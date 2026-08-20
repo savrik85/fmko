@@ -194,6 +194,17 @@ export async function runOneMeeting(
     quorum: stats.quorumNeeded,
   };
 
+  // Kolik klubů se dnes vůbec ozvalo — do zápisu i do článku. Počítá se přes
+  // uzavřené body, ne přes jeden návrh: klub mohl hlasovat jen o části programu.
+  const ucastniku = await db.prepare(
+    `SELECT COUNT(DISTINCT b.team_id) AS n
+       FROM competition_ballots b
+       JOIN competition_proposals p ON p.id = b.proposal_id
+      WHERE p.league_id = ? AND p.closed_game_date = ?`
+  ).bind(leagueId, gameDate).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, `účast na zasedání ${leagueId}`, e); return null; });
+  const odevzdanoHlasu = ucastniku?.n ?? 0;
+
   await db.prepare(
     `UPDATE competition_meetings
         SET proposals_closed = ?, proposals_passed = ?, attendance = ?, balance_after = ?, summary = ?
@@ -209,6 +220,28 @@ export async function runOneMeeting(
     .catch((e) => logger.warn({ module: M }, `poslední schůze ${leagueId}`, e));
 
   await notifyMeeting(db, leagueId, meta.name, results, stats.voters);
+
+  // Zápis do Zpravodaje. Až po uložení zasedání, aby se čísla v článku shodovala
+  // s tím, co je v databázi — a jen jednou, protože zasedání samo je proti
+  // dvojímu běhu chráněné claimem.
+  try {
+    const { publikujZapis, nactiProtiHlasy, mluvci } = await import("./minutes");
+    const newsId = await publikujZapis(db, {
+      leagueId, leagueName: meta.name, seasonNumber: meta.season_number, gameDate,
+      items: results as unknown as Array<{ title: string; status: string }>,
+      attendance, hlasovalo: odevzdanoHlasu, balance,
+      protiHlasy: await nactiProtiHlasy(db, leagueId, gameDate),
+      prezident: await mluvci(db, leagueId, meta.season_number),
+    });
+    if (newsId) {
+      await db.prepare("UPDATE competition_meetings SET news_id = ? WHERE league_id = ? AND game_date = ?")
+        .bind(newsId, leagueId, gameDate).run();
+    }
+  } catch (e) {
+    // Zpravodaj je výkladní skříň, ne účetnictví — když se článek nepovede,
+    // zasedání i tak platí.
+    logger.warn({ module: M }, `zápis ze zasedání ${leagueId} do zpravodaje`, e);
+  }
 
   return { leagueId, closed: closedCount, passed: passedCount, balance };
 }

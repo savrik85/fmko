@@ -82,7 +82,7 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
       "Tvrzení bez opory v datech se do článku nedostane.",
     ],
     hlasky: ["Podívejme se na to střízlivě.", "Čísla mluví jasně.", "Bez emocí, prosím."],
-    rubriky: ["ai_report", "round_summary", "matchday_preview"],
+    rubriky: ["ai_report", "round_summary", "matchday_preview", "governance_minutes"],
   },
   vycurany: {
     label: "vyčůraný",
@@ -97,7 +97,7 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
       "V redakci se říká, že nejlepší citáty vyrobí z toho, co jste zamlčeli.",
     ],
     hlasky: ["Jen abych rozuměl…", "To jste myslel vážně?", "A to říkáte po té prohře?"],
-    rubriky: ["interview", "manager_feud"],
+    rubriky: ["interview", "manager_feud", "governance_minutes"],
   },
   patriot: {
     label: "patriot",

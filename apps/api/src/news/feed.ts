@@ -27,6 +27,8 @@ const KVOTY: Record<string, number> = {
   matchday_preview: 1,
   season_opener: 1,
   season_wrap: 1,
+  // Zasedání je jednou týdně a zápis je dlouhý — dva vedle sebe by noviny zavalily.
+  governance_minutes: 1,
 };
 const KVOTA_OSTATNI = 2;
 
