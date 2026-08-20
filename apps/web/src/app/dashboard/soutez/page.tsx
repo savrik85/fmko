@@ -18,12 +18,12 @@ import { EntityLink, Modal, Spinner, Tabs, useTabParam } from "@/components/ui";
 import {
   Empty, GOLD, OpenProposalNote, Ornament, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
 } from "./ui";
-import { OdborInbox, PokladnaPanel, VedeniPanel, ZapisyPanel } from "./panels";
+import { OdborInbox, PokladnaPanel, SponsorPanel, VedeniPanel, ZapisyPanel } from "./panels";
 import { DisciplinePanel } from "./discipline";
 import { RefereesPanel } from "./referees-panel";
 import type {
   BoardData, DisciplineData, Election, LedgerEntry, Meeting, Proposal, ProposalKind,
-  RefereeData, State,
+  RefereeData, SponsorData, State,
 } from "./types";
 
 const TAB_KEYS = ["zasedani", "pokladna", "vedeni", "zapisy"] as const;
@@ -96,6 +96,7 @@ export default function SoutezPage() {
   const [discipline, setDiscipline] = useState<DisciplineData | null>(null);
   const [referees, setReferees] = useState<RefereeData | null>(null);
   const [board, setBoard] = useState<BoardData | null>(null);
+  const [sponsor, setSponsor] = useState<SponsorData | null>(null);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [gesce, setGesce] = useState<string>("hospodarska");
@@ -127,6 +128,12 @@ export default function SoutezPage() {
     if (!leagueId) return;
     apiFetch<DisciplineData>(`/api/competition/${leagueId}/discipline`)
       .then(setDiscipline).catch((e) => console.error("načtení disciplinárky:", e));
+  }, [leagueId]);
+
+  const loadSponsor = useCallback(() => {
+    if (!leagueId) return;
+    apiFetch<SponsorData>(`/api/competition/${leagueId}/sponsor`)
+      .then(setSponsor).catch((e) => console.error("načtení sponzora:", e));
   }, [leagueId]);
 
   /** Kabinet vidí jen ten, kdo má funkci — server u ostatních vrátí seat: null. */
@@ -216,9 +223,9 @@ export default function SoutezPage() {
     [state, teamId]);
 
   const refreshAll = useCallback(() => {
-    loadState(); loadProposals(); loadElections(); loadDiscipline(); loadBoard();
+    loadState(); loadProposals(); loadElections(); loadDiscipline(); loadBoard(); loadSponsor();
     if (referees) loadReferees();
-  }, [loadState, loadProposals, loadElections, loadDiscipline, loadBoard, loadReferees, referees]);
+  }, [loadState, loadProposals, loadElections, loadDiscipline, loadBoard, loadSponsor, loadReferees, referees]);
 
   const vote = async (proposalId: string, answer: string) => {
     if (!teamId) return;
@@ -364,6 +371,13 @@ export default function SoutezPage() {
                 </p>
               </>
             )
+          )}
+
+          {gesce === "soutez" && sponsor && (
+            <SponsorPanel
+              data={sponsor} teamId={teamId}
+              onChanged={refreshAll}
+            />
           )}
 
           {board && ROLE_OF_GESCE[gesce] && (

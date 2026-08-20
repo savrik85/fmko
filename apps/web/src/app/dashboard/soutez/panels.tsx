@@ -14,7 +14,7 @@ import { EntityLink } from "@/components/ui";
 import {
   Empty, GOLD, GOLD_SOFT, Ornament, PersonLine, Portrait, Row, czk, formatDate, plural, signed,
 } from "./ui";
-import type { BoardData, Election, LedgerEntry, Meeting, Rules, State } from "./types";
+import type { BoardData, Election, LedgerEntry, Meeting, Rules, SponsorData, State } from "./types";
 
 const LEDGER_LABEL: Record<string, string> = {
   subsidy: "Svazová dotace", entry_fee: "Startovné", sponsor: "Sponzor",
@@ -552,6 +552,111 @@ function ResignForm({ role, teamId, hrozbaOdvolani, onClose, onSaved }: {
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Sponzor soutěže. Nabídky chodí v zimní přestávce, přijmout jde jednu — a soutěž
+ * se tím přejmenuje, takže je to rozhodnutí na dvě třetiny hlasů.
+ */
+export function SponsorPanel({ data, teamId, onChanged }: {
+  data: SponsorData; teamId: string | null; onChanged: () => void;
+}) {
+  const [saving, setSaving] = useState<string | null>(null);
+
+  // Nabídky předkládá hlasování prezident. Neobsazenou funkci nikdo nezastupuje,
+  // aby se sponzor nedal protlačit potichu — pak smí kterýkoli klub.
+  const smim = !!teamId && (data.gatekeeperTeamId === null || data.gatekeeperTeamId === teamId);
+
+  const predloz = async (offerId: string) => {
+    if (!teamId) return;
+    setSaving(offerId);
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/sponsor-offers/${offerId}/propose`, { method: "POST" }),
+      "Nabídku se nepodařilo předložit",
+    );
+    setSaving(null);
+    if (ok) onChanged();
+  };
+
+  const TIER: Record<string, string> = {
+    mistni: "místní firma",
+    okresni: "okresní firma",
+    regionalni: "regionální značka",
+  };
+
+  if (data.current) {
+    const s = data.current;
+    return (
+      <div className="card p-5">
+        <Ornament right={`spokojenost ${s.satisfaction} ze 100`}>Sponzor soutěže</Ornament>
+        <div className="text-xl font-heading">{s.name}</div>
+        <div className="text-sm text-muted mt-0.5">
+          {czk(s.amount)} za sezónu{s.untilSeason ? ` · smlouva do ${s.untilSeason}. sezóny` : ""}
+        </div>
+        <p className="text-sm text-muted mt-3">
+          Soutěž nese jeho jméno. Když spokojenost na konci sezóny klesne pod 30, sponzor
+          odejde a název se vrátí na „{s.originalName ?? "původní"}". Sráží ji každá pokuta,
+          klid v soutěži ji naopak zvedá.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-5">
+      <Ornament>Sponzorské nabídky</Ornament>
+      {data.offers.filter((o) => o.status === "open").length === 0 ? (
+        <p className="text-sm text-muted">
+          Zatím se nikdo nehlásí. Nabídky chodí na začátku sezóny.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-muted mb-3">
+            Přijmout jde jen jednu a soutěž se tím přejmenuje. Rozhoduje se
+            dvoutřetinovou většinou.
+          </p>
+          <div className="space-y-3">
+            {data.offers.filter((o) => o.status === "open").map((o) => (
+              <div key={o.id} className="rounded-lg p-3" style={{ background: "var(--color-paper)" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-base font-semibold break-words">
+                      {o.name} liga
+                    </div>
+                    <div className="text-sm text-muted">
+                      {TIER[o.tier]} · {czk(o.amount)} za sezónu · na {o.seasons}{" "}
+                      {o.seasons === 1 ? "sezónu" : o.seasons <= 4 ? "sezóny" : "sezón"}
+                    </div>
+                  </div>
+                  {smim && (
+                    <button className="btn btn-md btn-secondary shrink-0"
+                      disabled={saving === o.id} onClick={() => predloz(o.id)}>
+                      {saving === o.id ? "Odesílám…" : "Dát hlasovat"}
+                    </button>
+                  )}
+                </div>
+                {o.conditions.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {o.conditions.map((c, i) => (
+                      <li key={i} className="text-sm text-muted flex gap-2">
+                        <span aria-hidden="true" style={{ color: GOLD }}>◆</span>
+                        <span className="min-w-0">{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+          {!smim && (
+            <p className="text-sm text-muted mt-3">
+              Nabídku předkládá hlasování prezident soutěže.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

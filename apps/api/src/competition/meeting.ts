@@ -187,6 +187,14 @@ export async function runOneMeeting(
   await openElections(db, leagueId, meta.season_number, gameDate)
     .catch((e) => logger.warn({ module: M }, `doplňovací volby ${leagueId}`, e));
 
+  // Spokojenost sponzora — kouká na to, jestli je v soutěži klid.
+  try {
+    const { updateSatisfaction } = await import("./sponsors");
+    await updateSatisfaction(db, { leagueId, seasonNumber: meta.season_number, gameDate });
+  } catch (e) {
+    logger.warn({ module: M }, `spokojenost sponzora ${leagueId}`, e);
+  }
+
   const balance = await recomputeBalance(db, leagueId, gameDate);
   const attendance = {
     voters: stats.voters.length,
@@ -400,6 +408,15 @@ async function applyImmediateEffect(
 
     if (p.kind === "recall" && payload.role) {
       await recallOfficial(db, p.league_id, payload.role as never, p.season_number, gameDate);
+      return;
+    }
+
+    if (p.kind === "sponsor" && payload.offerId) {
+      const { acceptOffer } = await import("./sponsors");
+      const out = await acceptOffer(db, {
+        leagueId: p.league_id, offerId: String(payload.offerId), seasonNumber: p.season_number,
+      });
+      if (!out.ok) logger.warn({ module: M }, `přijetí sponzora: ${out.reason}`);
       return;
     }
 

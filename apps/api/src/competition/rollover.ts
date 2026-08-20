@@ -122,6 +122,23 @@ async function rolloverOne(
   await endOfficialTerms(db, leagueId, newSeason, startDate);
   await openElections(db, leagueId, newSeason, startDate);
   await restampDeadlines(db, leagueId, startDate);
+  // Sponzorské nabídky na novou sezónu. Soutěž, která sponzora má, žádné
+  // nedostane — přijmout jde jen jednu smlouvu.
+  try {
+    const { generateOffers } = await import("./sponsors");
+    const stav = await loadGovernance(db, leagueId);
+    if (!stav?.sponsor_name) {
+      const okres = await db.prepare("SELECT district FROM leagues WHERE id = ?")
+        .bind(leagueId).first<{ district: string }>().catch(() => null);
+      await generateOffers(db, {
+        leagueId, district: okres?.district ?? "", seasonNumber: newSeason,
+        humanClubs: humans, gameDate: startDate,
+      });
+    }
+  } catch (e) {
+    logger.warn({ module: M }, `sponzorské nabídky ${leagueId}`, e);
+  }
+
   await recomputeBalance(db, leagueId, startDate);
   return true;
 }

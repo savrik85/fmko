@@ -1030,6 +1030,95 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans/direct", async (
   return c.json({ ok: true });
 });
 
+// ── Sponzor ─────────────────────────────────────────────────────────────────
+competitionRouter.get("/competition/:leagueId/sponsor", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const gov = await loadGovernance(c.env.DB, leagueId);
+  const { listOffers } = await import("../competition/sponsors");
+  const offers = await listOffers(c.env.DB, leagueId, meta.season_number);
+  const president = await presidentOf(c.env.DB, leagueId, meta.season_number);
+
+  return c.json({
+    // Kdo smí nabídku předložit hlasování: prezident soutěže. Neobsazenou funkci
+    // nikdo nezastupuje, aby se sponzor nedal protlačit potichu — pak smí každý.
+    gatekeeperTeamId: president?.teamId ?? null,
+    current: gov?.sponsor_name
+      ? {
+          name: gov.sponsor_name,
+          amount: gov.sponsor_amount,
+          satisfaction: gov.sponsor_satisfaction,
+          untilSeason: gov.sponsor_until_season,
+          originalName: gov.original_name,
+        }
+      : null,
+    offers,
+  });
+});
+
+/** Předložení nabídky hlasování. Přijetí samo probíhá až na zasedání. */
+competitionRouter.post("/teams/:teamId/competition/sponsor-offers/:id/propose", async (c) => {
+  const teamId = c.req.param("teamId");
+  const offerId = c.req.param("id");
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+  const gov = await loadGovernance(c.env.DB, leagueId);
+  if (!gov?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
+  if (gov.sponsor_name) {
+    return c.json({ error: `Soutěž už sponzora má — ${gov.sponsor_name}.` }, 409);
+  }
+
+  const voters = await voterStats(c.env.DB, leagueId);
+  if (!voters.voters.includes(teamId)) {
+    return c.json({ error: "Tvůj klub nemá v téhle soutěži hlasovací právo." }, 403);
+  }
+
+  const president = await presidentOf(c.env.DB, leagueId, meta.season_number);
+  if (president && president.teamId !== teamId) {
+    return c.json({ error: "Sponzorské nabídky předkládá hlasování prezident soutěže." }, 403);
+  }
+
+  const already = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM competition_proposals WHERE league_id = ? AND kind = 'sponsor' AND status = 'open'"
+  ).bind(leagueId).first<{ n: number }>().catch(() => null);
+  if ((already?.n ?? 0) > 0) {
+    return c.json({ error: "O jedné nabídce se už hlasuje." }, 409);
+  }
+
+  const offer = await c.env.DB.prepare(
+    "SELECT name, amount, seasons, tier, conditions FROM competition_sponsor_offers WHERE id = ? AND league_id = ? AND status = 'open'"
+  ).bind(offerId, leagueId)
+    .first<{ name: string; amount: number; seasons: number; tier: string; conditions: string }>()
+    .catch((e) => { logger.warn({ module: M }, "nabídka", e); return null; });
+  if (!offer) return c.json({ error: "Taková nabídka není ve hře." }, 404);
+
+  const { sponzorovanyNazev } = await import("../competition/sponsors");
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const id = crypto.randomUUID();
+
+  await c.env.DB.prepare(
+    `INSERT INTO competition_proposals
+      (id, league_id, season_number, kind, gesce, title, body, payload, proposed_by_team_id,
+       majority, quorum, opened_game_date, deposit, evidence)
+     VALUES (?,?,?,'sponsor','soutez',?,?,?,?,?,?,?,0,?)`
+  ).bind(
+    id, leagueId, meta.season_number,
+    `Přijetí sponzora ${offer.name} — soutěž se přejmenuje na „${sponzorovanyNazev(offer.name)}"`,
+    `${offer.amount.toLocaleString("cs")} Kč za sezónu na ${offer.seasons} `
+      + `${offer.seasons === 1 ? "sezónu" : offer.seasons <= 4 ? "sezóny" : "sezón"}.`,
+    JSON.stringify({ offerId, name: offer.name, amount: offer.amount, seasons: offer.seasons }),
+    teamId, 2 / 3, 0.5, gameDate,
+    offer.conditions,
+  ).run();
+
+  return c.json({ ok: true, id });
+});
+
 // ── Pravomoci prezidenta ────────────────────────────────────────────────────
 competitionRouter.post("/teams/:teamId/competition/officials/:role/suspend", async (c) => {
   const teamId = c.req.param("teamId");

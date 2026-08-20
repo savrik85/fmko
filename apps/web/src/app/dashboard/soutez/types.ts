@@ -153,3 +153,18 @@ export interface BoardData {
   unread: number;
   maxLength: number;
 }
+
+export interface SponsorOffer {
+  id: string; name: string; amount: number; seasons: number;
+  tier: "mistni" | "okresni" | "regionalni";
+  conditions: string[]; status: string;
+}
+
+export interface SponsorData {
+  gatekeeperTeamId: string | null;
+  current: {
+    name: string; amount: number; satisfaction: number;
+    untilSeason: number | null; originalName: string | null;
+  } | null;
+  offers: SponsorOffer[];
+}

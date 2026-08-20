@@ -342,7 +342,20 @@ export async function generateAiRoundReport(
     ? "Používej pražský městský kolorit — zmiňuj městské části, tramvaje, hospody, pražskou atmosféru. Piš jako pražský sportovní reportér."
     : "Používej místní kolorit — zmiňuj obce, jejich charakter, šumavskou atmosféru. Piš jako reportér co zná každého v okrese.";
 
-  const prompt = `Jsi sportovní redaktor ${isPraha ? "pražského" : "okresního"} zpravodaje${isPraha ? "" : ` v ${district}ích`}. Napiš článek o ${gameWeek}. kole ${leagueName.replace("Okresní přebor", "okresního přeboru").replace("Přebor Prahy", "Přeboru Prahy")}.
+/**
+ * Druhý pád názvu soutěže do věty „článek o kole …".
+ *
+ * Sponzorský tvar „Gambrinus liga" musí skloňovat taky, jinak by v novinách
+ * stálo „o kole Gambrinus liga".
+ */
+function druhyPad(leagueName: string): string {
+  if (/\bliga$/.test(leagueName)) return leagueName.replace(/liga$/, "ligy");
+  return leagueName
+    .replace("Okresní přebor", "okresního přeboru")
+    .replace("Přebor Prahy", "Přeboru Prahy");
+}
+
+  const prompt = `Jsi sportovní redaktor ${isPraha ? "pražského" : "okresního"} zpravodaje${isPraha ? "" : ` v ${district}ích`}. Napiš článek o ${gameWeek}. kole ${druhyPad(leagueName)}.
 
 VÝSLEDKY ${gameWeek}. KOLA:
 ${resultLines.join("\n")}
