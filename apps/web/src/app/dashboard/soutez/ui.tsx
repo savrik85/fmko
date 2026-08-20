@@ -89,17 +89,23 @@ export function Portrait({ avatar, name, size = 44, ring = GOLD }: {
   );
 }
 
-/** Jméno trenéra s klubem pod ním. Na mobilu se láme, nepřetéká. */
+/**
+ * Jméno trenéra s klubem pod ním. Na mobilu se láme, nepřetéká.
+ *
+ * Klub bez trenéra se podepíše sám sebou. „Neznámý trenér" na prvním řádku
+ * vypadal jako chyba dat, a přitom je to jen klub, kterému nikdo nešéfuje.
+ */
 export function PersonLine({ managerName, teamId, teamName, note }: {
   managerName: string | null; teamId: string; teamName: string; note?: React.ReactNode;
 }) {
+  const klub = <EntityLink type="team" id={teamId}>{teamName}</EntityLink>;
   return (
     <div className="min-w-0">
       <div className="text-base font-semibold leading-tight break-words">
-        {managerName ?? "neznámý trenér"}
+        {managerName ?? klub}
       </div>
       <div className="text-sm text-muted leading-tight break-words">
-        <EntityLink type="team" id={teamId}>{teamName}</EntityLink>
+        {managerName ? klub : "klub bez trenéra"}
         {note && <> · {note}</>}
       </div>
     </div>

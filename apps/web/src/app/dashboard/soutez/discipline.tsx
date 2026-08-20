@@ -216,7 +216,7 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
         {chosen && (
           <div className="flex items-center gap-3 rounded-lg p-3" style={{ background: "var(--color-paper)" }}>
             <Portrait avatar={chosen.managerAvatar} name={chosen.managerName ?? chosen.teamName} size={44} />
-            <PersonLine managerName={chosen.managerName ?? "Klub bez trenéra"} teamId={chosen.teamId} teamName={chosen.teamName} />
+            <PersonLine managerName={chosen.managerName} teamId={chosen.teamId} teamName={chosen.teamName} />
           </div>
         )}
 
