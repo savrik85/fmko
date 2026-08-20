@@ -111,6 +111,34 @@ export async function canRunFor(
 }
 
 /**
+ * Věta o výsledku volby do zápisu.
+ *
+ * Hlasy pro kandidáta, který mezitím odstoupil, propadají — a musí to být v zápisu
+ * vidět, jinak by čísla nesouhlasila s tím, kolik klubů skutečně hlasovalo.
+ */
+export function electionNote(
+  winner: { managerName: string | null; teamName: string | null; votes: number } | null | undefined,
+  platnychHlasu: number,
+  propadlychHlasu: number,
+): string {
+  const dovetek = propadlychHlasu > 0
+    ? ` ${propadlychHlasu} ${propadlychHlasu === 1 ? "hlas propadl" : propadlychHlasu <= 4 ? "hlasy propadly" : "hlasů propadlo"}`
+      + " — kandidát odstoupil."
+    : "";
+
+  if (!winner) {
+    return propadlychHlasu > 0
+      ? `Volba dopadla naprázdno — všichni kandidáti odstoupili.${dovetek}`
+      : "Nikdo nekandidoval — funkce zůstává neobsazená.";
+  }
+
+  const jmeno = winner.managerName ?? winner.teamName ?? "neznámý trenér";
+  const klub = winner.managerName && winner.teamName ? ` (${winner.teamName})` : "";
+  return `Zvolen ${jmeno}${klub} — ${winner.votes} z ${platnychHlasu} `
+    + `${platnychHlasu === 1 ? "hlasu" : "hlasů"}.${dovetek}`;
+}
+
+/**
  * Vyhodnotí volby splatné k danému hernímu dni. Volá se ze schůze.
  *
  * Vítězí prostá většina odevzdaných hlasů. Při rovnosti rozhoduje vyšší reputace
@@ -129,9 +157,13 @@ export async function resolveElections(
   const out: Array<{ role: OfficialRole; winnerTeamId: string | null; note: string }> = [];
 
   for (const el of due.results) {
-    // Reputace i jméno se berou poddotazem, NIKDY přes JOIN na managers: tým může
-    // mít v tabulce dva řádky (existuje takový), join by každý hlas zdvojil a
-    // kandidát z takového klubu by vyhrál každou volbu. Ověřeno na testovací DB.
+    // Dvě věci, na kterých stojí poctivost volby:
+    //
+    // 1) JOIN na kandidatury s `withdrawn = 0`. Bez něj vyhrál i kandidát, který
+    //    mezitím odstoupil — v UI už nebyl v seznamu, ale hlasy mu zůstaly
+    //    a stal se předsedou. Ověřeno na testovací DB.
+    // 2) Reputace i jméno poddotazem, NIKDY přes JOIN na managers: tým může mít
+    //    v tabulce dva řádky (existuje takový) a join by každý hlas zdvojil.
     const tally = await db.prepare(
       `SELECT b.candidate_team_id AS team_id, COUNT(*) AS votes,
               COALESCE((SELECT m.reputation FROM managers m
@@ -142,6 +174,9 @@ export async function resolveElections(
                 ORDER BY m.created_at LIMIT 1) AS manager_name,
               (SELECT t.name FROM teams t WHERE t.id = b.candidate_team_id) AS team_name
          FROM competition_election_ballots b
+         JOIN competition_candidacies c
+           ON c.election_id = b.election_id AND c.team_id = b.candidate_team_id
+          AND c.withdrawn = 0
         WHERE b.election_id = ?
         GROUP BY b.candidate_team_id
         ORDER BY votes DESC, rep DESC, b.candidate_team_id ASC`
@@ -151,16 +186,23 @@ export async function resolveElections(
     }>()
       .catch((e) => { logger.warn({ module: M }, `sečtení voleb ${el.id}`, e); return { results: [] }; });
 
+    const odevzdano = await db.prepare(
+      "SELECT COUNT(*) AS n FROM competition_election_ballots WHERE election_id = ?"
+    ).bind(el.id).first<{ n: number }>()
+      .catch((e) => { logger.warn({ module: M }, `odevzdané hlasy ${el.id}`, e); return null; });
+
     const totalVotes = tally.results.reduce((s, r) => s + r.votes, 0);
+    const propadlo = Math.max(0, (odevzdano?.n ?? totalVotes) - totalVotes);
     const winner = tally.results[0] ?? null;
 
     const status = winner ? "decided" : "failed";
     // Volba je tajná, ale kdo ji vyhrál se v zápisu tají těžko — a hráč to chce vědět.
-    const note = winner
-      ? `Zvolen ${winner.manager_name ?? winner.team_name ?? "neznámý trenér"}`
-        + `${winner.manager_name && winner.team_name ? ` (${winner.team_name})` : ""}`
-        + ` — ${winner.votes} z ${totalVotes} ${totalVotes === 1 ? "hlasu" : "hlasů"}.`
-      : "Nikdo nekandidoval — funkce zůstává neobsazená.";
+    const note = electionNote(
+      winner && {
+        managerName: winner.manager_name, teamName: winner.team_name, votes: winner.votes,
+      },
+      totalVotes, propadlo,
+    );
 
     // Atomický lock: efekt smí aplikovat jen ten běh, který volby opravdu uzavřel.
     const locked = await db.prepare(

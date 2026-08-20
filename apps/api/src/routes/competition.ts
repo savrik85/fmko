@@ -1223,11 +1223,20 @@ competitionRouter.post("/teams/:teamId/competition/elections/:id/candidacy", asy
 });
 
 competitionRouter.delete("/teams/:teamId/competition/elections/:id/candidacy", async (c) => {
+  const electionId = c.req.param("id");
+  // `AND withdrawn = 0` je podstatné: SQLite počítá řádky, které WHERE trefil,
+  // ne ty, kde se hodnota změnila. Bez toho hlásilo druhé stažení „ok".
   const res = await c.env.DB.prepare(
-    "UPDATE competition_candidacies SET withdrawn = 1 WHERE election_id = ? AND team_id = ?"
-  ).bind(c.req.param("id"), c.req.param("teamId")).run()
+    "UPDATE competition_candidacies SET withdrawn = 1 WHERE election_id = ? AND team_id = ? AND withdrawn = 0"
+  ).bind(electionId, c.req.param("teamId")).run()
     .catch((e) => { logger.warn({ module: M }, "stažení kandidatury", e); return null; });
   if (!res || (res.meta?.changes ?? 0) === 0) return c.json({ error: "Kandidaturu nemáš podanou." }, 409);
+
+  await c.env.DB.prepare(
+    "UPDATE competition_elections SET candidates = (SELECT COUNT(*) FROM competition_candidacies WHERE election_id = ? AND withdrawn = 0) WHERE id = ?"
+  ).bind(electionId, electionId).run()
+    .catch((e) => logger.warn({ module: M }, "počet kandidátů po stažení", e));
+
   return c.json({ ok: true });
 });
 
