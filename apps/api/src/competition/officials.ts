@@ -214,15 +214,25 @@ export async function resolveElections(
     if (!locked || (locked.meta?.changes ?? 0) === 0) continue;
 
     if (winner) {
-      await db.prepare(
-        `INSERT INTO competition_officials
+      // OR IGNORE kvůli částečnému unikátnímu indexu na obsazenou funkci. Kdyby
+      // se role mezitím zaplnila, volba by jinak hlásila „Zvolen X" a X by přitom
+      // v žádné funkci neseděl — a to je horší než hlasitá chyba v logu.
+      const zapsan = await db.prepare(
+        `INSERT OR IGNORE INTO competition_officials
           (id, league_id, role, team_id, season_number, elected_game_date)
          VALUES (?,?,?,?,?,?)`
       ).bind(crypto.randomUUID(), leagueId, el.role, winner.team_id, seasonNumber, gameDate).run()
-        .catch((e) => logger.warn({ module: M }, `zápis funkcionáře ${el.role}`, e));
+        .catch((e) => { logger.error({ module: M }, `zápis funkcionáře ${el.role}`, e); return null; });
 
-      // Odsloužený mandát se odmění až na konci; zvolení samo o sobě je jen titul.
-      logger.info({ module: M }, `soutěž ${leagueId}: ${ROLE_LABEL[el.role]} — zvolen ${winner.team_id}`);
+      if (!zapsan || (zapsan.meta?.changes ?? 0) === 0) {
+        logger.error(
+          { module: M },
+          `soutěž ${leagueId}: volbu ${el.role} vyhrál ${winner.team_id}, ale funkci se nepodařilo obsadit`,
+        );
+      } else {
+        // Odsloužený mandát se odmění až na konci; zvolení samo o sobě je jen titul.
+        logger.info({ module: M }, `soutěž ${leagueId}: ${ROLE_LABEL[el.role]} — zvolen ${winner.team_id}`);
+      }
     }
 
     out.push({ role: el.role, winnerTeamId: winner?.team_id ?? null, note });
