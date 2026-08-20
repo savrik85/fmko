@@ -23,8 +23,8 @@ const vstup = (over: Partial<MinutesInput> = {}): MinutesInput => ({
 describe("zápis ze zasedání", () => {
   it("uvede účast, výsledek s poměrem i jmenovitě ty proti", () => {
     const { body } = sestavZapis(redaktor("seriozni"), vstup());
-    expect(body).toContain("se do hlasování zapojilo 5");
-    expect(body).toContain("k usnesení bylo potřeba 4");
+    expect(body).toContain("do hlasování se zapojilo 5.");
+    expect(body).toContain("byly potřeba 4 hlasy");
     expect(body).toContain("prošlo (4:1)");
     expect(body).toContain("Proti byli: Tatran Michle.");
   });
@@ -55,6 +55,13 @@ describe("zápis ze zasedání", () => {
     }));
     expect(body).toContain("Zvolen Petr Novák");
     expect(body).not.toMatch(/\(\d+:\d+\)/);
+  });
+
+  it("název soutěže se v titulku skloňuje", () => {
+    // Po přijetí sponzora je z názvu „Gambrinus liga" — musí se ohnout taky.
+    expect(sestavZapis(redaktor("seriozni"), vstup()).headline).toContain("Přeboru Prahy");
+    expect(sestavZapis(redaktor("seriozni"), vstup({ leagueName: "Gambrinus liga" })).headline)
+      .toContain("Gambrinus ligy");
   });
 
   it("tón se liší podle redaktora, čísla ne", () => {

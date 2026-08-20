@@ -11,6 +11,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { druhyPad } from "../lib/league-name";
 import { jmenoRedaktora, redaktorProRubriku, type Journalist } from "../news/journalists";
 
 const M = "competition-minutes";
@@ -64,23 +65,25 @@ function vysledek(status: string): string {
 
 /** Titulek podle toho, jak zasedání dopadlo — a podle povahy redaktora. */
 function titulek(j: Journalist | null, vstup: MinutesInput, prijato: number): string {
-  const liga = vstup.leagueName;
+  // Název soutěže je proměnná — po přijetí sponzora se z „Přeboru Prahy" stane
+  // „Gambrinus liga", takže se do věty musí ohnout, ne vlepit.
+  const liga = druhyPad(vstup.leagueName);
   const style = j?.style ?? "seriozni";
   const nic = prijato === 0;
 
   if (style === "bulvar") {
     return nic
       ? `Grémium ${liga} se sešlo a nedohodlo se na ničem`
-      : `Zasedání ${liga}: padlo ${tvar(prijato, "rozhodnutí", "rozhodnutí", "rozhodnutí")}, a ne všem se líbí`;
+      : `Zasedání grémia ${liga}: padlo ${tvar(prijato, "rozhodnutí", "rozhodnutí", "rozhodnutí")}, a ne všem se líbí`;
   }
   if (style === "vycurany") {
     return nic
-      ? `V ${liga} se zasedalo. Výsledek? Posoudʼte sami`
+      ? `Grémium ${liga} zasedalo. Výsledek? Posuďte sami`
       : `Grémium ${liga} rozhodlo. Kdo na tom vydělá, se ukáže`;
   }
   if (style === "patriot") {
     return nic
-      ? `Naše grémium jednalo, rozhodnutí ale nepadlo`
+      ? "Naše grémium jednalo, rozhodnutí ale nepadlo"
       : `Grémium ${liga} má jasno: ${tvar(prijato, "bod schválen", "body schváleny", "bodů schváleno")}`;
   }
   return nic
@@ -94,8 +97,10 @@ function ucast(j: Journalist | null, v: MinutesInput): string {
   const chybelo = Math.max(0, attendance.voters - hlasovalo);
   const style = j?.style ?? "seriozni";
 
-  const zaklad = `Ze ${attendance.voters} klubů s hlasovacím právem se do hlasování zapojilo ${hlasovalo}`
-    + `, k usnesení bylo potřeba ${attendance.quorum}.`;
+  const zaklad = `Hlasovací právo mělo ${tvar(attendance.voters, "klub", "kluby", "klubů")}`
+    + `, do hlasování se ${hlasovalo === 1 ? "zapojil" : hlasovalo >= 2 && hlasovalo <= 4 ? "zapojily" : "zapojilo"} ${hlasovalo}.`
+    + ` K usnesení ${attendance.quorum === 1 ? "byl potřeba" : attendance.quorum <= 4 ? "byly potřeba" : "bylo potřeba"}`
+    + ` ${tvar(attendance.quorum, "hlas", "hlasy", "hlasů")}.`;
 
   if (chybelo === 0) return `${zaklad} Nechyběl nikdo.`;
   if (style === "bulvar") {
