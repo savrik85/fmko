@@ -145,13 +145,14 @@ export async function canRunFor(
 }
 
 /**
- * Věta o výsledku volby do zápisu.
+ * Věta o výsledku volby. ZÁMĚRNĚ bez jména zvoleného — to se v UI i v zápisu
+ * vypisuje zvlášť a jinak by tam stálo dvakrát.
  *
- * Hlasy pro kandidáta, který mezitím odstoupil, propadají — a musí to být v zápisu
- * vidět, jinak by čísla nesouhlasila s tím, kolik klubů skutečně hlasovalo.
+ * Hlasy pro kandidáta, který mezitím odstoupil, propadají — a musí to být vidět,
+ * jinak by čísla nesouhlasila s tím, kolik klubů skutečně hlasovalo.
  */
 export function electionNote(
-  winner: { managerName: string | null; teamName: string | null; votes: number } | null | undefined,
+  winner: { votes: number } | null | undefined,
   platnychHlasu: number,
   propadlychHlasu: number,
 ): string {
@@ -166,10 +167,14 @@ export function electionNote(
       : "Nikdo nekandidoval — funkce zůstává neobsazená.";
   }
 
-  const jmeno = winner.managerName ?? winner.teamName ?? "neznámý trenér";
-  const klub = winner.managerName && winner.teamName ? ` (${winner.teamName})` : "";
-  return `Zvolen ${jmeno}${klub} — ${winner.votes} z ${platnychHlasu} `
+  return `Zvolen ${winner.votes} z ${platnychHlasu} `
     + `${platnychHlasu === 1 ? "hlasu" : "hlasů"}.${dovetek}`;
+}
+
+/** Jak se zvolený podepíše — jméno trenéra a klub, když obojí známe. */
+export function winnerLabel(managerName: string | null, teamName: string | null): string {
+  const jmeno = managerName ?? teamName ?? "neznámý trenér";
+  return managerName && teamName ? `${jmeno} (${teamName})` : jmeno;
 }
 
 /**
@@ -181,14 +186,14 @@ export function electionNote(
  */
 export async function resolveElections(
   db: D1Database, leagueId: string, seasonNumber: number, gameDate: string,
-): Promise<Array<{ role: OfficialRole; winnerTeamId: string | null; note: string }>> {
+): Promise<Array<{ role: OfficialRole; winnerTeamId: string | null; winner: string | null; note: string }>> {
   const due = await db.prepare(
     `SELECT * FROM competition_elections
       WHERE league_id = ? AND status = 'open' AND opened_game_date < ?`
   ).bind(leagueId, gameDate).all<ElectionRow>()
     .catch((e) => { logger.warn({ module: M }, "splatné volby", e); return { results: [] }; });
 
-  const out: Array<{ role: OfficialRole; winnerTeamId: string | null; note: string }> = [];
+  const out: Array<{ role: OfficialRole; winnerTeamId: string | null; winner: string | null; note: string }> = [];
 
   for (const el of due.results) {
     // Dvě věci, na kterých stojí poctivost volby:
@@ -231,12 +236,8 @@ export async function resolveElections(
 
     const status = winner ? "decided" : "failed";
     // Volba je tajná, ale kdo ji vyhrál se v zápisu tají těžko — a hráč to chce vědět.
-    const note = electionNote(
-      winner && {
-        managerName: winner.manager_name, teamName: winner.team_name, votes: winner.votes,
-      },
-      totalVotes, propadlo,
-    );
+    const note = electionNote(winner && { votes: winner.votes }, totalVotes, propadlo);
+    const label = winner ? winnerLabel(winner.manager_name, winner.team_name) : null;
 
     // Atomický lock: efekt smí aplikovat jen ten běh, který volby opravdu uzavřel.
     const locked = await db.prepare(
@@ -269,7 +270,7 @@ export async function resolveElections(
       }
     }
 
-    out.push({ role: el.role, winnerTeamId: winner?.team_id ?? null, note });
+    out.push({ role: el.role, winnerTeamId: winner?.team_id ?? null, winner: label, note });
   }
 
   return out;

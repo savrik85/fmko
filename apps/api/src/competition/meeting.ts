@@ -142,7 +142,9 @@ export async function runOneMeeting(
       kind: "election",
       title: `Volba: ${ROLE_LABEL[e.role] ?? e.role}`,
       status: e.winnerTeamId ? "passed" : "no_quorum",
-      resultNote: e.note, winnerTeamId: e.winnerTeamId,
+      // V zápisu jméno být musí — tam se zvolený nikde jinde neuvádí.
+      resultNote: e.winner ? `Zvolen ${e.winner}. ${e.note}` : e.note,
+      winnerTeamId: e.winnerTeamId,
     } as unknown as Record<string, unknown>);
     // Volba je plnohodnotný bod programu — musí se počítat do zápisu stejně jako návrh.
     closedCount++;
