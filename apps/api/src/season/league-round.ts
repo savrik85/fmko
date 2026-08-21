@@ -121,21 +121,25 @@ export async function readLeagueGameDate(db: D1Database, leagueId: string): Prom
 /**
  * Ligy, které mají dnes naplánované kolo. Používá producent fronty i stará smyčka.
  *
- * `legacyExcludeNameLike` existuje JEN pro starou smyčku (režim "loop"), kde se natvrdo
+ * `legacyExcludeDistrictLike` existuje JEN pro starou smyčku (režim "loop"), kde se natvrdo
  * vylučovaly České Budějovice, protože 6 lig přeteklo limit workeru. Ve frontovém režimu
  * se nepředává — každá liga má vlastní invokaci, takže obcházení limitu není potřeba.
  * Až padne stará cesta (fáze 2), zmizí i tenhle parametr.
  */
 export async function findLeaguesWithDueRound(
   db: D1Database,
-  opts: { legacyExcludeNameLike?: string } = {},
+  opts: { legacyExcludeDistrictLike?: string } = {},
 ): Promise<Array<{ leagueId: string; gameDate: string }>> {
-  const exclude = opts.legacyExcludeNameLike;
+  // Filtruje se podle OKRESU, ne podle názvu ligy. Název je proměnlivý — soutěž se
+  // po přijetí sponzora přejmenuje (např. na „Gambrinus liga") a filtr na jméno by
+  // tiše přestal platit; tick by přetekl limit workeru a neodsimuloval by NIC.
+  // `leagues.district` se naopak nemění nikdy (U21 ho jen rozšiřuje o sufix " U21").
+  const exclude = opts.legacyExcludeDistrictLike;
   const stmt = db.prepare(
     `SELECT t.league_id AS league_id, MAX(t.game_date) AS max_game_date
        FROM teams t JOIN leagues l ON t.league_id = l.id
       WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL
-        ${exclude ? "AND l.name NOT LIKE ?" : ""}
+        ${exclude ? "AND l.district NOT LIKE ?" : ""}
       GROUP BY t.league_id`,
   );
   const rows = await (exclude ? stmt.bind(exclude) : stmt).all<{
@@ -290,7 +294,7 @@ export async function processLeagueRound(
     prof.mark("notifikace");
     await dispatchRoundReports(env, leagueId, calendarId, gameWeek, standingsBefore, opts);
     prof.mark("reporty");
-    await runBetweenRoundEvents(db, results, gameWeek);
+    await runBetweenRoundEvents(db, results, gameWeek, leagueId, calendarId);
     prof.mark("udalosti-mezi-koly");
     await runAdhocEvents(env, db, leagueId, gameWeek);
     prof.mark("adhoc-udalosti");
@@ -452,12 +456,27 @@ async function runBetweenRoundEvents(
   db: D1Database,
   results: Array<{ matchId: string; matchType: string; homeScore: number; awayScore: number }>,
   gameWeek: number,
+  leagueId?: string,
+  calendarId?: string,
 ): Promise<void> {
   try {
     const { generateBetweenRoundEvents } = await import("../events/between-rounds");
     const { createRng, cryptoSeed } = await import("../generators/rng");
     const { recordTransaction } = await import("./finance-processor");
     const brRng = createRng(cryptoSeed());
+
+    // Sazebník soutěže — jednou na kolo. Bez samosprávy zůstane null a pokuty
+    // se účtují v dosavadní výši a nikam neplynou.
+    const { loadCompetitionContext } = await import("../competition/rules");
+    const seasonRow = leagueId
+      ? await db.prepare("SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?")
+          .bind(leagueId).first<{ n: number | null }>()
+          .catch(() => null)
+      : null;
+    const compCtx = leagueId && seasonRow?.n
+      ? await loadCompetitionContext(db, leagueId, seasonRow.n)
+      : null;
+    const compRules = compCtx?.rules ?? null;
 
     for (const mr of results) {
       if (mr.matchType === "ai_vs_ai") continue;
@@ -514,9 +533,27 @@ async function runBetweenRoundEvents(
               .catch((e) => logger.warn({ module: "league-round" }, "morale effect failed", e));
           }
           if (eff.type === "budget" && eff.value) {
-            await recordTransaction(db, humanTeamId, "event", eff.value, ev.title, td?.game_date ?? new Date().toISOString()).catch((e) =>
+            // Svazovou pokutu určuje sazba odhlasovaná soutěží a její výnos plyne
+            // do pokladny. Událost si nese vlastní částku z rozsahu 300–1500 Kč;
+            // ta se převede na stejné místo v rozsahu odvozeném ze sazby, takže
+            // při výchozích 900 Kč vyjdou přesně původní čísla.
+            // Ostatní peněžní události se soutěže netýkají a jdou beze změny.
+            const scaled = eff.toLeague && compRules
+              ? -Math.round(Math.abs(eff.value) * (compRules.fine_admin / 900))
+              : eff.value;
+            const eventGameDate = td?.game_date ?? new Date().toISOString();
+            await recordTransaction(db, humanTeamId, "event", scaled, ev.title, eventGameDate).catch((e) =>
               logger.warn({ module: "league-round" }, "budget effect failed", e),
             );
+            if (eff.toLeague && compRules && compCtx) {
+              const { recordCompetitionEntry } = await import("../competition/ledger");
+              await recordCompetitionEntry(db, {
+                leagueId: compCtx.leagueId, seasonNumber: compCtx.seasonNumber,
+                type: "fine_admin", amount: Math.abs(scaled), description: ev.title,
+                teamId: humanTeamId, gameDate: eventGameDate,
+                referenceId: `adm-${calendarId}-${humanTeamId}`,
+              });
+            }
           }
           // Pozn.: žádné pravidlo v EVENT_RULES dnes reputační efekt negeneruje
           // (reputace je tam jen vstup). Větev držíme přepojenou na helper, aby

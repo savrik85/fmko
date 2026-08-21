@@ -130,8 +130,13 @@ export function Tabs<T extends string>({
             {t.icon && <span aria-hidden="true" className="mr-1">{t.icon}</span>}
             {t.label}
             {t.count != null && (
-              <span className={`ml-1.5 tabular-nums ${isActive ? "text-pitch-500" : "text-muted-light"}`}>
-                {t.count}
+              // Odznak, ne šedé číslo vedle popisku — jinak si ho nikdo nevšimne.
+              <span
+                className={`ml-1.5 inline-flex items-center justify-center min-w-5 px-1.5 py-0.5 rounded-full tabular-nums text-xs font-bold align-middle ${
+                  isActive ? "bg-pitch-500 text-white" : "bg-card-red text-white"
+                }`}
+              >
+                {t.count > 99 ? "99+" : t.count}
               </span>
             )}
           </button>

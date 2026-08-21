@@ -23,6 +23,12 @@ export interface EventEffect {
   value?: number;
   playerIndex?: number;
   duration?: number; // Rounds
+  /**
+   * Peníze putují do pokladny soutěže, ne do vzduchu — a soutěží odhlasovaný
+   * sazebník pokut na ně sedne. Příznak je na efektu schválně: podle titulku
+   * událost poznat nejde, texty se lokalizují podle okresu.
+   */
+  toLeague?: boolean;
 }
 
 interface EventRule {
@@ -238,7 +244,7 @@ const EVENT_RULES: EventRule[] = [
       return {
         prob: 1.0,
         description: ctx.rng.pick(reasons),
-        effect: { type: "budget", value: -amount },
+        effect: { type: "budget", value: -amount, toLeague: true },
       };
     },
   },

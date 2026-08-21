@@ -9,6 +9,8 @@ interface ModalProps {
   children: React.ReactNode;
   maxWidth?: string;
   title?: string;
+  /** Formulářový modal se kliknutím vedle nezavírá — viz Sheet. */
+  zavritKlikemVedle?: boolean;
 }
 
 /**
@@ -19,9 +21,10 @@ interface ModalProps {
  * i stránku pod ním. Volající kód se nemusel měnit — chování zdědí
  * všechny čtyři použití zdarma.
  */
-export function Modal({ isOpen, onClose, children, maxWidth, title }: ModalProps) {
+export function Modal({ isOpen, onClose, children, maxWidth, title, zavritKlikemVedle }: ModalProps) {
   return (
-    <Sheet open={isOpen} onClose={onClose} maxWidth={maxWidth ?? "560px"} title={title}>
+    <Sheet open={isOpen} onClose={onClose} maxWidth={maxWidth ?? "560px"} title={title}
+      zavritKlikemVedle={zavritKlikemVedle}>
       {children}
     </Sheet>
   );

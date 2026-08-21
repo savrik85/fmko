@@ -41,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/friendly", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
   { href: "/dashboard/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
   { href: "/dashboard/rozhodci", label: "Rozhodčí", icon: "\u{1F9D1}\u200D\u2696\uFE0F", group: "league" },
+  { href: "/dashboard/soutez", label: "Grémium", icon: "\u{1F3DB}\uFE0F", group: "league" },
   { href: "/dashboard/pohar", label: "Pohár", icon: "\u{1F3C5}", group: "league" },
   { href: "/dashboard/calendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
   { href: "/dashboard/napoveda", label: "Nápověda", icon: "\u{1F4D6}", group: "league" },
@@ -59,6 +60,7 @@ export function FMSidebar() {
   const [incomingOffers, setIncomingOffers] = useState(0);
   const [unvotedCount, setUnvotedCount] = useState(0);
   const [notesUnseen, setNotesUnseen] = useState(false);
+  const [gremiumCount, setGremiumCount] = useState(0);
   const pathname = usePathname();
   const { teamId, isAdmin, logout, token } = useTeam();
 
@@ -77,6 +79,11 @@ export function FMSidebar() {
       apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
         .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
         .catch((e) => console.error("fetch votes:", e));
+      // Body grémia, o kterých klub ještě nehlasoval. Zasedání je jednou týdně,
+      // takže propásnutý hlas se nedá dohnat — odznak je jediné varování.
+      apiFetch<{ toVote: number }>(`/api/teams/${teamId}/competition/pending`)
+        .then((p) => setGremiumCount(p.toVote ?? 0))
+        .catch((e) => console.error("fetch gremium pending:", e));
     };
     load();
     const interval = setInterval(load, 30000);
@@ -162,6 +169,9 @@ export function FMSidebar() {
                       {!expanded && item.href === "/dashboard/novinky" && notesUnseen && (
                         <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
                       )}
+                      {!expanded && item.href === "/dashboard/soutez" && gremiumCount > 0 && (
+                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
+                      )}
                       {expanded && (
                         <span className="text-[13px] font-medium whitespace-nowrap leading-none">
                           {item.label}
@@ -176,6 +186,9 @@ export function FMSidebar() {
                           )}
                           {item.href === "/dashboard/hlasovani" && unvotedCount > 0 && (
                             <span className="ml-1.5 bg-amber-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
+                          )}
+                          {item.href === "/dashboard/soutez" && gremiumCount > 0 && (
+                            <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{gremiumCount}</span>
                           )}
                         </span>
                       )}

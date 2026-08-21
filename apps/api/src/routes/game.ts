@@ -5790,7 +5790,13 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
 
   const currentAmount = (offer.counter_amount != null ? offer.counter_amount : offer.offer_amount) as number;
   const crossLeague = !!(fromTeamRow?.league_id && toTeamRow?.league_id && fromTeamRow.league_id !== toTeamRow.league_id);
-  const adminFee = crossLeague ? Math.round(currentAmount * 0.20) : 0;
+  // Stejný výpočet jako při přijetí, jinak by náhled ukazoval jinou částku, než se strhne.
+  const { computeTransferLevies: previewLevies } = await import("../competition/transfer-levy");
+  const adminFee = (await previewLevies(c.env.DB, {
+    buyerLeagueId: toTeamRow?.league_id as string | null | undefined,
+    sellerLeagueId: fromTeamRow?.league_id as string | null | undefined,
+    amount: currentAmount, isLoan: false,
+  })).adminFee;
 
   // Zájem hráče o přestup — u aktivní nabídky čerstvý přepočet, u uzavřené snapshot.
   // Detailní faktory vidí jen vlastník hráče (role seller); kupec jen úroveň.
@@ -5962,9 +5968,14 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     .first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for offer accept", e); return null; });
   const seasonId = mustSeason(currentSeason?.id);
 
-  // Cross-league admin fee (20 %) — jen pro trvalý přestup.
-  const isCrossLeague = !!(seller?.league_id && buyer.league_id && seller.league_id !== buyer.league_id);
-  const adminFee = (offerType !== "loan" && isCrossLeague) ? Math.round(amount * 0.20) : 0;
+  // Meziligový poplatek a odvod z přestupu uvnitř soutěže. Sazby jdou ze sazebníku
+  // soutěže; bez samosprávy zůstává 20 % / 0 %, tedy dosavadní chování.
+  const { computeTransferLevies } = await import("../competition/transfer-levy");
+  const levies = await computeTransferLevies(c.env.DB, {
+    buyerLeagueId: buyer.league_id, sellerLeagueId: seller?.league_id,
+    amount, isLoan: offerType === "loan",
+  });
+  const adminFee = levies.adminFee;
 
   if (offerType === "loan" && loanDuration) {
     // Hostování — atomický budget check (pouze pokud je nenulový poplatek)
@@ -6061,9 +6072,23 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     ];
     if (adminFee > 0) {
       txLog.push(c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_admin_fee', ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), buyerTeamId, -adminFee, buyerBalanceAfter, "Administrační poplatek za meziligový přestup", gameDate));
+        .bind(crypto.randomUUID(), buyerTeamId, -adminFee, buyerBalanceAfter, `Administrační poplatek za meziligový přestup (${levies.adminFeePct} %)`, gameDate));
+    }
+    if (levies.levy > 0) {
+      // Odvod platí prodávající z utržené částky — kupujícího se netýká.
+      txLog.push(c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(levies.levy, sellerTeamId));
+      txLog.push(c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'competition_fee', ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), sellerTeamId, -levies.levy, (seller?.budget ?? 0) + amount - levies.levy,
+          `Odvod z přestupu uvnitř soutěže (${levies.levyPct} %)`, gameDate));
     }
     await c.env.DB.batch(txLog).catch((e) => logger.warn({ module: "game" }, "log offer-accept transactions", e));
+
+    // Výnos do pokladny soutěže. Idempotentní přes reference_id odvozené z nabídky.
+    const { recordTransferLevies } = await import("../competition/transfer-levy");
+    await recordTransferLevies(c.env.DB, {
+      levies, buyerLeagueId: buyer.league_id, sellerLeagueId: seller?.league_id,
+      buyerTeamId, sellerTeamId, offerId, gameDate,
+    }).catch((e) => logger.warn({ module: "game" }, "zápis poplatků z přestupu do pokladny", e));
 
     const contractCloseTeam = isBuyoutAccept ? buyerTeamId : sellerTeamId;
     const contractLeaveType = isBuyoutAccept ? "loan_bought" : "transfer";

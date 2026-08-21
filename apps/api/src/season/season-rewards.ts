@@ -11,6 +11,10 @@
 import { recordTransaction } from "./finance-processor";
 import type { StandingEntry } from "../stats/standings";
 import { logger } from "../lib/logger";
+import { DEFAULT_RULES } from "../competition/defaults";
+import { readBalance, recordCompetitionEntry } from "../competition/ledger";
+import { loadRules } from "../competition/rules";
+import { scaledRewards } from "../competition/projection";
 
 export interface SeasonRewardResult {
   teamId: string;
@@ -36,18 +40,38 @@ export async function applySeasonRewards(
   seasonNumber: number,
   gameDate: string,
   level: string,
+  leagueId?: string | null,
 ): Promise<SeasonRewardResult[]> {
   const n = standings.length;
   if (n === 0) return [];
   const levelMult = LEVEL_MULT[level] ?? 1.0;
   const results: SeasonRewardResult[] = [];
 
+  // Soutěž se samosprávou platí odměny ze své pokladny a podle svého sazebníku.
+  const rules = leagueId ? await loadRules(db, leagueId, seasonNumber) : null;
+
+  // Když v pokladně nezbývá na plnou výplatu, krátí se VŠEM stejným poměrem.
+  // Je to okamžitý a čitelný následek vlastního rozhodnutí: kluby si odhlasovaly
+  // víc, než soutěž unese. Poměr se počítá jednou dopředu, aby nezáleželo na pořadí.
+  let ratio = 1;
+  let scaled: Map<string, number> | null = null;
+  if (rules && leagueId) {
+    const out = scaledRewards(rules, standings, level, await readBalance(db, leagueId));
+    ratio = out.ratio;
+    scaled = out.rewards;
+    if (ratio < 1) {
+      logger.warn({ module: "season-rewards" },
+        `pokladna soutěže ${leagueId} nestačí na odměny (${out.required} Kč) — krácení na ${Math.round(ratio * 100)} %`);
+    }
+  }
+
   for (const entry of standings) {
     const { teamId, pos } = entry;
     // Mírná geometrická škála — 1. místo 150 000, každé další ×0,80 (každé místo jiné, žádný plateau),
     // floor 6 000 jako pojistka pro malé ligy (× násobič úrovně soutěže).
-    const base = Math.max(6000, 150000 * Math.pow(0.80, pos - 1));
-    const reward = Math.round(base * levelMult);
+    // Se samosprávou jde vrchol, koeficient poklesu i floor ze sazebníku soutěže.
+    const reward = scaled?.get(teamId)
+      ?? Math.round(Math.max(DEFAULT_RULES.place_floor, DEFAULT_RULES.place_top * Math.pow(DEFAULT_RULES.place_decay, pos - 1)) * levelMult);
     const managerRepDelta = Math.round((n / 2 - pos + 0.5) * 1.5);
     const teamRepDelta = Math.round((n / 2 - pos + 0.5) * 0.8);
     const refId = `season-${seasonNumber}-rwd-${teamId}`;
@@ -60,10 +84,21 @@ export async function applySeasonRewards(
 
     // Transakce (kredit + idempotenční marker) NEJDŘÍV a BEZ .catch — když zápis selže, chyba MÁ
     // propadnout (throw → fáze vrátí "error" → zopakuje se). Dřív spolknutá do warn → tým tiše bez odměny.
+    const kraceno = ratio < 1 ? ` — kráceno na ${Math.round(ratio * 100)} %` : "";
     await recordTransaction(
       db, teamId, "season_reward", reward,
-      `Odměna za ${seasonNumber}. sezónu (${pos}. místo)`, gameDate, refId,
+      `Odměna za ${seasonNumber}. sezónu (${pos}. místo)${kraceno}`, gameDate, refId,
     );
+
+    // Výdaj pokladny AŽ po markeru v transactions, ať retry fáze nezaúčtuje dvakrát.
+    // Ledger má navíc vlastní gate na reference_id, takže drží obojí nezávisle.
+    if (rules && leagueId && reward > 0) {
+      await recordCompetitionEntry(db, {
+        leagueId, seasonNumber, type: "place_reward", amount: -reward,
+        description: `Odměna za ${pos}. místo${kraceno}`,
+        teamId, gameDate, referenceId: `rwd-${seasonNumber}-${teamId}`,
+      });
+    }
 
     // Reputace AŽ PO markeru — na retry gate (exists) přeskočí celý tým, takže se reputace nepřičte podruhé.
     if (managerRepDelta !== 0) {

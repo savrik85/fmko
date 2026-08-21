@@ -955,8 +955,21 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
       ? await db.prepare("SELECT 1 FROM transactions WHERE reference_id = ?").bind(cupRefId).first().catch((e) => { logger.warn({ module: M }, "cup prize gate", e); return null; })
       : null;
     if (realWinner && !alreadyPaid) {
-      await recordTransaction(db, realWinner, "cup_prize", prize, `Pohár — postup (${roundLabel})`, gameDate, cupRefId)
+      // Odvod z pohárové odměny do pokladny domovské soutěže vítěze — solidarita.
+      // Výchozí sazba je nula, takže dokud si ho kluby neodhlasují, klub dostane vše.
+      const levy = await cupLevy(db, realWinner, prize);
+      await recordTransaction(db, realWinner, "cup_prize", prize - levy.amount,
+        `Pohár — postup (${roundLabel})${levy.amount > 0 ? ` (odvod ${levy.pct} % soutěži)` : ""}`,
+        gameDate, cupRefId)
         .catch((e) => logger.warn({ module: M }, "cup prize", e));
+      if (levy.amount > 0 && levy.leagueId && levy.seasonNumber) {
+        const { recordCompetitionEntry } = await import("../competition/ledger");
+        await recordCompetitionEntry(db, {
+          leagueId: levy.leagueId, seasonNumber: levy.seasonNumber, type: "levy_cup",
+          amount: levy.amount, description: `Odvod z pohárové odměny (${roundLabel})`,
+          teamId: realWinner, gameDate, referenceId: `ilcup-${cupRefId}`,
+        });
+      }
       if (repBonus.manager > 0) {
         const { applyManagerAttrDelta } = await import("../lib/manager-attrs");
         await applyManagerAttrDelta(
@@ -1120,4 +1133,32 @@ export async function backfillCupFinances(db: D1Database): Promise<{ processed: 
   }
   logger.info({ module: M }, `cup backfill finances: ${processed} zpracováno, ${skipped} přeskočeno`);
   return { processed, skipped };
+}
+
+/**
+ * Odvod z pohárové odměny do pokladny soutěže, ve které klub hraje ligu.
+ * Pohár je celorepublikový, ale peníze z něj plynou zpátky do okresu.
+ */
+async function cupLevy(
+  db: D1Database, teamId: string, prize: number,
+): Promise<{ amount: number; pct: number; leagueId: string | null; seasonNumber: number | null }> {
+  const none = { amount: 0, pct: 0, leagueId: null, seasonNumber: null };
+  if (prize <= 0) return none;
+
+  const team = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "liga vítěze pro odvod z poháru", e); return null; });
+  if (!team?.league_id) return none;
+
+  const season = await db.prepare("SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?")
+    .bind(team.league_id).first<{ n: number | null }>()
+    .catch(() => null);
+  if (!season?.n) return none;
+
+  const { loadRules } = await import("../competition/rules");
+  const rules = await loadRules(db, team.league_id, season.n);
+  const pct = rules?.levy_cup_pct ?? 0;
+  if (pct <= 0) return none;
+
+  return { amount: Math.round(prize * pct / 100), pct, leagueId: team.league_id, seasonNumber: season.n };
 }

@@ -111,6 +111,17 @@ export async function runScheduledMatches(
     ).bind(calendarId).first<{ season_number: number; league_id: string }>()
         .catch((e) => { logger.warn({module: "match-runner"}, "load calendar for referee stats", e); return null; });
 
+    // Sazebník soutěže — JEDNOU na kolo, ne per tým. Sedm zápasů znamená čtrnáct volání
+    // zápasových financí; kdyby si pravidla tahalo každé z nich samo, je to 14 dotazů navíc.
+    // Bez kalendáře (nebo bez samosprávy) zůstane null a finance spadnou na dosavadní sazby.
+    const {loadCompetitionContext} = await import("../competition/rules");
+    const compCtx = calRow
+        ? await loadCompetitionContext(db, calRow.league_id, calRow.season_number)
+        : null;
+    if (!calRow) {
+        logger.warn({module: "match-runner"}, `kalendář kola ${calendarId} se nenačetl — finance jedou na výchozí sazby`);
+    }
+
     // Pick weather for the whole round
     const weathers: Weather[] = ["sunny", "cloudy", "rain", "wind", "snow"];
     const weatherWeights = [30, 30, 20, 15, 5];
@@ -910,8 +921,8 @@ export async function runScheduledMatches(
                 const repMap = new Map(repRows.results.map((r) => [r.id, r.reputation ?? 50]));
                 const homeRep = repMap.get(homeTeamId) ?? 50;
                 const awayRep = repMap.get(awayTeamId) ?? 50;
-                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendanceWithOfficials, gameDate, awayRep, false, weather);
-                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendanceWithOfficials, gameDate, homeRep, false, weather);
+                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendanceWithOfficials, gameDate, awayRep, false, weather, compCtx);
+                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendanceWithOfficials, gameDate, homeRep, false, weather, compCtx);
                 // Cash loan repayments — po všech ostatních match-day financích (na čerstvém budgetu)
                 await processCashLoanRepayment(db, homeTeamId, matchId, gameDate);
                 await processCashLoanRepayment(db, awayTeamId, matchId, gameDate);

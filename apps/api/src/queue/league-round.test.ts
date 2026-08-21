@@ -213,10 +213,11 @@ describe("findLeaguesWithDueRound", () => {
     const { findLeaguesWithDueRound } = await import("../season/league-round");
     const db = new FakeD1([{ match: /FROM teams t JOIN leagues l/, all: [] }]);
 
-    await findLeaguesWithDueRound(db as unknown as D1Database, { legacyExcludeNameLike: "%České Budějovice%" });
+    await findLeaguesWithDueRound(db as unknown as D1Database, { legacyExcludeDistrictLike: "České Budějovice%" });
 
-    expect(db.queries[0].sql).toContain("l.name NOT LIKE ?");
-    expect(db.queries[0].params).toEqual(["%České Budějovice%"]);
+    // Filtruje se podle okresu, ne podle názvu — název se přejmenováním sponzorem mění.
+    expect(db.queries[0].sql).toContain("l.district NOT LIKE ?");
+    expect(db.queries[0].params).toEqual(["České Budějovice%"]);
   });
 });
 

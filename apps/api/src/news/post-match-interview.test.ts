@@ -130,6 +130,24 @@ describe("dopady odpovědí", () => {
     expect(e.reputation).toBe(-1);
   });
 
+  it("výchozí sazba dává přesně dosavadní pokuty", () => {
+    // Přechod z násobiče na konkrétní sazbu nesmí změnit ani korunu: dřív
+    // 600 + 300 × síla, dnes sazba 1200 × (0,5 + 0,25 × síla).
+    expect(effectsFor("kritika", 1, false).fineBase).toBe(900);
+    expect(effectsFor("kritika", 2, false).fineBase).toBe(1200);
+    expect(effectsFor("kritika", 3, false).fineBase).toBe(1500);
+  });
+
+  it("odhlasovaná sazba škáluje trest, ne šanci na něj", () => {
+    const levna = effectsFor("kritika", 2, false, 400);
+    const drava = effectsFor("kritika", 2, false, 4000);
+    expect(levna.fineBase).toBe(400);
+    expect(drava.fineBase).toBe(4000);
+    expect(levna.fineChance).toBe(drava.fineChance);
+    // Nulová sazba znamená, že soutěž kritiku netrestá penězi.
+    expect(effectsFor("kritika", 3, false, 0).fineBase).toBe(0);
+  });
+
   it("obhajoba respekt vrací a nikdy nestojí peníze", () => {
     const e = effectsFor("obhajoba", 2, false);
     expect(e.refereeRespect).toBeGreaterThan(0);
