@@ -603,26 +603,28 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
 
   const teams = await countAllClubs(c.env.DB, leagueId);
 
-  // Zapnutí uprostřed rozehrané sezóny se musí poměrně zkrátit. Startovné je
+  // Zapnutí uprostřed rozehrané sezóny nesmí stát kluby ani korunu. Startovné je
   // pro klub neutrální jen přes celou sezónu — zaplatí 15 000 a stejně tolik
-  // ušetří na rozhodčích, které dosud platil sám. Kdo se přidá v půlce, ušetří
-  // jen půlku, takže i platí půlku.
+  // ušetří na rozhodčích, které dosud platil sám. Kdo naskočí v půlce, už půlku
+  // rozhodčích zaplatil ze svého, takže by na startovném prodělal.
   //
-  // Dotace se ale nekrátí stejně: odměny za umístění se vyplácejí celé bez
-  // ohledu na to, kdy samospráva začala, zatímco prémie a rozhodčí jen za
-  // zbývající zápasy. Proto se krátí jen zápasová část.
+  // Vybere se proto až při nejbližším rolloveru, jako každou jinou sezónu.
+  // Zbytek rozehrané sezóny financuje celý svazová dotace: odměny za umístění
+  // v plné výši (vyplácejí se bez ohledu na to, kdy samospráva začala) plus
+  // prémie a rozhodčí za zápasy, které ještě zbývají odehrát.
   const odehrano = await playedMatches(c.env.DB, leagueId);
   const vsechZapasu = matchCount(teams);
   const zbyva = vsechZapasu > 0
     ? Math.max(0, Math.min(1, (vsechZapasu - odehrano) / vsechZapasu))
     : 1;
+  const uprostredSezony = zbyva < 1;
 
   const plny = projectSeasonCost(DEFAULT_RULES as unknown as CompetitionRules, teams, meta.level);
-  const entryFee = Math.round(DEFAULT_RULES.entry_fee * zbyva);
+  const entryFee = uprostredSezony ? 0 : DEFAULT_RULES.entry_fee;
   const naklad = plny.placement + Math.round((plny.bonus + plny.referees) * zbyva);
-  const subsidy = zbyva >= 1
-    ? subsidyFor(teams, meta.level)
-    : Math.max(0, Math.round(SUBSIDY_CUSHION * (naklad - teams * entryFee)));
+  const subsidy = uprostredSezony
+    ? Math.max(0, Math.round(SUBSIDY_CUSHION * naklad))
+    : subsidyFor(teams, meta.level);
 
   const gameDate = await c.env.DB.prepare(
     "SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?"
@@ -662,7 +664,8 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
 
   const { recordTransaction } = await import("../season/finance-processor");
   let collected = 0;
-  for (const club of clubs.results) {
+  // Uprostřed sezóny se startovné nevybírá vůbec — přijde na řadu až rollover.
+  for (const club of uprostredSezony ? [] : clubs.results) {
     const refId = `fee-${meta.season_number}-${club.id}`;
     const entry = await recordCompetitionEntry(c.env.DB, {
       leagueId, seasonNumber: meta.season_number, type: "entry_fee",
