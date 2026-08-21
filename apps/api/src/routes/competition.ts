@@ -14,6 +14,7 @@ import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import {
   DEFAULT_RULES, MIN_HUMAN_CLUBS, PROPOSAL_DEPOSIT, PROPOSAL_KINDS, ROLE_LABEL, ROLE_SCOPE,
+  SUBSIDY_CUSHION,
   type CompetitionRules, type OfficialRole,
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
@@ -37,7 +38,8 @@ import {
   nextSeasonRules, proposalTitle, validateProposal, voterStats,
 } from "../competition/proposals";
 import {
-  checkBudget, freeBalance, outstandingCommitments, placementReward, subsidyFor, teamImpact,
+  checkBudget, freeBalance, matchCount, outstandingCommitments, placementReward,
+  projectSeasonCost, subsidyFor, teamImpact,
 } from "../competition/projection";
 import {
   countAllClubs, countHumanClubs, loadGovernance, loadLeagueMeta, playedMatches, resolveRules,
@@ -600,7 +602,28 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
   }
 
   const teams = await countAllClubs(c.env.DB, leagueId);
-  const subsidy = subsidyFor(teams, meta.level);
+
+  // Zapnutí uprostřed rozehrané sezóny se musí poměrně zkrátit. Startovné je
+  // pro klub neutrální jen přes celou sezónu — zaplatí 15 000 a stejně tolik
+  // ušetří na rozhodčích, které dosud platil sám. Kdo se přidá v půlce, ušetří
+  // jen půlku, takže i platí půlku.
+  //
+  // Dotace se ale nekrátí stejně: odměny za umístění se vyplácejí celé bez
+  // ohledu na to, kdy samospráva začala, zatímco prémie a rozhodčí jen za
+  // zbývající zápasy. Proto se krátí jen zápasová část.
+  const odehrano = await playedMatches(c.env.DB, leagueId);
+  const vsechZapasu = matchCount(teams);
+  const zbyva = vsechZapasu > 0
+    ? Math.max(0, Math.min(1, (vsechZapasu - odehrano) / vsechZapasu))
+    : 1;
+
+  const plny = projectSeasonCost(DEFAULT_RULES as unknown as CompetitionRules, teams, meta.level);
+  const entryFee = Math.round(DEFAULT_RULES.entry_fee * zbyva);
+  const naklad = plny.placement + Math.round((plny.bonus + plny.referees) * zbyva);
+  const subsidy = zbyva >= 1
+    ? subsidyFor(teams, meta.level)
+    : Math.max(0, Math.round(SUBSIDY_CUSHION * (naklad - teams * entryFee)));
+
   const gameDate = await c.env.DB.prepare(
     "SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?"
   ).bind(leagueId).first<{ d: string | null }>().then((r) => r?.d ?? new Date().toISOString())
@@ -643,13 +666,16 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
     const refId = `fee-${meta.season_number}-${club.id}`;
     const entry = await recordCompetitionEntry(c.env.DB, {
       leagueId, seasonNumber: meta.season_number, type: "entry_fee",
-      amount: DEFAULT_RULES.entry_fee, description: "Startovné do soutěže",
+      amount: entryFee,
+      description: zbyva >= 1
+        ? "Startovné do soutěže"
+        : `Startovné do soutěže (poměrná část za zbytek sezóny)`,
       teamId: club.id, gameDate, referenceId: refId,
     });
     if (!entry.written) continue;   // už zaplaceno v dřívějším běhu
     collected++;
     await recordTransaction(
-      c.env.DB, club.id, "competition_fee", -DEFAULT_RULES.entry_fee,
+      c.env.DB, club.id, "competition_fee", -entryFee,
       `Startovné do soutěže (${meta.season_number}. sezóna)`, gameDate, refId,
     ).catch((e) => logger.warn({ module: M }, `startovné klubu ${club.id}`, e));
   }
