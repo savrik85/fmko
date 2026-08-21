@@ -299,14 +299,31 @@ export default function SoutezPage() {
             </div>
           ) : (
             <div className="mt-4 text-sm">
-              <div className="font-semibold text-base">Soutěž je ve správě svazu.</div>
-              <p className="mt-1 text-muted">
-                Hlasovací právo dostane soutěž, až v ní bude aspoň {state.threshold} klubů s trenérem.
-                Teď je jich {state.humanClubs}.
-              </p>
-              <a href="/dashboard/invite" className="entity-link mt-2 inline-block">
-                Pozvi kamaráda do soutěže →
-              </a>
+              {/* Dva různé důvody, proč samospráva neběží — a hráč musí poznat který.
+                  Splněný práh a přesto vypnuto znamená, že se čeká na přelom sezóny;
+                  psát tam „sežeňte víc klubů" by byl nesmysl, když jich má dost. */}
+              {state.humanClubs >= state.threshold ? (
+                <>
+                  <div className="font-semibold text-base">Samospráva se spustí od příští sezóny.</div>
+                  <p className="mt-1 text-muted">
+                    Podmínku máte splněnou — {state.humanClubs} klubů s trenérem, potřeba je{" "}
+                    {state.threshold}. Na přelomu sezóny dostane soutěž vlastní pokladnu, vypíšou se
+                    volby do vedení a kluby začnou rozhodovat o odměnách, pokutách i pravidlech.
+                    Do té doby běží všechno postaru.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="font-semibold text-base">Soutěž je ve správě svazu.</div>
+                  <p className="mt-1 text-muted">
+                    Hlasovací právo dostane soutěž, až v ní bude aspoň {state.threshold} klubů
+                    s trenérem. Teď je jich {state.humanClubs}.
+                  </p>
+                  <a href="/dashboard/invite" className="entity-link mt-2 inline-block">
+                    Pozvi kamaráda do soutěže →
+                  </a>
+                </>
+              )}
             </div>
           )}
         </div>
