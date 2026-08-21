@@ -13,7 +13,8 @@ import { logger } from "../lib/logger";
 import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import {
-  DEFAULT_RULES, MIN_HUMAN_CLUBS, PROPOSAL_DEPOSIT, PROPOSAL_KINDS, ROLE_LABEL, ROLE_SCOPE,
+  DEFAULT_RULES, MIN_HUMAN_CLUBS, PROPOSAL_DEPOSIT, PROPOSAL_KINDS,
+  ROLE_LABEL, ROLE_LABEL_AKUZATIV, ROLE_SCOPE,
   type CompetitionRules, type OfficialRole,
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
@@ -196,7 +197,7 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
       const holder = officials.results.find((o) => o.role === role);
       const scope = ROLE_SCOPE[role];
       return {
-        role, label: ROLE_LABEL[role],
+        role, label: ROLE_LABEL[role], labelAkuzativ: ROLE_LABEL_AKUZATIV[role],
         agenda: scope.agenda, powers: scope.powers,
         holder: holder
           ? {
