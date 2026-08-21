@@ -143,6 +143,48 @@ export function checkBudget(opts: {
   return { ok: deficit === 0, deficit, projected, cost, income, requiredEntryFee };
 }
 
+/**
+ * Co stojí zapnutí samosprávy — ať už na začátku sezóny, nebo uprostřed ní.
+ *
+ * Uprostřed rozehrané sezóny se startovné NEVYBÍRÁ. Je pro klub neutrální jen
+ * přes celou sezónu: zaplatí 15 000 a stejně tolik ušetří na rozhodčích, které
+ * dosud platil sám. Kdo naskočí v půlce, půlku rozhodčích už zaplatil ze svého,
+ * takže by na startovném prodělal. Vybere se až při nejbližším rolloveru.
+ *
+ * Dotace to musí dorovnat: odměny za umístění v plné výši (vyplácejí se bez
+ * ohledu na to, kdy samospráva začala) plus prémie a rozhodčí za zápasy, které
+ * ještě zbývá odehrát.
+ */
+export function enableCost(teams: number, level: string, playedMatches: number): {
+  entryFee: number;
+  subsidy: number;
+  /** Podíl sezóny, který ještě zbývá. 1 = začátek sezóny. */
+  remaining: number;
+  midSeason: boolean;
+} {
+  const total = matchCount(teams);
+  const remaining = total > 0 ? Math.max(0, Math.min(1, (total - playedMatches) / total)) : 1;
+  const midSeason = remaining < 1;
+
+  if (!midSeason) {
+    return {
+      entryFee: DEFAULT_RULES.entry_fee,
+      subsidy: subsidyFor(teams, level),
+      remaining: 1,
+      midSeason: false,
+    };
+  }
+
+  const full = projectSeasonCost(DEFAULT_RULES as unknown as CompetitionRules, teams, level);
+  const cost = full.placement + Math.round((full.bonus + full.referees) * remaining);
+  return {
+    entryFee: 0,
+    subsidy: Math.max(0, Math.round(SUBSIDY_CUSHION * cost)),
+    remaining,
+    midSeason: true,
+  };
+}
+
 export interface TeamImpact {
   matchBonus: number;
   placeReward: number;

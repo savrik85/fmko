@@ -168,3 +168,14 @@ export interface SponsorData {
   } | null;
   offers: SponsorOffer[];
 }
+
+export interface GrantsData {
+  freeBalance: number;
+  min: number; max: number; surplusMaxPct: number;
+  pitchThreshold: number;
+  kinds: Array<{ kind: string; label: string; targeted: boolean; seasonEnd: boolean }>;
+  teams: Array<{
+    teamId: string; teamName: string; managerName: string | null;
+    vMinusu: boolean; hristePodHranici: boolean;
+  }>;
+}
