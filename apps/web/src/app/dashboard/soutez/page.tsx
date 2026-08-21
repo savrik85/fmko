@@ -412,6 +412,7 @@ export default function SoutezPage() {
             <OdborInbox
               roleKey={ROLE_OF_GESCE[gesce]}
               roleLabel={state.roles?.find((r) => r.role === ROLE_OF_GESCE[gesce])?.label ?? ""}
+              roleAkuzativ={state.roles?.find((r) => r.role === ROLE_OF_GESCE[gesce])?.labelAkuzativ ?? ""}
               messages={board.inbox?.[ROLE_OF_GESCE[gesce]] ?? []}
               maxLength={board.maxLength}
               canPost={board.canPost}

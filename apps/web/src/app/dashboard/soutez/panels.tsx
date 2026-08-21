@@ -848,9 +848,9 @@ export function SponsorPanel({ data, teamId, onChanged }: {
  * Zobrazuje se na záložce odboru. Vzkazy jsou už ořezané serverem: obyčejný klub
  * vidí jen svoje, předseda odboru a prezident vidí všechny.
  */
-export function OdborInbox({ roleKey, roleLabel, messages, maxLength, canPost,
+export function OdborInbox({ roleKey, roleLabel, roleAkuzativ, messages, maxLength, canPost,
   teamId, avatars, onPost }: {
-  roleKey: string; roleLabel: string;
+  roleKey: string; roleLabel: string; roleAkuzativ: string;
   messages: BoardData["messages"]; maxLength: number; canPost: boolean;
   teamId: string | null;
   avatars: Record<string, Record<string, unknown> | null>;
@@ -861,7 +861,7 @@ export function OdborInbox({ roleKey, roleLabel, messages, maxLength, canPost,
       title="Vzkazy odboru"
       right={roleLabel || undefined}
       subtitle={
-        `Soukromá linka na ${roleLabel ? roleLabel.toLowerCase() : "vedoucího odboru"}. `
+        `Soukromá linka na ${roleAkuzativ || "vedoucího odboru"}. `
         + "Čte to on a prezident soutěže — ostatní kluby ne. Sem patří stížnost nebo nápad, "
         + "který ještě nemá být návrhem na zasedání."
       }

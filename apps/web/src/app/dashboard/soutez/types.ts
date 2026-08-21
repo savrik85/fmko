@@ -27,6 +27,8 @@ export interface Official {
 
 export interface RoleSlot {
   role: string; label: string;
+  /** 4. pád — „napiš generálnímu sekretáři", ne „na generální sekretář". */
+  labelAkuzativ: string;
   agenda: string; powers: string[];
   holder: { teamId: string; teamName: string; managerName: string | null; status: string } | null;
 }

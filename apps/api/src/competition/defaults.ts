@@ -149,6 +149,17 @@ export const ROLE_SCOPE: Record<OfficialRole, {
   },
 };
 
+/**
+ * Funkce ve 4. pádu: „napiš prezidentovi soutěže", „soukromá linka na komisaře".
+ * Bez toho v UI stálo „Soukromá linka na generální sekretář".
+ */
+export const ROLE_LABEL_AKUZATIV: Record<OfficialRole, string> = {
+  predseda: "prezidenta soutěže",
+  hospodarska: "generálního sekretáře",
+  disciplinarni: "předsedu disciplinární rady",
+  rozhodcich: "komisaře rozhodčích",
+};
+
 /** Název celého orgánu. */
 export const BODY_NAME = "Grémium soutěže";
 
