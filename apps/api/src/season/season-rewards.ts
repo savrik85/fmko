@@ -100,6 +100,22 @@ export async function applySeasonRewards(
       });
     }
 
+    // Bezúročná půjčka se splácí z téhle odměny, ne z klubového rozpočtu — klub
+    // ji dostal, když byl v mínusu, a splatí ji z toho, co si vydělal na hřišti.
+    if (rules && leagueId && reward > 0) {
+      const { repayLoans } = await import("../competition/grants");
+      await repayLoans(db, { leagueId, seasonNumber, teamId, reward, gameDate })
+        .then(async (splatka) => {
+          if (splatka <= 0) return;
+          const { recordTransaction: rt } = await import("./finance-processor");
+          await rt(
+            db, teamId, "competition_fee", -splatka,
+            `Splátka bezúročné půjčky soutěži`, gameDate, `loanrep-${seasonNumber}-${teamId}`,
+          );
+        })
+        .catch((e) => logger.warn({ module: "season-rewards" }, `splátka půjčky ${teamId}`, e));
+    }
+
     // Reputace AŽ PO markeru — na retry gate (exists) přeskočí celý tým, takže se reputace nepřičte podruhé.
     if (managerRepDelta !== 0) {
       const { applyManagerAttrDelta } = await import("../lib/manager-attrs");

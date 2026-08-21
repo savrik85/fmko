@@ -7,14 +7,17 @@
  * akce jsou přes celou šířku a dlouhá jména se lámou.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
 import {
-  Empty, GOLD, GOLD_SOFT, Ornament, PersonLine, Portrait, Row, czk, formatDate, plural, signed,
+  Empty, GOLD, GOLD_SOFT, OpenProposalNote, Ornament, PersonLine, Portrait, Row,
+  czk, formatDate, plural, signed,
 } from "./ui";
-import type { BoardData, Election, LedgerEntry, Meeting, Rules, SponsorData, State } from "./types";
+import type {
+  BoardData, Election, GrantsData, LedgerEntry, Meeting, Rules, SponsorData, State,
+} from "./types";
 
 const LEDGER_LABEL: Record<string, string> = {
   subsidy: "Svazová dotace", entry_fee: "Startovné", sponsor: "Sponzor",
@@ -23,7 +26,8 @@ const LEDGER_LABEL: Record<string, string> = {
   fine_admin: "Administrativní pokuty", sanction: "Pokuty disciplinární rady",
   interleague_fee: "Meziligové poplatky", levy_transfer: "Odvod z přestupů",
   levy_concession: "Odvod z občerstvení", levy_gate: "Odvod ze vstupného",
-  levy_cup: "Odvod z poháru", grant: "Dotace klubům", deposit: "Kauce", other: "Ostatní",
+  levy_cup: "Odvod z poháru", grant: "Dotace klubům", loan_repaid: "Splátky půjček",
+  deposit: "Kauce", other: "Ostatní",
 };
 
 // ── Pokladna ────────────────────────────────────────────────────────────────
@@ -548,6 +552,184 @@ function ResignForm({ role, teamId, hrozbaOdvolani, onClose, onSaved }: {
           <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
           <button className="btn btn-lg btn-primary flex-1" disabled={saving} onClick={submit}>
             {saving ? "Odesílám…" : "Rezignovat"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Dotace z pokladny. Rozdat jde jen volné peníze — to, co zbude po dohrání
+ * rozehrané sezóny, protože odměny za umístění se platí až po posledním kole.
+ */
+export function GrantsPanel({ data, teamId, myOpen, onChanged }: {
+  data: GrantsData; teamId: string;
+  myOpen: { title: string } | null;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="card p-5">
+      <Ornament right={`volných ${czk(data.freeBalance)}`}>Dotace klubům</Ornament>
+      <p className="text-sm text-muted">
+        Soutěž může rozdat část pokladny zpátky klubům — na vybavení, na opravu hřiště,
+        jako cenu nebo jako bezúročnou půjčku tomu, kdo je v mínusu. Rozdává se jen
+        z volných peněz; zbytek padne na odměny za umístění.
+      </p>
+
+      {myOpen ? (
+        <div className="mt-3">
+          <OpenProposalNote p={myOpen} />
+        </div>
+      ) : data.freeBalance < data.min ? (
+        <p className="text-sm mt-3" style={{ color: "#A32B1F" }}>
+          Volných peněz je {czk(data.freeBalance)} — na dotaci to nestačí.
+        </p>
+      ) : (
+        <button className="btn btn-lg btn-primary w-full mt-3" onClick={() => setOpen(true)}>
+          Navrhnout dotaci
+        </button>
+      )}
+
+      {open && (
+        <GrantForm
+          data={data} teamId={teamId}
+          onClose={() => setOpen(false)}
+          onSaved={() => { setOpen(false); onChanged(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function GrantForm({ data, teamId, onClose, onSaved }: {
+  data: GrantsData; teamId: string; onClose: () => void; onSaved: () => void;
+}) {
+  const [kind, setKind] = useState(data.kinds[0]?.kind ?? "equipment");
+  const [amount, setAmount] = useState(String(Math.min(data.max, Math.max(data.min, 10_000))));
+  const [target, setTarget] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const spec = data.kinds.find((k) => k.kind === kind);
+  const jePrebytek = kind === "surplus";
+
+  // Půjčka dává smysl jen klubu v mínusu — nabídka to musí říct dřív, než ji server odmítne.
+  const cile = useMemo(
+    () => (kind === "loan" ? data.teams.filter((t) => t.vMinusu) : data.teams),
+    [kind, data.teams],
+  );
+
+  useEffect(() => {
+    setTarget(cile[0]?.teamId ?? "");
+  }, [cile]);
+
+  const submit = async () => {
+    setSaving(true);
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/grants`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind, amount: Number(amount),
+          targetTeamId: spec?.targeted ? target : undefined,
+          note,
+        }),
+      }),
+      "Návrh se nepodařilo podat",
+    );
+    setSaving(false);
+    if (ok) onSaved();
+  };
+
+  const podHranici = data.teams.filter((t) => t.hristePodHranici).length;
+
+  return (
+    <Modal isOpen onClose={onClose} title="Návrh na dotaci" zavritKlikemVedle={false}>
+      <div className="p-5 space-y-4">
+        <div className="text-lg font-heading">Návrh na dotaci</div>
+
+        <div>
+          <label className="text-sm text-muted">Na co</label>
+          <select className="select w-full mt-1" value={kind} onChange={(e) => setKind(e.target.value)}>
+            {data.kinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
+          </select>
+          {kind === "pitch" && (
+            <div className="text-sm text-muted mt-1">
+              {podHranici === 0
+                ? `Nikdo teď nemá hřiště pod ${data.pitchThreshold} — dotace by neměla komu jít.`
+                : `Rozdělí se rovným dílem mezi kluby pod hranicí ${data.pitchThreshold}. Teď jich je ${podHranici}.`}
+            </div>
+          )}
+          {kind === "equipment" && (
+            <div className="text-sm text-muted mt-1">
+              Rozdělí se rovným dílem mezi všechny kluby soutěže.
+            </div>
+          )}
+          {spec?.seasonEnd && (
+            <div className="text-sm text-muted mt-1">
+              Vyplácí se až na konci sezóny{kind === "award"
+                ? " — cena za fair play, za návštěvnost a pro nejlepšího střelce."
+                : "."}
+            </div>
+          )}
+        </div>
+
+        {spec?.targeted && (
+          <div>
+            <label className="text-sm text-muted">Komu</label>
+            {cile.length === 0 ? (
+              <div className="text-sm mt-1" style={{ color: "#A32B1F" }}>
+                Žádný klub soutěže není v mínusu. Půjčka je pro kluby v nouzi.
+              </div>
+            ) : (
+              <select className="select w-full mt-1" value={target} onChange={(e) => setTarget(e.target.value)}>
+                {cile.map((t) => (
+                  <option key={t.teamId} value={t.teamId}>
+                    {t.managerName ? `${t.managerName} (${t.teamName})` : t.teamName}
+                    {t.vMinusu ? " — v mínusu" : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="text-sm text-muted">
+            {jePrebytek
+              ? `Kolik procent přebytku (nejvýš ${data.surplusMaxPct} %)`
+              : `Částka (${czk(data.min)} – ${czk(Math.min(data.max, data.freeBalance))})`}
+          </label>
+          <input className="input w-full mt-1 tabular-nums" type="number"
+            step={jePrebytek ? "5" : "1000"}
+            min={jePrebytek ? 0 : data.min}
+            max={jePrebytek ? data.surplusMaxPct : Math.min(data.max, data.freeBalance)}
+            value={amount} onChange={(e) => setAmount(e.target.value)} />
+          {!jePrebytek && (
+            <div className="text-sm text-muted mt-1">
+              V pokladně je volných {czk(data.freeBalance)}.
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm text-muted">Odůvodnění (nepovinné)</label>
+          <textarea className="input w-full mt-1" rows={3} maxLength={500}
+            value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="Proč by to kluby měly podpořit?" />
+        </div>
+
+        <p className="text-sm text-muted">
+          Za podání se skládá kauce {czk(500)}. Vrátí se, až návrh projde.
+        </p>
+
+        <div className="flex gap-2">
+          <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
+          <button className="btn btn-lg btn-primary flex-1"
+            disabled={saving || (!!spec?.targeted && !target)} onClick={submit}>
+            {saving ? "Podávám…" : "Podat návrh"}
           </button>
         </div>
       </div>

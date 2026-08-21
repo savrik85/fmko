@@ -18,6 +18,7 @@
 import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { DEFAULT_RULES, PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY } from "./defaults";
+import type { GrantKind } from "./grants";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
 import { presidentOf, recallOfficial, resolveElections, restoreOfficial } from "./officials";
 import { voterStats } from "./proposals";
@@ -408,6 +409,31 @@ async function applyImmediateEffect(
 
     if (p.kind === "recall" && payload.role) {
       await recallOfficial(db, p.league_id, payload.role as never, p.season_number, gameDate);
+      return;
+    }
+
+    // Dotace vyplatitelné hned. Sezónní ceny a přebytek čekají na konec sezóny,
+    // protože se počítají z odehrané sezóny — proto se tady vědomě přeskočí.
+    if (p.kind === "grant" && payload.grantKind) {
+      const kind = String(payload.grantKind) as GrantKind;
+      if (kind === "award" || kind === "surplus") return;
+
+      const { payGrants, prijemci } = await import("./grants");
+      const { resolveRules } = await import("./rules");
+      const r = await resolveRules(db, p.league_id, p.season_number);
+      const komu = await prijemci(db, {
+        leagueId: p.league_id, kind, amount: Number(payload.amount) || 0,
+        targetTeamId: (payload.targetTeamId as string) ?? null,
+        pitchThreshold: r.min_pitch_condition > 0 ? r.min_pitch_condition : 30,
+      });
+      if (komu.length === 0) {
+        logger.warn({ module: M }, `dotace ${p.id}: nikdo ji nesplňuje, peníze zůstávají v pokladně`);
+        return;
+      }
+      await payGrants(db, {
+        leagueId: p.league_id, seasonNumber: p.season_number, kind,
+        referenceKey: p.id, payments: komu, gameDate,
+      });
       return;
     }
 

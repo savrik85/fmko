@@ -18,6 +18,9 @@ import {
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
 import {
+  GRANT_LABEL, GRANT_MAX, GRANT_MIN, SURPLUS_MAX_PCT, type GrantKind,
+} from "../competition/grants";
+import {
   actsFor, canRunFor, openElections, presidentOf, resignOfficial, rolesFor, suspendOfficial,
 } from "../competition/officials";
 import {
@@ -1028,6 +1031,159 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans/direct", async (
     .catch((e) => logger.warn({ module: M }, "čerpání pravomoci komisaře", e));
 
   return c.json({ ok: true });
+});
+
+// ── Dotace, ceny a půjčky ───────────────────────────────────────────────────
+/**
+ * Návrh na dotaci z pokladny.
+ *
+ * Strop je tvrdý: rozdat jde jen z VOLNÝCH peněz, tedy z toho, co zbyde po
+ * dohrání rozehrané sezóny. Odměny za umístění se vyplácejí až po posledním
+ * kole, takže část zůstatku je fakticky utracená — bez téhle kontroly by si
+ * kluby rozdělily peníze, které pak budou chybět jim samotným.
+ */
+competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{
+    kind?: string; amount?: number; targetTeamId?: string; note?: string;
+  }>().catch(() => null);
+
+  const kind = String(body?.kind ?? "") as GrantKind;
+  const amount = Math.round(Number(body?.amount));
+  if (!GRANT_LABEL[kind]) return c.json({ error: "Neznámý druh dotace." }, 400);
+  if (!Number.isFinite(amount) || amount < GRANT_MIN || amount > GRANT_MAX) {
+    return c.json({
+      error: `Částka musí být mezi ${GRANT_MIN.toLocaleString("cs")} a ${GRANT_MAX.toLocaleString("cs")} Kč.`,
+    }, 400);
+  }
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+  const gov = await loadGovernance(c.env.DB, leagueId);
+  if (!gov?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
+
+  const voters = await voterStats(c.env.DB, leagueId);
+  if (!voters.voters.includes(teamId)) {
+    return c.json({ error: "Tvůj klub nemá v téhle soutěži hlasovací právo." }, 403);
+  }
+
+  const openMine = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM competition_proposals WHERE league_id = ? AND proposed_by_team_id = ? AND status = 'open'"
+  ).bind(leagueId, teamId).first<{ n: number }>().catch(() => null);
+  if ((openMine?.n ?? 0) > 0) {
+    return c.json({ error: "Máš na programu zasedání už jeden návrh. Počkej, až se projedná." }, 409);
+  }
+
+  const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
+  const teamsInLeague = await countAllClubs(c.env.DB, leagueId);
+  const played = await playedMatches(c.env.DB, leagueId);
+  const free = freeBalance(
+    await readBalance(c.env.DB, leagueId), rules, teamsInLeague, meta.level, played,
+  );
+  if (amount > free) {
+    return c.json({
+      error: `Na tohle soutěž nemá. Volných peněz je ${Math.max(0, free).toLocaleString("cs")} Kč — `
+        + "zbytek pokladny padne na odměny rozehrané sezóny.",
+    }, 400);
+  }
+
+  // Půjčka jen klubu v mínusu, cílené dotace potřebují cíl.
+  const cileno = kind === "loan" || kind === "travel" || kind === "award";
+  if (cileno && !body?.targetTeamId) return c.json({ error: "Chybí klub, kterému to má jít." }, 400);
+  if (body?.targetTeamId && !voters.voters.includes(body.targetTeamId)) {
+    const jeVSouteZi = await c.env.DB.prepare("SELECT 1 FROM teams WHERE id = ? AND league_id = ?")
+      .bind(body.targetTeamId, leagueId).first().catch(() => null);
+    if (!jeVSouteZi) return c.json({ error: "Takový klub v soutěži není." }, 404);
+  }
+  if (kind === "loan" && body?.targetTeamId) {
+    const t = await c.env.DB.prepare("SELECT budget, name FROM teams WHERE id = ?")
+      .bind(body.targetTeamId).first<{ budget: number; name: string }>().catch(() => null);
+    if (!t) return c.json({ error: "Takový klub v soutěži není." }, 404);
+    if (t.budget >= 0) {
+      return c.json({ error: `${t.name} v mínusu není. Půjčka je pro kluby v nouzi.` }, 400);
+    }
+  }
+
+  const cil = body?.targetTeamId
+    ? await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
+        .bind(body.targetTeamId).first<{ name: string }>().catch(() => null)
+    : null;
+
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const id = crypto.randomUUID();
+  const titul = `${GRANT_LABEL[kind]}: ${amount.toLocaleString("cs")} Kč`
+    + (cil ? ` — ${cil.name}` : kind === "pitch" ? " klubům pod hranicí" : " rovným dílem");
+
+  await c.env.DB.prepare(
+    `INSERT INTO competition_proposals
+      (id, league_id, season_number, kind, gesce, title, body, payload, proposed_by_team_id,
+       target_team_id, majority, quorum, opened_game_date, deposit, effective_from_season)
+     VALUES (?,?,?,'grant','hospodarska',?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    id, leagueId, meta.season_number, titul, (body?.note ?? "").slice(0, 500),
+    JSON.stringify({ grantKind: kind, amount, targetTeamId: body?.targetTeamId ?? null }),
+    teamId, body?.targetTeamId ?? null, 0.5, 0.5, gameDate, PROPOSAL_DEPOSIT,
+    kind === "award" || kind === "surplus" ? meta.season_number : null,
+  ).run();
+
+  const { recordTransaction } = await import("../season/finance-processor");
+  await recordTransaction(
+    c.env.DB, teamId, "competition_deposit", -PROPOSAL_DEPOSIT,
+    "Kauce za návrh na dotaci", gameDate, `dep-${id}`,
+  ).catch((e) => logger.warn({ module: M }, "stržení kauce", e));
+  await recordCompetitionEntry(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, type: "deposit",
+    amount: PROPOSAL_DEPOSIT, description: "Kauce za podaný návrh",
+    teamId, gameDate, referenceId: `dep-${id}`,
+  });
+
+  return c.json({ ok: true, id });
+});
+
+/** Co všechno jde z pokladny rozdat a kolik na to je. */
+competitionRouter.get("/teams/:teamId/competition/grants", async (c) => {
+  const teamId = c.req.param("teamId");
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
+  const teamsInLeague = await countAllClubs(c.env.DB, leagueId);
+  const played = await playedMatches(c.env.DB, leagueId);
+  const free = freeBalance(
+    await readBalance(c.env.DB, leagueId), rules, teamsInLeague, meta.level, played,
+  );
+
+  const kluby = await c.env.DB.prepare(
+    `SELECT t.id, t.name, t.budget,
+            (SELECT s.pitch_condition FROM stadiums s WHERE s.team_id = t.id) AS pitch,
+            ${MANAGER_NAME("t.id")} AS manager_name
+       FROM teams t
+      WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
+      ORDER BY t.name`
+  ).bind(leagueId).all<{
+    id: string; name: string; budget: number; pitch: number | null; manager_name: string | null;
+  }>().catch((e) => { logger.warn({ module: M }, "kluby pro dotaci", e); return { results: [] }; });
+
+  const prah = rules.min_pitch_condition > 0 ? rules.min_pitch_condition : 30;
+  return c.json({
+    freeBalance: Math.max(0, free),
+    min: GRANT_MIN, max: GRANT_MAX, surplusMaxPct: SURPLUS_MAX_PCT,
+    kinds: (Object.keys(GRANT_LABEL) as GrantKind[]).map((k) => ({
+      kind: k, label: GRANT_LABEL[k],
+      targeted: k === "loan" || k === "travel" || k === "award",
+      seasonEnd: k === "award" || k === "surplus",
+    })),
+    teams: kluby.results.map((t) => ({
+      teamId: t.id, teamName: t.name, managerName: t.manager_name,
+      vMinusu: t.budget < 0,
+      hristePodHranici: t.pitch !== null && t.pitch < prah,
+    })),
+    pitchThreshold: prah,
+  });
 });
 
 // ── Sponzor ─────────────────────────────────────────────────────────────────

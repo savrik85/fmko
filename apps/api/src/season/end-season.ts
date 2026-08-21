@@ -185,6 +185,15 @@ async function runWrapPhase(
         if (!levelRow?.level) throw new Error(`rewards: nelze načíst level ligy ${leagueId}`);
         const gameDate = await getGameDate(db, leagueId);
         await applySeasonRewards(db, standings, seasonNumber, gameDate, levelRow.level, leagueId);
+        // Sezónní ceny a rozdělení přebytku, které si soutěž odhlasovala. Až po
+        // odměnách za umístění — z pokladny se rozdává to, co po nich zbude.
+        try {
+          const { paySeasonEndGrants } = await import("../competition/season-grants");
+          await paySeasonEndGrants(db, { leagueId, seasonNumber, level: levelRow.level, gameDate });
+        } catch (e) {
+          // Cena navíc nesmí shodit konec sezóny — odměny už jsou vyplacené.
+          logger.warn({ module: "end-season" }, `sezónní ceny soutěže ${leagueId}`, e);
+        }
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
       }
