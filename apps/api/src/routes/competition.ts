@@ -14,7 +14,6 @@ import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import {
   DEFAULT_RULES, MIN_HUMAN_CLUBS, PROPOSAL_DEPOSIT, PROPOSAL_KINDS, ROLE_LABEL, ROLE_SCOPE,
-  SUBSIDY_CUSHION,
   type CompetitionRules, type OfficialRole,
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
@@ -38,8 +37,8 @@ import {
   nextSeasonRules, proposalTitle, validateProposal, voterStats,
 } from "../competition/proposals";
 import {
-  checkBudget, freeBalance, matchCount, outstandingCommitments, placementReward,
-  projectSeasonCost, subsidyFor, teamImpact,
+  checkBudget, enableCost, freeBalance, outstandingCommitments, placementReward,
+  subsidyFor, teamImpact,
 } from "../competition/projection";
 import {
   countAllClubs, countHumanClubs, loadGovernance, loadLeagueMeta, playedMatches, resolveRules,
@@ -613,18 +612,7 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
   // v plné výši (vyplácejí se bez ohledu na to, kdy samospráva začala) plus
   // prémie a rozhodčí za zápasy, které ještě zbývají odehrát.
   const odehrano = await playedMatches(c.env.DB, leagueId);
-  const vsechZapasu = matchCount(teams);
-  const zbyva = vsechZapasu > 0
-    ? Math.max(0, Math.min(1, (vsechZapasu - odehrano) / vsechZapasu))
-    : 1;
-  const uprostredSezony = zbyva < 1;
-
-  const plny = projectSeasonCost(DEFAULT_RULES as unknown as CompetitionRules, teams, meta.level);
-  const entryFee = uprostredSezony ? 0 : DEFAULT_RULES.entry_fee;
-  const naklad = plny.placement + Math.round((plny.bonus + plny.referees) * zbyva);
-  const subsidy = uprostredSezony
-    ? Math.max(0, Math.round(SUBSIDY_CUSHION * naklad))
-    : subsidyFor(teams, meta.level);
+  const { entryFee, subsidy, midSeason: uprostredSezony } = enableCost(teams, meta.level, odehrano);
 
   const gameDate = await c.env.DB.prepare(
     "SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?"
@@ -669,10 +657,7 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
     const refId = `fee-${meta.season_number}-${club.id}`;
     const entry = await recordCompetitionEntry(c.env.DB, {
       leagueId, seasonNumber: meta.season_number, type: "entry_fee",
-      amount: entryFee,
-      description: zbyva >= 1
-        ? "Startovné do soutěže"
-        : `Startovné do soutěže (poměrná část za zbytek sezóny)`,
+      amount: entryFee, description: "Startovné do soutěže",
       teamId: club.id, gameDate, referenceId: refId,
     });
     if (!entry.written) continue;   // už zaplaceno v dřívějším běhu
