@@ -111,6 +111,39 @@ export async function rolloverAllLeagues(
     }
   } catch (e) { logger.error({ module: "season-rollover" }, "rollover samosprávy soutěží selhal", e); }
 
+  // 4b. Sázková kancelář: co zbylo otevřené ze staré sezóny, se ruší a vklady se
+  //     vracejí. Otevřený tiket by jinak visel navždy — jeho kolo se už nikdy
+  //     nedohraje. Odvod soutěži se nevrací, ten obrat proběhl.
+  //     Idempotence stojí na UPDATE ... WHERE status = 'open': druhý běh nenajde nic.
+  try {
+    const zbyle = await db.prepare(
+      `SELECT id, team_id, stake FROM bet_tickets WHERE status = 'open' AND season_number < ?`
+    ).bind(newNum).all<{ id: string; team_id: string; stake: number }>();
+
+    if (zbyle.results.length > 0) {
+      const { recordTransaction } = await import("./finance-processor");
+      let vraceno = 0;
+      for (const t of zbyle.results) {
+        const gate = await db.prepare(
+          `UPDATE bet_tickets SET status = 'void', payout = stake,
+                  settled_game_date = ?, settled_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+            WHERE id = ? AND status = 'open'`
+        ).bind(startIso, t.id).run();
+        if ((gate.meta?.changes ?? 0) === 0) continue;
+
+        await recordTransaction(db, t.team_id, "bet_refund", t.stake,
+          "Vrácený vklad — konec sezóny", startIso, `bet-payout-${t.id}`);
+        vraceno++;
+      }
+      if (vraceno > 0) {
+        logger.info({ module: "betting" }, `rollover: zrušeno ${vraceno} otevřených tiketů, vklady vráceny`);
+      }
+    }
+
+    // Kurzový lístek staré sezóny už nikoho nezajímá a jen roste.
+    await db.prepare("DELETE FROM bet_odds WHERE season_number < ?").bind(newNum).run();
+  } catch (e) { logger.error({ module: "betting" }, "úklid sázek při rolloveru selhal", e); }
+
   // 5. Celorepublikový pohár pro novou sezónu (kola na soboty, finále na konci ligy).
   try {
     const { createCup } = await import("../cup/cup");

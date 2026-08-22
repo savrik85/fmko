@@ -139,6 +139,25 @@ export async function placeTicket(db: D1Database, input: {
     return { ok: false, status: 400, error: "Z jednoho zápasu si můžeš vybrat jen jeden tip." };
   }
 
+  // ── Vlastní zápas ────────────────────────────────────────────────────────
+  // Musí se ověřit DŘÍV než kurzy: konflikt zájmů je závažnější než neshoda
+  // kurzu a hráč si zaslouží vědět, co je skutečně špatně. Kontroluje se proti
+  // všem týmům uživatele, aby to pokrylo i rezervu (U21 sdílí user_id).
+  const moje = await vlastniTymy(db, teamId);
+  const zapasyMoje = await db.prepare(
+    `SELECT id, home_team_id, away_team_id FROM matches WHERE id IN (${[...zapasy].map(() => "?").join(",")})`
+  ).bind(...zapasy).all<{ id: string; home_team_id: string; away_team_id: string }>()
+    .catch((e) => { logger.error({ module: M }, "kontrola vlastního zápasu", e); return { results: [] }; });
+
+  if (zapasyMoje.results.length !== zapasy.size) {
+    return { ok: false, status: 409, error: "Některý zápas z tiketu už neexistuje." };
+  }
+  for (const m of zapasyMoje.results) {
+    if (moje.has(m.home_team_id) || moje.has(m.away_team_id)) {
+      return { ok: false, status: 400, error: "Na vlastní zápas se nesází. To by nebyl fotbal, ale domluva." };
+    }
+  }
+
   // ── Kurzy ze serveru. To, co poslal klient, se použije jen k porovnání. ──
   const ph = selections.map(() => "(match_id = ? AND market = ? AND selection = ?)").join(" OR ");
   const vazby = selections.flatMap((s) => [s.matchId, s.market, s.selection]);
@@ -174,22 +193,6 @@ export async function placeTicket(db: D1Database, input: {
   }
   const calendarId = [...kola][0];
   const { league_id: leagueId, season_number: seasonNumber } = kurzy.results[0];
-
-  // ── Vlastní zápas ────────────────────────────────────────────────────────
-  const moje = await vlastniTymy(db, teamId);
-  const zapasyMoje = await db.prepare(
-    `SELECT id, home_team_id, away_team_id FROM matches WHERE id IN (${[...zapasy].map(() => "?").join(",")})`
-  ).bind(...zapasy).all<{ id: string; home_team_id: string; away_team_id: string }>()
-    .catch((e) => { logger.error({ module: M }, "kontrola vlastního zápasu", e); return { results: [] }; });
-
-  if (zapasyMoje.results.length !== zapasy.size) {
-    return { ok: false, status: 409, error: "Některý zápas z tiketu už neexistuje." };
-  }
-  for (const m of zapasyMoje.results) {
-    if (moje.has(m.home_team_id) || moje.has(m.away_team_id)) {
-      return { ok: false, status: 400, error: "Na vlastní zápas se nesází. To by nebyl fotbal, ale domluva." };
-    }
-  }
 
   // ── Herní kolo a povolení sázet ──────────────────────────────────────────
   const kolo = await db.prepare(
@@ -267,7 +270,7 @@ export async function placeTicket(db: D1Database, input: {
   }
 
   await recordTransaction(db, teamId, "bet_stake", -stake,
-    `Sázka u kanceláře (${(totalOdds / 100).toFixed(2)}×)`, gameDate, `bet-stake-${ticketId}`);
+    `Sázka u kanceláře (${(totalOdds / 100).toFixed(2).replace(".", ",")}×)`, gameDate, `bet-stake-${ticketId}`);
 
   if (levy > 0) {
     // Nejdřív ubrat klubu, pak připsat pokladně — pořadí je v projektu zvyk.

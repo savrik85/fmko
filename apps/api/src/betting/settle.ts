@@ -120,7 +120,7 @@ export async function settleRound(db: D1Database, calendarId: string): Promise<S
     if (payout > 0) {
       const typ = vysledek.status === "won" ? "bet_win" : "bet_refund";
       const popis = vysledek.status === "won"
-        ? `Výhra u sázkové kanceláře (${(vysledek.effectiveOddsX100 / 100).toFixed(2)}×)`
+        ? `Výhra u sázkové kanceláře (${(vysledek.effectiveOddsX100 / 100).toFixed(2).replace(".", ",")}×)`
         : "Vrácený vklad — tiket anulován";
       await recordTransaction(db, t.team_id, typ, payout, popis, gameDate, `bet-payout-${t.id}`);
       vyplaceno += payout;
@@ -198,6 +198,8 @@ async function oznam(
   const { sendSystemSMS } = await import("../messaging/system-sms");
   const { createNotification } = await import("../community/notifications");
   const kc = (n: number) => `${n.toLocaleString("cs")} Kč`;
+  /** Kurz s desetinnou čárkou — tečka do české zprávy nepatří. */
+  const ku = (x100: number) => (x100 / 100).toFixed(2).replace(".", ",");
   const cislo = t.id.slice(0, 4).toUpperCase();
 
   let sms: string;
@@ -207,8 +209,8 @@ async function oznam(
     const anulovane = legs.filter((l) => l.result === "void").length;
     titulek = "🎫 Vyhraný tiket";
     sms = legs.length === 1
-      ? `Tiket č. ${cislo} je vyhraný. Vklad ${kc(t.stake)}, kurz ${(oddsX100 / 100).toFixed(2)}, výplata ${kc(payout)}. Peníze máš na klubovém účtu.`
-      : `Tiket č. ${cislo} — všech ${legs.length} tipů sedlo. Kurz ${(oddsX100 / 100).toFixed(2)}, výplata ${kc(payout)}.`;
+      ? `Tiket č. ${cislo} je vyhraný. Vklad ${kc(t.stake)}, kurz ${ku(oddsX100)}, výplata ${kc(payout)}. Peníze máš na klubovém účtu.`
+      : `Tiket č. ${cislo} — všech ${legs.length} tipů sedlo. Kurz ${ku(oddsX100)}, výplata ${kc(payout)}.`;
     if (anulovane > 0) {
       sms += ` ${anulovane === 1 ? "Jeden tip se anuloval" : `${anulovane} tipy se anulovaly`} — hráč nenastoupil, kurz o něj klesl.`;
     }
@@ -250,7 +252,7 @@ async function doNovin(db: D1Database, t: TicketRow, payout: number, oddsX100: n
   ).bind(
     crypto.randomUUID(), t.league_id, t.team_id,
     `${tym.name} trefil u kanceláře ${kc(payout)}`,
-    `Tiket za ${kc(t.stake)} při kurzu ${(oddsX100 / 100).toFixed(2)}. `
+    `Tiket za ${kc(t.stake)} při kurzu ${(oddsX100 / 100).toFixed(2).replace(".", ",")}. `
     + `Sázková kancelář vyplácí ${kc(payout)}. V hospodě se o tom bude mluvit do jara.`,
   ).run();
 }
