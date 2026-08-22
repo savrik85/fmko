@@ -1,7 +1,7 @@
 "use client";
 
 import { SectionLabel } from "@/components/ui";
-import { czk, kurz, signed, IKONA_TIPU, POPIS_TIPU, Prazdno, Statek, StavPill, TYP_TIKETU } from "./ui";
+import { czk, kurz, signed, IkonaTipu, Prazdno, Statek, StavPill, TYP_TIKETU } from "./ui";
 import type { Tiket, TiketyOdpoved } from "./types";
 
 function TiketKarta({ t }: { t: Tiket }) {
@@ -24,10 +24,7 @@ function TiketKarta({ t }: { t: Tiket }) {
       <ol className="divide-y divide-gray-50">
         {t.selections.map((s) => (
           <li key={`${s.matchId}-${s.label}`} className="flex items-start gap-2 px-3 py-2.5">
-            <span className="mt-0.5 shrink-0 text-sm" title={POPIS_TIPU[s.result]}
-                  aria-label={POPIS_TIPU[s.result]}>
-              {IKONA_TIPU[s.result]}
-            </span>
+            <span className="mt-0.5"><IkonaTipu stav={s.result} /></span>
             <div className="flex-1 min-w-0">
               <div className="text-base font-semibold leading-tight break-words">{s.zapas}</div>
               <div className="text-sm text-muted leading-tight break-words">

@@ -21,13 +21,35 @@ export const TYP_TIKETU: Record<number, string> = {
   1: "Sólo", 2: "Dvojka", 3: "Trojka", 4: "Čtyřka", 5: "Pětka", 6: "Šestka",
 };
 
-export const IKONA_TIPU: Record<StavTipu, string> = {
-  pending: "⏳", won: "✓", lost: "✕", void: "∅",
-};
-
 export const POPIS_TIPU: Record<StavTipu, string> = {
   pending: "čeká na zápas", won: "sedl", lost: "nesedl", void: "anulován",
 };
+
+/**
+ * Stav tipu jako barevný odznak — zelená fajfka, červený křížek.
+ *
+ * Barva nese význam sama o sobě, ale nesmí ho nést jediná: symbol se liší
+ * tvarem a `aria-label` popisem, takže to přečte i barvoslepý hráč a čtečka.
+ */
+export function IkonaTipu({ stav }: { stav: StavTipu }) {
+  const styl: Record<StavTipu, { znak: string; trida: string }> = {
+    won: { znak: "✓", trida: "bg-pitch-500 text-white" },
+    lost: { znak: "✕", trida: "bg-card-red text-white" },
+    void: { znak: "∅", trida: "bg-gold-100 text-gold-700" },
+    pending: { znak: "•", trida: "bg-gray-200 text-muted" },
+  };
+  const s = styl[stav] ?? styl.pending;
+  return (
+    <span
+      className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center
+                  text-micro font-bold leading-none ${s.trida}`}
+      title={POPIS_TIPU[stav]}
+      aria-label={POPIS_TIPU[stav]}
+    >
+      {s.znak}
+    </span>
+  );
+}
 
 const STAV: Record<StavTiketu, { label: string; bg: string; fg: string }> = {
   open: { label: "Čeká na kolo", bg: "#F0EEE9", fg: "#5B5348" },
