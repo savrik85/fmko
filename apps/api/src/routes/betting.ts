@@ -384,19 +384,28 @@ bettingRouter.post("/teams/:teamId/betting/bans", async (c) => {
     .bind(teamId).first<{ game_date: string }>().then((r) => r?.game_date ?? new Date().toISOString())
     .catch(() => new Date().toISOString());
 
-  const { issueSanction } = await import("../competition/discipline");
-  await issueSanction(c.env.DB, {
-    leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, teamId: cil,
-    amount: 0, kind: "bet_manipulation", reason: duvod, evidence: null,
-    issuedBy: "chair", issuedByTeamId: teamId, proposalId: null, gameDate,
-  });
+  // Zákaz se zapisuje vlastním INSERTem, ne přes issueSanction: ta je stavěná
+  // na peněžní pokuty a nulovou částku rovnou zahodí (`if (amount <= 0) return null`).
+  // Zákaz sázení navíc nemá strhávat peníze ani plnit pokladnu — je to jiný druh
+  // trestu. V competition_sanctions ale být musí, aby se proti němu šlo odvolat.
+  const sankceId = crypto.randomUUID();
+  const zapis = await c.env.DB.prepare(
+    `INSERT INTO competition_sanctions
+      (id, league_id, season_number, team_id, kind, amount, reason, evidence,
+       issued_by, issued_by_team_id, proposal_id, appeal_deadline_gd, game_date,
+       reference_id, bet_ban_until_gw)
+     VALUES (?,?,?,?,'bet_manipulation',0,?,NULL,'chair',?,NULL,NULL,?,?,?)`
+  ).bind(
+    sankceId, kde.leagueId, kde.seasonNumber, cil, duvod, teamId, gameDate,
+    `betban-${sankceId}`, doKola,
+  ).run().catch((e) => { logger.error({ module: M }, "zápis zákazu sázení", e); return null; });
 
-  await c.env.DB.prepare(
-    `UPDATE competition_sanctions SET bet_ban_until_gw = ?
-      WHERE league_id = ? AND team_id = ? AND season_number = ? AND kind = 'bet_manipulation'
-        AND bet_ban_until_gw IS NULL`
-  ).bind(doKola, kde.leagueId, cil, kde.seasonNumber).run()
-    .catch((e) => logger.error({ module: M }, "zápis zákazu sázení", e));
+  // Teprve když zákaz opravdu vznikl, smí se poslat zpráva a čerpat pravomoc.
+  // Dřív tu bylo obojí bez kontroly, takže klub dostal SMS o zákazu, který
+  // ve skutečnosti neexistoval.
+  if (!zapis || (zapis.meta?.changes ?? 0) === 0) {
+    return c.json({ error: "Zákaz se nepodařilo uložit. Zkus to znovu." }, 500);
+  }
 
   await c.env.DB.prepare(
     `UPDATE competition_officials SET used_bet_ban = used_bet_ban + 1
