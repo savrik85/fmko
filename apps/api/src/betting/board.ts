@@ -101,15 +101,27 @@ export async function nextOpenRound(db: D1Database, leagueId: string): Promise<R
     .catch((e) => { logger.warn({ module: M }, `nejbližší kolo ligy ${leagueId}`, e); return null; });
 }
 
-/** Síla kádru = AVG(overall_rating) aktivních hráčů. Definice je součástí kalibrace modelu. */
+/**
+ * Síla týmu = průměr nejlepších JEDENÁCTI aktivních hráčů.
+ *
+ * Ne celý kádr. Průměr přes soupisku netrestá slabý tým, ale široký: klub
+ * s 31 hráči včetně dorostenců měl proti klubu s 21 vybranými průměr nižší
+ * o jedenáct bodů, i když jeho sestava byla lepší — a kurzy z něj dělaly
+ * outsidera. Nastupuje jedenáct lidí, ne celá soupiska.
+ *
+ * Definice je součástí kalibrace modelu (viz STRENGTH_K).
+ */
 async function loadStrengths(db: D1Database, teamIds: string[]): Promise<Map<string, number>> {
   if (teamIds.length === 0) return new Map();
   const ph = teamIds.map(() => "?").join(",");
   const rows = await db.prepare(
-    `SELECT team_id, COALESCE(AVG(overall_rating), 30) AS strength
-       FROM players
-      WHERE team_id IN (${ph}) AND (status IS NULL OR status = 'active')
-      GROUP BY team_id`
+    `SELECT team_id, COALESCE(AVG(overall_rating), 30) AS strength FROM (
+       SELECT team_id, overall_rating,
+              ROW_NUMBER() OVER (PARTITION BY team_id ORDER BY overall_rating DESC) AS poz
+         FROM players
+        WHERE team_id IN (${ph}) AND (status IS NULL OR status = 'active')
+     ) WHERE poz <= 11
+     GROUP BY team_id`
   ).bind(...teamIds).all<{ team_id: string; strength: number }>()
     .catch((e) => { logger.warn({ module: M }, "síla kádrů", e); return { results: [] }; });
 

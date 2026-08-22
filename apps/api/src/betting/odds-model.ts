@@ -29,14 +29,27 @@ export const BASE_HOME_GOALS = 1.84;
 export const BASE_AWAY_GOALS = 1.59;
 
 /**
- * Vliv jednoho bodu síly kádru na log λ. Nafitováno na koších podle rozdílu
- * AVG(overall_rating): při rozdílu +6 dává model 2,82 gólu proti naměřeným 3,00,
- * při −6 pak 1,15 proti naměřeným 1,15.
+ * Vliv jednoho bodu síly na log λ.
+ *
+ * Přefitováno 2026-08-22, když se síla přestala počítat z celého kádru
+ * a začala z nejlepších jedenácti (viz TeamInput.strength).
+ *
+ * Naměřený log-poměr gólů podle rozdílu top-11 síly:
+ *   +3 → +0,543 · +6 → +0,945 · +12 → +1,017
+ *   −3 → −0,215 · −6 → −0,733 · −12 → −0,227
+ *
+ * Data jsou zašuměná (rating se od zápasu mohl posunout), takže konstanta
+ * míří na horní okraj rozumného pásma: model favorita spíš mírně přecení.
+ * Je to schválně — podcenění favorita by znamenalo příliš vysoký kurz na
+ * něj, a to je jediná chyba, ze které dokáže sázející systematicky těžit.
  */
-export const STRENGTH_K = 0.075;
+export const STRENGTH_K = 0.085;
 
-/** Sráží přestřel u extrémních rozdílů, kde je málo dat a hodně šumu. */
-export const STRENGTH_SHRINK = 0.85;
+/**
+ * Sražení extrémů. U síly z celého kádru bylo potřeba (0,85), protože rozdíly
+ * nafukovala velikost soupisky. Top-11 se chová lineárněji, takže se nesráží.
+ */
+export const STRENGTH_SHRINK = 1.0;
 
 /** Strop efektivního rozdílu sil. Nad ním už kurzy nedávají smysl. */
 export const STRENGTH_CAP = 10;
@@ -55,7 +68,16 @@ export const DISPERSION_C = 2.6;
 export const MAX_GOALS = 12;
 
 export interface TeamInput {
-  /** AVG(overall_rating) aktivních hráčů. Definice je součástí kalibrace. */
+  /**
+   * Průměrný overall_rating NEJLEPŠÍCH JEDENÁCTI aktivních hráčů.
+   *
+   * Ne celý kádr: průměr přes soupisku netrestá slabý tým, ale široký. Klub
+   * s 31 hráči včetně dorostenců od ratingu 16 měl proti klubu s 21 vybranými
+   * průměr nižší o jedenáct bodů, přestože jeho sestava byla o kus lepší —
+   * a model z něj dělal outsidera (Vlachovo Březí vs Čkyně, produkce 2026-08-22).
+   *
+   * Definice je součástí kalibrace: změna znamená přefitovat STRENGTH_K.
+   */
   strength: number;
   /** Korekce na formu ve stejných jednotkách jako síla. Viz formAdjustment. */
   form: number;

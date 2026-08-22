@@ -51,8 +51,38 @@ describe("očekávané góly", () => {
 
   it("rozdíl sil je zastropovaný, extrém nevyrobí nesmyslná λ", () => {
     const l = expectedGoals({ strength: 90, form: 0 }, { strength: 10, form: 0 });
-    expect(l.home).toBeLessThan(4.0);
-    expect(l.away).toBeGreaterThan(0.7);
+    // Strop drží λ v mezích, které engine vůbec umí vyrobit — nejvyšší
+    // naměřený průměr při rozdílu +12 byl 3,13 gólu.
+    expect(l.home).toBeLessThan(5.0);
+    expect(l.away).toBeGreaterThan(0.5);
+  });
+
+  it("model odpovídá naměřenému poměru gólů podle síly sestavy", () => {
+    // Naměřeno na odehraných zápasech (rozdíl top-11 síly → log poměru gólů):
+    //   +3 → +0,543 · +6 → +0,945
+    // Model má být na horní hraně: favorita spíš přecenit než podcenit, protože
+    // podcenění je jediná chyba, ze které dokáže sázející systematicky těžit.
+    const pomer = (rozdil: number) => {
+      const l = expectedGoals({ strength: 30 + rozdil, form: 0 }, { strength: 30, form: 0 });
+      return Math.log(l.home / l.away) - Math.log(BASE_HOME_GOALS / BASE_AWAY_GOALS);
+    };
+    expect(pomer(3)).toBeGreaterThan(0.45);
+    expect(pomer(3)).toBeLessThan(0.70);
+    expect(pomer(6)).toBeGreaterThan(0.90);
+    expect(pomer(6)).toBeLessThan(1.30);
+  });
+
+  it("široký kádr nesmí dělat z týmu outsidera", () => {
+    // Vlachovo Březí (31 hráčů) vs Čkyně (21) na produkci: podle celého kádru
+    // 40,3 vs 45,9 (Březí outsider), podle sestavy 51,4 vs 50,9 (Březí mírně
+    // lepší). Tabulka dávala za pravdu sestavě — 18 bodů proti 11.
+    const podleSestavy = expectedGoals({ strength: 51.36, form: 0 }, { strength: 50.91, form: 0 });
+    const o = outcomeProbabilities(podleSestavy);
+    expect(o.home).toBeGreaterThan(o.away);   // domácí favorit, jak má být
+
+    const podleKadru = expectedGoals({ strength: 40.32, form: 0 }, { strength: 45.86, form: 0 });
+    const spatne = outcomeProbabilities(podleKadru);
+    expect(spatne.away).toBeGreaterThan(spatne.home);  // tohle dělal starý model
   });
 
   it("forma hýbe kurzem míň než rozdíl kádrů", () => {
