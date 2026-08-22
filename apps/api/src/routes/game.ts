@@ -5555,8 +5555,9 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      op.first_name as offered_first_name, op.last_name as offered_last_name, op.position as offered_position
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id LEFT JOIN teams t ON to2.from_team_id = t.id
      LEFT JOIN players op ON to2.offered_player_id = op.id
-     WHERE to2.to_team_id = ? AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
-  ).bind(teamId).all();
+     WHERE to2.to_team_id IN (?, COALESCE((SELECT u.id FROM teams u WHERE u.parent_team_id = ?), ?))
+       AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
+  ).bind(teamId, teamId, teamId).all();
   const myTeam = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
   const outgoing = await c.env.DB.prepare(
     `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar as player_avatar, p.skills as player_skills,

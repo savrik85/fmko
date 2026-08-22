@@ -33,6 +33,20 @@ async function seasonOf(db: D1Database, leagueId: string): Promise<number | null
   return row?.n ?? null;
 }
 
+/** Je některá strana obchodu v mládežnické soutěži? */
+async function jeMladeznicka(
+  db: D1Database, a: string | null | undefined, b: string | null | undefined,
+): Promise<boolean> {
+  const ids = [a, b].filter(Boolean) as string[];
+  if (ids.length === 0) return false;
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS n FROM leagues
+      WHERE id IN (${ids.map(() => "?").join(",")}) AND league_type = 'u21'`
+  ).bind(...ids).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, "typ soutěže u přestupu", e); return null; });
+  return (row?.n ?? 0) > 0;
+}
+
 /**
  * Spočítá oba poplatky. Nezapisuje nic — slouží i pro náhled nabídky,
  * aby kupující viděl přesně tu částku, která se mu pak strhne.
@@ -48,6 +62,13 @@ export async function computeTransferLevies(db: D1Database, opts: {
     levyPct: DEFAULT_RULES.levy_transfer_pct, levy: 0,
   };
   if (opts.isLoan || opts.amount <= 0) return none;
+
+  // Mládežnická soutěž se nepočítá. Meziligový poplatek je od toho, aby se
+  // platil přestup mezi SOUTĚŽEMI dospělých — přesun do rezervy nebo z ní je
+  // interní věc klubu a soutěž z něj nemá co brát. Bez tohohle se dvacet procent
+  // strhávalo i za vlastní odchovance, protože U21 má vlastní ligu.
+  const mladez = await jeMladeznicka(db, opts.buyerLeagueId, opts.sellerLeagueId);
+  if (mladez) return none;
 
   const crossLeague = !!(opts.buyerLeagueId && opts.sellerLeagueId
     && opts.buyerLeagueId !== opts.sellerLeagueId);
