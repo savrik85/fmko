@@ -17,6 +17,7 @@ import { staffRouter } from "./routes/staff";
 import { equipmentMarketRouter } from "./routes/equipment-market";
 import { refereesRouter } from "./routes/referees";
 import competitionRouter from "./routes/competition";
+import bettingRouter from "./routes/betting";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -102,6 +103,7 @@ app.route("/api", staffRouter);
 app.route("/api", equipmentMarketRouter);
 app.route("/api", refereesRouter);
 app.route("/api", competitionRouter);
+app.route("/api", bettingRouter);
 
 export default {
   fetch: app.fetch,

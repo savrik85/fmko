@@ -26,7 +26,8 @@ const LEDGER_LABEL: Record<string, string> = {
   fine_admin: "Administrativní pokuty", sanction: "Pokuty disciplinární rady",
   interleague_fee: "Meziligové poplatky", levy_transfer: "Odvod z přestupů",
   levy_concession: "Odvod z občerstvení", levy_gate: "Odvod ze vstupného",
-  levy_cup: "Odvod z poháru", grant: "Dotace klubům", loan_repaid: "Splátky půjček",
+  levy_cup: "Odvod z poháru", levy_bet: "Odvod ze sázek",
+  grant: "Dotace klubům", loan_repaid: "Splátky půjček",
   deposit: "Kauce", other: "Ostatní",
 };
 

@@ -59,6 +59,14 @@ export type TransactionType =
   | "competition_fee"
   | "competition_deposit"
   | "competition_grant"
+  // Sázková kancelář. Vklad i odvod ze sázky JSOU v PURCHASE_TYPES — klub
+  // v mínusu si nevsadí. Výhra a vrácený vklad jsou příjmy, ty se neblokují.
+  // Pozor: manager_bet_win/loss jsou něco jiného, to je sázka o bečku
+  // mezi dvěma trenéry (community/manager-relations.ts).
+  | "bet_stake"
+  | "bet_levy"
+  | "bet_win"
+  | "bet_refund"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
@@ -98,6 +106,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
   "manager_social", "staff_signing", "course_fee",
+  "bet_stake", "bet_levy",
 ]);
 
 /**

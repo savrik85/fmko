@@ -35,6 +35,13 @@ export const DEFAULT_RULES = {
   min_pitch_condition: 0,
   squad_min: 0,
   squad_max: 0,
+  // Sázková kancelář. Zákaz i odvod jsou nula, takže zapnutí samosprávy nikomu
+  // sázení nezakáže ani nezdaní. U stropů neutrální hodnota neexistuje — jsou to
+  // výchozí sazby, o kterých soutěž může hlasovat.
+  ban_betting: 0,
+  levy_bet_pct: 0,
+  bet_max_stake: 5_000,
+  bet_max_payout: 100_000,
 } as const;
 
 export type CompetitionRules = { -readonly [K in keyof typeof DEFAULT_RULES]: number };
