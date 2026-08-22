@@ -190,6 +190,25 @@ async function gameDateOf(db: D1Database, calendarId: string): Promise<string> {
  *
  * Tón je hospodský — krátké věty, žádné vykřičníky, žádné „Gratulujeme".
  */
+/** Slovní číslovky do druhého pádu: „ze tří", ne „z 3". */
+const ZE: Record<number, string> = {
+  1: "z jednoho", 2: "ze dvou", 3: "ze tří", 4: "ze čtyř", 5: "z pěti", 6: "ze šesti",
+};
+
+/**
+ * Kolik tipů sedlo, česky.
+ *
+ * Sázková kancelář v hospodě nepíše „Sedlo 1 z 3" — a hráč to čte jako zprávu,
+ * ne jako výpis z databáze.
+ */
+function kolikSedlo(sedlo: number, celkem: number): string {
+  const z = ZE[celkem] ?? `z ${celkem}`;
+  if (sedlo === 0) return `Nesedl ani jeden ${z}`;
+  if (sedlo === 1) return `Sedl jeden ${z}`;
+  if (sedlo <= 4) return `Sedly ${sedlo} ${z}`;
+  return `Sedlo ${sedlo} ${z}`;
+}
+
 async function oznam(
   db: D1Database, t: TicketRow,
   legs: Array<{ label: string; result: SelectionResult }>,
@@ -219,12 +238,26 @@ async function oznam(
     sms = `Tiket č. ${cislo} rušíme — nikdo ze sázených hráčů nenastoupil. Vklad ${kc(t.stake)} je zpátky na účtu.`;
   } else {
     const sedlo = legs.filter((l) => l.result === "won").length;
+    const anulovane = legs.filter((l) => l.result === "void").length;
+    const hralo = legs.length - anulovane;
     titulek = "🎫 Tiket neprošel";
-    sms = legs.length === 1
-      ? `Tiket č. ${cislo} nevyšel. Vklad ${kc(t.stake)} propadá.`
-      : sedlo === legs.length - 1
-        ? `Tiket č. ${cislo} neprošel. ${sedlo} tipů sedlo, poslední ne. Vklad ${kc(t.stake)} propadá.`
-        : `Tiket č. ${cislo} je pryč. Sedlo ${sedlo} z ${legs.length}, vklad ${kc(t.stake)} propadá.`;
+
+    if (legs.length === 1) {
+      sms = `Tiket č. ${cislo} nevyšel. Vklad ${kc(t.stake)} propadá.`;
+    } else if (sedlo === hralo - 1 && anulovane === 0) {
+      // Nejbolestivější případ si zaslouží vlastní větu.
+      sms = `Tiket č. ${cislo} neprošel. ${kolikSedlo(sedlo, hralo)}, poslední ne. Vklad ${kc(t.stake)} propadá.`;
+    } else {
+      sms = `Tiket č. ${cislo} je pryč. ${kolikSedlo(sedlo, hralo)}, vklad ${kc(t.stake)} propadá.`;
+    }
+
+    // Anulovaný tip musí být vidět i u prohry — jinak hráč počítá tipy na tiketu
+    // a nesedí mu to s tím, co mu kancelář napsala.
+    if (anulovane > 0) {
+      sms += anulovane === 1
+        ? " Jeden tip se anuloval, hráč vůbec nenastoupil."
+        : ` ${anulovane} tipy se anulovaly, hráči vůbec nenastoupili.`;
+    }
   }
 
   await sendSystemSMS(db, t.team_id, "Sázková kancelář", sms)
