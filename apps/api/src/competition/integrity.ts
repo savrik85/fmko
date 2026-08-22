@@ -110,8 +110,10 @@ export interface ZaznamPrestupu {
   hrac: string;
   playerId: string;
   zKlubu: string | null;
-  doKlubu: string | null;
+  doKlubu: string;
   castka: number;
+  /** „přestup" nebo „hostování" — hostování se posuzuje jinak. */
+  druh: string;
   gameDate: string;
   /** Proč to stojí za pohled. Prázdné = nic nápadného. */
   priznaky: string[];
@@ -120,52 +122,42 @@ export interface ZaznamPrestupu {
 /**
  * Realizované přestupy soutěže s upozorněním na to, co stojí za prověření.
  *
- * Příznaky NEJSOU obvinění — jen zvýraznění. Rozhodnutí je na komisaři,
- * stejně jako u sázek. Strojová detekce domluvy nefunguje a falešné
- * obvinění je horší než přehlédnutý obchod.
+ * Zdrojem jsou přijaté nabídky, ne transakce: transactions.reference_id je
+ * u přestupů prázdné a jméno hráče se dá vyčíst jen z popisu, takže by se
+ * protistrana nedala spolehlivě spárovat.
+ *
+ * Příznaky NEJSOU obvinění — jen zvýraznění. Rozhodnutí je na komisaři.
+ * Strojová detekce domluvy nefunguje a falešné obvinění je horší než
+ * přehlédnutý obchod.
  */
 export async function listinaPrestupu(
   db: D1Database, leagueId: string, seasonNumber: number, limit = 60,
 ): Promise<ZaznamPrestupu[]> {
   const rows = await db.prepare(
-    `SELECT tr.id, tr.amount, tr.game_date, tr.description,
-            tr.team_id AS kupujici,
-            p.first_name, p.last_name, p.id AS player_id,
-            p.overall_rating, p.age,
-            kt.name AS kupujici_nazev, kt.user_id AS kupujici_user
-       FROM transactions tr
-       JOIN teams kt ON kt.id = tr.team_id
-       LEFT JOIN players p ON p.id = tr.reference_id
-      WHERE tr.type = 'transfer_fee' AND kt.league_id = ?
-      ORDER BY tr.created_at DESC LIMIT ?`
-  ).bind(leagueId, limit).all<Record<string, unknown>>()
+    `SELECT o.id, o.offer_amount, o.offer_type, o.resolved_at,
+            p.first_name, p.last_name, p.id AS player_id, p.overall_rating, p.age,
+            fromT.name AS z_klubu, fromT.user_id AS z_user, fromT.id AS z_id,
+            toT.name AS do_klubu, toT.user_id AS do_user, toT.id AS do_id
+       FROM transfer_offers o
+       LEFT JOIN players p ON p.id = o.player_id
+       LEFT JOIN teams fromT ON fromT.id = o.from_team_id
+       JOIN teams toT ON toT.id = o.to_team_id
+      WHERE o.status = 'accepted'
+        AND (toT.league_id = ? OR fromT.league_id = ?)
+      ORDER BY o.resolved_at DESC LIMIT ?`
+  ).bind(leagueId, leagueId, limit).all<Record<string, unknown>>()
     .catch((e) => { logger.error({ module: M }, `listina přestupů ${leagueId}`, e); return { results: [] }; });
-
-  // Protistrana obchodu: prodávající dostal transfer_income se stejnou referencí.
-  const refs = rows.results.map((r) => r.id as string);
-  const prodavajici = new Map<string, { name: string; userId: string }>();
-  if (refs.length > 0) {
-    const p = await db.prepare(
-      `SELECT tr.reference_id, t.name, t.user_id
-         FROM transactions tr JOIN teams t ON t.id = tr.team_id
-        WHERE tr.type = 'transfer_income' AND tr.reference_id IN (${refs.map(() => "?").join(",")})`
-    ).bind(...refs).all<{ reference_id: string; name: string; user_id: string }>()
-      .catch((e) => { logger.warn({ module: M }, "protistrany přestupů", e); return { results: [] }; });
-    for (const r of p.results) prodavajici.set(r.reference_id, { name: r.name, userId: r.user_id });
-  }
 
   // Kolikrát spolu tytéž dva kluby obchodovaly
   const dvojice = new Map<string, number>();
   for (const r of rows.results) {
-    const prot = prodavajici.get(r.id as string);
-    if (!prot) continue;
-    const klic = [r.kupujici_nazev as string, prot.name].sort().join("|");
+    if (!r.z_id) continue;
+    const klic = [r.z_id as string, r.do_id as string].sort().join("|");
     dvojice.set(klic, (dvojice.get(klic) ?? 0) + 1);
   }
 
   return rows.results.map((r) => {
-    const prot = prodavajici.get(r.id as string);
-    const castka = Math.abs(r.amount as number);
+    const castka = Math.abs((r.offer_amount as number) ?? 0);
     // Hodnota se v databázi nedrží, počítá se z ratingu a věku — stejnou
     // funkcí, jakou používá přestupový trh při posuzování nabídek.
     const hodnota = r.overall_rating
@@ -173,25 +165,28 @@ export async function listinaPrestupu(
       : 0;
     const priznaky: string[] = [];
 
-    if (prot && prot.userId !== "ai" && prot.userId === (r.kupujici_user as string)) {
+    const zUser = r.z_user as string | null;
+    const doUser = r.do_user as string | null;
+    if (zUser && doUser && zUser !== "ai" && zUser === doUser) {
       priznaky.push("Oba kluby patří témuž majiteli");
     }
-    if (hodnota > 0) {
+    if (hodnota > 0 && castka > 0) {
       if (castka > hodnota * 2.5) priznaky.push("Cena výrazně nad odhadem hodnoty hráče");
       if (castka < hodnota * 0.4) priznaky.push("Cena výrazně pod odhadem hodnoty hráče");
     }
-    if (prot) {
-      const klic = [r.kupujici_nazev as string, prot.name].sort().join("|");
+    if (r.z_id) {
+      const klic = [r.z_id as string, r.do_id as string].sort().join("|");
       if ((dvojice.get(klic) ?? 0) >= 3) priznaky.push("Tyhle dva kluby spolu obchodují opakovaně");
     }
 
     return {
-      hrac: r.first_name ? `${r.first_name} ${r.last_name}` : "neznámý hráč",
+      hrac: r.first_name ? `${r.first_name} ${r.last_name}` : "hráč už v databázi není",
       playerId: (r.player_id as string) ?? "",
-      zKlubu: prot?.name ?? null,
-      doKlubu: r.kupujici_nazev as string,
+      zKlubu: (r.z_klubu as string) ?? null,
+      doKlubu: r.do_klubu as string,
       castka,
-      gameDate: r.game_date as string,
+      druh: r.offer_type === "loan" ? "hostování" : "přestup",
+      gameDate: (r.resolved_at as string) ?? "",
       priznaky,
     };
   });
