@@ -125,6 +125,8 @@ export interface MatchPreview {
   away: PreviewTeam;
   venue: { name: string; capacity: number; pitchCondition: number; pitchType: string };
   weather: { icon: string; expected: string; temperature: number; description: string };
+  /** Kurzy sázkové kanceláře v setinách. null = na tenhle zápas nejsou vypsané. */
+  odds: { home: number | null; draw: number | null; away: number | null } | null;
 }
 
 export interface NewsArticle { id: string; type: string; headline: string; icon: string; date: string }

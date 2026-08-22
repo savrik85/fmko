@@ -139,6 +139,24 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   const schedAt = (match.scheduled_at ?? match.created_at) as string | null;
   const forecast = generateForecast(schedAt, matchId.charCodeAt(0) + matchId.charCodeAt(1));
 
+  // Kurzy sázkové kanceláře, pokud jsou na tenhle zápas vypsané.
+  // Na vlastní zápas se sázet nedá, takže je to čistě informace — jak tým vidí
+  // kancelář. Chybějící kurzy nejsou chyba: lístek se vypisuje jen na nejbližší
+  // kolo a jen v ligách, kde se hraje.
+  const kurzyRows = await c.env.DB.prepare(
+    `SELECT selection, odds_x100, label FROM bet_odds
+      WHERE match_id = ? AND market = '1x2'`
+  ).bind(matchId).all<{ selection: string; odds_x100: number; label: string }>()
+    .catch((e) => { logger.warn({ module: "matches" }, "kurzy k náhledu zápasu", e); return { results: [] }; });
+
+  const kurzy = kurzyRows.results.length === 3
+    ? {
+        home: kurzyRows.results.find((r) => r.selection === "1")?.odds_x100 ?? null,
+        draw: kurzyRows.results.find((r) => r.selection === "X")?.odds_x100 ?? null,
+        away: kurzyRows.results.find((r) => r.selection === "2")?.odds_x100 ?? null,
+      }
+    : null;
+
   return c.json({
     matchId,
     round: match.round,
@@ -159,6 +177,7 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
       temperature: forecast.temperature,
       description: forecast.description,
     },
+    odds: kurzy,
   });
 });
 

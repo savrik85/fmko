@@ -244,6 +244,33 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
           );
         })()}
 
+        {preview?.odds?.home && preview.odds.draw && preview.odds.away && (() => {
+          // Vlastní zápas — sázet na něj nejde, takže je to informace, ne nabídka:
+          // jak tým vidí kancelář. Zvýrazní se strana, kterou drží jako favorita.
+          const k = (x: number) => (x / 100).toFixed(2).replace(".", ",");
+          const domaci = preview.odds.home!, remiza = preview.odds.draw!, hoste = preview.odds.away!;
+          const nej = Math.min(domaci, remiza, hoste);
+          const bunka = (popis: string, kurz: number) => (
+            <div className={`text-center py-1 rounded-tight ${kurz === nej ? "bg-pitch-50" : ""}`}>
+              <div className="text-micro text-muted font-heading font-bold uppercase leading-none">{popis}</div>
+              <div className={`text-sm font-heading font-bold tabular-nums leading-none mt-0.5
+                               ${kurz === nej ? "text-pitch-600" : ""}`}>{k(kurz)}</div>
+            </div>
+          );
+          return (
+            <div className="px-4 py-2.5 border-b border-gray-100">
+              <div className="grid grid-cols-3 gap-1.5">
+                {bunka(nextMatch.isHome ? "Vy" : "Domácí", domaci)}
+                {bunka("Remíza", remiza)}
+                {bunka(nextMatch.isHome ? "Soupeř" : "Vy", hoste)}
+              </div>
+              <div className="text-micro text-muted text-center mt-1.5 leading-snug">
+                Kurzy sázkové kanceláře. Na vlastní zápas se nesází.
+              </div>
+            </div>
+          );
+        })()}
+
         {preview && (
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
             <div className="flex items-center gap-1.5 text-sm text-muted">
