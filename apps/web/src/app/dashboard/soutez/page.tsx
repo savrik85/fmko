@@ -21,6 +21,7 @@ import {
 import { GrantsPanel, OdborInbox, PokladnaPanel, SponsorPanel, VedeniPanel, ZapisyPanel } from "./panels";
 import { DisciplinePanel } from "./discipline";
 import { RefereesPanel } from "./referees-panel";
+import { IntegrityPanel } from "./integrity-panel";
 import type {
   BoardData, DisciplineData, Election, LedgerEntry, Meeting, Proposal, ProposalKind,
   GrantsData, RefereeData, SponsorData, State,
@@ -370,6 +371,14 @@ export default function SoutezPage() {
             <DisciplinePanel
               data={discipline} state={state} teamId={teamId}
               isChair={isChair} myOpen={myOpen} onChanged={refreshAll}
+            />
+          )}
+
+          {gesce === "integrita" && state.enabled && teamId && (
+            <IntegrityPanel
+              state={state} teamId={teamId}
+              jsemKomisar={state.roles.some((r) => r.role === "integrita" && r.holder?.teamId === teamId)}
+              onChanged={refreshAll}
             />
           )}
 
