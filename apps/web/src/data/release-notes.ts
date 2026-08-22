@@ -12,6 +12,20 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-22",
+    emoji: "🎫",
+    title: "Sázková kancelář — Okresní tiket",
+    items: [
+      "V menu přibyly Sázky. Kancelář vypisuje kurzy na zápasy tvé soutěže a sází se z klubové kasy — takže si rozmysli, jestli ty peníze nepotřebuješ na výplaty.",
+      "Na vlastní zápas si nevsadíš. Ani na svůj A-tým, ani na rezervu. Kancelář to má v pravidlech od chvíle, kdy si jeden trenér vsadil na vlastní prohru. A vyhrál.",
+      "Sází se na výsledek (1 / X / 2), na neprohru (1X, X2, nebo že padne vítěz), na počet gólů a na to, kdo se trefí. Tipy z různých zápasů téhož kola můžeš složit na jeden tiket — kurzy se pak násobí, ale musí vyjít všechny. Z jednoho zápasu si vybíráš jen jeden tip.",
+      "Vklad od 100 Kč, nejvýš tři tikety na kolo a šest tipů na tiketu. Z jednoho tiketu se dá vyhrát maximálně 100 000 Kč — což jsou dvě třetiny odměny za titul, takže dobrý večer u přepážky klub opravdu postaví na nohy.",
+      "Kurz počítá hra ze síly obou kádrů, formy a domácího prostředí. Kancelář si k tomu přirazí osm procent, takže dlouhodobě vydělává ona, ne ty. Na lístku je u každého týmu vidět pořadí, posledních pět výsledků i skóre, aby se nesázelo naslepo.",
+      "Když sázený střelec vůbec nenastoupí, tip se anuluje a kurz tiketu o něj klesne — neprohráváš. Cizí sestavu totiž před zápasem nevidíš a hráči vypadávají kvůli kocovině, žním i zraněním.",
+      "Lístek se zavírá ve chvíli, kdy se kolo začne hrát. Výsledek přijde SMS do telefonu hned po odehrání a v Sázkách máš historii všech tiketů i bilanci, jak si u kanceláře stojíš.",
+    ],
+  },
+  {
     date: "2026-08-14",
     emoji: "🧑‍⚖️",
     title: "Okresní rozhodčí — každý má svůj metr",
