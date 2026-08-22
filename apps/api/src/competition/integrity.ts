@@ -170,9 +170,17 @@ export async function listinaPrestupu(
     if (zUser && doUser && zUser !== "ai" && zUser === doUser) {
       priznaky.push("Oba kluby patří témuž majiteli");
     }
+    const hostovani = r.offer_type === "loan";
     if (hodnota > 0 && castka > 0) {
-      if (castka > hodnota * 2.5) priznaky.push("Cena výrazně nad odhadem hodnoty hráče");
-      if (castka < hodnota * 0.4) priznaky.push("Cena výrazně pod odhadem hodnoty hráče");
+      if (hostovani) {
+        // U hostování se neporovnává cena hráče, ale poplatek za jeho půjčení.
+        // Za sezónní výpůjčku nikdo nezaplatí víc, než hráč stojí — a když ano,
+        // je to typický způsob, jak převést peníze bez skutečné protihodnoty.
+        if (castka > hodnota) priznaky.push("Poplatek za hostování je vyšší než hodnota hráče");
+      } else {
+        if (castka > hodnota * 2.5) priznaky.push("Cena výrazně nad odhadem hodnoty hráče");
+        if (castka < hodnota * 0.4) priznaky.push("Cena výrazně pod odhadem hodnoty hráče");
+      }
     }
     if (r.z_id) {
       const klic = [r.z_id as string, r.do_id as string].sort().join("|");
@@ -185,7 +193,7 @@ export async function listinaPrestupu(
       zKlubu: (r.z_klubu as string) ?? null,
       doKlubu: r.do_klubu as string,
       castka,
-      druh: r.offer_type === "loan" ? "hostování" : "přestup",
+      druh: hostovani ? "hostování" : "přestup",
       gameDate: (r.resolved_at as string) ?? "",
       priznaky,
     };
