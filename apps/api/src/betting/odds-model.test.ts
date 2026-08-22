@@ -290,13 +290,23 @@ describe("střelci", () => {
   });
 
   it("pravděpodobnost gólu roste s podílem i se sílou týmu", () => {
-    const a = scorerProbability(1.84, 0.25, 0.9);
-    const b = scorerProbability(1.84, 0.10, 0.9);
-    const c = scorerProbability(3.00, 0.25, 0.9);
+    const a = scorerProbability(1.84, 0.25);
+    const b = scorerProbability(1.84, 0.10);
+    const c = scorerProbability(3.00, 0.25);
     expect(a).toBeGreaterThan(b);
     expect(c).toBeGreaterThan(a);
     expect(a).toBeGreaterThan(0);
     expect(a).toBeLessThan(1);
+  });
+
+  it("kurz střelce nesmí trestat absenci dvakrát", () => {
+    // Nenastoupení tip anuluje (grade.ts), takže kurz vyjadřuje „dá gól, když
+    // nastoupí". Kdyby se do něj počítala i dostupnost, byl by o pětinu vyšší,
+    // než má být — přesně o to model podceňoval střelce (16,5 % vs 21,2 %).
+    const p = scorerProbability(1.74, 0.22);
+    const sDostupnosti = 1 - Math.exp(-(1.74 * 0.22 * 0.78));
+    expect(p).toBeGreaterThan(sDostupnosti);
+    expect(p / sDostupnosti).toBeGreaterThan(1.15);
   });
 });
 

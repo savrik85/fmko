@@ -18,7 +18,7 @@ import { logger } from "../lib/logger";
 import {
   expectedGoals, formAdjustment, outcomeProbabilities, totalsProbabilities,
   doubleChanceProbabilities,
-  scorerShares, availability, scorerProbability,
+  scorerShares, scorerProbability,
   marketOdds, singleSideOdds,
 } from "./odds-model";
 
@@ -369,8 +369,8 @@ export function matchOdds(input: {
 
     const ohodnoceni = kadr.map((s) => {
       const share = shares.get(s.playerId) ?? 0;
-      const avail = availability(s.starts, input.playedMatches);
-      return { s, prob: scorerProbability(teamLambda, share, avail) };
+      // Bez dostupnosti: nenastoupení tip anuluje, neprohrává ho.
+      return { s, prob: scorerProbability(teamLambda, share) };
     })
       .filter((x) => x.prob >= MIN_SCORER_PROB)
       .sort((a, b) => b.prob - a.prob)

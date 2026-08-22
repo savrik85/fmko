@@ -278,6 +278,9 @@ export function scorerShares(players: ScorerInput[], teamGoals: number): Map<str
 /**
  * Jak pravděpodobně hráč vůbec nastoupí, z počtu startů.
  *
+ * DO KURZU NA STŘELCE SE NEPOČÍTÁ — viz scorerProbability. Zůstává tu pro
+ * případ, že by se trh na střelce někdy nabízel i s prohrou při absenci.
+ *
  * Laplaceovo vyhlazení se stropem 0,95 — i hvězda občas chybí — a podlahou
  * 0,35, aby se rotující hráč nezlevnil až k nule.
  */
@@ -286,9 +289,19 @@ export function availability(starts: number, teamMatches: number): number {
   return clamp((starts + 2) / (teamMatches + 3), 0.35, 0.95);
 }
 
-/** Pravděpodobnost, že hráč dá v zápase aspoň jeden gól. */
-export function scorerProbability(teamLambda: number, share: number, avail: number): number {
-  return 1 - Math.exp(-(teamLambda * share * avail));
+/**
+ * Pravděpodobnost, že hráč dá v zápase aspoň jeden gól — ZA PŘEDPOKLADU,
+ * ŽE NASTOUPÍ.
+ *
+ * Dostupnost se schválně nezapočítává. Když sázený hráč nenastoupí, tip se
+ * anuluje a vklad se vrací (viz grade.ts), takže absence není prohra — a kurz
+ * ji nesmí započítávat podruhé. Dokud se tím násobilo, model tvrdil o střelcích
+ * 16,5 % proti skutečným 21,2 %, tedy kurzy byly o pětinu vyšší, než měly být.
+ *
+ * Kdyby se pravidlo VOID někdy zrušilo, musí se sem availability vrátit.
+ */
+export function scorerProbability(teamLambda: number, share: number): number {
+  return 1 - Math.exp(-(teamLambda * share));
 }
 
 // ── Marže a kurzy ───────────────────────────────────────────────────────────
