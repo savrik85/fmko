@@ -30,6 +30,18 @@ export const TOTAL_LINES = [2.5, 3.5, 6.5] as const;
 /** Kolik střelců se nabízí z každého týmu. */
 export const SCORERS_PER_TEAM = 6;
 
+/**
+ * Kolik hráčů z kádru se vůbec počítá do dělby gólů.
+ *
+ * Naměřeno: za sezónu nastoupí průměrně 14,7 různých hráčů, zbytek soupisky
+ * neodehraje nic. Když se podíl na gólech dělil mezi celý kádr, dostal každý
+ * nastupující hráč zlomek toho, co mu patří — model pak podceňoval střelce
+ * o pět procentních bodů a kurzy na ně byly příliš vysoké.
+ *
+ * Čtrnáct bez brankáře odpovídá tomu, co se reálně protočí.
+ */
+export const SQUAD_DEPTH = 14;
+
 /** Pod tuhle pravděpodobnost se střelec nenabízí — kurz by byl nesmyslně vysoký. */
 export const MIN_SCORER_PROB = 0.06;
 
@@ -221,15 +233,20 @@ async function loadScorers(
   if (teamIds.length === 0) return out;
   const ph = teamIds.map(() => "?").join(",");
 
+  // Jen ta část kádru, která se reálně protočí — viz SQUAD_DEPTH. Řadí se
+  // podle ratingu, protože podle něj se vybírá i sestava.
   const rows = await db.prepare(
-    `SELECT p.id, p.team_id, p.first_name, p.last_name, p.position, p.overall_rating,
-            COALESCE(ps.goals, 0) AS goals, COALESCE(ps.appearances, 0) AS starts
-       FROM players p
-       LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = ?
-      WHERE p.team_id IN (${ph})
-        AND (p.status IS NULL OR p.status = 'active')
-        AND COALESCE(p.suspended_matches, 0) = 0
-        AND p.position <> 'GK'`
+    `SELECT id, team_id, first_name, last_name, position, overall_rating, goals, starts FROM (
+       SELECT p.id, p.team_id, p.first_name, p.last_name, p.position, p.overall_rating,
+              COALESCE(ps.goals, 0) AS goals, COALESCE(ps.appearances, 0) AS starts,
+              ROW_NUMBER() OVER (PARTITION BY p.team_id ORDER BY p.overall_rating DESC) AS poz
+         FROM players p
+         LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = ?
+        WHERE p.team_id IN (${ph})
+          AND (p.status IS NULL OR p.status = 'active')
+          AND COALESCE(p.suspended_matches, 0) = 0
+          AND p.position <> 'GK'
+     ) WHERE poz <= ${SQUAD_DEPTH}`
   ).bind(seasonId, ...teamIds).all<PlayerRow>()
     .catch((e) => { logger.warn({ module: M }, "kandidáti na střelce", e); return { results: [] }; });
 
