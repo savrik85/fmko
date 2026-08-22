@@ -19,3 +19,7 @@ apps/api/src/**/*.js
 
 # TypeScript inkrementální build cache
 *.tsbuildinfo
+
+# Zálohy databází. Jsou v desítkách až stovkách MB a do gitu nepatří —
+# jednou přidané objekty už z historie nezmizí a nafouknou repo natrvalo.
+backups/
