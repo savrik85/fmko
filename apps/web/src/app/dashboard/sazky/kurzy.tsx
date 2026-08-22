@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { EntityLink } from "@/components/ui";
 import { Forma, kurz } from "./ui";
-import { bestTextOn } from "@/lib/team-color";
 import type { Board, Nabidka, Strana, VybranyTip, Zapas } from "./types";
 
 /** Jedno tlačítko kurzu. Jméno týmu ani hráče do něj NIKDY nepatří — musí zůstat odkazem. */
@@ -32,39 +31,37 @@ function Kurz({ tip, label, oddsX100, vybrano, onClick }: {
  * sebe nevejdou a přidávat sloupce do tabulky je proti zvyklostem téhle hry.
  */
 function RadekTymu({ t, odkaz }: { t: Strana; odkaz: boolean }) {
+  // Barva klubu jen jako tenký akcent. Dřív tu byl barevný čtvereček s pořadím,
+  // ale ten přetahoval pozornost ze jména týmu — a pořadí je kontext, ne identita.
   const barva = t.color ?? "#2D5F2D";
-  // Barva klubu nese pořadí místo dekorativní tečky — má tak konečně funkci.
-  // Text na ní musí být adaptivní, jinak na světlém dresu zmizí.
-  const textNaBarve = bestTextOn(barva) === "light" ? "#FFFFFF" : "#111827";
 
   return (
-    <div className="flex items-center gap-2.5 min-w-0">
-      <span
-        className="w-7 h-7 rounded-control shrink-0 flex items-center justify-center
-                   text-sm font-heading font-bold tabular-nums leading-none"
-        style={{ background: barva, color: textNaBarve }}
-        aria-label={t.pos > 0 ? `${t.pos}. místo v tabulce` : undefined}
-      >
-        {t.pos > 0 ? t.pos : ""}
-      </span>
+    <div className="flex items-stretch gap-2.5 min-w-0">
+      <span className="w-1 rounded-full shrink-0" style={{ background: barva }} aria-hidden />
 
       <div className="flex-1 min-w-0">
-        {odkaz ? (
-          <EntityLink type="team" id={t.id} className="text-base font-semibold truncate block">
-            {t.name}
-          </EntityLink>
-        ) : (
-          <span className="text-base font-semibold truncate block">{t.name}</span>
-        )}
-        {t.played > 0 && <div className="mt-1"><Forma form={t.form} /></div>}
-      </div>
-
-      {t.played > 0 && (
-        <div className="text-right shrink-0 leading-tight">
-          <div className="text-sm font-heading font-bold tabular-nums">{t.points} b</div>
-          <div className="text-micro text-muted tabular-nums">{t.goalsFor}:{t.goalsAgainst}</div>
+        <div className="flex items-baseline justify-between gap-2">
+          {odkaz ? (
+            <EntityLink type="team" id={t.id} className="text-base font-semibold truncate">
+              {t.name}
+            </EntityLink>
+          ) : (
+            <span className="text-base font-semibold truncate">{t.name}</span>
+          )}
+          {t.played > 0 && (
+            <span className="text-sm font-heading font-bold tabular-nums shrink-0">{t.points} b</span>
+          )}
         </div>
-      )}
+
+        {t.played > 0 && (
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <Forma form={t.form} />
+            <span className="text-micro text-muted tabular-nums">
+              {t.pos > 0 && `${t.pos}. místo · `}{t.goalsFor}:{t.goalsAgainst}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
