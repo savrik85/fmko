@@ -98,22 +98,24 @@ export function Statek({ label, value, className = "" }: {
 /**
  * Posledních pět výsledků jako barevné body. Nejnovější vlevo.
  *
- * Písmena, ne ikony — V/R/P čte hráč okamžitě a nemusí luštit legendu.
+ * Barvy jsou schválně tytéž jako v ligové tabulce (/dashboard/liga) — hráč
+ * čte formu na dvou místech a nesmí ji na každém luštit znovu.
  */
 export function Forma({ form }: { form: string[] }) {
   if (form.length === 0) return null;
   const barva: Record<string, string> = {
-    V: "bg-pitch-500 text-white",
-    R: "bg-gray-200 text-ink",
-    P: "bg-card-red text-white",
+    V: "bg-pitch-400",
+    R: "bg-gold-500",
+    P: "bg-card-red",
   };
   const popis: Record<string, string> = { V: "výhra", R: "remíza", P: "prohra" };
   return (
-    <span className="inline-flex gap-0.5 shrink-0" aria-label={`Forma: ${form.map((f) => popis[f]).join(", ")}`}>
+    <span className="inline-flex gap-1 shrink-0"
+          aria-label={`Forma: ${form.map((f) => popis[f]).join(", ")}`}>
       {form.map((f, i) => (
         <span key={i} aria-hidden
-          className={`w-4 h-4 rounded-tight text-micro font-heading font-bold
-                      flex items-center justify-center leading-none ${barva[f] ?? "bg-gray-100"}`}>
+          className={`w-5 h-5 rounded text-micro font-heading font-bold text-white
+                      flex items-center justify-center leading-none ${barva[f] ?? "bg-gray-200"}`}>
           {f}
         </span>
       ))}

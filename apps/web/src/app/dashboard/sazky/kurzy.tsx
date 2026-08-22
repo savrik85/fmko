@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { EntityLink } from "@/components/ui";
 import { Forma, kurz } from "./ui";
+import { bestTextOn } from "@/lib/team-color";
 import type { Board, Nabidka, Strana, VybranyTip, Zapas } from "./types";
 
 /** Jedno tlačítko kurzu. Jméno týmu ani hráče do něj NIKDY nepatří — musí zůstat odkazem. */
@@ -31,30 +32,37 @@ function Kurz({ tip, label, oddsX100, vybrano, onClick }: {
  * sebe nevejdou a přidávat sloupce do tabulky je proti zvyklostem téhle hry.
  */
 function RadekTymu({ t, odkaz }: { t: Strana; odkaz: boolean }) {
+  const barva = t.color ?? "#2D5F2D";
+  // Barva klubu nese pořadí místo dekorativní tečky — má tak konečně funkci.
+  // Text na ní musí být adaptivní, jinak na světlém dresu zmizí.
+  const textNaBarve = bestTextOn(barva) === "light" ? "#FFFFFF" : "#111827";
+
   return (
-    <div className="min-w-0">
-      <div className="flex items-center gap-2 min-w-0">
-        {t.pos > 0 && (
-          <span className="text-micro font-heading font-bold tabular-nums text-muted w-5 shrink-0 text-right">
-            {t.pos}.
-          </span>
-        )}
-        <span className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ background: t.color ?? "#2D5F2D" }} aria-hidden />
+    <div className="flex items-center gap-2.5 min-w-0">
+      <span
+        className="w-7 h-7 rounded-control shrink-0 flex items-center justify-center
+                   text-sm font-heading font-bold tabular-nums leading-none"
+        style={{ background: barva, color: textNaBarve }}
+        aria-label={t.pos > 0 ? `${t.pos}. místo v tabulce` : undefined}
+      >
+        {t.pos > 0 ? t.pos : ""}
+      </span>
+
+      <div className="flex-1 min-w-0">
         {odkaz ? (
-          <EntityLink type="team" id={t.id} className="text-base font-semibold truncate">
+          <EntityLink type="team" id={t.id} className="text-base font-semibold truncate block">
             {t.name}
           </EntityLink>
         ) : (
-          <span className="text-base font-semibold truncate">{t.name}</span>
+          <span className="text-base font-semibold truncate block">{t.name}</span>
         )}
+        {t.played > 0 && <div className="mt-1"><Forma form={t.form} /></div>}
       </div>
+
       {t.played > 0 && (
-        <div className="flex items-center gap-2 mt-0.5 pl-7 flex-wrap">
-          <Forma form={t.form} />
-          <span className="text-micro text-muted tabular-nums">
-            {t.points} b · {t.goalsFor}:{t.goalsAgainst}
-          </span>
+        <div className="text-right shrink-0 leading-tight">
+          <div className="text-sm font-heading font-bold tabular-nums">{t.points} b</div>
+          <div className="text-micro text-muted tabular-nums">{t.goalsFor}:{t.goalsAgainst}</div>
         </div>
       )}
     </div>
@@ -78,7 +86,7 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
   if (z.ownMatch) {
     return (
       <article className="card overflow-hidden opacity-70">
-        <div className="px-3 py-2.5 space-y-1.5">
+        <div className="px-3 py-2.5 space-y-2.5">
           {[z.home, z.away].map((t) => <RadekTymu key={t.id} t={t} odkaz={false} />)}
         </div>
         <div className="px-3 py-2.5 border-t border-gray-50 bg-gray-50/60">
@@ -108,7 +116,7 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
   return (
     <article className="card overflow-hidden">
       {/* Týmy pod sebou, ne vedle sebe — dvě vesnická jména se na 360 px vedle sebe nevejdou. */}
-      <div className="px-3 pt-2.5 pb-2 space-y-1.5">
+      <div className="px-3 pt-2.5 pb-2.5 space-y-2.5">
         {[z.home, z.away].map((t) => <RadekTymu key={t.id} t={t} odkaz />)}
       </div>
 
