@@ -33,6 +33,15 @@ export const SCORERS_PER_TEAM = 6;
 /** Pod tuhle pravděpodobnost se střelec nenabízí — kurz by byl nesmyslně vysoký. */
 export const MIN_SCORER_PROB = 0.06;
 
+/**
+ * Nejnižší kurz, který se ještě vypisuje.
+ *
+ * Cokoli pod tím je prakticky jistota: nikdo to nevsadí a na lístku to jen
+ * zabírá místo. Týká se opačné strany vysokých gólových linií a neprohry
+ * favorita u jednoznačných zápasů.
+ */
+export const MIN_OFFERED_ODDS = 120;
+
 /** Kolik posledních zápasů se počítá do formy. */
 const FORM_MATCHES = 5;
 
@@ -241,18 +250,22 @@ export function matchOdds(input: {
   // Dvojtip. Tři možnosti se navzájem nevylučují, takže se každá maržuje
   // zvlášť jako dvoucestná sázka — normalizovat je na jeden overround by
   // znamenalo prodávat jistotu pod cenou.
+  //
+  // U jednoznačného zápasu spadne neprohra favorita na podlahu kurzu (1,05).
+  // Takovou možnost nemá smysl vypisovat: nikdo ji nevsadí a na lístku jen
+  // zabírá místo. Stejný práh jako u vysokých gólových linií.
   const dc = doubleChanceProbabilities(lambdas);
-  out.push(
-    { matchId: input.matchId, market: "dchance", selection: "1X",
-      oddsX100: singleSideOdds(dc.homeOrDraw), probability: dc.homeOrDraw,
-      label: `${input.homeName} neprohraje` },
-    { matchId: input.matchId, market: "dchance", selection: "X2",
-      oddsX100: singleSideOdds(dc.awayOrDraw), probability: dc.awayOrDraw,
-      label: `${input.awayName} neprohraje` },
-    { matchId: input.matchId, market: "dchance", selection: "12",
-      oddsX100: singleSideOdds(dc.noDraw), probability: dc.noDraw,
-      label: "Nebude remíza" },
-  );
+  const dvojtipy: Array<[string, number, string]> = [
+    ["1X", dc.homeOrDraw, `${input.homeName} neprohraje`],
+    ["12", dc.noDraw, "Nebude remíza"],
+    ["X2", dc.awayOrDraw, `${input.awayName} neprohraje`],
+  ];
+  for (const [selection, prob, label] of dvojtipy) {
+    const odds = singleSideOdds(prob);
+    if (odds < MIN_OFFERED_ODDS) continue;
+    out.push({ matchId: input.matchId, market: "dchance", selection,
+               oddsX100: odds, probability: prob, label });
+  }
 
   // Počet gólů
   for (const line of TOTAL_LINES) {
@@ -265,9 +278,9 @@ export function matchOdds(input: {
                oddsX100: kover, probability: t.over, label: `Víc než ${cara} gólu` });
 
     // Opačná strana se nabízí jen tam, kde má smysl. „Míň než 6,5 gólu" vychází
-    // na kurz 1,05, tedy na podlahu — nikdo to nevsadí a na lístku to jen
-    // zabírá místo. Vysoká linie je trh na výprask, a ten se sází jen nahoru.
-    if (kunder >= 120) {
+    // na kurz 1,05, tedy na podlahu. Vysoká linie je trh na výprask a ten se
+    // sází jen nahoru.
+    if (kunder >= MIN_OFFERED_ODDS) {
       out.push({ matchId: input.matchId, market: "totals", selection: `under${tag}`,
                  oddsX100: kunder, probability: t.under, label: `Míň než ${cara} gólu` });
     }
