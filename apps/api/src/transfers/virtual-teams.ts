@@ -149,23 +149,10 @@ export async function generateAiListings(
   if (position === "FWD") { adjustedSkills.shooting += 12; adjustedSkills.speed += 8; }
   for (const k of skillKeys) adjustedSkills[k] = Math.max(1, Math.min(95, adjustedSkills[k]));
 
-  // Zbylé dovednosti. Bez nich měl hráč koupený z trhu nulovou kreativitu,
-  // standardky, přehled, výdrž, sílu i zkušenost — a to není kosmetika: do
-  // zápasu se počítají jako nula, takže byl reálně slabší, než říkal jeho
-  // rating. Ten se totiž počítá jen ze sedmi dovedností nahoře.
-  //
-  // Odvozují se z příbuzných hodnot stejně jako v cup.ts a u generátorů kádrů,
-  // aby hráč z trhu vypadal jako každý jiný.
-  const dopln = (zaklad: number, rozptyl = 8) =>
-    Math.max(1, Math.min(95, zaklad + rng.int(-rozptyl, rozptyl)));
-
-  adjustedSkills.vision = dopln(adjustedSkills.technique);
-  adjustedSkills.creativity = dopln(adjustedSkills.passing);
-  adjustedSkills.setPieces = dopln(Math.round((adjustedSkills.technique + adjustedSkills.shooting) / 2));
-  adjustedSkills.stamina = player.stamina;
-  adjustedSkills.strength = player.strength;
-  // Zkušenost roste s věkem: v osmnácti skoro žádná, po třicítce vysoká.
-  adjustedSkills.experience = Math.max(1, Math.min(95, Math.round((age - 15) * 3.5) + rng.int(-5, 5)));
+  doplnZbyleDovednosti(adjustedSkills, {
+    stamina: player.stamina, strength: player.strength, age,
+    sum: (min, max) => rng.int(min, max),
+  });
 
   const posWeights: Record<string, Record<string, number>> = {
     GK: { speed: 0.05, technique: 0.05, shooting: 0.02, passing: 0.08, heading: 0.05, defense: 0.15, goalkeeping: 0.60 },
@@ -294,6 +281,40 @@ export async function getVirtualTeamsForDistrict(db: D1Database, district: strin
 
 /** Šance na CPU nabídku per tým a den (~1 nabídka za 2 týdny, cooldowny to dál ředí). */
 const OFFER_CHANCE_PER_TEAM = 0.08;
+
+/** Kanonický seznam dovedností, který hra u hráče očekává. */
+export const VSECHNY_DOVEDNOSTI = [
+  "speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping",
+  "creativity", "setPieces", "vision", "stamina", "strength", "experience",
+] as const;
+
+/**
+ * Doplní dovednosti, které se neladí na kvalitu klubu.
+ *
+ * Generátor dřív vyplňoval jen sedm dovedností a zbylých šest nechával prázdných.
+ * Nebyla to kosmetika: do zápasu se počítají jako nula, takže hráč koupený z trhu
+ * byl reálně slabší, než říkal jeho rating — a ten se počítá jen z těch sedmi,
+ * takže vypadal v pořádku. Na produkci takhle vzniklo devět hráčů.
+ *
+ * Odvozuje z příbuzných hodnot stejně jako cup.ts a generátory kádrů.
+ * Mění předaný objekt na místě.
+ */
+export function doplnZbyleDovednosti(
+  skills: Record<string, number>,
+  vstup: { stamina: number; strength: number; age: number; sum: (min: number, max: number) => number },
+): Record<string, number> {
+  const kolem = (zaklad: number, rozptyl = 8) =>
+    Math.max(1, Math.min(95, Math.round(zaklad) + vstup.sum(-rozptyl, rozptyl)));
+
+  skills.vision = kolem(skills.technique ?? 40);
+  skills.creativity = kolem(skills.passing ?? 40);
+  skills.setPieces = kolem(((skills.technique ?? 40) + (skills.shooting ?? 40)) / 2);
+  skills.stamina = vstup.stamina;
+  skills.strength = vstup.strength;
+  // Zkušenost roste s věkem: v osmnácti skoro žádná, po třicítce vysoká.
+  skills.experience = Math.max(1, Math.min(95, Math.round((vstup.age - 15) * 3.5) + vstup.sum(-5, 5)));
+  return skills;
+}
 
 async function maybeOfferForTeam(
   db: D1Database,
