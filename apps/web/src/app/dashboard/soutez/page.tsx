@@ -29,7 +29,7 @@ import type {
 const TAB_KEYS = ["zasedani", "pokladna", "vedeni", "zapisy"] as const;
 
 /** Pořadí určuje pořadí podzáložek. „zadna" je koš pro návrhy mimo gesce. */
-const GESCE_ORDER = ["soutez", "hospodarska", "disciplinarni", "rozhodcich", "zadna"] as const;
+const GESCE_ORDER = ["soutez", "hospodarska", "disciplinarni", "rozhodcich", "integrita", "zadna"] as const;
 
 /**
  * Záložky nesou jméno funkce, která odbor vede — zkrácené, aby se čtyři vešly
@@ -37,12 +37,14 @@ const GESCE_ORDER = ["soutez", "hospodarska", "disciplinarni", "rozhodcich", "za
  */
 const GESCE_LABEL: Record<string, string> = {
   soutez: "Prezident", hospodarska: "Sekretář",
-  disciplinarni: "Disciplinárka", rozhodcich: "Rozhodčí", zadna: "Ostatní",
+  disciplinarni: "Disciplinárka", rozhodcich: "Rozhodčí",
+  integrita: "Integrita", zadna: "Ostatní",
 };
 
 const GESCE_PLNY: Record<string, string> = {
   soutez: "Prezident soutěže", hospodarska: "Generální sekretář",
-  disciplinarni: "Předseda disciplinární rady", rozhodcich: "Komisař rozhodčích", zadna: "Ostatní",
+  disciplinarni: "Předseda disciplinární rady", rozhodcich: "Komisař rozhodčích",
+  integrita: "Komisař pro integritu soutěže", zadna: "Ostatní",
 };
 
 const GESCE_POPIS: Record<string, string> = {
@@ -50,18 +52,20 @@ const GESCE_POPIS: Record<string, string> = {
   hospodarska: "Odměny za zápasy i za umístění, startovné, odvody z tržeb a dotace klubům.",
   disciplinarni: "Pokuty klubům, sazebník trestů a odvolání proti nim.",
   rozhodcich: "Listina rozhodčích a jejich odměna za odpískaný zápas.",
+  integrita: "Sázková kancelář a přestupový trh — limity sázek, odvod z obratu a dohled nad tím, co vypadá na domluvu.",
   zadna: "Návrhy, které nespadají pod žádný odbor.",
 };
 
 /** Komu se návrh podává — třetí pád, ať věta drží pohromadě. */
 const GESCE_KOMU: Record<string, string> = {
   soutez: "prezidentovi soutěže", hospodarska: "generálnímu sekretáři",
-  disciplinarni: "předsedovi disciplinární rady", rozhodcich: "komisaři rozhodčích", zadna: "mimo odbory",
+  disciplinarni: "předsedovi disciplinární rady", rozhodcich: "komisaři rozhodčích",
+  integrita: "komisaři pro integritu soutěže", zadna: "mimo odbory",
 };
 
 const ROLE_OF_GESCE: Record<string, string> = {
   soutez: "predseda", hospodarska: "hospodarska",
-  disciplinarni: "disciplinarni", rozhodcich: "rozhodcich",
+  disciplinarni: "disciplinarni", rozhodcich: "rozhodcich", integrita: "integrita",
 };
 
 const ANSWER_LABEL: Record<string, string> = { pro: "Pro", proti: "Proti", zdrzel: "Zdržel se" };

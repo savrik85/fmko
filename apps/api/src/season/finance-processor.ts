@@ -67,6 +67,7 @@ export type TransactionType =
   | "bet_levy"
   | "bet_win"
   | "bet_refund"
+  | "bet_confiscated"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */

@@ -20,7 +20,7 @@ export function rolesFor(humanClubs: number): OfficialRole[] {
   // V malé lize nemá smysl mít čtyři bafuňáře na osm klubů — disciplinární
   // pokuty i škrtání rozhodčích se tam řeší vždycky hlasováním.
   return humanClubs >= FULL_BOARD_CLUBS
-    ? ["predseda", "hospodarska", "disciplinarni", "rozhodcich"]
+    ? ["predseda", "hospodarska", "disciplinarni", "rozhodcich", "integrita"]
     : ["predseda", "hospodarska"];
 }
 
