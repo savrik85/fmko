@@ -7,7 +7,7 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
-import { generateBoard, nextOpenRound } from "../betting/board";
+import { generateBoard, nextOpenRound, teamStandings } from "../betting/board";
 import { placeTicket, limitsFor, canBet, type SelectionInput } from "../betting/tickets";
 import { settleRound } from "../betting/settle";
 
@@ -113,6 +113,10 @@ bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
     canBet(c.env.DB, teamId, meta.league_id, round.season_number, round.game_week),
   ]);
 
+  // Jak si týmy stojí. Bez toho hráč sází naslepo, nebo musí odejít na tabulku
+  // a zpátky — a to už si radši nevsadí.
+  const tabulka = await teamStandings(c.env.DB, meta.league_id, round.season_number);
+
   // Vlastní zápasy — přes user_id, aby to pokrylo i rezervu.
   const moje = await c.env.DB.prepare(
     "SELECT id FROM teams WHERE user_id = ?"
@@ -146,10 +150,23 @@ bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
     matches: zapasy.results.map((m) => {
       const vlastni = mojeIds.has(m.home_team_id) || mojeIds.has(m.away_team_id);
       const k = podleZapasu.get(m.id) ?? [];
+      const strana = (id: string, name: string, color: string) => {
+        const st = tabulka.get(id);
+        return {
+          id, name, color,
+          pos: st?.pos ?? 0,
+          played: st?.played ?? 0,
+          points: st?.points ?? 0,
+          goalsFor: st?.goalsFor ?? 0,
+          goalsAgainst: st?.goalsAgainst ?? 0,
+          form: st?.form ?? [],
+        };
+      };
+
       return {
         matchId: m.id,
-        home: { id: m.home_team_id, name: m.home_name, color: m.home_color },
-        away: { id: m.away_team_id, name: m.away_name, color: m.away_color },
+        home: strana(m.home_team_id, m.home_name, m.home_color),
+        away: strana(m.away_team_id, m.away_name, m.away_color),
         ownMatch: vlastni,
         markets: vlastni ? null : {
           result: k.filter((x) => x.market === "1x2")

@@ -73,6 +73,32 @@ export function Statek({ label, value, className = "" }: {
   );
 }
 
+/**
+ * Posledních pět výsledků jako barevné body. Nejnovější vlevo.
+ *
+ * Písmena, ne ikony — V/R/P čte hráč okamžitě a nemusí luštit legendu.
+ */
+export function Forma({ form }: { form: string[] }) {
+  if (form.length === 0) return null;
+  const barva: Record<string, string> = {
+    V: "bg-pitch-500 text-white",
+    R: "bg-gray-200 text-ink",
+    P: "bg-card-red text-white",
+  };
+  const popis: Record<string, string> = { V: "výhra", R: "remíza", P: "prohra" };
+  return (
+    <span className="inline-flex gap-0.5 shrink-0" aria-label={`Forma: ${form.map((f) => popis[f]).join(", ")}`}>
+      {form.map((f, i) => (
+        <span key={i} aria-hidden
+          className={`w-4 h-4 rounded-tight text-micro font-heading font-bold
+                      flex items-center justify-center leading-none ${barva[f] ?? "bg-gray-100"}`}>
+          {f}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function Prazdno({ nadpis, children }: { nadpis: string; children: ReactNode }) {
   return (
     <div className="card p-8 text-center">

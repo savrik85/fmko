@@ -19,6 +19,14 @@ export interface Strana {
   id: string;
   name: string;
   color: string | null;
+  /** Pořadí v tabulce; 0 = ještě se nehrálo. */
+  pos: number;
+  played: number;
+  points: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  /** Posledních pět výsledků, nejnovější první: „V" | „R" | „P". */
+  form: string[];
 }
 
 export interface Zapas {

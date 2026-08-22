@@ -119,15 +119,36 @@ async function loadStrengths(db: D1Database, teamIds: string[]): Promise<Map<str
   return out;
 }
 
+/** Jak si tým stojí — pro kurzy i pro to, co se ukáže hráči na lístku. */
+export interface TeamStanding {
+  /** Pořadí v tabulce. 0 = ještě se nehrálo. */
+  pos: number;
+  played: number;
+  points: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  /** Posledních pět výsledků, nejnovější první: „V" | „R" | „P". */
+  form: string[];
+  /** Korekce formy pro kurzový model, ve stejných jednotkách jako síla kádru. */
+  formAdj: number;
+}
+
 /**
- * Forma jako průměr bodů na zápas z posledních pěti odehraných kol.
- * Počítá se jen z aktuální sezóny — jinak by se do formy míchaly staré ročníky.
+ * Tabulka a forma všech týmů soutěže z jednoho dotazu.
+ *
+ * Slouží dvěma věcem naráz: kurzovému modelu (formAdj) a kurzovému lístku
+ * (pořadí, skóre, posledních pět výsledků). Počítá se jen z aktuální sezóny —
+ * league_id se napříč sezónami recykluje, takže bez filtru by se do tabulky
+ * počítaly staré ročníky (vzor stats/standings.ts).
  */
-async function loadForm(
-  db: D1Database, leagueId: string, seasonNumber: number, teamIds: string[],
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  if (teamIds.length === 0) return out;
+export async function teamStandings(
+  db: D1Database, leagueId: string, seasonNumber: number,
+): Promise<Map<string, TeamStanding>> {
+  const out = new Map<string, TeamStanding>();
+
+  const tymy = await db.prepare("SELECT id FROM teams WHERE league_id = ?")
+    .bind(leagueId).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `týmy ligy ${leagueId}`, e); return { results: [] }; });
 
   const rows = await db.prepare(
     `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score, sc.game_week
@@ -137,26 +158,45 @@ async function loadForm(
       ORDER BY sc.game_week DESC`
   ).bind(leagueId, seasonNumber).all<{
     home_team_id: string; away_team_id: string; home_score: number; away_score: number;
-  }>().catch((e) => { logger.warn({ module: M }, `forma ligy ${leagueId}`, e); return { results: [] }; });
+  }>().catch((e) => { logger.warn({ module: M }, `tabulka ligy ${leagueId}`, e); return { results: [] }; });
 
-  const body = new Map<string, number[]>();
-  for (const id of teamIds) body.set(id, []);
+  interface Stat { w: number; d: number; l: number; gf: number; ga: number; form: string[] }
+  const stat = new Map<string, Stat>();
+  for (const t of tymy.results) stat.set(t.id, { w: 0, d: 0, l: 0, gf: 0, ga: 0, form: [] });
 
+  // Zápasy chodí od nejnovějšího kola, takže prvních pět zapsaných je forma.
   for (const m of rows.results) {
     for (const [tid, vlastni, cizi] of [
       [m.home_team_id, m.home_score, m.away_score] as const,
       [m.away_team_id, m.away_score, m.home_score] as const,
     ]) {
-      const arr = body.get(tid);
-      if (!arr || arr.length >= FORM_MATCHES) continue;
-      arr.push(vlastni > cizi ? 3 : vlastni === cizi ? 1 : 0);
+      const s = stat.get(tid);
+      if (!s) continue;
+      s.gf += vlastni; s.ga += cizi;
+      if (vlastni > cizi) s.w++; else if (vlastni === cizi) s.d++; else s.l++;
+      if (s.form.length < FORM_MATCHES) s.form.push(vlastni > cizi ? "V" : vlastni === cizi ? "R" : "P");
     }
   }
 
-  for (const [tid, arr] of body) {
-    // Bez odehraných zápasů je forma neutrální, ne nulová — nula znamená
-    // „samé prohry" a na začátku sezóny by všem strhla kurz.
-    out.set(tid, arr.length === 0 ? 0 : formAdjustment(arr.reduce((a, b) => a + b, 0) / arr.length));
+  const poradi = [...stat.entries()]
+    .map(([id, s]) => ({ id, body: s.w * 3 + s.d, rozdil: s.gf - s.ga, vstrelene: s.gf }))
+    .sort((a, b) => b.body - a.body || b.rozdil - a.rozdil || b.vstrelene - a.vstrelene);
+  const misto = new Map(poradi.map((t, i) => [t.id, i + 1]));
+
+  for (const [id, s] of stat) {
+    const odehrano = s.w + s.d + s.l;
+    const bodyNaZapas = s.form.length === 0
+      ? 1.5   // bez odehraných zápasů je forma neutrální, ne nulová
+      : s.form.reduce((a, v) => a + (v === "V" ? 3 : v === "R" ? 1 : 0), 0) / s.form.length;
+    out.set(id, {
+      pos: odehrano === 0 ? 0 : (misto.get(id) ?? 0),
+      played: odehrano,
+      points: s.w * 3 + s.d,
+      goalsFor: s.gf,
+      goalsAgainst: s.ga,
+      form: s.form,
+      formAdj: formAdjustment(bodyNaZapas),
+    });
   }
   return out;
 }
@@ -345,9 +385,9 @@ export async function generateBoard(
   const teamIds = [...new Set(matches.results.flatMap((m) => [m.home_team_id, m.away_team_id]))];
   const seasonId = `season-${round.season_number}`;
 
-  const [strengths, forms, scorers, teamGoals, played] = await Promise.all([
+  const [strengths, tabulka, scorers, teamGoals, played] = await Promise.all([
     loadStrengths(db, teamIds),
-    loadForm(db, leagueId, round.season_number, teamIds),
+    teamStandings(db, leagueId, round.season_number),
     loadScorers(db, teamIds, seasonId),
     loadTeamGoals(db, teamIds, seasonId),
     loadPlayedCount(db, leagueId, round.season_number),
@@ -364,8 +404,8 @@ export async function generateBoard(
       awayName: m.away_name,
       homeStrength: strengths.get(m.home_team_id) ?? 30,
       awayStrength: strengths.get(m.away_team_id) ?? 30,
-      homeForm: forms.get(m.home_team_id) ?? 0,
-      awayForm: forms.get(m.away_team_id) ?? 0,
+      homeForm: tabulka.get(m.home_team_id)?.formAdj ?? 0,
+      awayForm: tabulka.get(m.away_team_id)?.formAdj ?? 0,
       homeTeamGoals: teamGoals.get(m.home_team_id) ?? 0,
       awayTeamGoals: teamGoals.get(m.away_team_id) ?? 0,
       playedMatches: played,

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { EntityLink } from "@/components/ui";
-import { kurz } from "./ui";
-import type { Board, Nabidka, VybranyTip, Zapas } from "./types";
+import { Forma, kurz } from "./ui";
+import type { Board, Nabidka, Strana, VybranyTip, Zapas } from "./types";
 
 /** Jedno tlačítko kurzu. Jméno týmu ani hráče do něj NIKDY nepatří — musí zůstat odkazem. */
 function Kurz({ tip, label, oddsX100, vybrano, onClick }: {
@@ -24,6 +24,43 @@ function Kurz({ tip, label, oddsX100, vybrano, onClick }: {
   );
 }
 
+/**
+ * Řádek týmu: pořadí, jméno, forma a skóre.
+ *
+ * Všechno pod sebou, ne do sloupců — na 360 px se dvě vesnická jména vedle
+ * sebe nevejdou a přidávat sloupce do tabulky je proti zvyklostem téhle hry.
+ */
+function RadekTymu({ t, odkaz }: { t: Strana; odkaz: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
+        {t.pos > 0 && (
+          <span className="text-micro font-heading font-bold tabular-nums text-muted w-5 shrink-0 text-right">
+            {t.pos}.
+          </span>
+        )}
+        <span className="w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ background: t.color ?? "#2D5F2D" }} aria-hidden />
+        {odkaz ? (
+          <EntityLink type="team" id={t.id} className="text-base font-semibold truncate">
+            {t.name}
+          </EntityLink>
+        ) : (
+          <span className="text-base font-semibold truncate">{t.name}</span>
+        )}
+      </div>
+      {t.played > 0 && (
+        <div className="flex items-center gap-2 mt-0.5 pl-7 flex-wrap">
+          <Forma form={t.form} />
+          <span className="text-micro text-muted tabular-nums">
+            {t.points} b · {t.goalsFor}:{t.goalsAgainst}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Popisek linie: 'over25' → 'Víc než 2,5'. */
 function lineLabel(selection: string): { smer: string; cara: string } {
   const smer = selection.startsWith("over") ? "Víc" : "Míň";
@@ -41,10 +78,8 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
   if (z.ownMatch) {
     return (
       <article className="card overflow-hidden opacity-70">
-        <div className="px-3 py-2.5 space-y-1">
-          {[z.home, z.away].map((t) => (
-            <div key={t.id} className="text-base font-semibold truncate">{t.name}</div>
-          ))}
+        <div className="px-3 py-2.5 space-y-1.5">
+          {[z.home, z.away].map((t) => <RadekTymu key={t.id} t={t} odkaz={false} />)}
         </div>
         <div className="px-3 py-2.5 border-t border-gray-50 bg-gray-50/60">
           <div className="font-heading font-bold text-sm mb-0.5">Na svůj zápas si nevsadíš</div>
@@ -73,16 +108,8 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
   return (
     <article className="card overflow-hidden">
       {/* Týmy pod sebou, ne vedle sebe — dvě vesnická jména se na 360 px vedle sebe nevejdou. */}
-      <div className="px-3 pt-2.5 pb-2 space-y-1">
-        {[z.home, z.away].map((t) => (
-          <div key={t.id} className="flex items-center gap-2 min-w-0">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ background: t.color ?? "#2D5F2D" }} aria-hidden />
-            <EntityLink type="team" id={t.id} className="text-base font-semibold truncate">
-              {t.name}
-            </EntityLink>
-          </div>
-        ))}
+      <div className="px-3 pt-2.5 pb-2 space-y-1.5">
+        {[z.home, z.away].map((t) => <RadekTymu key={t.id} t={t} odkaz />)}
       </div>
 
       <div className="grid grid-cols-3 gap-1.5 px-3 pb-3">
