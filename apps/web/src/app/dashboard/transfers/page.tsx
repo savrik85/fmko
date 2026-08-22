@@ -2103,9 +2103,9 @@ export default function TransfersPage() {
                         <button onClick={async () => {
                           const amount = o.counter_amount ?? o.offer_amount;
                           const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
-                          const adminFee = isCrossLeague ? Math.round(amount * 0.20) : 0;
-                          const desc = isCrossLeague
-                            ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup — kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)} (15%)`
+                          const adminFee = Number((o as any).admin_fee ?? 0);
+                          const desc = adminFee > 0
+                            ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup — kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)}`
                             : `Za ${o.first_name} ${o.last_name}`;
                           const ok = await confirm({ title: `Přijmout ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
@@ -2190,9 +2190,10 @@ export default function TransfersPage() {
                           )}
                           {o.counter_amount && <span className="text-gold-600 ml-2">Protinabídka: {formatCZK(o.counter_amount)}</span>}
                           {(() => {
-                            const crossLeague = myLeagueId && (o as any).to_league_id && (o as any).to_league_id !== myLeagueId;
-                            if (!crossLeague) return null;
-                            const fee = Math.round((o.counter_amount ?? o.offer_amount) * 0.20);
+                            // Poplatek počítá server — zná sazbu, kterou si soutěž odhlasovala,
+                            // i výjimku pro mládež (přesun mezi áčkem a rezervou se neplatí).
+                            const fee = Number((o as any).admin_fee ?? 0);
+                            if (fee <= 0) return null;
                             return <span className="text-xs text-card-red ml-2">+ poplatek {formatCZK(fee)}</span>;
                           })()}
                         </div>
@@ -2213,9 +2214,9 @@ export default function TransfersPage() {
                           <button onClick={async () => {
                             const amount = o.counter_amount ?? o.offer_amount;
                             const isCrossLeague = myLeagueId && (o as any).to_league_id && (o as any).to_league_id !== myLeagueId;
-                            const adminFee = isCrossLeague ? Math.round(amount * 0.20) : 0;
-                            const desc = isCrossLeague
-                              ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup — zaplatíš navíc administrační poplatek ${formatCZK(adminFee)} (15%)`
+                            const adminFee = Number((o as any).admin_fee ?? 0);
+                            const desc = adminFee > 0
+                              ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup — zaplatíš navíc administrační poplatek ${formatCZK(adminFee)}`
                               : `Za ${o.first_name} ${o.last_name}`;
                             const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                             if (!ok || !teamId) return;

@@ -5513,16 +5513,26 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   // SMS to the owner team about the incoming offer
   const buyerTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   const pName = `${player.first_name} ${player.last_name}`;
+
+  // Komu zprávu doručit. U hráče z rezervy vlastní kartu U21 tým, jenže trenér
+  // je přihlášený za áčko — do telefonu U21 týmu se nikdy nepodívá. Zpráva
+  // i notifikace proto míří na mateřský klub. Bez toho nabídky na mládež tiše
+  // vypršely: na produkci jich takhle propadlo šest.
+  const komuDorucit = await c.env.DB.prepare(
+    "SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?"
+  ).bind(targetOwnerId).first<{ id: string }>()
+    .then((r) => r?.id ?? targetOwnerId)
+    .catch((e) => { logger.warn({ module: "game" }, "mateřský klub k doručení", e); return targetOwnerId; });
   if (isBuyout) {
-    await sendPhoneSMS(c.env.DB, targetOwnerId, "Sportovní ředitel", "Sportovní ředitel",
+    await sendPhoneSMS(c.env.DB, komuDorucit, "Sportovní ředitel", "Sportovní ředitel",
       `📩 ${buyerTeam?.name ?? "Neznámý klub"} chce odkoupit ${pName} (aktuálně u nich na hostování) za ${body.amount.toLocaleString("cs")} Kč.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else if (offerType === "loan") {
-    await sendPhoneSMS(c.env.DB, targetOwnerId, "Sportovní ředitel", "Sportovní ředitel",
+    await sendPhoneSMS(c.env.DB, komuDorucit, "Sportovní ředitel", "Sportovní ředitel",
       `📩 ${buyerTeam?.name ?? "Neznámý klub"} má zájem o hostování ${pName}.${body.amount > 0 ? ` Nabízí poplatek ${body.amount.toLocaleString("cs")} Kč.` : ""} Podívejte se na to v přestupech.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else {
-    await sendPhoneSMS(c.env.DB, targetOwnerId, "Sportovní ředitel", "Sportovní ředitel",
+    await sendPhoneSMS(c.env.DB, komuDorucit, "Sportovní ředitel", "Sportovní ředitel",
       `📩 Přišla nabídka na ${pName} od ${buyerTeam?.name ?? "neznámého klubu"} za ${body.amount.toLocaleString("cs")} Kč. Podívejte se na to v přestupech.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
@@ -5531,7 +5541,7 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
     const { createNotification } = await import("../community/notifications");
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
     const offerLabel = offerType === "loan" ? "hostování" : "přestup";
-    await createNotification(c.env.DB, targetOwnerId, "transfer",
+    await createNotification(c.env.DB, komuDorucit, "transfer",
       `💰 Nová nabídka za ${pName}`,
       `${buyerTeam?.name ?? "Neznámý klub"} nabízí ${offerLabel} za ${body.amount.toLocaleString("cs-CZ")} Kč.`,
       `/dashboard/transfers/offer/${id}`, pushEnv);
@@ -5551,6 +5561,7 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
   const incoming = await c.env.DB.prepare(
     `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills as player_skills,
      ${virtualNameSql} as from_team_name, t.league_id as from_league_id,
+     (SELECT tt.league_id FROM teams tt WHERE tt.id = to2.to_team_id) as to_league_id,
      CASE WHEN to2.from_team_id = 'virtual_ai' THEN 1 ELSE 0 END as is_virtual,
      op.first_name as offered_first_name, op.last_name as offered_last_name, op.position as offered_position
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id LEFT JOIN teams t ON to2.from_team_id = t.id
@@ -5562,6 +5573,7 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
   const outgoing = await c.env.DB.prepare(
     `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar as player_avatar, p.skills as player_skills,
      t.name as to_team_name, t.league_id as to_league_id,
+     (SELECT tf.league_id FROM teams tf WHERE tf.id = to2.from_team_id) as from_league_id,
      op.first_name as offered_first_name, op.last_name as offered_last_name, op.position as offered_position
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      LEFT JOIN players op ON to2.offered_player_id = op.id
@@ -5677,9 +5689,35 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
       return { ...r, on_turn: onTurn };
     });
 
+  // Administrační poplatek počítá server, ne prohlížeč.
+  //
+  // Frontend si ho dřív dopočítával sám natvrdo dvaceti procenty (a v jiné hlášce
+  // na téže stránce psal patnáct), takže se rozcházel i se sazbou, kterou si
+  // soutěž odhlasovala. A hlavně nevěděl o výjimce pro mládež — u přesunu mezi
+  // A-týmem a rezervou se poplatek neplatí, protože to není přestup mezi
+  // soutěžemi dospělých.
+  const { computeTransferLevies } = await import("../competition/transfer-levy");
+  const dopocitejPoplatek = async (rows: Record<string, unknown>[]) => {
+    const out: Record<string, unknown>[] = [];
+    for (const r of rows) {
+      const castka = Number(r.counter_amount ?? r.offer_amount ?? 0);
+      const poplatky = await computeTransferLevies(c.env.DB, {
+        buyerLeagueId: r.from_league_id as string | null,
+        sellerLeagueId: r.to_league_id as string | null,
+        amount: castka,
+        isLoan: r.offer_type === "loan",
+      }).catch((e) => {
+        logger.warn({ module: "game" }, "výpočet poplatku k nabídce", e);
+        return null;
+      });
+      out.push({ ...r, admin_fee: poplatky?.adminFee ?? 0, admin_fee_pct: poplatky?.adminFeePct ?? 0 });
+    }
+    return out;
+  };
+
   return c.json({
-    incoming: addOnTurn(incoming.results as Record<string, unknown>[]),
-    outgoing: addOnTurn(outgoing.results as Record<string, unknown>[]),
+    incoming: await dopocitejPoplatek(addOnTurn(incoming.results as Record<string, unknown>[])),
+    outgoing: await dopocitejPoplatek(addOnTurn(outgoing.results as Record<string, unknown>[])),
     incomingBids: addBidOnTurn(incomingBids.results as Record<string, unknown>[], "seller"),
     outgoingBids: addBidOnTurn(outgoingBids.results as Record<string, unknown>[], "buyer"),
     history: historyWithRole,
