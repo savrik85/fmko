@@ -130,9 +130,15 @@ export async function generateAiListings(
 
   const village: VillageInfo = { region_code: "CZ03", category: "mesto", population: 5000, district: team.district };
   const player = generatePlayer(rng, village, position, surnameData, firstnameData);
-  // Override quality to match team rating
-  const skillKeys = ["speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping"] as const;
+  // Kvalita se ladí na sílu klubu, ale VYCHÁZÍ SE Z VYGENEROVANÉHO HRÁČE.
+  //
+  // Dřív se tu zakládal prázdný objekt a přepisovalo se do něj sedm dovedností —
+  // zbylých šest (kreativita, standardky, přehled, výdrž, síla, zkušenost) se
+  // tím zahodilo. Hráč koupený z trhu je pak měl nulové, což není kosmetika:
+  // do zápasu se počítají jako nula, takže byl reálně slabší, než říkal rating.
+  // Rating se přitom počítal jen ze sedmi zbylých, takže vypadal v pořádku.
   const adjustedSkills: Record<string, number> = {};
+  const skillKeys = ["speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping"] as const;
   for (const k of skillKeys) {
     adjustedSkills[k] = Math.max(1, Math.min(95, qualityBase + rng.int(-10, 10)));
   }
@@ -142,6 +148,24 @@ export async function generateAiListings(
   if (position === "MID") { adjustedSkills.passing += 10; adjustedSkills.technique += 8; }
   if (position === "FWD") { adjustedSkills.shooting += 12; adjustedSkills.speed += 8; }
   for (const k of skillKeys) adjustedSkills[k] = Math.max(1, Math.min(95, adjustedSkills[k]));
+
+  // Zbylé dovednosti. Bez nich měl hráč koupený z trhu nulovou kreativitu,
+  // standardky, přehled, výdrž, sílu i zkušenost — a to není kosmetika: do
+  // zápasu se počítají jako nula, takže byl reálně slabší, než říkal jeho
+  // rating. Ten se totiž počítá jen ze sedmi dovedností nahoře.
+  //
+  // Odvozují se z příbuzných hodnot stejně jako v cup.ts a u generátorů kádrů,
+  // aby hráč z trhu vypadal jako každý jiný.
+  const dopln = (zaklad: number, rozptyl = 8) =>
+    Math.max(1, Math.min(95, zaklad + rng.int(-rozptyl, rozptyl)));
+
+  adjustedSkills.vision = dopln(adjustedSkills.technique);
+  adjustedSkills.creativity = dopln(adjustedSkills.passing);
+  adjustedSkills.setPieces = dopln(Math.round((adjustedSkills.technique + adjustedSkills.shooting) / 2));
+  adjustedSkills.stamina = player.stamina;
+  adjustedSkills.strength = player.strength;
+  // Zkušenost roste s věkem: v osmnácti skoro žádná, po třicítce vysoká.
+  adjustedSkills.experience = Math.max(1, Math.min(95, Math.round((age - 15) * 3.5) + rng.int(-5, 5)));
 
   const posWeights: Record<string, Record<string, number>> = {
     GK: { speed: 0.05, technique: 0.05, shooting: 0.02, passing: 0.08, heading: 0.05, defense: 0.15, goalkeeping: 0.60 },
