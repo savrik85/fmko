@@ -83,6 +83,7 @@ const TXN_ICONS: Record<string, string> = {
   promotional_campaign: "📢", stadium_visual: "🎨", bus_subsidy: "🚌",
   cash_loan_disbursement: "💳", cash_loan_repayment: "💳", village_brigade: "🔨",
   manager_social: "🍻", manager_bet_win: "🍺", manager_bet_loss: "🍺", cup_prize: "🏅",
+  bet_stake: "🎫", bet_win: "🎫", bet_levy: "🎫", bet_refund: "↩",
   staff_wage: "👔", staff_signing: "✍", course_fee: "🎓", disciplinary_fine: "⚖️",
   other: "📋",
 };
@@ -99,6 +100,7 @@ const TXN_LABELS: Record<string, string> = {
   promotional_campaign: "Propagace zápasu", stadium_visual: "Vzhled stadionu", bus_subsidy: "Autobus fanoušků",
   cash_loan_disbursement: "Půjčka — přijatá", cash_loan_repayment: "Splátka půjčky", village_brigade: "Brigáda v obci",
   manager_social: "Trenérská diplomacie", manager_bet_win: "Vyhraná sázka", manager_bet_loss: "Prohraná sázka", cup_prize: "Odměna z poháru",
+  bet_stake: "Sázka u kanceláře", bet_win: "Výhra ze sázky", bet_levy: "Odvod ze sázky", bet_refund: "Vrácený vklad",
   staff_wage: "Mzdy zaměstnanců", staff_signing: "Podpisné zaměstnance", course_fee: "Kurz zaměstnance",
   disciplinary_fine: "Pokuta disciplinární komise",
   other: "Ostatní",

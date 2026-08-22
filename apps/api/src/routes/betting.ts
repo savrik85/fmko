@@ -58,6 +58,9 @@ async function teamMeta(db: D1Database, teamId: string): Promise<TeamMeta | null
  */
 bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
   const teamId = c.req.param("teamId");
+  // Lístek nese rozpočet klubu a počet zbývajících tiketů, takže veřejný být
+  // nesmí — requireTeamOwnership vědomě propouští GET, kontrola musí být tady.
+  if (!(await ownsTeam(c as never, teamId))) return c.json({ error: "Cizí klub" }, 403);
   const meta = await teamMeta(c.env.DB, teamId);
   if (!meta?.league_id) return c.json({ open: false, closedReason: "no_league" });
 
@@ -79,8 +82,13 @@ bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
 
   const [odds, zapasy, limity, povoleno] = await Promise.all([
     c.env.DB.prepare(
+      // Pořadí 1/X/2 je zažité ze sázkových lístků; řazení podle kurzu by ho
+      // rozhodilo. U ostatních trhů rozhoduje kurz (od nejpravděpodobnějšího).
       `SELECT match_id, market, selection, odds_x100, label
-         FROM bet_odds WHERE calendar_id = ? ORDER BY market, odds_x100`
+         FROM bet_odds WHERE calendar_id = ?
+        ORDER BY market,
+                 CASE selection WHEN '1' THEN 0 WHEN 'X' THEN 1 WHEN '2' THEN 2 ELSE 3 END,
+                 odds_x100`
     ).bind(round.calendar_id).all<{
       match_id: string; market: string; selection: string; odds_x100: number; label: string;
     }>().catch((e) => { logger.error({ module: M }, "načtení kurzů", e); return { results: [] }; }),
@@ -269,6 +277,7 @@ bettingRouter.post("/teams/:teamId/bets", async (c) => {
 /** Odznak v menu — kolik vyhodnocených tiketů hráč ještě neviděl. */
 bettingRouter.get("/teams/:teamId/bets/pending", async (c) => {
   const teamId = c.req.param("teamId");
+  if (!(await ownsTeam(c as never, teamId))) return c.json({ unseen: 0 });
   const row = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM bet_tickets
       WHERE team_id = ? AND status IN ('won','lost','void','confiscated') AND seen_at IS NULL`

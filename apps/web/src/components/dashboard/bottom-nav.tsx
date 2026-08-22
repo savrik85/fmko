@@ -52,6 +52,7 @@ export function BottomNav() {
   const [unvotedCount, setUnvotedCount] = useState(0);
   const [notesUnseen, setNotesUnseen] = useState(false);
   const [gremiumCount, setGremiumCount] = useState(0);
+  const [betsCount, setBetsCount] = useState(0);
 
   useEffect(() => {
     if (!teamId) return;
@@ -68,6 +69,10 @@ export function BottomNav() {
       apiFetch<{ toVote: number }>(`/api/teams/${teamId}/competition/pending`)
         .then((p) => setGremiumCount(p.toVote ?? 0))
         .catch((e) => console.error("fetch gremium pending:", e));
+      // Sázky jsou taky pod Více — vyhodnocený tiket by jinak zůstal nepovšimnut.
+      apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`)
+        .then((b) => setBetsCount(b.unseen ?? 0))
+        .catch((e) => console.error("fetch bets pending:", e));
     };
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
@@ -86,7 +91,7 @@ export function BottomNav() {
     { href: "/dashboard/liga", label: "Liga", icon: "🏆" },
     // Novinky se schovávají pod Více, takže se musí připočíst sem — jinak by
     // hráč na mobilu neměl jak poznat, že něco nového vyšlo.
-    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: unvotedCount + gremiumCount + (notesUnseen ? 1 : 0) },
+    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: unvotedCount + gremiumCount + betsCount + (notesUnseen ? 1 : 0) },
   ];
 
   return (

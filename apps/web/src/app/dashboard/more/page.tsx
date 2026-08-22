@@ -16,6 +16,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string
     { href: "/dashboard/zamestnanci", icon: "\u{1F454}", label: "Zaměstnanci", color: "#4E6B7B" },
     { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "Přestupy", color: "#4A8A4A" },
     { href: "/dashboard/watchlist", icon: "⭐", label: "Sledovaní", color: "#B8860B" },
+    { href: "/dashboard/sazky", icon: "🎫", label: "Sázková kancelář", color: "#7A2E2E" },
     { href: "/dashboard/finances", icon: "\u{1F4B0}", label: "Finance", color: "#6B8E23" },
     { href: "/dashboard/sponsors", icon: "\u{1F4BC}", label: "Sponzoři", color: "#8B7355" },
     { href: "/dashboard/equipment", icon: "\u{1F45F}", label: "Vybavení", color: "#7B6B4E" },

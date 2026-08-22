@@ -170,11 +170,25 @@ export const POS_WEIGHT: Record<string, number> = {
 /** Kolik „virtuálních gólů" váží poziční priorita, než ji přebijí skutečné. */
 export const SHARE_PRIOR_K = 8;
 
+/**
+ * Jak silně kvalita hráče ovlivňuje jeho podíl na gólech.
+ *
+ * Bez tohohle členu měli na začátku sezóny všichni útočníci téhož týmu stejný
+ * kurz — poziční váha je nerozlišuje a góly ještě nikdo nemá. Hvězda se stejnou
+ * cenou jako benjamínek je herně nesmysl a hráč to okamžitě pozná.
+ *
+ * Exponent 1,5: útočník s ratingem 45 má proti třicítce podíl 1,84×, ne 1,5×.
+ * Znatelné, ale ne zdrcující.
+ */
+export const QUALITY_EXP = 1.5;
+
 export interface ScorerInput {
   playerId: string;
   position: string;
   /** Góly hráče v probíhající sezóně. */
   goals: number;
+  /** overall_rating. Rozlišuje hráče, dokud sezónní góly nemají co říct. */
+  rating: number;
 }
 
 /**
@@ -185,7 +199,15 @@ export interface ScorerInput {
  * sám, bez zvláštní větve v kódu.
  */
 export function scorerShares(players: ScorerInput[], teamGoals: number): Map<string, number> {
-  const weights = players.map((p) => POS_WEIGHT[p.position] ?? POS_WEIGHT.MID);
+  // Průměrný rating kádru je vztažná hodnota — dělá váhu nezávislou na tom,
+  // jestli je to okresní soutěž nebo krajský přebor.
+  const ratings = players.map((p) => Math.max(1, p.rating || 30));
+  const prumer = ratings.reduce((a, b) => a + b, 0) / Math.max(1, ratings.length);
+
+  const weights = players.map((p, i) => {
+    const pos = POS_WEIGHT[p.position] ?? POS_WEIGHT.MID;
+    return pos * Math.pow(ratings[i] / prumer, QUALITY_EXP);
+  });
   const weightSum = weights.reduce((a, b) => a + b, 0);
   const out = new Map<string, number>();
   if (weightSum <= 0) return out;

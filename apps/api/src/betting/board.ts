@@ -217,7 +217,7 @@ export function matchOdds(input: {
   homeForm: number;
   awayForm: number;
   scorers: Array<{ playerId: string; name: string; teamName: string; isHome: boolean;
-                   position: string; goals: number; starts: number }>;
+                   position: string; goals: number; starts: number; rating: number }>;
   homeTeamGoals: number;
   awayTeamGoals: number;
   playedMatches: number;
@@ -243,10 +243,17 @@ export function matchOdds(input: {
     const [kover, kunder] = marketOdds([t.over, t.under]);
     const tag = String(line).replace(".", "");
     const cara = String(line).replace(".", ",");
-    out.push(
-      { matchId: input.matchId, market: "totals", selection: `over${tag}`, oddsX100: kover, probability: t.over, label: `Víc než ${cara} gólu` },
-      { matchId: input.matchId, market: "totals", selection: `under${tag}`, oddsX100: kunder, probability: t.under, label: `Míň než ${cara} gólu` },
-    );
+
+    out.push({ matchId: input.matchId, market: "totals", selection: `over${tag}`,
+               oddsX100: kover, probability: t.over, label: `Víc než ${cara} gólu` });
+
+    // Opačná strana se nabízí jen tam, kde má smysl. „Míň než 6,5 gólu" vychází
+    // na kurz 1,05, tedy na podlahu — nikdo to nevsadí a na lístku to jen
+    // zabírá místo. Vysoká linie je trh na výprask, a ten se sází jen nahoru.
+    if (kunder >= 120) {
+      out.push({ matchId: input.matchId, market: "totals", selection: `under${tag}`,
+                 oddsX100: kunder, probability: t.under, label: `Míň než ${cara} gólu` });
+    }
   }
 
   // Střelci — zvlášť pro každý tým, podíly se dělí uvnitř týmu
@@ -257,7 +264,7 @@ export function matchOdds(input: {
     const teamLambda = isHome ? lambdas.home : lambdas.away;
     const teamGoals = isHome ? input.homeTeamGoals : input.awayTeamGoals;
     const shares = scorerShares(
-      kadr.map((s) => ({ playerId: s.playerId, position: s.position, goals: s.goals })),
+      kadr.map((s) => ({ playerId: s.playerId, position: s.position, goals: s.goals, rating: s.rating })),
       teamGoals,
     );
 
@@ -336,10 +343,12 @@ export async function generateBoard(
         ...kadrDomaci.map((p) => ({
           playerId: p.id, name: `${p.first_name} ${p.last_name}`, teamName: m.home_name,
           isHome: true, position: p.position, goals: p.goals, starts: p.starts,
+          rating: p.overall_rating,
         })),
         ...kadrHoste.map((p) => ({
           playerId: p.id, name: `${p.first_name} ${p.last_name}`, teamName: m.away_name,
           isHome: false, position: p.position, goals: p.goals, starts: p.starts,
+          rating: p.overall_rating,
         })),
       ],
     });

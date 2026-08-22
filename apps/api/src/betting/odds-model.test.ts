@@ -168,10 +168,10 @@ describe("KALIBRACE na odehraných zápasech", () => {
 
 describe("střelci", () => {
   const kadr = [
-    { playerId: "utocnik", position: "FWD", goals: 0 },
-    { playerId: "zaloznik", position: "MID", goals: 0 },
-    { playerId: "obrance", position: "DEF", goals: 0 },
-    { playerId: "brankar", position: "GK", goals: 0 },
+    { playerId: "utocnik", position: "FWD", goals: 0, rating: 30 },
+    { playerId: "zaloznik", position: "MID", goals: 0, rating: 30 },
+    { playerId: "obrance", position: "DEF", goals: 0, rating: 30 },
+    { playerId: "brankar", position: "GK", goals: 0, rating: 30 },
   ];
 
   it("podíly sečtou na 1", () => {
@@ -189,11 +189,31 @@ describe("střelci", () => {
 
   it("skutečné góly nakonec přebijí pozici", () => {
     const stridnik = [
-      { playerId: "utocnik", position: "FWD", goals: 1 },
-      { playerId: "obrance", position: "DEF", goals: 14 },
+      { playerId: "utocnik", position: "FWD", goals: 1, rating: 30 },
+      { playerId: "obrance", position: "DEF", goals: 14, rating: 30 },
     ];
     const s = scorerShares(stridnik, 15);
     expect(s.get("obrance")!).toBeGreaterThan(s.get("utocnik")!);
+  });
+
+  it("lepší hráč má vyšší podíl i bez odehraných gólů", () => {
+    // Tohle odhalil až běh proti reálným datům: v prvním kole nikdo nemá góly,
+    // takže bez vlivu ratingu měli všichni útočníci téhož týmu stejný kurz.
+    const dva = [
+      { playerId: "hvezda", position: "FWD", goals: 0, rating: 45 },
+      { playerId: "benjaminek", position: "FWD", goals: 0, rating: 25 },
+    ];
+    const s = scorerShares(dva, 0);
+    expect(s.get("hvezda")!).toBeGreaterThan(s.get("benjaminek")! * 1.5);
+  });
+
+  it("silný záložník ale nepřeskočí slabšího útočníka — post váží víc", () => {
+    const dva = [
+      { playerId: "utocnik", position: "FWD", goals: 0, rating: 28 },
+      { playerId: "zaloznik", position: "MID", goals: 0, rating: 42 },
+    ];
+    const s = scorerShares(dva, 0);
+    expect(s.get("utocnik")!).toBeGreaterThan(s.get("zaloznik")!);
   });
 
   it("dostupnost má podlahu i strop", () => {
