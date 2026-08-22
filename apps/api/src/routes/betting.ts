@@ -71,12 +71,19 @@ bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
   // Kurzy se generují líně: první pohled na lístek je vypíše. UPSERT na
   // UNIQUE(match_id, market, selection) zajistí, že souběžné požadavky
   // nevyrobí dvě sady.
-  const existuje = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM bet_odds WHERE calendar_id = ?"
-  ).bind(round.calendar_id).first<{ n: number }>()
+  //
+  // Nestačí ptát se, jestli v kole VŮBEC nějaký kurz je: když se z něj smaže
+  // jeden trh (třeba po opravě modelu střelců), zbytek by generování zablokoval
+  // a hráči by ten trh na lístku nenašli. Kontroluje se proto každý trh zvlášť.
+  const pokryti = await c.env.DB.prepare(
+    `SELECT COUNT(DISTINCT market) AS trhu, COUNT(*) AS kurzu
+       FROM bet_odds WHERE calendar_id = ?`
+  ).bind(round.calendar_id).first<{ trhu: number; kurzu: number }>()
     .catch((e) => { logger.warn({ module: M }, "kontrola lístku", e); return null; });
 
-  if ((existuje?.n ?? 0) === 0) {
+  // 1x2, dchance a totals jsou vždycky; scorer chybí jen v soutěži bez hráčů.
+  const OCEKAVANE_TRHY = 3;
+  if ((pokryti?.kurzu ?? 0) === 0 || (pokryti?.trhu ?? 0) < OCEKAVANE_TRHY) {
     await generateBoard(c.env.DB, meta.league_id, meta.game_date ?? new Date().toISOString())
       .catch((e) => logger.error({ module: M }, `generování lístku ligy ${meta.league_id}`, e));
   }
