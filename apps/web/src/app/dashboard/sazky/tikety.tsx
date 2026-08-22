@@ -75,18 +75,17 @@ export function MojeTikety({ data }: { data: TiketyOdpoved | null }) {
 
   return (
     <div className="space-y-4">
+      {/* Souhrn je v hlavičce stránky, tady stačí rozpad a vysvětlení. */}
       <div className="card p-4">
-        <div className="text-micro font-heading font-bold uppercase tracking-wide text-muted mb-2">
-          Bilance u kanceláře
-        </div>
         <div className="grid grid-cols-3 gap-2 text-center">
-          <Statek label="Vsazeno" value={czk(s.staked)} />
+          <Statek label="Vsazeno" value={czk(s.staked + s.levy)} />
           <Statek label="Vyhráno" value={czk(s.won)} />
           <Statek label="Rozdíl" value={signed(s.net)}
                   className={s.net >= 0 ? "text-pitch-600" : "text-card-red"} />
         </div>
         <p className="text-sm text-muted mt-2 leading-snug">
           Kancelář si na každém kurzu bere osm procent. Není to charita, je to hospoda.
+          {s.levy > 0 && ` Na odvodech soutěži jsi zaplatil ${czk(s.levy)}.`}
         </p>
       </div>
 

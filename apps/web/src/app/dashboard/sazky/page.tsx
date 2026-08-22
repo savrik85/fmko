@@ -7,7 +7,7 @@ import { Spinner, Tabs, useTabParam } from "@/components/ui";
 import { KurzovyListek } from "./kurzy";
 import { TiketLista, TiketSheet } from "./tiket";
 import { MojeTikety } from "./tikety";
-import { Prazdno } from "./ui";
+import { czk, Prazdno, signed } from "./ui";
 import type { Board, TiketyOdpoved, VybranyTip } from "./types";
 
 const TAB_KEYS = ["kurzy", "tikety"] as const;
@@ -79,6 +79,7 @@ export default function SazkyPage() {
   }
 
   const bezici = tikety?.tickets.filter((t) => t.status === "open").length ?? 0;
+  const bilance = tikety?.summary ?? null;
 
   return (
     <>
@@ -102,6 +103,29 @@ export default function SazkyPage() {
               <span className="ml-auto text-muted tabular-nums">
                 tikety {board.ticketsLeft}/{board.limits.ticketsPerRound}
               </span>
+            </div>
+          )}
+
+          {/* Bilance patří na první obrazovku, ne až do historie: hráč má vidět,
+              jak si u kanceláře stojí, dřív než vsadí další korunu. */}
+          {bilance && bilance.tickets > 0 && (
+            <div className="px-4 py-2.5 border-t border-gray-50 bg-gray-50/50">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-micro font-heading font-bold uppercase tracking-wide text-muted">
+                  Bilance u kanceláře
+                </span>
+                <span className="text-sm tabular-nums">
+                  <span className="text-muted">vsazeno</span>{" "}
+                  <b className="font-heading">{czk(bilance.staked + bilance.levy)}</b>
+                  <span className="text-gray-300"> · </span>
+                  <span className="text-muted">vyhráno</span>{" "}
+                  <b className="font-heading">{czk(bilance.won)}</b>
+                  <span className="text-gray-300"> · </span>
+                  <b className={`font-heading ${bilance.net >= 0 ? "text-pitch-600" : "text-card-red"}`}>
+                    {signed(bilance.net)}
+                  </b>
+                </span>
+              </div>
             </div>
           )}
         </div>
