@@ -32,7 +32,7 @@ describe("očekávané góly", () => {
 
   it("domácí výhoda je zabudovaná v rozdílu bází, ne ve zvláštním členu", () => {
     expect(vyrovnany.home).toBeGreaterThan(vyrovnany.away);
-    expect(vyrovnany.home / vyrovnany.away).toBeCloseTo(1.157, 2);
+    expect(vyrovnany.home / vyrovnany.away).toBeCloseTo(1.177, 2);
   });
 
   it("silnější tým dá víc a dostane míň", () => {
@@ -185,6 +185,16 @@ describe("KALIBRACE na odehraných zápasech", () => {
     expect(odchylka(4.5, NAMERENO.over45)).toBeLessThan(0.02);
   });
 
+  it("báze je průměr vyrovnaných zápasů, ne celkový průměr", () => {
+    // Kdyby se jako báze vzal celkový průměr (1,842 / 1,590), model by tvrdil
+    // o KAŽDÉM zápase, že padne 3,43 gólu — jenže vyrovnaný zápas jich má jen
+    // 3,22 a zbytek dohánějí nevyrovnané. Sázka na „míň gólů" by pak byla
+    // dlouhodobě výdělečná.
+    const vyrovnaneNamereno = 1.742 + 1.480;
+    expect(BASE_HOME_GOALS + BASE_AWAY_GOALS).toBeCloseTo(vyrovnaneNamereno, 2);
+    expect(BASE_HOME_GOALS + BASE_AWAY_GOALS).toBeLessThan(NAMERENO.celkem);
+  });
+
   it("Poissonova varianta by na téže linii selhala — proto negativní binomické", () => {
     // P(k) = e^−λ · λ^k / k!  pro λ = 3,432
     const lambda = NAMERENO.celkem;
@@ -297,15 +307,19 @@ describe("marže a kurzy", () => {
     expect(sum).toBeCloseTo(1 + MARGIN, 10);
   });
 
-  it("kurzy trhu drží overround mezi 1,08 a 1,10", () => {
-    // Zaokrouhlení dolů smí marži jen zvýšit, nikdy snížit.
+  it("kurzy trhu nikdy nespadnou pod plánovanou marži", () => {
+    // Zaokrouhlení dolů a strop kurzu smí marži jen zvýšit, nikdy snížit —
+    // marže pod 8 % by znamenala, že kancelář prodává pod cenou.
     for (const sily of [[30, 30], [36, 26], [26, 36], [40, 22]]) {
       const l = expectedGoals({ strength: sily[0], form: 0 }, { strength: sily[1], form: 0 });
       const o = outcomeProbabilities(l);
       const over = marketOdds([o.home, o.draw, o.away])
         .reduce((acc, k) => acc + 100 / k, 0);
       expect(over).toBeGreaterThanOrEqual(1 + MARGIN - 1e-9);
-      expect(over).toBeLessThan(1.10);
+      // U velmi nevyrovnaných zápasů zasáhne podlaha pravděpodobnosti
+      // a marže vyroste — na hráče to není past, jen se mu nevyplatí sázet
+      // jistotu za korunu.
+      expect(over).toBeLessThan(1.13);
     }
   });
 

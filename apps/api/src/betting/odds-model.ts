@@ -23,10 +23,23 @@
 
 // ── Očekávané góly ──────────────────────────────────────────────────────────
 
-/** Naměřeno 1,842. Domácí výhoda není zvláštní člen, je v rozdílu bází. */
-export const BASE_HOME_GOALS = 1.84;
-/** Naměřeno 1,590. */
-export const BASE_AWAY_GOALS = 1.59;
+/**
+ * Očekávané góly VYROVNANÉHO zápasu. Domácí výhoda není zvláštní člen,
+ * je v rozdílu obou bází.
+ *
+ * POZOR na past, do které jsem spadl při první kalibraci: tohle NENÍ celkový
+ * průměr gólů (1,842 / 1,590). Nevyrovnané zápasy mají gólů víc — favorit
+ * nastřílí víc, než kolik outsider ušetří — takže průměr přes všechny zápasy
+ * je vyšší než průměr vyrovnaných. Je to Jensenova nerovnost: E[e^x] > e^E[x].
+ *
+ * Když se jako báze vzal celkový průměr, model tvrdil o každém zápase, že
+ * padne 3,71 gólu místo skutečných 3,43 — a sázka na „míň gólů" se stala
+ * dlouhodobě výdělečnou. Přesně ta chyba, kvůli které jsem zavrhoval Poissona.
+ *
+ * Naměřeno na zápasech s rozdílem síly do ±1,5: 1,742 doma / 1,480 venku.
+ */
+export const BASE_HOME_GOALS = 1.742;
+export const BASE_AWAY_GOALS = 1.480;
 
 /**
  * Vliv jednoho bodu síly na log λ.
@@ -42,8 +55,12 @@ export const BASE_AWAY_GOALS = 1.59;
  * míří na horní okraj rozumného pásma: model favorita spíš mírně přecení.
  * Je to schválně — podcenění favorita by znamenalo příliš vysoký kurz na
  * něj, a to je jediná chyba, ze které dokáže sázející systematicky těžit.
+ *
+ * Hodnota je zároveň provázaná s bázemi: spolu musí dát průměrné λ napříč
+ * reálnými dvojicemi 3,43 gólu. Při 0,08 vychází 3,46 a linie 2,5 sedí na
+ * 62,1 % proti naměřeným 61,5 %.
  */
-export const STRENGTH_K = 0.085;
+export const STRENGTH_K = 0.08;
 
 /**
  * Sražení extrémů. U síly z celého kádru bylo potřeba (0,85), protože rozdíly
