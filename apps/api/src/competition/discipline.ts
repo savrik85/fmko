@@ -65,6 +65,15 @@ export const OFFENCES: Record<string, Offence> = {
     evidenceLabel: "dvakrát a víckrát kritika sudího v pozápasovém rozhovoru",
     majority: QUALIFIED_MAJORITY,
   },
+  bet_manipulation: {
+    kind: "bet_manipulation",
+    label: "Manipulace se sázkami",
+    // Strojová detekce domluvy nefunguje a falešné obvinění je horší než
+    // přehlédnutý obchod. Navrhovatel doloží sám z knihy sázek.
+    evidenceLabel: "bez strojového důkazu — navrhovatel doloží sám",
+    majority: QUALIFIED_MAJORITY,
+    freeText: true,
+  },
   other: {
     kind: "other",
     label: "Nesportovní chování",
@@ -163,14 +172,21 @@ export async function canFine(
 
   // Pokuty z kontroly pravidel se do stropu nepočítají — jinak by stačilo dvakrát
   // porušit pravidlo a klub by byl na zbytek sezóny nedotknutelný pro hlasování.
-  const issued = await db.prepare(
-    `SELECT COUNT(*) AS n FROM competition_sanctions
-      WHERE league_id = ? AND team_id = ? AND season_number = ?
-        AND status IN ('issued','appealed','paid') AND issued_by IN ('vote','chair')`
-  ).bind(leagueId, targetTeamId, seasonNumber).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: M }, "počet pokut klubu", e); return null; });
-  if ((issued?.n ?? 0) >= MAX_FINES_PER_TEAM) {
-    return { ok: false, reason: `Tenhle klub už letos dostal ${MAX_FINES_PER_TEAM} pokuty. Víc jich soutěž v jedné sezóně neuloží.` };
+  //
+  // Manipulace se sázkami je ze stropu vyjmutá ze stejného důvodu: klub, který
+  // dostal dvě pokuty za neposekaný trávník, nesmí být nedotknutelný pro
+  // obvinění z domluvy. Je to jiná váha provinění.
+  if (kind !== "bet_manipulation") {
+    const issued = await db.prepare(
+      `SELECT COUNT(*) AS n FROM competition_sanctions
+        WHERE league_id = ? AND team_id = ? AND season_number = ?
+          AND status IN ('issued','appealed','paid') AND issued_by IN ('vote','chair')
+          AND kind <> 'bet_manipulation'`
+    ).bind(leagueId, targetTeamId, seasonNumber).first<{ n: number }>()
+      .catch((e) => { logger.warn({ module: M }, "počet pokut klubu", e); return null; });
+    if ((issued?.n ?? 0) >= MAX_FINES_PER_TEAM) {
+      return { ok: false, reason: `Tenhle klub už letos dostal ${MAX_FINES_PER_TEAM} pokuty. Víc jich soutěž v jedné sezóně neuloží.` };
+    }
   }
 
   const pending = await db.prepare(
@@ -183,13 +199,16 @@ export async function canFine(
   }
 
   if (offence.freeText) {
+    // Strop se počítá pro KAŽDÝ volný skutek zvlášť. Dřív tu bylo natvrdo
+    // kind = 'other', takže by manipulace se sázkami sdílela počítadlo
+    // s nesportovním chováním a jedno by blokovalo druhé.
     const used = await db.prepare(
       `SELECT COUNT(*) AS n FROM competition_sanctions
-        WHERE league_id = ? AND team_id = ? AND season_number = ? AND kind = 'other'`
-    ).bind(leagueId, targetTeamId, seasonNumber).first<{ n: number }>()
-      .catch((e) => { logger.warn({ module: M }, "volné pokuty", e); return null; });
+        WHERE league_id = ? AND team_id = ? AND season_number = ? AND kind = ?`
+    ).bind(leagueId, targetTeamId, seasonNumber, kind).first<{ n: number }>()
+      .catch((e) => { logger.warn({ module: M }, `volné pokuty (${kind})`, e); return null; });
     if ((used?.n ?? 0) > 0) {
-      return { ok: false, reason: "Nesportovní chování se dá tomuhle klubu vytknout jen jednou za sezónu." };
+      return { ok: false, reason: `${offence.label} se dá tomuhle klubu vytknout jen jednou za sezónu.` };
     }
   }
 

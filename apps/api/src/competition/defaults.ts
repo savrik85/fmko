@@ -35,6 +35,13 @@ export const DEFAULT_RULES = {
   min_pitch_condition: 0,
   squad_min: 0,
   squad_max: 0,
+  // Sázková kancelář. Zákaz i odvod jsou nula, takže zapnutí samosprávy nikomu
+  // sázení nezakáže ani nezdaní. U stropů neutrální hodnota neexistuje — jsou to
+  // výchozí sazby, o kterých soutěž může hlasovat.
+  ban_betting: 0,
+  levy_bet_pct: 0,
+  bet_max_stake: 5_000,
+  bet_max_payout: 100_000,
 } as const;
 
 export type CompetitionRules = { -readonly [K in keyof typeof DEFAULT_RULES]: number };
@@ -86,8 +93,8 @@ export const ACTIVITY_WINDOW_MEETINGS = 3;
 export const SIMPLE_MAJORITY = 0.5;
 export const QUALIFIED_MAJORITY = 2 / 3;
 
-export type Gesce = "soutez" | "hospodarska" | "disciplinarni" | "rozhodcich" | "zadna";
-export type OfficialRole = "predseda" | "hospodarska" | "disciplinarni" | "rozhodcich";
+export type Gesce = "soutez" | "hospodarska" | "disciplinarni" | "rozhodcich" | "integrita" | "zadna";
+export type OfficialRole = "predseda" | "hospodarska" | "disciplinarni" | "rozhodcich" | "integrita";
 
 /**
  * Tituly jsou schválně o číslo nabubřelejší, než na okresní přebor patří —
@@ -99,6 +106,7 @@ export const ROLE_LABEL: Record<OfficialRole, string> = {
   hospodarska: "Generální sekretář",
   disciplinarni: "Předseda disciplinární rady",
   rozhodcich: "Komisař rozhodčích",
+  integrita: "Komisař pro integritu soutěže",
 };
 
 /**
@@ -147,6 +155,18 @@ export const ROLE_SCOPE: Record<OfficialRole, {
       "Vyškrtnutý sudí se po sezóně vrátí a bude si pamatovat, kdo ho škrtl.",
     ],
   },
+  integrita: {
+    gesce: "integrita",
+    agenda: "Sázková kancelář a přestupový trh — všechno, u čeho může jít o domluvu. "
+      + "Strop vkladu, strop výhry, odvod ze sázek a zákaz sázení klubům soutěže.",
+    powers: [
+      "Vidí knihu sázek celé soutěže včetně běžících tiketů. Kromě něj do ní vidí jen prezident.",
+      "Vidí listinu realizovaných přestupů s upozorněním na obchody, které stojí za prověření.",
+      "Zablokuje klubu sázení sám, bez hlasování, nejvýš dvakrát za sezónu. Klub se může odvolat k zasedání.",
+      "Zabaví výhru z konkrétního tiketu — peníze jdou do pokladny soutěže.",
+      "Vlastnímu klubu zákaz uložit nemůže, ani klubu, se kterým má vyhrocený vztah.",
+    ],
+  },
 };
 
 /**
@@ -158,6 +178,7 @@ export const ROLE_LABEL_AKUZATIV: Record<OfficialRole, string> = {
   hospodarska: "generálního sekretáře",
   disciplinarni: "předsedu disciplinární rady",
   rozhodcich: "komisaře rozhodčích",
+  integrita: "komisaře pro integritu soutěže",
 };
 
 /** Název celého orgánu. */
@@ -169,6 +190,7 @@ export const GESCE_ROLE: Record<Exclude<Gesce, "zadna">, OfficialRole> = {
   hospodarska: "hospodarska",
   disciplinarni: "disciplinarni",
   rozhodcich: "rozhodcich",
+  integrita: "integrita",
 };
 
 /**
@@ -226,6 +248,12 @@ export const PROPOSAL_KINDS: Record<string, ProposalSpec> = {
   min_pitch_condition: { rulesField: "min_pitch_condition", gesce: "soutez", label: "Minimální stav hřiště", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 60, unit: "count", counted: ["bod", "body", "bodů"], note: "Kdo pod tuhle hranici spadne, dostane pokutu za porušení pravidla. Nula znamená, že se stav hřiště nehlídá." },
   squad_min: { rulesField: "squad_min", gesce: "soutez", label: "Minimální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 18, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti klubům, které pustí kádr pod hranici únosnosti. Nula znamená bez omezení." },
   squad_max: { rulesField: "squad_max", gesce: "soutez", label: "Maximální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti hromadění hráčů na lavici. Nula znamená bez omezení." },
+
+  // ── Komisař pro integritu: sázková kancelář ──────────────────────────────
+  ban_betting: { rulesField: "ban_betting", gesce: "integrita", label: "Zákaz sázení klubům soutěže", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 1, unit: "switch", note: "Sváže kluby TÉHLE soutěže — nesmí podat tiket nikde. Na zápasy soutěže může dál sázet kdokoli zvenčí. Otevřené tikety doběhnou a vyplatí se." },
+  bet_max_stake: { rulesField: "bet_max_stake", gesce: "integrita", label: "Nejvyšší sázka na tiket", majority: SIMPLE_MAJORITY, nextSeason: false, min: 500, max: 20_000, unit: "czk" },
+  bet_max_payout: { rulesField: "bet_max_payout", gesce: "integrita", label: "Strop výhry z jednoho tiketu", majority: SIMPLE_MAJORITY, nextSeason: false, min: 20_000, max: 150_000, unit: "czk", note: "Nad tuhle částku kancelář nevyplácí, i kdyby kurz vycházel výš." },
+  levy_bet_pct: { rulesField: "levy_bet_pct", gesce: "integrita", label: "Odvod ze sázek", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 10, unit: "pct", note: "Klub zaplatí navíc k vkladu. Z tisícovky při pěti procentech odejde 1 050 Kč a padesátka jde do pokladny soutěže. Výhra se počítá z celého vkladu." },
 };
 
 /** Sazebníkové návrhy, u kterých se musí ověřit projekce rozpočtu. */

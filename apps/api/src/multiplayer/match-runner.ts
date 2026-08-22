@@ -1171,6 +1171,24 @@ export async function runScheduledMatches(
         }
     }
 
+    // Vypořádání sázek. AŽ TADY, ne po jednotlivých zápasech: kombinovaný tiket
+    // může mít tipy ze všech zápasů kola, takže se dá uzavřít teprve když je
+    // odsimulovaný ten poslední. Vyhodnocení per zápas (jako resolveBets
+    // u sázky o bečku) by na akumulátor nestačilo.
+    //
+    // Sedí to tady, a ne v processLeagueRound, protože runScheduledMatches má
+    // čtyři volající včetně recoverStuckRounds — jedno místo pokryje všechny.
+    try {
+        const {settleRound} = await import("../betting/settle");
+        const out = await settleRound(db, calendarId);
+        if (out.tickets > 0) {
+            logger.info({module: "betting"},
+                `kolo ${calendarId}: vypořádáno ${out.tickets} tiketů, vyplaceno ${out.paidOut} Kč`);
+        }
+    } catch (e) {
+        logger.error({module: "betting"}, "vypořádání sázek kola", e);
+    }
+
     return results;
 }
 

@@ -29,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/zamestnanci", label: "Zaměstnanci", icon: "\u{1F454}", group: "club" },
   { href: "/dashboard/transfers", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
   { href: "/dashboard/watchlist", label: "Sledovaní", icon: "\u{2B50}", group: "club" },
+  { href: "/dashboard/sazky", label: "Sázky", icon: "\u{1F3AB}", group: "club" },
   { href: "/dashboard/finances", label: "Finance", icon: "\u{1F4B0}", group: "club" },
   { href: "/dashboard/sponsors", label: "Sponzoři", icon: "\u{1F4BC}", group: "club" },
   { href: "/dashboard/equipment", label: "Vybavení", icon: "\u{1F45F}", group: "club" },
@@ -61,6 +62,7 @@ export function FMSidebar() {
   const [unvotedCount, setUnvotedCount] = useState(0);
   const [notesUnseen, setNotesUnseen] = useState(false);
   const [gremiumCount, setGremiumCount] = useState(0);
+  const [betsCount, setBetsCount] = useState(0);
   const pathname = usePathname();
   const { teamId, isAdmin, logout, token } = useTeam();
 
@@ -84,6 +86,10 @@ export function FMSidebar() {
       apiFetch<{ toVote: number }>(`/api/teams/${teamId}/competition/pending`)
         .then((p) => setGremiumCount(p.toVote ?? 0))
         .catch((e) => console.error("fetch gremium pending:", e));
+      // Vyhodnocené tikety, které hráč ještě neviděl.
+      apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`)
+        .then((b) => setBetsCount(b.unseen ?? 0))
+        .catch((e) => console.error("fetch bets pending:", e));
     };
     load();
     const interval = setInterval(load, 30000);
@@ -172,6 +178,9 @@ export function FMSidebar() {
                       {!expanded && item.href === "/dashboard/soutez" && gremiumCount > 0 && (
                         <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
                       )}
+                      {!expanded && item.href === "/dashboard/sazky" && betsCount > 0 && (
+                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
+                      )}
                       {expanded && (
                         <span className="text-[13px] font-medium whitespace-nowrap leading-none">
                           {item.label}
@@ -189,6 +198,9 @@ export function FMSidebar() {
                           )}
                           {item.href === "/dashboard/soutez" && gremiumCount > 0 && (
                             <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{gremiumCount}</span>
+                          )}
+                          {item.href === "/dashboard/sazky" && betsCount > 0 && (
+                            <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{betsCount}</span>
                           )}
                         </span>
                       )}

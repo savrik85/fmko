@@ -33,6 +33,18 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Šipky < > v hlavičce jsou historie prohlížeče, NE posouvání dnů. Dny posouvej přes Administraci.", tip: true },
     ],
   },
+  "/dashboard/sazky": {
+    title: "Sázková kancelář",
+    icon: "\u{1F3AB}",
+    sections: [
+      { text: "Kancelář vypisuje kurzy na zápasy tvé soutěže. Na vlastní zápas si vsadit nemůžeš — ani na svůj A-tým, ani na rezervu. Sází se z klubové kasy." },
+      { heading: "Kurzy", text: "Kurz počítá hra ze síly obou kádrů, formy a domácího prostředí. Kancelář si k tomu přirazí osm procent, takže součet šancí na lístku vždycky přesahuje sto procent a dlouhodobě vydělává ona, ne ty." },
+      { heading: "Typy sázek", text: "Kdo vyhraje (1 = domácí, X = remíza, 2 = hosté), kolik padne gólů a kdo se trefí. Tipy z různých zápasů téhož kola se dají složit na jeden tiket — kurzy se pak násobí, ale musí vyjít všechny. Z jednoho zápasu si vybíráš jen jeden tip." },
+      { heading: "Limity", text: "Vklad od 100 Kč, nejvýš tři tikety na kolo a nejvýš šest tipů na tiketu. Horní hranici vkladu i strop výhry si soutěž nastavuje sama hlasováním. Klub v mínusu si nevsadí vůbec." },
+      { heading: "Uzávěrka", text: "Lístek se zavírá ve chvíli, kdy se kolo začne hrát. Výsledek přijde SMS do telefonu hned po odehrání." },
+      { text: "Když sázený střelec vůbec nenastoupí, tip se anuluje a kurz tiketu klesne — tip neprohrává. Cizí sestavu totiž předem nevidíš.", tip: true },
+    ],
+  },
   "/dashboard/phone": {
     title: "Telefon / Zprávy",
     icon: "\u{1F4F1}",

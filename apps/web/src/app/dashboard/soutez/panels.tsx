@@ -26,7 +26,8 @@ const LEDGER_LABEL: Record<string, string> = {
   fine_admin: "Administrativní pokuty", sanction: "Pokuty disciplinární rady",
   interleague_fee: "Meziligové poplatky", levy_transfer: "Odvod z přestupů",
   levy_concession: "Odvod z občerstvení", levy_gate: "Odvod ze vstupného",
-  levy_cup: "Odvod z poháru", grant: "Dotace klubům", loan_repaid: "Splátky půjček",
+  levy_cup: "Odvod z poháru", levy_bet: "Odvod ze sázek",
+  grant: "Dotace klubům", loan_repaid: "Splátky půjček",
   deposit: "Kauce", other: "Ostatní",
 };
 
@@ -57,6 +58,10 @@ export function PokladnaPanel({ state, ledger }: {
       ["levy_concession_pct", "Odvod z občerstvení", (v) => `${v} %`],
       ["levy_transfer_pct", "Odvod z přestupů v soutěži", (v) => `${v} %`],
       ["levy_cup_pct", "Odvod z pohárových odměn", (v) => `${v} %`],
+      ["levy_bet_pct", "Odvod ze sázek", (v) => `${v} %`],
+      ["bet_max_stake", "Nejvyšší sázka na tiket", czk],
+      ["bet_max_payout", "Strop výhry z tiketu", czk],
+      ["ban_betting", "Zákaz sázení klubům", (v) => (v ? "platí" : "neplatí")],
     ];
     return popis
       .filter(([k]) => next[k] !== state.rules[k])

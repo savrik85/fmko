@@ -32,6 +32,8 @@ export type LedgerType =
   | "levy_concession"  // odvod z občerstvení
   | "levy_gate"        // odvod ze vstupného
   | "levy_cup"         // odvod z pohárové odměny
+  | "levy_bet"         // odvod z obratu sázkové kanceláře
+  | "bet_confiscated"  // výhra zabavená komisařem pro integritu
   | "grant"            // dotace, cena nebo půjčka klubu
   | "loan_repaid"      // splátka bezúročné půjčky ze sezónní odměny
   | "deposit"          // kauce za návrh

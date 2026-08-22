@@ -981,6 +981,45 @@ export async function executeDailyTick(
         }
       } catch (e) { logger.error({ module: "competition" }, "schůze vedení soutěže selhala", e); }
     }
+
+    // ── Sázková kancelář ──
+    // Kurzový lístek se přepisuje jednou za herní den, dokud je kolo 'scheduled'.
+    // Vstupy modelu (síla kádru, forma, střelci) se každý den mění, takže lístek
+    // musí být čerstvý; podaný tiket to neovlivní, ten si kurz nese ve vlastní kopii.
+    try {
+      const { generateBoard } = await import("../betting/board");
+      const ligy = await env.DB.prepare(
+        `SELECT DISTINCT l.id FROM leagues l
+           JOIN teams t ON t.league_id = l.id
+          WHERE l.league_type = 'senior' AND t.user_id <> 'ai'`
+      ).all<{ id: string }>();
+
+      let radku = 0;
+      for (const liga of ligy.results) {
+        const r = await generateBoard(env.DB, liga.id, globalGameDate);
+        radku += r.rows;
+      }
+      if (radku > 0) logger.info({ module: "betting" }, `kurzový lístek: ${radku} kurzů`);
+    } catch (e) { logger.error({ module: "betting" }, "generování kurzového lístku", e); }
+
+    // Záchranná síť: tiket z kola, které dohrál ruční endpoint nebo recovery,
+    // by jinak zůstal viset navždy. Zámek na status='open' dělá opakování zdarma.
+    try {
+      const { settleRound } = await import("../betting/settle");
+      const zbyle = await env.DB.prepare(
+        `SELECT DISTINCT t.calendar_id FROM bet_tickets t
+           JOIN season_calendar sc ON sc.id = t.calendar_id
+          WHERE t.status = 'open' AND sc.status = 'simulated'`
+      ).all<{ calendar_id: string }>();
+
+      for (const k of zbyle.results) {
+        const r = await settleRound(env.DB, k.calendar_id);
+        if (r.tickets > 0) {
+          logger.warn({ module: "betting" },
+            `dovypořádáno ${r.tickets} tiketů kola ${k.calendar_id} — uniklo hlavní cestě`);
+        }
+      }
+    } catch (e) { logger.error({ module: "betting" }, "dovypořádání tiketů", e); }
   }
   // (Chybějící game_clock už je zalogováno jako error na začátku ticku.)
 
