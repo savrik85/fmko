@@ -144,8 +144,8 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
     <>
       {confirmDialog}
       <div className="overflow-hidden rounded-xl border border-gray-100">
-        <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-5 text-white">
-          <div className="text-center mb-4 flex items-center justify-center gap-2">
+        <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-3 text-white">
+          <div className="text-center mb-2 flex items-center justify-center gap-2">
             <span className="text-micro font-heading font-bold uppercase tracking-widest text-white/40">
               {nextMatch.isCup ? (nextMatch.roundName ?? "🏆 Pohár") : nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}
             </span>
@@ -162,36 +162,35 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
           </div>
           <div className="flex items-start gap-3">
             <TeamCell t={homeTeam}>
-              <div className="flex justify-center mb-2">
+              <div className="flex justify-center mb-1.5">
                 <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge}
-                  initials={homeTeam.customInitials || initials(homeTeam.name)} symbol={homeTeam.symbol} size={48} />
+                  initials={homeTeam.customInitials || initials(homeTeam.name)} symbol={homeTeam.symbol} size={38} />
               </div>
               <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
+              {homeTeam.pos && (
+                <div className="text-micro text-white/40 tabular-nums leading-tight">{homeTeam.pos.position}. místo</div>
+              )}
             </TeamCell>
-            <div className="shrink-0 flex flex-col items-center pt-3">
-              <div className="w-10 h-10 rounded-full border-2 border-white/10 flex items-center justify-center">
-                <span className="font-heading font-[800] text-sm text-white/30">VS</span>
+            <div className="shrink-0 flex flex-col items-center pt-2">
+              <div className="w-8 h-8 rounded-full border-2 border-white/10 flex items-center justify-center">
+                <span className="font-heading font-[800] text-micro text-white/30">VS</span>
               </div>
             </div>
             <TeamCell t={awayTeam}>
-              <div className="flex justify-center mb-2">
+              <div className="flex justify-center mb-1.5">
                 <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge}
-                  initials={awayTeam.customInitials || initials(awayTeam.name)} symbol={awayTeam.symbol} size={48} />
+                  initials={awayTeam.customInitials || initials(awayTeam.name)} symbol={awayTeam.symbol} size={38} />
               </div>
               <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
+              {awayTeam.pos && (
+                <div className="text-micro text-white/40 tabular-nums leading-tight">{awayTeam.pos.position}. místo</div>
+              )}
             </TeamCell>
           </div>
-          {nextMatch.round != null && (homeTeam.pos || awayTeam.pos) && (
-            <div className="flex items-center gap-3 mt-2">
-              <div className="flex-1 text-center text-micro text-white/40 tabular-nums">{homeTeam.pos ? `${homeTeam.pos.position}. místo` : ""}</div>
-              <div className="shrink-0 w-10" />
-              <div className="flex-1 text-center text-micro text-white/40 tabular-nums">{awayTeam.pos ? `${awayTeam.pos.position}. místo` : ""}</div>
-            </div>
-          )}
         </div>
 
         {homeForm && awayForm && (homeForm.form.length > 0 || awayForm.form.length > 0) && (
-          <div className="flex items-center px-4 py-3 border-b border-gray-100 overflow-hidden">
+          <div className="flex items-center px-4 py-2 border-b border-gray-100 overflow-hidden">
             <div className="flex-1 min-w-0 flex gap-1 justify-end overflow-hidden">
               {homeForm.form.slice(0, 5).map((f, i) => <MiniForm key={i} f={f} />)}
             </div>
@@ -245,8 +244,9 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
         })()}
 
         {preview?.odds?.home && preview.odds.draw && preview.odds.away && (() => {
-          // Vlastní zápas — sázet na něj nejde, takže je to informace, ne nabídka:
-          // jak tým vidí kancelář. Zvýrazní se strana, kterou drží jako favorita.
+          // Vlastní zápas — sázet na něj nejde, takže je to čistě informace, jak
+          // tým vidí kancelář. Zvýrazněný je favorit. Vysvětlovat to v UI netřeba,
+          // hráč vidí kurzy a rozumí jim.
           const k = (x: number) => (x / 100).toFixed(2).replace(".", ",");
           const domaci = preview.odds.home!, remiza = preview.odds.draw!, hoste = preview.odds.away!;
           const nej = Math.min(domaci, remiza, hoste);
@@ -263,9 +263,6 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                 {bunka(nextMatch.isHome ? "Vy" : "Domácí", domaci)}
                 {bunka("Remíza", remiza)}
                 {bunka(nextMatch.isHome ? "Soupeř" : "Vy", hoste)}
-              </div>
-              <div className="text-micro text-muted text-center mt-1.5 leading-snug">
-                Kurzy sázkové kanceláře. Na vlastní zápas se nesází.
               </div>
             </div>
           );
