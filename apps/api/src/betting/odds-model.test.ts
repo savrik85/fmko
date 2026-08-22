@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   BASE_HOME_GOALS, BASE_AWAY_GOALS, DISPERSION_C, MARGIN, MIN_ODDS_X100, MAX_ODDS_X100,
   expectedGoals, formAdjustment, goalDistribution, outcomeProbabilities, totalsProbabilities,
+  doubleChanceProbabilities,
   scorerShares, availability, scorerProbability,
   applyMargin, toOddsX100, marketOdds, singleSideOdds, combineOddsX100, capPayout,
 } from "./odds-model";
@@ -95,6 +96,31 @@ describe("rozdělení gólů", () => {
       const t = totalsProbabilities(vyrovnany, line);
       expect(t.over + t.under).toBeCloseTo(1, 10);
     }
+  });
+
+  it("dvojtip sedí na jednotlivé výsledky", () => {
+    const o = outcomeProbabilities(vyrovnany);
+    const d = doubleChanceProbabilities(vyrovnany);
+    expect(d.homeOrDraw).toBeCloseTo(o.home + o.draw, 10);
+    expect(d.awayOrDraw).toBeCloseTo(o.away + o.draw, 10);
+    expect(d.noDraw).toBeCloseTo(o.home + o.away, 10);
+    // Každý výsledek je ve dvou možnostech, takže součet je vždycky přesně 2.
+    expect(d.homeOrDraw + d.awayOrDraw + d.noDraw).toBeCloseTo(2, 10);
+  });
+
+  it("neprohra je vždy pravděpodobnější než samotná výhra", () => {
+    const o = outcomeProbabilities(vyrovnany);
+    const d = doubleChanceProbabilities(vyrovnany);
+    expect(d.homeOrDraw).toBeGreaterThan(o.home);
+    expect(d.awayOrDraw).toBeGreaterThan(o.away);
+  });
+
+  it("neprohra favorita má nižší kurz než neprohra outsidera", () => {
+    const l = expectedGoals({ strength: 36, form: 0 }, { strength: 28, form: 0 });
+    const d = doubleChanceProbabilities(l);
+    expect(singleSideOdds(d.homeOrDraw)).toBeLessThan(singleSideOdds(d.awayOrDraw));
+    // A pořád nese marži — dvojtip nesmí být levnější cesta k jistotě.
+    expect(100 / singleSideOdds(d.homeOrDraw)).toBeGreaterThan(d.homeOrDraw);
   });
 
   it("vyšší linie je vždy méně pravděpodobná", () => {

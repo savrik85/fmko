@@ -137,6 +137,22 @@ export function outcomeProbabilities(l: Lambdas): OutcomeProbs {
 }
 
 /**
+ * Dvojtip — pravděpodobnost, že tým neprohraje.
+ *
+ * Tři možnosti se navzájem NEvylučují (každý výsledek spadá do dvou z nich),
+ * takže se nesmí normalizovat jako trojcestný trh. Každá se maržuje zvlášť
+ * jako dvoucestná sázka: „1X" proti „2", „X2" proti „1", „12" proti „X".
+ */
+export function doubleChanceProbabilities(l: Lambdas): { homeOrDraw: number; awayOrDraw: number; noDraw: number } {
+  const o = outcomeProbabilities(l);
+  return {
+    homeOrDraw: o.home + o.draw,
+    awayOrDraw: o.away + o.draw,
+    noDraw: o.home + o.away,
+  };
+}
+
+/**
  * Pravděpodobnost, že padne víc / míň gólů než daná linie.
  *
  * Linie je vždy půlgólová (2,5 / 3,5 / 6,5), takže remíza na trhu nemůže

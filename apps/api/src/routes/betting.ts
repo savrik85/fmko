@@ -87,7 +87,10 @@ bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
       `SELECT match_id, market, selection, odds_x100, label
          FROM bet_odds WHERE calendar_id = ?
         ORDER BY market,
-                 CASE selection WHEN '1' THEN 0 WHEN 'X' THEN 1 WHEN '2' THEN 2 ELSE 3 END,
+                 CASE selection
+                   WHEN '1' THEN 0 WHEN 'X' THEN 1 WHEN '2' THEN 2
+                   WHEN '1X' THEN 0 WHEN '12' THEN 1 WHEN 'X2' THEN 2
+                   ELSE 3 END,
                  odds_x100`
     ).bind(round.calendar_id).all<{
       match_id: string; market: string; selection: string; odds_x100: number; label: string;
@@ -150,6 +153,8 @@ bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
         ownMatch: vlastni,
         markets: vlastni ? null : {
           result: k.filter((x) => x.market === "1x2")
+            .map((x) => ({ selection: x.selection, label: x.label, oddsX100: x.odds_x100 })),
+          dchance: k.filter((x) => x.market === "dchance")
             .map((x) => ({ selection: x.selection, label: x.label, oddsX100: x.odds_x100 })),
           totals: k.filter((x) => x.market === "totals")
             .map((x) => ({ selection: x.selection, label: x.label, oddsX100: x.odds_x100 })),

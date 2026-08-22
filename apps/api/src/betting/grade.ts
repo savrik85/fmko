@@ -37,6 +37,15 @@ export function gradeSelection(
     return selection === vysledek ? "won" : "lost";
   }
 
+  if (market === "dchance") {
+    const vyhraliDomaci = result.homeScore > result.awayScore;
+    const remiza = result.homeScore === result.awayScore;
+    if (selection === "1X") return vyhraliDomaci || remiza ? "won" : "lost";
+    if (selection === "X2") return !vyhraliDomaci || remiza ? "won" : "lost";
+    if (selection === "12") return remiza ? "lost" : "won";
+    return "void";
+  }
+
   if (market === "totals") {
     const line = parseLine(selection);
     if (line === null) return "void";

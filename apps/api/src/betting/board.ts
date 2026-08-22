@@ -17,6 +17,7 @@
 import { logger } from "../lib/logger";
 import {
   expectedGoals, formAdjustment, outcomeProbabilities, totalsProbabilities,
+  doubleChanceProbabilities,
   scorerShares, availability, scorerProbability,
   marketOdds, singleSideOdds,
 } from "./odds-model";
@@ -67,7 +68,7 @@ export interface OddsRow {
   seasonNumber: number;
   calendarId: string;
   matchId: string;
-  market: "1x2" | "totals" | "scorer";
+  market: "1x2" | "dchance" | "totals" | "scorer";
   selection: string;
   oddsX100: number;
   probability: number;
@@ -235,6 +236,22 @@ export function matchOdds(input: {
     { matchId: input.matchId, market: "1x2", selection: "1", oddsX100: k1, probability: o.home, label: input.homeName },
     { matchId: input.matchId, market: "1x2", selection: "X", oddsX100: kx, probability: o.draw, label: "Remíza" },
     { matchId: input.matchId, market: "1x2", selection: "2", oddsX100: k2, probability: o.away, label: input.awayName },
+  );
+
+  // Dvojtip. Tři možnosti se navzájem nevylučují, takže se každá maržuje
+  // zvlášť jako dvoucestná sázka — normalizovat je na jeden overround by
+  // znamenalo prodávat jistotu pod cenou.
+  const dc = doubleChanceProbabilities(lambdas);
+  out.push(
+    { matchId: input.matchId, market: "dchance", selection: "1X",
+      oddsX100: singleSideOdds(dc.homeOrDraw), probability: dc.homeOrDraw,
+      label: `${input.homeName} neprohraje` },
+    { matchId: input.matchId, market: "dchance", selection: "X2",
+      oddsX100: singleSideOdds(dc.awayOrDraw), probability: dc.awayOrDraw,
+      label: `${input.awayName} neprohraje` },
+    { matchId: input.matchId, market: "dchance", selection: "12",
+      oddsX100: singleSideOdds(dc.noDraw), probability: dc.noDraw,
+      label: "Nebude remíza" },
   );
 
   // Počet gólů

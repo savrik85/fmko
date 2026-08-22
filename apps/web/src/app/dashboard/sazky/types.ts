@@ -28,6 +28,7 @@ export interface Zapas {
   ownMatch: boolean;
   markets: {
     result: Nabidka[];
+    dchance: Nabidka[];
     totals: Nabidka[];
     scorers: Nabidka[];
   } | null;
@@ -92,9 +93,9 @@ export interface TiketyOdpoved {
 /** Jeden vybraný tip v košíku. Žije jen v paměti stránky. */
 export interface VybranyTip {
   matchId: string;
-  market: "result" | "totals" | "scorers";
-  /** Kód, který chce server: '1x2' | 'totals' | 'scorer'. */
-  serverMarket: "1x2" | "totals" | "scorer";
+  market: "result" | "dchance" | "totals" | "scorers";
+  /** Kód, který chce server. */
+  serverMarket: "1x2" | "dchance" | "totals" | "scorer";
   selection: string;
   oddsX100: number;
   label: string;

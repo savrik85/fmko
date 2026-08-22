@@ -68,7 +68,7 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
   });
 
   const jeVybran = (selection: string) => vybranyKlic?.selection === selection;
-  const pocetDalsich = m.totals.length + m.scorers.length;
+  const pocetDalsich = m.dchance.length + m.totals.length + m.scorers.length;
 
   return (
     <article className="card overflow-hidden">
@@ -96,7 +96,7 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
       {pocetDalsich > 0 && (
         <button type="button" onClick={() => setRozbaleno(!rozbaleno)} aria-expanded={rozbaleno}
           className="w-full min-h-11 px-3 border-t border-gray-50 flex items-center gap-2 text-sm text-muted hover:bg-gray-50/50 cursor-pointer">
-          <span className="font-heading font-bold">Góly a střelci</span>
+          <span className="font-heading font-bold">Neprohra, góly a střelci</span>
           <span className="text-micro tabular-nums">({pocetDalsich})</span>
           <span className={`ml-auto transition-transform ${rozbaleno ? "rotate-180" : ""}`} aria-hidden>▾</span>
         </button>
@@ -104,6 +104,25 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
 
       {rozbaleno && (
         <div className="border-t border-gray-50 px-3 py-3 space-y-4 bg-gray-50/40">
+          {m.dchance.length > 0 && (
+            <section>
+              <div className="text-micro font-heading font-bold uppercase tracking-wide text-muted mb-2">
+                Kdo neprohraje
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {m.dchance.map((n) => (
+                  <Kurz key={n.selection} tip={n.selection} label={n.label} oddsX100={n.oddsX100}
+                        vybrano={jeVybran(n.selection)}
+                        onClick={() => muzeSazet && pridej("dchance", "dchance", n)} />
+                ))}
+              </div>
+              <p className="text-sm text-muted mt-2 leading-snug">
+                <b>1X</b> = domácí vyhrají nebo remizují · <b>X2</b> = totéž pro hosty ·
+                {" "}<b>12</b> = padne vítěz, remíza prohrává.
+              </p>
+            </section>
+          )}
+
           {m.totals.length > 0 && (
             <section>
               <div className="text-micro font-heading font-bold uppercase tracking-wide text-muted mb-2">

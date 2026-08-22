@@ -23,6 +23,32 @@ describe("výsledek 1/X/2", () => {
   });
 });
 
+describe("dvojtip (neprohra)", () => {
+  // Úplná tabulka: tři možnosti proti třem výsledkům. Trh, kde se dá snadno
+  // splést strana, si zaslouží vyčerpávající test.
+  const pripady: Array<[string, { homeScore: number; awayScore: number }, string, string]> = [
+    ["1X", vyhraDomacich, "won",  "domácí vyhráli"],
+    ["1X", remiza,        "won",  "remíza"],
+    ["1X", vyhraHostu,    "lost", "domácí prohráli"],
+    ["X2", vyhraDomacich, "lost", "hosté prohráli"],
+    ["X2", remiza,        "won",  "remíza"],
+    ["X2", vyhraHostu,    "won",  "hosté vyhráli"],
+    ["12", vyhraDomacich, "won",  "rozhodlo se"],
+    ["12", remiza,        "lost", "remíza"],
+    ["12", vyhraHostu,    "won",  "rozhodlo se"],
+  ];
+
+  for (const [tip, vysledek, ocekavano, popis] of pripady) {
+    it(`${tip} při ${vysledek.homeScore}:${vysledek.awayScore} → ${ocekavano} (${popis})`, () => {
+      expect(gradeSelection("dchance", tip, vysledek, nikdo)).toBe(ocekavano);
+    });
+  }
+
+  it("neznámá varianta se anuluje", () => {
+    expect(gradeSelection("dchance", "XY", remiza, nikdo)).toBe("void");
+  });
+});
+
 describe("počet gólů", () => {
   it("linie je půlgólová, takže remíza na trhu nenastane", () => {
     // 4 góly celkem
