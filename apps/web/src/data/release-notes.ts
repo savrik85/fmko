@@ -23,6 +23,10 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Kurz počítá hra ze síly obou kádrů, formy a domácího prostředí. Kancelář si k tomu přirazí osm procent, takže dlouhodobě vydělává ona, ne ty. Na lístku je u každého týmu vidět pořadí, posledních pět výsledků i skóre, aby se nesázelo naslepo.",
       "Když sázený střelec vůbec nenastoupí, tip se anuluje a kurz tiketu o něj klesne — neprohráváš. Cizí sestavu totiž před zápasem nevidíš a hráči vypadávají kvůli kocovině, žním i zraněním.",
       "Lístek se zavírá ve chvíli, kdy se kolo začne hrát. Výsledek přijde SMS do telefonu hned po odehrání a v Sázkách máš historii všech tiketů i bilanci, jak si u kanceláře stojíš.",
+      "V grémiu přibyla pátá volená funkce — Komisař pro integritu soutěže. Otevře se od devíti lidských klubů a hlídá sázky i přestupový trh, protože obojí je odpověď na tutéž otázku: nejde tady o něco podezřelého?",
+      "Komisař jediný vidí knihu sázek celé soutěže včetně tiketů, které ještě běží — kromě něj do ní vidí už jen prezident. K tomu má listinu všech realizovaných přestupů, kde se samy zvýrazní obchody mezi kluby stejného majitele, ceny mimo odhad hodnoty hráče a dvojice, které spolu obchodují pořád dokola. Není to obvinění, jen upozornění; posoudit to musí člověk.",
+      "Když na něco přijde, může klubu zakázat sázení sám a bez hlasování — nejvýš dvakrát za sezónu, ne vlastnímu klubu a ne někomu, s kým má vyhrocený vztah. Umí taky zabavit výhru z konkrétního tiketu ve prospěch pokladny soutěže. Obojí musí odůvodnit a klub se proti tomu odvolá k zasedání.",
+      "Pod komisaře spadají i čtyři nová hlasování: nejvyšší sázka na tiket, strop výhry, odvod ze sázek do pokladny soutěže a úplný zákaz sázení klubům soutěže. Takže si limity nastavíte sami — včetně toho, že si sázení zakážete úplně.",
     ],
   },
   {
