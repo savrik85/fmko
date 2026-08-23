@@ -332,72 +332,77 @@ export function Stadium3D({
 
           {/* Panely se zobrazí pouze pokud je controlsVisible = true */}
           {controlsVisible && (
-            <>
-              {/* Přepínač denní doby (vlevo nahoře) */}
-              <div className="absolute top-3 left-3 z-10 flex items-center bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg animate-in fade-in zoom-in-95 duration-200">
-                <button
-                  onClick={() => setTimeOfDay("day")}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
-                    timeOfDay === "day"
-                      ? "bg-amber-500 text-white shadow-sm"
-                      : "text-white/70 hover:text-white hover:bg-white/10"
-                  }`}
-                  title="Slunečný den"
-                >
-                  <span>☀️</span>
-                  <span className="hidden sm:inline">Den</span>
-                </button>
-                <button
-                  onClick={() => setTimeOfDay("sunset")}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
-                    timeOfDay === "sunset"
-                      ? "bg-orange-600 text-white shadow-sm"
-                      : "text-white/70 hover:text-white hover:bg-white/10"
-                  }`}
-                  title="Západ slunce / Zlatá hodinka"
-                >
-                  <span>🌅</span>
-                  <span className="hidden sm:inline">Západ</span>
-                </button>
-                <button
-                  onClick={() => setTimeOfDay("night")}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
-                    timeOfDay === "night"
-                      ? "bg-indigo-600 text-white shadow-sm"
-                      : "text-white/70 hover:text-white hover:bg-white/10"
-                  }`}
-                  title="Noční zápas pod reflektory"
-                >
-                  <span>🌙</span>
-                  <span className="hidden sm:inline">Noc</span>
-                </button>
+            <div className={`absolute top-12 inset-x-2 sm:inset-x-4 ${reserveCloseButtonSpace ? "sm:right-20" : ""} z-20 pointer-events-none flex flex-col md:flex-row items-start md:items-center justify-between gap-2 animate-in fade-in zoom-in-95 duration-200`}>
+              {/* Denní doba + Počasí */}
+              <div className="flex flex-wrap items-center gap-1.5 bg-black/85 backdrop-blur-xl p-1.5 rounded-2xl border border-white/15 shadow-2xl pointer-events-auto max-w-full overflow-x-auto">
+                {/* Denní doba */}
+                <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl">
+                  <button
+                    onClick={() => setTimeOfDay("day")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                      timeOfDay === "day"
+                        ? "bg-amber-500 text-white shadow-sm"
+                        : "text-white/70 hover:text-white hover:bg-white/10"
+                    }`}
+                    title="Slunečný den"
+                  >
+                    <span>☀️</span>
+                    <span className="hidden sm:inline">Den</span>
+                  </button>
+                  <button
+                    onClick={() => setTimeOfDay("sunset")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                      timeOfDay === "sunset"
+                        ? "bg-orange-600 text-white shadow-sm"
+                        : "text-white/70 hover:text-white hover:bg-white/10"
+                    }`}
+                    title="Západ slunce / Zlatá hodinka"
+                  >
+                    <span>🌅</span>
+                    <span className="hidden sm:inline">Západ</span>
+                  </button>
+                  <button
+                    onClick={() => setTimeOfDay("night")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                      timeOfDay === "night"
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "text-white/70 hover:text-white hover:bg-white/10"
+                    }`}
+                    title="Noční zápas pod reflektory"
+                  >
+                    <span>🌙</span>
+                    <span className="hidden sm:inline">Noc</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-5 bg-white/20 hidden sm:block" />
+
+                {/* Počasí */}
+                <div className="flex items-center gap-0.5">
+                  {(Object.keys(WEATHER_OPTIONS) as WeatherType[]).map((wKey) => {
+                    const opt = WEATHER_OPTIONS[wKey];
+                    const active = weather === wKey;
+                    return (
+                      <button
+                        key={wKey}
+                        onClick={() => setWeather(wKey)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                          active
+                            ? "bg-sky-600 text-white shadow-sm"
+                            : "text-white/70 hover:text-white hover:bg-white/10"
+                        }`}
+                        title={`${opt.label} (${opt.desc})`}
+                      >
+                        <span>{opt.icon}</span>
+                        <span className="hidden lg:inline">{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Přepínač počasí (vlevo pod denní dobou) */}
-              <div className="absolute top-14 left-3 z-10 flex items-center bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg animate-in fade-in zoom-in-95 duration-200">
-                {(Object.keys(WEATHER_OPTIONS) as WeatherType[]).map((wKey) => {
-                  const opt = WEATHER_OPTIONS[wKey];
-                  const active = weather === wKey;
-                  return (
-                    <button
-                      key={wKey}
-                      onClick={() => setWeather(wKey)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
-                        active
-                          ? "bg-sky-600 text-white shadow-sm"
-                          : "text-white/70 hover:text-white hover:bg-white/10"
-                      }`}
-                      title={`${opt.label} (${opt.desc})`}
-                    >
-                      <span>{opt.icon}</span>
-                      <span className="hidden sm:inline">{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Přepínač filmových pohledů kamery (vpravo pod tlačítkem Ovládání) */}
-              <div className={`absolute top-14 ${reserveCloseButtonSpace ? "right-[4.5rem]" : "right-3"} z-10 flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg overflow-x-auto max-w-[calc(100%-20px)] sm:max-w-none animate-in fade-in zoom-in-95 duration-200`}>
+              {/* Filmové pohledy kamery */}
+              <div className="flex items-center gap-0.5 bg-black/85 backdrop-blur-xl p-1.5 rounded-2xl border border-white/15 shadow-2xl pointer-events-auto max-w-full overflow-x-auto">
                 {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).map((key) => {
                   const vp = VIEWPOINTS[key];
                   const active = viewpoint === key;
@@ -405,7 +410,7 @@ export function Stadium3D({
                     <button
                       key={key}
                       onClick={() => setViewpoint(key)}
-                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
                         active
                           ? "bg-pitch-500 text-white shadow-sm"
                           : "text-white/70 hover:text-white hover:bg-white/10"
@@ -413,12 +418,12 @@ export function Stadium3D({
                       title={vp.label}
                     >
                       <span>{vp.icon}</span>
-                      <span className="hidden md:inline">{vp.label}</span>
+                      <span className="text-[11px] sm:text-xs">{vp.label}</span>
                     </button>
                   );
                 })}
               </div>
-            </>
+            </div>
           )}
         </>
       )}
