@@ -137,8 +137,14 @@ export async function performUnrestAction(
   const player = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.personality, p.life_context, p.coach_relationship, p.weekly_wage,
             (SELECT COUNT(*) FROM conversations c WHERE c.team_id = ? AND c.type = 'player' AND c.participant_id = p.id AND c.ai_thread_active = 1) as thread_active
-     FROM players p WHERE p.id = ? AND p.team_id = ?`
-  ).bind(teamId, playerId, teamId).first<Record<string, unknown>>()
+     FROM players p
+     JOIN teams current_team ON current_team.id = p.team_id
+     LEFT JOIN teams owner_team ON owner_team.id = p.loan_from_team_id
+     WHERE p.id = ? AND (
+       COALESCE(current_team.parent_team_id, current_team.id) = ?
+       OR COALESCE(owner_team.parent_team_id, owner_team.id) = ?
+     )`
+  ).bind(teamId, playerId, teamId, teamId).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "unrest" }, "load player", e); return null; });
   if (!player) return { ok: false, error: "Hráč nenalezen", status: 404 };
   if ((player.thread_active as number) > 0) {

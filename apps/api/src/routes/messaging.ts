@@ -118,8 +118,16 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   let unrest: { level: number; teamName?: string; mood: string; actions: { id: string; label: string; description: string }[] } | null = null;
   if (convOwner.type === "player" && convOwner.participant_id && convOwner.ai_thread_active !== 1) {
     try {
-      const playerRow = await c.env.DB.prepare("SELECT life_context FROM players WHERE id = ? AND team_id = ?")
-        .bind(convOwner.participant_id, teamId).first<{ life_context: string | null }>();
+      const playerRow = await c.env.DB.prepare(
+        `SELECT p.life_context
+         FROM players p
+         JOIN teams current_team ON current_team.id = p.team_id
+         LEFT JOIN teams owner_team ON owner_team.id = p.loan_from_team_id
+         WHERE p.id = ? AND (
+           COALESCE(current_team.parent_team_id, current_team.id) = ?
+           OR COALESCE(owner_team.parent_team_id, owner_team.id) = ?
+         )`,
+      ).bind(convOwner.participant_id, teamId, teamId).first<{ life_context: string | null }>();
       const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
       if (lc?.transferUnrest?.level >= 40) {
         const { availableActions, unrestMoodQuote } = await import("../transfers/unrest");

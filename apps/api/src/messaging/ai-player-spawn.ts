@@ -522,11 +522,28 @@ async function handleAiPlayerReplyInner(
 
   // Načti hráče (recent stats nejsou pro reply potřeba)
   const playerRow = await db.prepare(
-    "SELECT id, first_name, last_name, age, position, team_id, personality, life_context, coach_relationship, is_celebrity FROM players WHERE id = ?",
+    "SELECT id, first_name, last_name, age, position, team_id, loan_from_team_id, personality, life_context, coach_relationship, is_celebrity FROM players WHERE id = ?",
   ).bind(state.player_id).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load player for reply", e); return null; });
 
-  if (!playerRow || playerRow.team_id !== conv.team_id) {
+  const playerClubTeamId = playerRow
+    ? await db.prepare("SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?")
+      .bind(playerRow.team_id).first<{ id: string }>()
+      .then((row) => row?.id ?? playerRow.team_id)
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "resolve player club for reply", e); return playerRow.team_id; })
+    : null;
+  const conversationClubTeamId = await db.prepare("SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?")
+    .bind(conv.team_id).first<{ id: string }>()
+    .then((row) => row?.id ?? conv.team_id)
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "resolve conversation club for reply", e); return conv.team_id; });
+  const playerLoanOwnerClubTeamId = playerRow?.loan_from_team_id
+    ? await db.prepare("SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?")
+      .bind(playerRow.loan_from_team_id).first<{ id: string }>()
+      .then((row) => row?.id ?? playerRow.loan_from_team_id)
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "resolve loan owner club for reply", e); return playerRow.loan_from_team_id; })
+    : null;
+
+  if (!playerRow || (playerClubTeamId !== conversationClubTeamId && playerLoanOwnerClubTeamId !== conversationClubTeamId)) {
     logger.info({ module: "ai-player-spawn" }, `player ${state.player_id} no longer in team — closing thread`);
     await db.batch([
       db.prepare(

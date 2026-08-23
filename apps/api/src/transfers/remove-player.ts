@@ -136,9 +136,13 @@ export async function removePlayer(
       "UPDATE player_contracts SET leave_type = ?, is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1",
     ).bind(leaveType, playerId, teamId),
   );
-  batch.push(db.prepare("DELETE FROM players WHERE id = ?").bind(playerId));
+  // Guard i na finálním DELETE: úvodní SELECT sám nestačí, hráč se mohl mezi
+  // await body přesunout jinam. Nikdy nesmazat hráče už patřícího novému klubu.
+  batch.push(db.prepare("DELETE FROM players WHERE id = ? AND team_id = ?").bind(playerId, teamId));
 
-  await db.batch(batch);
+  const results = await db.batch(batch);
+  const deleted = results[results.length - 1];
+  if (!deleted || deleted.meta.changes !== 1) return { ok: false, reason: "not_found" };
 
   return {
     ok: true,

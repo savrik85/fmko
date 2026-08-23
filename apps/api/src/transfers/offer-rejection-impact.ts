@@ -85,15 +85,27 @@ export async function applyOfferRejectionImpact(
   env?: { GEMINI_API_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; DB?: D1Database },
 ): Promise<void> {
   const playerId = offer.player_id as string;
-  const sellerTeamId = offer.to_team_id as string;
+  const sellerRosterTeamId = offer.to_team_id as string;
+  const sellerClubTeamId = await db.prepare(
+    "SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?",
+  ).bind(sellerRosterTeamId).first<{ id: string }>()
+    .then((row) => row?.id ?? sellerRosterTeamId)
+    .catch((e) => { logger.warn({ module: "rejection-impact" }, "resolve seller club", e); return sellerRosterTeamId; });
   const fromTeamId = offer.from_team_id as string;
   const amount = (offer.counter_amount != null ? offer.counter_amount : offer.offer_amount) as number;
   const isLoan = (offer.offer_type as string) === "loan";
 
   // Hráč musí pořád patřit prodávajícímu (mohl mezitím odejít)
   const player = await db.prepare(
-    "SELECT id, first_name, last_name, nickname, avatar, team_id, personality, life_context, coach_relationship FROM players WHERE id = ? AND team_id = ?"
-  ).bind(playerId, sellerTeamId).first<Record<string, unknown>>()
+    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.team_id, p.loan_from_team_id,
+            p.personality, p.life_context, p.coach_relationship
+     FROM players p
+     JOIN teams current_team ON current_team.id = p.team_id
+     LEFT JOIN teams owner_team ON owner_team.id = p.loan_from_team_id
+     WHERE p.id = ?
+       AND COALESCE(owner_team.parent_team_id, owner_team.id,
+                    current_team.parent_team_id, current_team.id) = ?`
+  ).bind(playerId, sellerClubTeamId).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "rejection-impact" }, "load player", e); return null; });
   if (!player) return;
 
@@ -135,7 +147,7 @@ export async function applyOfferRejectionImpact(
       const newMorale = clamp(morale + 2, 0, 100);
       await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?")
         .bind(newMorale, playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "loyal morale boost", e));
-      await sendPlayerSMS(db, sellerTeamId, playerRef, pick(REJECTED_SMS_LOYAL).replace("{team}", teamName));
+      await sendPlayerSMS(db, sellerClubTeamId, playerRef, pick(REJECTED_SMS_LOYAL).replace("{team}", teamName));
     }
     return;
   }
@@ -156,7 +168,7 @@ export async function applyOfferRejectionImpact(
   // U rodáků (vysoký patriotism) váží dvojnásob: ty fotky v klubovně jsou jejich.
   const trophyFx = await (async () => {
     const row = await db.prepare("SELECT trophy_case, trophy_case_condition FROM equipment WHERE team_id = ?")
-      .bind(sellerTeamId).first<{ trophy_case: number; trophy_case_condition: number }>()
+      .bind(sellerClubTeamId).first<{ trophy_case: number; trophy_case_condition: number }>()
       .catch((e) => { logger.warn({ module: "rejection-impact" }, "load trophy case", e); return null; });
     if (!row?.trophy_case) return 0;
     return row.trophy_case * ((row.trophy_case_condition ?? 50) / 100) * 0.12;
@@ -195,7 +207,7 @@ export async function applyOfferRejectionImpact(
   const smsBody = brokenTransferPledge
     ? `Slíbil jste, že mě při další dobré nabídce pustíte! ${teamName} přišel a vy nic. S vámi jsem skončil.`
     : pick(pool).replace("{team}", teamName);
-  const convId = await sendPlayerSMS(db, sellerTeamId, playerRef, smsBody);
+  const convId = await sendPlayerSMS(db, sellerClubTeamId, playerRef, smsBody);
 
   // Otevřít živou konverzaci (AI thread): trenér může volně odpovědět, hráč reaguje,
   // po max 2 výměnách AI vyhodnotí dopad (viz applyResolutionAndClose — upravuje i truc).
@@ -228,7 +240,7 @@ export async function applyOfferRejectionImpact(
     const pushEnv = env?.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT
       ? { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db }
       : undefined;
-    await createNotification(db, sellerTeamId, "transfer",
+    await createNotification(db, sellerClubTeamId, "transfer",
       `😠 ${playerRef.firstName} ${playerRef.lastName} je naštvaný`,
       `${trigger === "expire" ? "Nabídka od" : "Odmítl jsi nabídku od"} ${teamName} — hráč o přestup stál (${INTEREST_LABELS[interest.level]}).`,
       `/dashboard/player/${playerId}`,
@@ -250,10 +262,13 @@ function pick<T>(arr: T[]): T {
  */
 export async function processTransferUnrest(db: D1Database): Promise<number> {
   const rows = await db.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.team_id, p.personality, p.life_context,
+    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.team_id,
+            COALESCE(owner_team.parent_team_id, owner_team.id, t.parent_team_id, t.id) AS club_team_id,
+            p.personality, p.life_context,
             (SELECT COUNT(*) FROM injuries i WHERE i.player_id = p.id AND i.days_remaining > 0) as active_injuries,
             (SELECT COUNT(*) FROM injuries i WHERE i.player_id = p.id AND i.is_fake = 1 AND i.days_remaining > 0) as active_fake
      FROM players p JOIN teams t ON p.team_id = t.id
+     LEFT JOIN teams owner_team ON owner_team.id = p.loan_from_team_id
      WHERE t.user_id != 'ai' AND json_extract(p.life_context, '$.transferUnrest') IS NOT NULL`
   ).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "rejection-impact" }, "load unrest players", e); return { results: [] as Record<string, unknown>[] }; });
@@ -272,7 +287,8 @@ export async function processTransferUnrest(db: D1Database): Promise<number> {
 
 async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>): Promise<void> {
   const playerId = row.id as string;
-  const teamId = row.team_id as string;
+  const rosterTeamId = row.team_id as string;
+  const clubTeamId = (row.club_team_id as string | null) ?? rosterTeamId;
   const lc = (() => { try { return JSON.parse(row.life_context as string) ?? {}; } catch { return {}; } })();
   const pers = (() => { try { return JSON.parse(row.personality as string) ?? {}; } catch { return {}; } })();
   const unrest: TransferUnrest = lc.transferUnrest;
@@ -290,18 +306,18 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
   // 1) Kontrola slibu minut (pledge 'minutes') — 2 ze 3 zápasů týmu od slibu v základu (45+ min)
   let pledgeBroken = false;
   if (unrest.pledge?.type === "minutes") {
-    const verdict = await checkMinutesPledge(db, playerId, teamId, unrest.pledge);
+    const verdict = await checkMinutesPledge(db, playerId, rosterTeamId, unrest.pledge);
     if (verdict === "kept") {
       unrest.pledge = null;
       unrest.level = clamp(unrest.level - 10, 0, 100);
-      await sendPlayerSMS(db, teamId, playerRef, "Trenére, díky že jste dodržel slovo s tou sestavou. Vážím si toho.");
+      await sendPlayerSMS(db, clubTeamId, playerRef, "Trenére, díky že jste dodržel slovo s tou sestavou. Vážím si toho.");
     } else if (verdict === "broken") {
       pledgeBroken = true;
       unrest.pledge = null;
       unrest.level = clamp(unrest.level + 35, 0, 100);
       const morale: number = typeof lc.morale === "number" ? lc.morale : 50;
       lc.morale = clamp(morale - 8, 0, 100);
-      await sendPlayerSMS(db, teamId, playerRef, "Sliboval jste mi místo v sestavě, trenére. A já zase sedím. Tohle nemá cenu.");
+      await sendPlayerSMS(db, clubTeamId, playerRef, "Sliboval jste mi místo v sestavě, trenére. A já zase sedím. Tohle nemá cenu.");
     }
   } else if (unrest.pledge?.type === "transfer" && new Date(unrest.pledge.deadline) < new Date()) {
     // Slib prodeje vypršel bez další nabídky — smazat (porušení řeší applyOfferRejectionImpact)
@@ -317,17 +333,17 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
   if (unrest.level <= 0) {
     await db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.transferUnrest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "remove unrest", e));
-    if (hasFakeInjury) await healFakeInjury(db, teamId, playerRef);
+    if (hasFakeInjury) await healFakeInjury(db, clubTeamId, playerRef);
     return;
   }
 
   // 4) Zázračné uzdravení — truc klesl pod 40, fake injury ztratila smysl
   if (hasFakeInjury && unrest.level < 40) {
-    await healFakeInjury(db, teamId, playerRef);
+    await healFakeInjury(db, clubTeamId, playerRef);
   } else if (hasFakeInjury && !unrest.fakeInjuryHintSent && unrest.fakeInjuryAt
     && (Date.now() - new Date(unrest.fakeInjuryAt).getTime()) >= 3 * DAY_MS) {
     // 5) Fyzio nápověda 3. den — manažer dostane stopu, že zranění je podezřelé
-    await sendSystemSMS(db, teamId, "Fyzioterapeut",
+    await sendSystemSMS(db, clubTeamId, "Fyzioterapeut",
       `Trenére, byl jsem se podívat na ${playerRef.firstName} ${playerRef.lastName}. Na tom zranění mi něco nesedí — na rovinu, podle mě mu nic není. Zkuste si s ním promluvit.`);
     unrest.fakeInjuryHintSent = true;
   }
@@ -341,9 +357,9 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
       const days = 7 + Math.floor(Math.random() * 8); // 7–14
       await db.prepare(
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, is_fake) VALUES (?, ?, ?, ?, ?, 'stredni', ?, ?, 1)"
-      ).bind(crypto.randomUUID(), playerId, teamId, inj.type, inj.description, days, days).run()
+      ).bind(crypto.randomUUID(), playerId, rosterTeamId, inj.type, inj.description, days, days).run()
         .catch((e) => logger.warn({ module: "rejection-impact" }, "insert fake injury", e));
-      await sendPlayerSMS(db, teamId, playerRef, inj.smsText);
+      await sendPlayerSMS(db, clubTeamId, playerRef, inj.smsText);
       unrest.fakeInjuryUsed = true;
       unrest.fakeInjuryAt = nowIso;
       unrest.level = clamp(Math.min(unrest.level, 55), 0, 100);
