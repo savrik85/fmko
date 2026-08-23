@@ -20,6 +20,7 @@ export function CameraController({ viewpoint, isMobile = false }: CameraControll
   const targetLookAt = useRef(new THREE.Vector3(...VIEWPOINTS[viewpoint].target));
   const targetFov = useRef(VIEWPOINTS[viewpoint].fov);
   const isTransitioning = useRef(true);
+  const orbitAngle = useRef(0);
 
   // Reakce na změnu viewpoint
   useEffect(() => {
@@ -32,16 +33,37 @@ export function CameraController({ viewpoint, isMobile = false }: CameraControll
     }
   }, [viewpoint]);
 
-  // Plynulý lerp kamery a targetu v každém framu
-  useFrame((_, delta) => {
+  // Plynulý lerp kamery a kinematický oblet
+  useFrame((state, delta) => {
     if (!controlsRef.current) return;
     const controls = controlsRef.current;
 
     if (viewpoint === "orbit") {
-      controls.autoRotate = true;
-      controls.autoRotateSpeed = 0.8;
-    } else {
-      controls.autoRotate = false;
+      // Kinematický filmový oblet s proměnlivou výškou a vzdáleností
+      orbitAngle.current += delta * 0.28;
+      const angle = orbitAngle.current;
+
+      const radiusX = isMobile ? 74 : 58;
+      const radiusZ = isMobile ? 86 : 68;
+      const x = Math.sin(angle) * radiusX;
+      const z = Math.cos(angle) * radiusZ;
+      // Na mobilu je kamera výše a zacílená výše, aby stadion seděl v horní 2/3 obrazovky
+      const y = (isMobile ? 36 : 24) + Math.sin(angle * 2) * (isMobile ? 14 : 12);
+      const targetY = isMobile ? 4.5 + Math.sin(angle) * 1.5 : 1.5 + Math.sin(angle) * 1.5;
+
+      // Plynulý přesun
+      camera.position.lerp(new THREE.Vector3(x, y, z), delta * 2.0);
+      controls.target.lerp(new THREE.Vector3(0, targetY, 0), delta * 2.0);
+
+      const persCam = camera as THREE.PerspectiveCamera;
+      if (persCam.fov) {
+        const baseFov = isMobile ? 48 : 38;
+        persCam.fov = THREE.MathUtils.lerp(persCam.fov, baseFov + Math.cos(angle) * 4, delta * 1.5);
+        persCam.updateProjectionMatrix();
+      }
+
+      controls.update();
+      return;
     }
 
     if (isTransitioning.current) {
@@ -75,7 +97,7 @@ export function CameraController({ viewpoint, isMobile = false }: CameraControll
       enablePan={false}
       maxPolarAngle={Math.PI / 2.08}
       minDistance={15}
-      maxDistance={135}
+      maxDistance={140}
       touches={
         isMobile
           ? { ONE: -1 as unknown as THREE.TOUCH, TWO: THREE.TOUCH.DOLLY_ROTATE }

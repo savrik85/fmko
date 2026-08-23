@@ -6,6 +6,19 @@
 -- Hráč a trenér kola tak zmlkli po 7. kole, předzápasové preview po 8.
 -- Ohlédnutí za sezónou by se nevygenerovalo už nikdy.
 
+CREATE TABLE IF NOT EXISTS round_awards (
+  id TEXT PRIMARY KEY,
+  league_id TEXT NOT NULL,
+  calendar_id TEXT NOT NULL,
+  game_week INTEGER NOT NULL,
+  player_of_round_id TEXT,
+  manager_of_round_team_id TEXT,
+  player_reason TEXT,
+  manager_reason TEXT,
+  news_id TEXT,
+  created_at TEXT NOT NULL
+);
+
 ALTER TABLE news ADD COLUMN season_number INTEGER;
 ALTER TABLE round_awards ADD COLUMN season_number INTEGER;
 

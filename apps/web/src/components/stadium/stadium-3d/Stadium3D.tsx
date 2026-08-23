@@ -19,12 +19,15 @@ import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
 import { VillageVibe } from "./VillageVibe";
 import { LightingAndAtmosphere } from "./LightingAndAtmosphere";
+import { WeatherEffects } from "./WeatherEffects";
 import { CameraController } from "./CameraController";
 import {
   getStadiumLayout,
   VIEWPOINTS,
+  WEATHER_OPTIONS,
   type TimeOfDay,
   type CameraViewpoint,
+  type WeatherType,
 } from "./constants";
 
 export interface Stadium3DCustomization {
@@ -65,7 +68,10 @@ interface Stadium3DProps {
   lastMatch?: LastMatchScore | null;
   initialTimeOfDay?: TimeOfDay;
   initialViewpoint?: CameraViewpoint;
+  initialWeather?: WeatherType;
+  weather?: WeatherType;
   showControls?: boolean;
+  defaultControlsVisible?: boolean;
   reserveCloseButtonSpace?: boolean;
 }
 
@@ -86,7 +92,10 @@ export function Stadium3D({
   lastMatch,
   initialTimeOfDay = "day",
   initialViewpoint = "overview",
+  initialWeather = "sunny",
+  weather: weatherProp,
   showControls = true,
+  defaultControlsVisible = false,
   reserveCloseButtonSpace = false,
 }: Stadium3DProps) {
   const f = facilities;
@@ -98,9 +107,19 @@ export function Stadium3D({
   const fenceColor = cust.fenceColor ?? null;
   const roofColor = cust.roofColor ?? null;
 
-  // Stav denní doby a kamerového pohledu
+  // Stav zobrazení ovládacích prvků (defaultně skryté)
+  const [controlsVisible, setControlsVisible] = useState(defaultControlsVisible);
+
+  // Stav denní doby, počasí a kamerového pohledu
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(initialTimeOfDay);
+  const [weather, setWeather] = useState<WeatherType>(weatherProp ?? initialWeather);
   const [viewpoint, setViewpoint] = useState<CameraViewpoint>(initialViewpoint);
+
+  useEffect(() => {
+    if (weatherProp) {
+      setWeather(weatherProp);
+    }
+  }, [weatherProp]);
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
@@ -125,10 +144,13 @@ export function Stadium3D({
         dpr={isMobile ? [1, 1.5] : [1, 2]}
         gl={{ antialias: !isMobile, alpha: false, powerPreference: "high-performance" }}
       >
-        {/* Dynamická obloha a osvětlení (den, západ, noc) */}
-        <LightingAndAtmosphere timeOfDay={timeOfDay} isMobile={isMobile} />
+        {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
+        <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} />
 
-        {/* Plynulý kontrolér kamery */}
+        {/* 3D efekty počasí (déšť, sníh, vítr, blesky, mraky) */}
+        <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />
+
+        {/* Plynulý kontrolér kamery a filmový oblet */}
         <CameraController viewpoint={viewpoint} isMobile={isMobile} />
 
         <Suspense fallback={null}>
@@ -301,68 +323,112 @@ export function Stadium3D({
       {/* ═══ Interaktivní ovládací lišty na ploše 3D scény ═══ */}
       {showControls && (
         <>
-          {/* Přepínač denní doby (vlevo nahoře) */}
-          <div className="absolute top-3 left-3 z-10 flex items-center bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg">
+          {/* Tlačítko pro zapnutí / vypnutí ovládacích panelů */}
+          <div className={`absolute top-3 ${reserveCloseButtonSpace ? "right-[4.5rem]" : "right-3"} z-20`}>
             <button
-              onClick={() => setTimeOfDay("day")}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
-                timeOfDay === "day"
-                  ? "bg-amber-500 text-white shadow-sm"
-                  : "text-white/70 hover:text-white hover:bg-white/10"
+              onClick={() => setControlsVisible(!controlsVisible)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-heading font-bold transition-all shadow-lg backdrop-blur-md border ${
+                controlsVisible
+                  ? "bg-pitch-500 text-white border-pitch-400/40 shadow-pitch-500/20"
+                  : "bg-black/65 hover:bg-black/85 text-white/90 hover:text-white border-white/15"
               }`}
-              title="Slunečný den"
+              title={controlsVisible ? "Skrýt ovládací panely" : "Zobrazit nastavení počasí, denní doby a kamer"}
             >
-              <span>☀️</span>
-              <span className="hidden sm:inline">Den</span>
-            </button>
-            <button
-              onClick={() => setTimeOfDay("sunset")}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
-                timeOfDay === "sunset"
-                  ? "bg-orange-600 text-white shadow-sm"
-                  : "text-white/70 hover:text-white hover:bg-white/10"
-              }`}
-              title="Západ slunce / Zlatá hodinka"
-            >
-              <span>🌅</span>
-              <span className="hidden sm:inline">Západ</span>
-            </button>
-            <button
-              onClick={() => setTimeOfDay("night")}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
-                timeOfDay === "night"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-white/70 hover:text-white hover:bg-white/10"
-              }`}
-              title="Noční zápas pod reflektory"
-            >
-              <span>🌙</span>
-              <span className="hidden sm:inline">Noc</span>
+              <span>{controlsVisible ? "✕" : "🎛️"}</span>
+              <span>{controlsVisible ? "Zavřít" : "Počasí & Kamery"}</span>
             </button>
           </div>
 
-          {/* Přepínač filmových pohledů kamery (vpravo nahoře / dole) */}
-          <div className={`absolute top-3 ${reserveCloseButtonSpace ? "right-[4.5rem]" : "right-3"} z-10 flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg overflow-x-auto max-w-[calc(100%-140px)] sm:max-w-none`}>
-            {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).map((key) => {
-              const vp = VIEWPOINTS[key];
-              const active = viewpoint === key;
-              return (
+          {/* Panely se zobrazí pouze pokud je controlsVisible = true */}
+          {controlsVisible && (
+            <>
+              {/* Přepínač denní doby (vlevo nahoře) */}
+              <div className="absolute top-3 left-3 z-10 flex items-center bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg animate-in fade-in zoom-in-95 duration-200">
                 <button
-                  key={key}
-                  onClick={() => setViewpoint(key)}
-                  className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
-                    active
-                      ? "bg-pitch-500 text-white shadow-sm"
+                  onClick={() => setTimeOfDay("day")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                    timeOfDay === "day"
+                      ? "bg-amber-500 text-white shadow-sm"
                       : "text-white/70 hover:text-white hover:bg-white/10"
                   }`}
-                  title={vp.label}
+                  title="Slunečný den"
                 >
-                  <span>{vp.icon}</span>
-                  <span className="hidden md:inline">{vp.label}</span>
+                  <span>☀️</span>
+                  <span className="hidden sm:inline">Den</span>
                 </button>
-              );
-            })}
-          </div>
+                <button
+                  onClick={() => setTimeOfDay("sunset")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                    timeOfDay === "sunset"
+                      ? "bg-orange-600 text-white shadow-sm"
+                      : "text-white/70 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="Západ slunce / Zlatá hodinka"
+                >
+                  <span>🌅</span>
+                  <span className="hidden sm:inline">Západ</span>
+                </button>
+                <button
+                  onClick={() => setTimeOfDay("night")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                    timeOfDay === "night"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-white/70 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="Noční zápas pod reflektory"
+                >
+                  <span>🌙</span>
+                  <span className="hidden sm:inline">Noc</span>
+                </button>
+              </div>
+
+              {/* Přepínač počasí (vlevo pod denní dobou) */}
+              <div className="absolute top-14 left-3 z-10 flex items-center bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg animate-in fade-in zoom-in-95 duration-200">
+                {(Object.keys(WEATHER_OPTIONS) as WeatherType[]).map((wKey) => {
+                  const opt = WEATHER_OPTIONS[wKey];
+                  const active = weather === wKey;
+                  return (
+                    <button
+                      key={wKey}
+                      onClick={() => setWeather(wKey)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                        active
+                          ? "bg-sky-600 text-white shadow-sm"
+                          : "text-white/70 hover:text-white hover:bg-white/10"
+                      }`}
+                      title={`${opt.label} (${opt.desc})`}
+                    >
+                      <span>{opt.icon}</span>
+                      <span className="hidden sm:inline">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Přepínač filmových pohledů kamery (vpravo pod tlačítkem Ovládání) */}
+              <div className={`absolute top-14 ${reserveCloseButtonSpace ? "right-[4.5rem]" : "right-3"} z-10 flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg overflow-x-auto max-w-[calc(100%-20px)] sm:max-w-none animate-in fade-in zoom-in-95 duration-200`}>
+                {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).map((key) => {
+                  const vp = VIEWPOINTS[key];
+                  const active = viewpoint === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setViewpoint(key)}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
+                        active
+                          ? "bg-pitch-500 text-white shadow-sm"
+                          : "text-white/70 hover:text-white hover:bg-white/10"
+                      }`}
+                      title={vp.label}
+                    >
+                      <span>{vp.icon}</span>
+                      <span className="hidden md:inline">{vp.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

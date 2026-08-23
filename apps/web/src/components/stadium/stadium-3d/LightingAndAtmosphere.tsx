@@ -2,60 +2,180 @@
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
-import { useFrame } from "@react-three/fiber";
-import type { TimeOfDay } from "./constants";
+import { useFrame, useThree } from "@react-three/fiber";
+import type { TimeOfDay, WeatherType } from "./constants";
 
 interface LightingAndAtmosphereProps {
   timeOfDay: TimeOfDay;
+  weather?: WeatherType;
   isMobile?: boolean;
 }
 
-export function LightingAndAtmosphere({ timeOfDay, isMobile = false }: LightingAndAtmosphereProps) {
+export function LightingAndAtmosphere({
+  timeOfDay,
+  weather = "sunny",
+  isMobile = false,
+}: LightingAndAtmosphereProps) {
   const shadowMapSize = isMobile ? 1024 : 2048;
+  const { scene } = useThree();
+
+  // Dynamická atmosférická mlha podle denní doby a počasí
+  useEffect(() => {
+    let fogColor = "#C8E5F7";
+    let fogNear = 50;
+    let fogFar = 220;
+
+    if (timeOfDay === "night") {
+      fogColor = weather === "rain" ? "#0A101D" : "#0A1324";
+      fogNear = 40;
+      fogFar = 180;
+    } else if (timeOfDay === "sunset") {
+      fogColor = weather === "rain" ? "#4A3343" : "#D97757";
+      fogNear = 45;
+      fogFar = 200;
+    } else {
+      // Day
+      if (weather === "rain") {
+        fogColor = "#475569";
+        fogNear = 25;
+        fogFar = 130;
+      } else if (weather === "snow") {
+        fogColor = "#CBD5E1";
+        fogNear = 30;
+        fogFar = 140;
+      } else if (weather === "cloudy") {
+        fogColor = "#94A3B8";
+        fogNear = 40;
+        fogFar = 160;
+      } else {
+        // sunny / wind
+        fogColor = "#C8E5F7";
+        fogNear = 55;
+        fogFar = 220;
+      }
+    }
+
+    scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+    return () => {
+      scene.fog = null;
+    };
+  }, [timeOfDay, weather, scene]);
 
   return (
     <>
-      {/* Obloha podle denní doby */}
-      <DynamicSky timeOfDay={timeOfDay} />
+      {/* Obloha podle denní doby a počasí */}
+      <DynamicSky timeOfDay={timeOfDay} weather={weather} />
 
-      {/* Noční hvězdy (jen v noci) */}
-      {timeOfDay === "night" && <Stars count={isMobile ? 120 : 250} />}
+      {/* Noční hvězdy (jen v noci a pokud není hustý déšť/sněžení) */}
+      {timeOfDay === "night" && weather !== "rain" && weather !== "snow" && (
+        <Stars count={isMobile ? 120 : 250} />
+      )}
 
       {/* Denní / západové mráčky */}
-      {timeOfDay !== "night" && <LowPolyClouds count={isMobile ? 4 : 8} timeOfDay={timeOfDay} />}
+      {timeOfDay !== "night" && weather === "sunny" && (
+        <LowPolyClouds count={isMobile ? 4 : 8} timeOfDay={timeOfDay} />
+      )}
 
-      {/* Osvětlení scény */}
+      {/* Osvětlení scény — Den */}
       {timeOfDay === "day" && (
         <group>
-          <ambientLight intensity={0.65} color="#F0F6FF" />
-          <directionalLight
-            position={[40, 60, 25]}
-            intensity={1.3}
-            color="#FFF8EC"
-            castShadow={!isMobile}
-            shadow-mapSize-width={shadowMapSize}
-            shadow-mapSize-height={shadowMapSize}
-            shadow-camera-near={0.5}
-            shadow-camera-far={200}
-            shadow-camera-left={-65}
-            shadow-camera-right={65}
-            shadow-camera-top={65}
-            shadow-camera-bottom={-65}
-            shadow-bias={-0.0003}
-          />
-          {/* Fill světlo ze severu */}
-          <directionalLight position={[-35, 25, -30]} intensity={0.4} color="#D2E4F8" />
-          <hemisphereLight args={["#C8E5F7", "#447526", 0.4]} />
+          {weather === "rain" ? (
+            <>
+              {/* Zatažené bouřkové osvětlení */}
+              <ambientLight intensity={0.42} color="#94A3B8" />
+              <directionalLight
+                position={[30, 50, 20]}
+                intensity={0.65}
+                color="#CBD5E1"
+                castShadow={!isMobile}
+                shadow-mapSize-width={shadowMapSize}
+                shadow-mapSize-height={shadowMapSize}
+                shadow-camera-near={0.5}
+                shadow-camera-far={200}
+                shadow-camera-left={-65}
+                shadow-camera-right={65}
+                shadow-camera-top={65}
+                shadow-camera-bottom={-65}
+                shadow-bias={-0.0003}
+              />
+              <hemisphereLight args={["#64748B", "#2D4A27", 0.35]} />
+            </>
+          ) : weather === "snow" ? (
+            <>
+              {/* Zimní rozptýlené bílo-šedé světlo */}
+              <ambientLight intensity={0.55} color="#E2E8F0" />
+              <directionalLight
+                position={[35, 50, 20]}
+                intensity={0.85}
+                color="#F8FAFC"
+                castShadow={!isMobile}
+                shadow-mapSize-width={shadowMapSize}
+                shadow-mapSize-height={shadowMapSize}
+                shadow-camera-near={0.5}
+                shadow-camera-far={200}
+                shadow-camera-left={-65}
+                shadow-camera-right={65}
+                shadow-camera-top={65}
+                shadow-camera-bottom={-65}
+                shadow-bias={-0.0003}
+              />
+              <hemisphereLight args={["#CBD5E1", "#3E5C32", 0.4]} />
+            </>
+          ) : weather === "cloudy" ? (
+            <>
+              {/* Pod mrakem — měkké difúzní stíny */}
+              <ambientLight intensity={0.55} color="#E2E8F0" />
+              <directionalLight
+                position={[40, 55, 25]}
+                intensity={1.0}
+                color="#F1F5F9"
+                castShadow={!isMobile}
+                shadow-mapSize-width={shadowMapSize}
+                shadow-mapSize-height={shadowMapSize}
+                shadow-camera-near={0.5}
+                shadow-camera-far={200}
+                shadow-camera-left={-65}
+                shadow-camera-right={65}
+                shadow-camera-top={65}
+                shadow-camera-bottom={-65}
+                shadow-bias={-0.0003}
+              />
+              <directionalLight position={[-35, 25, -30]} intensity={0.35} color="#CBD5E1" />
+              <hemisphereLight args={["#94A3B8", "#386125", 0.38]} />
+            </>
+          ) : (
+            <>
+              {/* Jasno / Slunečno */}
+              <ambientLight intensity={0.65} color="#F0F6FF" />
+              <directionalLight
+                position={[40, 60, 25]}
+                intensity={1.3}
+                color="#FFF8EC"
+                castShadow={!isMobile}
+                shadow-mapSize-width={shadowMapSize}
+                shadow-mapSize-height={shadowMapSize}
+                shadow-camera-near={0.5}
+                shadow-camera-far={200}
+                shadow-camera-left={-65}
+                shadow-camera-right={65}
+                shadow-camera-top={65}
+                shadow-camera-bottom={-65}
+                shadow-bias={-0.0003}
+              />
+              <directionalLight position={[-35, 25, -30]} intensity={0.4} color="#D2E4F8" />
+              <hemisphereLight args={["#C8E5F7", "#447526", 0.4]} />
+            </>
+          )}
         </group>
       )}
 
+      {/* Osvětlení scény — Západ */}
       {timeOfDay === "sunset" && (
         <group>
-          <ambientLight intensity={0.45} color="#FCE5CE" />
-          {/* Nízko položené teplé zlaté slunce */}
+          <ambientLight intensity={weather === "rain" ? 0.32 : 0.45} color="#FCE5CE" />
           <directionalLight
             position={[50, 22, -35]}
-            intensity={1.6}
+            intensity={weather === "rain" ? 0.9 : 1.6}
             color="#FFA756"
             castShadow={!isMobile}
             shadow-mapSize-width={shadowMapSize}
@@ -68,19 +188,18 @@ export function LightingAndAtmosphere({ timeOfDay, isMobile = false }: LightingA
             shadow-camera-bottom={-65}
             shadow-bias={-0.0003}
           />
-          {/* Fialovo-modré protisvětlo pro večerní hloubku */}
-          <directionalLight position={[-40, 18, 40]} intensity={0.5} color="#9D76A8" />
-          <hemisphereLight args={["#F89E68", "#2E4720", 0.45]} />
+          <directionalLight position={[-40, 18, 40]} intensity={0.4} color="#9D76A8" />
+          <hemisphereLight args={["#F89E68", "#2E4720", 0.4]} />
         </group>
       )}
 
+      {/* Osvětlení scény — Noc */}
       {timeOfDay === "night" && (
         <group>
-          {/* Jemné noční měsíční a atmosférické světlo */}
-          <ambientLight intensity={0.18} color="#152136" />
+          <ambientLight intensity={weather === "rain" ? 0.12 : 0.18} color="#152136" />
           <directionalLight
             position={[-30, 45, -20]}
-            intensity={0.30}
+            intensity={weather === "rain" ? 0.18 : 0.30}
             color="#7E9EC9"
             castShadow={!isMobile}
             shadow-mapSize-width={shadowMapSize / 2}
@@ -92,7 +211,7 @@ export function LightingAndAtmosphere({ timeOfDay, isMobile = false }: LightingA
             shadow-camera-top={65}
             shadow-camera-bottom={-65}
           />
-          <hemisphereLight args={["#1A2C4A", "#0E180B", 0.22]} />
+          <hemisphereLight args={["#1A2C4A", "#0E180B", 0.2]} />
         </group>
       )}
     </>
@@ -100,7 +219,7 @@ export function LightingAndAtmosphere({ timeOfDay, isMobile = false }: LightingA
 }
 
 /** Stylizovaná obloha vykreslená do CanvasTexture */
-function DynamicSky({ timeOfDay }: { timeOfDay: TimeOfDay }) {
+function DynamicSky({ timeOfDay, weather }: { timeOfDay: TimeOfDay; weather: WeatherType }) {
   const texture = useMemo(() => {
     if (typeof document === "undefined") return null;
     const canvas = document.createElement("canvas");
@@ -112,14 +231,35 @@ function DynamicSky({ timeOfDay }: { timeOfDay: TimeOfDay }) {
     const g = ctx.createLinearGradient(0, 0, 0, 512);
 
     if (timeOfDay === "day") {
-      g.addColorStop(0, "#5597CC"); // Zenit — sytá letní modrá
-      g.addColorStop(0.5, "#9DD0ED");
-      g.addColorStop(1, "#E6F3FA"); // Horizont — měkká světlá
+      if (weather === "rain") {
+        g.addColorStop(0, "#1E293B"); // Tmavě olověný zenit
+        g.addColorStop(0.5, "#475569");
+        g.addColorStop(1, "#94A3B8"); // Mlhavý šedý horizont
+      } else if (weather === "snow") {
+        g.addColorStop(0, "#475569");
+        g.addColorStop(0.6, "#94A3B8");
+        g.addColorStop(1, "#E2E8F0"); // Mrazivě bílý horizont
+      } else if (weather === "cloudy") {
+        g.addColorStop(0, "#334155");
+        g.addColorStop(0.5, "#64748B");
+        g.addColorStop(1, "#CBD5E1");
+      } else {
+        // sunny / wind
+        g.addColorStop(0, "#5597CC"); // Zenit — sytá letní modrá
+        g.addColorStop(0.5, "#9DD0ED");
+        g.addColorStop(1, "#E6F3FA"); // Horizont — měkká světlá
+      }
     } else if (timeOfDay === "sunset") {
-      g.addColorStop(0, "#31234F"); // Zenit — večerní tmavě indigová
-      g.addColorStop(0.35, "#7E3B68"); // Purpurová
-      g.addColorStop(0.7, "#D9653B"); // Teplá oranžová
-      g.addColorStop(1, "#F7BA63"); // Horizont — zlatavá
+      if (weather === "rain") {
+        g.addColorStop(0, "#231B2D");
+        g.addColorStop(0.5, "#4F2A3D");
+        g.addColorStop(1, "#8A4D3E");
+      } else {
+        g.addColorStop(0, "#31234F"); // Zenit — večerní tmavě indigová
+        g.addColorStop(0.35, "#7E3B68"); // Purpurová
+        g.addColorStop(0.7, "#D9653B"); // Teplá oranžová
+        g.addColorStop(1, "#F7BA63"); // Horizont — zlatavá
+      }
     } else {
       // night
       g.addColorStop(0, "#040711"); // Zenit — temný vesmír
@@ -132,7 +272,7 @@ function DynamicSky({ timeOfDay }: { timeOfDay: TimeOfDay }) {
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
-  }, [timeOfDay]);
+  }, [timeOfDay, weather]);
 
   useEffect(() => {
     return () => {
@@ -208,12 +348,12 @@ function LowPolyClouds({ count = 6, timeOfDay }: { count?: number; timeOfDay: Ti
     };
     return Array.from({ length: count }).map((_, i) => {
       const angle = (i / count) * Math.PI * 2 + rand() * 0.5;
-      const radius = 60 + rand() * 35;
+      const radius = 75 + rand() * 45;
       return {
         x: Math.cos(angle) * radius,
-        y: 40 + rand() * 15,
+        y: 60 + rand() * 16,
         z: Math.sin(angle) * radius,
-        scale: 1.2 + rand() * 1.5,
+        scale: 1.5 + rand() * 1.8,
         speed: 0.04 + rand() * 0.04,
       };
     });
@@ -229,7 +369,6 @@ function LowPolyClouds({ count = 6, timeOfDay }: { count?: number; timeOfDay: Ti
     <group ref={groupRef}>
       {clouds.map((c, i) => (
         <group key={i} position={[c.x, c.y, c.z]} scale={[c.scale, c.scale * 0.6, c.scale]}>
-          {/* Kumulativní shluk 3 icosahedronů tvořící mrak */}
           <mesh position={[0, 0, 0]}>
             <icosahedronGeometry args={[4, 1]} />
             <meshStandardMaterial color={cloudColor} emissive={cloudEmissive} emissiveIntensity={0.15} roughness={0.9} flatShading />

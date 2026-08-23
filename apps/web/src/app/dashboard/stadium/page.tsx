@@ -351,10 +351,14 @@ export default function StadiumPage() {
             </div>
             <button
               onClick={() => setViewerOpen(true)}
-              className="w-full py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-soft text-sm font-heading font-bold transition-colors"
+              className="w-full py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-soft text-sm font-heading font-bold transition-colors shadow-sm"
             >
               🔍 Prohlédnout v plné velikosti
             </button>
+            <div className="flex items-center justify-center gap-1.5 text-xs text-muted text-center pt-0.5">
+              <span>💡</span>
+              <span>Pro simulaci <strong>počasí</strong> (déšť, sníh, vítr), <strong>denní doby</strong> (západ, noc) a <strong>kamer</strong> klikněte v rohu scény na <strong>🎛️ Počasí & Kamery</strong>.</span>
+            </div>
           </div>
         ) : (
           <StadiumView

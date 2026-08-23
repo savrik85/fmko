@@ -164,7 +164,8 @@
       "Bash(md5)",
       "Bash(xargs -I{} gh run rerun {} --failed)",
       "mcp__plugin_serena_serena__initial_instructions",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(npx vitest *)"
     ]
   },
   "remote": {

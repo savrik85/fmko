@@ -163,3 +163,51 @@ export const VIEWPOINTS: Record<CameraViewpoint, ViewpointDef> = {
     fov: 36,
   },
 };
+
+export type WeatherType = "sunny" | "cloudy" | "rain" | "wind" | "snow";
+
+export interface WeatherOption {
+  id: WeatherType;
+  label: string;
+  icon: string;
+  desc: string;
+  defaultTemp: number;
+}
+
+export const WEATHER_OPTIONS: Record<WeatherType, WeatherOption> = {
+  sunny: {
+    id: "sunny",
+    label: "Jasno",
+    icon: "☀️",
+    desc: "Slunečno, suché hřiště",
+    defaultTemp: 22,
+  },
+  cloudy: {
+    id: "cloudy",
+    label: "Zataženo",
+    icon: "☁️",
+    desc: "Pod mrakem, klidné podmínky",
+    defaultTemp: 16,
+  },
+  rain: {
+    id: "rain",
+    label: "Déšť",
+    icon: "🌧️",
+    desc: "Vytrvalý déšť, mokrý a kluzký terén",
+    defaultTemp: 12,
+  },
+  wind: {
+    id: "wind",
+    label: "Vítr",
+    icon: "💨",
+    desc: "Silný vítr, ztížené dlouhé pasy",
+    defaultTemp: 14,
+  },
+  snow: {
+    id: "snow",
+    label: "Sníh",
+    icon: "❄️",
+    desc: "Sněžení a mráz, ztížený pohyb",
+    defaultTemp: -2,
+  },
+};
