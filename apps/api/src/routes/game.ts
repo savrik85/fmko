@@ -15,6 +15,7 @@ import { mustSeason } from "../lib/season";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
+import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 
 const gameRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -4409,28 +4410,20 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
   }
 });
 
-// Search all players across all teams in the league
+// Search all players across all teams in the league, including its U21 mirror.
 gameRouter.get("/teams/:teamId/search-players", async (c) => {
   try {
     const teamId = c.req.param("teamId");
     const searchLeagueId = c.req.query("leagueId");
-    const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
-      .bind(teamId).first<{ league_id: string | null }>();
-    if (!team?.league_id) return c.json({ players: [] });
+    const context = await resolveTransferSearchContext(c.env.DB, teamId);
+    if (!context) return c.json({ players: [] });
 
-    const targetLeague = searchLeagueId ?? team.league_id;
+    const targetLeague = searchLeagueId ?? context.leagueId;
 
-    const rows = await c.env.DB.prepare(
-      `SELECT p.id, p.first_name, p.last_name, p.nickname, p.age, p.position, p.overall_rating, p.weekly_wage,
-       p.skills, p.physical, p.personality, p.life_context, p.avatar, p.squad_number, p.nationality,
-       t.id as team_id, t.name as team_name
-       FROM players p JOIN teams t ON p.team_id = t.id
-       WHERE t.league_id = ? AND t.id != ? AND t.user_id != 'ai' AND (p.status IS NULL OR p.status = 'active')
-       ORDER BY p.overall_rating DESC LIMIT 200`
-    ).bind(targetLeague, teamId).all();
+    const rows = await findTransferSearchPlayerRows(c.env.DB, targetLeague, context.rootTeamId);
 
     const blur = (v: number) => Math.round(v / 5) * 5;
-    const players = rows.results.map((r) => {
+    const players = rows.map((r) => {
       const isOwn = r.team_id === teamId;
       let skills: Record<string, unknown> = {};
       let physical: Record<string, unknown> = {};
