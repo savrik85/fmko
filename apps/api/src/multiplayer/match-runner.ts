@@ -305,7 +305,7 @@ export async function runScheduledMatches(
             const {calculateFacilityEffects} = await import("../stadium/stadium-generator");
             const facilities: Record<string, number> = {};
             if (stadiumRow) {
-                for (const key of ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence", "roof", "ultras_stand", "toilets"]) {
+                for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence", "roof", "ultras_stand", "toilets", "entrance_gate"]) {
                     facilities[key] = (stadiumRow[key] as number) ?? 0;
                 }
             }
@@ -430,7 +430,7 @@ export async function runScheduledMatches(
             const wf = weatherAttendanceFactor(weather);
             const shieldedWeather = wf + (1 - wf) * facilityEffects.weatherAttendanceShield;
 
-            // Apply facility attendance bonus (parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením), cap at stadium capacity
+            // Apply facility attendance bonus (lighting + parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením), cap at stadium capacity
             const attendance = Math.min(
                 Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather),
                 stadiumCapacity,

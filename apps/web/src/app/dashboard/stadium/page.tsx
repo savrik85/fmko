@@ -94,36 +94,42 @@ const FACILITY_ICONS: Record<string, string> = {
   changing_rooms: "🚪",
   showers: "🚿",
   refreshments: "🍺",
+  lighting: "💡",
   stands: "🏟",
   roof: "☂️",
   ultras_stand: "🥁",
   toilets: "🚻",
   parking: "🚗",
   fence: "🏗",
+  entrance_gate: "🎟️",
 };
 
 const FACILITY_LABELS: Record<string, string> = {
   changing_rooms: "Šatny",
   showers: "Sprchy",
   refreshments: "Občerstvení",
+  lighting: "Osvětlení",
   stands: "Tribuny",
   roof: "Zastřešení tribun",
   ultras_stand: "Sektor kotle",
   toilets: "Sociálky",
   parking: "Parkoviště",
   fence: "Oplocení",
+  entrance_gate: "Vstupní brána",
 };
 
 const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   changing_rooms: ["Převlékání za autem", "Bouda s lavicí", "Šatna se skříňkami", "Moderní šatny s vyhříváním"],
   showers: ["Hadice na dvoře", "Jedna sprcha se studenou vodou", "Sprchy s teplou vodou", "Sprchy s masážními tryskami"],
-  refreshments: ["Žádné", "Pivní stan z bazaru", "Karavan", "Hospůdka"],
-  stands: ["Diváci stojí kolem hřiště", "Pár laviček", "Dřevěná tribuna se střechou", "Betonová tribuna se sedačkami"],
+  refreshments: ["Žádné", "Dřevěný kiosek", "Zděná klubová hospůdka", "Moderní restaurace s terasou"],
+  lighting: ["Žádné", "Dva základní stožáry", "Čtyři stožáry s osvětlením hřiště", "Plné profesionální osvětlení"],
+  stands: ["Diváci stojí kolem hřiště", "Pár laviček", "Dřevěná tribuna", "Betonová tribuna se sedačkami"],
   roof: ["Bez střechy — v dešti se to vylidní", "Plachta nad lavičkami", "Plechová stříška nad tribunou", "Kompletní zastřešení tribun"],
   ultras_stand: ["Bez kotle", "Pár bubeníků za brankou", "Vlajkový sektor s bubny", "Peklo — chorály slyšet do vedlejší vsi"],
   toilets: ["Kopřivy za střídačkou", "Kadibudka", "Zděné záchodky", "Čisté sociálky s teplou vodou"],
   parking: ["Žádné", "Louka vedle hřiště", "Štěrkové parkoviště", "Asfaltové parkoviště s čarami"],
   fence: ["Žádné", "Provizorní páska", "Drátěný plot", "Zděné oplocení s branami"],
+  entrance_gate: ["Závora a pokladna na stolečku", "Dřevěná pokladna a kovaná brána", "Zděná brána se 2 turnikety", "Monumentální stadionový portál s turnikety"],
 };
 
 const LEVEL_LABELS = ["Žádné", "Základní", "Dobré", "Vynikající"];
@@ -322,21 +328,23 @@ export default function StadiumPage() {
               className="h-[280px] sm:h-[500px] rounded-xl overflow-hidden bg-gradient-to-b from-sky-100 to-sky-50 relative"
               style={{ touchAction: "pan-y" }}
             >
-              <Stadium3D
-                pitchCondition={stadium.pitchCondition}
-                pitchType={stadium.pitchType}
-                facilities={stadium.facilities}
-                teamColor={team.primary_color}
-                secondaryColor={team.secondary_color}
-                badgePattern={team.badge_pattern}
-                badgeInitials={team.badge_initials || teamInitials(team.name)}
-                badgeSymbol={team.badge_symbol}
-                badgePrimary={team.badge_primary_color}
-                badgeSecondary={team.badge_secondary_color}
-                stadiumName={stadium.stadiumName}
-                sponsors={sponsorNames}
-                customization={stadium.customization}
-              />
+              {!viewerOpen && (
+                <Stadium3D
+                  pitchCondition={stadium.pitchCondition}
+                  pitchType={stadium.pitchType}
+                  facilities={stadium.facilities}
+                  teamColor={team.primary_color}
+                  secondaryColor={team.secondary_color}
+                  badgePattern={team.badge_pattern}
+                  badgeInitials={team.badge_initials || teamInitials(team.name)}
+                  badgeSymbol={team.badge_symbol}
+                  badgePrimary={team.badge_primary_color}
+                  badgeSecondary={team.badge_secondary_color}
+                  stadiumName={stadium.stadiumName}
+                  sponsors={sponsorNames}
+                  customization={stadium.customization}
+                />
+              )}
               <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-micro px-2 py-1 rounded pointer-events-none">
                 dva prsty pro rotaci/zoom
               </div>

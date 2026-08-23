@@ -1,9 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import * as THREE from "three";
+import { Suspense, useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { Pitch } from "./Pitch";
 import { Stand } from "./Stand";
@@ -16,7 +14,18 @@ import { AdBoards } from "./AdBoards";
 import { Scoreboard } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
 import { StandRoof, UltrasSector } from "./StadiumExtras";
-import { getStadiumLayout } from "./constants";
+import { Floodlights } from "./Floodlights";
+import { EntranceGate } from "./EntranceGate";
+import { Dugouts } from "./Dugouts";
+import { VillageVibe } from "./VillageVibe";
+import { LightingAndAtmosphere } from "./LightingAndAtmosphere";
+import { CameraController } from "./CameraController";
+import {
+  getStadiumLayout,
+  VIEWPOINTS,
+  type TimeOfDay,
+  type CameraViewpoint,
+} from "./constants";
 
 export interface Stadium3DCustomization {
   fenceColor?: string | null;
@@ -54,6 +63,10 @@ interface Stadium3DProps {
   sponsors?: string[];
   customization?: Stadium3DCustomization;
   lastMatch?: LastMatchScore | null;
+  initialTimeOfDay?: TimeOfDay;
+  initialViewpoint?: CameraViewpoint;
+  showControls?: boolean;
+  reserveCloseButtonSpace?: boolean;
 }
 
 export function Stadium3D({
@@ -61,7 +74,7 @@ export function Stadium3D({
   pitchType,
   facilities,
   teamColor,
-  secondaryColor,
+  secondaryColor = "#ffffff",
   badgePattern,
   badgeInitials,
   badgeSymbol,
@@ -71,6 +84,10 @@ export function Stadium3D({
   sponsors,
   customization,
   lastMatch,
+  initialTimeOfDay = "day",
+  initialViewpoint = "overview",
+  showControls = true,
+  reserveCloseButtonSpace = false,
 }: Stadium3DProps) {
   const f = facilities;
   const layout = getStadiumLayout(f.stands ?? 0);
@@ -78,10 +95,14 @@ export function Stadium3D({
   const standColor = cust.standColor ?? teamColor;
   const seatColor = cust.seatColor ?? teamColor;
   const accentColor = cust.accentColor ?? "#C9A84C";
-  const fenceColor = cust.fenceColor ?? null;       // Fence komponenta má per-level defaulty
-  const roofColor = cust.roofColor ?? null;          // null = per-budovu default barva
+  const fenceColor = cust.fenceColor ?? null;
+  const roofColor = cust.roofColor ?? null;
 
-  // Mobile detection (matchMedia → re-render při změně viewport)
+  // Stav denní doby a kamerového pohledu
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(initialTimeOfDay);
+  const [viewpoint, setViewpoint] = useState<CameraViewpoint>(initialViewpoint);
+
+  // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -92,160 +113,258 @@ export function Stadium3D({
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  const shadowMapSize = isMobile ? 1024 : 2048;
+  const bloomIntensity = timeOfDay === "night" ? 0.7 : timeOfDay === "sunset" ? 0.45 : 0.3;
 
   return (
-    <Canvas
-      shadows={!isMobile}
-      camera={{ position: [55, 45, 55], fov: 35 }}
-      frameloop="always"
-      dpr={isMobile ? [1, 1.5] : [1, 2]}
-      gl={{ antialias: !isMobile, alpha: false, powerPreference: "high-performance" }}
-    >
-      {/* Stylizovaná gradientová obloha (sedí k low-poly víc než fyzikálně realistická drei Sky) */}
-      <GradientSky />
+    <div className="relative w-full h-full select-none">
+      {/* 3D Canvas scéna */}
+      <Canvas
+        shadows={!isMobile}
+        camera={{ position: [55, 45, 55], fov: 35 }}
+        frameloop="always"
+        dpr={isMobile ? [1, 1.5] : [1, 2]}
+        gl={{ antialias: !isMobile, alpha: false, powerPreference: "high-performance" }}
+      >
+        {/* Dynamická obloha a osvětlení (den, západ, noc) */}
+        <LightingAndAtmosphere timeOfDay={timeOfDay} isMobile={isMobile} />
 
-      {/* Lighting */}
-      <ambientLight intensity={0.6} />
-      <directionalLight
-        position={[40, 60, 25]}
-        intensity={1.25}
-        color="#FFF6E8"
-        castShadow={!isMobile}
-        shadow-mapSize-width={shadowMapSize}
-        shadow-mapSize-height={shadowMapSize}
-        shadow-camera-near={0.5}
-        shadow-camera-far={200}
-        shadow-camera-left={-60}
-        shadow-camera-right={60}
-        shadow-camera-top={60}
-        shadow-camera-bottom={-60}
-      />
-      {/* Fill světlo z opačné strany — měkčí stíny na low-poly plochách (bez shadow mapy) */}
-      <directionalLight position={[-35, 28, -30]} intensity={0.45} color="#DCE8FF" />
-      <hemisphereLight args={["#BFE0F0", "#4A7A2C", 0.35]} />
+        {/* Plynulý kontrolér kamery */}
+        <CameraController viewpoint={viewpoint} isMobile={isMobile} />
 
-      <OrbitControls
-        enableZoom
-        enablePan={false}
-        maxPolarAngle={Math.PI / 2.15}
-        minDistance={25}
-        maxDistance={120}
-        target={[0, 0, 0]}
-        // Na mobilu: jen dva prsty rotují/zoomují (single finger = scroll page)
-        touches={isMobile ? { ONE: -1 as unknown as THREE.TOUCH, TWO: THREE.TOUCH.DOLLY_ROTATE } : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
-      />
+        <Suspense fallback={null}>
+          {/* Okolí, terénní kopečky a vzdálená vesnička */}
+          <Surroundings reduceTrees={isMobile} timeOfDay={timeOfDay} />
 
-      <Suspense fallback={null}>
-        <Surroundings reduceTrees={isMobile} />
+          {/* Vesnický život v areálu: zahrádka, pivo, kouřící gril, kola, sekačka, zábradlí */}
+          <VillageVibe
+            timeOfDay={timeOfDay}
+            pubPosition={layout.buildings.refreshments}
+            changingRoomsPosition={layout.buildings.changing_rooms}
+            isMobile={isMobile}
+          />
 
-        <Fence level={f.fence ?? 0} bounds={layout.fence} colorOverride={fenceColor} />
+          {/* Osvětlovací stožáry v rozích hřiště */}
+          <Floodlights level={f.lighting ?? 0} standsLevel={f.stands ?? 0} timeOfDay={timeOfDay} isMobile={isMobile} />
 
-        <Pitch condition={pitchCondition} pitchType={pitchType} />
+          {/* Střídačky u postranní čáry */}
+          <Dugouts teamColor={teamColor} secondaryColor={secondaryColor} />
 
-        {/* 4 tribuny okolo hřiště - všechny na stejném levelu (jeden parametr stands) */}
-        <Stand side="north" level={f.stands ?? 0} teamColor={teamColor} standColor={standColor} seatColor={seatColor} accentColor={accentColor} reducedDetail={isMobile} />
-        <Stand side="south" level={f.stands ?? 0} teamColor={teamColor} standColor={standColor} seatColor={seatColor} accentColor={accentColor} reducedDetail={isMobile} />
-        {/* East/West tribuny renderujeme jen na L2+ aby vytvořily progresivní pocit růstu */}
-        {(f.stands ?? 0) >= 2 && <Stand side="east" level={f.stands} teamColor={teamColor} standColor={standColor} seatColor={seatColor} accentColor={accentColor} reducedDetail={isMobile} />}
-        {(f.stands ?? 0) >= 2 && <Stand side="west" level={f.stands} teamColor={teamColor} standColor={standColor} seatColor={seatColor} accentColor={accentColor} reducedDetail={isMobile} />}
+          {/* Obvodový plot */}
+          <Fence level={f.fence ?? 0} bounds={layout.fence} colorOverride={fenceColor} />
 
-        {/* Zastřešení tribun */}
-        <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} />
+          {/* Trávník, čáry, praporky, míč, branky */}
+          <Pitch condition={pitchCondition} pitchType={pitchType} />
 
-        {/* Sektor kotle — vlajkový sektor + buben + baner s nápisem */}
-        <UltrasSector
-          level={f.ultras_stand ?? 0}
-          primaryColor={teamColor}
-          secondaryColor={secondaryColor}
-          text={cust.ultrasText}
-          bannerColor={cust.ultrasBannerColor}
-          textColor={cust.ultrasTextColor}
-        />
-
-        {/* Budovy v rozích */}
-        <Building kind="changing_rooms" level={f.changing_rooms ?? 0} position={layout.buildings.changing_rooms} roofColorOverride={roofColor} />
-        <Building kind="showers" level={f.showers ?? 0} position={layout.buildings.showers} roofColorOverride={roofColor} />
-        <Building kind="refreshments" level={f.refreshments ?? 0} position={layout.buildings.refreshments} roofColorOverride={roofColor} />
-        <Building kind="toilets" level={f.toilets ?? 0} position={layout.buildings.toilets} roofColorOverride={roofColor} />
-
-        {/* Parkoviště */}
-        <Parking level={f.parking ?? 0} position={layout.parking} />
-
-        {/* Cedule s názvem stadionu — těsně před jižním plotem zvenku */}
-        {stadiumName && (
-          <StadiumSign
-            name={stadiumName}
-            position={[0, 0, -(layout.fence.depth / 2 + 1.5)]}
+          {/* Tribuny okolo hřiště */}
+          <Stand
+            side="north"
+            level={f.stands ?? 0}
             teamColor={teamColor}
+            standColor={standColor}
+            seatColor={seatColor}
+            accentColor={accentColor}
+            reducedDetail={isMobile}
           />
-        )}
-
-        {/* Reklamní bannery podél hřiště — jen aktivní smluvy, opakují se */}
-        {sponsors && sponsors.length > 0 && (
-          <AdBoards sponsors={sponsors} teamColor={teamColor} />
-        )}
-
-        {/* Scoreboard za severní brankou */}
-        {(cust.scoreboardLevel ?? 0) > 0 && (
-          <Scoreboard
-            level={cust.scoreboardLevel ?? 0}
-            homeScore={lastMatch?.homeScore ?? 0}
-            awayScore={lastMatch?.awayScore ?? 0}
-            homeName={lastMatch?.homeName ?? "DOMÁCÍ"}
-            awayName={lastMatch?.awayName ?? "HOSTÉ"}
+          <Stand
+            side="south"
+            level={f.stands ?? 0}
+            teamColor={teamColor}
+            standColor={standColor}
+            seatColor={seatColor}
+            accentColor={accentColor}
+            reducedDetail={isMobile}
           />
-        )}
+          {(f.stands ?? 0) >= 2 && (
+            <Stand
+              side="east"
+              level={f.stands}
+              teamColor={teamColor}
+              standColor={standColor}
+              seatColor={seatColor}
+              accentColor={accentColor}
+              reducedDetail={isMobile}
+            />
+          )}
+          {(f.stands ?? 0) >= 2 && (
+            <Stand
+              side="west"
+              level={f.stands}
+              teamColor={teamColor}
+              standColor={standColor}
+              seatColor={seatColor}
+              accentColor={accentColor}
+              reducedDetail={isMobile}
+            />
+          )}
 
-        {/* Vlajka týmu před vchodem */}
-        {(cust.flagSize ?? 0) > 0 && (
-          <TeamFlag
-            size={cust.flagSize ?? 0}
-            primaryColor={cust.flagColor || teamColor}
-            secondaryColor={secondaryColor ?? "#fff"}
-            badgePrimary={badgePrimary || teamColor}
-            badgeSecondary={badgeSecondary || secondaryColor || "#fff"}
-            pattern={badgePattern ?? "shield"}
-            initials={badgeInitials ?? "?"}
-            symbol={badgeSymbol}
-            position={[12, 0, -(layout.fence.depth / 2 + 3)]}
+          {/* Zastřešení tribun */}
+          <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} />
+
+          {/* Sektor kotle */}
+          <UltrasSector
+            level={f.ultras_stand ?? 0}
+            primaryColor={teamColor}
+            secondaryColor={secondaryColor}
+            text={cust.ultrasText}
+            bannerColor={cust.ultrasBannerColor}
+            textColor={cust.ultrasTextColor}
           />
-        )}
-      </Suspense>
 
-      {/* Post-processing: jen na desktopu (mobile = perf hit) */}
-      {!isMobile && (
-        <EffectComposer multisampling={0}>
-          <Bloom intensity={0.35} luminanceThreshold={0.7} luminanceSmoothing={0.4} mipmapBlur />
-          <Vignette eskil={false} offset={0.15} darkness={0.6} />
-        </EffectComposer>
+          {/* Budovy v rozích */}
+          <Building
+            kind="changing_rooms"
+            level={f.changing_rooms ?? 0}
+            position={layout.buildings.changing_rooms}
+            roofColorOverride={roofColor}
+            timeOfDay={timeOfDay}
+          />
+          <Building
+            kind="showers"
+            level={f.showers ?? 0}
+            position={layout.buildings.showers}
+            roofColorOverride={roofColor}
+            timeOfDay={timeOfDay}
+          />
+          <Building
+            kind="refreshments"
+            level={f.refreshments ?? 0}
+            position={layout.buildings.refreshments}
+            roofColorOverride={roofColor}
+            timeOfDay={timeOfDay}
+          />
+          <Building
+            kind="toilets"
+            level={f.toilets ?? 0}
+            position={layout.buildings.toilets}
+            roofColorOverride={roofColor}
+            timeOfDay={timeOfDay}
+          />
+
+          {/* Parkoviště */}
+          <Parking level={f.parking ?? 0} position={layout.parking} />
+
+          {/* Vstupní brána a pokladny */}
+          <EntranceGate
+            level={f.entrance_gate ?? 0}
+            position={[0, 0, -(layout.fence.depth / 2)]}
+            teamColor={teamColor}
+            secondaryColor={secondaryColor}
+            stadiumName={stadiumName}
+          />
+
+          {/* Reklamní bannery podél hřiště */}
+          {sponsors && sponsors.length > 0 && (
+            <AdBoards sponsors={sponsors} teamColor={teamColor} />
+          )}
+
+          {/* Scoreboard za severní brankou */}
+          {(cust.scoreboardLevel ?? 0) > 0 && (
+            <Scoreboard
+              level={cust.scoreboardLevel ?? 0}
+              homeScore={lastMatch?.homeScore ?? 0}
+              awayScore={lastMatch?.awayScore ?? 0}
+              homeName={lastMatch?.homeName ?? "DOMÁCÍ"}
+              awayName={lastMatch?.awayName ?? "HOSTÉ"}
+            />
+          )}
+
+          {/* Vlajka týmu před vchodem */}
+          {(cust.flagSize ?? 0) > 0 && (
+            <TeamFlag
+              size={cust.flagSize ?? 0}
+              primaryColor={cust.flagColor || teamColor}
+              secondaryColor={secondaryColor ?? "#fff"}
+              badgePrimary={badgePrimary || teamColor}
+              badgeSecondary={badgeSecondary || secondaryColor || "#fff"}
+              pattern={badgePattern ?? "shield"}
+              initials={badgeInitials ?? "?"}
+              symbol={badgeSymbol}
+              position={[12, 0, -(layout.fence.depth / 2 + 3)]}
+            />
+          )}
+        </Suspense>
+
+        {/* Post-processing */}
+        {!isMobile && (
+          <EffectComposer multisampling={0}>
+            <Bloom
+              intensity={bloomIntensity}
+              luminanceThreshold={0.65}
+              luminanceSmoothing={0.4}
+              mipmapBlur
+            />
+            <Vignette eskil={false} offset={0.15} darkness={timeOfDay === "night" ? 0.8 : 0.55} />
+          </EffectComposer>
+        )}
+      </Canvas>
+
+      {/* ═══ Interaktivní ovládací lišty na ploše 3D scény ═══ */}
+      {showControls && (
+        <>
+          {/* Přepínač denní doby (vlevo nahoře) */}
+          <div className="absolute top-3 left-3 z-10 flex items-center bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg">
+            <button
+              onClick={() => setTimeOfDay("day")}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                timeOfDay === "day"
+                  ? "bg-amber-500 text-white shadow-sm"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
+              }`}
+              title="Slunečný den"
+            >
+              <span>☀️</span>
+              <span className="hidden sm:inline">Den</span>
+            </button>
+            <button
+              onClick={() => setTimeOfDay("sunset")}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                timeOfDay === "sunset"
+                  ? "bg-orange-600 text-white shadow-sm"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
+              }`}
+              title="Západ slunce / Zlatá hodinka"
+            >
+              <span>🌅</span>
+              <span className="hidden sm:inline">Západ</span>
+            </button>
+            <button
+              onClick={() => setTimeOfDay("night")}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                timeOfDay === "night"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
+              }`}
+              title="Noční zápas pod reflektory"
+            >
+              <span>🌙</span>
+              <span className="hidden sm:inline">Noc</span>
+            </button>
+          </div>
+
+          {/* Přepínač filmových pohledů kamery (vpravo nahoře / dole) */}
+          <div className={`absolute top-3 ${reserveCloseButtonSpace ? "right-[4.5rem]" : "right-3"} z-10 flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow-lg overflow-x-auto max-w-[calc(100%-140px)] sm:max-w-none`}>
+            {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).map((key) => {
+              const vp = VIEWPOINTS[key];
+              const active = viewpoint === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setViewpoint(key)}
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
+                    active
+                      ? "bg-pitch-500 text-white shadow-sm"
+                      : "text-white/70 hover:text-white hover:bg-white/10"
+                  }`}
+                  title={vp.label}
+                >
+                  <span>{vp.icon}</span>
+                  <span className="hidden md:inline">{vp.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
-    </Canvas>
+    </div>
   );
-}
-
-/**
- * Stylizovaná obloha jako svislý gradient (CanvasTexture jako scene.background).
- * Levné, bez shaderu, konzistentnější s low-poly než fyzikálně realistická drei Sky.
- */
-function GradientSky() {
-  const texture = useMemo(() => {
-    if (typeof document === "undefined") return null;
-    const c = document.createElement("canvas");
-    c.width = 4; c.height = 512;
-    const ctx = c.getContext("2d");
-    if (!ctx) return null;
-    const g = ctx.createLinearGradient(0, 0, 0, 512);
-    g.addColorStop(0, "#6FB0DC");    // zenit — sytější modrá
-    g.addColorStop(0.5, "#A6D2EC");
-    g.addColorStop(1, "#E7F2F9");    // horizont — bledá
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 4, 512);
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, []);
-  useEffect(() => () => { texture?.dispose(); }, [texture]);
-  if (!texture) return null;
-  return <primitive object={texture} attach="background" />;
 }

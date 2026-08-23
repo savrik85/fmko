@@ -107,3 +107,59 @@ export const GROUND_COLOR = "#4A7A2C";  // tmavší zelená než hřiště
 
 // Sky/atmospheric defaults
 export const SKY_SUN_POSITION: [number, number, number] = [50, 30, 20];
+
+export type TimeOfDay = "day" | "sunset" | "night";
+
+export type CameraViewpoint = "overview" | "main_stand" | "dugout" | "behind_goal" | "orbit";
+
+export interface ViewpointDef {
+  id: CameraViewpoint;
+  label: string;
+  icon: string;
+  position: [number, number, number];
+  target: [number, number, number];
+  fov: number;
+}
+
+export const VIEWPOINTS: Record<CameraViewpoint, ViewpointDef> = {
+  overview: {
+    id: "overview",
+    label: "Areál",
+    icon: "🦅",
+    position: [55, 45, 55],
+    target: [0, 0, 0],
+    fov: 35,
+  },
+  main_stand: {
+    id: "main_stand",
+    label: "Tribuna",
+    icon: "🏟️",
+    position: [0, 8, 38],
+    target: [0, 1, 0],
+    fov: 48,
+  },
+  dugout: {
+    id: "dugout",
+    label: "Střídačka",
+    icon: "💺",
+    position: [-24, 2.5, -4],
+    target: [0, 1.5, 0],
+    fov: 52,
+  },
+  behind_goal: {
+    id: "behind_goal",
+    label: "Za brankou",
+    icon: "🎯",
+    position: [0, 4.5, -39],
+    target: [0, 1.5, 0],
+    fov: 48,
+  },
+  orbit: {
+    id: "orbit",
+    label: "Oblet",
+    icon: "🎬",
+    position: [52, 38, 52],
+    target: [0, 0, 0],
+    fov: 36,
+  },
+};

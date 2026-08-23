@@ -95,8 +95,8 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
 
       {/* Title */}
       {props.stadiumName && (
-        <div className="absolute top-4 left-4 z-10 bg-white/15 backdrop-blur-sm rounded-soft px-4 py-2 text-white">
-          <div className="font-heading font-bold text-base">{props.stadiumName}</div>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-black/60 backdrop-blur-md rounded-xl px-4 py-2 text-white border border-white/10 shadow-lg pointer-events-none">
+          <div className="font-heading font-bold text-sm sm:text-base">{props.stadiumName}</div>
         </div>
       )}
 
@@ -115,7 +115,7 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
         </div>
       ) : (
         <div className="w-screen h-dvh sm:w-[90vw] sm:h-[90vh] bg-gradient-to-b from-sky-100 to-sky-50 sm:rounded-2xl overflow-hidden">
-          <Stadium3D {...sceneProps} />
+          <Stadium3D {...sceneProps} reserveCloseButtonSpace />
         </div>
       )}
     </div>

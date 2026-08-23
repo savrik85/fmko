@@ -1,9 +1,9 @@
 "use client";
-
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { PITCH, STAND_DIMS } from "./constants";
+import { generateCorrugatedTexture } from "./materialTextures";
 
 const STAND_GAP = 2.5;
 
@@ -99,18 +99,25 @@ function WavingPennant({ color, y, phase }: { color: string; y: number; phase: n
  * Zastřešení tribun — stříška nad severní/jižní (a od L2 i V/Z) tribunou.
  * Renderuje se jen když je postavené (roofLevel>0) a existují tribuny (standsLevel>0).
  */
-export function StandRoof({
-  standsLevel,
-  roofLevel,
-  roofColor,
-}: {
+interface StandRoofProps {
   standsLevel: number;
   roofLevel: number;
   roofColor?: string | null;
-}) {
-  if (roofLevel <= 0 || standsLevel <= 0) return null;
+}
+
+export function StandRoof(props: StandRoofProps) {
+  if (props.roofLevel <= 0 || props.standsLevel <= 0) return null;
+  return <ActiveStandRoof {...props} />;
+}
+
+function ActiveStandRoof({
+  standsLevel,
+  roofLevel,
+  roofColor,
+}: StandRoofProps) {
   const dims = STAND_DIMS[Math.min(standsLevel, 3)];
   const color = roofColor ?? "#9A9DA4"; // světlejší plech
+  const roofTexture = useMemo(() => generateCorrugatedTexture(color, 8, 2), [color]);
   const overhang = 0.5 + roofLevel * 0.35; // přesah nad hřiště roste s levelem
 
   // Stejné umístění jako Stand: skupina na okraji hřiště, lokální +Z = od hřiště dozadu.
@@ -135,7 +142,13 @@ export function StandRoof({
         {/* Nakloněná plocha stříšky */}
         <mesh position={[0, roofY, roofZ]} rotation={[-0.32, 0, 0]} castShadow>
           <boxGeometry args={[alongLen + 1, 0.14, roofDepth]} />
-          <meshStandardMaterial color={color} roughness={0.5} metalness={0.35} />
+          <meshStandardMaterial
+            map={roofTexture.map}
+            bumpMap={roofTexture.bumpMap}
+            bumpScale={0.12}
+            roughness={0.5}
+            metalness={0.35}
+          />
         </mesh>
         {/* Přední okapový lem — rámuje střechu, ať nepůsobí jako plovoucí plát */}
         <mesh position={[0, frontY, frontZ]} rotation={[-0.32, 0, 0]} castShadow>
@@ -243,6 +256,189 @@ export function UltrasSector({
           </mesh>
         </group>
       )}
+
+      {/* Pyrotechnika & Dýmovnice v klubových barvách */}
+      <UltrasPyroShow
+        level={lvl}
+        primaryColor={primaryColor}
+        secondaryColor={sec}
+        z={z}
+        spread={spread}
+      />
+
+      {/* Spíkr / rozeřvávač kotle se stupínkem a megafonem (od L2) */}
+      {lvl >= 2 && (
+        <UltrasCapoStand
+          position={[-spread * 0.45, 0, z + 0.6]}
+          primaryColor={primaryColor}
+        />
+      )}
+    </group>
+  );
+}
+
+/** Pyrotechnika kotle — plápolající světlice a stoupající kouř v barvách klubu */
+function UltrasPyroShow({
+  level,
+  primaryColor,
+  secondaryColor,
+  z,
+  spread,
+}: {
+  level: number;
+  primaryColor: string;
+  secondaryColor: string;
+  z: number;
+  spread: number;
+}) {
+  const flareCount = level === 1 ? 2 : level === 2 ? 4 : 6;
+  const flarePositions = useMemo(() => {
+    const arr: Array<{ x: number; color: string; phase: number }> = [];
+    for (let i = 0; i < flareCount; i++) {
+      const x = -spread * 0.4 + (spread * 0.8 / Math.max(flareCount - 1, 1)) * i;
+      const color = i % 2 === 0 ? primaryColor : secondaryColor;
+      arr.push({ x, color, phase: i * 1.3 });
+    }
+    return arr;
+  }, [flareCount, spread, primaryColor, secondaryColor]);
+
+  return (
+    <group>
+      {flarePositions.map((fl, i) => (
+        <PyroFlare key={i} position={[fl.x, 1.3, z - 0.2]} color={fl.color} phase={fl.phase} />
+      ))}
+    </group>
+  );
+}
+
+/** Jednotlivá světlice s plápolajícím ohněm a stoupajícími oblaky kouře */
+function PyroFlare({ position, color, phase }: { position: [number, number, number]; color: string; phase: number }) {
+  const lightRef = useRef<THREE.PointLight>(null);
+  const smokeGroupRef = useRef<THREE.Group>(null);
+  const flameMeshRef = useRef<THREE.Mesh>(null);
+
+  // Počet obláčků kouře
+  const puffCount = 5;
+  const puffs = useMemo(() => {
+    return Array.from({ length: puffCount }).map((_, i) => ({
+      delay: (i / puffCount) * 2.0,
+      driftX: (Math.sin(i * 1.7) * 0.4),
+      driftZ: (Math.cos(i * 2.1) * 0.3),
+      size: 0.35 + (i * 0.12),
+    }));
+  }, [puffCount]);
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime * 2.2 + phase;
+
+    // Plápolání světla
+    if (lightRef.current) {
+      lightRef.current.intensity = 1.2 + Math.sin(t * 7.5) * 0.4 + Math.cos(t * 11) * 0.25;
+    }
+
+    // Třepotání plamene
+    if (flameMeshRef.current) {
+      const s = 0.9 + Math.sin(t * 9) * 0.25;
+      flameMeshRef.current.scale.set(s, s * 1.3, s);
+    }
+
+    // Animace stoupajícího kouře
+    if (smokeGroupRef.current) {
+      smokeGroupRef.current.children.forEach((child, idx) => {
+        const puff = puffs[idx];
+        const age = ((clock.elapsedTime * 0.85 + puff.delay + phase) % 2.0) / 2.0; // 0..1
+        child.position.y = age * 2.2;
+        child.position.x = puff.driftX * age + Math.sin(t + idx) * 0.15;
+        child.position.z = puff.driftZ * age;
+        const scale = puff.size * (0.6 + age * 1.4);
+        child.scale.set(scale, scale, scale);
+
+        const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
+        if (mat) {
+          mat.opacity = Math.sin(age * Math.PI) * 0.45;
+        }
+      });
+    }
+  });
+
+  return (
+    <group position={position}>
+      {/* Tělo světlice / patrona */}
+      <mesh castShadow>
+        <cylinderGeometry args={[0.04, 0.04, 0.3, 8]} />
+        <meshStandardMaterial color="#2B2D42" roughness={0.4} />
+      </mesh>
+
+      {/* Planoucí špička světlice */}
+      <mesh ref={flameMeshRef} position={[0, 0.18, 0]}>
+        <sphereGeometry args={[0.07, 8, 8]} />
+        <meshBasicMaterial color="#FFFFFF" />
+      </mesh>
+
+      {/* Bodové světlo osvětlující kotel barvou dýmu */}
+      <pointLight
+        ref={lightRef}
+        color={color}
+        distance={6.5}
+        intensity={1.2}
+        decay={1.8}
+      />
+
+      {/* Stoupající obláčky kouře v klubové barvě */}
+      <group ref={smokeGroupRef} position={[0, 0.25, 0]}>
+        {puffs.map((_, idx) => (
+          <mesh key={idx}>
+            <sphereGeometry args={[1, 7, 7]} />
+            <meshBasicMaterial
+              color={color}
+              transparent
+              opacity={0.4}
+              depthWrite={false}
+            />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+/** Stupínek pro spíkra kotle s megafonem */
+function UltrasCapoStand({ position, primaryColor }: { position: [number, number, number]; primaryColor: string }) {
+  return (
+    <group position={position}>
+      {/* Kovový vyvýšený stupínek */}
+      <mesh position={[0, 0.6, 0]} castShadow>
+        <boxGeometry args={[0.9, 1.2, 0.8]} />
+        <meshStandardMaterial color="#475569" metalness={0.7} roughness={0.3} />
+      </mesh>
+      {/* Zábradlíčko stupínku */}
+      <mesh position={[0, 1.5, -0.35]}>
+        <boxGeometry args={[0.9, 0.6, 0.05]} />
+        <meshStandardMaterial color="#64748B" metalness={0.8} />
+      </mesh>
+      {/* Postava spíkra otočená čelem k tribuně (-Z) */}
+      <group position={[0, 1.2, 0]} rotation={[0, Math.PI, 0]}>
+        {/* Nohy */}
+        <mesh position={[0, 0.4, 0]} castShadow>
+          <boxGeometry args={[0.26, 0.8, 0.22]} />
+          <meshStandardMaterial color="#1E293B" />
+        </mesh>
+        {/* Tělo v klubovém triku */}
+        <mesh position={[0, 1.05, 0]} castShadow>
+          <boxGeometry args={[0.38, 0.5, 0.26]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        {/* Hlava */}
+        <mesh position={[0, 1.45, 0]} castShadow>
+          <boxGeometry args={[0.22, 0.24, 0.22]} />
+          <meshStandardMaterial color="#E2A77A" />
+        </mesh>
+        {/* Megafon u úst */}
+        <mesh position={[0, 1.42, 0.22]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <coneGeometry args={[0.1, 0.24, 8, 1, true]} />
+          <meshStandardMaterial color="#EF4444" side={THREE.DoubleSide} />
+        </mesh>
+      </group>
     </group>
   );
 }

@@ -19,6 +19,19 @@ import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../t
 
 const gameRouter = new Hono<{ Bindings: Bindings }>();
 
+/** Explicitní KV přepínač pro ruční testování stadionových levelů, pouze na localhostu. */
+async function ignoreStadiumProgressLocks(cache: KVNamespace, teamId: string, requestUrl: string): Promise<boolean> {
+  const hostname = new URL(requestUrl).hostname;
+  if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "[::1]") return false;
+
+  try {
+    return await cache.get(`dev:stadium:unlock:${teamId}`) === "1";
+  } catch (error) {
+    logger.warn({ module: "game" }, "load local stadium unlock flag", error);
+    return false;
+  }
+}
+
 // ── Auth middleware ──────────────────────────────────────────────────────────
 // Všechny write operace na týmových routách vyžadují ownership ověření.
 gameRouter.use("/teams/:teamId/*", requireTeamOwnership);
@@ -1517,10 +1530,10 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
 
     const id = crypto.randomUUID();
     await c.env.DB.prepare(
-      `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, stands, parking, fence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(id, teamId, config.capacity, config.pitchCondition, config.pitchType,
-      config.changingRooms, config.showers, config.refreshments,
+      config.changingRooms, config.showers, config.refreshments, config.lighting,
       config.stands, config.parking, config.fence,
     ).run().catch((e) => logger.warn({ module: "game" }, "insert stadium", e));
 
@@ -1535,12 +1548,14 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     changing_rooms: stadium.changing_rooms as number ?? 0,
     showers: stadium.showers as number ?? 0,
     refreshments: stadium.refreshments as number ?? 0,
+    lighting: stadium.lighting as number ?? 0,
     stands: stadium.stands as number ?? 0,
     roof: stadium.roof as number ?? 0,
     ultras_stand: stadium.ultras_stand as number ?? 0,
     toilets: stadium.toilets as number ?? 0,
     parking: stadium.parking as number ?? 0,
     fence: stadium.fence as number ?? 0,
+    entrance_gate: stadium.entrance_gate as number ?? 0,
   };
 
   // Batch: team info + match count + active season
@@ -1615,6 +1630,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   // engine (match-runner) i pohár — zobrazené číslo musí sedět s limitem v zápase.
   const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
   const effectiveCapacity = ((stadium.capacity as number) ?? 200) + calculateFacilityEffects(facilities).capacityBonus;
+  const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);
 
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
@@ -1624,7 +1640,13 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     facilities,
     customization,
     visualUpgrades,
-    upgrades: getUpgradeOptions(facilities, teamInfo?.reputation ?? 0, matchCount?.cnt ?? 0, mustSeason(currentSeason?.number)),
+    upgrades: getUpgradeOptions(
+      facilities,
+      teamInfo?.reputation ?? 0,
+      matchCount?.cnt ?? 0,
+      mustSeason(currentSeason?.number),
+      ignoreProgressLocks,
+    ),
     pitchActions,
     pitchUpgrades,
   });
@@ -1659,15 +1681,24 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     changing_rooms: stadium.changing_rooms as number ?? 0,
     showers: stadium.showers as number ?? 0,
     refreshments: stadium.refreshments as number ?? 0,
+    lighting: stadium.lighting as number ?? 0,
     stands: stadium.stands as number ?? 0,
     roof: stadium.roof as number ?? 0,
     ultras_stand: stadium.ultras_stand as number ?? 0,
     toilets: stadium.toilets as number ?? 0,
     parking: stadium.parking as number ?? 0,
     fence: stadium.fence as number ?? 0,
+    entrance_gate: stadium.entrance_gate as number ?? 0,
   };
 
-  const upgrades = getUpgradeOptions(facilities, team.reputation, matchCount?.cnt ?? 0, seasonNum);
+  const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);
+  const upgrades = getUpgradeOptions(
+    facilities,
+    team.reputation,
+    matchCount?.cnt ?? 0,
+    seasonNum,
+    ignoreProgressLocks,
+  );
   const upgrade = upgrades.find((u) => u.facility === body.facility);
   if (!upgrade) return c.json({ error: "No upgrade available" }, 400);
   if (upgrade.locked) return c.json({ error: upgrade.lockReason ?? "Zamčeno" }, 400);

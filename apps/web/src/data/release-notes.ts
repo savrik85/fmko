@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-23",
+    emoji: "🏟️",
+    title: "Vylepšení 3D stadionu",
+    items: [
+      "Věrnější textury budov, tribun, střech a sítí v brankách.",
+      "Nové vylepšitelné zázemí: Vstupní brána a pokladny (L0–L3).",
+      "Pyrotechnika a dýmovnice v klubových barvách v sektoru kotle.",
+      "Vyladěné osvětlení v rozích stadionu a živější atmosféra kolem hřiště.",
+    ],
+  },
+  {
     date: "2026-08-22",
     emoji: "🎫",
     title: "Sázková kancelář — Okresní tiket",

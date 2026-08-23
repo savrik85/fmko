@@ -112,21 +112,23 @@ export default function VisitStadiumPage() {
       {/* 3D scéna */}
       <div className="card p-4 sm:p-5">
         <div className="h-[280px] sm:h-[500px] rounded-xl overflow-hidden bg-gradient-to-b from-sky-100 to-sky-50" style={{ touchAction: "pan-y" }}>
-          <Stadium3D
-            pitchCondition={stadium.pitchCondition}
-            pitchType={stadium.pitchType}
-            facilities={stadium.facilities}
-            teamColor={team.primary_color}
-            secondaryColor={team.secondary_color}
-            badgePattern={team.badge_pattern}
-            badgeInitials={team.badge_initials || teamInitials(team.name)}
-            badgeSymbol={team.badge_symbol}
-            badgePrimary={team.badge_primary_color}
-            badgeSecondary={team.badge_secondary_color}
-            stadiumName={stadium.stadiumName}
-            sponsors={sponsors}
-            customization={stadium.customization}
-          />
+          {!viewerOpen && (
+            <Stadium3D
+              pitchCondition={stadium.pitchCondition}
+              pitchType={stadium.pitchType}
+              facilities={stadium.facilities}
+              teamColor={team.primary_color}
+              secondaryColor={team.secondary_color}
+              badgePattern={team.badge_pattern}
+              badgeInitials={team.badge_initials || teamInitials(team.name)}
+              badgeSymbol={team.badge_symbol}
+              badgePrimary={team.badge_primary_color}
+              badgeSecondary={team.badge_secondary_color}
+              stadiumName={stadium.stadiumName}
+              sponsors={sponsors}
+              customization={stadium.customization}
+            />
+          )}
         </div>
         <button
           onClick={() => setViewerOpen(true)}

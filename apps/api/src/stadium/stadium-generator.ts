@@ -12,6 +12,7 @@ export interface StadiumConfig {
   changingRooms: number;
   showers: number;
   refreshments: number;
+  lighting: number;
   stands: number;
   parking: number;
   fence: number;
@@ -20,31 +21,31 @@ export interface StadiumConfig {
 const BASE_BY_SIZE: Record<string, StadiumConfig> = {
   hamlet: {
     capacity: 80, pitchCondition: 30, pitchType: "natural",
-    changingRooms: 0, showers: 0, refreshments: 0, stands: 0, parking: 0, fence: 0,
+    changingRooms: 0, showers: 0, refreshments: 0, lighting: 0, stands: 0, parking: 0, fence: 0,
   },
   vesnice: {
     capacity: 150, pitchCondition: 40, pitchType: "natural",
-    changingRooms: 1, showers: 0, refreshments: 0, stands: 0, parking: 0, fence: 0,
+    changingRooms: 1, showers: 0, refreshments: 0, lighting: 0, stands: 0, parking: 0, fence: 0,
   },
   obec: {
     capacity: 250, pitchCondition: 50, pitchType: "natural",
-    changingRooms: 1, showers: 1, refreshments: 0, stands: 0, parking: 1, fence: 0,
+    changingRooms: 1, showers: 1, refreshments: 0, lighting: 0, stands: 0, parking: 1, fence: 0,
   },
   mestys: {
     capacity: 400, pitchCondition: 55, pitchType: "natural",
-    changingRooms: 1, showers: 1, refreshments: 1, stands: 1, parking: 1, fence: 1,
+    changingRooms: 1, showers: 1, refreshments: 1, lighting: 0, stands: 1, parking: 1, fence: 1,
   },
   mesto: {
     capacity: 600, pitchCondition: 60, pitchType: "natural",
-    changingRooms: 2, showers: 1, refreshments: 1, stands: 1, parking: 1, fence: 1,
+    changingRooms: 2, showers: 1, refreshments: 1, lighting: 0, stands: 1, parking: 1, fence: 1,
   },
   small_city: {
     capacity: 800, pitchCondition: 65, pitchType: "natural",
-    changingRooms: 2, showers: 2, refreshments: 1, stands: 1, parking: 2, fence: 1,
+    changingRooms: 2, showers: 2, refreshments: 1, lighting: 0, stands: 1, parking: 2, fence: 1,
   },
   city: {
     capacity: 1200, pitchCondition: 70, pitchType: "hybrid",
-    changingRooms: 2, showers: 2, refreshments: 2, stands: 2, parking: 2, fence: 2,
+    changingRooms: 2, showers: 2, refreshments: 2, lighting: 0, stands: 2, parking: 2, fence: 2,
   },
 };
 
@@ -80,12 +81,14 @@ const FACILITY_LABELS: Record<string, string> = {
   changing_rooms: "Šatny",
   showers: "Sprchy",
   refreshments: "Občerstvení",
+  lighting: "Osvětlení",
   stands: "Tribuny",
   roof: "Zastřešení tribun",
   ultras_stand: "Sektor kotle",
   toilets: "Sociálky",
   parking: "Parkoviště",
   fence: "Oplocení",
+  entrance_gate: "Vstupní brána",
 };
 
 // Stadium = dlouhodobá investice přes více sezón
@@ -95,24 +98,28 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   changing_rooms: [0, 25000, 85000, 220000],
   showers: [0, 18000, 60000, 160000],
   refreshments: [0, 5000, 110000, 280000],
+  lighting: [0, 95000, 280000, 600000],
   stands: [0, 55000, 170000, 450000],
   roof: [0, 30000, 90000, 230000],
   ultras_stand: [0, 22000, 70000, 175000],
   toilets: [0, 12000, 40000, 100000],
   parking: [0, 20000, 60000, 150000],
   fence: [0, 15000, 50000, 130000],
+  entrance_gate: [0, 12000, 45000, 120000],
 };
 
 const UPGRADE_EFFECTS: Record<string, string[]> = {
   changing_rooms: ["", "+3 morálka domácích", "+5 morálka, -5% zranění doma", "+8 morálka, -10% zranění"],
   showers: ["", "+2 regenerace kondice/den", "+4 regenerace kondice/den", "+6 regenerace kondice/den"],
   refreshments: ["", "Umožní vlastní provoz občerstvení", "Vyšší pronájem pro externí provozovatele", "Prémiové zázemí, bez výdajů za občerstvení po zápase"],
+  lighting: ["", "2 základní osvětlovací stožáry", "4 stožáry — +5% návštěvnost", "Profesionální osvětlení — +10% návštěvnost"],
   stands: ["", "+50 kapacita", "+150 kapacita", "+300 kapacita"],
   roof: ["", "V ošklivém počasí odejde míň lidí", "Solidní zastřešení — počasí moc neřeší", "Kompletní střecha — na počasí kašlou"],
   ultras_stand: ["", "Hlasitější kotel — mírná výhoda doma", "Bubny a vlajky — větší výhoda doma", "Peklo pro soupeře — velká domácí výhoda"],
   toilets: ["", "Kadibudky místo kopřiv — +spokojenost", "Slušné záchodky — víc spokojenosti", "Čisté sociálky s teplou vodou — fanoušci spokojení"],
   parking: ["", "+5% návštěvnost", "+10% návštěvnost", "+15% návštěvnost"],
   fence: ["", "Víc lidí zaplatí vstupné", "Platí všichni diváci", "Platí všichni, prémiový stadion"],
+  entrance_gate: ["", "Rychlejší odbavení — +2% návštěvnost", "2 turnikety — +5% návštěvnost", "Elektronické turnikety — +10% návštěvnost"],
 };
 
 // Unlock requirements per level
@@ -166,6 +173,7 @@ export function getUpgradeOptions(
   teamReputation: number = 0,
   matchesPlayed: number = 0,
   currentSeason: number = 1,
+  ignoreProgressLocks: boolean = false,
 ): UpgradeOption[] {
   const options: UpgradeOption[] = [];
   for (const [key, label] of Object.entries(FACILITY_LABELS)) {
@@ -174,7 +182,9 @@ export function getUpgradeOptions(
     const next = current + 1;
     const costs = UPGRADE_COSTS[key];
     const effects = UPGRADE_EFFECTS[key];
-    const req = STADIUM_UNLOCK[next] ?? {};
+    // Lokální vizuální testování může přeskočit časové/progresní podmínky,
+    // ale logické návaznosti zařízení (např. střecha potřebuje tribunu) platí dál.
+    const req = ignoreProgressLocks ? {} : (STADIUM_UNLOCK[next] ?? {});
 
     let locked = false;
     // lockDetail nese VŠECHNY nesplněné podmínky. Dřív se lockReason přiřazoval
@@ -235,10 +245,10 @@ export interface StadiumFacilityEffects {
   conditionRegenBonus: number;    // sprchy: +body regenerace kondice/den
   refreshmentPerAttendee: number; // občerstvení: Kč příjem za diváka (external mode)
   noRefreshmentExpense: boolean;  // občerstvení L3: zruší výdaj za občerstvení
-  attendanceBonus: number;        // parkoviště: % bonus návštěvnosti
+  attendanceBonus: number;        // osvětlení + parkoviště + vstupní brána: % bonus návštěvnosti
   capacityBonus: number;          // tribuny: +kapacita
   ticketPriceBonus: number;       // oplocení L2+: % bonus na cenu vstupného
-  fencePayingRatio: number;       // oplocení: podíl diváků co reálně zaplatí (L0 = 0.3, L1+ = 1.0)
+  fencePayingRatio: number;       // oplocení: podíl diváků, kteří reálně zaplatí
   weatherAttendanceShield: number; // zastřešení: podíl počasového postihu návštěvy, který se zruší (0.0-1.0)
   homeAdvantageBonus: number;     // sektor kotle: + k domácí výhodě v zápase
   homeCrowdMoraleBonus: number;   // sektor kotle: + morálka domácích od kotle
@@ -249,12 +259,14 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   const cr = facilities.changing_rooms ?? 0;
   const sh = facilities.showers ?? 0;
   const re = facilities.refreshments ?? 0;
+  const li = facilities.lighting ?? 0;
   const st = facilities.stands ?? 0;
   const pa = facilities.parking ?? 0;
   const fe = facilities.fence ?? 0;
   const ro = facilities.roof ?? 0;
   const ul = facilities.ultras_stand ?? 0;
   const to = facilities.toilets ?? 0;
+  const eg = facilities.entrance_gate ?? 0;
 
   return {
     homeMoraleBonus: [0, 3, 5, 8][cr] ?? 0,
@@ -262,7 +274,9 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     conditionRegenBonus: [0, 2, 4, 6][sh] ?? 0,
     refreshmentPerAttendee: [0, 8, 18, 30][re] ?? 0,
     noRefreshmentExpense: re >= 3,
-    attendanceBonus: [0, 0.05, 0.10, 0.15][pa] ?? 0,
+    attendanceBonus: ([0, 0, 0.05, 0.10][li] ?? 0)
+      + ([0, 0.05, 0.10, 0.15][pa] ?? 0)
+      + ([0, 0.02, 0.05, 0.10][eg] ?? 0),
     capacityBonus: [0, 50, 150, 300][st] ?? 0,
     ticketPriceBonus: [0, 0, 0.10, 0.20][fe] ?? 0,
     fencePayingRatio: [0.3, 0.65, 1.0, 1.0][fe] ?? 0.3,
