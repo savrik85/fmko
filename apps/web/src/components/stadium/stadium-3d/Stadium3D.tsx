@@ -1,8 +1,8 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
-import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { Pitch } from "./Pitch";
 import { Stand } from "./Stand";
 import { Building } from "./Building";
@@ -132,8 +132,6 @@ export function Stadium3D({
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  const bloomIntensity = timeOfDay === "night" ? 0.7 : timeOfDay === "sunset" ? 0.45 : 0.3;
-
   return (
     <div className="relative w-full h-full select-none">
       {/* 3D Canvas scéna */}
@@ -141,8 +139,14 @@ export function Stadium3D({
         shadows={!isMobile}
         camera={{ position: [55, 45, 55], fov: 35 }}
         frameloop="always"
-        dpr={isMobile ? [1, 1.5] : [1, 2]}
-        gl={{ antialias: !isMobile, alpha: false, powerPreference: "high-performance" }}
+        dpr={isMobile ? [1, 1.25] : [1, 1.75]}
+        gl={{
+          antialias: true,
+          alpha: false,
+          powerPreference: "high-performance",
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: timeOfDay === "night" ? 1.15 : timeOfDay === "sunset" ? 1.05 : 0.95,
+        }}
       >
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} />
@@ -305,19 +309,6 @@ export function Stadium3D({
             />
           )}
         </Suspense>
-
-        {/* Post-processing */}
-        {!isMobile && (
-          <EffectComposer multisampling={0}>
-            <Bloom
-              intensity={bloomIntensity}
-              luminanceThreshold={0.65}
-              luminanceSmoothing={0.4}
-              mipmapBlur
-            />
-            <Vignette eskil={false} offset={0.15} darkness={timeOfDay === "night" ? 0.8 : 0.55} />
-          </EffectComposer>
-        )}
       </Canvas>
 
       {/* ═══ Interaktivní ovládací lišty na ploše 3D scény ═══ */}

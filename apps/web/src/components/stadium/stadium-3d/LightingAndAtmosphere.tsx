@@ -16,46 +16,36 @@ export function LightingAndAtmosphere({
   weather = "sunny",
   isMobile = false,
 }: LightingAndAtmosphereProps) {
-  const shadowMapSize = isMobile ? 1024 : 2048;
+  const shadowMapSize = isMobile ? 512 : 1024;
   const { scene } = useThree();
 
   // Dynamická atmosférická mlha podle denní doby a počasí
   useEffect(() => {
-    let fogColor = "#C8E5F7";
-    let fogNear = 50;
-    let fogFar = 220;
-
-    if (timeOfDay === "night") {
-      fogColor = weather === "rain" ? "#0A101D" : "#0A1324";
-      fogNear = 40;
-      fogFar = 180;
-    } else if (timeOfDay === "sunset") {
-      fogColor = weather === "rain" ? "#4A3343" : "#D97757";
-      fogNear = 45;
-      fogFar = 200;
-    } else {
-      // Day
-      if (weather === "rain") {
-        fogColor = "#475569";
-        fogNear = 25;
-        fogFar = 130;
+    // U jasného dne a větru nechceme žádnou mlhu u stadionu při oddálení
+    if (timeOfDay === "day") {
+      if (weather === "sunny" || weather === "wind") {
+        scene.fog = null;
+        return () => {
+          scene.fog = null;
+        };
+      } else if (weather === "rain") {
+        scene.fog = new THREE.Fog("#475569", 110, 320);
       } else if (weather === "snow") {
-        fogColor = "#CBD5E1";
-        fogNear = 30;
-        fogFar = 140;
+        scene.fog = new THREE.Fog("#CBD5E1", 120, 340);
       } else if (weather === "cloudy") {
-        fogColor = "#94A3B8";
-        fogNear = 40;
-        fogFar = 160;
-      } else {
-        // sunny / wind
-        fogColor = "#C8E5F7";
-        fogNear = 55;
-        fogFar = 220;
+        scene.fog = new THREE.Fog("#94A3B8", 140, 380);
       }
+    } else if (timeOfDay === "sunset") {
+      if (weather === "rain") {
+        scene.fog = new THREE.Fog("#4A3343", 90, 280);
+      } else {
+        scene.fog = new THREE.Fog("#D97757", 180, 500);
+      }
+    } else {
+      // night
+      scene.fog = new THREE.Fog(weather === "rain" ? "#0A101D" : "#0A1324", 160, 420);
     }
 
-    scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
     return () => {
       scene.fog = null;
     };
@@ -218,17 +208,24 @@ export function LightingAndAtmosphere({
   );
 }
 
+// Globální cache pro textury oblohy (vygeneruje se jen 1x)
+const skyTextureCache = new Map<string, THREE.CanvasTexture>();
+
 /** Stylizovaná obloha vykreslená do CanvasTexture */
 function DynamicSky({ timeOfDay, weather }: { timeOfDay: TimeOfDay; weather: WeatherType }) {
   const texture = useMemo(() => {
     if (typeof document === "undefined") return null;
+    const cacheKey = `${timeOfDay}:${weather}`;
+    const cached = skyTextureCache.get(cacheKey);
+    if (cached) return cached;
+
     const canvas = document.createElement("canvas");
     canvas.width = 4;
-    canvas.height = 512;
+    canvas.height = 128;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    const g = ctx.createLinearGradient(0, 0, 0, 512);
+    const g = ctx.createLinearGradient(0, 0, 0, 128);
 
     if (timeOfDay === "day") {
       if (weather === "rain") {
@@ -268,17 +265,12 @@ function DynamicSky({ timeOfDay, weather }: { timeOfDay: TimeOfDay; weather: Wea
     }
 
     ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 4, 512);
+    ctx.fillRect(0, 0, 4, 128);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
+    skyTextureCache.set(cacheKey, tex);
     return tex;
   }, [timeOfDay, weather]);
-
-  useEffect(() => {
-    return () => {
-      texture?.dispose();
-    };
-  }, [texture]);
 
   if (!texture) return null;
   return <primitive object={texture} attach="background" />;
