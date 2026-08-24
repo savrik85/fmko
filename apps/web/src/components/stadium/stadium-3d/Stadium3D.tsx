@@ -314,32 +314,29 @@ export function Stadium3D({
       {/* ═══ Interaktivní ovládací lišty na ploše 3D scény ═══ */}
       {showControls && (
         <>
-          {/* Tlačítko pro zapnutí / vypnutí ovládacích panelů */}
-          <div className={`absolute top-3 ${reserveCloseButtonSpace ? "right-[4.5rem]" : "right-3"} z-20`}>
-            <button
-              onClick={() => setControlsVisible(!controlsVisible)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-heading font-bold transition-all shadow-lg backdrop-blur-md border ${
-                controlsVisible
-                  ? "bg-pitch-500 text-white border-pitch-400/40 shadow-pitch-500/20"
-                  : "bg-black/65 hover:bg-black/85 text-white/90 hover:text-white border-white/15"
-              }`}
-              title={controlsVisible ? "Skrýt ovládací panely" : "Zobrazit nastavení počasí, denní doby a kamer"}
-            >
-              <span>{controlsVisible ? "✕" : "🎛️"}</span>
-              <span>{controlsVisible ? "Zavřít" : "Počasí & Kamery"}</span>
-            </button>
-          </div>
+          {/* Tlačítko v rohu (zobrazí se, když je panel zavřený) */}
+          {!controlsVisible && (
+            <div className={`absolute top-3 ${reserveCloseButtonSpace ? "right-14" : "right-3"} z-20`}>
+              <button
+                onClick={() => setControlsVisible(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-heading font-bold transition-all shadow-lg backdrop-blur-md border bg-black/75 hover:bg-black/90 text-white/90 hover:text-white border-white/15 active:scale-95"
+                title="Zobrazit nastavení počasí, denní doby a kamer"
+              >
+                <span>🎛️</span>
+                <span>Počasí & Kamery</span>
+              </button>
+            </div>
+          )}
 
-          {/* Panely se zobrazí pouze pokud je controlsVisible = true */}
+          {/* Spodní elegantní plovoucí panel nástrojů (Glass Control Dock) */}
           {controlsVisible && (
-            <div className={`absolute top-12 inset-x-2 sm:inset-x-4 ${reserveCloseButtonSpace ? "sm:right-20" : ""} z-20 pointer-events-none flex flex-col md:flex-row items-start md:items-center justify-between gap-2 animate-in fade-in zoom-in-95 duration-200`}>
-              {/* Denní doba + Počasí */}
-              <div className="flex flex-wrap items-center gap-1.5 bg-black/85 backdrop-blur-xl p-1.5 rounded-2xl border border-white/15 shadow-2xl pointer-events-auto max-w-full overflow-x-auto">
-                {/* Denní doba */}
-                <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl">
+            <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100%-16px)] sm:max-w-max animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-1.5 bg-black/85 backdrop-blur-xl p-1.5 sm:px-2.5 sm:py-1.5 rounded-2xl border border-white/20 shadow-2xl">
+                {/* 1. Denní doba */}
+                <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl shrink-0">
                   <button
                     onClick={() => setTimeOfDay("day")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
                       timeOfDay === "day"
                         ? "bg-amber-500 text-white shadow-sm"
                         : "text-white/70 hover:text-white hover:bg-white/10"
@@ -347,38 +344,38 @@ export function Stadium3D({
                     title="Slunečný den"
                   >
                     <span>☀️</span>
-                    <span className="hidden sm:inline">Den</span>
+                    <span className="hidden md:inline">Den</span>
                   </button>
                   <button
                     onClick={() => setTimeOfDay("sunset")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
                       timeOfDay === "sunset"
                         ? "bg-orange-600 text-white shadow-sm"
                         : "text-white/70 hover:text-white hover:bg-white/10"
                     }`}
-                    title="Západ slunce / Zlatá hodinka"
+                    title="Západ slunce"
                   >
                     <span>🌅</span>
-                    <span className="hidden sm:inline">Západ</span>
+                    <span className="hidden md:inline">Západ</span>
                   </button>
                   <button
                     onClick={() => setTimeOfDay("night")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
                       timeOfDay === "night"
                         ? "bg-indigo-600 text-white shadow-sm"
                         : "text-white/70 hover:text-white hover:bg-white/10"
                     }`}
-                    title="Noční zápas pod reflektory"
+                    title="Noc"
                   >
                     <span>🌙</span>
-                    <span className="hidden sm:inline">Noc</span>
+                    <span className="hidden md:inline">Noc</span>
                   </button>
                 </div>
 
-                <div className="w-px h-5 bg-white/20 hidden sm:block" />
+                <div className="w-px h-5 bg-white/20 hidden sm:block shrink-0" />
 
-                {/* Počasí */}
-                <div className="flex items-center gap-0.5">
+                {/* 2. Počasí */}
+                <div className="flex items-center gap-0.5 shrink-0">
                   {(Object.keys(WEATHER_OPTIONS) as WeatherType[]).map((wKey) => {
                     const opt = WEATHER_OPTIONS[wKey];
                     const active = weather === wKey;
@@ -399,29 +396,42 @@ export function Stadium3D({
                     );
                   })}
                 </div>
-              </div>
 
-              {/* Filmové pohledy kamery */}
-              <div className="flex items-center gap-0.5 bg-black/85 backdrop-blur-xl p-1.5 rounded-2xl border border-white/15 shadow-2xl pointer-events-auto max-w-full overflow-x-auto">
-                {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).map((key) => {
-                  const vp = VIEWPOINTS[key];
-                  const active = viewpoint === key;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setViewpoint(key)}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
-                        active
-                          ? "bg-pitch-500 text-white shadow-sm"
-                          : "text-white/70 hover:text-white hover:bg-white/10"
-                      }`}
-                      title={vp.label}
-                    >
-                      <span>{vp.icon}</span>
-                      <span className="text-[11px] sm:text-xs">{vp.label}</span>
-                    </button>
-                  );
-                })}
+                <div className="w-px h-5 bg-white/20 hidden sm:block shrink-0" />
+
+                {/* 3. Kamery */}
+                <div className="flex items-center gap-0.5 shrink-0">
+                  {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).map((key) => {
+                    const vp = VIEWPOINTS[key];
+                    const active = viewpoint === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setViewpoint(key)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
+                          active
+                            ? "bg-pitch-500 text-white shadow-sm"
+                            : "text-white/70 hover:text-white hover:bg-white/10"
+                        }`}
+                        title={vp.label}
+                      >
+                        <span>{vp.icon}</span>
+                        <span className="text-[10px] sm:text-xs">{vp.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="w-px h-5 bg-white/20 shrink-0" />
+
+                {/* 4. Tlačítko zavřít panel */}
+                <button
+                  onClick={() => setControlsVisible(false)}
+                  className="text-white/60 hover:text-white px-2 py-1 rounded-lg hover:bg-white/15 text-xs font-heading font-bold transition-all shrink-0"
+                  title="Zavřít panel ovládání"
+                >
+                  ✕
+                </button>
               </div>
             </div>
           )}

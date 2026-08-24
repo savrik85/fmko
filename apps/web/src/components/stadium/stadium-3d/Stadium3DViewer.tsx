@@ -86,11 +86,11 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[var(--z-viewer)] bg-black/95 flex items-center justify-center">
+    <div className="fixed inset-0 z-[var(--z-viewer)] bg-black w-screen h-screen min-h-dvh overflow-hidden select-none">
       {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 w-12 h-12 rounded-full bg-white/15 hover:bg-white/30 text-white text-2xl font-bold flex items-center justify-center transition-colors backdrop-blur-sm"
+        className="absolute top-3 right-3 z-30 w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 border border-white/20 text-white text-xl font-bold flex items-center justify-center transition-all backdrop-blur-md shadow-lg"
         aria-label="Zavřít"
       >
         ✕
@@ -98,14 +98,15 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
 
       {/* Title */}
       {props.stadiumName && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-black/60 backdrop-blur-md rounded-xl px-4 py-2 text-white border border-white/10 shadow-lg pointer-events-none">
-          <div className="font-heading font-bold text-sm sm:text-base">{props.stadiumName}</div>
+        <div className="absolute top-3 left-3 z-20 bg-black/70 backdrop-blur-md rounded-xl px-3 py-1.5 text-white border border-white/15 shadow-lg pointer-events-none flex items-center gap-1.5">
+          <span>🏟️</span>
+          <span className="font-heading font-bold text-xs sm:text-sm">{props.stadiumName}</span>
         </div>
       )}
 
       {/* Portrait orientation prompt na mobilu */}
       {isPortraitMobile ? (
-        <div className="text-white text-center px-6">
+        <div className="w-full h-full flex flex-col items-center justify-center text-white text-center px-6 bg-black">
           <div className="text-7xl mb-4 animate-pulse">📱</div>
           <div className="font-heading font-bold text-xl mb-2">Otoč zařízení</div>
           <div className="text-sm opacity-80">Pro nejlepší zážitek otoč telefon do landscape režimu</div>
@@ -117,7 +118,7 @@ export function Stadium3DViewer(props: Stadium3DViewerProps) {
           </button>
         </div>
       ) : (
-        <div className="w-full h-full md:w-[94vw] md:h-[92vh] md:max-w-7xl md:rounded-2xl overflow-hidden relative bg-black">
+        <div className="w-full h-full relative bg-black">
           <Stadium3D {...sceneProps} reserveCloseButtonSpace />
         </div>
       )}
