@@ -49,19 +49,27 @@ export function WeatherEffects({
   );
 }
 
-/** 🌧️ Částice deště s reálným náklonem a rychlým pádem */
+/** 🌧️ Částice deště s reálným náklonem, variabilní rychlostí a plynulým pádem */
 function RainParticles({ count }: { count: number }) {
   const lineCount = count;
-  const positions = useMemo(() => {
-    const pos = new Float32Array(lineCount * 6); // 2 body na čáru (x,y,z - start, x,y,z - end)
+  const { positions, speeds, lengths } = useMemo(() => {
+    const pos = new Float32Array(lineCount * 6);
+    const spd = new Float32Array(lineCount);
+    const lenArr = new Float32Array(lineCount);
+
     for (let i = 0; i < lineCount; i++) {
       const idx = i * 6;
-      const x = (Math.random() - 0.5) * 110;
-      const y = Math.random() * 48;
-      const z = (Math.random() - 0.5) * 125;
-      const len = 0.7 + Math.random() * 0.5;
-      const slantX = 0.16;
-      const slantZ = 0.09;
+      const x = (Math.random() - 0.5) * 125;
+      const y = Math.random() * 55; // Rovnoměrně rozprostřeno po celé výšce
+      const z = (Math.random() - 0.5) * 140;
+      const len = 0.75 + Math.random() * 0.65;
+      const speed = 46 + Math.random() * 32; // Různé rychlosti kapek 46..78 m/s zabraňují shlukování do vln
+
+      spd[i] = speed;
+      lenArr[i] = len;
+
+      const slantX = len * 0.16;
+      const slantZ = len * 0.09;
 
       pos[idx] = x;
       pos[idx + 1] = y;
@@ -70,41 +78,43 @@ function RainParticles({ count }: { count: number }) {
       pos[idx + 4] = y - len;
       pos[idx + 5] = z + slantZ;
     }
-    return pos;
+    return { positions: pos, speeds: spd, lengths: lenArr };
   }, [lineCount]);
 
   const geoRef = useRef<THREE.BufferGeometry>(null);
 
   useFrame((_, delta) => {
     if (!geoRef.current) return;
+    const dt = Math.min(delta, 0.05); // Ochrana proti skokům při přepnutí tabu
     const posAttr = geoRef.current.attributes.position;
     const arr = posAttr.array as Float32Array;
-    const speed = 48 * delta;
-    const slantX = 6.5 * delta;
-    const slantZ = 3.5 * delta;
 
     for (let i = 0; i < lineCount; i++) {
       const idx = i * 6;
-      arr[idx + 1] -= speed;
-      arr[idx + 4] -= speed;
-      arr[idx] += slantX;
-      arr[idx + 3] += slantX;
-      arr[idx + 2] += slantZ;
-      arr[idx + 5] += slantZ;
+      const v = speeds[i] * dt;
+      const sx = v * 0.16;
+      const sz = v * 0.09;
 
-      // Respawn nahoře vysoko v oblacích
+      arr[idx] += sx;
+      arr[idx + 1] -= v;
+      arr[idx + 2] += sz;
+      arr[idx + 3] += sx;
+      arr[idx + 4] -= v;
+      arr[idx + 5] += sz;
+
+      // Plynulý respawn napříč širokým pásem oblačnosti
       if (arr[idx + 4] < 0) {
-        const x = (Math.random() - 0.5) * 110;
-        const y = 46 + Math.random() * 6;
-        const z = (Math.random() - 0.5) * 125;
-        const len = 0.7 + Math.random() * 0.5;
+        const x = (Math.random() - 0.5) * 125;
+        const y = 48 + Math.random() * 18;
+        const z = (Math.random() - 0.5) * 140;
+        const len = lengths[i];
 
         arr[idx] = x;
         arr[idx + 1] = y;
         arr[idx + 2] = z;
-        arr[idx + 3] = x + 0.16;
+        arr[idx + 3] = x + len * 0.16;
         arr[idx + 4] = y - len;
-        arr[idx + 5] = z + 0.09;
+        arr[idx + 5] = z + len * 0.09;
       }
     }
     posAttr.needsUpdate = true;
@@ -139,7 +149,7 @@ function RainGroundSplashes({ count }: { count: number }) {
       z: (Math.random() - 0.5) * 75,
       scale: Math.random(),
       speed: 2.5 + Math.random() * 3.5,
-      time: Math.random() * Math.PI * 2,
+      time: Math.random(),
     }));
   }, [count]);
 
@@ -205,7 +215,7 @@ function SnowParticles({ count }: { count: number }) {
       const curZ = f.z + Math.cos(t * f.swaySpeed * 0.8 + f.seed) * f.swayAmp;
 
       if (f.y < 0.1) {
-        f.y = 46 + Math.random() * 6;
+        f.y = 48 + Math.random() * 16;
         f.x = (Math.random() - 0.5) * 110;
         f.z = (Math.random() - 0.5) * 125;
       }
