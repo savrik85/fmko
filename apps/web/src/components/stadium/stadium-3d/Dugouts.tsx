@@ -2,16 +2,17 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { PITCH } from "./constants";
+import { type WeatherType, PITCH } from "./constants";
 
 interface DugoutsProps {
   teamColor: string;
   secondaryColor?: string;
+  weather?: WeatherType;
 }
 
 const HALF_W = PITCH.width / 2;
 
-export function Dugouts({ teamColor, secondaryColor = "#ffffff" }: DugoutsProps) {
+export function Dugouts({ teamColor, secondaryColor = "#ffffff", weather }: DugoutsProps) {
   // Střídačky jsou podél západní postranní čáry (x = -HALF_W - 2.5)
   const dugoutX = -HALF_W - 2.2;
 
@@ -25,6 +26,7 @@ export function Dugouts({ teamColor, secondaryColor = "#ffffff" }: DugoutsProps)
         mainColor={teamColor}
         accentColor={secondaryColor}
         seatCount={6}
+        weather={weather}
       />
 
       {/* Hostující střídačka (z = 7.5) */}
@@ -35,6 +37,7 @@ export function Dugouts({ teamColor, secondaryColor = "#ffffff" }: DugoutsProps)
         mainColor="#374151"
         accentColor="#9CA3AF"
         seatCount={6}
+        weather={weather}
       />
     </group>
   );
@@ -47,6 +50,7 @@ function Dugout({
   mainColor,
   accentColor,
   seatCount = 6,
+  weather,
 }: {
   position: [number, number, number];
   rotationY: number;
@@ -54,7 +58,9 @@ function Dugout({
   mainColor: string;
   accentColor: string;
   seatCount: number;
+  weather?: WeatherType;
 }) {
+  const isSnow = weather === "snow";
   const width = 5.0;
   const height = 2.1;
   const depth = 1.6;
@@ -152,6 +158,14 @@ function Dugout({
         <boxGeometry args={[width + 0.2, 0.08, depth + 0.3]} />
         <meshStandardMaterial color={mainColor} roughness={0.4} metalness={0.2} />
       </mesh>
+
+      {/* Sněhová vrstva na stříšce v zimě */}
+      {isSnow && (
+        <mesh position={[0, height + 0.1, 0]} rotation={[0.15, 0, 0]} castShadow>
+          <boxGeometry args={[width + 0.22, 0.05, depth + 0.32]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.9} />
+        </mesh>
+      )}
 
       {/* Přední štítek s nápisem */}
       {labelTexture && (

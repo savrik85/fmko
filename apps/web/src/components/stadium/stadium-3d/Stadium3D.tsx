@@ -213,7 +213,7 @@ export function Stadium3D({
 
         <Suspense fallback={null}>
           {/* Okolí, terénní kopečky a vzdálená vesnička */}
-          <Surroundings reduceTrees={isMobile} timeOfDay={timeOfDay} />
+          <Surroundings reduceTrees={isMobile} timeOfDay={timeOfDay} weather={weather} />
 
           {/* Vesnický život v areálu: zahrádka, pivo, kouřící gril, kola, sekačka, zábradlí */}
           <VillageVibe
@@ -221,19 +221,20 @@ export function Stadium3D({
             pubPosition={layout.buildings.refreshments}
             changingRoomsPosition={layout.buildings.changing_rooms}
             isMobile={isMobile}
+            weather={weather}
           />
 
           {/* Osvětlovací stožáry v rozích hřiště */}
           <Floodlights level={f.lighting ?? 0} standsLevel={f.stands ?? 0} timeOfDay={timeOfDay} isMobile={isMobile} />
 
           {/* Střídačky u postranní čáry */}
-          <Dugouts teamColor={teamColor} secondaryColor={secondaryColor} />
+          <Dugouts teamColor={teamColor} secondaryColor={secondaryColor} weather={weather} />
 
           {/* Obvodový plot */}
           <Fence level={f.fence ?? 0} bounds={layout.fence} colorOverride={fenceColor} />
 
           {/* Trávník, čáry, praporky, míč, branky */}
-          <Pitch condition={pitchCondition} pitchType={pitchType} />
+          <Pitch condition={pitchCondition} pitchType={pitchType} weather={weather} />
 
           {/* Tribuny okolo hřiště */}
           <Stand
@@ -278,7 +279,7 @@ export function Stadium3D({
           )}
 
           {/* Zastřešení tribun */}
-          <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} />
+          <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} weather={weather} />
 
           {/* Sektor kotle */}
           <UltrasSector
@@ -297,6 +298,7 @@ export function Stadium3D({
             position={layout.buildings.changing_rooms}
             roofColorOverride={roofColor}
             timeOfDay={timeOfDay}
+            weather={weather}
           />
           <Building
             kind="showers"
@@ -304,6 +306,7 @@ export function Stadium3D({
             position={layout.buildings.showers}
             roofColorOverride={roofColor}
             timeOfDay={timeOfDay}
+            weather={weather}
           />
           <Building
             kind="refreshments"
@@ -311,6 +314,7 @@ export function Stadium3D({
             position={layout.buildings.refreshments}
             roofColorOverride={roofColor}
             timeOfDay={timeOfDay}
+            weather={weather}
           />
           <Building
             kind="toilets"
@@ -318,10 +322,11 @@ export function Stadium3D({
             position={layout.buildings.toilets}
             roofColorOverride={roofColor}
             timeOfDay={timeOfDay}
+            weather={weather}
           />
 
           {/* Parkoviště */}
-          <Parking level={f.parking ?? 0} position={layout.parking} />
+          <Parking level={f.parking ?? 0} position={layout.parking} weather={weather} />
 
           {/* Vstupní brána a pokladny */}
           <EntranceGate
@@ -330,6 +335,7 @@ export function Stadium3D({
             teamColor={teamColor}
             secondaryColor={secondaryColor}
             stadiumName={stadiumName}
+            weather={weather}
           />
 
           {/* Reklamní bannery podél hřiště */}

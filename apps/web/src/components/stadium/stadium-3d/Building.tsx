@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { type TimeOfDay } from "./constants";
+import { type TimeOfDay, type WeatherType } from "./constants";
 import {
   generateWoodTexture,
   generateBrickTexture,
@@ -17,18 +17,21 @@ export interface BuildingProps {
   position: [number, number];
   roofColorOverride?: string | null;
   timeOfDay?: TimeOfDay;
+  weather?: WeatherType;
 }
 
-export function Building({ kind, level, position, roofColorOverride, timeOfDay = "day" }: BuildingProps) {
+export function Building({ kind, level, position, roofColorOverride, timeOfDay = "day", weather = "sunny" }: BuildingProps) {
   if (level <= 0) return null;
   const lvl = Math.min(level, 3);
   const rotationY = position[1] > 0 ? Math.PI : 0;
+  const effectiveRoofColor = roofColorOverride ?? (weather === "snow" ? "#F1F5F9" : null);
+
   return (
     <group position={[position[0], 0, position[1]]} rotation={[0, rotationY, 0]}>
-      {kind === "refreshments" && <Refreshments level={lvl} roofColor={roofColorOverride} timeOfDay={timeOfDay} />}
-      {kind === "changing_rooms" && <ChangingRooms level={lvl} roofColor={roofColorOverride} timeOfDay={timeOfDay} />}
-      {kind === "showers" && <Showers level={lvl} roofColor={roofColorOverride} timeOfDay={timeOfDay} />}
-      {kind === "toilets" && <Toilets level={lvl} roofColor={roofColorOverride} timeOfDay={timeOfDay} />}
+      {kind === "refreshments" && <Refreshments level={lvl} roofColor={effectiveRoofColor} timeOfDay={timeOfDay} />}
+      {kind === "changing_rooms" && <ChangingRooms level={lvl} roofColor={effectiveRoofColor} timeOfDay={timeOfDay} />}
+      {kind === "showers" && <Showers level={lvl} roofColor={effectiveRoofColor} timeOfDay={timeOfDay} />}
+      {kind === "toilets" && <Toilets level={lvl} roofColor={effectiveRoofColor} timeOfDay={timeOfDay} />}
     </group>
   );
 }

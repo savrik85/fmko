@@ -2,13 +2,14 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { PITCH, pitchColor } from "./constants";
-import { generatePitchSurface } from "./grassTexture";
+import { PITCH, pitchColor, type WeatherType } from "./constants";
+import { generatePitchSurface, generateSnowPitchSurface } from "./grassTexture";
 import { generateNetTexture } from "./materialTextures";
 
 interface PitchProps {
   condition: number;
   pitchType: string;
+  weather?: WeatherType;
 }
 
 const HALF_W = PITCH.width / 2;
@@ -16,6 +17,7 @@ const HALF_D = PITCH.depth / 2;
 
 // Paleta hnědo-žlutých odstínů pro vyšlapaná místa
 const WEAR_COLORS = ["#8B6F47", "#9B7E55", "#A08560", "#7A5C3A", "#6B5836", "#B89868"];
+const SNOW_WEAR_COLORS = ["#B8C9BD", "#A5B8AA", "#8FA294", "#CBD7CE"];
 
 interface DamageSpot {
   nx: number;     // -1..1
@@ -25,6 +27,7 @@ interface DamageSpot {
   threshold: number;
   opacity: number;
   color: string;
+  snowColor: string;
   rotation: number;
 }
 
@@ -36,6 +39,7 @@ function generateDamageSpots(): DamageSpot[] {
     return seed / 233280;
   };
   const pickColor = () => WEAR_COLORS[Math.floor(rand() * WEAR_COLORS.length)];
+  const pickSnowColor = () => SNOW_WEAR_COLORS[Math.floor(rand() * SNOW_WEAR_COLORS.length)];
   const out: DamageSpot[] = [];
 
   // Hotspoty: méně skvrn + skromnější rozšíření, viditelné jen při výrazném poškození
@@ -65,6 +69,7 @@ function generateDamageSpots(): DamageSpot[] {
         threshold: cl.baseThr - Math.floor(rand() * 15),
         opacity: 0.3 + rand() * 0.3,    // méně neprůhledné
         color: pickColor(),
+        snowColor: pickSnowColor(),
         rotation: rand() * Math.PI,
       });
     }
@@ -74,7 +79,8 @@ function generateDamageSpots(): DamageSpot[] {
 
 const DAMAGE_SPOTS = generateDamageSpots();
 
-export function Pitch({ condition, pitchType }: PitchProps) {
+export function Pitch({ condition, pitchType, weather }: PitchProps) {
+  const isSnow = weather === "snow";
   const hasLines = condition >= 20;
   const hasCenter = condition >= 40;
   const hasFull = condition >= 65;
@@ -84,20 +90,18 @@ export function Pitch({ condition, pitchType }: PitchProps) {
   const pitchRotation: [number, number, number] = [-Math.PI / 2, 0, 0];
 
   // Base barva trávníku - i pro nízkou condition zachovat trochu zeleně
-  // (poškození pak overlay přidává hnědou)
   const finalGrassColor = useMemo(() => {
     if (pitchType === "artificial") return condition >= 30 ? "#2E8B1F" : "#5A8245";
-    // Pro natural/hybrid: condition ovlivňuje sytost zelené, ale nepřejde do hnědé
     if (condition >= 70) return pitchColor(condition);
     if (condition >= 40) return "#6B8240";
     if (condition >= 20) return "#5C7138";
     return "#566B30";
   }, [pitchType, condition]);
 
-  const grassSurface = useMemo(
-    () => generatePitchSurface(finalGrassColor, pitchType, hasStripes),
-    [finalGrassColor, pitchType, hasStripes],
-  );
+  const grassSurface = useMemo(() => {
+    if (isSnow) return generateSnowPitchSurface(hasStripes);
+    return generatePitchSurface(finalGrassColor, pitchType, hasStripes);
+  }, [isSnow, finalGrassColor, pitchType, hasStripes]);
 
   // Vidím damage spoty s threshold > condition (čím nižší kondice, tím víc viditelných)
   const visibleSpots = useMemo(
@@ -128,7 +132,7 @@ export function Pitch({ condition, pitchType }: PitchProps) {
         >
           <circleGeometry args={[1, 8]} />
           <meshBasicMaterial
-            color={s.color}
+            color={isSnow ? s.snowColor : s.color}
             opacity={s.opacity * Math.min(1, Math.max(0, (s.threshold - condition) / 35))}
             transparent
             depthWrite={false}

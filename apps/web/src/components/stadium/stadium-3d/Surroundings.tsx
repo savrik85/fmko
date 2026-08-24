@@ -2,18 +2,20 @@
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
-import { GROUND_SIZE, GROUND_COLOR, TREE_POSITIONS, ROAD, type TimeOfDay } from "./constants";
-import { generateAsphaltSurface, generateTerrainSurface } from "./grassTexture";
+import { GROUND_SIZE, GROUND_COLOR, TREE_POSITIONS, ROAD, type TimeOfDay, type WeatherType } from "./constants";
+import { generateAsphaltSurface, generateTerrainSurface, generateSnowTerrainSurface } from "./grassTexture";
 
 interface SurroundingsProps {
   reduceTrees?: boolean;
   timeOfDay?: TimeOfDay;
+  weather?: WeatherType;
 }
 
-export function Surroundings({ reduceTrees = false, timeOfDay = "day" }: SurroundingsProps) {
+export function Surroundings({ reduceTrees = false, timeOfDay = "day", weather = "sunny" }: SurroundingsProps) {
+  const isSnow = weather === "snow";
   const groundSurface = useMemo(
-    () => generateTerrainSurface(GROUND_COLOR, 14, 14),
-    [],
+    () => isSnow ? generateSnowTerrainSurface(14, 14) : generateTerrainSurface(GROUND_COLOR, 14, 14),
+    [isSnow],
   );
 
   return (
@@ -24,22 +26,22 @@ export function Surroundings({ reduceTrees = false, timeOfDay = "day" }: Surroun
         <meshStandardMaterial
           map={groundSurface.map}
           bumpMap={groundSurface.bumpMap}
-          bumpScale={0.12}
+          bumpScale={isSnow ? 0.08 : 0.12}
           roughness={1}
         />
       </mesh>
 
       {/* Zvlněné kopečky v krajině na horizontu */}
-      <LandscapeHills />
+      <LandscapeHills isSnow={isSnow} />
 
       {/* Příjezdová cesta */}
       <Road />
 
       {/* Stromy a lesíky kolem areálu */}
-      <Trees reduce={reduceTrees} />
+      <Trees reduce={reduceTrees} isSnow={isSnow} />
 
       {/* Silueta vesničky na horizontu (domky a kostelík) */}
-      <DistantVillage timeOfDay={timeOfDay} />
+      <DistantVillage timeOfDay={timeOfDay} isSnow={isSnow} />
     </group>
   );
 }
@@ -74,7 +76,7 @@ function Road() {
 }
 
 /** Zvlněný terén / nízké kopečky kolem areálu */
-function LandscapeHills() {
+function LandscapeHills({ isSnow = false }: { isSnow?: boolean }) {
   const hills = [
     { pos: [-80, -2, -75] as [number, number, number], scale: [35, 12, 35] as [number, number, number] },
     { pos: [75, -2, -80] as [number, number, number], scale: [40, 14, 40] as [number, number, number] },
@@ -87,7 +89,7 @@ function LandscapeHills() {
       {hills.map((h, i) => (
         <mesh key={i} position={h.pos} scale={h.scale} receiveShadow>
           <sphereGeometry args={[1, 16, 8]} />
-          <meshStandardMaterial color="#3D6A24" roughness={1} flatShading />
+          <meshStandardMaterial color={isSnow ? "#E2E8F0" : "#3D6A24"} roughness={1} flatShading />
         </mesh>
       ))}
     </group>
@@ -95,7 +97,7 @@ function LandscapeHills() {
 }
 
 /** Vesnička na horizontu (domky se sedlovými střechami a věž kostela) */
-function DistantVillage({ timeOfDay }: { timeOfDay: TimeOfDay }) {
+function DistantVillage({ timeOfDay, isSnow = false }: { timeOfDay: TimeOfDay; isSnow?: boolean }) {
   const isNight = timeOfDay === "night";
 
   return (
@@ -108,7 +110,7 @@ function DistantVillage({ timeOfDay }: { timeOfDay: TimeOfDay }) {
       {/* Jehlanová střecha kostela */}
       <mesh position={[0, 15, 0]} castShadow>
         <coneGeometry args={[3.2, 7, 4]} />
-        <meshStandardMaterial color="#883A2D" roughness={0.7} />
+        <meshStandardMaterial color={isSnow ? "#F8FAFC" : "#883A2D"} roughness={0.7} />
       </mesh>
 
       {/* Vesnické domky */}
@@ -124,7 +126,7 @@ function DistantVillage({ timeOfDay }: { timeOfDay: TimeOfDay }) {
           </mesh>
           <mesh position={[0, d.h + 1.2, 0]} rotation={[0, 0, 0]} castShadow>
             <coneGeometry args={[d.w * 0.7, 2.5, 4]} />
-            <meshStandardMaterial color={d.roof} roughness={0.7} />
+            <meshStandardMaterial color={isSnow ? "#F8FAFC" : d.roof} roughness={0.7} />
           </mesh>
           {/* Rozsvícená okna v noci */}
           {isNight && (
@@ -139,13 +141,18 @@ function DistantVillage({ timeOfDay }: { timeOfDay: TimeOfDay }) {
   );
 }
 
-function Trees({ reduce = false }: { reduce?: boolean }) {
+function Trees({ reduce = false, isSnow = false }: { reduce?: boolean; isSnow?: boolean }) {
   const trunkRef = useRef<THREE.InstancedMesh>(null);
   const coneRef = useRef<THREE.InstancedMesh>(null);
   const roundRef = useRef<THREE.InstancedMesh>(null);
   const matrix = useMemo(() => new THREE.Matrix4(), []);
   const color = useMemo(() => new THREE.Color(), []);
-  const crownColors = useMemo(() => ["#2D4A1D", "#3D6A24", "#4A7A2C", "#5B8C3A"], []);
+  const crownColors = useMemo(
+    () => isSnow
+      ? ["#1E3A1A", "#2D4A1D", "#E2E8F0", "#F8FAFC"]
+      : ["#2D4A1D", "#3D6A24", "#4A7A2C", "#5B8C3A"],
+    [isSnow]
+  );
 
   // Pseudo-random varianty velikosti + typ koruny
   const trees = useMemo(() => {

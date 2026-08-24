@@ -3,7 +3,7 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { PITCH, type TimeOfDay } from "./constants";
+import { PITCH, type TimeOfDay, type WeatherType } from "./constants";
 import { generateGravelSurface } from "./grassTexture";
 
 interface VillageVibeProps {
@@ -11,6 +11,7 @@ interface VillageVibeProps {
   pubPosition?: [number, number];
   changingRoomsPosition?: [number, number];
   isMobile?: boolean;
+  weather?: WeatherType;
 }
 
 const HALF_W = PITCH.width / 2;
@@ -21,7 +22,9 @@ export function VillageVibe({
   pubPosition = [25, 34],
   changingRoomsPosition = [-25, -34],
   isMobile = false,
+  weather = "sunny",
 }: VillageVibeProps) {
+  const isSnow = weather === "snow";
   // Bezpečné souřadnice mimo hrací plochu (hřiště končí na X = ±20, Z = ±30)
   const pubX = pubPosition[0];
   const pubZ = pubPosition[1];
@@ -31,13 +34,13 @@ export function VillageVibe({
   return (
     <group>
       {/* 1. Dřevěné pivní sety a slunečník na travnaté terase vedle hospůdky */}
-      <BeerGarden position={[pubX + 5.5, 0, pubZ + 0.5]} isMobile={isMobile} />
+      <BeerGarden position={[pubX + 5.5, 0, pubZ + 0.5]} isMobile={isMobile} isSnow={isSnow} />
 
       {/* 2. Kouřící gril na klobásy vedle vchodu do hospůdky */}
       <SausageGrill position={[pubX + 1.2, 0, pubZ - 2.8]} />
 
       {/* 3. Stojan na jízdní kola */}
-      <BicycleStand position={[pubX + 5.5, 0, pubZ - 3.2]} />
+      <BicycleStand position={[pubX + 5.5, 0, pubZ - 3.2]} isSnow={isSnow} />
 
       {/* 4. Sekačka na trávu u šaten / hospodářského rohu */}
       <LawnMower position={[crX - 3.5, 0, crZ + 1.2]} />
@@ -55,13 +58,13 @@ export function VillageVibe({
       <VillageLoudspeaker position={[crX + 3.5, 0, -31.5]} />
 
       {/* 9. Dlážděné / šotolinové obvodové chodníčky */}
-      <Walkways pubPos={pubPosition} crPos={changingRoomsPosition} />
+      <Walkways pubPos={pubPosition} crPos={changingRoomsPosition} isSnow={isSnow} />
     </group>
   );
 }
 
 /** Hospodská zahrádka: pivní sety, piva a slunečník */
-function BeerGarden({ position, isMobile }: { position: [number, number, number]; isMobile: boolean }) {
+function BeerGarden({ position, isMobile, isSnow = false }: { position: [number, number, number]; isMobile: boolean; isSnow?: boolean }) {
   const gravelSurface = useMemo(() => generateGravelSurface(3, 2.5), []);
 
   return (
@@ -74,22 +77,23 @@ function BeerGarden({ position, isMobile }: { position: [number, number, number]
           bumpMap={gravelSurface.bumpMap}
           bumpScale={0.08}
           roughness={0.97}
+          color={isSnow ? "#E2E8F0" : "#FFFFFF"}
         />
       </mesh>
 
       {/* 2-3 Pivní sety (stůl + 2 lavice) */}
-      <BeerTableSet position={[-1.5, 0, -1.2]} rotationY={0.06} />
-      <BeerTableSet position={[-1.5, 0, 1.2]} rotationY={-0.05} />
-      {!isMobile && <BeerTableSet position={[1.7, 0, 0]} rotationY={Math.PI / 2} />}
+      <BeerTableSet position={[-1.5, 0, -1.2]} rotationY={0.06} isSnow={isSnow} />
+      <BeerTableSet position={[-1.5, 0, 1.2]} rotationY={-0.05} isSnow={isSnow} />
+      {!isMobile && <BeerTableSet position={[1.7, 0, 0]} rotationY={Math.PI / 2} isSnow={isSnow} />}
 
       {/* Velký hospodský slunečník */}
-      <BeerUmbrella position={[0.2, 0, 0]} color="#1E3A2B" accentColor="#F59E0B" />
+      <BeerUmbrella position={[0.2, 0, 0]} color={isSnow ? "#CBD5E1" : "#1E3A2B"} accentColor={isSnow ? "#F8FAFC" : "#F59E0B"} isSnow={isSnow} />
     </group>
   );
 }
 
 /** Jeden pivní set: stůl + 2 lavice + 2 půllitry piva */
-function BeerTableSet({ position, rotationY }: { position: [number, number, number]; rotationY: number }) {
+function BeerTableSet({ position, rotationY, isSnow = false }: { position: [number, number, number]; rotationY: number; isSnow?: boolean }) {
   const tableW = 2.2, tableD = 0.7, tableH = 0.75;
   const benchW = 2.2, benchD = 0.3, benchH = 0.45;
 
@@ -100,6 +104,13 @@ function BeerTableSet({ position, rotationY }: { position: [number, number, numb
         <boxGeometry args={[tableW, 0.05, tableD]} />
         <meshStandardMaterial color="#8B5A2B" roughness={0.85} />
       </mesh>
+      {/* Sníh na stole */}
+      {isSnow && (
+        <mesh position={[0, tableH + 0.03, 0]} castShadow>
+          <boxGeometry args={[tableW + 0.02, 0.02, tableD + 0.02]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.9} />
+        </mesh>
+      )}
       {/* Nohy stolu (zelená ocel) */}
       {[-tableW / 2 + 0.2, tableW / 2 - 0.2].map((x, i) => (
         <mesh key={`tleg-${i}`} position={[x, tableH / 2, 0]} castShadow>
@@ -113,6 +124,12 @@ function BeerTableSet({ position, rotationY }: { position: [number, number, numb
         <boxGeometry args={[benchW, 0.04, benchD]} />
         <meshStandardMaterial color="#8B5A2B" roughness={0.85} />
       </mesh>
+      {isSnow && (
+        <mesh position={[0, benchH + 0.025, -tableD / 2 - 0.35]} castShadow>
+          <boxGeometry args={[benchW + 0.02, 0.02, benchD + 0.02]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.9} />
+        </mesh>
+      )}
       {[-benchW / 2 + 0.2, benchW / 2 - 0.2].map((x, i) => (
         <mesh key={`bleg1-${i}`} position={[x, benchH / 2, -tableD / 2 - 0.35]} castShadow>
           <boxGeometry args={[0.05, benchH, benchD * 0.8]} />
@@ -125,6 +142,12 @@ function BeerTableSet({ position, rotationY }: { position: [number, number, numb
         <boxGeometry args={[benchW, 0.04, benchD]} />
         <meshStandardMaterial color="#8B5A2B" roughness={0.85} />
       </mesh>
+      {isSnow && (
+        <mesh position={[0, benchH + 0.025, tableD / 2 + 0.35]} castShadow>
+          <boxGeometry args={[benchW + 0.02, 0.02, benchD + 0.02]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.9} />
+        </mesh>
+      )}
       {[-benchW / 2 + 0.2, benchW / 2 - 0.2].map((x, i) => (
         <mesh key={`bleg2-${i}`} position={[x, benchH / 2, tableD / 2 + 0.35]} castShadow>
           <boxGeometry args={[0.05, benchH, benchD * 0.8]} />
@@ -156,7 +179,7 @@ function BeerTableSet({ position, rotationY }: { position: [number, number, numb
 }
 
 /** Velký zahradní slunečník */
-function BeerUmbrella({ position, color, accentColor }: { position: [number, number, number]; color: string; accentColor: string }) {
+function BeerUmbrella({ position, color, accentColor, isSnow = false }: { position: [number, number, number]; color: string; accentColor: string; isSnow?: boolean }) {
   const poleH = 2.8;
   const umbrellaR = 2.4;
 
@@ -177,6 +200,13 @@ function BeerUmbrella({ position, color, accentColor }: { position: [number, num
         <coneGeometry args={[umbrellaR, 0.8, 8]} />
         <meshStandardMaterial color={color} roughness={0.8} side={THREE.DoubleSide} />
       </mesh>
+      {/* Sníh na špičce slunečníku */}
+      {isSnow && (
+        <mesh position={[0, poleH + 0.5, 0]} castShadow>
+          <coneGeometry args={[umbrellaR * 0.7, 0.6, 8]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.9} />
+        </mesh>
+      )}
       {/* Lem / pruh v akcentní barvě */}
       <mesh position={[0, poleH + 0.02, 0]}>
         <cylinderGeometry args={[umbrellaR + 0.02, umbrellaR + 0.02, 0.1, 8, 1, true]} />
@@ -243,7 +273,7 @@ function SausageGrill({ position }: { position: [number, number, number]; }) {
 }
 
 /** Stojan na jízdní kola s opřenými koly */
-function BicycleStand({ position }: { position: [number, number, number] }) {
+function BicycleStand({ position, isSnow = false }: { position: [number, number, number]; isSnow?: boolean }) {
   return (
     <group position={position} rotation={[0, 0.3, 0]}>
       {/* Spodní ocelová konstrukce stojanu */}
@@ -251,6 +281,12 @@ function BicycleStand({ position }: { position: [number, number, number] }) {
         <boxGeometry args={[3.2, 0.4, 0.7]} />
         <meshStandardMaterial color="#4B5563" metalness={0.7} roughness={0.4} />
       </mesh>
+      {isSnow && (
+        <mesh position={[0, 0.41, 0]} castShadow>
+          <boxGeometry args={[3.25, 0.03, 0.75]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.9} />
+        </mesh>
+      )}
 
       {/* 3 Zaparkovaná kola různých barev */}
       <Bicycle position={[-0.8, 0, 0]} color="#EF4444" />
@@ -470,9 +506,11 @@ function RailingLine({
 function Walkways({
   pubPos,
   crPos,
+  isSnow = false,
 }: {
   pubPos: [number, number];
   crPos: [number, number];
+  isSnow?: boolean;
 }) {
   const gravelSurface = useMemo(() => generateGravelSurface(1.5, 9), []);
 
@@ -494,6 +532,7 @@ function Walkways({
           bumpMap={gravelSurface.bumpMap}
           bumpScale={0.08}
           roughness={0.97}
+          color={isSnow ? "#E2E8F0" : "#FFFFFF"}
         />
       </mesh>
 
@@ -505,6 +544,7 @@ function Walkways({
           bumpMap={gravelSurface.bumpMap}
           bumpScale={0.08}
           roughness={0.97}
+          color={isSnow ? "#E2E8F0" : "#FFFFFF"}
         />
       </mesh>
     </group>

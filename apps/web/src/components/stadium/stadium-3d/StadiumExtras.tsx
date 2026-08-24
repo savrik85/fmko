@@ -2,7 +2,7 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { PITCH, STAND_DIMS } from "./constants";
+import { PITCH, STAND_DIMS, type WeatherType } from "./constants";
 import { generateCorrugatedTexture } from "./materialTextures";
 
 const STAND_GAP = 2.5;
@@ -103,6 +103,7 @@ interface StandRoofProps {
   standsLevel: number;
   roofLevel: number;
   roofColor?: string | null;
+  weather?: WeatherType;
 }
 
 export function StandRoof(props: StandRoofProps) {
@@ -114,9 +115,11 @@ function ActiveStandRoof({
   standsLevel,
   roofLevel,
   roofColor,
+  weather,
 }: StandRoofProps) {
+  const isSnow = weather === "snow";
   const dims = STAND_DIMS[Math.min(standsLevel, 3)];
-  const color = roofColor ?? "#9A9DA4"; // světlejší plech
+  const color = roofColor ?? (isSnow ? "#F1F5F9" : "#9A9DA4"); // světlejší plech nebo bílý sníh
   const roofTexture = useMemo(() => generateCorrugatedTexture(color, 8, 2), [color]);
   const overhang = 0.5 + roofLevel * 0.35; // přesah nad hřiště roste s levelem
 

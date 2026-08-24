@@ -73,6 +73,42 @@ export function generatePitchSurface(
   return result;
 }
 
+export function generateSnowPitchSurface(hasMowingStripes: boolean): SurfaceTextureSet {
+  const key = `pitch:snow:${hasMowingStripes}`;
+  const cached = surfaceCache.get(key);
+  if (cached) return cached;
+
+  const width = 512;
+  const height = 768;
+  const seed = hashString(key);
+  const albedo = createCanvas(width, height);
+  const bump = createCanvas(width, height);
+  const albedoCtx = getContext(albedo);
+  const bumpCtx = getContext(bump);
+
+  // Podklad: zasněžený trávník s prosvítající zimní trávou
+  paintLowFrequencyNoise(albedoCtx, hexToRgb("#DDE7DF"), width, height, seed, 4, 38, 56);
+  paintLowFrequencyNoise(bumpCtx, { r: 128, g: 128, b: 128 }, width, height, seed, 6, 38, 56);
+
+  if (hasMowingStripes) {
+    for (let i = 0; i < 8; i++) {
+      const y = (height / 8) * i;
+      albedoCtx.fillStyle = i % 2 === 0
+        ? "rgba(255, 255, 255, 0.14)"
+        : "rgba(175, 200, 185, 0.09)";
+      albedoCtx.fillRect(0, y, width, height / 8);
+    }
+  }
+
+  // Jemné krystalky a sněhové závěje
+  drawFibres(albedoCtx, width, height, seed + 11, 2000, false);
+  drawBumpFibres(bumpCtx, width, height, seed + 11, 2000, false);
+
+  const result = createTextureSet(albedo, bump, 1, 1, false);
+  surfaceCache.set(key, result);
+  return result;
+}
+
 export function generateTerrainSurface(
   baseColor: string,
   repeatX = 14,
@@ -102,6 +138,38 @@ export function generateTerrainSurface(
     albedoCtx.fillStyle = `rgba(92, 73, 43, ${0.025 + rand() * 0.035})`;
     albedoCtx.beginPath();
     albedoCtx.ellipse(x, y, radius * 1.8, radius, rand() * Math.PI, 0, Math.PI * 2);
+    albedoCtx.fill();
+  }
+
+  const result = createTextureSet(albedo, bump, repeatX, repeatY, true);
+  surfaceCache.set(key, result);
+  return result;
+}
+
+export function generateSnowTerrainSurface(repeatX = 14, repeatY = 14): SurfaceTextureSet {
+  const key = `terrain:snow:${repeatX}:${repeatY}`;
+  const cached = surfaceCache.get(key);
+  if (cached) return cached;
+
+  const size = 512;
+  const seed = hashString(key);
+  const albedo = createCanvas(size, size);
+  const bump = createCanvas(size, size);
+  const albedoCtx = getContext(albedo);
+  const bumpCtx = getContext(bump);
+
+  paintLowFrequencyNoise(albedoCtx, hexToRgb("#F1F5F9"), size, size, seed, 12, 34, 34);
+  paintLowFrequencyNoise(bumpCtx, { r: 128, g: 128, b: 128 }, size, size, seed, 16, 34, 34);
+
+  // Krystalický sníh a jemné stopy
+  const rand = seededRandom(seed + 99);
+  for (let i = 0; i < 120; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const radius = 1.0 + rand() * 3.0;
+    albedoCtx.fillStyle = `rgba(226, 232, 240, ${0.04 + rand() * 0.06})`;
+    albedoCtx.beginPath();
+    albedoCtx.ellipse(x, y, radius * 2.0, radius, rand() * Math.PI, 0, Math.PI * 2);
     albedoCtx.fill();
   }
 

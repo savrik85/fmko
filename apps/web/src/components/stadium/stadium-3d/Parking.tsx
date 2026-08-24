@@ -2,21 +2,23 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { CAR_COLORS, PARKING_DIMS } from "./constants";
-import { generateAsphaltSurface, generateGravelSurface, generateTerrainSurface } from "./grassTexture";
+import { CAR_COLORS, PARKING_DIMS, type WeatherType } from "./constants";
+import { generateAsphaltSurface, generateGravelSurface, generateTerrainSurface, generateSnowTerrainSurface } from "./grassTexture";
 import { generateWoodTexture, generateConcreteTexture } from "./materialTextures";
 
 interface ParkingProps {
   level: number;
   position: [number, number];
+  weather?: WeatherType;
 }
 
-export function Parking({ level, position }: ParkingProps) {
+export function Parking({ level, position, weather }: ParkingProps) {
   if (level <= 0) return null;
-  return <ActiveParking level={level} position={position} />;
+  return <ActiveParking level={level} position={position} weather={weather} />;
 }
 
-function ActiveParking({ level, position }: ParkingProps) {
+function ActiveParking({ level, position, weather }: ParkingProps) {
+  const isSnow = weather === "snow";
   const dims = PARKING_DIMS[Math.min(level, 3)];
   const [px, pz] = position;
 
@@ -29,7 +31,7 @@ function ActiveParking({ level, position }: ParkingProps) {
   const carCount = Math.max(1, Math.floor(totalSlots * 0.75));
 
   const surface = level === 1
-    ? generateTerrainSurface("#607746", Math.max(1, dims.width / 3), Math.max(1, dims.depth / 3))
+    ? (isSnow ? generateSnowTerrainSurface(Math.max(1, dims.width / 3), Math.max(1, dims.depth / 3)) : generateTerrainSurface("#607746", Math.max(1, dims.width / 3), Math.max(1, dims.depth / 3)))
     : level === 2
       ? generateGravelSurface(Math.max(1, dims.width / 2.5), Math.max(1, dims.depth / 2.5))
       : generateAsphaltSurface(Math.max(1, dims.width / 4), Math.max(1, dims.depth / 4));

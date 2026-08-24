@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { generateBrickTexture, generateWoodTexture, generateRoofTileTexture, generateConcreteTexture } from "./materialTextures";
+import { type WeatherType } from "./constants";
 
 interface EntranceGateProps {
   level: number;
@@ -10,6 +11,7 @@ interface EntranceGateProps {
   teamColor: string;
   secondaryColor?: string;
   stadiumName?: string | null;
+  weather?: WeatherType;
 }
 
 function useSignTexture(name: string | null | undefined, bg: string, fg: string): THREE.CanvasTexture | null {
