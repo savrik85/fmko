@@ -107,6 +107,10 @@ export function Stadium3D({
   const fenceColor = cust.fenceColor ?? null;
   const roofColor = cust.roofColor ?? null;
 
+  // Stav načtení scény a přechodové toasty
+  const [isSceneReady, setIsSceneReady] = useState(false);
+  const [statusToast, setStatusToast] = useState<string | null>(null);
+
   // Stav zobrazení ovládacích prvků (defaultně skryté)
   const [controlsVisible, setControlsVisible] = useState(defaultControlsVisible);
 
@@ -121,6 +125,29 @@ export function Stadium3D({
     }
   }, [weatherProp]);
 
+  // Pomocné funkce pro přepínání s okamžitou odezvou (toast)
+  const handleWeatherChange = (wKey: WeatherType) => {
+    if (wKey === weather) return;
+    setWeather(wKey);
+    setStatusToast(`${WEATHER_OPTIONS[wKey].icon} Nastavuji ${WEATHER_OPTIONS[wKey].label.toLowerCase()}...`);
+    setTimeout(() => setStatusToast(null), 900);
+  };
+
+  const handleTimeOfDayChange = (tKey: TimeOfDay) => {
+    if (tKey === timeOfDay) return;
+    setTimeOfDay(tKey);
+    const labels = { day: "☀️ Slunečný den", sunset: "🌅 Západ slunce", night: "🌙 Noční osvětlení" };
+    setStatusToast(`Nastavuji ${labels[tKey]}...`);
+    setTimeout(() => setStatusToast(null), 900);
+  };
+
+  const handleViewpointChange = (vpKey: CameraViewpoint) => {
+    if (vpKey === viewpoint) return;
+    setViewpoint(vpKey);
+    setStatusToast(`${VIEWPOINTS[vpKey].icon} Kamera: ${VIEWPOINTS[vpKey].label}`);
+    setTimeout(() => setStatusToast(null), 900);
+  };
+
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -134,12 +161,39 @@ export function Stadium3D({
 
   return (
     <div className="relative w-full h-full select-none">
+      {/* Decentní úvodní indikátor načítání 3D scény */}
+      {!isSceneReady && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#141b26] text-white transition-opacity duration-300 pointer-events-none select-none">
+          <div className="relative mb-3 flex items-center justify-center">
+            <div className="w-10 h-10 border-3 border-pitch-500/30 border-t-pitch-400 rounded-full animate-spin shadow-lg" />
+            <span className="absolute text-sm">🏟️</span>
+          </div>
+          <div className="font-heading font-extrabold text-sm tracking-wide text-white/90">
+            Načítám 3D areál...
+          </div>
+          <div className="text-[11px] text-white/50 mt-0.5">Připravuji hřiště a atmosféru</div>
+        </div>
+      )}
+
+      {/* Decentní plovoucí stavový toast při přepínání počasí/kamer */}
+      {isSceneReady && statusToast && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center gap-2 bg-black/85 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20 text-white text-xs font-heading font-bold shadow-2xl">
+            <span className="w-1.5 h-1.5 rounded-full bg-pitch-400 animate-pulse" />
+            <span>{statusToast}</span>
+          </div>
+        </div>
+      )}
+
       {/* 3D Canvas scéna */}
       <Canvas
         shadows={!isMobile}
         camera={{ position: [55, 45, 55], fov: 35 }}
         frameloop="always"
         dpr={isMobile ? [1, 1.25] : [1, 1.75]}
+        onCreated={() => {
+          setTimeout(() => setIsSceneReady(true), 120);
+        }}
         gl={{
           antialias: true,
           alpha: false,
@@ -330,12 +384,12 @@ export function Stadium3D({
 
           {/* Spodní elegantní plovoucí panel nástrojů (Glass Control Dock) */}
           {controlsVisible && (
-            <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100%-16px)] sm:max-w-max animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-1.5 bg-black/85 backdrop-blur-xl p-1.5 sm:px-2.5 sm:py-1.5 rounded-2xl border border-white/20 shadow-2xl">
+            <div className="absolute bottom-3 sm:bottom-4 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100%-32px)] sm:max-w-max mx-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-1.5 sm:gap-2 bg-black/85 backdrop-blur-xl px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border border-white/20 shadow-2xl">
                 {/* 1. Denní doba */}
                 <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl shrink-0">
                   <button
-                    onClick={() => setTimeOfDay("day")}
+                    onClick={() => handleTimeOfDayChange("day")}
                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
                       timeOfDay === "day"
                         ? "bg-amber-500 text-white shadow-sm"
@@ -347,7 +401,7 @@ export function Stadium3D({
                     <span className="hidden md:inline">Den</span>
                   </button>
                   <button
-                    onClick={() => setTimeOfDay("sunset")}
+                    onClick={() => handleTimeOfDayChange("sunset")}
                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
                       timeOfDay === "sunset"
                         ? "bg-orange-600 text-white shadow-sm"
@@ -359,7 +413,7 @@ export function Stadium3D({
                     <span className="hidden md:inline">Západ</span>
                   </button>
                   <button
-                    onClick={() => setTimeOfDay("night")}
+                    onClick={() => handleTimeOfDayChange("night")}
                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
                       timeOfDay === "night"
                         ? "bg-indigo-600 text-white shadow-sm"
@@ -382,7 +436,7 @@ export function Stadium3D({
                     return (
                       <button
                         key={wKey}
-                        onClick={() => setWeather(wKey)}
+                        onClick={() => handleWeatherChange(wKey)}
                         className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
                           active
                             ? "bg-sky-600 text-white shadow-sm"
@@ -407,7 +461,7 @@ export function Stadium3D({
                     return (
                       <button
                         key={key}
-                        onClick={() => setViewpoint(key)}
+                        onClick={() => handleViewpointChange(key)}
                         className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
                           active
                             ? "bg-pitch-500 text-white shadow-sm"
