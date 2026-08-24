@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { simulateMatch, WEATHER_MODS } from "./simulation";
+import { simulateMatch, WEATHER_MODS, calcGoalProb } from "./simulation";
 import type { MatchPlayer, TeamSetup, Weather } from "./types";
 import { generateCommentary } from "./commentary";
 import { createRng } from "../generators/rng";
@@ -227,5 +227,53 @@ describe("vliv počasí na simulaci", () => {
     }
 
     expect(puddles).toBeGreaterThan(0);
+  });
+});
+
+describe("jistota rukou brankáře podle počasí", () => {
+  /**
+   * gkHandlingMod už jednou tiše umřel: hodnoty ve WEATHER_MODS zůstaly naladěné,
+   * ale nikdo je nečetl a v dešti se chytalo stejně jako v suchu. Tenhle test hlídá,
+   * že číslo skutečně vstupuje do gólové pravděpodobnosti.
+   */
+  function goalProbWith(handling: number): number {
+    const attacker = createPlayer(1, "FWD", 60);
+    const gk = createPlayer(2, "GK", 60);
+    return calcGoalProb(createRng(99), attacker, gk, 55, 40, 0, handling);
+  }
+
+  it("kluzký míč zvedá šanci na gól — hodnota se opravdu čte", () => {
+    const sucho = goalProbWith(1.0);
+    const dest = goalProbWith(WEATHER_MODS.rain.gkHandlingMod);
+    const snih = goalProbWith(WEATHER_MODS.snow.gkHandlingMod);
+
+    expect(dest).toBeGreaterThan(sucho);
+    expect(snih).toBeGreaterThan(dest);
+  });
+
+  it("v suchu je výchozí hodnota neutrální", () => {
+    expect(goalProbWith(WEATHER_MODS.sunny.gkHandlingMod)).toBe(goalProbWith(1.0));
+  });
+
+  it("zimní výbava postih brankáři tlumí", () => {
+    const N = 200;
+    let bezVybavy = 0;
+    let sVybavou = 0;
+
+    for (let i = 0; i < N; i++) {
+      const r1 = simulateMatch(createRng(6000 + i), {
+        home: createTeam(1, "TJ Sokol", 50, 0), away: createTeam(2, "SK Lhota", 50, 0),
+        weather: "snow", isHomeAdvantage: false,
+      });
+      bezVybavy += r1.events.filter((e) => e.detail === "save" && e.description.includes("kluzký")).length;
+
+      const r2 = simulateMatch(createRng(6000 + i), {
+        home: createTeam(1, "TJ Sokol", 50, 0.45), away: createTeam(2, "SK Lhota", 50, 0.45),
+        weather: "snow", isHomeAdvantage: false,
+      });
+      sVybavou += r2.events.filter((e) => e.detail === "save" && e.description.includes("kluzký")).length;
+    }
+
+    expect(bezVybavy).toBeGreaterThan(sVybavou);
   });
 });

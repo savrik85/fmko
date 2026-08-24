@@ -168,13 +168,15 @@ const OPEN_PLAY_GOAL_SCALE = 0.855;
  * Calculate goal probability from an open-play chance.
  * Standardky mají vlastní matematiku (calcPenaltyProb / calcFreekickProb / calcAerialProb).
  */
-function calcGoalProb(
+export function calcGoalProb(
   rng: Rng,
   attacker: MatchPlayer,
   gk: MatchPlayer,
   defenseAvg: number,
   minute: number,
   scoreDiff: number,
+  /** Jistota rukou brankáře podle počasí (1 = sucho). Kluzký míč mu ubere z chytání. */
+  gkHandlingMod: number = 1,
 ): number {
   // 30% šancí = hlavičky (centr ze hry)
   const isHeader = rng.random() < 0.3;
@@ -182,7 +184,7 @@ function calcGoalProb(
     ? (attacker.heading * 2 + attacker.strength) / 3
     : (attacker.shooting * 2 + attacker.technique) / 3;
 
-  const defenseVal = (gk.goalkeeping * 2 + defenseAvg) / 3;
+  const defenseVal = (gk.goalkeeping * gkHandlingMod * 2 + defenseAvg) / 3;
 
   let ratio = attackVal / (attackVal + defenseVal);
 
@@ -594,6 +596,16 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     });
   }
 
+  /**
+   * Jistota rukou brankáře v daném počasí. V dešti a na sněhu mu kluzký míč ubírá
+   * z chytání; zimní výbava (weatherResist) postih tlumí stejně jako u techniky,
+   * zranění a kondice, aby se počasí dalo vybavením konzistentně vykoupit.
+   */
+  function gkHandling(defendingTeam: TeamSetup): number {
+    const base = WEATHER_MODS[weather].gkHandlingMod;
+    return 1 - (1 - base) * (1 - (defendingTeam.weatherResist ?? 0));
+  }
+
   /** Tým na hřišti podle engine ID — pro převod naplánované chyby na konkrétní sestavu. */
   function teamById(id: number): TeamSetup {
     return home.teamId === id ? home : away;
@@ -947,7 +959,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       const gk = getGK(defending.lineup);
       const defAvg = teamAvg(defending.lineup.filter((p) => p.position === "DEF"), "defense");
       const scoreDiff = isHomePossession ? homeScore - awayScore : awayScore - homeScore;
-      const goalProb = calcGoalProb(rng, attacker, gk, defAvg, minute, scoreDiff);
+      const goalProb = calcGoalProb(rng, attacker, gk, defAvg, minute, scoreDiff, gkHandling(defending));
 
       const scored = rng.random() < goalProb;
 
@@ -1019,8 +1031,11 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
         // Save/block events for rating
         if (outcome === "chytil brankář") {
-          const isDifficultWeather = weather === "snow" || weather === "rain";
-          const saveDesc = isDifficultWeather && rng.random() < 0.4
+          // Jak často zákrok vypadá jako boj s kluzkým míčem, řídí stejná hodnota,
+          // která brankáři ubírá z chytání — ne plochá konstanta. Sníh (0.76) tak
+          // vyrábí víc bojovaných zákroků než déšť (0.82) a vítr (0.92) taky nějaké.
+          const slipperyBallChance = (1 - gkHandling(defending)) * 2;
+          const saveDesc = rng.random() < slipperyBallChance
             ? `${playerName(gk)} s námahou vyrazil kluzký míč`
             : `${playerName(gk)} chytá střelu`;
           addEvent(minute, "special", gk, defending.teamId,
@@ -1058,7 +1073,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       const counterGk = getGK(attacking.lineup);
       const counterDefAvg = teamAvg(attacking.lineup.filter((p) => p.position === "DEF"), "defense");
       const counterScoreDiff = isHomePossession ? awayScore - homeScore : homeScore - awayScore;
-      const counterGoalProb = calcGoalProb(rng, counterAttacker, counterGk, counterDefAvg, minute, counterScoreDiff) * 0.85;
+      const counterGoalProb = calcGoalProb(rng, counterAttacker, counterGk, counterDefAvg, minute, counterScoreDiff, gkHandling(attacking)) * 0.85;
 
       if (rng.random() < counterGoalProb) {
         scoreGoal(minute, counterAttacker, defending, attacking,
