@@ -128,6 +128,7 @@ export interface ArenaKomentar {
   teamId: string;
   teamName: string;
   authorName: string | null;
+  authorAvatar: Record<string, unknown> | null;
   body: string;
   createdAt: string;
   muzuSmazat: boolean;
@@ -139,6 +140,7 @@ export interface ArenaTiket {
   teamId: string;
   teamName: string;
   authorName: string | null;
+  authorAvatar: Record<string, unknown> | null;
   stake: number;
   totalOddsX100: number;
   potentialPayout: number;

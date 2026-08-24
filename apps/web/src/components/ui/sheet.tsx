@@ -41,12 +41,21 @@ export function Sheet({
   const vratitFokusNa = useRef<HTMLElement | null>(null);
   const panel = useRef<HTMLDivElement>(null);
 
+  // onClose drží ref, NE závislost efektu.
+  //
+  // Rodiče ho předávají jako inline funkci, která při každém překreslení vzniká
+  // znovu. Kdyby byl v závislostech, efekt by se při každém stisku klávesy uklidil
+  // a spustil — cleanup vrátí fokus mimo plachtu, setup ho dá na panel, a psaní
+  // do pole uvnitř tak přišlo o fokus po každém písmenu.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     vratitFokusNa.current = document.activeElement as HTMLElement | null;
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+      if (e.key === "Escape") { e.stopPropagation(); onCloseRef.current(); }
     };
     document.addEventListener("keydown", onKey);
 
@@ -61,7 +70,7 @@ export function Sheet({
       document.body.style.overflow = puvodni;
       vratitFokusNa.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

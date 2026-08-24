@@ -11,6 +11,13 @@ import { logger } from "../lib/logger";
 
 const M = "betting-arena";
 
+/** Avatar je v databázi JSON string. Rozbitý avatar nesmí shodit celou arénu. */
+function avatarJson(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "string") return null;
+  try { return JSON.parse(raw) as Record<string, unknown>; }
+  catch (e) { logger.warn({ module: M }, "avatar trenéra nejde přečíst", e); return null; }
+}
+
 /** Nejdelší komentář. Delší je fórum, ne poznámka pod tiketem. */
 export const MAX_KOMENTAR = 300;
 
@@ -34,6 +41,7 @@ export interface ArenaKomentar {
   teamId: string;
   teamName: string;
   authorName: string | null;
+  authorAvatar: Record<string, unknown> | null;
   body: string;
   createdAt: string;
   muzuSmazat: boolean;
@@ -45,6 +53,7 @@ export interface ArenaTiket {
   teamId: string;
   teamName: string;
   authorName: string | null;
+  authorAvatar: Record<string, unknown> | null;
   stake: number;
   totalOddsX100: number;
   potentialPayout: number;
@@ -72,7 +81,8 @@ export async function arena(
   const tikety = await db.prepare(
     `SELECT t.id, t.team_id, t.stake, t.total_odds_x100, t.potential_payout, t.payout,
             t.capped, t.status, t.shared_at, t.share_note, tm.name AS team_name, sc.game_week,
-            (SELECT m.name FROM managers m WHERE m.team_id = t.team_id ORDER BY m.created_at LIMIT 1) AS author_name
+            (SELECT m.name FROM managers m WHERE m.team_id = t.team_id ORDER BY m.created_at LIMIT 1) AS author_name,
+            (SELECT m.avatar FROM managers m WHERE m.team_id = t.team_id ORDER BY m.created_at LIMIT 1) AS author_avatar
        FROM bet_tickets t
        JOIN teams tm ON tm.id = t.team_id
        LEFT JOIN season_calendar sc ON sc.id = t.calendar_id
@@ -98,8 +108,9 @@ export async function arena(
       .catch((e) => { logger.error({ module: M }, "tipy arény", e); return { results: [] }; }),
 
     db.prepare(
-      `SELECT id, ticket_id, team_id, team_name, author_name, body, created_at
-         FROM bet_comments WHERE ticket_id IN (${ph}) ORDER BY created_at ASC`
+      `SELECT c.id, c.ticket_id, c.team_id, c.team_name, c.author_name, c.body, c.created_at,
+              (SELECT m.avatar FROM managers m WHERE m.team_id = c.team_id ORDER BY m.created_at LIMIT 1) AS author_avatar
+         FROM bet_comments c WHERE c.ticket_id IN (${ph}) ORDER BY c.created_at ASC`
     ).bind(...ids).all<Record<string, unknown>>()
       .catch((e) => { logger.error({ module: M }, "komentáře arény", e); return { results: [] }; }),
   ]);
@@ -126,6 +137,7 @@ export async function arena(
       teamId: k.team_id as string,
       teamName: k.team_name as string,
       authorName: (k.author_name as string) ?? null,
+      authorAvatar: avatarJson(k.author_avatar),
       body: k.body as string,
       createdAt: k.created_at as string,
       muzuSmazat: !!mujTeamId && k.team_id === mujTeamId,
@@ -139,6 +151,7 @@ export async function arena(
     teamId: t.team_id as string,
     teamName: t.team_name as string,
     authorName: (t.author_name as string) ?? null,
+    authorAvatar: avatarJson(t.author_avatar),
     stake: t.stake as number,
     totalOddsX100: t.total_odds_x100 as number,
     potentialPayout: t.potential_payout as number,

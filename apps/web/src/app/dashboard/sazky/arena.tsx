@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { EntityLink } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 import { czk, kurz, IkonaTipu, Prazdno, StavPill, TYP_TIKETU } from "./ui";
 import type { ArenaOdpoved, ArenaTiket } from "./types";
 
@@ -25,6 +26,26 @@ function kdy(iso: string): string {
   const h = Math.round(min / 60);
   if (h < 24) return `před ${h} h`;
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
+}
+
+/**
+ * Portrét trenéra. V aréně mluví lidé, ne kluby — proto je vidět tvář a jméno
+ * trenéra, a název klubu až pod ním jako odkaz.
+ */
+function Tvar({ avatar, jmeno, size }: {
+  avatar: Record<string, unknown> | null; jmeno: string; size: number;
+}) {
+  const pouzitelny = !!avatar && Object.keys(avatar).length > 2;
+  return (
+    <div className="rounded-full overflow-hidden shrink-0 flex items-end justify-center bg-gray-100"
+         style={{ width: size, height: size }}>
+      {pouzitelny
+        ? <FaceAvatar faceConfig={avatar} size={size / 1.2} />
+        : <span className="text-sm font-heading font-bold text-muted self-center">
+            {jmeno.trim().charAt(0).toUpperCase()}
+          </span>}
+    </div>
+  );
 }
 
 function Vlakno({ t, maxComment, teamId, onZmena }: {
@@ -67,21 +88,26 @@ function Vlakno({ t, maxComment, teamId, onZmena }: {
       {otevreno && (
         <div className="px-3 py-2.5 space-y-2.5">
           {t.komentare.map((k) => (
-            <div key={k.id} className="text-sm">
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <EntityLink type="team" id={k.teamId} className="font-semibold">
-                  {k.teamName}
-                </EntityLink>
-                {k.authorName && <span className="text-micro text-muted">{k.authorName}</span>}
-                <span className="text-micro text-muted">· {kdy(k.createdAt)}</span>
-                {k.muzuSmazat && (
-                  <button type="button" onClick={() => smaz(k.id)}
-                    className="ml-auto text-micro text-muted hover:text-card-red cursor-pointer">
-                    smazat
-                  </button>
-                )}
+            <div key={k.id} className="flex items-start gap-2 text-sm">
+              <Tvar avatar={k.authorAvatar} jmeno={k.authorName ?? k.teamName} size={30} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-base font-semibold leading-tight">
+                    {k.authorName ?? k.teamName}
+                  </span>
+                  <EntityLink type="team" id={k.teamId} className="text-micro text-muted">
+                    {k.teamName}
+                  </EntityLink>
+                  <span className="text-micro text-muted">· {kdy(k.createdAt)}</span>
+                  {k.muzuSmazat && (
+                    <button type="button" onClick={() => smaz(k.id)}
+                      className="ml-auto text-micro text-muted hover:text-card-red cursor-pointer">
+                      smazat
+                    </button>
+                  )}
+                </div>
+                <p className="leading-snug break-words">{k.body}</p>
               </div>
-              <p className="leading-snug break-words">{k.body}</p>
             </div>
           ))}
 
@@ -116,12 +142,17 @@ function ArenaKarta({ t, maxComment, teamId, onZmena }: {
 
   return (
     <article className="card overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 flex-wrap">
-        <EntityLink type="team" id={t.teamId} className="text-base font-semibold truncate">
-          {t.teamName}
-        </EntityLink>
-        {t.authorName && <span className="text-micro text-muted">{t.authorName}</span>}
-        <span className="ml-auto text-micro text-muted">{kdy(t.sharedAt)}</span>
+      <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-gray-50">
+        <Tvar avatar={t.authorAvatar} jmeno={t.authorName ?? t.teamName} size={38} />
+        <div className="flex-1 min-w-0">
+          <div className="text-base font-semibold leading-tight truncate">
+            {t.authorName ?? t.teamName}
+          </div>
+          <EntityLink type="team" id={t.teamId} className="text-micro text-muted truncate block">
+            {t.teamName}
+          </EntityLink>
+        </div>
+        <span className="text-micro text-muted shrink-0">{kdy(t.sharedAt)}</span>
       </div>
 
       {t.vzkaz && (
