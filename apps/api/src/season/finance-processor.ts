@@ -584,6 +584,12 @@ export async function processMatchDayFinances(
       return null;
     });
 
+    const homePitchCondition = isHome
+      ? (await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
+          .bind(teamId).first<{ pitch_condition: number }>()
+          .catch((e) => { logger.warn({ module: "finance-processor" }, "stav hriste pro spokojenost", e); return null; }))?.pitch_condition ?? null
+      : null;
+
     const satCalc = computeMatchSatisfactionDelta({
       result,
       fans: fansCtx.fans,
@@ -595,6 +601,8 @@ export async function processMatchDayFinances(
       manager: mgrRow ?? undefined,
       // Ozvučení hraje jen na domácím hřišti — venku si atmosféru dělá soupeř.
       paSystemBonus: isHome ? matchEquipmentFx?.fanSatisfactionMod ?? 0 : 0,
+      // Trávník hodnotí fanoušci jen ten svůj. Za stav soupeřova hřiště klub nemůže.
+      pitchCondition: isHome ? homePitchCondition : null,
     });
 
     // Obsluha občerstvení: usměvavá obsluha zvedá spokojenost (jen doma, self mode)

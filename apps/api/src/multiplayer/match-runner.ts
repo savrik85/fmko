@@ -4,7 +4,7 @@
  */
 
 import {simulateMatch} from "../engine/simulation";
-import {weatherAttendanceFactor} from "../season/weather";
+import {weatherAttendanceFactor, pitchAttendanceFactor} from "../season/weather";
 import {generateMatchCommentary, loadCommentaryFromDB} from "../engine/commentary";
 import {createRng} from "../generators/rng";
 import {experienceGainChance} from "../skills/training";
@@ -430,9 +430,12 @@ export async function runScheduledMatches(
             const wf = weatherAttendanceFactor(weather);
             const shieldedWeather = wf + (1 - wf) * facilityEffects.weatherAttendanceShield;
 
+            // Na rozoranou louku se nikomu nechce — zastřešení tribun s tímhle nepomůže.
+            const pitchAttMul = pitchAttendanceFactor(pitchCondition);
+
             // Apply facility attendance bonus (lighting + parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením), cap at stadium capacity
             const attendance = Math.min(
-                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather),
+                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather * pitchAttMul),
                 stadiumCapacity,
             );
 

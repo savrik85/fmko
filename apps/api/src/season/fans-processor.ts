@@ -45,6 +45,8 @@ export interface MatchSatisfactionInput {
   manager?: ManagerInput;
   /** Ozvučení a hlasatel — body navíc za atmosféru. Jen doma. */
   paSystemBonus?: number;
+  /** Stav trávníku 0–100. Jen doma — vlastní hřiště fanoušci vidí každé kolo. */
+  pitchCondition?: number | null;
 }
 
 export interface MatchSatisfactionResult {
@@ -140,6 +142,23 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
     if (mgrBoost !== 0) {
       delta += mgrBoost;
       reasons.push(`Trenér ${mgrBoost > 0 ? "+" : ""}${mgrBoost}`);
+    }
+  }
+
+  // Stav vlastního hřiště. Fanoušci ho vidí každé kolo a rozorané vápno se pozná
+  // z tribuny na první pohled — bez tohohle se záměrně neudržovaný trávník klubu
+  // vyplácel (ušetří na údržbě a nakopávaná taktika na něm funguje líp).
+  if (input.pitchCondition != null) {
+    const pc = input.pitchCondition;
+    if (pc < 20) {
+      delta -= 4;
+      reasons.push("Hřiště jak brambořiště -4");
+    } else if (pc < 35) {
+      delta -= 2;
+      reasons.push("Zanedbaný trávník -2");
+    } else if (pc >= 90) {
+      delta += 1;
+      reasons.push("Trávník jak koberec +1");
     }
   }
 

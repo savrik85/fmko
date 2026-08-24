@@ -83,7 +83,31 @@ export const OFFENCES: Record<string, Offence> = {
   },
 };
 
-const PITCH_THRESHOLD = 30;
+/**
+ * Výchozí hranice „neudržovaného hřiště", když si soutěž vlastní neodhlasovala.
+ * Odpovídá hodnotě, která tu byla natvrdo před zavedením pravidla min_pitch_condition.
+ */
+export const DEFAULT_PITCH_THRESHOLD = 30;
+
+/**
+ * Hranice platná pro danou soutěž. Odhlasované `min_pitch_condition` má přednost.
+ *
+ * Bez tohohle měla disciplinárka vlastní pevnou třicítku, zatímco automatika
+ * porušení pravidel (compliance.ts) i dotace na hřiště braly odhlasovanou hodnotu —
+ * liga s minimem 50 tak viděla porušení, které se nedalo doložit jako skutek.
+ */
+export async function pitchThresholdFor(
+  db: D1Database, leagueId: string, seasonNumber: number,
+): Promise<number> {
+  try {
+    const { resolveRules } = await import("./rules");
+    const r = await resolveRules(db, leagueId, seasonNumber);
+    return r.min_pitch_condition > 0 ? r.min_pitch_condition : DEFAULT_PITCH_THRESHOLD;
+  } catch (e) {
+    logger.warn({ module: M }, "nacteni hranice stavu hriste", e);
+    return DEFAULT_PITCH_THRESHOLD;
+  }
+}
 const RED_CARD_THRESHOLD = 3;
 const CRITICISM_THRESHOLD = 2;
 
@@ -100,16 +124,18 @@ export interface EvidenceItem {
  */
 export async function collectEvidence(
   db: D1Database, teamId: string,
+  /** Hranice stavu hřiště platná v té soutěži — viz pitchThresholdFor. */
+  pitchThreshold: number = DEFAULT_PITCH_THRESHOLD,
 ): Promise<EvidenceItem[]> {
   const out: EvidenceItem[] = [];
 
   const pitch = await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
     .bind(teamId).first<{ pitch_condition: number }>()
     .catch((e) => { logger.warn({ module: M }, "stav hřiště", e); return null; });
-  if (pitch && pitch.pitch_condition < PITCH_THRESHOLD) {
+  if (pitch && pitch.pitch_condition < pitchThreshold) {
     out.push({
       kind: "pitch", label: OFFENCES.pitch.label,
-      detail: `Stav trávníku ${pitch.pitch_condition} ze 100 — pod hranicí ${PITCH_THRESHOLD}.`,
+      detail: `Stav trávníku ${pitch.pitch_condition} ze 100 — pod hranicí ${pitchThreshold}.`,
     });
   }
 

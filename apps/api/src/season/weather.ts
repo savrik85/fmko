@@ -110,6 +110,23 @@ export function weatherAttendanceFactor(weather: Weather): number {
   }
 }
 
+/**
+ * Násobič návštěvy podle stavu hřiště.
+ *
+ * Na rozoranou louku se nikomu nechce. Bez tohohle se rozbité hřiště klubu
+ * vyplácelo: ušetřil na údržbě a nakopávaná taktika na něm navíc funguje líp,
+ * takže záměrně neudržovaný trávník byl čistý zisk. Teď za něj platí u pokladny.
+ *
+ * 100 → 1.0, 60 → 0.98, 30 → 0.91, 5 → 0.85. Postih začíná až pod 70 — do té doby
+ * je hřiště „normální" a divák ho neřeší.
+ */
+export function pitchAttendanceFactor(pitchCondition: number | null | undefined): number {
+  if (pitchCondition == null) return 1;
+  const pc = Math.max(0, Math.min(100, pitchCondition));
+  if (pc >= 70) return 1;
+  return 1 - ((70 - pc) / 70) * 0.15;
+}
+
 /** Násobič prodeje piva dle počasí — v mrazu se pije míň, v teple víc. */
 export function weatherBeerFactor(weather: Weather): number {
   switch (weather) {

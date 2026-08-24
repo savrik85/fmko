@@ -29,7 +29,7 @@ import {
 } from "../competition/board";
 import {
   CHAIR_FINE_LIMIT, FINE_MAX, FINE_MIN, OFFENCES,
-  canChairFine, canFine, collectEvidence, issueSanction,
+  canChairFine, canFine, collectEvidence, issueSanction, pitchThresholdFor,
 } from "../competition/discipline";
 import {
   MIN_ACTIVE_REFEREES, canBanReferee, refereeStandings,
@@ -694,14 +694,15 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
     .catch((e) => { logger.warn({ module: M }, "kluby soutěže", e); return { results: [] }; });
 
   // Důkazy se sbírají pro každý klub zvlášť — formulář pak nenabídne skutek,
-  // který se nedá doložit.
+  // který se nedá doložit. Hranice stavu hřiště je ta, kterou si soutěž odhlasovala.
+  const pitchThreshold = await pitchThresholdFor(c.env.DB, leagueId, meta.season_number);
   const targets = [];
   for (const club of clubs.results) {
     targets.push({
       teamId: club.id, teamName: club.name,
       managerName: club.manager_name,
       managerAvatar: safeJson(club.manager_avatar),
-      evidence: await collectEvidence(c.env.DB, club.id),
+      evidence: await collectEvidence(c.env.DB, club.id, pitchThreshold),
     });
   }
 
@@ -765,7 +766,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
   // Bez důkazu se dá podat jen volná položka — a ta má tvrdší podmínky.
   let evidence: string | null = null;
   if (!offence.freeText) {
-    const found = (await collectEvidence(c.env.DB, body.targetTeamId)).find((e) => e.kind === body.offence);
+    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await pitchThresholdFor(c.env.DB, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
     if (!found) return c.json({ error: "Tenhle skutek se u toho klubu nedá doložit." }, 400);
     evidence = found.detail;
   } else if (!body.note || body.note.trim().length < 10) {
@@ -888,7 +889,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) 
 
   let evidence: string | null = null;
   if (!offence.freeText) {
-    const found = (await collectEvidence(c.env.DB, body.targetTeamId)).find((e) => e.kind === body.offence);
+    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await pitchThresholdFor(c.env.DB, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
     if (!found) return c.json({ error: "Tenhle skutek se u toho klubu nedá doložit." }, 400);
     evidence = found.detail;
   }
