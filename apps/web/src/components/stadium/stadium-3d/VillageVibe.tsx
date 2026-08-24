@@ -3,8 +3,9 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { PITCH, type TimeOfDay, type WeatherType } from "./constants";
+import { PITCH, type TimeOfDay, type WeatherType, type StadiumMode } from "./constants";
 import { generateGravelSurface } from "./grassTexture";
+import { TrainingProps3D } from "./TrainingProps3D";
 
 interface VillageVibeProps {
   timeOfDay: TimeOfDay;
@@ -12,6 +13,7 @@ interface VillageVibeProps {
   changingRoomsPosition?: [number, number];
   isMobile?: boolean;
   weather?: WeatherType;
+  mode?: StadiumMode;
 }
 
 const HALF_W = PITCH.width / 2;
@@ -19,13 +21,25 @@ const HALF_D = PITCH.depth / 2;
 
 export function VillageVibe({
   timeOfDay,
-  pubPosition = [25, 34],
-  changingRoomsPosition = [-25, -34],
+  pubPosition,
+  changingRoomsPosition,
   isMobile = false,
-  weather = "sunny",
-}: VillageVibeProps) {
+  weather,
+  mode = "match_day",
+  attendanceRatio = 0.75,
+}: {
+  timeOfDay: TimeOfDay;
+  pubPosition: [number, number];
+  changingRoomsPosition: [number, number];
+  isMobile?: boolean;
+  weather?: WeatherType;
+  mode?: StadiumMode;
+  attendanceRatio?: number;
+}) {
+  const isNight = timeOfDay === "night";
   const isSnow = weather === "snow";
-  // Bezpečné souřadnice mimo hrací plochu (hřiště končí na X = ±20, Z = ±30)
+  const isTrainingDay = mode === "training_day";
+
   const pubX = pubPosition[0];
   const pubZ = pubPosition[1];
   const crX = changingRoomsPosition[0];
@@ -34,37 +48,55 @@ export function VillageVibe({
   return (
     <group>
       {/* 1. Dřevěné pivní sety a slunečník na travnaté terase vedle hospůdky */}
-      <BeerGarden position={[pubX + 5.5, 0, pubZ + 0.5]} isMobile={isMobile} isSnow={isSnow} />
+      <BeerGarden
+        position={[pubX + 5.5, 0, pubZ + 0.5]}
+        isMobile={isMobile}
+        isSnow={isSnow}
+        isTrainingDay={isTrainingDay}
+      />
 
-      {/* 2. Kouřící gril na klobásy vedle vchodu do hospůdky */}
-      <SausageGrill position={[pubX + 1.2, 0, pubZ - 2.8]} />
+      {/* 2. Kouřící gril na klobásy vedle vchodu do hospůdky (v tréninkový den zakrytý plachtou) */}
+      <SausageGrill position={[pubX + 1.2, 0, pubZ - 2.8]} isTrainingDay={isTrainingDay} />
 
       {/* 3. Stojan na jízdní kola */}
-      <BicycleStand position={[pubX + 5.5, 0, pubZ - 3.2]} isSnow={isSnow} />
+      <BicycleStand position={[pubX + 5.5, 0, pubZ - 3.2]} isSnow={isSnow} isTrainingDay={isTrainingDay} />
 
       {/* 4. Sekačka na trávu u šaten / hospodářského rohu */}
-      <LawnMower position={[crX - 3.5, 0, crZ + 1.2]} />
+      <LawnMower position={[crX - 3.5, 0, crZ + 1.2]} isTrainingDay={isTrainingDay} />
 
       {/* 5. Obvodové zábradlí hřiště (krakorce s trubkou) */}
       <PitchPerimeterRailing isMobile={isMobile} />
 
-      {/* 6. Fanoušci stojící u klandru (podél zábradlí) */}
-      <RailSpectators isMobile={isMobile} />
+      {/* 6. Fanoušci stojící u klandru (jen v zápasový den, škálovaní dle návštěvnosti) */}
+      {!isTrainingDay && <RailSpectators isMobile={isMobile} attendanceRatio={attendanceRatio} />}
 
-      {/* 7. Reklamní cedule místních sponzorů na zábradlí */}
+      {/* 7. Tréninkové pomůcky na hřišti (kužely, tyče, minibranka, zeď) jen v tréninkový den */}
+      {isTrainingDay && <TrainingProps3D isSnow={isSnow} isMobile={isMobile} />}
+
+      {/* 8. Reklamní cedule místních sponzorů na zábradlí */}
       <RailSponsorBanners />
 
-      {/* 8. Obecní rozhlas (amplion) na sloupu */}
-      <VillageLoudspeaker position={[crX + 3.5, 0, -31.5]} />
+      {/* 9. Obecní rozhlas (amplion) na sloupu */}
+      <VillageLoudspeaker position={[crX + 3.5, 0, -31.5]} isTrainingDay={isTrainingDay} />
 
-      {/* 9. Dlážděné / šotolinové obvodové chodníčky */}
+      {/* 10. Dlážděné / šotolinové obvodové chodníčky */}
       <Walkways pubPos={pubPosition} crPos={changingRoomsPosition} isSnow={isSnow} />
     </group>
   );
 }
 
 /** Hospodská zahrádka: pivní sety, piva a slunečník */
-function BeerGarden({ position, isMobile, isSnow = false }: { position: [number, number, number]; isMobile: boolean; isSnow?: boolean }) {
+function BeerGarden({
+  position,
+  isMobile,
+  isSnow = false,
+  isTrainingDay = false,
+}: {
+  position: [number, number, number];
+  isMobile: boolean;
+  isSnow?: boolean;
+  isTrainingDay?: boolean;
+}) {
   const gravelSurface = useMemo(() => generateGravelSurface(3, 2.5), []);
 
   return (
@@ -82,18 +114,36 @@ function BeerGarden({ position, isMobile, isSnow = false }: { position: [number,
       </mesh>
 
       {/* 2-3 Pivní sety (stůl + 2 lavice) */}
-      <BeerTableSet position={[-1.5, 0, -1.2]} rotationY={0.06} isSnow={isSnow} />
-      <BeerTableSet position={[-1.5, 0, 1.2]} rotationY={-0.05} isSnow={isSnow} />
-      {!isMobile && <BeerTableSet position={[1.7, 0, 0]} rotationY={Math.PI / 2} isSnow={isSnow} />}
+      <BeerTableSet position={[-1.5, 0, -1.2]} rotationY={0.06} isSnow={isSnow} isTrainingDay={isTrainingDay} />
+      <BeerTableSet position={[-1.5, 0, 1.2]} rotationY={-0.05} isSnow={isSnow} isTrainingDay={isTrainingDay} />
+      {!isMobile && (
+        <BeerTableSet position={[1.7, 0, 0]} rotationY={Math.PI / 2} isSnow={isSnow} isTrainingDay={isTrainingDay} />
+      )}
 
-      {/* Velký hospodský slunečník */}
-      <BeerUmbrella position={[0.2, 0, 0]} color={isSnow ? "#CBD5E1" : "#1E3A2B"} accentColor={isSnow ? "#F8FAFC" : "#F59E0B"} isSnow={isSnow} />
+      {/* Velký hospodský slunečník (v tréninkový den složený) */}
+      <BeerUmbrella
+        position={[0.2, 0, 0]}
+        color={isSnow ? "#CBD5E1" : "#1E3A2B"}
+        accentColor={isSnow ? "#F8FAFC" : "#F59E0B"}
+        isSnow={isSnow}
+        isTrainingDay={isTrainingDay}
+      />
     </group>
   );
 }
 
-/** Jeden pivní set: stůl + 2 lavice + 2 půllitry piva */
-function BeerTableSet({ position, rotationY, isSnow = false }: { position: [number, number, number]; rotationY: number; isSnow?: boolean }) {
+/** Jeden pivní set: stůl + 2 lavice + (v zápasový den) půllitry piva */
+function BeerTableSet({
+  position,
+  rotationY,
+  isSnow = false,
+  isTrainingDay = false,
+}: {
+  position: [number, number, number];
+  rotationY: number;
+  isSnow?: boolean;
+  isTrainingDay?: boolean;
+}) {
   const tableW = 2.2, tableD = 0.7, tableH = 0.75;
   const benchW = 2.2, benchD = 0.3, benchH = 0.45;
 
@@ -155,31 +205,46 @@ function BeerTableSet({ position, rotationY, isSnow = false }: { position: [numb
         </mesh>
       ))}
 
-      {/* Půllitry s pivem */}
-      <mesh position={[-0.4, tableH + 0.1, 0.1]} castShadow>
-        <cylinderGeometry args={[0.06, 0.05, 0.16, 8]} />
-        <meshStandardMaterial color="#D97706" transparent opacity={0.85} roughness={0.2} />
-      </mesh>
-      {/* Pěna */}
-      <mesh position={[-0.4, tableH + 0.19, 0.1]}>
-        <cylinderGeometry args={[0.062, 0.062, 0.04, 8]} />
-        <meshStandardMaterial color="#FFFFFF" roughness={0.6} />
-      </mesh>
+      {/* Půllitry s pivem (jen v zápasový den) */}
+      {!isTrainingDay && (
+        <>
+          <mesh position={[-0.4, tableH + 0.1, 0.1]} castShadow>
+            <cylinderGeometry args={[0.06, 0.05, 0.16, 8]} />
+            <meshStandardMaterial color="#D97706" transparent opacity={0.85} roughness={0.2} />
+          </mesh>
+          <mesh position={[-0.4, tableH + 0.19, 0.1]}>
+            <cylinderGeometry args={[0.062, 0.062, 0.04, 8]} />
+            <meshStandardMaterial color="#FFFFFF" roughness={0.6} />
+          </mesh>
 
-      <mesh position={[0.4, tableH + 0.1, -0.1]} castShadow>
-        <cylinderGeometry args={[0.06, 0.05, 0.16, 8]} />
-        <meshStandardMaterial color="#D97706" transparent opacity={0.85} roughness={0.2} />
-      </mesh>
-      <mesh position={[0.4, tableH + 0.19, -0.1]}>
-        <cylinderGeometry args={[0.062, 0.062, 0.04, 8]} />
-        <meshStandardMaterial color="#FFFFFF" roughness={0.6} />
-      </mesh>
+          <mesh position={[0.4, tableH + 0.1, -0.1]} castShadow>
+            <cylinderGeometry args={[0.06, 0.05, 0.16, 8]} />
+            <meshStandardMaterial color="#D97706" transparent opacity={0.85} roughness={0.2} />
+          </mesh>
+          <mesh position={[0.4, tableH + 0.19, -0.1]}>
+            <cylinderGeometry args={[0.062, 0.062, 0.04, 8]} />
+            <meshStandardMaterial color="#FFFFFF" roughness={0.6} />
+          </mesh>
+        </>
+      )}
     </group>
   );
 }
 
-/** Velký zahradní slunečník */
-function BeerUmbrella({ position, color, accentColor, isSnow = false }: { position: [number, number, number]; color: string; accentColor: string; isSnow?: boolean }) {
+/** Velký zahradní slunečník (otevřený v zápasový den / složený v tréninkový den) */
+function BeerUmbrella({
+  position,
+  color,
+  accentColor,
+  isSnow = false,
+  isTrainingDay = false,
+}: {
+  position: [number, number, number];
+  color: string;
+  accentColor: string;
+  isSnow?: boolean;
+  isTrainingDay?: boolean;
+}) {
   const poleH = 2.8;
   const umbrellaR = 2.4;
 
@@ -195,34 +260,59 @@ function BeerUmbrella({ position, color, accentColor, isSnow = false }: { positi
         <cylinderGeometry args={[0.05, 0.05, poleH, 8]} />
         <meshStandardMaterial color="#D1D5DB" metalness={0.7} />
       </mesh>
-      {/* Plachta slunečníku (šestiboký kužel) */}
-      <mesh position={[0, poleH + 0.4, 0]} castShadow>
-        <coneGeometry args={[umbrellaR, 0.8, 8]} />
-        <meshStandardMaterial color={color} roughness={0.8} side={THREE.DoubleSide} />
-      </mesh>
-      {/* Sníh na špičce slunečníku */}
-      {isSnow && (
-        <mesh position={[0, poleH + 0.5, 0]} castShadow>
-          <coneGeometry args={[umbrellaR * 0.7, 0.6, 8]} />
-          <meshStandardMaterial color="#F8FAFC" roughness={0.9} />
-        </mesh>
+
+      {/* Otevřený slunečník vs. složený tréninkový */}
+      {!isTrainingDay ? (
+        <>
+          {/* Plachta slunečníku (šestiboký kužel) */}
+          <mesh position={[0, poleH + 0.4, 0]} castShadow>
+            <coneGeometry args={[umbrellaR, 0.8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.8} side={THREE.DoubleSide} />
+          </mesh>
+          {/* Sníh na špičce slunečníku */}
+          {isSnow && (
+            <mesh position={[0, poleH + 0.5, 0]} castShadow>
+              <coneGeometry args={[umbrellaR * 0.7, 0.6, 8]} />
+              <meshStandardMaterial color="#F8FAFC" roughness={0.9} />
+            </mesh>
+          )}
+          {/* Lem / pruh v akcentní barvě */}
+          <mesh position={[0, poleH + 0.02, 0]}>
+            <cylinderGeometry args={[umbrellaR + 0.02, umbrellaR + 0.02, 0.1, 8, 1, true]} />
+            <meshStandardMaterial color={accentColor} side={THREE.DoubleSide} />
+          </mesh>
+        </>
+      ) : (
+        /* Složený slunečník ve všední dny */
+        <group position={[0, poleH - 0.2, 0]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.18, 0.08, 1.8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.9} />
+          </mesh>
+          {/* Páska/lano stahující složený slunečník */}
+          <mesh position={[0, 0, 0]}>
+            <cylinderGeometry args={[0.19, 0.19, 0.1, 8]} />
+            <meshStandardMaterial color={accentColor} />
+          </mesh>
+        </group>
       )}
-      {/* Lem / pruh v akcentní barvě */}
-      <mesh position={[0, poleH + 0.02, 0]}>
-        <cylinderGeometry args={[umbrellaR + 0.02, umbrellaR + 0.02, 0.1, 8, 1, true]} />
-        <meshStandardMaterial color={accentColor} side={THREE.DoubleSide} />
-      </mesh>
     </group>
   );
 }
 
-/** Gril na klobásy s animovaným stoupajícím kouřem */
-function SausageGrill({ position }: { position: [number, number, number]; }) {
+/** Gril na klobásy s animovaným stoupajícím kouřem (v tréninkový den zakrytý) */
+function SausageGrill({
+  position,
+  isTrainingDay = false,
+}: {
+  position: [number, number, number];
+  isTrainingDay?: boolean;
+}) {
   const smokePuffs = useRef<THREE.Group>(null);
 
-  // Animace stoupajících obláčků kouře
+  // Animace stoupajících obláčků kouře (jen v zápasový den)
   useFrame(({ clock }) => {
-    if (!smokePuffs.current) return;
+    if (!smokePuffs.current || isTrainingDay) return;
     const t = clock.elapsedTime;
     smokePuffs.current.children.forEach((child, i) => {
       const offset = i * 0.8;
@@ -230,7 +320,7 @@ function SausageGrill({ position }: { position: [number, number, number]; }) {
       child.position.y = progress * 2.2;
       child.position.x = Math.sin(t * 1.5 + i) * 0.15 * progress;
       child.position.z = Math.cos(t * 1.2 + i) * 0.15 * progress;
-      const scale = (0.2 + progress * 0.6);
+      const scale = 0.2 + progress * 0.6;
       child.scale.set(scale, scale, scale);
       const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
       if (mat) {
@@ -248,7 +338,7 @@ function SausageGrill({ position }: { position: [number, number, number]; }) {
       </mesh>
       {/* Nožky grilu */}
       {[-0.4, 0.4].map((x, i) => (
-        <mesh key={i} position={[x, 0.45, 0]} rotation={[0, 0, (i === 0 ? 0.15 : -0.15)]} castShadow>
+        <mesh key={i} position={[x, 0.45, 0]} rotation={[0, 0, i === 0 ? 0.15 : -0.15]} castShadow>
           <cylinderGeometry args={[0.03, 0.03, 0.9, 6]} />
           <meshStandardMaterial color="#374151" metalness={0.8} />
         </mesh>
@@ -273,7 +363,15 @@ function SausageGrill({ position }: { position: [number, number, number]; }) {
 }
 
 /** Stojan na jízdní kola s opřenými koly */
-function BicycleStand({ position, isSnow = false }: { position: [number, number, number]; isSnow?: boolean }) {
+function BicycleStand({
+  position,
+  isSnow = false,
+  isTrainingDay = false,
+}: {
+  position: [number, number, number];
+  isSnow?: boolean;
+  isTrainingDay?: boolean;
+}) {
   return (
     <group position={position} rotation={[0, 0.3, 0]}>
       {/* Spodní ocelová konstrukce stojanu */}
@@ -288,10 +386,14 @@ function BicycleStand({ position, isSnow = false }: { position: [number, number,
         </mesh>
       )}
 
-      {/* 3 Zaparkovaná kola různých barev */}
+      {/* Zaparkovaná kola (v zápasový den 3, v tréninkový 1) */}
       <Bicycle position={[-0.8, 0, 0]} color="#EF4444" />
-      <Bicycle position={[0.1, 0, 0]} color="#3B82F6" />
-      <Bicycle position={[0.9, 0, 0]} color="#10B981" />
+      {!isTrainingDay && (
+        <>
+          <Bicycle position={[0.1, 0, 0]} color="#3B82F6" />
+          <Bicycle position={[0.9, 0, 0]} color="#10B981" />
+        </>
+      )}
     </group>
   );
 }
@@ -339,7 +441,13 @@ function Bicycle({ position, color }: { position: [number, number, number]; colo
 }
 
 /** Zahradní traktor / sekačka na trávu u hřiště */
-function LawnMower({ position }: { position: [number, number, number] }) {
+function LawnMower({
+  position,
+  isTrainingDay = false,
+}: {
+  position: [number, number, number];
+  isTrainingDay?: boolean;
+}) {
   return (
     <group position={position} rotation={[0, 0.6, 0]}>
       {/* Tělo sekačky */}
@@ -552,27 +660,46 @@ function Walkways({
 }
 
 /** Diváci a štamgasti stojící podél zábradlí s pivem ("u klandru") */
-function RailSpectators({ isMobile }: { isMobile: boolean }) {
-  const spectatorCount = isMobile ? 8 : 16;
+function RailSpectators({
+  isMobile,
+  attendanceRatio = 0.75,
+}: {
+  isMobile: boolean;
+  attendanceRatio?: number;
+}) {
+  const baseTotal = isMobile ? 12 : 24;
+  const spectatorCount = Math.max(3, Math.round(baseTotal * Math.min(1.0, Math.max(0.1, attendanceRatio))));
   const padX = HALF_W + 2.0;
 
   const spectators = useMemo(() => {
-    const list: Array<{ x: number; z: number; shirtColor: string; skinColor: string; hasBeer: boolean }> = [];
-    const shirts = ["#DC2626", "#2563EB", "#059669", "#D97706", "#4B5563", "#7C3AED", "#1F2937"];
-    const skins = ["#E8B48C", "#D19A6A", "#A9713F", "#F0C9A0"];
+    const list: Array<{
+      x: number;
+      z: number;
+      shirtColor: string;
+      pantsColor: string;
+      skinColor: string;
+      hatColor: string | null;
+      hasBeer: boolean;
+    }> = [];
+    const shirts = ["#EF4444", "#3B82F6", "#10B981", "#F59E0B", "#F97316", "#8B5CF6", "#FFFFFF", "#38BDF8", "#F43F5E"];
+    const pants = ["#3B82F6", "#60A5FA", "#94A3B8", "#D6D3D1", "#475569", "#2563EB"];
+    const skins = ["#FFF1F2", "#FFE4E6", "#FED7AA", "#FDE68A", "#E5B887", "#D4A373"];
+    const hats = ["#FFFFFF", "#EF4444", "#3B82F6", "#F59E0B", "#10B981", "#FDE047"];
 
     for (let i = 0; i < spectatorCount; i++) {
       const side = i % 2 === 0 ? 1 : -1;
-      const z = -20 + (i / spectatorCount) * 40;
+      const z = -22 + (i / spectatorCount) * 44;
       const overlapsWestDugout = side < 0
-        && (Math.abs(z - 7.5) < 3 || Math.abs(z + 7.5) < 3);
+        && (Math.abs(z - 7.5) < 3.2 || Math.abs(z + 7.5) < 3.2);
       if (overlapsWestDugout) continue;
       list.push({
-        x: side * padX + (Math.sin(i * 3) * 0.3),
+        x: side * padX + (Math.sin(i * 3.3) * 0.35),
         z,
         shirtColor: shirts[i % shirts.length],
+        pantsColor: pants[i % pants.length],
         skinColor: skins[i % skins.length],
-        hasBeer: i % 3 !== 0,
+        hatColor: i % 3 === 0 ? hats[i % hats.length] : null,
+        hasBeer: i % 4 !== 0,
       });
     }
     return list;
@@ -582,21 +709,28 @@ function RailSpectators({ isMobile }: { isMobile: boolean }) {
     <group>
       {spectators.map((s, idx) => (
         <group key={idx} position={[s.x, 0, s.z]}>
-          {/* Nohy */}
+          {/* Nohy v kalhotách */}
           <mesh position={[0, 0.45, 0]} castShadow>
             <boxGeometry args={[0.3, 0.9, 0.25]} />
-            <meshStandardMaterial color="#1E293B" roughness={0.9} />
+            <meshStandardMaterial color={s.pantsColor} roughness={0.4} />
           </mesh>
-          {/* Trup */}
+          {/* Trup v bundě / triku */}
           <mesh position={[0, 1.15, 0]} castShadow>
             <boxGeometry args={[0.42, 0.55, 0.3]} />
-            <meshStandardMaterial color={s.shirtColor} roughness={0.7} />
+            <meshStandardMaterial color={s.shirtColor} roughness={0.35} />
           </mesh>
           {/* Hlava */}
           <mesh position={[0, 1.6, 0]} castShadow>
-            <boxGeometry args={[0.26, 0.28, 0.26]} />
-            <meshStandardMaterial color={s.skinColor} roughness={0.6} />
+            <boxGeometry args={[0.26, 0.26, 0.26]} />
+            <meshStandardMaterial color={s.skinColor} roughness={0.35} />
           </mesh>
+          {/* Čepice */}
+          {s.hatColor && (
+            <mesh position={[0, 1.74, -0.02]} castShadow>
+              <boxGeometry args={[0.28, 0.08, 0.32]} />
+              <meshStandardMaterial color={s.hatColor} roughness={0.35} />
+            </mesh>
+          )}
           {/* Půllitr s pivem v ruce opřené o zábradlí */}
           {s.hasBeer && (
             <group position={[s.x > 0 ? -0.25 : 0.25, 1.1, 0.15]}>
@@ -645,7 +779,13 @@ function RailSponsorBanners() {
 }
 
 /** Obecní amplion / rozhlas na dřevěném sloupu */
-function VillageLoudspeaker({ position }: { position: [number, number, number] }) {
+function VillageLoudspeaker({
+  position,
+  isTrainingDay = false,
+}: {
+  position: [number, number, number];
+  isTrainingDay?: boolean;
+}) {
   const poleH = 6.5;
   return (
     <group position={position}>

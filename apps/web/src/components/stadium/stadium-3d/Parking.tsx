@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { CAR_COLORS, PARKING_DIMS, type WeatherType } from "./constants";
+import { CAR_COLORS, PARKING_DIMS, type WeatherType, type StadiumMode } from "./constants";
 import { generateAsphaltSurface, generateGravelSurface, generateTerrainSurface, generateSnowTerrainSurface } from "./grassTexture";
 import { generateWoodTexture, generateConcreteTexture } from "./materialTextures";
 
@@ -10,15 +10,17 @@ interface ParkingProps {
   level: number;
   position: [number, number];
   weather?: WeatherType;
+  mode?: StadiumMode;
 }
 
-export function Parking({ level, position, weather }: ParkingProps) {
+export function Parking({ level, position, weather, mode = "match_day" }: ParkingProps) {
   if (level <= 0) return null;
-  return <ActiveParking level={level} position={position} weather={weather} />;
+  return <ActiveParking level={level} position={position} weather={weather} mode={mode} />;
 }
 
-function ActiveParking({ level, position, weather }: ParkingProps) {
+function ActiveParking({ level, position, weather, mode = "match_day" }: ParkingProps) {
   const isSnow = weather === "snow";
+  const isTrainingDay = mode === "training_day";
   const dims = PARKING_DIMS[Math.min(level, 3)];
   const [px, pz] = position;
 
@@ -28,7 +30,7 @@ function ActiveParking({ level, position, weather }: ParkingProps) {
   const cols = Math.floor((dims.width - padding * 2) / (carWidth + padding));
   const rows = Math.floor((dims.depth - padding * 2) / (carDepth + padding));
   const totalSlots = cols * rows;
-  const carCount = Math.max(1, Math.floor(totalSlots * 0.75));
+  const carCount = isTrainingDay ? 1 : Math.max(1, Math.floor(totalSlots * 0.75));
 
   const surface = level === 1
     ? (isSnow ? generateSnowTerrainSurface(Math.max(1, dims.width / 3), Math.max(1, dims.depth / 3)) : generateTerrainSurface("#607746", Math.max(1, dims.width / 3), Math.max(1, dims.depth / 3)))

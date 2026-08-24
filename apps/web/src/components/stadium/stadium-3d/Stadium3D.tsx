@@ -25,9 +25,13 @@ import {
   getStadiumLayout,
   VIEWPOINTS,
   WEATHER_OPTIONS,
+  STADIUM_MODES,
+  ATTENDANCE_PRESETS,
   type TimeOfDay,
   type CameraViewpoint,
   type WeatherType,
+  type StadiumMode,
+  type AttendanceLevel,
 } from "./constants";
 
 export interface Stadium3DCustomization {
@@ -70,6 +74,12 @@ interface Stadium3DProps {
   initialViewpoint?: CameraViewpoint;
   initialWeather?: WeatherType;
   weather?: WeatherType;
+  initialMode?: StadiumMode;
+  mode?: StadiumMode;
+  onModeChange?: (mode: StadiumMode) => void;
+  initialAttendanceRatio?: number;
+  attendanceRatio?: number;
+  onAttendanceChange?: (ratio: number) => void;
   showControls?: boolean;
   defaultControlsVisible?: boolean;
   reserveCloseButtonSpace?: boolean;
@@ -94,6 +104,12 @@ export function Stadium3D({
   initialViewpoint = "overview",
   initialWeather = "sunny",
   weather: weatherProp,
+  initialMode = "match_day",
+  mode: modeProp,
+  onModeChange,
+  initialAttendanceRatio = 0.50,
+  attendanceRatio: attendanceProp,
+  onAttendanceChange,
   showControls = true,
   defaultControlsVisible = false,
   reserveCloseButtonSpace = false,
@@ -114,16 +130,46 @@ export function Stadium3D({
   // Stav zobrazení ovládacích prvků (defaultně skryté)
   const [controlsVisible, setControlsVisible] = useState(defaultControlsVisible);
 
-  // Stav denní doby, počasí a kamerového pohledu
+  // Stav denní doby, počasí, kamerového pohledu, režimu areálu a návštěvnosti
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(initialTimeOfDay);
   const [weather, setWeather] = useState<WeatherType>(weatherProp ?? initialWeather);
   const [viewpoint, setViewpoint] = useState<CameraViewpoint>(initialViewpoint);
+  const [mode, setMode] = useState<StadiumMode>(modeProp ?? initialMode);
+  const [attendanceRatio, setAttendanceRatio] = useState<number>(attendanceProp ?? initialAttendanceRatio);
 
   useEffect(() => {
     if (weatherProp) {
       setWeather(weatherProp);
     }
   }, [weatherProp]);
+
+  useEffect(() => {
+    if (modeProp) {
+      setMode(modeProp);
+    }
+  }, [modeProp]);
+
+  useEffect(() => {
+    if (attendanceProp !== undefined) {
+      setAttendanceRatio(attendanceProp);
+    }
+  }, [attendanceProp]);
+
+  const handleModeChange = (mKey: StadiumMode) => {
+    if (mKey === mode) return;
+    setMode(mKey);
+    onModeChange?.(mKey);
+    setStatusToast(`${STADIUM_MODES[mKey].icon} Nastavuji ${STADIUM_MODES[mKey].label.toLowerCase()}...`);
+    setTimeout(() => setStatusToast(null), 900);
+  };
+
+  const handleAttendanceChange = (ratio: number) => {
+    setAttendanceRatio(ratio);
+    onAttendanceChange?.(ratio);
+    const pct = Math.round(ratio * 100);
+    setStatusToast(`👥 Návštěvnost: ${pct}% kapacity`);
+    setTimeout(() => setStatusToast(null), 900);
+  };
 
   // Pomocné funkce pro přepínání s okamžitou odezvou (toast)
   const handleWeatherChange = (wKey: WeatherType) => {
@@ -222,6 +268,8 @@ export function Stadium3D({
             changingRoomsPosition={layout.buildings.changing_rooms}
             isMobile={isMobile}
             weather={weather}
+            mode={mode}
+            attendanceRatio={attendanceRatio}
           />
 
           {/* Osvětlovací stožáry v rozích hřiště */}
@@ -236,34 +284,43 @@ export function Stadium3D({
           {/* Trávník, čáry, praporky, míč, branky */}
           <Pitch condition={pitchCondition} pitchType={pitchType} weather={weather} />
 
-          {/* Tribuny okolo hřiště */}
+          {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}
           <Stand
             side="north"
             level={f.stands ?? 0}
             teamColor={teamColor}
+            secondaryColor={secondaryColor}
             standColor={standColor}
             seatColor={seatColor}
             accentColor={accentColor}
             reducedDetail={isMobile}
+            mode={mode}
+            attendanceRatio={attendanceRatio}
           />
           <Stand
             side="south"
             level={f.stands ?? 0}
             teamColor={teamColor}
+            secondaryColor={secondaryColor}
             standColor={standColor}
             seatColor={seatColor}
             accentColor={accentColor}
             reducedDetail={isMobile}
+            mode={mode}
+            attendanceRatio={attendanceRatio}
           />
           {(f.stands ?? 0) >= 2 && (
             <Stand
               side="east"
               level={f.stands}
               teamColor={teamColor}
+              secondaryColor={secondaryColor}
               standColor={standColor}
               seatColor={seatColor}
               accentColor={accentColor}
               reducedDetail={isMobile}
+              mode={mode}
+              attendanceRatio={attendanceRatio}
             />
           )}
           {(f.stands ?? 0) >= 2 && (
@@ -271,17 +328,20 @@ export function Stadium3D({
               side="west"
               level={f.stands}
               teamColor={teamColor}
+              secondaryColor={secondaryColor}
               standColor={standColor}
               seatColor={seatColor}
               accentColor={accentColor}
               reducedDetail={isMobile}
+              mode={mode}
+              attendanceRatio={attendanceRatio}
             />
           )}
 
           {/* Zastřešení tribun */}
           <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} weather={weather} />
 
-          {/* Sektor kotle */}
+          {/* Sektor kotle (v tréninkový den bez pyrotechniky, spíkra a bubnu) */}
           <UltrasSector
             level={f.ultras_stand ?? 0}
             primaryColor={teamColor}
@@ -289,6 +349,7 @@ export function Stadium3D({
             text={cust.ultrasText}
             bannerColor={cust.ultrasBannerColor}
             textColor={cust.ultrasTextColor}
+            mode={mode}
           />
 
           {/* Budovy v rozích */}
@@ -326,7 +387,7 @@ export function Stadium3D({
           />
 
           {/* Parkoviště */}
-          <Parking level={f.parking ?? 0} position={layout.parking} weather={weather} />
+          <Parking level={f.parking ?? 0} position={layout.parking} weather={weather} mode={mode} />
 
           {/* Vstupní brána a pokladny */}
           <EntranceGate
@@ -376,7 +437,17 @@ export function Stadium3D({
         <>
           {/* Tlačítko v rohu (zobrazí se, když je panel zavřený) */}
           {!controlsVisible && (
-            <div className={`absolute top-3 ${reserveCloseButtonSpace ? "right-14" : "right-3"} z-20`}>
+            <div className={`absolute top-3 ${reserveCloseButtonSpace ? "right-14" : "right-3"} z-20 flex items-center gap-1.5`}>
+              {/* Rychlý indikátor režimu */}
+              <button
+                onClick={() => handleModeChange(mode === "match_day" ? "training_day" : "match_day")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-heading font-bold transition-all shadow-lg backdrop-blur-md border bg-black/75 hover:bg-black/90 text-white/90 hover:text-white border-white/15 active:scale-95"
+                title="Kliknutím přepneš mezi Zápasovým a Tréninkovým dnem"
+              >
+                <span>{STADIUM_MODES[mode].icon}</span>
+                <span className="hidden sm:inline">{STADIUM_MODES[mode].label}</span>
+              </button>
+
               <button
                 onClick={() => setControlsVisible(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-heading font-bold transition-all shadow-lg backdrop-blur-md border bg-black/75 hover:bg-black/90 text-white/90 hover:text-white border-white/15 active:scale-95"
@@ -390,52 +461,76 @@ export function Stadium3D({
 
           {/* Spodní elegantní plovoucí panel nástrojů (Glass Control Dock) */}
           {controlsVisible && (
-            <div className="absolute bottom-3 sm:bottom-4 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100%-32px)] sm:max-w-max mx-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-1.5 sm:gap-2 bg-black/85 backdrop-blur-xl px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border border-white/20 shadow-2xl">
+            <div className="absolute bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[96%] overflow-x-auto no-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="flex items-center gap-1 sm:gap-1.5 bg-black/90 backdrop-blur-xl px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-2xl border border-white/20 shadow-2xl w-max">
+                {/* 0. Režim areálu: Zápas vs Trénink */}
+                <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl shrink-0">
+                  {(Object.keys(STADIUM_MODES) as StadiumMode[]).map((mKey) => {
+                    const opt = STADIUM_MODES[mKey];
+                    const active = mode === mKey;
+                    return (
+                      <button
+                        key={mKey}
+                        onClick={() => handleModeChange(mKey)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                          active
+                            ? mKey === "match_day"
+                              ? "bg-emerald-600 text-white shadow-sm"
+                              : "bg-amber-600 text-white shadow-sm"
+                            : "text-white/70 hover:text-white hover:bg-white/10"
+                        }`}
+                        title={`${opt.label} (${opt.desc})`}
+                      >
+                        <span>{opt.icon}</span>
+                        <span className="text-[11px] sm:text-xs">{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="w-px h-4 bg-white/20 shrink-0" />
+
                 {/* 1. Denní doba */}
                 <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl shrink-0">
                   <button
                     onClick={() => handleTimeOfDayChange("day")}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                    className={`p-1.5 rounded-lg text-xs transition-all ${
                       timeOfDay === "day"
                         ? "bg-amber-500 text-white shadow-sm"
                         : "text-white/70 hover:text-white hover:bg-white/10"
                     }`}
-                    title="Slunečný den"
+                    title="Den (Slunečno)"
                   >
-                    <span>☀️</span>
-                    <span className="hidden md:inline">Den</span>
+                    ☀️
                   </button>
                   <button
                     onClick={() => handleTimeOfDayChange("sunset")}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                    className={`p-1.5 rounded-lg text-xs transition-all ${
                       timeOfDay === "sunset"
                         ? "bg-orange-600 text-white shadow-sm"
                         : "text-white/70 hover:text-white hover:bg-white/10"
                     }`}
                     title="Západ slunce"
                   >
-                    <span>🌅</span>
-                    <span className="hidden md:inline">Západ</span>
+                    🌅
                   </button>
                   <button
                     onClick={() => handleTimeOfDayChange("night")}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                    className={`p-1.5 rounded-lg text-xs transition-all ${
                       timeOfDay === "night"
                         ? "bg-indigo-600 text-white shadow-sm"
                         : "text-white/70 hover:text-white hover:bg-white/10"
                     }`}
-                    title="Noc"
+                    title="Noc (Umělé osvětlení)"
                   >
-                    <span>🌙</span>
-                    <span className="hidden md:inline">Noc</span>
+                    🌙
                   </button>
                 </div>
 
-                <div className="w-px h-5 bg-white/20 hidden sm:block shrink-0" />
+                <div className="w-px h-4 bg-white/20 shrink-0" />
 
                 {/* 2. Počasí */}
-                <div className="flex items-center gap-0.5 shrink-0">
+                <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl shrink-0">
                   {(Object.keys(WEATHER_OPTIONS) as WeatherType[]).map((wKey) => {
                     const opt = WEATHER_OPTIONS[wKey];
                     const active = weather === wKey;
@@ -443,24 +538,23 @@ export function Stadium3D({
                       <button
                         key={wKey}
                         onClick={() => handleWeatherChange(wKey)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all ${
+                        className={`p-1.5 rounded-lg text-xs transition-all ${
                           active
                             ? "bg-sky-600 text-white shadow-sm"
                             : "text-white/70 hover:text-white hover:bg-white/10"
                         }`}
-                        title={`${opt.label} (${opt.desc})`}
+                        title={`${opt.label} — ${opt.desc}`}
                       >
-                        <span>{opt.icon}</span>
-                        <span className="hidden lg:inline">{opt.label}</span>
+                        {opt.icon}
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="w-px h-5 bg-white/20 hidden sm:block shrink-0" />
+                <div className="w-px h-4 bg-white/20 shrink-0" />
 
                 {/* 3. Kamery */}
-                <div className="flex items-center gap-0.5 shrink-0">
+                <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl shrink-0">
                   {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).map((key) => {
                     const vp = VIEWPOINTS[key];
                     const active = viewpoint === key;
@@ -468,26 +562,25 @@ export function Stadium3D({
                       <button
                         key={key}
                         onClick={() => handleViewpointChange(key)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-heading font-bold transition-all whitespace-nowrap ${
+                        className={`p-1.5 rounded-lg text-xs transition-all ${
                           active
                             ? "bg-pitch-500 text-white shadow-sm"
                             : "text-white/70 hover:text-white hover:bg-white/10"
                         }`}
-                        title={vp.label}
+                        title={`Kamera: ${vp.label}`}
                       >
-                        <span>{vp.icon}</span>
-                        <span className="text-[10px] sm:text-xs">{vp.label}</span>
+                        {vp.icon}
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="w-px h-5 bg-white/20 shrink-0" />
+                <div className="w-px h-4 bg-white/20 shrink-0" />
 
                 {/* 4. Tlačítko zavřít panel */}
                 <button
                   onClick={() => setControlsVisible(false)}
-                  className="text-white/60 hover:text-white px-2 py-1 rounded-lg hover:bg-white/15 text-xs font-heading font-bold transition-all shrink-0"
+                  className="text-white/60 hover:text-white p-1.5 rounded-lg hover:bg-white/15 text-xs font-heading font-bold transition-all shrink-0"
                   title="Zavřít panel ovládání"
                 >
                   ✕

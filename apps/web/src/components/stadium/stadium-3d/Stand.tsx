@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as THREE from "three";
-import { PITCH, STAND_DIMS } from "./constants";
+import { PITCH, STAND_DIMS, type StadiumMode } from "./constants";
 import {
   generateWoodTexture,
   generateConcreteTexture,
@@ -14,10 +14,13 @@ interface StandProps {
   side: Side;
   level: number;
   teamColor: string;
+  secondaryColor?: string;
   standColor?: string;
   seatColor?: string;
   accentColor?: string;
   reducedDetail?: boolean;
+  mode?: StadiumMode;
+  attendanceRatio?: number;
 }
 
 const STAND_GAP = 2.5;
@@ -26,10 +29,13 @@ export function Stand({
   side,
   level,
   teamColor,
+  secondaryColor = "#FFFFFF",
   standColor,
   seatColor,
   accentColor,
   reducedDetail = false,
+  mode = "match_day",
+  attendanceRatio = 0.75,
 }: StandProps) {
   if (level <= 0) return null;
   return (
@@ -37,10 +43,13 @@ export function Stand({
       side={side}
       level={level}
       teamColor={teamColor}
+      secondaryColor={secondaryColor}
       standColor={standColor}
       seatColor={seatColor}
       accentColor={accentColor}
       reducedDetail={reducedDetail}
+      mode={mode}
+      attendanceRatio={attendanceRatio}
     />
   );
 }
@@ -49,10 +58,13 @@ function ActiveStand({
   side,
   level,
   teamColor,
+  secondaryColor = "#FFFFFF",
   standColor,
   seatColor,
   accentColor,
   reducedDetail = false,
+  mode = "match_day",
+  attendanceRatio = 0.75,
 }: StandProps) {
   const dims = STAND_DIMS[Math.min(level, 3)];
   const finalSeatColor = seatColor ?? teamColor;
@@ -61,7 +73,6 @@ function ActiveStand({
 
   const isEW = side === "east" || side === "west";
   const length = isEW ? PITCH.depth : PITCH.width;
-  const spectatorDensity = reducedDetail ? 0.22 : 0.45;
   const seatColMult = reducedDetail ? 0.7 : 1.2;
 
   const distance = (isEW ? PITCH.width : PITCH.depth) / 2 + STAND_GAP + dims.depth / 2;
@@ -112,16 +123,22 @@ function ActiveStand({
         woodTexture={seatWoodTexture}
       />
 
-      {/* 3. Diváci na tribuně */}
-      <Spectators
-        rows={seatRows}
-        columns={seatColumns}
-        seatSize={seatSize}
-        seatDepth={seatDepth}
-        seatRise={seatRise}
-        length={length}
-        density={spectatorDensity}
-      />
+      {/* 3. Diváci na tribuně (jen v zápasový den, škálovaní dle návštěvnosti) */}
+      {mode !== "training_day" && (
+        <Spectators
+          rows={seatRows}
+          columns={seatColumns}
+          seatSize={seatSize}
+          seatDepth={seatDepth}
+          seatRise={seatRise}
+          length={length}
+          attendanceRatio={attendanceRatio}
+          teamColor={teamColor}
+          secondaryColor={secondaryColor}
+          isUltrasSector={side === "south"}
+          reducedDetail={reducedDetail}
+        />
+      )}
 
       {/* 4. VIP skybox a novinářská lávka (L3). Střecha je samostatné zařízení. */}
       {level >= 3 && (
@@ -338,7 +355,7 @@ function Seats({
   );
 }
 
-/** Diváci na tribuně s generovanými barvami oblečení */
+/** Detailní a rozmanití diváci na tribuně se shlukováním podle procenta návštěvnosti */
 function Spectators({
   rows,
   columns,
@@ -346,7 +363,11 @@ function Spectators({
   seatDepth,
   seatRise,
   length,
-  density,
+  attendanceRatio = 0.75,
+  teamColor,
+  secondaryColor = "#FFFFFF",
+  isUltrasSector = false,
+  reducedDetail = false,
 }: {
   rows: number;
   columns: number;
@@ -354,76 +375,333 @@ function Spectators({
   seatDepth: number;
   seatRise: number;
   length: number;
-  density: number;
+  attendanceRatio: number;
+  teamColor: string;
+  secondaryColor?: string;
+  isUltrasSector?: boolean;
+  reducedDetail?: boolean;
 }) {
   const torsoRef = useRef<THREE.InstancedMesh>(null);
+  const pantsRef = useRef<THREE.InstancedMesh>(null);
   const headRef = useRef<THREE.InstancedMesh>(null);
-  const colors = useMemo(() => ["#DC2626", "#1E40AF", "#047857", "#D97706", "#4B5563", "#7C3AED", "#1F2937", "#B91C1C"], []);
-  const skins = useMemo(() => ["#E8B48C", "#D19A6A", "#A9713F", "#F0C9A0"], []);
+  const hatRef = useRef<THREE.InstancedMesh>(null);
+  const beerRef = useRef<THREE.InstancedMesh>(null);
+  const scarfRef = useRef<THREE.InstancedMesh>(null);
+
+  const colors = useMemo(
+    () => [
+      teamColor,
+      teamColor,
+      secondaryColor,
+      "#FFFFFF", // bílá mikina / dres
+      "#F87171", // jasně červená bunda
+      "#60A5FA", // jasně modrá větrovka
+      "#34D399", // svěží zelená mikina
+      "#FBBF24", // zlatavě žlutá bunda
+      "#FB923C", // světle oranžová větrovka
+      "#38BDF8", // azurová bunda
+      "#E2E8F0", // světle šedá mikina
+      "#F43F5E", // červeno-růžová mikina
+      "#FDE047", // jasně žlutý dres
+      "#A78BFA", // levandulová mikina
+      "#93C5FD", // světle modrá mikina
+    ],
+    [teamColor, secondaryColor]
+  );
+
+  const pantsColors = useMemo(
+    () => [
+      "#3B82F6", // modré džíny
+      "#60A5FA", // světlý denim
+      "#94A3B8", // světle šedé kalhoty
+      "#CBD5E1", // velmi světle šedé tepláky
+      "#D6D3D1", // béžové plátěné kalhoty
+      "#475569", // středně šedomodré kalhoty
+      "#2563EB", // sytý denim
+    ],
+    []
+  );
+
+  const skins = useMemo(
+    () => [
+      "#FFF1F2", // světlá narůžovělá
+      "#FFE4E6", // světlá přirozená
+      "#FED7AA", // světle broskvová
+      "#FDE68A", // teplá béžová
+      "#E5B887", // přirozená pleť
+      "#D4A373", // mírně opálená
+    ],
+    []
+  );
+
+  const hatColors = useMemo(
+    () => [teamColor, secondaryColor, "#FFFFFF", "#EF4444", "#3B82F6", "#F59E0B", "#10B981", "#FDE047"],
+    [teamColor, secondaryColor]
+  );
+
   const matrix = useMemo(() => new THREE.Matrix4(), []);
   const color = useMemo(() => new THREE.Color(), []);
 
+  // Generování realistických skupinek (shluků fanoušků) podle návštěvnosti
   const filled = useMemo(() => {
-    const out: Array<{ r: number; c: number; col: string; skin: string }> = [];
-    let seed = 12345;
+    const out: Array<{
+      r: number;
+      c: number;
+      col: string;
+      pantsCol: string;
+      skin: string;
+      hatType: number; // 0: žádná/vlasy, 1: kšiltovka, 2: kulich
+      hatCol: string;
+      hasBeer: boolean;
+      hasScarf: boolean;
+      leanAngle: number;
+    }> = [];
+
+    let seed = 98765;
     const rand = () => {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
+
+    const isSoldOut = attendanceRatio >= 0.92;
+    const occupiedGrid: boolean[][] = Array.from({ length: rows }, () => Array(columns).fill(false));
+
+    if (isSoldOut) {
+      // 100% Vyprodáno — zaplnit prakticky všechna místa (96–100%)
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < columns; c++) {
+          if (rand() < 0.98) {
+            occupiedGrid[r][c] = true;
+          }
+        }
+      }
+    } else {
+      // Procento návštěvnosti (25%, 50%, 75%)
+      const targetFillRatio = Math.min(0.9, Math.max(0.05, attendanceRatio));
+
+      // 1. Shluky kamarádů vedle sebe
+      const clusterCount = Math.floor((rows * columns * targetFillRatio) / 2.2);
+      for (let i = 0; i < clusterCount; i++) {
+        const r = Math.floor(rand() * rows);
+        const cStart = Math.floor(rand() * (columns - 1));
+        const groupSize = 2 + Math.floor(rand() * 4); // 2 až 5 lidí
+        for (let g = 0; g < groupSize; g++) {
+          const c = cStart + g;
+          if (c < columns && rand() < 0.95) {
+            occupiedGrid[r][c] = true;
+          }
+        }
+      }
+
+      // 2. Doplnění jednotlivců pro dosažení přesného procenta
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < columns; c++) {
+          if (!occupiedGrid[r][c] && rand() < targetFillRatio * 0.85) {
+            occupiedGrid[r][c] = true;
+          }
+        }
+      }
+    }
+
+    // 3. Sestavení detailních vlastností pro každého sedícího fanouška
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < columns; c++) {
-        if (rand() < density) {
+        if (occupiedGrid[r][c]) {
+          const hatRand = rand();
+          const hatType = hatRand < 0.40 ? 1 : hatRand < 0.70 ? 2 : 0;
+
+          // Barva oblečení: V sektoru kotle (ultras) nosí 85%+ fanoušků klubové barvy!
+          let fanCol: string;
+          if (isUltrasSector) {
+            const clubRoll = rand();
+            if (clubRoll < 0.62) {
+              fanCol = teamColor; // hlavní klubová barva (dres/mikina)
+            } else if (clubRoll < 0.86) {
+              fanCol = secondaryColor; // sekundární klubová barva
+            } else if (clubRoll < 0.94) {
+              fanCol = "#FFFFFF"; // bílá klubová mikina
+            } else {
+              fanCol = colors[Math.floor(rand() * colors.length)];
+            }
+          } else {
+            // Na běžných tribunách nosí cca 40% fanoušků klubové barvy a zbytek civilní pestré oblečení
+            const roll = rand();
+            if (roll < 0.28) {
+              fanCol = teamColor;
+            } else if (roll < 0.40) {
+              fanCol = secondaryColor;
+            } else {
+              fanCol = colors[Math.floor(rand() * colors.length)];
+            }
+          }
+
+          // Barva čepice / kšiltovky: v kotli téměř výhradně v klubových barvách
+          const hatCol = isUltrasSector
+            ? rand() < 0.65 ? teamColor : secondaryColor
+            : hatColors[Math.floor(rand() * hatColors.length)];
+
+          // Šála: v kotli 75% fanoušků drží / má klubovou šálu, na ostatních tribunách 25%
+          const hasScarf = isUltrasSector ? rand() < 0.75 : rand() < 0.25;
+
+          // Pivo: v kotli 45% fanoušků s pivem
+          const hasBeer = isUltrasSector ? rand() < 0.45 : rand() < 0.30;
+
           out.push({
             r,
             c,
-            col: colors[Math.floor(rand() * colors.length)],
-            skin: skins[(r * 3 + c) % skins.length],
+            col: fanCol,
+            pantsCol: pantsColors[Math.floor(rand() * pantsColors.length)],
+            skin: skins[(r * 5 + c) % skins.length],
+            hatType,
+            hatCol,
+            hasBeer,
+            hasScarf,
+            leanAngle: (rand() - 0.5) * (isUltrasSector ? 0.22 : 0.15),
           });
         }
       }
     }
     return out;
-  }, [rows, columns, density, colors, skins]);
+  }, [rows, columns, attendanceRatio, colors, pantsColors, skins, hatColors, isUltrasSector, teamColor, secondaryColor]);
 
-  const TORSO_H = 0.45;
-  const HEAD_H = 0.28;
+  const TORSO_H = 0.46;
+  const HEAD_H = 0.26;
 
-  useEffect(() => {
-    if (!torsoRef.current || !headRef.current || filled.length === 0) return;
+  // Nastavení instancí matric a barev
+  useLayoutEffect(() => {
+    if (!torsoRef.current || !headRef.current || !pantsRef.current || filled.length === 0) return;
     const stepX = length / columns;
+
+    let beerIdx = 0;
+    let scarfIdx = 0;
+    let hatIdx = 0;
+
     filled.forEach((f, i) => {
       const x = -length / 2 + stepX * f.c + stepX / 2;
-      const z = f.r * seatDepth + seatDepth * 0.55;
-      const yb = f.r * seatRise + seatRise + 0.45;
+      const z = f.r * seatDepth + seatDepth * 0.52;
+      const yb = f.r * seatRise + seatRise + 0.42;
 
-      // Torzo
-      matrix.makeTranslation(x, yb, z);
+      // 1. Nohy / kalhoty (sedící vpřed)
+      matrix.makeTranslation(x, yb - 0.14, z - 0.08);
+      pantsRef.current!.setMatrixAt(i, matrix);
+      color.set(f.pantsCol);
+      pantsRef.current!.setColorAt(i, color);
+
+      // 2. Torzo v bundě / dresu
+      const rot = new THREE.Matrix4().makeRotationY(f.leanAngle);
+      const trans = new THREE.Matrix4().makeTranslation(x, yb + TORSO_H / 2, z);
+      matrix.multiplyMatrices(trans, rot);
       torsoRef.current!.setMatrixAt(i, matrix);
       color.set(f.col);
       torsoRef.current!.setColorAt(i, color);
 
-      // Hlava
-      matrix.makeTranslation(x, yb + TORSO_H / 2 + HEAD_H / 2, z);
+      // 3. Hlava
+      matrix.makeTranslation(x, yb + TORSO_H + HEAD_H / 2, z);
       headRef.current!.setMatrixAt(i, matrix);
       color.set(f.skin);
       headRef.current!.setColorAt(i, color);
+
+      // 4. Pokrývka hlavy (čepice / kšiltovka / kulich)
+      if (hatRef.current && f.hatType > 0) {
+        matrix.makeTranslation(x, yb + TORSO_H + HEAD_H + 0.04, z + (f.hatType === 1 ? -0.04 : 0));
+        hatRef.current.setMatrixAt(hatIdx, matrix);
+        color.set(f.hatCol);
+        hatRef.current.setColorAt(hatIdx, color);
+        hatIdx++;
+      }
+
+      // 5. Kelímek s pivem v ruce
+      if (beerRef.current && f.hasBeer) {
+        matrix.makeTranslation(x + 0.22, yb + 0.28, z - 0.18);
+        beerRef.current.setMatrixAt(beerIdx, matrix);
+        beerIdx++;
+      }
+
+      // 6. Klubová šála
+      if (scarfRef.current && f.hasScarf) {
+        matrix.makeTranslation(x, yb + TORSO_H * 0.95, z - 0.04);
+        scarfRef.current.setMatrixAt(scarfIdx, matrix);
+        color.set(teamColor);
+        scarfRef.current.setColorAt(scarfIdx, color);
+        scarfIdx++;
+      }
     });
+
+    torsoRef.current.count = filled.length;
     torsoRef.current.instanceMatrix.needsUpdate = true;
     if (torsoRef.current.instanceColor) torsoRef.current.instanceColor.needsUpdate = true;
+
+    pantsRef.current.count = filled.length;
+    pantsRef.current.instanceMatrix.needsUpdate = true;
+    if (pantsRef.current.instanceColor) pantsRef.current.instanceColor.needsUpdate = true;
+
+    headRef.current.count = filled.length;
     headRef.current.instanceMatrix.needsUpdate = true;
     if (headRef.current.instanceColor) headRef.current.instanceColor.needsUpdate = true;
-  }, [filled, length, columns, seatDepth, seatRise, matrix, color]);
+
+    if (hatRef.current) {
+      hatRef.current.count = hatIdx;
+      hatRef.current.instanceMatrix.needsUpdate = true;
+      if (hatRef.current.instanceColor) hatRef.current.instanceColor.needsUpdate = true;
+    }
+
+    if (beerRef.current) {
+      beerRef.current.count = beerIdx;
+      beerRef.current.instanceMatrix.needsUpdate = true;
+    }
+
+    if (scarfRef.current) {
+      scarfRef.current.count = scarfIdx;
+      scarfRef.current.instanceMatrix.needsUpdate = true;
+      if (scarfRef.current.instanceColor) scarfRef.current.instanceColor.needsUpdate = true;
+    }
+
+    // Aktualizovat materiály instancí pro správný shader
+    [torsoRef, pantsRef, headRef, hatRef, scarfRef].forEach((r) => {
+      if (r.current?.material) {
+        (r.current.material as THREE.Material).needsUpdate = true;
+      }
+    });
+  }, [filled, length, columns, seatDepth, seatRise, matrix, color, teamColor]);
 
   if (filled.length === 0) return null;
+
   return (
     <group>
-      <instancedMesh ref={torsoRef} args={[undefined, undefined, filled.length]} castShadow>
-        <boxGeometry args={[seatSize * 0.45, TORSO_H, seatSize * 0.35]} />
-        <meshStandardMaterial vertexColors roughness={0.7} />
+      {/* Nohy sedících diváků */}
+      <instancedMesh ref={pantsRef} args={[undefined, undefined, filled.length]} castShadow>
+        <boxGeometry args={[seatSize * 0.44, 0.32, seatSize * 0.48]} />
+        <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
       </instancedMesh>
+
+      {/* Trup / bundy / dresy */}
+      <instancedMesh ref={torsoRef} args={[undefined, undefined, filled.length]} castShadow>
+        <boxGeometry args={[seatSize * 0.48, TORSO_H, seatSize * 0.36]} />
+        <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
+      </instancedMesh>
+
+      {/* Hlavy s rozličnými světlými tóny pleti */}
       <instancedMesh ref={headRef} args={[undefined, undefined, filled.length]} castShadow>
-        <boxGeometry args={[seatSize * 0.28, HEAD_H, seatSize * 0.28]} />
-        <meshStandardMaterial vertexColors roughness={0.6} />
+        <boxGeometry args={[seatSize * 0.27, HEAD_H, seatSize * 0.27]} />
+        <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#332222" emissiveIntensity={0.25} />
+      </instancedMesh>
+
+      {/* Čepice a kulichy */}
+      <instancedMesh ref={hatRef} args={[undefined, undefined, filled.length]} castShadow>
+        <boxGeometry args={[seatSize * 0.29, 0.1, seatSize * 0.31]} />
+        <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
+      </instancedMesh>
+
+      {/* Pivo v kelímku */}
+      <instancedMesh ref={beerRef} args={[undefined, undefined, filled.length]} castShadow>
+        <cylinderGeometry args={[0.045, 0.035, 0.13, 6]} />
+        <meshStandardMaterial color="#FBBF24" roughness={0.2} transparent opacity={0.92} />
+      </instancedMesh>
+
+      {/* Klubové šály */}
+      <instancedMesh ref={scarfRef} args={[undefined, undefined, filled.length]} castShadow>
+        <boxGeometry args={[seatSize * 0.38, 0.08, 0.12]} />
+        <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
       </instancedMesh>
     </group>
   );

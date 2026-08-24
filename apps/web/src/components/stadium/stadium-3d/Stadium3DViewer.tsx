@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Stadium3D } from "./Stadium3D";
 import type { Stadium3DCustomization, LastMatchScore } from "./Stadium3D";
-import type { WeatherType } from "./constants";
+import type { WeatherType, StadiumMode } from "./constants";
 
 interface Stadium3DViewerProps {
   open: boolean;
@@ -24,6 +24,12 @@ interface Stadium3DViewerProps {
   lastMatch?: LastMatchScore | null;
   weather?: WeatherType;
   initialWeather?: WeatherType;
+  initialMode?: StadiumMode;
+  mode?: StadiumMode;
+  onModeChange?: (mode: StadiumMode) => void;
+  initialAttendanceRatio?: number;
+  attendanceRatio?: number;
+  onAttendanceChange?: (ratio: number) => void;
 }
 
 export function Stadium3DViewer(props: Stadium3DViewerProps) {

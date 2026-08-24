@@ -357,7 +357,7 @@ export default function StadiumPage() {
             </button>
             <div className="flex items-center justify-center gap-1.5 text-xs text-muted text-center pt-0.5">
               <span>💡</span>
-              <span>Pro simulaci <strong>počasí</strong> (déšť, sníh, vítr), <strong>denní doby</strong> (západ, noc) a <strong>kamer</strong> klikněte v rohu scény na <strong>🎛️ Počasí & Kamery</strong>.</span>
+              <span>Pro přepínání <strong>režimu areálu</strong> (Zápasový vs. Tréninkový den), <strong>počasí</strong> a <strong>kamer</strong> klikněte v rohu scény na <strong>🎛️ Počasí & Kamery</strong>.</span>
             </div>
           </div>
         ) : (

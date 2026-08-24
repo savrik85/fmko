@@ -211,3 +211,37 @@ export const WEATHER_OPTIONS: Record<WeatherType, WeatherOption> = {
     defaultTemp: -2,
   },
 };
+
+export type StadiumMode = "match_day" | "training_day";
+
+export interface StadiumModeOption {
+  id: StadiumMode;
+  label: string;
+  icon: string;
+  desc: string;
+}
+
+export const STADIUM_MODES: Record<StadiumMode, StadiumModeOption> = {
+  match_day: {
+    id: "match_day",
+    label: "Zápas",
+    icon: "⚽",
+    desc: "Zápasový den (fanoušci, kotel, plný areál)",
+  },
+  training_day: {
+    id: "training_day",
+    label: "Trénink",
+    icon: "🏃",
+    desc: "Tréninkový den (kužely, slalom, prázdné tribuny)",
+  },
+};
+
+export type AttendanceLevel = "low" | "medium" | "high" | "sold_out";
+
+export const ATTENDANCE_PRESETS: Record<AttendanceLevel, { id: AttendanceLevel; label: string; ratio: number; icon: string; desc: string }> = {
+  low: { id: "low", label: "25%", ratio: 0.25, icon: "👤", desc: "Slabá návštěva (~25%)" },
+  medium: { id: "medium", label: "50%", ratio: 0.50, icon: "👥", desc: "Polozaplněný stadion (~50%)" },
+  high: { id: "high", label: "75%", ratio: 0.75, icon: "🏟️", desc: "Velmi slušná návštěva (~75%)" },
+  sold_out: { id: "sold_out", label: "100%", ratio: 1.00, icon: "🔥", desc: "Vyprodáno do posledního místa (100%)" },
+};
+

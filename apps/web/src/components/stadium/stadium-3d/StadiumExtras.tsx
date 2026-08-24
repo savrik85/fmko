@@ -2,7 +2,7 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { PITCH, STAND_DIMS, type WeatherType } from "./constants";
+import { PITCH, STAND_DIMS, type WeatherType, type StadiumMode } from "./constants";
 import { generateCorrugatedTexture } from "./materialTextures";
 
 const STAND_GAP = 2.5;
@@ -190,6 +190,7 @@ export function UltrasSector({
   text,
   bannerColor,
   textColor,
+  mode = "match_day",
 }: {
   level: number;
   primaryColor: string;
@@ -197,7 +198,9 @@ export function UltrasSector({
   text?: string | null;
   bannerColor?: string | null;
   textColor?: string | null;
+  mode?: StadiumMode;
 }) {
+  const isTrainingDay = mode === "training_day";
   const sec = secondaryColor ?? "#ffffff";
   const bannerBg = bannerColor ?? primaryColor;
   // Barva nápisu: volitelná; jinak čitelný kontrast k barvě plachty (bílá na tmavé, tmavá na světlé).
@@ -224,22 +227,23 @@ export function UltrasSector({
         </mesh>
       )}
 
-      {/* Žerdě s vlajkami — trčí nad tribunu, nezakrývají ji */}
-      {Array.from({ length: count }).map((_, i) => {
-        const x = -spread / 2 + (spread / Math.max(count - 1, 1)) * i;
-        return (
-          <group key={i} position={[x, 0, z]}>
-            <mesh position={[0, poleH / 2, 0]} castShadow>
-              <cylinderGeometry args={[0.07, 0.07, poleH, 6]} />
-              <meshStandardMaterial color="#2E2E2E" metalness={0.5} roughness={0.5} />
-            </mesh>
-            <WavingPennant color={i % 2 === 0 ? sec : primaryColor} y={poleH - 0.6} phase={i * 0.8} />
-          </group>
-        );
-      })}
+      {/* Žerdě s vlajkami — jen v zápasový den vlají, v tréninkový den jsou stažené/žerdě */}
+      {!isTrainingDay &&
+        Array.from({ length: count }).map((_, i) => {
+          const x = -spread / 2 + (spread / Math.max(count - 1, 1)) * i;
+          return (
+            <group key={i} position={[x, 0, z]}>
+              <mesh position={[0, poleH / 2, 0]} castShadow>
+                <cylinderGeometry args={[0.07, 0.07, poleH, 6]} />
+                <meshStandardMaterial color="#2E2E2E" metalness={0.5} roughness={0.5} />
+              </mesh>
+              <WavingPennant color={i % 2 === 0 ? sec : primaryColor} y={poleH - 0.6} phase={i * 0.8} />
+            </group>
+          );
+        })}
 
-      {/* Buben (od L2) — v rohu vedle branky, mimo hřiště, čelem k hřišti */}
-      {lvl >= 2 && (
+      {/* Buben (od L2) — jen v zápasový den */}
+      {!isTrainingDay && lvl >= 2 && (
         <group position={[spread * 0.5 + 1.6, 0, z]}>
           <mesh position={[0, 0.9, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <cylinderGeometry args={[0.75, 0.75, 1.0, 18]} />
@@ -260,17 +264,19 @@ export function UltrasSector({
         </group>
       )}
 
-      {/* Pyrotechnika & Dýmovnice v klubových barvách */}
-      <UltrasPyroShow
-        level={lvl}
-        primaryColor={primaryColor}
-        secondaryColor={sec}
-        z={z}
-        spread={spread}
-      />
+      {/* Pyrotechnika & Dýmovnice — jen v zápasový den */}
+      {!isTrainingDay && (
+        <UltrasPyroShow
+          level={lvl}
+          primaryColor={primaryColor}
+          secondaryColor={sec}
+          z={z}
+          spread={spread}
+        />
+      )}
 
-      {/* Spíkr / rozeřvávač kotle se stupínkem a megafonem (od L2) */}
-      {lvl >= 2 && (
+      {/* Spíkr / rozeřvávač kotle se stupínkem a megafonem (od L2) — jen v zápasový den */}
+      {!isTrainingDay && lvl >= 2 && (
         <UltrasCapoStand
           position={[-spread * 0.45, 0, z + 0.6]}
           primaryColor={primaryColor}
@@ -280,6 +286,7 @@ export function UltrasSector({
   );
 }
 
+/** Pyrotechnika kotle — plápolající světlice a stoupající kouř v barvách klubu */
 /** Pyrotechnika kotle — plápolající světlice a stoupající kouř v barvách klubu */
 function UltrasPyroShow({
   level,
@@ -308,57 +315,79 @@ function UltrasPyroShow({
   return (
     <group>
       {flarePositions.map((fl, i) => (
-        <PyroFlare key={i} position={[fl.x, 1.3, z - 0.2]} color={fl.color} phase={fl.phase} />
+        <PyroFlare key={i} position={[fl.x, 1.4, z - 0.3]} color={fl.color} phase={fl.phase} />
       ))}
     </group>
   );
 }
 
-/** Jednotlivá světlice s plápolajícím ohněm a stoupajícími oblaky kouře */
+/** Jednotlivá světlice s plápolajícím ohněm, jiskrami a hustým stoupajícím kouřem */
 function PyroFlare({ position, color, phase }: { position: [number, number, number]; color: string; phase: number }) {
   const lightRef = useRef<THREE.PointLight>(null);
   const smokeGroupRef = useRef<THREE.Group>(null);
   const flameMeshRef = useRef<THREE.Mesh>(null);
+  const auraMeshRef = useRef<THREE.Mesh>(null);
+  const sparksRef = useRef<THREE.Group>(null);
 
-  // Počet obláčků kouře
-  const puffCount = 5;
+  // Obláčky kouře s různou fází růstu
+  const puffCount = 7;
   const puffs = useMemo(() => {
     return Array.from({ length: puffCount }).map((_, i) => ({
-      delay: (i / puffCount) * 2.0,
-      driftX: (Math.sin(i * 1.7) * 0.4),
-      driftZ: (Math.cos(i * 2.1) * 0.3),
-      size: 0.35 + (i * 0.12),
+      delay: (i / puffCount) * 2.2,
+      driftX: Math.sin(i * 1.9 + phase) * 0.55,
+      driftZ: Math.cos(i * 2.3 + phase) * 0.4,
+      rotSpeed: (Math.sin(i * 3.1) > 0 ? 1 : -1) * (0.5 + (i % 3) * 0.3),
+      size: 0.4 + (i * 0.14),
     }));
-  }, [puffCount]);
+  }, [puffCount, phase]);
 
   useFrame(({ clock }) => {
-    const t = clock.elapsedTime * 2.2 + phase;
+    const t = clock.elapsedTime * 2.5 + phase;
 
     // Plápolání světla
     if (lightRef.current) {
-      lightRef.current.intensity = 1.2 + Math.sin(t * 7.5) * 0.4 + Math.cos(t * 11) * 0.25;
+      lightRef.current.intensity = 2.2 + Math.sin(t * 8.5) * 0.8 + Math.cos(t * 13) * 0.4;
     }
 
-    // Třepotání plamene
+    // Třepotání plamene a záře
     if (flameMeshRef.current) {
-      const s = 0.9 + Math.sin(t * 9) * 0.25;
-      flameMeshRef.current.scale.set(s, s * 1.3, s);
+      const s = 1.0 + Math.sin(t * 11) * 0.3;
+      flameMeshRef.current.scale.set(s, s * 1.5, s);
+    }
+    if (auraMeshRef.current) {
+      const s = 1.2 + Math.sin(t * 7) * 0.35;
+      auraMeshRef.current.scale.set(s, s, s);
+    }
+
+    // Jiskry vystřelující vzhůru
+    if (sparksRef.current) {
+      sparksRef.current.children.forEach((child, idx) => {
+        const sparkAge = ((clock.elapsedTime * 2.8 + idx * 0.4 + phase) % 1.0);
+        child.position.y = sparkAge * 1.6;
+        child.position.x = Math.sin(sparkAge * 8 + idx) * 0.25;
+        child.position.z = Math.cos(sparkAge * 8 + idx) * 0.2;
+        const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
+        if (mat) {
+          mat.opacity = (1 - sparkAge) * 0.9;
+        }
+      });
     }
 
     // Animace stoupajícího kouře
     if (smokeGroupRef.current) {
       smokeGroupRef.current.children.forEach((child, idx) => {
         const puff = puffs[idx];
-        const age = ((clock.elapsedTime * 0.85 + puff.delay + phase) % 2.0) / 2.0; // 0..1
-        child.position.y = age * 2.2;
-        child.position.x = puff.driftX * age + Math.sin(t + idx) * 0.15;
+        const age = ((clock.elapsedTime * 0.75 + puff.delay + phase) % 2.2) / 2.2; // 0..1
+        child.position.y = age * 2.6;
+        child.position.x = puff.driftX * age + Math.sin(t * 0.8 + idx) * 0.25;
         child.position.z = puff.driftZ * age;
-        const scale = puff.size * (0.6 + age * 1.4);
+        child.rotation.z = clock.elapsedTime * puff.rotSpeed;
+        const scale = puff.size * (0.6 + age * 1.9);
         child.scale.set(scale, scale, scale);
 
         const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
         if (mat) {
-          mat.opacity = Math.sin(age * Math.PI) * 0.45;
+          mat.opacity = Math.sin(age * Math.PI) * 0.55;
         }
       });
     }
@@ -366,36 +395,80 @@ function PyroFlare({ position, color, phase }: { position: [number, number, numb
 
   return (
     <group position={position}>
-      {/* Tělo světlice / patrona */}
-      <mesh castShadow>
-        <cylinderGeometry args={[0.04, 0.04, 0.3, 8]} />
+      {/* Postava fanouška držícího světlici */}
+      <group position={[0, -0.9, 0]}>
+        {/* Nohy */}
+        <mesh position={[0, 0.4, 0]} castShadow>
+          <boxGeometry args={[0.26, 0.8, 0.22]} />
+          <meshStandardMaterial color="#1E293B" />
+        </mesh>
+        {/* Tělo v mikině */}
+        <mesh position={[0, 0.95, 0]} castShadow>
+          <boxGeometry args={[0.38, 0.45, 0.25]} />
+          <meshStandardMaterial color="#18181B" roughness={0.7} />
+        </mesh>
+        {/* Zvednutá ruka se světlicí */}
+        <mesh position={[0.2, 1.25, 0]} rotation={[0, 0, -0.4]} castShadow>
+          <boxGeometry args={[0.08, 0.4, 0.08]} />
+          <meshStandardMaterial color="#18181B" />
+        </mesh>
+        {/* Hlava s kšiltovkou */}
+        <mesh position={[0, 1.32, 0]} castShadow>
+          <boxGeometry args={[0.24, 0.24, 0.24]} />
+          <meshStandardMaterial color="#D19A6A" />
+        </mesh>
+        <mesh position={[0, 1.45, 0.03]} castShadow>
+          <boxGeometry args={[0.26, 0.08, 0.3]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+      </group>
+
+      {/* Tělo světlice / patrona v ruce */}
+      <mesh position={[0.32, 0.5, 0]} rotation={[0, 0, -0.2]} castShadow>
+        <cylinderGeometry args={[0.045, 0.045, 0.35, 8]} />
         <meshStandardMaterial color="#2B2D42" roughness={0.4} />
       </mesh>
 
-      {/* Planoucí špička světlice */}
-      <mesh ref={flameMeshRef} position={[0, 0.18, 0]}>
-        <sphereGeometry args={[0.07, 8, 8]} />
-        <meshBasicMaterial color="#FFFFFF" />
+      {/* Planoucí špička světlice - zářivý střed */}
+      <mesh ref={flameMeshRef} position={[0.35, 0.72, 0]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshBasicMaterial color="#FFFBEB" />
       </mesh>
+
+      {/* Barevná záře kolem plamene */}
+      <mesh ref={auraMeshRef} position={[0.35, 0.72, 0]}>
+        <sphereGeometry args={[0.18, 8, 8]} />
+        <meshBasicMaterial color={color} transparent opacity={0.65} depthWrite={false} />
+      </mesh>
+
+      {/* Vystřelující jiskry */}
+      <group ref={sparksRef} position={[0.35, 0.75, 0]}>
+        {Array.from({ length: 4 }).map((_, idx) => (
+          <mesh key={idx}>
+            <sphereGeometry args={[0.025, 4, 4]} />
+            <meshBasicMaterial color="#FEF08A" transparent opacity={0.9} />
+          </mesh>
+        ))}
+      </group>
 
       {/* Bodové světlo osvětlující kotel barvou dýmu */}
       <pointLight
         ref={lightRef}
         color={color}
-        distance={6.5}
-        intensity={1.2}
+        distance={9.0}
+        intensity={2.2}
         decay={1.8}
       />
 
       {/* Stoupající obláčky kouře v klubové barvě */}
-      <group ref={smokeGroupRef} position={[0, 0.25, 0]}>
+      <group ref={smokeGroupRef} position={[0.35, 0.85, 0]}>
         {puffs.map((_, idx) => (
           <mesh key={idx}>
             <sphereGeometry args={[1, 7, 7]} />
             <meshBasicMaterial
               color={color}
               transparent
-              opacity={0.4}
+              opacity={0.45}
               depthWrite={false}
             />
           </mesh>
