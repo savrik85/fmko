@@ -232,7 +232,7 @@ export function Pitch({
   return (
     <group>
       {/* Hlavní hřiště — jemná procedurální tráva bez ostrého pixelového šumu */}
-      <mesh rotation={pitchRotation} position={[0, 0.01, 0]} receiveShadow>
+      <mesh rotation={pitchRotation} position={[0, 0.05, 0]} receiveShadow>
         <planeGeometry args={[PITCH.width, PITCH.depth]} />
         <meshStandardMaterial
           map={grassSurface.map}
@@ -249,7 +249,7 @@ export function Pitch({
         <mesh
           key={`puddle-${i}`}
           rotation={[-Math.PI / 2, 0, p.rotation]}
-          position={[p.nx * HALF_W, 0.028 + (i % 3) * 0.001, p.nz * HALF_D]}
+          position={[p.nx * HALF_W, 0.068 + (i % 3) * 0.001, p.nz * HALF_D]}
           scale={[p.rx * PITCH.width, p.rz * PITCH.depth, 1]}
         >
           <circleGeometry args={[1, 16]} />
@@ -273,7 +273,7 @@ export function Pitch({
         <mesh
           key={i}
           rotation={[-Math.PI / 2, 0, s.rotation]}
-          position={[s.nx * HALF_W, 0.025 + (i % 3) * 0.001, s.nz * HALF_D]}
+          position={[s.nx * HALF_W, 0.065 + (i % 3) * 0.001, s.nz * HALF_D]}
           scale={[s.rx * PITCH.width, s.rz * PITCH.depth, 1]}
         >
           <circleGeometry args={[1, 8]} />

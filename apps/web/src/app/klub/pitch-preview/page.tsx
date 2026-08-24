@@ -23,13 +23,14 @@ function Preview() {
   const heating = Number(q.get("heating") ?? 0);
   const irrigation = Number(q.get("irrigation") ?? 0);
   const moisture = Number(q.get("moisture") ?? 50);
+  const surround = q.get("surround") ?? "grass";
   const pitchType = q.get("pitchType") ?? "natural";
   const timeOfDay = (q.get("time") ?? "day") as never;
 
   return (
     <div className="w-screen h-screen">
       <div className="absolute top-2 left-2 z-10 bg-white/90 rounded px-3 py-1.5 text-sm font-bold">
-        stav {condition} · {weather} · vyhřívání Lv{heating} · zavlažování Lv{irrigation} · vlhkost {moisture} · {pitchType}
+        stav {condition} · {weather} · vyhřívání Lv{heating} · zavlažování Lv{irrigation} · vlhkost {moisture} · okolí {surround} · {pitchType}
       </div>
       <Stadium3D
         pitchCondition={condition}
@@ -42,6 +43,7 @@ function Preview() {
         teamColor="#2E7D32"
         secondaryColor="#FFFFFF"
         stadiumName="Náhled"
+        customization={{ surroundSurface: surround }}
         initialTimeOfDay={timeOfDay}
       />
     </div>

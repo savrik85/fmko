@@ -64,11 +64,17 @@ export function SurroundTrack({
         receiveShadow
       >
         <planeGeometry args={[APRON_W, APRON_D]} />
+        {/* Deska jde pod celý areál včetně prostoru pod hřištěm. polygonOffset ji
+            v hloubkovém testu odsune dozadu, takže i při zbytku nepřesnosti
+            prohraje s trávníkem místo aby jím prosvítala. */}
         <meshStandardMaterial
           map={surfaceSet.map}
           bumpMap={surfaceSet.bumpMap}
           bumpScale={isSnow ? 0.03 : isPaved ? 0.06 : isClay ? 0.07 : 0.04}
           roughness={isClubCarpet || isAstro ? 0.85 : 0.94}
+          polygonOffset
+          polygonOffsetFactor={1}
+          polygonOffsetUnits={1}
         />
       </mesh>
 
