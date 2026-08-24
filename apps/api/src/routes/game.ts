@@ -1652,9 +1652,24 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const effectiveCapacity = ((stadium.capacity as number) ?? 200) + calculateFacilityEffects(facilities).capacityBonus;
   const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);
 
-  const pitchHeatingLevel = (await c.env.DB.prepare("SELECT pitch_heating FROM equipment WHERE team_id = ?")
-    .bind(teamId).first<{ pitch_heating: number }>()
-    .catch((e) => { logger.warn({ module: "game" }, "load pitch heating", e); return null; }))?.pitch_heating ?? 0;
+  const careEquip = await c.env.DB.prepare("SELECT pitch_heating, pitch_irrigation FROM equipment WHERE team_id = ?")
+    .bind(teamId).first<{ pitch_heating: number; pitch_irrigation: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load pitch care equipment", e); return null; });
+  const pitchHeatingLevel = careEquip?.pitch_heating ?? 0;
+
+  const { PITCH_CARE_MODE_LABEL, serviceCost, SNOW_CLEARING_COST } = await import("../stadium/pitch-care");
+  const careMode = ((stadium.pitch_care_mode as string) ?? "auto") as keyof typeof PITCH_CARE_MODE_LABEL;
+  const pitchCare = {
+    mode: careMode,
+    modeLabel: PITCH_CARE_MODE_LABEL[careMode] ?? PITCH_CARE_MODE_LABEL.auto,
+    heatingLevel: pitchHeatingLevel,
+    irrigationLevel: careEquip?.pitch_irrigation ?? 0,
+    heatingCost: serviceCost("heating", pitchHeatingLevel),
+    irrigationCost: serviceCost("irrigation", careEquip?.pitch_irrigation ?? 0),
+    snowClearingCost: SNOW_CLEARING_COST,
+    careOrdered: ((stadium.pitch_care_ordered as number) ?? 0) > 0,
+    snowClearingOrdered: ((stadium.pitch_snow_clearing_ordered as number) ?? 0) > 0,
+  };
 
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
@@ -1664,6 +1679,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     // Vyhřívání je vybavení, ne zázemí stadionu — 3D pohled ho potřebuje zvlášť,
     // aby na vyhřívané ploše nevykresloval sníh.
     pitchHeating: pitchHeatingLevel,
+    pitchCare,
     facilities,
     customization,
     visualUpgrades,
@@ -1897,6 +1913,83 @@ gameRouter.post("/teams/:teamId/stadium/maintain-pitch", async (c) => {
   ).bind(action.improvement, teamId).run();
 
   return c.json({ ok: true, cost: action.cost, improvement: action.improvement });
+});
+
+// POST /api/teams/:id/stadium/pitch-care-mode — jak se má péče o trávník zapínat
+gameRouter.post("/teams/:teamId/stadium/pitch-care-mode", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ mode: string }>();
+
+  const { PITCH_CARE_MODES, PITCH_CARE_MODE_LABEL } = await import("../stadium/pitch-care");
+  if (!PITCH_CARE_MODES.includes(body.mode as never)) {
+    return c.json({ error: "Neznámý režim péče o hřiště." }, 400);
+  }
+
+  await c.env.DB.prepare("UPDATE stadiums SET pitch_care_mode = ? WHERE team_id = ?")
+    .bind(body.mode, teamId).run();
+
+  return c.json({ ok: true, mode: body.mode, label: PITCH_CARE_MODE_LABEL[body.mode as never] });
+});
+
+// POST /api/teams/:id/stadium/pitch-care-order — objednávka péče na nejbližší domácí zápas
+gameRouter.post("/teams/:teamId/stadium/pitch-care-order", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ service: "care" | "snow_clearing" }>();
+
+  const { SNOW_CLEARING_COST, serviceCost } = await import("../stadium/pitch-care");
+
+  const stadium = await c.env.DB.prepare(
+    "SELECT pitch_care_mode, pitch_care_ordered, pitch_snow_clearing_ordered FROM stadiums WHERE team_id = ?"
+  ).bind(teamId).first<{
+    pitch_care_mode: string | null;
+    pitch_care_ordered: number | null;
+    pitch_snow_clearing_ordered: number | null;
+  }>();
+  if (!stadium) return c.json({ error: "Stadion nenalezen" }, 404);
+
+  if (body.service === "snow_clearing") {
+    if ((stadium.pitch_snow_clearing_ordered ?? 0) > 0) {
+      return c.json({ error: "Úklid sněhu už je na příští domácí zápas objednaný." }, 409);
+    }
+    // Platí se až u zápasu — do té doby se dá objednávka zrušit a počasí se může změnit.
+    await c.env.DB.prepare("UPDATE stadiums SET pitch_snow_clearing_ordered = 1 WHERE team_id = ?")
+      .bind(teamId).run();
+    return c.json({ ok: true, service: "snow_clearing", estimatedCost: SNOW_CLEARING_COST });
+  }
+
+  if (stadium.pitch_care_mode !== "manual") {
+    return c.json({ error: "Objednávat se dá jen v ručním režimu. V automatickém se péče zapne sama." }, 409);
+  }
+  if ((stadium.pitch_care_ordered ?? 0) > 0) {
+    return c.json({ error: "Péče už je na příští domácí zápas objednaná." }, 409);
+  }
+
+  const equip = await c.env.DB.prepare("SELECT pitch_heating, pitch_irrigation FROM equipment WHERE team_id = ?")
+    .bind(teamId).first<{ pitch_heating: number; pitch_irrigation: number }>();
+  if (!equip || (equip.pitch_heating ?? 0) + (equip.pitch_irrigation ?? 0) === 0) {
+    return c.json({ error: "Nemáš vyhřívání ani zavlažování — není co zapínat." }, 400);
+  }
+
+  await c.env.DB.prepare("UPDATE stadiums SET pitch_care_ordered = 1 WHERE team_id = ?")
+    .bind(teamId).run();
+
+  return c.json({
+    ok: true,
+    service: "care",
+    estimatedCost: {
+      heating: serviceCost("heating", equip.pitch_heating ?? 0),
+      irrigation: serviceCost("irrigation", equip.pitch_irrigation ?? 0),
+    },
+  });
+});
+
+// DELETE /api/teams/:id/stadium/pitch-care-order — zrušení objednávky (ještě se neplatilo)
+gameRouter.delete("/teams/:teamId/stadium/pitch-care-order", async (c) => {
+  const teamId = c.req.param("teamId");
+  await c.env.DB.prepare(
+    "UPDATE stadiums SET pitch_care_ordered = 0, pitch_snow_clearing_ordered = 0 WHERE team_id = ?"
+  ).bind(teamId).run();
+  return c.json({ ok: true });
 });
 
 // POST /api/teams/:id/stadium/upgrade-pitch — change pitch type

@@ -81,6 +81,18 @@ interface VisualUpgrade {
   label: string;
 }
 
+interface PitchCare {
+  mode: "auto" | "manual" | "off";
+  modeLabel: string;
+  heatingLevel: number;
+  irrigationLevel: number;
+  heatingCost: number;
+  irrigationCost: number;
+  snowClearingCost: number;
+  careOrdered: boolean;
+  snowClearingOrdered: boolean;
+}
+
 interface StadiumData {
   stadiumName: string | null;
   capacity: number;
@@ -89,6 +101,7 @@ interface StadiumData {
   facilities: Record<string, number>;
   /** Úroveň vyhřívání trávníku (0–3) z vybavení — vyhřívaná plocha nezasněží. */
   pitchHeating?: number;
+  pitchCare?: PitchCare;
   customization: Customization;
   visualUpgrades: VisualUpgrade[];
   upgrades: UpgradeOption[];
@@ -778,6 +791,143 @@ export default function StadiumPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {stadium.pitchCare && (
+            <div className="pt-3 border-t border-gray-100">
+              <div className="text-xs text-muted font-heading uppercase mb-2">Péče o trávník</div>
+
+              {stadium.pitchCare.heatingLevel === 0 && stadium.pitchCare.irrigationLevel === 0 ? (
+                <p className="text-sm text-muted mb-3">
+                  Nemáš vyhřívání ani zavlažování. Ve Vybavení se dají pořídit — počasí pak trávníku
+                  neubližuje tolik.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-muted mb-2">
+                    Zařízení se musí zapnout a ta elektřina i voda něco stojí. Provoz se platí za zápas,
+                    ve kterém je potřeba.
+                  </p>
+                  <div className="text-sm mb-3 space-y-0.5">
+                    {stadium.pitchCare.heatingLevel > 0 && (
+                      <div className="flex justify-between">
+                        <span>🔥 Vyhřívání (déšť a sníh)</span>
+                        <span className="font-heading font-bold tabular-nums">{formatCZK(stadium.pitchCare.heatingCost)}</span>
+                      </div>
+                    )}
+                    {stadium.pitchCare.irrigationLevel > 0 && (
+                      <div className="flex justify-between">
+                        <span>💧 Zavlažování (výheň)</span>
+                        <span className="font-heading font-bold tabular-nums">{formatCZK(stadium.pitchCare.irrigationCost)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {([
+                      { mode: "auto", label: "Automaticky" },
+                      { mode: "manual", label: "Ručně" },
+                      { mode: "off", label: "Nezapínat" },
+                    ] as const).map((m) => (
+                      <button
+                        key={m.mode}
+                        onClick={async () => {
+                          setActing("care-mode");
+                          try {
+                            await apiFetch(`/api/teams/${teamId}/stadium/pitch-care-mode`, {
+                              method: "POST",
+                              body: JSON.stringify({ mode: m.mode }),
+                            });
+                            await refresh();
+                          } catch (e) {
+                            console.error("Nastavení režimu péče selhalo:", e);
+                          } finally {
+                            setActing(null);
+                          }
+                        }}
+                        disabled={!!acting}
+                        className={`py-1.5 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
+                          stadium.pitchCare!.mode === m.mode
+                            ? "bg-pitch-500 text-white"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {stadium.pitchCare.mode === "off" && (
+                    <p className="text-sm text-amber-700 mb-3">
+                      Péče je vypnutá. Ušetříš za provoz, ale trávník půjde dolů rychleji — a soutěž
+                      si může neudržované hřiště vytknout.
+                    </p>
+                  )}
+
+                  {stadium.pitchCare.mode === "manual" && (
+                    <div className="flex items-center justify-between gap-3 py-2 border-t border-gray-50">
+                      <div className="text-sm">
+                        {stadium.pitchCare.careOrdered
+                          ? "Na příští domácí zápas je péče objednaná."
+                          : "Na příští domácí zápas není objednané nic."}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          setActing("care-order");
+                          try {
+                            await apiFetch(`/api/teams/${teamId}/stadium/pitch-care-order`, {
+                              method: stadium.pitchCare!.careOrdered ? "DELETE" : "POST",
+                              body: JSON.stringify({ service: "care" }),
+                            });
+                            await refresh();
+                          } catch (e) {
+                            console.error("Objednávka péče selhala:", e);
+                          } finally {
+                            setActing(null);
+                          }
+                        }}
+                        disabled={!!acting}
+                        className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+                      >
+                        {acting === "care-order" ? "..." : stadium.pitchCare.careOrdered ? "Zrušit" : "Objednat"}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className="flex items-center justify-between gap-3 py-2 border-t border-gray-50">
+                <div className="min-w-0">
+                  <div className="font-heading font-bold text-sm">❄️ Úklid sněhu</div>
+                  <div className="text-xs text-muted">
+                    Parta s lopatami na jeden zápas. Zabere i bez vyhřívání, ale rozbředlý podklad neřeší.
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    setActing("snow");
+                    try {
+                      await apiFetch(`/api/teams/${teamId}/stadium/pitch-care-order`, {
+                        method: stadium.pitchCare!.snowClearingOrdered ? "DELETE" : "POST",
+                        body: JSON.stringify({ service: "snow_clearing" }),
+                      });
+                      await refresh();
+                    } catch (e) {
+                      console.error("Objednávka úklidu sněhu selhala:", e);
+                    } finally {
+                      setActing(null);
+                    }
+                  }}
+                  disabled={!!acting}
+                  className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+                >
+                  {acting === "snow" ? "..." : stadium.pitchCare.snowClearingOrdered ? "Zrušit" : "Objednat"}
+                </button>
+              </div>
+              <div className="text-xs text-muted mb-1">
+                Cena úklidu {formatCZK(stadium.pitchCare.snowClearingCost)}, platí se až u zápasu.
+              </div>
             </div>
           )}
 

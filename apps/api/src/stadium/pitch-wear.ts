@@ -1,5 +1,8 @@
 import { logger } from "../lib/logger";
 import type { Weather } from "../engine/types";
+import {
+  careEffectiveness, decidePitchCare, type PitchCareDecision, type PitchCareMode,
+} from "./pitch-care";
 
 /**
  * Opotřebení trávníku odehraným zápasem.
@@ -77,12 +80,14 @@ export function pitchWearForMatch(
   return Math.round(base * (1 + (entry.mult - 1) * (1 - damped)));
 }
 
-/** Péče o trávník podle vybavení domácího týmu. Bez vybavení nebo při chybě nuly. */
-async function loadPitchCareMods(db: D1Database, teamId: string): Promise<PitchCareMods> {
+/** Úrovně a účinnost zařízení péče o trávník. Bez vybavení nebo při chybě nuly. */
+async function loadPitchEquipment(db: D1Database, teamId: string): Promise<
+  PitchCareMods & { heatingLevel: number; irrigationLevel: number }
+> {
   try {
     const row = await db.prepare("SELECT * FROM equipment WHERE team_id = ?")
       .bind(teamId).first<Record<string, unknown>>();
-    if (!row) return {};
+    if (!row) return { heatingLevel: 0, irrigationLevel: 0 };
 
     const levels: Record<string, number> = {};
     const conditions: Record<string, number> = {};
@@ -94,39 +99,92 @@ async function loadPitchCareMods(db: D1Database, teamId: string): Promise<PitchC
 
     const { calculateEffects } = await import("../equipment/equipment-generator");
     const eff = calculateEffects(levels, conditions);
-    return { heatingMod: eff.pitchHeatingMod, irrigationMod: eff.pitchIrrigationMod };
+    return {
+      heatingMod: eff.pitchHeatingMod,
+      irrigationMod: eff.pitchIrrigationMod,
+      heatingLevel: levels.pitch_heating ?? 0,
+      irrigationLevel: levels.pitch_irrigation ?? 0,
+    };
   } catch (e) {
     logger.warn({ module: "pitch-wear" }, "nacteni pece o travnik", e);
-    return {};
+    return { heatingLevel: 0, irrigationLevel: 0 };
   }
 }
 
 /**
- * Zapíše opotřebení hřiště domácího týmu. Chybu jen loguje — rozehraný zápas
- * se kvůli trávníku rušit nebude.
+ * Zapíše opotřebení hřiště domácího týmu a vyúčtuje péči, která se před zápasem
+ * zapnula. Chybu jen loguje — rozehraný zápas se kvůli trávníku rušit nebude.
+ *
+ * Vrací, co se zapnulo a co to stálo, aby to šlo ukázat v zápise ze zápasu.
  */
 export async function applyPitchWear(
   db: D1Database,
   homeTeamId: string,
   weather: Weather | null | undefined,
-): Promise<void> {
+  gameDate?: string,
+): Promise<PitchCareDecision & { wear: number }> {
+  const nic: PitchCareDecision & { wear: number } = { service: null, cost: 0, skipped: null, wear: 0 };
   try {
     const stadium = await db
-      .prepare("SELECT pitch_type FROM stadiums WHERE team_id = ?")
+      .prepare(`SELECT pitch_type, pitch_care_mode, pitch_care_ordered, pitch_snow_clearing_ordered
+                  FROM stadiums WHERE team_id = ?`)
       .bind(homeTeamId)
-      .first<{ pitch_type: string | null }>();
-    if (!stadium) return;
+      .first<{
+        pitch_type: string | null;
+        pitch_care_mode: string | null;
+        pitch_care_ordered: number | null;
+        pitch_snow_clearing_ordered: number | null;
+      }>();
+    if (!stadium) return nic;
 
-    const care = await loadPitchCareMods(db, homeTeamId);
-    const wear = pitchWearForMatch(stadium.pitch_type, weather, care);
-    if (wear <= 0) return;
+    const equip = await loadPitchEquipment(db, homeTeamId);
+    const budget = (await db.prepare("SELECT budget FROM teams WHERE id = ?")
+      .bind(homeTeamId).first<{ budget: number }>()
+      .catch((e) => { logger.warn({ module: "pitch-wear" }, "rozpocet pro peci o travnik", e); return null; }))?.budget ?? 0;
+
+    const decision = decidePitchCare({
+      weather,
+      mode: (stadium.pitch_care_mode as PitchCareMode) ?? "auto",
+      heatingLevel: equip.heatingLevel,
+      irrigationLevel: equip.irrigationLevel,
+      orderedThisMatch: (stadium.pitch_care_ordered ?? 0) > 0,
+      snowClearingOrdered: (stadium.pitch_snow_clearing_ordered ?? 0) > 0,
+      budget,
+    });
+
+    // Objednávky platí jen na tenhle zápas — spotřebují se bez ohledu na výsledek,
+    // jinak by jedna zaplacená péče držela celou sezónu.
+    if ((stadium.pitch_care_ordered ?? 0) > 0 || (stadium.pitch_snow_clearing_ordered ?? 0) > 0) {
+      await db.prepare(
+        "UPDATE stadiums SET pitch_care_ordered = 0, pitch_snow_clearing_ordered = 0 WHERE team_id = ?"
+      ).bind(homeTeamId).run()
+        .catch((e) => logger.warn({ module: "pitch-wear" }, "spotrebovani objednavky pece", e));
+    }
+
+    if (decision.cost > 0) {
+      const { recordTransaction } = await import("../season/finance-processor");
+      await recordTransaction(
+        db, homeTeamId, "pitch_repair", -decision.cost,
+        decision.service === "snow_clearing" ? "Úklid sněhu z hřiště"
+          : decision.service === "heating" ? "Provoz vyhřívání trávníku"
+          : "Provoz zavlažování hřiště",
+        gameDate ?? new Date().toISOString(),
+      ).catch((e) => logger.warn({ module: "pitch-wear" }, "uctovani pece o travnik", e));
+    }
+
+    const mods = careEffectiveness(decision, equip.heatingMod ?? 0, equip.irrigationMod ?? 0);
+    const wear = pitchWearForMatch(stadium.pitch_type, weather, mods);
+    if (wear <= 0) return { ...decision, wear: 0 };
 
     const floor = FLOOR_BY_SURFACE[stadium.pitch_type ?? "natural"] ?? 5;
     await db
       .prepare("UPDATE stadiums SET pitch_condition = MAX(?, pitch_condition - ?) WHERE team_id = ?")
       .bind(floor, wear, homeTeamId)
       .run();
+
+    return { ...decision, wear };
   } catch (e) {
     logger.warn({ module: "pitch-wear" }, "zapis opotrebeni travniku", e);
+    return nic;
   }
 }
