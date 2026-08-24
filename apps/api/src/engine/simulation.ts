@@ -41,13 +41,24 @@ function playerName(p: MatchPlayer): string {
   return `${p.firstName} ${p.lastName}`;
 }
 
+export interface WeatherMod {
+  techniqueMod: number;
+  longBallBonus: number;
+  injuryMod: number;
+  conditionDrainMod: number;
+  gkHandlingMod: number;
+  slipChance: number;
+  puddleChance: number;
+  windGustChance: number;
+}
+
 /** Weather effects */
-const WEATHER_MODS: Record<Weather, { techniqueMod: number; longBallBonus: number; injuryMod: number }> = {
-  sunny:  { techniqueMod: 1.0, longBallBonus: 0, injuryMod: 1.0 },
-  cloudy: { techniqueMod: 1.0, longBallBonus: 0, injuryMod: 1.0 },
-  rain:   { techniqueMod: 0.8, longBallBonus: 0.15, injuryMod: 1.3 },
-  wind:   { techniqueMod: 0.9, longBallBonus: -0.1, injuryMod: 1.0 },
-  snow:   { techniqueMod: 0.7, longBallBonus: 0.1, injuryMod: 1.4 },
+export const WEATHER_MODS: Record<Weather, WeatherMod> = {
+  sunny:  { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.0,  conditionDrainMod: 1.0,  gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
+  cloudy: { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.0,  conditionDrainMod: 1.0,  gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
+  rain:   { techniqueMod: 0.8,  longBallBonus: 0.15,  injuryMod: 1.3,  conditionDrainMod: 1.12, gkHandlingMod: 0.82, slipChance: 0.005, puddleChance: 0.008, windGustChance: 0.003 },
+  wind:   { techniqueMod: 0.9,  longBallBonus: -0.1,  injuryMod: 1.0,  conditionDrainMod: 1.04, gkHandlingMod: 0.92, slipChance: 0,     puddleChance: 0,     windGustChance: 0.008 },
+  snow:   { techniqueMod: 0.7,  longBallBonus: 0.1,   injuryMod: 1.4,  conditionDrainMod: 1.20, gkHandlingMod: 0.76, slipChance: 0.008, puddleChance: 0,     windGustChance: 0.004 },
 };
 
 /**
@@ -946,9 +957,14 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       } else if (scored) {
         // GOAL!
         if (isHomePossession) homeScore++; else awayScore++;
+        const isScramble = (weather === "snow" || weather === "rain") && rng.random() < 0.25;
+        const goalSource: GoalSource = isScramble ? "scramble" : "open_play";
+        const goalDesc = isScramble
+          ? `Gól! ${playerName(attacker)} pohotově dorazil vyražený míč do sítě`
+          : `Gól! ${playerName(attacker)} skóruje`;
+
         addEvent(minute, "goal", attacker, attacking.teamId,
-          `Gól! ${playerName(attacker)} skóruje`,
-          `${homeScore}:${awayScore}`, "open_play");
+          goalDesc, `${homeScore}:${awayScore}`, goalSource);
 
         // Assist — 65% chance, weighted by passing/vision/creativity
         if (rng.random() < 0.65) {
@@ -1003,8 +1019,12 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
         // Save/block events for rating
         if (outcome === "chytil brankář") {
+          const isDifficultWeather = weather === "snow" || weather === "rain";
+          const saveDesc = isDifficultWeather && rng.random() < 0.4
+            ? `${playerName(gk)} s námahou vyrazil kluzký míč`
+            : `${playerName(gk)} chytá střelu`;
           addEvent(minute, "special", gk, defending.teamId,
-            `${playerName(gk)} chytá střelu`, "save");
+            saveDesc, "save");
         } else if (outcome === "zblokováno") {
           const blocker = rng.pick(defending.lineup.filter((p) => p.position === "DEF"));
           if (blocker) {
@@ -1283,6 +1303,64 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
+    // ── Dynamické incidenty počasí ──
+    // Každý typ má vlastní roll řízený svou hodnotou ve WEATHER_MODS[weather]; počasí,
+    // které danou šanci má na 0, větev nikdy neotevře. Dřív byly větve přivázané na
+    // konkrétní počasí a četly WEATHER_MODS.snow/.rain/.wind natvrdo, takže se tři
+    // z devíti naladěných hodnot nikdy nepoužily (déšť neuklouzl, ve sněhu nefoukalo).
+    const weatherMod = WEATHER_MODS[weather];
+
+    /** Náhodný hráč na hřišti i s týmem, ke kterému patří. */
+    function pickIncidentPlayer(): { player: MatchPlayer; team: TeamSetup } {
+      const player = rng.pick([...home.lineup, ...away.lineup]);
+      return { player, team: home.lineup.includes(player) ? home : away };
+    }
+
+    if (rng.random() < weatherMod.slipChance) {
+      const { player, team } = pickIncidentPlayer();
+      // Zimní výbava (weatherResist) podklouznutí tlumí. Random se losuje vždy, i při
+      // resistu 0 — jinak by se RNG proudy týmů s výbavou a bez ní rozešly.
+      if (rng.random() >= (team.weatherResist ?? 0)) {
+        const slipTexts = weather === "snow"
+          ? [
+              `${playerName(player)} na zasněženém trávníku nečekaně podklouzl!`,
+              `${playerName(player)} na zmrzlém podkladu ztratil rovnováhu a poroučel se k zemi.`,
+              `Dlouhý skluz na sněhu vynesl ${playerName(player)} až za postranní čáru.`,
+              `${playerName(player)} se zvedá ze zasněženého trávníku a oklepává si sníh z dresu.`,
+            ]
+          : [
+              `${playerName(player)} uklouzl na mokrém trávníku a natáhl se jak široký tak dlouhý!`,
+              `${playerName(player)} podklouzl v rozbředlém vápně a míč mu utekl do autu.`,
+              `Kopačky na mokru nedržely — ${playerName(player)} skončil na zemi.`,
+              `${playerName(player)} se sbírá z promáčeného trávníku a ždímá si dres.`,
+            ];
+        addEvent(minute, "special", player, team.teamId, rng.pick(slipTexts), "weather_slip");
+        player.condition = round2(Math.max(0, player.condition - 1.5));
+      }
+    }
+
+    if ((config.pitchCondition ?? 80) < 70 && rng.random() < weatherMod.puddleChance) {
+      const { player, team } = pickIncidentPlayer();
+      const puddleTexts = [
+        `Přihrávka do běhu se zastavila v hluboké kaluži na vápně!`,
+        `Míč uvízl v rozbahněném terénu uprostřed hřiště a vznikl nečekaný souboj.`,
+        `${playerName(player)} se pokusil o kličku, ale míč zůstal stát ve vodě.`,
+        `Voda stříká od kopaček při každém došlapu, trávník se mění v oraniště.`,
+      ];
+      addEvent(minute, "special", player, team.teamId, rng.pick(puddleTexts), "weather_puddle");
+    }
+
+    if (rng.random() < weatherMod.windGustChance) {
+      const { player, team } = pickIncidentPlayer();
+      const windTexts = [
+        `Silný poryv větru stočil centr daleko za bránu.`,
+        `Odkop od brány sfoukl protivítr zpátky na polovinu hřiště.`,
+        `Míč ve vzduchu zaplaval a ${playerName(player)} ho v silném větru netrefil.`,
+        `Poryv bočního větru srazil dlouhý pas do autu.`,
+      ];
+      addEvent(minute, "special", player, team.teamId, rng.pick(windTexts), "weather_wind");
+    }
+
     // Possession/atmosphere events (~25% per minute — keeps match alive, ~45 events/match)
     if (rng.random() < 0.25) {
       const isHomeAtt = rng.random() < homePoss;
@@ -1317,11 +1395,14 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    // Update condition (equipment drain reduction × tactic drain — pressing = +30 %)
+    // Update condition (equipment drain reduction × tactic drain × weather drain — pressing = +30 %, snow/freeze = +20 %)
+    const homeWeatherDrain = 1 + (WEATHER_MODS[weather].conditionDrainMod - 1) * (1 - (home.weatherResist ?? 0));
+    const awayWeatherDrain = 1 + (WEATHER_MODS[weather].conditionDrainMod - 1) * (1 - (away.weatherResist ?? 0));
+
     updateCondition(home.lineup, minute,
-      homeCondDrainMod * tacticDrainMod(home.tactic) * hardnessMods(home.hardness).drainMod, homeLateFatigueMod);
+      homeCondDrainMod * tacticDrainMod(home.tactic) * hardnessMods(home.hardness).drainMod * homeWeatherDrain, homeLateFatigueMod);
     updateCondition(away.lineup, minute,
-      awayCondDrainMod * tacticDrainMod(away.tactic) * hardnessMods(away.hardness).drainMod, awayLateFatigueMod);
+      awayCondDrainMod * tacticDrainMod(away.tactic) * hardnessMods(away.hardness).drainMod * awayWeatherDrain, awayLateFatigueMod);
   }
 
   // Full-time event

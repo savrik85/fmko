@@ -17,7 +17,7 @@ export type EventType =
  * Odkud gól přišel. Chybí-li (starší zápasy), jde o gól ze hry.
  * Nese ho událost typu "goal" — `detail` u gólu je obsazený skóre.
  */
-export type GoalSource = "open_play" | "counter" | "penalty" | "freekick" | "corner" | "cross";
+export type GoalSource = "open_play" | "counter" | "penalty" | "freekick" | "corner" | "cross" | "scramble";
 
 export interface MatchEvent {
   minute: number;

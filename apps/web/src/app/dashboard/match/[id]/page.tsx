@@ -884,6 +884,7 @@ const GOAL_SOURCE_LABEL: Record<string, string> = {
   corner: "po rohu",
   cross: "ze standardky",
   counter: "z protiútoku",
+  scramble: "z dorážky",
 };
 
 function GoalRow({ goal }: { goal: MatchEvent }) {
