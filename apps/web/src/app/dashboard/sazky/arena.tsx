@@ -131,6 +131,16 @@ function ArenaKarta({ t, maxComment, teamId, onZmena }: {
   t: ArenaTiket; maxComment: number; teamId: string; onZmena: () => void;
 }) {
   const bezi = t.status === "open";
+  // Sloveso i číslo se musí trefit do stavu. Dřív se všechno nevyhrané hlásilo
+  // jako „prohráno" a číslo bylo pořád výplata z kanceláře — u prohry nula,
+  // takže tiket tvrdil, že hráč přišel o nic. Prohrál vklad.
+  const slovo = bezi ? "může vyhrát"
+    : t.status === "won" ? "vyhrál"
+    : t.status === "void" ? "vráceno"
+    : t.status === "confiscated" ? "zabaveno" : "prohrál";
+  const castka = bezi ? t.potentialPayout
+    : t.status === "lost" ? t.stake
+    : t.payout;
   const stahni = async () => {
     if (await apiAction(
       apiFetch(`/api/teams/${teamId}/bets/${t.id}/share`, {
@@ -194,9 +204,9 @@ function ArenaKarta({ t, maxComment, teamId, onZmena }: {
         <span className="text-gray-300">·</span>
         <span className="text-muted">kurz <b className="font-heading text-ink">{kurz(t.totalOddsX100)}</b></span>
         <span className="text-gray-300">·</span>
-        <span className={t.status === "won" ? "text-pitch-600" : "text-muted"}>
-          {bezi ? "může vyhrát " : t.status === "won" ? "vyhrál " : "prohráno "}
-          <b className="font-heading">{czk(bezi ? t.potentialPayout : t.payout)}</b>
+        <span className={t.status === "won" ? "text-pitch-600"
+          : t.status === "lost" || t.status === "confiscated" ? "text-card-red" : "text-muted"}>
+          {slovo} <b className="font-heading">{czk(castka)}</b>
         </span>
         {t.jeMuj && (
           <button type="button" onClick={stahni}

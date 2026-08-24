@@ -28,7 +28,13 @@ function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena:
   const anulovane = t.selections.filter((s) => s.result === "void").length;
   const popisVyplaty = t.status === "won" ? "Výhra"
     : t.status === "lost" ? "Prohráno"
-    : t.status === "void" ? "Vráceno" : "Možná výhra";
+    : t.status === "void" ? "Vráceno"
+    : t.status === "confiscated" ? "Zabaveno" : "Možná výhra";
+  // Číslo musí sedět s popiskem nad ním. Kancelář u prohry nevyplácí nic, ale
+  // ztráta hráče nulová není — přišel o vklad, a ten pod „Prohráno" patří.
+  const castka = t.status === "open" ? t.potentialPayout
+    : t.status === "lost" ? t.stake
+    : t.payout;
 
   return (
     <article className="card overflow-hidden">
@@ -64,9 +70,9 @@ function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena:
         <Statek label="Vklad" value={czk(t.stake)} />
         <Statek label="Kurz" value={kurz(t.totalOddsX100)} />
         <Statek label={popisVyplaty}
-                value={czk(t.status === "open" ? t.potentialPayout : t.payout)}
+                value={czk(castka)}
                 className={t.status === "won" ? "text-pitch-600"
-                  : t.status === "lost" ? "text-muted line-through" : ""} />
+                  : t.status === "lost" || t.status === "confiscated" ? "text-card-red" : ""} />
       </div>
 
       {t.capped && t.status !== "lost" && (
