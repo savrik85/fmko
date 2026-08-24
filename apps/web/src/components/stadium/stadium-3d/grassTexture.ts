@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GROUND_COLOR } from "./constants";
 
 /**
  * Jemné procedurální materiály pro stadion.
@@ -243,12 +244,237 @@ export function generateSnowTerrainSurface(repeatX = 14, repeatY = 14): SurfaceT
   return result;
 }
 
+export type SurroundSurfaceType = "grass" | "cinders" | "paving" | "tartan" | "astro";
+
 export function generateAsphaltSurface(repeatX = 3, repeatY = 2): SurfaceTextureSet {
   return generateAggregateSurface("asphalt", "#3F3F46", repeatX, repeatY, false);
 }
 
 export function generateGravelSurface(repeatX = 4, repeatY = 3): SurfaceTextureSet {
   return generateAggregateSurface("gravel", "#928A7E", repeatX, repeatY, true);
+}
+
+/** Tmavá okresní škvára / antuka */
+export function generateCindersSurface(repeatX = 10, repeatY = 14): SurfaceTextureSet {
+  const key = `cinders:${repeatX}:${repeatY}`;
+  const cached = surfaceCache.get(key);
+  if (cached) return cached;
+
+  const size = 512;
+  const seed = hashString(key);
+  const albedo = createCanvas(size, size);
+  const bump = createCanvas(size, size);
+  const albedoCtx = getContext(albedo);
+  const bumpCtx = getContext(bump);
+
+  // Teplý tmavý škvárový podklad
+  paintLowFrequencyNoise(albedoCtx, hexToRgb("#322825"), size, size, seed, 10, 24, 24);
+  paintLowFrequencyNoise(bumpCtx, { r: 128, g: 128, b: 128 }, size, size, seed, 16, 24, 24);
+
+  const rand = seededRandom(seed + 42);
+  // Škvárové uhlíky, černá drť a cihlový prach
+  for (let i = 0; i < 1200; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = 0.5 + rand() * 2.2;
+    const v = rand();
+    if (v > 0.65) {
+      albedoCtx.fillStyle = `rgba(18, 14, 12, ${0.25 + rand() * 0.35})`; // černý uhel
+      bumpCtx.fillStyle = "#151515";
+    } else if (v > 0.3) {
+      albedoCtx.fillStyle = `rgba(95, 68, 55, ${0.15 + rand() * 0.25})`; // antukový prach
+      bumpCtx.fillStyle = "#A0A0A0";
+    } else {
+      albedoCtx.fillStyle = `rgba(140, 115, 95, ${0.1 + rand() * 0.2})`; // světlý kamínek
+      bumpCtx.fillStyle = "#E0E0E0";
+    }
+    albedoCtx.beginPath();
+    albedoCtx.arc(x, y, r, 0, Math.PI * 2);
+    albedoCtx.fill();
+
+    bumpCtx.beginPath();
+    bumpCtx.arc(x, y, r, 0, Math.PI * 2);
+    bumpCtx.fill();
+  }
+
+  // Jemné podélné stopy po válcování dráhy
+  for (let y = 0; y < size; y += 4) {
+    const a = 0.02 + rand() * 0.03;
+    albedoCtx.fillStyle = `rgba(0, 0, 0, ${a})`;
+    albedoCtx.fillRect(0, y, size, 1.5);
+  }
+
+  const result = createTextureSet(albedo, bump, repeatX, repeatY, true);
+  surfaceCache.set(key, result);
+  return result;
+}
+
+/** Červený atletický polyuretanový tartan */
+export function generateTartanSurface(repeatX = 10, repeatY = 14): SurfaceTextureSet {
+  const key = `tartan:${repeatX}:${repeatY}`;
+  const cached = surfaceCache.get(key);
+  if (cached) return cached;
+
+  const size = 512;
+  const seed = hashString(key);
+  const albedo = createCanvas(size, size);
+  const bump = createCanvas(size, size);
+  const albedoCtx = getContext(albedo);
+  const bumpCtx = getContext(bump);
+
+  // Sytá cihlová sportovní červeň
+  paintLowFrequencyNoise(albedoCtx, hexToRgb("#A32815"), size, size, seed, 6, 20, 20);
+  paintLowFrequencyNoise(bumpCtx, { r: 128, g: 128, b: 128 }, size, size, seed, 14, 20, 20);
+
+  const rand = seededRandom(seed + 88);
+  // Gumový polyuretanový granulát
+  for (let i = 0; i < 1400; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = 0.4 + rand() * 1.6;
+    const v = rand();
+    if (v > 0.6) {
+      albedoCtx.fillStyle = `rgba(220, 75, 45, ${0.15 + rand() * 0.2})`;
+      bumpCtx.fillStyle = "#E0E0E0";
+    } else if (v > 0.2) {
+      albedoCtx.fillStyle = `rgba(115, 20, 10, ${0.18 + rand() * 0.25})`;
+      bumpCtx.fillStyle = "#252525";
+    } else {
+      albedoCtx.fillStyle = `rgba(60, 10, 5, ${0.12 + rand() * 0.18})`;
+      bumpCtx.fillStyle = "#101010";
+    }
+    albedoCtx.beginPath();
+    albedoCtx.arc(x, y, r, 0, Math.PI * 2);
+    albedoCtx.fill();
+
+    bumpCtx.beginPath();
+    bumpCtx.arc(x, y, r, 0, Math.PI * 2);
+    bumpCtx.fill();
+  }
+
+  const result = createTextureSet(albedo, bump, repeatX, repeatY, true);
+  surfaceCache.set(key, result);
+  return result;
+}
+
+/** Zámková betonová dlažba se spárami */
+export function generatePaverSurface(repeatX = 12, repeatY = 16): SurfaceTextureSet {
+  const key = `paver:${repeatX}:${repeatY}`;
+  const cached = surfaceCache.get(key);
+  if (cached) return cached;
+
+  const size = 512;
+  const seed = hashString(key);
+  const albedo = createCanvas(size, size);
+  const bump = createCanvas(size, size);
+  const albedoCtx = getContext(albedo);
+  const bumpCtx = getContext(bump);
+
+  paintLowFrequencyNoise(albedoCtx, hexToRgb("#8E95A0"), size, size, seed, 6, 18, 18);
+  bumpCtx.fillStyle = "#808080";
+  bumpCtx.fillRect(0, 0, size, size);
+
+  // Dlaždice 8x8 se spárami a jemnou texturou betonu
+  const cols = 8;
+  const rows = 8;
+  const cellW = size / cols;
+  const cellH = size / rows;
+  const rand = seededRandom(seed + 19);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const px = c * cellW;
+      const py = r * cellH;
+      const toneVar = (rand() - 0.5) * 28;
+      const baseGray = clamp(148 + toneVar);
+
+      // Tělo dlaždice
+      albedoCtx.fillStyle = `rgb(${baseGray}, ${baseGray + 2}, ${baseGray + 6})`;
+      albedoCtx.fillRect(px + 2, py + 2, cellW - 4, cellH - 4);
+
+      // Zkosená hrana dlaždice (světlejší nahoře/vlevo, tmavší dole/vpravo)
+      albedoCtx.fillStyle = "rgba(255, 255, 255, 0.15)";
+      albedoCtx.fillRect(px + 2, py + 2, cellW - 4, 1.5);
+      albedoCtx.fillRect(px + 2, py + 2, 1.5, cellH - 4);
+
+      albedoCtx.fillStyle = "rgba(0, 0, 0, 0.25)";
+      albedoCtx.fillRect(px + 2, py + cellH - 3.5, cellW - 4, 1.5);
+      albedoCtx.fillRect(px + cellW - 3.5, py + 2, 1.5, cellH - 4);
+
+      // Hluboká spára mezi dlaždicemi
+      bumpCtx.fillStyle = "#151515";
+      bumpCtx.strokeRect(px + 1, py + 1, cellW - 2, cellH - 2);
+      bumpCtx.fillStyle = "#C0C0C0";
+      bumpCtx.fillRect(px + 3, py + 3, cellW - 6, cellH - 6);
+    }
+  }
+
+  const result = createTextureSet(albedo, bump, repeatX, repeatY, true);
+  surfaceCache.set(key, result);
+  return result;
+}
+
+/** Sytě zelený syntetický trávník (AstroTurf surround) */
+export function generateAstroSurroundSurface(repeatX = 10, repeatY = 14): SurfaceTextureSet {
+  const key = `astro:${repeatX}:${repeatY}`;
+  const cached = surfaceCache.get(key);
+  if (cached) return cached;
+
+  const size = 512;
+  const seed = hashString(key);
+  const albedo = createCanvas(size, size);
+  const bump = createCanvas(size, size);
+  const albedoCtx = getContext(albedo);
+  const bumpCtx = getContext(bump);
+
+  paintLowFrequencyNoise(albedoCtx, hexToRgb("#156B30"), size, size, seed, 4, 20, 20);
+  paintLowFrequencyNoise(bumpCtx, { r: 128, g: 128, b: 128 }, size, size, seed, 10, 20, 20);
+  drawFibres(albedoCtx, size, size, seed + 13, 2600, true);
+  drawBumpFibres(bumpCtx, size, size, seed + 13, 2600, true);
+
+  const result = createTextureSet(albedo, bump, repeatX, repeatY, true);
+  surfaceCache.set(key, result);
+  return result;
+}
+
+/** VIP syntetický koberec v klubových barvách */
+export function generateClubCarpetSurface(teamColor: string, repeatX = 6, repeatY = 8): SurfaceTextureSet {
+  const key = `club_carpet:${teamColor}:${repeatX}:${repeatY}`;
+  const cached = surfaceCache.get(key);
+  if (cached) return cached;
+
+  const size = 512;
+  const seed = hashString(key);
+  const albedo = createCanvas(size, size);
+  const bump = createCanvas(size, size);
+  const albedoCtx = getContext(albedo);
+  const bumpCtx = getContext(bump);
+
+  const rgb = hexToRgb(teamColor || "#1E40AF");
+  paintLowFrequencyNoise(albedoCtx, rgb, size, size, seed, 4, 18, 18);
+  paintLowFrequencyNoise(bumpCtx, { r: 128, g: 128, b: 128 }, size, size, seed, 8, 18, 18);
+  drawFibres(albedoCtx, size, size, seed + 77, 2800, true);
+  drawBumpFibres(bumpCtx, size, size, seed + 77, 2800, true);
+
+  const result = createTextureSet(albedo, bump, repeatX, repeatY, true);
+  surfaceCache.set(key, result);
+  return result;
+}
+
+/** Vrátí sadu textur pro zvolený typ povrchu areálu */
+export function getSurroundSurfaceSet(
+  type: SurroundSurfaceType = "grass",
+  isSnow = false,
+  repeatX = 10,
+  repeatY = 14,
+  teamColor = "#1E40AF",
+): SurfaceTextureSet {
+  if (isSnow) return generateSnowTerrainSurface(repeatX, repeatY);
+  if (type === "cinders") return generateCindersSurface(repeatX, repeatY);
+  if (type === "tartan") return generateClubCarpetSurface(teamColor, repeatX, repeatY);
+  if (type === "paving") return generatePaverSurface(repeatX, repeatY);
+  if (type === "astro") return generateAstroSurroundSurface(repeatX, repeatY);
+  return generateTerrainSurface(GROUND_COLOR, repeatX, repeatY);
 }
 
 /** Zpětně kompatibilní pomocník pro případné další použití samotné mapy trávy. */

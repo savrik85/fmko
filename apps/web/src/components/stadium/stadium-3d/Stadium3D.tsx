@@ -17,6 +17,7 @@ import { StandRoof, UltrasSector } from "./StadiumExtras";
 import { Floodlights } from "./Floodlights";
 import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
+import { SurroundTrack } from "./SurroundTrack";
 import { VillageVibe } from "./VillageVibe";
 import { LightingAndAtmosphere } from "./LightingAndAtmosphere";
 import { WeatherEffects } from "./WeatherEffects";
@@ -49,6 +50,7 @@ export interface Stadium3DCustomization {
   mowingPattern?: string | null;
   netPattern?: string | null;
   netStyle?: string | null;
+  surroundSurface?: string | null;
 }
 
 export interface LastMatchScore {
@@ -283,6 +285,16 @@ export function Stadium3D({
 
           {/* Obvodový plot */}
           <Fence level={f.fence ?? 0} bounds={layout.fence} colorOverride={fenceColor} />
+
+          {/* Výběhová zóna kolem hřiště */}
+          <SurroundTrack
+            surroundSurface={(cust.surroundSurface as any) ?? "grass"}
+            teamColor={teamColor}
+            secondaryColor={secondaryColor}
+            standsLevel={f.stands ?? 0}
+            weather={weather}
+            isMobile={isMobile}
+          />
 
           {/* Trávník, čáry, praporky, míč, branky */}
           <Pitch

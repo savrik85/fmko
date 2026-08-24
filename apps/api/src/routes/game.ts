@@ -1617,6 +1617,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     mowingPattern: (stadium.mowing_pattern as string | null) ?? "stripes",
     netPattern: (stadium.net_pattern as string | null) ?? "white",
     netStyle: (stadium.net_style as string | null) ?? "loose",
+    surroundSurface: (stadium.surround_surface as string | null) ?? "grass",
   };
 
   // Scoreboard a vlajka upgrady
@@ -1780,6 +1781,43 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
     await c.env.DB.prepare("UPDATE stadiums SET net_style = ? WHERE team_id = ?")
       .bind(val, teamId).run();
     return c.json({ ok: true, value: val });
+  }
+
+  // Povrch areálu / výběhové zóny (s cenou dle luxusu)
+  if (body.field === "surround_surface") {
+    const SURROUND_COSTS: Record<string, { cost: number; label: string }> = {
+      grass:   { cost: 0,     label: "Přírodní tráva" },
+      cinders: { cost: 3000,  label: "Antukový pás" },
+      paving:  { cost: 10000, label: "Zámková dlažba" },
+      astro:   { cost: 25000, label: "Umělý trávník" },
+      tartan:  { cost: 50000, label: "Klubový VIP koberec" },
+    };
+
+    const allowed = new Set(Object.keys(SURROUND_COSTS));
+    const val = allowed.has(String(body.value)) ? String(body.value) : "grass";
+    const currentStadium = await c.env.DB.prepare(
+      "SELECT surround_surface FROM stadiums WHERE team_id = ?"
+    ).bind(teamId).first<{ surround_surface: string | null }>();
+
+    const currentVal = currentStadium?.surround_surface ?? "grass";
+    if (val === currentVal) {
+      return c.json({ ok: true, value: val });
+    }
+
+    const { cost, label } = SURROUND_COSTS[val] ?? { cost: 0, label: val };
+    if (cost > 0) {
+      const team = await c.env.DB.prepare("SELECT budget, game_date FROM teams WHERE id = ?")
+        .bind(teamId).first<{ budget: number; game_date: string | null }>();
+      if (!team || team.budget < cost) {
+        return c.json({ error: "Nedostatek financí na účtu klubu" }, 400);
+      }
+      await recordTransaction(c.env.DB, teamId, "stadium_visual", -cost,
+        `Povrch areálu: ${label}`, team.game_date ?? new Date().toISOString());
+    }
+
+    await c.env.DB.prepare("UPDATE stadiums SET surround_surface = ? WHERE team_id = ?")
+      .bind(val, teamId).run();
+    return c.json({ ok: true, value: val, cost });
   }
 
   const allowed = new Set(["fence_color", "stand_color", "seat_color", "roof_color", "accent_color", "ultras_banner_color", "ultras_text_color", "flag_color"]);

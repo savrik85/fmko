@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { PITCH, type TimeOfDay, type WeatherType, type StadiumMode } from "./constants";
-import { generateGravelSurface } from "./grassTexture";
+import { generateGravelSurface, generatePaverSurface } from "./grassTexture";
 import { TrainingProps3D } from "./TrainingProps3D";
 
 interface VillageVibeProps {
@@ -97,20 +97,40 @@ function BeerGarden({
   isSnow?: boolean;
   isTrainingDay?: boolean;
 }) {
-  const gravelSurface = useMemo(() => generateGravelSurface(3, 2.5), []);
+  const paverSurface = useMemo(() => generatePaverSurface(3, 2.5), []);
+  const terraceW = 7.6;
+  const terraceD = 6.2;
 
   return (
     <group position={position}>
-      {/* Šotolinový / dlážděný podklad pod stoly */}
-      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[7.2, 5.8]} />
+      {/* Dlážděná terasa ze zámkové dlažby pod pivními stoly */}
+      <mesh position={[0, 0.025, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[terraceW, terraceD]} />
         <meshStandardMaterial
-          map={gravelSurface.map}
-          bumpMap={gravelSurface.bumpMap}
-          bumpScale={0.08}
-          roughness={0.97}
+          map={paverSurface.map}
+          bumpMap={paverSurface.bumpMap}
+          bumpScale={0.06}
+          roughness={0.92}
           color={isSnow ? "#E2E8F0" : "#FFFFFF"}
         />
+      </mesh>
+
+      {/* Obrubník zahrádky */}
+      <mesh position={[0, 0.04, -terraceD / 2]} receiveShadow>
+        <boxGeometry args={[terraceW, 0.05, 0.15]} />
+        <meshStandardMaterial color="#71717A" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.04, terraceD / 2]} receiveShadow>
+        <boxGeometry args={[terraceW, 0.05, 0.15]} />
+        <meshStandardMaterial color="#71717A" roughness={0.9} />
+      </mesh>
+      <mesh position={[-terraceW / 2, 0.04, 0]} receiveShadow>
+        <boxGeometry args={[0.15, 0.05, terraceD]} />
+        <meshStandardMaterial color="#71717A" roughness={0.9} />
+      </mesh>
+      <mesh position={[terraceW / 2, 0.04, 0]} receiveShadow>
+        <boxGeometry args={[0.15, 0.05, terraceD]} />
+        <meshStandardMaterial color="#71717A" roughness={0.9} />
       </mesh>
 
       {/* 2-3 Pivní sety (stůl + 2 lavice) */}

@@ -70,6 +70,7 @@ interface Customization {
   mowingPattern?: string | null;
   netPattern?: string | null;
   netStyle?: string | null;
+  surroundSurface?: string | null;
 }
 
 interface VisualUpgrade {
@@ -191,6 +192,14 @@ const NET_STYLES = [
   { id: "box", label: "Krabicová", icon: "📦", desc: "Napnutá moderní síť" },
 ];
 
+const SURROUND_SURFACES = [
+  { id: "grass", label: "Přírodní tráva", icon: "🌿", cost: 0, desc: "Základní venkovský terén (Zdarma)" },
+  { id: "cinders", label: "Antukový pás", icon: "🟤", cost: 3000, desc: "Červeno-hnědý zpevněný lem podél lajn" },
+  { id: "paving", label: "Zámková dlažba", icon: "🧱", cost: 10000, desc: "Dlážděný výběh & chodníky k šatnám a hospodě" },
+  { id: "astro", label: "Umělý trávník", icon: "🟢", cost: 25000, desc: "Sytě zelený AstroTurf výběhový koberec" },
+  { id: "tartan", label: "Klubový VIP koberec", icon: "🔵", cost: 50000, desc: "Syntetický koberec v klubových barvách" },
+];
+
 export default function StadiumPage() {
   const { teamId } = useTeam();
   const [stadium, setStadium] = useState<StadiumData | null>(null);
@@ -249,6 +258,28 @@ export default function StadiumPage() {
       body: JSON.stringify({ field: dbField, value }),
     }).catch((e) => console.error("customize:", e));
     await refresh();
+  };
+
+  const handleSurroundChange = async (s: (typeof SURROUND_SURFACES)[number]) => {
+    const current = stadium?.customization.surroundSurface ?? "grass";
+    if (!team || current === s.id || acting) return;
+
+    if (s.cost > 0) {
+      if (team.budget < s.cost) {
+        return;
+      }
+      const ok = await confirm({
+        title: `Položit povrch: ${s.label}?`,
+        description: `Vybudování a úprava nového povrchu v areálu a kolem hřiště.`,
+        details: [{ label: "Cena", value: `-${formatCZK(s.cost)}`, color: "text-card-red" }],
+        confirmLabel: `Koupit a položit za ${formatCZK(s.cost)}`,
+      });
+      if (!ok) return;
+    }
+
+    setActing("surround-" + s.id);
+    await handleCustomize("surroundSurface", s.id);
+    setActing(null);
   };
 
   const handleVisualUpgrade = async (kind: "scoreboard" | "flag", label: string, cost: number) => {
@@ -388,6 +419,7 @@ export default function StadiumPage() {
             facilities={stadium.facilities}
             teamColor={team.primary_color}
             mowingPattern={stadium.customization.mowingPattern ?? "stripes"}
+            surroundSurface={stadium.customization.surroundSurface ?? "grass"}
           />
         )}
 
@@ -567,6 +599,50 @@ export default function StadiumPage() {
                           <span>{s.label}</span>
                         </div>
                         <div className="text-micro text-muted mt-0.5 leading-tight">{s.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted font-heading uppercase mb-1.5 flex items-center justify-between">
+                  <span>🏃‍♂️ Povrch areálu & oválu</span>
+                  <span className="text-micro font-normal text-muted lowercase">stavební investice</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {SURROUND_SURFACES.map((s) => {
+                    const isSelected = (stadium.customization.surroundSurface ?? "grass") === s.id;
+                    const canAfford = s.cost === 0 || team.budget >= s.cost;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => handleSurroundChange(s)}
+                        disabled={!!acting || (!isSelected && !canAfford)}
+                        className={`flex flex-col text-left p-2.5 rounded-soft border-2 transition-all relative ${
+                          isSelected
+                            ? "border-pitch-500 bg-pitch-50 shadow-sm"
+                            : canAfford
+                            ? "border-gray-200 hover:border-gray-400 bg-white"
+                            : "border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <div className="flex items-center gap-1.5 font-heading font-bold text-xs">
+                            <span>{s.icon}</span>
+                            <span>{s.label}</span>
+                          </div>
+                          {isSelected ? (
+                            <span className="text-micro font-bold text-pitch-600 bg-pitch-100 px-1.5 py-0.5 rounded">
+                              Položeno
+                            </span>
+                          ) : (
+                            <span className={`text-micro font-bold tabular-nums ${s.cost === 0 ? "text-emerald-600" : canAfford ? "text-ink" : "text-card-red"}`}>
+                              {s.cost === 0 ? "Zdarma" : formatCZK(s.cost)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-micro text-muted mt-1 leading-tight">{s.desc}</div>
                       </button>
                     );
                   })}

@@ -12,6 +12,7 @@ interface StadiumViewProps {
   facilities: Record<string, number>;
   teamColor?: string;
   mowingPattern?: string;
+  surroundSurface?: string;
 }
 
 function pitchGreen(c: number): string {
@@ -38,6 +39,7 @@ export function StadiumView({
   facilities,
   teamColor = "#2D5F2D",
   mowingPattern = "stripes",
+  surroundSurface = "grass",
 }: StadiumViewProps) {
   const cond = pitchCondition;
   const gc = pitchGreen(cond);
@@ -131,7 +133,33 @@ export function StadiumView({
 
         {/* PITCH SVG */}
         <svg viewBox="0 0 260 300" className="w-[220px] sm:w-[260px]" style={{ filter: cond < 25 ? "saturate(0.5)" : cond < 40 ? "saturate(0.8)" : undefined }}>
-          <rect x="0" y="0" width="260" height="300" rx="3" fill={gc} />
+          {/* Surround surface border / track (2D) */}
+          {surroundSurface !== "grass" ? (
+            <g>
+              <rect
+                x="0"
+                y="0"
+                width="260"
+                height="300"
+                rx="4"
+                fill={
+                  surroundSurface === "cinders"
+                    ? "#8B4513"
+                    : surroundSurface === "tartan"
+                    ? teamColor
+                    : surroundSurface === "paving"
+                    ? "#94A3B8"
+                    : "#15803D"
+                }
+              />
+              <rect x="14" y="14" width="232" height="272" rx="2" fill={gc} />
+              {(surroundSurface === "cinders" || surroundSurface === "tartan") && (
+                <rect x="6" y="6" width="248" height="288" rx="3" fill="none" stroke="#FFF" strokeWidth="1" opacity="0.6" strokeDasharray="4 2" />
+              )}
+            </g>
+          ) : (
+            <rect x="0" y="0" width="260" height="300" rx="3" fill={gc} />
+          )}
 
           {/* Mowing pattern (2D) */}
           {hasStripes && (
