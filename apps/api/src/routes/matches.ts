@@ -129,8 +129,8 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
 
   // Stadium of home team (where the match is played) — efektivní kapacita včetně tribun
   const stadium = await c.env.DB.prepare(
-    "SELECT capacity, stands, pitch_condition, pitch_type FROM stadiums WHERE team_id = ?"
-  ).bind(homeId).first<{ capacity: number; stands: number | null; pitch_condition: number; pitch_type: string }>().catch((e) => { logger.warn({ module: "matches" }, "fetch stadium for preview", e); return null; });
+    "SELECT capacity, stands, pitch_condition, pitch_type, pitch_moisture FROM stadiums WHERE team_id = ?"
+  ).bind(homeId).first<{ capacity: number; stands: number | null; pitch_condition: number; pitch_type: string; pitch_moisture: number }>().catch((e) => { logger.warn({ module: "matches" }, "fetch stadium for preview", e); return null; });
   const { calculateFacilityEffects: calcFxPreview } = await import("../stadium/stadium-generator");
   const previewCapacity = stadium ? stadium.capacity + calcFxPreview({ stands: stadium.stands ?? 0 }).capacityBonus : 0;
 
@@ -138,6 +138,25 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   const { generateForecast } = await import("../season/weather");
   const schedAt = (match.scheduled_at ?? match.created_at) as string | null;
   const forecast = generateForecast(schedAt, matchId.charCodeAt(0) + matchId.charCodeAt(1));
+
+  // Tipy k sestavě — co podmínky udělají se hrou. Radí, nerozhodují.
+  const { tacticHints: buildHints } = await import("../engine/tactic-hints");
+  const savedTactic = (await c.env.DB.prepare(
+    "SELECT tactic FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1"
+  ).bind(teamId).first<{ tactic: string }>()
+    .catch((e) => { logger.warn({ module: "matches" }, "taktika k tipům", e); return null; }))?.tactic ?? null;
+  const homeEquip = await c.env.DB.prepare("SELECT winter_gear, winter_gear_condition FROM equipment WHERE team_id = ?")
+    .bind(teamId).first<{ winter_gear: number; winter_gear_condition: number }>()
+    .catch((e) => { logger.warn({ module: "matches" }, "zimní výbava k tipům", e); return null; });
+  const tacticHints = buildHints({
+    weather: forecast.expected,
+    pitchCondition: stadium?.pitch_condition ?? null,
+    pitchMoisture: (stadium?.pitch_moisture as number | undefined) ?? null,
+    tactic: savedTactic,
+    weatherResist: homeEquip
+      ? (homeEquip.winter_gear ?? 0) * ((homeEquip.winter_gear_condition ?? 50) / 100) * 0.15
+      : 0,
+  });
 
   // Kurzy sázkové kanceláře, pokud jsou na tenhle zápas vypsané.
   // Na vlastní zápas se sázet nedá, takže je to čistě informace — jak tým vidí
@@ -177,6 +196,9 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
       temperature: forecast.temperature,
       description: forecast.description,
     },
+    // Tipy k sestavě podle podmínek. Počítají se z konstant enginu, takže při
+    // přeladění balancu se posunou s ním a nezačnou radit nesmysly.
+    tacticHints,
     odds: kurzy,
   });
 });

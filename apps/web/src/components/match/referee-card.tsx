@@ -30,7 +30,7 @@ interface Props {
 export function RefereeCard({ referee, isHome }: Props) {
   if (!referee) {
     return (
-      <CollapsibleCard title="🧑‍⚖️ Rozhodčí" summary="Zatím nedelegován">
+      <CollapsibleCard title="🧑‍⚖️ Rozhodčí" summary="Zatím nedelegován" startCollapsed>
         <p className="text-sm text-muted">
           Delegace přijde dva herní dny před výkopem. Pak bude podle povahy sudího vidět,
           jestli se vyplatí hrát opatrně, nebo do toho jít naplno.
@@ -46,6 +46,7 @@ export function RefereeCard({ referee, isHome }: Props) {
     <CollapsibleCard
       title="🧑‍⚖️ Rozhodčí utkání"
       summary={`${referee.name} · ${referee.archetypeLabel}`}
+      startCollapsed
     >
       <div className="flex items-start gap-3">
         {referee.avatar && (

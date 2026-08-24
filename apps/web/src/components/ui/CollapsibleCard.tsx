@@ -8,6 +8,11 @@ interface Props {
   summary?: ReactNode;
   children: ReactNode;
   className?: string;
+  /**
+   * Začít sbalené i na širší obrazovce. Pro karty, které jsou spíš referenční —
+   * nad sestavou jich je několik a rozbalené odtlačují hřiště pod okraj i na desktopu.
+   */
+  startCollapsed?: boolean;
 }
 
 /**
@@ -34,8 +39,11 @@ export function useOpenOnDesktop(): [boolean, Dispatch<SetStateAction<boolean>>]
  * ke skutečné práci — postavit jedenáctku — musí dlouho rolovat. Shrnutí zůstává
  * viditelné i ve sbaleném stavu, aby se kvůli základní informaci nemuselo klikat.
  */
-export function CollapsibleCard({ title, summary, children, className = "" }: Props) {
-  const [open, setOpen] = useOpenOnDesktop();
+export function CollapsibleCard({ title, summary, children, className = "", startCollapsed = false }: Props) {
+  const [openOnDesktop, setOpenOnDesktop] = useOpenOnDesktop();
+  const [openAlways, setOpenAlways] = useState(false);
+  const open = startCollapsed ? openAlways : openOnDesktop;
+  const setOpen = startCollapsed ? setOpenAlways : setOpenOnDesktop;
 
   return (
     <div className={`card p-3 ${className}`}>

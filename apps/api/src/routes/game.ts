@@ -3837,8 +3837,42 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     } catch (e) { logger.warn({ module: "game" }, "načtení delegovaného rozhodčího", e); }
   }
 
+  // Předpověď na zápas + tipy, co podmínky udělají se hrou. Trenér je vidí ještě
+  // před uložením sestavy, takže se podle nich může rozhodnout o taktice.
+  const homeTeamId = match.home_team_id as string;
+  const { generateForecast } = await import("../season/weather");
+  const forecast = generateForecast(scheduledAt, String(match.id).charCodeAt(0) + String(match.id).charCodeAt(1));
+  const pitchRow = await c.env.DB.prepare(
+    "SELECT pitch_condition, pitch_moisture FROM stadiums WHERE team_id = ?"
+  ).bind(homeTeamId).first<{ pitch_condition: number; pitch_moisture: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "hriste k tipum na sestavu", e); return null; });
+  const winter = await c.env.DB.prepare(
+    "SELECT winter_gear, winter_gear_condition FROM equipment WHERE team_id = ?"
+  ).bind(teamId).first<{ winter_gear: number; winter_gear_condition: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "zimni vybava k tipum na sestavu", e); return null; });
+
+  const { tacticHints } = await import("../engine/tactic-hints");
+  const hints = tacticHints({
+    weather: forecast.expected,
+    pitchCondition: pitchRow?.pitch_condition ?? null,
+    pitchMoisture: pitchRow?.pitch_moisture ?? null,
+    tactic: lineup?.tactic ?? null,
+    weatherResist: winter ? (winter.winter_gear ?? 0) * ((winter.winter_gear_condition ?? 50) / 100) * 0.15 : 0,
+  });
+
   return c.json({
     referee: refereeInfo,
+    forecast: {
+      icon: forecast.icon,
+      expected: forecast.expected,
+      temperature: forecast.temperature,
+      description: forecast.description,
+    },
+    pitch: {
+      condition: pitchRow?.pitch_condition ?? null,
+      moisture: pitchRow?.pitch_moisture ?? null,
+    },
+    tacticHints: hints,
     nextMatch: {
       matchId: match.id,
       calendarId: (isFriendly || isCup) ? (match.id as string) : calendarId,

@@ -10,6 +10,7 @@ import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/c
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { RefereeCard } from "@/components/match/referee-card";
+import { CollapsibleCard } from "@/components/ui";
 import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
 import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
 import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
@@ -161,6 +162,8 @@ function MatchPage() {
   const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
   const [players, setPlayers] = useState<AvailablePlayer[]>([]);
   const [referee, setReferee] = useState<DelegatedReferee | null>(null);
+  const [forecast, setForecast] = useState<{ icon: string; expected: string; temperature: number; description: string } | null>(null);
+  const [tacticHints, setTacticHints] = useState<Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>>([]);
   const [hardness, setHardness] = useState<HardnessKey>("normal");
   const [cardRisk, setCardRisk] = useState<CardRisk | null>(null);
   const [hintsOpen, setHintsOpen] = useOpenOnDesktop();
@@ -205,11 +208,13 @@ function MatchPage() {
     // Pokud URL má ?calendarId=X, načti přímo ten zápas. Jinak default = nejbližší.
     const urlCalIdInit = searchParams.get("calendarId");
     const url = urlCalIdInit ? `/api/teams/${teamId}/next-match?calendarId=${urlCalIdInit}` : `/api/teams/${teamId}/next-match`;
-    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       url
     ).then((data) => {
       setNextMatch(data.nextMatch);
       setReferee(data.referee ?? null);
+      setForecast(data.forecast ?? null);
+      setTacticHints(data.tacticHints ?? []);
       setPlayers(data.availablePlayers ?? []);
       setUpcomingMatches(data.upcomingMatches ?? []);
       if (data.lineup && data.lineup.players.length === 11) {
@@ -535,9 +540,11 @@ function MatchPage() {
           } : prev);
           if (teamId) {
             // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
-            apiFetch<{ referee?: DelegatedReferee | null; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+            apiFetch<{ referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
                 setReferee(data.referee ?? null);
+                setForecast(data.forecast ?? null);
+                setTacticHints(data.tacticHints ?? []);
                 if (data.availablePlayers) setPlayers(data.availablePlayers);
                 if (data.lineup && data.lineup.players.length === 11) {
                   setFormation(data.lineup.formation);
@@ -610,6 +617,40 @@ function MatchPage() {
           </>
         );
       })()}
+
+      {forecast && (
+        <CollapsibleCard
+          title={`${forecast.icon} Počasí na zápas`}
+          summary={`${forecast.description} · ${forecast.temperature} °C${tacticHints.length > 0 ? ` · ${tacticHints.length} ${tacticHints.length === 1 ? "tip" : tacticHints.length < 5 ? "tipy" : "tipů"}` : ""}`}
+          startCollapsed
+          className="mb-3"
+        >
+          <div className="text-sm mb-3">
+            <span className="font-heading font-bold">{forecast.description}</span>
+            <span className="text-muted"> · {forecast.temperature} °C</span>
+          </div>
+
+          {tacticHints.length > 0 ? (
+            <ul className="space-y-2">
+              {tacticHints.map((h, i) => (
+                <li key={i} className="flex gap-2.5 text-sm leading-relaxed">
+                  <span className="shrink-0 text-base">
+                    {h.tone === "warning" ? "⚠️" : h.tone === "opportunity" ? "💡" : "ℹ️"}
+                  </span>
+                  <span>
+                    <span className="font-heading font-bold">{h.label}</span>
+                    <span className="text-muted"> — {h.detail}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">
+              Podmínky jsou v pohodě — hřiště ani počasí ti do hry mluvit nebudou.
+            </p>
+          )}
+        </CollapsibleCard>
+      )}
 
       {/* Rozhodčí — delegace dva herní dny předem, aby se dala přizpůsobit sestava */}
       {nextMatch && !nextMatch.isFriendly && (
