@@ -3,6 +3,7 @@ import type { Weather } from "../engine/types";
 import {
   careEffectiveness, decidePitchCare, type PitchCareDecision, type PitchCareMode,
 } from "./pitch-care";
+import { moistureAfterMatch } from "./pitch-moisture";
 
 /**
  * Opotřebení trávníku odehraným zápasem.
@@ -126,7 +127,8 @@ export async function applyPitchWear(
   const nic: PitchCareDecision & { wear: number } = { service: null, cost: 0, skipped: null, wear: 0 };
   try {
     const stadium = await db
-      .prepare(`SELECT pitch_type, pitch_care_mode, pitch_care_ordered, pitch_snow_clearing_ordered
+      .prepare(`SELECT pitch_type, pitch_care_mode, pitch_care_ordered,
+                       pitch_snow_clearing_ordered, pitch_moisture
                   FROM stadiums WHERE team_id = ?`)
       .bind(homeTeamId)
       .first<{
@@ -134,6 +136,7 @@ export async function applyPitchWear(
         pitch_care_mode: string | null;
         pitch_care_ordered: number | null;
         pitch_snow_clearing_ordered: number | null;
+        pitch_moisture: number | null;
       }>();
     if (!stadium) return nic;
 
@@ -171,6 +174,19 @@ export async function applyPitchWear(
         gameDate ?? new Date().toISOString(),
       ).catch((e) => logger.warn({ module: "pitch-wear" }, "uctovani pece o travnik", e));
     }
+
+    // Vlhkost si hřiště pamatuje mezi zápasy — déšť ji zvedne, výheň srazí,
+    // zapnuté zavlažování ji dotuje. Zapisuje se i když opotřebení vyjde na nulu
+    // (umělka), protože půda pod ní žádná není, ale u přírodního povrchu jde
+    // o samostatnou veličinu na kondici nezávislou.
+    const moisture = moistureAfterMatch(
+      stadium.pitch_moisture ?? 50,
+      weather,
+      { irrigationRan: decision.service === "irrigation" },
+    );
+    await db.prepare("UPDATE stadiums SET pitch_moisture = ? WHERE team_id = ?")
+      .bind(moisture, homeTeamId).run()
+      .catch((e) => logger.warn({ module: "pitch-wear" }, "zapis vlhkosti travniku", e));
 
     const mods = careEffectiveness(decision, equip.heatingMod ?? 0, equip.irrigationMod ?? 0);
     const wear = pitchWearForMatch(stadium.pitch_type, weather, mods);

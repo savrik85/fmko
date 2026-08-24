@@ -13,6 +13,10 @@ interface Stadium3DViewerProps {
   facilities: Record<string, number>;
   /** Úroveň vyhřívání trávníku (0–3) — putuje beze změny do Stadium3D. */
   pitchHeating?: number;
+  /** Úroveň zavlažování (0–3) — putuje beze změny do Stadium3D. */
+  pitchIrrigation?: number;
+  /** Vlhkost půdy 0–100 — putuje beze změny do Stadium3D. */
+  pitchMoisture?: number;
   teamColor: string;
   secondaryColor?: string;
   badgePattern?: string;

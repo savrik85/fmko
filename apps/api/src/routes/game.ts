@@ -1679,6 +1679,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     // Vyhřívání je vybavení, ne zázemí stadionu — 3D pohled ho potřebuje zvlášť,
     // aby na vyhřívané ploše nevykresloval sníh.
     pitchHeating: pitchHeatingLevel,
+    pitchMoisture: (stadium.pitch_moisture as number) ?? 50,
     pitchCare,
     facilities,
     customization,

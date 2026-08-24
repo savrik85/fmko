@@ -66,6 +66,10 @@ interface Stadium3DProps {
   facilities: Record<string, number>;
   /** Úroveň vyhřívání trávníku (0–3) z vybavení klubu — na sněhu drží plochu zelenou. */
   pitchHeating?: number;
+  /** Úroveň zavlažování (0–3) — na výhni drží trávník zelený místo slámového. */
+  pitchIrrigation?: number;
+  /** Vlhkost půdy 0–100 (50 = normál) — řídí kaluže i vyschnutí. */
+  pitchMoisture?: number;
   teamColor: string;
   secondaryColor?: string;
   badgePattern?: string;
@@ -97,6 +101,8 @@ export function Stadium3D({
   pitchType,
   facilities,
   pitchHeating = 0,
+  pitchIrrigation = 0,
+  pitchMoisture = 50,
   teamColor,
   secondaryColor = "#ffffff",
   badgePattern,
@@ -310,6 +316,8 @@ export function Stadium3D({
             teamColor={teamColor}
             secondaryColor={secondaryColor}
             pitchHeating={pitchHeating}
+            pitchIrrigation={pitchIrrigation}
+            pitchMoisture={pitchMoisture}
           />
 
           {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}

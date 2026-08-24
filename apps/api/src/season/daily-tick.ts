@@ -628,6 +628,20 @@ export async function executeDailyTick(
     "UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0) AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0)"
   ).run();
 
+  // Vlhkost půdy se den po dni vrací k normálu — rozmáčené hřiště se vsákne,
+  // vyprahlé chytne ranní rosu. Pomalu, aby si stav pár dní pamatovalo.
+  try {
+    await env.DB.prepare(
+      `UPDATE stadiums SET pitch_moisture = CASE
+         WHEN pitch_moisture > 50 THEN MAX(50, pitch_moisture - 2)
+         WHEN pitch_moisture < 50 THEN MIN(50, pitch_moisture + 2)
+         ELSE pitch_moisture END
+       WHERE pitch_moisture <> 50`
+    ).run();
+  } catch (e) {
+    logger.warn({ module: "daily-tick" }, "drift vlhkosti travniku", e);
+  }
+
   // Sekačka: trávník některé dny nechátrá vůbec. Šance = pitchCareMod (0–90 %),
   // takže Lv3 v dobrém stavu udrží hřiště skoro pořád.
   try {

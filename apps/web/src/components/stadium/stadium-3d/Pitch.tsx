@@ -17,6 +17,13 @@ interface PitchProps {
   secondaryColor?: string;
   /** Úroveň vyhřívání trávníku (0–3). Od Lv1 na hrací ploše sníh neleží. */
   pitchHeating?: number;
+  /** Úroveň zavlažování (0–3). Drží trávník zelený i na výhni. */
+  pitchIrrigation?: number;
+  /**
+   * Vlhkost půdy 0–100 (50 = normál). Paměť mezi zápasy: v dešti stoupá, v suchu
+   * klesá. Řídí kaluže i vyschnutí — bez ní by týden veder skončil, jakmile se zatáhne.
+   */
+  pitchMoisture?: number;
 }
 
 const HALF_W = PITCH.width / 2;
@@ -84,7 +91,59 @@ function generateDamageSpots(): DamageSpot[] {
   return out;
 }
 
+/** Lineární míchání dvou hex barev — pro přechod zeleně do slámova. */
+function mixHex(a: string, b: string, t: number): string {
+  const k = Math.max(0, Math.min(1, t));
+  const parse = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [ar, ag, ab] = parse(a);
+  const [br, bg, bb] = parse(b);
+  const mix = (x: number, y: number) => Math.round(x + (y - x) * k).toString(16).padStart(2, "0");
+  return `#${mix(ar, br)}${mix(ag, bg)}${mix(ab, bb)}`;
+}
+
 const DAMAGE_SPOTS = generateDamageSpots();
+
+/**
+ * Kaluže na rozmoklém hřišti.
+ *
+ * Deterministicky rozmístěné (vlastní seed), aby při každém překreslení ležely
+ * na stejném místě. Drží se spíš u vápen a na krajích, kde se nejvíc stojí a
+ * kde bývá terén nejvíc sešlapaný.
+ */
+function generatePuddles() {
+  let seed = 20260825;
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const zones = [
+    { cx: 0, cz: -0.78, range: 0.28, count: 5, thr: 62 },   // vápno
+    { cx: 0, cz: 0.78, range: 0.28, count: 5, thr: 62 },
+    { cx: -0.72, cz: 0, range: 0.3, count: 4, thr: 45 },    // kraje
+    { cx: 0.72, cz: 0, range: 0.3, count: 4, thr: 45 },
+    { cx: 0, cz: 0, range: 0.45, count: 4, thr: 32 },       // střed až u nejhorších
+  ];
+  const out: Array<{ nx: number; nz: number; rx: number; rz: number; threshold: number; rotation: number; opacity: number }> = [];
+  for (const z of zones) {
+    for (let i = 0; i < z.count; i++) {
+      const a = rand() * Math.PI * 2;
+      const d = Math.pow(rand(), 0.6) * z.range;
+      const sz = 0.035 + rand() * 0.055;
+      out.push({
+        nx: Math.max(-0.95, Math.min(0.95, z.cx + Math.cos(a) * d)),
+        nz: Math.max(-0.95, Math.min(0.95, z.cz + Math.sin(a) * d * 1.3)),
+        rx: sz,
+        rz: sz * (0.45 + rand() * 0.5),
+        threshold: z.thr - Math.floor(rand() * 10),
+        rotation: rand() * Math.PI,
+        opacity: 0.35 + rand() * 0.25,
+      });
+    }
+  }
+  return out;
+}
+
+const PUDDLES = generatePuddles();
 
 export function Pitch({
   condition,
@@ -96,6 +155,8 @@ export function Pitch({
   teamColor = "#EF4444",
   secondaryColor = "#FFFFFF",
   pitchHeating = 0,
+  pitchIrrigation = 0,
+  pitchMoisture = 50,
 }: PitchProps) {
   // Vyhřívání roztaví sníh na hrací ploše — okolí, střídačky ani terén ale
   // zasněžené zůstanou, takže je zelený obdélník uprostřed bílého areálu vidět.
@@ -111,13 +172,51 @@ export function Pitch({
   const pitchRotation: [number, number, number] = [-Math.PI / 2, 0, 0];
 
   // Base barva trávníku - i pro nízkou condition zachovat trochu zeleně
+  /**
+   * Jak moc je trávník vyprahlý (0–1).
+   *
+   * Na výhni tráva vysychá do slámova. Zavlažování to drží zelené — Lv3 vyschnutí
+   * zastaví úplně, stejně jako vyhřívání zastaví sníh. Umělka nevysychá (nemá co).
+   * Špatný trávník se propaluje rychleji, dobře zapěstovaný drží déle.
+   */
+  const dryness = useMemo(() => {
+    if (pitchType === "artificial") return 0;
+    // Vyprahlost pod 45 vlhkosti, plná při 0. Špatný trávník se propaluje rychleji.
+    const parched = Math.max(0, Math.min(1, (45 - pitchMoisture) / 45));
+    if (parched <= 0) return 0;
+    const severity = 0.18 + (1 - Math.max(0, Math.min(100, condition)) / 100) * 0.24;
+    return parched * severity;
+  }, [pitchType, pitchMoisture, condition]);
+
   const finalGrassColor = useMemo(() => {
-    if (pitchType === "artificial") return condition >= 30 ? "#2E8B1F" : "#5A8245";
-    if (condition >= 70) return pitchColor(condition);
-    if (condition >= 40) return "#6B8240";
-    if (condition >= 20) return "#5C7138";
-    return "#566B30";
-  }, [pitchType, condition]);
+    const healthy = pitchType === "artificial"
+      ? (condition >= 30 ? "#2E8B1F" : "#5A8245")
+      : condition >= 70 ? pitchColor(condition)
+      : condition >= 40 ? "#6B8240"
+      : condition >= 20 ? "#5C7138"
+      : "#566B30";
+    // Sláma, do které vyprahlá tráva přechází.
+    // Vyschlá TRÁVA, ne písek — olivová se žlutým nádechem.
+    return dryness > 0 ? mixHex(healthy, "#9C9A52", dryness) : healthy;
+  }, [pitchType, condition, dryness]);
+
+  // Voda stojí jen na rozmoklém přírodním či hybridním trávníku. V dešti se kaluže
+  // objeví dřív a jsou výraznější, za sucha vyschnou. Sníh je překryje, umělka odvodní.
+  const isRain = weather === "rain";
+  const puddleStrength = useMemo(() => {
+    // Sníh kaluže překryje, umělka je odvodní.
+    if (isSnow || pitchType === "artificial") return 0;
+    // Voda stojí podle NASÁKLOSTI půdy, ne podle toho, jestli zrovna prší —
+    // rozmáčené hřiště zůstane rozmáčené i den po dešti.
+    const soaked = Math.max(0, Math.min(1, (pitchMoisture - 55) / 45));
+    // Právě padající déšť hladinu ještě zvýrazní.
+    return Math.min(1, soaked + (isRain ? 0.35 : 0));
+  }, [isSnow, isRain, pitchMoisture, pitchType]);
+
+  const puddles = useMemo(
+    () => (puddleStrength <= 0 ? [] : PUDDLES.filter((p) => condition < p.threshold + puddleStrength * 22)),
+    [puddleStrength, condition],
+  );
 
   const grassSurface = useMemo(() => {
     if (isSnow) return generateSnowPitchSurface(hasStripes, mowingPattern);
@@ -142,6 +241,32 @@ export function Pitch({
           roughness={pitchType === "artificial" ? 0.82 : 0.94}
         />
       </mesh>
+
+      {/* Kaluže — na rozmoklém hřišti stojí voda ve vyšlapaných místech.
+          V dešti se objeví dřív a jsou výraznější, v suchu vyschnou. Na sněhu
+          nejsou vidět (leží na nich sníh) a na umělce voda nestojí. */}
+      {puddles.map((p, i) => (
+        <mesh
+          key={`puddle-${i}`}
+          rotation={[-Math.PI / 2, 0, p.rotation]}
+          position={[p.nx * HALF_W, 0.028 + (i % 3) * 0.001, p.nz * HALF_D]}
+          scale={[p.rx * PITCH.width, p.rz * PITCH.depth, 1]}
+        >
+          <circleGeometry args={[1, 16]} />
+          {/* Kaluž odráží oblohu, takže je SVĚTLEJŠÍ než tráva. Tmavá voda splyne
+              se stíny a vyšlapanými místy a v dešti není vidět vůbec. */}
+          <meshStandardMaterial
+            color="#B9CBDD"
+            opacity={Math.min(0.92, (0.55 + p.opacity * 0.45) * puddleStrength)}
+            transparent
+            depthWrite={false}
+            roughness={0.05}
+            metalness={0.85}
+            emissive="#2A3A4A"
+            emissiveIntensity={0.35}
+          />
+        </mesh>
+      ))}
 
       {/* Damage spots — mnoho malých nepravidelných skvrn */}
       {visibleSpots.map((s, i) => (
