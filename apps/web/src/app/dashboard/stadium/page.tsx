@@ -67,6 +67,9 @@ interface Customization {
   ultrasBannerColor: string | null;
   ultrasTextColor: string | null;
   flagColor: string | null;
+  mowingPattern?: string | null;
+  netPattern?: string | null;
+  netStyle?: string | null;
 }
 
 interface VisualUpgrade {
@@ -168,6 +171,24 @@ const CUSTOM_FIELDS: Array<{ field: keyof Customization; label: string; defaultC
   { field: "flagColor", label: "Vlajka", defaultColor: "#2D5F2D", requiresFlag: true, teamDefault: true },
   { field: "ultrasBannerColor", label: "Kotel plachta", defaultColor: "#7A2530", requiresKotel: true, teamDefault: true },
   { field: "ultrasTextColor", label: "Kotel nápis", defaultColor: "#FFFFFF", requiresKotel: true },
+];
+
+const MOWING_PATTERNS = [
+  { id: "stripes", label: "Pruhy", icon: "📏", desc: "Klasické vodorovné pruhy" },
+  { id: "checkerboard", label: "Šachovnice", icon: "🏁", desc: "Anglický čtvercový vzor" },
+  { id: "circles", label: "Kruhy", icon: "🎯", desc: "Soustředné prstence" },
+  { id: "crooked", label: "Správce Franta", icon: "🚜", desc: "Křivé okresní vlnovky" },
+];
+
+const NET_PATTERNS = [
+  { id: "white", label: "Bílá klasika", icon: "⚪", desc: "Tradiční bílá síť" },
+  { id: "checkered", label: "Šachovnice", icon: "🏁", desc: "V klubových barvách" },
+  { id: "striped", label: "Pruhy", icon: "💈", desc: "Klubové pruhy" },
+];
+
+const NET_STYLES = [
+  { id: "loose", label: "Okresní volná", icon: "📐", desc: "Šikmé vzpěry, splývající síť" },
+  { id: "box", label: "Krabicová", icon: "📦", desc: "Napnutá moderní síť" },
 ];
 
 export default function StadiumPage() {
@@ -366,6 +387,7 @@ export default function StadiumPage() {
             pitchType={stadium.pitchType}
             facilities={stadium.facilities}
             teamColor={team.primary_color}
+            mowingPattern={stadium.customization.mowingPattern ?? "stripes"}
           />
         )}
 
@@ -464,6 +486,93 @@ export default function StadiumPage() {
                 <div className="text-micro text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
               </div>
             )}
+
+            {/* 🌿 Vzor sekání trávníku */}
+            <div className="pt-2 border-t border-gray-50">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-xs text-muted font-heading uppercase">🌿 Vzor sekání trávníku</div>
+                <div className="text-micro text-muted">
+                  {stadium.pitchCondition < 50 ? "⚠️ Vyžaduje trávník ≥ 50 %" : "Aktivní na 3D i 2D"}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {MOWING_PATTERNS.map((p) => {
+                  const isSelected = (stadium.customization.mowingPattern ?? "stripes") === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => handleCustomize("mowingPattern", p.id)}
+                      className={`flex flex-col text-left p-2 rounded-soft border-2 transition-all ${
+                        isSelected
+                          ? "border-pitch-500 bg-pitch-50 shadow-sm"
+                          : "border-gray-200 hover:border-gray-400 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-heading font-bold text-xs">
+                        <span>{p.icon}</span>
+                        <span>{p.label}</span>
+                      </div>
+                      <div className="text-micro text-muted mt-0.5 leading-tight">{p.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 🥅 Sítě a styl branek */}
+            <div className="pt-2 border-t border-gray-50 space-y-3">
+              <div>
+                <div className="text-xs text-muted font-heading uppercase mb-1.5">🥅 Vzor brankové sítě</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {NET_PATTERNS.map((p) => {
+                    const isSelected = (stadium.customization.netPattern ?? "white") === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => handleCustomize("netPattern", p.id)}
+                        className={`flex flex-col text-left p-2 rounded-soft border-2 transition-all ${
+                          isSelected
+                            ? "border-pitch-500 bg-pitch-50 shadow-sm"
+                            : "border-gray-200 hover:border-gray-400 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-heading font-bold text-xs">
+                          <span>{p.icon}</span>
+                          <span>{p.label}</span>
+                        </div>
+                        <div className="text-micro text-muted mt-0.5 leading-tight">{p.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted font-heading uppercase mb-1.5">📐 Styl zavěšení branky</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {NET_STYLES.map((s) => {
+                    const isSelected = (stadium.customization.netStyle ?? "loose") === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => handleCustomize("netStyle", s.id)}
+                        className={`flex flex-col text-left p-2 rounded-soft border-2 transition-all ${
+                          isSelected
+                            ? "border-pitch-500 bg-pitch-50 shadow-sm"
+                            : "border-gray-200 hover:border-gray-400 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-heading font-bold text-xs">
+                          <span>{s.icon}</span>
+                          <span>{s.label}</span>
+                        </div>
+                        <div className="text-micro text-muted mt-0.5 leading-tight">{s.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
 
             <div className="pt-2 border-t border-gray-50 space-y-1">
               <div className="text-xs text-muted font-heading uppercase mb-1">Vybavení (placené)</div>

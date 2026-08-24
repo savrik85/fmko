@@ -1614,6 +1614,9 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     ultrasBannerColor: (stadium.ultras_banner_color as string | null) ?? null,
     ultrasTextColor: (stadium.ultras_text_color as string | null) ?? null,
     flagColor: (stadium.flag_color as string | null) ?? null,
+    mowingPattern: (stadium.mowing_pattern as string | null) ?? "stripes",
+    netPattern: (stadium.net_pattern as string | null) ?? "white",
+    netStyle: (stadium.net_style as string | null) ?? "loose",
   };
 
   // Scoreboard a vlajka upgrady
@@ -1750,6 +1753,33 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
     await c.env.DB.prepare("UPDATE stadiums SET ultras_text = ? WHERE team_id = ?")
       .bind(clean, teamId).run();
     return c.json({ ok: true, value: clean });
+  }
+
+  // Vzor sekání trávníku
+  if (body.field === "mowing_pattern") {
+    const allowed = new Set(["stripes", "checkerboard", "circles", "crooked"]);
+    const val = allowed.has(String(body.value)) ? String(body.value) : "stripes";
+    await c.env.DB.prepare("UPDATE stadiums SET mowing_pattern = ? WHERE team_id = ?")
+      .bind(val, teamId).run();
+    return c.json({ ok: true, value: val });
+  }
+
+  // Vzor sítě v brance
+  if (body.field === "net_pattern") {
+    const allowed = new Set(["white", "checkered", "striped"]);
+    const val = allowed.has(String(body.value)) ? String(body.value) : "white";
+    await c.env.DB.prepare("UPDATE stadiums SET net_pattern = ? WHERE team_id = ?")
+      .bind(val, teamId).run();
+    return c.json({ ok: true, value: val });
+  }
+
+  // Styl zavěšení branky
+  if (body.field === "net_style") {
+    const allowed = new Set(["loose", "box"]);
+    const val = allowed.has(String(body.value)) ? String(body.value) : "loose";
+    await c.env.DB.prepare("UPDATE stadiums SET net_style = ? WHERE team_id = ?")
+      .bind(val, teamId).run();
+    return c.json({ ok: true, value: val });
   }
 
   const allowed = new Set(["fence_color", "stand_color", "seat_color", "roof_color", "accent_color", "ultras_banner_color", "ultras_text_color", "flag_color"]);

@@ -3,13 +3,18 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { PITCH, pitchColor, type WeatherType } from "./constants";
-import { generatePitchSurface, generateSnowPitchSurface } from "./grassTexture";
-import { generateNetTexture } from "./materialTextures";
+import { generatePitchSurface, generateSnowPitchSurface, type MowingPattern } from "./grassTexture";
+import { generateNetTexture, type NetPattern, type NetStyle } from "./materialTextures";
 
 interface PitchProps {
   condition: number;
   pitchType: string;
   weather?: WeatherType;
+  mowingPattern?: MowingPattern;
+  netPattern?: NetPattern;
+  netStyle?: NetStyle;
+  teamColor?: string;
+  secondaryColor?: string;
 }
 
 const HALF_W = PITCH.width / 2;
@@ -79,12 +84,21 @@ function generateDamageSpots(): DamageSpot[] {
 
 const DAMAGE_SPOTS = generateDamageSpots();
 
-export function Pitch({ condition, pitchType, weather }: PitchProps) {
+export function Pitch({
+  condition,
+  pitchType,
+  weather,
+  mowingPattern = "stripes",
+  netPattern = "white",
+  netStyle = "loose",
+  teamColor = "#EF4444",
+  secondaryColor = "#FFFFFF",
+}: PitchProps) {
   const isSnow = weather === "snow";
   const hasLines = condition >= 20;
   const hasCenter = condition >= 40;
   const hasFull = condition >= 65;
-  const hasStripes = condition >= 55;
+  const hasStripes = condition >= 50;
 
   // Hřiště je naplocho na zemi (rotation -π/2 kolem X)
   const pitchRotation: [number, number, number] = [-Math.PI / 2, 0, 0];
@@ -99,9 +113,9 @@ export function Pitch({ condition, pitchType, weather }: PitchProps) {
   }, [pitchType, condition]);
 
   const grassSurface = useMemo(() => {
-    if (isSnow) return generateSnowPitchSurface(hasStripes);
-    return generatePitchSurface(finalGrassColor, pitchType, hasStripes);
-  }, [isSnow, finalGrassColor, pitchType, hasStripes]);
+    if (isSnow) return generateSnowPitchSurface(hasStripes, mowingPattern);
+    return generatePitchSurface(finalGrassColor, pitchType, hasStripes, mowingPattern);
+  }, [isSnow, finalGrassColor, pitchType, hasStripes, mowingPattern]);
 
   // Vidím damage spoty s threshold > condition (čím nižší kondice, tím víc viditelných)
   const visibleSpots = useMemo(
@@ -140,20 +154,31 @@ export function Pitch({ condition, pitchType, weather }: PitchProps) {
         </mesh>
       ))}
 
-      {/* Hrací čáry */}
-      {hasLines && (
-        <PitchLines hasFull={hasFull} hasCenter={hasCenter} opacity={hasFull ? 0.85 : condition < 30 ? 0.15 : 0.35} />
-      )}
+      {/* Čáry hřiště */}
+      <PitchLines hasFull={hasFull} hasCenter={hasCenter} opacity={hasLines ? (condition < 35 ? 0.75 : 0.92) : 0} />
 
       {/* Rohové praporky */}
-      {hasLines && <CornerFlags />}
+      <CornerFlags />
 
       {/* Zápasový fotbalový míč na středu */}
       {hasCenter && <MatchBall />}
 
       {/* Branky */}
-      <Goal position={[0, 0, -HALF_D]} />
-      <Goal position={[0, 0, HALF_D]} flip />
+      <Goal
+        position={[0, 0, -HALF_D]}
+        netStyle={netStyle}
+        netPattern={netPattern}
+        teamColor={teamColor}
+        secondaryColor={secondaryColor}
+      />
+      <Goal
+        position={[0, 0, HALF_D]}
+        flip
+        netStyle={netStyle}
+        netPattern={netPattern}
+        teamColor={teamColor}
+        secondaryColor={secondaryColor}
+      />
     </group>
   );
 }
@@ -326,76 +351,223 @@ function Circle({ radius, y, color, width, opacity }: { radius: number; y: numbe
   return <Line points={points} color={color} width={width} opacity={opacity} />;
 }
 
-function Goal({ position, flip }: { position: [number, number, number]; flip?: boolean }) {
-  // Branka: 2 bílé sloupky + břevno + zadní napínací tyče (stanchions) + hexagonální síť
+/** Vytvoří přesnou geometrii lichoběžníkového boku pro volnou okresní síť */
+function createSideNetGeometry(dir: number, topD: number, groundD: number, H: number) {
+  const geom = new THREE.BufferGeometry();
+  // 4 vrcholy bočního lichoběžníku
+  const positions = new Float32Array([
+    0, 0, 0,                // V0: pata u sloupku
+    0, H, 0,                // V1: horní roh u břevna
+    0, H, dir * topD,       // V2: horní zadní konec oblouku
+    0, 0, dir * groundD,    // V3: spodní zadní roh na zemi
+  ]);
+
+  const uvs = new Float32Array([
+    0, 0,
+    0, 8,
+    topD * 4, 8,
+    groundD * 4, 0,
+  ]);
+
+  // Oboustranné trojúhelníky
+  const indices = [
+    0, 1, 2,  0, 2, 3, // přední strana
+    0, 2, 1,  0, 3, 2, // zadní strana
+  ];
+
+  geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  return geom;
+}
+
+function Goal({
+  position,
+  flip,
+  netStyle = "loose",
+  netPattern = "white",
+  teamColor = "#EF4444",
+  secondaryColor = "#FFFFFF",
+}: {
+  position: [number, number, number];
+  flip?: boolean;
+  netStyle?: NetStyle;
+  netPattern?: NetPattern;
+  teamColor?: string;
+  secondaryColor?: string;
+}) {
   const goalWidth = 7.32;
   const goalHeight = 2.44;
-  const goalDepth = 1.8;
   const postRadius = 0.08;
   const dir = flip ? 1 : -1;
+  const isBox = netStyle === "box";
 
-  // Hexagonální síť
-  const netTexBack = useMemo(() => generateNetTexture(14, 8), []);
-  const netTexRoof = useMemo(() => generateNetTexture(14, 5), []);
-  const netTexSide = useMemo(() => generateNetTexture(5, 8), []);
+  // Rozměry pro okresní volnou síť (horní oblouk 0.8m, spodní hloubka 2.0m)
+  const topD = 0.8;
+  const groundD = 2.0;
+  const boxDepth = 1.8;
+
+  // Šikmá zadní stěna u volné sítě
+  const slopeDepth = groundD - topD; // 1.2m
+  const diagLen = Math.hypot(goalHeight, slopeDepth); // ~2.72m
+  const diagAngle = Math.atan2(slopeDepth, goalHeight); // ~26.2°
+  const slopeMidZ = dir * (topD + slopeDepth / 2); // dir * 1.4m
+
+  // Textury sítě
+  const netTexBack = useMemo(
+    () => generateNetTexture(netPattern, teamColor, secondaryColor, 14, 8),
+    [netPattern, teamColor, secondaryColor]
+  );
+  const netTexRoof = useMemo(
+    () => generateNetTexture(netPattern, teamColor, secondaryColor, 14, 4),
+    [netPattern, teamColor, secondaryColor]
+  );
+  const netTexSide = useMemo(
+    () => generateNetTexture(netPattern, teamColor, secondaryColor, 6, 6),
+    [netPattern, teamColor, secondaryColor]
+  );
+
+  // Boční sítě pro volný styl
+  const sideNetGeom = useMemo(
+    () => (!isBox ? createSideNetGeometry(dir, topD, groundD, goalHeight) : null),
+    [isBox, dir, topD, groundD, goalHeight]
+  );
+
+  const braceColor = "#94A3B8";
 
   return (
     <group position={position}>
+      {/* ─── Hlavní bílý rám branky ─── */}
       {/* Levý sloupek */}
       <mesh position={[-goalWidth / 2, goalHeight / 2, 0]} castShadow>
-        <cylinderGeometry args={[postRadius, postRadius, goalHeight, 14]} />
-        <meshStandardMaterial color="#FFFFFF" roughness={0.3} metalness={0.2} />
+        <cylinderGeometry args={[postRadius, postRadius, goalHeight, 16]} />
+        <meshStandardMaterial color="#FFFFFF" roughness={0.25} metalness={0.15} />
       </mesh>
       {/* Pravý sloupek */}
       <mesh position={[goalWidth / 2, goalHeight / 2, 0]} castShadow>
-        <cylinderGeometry args={[postRadius, postRadius, goalHeight, 14]} />
-        <meshStandardMaterial color="#FFFFFF" roughness={0.3} metalness={0.2} />
+        <cylinderGeometry args={[postRadius, postRadius, goalHeight, 16]} />
+        <meshStandardMaterial color="#FFFFFF" roughness={0.25} metalness={0.15} />
       </mesh>
       {/* Břevno */}
       <mesh position={[0, goalHeight, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[postRadius, postRadius, goalWidth, 14]} />
-        <meshStandardMaterial color="#FFFFFF" roughness={0.3} metalness={0.2} />
+        <cylinderGeometry args={[postRadius, postRadius, goalWidth, 16]} />
+        <meshStandardMaterial color="#FFFFFF" roughness={0.25} metalness={0.15} />
       </mesh>
 
-      {/* Zadní napínací ocelové vzpěry (stanchions) */}
-      {[-goalWidth / 2 + 0.1, goalWidth / 2 - 0.1].map((x, i) => (
-        <group key={i}>
-          {/* Zadní svislá tyč */}
-          <mesh position={[x, goalHeight / 2, dir * goalDepth]} castShadow>
-            <cylinderGeometry args={[0.04, 0.04, goalHeight, 8]} />
-            <meshStandardMaterial color="#64748B" metalness={0.8} />
-          </mesh>
-          {/* Horní vzpěra od břevna k zadní tyči */}
-          <mesh position={[x, goalHeight, dir * goalDepth / 2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-            <cylinderGeometry args={[0.035, 0.035, goalDepth, 8]} />
-            <meshStandardMaterial color="#64748B" metalness={0.8} />
-          </mesh>
-        </group>
-      ))}
+      {/* ─── Ocelová konstrukce podle stylu ─── */}
+      {isBox ? (
+        // BOX: Moderní krabicová branka (svislé zadní sloupy + horní táhla)
+        [-goalWidth / 2 + 0.05, goalWidth / 2 - 0.05].map((x, i) => (
+          <group key={i}>
+            {/* Zadní svislá tyč */}
+            <mesh position={[x, goalHeight / 2, dir * boxDepth]} castShadow>
+              <cylinderGeometry args={[0.04, 0.04, goalHeight, 8]} />
+              <meshStandardMaterial color={braceColor} metalness={0.7} roughness={0.4} />
+            </mesh>
+            {/* Horní vodorovná vzpěra od břevna */}
+            <mesh position={[x, goalHeight, dir * (boxDepth / 2)]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.035, 0.035, boxDepth, 8]} />
+              <meshStandardMaterial color={braceColor} metalness={0.7} roughness={0.4} />
+            </mesh>
+            {/* Spodní boční zemní trubka */}
+            <mesh position={[x, 0.04, dir * (boxDepth / 2)]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.035, 0.035, boxDepth, 8]} />
+              <meshStandardMaterial color={braceColor} metalness={0.7} roughness={0.4} />
+            </mesh>
+          </group>
+        ))
+      ) : (
+        // LOOSE: Autentická okresní branka (horní oblouky "ucha" + šikmé vzpěry + spodní zemní rám)
+        [-goalWidth / 2 + 0.05, goalWidth / 2 - 0.05].map((x, i) => (
+          <group key={i}>
+            {/* Horní vodorovné "ucho" branky ze břevna dozadu */}
+            <mesh position={[x, goalHeight, dir * (topD / 2)]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.035, 0.035, topD, 8]} />
+              <meshStandardMaterial color={braceColor} metalness={0.7} roughness={0.4} />
+            </mesh>
+            {/* Šikmá zadní vzpěra z konce ucha dolů k zemi */}
+            <mesh
+              position={[x, goalHeight / 2, slopeMidZ]}
+              rotation={[-dir * diagAngle, 0, 0]}
+              castShadow
+            >
+              <cylinderGeometry args={[0.035, 0.035, diagLen, 8]} />
+              <meshStandardMaterial color={braceColor} metalness={0.7} roughness={0.4} />
+            </mesh>
+            {/* Spodní boční zemní rám */}
+            <mesh position={[x, 0.04, dir * (groundD / 2)]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.035, 0.035, groundD, 8]} />
+              <meshStandardMaterial color={braceColor} metalness={0.7} roughness={0.4} />
+            </mesh>
+          </group>
+        ))
+      )}
 
-      {/* Síť: zadní + horní + 2 boční stěny */}
+      {/* Zadní spojovací tyč na zemi */}
+      <mesh
+        position={[0, 0.04, dir * (isBox ? boxDepth : groundD)]}
+        rotation={[0, 0, Math.PI / 2]}
+        castShadow
+      >
+        <cylinderGeometry args={[0.035, 0.035, goalWidth - 0.1, 8]} />
+        <meshStandardMaterial color={braceColor} metalness={0.7} roughness={0.4} />
+      </mesh>
+
+      {/* ─── Síť ─── */}
       {netTexBack && (
         <group>
-          {/* Zadní stěna */}
-          <mesh position={[0, goalHeight / 2, dir * goalDepth]}>
-            <planeGeometry args={[goalWidth, goalHeight]} />
-            <meshBasicMaterial map={netTexBack} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
-          </mesh>
-          {/* Horní stěna */}
-          <mesh position={[0, goalHeight, dir * goalDepth / 2]} rotation={[Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[goalWidth, goalDepth]} />
-            <meshBasicMaterial map={netTexRoof ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
-          </mesh>
-          {/* Levý bok */}
-          <mesh position={[-goalWidth / 2, goalHeight / 2, dir * goalDepth / 2]} rotation={[0, Math.PI / 2, 0]}>
-            <planeGeometry args={[goalDepth, goalHeight]} />
-            <meshBasicMaterial map={netTexSide ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
-          </mesh>
-          {/* Pravý bok */}
-          <mesh position={[goalWidth / 2, goalHeight / 2, dir * goalDepth / 2]} rotation={[0, Math.PI / 2, 0]}>
-            <planeGeometry args={[goalDepth, goalHeight]} />
-            <meshBasicMaterial map={netTexSide ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
-          </mesh>
+          {isBox ? (
+            <>
+              {/* Krabicová: Zadní svislá stěna */}
+              <mesh position={[0, goalHeight / 2, dir * boxDepth]}>
+                <planeGeometry args={[goalWidth, goalHeight]} />
+                <meshBasicMaterial map={netTexBack} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
+              </mesh>
+              {/* Krabicová: Horní stropní síť */}
+              <mesh position={[0, goalHeight, dir * (boxDepth / 2)]} rotation={[Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[goalWidth, boxDepth]} />
+                <meshBasicMaterial map={netTexRoof ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
+              </mesh>
+              {/* Krabicová: Levý bok */}
+              <mesh position={[-goalWidth / 2, goalHeight / 2, dir * (boxDepth / 2)]} rotation={[0, Math.PI / 2, 0]}>
+                <planeGeometry args={[boxDepth, goalHeight]} />
+                <meshBasicMaterial map={netTexSide ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
+              </mesh>
+              {/* Krabicová: Pravý bok */}
+              <mesh position={[goalWidth / 2, goalHeight / 2, dir * (boxDepth / 2)]} rotation={[0, Math.PI / 2, 0]}>
+                <planeGeometry args={[boxDepth, goalHeight]} />
+                <meshBasicMaterial map={netTexSide ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
+              </mesh>
+            </>
+          ) : (
+            <>
+              {/* Volná: Horní vodorovná část mezi břevnem a oblouky */}
+              <mesh position={[0, goalHeight, dir * (topD / 2)]} rotation={[Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[goalWidth, topD]} />
+                <meshBasicMaterial map={netTexRoof ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
+              </mesh>
+              {/* Volná: Šikmá splývající zadní síť z konce ucha k zemi */}
+              <mesh
+                position={[0, goalHeight / 2, slopeMidZ]}
+                rotation={[-dir * diagAngle, 0, 0]}
+              >
+                <planeGeometry args={[goalWidth, diagLen]} />
+                <meshBasicMaterial map={netTexBack} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
+              </mesh>
+              {/* Volná: Přesný levý bok (lichoběžník) */}
+              {sideNetGeom && (
+                <>
+                  <mesh position={[-goalWidth / 2, 0, 0]} geometry={sideNetGeom}>
+                    <meshBasicMaterial map={netTexSide ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
+                  </mesh>
+                  <mesh position={[goalWidth / 2, 0, 0]} geometry={sideNetGeom}>
+                    <meshBasicMaterial map={netTexSide ?? undefined} transparent depthWrite={false} side={THREE.DoubleSide} opacity={0.88} />
+                  </mesh>
+                </>
+              )}
+            </>
+          )}
         </group>
       )}
     </group>

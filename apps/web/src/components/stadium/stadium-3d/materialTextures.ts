@@ -473,29 +473,83 @@ export function generateCorrugatedTexture(
   return result;
 }
 
+export type NetPattern = "white" | "checkered" | "striped";
+export type NetStyle = "loose" | "box";
+
 /**
- * Textura šestiúhelníkové / diamantové brankové sítě
+ * Textura šestiúhelníkové / diamantové brankové sítě s volitelným vzorem (bílá, šachovnice, pruhy)
  */
-export function generateNetTexture(repeatX = 16, repeatY = 10): THREE.CanvasTexture | null {
+export function generateNetTexture(
+  pattern: NetPattern = "white",
+  primaryColor = "#FFFFFF",
+  secondaryColor = "#2563EB",
+  repeatX = 16,
+  repeatY = 10,
+): THREE.CanvasTexture | null {
   if (typeof document === "undefined") return null;
   const canvas = createCanvas(64, 64);
   const ctx = getContext(canvas);
 
-  ctx.strokeStyle = "rgba(245, 245, 245, 0.85)";
-  ctx.lineWidth = 2.5;
+  if (pattern === "checkered") {
+    // Šachovnicová síť v klubových barvách (2x2 dlaždice)
+    ctx.fillStyle = primaryColor;
+    ctx.fillRect(0, 0, 32, 32);
+    ctx.fillRect(32, 32, 32, 32);
+    ctx.fillStyle = secondaryColor;
+    ctx.fillRect(32, 0, 32, 32);
+    ctx.fillRect(0, 32, 32, 32);
 
-  ctx.beginPath();
-  // Hexagonální/diamantová vazba
-  for (let y = -32; y <= 96; y += 16) {
-    ctx.moveTo(0, y);
-    ctx.lineTo(32, y + 8);
-    ctx.lineTo(64, y);
+    // Hexagonální/diamantová vazba sítě
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let y = -32; y <= 96; y += 16) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(32, y + 8);
+      ctx.lineTo(64, y);
 
-    ctx.moveTo(0, y + 16);
-    ctx.lineTo(32, y + 8);
-    ctx.lineTo(64, y + 16);
+      ctx.moveTo(0, y + 16);
+      ctx.lineTo(32, y + 8);
+      ctx.lineTo(64, y + 16);
+    }
+    ctx.stroke();
+  } else if (pattern === "striped") {
+    // Vodorovné pruhy v klubových barvách
+    ctx.fillStyle = primaryColor;
+    ctx.fillRect(0, 0, 64, 32);
+    ctx.fillStyle = secondaryColor;
+    ctx.fillRect(0, 32, 64, 32);
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let y = -32; y <= 96; y += 16) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(32, y + 8);
+      ctx.lineTo(64, y);
+
+      ctx.moveTo(0, y + 16);
+      ctx.lineTo(32, y + 8);
+      ctx.lineTo(64, y + 16);
+    }
+    ctx.stroke();
+  } else {
+    // Klasická bílá síť (průhledné pozadí)
+    ctx.strokeStyle = "rgba(245, 245, 245, 0.92)";
+    ctx.lineWidth = 2.8;
+
+    ctx.beginPath();
+    for (let y = -32; y <= 96; y += 16) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(32, y + 8);
+      ctx.lineTo(64, y);
+
+      ctx.moveTo(0, y + 16);
+      ctx.lineTo(32, y + 8);
+      ctx.lineTo(64, y + 16);
+    }
+    ctx.stroke();
   }
-  ctx.stroke();
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;

@@ -14,12 +14,86 @@ export interface SurfaceTextureSet {
 
 const surfaceCache = new Map<string, SurfaceTextureSet>();
 
+export type MowingPattern = "stripes" | "checkerboard" | "circles" | "crooked";
+
+/**
+ * Vykreslí zvolený vzor sekání trávníku
+ */
+function paintMowingPattern(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  pattern: MowingPattern = "stripes",
+  isSnow = false,
+) {
+  const lightFill = isSnow ? "rgba(255, 255, 255, 0.14)" : "rgba(255, 255, 225, 0.04)";
+  const darkFill = isSnow ? "rgba(175, 200, 185, 0.09)" : "rgba(8, 38, 10, 0.04)";
+
+  if (pattern === "checkerboard") {
+    // Anglická šachovnice: 8 řad x 6 sloupců
+    const rows = 8;
+    const cols = 6;
+    const cellW = width / cols;
+    const cellH = height / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        ctx.fillStyle = (r + c) % 2 === 0 ? lightFill : darkFill;
+        ctx.fillRect(c * cellW, r * cellH, cellW, cellH);
+      }
+    }
+  } else if (pattern === "circles") {
+    // Soustředné kruhy a prstence rozbíhající se od středu hřiště
+    const cx = width / 2;
+    const cy = height / 2;
+    const maxR = Math.sqrt(cx * cx + cy * cy);
+    const ringStep = maxR / 7;
+    for (let r = 7; r >= 1; r--) {
+      ctx.fillStyle = r % 2 === 0 ? lightFill : darkFill;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * ringStep, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (pattern === "crooked") {
+    // „Křivé sekání od správce Franty“ — nepravidelné zvlněné pruhy
+    const rows = 8;
+    const rowH = height / rows;
+    for (let i = 0; i < rows; i++) {
+      ctx.fillStyle = i % 2 === 0 ? lightFill : darkFill;
+      ctx.beginPath();
+      const yBase = i * rowH;
+      const yNext = (i + 1) * rowH;
+
+      ctx.moveTo(0, yBase);
+      for (let x = 0; x <= width; x += 16) {
+        const wave = Math.sin(x * 0.02 + i * 1.8) * 16 + Math.cos(x * 0.045) * 8;
+        ctx.lineTo(x, yBase + wave);
+      }
+      ctx.lineTo(width, yNext);
+      for (let x = width; x >= 0; x -= 16) {
+        const wave = Math.sin(x * 0.02 + (i + 1) * 1.8) * 16 + Math.cos(x * 0.045) * 8;
+        ctx.lineTo(x, yNext + wave);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else {
+    // Klasické vodorovné pruhy (stripes)
+    const rows = 8;
+    const rowH = height / rows;
+    for (let i = 0; i < rows; i++) {
+      ctx.fillStyle = i % 2 === 0 ? lightFill : darkFill;
+      ctx.fillRect(0, i * rowH, width, rowH);
+    }
+  }
+}
+
 export function generatePitchSurface(
   baseColor: string,
   pitchType: string,
   hasMowingStripes: boolean,
+  mowingPattern: MowingPattern = "stripes",
 ): SurfaceTextureSet {
-  const key = `pitch:${baseColor}:${pitchType}:${hasMowingStripes}`;
+  const key = `pitch:${baseColor}:${pitchType}:${hasMowingStripes}:${mowingPattern}`;
   const cached = surfaceCache.get(key);
   if (cached) return cached;
 
@@ -55,13 +129,7 @@ export function generatePitchSurface(
   );
 
   if (hasMowingStripes) {
-    for (let i = 0; i < 8; i++) {
-      const y = (height / 8) * i;
-      albedoCtx.fillStyle = i % 2 === 0
-        ? "rgba(255, 255, 225, 0.035)"
-        : "rgba(8, 38, 10, 0.035)";
-      albedoCtx.fillRect(0, y, width, height / 8);
-    }
+    paintMowingPattern(albedoCtx, width, height, mowingPattern, false);
   }
 
   const fibreCount = artificial ? 1700 : hybrid ? 2300 : 2800;
@@ -73,8 +141,11 @@ export function generatePitchSurface(
   return result;
 }
 
-export function generateSnowPitchSurface(hasMowingStripes: boolean): SurfaceTextureSet {
-  const key = `pitch:snow:${hasMowingStripes}`;
+export function generateSnowPitchSurface(
+  hasMowingStripes: boolean,
+  mowingPattern: MowingPattern = "stripes",
+): SurfaceTextureSet {
+  const key = `pitch:snow:${hasMowingStripes}:${mowingPattern}`;
   const cached = surfaceCache.get(key);
   if (cached) return cached;
 
@@ -91,13 +162,7 @@ export function generateSnowPitchSurface(hasMowingStripes: boolean): SurfaceText
   paintLowFrequencyNoise(bumpCtx, { r: 128, g: 128, b: 128 }, width, height, seed, 6, 38, 56);
 
   if (hasMowingStripes) {
-    for (let i = 0; i < 8; i++) {
-      const y = (height / 8) * i;
-      albedoCtx.fillStyle = i % 2 === 0
-        ? "rgba(255, 255, 255, 0.14)"
-        : "rgba(175, 200, 185, 0.09)";
-      albedoCtx.fillRect(0, y, width, height / 8);
-    }
+    paintMowingPattern(albedoCtx, width, height, mowingPattern, true);
   }
 
   // Jemné krystalky a sněhové závěje

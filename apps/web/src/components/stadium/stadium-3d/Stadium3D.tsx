@@ -46,6 +46,9 @@ export interface Stadium3DCustomization {
   ultrasBannerColor?: string | null;
   ultrasTextColor?: string | null;
   flagColor?: string | null;
+  mowingPattern?: string | null;
+  netPattern?: string | null;
+  netStyle?: string | null;
 }
 
 export interface LastMatchScore {
@@ -282,7 +285,16 @@ export function Stadium3D({
           <Fence level={f.fence ?? 0} bounds={layout.fence} colorOverride={fenceColor} />
 
           {/* Trávník, čáry, praporky, míč, branky */}
-          <Pitch condition={pitchCondition} pitchType={pitchType} weather={weather} />
+          <Pitch
+            condition={pitchCondition}
+            pitchType={pitchType}
+            weather={weather}
+            mowingPattern={(cust.mowingPattern as any) ?? "stripes"}
+            netPattern={(cust.netPattern as any) ?? "white"}
+            netStyle={(cust.netStyle as any) ?? "loose"}
+            teamColor={teamColor}
+            secondaryColor={secondaryColor}
+          />
 
           {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}
           <Stand

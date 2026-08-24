@@ -11,6 +11,7 @@ interface StadiumViewProps {
   pitchType: string;
   facilities: Record<string, number>;
   teamColor?: string;
+  mowingPattern?: string;
 }
 
 function pitchGreen(c: number): string {
@@ -31,14 +32,20 @@ const FACILITY_CONFIG: Record<string, { icon: string; label: string }> = {
   entrance_gate: { icon: "\u{1F3AB}", label: "Vstupní brána" },
 };
 
-export function StadiumView({ pitchCondition, pitchType, facilities, teamColor = "#2D5F2D" }: StadiumViewProps) {
+export function StadiumView({
+  pitchCondition,
+  pitchType,
+  facilities,
+  teamColor = "#2D5F2D",
+  mowingPattern = "stripes",
+}: StadiumViewProps) {
   const cond = pitchCondition;
   const gc = pitchGreen(cond);
   const f = facilities;
   const hasLines = cond >= 20;
   const hasCenter = cond >= 40;
   const hasFull = cond >= 65;
-  const hasStripes = cond >= 55;
+  const hasStripes = cond >= 50;
 
   // Small building chips (bottom row)
   const bottomFacilities = ["changing_rooms", "showers", "refreshments"].filter((k) => f[k] > 0);
@@ -126,12 +133,41 @@ export function StadiumView({ pitchCondition, pitchType, facilities, teamColor =
         <svg viewBox="0 0 260 300" className="w-[220px] sm:w-[260px]" style={{ filter: cond < 25 ? "saturate(0.5)" : cond < 40 ? "saturate(0.8)" : undefined }}>
           <rect x="0" y="0" width="260" height="300" rx="3" fill={gc} />
 
-          {/* Mowing stripes */}
+          {/* Mowing pattern (2D) */}
           {hasStripes && (
-            <g opacity="0.1">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <rect key={i} x="0" y={i * 38} width="260" height="19" fill="#000" />
-              ))}
+            <g opacity="0.12">
+              {mowingPattern === "checkerboard" ? (
+                Array.from({ length: 8 }).flatMap((_, r) =>
+                  Array.from({ length: 6 }).map((_, c) =>
+                    (r + c) % 2 === 1 ? (
+                      <rect key={`${r}-${c}`} x={c * (260 / 6)} y={r * (300 / 8)} width={260 / 6} height={300 / 8} fill="#000" />
+                    ) : null
+                  )
+                )
+              ) : mowingPattern === "circles" ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <circle
+                    key={i}
+                    cx="130"
+                    cy="150"
+                    r={(6 - i) * 28}
+                    fill={i % 2 === 0 ? "#000" : "none"}
+                  />
+                ))
+              ) : mowingPattern === "crooked" ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <path
+                    key={i}
+                    d={`M 0,${i * 37.5} Q 65,${i * 37.5 + (i % 2 === 0 ? 12 : -12)} 130,${i * 37.5} T 260,${i * 37.5} L 260,${(i + 1) * 37.5} Q 195,${(i + 1) * 37.5 + (i % 2 === 0 ? 12 : -12)} 130,${(i + 1) * 37.5} T 0,${(i + 1) * 37.5} Z`}
+                    fill={i % 2 === 0 ? "#000" : "none"}
+                  />
+                ))
+              ) : (
+                // stripes (default)
+                Array.from({ length: 8 }).map((_, i) => (
+                  <rect key={i} x="0" y={i * 37.5} width="260" height="18.75" fill="#000" />
+                ))
+              )}
             </g>
           )}
 
