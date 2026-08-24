@@ -18,6 +18,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     items: [
       "Ošklivé počasí nově bere kondici. Na sněhu se tým unaví o pětinu rychleji, v dešti o osminu, ve větru jen o kousek. Nejde o velké číslo na papíře, ale v poslední půlhodině je poznat, kdo v tom brodění doběhl a kdo už jen chodí.",
       "Zimní výbava v šatně konečně dělá to, co slibuje. Kromě techniky a zranění teď tlumí i ten kondiční úbytek a hráči v ní míň podklouzávají. Kdo do ní investoval, má na zimní kolo skutečnou výhodu — a kdo ne, tomu tým v prosinci odejde.",
+      "V ošklivém počasí se víc zraňuje. Na sněhu nejvíc, v dešti o kus míň a nově i ve větru, kde dřív bylo riziko stejné jako za slunečna. Pořád ale platí, že největší vliv na zdraví má stav trávníku — rozbité hřiště nadělá víc škody než jakákoli plískanice.",
       "Na hřišti se začaly dít věci. Na sněhu a v dešti hráči podklouzávají (a chvíli se pak sbírají), na podmáčeném trávníku míč uvázne v kaluži, ve větru poryv stočí centr někam za bránu. Zhruba jednou za zápas — dost na to, aby bylo poznat, v čem se hraje, ale ne tak často, aby to otravovalo.",
       "Louže se dělají jen na špatném trávníku. Kdo má hřiště v pořádku, ten se rozbahněnému vápnu vyhne — takže investice do trávníku má nově i tenhle důvod.",
       "Brankářům kluzký míč nedrží v rukavicích. Ve sněhu je to znát nejvíc, v dešti o něco míň, ve větru jen trochu — a čím hůř drží, tím spíš mu tam něco propadne. Zimní výbava i tenhle postih tlumí, takže dobře vybavený gólman zůstává gólmanem i v lednu.",

@@ -54,11 +54,11 @@ export interface WeatherMod {
 
 /** Weather effects */
 export const WEATHER_MODS: Record<Weather, WeatherMod> = {
-  sunny:  { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.0,  conditionDrainMod: 1.0,  gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
-  cloudy: { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.0,  conditionDrainMod: 1.0,  gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
-  rain:   { techniqueMod: 0.8,  longBallBonus: 0.15,  injuryMod: 1.3,  conditionDrainMod: 1.12, gkHandlingMod: 0.82, slipChance: 0.005, puddleChance: 0.008, windGustChance: 0.003 },
-  wind:   { techniqueMod: 0.9,  longBallBonus: -0.1,  injuryMod: 1.0,  conditionDrainMod: 1.04, gkHandlingMod: 0.92, slipChance: 0,     puddleChance: 0,     windGustChance: 0.008 },
-  snow:   { techniqueMod: 0.7,  longBallBonus: 0.1,   injuryMod: 1.4,  conditionDrainMod: 1.20, gkHandlingMod: 0.76, slipChance: 0.008, puddleChance: 0,     windGustChance: 0.004 },
+  sunny:  { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.0,  conditionDrainMod: 1.0,   gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
+  cloudy: { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.0,  conditionDrainMod: 1.0,   gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
+  rain:   { techniqueMod: 0.8,  longBallBonus: 0.15,  injuryMod: 1.45, conditionDrainMod: 1.12, gkHandlingMod: 0.82, slipChance: 0.005, puddleChance: 0.008, windGustChance: 0.003 },
+  wind:   { techniqueMod: 0.9,  longBallBonus: -0.1,  injuryMod: 1.15, conditionDrainMod: 1.04, gkHandlingMod: 0.92, slipChance: 0,     puddleChance: 0,     windGustChance: 0.008 },
+  snow:   { techniqueMod: 0.7,  longBallBonus: 0.1,   injuryMod: 1.6,  conditionDrainMod: 1.20, gkHandlingMod: 0.76, slipChance: 0.008, puddleChance: 0,     windGustChance: 0.004 },
 };
 
 /**
