@@ -752,6 +752,13 @@ async function simulateCupTie(
       cupMatchId,
     ).run().catch((e) => logger.warn({ module: M }, "save cup match detail", e));
 
+    // Pohár se hraje na hřišti domácího — pokud je domácí reálný klub, trávník to stojí.
+    // U velkoklubu (homeReal == null) se nehraje na našem hřišti, takže nic.
+    if (homeReal) {
+      const { applyPitchWear } = await import("../stadium/pitch-wear");
+      await applyPitchWear(db, homeReal, weather);
+    }
+
     // Bilance sudího — bez tohohle by pohárové zápasy v jeho profilu i v žebříčku
     // chyběly, přestože je odpískal. Incidenty se sem posílají navázané na reálná
     // teams.id, ne na cup_teams.id, jinak by je profil „vůči tvému týmu" nenašel.

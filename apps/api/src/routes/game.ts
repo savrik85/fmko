@@ -1652,11 +1652,18 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const effectiveCapacity = ((stadium.capacity as number) ?? 200) + calculateFacilityEffects(facilities).capacityBonus;
   const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);
 
+  const pitchHeatingLevel = (await c.env.DB.prepare("SELECT pitch_heating FROM equipment WHERE team_id = ?")
+    .bind(teamId).first<{ pitch_heating: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load pitch heating", e); return null; }))?.pitch_heating ?? 0;
+
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
     capacity: effectiveCapacity,
     pitchCondition: stadium.pitch_condition,
     pitchType: stadium.pitch_type,
+    // Vyhřívání je vybavení, ne zázemí stadionu — 3D pohled ho potřebuje zvlášť,
+    // aby na vyhřívané ploše nevykresloval sníh.
+    pitchHeating: pitchHeatingLevel,
     facilities,
     customization,
     visualUpgrades,

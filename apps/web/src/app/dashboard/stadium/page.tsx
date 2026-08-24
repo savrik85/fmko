@@ -87,6 +87,8 @@ interface StadiumData {
   pitchCondition: number;
   pitchType: string;
   facilities: Record<string, number>;
+  /** Úroveň vyhřívání trávníku (0–3) z vybavení — vyhřívaná plocha nezasněží. */
+  pitchHeating?: number;
   customization: Customization;
   visualUpgrades: VisualUpgrade[];
   upgrades: UpgradeOption[];
@@ -330,6 +332,7 @@ export default function StadiumPage() {
         pitchCondition={stadium.pitchCondition}
         pitchType={stadium.pitchType}
         facilities={stadium.facilities}
+                  pitchHeating={stadium.pitchHeating ?? 0}
         teamColor={team.primary_color}
         secondaryColor={team.secondary_color}
         badgePattern={team.badge_pattern}
@@ -385,6 +388,7 @@ export default function StadiumPage() {
                   pitchCondition={stadium.pitchCondition}
                   pitchType={stadium.pitchType}
                   facilities={stadium.facilities}
+            pitchHeating={stadium.pitchHeating ?? 0}
                   teamColor={team.primary_color}
                   secondaryColor={team.secondary_color}
                   badgePattern={team.badge_pattern}

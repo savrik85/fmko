@@ -672,6 +672,12 @@ export async function runScheduledMatches(
                 matchId,
             ).run();
 
+            // Devadesát minut na hřišti trávník stojí — nese to domácí tým.
+            {
+                const { applyPitchWear } = await import("../stadium/pitch-wear");
+                await applyPitchWear(db, homeTeamId, weather);
+            }
+
             // Bilance rozhodčího — sezónní statistika + historie vůči oběma klubům.
             if (referee.profile.id && calRow) {
                 try {

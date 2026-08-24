@@ -54,7 +54,7 @@ export interface WeatherMod {
 
 /** Weather effects */
 export const WEATHER_MODS: Record<Weather, WeatherMod> = {
-  sunny:  { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.0,  conditionDrainMod: 1.0,   gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
+  sunny:  { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.05, conditionDrainMod: 1.08,  gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
   cloudy: { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.0,  conditionDrainMod: 1.0,   gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
   rain:   { techniqueMod: 0.8,  longBallBonus: 0.15,  injuryMod: 1.45, conditionDrainMod: 1.12, gkHandlingMod: 0.82, slipChance: 0.005, puddleChance: 0.008, windGustChance: 0.003 },
   wind:   { techniqueMod: 0.9,  longBallBonus: -0.1,  injuryMod: 1.15, conditionDrainMod: 1.04, gkHandlingMod: 0.92, slipChance: 0,     puddleChance: 0,     windGustChance: 0.008 },
@@ -76,6 +76,33 @@ function calcPossession(home: TeamSetup, away: TeamSetup, homeAdvantage: number)
 }
 
 /**
+ * Vliv stavu trávníku na míčovou techniku.
+ *
+ * Do 2026-08-24 hřiště ovlivňovalo VÝHRADNĚ riziko zranění — na rozorané louce
+ * se přihrávalo stejně přesně jako na koberci a hráč neměl důvod trávník řešit
+ * jinak než kvůli marodce. Na nerovném povrchu ale míč skáče a kombinace vázne.
+ *
+ * 100 → 1.0 (koberec), 5 → 0.876. Neznámý stav (starší zápasy) → beze změny.
+ */
+export function pitchTechniqueFactor(pitchCondition: number | null | undefined): number {
+  if (pitchCondition == null) return 1;
+  const pc = Math.max(0, Math.min(100, pitchCondition));
+  return 0.87 + (pc / 100) * 0.13;
+}
+
+/**
+ * Nerovné hřiště nahrává nakopávaným balonům — krátká kombinace po zemi se na něm
+ * hrát nedá, tak se to radši pošle dopředu. Přičítá se k bonusu z počasí.
+ *
+ * 100 → 0, 5 → +0.057. Platí jen pro taktiku long_ball, stejně jako bonus z počasí.
+ */
+export function pitchLongBallBonus(pitchCondition: number | null | undefined): number {
+  if (pitchCondition == null) return 0;
+  const pc = Math.max(0, Math.min(100, pitchCondition));
+  return ((100 - pc) / 100) * 0.06;
+}
+
+/**
  * Calculate chance probability per minute for attacking team.
  */
 function calcChanceProb(
@@ -87,6 +114,8 @@ function calcChanceProb(
   referee?: RefereeProfile,
   /** Kdo už má žlutou. Pokartovaný tým z tvrdosti postupně nic nemá. */
   booked?: { attacking: ReadonlySet<number>; defending: ReadonlySet<number> },
+  /** Stav trávníku 0–100. Chybí-li (starší zápasy), hřiště se neprojeví. */
+  pitchCondition?: number | null,
 ): number {
   // Defensive — pokud se neznámá tactic prolomi (data corruption), použij balanced
   const tacticMod = TACTIC_MODS[attacking.tactic] ?? TACTIC_MODS.balanced;
@@ -129,7 +158,7 @@ function calcChanceProb(
   const intimidation = intimidationPenalty(defHard, defHardEff, attacking.lineup);
 
   const attackPower = (
-    teamAvg(outfield, "technique") * weatherMod.techniqueMod * 0.8 +
+    teamAvg(outfield, "technique") * weatherMod.techniqueMod * pitchTechniqueFactor(pitchCondition) * 0.8 +
     teamAvg(outfield, "passing") * 1.0 +
     teamAvg(outfield, "speed") * 0.7 +
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
@@ -150,7 +179,10 @@ function calcChanceProb(
   // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
   const advantage = (attackPower - defensePower) / 100; // skill difference matters but not overwhelming
   const baseChance = 0.10; // neutral chance per minute — target ~3.5 goals/match
-  const longBallBonus = attacking.tactic === "long_ball" ? weatherMod.longBallBonus : 0;
+  // Nakopávaný balon těží z počasí i z rozbitého hřiště — obojí sráží hru po zemi.
+  const longBallBonus = attacking.tactic === "long_ball"
+    ? weatherMod.longBallBonus + pitchLongBallBonus(pitchCondition)
+    : 0;
 
   // Underdog boost: weaker team gets small floor boost
   const underdogBoost = advantage < -0.05 ? 0.02 : 0;
@@ -948,7 +980,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const attackForm = isHomePossession ? homeForm : awayForm;
     const chanceProb = calcChanceProb(attacking, defending, weather, attackForm, ref, {
       attacking: yellowCards, defending: yellowCards,
-    });
+    }, config.pitchCondition);
     // Reduce chance probability when condition is low
     // Low condition has significant impact — floor at 0.45
     const conditionMod = Math.max(0.45, teamAvg(attacking.lineup, "condition") / 100);

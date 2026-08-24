@@ -12,7 +12,7 @@ export const CATEGORIES = [
   "balls", "jerseys", "training_cones", "first_aid",
   "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
   "team_van", "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup",
-  "laundry", "mower", "coffee_maker",
+  "laundry", "mower", "pitch_heating", "pitch_irrigation", "coffee_maker",
   "sports_drinks", "raffle", "pa_system", "trophy_case",
 ] as const;
 export type EquipmentCategory = typeof CATEGORIES[number];
@@ -38,6 +38,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
   video_setup: "Kamera a rozbory",
   laundry: "Pračka a sušárna dresů",
   mower: "Sekačka a traktůrek",
+  pitch_heating: "Vyhřívání trávníku",
+  pitch_irrigation: "Zavlažování hřiště",
   coffee_maker: "Kávovar do kabiny",
   sports_drinks: "Iontové nápoje a gely",
   raffle: "Tombola a losy",
@@ -156,6 +158,18 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
     "Zahradní traktůrek",
     "Profi sekačka, válec a značkovač lajn",
   ],
+  pitch_heating: [
+    "Když přimrzne, hraje se jinde",
+    "Plachta a sláma, na noc se přikryje",
+    "Topné kabely pod polovinou hřiště",
+    "Vyhřívání pod celým trávníkem, sníh na něm neleží",
+  ],
+  pitch_irrigation: [
+    "Konev a dobrá vůle",
+    "Hadice od kabin, kropí se ručně",
+    "Postřikovače na půlce hřiště",
+    "Automatické zavlažování s čidlem vlhkosti",
+  ],
   coffee_maker: [
     "Ráno se to nějak rozchodí",
     "Rychlovarná konvice a Jacobs 3v1",
@@ -210,6 +224,8 @@ export interface EquipmentEffects {
   youthTrainingMod: number;     // kamera: růst hráčů do 22 let ×(1 + mod)
   equipCareMod: number;         // pračka: šance na denní opotřebení OSTATNÍHO vybavení ×(1 - mod)
   pitchCareMod: number;         // sekačka: šance, že trávník ten den nechátrá
+  pitchHeatingMod: number;      // vyhřívání: navýšení opotřebení hřiště z nečasu ×(1 - mod)
+  pitchIrrigationMod: number;   // zavlažování: navýšení opotřebení hřiště z výhně ×(1 - mod)
   hangoverMod: number;          // kávovar: šance na ranní kocovinu po hospodě ×(1 - mod)
   lateFatigueMod: number;       // iontové nápoje: propad kondice po 70. minutě ×(1 - mod)
   raffleIncomePerFan: number;   // tombola: Kč z každého diváka na domácím zápase
@@ -250,6 +266,11 @@ export function calculateEffects(levels: Record<string, number>, conditions: Rec
     // v kondici všechno ostatní. Dává smysl kupovat až po zbytku.
     equipCareMod: eff("laundry") * 0.15,
     pitchCareMod: eff("mower") * 0.30,
+    // Vyhřívání drží trávník rozmrzlý — déšť a sníh z něj pak neudělají oraniště.
+    // Lv3 v plné kondici nečas vynuluje úplně (3 × 0.333 = 1.0).
+    pitchHeatingMod: Math.min(1, eff("pitch_heating") * 0.333),
+    // Zavlažování drží trávník zelený, když týden nezaprší a půda ztvrdne na kámen.
+    pitchIrrigationMod: Math.min(1, eff("pitch_irrigation") * 0.333),
     hangoverMod: eff("coffee_maker") * 0.15,
     lateFatigueMod: eff("sports_drinks") * 0.20,
     raffleIncomePerFan: Math.round(eff("raffle") * 3),
@@ -281,6 +302,8 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   video_setup:     [0, 5000, 25000, 75000],
   laundry:         [0, 5000, 20000, 60000],
   mower:           [0, 8000, 30000, 90000],
+  pitch_heating:   [0, 25000, 80000, 220000],
+  pitch_irrigation:[0, 6000, 22000, 65000],
   coffee_maker:    [0, 1500, 6000, 18000],
   sports_drinks:   [0, 3000, 12000, 35000],
   raffle:          [0, 2000, 8000, 25000],
@@ -442,6 +465,8 @@ const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
   video_setup:     ["", "Hráči do 22 let +5 % trénink", "Hráči do 22 let +10 % trénink", "Hráči do 22 let +15 % trénink"],
   laundry:         ["", "Vybavení chátrá o 15 % pomaleji", "Vybavení chátrá o 30 % pomaleji", "Vybavení chátrá o 45 % pomaleji"],
   mower:           ["", "Trávník vydrží 30 % dní bez opotřebení", "Trávník vydrží 60 % dní bez opotřebení", "Trávník vydrží 90 % dní bez opotřebení"],
+  pitch_heating:   ["", "Rozbahnění v nečase -33 %", "Rozbahnění v nečase -66 %", "V nečase se trávník nerozbahní vůbec"],
+  pitch_irrigation:["", "Vysychání na výhni -33 %", "Vysychání na výhni -66 %", "Na výhni trávník nevysychá vůbec"],
   coffee_maker:    ["", "Kocovina o 15 % míň častá", "Kocovina o 30 % míň častá", "Kocovina o 45 % míň častá"],
   sports_drinks:   ["", "Únava v závěru -20 %", "Únava v závěru -40 %", "Únava v závěru -60 %"],
   raffle:          ["", "+3 Kč z diváka na domácím zápase", "+6 Kč z diváka na domácím zápase", "+9 Kč z diváka na domácím zápase"],

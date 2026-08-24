@@ -15,6 +15,8 @@ interface PitchProps {
   netStyle?: NetStyle;
   teamColor?: string;
   secondaryColor?: string;
+  /** Úroveň vyhřívání trávníku (0–3). Od Lv1 na hrací ploše sníh neleží. */
+  pitchHeating?: number;
 }
 
 const HALF_W = PITCH.width / 2;
@@ -93,8 +95,13 @@ export function Pitch({
   netStyle = "loose",
   teamColor = "#EF4444",
   secondaryColor = "#FFFFFF",
+  pitchHeating = 0,
 }: PitchProps) {
-  const isSnow = weather === "snow";
+  // Vyhřívání roztaví sníh na hrací ploše — okolí, střídačky ani terén ale
+  // zasněžené zůstanou, takže je zelený obdélník uprostřed bílého areálu vidět.
+  // Umělka sníh drží vždy: topné kabely se pod ni nedávají.
+  const heatingWorks = pitchHeating > 0 && pitchType !== "artificial";
+  const isSnow = weather === "snow" && !heatingWorks;
   const hasLines = condition >= 20;
   const hasCenter = condition >= 40;
   const hasFull = condition >= 65;

@@ -202,6 +202,12 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         matchId,
       ).run();
 
+      // Přátelák trávník opotřebuje stejně jako mistrák — hraje se na něm taky.
+      {
+        const { applyPitchWear } = await import("../stadium/pitch-wear");
+        await applyPitchWear(db, homeTeamId, weather);
+      }
+
       // Update challenge status
       await db.prepare("UPDATE challenges SET status = 'played' WHERE match_id = ?").bind(matchId).run().catch((e) => logger.warn({ module: "friendly-runner" }, "update challenge status", e));
 
