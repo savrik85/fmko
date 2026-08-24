@@ -1,10 +1,30 @@
 "use client";
 
 import { SectionLabel } from "@/components/ui";
+import { useState } from "react";
+import { apiAction, apiFetch } from "@/lib/api";
+import { Sheet } from "@/components/ui";
 import { czk, kurz, signed, IkonaTipu, Prazdno, Statek, StavPill, TYP_TIKETU } from "./ui";
 import type { Tiket, TiketyOdpoved } from "./types";
 
-function TiketKarta({ t }: { t: Tiket }) {
+function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena: () => void }) {
+  const [vyvesuji, setVyvesuji] = useState(false);
+  const [vzkaz, setVzkaz] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const posli = async (note: string) => {
+    setBusy(true);
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/bets/${t.id}/share`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note }),
+      }),
+      "Nepodařilo se vyvěsit",
+    );
+    setBusy(false);
+    if (ok) { setVyvesuji(false); setVzkaz(""); onZmena(); }
+  };
+
   const anulovane = t.selections.filter((s) => s.result === "void").length;
   const popisVyplaty = t.status === "won" ? "Výhra"
     : t.status === "lost" ? "Prohráno"
@@ -60,11 +80,46 @@ function TiketKarta({ t }: { t: Tiket }) {
           hráč nenastoupil, kurz o něj klesl.
         </div>
       )}
+
+      {t.sharedAt ? (
+        <button type="button" onClick={() => posli("")} disabled={busy}
+          className="w-full min-h-11 border-t border-gray-50 text-sm font-heading font-bold
+                     text-muted hover:bg-gray-50/50 cursor-pointer disabled:opacity-50">
+          {busy ? "…" : "Stáhnout z arény"}
+        </button>
+      ) : (
+        <button type="button" onClick={() => setVyvesuji(true)}
+          className="w-full min-h-11 border-t border-gray-50 text-sm font-heading font-bold
+                     text-pitch-600 hover:bg-pitch-50/60 cursor-pointer">
+          Vyvěsit do arény
+        </button>
+      )}
+
+      <Sheet open={vyvesuji} onClose={() => setVyvesuji(false)} title="Vyvěsit tiket" maxWidth="480px" zavritKlikemVedle={false}>
+        <div className="p-4 space-y-3">
+          <p className="text-sm text-muted leading-snug">
+            Tiket uvidí všechny kluby v soutěži a můžou se pod ním vyjádřit.
+            {t.status === "open" && " Tenhle ještě běží — odkryješ tím, na co sázíš."}
+          </p>
+          <div>
+            <label htmlFor={`vzkaz-${t.id}`} className="text-micro font-heading font-bold uppercase tracking-wide text-muted">
+              Chceš k tomu něco říct? (nepovinné)
+            </label>
+            <textarea id={`vzkaz-${t.id}`} value={vzkaz} onChange={(e) => setVzkaz(e.target.value)}
+              rows={3} maxLength={200} placeholder="Třeba: tohle je jistota, dávám do toho všechno…"
+              className="input w-full mt-1 text-sm resize-none" />
+          </div>
+          <button type="button" onClick={() => posli(vzkaz)} disabled={busy}
+            className="w-full min-h-12 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm disabled:opacity-50 cursor-pointer">
+            {busy ? "Vyvěšuji…" : "Vyvěsit do arény"}
+          </button>
+        </div>
+      </Sheet>
     </article>
   );
 }
 
-export function MojeTikety({ data }: { data: TiketyOdpoved | null }) {
+export function MojeTikety({ data, teamId, onZmena }: { data: TiketyOdpoved | null; teamId: string; onZmena: () => void }) {
   if (!data) return null;
   const bezici = data.tickets.filter((t) => t.status === "open");
   const hotove = data.tickets.filter((t) => t.status !== "open");
@@ -89,7 +144,7 @@ export function MojeTikety({ data }: { data: TiketyOdpoved | null }) {
       {bezici.length > 0 && (
         <>
           <SectionLabel>Čeká na kolo</SectionLabel>
-          <div className="space-y-3">{bezici.map((t) => <TiketKarta key={t.id} t={t} />)}</div>
+          <div className="space-y-3">{bezici.map((t) => <TiketKarta key={t.id} t={t} teamId={teamId} onZmena={onZmena} />)}</div>
         </>
       )}
 
@@ -99,7 +154,7 @@ export function MojeTikety({ data }: { data: TiketyOdpoved | null }) {
           Až se odehraje kolo, najdeš tady, jak tvoje tikety dopadly.
         </Prazdno>
       ) : (
-        <div className="space-y-3">{hotove.map((t) => <TiketKarta key={t.id} t={t} />)}</div>
+        <div className="space-y-3">{hotove.map((t) => <TiketKarta key={t.id} t={t} teamId={teamId} onZmena={onZmena} />)}</div>
       )}
     </div>
   );

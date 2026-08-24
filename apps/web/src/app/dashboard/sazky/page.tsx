@@ -7,10 +7,11 @@ import { Spinner, Tabs, useTabParam } from "@/components/ui";
 import { KurzovyListek } from "./kurzy";
 import { TiketLista, TiketSheet } from "./tiket";
 import { MojeTikety } from "./tikety";
+import { Arena } from "./arena";
 import { czk, Prazdno, signed } from "./ui";
-import type { Board, TiketyOdpoved, VybranyTip } from "./types";
+import type { ArenaOdpoved, Board, TiketyOdpoved, VybranyTip } from "./types";
 
-const TAB_KEYS = ["kurzy", "tikety"] as const;
+const TAB_KEYS = ["kurzy", "tikety", "arena"] as const;
 
 const DUVOD: Record<string, string> = {
   no_round: "Tenhle týden se už nehraje. Kurzy vyvěsíme, jakmile bude jasné, kdo s kým příští kolo nastoupí.",
@@ -22,6 +23,7 @@ export default function SazkyPage() {
   const [tab, setTab] = useTabParam(TAB_KEYS);
   const [board, setBoard] = useState<Board | null>(null);
   const [tikety, setTikety] = useState<TiketyOdpoved | null>(null);
+  const [arena, setArena] = useState<ArenaOdpoved | null>(null);
   const [nacitam, setNacitam] = useState(true);
   const [vybrane, setVybrane] = useState<VybranyTip[]>([]);
   const [sheet, setSheet] = useState(false);
@@ -44,10 +46,24 @@ export default function SazkyPage() {
     }
   }, [teamId]);
 
+  const nactiArenu = useCallback(async () => {
+    if (!teamId) return;
+    try {
+      setArena(await apiFetch<ArenaOdpoved>(`/api/teams/${teamId}/bets/arena`));
+    } catch (e) {
+      console.error("načtení arény:", e);
+    }
+  }, [teamId]);
+
   useEffect(() => {
     if (!teamId) return;
     Promise.all([nactiBoard(), nactiTikety()]).finally(() => setNacitam(false));
   }, [teamId, nactiBoard, nactiTikety]);
+
+  // Aréna se načítá až při otevření záložky — je to nejtěžší dotaz ze všech tří.
+  useEffect(() => {
+    if (tab === "arena") nactiArenu();
+  }, [tab, nactiArenu]);
 
   // Otevření záložky s tikety smaže odznak v menu.
   useEffect(() => {
@@ -134,6 +150,7 @@ export default function SazkyPage() {
           items={[
             { key: "kurzy", label: "Kurzy", icon: "🎫" },
             { key: "tikety", label: "Tikety", icon: "📄", count: bezici || undefined },
+            { key: "arena", label: "Aréna", icon: "🗣️" },
           ]} />
 
         {tab === "kurzy" && (
@@ -144,9 +161,13 @@ export default function SazkyPage() {
               </Prazdno>
         )}
 
+        {tab === "arena" && (
+          <Arena data={arena} teamId={teamId ?? ""} onZmena={nactiArenu} />
+        )}
+
         {tab === "tikety" && (
           tikety && tikety.tickets.length > 0
-            ? <MojeTikety data={tikety} />
+            ? <MojeTikety data={tikety} teamId={teamId ?? ""} onZmena={() => { nactiTikety(); nactiArenu(); }} />
             : <Prazdno nadpis="Zatím sis nevsadil">
                 Vyber kurz na lístku, přidej ho na tiket a řekni, kolik do toho dáš.
               </Prazdno>

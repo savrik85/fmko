@@ -82,6 +82,8 @@ export interface Tiket {
   payout: number;
   status: StavTiketu;
   gameWeek: number | null;
+  /** Kdy byl vyvěšen do arény. null = nesdílený. */
+  sharedAt: string | null;
   selections: Tip[];
 }
 
@@ -108,4 +110,52 @@ export interface VybranyTip {
   oddsX100: number;
   label: string;
   zapas: string;
+}
+
+// ── Tiketaréna ──────────────────────────────────────────────────────────────
+
+export interface ArenaTip {
+  market: string;
+  label: string;
+  oddsX100: number;
+  result: StavTipu;
+  zapas: string;
+  vysledek: string | null;
+}
+
+export interface ArenaKomentar {
+  id: string;
+  teamId: string;
+  teamName: string;
+  authorName: string | null;
+  body: string;
+  createdAt: string;
+  muzuSmazat: boolean;
+}
+
+export interface ArenaTiket {
+  id: string;
+  cislo: string;
+  teamId: string;
+  teamName: string;
+  authorName: string | null;
+  stake: number;
+  totalOddsX100: number;
+  potentialPayout: number;
+  payout: number;
+  capped: boolean;
+  status: StavTiketu;
+  gameWeek: number | null;
+  sharedAt: string;
+  /** Co k tiketu napsal autor při vyvěšení. */
+  vzkaz: string | null;
+  jeMuj: boolean;
+  tipy: ArenaTip[];
+  komentare: ArenaKomentar[];
+}
+
+export interface ArenaOdpoved {
+  tickets: ArenaTiket[];
+  maxComment: number;
+  maxNote: number;
 }

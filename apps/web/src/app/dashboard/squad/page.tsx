@@ -6,10 +6,11 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 import { ATTRIBUTE_INFO, getTooltip, type AttrKey, type Pos } from "@/lib/attribute-info";
+import { TeamPosterBoard } from "@/components/team-poster/TeamPosterBoard";
 
-type Tab = "atributy" | "sezona" | "top" | "dochazka";
+type Tab = "atributy" | "sezona" | "top" | "dochazka" | "plakat";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["atributy", "sezona", "top", "dochazka"] as const;
+const TAB_KEYS = ["atributy", "sezona", "top", "dochazka", "plakat"] as const;
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
 type SortKey = "name" | "pos" | "age" | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "rel" | "wage";
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
@@ -146,7 +147,7 @@ function relationLabel(v: number): string {
 }
 
 export default function SquadPage() {
-  const { teamId } = useTeam();
+  const { teamId, season, district } = useTeam();
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [seasonStats, setSeasonStats] = useState<PlayerSeasonStats[]>([]);
@@ -338,36 +339,50 @@ export default function SquadPage() {
             { key: "sezona", label: "Sezóna", icon: "\u{1F4CA}" },
             { key: "top", label: "TOP", icon: "\u{1F3C6}" },
             { key: "dochazka", label: "Docházka", icon: "\u{1F4C5}" },
+            { key: "plakat", label: "Kartičky & Plakát", icon: "🃏" },
           ]}
         />
       </div>
 
-      {/* Position filter — segmented control */}
-      <div className="card p-3">
-        <div className="text-micro text-muted font-heading uppercase tracking-wide mb-2">Filtr pozice</div>
-        <div className="flex rounded-xl bg-gray-50 p-0.5 gap-0.5">
-          {([
-            ["all", "Vše", players.length],
-            ["GK", "Brankáři", posCounts.GK],
-            ["DEF", "Obrana", posCounts.DEF],
-            ["MID", "Záloha", posCounts.MID],
-            ["FWD", "Útok", posCounts.FWD],
-          ] as Array<[PosFilter, string, number]>).map(([pos, label, count]) => (
-            <button
-              key={pos}
-              onClick={() => setFilter(pos)}
-              className={`flex-1 py-1.5 px-1 rounded-soft text-center transition-all font-heading font-bold ${
-                filter === pos
-                  ? "bg-white shadow-sm text-pitch-600"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              <div className="text-xs sm:text-sm truncate">{label}</div>
-              <div className={`text-micro tabular-nums ${filter === pos ? "text-pitch-500" : "text-muted-light"}`}>{count}</div>
-            </button>
-          ))}
+      {/* Sběratelský plakát a kartičky kádru (Panini / FIFA styl) */}
+      {tab === "plakat" && (
+        <TeamPosterBoard
+          players={players}
+          team={team}
+          seasonText={`Sezóna ${season ?? 1} (2026/2027)`}
+          leagueName={district ? `Okresní přebor • ${district}` : "Okresní přebor"}
+          coachName="Hlavní trenér"
+        />
+      )}
+
+      {/* Position filter — segmented control (jen pro tabulkové záložky) */}
+      {tab !== "plakat" && (
+        <div className="card p-3">
+          <div className="text-micro text-muted font-heading uppercase tracking-wide mb-2">Filtr pozice</div>
+          <div className="flex rounded-xl bg-gray-50 p-0.5 gap-0.5">
+            {([
+              ["all", "Vše", players.length],
+              ["GK", "Brankáři", posCounts.GK],
+              ["DEF", "Obrana", posCounts.DEF],
+              ["MID", "Záloha", posCounts.MID],
+              ["FWD", "Útok", posCounts.FWD],
+            ] as Array<[PosFilter, string, number]>).map(([pos, label, count]) => (
+              <button
+                key={pos}
+                onClick={() => setFilter(pos)}
+                className={`flex-1 py-1.5 px-1 rounded-soft text-center transition-all font-heading font-bold ${
+                  filter === pos
+                    ? "bg-white shadow-sm text-pitch-600"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                <div className="text-xs sm:text-sm truncate">{label}</div>
+                <div className={`text-micro tabular-nums ${filter === pos ? "text-pitch-500" : "text-muted-light"}`}>{count}</div>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* FM-style table — Atributy tab */}
       {tab === "atributy" && (

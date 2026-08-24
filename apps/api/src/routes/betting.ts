@@ -11,6 +11,7 @@ import { generateBoard, nextOpenRound, teamStandings } from "../betting/board";
 import { placeTicket, limitsFor, canBet, type SelectionInput } from "../betting/tickets";
 import { settleRound } from "../betting/settle";
 import { knihaSazek, listinaPrestupu, muzeDoKnihy, muzeZablokovat } from "../competition/integrity";
+import { arena, prepniSdileni, pridejKomentar, smazKomentar, MAX_KOMENTAR, MAX_VZKAZ } from "../betting/arena";
 
 const M = "betting";
 const bettingRouter = new Hono<{ Bindings: Bindings }>();
@@ -200,7 +201,7 @@ bettingRouter.get("/teams/:teamId/bets", async (c) => {
   const tikety = await c.env.DB.prepare(
     `SELECT t.id, t.stake, t.levy, t.total_odds_x100, t.potential_payout, t.capped,
             t.payout, t.status, t.placed_game_date, t.settled_game_date, t.seen_at,
-            sc.game_week
+            t.shared_at, sc.game_week
        FROM bet_tickets t
        LEFT JOIN season_calendar sc ON sc.id = t.calendar_id
       WHERE t.team_id = ? AND t.status <> 'pending'
@@ -248,6 +249,7 @@ bettingRouter.get("/teams/:teamId/bets", async (c) => {
       payout: t.payout,
       status: t.status,
       gameWeek: t.game_week,
+      sharedAt: t.shared_at ?? null,
       selections: (podleTiketu.get(t.id as string) ?? []).map((l) => ({
         matchId: l.match_id,
         market: l.market,
@@ -323,6 +325,47 @@ bettingRouter.post("/teams/:teamId/bets/seen", async (c) => {
       WHERE team_id = ? AND seen_at IS NULL AND status <> 'open' AND status <> 'pending'`
   ).bind(teamId).run()
     .catch((e) => logger.warn({ module: M }, "označení tiketů za přečtené", e));
+  return c.json({ ok: true });
+});
+
+// ── Tiketaréna ──────────────────────────────────────────────────────────────
+
+/** Vyvěšené tikety soutěže i s vlákny. Vidí je každý klub v lize. */
+bettingRouter.get("/teams/:teamId/bets/arena", async (c) => {
+  const teamId = c.req.param("teamId");
+  const meta = await teamMeta(c.env.DB, teamId);
+  if (!meta?.league_id) return c.json({ tickets: [], maxComment: MAX_KOMENTAR, maxNote: MAX_VZKAZ });
+
+  const tickets = await arena(c.env.DB, meta.league_id, teamId);
+  return c.json({ tickets, maxComment: MAX_KOMENTAR, maxNote: MAX_VZKAZ });
+});
+
+/** Vyvěsit tiket do arény nebo ho stáhnout. */
+bettingRouter.post("/teams/:teamId/bets/:ticketId/share", async (c) => {
+  const body = await c.req.json<{ note?: string }>().catch(() => ({ note: undefined }));
+  const res = await prepniSdileni(c.env.DB, c.req.param("teamId"), c.req.param("ticketId"), body?.note);
+  if (!res.ok) return c.json({ error: res.duvod }, 403);
+  return c.json({ ok: true, shared: res.sdileno });
+});
+
+/** Komentář do vlákna pod tiketem. */
+bettingRouter.post("/teams/:teamId/bets/:ticketId/comments", async (c) => {
+  const teamId = c.req.param("teamId");
+  let body: { text?: unknown };
+  try { body = await c.req.json(); }
+  catch (e) { logger.warn({ module: M }, "nečitelný komentář", e); return c.json({ error: "Nečitelný požadavek" }, 400); }
+
+  const res = await pridejKomentar(c.env.DB, {
+    ticketId: c.req.param("ticketId"), teamId, body: String(body.text ?? ""),
+  });
+  if (!res.ok) return c.json({ error: res.duvod }, res.status as 400);
+  return c.json({ ok: true, id: res.id });
+});
+
+/** Smazat vlastní komentář. */
+bettingRouter.delete("/teams/:teamId/bets/comments/:commentId", async (c) => {
+  const ok = await smazKomentar(c.env.DB, c.req.param("teamId"), c.req.param("commentId"));
+  if (!ok) return c.json({ error: "Tenhle komentář smazat nemůžeš." }, 403);
   return c.json({ ok: true });
 });
 
