@@ -9,7 +9,6 @@
  */
 
 import type { Weather } from "../engine/types";
-import { monthTemperature } from "./weather";
 
 export type ProductKey = "sausage" | "beer" | "lemonade" | "mulled_wine";
 
@@ -159,22 +158,21 @@ function clampFactor(v: number): number {
 }
 
 /**
- * Násobič poptávky po produktu podle počasí a měsíce.
+ * Násobič poptávky po produktu podle počasí a teploty.
  *
  * Nahrazuje dřívější `weatherBeerFactor`, který platil plošně pro pivo i limonádu
  * a klobásu ignoroval úplně — takže ve sněhu klesalo pití o 45 %, ale prodej
  * teplého jídla se nehnul, i když teplá klobása je v mrazu to jediné, co se prodá.
  *
- * Bez měsíce se použije jen složka počasí. Volající, který měsíc nezná, tak
- * dostane rozumný odhad místo výjimky.
+ * Teplota jde z `season-weather.ts` — z téže hodnoty, kterou hráč vidí
+ * v předpovědi. Bez ní se použije jen složka počasí.
  */
-export function concessionWeatherFactor(key: ProductKey, weather: Weather, month?: number): number {
+export function concessionWeatherFactor(key: ProductKey, weather: Weather, temperature?: number): number {
   const entry = CONCESSION_CATALOG[key];
   if (!entry) return 1;
   const weatherMul = entry.weatherFactors[weather] ?? 1;
-  if (month === undefined) return clampFactor(weatherMul);
-  const temp = monthTemperature(month);
-  const tempMul = 1 + ((temp - REFERENCE_TEMP) / REFERENCE_TEMP) * entry.tempSensitivity;
+  if (temperature === undefined) return clampFactor(weatherMul);
+  const tempMul = 1 + ((temperature - REFERENCE_TEMP) / REFERENCE_TEMP) * entry.tempSensitivity;
   return clampFactor(weatherMul * tempMul);
 }
 
@@ -216,10 +214,10 @@ function hintText(factor: number): string {
  * Sama předpověď manažerovi nestačí: musel by v hlavě přepočítávat počasí
  * a měsíc na poměry mezi produkty. Tohle mu rovnou řekne, na co se vrhnout.
  */
-export function concessionDemandHints(weather: Weather, month?: number): ConcessionDemandHint[] {
+export function concessionDemandHints(weather: Weather, temperature?: number): ConcessionDemandHint[] {
   return CONCESSION_PRODUCT_KEYS
     .map((key) => {
-      const raw = concessionWeatherFactor(key, weather, month);
+      const raw = concessionWeatherFactor(key, weather, temperature);
       // Zaokrouhleno na dvě místa: přes API by jinak chodilo 1.6743999999999999
       // a hodnota se stejně používá jen na prahy a zobrazení.
       const factor = Math.round(raw * 100) / 100;

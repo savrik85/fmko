@@ -186,8 +186,8 @@ export function computeSelfConcessionMatch(
   products: ConcessionProductRow[],
   weather: Weather = "cloudy",
   staffSellMul: number = 1,
-  /** Měsíc zápasu 1-12. Bez něj se použije jen složka počasí, bez roční doby. */
-  month?: number,
+  /** Teplota zápasu ve °C ze season-weather. Bez ní jen složka počasí. */
+  temperature?: number,
 ): ConcessionSaleResult {
   // satisfaction mul pro poptávku: 0.7 (nespokojení) -> 1.3 (nadšení)
   const satMul = 0.7 + (clamp(satisfaction, 0, 100) / 100) * 0.6;
@@ -223,7 +223,7 @@ export function computeSelfConcessionMatch(
 
     // Počasí i roční doba — každý produkt reaguje po svém. Dřív se řídily počasím
     // jen nápoje společným faktorem a klobása se nehnula ani ve sněhu.
-    const weatherMul = concessionWeatherFactor(p.key, weather, month);
+    const weatherMul = concessionWeatherFactor(p.key, weather, temperature);
     // staffSellMul: obsluha občerstvení zvyšuje poptávku
     const demand = Math.round(
       attendance * catalog.baseDemandRate * satMul * priceFactor * qualityBoost * weatherMul * staffSellMul,

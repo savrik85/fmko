@@ -388,6 +388,9 @@ export async function executeDailyTick(
         equipAttendanceBonus += staffFx.trainingAttendanceBonus;
         equipYouthMod += staffFx.youthTrainingMod;
 
+        const { resolveWeatherForDate } = await import("./season-weather");
+        const trainingWeather = await resolveWeatherForDate(env.DB, team.game_date as string);
+
         const rng = createRng(now.getTime() + teamId.charCodeAt(0));
         const result = simulateTraining(rng, squad, {
           type: (todayTrainingType as any) ?? "conditioning",
@@ -395,7 +398,10 @@ export async function executeDailyTick(
           weeklyLoad,
           approach: (team.training_approach as any) ?? "balanced",
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
-        }, undefined, equipMul, mgrBonus, { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul });
+        }, undefined, equipMul, mgrBonus,
+          { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul },
+          // Počasí tréninkového dne — týž zdroj jako předpověď a zápas.
+          trainingWeather?.weather);
 
         const attendanceWithNames = result.attendance.map((a) => ({
           playerId: playersResult.results[a.playerIndex].id as string,

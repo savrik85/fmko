@@ -935,8 +935,11 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
       continue;
     }
 
-    const cupWeathers: Weather[] = ["sunny", "cloudy", "cloudy", "rain", "wind", "snow"];
-    const tieWeather = cupWeathers[rng.int(0, cupWeathers.length - 1)];
+    // Počasí dne, ne vlastní losování. Pohár se hraje ve stejném okrese jako
+    // liga, takže nemůže mít svoje počasí — a hlavně musí sedět s předpovědí,
+    // kterou hráč u zápasu vidí. Viz season/season-weather.ts.
+    const { resolveWeatherForDate } = await import("../season/season-weather");
+    const tieWeather: Weather = (await resolveWeatherForDate(db, m.scheduled_at as string))?.weather ?? "cloudy";
     // Zápas dvou generovaných klubů nemá reálné hráče, domácí tržby ani diváka mezi manažery —
     // stačí silový výsledek. Plný engine si šetříme pro zápasy, kde hraje něčí tým.
     const isWatched = !!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id);

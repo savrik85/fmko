@@ -16,6 +16,8 @@ import { logger } from "../lib/logger";
 
 export interface HomeMatchRef {
   id: string;
+  /** Kolo v kalendáři — zdroj počasí. Null u poháru, ten kalendář nemá. */
+  calendarId: string | null;
   scheduledAt: string;
   opponent: string;
   isCup: boolean;
@@ -42,7 +44,7 @@ export function pickEarlier(league: HomeMatchRef | null, cup: HomeMatchRef | nul
 /** Nejbližší neodehraný domácí zápas — liga v aktuální sezóně, nebo pohár. */
 export async function findNextHomeMatch(db: D1Database, teamId: string): Promise<HomeMatchRef | null> {
   const leagueRow = await db.prepare(
-    `SELECT m.id, sc.scheduled_at, t.name AS opponent
+    `SELECT m.id, m.calendar_id, sc.scheduled_at, t.name AS opponent
        FROM matches m
        JOIN season_calendar sc ON m.calendar_id = sc.id
        JOIN teams t ON m.away_team_id = t.id
@@ -51,7 +53,7 @@ export async function findNextHomeMatch(db: D1Database, teamId: string): Promise
           SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id
         )
       ORDER BY sc.scheduled_at ASC LIMIT 1`,
-  ).bind(teamId).first<{ id: string; scheduled_at: string; opponent: string }>()
+  ).bind(teamId).first<{ id: string; calendar_id: string; scheduled_at: string; opponent: string }>()
     .catch((e) => { logger.warn({ module: "next-home-match" }, "ligovy zapas", e); return null; });
 
   const cupRow = await db.prepare(
@@ -68,7 +70,7 @@ export async function findNextHomeMatch(db: D1Database, teamId: string): Promise
     .catch((e) => { logger.warn({ module: "next-home-match" }, "poharovy zapas", e); return null; });
 
   return pickEarlier(
-    leagueRow ? { id: leagueRow.id, scheduledAt: leagueRow.scheduled_at, opponent: leagueRow.opponent, isCup: false } : null,
-    cupRow ? { id: cupRow.id, scheduledAt: cupRow.scheduled_at, opponent: cupRow.opponent, isCup: true } : null,
+    leagueRow ? { id: leagueRow.id, calendarId: leagueRow.calendar_id, scheduledAt: leagueRow.scheduled_at, opponent: leagueRow.opponent, isCup: false } : null,
+    cupRow ? { id: cupRow.id, calendarId: null, scheduledAt: cupRow.scheduled_at, opponent: cupRow.opponent, isCup: true } : null,
   );
 }

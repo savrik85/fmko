@@ -146,11 +146,12 @@ export async function processTeamDay(
                   isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
               });
               const teamDistrict = (team.village_district as string | null) ?? undefined;
-              const { fetchTeamCommuteMod, monthFromIso } = await import("../events/match-absences");
+              const { fetchTeamCommuteMod } = await import("../events/match-absences");
+              const { resolveRoundWeather } = await import("./season-weather");
               const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, {
                 timing: "day_before", district: teamDistrict,
                 commuteMod: await fetchTeamCommuteMod(env.DB, teamId),
-                month: monthFromIso((tomorrowMatch as { scheduled_at?: string }).scheduled_at),
+                weather: (await resolveRoundWeather(env.DB, tomorrowMatch.id as string))?.weather,
               });
               const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
               const matchConvId = crypto.randomUUID();
@@ -498,11 +499,12 @@ export async function processTeamDay(
               const alreadyIds = new Set(alreadyMessaged.results.map((r) => r.sender_id as string));
 
               const teamDistrictMd = (team.village_district as string | null) ?? undefined;
-              const { fetchTeamCommuteMod: fetchVanModMd, monthFromIso: monthMd } = await import("../events/match-absences");
+              const { fetchTeamCommuteMod: fetchVanModMd } = await import("../events/match-absences");
+              const { resolveRoundWeather: resolveMdWeather } = await import("./season-weather");
               const matchDayAbsences = generateAbsences(mdRng as any, absSquad, {
                 timing: "match_day", district: teamDistrictMd,
                 commuteMod: await fetchVanModMd(env.DB, teamId),
-                month: monthMd((todayMatch as { scheduled_at?: string }).scheduled_at),
+                weather: (await resolveMdWeather(env.DB, todayMatch.id as string))?.weather,
               })
                 .filter((a) => {
                   const pid = squadRows.results[a.playerIndex]?.id as string;

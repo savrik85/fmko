@@ -10,22 +10,22 @@
  */
 
 import type { Rng } from "./rng";
+import type { Weather } from "../engine/types";
 
 type VillageSize = "hamlet" | "village" | "town" | "small_city" | "city";
 
 /**
- * Jedna profesní výmluva. Bez `months` platí celoročně.
+ * Jedna profesní výmluva. Bez `weather` platí za každého počasí.
  *
- * Vazba na počasí tu záměrně NENÍ: výmluvy se generují den před zápasem, kdy
- * počasí ještě není rozhodnuté, a `weather` není v rozsahu ani v simulaci
- * (`multiplayer/match-runner.ts`). Kdyby dvě volání pro tentýž zápas dostala
- * jiné počasí, vybrala by jiný text a SMS by se rozešla se simulací. Roční
- * období s počasím dost koreluje a měsíc známý je — proto se filtruje jím.
+ * Váže se na TOTÉŽ počasí, které hráč vidí v předpovědi u nadcházejícího
+ * zápasu — `season/season-weather.ts` ho odvozuje deterministicky z kola,
+ * takže předpověď, SMS i simulace pracují s jednou hodnotou. Vlastní kalendář
+ * výmluvy mít nesmí, jinak by spoluhráč sháněl seno, zatímco venku sněží.
  */
 export interface ProfExcuse {
   text: string;
-  /** Měsíce 1–12, kdy je výmluva na místě. Bez pole = celoročně. */
-  months?: number[];
+  /** Počasí, za kterého výmluva dává smysl. Bez pole = za každého. */
+  weather?: Weather[];
 }
 
 export interface Occupation {
@@ -58,9 +58,9 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Kombajn se rozbil uprostřed pole, čekám na mechanika" },
       { text: "Musím stříkat, jinak přijdu o úrodu" },
       { text: "Seno musí být dneska svezený, prší od zítřka" },
-      { text: "Žně nepočkají, jedeme do tmy", months: [7, 8] },
-      { text: "Sklízíme, každá hodina bez deště se počítá", months: [7, 8] },
-      { text: "Krmím dobytek, v týhle plundře je nenechám venku", months: [11, 12, 1, 2] },
+      { text: "Žně nepočkají, jedeme do tmy", weather: ["sunny", "cloudy"] },
+      { text: "Sklízíme, každá hodina bez deště se počítá", weather: ["sunny"] },
+      { text: "Krmím dobytek, v týhle plundře je nenechám venku", weather: ["snow", "rain"] },
     ],
   },
   {
@@ -74,8 +74,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Hydraulika přestala fungovat, nezvednu radlici" },
       { text: "Musím odvézt brambory do sklepa než začnou mrznout" },
       { text: "Šéf poslal dělat cesty, nemůžu odjet" },
-      { text: "Vozím obilí z pole, kombajn na mě čeká", months: [7, 8] },
-      { text: "Sype se cesta, jsem na pluhu od rána", months: [12, 1, 2] },
+      { text: "Vozím obilí z pole, kombajn na mě čeká", weather: ["sunny", "cloudy"] },
+      { text: "Sype se cesta, jsem na pluhu od rána", weather: ["snow"] },
     ],
   },
   {
@@ -109,8 +109,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Včely jsou agresivní, nemůžu od úlů odejít" },
       { text: "Dneska mám kontrolu veterináře, musím být u úlů" },
       { text: "Jeden úl napadly sršně, řeším to celý den" },
-      { text: "Roj mi utekl na hrušku, musím ho sundat", months: [5, 6] },
-      { text: "Točím med, rozdělaný to nenechám", months: [6, 7] },
+      { text: "Roj mi utekl na hrušku, musím ho sundat", weather: ["sunny"] },
+      { text: "Točím med, rozdělaný to nenechám", weather: ["sunny", "cloudy"] },
     ],
   },
   {
@@ -122,7 +122,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Veterinář přijede jen dneska, musím být doma" },
       { text: "Slepice přestaly nést, musím zjistit proč" },
       { text: "Přijela zkontrolovat hygiena, nemůžu od ní odejít" },
-      { text: "Ovce se bahní, nemůžu od nich", months: [3, 4] },
+      { text: "Ovce se bahní, nemůžu od nich" },
     ],
   },
   {
@@ -134,8 +134,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Zasekla se mi zrnovod, řeším to už druhou hodinu" },
       { text: "Družstvo tlačí na dodávku, jedu do tmy" },
       { text: "Stíhám poslední pole než přijde déšť" },
-      { text: "Máme rozdělaný lán, do večera to nedáme", months: [7, 8] },
-      { text: "Čekám až oschne, pak jedu do tmy", months: [7, 8] },
+      { text: "Máme rozdělaný lán, do večera to nedáme", weather: ["sunny", "cloudy"] },
+      { text: "Čekám až oschne, pak jedu do tmy", weather: ["rain"] },
     ],
   },
   {
@@ -147,8 +147,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Vlk se potlouká u vesnice, musíme hlídkovat" },
       { text: "Odlovná komise přijede v sobotu, musím připravit" },
       { text: "Srnec zranil nohu na silnici, jedu ho dosledovat" },
-      { text: "Máme naháňku, to se neodkládá", months: [10, 11, 12] },
-      { text: "Jdu na čekanou, srnec chodí jen za šera", months: [10, 11] },
+      { text: "Máme naháňku, to se neodkládá", weather: ["snow", "wind"] },
+      { text: "Jdu na čekanou, srnec chodí jen za šera", weather: ["cloudy"] },
     ],
   },
   {
@@ -171,8 +171,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Spadlý strom blokuje cestu, musím to řešit" },
       { text: "Turisti zase nechali oheň v lese, běžím to uhasit" },
       { text: "Hledám zraněnou srnu, viděl ji řidič na silnici" },
-      { text: "Sázíme stromky, revír chce hotovo do mrazů", months: [10, 11] },
-      { text: "Krmelce se musí naplnit, než napadne víc", months: [11, 12, 1] },
+      { text: "Sázíme stromky, revír chce hotovo do mrazů", weather: ["wind", "cloudy"] },
+      { text: "Krmelce se musí naplnit, než napadne víc", weather: ["snow"] },
     ],
   },
   {
@@ -195,8 +195,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Přijela sezónní parta, musím jim vše zorganizovat" },
       { text: "Moštárna bere jen dnes, musím odvézt sběr" },
       { text: "Škůdce napadá, musím postříkat dřív než zaprší" },
-      { text: "Sklízíme, jablka nepočkají", months: [9, 10] },
-      { text: "Řežu stromy, než začne míza", months: [2, 3] },
+      { text: "Sklízíme, jablka nepočkají", weather: ["sunny", "cloudy"] },
+      { text: "Řežu stromy, než začne míza" },
     ],
   },
   {
@@ -208,7 +208,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Dneska platí tyden práce za dva, nemůžu to zmeškat" },
       { text: "Bus na brigádu jede od 5 ráno, vrátím se v osm večer" },
       { text: "Pronajal jsem se do chmelnic, nejde odejít" },
-      { text: "Sezóna, beru každou šichtu co je", months: [5, 6, 7, 8, 9] },
+      { text: "Sezóna, beru každou šichtu co je", weather: ["sunny", "cloudy"] },
     ],
   },
   {
@@ -235,8 +235,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Lešení se rozklížilo, musím to opravit" },
       { text: "Mix přijel s dvouhodinovým zpožděním, zdržujeme se" },
       { text: "Stěna se začala bořit, nemůžu to opustit" },
-      { text: "Stavební sezóna, makáme do tmy", months: [5, 6, 7, 8, 9] },
-      { text: "Beton se musí dodělat, jinak mi ztuhne", months: [5, 6, 7, 8, 9] },
+      { text: "Stavební sezóna, makáme do tmy", weather: ["sunny", "cloudy"] },
+      { text: "Beton se musí dodělat, jinak mi ztuhne", weather: ["sunny"] },
       { text: "Za deště zdít nemůžu, ale musím to zaplachtovat" },
     ],
   },
@@ -249,7 +249,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Zákazník chce krov do neděle, jedeme i v noci" },
       { text: "Přijel statik, musí mi potvrdit trámy" },
       { text: "Jeřáb je objednaný, nemůžu ho nechat čekat" },
-      { text: "Krov musí být pod střechou, než přijdou deště", months: [5, 6, 7, 8, 9] },
+      { text: "Krov musí být pod střechou, než přijdou deště", weather: ["cloudy", "wind"] },
       { text: "Nemůžu nechat rozdělaný krov v dešti" },
     ],
   },
@@ -273,8 +273,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Stará paní má prasklou trubku, voda teče do bytu" },
       { text: "Připojuju bojler, nemůžu to nechat v půlce" },
       { text: "Čekám na materiál z velkoobchodu, přijede každou chvíli" },
-      { text: "Půl vesnice nemá teplo, nemůžu odejít", months: [12, 1, 2] },
-      { text: "Zamrzly trubky u Novákových, jedu tam hned", months: [12, 1, 2] },
+      { text: "Půl vesnice nemá teplo, nemůžu odejít", weather: ["snow"] },
+      { text: "Zamrzly trubky u Novákových, jedu tam hned", weather: ["snow"] },
     ],
   },
   {
@@ -286,8 +286,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Vítr mi odfoukl taške z půlky střechy" },
       { text: "Soused mě prosí o okamžitou opravu, teče mu do postele" },
       { text: "Přivezli tašky, musím je naskládat na střechu dřív než začne pršet" },
-      { text: "V týhle plundře nelezu ze střechy dřív než ve čtyři", months: [12, 1, 2] },
-      { text: "Krytí se mi rozteče, musím to dodělat teď", months: [6, 7, 8] },
+      { text: "V týhle plundře nelezu ze střechy dřív než ve čtyři", weather: ["snow", "wind"] },
+      { text: "Krytí se mi rozteče, musím to dodělat teď", weather: ["sunny"] },
       { text: "Za deště na střechu nelezu, ale musím to zaplachtovat" },
     ],
   },
@@ -322,9 +322,9 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Přijela inspekce, musím být v hospodě" },
       { text: "Dovezli sud, musím ho napojit na pípu" },
       { text: "Pivní reprezentant čeká na ochutnávku nových piv" },
-      { text: "Máme hody, sál je plnej", months: [7, 8] },
-      { text: "Silvestr, tady je vyprodáno tři měsíce dopředu", months: [12] },
-      { text: "Zahrádka je narvaná, nemůžu odejít od výčepu", months: [6, 7, 8] },
+      { text: "Máme hody, sál je plnej", weather: ["sunny", "cloudy"] },
+      { text: "Silvestr, tady je vyprodáno tři měsíce dopředu", weather: ["snow"] },
+      { text: "Zahrádka je narvaná, nemůžu odejít od výčepu", weather: ["sunny"] },
     ],
   },
   {
@@ -336,7 +336,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Závoz přijel pozdě, musím to naskladnit" },
       { text: "Dneska bereme velkou objednávku, šéf trvá na mé přítomnosti" },
       { text: "Kasa se zasekla, čekám na servisáka" },
-      { text: "Předvánoční šturm, šéf volno nedá", months: [12] },
+      { text: "Předvánoční šturm, šéf volno nedá", weather: ["snow"] },
     ],
   },
   {
@@ -370,7 +370,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Dělám výmalbu školky, děti přijdou v pondělí" },
       { text: "Udělal jsem špatný odstín, míchám to znovu" },
       { text: "Padl mi válec do barvy, čistím to hodinu" },
-      { text: "Sezóna maleb, mám nabito do konce prázdnin", months: [6, 7, 8] },
+      { text: "Sezóna maleb, mám nabito do konce prázdnin", weather: ["sunny", "cloudy"] },
     ],
   },
   {
@@ -393,8 +393,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Někdo vyrazil dveře do šaten, volám policii" },
       { text: "Zalévací systém se rozbil, musím to spravit ručně" },
       { text: "Připravuju čáry na zítřek, nemůžu to přerušit" },
-      { text: "Musím zalít, jinak mi to do neděle uschne", months: [6, 7, 8] },
-      { text: "Odklízím sníh z hrací plochy, sám to nedám", months: [12, 1, 2] },
+      { text: "Musím zalít, jinak mi to do neděle uschne", weather: ["sunny"] },
+      { text: "Odklízím sníh z hrací plochy, sám to nedám", weather: ["snow"] },
     ],
   },
 
@@ -429,8 +429,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Koncentrát do postřiku zasychá, musím hned stříkat" },
       { text: "Zákaznice chce mít před víkendem hotové, jedu i v neděli" },
       { text: "Sekačka mě nepustila, musím do servisu" },
-      { text: "Sezóna, sekám od rána do večera", months: [5, 6, 7, 8] },
-      { text: "Musím zabalit rostliny, než přijde mráz", months: [10, 11] },
+      { text: "Sezóna, sekám od rána do večera", weather: ["sunny", "cloudy"] },
+      { text: "Musím zabalit rostliny, než přijde mráz", weather: ["wind", "cloudy"] },
     ],
   },
   {
@@ -501,7 +501,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Šéf mě poslal na extra jízdu, nemohl jsem odmítnout" },
       { text: "Mám tacho, musím držet povinnou pauzu" },
       { text: "Zavřeli hranici, stojím v koloně" },
-      { text: "Stojím v koloně, silnice jsou neprůjezdný", months: [12, 1, 2] },
+      { text: "Stojím v koloně, silnice jsou neprůjezdný", weather: ["snow"] },
     ],
   },
   {
@@ -513,7 +513,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Zkrat v panelovém domě, hlídám to" },
       { text: "Rozvaděč mi padá, jsem v objektu do večera" },
       { text: "Revize, musí být hotovo do zítřka" },
-      { text: "Vypadl proud v celé ulici, hledám poruchu", months: [12, 1, 2] },
+      { text: "Vypadl proud v celé ulici, hledám poruchu", weather: ["wind", "snow"] },
       { text: "Vichřice strhla dráty, jsme venku všichni" },
     ],
   },
@@ -548,8 +548,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Šéf objednal rauty, pracuju přesčas" },
       { text: "Přivezli špatnou dodávku, řeším reklamaci" },
       { text: "Stroj se zasekl, musím to dělat ručně" },
-      { text: "Vaříme na hody, mám sto padesát porcí", months: [7, 8] },
-      { text: "Vánoční večírky, kuchyň jede na plný pecky", months: [12] },
+      { text: "Vaříme na hody, mám sto padesát porcí", weather: ["sunny", "cloudy"] },
+      { text: "Vánoční večírky, kuchyň jede na plný pecky", weather: ["snow"] },
     ],
   },
   {
@@ -561,8 +561,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Oslava sedmdesátin, předem objednané" },
       { text: "Kolegyně odešla v poledne, obsluhuju celý salon" },
       { text: "Pokladna se sekla, řešíme to s technikem" },
-      { text: "Hody, roznáším od rána do noci", months: [7, 8] },
-      { text: "Vánoční žně, šéf volno nedá", months: [12] },
+      { text: "Hody, roznáším od rána do noci", weather: ["sunny", "cloudy"] },
+      { text: "Vánoční žně, šéf volno nedá", weather: ["snow"] },
     ],
   },
   {
@@ -644,8 +644,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Opravuji písemky do večera" },
       { text: "Zastupuju nemocného kolegu, učím dvojnásobek" },
       { text: "Pedagogická rada se protáhla, nevrátím se včas" },
-      { text: "Vysvědčení, uzavírám známky", months: [6] },
-      { text: "Začátek roku, mám na krku nový třídy", months: [9] },
+      { text: "Vysvědčení, uzavírám známky" },
+      { text: "Začátek roku, mám na krku nový třídy" },
     ],
   },
   {
@@ -714,8 +714,8 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Rozlil se sud, uklízím" },
       { text: "Hrajeme tequila párty, objednali 200 štamprlí" },
       { text: "Bezpečnostní agentura přijela až ve dvě ráno" },
-      { text: "Letní scéna frčí, stojím za barem do rána", months: [7, 8] },
-      { text: "Silvestr, tady se nedá nic vzít", months: [12] },
+      { text: "Letní scéna frčí, stojím za barem do rána", weather: ["sunny"] },
+      { text: "Silvestr, tady se nedá nic vzít", weather: ["snow"] },
     ],
   },
   {
@@ -760,7 +760,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Přivezli noviny pozdě, musím je roztřídit" },
       { text: "Závoz loterie se opozdil, čekám" },
       { text: "Někdo ukradl časopisy z výlohy, řeším to s policií" },
-      { text: "Před svátky je tu fronta až na ulici", months: [12] },
+      { text: "Před svátky je tu fronta až na ulici", weather: ["snow"] },
     ],
   },
   {
@@ -871,19 +871,19 @@ export const OCCUPATIONS: Occupation[] = [
 ];
 
 /**
- * Vybere profesní výmluvu vhodnou pro daný měsíc.
+ * Vybere profesní výmluvu vhodnou pro dané počasí.
  *
- * Když sezónní varianta nesedí, spadne se na celoroční — proto musí mít každé
- * povolání aspoň jednu bez omezení. Hlídá to test.
+ * Když povětrnostní varianta nesedí, spadne se na univerzální — proto musí mít
+ * každé povolání aspoň jednu bez omezení. Hlídá to test.
  */
 export function pickProfessionalExcuse(
   rng: Rng,
   occ: Occupation,
-  month?: number,
+  weather?: Weather,
 ): string {
-  const fits = (e: ProfExcuse) => !e.months || month === undefined || e.months.includes(month);
+  const fits = (e: ProfExcuse) => !e.weather || weather === undefined || e.weather.includes(weather);
   const applicable = occ.excuses.filter(fits);
-  const pool = applicable.length > 0 ? applicable : occ.excuses.filter((e) => !e.months);
+  const pool = applicable.length > 0 ? applicable : occ.excuses.filter((e) => !e.weather);
   return rng.pick(pool.length > 0 ? pool : occ.excuses).text;
 }
 

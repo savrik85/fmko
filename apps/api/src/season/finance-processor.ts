@@ -448,12 +448,16 @@ export async function processMatchDayFinances(
 
     // Concession income — podle módu
     if (fansCtx?.concessionMode === "self") {
-      // Měsíc herního data — teplota se odvozuje z něj, ne z reálného kalendáře.
-      // Regex je pojistka: při nečekaném formátu se měsíc vynechá a poptávka
-      // spadne zpět na samotné počasí, místo aby se počítalo s NaN.
-      const matchMonth = /^\d{4}-\d{2}/.test(gameDate) ? Number(gameDate.slice(5, 7)) : undefined;
+      // Teplota kola ze season-weather — táž hodnota, jakou hráč viděl
+      // v předpovědi, když se rozhodoval, co naskladnit.
+      const { resolveRoundWeather } = await import("./season-weather");
+      const calRow = await db.prepare("SELECT calendar_id FROM matches WHERE id = ?")
+        .bind(matchId).first<{ calendar_id: string | null }>().catch(() => null);
+      const roundTemp = calRow?.calendar_id
+        ? (await resolveRoundWeather(db, calRow.calendar_id))?.temperature
+        : undefined;
       const sale = computeSelfConcessionMatch(
-        attendance, satisfaction, fansCtx.products, weather, staffFx.concessionDemandMul, matchMonth,
+        attendance, satisfaction, fansCtx.products, weather, staffFx.concessionDemandMul, roundTemp,
       );
       soldProducts = sale.products;
 

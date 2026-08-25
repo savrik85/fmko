@@ -135,9 +135,12 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   const previewCapacity = stadium ? stadium.capacity + calcFxPreview({ stands: stadium.stands ?? 0 }).capacityBonus : 0;
 
   // Weather forecast
-  const { generateForecast } = await import("../season/weather");
+  const { forecastForMatch } = await import("../season/season-weather");
   const schedAt = (match.scheduled_at ?? match.created_at) as string | null;
-  const forecast = generateForecast(schedAt, matchId.charCodeAt(0) + matchId.charCodeAt(1));
+  // Ze stejného zdroje jako simulace — předpověď musí předpovídat.
+  const forecast = await forecastForMatch(
+    c.env.DB, (match.calendar_id as string | null) ?? null, schedAt ?? "", matchId,
+  );
 
   // Tipy k sestavě — co podmínky udělají se hrou. Radí, nerozhodují.
   const { tacticHints: buildHints } = await import("../engine/tactic-hints");
@@ -267,8 +270,15 @@ matchesRouter.get("/teams/:teamId/cup-preview/:cupMatchId", async (c) => {
   const [home, away] = await Promise.all([buildSide(cm.home_cup_team_id), buildSide(cm.away_cup_team_id)]);
   if (!home || !away) return c.json({ error: "Cup team not found" }, 404);
 
-  const { generateForecast } = await import("../season/weather");
-  const forecast = generateForecast(cm.scheduled_at, cupMatchId.charCodeAt(0) + cupMatchId.charCodeAt(1));
+  // Pohár nemá season_calendar, ale počasí je vlastnost dne — bere se stejně.
+  const { resolveWeatherForDate } = await import("../season/season-weather");
+  const { describeWeather } = await import("../season/weather");
+  const dayW = await resolveWeatherForDate(c.env.DB, cm.scheduled_at as string);
+  const forecast = {
+    expected: dayW?.weather ?? "cloudy",
+    temperature: dayW?.temperature ?? 12,
+    ...describeWeather(dayW?.weather ?? "cloudy", cupMatchId),
+  };
   const { roundName } = await import("../cup/cup");
 
   return c.json({

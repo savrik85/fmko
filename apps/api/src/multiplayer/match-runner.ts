@@ -122,19 +122,19 @@ export async function runScheduledMatches(
         logger.warn({module: "match-runner"}, `kalendář kola ${calendarId} se nenačetl — finance jedou na výchozí sazby`);
     }
 
-    // Pick weather for the whole round
-    const weathers: Weather[] = ["sunny", "cloudy", "rain", "wind", "snow"];
-    const weatherWeights = [30, 30, 20, 15, 5];
-    const weatherRoll = Math.random() * 100;
-    let cumulative = 0;
-    let weather: Weather = "cloudy";
-    for (let i = 0; i < weathers.length; i++) {
-        cumulative += weatherWeights[i];
-        if (weatherRoll < cumulative) {
-            weather = weathers[i];
-            break;
-        }
+    // Počasí pro celé kolo — liga se hraje na malé oblasti, takže nemůže být
+    // v jedné vesnici vedro a ve vedlejší sníh.
+    //
+    // Dřív padalo z Math.random() s plochými váhami, nezávisle na tom, co hráči
+    // ukazovala předpověď u zápasu. Naskladnit bufet podle předpovědi tak bylo
+    // stejně dobré jako hádat. Teď jde ze season-weather.ts, odkud čte i ta
+    // předpověď a výmluvy hráčů — jedna hodnota pro všechny.
+    const { resolveRoundWeather } = await import("../season/season-weather");
+    const roundW = await resolveRoundWeather(db, calendarId);
+    if (!roundW) {
+        logger.warn({module: "match-runner"}, `počasí kola ${calendarId} se neodvodilo — jede se na zataženo`);
     }
+    const weather: Weather = roundW?.weather ?? "cloudy";
 
     for (const match of matches.results) {
         const matchId = match.id as string;
@@ -1290,22 +1290,18 @@ export async function buildMatchPlayers(
                 teamId,
                 phase: "match_day"
             }));
-            const { fetchTeamCommuteMod, monthFromIso } = await import("../events/match-absences");
+            const { fetchTeamCommuteMod } = await import("../events/match-absences");
+            const { resolveRoundWeather } = await import("../season/season-weather");
             const vanCommuteMod = await fetchTeamCommuteMod(db, teamId);
-            // Měsíc zápasu pro sezónní profesní výmluvy. Musí vyjít stejně jako
-            // v SMS (events/match-absences.ts), proto se čte z téhož sloupce.
-            const schedRow = await db.prepare(
-                "SELECT scheduled_at FROM season_calendar WHERE id = ?",
-            ).bind(options.matchKey).first<{ scheduled_at: string }>()
-                .catch(() => null);
-            const absenceMonth = monthFromIso(schedRow?.scheduled_at);
+            // Počasí kola — stejný zdroj jako předpověď i SMS.
+            const absenceWeather = (await resolveRoundWeather(db, options.matchKey))?.weather;
             const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, {
               timing: "day_before", district, friendlyMultiplier: options.friendlyMultiplier,
-              commuteMod: vanCommuteMod, month: absenceMonth,
+              commuteMod: vanCommuteMod, weather: absenceWeather,
             });
             const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, {
               timing: "match_day", district, friendlyMultiplier: options.friendlyMultiplier,
-              commuteMod: vanCommuteMod, month: absenceMonth,
+              commuteMod: vanCommuteMod, weather: absenceWeather,
             });
             const seen = new Set<number>();
             const allAbsences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {

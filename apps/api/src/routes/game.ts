@@ -1576,11 +1576,11 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
 
   // Batch: team info + match count + active season
   const [teamInfoRes, matchCountRes, currentSeasonRes] = await c.env.DB.batch([
-    c.env.DB.prepare("SELECT reputation, stadium_name FROM teams WHERE id = ?").bind(teamId),
+    c.env.DB.prepare("SELECT reputation, stadium_name, game_date FROM teams WHERE id = ?").bind(teamId),
     c.env.DB.prepare("SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'").bind(teamId, teamId),
     c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"),
   ]);
-  const teamInfo = (teamInfoRes.results[0] as { reputation: number; stadium_name: string | null } | undefined) ?? null;
+  const teamInfo = (teamInfoRes.results[0] as { reputation: number; stadium_name: string | null; game_date: string | null } | undefined) ?? null;
   const matchCount = (matchCountRes.results[0] as { cnt: number } | undefined) ?? null;
   const currentSeason = (currentSeasonRes.results[0] as { number: number } | undefined) ?? null;
 
@@ -1673,11 +1673,19 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     snowClearingOrdered: ((stadium.pitch_snow_clearing_ordered as number) ?? 0) > 0,
   };
 
+  // Počasí, které je nad areálem PRÁVĚ TEĎ — počasí herního dne, ne toho
+  // zápasového. Na stadion se hráč dívá dnes; jak bude v sobotu, mu říká
+  // předpověď u zápasu.
+  const { resolveWeatherForDate } = await import("../season/season-weather");
+  const dnesniPocasi = await resolveWeatherForDate(c.env.DB, (teamInfo?.game_date as string) ?? "");
+
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
     capacity: effectiveCapacity,
     pitchCondition: stadium.pitch_condition,
     pitchType: stadium.pitch_type,
+    currentWeather: dnesniPocasi?.weather ?? null,
+    currentTemperature: dnesniPocasi?.temperature ?? null,
     // Vyhřívání je vybavení, ne zázemí stadionu — 3D pohled ho potřebuje zvlášť,
     // aby na vyhřívané ploše nevykresloval sníh.
     pitchHeating: pitchHeatingLevel,
@@ -3611,11 +3619,12 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     const matchDayRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "match_day" }));
     // Dodávka musí být i tady: preview jede na stejných seedech jako SMS a simulace,
     // takže bez ní by ukazovalo absence, které se pak neodehrají.
-    const { fetchTeamCommuteMod, monthFromIso } = await import("../events/match-absences");
+    const { fetchTeamCommuteMod } = await import("../events/match-absences");
+    const { resolveRoundWeather } = await import("../season/season-weather");
     const commuteMod = await fetchTeamCommuteMod(c.env.DB, teamId);
-    const month = monthFromIso(scheduledAt);
-    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, month });
-    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, month });
+    const weather = (await resolveRoundWeather(c.env.DB, matchKey))?.weather;
+    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, weather });
+    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, weather });
     const seen = new Set<number>();
     absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
       if (seen.has(a.playerIndex)) return false;
@@ -3849,8 +3858,11 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   // Předpověď na zápas + tipy, co podmínky udělají se hrou. Trenér je vidí ještě
   // před uložením sestavy, takže se podle nich může rozhodnout o taktice.
   const homeTeamId = match.home_team_id as string;
-  const { generateForecast } = await import("../season/weather");
-  const forecast = generateForecast(scheduledAt, String(match.id).charCodeAt(0) + String(match.id).charCodeAt(1));
+  const { forecastForMatch } = await import("../season/season-weather");
+  // Ze stejného zdroje jako simulace, bufet i omluvenky hráčů.
+  const forecast = await forecastForMatch(
+    c.env.DB, (match.calendar_id as string | null) ?? null, scheduledAt ?? "", String(match.id),
+  );
   const pitchRow = await c.env.DB.prepare(
     "SELECT pitch_condition, pitch_moisture FROM stadiums WHERE team_id = ?"
   ).bind(homeTeamId).first<{ pitch_condition: number; pitch_moisture: number }>()
@@ -8937,13 +8949,10 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
     const row = await findNextHomeMatch(c.env.DB, teamId);
 
     if (row?.scheduledAt) {
-      const { generateForecast, monthTemperature } = await import("../season/weather");
+      const { forecastForMatch } = await import("../season/season-weather");
       const { concessionDemandHints } = await import("../season/concession-catalog");
-      // Stejné odvození seedu jako na stránce sestavy, jinak by hra ukazovala
-      // dvě různé předpovědi na tentýž zápas.
-      const seed = String(row.id).charCodeAt(0) + String(row.id).charCodeAt(1);
-      const forecast = generateForecast(row.scheduledAt, seed);
-      const month = Number(row.scheduledAt.slice(5, 7));
+      // Předpověď ze stejného zdroje jako simulace i omluvenky hráčů.
+      const forecast = await forecastForMatch(c.env.DB, row.calendarId, row.scheduledAt, row.id);
       nextHome = {
         scheduledAt: row.scheduledAt,
         opponent: row.opponent,
@@ -8954,8 +8963,8 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
           temperature: forecast.temperature,
           description: forecast.description,
         },
-        avgTemperature: Number.isFinite(month) ? monthTemperature(month) : null,
-        hints: concessionDemandHints(forecast.expected, Number.isFinite(month) ? month : undefined),
+        avgTemperature: forecast.temperature,
+        hints: concessionDemandHints(forecast.expected, forecast.temperature),
       };
     }
   } catch (e) {
@@ -9175,11 +9184,12 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
 
     const triggerDistrict = await fetchDistrictForTrigger(c.env.DB, teamId);
     // Stejný důvod jako u preview: tyhle SMS musí sedět se simulací zápasu.
-    const { fetchTeamCommuteMod: fetchTriggerCommuteMod, monthFromIso: monthTrigger } = await import("../events/match-absences");
+    const { fetchTeamCommuteMod: fetchTriggerCommuteMod } = await import("../events/match-absences");
+    const { resolveRoundWeather: resolveTriggerWeather } = await import("../season/season-weather");
     const triggerCommuteMod = await fetchTriggerCommuteMod(c.env.DB, teamId);
     const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, {
       timing: "day_before", district: triggerDistrict, commuteMod: triggerCommuteMod,
-      month: monthTrigger(tomorrowMatch.scheduled_at),
+      weather: (await resolveTriggerWeather(c.env.DB, tomorrowMatch.id))?.weather,
     });
     const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
     const matchConvId = crypto.randomUUID();

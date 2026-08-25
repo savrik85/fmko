@@ -94,6 +94,9 @@ interface PitchCare {
 }
 
 interface StadiumData {
+  /** Počasí nad areálem právě teď — počasí herního dne, ne zápasového. */
+  currentWeather?: string | null;
+  currentTemperature?: number | null;
   stadiumName: string | null;
   capacity: number;
   pitchCondition: number;
@@ -246,14 +249,17 @@ export default function StadiumPage() {
 
   const [sponsorNames, setSponsorNames] = useState<string[]>([]);
   /**
-   * Počasí na nejbližší zápas. Areál má ukazovat, na co se klub chystá —
-   * pevné „slunečno" nedávalo smysl, když se v sobotu hraje na sněhu.
+   * Počasí, které je nad areálem PRÁVĚ TEĎ.
+   *
+   * Dřív se sem tahala předpověď na nejbližší zápas, jenže na stadion se hráč
+   * dívá dnes — v úterý nemá smysl vykreslovat sobotní sníh. Jak bude v sobotu,
+   * říká předpověď u zápasu.
    */
   const [matchWeather, setMatchWeather] = useState<string | null>(null);
 
   const refresh = async () => {
     if (!teamId) return;
-    const [s, t, sp, nm] = await Promise.all([
+    const [s, t, sp] = await Promise.all([
       apiFetch<StadiumData>(`/api/teams/${teamId}/stadium`),
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<{
@@ -263,11 +269,9 @@ export default function StadiumPage() {
       }>(
         `/api/teams/${teamId}/sponsors`
       ).catch((e) => { console.warn("sponsors fetch:", e); return null; }),
-      apiFetch<{ forecast?: { expected: string } | null }>(`/api/teams/${teamId}/next-match`)
-        .catch((e) => { console.warn("next-match forecast:", e); return null; }),
     ]);
     setStadium(s); setTeam(t);
-    setMatchWeather(nm?.forecast?.expected ?? null);
+    setMatchWeather(s.currentWeather ?? null);
     // Pro 3D bannery jen aktivní banner kontrakty — bez bannerů žádné ploty kolem hřiště
     setSponsorNames(sp?.bannerContracts?.map((c) => c.sponsorName) ?? []);
   };

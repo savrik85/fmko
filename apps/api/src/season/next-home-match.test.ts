@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { pickEarlier, type HomeMatchRef } from "./next-home-match";
 
-const liga = (d: string): HomeMatchRef => ({ id: "l", scheduledAt: d, opponent: "Liga", isCup: false });
-const pohar = (d: string): HomeMatchRef => ({ id: "c", scheduledAt: d, opponent: "Pohár", isCup: true });
+const liga = (d: string): HomeMatchRef => ({ id: "l", calendarId: "cal-l", scheduledAt: d, opponent: "Liga", isCup: false });
+const pohar = (d: string): HomeMatchRef => ({ id: "c", calendarId: null, scheduledAt: d, opponent: "Pohár", isCup: true });
 
 /**
  * Nejbližší domácí zápas se skládá ze dvou zdrojů — liga (`season_calendar`)

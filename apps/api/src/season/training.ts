@@ -1,3 +1,4 @@
+import type { Weather } from "../engine/types";
 /**
  * FMK-12: Tréninkový systém — plánování, účast, efekt na atributy.
  */
@@ -314,6 +315,27 @@ function simulateAttendance(
 }
 
 /**
+ * Vliv počasí na chuť dojít na trénink.
+ *
+ * Počasí je ve hře vlastnost DNE (`season/season-weather.ts`), takže trénink
+ * ve čtvrtek dostane počasí čtvrtka — stejné, jaké hráč vidí v předpovědi.
+ * Zápas se odehraje skoro za každého počasí, ale na středeční trénink se
+ * v plískanici nikomu nechce.
+ *
+ * Rozpětí je schválně malé: počasí má docházku barvit, ne řídit.
+ */
+export function trainingWeatherMod(weather: Weather | undefined): number {
+  switch (weather) {
+    case "sunny": return 0.06;
+    case "cloudy": return 0;
+    case "wind": return -0.04;
+    case "rain": return -0.09;
+    case "snow": return -0.14;
+    default: return 0;
+  }
+}
+
+/**
  * Odsimuluje JEDEN trénink (jeden tréninkový den). Kolikrát za týden se trénuje,
  * určují výhradně tréninkové dny — volající zavolá tuhle funkci jednou za každý z nich.
  */
@@ -325,12 +347,18 @@ export function simulateTraining(
   equipmentMultiplier: number = 1.0,
   managerBonus: { coaching: number; discipline: number; youthDev: number } = { coaching: 40, discipline: 40, youthDev: 40 },
   equipExtras: { attendanceBonus?: number; youthTrainingMod?: number; gkTrainingMul?: number } = {},
+  /** Počasí tréninkového dne z `resolveWeatherForDate`. */
+  weather?: Weather,
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
 
   // Jeden trénink = jedna docházka. Kdo přišel, dostane jeden pokus o zlepšení.
-  const session = simulateAttendance(rng, squad, plan.approach, commuteKms, equipExtras.attendanceBonus ?? 0, managerBonus.discipline);
+  const session = simulateAttendance(
+    rng, squad, plan.approach, commuteKms,
+    (equipExtras.attendanceBonus ?? 0) + trainingWeatherMod(weather),
+    managerBonus.discipline,
+  );
   for (const a of session) {
     if (a.attended) attendanceCounts.set(a.playerIndex, 1);
   }
