@@ -99,16 +99,9 @@ export function generateForecast(scheduledAt: string | null, seed?: number): Wea
 }
 
 /** Násobič návštěvy dle počasí — v ošklivu přijde míň lidí. */
-export function weatherAttendanceFactor(weather: Weather): number {
-  switch (weather) {
-    case "sunny": return 1.12;
-    case "cloudy": return 1.0;
-    case "wind": return 0.92;
-    case "rain": return 0.80;
-    case "snow": return 0.62;
-    default: return 1.0;
-  }
-}
+// Hodnoty žijí ve sdíleném balíčku, aby je frontend nemusel mít natvrdo znovu —
+// právě takhle se widget rozešel se skutečností (sníh hlásil -30 % místo -38 %).
+export { weatherAttendanceFactor } from "@okresni-masina/shared";
 
 /**
  * Násobič návštěvy podle stavu hřiště.

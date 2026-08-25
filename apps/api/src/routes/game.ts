@@ -1652,10 +1652,12 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const effectiveCapacity = ((stadium.capacity as number) ?? 200) + calculateFacilityEffects(facilities).capacityBonus;
   const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);
 
-  const careEquip = await c.env.DB.prepare("SELECT pitch_heating, pitch_irrigation FROM equipment WHERE team_id = ?")
-    .bind(teamId).first<{ pitch_heating: number; pitch_irrigation: number }>()
+  const careEquip = await c.env.DB.prepare("SELECT pitch_heating, pitch_irrigation, mower FROM equipment WHERE team_id = ?")
+    .bind(teamId).first<{ pitch_heating: number; pitch_irrigation: number; mower: number }>()
     .catch((e) => { logger.warn({ module: "game" }, "load pitch care equipment", e); return null; });
   const pitchHeatingLevel = careEquip?.pitch_heating ?? 0;
+  const pitchIrrigationLevel = careEquip?.pitch_irrigation ?? 0;
+  const mowerLevel = careEquip?.mower ?? 0;
 
   const { PITCH_CARE_MODE_LABEL, serviceCost, SNOW_CLEARING_COST } = await import("../stadium/pitch-care");
   const careMode = ((stadium.pitch_care_mode as string) ?? "auto") as keyof typeof PITCH_CARE_MODE_LABEL;
@@ -1663,9 +1665,9 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     mode: careMode,
     modeLabel: PITCH_CARE_MODE_LABEL[careMode] ?? PITCH_CARE_MODE_LABEL.auto,
     heatingLevel: pitchHeatingLevel,
-    irrigationLevel: careEquip?.pitch_irrigation ?? 0,
+    irrigationLevel: pitchIrrigationLevel,
     heatingCost: serviceCost("heating", pitchHeatingLevel),
-    irrigationCost: serviceCost("irrigation", careEquip?.pitch_irrigation ?? 0),
+    irrigationCost: serviceCost("irrigation", pitchIrrigationLevel),
     snowClearingCost: SNOW_CLEARING_COST,
     careOrdered: ((stadium.pitch_care_ordered as number) ?? 0) > 0,
     snowClearingOrdered: ((stadium.pitch_snow_clearing_ordered as number) ?? 0) > 0,
@@ -1679,6 +1681,8 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     // Vyhřívání je vybavení, ne zázemí stadionu — 3D pohled ho potřebuje zvlášť,
     // aby na vyhřívané ploše nevykresloval sníh.
     pitchHeating: pitchHeatingLevel,
+    pitchIrrigation: pitchIrrigationLevel,
+    mowerLevel,
     pitchMoisture: (stadium.pitch_moisture as number) ?? 50,
     pitchCare,
     facilities,

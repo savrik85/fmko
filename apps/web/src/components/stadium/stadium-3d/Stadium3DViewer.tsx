@@ -15,6 +15,10 @@ interface Stadium3DViewerProps {
   pitchHeating?: number;
   /** Úroveň zavlažování (0–3) — putuje beze změny do Stadium3D. */
   pitchIrrigation?: number;
+  /** Úroveň sekačky (0–3) — putuje beze změny do Stadium3D. */
+  mowerLevel?: number;
+  /** Zda je objednán úklid sněhu — putuje beze změny do Stadium3D. */
+  snowClearingOrdered?: boolean;
   /** Vlhkost půdy 0–100 — putuje beze změny do Stadium3D. */
   pitchMoisture?: number;
   teamColor: string;

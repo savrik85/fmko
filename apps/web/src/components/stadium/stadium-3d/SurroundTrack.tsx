@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { PITCH, type WeatherType } from "./constants";
+import { PITCH, type WeatherType, APRON_MARGIN, APRON_Y, PITCH_GRASS_MARGIN } from "./constants";
 import { getSurroundSurfaceSet, generatePaverSurface, type SurroundSurfaceType } from "./grassTexture";
 
 interface SurroundTrackProps {
@@ -18,11 +18,11 @@ const HALF_W = PITCH.width / 2; // 20
 const HALF_D = PITCH.depth / 2; // 30
 
 // Přesný 2.4m široký výběhový technický lem kolem lajn hřiště
-const APRON_MARGIN = 2.4;
-const APRON_W = PITCH.width + APRON_MARGIN * 2; // 44.8m
-const APRON_D = PITCH.depth + APRON_MARGIN * 2; // 64.8m
-const HALF_APRON_W = APRON_W / 2; // 22.4m
-const HALF_APRON_D = APRON_D / 2; // 32.4m
+
+const APRON_W = PITCH.width + APRON_MARGIN * 2;
+const APRON_D = PITCH.depth + APRON_MARGIN * 2;
+const HALF_APRON_W = APRON_W / 2;
+const HALF_APRON_D = APRON_D / 2;
 
 export function SurroundTrack({
   surroundSurface = "grass",
@@ -53,28 +53,59 @@ export function SurroundTrack({
     return null;
   }
 
+  /**
+   * Rám výběhové zóny — vnější obdélník s dírou přesně pod hrací plochou.
+   * UV se přemapují z metrů na 0–1, aby dlaždice měly stejné měřítko jako dřív.
+   */
+  const apronGeometry = useMemo(() => {
+    const outer = new THREE.Shape();
+    outer.moveTo(-HALF_APRON_W, -HALF_APRON_D);
+    outer.lineTo(HALF_APRON_W, -HALF_APRON_D);
+    outer.lineTo(HALF_APRON_W, HALF_APRON_D);
+    outer.lineTo(-HALF_APRON_W, HALF_APRON_D);
+    outer.closePath();
+
+    // Díra je větší než hřiště o pruh trávy — povrch začíná až za ním.
+    const hw = PITCH.width / 2 + PITCH_GRASS_MARGIN;
+    const hd = PITCH.depth / 2 + PITCH_GRASS_MARGIN;
+    const hole = new THREE.Path();
+    hole.moveTo(-hw, -hd);
+    hole.lineTo(-hw, hd);
+    hole.lineTo(hw, hd);
+    hole.lineTo(hw, -hd);
+    hole.closePath();
+    outer.holes.push(hole);
+
+    const g = new THREE.ShapeGeometry(outer);
+    const pos = g.attributes.position;
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      uv[i * 2] = (pos.getX(i) + HALF_APRON_W) / APRON_W;
+      uv[i * 2 + 1] = (pos.getY(i) + HALF_APRON_D) / APRON_D;
+    }
+    g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    g.computeVertexNormals();
+    return g;
+  }, []);
+
   const curbColor = isSnow ? "#CBD5E1" : isClubCarpet ? "#F1F5F9" : "#71717A";
 
   return (
     <group position={[0, 0, 0]}>
-      {/* ─── Hlavní výběhový technický koberec kolem lajn hřiště ─── */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.005, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[APRON_W, APRON_D]} />
-        {/* Deska jde pod celý areál včetně prostoru pod hřištěm. polygonOffset ji
-            v hloubkovém testu odsune dozadu, takže i při zbytku nepřesnosti
-            prohraje s trávníkem místo aby jím prosvítala. */}
+      {/* ─── Hlavní výběhová zóna kolem lajn hřiště ───
+          Je to RÁM s dírou pod hrací plochou, ne celá deska.
+          Původně šla deska i pod hřiště, takže dvě plochy pár tisícin od sebe
+          soupeřily v hloubkovém testu a povrch prosvítal trávníkem. Ladit to
+          rozestupem nešlo: větší mezera dělala viditelný schod, menší vracela
+          prosvítání. S dírou se plochy nepřekrývají vůbec a problém nemůže
+          vzniknout — zóna proto může ležet skoro v rovině s trávníkem. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, APRON_Y, 0]} receiveShadow>
+        <primitive object={apronGeometry} attach="geometry" />
         <meshStandardMaterial
           map={surfaceSet.map}
           bumpMap={surfaceSet.bumpMap}
           bumpScale={isSnow ? 0.03 : isPaved ? 0.06 : isClay ? 0.07 : 0.04}
           roughness={isClubCarpet || isAstro ? 0.85 : 0.94}
-          polygonOffset
-          polygonOffsetFactor={1}
-          polygonOffsetUnits={1}
         />
       </mesh>
 
@@ -211,13 +242,13 @@ function PavedPathways({ paverSet, isSnow }: { paverSet: any; isSnow: boolean })
   return (
     <group>
       {/* Chodník od vchodu k šatnám (severozápad) */}
-      <mesh position={[-20, 0.005, -42]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh position={[-20, APRON_Y, -42]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[18, 2.2]} />
         <meshStandardMaterial map={paverSet.map} bumpMap={paverSet.bumpMap} bumpScale={0.05} roughness={0.92} />
       </mesh>
 
       {/* Chodník k hospodě (jihovýchod) */}
-      <mesh position={[20, 0.005, 42]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh position={[20, APRON_Y, 42]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[18, 2.2]} />
         <meshStandardMaterial map={paverSet.map} bumpMap={paverSet.bumpMap} bumpScale={0.05} roughness={0.92} />
       </mesh>

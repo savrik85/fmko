@@ -3,18 +3,10 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { PITCH, type TimeOfDay, type WeatherType, type StadiumMode } from "./constants";
+import { PITCH, type TimeOfDay, type WeatherType, type StadiumMode, RAILING_MARGIN } from "./constants";
 import { generateGravelSurface, generatePaverSurface } from "./grassTexture";
 import { TrainingProps3D } from "./TrainingProps3D";
-
-interface VillageVibeProps {
-  timeOfDay: TimeOfDay;
-  pubPosition?: [number, number];
-  changingRoomsPosition?: [number, number];
-  isMobile?: boolean;
-  weather?: WeatherType;
-  mode?: StadiumMode;
-}
+import { PitchEquipment3D } from "./PitchEquipment3D";
 
 const HALF_W = PITCH.width / 2;
 const HALF_D = PITCH.depth / 2;
@@ -27,6 +19,11 @@ export function VillageVibe({
   weather,
   mode = "match_day",
   attendanceRatio = 0.75,
+  pitchHeating = 0,
+  pitchIrrigation = 0,
+  mowerLevel = 2,
+  pitchMoisture = 50,
+  snowClearingOrdered = false,
 }: {
   timeOfDay: TimeOfDay;
   pubPosition: [number, number];
@@ -35,6 +32,11 @@ export function VillageVibe({
   weather?: WeatherType;
   mode?: StadiumMode;
   attendanceRatio?: number;
+  pitchHeating?: number;
+  pitchIrrigation?: number;
+  mowerLevel?: number;
+  pitchMoisture?: number;
+  snowClearingOrdered?: boolean;
 }) {
   const isNight = timeOfDay === "night";
   const isSnow = weather === "snow";
@@ -61,8 +63,19 @@ export function VillageVibe({
       {/* 3. Stojan na jízdní kola */}
       <BicycleStand position={[pubX + 5.5, 0, pubZ - 3.2]} isSnow={isSnow} isTrainingDay={isTrainingDay} />
 
-      {/* 4. Sekačka na trávu u šaten / hospodářského rohu */}
-      <LawnMower position={[crX - 3.5, 0, crZ + 1.2]} isTrainingDay={isTrainingDay} />
+      {/* 4. Zařízení pro údržbu trávníku (vyhřívání, zavlažování, sekačky, úklid sněhu) */}
+      <PitchEquipment3D
+        changingRoomsPosition={changingRoomsPosition}
+        pitchHeating={pitchHeating}
+        pitchIrrigation={pitchIrrigation}
+        mowerLevel={mowerLevel}
+        pitchMoisture={pitchMoisture}
+        isSnow={isSnow}
+        weather={weather}
+        mode={mode}
+        snowClearingOrdered={snowClearingOrdered}
+        isMobile={isMobile}
+      />
 
       {/* 5. Obvodové zábradlí hřiště (krakorce s trubkou) */}
       <PitchPerimeterRailing isMobile={isMobile} />
@@ -460,51 +473,6 @@ function Bicycle({ position, color }: { position: [number, number, number]; colo
   );
 }
 
-/** Zahradní traktor / sekačka na trávu u hřiště */
-function LawnMower({
-  position,
-  isTrainingDay = false,
-}: {
-  position: [number, number, number];
-  isTrainingDay?: boolean;
-}) {
-  return (
-    <group position={position} rotation={[0, 0.6, 0]}>
-      {/* Tělo sekačky */}
-      <mesh position={[0, 0.45, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.0, 0.45, 1.7]} />
-        <meshStandardMaterial color="#15803D" roughness={0.5} metalness={0.3} />
-      </mesh>
-
-      {/* Sedadlo řidiče */}
-      <mesh position={[0, 0.75, -0.25]} castShadow>
-        <boxGeometry args={[0.5, 0.35, 0.45]} />
-        <meshStandardMaterial color="#1F2937" />
-      </mesh>
-
-      {/* Žlutý volant */}
-      <mesh position={[0, 0.85, 0.25]} rotation={[0.4, 0, 0]} castShadow>
-        <torusGeometry args={[0.15, 0.02, 6, 12]} />
-        <meshStandardMaterial color="#FACC15" />
-      </mesh>
-
-      {/* 4 Kola */}
-      {[[-0.55, 0.6], [0.55, 0.6], [-0.55, -0.6], [0.55, -0.6]].map(([x, z], i) => (
-        <mesh key={i} position={[x, 0.25, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.25, 0.25, 0.2, 10]} />
-          <meshStandardMaterial color="#111827" />
-        </mesh>
-      ))}
-
-      {/* Žací ústrojí dole */}
-      <mesh position={[0, 0.15, 0]} castShadow>
-        <boxGeometry args={[1.2, 0.15, 0.8]} />
-        <meshStandardMaterial color="#374151" metalness={0.6} />
-      </mesh>
-    </group>
-  );
-}
-
 /** Vstupní pokladna ("Vstupné 30 Kč") u brány */
 function TicketBooth({ position }: { position: [number, number, number] }) {
   const boothW = 2.2, boothH = 2.5, boothD = 1.8;
@@ -576,8 +544,8 @@ function TicketBooth({ position }: { position: [number, number, number] }) {
 /** Obvodové bílo-zelené trubkové zábradlí podél hřiště */
 function PitchPerimeterRailing({ isMobile }: { isMobile: boolean }) {
   const railH = 1.05;
-  const padX = HALF_W + 1.6;
-  const padZ = HALF_D + 1.6;
+  const padX = HALF_W + RAILING_MARGIN;
+  const padZ = HALF_D + RAILING_MARGIN;
 
   // Zábradlí běží okolo hřiště
   return (

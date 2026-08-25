@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { PITCH, pitchColor, type WeatherType } from "./constants";
+import { PITCH, pitchColor, type WeatherType, PITCH_SURFACE_Y } from "./constants";
 import { generatePitchSurface, generateSnowPitchSurface, type MowingPattern } from "./grassTexture";
 import { generateNetTexture, type NetPattern, type NetStyle } from "./materialTextures";
 
@@ -25,6 +25,26 @@ interface PitchProps {
    */
   pitchMoisture?: number;
 }
+
+/**
+ * Výška hrací plochy a vrstev nad ní.
+ *
+ * Vše, co na trávníku leží, se musí odvozovat OD TOHO — jinak stačí posunout
+ * plochu a čáry zůstanou pod ní. Přesně to se stalo, když se plocha zvedla
+ * z 0,010 na 0,050 kvůli prosvítající dlažbě: čáry měly natvrdo 0,05, ocitly
+ * se v jedné rovině s trávou a při pohybu kamery se trhaly.
+ *
+ * Rozestupy jsou malé, ale po zvětšení near roviny kamery (near=1) je hloubková
+ * přesnost dost velká i na mobilu.
+ */
+/** Vyšlapaná místa — hned nad trávou. */
+const DAMAGE_Y = PITCH_SURFACE_Y + 0.015;
+/** Kaluže — nad vyšlapanými místy, voda v nich stojí. */
+const PUDDLE_Y = PITCH_SURFACE_Y + 0.018;
+/** Vápno — navrch, čáry jsou vidět i přes vyšlapaná místa. */
+const LINE_Y = PITCH_SURFACE_Y + 0.025;
+/** Rohový čtvrtkruh — součást vápna. */
+const CORNER_ARC_Y = LINE_Y;
 
 const HALF_W = PITCH.width / 2;
 const HALF_D = PITCH.depth / 2;
@@ -232,7 +252,7 @@ export function Pitch({
   return (
     <group>
       {/* Hlavní hřiště — jemná procedurální tráva bez ostrého pixelového šumu */}
-      <mesh rotation={pitchRotation} position={[0, 0.05, 0]} receiveShadow>
+      <mesh rotation={pitchRotation} position={[0, PITCH_SURFACE_Y, 0]} receiveShadow>
         <planeGeometry args={[PITCH.width, PITCH.depth]} />
         <meshStandardMaterial
           map={grassSurface.map}
@@ -249,7 +269,7 @@ export function Pitch({
         <mesh
           key={`puddle-${i}`}
           rotation={[-Math.PI / 2, 0, p.rotation]}
-          position={[p.nx * HALF_W, 0.068 + (i % 3) * 0.001, p.nz * HALF_D]}
+          position={[p.nx * HALF_W, PUDDLE_Y + (i % 3) * 0.001, p.nz * HALF_D]}
           scale={[p.rx * PITCH.width, p.rz * PITCH.depth, 1]}
         >
           <circleGeometry args={[1, 16]} />
@@ -273,7 +293,7 @@ export function Pitch({
         <mesh
           key={i}
           rotation={[-Math.PI / 2, 0, s.rotation]}
-          position={[s.nx * HALF_W, 0.065 + (i % 3) * 0.001, s.nz * HALF_D]}
+          position={[s.nx * HALF_W, DAMAGE_Y + (i % 3) * 0.001, s.nz * HALF_D]}
           scale={[s.rx * PITCH.width, s.rz * PITCH.depth, 1]}
         >
           <circleGeometry args={[1, 8]} />
@@ -315,6 +335,17 @@ export function Pitch({
   );
 }
 
+/**
+ * Natočení rohového čtvrtkruhu tak, aby mířil do hřiště.
+ *
+ * Výchozí výseč ringGeometry (0 → π/2) po sklopení do roviny pokrývá světový
+ * kvadrant (+X, −Z). Každý roh potřebuje jiný, podle toho, kde leží střed hřiště.
+ */
+function cornerArcRotation(x: number, z: number): number {
+  if (x < 0) return z < 0 ? -Math.PI / 2 : 0;
+  return z < 0 ? Math.PI : Math.PI / 2;
+}
+
 /** Rohové praporky ve 4 rozích hřiště */
 function CornerFlags() {
   const corners: Array<[number, number]> = [
@@ -342,9 +373,11 @@ function CornerFlags() {
             <planeGeometry args={[0.18, 0.13]} />
             <meshStandardMaterial color="#FACC15" side={THREE.DoubleSide} roughness={0.7} />
           </mesh>
-          {/* Rohový čtvrtkruh na trávě */}
-          <mesh position={[(x > 0 ? -0.5 : 0.5), 0.03, (z > 0 ? -0.5 : 0.5)]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.9, 1.05, 8, 1, 0, Math.PI / 2]} />
+          {/* Rohový čtvrtkruh — střed leží PŘESNĚ na rohu a výseč míří dovnitř hřiště.
+              Dřív byl posunutý o půl metru dovnitř a výseč měl ve všech čtyřech rozích
+              stejnou, takže ve třech z nich trčel ven do výběhové zóny. */}
+          <mesh position={[0, CORNER_ARC_Y, 0]} rotation={[-Math.PI / 2, 0, cornerArcRotation(x, z)]}>
+            <ringGeometry args={[0.9, 1.05, 12, 1, 0, Math.PI / 2]} />
             <meshBasicMaterial color="#FFFFFF" transparent opacity={0.6} side={THREE.DoubleSide} />
           </mesh>
         </group>
@@ -386,7 +419,7 @@ function MatchBall() {
 }
 
 function PitchLines({ hasFull, hasCenter, opacity }: { hasFull: boolean; hasCenter: boolean; opacity: number }) {
-  const lineY = 0.05;
+  const lineY = LINE_Y;
   const lineColor = "#fff";
   const lineWidth = hasFull ? 0.25 : 0.15;
 

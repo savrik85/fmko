@@ -5,6 +5,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
+import { weatherAttendancePct, type Weather } from "@okresni-masina/shared";
 import { BadgePreview, useConfirm, type BadgePattern } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import type { WidgetProps, ScheduleMatch } from "../types";
@@ -273,11 +274,18 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
             <div className="flex items-center gap-1.5 text-sm text-muted">
               <span className="text-base">{preview.weather.icon}</span>
               <span>{preview.weather.temperature} °C</span>
-              {(preview.weather.expected === "rain" || preview.weather.expected === "snow" || preview.weather.expected === "wind") && (
-                <span className="text-card-red text-micro font-heading font-bold">
-                  {preview.weather.expected === "rain" ? "-20 %" : preview.weather.expected === "snow" ? "-30 %" : "-10 %"}
-                </span>
-              )}
+              {(() => {
+                // Postih docházky počítá weatherAttendanceFactor. Dřív tu byla vlastní
+                // kopie čísel, která se s ním rozešla — sníh hlásil -30 %, ve skutečnosti
+                // je to -38 %. Teď se počítá z téže funkce, takže se rozejít nemůže.
+                const dopad = weatherAttendancePct(preview.weather.expected as Weather);
+                if (dopad === 0) return null;
+                return (
+                  <span className={`text-micro font-heading font-bold ${dopad < 0 ? "text-card-red" : "text-pitch-600"}`}>
+                    {dopad > 0 ? "+" : ""}{dopad} %
+                  </span>
+                );
+              })()}
             </div>
             <span className="text-micro text-muted">{preview.venue.name}</span>
           </div>

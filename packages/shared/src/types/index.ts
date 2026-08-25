@@ -38,6 +38,8 @@ export {
 } from "./staff";
 export type { RatingPosition, AttrImportance } from "./rating-weights";
 export { RATING_WEIGHTS, ratingWeightsFor, attributeImportance } from "./rating-weights";
+export type { Weather } from "./weather";
+export { weatherAttendanceFactor, weatherAttendancePct } from "./weather";
 export type { ManagerFansBand, ManagerFansEffect } from "./manager-fans";
 export {
   MANAGER_FANS,

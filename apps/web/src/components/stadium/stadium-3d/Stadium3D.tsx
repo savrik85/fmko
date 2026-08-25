@@ -68,6 +68,10 @@ interface Stadium3DProps {
   pitchHeating?: number;
   /** Úroveň zavlažování (0–3) — na výhni drží trávník zelený místo slámového. */
   pitchIrrigation?: number;
+  /** Úroveň sekačky (0–3) — koza / ruční / rider / profi válec. */
+  mowerLevel?: number;
+  /** Zda je objednán úklid sněhu (zobrazí zimní nářadí). */
+  snowClearingOrdered?: boolean;
   /** Vlhkost půdy 0–100 (50 = normál) — řídí kaluže i vyschnutí. */
   pitchMoisture?: number;
   teamColor: string;
@@ -102,6 +106,8 @@ export function Stadium3D({
   facilities,
   pitchHeating = 0,
   pitchIrrigation = 0,
+  mowerLevel = 2,
+  snowClearingOrdered = false,
   pitchMoisture = 50,
   teamColor,
   secondaryColor = "#ffffff",
@@ -279,7 +285,7 @@ export function Stadium3D({
           {/* Okolí, terénní kopečky a vzdálená vesnička */}
           <Surroundings reduceTrees={isMobile} timeOfDay={timeOfDay} weather={weather} />
 
-          {/* Vesnický život v areálu: zahrádka, pivo, kouřící gril, kola, sekačka, zábradlí */}
+          {/* Vesnický život v areálu: zahrádka, pivo, kouřící gril, kola, údržba trávníku, zábradlí */}
           <VillageVibe
             timeOfDay={timeOfDay}
             pubPosition={layout.buildings.refreshments}
@@ -288,6 +294,11 @@ export function Stadium3D({
             weather={weather}
             mode={mode}
             attendanceRatio={attendanceRatio}
+            pitchHeating={pitchHeating}
+            pitchIrrigation={pitchIrrigation}
+            mowerLevel={mowerLevel}
+            pitchMoisture={pitchMoisture}
+            snowClearingOrdered={snowClearingOrdered}
           />
 
           {/* Osvětlovací stožáry v rozích hřiště */}

@@ -41,6 +41,10 @@ interface StadiumData {
   capacity: number;
   pitchCondition: number;
   pitchType: string;
+  pitchHeating?: number;
+  pitchIrrigation?: number;
+  mowerLevel?: number;
+  pitchMoisture?: number;
   facilities: Record<string, number>;
   customization: Customization;
 }
@@ -97,6 +101,10 @@ export default function VisitStadiumPage() {
         pitchCondition={stadium.pitchCondition}
         pitchType={stadium.pitchType}
         facilities={stadium.facilities}
+        pitchHeating={stadium.pitchHeating ?? 0}
+        pitchIrrigation={stadium.pitchIrrigation ?? 0}
+        mowerLevel={stadium.mowerLevel ?? 2}
+        pitchMoisture={stadium.pitchMoisture ?? 50}
         teamColor={team.primary_color}
         secondaryColor={team.secondary_color}
         badgePattern={team.badge_pattern}
@@ -117,6 +125,10 @@ export default function VisitStadiumPage() {
               pitchCondition={stadium.pitchCondition}
               pitchType={stadium.pitchType}
               facilities={stadium.facilities}
+              pitchHeating={stadium.pitchHeating ?? 0}
+              pitchIrrigation={stadium.pitchIrrigation ?? 0}
+              mowerLevel={stadium.mowerLevel ?? 2}
+              pitchMoisture={stadium.pitchMoisture ?? 50}
               teamColor={team.primary_color}
               secondaryColor={team.secondary_color}
               badgePattern={team.badge_pattern}

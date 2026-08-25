@@ -1,5 +1,38 @@
 // Stadium 3D scene constants — shared sizes, positions, palettes.
 
+/**
+ * Výška hrací plochy nad terénem a výška okolní výběhové zóny.
+ *
+ * Zóna je RÁM s dírou pod hrací plochou (viz SurroundTrack), takže se s trávníkem
+ * nikde nepřekrývá. Nemusí se proto od něj odsazovat kvůli hloubkovému testu a
+ * může ležet prakticky v rovině — žádný schod, žádné prosvítání.
+ *
+ * Ladit tohle rozestupem nešlo: větší mezera dělala viditelný schod pod dlažbou,
+ * menší vracela prosvítání povrchu skrz trávník.
+ */
+export const PITCH_SURFACE_Y = 0.05;
+export const APRON_Y = PITCH_SURFACE_Y - 0.002;
+
+/**
+ * Šířka výběhové zóny kolem hrací plochy (metry od postranní čáry).
+ *
+ * Zóna nese zvolený povrch areálu (tráva, antuka, zámková dlažba, umělka,
+ * klubový koberec). Při 2,4 m z ní po odečtení zábradlí zbýval pruh 1,6 m
+ * a zvolený povrch nebyl prakticky vidět — investice do dlažby vypadala stejně
+ * jako tráva. Zábradlí se odvozuje odtud, aby zóna a plot nikdy nerozešly.
+ */
+export const APRON_MARGIN = 5.5;
+/**
+ * Pruh TRÁVY mezi postranní čarou a začátkem zvoleného povrchu.
+ *
+ * Bez něj dlažba začínala přesně na lajně a branka pak stála na zámkovce.
+ * Na vesnickém hřišti kolem lajn tráva vždycky je — dlažba, antuka nebo koberec
+ * začínají až za ní, u zábradlí. Díra v rámu zóny se o tenhle pruh zvětšuje.
+ */
+export const PITCH_GRASS_MARGIN = 2.5;
+/** Zábradlí stojí u vnějšího okraje zóny, kousek dlažby nechává i za sebou. */
+export const RAILING_MARGIN = APRON_MARGIN - 0.9;
+
 export const PITCH = {
   width: 40,    // X axis (kratší strana)
   depth: 60,    // Z axis (delší strana)

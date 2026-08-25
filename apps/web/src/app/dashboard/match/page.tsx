@@ -873,7 +873,10 @@ function MatchPage() {
                   setEditSlot(isEditing ? null : i); setSwapSource(null);
                 }
               }}
-                className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-10"
+                // flex + items-center: tlačítko je široké jako nejširší dítě, což bývá
+                // jméno. Bez tohohle zůstalo kolečko u levého okraje, zatímco jméno se
+                // centrovalo — čím delší jméno, tím větší rozjezd kolečka vůči popisku.
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-10 flex flex-col items-center"
                 style={{ left: `${slot.x}%`, top: `${slot.y}%` }}>
                 <div className="relative">
                   <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-heading font-[800] text-sm sm:text-base shadow-md transition-all ${POS_BG[slot.pos]} ${
@@ -886,8 +889,13 @@ function MatchPage() {
                   )}
                 </div>
                 <div className="text-center mt-0.5 leading-tight">
-                  <div className="text-xs sm:text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                    {player?.lastName ?? "—"}{isOOP && " ⚠️"}
+                  {/* Jméno musí zůstat vycentrované pod kolečkem. Když byla ikona
+                      součástí textu, centrovala se dvojice a jméno uteklo doleva. */}
+                  <div className="relative inline-block text-xs sm:text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                    {player?.lastName ?? "—"}
+                    {isOOP && (
+                      <span className="absolute left-full top-0 ml-0.5" title="Hraje mimo svou pozici">⚠️</span>
+                    )}
                   </div>
                 </div>
               </button>
