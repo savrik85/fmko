@@ -1585,11 +1585,16 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const currentSeason = (currentSeasonRes.results[0] as { number: number } | undefined) ?? null;
 
   // Pitch maintenance options
-  // Volume discount: větší údržba = levnější na procento (160/120/100 Kč/%).
+  // Množstevní sleva: větší údržba = levnější na procento (160/120/100 Kč/%).
+  //
+  // Ceny do 2026-08-25 sedely na treti tomu, co rika tenhle komentar (50/40/34 Kč
+  // za procento), takze se cely travnik obnovil levneji nez jeden uklid snehu
+  // (4 500 Kč) a sezonni udrzba vysla na vydelek ze dvou domacich zapasu. Sekacka
+  // za 8 000 Kč se pri te cene nevratila nikdy. Srovnano na puvodni zamer.
   const pitchActions = [
-    { level: "basic", label: "Základní údržba", desc: "Posečení, zarovnání", cost: 500, improvement: 10 },
-    { level: "thorough", label: "Důkladná údržba", desc: "Přesetí holých míst, hnojení", cost: 1000, improvement: 25 },
-    { level: "renovation", label: "Renovace trávníku", desc: "Kompletní obnova povrchu", cost: 1700, improvement: 50 },
+    { level: "basic", label: "Základní údržba", desc: "Posečení, zarovnání", cost: 1600, improvement: 10 },
+    { level: "thorough", label: "Důkladná údržba", desc: "Přesetí holých míst, hnojení", cost: 3000, improvement: 25 },
+    { level: "renovation", label: "Renovace trávníku", desc: "Kompletní obnova povrchu", cost: 5000, improvement: 50 },
   ].filter((a) => (stadium.pitch_condition as number) + a.improvement <= 110); // only show useful actions
 
   // Pitch type upgrades
@@ -1922,10 +1927,12 @@ gameRouter.post("/teams/:teamId/stadium/maintain-pitch", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ level: "basic" | "thorough" | "renovation" }>();
 
+  // Ceny musí sedět s nabídkou v `GET /stadium` výš, jinak by tlačítko slibovalo
+  // jinou částku, než se strhne.
   const costs: Record<string, { cost: number; improvement: number; label: string }> = {
-    basic:      { cost: 500, improvement: 10, label: "Základní údržba (+10%)" },
-    thorough:   { cost: 1000, improvement: 25, label: "Důkladná údržba (+25%)" },
-    renovation: { cost: 1700, improvement: 50, label: "Renovace trávníku (+50%)" },
+    basic:      { cost: 1600, improvement: 10, label: "Základní údržba (+10%)" },
+    thorough:   { cost: 3000, improvement: 25, label: "Důkladná údržba (+25%)" },
+    renovation: { cost: 5000, improvement: 50, label: "Renovace trávníku (+50%)" },
   };
 
   const action = costs[body.level];
