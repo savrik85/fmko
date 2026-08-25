@@ -82,8 +82,21 @@ interface NextHomeMatch {
   opponent: string;
   isCup: boolean;
   forecast: { icon: string; expected: string; temperature: number; description: string };
+  /** Teplota, ze které se tipy počítají — měsíční průměr, ne teplota předpovědi. */
+  avgTemperature: number | null;
   hints: ConcessionDemandHint[];
 }
+
+/**
+ * Názvy měsíců v 6. pádě, pro popisek „v září kolem 16 °C".
+ *
+ * Karta schválně neukazuje teplotu z předpovědi: poptávka se počítá z měsíčního
+ * průměru, takže by vedle sebe stálo číslo a rada, které spolu nesouvisí.
+ */
+const MESIC_V = [
+  "v lednu", "v únoru", "v březnu", "v dubnu", "v květnu", "v červnu",
+  "v červenci", "v srpnu", "v září", "v říjnu", "v listopadu", "v prosinci",
+];
 
 interface ConcessionData {
   mode: "external" | "self";
@@ -1377,7 +1390,14 @@ export default function FansPage() {
                       )}
                     </div>
                     <div className="text-sm text-muted">
-                      {concession.nextHome.forecast.description} · {concession.nextHome.forecast.temperature} °C
+                      {concession.nextHome.forecast.description}
+                      {concession.nextHome.avgTemperature !== null && (
+                        <>
+                          {" · "}
+                          {MESIC_V[new Date(concession.nextHome.scheduledAt).getMonth()]} kolem{" "}
+                          {Math.round(concession.nextHome.avgTemperature)} °C
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

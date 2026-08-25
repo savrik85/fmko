@@ -8919,6 +8919,12 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
   let nextHome: {
     scheduledAt: string; opponent: string; isCup: boolean;
     forecast: { icon: string; expected: string; temperature: number; description: string };
+    /**
+     * Teplota, ze které se tipy opravdu počítají — měsíční průměr, ne teplota
+     * konkrétní předpovědi. Karta bufetu musí ukazovat tuhle, jinak by vedle
+     * sebe stálo číslo a rada, které spolu nesouvisí.
+     */
+    avgTemperature: number | null;
     hints: { key: string; label: string; factor: number; hint: string }[];
   } | null = null;
   try {
@@ -8926,7 +8932,7 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
     const row = await findNextHomeMatch(c.env.DB, teamId);
 
     if (row?.scheduledAt) {
-      const { generateForecast } = await import("../season/weather");
+      const { generateForecast, monthTemperature } = await import("../season/weather");
       const { concessionDemandHints } = await import("../season/concession-catalog");
       // Stejné odvození seedu jako na stránce sestavy, jinak by hra ukazovala
       // dvě různé předpovědi na tentýž zápas.
@@ -8943,6 +8949,7 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
           temperature: forecast.temperature,
           description: forecast.description,
         },
+        avgTemperature: Number.isFinite(month) ? monthTemperature(month) : null,
         hints: concessionDemandHints(forecast.expected, Number.isFinite(month) ? month : undefined),
       };
     }
