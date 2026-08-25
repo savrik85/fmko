@@ -60,8 +60,12 @@ export function FMTopBar() {
           <span className="text-white/60 whitespace-nowrap truncate">
             {nextMatch.isCup ? "🏆" : "⚽"} {nextMatch.isFriendly && <span className="text-amber-400 text-micro mr-1 hidden sm:inline">přátelák</span>}
             {nextMatch.isCup && <span className="text-gold-400 text-micro mr-1 hidden sm:inline">pohár</span>}
-            <span className="text-white font-bold">{nextMatch.opponent}</span>
-            {" · "}
+            {/* Jméno soupeře je na mobilu ta nejdražší položka v hlavičce (187 px
+                ze 390). Bez něj zbyde „⚽ za 6 dní", což je informace, kvůli
+                které se sem člověk dívá; soupeře najde na Domů. Od sm nahoru
+                se vrací. */}
+            <span className="text-white font-bold hidden sm:inline">{nextMatch.opponent}</span>
+            <span className="hidden sm:inline">{" · "}</span>
             {nextMatch.isFriendly ? (
               <span className="text-amber-400 font-bold hidden sm:inline">sestava!</span>
             ) : nextMatch.daysUntil === 0 ? (
