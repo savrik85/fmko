@@ -78,3 +78,42 @@ export function drynessFromMoisture(moisture: number | null | undefined): number
   if (moisture == null) return 0;
   return Math.max(0, Math.min(1, (45 - moisture) / 45));
 }
+
+/**
+ * Jak den v daném počasí pohne vlhkostí.
+ *
+ * Mírnější než `MATCH_SHIFT`: zápas půdu navíc rozdupe, samotný déšť ji jen
+ * namočí. Bez tohohle vnímalo hřiště počasí výhradně v zápasový den a šest dní
+ * v týdnu se s ním nedělo nic.
+ */
+const DAILY_SHIFT: Record<Weather, number> = {
+  rain: 10,
+  snow: 6,
+  cloudy: 1,
+  wind: -4,
+  sunny: -8,
+};
+
+/**
+ * Vlhkost po jednom dni daného počasí.
+ *
+ * Kromě posunu od počasí se půda pomalu vrací k normálu, takže se extrémy
+ * neutrhnou — týden veder hřiště vyprahne, ale nespadne na nulu a nezůstane
+ * tam navěky.
+ */
+export function moistureDaily(current: number, weather: Weather | null | undefined): number {
+  if (!weather) return moistureDailyDrift(current);
+  const posun = DAILY_SHIFT[weather] ?? 0;
+  const smerKNormalu = current > MOISTURE_NORMAL ? -1 : current < MOISTURE_NORMAL ? 1 : 0;
+  return clamp(current + posun + smerKNormalu);
+}
+
+/**
+ * Kolik bodů kondice trávníku ubere mráz za den.
+ *
+ * Zmrzlý trávník praská a při hraní se z něj odlamují drny. Jen sníh — déšť
+ * ani vítr kvalitu drnu samy o sobě neničí, ty řeší vlhkost.
+ */
+export function pitchFrostDamage(weather: Weather | null | undefined): number {
+  return weather === "snow" ? 1 : 0;
+}

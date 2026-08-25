@@ -634,18 +634,43 @@ export async function executeDailyTick(
     "UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0) AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0)"
   ).run();
 
-  // Vlhkost půdy se den po dni vrací k normálu — rozmáčené hřiště se vsákne,
-  // vyprahlé chytne ranní rosu. Pomalu, aby si stav pár dní pamatovalo.
+  // Vlhkost půdy podle počasí DNEŠNÍHO dne, ne jen po zápase.
+  //
+  // Dřív se tu jen driftovalo k normálu, takže hřiště počasí vnímalo výhradně
+  // v zápasový den — šest dní v týdnu ho déšť nenamočil a slunce nevysušilo.
+  // Počasí je přitom vlastnost dne (`season/season-weather.ts`).
   try {
-    await env.DB.prepare(
-      `UPDATE stadiums SET pitch_moisture = CASE
-         WHEN pitch_moisture > 50 THEN MAX(50, pitch_moisture - 2)
-         WHEN pitch_moisture < 50 THEN MIN(50, pitch_moisture + 2)
-         ELSE pitch_moisture END
-       WHERE pitch_moisture <> 50`
-    ).run();
+    const { resolveWeatherForDate } = await import("./season-weather");
+    const { moistureDaily, pitchFrostDamage } = await import("../stadium/pitch-moisture");
+
+    // Počasí je pro celý okres stejné, takže stačí jednou — ne dotaz na tým.
+    const den = await env.DB.prepare(
+      "SELECT game_date FROM teams WHERE game_date IS NOT NULL LIMIT 1",
+    ).first<{ game_date: string }>();
+    const dnes = den?.game_date ? await resolveWeatherForDate(env.DB, den.game_date) : null;
+
+    const stadiony = await env.DB.prepare(
+      "SELECT team_id, pitch_moisture FROM stadiums",
+    ).all<{ team_id: string; pitch_moisture: number }>();
+
+    for (const row of stadiony.results ?? []) {
+      const nova = moistureDaily(row.pitch_moisture ?? 50, dnes?.weather);
+      if (nova !== row.pitch_moisture) {
+        await env.DB.prepare("UPDATE stadiums SET pitch_moisture = ? WHERE team_id = ?")
+          .bind(nova, row.team_id).run();
+      }
+    }
+
+    // Mráz odlamuje drny — jediné počasí, které ubírá přímo kvalitu trávníku.
+    const mraz = pitchFrostDamage(dnes?.weather);
+    if (mraz > 0) {
+      await env.DB.prepare(
+        "UPDATE stadiums SET pitch_condition = MAX(5, pitch_condition - ?) WHERE pitch_type != 'artificial'",
+      ).bind(mraz).run();
+      events.push({ type: "pitch", description: `Mráz ubral trávníkům ${mraz} bod kondice` });
+    }
   } catch (e) {
-    logger.warn({ module: "daily-tick" }, "drift vlhkosti travniku", e);
+    logger.error({ module: "daily-tick" }, "denni vliv pocasi na travnik", e);
   }
 
   // Sekačka: trávník některé dny nechátrá vůbec. Šance = pitchCareMod (0–90 %),
