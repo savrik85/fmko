@@ -7196,10 +7196,16 @@ gameRouter.post("/admin/generate-player-offer/:teamId", async (c) => {
 //
 // Respektuje běžná pravidla: tým, který už má 2 čekající nabídky, se přeskočí.
 // `?dryRun=1` jen spočítá, koho by se to týkalo. `?source=` umí i jiný zdroj (pub, friend,
-// recommendation), výchozí je dorost.
+// recommendation), výchozí je dorost. `?source=random` nechá losovat zdroj zvlášť pro každý
+// tým — každý manažer pak dostane jiného odesílatele (starosta / dorost / hospodský / kapitán).
 gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
   const dryRun = c.req.query("dryRun") === "1";
-  const source = (c.req.query("source") ?? "youth") as "pub" | "youth" | "friend" | "recommendation";
+  const sourceParam = c.req.query("source") ?? "youth";
+  // U `random` se forceSource nepředá vůbec a generatePlayerOffer si zdroj vylosuje sám
+  // (stejně jako v daily-ticku) — proto undefined, ne nějaká vlastní náhoda tady.
+  const source = sourceParam === "random"
+    ? undefined
+    : (sourceParam as "pub" | "youth" | "friend" | "recommendation");
 
   const teams = await c.env.DB.prepare(
     `SELECT t.id, t.name, t.game_date, v.district, v.population, v.size,
@@ -7212,7 +7218,7 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
   const eligible = teams.results.filter((t) => t.pending < 2);
   if (dryRun) {
     return c.json({
-      ok: true, dryRun: true, source,
+      ok: true, dryRun: true, source: sourceParam,
       teams: eligible.length,
       skipped: teams.results.length - eligible.length,
       names: eligible.map((t) => t.name),
@@ -7221,7 +7227,7 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
 
   const { generatePlayerOffer } = await import("../events/player-offers");
   const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
-  const results: Array<{ team: string; player?: string; ok: boolean }> = [];
+  const results: Array<{ team: string; player?: string; source?: string; ok: boolean }> = [];
   for (const t of eligible) {
     const villageInfo = {
       region_code: t.district,
@@ -7231,12 +7237,12 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
     };
     const r = await generatePlayerOffer(c.env.DB, createRng(cryptoSeed()), t.id, t.district, villageInfo, t.game_date, source)
       .catch((e) => { logger.warn({ module: "game" }, `youth offer for ${t.id}`, e); return null; });
-    results.push({ team: t.name, player: r?.playerName, ok: !!r });
+    results.push({ team: t.name, player: r?.playerName, source: r?.source, ok: !!r });
   }
 
   const created = results.filter((r) => r.ok).length;
-  logger.info({ module: "game" }, `hromadné nabídky (${source}): ${created}/${eligible.length} týmů`);
-  return c.json({ ok: true, source, created, skipped: teams.results.length - eligible.length, results });
+  logger.info({ module: "game" }, `hromadné nabídky (${sourceParam}): ${created}/${eligible.length} týmů`);
+  return c.json({ ok: true, source: sourceParam, created, skipped: teams.results.length - eligible.length, results });
 });
 
 // ── Coach interviews (Rozhovor kola) ──
