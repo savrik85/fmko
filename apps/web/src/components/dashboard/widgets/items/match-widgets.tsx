@@ -280,14 +280,16 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                 // je to -38 %. Teď se počítá z téže funkce, takže se rozejít nemůže.
                 const dopad = weatherAttendancePct(preview.weather.expected as Weather);
                 if (dopad === 0) return null;
+                // Bez popisku bylo holé „-38 %" hádanka. Je to dopad počasí na to,
+                // kolik lidí dorazí, ne na výsledek ani na tržby za lístek.
                 return (
-                  <span className={`text-micro font-heading font-bold ${dopad < 0 ? "text-card-red" : "text-pitch-600"}`}>
-                    {dopad > 0 ? "+" : ""}{dopad} %
+                  <span className={`text-sm font-heading font-bold ${dopad < 0 ? "text-card-red" : "text-pitch-600"}`}>
+                    {dopad > 0 ? "+" : ""}{dopad} % diváků
                   </span>
                 );
               })()}
             </div>
-            <span className="text-micro text-muted">{preview.venue.name}</span>
+            <span className="text-sm text-muted truncate ml-2">{preview.venue.name}</span>
           </div>
         )}
 
