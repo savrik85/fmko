@@ -36,6 +36,19 @@ const TEMP_RANGES: Record<number, [number, number]> = {
   9: [10, 22], 10: [5, 16], 11: [0, 8], 12: [-6, 3],
 };
 
+/**
+ * Průměrná teplota měsíce — střed rozsahu z TEMP_RANGES.
+ *
+ * Tabulka `matches` sloupec pro teplotu nemá a migrace se kvůli tomu dělat
+ * nebude. Měsíc rozdíl duben/červenec zachytí dost dobře na to, aby z nastavení
+ * bufetu bylo sezónní rozhodnutí; přesná teplota konkrétního zápasu by přidala
+ * málo za cenu migrace a dalšího sloupce, který by se musel plnit zpětně.
+ */
+export function monthTemperature(month: number): number {
+  const [tMin, tMax] = TEMP_RANGES[month] ?? [10, 20];
+  return (tMin + tMax) / 2;
+}
+
 const WEATHER_TYPES: Weather[] = ["sunny", "cloudy", "rain", "wind", "snow"];
 
 const DESCRIPTIONS: Record<Weather, string[]> = {
@@ -118,18 +131,6 @@ export function pitchAttendanceFactor(pitchCondition: number | null | undefined)
   const pc = Math.max(0, Math.min(100, pitchCondition));
   if (pc >= 70) return 1;
   return 1 - ((70 - pc) / 70) * 0.15;
-}
-
-/** Násobič prodeje piva dle počasí — v mrazu se pije míň, v teple víc. */
-export function weatherBeerFactor(weather: Weather): number {
-  switch (weather) {
-    case "sunny": return 1.30;
-    case "cloudy": return 1.0;
-    case "wind": return 0.95;
-    case "rain": return 0.85;
-    case "snow": return 0.55;
-    default: return 1.0;
-  }
 }
 
 /**

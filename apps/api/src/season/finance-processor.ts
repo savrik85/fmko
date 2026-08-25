@@ -448,7 +448,13 @@ export async function processMatchDayFinances(
 
     // Concession income — podle módu
     if (fansCtx?.concessionMode === "self") {
-      const sale = computeSelfConcessionMatch(attendance, satisfaction, fansCtx.products, weather, staffFx.concessionDemandMul);
+      // Měsíc herního data — teplota se odvozuje z něj, ne z reálného kalendáře.
+      // Regex je pojistka: při nečekaném formátu se měsíc vynechá a poptávka
+      // spadne zpět na samotné počasí, místo aby se počítalo s NaN.
+      const matchMonth = /^\d{4}-\d{2}/.test(gameDate) ? Number(gameDate.slice(5, 7)) : undefined;
+      const sale = computeSelfConcessionMatch(
+        attendance, satisfaction, fansCtx.products, weather, staffFx.concessionDemandMul, matchMonth,
+      );
       soldProducts = sale.products;
 
       // Persist stock decrements + zaznamenat příjem

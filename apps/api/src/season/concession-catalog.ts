@@ -8,6 +8,9 @@
  * - quality_mul (kolik satisfaction dá při vhodném poměru cena/kvalita)
  */
 
+import type { Weather } from "../engine/types";
+import { monthTemperature } from "./weather";
+
 export type ProductKey = "sausage" | "beer" | "lemonade";
 
 export interface ProductQualityTier {
@@ -23,6 +26,13 @@ export interface ProductCatalogEntry {
   baseDemandRate: number;
   /** Cenová elasticita — čím vyšší, tím víc poptávka reaguje na cenu */
   priceElasticity: number;
+  /** Násobič poptávky podle typu počasí. */
+  weatherFactors: Record<Weather, number>;
+  /**
+   * Citlivost na teplotu. Kladná = v teple se prodává víc (nápoje),
+   * záporná = v mrazu se prodává víc (teplé jídlo).
+   */
+  tempSensitivity: number;
   tiers: ProductQualityTier[]; // index 0-3, 0 = nenabízí se
 }
 
@@ -37,6 +47,8 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     label: "Klobása",
     baseDemandRate: 0.4,
     priceElasticity: 0.6,
+    weatherFactors: { sunny: 0.90, cloudy: 1.0, wind: 1.10, rain: 1.05, snow: 1.35 },
+    tempSensitivity: -0.25,   // v mrazu je teplé jídlo to jediné, co u klandru jde na dračku
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 15, defaultSellPrice: 30, label: "Kostelecké uzeniny" },
@@ -49,6 +61,12 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     label: "Pivo",
     baseDemandRate: 4.0,
     priceElasticity: 0.8,
+    weatherFactors: { sunny: 1.30, cloudy: 1.0, wind: 0.95, rain: 0.90, snow: 0.72 },
+    // Nižší citlivost než u limonády schválně: v mrazu se pije na zahřátí, takže
+    // pivo nespadne tak hluboko jako studený nápoj. Déšť pod stříškou mu nevadí.
+    // Při 0.30 a snow 0.65 klesla prosincová tržba pod dřívější úroveň — to už
+    // nebyla sezónnost, ale nechtěné osekání klubových příjmů.
+    tempSensitivity: 0.22,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 14, defaultSellPrice: 25, label: "Měšťan 10°" },
@@ -61,6 +79,8 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     label: "Limonáda",
     baseDemandRate: 1.0,
     priceElasticity: 0.4,
+    weatherFactors: { sunny: 1.45, cloudy: 1.0, wind: 0.90, rain: 0.80, snow: 0.40 },
+    tempSensitivity: 0.45,    // letní nápoj pro děti a řidiče, v zimě po něm nikdo neštěkne
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 8, defaultSellPrice: 15, label: "Sirup s vodou" },
@@ -88,4 +108,32 @@ export function getDefaultSellPrice(key: string, qualityLevel: number): number {
   if (!entry) return 0;
   const tier = entry.tiers[Math.max(0, Math.min(3, qualityLevel))];
   return tier?.defaultSellPrice ?? 0;
+}
+
+/** Referenční teplota, při které je teplotní složka neutrální (jarní/podzimní zápas). */
+const REFERENCE_TEMP = 15;
+
+/** Ani extrémní kombinace nesmí poptávku vynulovat ani zdvojnásobit. */
+function clampFactor(v: number): number {
+  return Math.max(0.3, Math.min(1.8, v));
+}
+
+/**
+ * Násobič poptávky po produktu podle počasí a měsíce.
+ *
+ * Nahrazuje dřívější `weatherBeerFactor`, který platil plošně pro pivo i limonádu
+ * a klobásu ignoroval úplně — takže ve sněhu klesalo pití o 45 %, ale prodej
+ * teplého jídla se nehnul, i když teplá klobása je v mrazu to jediné, co se prodá.
+ *
+ * Bez měsíce se použije jen složka počasí. Volající, který měsíc nezná, tak
+ * dostane rozumný odhad místo výjimky.
+ */
+export function concessionWeatherFactor(key: ProductKey, weather: Weather, month?: number): number {
+  const entry = CONCESSION_CATALOG[key];
+  if (!entry) return 1;
+  const weatherMul = entry.weatherFactors[weather] ?? 1;
+  if (month === undefined) return clampFactor(weatherMul);
+  const temp = monthTemperature(month);
+  const tempMul = 1 + ((temp - REFERENCE_TEMP) / REFERENCE_TEMP) * entry.tempSensitivity;
+  return clampFactor(weatherMul * tempMul);
 }

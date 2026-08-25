@@ -1,7 +1,6 @@
 import { managerFansEffect } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
-import { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS, type ProductKey } from "./concession-catalog";
-import { weatherBeerFactor } from "./weather";
+import { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS, concessionWeatherFactor, type ProductKey } from "./concession-catalog";
 import type { Weather } from "../engine/types";
 
 /**
@@ -187,6 +186,8 @@ export function computeSelfConcessionMatch(
   products: ConcessionProductRow[],
   weather: Weather = "cloudy",
   staffSellMul: number = 1,
+  /** Měsíc zápasu 1-12. Bez něj se použije jen složka počasí, bez roční doby. */
+  month?: number,
 ): ConcessionSaleResult {
   // satisfaction mul pro poptávku: 0.7 (nespokojení) -> 1.3 (nadšení)
   const satMul = 0.7 + (clamp(satisfaction, 0, 100) / 100) * 0.6;
@@ -220,8 +221,9 @@ export function computeSelfConcessionMatch(
     // Quality boost: vyšší quality → mírně víc demand (lidé chtějí "to dobré")
     const qualityBoost = 1 + (p.qualityLevel - 1) * 0.1; // L1=1.0, L2=1.1, L3=1.2
 
-    // Nápoje (pivo, limo) se řídí počasím — v mrazu se pije míň, v teple víc.
-    const weatherMul = (p.key === "beer" || p.key === "lemonade") ? weatherBeerFactor(weather) : 1;
+    // Počasí i roční doba — každý produkt reaguje po svém. Dřív se řídily počasím
+    // jen nápoje společným faktorem a klobása se nehnula ani ve sněhu.
+    const weatherMul = concessionWeatherFactor(p.key, weather, month);
     // staffSellMul: obsluha občerstvení zvyšuje poptávku
     const demand = Math.round(
       attendance * catalog.baseDemandRate * satMul * priceFactor * qualityBoost * weatherMul * staffSellMul,
