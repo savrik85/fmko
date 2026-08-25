@@ -3,6 +3,19 @@
  * PBKDF2 hashování, KV sessions.
  */
 
+/**
+ * Počasí herního dne pro hlavičku stránky. Jediný zdroj — `season-weather.ts`.
+ * Když se neodvodí (chybí hranice sezóny), hlavička počasí prostě nezobrazí.
+ */
+async function getCurrentWeather(db: D1Database, gameDate: string | null) {
+  if (!gameDate) return null;
+  const { resolveWeatherForDate } = await import("../season/season-weather");
+  const w = await resolveWeatherForDate(db, gameDate).catch(() => null);
+  if (!w) return null;
+  const { describeWeather } = await import("../season/weather");
+  return { ...w, ...describeWeather(w.weather, gameDate.slice(0, 10)) };
+}
+
 async function getNextMatch(db: D1Database, teamId: string, leagueId: string, gameDate: string | null): Promise<{ opponent: string; daysUntil: number; isFriendly?: boolean; isCup?: boolean } | null> {
   if (!gameDate) return null;
   const gd = new Date(gameDate);
@@ -192,6 +205,7 @@ authRouter.post("/login", async (c) => {
         ? Math.round((new Date(team.season_end as string).getTime() - new Date(team.season_start as string).getTime()) / 86400000)
         : null,
       gameDate: (team?.game_date as string) ?? null,
+      currentWeather: await getCurrentWeather(c.env.DB, (team?.game_date as string) ?? null),
       nextMatch: teamId && team?.league_id
         ? await getNextMatch(c.env.DB, teamId, team.league_id as string, team.game_date as string | null)
         : null,
@@ -266,6 +280,7 @@ authRouter.get("/me", async (c) => {
       ? Math.round((new Date(team.season_end as string).getTime() - new Date(team.season_start as string).getTime()) / 86400000)
       : null,
     gameDate: (team?.game_date as string) ?? null,
+    currentWeather: await getCurrentWeather(c.env.DB, (team?.game_date as string) ?? null),
     nextMatch: team?.id && team?.league_id
       ? await getNextMatch(c.env.DB, team.id as string, team.league_id as string, team.game_date as string | null)
       : null,

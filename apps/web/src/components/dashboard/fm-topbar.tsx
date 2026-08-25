@@ -6,7 +6,7 @@ import { Napoveda } from "@/components/ui/napoveda";
 
 export function FMTopBar() {
   const router = useRouter();
-  const { budget, season, seasonDay, seasonTotal, nextMatch } = useTeam();
+  const { budget, season, seasonDay, seasonTotal, nextMatch, currentWeather } = useTeam();
 
   return (
     <header
@@ -41,6 +41,18 @@ export function FMTopBar() {
       <div className="flex-1 min-w-0" />
 
       <div className="flex items-center gap-3 sm:gap-6 shrink-0 text-micro sm:text-sm font-heading overflow-hidden">
+        {/* Počasí herního dne. Na mobilu jen ikona a teplota — vejde se vedle
+            rozpočtu; popis („Vytrvalý déšť, bahno") až od sm nahoru. */}
+        {currentWeather && (
+          <span
+            className="text-white/60 tabular-nums whitespace-nowrap"
+            title={`${currentWeather.description} · ${currentWeather.temperature} °C`}
+          >
+            {currentWeather.icon}{" "}
+            <span className="hidden md:inline text-white/40">{currentWeather.description}{" · "}</span>
+            {currentWeather.temperature}{"°"}
+          </span>
+        )}
         {budget != null && (
           <span className="text-white/60 tabular-nums whitespace-nowrap">{"💰"} {budget.toLocaleString("cs")} {"Kč"}</span>
         )}

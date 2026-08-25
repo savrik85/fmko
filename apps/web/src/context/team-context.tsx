@@ -25,6 +25,8 @@ interface AuthState {
   seasonDay: number | null;
   seasonTotal: number | null;
   gameDate: string | null;
+  /** Počasí herního dne — hlavička ho ukazuje. Zdroj: season-weather.ts. */
+  currentWeather: { weather: string; temperature: number; description: string; icon: string } | null;
   nextMatch: { opponent: string; daysUntil: number; isFriendly?: boolean; isCup?: boolean } | null;
   isAdmin: boolean;
   isLoading: boolean;
@@ -39,6 +41,7 @@ type AuthMeResponse = {
   budget?: number | null; leaguePosition?: number | null;
   season?: number | null; seasonDay?: number | null; seasonTotal?: number | null;
   gameDate?: string | null;
+  currentWeather?: { weather: string; temperature: number; description: string; icon: string } | null;
   nextMatch?: { opponent: string; daysUntil: number; isFriendly?: boolean; isCup?: boolean } | null;
 };
 
@@ -52,7 +55,8 @@ function buildTeamData(user: AuthMeResponse) {
     villageName: user.villageName ?? null, district: user.district ?? null,
     budget: user.budget ?? null, leaguePosition: user.leaguePosition ?? null,
     season: user.season ?? null, seasonDay: user.seasonDay ?? null, seasonTotal: user.seasonTotal ?? null,
-    gameDate: user.gameDate ?? null, nextMatch: user.nextMatch ?? null,
+    gameDate: user.gameDate ?? null, currentWeather: user.currentWeather ?? null,
+    nextMatch: user.nextMatch ?? null,
   };
 }
 
@@ -61,7 +65,8 @@ const EMPTY_AUTH_STATE: AuthState = {
   primaryColor: null, secondaryColor: null, badgePattern: null,
   badgePrimary: null, badgeSecondary: null, badgeInitials: null, badgeSymbol: null,
   villageName: null, district: null, budget: null, leaguePosition: null,
-  season: null, seasonDay: null, seasonTotal: null, gameDate: null, nextMatch: null,
+  season: null, seasonDay: null, seasonTotal: null, gameDate: null,
+  currentWeather: null, nextMatch: null,
   isAdmin: false, isLoading: true,
 };
 
