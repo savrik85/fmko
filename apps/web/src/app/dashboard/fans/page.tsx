@@ -62,6 +62,8 @@ interface ConcessionProduct {
   key: string;
   label: string;
   baseDemandRate: number;
+  /** Podíl skladu, který se za den zkazí. */
+  spoilRatePerDay: number;
   qualityLevel: number;
   sellPrice: number;
   stockQuantity: number;
@@ -181,6 +183,20 @@ const PRODUCT_ICONS: Record<string, string> = {
   mulled_wine: "🍷",
 };
 
+
+/**
+ * Kolik ze skladu zbyde po N dnech zkázy.
+ *
+ * Musí zaokrouhlovat dolů po každém dni stejně jako `stockAfterDays` na serveru
+ * a `CAST(... AS INTEGER)` v denním ticku — jinak by stránka slibovala jiná
+ * čísla, než jaká manažer druhý den uvidí.
+ */
+function stockAfterDays(stock: number, spoilRatePerDay: number, days: number): number {
+  let s = Math.max(0, Math.floor(stock));
+  const keep = 1 - spoilRatePerDay;
+  for (let i = 0; i < days && s > 0; i++) s = Math.floor(s * keep);
+  return s;
+}
 
 function formatCZK(v: number): string {
   return v.toLocaleString("cs") + " Kč";
@@ -1327,6 +1343,7 @@ export default function FansPage() {
           <div className="space-y-3">
             <div className="text-sm text-muted bg-gray-50 rounded-soft px-3 py-2.5">
               Sklad se nečerpá automaticky — před každým domácím zápasem doplň zásoby. Bez zásob = nespokojení fanoušci.
+              Zboží se navíc kazí, takže se nevyplatí dělat velké zásoby dopředu.
             </div>
 
             {concession.products.map((p) => {
@@ -1354,6 +1371,18 @@ export default function FansPage() {
                       {stockLow && <div className="text-xs text-gold-600">málo</div>}
                     </div>
                   </div>
+
+                  {/* Zkáza — proč se nevyplatí naskladnit půl roku dopředu */}
+                  {p.stockQuantity > 0 && (
+                    <div className="text-sm text-muted mb-3">
+                      Zkazí se{" "}
+                      <span className="text-card-red font-medium tabular-nums">
+                        {p.stockQuantity - stockAfterDays(p.stockQuantity, p.spoilRatePerDay, 1)} ks
+                      </span>{" "}
+                      denně · za týden zbyde{" "}
+                      <span className="tabular-nums">{stockAfterDays(p.stockQuantity, p.spoilRatePerDay, 7)} ks</span>
+                    </div>
+                  )}
 
                   {/* Quality tiers */}
                   <div className="flex gap-1 mb-3">

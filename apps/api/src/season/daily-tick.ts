@@ -697,6 +697,28 @@ export async function executeDailyTick(
     }
   }
 
+  // ── Zkáza zboží v bufetu ──
+  // Bez tohohle byla optimální strategie „naskladni jednou hodně od všeho a zapomeň":
+  // sklad se jen odečítal při prodeji a nic ho neubíralo, takže předpověď počasí
+  // nemělo smysl sledovat — nadzásoba nic nestála. Teď se klobásy musí kupovat
+  // čerstvé a svařák nakoupený v létě do prosince nevydrží.
+  try {
+    const { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS } = await import("./concession-catalog");
+    for (const key of CONCESSION_PRODUCT_KEYS) {
+      const keep = 1 - CONCESSION_CATALOG[key].spoilRatePerDay;
+      // CAST(... AS INTEGER) ořízne dolů — přesně to samé dělá stockAfterDays,
+      // aby se model v testech nerozcházel s tím, co je v databázi.
+      await env.DB.prepare(
+        `UPDATE concession_products
+            SET stock_quantity = CAST(stock_quantity * ? AS INTEGER),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+          WHERE product_key = ? AND stock_quantity > 0`,
+      ).bind(keep, key).run();
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "concession spoilage failed", e);
+  }
+
   // Injury recovery
   await env.DB.prepare(
     "UPDATE injuries SET days_remaining = days_remaining - 1 WHERE days_remaining > 0"
