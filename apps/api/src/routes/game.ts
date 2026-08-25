@@ -8913,12 +8913,55 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
     };
   });
 
+  // Předpověď na nejbližší DOMÁCÍ zápas — venku se bufet neprovozuje, takže
+  // předpověď na venkovní zápas by manažera jen mátla. Bez ní má kleště (zboží
+  // se kazí vs. vyprodáno = −2 spokojenosti), ale nevidí, kam mířit.
+  let nextHome: {
+    scheduledAt: string; opponent: string;
+    forecast: { icon: string; expected: string; temperature: number; description: string };
+    hints: { key: string; label: string; factor: number; hint: string }[];
+  } | null = null;
+  try {
+    const row = await c.env.DB.prepare(
+      `SELECT m.id, sc.scheduled_at, t.name AS opponent
+         FROM matches m
+         JOIN season_calendar sc ON m.calendar_id = sc.id
+         JOIN teams t ON m.away_team_id = t.id
+        WHERE m.home_team_id = ? AND m.status != 'simulated'
+        ORDER BY sc.scheduled_at ASC LIMIT 1`,
+    ).bind(teamId).first<{ id: string; scheduled_at: string; opponent: string }>();
+
+    if (row?.scheduled_at) {
+      const { generateForecast } = await import("../season/weather");
+      const { concessionDemandHints } = await import("../season/concession-catalog");
+      // Stejné odvození seedu jako na stránce sestavy, jinak by hra ukazovala
+      // dvě různé předpovědi na tentýž zápas.
+      const seed = String(row.id).charCodeAt(0) + String(row.id).charCodeAt(1);
+      const forecast = generateForecast(row.scheduled_at, seed);
+      const month = Number(row.scheduled_at.slice(5, 7));
+      nextHome = {
+        scheduledAt: row.scheduled_at,
+        opponent: row.opponent,
+        forecast: {
+          icon: forecast.icon,
+          expected: forecast.expected,
+          temperature: forecast.temperature,
+          description: forecast.description,
+        },
+        hints: concessionDemandHints(forecast.expected, Number.isFinite(month) ? month : undefined),
+      };
+    }
+  } catch (e) {
+    logger.warn({ module: "game" }, "predpoved na domaci zapas pro bufet", e);
+  }
+
   return c.json({
     mode,
     canSwitchToSelf,
     refreshmentsLevel,
     externalWeeklyIncome,
     products,
+    nextHome,
   });
 });
 

@@ -70,12 +70,28 @@ interface ConcessionProduct {
   tiers: ProductTier[];
 }
 
+interface ConcessionDemandHint {
+  key: string;
+  label: string;
+  factor: number;
+  hint: string;
+}
+
+interface NextHomeMatch {
+  scheduledAt: string;
+  opponent: string;
+  forecast: { icon: string; expected: string; temperature: number; description: string };
+  hints: ConcessionDemandHint[];
+}
+
 interface ConcessionData {
   mode: "external" | "self";
   canSwitchToSelf: boolean;
   refreshmentsLevel: number;
   externalWeeklyIncome: number;
   products: ConcessionProduct[];
+  /** Nejbližší domácí zápas. Null, když žádný nenaplánovaný není. */
+  nextHome: NextHomeMatch | null;
 }
 
 interface FansHistoryItem {
@@ -1345,6 +1361,43 @@ export default function FansPage() {
               Sklad se nečerpá automaticky — před každým domácím zápasem doplň zásoby. Bez zásob = nespokojení fanoušci.
               Zboží se navíc kazí, takže se nevyplatí dělat velké zásoby dopředu.
             </div>
+
+            {/* Předpověď na nejbližší domácí zápas — bez ní manažer neví, na co
+                se vrhnout: zkazit zásoby i vyprodat se stojí obojí. */}
+            {concession.nextHome && (
+              <div className="border border-gray-100 rounded-soft p-3">
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <span className="text-2xl">{concession.nextHome.forecast.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-heading font-bold">
+                      Doma s {concession.nextHome.opponent}
+                    </div>
+                    <div className="text-sm text-muted">
+                      {concession.nextHome.forecast.description} · {concession.nextHome.forecast.temperature} °C
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  {concession.nextHome.hints.map((h) => (
+                    <div key={h.key} className="flex items-center gap-2 text-sm">
+                      <span className="w-6 text-center">{PRODUCT_ICONS[h.key] ?? "🍽"}</span>
+                      <span className="flex-1 min-w-0 truncate">{h.label}</span>
+                      <span
+                        className={
+                          h.factor >= 1.10
+                            ? "text-pitch-500 font-medium"
+                            : h.factor <= 0.60
+                              ? "text-card-red"
+                              : "text-muted"
+                        }
+                      >
+                        {h.hint}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {concession.products.map((p) => {
               const currentTier = p.tiers[p.qualityLevel];

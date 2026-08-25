@@ -192,3 +192,35 @@ export function stockAfterDays(stock: number, spoilRatePerDay: number, days: num
   for (let i = 0; i < days && s > 0; i++) s = Math.floor(s * keep);
   return s;
 }
+
+export interface ConcessionDemandHint {
+  key: ProductKey;
+  label: string;
+  /** Násobič poptávky za daných podmínek. 1,0 = běžně. */
+  factor: number;
+  /** Slovní shrnutí pro manažera — co s tím udělat při naskladnění. */
+  hint: string;
+}
+
+function hintText(factor: number): string {
+  if (factor >= 1.35) return "půjde na dračku";
+  if (factor >= 1.10) return "poptávka nahoře";
+  if (factor > 0.90) return "běžná poptávka";
+  if (factor > 0.60) return "poptávka dolů";
+  return "skoro se neprodá";
+}
+
+/**
+ * Co naskladnit na zápas za daných podmínek, seřazené od nejžádanějšího.
+ *
+ * Sama předpověď manažerovi nestačí: musel by v hlavě přepočítávat počasí
+ * a měsíc na poměry mezi produkty. Tohle mu rovnou řekne, na co se vrhnout.
+ */
+export function concessionDemandHints(weather: Weather, month?: number): ConcessionDemandHint[] {
+  return CONCESSION_PRODUCT_KEYS
+    .map((key) => {
+      const factor = concessionWeatherFactor(key, weather, month);
+      return { key, label: CONCESSION_CATALOG[key].label, factor, hint: hintText(factor) };
+    })
+    .sort((a, b) => b.factor - a.factor);
+}
