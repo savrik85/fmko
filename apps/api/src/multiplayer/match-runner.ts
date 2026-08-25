@@ -1292,8 +1292,12 @@ export async function buildMatchPlayers(
             }));
             const { fetchTeamCommuteMod } = await import("../events/match-absences");
             const vanCommuteMod = await fetchTeamCommuteMod(db, teamId);
-            const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, "day_before", district, options.friendlyMultiplier, vanCommuteMod);
-            const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, "match_day", district, options.friendlyMultiplier, vanCommuteMod);
+            const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, {
+              timing: "day_before", district, friendlyMultiplier: options.friendlyMultiplier, commuteMod: vanCommuteMod,
+            });
+            const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, {
+              timing: "match_day", district, friendlyMultiplier: options.friendlyMultiplier, commuteMod: vanCommuteMod,
+            });
             const seen = new Set<number>();
             const allAbsences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
                 if (seen.has(a.playerIndex)) return false;

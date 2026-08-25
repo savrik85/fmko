@@ -147,7 +147,9 @@ export async function processTeamDay(
               });
               const teamDistrict = (team.village_district as string | null) ?? undefined;
               const { fetchTeamCommuteMod } = await import("../events/match-absences");
-              const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before", teamDistrict, undefined, await fetchTeamCommuteMod(env.DB, teamId));
+              const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, {
+                timing: "day_before", district: teamDistrict, commuteMod: await fetchTeamCommuteMod(env.DB, teamId),
+              });
               const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
               const matchConvId = crypto.randomUUID();
               await env.DB.prepare(
@@ -495,7 +497,9 @@ export async function processTeamDay(
 
               const teamDistrictMd = (team.village_district as string | null) ?? undefined;
               const { fetchTeamCommuteMod: fetchVanModMd } = await import("../events/match-absences");
-              const matchDayAbsences = generateAbsences(mdRng as any, absSquad, "match_day", teamDistrictMd, undefined, await fetchVanModMd(env.DB, teamId))
+              const matchDayAbsences = generateAbsences(mdRng as any, absSquad, {
+                timing: "match_day", district: teamDistrictMd, commuteMod: await fetchVanModMd(env.DB, teamId),
+              })
                 .filter((a) => {
                   const pid = squadRows.results[a.playerIndex]?.id as string;
                   return pid && !alreadyIds.has(pid);

@@ -12,6 +12,7 @@
 
 import type { Rng } from "../generators/rng";
 import { getOccupationByName, type Occupation } from "../generators/occupations";
+import type { Weather } from "../engine/types";
 
 export type AbsenceTiming = "day_before" | "match_day" | "any";
 
@@ -24,7 +25,7 @@ export interface AbsenceResult {
   smsText: string;
 }
 
-interface PlayerForAbsence {
+export interface PlayerForAbsence {
   firstName: string;
   lastName: string;
   age: number;
@@ -454,14 +455,35 @@ const COMMUTE_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> =
  * - age + stamina + injuryProneness → zdravotní
  * - occupation → profesní
  */
+export interface AbsenceOpts {
+  timing?: AbsenceTiming;
+  district?: string;
+  friendlyMultiplier?: number;
+  /**
+   * Klubová dodávka (0–0,45) plus profesní řidiči v kádru. Tlumí absence
+   * z dojíždění.
+   *
+   * MUSÍ být stejný ve všech voláních pro tentýž zápas, jinak se rozjede SMS
+   * vůči simulaci a hráč dostane omluvenku od někoho, kdo nastoupil. Options
+   * objekt tuhle past zmenšuje, neruší ji.
+   */
+  commuteMod?: number;
+  /** Měsíc zápasu 1–12, pro sezónní profesní výmluvy. */
+  month?: number;
+  /** Počasí zápasu, pro povětrnostní profesní výmluvy. */
+  weather?: Weather;
+}
+
+/** Nad tímhle stropem by dodávka s řidiči absence z dojíždění vypnuly úplně. */
+const COMMUTE_MOD_CAP = 0.55;
+
 export function generateAbsences(
   rng: Rng,
   squad: PlayerForAbsence[],
-  timing: AbsenceTiming = "any",
-  district?: string,
-  friendlyMultiplier?: number,
-  commuteMod: number = 0, // klubová dodávka: 0-0.45 — tlumí absence z dojíždění (MUSÍ být stejný ve všech voláních pro tentýž zápas, jinak se rozjede SMS vs. simulace)
+  opts: AbsenceOpts = {},
 ): AbsenceResult[] {
+  const { timing = "any", district, friendlyMultiplier } = opts;
+  const commuteMod = Math.min(COMMUTE_MOD_CAP, Math.max(0, opts.commuteMod ?? 0));
   const absences: AbsenceResult[] = [];
   // District filter: Praha = urban, definovaný non-Praha = rural, undefined = jen univerzální výmluvy
   const isUrban = district === "Praha";

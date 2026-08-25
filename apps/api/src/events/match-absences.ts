@@ -149,9 +149,9 @@ export async function getAbsentPlayersMap(
   const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "day_before" }));
   const matchDayRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "match_day" }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", district, friendlyMultiplier, commuteMod);
+  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", district, friendlyMultiplier, commuteMod);
+  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod });
   const seen = new Set<number>();
   const absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
     if (seen.has(a.playerIndex)) return false;

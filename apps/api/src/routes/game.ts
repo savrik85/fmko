@@ -3609,8 +3609,12 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   if (daysUntilMatch <= 1) {
     const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "day_before" }));
     const matchDayRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "match_day" }));
-    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, "day_before", district, friendlyMultiplier);
-    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, "match_day", district, friendlyMultiplier);
+    // Dodávka musí být i tady: preview jede na stejných seedech jako SMS a simulace,
+    // takže bez ní by ukazovalo absence, které se pak neodehrají.
+    const { fetchTeamCommuteMod } = await import("../events/match-absences");
+    const commuteMod = await fetchTeamCommuteMod(c.env.DB, teamId);
+    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod });
+    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod });
     const seen = new Set<number>();
     absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
       if (seen.has(a.playerIndex)) return false;
@@ -9169,7 +9173,12 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
     });
 
     const triggerDistrict = await fetchDistrictForTrigger(c.env.DB, teamId);
-    const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, "day_before", triggerDistrict);
+    // Stejný důvod jako u preview: tyhle SMS musí sedět se simulací zápasu.
+    const { fetchTeamCommuteMod: fetchTriggerCommuteMod } = await import("../events/match-absences");
+    const triggerCommuteMod = await fetchTriggerCommuteMod(c.env.DB, teamId);
+    const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, {
+      timing: "day_before", district: triggerDistrict, commuteMod: triggerCommuteMod,
+    });
     const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
     const matchConvId = crypto.randomUUID();
 
