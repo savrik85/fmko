@@ -111,7 +111,7 @@ export async function processTeamDay(
         const lid = team.league_id as string | null;
         if (lid) {
           const tomorrowMatch = await env.DB.prepare(
-            "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
+            "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
           ).bind(lid, checkDayStart.toISOString(), checkDayEnd.toISOString()).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match lookup", e); return null; });
           if (tomorrowMatch) {
             const alreadySent = await env.DB.prepare(
@@ -146,9 +146,11 @@ export async function processTeamDay(
                   isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
               });
               const teamDistrict = (team.village_district as string | null) ?? undefined;
-              const { fetchTeamCommuteMod } = await import("../events/match-absences");
+              const { fetchTeamCommuteMod, monthFromIso } = await import("../events/match-absences");
               const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, {
-                timing: "day_before", district: teamDistrict, commuteMod: await fetchTeamCommuteMod(env.DB, teamId),
+                timing: "day_before", district: teamDistrict,
+                commuteMod: await fetchTeamCommuteMod(env.DB, teamId),
+                month: monthFromIso((tomorrowMatch as { scheduled_at?: string }).scheduled_at),
               });
               const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
               const matchConvId = crypto.randomUUID();
@@ -447,7 +449,7 @@ export async function processTeamDay(
       try {
         const todayEnd = new Date(gd); todayEnd.setUTCHours(23, 59, 59, 999);
         const todayMatch = await env.DB.prepare(
-          "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+          "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
         ).bind(team.league_id, todayEnd.toISOString()).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "today match lookup", e); return null; });
 
         if (todayMatch) {
@@ -496,9 +498,11 @@ export async function processTeamDay(
               const alreadyIds = new Set(alreadyMessaged.results.map((r) => r.sender_id as string));
 
               const teamDistrictMd = (team.village_district as string | null) ?? undefined;
-              const { fetchTeamCommuteMod: fetchVanModMd } = await import("../events/match-absences");
+              const { fetchTeamCommuteMod: fetchVanModMd, monthFromIso: monthMd } = await import("../events/match-absences");
               const matchDayAbsences = generateAbsences(mdRng as any, absSquad, {
-                timing: "match_day", district: teamDistrictMd, commuteMod: await fetchVanModMd(env.DB, teamId),
+                timing: "match_day", district: teamDistrictMd,
+                commuteMod: await fetchVanModMd(env.DB, teamId),
+                month: monthMd((todayMatch as { scheduled_at?: string }).scheduled_at),
               })
                 .filter((a) => {
                   const pid = squadRows.results[a.playerIndex]?.id as string;

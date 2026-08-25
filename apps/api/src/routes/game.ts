@@ -3611,10 +3611,11 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     const matchDayRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "match_day" }));
     // Dodávka musí být i tady: preview jede na stejných seedech jako SMS a simulace,
     // takže bez ní by ukazovalo absence, které se pak neodehrají.
-    const { fetchTeamCommuteMod } = await import("../events/match-absences");
+    const { fetchTeamCommuteMod, monthFromIso } = await import("../events/match-absences");
     const commuteMod = await fetchTeamCommuteMod(c.env.DB, teamId);
-    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod });
-    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod });
+    const month = monthFromIso(scheduledAt);
+    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, month });
+    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, month });
     const seen = new Set<number>();
     absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
       if (seen.has(a.playerIndex)) return false;
@@ -8354,7 +8355,7 @@ gameRouter.get("/admin/seed-data/:table", async (c) => {
       id: o.id, name: o.name,
       hamlet: o.w.hamlet, village: o.w.village, town: o.w.town, small_city: o.w.small_city, city: o.w.city,
       injuryRisk: o.injuryRisk, overtimeRisk: o.overtimeRisk, strengthBonus: o.strengthBonus,
-      excuses: o.excuses.join(" | "),
+      excuses: o.excuses.map((e) => e.text).join(" | "),
     }));
     return c.json({ rows, total: rows.length });
   }
@@ -9134,8 +9135,8 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
     const tEnd = new Date(tomorrow); tEnd.setUTCHours(23, 59, 59, 999);
 
     const tomorrowMatch = await c.env.DB.prepare(
-      "SELECT id FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
-    ).bind(leagueId, tStart.toISOString(), tEnd.toISOString()).first<{ id: string }>()
+      "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
+    ).bind(leagueId, tStart.toISOString(), tEnd.toISOString()).first<{ id: string; scheduled_at: string }>()
       .catch((e) => { logger.warn({ module: "game" }, "trigger-day-before match lookup", e); return null; });
     if (!tomorrowMatch) continue;
 
@@ -9174,10 +9175,11 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
 
     const triggerDistrict = await fetchDistrictForTrigger(c.env.DB, teamId);
     // Stejný důvod jako u preview: tyhle SMS musí sedět se simulací zápasu.
-    const { fetchTeamCommuteMod: fetchTriggerCommuteMod } = await import("../events/match-absences");
+    const { fetchTeamCommuteMod: fetchTriggerCommuteMod, monthFromIso: monthTrigger } = await import("../events/match-absences");
     const triggerCommuteMod = await fetchTriggerCommuteMod(c.env.DB, teamId);
     const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, {
       timing: "day_before", district: triggerDistrict, commuteMod: triggerCommuteMod,
+      month: monthTrigger(tomorrowMatch.scheduled_at),
     });
     const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
     const matchConvId = crypto.randomUUID();

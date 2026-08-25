@@ -20,6 +20,13 @@ export interface MatchContext {
 }
 
 /** Najdi match kontext podle calendarId (ligu) nebo match.id (přátelák). */
+/** Měsíc 1–12 z ISO data. Vrací undefined pro nečitelný vstup. */
+export function monthFromIso(iso: string | null | undefined): number | undefined {
+  if (!iso || !/^\d{4}-\d{2}/.test(iso)) return undefined;
+  const m = Number(iso.slice(5, 7));
+  return m >= 1 && m <= 12 ? m : undefined;
+}
+
 export async function resolveMatchContext(
   db: D1Database,
   teamId: string,
@@ -146,12 +153,14 @@ export async function getAbsentPlayersMap(
 
   const friendlyMultiplier = ctx.isFriendly ? 1.8 : undefined;
   const commuteMod = await fetchTeamCommuteMod(db, teamId);
+  // Měsíc zápasu pro sezónní profesní výmluvy — stejná hodnota do obou fází.
+  const month = monthFromIso(ctx.scheduledAt);
   const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "day_before" }));
   const matchDayRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "match_day" }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod });
+  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, month });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod });
+  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, month });
   const seen = new Set<number>();
   const absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
     if (seen.has(a.playerIndex)) return false;

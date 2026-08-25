@@ -1290,13 +1290,22 @@ export async function buildMatchPlayers(
                 teamId,
                 phase: "match_day"
             }));
-            const { fetchTeamCommuteMod } = await import("../events/match-absences");
+            const { fetchTeamCommuteMod, monthFromIso } = await import("../events/match-absences");
             const vanCommuteMod = await fetchTeamCommuteMod(db, teamId);
+            // Měsíc zápasu pro sezónní profesní výmluvy. Musí vyjít stejně jako
+            // v SMS (events/match-absences.ts), proto se čte z téhož sloupce.
+            const schedRow = await db.prepare(
+                "SELECT scheduled_at FROM season_calendar WHERE id = ?",
+            ).bind(options.matchKey).first<{ scheduled_at: string }>()
+                .catch(() => null);
+            const absenceMonth = monthFromIso(schedRow?.scheduled_at);
             const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, {
-              timing: "day_before", district, friendlyMultiplier: options.friendlyMultiplier, commuteMod: vanCommuteMod,
+              timing: "day_before", district, friendlyMultiplier: options.friendlyMultiplier,
+              commuteMod: vanCommuteMod, month: absenceMonth,
             });
             const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, {
-              timing: "match_day", district, friendlyMultiplier: options.friendlyMultiplier, commuteMod: vanCommuteMod,
+              timing: "match_day", district, friendlyMultiplier: options.friendlyMultiplier,
+              commuteMod: vanCommuteMod, month: absenceMonth,
             });
             const seen = new Set<number>();
             const allAbsences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {

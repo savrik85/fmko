@@ -11,8 +11,7 @@
  */
 
 import type { Rng } from "../generators/rng";
-import { getOccupationByName, type Occupation } from "../generators/occupations";
-import type { Weather } from "../engine/types";
+import { getOccupationByName, pickProfessionalExcuse, type Occupation } from "../generators/occupations";
 
 export type AbsenceTiming = "day_before" | "match_day" | "any";
 
@@ -468,10 +467,13 @@ export interface AbsenceOpts {
    * objekt tuhle past zmenšuje, neruší ji.
    */
   commuteMod?: number;
-  /** Měsíc zápasu 1–12, pro sezónní profesní výmluvy. */
+  /**
+   * Měsíc zápasu 1–12, pro sezónní profesní výmluvy.
+   *
+   * Počasí se tu záměrně nepředává: den před zápasem ještě rozhodnuté není
+   * a mezi SMS a simulací by se mohlo lišit. Viz `ProfExcuse`.
+   */
   month?: number;
-  /** Počasí zápasu, pro povětrnostní profesní výmluvy. */
-  weather?: Weather;
 }
 
 /** Nad tímhle stropem by dodávka s řidiči absence z dojíždění vypnuly úplně. */
@@ -567,8 +569,11 @@ export function generateAbsences(
 
     switch (category) {
       case "professional": {
-        const excuses = occupation?.excuses ?? ["Musím do práce, nemůžu přijít"];
-        smsText = rng.pick(excuses);
+        // Výmluva se vybírá podle měsíce: zedník má v srpnu stavební sezónu,
+        // pokrývač v prosinci nelítá po střeše a myslivec má na podzim naháňku.
+        smsText = occupation
+          ? pickProfessionalExcuse(rng, occupation, opts.month)
+          : "Musím do práce, nemůžu přijít";
         emoji = "\u{1F3D7}";
         excuseTiming = "day_before";
         break;
