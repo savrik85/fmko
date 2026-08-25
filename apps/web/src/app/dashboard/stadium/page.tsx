@@ -97,6 +97,9 @@ interface StadiumData {
   /** Počasí nad areálem právě teď — počasí herního dne, ne zápasového. */
   currentWeather?: string | null;
   currentTemperature?: number | null;
+  /** Dnes se hraje doma — areál se otevře v zápasovém režimu. */
+  matchDay?: boolean;
+  matchDayOpponent?: string | null;
   stadiumName: string | null;
   capacity: number;
   pitchCondition: number;
@@ -367,7 +370,7 @@ export default function StadiumPage() {
         snowClearingOrdered={stadium.pitchCare?.snowClearingOrdered ?? false}
         pitchMoisture={stadium.pitchMoisture ?? 50}
         initialWeather={(matchWeather as never) ?? "cloudy"}
-        initialMode="training_day"
+        initialMode={stadium.matchDay ? "match_day" : "training_day"}
         teamColor={team.primary_color}
         secondaryColor={team.secondary_color}
         badgePattern={team.badge_pattern}
@@ -429,7 +432,7 @@ export default function StadiumPage() {
                   snowClearingOrdered={stadium.pitchCare?.snowClearingOrdered ?? false}
                   pitchMoisture={stadium.pitchMoisture ?? 50}
                   initialWeather={(matchWeather as never) ?? "cloudy"}
-                  initialMode="training_day"
+                  initialMode={stadium.matchDay ? "match_day" : "training_day"}
                   teamColor={team.primary_color}
                   secondaryColor={team.secondary_color}
                   badgePattern={team.badge_pattern}
@@ -452,6 +455,13 @@ export default function StadiumPage() {
             >
               🔍 Prohlédnout v plné velikosti
             </button>
+            {/* Proč areál vypadá jinak než včera — bez tohohle by přepnutí režimu
+                vypadalo jako rozbitá scéna. */}
+            {stadium.matchDay && (
+              <div className="text-center text-sm text-ink font-heading">
+                {"⚽ Dnes se hraje doma"}{stadium.matchDayOpponent ? ` proti ${stadium.matchDayOpponent}` : ""}{" — areál je v zápasovém režimu."}
+              </div>
+            )}
             <div className="flex items-center justify-center gap-1.5 text-xs text-muted text-center pt-0.5">
               <span>💡</span>
               <span>Pro přepínání <strong>režimu areálu</strong> (Zápasový vs. Tréninkový den), <strong>počasí</strong> a <strong>kamer</strong> klikněte v rohu scény na <strong>🎛️ Počasí & Kamery</strong>.</span>

@@ -29,7 +29,7 @@ export function LightingAndAtmosphere({
           scene.fog = null;
         };
       } else if (weather === "rain") {
-        scene.fog = new THREE.Fog("#475569", 110, 320);
+        scene.fog = new THREE.Fog("#6B7C91", 130, 360);
       } else if (weather === "snow") {
         scene.fog = new THREE.Fog("#CBD5E1", 120, 340);
       } else if (weather === "cloudy") {
@@ -71,12 +71,12 @@ export function LightingAndAtmosphere({
         <group>
           {weather === "rain" ? (
             <>
-              {/* Zatažené bouřkové osvětlení */}
-              <ambientLight intensity={0.42} color="#94A3B8" />
+              {/* Zatažené deštivé osvětlení — pořád nejtmavší z denních, ale čitelné */}
+              <ambientLight intensity={0.6} color="#C2CDD9" />
               <directionalLight
                 position={[30, 50, 20]}
-                intensity={0.65}
-                color="#CBD5E1"
+                intensity={0.92}
+                color="#E6EBF1"
                 castShadow={!isMobile}
                 shadow-mapSize-width={shadowMapSize}
                 shadow-mapSize-height={shadowMapSize}
@@ -88,7 +88,10 @@ export function LightingAndAtmosphere({
                 shadow-camera-bottom={-65}
                 shadow-bias={-0.0003}
               />
-              <hemisphereLight args={["#64748B", "#2D4A27", 0.35]} />
+              {/* Přisvětlení ze stínové strany, stejný idiom jako u zataženo — bez něj
+                  zůstala půlka areálu v dešti černá. */}
+              <directionalLight position={[-35, 25, -30]} intensity={0.22} color="#9FB0C2" />
+              <hemisphereLight args={["#93A5B8", "#3A5A33", 0.48]} />
             </>
           ) : weather === "snow" ? (
             <>
@@ -229,9 +232,11 @@ function DynamicSky({ timeOfDay, weather }: { timeOfDay: TimeOfDay; weather: Wea
 
     if (timeOfDay === "day") {
       if (weather === "rain") {
-        g.addColorStop(0, "#1E293B"); // Tmavě olověný zenit
-        g.addColorStop(0.5, "#475569");
-        g.addColorStop(1, "#94A3B8"); // Mlhavý šedý horizont
+        // Zesvětleno (2026-08-25): olověná obloha stahovala celou scénu tak, že v ní
+        // ve dne nebylo vidět. Pořád je to nejtemnější denní počasí, ale hraje se pod ní.
+        g.addColorStop(0, "#2E3E52"); // Olověný zenit
+        g.addColorStop(0.5, "#5A6C82");
+        g.addColorStop(1, "#A9B7C6"); // Mlhavý šedý horizont
       } else if (weather === "snow") {
         g.addColorStop(0, "#475569");
         g.addColorStop(0.6, "#94A3B8");

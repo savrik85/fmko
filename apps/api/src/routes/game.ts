@@ -1679,8 +1679,20 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const { resolveWeatherForDate } = await import("../season/season-weather");
   const dnesniPocasi = await resolveWeatherForDate(c.env.DB, (teamInfo?.game_date as string) ?? "");
 
+  // Hraje se dnes doma? Zápasový režim areálu je o fanoušcích, kotli a plných
+  // tribunách — na venkovní zápas se tady nikdo nesejde, takže se počítá výhradně
+  // domácí zápas. Zdroj je stejný jako u bufetu (`findNextHomeMatch`), ať obě
+  // stránky neukazují jiný „dnešní zápas".
+  const { findNextHomeMatch } = await import("../season/next-home-match");
+  const dalsiDoma = await findNextHomeMatch(c.env.DB, teamId);
+  const herniDen = ((teamInfo?.game_date as string) ?? "").slice(0, 10);
+  const matchDay = !!herniDen && dalsiDoma?.scheduledAt?.slice(0, 10) === herniDen;
+
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
+    /** Dnes se hraje doma → 3D areál se otevře v zápasovém režimu. */
+    matchDay,
+    matchDayOpponent: matchDay ? (dalsiDoma?.opponent ?? null) : null,
     capacity: effectiveCapacity,
     pitchCondition: stadium.pitch_condition,
     pitchType: stadium.pitch_type,

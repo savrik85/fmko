@@ -328,7 +328,9 @@ function OvercastCloudLayer({
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
   const cloudColor = useMemo(() => {
-    if (weather === "rain") return timeOfDay === "night" ? "#1E293B" : "#475569";
+    // Denní dešťová vrstva byla tak tmavá, že dělala nad areálem strop; v noci
+    // ať zůstane olověná, tam je tma po právu.
+    if (weather === "rain") return timeOfDay === "night" ? "#1E293B" : "#6B7C91";
     if (weather === "snow") return "#94A3B8";
     return timeOfDay === "sunset" ? "#9A7B7B" : "#CBD5E1";
   }, [weather, timeOfDay]);
