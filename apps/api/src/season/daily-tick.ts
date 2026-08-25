@@ -9,6 +9,7 @@ import { createRng } from "../generators/rng";
 import { simulateTraining, trainingTypeLabel } from "./training";
 import { trainingExperienceChance } from "../skills/training";
 import { logger } from "../lib/logger";
+import type { PitchCareMode } from "../stadium/pitch-care";
 import { MEETING_DAY_OF_WEEK } from "../competition/defaults";
 import { overallRatingFromFlat } from "../skills/generator";
 
@@ -641,7 +642,7 @@ export async function executeDailyTick(
   // Počasí je přitom vlastnost dne (`season/season-weather.ts`).
   try {
     const { resolveWeatherForDate } = await import("./season-weather");
-    const { moistureDaily, pitchFrostDamage } = await import("../stadium/pitch-moisture");
+    const { moistureDaily, pitchFrostDamage, IRRIGATION_MOISTURE_GAIN } = await import("../stadium/pitch-moisture");
 
     // Den, do kterého svět právě vstupuje. `effectiveDate` je kanonický herní den ticku
     // a níž (řádek ~1002) se zapisuje do `teams.game_date`. Dřív se tu ten sloupec četl
@@ -650,25 +651,70 @@ export async function executeDailyTick(
     // stačí jednou — ne dotaz na tým.
     const dnes = await resolveWeatherForDate(env.DB, effectiveDate.toISOString());
 
-    const stadiony = await env.DB.prepare(
-      "SELECT team_id, pitch_moisture FROM stadiums",
-    ).all<{ team_id: string; pitch_moisture: number }>();
+    // Péče o trávník běží i mimo zápas. Dřív se vyhodnocovala VÝHRADNĚ v zápasový
+    // den (`stadium/pitch-wear.ts`), takže týden veder hřiště vypráhl a zavlažování
+    // s tím nesvedlo nic, dokud se nehrálo doma. Denní sazba je udržovací (čtvrtina
+    // zápasové), zápasový provoz se účtuje zvlášť — je to nárazový výkon na zápas.
+    const { decideDailyPitchCare } = await import("../stadium/pitch-care");
+    const { recordTransaction } = await import("./finance-processor");
+    const denIso = effectiveDate.toISOString();
 
-    for (const row of stadiony.results ?? []) {
-      const nova = moistureDaily(row.pitch_moisture ?? 50, dnes?.weather);
-      if (nova !== row.pitch_moisture) {
-        await env.DB.prepare("UPDATE stadiums SET pitch_moisture = ? WHERE team_id = ?")
-          .bind(nova, row.team_id).run();
-      }
-    }
+    const stadiony = await env.DB.prepare(
+      `SELECT s.team_id, s.pitch_moisture, s.pitch_type, s.pitch_care_mode, t.budget,
+              COALESCE(e.pitch_heating, 0) AS heating_level,
+              COALESCE(e.pitch_irrigation, 0) AS irrigation_level
+         FROM stadiums s
+         JOIN teams t ON t.id = s.team_id
+         LEFT JOIN equipment e ON e.team_id = s.team_id`,
+    ).all<{
+      team_id: string; pitch_moisture: number | null; pitch_type: string | null;
+      pitch_care_mode: string | null; budget: number;
+      heating_level: number; irrigation_level: number;
+    }>();
 
     // Mráz odlamuje drny — jediné počasí, které ubírá přímo kvalitu trávníku.
     const mraz = pitchFrostDamage(dnes?.weather);
-    if (mraz > 0) {
-      await env.DB.prepare(
-        "UPDATE stadiums SET pitch_condition = MAX(5, pitch_condition - ?) WHERE pitch_type != 'artificial'",
-      ).bind(mraz).run();
-      events.push({ type: "pitch", description: `Mráz ubral trávníkům ${mraz} bod kondice` });
+    let zmrzlo = 0;
+
+    for (const row of stadiony.results ?? []) {
+      const pece = decideDailyPitchCare({
+        weather: dnes?.weather,
+        mode: (row.pitch_care_mode as PitchCareMode) ?? "auto",
+        heatingLevel: row.heating_level ?? 0,
+        irrigationLevel: row.irrigation_level ?? 0,
+        budget: row.budget ?? 0,
+      });
+
+      if (pece.cost > 0) {
+        await recordTransaction(
+          env.DB, row.team_id, "pitch_repair", -pece.cost,
+          pece.service === "heating" ? "Vyhřívání trávníku (denní provoz)" : "Zavlažování hřiště (denní provoz)",
+          denIso,
+        ).catch((e) => logger.warn({ module: "daily-tick" }, "uctovani denni pece o travnik", e));
+      }
+
+      // Zavlažování dotuje půdu i v den bez zápasu — stejný přírůstek jako po zápase.
+      const zavlazeno = pece.service === "irrigation" ? IRRIGATION_MOISTURE_GAIN : 0;
+      const novaVlhkost = Math.max(0, Math.min(100,
+        moistureDaily(row.pitch_moisture ?? 50, dnes?.weather) + zavlazeno,
+      ));
+
+      // Zapnuté vyhřívání drží plochu rozmrzlou, takže mráz drny neláme. Bez něj
+      // (nebo když na provoz nezbylo) si zimu hřiště odnese — přesně to je ta volba
+      // „zaplatím, nebo to risknu", kvůli které vyhřívání ve hře je.
+      const chranenoMrazem = pece.service === "heating";
+      const ubere = mraz > 0 && row.pitch_type !== "artificial" && !chranenoMrazem ? mraz : 0;
+      if (ubere > 0) zmrzlo++;
+
+      if (novaVlhkost !== row.pitch_moisture || ubere > 0) {
+        await env.DB.prepare(
+          "UPDATE stadiums SET pitch_moisture = ?, pitch_condition = MAX(5, pitch_condition - ?) WHERE team_id = ?",
+        ).bind(novaVlhkost, ubere, row.team_id).run();
+      }
+    }
+
+    if (zmrzlo > 0) {
+      events.push({ type: "pitch", description: `Mráz ubral ${zmrzlo} trávníkům ${mraz} bod kondice` });
     }
   } catch (e) {
     logger.error({ module: "daily-tick" }, "denni vliv pocasi na travnik", e);

@@ -1659,7 +1659,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const pitchIrrigationLevel = careEquip?.pitch_irrigation ?? 0;
   const mowerLevel = careEquip?.mower ?? 0;
 
-  const { PITCH_CARE_MODE_LABEL, serviceCost, SNOW_CLEARING_COST } = await import("../stadium/pitch-care");
+  const { PITCH_CARE_MODE_LABEL, serviceCost, dailyServiceCost, SNOW_CLEARING_COST } = await import("../stadium/pitch-care");
   const careMode = ((stadium.pitch_care_mode as string) ?? "auto") as keyof typeof PITCH_CARE_MODE_LABEL;
   const pitchCare = {
     mode: careMode,
@@ -1668,6 +1668,10 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     irrigationLevel: pitchIrrigationLevel,
     heatingCost: serviceCost("heating", pitchHeatingLevel),
     irrigationCost: serviceCost("irrigation", pitchIrrigationLevel),
+    // Provoz mimo zápas je udržovací, tedy levnější — hráč musí vidět obě sazby,
+    // jinak by ho denní účet v financích překvapil.
+    heatingDailyCost: dailyServiceCost("heating", pitchHeatingLevel),
+    irrigationDailyCost: dailyServiceCost("irrigation", pitchIrrigationLevel),
     snowClearingCost: SNOW_CLEARING_COST,
     careOrdered: ((stadium.pitch_care_ordered as number) ?? 0) > 0,
     snowClearingOrdered: ((stadium.pitch_snow_clearing_ordered as number) ?? 0) > 0,

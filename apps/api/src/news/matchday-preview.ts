@@ -336,6 +336,12 @@ export async function generateMatchdayPreview(
   const { redaktorProRubriku, pokynyProRedaktora } = await import("./journalists");
   const redaktor = await redaktorProRubriku(db, leagueId, "matchday_preview", calendarId);
 
+  // Předpověď na kolo — TATÁŽ, kterou hráč vidí u zápasu i v bufetu (jediný zdroj
+  // je `season-weather.ts`). Bez ní preview slibovalo fotbálek v ideálu, i když
+  // se kolo hrálo v plískanici.
+  const { roundWeatherContext, weatherPromptBlock } = await import("./weather-context");
+  const pocasiBlok = weatherPromptBlock(await roundWeatherContext(db, calendarId), true);
+
   const prompt = `${redaktor ? pokynyProRedaktora(redaktor) : `Jsi sportovní redaktor ${isPraha ? "pražského" : "okresního"} zpravodaje`}. Napiš předzápasové preview ${gameWeek}. kola ${leagueName}.
 
 ZÁPASY KOLA:
@@ -343,7 +349,7 @@ ${matchLines.join("\n\n")}
 
 AKTUÁLNÍ TABULKA PŘED KOLEM:
 ${standingsFull.join("\n")}
-
+${pocasiBlok}
 POVOLENÍ HRÁČI (jediní, které smíš v článku zmínit + jejich tým):
 ${whitelistLines.join("\n")}
 

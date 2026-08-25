@@ -361,7 +361,7 @@ function buildCupLineupData(
  * Vrací null pokud domácí není reálný tým (velkoklub).
  */
 async function cupHomeMatchContext(db: D1Database, homeRealTeamId: string | null, weather: Weather, cupMatchId: string):
-  Promise<{ attendance: number; stadiumName: string | null; pitchCondition: number } | null> {
+  Promise<{ attendance: number; stadiumName: string | null; pitchCondition: number; pitchMoisture: number } | null> {
   if (!homeRealTeamId) return null;
   try {
     const { loadFanbaseAggregate, loadRegionalPopulation, expectedAttendance } = await import("../season/fanbase-helpers");
@@ -415,7 +415,11 @@ async function cupHomeMatchContext(db: D1Database, homeRealTeamId: string | null
     const shieldedWeather = wf + (1 - wf) * fx.weatherAttendanceShield;
     const rawAttendance = Math.max(8, popBase + repBonus + formBonus + busDropIn + Math.round(rng2(homeRealTeamId) * 10 - 5));
     const attendance = Math.min(Math.round(rawAttendance * (1 + fx.attendanceBonus) * satMul * shieldedWeather * promoBoost), stadiumCapacity);
-    return { attendance, stadiumName, pitchCondition: (stadiumRow?.pitch_condition as number) ?? 50 };
+    return {
+      attendance, stadiumName,
+      pitchCondition: (stadiumRow?.pitch_condition as number) ?? 50,
+      pitchMoisture: (stadiumRow?.pitch_moisture as number) ?? 50,
+    };
   } catch (e) {
     logger.warn({ module: M }, "cup home match context", e);
     return null;

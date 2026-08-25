@@ -294,6 +294,8 @@ export async function runScheduledMatches(
                     return null;
                 });
             const pitchCondition = (stadiumRow?.pitch_condition as number) ?? 50;
+            // Nasáklost půdy: rozmáčené hřiště se hraje jinak než suché, i když prší stejně.
+            const pitchMoisture = (stadiumRow?.pitch_moisture as number) ?? 50;
             const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
                 .bind(homeTeamId).first<{ stadium_name: string }>().catch((e) => {
                     logger.warn({module: "match-runner"}, "Failed to load stadium name", e);
@@ -574,6 +576,7 @@ export async function runScheduledMatches(
                 isHomeAdvantage: true,
                 homeAdvantage,
                 pitchCondition,
+                pitchMoisture,
                 stadiumName: stadiumName ?? undefined,
                 attendance: attendanceWithOfficials,
                 homeEquipment,

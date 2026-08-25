@@ -128,8 +128,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       };
 
       // Stadium info
-      const stadiumRow = await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
-        .bind(homeTeamId).first<{ pitch_condition: number }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium", e); return null; });
+      const stadiumRow = await db.prepare("SELECT pitch_condition, pitch_moisture FROM stadiums WHERE team_id = ?")
+        .bind(homeTeamId).first<{ pitch_condition: number; pitch_moisture: number | null }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium", e); return null; });
       const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
         .bind(homeTeamId).first<{ stadium_name: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium name", e); return null; });
 
@@ -147,6 +147,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         weather,
         isHomeAdvantage: false, // přátelák = neutrální
         pitchCondition: stadiumRow?.pitch_condition ?? 50,
+        pitchMoisture: stadiumRow?.pitch_moisture ?? 50,
         stadiumName: stadiumNameRow?.stadium_name ?? undefined,
         attendance: friendlyAttendance,
         homeEquipment,

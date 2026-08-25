@@ -89,6 +89,8 @@ export interface MatchConfig {
    *  použije se 0.05 pokud isHomeAdvantage, jinak 0. */
   homeAdvantage?: number;
   pitchCondition?: number; // 0-100, affects injury probability
+  /** Nasáklost půdy 0–100 (50 = normál) — bahno i vyprahlá zem mění hru i riziko zranění. */
+  pitchMoisture?: number | null;
   stadiumName?: string;
   attendance?: number;
   homeEquipment?: EquipmentMods;

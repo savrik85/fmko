@@ -192,6 +192,10 @@ export async function generateRoundSummary(
   const { redaktorProRubriku, pokynyProRedaktora } = await import("./journalists");
   const redaktor = await redaktorProRubriku(db, leagueId, "round_summary", calendarId);
 
+  // Počasí kola — bez něj by hrdinský výkon v lijáku vypadal jako procházka po koberci.
+  const { roundWeatherContext, weatherPromptBlock } = await import("./weather-context");
+  const pocasiBlok = weatherPromptBlock(await roundWeatherContext(db, calendarId));
+
   const prompt = `${redaktor ? pokynyProRedaktora(redaktor) : "Jsi sportovní redaktor."}
 
 Po ${gameWeek}. kole ${leagueName} vyhlásíš Hráče a Trenéra kola — STRUČNĚ, žádný obsáhlý článek o celém kole (ten má zpravodaj už jinde).
@@ -201,7 +205,7 @@ ${playerLines.join("\n")}
 
 VÝSLEDKY KOLA (pro kontext výběru trenéra):
 ${resultLines.join("\n")}
-
+${pocasiBlok}
 ÚKOL:
 Vyber 1 HRÁČE KOLA a 1 TRENÉRA KOLA. Zohledni kontext — UPSET, hrdinský výkon z horšího týmu, dramatický obrat — ne jen nejvyšší rating.
 

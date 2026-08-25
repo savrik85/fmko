@@ -5,6 +5,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { wetnessFromMoisture, drynessFromMoisture } from "../stadium/pitch-moisture";
 import type { MatchEvent, EventType, GoalSource } from "@okresni-masina/shared";
 import type {
   MatchConfig,
@@ -103,6 +104,41 @@ export function pitchLongBallBonus(pitchCondition: number | null | undefined): n
 }
 
 /**
+ * ─── Nasáklost půdy ─────────────────────────────────────────────────────────
+ *
+ * Vlhkost (`stadiums.pitch_moisture`) je PAMĚŤ půdy, ne počasí: hřiště zůstane
+ * rozmáčené i dva dny po lijáku a vyprahlé zůstane týden po vedrech. Do
+ * 2026-08-25 se promítala jen do 3D vizuálu a rad k taktice, takže zápas se na
+ * bahně hrál stejně jako na koberci.
+ *
+ * Postihy jsou schválně MÍRNĚJŠÍ než z počasí — když prší, počítá se déšť
+ * (`WEATHER_MODS`) i nasáklá půda, a dvojitá plná penalizace by z fotbalu
+ * udělala loterii. Pásmo 45–55 je hluché, tam se hřiště chová jako suché.
+ */
+
+/** Technika na rozmáčené/vyprahlé půdě. 100 → 0.94, 0 → 0.97, normál → 1. */
+export function moistureTechniqueFactor(moisture: number | null | undefined): number {
+  if (moisture == null) return 1;
+  return 1 - wetnessFromMoisture(moisture) * 0.06 - drynessFromMoisture(moisture) * 0.03;
+}
+
+/**
+ * Na bahně se kombinace po zemi hrát nedá, tak se to posílá dopředu. Přičítá se
+ * k bonusu z počasí i ze stavu trávníku. Vyprahlá tvrdá zem naopak nakopávání
+ * nenahrává — po suchém povrchu se míč veze rychle, tam je nula.
+ */
+export function moistureLongBallBonus(moisture: number | null | undefined): number {
+  if (moisture == null) return 0;
+  return wetnessFromMoisture(moisture) * 0.08;
+}
+
+/** Riziko zranění: v bahně to klouže, na vyprahlé tvrdé zemi to bolí klouby. */
+export function moistureInjuryFactor(moisture: number | null | undefined): number {
+  if (moisture == null) return 1;
+  return 1 + wetnessFromMoisture(moisture) * 0.20 + drynessFromMoisture(moisture) * 0.10;
+}
+
+/**
  * Calculate chance probability per minute for attacking team.
  */
 function calcChanceProb(
@@ -116,6 +152,8 @@ function calcChanceProb(
   booked?: { attacking: ReadonlySet<number>; defending: ReadonlySet<number> },
   /** Stav trávníku 0–100. Chybí-li (starší zápasy), hřiště se neprojeví. */
   pitchCondition?: number | null,
+  /** Nasáklost půdy 0–100 (50 = normál). Bahno i vyprahlá zem mění, jak se hraje. */
+  pitchMoisture?: number | null,
 ): number {
   // Defensive — pokud se neznámá tactic prolomi (data corruption), použij balanced
   const tacticMod = TACTIC_MODS[attacking.tactic] ?? TACTIC_MODS.balanced;
@@ -158,7 +196,8 @@ function calcChanceProb(
   const intimidation = intimidationPenalty(defHard, defHardEff, attacking.lineup);
 
   const attackPower = (
-    teamAvg(outfield, "technique") * weatherMod.techniqueMod * pitchTechniqueFactor(pitchCondition) * 0.8 +
+    teamAvg(outfield, "technique") * weatherMod.techniqueMod * pitchTechniqueFactor(pitchCondition)
+      * moistureTechniqueFactor(pitchMoisture) * 0.8 +
     teamAvg(outfield, "passing") * 1.0 +
     teamAvg(outfield, "speed") * 0.7 +
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
@@ -181,7 +220,7 @@ function calcChanceProb(
   const baseChance = 0.10; // neutral chance per minute — target ~3.5 goals/match
   // Nakopávaný balon těží z počasí i z rozbitého hřiště — obojí sráží hru po zemi.
   const longBallBonus = attacking.tactic === "long_ball"
-    ? weatherMod.longBallBonus + pitchLongBallBonus(pitchCondition)
+    ? weatherMod.longBallBonus + pitchLongBallBonus(pitchCondition) + moistureLongBallBonus(pitchMoisture)
     : 0;
 
   // Underdog boost: weaker team gets small floor boost
@@ -980,7 +1019,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const attackForm = isHomePossession ? homeForm : awayForm;
     const chanceProb = calcChanceProb(attacking, defending, weather, attackForm, ref, {
       attacking: yellowCards, defending: yellowCards,
-    }, config.pitchCondition);
+    }, config.pitchCondition, config.pitchMoisture);
     // Reduce chance probability when condition is low
     // Low condition has significant impact — floor at 0.45
     const conditionMod = Math.max(0.45, teamAvg(attacking.lineup, "condition") / 100);
@@ -1184,7 +1223,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     }
 
     // Check for injury (~1% per minute, modified by weather, pitch, equipment)
-    const pitchMod = config.pitchCondition != null ? (1 + (100 - config.pitchCondition) / 50) : 1;
+    const pitchMod = (config.pitchCondition != null ? (1 + (100 - config.pitchCondition) / 50) : 1)
+      * moistureInjuryFactor(config.pitchMoisture);
     // Tvrdá hra bolí obě strany: vlastní hráči chodí do soubojů naostro a soupeř
     // schytává fauly. Násobí se globální pravděpodobnost i váhy — bez toho by se
     // zranění jen přerozdělila mezi týmy a celkem by jich nepřibylo.
@@ -1386,7 +1426,10 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       }
     }
 
-    if ((config.pitchCondition ?? 80) < 70 && rng.random() < weatherMod.puddleChance) {
+    // Kaluže drží NASÁKLÁ půda. Dřív to viselo jen na stavu trávníku, takže na
+    // udržovaném, ale rozmáčeném hřišti se v lijáku žádná nezastavila.
+    const kaluzeMozne = (config.pitchCondition ?? 80) < 70 || wetnessFromMoisture(config.pitchMoisture) > 0.3;
+    if (kaluzeMozne && rng.random() < weatherMod.puddleChance) {
       const { player, team } = pickIncidentPlayer();
       const puddleTexts = [
         `Přihrávka do běhu se zastavila v hluboké kaluži na vápně!`,

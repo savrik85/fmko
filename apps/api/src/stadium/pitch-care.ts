@@ -132,3 +132,68 @@ export function careEffectiveness(
   if (decision.service === "snow_clearing") return { heatingMod: 0.6, irrigationMod: 0 };
   return { heatingMod: 0, irrigationMod: 0 };
 }
+
+/**
+ * ─── Provoz mimo zápas ───────────────────────────────────────────────────────
+ *
+ * Počasí působí na hřiště KAŽDÝ den (viz `season/daily-tick.ts`), ale péče se do
+ * 2026-08-25 vyhodnocovala jen v zápasový den. Týden veder tedy hřiště vypráhl
+ * a zavlažování s tím nesvedlo nic, dokud se nehrálo doma; vyhřívání zase
+ * nechránilo před mrazem, protože mráz ubírá kondici právě v denním ticku.
+ */
+
+/**
+ * Podíl denní sazby z ceny na zápas.
+ *
+ * Zápasový provoz je nárazový výkon na celý zápas — běžný den je jen udržovací
+ * režim, takže se platí čtvrtina. Bez rozdílu by vyhřívání úrovně 3 stálo
+ * 3 800 Kč denně a nikdo by si ho nezapnul.
+ */
+export const DAILY_SERVICE_RATE = 0.25;
+
+/**
+ * Co má smysl zapínat v běžný den.
+ *
+ * Déšť tu schválně chybí: mimo zápas z něj hřiště jen zvlhne, rozbahní ho teprve
+ * dvaadvacet párů kopaček. Topit kvůli dešti v den bez zápasu by byly vyhozené
+ * peníze — v zápasový den to řeší `serviceForWeather`.
+ */
+export function dailyServiceForWeather(weather: Weather | null | undefined): PitchService | null {
+  switch (weather) {
+    case "snow": return "heating";      // drží plochu rozmrzlou → mráz neláme drny
+    case "sunny": return "irrigation";  // dotuje vyprahlou půdu
+    default: return null;
+  }
+}
+
+/** Cena provozu na jeden běžný den. Zaokrouhleno na desítky, ať to v účtech nevypadá jako chyba. */
+export function dailyServiceCost(service: PitchService, level: number): number {
+  return Math.round(serviceCost(service, level) * DAILY_SERVICE_RATE / 10) * 10;
+}
+
+export type DailyPitchCareInput = Omit<
+  PitchCareDecisionInput, "orderedThisMatch" | "snowClearingOrdered"
+>;
+
+/**
+ * Co se zapne v běžný den. Stejná pravidla jako u zápasu, jen levnější sazba
+ * a užší výběr počasí.
+ *
+ * Ruční režim mimo zápas nezapne nic — objednávka se v UI dělá na konkrétní
+ * zápas, takže „ručně" znamená „jen když si o to řeknu před zápasem".
+ */
+export function decideDailyPitchCare(input: DailyPitchCareInput): PitchCareDecision {
+  const needed = dailyServiceForWeather(input.weather);
+  if (!needed) return { service: null, cost: 0, skipped: "not_needed" };
+
+  const level = needed === "heating" ? input.heatingLevel : input.irrigationLevel;
+  if (level <= 0) return { service: null, cost: 0, skipped: "no_equipment" };
+
+  if (input.mode === "off") return { service: null, cost: 0, skipped: "mode_off" };
+  if (input.mode === "manual") return { service: null, cost: 0, skipped: "not_ordered" };
+
+  const cost = dailyServiceCost(needed, level);
+  if (input.budget < cost) return { service: null, cost: 0, skipped: "no_money" };
+
+  return { service: needed, cost, skipped: null };
+}

@@ -6,6 +6,15 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
+import { moistureLabel, moistureHint } from "@/lib/pitch-moisture";
+
+/** Počasí nad areálem — popisek do hlavičky karty. */
+const WEATHER_LABEL: Record<string, string> = {
+  sunny: "Slunečno", cloudy: "Zataženo", rain: "Déšť", snow: "Sníh", wind: "Vítr",
+};
+const WEATHER_ICON: Record<string, string> = {
+  sunny: "☀️", cloudy: "⛅", rain: "🌧️", snow: "❄️", wind: "💨",
+};
 
 const Stadium3D = dynamic(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
@@ -88,6 +97,9 @@ interface PitchCare {
   irrigationLevel: number;
   heatingCost: number;
   irrigationCost: number;
+  /** Provoz v běžný den (udržovací sazba). */
+  heatingDailyCost?: number;
+  irrigationDailyCost?: number;
   snowClearingCost: number;
   careOrdered: boolean;
   snowClearingOrdered: boolean;
@@ -178,6 +190,126 @@ function pitchBarColor(condition: number): string {
 }
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
+
+/**
+ * ─── Stavební bloky stránky ─────────────────────────────────────────────────
+ *
+ * Stadion sdružuje šest různých agend (pohled, vzhled, trávník, péče, povrch,
+ * zázemí) a každá si dřív nesla vlastní typografii, vlastní odsazení i vlastní
+ * podobu tlačítka. Na mobilu se to rozpadalo do drobného textu a přeplácaných
+ * mřížek. Tyhle tři komponenty drží celou stránku v jedné řeči — a jedno místo,
+ * kde se dá měnit.
+ */
+
+/** Karta jedné agendy. Nadpis vlevo, doplňková informace vpravo. */
+function Sekce({ titul, doplnek, children }: {
+  titul: string; doplnek?: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <section className="card p-4 sm:p-5 space-y-4">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="font-heading font-bold text-lg">{titul}</h2>
+        {doplnek != null && <div className="text-sm text-muted">{doplnek}</div>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+/** Podnadpis uvnitř sekce — jediný povolený způsob, jak uvnitř karty dělit obsah. */
+function Podnadpis({ children, doplnek }: { children: React.ReactNode; doplnek?: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+      <h3 className="font-heading font-bold text-sm uppercase tracking-wide text-muted">{children}</h3>
+      {doplnek != null && <span className="text-sm text-muted">{doplnek}</span>}
+    </div>
+  );
+}
+
+/**
+ * Řádek „položka + akce". Na mobilu jde tlačítko pod text na celou šířku —
+ * vedle sebe se to na 390px mačkalo do dvouřádkových popisků.
+ *
+ * Cena patří do popisu, ne do tlačítka: tlačítko říká, co se stane.
+ */
+function Radek({ ikona, nazev, popis, akce }: {
+  ikona?: string; nazev: React.ReactNode; popis?: React.ReactNode; akce?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2 py-3 border-b border-gray-100 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex items-start gap-2.5 min-w-0">
+        {ikona && <span className="text-xl shrink-0 leading-none pt-0.5">{ikona}</span>}
+        <div className="min-w-0">
+          <div className="font-heading font-bold text-base">{nazev}</div>
+          {popis != null && <div className="text-sm text-muted leading-snug">{popis}</div>}
+        </div>
+      </div>
+      {akce != null && <div className="shrink-0 sm:w-auto [&>button]:w-full sm:[&>button]:w-auto">{akce}</div>}
+    </div>
+  );
+}
+
+/** Dlaždice volby (vzor sekání, sítě, povrch). Dvě na mobilu, ať se text vejde. */
+function Dlazdice({ vybrano, disabled, onClick, ikona, nazev, popis, meta }: {
+  vybrano: boolean; disabled?: boolean; onClick: () => void;
+  ikona: string; nazev: string; popis?: string; meta?: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex flex-col text-left p-3 rounded-soft border-2 transition-colors min-h-[76px] ${
+        vybrano
+          ? "border-pitch-500 bg-pitch-50"
+          : disabled
+          ? "border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed"
+          : "border-gray-200 bg-white hover:border-gray-400"
+      }`}
+    >
+      <div className="flex flex-col items-start gap-0.5 w-full sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+        <span className="flex items-center gap-1.5 font-heading font-bold text-sm">
+          <span>{ikona}</span>
+          <span>{nazev}</span>
+        </span>
+        {meta}
+      </div>
+      {popis && <span className="text-sm text-muted mt-1 leading-snug">{popis}</span>}
+    </button>
+  );
+}
+
+/** Přepínač režimů. Na mobilu roztažený na celou šířku — palec míří doprostřed. */
+function Prepinac<T extends string>({ hodnoty, aktivni, onChange, disabled }: {
+  hodnoty: ReadonlyArray<{ id: T; label: string }>;
+  aktivni: T; onChange: (id: T) => void; disabled?: boolean;
+}) {
+  return (
+    <div className="grid gap-1.5 p-1 bg-gray-100 rounded-soft" style={{ gridTemplateColumns: `repeat(${hodnoty.length}, minmax(0, 1fr))` }}>
+      {hodnoty.map((h) => (
+        <button
+          key={h.id}
+          onClick={() => onChange(h.id)}
+          disabled={disabled}
+          className={`py-2.5 px-3 rounded-soft text-sm font-heading font-bold transition-colors ${
+            aktivni === h.id ? "bg-pitch-500 text-white shadow-sm" : "text-muted hover:text-ink"
+          }`}
+        >
+          {h.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Jeden údaj v přehledu areálu. */
+function Udaj({ hodnota, popisek, barva }: { hodnota: React.ReactNode; popisek: string; barva?: string }) {
+  return (
+    <div className="text-center">
+      <div className={`font-heading font-bold text-xl tabular-nums ${barva ?? "text-ink"}`}>{hodnota}</div>
+      <div className="text-sm text-muted">{popisek}</div>
+    </div>
+  );
+}
 
 function teamInitials(name: string): string {
   return name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
@@ -384,36 +516,23 @@ export default function StadiumPage() {
       />
 
       {/* ═══ Stadium visualization + stats ═══ */}
-      <div className="card p-4 sm:p-5">
-        {stadium.stadiumName && (
-          <div className="text-center mb-3">
-            <h2 className="font-heading font-bold text-xl">{stadium.stadiumName}</h2>
-          </div>
-        )}
+      <div className="card p-4 sm:p-5 space-y-4">
+        <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h2 className="font-heading font-bold text-lg">{stadium.stadiumName ?? "Areál"}</h2>
+          {stadium.currentWeather && (
+            <span className="text-sm text-muted">
+              {WEATHER_ICON[stadium.currentWeather] ?? ""} {WEATHER_LABEL[stadium.currentWeather] ?? stadium.currentWeather}
+              {stadium.currentTemperature != null ? ` · ${stadium.currentTemperature} °C` : ""}
+            </span>
+          )}
+        </header>
 
-        {/* Toggle 2D / 3D */}
-        <div className="flex justify-end gap-2 mb-3">
-          <button
-            onClick={() => switchView("2d")}
-            className={`px-5 py-2 rounded-soft text-base font-heading font-bold transition-colors min-w-[64px] ${
-              viewMode === "2d"
-                ? "bg-pitch-500 text-white"
-                : "bg-gray-100 text-muted hover:bg-gray-200"
-            }`}
-          >
-            2D
-          </button>
-          <button
-            onClick={() => switchView("3d")}
-            className={`px-5 py-2 rounded-soft text-base font-heading font-bold transition-colors min-w-[64px] ${
-              viewMode === "3d"
-                ? "bg-pitch-500 text-white"
-                : "bg-gray-100 text-muted hover:bg-gray-200"
-            }`}
-          >
-            3D
-          </button>
-        </div>
+        {/* Pohled na areál — na mobilu přes celou šířku, ať se trefí palcem. */}
+        <Prepinac
+          hodnoty={[{ id: "2d" as ViewMode, label: "2D plán" }, { id: "3d" as ViewMode, label: "3D areál" }]}
+          aktivni={viewMode}
+          onChange={switchView}
+        />
 
         {viewMode === "3d" ? (
           <div className="space-y-2">
@@ -445,8 +564,8 @@ export default function StadiumPage() {
                   customization={stadium.customization}
                 />
               )}
-              <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-micro px-2 py-1 rounded pointer-events-none">
-                dva prsty pro rotaci/zoom
+              <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-sm px-2.5 py-1 rounded pointer-events-none">
+                dva prsty = otáčení
               </div>
             </div>
             <button
@@ -462,7 +581,7 @@ export default function StadiumPage() {
                 {"⚽ Dnes se hraje doma"}{stadium.matchDayOpponent ? ` proti ${stadium.matchDayOpponent}` : ""}{" — areál je v zápasovém režimu."}
               </div>
             )}
-            <div className="flex items-center justify-center gap-1.5 text-xs text-muted text-center pt-0.5">
+            <div className="flex items-start justify-center gap-1.5 text-sm text-muted text-center">
               <span>💡</span>
               <span>Pro přepínání <strong>režimu areálu</strong> (Zápasový vs. Tréninkový den), <strong>počasí</strong> a <strong>kamer</strong> klikněte v rohu scény na <strong>🎛️ Počasí & Kamery</strong>.</span>
             </div>
@@ -478,27 +597,27 @@ export default function StadiumPage() {
           />
         )}
 
-        <div className="grid grid-cols-3 gap-4 text-center mt-4 pt-4 border-t border-gray-100">
-          <div>
-            <div className="font-heading font-bold text-xl tabular-nums text-ink">{stadium.capacity}</div>
-            <div className="text-sm text-muted">Kapacita</div>
-          </div>
-          <div>
-            <div className={`font-heading font-bold text-xl tabular-nums ${pitchColor(stadium.pitchCondition)}`}>{stadium.pitchCondition}%</div>
-            <div className="text-sm text-muted">Trávník</div>
-          </div>
-          <div>
-            <div className="font-heading font-bold text-xl tabular-nums text-ink">
-              {stadium.pitchType === "natural" ? "Přírodní" : stadium.pitchType === "hybrid" ? "Hybridní" : "Umělý"}
-            </div>
-            <div className="text-sm text-muted">Povrch</div>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-4 gap-x-3 pt-4 border-t border-gray-100">
+          <Udaj hodnota={stadium.capacity} popisek="Kapacita" />
+          <Udaj hodnota={`${stadium.pitchCondition} %`} popisek="Trávník" barva={pitchColor(stadium.pitchCondition)} />
+          <Udaj
+            hodnota={`${stadium.pitchMoisture ?? 50} %`}
+            popisek={`Vlhkost · ${moistureLabel(stadium.pitchMoisture).label.toLowerCase()}`}
+            barva={moistureLabel(stadium.pitchMoisture).color}
+          />
+          <Udaj
+            hodnota={stadium.pitchType === "natural" ? "Přírodní" : stadium.pitchType === "hybrid" ? "Hybridní" : "Umělý"}
+            popisek="Povrch"
+          />
         </div>
+        {moistureHint(stadium.pitchMoisture) && (
+          <p className="text-sm text-muted -mt-1">{moistureHint(stadium.pitchMoisture)}</p>
+        )}
 
         {/* ─── Vzhled stadionu (jen v 3D) ─── */}
         {viewMode === "3d" && (
           <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
-            <div className="text-xs text-muted font-heading uppercase">Vzhled stadionu (zdarma)</div>
+            <Podnadpis doplnek="zdarma">Vzhled stadionu</Podnadpis>
 
             {/* Záložky – výběr položky (kotel jen když je postavený) */}
             <div className="flex flex-wrap gap-1.5">
@@ -510,7 +629,7 @@ export default function StadiumPage() {
                   <button
                     key={field}
                     onClick={() => setOpenPicker(isActive ? null : field)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-soft border-2 transition-colors text-xs font-heading font-bold ${isActive ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-400 bg-white"}`}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-soft border-2 transition-colors text-sm font-heading font-bold ${isActive ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-400 bg-white"}`}
                   >
                     <span className="w-5 h-5 rounded border border-gray-300 shrink-0" style={{ backgroundColor: displayColor }} />
                     <span>{label}</span>
@@ -549,7 +668,7 @@ export default function StadiumPage() {
             {/* Nápis v kotli — jen když je postavený sektor kotle */}
             {(stadium.facilities.ultras_stand ?? 0) > 0 && (
               <div className="pt-2 border-t border-gray-50">
-                <div className="text-xs text-muted font-heading uppercase mb-1.5">Nápis v kotli</div>
+                <Podnadpis>Nápis v kotli</Podnadpis>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -570,135 +689,78 @@ export default function StadiumPage() {
                     Uložit
                   </button>
                 </div>
-                <div className="text-micro text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
+                <div className="text-sm text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
               </div>
             )}
 
             {/* 🌿 Vzor sekání trávníku */}
             <div className="pt-2 border-t border-gray-50">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="text-xs text-muted font-heading uppercase">🌿 Vzor sekání trávníku</div>
-                <div className="text-micro text-muted">
-                  {stadium.pitchCondition < 50 ? "⚠️ Vyžaduje trávník ≥ 50 %" : "Aktivní na 3D i 2D"}
-                </div>
-              </div>
+              <Podnadpis doplnek={stadium.pitchCondition < 50 ? "⚠️ Vyžaduje trávník ≥ 50 %" : "Aktivní na 3D i 2D"}>
+                🌿 Vzor sekání trávníku
+              </Podnadpis>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {MOWING_PATTERNS.map((p) => {
-                  const isSelected = (stadium.customization.mowingPattern ?? "stripes") === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => handleCustomize("mowingPattern", p.id)}
-                      className={`flex flex-col text-left p-2 rounded-soft border-2 transition-all ${
-                        isSelected
-                          ? "border-pitch-500 bg-pitch-50 shadow-sm"
-                          : "border-gray-200 hover:border-gray-400 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-heading font-bold text-xs">
-                        <span>{p.icon}</span>
-                        <span>{p.label}</span>
-                      </div>
-                      <div className="text-micro text-muted mt-0.5 leading-tight">{p.desc}</div>
-                    </button>
-                  );
-                })}
+                {MOWING_PATTERNS.map((p) => (
+                  <Dlazdice
+                    key={p.id}
+                    vybrano={(stadium.customization.mowingPattern ?? "stripes") === p.id}
+                    onClick={() => handleCustomize("mowingPattern", p.id)}
+                    ikona={p.icon} nazev={p.label} popis={p.desc}
+                  />
+                ))}
               </div>
             </div>
 
             {/* 🥅 Sítě a styl branek */}
             <div className="pt-2 border-t border-gray-50 space-y-3">
               <div>
-                <div className="text-xs text-muted font-heading uppercase mb-1.5">🥅 Vzor brankové sítě</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {NET_PATTERNS.map((p) => {
-                    const isSelected = (stadium.customization.netPattern ?? "white") === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => handleCustomize("netPattern", p.id)}
-                        className={`flex flex-col text-left p-2 rounded-soft border-2 transition-all ${
-                          isSelected
-                            ? "border-pitch-500 bg-pitch-50 shadow-sm"
-                            : "border-gray-200 hover:border-gray-400 bg-white"
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 font-heading font-bold text-xs">
-                          <span>{p.icon}</span>
-                          <span>{p.label}</span>
-                        </div>
-                        <div className="text-micro text-muted mt-0.5 leading-tight">{p.desc}</div>
-                      </button>
-                    );
-                  })}
+                <Podnadpis>🥅 Vzor brankové sítě</Podnadpis>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {NET_PATTERNS.map((p) => (
+                    <Dlazdice
+                      key={p.id}
+                      vybrano={(stadium.customization.netPattern ?? "white") === p.id}
+                      onClick={() => handleCustomize("netPattern", p.id)}
+                      ikona={p.icon} nazev={p.label} popis={p.desc}
+                    />
+                  ))}
                 </div>
               </div>
 
               <div>
-                <div className="text-xs text-muted font-heading uppercase mb-1.5">📐 Styl zavěšení branky</div>
+                <Podnadpis>📐 Styl zavěšení branky</Podnadpis>
                 <div className="grid grid-cols-2 gap-2">
-                  {NET_STYLES.map((s) => {
-                    const isSelected = (stadium.customization.netStyle ?? "loose") === s.id;
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => handleCustomize("netStyle", s.id)}
-                        className={`flex flex-col text-left p-2 rounded-soft border-2 transition-all ${
-                          isSelected
-                            ? "border-pitch-500 bg-pitch-50 shadow-sm"
-                            : "border-gray-200 hover:border-gray-400 bg-white"
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 font-heading font-bold text-xs">
-                          <span>{s.icon}</span>
-                          <span>{s.label}</span>
-                        </div>
-                        <div className="text-micro text-muted mt-0.5 leading-tight">{s.desc}</div>
-                      </button>
-                    );
-                  })}
+                  {NET_STYLES.map((st) => (
+                    <Dlazdice
+                      key={st.id}
+                      vybrano={(stadium.customization.netStyle ?? "loose") === st.id}
+                      onClick={() => handleCustomize("netStyle", st.id)}
+                      ikona={st.icon} nazev={st.label} popis={st.desc}
+                    />
+                  ))}
                 </div>
               </div>
 
               <div>
-                <div className="text-xs text-muted font-heading uppercase mb-1.5 flex items-center justify-between">
-                  <span>🏃‍♂️ Povrch areálu & oválu</span>
-                  <span className="text-micro font-normal text-muted lowercase">stavební investice</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {SURROUND_SURFACES.map((s) => {
-                    const isSelected = (stadium.customization.surroundSurface ?? "grass") === s.id;
-                    const canAfford = s.cost === 0 || team.budget >= s.cost;
+                <Podnadpis doplnek="stavební investice">🏃‍♂️ Povrch areálu &amp; oválu</Podnadpis>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                  {SURROUND_SURFACES.map((sur) => {
+                    const vybrano = (stadium.customization.surroundSurface ?? "grass") === sur.id;
+                    const dostupne = sur.cost === 0 || team.budget >= sur.cost;
                     return (
-                      <button
-                        key={s.id}
-                        onClick={() => handleSurroundChange(s)}
-                        disabled={!!acting || (!isSelected && !canAfford)}
-                        className={`flex flex-col text-left p-2.5 rounded-soft border-2 transition-all relative ${
-                          isSelected
-                            ? "border-pitch-500 bg-pitch-50 shadow-sm"
-                            : canAfford
-                            ? "border-gray-200 hover:border-gray-400 bg-white"
-                            : "border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 w-full">
-                          <div className="flex items-center gap-1.5 font-heading font-bold text-xs">
-                            <span>{s.icon}</span>
-                            <span>{s.label}</span>
-                          </div>
-                          {isSelected ? (
-                            <span className="text-micro font-bold text-pitch-600 bg-pitch-100 px-1.5 py-0.5 rounded">
-                              Položeno
-                            </span>
-                          ) : (
-                            <span className={`text-micro font-bold tabular-nums ${s.cost === 0 ? "text-emerald-600" : canAfford ? "text-ink" : "text-card-red"}`}>
-                              {s.cost === 0 ? "Zdarma" : formatCZK(s.cost)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-micro text-muted mt-1 leading-tight">{s.desc}</div>
-                      </button>
+                      <Dlazdice
+                        key={sur.id}
+                        vybrano={vybrano}
+                        disabled={!!acting || (!vybrano && !dostupne)}
+                        onClick={() => handleSurroundChange(sur)}
+                        ikona={sur.icon} nazev={sur.label} popis={sur.desc}
+                        meta={vybrano ? (
+                          <span className="text-sm font-heading font-bold text-pitch-600">Položeno</span>
+                        ) : (
+                          <span className={`text-sm font-heading font-bold tabular-nums ${sur.cost === 0 ? "text-pitch-600" : dostupne ? "text-ink" : "text-card-red"}`}>
+                            {sur.cost === 0 ? "Zdarma" : formatCZK(sur.cost)}
+                          </span>
+                        )}
+                      />
                     );
                   })}
                 </div>
@@ -706,65 +768,44 @@ export default function StadiumPage() {
             </div>
 
             <div className="pt-2 border-t border-gray-50 space-y-1">
-              <div className="text-xs text-muted font-heading uppercase mb-1">Vybavení (placené)</div>
+              <Podnadpis>Vybavení</Podnadpis>
 
-              <div className="flex items-center justify-between gap-3 py-1.5">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-lg">🏟️</span>
-                  <div>
-                    <div className="font-heading font-bold text-sm">
-                      Scoreboard <span className="text-muted">L{stadium.customization.scoreboardLevel}/3</span>
-                    </div>
-                    <div className="text-xs text-muted">
-                      {stadium.customization.scoreboardLevel === 0 ? "Žádný" :
-                       stadium.customization.scoreboardLevel === 1 ? "Dřevěná tabule" :
-                       stadium.customization.scoreboardLevel === 2 ? "LED jednobarevná" : "Full-color LED"}
-                    </div>
-                  </div>
-                </div>
-                {stadium.visualUpgrades.find((u) => u.kind === "scoreboard") && (() => {
-                  const u = stadium.visualUpgrades.find((u) => u.kind === "scoreboard")!;
-                  const canAfford = team.budget >= u.cost;
-                  return (
-                    <button
-                      onClick={() => handleVisualUpgrade("scoreboard", u.label, u.cost)}
-                      disabled={!canAfford || !!acting}
-                      className={`shrink-0 py-1.5 px-3 rounded-soft text-xs font-heading font-bold ${canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400"}`}
-                    >
-                      {acting === "visual-scoreboard" ? "..." : `${u.label} — ${formatCZK(u.cost)}`}
-                    </button>
-                  );
-                })()}
-              </div>
-
-              <div className="flex items-center justify-between gap-3 py-1.5">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-lg">🚩</span>
-                  <div>
-                    <div className="font-heading font-bold text-sm">
-                      Vlajka týmu <span className="text-muted">L{stadium.customization.flagSize}/3</span>
-                    </div>
-                    <div className="text-xs text-muted">
-                      {stadium.customization.flagSize === 0 ? "Žádná" :
-                       stadium.customization.flagSize === 1 ? "Malá (3m)" :
-                       stadium.customization.flagSize === 2 ? "Střední (5m)" : "Velká (8m)"}
-                    </div>
-                  </div>
-                </div>
-                {stadium.visualUpgrades.find((u) => u.kind === "flag") && (() => {
-                  const u = stadium.visualUpgrades.find((u) => u.kind === "flag")!;
-                  const canAfford = team.budget >= u.cost;
-                  return (
-                    <button
-                      onClick={() => handleVisualUpgrade("flag", u.label, u.cost)}
-                      disabled={!canAfford || !!acting}
-                      className={`shrink-0 py-1.5 px-3 rounded-soft text-xs font-heading font-bold ${canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400"}`}
-                    >
-                      {acting === "visual-flag" ? "..." : `${u.label} — ${formatCZK(u.cost)}`}
-                    </button>
-                  );
-                })()}
-              </div>
+              {([
+                {
+                  kind: "scoreboard" as const, ikona: "🏟️", nazev: "Scoreboard",
+                  uroven: stadium.customization.scoreboardLevel,
+                  stav: stadium.customization.scoreboardLevel === 0 ? "Žádný"
+                    : stadium.customization.scoreboardLevel === 1 ? "Dřevěná tabule"
+                    : stadium.customization.scoreboardLevel === 2 ? "LED jednobarevná" : "Full-color LED",
+                },
+                {
+                  kind: "flag" as const, ikona: "🚩", nazev: "Vlajka týmu",
+                  uroven: stadium.customization.flagSize,
+                  stav: stadium.customization.flagSize === 0 ? "Žádná"
+                    : stadium.customization.flagSize === 1 ? "Malá (3 m)"
+                    : stadium.customization.flagSize === 2 ? "Střední (5 m)" : "Velká (8 m)",
+                },
+              ]).map((v) => {
+                const u = stadium.visualUpgrades.find((x) => x.kind === v.kind);
+                const dostupne = u ? team.budget >= u.cost : false;
+                return (
+                  <Radek
+                    key={v.kind}
+                    ikona={v.ikona}
+                    nazev={<>{v.nazev} <span className="text-muted font-normal">L{v.uroven}/3</span></>}
+                    popis={u ? `${v.stav} · ${u.label} za ${formatCZK(u.cost)}` : v.stav}
+                    akce={u && (
+                      <button
+                        onClick={() => handleVisualUpgrade(v.kind, u.label, u.cost)}
+                        disabled={!dostupne || !!acting}
+                        className="btn btn-primary btn-sm"
+                      >
+                        {acting === `visual-${v.kind}` ? "…" : "Koupit"}
+                      </button>
+                    )}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
@@ -772,17 +813,37 @@ export default function StadiumPage() {
 
       {/* ═══ Pitch maintenance ═══ */}
       {(stadium.pitchActions.length > 0 || stadium.pitchUpgrades.length > 0) && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Údržba trávníku</SectionLabel>
+        <Sekce titul="Údržba trávníku" doplnek={stadium.matchDay ? "dnes se hraje doma" : undefined}>
 
           {/* Condition bar */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-muted uppercase">Stav trávníku</span>
-              <span className={`text-sm font-heading font-bold tabular-nums ${pitchColor(stadium.pitchCondition)}`}>{stadium.pitchCondition}%</span>
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-baseline justify-between gap-2 mb-1">
+                <span className="text-sm text-muted">Kvalita trávníku</span>
+                <span className={`text-sm font-heading font-bold tabular-nums ${pitchColor(stadium.pitchCondition)}`}>{stadium.pitchCondition} %</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div className={`h-2.5 rounded-full transition-all ${pitchBarColor(stadium.pitchCondition)}`} style={{ width: `${stadium.pitchCondition}%` }} />
+              </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div className={`h-2.5 rounded-full transition-all ${pitchBarColor(stadium.pitchCondition)}`} style={{ width: `${stadium.pitchCondition}%` }} />
+
+            {/* Vlhkost je jiná veličina než kvalita: rozorané hřiště může být rozmáčené
+                i vyprahlé. Značka na 50 % ukazuje, kde je ideál. */}
+            <div>
+              <div className="flex items-baseline justify-between gap-2 mb-1">
+                <span className="text-sm text-muted">Vlhkost půdy</span>
+                <span className={`text-sm font-heading font-bold tabular-nums ${moistureLabel(stadium.pitchMoisture).color}`}>
+                  {stadium.pitchMoisture ?? 50} % · {moistureLabel(stadium.pitchMoisture).label}
+                </span>
+              </div>
+              <div className="relative w-full bg-gray-200 rounded-full h-2.5">
+                <div
+                  className="h-2.5 rounded-full transition-all bg-gradient-to-r from-amber-400 via-pitch-400 to-sky-500"
+                  style={{ width: `${stadium.pitchMoisture ?? 50}%` }}
+                />
+                <span className="absolute top-[-3px] bottom-[-3px] left-1/2 w-0.5 bg-ink/30 rounded" title="Ideál" />
+              </div>
+              <p className="text-sm text-muted mt-1 leading-snug">{moistureHint(stadium.pitchMoisture)}</p>
             </div>
           </div>
 
@@ -791,15 +852,12 @@ export default function StadiumPage() {
               {stadium.pitchActions.map((a) => {
                 const canAfford = team.budget >= a.cost;
                 return (
-                  <div key={a.level} className="flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-b-0">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-xl shrink-0">🌿</span>
-                      <div>
-                        <div className="font-heading font-bold text-sm">{a.label} <span className="text-muted">—</span> <span className="font-heading font-bold tabular-nums">{formatCZK(a.cost)}</span></div>
-                        <div className="text-xs text-muted">{a.desc} · +{a.improvement}% stav</div>
-                      </div>
-                    </div>
-                    <button
+                  <Radek
+                    key={a.level}
+                    ikona="🌿"
+                    nazev={a.label}
+                    popis={`${a.desc} · +${a.improvement} % stav · ${formatCZK(a.cost)}`}
+                    akce={<button
                       onClick={async () => {
                         const ok = await confirm({
                           title: a.label,
@@ -820,13 +878,11 @@ export default function StadiumPage() {
                         setActing(null);
                       }}
                       disabled={!canAfford || !!acting}
-                      className={`shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
-                        canAfford ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      }`}
+                      className="btn btn-primary btn-sm"
                     >
-                      {acting === "pitch-" + a.level ? "..." : "Provést"}
-                    </button>
-                  </div>
+                      {acting === "pitch-" + a.level ? "…" : "Provést"}
+                    </button>}
+                  />
                 );
               })}
             </div>
@@ -834,7 +890,7 @@ export default function StadiumPage() {
 
           {stadium.pitchCare && (
             <div className="pt-3 border-t border-gray-100">
-              <div className="text-xs text-muted font-heading uppercase mb-2">Péče o trávník</div>
+              <Podnadpis>Péče o trávník</Podnadpis>
 
               {stadium.pitchCare.heatingLevel === 0 && stadium.pitchCare.irrigationLevel === 0 ? (
                 <p className="text-sm text-muted mb-3">
@@ -843,58 +899,58 @@ export default function StadiumPage() {
                 </p>
               ) : (
                 <>
-                  <p className="text-sm text-muted mb-2">
-                    Zařízení se musí zapnout a ta elektřina i voda něco stojí. Provoz se platí za zápas,
-                    ve kterém je potřeba.
+                  <p className="text-sm text-muted">
+                    Zařízení se musí zapnout a ta elektřina i voda něco stojí. V zápasový den se platí
+                    plná sazba, v běžný den čtvrtina — tam jde jen o udržení plochy.
                   </p>
-                  <div className="text-sm mb-3 space-y-0.5">
+                  <div className="text-sm space-y-1.5">
                     {stadium.pitchCare.heatingLevel > 0 && (
-                      <div className="flex justify-between">
-                        <span>🔥 Vyhřívání (déšť a sníh)</span>
-                        <span className="font-heading font-bold tabular-nums">{formatCZK(stadium.pitchCare.heatingCost)}</span>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                        <span>🔥 Vyhřívání (mráz a sníh)</span>
+                        <span className="font-heading font-bold tabular-nums">
+                          {formatCZK(stadium.pitchCare.heatingCost)} <span className="text-muted font-normal">za zápas</span>
+                          {stadium.pitchCare.heatingDailyCost != null && (
+                            <> · {formatCZK(stadium.pitchCare.heatingDailyCost)} <span className="text-muted font-normal">za den</span></>
+                          )}
+                        </span>
                       </div>
                     )}
                     {stadium.pitchCare.irrigationLevel > 0 && (
-                      <div className="flex justify-between">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                         <span>💧 Zavlažování (výheň)</span>
-                        <span className="font-heading font-bold tabular-nums">{formatCZK(stadium.pitchCare.irrigationCost)}</span>
+                        <span className="font-heading font-bold tabular-nums">
+                          {formatCZK(stadium.pitchCare.irrigationCost)} <span className="text-muted font-normal">za zápas</span>
+                          {stadium.pitchCare.irrigationDailyCost != null && (
+                            <> · {formatCZK(stadium.pitchCare.irrigationDailyCost)} <span className="text-muted font-normal">za den</span></>
+                          )}
+                        </span>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {([
-                      { mode: "auto", label: "Automaticky" },
-                      { mode: "manual", label: "Ručně" },
-                      { mode: "off", label: "Nezapínat" },
-                    ] as const).map((m) => (
-                      <button
-                        key={m.mode}
-                        onClick={async () => {
-                          setActing("care-mode");
-                          try {
-                            await apiFetch(`/api/teams/${teamId}/stadium/pitch-care-mode`, {
-                              method: "POST",
-                              body: JSON.stringify({ mode: m.mode }),
-                            });
-                            await refresh();
-                          } catch (e) {
-                            console.error("Nastavení režimu péče selhalo:", e);
-                          } finally {
-                            setActing(null);
-                          }
-                        }}
-                        disabled={!!acting}
-                        className={`py-1.5 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
-                          stadium.pitchCare!.mode === m.mode
-                            ? "bg-pitch-500 text-white"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        }`}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
+                  <Prepinac
+                    hodnoty={[
+                      { id: "auto" as const, label: "Automaticky" },
+                      { id: "manual" as const, label: "Ručně" },
+                      { id: "off" as const, label: "Nezapínat" },
+                    ]}
+                    aktivni={stadium.pitchCare.mode}
+                    disabled={!!acting}
+                    onChange={async (mode) => {
+                      setActing("care-mode");
+                      try {
+                        await apiFetch(`/api/teams/${teamId}/stadium/pitch-care-mode`, {
+                          method: "POST",
+                          body: JSON.stringify({ mode }),
+                        });
+                        await refresh();
+                      } catch (e) {
+                        console.error("Nastavení režimu péče selhalo:", e);
+                      } finally {
+                        setActing(null);
+                      }
+                    }}
+                  />
 
                   {stadium.pitchCare.mode === "off" && (
                     <p className="text-sm text-amber-700 mb-3">
@@ -904,13 +960,10 @@ export default function StadiumPage() {
                   )}
 
                   {stadium.pitchCare.mode === "manual" && (
-                    <div className="flex items-center justify-between gap-3 py-2 border-t border-gray-50">
-                      <div className="text-sm">
-                        {stadium.pitchCare.careOrdered
-                          ? "Na příští domácí zápas je péče objednaná."
-                          : "Na příští domácí zápas není objednané nic."}
-                      </div>
-                      <button
+                    <Radek
+                      nazev="Péče na příští domácí zápas"
+                      popis={stadium.pitchCare.careOrdered ? "Objednaná — zapne se sama." : "Neobjednaná."}
+                      akce={<button
                         onClick={async () => {
                           setActing("care-order");
                           try {
@@ -926,23 +979,20 @@ export default function StadiumPage() {
                           }
                         }}
                         disabled={!!acting}
-                        className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+                        className="btn btn-primary btn-sm"
                       >
-                        {acting === "care-order" ? "..." : stadium.pitchCare.careOrdered ? "Zrušit" : "Objednat"}
-                      </button>
-                    </div>
+                        {acting === "care-order" ? "…" : stadium.pitchCare.careOrdered ? "Zrušit" : "Objednat"}
+                      </button>}
+                    />
                   )}
                 </>
               )}
 
-              <div className="flex items-center justify-between gap-3 py-2 border-t border-gray-50">
-                <div className="min-w-0">
-                  <div className="font-heading font-bold text-sm">❄️ Úklid sněhu</div>
-                  <div className="text-xs text-muted">
-                    Parta s lopatami na jeden zápas. Zabere i bez vyhřívání, ale rozbředlý podklad neřeší.
-                  </div>
-                </div>
-                <button
+              <Radek
+                ikona="❄️"
+                nazev="Úklid sněhu"
+                popis={`Parta s lopatami na jeden zápas. Zabere i bez vyhřívání, ale rozbředlý podklad neřeší. ${formatCZK(stadium.pitchCare.snowClearingCost)}, platí se až u zápasu.`}
+                akce={<button
                   onClick={async () => {
                     setActing("snow");
                     try {
@@ -958,32 +1008,26 @@ export default function StadiumPage() {
                     }
                   }}
                   disabled={!!acting}
-                  className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
+                  className="btn btn-primary btn-sm"
                 >
-                  {acting === "snow" ? "..." : stadium.pitchCare.snowClearingOrdered ? "Zrušit" : "Objednat"}
-                </button>
-              </div>
-              <div className="text-xs text-muted mb-1">
-                Cena úklidu {formatCZK(stadium.pitchCare.snowClearingCost)}, platí se až u zápasu.
-              </div>
+                  {acting === "snow" ? "…" : stadium.pitchCare.snowClearingOrdered ? "Zrušit" : "Objednat"}
+                </button>}
+              />
             </div>
           )}
 
           {stadium.pitchUpgrades.length > 0 && (
             <div className="pt-3 border-t border-gray-100">
-              <div className="text-xs text-muted font-heading uppercase mb-2">Upgrade povrchu</div>
+              <Podnadpis>Upgrade povrchu</Podnadpis>
               {stadium.pitchUpgrades.map((u) => {
                 const canAfford = team.budget >= u.cost;
                 return (
-                  <div key={u.pitchType} className="flex items-center justify-between gap-3 py-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-xl shrink-0">{u.pitchType === "hybrid" ? "🌾" : "🟩"}</span>
-                      <div>
-                        <div className="font-heading font-bold text-sm">{u.label} <span className="text-muted">—</span> <span className="font-heading font-bold tabular-nums">{formatCZK(u.cost)}</span></div>
-                        <div className="text-xs text-muted">{u.desc}</div>
-                      </div>
-                    </div>
-                    <button
+                  <Radek
+                    key={u.pitchType}
+                    ikona={u.pitchType === "hybrid" ? "🌾" : "🟩"}
+                    nazev={u.label}
+                    popis={`${u.desc} · ${formatCZK(u.cost)}`}
+                    akce={<button
                       onClick={async () => {
                         const ok = await confirm({
                           title: `Upgrade na ${u.label}?`,
@@ -1001,21 +1045,19 @@ export default function StadiumPage() {
                         setActing(null);
                       }}
                       disabled={!canAfford || !!acting}
-                      className={`shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
-                        canAfford ? "bg-gold-500 text-white hover:bg-gold-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      }`}
+                      className="btn btn-primary btn-sm"
                     >
-                      {acting === "pitch-up-" + u.pitchType ? "..." : "Upgradovat"}
-                    </button>
-                  </div>
+                      {acting === "pitch-up-" + u.pitchType ? "…" : "Upgradovat"}
+                    </button>}
+                  />
                 );
               })}
             </div>
           )}
-        </div>
+        </Sekce>
       )}
 
-      {/* ═══ Facilities grid — cards ═══ */}
+      {/* ═══ Zázemí ═══ */}
       <SectionLabel>Zázemí</SectionLabel>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {Object.entries(stadium.facilities).map(([key, level]) => {
@@ -1029,7 +1071,7 @@ export default function StadiumPage() {
                 <span className="text-2xl">{FACILITY_ICONS[key] ?? "📦"}</span>
                 <div className="flex-1 min-w-0">
                   <div className="font-heading font-bold">{FACILITY_LABELS[key] ?? key}</div>
-                  <div className="text-xs text-muted">{FACILITY_DESCRIPTIONS[key]?.[level] ?? LEVEL_LABELS[level]}</div>
+                  <div className="text-sm text-muted leading-snug">{FACILITY_DESCRIPTIONS[key]?.[level] ?? LEVEL_LABELS[level]}</div>
                 </div>
                 <div className="flex gap-1 shrink-0">
                   {[1, 2, 3].map((l) => (
@@ -1040,23 +1082,21 @@ export default function StadiumPage() {
 
               {/* Upgrade info + action */}
               {upgrade && !upgrade.locked && (
-                <div className="flex items-center justify-between gap-3 mt-1">
-                  <div>
+                <div className="flex flex-col gap-2 mt-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  <div className="min-w-0">
                     <div className="text-sm">
-                      <span className="font-heading font-bold">Lv.{upgrade.nextLevel}</span>{" "}
-                      <span className="text-muted">—</span>{" "}
+                      <span className="font-heading font-bold">Úroveň {upgrade.nextLevel}</span>{" "}
+                      <span className="text-muted">·</span>{" "}
                       <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span>
                     </div>
-                    <div className="text-xs text-pitch-600">{upgrade.effect}</div>
+                    <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
                   </div>
                   <button
                     onClick={() => handleUpgrade(upgrade.facility, upgrade.label, upgrade.cost, upgrade.effect)}
                     disabled={!canUpgrade || !!acting}
-                    className={`shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
-                      canUpgrade ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    }`}
+                    className="btn btn-primary btn-sm w-full sm:w-auto"
                   >
-                    {acting === key ? "..." : "Koupit"}
+                    {acting === key ? "…" : "Koupit"}
                   </button>
                 </div>
               )}
