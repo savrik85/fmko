@@ -37,6 +37,12 @@ interface Customization {
 }
 
 interface StadiumData {
+  /** Počasí nad areálem právě teď, stejný zdroj jako na vlastním Stadionu. */
+  currentWeather?: string | null;
+  currentTemperature?: number | null;
+  /** Hraje se tu dnes doma? Pak se scéna otevře v zápasovém režimu. */
+  matchDay?: boolean;
+  matchDayOpponent?: string | null;
   stadiumName: string | null;
   capacity: number;
   pitchCondition: number;
@@ -48,6 +54,14 @@ interface StadiumData {
   facilities: Record<string, number>;
   customization: Customization;
 }
+
+/** Počasí nad areálem, stejné popisky jako na vlastním Stadionu. */
+const WEATHER_LABEL: Record<string, string> = {
+  sunny: "Slunečno", cloudy: "Zataženo", rain: "Déšť", snow: "Sníh", wind: "Vítr",
+};
+const WEATHER_ICON: Record<string, string> = {
+  sunny: "☀️", cloudy: "⛅", rain: "🌧️", snow: "❄️", wind: "💨",
+};
 
 function teamInitials(name: string): string {
   return name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
@@ -91,7 +105,13 @@ export default function VisitStadiumPage() {
         </button>
         <div className="text-right">
           <div className="font-heading font-bold text-base">{team.name}</div>
-          {stadium.stadiumName && <div className="text-xs text-muted">{stadium.stadiumName}</div>}
+          {stadium.stadiumName && <div className="text-sm text-muted">{stadium.stadiumName}</div>}
+          {stadium.currentWeather && (
+            <div className="text-sm text-muted">
+              {WEATHER_ICON[stadium.currentWeather] ?? ""} {WEATHER_LABEL[stadium.currentWeather] ?? stadium.currentWeather}
+              {stadium.currentTemperature != null ? ` · ${stadium.currentTemperature} °C` : ""}
+            </div>
+          )}
         </div>
       </div>
 
@@ -105,6 +125,8 @@ export default function VisitStadiumPage() {
         pitchIrrigation={stadium.pitchIrrigation ?? 0}
         mowerLevel={stadium.mowerLevel ?? 2}
         pitchMoisture={stadium.pitchMoisture ?? 50}
+        initialWeather={(stadium.currentWeather as never) ?? "cloudy"}
+        initialMode={stadium.matchDay ? "match_day" : "training_day"}
         teamColor={team.primary_color}
         secondaryColor={team.secondary_color}
         badgePattern={team.badge_pattern}
@@ -129,6 +151,8 @@ export default function VisitStadiumPage() {
               pitchIrrigation={stadium.pitchIrrigation ?? 0}
               mowerLevel={stadium.mowerLevel ?? 2}
               pitchMoisture={stadium.pitchMoisture ?? 50}
+              initialWeather={(stadium.currentWeather as never) ?? "cloudy"}
+              initialMode={stadium.matchDay ? "match_day" : "training_day"}
               teamColor={team.primary_color}
               secondaryColor={team.secondary_color}
               badgePattern={team.badge_pattern}
