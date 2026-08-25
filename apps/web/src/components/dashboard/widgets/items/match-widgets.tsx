@@ -5,7 +5,6 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
-import { weatherAttendancePct, type Weather } from "@okresni-masina/shared";
 import { BadgePreview, useConfirm, type BadgePattern } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import type { WidgetProps, ScheduleMatch } from "../types";
@@ -274,20 +273,6 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
             <div className="flex items-center gap-1.5 text-sm text-muted">
               <span className="text-base">{preview.weather.icon}</span>
               <span>{preview.weather.temperature} °C</span>
-              {(() => {
-                // Postih docházky počítá weatherAttendanceFactor. Dřív tu byla vlastní
-                // kopie čísel, která se s ním rozešla — sníh hlásil -30 %, ve skutečnosti
-                // je to -38 %. Teď se počítá z téže funkce, takže se rozejít nemůže.
-                const dopad = weatherAttendancePct(preview.weather.expected as Weather);
-                if (dopad === 0) return null;
-                // Bez popisku bylo holé „-38 %" hádanka. Je to dopad počasí na to,
-                // kolik lidí dorazí, ne na výsledek ani na tržby za lístek.
-                return (
-                  <span className={`text-sm font-heading font-bold ${dopad < 0 ? "text-card-red" : "text-pitch-600"}`}>
-                    {dopad > 0 ? "+" : ""}{dopad} % diváků
-                  </span>
-                );
-              })()}
             </div>
             <span className="text-sm text-muted truncate ml-2">{preview.venue.name}</span>
           </div>
