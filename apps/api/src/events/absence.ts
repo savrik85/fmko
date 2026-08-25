@@ -115,7 +115,7 @@ const PERSONAL_EXCUSES = [
 // env: "rural" = jen vesnice/hamlet, "urban" = jen town/city, undefined = všude
 type ExcuseEnv = "rural" | "urban" | undefined;
 
-const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming; env?: ExcuseEnv }> = [
+const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming; env?: ExcuseEnv; weather?: Weather[] }> = [
   // Vesnické
   { text: "Zamkl jsem se v garáži a nikdo není doma", emoji: "\u{1F512}", timing: "match_day" },
   { text: "Musím hlídat kozu, utekla sousedům a žere mi zahradu", emoji: "\u{1F410}", timing: "match_day", env: "rural" },
@@ -296,13 +296,20 @@ const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming
   { text: "Na Mářskej vrch lezou turisti a parkujou mi na dvoře v Hradčanech", emoji: "\u{1F9ED}", timing: "match_day", env: "rural" },
   { text: "V Hradčanech je hasičská soutěž, dělám časoměřiče", emoji: "\u{23F1}", timing: "day_before", env: "rural" },
   { text: "Šel jsem z Mářského vrchu zkratkou a zabloudil v lese nad Hradčany", emoji: "\u{1F332}", timing: "match_day", env: "rural" },
+  // Prostá nechuť podle počasí — ta nejlidštější kategorie ze všech.
+  { text: "Trenére, v tomhle dešti se mi fakt nechce, promiňte", emoji: "\u{1F327}", timing: "match_day", weather: ["rain"] },
+  { text: "Je pod nulou a já mám jen tepláky, dneska mě omluvte", emoji: "\u{1F976}", timing: "match_day", weather: ["snow"] },
+  { text: "Takovou zimu moje koleno nedá, nemá to cenu", emoji: "\u{1F9B5}", timing: "day_before", weather: ["snow"] },
+  { text: "V tomhle vedru se uběhat nedám, jdu radši k vodě", emoji: "\u{2600}", timing: "match_day", weather: ["sunny"] },
+  { text: "Je hic, vzal jsem děcka na koupaliště a nedostanu je odtamtud", emoji: "\u{1F3D6}", timing: "match_day", weather: ["sunny"] },
+  { text: "Ten vítr mi odnesl plachtu ze stodoly, musím to řešit", emoji: "\u{1F32C}", timing: "day_before", env: "rural", weather: ["wind"] },
 ];
 
 // ═══════════════════════════════════════════════
 // KOCOVINA
 // ═══════════════════════════════════════════════
 
-const HANGOVER_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> = [
+const HANGOVER_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv; weather?: Weather[] }> = [
   { text: "Sorry trenere, není mi dobře... včera to bylo silný", emoji: "\u{1F37A}" },
   { text: "Nemůžuuu... hlava mi třeští. Příště určitě", emoji: "\u{1F635}" },
   { text: "Neni mi dobře, asi jsem něco špatného snědl (nepil)", emoji: "\u{1F922}" },
@@ -410,7 +417,7 @@ const HEALTH_EXCUSES = [
   { text: "Zaseklo mi krční páteř když jsem kýchl", emoji: "\u{1F927}" },
 ];
 
-const COMMUTE_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> = [
+const COMMUTE_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv; weather?: Weather[] }> = [
   // Univerzální
   { text: "Auto se porouchalo cestou na zápas", emoji: "\u{1F697}" },
   { text: "Nestihl jsem to, na silnici byla nehoda a stálo se", emoji: "\u{1F6A7}" },
@@ -427,7 +434,7 @@ const COMMUTE_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> =
   { text: "Silnice z Vimperku zavřená, objížďka přes Zdíkov a Stachy", emoji: "\u{1F6A7}", env: "rural" },
   { text: "Na Strážném stojím v koloně z Německa, ani se nehne", emoji: "\u{1F697}", env: "rural" },
   { text: "Na Kubově Huti zapadl autobus do závěje, čekáme na pluh", emoji: "\u{1F68C}", env: "rural" },
-  { text: "Na Zadově sníh, řetězy nemám a ten kopec prostě nevyjedu", emoji: "\u{26C4}", env: "rural" },
+  { text: "Na Zadově sníh, řetězy nemám a ten kopec prostě nevyjedu", emoji: "\u{26C4}", env: "rural", weather: ["snow"] },
   { text: "U Soumarskýho mostu zavřeli silnici kvůli závodům", emoji: "\u{1F6A7}", env: "rural" },
   { text: "Stádo jelenů u Borových Lad přebíhá silnici, radši stojím", emoji: "\u{1F98C}", env: "rural" },
   // Pražské / městské
@@ -442,6 +449,12 @@ const COMMUTE_EXCUSES: Array<{ text: string; emoji: string; env?: ExcuseEnv }> =
   { text: "D1 ucpaná od Chodova po Spořilov, stojím v koloně", emoji: "\u{1F697}", env: "urban" },
   { text: "Koloběžka se mi rozbila u Anděla, pěšky to nestíhám", emoji: "\u{1F6F4}", env: "urban" },
   { text: "Lítačka mi nefunguje, turnikety mě nepustily", emoji: "\u{1F4B3}", env: "urban" },
+  // Vázané na počasí — až od 2026-08 se dá spolehnout, že počasí zápasu známe
+  // dopředu a je totéž pro předpověď i simulaci (viz season/season-weather.ts).
+  { text: "V týhle vánici nikam nejedu, sotva vidím na kapotu", emoji: "\u{1F328}", weather: ["snow"] },
+  { text: "Silnice je jak zrcadlo, radši zůstanu doma", emoji: "\u{1F697}", weather: ["snow"] },
+  { text: "Leje jak z konve, kolo nechám doma a pěšky to nedám", emoji: "\u{1F327}", weather: ["rain"] },
+  { text: "Spadl strom přes cestu, nikdo tudy neprojede", emoji: "\u{1F333}", weather: ["wind"] },
 ];
 
 /**
@@ -494,6 +507,14 @@ export function generateAbsences(
   const isRural = district !== undefined && district !== "Praha";
   const envFilter = (e: { env?: ExcuseEnv }) =>
     !e.env || (isUrban && e.env === "urban") || (isRural && e.env === "rural");
+  /**
+   * Výmluva vázaná na počasí se smí objevit jen za něj. Bez známého počasí se
+   * takové vynechají úplně — je lepší mít o výmluvu míň než hlásit vánici
+   * v červenci, jak to dřív dělalo „Na Zadově sníh, řetězy nemám".
+   */
+  const weatherFilter = (e: { weather?: Weather[] }) =>
+    !e.weather || (opts.weather !== undefined && e.weather.includes(opts.weather));
+  const passes = (e: { env?: ExcuseEnv; weather?: Weather[] }) => envFilter(e) && weatherFilter(e);
 
   for (let i = 0; i < squad.length; i++) {
     const p = squad[i];
@@ -590,8 +611,8 @@ export function generateAbsences(
         break;
       }
       case "absurd": {
-        const applicable = ABSURD_EXCUSES.filter((e) => (timing === "any" || e.timing === timing) && envFilter(e));
-        const pick = rng.pick(applicable.length > 0 ? applicable : ABSURD_EXCUSES.filter(envFilter));
+        const applicable = ABSURD_EXCUSES.filter((e) => (timing === "any" || e.timing === timing) && passes(e));
+        const pick = rng.pick(applicable.length > 0 ? applicable : ABSURD_EXCUSES.filter(passes));
         smsText = pick.text;
         emoji = pick.emoji;
         excuseTiming = pick.timing ?? "match_day";
@@ -604,14 +625,14 @@ export function generateAbsences(
         break;
       }
       case "hangover": {
-        const hangoverFiltered = HANGOVER_EXCUSES.filter(envFilter);
+        const hangoverFiltered = HANGOVER_EXCUSES.filter(passes);
         const pick = rng.pick(hangoverFiltered.length > 0 ? hangoverFiltered : HANGOVER_EXCUSES);
         smsText = pick.text;
         emoji = pick.emoji;
         break;
       }
       case "commute": {
-        const commuteFiltered = COMMUTE_EXCUSES.filter(envFilter);
+        const commuteFiltered = COMMUTE_EXCUSES.filter(passes);
         const pick = rng.pick(commuteFiltered.length > 0 ? commuteFiltered : COMMUTE_EXCUSES);
         smsText = pick.text;
         emoji = pick.emoji;
