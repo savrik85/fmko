@@ -219,8 +219,11 @@ function hintText(factor: number): string {
 export function concessionDemandHints(weather: Weather, month?: number): ConcessionDemandHint[] {
   return CONCESSION_PRODUCT_KEYS
     .map((key) => {
-      const factor = concessionWeatherFactor(key, weather, month);
-      return { key, label: CONCESSION_CATALOG[key].label, factor, hint: hintText(factor) };
+      const raw = concessionWeatherFactor(key, weather, month);
+      // Zaokrouhleno na dvě místa: přes API by jinak chodilo 1.6743999999999999
+      // a hodnota se stejně používá jen na prahy a zobrazení.
+      const factor = Math.round(raw * 100) / 100;
+      return { key, label: CONCESSION_CATALOG[key].label, factor, hint: hintText(raw) };
     })
     .sort((a, b) => b.factor - a.factor);
 }

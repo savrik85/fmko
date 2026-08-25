@@ -80,6 +80,7 @@ interface ConcessionDemandHint {
 interface NextHomeMatch {
   scheduledAt: string;
   opponent: string;
+  isCup: boolean;
   forecast: { icon: string; expected: string; temperature: number; description: string };
   hints: ConcessionDemandHint[];
 }
@@ -1371,6 +1372,9 @@ export default function FansPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-heading font-bold">
                       Doma s {concession.nextHome.opponent}
+                      {concession.nextHome.isCup && (
+                        <span className="text-gold-600"> · 🏆 pohár</span>
+                      )}
                     </div>
                     <div className="text-sm text-muted">
                       {concession.nextHome.forecast.description} · {concession.nextHome.forecast.temperature} °C
