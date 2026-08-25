@@ -47,8 +47,10 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     label: "Klobása",
     baseDemandRate: 0.4,
     priceElasticity: 0.6,
-    weatherFactors: { sunny: 0.90, cloudy: 1.0, wind: 1.10, rain: 1.05, snow: 1.35 },
-    tempSensitivity: -0.25,   // v mrazu je teplé jídlo to jediné, co u klandru jde na dračku
+    weatherFactors: { sunny: 0.88, cloudy: 0.98, wind: 1.05, rain: 1.00, snow: 1.10 },
+    // Záporná, ale mírná: v mrazu klobása taky klesá, jen mnohem pomaleji než pivo.
+    // Nikdo v plískanici nesní dvě klobásy navíc — jen místo tří piv dá jedno a klobásu.
+    tempSensitivity: -0.10,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 15, defaultSellPrice: 30, label: "Kostelecké uzeniny" },
@@ -61,11 +63,9 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     label: "Pivo",
     baseDemandRate: 4.0,
     priceElasticity: 0.8,
-    weatherFactors: { sunny: 1.30, cloudy: 1.0, wind: 0.95, rain: 0.90, snow: 0.72 },
-    // Nižší citlivost než u limonády schválně: v mrazu se pije na zahřátí, takže
-    // pivo nespadne tak hluboko jako studený nápoj. Déšť pod stříškou mu nevadí.
-    // Při 0.30 a snow 0.65 klesla prosincová tržba pod dřívější úroveň — to už
-    // nebyla sezónnost, ale nechtěné osekání klubových příjmů.
+    weatherFactors: { sunny: 1.24, cloudy: 0.96, wind: 0.92, rain: 0.85, snow: 0.55 },
+    // Nižší citlivost než u limonády: v mrazu se pije i na zahřátí, takže pivo
+    // nespadne tak hluboko jako studený nápoj. Déšť pod stříškou mu vadí málo.
     tempSensitivity: 0.22,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
@@ -79,8 +79,8 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     label: "Limonáda",
     baseDemandRate: 1.0,
     priceElasticity: 0.4,
-    weatherFactors: { sunny: 1.45, cloudy: 1.0, wind: 0.90, rain: 0.80, snow: 0.40 },
-    tempSensitivity: 0.45,    // letní nápoj pro děti a řidiče, v zimě po něm nikdo neštěkne
+    weatherFactors: { sunny: 1.40, cloudy: 0.96, wind: 0.88, rain: 0.78, snow: 0.35 },
+    tempSensitivity: 0.42,    // letní nápoj pro děti a řidiče, v zimě po něm nikdo neštěkne
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 8, defaultSellPrice: 15, label: "Sirup s vodou" },

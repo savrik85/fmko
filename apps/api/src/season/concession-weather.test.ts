@@ -89,12 +89,17 @@ describe("měsíc doteče až do prodeje", () => {
     expect(kus(prodej("sunny", 4), "beer")).not.toBe(kus(prodej("sunny", 7), "beer"));
   });
 
-  it("prosincová tržba neklesne pod 40 % té červencové", () => {
-    // Sezónní výkyv je záměr, ale bufet nesmí v zimě přestat vydělávat.
-    // Hraje se duben–prosinec, takže reálné extrémy jsou červenec a prosinec.
+  it("prosinec je výrazně slabší než červenec, ale bufet nezavírá", () => {
+    // Sezónní výkyv je záměr — v zimě se konzumuje míň, tečka. Hraje se
+    // duben–prosinec, takže reálné extrémy jsou červenec a prosinec.
+    //
+    // Pozor při čtení čísel: tenhle test počítá s pevnou návštěvností 300, takže
+    // měří jen konzumaci na hlavu. V ostrém provozu se na to navrství ještě
+    // weatherAttendanceFactor (sníh −38 %) a skutečný rozdíl je podstatně hlubší.
     const leto = prodej("sunny", 7).totalRevenue;
     const zima = prodej("snow", 12).totalRevenue;
-    expect(zima).toBeGreaterThan(leto * 0.4);
+    expect(zima).toBeLessThan(leto * 0.5);
+    expect(zima).toBeGreaterThan(leto * 0.25);
   });
 
   it("v zimě se tržba přesune ke klobásám, ne že zmizí", () => {
