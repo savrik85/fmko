@@ -11,7 +11,7 @@
 import type { Weather } from "../engine/types";
 import { monthTemperature } from "./weather";
 
-export type ProductKey = "sausage" | "beer" | "lemonade";
+export type ProductKey = "sausage" | "beer" | "lemonade" | "mulled_wine";
 
 export interface ProductQualityTier {
   wholesalePrice: number;   // Kč/ks
@@ -40,6 +40,13 @@ export interface ProductCatalogEntry {
  * Pivo — nejvyšší demand, vyšší cenová elasticita (lidé rádi šetří), mocné pro satisfaction.
  * Klobása — střední demand, lidé jsou ochotní zaplatit víc za kvalitu.
  * Limonáda — nižší demand (děti, řidiči), menší elasticita.
+ * Svařák — sezónní: v létě se neprodá, v listopadu a prosinci drží bufet nad vodou.
+ *
+ * ⚠️ Při přidávání dalšího produktu hlídej výchozí ceny: `computeMatchSatisfactionDelta`
+ * strhne −2 spokojenosti za "předraženou" položku, když je qualityLevel <= 1 a prodejní
+ * cena přes dvojnásobek velkoobchodní — a sahá i na produkty s nulovým prodejem. Špatně
+ * nacenený L1 by tak trvale srážel spokojenost i týmu, který produkt nikdy nenaskladní.
+ * Hlídá to test v `concession-mulled-wine.test.ts`.
  */
 export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
   sausage: {
@@ -88,9 +95,27 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
       { wholesalePrice: 22, defaultSellPrice: 40, label: "Prémiová značka" },
     ],
   },
+  mulled_wine: {
+    key: "mulled_wine",
+    label: "Svařák a grog",
+    // Nižší než pivo: i v mrazu si dá svařák menšina. Zato ho ta menšina chce.
+    baseDemandRate: 0.6,
+    // Kdo si v zimě jde pro svařák, cenu tolik neřeší — jde mu o to se zahřát.
+    priceElasticity: 0.5,
+    weatherFactors: { sunny: 0.35, cloudy: 0.75, wind: 1.00, rain: 0.95, snow: 1.60 },
+    // Nejsilnější citlivost v katalogu, a záporná: mimo chladné měsíce je svařák
+    // mrtvý peníz. Tím se z naskladnění stává sezónní sázka, ne trvalá položka.
+    tempSensitivity: -0.70,
+    tiers: [
+      { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
+      { wholesalePrice: 15, defaultSellPrice: 28, label: "Krabicák s hřebíčkem" },
+      { wholesalePrice: 25, defaultSellPrice: 45, label: "Svařák z pořádného vína" },
+      { wholesalePrice: 34, defaultSellPrice: 60, label: "Grog s tuzemákem" },
+    ],
+  },
 };
 
-export const CONCESSION_PRODUCT_KEYS: ProductKey[] = ["sausage", "beer", "lemonade"];
+export const CONCESSION_PRODUCT_KEYS: ProductKey[] = ["sausage", "beer", "lemonade", "mulled_wine"];
 
 export function getProductCatalog(key: string): ProductCatalogEntry | undefined {
   return CONCESSION_CATALOG[key as ProductKey];

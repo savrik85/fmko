@@ -178,6 +178,7 @@ const PRODUCT_ICONS: Record<string, string> = {
   sausage: "🌭",
   beer: "🍺",
   lemonade: "🥤",
+  mulled_wine: "🍷",
 };
 
 
