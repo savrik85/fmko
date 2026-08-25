@@ -274,7 +274,15 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
               <span className="text-base">{preview.weather.icon}</span>
               <span>{preview.weather.temperature} °C</span>
             </div>
-            <span className="text-sm text-muted truncate ml-2">{preview.venue.name}</span>
+            {/* Dějiště je proklik na areál: doma na vlastní stadion, venku na
+                stadion soupeře. Bez odkazu se hráč o hřišti, na kterém za dva dny
+                nastoupí, nedozvěděl nic. */}
+            <Link
+              href={nextMatch.isHome ? "/dashboard/stadium" : `/dashboard/team/${homeTeam.id}/stadium`}
+              className="text-sm text-muted truncate ml-2 hover:text-pitch-600 hover:underline"
+            >
+              {preview.venue.name}
+            </Link>
           </div>
         )}
 
