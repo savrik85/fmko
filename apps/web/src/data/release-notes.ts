@@ -12,6 +12,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-25",
+    emoji: "\u{1F326}\u{FE0F}",
+    title: "Počasí má svůj rok a hřiště paměť",
+    items: [
+      "Počasí se řídí tím, kde je sezóna, ne kalendářem. Rozjíždí se v létě, uprostřed sezóny je zima s mrazem a sněhem a do konce se zase oteplí. Teploty jdou zhruba od mínus dvou do dvaceti čtyř stupňů a platí pro celý okres najednou, takže se nestane, že v jedné vsi sněží a ve vedlejší se griluje.",
+      "Aktuální počasí máš v hlavičce, ať jsi kdekoli. Vedle rozpočtu svítí ikona a teplota, na širší obrazovce i popis dne.",
+      "U nadcházejícího zápasu je předpověď a ta platí. Co v ní stojí, to se v zápase opravdu odehraje, takže se podle ní dá stavět sestava, volit taktika i naskladňovat bufet.",
+      "Hřiště má nově vlhkost, což je paměť půdy. Po lijáku zůstane rozmáčené ještě několik dní a po týdnu veder je vyprahlé, i když zrovna svítí slunce. Na Stadionu ji najdeš číslem i slovem (Ideální, Vlhké, Rozmáčené, Bahno, Vyprahlé) a s větou, co to dělá se hrou.",
+      "V zápase je ten stav znát. Na bahně vázne kombinace, vyplatí se posílat dlouhé míče dopředu, drží se kaluže a hráči se snáz zraní. Na vyprahlé tvrdé zemi to zase bolí klouby a míč se veze rychleji. Nejlíp se hraje někde uprostřed.",
+      "Počasí ovlivňuje trávník každý den, ne jen ve dnech, kdy se hraje. Déšť ho namočí, slunce vysuší a po mrazivé noci se z něj lámou drny, takže kvalita jde dolů.",
+      "Spravit se to dá na Stadionu v Údržbě trávníku. Základní údržba (posečení a zarovnání) přidá deset procent za 500 Kč, důkladná (přesetí holých míst a hnojení) dvacet pět procent za 1 000 Kč a renovace povrchu padesát procent za 1 700 Kč. Kdo má v šatně sekačku s traktůrkem, tomu trávník část dní nechátrá vůbec, u nejvyšší úrovně v dobrém stavu skoro pořád. Kdo chce mít pokoj, může přejít na hybridní povrch za 85 000 Kč, ten toho snese víc než přírodní tráva.",
+      "Vyhřívání a zavlažování se o hřiště starají i mezi zápasy. V běžný den jede udržovací režim za čtvrtinu zápasové sazby: zapnuté vyhřívání drží plochu rozmrzlou, takže jí mráz neublíží, a zavlažování dotuje vyprahlou půdu. V režimu Automaticky se to zapíná samo, Ručně platí dál jen na zápas a Nezapínat nestojí nic, jen si to hřiště odnese.",
+      "V den, kdy hraješ doma, se areál otevře rovnou v zápasovém režimu, tedy plné tribuny, kotel a atmosféra. Ostatní dny běží tréninkový.",
+      "Ze zápasu se hráči vymlouvají na počasí. V dešti, mrazu i ve vedru chodí do telefonu omluvenky, které na ten den sedí, od „v tomhle dešti se mi fakt nechce\" po „na Zadově sníh, řetězy nemám a ten kopec nevyjedu\". Přijdou den předem nebo rovnou v den zápasu, takže se s tím dá ještě něco dělat.",
+      "Na trénink v ošklivém počasí dorazí míň lidí. Nejhorší je sníh, o kus lepší déšť, vítr už jen trochu, a za sluníčka se naopak sejde víc než obvykle. Zimní tréninky tak mají slabší docházku, i když nikdo neposílá žádnou omluvu.",
+      "Bufet jde za počasím. V mrazu se prodává svařák a teplé nápoje, na výhni limonáda, a naskladnit se dá podle předpovědi na příští domácí zápas.",
+      "Ve zpravodaji se počasí objevuje v předzápasovém preview i v ohlédnutí za kolem. Když kolo rozhodl liják nebo sníh, dočteš se to i v novinách.",
+    ],
+  },
+  {
     date: "2026-08-24",
     emoji: "🌧️",
     title: "Počasí se začalo plést do zápasu",
