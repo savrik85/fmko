@@ -578,7 +578,7 @@ export default function StadiumPage() {
                 vypadalo jako rozbitá scéna. */}
             {stadium.matchDay && (
               <div className="text-center text-sm text-ink font-heading">
-                {"⚽ Dnes se hraje doma"}{stadium.matchDayOpponent ? ` proti ${stadium.matchDayOpponent}` : ""}{" — areál je v zápasovém režimu."}
+                {"⚽ Dnes se hraje doma"}{stadium.matchDayOpponent ? ` proti ${stadium.matchDayOpponent}` : ""}{", areál je proto v zápasovém režimu."}
               </div>
             )}
             <div className="flex items-start justify-center gap-1.5 text-sm text-muted text-center">
@@ -901,7 +901,7 @@ export default function StadiumPage() {
                 <>
                   <p className="text-sm text-muted">
                     Zařízení se musí zapnout a ta elektřina i voda něco stojí. V zápasový den se platí
-                    plná sazba, v běžný den čtvrtina — tam jde jen o udržení plochy.
+                    plná sazba, v běžný den čtvrtina, tam jde jen o udržení plochy.
                   </p>
                   <div className="text-sm space-y-1.5">
                     {stadium.pitchCare.heatingLevel > 0 && (

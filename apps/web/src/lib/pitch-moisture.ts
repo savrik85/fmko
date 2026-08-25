@@ -31,9 +31,9 @@ export function moistureHint(moisture: number | null | undefined): string | null
   if (moisture == null) return null;
   const m = Math.max(0, Math.min(100, moisture));
   if (m >= 85) return "Míč se v bahně zastaví, kombinace nefunguje a roste riziko zranění.";
-  if (m >= 70) return "Těžký terén — kombinaci to vázne, vyplácí se nakopávat.";
+  if (m >= 70) return "Těžký terén, kombinace vázne a vyplácí se nakopávat.";
   if (m > 55) return "Trochu těžší terén, na hru to má malý vliv.";
-  if (m >= 45) return "Půda je akorát — hře nic nepřekáží.";
+  if (m >= 45) return "Půda je akorát, hře nic nepřekáží.";
   if (m >= 30) return "Vyprahlá půda, míč se veze rychleji a povrch tvrdne.";
-  return "Spálená tvrdá zem — nepříjemné odskoky a víc bolavých kloubů.";
+  return "Spálená tvrdá zem, nepříjemné odskoky a víc bolavých kloubů.";
 }
