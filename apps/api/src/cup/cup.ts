@@ -595,9 +595,25 @@ async function simulateCupTie(
       : nactenySudi.profile,
   };
 
+  // Dějiště zápasu — stav hřiště a návštěva platí i v poháru. Do 2026-08-25 se
+  // kontext načítal až PO simulaci (potřeboval ho jen zápis detailu), takže se
+  // pohár hrál na ideálním trávníku bez ohledu na to, jak vypadal ten skutečný,
+  // a sudímu netřáslo ani vyprodané hlediště. Načte se jednou a použije obojím.
+  const ctxDejiste = await cupHomeMatchContext(db, homeReal, weather, cupMatchId);
+  if (ctxDejiste) {
+    logger.info(
+      { module: M, cupMatchId },
+      `hřiště domácích: kondice ${ctxDejiste.pitchCondition}, vlhkost ${ctxDejiste.pitchMoisture}, návštěva ${ctxDejiste.attendance}`,
+    );
+  }
+
   const result = simulateMatch(rng, {
     home: homeSetup, away: awaySetup, weather, isHomeAdvantage: false,
     homeEquipment, awayEquipment, referee: referee.profile,
+    pitchCondition: ctxDejiste?.pitchCondition,
+    pitchMoisture: ctxDejiste?.pitchMoisture,
+    attendance: ctxDejiste?.attendance,
+    stadiumName: ctxDejiste?.stadiumName ?? undefined,
   });
 
   // Sporné situace: v poháru se mapují na cup_teams.id, protože soupeřem může být
@@ -725,7 +741,7 @@ async function simulateCupTie(
   try {
     const homeLineupData = buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeFormation, homeTactic, homeHardness);
     const awayLineupData = buildCupLineupData(awayPre, awaySubs, awayBuild.idMap, awayFormation, awayTactic, awayHardness);
-    const ctx = await cupHomeMatchContext(db, homeReal, weather, cupMatchId);
+    const ctx = ctxDejiste;
 
     // Komentář (dějiště = okres domácího reálného týmu; velkoklub bez okresu)
     const nameRows = await db.prepare("SELECT id, name FROM cup_teams WHERE id = ? OR id = ?").bind(homeCupTeamId, awayCupTeamId).all<{ id: string; name: string }>()
