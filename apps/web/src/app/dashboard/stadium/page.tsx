@@ -962,7 +962,7 @@ export default function StadiumPage() {
                   {stadium.pitchCare.mode === "manual" && (
                     <Radek
                       nazev="Péče na příští domácí zápas"
-                      popis={stadium.pitchCare.careOrdered ? "Objednaná — zapne se sama." : "Neobjednaná."}
+                      popis={stadium.pitchCare.careOrdered ? "Objednaná, zapne se sama." : "Neobjednaná."}
                       akce={<button
                         onClick={async () => {
                           setActing("care-order");
