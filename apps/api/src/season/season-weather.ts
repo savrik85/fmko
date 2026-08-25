@@ -66,11 +66,21 @@ export function seasonTemperature(winterness: number): number {
 }
 
 /** Váhy počasí pro danou fázi sezóny. */
+/** Nad touhle teplotou sníh nepadá — spadne místo něj déšť. */
+const SNIH_MAX_TEPLOTA = 3;
+
 export function seasonWeatherWeights(winterness: number): Record<Weather, number> {
   const z = Math.max(0, Math.min(1, winterness));
   const out = {} as Record<Weather, number>;
   for (const key of Object.keys(LETO) as Weather[]) {
     out[key] = LETO[key] * (1 - z) + ZIMA[key] * z;
+  }
+  // Lineární interpolace sama o sobě dovolila sníh při +12 °C, protože jeho váha
+  // rostla dřív, než stihlo přituhnout. Nad bodem mrazu se váha sněhu přelije
+  // do deště — sněžit smí jen když je na to dost zima.
+  if (seasonTemperature(z) > SNIH_MAX_TEPLOTA) {
+    out.rain += out.snow;
+    out.snow = 0;
   }
   return out;
 }

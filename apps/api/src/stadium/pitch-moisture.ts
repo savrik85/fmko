@@ -104,8 +104,11 @@ const DAILY_SHIFT: Record<Weather, number> = {
 export function moistureDaily(current: number, weather: Weather | null | undefined): number {
   if (!weather) return moistureDailyDrift(current);
   const posun = DAILY_SHIFT[weather] ?? 0;
-  const smerKNormalu = current > MOISTURE_NORMAL ? -1 : current < MOISTURE_NORMAL ? 1 : 0;
-  return clamp(current + posun + smerKNormalu);
+  // Návrat k normálu je úměrný odchylce, ne pevný bod. Při pevném bodu se
+  // rozmáčené hřiště zaseklo na stovce na celé týdny — půda se vsakuje tím
+  // rychleji, čím je nasycenější.
+  const kNormalu = (MOISTURE_NORMAL - current) * 0.12;
+  return clamp(current + posun + kNormalu);
 }
 
 /**
