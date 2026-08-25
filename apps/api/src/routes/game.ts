@@ -8940,7 +8940,6 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
       key,
       label: catalog.label,
       baseDemandRate: catalog.baseDemandRate,
-      spoilRatePerDay: catalog.spoilRatePerDay,
       qualityLevel: row?.quality_level ?? 1,
       sellPrice: row?.sell_price ?? catalog.tiers[1].defaultSellPrice,
       stockQuantity: row?.stock_quantity ?? 0,

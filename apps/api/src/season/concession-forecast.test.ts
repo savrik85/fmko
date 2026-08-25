@@ -6,7 +6,7 @@ const LETO = 24;
 const ZIMA = -2;
 
 /**
- * Tipy k předpovědi. Bez nich má manažer kleště (zkáza vs. vyprodáno),
+ * Tipy k předpovědi. Bez nich manažer neví, na co se má naskladnit,
  * ale nevidí, kam mířit — musel by si počasí dohledávat na jiné stránce
  * a poměry v hlavě přepočítávat na kusy.
  */

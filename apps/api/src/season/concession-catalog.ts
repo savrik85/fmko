@@ -32,11 +32,6 @@ export interface ProductCatalogEntry {
    * záporná = v mrazu se prodává víc (teplé jídlo).
    */
   tempSensitivity: number;
-  /**
-   * Podíl skladu, který se za den zkazí. Bez zkázy byla optimální strategie
-   * „naskladni jednou hodně od všeho" a předpověď počasí nemělo smysl sledovat.
-   */
-  spoilRatePerDay: number;
   tiers: ProductQualityTier[]; // index 0-3, 0 = nenabízí se
 }
 
@@ -62,9 +57,6 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     // Záporná, ale mírná: v mrazu klobása taky klesá, jen mnohem pomaleji než pivo.
     // Nikdo v plískanici nesní dvě klobásy navíc — jen místo tří piv dá jedno a klobásu.
     tempSensitivity: -0.10,
-    // Čerstvé maso ve vesnickém bufetu bez chladírny. Za týden do dalšího
-    // zápasu zbyde půlka — klobásy se musí kupovat čerstvé, nedají se předzásobit.
-    spoilRatePerDay: 0.10,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 15, defaultSellPrice: 30, label: "Kostelecké uzeniny" },
@@ -81,8 +73,6 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     // Nižší citlivost než u limonády: v mrazu se pije i na zahřátí, takže pivo
     // nespadne tak hluboko jako studený nápoj. Déšť pod stříškou mu vadí málo.
     tempSensitivity: 0.22,
-    // Lahve a sudy vydrží, ale teplo a čas pivu nesvědčí.
-    spoilRatePerDay: 0.02,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 14, defaultSellPrice: 25, label: "Měšťan 10°" },
@@ -97,8 +87,6 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     priceElasticity: 0.4,
     weatherFactors: { sunny: 1.40, cloudy: 0.96, wind: 0.88, rain: 0.78, snow: 0.35 },
     tempSensitivity: 0.42,    // letní nápoj pro děti a řidiče, v zimě po něm nikdo neštěkne
-    // Nejtrvanlivější položka v bufetu.
-    spoilRatePerDay: 0.01,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 8, defaultSellPrice: 15, label: "Sirup s vodou" },
@@ -117,9 +105,6 @@ export const CONCESSION_CATALOG: Record<ProductKey, ProductCatalogEntry> = {
     // Nejsilnější citlivost v katalogu, a záporná: mimo chladné měsíce je svařák
     // mrtvý peníz. Tím se z naskladnění stává sezónní sázka, ne trvalá položka.
     tempSensitivity: -0.70,
-    // Víno vydrží dlouho, koření a citrusy ne. Za čtyři měsíce z letního
-    // nákupu nezbyde nic použitelného, takže svařák zůstává sezónní sázkou.
-    spoilRatePerDay: 0.015,
     tiers: [
       { wholesalePrice: 0, defaultSellPrice: 0, label: "—" },
       { wholesalePrice: 15, defaultSellPrice: 28, label: "Krabicák s hřebíčkem" },
@@ -174,21 +159,6 @@ export function concessionWeatherFactor(key: ProductKey, weather: Weather, tempe
   if (temperature === undefined) return clampFactor(weatherMul);
   const tempMul = 1 + ((temperature - REFERENCE_TEMP) / REFERENCE_TEMP) * entry.tempSensitivity;
   return clampFactor(weatherMul * tempMul);
-}
-
-/**
- * Kolik ze skladu zbyde po N dnech zkázy.
- *
- * Zaokrouhluje dolů po každém dni, aby výsledek přesně odpovídal tomu, co dělá
- * `CAST(stock_quantity * ? AS INTEGER)` v denním ticku. Kdyby se počítalo
- * spojitě, model by se s databází pomalu rozcházel a zbytky by v DB přežívaly
- * déle, než by kdokoli čekal.
- */
-export function stockAfterDays(stock: number, spoilRatePerDay: number, days: number): number {
-  let s = Math.max(0, Math.floor(stock));
-  const keep = 1 - spoilRatePerDay;
-  for (let i = 0; i < days && s > 0; i++) s = Math.floor(s * keep);
-  return s;
 }
 
 export interface ConcessionDemandHint {
