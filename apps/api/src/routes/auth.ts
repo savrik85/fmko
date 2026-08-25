@@ -10,7 +10,10 @@
 async function getCurrentWeather(db: D1Database, gameDate: string | null) {
   if (!gameDate) return null;
   const { resolveWeatherForDate } = await import("../season/season-weather");
-  const w = await resolveWeatherForDate(db, gameDate).catch(() => null);
+  const w = await resolveWeatherForDate(db, gameDate).catch((e) => {
+    logger.warn({ module: "auth" }, `počasí pro hlavičku (${gameDate}) se neodvodilo`, e);
+    return null;
+  });
   if (!w) return null;
   const { describeWeather } = await import("../season/weather");
   return { ...w, ...describeWeather(w.weather, gameDate.slice(0, 10)) };

@@ -15,6 +15,7 @@
  */
 
 import type { Weather } from "../engine/types";
+import { logger } from "../lib/logger";
 
 /** Profily krajních fází. Mezi nimi se lineárně interpoluje podle zimavosti. */
 const LETO: Record<Weather, number> = { sunny: 45, cloudy: 20, rain: 30, wind: 5, snow: 0 };
@@ -131,12 +132,36 @@ export function roundWeather(calendarId: string, gameWeek: number, totalWeeks: n
   return weatherForDay(`${calendarId}|${gameWeek}`, seasonWinterness(gameWeek, totalWeeks));
 }
 
+/** Kolik dní před prvním kolem začíná sezóna — rollover klade start do předsezóny. */
+const PREDSEZONA_DNI = 7;
+
 /** Hranice aktuální sezóny. Jsou pro celý svět stejné, stačí je vzít z libovolného týmu. */
 async function seasonBounds(db: D1Database): Promise<{ start: string; end: string } | null> {
   const row = await db.prepare(
     "SELECT season_start, season_end FROM teams WHERE season_start IS NOT NULL AND season_end IS NOT NULL LIMIT 1",
-  ).first<{ season_start: string; season_end: string }>().catch(() => null);
-  return row ? { start: row.season_start, end: row.season_end } : null;
+  ).first<{ season_start: string; season_end: string }>().catch((e) => {
+    logger.warn({ module: "season-weather" }, "hranice sezóny z teams se nenačetly", e);
+    return null;
+  });
+  if (row) return { start: row.season_start, end: row.season_end };
+
+  // Záloha z kalendáře. `teams.season_start/season_end` plní JEDINÉ místo v kódu —
+  // rollover (`season-rollover.ts`) — takže čerstvě naseedovaný svět je má prázdné
+  // a bez tohohle by neměl počasí vůbec: ani v hlavičce, ani v předpovědi u zápasu,
+  // ani v poptávce bufetu. Kalendář existuje od seedu, oblouk sezóny jde odvodit z něj.
+  const cal = await db.prepare(
+    `SELECT MIN(scheduled_at) AS prvni, MAX(scheduled_at) AS posledni FROM season_calendar
+     WHERE season_number = (SELECT MAX(season_number) FROM season_calendar)`,
+  ).first<{ prvni: string | null; posledni: string | null }>().catch((e) => {
+    logger.warn({ module: "season-weather" }, "hranice sezóny z kalendáře se nenačetly", e);
+    return null;
+  });
+  if (!cal?.prvni || !cal?.posledni) return null;
+
+  const prvniKolo = Date.parse(cal.prvni);
+  if (!Number.isFinite(prvniKolo)) return null;
+  // Start týden před prvním kolem, ať oblouk vyjde stejně, ať hranice přišly odkudkoli.
+  return { start: new Date(prvniKolo - PREDSEZONA_DNI * 86400000).toISOString(), end: cal.posledni };
 }
 
 /**
@@ -162,7 +187,10 @@ export async function resolveRoundWeather(
   calendarId: string,
 ): Promise<RoundWeather | null> {
   const row = await db.prepare("SELECT scheduled_at FROM season_calendar WHERE id = ?")
-    .bind(calendarId).first<{ scheduled_at: string }>().catch(() => null);
+    .bind(calendarId).first<{ scheduled_at: string }>().catch((e) => {
+      logger.warn({ module: "season-weather" }, `termín kola ${calendarId} se nenačetl`, e);
+      return null;
+    });
   if (!row?.scheduled_at) return null;
   return resolveWeatherForDate(db, row.scheduled_at);
 }

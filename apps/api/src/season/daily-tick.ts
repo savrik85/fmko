@@ -643,11 +643,12 @@ export async function executeDailyTick(
     const { resolveWeatherForDate } = await import("./season-weather");
     const { moistureDaily, pitchFrostDamage } = await import("../stadium/pitch-moisture");
 
-    // Počasí je pro celý okres stejné, takže stačí jednou — ne dotaz na tým.
-    const den = await env.DB.prepare(
-      "SELECT game_date FROM teams WHERE game_date IS NOT NULL LIMIT 1",
-    ).first<{ game_date: string }>();
-    const dnes = den?.game_date ? await resolveWeatherForDate(env.DB, den.game_date) : null;
+    // Den, do kterého svět právě vstupuje. `effectiveDate` je kanonický herní den ticku
+    // a níž (řádek ~1002) se zapisuje do `teams.game_date`. Dřív se tu ten sloupec četl
+    // z databáze, jenže v tomhle místě v něm ještě sedí VČEREJŠEK — trávníku tedy pršelo
+    // o den dřív, než co hráč viděl v hlavičce. Počasí je pro celý okres stejné, takže
+    // stačí jednou — ne dotaz na tým.
+    const dnes = await resolveWeatherForDate(env.DB, effectiveDate.toISOString());
 
     const stadiony = await env.DB.prepare(
       "SELECT team_id, pitch_moisture FROM stadiums",
