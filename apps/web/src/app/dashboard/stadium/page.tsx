@@ -245,10 +245,15 @@ export default function StadiumPage() {
   };
 
   const [sponsorNames, setSponsorNames] = useState<string[]>([]);
+  /**
+   * Počasí na nejbližší zápas. Areál má ukazovat, na co se klub chystá —
+   * pevné „slunečno" nedávalo smysl, když se v sobotu hraje na sněhu.
+   */
+  const [matchWeather, setMatchWeather] = useState<string | null>(null);
 
   const refresh = async () => {
     if (!teamId) return;
-    const [s, t, sp] = await Promise.all([
+    const [s, t, sp, nm] = await Promise.all([
       apiFetch<StadiumData>(`/api/teams/${teamId}/stadium`),
       apiFetch<Team>(`/api/teams/${teamId}`),
       apiFetch<{
@@ -258,8 +263,11 @@ export default function StadiumPage() {
       }>(
         `/api/teams/${teamId}/sponsors`
       ).catch((e) => { console.warn("sponsors fetch:", e); return null; }),
+      apiFetch<{ forecast?: { expected: string } | null }>(`/api/teams/${teamId}/next-match`)
+        .catch((e) => { console.warn("next-match forecast:", e); return null; }),
     ]);
     setStadium(s); setTeam(t);
+    setMatchWeather(nm?.forecast?.expected ?? null);
     // Pro 3D bannery jen aktivní banner kontrakty — bez bannerů žádné ploty kolem hřiště
     setSponsorNames(sp?.bannerContracts?.map((c) => c.sponsorName) ?? []);
   };
@@ -354,6 +362,8 @@ export default function StadiumPage() {
         mowerLevel={stadium.mowerLevel ?? 2}
         snowClearingOrdered={stadium.pitchCare?.snowClearingOrdered ?? false}
         pitchMoisture={stadium.pitchMoisture ?? 50}
+        initialWeather={(matchWeather as never) ?? "cloudy"}
+        initialMode="training_day"
         teamColor={team.primary_color}
         secondaryColor={team.secondary_color}
         badgePattern={team.badge_pattern}
@@ -414,6 +424,8 @@ export default function StadiumPage() {
                   mowerLevel={stadium.mowerLevel ?? 2}
                   snowClearingOrdered={stadium.pitchCare?.snowClearingOrdered ?? false}
                   pitchMoisture={stadium.pitchMoisture ?? 50}
+                  initialWeather={(matchWeather as never) ?? "cloudy"}
+                  initialMode="training_day"
                   teamColor={team.primary_color}
                   secondaryColor={team.secondary_color}
                   badgePattern={team.badge_pattern}
