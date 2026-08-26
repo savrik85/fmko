@@ -113,13 +113,14 @@ export function vyhledHrace(v: VstupVyhledu): Vyhled {
   // Odhad nikdy neklesne pod dnešní hodnocení — hráč, kterého manažer vidí hrát na 60,
   // nemůže mít „strop 54".
   const odhadStropu = Math.max(v.hodnoceni, Math.min(100, teoreticky + Math.round(v.posun * v.rozptyl)));
-  // Tempo, kterým počítá VŠECHNO — verdikt i prognóza. Modelová hodnota podle věku je
-  // spodní hranice: naměřená historie sahá do doby, kdy trénink u části hráčů tiše
-  // selhával (dovednost nad vlastním stropem ho odmítala), takže z ní vycházelo tempo
-  // kolem 0,9 bodu za sezónu i u klubu, který trénuje třikrát týdně — a jednadvacetiletému
-  // pak prognóza hlásila šest sezón do sestavy. Hráče nesmí dohnat období, kdy byla hra
-  // rozbitá; kdo trénuje nadprůměrně, tomu se naopak započítá jeho lepší skutečnost.
-  const tempo = Math.max(v.tempoZHistorie ?? 0, tempoPodleVeku(v.vek));
+  // Tempo, kterým počítá VŠECHNO — verdikt i prognóza.
+  //
+  // Modelová hodnota podle věku je jen ZÁLOHA pro hráče bez historie, ne spodní hranice.
+  // Chvíli tu spodní hranice byla a byla to chyba: naměřeno na produkci, medián skutečného
+  // růstu dorostence je 0,5 bodu hodnocení za sezónu, zatímco model říká 2,8. Model tedy
+  // není opatrný odhad, je pětinásobně mimo — vznikl ze simulace s jedním hráčem, kondicí
+  // sto, bez absencí a se stropy daleko. Kdo má historii, tomu se věří, i když je nízká.
+  const tempo = v.tempoZHistorie && v.tempoZHistorie > 0 ? v.tempoZHistorie : tempoPodleVeku(v.vek);
   const realnyStrop = realneDosazitelnyStrop(v.vek, v.hodnoceni, odhadStropu, v.talent, tempo);
   const zbyva = Math.max(0, realnyStrop - v.hodnoceni);
 
