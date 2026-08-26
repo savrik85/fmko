@@ -16,12 +16,15 @@ interface Uroven {
   popis: string;
   mesicne: number;
   tydne: number;
-  sanceNaOdchovance: number;
+  zaSezonu: number;
+  pokusu: number;
+  ocekavaneOdchovancu: number;
 }
 
 interface AkademieData {
   aktualni: string;
   populace: number;
+  tydnuVSezone: number;
   maU21Tym: boolean;
   urovne: Uroven[];
 }
@@ -95,7 +98,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                 <span className="font-heading font-bold text-sm text-ink">{u.nazev}</span>
                 <span className="text-sm tabular-nums text-muted">
                   {u.tydne > 0 ? `${u.tydne.toLocaleString("cs")} Kč/týden` : "zdarma"}
-                  {u.klic !== "none" && ` · šance ${u.sanceNaOdchovance} %`}
+                  {u.klic !== "none" && ` · ~${u.ocekavaneOdchovancu.toLocaleString("cs")} odchovance za sezónu`}
                 </span>
               </div>
               <p className="text-sm text-muted mt-1 leading-snug">{u.popis}</p>
@@ -106,12 +109,14 @@ export function AcademyCard({ teamId }: { teamId: string }) {
 
       {aktualniUroven && aktualniUroven.klic !== "none" && (
         <p className="text-sm text-muted">
-          Za sezónu tě akademie vyjde zhruba na{" "}
+          Za sezónu ({data.tydnuVSezone} týdnů) tě akademie vyjde zhruba na{" "}
           <strong className="text-ink font-heading tabular-nums">
-            {(aktualniUroven.tydne * 26).toLocaleString("cs")} Kč
+            {aktualniUroven.zaSezonu.toLocaleString("cs")} Kč
           </strong>
-          . Vesnice s {data.populace.toLocaleString("cs")} obyvateli dává šanci{" "}
-          {aktualniUroven.sanceNaOdchovance} % na odchovance za sezónu.
+          . O postup do dorostu se pokusí {aktualniUroven.pokusu}{" "}
+          {aktualniUroven.pokusu === 1 ? "kluk" : aktualniUroven.pokusu < 5 ? "kluci" : "kluků"} a při{" "}
+          {data.populace.toLocaleString("cs")} obyvatelích jich průměrně projde{" "}
+          <strong className="text-ink font-heading tabular-nums">{aktualniUroven.ocekavaneOdchovancu.toLocaleString("cs")}</strong>.
         </p>
       )}
 

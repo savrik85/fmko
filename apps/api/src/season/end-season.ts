@@ -248,16 +248,16 @@ async function runWrapPhase(
           .first<{ id: string }>()
           .catch((e) => { logger.warn({ module: "end-season" }, "load active season for academy", e); return null; });
 
-        const { graduateAcademyPlayer, notifyAcademyGraduate } = await import("./academy-graduation");
+        const { graduateAcademyClass, notifyAcademyGraduates } = await import("./academy-graduation");
         const todo = teamsRes.results.map((r) => r.id).filter((id) => !processedSet.has(id)).slice(0, DEPARTURES_CHUNK);
         for (const tid of todo) {
-          // Kurzor PŘED zápisem hráče — pád uprostřed radši znamená chybějícího odchovance
+          // Kurzor PŘED zápisem hráčů — pád uprostřed radši znamená chybějící ročník
           // než dva stejné.
           processedSet.add(tid);
           await setProgress(db, leagueId, seasonNumber, phase, "pending", JSON.stringify([...processedSet]));
-          const res = await graduateAcademyPlayer(db, tid, seasonRow?.id ?? null)
-            .catch((e) => { logger.warn({ module: "end-season", teamId: tid }, "academy graduation", e); return null; });
-          if (res) await notifyAcademyGraduate(db, res);
+          const odchovanci = await graduateAcademyClass(db, tid, seasonRow?.id ?? null)
+            .catch((e) => { logger.warn({ module: "end-season", teamId: tid }, "academy graduation", e); return []; });
+          if (odchovanci.length > 0) await notifyAcademyGraduates(db, tid, odchovanci);
         }
 
         const done = processedSet.size >= teamsRes.results.length;

@@ -50,20 +50,43 @@ export const YOUTH_POPISY: Record<YouthInvestment, string> = {
   high: "Vlastní mládežnický program. Nejvyšší šance na odchovance a nejvyšší strop, kam může dorůst.",
 };
 
-/** Šance na odchovance na konci sezóny (před úpravou podle velikosti obce). */
+/** Šance na jednoho odchovance (před úpravou podle velikosti obce). */
 export const YOUTH_SANCE: Record<YouthInvestment, number> = {
   none: 0,
-  minimal: 0.25,
-  medium: 0.5,
-  high: 0.75,
+  minimal: 0.40,
+  medium: 0.55,
+  high: 0.70,
 };
 
 /**
- * Strop šance na odchovance. Velká obec vynásobí základ až 1,5×, takže velkorysá investice
- * vycházela na jistotu — a odchovanec přestal být událostí. I nejlepší akademie musí občas
- * mít ročník, ze kterého nic nevyroste.
+ * Kolik kluků se z akademie o postup pokouší.
+ *
+ * Jeden odchovanec za sezónu byl proti pasivnímu toku nabídek k smíchu: průměrnému klubu
+ * chodí ~2,5 nabídky dorostence za 60 dní, tedy 4–7 za sezónu, a zadarmo. Akademie proto
+ * nesmí soutěžit kvalitou jednoho kusu, ale objemem i kvalitou — odchovanec má navíc
+ * vyšší strop a talent než náhodný tip z hospody.
+ */
+export const YOUTH_POCET_POKUSU: Record<YouthInvestment, number> = {
+  none: 0,
+  minimal: 1,
+  medium: 2,
+  high: 3,
+};
+
+/**
+ * Strop šance jednoho pokusu. Velká obec vynásobí základ až 1,5×, takže bez stropu by
+ * velkorysá akademie vycházela na jistotu — a odchovanec by přestal být událostí.
  */
 export const YOUTH_SANCE_STROP = 0.8;
+
+/**
+ * Kolik odchovanců klub za sezónu očekává — do UI, ať manažer vidí, co za ty peníze dostane.
+ * `popMod` je násobitel podle velikosti obce (0,5 až 1,5).
+ */
+export function ocekavanyPocetOdchovancu(investment: YouthInvestment, popMod: number): number {
+  const sance = Math.min(YOUTH_SANCE_STROP, YOUTH_SANCE[investment] * popMod);
+  return Math.round(YOUTH_POCET_POKUSU[investment] * sance * 10) / 10;
+}
 
 const SKILL_RANGE: Record<YouthInvestment, [number, number]> = {
   none: [0, 0], // No graduates
@@ -92,17 +115,10 @@ export function tryGraduateYouth(
 ): YouthGraduate | null {
   if (config.investment === "none") return null;
 
-  // Probability of graduation
-  let prob = 0;
-  switch (config.investment) {
-    case "minimal": prob = 0.25; break;
-    case "medium": prob = 0.5; break;
-    case "high": prob = 0.75; break;
-  }
-
   // Bigger village = more kids = higher chance
-  const popMod = Math.min(1.5, config.villagPopulation / 3000);
-  prob *= Math.max(0.5, popMod);
+  const popMod = Math.max(0.5, Math.min(1.5, config.villagPopulation / 3000));
+  // Strop drží i nejlepší akademii pod jistotou — ročník, ze kterého nic nevyroste, se stát musí
+  const prob = Math.min(YOUTH_SANCE_STROP, YOUTH_SANCE[config.investment] * popMod);
 
   if (rng.random() > prob) return null;
 

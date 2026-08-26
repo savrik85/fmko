@@ -225,7 +225,7 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
   const odmitnuto = await overSiVlastnictvi(c, teamId);
   if (odmitnuto) return odmitnuto;
 
-  const { YOUTH_LABELS, YOUTH_POPISY, YOUTH_SANCE, youthMonthlyCost } = await import("../season/youth");
+  const { YOUTH_LABELS, YOUTH_POPISY, YOUTH_POCET_POKUSU, ocekavanyPocetOdchovancu, youthMonthlyCost } = await import("../season/youth");
 
   const team = await c.env.DB.prepare(
     `SELECT t.youth_investment, v.population FROM teams t
@@ -238,14 +238,36 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
   // Větší obec = víc kluků = vyšší šance. Týž vzorec, jaký používá tryGraduateYouth.
   const popMod = Math.max(0.5, Math.min(1.5, (team.population ?? 500) / 3000));
 
-  const urovne = (["none", "minimal", "medium", "high"] as const).map((u) => ({
-    klic: u,
-    nazev: YOUTH_LABELS[u],
-    popis: YOUTH_POPISY[u],
-    mesicne: youthMonthlyCost(u),
-    tydne: Math.round(youthMonthlyCost(u) / 4.3),
-    sanceNaOdchovance: Math.round(Math.min(1, YOUTH_SANCE[u] * popMod) * 100),
-  }));
+  // Sezónní náklad se počítá ze SKUTEČNÉ délky sezóny. Dřív tu bylo natvrdo ×26 podle počtu
+  // kol, jenže kol není 26 týdnů — ročník trvá 14 až 24 týdnů podle rozpisu, takže to číslo
+  // manažera mátlo o desítky procent.
+  const kalendar = await c.env.DB.prepare(
+    `SELECT MIN(scheduled_at) AS od, MAX(scheduled_at) AS do FROM season_calendar
+      WHERE season_number = (SELECT MAX(season_number) FROM season_calendar)`,
+  ).first<{ od: string | null; do: string | null }>()
+    .catch((e) => { logger.warn({ module: "development" }, "load season length", e); return null; });
+
+  let tydnuVSezone = 20; // rozumný odhad, když kalendář chybí
+  if (kalendar?.od && kalendar?.do) {
+    const dnu = (new Date(kalendar.do).getTime() - new Date(kalendar.od).getTime()) / 86_400_000;
+    if (dnu > 0) tydnuVSezone = Math.max(1, Math.round(dnu / 7));
+  }
+
+  const urovne = (["none", "minimal", "medium", "high"] as const).map((u) => {
+    const tydne = Math.round(youthMonthlyCost(u) / 4.3);
+    return {
+      klic: u,
+      nazev: YOUTH_LABELS[u],
+      popis: YOUTH_POPISY[u],
+      mesicne: youthMonthlyCost(u),
+      tydne,
+      zaSezonu: tydne * tydnuVSezone,
+      /** Kolik kluků se o postup pokusí. */
+      pokusu: YOUTH_POCET_POKUSU[u],
+      /** Kolik jich průměrně opravdu projde — tohle manažera zajímá. */
+      ocekavaneOdchovancu: ocekavanyPocetOdchovancu(u, popMod),
+    };
+  });
 
   const maU21 = await c.env.DB.prepare("SELECT 1 AS ok FROM teams WHERE parent_team_id = ? AND team_type = 'u21'")
     .bind(teamId).first<{ ok: number }>()
@@ -254,6 +276,7 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
   return c.json({
     aktualni: team.youth_investment ?? "none",
     populace: team.population,
+    tydnuVSezone,
     /** Bez U21 týmu nemá odchovanec kam jít — na to musí manažer vidět dřív, než začne platit. */
     maU21Tym: !!maU21,
     urovne,
@@ -285,20 +308,21 @@ developmentRouter.post("/teams/:teamId/academy", async (c) => {
 // že akademie funguje, bez čekání na konec ročníku.
 developmentRouter.post("/admin/academy-graduate/:teamId", requireAdmin, async (c) => {
   const teamId = c.req.param("teamId");
-  const { graduateAcademyPlayer, notifyAcademyGraduate } = await import("../season/academy-graduation");
+  const { graduateAcademyClass, notifyAcademyGraduates } = await import("../season/academy-graduation");
 
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE is_active = 1 LIMIT 1")
     .first<{ id: string }>()
     .catch((e) => { logger.warn({ module: "development" }, "load active season", e); return null; });
 
-  const res = await graduateAcademyPlayer(c.env.DB, teamId, season?.id ?? null);
-  if (res) await notifyAcademyGraduate(c.env.DB, res);
+  const odchovanci = await graduateAcademyClass(c.env.DB, teamId, season?.id ?? null);
+  if (odchovanci.length > 0) await notifyAcademyGraduates(c.env.DB, teamId, odchovanci);
 
   return c.json({
     ok: true,
-    odchovanec: res,
-    // null znamená buď „klub do mládeže nesype", „nemá U21", nebo „letos se nikdo neurodil"
-    poznamka: res ? null : "Žádný odchovanec — zkontroluj investici, U21 tým, nebo to prostě nevyšlo",
+    pocet: odchovanci.length,
+    odchovanci,
+    // prázdné pole znamená „klub do mládeže nesype", „nemá U21", nebo „ročník nevyšel"
+    poznamka: odchovanci.length > 0 ? null : "Žádný odchovanec — zkontroluj investici, U21 tým, nebo to prostě nevyšlo",
   });
 });
 

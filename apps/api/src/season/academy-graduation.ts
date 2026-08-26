@@ -10,7 +10,7 @@
  */
 
 import { createRng, cryptoSeed } from "../generators/rng";
-import { tryGraduateYouth, type YouthInvestment } from "./youth";
+import { tryGraduateYouth, YOUTH_POCET_POKUSU, type YouthInvestment } from "./youth";
 import { generatePlayerFace } from "../routes/teams";
 import { generateHiddenTalent, generateFieldSkills, generateGKSkills } from "../skills/generator";
 import { getDistrictDataFromDB } from "../data/districts";
@@ -38,8 +38,38 @@ export interface AcademyResult {
 }
 
 /**
- * Zkusí vychovat odchovance pro jeden klub. Vrací null, když klub do mládeže nesype
- * nebo když se letos nikdo neurodil.
+ * Vychová klubu celý ročník odchovanců — kolik kluků to zkusí, určuje výše investice
+ * (`YOUTH_POCET_POKUSU`). Vrací jen ty, kterým to vyšlo; prázdné pole znamená, že klub
+ * do mládeže nesype nebo že z ročníku nic nevyrostlo.
+ */
+export async function graduateAcademyClass(
+  db: D1Database,
+  teamId: string,
+  seasonId: string | null,
+): Promise<AcademyResult[]> {
+  const team = await db.prepare("SELECT youth_investment FROM teams WHERE id = ?")
+    .bind(teamId).first<{ youth_investment: string | null }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "load investment for class", e); return null; });
+
+  const investment = (team?.youth_investment ?? "none") as YouthInvestment;
+  const pokusu = YOUTH_POCET_POKUSU[investment] ?? 0;
+
+  const odchovanci: AcademyResult[] = [];
+  for (let i = 0; i < pokusu; i++) {
+    const res = await graduateAcademyPlayer(db, teamId, seasonId)
+      .catch((e) => { logger.warn({ module: M, teamId }, `academy attempt ${i + 1}`, e); return null; });
+    if (res) odchovanci.push(res);
+  }
+
+  if (pokusu > 0) {
+    logger.info({ module: M, teamId }, `akademie (${investment}): ${odchovanci.length}/${pokusu} odchovanců`);
+  }
+  return odchovanci;
+}
+
+/**
+ * Zkusí vychovat jednoho odchovance. Vrací null, když klub do mládeže nesype
+ * nebo když ten konkrétní kluk neprorazil.
  */
 export async function graduateAcademyPlayer(
   db: D1Database,
@@ -161,27 +191,48 @@ export async function graduateAcademyPlayer(
   return { teamId, playerName: `${p.firstName} ${p.lastName}`, position, age: p.age, hiddenTalent };
 }
 
+const POZICE: Record<string, string> = { GK: "brankář", DEF: "obránce", MID: "záložník", FWD: "útočník" };
+
+/** Jak trenér mládeže popíše jednoho kluka. */
+function popisOdchovance(res: AcademyResult): string {
+  const pozice = POZICE[res.position] ?? res.position;
+  if (res.hiddenTalent >= 50) return `${res.playerName} (${res.age}, ${pozice}) — z toho něco bude, na to vemte jed`;
+  if (res.hiddenTalent >= 30) return `${res.playerName} (${res.age}, ${pozice}) — slibný kluk`;
+  return `${res.playerName} (${res.age}, ${pozice})`;
+}
+
 /**
- * Pošle manažerovi SMS o novém odchovanci. Bez zprávy by se kluk objevil v dorostu
- * potichu a nikdo by si ho nevšiml.
+ * Pošle manažerovi jednu SMS o celém ročníku odchovanců. Bez zprávy by se kluci objevili
+ * v dorostu potichu a nikdo by si jich nevšiml; zvlášť za každého by to zase byl spam.
  */
-export async function notifyAcademyGraduate(db: D1Database, res: AcademyResult): Promise<void> {
-  const POZICE: Record<string, string> = { GK: "brankář", DEF: "obránce", MID: "záložník", FWD: "útočník" };
-  const telo = res.hiddenTalent >= 50
-    ? `Z akademie vyrostl ${res.playerName} (${res.age}, ${POZICE[res.position] ?? res.position}). Trenér mládeže si ho nemůže vynachválit — prý z toho něco bude. Najdeš ho v dorostu.`
-    : `Z akademie postoupil do dorostu ${res.playerName} (${res.age}, ${POZICE[res.position] ?? res.position}). Vychovanec klubu.`;
+export async function notifyAcademyGraduates(
+  db: D1Database,
+  teamId: string,
+  odchovanci: AcademyResult[],
+): Promise<void> {
+  if (odchovanci.length === 0) return;
+
+  // Skloňování: 2–4 kluci postoupili, 5 a víc kluků postoupilo
+  const pocet = odchovanci.length;
+  const vetaOPoctu = pocet < 5
+    ? `postoupili do dorostu ${pocet} kluci`
+    : `postoupilo do dorostu ${pocet} kluků`;
+
+  const telo = pocet === 1
+    ? `Z akademie postoupil do dorostu ${popisOdchovance(odchovanci[0])}. Vychovanec klubu.`
+    : `Z akademie letos ${vetaOPoctu}: ${odchovanci.map(popisOdchovance).join("; ")}.`;
 
   try {
     const nazev = "Mládež";
     let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
-      .bind(res.teamId, nazev).first<{ id: string }>().then((r) => r?.id)
+      .bind(teamId, nazev).first<{ id: string }>().then((r) => r?.id)
       .catch((e) => { logger.warn({ module: M }, "find academy conversation", e); return null; });
 
     if (!convId) {
       convId = crypto.randomUUID();
       await db.prepare(
         "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
-      ).bind(convId, res.teamId, nazev).run()
+      ).bind(convId, teamId, nazev).run()
         .catch((e) => logger.warn({ module: M }, "create academy conversation", e));
     }
     await db.prepare(
@@ -191,6 +242,6 @@ export async function notifyAcademyGraduate(db: D1Database, res: AcademyResult):
       "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
     ).bind(telo.slice(0, 100), convId).run();
   } catch (e) {
-    logger.warn({ module: M, teamId: res.teamId }, "academy SMS failed", e);
+    logger.warn({ module: M, teamId }, "academy SMS failed", e);
   }
 }
