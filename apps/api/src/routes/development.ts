@@ -405,7 +405,6 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
   // Větší obec = víc kluků = vyšší šance. Týž vzorec, jaký používá tryGraduateYouth.
-  const popMod = Math.max(0.5, Math.min(1.5, (team.population ?? 500) / 3000));
 
   // Sezónní náklad se počítá ze SKUTEČNÉ délky sezóny. Dřív tu bylo natvrdo ×26 podle počtu
   // kol, jenže kol není 26 týdnů — ročník trvá 14 až 24 týdnů podle rozpisu, takže to číslo
@@ -434,9 +433,9 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
       /** Kolik kluků se o postup pokusí. */
       pokusu: YOUTH_POCET_POKUSU[u],
       /** Šance jednoho pokusu (0–1). UI z ní skládá text, ať nemusí ukazovat půlky hráčů. */
-      sanceNaPokus: sanceJednohoPokusu(u, popMod),
+      sanceNaPokus: sanceJednohoPokusu(u),
       /** Kolik jich průměrně opravdu projde — střední hodnota, do UI jen zaokrouhleně. */
-      ocekavaneOdchovancu: ocekavanyPocetOdchovancu(u, popMod),
+      ocekavaneOdchovancu: ocekavanyPocetOdchovancu(u),
     };
   });
 

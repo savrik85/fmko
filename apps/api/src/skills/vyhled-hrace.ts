@@ -91,7 +91,8 @@ export function vyhledHrace(v: VstupVyhledu): Vyhled {
   // Odhad nikdy neklesne pod dnešní hodnocení — hráč, kterého manažer vidí hrát na 60,
   // nemůže mít „strop 54".
   const odhadStropu = Math.max(v.hodnoceni, Math.min(100, teoreticky + Math.round(v.posun * v.rozptyl)));
-  const realnyStrop = realneDosazitelnyStrop(v.vek, v.hodnoceni, odhadStropu, v.talent);
+  // Tempo se předává i sem — verdikt a prognóza musí počítat stejným.
+  const realnyStrop = realneDosazitelnyStrop(v.vek, v.hodnoceni, odhadStropu, v.talent, v.tempoZHistorie);
   const zbyva = Math.max(0, realnyStrop - v.hodnoceni);
 
   const dolni = Math.max(v.hodnoceni, realnyStrop - v.rozptyl);

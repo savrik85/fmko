@@ -59,6 +59,16 @@ export function tempoPodleVeku(vek: number): number {
 const KONEC_KARIERY = 37;
 
 /**
+ * Přes kolik sezón má smysl rozvoj vůbec počítat.
+ *
+ * Do konce kariéry se počítat nedá: osmnáctiletý pak vychází na „za 19 sezón", což je věk
+ * sedmatřicet a jako informace to nemá cenu — manažer chce vědět, jestli mu ten kluk pomůže
+ * v dohledné době. Kdo se do osmi sezón nedotáhne, do sestavy se prakticky nedostane:
+ * mezitím zestárne, dospívání mu skončí v jednadvaceti a tempo růstu s věkem klesá.
+ */
+const HORIZONT_ROZVOJE = 8;
+
+/**
  * Kam hráč REÁLNĚ dojde, než ho dožene věk.
  *
  * Teoretický strop je u staršího hráče prázdný slib: třicátník roste zlomkem toho co
@@ -69,11 +79,19 @@ export function realneDosazitelnyStrop(
   hodnoceni: number,
   teoretickyStrop: number,
   talent: number,
+  /**
+   * Skutečné tempo z tréninkové historie. MUSÍ to být totéž tempo, jakým počítá
+   * `sezonDoLatky` — jinak verdikt slibuje sestavu tempem, kterým klub netrénuje,
+   * a prognóza vedle něj hlásí devatenáct sezón.
+   */
+  tempoZHistorie?: number,
 ): number {
   let rating = hodnoceni;
-  for (let v = vek; v < KONEC_KARIERY; v++) {
+  const konec = Math.min(KONEC_KARIERY, vek + HORIZONT_ROZVOJE);
+  for (let v = vek; v < konec; v++) {
+    const zTreninku = tempoZHistorie && tempoZHistorie > 0 ? tempoZHistorie : tempoPodleVeku(v);
     const zDospivani = v <= DOSPIVANI_DO_VEKU ? bodyDospivani(v, talent) : 0;
-    rating = Math.round(rating + tempoPodleVeku(v) + zDospivani);
+    rating = Math.round(rating + zTreninku + zDospivani);
     if (rating >= teoretickyStrop) return teoretickyStrop;
   }
   return Math.min(teoretickyStrop, Math.round(rating));
@@ -97,11 +115,8 @@ export function sezonDoLatky(
 
   let rating = hodnoceni;
   let v = vek;
-  // Horizont je zbytek kariéry, ne pevných osm sezón. `realneDosazitelnyStrop` počítá
-  // taky do konce kariéry, takže s kratším limitem tvrdila prognóza „nedotáhne se"
-  // u hráčů, kterým verdikt sestavu sliboval — sedmnáctiletý se na laťku dostal
-  // v desáté sezóně, což se do osmi nevešlo.
-  const sezonDoKonce = Math.max(1, KONEC_KARIERY - vek);
+  // Týž horizont jako u `realneDosazitelnyStrop`, jinak si obě čísla odporují.
+  const sezonDoKonce = Math.max(1, Math.min(KONEC_KARIERY - vek, HORIZONT_ROZVOJE));
   for (let s = 1; s <= sezonDoKonce; s++) {
     const zTreninku = tempoZHistorie && tempoZHistorie > 0 ? tempoZHistorie : tempoPodleVeku(v);
     const zDospivani = v <= DOSPIVANI_DO_VEKU ? bodyDospivani(v, talent) : 0;

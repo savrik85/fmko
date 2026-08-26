@@ -25,7 +25,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Mladí do jednadvaceti se rozvíjejí rychleji než dospělí hráči. Nejvíc šestnácti a sedmnáctiletí, ale svoje pásmo mají i dvacetiletí a jednadvacetiletí.",
       "Přes léto kluci povyrostou. Mladí do jednadvaceti dostávají na přelomu sezóny skok v hodnocení podle svého talentu a trenér mládeže ti pošle esemesku s tím, kdo vyrostl nejvíc. Někteří po tom skoku můžou být rovnou na áčko.",
       "Dorost se obměňuje. Kdo dosáhne dvaadvaceti, z mládeže odchází do áčka, a když je kádr plný, jde mezi volné hráče. Na jeho místo přijde nový šestnáctiletý ročník, takže se ti dorost nezaplní samými přestárlými kluky.",
-      "Mládežnická akademie říká, kolik kluků ti z ní vyroste. U symbolické zhruba jeden odchovanec za dvě sezóny, u solidní jeden až dva za sezónu, u velkorysé dva až tři — a čím větší obec, tím víc. Šance u symbolické a solidní úrovně jsme zvedli, takže se vyplatí i menší investice.",
+      "Mládežnická akademie říká, kolik kluků ti z ní vyroste. U symbolické zhruba jeden odchovanec za sezónu, u solidní jeden až dva, u velkorysé dva až tři. Nezáleží na tom, jak velkou máš obec — do počtu odchovanců se velikost vesnice nepromítá, jen do toho, jak dobří budou.",
       "Brankáři se rozvíjejí stejně jako hráči v poli. Chytání, výběh, postavení i rozehrávka rostou tréninkem, promítají se do hodnocení a mají svůj strop jako každá jiná dovednost.",
       "Dorostům jsme přidali na potenciálu. Kluci, které máš v mládeži dnes, mají strop odpovídající tomu, jak se dorostenci rodí teď — nikdo z nich nezmizel a nikoho to nevytáhne nad úroveň základní sestavy tvého áčka. Vytrénovat se pořád musí.",
     ],

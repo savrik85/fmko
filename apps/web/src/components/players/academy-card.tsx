@@ -135,7 +135,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           <strong className="text-ink font-heading tabular-nums">
             {aktualniUroven.zaSezonu.toLocaleString("cs")} Kč
           </strong>
-          . Při {data.populace.toLocaleString("cs")} obyvatelích ti z ní vyroste{" "}
+          . Vyroste ti z ní{" "}
           <strong className="text-ink font-heading">{textOdchovancu(aktualniUroven.ocekavaneOdchovancu)}</strong>.
         </p>
       )}

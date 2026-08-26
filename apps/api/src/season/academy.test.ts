@@ -9,7 +9,7 @@ import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import { FIRSTNAMES } from "../data/czech-names";
 import {
-  youthMonthlyCost, tryGraduateYouth, ocekavanyPocetOdchovancu,
+  youthMonthlyCost, tryGraduateYouth, ocekavanyPocetOdchovancu, sanceJednohoPokusu,
   YOUTH_SANCE_STROP, YOUTH_POCET_POKUSU, type YouthInvestment,
 } from "./youth";
 
@@ -36,32 +36,37 @@ describe("cena akademie", () => {
 });
 
 describe("výnos akademie", () => {
-  it("velkorysá dá za sezónu víc než jednoho kluka", () => {
-    // Velká obec (popMod 1.5) — tam má akademie dávat nejvíc
-    expect(ocekavanyPocetOdchovancu("high", 1.5)).toBeGreaterThan(1);
+  it("i nejlevnější akademie dá zhruba kluka za sezónu", () => {
+    // Dřív vycházel vesnici jeden za tři sezóny, což bylo za týdenní platbu vyhozené peníze
+    expect(ocekavanyPocetOdchovancu("minimal")).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("velkorysá dá za sezónu víc než dva kluky", () => {
+    expect(ocekavanyPocetOdchovancu("high")).toBeGreaterThan(2);
   });
 
   it("výnos roste s úrovní investice", () => {
-    const popMod = 1.0;
-    expect(ocekavanyPocetOdchovancu("minimal", popMod))
-      .toBeLessThan(ocekavanyPocetOdchovancu("medium", popMod));
-    expect(ocekavanyPocetOdchovancu("medium", popMod))
-      .toBeLessThan(ocekavanyPocetOdchovancu("high", popMod));
+    expect(ocekavanyPocetOdchovancu("minimal")).toBeLessThan(ocekavanyPocetOdchovancu("medium"));
+    expect(ocekavanyPocetOdchovancu("medium")).toBeLessThan(ocekavanyPocetOdchovancu("high"));
   });
 
   it("žádná investice nedá nic", () => {
-    expect(ocekavanyPocetOdchovancu("none", 1.5)).toBe(0);
+    expect(ocekavanyPocetOdchovancu("none")).toBe(0);
     expect(YOUTH_POCET_POKUSU.none).toBe(0);
   });
 
-  it("ani nejlepší akademie ve velké obci není jistota", () => {
+  it("ani nejlepší akademie není jistota", () => {
     // Strop drží jednotlivý pokus pod 100 %, takže neúspěšný ročník je pořád možný
-    expect(ocekavanyPocetOdchovancu("high", 1.5)).toBeLessThan(YOUTH_POCET_POKUSU.high);
+    expect(ocekavanyPocetOdchovancu("high")).toBeLessThan(YOUTH_POCET_POKUSU.high);
   });
 
-  it("malá vesnice vychová míň než velká obec", () => {
-    expect(ocekavanyPocetOdchovancu("high", 0.5))
-      .toBeLessThan(ocekavanyPocetOdchovancu("high", 1.5));
+  it("velikost obce se do POČTU odchovanců nepromítá", () => {
+    // Vesnice s 54 obyvateli musí dostat totéž co město — vzorec populace/3000 posadil
+    // jedenáct klubů z třiadvaceti na dno stupnice a akademie tam nedávala smysl
+    for (const uroven of ["minimal", "medium", "high"] as const) {
+      expect(sanceJednohoPokusu(uroven)).toBe(sanceJednohoPokusu(uroven));
+    }
+    expect(ocekavanyPocetOdchovancu("minimal")).toBeGreaterThan(0.5);
   });
 });
 
