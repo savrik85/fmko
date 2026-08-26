@@ -8,7 +8,7 @@
  */
 
 import {
-  pasmo, slovneNadejnost, sezonDoLatky, realneDosazitelnyStrop,
+  pasmo, slovneNadejnost, sezonDoLatky, realneDosazitelnyStrop, tempoPodleVeku,
   type LatkyKadru, type Verdikt,
 } from "./verdikt";
 import { ratingWeightsFor } from "@okresni-masina/shared";
@@ -113,15 +113,21 @@ export function vyhledHrace(v: VstupVyhledu): Vyhled {
   // Odhad nikdy neklesne pod dnešní hodnocení — hráč, kterého manažer vidí hrát na 60,
   // nemůže mít „strop 54".
   const odhadStropu = Math.max(v.hodnoceni, Math.min(100, teoreticky + Math.round(v.posun * v.rozptyl)));
-  // Tempo se předává i sem — verdikt a prognóza musí počítat stejným.
-  const realnyStrop = realneDosazitelnyStrop(v.vek, v.hodnoceni, odhadStropu, v.talent, v.tempoZHistorie);
+  // Tempo, kterým počítá VŠECHNO — verdikt i prognóza. Modelová hodnota podle věku je
+  // spodní hranice: naměřená historie sahá do doby, kdy trénink u části hráčů tiše
+  // selhával (dovednost nad vlastním stropem ho odmítala), takže z ní vycházelo tempo
+  // kolem 0,9 bodu za sezónu i u klubu, který trénuje třikrát týdně — a jednadvacetiletému
+  // pak prognóza hlásila šest sezón do sestavy. Hráče nesmí dohnat období, kdy byla hra
+  // rozbitá; kdo trénuje nadprůměrně, tomu se naopak započítá jeho lepší skutečnost.
+  const tempo = Math.max(v.tempoZHistorie ?? 0, tempoPodleVeku(v.vek));
+  const realnyStrop = realneDosazitelnyStrop(v.vek, v.hodnoceni, odhadStropu, v.talent, tempo);
   const zbyva = Math.max(0, realnyStrop - v.hodnoceni);
 
   const dolni = Math.max(v.hodnoceni, realnyStrop - v.rozptyl);
   const horni = Math.min(100, realnyStrop + v.rozptyl);
 
   const sezon = sezonDoLatky(
-    v.vek, v.hodnoceni, realnyStrop, v.talent, v.latky.sestavaDnes, v.tempoZHistorie,
+    v.vek, v.hodnoceni, realnyStrop, v.talent, v.latky.sestavaDnes, tempo,
   );
 
   return {
