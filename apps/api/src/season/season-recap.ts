@@ -10,6 +10,7 @@
 import { logger } from "../lib/logger";
 import type { TeamDeparturesResult } from "./season-departures";
 import { createRng } from "../generators/rng";
+import { generateInjury } from "../injuries/injury-generator";
 
 const M = "season-recap";
 
@@ -366,7 +367,12 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
   for (let i = eventPool.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [eventPool[i], eventPool[j]] = [eventPool[j], eventPool[i]]; }
   const summerRaw = shuffledSquad.slice(0, Math.min(5, shuffledSquad.length)).map((pl, i) => {
     const tmpl = eventPool[i % eventPool.length];
-    return { id: pl.id, name: pl.name, text: tmpl.text.replace(/\{p\}/g, pl.name), effect: tmpl.effect };
+    return {
+      id: pl.id, name: pl.name, text: tmpl.text.replace(/\{p\}/g, pl.name), effect: tmpl.effect,
+      // Generátor zranění potřebuje vědět, komu se to stalo — starší a náchylnější hráč
+      // dostane vážnější druh.
+      age: (pl as { age?: number }).age, injuryProneness: (pl as { injuryProneness?: number }).injuryProneness,
+    };
   });
 
   // Reálný dopad na hráče (jen při 1. generování recapu — idempotence přes applyEffects).
@@ -384,9 +390,14 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
       } else if (s.effect === "injury") {
         // Opravdové zranění — začíná sezónu mimo hru (~12 herních dní) + nízká kondice.
         stmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', 45) WHERE id = ?").bind(s.id));
+        // Druh zranění z generátoru, ne natvrdo 'obecne'. Generátor zná čtrnáct druhů
+        // napříč deseti typy, ale nikdo ho nevolal — v produkci proto za celou historii
+        // hry vznikla jen zranění typu 'obecne' a 'sval', zatímco koleno, záda, hlava,
+        // žebra, achilovka, třísla ani rameno se neobjevily ANI JEDNOU.
+        const { injury: druh, days: dnu } = generateInjury(rng, s.age ?? 25, s.injuryProneness ?? 30);
         stmts.push(db.prepare(
-          "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, 'obecne', 'Letní zranění — začíná sezónu mimo hru.', 'stredni', 12, 12)",
-        ).bind(crypto.randomUUID(), s.id, teamId));
+          "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ).bind(crypto.randomUUID(), s.id, teamId, druh.type, druh.description, druh.severity, dnu, dnu));
       }
     }
     for (let i = 0; i < stmts.length; i += 20) await db.batch(stmts.slice(i, i + 20)).catch((e) => logger.warn({ module: M }, "apply summer effects", e));

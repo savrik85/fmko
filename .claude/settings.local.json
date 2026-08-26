@@ -168,7 +168,5 @@
       "Bash(npx vitest *)"
     ]
   },
-  "remote": {
-    "defaultEnvironmentId": "env_01WAAHa5YFKzaYXAPszX84JN"
-  }
+  "remote": {}
 }

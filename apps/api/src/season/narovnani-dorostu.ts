@@ -266,9 +266,12 @@ export async function narovnejDorosty(
   const filtr = scope === "ai" ? " AND rodic.user_id = 'ai'"
     : scope === "human" ? " AND rodic.user_id != 'ai'" : "";
 
+  // I hráči v A-týmu. Penalizace generátoru se týkala HRÁČŮ, ne soupisek — omezit
+  // narovnání na U21 znamenalo, že 592 z 597 hráčů áček zůstalo se starými stropy,
+  // mezi nimi i sedmnáctiletí, kteří už nemohli vyrůst ani o bod.
   const tymy = await db.prepare(
-    `SELECT t.id FROM teams t JOIN teams rodic ON rodic.id = t.parent_team_id
-      WHERE t.team_type = 'u21'${filtr}`,
+    `SELECT t.id FROM teams t JOIN teams rodic ON rodic.id = COALESCE(t.parent_team_id, t.id)
+      WHERE t.team_type IN ('u21', 'senior')${filtr}`,
   ).all<{ id: string }>()
     .catch((e) => { logger.warn({ module: M }, "load u21 teams", e); return { results: [] as never[] }; });
 

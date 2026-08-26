@@ -35,7 +35,9 @@ const ATRIBUTY = [
  */
 export function bodyDospivani(vek: number, talent: number): number {
   if (vek > DOSPIVANI_DO_VEKU) return 0;
-  return Math.round(3 + Math.max(0, Math.min(100, talent)) / 100 * 9);
+  // Základ zvednutý ze 3 na 4: i kluk bez talentu má za pět let dorostu (16–21) posbírat
+  // dvacet bodů dovedností, ne patnáct. Talentovaný dostává dál výrazně víc.
+  return Math.round(4 + Math.max(0, Math.min(100, talent)) / 100 * 9);
 }
 
 export interface VysledekDospivani {

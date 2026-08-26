@@ -22,10 +22,15 @@ export const RATING_WEIGHTS: Record<RatingPosition, Record<string, number>> = {
   // Váhy vznikly sloučením původních: goalkeeping nese reflexy i chytání (3+3), obrana
   // postavení, rychlost vybíhání, technika kopací techniku, přihrávka rozehrávku,
   // hlavičky dosah, kreativita komunikaci. Součet zůstal 20, takže hodnocení nepřeskočí.
-  GK: { goalkeeping: 6, defense: 3, speed: 2, technique: 1, passing: 1, strength: 1, heading: 2, creativity: 2, experience: 2 },
-  DEF: { speed: 1, stamina: 2, strength: 3, technique: 1, shooting: 0.5, passing: 2, heading: 3, defense: 3, vision: 2, experience: 2 },
-  MID: { speed: 2, stamina: 3, strength: 1, technique: 2, shooting: 1.5, passing: 3, heading: 1, defense: 1.5, vision: 3, experience: 2 },
-  FWD: { speed: 3, stamina: 1.5, strength: 1.5, technique: 3, shooting: 3, passing: 2, heading: 2, defense: 0.5, vision: 2, experience: 1.5 },
+  // Kreativita a standardky se dřív nepočítaly nikomu kromě brankáře (kreativita) —
+  // standardky neměly váhu u ŽÁDNÉ pozice. Hráč je přitom trénoval, dovednost mu rostla
+  // a hodnocení se nehnulo. Trénovat standardky nebo tvořivou hru je pro záložníka
+  // naprosto legitimní, takže se to napravuje tady ve vahách, ne tím, že by hra
+  // takový trénink obcházela.
+  GK: { goalkeeping: 6, defense: 3, speed: 2, technique: 1, passing: 1, strength: 1, stamina: 1, heading: 2, creativity: 2, experience: 2 },
+  DEF: { speed: 1, stamina: 2, strength: 3, technique: 1, shooting: 0.5, passing: 2, heading: 3, defense: 3, vision: 2, creativity: 1, setPieces: 0.5, experience: 2 },
+  MID: { speed: 2, stamina: 3, strength: 1, technique: 2, shooting: 1.5, passing: 3, heading: 1, defense: 1.5, vision: 3, creativity: 2, setPieces: 1, experience: 2 },
+  FWD: { speed: 3, stamina: 1.5, strength: 1.5, technique: 3, shooting: 3, passing: 2, heading: 2, defense: 0.5, vision: 2, creativity: 2, setPieces: 1, experience: 1.5 },
 };
 
 /** Váhy pro pozici; neznámá pozice spadne na útočníka (stejně jako dřív v API). */

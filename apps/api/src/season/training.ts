@@ -4,6 +4,7 @@ import type { Weather } from "../engine/types";
  */
 
 import type { Rng } from "../generators/rng";
+import { ratingWeightsFor } from "@okresni-masina/shared";
 import type { GeneratedPlayer } from "../generators/player";
 
 /**
@@ -91,6 +92,24 @@ export function trainingTypeLabel(type: string | null | undefined): string {
  * Zvednuto o 4–12 %, ne víc: cílem je zkrátit cestu do áčka o zlomek sezóny, ne vyrobit
  * z dorostu líheň hotových hráčů.
  */
+/** Do kolika let má hráč nárok na dva pokusy o zlepšení za jeden trénink. */
+export const POCET_POKUSU_DO_VEKU = 28;
+
+/**
+ * Kolik pokusů o zlepšení dostane hráč v produktivním věku (do 28 let) za jeden trénink.
+ *
+ * Naměřeno skutečným denním tickem nad kopií produkce, zisk hodnocení za sezónu:
+ *   pokusů   do 21   22–24   25–27
+ *        2    2,05    1,25    1,08
+ *        4    3,52    2,44    2,08
+ *        6    5,10    3,46    3,02
+ *
+ * Šestka je zvolená tak, aby se dorostenec z hodnocení 28 dostal na laťku základní
+ * sestavy (kolem 49) za čtyři sezóny — tedy dřív, než mu skončí dorostenecký věk.
+ * Při dvou pokusech to bylo dvanáct sezón, což znamenalo, že se tam nedostal nikdy.
+ */
+export const POKUSU_MLADI = 6;
+
 export function ageGrowthMod(age: number): number {
   if (age < 18) return 1.45;
   if (age < 20) return 1.35;
@@ -279,10 +298,13 @@ const COMMUTE_ABSENCE_REASONS = [
 ];
 
 export const TRAINING_EFFECTS: Record<TrainingType, string[]> = {
+  // Každý typ tréninku zvedá i něco fyzického. Dřív se výdrž dala trénovat JEN v kondici,
+  // takže při rotaci typů na ni vyšla čtvrtina tréninků — a proti tomu stála ztráta za
+  // každou absenci. Výdrž pak klesala i hráčům, kteří poctivě chodili.
   conditioning: ["stamina", "speed", "strength"],
-  technique: ["technique", "shooting", "creativity", "setPieces"],
-  tactics: ["passing", "defense", "vision"],
-  match_practice: ["shooting", "heading", "goalkeeping"],
+  technique: ["technique", "shooting", "creativity", "setPieces", "stamina"],
+  tactics: ["passing", "defense", "vision", "stamina"],
+  match_practice: ["shooting", "heading", "goalkeeping", "speed"],
 };
 
 /**
@@ -411,6 +433,23 @@ export function simulateTraining(
   const improvements: TrainingResult["improvements"] = [];
   const affectedAttrs = TRAINING_EFFECTS[plan.type];
 
+  /**
+   * Z dovedností, které daný trénink zvedá, nechá jen ty, které se hráči na jeho pozici
+   * počítají do hodnocení.
+   *
+   * Bez toho se trénoval vzduch: `technique` zvedá kreativitu a standardky, jenže standardky
+   * nemají váhu u ŽÁDNÉ pozice a kreativita jen u brankáře (viz rating-weights.ts). Hráč
+   * v poli tak polovinu technických tréninků proplýtval — dovednost mu vyrostla, ale
+   * hodnocení se nehnulo. Naměřeno: technika vycházela 4× hůř než taktika.
+   *
+   * Když by nezbylo nic (teoreticky u neznámé pozice), použije se původní seznam.
+   */
+  const uzitecneProPozici = (pozice: string): string[] => {
+    const vahy = ratingWeightsFor(pozice);
+    const uzitecne = affectedAttrs.filter((a) => (vahy[a] ?? 0) > 0);
+    return uzitecne.length > 0 ? uzitecne : affectedAttrs;
+  };
+
   // Mentor dneška: nejsilnější vůdčí veterán, který na trénink DORAZIL. Kdo nepřijde,
   // nikoho nevychová — proto se hledá až po docházce, ne v celém kádru.
   let mentorIndex: number | undefined;
@@ -440,13 +479,21 @@ export function simulateTraining(
       ? (0.9 + (managerBonus.youthDev / 100) * 0.6) * (1 + (equipExtras.youthTrainingMod ?? 0))
       : 1.0;
 
-    // Independent roll per session attended (base 10% per session)
-    for (let s = 0; s < sessions; s++) {
+    // Mladí do 22 let dostanou za jeden trénink DVA pokusy o zlepšení, dospělí jeden.
+    //
+    // Zvyšovat šanci na zlepšení nemá smysl: u dorostence je už kolem 50 % a naměřeno
+    // harnessem nad produkčními kádry se od dvojnásobku věkového modifikátoru čísla
+    // vůbec nehnula — šance narazila na sto procent a strop pak určuje docházka krát
+    // počet tréninkových dní, ne pravděpodobnost. Víc než jeden bod za trénink z jednoho
+    // pokusu prostě nevypadne. Druhý pokus ten strop zvedne.
+    const pokusu = player.age < POCET_POKUSU_DO_VEKU ? sessions * POKUSU_MLADI : sessions;
+    for (let s = 0; s < pokusu; s++) {
       // GK filter: non-GK never gets goalkeeping, GK prefers goalkeeping in match_practice
-      let attr = rng.pick(affectedAttrs);
+      const moznosti = uzitecneProPozici(player.position);
+      let attr = rng.pick(moznosti);
       if (attr === "goalkeeping" && player.position !== "GK") {
-        const filtered = affectedAttrs.filter((a) => a !== "goalkeeping");
-        attr = rng.pick(filtered);
+        const filtered = moznosti.filter((a) => a !== "goalkeeping");
+        attr = rng.pick(filtered.length > 0 ? filtered : moznosti);
       } else if (player.position === "GK" && plan.type === "match_practice" && attr !== "goalkeeping") {
         if (rng.random() < 0.6) attr = "goalkeeping";
       }
@@ -489,15 +536,30 @@ export function simulateTraining(
     }
   }
 
-  // Non-attendees may lose stamina (5% chance per training day)
+  // Kdo nedorazí, vypadává z formy — ale jen do rozumné míry.
+  //
+  // Dřív mohla výdrž klesat až k pěti bodům a nebyla na věku závislá, takže se
+  // sedmnáctiletý s poloviční docházkou propadl do nepoužitelnosti, aniž by kdy zestárl.
+  // Naměřeno na produkčním kádru: ztráta vycházela na 0,9 bodu za sezónu, zatímco
+  // kondiční trénink jich vrátí 0,6 — výdrž tedy byla trvale ztrátová u KAŽDÉHO hráče
+  // v lize. Sedmadvacetiletý záložník přišel za šest sezón o 21 bodů.
+  //
+  // Nově se dá spadnout nejvýš na 60 % vlastního stropu výdrže. Kdo netrénuje, je
+  // rozlámaný, ale ne mrtvý — a dohnat se to dá kondičním tréninkem. Skutečné stárnutí
+  // řeší `aging.ts`: od 30 let ubývá rychlost, výdrž i síla bez ohledu na docházku.
+  // Naměřeno: při 5 % vycházela ztráta 0,9 bodu za sezónu proti zisku 0,6 z kondičního
+  // tréninku, takže výdrž klesala KAŽDÉMU hráči v lize bez ohledu na věk. Při 2 % je
+  // ztráta 0,36 a poměr se otočí do plusu — kdo chodí, přidává; kdo nechodí, ztrácí.
+  const SANCE_ZTRATY_VYDRZE = 0.02;
+  const PODLAHA_VYDRZE = 0.6;
   for (let i = 0; i < squad.length; i++) {
     const attended = attendanceCounts.get(i) ?? 0;
-    if (attended === 0 && rng.random() < 0.05) {
-      const player = squad[i];
-      if (player.stamina > 5) {
-        player.stamina -= 1;
-        improvements.push({ playerIndex: i, attribute: "stamina", change: -1 });
-      }
+    if (attended !== 0 || rng.random() >= SANCE_ZTRATY_VYDRZE) continue;
+    const player = squad[i];
+    const podlaha = Math.max(5, Math.round((player.skillCaps?.stamina ?? 100) * PODLAHA_VYDRZE));
+    if (player.stamina > podlaha) {
+      player.stamina -= 1;
+      improvements.push({ playerIndex: i, attribute: "stamina", change: -1 });
     }
   }
 
