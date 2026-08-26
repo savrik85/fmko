@@ -772,8 +772,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   leagueTransfers.push(...virtualSales);
   leagueTransfers.sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
 
-  // Placené přestupy (bez free agentů) — pro stats, biggest, sellers, buyers
-  const paidTransfers = leagueTransfers.filter((t) => t.joinType === "transfer");
+  // Placené přestupy (bez free agentů) — pro stats, biggest, sellers, buyers.
+  // Výměna se do nich nepočítá: nemá cenu, jen doplatek, takže by v žebříčku
+  // nejdražších visela jako přestup za pár korun a ředila by průměr.
+  // Ve výpisu posledních přestupů výměny zůstávají, tam musí být vidět obě strany.
+  const paidTransfers = leagueTransfers.filter((t) => t.joinType === "transfer" && !t.isSwap);
 
   const totalTransfers = paidTransfers.length;
   const totalValue = paidTransfers.reduce((s, t) => s + t.fee, 0);
