@@ -17,7 +17,9 @@
 
 import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
-import { DEFAULT_RULES, PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY } from "./defaults";
+import {
+  DEFAULT_RULES, PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY, type OfficialRole,
+} from "./defaults";
 import type { GrantKind } from "./grants";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
 import { presidentOf, recallOfficial, resolveElections, restoreOfficial } from "./officials";
@@ -146,6 +148,8 @@ export async function runOneMeeting(
       // V zápisu jméno být musí — tam se zvolený nikde jinde neuvádí.
       resultNote: e.winner ? `Zvolen ${e.winner}. ${e.note}` : e.note,
       winnerTeamId: e.winnerTeamId,
+      // Pro článek: zasedání s volbou se píše jako událost, ne jako protokol.
+      zvolen: e.winner, roleLabel: ROLE_LABEL[e.role] ?? e.role, role: e.role,
     } as unknown as Record<string, unknown>);
     // Volba je plnohodnotný bod programu — musí se počítat do zápisu stejně jako návrh.
     closedCount++;
@@ -516,10 +520,56 @@ async function notifyMeeting(
 
   const n = results.length;
   const bodu = n === 1 ? "bod" : n <= 4 ? "body" : "bodů";
-  const body = `Zasedání grémia soutěže (${leagueName}) projednalo ${n} ${bodu}: `
-    + `${parts.join(", ") || "bez rozhodnutí"}. Zápis najdeš v sekci Grémium.`;
+  const spolecne = `Zasedání grémia soutěže (${leagueName}) projednalo ${n} ${bodu}: `
+    + `${parts.join(", ") || "bez rozhodnutí"}.`;
 
-  for (const teamId of voters) {
+  // Co se týká přímo tebe. Bez tohohle dostal nově zvolený prezident tentýž
+  // obecný souhrn jako všichni ostatní a o svém zvolení se nedozvěděl.
+  const osobni = new Map<string, string[]>();
+  const pridej = (teamId: string | null | undefined, veta: string) => {
+    if (!teamId) return;
+    const l = osobni.get(teamId) ?? [];
+    l.push(veta);
+    osobni.set(teamId, l);
+  };
+
+  for (const r of results) {
+    const kind = String(r.kind ?? "");
+    const title = String(r.title ?? "");
+
+    if (kind === "election" && r.winnerTeamId) {
+      const role = String(r.role ?? "");
+      pridej(
+        r.winnerTeamId as string,
+        `Byl jsi zvolen do funkce ${ROLE_LABEL[role as OfficialRole] ?? "ve vedení soutěže"}.`,
+      );
+      continue;
+    }
+    if (kind === "compliance" || kind === "vacated") {
+      pridej(r.teamId as string, `${title} ${r.resultNote ?? ""}`.trim());
+      continue;
+    }
+    // Návrhy: zajímá to navrhovatele a klub, kterého se bod týká.
+    const vysledek = r.status === "passed" ? "prošel"
+      : r.status === "rejected" ? "neprošel"
+      : r.status === "no_quorum" ? "spadl pod stůl, nesešlo se dost hlasů"
+      : null;
+    if (!vysledek) continue;
+    pridej(r.proposedByTeamId as string, `Tvůj návrh „${title}" ${vysledek}.`);
+    if (r.targetTeamId && r.targetTeamId !== r.proposedByTeamId) {
+      pridej(r.targetTeamId as string, `Bod „${title}", který se tě týká, ${vysledek}.`);
+    }
+  }
+
+  // Zvolení nemusí být mezi hlasujícími (klub bez hlasovacího práva kandidovat
+  // nemůže, ale pokutovaný nebo odvolaný ano) — sjednotíme příjemce.
+  const prijemci = new Set<string>([...voters, ...osobni.keys()]);
+
+  for (const teamId of prijemci) {
+    const moje = osobni.get(teamId);
+    const body = moje?.length
+      ? `${moje.join(" ")} ${spolecne} Zápis najdeš v sekci Grémium.`
+      : `${spolecne} Zápis najdeš v sekci Grémium.`;
     await sendSystemSMS(db, teamId, SMS_ROLE, body)
       .catch((e) => logger.warn({ module: M }, `SMS o schůzi pro tým ${teamId}`, e));
   }

@@ -314,21 +314,25 @@ export default function NewsPage() {
     : playerInterviewArticles;
   // Lead story = nejnovější kandidát napříč typy (preview kolem zápasu vyhraje nad starým round_summary).
   // standing je dynamicky generovaný se současným časem, proto zůstává až jako poslední fallback.
+  // Zasedání grémia je událost soutěže, ne drobná zpráva — zvolené vedení
+  // patří nad ohyb, ne do dvousloupcové patičky vedle inzerce.
+  const gremiumArticles = articles.filter((a) => a.type === "governance_minutes");
   const openerArticles = articles.filter((a) => a.type === "season_opener");
   const wrapArticles = articles.filter((a) => a.type === "season_wrap");
-  const leadStory = [openerArticles[0], previewArticles[0], roundSummaryArticles[0], aiReportArticles[0], matchArticles[0]]
+  const leadStory = [openerArticles[0], gremiumArticles[0], previewArticles[0], roundSummaryArticles[0], aiReportArticles[0], matchArticles[0]]
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     || standingArticles[0] || articles.find((a) => a.type !== "ultras_report");
   // Druhý hlavní článek — kolem přelomu sezóny je to ohlédnutí za sezónou (season_wrap),
   // jinak round_summary / ai_report (podle toho, co není lead).
   const secondaryStory =
-    (wrapArticles[0] && wrapArticles[0].id !== leadStory?.id ? wrapArticles[0] : null)
+    (gremiumArticles[0] && gremiumArticles[0].id !== leadStory?.id ? gremiumArticles[0] : null)
+    ?? (wrapArticles[0] && wrapArticles[0].id !== leadStory?.id ? wrapArticles[0] : null)
     ?? (roundSummaryArticles[0] && roundSummaryArticles[0].id !== leadStory?.id ? roundSummaryArticles[0] : null)
     ?? (aiReportArticles[0] && aiReportArticles[0].id !== leadStory?.id ? aiReportArticles[0] : null);
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
-    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "post_match_interview", "ultras_report"].includes(a.type)
+    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "post_match_interview", "ultras_report", "governance_minutes"].includes(a.type)
       && a.id !== leadStory?.id && a.id !== secondaryStory?.id,
   );
   const miscArticles = otherArticles;

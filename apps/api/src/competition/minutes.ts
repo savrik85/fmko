@@ -25,6 +25,9 @@ export interface MinutesItem {
   proti?: number;
   zdrzel?: number;
   resultNote?: string | null;
+  /** U volby: jméno zvoleného a název funkce, ať se dá napsat slavnostní lead. */
+  zvolen?: string | null;
+  roleLabel?: string | null;
 }
 
 export interface MinutesInput {
@@ -160,10 +163,56 @@ function citace(j: Journalist | null, v: MinutesInput, prijato: number): string 
   return `„${veta}" řekl po zasedání prezident soutěže ${kdo} (${v.prezident.teamName}).`;
 }
 
+/**
+ * Zasedání, na kterém se volilo, není běžná schůze. Zvolení vedení je událost
+ * a článek tak musí vypadat — jménem v titulku a jmény v prvním odstavci, ne
+ * odrážkou mezi ostatními body.
+ */
+function zvoleni(v: MinutesInput): Array<{ role: string; kdo: string; title: string }> {
+  return v.items
+    .filter((i) => i.kind === "election" && i.status === "passed" && i.zvolen)
+    .map((i) => ({ role: i.roleLabel ?? "ve vedení soutěže", kdo: i.zvolen as string, title: i.title }));
+}
+
 /** Sestaví text zápisu. Čistá funkce — jde otestovat bez databáze. */
 export function sestavZapis(j: Journalist | null, v: MinutesInput): { headline: string; body: string } {
   const prijato = v.items.filter((i) => i.status === "passed").length;
-  const radky = v.items.map((it) => bod(v, it)).filter(Boolean);
+  const volby = zvoleni(v);
+  const liga = druhyPad(v.leagueName);
+
+  // Z programu vypadnou jen ty volby, které se opravdu dostaly do úvodu. Volba
+  // bez jména zvoleného tam nepatří, ale zmizet z článku taky nesmí.
+  const vUvodu = new Set(volby.map((z) => z.title));
+  const radky = v.items
+    .filter((i) => !vUvodu.has(i.title))
+    .map((it) => bod(v, it))
+    .filter(Boolean);
+
+  if (volby.length > 0) {
+    const seznam = volby.map((z) => `${z.role}: ${z.kdo}`);
+    const prvni = volby[0];
+    const headline = volby.length >= 3
+      ? `${liga.charAt(0).toUpperCase()}${liga.slice(1)} má nové vedení`
+      : `${prvni.role} ${liga}: ${prvni.kdo}`;
+
+    const uvod = volby.length === 1
+      ? `Soutěž má nového funkcionáře. Do funkce ${prvni.role.toLowerCase()} byl zvolen ${prvni.kdo}.`
+      : `Soutěž má vedení. Kluby si zvolily ${tvar(volby.length, "funkcionáře", "funkcionáře", "funkcionářů")}:`;
+
+    const body = [
+      uvod,
+      ...(volby.length === 1 ? [] : seznam.map((r) => `• ${r}`)),
+      "",
+      ucast(j, v),
+      ...(radky.length > 0 ? ["", "Dál se na programu zasedání objevilo:", ...radky] : []),
+      "",
+      citace(j, v, prijato),
+      "",
+      `V pokladně soutěže po zasedání zůstalo ${czk(v.balance)}.`,
+    ].join("\n");
+
+    return { headline, body };
+  }
 
   const body = [
     ucast(j, v),
