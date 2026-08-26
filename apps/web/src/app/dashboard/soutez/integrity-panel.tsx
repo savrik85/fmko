@@ -25,6 +25,7 @@ interface ZaznamKnihy {
 interface ZaznamPrestupu {
   hrac: string; playerId: string; zKlubu: string | null; doKlubu: string;
   castka: number; druh: string; gameDate: string; priznaky: string[];
+  vymena?: boolean; protihrac?: string | null;
 }
 
 const kurz = (x: number) => (x / 100).toFixed(2).replace(".", ",");
@@ -128,11 +129,16 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
                         : t.hrac}
                     </span>
                     <span className="text-sm font-heading font-bold tabular-nums shrink-0">
-                      {t.castka > 0 ? czk(t.castka) : "zdarma"}
+                      {/* U výměny nese peníze jen jedna strana; „zdarma" by u té
+                          druhé lhalo, protihodnotou byl hráč. */}
+                      {t.castka > 0
+                        ? (t.vymena ? `doplatek ${czk(t.castka)}` : czk(t.castka))
+                        : t.vymena ? "bez doplatku" : "zdarma"}
                     </span>
                   </div>
                   <div className="text-sm text-muted leading-snug">
                     {t.druh} · {t.zKlubu ?? "volný hráč"} → {t.doKlubu}
+                    {t.vymena && t.protihrac && ` · za ${t.protihrac}`}
                   </div>
                   {t.priznaky.map((p, j) => (
                     <div key={j} className="text-sm mt-1 leading-snug" style={{ color: "#A32B1F" }}>

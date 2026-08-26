@@ -1888,7 +1888,7 @@ export default function TransfersPage() {
                 <div className="card p-6 text-center text-muted">Zatím žádná uzavřená jednání.</div>
               ) : (
                 <div className="space-y-2">
-                  {history.map((o) => {
+                  {history.flatMap((o) => {
                     const statusMap: Record<string, { label: string; color: string }> = {
                       accepted: { label: "Přijato", color: "text-pitch-500" },
                       rejected: { label: "Zamítnuto", color: "text-red-600" },
@@ -1900,29 +1900,68 @@ export default function TransfersPage() {
                     const isLoan = o.offer_type === "loan";
                     const otherName = o.my_role === "buyer" ? o.to_team_name : o.from_team_name;
                     const when = o.resolved_at ? new Date(o.resolved_at).toLocaleDateString("cs-CZ") : "";
-                    const hAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
-                    return (
-                      <Link key={o.id} href={`/dashboard/transfers/offer/${o.id}`} className="card p-3 flex items-center gap-3 hover:bg-pitch-50 transition-colors">
-                        {hAvatar && Object.keys(hAvatar).length > 0
-                          ? <FaceAvatar faceConfig={hAvatar} size={36} className="rounded-full shrink-0" />
+                    const parseAvatar = (raw: unknown): Record<string, unknown> | null => {
+                      try {
+                        const v = typeof raw === "string" ? JSON.parse(raw) : raw;
+                        return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+                      } catch { return null; }
+                    };
+                    const hAvatar = parseAvatar((o as any).player_avatar ?? (o as any).avatar);
+                    // Výměna se v historii ukazuje jako dva přestupy — každý hráč
+                    // svůj řádek. Jinak by druhý hráč nebyl vidět vůbec a doplatek
+                    // by vypadal jako celá cena obchodu.
+                    const swapName = (o as any).swap_first_name
+                      ? `${(o as any).swap_first_name} ${(o as any).swap_last_name}`
+                      : null;
+                    const jeVymena = !!(o as any).offered_player_id;
+                    const druh = isLoan ? "Hostování" : jeVymena ? "Výměna" : "Přestup";
+
+                    const radek = (
+                      key: string, jmeno: string, pozice: string | null,
+                      avatar: Record<string, unknown> | null, prichod: boolean, castka: number | null,
+                      poznamka: string | null,
+                    ) => (
+                      <Link key={key} href={`/dashboard/transfers/offer/${o.id}`} className="card p-3 flex items-center gap-3 hover:bg-pitch-50 transition-colors">
+                        {avatar && Object.keys(avatar).length > 0
+                          ? <FaceAvatar faceConfig={avatar} size={36} className="rounded-full shrink-0" />
                           : <div className="w-9 h-9 rounded-full bg-gray-100 shrink-0" />}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-heading font-bold text-sm truncate">{o.first_name} {o.last_name}</span>
-                            <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                            <span className="font-heading font-bold text-sm truncate">{jmeno}</span>
+                            {pozice && <PositionBadge position={pozice as "GK" | "DEF" | "MID" | "FWD"} />}
                             <span className={`text-xs font-heading font-bold uppercase tracking-wider ${s.color}`}>{s.label}</span>
                           </div>
                           <div className="text-xs text-muted truncate">
-                            {o.my_role === "buyer" ? "→" : "←"} {otherName}
+                            {prichod ? "←" : "→"} {otherName}
                             {" · "}
-                            {isLoan ? "Hostování" : "Přestup"}
-                            {amount > 0 && ` · ${amount.toLocaleString("cs")} Kč`}
+                            {druh}
+                            {poznamka && ` · ${poznamka}`}
+                            {castka != null && castka > 0 && ` · ${castka.toLocaleString("cs")} Kč`}
                             {when && ` · ${when}`}
                           </div>
                         </div>
                         <span className="text-xs text-muted shrink-0">›</span>
                       </Link>
                     );
+
+                    const hlavni = radek(
+                      o.id, `${o.first_name} ${o.last_name}`, o.position as string, hAvatar,
+                      o.my_role === "buyer", amount,
+                      jeVymena && swapName ? `za ${swapName}` : null,
+                    );
+                    if (!jeVymena) return [hlavni];
+
+                    return [
+                      hlavni,
+                      radek(
+                        `${o.id}-swap`,
+                        swapName ?? "hráč už v databázi není",
+                        (o as any).swap_position ?? null,
+                        parseAvatar((o as any).swap_avatar),
+                        o.my_role !== "buyer", null,
+                        `za ${o.first_name} ${o.last_name}`,
+                      ),
+                    ];
                   })}
                 </div>
               )}

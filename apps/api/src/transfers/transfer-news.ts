@@ -84,6 +84,8 @@ export async function createTransferNews(
     fromTeamName?: string;
     toTeamName?: string;
     fee?: number;
+    /** Hráč, který šel opačným směrem. U výměny je cena jen doplatek. */
+    swapPlayerName?: string;
     reason?: string;
     isCrossDistrict?: boolean;
   },
@@ -121,15 +123,24 @@ export async function createTransferNews(
       body = `Fotbalista ${data.teamName} ${data.playerName} (${data.playerAge}) přestal docházet. ${data.reason ?? "Prý ho to nebaví."}`;
       break;
 
-    case "transfer_completed":
+    case "transfer_completed": {
+      // U výměny je částka jen doplatek, ne cena hráče. Napsat „za 10 Kč" by
+      // z vyrovnaného obchodu udělalo výprodej.
+      const zaCo = data.swapPlayerName
+        ? ` výměnou za ${data.swapPlayerName}${data.fee ? ` a ${data.fee.toLocaleString("cs")} Kč` : ""}`
+        : data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : "";
       if (data.isCrossDistrict) {
         headline = `Posila z jiného okresu! ${data.playerName} přichází z ${data.fromTeamName}`;
-        body = `${data.toTeamName} přivedl ${data.playerName} (${data.playerAge}, ${data.playerPosition}) až z ${data.fromTeamName}${data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : ""}. Meziokresní přestup vzbudil pozornost — uvidíme, jestli se novému prostředí přizpůsobí.`;
+        body = `${data.toTeamName} přivedl ${data.playerName} (${data.playerAge}, ${data.playerPosition}) až z ${data.fromTeamName}${zaCo}. Meziokresní přestup vzbudil pozornost — uvidíme, jestli se novému prostředí přizpůsobí.`;
+      } else if (data.swapPlayerName) {
+        headline = `Výměna! ${data.playerName} za ${data.swapPlayerName}`;
+        body = `${data.fromTeamName} a ${data.toTeamName} si vyměnily hráče: ${data.playerName} (${data.playerAge}, ${data.playerPosition}) míří do ${data.toTeamName}, opačným směrem jde ${data.swapPlayerName}${data.fee ? `, k tomu doplatek ${data.fee.toLocaleString("cs")} Kč` : ""}. ${humor}`;
       } else {
         headline = `Přestup! ${data.playerName} míří z ${data.fromTeamName} do ${data.toTeamName}`;
-        body = `${data.playerName} (${data.playerAge}, ${data.playerPosition}) přestupuje z ${data.fromTeamName} do ${data.toTeamName}${data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : ""}. ${humor}`;
+        body = `${data.playerName} (${data.playerAge}, ${data.playerPosition}) přestupuje z ${data.fromTeamName} do ${data.toTeamName}${zaCo}. ${humor}`;
       }
       break;
+    }
 
     case "loan_completed":
       headline = `Hostování: ${data.playerName} zamířil do ${data.toTeamName}`;

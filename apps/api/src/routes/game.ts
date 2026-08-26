@@ -5898,6 +5898,13 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
     `SELECT to2.*, COALESCE(p.first_name, dp.first_name) as first_name, COALESCE(p.last_name, dp.last_name) as last_name,
      COALESCE(p.age, dp.age) as age, COALESCE(p.position, dp.position) as position,
      COALESCE(p.overall_rating, dp.overall_rating) as overall_rating, p.avatar as player_avatar,
+     -- Výměnný hráč: jde opačným směrem jako protihodnota. Bez něj vypadá
+     -- doplatek jako celá cena přestupu a druhý hráč se v historii vůbec neobjeví.
+     COALESCE(sp.first_name, sdp.first_name) as swap_first_name,
+     COALESCE(sp.last_name, sdp.last_name) as swap_last_name,
+     COALESCE(sp.position, sdp.position) as swap_position,
+     COALESCE(sp.overall_rating, sdp.overall_rating) as swap_overall_rating,
+     sp.avatar as swap_avatar,
      ${virtualNameSql.replace("ELSE t.name END", "ELSE tf.name END")} as from_team_name, tt.name as to_team_name,
      tf.league_id as from_league_id, tt.league_id as to_league_id,
      COALESCE((SELECT COALESCE(fc.parent_team_id, fc.id) FROM teams fc WHERE fc.id = to2.from_team_id), to2.from_team_id) as from_club_team_id,
@@ -5905,6 +5912,8 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      FROM transfer_offers to2
      LEFT JOIN players p ON to2.player_id = p.id
      LEFT JOIN departed_players dp ON to2.player_id = dp.id
+     LEFT JOIN players sp ON to2.offered_player_id = sp.id
+     LEFT JOIN departed_players sdp ON to2.offered_player_id = sdp.id
      LEFT JOIN teams tf ON to2.from_team_id = tf.id
      JOIN teams tt ON to2.to_team_id = tt.id
      WHERE (to2.from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
@@ -6267,6 +6276,14 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const loanDuration = offer.loan_duration as number | null;
   if (offerType === "loan" && !loanDuration) return c.json({ error: "Nabídce hostování chybí délka" }, 400);
   const swapPlayerId = (offer.offered_player_id as string | null) ?? null;
+  // Jméno vyměněného hráče se čte teď, dokud ještě sedí na původní soupisce —
+  // po dokončení výměny už je jinde a do zprávy by se dohledávalo hůř.
+  const swapPlayerName = swapPlayerId
+    ? await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?")
+        .bind(swapPlayerId).first<{ first_name: string; last_name: string }>()
+        .then((r) => (r ? `${r.first_name} ${r.last_name}` : null))
+        .catch((e) => { logger.warn({ module: "game" }, "jméno vyměněného hráče", e); return null; })
+    : null;
   const targetSquad = ((offer.target_squad as string) ?? "senior") === "u21" ? "u21" : "senior";
 
   // Nabídka odkazuje na konkrétní soupisku, finance ale patří mateřskému klubu.
@@ -6718,6 +6735,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       playerName: offerPlayerName, playerAge: player?.age as number,
       playerPosition: player?.position as string, teamName: seller?.name ?? "",
       fromTeamName: seller?.name, toTeamName: buyer.name, fee: amount,
+      swapPlayerName: swapPlayerName ?? undefined,
     }).catch((e) => logger.warn({ module: "game" }, "create offer accepted news", e));
   }
 

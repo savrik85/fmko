@@ -117,6 +117,10 @@ export interface ZaznamPrestupu {
   gameDate: string;
   /** Proč to stojí za pohled. Prázdné = nic nápadného. */
   priznaky: string[];
+  /** Výměna: hráč šel jako protihodnota, ne za peníze. */
+  vymena?: boolean;
+  /** Kdo šel opačným směrem. Obě strany výměny na sebe takhle ukazují. */
+  protihrac?: string | null;
 }
 
 /**
@@ -134,12 +138,19 @@ export async function listinaPrestupu(
   db: D1Database, leagueId: string, seasonNumber: number, limit = 60,
 ): Promise<ZaznamPrestupu[]> {
   const rows = await db.prepare(
-    `SELECT o.id, o.offer_amount, o.offer_type, o.resolved_at,
+    `SELECT o.id, o.offer_amount, o.counter_amount, o.offer_type, o.resolved_at,
+            o.offered_player_id,
             p.first_name, p.last_name, p.id AS player_id, p.overall_rating, p.age,
+            sp.first_name AS sw_first, sp.last_name AS sw_last,
+            sp.overall_rating AS sw_rating, sp.age AS sw_age,
+            sdp.first_name AS swd_first, sdp.last_name AS swd_last,
+            sdp.overall_rating AS swd_rating, sdp.age AS swd_age,
             fromT.name AS z_klubu, fromT.user_id AS z_user, fromT.id AS z_id,
             toT.name AS do_klubu, toT.user_id AS do_user, toT.id AS do_id
        FROM transfer_offers o
        LEFT JOIN players p ON p.id = o.player_id
+       LEFT JOIN players sp ON sp.id = o.offered_player_id
+       LEFT JOIN departed_players sdp ON sdp.id = o.offered_player_id
        LEFT JOIN teams fromT ON fromT.id = o.from_team_id
        JOIN teams toT ON toT.id = o.to_team_id
       WHERE o.status = 'accepted'
@@ -156,30 +167,44 @@ export async function listinaPrestupu(
     dvojice.set(klic, (dvojice.get(klic) ?? 0) + 1);
   }
 
-  return rows.results.map((r) => {
-    const castka = Math.abs((r.offer_amount as number) ?? 0);
+  const out: ZaznamPrestupu[] = [];
+
+  for (const r of rows.results) {
+    // Dohodnutá cena, ne původní nabídka. Když se smlouvalo, platí protinávrh.
+    const castka = Math.abs((r.counter_amount as number) ?? (r.offer_amount as number) ?? 0);
     // Hodnota se v databázi nedrží, počítá se z ratingu a věku — stejnou
     // funkcí, jakou používá přestupový trh při posuzování nabídek.
     const hodnota = r.overall_rating
       ? estimateMarketValue(r.overall_rating as number, (r.age as number) ?? 26)
       : 0;
-    const priznaky: string[] = [];
 
+    // Výměna: druhý hráč šel opačným směrem jako protihodnota. Bez něj by
+    // desetikorunový doplatek vypadal jako obchod za deset korun a komisař by
+    // dostal falešné podezření z podhodnocené ceny.
+    const swFirst = (r.sw_first ?? r.swd_first) as string | null;
+    const swLast = (r.sw_last ?? r.swd_last) as string | null;
+    const swRating = (r.sw_rating ?? r.swd_rating) as number | null;
+    const swAge = (r.swd_age ?? r.sw_age) as number | null;
+    const jeVymena = !!r.offered_player_id;
+    const protihodnota = swRating ? estimateMarketValue(swRating, swAge ?? 26) : 0;
+    const swJmeno = swFirst ? `${swFirst} ${swLast}` : jeVymena ? "hráč už v databázi není" : null;
+
+    const priznaky: string[] = [];
     const zUser = r.z_user as string | null;
     const doUser = r.do_user as string | null;
     if (zUser && doUser && zUser !== "ai" && zUser === doUser) {
       priznaky.push("Oba kluby patří témuž majiteli");
     }
     const hostovani = r.offer_type === "loan";
-    if (hodnota > 0 && castka > 0) {
+    // U výměny se poměřuje celé plnění — hotovost plus hráč, který šel zpátky.
+    const plneni = castka + protihodnota;
+    if (hodnota > 0 && plneni > 0) {
       if (hostovani) {
         // U hostování se neporovnává cena hráče, ale poplatek za jeho půjčení.
-        // Za sezónní výpůjčku nikdo nezaplatí víc, než hráč stojí — a když ano,
-        // je to typický způsob, jak převést peníze bez skutečné protihodnoty.
-        if (castka > hodnota) priznaky.push("Poplatek za hostování je vyšší než hodnota hráče");
+        if (plneni > hodnota) priznaky.push("Poplatek za hostování je vyšší než hodnota hráče");
       } else {
-        if (castka > hodnota * 2.5) priznaky.push("Cena výrazně nad odhadem hodnoty hráče");
-        if (castka < hodnota * 0.4) priznaky.push("Cena výrazně pod odhadem hodnoty hráče");
+        if (plneni > hodnota * 2.5) priznaky.push("Plnění výrazně nad odhadem hodnoty hráče");
+        if (plneni < hodnota * 0.4) priznaky.push("Plnění výrazně pod odhadem hodnoty hráče");
       }
     }
     if (r.z_id) {
@@ -187,17 +212,33 @@ export async function listinaPrestupu(
       if ((dvojice.get(klic) ?? 0) >= 3) priznaky.push("Tyhle dva kluby spolu obchodují opakovaně");
     }
 
-    return {
+    const zKlubu = (r.z_klubu as string) ?? null;
+    const doKlubu = r.do_klubu as string;
+    const gameDate = (r.resolved_at as string) ?? "";
+    const druh = hostovani ? "hostování" : jeVymena ? "výměna" : "přestup";
+
+    out.push({
       hrac: r.first_name ? `${r.first_name} ${r.last_name}` : "hráč už v databázi není",
       playerId: (r.player_id as string) ?? "",
-      zKlubu: (r.z_klubu as string) ?? null,
-      doKlubu: r.do_klubu as string,
-      castka,
-      druh: hostovani ? "hostování" : "přestup",
-      gameDate: (r.resolved_at as string) ?? "",
-      priznaky,
-    };
-  });
+      zKlubu, doKlubu, castka, druh, gameDate, priznaky,
+      vymena: jeVymena, protihrac: swJmeno,
+    });
+
+    // Druhý hráč výměny je taky přestup a musí být v listině vidět. Jde opačným
+    // směrem a peníze nenese — ty visí u prvního záznamu, ať se nesčítají dvakrát.
+    if (jeVymena) {
+      out.push({
+        hrac: swJmeno ?? "hráč už v databázi není",
+        playerId: (r.offered_player_id as string) ?? "",
+        zKlubu: doKlubu, doKlubu: zKlubu ?? doKlubu,
+        castka: 0, druh, gameDate, priznaky,
+        vymena: true,
+        protihrac: r.first_name ? `${r.first_name} ${r.last_name}` : null,
+      });
+    }
+  }
+
+  return out;
 }
 
 /** Smí komisař zablokovat sázení právě tomuhle klubu? */
