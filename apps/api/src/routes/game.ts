@@ -4909,8 +4909,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
   // ho ovládá odtamtud. Bez druhé podmínky hráče nenajdeme a manažer dostane „Hráč nenalezen",
   // takže z dorostu nešlo nikoho propustit ani vystavit na trh.
   const player = await c.env.DB.prepare(
-    `SELECT p.first_name, p.last_name, p.age, p.position, p.loan_from_team_id,
-            p.team_id AS kmenovy_tym, t.league_id, t.name as team_name
+    `SELECT p.first_name, p.last_name, p.age, p.position, p.loan_from_team_id, t.name as team_name
        FROM players p JOIN teams t ON p.team_id = t.id
       WHERE p.id = ? AND (p.team_id = ? OR t.parent_team_id = ?)`
   ).bind(playerId, teamId, teamId).first<Record<string, unknown>>();
@@ -4923,16 +4922,23 @@ gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
   ).bind(playerId).first();
   if (existing) return c.json({ error: "Hráč je už na trhu" }, 400);
 
+  // Inzerát patří KLUBU, který hráče prodává — tedy A-týmu a jeho lize, i když je hráč
+  // vedený v dorostu. Trh se čte přes `league_id` a `team_id` áčka, takže inzerát založený
+  // na dorostenecký tým je neviditelný: nevidí ho soupeři ani vlastník mezi svými nabídkami.
+  const prodavajici = await c.env.DB.prepare("SELECT league_id, name FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string; name: string }>();
+  if (!prodavajici) return c.json({ error: "Tým nenalezen" }, 404);
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
 
   await c.env.DB.prepare(
     "INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(id, playerId, (player.kmenovy_tym as string) ?? teamId, body.askingPrice, player.league_id, expiresAt.toISOString()).run();
+  ).bind(id, playerId, teamId, body.askingPrice, prodavajici.league_id, expiresAt.toISOString()).run();
 
   const { createTransferNews } = await import("../transfers/transfer-news");
-  await createTransferNews(c.env.DB, player.league_id as string, teamId, "player_listed", {
+  await createTransferNews(c.env.DB, prodavajici.league_id, teamId, "player_listed", {
     playerName: `${player.first_name} ${player.last_name}`, playerAge: player.age as number,
     playerPosition: player.position as string, teamName: player.team_name as string, fee: body.askingPrice,
   }).catch((e) => logger.warn({ module: "game" }, "create listing news", e));
