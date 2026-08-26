@@ -447,6 +447,14 @@ export async function executeDailyTick(
           improvements: improvementsWithNames,
           teamChemistry: result.teamChemistry,
           moraleChanges: moraleWithNames,
+          // Kdo dnes v kabině táhl mladé nahoru — ať je vidět, že se veterán vyplácí
+          mentor: result.mentor
+            ? {
+                playerId: playersResult.results[result.mentor.playerIndex].id as string,
+                playerName: `${squad[result.mentor.playerIndex].firstName} ${squad[result.mentor.playerIndex].lastName}`,
+                bonusPct: result.mentor.bonusPct,
+              }
+            : null,
           attendedCount: attendanceWithNames.filter((a) => a.attended).length,
           totalCount: attendanceWithNames.length,
           rested: restedPlayers,

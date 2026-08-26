@@ -1063,14 +1063,21 @@ export async function runScheduledMatches(
             // More minutes = more chance. Young players benefit more.
             try {
                 const matchRng = createRng(Date.now() + matchId.charCodeAt(2));
+                // Trenér mládeže a kamera zrychlují rozvoj i ze zápasu, ne jen z tréninku.
+                // Načítá se jednou za tým, ne za hráče — jde o klubové zázemí.
+                const { tryMatchGrowth, parseSkillCaps, loadYouthMod } = await import("../season/match-growth");
+                const youthModPerTeam = new Map<string, number>();
+                for (const tid of [homeTeamId, awayTeamId]) {
+                    youthModPerTeam.set(tid, await loadYouthMod(db, tid));
+                }
                 for (const [engineId, pm] of Object.entries(result.playerMinutes)) {
                     const dbId = fullIdMap.get(Number(engineId));
                     if (!dbId) continue;
                     const minutes = ((pm as any).left ?? 90) - (pm as any).entered;
                     if (minutes < 15) continue; // too few minutes to learn anything
 
-                    const playerRow = await db.prepare("SELECT p.age, p.skills, p.position, t.team_type FROM players p LEFT JOIN teams t ON t.id = p.team_id WHERE p.id = ?")
-                        .bind(dbId).first<{ age: number; skills: string; position: string; team_type: string | null }>().catch((e) => {
+                    const playerRow = await db.prepare("SELECT p.age, p.skills, p.position, p.hidden_talent, p.skills_max, t.team_type FROM players p LEFT JOIN teams t ON t.id = p.team_id WHERE p.id = ?")
+                        .bind(dbId).first<{ age: number; skills: string; position: string; hidden_talent: number | null; skills_max: string | null; team_type: string | null }>().catch((e) => {
                             logger.warn({module: "match-runner"}, "Failed to load player for match experience", e);
                             return null;
                         });
@@ -1092,30 +1099,27 @@ export async function runScheduledMatches(
                         }
                     }
 
-                    const ageMod = age < 22 ? 0.08 : age < 26 ? 0.05 : age < 30 ? 0.03 : 0.01;
-                    const minutesMod = minutes / 90; // full match = 1.0
-                    const improveChance = ageMod * minutesMod;
+                    const hracuvTym = fullPosMap.get(dbId)
+                        ? (homeBuild.idMap.has(Number(engineId)) ? homeTeamId : awayTeamId)
+                        : homeTeamId;
+                    const skills = JSON.parse(playerRow.skills);
+                    const rust = tryMatchGrowth(matchRng, skills, {
+                        age,
+                        position: playerRow.position,
+                        minutes,
+                        hiddenTalent: playerRow.hidden_talent ?? 0,
+                        skillCaps: parseSkillCaps(playerRow.skills_max),
+                        youthMod: youthModPerTeam.get(hracuvTym) ?? 0,
+                    });
 
-                    if (matchRng.random() < improveChance) {
-                        const skills = JSON.parse(playerRow.skills);
-                        // Pick a position-relevant skill to improve
-                        const posSkills: Record<string, string[]> = {
-                            GK: ["goalkeeping"], DEF: ["defense", "heading", "strength"],
-                            MID: ["passing", "vision", "technique"], FWD: ["shooting", "speed", "technique"],
-                        };
-                        const candidates = posSkills[playerRow.position] ?? ["technique"];
-                        const attr = matchRng.pick(candidates);
-                        const current = skills[attr] ?? 50;
-                        if (current < 85) { // cap at 85 from match experience alone
-                            skills[attr] = current + 1;
-                            await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
-                                .bind(JSON.stringify(skills), dbId).run();
-                            // Log it
-                            await db.prepare(
-                                "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'match', ?)"
-                            ).bind(dbId, fullPosMap.get(dbId) ? (homeBuild.idMap.has(Number(engineId)) ? homeTeamId : awayTeamId) : homeTeamId,
-                                attr, current, current + 1, new Date().toISOString()).run().catch((e) => logger.warn({module: "match-runner"}, "Failed to save training log", e));
-                        }
+                    if (rust) {
+                        skills[rust.attribute] = rust.newValue;
+                        await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
+                            .bind(JSON.stringify(skills), dbId).run();
+                        await db.prepare(
+                            "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'match', ?)"
+                        ).bind(dbId, hracuvTym, rust.attribute, rust.oldValue, rust.newValue, new Date().toISOString())
+                            .run().catch((e) => logger.warn({module: "match-runner"}, "Failed to save training log", e));
                     }
                 }
             } catch (e) {

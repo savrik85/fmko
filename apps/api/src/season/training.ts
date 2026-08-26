@@ -92,6 +92,22 @@ export function diminishingMod(currentValue: number): number {
   return currentValue >= 50 ? Math.max(0.15, 1.0 - (currentValue - 50) * 0.017) : 1.0;
 }
 
+/** Od kolika let a jakého vůdcovství je z hráče mentor. */
+export const MENTOR_MIN_AGE = 30;
+export const MENTOR_MIN_LEADERSHIP = 55;
+
+/**
+ * Mentorský bonus pro hráče do 22 let.
+ *
+ * Zkušený harcovník s autoritou v kabině táhne mladé nahoru — kluk se za trénink vedle něj
+ * naučí víc než sám. Bere se jeden nejlepší mentor, ne součet: dva vzory kluka nevychovají
+ * dvakrát. Vůdcovství 55 dá +2,5 %, 90 dá +20 %, 100 strop +25 %.
+ */
+export function mentoringMod(leadership: number): number {
+  if (leadership < MENTOR_MIN_LEADERSHIP) return 1;
+  return 1 + Math.min(0.25, (leadership - 50) / 200);
+}
+
 /**
  * Ideální počet tréninkových dnů v týdnu pro daného hráče. Dříč chce dřít, pohodář ne;
  * veterán a vyčerpaný hráč potřebují ubrat, mladík naopak snese víc.
@@ -145,6 +161,11 @@ export interface TrainingResult {
   teamChemistry: number; // Change to team chemistry
   /** Jak hráči reagovali na nastavení tréninku (zátěž, přístup). Volající je ukládá do morálky. */
   moraleChanges: Array<{ playerIndex: number; change: number; reason: string }>;
+  /**
+   * Veterán, který dnes táhl mladé nahoru (pokud takový dorazil). Manažer díky tomu vidí,
+   * že se mu vyplácí držet v kabině zkušeného harcovníka.
+   */
+  mentor?: { playerIndex: number; leadership: number; bonusPct: number };
   description: string;
 }
 
@@ -375,6 +396,20 @@ export function simulateTraining(
   const improvements: TrainingResult["improvements"] = [];
   const affectedAttrs = TRAINING_EFFECTS[plan.type];
 
+  // Mentor dneška: nejsilnější vůdčí veterán, který na trénink DORAZIL. Kdo nepřijde,
+  // nikoho nevychová — proto se hledá až po docházce, ne v celém kádru.
+  let mentorIndex: number | undefined;
+  let mentorLeadership = 0;
+  for (const [playerIndex] of attendanceCounts) {
+    const p = squad[playerIndex];
+    const vudcovstvi = p.leadership ?? 0;
+    if (p.age >= MENTOR_MIN_AGE && vudcovstvi >= MENTOR_MIN_LEADERSHIP && vudcovstvi > mentorLeadership) {
+      mentorLeadership = vudcovstvi;
+      mentorIndex = playerIndex;
+    }
+  }
+  const mentorMod = mentoringMod(mentorLeadership);
+
   for (const [playerIndex, sessions] of attendanceCounts) {
     // Přišel na trénink → má nárok na pokus o zlepšení (dřív musel stihnout půlku z N sessions).
     if (sessions < 1) continue;
@@ -409,7 +444,9 @@ export function simulateTraining(
       const intensityMod = INTENSITY[plan.intensity ?? "normal"].growth;
       // Skrytý talent zrychluje růst (0 → 1.0×, 65 → ~1.33×) — "odhalí se postupně tréninkem"
       const talentMod = 1 + Math.max(0, player.hiddenTalent ?? 0) / 200;
-      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * talentMod;
+      // Mentor pomáhá jen mladým — a sám ze sebe nic nemá
+      const mentorBonus = player.age < 22 && playerIndex !== mentorIndex ? mentorMod : 1;
+      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * talentMod * mentorBonus;
       if (rng.random() < improveChance) {
         // Strop atributu = vygenerovaný potenciál (skills_max), ne paušálních 100.
         // Hráč, který je na svém stropu, se v daném atributu dál nezlepší.
@@ -499,11 +536,17 @@ export function simulateTraining(
     `Trénink ${plan.type === "conditioning" ? "kondice" : plan.type === "technique" ? "techniky" : plan.type === "tactics" ? "taktiky" : "zápasový"}: účast ${attendedCount}/${squad.length}.`,
   ];
 
+  // Mentora hlásit jen když měl komu pomoct — bez mladíka v kádru je to prázdná informace.
+  const jsouMladici = squad.some((p, i) => p.age < 22 && i !== mentorIndex && attendanceCounts.has(i));
+
   return {
     attendance: allAttendance,
     improvements,
     teamChemistry: chemistryChange,
     moraleChanges,
+    mentor: mentorIndex !== undefined && jsouMladici
+      ? { playerIndex: mentorIndex, leadership: mentorLeadership, bonusPct: Math.round((mentorMod - 1) * 100) }
+      : undefined,
     description: rng.pick(descriptions),
   };
 }

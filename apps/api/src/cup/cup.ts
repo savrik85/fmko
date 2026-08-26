@@ -685,6 +685,12 @@ async function simulateCupTie(
   // nejsou v tabulce players.
   try {
     const expRng = createRng(cupMatchId.charCodeAt(1) * 7919 + result.homeScore);
+    const { tryMatchGrowth, parseSkillCaps, loadYouthMod } = await import("../season/match-growth");
+    // Klubové zázemí (trenér mládeže, kamera) jednou za tým, ne za hráče
+    const youthModPerTeam = new Map<string, number>();
+    for (const realId of [homeReal, awayReal]) {
+      if (realId) youthModPerTeam.set(realId, await loadYouthMod(db, realId));
+    }
     for (const [engineId, pm] of Object.entries(result.playerMinutes)) {
       const dbId = fullIdMap.get(Number(engineId));
       if (!dbId) continue;
@@ -694,8 +700,8 @@ async function simulateCupTie(
       const minutes = ((pm as { left?: number; entered: number }).left ?? 90) - (pm as { entered: number }).entered;
       if (minutes < 15) continue;
 
-      const row = await db.prepare("SELECT age, skills, position FROM players WHERE id = ?")
-        .bind(dbId).first<{ age: number; skills: string; position: string }>()
+      const row = await db.prepare("SELECT age, skills, position, hidden_talent, skills_max FROM players WHERE id = ?")
+        .bind(dbId).first<{ age: number; skills: string; position: string; hidden_talent: number | null; skills_max: string | null }>()
         .catch((e) => { logger.warn({ module: M }, "load player for cup experience", e); return null; });
       if (!row) continue;
 
@@ -708,23 +714,23 @@ async function simulateCupTie(
         changed = true;
       }
 
-      // Zlepšení dovednosti — stejné šance jako v lize
-      const ageMod = row.age < 22 ? 0.08 : row.age < 26 ? 0.05 : row.age < 30 ? 0.03 : 0.01;
-      if (expRng.random() < ageMod * (minutes / 90)) {
-        const posSkills: Record<string, string[]> = {
-          GK: ["goalkeeping"], DEF: ["defense", "heading", "strength"],
-          MID: ["passing", "vision", "technique"], FWD: ["shooting", "speed", "technique"],
-        };
-        const attr = expRng.pick(posSkills[row.position] ?? ["technique"]);
-        const current = skills[attr] ?? 50;
-        if (current < 85) {
-          skills[attr] = current + 1;
-          changed = true;
-          await db.prepare(
-            "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'cup', ?)"
-          ).bind(dbId, isHome ? homeCupTeamId : awayCupTeamId, attr, current, current + 1, new Date().toISOString())
-            .run().catch((e) => logger.warn({ module: M }, "cup training log", e));
-        }
+      // Zlepšení dovednosti — stejná pravidla jako v lize (season/match-growth.ts)
+      const rust = tryMatchGrowth(expRng, skills, {
+        age: row.age,
+        position: row.position,
+        minutes,
+        hiddenTalent: row.hidden_talent ?? 0,
+        skillCaps: parseSkillCaps(row.skills_max),
+        // Klubové zázemí visí na skutečném týmu, ne na pohárovém záznamu
+        youthMod: youthModPerTeam.get((isHome ? homeReal : awayReal) ?? "") ?? 0,
+      });
+      if (rust) {
+        skills[rust.attribute] = rust.newValue;
+        changed = true;
+        await db.prepare(
+          "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'cup', ?)"
+        ).bind(dbId, isHome ? homeCupTeamId : awayCupTeamId, rust.attribute, rust.oldValue, rust.newValue, new Date().toISOString())
+          .run().catch((e) => logger.warn({ module: M }, "cup training log", e));
       }
 
       if (changed) {
@@ -1182,7 +1188,7 @@ async function cupLevy(
 
   const season = await db.prepare("SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?")
     .bind(team.league_id).first<{ n: number | null }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "sezóna pro odvod z poháru", e); return null; });
   if (!season?.n) return none;
 
   const { loadRules } = await import("../competition/rules");

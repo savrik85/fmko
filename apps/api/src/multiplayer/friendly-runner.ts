@@ -279,14 +279,20 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         for (const [engineId, dbId] of awayBuild.idMap) fullIdMap.set(engineId, dbId);
 
         const matchRng = createRng(Date.now() + matchId.charCodeAt(2));
+        const { tryMatchGrowth, parseSkillCaps, loadYouthMod } = await import("../season/match-growth");
+        // Klubové zázemí (trenér mládeže, kamera) jednou za tým, ne za hráče
+        const youthModPerTeam = new Map<string, number>();
+        for (const tid of [homeTeamId, awayTeamId]) {
+          if (tid) youthModPerTeam.set(tid, await loadYouthMod(db, tid));
+        }
         for (const [engineId, pm] of Object.entries(result.playerMinutes)) {
           const dbId = fullIdMap.get(Number(engineId));
           if (!dbId) continue;
           const minutes = ((pm as any).left ?? 90) - (pm as any).entered;
           if (minutes < 15) continue;
 
-          const playerRow = await db.prepare("SELECT age, skills, position, team_id FROM players WHERE id = ?")
-            .bind(dbId).first<{ age: number; skills: string; position: string; team_id: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load player for experience", e); return null; });
+          const playerRow = await db.prepare("SELECT age, skills, position, team_id, hidden_talent, skills_max FROM players WHERE id = ?")
+            .bind(dbId).first<{ age: number; skills: string; position: string; team_id: string; hidden_talent: number | null; skills_max: string | null }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load player for experience", e); return null; });
           if (!playerRow) continue;
 
           const age = playerRow.age;
@@ -304,27 +310,26 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
             }
           }
 
-          const ageMod = age < 22 ? 0.04 : age < 26 ? 0.025 : age < 30 ? 0.015 : 0.005; // halved vs league
-          const minutesMod = minutes / 90;
-          const improveChance = ageMod * minutesMod;
+          // Stejná pravidla jako liga (season/match-growth.ts), jen s poloviční váhou —
+          // v přáteláku se hráč naučí míň než v ostrém zápase.
+          const skills = JSON.parse(playerRow.skills);
+          const rust = tryMatchGrowth(matchRng, skills, {
+            age,
+            position: playerRow.position,
+            minutes,
+            hiddenTalent: playerRow.hidden_talent ?? 0,
+            skillCaps: parseSkillCaps(playerRow.skills_max),
+            youthMod: youthModPerTeam.get(playerRow.team_id) ?? 0,
+            nasobitel: 0.5,
+          });
 
-          if (matchRng.random() < improveChance) {
-            const skills = JSON.parse(playerRow.skills);
-            const posSkills: Record<string, string[]> = {
-              GK: ["goalkeeping"], DEF: ["defense", "heading", "strength"],
-              MID: ["passing", "technique"], FWD: ["shooting", "speed", "technique"],
-            };
-            const candidates = posSkills[playerRow.position] ?? ["technique"];
-            const attr = matchRng.pick(candidates);
-            const current = skills[attr] ?? 50;
-            if (current < 80) { // lower cap than league (80 vs 85)
-              skills[attr] = current + 1;
-              await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
-                .bind(JSON.stringify(skills), dbId).run();
-              await db.prepare(
-                "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'friendly', ?)"
-              ).bind(dbId, playerRow.team_id, attr, current, current + 1, new Date().toISOString()).run().catch((e) => logger.warn({ module: "friendly-runner" }, "training log insert", e));
-            }
+          if (rust) {
+            skills[rust.attribute] = rust.newValue;
+            await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
+              .bind(JSON.stringify(skills), dbId).run();
+            await db.prepare(
+              "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'friendly', ?)"
+            ).bind(dbId, playerRow.team_id, rust.attribute, rust.oldValue, rust.newValue, new Date().toISOString()).run().catch((e) => logger.warn({ module: "friendly-runner" }, "training log insert", e));
           }
         }
       } catch (e) {
