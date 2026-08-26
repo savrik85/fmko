@@ -9,12 +9,39 @@
 import { Hono } from "hono";
 import { logger } from "../lib/logger";
 import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
+import { getSession, getTokenFromRequest } from "../auth/session";
 import { ratingWeightsFor } from "@okresni-masina/shared";
 
-type Env = { Bindings: { DB: D1Database } };
+type Env = { Bindings: { DB: D1Database; SESSION_KV: KVNamespace } };
 
 export const developmentRouter = new Hono<Env>();
+// Pozor: `requireTeamOwnership` propouští GET bez kontroly (většina herních dat je veřejná).
+// Tady to nestačí — odhad stropu je konkurenční výhoda, za kterou klub platí skauta, a bez
+// vlastní kontroly by kdokoli se známým ID viděl potenciál cizích hráčů. Proto si GETy
+// ověřují vlastnictví samy přes `overSiVlastnictvi`.
 developmentRouter.use("/teams/:teamId/*", requireTeamOwnership);
+
+/**
+ * Ověří, že volající je přihlášený vlastník daného týmu. Vrací chybovou odpověď, nebo null
+ * když je všechno v pořádku.
+ */
+async function overSiVlastnictvi(
+  c: { req: { param: (k: string) => string | undefined }; env: { DB: D1Database; SESSION_KV: KVNamespace }; json: (o: unknown, s?: number) => Response },
+  teamId: string,
+): Promise<Response | null> {
+  const token = getTokenFromRequest(c as never);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+
+  const vlastni = await c.env.DB.prepare("SELECT id FROM teams WHERE id = ? AND user_id = ?")
+    .bind(teamId, session.userId).first()
+    .catch((e) => { logger.warn({ module: "development", teamId }, "check ownership", e); return null; });
+  if (!vlastni) return c.json({ error: "Přístup odepřen" }, 403);
+
+  return null;
+}
 
 /** České názvy atributů — do UI nikdy neposílat holý klíč. */
 const NAZVY_ATRIBUTU: Record<string, string> = {
@@ -57,6 +84,9 @@ function stabilniPosun(seed: string): number {
 developmentRouter.get("/teams/:teamId/players/:playerId/development", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
+
+  const odmitnuto = await overSiVlastnictvi(c, teamId);
+  if (odmitnuto) return odmitnuto;
 
   const player = await c.env.DB.prepare(
     "SELECT id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, skills_max, hidden_talent FROM players WHERE id = ?",
@@ -191,6 +221,9 @@ developmentRouter.get("/teams/:teamId/players/:playerId/development", async (c) 
 // GET /api/teams/:teamId/academy — stav akademie a nabídka úrovní
 developmentRouter.get("/teams/:teamId/academy", async (c) => {
   const teamId = c.req.param("teamId");
+
+  const odmitnuto = await overSiVlastnictvi(c, teamId);
+  if (odmitnuto) return odmitnuto;
 
   const { YOUTH_LABELS, YOUTH_POPISY, YOUTH_SANCE, youthMonthlyCost } = await import("../season/youth");
 
