@@ -969,16 +969,23 @@ export default function PlayerDetailPage() {
                       : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
                       : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
                       : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
-                      : c.joinType === "swap" ? "bg-gold-50 text-gold-600"
+                      : c.joinType === "swap" || c.swapPartner ? "bg-gold-50 text-gold-600"
                       : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
                       : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
                       : "bg-gray-100 text-muted"
                     }`}>{c.joinLabel}</span>
                   </div>
                 </a>
-                {c.fee > 0 && (
+                {c.swapPartner ? (
+                  /* U výměny není `fee` cena hráče, ale doplatek — a druhý hráč
+                     obchodu musí být vidět, jinak to vypadá jako prodej za pár korun. */
+                  <div className="text-micro text-muted mt-1 ml-[42px]">
+                    Výměna za: {c.swapPartner}
+                    {c.fee > 0 ? ` · doplatek ${c.fee.toLocaleString("cs")} Kč` : ""}
+                  </div>
+                ) : c.fee > 0 ? (
                   <div className="text-micro text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
-                )}
+                ) : null}
               </div>
             ))}
           </div>

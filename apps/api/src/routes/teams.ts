@@ -3010,10 +3010,31 @@ teamsRouter.get("/:id/players/:playerId/condition-log", async (c) => {
 teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
   const playerId = c.req.param("playerId");
 
+  // U výměny je `fee` jen doplatek, ne cena hráče, a druhý hráč se musí jmenovat.
+  // Hráč, který doplatek přinesl, má join_type 'transfer' jako každý jiný přestup —
+  // že šlo o výměnu, se pozná jedině z nabídky, která ji uzavřela. Pozor na směr:
+  // from_team_id je ten, kdo nabízí (kupující), to_team_id majitel hráče.
+  // Závora na join_type je nutná — bez ní se chytne starší kontrakt v témže klubu.
+  const SWAP_PARTNER_SQL = `
+       CASE WHEN pc.join_type IN ('transfer', 'swap') THEN COALESCE(
+         (SELECT COALESCE(sp.first_name || ' ' || sp.last_name, sdp.first_name || ' ' || sdp.last_name)
+            FROM transfer_offers o
+            LEFT JOIN players sp ON sp.id = o.offered_player_id
+            LEFT JOIN departed_players sdp ON sdp.id = o.offered_player_id
+           WHERE o.status = 'accepted' AND o.offered_player_id IS NOT NULL
+             AND o.player_id = pc.player_id AND o.from_team_id = pc.team_id LIMIT 1),
+         (SELECT COALESCE(mp.first_name || ' ' || mp.last_name, mdp.first_name || ' ' || mdp.last_name)
+            FROM transfer_offers o2
+            LEFT JOIN players mp ON mp.id = o2.player_id
+            LEFT JOIN departed_players mdp ON mdp.id = o2.player_id
+           WHERE o2.status = 'accepted' AND o2.offered_player_id = pc.player_id
+             AND o2.to_team_id = pc.team_id LIMIT 1)
+       ) END as swap_partner`;
+
   const contracts = await c.env.DB.prepare(
     `SELECT pc.*, t.name as team_name, t.primary_color as team_color,
        t.secondary_color as team_secondary, t.badge_pattern as team_badge,
-       s.number as season_number
+       s.number as season_number, ${SWAP_PARTNER_SQL}
      FROM player_contracts pc
      JOIN teams t ON pc.team_id = t.id
      JOIN seasons s ON pc.season_id = s.id
@@ -3038,7 +3059,7 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
       const fresh = await c.env.DB.prepare(
         `SELECT pc.*, t.name as team_name, t.primary_color as team_color,
            t.secondary_color as team_secondary, t.badge_pattern as team_badge,
-           s.number as season_number
+           s.number as season_number, ${SWAP_PARTNER_SQL}
          FROM player_contracts pc
          JOIN teams t ON pc.team_id = t.id
          JOIN seasons s ON pc.season_id = s.id
@@ -3073,9 +3094,12 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
       joinedAt: row.joined_at,
       leftAt: row.left_at,
       joinType: row.join_type,
-      joinLabel: JOIN_LABELS[row.join_type as string] ?? row.join_type,
+      joinLabel: row.swap_partner && row.join_type === "transfer"
+        ? JOIN_LABELS.swap
+        : (JOIN_LABELS[row.join_type as string] ?? row.join_type),
       leaveType: row.leave_type,
       fee: row.fee,
+      swapPartner: (row.swap_partner as string | null) ?? null,
       isActive: row.is_active === 1,
     })),
   });

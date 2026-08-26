@@ -28,7 +28,7 @@ interface TransfersOverview {
   topSellers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; earned: number; count: number }>;
   topBuyers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; spent: number; count: number }>;
   mostActive: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; in: number; out: number; total: number }>;
-  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string; toVirtual?: boolean; loanEnded?: boolean }>;
+  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string; isSwap?: boolean; toVirtual?: boolean; loanEnded?: boolean }>;
   speculations?: Array<{
     playerId: string;
     playerName: string;
@@ -356,6 +356,13 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
               </span>
             ) : t.joinType === "free_agent" ? (
               <span className="text-amber-700">★&nbsp;ZDARMA</span>
+            ) : t.isSwap ? (
+              /* U výměny je částka jen doplatek. Napsat ji jako cenu by z obchodu
+                 za hráče udělalo výprodej za pár korun. */
+              <span className="text-sky-700">
+                ⇄&nbsp;VÝMĚNA
+                {t.fee > 0 ? <span className="text-muted">&nbsp;· doplatek {t.fee.toLocaleString("cs")}&nbsp;Kč</span> : null}
+              </span>
             ) : t.fee > 0 ? (
               <>{t.fee.toLocaleString("cs")}&nbsp;<span className="text-micro text-muted">Kč</span></>
             ) : "—"}

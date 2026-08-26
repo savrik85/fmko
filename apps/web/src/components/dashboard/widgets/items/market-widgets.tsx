@@ -114,7 +114,10 @@ export function LeagueTransfersWidget({ data, teamId, height }: WidgetProps) {
                   {t.playerName}
                 </a>
                 <span className="text-sm font-heading font-bold tabular-nums shrink-0">
-                  {t.fee > 0 ? compactCZK(t.fee) : "zdarma"}
+                  {/* U výměny je částka jen doplatek — psát ji jako cenu by z obchodu
+                      za hráče udělalo výprodej za pár korun. */}
+                  {t.isSwap ? <span className="text-sky-700">⇄&nbsp;výměna</span>
+                    : t.fee > 0 ? compactCZK(t.fee) : "zdarma"}
                 </span>
               </div>
               <div className="text-micro text-muted truncate">
@@ -128,7 +131,7 @@ export function LeagueTransfersWidget({ data, teamId, height }: WidgetProps) {
       <div className="text-sm text-muted text-center">
         Objem{" "}
         <span className="font-heading font-bold text-ink tabular-nums">
-          {fullCZK(transfers.reduce((s, t) => s + (t.fee ?? 0), 0))}
+          {fullCZK(transfers.reduce((s, t) => s + (t.isSwap ? 0 : (t.fee ?? 0)), 0))}
         </span>
       </div>
       <MoreLink href="/dashboard/transfers">Přehled přestupů →</MoreLink>

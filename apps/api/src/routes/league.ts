@@ -617,7 +617,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
   const leagueId = c.req.param("leagueId");
 
   // All completed transfers in this league (either buyer or seller is in league)
-  // Get new contracts (join_type='transfer') and resolve the "from team" from previous contract
+  // Nové smlouvy a dohledání klubu, odkud hráč přišel.
+  //
+  // `swap` musí být ve výběru: výměna zakládá druhému hráči smlouvu právě
+  // s tímhle druhem a bez něj v přehledu chyběl úplně — vidět byl jen ten hráč,
+  // u kterého visel doplatek, takže výměna vypadala jako přestup za pár korun.
   const transfersRes = await c.env.DB.prepare(
     `SELECT
        pc.player_id, pc.team_id as to_team_id, pc.fee, pc.joined_at, pc.join_type,
@@ -631,11 +635,20 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         AND pc2.is_active = 0
         AND pc2.leave_type IN ('transfer', 'released')
         AND pc2.left_at <= pc.joined_at
-        ORDER BY pc2.left_at DESC LIMIT 1) as from_team_id
+        ORDER BY pc2.left_at DESC LIMIT 1) as from_team_id,
+       -- Hráč, u kterého visí doplatek, má join_type 'transfer' jako každý jiný.
+       -- Že šlo o výměnu, se pozná jen z nabídky, která ji uzavřela. Pozor na směr:
+       -- v transfer_offers je from_team_id ten, kdo nabízí (kupující), a to_team_id
+       -- majitel hráče (prodávající) — hráč se stěhuje do from_team_id.
+       (SELECT 1 FROM transfer_offers o
+         WHERE o.status = 'accepted' AND o.offered_player_id IS NOT NULL
+           AND ((o.player_id = pc.player_id AND o.from_team_id = pc.team_id)
+             OR (o.offered_player_id = pc.player_id AND o.to_team_id = pc.team_id))
+         LIMIT 1) as je_vymena
      FROM player_contracts pc
      JOIN players p ON pc.player_id = p.id
      JOIN teams t_to ON pc.team_id = t_to.id
-     WHERE pc.join_type IN ('transfer', 'free_agent')
+     WHERE pc.join_type IN ('transfer', 'free_agent', 'swap')
      ORDER BY pc.joined_at DESC`
   ).all().catch((e) => { logger.error({ module: "league" }, "fetch transfers", e); return { results: [] }; });
 
@@ -701,7 +714,10 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         fee: (r.fee as number) ?? 0,
         date: r.joined_at as string,
         isCrossLeague: !!isCrossLeague,
-        joinType: (r.join_type as string) ?? "transfer",
+        // `swap` je pro UI pořád přestup, jen se u něj neukazuje cena, ale
+        // doplatek — jinak by výměna vypadala jako prodej za pár korun.
+        joinType: r.join_type === "swap" ? "transfer" : ((r.join_type as string) ?? "transfer"),
+        isSwap: (r.join_type === "swap" || r.join_type === "transfer") && !!r.je_vymena,
         toVirtual: false,
       };
     });
@@ -747,6 +763,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
       date: r.joined_at as string,
       isCrossLeague: false,
       joinType: "transfer",
+      isSwap: false,
       toVirtual: true,
     };
   });

@@ -182,6 +182,8 @@ export interface PlayerContract {
   joinLabel: string;
   leaveType: string | null;
   fee: number;
+  /** Druhý hráč výměny — u ní je `fee` jen doplatek, ne cena. */
+  swapPartner: string | null;
   isActive: boolean;
 }
 

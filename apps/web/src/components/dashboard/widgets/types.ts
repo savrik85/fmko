@@ -368,6 +368,8 @@ export interface LeagueTransfer {
   fromTeamId: string | null; fromTeam: string | null;
   toTeamId: string; toTeam: string;
   fee: number; date: string; joinType?: string;
+  /** U výměny je `fee` jen doplatek, ne cena hráče. */
+  isSwap?: boolean;
 }
 
 export interface TeamStatRow {
