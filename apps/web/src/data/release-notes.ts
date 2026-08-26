@@ -12,6 +12,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-26",
+    emoji: "\u{1F31F}",
+    title: "Práce s mládeží — z dorostence se dá vypiplat hráč do áčka",
+    items: [
+      "Každý hráč má potenciál, tedy strop, kam může dorůst. V profilu ho vidíš jako hvězdičky v hlavičce a v kádru jako sloupec Pot, podle kterého jde řadit. Není to jistota, je to odhad, a jak přesný bude, záleží na tvém skautovi.",
+      "Bez skauta vidíš jen mlhu. Odhad je zpočátku široký klidně o osmnáct bodů na obě strany, se špičkovým skautem se zúží na čtyři. Skaut se tím konečně vyplácí: pozná, do koho stojí za to investovat, dřív než to pozná soupeř.",
+      "U hráče svítí odznak s výhledem, kam to dotáhne. Čte se rovnou, o co jde — Výhled: tahoun áčka, sestava áčka, střídání v áčku, nebo na áčko nemá. Vždycky se to měří proti tvému áčku, takže co je hvězda v jednom klubu, může být v jiném náhradník.",
+      "V U21 přibyla záložka Rozvoj. U každého kluka je vidět, kde je dnes, kam může dorůst a za kolik sezón se dotáhne na základní sestavu áčka. Nahoře máš shrnutí, kolik jich na áčko už má a kolik se tam dostane do tří sezón, a seznam jde řadit i filtrovat podle pozice nebo jen na nadějné.",
+      "Přes léto kluci povyrostou. Mladí do jednadvaceti dostávají na přelomu sezóny skok v hodnocení podle svého talentu a trenér mládeže ti pošle esemesku s tím, kdo vyrostl nejvíc. Někteří po tom skoku můžou být rovnou na áčko.",
+      "Dorost se obměňuje. Kdo dosáhne dvaadvaceti, z mládeže odchází do áčka, a když je kádr plný, jde mezi volné hráče. Na jeho místo přijde nový šestnáctiletý ročník, takže se ti dorost nezaplní samými přestárlými kluky.",
+      "Mladí do jednadvaceti se trénují rychleji než dřív. Nejvíc šestnácti a sedmnáctiletí, ale přidali si i dvacetiletí a jednadvacetiletí, kteří dřív rostli stejně pomalu jako čtyřiadvacetiletí, přestože jsou to pořád kluci z dorostu.",
+      "Odhad, za kolik sezón se hráč dotáhne, je nově spočítaný z toho, jak trénink opravdu funguje. Dřív sliboval skoro dvojnásobek. Počítá se s klubem, který trénuje třikrát týdně, takže kdo trénuje víc, dorazí dřív, než mu odznak sliboval.",
+      "Mládežnická akademie konečně říká, co za ty peníze dostaneš. Místo nesmyslné šestiny odchovance u každé úrovně stojí, kolik kluků ti z ní vyroste — u symbolické zhruba jeden za dvě sezóny, u velkorysé dva až tři za sezónu. Šance u symbolické a solidní úrovně jsme zvedli.",
+      "Brankáři měli rozbité hodnocení i potenciál. Po tréninku se jim rating nehýbal, karta potenciálu jim ukazovala jediný řádek a profil se seznamem se o nich navzájem přeli. Chytání, výběh i postavení teď hrají podle stejných pravidel jako dovednosti hráčů v poli.",
+      "Dorostenci, kteří vznikli podle starých pravidel, dostali zpátky to, co jim tehdy sebral generátor. Nikdo z nich nezmizel a nezmenšil se — jen mají strop tam, kde ho měli mít od začátku, a nikoho to nevytáhne nad úroveň základní sestavy jeho vlastního áčka.",
+    ],
+  },
+  {
     date: "2026-08-25",
     emoji: "\u{1F326}\u{FE0F}",
     title: "Počasí má svůj rok a hřiště paměť",
