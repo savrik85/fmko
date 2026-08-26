@@ -4614,9 +4614,14 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
 
+  // Dorostenec patří U21 týmu, ale frontend sem posílá ID A-týmu — klub je jeden a manažer
+  // ho ovládá odtamtud. Bez druhé podmínky hráče nenajdeme a manažer dostane „Hráč nenalezen",
+  // takže z dorostu nešlo nikoho propustit ani vystavit na trh.
   const player = await c.env.DB.prepare(
-    "SELECT p.*, t.name as team_name, t.league_id, v.district FROM players p JOIN teams t ON p.team_id = t.id JOIN villages v ON t.village_id = v.id WHERE p.id = ? AND p.team_id = ?"
-  ).bind(playerId, teamId).first<Record<string, unknown>>();
+    `SELECT p.*, t.name as team_name, t.league_id, v.district
+       FROM players p JOIN teams t ON p.team_id = t.id JOIN villages v ON t.village_id = v.id
+      WHERE p.id = ? AND (p.team_id = ? OR t.parent_team_id = ?)`
+  ).bind(playerId, teamId, teamId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
   // Hostující hráč patří jinému klubu — propuštěním by skončil mezi volnými hráči
   // a kmenový klub by o něj nadobro přišel. Stejná ochrana jako u vylistování na trh.
@@ -4632,7 +4637,10 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
 
   // Kompletní FK úklid + atomické odebrání (sdílené s koncem sezony)
   const { removePlayer } = await import("../transfers/remove-player");
-  const removed = await removePlayer(c.env.DB, playerId, "released", { toFreeAgent: true, teamId });
+  // Odebrat se musí z týmu, ve kterém hráč SKUTEČNĚ je — u dorostence je to U21 tým,
+  // ne áčko, jehož ID přišlo v URL. Jinak `removePlayer` nic nenajde a propuštění selže.
+  const kmenovy = (player.team_id as string) ?? teamId;
+  const removed = await removePlayer(c.env.DB, playerId, "released", { toFreeAgent: true, teamId: kmenovy });
   if (!removed.ok) return c.json({ error: "Hráč nenalezen" }, 404);
 
   const { createTransferNews } = await import("../transfers/transfer-news");
@@ -4897,9 +4905,15 @@ gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
   const playerId = c.req.param("playerId");
   const body = await c.req.json<{ askingPrice: number }>();
 
+  // Dorostenec patří U21 týmu, ale frontend sem posílá ID A-týmu — klub je jeden a manažer
+  // ho ovládá odtamtud. Bez druhé podmínky hráče nenajdeme a manažer dostane „Hráč nenalezen",
+  // takže z dorostu nešlo nikoho propustit ani vystavit na trh.
   const player = await c.env.DB.prepare(
-    "SELECT p.first_name, p.last_name, p.age, p.position, p.loan_from_team_id, t.league_id, t.name as team_name FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ? AND p.team_id = ?"
-  ).bind(playerId, teamId).first<Record<string, unknown>>();
+    `SELECT p.first_name, p.last_name, p.age, p.position, p.loan_from_team_id,
+            p.team_id AS kmenovy_tym, t.league_id, t.name as team_name
+       FROM players p JOIN teams t ON p.team_id = t.id
+      WHERE p.id = ? AND (p.team_id = ? OR t.parent_team_id = ?)`
+  ).bind(playerId, teamId, teamId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
   if (player.loan_from_team_id) return c.json({ error: "Hostující hráč nemůže být vylistován na trh" }, 400);
 
@@ -4915,7 +4929,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
 
   await c.env.DB.prepare(
     "INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(id, playerId, teamId, body.askingPrice, player.league_id, expiresAt.toISOString()).run();
+  ).bind(id, playerId, (player.kmenovy_tym as string) ?? teamId, body.askingPrice, player.league_id, expiresAt.toISOString()).run();
 
   const { createTransferNews } = await import("../transfers/transfer-news");
   await createTransferNews(c.env.DB, player.league_id as string, teamId, "player_listed", {
