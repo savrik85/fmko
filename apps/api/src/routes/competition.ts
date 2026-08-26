@@ -1635,6 +1635,91 @@ competitionRouter.post("/admin/competition/:leagueId/sponsor-offers", async (c) 
   return c.json({ ok: true, opened });
 });
 
+/**
+ * Přepíše článek o posledním zasedání podle aktuálního kódu.
+ *
+ * Zápis se generuje jednou, při zasedání. Když se text zlepší až potom — třeba
+ * proto, že zvolení vedení má být událost a ne odrážka — starý článek by jinak
+ * zůstal, jaký byl. Tohle ho přegeneruje ze živých dat: vítězové z tabulky
+ * voleb, účast a pokladna ze zasedání.
+ */
+competitionRouter.post("/admin/competition/:leagueId/regenerate-minutes", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const meeting = await c.env.DB.prepare(
+    `SELECT game_date, attendance, balance_after, summary, news_id
+       FROM competition_meetings WHERE league_id = ? ORDER BY game_date DESC LIMIT 1`
+  ).bind(leagueId).first<{
+    game_date: string; attendance: string; balance_after: number;
+    summary: string; news_id: string | null;
+  }>().catch((e) => { logger.warn({ module: M }, "poslední zasedání", e); return null; });
+  if (!meeting) return c.json({ error: "Tahle soutěž ještě nezasedala." }, 404);
+  if (!meeting.news_id) return c.json({ error: "K zasedání není článek." }, 404);
+
+  let items: Array<Record<string, unknown>> = [];
+  try { const p = JSON.parse(meeting.summary || "[]"); if (Array.isArray(p)) items = p; }
+  catch (e) { logger.warn({ module: M }, "zápis zasedání nejde přečíst", e); }
+
+  const a = safeJson(meeting.attendance);
+  const attendance = {
+    voters: Number(a.voters) || 0,
+    active: Number(a.active) || 0,
+    quorum: Number(a.quorum) || 0,
+  };
+
+  // Vítěze bereme z tabulky voleb, ne ze staré podoby zápisu — ta jméno nemusí nést.
+  const volby = await c.env.DB.prepare(
+    `SELECT e.role, t.name AS team_name, ${MANAGER_NAME("e.winner_team_id")} AS manager_name
+       FROM competition_elections e
+       LEFT JOIN teams t ON t.id = e.winner_team_id
+      WHERE e.league_id = ? AND e.season_number = ? AND e.closed_game_date = ?`
+  ).bind(leagueId, meta.season_number, meeting.game_date).all<{
+    role: string; team_name: string | null; manager_name: string | null;
+  }>().catch((e) => { logger.warn({ module: M }, "vítězové voleb", e); return { results: [] }; });
+
+  const { winnerLabel } = await import("../competition/officials");
+  const podleRole = new Map(volby.results.map((r) => [
+    r.role,
+    r.team_name ? winnerLabel(r.manager_name, r.team_name) : null,
+  ]));
+
+  const obohacene = items.map((it) => {
+    if (it.kind !== "election") return it;
+    const role = String(it.role ?? "");
+    return { ...it, zvolen: podleRole.get(role) ?? null, roleLabel: ROLE_LABEL[role as OfficialRole] ?? role };
+  });
+
+  const hlasovalo = await c.env.DB.prepare(
+    `SELECT COUNT(DISTINCT b.team_id) AS n FROM competition_ballots b
+       JOIN competition_proposals p ON p.id = b.proposal_id
+      WHERE p.league_id = ? AND p.closed_game_date = ?`
+  ).bind(leagueId, meeting.game_date).first<{ n: number }>().catch(() => null);
+
+  const { sestavZapis, mluvci, nactiProtiHlasy } = await import("../competition/minutes");
+  const { redaktorProRubriku } = await import("../news/journalists");
+  const redaktor = await redaktorProRubriku(c.env.DB, leagueId, "governance_minutes", meeting.game_date)
+    .catch(() => null);
+
+  const { headline, body } = sestavZapis(redaktor, {
+    leagueId, leagueName: meta.name, seasonNumber: meta.season_number,
+    gameDate: meeting.game_date,
+    items: obohacene as never,
+    attendance, hlasovalo: hlasovalo?.n ?? 0, balance: meeting.balance_after,
+    protiHlasy: await nactiProtiHlasy(c.env.DB, leagueId, meeting.game_date),
+    prezident: await mluvci(c.env.DB, leagueId, meta.season_number),
+  });
+
+  // `created_at` se posouvá schválně: článek má znovu vyplavat na čelo novin.
+  await c.env.DB.prepare(
+    `UPDATE news SET headline = ?, body = ?, created_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+      WHERE id = ?`
+  ).bind(headline, body, meeting.news_id).run();
+
+  return c.json({ ok: true, headline, body });
+});
+
 competitionRouter.post("/admin/competition/:leagueId/meeting", async (c) => {
   const leagueId = c.req.param("leagueId");
   const gameDate = await c.env.DB.prepare(
