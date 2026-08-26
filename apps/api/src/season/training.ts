@@ -82,9 +82,24 @@ export function trainingTypeLabel(type: string | null | undefined): string {
   return TRAINING_TYPE_LABELS[type as TrainingType] ?? type;
 }
 
-/** Věkový modifikátor růstu — mladí rostou rychle, veteráni skoro vůbec. */
+/**
+ * Věkový modifikátor růstu — mladí rostou rychle, veteráni skoro vůbec.
+ *
+ * Dorostenecký věk má vlastní stupně. Dvacetiletý a jednadvacetiletý dřív spadali do téhož
+ * pásma jako čtyřiadvacetiletý (1,15), přestože jsou to pořád kluci z dorostu — a právě
+ * na nich stojí, jestli je manažer stihne vytrénovat, než z mládeže odejdou.
+ * Zvednuto o 4–12 %, ne víc: cílem je zkrátit cestu do áčka o zlomek sezóny, ne vyrobit
+ * z dorostu líheň hotových hráčů.
+ */
 export function ageGrowthMod(age: number): number {
-  return age < 20 ? 1.3 : age < 25 ? 1.15 : age < 30 ? 1.0 : age < 34 ? 0.7 : age < 38 ? 0.4 : 0.15;
+  if (age < 18) return 1.45;
+  if (age < 20) return 1.35;
+  if (age < 22) return 1.25;
+  if (age < 25) return 1.15;
+  if (age < 30) return 1.0;
+  if (age < 34) return 0.7;
+  if (age < 38) return 0.4;
+  return 0.15;
 }
 
 /** Klesající výnosy: každý bod nad 50 ubírá ze šance na další zlepšení. */

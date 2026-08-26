@@ -31,9 +31,29 @@ export function pasmo(hodnota: number, l: LatkyKadru): 0 | 1 | 2 | 3 {
   return 0;
 }
 
-/** Tempo růstu z tréninku a zápasů podle věku (bodů hodnocení za sezónu). */
+/**
+ * Tempo růstu z tréninku a zápasů podle věku (bodů hodnocení za sezónu).
+ *
+ * Používá se jen jako záloha, když hráč nemá tréninkovou historii — jinak se počítá
+ * ze skutečného přírůstku za posledních 120 dní.
+ *
+ * Čísla jsou NAMĚŘENÁ simulací celé sezóny (16 týdnů) nad `simulateTraining`, ne odhad:
+ * při třech trénincích týdně vyjde šestnáctiletému 2,83 bodu, dvacetiletému 2,57
+ * a dvaadvacetiletému 1,70. K tomu se přičítá zhruba 0,3 bodu ze zápasových minut.
+ *
+ * Původní řada (3,2 pod 20 let a 2,8 do 25) odpovídala klubu, který trénuje 4–5× týdně.
+ * Výchozí režim jsou přitom dva tréninky, kde skutečný přírůstek vychází kolem 1,6 —
+ * prognóza tedy slibovala skoro dvojnásobek toho, co manažer dostal. Řada je proto
+ * srovnaná na tři tréninky týdně: kdo trénuje víc, dorazí dřív, než mu odznak sliboval.
+ */
 export function tempoPodleVeku(vek: number): number {
-  return vek < 20 ? 3.2 : vek < 25 ? 2.8 : vek < 30 ? 1.7 : vek < 34 ? 1.2 : 0.5;
+  if (vek < 18) return 3.1;
+  if (vek < 20) return 2.9;
+  if (vek < 22) return 2.8;
+  if (vek < 25) return 2.0;
+  if (vek < 30) return 1.5;
+  if (vek < 34) return 0.9;
+  return 0.4;
 }
 
 const KONEC_KARIERY = 37;
