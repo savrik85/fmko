@@ -6,6 +6,8 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { AcademyCard } from "@/components/players/academy-card";
+import { U21Rozvoj } from "@/components/players/u21-rozvoj";
 import type { BadgePattern } from "@/components/ui";
 
 interface U21Player {
@@ -87,7 +89,7 @@ interface LeagueRound {
 
 type Tab = "kadr" | "tabulka" | "rozpis";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["kadr", "tabulka", "rozpis"] as const;
+const TAB_KEYS = ["kadr", "rozvoj", "tabulka", "rozpis", "akademie"] as const;
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -280,8 +282,10 @@ export default function U21Page() {
         ariaLabel="U21"
         items={[
           { key: "kadr", label: "Kádr" },
+          { key: "rozvoj", label: "Rozvoj" },
           { key: "tabulka", label: "Tabulka" },
           { key: "rozpis", label: "Rozpis" },
+          { key: "akademie", label: "Akademie" },
         ]}
       />
 
@@ -423,6 +427,10 @@ export default function U21Page() {
           ))}
         </div>
       )}
+
+      {tab === "rozvoj" && teamId && <U21Rozvoj teamId={teamId} />}
+
+      {tab === "akademie" && teamId && <AcademyCard teamId={teamId} />}
     </div>
   );
 }

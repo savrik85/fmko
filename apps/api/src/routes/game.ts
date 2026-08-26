@@ -6462,7 +6462,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const offerPlayerName = `${player?.first_name} ${player?.last_name}`;
 
   // Get current season for contract records
-  const currentSeason = await c.env.DB.prepare("SELECT id FROM seasons ORDER BY number DESC LIMIT 1")
+  const currentSeason = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
     .first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for offer accept", e); return null; });
   const seasonId = mustSeason(currentSeason?.id);
 
@@ -7152,7 +7152,7 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
   await attachNewcomerRelations(c.env.DB, teamId, playerId);
 
   // Contract
-  const season = await c.env.DB.prepare("SELECT id FROM seasons ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
+  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
   await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 0, 1)")
     .bind(crypto.randomUUID(), playerId, teamId, mustSeason(season?.id), offer.source).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
 

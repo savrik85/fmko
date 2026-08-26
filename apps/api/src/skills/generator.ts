@@ -18,16 +18,27 @@ function generateSkillValue(rng: Rng, range: LeagueLevelRange, positionBonus: nu
   return { current: Math.max(1, current), maxPotential: clampedCap };
 }
 
-function applyAgeCurve(skill: SkillValue, age: number): SkillValue {
-  let mod = 1.0;
-  if (age < 20) mod = 0.7;
-  else if (age < 28) mod = 1.0;
-  else if (age < 34) mod = 0.9;
-  else if (age < 40) mod = 0.75;
-  else mod = 0.5;
+/**
+ * Jak moc je hráč v daném věku pod svým „dospělým" já.
+ *
+ * Mezi 16 a 21 lety se náběh počítá plynule. Dřív tu byl schod: všechno pod 20 let dostalo
+ * 0,7 a od 20 rovnou 1,0, takže devatenáctiletý vypadal o 30 % hůř než dvacetiletý se
+ * stejnými vlohami — v datech rozehrané ligy je ten zlom vidět jako skok průměrného
+ * hodnocení dorostenců z 25,1 na 33,9 mezi 19. a 20. rokem.
+ *
+ * Náběh zároveň začíná výš (0,78 místo 0,7), protože nejmladší ročníky vycházely
+ * z generátoru tak slabé, že se nedaly použít ani v dorostu.
+ */
+export function vekovyNasobitel(age: number): number {
+  if (age >= 28) return age < 34 ? 0.9 : age < 40 ? 0.75 : 0.5;
+  if (age >= 22) return 1.0;
+  const vek = Math.min(21, Math.max(16, age));
+  return 0.78 + (vek - 16) * 0.038; // 16 → 0,78 … 21 → 0,97
+}
 
+function applyAgeCurve(skill: SkillValue, age: number): SkillValue {
   return {
-    current: Math.max(1, Math.round(skill.current * mod)),
+    current: Math.max(1, Math.round(skill.current * vekovyNasobitel(age))),
     maxPotential: skill.maxPotential,
   };
 }
@@ -76,7 +87,10 @@ export function generateFieldSkills(
       // 5% chance of set-piece specialist (+30 bonus)
       if (rng.int(0, 100) < 5) {
         base.current = Math.min(100, base.current + 30);
-        base.maxPotential = Math.min(100, base.maxPotential + 20);
+        // Strop musí zůstat aspoň na úrovni současné hodnoty. Bonus na current byl +30,
+        // na strop jen +20, takže specialista mohl vzniknout NAD svým stropem — a trénink
+        // ho pak nikdy nezlepšil, protože porovnává `current < cap`.
+        base.maxPotential = Math.min(100, Math.max(base.maxPotential + 20, base.current));
       }
       return base;
     })(),
@@ -108,16 +122,19 @@ export function generateGKSkills(
   };
   const gkBonus = 5;
 
+  // Bonusy odpovídají původním brankářským dovednostem, jen pod plochými názvy:
+  // goalkeeping = reflexy a chytání (nejvyšší bonus), defense = postavení,
+  // speed = vybíhání, technique = kopací technika, passing = rozehrávka,
+  // heading = dosah, creativity = komunikace s obranou.
   return {
-    reflexes: applyAgeCurve(generateSkillValue(rng, range, gkBonus + 5), age),
-    positioning: applyAgeCurve(generateSkillValue(rng, range, gkBonus + 3), age),
-    rushing: applyAgeCurve(generateSkillValue(rng, range, gkBonus), age),
-    catching: applyAgeCurve(generateSkillValue(rng, range, gkBonus + 5), age),
-    kicking: applyAgeCurve(generateSkillValue(rng, range, gkBonus - 3), age),
-    distribution: applyAgeCurve(generateSkillValue(rng, range, gkBonus - 5), age),
+    goalkeeping: applyAgeCurve(generateSkillValue(rng, range, gkBonus + 5), age),
+    defense: applyAgeCurve(generateSkillValue(rng, range, gkBonus + 3), age),
+    speed: applyAgeCurve(generateSkillValue(rng, range, gkBonus), age),
+    technique: applyAgeCurve(generateSkillValue(rng, range, gkBonus - 3), age),
+    passing: applyAgeCurve(generateSkillValue(rng, range, gkBonus - 5), age),
     strength: applyAgeCurve(generateSkillValue(rng, range, 0), age),
-    reach: applyAgeCurve(generateSkillValue(rng, range, gkBonus + 2), age),
-    communication: applyAgeCurve(generateSkillValue(rng, range, gkBonus), age),
+    heading: applyAgeCurve(generateSkillValue(rng, range, gkBonus + 2), age),
+    creativity: applyAgeCurve(generateSkillValue(rng, range, gkBonus), age),
     experience: {
       current: Math.min(100, Math.max(0, (age - 16) * rng.int(3, 6))),
       maxPotential: 100,

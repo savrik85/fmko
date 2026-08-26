@@ -1,6 +1,7 @@
 import { logger } from "../lib/logger";
 import type { Weather } from "../engine/types";
 import { recordCompetitionEntry } from "../competition/ledger";
+import { youthMonthlyCost, YOUTH_LABELS, type YouthInvestment } from "./youth";
 import type { CompetitionRules } from "../competition/defaults";
 /**
  * Centrální finanční procesor — jediný způsob jak měnit rozpočet týmu.
@@ -16,6 +17,7 @@ export type TransactionType =
   | "training_cost"
   | "pitch_maintenance"
   | "equipment_expense"
+  | "youth_academy"        // provoz mládežnické akademie
   | "equipment_upgrade"
   | "equipment_purchase"   // nákup vybavení z bazaru od jiného klubu
   | "equipment_sale"       // příjem z prodeje vybavení v bazaru
@@ -216,6 +218,21 @@ export async function processWeeklyFinances(
   const weeklyEquipment = Math.round((500 / 4.3) * staffFx.opsCostMul);
   await recordTransaction(db, teamId, "equipment_expense", -weeklyEquipment,
     `Amortizace vybavení`, gameDate);
+
+  // 3b. Mládežnická akademie — kdo chce odchovance, musí na ně sypat celý rok.
+  // Náklad se strhává průběžně, absolvent přijde až na konci sezóny.
+  const akademie = await db.prepare("SELECT youth_investment FROM teams WHERE id = ?")
+    .bind(teamId).first<{ youth_investment: string | null }>()
+    .catch((e) => { logger.warn({ module: "finance-processor", teamId }, "load youth investment", e); return null; });
+  const investice = (akademie?.youth_investment ?? "none") as YouthInvestment;
+  if (investice !== "none") {
+    const mesicni = youthMonthlyCost(investice);
+    const tydenni = Math.round((mesicni / 4.3) * staffFx.opsCostMul);
+    if (tydenni > 0) {
+      await recordTransaction(db, teamId, "youth_academy", -tydenni,
+        `Mládežnická akademie (${YOUTH_LABELS[investice]})`, gameDate);
+    }
+  }
 
   // ── PŘÍJMY ──
 
@@ -452,7 +469,8 @@ export async function processMatchDayFinances(
       // v předpovědi, když se rozhodoval, co naskladnit.
       const { resolveRoundWeather } = await import("./season-weather");
       const calRow = await db.prepare("SELECT calendar_id FROM matches WHERE id = ?")
-        .bind(matchId).first<{ calendar_id: string | null }>().catch(() => null);
+        .bind(matchId).first<{ calendar_id: string | null }>()
+        .catch((e) => { logger.warn({ module: "finance-processor" }, "load calendar for concession weather", e); return null; });
       const roundTemp = calRow?.calendar_id
         ? (await resolveRoundWeather(db, calRow.calendar_id))?.temperature
         : undefined;

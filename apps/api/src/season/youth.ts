@@ -18,12 +18,93 @@ export interface YouthGraduate {
   description: string;
 }
 
+/**
+ * Měsíční náklad akademie.
+ *
+ * Původní ceny (500 / 2 000 / 5 000) byly proti reálné ekonomice klubů zanedbatelné:
+ * fixní týdenní výdaje průměrného klubu jsou kolem 6 800 Kč (mzdy hráčů 4 552, zaměstnanci
+ * 1 467, vybavení 534, hřiště 250), takže nejvyšší úroveň brala 17 % a nikdo nic neobětoval.
+ * Teď velkorysá stojí 2 791 Kč/týden, tedy zhruba 41 % fixních nákladů — je to volba mezi
+ * kádrem a mládeží, ne položka, které si nikdo nevšimne.
+ */
 const INVESTMENT_COST: Record<YouthInvestment, number> = {
   none: 0,
-  minimal: 500,
-  medium: 2000,
-  high: 5000,
+  minimal: 1500,
+  medium: 5000,
+  high: 12000,
 };
+
+/** České názvy úrovní investice — do UI ani do výpisu financí nikdy neposílat holý klíč. */
+export const YOUTH_LABELS: Record<YouthInvestment, string> = {
+  none: "Žádná",
+  minimal: "Symbolická",
+  medium: "Solidní",
+  high: "Velkorysá",
+};
+
+/** Co manažer za svoje peníze dostane — text do UI, ať se nerozhoduje naslepo. */
+export const YOUTH_POPISY: Record<YouthInvestment, string> = {
+  none: "Do mládeže nesypeš nic. Žádní odchovanci.",
+  minimal: "Pár míčů a kužely pro žáky. Občas z toho někdo vyroste.",
+  medium: "Trenér žáků má na benzín a klub platí halu. Odchovanci chodí pravidelněji a jsou lepší.",
+  high: "Vlastní mládežnický program. Nejvyšší šance na odchovance a nejvyšší strop, kam může dorůst.",
+};
+
+/**
+ * Šance na jednoho odchovance (před úpravou podle velikosti obce).
+ *
+ * Levnější stupně byly původně 0,40 a 0,55 a nevyplácely se: symbolická akademie dala
+ * průměrně jednoho kluka za dvě sezóny, zatímco pasivních nabídek dorostenců chodí klubu
+ * 4–7 za sezónu zadarmo. Manažer tak neměl důvod platit vůbec něco.
+ *
+ * Stupně se od sebe liší hlavně POČTEM pokusů (1 / 2 / 3), ne šancí jednoho z nich —
+ * proto smí být `medium` na téže hodnotě jako `high`, aniž by se žebříček obrátil.
+ * Nikdy ale nesmí být VÝŠ, jinak by dražší stupeň byl na jeden pokus horší.
+ */
+export const YOUTH_SANCE: Record<YouthInvestment, number> = {
+  none: 0,
+  minimal: 0.60,
+  medium: 0.70,
+  high: 0.70,
+};
+
+/**
+ * Kolik kluků se z akademie o postup pokouší.
+ *
+ * Jeden odchovanec za sezónu byl proti pasivnímu toku nabídek k smíchu: průměrnému klubu
+ * chodí ~2,5 nabídky dorostence za 60 dní, tedy 4–7 za sezónu, a zadarmo. Akademie proto
+ * nesmí soutěžit kvalitou jednoho kusu, ale objemem i kvalitou — odchovanec má navíc
+ * vyšší strop a talent než náhodný tip z hospody.
+ */
+export const YOUTH_POCET_POKUSU: Record<YouthInvestment, number> = {
+  none: 0,
+  minimal: 1,
+  medium: 2,
+  high: 3,
+};
+
+/**
+ * Strop šance jednoho pokusu. Velká obec vynásobí základ až 1,5×, takže bez stropu by
+ * velkorysá akademie vycházela na jistotu — a odchovanec by přestal být událostí.
+ */
+export const YOUTH_SANCE_STROP = 0.8;
+
+/**
+ * Kolik odchovanců klub za sezónu očekává — do UI, ať manažer vidí, co za ty peníze dostane.
+ * `popMod` je násobitel podle velikosti obce (0,5 až 1,5).
+ */
+export function ocekavanyPocetOdchovancu(investment: YouthInvestment, popMod: number): number {
+  return Math.round(YOUTH_POCET_POKUSU[investment] * sanceJednohoPokusu(investment, popMod) * 10) / 10;
+}
+
+/**
+ * Šance, že JEDEN kluk projde. Do UI se posílá zvlášť, protože střední hodnota sama o sobě
+ * manažerovi nic neříká — „0,6 odchovance za sezónu" čte každý jako půlku hráče.
+ * Skutečný mechanismus jsou nezávislé pokusy, každý s touhle pravděpodobností.
+ */
+export function sanceJednohoPokusu(investment: YouthInvestment, popMod: number): number {
+  return Math.min(YOUTH_SANCE_STROP, YOUTH_SANCE[investment] * popMod);
+}
 
 const SKILL_RANGE: Record<YouthInvestment, [number, number]> = {
   none: [0, 0], // No graduates
@@ -52,17 +133,10 @@ export function tryGraduateYouth(
 ): YouthGraduate | null {
   if (config.investment === "none") return null;
 
-  // Probability of graduation
-  let prob = 0;
-  switch (config.investment) {
-    case "minimal": prob = 0.25; break;
-    case "medium": prob = 0.5; break;
-    case "high": prob = 0.75; break;
-  }
-
   // Bigger village = more kids = higher chance
-  const popMod = Math.min(1.5, config.villagPopulation / 3000);
-  prob *= Math.max(0.5, popMod);
+  const popMod = Math.max(0.5, Math.min(1.5, config.villagPopulation / 3000));
+  // Strop drží i nejlepší akademii pod jistotou — ročník, ze kterého nic nevyroste, se stát musí
+  const prob = Math.min(YOUTH_SANCE_STROP, YOUTH_SANCE[config.investment] * popMod);
 
   if (rng.random() > prob) return null;
 

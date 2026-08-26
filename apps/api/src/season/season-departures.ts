@@ -285,6 +285,17 @@ async function buildDuels(db: D1Database, teamId: string, rng: ReturnType<typeof
 async function bumpAges(db: D1Database, teamId: string): Promise<number> {
   const res = await db.prepare("UPDATE players SET age = age + 1 WHERE team_id = ? AND status = 'active'")
     .bind(teamId).run().catch((e) => { logger.warn({ module: "season-departures" }, "bump ages", e); return null; });
+
+  // Mladí přes léto povyrostou — sami od sebe, ne jen tréninkem. Musí to být AŽ po
+  // zestárnutí, protože přírůstek se váže na nový věk.
+  try {
+    const { dospejMladeHrace, oznamDospivani } = await import("./dospivani");
+    const vyrostli = await dospejMladeHrace(db, teamId);
+    if (vyrostli.length > 0) await oznamDospivani(db, teamId, vyrostli);
+  } catch (e) {
+    logger.warn({ module: "season-departures", teamId }, "dospívání mladých", e);
+  }
+
   return res?.meta?.changes ?? 0;
 }
 

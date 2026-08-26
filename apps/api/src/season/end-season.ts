@@ -29,6 +29,9 @@ import { logger } from "../lib/logger";
 
 const WRAP_PHASES = [
   "finalize", "rewards", "awards", "archive", "departures",
+  // Akademie až PO odchodech: odchovanec má nahradit toho, kdo skončil, ne se do kádru
+  // přidat vedle něj.
+  "academy",
   "replenish", "village", "articles", "interviews", "recap",
 ] as const;
 type WrapPhase = (typeof WRAP_PHASES)[number];
@@ -224,6 +227,40 @@ async function runWrapPhase(
           await captureDepartures(db, tid, seasonNumber, res);
         }
         const done = processedSet.size >= teamIds.length;
+        await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending", JSON.stringify([...processedSet]));
+        return done ? "done" : "in_progress";
+      }
+      case "academy": {
+        // Odchovanci z akademie — jen lidské kluby, AI do mládeže nesype.
+        // Fáze je idempotentní přes kurzor: kdo je odbavený, ten se znovu nevychová.
+        const prog = await getProgress(db, leagueId, seasonNumber, phase);
+        let processed: string[] = [];
+        try { processed = JSON.parse(prog?.cursor ?? "[]"); }
+        catch (e) { logger.warn({ module: "end-season" }, "parse academy cursor", e); processed = []; }
+        const processedSet = new Set(processed);
+
+        const teamsRes = await db.prepare(
+          "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai' AND parent_team_id IS NULL AND youth_investment != 'none'",
+        ).bind(leagueId).all<{ id: string }>()
+          .catch((e) => { logger.warn({ module: "end-season" }, "load teams for academy", e); return { results: [] as { id: string }[] }; });
+
+        const seasonRow = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+          .first<{ id: string }>()
+          .catch((e) => { logger.warn({ module: "end-season" }, "load active season for academy", e); return null; });
+
+        const { graduateAcademyClass, notifyAcademyGraduates } = await import("./academy-graduation");
+        const todo = teamsRes.results.map((r) => r.id).filter((id) => !processedSet.has(id)).slice(0, DEPARTURES_CHUNK);
+        for (const tid of todo) {
+          // Kurzor PŘED zápisem hráčů — pád uprostřed radši znamená chybějící ročník
+          // než dva stejné.
+          processedSet.add(tid);
+          await setProgress(db, leagueId, seasonNumber, phase, "pending", JSON.stringify([...processedSet]));
+          const odchovanci = await graduateAcademyClass(db, tid, seasonRow?.id ?? null)
+            .catch((e) => { logger.warn({ module: "end-season", teamId: tid }, "academy graduation", e); return []; });
+          if (odchovanci.length > 0) await notifyAcademyGraduates(db, tid, odchovanci);
+        }
+
+        const done = processedSet.size >= teamsRes.results.length;
         await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending", JSON.stringify([...processedSet]));
         return done ? "done" : "in_progress";
       }

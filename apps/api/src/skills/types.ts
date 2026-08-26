@@ -27,16 +27,28 @@ export interface FieldSkills {
 }
 
 /** Brankář — 10 skillů */
+/**
+ * Brankářské dovednosti pod TÝMIŽ názvy, jaké používá zbytek hry.
+ *
+ * Dřív měl brankář vlastní sadu (reflexes, positioning, rushing, catching, kicking,
+ * distribution, reach, communication), která ale žila jen tady a ve `skills_max`, zatímco
+ * trénink, zápasový engine i UI pracovaly s plochými atributy. Ty dvě sady se opakovaně
+ * rozcházely — hodnocení brankáře se po tréninku nehýbalo, karta potenciálu ukazovala
+ * jediný řádek a profil se seznamem si odporovaly.
+ *
+ * Původní dovednosti se do plochých přeložily takto:
+ *   reflexes + catching → goalkeeping, positioning → defense, rushing → speed,
+ *   kicking → technique, distribution → passing, reach → heading, communication → creativity
+ */
 export interface GoalkeeperSkills {
-  reflexes: SkillValue;
-  positioning: SkillValue;
-  rushing: SkillValue;
-  catching: SkillValue;
-  kicking: SkillValue;
-  distribution: SkillValue;
+  goalkeeping: SkillValue;
+  defense: SkillValue;
+  speed: SkillValue;
+  technique: SkillValue;
+  passing: SkillValue;
   strength: SkillValue;
-  reach: SkillValue;
-  communication: SkillValue;
+  heading: SkillValue;
+  creativity: SkillValue;
   experience: SkillValue;
 }
 

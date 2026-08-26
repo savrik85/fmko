@@ -42,8 +42,15 @@ const CELEB_TRAINING_EXCUSES = [
   "Soustředění reprezentace veteránů na Maledivách",
 ];
 
-/** Základní šance na zlepšení atributu za jeden odtrénovaný den (před modifikátory). */
-export const BASE_IMPROVE_CHANCE = 0.20;
+/**
+ * Základní šance na zlepšení atributu za jeden odtrénovaný den (před modifikátory).
+ *
+ * Na 0,20 vycházelo z naměřených dat zhruba +1 bod hodnocení za sezónu — hráči se za celou
+ * kariéru nedostali ani na tři čtvrtiny svého stropu a dorostenec neměl šanci dorůst do áčka
+ * dřív, než zestárl. 0,30 to zrychluje zhruba o polovinu; klesající výnosy nad 50 bodů
+ * a věkový modifikátor drží horní konec pořád na uzdě.
+ */
+export const BASE_IMPROVE_CHANCE = 0.30;
 
 export type TrainingIntensity = "light" | "normal" | "hard";
 
@@ -75,14 +82,45 @@ export function trainingTypeLabel(type: string | null | undefined): string {
   return TRAINING_TYPE_LABELS[type as TrainingType] ?? type;
 }
 
-/** Věkový modifikátor růstu — mladí rostou rychle, veteráni skoro vůbec. */
+/**
+ * Věkový modifikátor růstu — mladí rostou rychle, veteráni skoro vůbec.
+ *
+ * Dorostenecký věk má vlastní stupně. Dvacetiletý a jednadvacetiletý dřív spadali do téhož
+ * pásma jako čtyřiadvacetiletý (1,15), přestože jsou to pořád kluci z dorostu — a právě
+ * na nich stojí, jestli je manažer stihne vytrénovat, než z mládeže odejdou.
+ * Zvednuto o 4–12 %, ne víc: cílem je zkrátit cestu do áčka o zlomek sezóny, ne vyrobit
+ * z dorostu líheň hotových hráčů.
+ */
 export function ageGrowthMod(age: number): number {
-  return age < 20 ? 1.3 : age < 25 ? 1.15 : age < 30 ? 1.0 : age < 34 ? 0.7 : age < 38 ? 0.4 : 0.15;
+  if (age < 18) return 1.45;
+  if (age < 20) return 1.35;
+  if (age < 22) return 1.25;
+  if (age < 25) return 1.15;
+  if (age < 30) return 1.0;
+  if (age < 34) return 0.7;
+  if (age < 38) return 0.4;
+  return 0.15;
 }
 
 /** Klesající výnosy: každý bod nad 50 ubírá ze šance na další zlepšení. */
 export function diminishingMod(currentValue: number): number {
   return currentValue >= 50 ? Math.max(0.15, 1.0 - (currentValue - 50) * 0.017) : 1.0;
+}
+
+/** Od kolika let a jakého vůdcovství je z hráče mentor. */
+export const MENTOR_MIN_AGE = 30;
+export const MENTOR_MIN_LEADERSHIP = 55;
+
+/**
+ * Mentorský bonus pro hráče do 22 let.
+ *
+ * Zkušený harcovník s autoritou v kabině táhne mladé nahoru — kluk se za trénink vedle něj
+ * naučí víc než sám. Bere se jeden nejlepší mentor, ne součet: dva vzory kluka nevychovají
+ * dvakrát. Vůdcovství 55 dá +2,5 %, 90 dá +20 %, 100 strop +25 %.
+ */
+export function mentoringMod(leadership: number): number {
+  if (leadership < MENTOR_MIN_LEADERSHIP) return 1;
+  return 1 + Math.min(0.25, (leadership - 50) / 200);
 }
 
 /**
@@ -138,6 +176,11 @@ export interface TrainingResult {
   teamChemistry: number; // Change to team chemistry
   /** Jak hráči reagovali na nastavení tréninku (zátěž, přístup). Volající je ukládá do morálky. */
   moraleChanges: Array<{ playerIndex: number; change: number; reason: string }>;
+  /**
+   * Veterán, který dnes táhl mladé nahoru (pokud takový dorazil). Manažer díky tomu vidí,
+   * že se mu vyplácí držet v kabině zkušeného harcovníka.
+   */
+  mentor?: { playerIndex: number; leadership: number; bonusPct: number };
   description: string;
 }
 
@@ -368,6 +411,20 @@ export function simulateTraining(
   const improvements: TrainingResult["improvements"] = [];
   const affectedAttrs = TRAINING_EFFECTS[plan.type];
 
+  // Mentor dneška: nejsilnější vůdčí veterán, který na trénink DORAZIL. Kdo nepřijde,
+  // nikoho nevychová — proto se hledá až po docházce, ne v celém kádru.
+  let mentorIndex: number | undefined;
+  let mentorLeadership = 0;
+  for (const [playerIndex] of attendanceCounts) {
+    const p = squad[playerIndex];
+    const vudcovstvi = p.leadership ?? 0;
+    if (p.age >= MENTOR_MIN_AGE && vudcovstvi >= MENTOR_MIN_LEADERSHIP && vudcovstvi > mentorLeadership) {
+      mentorLeadership = vudcovstvi;
+      mentorIndex = playerIndex;
+    }
+  }
+  const mentorMod = mentoringMod(mentorLeadership);
+
   for (const [playerIndex, sessions] of attendanceCounts) {
     // Přišel na trénink → má nárok na pokus o zlepšení (dřív musel stihnout půlku z N sessions).
     if (sessions < 1) continue;
@@ -402,7 +459,9 @@ export function simulateTraining(
       const intensityMod = INTENSITY[plan.intensity ?? "normal"].growth;
       // Skrytý talent zrychluje růst (0 → 1.0×, 65 → ~1.33×) — "odhalí se postupně tréninkem"
       const talentMod = 1 + Math.max(0, player.hiddenTalent ?? 0) / 200;
-      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * talentMod;
+      // Mentor pomáhá jen mladým — a sám ze sebe nic nemá
+      const mentorBonus = player.age < 22 && playerIndex !== mentorIndex ? mentorMod : 1;
+      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * talentMod * mentorBonus;
       if (rng.random() < improveChance) {
         // Strop atributu = vygenerovaný potenciál (skills_max), ne paušálních 100.
         // Hráč, který je na svém stropu, se v daném atributu dál nezlepší.
@@ -492,11 +551,17 @@ export function simulateTraining(
     `Trénink ${plan.type === "conditioning" ? "kondice" : plan.type === "technique" ? "techniky" : plan.type === "tactics" ? "taktiky" : "zápasový"}: účast ${attendedCount}/${squad.length}.`,
   ];
 
+  // Mentora hlásit jen když měl komu pomoct — bez mladíka v kádru je to prázdná informace.
+  const jsouMladici = squad.some((p, i) => p.age < 22 && i !== mentorIndex && attendanceCounts.has(i));
+
   return {
     attendance: allAttendance,
     improvements,
     teamChemistry: chemistryChange,
     moraleChanges,
+    mentor: mentorIndex !== undefined && jsouMladici
+      ? { playerIndex: mentorIndex, leadership: mentorLeadership, bonusPct: Math.round((mentorMod - 1) * 100) }
+      : undefined,
     description: rng.pick(descriptions),
   };
 }

@@ -6,6 +6,8 @@ import Link from "next/link";
 import { apiFetch, apiAction, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { PotentialProgress } from "@/components/players/potential-progress";
+import { usePotencial, PotentialBox, PotentialBadge } from "@/components/players/potential-summary";
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
@@ -290,6 +292,8 @@ export default function PlayerDetailPage() {
   // U21 hráč je „můj" pokud jeho tým má parent_team_id rovné mému A-tým ID.
   const isMyU21Player = playerTeam?.team_type === "u21" && playerTeam?.parent_team_id === teamId;
   const isOwnPlayer = player?.team_id === teamId || isMyU21Player;
+  // Potenciál se načte jednou a použije se na třech místech: hlavička, odznak, karta dole
+  const potencial = usePotencial(isOwnPlayer ? teamId : null, playerId);
   const isLoanedToUs = isOwnPlayer && !!player?.loan_from_team_id;
   // Kmenový klub hráče, který zrovna hostuje jinde. Formálně to není hráč „u nás",
   // takže bez téhle výjimky by na svého hráče nabízel přestup a přidával si ho do
@@ -431,6 +435,7 @@ export default function PlayerDetailPage() {
                 </div>
                 <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
               </div>
+              <PotentialBox data={potencial} boxBg={boxBg} boxLabel={boxLabel} klic="hl-desktop" />
             </div>
             {allPlayers.length > 1 && (
               <button onClick={() => nextPlayer && router.push(`/dashboard/player/${nextPlayer.id}`)}
@@ -482,22 +487,24 @@ export default function PlayerDetailPage() {
               {absencePill}
               {unrestPill}
             </div>
-            {/* Řádek 3: staty přes celou šířku */}
-            <div className="flex gap-2 mt-3">
-              <div className={`flex-1 ${boxBg} rounded-soft py-2 text-center`}>
-                <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${cond.color}`}>
+            {/* Řádek 3: staty přes celou šířku. Nízké boxy — na mobilu se za ně vejde
+                víc obsahu, aniž by manažer musel scrollovat. */}
+            <div className="flex gap-1.5 mt-2">
+              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
+                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${cond.color}`}>
                   {player.lifeContext?.condition ?? 50}%
                 </div>
                 <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Kondice</div>
               </div>
-              <div className={`flex-1 ${boxBg} rounded-soft py-2 text-center`}>
-                <div className="text-lg leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
+              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
+                <div className="text-sm leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
                 <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Morálka</div>
               </div>
-              <div className={`flex-1 ${boxBg} rounded-soft py-2 text-center`}>
-                <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{player.overall_rating}</div>
+              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
+                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>{player.overall_rating}</div>
                 <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
               </div>
+              <PotentialBox data={potencial} boxBg={`flex-1 ${boxBg}`} boxLabel={boxLabel} klic="hl-mobil" kompaktni />
             </div>
           </div>
 
@@ -806,7 +813,7 @@ export default function PlayerDetailPage() {
       {activeTab === "prehled" && <>
 
       {/* ═══ Characteristics (tags) ═══ */}
-      {player && allPlayers.length > 0 && (() => {
+      {player && (() => {
         const playerInput = {
           overall_rating: player.overall_rating ?? 0,
           age: player.age,
@@ -822,9 +829,16 @@ export default function PlayerDetailPage() {
           position: tp.position,
           skills: tp.skills as Record<string, number> | undefined,
         }));
-        const tags = generateCharacteristics(playerInput, teamInput);
+        // Charakteristiky se počítají proti spoluhráčům; bez načteného kádru prostě nejsou.
+        const tags = allPlayers.length > 0
+          ? generateCharacteristics(playerInput, teamInput, 3, playerTeam?.team_type === "u21")
+          : [];
 
-        if (tags.length === 0) return null;
+        // Odznak výhledu na kádru nezávisí — přišel z API a musí se ukázat i hráči, který
+        // žádnou charakteristiku nemá. Dřív visel uvnitř téhle podmínky, takže devatenáctiletý
+        // uprostřed kádru neměl v profilu ani jeden odznak, přestože mu skaut sliboval sestavu.
+        const maOdznakVyhledu = Boolean(potencial?.nadejnost?.zobrazitOdznak);
+        if (tags.length === 0 && !maOdznakVyhledu) return null;
 
         const TAG_COLORS: Record<string, string> = {
           green: "bg-pitch-50 text-pitch-600 border-pitch-200",
@@ -844,6 +858,7 @@ export default function PlayerDetailPage() {
                 <span>{tag.label}</span>
               </div>
             ))}
+            <PotentialBadge data={potencial} />
           </div>
         );
       })()}
@@ -927,6 +942,11 @@ export default function PlayerDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Podrobný rozpad potenciálu po dovednostech — patří dolů, ne do hlavičky */}
+      {isOwnPlayer && teamId && (
+        <PotentialProgress teamId={teamId} playerId={playerId} />
+      )}
 
       </>}
       {/* ═══ /TAB PŘEHLED ═══ */}

@@ -19,7 +19,7 @@ import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
 
 const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
-type Position = typeof POSITIONS[number];
+export type Position = typeof POSITIONS[number];
 
 // Squad position distribution pro 14 hráčů
 const U21_POSITION_COUNTS: Record<Position, number> = { GK: 2, DEF: 5, MID: 5, FWD: 2 };
@@ -153,6 +153,125 @@ export async function backfillU21ForLeague(
 /**
  * Vytvoří 1 U21 tým + squad (14 mladíků). Vrací počet hráčů.
  */
+/**
+ * Vygeneruje dorostence na zadané pozice a vloží je do týmu.
+ *
+ * Vytažené z `createU21TeamAndSquad`, protože kluky do dorostu nepotřebuje jen založení
+ * týmu: každou sezónu se kádr doplňuje o nový ročník a existující soupisky jde přegenerovat.
+ * Dokud tahle smyčka žila jen uvnitř zakládání týmu, nešlo to bez kopie kódu — a kopie
+ * generátoru je přesně to, čím vznikly rozjeté brankářské názvy dovedností.
+ */
+export async function vygenerujDorostence(
+  db: D1Database,
+  teamId: string,
+  positions: Position[],
+  village: VillageInfo,
+  villageSize: string,
+  rng: Rng,
+  surnameData: { surnames: Record<string, number>; female_forms: Record<string, string> },
+  firstnameData: { male: Record<string, Record<string, number>>; female: Record<string, Record<string, number>> },
+  seasonId: string,
+  vekOd = 16,
+  vekDo = 21,
+): Promise<number> {
+  const playerStmts: D1PreparedStatement[] = [];
+  const contractStmts: D1PreparedStatement[] = [];
+
+  for (const position of positions) {
+    const base = generatePlayer(rng, village, position, surnameData, firstnameData);
+    // Forcovat věk 16-21 (override náhodný věk z generatePlayer)
+    const age = rng.int(vekOd, vekDo);
+
+    const isGK = position === "GK";
+    // Bez AI penalizace. Dorostenec je vlastní odchovanec, ne výplň soupeřovy lavičky —
+    // s `isAi = true` mu generátor strhával 6–12 bodů z průměrů a 4–8 ze stropů, takže
+    // mladík vycházel z akademie s nižším POTENCIÁLEM než dospělý v áčku. Věkovou slabost
+    // řeší `applyAgeCurve` (do 20 let 0,7× současné hodnoty), strop se snižovat nemá.
+    const fieldSkills = !isGK ? generateFieldSkills(rng, position as "DEF" | "MID" | "FWD", villageSize, age) : null;
+    const gkSkills = isGK ? generateGKSkills(rng, villageSize, age) : null;
+
+    // Občas se v dorostu urodí kluk, co vesnici přeroste. Vzácně (~7 %) dostane výrazný
+    // talent a strop posunutý nahoro — takový hráč vypadá zpočátku stejně nevýrazně jako
+    // ostatní (současné hodnoty se nemění), ale trénink ho vytáhne mnohem výš.
+    let hiddenTalent = generateHiddenTalent(rng, villageSize);
+    if (rng.random() < 0.07) {
+      hiddenTalent = rng.int(70, 95);
+      const bonusStropu = rng.int(12, 25);
+      const dovednosti = (isGK ? gkSkills : fieldSkills) as unknown as Record<string, { current: number; maxPotential: number }>;
+      for (const dovednost of Object.values(dovednosti)) {
+        dovednost.maxPotential = Math.min(100, dovednost.maxPotential + bonusStropu);
+      }
+    }
+
+    const skills = isGK
+      ? { speed: gkSkills!.speed.current, technique: gkSkills!.technique.current, shooting: gkSkills!.technique.current, passing: gkSkills!.passing.current, heading: gkSkills!.heading.current, defense: gkSkills!.defense.current, goalkeeping: gkSkills!.goalkeeping.current, creativity: gkSkills!.creativity.current, setPieces: gkSkills!.technique.current, stamina: gkSkills!.strength.current, strength: gkSkills!.strength.current, vision: gkSkills!.defense.current, experience: gkSkills!.experience.current }
+      : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 1, creativity: fieldSkills!.creativity.current, setPieces: fieldSkills!.setPieces.current, stamina: fieldSkills!.stamina.current, strength: fieldSkills!.strength.current, vision: fieldSkills!.vision.current, experience: fieldSkills!.experience.current };
+
+    const height = (position === "GK" ? 185 : position === "DEF" ? 180 : position === "FWD" ? 178 : 176) + rng.int(-8, 8);
+    const baseWeight = base.bodyType === "obese" ? 92 : base.bodyType === "stocky" ? 82 : base.bodyType === "thin" ? 65 : base.bodyType === "athletic" ? 72 : 74;
+    const weight = baseWeight + rng.int(-4, 6);
+
+    const physical = {
+      stamina: isGK ? gkSkills!.strength.current : fieldSkills!.stamina.current,
+      strength: isGK ? gkSkills!.strength.current : fieldSkills!.strength.current,
+      injuryProneness: rng.int(10, 60), height, weight,
+      preferredFoot: base.preferredFoot, preferredSide: base.preferredSide,
+    };
+    const personality = {
+      discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 60), temper: rng.int(10, 80),
+      leadership: Math.max(5, base.leadership - 15), // mladí mají nižší vůdcovství
+      workRate: base.workRate, aggression: base.aggression,
+      consistency: Math.max(5, base.consistency - 10), clutch: base.clutch,
+    };
+    const occ = pickOccupation(rng, villageSize, age, village.district);
+    const lifeContext = { occupation: occ.name, condition: 100, morale: 50 + rng.int(-10, 10) };
+    const rating = calculateOverallRating(position, isGK ? gkSkills! : fieldSkills!, hiddenTalent);
+    const description = generateDescription(rng, {
+      firstName: base.firstName, lastName: base.lastName, nickname: "",
+      age, position, occupation: occ.name,
+      bodyType: base.bodyType, alcohol: personality.alcohol, discipline: personality.discipline,
+      speed: skills.speed, shooting: skills.shooting, technique: skills.technique,
+      patriotism: personality.patriotism,
+    });
+
+    const playerId = crypto.randomUUID();
+    playerStmts.push(
+      db.prepare(
+        "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(
+        playerId, teamId, base.firstName, base.lastName, "", age, position, rating,
+        JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
+        JSON.stringify(lifeContext),
+        JSON.stringify(generatePlayerFace({ age, bodyType: base.bodyType, ethnicity: base.ethnicity })),
+        description,
+        JSON.stringify(isGK ? gkSkills : fieldSkills), hiddenTalent,
+        isGK ? gkSkills!.experience.current : fieldSkills!.experience.current,
+        Math.round(5 + rating * 2), // U21 nižší mzdy
+        base.nationality ?? "CZ",
+      )
+    );
+
+    contractStmts.push(
+      db.prepare(
+        "INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'generated', 0, 1)"
+      ).bind(crypto.randomUUID(), playerId, teamId, seasonId)
+    );
+  }
+
+  try {
+    await db.batch(playerStmts);
+  } catch (e) {
+    logger.error({ module: "u21-generator" }, `batch insert players for U21 team ${teamId}`, e);
+  }
+  try {
+    await db.batch(contractStmts);
+  } catch (e) {
+    logger.error({ module: "u21-generator" }, `batch insert contracts for U21 team ${teamId}`, e);
+  }
+
+  return positions.length;
+}
+
 export async function createU21TeamAndSquad(
   db: D1Database,
   seniorTeam: SeniorTeam,
@@ -208,91 +327,16 @@ export async function createU21TeamAndSquad(
     : village.category === "obec" ? "village"
     : village.category === "mestys" ? "town" : "small_city";
 
-  const playerStmts: D1PreparedStatement[] = [];
-  const contractStmts: D1PreparedStatement[] = [];
-
-  for (const position of positions) {
-    const base = generatePlayer(rng, village, position, surnameData, firstnameData);
-    // Forcovat věk 16-21 (override náhodný věk z generatePlayer)
-    const age = rng.int(16, 21);
-
-    const isGK = position === "GK";
-    const fieldSkills = !isGK ? generateFieldSkills(rng, position as "DEF" | "MID" | "FWD", villageSize, age, true) : null;
-    const gkSkills = isGK ? generateGKSkills(rng, villageSize, age, true) : null;
-    const hiddenTalent = generateHiddenTalent(rng, villageSize);
-
-    const skills = isGK
-      ? { speed: gkSkills!.rushing.current, technique: gkSkills!.kicking.current, shooting: gkSkills!.kicking.current, passing: gkSkills!.distribution.current, heading: gkSkills!.reach.current, defense: gkSkills!.positioning.current, goalkeeping: gkSkills!.reflexes.current, creativity: gkSkills!.communication.current, setPieces: gkSkills!.kicking.current, stamina: gkSkills!.strength.current, strength: gkSkills!.strength.current, vision: gkSkills!.positioning.current, experience: gkSkills!.experience.current }
-      : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 1, creativity: fieldSkills!.creativity.current, setPieces: fieldSkills!.setPieces.current, stamina: fieldSkills!.stamina.current, strength: fieldSkills!.strength.current, vision: fieldSkills!.vision.current, experience: fieldSkills!.experience.current };
-
-    const height = (position === "GK" ? 185 : position === "DEF" ? 180 : position === "FWD" ? 178 : 176) + rng.int(-8, 8);
-    const baseWeight = base.bodyType === "obese" ? 92 : base.bodyType === "stocky" ? 82 : base.bodyType === "thin" ? 65 : base.bodyType === "athletic" ? 72 : 74;
-    const weight = baseWeight + rng.int(-4, 6);
-
-    const physical = {
-      stamina: isGK ? gkSkills!.strength.current : fieldSkills!.stamina.current,
-      strength: isGK ? gkSkills!.strength.current : fieldSkills!.strength.current,
-      injuryProneness: rng.int(10, 60), height, weight,
-      preferredFoot: base.preferredFoot, preferredSide: base.preferredSide,
-    };
-    const personality = {
-      discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 60), temper: rng.int(10, 80),
-      leadership: Math.max(5, base.leadership - 15), // mladí mají nižší vůdcovství
-      workRate: base.workRate, aggression: base.aggression,
-      consistency: Math.max(5, base.consistency - 10), clutch: base.clutch,
-    };
-    const occ = pickOccupation(rng, villageSize, age, village.district);
-    const lifeContext = { occupation: occ.name, condition: 100, morale: 50 + rng.int(-10, 10) };
-    const rating = calculateOverallRating(position, isGK ? gkSkills! : fieldSkills!, hiddenTalent);
-    const description = generateDescription(rng, {
-      firstName: base.firstName, lastName: base.lastName, nickname: "",
-      age, position, occupation: occ.name,
-      bodyType: base.bodyType, alcohol: personality.alcohol, discipline: personality.discipline,
-      speed: skills.speed, shooting: skills.shooting, technique: skills.technique,
-      patriotism: personality.patriotism,
-    });
-
-    const playerId = crypto.randomUUID();
-    playerStmts.push(
-      db.prepare(
-        "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(
-        playerId, u21TeamId, base.firstName, base.lastName, "", age, position, rating,
-        JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
-        JSON.stringify(lifeContext),
-        JSON.stringify(generatePlayerFace({ age, bodyType: base.bodyType, ethnicity: base.ethnicity })),
-        description,
-        JSON.stringify(isGK ? gkSkills : fieldSkills), hiddenTalent,
-        isGK ? gkSkills!.experience.current : fieldSkills!.experience.current,
-        Math.round(5 + rating * 2), // U21 nižší mzdy
-        base.nationality ?? "CZ",
-      )
-    );
-
-    contractStmts.push(
-      db.prepare(
-        "INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'generated', 0, 1)"
-      ).bind(crypto.randomUUID(), playerId, u21TeamId, seasonId)
-    );
-  }
-
-  try {
-    await db.batch(playerStmts);
-  } catch (e) {
-    logger.error({ module: "u21-generator" }, `batch insert players for U21 team ${u21TeamId}`, e);
-  }
-  try {
-    await db.batch(contractStmts);
-  } catch (e) {
-    logger.error({ module: "u21-generator" }, `batch insert contracts for U21 team ${u21TeamId}`, e);
-  }
+  const pocet = await vygenerujDorostence(
+    db, u21TeamId, positions, village, villageSize, rng, surnameData, firstnameData, seasonId,
+  );
 
   // Vazby v kabině — U21 soupisky je dřív nedostávaly vůbec, takže chemie
   // juniorky byla napořád nulová.
   const { attachSquadRelations } = await import("../transfers/attach-relations");
   await attachSquadRelations(db, u21TeamId);
 
-  return { teamId: u21TeamId, playerCount: positions.length };
+  return { teamId: u21TeamId, playerCount: pocet };
 }
 
 /**

@@ -6,7 +6,7 @@
  * Staré zápasy/kalendář zůstávají (historie); season-aware standings je ignoruje.
  *
  * Mirror logiky z bootstrap-league (game.ts), BEZ tvorby AI týmů.
- * U21 mimo rozsah (vlastní lifecycle — follow-up).
+ * U21 má vlastní lifecycle v `u21-lifecycle.ts` — volá se odsud pod markerem `u21_aging`.
  */
 
 import { createRng, cryptoSeed } from "../generators/rng";
@@ -176,6 +176,40 @@ export async function rolloverAllLeagues(
     if (agedMark?.status !== "done") {
       await db.prepare("UPDATE players SET age = age + 1 WHERE team_id IN (SELECT id FROM teams WHERE team_type = 'u21')").run()
         .catch((e) => logger.warn({ module: "season-rollover" }, "u21 aging", e));
+
+      // Dospívání dorostenců — musí být TADY, ne ve fázi departures: ta běží jen pro
+      // senior ligy, takže by se na U21 týmy nikdy nedostala. Pořadí je důležité,
+      // přírůstek se počítá z nového věku.
+      try {
+        const { dospejMladeHrace, oznamDospivani } = await import("./dospivani");
+        const u21Tymy = await db.prepare(
+          `SELECT t.id FROM teams t JOIN teams rodic ON rodic.id = t.parent_team_id
+            WHERE t.team_type = 'u21' AND rodic.user_id != 'ai'`,
+        ).all<{ id: string }>()
+          .catch((e) => { logger.warn({ module: "season-rollover" }, "load u21 teams for maturation", e); return { results: [] as { id: string }[] }; });
+
+        for (const t of u21Tymy.results) {
+          const vyrostli = await dospejMladeHrace(db, t.id);
+          if (vyrostli.length > 0) await oznamDospivani(db, t.id, vyrostli);
+        }
+        logger.info({ module: "season-rollover" }, `dospívání dorostu: ${u21Tymy.results.length} týmů`);
+      } catch (e) {
+        logger.warn({ module: "season-rollover" }, "dospívání dorostu selhalo", e);
+      }
+
+      // Životní cyklus dorostu — AŽ ZA stárnutím a dospíváním. Kdo právě dosáhl 22 let,
+      // jde do áčka (nebo mezi volné hráče) a na jeho místo přijde nový šestnáctiletý
+      // ročník. Bez toho kádry dorostu jen stárly: v rozehrané lize bylo 89 z 212
+      // dorostenců ve věku 20–21 let a šestnáctiletých jen 29.
+      try {
+        const { dorostovyCyklusVsech } = await import("./u21-lifecycle");
+        const souhrn = await dorostovyCyklusVsech(db);
+        logger.info({ module: "season-rollover" },
+          `dorostový cyklus: ${souhrn.tymu} týmů, do áčka ${souhrn.povyseno}, uvolněno ${souhrn.propusteno}, přišlo ${souhrn.prislo}`);
+      } catch (e) {
+        logger.warn({ module: "season-rollover" }, "dorostový cyklus selhal", e);
+      }
+
       await db.prepare("INSERT INTO season_end_progress (league_id, season_number, phase, status, updated_at) VALUES ('__u21__', ?, 'u21_aging', 'done', strftime('%Y-%m-%dT%H:%M:%SZ','now')) ON CONFLICT(league_id, season_number, phase) DO UPDATE SET status = 'done'")
         .bind(newNum).run().catch((e) => logger.warn({ module: "season-rollover" }, "u21 aging marker save", e));
     }

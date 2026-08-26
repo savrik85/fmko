@@ -12,6 +12,25 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-08-26",
+    emoji: "\u{1F31F}",
+    title: "Práce s mládeží — z dorostence se dá vypiplat hráč do áčka",
+    items: [
+      "Dorost trénuje s áčkem. Typ tréninku, přístup i kolikrát týdně se trénuje nastavuješ pro klub jednou a platí to pro obě soupisky. Čím častěji necháš trénovat, tím rychleji ti mladí rostou — je to zdaleka nejsilnější páka, kterou na jejich rozvoj máš.",
+      "Dřina má ale svou cenu. Každý hráč má tempo, které mu sedí, podle pracovitosti, věku a kondice. Kdo se dře víc, než mu vyhovuje, chodí z tréninku naštvaný a jde mu dolů morálka — a naopak dříč, který trénuje jednou týdně, se nudí.",
+      "Každý hráč má potenciál, tedy strop, kam může dorůst. V profilu ho vidíš jako hvězdičky v hlavičce a v kádru jako sloupec Pot, podle kterého jde řadit. Není to jistota, je to odhad, a jak přesný bude, záleží na tvém skautovi.",
+      "Bez skauta vidíš jen mlhu — široké rozpětí, ve kterém se hráč někde pohybuje. Čím lepšího skauta máš, tím je odhad užší. Skaut se tím vyplácí: pozná, do koho stojí za to investovat, dřív než to pozná soupeř.",
+      "U hráče svítí odznak s výhledem, kam to dotáhne. Čte se rovnou, o co jde — Výhled: tahoun áčka, sestava áčka, střídání v áčku, nebo na áčko nemá. Vždycky se to měří proti tvému áčku, takže co je hvězda v jednom klubu, může být v jiném náhradník.",
+      "V U21 přibyla záložka Rozvoj. U každého kluka je vidět, kde je dnes, kam může dorůst a za kolik sezón se dotáhne na základní sestavu áčka. Nahoře máš shrnutí, kolik jich na áčko už má a kolik se tam dostane do tří sezón, a seznam jde řadit i filtrovat.",
+      "Mladí do jednadvaceti se rozvíjejí rychleji než dospělí hráči. Nejvíc šestnácti a sedmnáctiletí, ale svoje pásmo mají i dvacetiletí a jednadvacetiletí.",
+      "Přes léto kluci povyrostou. Mladí do jednadvaceti dostávají na přelomu sezóny skok v hodnocení podle svého talentu a trenér mládeže ti pošle esemesku s tím, kdo vyrostl nejvíc. Někteří po tom skoku můžou být rovnou na áčko.",
+      "Dorost se obměňuje. Kdo dosáhne dvaadvaceti, z mládeže odchází do áčka, a když je kádr plný, jde mezi volné hráče. Na jeho místo přijde nový šestnáctiletý ročník, takže se ti dorost nezaplní samými přestárlými kluky.",
+      "Mládežnická akademie říká, kolik kluků ti z ní vyroste. U symbolické zhruba jeden odchovanec za dvě sezóny, u solidní jeden až dva za sezónu, u velkorysé dva až tři — a čím větší obec, tím víc. Šance u symbolické a solidní úrovně jsme zvedli, takže se vyplatí i menší investice.",
+      "Brankáři se rozvíjejí stejně jako hráči v poli. Chytání, výběh, postavení i rozehrávka rostou tréninkem, promítají se do hodnocení a mají svůj strop jako každá jiná dovednost.",
+      "Dorostům jsme přidali na potenciálu. Kluci, které máš v mládeži dnes, mají strop odpovídající tomu, jak se dorostenci rodí teď — nikdo z nich nezmizel a nikoho to nevytáhne nad úroveň základní sestavy tvého áčka. Vytrénovat se pořád musí.",
+    ],
+  },
+  {
     date: "2026-08-25",
     emoji: "\u{1F326}\u{FE0F}",
     title: "Počasí má svůj rok a hřiště paměť",
