@@ -6,6 +6,7 @@ import Link from "next/link";
 import { apiFetch, apiAction, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { PotentialProgress } from "@/components/players/potential-progress";
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
@@ -927,6 +928,11 @@ export default function PlayerDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Kam až hráč může dojít — vlastní hráči včetně dorostu, odhad podle kvality skauta */}
+      {isOwnPlayer && teamId && (
+        <PotentialProgress teamId={teamId} playerId={playerId} />
+      )}
 
       </>}
       {/* ═══ /TAB PŘEHLED ═══ */}
