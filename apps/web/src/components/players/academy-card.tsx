@@ -19,6 +19,8 @@ interface Uroven {
   zaSezonu: number;
   pokusu: number;
   ocekavaneOdchovancu: number;
+  /** Šance jednoho pokusu, 0–1. */
+  sanceNaPokus: number;
 }
 
 interface AkademieData {
@@ -27,6 +29,26 @@ interface AkademieData {
   tydnuVSezone: number;
   maU21Tym: boolean;
   urovne: Uroven[];
+}
+
+/**
+ * Kolik odchovanců za sezónu — řečí manažera, ne tabulkou.
+ *
+ * Uvnitř je to N nezávislých pokusů, každý s nějakou pravděpodobností, takže střední
+ * hodnota vychází i pod jedničkou. „~0,6 odchovance za sezónu" ale čte každý jako půlku
+ * hráče a „1 pokus · šance 60 %" zas nikoho nezajímá. Manažer chce vědět jediné: kolik
+ * kluků mu za ty peníze vyroste. Pod jedním se to řekne časem, od jedničky výš v kusech.
+ */
+function textOdchovancu(ocekavane: number): string {
+  if (ocekavane <= 0) return "žádní odchovanci";
+  if (ocekavane < 1) {
+    const zaSezon = Math.round(1 / ocekavane);
+    return `zhruba jeden odchovanec za ${zaSezon === 1 ? "sezónu" : zaSezon < 5 ? `${zaSezon} sezóny` : `${zaSezon} sezón`}`;
+  }
+  const dolni = Math.floor(ocekavane);
+  const horni = Math.ceil(ocekavane);
+  if (dolni === horni) return `${dolni} ${dolni === 1 ? "odchovanec" : dolni < 5 ? "odchovanci" : "odchovanců"} za sezónu`;
+  return `${dolni}–${horni} ${horni < 5 ? "odchovanci" : "odchovanců"} za sezónu`;
 }
 
 export function AcademyCard({ teamId }: { teamId: string }) {
@@ -98,7 +120,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                 <span className="font-heading font-bold text-sm text-ink">{u.nazev}</span>
                 <span className="text-sm tabular-nums text-muted">
                   {u.tydne > 0 ? `${u.tydne.toLocaleString("cs")} Kč/týden` : "zdarma"}
-                  {u.klic !== "none" && ` · ~${u.ocekavaneOdchovancu.toLocaleString("cs")} odchovance za sezónu`}
+                  {u.klic !== "none" && ` · ${textOdchovancu(u.ocekavaneOdchovancu)}`}
                 </span>
               </div>
               <p className="text-sm text-muted mt-1 leading-snug">{u.popis}</p>
@@ -113,10 +135,8 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           <strong className="text-ink font-heading tabular-nums">
             {aktualniUroven.zaSezonu.toLocaleString("cs")} Kč
           </strong>
-          . O postup do dorostu se pokusí {aktualniUroven.pokusu}{" "}
-          {aktualniUroven.pokusu === 1 ? "kluk" : aktualniUroven.pokusu < 5 ? "kluci" : "kluků"} a při{" "}
-          {data.populace.toLocaleString("cs")} obyvatelích jich průměrně projde{" "}
-          <strong className="text-ink font-heading tabular-nums">{aktualniUroven.ocekavaneOdchovancu.toLocaleString("cs")}</strong>.
+          . Při {data.populace.toLocaleString("cs")} obyvatelích ti z ní vyroste{" "}
+          <strong className="text-ink font-heading">{textOdchovancu(aktualniUroven.ocekavaneOdchovancu)}</strong>.
         </p>
       )}
 

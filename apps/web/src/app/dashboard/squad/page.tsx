@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
+import { TalentStars } from "@/components/players/talent-stars";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 import { ATTRIBUTE_INFO, getTooltip, type AttrKey, type Pos } from "@/lib/attribute-info";
@@ -11,7 +12,7 @@ type Tab = "atributy" | "sezona" | "top" | "dochazka";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["atributy", "sezona", "top", "dochazka"] as const;
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
-type SortKey = "name" | "pos" | "age" | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "rel" | "wage";
+type SortKey = "name" | "pos" | "age" | "rat" | "pot" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "rel" | "wage";
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
 type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "injury" | "suspension" | "excuse" | "bench" | "notNominated";
 type SortDir = "asc" | "desc";
@@ -61,6 +62,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; tip: string; attrKey?: AttrK
   { key: "pos", label: "Poz", tip: "Pozice" },
   { key: "age", label: "Věk", tip: getTooltip("age"), attrKey: "age" },
   { key: "rat", label: "Rat", tip: getTooltip("rat"), attrKey: "rat" },
+  { key: "pot", label: "Pot", tip: "Potenciál — kam hráč reálně dojde, než ho dožene věk. Odhad skauta, bez skauta se nezobrazí." },
   { key: "spd", label: "Rch", tip: getTooltip("spd"), attrKey: "spd" },
   { key: "tec", label: "Tch", tip: getTooltip("tec"), attrKey: "tec" },
   { key: "sho", label: "Stř", tip: getTooltip("sho"), attrKey: "sho" },
@@ -83,10 +85,12 @@ const POS_DOT_COLOR: Record<Pos, string> = {
   FWD: "bg-card-red",
 };
 
-function getVal(p: Player, key: SortKey): string | number {
+function getVal(p: Player, key: SortKey, potencial?: Map<string, { strop: number | null }>): string | number {
   const s = p.skills as Record<string, number> | undefined;
   const lc = p.lifeContext as unknown as Record<string, number> | undefined;
   switch (key) {
+    // Bez skauta potenciál neznáme — takoví hráči padají na konec, ne na začátek
+    case "pot": return potencial?.get(p.id)?.strop ?? -1;
     case "name": return `${p.last_name} ${p.first_name}`;
     case "pos": return POS_ORDER[p.position] ?? 9;
     case "age": return p.age;
@@ -149,6 +153,9 @@ export default function SquadPage() {
   const { teamId } = useTeam();
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  // Potenciál celého kádru jedním dotazem — bez skauta zůstane prázdný
+  const [potencial, setPotencial] = useState<Map<string, { strop: number | null; uroven: string | null; slovne: string | null }>>(new Map());
+  const [stropOpor, setStropOpor] = useState<number | null>(null);
   const [seasonStats, setSeasonStats] = useState<PlayerSeasonStats[]>([]);
   const [tab, setTab] = useTabParam(TAB_KEYS);
   const [filter, setFilter] = useState<PosFilter>("all");
@@ -169,6 +176,15 @@ export default function SquadPage() {
       apiFetch<Player[]>(`/api/teams/${teamId}/players`),
       apiFetch<TeamStatsResponse>(`/api/teams/${teamId}/stats`).catch((e) => { console.error("team stats:", e); return { stats: [], topScorers: [], topAssists: [] } as TeamStatsResponse; }),
     ]).then(([t, p, s]) => { setTeam(t); setPlayers(p); setSeasonStats(s.stats); setLoading(false); });
+
+    // Potenciál celého kádru — musí se načíst rovnou s kádrem, ne až s nějakým tabem
+    apiFetch<{ maSkauta: boolean; stropOpor: number | null; hraci: Array<{ id: string; strop: number | null; uroven: string | null; slovne: string | null }> }>(
+      `/api/teams/${teamId}/potencial-kadru`)
+      .then((d) => {
+        setStropOpor(d.stropOpor);
+        setPotencial(new Map(d.hraci.map((h) => [h.id, { strop: h.strop, uroven: h.uroven, slovne: h.slovne }])));
+      })
+      .catch((e) => console.error("potencial kadru:", e));
   }, [teamId]);
 
   // Lazy fetch attendance při kliknutí na tab Docházka
@@ -251,8 +267,8 @@ export default function SquadPage() {
   const filtered = filter === "all" ? players : players.filter((p) => p.position === filter);
 
   const sorted = [...filtered].sort((a, b) => {
-    const va = getVal(a, sortKey);
-    const vb = getVal(b, sortKey);
+    const va = getVal(a, sortKey, potencial);
+    const vb = getVal(b, sortKey, potencial);
     const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -447,6 +463,21 @@ export default function SquadPage() {
                   <td className="py-2 px-1.5 text-center tabular-nums text-muted">{p.age}</td>
                   {/* Rating */}
                   <td className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${cellColor(p.overall_rating ?? 0)}`}>{p.overall_rating}</td>
+                  {/* Potenciál — kam reálně dojde. Barva nese verdikt, ať jde kádr přeletět očima. */}
+                  {(() => {
+                    const pot = potencial.get(p.id);
+                    const barva = pot?.uroven === "hvezda" ? "text-gold-600"
+                      : pot?.uroven === "nadejny" ? "text-pitch-500"
+                      : pot?.uroven === "prumer" ? "text-blue-600" : "text-muted";
+                    return (
+                      <td
+                        className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${barva}`}
+                        title={pot?.slovne ?? "Bez skauta v realizačním týmu potenciál neodhadneš"}
+                      >
+                        {pot?.strop ?? "—"}
+                      </td>
+                    );
+                  })()}
                   {/* Skills */}
                   <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.speed ?? 0)}`}>{s?.speed ?? "—"}</td>
                   <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.technique ?? 0)}`}>{s?.technique ?? "—"}</td>

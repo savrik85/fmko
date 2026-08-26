@@ -11,6 +11,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { SectionLabel } from "@/components/ui";
+import { TalentStars } from "@/components/players/talent-stars";
 
 interface AtributRozvoje {
   atribut: string;
@@ -22,17 +23,34 @@ interface AtributRozvoje {
 }
 
 interface RozvojData {
+  hrac?: { hodnoceni: number };
   skaut: { maSkauta: boolean; presnost: string | null; rozptyl: number | null };
   talent: { slovne: string; hodnota: number } | null;
+  /** Jen u hráčů do 21 let a jen se skautem — kam to podle odhadu dotáhne. */
+  nadejnost: {
+    slovne: string; uroven: string; odhadStropu: number; realnyStrop: number;
+    stropOpor: number; zbyvaDoStropu: number;
+  } | null;
   atributy: AtributRozvoje[];
   rustZa30Dni: { celkem: number; podleAtributu: Array<{ atribut: string; nazev: string; zmena: number }> };
 }
 
-/** Barva odznaku talentu — od šedé po zlatou, ať výjimečný kluk svítí. */
-function barvaTalentu(slovne: string): string {
-  if (slovne === "výjimečný talent") return "bg-gold-50 text-gold-600";
-  if (slovne === "velký talent") return "bg-purple-50 text-purple-600";
-  if (slovne === "slibný") return "bg-blue-50 text-blue-600";
+/** Barva verdiktu nadějnosti. */
+const BARVA_NADEJNOSTI: Record<string, string> = {
+  hvezda: "bg-gold-50 text-gold-700 border-gold-300",
+  nadejny: "bg-pitch-50 text-pitch-600 border-pitch-300",
+  prumer: "bg-blue-50 text-blue-600 border-blue-200",
+  slaby: "bg-gray-100 text-muted border-gray-200",
+};
+
+/**
+ * Barva odznaku tempa rozvoje. Tempo NENÍ totéž co strop — proto je odznak vizuálně
+ * odlišený od hvězd a verdiktu, aby se to nepletlo.
+ */
+function barvaTempa(slovne: string): string {
+  if (slovne === "učí se bleskově") return "bg-purple-50 text-purple-600";
+  if (slovne === "učí se rychle") return "bg-blue-50 text-blue-600";
+  if (slovne === "průměrné tempo") return "bg-gray-100 text-muted";
   return "bg-gray-100 text-muted";
 }
 
@@ -57,7 +75,10 @@ export function PotentialProgress({ teamId, playerId }: { teamId: string; player
       <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
         <SectionLabel>Potenciál rozvoje</SectionLabel>
         {data.talent && (
-          <span className={`text-sm px-2.5 py-1 rounded-full font-heading font-bold ${barvaTalentu(data.talent.slovne)}`}>
+          <span
+            className={`text-sm px-2.5 py-1 rounded-full font-heading font-bold ${barvaTempa(data.talent.slovne)}`}
+            title="Jak rychle se hráč zlepšuje. Kam až dojde, ukazují hvězdy."
+          >
             {data.talent.slovne}
           </span>
         )}
@@ -70,7 +91,34 @@ export function PotentialProgress({ teamId, playerId }: { teamId: string; player
         </p>
       ) : (
         <>
+          {/* Legenda k hvězdám v hlavičce. Bez ní není poznat, co je dnešek a co výhled. */}
+          <div className="flex items-center gap-3 flex-wrap mb-3 text-sm text-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#2D5F2D" }} />
+              hvězdy plnou barvou = jak hraje dnes
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#81C784" }} />
+              světlé = kam může dojít
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#F0D060" }} />
+              zlaté = přeroste opory áčka
+            </span>
+          </div>
+
           <div className="flex items-baseline gap-2 flex-wrap mb-4">
+            {/* Odhad maxima patří sem, ne do hlavičky — tam jsou jen hvězdy */}
+            {data.nadejnost && (
+              <span className="text-sm">
+                Dotáhne to zhruba na{" "}
+                <strong className="text-ink font-heading tabular-nums">
+                  {Math.max(data.hrac?.hodnoceni ?? 0, data.nadejnost.realnyStrop - (data.skaut.rozptyl ?? 0))}
+                  –
+                  {Math.min(100, data.nadejnost.realnyStrop + (data.skaut.rozptyl ?? 0))}
+                </strong>
+              </span>
+            )}
             <span className="text-sm text-muted">
               Odhad skauta je <strong className="text-ink font-heading">{data.skaut.presnost}</strong>
               {data.skaut.rozptyl !== null && ` (±${data.skaut.rozptyl})`}

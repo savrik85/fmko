@@ -244,7 +244,7 @@ async function runWrapPhase(
         ).bind(leagueId).all<{ id: string }>()
           .catch((e) => { logger.warn({ module: "end-season" }, "load teams for academy", e); return { results: [] as { id: string }[] }; });
 
-        const seasonRow = await db.prepare("SELECT id FROM seasons WHERE is_active = 1 LIMIT 1")
+        const seasonRow = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
           .first<{ id: string }>()
           .catch((e) => { logger.warn({ module: "end-season" }, "load active season for academy", e); return null; });
 

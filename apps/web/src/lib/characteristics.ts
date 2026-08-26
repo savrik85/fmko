@@ -1,6 +1,11 @@
 /**
  * Generuje dynamické tagy/charakteristiky hráče relativně k jeho týmu.
  * Spouští se na FE při každém renderu (ne uloženo v DB).
+ *
+ * Odznaky z části A a B se poměřují s VLASTNÍM kádrem hráče. U dorostence to je dorost,
+ * ne áčko — a protože odznak výhledu vedle nich mluví o áčku, stálo u dvacetiletého
+ * dorostence „Hvězda týmu" hned vedle „Výhled: možná sestava". Obojí pravda, dohromady
+ * nesmysl. Proto se u dorostu do popisků píše, že jde o dorost.
  */
 
 export interface PlayerTag {
@@ -26,8 +31,12 @@ export function generateCharacteristics(
   player: PlayerInput,
   teamPlayers: PlayerInput[],
   maxTags = 3,
+  /** Hráč hraje za dorost — odznaky vztažené ke kádru pak mluví o dorostu. */
+  jeDorost = false,
 ): PlayerTag[] {
   const tags: PlayerTag[] = [];
+  /** „…týmu" u áčka, „…dorostu" u U21. */
+  const kadr = jeDorost ? "dorostu" : "týmu";
 
   // Celebrity tags — highest priority
   if (player.is_celebrity) {
@@ -56,15 +65,15 @@ export function generateCharacteristics(
     const percentile = (rank / ratings.length) * 100;
 
     if (percentile >= 93) {
-      tags.push({ key: "star", label: "Hvězda týmu", emoji: "🌟", color: "gold", description: "Nejlepší hráč kádru", priority: 1 });
+      tags.push({ key: "star", label: `Hvězda ${kadr}`, emoji: "🌟", color: "gold", description: `Nejlepší hráč ${jeDorost ? "dorostu" : "kádru"}`, priority: 1 });
     } else if (percentile >= 82) {
-      tags.push({ key: "key", label: "Klíčový hráč", emoji: "⭐", color: "green", description: "Patří mezi top hráče v týmu", priority: 2 });
+      tags.push({ key: "key", label: jeDorost ? "Opora dorostu" : "Klíčový hráč", emoji: "⭐", color: "green", description: `Patří mezi top hráče ${jeDorost ? "dorostu" : "v týmu"}`, priority: 2 });
     } else if (percentile >= 68) {
-      tags.push({ key: "starter", label: "Pravidelný hráč", emoji: "✅", color: "green", description: "Stabilní člen základní sestavy", priority: 5 });
+      tags.push({ key: "starter", label: "Pravidelný hráč", emoji: "✅", color: "green", description: `Stabilní člen základní sestavy ${kadr}`, priority: 5 });
     } else if (percentile < 18 && age > 30) {
-      tags.push({ key: "ballast", label: "Doplněk kádru", emoji: "⚠️", color: "red", description: "Stárnoucí hráč pod úrovní týmu", priority: 20 });
+      tags.push({ key: "ballast", label: "Doplněk kádru", emoji: "⚠️", color: "red", description: `Stárnoucí hráč pod úrovní ${kadr}`, priority: 20 });
     } else if (percentile < 30) {
-      tags.push({ key: "bench", label: "Náhradník", emoji: "🪑", color: "muted", description: "Čeká na šanci v základu", priority: 15 });
+      tags.push({ key: "bench", label: "Náhradník", emoji: "🪑", color: "muted", description: `Čeká na šanci v základu ${kadr}`, priority: 15 });
     }
   }
 
@@ -74,7 +83,7 @@ export function generateCharacteristics(
   } else if (age >= 20 && age <= 23) {
     const avgRating = teamPlayers.length > 0 ? teamPlayers.reduce((sum, tp) => sum + (tp.overall_rating ?? 0), 0) / teamPlayers.length : 50;
     if (rating > avgRating * 1.1) {
-      tags.push({ key: "rising", label: "Vycházející hvězda", emoji: "🚀", color: "blue", description: "Mladý hráč s nadprůměrným výkonem", priority: 4 });
+      tags.push({ key: "rising", label: "Vycházející hvězda", emoji: "🚀", color: "blue", description: `Mladý hráč nad průměrem ${kadr}`, priority: 4 });
     }
   }
   if (age >= 30 && age <= 34 && rating > 45) {

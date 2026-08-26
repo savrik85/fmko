@@ -50,11 +50,21 @@ export const YOUTH_POPISY: Record<YouthInvestment, string> = {
   high: "Vlastní mládežnický program. Nejvyšší šance na odchovance a nejvyšší strop, kam může dorůst.",
 };
 
-/** Šance na jednoho odchovance (před úpravou podle velikosti obce). */
+/**
+ * Šance na jednoho odchovance (před úpravou podle velikosti obce).
+ *
+ * Levnější stupně byly původně 0,40 a 0,55 a nevyplácely se: symbolická akademie dala
+ * průměrně jednoho kluka za dvě sezóny, zatímco pasivních nabídek dorostenců chodí klubu
+ * 4–7 za sezónu zadarmo. Manažer tak neměl důvod platit vůbec něco.
+ *
+ * Stupně se od sebe liší hlavně POČTEM pokusů (1 / 2 / 3), ne šancí jednoho z nich —
+ * proto smí být `medium` na téže hodnotě jako `high`, aniž by se žebříček obrátil.
+ * Nikdy ale nesmí být VÝŠ, jinak by dražší stupeň byl na jeden pokus horší.
+ */
 export const YOUTH_SANCE: Record<YouthInvestment, number> = {
   none: 0,
-  minimal: 0.40,
-  medium: 0.55,
+  minimal: 0.60,
+  medium: 0.70,
   high: 0.70,
 };
 
@@ -84,8 +94,16 @@ export const YOUTH_SANCE_STROP = 0.8;
  * `popMod` je násobitel podle velikosti obce (0,5 až 1,5).
  */
 export function ocekavanyPocetOdchovancu(investment: YouthInvestment, popMod: number): number {
-  const sance = Math.min(YOUTH_SANCE_STROP, YOUTH_SANCE[investment] * popMod);
-  return Math.round(YOUTH_POCET_POKUSU[investment] * sance * 10) / 10;
+  return Math.round(YOUTH_POCET_POKUSU[investment] * sanceJednohoPokusu(investment, popMod) * 10) / 10;
+}
+
+/**
+ * Šance, že JEDEN kluk projde. Do UI se posílá zvlášť, protože střední hodnota sama o sobě
+ * manažerovi nic neříká — „0,6 odchovance za sezónu" čte každý jako půlku hráče.
+ * Skutečný mechanismus jsou nezávislé pokusy, každý s touhle pravděpodobností.
+ */
+export function sanceJednohoPokusu(investment: YouthInvestment, popMod: number): number {
+  return Math.min(YOUTH_SANCE_STROP, YOUTH_SANCE[investment] * popMod);
 }
 
 const SKILL_RANGE: Record<YouthInvestment, [number, number]> = {
