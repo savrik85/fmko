@@ -18,11 +18,20 @@ export interface YouthGraduate {
   description: string;
 }
 
+/**
+ * Měsíční náklad akademie.
+ *
+ * Původní ceny (500 / 2 000 / 5 000) byly proti reálné ekonomice klubů zanedbatelné:
+ * fixní týdenní výdaje průměrného klubu jsou kolem 6 800 Kč (mzdy hráčů 4 552, zaměstnanci
+ * 1 467, vybavení 534, hřiště 250), takže nejvyšší úroveň brala 17 % a nikdo nic neobětoval.
+ * Teď velkorysá stojí 2 791 Kč/týden, tedy zhruba 41 % fixních nákladů — je to volba mezi
+ * kádrem a mládeží, ne položka, které si nikdo nevšimne.
+ */
 const INVESTMENT_COST: Record<YouthInvestment, number> = {
   none: 0,
-  minimal: 500,
-  medium: 2000,
-  high: 5000,
+  minimal: 1500,
+  medium: 5000,
+  high: 12000,
 };
 
 /** České názvy úrovní investice — do UI ani do výpisu financí nikdy neposílat holý klíč. */
@@ -48,6 +57,13 @@ export const YOUTH_SANCE: Record<YouthInvestment, number> = {
   medium: 0.5,
   high: 0.75,
 };
+
+/**
+ * Strop šance na odchovance. Velká obec vynásobí základ až 1,5×, takže velkorysá investice
+ * vycházela na jistotu — a odchovanec přestal být událostí. I nejlepší akademie musí občas
+ * mít ročník, ze kterého nic nevyroste.
+ */
+export const YOUTH_SANCE_STROP = 0.8;
 
 const SKILL_RANGE: Record<YouthInvestment, [number, number]> = {
   none: [0, 0], // No graduates
