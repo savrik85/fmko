@@ -25,6 +25,30 @@ const INVESTMENT_COST: Record<YouthInvestment, number> = {
   high: 5000,
 };
 
+/** České názvy úrovní investice — do UI ani do výpisu financí nikdy neposílat holý klíč. */
+export const YOUTH_LABELS: Record<YouthInvestment, string> = {
+  none: "Žádná",
+  minimal: "Symbolická",
+  medium: "Solidní",
+  high: "Velkorysá",
+};
+
+/** Co manažer za svoje peníze dostane — text do UI, ať se nerozhoduje naslepo. */
+export const YOUTH_POPISY: Record<YouthInvestment, string> = {
+  none: "Do mládeže nesypeš nic. Žádní odchovanci.",
+  minimal: "Pár míčů a kužely pro žáky. Občas z toho někdo vyroste.",
+  medium: "Trenér žáků má na benzín a klub platí halu. Odchovanci chodí pravidelněji a jsou lepší.",
+  high: "Vlastní mládežnický program. Nejvyšší šance na odchovance a nejvyšší strop, kam může dorůst.",
+};
+
+/** Šance na odchovance na konci sezóny (před úpravou podle velikosti obce). */
+export const YOUTH_SANCE: Record<YouthInvestment, number> = {
+  none: 0,
+  minimal: 0.25,
+  medium: 0.5,
+  high: 0.75,
+};
+
 const SKILL_RANGE: Record<YouthInvestment, [number, number]> = {
   none: [0, 0], // No graduates
   minimal: [3, 8],

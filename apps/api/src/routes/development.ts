@@ -8,7 +8,7 @@
 
 import { Hono } from "hono";
 import { logger } from "../lib/logger";
-import { requireTeamOwnership } from "../auth/middleware";
+import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { ratingWeightsFor } from "@okresni-masina/shared";
 
 type Env = { Bindings: { DB: D1Database } };
@@ -107,7 +107,10 @@ developmentRouter.get("/teams/:teamId/players/:playerId/development", async (c) 
   const vahy = ratingWeightsFor(player.position);
 
   // Atributy, které dávají smysl ukazovat: co hráč má a co se dá trénovat.
+  // Zkušenost se vynechává — neroste tréninkem ale odehranými minutami a strop má vždy 100,
+  // takže by se u ní ukazovalo nesmyslné „2 / 94–100".
   const atributy = Object.keys(NAZVY_ATRIBUTU)
+    .filter((attr) => attr !== "experience")
     .filter((attr) => typeof skills[attr] === "number" || typeof physical[attr] === "number")
     .map((attr) => {
       const soucasna = skills[attr] ?? physical[attr] ?? 0;
@@ -180,6 +183,89 @@ developmentRouter.get("/teams/:teamId/players/:playerId/development", async (c) 
       z: h.old_value, na: h.new_value, zmena: h.change,
       zdroj: h.training_type, datum: h.game_date,
     })),
+  });
+});
+
+// ── Mládežnická akademie ─────────────────────────────────────────────────────
+
+// GET /api/teams/:teamId/academy — stav akademie a nabídka úrovní
+developmentRouter.get("/teams/:teamId/academy", async (c) => {
+  const teamId = c.req.param("teamId");
+
+  const { YOUTH_LABELS, YOUTH_POPISY, YOUTH_SANCE, youthMonthlyCost } = await import("../season/youth");
+
+  const team = await c.env.DB.prepare(
+    `SELECT t.youth_investment, v.population FROM teams t
+       JOIN villages v ON v.id = t.village_id WHERE t.id = ?`,
+  ).bind(teamId).first<{ youth_investment: string | null; population: number }>()
+    .catch((e) => { logger.warn({ module: "development", teamId }, "load academy", e); return null; });
+
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  // Větší obec = víc kluků = vyšší šance. Týž vzorec, jaký používá tryGraduateYouth.
+  const popMod = Math.max(0.5, Math.min(1.5, (team.population ?? 500) / 3000));
+
+  const urovne = (["none", "minimal", "medium", "high"] as const).map((u) => ({
+    klic: u,
+    nazev: YOUTH_LABELS[u],
+    popis: YOUTH_POPISY[u],
+    mesicne: youthMonthlyCost(u),
+    tydne: Math.round(youthMonthlyCost(u) / 4.3),
+    sanceNaOdchovance: Math.round(Math.min(1, YOUTH_SANCE[u] * popMod) * 100),
+  }));
+
+  const maU21 = await c.env.DB.prepare("SELECT 1 AS ok FROM teams WHERE parent_team_id = ? AND team_type = 'u21'")
+    .bind(teamId).first<{ ok: number }>()
+    .catch((e) => { logger.warn({ module: "development", teamId }, "check u21", e); return null; });
+
+  return c.json({
+    aktualni: team.youth_investment ?? "none",
+    populace: team.population,
+    /** Bez U21 týmu nemá odchovanec kam jít — na to musí manažer vidět dřív, než začne platit. */
+    maU21Tym: !!maU21,
+    urovne,
+  });
+});
+
+// POST /api/teams/:teamId/academy — nastavit úroveň investice
+developmentRouter.post("/teams/:teamId/academy", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ investment?: string }>().catch((e) => {
+    logger.warn({ module: "development", teamId }, "parse academy body", e);
+    return null;
+  });
+
+  const povolene = ["none", "minimal", "medium", "high"];
+  if (!body?.investment || !povolene.includes(body.investment)) {
+    return c.json({ error: "Neplatná úroveň investice" }, 400);
+  }
+
+  await c.env.DB.prepare("UPDATE teams SET youth_investment = ? WHERE id = ?")
+    .bind(body.investment, teamId).run();
+
+  logger.info({ module: "development", teamId }, `akademie nastavena na ${body.investment}`);
+  return c.json({ ok: true, investment: body.investment });
+});
+
+// POST /api/admin/academy-graduate/:teamId — ruční vychování odchovance.
+// Stejný mechanismus, jaký spustí fáze `academy` na konci sezóny; slouží k ověření,
+// že akademie funguje, bez čekání na konec ročníku.
+developmentRouter.post("/admin/academy-graduate/:teamId", requireAdmin, async (c) => {
+  const teamId = c.req.param("teamId");
+  const { graduateAcademyPlayer, notifyAcademyGraduate } = await import("../season/academy-graduation");
+
+  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE is_active = 1 LIMIT 1")
+    .first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "development" }, "load active season", e); return null; });
+
+  const res = await graduateAcademyPlayer(c.env.DB, teamId, season?.id ?? null);
+  if (res) await notifyAcademyGraduate(c.env.DB, res);
+
+  return c.json({
+    ok: true,
+    odchovanec: res,
+    // null znamená buď „klub do mládeže nesype", „nemá U21", nebo „letos se nikdo neurodil"
+    poznamka: res ? null : "Žádný odchovanec — zkontroluj investici, U21 tým, nebo to prostě nevyšlo",
   });
 });
 
