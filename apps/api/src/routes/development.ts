@@ -77,7 +77,7 @@ function slovneTempoRozvoje(talent: number): string {
 // křížem přes věky, hodnocení a talenty. Dřív si je počítal každý endpoint po svém a
 // výsledkem byly dvojice jako „Výhled: sestava" vedle „Nedotáhne se".
 import { tempoPodleVeku, type LatkyKadru } from "../skills/verdikt";
-import { vyhledHrace, teoretickyStropHrace } from "../skills/vyhled-hrace";
+import { vyhledHrace, teoretickyStropHrace, tempoZTreninku, OKNO_HISTORIE_DNI } from "../skills/vyhled-hrace";
 import { bodyDospivani, DOSPIVANI_DO_VEKU } from "../season/dospivani";
 
 /**
@@ -309,6 +309,14 @@ developmentRouter.get("/teams/:teamId/players/:playerId/development", async (c) 
   ).bind(playerId).all<{ attribute: string; zmena: number; kroku: number }>()
     .catch((e) => { logger.warn({ module: "development", playerId }, "load growth", e); return { results: [] as never[] }; });
 
+  // Totéž okno, jaké používá seznam dorostu — jinak si dva pohledy na téhož hráče
+  // spočítají jiné tempo a ukážou jiný strop.
+  const rust120 = await c.env.DB.prepare(
+    `SELECT SUM(change) AS body FROM training_log
+      WHERE player_id = ? AND created_at > datetime('now', '-' || ? || ' days')`,
+  ).bind(playerId, OKNO_HISTORIE_DNI).first<{ body: number | null }>()
+    .catch((e) => { logger.warn({ module: "development", playerId }, "load growth 120", e); return null; });
+
   const historie = await c.env.DB.prepare(
     `SELECT attribute, old_value, new_value, change, training_type, game_date
        FROM training_log WHERE player_id = ? ORDER BY created_at DESC LIMIT 30`,
@@ -334,6 +342,7 @@ developmentRouter.get("/teams/:teamId/players/:playerId/development", async (c) 
       stropyDovednosti: skillsMax,
       latky: { prumerKadru: latkyDnes.prumerKadru, sestavaDnes: latkyDnes.sestava, latkaKlenotu: klenot },
       rozptyl, posun: stabilniPosun(`${playerId}:strop`),
+      tempoZHistorie: tempoZTreninku(rust120?.body),
     });
 
     if (vyhled.verdikt !== null) {
@@ -517,9 +526,9 @@ developmentRouter.get("/teams/:teamId/u21/rozvoj", async (c) => {
   const rustRows = await c.env.DB.prepare(
     `SELECT tl.player_id, SUM(tl.change) AS body, COUNT(*) AS kroku
        FROM training_log tl JOIN players p ON p.id = tl.player_id
-      WHERE p.team_id = ? AND tl.created_at > datetime('now', '-120 days')
+      WHERE p.team_id = ? AND tl.created_at > datetime('now', '-' || ? || ' days')
       GROUP BY tl.player_id`,
-  ).bind(u21.id).all<{ player_id: string; body: number; kroku: number }>()
+  ).bind(u21.id, OKNO_HISTORIE_DNI).all<{ player_id: string; body: number; kroku: number }>()
     .catch((e) => { logger.warn({ module: "development", teamId }, "load growth", e); return { results: [] as never[] }; });
   const rustMap = new Map(rustRows.results.map((r) => [r.player_id, r.body]));
 
@@ -537,7 +546,7 @@ developmentRouter.get("/teams/:teamId/u21/rozvoj", async (c) => {
     // hodnocení), hráč ji ale nemusí mít vůbec — odchovanec, čerstvá posila, kdokoli po
     // rolloveru. Bez zálohy podle věku prognóza tvrdila „nedotáhne" i dvacetiletému se
     // stropem 74.
-    const zHistorie = (rustMap.get(h.id) ?? 0) * 0.087;
+    const zHistorie = tempoZTreninku(rustMap.get(h.id)) ?? 0;
     const vyhled = vyhledHrace({
       vek: h.age, hodnoceni: h.overall_rating, pozice: h.position, talent,
       stropyDovednosti: stropy,

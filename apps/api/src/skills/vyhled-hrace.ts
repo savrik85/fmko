@@ -53,6 +53,28 @@ export interface Vyhled {
   jizNaSestavu: boolean;
 }
 
+/**
+ * Jeden bod dovednosti je zhruba tolik bodů hodnocení. Hodnocení je vážený průměr asi
+ * třinácti atributů, takže jeden natrénovaný bod v něm váží málo.
+ */
+export const BOD_DOVEDNOSTI_V_HODNOCENI = 0.087;
+
+/** Okno, ze kterého se skutečné tempo odečítá. Musí být stejné všude. */
+export const OKNO_HISTORIE_DNI = 120;
+
+/**
+ * Skutečné tempo růstu za sezónu z natrénovaných bodů za `OKNO_HISTORIE_DNI`.
+ *
+ * Vrací `undefined`, když hráč historii nemá — volající pak spadne na odhad podle věku.
+ * Musí to počítat jedno místo: profil to dřív bral z třicetidenního okna a seznam dorostu
+ * ze stodvacetidenního, takže témuž hráči vycházel v jednom pohledu strop 55–71
+ * a ve druhém 46–62.
+ */
+export function tempoZTreninku(bodyZaOkno: number | null | undefined): number | undefined {
+  const b = bodyZaOkno ?? 0;
+  return b > 0 ? b * BOD_DOVEDNOSTI_V_HODNOCENI : undefined;
+}
+
 /** Teoretický strop hráče: hodnocení, kdyby měl všechny dovednosti na maximu.
  *
  * Počítá se nad `skills_max`, kde brankáři mají vlastní názvy dovedností — proto tu žádný
