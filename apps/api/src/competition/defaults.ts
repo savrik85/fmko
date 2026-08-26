@@ -245,7 +245,7 @@ export const PROPOSAL_KINDS: Record<string, ProposalSpec> = {
 
   // ── Prezident soutěže: pravidla soutěže ──────────────────────────────────
   ban_own_owner_transfers: { rulesField: "ban_own_owner_transfers", gesce: "soutez", label: "Zákaz transferů mezi kluby stejného majitele", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 1, unit: "switch", note: "Obchod projde, ale objeví se na programu nejbližšího zasedání jako disciplinární bod." },
-  min_pitch_condition: { rulesField: "min_pitch_condition", gesce: "soutez", label: "Minimální stav hřiště", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 60, unit: "count", counted: ["bod", "body", "bodů"], note: "Kdo pod tuhle hranici spadne, dostane pokutu za porušení pravidla. Nula znamená, že se stav hřiště nehlídá." },
+  min_pitch_condition: { rulesField: "min_pitch_condition", gesce: "soutez", label: "Minimální stav hřiště", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 100, unit: "count", counted: ["bod", "body", "bodů"], note: "Kdo pod tuhle hranici spadne, dostane pokutu za porušení pravidla. Nula znamená, že se stav hřiště nehlídá." },
   squad_min: { rulesField: "squad_min", gesce: "soutez", label: "Minimální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 18, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti klubům, které pustí kádr pod hranici únosnosti. Nula znamená bez omezení." },
   squad_max: { rulesField: "squad_max", gesce: "soutez", label: "Maximální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti hromadění hráčů na lavici. Nula znamená bez omezení." },
 

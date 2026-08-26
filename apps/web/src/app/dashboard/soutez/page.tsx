@@ -90,6 +90,21 @@ function fmtValue(spec: ProposalKind | undefined, v: number): string {
   }
 }
 
+/** Hodnota čísly a s jednotkou, bez sémantických náhrad za nulu. */
+function fmtMez(spec: ProposalKind, v: number): string {
+  const cislo = spec.unit === "ratio" ? v.toFixed(2) : String(v);
+  const jednotka = spec.unit === "pct" ? " %"
+    : spec.unit === "czk" ? " Kč"
+    : spec.unit === "count" ? ` ${spec.counted?.[2] ?? ""}`.trimEnd()
+    : "";
+  return `${cislo}${jednotka}`;
+}
+
+/** Rozsah pole tak, jak ho hráč čte nad vstupem. */
+function fmtRozsah(spec: ProposalKind): string {
+  return `${spec.unit === "ratio" ? (spec.min ?? 0).toFixed(2) : String(spec.min ?? 0)}–${fmtMez(spec, spec.max ?? 0)}`;
+}
+
 export default function SoutezPage() {
   const { teamId } = useTeam();
   const [tab, setTab] = useTabParam(TAB_KEYS);
@@ -681,7 +696,19 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
     return () => clearTimeout(t);
   }, [kind, value, teamId]);
 
+  // Prohlížeč `max` na number inputu při psaní nevynutí, takže bez téhle kontroly
+  // se hráč o překročeném rozsahu dozví až od serveru, po kliknutí na Podat návrh.
+  const mimoRozsah = (() => {
+    if (!spec) return null;
+    const v = Number(value);
+    if (!Number.isFinite(v)) return "Zadej číslo.";
+    if (spec.min !== null && v < spec.min) return `Nejmíň ${fmtMez(spec, spec.min)}.`;
+    if (spec.max !== null && v > spec.max) return `Nejvíc ${fmtMez(spec, spec.max)}.`;
+    return null;
+  })();
+
   const submit = async () => {
+    if (mimoRozsah) return;
     setSaving(true);
     const ok = await apiAction(
       apiFetch(`/api/teams/${teamId}/competition/proposals`, {
@@ -730,13 +757,16 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
               <>
                 <label className="text-sm text-muted">
                   Nová hodnota
-                  {spec.min !== null && spec.max !== null
-                    && ` (${fmtValue(spec, spec.min)} – ${fmtValue(spec, spec.max)})`}
+                  {/* Rozsah se píše čísly. fmtValue umí nulu přeložit na „bez omezení",
+                      což z „0 – 60 bodů" udělá „bez omezení – 60 bodů" — a to se čte
+                      jako by pole žádný strop nemělo. Co znamená nula, říká poznámka. */}
+                  {spec.min !== null && spec.max !== null && ` (${fmtRozsah(spec)})`}
                 </label>
                 <input className="input w-full mt-1 tabular-nums" type="number"
                   step={spec.unit === "ratio" ? "0.01" : "1"}
                   min={spec.min ?? undefined} max={spec.max ?? undefined}
                   value={value} onChange={(e) => setValue(e.target.value)} />
+                {mimoRozsah && <p className="text-sm text-red-700 mt-1">{mimoRozsah}</p>}
               </>
             )}
 
@@ -750,7 +780,9 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
           </div>
         )}
 
-        {impact && zmeneno && (
+        {/* Návrh mimo rozpočet (stav hřiště, soupiska, sázky) nemá na klubovou
+            kasu vliv — čtyři řádky nul jsou jen šum. */}
+        {impact && zmeneno && (impact.delta.matchBonus !== 0 || impact.delta.placeReward !== 0 || impact.delta.entryFee !== 0) && (
           <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
             <div className="font-semibold">Dopad na tvůj klub při současné formě</div>
             <div className="text-muted">
@@ -780,12 +812,14 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
 
         <div className="flex gap-2">
           <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
-          <button className="btn btn-lg btn-primary flex-1" onClick={submit} disabled={saving || !kind || !zmeneno}>
+          <button className="btn btn-lg btn-primary flex-1" onClick={submit} disabled={saving || !kind || !zmeneno || !!mimoRozsah}>
             {saving
               ? "Podávám…"
-              : zmeneno
-                ? "Podat návrh"
-                : spec?.unit === "switch" ? "Tohle už platí" : "Změň hodnotu"}
+              : mimoRozsah
+                ? "Mimo rozsah"
+                : zmeneno
+                  ? "Podat návrh"
+                  : spec?.unit === "switch" ? "Tohle už platí" : "Změň hodnotu"}
           </button>
         </div>
       </div>
