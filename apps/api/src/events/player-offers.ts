@@ -135,7 +135,10 @@ export async function generatePlayerOffer(
     preferredSide: player.preferredSide,
   };
 
-  const hiddenTalent = isYouth ? rng.int(20, 65) : 0;
+  // Skrytý talent. Dorostenec má velký prostor, dospělý z hospody menší — ale ne nulový:
+  // natvrdo zapsaná nula dělala z každého tipu od kamaráda, hospodského i starosty hráče,
+  // který se prakticky nemůže zlepšit (talent zrychluje růst a určuje strop při přijetí).
+  const hiddenTalent = isYouth ? rng.int(20, 65) : rng.int(0, 25);
 
   // Hodnocení počítá TÁŽ funkce jako zbytek hry (včetně bonusu za skrytý talent).
   // Vlastní zjednodušený vzorec tu dřív dával jiné číslo, než jaké hráči vyšlo hned
@@ -158,7 +161,9 @@ export async function generatePlayerOffer(
     JSON.stringify({
       discipline: player.discipline, patriotism: player.patriotism,
       alcohol: player.alcohol, temper: player.temper,
-      ...(isYouth ? { hiddenTalent } : {}),
+      // Talent se ukládá vždy — přijetí nabídky ho z personality čte a propisuje
+      // do sloupce hidden_talent i do stropu rozvoje (skills_max).
+      hiddenTalent,
     }),
     JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
     JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),

@@ -217,9 +217,25 @@ export async function createU21TeamAndSquad(
     const age = rng.int(16, 21);
 
     const isGK = position === "GK";
-    const fieldSkills = !isGK ? generateFieldSkills(rng, position as "DEF" | "MID" | "FWD", villageSize, age, true) : null;
-    const gkSkills = isGK ? generateGKSkills(rng, villageSize, age, true) : null;
-    const hiddenTalent = generateHiddenTalent(rng, villageSize);
+    // Bez AI penalizace. Dorostenec je vlastní odchovanec, ne výplň soupeřovy lavičky —
+    // s `isAi = true` mu generátor strhával 6–12 bodů z průměrů a 4–8 ze stropů, takže
+    // mladík vycházel z akademie s nižším POTENCIÁLEM než dospělý v áčku. Věkovou slabost
+    // řeší `applyAgeCurve` (do 20 let 0,7× současné hodnoty), strop se snižovat nemá.
+    const fieldSkills = !isGK ? generateFieldSkills(rng, position as "DEF" | "MID" | "FWD", villageSize, age) : null;
+    const gkSkills = isGK ? generateGKSkills(rng, villageSize, age) : null;
+
+    // Občas se v dorostu urodí kluk, co vesnici přeroste. Vzácně (~7 %) dostane výrazný
+    // talent a strop posunutý nahoro — takový hráč vypadá zpočátku stejně nevýrazně jako
+    // ostatní (současné hodnoty se nemění), ale trénink ho vytáhne mnohem výš.
+    let hiddenTalent = generateHiddenTalent(rng, villageSize);
+    if (rng.random() < 0.07) {
+      hiddenTalent = rng.int(70, 95);
+      const bonusStropu = rng.int(12, 25);
+      const dovednosti = (isGK ? gkSkills : fieldSkills) as unknown as Record<string, { current: number; maxPotential: number }>;
+      for (const dovednost of Object.values(dovednosti)) {
+        dovednost.maxPotential = Math.min(100, dovednost.maxPotential + bonusStropu);
+      }
+    }
 
     const skills = isGK
       ? { speed: gkSkills!.rushing.current, technique: gkSkills!.kicking.current, shooting: gkSkills!.kicking.current, passing: gkSkills!.distribution.current, heading: gkSkills!.reach.current, defense: gkSkills!.positioning.current, goalkeeping: gkSkills!.reflexes.current, creativity: gkSkills!.communication.current, setPieces: gkSkills!.kicking.current, stamina: gkSkills!.strength.current, strength: gkSkills!.strength.current, vision: gkSkills!.positioning.current, experience: gkSkills!.experience.current }

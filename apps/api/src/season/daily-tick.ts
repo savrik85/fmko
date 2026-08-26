@@ -195,7 +195,8 @@ export async function executeDailyTick(
             COALESCE(t.training_approach, parent.training_approach) as training_approach,
             COALESCE(t.training_sessions, parent.training_sessions) as training_sessions,
             COALESCE(t.training_days, parent.training_days) as training_days,
-            COALESCE(t.training_plan, parent.training_plan) as training_plan
+            COALESCE(t.training_plan, parent.training_plan) as training_plan,
+            COALESCE(t.parent_team_id, t.id) as club_id
        FROM teams t
        LEFT JOIN teams parent ON parent.id = t.parent_team_id
       WHERE t.user_id != 'ai'`
@@ -229,6 +230,10 @@ export async function executeDailyTick(
 
   for (const team of teams.results) {
     const teamId = team.id as string;
+    // Trenér, vybavení a realizační tým visí na A-týmu — U21 nemá vlastní ani jedno.
+    // Bez tohohle přesměrování trénoval dorost s výchozími hodnotami (trenér 40, vybavení 1,0),
+    // tedy hůř než áčko, přestože právě u mládeže má rozvoj fungovat nejlíp.
+    const clubId = (team.club_id as string) ?? teamId;
 
     // Per-team training day check: custom training_days (JSON array) override default mapping.
     // Smart skip: pokud má tým ligový zápas dnes nebo zítra, trénink se přeskočí ("trenér dal volno").
@@ -349,7 +354,7 @@ export async function executeDailyTick(
 
         const { calculateEffects } = await import("../equipment/equipment-generator");
         const equip = await env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?")
-          .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "daily-tick" }, "fetch equipment", e); return null; });
+          .bind(clubId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "daily-tick" }, "fetch equipment", e); return null; });
 
         let equipMul = 1.0;
         let equipAttendanceBonus = 0;   // dodávka: lepší docházka na trénink
@@ -375,14 +380,14 @@ export async function executeDailyTick(
 
         // Load manager attributes for training bonuses
         const mgr = await env.DB.prepare("SELECT coaching, discipline, youth_development FROM managers WHERE team_id = ?")
-          .bind(teamId).first<{ coaching: number; discipline: number; youth_development: number }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load manager for training", e); return null; });
+          .bind(clubId).first<{ coaching: number; discipline: number; youth_development: number }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load manager for training", e); return null; });
         const mgrBonus = { coaching: mgr?.coaching ?? 40, discipline: mgr?.discipline ?? 40, youthDev: mgr?.youth_development ?? 40 };
 
         // Staff efekty na trénink (asistent, trenér mládeže, trenér brankářů, kondiční trenér)
         const { calculateStaffEffects } = await import("../staff/staff-effects");
         const staffTrainRows = await env.DB.prepare(
           "SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?"
-        ).bind(teamId).all<{ role: string; coaching: number; medicine: number; maintenance: number; judgement: number; communication: number; work_rate: number; charm: number }>()
+        ).bind(clubId).all<{ role: string; coaching: number; medicine: number; maintenance: number; judgement: number; communication: number; work_rate: number; charm: number }>()
           .catch((e) => { logger.warn({ module: "daily-tick" }, "load staff for training", e); return { results: [] as never[] }; });
         const staffFx = calculateStaffEffects(staffTrainRows.results);
         equipMul *= staffFx.trainingMultiplier;

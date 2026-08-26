@@ -42,8 +42,15 @@ const CELEB_TRAINING_EXCUSES = [
   "Soustředění reprezentace veteránů na Maledivách",
 ];
 
-/** Základní šance na zlepšení atributu za jeden odtrénovaný den (před modifikátory). */
-export const BASE_IMPROVE_CHANCE = 0.20;
+/**
+ * Základní šance na zlepšení atributu za jeden odtrénovaný den (před modifikátory).
+ *
+ * Na 0,20 vycházelo z naměřených dat zhruba +1 bod hodnocení za sezónu — hráči se za celou
+ * kariéru nedostali ani na tři čtvrtiny svého stropu a dorostenec neměl šanci dorůst do áčka
+ * dřív, než zestárl. 0,30 to zrychluje zhruba o polovinu; klesající výnosy nad 50 bodů
+ * a věkový modifikátor drží horní konec pořád na uzdě.
+ */
+export const BASE_IMPROVE_CHANCE = 0.30;
 
 export type TrainingIntensity = "light" | "normal" | "hard";
 

@@ -161,6 +161,30 @@ export function calculateOverallRating(
 }
 
 /**
+ * Překlad brankářských dovedností na ploché atributy.
+ *
+ * Brankářské dovednosti (reflexes, positioning, …) žijí jen ve `skills_max`, který se po
+ * vzniku hráče nikdy neaktualizuje. Trénink zapisuje do plochého `goalkeeping` a spol.,
+ * takže bez tohohle překladu se brankáři hodnocení po tréninku vůbec nehnulo — natrénované
+ * body brankářské dovednosti se do ratingu nepromítly ani jednou.
+ *
+ * Mapování je obrácené k tomu, jak se ploché `skills` u brankáře vyrábějí
+ * (`routes/teams.ts`, `league/u21-generator.ts`, `league/insert-ai-teams.ts` — všude stejně).
+ * `catching` se do plochých atributů nikdy nepromítlo; bere reflexy, protože z pohledu
+ * plochého modelu jsou to tytéž ruce a jinak by ta váha zůstala navždy zamrzlá.
+ */
+const GK_FLAT_ALIAS: Record<string, string> = {
+  reflexes: "goalkeeping",
+  catching: "goalkeeping",
+  positioning: "defense",
+  rushing: "speed",
+  kicking: "technique",
+  distribution: "passing",
+  reach: "heading",
+  communication: "creativity",
+};
+
+/**
  * Celkové hodnocení z plochých atributů, jak jsou uložené v DB.
  *
  * `calculateOverallRating` čte strukturu `{ skill: { current, maxPotential } }`, tedy sloupec
@@ -186,6 +210,11 @@ export function overallRatingFromFlat(
     let value: number | undefined;
 
     if (typeof skills[key] === "number") value = skills[key] as number;
+    // Brankář: dovednost pod svým jménem v plochém `skills` není, sáhnout na její protějšek
+    if (value === undefined && position === "GK") {
+      const alias = GK_FLAT_ALIAS[key];
+      if (alias && typeof skills[alias] === "number") value = skills[alias] as number;
+    }
     // stamina/strength drží pravdu v physical (read path ho preferuje)
     if (value === undefined && typeof physical[key] === "number") value = physical[key] as number;
     if (value === undefined && fallback) {
