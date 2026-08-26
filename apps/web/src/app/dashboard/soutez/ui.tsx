@@ -164,9 +164,10 @@ export function StatusPill({ status }: { status: string }) {
 export function OpenProposalNote({ p }: { p: { title: string } }) {
   return (
     <div className="card p-5 text-sm" style={{ background: "var(--color-paper)" }}>
-      <div className="font-semibold text-base">Na programu už jeden návrh máš.</div>
+      <div className="font-semibold text-base">V tomhle odboru už návrh máš.</div>
       <p className="mt-1 text-muted break-words">
-        „{p.title}“ — další podáš, až se o něm bude hlasovat. Stáhnout ho můžeš u samotného návrhu.
+        „{p.title}“ — další sem podáš, až se o něm bude hlasovat. Stáhnout ho můžeš
+        u samotného návrhu. V ostatních odborech ti to nebrání.
       </p>
     </div>
   );

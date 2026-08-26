@@ -223,12 +223,18 @@ export default function SoutezPage() {
     () => proposals.filter((p) => p.status !== "open" && p.gesce === gesce), [proposals, gesce]);
   const openAll = useMemo(() => proposals.filter((p) => p.status === "open"), [proposals]);
 
-  // Server pustí na program jen jeden návrh od klubu. Tlačítko proto musí zmizet,
-  // jinak by hráč vyplnil formulář a odpovědí by mu bylo 409.
-  const myOpen = useMemo(
-    () => openAll.find((p) => p.proposedByTeamId === teamId) ?? null,
-    [openAll, teamId],
-  );
+  // Limit je per odbor: v každém můžeš mít jeden rozjednaný návrh. Tlačítko
+  // proto mizí jen v tom odboru, kde už návrh visí — jinde zůstává.
+  // Odvolání předsedy se nepočítá, klub si ho nevybral (zakládá ho pozastavení
+  // pravomoci a je vedené na prezidenta).
+  const myOpenByGesce = useMemo(() => {
+    const m: Record<string, { title: string }> = {};
+    for (const p of openAll) {
+      if (p.proposedByTeamId !== teamId || p.kind === "recall") continue;
+      if (!m[p.gesce]) m[p.gesce] = { title: p.title };
+    }
+    return m;
+  }, [openAll, teamId]);
 
   const isChair = useMemo(
     () => !!state?.officials.find((o) => o.role === "disciplinarni" && o.teamId === teamId && o.status === "active"),
@@ -370,7 +376,7 @@ export default function SoutezPage() {
           {gesce === "disciplinarni" && (
             <DisciplinePanel
               data={discipline} state={state} teamId={teamId}
-              isChair={isChair} myOpen={myOpen} onChanged={refreshAll}
+              isChair={isChair} myOpen={myOpenByGesce.disciplinarni ?? null} onChanged={refreshAll}
             />
           )}
 
@@ -383,7 +389,8 @@ export default function SoutezPage() {
           )}
 
           {gesce === "rozhodcich" && (
-            <RefereesPanel data={referees} state={state} teamId={teamId} myOpen={myOpen} onChanged={refreshAll} />
+            <RefereesPanel data={referees} state={state} teamId={teamId}
+              myOpen={myOpenByGesce.rozhodcich ?? null} onChanged={refreshAll} />
           )}
 
           {open.length === 0 ? (
@@ -396,8 +403,8 @@ export default function SoutezPage() {
           )}
 
           {state.enabled && gesce !== "zadna" && gesce !== "disciplinarni" && gesce !== "rozhodcich" && (
-            myOpen ? (
-              <OpenProposalNote p={myOpen} />
+            myOpenByGesce[gesce] ? (
+              <OpenProposalNote p={myOpenByGesce[gesce]} />
             ) : (
               <>
                 <button className="btn btn-lg btn-primary w-full" onClick={() => setFormOpen(true)}>
@@ -411,7 +418,8 @@ export default function SoutezPage() {
           )}
 
           {gesce === "hospodarska" && grants && state.enabled && teamId && (
-            <GrantsPanel data={grants} teamId={teamId} myOpen={myOpen} onChanged={refreshAll} />
+            <GrantsPanel data={grants} teamId={teamId}
+              myOpen={myOpenByGesce.hospodarska ?? null} onChanged={refreshAll} />
           )}
 
           {gesce === "soutez" && sponsor && (

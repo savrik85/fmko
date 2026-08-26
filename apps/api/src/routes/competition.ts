@@ -455,13 +455,12 @@ competitionRouter.post("/teams/:teamId/competition/proposals", async (c) => {
     return c.json({ error: "Tvůj klub nemá v téhle soutěži hlasovací právo." }, 403);
   }
 
-  // Jeden otevřený návrh na klub — jinak by se program schůze dal zahltit.
-  const openMine = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM competition_proposals WHERE league_id = ? AND proposed_by_team_id = ? AND status = 'open'"
-  ).bind(leagueId, teamId).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: M }, "počet mých návrhů", e); return null; });
-  if ((openMine?.n ?? 0) > 0) {
-    return c.json({ error: "Máš na programu schůze už jeden návrh. Počkej, až se projedná." }, 409);
+  const gesceNavrhu = PROPOSAL_KINDS[body.kind ?? ""]?.gesce ?? "zadna";
+  const uzMam = await otevrenyNavrhVGesci(c.env.DB, leagueId, teamId, gesceNavrhu);
+  if (uzMam) {
+    return c.json({
+      error: `V tomhle odboru už na programu návrh máš — „${uzMam}". Počkej, až se projedná, nebo ho stáhni.`,
+    }, 409);
   }
 
   const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
@@ -519,6 +518,28 @@ competitionRouter.post("/teams/:teamId/competition/proposals", async (c) => {
 
   return c.json({ ok: true, id, budgetNote: v.budgetNote, effectiveFromSeason: v.effectiveFromSeason });
 });
+
+/**
+ * Má klub v tomhle odboru rozjednaný návrh?
+ *
+ * Limit je per odbor, ne per klub: program zasedání zůstane čitelný, ale klub
+ * může řešit rozpočet a disciplinárku najednou, místo aby týden čekal.
+ *
+ * Systémové návrhy se nepočítají — odvolání předsedy zakládá pozastavení
+ * pravomoci a je vedené na prezidenta, který si ho nevybral.
+ */
+async function otevrenyNavrhVGesci(
+  db: D1Database, leagueId: string, teamId: string, gesce: string,
+): Promise<string | null> {
+  const row = await db.prepare(
+    `SELECT title FROM competition_proposals
+      WHERE league_id = ? AND proposed_by_team_id = ? AND status = 'open'
+        AND gesce = ? AND kind != 'recall'
+      LIMIT 1`
+  ).bind(leagueId, teamId, gesce).first<{ title: string }>()
+    .catch((e) => { logger.warn({ module: M }, "můj návrh v gesci", e); return null; });
+  return row?.title ?? null;
+}
 
 /** Herní datum týmu; fallback na globální hodiny, ať nikdy nevrátíme reálné „dnes". */
 async function currentGameDate(db: D1Database, teamId: string): Promise<string> {
@@ -1085,11 +1106,11 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
     return c.json({ error: "Tvůj klub nemá v téhle soutěži hlasovací právo." }, 403);
   }
 
-  const openMine = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM competition_proposals WHERE league_id = ? AND proposed_by_team_id = ? AND status = 'open'"
-  ).bind(leagueId, teamId).first<{ n: number }>().catch(() => null);
-  if ((openMine?.n ?? 0) > 0) {
-    return c.json({ error: "Máš na programu zasedání už jeden návrh. Počkej, až se projedná." }, 409);
+  const uzMam = await otevrenyNavrhVGesci(c.env.DB, leagueId, teamId, "hospodarska");
+  if (uzMam) {
+    return c.json({
+      error: `U generálního sekretáře už na programu návrh máš — „${uzMam}". Počkej, až se projedná, nebo ho stáhni.`,
+    }, 409);
   }
 
   const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
