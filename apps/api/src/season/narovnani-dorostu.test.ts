@@ -11,18 +11,20 @@ import { narovnejPotencialDorostu } from "./narovnani-dorostu";
 interface Radek {
   id: string; position: string; overall_rating: number; weekly_wage: number | null;
   hidden_talent: number | null; skills: string | null; physical: string | null;
-  skills_max: string; life_context: string | null;
+  skills_max: string; life_context: string | null; created_at: string | null;
 }
 
 /** Minimální D1 nad polem v paměti — stačí to, co narovnání volá. */
 function fakeDb(hraci: Radek[], latkaSestavy: number | null = null) {
+  // Dotaz na hráče filtruje `created_at` — fake to musí umět, jinak by test pojistku minul
   const ulozene = new Map(hraci.map((h) => [h.id, { ...h }]));
+  const stari = (h: Radek) => !h.created_at || h.created_at < "2026-08-26";
   const db = {
     prepare(sql: string) {
       let params: unknown[] = [];
       const self = {
         bind: (...p: unknown[]) => { params = p; return self; },
-        all: async () => ({ results: [...ulozene.values()] }),
+        all: async () => ({ results: [...ulozene.values()].filter(stari) }),
         first: async () => (sql.includes("poradi <= 11") ? { sestava: latkaSestavy } : null),
         run: async () => ({ success: true }),
         __exec: () => {
@@ -59,6 +61,7 @@ function hrac(id: string, stropy: Record<string, number>, talent = 10): Radek {
     id, position: "MID", overall_rating: 30, weekly_wage: 200, hidden_talent: talent,
     skills: JSON.stringify(skills), physical: JSON.stringify(physical),
     skills_max: JSON.stringify(sm), life_context: JSON.stringify({ condition: 100 }),
+    created_at: "2026-01-01",
   };
 }
 
@@ -201,10 +204,25 @@ describe("narovnání potenciálu", () => {
     expect(sm.speed.maxPotential).toBeGreaterThan(DOVEDNOSTI.speed);
   });
 
+  it("hráče narozeného po opravě generátoru nechá být", async () => {
+    // Odchovanec z nového ročníku penalizaci nikdy nedostal — nemá co vracet
+    const novy = { ...hrac("novy", DOVEDNOSTI), created_at: "2026-09-15" };
+    const db = fakeDb([novy]);
+    const v = await narovnejPotencialDorostu(db, "u21");
+    expect(v.upraveno).toBe(0);
+    expect(db.__stav()[0].skills_max).toEqual(novy.skills_max);
+    expect(db.__stav()[0].overall_rating).toBe(30);
+  });
+
+  it("hráče bez data vzniku narovná — jsou to ti nejstarší", async () => {
+    const db = fakeDb([{ ...hrac("bez-data", DOVEDNOSTI), created_at: null }]);
+    expect((await narovnejPotencialDorostu(db, "u21")).upraveno).toBe(1);
+  });
+
   it("hráč s rozbitým skills_max se přeskočí, ne shodí běh", async () => {
     const db = fakeDb([
       { id: "rozbity", position: "MID", overall_rating: 20, weekly_wage: 100, hidden_talent: 5,
-        skills: null, physical: null, skills_max: "{nevalidni", life_context: null },
+        skills: null, physical: null, skills_max: "{nevalidni", life_context: null, created_at: "2026-01-01" },
       hrac("zdravy", DOVEDNOSTI),
     ]);
     const v = await narovnejPotencialDorostu(db, "u21");

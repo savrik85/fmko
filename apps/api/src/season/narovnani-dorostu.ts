@@ -16,6 +16,11 @@
  * dvě sezóny. Současná hodnota se přitom nikdy nedostane nad vlastní strop, takže se tím
  * hráč „nedotrénuje" zadarmo — jen se vrací tam, kde měl začínat.
  *
+ * Sahá VÝHRADNĚ na hráče, kteří vznikli před opravou generátoru. Kdo se narodil potom,
+ * penalizaci nikdy nedostal a přidat mu šest až dvanáct bodů by bylo rozdávání zadarmo —
+ * a protože značka hlídá jen dvojí spuštění, ne stáří hráče, sklaplo by to na každém
+ * novém ročníku, kdyby někdo endpoint pustil znovu.
+ *
  * Nad úroveň základní sestavy vlastního áčka oprava nikoho nevytáhne. Naměřeno na produkci:
  * u 2 z 23 klubů by nejlepší dorostenec laťku přerostl o víc než deset bodů, protože jejich
  * áčko je slabé (laťky jdou od 35 do 59). Smyslem je zpřístupnit áčko, ne vyrobit hvězdu,
@@ -56,6 +61,13 @@ const VERZE = 2;
 
 /** Dovednosti uložené v `physical`, ne v plochém `skills`. */
 const FYZICKE = new Set(["stamina", "strength"]);
+
+/**
+ * Datum opravy generátoru. Hráč vzniklý později penalizaci nedostal, takže nemá co vracet.
+ * Datum je pevné schválně: kdyby se odvozovalo od „teď", každé pozdější spuštění by
+ * narovnalo i ročník, který vznikl už podle správných pravidel.
+ */
+const GENERATOR_OPRAVEN = "2026-08-26";
 
 export interface VysledekNarovnani {
   upraveno: number;
@@ -109,8 +121,9 @@ export async function narovnejPotencialDorostu(
   const hraci = await db.prepare(
     `SELECT id, position, overall_rating, weekly_wage, hidden_talent, skills, physical, skills_max, life_context
        FROM players
-      WHERE team_id = ? AND (status IS NULL OR status = 'active') AND skills_max IS NOT NULL`,
-  ).bind(u21TeamId).all<{
+      WHERE team_id = ? AND (status IS NULL OR status = 'active') AND skills_max IS NOT NULL
+        AND (created_at IS NULL OR date(created_at) < ?)`,
+  ).bind(u21TeamId, GENERATOR_OPRAVEN).all<{
     id: string; position: string; overall_rating: number; weekly_wage: number | null;
     hidden_talent: number | null; skills: string | null; physical: string | null;
     skills_max: string; life_context: string | null;
