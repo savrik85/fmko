@@ -42,6 +42,11 @@ export const DEFAULT_RULES = {
   levy_bet_pct: 0,
   bet_max_stake: 5_000,
   bet_max_payout: 100_000,
+  // Bankovní půjčka klubu. Výchozí hodnoty jsou přesně ty, které byly doteď
+  // natvrdo v routes/cash-loans.ts, takže soutěž bez samosprávy půjčuje jako dřív.
+  // Úrok v celých procentech — na podíl se převádí až při podpisu půjčky.
+  cash_loan_max: 40_000,
+  cash_loan_interest_pct: 15,
 } as const;
 
 export type CompetitionRules = { -readonly [K in keyof typeof DEFAULT_RULES]: number };
@@ -248,6 +253,9 @@ export const PROPOSAL_KINDS: Record<string, ProposalSpec> = {
   min_pitch_condition: { rulesField: "min_pitch_condition", gesce: "soutez", label: "Minimální stav hřiště", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 100, unit: "count", counted: ["bod", "body", "bodů"], note: "Kdo pod tuhle hranici spadne, dostane pokutu za porušení pravidla. Nula znamená, že se stav hřiště nehlídá." },
   squad_min: { rulesField: "squad_min", gesce: "soutez", label: "Minimální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 18, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti klubům, které pustí kádr pod hranici únosnosti. Nula znamená bez omezení." },
   squad_max: { rulesField: "squad_max", gesce: "soutez", label: "Maximální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti hromadění hráčů na lavici. Nula znamená bez omezení." },
+
+  cash_loan_max: { rulesField: "cash_loan_max", gesce: "hospodarska", label: "Strop půjčky od banky", majority: SIMPLE_MAJORITY, nextSeason: false, min: 5_000, max: 250_000, unit: "czk", note: "Nejvyšší částka, kterou si klub může půjčit na stránce Finance. Splácí se po zápasech do konce sezóny, jednou za sezónu. Běžících půjček se změna netýká." },
+  cash_loan_interest_pct: { rulesField: "cash_loan_interest_pct", gesce: "hospodarska", label: "Úrok z půjčky od banky", majority: SIMPLE_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "pct", note: "Kolik klub vrátí navíc. Při patnácti procentech splatí ze 40 000 celkem 46 000 Kč. Sazba se zmrazí při podpisu, takže už běžící půjčky nezdraží." },
 
   // ── Komisař pro integritu: sázková kancelář ──────────────────────────────
   ban_betting: { rulesField: "ban_betting", gesce: "integrita", label: "Zákaz sázení klubům soutěže", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 1, unit: "switch", note: "Sváže kluby TÉHLE soutěže — nesmí podat tiket nikde. Na zápasy soutěže může dál sázet kdokoli zvenčí. Otevřené tikety doběhnou a vyplatí se." },

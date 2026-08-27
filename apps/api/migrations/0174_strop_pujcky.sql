@@ -1,0 +1,27 @@
+-- 0174: Strop a úrok bankovní půjčky jako hlasovatelné pravidlo soutěže.
+--
+-- Aplikovat MANUÁLNĚ, a to PŘED nasazením kódu:
+--   npx wrangler d1 execute prales-db-test --remote --file apps/api/migrations/0174_strop_pujcky.sql
+--
+-- POŘADÍ JE ZÁVAZNÉ. Sloupce competition_rules se v kódu skládají
+-- z Object.keys(DEFAULT_RULES) na třech místech (competition/rollover.ts:buildRules,
+-- routes/competition.ts admin enable, competition/rules.ts RULE_FIELDS). Kdyby šel
+-- kód první, INSERT by mířil na neexistující sloupec a rollover by celé soutěži
+-- nezaložil sazebník.
+--
+-- Doteď byly obě čísla natvrdo v routes/cash-loans.ts (MAX_PRINCIPAL 40 000,
+-- INTEREST_RATE 0,15). Výchozí hodnoty sloupců jsou schválně stejné, takže
+-- soutěž bez samosprávy i soutěž, která o tom ještě nehlasovala, půjčuje
+-- přesně jako dřív.
+--
+-- Úrok se ukládá v CELÝCH PROCENTECH, ne jako desetinné číslo. Zbytek sazebníku
+-- to dělá stejně (levy_gate_pct, interleague_fee_pct) a formulář návrhu umí
+-- jednotku "pct" jen takhle. Na desetinný podíl se to převádí až v routeru.
+--
+-- Sazba se u půjčky ZMRAZÍ při podpisu (cash_loans.interest_rate je vlastní
+-- sloupec), takže odhlasovaná změna nikdy nepřepočítá už běžící splátky.
+--
+-- CHECK se u ALTER ADD COLUMN nepíše (stejně jako v 0153 a 0157) — rozsahy
+-- hlídá validateProposal na serveru.
+ALTER TABLE competition_rules ADD COLUMN cash_loan_max          INTEGER NOT NULL DEFAULT 40000;
+ALTER TABLE competition_rules ADD COLUMN cash_loan_interest_pct INTEGER NOT NULL DEFAULT 15;

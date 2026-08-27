@@ -2,12 +2,33 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { recordTransaction, countRemainingMatchDays } from "../season/finance-processor";
+import { resolveRules } from "../competition/rules";
 
 export const cashLoansRouter = new Hono<{ Bindings: Bindings }>();
 
+/** Spodní hranice zůstává napevno — je to ochrana proti půjčkám za pár korun,
+ *  ne sazba, o které by mělo smysl hlasovat. Strop návrhu je vždycky nad ní. */
 const MIN_PRINCIPAL = 3_000;
-const MAX_PRINCIPAL = 40_000;
-const INTEREST_RATE = 0.15;
+
+/**
+ * Strop a úrok si odhlasuje soutěž (gesce generálního sekretáře). Bez samosprávy
+ * nebo dokud se o tom nehlasovalo, vrací resolveRules výchozí 40 000 Kč a 15 %,
+ * tedy přesně to, co tu bývalo natvrdo.
+ */
+async function loanTerms(db: D1Database, teamId: string): Promise<{ max: number; interest: number }> {
+  const row = await db.prepare(
+    `SELECT t.league_id AS league_id,
+            (SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1) AS season_number
+       FROM teams t WHERE t.id = ?`
+  ).bind(teamId).first<{ league_id: string | null; season_number: number | null }>()
+    .catch((e) => { logger.warn({ module: "cash-loans" }, "načtení soutěže klubu", e); return null; });
+
+  const r = await resolveRules(db, row?.league_id, row?.season_number);
+  return {
+    max: Math.max(MIN_PRINCIPAL, r.cash_loan_max),
+    interest: r.cash_loan_interest_pct / 100,
+  };
+}
 
 interface CashLoan {
   id: string;
@@ -63,6 +84,8 @@ cashLoansRouter.get("/teams/:teamId/cash-loans", async (c) => {
       .catch((e) => { logger.warn({ module: "cash-loans" }, "load team budget", e); return null; }),
   ]);
 
+  const terms = await loanTerms(c.env.DB, teamId);
+
   const takenThisSeason = remainingInfo.seasonId
     ? await c.env.DB.prepare(
         "SELECT COUNT(*) as cnt FROM cash_loans WHERE team_id = ? AND season_id = ?"
@@ -89,8 +112,8 @@ cashLoansRouter.get("/teams/:teamId/cash-loans", async (c) => {
     history: (historyResult.results ?? []).map(mapLoan),
     rules: {
       minPrincipal: MIN_PRINCIPAL,
-      maxPrincipal: MAX_PRINCIPAL,
-      interestRate: INTEREST_RATE,
+      maxPrincipal: terms.max,
+      interestRate: terms.interest,
     },
     remainingMatches,
     currentBudget: teamRow?.budget ?? 0,
@@ -107,9 +130,11 @@ cashLoansRouter.post("/teams/:teamId/cash-loans", async (c) => {
   const body = await c.req.json<{ amount?: number }>().catch(() => ({ amount: 0 }));
   const amount = Math.round(body.amount ?? 0);
 
-  if (amount < MIN_PRINCIPAL || amount > MAX_PRINCIPAL) {
+  const terms = await loanTerms(c.env.DB, teamId);
+
+  if (amount < MIN_PRINCIPAL || amount > terms.max) {
     return c.json({
-      error: `Částka musí být mezi ${MIN_PRINCIPAL.toLocaleString("cs")} a ${MAX_PRINCIPAL.toLocaleString("cs")} Kč.`,
+      error: `Částka musí být mezi ${MIN_PRINCIPAL.toLocaleString("cs")} a ${terms.max.toLocaleString("cs")} Kč.`,
     }, 400);
   }
 
@@ -138,7 +163,7 @@ cashLoansRouter.post("/teams/:teamId/cash-loans", async (c) => {
     return c.json({ error: "Půjčku můžeš vzít pouze jednou za sezónu." }, 400);
   }
 
-  const totalToRepay = Math.round(amount * (1 + INTEREST_RATE));
+  const totalToRepay = Math.round(amount * (1 + terms.interest));
   const totalInstallments = remainingInfo.remainingMatches;
   const perMatchInstallment = Math.ceil(totalToRepay / totalInstallments);
 
@@ -152,13 +177,13 @@ cashLoansRouter.post("/teams/:teamId/cash-loans", async (c) => {
        total_installments, installments_paid, per_match_installment, status, taken_game_date, taken_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'active', ?, ?)`
   ).bind(
-    loanId, teamId, remainingInfo.seasonId, amount, INTEREST_RATE, totalToRepay, totalToRepay,
+    loanId, teamId, remainingInfo.seasonId, amount, terms.interest, totalToRepay, totalToRepay,
     totalInstallments, perMatchInstallment, gameDate, takenAt,
   ).run().catch((e) => { logger.error({ module: "cash-loans" }, "insert cash loan failed", e); throw e; });
 
   await recordTransaction(
     c.env.DB, teamId, "cash_loan_disbursement", amount,
-    `Půjčka hotovosti ${amount.toLocaleString("cs")} Kč (úrok 15 %)`,
+    `Půjčka hotovosti ${amount.toLocaleString("cs")} Kč (úrok ${Math.round(terms.interest * 100)} %)`,
     gameDate, loanId,
   );
 
@@ -170,7 +195,7 @@ cashLoansRouter.post("/teams/:teamId/cash-loans", async (c) => {
       totalToRepay,
       perMatchInstallment,
       totalInstallments,
-      interestRate: INTEREST_RATE,
+      interestRate: terms.interest,
     },
   });
 });
