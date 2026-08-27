@@ -11,7 +11,7 @@
  * dlouhá jména se lámou a portréty drží poměr i v úzkém sloupci.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch } from "@/lib/api";
 import { EntityLink, Modal, Spinner, Tabs, useTabParam } from "@/components/ui";
@@ -231,6 +231,26 @@ export default function SoutezPage() {
   useEffect(() => {
     if (gesceList.length > 0 && !gesceList.includes(gesce as never)) setGesce(gesceList[0]);
   }, [gesceList, gesce]);
+
+  /**
+   * Kdo odbor vede, spadne do něj rovnou po příchodu — je to jeho agenda a jinak
+   * by ji hledal mezi pěti záložkami. Pozastavený vedoucí taky: pravomoc nemá,
+   * ale vidět na svůj odbor potřebuje o to víc.
+   *
+   * Nastaví se JEDNOU, při prvním načtení stavu. Bez té pojistky by přepnutí
+   * záložky přežilo jen do nejbližšího refreshAll() a hráči by to skákalo zpátky
+   * pod rukama pokaždé, když zahlasuje nebo něco podá.
+   */
+  const vlastniOdborNastaven = useRef(false);
+  useEffect(() => {
+    if (vlastniOdborNastaven.current || !state || !teamId) return;
+    vlastniOdborNastaven.current = true;
+    const moje = state.officials.find(
+      (o) => o.teamId === teamId && (o.status === "active" || o.status === "suspended"));
+    if (!moje) return;
+    const g = GESCE_ORDER.find((k) => ROLE_OF_GESCE[k] === moje.role);
+    if (g && gesceList.includes(g)) setGesce(g);
+  }, [state, teamId, gesceList]);
 
   const open = useMemo(
     () => proposals.filter((p) => p.status === "open" && p.gesce === gesce), [proposals, gesce]);
