@@ -147,7 +147,9 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
         <div className="bg-gradient-to-b from-[#1e2d1e] to-[#2a3f2a] px-4 py-3 text-white">
           <div className="text-center mb-2 flex items-center justify-center gap-2">
             <span className="text-micro font-heading font-bold uppercase tracking-widest text-white/40">
-              {nextMatch.isCup ? (nextMatch.roundName ?? "🏆 Pohár") : nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}
+              {/* Trofej i k nazvu kola — roundName vraci u strednich kol holé „N. kolo",
+                  ktere je jinak k nerozeznani od ligoveho. */}
+              {nextMatch.isCup ? `🏆 ${nextMatch.roundName ?? "Pohár"}` : nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}
             </span>
             {nextMatch.scheduledAt && gameDate && (() => {
               const daysUntil = Math.max(0, Math.round((new Date(nextMatch.scheduledAt).getTime() - gameDate.getTime()) / 86400000));
