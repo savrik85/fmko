@@ -11,6 +11,7 @@ import { logger } from "../lib/logger";
 import type { TeamDeparturesResult } from "./season-departures";
 import { createRng } from "../generators/rng";
 import { generateInjury } from "../injuries/injury-generator";
+import { overallRatingFromFlat } from "../skills/generator";
 
 const M = "season-recap";
 
@@ -20,6 +21,78 @@ function parseJson<T>(s: string | null | undefined, fallback: T): T {
 }
 
 /** Zachytí odchody týmu do recap snapshotu (volá fáze departures). */
+
+/** Kolik bodů přidá letní příprava do výdrže a síly. */
+const LETNI_BONUS = 2;
+
+/**
+ * Připraví zápisy pro trvalý fyzický bonus z letní přípravy.
+ *
+ * Výdrž a síla žijí ve dvou kopiích — `physical` je zdroj pro profil, zápasový engine
+ * i trénink, `skills` je to, z čeho `overallRatingFromFlat` počítá hodnocení. Zapisuje se
+ * do obou naráz, jinak se zase rozejdou. Bonus respektuje `skills_max`: nad svůj potenciál
+ * hráč přes léto nevyroste.
+ */
+export async function pripravFyzickyBonus(
+  db: D1Database,
+  playerId: string,
+  stmts: D1PreparedStatement[],
+): Promise<void> {
+  const row = await db.prepare(
+    "SELECT position, skills, physical, skills_max, hidden_talent FROM players WHERE id = ?",
+  ).bind(playerId).first<{
+    position: string; skills: string; physical: string | null;
+    skills_max: string | null; hidden_talent: number | null;
+  }>().catch((e) => { logger.warn({ module: M }, "load player for summer bonus", e); return null; });
+  if (!row) return;
+
+  const rozparsuj = (text: string | null | undefined): Record<string, unknown> => {
+    if (!text) return {};
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch (e) {
+      logger.warn({ module: M }, "parse player json for summer bonus", e);
+      return {};
+    }
+  };
+  const skills = rozparsuj(row.skills);
+  const physical = rozparsuj(row.physical);
+  const stropy = rozparsuj(row.skills_max);
+
+  const strop = (attr: string): number => {
+    const z = stropy[attr];
+    if (z && typeof z === "object" && typeof (z as { maxPotential?: unknown }).maxPotential === "number") {
+      return (z as { maxPotential: number }).maxPotential;
+    }
+    // Starší záznamy drží ve `skills_max` holé číslo místo objektu.
+    if (typeof z === "number") return z;
+    return 99;
+  };
+
+  for (const attr of ["stamina", "strength"]) {
+    const dnes = typeof physical[attr] === "number" ? (physical[attr] as number)
+      : typeof skills[attr] === "number" ? (skills[attr] as number) : 50;
+    const nova = Math.min(strop(attr), dnes + LETNI_BONUS);
+    physical[attr] = nova;
+    skills[attr] = nova;
+  }
+
+  const rating = overallRatingFromFlat(
+    row.position, skills, physical, row.hidden_talent ?? 0, stropy,
+  );
+  // `null` = hráč nemá dost vyplněných atributů; hodnocení se pak nedotýkáme, stejně
+  // jako to dělá denní tick.
+  const sloupceRatingu = rating !== null ? ", overall_rating = ?" : "";
+  const zapis = db.prepare(
+    `UPDATE players SET skills = ?, physical = ?,
+            life_context = json_set(life_context, '$.condition', 100)${sloupceRatingu}
+      WHERE id = ?`,
+  );
+  stmts.push(rating !== null
+    ? zapis.bind(JSON.stringify(skills), JSON.stringify(physical), Math.max(1, rating), playerId)
+    : zapis.bind(JSON.stringify(skills), JSON.stringify(physical), playerId));
+}
+
 export async function captureDepartures(
   db: D1Database,
   teamId: string,
@@ -380,10 +453,14 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
     const stmts: D1PreparedStatement[] = [];
     for (const s of summerRaw) {
       if (s.effect === "fit") {
-        // Trvalý fyzický bonus (+2 síla i vytrvalost, cap 99) + čerstvá kondice na start sezóny.
-        stmts.push(db.prepare(
-          "UPDATE players SET physical = json_set(json_set(physical, '$.stamina', MIN(99, COALESCE(json_extract(physical,'$.stamina'),50) + 2)), '$.strength', MIN(99, COALESCE(json_extract(physical,'$.strength'),50) + 2)), life_context = json_set(life_context, '$.condition', 100) WHERE id = ?",
-        ).bind(s.id));
+        // Trvalý fyzický bonus (+2 síla i výdrž) + čerstvá kondice na start sezóny.
+        //
+        // Dřív to byl jeden json_set do `physical` se stropem 99 — dvě chyby naráz.
+        // Za prvé se bonus nikdy nepropsal do `skills`, odkud `overallRatingFromFlat` čte
+        // hodnocení, takže hráč viděl v profilu sílu, kterou mu rating nezapočítal.
+        // Za druhé strop 99 ignoroval `skills_max`: letní příprava uměla hráče přetlačit
+        // nad jeho vlastní potenciál, který mu karta rozvoje slibuje jako hranici.
+        await pripravFyzickyBonus(db, s.id, stmts);
       } else if (s.effect === "rusty") {
         // Mimo formu — nízká kondice na start (postupně se dotrénuje).
         stmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', 58) WHERE id = ?").bind(s.id));
