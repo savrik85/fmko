@@ -169,7 +169,8 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                   initials={homeTeam.customInitials || initials(homeTeam.name)} symbol={homeTeam.symbol} size={38} />
               </div>
               <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
-              {homeTeam.pos && (
+              {/* Pohár tabulku nemá — cup-preview posílá position 0, jinak by karta hlásila „0. místo". */}
+              {homeTeam.pos && homeTeam.pos.position > 0 && (
                 <div className="text-micro text-white/40 tabular-nums leading-tight">{homeTeam.pos.position}. místo</div>
               )}
             </TeamCell>
@@ -184,7 +185,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                   initials={awayTeam.customInitials || initials(awayTeam.name)} symbol={awayTeam.symbol} size={38} />
               </div>
               <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
-              {awayTeam.pos && (
+              {awayTeam.pos && awayTeam.pos.position > 0 && (
                 <div className="text-micro text-white/40 tabular-nums leading-tight">{awayTeam.pos.position}. místo</div>
               )}
             </TeamCell>
