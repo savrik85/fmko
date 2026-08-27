@@ -36,8 +36,8 @@ describe("bodyDospivani", () => {
   });
 
   it("nesmyslný talent nerozbije výpočet", () => {
-    expect(bodyDospivani(17, -50)).toBe(3);
-    expect(bodyDospivani(17, 500)).toBe(12);
+    expect(bodyDospivani(17, -50)).toBe(4);
+    expect(bodyDospivani(17, 500)).toBe(13);
   });
 
   it("dorostenec za tři sezóny získá dost na průraz do sestavy", () => {

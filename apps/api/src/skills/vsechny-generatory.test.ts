@@ -94,7 +94,10 @@ describe("hráči v poli ze všech kombinací", () => {
 
 describe("brankáři ze všech kombinací", () => {
   it("mají všechny dovednosti, které brankářské váhy potřebují", () => {
-    const potreba = Object.keys(ratingWeightsFor("GK")).filter((k) => k !== "experience");
+    // Výdrž a síla žijí u brankáře v `physical`, ne v jeho sadě dovedností — `overallRatingFromFlat`
+    // je odtamtud čte. Sada je proto nemusí obsahovat.
+    const potreba = Object.keys(ratingWeightsFor("GK"))
+      .filter((k) => k !== "experience" && k !== "stamina" && k !== "strength");
     const chybejici: string[] = [];
     for (const velikost of VELIKOSTI) {
       for (const vek of VEKY) {

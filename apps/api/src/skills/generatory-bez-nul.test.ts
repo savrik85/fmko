@@ -73,9 +73,11 @@ describe("generátor brankářů", () => {
 
   it("pokrývá všechny dovednosti, které váhy hodnocení očekávají", () => {
     // Tohle je jádro té staré chyby: váhy jely pod jinými názvy než generátor,
-    // takže hodnocení počítalo z chybějících hodnot.
+    // takže hodnocení počítalo z chybějících hodnot. Výdrž a síla žijí v physical, zkušenost v experience.
     const s = generateGKSkills(createRng(1), "village", 25) as unknown as Record<string, unknown>;
-    for (const attr of Object.keys(ratingWeightsFor("GK"))) {
+    const dovednosti = Object.keys(ratingWeightsFor("GK"))
+      .filter((k) => k !== "experience" && k !== "stamina" && k !== "strength");
+    for (const attr of dovednosti) {
       expect(s[attr], `váhy GK počítají s "${attr}", generátor ho nevrací`).toBeDefined();
     }
   });
