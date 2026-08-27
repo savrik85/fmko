@@ -142,3 +142,50 @@ export async function loadYouthMod(db: D1Database, teamId: string): Promise<numb
 
   return mod;
 }
+
+/**
+ * Výdrž a síla žijí ve dvou kopiích: v `skills` a v `physical`. Pravdu drží `physical` —
+ * čte z něj profil hráče i zápasový engine.
+ *
+ * Růst ze zápasu si toho dřív nevšímal: načetl `skills`, zlepšil sílu a uložil zase jen
+ * `skills`. Následující trénink pak vyšel z `physical`, kde ten bod nebyl, a při zápisu
+ * do obou kopií zápasový přírůstek přemazal. Naměřeno skutečným tickem: po opravě
+ * ukládání v tréninku zbývalo 31 ztracených bodů a 26 z nich byla právě výdrž a síla.
+ */
+export const FYZICKE_DOVEDNOSTI = ["stamina", "strength"];
+
+/**
+ * Ploché dovednosti a fyzično pro výpočet růstu — výdrž a síla se doplní z `physical`,
+ * aby se nerostlo ze zastaralé hodnoty.
+ */
+export function sjednoceneDovednosti(
+  skillsJson: string | null | undefined,
+  physicalJson: string | null | undefined,
+): { skills: Record<string, unknown>; physical: Record<string, unknown> } {
+  const rozparsuj = (s: string | null | undefined): Record<string, unknown> => {
+    if (!s) return {};
+    try {
+      return JSON.parse(s) as Record<string, unknown>;
+    } catch (e) {
+      logger.warn({ module: "match-growth" }, "parse dovednosti", e);
+      return {};
+    }
+  };
+  const skills = rozparsuj(skillsJson);
+  const physical = rozparsuj(physicalJson);
+  for (const attr of FYZICKE_DOVEDNOSTI) {
+    if (typeof physical[attr] === "number") skills[attr] = physical[attr];
+  }
+  return { skills, physical };
+}
+
+/** Zapíše zlepšení do obou kopií naráz, ať se zase nerozejdou. */
+export function zapisDovednost(
+  skills: Record<string, unknown>,
+  physical: Record<string, unknown>,
+  attribute: string,
+  newValue: number,
+): void {
+  skills[attribute] = newValue;
+  if (FYZICKE_DOVEDNOSTI.includes(attribute)) physical[attribute] = newValue;
+}

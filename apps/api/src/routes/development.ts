@@ -59,19 +59,15 @@ function rozptylOdhadu(kvalitaSkauta: number): number {
   return Math.round(18 - Math.max(0, Math.min(1, kvalitaSkauta)) * 14);
 }
 
-/**
- * Skrytý talent říká, jak RYCHLE se hráč učí — ne kam až dojde. To určuje strop.
- *
- * Odznak dřív hlásil „velký talent" a hned vedle stálo „Na střídání to bude stačit",
- * což si protiřečilo. Tempo a strop jsou dvě různé věci: kluk se může učit rychle a přesto
- * skončit nízko (dojde na svůj strop dřív), nebo se plazit k vysokému stropu půl kariéry.
- */
-function slovneTempoRozvoje(talent: number): string {
-  if (talent >= 61) return "učí se bleskově";
-  if (talent >= 36) return "učí se rychle";
-  if (talent >= 16) return "průměrné tempo";
-  return "rozvíjí se pomalu";
-}
+// Skrytý talent říká, jak RYCHLE se hráč učí — ne kam až dojde. To určuje strop.
+//
+// Odznak dřív hlásil „velký talent" a hned vedle stálo „Na střídání to bude stačit",
+// což si protiřečilo. Tempo a strop jsou dvě různé věci: kluk se může učit rychle a přesto
+// skončit nízko (dojde na svůj strop dřív), nebo se plazit k vysokému stropu půl kariéry.
+//
+// Prahy i text bydlí v `skills/talent.ts` spolu s mechanikou, která je uvádí v život.
+// Dokud tady stály vlastní, popisovala karta rozdíl, který trénink nedělal.
+import { slovneTempoRozvoje } from "../skills/talent";
 
 // Verdikt, pásma i prognóza sezón žijí v `skills/verdikt.ts` — jedno místo, otestované
 // křížem přes věky, hodnocení a talenty. Dřív si je počítal každý endpoint po svém a

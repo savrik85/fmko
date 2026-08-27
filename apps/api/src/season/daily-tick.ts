@@ -502,41 +502,75 @@ export async function executeDailyTick(
             .catch((e) => logger.warn({ module: "daily-tick" }, "gain training experience", e));
         }
 
+        // Zlepšení se ukládají PO HRÁČÍCH, ne po jednotlivých bodech.
+        //
+        // Dřív se každé zlepšení zapisovalo vlastním UPDATEm a základ si pokaždé znovu
+        // rozparsovalo z řádku staženého na začátku dne. Kdo se za jeden trénink zlepšil
+        // ve dvou dovednostech, přišel o tu první — druhý zápis vyšel ze staré verze
+        // a přepsal ji. Naměřeno na produkci: 433 dvojic hráč–dovednost mělo v `skills`
+        // nižší hodnotu, než jaká stála v posledním záznamu tréninkového logu.
+        //
+        // Výdrž a síla ten problém neměly, protože mají vlastní příkaz do `physical`,
+        // který nikdo nepřepsal. Tím se ale obě kopie rozešly — a hodnocení čte `skills`,
+        // takže hráč viděl v profilu sílu, kterou mu rating nezapočítal (1009 hráčů).
+        const podleHrace = new Map<number, typeof result.improvements>();
         for (const imp of result.improvements) {
-          const player = squad[imp.playerIndex];
-          const playerId = playersResult.results[imp.playerIndex].id as string;
-          const currentSkills = JSON.parse(playersResult.results[imp.playerIndex].skills as string);
-          const newValue = player[imp.attribute as keyof typeof player] as number;
+          const dosud = podleHrace.get(imp.playerIndex);
+          if (dosud) dosud.push(imp);
+          else podleHrace.set(imp.playerIndex, [imp]);
+        }
 
-          // Always write to skills JSON (ensure attribute exists)
-          const oldValue = currentSkills[imp.attribute] ?? 0;
-          currentSkills[imp.attribute] = newValue;
-          await env.DB.prepare("UPDATE players SET skills = ? WHERE id = ?")
-            .bind(JSON.stringify(currentSkills), playerId).run();
+        for (const [playerIndex, zlepseni] of podleHrace) {
+          const row = playersResult.results[playerIndex];
+          const player = squad[playerIndex];
+          const playerId = row.id as string;
+          const skills = JSON.parse(row.skills as string);
+          const physical = row.physical ? JSON.parse(row.physical as string) : {};
 
-          // For stamina/strength: also update physical JSON (read path prefers physical)
-          if (imp.attribute === "stamina" || imp.attribute === "strength") {
-            const currentPhysical = playersResult.results[imp.playerIndex].physical
-              ? JSON.parse(playersResult.results[imp.playerIndex].physical as string) : {};
-            currentPhysical[imp.attribute] = newValue;
-            await env.DB.prepare("UPDATE players SET physical = ? WHERE id = ?")
-              .bind(JSON.stringify(currentPhysical), playerId).run();
+          // `player[atribut]` drží až KONEČNOU hodnotu po všech bodech za dnešek. Aby log
+          // nehlásil u každého bodu tentýž skok, dopočítá se výchozí hodnota odečtením
+          // celého dnešního přírůstku a pak se jde krok po kroku.
+          const celkem = new Map<string, number>();
+          for (const imp of zlepseni) celkem.set(imp.attribute, (celkem.get(imp.attribute) ?? 0) + imp.change);
+          const beziciHodnota = new Map<string, number>();
+          for (const [atribut, zmena] of celkem) {
+            beziciHodnota.set(atribut, ((player[atribut as keyof typeof player] as number) ?? 0) - zmena);
           }
+
+          const logy: { attribute: string; old: number; nova: number; change: number }[] = [];
+          for (const imp of zlepseni) {
+            const pred = beziciHodnota.get(imp.attribute) ?? 0;
+            const po = pred + imp.change;
+            beziciHodnota.set(imp.attribute, po);
+            logy.push({ attribute: imp.attribute, old: pred, nova: po, change: imp.change });
+            skills[imp.attribute] = po;
+            // Výdrž a síla drží pravdu v `physical` — zápasový engine je čte odtamtud.
+            if (imp.attribute === "stamina" || imp.attribute === "strength") physical[imp.attribute] = po;
+          }
+
+          const skillsJson = JSON.stringify(skills);
+          const physicalJson = JSON.stringify(physical);
+          // Ať navazující zápisy v tomhle ticku vychází z aktuálních hodnot, ne ze starých.
+          row.skills = skillsJson;
+          row.physical = physicalJson;
 
           // Přepočítat hodnocení z aktuálních atributů. Dřív se přičítalo ±1 za každý
           // natrénovaný bod, jenže hodnocení je vážený průměr ~10 atributů — jeden bod v něm
           // váží 0,03–0,15. Ratingy tak utíkaly nahoru řádově rychleji než skutečná síla
           // hráče (naměřeno 0,88 bodu na trénink místo ~0,1).
-          const row = playersResult.results[imp.playerIndex];
-          const physicalForRating = row.physical ? JSON.parse(row.physical as string) : {};
           const skillsMaxForRating = row.skills_max ? JSON.parse(row.skills_max as string) : undefined;
           const computed = overallRatingFromFlat(
             row.position as string,
-            currentSkills,
-            physicalForRating,
+            skills,
+            physical,
             (row.hidden_talent as number) ?? 0,
             skillsMaxForRating,
           );
+
+          const zapisy: D1PreparedStatement[] = [
+            env.DB.prepare("UPDATE players SET skills = ?, physical = ? WHERE id = ?")
+              .bind(skillsJson, physicalJson, playerId),
+          ];
 
           // null = hráč nemá dost vyplněných atributů (část brankářů). Hodnocení ani mzdy
           // se pak nedotýkáme — dřív by tu drift pokračoval, teď se prostě nic nestane.
@@ -554,15 +588,22 @@ export async function executeDailyTick(
               ? Math.round(oldWage * (baseWageFor(newRating) / oldBase))
               : baseWageFor(newRating);
 
-            await env.DB.prepare(
-              "UPDATE players SET overall_rating = ?, weekly_wage = ? WHERE id = ?"
-            ).bind(newRating, newWage, playerId).run();
+            row.overall_rating = newRating;
+            zapisy.push(
+              env.DB.prepare("UPDATE players SET overall_rating = ?, weekly_wage = ? WHERE id = ?")
+                .bind(newRating, newWage, playerId),
+            );
           }
 
-          // Log to training_log
-          await env.DB.prepare(
-            "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-          ).bind(playerId, teamId, imp.attribute, oldValue, newValue, imp.change, todayTrainingType ?? "conditioning", effectiveDate.toISOString()).run().catch((e) => logger.warn({ module: "daily-tick" }, "insert training log", e));
+          for (const l of logy) {
+            zapisy.push(
+              env.DB.prepare(
+                "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              ).bind(playerId, teamId, l.attribute, l.old, l.nova, l.change, todayTrainingType ?? "conditioning", effectiveDate.toISOString()),
+            );
+          }
+
+          await env.DB.batch(zapisy).catch((e) => logger.warn({ module: "daily-tick" }, "ulozit vysledek treninku", e));
         }
 
         // Training drains condition for attending players

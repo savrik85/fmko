@@ -685,7 +685,7 @@ async function simulateCupTie(
   // nejsou v tabulce players.
   try {
     const expRng = createRng(cupMatchId.charCodeAt(1) * 7919 + result.homeScore);
-    const { tryMatchGrowth, parseSkillCaps, loadYouthMod } = await import("../season/match-growth");
+    const { tryMatchGrowth, parseSkillCaps, loadYouthMod, sjednoceneDovednosti, zapisDovednost } = await import("../season/match-growth");
     // Klubové zázemí (trenér mládeže, kamera) jednou za tým, ne za hráče
     const youthModPerTeam = new Map<string, number>();
     for (const realId of [homeReal, awayReal]) {
@@ -700,15 +700,16 @@ async function simulateCupTie(
       const minutes = ((pm as { left?: number; entered: number }).left ?? 90) - (pm as { entered: number }).entered;
       if (minutes < 15) continue;
 
-      const row = await db.prepare("SELECT age, skills, position, hidden_talent, skills_max FROM players WHERE id = ?")
-        .bind(dbId).first<{ age: number; skills: string; position: string; hidden_talent: number | null; skills_max: string | null }>()
+      const row = await db.prepare("SELECT age, skills, physical, position, hidden_talent, skills_max FROM players WHERE id = ?")
+        .bind(dbId).first<{ age: number; skills: string; physical: string | null; position: string; hidden_talent: number | null; skills_max: string | null }>()
         .catch((e) => { logger.warn({ module: M }, "load player for cup experience", e); return null; });
       if (!row) continue;
 
-      const skills = JSON.parse(row.skills);
+      // Výdrž a síla se berou z `physical`, kde drží pravdu (viz `sjednoceneDovednosti`).
+      const { skills, physical } = sjednoceneDovednosti(row.skills, row.physical);
       let changed = false;
 
-      const currentExp = skills.experience ?? 0;
+      const currentExp = typeof skills.experience === "number" ? skills.experience : 0;
       if (currentExp < 100 && expRng.random() < experienceGainChance(minutes, "cup", row.age)) {
         skills.experience = currentExp + 1;
         changed = true;
@@ -725,7 +726,7 @@ async function simulateCupTie(
         youthMod: youthModPerTeam.get((isHome ? homeReal : awayReal) ?? "") ?? 0,
       });
       if (rust) {
-        skills[rust.attribute] = rust.newValue;
+        zapisDovednost(skills, physical, rust.attribute, rust.newValue);
         changed = true;
         await db.prepare(
           "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'cup', ?)"
@@ -734,8 +735,8 @@ async function simulateCupTie(
       }
 
       if (changed) {
-        await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
-          .bind(JSON.stringify(skills), dbId).run()
+        await db.prepare("UPDATE players SET skills = ?, physical = ? WHERE id = ?")
+          .bind(JSON.stringify(skills), JSON.stringify(physical), dbId).run()
           .catch((e) => logger.warn({ module: M }, "cup skills persist", e));
       }
     }

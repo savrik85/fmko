@@ -279,7 +279,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         for (const [engineId, dbId] of awayBuild.idMap) fullIdMap.set(engineId, dbId);
 
         const matchRng = createRng(Date.now() + matchId.charCodeAt(2));
-        const { tryMatchGrowth, parseSkillCaps, loadYouthMod } = await import("../season/match-growth");
+        const { tryMatchGrowth, parseSkillCaps, loadYouthMod, sjednoceneDovednosti, zapisDovednost } = await import("../season/match-growth");
         // Klubové zázemí (trenér mládeže, kamera) jednou za tým, ne za hráče
         const youthModPerTeam = new Map<string, number>();
         for (const tid of [homeTeamId, awayTeamId]) {
@@ -291,8 +291,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
           const minutes = ((pm as any).left ?? 90) - (pm as any).entered;
           if (minutes < 15) continue;
 
-          const playerRow = await db.prepare("SELECT age, skills, position, team_id, hidden_talent, skills_max FROM players WHERE id = ?")
-            .bind(dbId).first<{ age: number; skills: string; position: string; team_id: string; hidden_talent: number | null; skills_max: string | null }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load player for experience", e); return null; });
+          const playerRow = await db.prepare("SELECT age, skills, physical, position, team_id, hidden_talent, skills_max FROM players WHERE id = ?")
+            .bind(dbId).first<{ age: number; skills: string; physical: string | null; position: string; team_id: string; hidden_talent: number | null; skills_max: string | null }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load player for experience", e); return null; });
           if (!playerRow) continue;
 
           const age = playerRow.age;
@@ -312,7 +312,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
 
           // Stejná pravidla jako liga (season/match-growth.ts), jen s poloviční váhou —
           // v přáteláku se hráč naučí míň než v ostrém zápase.
-          const skills = JSON.parse(playerRow.skills);
+          // Výdrž a síla se berou z `physical`, kde drží pravdu (viz `sjednoceneDovednosti`).
+          const { skills, physical } = sjednoceneDovednosti(playerRow.skills, playerRow.physical);
           const rust = tryMatchGrowth(matchRng, skills, {
             age,
             position: playerRow.position,
@@ -324,9 +325,9 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
           });
 
           if (rust) {
-            skills[rust.attribute] = rust.newValue;
-            await db.prepare("UPDATE players SET skills = ? WHERE id = ?")
-              .bind(JSON.stringify(skills), dbId).run();
+            zapisDovednost(skills, physical, rust.attribute, rust.newValue);
+            await db.prepare("UPDATE players SET skills = ?, physical = ? WHERE id = ?")
+              .bind(JSON.stringify(skills), JSON.stringify(physical), dbId).run();
             await db.prepare(
               "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'friendly', ?)"
             ).bind(dbId, playerRow.team_id, rust.attribute, rust.oldValue, rust.newValue, new Date().toISOString()).run().catch((e) => logger.warn({ module: "friendly-runner" }, "training log insert", e));

@@ -5,6 +5,7 @@ import type { Weather } from "../engine/types";
 
 import type { Rng } from "../generators/rng";
 import { ratingWeightsFor } from "@okresni-masina/shared";
+import { pokusuZaTalent } from "../skills/talent";
 import type { GeneratedPlayer } from "../generators/player";
 
 /**
@@ -109,6 +110,20 @@ export const POCET_POKUSU_DO_VEKU = 28;
  * Při dvou pokusech to bylo dvanáct sezón, což znamenalo, že se tam nedostal nikdy.
  */
 export const POKUSU_MLADI = 6;
+
+/**
+ * Kolik pokusů o zlepšení dostane hráč za jeden trénink podle věku.
+ *
+ * Odstupňované, ne se srázem: dřív dostal osmadvacetiletý šest pokusů a devětadvacetiletý
+ * jeden, takže hráč ze dne na den přestal růst. Fotbalista se zlepšuje i po třicítce,
+ * jen pomaleji, a po pětatřicítce mu spíš ubývá (o to se stará `aging.ts`).
+ */
+export function pokusuPodleVeku(vek: number): number {
+  if (vek < POCET_POKUSU_DO_VEKU) return POKUSU_MLADI;  // do 27 včetně
+  if (vek < 32) return 4;
+  if (vek < 36) return 3;
+  return 2;
+}
 
 export function ageGrowthMod(age: number): number {
   if (age < 18) return 1.45;
@@ -486,7 +501,10 @@ export function simulateTraining(
     // vůbec nehnula — šance narazila na sto procent a strop pak určuje docházka krát
     // počet tréninkových dní, ne pravděpodobnost. Víc než jeden bod za trénink z jednoho
     // pokusu prostě nevypadne. Druhý pokus ten strop zvedne.
-    const pokusu = player.age < POCET_POKUSU_DO_VEKU ? sessions * POKUSU_MLADI : sessions;
+    // Talent přidává (nebo ubírá) celé pokusy, ne procenta k šanci — ta se u dorostence
+    // stejně opře o strop, takže se v ní násobek ztratil. Viz `skills/talent.ts`.
+    const pokusuZaTrenink = Math.max(1, pokusuPodleVeku(player.age) + pokusuZaTalent(player.hiddenTalent ?? 0));
+    const pokusu = sessions * pokusuZaTrenink;
     for (let s = 0; s < pokusu; s++) {
       // GK filter: non-GK never gets goalkeeping, GK prefers goalkeeping in match_practice
       const moznosti = uzitecneProPozici(player.position);
@@ -504,11 +522,9 @@ export function simulateTraining(
       // Trenér brankářů: extra multiplikátor jen pro brankáře
       const gkMul = player.position === "GK" ? (equipExtras.gkTrainingMul ?? 1) : 1;
       const intensityMod = INTENSITY[plan.intensity ?? "normal"].growth;
-      // Skrytý talent zrychluje růst (0 → 1.0×, 65 → ~1.33×) — "odhalí se postupně tréninkem"
-      const talentMod = 1 + Math.max(0, player.hiddenTalent ?? 0) / 200;
       // Mentor pomáhá jen mladým — a sám ze sebe nic nemá
       const mentorBonus = player.age < 22 && playerIndex !== mentorIndex ? mentorMod : 1;
-      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * talentMod * mentorBonus;
+      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * mentorBonus;
       if (rng.random() < improveChance) {
         // Strop atributu = vygenerovaný potenciál (skills_max), ne paušálních 100.
         // Hráč, který je na svém stropu, se v daném atributu dál nezlepší.

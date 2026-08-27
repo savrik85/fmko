@@ -76,6 +76,10 @@ function kv(): KVNamespace {
 
 it.skipIf(!existsSync(DB))("skutecny denni tick nad produkcni kopii", async () => {
   const pred = dotaz<{ n: number }>("SELECT COUNT(*) AS n FROM training_log")[0]?.n ?? 0;
+  // Vodoznak musi byt POSLEDNI id, ne pocet radku: v obnovenem dumpu id souvisla nejsou
+  // (7650 radku, ale id od 4 do 9453), takze filtr podle poctu pustil dovnitr stara data
+  // a kontrola nize hlasila stovky "ztracenych" bodu jeste pred prvnim tickem.
+  const vodoznak = dotaz<{ n: number }>("SELECT COALESCE(MAX(id), 0) AS n FROM training_log")[0]?.n ?? 0;
   const env = { DB: d1(), CACHE_KV: kv(), SESSION_KV: kv() } as unknown as Parameters<typeof executeDailyTick>[0];
 
   let chyby = 0;
@@ -95,8 +99,21 @@ it.skipIf(!existsSync(DB))("skutecny denni tick nad produkcni kopii", async () =
              SUM(CASE WHEN tl.change < 0 THEN -tl.change ELSE 0 END) AS ubytek
         FROM training_log tl JOIN players p ON p.id = tl.player_id
         JOIN teams t ON t.id = p.team_id JOIN teams r ON r.id = COALESCE(t.parent_team_id, t.id)
-       WHERE r.user_id != 'ai' AND tl.rowid > ${pred}
+       WHERE r.user_id != 'ai' AND tl.id > ${vodoznak}
        GROUP BY pasmo ORDER BY pasmo`);
+
+  // Tentyz rez, ale podle skryteho talentu — a jen u hracu do 21 let, aby vek
+  // vysledek nemichal. Prahy odpovidaji tomu, co profil hraci napise slovy.
+  const podleTalentu = dotaz<{
+    pasmo: string; hracu: number; talent: number; zlepseni: number;
+  }>(`SELECT CASE WHEN p.hidden_talent >= 61 THEN 'bleskove' WHEN p.hidden_talent >= 36 THEN 'rychle'
+                 WHEN p.hidden_talent >= 16 THEN 'prumerne' ELSE 'pomalu' END AS pasmo,
+             COUNT(DISTINCT p.id) AS hracu, ROUND(AVG(p.hidden_talent), 1) AS talent,
+             SUM(CASE WHEN tl.change > 0 THEN tl.change ELSE 0 END) AS zlepseni
+        FROM training_log tl JOIN players p ON p.id = tl.player_id
+        JOIN teams t ON t.id = p.team_id JOIN teams r ON r.id = COALESCE(t.parent_team_id, t.id)
+       WHERE r.user_id != 'ai' AND p.age <= 21 AND tl.id > ${vodoznak}
+       GROUP BY pasmo ORDER BY talent`);
 
   const radky = [
     `SKUTECNY DENNI TICK, ${DNI} hernich dni (~1 sezona), produkcni kopie`,
@@ -108,6 +125,44 @@ it.skipIf(!existsSync(DB))("skutecny denni tick nad produkcni kopii", async () =
     const cisty = (r.zlepseni - r.ubytek) / Math.max(1, r.hracu);
     radky.push(`${r.pasmo.padEnd(8)}${String(r.hracu).padEnd(8)}${String(r.zlepseni).padEnd(11)}${String(r.ubytek).padEnd(9)}${cisty.toFixed(1)} bodu (${(cisty * 0.087).toFixed(2)} hodnoceni)`);
   }
+  radky.push("", "podle skryteho talentu, jen hraci do 21 let:",
+    `${"pasmo".padEnd(10)}${"hracu".padEnd(8)}${"o talent".padEnd(10)}${"bodu/hrace".padEnd(12)}${"index"}`);
+  const zaklad = podleTalentu.find((r) => r.pasmo === "pomalu");
+  const zakladNaHrace = zaklad ? zaklad.zlepseni / Math.max(1, zaklad.hracu) : 0;
+  for (const r of podleTalentu) {
+    const naHrace = r.zlepseni / Math.max(1, r.hracu);
+    const index = zakladNaHrace > 0 ? `${(naHrace / zakladNaHrace).toFixed(2)}x` : "-";
+    radky.push(`${r.pasmo.padEnd(10)}${String(r.hracu).padEnd(8)}${String(r.talent).padEnd(10)}${naHrace.toFixed(2).padEnd(12)}${index}`);
+  }
+  // Kontrola, ze se natrenovany bod opravdu ulozil.
+  //
+  // Trenink zapisoval kazde zlepseni vlastnim UPDATEm a zaklad si pokazde znovu rozparsoval
+  // z radku stazeneho na zacatku dne. Kdo se za jeden trenink zlepsil ve dvou dovednostech,
+  // prisel o tu prvni. Na produkci to bylo videt jako 433 dvojic hrac-dovednost, kde
+  // `skills` drzelo mensi cislo, nez jake stalo v poslednim zaznamu logu.
+  //
+  // Invariant: po behu musi u KAZDE dvojice sedet posledni zaznam logu s tim, co ma hrac
+  // v `skills`. Vyssi hodnota je v poradku (dospivani a zapasy pridavaji taky), nizsi ne.
+  //
+  // Berou se zaznamy OBOU znamenek. Kdyz se pocital jen posledni prirustek, vypadalo
+  // devatenact hracu jako ztrata — vsem ale po zlepseni prisel zapsany ubytek vydrze
+  // za neucast, takze mensi cislo v datech bylo spravne.
+  const ztracene = dotaz<{ hrac: string; atribut: string; v_logu: number; v_datech: number }>(
+    `WITH posledni AS (
+       SELECT player_id, attribute, new_value,
+              ROW_NUMBER() OVER (PARTITION BY player_id, attribute ORDER BY id DESC) AS poradi
+         FROM training_log WHERE id > ${vodoznak})
+     SELECT p.last_name AS hrac, l.attribute AS atribut, l.new_value AS v_logu,
+            COALESCE(json_extract(p.skills, '$.' || l.attribute), -1) AS v_datech
+       FROM posledni l JOIN players p ON p.id = l.player_id
+      WHERE l.poradi = 1
+        AND COALESCE(json_extract(p.skills, '$.' || l.attribute), -1) < l.new_value`);
+  radky.push("", `natrenovane body, ktere se neulozily: ${ztracene.length}`);
+  for (const z of ztracene.slice(0, 5)) {
+    radky.push(`   ${z.hrac} ${z.atribut}: log ${z.v_logu}, v datech ${z.v_datech}`);
+  }
+
   writeFileSync(process.env.VYSTUP ?? `${SCR}/tick.txt`, radky.join("\n"));
   expect(po).toBeGreaterThan(pred);
+  expect(ztracene.slice(0, 5), `${ztracene.length} natrenovanych bodu se neulozilo`).toEqual([]);
 }, 1_800_000);

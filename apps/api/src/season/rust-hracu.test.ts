@@ -12,11 +12,12 @@ import {
 } from "./training";
 import { createRng } from "../generators/rng";
 import { ratingWeightsFor } from "@okresni-masina/shared";
+import { stupenTalentu, slovneTempoRozvoje, pokusuZaTalent } from "../skills/talent";
 
 const ATR = ["speed","technique","shooting","passing","heading","defense","goalkeeping",
              "stamina","strength","vision","creativity","setPieces"] as const;
 
-function hrac(vek: number, pozice = "MID", stropy = 90): TrainingPlayer {
+function hrac(vek: number, pozice = "MID", stropy = 90, talent = 30): TrainingPlayer {
   const p: Record<string, unknown> = {
     firstName: "T", lastName: "T", age: vek, position: pozice,
     occupation: "Zedník", bodyType: "athletic", avatarConfig: {},
@@ -24,7 +25,7 @@ function hrac(vek: number, pozice = "MID", stropy = 90): TrainingPlayer {
     condition: 100, morale: 60, injuryProneness: 10,
     discipline: 80, patriotism: 50, alcohol: 5, temper: 30,
     leadership: 20, workRate: 80, aggression: 40, consistency: 60, clutch: 50,
-    hiddenTalent: 30, skillCaps: Object.fromEntries(ATR.map((a) => [a, stropy])),
+    hiddenTalent: talent, skillCaps: Object.fromEntries(ATR.map((a) => [a, stropy])),
   };
   for (const a of ATR) p[a] = 30;
   return p as unknown as TrainingPlayer;
@@ -43,6 +44,24 @@ function odtrenuj(kadr: TrainingPlayer[], dni: number, typ = "tactics", seed = 4
     }
   }
   return zisky;
+}
+
+
+/** Kolik bodů nasbírá osmnáctiletý s daným talentem za sezónu, když klub střídá typy tréninku. */
+function sezona(talent: number): number {
+  const TYPY = ["conditioning", "technique", "tactics", "match_practice"];
+  const kadr = [hrac(18, "MID", 90, talent), ...Array.from({ length: 14 }, () => hrac(25))];
+  const rng = createRng(5);
+  let zisk = 0;
+  for (let d = 0; d < 90; d++) {
+    const v = simulateTraining(rng, kadr, { sessionsPerWeek: 3, type: TYPY[d % TYPY.length], approach: "balanced" } as never);
+    for (const z of v.improvements) {
+      const rec = kadr[z.playerIndex] as unknown as Record<string, number>;
+      if (typeof rec[z.attribute] === "number") rec[z.attribute] += z.change;
+      if (z.playerIndex === 0) zisk += z.change;
+    }
+  }
+  return zisk;
 }
 
 describe("mladí mají dva pokusy o zlepšení na trénink", () => {
@@ -78,10 +97,12 @@ describe("trénink míří jen na dovednosti, které se počítají do hodnocen�
     }
   });
 
-  it("záložník netrénuje standardky ani kreativitu — nemají u něj váhu", () => {
+  it("záložník kreativitu i standardky trénuje — nově se mu počítají", () => {
+    // Dřív neměly u hráče v poli žádnou váhu, takže polovina technického tréninku
+    // mizela naprázdno. Trénovat standardky je pro záložníka legitimní.
     const vahy = ratingWeightsFor("MID");
-    expect(vahy.setPieces ?? 0).toBe(0);
-    expect(vahy.creativity ?? 0).toBe(0);
+    expect(vahy.setPieces ?? 0).toBeGreaterThan(0);
+    expect(vahy.creativity ?? 0).toBeGreaterThan(0);
 
     const kadr = [hrac(24, "MID"), ...Array.from({ length: 10 }, () => hrac(25))];
     const rng = createRng(11);
@@ -94,9 +115,9 @@ describe("trénink míří jen na dovednosti, které se počítají do hodnocen�
         if (typeof rec[z.attribute] === "number") rec[z.attribute] += z.change;
       }
     }
-    expect([...trefy]).not.toContain("setPieces");
-    expect([...trefy]).not.toContain("creativity");
     expect(trefy.size).toBeGreaterThan(0);
+    // brankaření se mu netrénuje dál — to u něj váhu opravdu nemá
+    expect([...trefy]).not.toContain("goalkeeping");
   });
 
   it("brankář naopak kreativitu trénovat smí — u něj váhu má", () => {
@@ -138,5 +159,37 @@ describe("věková křivka odpovídá fotbalu", () => {
     expect(ageGrowthMod(30)).toBeLessThan(ageGrowthMod(27));
     expect(ageGrowthMod(35)).toBeLessThan(ageGrowthMod(30));
     expect(ageGrowthMod(40)).toBeLessThan(ageGrowthMod(35));
+  });
+});
+
+describe("talent se v tréninku opravdu pozná", () => {
+  it("prahy pro text i pro mechaniku jsou jedny", () => {
+    // Karta psala „rozvíjí se pomalu" podle svých prahů, trénink počítal talent úplně
+    // jinak — a naměřený rozdíl mezi „pomalu" a „rychle" byl tři procenta.
+    expect(stupenTalentu(9)).toBe("pomalu");
+    expect(stupenTalentu(26)).toBe("prumerne");
+    expect(stupenTalentu(40)).toBe("rychle");
+    expect(stupenTalentu(83)).toBe("bleskove");
+    expect(slovneTempoRozvoje(9)).toBe("rozvíjí se pomalu");
+  });
+
+  it("každý stupeň dostane jiný počet pokusů, ne jiné procento", () => {
+    // Procento se u dorostence opře o strop a ztratí se. Pokusy se sčítají.
+    expect(pokusuZaTalent(9)).toBeLessThan(pokusuZaTalent(26));
+    expect(pokusuZaTalent(26)).toBeLessThan(pokusuZaTalent(40));
+    expect(pokusuZaTalent(40)).toBeLessThan(pokusuZaTalent(83));
+  });
+
+  it("nadaný dorostenec nasbírá znatelně víc než stejně starý bez talentu", () => {
+    // Klub střídá typy tréninku, jinak se pár dovedností rychle opře o zákon klesajícího
+    // výnosu a všechny varianty skončí na stejné hodnotě bez ohledu na počet pokusů.
+    const pomaly = sezona(9);
+    const nadany = sezona(83);
+    // Před opravou tu vycházel rozdíl pod pět procent — v rámci šumu.
+    expect(nadany).toBeGreaterThan(pomaly * 1.25);
+  });
+
+  it("hráč bez talentu se pořád zlepšuje, jen pomaleji", () => {
+    expect(sezona(0)).toBeGreaterThan(0);
   });
 });
