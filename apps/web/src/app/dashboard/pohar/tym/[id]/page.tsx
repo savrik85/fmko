@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
 import { Spinner, SectionLabel } from "@/components/ui";
+import { bestTextOn } from "@/lib/team-color";
 
 interface CupSquadPlayer { name: string; position: string; rating: number; age: number; condition: number; morale: number; suspended: boolean }
 interface CupTeamMatch {
@@ -64,7 +65,12 @@ export default function CupTeamDetailPage() {
 
       {/* Hlavička týmu */}
       <div className="card p-5 flex items-center gap-4">
-        <span className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-heading font-bold text-white shrink-0" style={{ background: t.color || "#9aa18c" }}>
+        <span
+          className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-heading font-bold shrink-0 border ${
+            bestTextOn(t.color || "#9aa18c") === "light" ? "text-white border-transparent" : "text-gray-900 border-gray-300"
+          }`}
+          style={{ background: t.color || "#9aa18c" }}
+        >
           {initials(t.name)}
         </span>
         <div className="min-w-0 flex-1">

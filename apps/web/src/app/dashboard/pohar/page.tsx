@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader, Tabs, useTabParam } from "@/components/ui";
+import { bestTextOn } from "@/lib/team-color";
 
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["pavouk", "strelci"] as const;
@@ -48,8 +49,16 @@ function initials(name: string) {
 }
 
 function TeamCell({ s, align, bold }: { s: Side | null; align: "left" | "right"; bold: boolean }) {
+  // Dresy sahají až k bílé (#FFFFFF) — bílé iniciály na světlém kolečku zmizí
+  // a samo kolečko splyne s kartou, proto k tmavému textu i obrys.
+  const color = s?.color || "#9aa18c";
   const badge = (
-    <span className="w-6 h-6 rounded-full flex items-center justify-center text-micro font-heading font-bold text-white shrink-0" style={{ background: s?.color || "#9aa18c" }}>
+    <span
+      className={`w-6 h-6 rounded-full flex items-center justify-center text-micro font-heading font-bold shrink-0 border ${
+        bestTextOn(color) === "light" ? "text-white border-transparent" : "text-gray-900 border-gray-300"
+      }`}
+      style={{ background: color }}
+    >
       {s ? initials(s.name) : "?"}
     </span>
   );

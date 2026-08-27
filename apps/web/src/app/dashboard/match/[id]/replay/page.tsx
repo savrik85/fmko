@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import { PositionBadge } from "@/components/ui/position-badge";
+import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
@@ -632,8 +633,9 @@ export default function MatchReplayPage() {
             }`} style={speed === s ? { backgroundColor: hc } : undefined}
           >{s === "live" ? "\u25B6 Živě" : s === "fast" ? "\u25B6\u25B6 Rychle" : "\u25B6\u25B6\u25B6 Konec"}</button>
         ))}
-        {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); setKickoff("2nd"); }} className="px-8 py-3 rounded-xl text-base font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
-        {finished && <button onClick={() => router.push(`/dashboard/match/${matchId}`)} className="px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase text-white shadow-lg" style={{ backgroundColor: hc }}>Pokračovat na přehled</button>}
+        {/* Pozadím je dres domácích — u bílého (#FFFFFF) by bílý popisek zmizel a tlačítko nešlo přečíst. */}
+        {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); setKickoff("2nd"); }} className={`px-8 py-3 rounded-xl text-base font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
+        {finished && <button onClick={() => router.push(`/dashboard/match/${matchId}`)} className={`px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>Pokračovat na přehled</button>}
       </div>
 
       {/* ═══ TICKER ═══ */}
