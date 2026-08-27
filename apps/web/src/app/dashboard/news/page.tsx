@@ -312,23 +312,27 @@ export default function NewsPage() {
   const currentPlayerInterviews = latestPlayerIvWeek != null && latestPlayerIvWeek > 0
     ? playerInterviewArticles.filter((a) => (a as any).gameWeek === latestPlayerIvWeek)
     : playerInterviewArticles;
-  // Lead story = nejnovější kandidát napříč typy (preview kolem zápasu vyhraje nad starým round_summary).
+  // Hráč a trenér kola má VLASTNÍ pevnou rubriku, proto nesoutěží o lead ani secondary.
+  // Dřív se o oba sloty přetahoval s ostatními typy, a protože je zároveň vyloučený
+  // z drobných zpráv, po prvním zápisu grémia (ten má v secondary přednost a nikdy
+  // nezestárne) zmizel ze stránky nadobro.
+  const roundSummaryStory = roundSummaryArticles[0] ?? null;
+  // Lead story = nejnovější kandidát napříč typy (preview kolem zápasu vyhraje nad starým reportem).
   // standing je dynamicky generovaný se současným časem, proto zůstává až jako poslední fallback.
   // Zasedání grémia je událost soutěže, ne drobná zpráva — zvolené vedení
   // patří nad ohyb, ne do dvousloupcové patičky vedle inzerce.
   const gremiumArticles = articles.filter((a) => a.type === "governance_minutes");
   const openerArticles = articles.filter((a) => a.type === "season_opener");
   const wrapArticles = articles.filter((a) => a.type === "season_wrap");
-  const leadStory = [openerArticles[0], gremiumArticles[0], previewArticles[0], roundSummaryArticles[0], aiReportArticles[0], matchArticles[0]]
+  const leadStory = [openerArticles[0], gremiumArticles[0], previewArticles[0], aiReportArticles[0], matchArticles[0]]
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
-    || standingArticles[0] || articles.find((a) => a.type !== "ultras_report");
+    || standingArticles[0] || articles.find((a) => !["ultras_report", "round_summary"].includes(a.type));
   // Druhý hlavní článek — kolem přelomu sezóny je to ohlédnutí za sezónou (season_wrap),
-  // jinak round_summary / ai_report (podle toho, co není lead).
+  // jinak ai_report (podle toho, co není lead).
   const secondaryStory =
     (gremiumArticles[0] && gremiumArticles[0].id !== leadStory?.id ? gremiumArticles[0] : null)
     ?? (wrapArticles[0] && wrapArticles[0].id !== leadStory?.id ? wrapArticles[0] : null)
-    ?? (roundSummaryArticles[0] && roundSummaryArticles[0].id !== leadStory?.id ? roundSummaryArticles[0] : null)
     ?? (aiReportArticles[0] && aiReportArticles[0].id !== leadStory?.id ? aiReportArticles[0] : null);
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
@@ -451,6 +455,24 @@ export default function NewsPage() {
                 {secondaryStory.body.split("\n").filter(Boolean).map((p, i) => (
                   <p key={i}>{renderMarkdown(p)}</p>
                 ))}
+              </div>
+            </section>
+          )}
+
+          {/* ═══ Hráč a trenér kola — vlastní rubrika, ať ji nepřebije jiný článek ═══ */}
+          {roundSummaryStory && (
+            <section id={`news-${roundSummaryStory.id}`} className="border-t border-ink/20 pt-6">
+              <Kicker>🏆 Hráč a trenér kola</Kicker>
+              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{roundSummaryStory.headline}</h2>
+              <Podpis clanek={roundSummaryStory} stred />
+              <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
+                {roundSummaryStory.body.split("\n").filter(Boolean).map((p, i) => (
+                  <p key={i}>{renderMarkdown(p)}</p>
+                ))}
+              </div>
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <span className="text-micro text-muted italic">{timeAgo(roundSummaryStory.date)}</span>
+                <ShareButton articleId={roundSummaryStory.id} />
               </div>
             </section>
           )}
