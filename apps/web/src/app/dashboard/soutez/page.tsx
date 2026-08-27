@@ -255,6 +255,17 @@ export default function SoutezPage() {
     () => !!state?.officials.find((o) => o.role === "disciplinarni" && o.teamId === teamId && o.status === "active"),
     [state, teamId]);
 
+  // Zrcadlí actsFor() na serveru (competition/officials.ts): pravomoc má činný
+  // komisař, a když je křeslo prázdné, zastupuje ho prezident soutěže.
+  // Pozastavenému komisaři pravomoc nepatří, proto se hlídá i status.
+  const jeKomisarRozhodcich = useMemo(() => {
+    if (!state || !teamId) return false;
+    const drzitel = state.officials.find(
+      (o) => o.role === "rozhodcich" && (o.status === "active" || o.status === "suspended"));
+    if (drzitel) return drzitel.teamId === teamId && drzitel.status === "active";
+    return state.presidentTeamId === teamId;
+  }, [state, teamId]);
+
   const refreshAll = useCallback(() => {
     loadState(); loadProposals(); loadElections(); loadDiscipline(); loadBoard(); loadSponsor(); loadGrants();
     if (referees) loadReferees();
@@ -405,7 +416,8 @@ export default function SoutezPage() {
 
           {gesce === "rozhodcich" && (
             <RefereesPanel data={referees} state={state} teamId={teamId}
-              myOpen={myOpenByGesce.rozhodcich ?? null} onChanged={refreshAll} />
+              myOpen={myOpenByGesce.rozhodcich ?? null} jeKomisar={jeKomisarRozhodcich}
+              onChanged={refreshAll} />
           )}
 
           {open.length === 0 ? (

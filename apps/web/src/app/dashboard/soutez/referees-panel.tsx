@@ -22,9 +22,9 @@ function gradeColor(g: number | null): string {
   return "#A32B1F";
 }
 
-export function RefereesPanel({ data, state, teamId, myOpen, onChanged }: {
+export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChanged }: {
   data: RefereeData | null; state: State; teamId: string | null;
-  myOpen: { title: string } | null; onChanged: () => void;
+  myOpen: { title: string } | null; jeKomisar: boolean; onChanged: () => void;
 }) {
   const [banTarget, setBanTarget] = useState<RefereeRow | null>(null);
   if (!data) return <Empty>Načítám listinu rozhodčích…</Empty>;
@@ -84,9 +84,10 @@ export function RefereesPanel({ data, state, teamId, myOpen, onChanged }: {
                 <div className="text-lg font-heading tabular-nums" style={{ color: gradeColor(r.avgGrade) }}>
                   {r.avgGrade !== null ? r.avgGrade.toFixed(2) : "—"}
                 </div>
-                {state.enabled && !r.banned && data.canBan && teamId && !myOpen && (
+                {/* Komisař rozhoduje sám, takže ho vlastní otevřený návrh nebrzdí. */}
+                {state.enabled && !r.banned && data.canBan && teamId && (!myOpen || jeKomisar) && (
                   <button className="btn btn-md btn-secondary" onClick={() => setBanTarget(r)}>
-                    Navrhnout vyškrtnutí
+                    {jeKomisar ? "Vyškrtnout" : "Navrhnout vyškrtnutí"}
                   </button>
                 )}
               </div>
@@ -97,7 +98,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, onChanged }: {
 
       {banTarget && teamId && (
         <BanForm
-          referee={banTarget} teamId={teamId} deposit={state.deposit}
+          referee={banTarget} teamId={teamId} deposit={state.deposit} jeKomisar={jeKomisar}
           onClose={() => setBanTarget(null)}
           onSaved={() => { setBanTarget(null); onChanged(); }}
         />
@@ -106,32 +107,49 @@ export function RefereesPanel({ data, state, teamId, myOpen, onChanged }: {
   );
 }
 
-function BanForm({ referee, teamId, deposit, onClose, onSaved }: {
-  referee: RefereeRow; teamId: string; deposit: number;
+/** Server chce u přímého vyškrtnutí odůvodnění aspoň takhle dlouhé. */
+const MIN_DUVOD = 10;
+
+function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
+  referee: RefereeRow; teamId: string; deposit: number; jeKomisar: boolean;
   onClose: () => void; onSaved: () => void;
 }) {
   const [note, setNote] = useState("");
+  // Komisař škrtá rovnou; odškrtnutím se z toho stane běžný návrh na zasedání.
+  const [primo, setPrimo] = useState(jeKomisar);
   const [saving, setSaving] = useState(false);
 
+  const kratkyDuvod = primo && note.trim().length < MIN_DUVOD;
+
   const submit = async () => {
+    if (kratkyDuvod) return;
     setSaving(true);
     const ok = await apiAction(
-      apiFetch(`/api/teams/${teamId}/competition/referee-bans`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refereeId: referee.refereeId, note }),
-      }),
-      "Návrh se nepodařilo podat",
+      apiFetch(
+        primo
+          ? `/api/teams/${teamId}/competition/referee-bans/direct`
+          : `/api/teams/${teamId}/competition/referee-bans`,
+        {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refereeId: referee.refereeId, note }),
+        },
+      ),
+      primo ? "Rozhodčího se nepodařilo vyškrtnout" : "Návrh se nepodařilo podat",
     );
     setSaving(false);
     if (ok) onSaved();
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Návrh na vyškrtnutí rozhodčího" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Vyškrtnutí rozhodčího" zavritKlikemVedle={false}>
       <div className="p-5 space-y-4">
-        <div className="text-lg font-heading">Navrhnout vyškrtnutí — {referee.name}</div>
+        <div className="text-lg font-heading">
+          {primo ? "Vyškrtnout" : "Navrhnout vyškrtnutí"} — {referee.name}
+        </div>
         <p className="text-sm text-muted">
-          Sám ho nevyškrtneš. Návrh půjde na nejbližší zasedání a rozhodnou o něm kluby.
+          {primo
+            ? "Rozhoduješ z titulu komisaře rozhodčích. Platí to okamžitě, bez hlasování — a v zápisu bude stát tvoje jméno i důvod."
+            : "Sám ho nevyškrtneš. Návrh půjde na nejbližší zasedání a rozhodnou o něm kluby."}
         </p>
 
         <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
@@ -141,7 +159,7 @@ function BanForm({ referee, teamId, deposit, onClose, onSaved }: {
             </strong>
           </div>
           <div className="text-muted">
-            Návrh potřebuje dvoutřetinovou většinu.
+            {primo ? "Rozhodnutí komisaře nepotřebuje hlasování." : "Návrh potřebuje dvoutřetinovou většinu."}
           </div>
         </div>
 
@@ -153,18 +171,35 @@ function BanForm({ referee, teamId, deposit, onClose, onSaved }: {
         </div>
 
         <div>
-          <label className="text-sm text-muted">Odůvodnění (nepovinné)</label>
+          <label className="text-sm text-muted">
+            Odůvodnění {primo ? "(povinné — přečte si ho celá soutěž)" : "(nepovinné)"}
+          </label>
           <textarea className="input w-full mt-1" rows={3} maxLength={200}
             value={note} onChange={(e) => setNote(e.target.value)}
-            placeholder="Proč by ho měla soutěž vyškrtnout?" />
+            placeholder="Proč ho na listině dál nechceš?" />
+          {kratkyDuvod && (
+            <p className="text-sm text-red-700 mt-1">
+              Napiš aspoň {MIN_DUVOD} znaků. Za rozhodnutím komisaře musí být důvod.
+            </p>
+          )}
         </div>
 
-        <p className="text-sm text-muted">Za podání se skládá kauce {czk(deposit)}.</p>
+        {jeKomisar && (
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={primo} onChange={(e) => setPrimo(e.target.checked)} className="mt-1" />
+            <span>
+              Vyškrtnout rovnou z titulu komisaře rozhodčích. Bez hlasování a bez kauce —
+              odpovědnost je tvoje a kluby tě za ni můžou odvolat.
+            </span>
+          </label>
+        )}
+
+        {!primo && <p className="text-sm text-muted">Za podání se skládá kauce {czk(deposit)}.</p>}
 
         <div className="flex gap-2">
           <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
-          <button className="btn btn-lg btn-primary flex-1" disabled={saving} onClick={submit}>
-            {saving ? "Odesílám…" : "Podat návrh"}
+          <button className="btn btn-lg btn-primary flex-1" disabled={saving || kratkyDuvod} onClick={submit}>
+            {saving ? "Odesílám…" : primo ? "Vyškrtnout" : "Podat návrh"}
           </button>
         </div>
       </div>
