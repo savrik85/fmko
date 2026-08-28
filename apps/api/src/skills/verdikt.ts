@@ -15,7 +15,11 @@ export type UrovenNadeje = "hvezda" | "nadejny" | "prumer" | "slaby";
 export interface LatkyKadru {
   /** Průměr celého kádru. */
   prumerKadru: number;
-  /** Průměr základní jedenáctky — od téhle hodnoty hráč do sestavy patří. */
+  /**
+   * Hodnocení nejslabšího hráče základní jedenáctky — hranice, přes kterou se do sestavy leze.
+   * Ne průměr sestavy: proti středu je podprůměrná zhruba půlka vlastních opor a verdikt pak
+   * tvrdí „možná sestava áčka" hráči, který v ní stojí. Podrobně v `nactiLatkyKadru`.
+   */
   sestavaDnes: number;
   /** Od jakého STROPU je hráč klenot (špička potenciálu klubu). */
   latkaKlenotu: number;

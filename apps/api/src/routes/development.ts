@@ -81,9 +81,22 @@ import { bodyDospivani, DOSPIVANI_DO_VEKU } from "../season/dospivani";
  * Manažer porovnává s tím, co na hřišti vidí, ne s teoretickým maximem za pět sezón.
  */
 async function nactiLatkyKadru(db: D1Database, teamId: string): Promise<{ prumerKadru: number; sestava: number; nejlepsi: number }> {
+  // `sestava` je hodnocení NEJSLABŠÍHO hráče základní jedenáctky, ne její průměr.
+  //
+  // Je to hranice, přes kterou se do sestavy leze, a odpovídá na otázku „hraje už za áčko?".
+  // S průměrem to nešlo: průměr leží uprostřed, takže pod ním skončí zhruba půlka vlastních
+  // opor. Naměřeno na produkci — 499 z 946 hráčů základních sestav dostávalo verdikt
+  // „možná sestava áčka", přestože v té sestavě stáli. Stačil jeden vytáhlý hráč (u Löffleru
+  // 63 proti zbytku kolem 51) a laťka utekla nad osm z jedenácti.
+  //
+  // Touž hodnotou se řídí i `pasmo` v `verdikt.ts`, protože jeho pásmo 2 vyslovuje TUTÉŽ
+  // větu („sestava áčka") jako odznak. Dvě různé laťky na jednu větu znamenají, že si
+  // stránka odporuje sama se sebou — hlídá to test „žádný hráč nedostane dvě protichůdná
+  // tvrzení". U hubených kádrů tím pásmo „střídání v áčku" skoro zmizí, a je to správně:
+  // když má tým třináct hráčů, jedenáct z nich hraje a lavička prakticky neexistuje.
   const row = await db.prepare(
     `SELECT ROUND(AVG(overall_rating)) AS prumer,
-            ROUND(AVG(CASE WHEN poradi <= 11 THEN overall_rating END)) AS sestava,
+            MIN(CASE WHEN poradi <= 11 THEN overall_rating END) AS sestava,
             MAX(overall_rating) AS nejlepsi
        FROM (SELECT overall_rating, ROW_NUMBER() OVER (ORDER BY overall_rating DESC) AS poradi
                FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active'))`,
@@ -609,6 +622,9 @@ developmentRouter.get("/teams/:teamId/potencial-kadru", async (c) => {
   const { scoutChanceMultiplier } = await import("../staff/staff-effects");
   const rozptyl = rozptylOdhadu(Math.max(0, scoutChanceMultiplier(staff.results) - 1));
 
+  // Tady průměr sestavy ZŮSTÁVÁ, na rozdíl od `nactiLatkyKadru` — neptá se „hraje už za
+  // áčko?", ale slouží jako záložní měřítko pro hvězdičkovou škálu (`sestava + 15`).
+  // Na škálu je střed sestavy poctivější než její nejslabší článek.
   const latka = await c.env.DB.prepare(
     `SELECT ROUND(AVG(CASE WHEN poradi <= 11 THEN overall_rating END)) AS sestava
        FROM (SELECT overall_rating, ROW_NUMBER() OVER (ORDER BY overall_rating DESC) AS poradi

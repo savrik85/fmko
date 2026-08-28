@@ -67,7 +67,7 @@ function latkyTymu(cesta: string, teamId: string): LatkyKadru & { nejlepsi: numb
   const r = dotaz<{ prumer: number | null; sestava: number | null; nejlepsi: number | null }>(
     cesta,
     `SELECT ROUND(AVG(overall_rating)) AS prumer,
-            ROUND(AVG(CASE WHEN poradi <= 11 THEN overall_rating END)) AS sestava,
+            MIN(CASE WHEN poradi <= 11 THEN overall_rating END) AS sestava,
             MAX(overall_rating) AS nejlepsi
        FROM (SELECT overall_rating, ROW_NUMBER() OVER (ORDER BY overall_rating DESC) AS poradi
                FROM players WHERE team_id = ?1 AND (status IS NULL OR status = 'active'))`,
@@ -245,5 +245,40 @@ describe.skipIf(databaze.length === 0)("výhled nad skutečnými daty z lokáln�
     }
 
     expect(chybne.slice(0, 8), `${chybne.length} dovedností nad vlastním stropem`).toEqual([]);
+  });
+
+  it("kdo stojí v základní sestavě, ten na ni podle výhledu má", () => {
+    // Laťka „hraje už za áčko?" musí být hranice VSTUPU do sestavy, ne její průměr.
+    // S průměrem pod ní skončila zhruba půlka vlastních opor: naměřeno na produkci
+    // 499 z 946 hráčů základních sestav, kterým výhled tvrdil „možná sestava áčka",
+    // přestože v té sestavě stáli. Stačí jeden vytáhlý hráč a laťka uteče nad zbytek.
+    const rozpory: string[] = [];
+
+    for (const cesta of databaze) {
+      let tymy: Array<{ team_id: string }>;
+      try {
+        tymy = dotaz(cesta, "SELECT DISTINCT team_id FROM players WHERE team_id IS NOT NULL");
+      } catch { continue; }
+
+      for (const { team_id } of tymy) {
+        const sestava = dotaz<{ id: string; overall_rating: number }>(
+          cesta,
+          `SELECT id, overall_rating FROM players
+            WHERE team_id = ?1 AND (status IS NULL OR status = 'active')
+            ORDER BY overall_rating DESC LIMIT 11`,
+          team_id,
+        );
+        if (sestava.length === 0) continue;
+
+        const latka = latkyTymu(cesta, team_id).sestavaDnes;
+        for (const h of sestava) {
+          if (h.overall_rating < latka) {
+            rozpory.push(`${h.id.slice(0, 8)} hodnocení ${h.overall_rating} < laťka ${latka}`);
+          }
+        }
+      }
+    }
+
+    expect(rozpory.slice(0, 8), `${rozpory.length} hráčů základní sestavy pod vlastní laťkou`).toEqual([]);
   });
 });
