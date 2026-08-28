@@ -8,7 +8,7 @@ import { logger } from "../lib/logger";
 import { experienceGainChance } from "../skills/training";
 import { recordTransaction } from "../season/finance-processor";
 import type { Weather, TeamSetup } from "../engine/types";
-import { typZraneniZPopisu } from "../injuries/injury-types";
+import { typZraneniZPopisu, zavaznostZeDnu } from "../injuries/injury-types";
 
 /** Odměna za VÝHRU kola podle hloubky (od finále). Platí pro libovolný počet kol. */
 const CUP_PRIZE_BY_DEPTH = [240000, 120000, 72000, 42000, 24000, 15000, 9000];
@@ -823,7 +823,7 @@ async function simulateCupTie(
       if (!realPlayerId) continue;
       const days = Math.max(2, 3 + Math.floor(rng.random() * 18));
       const injType = typZraneniZPopisu(event.detail);
-      const severity = days <= 7 ? "lehke" : days <= 14 ? "stredni" : "tezke";
+      const severity = zavaznostZeDnu(days);
       injuryStmts.push(db.prepare(
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(crypto.randomUUID(), realPlayerId, realTeam, injType, event.detail ?? "zranění", severity, days, days, cupMatchId));

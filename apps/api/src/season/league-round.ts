@@ -14,6 +14,7 @@ import type { Bindings } from "../index";
 import type { StandingEntry } from "../stats/standings";
 import type { ReportQueueMessage } from "../queue/messages";
 import { logger } from "../lib/logger";
+import { typZraneniZPopisu, zavaznostZeDnu } from "../injuries/injury-types";
 
 export type LeagueRoundStatus =
   /** Kolo odsimulováno. */
@@ -578,9 +579,22 @@ async function runBetweenRoundEvents(
             const injured = sqRows.results[eff.playerIndex];
             if (injured) {
               const days = (eff.duration ?? 1) * 7; // rounds to days
+              // Dřív se tu zapisovaly jen čtyři sloupce a typ „training", který ve výčtu
+              // `injuries.type` není. Chyběly `team_id`, `description`, `severity`
+              // i `days_total` — všechny NOT NULL. Zápis tedy pokaždé porušil omezení
+              // a `INSERT OR IGNORE` to spolkl beze stopy, takže se za celou historii hry
+              // neuložilo ani jedno tréninkové zranění. Proto tu je plný zápis a obyčejný
+              // INSERT: když něco nesedne, ať to spadne do logu, ne pod stůl.
               await db
-                .prepare("INSERT OR IGNORE INTO injuries (id, player_id, type, days_remaining) VALUES (?, ?, 'training', ?)")
-                .bind(crypto.randomUUID(), injured.id, days)
+                .prepare(
+                  `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                )
+                .bind(
+                  crypto.randomUUID(), injured.id, humanTeamId,
+                  typZraneniZPopisu(eff.popisZraneni), eff.popisZraneni ?? ev.title,
+                  zavaznostZeDnu(days), days, days,
+                )
                 .run()
                 .catch((e) => logger.warn({ module: "league-round" }, "injury effect failed", e));
             }

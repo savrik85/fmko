@@ -18,11 +18,24 @@ export interface GameEvent {
   effect?: EventEffect;
 }
 
+/**
+ * Popisy zranění z tréninku — vlastní sada, jiná než zápasová `POPISY_ZRANENI`.
+ * Export je schválně: překlad na typ v `injuries/injury-types.ts` musí pokrýt obě sady
+ * a `injury-types.test.ts` to hlídá. Dokud seznam žil uvnitř funkce, zápis o něm nevěděl
+ * a ukládal nepovolený typ „training", takže se tréninková zranění vůbec neuložila.
+ */
+export const POPISY_ZRANENI_TRENINK = [
+  "natažený sval", "podvrtnutý kotník", "naražené žebro",
+  "pohmožděný palec", "bolest kolene",
+] as const;
+
 export interface EventEffect {
   type: "morale" | "condition" | "budget" | "reputation" | "player_add" | "player_leave" | "injury";
   value?: number;
   playerIndex?: number;
   duration?: number; // Rounds
+  /** U zranění: který popis padl, ať se uloží správný typ a ne jen obecné zranění. */
+  popisZraneni?: (typeof POPISY_ZRANENI_TRENINK)[number];
   /**
    * Peníze putují do pokladny soutěže, ne do vzduchu — a soutěží odhlasovaný
    * sazebník pokut na ně sedne. Příznak je na efektu schválně: podle titulku
@@ -141,15 +154,12 @@ const EVENT_RULES: EventRule[] = [
     evaluate: (ctx) => {
       const idx = ctx.rng.int(0, ctx.squad.length - 1);
       const player = ctx.squad[idx];
-      const injuries = [
-        "natažený sval", "podvrtnutý kotník", "naražené žebro",
-        "pohmožděný palec", "bolest kolene",
-      ];
+      const popis = ctx.rng.pick(POPISY_ZRANENI_TRENINK);
       const duration = ctx.rng.int(1, 4);
       return {
         prob: player.injuryProneness / 20,
-        description: `${player.firstName} ${player.lastName} si na tréninku přivodil ${ctx.rng.pick(injuries)}. Bude chybět ${duration} ${duration === 1 ? "kolo" : duration < 5 ? "kola" : "kol"}.`,
-        effect: { type: "injury", playerIndex: idx, duration },
+        description: `${player.firstName} ${player.lastName} si na tréninku přivodil ${popis}. Bude chybět ${duration} ${duration === 1 ? "kolo" : duration < 5 ? "kola" : "kol"}.`,
+        effect: { type: "injury", playerIndex: idx, duration, popisZraneni: popis },
       };
     },
   },

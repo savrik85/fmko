@@ -19,7 +19,7 @@ import {
     type MatchPlayerStatsEntry
 } from "../stats/update-stats";
 import {logger} from "../lib/logger";
-import {typZraneniZPopisu} from "../injuries/injury-types";
+import {typZraneniZPopisu, zavaznostZeDnu} from "../injuries/injury-types";
 
 export interface MatchRunResult {
     matchId: string;
@@ -903,7 +903,7 @@ export async function runScheduledMatches(
                             const injuryReduction = (event.teamId === 1 ? homeEquipment : awayEquipment)?.injuryDaysReduction ?? 0;
                             const days = Math.max(2, 3 + Math.floor(Math.random() * 18) - injuryReduction);
                             const injType = typZraneniZPopisu(event.detail);
-                            const severity = days <= 7 ? "lehke" : days <= 14 ? "stredni" : "tezke";
+                            const severity = zavaznostZeDnu(days);
                             injuryStmts.push(db.prepare(
                                 "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
                             ).bind(crypto.randomUUID(), realPlayerId, evTeamId, injType, event.detail ?? "zranění", severity, days, days, matchId));
