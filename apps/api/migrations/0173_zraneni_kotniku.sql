@@ -54,3 +54,9 @@ SELECT id, player_id, team_id,
 
 DROP TABLE injuries;
 ALTER TABLE injuries_nove RENAME TO injuries;
+
+-- Indexy jdou s DROP TABLE k zemi, takže se musí postavit znovu — jinak by každé čtení
+-- zranění (soupiska, denní tick, zápas) přešlo na plný sken tabulky.
+CREATE INDEX idx_injuries_player ON injuries(player_id);
+CREATE INDEX idx_injuries_team ON injuries(team_id);
+CREATE INDEX idx_injuries_active ON injuries(team_id, days_remaining);
