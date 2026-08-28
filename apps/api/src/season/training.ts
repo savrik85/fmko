@@ -109,7 +109,13 @@ export const POCET_POKUSU_DO_VEKU = 28;
  * sestavy (kolem 49) za čtyři sezóny — tedy dřív, než mu skončí dorostenecký věk.
  * Při dvou pokusech to bylo dvanáct sezón, což znamenalo, že se tam nedostal nikdy.
  */
-export const POKUSU_MLADI = 6;
+// 2026-08-28: staženo zpět ze 6 na 2. Kalibrace na 6 vznikla PŘED zavedením filtru
+// `uzitecneProPozici`, takže nepočítala s tím, že po něm každý pokus padne na dovednost,
+// která se počítá do hodnocení. Dvě změny se znásobily a naměřeno na produkci:
+// zisk vyskočil z 1,0 bodu na hráče za trénink na 4,2, a počet trénujících hráčů
+// ze 68 na 415 za den. Celková hodnocení tím rostla skokově.
+// Než se to zvedne znovu, musí se tempo přeměřit AŽ S tím filtrem.
+export const POKUSU_MLADI = 2;
 
 /**
  * Kolik pokusů o zlepšení dostane hráč za jeden trénink podle věku.
