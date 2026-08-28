@@ -19,6 +19,7 @@ import {
     type MatchPlayerStatsEntry
 } from "../stats/update-stats";
 import {logger} from "../lib/logger";
+import {typZraneniZPopisu} from "../injuries/injury-types";
 
 export interface MatchRunResult {
     matchId: string;
@@ -891,11 +892,6 @@ export async function runScheduledMatches(
                     .bind(homeTeamId, awayTeamId, matchId).run().catch((e) => logger.warn({module: "match-runner"}, "decrement suspensions", e));
 
                 // ── Persist injuries from match events ──
-                const injuryTypeMap: Record<string, string> = {
-                    "natažený sval": "sval", "naražené žebro": "zebra", "podvrtnutý kotník": "kotnik",
-                    "bolest kolene": "koleno", "bolavá záda": "zada", "naražená hlava": "hlava",
-                    "pohmožděný palec": "obecne", "přetržený achilov": "achilovka",
-                };
                 const injuryStmts: D1PreparedStatement[] = [];
                 for (const event of result.events) {
                     if (event.type === "injury") {
@@ -906,7 +902,7 @@ export async function runScheduledMatches(
                             // Lékárnička Lv2+: ošetření hned na hřišti — nové zranění o 1-2 dny kratší
                             const injuryReduction = (event.teamId === 1 ? homeEquipment : awayEquipment)?.injuryDaysReduction ?? 0;
                             const days = Math.max(2, 3 + Math.floor(Math.random() * 18) - injuryReduction);
-                            const injType = injuryTypeMap[event.detail ?? ""] ?? "obecne";
+                            const injType = typZraneniZPopisu(event.detail);
                             const severity = days <= 7 ? "lehke" : days <= 14 ? "stredni" : "tezke";
                             injuryStmts.push(db.prepare(
                                 "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"

@@ -8,6 +8,7 @@ import { logger } from "../lib/logger";
 import { experienceGainChance } from "../skills/training";
 import { recordTransaction } from "../season/finance-processor";
 import type { Weather, TeamSetup } from "../engine/types";
+import { typZraneniZPopisu } from "../injuries/injury-types";
 
 /** Odměna za VÝHRU kola podle hloubky (od finále). Platí pro libovolný počet kol. */
 const CUP_PRIZE_BY_DEPTH = [240000, 120000, 72000, 42000, 24000, 15000, 9000];
@@ -812,11 +813,6 @@ async function simulateCupTie(
     }
 
     // Zranění ze zápasu — jen pro reálné týmy (velkoklubové kádry nejsou v players, FK by spadl)
-    const injuryTypeMap: Record<string, string> = {
-      "natažený sval": "sval", "naražené žebro": "zebra", "podvrtnutý kotník": "kotnik",
-      "bolest kolene": "koleno", "bolavá záda": "zada", "naražená hlava": "hlava",
-      "pohmožděný palec": "obecne", "přetržený achilov": "achilovka",
-    };
     const injuryStmts: D1PreparedStatement[] = [];
     for (const event of result.events) {
       if (event.type !== "injury") continue;
@@ -826,7 +822,7 @@ async function simulateCupTie(
       const realPlayerId = (isHome ? homeBuild.idMap : awayBuild.idMap).get(event.playerId);
       if (!realPlayerId) continue;
       const days = Math.max(2, 3 + Math.floor(rng.random() * 18));
-      const injType = injuryTypeMap[event.detail ?? ""] ?? "obecne";
+      const injType = typZraneniZPopisu(event.detail);
       const severity = days <= 7 ? "lehke" : days <= 14 ? "stredni" : "tezke";
       injuryStmts.push(db.prepare(
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"

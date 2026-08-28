@@ -21,8 +21,8 @@ export function createRng(seed: number) {
       return Math.floor(next() * (max - min + 1)) + min;
     },
 
-    /** Pick one item from array */
-    pick<T>(arr: T[]): T {
+    /** Pick one item from array. `readonly`, protože výběr nic nemění — pustí i `as const` seznamy. */
+    pick<T>(arr: readonly T[]): T {
       return arr[Math.floor(next() * arr.length)];
     },
 

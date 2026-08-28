@@ -53,6 +53,19 @@ export interface WeatherMod {
   windGustChance: number;
 }
 
+/**
+ * Popisy zranění, které zápas umí vyrobit — JEDINÝ zdroj.
+ *
+ * Ukládání zranění tyhle popisy překládá na typ v `injuries.type` (viz `typZraneniZPopisu`).
+ * Dokud tu byl seznam schovaný uvnitř simulace, překladová tabulka si žila vlastním životem:
+ * čekala „bolest kolene", zatímco zápas posílal „koleno", a znala šest popisů, které nikdy
+ * nevznikly. Tři z pěti zranění pak spadly na obecný typ. Export je proto schválně —
+ * test `injury-types.test.ts` hlídá, že překlad pokrývá přesně tenhle seznam.
+ */
+export const POPISY_ZRANENI = [
+  "natažený sval", "podvrtnutý kotník", "křeče", "koleno", "naraženina",
+] as const;
+
 /** Weather effects */
 export const WEATHER_MODS: Record<Weather, WeatherMod> = {
   sunny:  { techniqueMod: 1.0,  longBallBonus: 0,     injuryMod: 1.05, conditionDrainMod: 1.08,  gkHandlingMod: 1.0,  slipChance: 0,     puddleChance: 0,     windGustChance: 0 },
@@ -1262,8 +1275,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         // Equipment prevented this injury — skip
       } else {
         const teamId = home.lineup.includes(unlucky) ? home.teamId : away.teamId;
-        const injuries = ["natažený sval", "podvrtnutý kotník", "křeče", "koleno", "naraženina"];
-        const injury = rng.pick(injuries);
+        const injury = rng.pick(POPISY_ZRANENI);
         addEvent(minute, "injury", unlucky, teamId,
           `${playerName(unlucky)} — ${injury}`,
           injury);
