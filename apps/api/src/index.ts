@@ -142,14 +142,32 @@ export default {
       }
     }
 
-    // ── CUP TICK: pohár se hraje od poledne, pak při každém dalším cronu ──
-    // Ranní crony (3:00 posun dne, 5:00 zaměstnanci, 6:00 preview) pohár míjejí, aby se
-    // nedohrával v 7 ráno — první pohárový tick je 10:00 UTC = 12:00 SELČ.
-    // Zbylé čtyři ticky (10, 14, 16, 16:05) dají 12 dávek po 48 zápasech denně, takže i
+    // ── CUP TICK: pohár se hraje od poledne pražského času ──
+    // Cloudflare umí crony jen v UTC, takže poledne v Praze padá na jinou hodinu v létě
+    // (10:00 UTC) a v zimě (11:00 UTC). Proto jsou v plánu obě a rozhoduje se tady podle
+    // skutečné pražské hodiny — první tick, kdy je v Praze 12:00 nebo víc, kolo odehraje;
+    // ten druhý pak už nemá co dělat. Ranní crony (posun dne, zaměstnanci, preview) se
+    // do poledne nedostanou samy od sebe.
+    // Manuální trigger (!cron) pohár posune vždy — tam si o běh říká člověk.
+    // Zbylé ticky (14, 16, 16:05) dají dohromady 12 dávek po 48 zápasech denně, takže i
     // největší kolo (128 zápasů v 1. předkole) je hotové hned tím poledním.
     // Předčasně se nic neodehraje — maybeAdvanceCup simuluje jen kola, jejichž termín už nastal,
     // a herní datum se posouvá výhradně v nočním ticku.
-    const isCupTick = !!cron && !["0 3 * * *", "0 5 * * *", "0 6 * * *"].includes(cron);
+    // Když by převod časové zóny z jakéhokoli důvodu selhal, radši kolo pustíme podle
+    // samotného cronu, než aby pohár uvázl a neodehrál se nikdy — proto fallback 12, ne NaN
+    // (NaN >= 12 je false, což by tick umlčelo natrvalo).
+    let prahaHodina: number;
+    try {
+      prahaHodina = Number(
+        new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", hour: "numeric", hour12: false })
+          .format(new Date()),
+      );
+      if (!Number.isFinite(prahaHodina)) throw new Error("nečitelná hodina");
+    } catch (e: any) {
+      log("warn", "pražská hodina se nespočítala, pohár jede podle cronu", e);
+      prahaHodina = 12;
+    }
+    const isCupTick = !cron || (prahaHodina >= 12 && !["0 3 * * *", "0 5 * * *", "0 6 * * *"].includes(cron));
     if (isCupTick) {
       try {
         const { maybeAdvanceCup } = await import("./cup/cup");

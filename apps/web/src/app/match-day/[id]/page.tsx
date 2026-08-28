@@ -44,6 +44,8 @@ interface MatchInfo {
   stadium_name: string | null;
   pitch_condition: number;
   pitch_type: string;
+  isCup: boolean;
+  roundName: string | null;
 }
 
 interface StadiumFacilities {
@@ -63,7 +65,10 @@ export default function MatchDayPage() {
   const [uiMode, setUiMode] = useState<"full" | "minimal" | "hidden">("full");
 
   useEffect(() => {
+    // Pohár má vlastní tabulky i endpoint. Zkoušíme ligu první, protože těch zápasů je
+    // řádově víc; teprve když ID nesedí, sáhneme do poháru.
     apiFetch<Record<string, unknown>>(`/api/matches/${matchId}`)
+      .catch(() => apiFetch<Record<string, unknown>>(`/api/cup-matches/${matchId}`))
       .then(async (r) => {
         const homeTeamId = r.home_team_id as string;
         const rawWeather = (r.weather as string) || "sunny";
@@ -91,6 +96,8 @@ export default function MatchDayPage() {
           stadium_name: (r.stadium_name as string) ?? null,
           pitch_condition: (r.pitch_condition as number) ?? 85,
           pitch_type: (r.pitch_type as string) ?? "natural",
+          isCup: r.isCup === true,
+          roundName: (r.roundName as string) ?? null,
         });
 
         // Načteme zázemí stadionu domácího týmu pro 3D scénu
@@ -188,7 +195,7 @@ export default function MatchDayPage() {
         <div className="bg-black/75 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl flex items-center gap-2 text-white shadow-2xl pointer-events-auto">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
           <span className="text-[11px] sm:text-xs font-heading font-bold uppercase tracking-wider text-white/90">
-            {match.round ? `${match.round}. kolo` : "Pohár"} {match.stadium_name ? `· ${match.stadium_name}` : ""}
+            {match.isCup ? `Pohár${match.roundName ? ` · ${match.roundName}` : ""}` : match.round ? `${match.round}. kolo` : "Zápas"} {match.stadium_name ? `· ${match.stadium_name}` : ""}
           </span>
         </div>
 

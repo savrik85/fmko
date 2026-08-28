@@ -153,9 +153,9 @@ export default function MatchReplayPage() {
   }, [matchId]);
 
   const markSeen = useCallback(() => {
-    // Pohárové zápasy se nepřečítají — cup_matches nemá seen sloupce a endpoint by vrátil 404.
-    if (teamId && !match?.isCup) apiFetch(`/api/matches/${matchId}/mark-seen`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamId }) }).catch((e) => console.error("Failed to mark seen:", e));
-  }, [matchId, teamId, match?.isCup]);
+    // Pohár i liga jdou na stejnou adresu — endpoint si sám najde, ve které tabulce zápas leží.
+    if (teamId) apiFetch(`/api/matches/${matchId}/mark-seen`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamId }) }).catch((e) => console.error("Failed to mark seen:", e));
+  }, [matchId, teamId]);
 
   const vis = match ? match.events.slice(0, idx) : [];
   const st = {

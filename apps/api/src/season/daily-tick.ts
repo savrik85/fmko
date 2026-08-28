@@ -1081,11 +1081,9 @@ export async function executeDailyTick(
     await env.DB.prepare("UPDATE teams SET game_date = ? WHERE game_date IS NOT NULL").bind(globalGameDate).run()
       .catch((e) => logger.warn({ module: "daily-tick" }, "set global game date", e));
 
-    // Pohár: postup kol podle herního dne (kola padají na soboty, finále na konci ligy).
-    try {
-      const { maybeAdvanceCup } = await import("../cup/cup");
-      await maybeAdvanceCup(env.DB);
-    } catch (e) { logger.warn({ module: "daily-tick" }, "cup auto-advance failed", e); }
+    // Pohár se tady ZÁMĚRNĚ neposouvá. Noční tick běží v 5:00 pražského času a kolo by se
+    // odbylo dřív, než kdokoli vstane — přesně to dělal do 2026-08-28. Postup kol řeší
+    // samostatný pohárový tick v index.ts, který se pouští až od poledne.
 
     // ── Delegace rozhodčích na zápasy za dva herní dny ──
     // Záměrně PŘED per-tým smyčkou: delegace je per liga a musí proběhnout i pro
