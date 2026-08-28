@@ -117,8 +117,13 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
 
 ### Cron triggers
 - **Plán: Workers Paid ($5/měs)** — limit **250 cron triggers/účet**, prostor je volný
-- Produkce (`wrangler.toml` top level): **7 cronů** (0 3, 0 5, 0 6, 0 10, 0 14, 0 16, 5 16) — můžeš přidávat další
-- Testing (`[env.testing.triggers]`): **od 2026-08-17 zrcadlí produkci — 7 cronů**.
+- Produkce (`wrangler.toml` top level): **8 cronů** (0 3, 0 5, 0 6, 0 10, 0 11, 0 14, 0 16, 5 16) — můžeš přidávat další
+- **Crony jsou v UTC, poledne v Praze se v čase posouvá.** Proto jsou v plánu `0 10` i `0 11`:
+  v létě je poledne 10:00 UTC, v zimě 11:00 UTC. Pohárový tick se řídí skutečnou pražskou
+  hodinou (`Intl.DateTimeFormat` s `Europe/Prague` v `index.ts`), ne samotným cronem.
+  Pohár se **neposouvá v nočním ticku** — od 2026-08-28 to `daily-tick.ts` nedělá, jinak by se
+  kolo odbylo v 5 ráno, než kdokoli vstane.
+- Testing (`[env.testing.triggers]`): **od 2026-08-17 zrcadlí produkci — 8 cronů**.
   Dřívější pravidlo `crons = []` vzniklo kvůli limitu Free plánu (5/účet) a je zastaralé.
   Ověřeno přes Cloudflare API: účet je na Workers Paid, napříč workery běželo 8 cronů,
   po přidání testingu je jich 15 z 250.
