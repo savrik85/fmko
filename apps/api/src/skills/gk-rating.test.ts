@@ -55,10 +55,10 @@ describe("hodnocení brankáře", () => {
     expect(nizke).toBe(vysoke);
   });
 
-  it("skrytý talent se do hodnocení promítne stejně jako u hráčů v poli", () => {
+  it("skrytý talent hodnocení nezvedá — je to skrytá vlastnost, ne dnešní výkonnost", () => {
     const physical = { stamina: 30, strength: 30 };
     const bez = overallRatingFromFlat("GK", ploche(40), physical, 0, SKILLS_MAX_GK);
-    const s = overallRatingFromFlat("GK", ploche(40), physical, 60, SKILLS_MAX_GK);
-    expect(s!).toBeGreaterThan(bez!);
+    const s = overallRatingFromFlat("GK", ploche(40), physical, 95, SKILLS_MAX_GK);
+    expect(s).toBe(bez);
   });
 });

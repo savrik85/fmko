@@ -63,6 +63,22 @@ const VERZE = 2;
 const FYZICKE = new Set(["stamina", "strength"]);
 
 /**
+ * Kolik prostoru musí hráči nad jeho dnešní hodnotou zůstat, podle věku.
+ *
+ * Bez téhle pojistky si narovnání sežralo samo sebe: strop se zvedl o 4–8, ale současná
+ * hodnota o 6–12 (ořezaná stropem), takže hráč skončil zase přesně na stropu. Naměřeno
+ * na produkci u sedmnáctiletého útočníka — rychlost 50 při stropu 50, střelba 63 při
+ * stropu 63, tedy nula prostoru růst. Sedmnáctiletý na svém maximu je nesmysl.
+ */
+function minimalniProstor(vek: number): number {
+  if (vek <= 19) return 18;
+  if (vek <= 23) return 12;
+  if (vek <= 27) return 8;
+  if (vek <= 31) return 4;
+  return 2;
+}
+
+/**
  * Datum opravy generátoru. Hráč vzniklý později penalizaci nedostal, takže nemá co vracet.
  * Datum je pevné schválně: kdyby se odvozovalo od „teď", každé pozdější spuštění by
  * narovnalo i ročník, který vznikl už podle správných pravidel.
@@ -119,12 +135,12 @@ export async function narovnejPotencialDorostu(
   };
 
   const hraci = await db.prepare(
-    `SELECT id, position, overall_rating, weekly_wage, hidden_talent, skills, physical, skills_max, life_context
+    `SELECT id, position, age, overall_rating, weekly_wage, hidden_talent, skills, physical, skills_max, life_context
        FROM players
       WHERE team_id = ? AND (status IS NULL OR status = 'active') AND skills_max IS NOT NULL
         AND (created_at IS NULL OR date(created_at) < ?)`,
   ).bind(u21TeamId, GENERATOR_OPRAVEN).all<{
-    id: string; position: string; overall_rating: number; weekly_wage: number | null;
+    id: string; position: string; age: number; overall_rating: number; weekly_wage: number | null;
     hidden_talent: number | null; skills: string | null; physical: string | null;
     skills_max: string; life_context: string | null;
   }>()
@@ -181,6 +197,11 @@ export async function narovnejPotencialDorostu(
       + Math.round(stabilniHodnota(`${h.id}:hodnota`) * (NAVRAT_HODNOTY_MAX - NAVRAT_HODNOTY_MIN));
 
     /** Zvedne dovednosti o `kolik` a vrátí, na jaké hodnocení to vyjde. */
+    const talentDnes = h.hidden_talent ?? 0;
+    const novyTalent = jeKlenot
+      ? Math.max(talentDnes, KLENOT_TALENT_MIN + Math.round(stabilniHodnota(`${h.id}:talent`) * (KLENOT_TALENT_MAX - KLENOT_TALENT_MIN)))
+      : Math.max(talentDnes, Math.round(stabilniHodnota(`${h.id}:tal2`) * TALENT_STROP_VESNICE));
+
     const zkusPridavek = (kolik: number): { rating: number; skills: Record<string, unknown>; physical: Record<string, unknown>; sm: typeof sm } => {
       const s2 = { ...skills }, f2 = { ...physical };
       const sm2: typeof sm = {};
@@ -194,11 +215,22 @@ export async function narovnejPotencialDorostu(
         if (typeof dnes !== "number") continue;
         const nova = Math.min(strop, 100, dnes + kolik);
         zdroj[nazev] = nova;
+        // Strop musí nad hráčem nechat prostor odpovídající jeho věku — jinak si
+        // narovnání sežere samo sebe a hráč skončí zase na maximu.
+        const sProstorem = Math.min(100, Math.max(strop, nova + minimalniProstor(h.age)));
         // Snímek uvnitř `skills_max` drží krok s živou hodnotou, jinak by si čísla o témž
         // hráči protiřečila (profil ho čte jako záložní zdroj pro přehled a zkušenost).
-        sm2[nazev] = { ...sm2[nazev], current: nova };
+        sm2[nazev] = { ...sm2[nazev], current: nova, maxPotential: sProstorem };
       }
-      const r = overallRatingFromFlat(h.position, s2, f2, h.hidden_talent ?? 0, sm2);
+      // Hodnocení se počítá z NOVÉHO talentu, ne ze starého. Dnes už na výsledku nic
+      // nemění (talent se do hodnocení nezapočítává), ale při prvním běhu ještě ano:
+      // bonus byl talent × 0,15, takže skok z talentu 1 na 94 znamenal +14 bodů.
+      // Narovnání zapsalo hodnocení spočítané ze starého talentu, noční přepočet
+      // v denním ticku ho pak dopočítal s novým — a v tabulkách to vypadalo jako
+      // skokové zlepšení z ničeho nic (potvrzeno na produkci: 172 ze 191 skoků
+      // v noci 27.→28. 8. 2026 se přesně rovnalo talent × 0,15).
+      // Předává se dál i tak: co narovnání zapisuje, má odpovídat tomu, co spočítalo.
+      const r = overallRatingFromFlat(h.position, s2, f2, novyTalent, sm2);
       return { rating: r !== null ? Math.max(1, r) : h.overall_rating, skills: s2, physical: f2, sm: sm2 };
     };
 
@@ -224,11 +256,6 @@ export async function narovnejPotencialDorostu(
     const novaMzda = stara > 0 && starýZaklad > 0
       ? Math.round(stara * (zakladMzdy(rating) / starýZaklad))
       : zakladMzdy(rating);
-
-    const talentDnes = h.hidden_talent ?? 0;
-    const novyTalent = jeKlenot
-      ? Math.max(talentDnes, KLENOT_TALENT_MIN + Math.round(stabilniHodnota(`${h.id}:talent`) * (KLENOT_TALENT_MAX - KLENOT_TALENT_MIN)))
-      : Math.max(talentDnes, Math.round(stabilniHodnota(`${h.id}:tal2`) * TALENT_STROP_VESNICE));
 
     ctx[ZNACKA] = VERZE;
     prikazy.push(

@@ -172,9 +172,18 @@ export function calculateOverallRating(
     }
   }
 
-  const baseRating = totalWeight > 0 ? weightedSum / totalWeight : 0;
-  const bonus = hiddenTalent * 0.15;
-  return Math.round(baseRating + bonus);
+  // POZOR: `hiddenTalent` se do hodnocení ZÁMĚRNĚ nepromítá.
+  //
+  // Je to SKRYTÁ vlastnost — kam hráč může vyrůst, ne co dnes umí. Dokud se
+  // připočítávala (talent × 0,15), dostal hráč s talentem 95 rovnou +14 bodů
+  // za schopnosti, které ještě nemá, a skrytá vlastnost byla v tabulce vidět.
+  // Narovnání potenciálu pak zvedlo talent a hodnocení celé ligy skočilo,
+  // aniž by kdokoli něco natrénoval.
+  //
+  // Parametr zůstává v signatuře, aby ho volající nemuseli přestat předávat;
+  // potenciál se zobrazuje zvlášť přes skills/verdikt.ts a vyhled-hrace.ts.
+  void hiddenTalent;
+  return Math.round(totalWeight > 0 ? weightedSum / totalWeight : 0);
 }
 
 /**
@@ -223,5 +232,7 @@ export function overallRatingFromFlat(
   // ať se z pár náhodných atributů nespočítá nesmysl.
   if (totalWeight < fullWeight / 2) return null;
 
-  return Math.round(weightedSum / totalWeight + hiddenTalent * 0.15);
+  // Stejně jako v calculateOverallRating: skrytý talent do hodnocení nepatří.
+  void hiddenTalent;
+  return Math.round(weightedSum / totalWeight);
 }

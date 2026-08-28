@@ -27,10 +27,14 @@ prvnim dalsim zlepseni. Retroaktivni skok by smazal vyjednana navyseni.
 """
 import json
 import io
+import os
 import sys
 from collections import Counter
 
-SCR = "/private/tmp/claude-501/-Users-savrik-Projects-fmko/16b68775-2459-4de9-ae1b-2b7e396e425e/scratchpad"
+# Slozka se snimky a vygenerovanym SQL. Prepinatelna, aby sla stejna priprava
+# projet nejdriv nad testem a teprve pak nad produkci, aniz by si soubory lezly do cesty.
+SCR = os.environ.get("SROVNANI_DIR") or (
+    "/private/tmp/claude-501/-Users-savrik-Projects-fmko/16b68775-2459-4de9-ae1b-2b7e396e425e/scratchpad")
 FYZICKE = ("stamina", "strength")
 VAHY = {
     "GK": {"goalkeeping": 6, "defense": 3, "speed": 2, "technique": 1, "passing": 1,
