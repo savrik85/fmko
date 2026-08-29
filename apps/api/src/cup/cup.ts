@@ -853,6 +853,58 @@ async function simulateCupTie(
   return { hg: result.homeScore, ag: result.awayScore, hp, ap, homeWin, upset: loserStr - winnerStr >= 12 };
 }
 
+/** Zápas kola tak, jak ho potřebuje simulace. Termín je součástí řádku — počasí je vlastnost dne. */
+export interface CupRoundMatch {
+  id: string;
+  bracket_pos: number;
+  home_cup_team_id: string | null;
+  away_cup_team_id: string | null;
+  scheduled_at: string | null;
+}
+
+/**
+ * Zápasy kola čekající na odehrání.
+ *
+ * `scheduled_at` musí být v SELECTu — bez něj si simulace nemá kde vzít počasí
+ * dne a celé kolo spadne na fallback. Přesně to se stalo 2026-08-29: sloupec
+ * v dotazu chyběl, `m.scheduled_at` bylo `undefined` a jedenáct pohárových
+ * zápasů se odehrálo v zataženu, zatímco den měl sníh a předpověď ho hlásila.
+ * Typecheck mlčel, protože `.catch()` vracel `any[]`.
+ */
+export async function loadRoundMatches(
+  db: D1Database, cupId: string, round: number, limit: number,
+): Promise<CupRoundMatch[]> {
+  const res = await db.prepare(
+    `SELECT id, bracket_pos, home_cup_team_id, away_cup_team_id, scheduled_at
+       FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'scheduled'
+      ORDER BY bracket_pos LIMIT ?`,
+  ).bind(cupId, round, limit).all<CupRoundMatch>()
+    .catch((e) => { logger.warn({ module: M }, "load round matches", e); return { results: [] as CupRoundMatch[] }; });
+  return res.results;
+}
+
+/**
+ * Počasí pohárového zápasu — počasí jeho dne, ne vlastní losování.
+ *
+ * Pohár se hraje ve stejném okrese jako liga, takže nemůže mít svoje počasí,
+ * a hlavně musí sedět s předpovědí, kterou hráč u zápasu vidí. Viz
+ * `season/season-weather.ts`, jediný zdroj pravdy.
+ *
+ * Fallback hlásí warn: tichý „cloudy" umí půl sezóny předstírat, že je všechno
+ * v pořádku, a nikdo se nedozví, že se počasí dne nepodařilo zjistit.
+ */
+export async function cupTieWeather(
+  db: D1Database, scheduledAt: string | null | undefined, cupMatchId: string,
+): Promise<Weather> {
+  const { resolveWeatherForDate } = await import("../season/season-weather");
+  const rw = scheduledAt ? await resolveWeatherForDate(db, scheduledAt) : null;
+  if (!rw) {
+    logger.warn({ module: M }, `cup tie ${cupMatchId}: počasí dne se nezjistilo (termín ${scheduledAt ?? "chybí"}) → zataženo`);
+    return "cloudy";
+  }
+  return rw.weather;
+}
+
 /** Odsimuluje aktuální kolo poháru a vygeneruje další kolo z vítězů (nebo ukončí pohár ve finále). */
 export async function simulateCupRound(db: D1Database, cupId: string): Promise<{ ok: boolean; round?: number; finished?: boolean; winner?: string }> {
   const cup = await db.prepare("SELECT total_rounds, current_round, status, season_number FROM cup_competitions WHERE id = ?").bind(cupId)
@@ -870,9 +922,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   const FULL_ENGINE_BUDGET = 12;
   // Po kolika minutách se claim nedokončeného zápasu považuje za mrtvý (spadlá invokace).
   const CLAIM_STALE_MIN = 15;
-  const matchesRes = await db.prepare("SELECT id, bracket_pos, home_cup_team_id, away_cup_team_id FROM cup_matches WHERE cup_id = ? AND round = ? AND status = 'scheduled' ORDER BY bracket_pos LIMIT ?")
-    .bind(cupId, round, CUP_CHUNK).all<{ id: string; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null }>()
-    .catch((e) => { logger.warn({ module: M }, "load round matches", e); return { results: [] as any[] }; });
+  const roundMatches = await loadRoundMatches(db, cupId, round, CUP_CHUNK);
 
   const teamsRes = await db.prepare("SELECT id, strength, team_id FROM cup_teams WHERE cup_id = ?").bind(cupId).all<{ id: string; strength: number; team_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "load cup teams", e); return { results: [] as any[] }; });
@@ -897,7 +947,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   // něčí tým, a jen do výše rozpočtu enginu. Generovat ho pro souboje dvou AI klubů by byla
   // čistá ztráta času i místa.
   const chunkTeamIds = [...new Set(
-    matchesRes.results
+    roundMatches
       .filter((m) => !!m.home_cup_team_id && !!m.away_cup_team_id
         && (!!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id)))
       .slice(0, FULL_ENGINE_BUDGET)
@@ -930,7 +980,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   const winners: { pos: number; teamId: string }[] = [];
   let fullUsed = 0; // kolik zápasů už v této invokaci prošlo plným enginem
 
-  for (const m of matchesRes.results) {
+  for (const m of roundMatches) {
     if ((m.home_cup_team_id && stillMissing.has(m.home_cup_team_id)) || (m.away_cup_team_id && stillMissing.has(m.away_cup_team_id))) {
       logger.info({ module: M }, `cup tie ${m.id}: čeká na dogenerování kádru soupeře, odloženo na další dávku`);
       continue;
@@ -958,11 +1008,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
       continue;
     }
 
-    // Počasí dne, ne vlastní losování. Pohár se hraje ve stejném okrese jako
-    // liga, takže nemůže mít svoje počasí — a hlavně musí sedět s předpovědí,
-    // kterou hráč u zápasu vidí. Viz season/season-weather.ts.
-    const { resolveWeatherForDate } = await import("../season/season-weather");
-    const tieWeather: Weather = (await resolveWeatherForDate(db, m.scheduled_at as string))?.weather ?? "cloudy";
+    const tieWeather = await cupTieWeather(db, m.scheduled_at, m.id);
     // Zápas dvou generovaných klubů nemá reálné hráče, domácí tržby ani diváka mezi manažery —
     // stačí silový výsledek. Plný engine si šetříme pro zápasy, kde hraje něčí tým.
     const isWatched = !!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id);
