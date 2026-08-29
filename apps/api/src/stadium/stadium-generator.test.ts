@@ -144,4 +144,43 @@ describe("kapacita podle stadionu, ne podle adresy", () => {
     expect(skoky).toEqual([...skoky].sort((a, b) => a - b));
     expect(new Set(skoky).size).toBe(4);
   });
+
+  it("drží čísla, na která je okresní přebor zvyklý", () => {
+    // 440 je kapacita, kterou kluby s L2 měly, než se základ sjednotil.
+    // Když se tahle čtveřice mění, mění se ekonomika vstupného všem — ať to je vidět.
+    const zaklad = generateStadium(createRng(1), "hamlet").capacity;
+    expect([0, 1, 2, 3].map((s) => zaklad + calculateFacilityEffects({ stands: s }).capacityBonus))
+      .toEqual([250, 310, 440, 650]);
+  });
+});
+
+/**
+ * Co tlačítko slíbí, to klub dostane.
+ *
+ * Nabídka upgradu ukazovala `UPGRADE_EFFECTS[nextLevel]`, což je ale kumulativní
+ * bonus té úrovně, ne přírůstek. Klub s L1 tak u tribun za 170 000 Kč četl
+ * „+190 kapacita" a dostal 100. Text se teď počítá z týchž čísel jako efekt.
+ */
+describe("slib v nabídce upgradu sedí se skutečností", () => {
+  const nabidka = (stands: number) =>
+    getUpgradeOptions({ stands }, 100, 100, 10, true).find((o) => o.facility === "stands");
+
+  const kapacita = (stands: number) => calculateFacilityEffects({ stands }).capacityBonus;
+
+  it.each([0, 1, 2])("z L%i na další úroveň přidá přesně to, co slibuje", (current) => {
+    const slib = nabidka(current)!.effect;
+    const skutecnost = kapacita(current + 1) - kapacita(current);
+    expect(slib).toBe(`+${skutecnost} kapacita`);
+  });
+
+  it("součet slíbených přírůstků dá celkový bonus L3", () => {
+    const soucet = [0, 1, 2]
+      .map((l) => Number(nabidka(l)!.effect.match(/\+(\d+)/)![1]))
+      .reduce((a, b) => a + b, 0);
+    expect(soucet).toBe(kapacita(3));
+  });
+
+  it("na maximu už se nic nenabízí", () => {
+    expect(nabidka(3)).toBeUndefined();
+  });
 });

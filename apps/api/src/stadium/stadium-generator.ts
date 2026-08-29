@@ -121,12 +121,29 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   entrance_gate: [0, 12000, 45000, 120000],
 };
 
+/**
+ * Kapacita, kterou tribuny přidávají k základu — kumulativně za úroveň.
+ *
+ * Jediný zdroj: `capacityBonus` i text v nabídce upgradu se počítají odsud,
+ * takže nemůže nastat, že tlačítko slibuje +190 a klub dostane +100. Hodnoty
+ * jsou zvolené tak, aby vyšly na čísla, která okresní přebor zná: se základem
+ * 250 je L1 = 310, L2 = 440, L3 = 650.
+ */
+export const STANDS_CAPACITY: readonly number[] = [0, 60, 190, 400];
+
+/** O kolik kapacity klub skutečně přijde/získá přechodem mezi úrovněmi. */
+export function standsCapacityGain(fromLevel: number, toLevel: number): number {
+  const bezpecne = (l: number) => STANDS_CAPACITY[Math.max(0, Math.min(3, l))] ?? 0;
+  return bezpecne(toLevel) - bezpecne(fromLevel);
+}
+
 const UPGRADE_EFFECTS: Record<string, string[]> = {
   changing_rooms: ["", "+3 morálka domácích", "+5 morálka, -5% zranění doma", "+8 morálka, -10% zranění"],
   showers: ["", "+2 regenerace kondice/den", "+4 regenerace kondice/den", "+6 regenerace kondice/den"],
   refreshments: ["", "Umožní vlastní provoz občerstvení", "Vyšší pronájem pro externí provozovatele", "Prémiové zázemí, bez výdajů za občerstvení po zápase"],
   lighting: ["", "2 základní osvětlovací stožáry", "4 stožáry — +5% návštěvnost", "Profesionální osvětlení — +10% návštěvnost"],
-  stands: ["", "+100 kapacita", "+300 kapacita", "+600 kapacita"],
+  // stands: popisek se počítá z STANDS_CAPACITY, viz effect níž
+  stands: ["", "", "", ""],
   roof: ["", "V ošklivém počasí odejde míň lidí", "Solidní zastřešení — počasí moc neřeší", "Kompletní střecha — na počasí kašlou"],
   ultras_stand: ["", "Hlasitější kotel — mírná výhoda doma", "Bubny a vlajky — větší výhoda doma", "Peklo pro soupeře — velká domácí výhoda"],
   toilets: ["", "Kadibudky místo kopřiv — +spokojenost", "Slušné záchodky — víc spokojenosti", "Čisté sociálky s teplou vodou — fanoušci spokojení"],
@@ -240,7 +257,12 @@ export function getUpgradeOptions(
       currentLevel: current,
       nextLevel: next,
       cost: costs[next] ?? 99999,
-      effect: effects[next] ?? "",
+      // Text musí slibovat to, co upgrade opravdu udělá: rozdíl proti současné
+      // úrovni, ne celkový bonus té nové. Dřív tlačítko u L2 hlásilo "+190
+      // kapacita", zatímco klub s L1 dostal jen 100.
+      effect: key === "stands"
+        ? `+${standsCapacityGain(current, next)} kapacita`
+        : effects[next] ?? "",
       locked,
       lockReason,
       lockDetail: locked ? lockDetail : undefined,
@@ -290,11 +312,11 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     attendanceBonus: ([0, 0, 0.05, 0.10][li] ?? 0)
       + ([0, 0.05, 0.10, 0.15][pa] ?? 0)
       + ([0, 0.02, 0.05, 0.10][eg] ?? 0),
-    // Tribuny rozhodují víc než to, co klub zdědil podle velikosti obce: na malé vsi
-    // je základ 120 a ve městě 290, takže při starých +50/+150/+300 zůstal rozdíl
-    // ve výdělku napořád — a strop se přitom vyprodává skoro v každém zápase.
-    // Ceny upgradu jsou pro všechny stejné, tak ať za ně všichni dostanou dost.
-    capacityBonus: [0, 100, 300, 600][st] ?? 0,
+    // Jediné, co dělá rozdíl v kapacitě — základ je pro všechny stejný (250).
+    // Hodnoty jsou zvolené tak, aby vyšly na čísla, která okresní přebor zná:
+    // L1 = 340, L2 = 440, L3 = 650. Dřív totéž dostal jen klub z větší obce,
+    // menší ves měla za tutéž postavenou tribunu o polovinu míň.
+    capacityBonus: STANDS_CAPACITY[st] ?? 0,
     ticketPriceBonus: [0, 0, 0.10, 0.20][fe] ?? 0,
     fencePayingRatio: [0.3, 0.65, 1.0, 1.0][fe] ?? 0.3,
     weatherAttendanceShield: [0, 0.35, 0.65, 1.0][ro] ?? 0,
