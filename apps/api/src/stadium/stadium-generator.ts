@@ -113,7 +113,7 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   showers: ["", "+2 regenerace kondice/den", "+4 regenerace kondice/den", "+6 regenerace kondice/den"],
   refreshments: ["", "Umožní vlastní provoz občerstvení", "Vyšší pronájem pro externí provozovatele", "Prémiové zázemí, bez výdajů za občerstvení po zápase"],
   lighting: ["", "2 základní osvětlovací stožáry", "4 stožáry — +5% návštěvnost", "Profesionální osvětlení — +10% návštěvnost"],
-  stands: ["", "+50 kapacita", "+150 kapacita", "+300 kapacita"],
+  stands: ["", "+100 kapacita", "+300 kapacita", "+600 kapacita"],
   roof: ["", "V ošklivém počasí odejde míň lidí", "Solidní zastřešení — počasí moc neřeší", "Kompletní střecha — na počasí kašlou"],
   ultras_stand: ["", "Hlasitější kotel — mírná výhoda doma", "Bubny a vlajky — větší výhoda doma", "Peklo pro soupeře — velká domácí výhoda"],
   toilets: ["", "Kadibudky místo kopřiv — +spokojenost", "Slušné záchodky — víc spokojenosti", "Čisté sociálky s teplou vodou — fanoušci spokojení"],
@@ -277,7 +277,11 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     attendanceBonus: ([0, 0, 0.05, 0.10][li] ?? 0)
       + ([0, 0.05, 0.10, 0.15][pa] ?? 0)
       + ([0, 0.02, 0.05, 0.10][eg] ?? 0),
-    capacityBonus: [0, 50, 150, 300][st] ?? 0,
+    // Tribuny rozhodují víc než to, co klub zdědil podle velikosti obce: na malé vsi
+    // je základ 120 a ve městě 290, takže při starých +50/+150/+300 zůstal rozdíl
+    // ve výdělku napořád — a strop se přitom vyprodává skoro v každém zápase.
+    // Ceny upgradu jsou pro všechny stejné, tak ať za ně všichni dostanou dost.
+    capacityBonus: [0, 100, 300, 600][st] ?? 0,
     ticketPriceBonus: [0, 0, 0.10, 0.20][fe] ?? 0,
     fencePayingRatio: [0.3, 0.65, 1.0, 1.0][fe] ?? 0.3,
     weatherAttendanceShield: [0, 0.35, 0.65, 1.0][ro] ?? 0,
