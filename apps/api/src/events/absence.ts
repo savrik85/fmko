@@ -482,11 +482,12 @@ export interface AbsenceOpts {
    */
   commuteMod?: number;
   /**
-   * Počasí kola, pro povětrnostní profesní výmluvy.
+   * Počasí dne zápasu, pro povětrnostní profesní výmluvy.
    *
-   * Musí pocházet z `resolveRoundWeather` — tedy z téhož zdroje jako předpověď,
-   * kterou hráč vidí u zápasu. Jinak by omluvenka mluvila o jiném počasí, než
-   * jaké se odehrálo.
+   * Musí pocházet ze `season-weather.ts` — `resolveWeatherForDate`, když je po
+   * ruce termín, jinak `resolveWeatherForMatchKey`, který si ho najde i pro
+   * pohár a přátelák. Tedy z téhož zdroje jako předpověď, kterou hráč vidí u
+   * zápasu; jinak by omluvenka mluvila o jiném počasí, než jaké se odehrálo.
    */
   weather?: Weather;
 }

@@ -3643,9 +3643,11 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     // Dodávka musí být i tady: preview jede na stejných seedech jako SMS a simulace,
     // takže bez ní by ukazovalo absence, které se pak neodehrají.
     const { fetchTeamCommuteMod } = await import("../events/match-absences");
-    const { resolveRoundWeather } = await import("../season/season-weather");
+    // Podle klíče, ne podle kalendáře — `matchKey` je u poháru id pohárového
+    // zápasu a u přáteláku id zápasu, a ani jedno kalendář nezná.
+    const { resolveWeatherForMatchKey } = await import("../season/season-weather");
     const commuteMod = await fetchTeamCommuteMod(c.env.DB, teamId);
-    const weather = (await resolveRoundWeather(c.env.DB, matchKey))?.weather;
+    const weather = (await resolveWeatherForMatchKey(c.env.DB, matchKey))?.weather;
     const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, weather });
     const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, weather });
     const seen = new Set<number>();

@@ -146,10 +146,11 @@ export async function getAbsentPlayersMap(
 
   const friendlyMultiplier = ctx.isFriendly ? 1.8 : undefined;
   const commuteMod = await fetchTeamCommuteMod(db, teamId);
-  // Počasí kola — stejná hodnota do obou fází i do simulace. Musí jít
-  // z resolveRoundWeather, jinak omluvenka mluví o jiném počasí než zápas.
-  const { resolveRoundWeather } = await import("../season/season-weather");
-  const weather = (await resolveRoundWeather(db, ctx.matchKey))?.weather;
+  // Počasí dne zápasu — stejná hodnota do obou fází i do simulace, jinak
+  // omluvenka mluví o jiném počasí než zápas. Termín bereme z kontextu:
+  // `matchKey` je u přáteláku id zápasu, které kalendář nezná.
+  const { resolveWeatherForDate } = await import("../season/season-weather");
+  const weather = (await resolveWeatherForDate(db, ctx.scheduledAt))?.weather;
   const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "day_before" }));
   const matchDayRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "match_day" }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

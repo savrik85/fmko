@@ -1296,10 +1296,11 @@ export async function buildMatchPlayers(
                 phase: "match_day"
             }));
             const { fetchTeamCommuteMod } = await import("../events/match-absences");
-            const { resolveRoundWeather } = await import("../season/season-weather");
+            const { resolveWeatherForMatchKey } = await import("../season/season-weather");
             const vanCommuteMod = await fetchTeamCommuteMod(db, teamId);
-            // Počasí kola — stejný zdroj jako předpověď i SMS.
-            const absenceWeather = (await resolveRoundWeather(db, options.matchKey))?.weather;
+            // Počasí dne — stejný zdroj jako předpověď i SMS. Podle klíče, ne podle
+            // kalendáře: tudy chodí i pohár a přátelák, a těm kalendář termín nezná.
+            const absenceWeather = (await resolveWeatherForMatchKey(db, options.matchKey))?.weather;
             const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, {
               timing: "day_before", district, friendlyMultiplier: options.friendlyMultiplier,
               commuteMod: vanCommuteMod, weather: absenceWeather,
