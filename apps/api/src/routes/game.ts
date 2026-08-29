@@ -1180,7 +1180,9 @@ gameRouter.post("/teams/:teamId/recruit", async (c) => {
 gameRouter.get("/teams/:teamId/news", async (c) => {
   const teamId = c.req.param("teamId");
 
-  // Batch: team info + recent matches
+  // Batch: team info + recent matches.
+  // Jen soutěžní zápasy (`calendar_id IS NOT NULL`) — přátelák do okresního plátku
+  // nepatří. Bez toho se čerstvě odehraná příprava stala úvodníkem Zpravodaje.
   const [teamRes, matchesRes] = await c.env.DB.batch([
     c.env.DB.prepare("SELECT t.name, t.league_id, t.reputation FROM teams t WHERE t.id = ?").bind(teamId),
     c.env.DB.prepare(`SELECT m.id, m.home_score, m.away_score, m.simulated_at, m.round,
@@ -1190,6 +1192,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
      JOIN teams ht ON m.home_team_id = ht.id
      JOIN teams at ON m.away_team_id = at.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
+       AND m.calendar_id IS NOT NULL
      ORDER BY m.simulated_at DESC LIMIT 5`).bind(teamId, teamId),
   ]);
   const team = teamRes.results[0] as { name: string; league_id: string | null; reputation: number } | undefined;
