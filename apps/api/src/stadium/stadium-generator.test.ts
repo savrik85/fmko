@@ -103,3 +103,40 @@ describe("vstupní brána", () => {
     expect(level3.ticketPriceBonus).toBe(base.ticketPriceBonus);
   });
 });
+
+/**
+ * Tribuny mají dohnat to, co klub zdědil.
+ *
+ * Základ stadionu se řídí velikostí obce (na samotě 120, ve větší obci 290),
+ * ale upgrade stojí všechny stejně — a strop kapacity se v okresním přeboru
+ * vyprodává skoro v každém zápase, takže rozdíl v základu jde rovnou do tržeb.
+ * Kdo tribuny postaví, musí se dotáhnout; jinak o výdělku klubu rozhoduje
+ * adresa, ne hra.
+ */
+describe("tribuny vyrovnávají start", () => {
+  const kapacita = (zaklad: number, stands: number) =>
+    zaklad + calculateFacilityEffects({ stands }).capacityBonus;
+
+  const VES = 120;   // FK Löffler Spůle, 62 obyvatel
+  const OBEC = 290;  // FK KMP Čkyně, 1550 obyvatel
+
+  it("každá úroveň přidá stejně oběma — ceny jsou taky pro všechny stejné", () => {
+    for (const level of [1, 2, 3]) {
+      expect(kapacita(OBEC, level) - kapacita(VES, level)).toBe(OBEC - VES);
+    }
+  });
+
+  it("po plné investici je ves na obci nejvýš o pětinu pozadu", () => {
+    expect(kapacita(OBEC, 3) / kapacita(VES, 3)).toBeLessThan(1.25);
+  });
+
+  it("bez tribun rozhoduje adresa — to je ten rozdíl, který se má dát dohnat", () => {
+    expect(kapacita(OBEC, 0) / kapacita(VES, 0)).toBeGreaterThan(2);
+  });
+
+  it("vyšší úroveň dá vždycky víc než nižší", () => {
+    const skoky = [0, 1, 2, 3].map((l) => calculateFacilityEffects({ stands: l }).capacityBonus);
+    expect(skoky).toEqual([...skoky].sort((a, b) => a - b));
+    expect(new Set(skoky).size).toBe(4);
+  });
+});
