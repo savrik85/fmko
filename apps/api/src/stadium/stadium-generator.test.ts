@@ -105,37 +105,42 @@ describe("vstupní brána", () => {
 });
 
 /**
- * Tribuny mají dohnat to, co klub zdědil.
+ * Kapacita je funkce postaveného stadionu, ne adresy.
  *
- * Základ stadionu se řídí velikostí obce (na samotě 120, ve větší obci 290),
- * ale upgrade stojí všechny stejně — a strop kapacity se v okresním přeboru
- * vyprodává skoro v každém zápase, takže rozdíl v základu jde rovnou do tržeb.
- * Kdo tribuny postaví, musí se dotáhnout; jinak o výdělku klubu rozhoduje
- * adresa, ne hra.
+ * Dva kluby se stejně postavenými tribunami musí mít stejnou kapacitu, ať jeden
+ * hraje na samotě o 62 obyvatelích a druhý ve městě. Dřív rozhodovala velikost
+ * obce (80 až 1200) plus náhodný rozptyl, takže i dva kluby v jedné vsi dostaly
+ * jiný stadion — a protože se strop v okresním přeboru běžně vyprodá, byl to
+ * trvalý rozdíl v tržbách, který se nedal dohnat.
  */
-describe("tribuny vyrovnávají start", () => {
-  const kapacita = (zaklad: number, stands: number) =>
-    zaklad + calculateFacilityEffects({ stands }).capacityBonus;
+describe("kapacita podle stadionu, ne podle adresy", () => {
+  const VELIKOSTI = ["hamlet", "vesnice", "obec", "mestys", "mesto", "small_city", "city"];
 
-  const VES = 120;   // FK Löffler Spůle, 62 obyvatel
-  const OBEC = 290;  // FK KMP Čkyně, 1550 obyvatel
-
-  it("každá úroveň přidá stejně oběma — ceny jsou taky pro všechny stejné", () => {
-    for (const level of [1, 2, 3]) {
-      expect(kapacita(OBEC, level) - kapacita(VES, level)).toBe(OBEC - VES);
-    }
+  it("stejný stadion má stejnou kapacitu bez ohledu na velikost obce", () => {
+    const kapacity = VELIKOSTI.map((v) => generateStadium(createRng(1), v).capacity);
+    expect(new Set(kapacity).size).toBe(1);
   });
 
-  it("po plné investici je ves na obci nejvýš o pětinu pozadu", () => {
-    expect(kapacita(OBEC, 3) / kapacita(VES, 3)).toBeLessThan(1.25);
+  it("neznámá velikost obce nedostane jinou kapacitu než známá", () => {
+    // `villages.size` obsahuje `village` a `town`, které v tabulce nejsou —
+    // fallback proto nesmí vést k jinému stadionu.
+    expect(generateStadium(createRng(1), "village").capacity)
+      .toBe(generateStadium(createRng(1), "city").capacity);
+    expect(generateStadium(createRng(7), "town").capacity)
+      .toBe(generateStadium(createRng(99), "hamlet").capacity);
   });
 
-  it("bez tribun rozhoduje adresa — to je ten rozdíl, který se má dát dohnat", () => {
-    expect(kapacita(OBEC, 0) / kapacita(VES, 0)).toBeGreaterThan(2);
+  it("dva kluby ve stejné vsi dostanou totožnou kapacitu — žádný náhodný rozptyl", () => {
+    const a = generateStadium(createRng(1), "hamlet").capacity;
+    const b = generateStadium(createRng(2), "hamlet").capacity;
+    const c = generateStadium(createRng(12345), "hamlet").capacity;
+    expect([b, c]).toEqual([a, a]);
   });
 
-  it("vyšší úroveň dá vždycky víc než nižší", () => {
-    const skoky = [0, 1, 2, 3].map((l) => calculateFacilityEffects({ stands: l }).capacityBonus);
+  it("rozdíl v kapacitě dělají jedině postavené tribuny", () => {
+    const zaklad = generateStadium(createRng(1), "hamlet").capacity;
+    const kapacita = (stands: number) => zaklad + calculateFacilityEffects({ stands }).capacityBonus;
+    const skoky = [0, 1, 2, 3].map(kapacita);
     expect(skoky).toEqual([...skoky].sort((a, b) => a - b));
     expect(new Set(skoky).size).toBe(4);
   });

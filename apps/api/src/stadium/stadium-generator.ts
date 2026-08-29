@@ -18,33 +18,44 @@ export interface StadiumConfig {
   fence: number;
 }
 
+/**
+ * Základní kapacita hřiště — stejná pro všechny, ať klub stojí kdekoli.
+ *
+ * Dřív ji určovala velikost obce (80 na samotě až 1200 ve městě). Znamenalo to,
+ * že dva kluby se stejně postavenými tribunami měly jinou kapacitu jen podle
+ * adresy, a protože se strop v okresním přeboru běžně vyprodá, šel ten rozdíl
+ * rovnou do tržeb — a nedal se dohnat, protože upgrady stojí všechny stejně.
+ * Kapacita je teď funkce postaveného stadionu, ne místa na mapě.
+ */
+const ZAKLADNI_KAPACITA = 250;
+
 const BASE_BY_SIZE: Record<string, StadiumConfig> = {
   hamlet: {
-    capacity: 80, pitchCondition: 30, pitchType: "natural",
+    capacity: ZAKLADNI_KAPACITA, pitchCondition: 30, pitchType: "natural",
     changingRooms: 0, showers: 0, refreshments: 0, lighting: 0, stands: 0, parking: 0, fence: 0,
   },
   vesnice: {
-    capacity: 150, pitchCondition: 40, pitchType: "natural",
+    capacity: ZAKLADNI_KAPACITA, pitchCondition: 40, pitchType: "natural",
     changingRooms: 1, showers: 0, refreshments: 0, lighting: 0, stands: 0, parking: 0, fence: 0,
   },
   obec: {
-    capacity: 250, pitchCondition: 50, pitchType: "natural",
+    capacity: ZAKLADNI_KAPACITA, pitchCondition: 50, pitchType: "natural",
     changingRooms: 1, showers: 1, refreshments: 0, lighting: 0, stands: 0, parking: 1, fence: 0,
   },
   mestys: {
-    capacity: 400, pitchCondition: 55, pitchType: "natural",
+    capacity: ZAKLADNI_KAPACITA, pitchCondition: 55, pitchType: "natural",
     changingRooms: 1, showers: 1, refreshments: 1, lighting: 0, stands: 1, parking: 1, fence: 1,
   },
   mesto: {
-    capacity: 600, pitchCondition: 60, pitchType: "natural",
+    capacity: ZAKLADNI_KAPACITA, pitchCondition: 60, pitchType: "natural",
     changingRooms: 2, showers: 1, refreshments: 1, lighting: 0, stands: 1, parking: 1, fence: 1,
   },
   small_city: {
-    capacity: 800, pitchCondition: 65, pitchType: "natural",
+    capacity: ZAKLADNI_KAPACITA, pitchCondition: 65, pitchType: "natural",
     changingRooms: 2, showers: 2, refreshments: 1, lighting: 0, stands: 1, parking: 2, fence: 1,
   },
   city: {
-    capacity: 1200, pitchCondition: 70, pitchType: "hybrid",
+    capacity: ZAKLADNI_KAPACITA, pitchCondition: 70, pitchType: "hybrid",
     changingRooms: 2, showers: 2, refreshments: 2, lighting: 0, stands: 2, parking: 2, fence: 2,
   },
 };
@@ -53,7 +64,9 @@ export function generateStadium(rng: Rng, villageSize: string): StadiumConfig {
   const base = BASE_BY_SIZE[villageSize] ?? BASE_BY_SIZE.obec;
   return {
     ...base,
-    capacity: base.capacity + rng.int(-20, 40),
+    // Bez náhodného rozptylu: dva kluby ve stejné vsi dostávaly 120 a 134,
+    // což je přesně ta nespravedlnost o velikosti jednoho upgradu zadarmo.
+    capacity: base.capacity,
     pitchCondition: Math.max(10, Math.min(100, base.pitchCondition + rng.int(-10, 10))),
   };
 }
