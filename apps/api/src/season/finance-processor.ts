@@ -489,9 +489,11 @@ export async function processMatchDayFinances(
       }
 
       if (sale.totalRevenue > 0) {
+        // České názvy z katalogu — v účetnictví klubu nemá co dělat `mulled_wine`.
+        const { CONCESSION_CATALOG } = await import("./concession-catalog");
         const breakdown = sale.products
           .filter((p) => p.sold > 0)
-          .map((p) => `${p.sold}× ${p.key}`)
+          .map((p) => `${p.sold}× ${CONCESSION_CATALOG[p.key]?.label ?? p.key}`)
           .join(", ");
         await recordTransaction(db, teamId, "concession_income_self", sale.totalRevenue,
           `Tržby z vlastního občerstvení: ${breakdown}`, gameDate, matchId);

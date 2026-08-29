@@ -1441,7 +1441,7 @@ gameRouter.get("/teams/:teamId/equipment", async (c) => {
 gameRouter.post("/teams/:teamId/equipment/upgrade", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ category: string }>();
-  const { getUpgradeOptions, CATEGORIES } = await import("../equipment/equipment-generator");
+  const { getUpgradeOptions, CATEGORIES, CATEGORY_LABELS } = await import("../equipment/equipment-generator");
 
   // Whitelist PŘED jakýmkoli SQL — název kategorie se níž interpoluje do stringu.
   if (!CATEGORIES.includes(body.category as any)) return c.json({ error: "Invalid category" }, 400);
@@ -1470,7 +1470,7 @@ gameRouter.post("/teams/:teamId/equipment/upgrade", async (c) => {
   if (team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
   await recordTransaction(c.env.DB, teamId, "equipment_upgrade", -upgrade.cost,
-    `Vylepšení vybavení: ${body.category} → úroveň ${upgrade.nextLevel}`, new Date().toISOString());
+    `Vylepšení vybavení: ${CATEGORY_LABELS[body.category] ?? body.category} → úroveň ${upgrade.nextLevel}`, new Date().toISOString());
   await c.env.DB.prepare(
     `UPDATE equipment SET ${body.category} = ?, ${body.category}_condition = 100 WHERE team_id = ?`
   ).bind(upgrade.nextLevel, teamId).run();
@@ -1784,9 +1784,11 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   if (upgrade.locked) return c.json({ error: upgrade.lockReason ?? "Zamčeno" }, 400);
   if (team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
-  // Deduct cost + apply upgrade
+  // Deduct cost + apply upgrade. Do popisu jde český název zařízení, ne klíč sloupce —
+  // v historii transakcí to čte hráč, ne databáze.
+  const { FACILITY_LABELS } = await import("../stadium/stadium-generator");
   await recordTransaction(c.env.DB, teamId, "stadium_upgrade", -upgrade.cost,
-    `Vylepšení stadionu: ${body.facility}`, new Date().toISOString());
+    `Vylepšení stadionu: ${FACILITY_LABELS[body.facility] ?? body.facility}`, new Date().toISOString());
 
   await c.env.DB.prepare(
     `UPDATE stadiums SET ${body.facility} = ? WHERE team_id = ?`
@@ -1915,7 +1917,7 @@ gameRouter.post("/teams/:teamId/stadium/visual-upgrade", async (c) => {
   if (team.budget < cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
   await recordTransaction(c.env.DB, teamId, "stadium_visual", -cost,
-    `Stadion vzhled: ${body.kind === "scoreboard" ? "scoreboard" : "vlajka"} L${nextLevel}`,
+    `Stadion vzhled: ${body.kind === "scoreboard" ? "ukazatel skóre" : "vlajka"} L${nextLevel}`,
     new Date().toISOString());
 
   const column = body.kind === "scoreboard" ? "scoreboard_level" : "flag_size";
@@ -2040,6 +2042,10 @@ gameRouter.post("/teams/:teamId/stadium/upgrade-pitch", async (c) => {
     hybrid:     { from: "natural", cost: 85000 },
     artificial: { from: "hybrid", cost: 220000 },
   };
+  // Popis transakce čte hráč — do účetnictví patří "hybridní", ne "hybrid".
+  const PITCH_TYPE_LABELS: Record<string, string> = {
+    natural: "přírodní", hybrid: "hybridní", artificial: "umělý",
+  };
 
   const upgrade = upgrades[body.pitchType];
   if (!upgrade) return c.json({ error: "Invalid pitch type" }, 400);
@@ -2054,7 +2060,7 @@ gameRouter.post("/teams/:teamId/stadium/upgrade-pitch", async (c) => {
   if (!team || team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
   await recordTransaction(c.env.DB, teamId, "pitch_upgrade", -upgrade.cost,
-    `Změna povrchu: ${body.pitchType}`, new Date().toISOString());
+    `Změna povrchu: ${PITCH_TYPE_LABELS[body.pitchType] ?? body.pitchType}`, new Date().toISOString());
   await c.env.DB.prepare(
     "UPDATE stadiums SET pitch_type = ?, pitch_condition = 100 WHERE team_id = ?"
   ).bind(body.pitchType, teamId).run();

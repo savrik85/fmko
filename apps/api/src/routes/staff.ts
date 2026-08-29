@@ -8,7 +8,7 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireTeamOwnership } from "../auth/middleware";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
-import { ROLE_DEFS, type StaffRole, type StaffAttributeKey } from "@okresni-masina/shared";
+import { ROLE_DEFS, STAFF_ATTRIBUTE_LABELS, type StaffRole, type StaffAttributeKey } from "@okresni-masina/shared";
 import { calculateStaffEffects } from "../staff/staff-effects";
 
 export const staffRouter = new Hono<{ Bindings: Bindings }>();
@@ -264,7 +264,7 @@ staffRouter.post("/teams/:teamId/staff/:staffId/course", async (c) => {
     .catch((e) => { logger.error({ module: "staff" }, "course start failed", e); throw e; });
 
   await recordTransaction(c.env.DB, teamId, "course_fee", -quote.cost,
-    `Kurz (${attribute}) pro ${row.first_name} ${row.last_name}`, gameDate, staffId);
+    `Kurz (${STAFF_ATTRIBUTE_LABELS[attribute as StaffAttributeKey] ?? attribute}) pro ${row.first_name} ${row.last_name}`, gameDate, staffId);
 
   return c.json({ ok: true, course: { attribute, ...quote } });
 });

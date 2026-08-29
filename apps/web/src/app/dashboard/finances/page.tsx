@@ -85,6 +85,11 @@ const TXN_ICONS: Record<string, string> = {
   manager_social: "🍻", manager_bet_win: "🍺", manager_bet_loss: "🍺", cup_prize: "🏅",
   bet_stake: "🎫", bet_win: "🎫", bet_levy: "🎫", bet_refund: "↩",
   staff_wage: "👔", staff_signing: "✍", course_fee: "🎓", disciplinary_fine: "⚖️",
+  raffle_income: "🎟", youth_academy: "🧒", equipment_purchase: "🛒", equipment_sale: "🏷",
+  equipment_pawn: "💍", competition_fee: "🏛", competition_deposit: "🏛",
+  competition_grant: "🏛", bet_confiscated: "🚫",
+  // Historické typy z ručních zásahů — kód je už negeneruje, ale v účetnictví klubů leží.
+  admin_correction: "🛠", bonus: "🎁", transfer_correction: "↩",
   other: "📋",
 };
 
@@ -103,6 +108,13 @@ const TXN_LABELS: Record<string, string> = {
   bet_stake: "Sázka u kanceláře", bet_win: "Výhra ze sázky", bet_levy: "Odvod ze sázky", bet_refund: "Vrácený vklad",
   staff_wage: "Mzdy zaměstnanců", staff_signing: "Podpisné zaměstnance", course_fee: "Kurz zaměstnance",
   disciplinary_fine: "Pokuta disciplinární komise",
+  raffle_income: "Tombola", youth_academy: "Mládežnická akademie",
+  equipment_purchase: "Nákup vybavení z bazaru", equipment_sale: "Prodej vybavení do bazaru",
+  equipment_pawn: "Výkup v zastavárně", competition_fee: "Poplatek soutěži",
+  competition_deposit: "Kauce za návrh", competition_grant: "Dotace ze soutěže",
+  bet_confiscated: "Zabavená výhra ze sázky",
+  admin_correction: "Oprava vedení soutěže", bonus: "Mimořádná prémie",
+  transfer_correction: "Oprava přestupu",
   other: "Ostatní",
 };
 
