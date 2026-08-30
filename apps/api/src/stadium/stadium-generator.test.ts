@@ -246,3 +246,29 @@ describe("slib v nabídce sedí u všech zařízení", () => {
     expect(o!.effect).toBe("2 základní osvětlovací stožáry");
   });
 });
+
+/**
+ * Vyšší stupeň musí dát víc než nižší.
+ *
+ * Sprchy, sociálky a kotel dávaly na každé úrovni identický přírůstek, ačkoli
+ * L3 stojí devětkrát víc než L1 — klub platil trojnásobek za totéž. Efekty se
+ * počítají z úrovně při každém čtení, takže narovnání platí i pro kluby, které
+ * si vyšší stupeň koupily dávno; nic nedoplácejí.
+ */
+describe("dražší stupeň dá víc než levnější", () => {
+  const ROSTOUCI: Record<string, (e: StadiumFacilityEffects) => number> = {
+    showers: (e) => e.conditionRegenBonus,
+    toilets: (e) => e.matchSatisfactionBonus,
+    ultras_stand: (e) => e.homeCrowdMoraleBonus,
+    stands: (e) => e.capacityBonus,
+  };
+
+  for (const [key, hodnota] of Object.entries(ROSTOUCI)) {
+    it(`${key}: každý další stupeň přidá víc než ten předchozí`, () => {
+      const prirustky = [0, 1, 2].map((l) =>
+        hodnota(calculateFacilityEffects({ [key]: l + 1 })) - hodnota(calculateFacilityEffects({ [key]: l })));
+      expect(prirustky).toEqual([...prirustky].sort((a, b) => a - b));
+      expect(new Set(prirustky).size).toBeGreaterThan(1);
+    });
+  }
+});

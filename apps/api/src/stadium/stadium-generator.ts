@@ -135,15 +135,16 @@ const UPGRADE_COSTS: Record<string, number[]> = {
  */
 export const SKALY = {
   changing_rooms: { morale: [0, 3, 5, 8], injury: [0, 0, 0.05, 0.10] },
-  showers: { regen: [0, 2, 4, 6] },
+  // Každý stupeň dřív dával stejné +2, ačkoli L3 stojí devětkrát víc než L1.
+  showers: { regen: [0, 2, 5, 9] },
   refreshments: { perAttendee: [0, 8, 18, 30] },
   lighting: { attendance: [0, 0, 0.05, 0.10] },
   parking: { attendance: [0, 0.05, 0.10, 0.15] },
   entrance_gate: { attendance: [0, 0.02, 0.05, 0.10] },
   fence: { price: [0, 0, 0.10, 0.20], paying: [0.3, 0.65, 1.0, 1.0] },
   roof: { shield: [0, 0.35, 0.65, 1.0] },
-  ultras_stand: { advantage: [0, 0.015, 0.03, 0.05], morale: [0, 1, 2, 3] },
-  toilets: { satisfaction: [0, 1, 2, 3] },
+  ultras_stand: { advantage: [0, 0.015, 0.03, 0.05], morale: [0, 1, 3, 6] },
+  toilets: { satisfaction: [0, 1, 3, 6] },
 } as const;
 
 /**
