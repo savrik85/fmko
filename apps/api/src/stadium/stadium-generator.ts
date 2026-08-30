@@ -126,6 +126,27 @@ const UPGRADE_COSTS: Record<string, number[]> = {
 };
 
 /**
+ * Číselné škály zařízení — kumulativně za úroveň.
+ *
+ * JEDINÝ ZDROJ. Čte odsud `calculateFacilityEffects` i text v nabídce upgradu,
+ * takže nemůže nastat, že tlačítko slibuje +15 % a klub dostane +5 %. Přesně to
+ * se dělo: popisky nesly celkovou hodnotu úrovně, hráč je četl jako přírůstek
+ * a za parkoviště L3 (150 000 Kč) čekal +15 %, zatímco dostal pětinu.
+ */
+export const SKALY = {
+  changing_rooms: { morale: [0, 3, 5, 8], injury: [0, 0, 0.05, 0.10] },
+  showers: { regen: [0, 2, 4, 6] },
+  refreshments: { perAttendee: [0, 8, 18, 30] },
+  lighting: { attendance: [0, 0, 0.05, 0.10] },
+  parking: { attendance: [0, 0.05, 0.10, 0.15] },
+  entrance_gate: { attendance: [0, 0.02, 0.05, 0.10] },
+  fence: { price: [0, 0, 0.10, 0.20], paying: [0.3, 0.65, 1.0, 1.0] },
+  roof: { shield: [0, 0.35, 0.65, 1.0] },
+  ultras_stand: { advantage: [0, 0.015, 0.03, 0.05], morale: [0, 1, 2, 3] },
+  toilets: { satisfaction: [0, 1, 2, 3] },
+} as const;
+
+/**
  * Kapacita, kterou tribuny přidávají k základu — kumulativně za úroveň.
  *
  * Jediný zdroj: `capacityBonus` i text v nabídce upgradu se počítají odsud,
@@ -142,20 +163,64 @@ export function standsCapacityGain(fromLevel: number, toLevel: number): number {
   return bezpecne(toLevel) - bezpecne(fromLevel);
 }
 
+/**
+ * Co na stadionu přibude — slovem. Čísla v textech schválně nejsou: dopočítá je
+ * `popisPrirustku` ze SKAL jako rozdíl proti současné úrovni klubu.
+ */
 const UPGRADE_EFFECTS: Record<string, string[]> = {
-  changing_rooms: ["", "+3 morálka domácích", "+5 morálka, -5% zranění doma", "+8 morálka, -10% zranění"],
-  showers: ["", "+2 regenerace kondice/den", "+4 regenerace kondice/den", "+6 regenerace kondice/den"],
+  changing_rooms: ["", "Vlastní kabina místo hospody naproti", "Lavice, věšáky a masérský stůl", "Šatna jako v krajském přeboru"],
+  showers: ["", "Teplá voda, když se bojler rozhoupe", "Bojler, co stačí na celý tým", "Sprchy bez fronty a bez ledové vody"],
   refreshments: ["", "Umožní vlastní provoz občerstvení", "Vyšší pronájem pro externí provozovatele", "Prémiové zázemí, bez výdajů za občerstvení po zápase"],
-  lighting: ["", "2 základní osvětlovací stožáry", "4 stožáry — +5% návštěvnost", "Profesionální osvětlení — +10% návštěvnost"],
-  // stands: popisek se počítá z STANDS_CAPACITY, viz effect níž
-  stands: ["", "", "", ""],
+  lighting: ["", "2 základní osvětlovací stožáry", "4 stožáry", "Profesionální osvětlení"],
+  stands: ["", "Kovová tribunka na pár řad", "Krytá tribuna se sedačkami", "Tribuna přes celou délku hřiště"],
   roof: ["", "V ošklivém počasí odejde míň lidí", "Solidní zastřešení — počasí moc neřeší", "Kompletní střecha — na počasí kašlou"],
-  ultras_stand: ["", "Hlasitější kotel — mírná výhoda doma", "Bubny a vlajky — větší výhoda doma", "Peklo pro soupeře — velká domácí výhoda"],
-  toilets: ["", "Kadibudky místo kopřiv — +spokojenost", "Slušné záchodky — víc spokojenosti", "Čisté sociálky s teplou vodou — fanoušci spokojení"],
-  parking: ["", "+5% návštěvnost", "+10% návštěvnost", "+15% návštěvnost"],
+  ultras_stand: ["", "Hlasitější kotel", "Bubny a vlajky", "Peklo pro soupeře"],
+  toilets: ["", "Kadibudky místo kopřiv", "Slušné záchodky", "Čisté sociálky s teplou vodou"],
+  parking: ["", "Zpevněná plocha vedle hřiště", "Vyznačená stání", "Parkoviště i pro autobusy"],
   fence: ["", "Víc lidí zaplatí vstupné", "Platí všichni diváci", "Platí všichni, prémiový stadion"],
-  entrance_gate: ["", "Rychlejší odbavení — +2% návštěvnost", "2 turnikety — +5% návštěvnost", "Elektronické turnikety — +10% návštěvnost"],
+  entrance_gate: ["", "Rychlejší odbavení u vstupu", "Dva turnikety", "Elektronické turnikety"],
 };
+
+/** Procento pro hráče — 0.05 → „5 %". */
+function pct(x: number): string {
+  return `${Math.round(x * 1000) / 10} %`;
+}
+
+/**
+ * Co upgrade opravdu přidá, spočítané ze SKAL jako rozdíl proti současné úrovni.
+ *
+ * Tohle je ta oprava: dřív se do nabídky posílala kumulativní hodnota cílové
+ * úrovně, takže klub s parkovištěm L2 četl u L3 „+15 % návštěvnost" a dostal 5.
+ */
+export function popisPrirustku(key: string, from: number, to: number): string {
+  const rozdil = (skala: readonly number[]) => (skala[to] ?? 0) - (skala[from] ?? 0);
+  switch (key) {
+    case "stands":
+      return `+${standsCapacityGain(from, to)} kapacita`;
+    case "changing_rooms": {
+      const casti = [`+${rozdil(SKALY.changing_rooms.morale)} morálka domácích`];
+      const zraneni = rozdil(SKALY.changing_rooms.injury);
+      if (zraneni > 0) casti.push(`−${pct(zraneni)} zranění doma`);
+      return casti.join(", ");
+    }
+    case "showers":
+      return `+${rozdil(SKALY.showers.regen)} regenerace kondice/den`;
+    case "lighting": {
+      const a = rozdil(SKALY.lighting.attendance);
+      return a > 0 ? `+${pct(a)} návštěvnost` : "";
+    }
+    case "parking":
+      return `+${pct(rozdil(SKALY.parking.attendance))} návštěvnost`;
+    case "entrance_gate":
+      return `+${pct(rozdil(SKALY.entrance_gate.attendance))} návštěvnost`;
+    case "toilets":
+      return `+${rozdil(SKALY.toilets.satisfaction)} spokojenost po zápase`;
+    case "ultras_stand":
+      return `+${rozdil(SKALY.ultras_stand.morale)} morálka od kotle`;
+    default:
+      return "";
+  }
+}
 
 // Unlock requirements per level
 export interface UnlockReq {
@@ -263,11 +328,10 @@ export function getUpgradeOptions(
       nextLevel: next,
       cost: costs[next] ?? 99999,
       // Text musí slibovat to, co upgrade opravdu udělá: rozdíl proti současné
-      // úrovni, ne celkový bonus té nové. Dřív tlačítko u L2 hlásilo "+190
-      // kapacita", zatímco klub s L1 dostal jen 100.
-      effect: key === "stands"
-        ? `+${standsCapacityGain(current, next)} kapacita`
-        : effects[next] ?? "",
+      // úrovni, ne celkový bonus té nové. Dřív tlačítko u parkoviště L3 hlásilo
+      // "+15 % návštěvnost", zatímco klub s L2 dostal 5.
+      effect: [effects[next] ?? "", popisPrirustku(key, current, next)]
+        .filter(Boolean).join(" — "),
       locked,
       lockReason,
       lockDetail: locked ? lockDetail : undefined,
@@ -309,25 +373,22 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   const eg = facilities.entrance_gate ?? 0;
 
   return {
-    homeMoraleBonus: [0, 3, 5, 8][cr] ?? 0,
-    homeInjuryReduction: [0, 0, 0.05, 0.10][cr] ?? 0,
-    conditionRegenBonus: [0, 2, 4, 6][sh] ?? 0,
-    refreshmentPerAttendee: [0, 8, 18, 30][re] ?? 0,
+    homeMoraleBonus: SKALY.changing_rooms.morale[cr] ?? 0,
+    homeInjuryReduction: SKALY.changing_rooms.injury[cr] ?? 0,
+    conditionRegenBonus: SKALY.showers.regen[sh] ?? 0,
+    refreshmentPerAttendee: SKALY.refreshments.perAttendee[re] ?? 0,
     noRefreshmentExpense: re >= 3,
-    attendanceBonus: ([0, 0, 0.05, 0.10][li] ?? 0)
-      + ([0, 0.05, 0.10, 0.15][pa] ?? 0)
-      + ([0, 0.02, 0.05, 0.10][eg] ?? 0),
-    // Jediné, co dělá rozdíl v kapacitě — základ je pro všechny stejný (250).
-    // Hodnoty jsou zvolené tak, aby vyšly na čísla, která okresní přebor zná:
-    // L1 = 340, L2 = 440, L3 = 650. Dřív totéž dostal jen klub z větší obce,
-    // menší ves měla za tutéž postavenou tribunu o polovinu míň.
+    attendanceBonus: (SKALY.lighting.attendance[li] ?? 0)
+      + (SKALY.parking.attendance[pa] ?? 0)
+      + (SKALY.entrance_gate.attendance[eg] ?? 0),
+    // Jediné, co dělá rozdíl v kapacitě — základ má každý klub stejný.
     capacityBonus: STANDS_CAPACITY[st] ?? 0,
-    ticketPriceBonus: [0, 0, 0.10, 0.20][fe] ?? 0,
-    fencePayingRatio: [0.3, 0.65, 1.0, 1.0][fe] ?? 0.3,
-    weatherAttendanceShield: [0, 0.35, 0.65, 1.0][ro] ?? 0,
-    homeAdvantageBonus: [0, 0.015, 0.03, 0.05][ul] ?? 0,
-    homeCrowdMoraleBonus: [0, 1, 2, 3][ul] ?? 0,
-    matchSatisfactionBonus: [0, 1, 2, 3][to] ?? 0,
+    ticketPriceBonus: SKALY.fence.price[fe] ?? 0,
+    fencePayingRatio: SKALY.fence.paying[fe] ?? 0.3,
+    weatherAttendanceShield: SKALY.roof.shield[ro] ?? 0,
+    homeAdvantageBonus: SKALY.ultras_stand.advantage[ul] ?? 0,
+    homeCrowdMoraleBonus: SKALY.ultras_stand.morale[ul] ?? 0,
+    matchSatisfactionBonus: SKALY.toilets.satisfaction[to] ?? 0,
   };
 }
 
