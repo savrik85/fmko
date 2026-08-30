@@ -80,6 +80,8 @@ interface Customization {
   netPattern?: string | null;
   netStyle?: string | null;
   surroundSurface?: string | null;
+  /** Povrchy, které klub už zaplatil — přepnutí zpět na ně je zdarma. */
+  surroundOwned?: string[] | null;
 }
 
 interface VisualUpgrade {
@@ -430,7 +432,9 @@ export default function StadiumPage() {
     const current = stadium?.customization.surroundSurface ?? "grass";
     if (!team || current === s.id || acting) return;
 
-    if (s.cost > 0) {
+    // Zaplacený povrch se pokládá zpátky zdarma — žádná cena, žádné potvrzení.
+    const zaplaceno = (stadium?.customization.surroundOwned ?? []).includes(s.id);
+    if (s.cost > 0 && !zaplaceno) {
       if (team.budget < s.cost) {
         return;
       }
@@ -745,7 +749,8 @@ export default function StadiumPage() {
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
                   {SURROUND_SURFACES.map((sur) => {
                     const vybrano = (stadium.customization.surroundSurface ?? "grass") === sur.id;
-                    const dostupne = sur.cost === 0 || team.budget >= sur.cost;
+                    const zaplaceno = (stadium.customization.surroundOwned ?? []).includes(sur.id);
+                    const dostupne = sur.cost === 0 || zaplaceno || team.budget >= sur.cost;
                     return (
                       <Dlazdice
                         key={sur.id}
@@ -755,6 +760,8 @@ export default function StadiumPage() {
                         ikona={sur.icon} nazev={sur.label} popis={sur.desc}
                         meta={vybrano ? (
                           <span className="text-sm font-heading font-bold text-pitch-600">Položeno</span>
+                        ) : zaplaceno ? (
+                          <span className="text-sm font-heading font-bold text-pitch-600">Zaplaceno</span>
                         ) : (
                           <span className={`text-sm font-heading font-bold tabular-nums ${sur.cost === 0 ? "text-pitch-600" : dostupne ? "text-ink" : "text-card-red"}`}>
                             {sur.cost === 0 ? "Zdarma" : formatCZK(sur.cost)}

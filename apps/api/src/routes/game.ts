@@ -18,6 +18,30 @@ import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
 
+/**
+ * Povrchy areálu, které má klub ZAPLACENÉ.
+ *
+ * Sloupec `stadiums.surround_owned` drží JSON seznam. U klubů, které od migrace 0177
+ * nic nekupovaly, může být prázdný — proto se do seznamu vždy přidá i to, co má klub
+ * právě položené: za to zaplatil, i když o tom záznam nevznikl. Tráva je zdarma,
+ * takže se ve vlastnictví nedrží.
+ */
+function vlastnenePovrchy(raw: string | null, polozene: string | null): string[] {
+  const seznam: string[] = [];
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const p of parsed) if (typeof p === "string" && p !== "grass") seznam.push(p);
+      }
+    } catch (e) {
+      logger.warn({ module: "game", raw }, "parse surround_owned", e);
+    }
+  }
+  if (polozene && polozene !== "grass" && !seznam.includes(polozene)) seznam.push(polozene);
+  return seznam;
+}
+
 const gameRouter = new Hono<{ Bindings: Bindings }>();
 
 /** Explicitní KV přepínač pro ruční testování stadionových levelů, pouze na localhostu. */
@@ -1626,6 +1650,9 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     netPattern: (stadium.net_pattern as string | null) ?? "white",
     netStyle: (stadium.net_style as string | null) ?? "loose",
     surroundSurface: (stadium.surround_surface as string | null) ?? "grass",
+    // Co má klub ZAPLACENÉ. Přepnutí na vlastněný povrch je zdarma, takže to FE
+    // potřebuje vědět, aby u něj neukazovalo cenu.
+    surroundOwned: vlastnenePovrchy(stadium.surround_owned as string | null, stadium.surround_surface as string | null),
   };
 
   // Scoreboard a vlajka upgrady
@@ -1858,15 +1885,22 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
     const allowed = new Set(Object.keys(SURROUND_COSTS));
     const val = allowed.has(String(body.value)) ? String(body.value) : "grass";
     const currentStadium = await c.env.DB.prepare(
-      "SELECT surround_surface FROM stadiums WHERE team_id = ?"
-    ).bind(teamId).first<{ surround_surface: string | null }>();
+      "SELECT surround_surface, surround_owned FROM stadiums WHERE team_id = ?"
+    ).bind(teamId).first<{ surround_surface: string | null; surround_owned: string | null }>();
 
     const currentVal = currentStadium?.surround_surface ?? "grass";
     if (val === currentVal) {
-      return c.json({ ok: true, value: val });
+      return c.json({ ok: true, value: val, cost: 0, owned: vlastnenePovrchy(currentStadium?.surround_owned ?? null, currentVal) });
     }
 
-    const { cost, label } = SURROUND_COSTS[val] ?? { cost: 0, label: val };
+    // Povrch se platí JEDNOU. Dřív se účtovalo při každé změně na jinou hodnotu, takže
+    // kdo si prohlédl trávu (ta je zdarma) a vrátil se ke koberci, zaplatil ho podruhé —
+    // na produkci se to stalo za 50 000 Kč. Zaplacené povrchy zůstávají klubu napořád.
+    const owned = vlastnenePovrchy(currentStadium?.surround_owned ?? null, currentVal);
+    const jizZaplaceno = owned.includes(val);
+
+    const { cost: cenik, label } = SURROUND_COSTS[val] ?? { cost: 0, label: val };
+    const cost = jizZaplaceno ? 0 : cenik;
     if (cost > 0) {
       const team = await c.env.DB.prepare("SELECT budget, game_date FROM teams WHERE id = ?")
         .bind(teamId).first<{ budget: number; game_date: string | null }>();
@@ -1877,9 +1911,10 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
         `Povrch areálu: ${label}`, team.game_date ?? new Date().toISOString());
     }
 
-    await c.env.DB.prepare("UPDATE stadiums SET surround_surface = ? WHERE team_id = ?")
-      .bind(val, teamId).run();
-    return c.json({ ok: true, value: val, cost });
+    const noveVlastnene = jizZaplaceno ? owned : [...owned, val].filter((p) => p !== "grass");
+    await c.env.DB.prepare("UPDATE stadiums SET surround_surface = ?, surround_owned = ? WHERE team_id = ?")
+      .bind(val, JSON.stringify(noveVlastnene), teamId).run();
+    return c.json({ ok: true, value: val, cost, owned: noveVlastnene });
   }
 
   const allowed = new Set(["fence_color", "stand_color", "seat_color", "roof_color", "accent_color", "ultras_banner_color", "ultras_text_color", "flag_color"]);
