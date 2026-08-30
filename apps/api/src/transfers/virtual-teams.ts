@@ -11,6 +11,7 @@ import { generateHeightWeight } from "../generators/physicals";
 import { generatePlayerFace } from "../routes/teams";
 import { estimateMarketValue } from "../season/economy";
 import { logger } from "../lib/logger";
+import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
 
 // ═══════════════════════════════════════════════
 // HARDCODED VIRTUAL TEAMS PER DISTRICT
@@ -167,6 +168,12 @@ export async function generateAiListings(
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
   const avatar = generatePlayerFace({ age, bodyType: player.bodyType, ethnicity: player.ethnicity });
 
+  // Stropy a talent MUSÍ do inzerátu. Bez nich vznikne po koupi hráč s prázdným
+  // `skills_max` a nulovým talentem — schéma to nevyhodí (má DEFAULT), jen se
+  // manažerovi ukáže prázdná karta Potenciálu u hráče, za kterého zaplatil.
+  const skillCaps = stropyZDovednosti(rng, adjustedSkills, age);
+  const hiddenTalent = talentPodleVeku(rng, age);
+
   const playerData = JSON.stringify({
     firstName: player.firstName,
     lastName: player.lastName,
@@ -182,6 +189,8 @@ export async function generateAiListings(
     fromTeam: team.name,
     fromCity: team.city,
     fromDistrict: team.district,
+    skillCaps,
+    hiddenTalent,
   });
 
   const listingId = crypto.randomUUID();

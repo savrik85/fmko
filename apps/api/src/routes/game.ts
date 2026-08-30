@@ -11,6 +11,7 @@ import { generateBetweenRoundEvents } from "../events/between-rounds";
 import { getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seasonal-events";
 import type { GeneratedPlayer } from "../generators/player";
 import { logger } from "../lib/logger";
+import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
 import { mustSeason } from "../lib/season";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
@@ -5406,12 +5407,22 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     const avatar = JSON.stringify(aiData.avatar ?? {});
     const weeklyWage = aiData.weeklyWage ?? Math.round(10 + ((aiData.overallRating ?? 40) / 100) * 400);
 
+    // Stropy a talent MUSÍ do zápisu. Sloupce mají v schématu DEFAULT '{}' a DEFAULT 0,
+    // takže když chyběly, nic nespadlo — hráč jen tiše vznikl bez potenciálu a manažer
+    // koupil kocoura v pytli. Starší inzeráty je v `ai_player_data` nemají, proto se
+    // pro ně dopočítají tady.
+    const rngStropy = createRng(cryptoSeed());
+    const skillsMax = JSON.stringify(
+      aiData.skillCaps ?? stropyZDovednosti(rngStropy, aiData.skills ?? {}, aiData.age ?? 25),
+    );
+    const hiddenTalent = aiData.hiddenTalent ?? talentPodleVeku(rngStropy, aiData.age ?? 25);
+
     await c.env.DB.prepare(
-      `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+      `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, skills_max, hidden_talent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
     ).bind(playerId, teamId, aiData.firstName, aiData.lastName, aiData.age, aiData.position, aiData.overallRating,
       skills, physical, personality, lifeContext, avatar, weeklyWage,
-      (aiData as { nationality?: string }).nationality ?? "CZ").run();
+      (aiData as { nationality?: string }).nationality ?? "CZ", skillsMax, hiddenTalent).run();
 
     // Deduct budget (recordTransaction handles both budget update + logging)
     const { recordTransaction } = await import("../season/finance-processor");
