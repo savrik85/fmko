@@ -145,12 +145,21 @@ describe("kapacita podle stadionu, ne podle adresy", () => {
     expect(new Set(skoky).size).toBe(4);
   });
 
+  it("velká tribuna je znát víc než malá — jako na stadionu", () => {
+    const zaklad = generateStadium(createRng(1), "hamlet").capacity;
+    const kap = (s: number) => zaklad + calculateFacilityEffects({ stands: s }).capacityBonus;
+    // L1→L2 musí být větší skok než L0→L1, jinak stavba neodpovídá tomu, co je vidět
+    expect(kap(2) - kap(1)).toBeGreaterThan(kap(1) - kap(0));
+    // a malá tribuna musí být znát aspoň o polovinu proti holému hřišti
+    expect(kap(1) / kap(0)).toBeGreaterThanOrEqual(1.5);
+  });
+
   it("drží čísla, na která je okresní přebor zvyklý", () => {
-    // 440 je kapacita, kterou kluby s L2 měly, než se základ sjednotil.
+    // 440 je kapacita, kterou kluby s velkou tribunou měly odjakživa.
     // Když se tahle čtveřice mění, mění se ekonomika vstupného všem — ať to je vidět.
     const zaklad = generateStadium(createRng(1), "hamlet").capacity;
     expect([0, 1, 2, 3].map((s) => zaklad + calculateFacilityEffects({ stands: s }).capacityBonus))
-      .toEqual([250, 310, 440, 650]);
+      .toEqual([150, 240, 440, 650]);
   });
 });
 

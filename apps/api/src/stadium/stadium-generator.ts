@@ -26,8 +26,12 @@ export interface StadiumConfig {
  * adresy, a protože se strop v okresním přeboru běžně vyprodá, šel ten rozdíl
  * rovnou do tržeb — a nedal se dohnat, protože upgrady stojí všechny stejně.
  * Kapacita je teď funkce postaveného stadionu, ne místa na mapě.
+ *
+ * 150 je holé hřiště bez tribuny — lidi stojí kolem plotu. Nízký základ je
+ * schválně: při 250 přidala malá tribuna sotva čtvrtinu a stavba nebyla znát,
+ * ačkoli na stadionu je vidět na první pohled.
  */
-const ZAKLADNI_KAPACITA = 250;
+const ZAKLADNI_KAPACITA = 150;
 
 const BASE_BY_SIZE: Record<string, StadiumConfig> = {
   hamlet: {
@@ -125,11 +129,12 @@ const UPGRADE_COSTS: Record<string, number[]> = {
  * Kapacita, kterou tribuny přidávají k základu — kumulativně za úroveň.
  *
  * Jediný zdroj: `capacityBonus` i text v nabídce upgradu se počítají odsud,
- * takže nemůže nastat, že tlačítko slibuje +190 a klub dostane +100. Hodnoty
- * jsou zvolené tak, aby vyšly na čísla, která okresní přebor zná: se základem
- * 250 je L1 = 310, L2 = 440, L3 = 650.
+ * takže nemůže nastat, že tlačítko slibuje +190 a klub dostane +100. Se
+ * základem 150 vychází L1 = 240, L2 = 440 (tolik měly kluby s velkou tribunou
+ * odjakživa) a L3 = 650. Skok z malé tribuny na velkou je 200 míst, aby
+ * odpovídal tomu, o kolik je ta stavba na stadionu větší.
  */
-export const STANDS_CAPACITY: readonly number[] = [0, 60, 190, 400];
+export const STANDS_CAPACITY: readonly number[] = [0, 90, 290, 500];
 
 /** O kolik kapacity klub skutečně přijde/získá přechodem mezi úrovněmi. */
 export function standsCapacityGain(fromLevel: number, toLevel: number): number {
