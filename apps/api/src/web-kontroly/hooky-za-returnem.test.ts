@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { globSync } from "node:fs";
 
 /**
  * Hook za předčasným `return` = React #310 a bílá obrazovka.
@@ -76,6 +76,20 @@ export function najdiHookyZaReturnem(zdroj: string, soubor: string): Nalez[] {
   return nalezy;
 }
 
+/**
+ * Rekurzivní výpis .tsx. Vlastní, protože `globSync` z `node:fs` přibyl až v Node 22
+ * a CI jede na Node 20 — lokálně to prošlo a spadlo až tam.
+ */
+function najdiTsx(korenSlozky: string, podcesta = ""): string[] {
+  const nalezene: string[] = [];
+  for (const polozka of readdirSync(join(korenSlozky, podcesta), { withFileTypes: true })) {
+    const cesta = podcesta ? `${podcesta}/${polozka.name}` : polozka.name;
+    if (polozka.isDirectory()) nalezene.push(...najdiTsx(korenSlozky, cesta));
+    else if (polozka.name.endsWith(".tsx")) nalezene.push(cesta);
+  }
+  return nalezene;
+}
+
 describe("žádný hook se nevolá za předčasným returnem", () => {
   it("vzor z produkce se pozná", () => {
     const rozbite = `
@@ -104,7 +118,7 @@ function Druha() {
   });
 
   it("celý frontend je čistý", () => {
-    const soubory = globSync("**/*.tsx", { cwd: WEB }) as string[];
+    const soubory = najdiTsx(WEB);
     expect(soubory.length, "žádné .tsx nenalezeno — špatná cesta?").toBeGreaterThan(50);
     const nalezy = soubory.flatMap((f) => najdiHookyZaReturnem(readFileSync(WEB + f, "utf8"), f));
     expect(
