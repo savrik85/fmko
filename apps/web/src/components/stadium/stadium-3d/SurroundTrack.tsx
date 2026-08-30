@@ -48,11 +48,6 @@ export function SurroundTrack({
     []
   );
 
-  // Pokud je výchozí tráva, nekreslíme nic (hřiště je v přirozeném terénu)
-  if (surroundSurface === "grass") {
-    return null;
-  }
-
   /**
    * Rám výběhové zóny — vnější obdélník s dírou přesně pod hrací plochou.
    * UV se přemapují z metrů na 0–1, aby dlaždice měly stejné měřítko jako dřív.
@@ -89,6 +84,16 @@ export function SurroundTrack({
   }, []);
 
   const curbColor = isSnow ? "#CBD5E1" : isClubCarpet ? "#F1F5F9" : "#71717A";
+
+  // Pokud je výchozí tráva, nekreslíme nic (hřiště je v přirozeném terénu).
+  //
+  // POZOR: tenhle return musí zůstat POD všemi hooky. Když stál mezi nimi, volaly se
+  // při trávě dva hooky a při dlaždicích tři — a React na změnu počtu hooků mezi
+  // rendery spadne (#310). Projevilo se to až ve chvíli, kdy šlo povrch přepínat
+  // zdarma tam a zpět: stránka stadionu spadla na bílou obrazovku.
+  if (surroundSurface === "grass") {
+    return null;
+  }
 
   return (
     <group position={[0, 0, 0]}>
