@@ -20,6 +20,16 @@ describe("stropy dopočítané z dovedností", () => {
     }
   });
 
+  it("zkušenost má strop 100 jako u každého jiného hráče", () => {
+    // Nabírá se zápasy, ne tréninkem, takže ji věk nebrzdí. V DB má maxPotential 100
+    // u všech 1645 zdravých hráčů — dopočítaný nesmí být výjimka.
+    for (const vek of [18, 30, 45]) {
+      const s = stropyZDovednosti(createRng(2), { experience: 40, speed: 40 }, vek);
+      expect(s.experience.maxPotential, `${vek} let`).toBe(100);
+      expect(s.speed.maxPotential, "běžná dovednost strop 100 nemá").toBeLessThan(100);
+    }
+  });
+
   it("mladík dostane víc prostoru než veterán", () => {
     expect(prostorPodleVeku(19).max).toBeGreaterThan(prostorPodleVeku(35).max);
     expect(prostorPodleVeku(19).min).toBeGreaterThan(prostorPodleVeku(35).min);
@@ -57,7 +67,7 @@ describe("žádná cesta nezakládá hráče bez potenciálu", () => {
       if (!p.name.endsWith(".ts") || p.name.endsWith(".test.ts")) continue;
       const radky = readFileSync(join(slozka, cesta), "utf8").split("\n");
       radky.forEach((r, i) => {
-        if (!/INSERT (OR \w+ )?INTO players\s*\(/.test(r)) return;
+        if (!/INSERT (OR \w+ )?INTO (players|free_agents)\s*\(/.test(r)) return;
         // Seznam sloupců může přetéct na další řádky — posbírat až po `)`
         let sql = r;
         for (let j = i + 1; j < radky.length && !sql.includes(")"); j++) sql += radky[j];
@@ -67,7 +77,20 @@ describe("žádná cesta nezakládá hráče bez potenciálu", () => {
     return nalezy;
   }
 
-  it("každý INSERT INTO players vyplňuje skills_max i hidden_talent", () => {
+  it("stropy musí být objekty s maxPotential, ne holá čísla", () => {
+    // Podpis volného hráče dosazoval za stropy ploché dovednosti, takže vznikl tvar
+    // {"speed": 51} místo {"speed": {"current": 51, "maxPotential": 68}}. Hráč pak
+    // neměl kam růst — strop se rovnal dnešní hodnotě. Naměřeno u devíti hráčů.
+    const sm = stropyZDovednosti(createRng(3), { speed: 51, defense: 44 }, 18);
+    for (const [nazev, v] of Object.entries(sm)) {
+      expect(typeof v, `${nazev} musí být objekt, ne číslo`).toBe("object");
+      expect(v.maxPotential, `${nazev} osmnáctiletého musí mít prostor růst`).toBeGreaterThan(v.current);
+    }
+  });
+
+  it("každý zápis hráče vyplňuje skills_max i hidden_talent", () => {
+    // `free_agents` je tu schválně taky: minule z kontroly vypadla a právě v ní
+    // ležela druhá polovina téže chyby.
     const zapisy = najdiZapisy(SRC);
     expect(zapisy.length, "žádný INSERT nenalezen — špatná cesta?").toBeGreaterThan(3);
 

@@ -10,6 +10,7 @@ import { generatePlayer, type VillageInfo } from "../generators/player";
 import { generateHeightWeight } from "../generators/physicals";
 import { getDistrictDataFromDB } from "../data/districts";
 import { generatePlayerFace } from "../routes/teams";
+import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
 
 
 const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
@@ -92,10 +93,15 @@ export async function generateFreeAgentsForDistrict(
     const expiresAt = new Date(gameDate);
     expiresAt.setDate(expiresAt.getDate() + rng.int(5, 7));
 
+    // Stropy a talent MUSÍ vzniknout tady. Bez nich podpis dosadí za stropy ploché
+    // dovednosti, takže hráč nemá kam růst — a `hidden_talent` spadne na DEFAULT 0.
+    const skillsMax = stropyZDovednosti(rng, skills as Record<string, number>, player.age);
+    const hiddenTalent = talentPodleVeku(rng, player.age);
+
     const id = crypto.randomUUID();
     await db.prepare(
-      `INSERT INTO free_agents (id, district, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, nationality, weekly_wage, source, village_id, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?)`
+      `INSERT INTO free_agents (id, district, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, nationality, weekly_wage, source, village_id, expires_at, skills_max, hidden_talent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?)`
     ).bind(
       id, district, player.firstName, player.lastName, player.age, pos, overallRating,
       JSON.stringify(skills),
@@ -105,6 +111,7 @@ export async function generateFreeAgentsForDistrict(
       JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
       player.nationality ?? "CZ",
       weeklyWage, resVillage?.id ?? null, expiresAt.toISOString(),
+      JSON.stringify(skillsMax), hiddenTalent,
     ).run();
 
     generated++;

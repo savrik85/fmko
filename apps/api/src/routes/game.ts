@@ -4849,13 +4849,29 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const isCelebrity = (fa.is_celebrity as number) ?? 0;
   // Extract skillsMax from life_context (fallen_star celebrities have it stored there)
   const faLifeCtx = (() => { try { return JSON.parse(fa.life_context as string); } catch { return {}; } })();
-  // celebrities (fallen_star) have skillsMax stored in life_context; regular FAs use current skills as max
-  const faSkillsMax = faLifeCtx.skillsMax ? JSON.stringify(faLifeCtx.skillsMax) : fa.skills as string;
+  // Stropy: celebrity je mají v `life_context`, ostatní ve vlastním sloupci (migrace 0178).
+  //
+  // Dřív se za stropy dosazovaly ploché dovednosti `fa.skills`, takže vznikl tvar
+  // {"speed": 51} místo {"speed": {"current": 51, "maxPotential": 68}} a hráč neměl
+  // KAM RŮST — strop se rovnal dnešní hodnotě. Naměřeno na produkci u devíti hráčů,
+  // mezi nimi osmnáctiletého. Volní hráči z doby před migrací sloupec nemají vyplněný,
+  // proto se pro ně stropy dopočítají tady.
+  const rngStropy = createRng(cryptoSeed());
+  const faSkillsMaxRaw = (() => {
+    if (faLifeCtx.skillsMax) return faLifeCtx.skillsMax as Record<string, unknown>;
+    const ulozene = (() => { try { return JSON.parse((fa.skills_max as string) ?? "{}"); } catch { return {}; } })();
+    const maObjekty = Object.values(ulozene).some((v) => v && typeof v === "object");
+    if (maObjekty) return ulozene as Record<string, unknown>;
+    const ploche = (() => { try { return JSON.parse((fa.skills as string) ?? "{}"); } catch { return {}; } })();
+    return stropyZDovednosti(rngStropy, ploche as Record<string, number>, Number(fa.age) || 25);
+  })();
+  const faSkillsMax = JSON.stringify(faSkillsMaxRaw);
+  const faTalent = (fa.hidden_talent as number) || talentPodleVeku(rngStropy, Number(fa.age) || 25);
   await c.env.DB.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, nationality, status, is_celebrity, skills_max)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
   ).bind(playerId, teamId, fa.first_name, fa.last_name, (fa.nickname as string) ?? "", fa.age, fa.position, fa.overall_rating,
-    fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, fa.hidden_talent ?? 0, body.offeredWage, (fa.nationality as string) ?? "CZ", isCelebrity, faSkillsMax).run();
+    fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, faTalent, body.offeredWage, (fa.nationality as string) ?? "CZ", isCelebrity, faSkillsMax).run();
 
   // Set residence & commute for new signing
   const { generateResidence } = await import("../generators/residence");

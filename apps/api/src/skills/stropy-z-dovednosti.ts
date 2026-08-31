@@ -37,10 +37,12 @@ export function stropyZDovednosti(
   const stropy: Record<string, StropDovednosti> = {};
   for (const [nazev, hodnota] of Object.entries(dovednosti)) {
     if (typeof hodnota !== "number") continue;
-    stropy[nazev] = {
-      current: hodnota,
-      maxPotential: Math.min(100, Math.max(hodnota, hodnota + rng.int(min, max))),
-    };
+    // Zkušenost se nabírá odehranými zápasy, ne tréninkem, a věk ji nebrzdí — stoletý
+    // strop má i každý normálně vygenerovaný hráč. Kdyby se jí tady strop uzavřel podle
+    // věku, měl by dopočítaný hráč jako jediný v lize zaseknutou zkušenost.
+    stropy[nazev] = nazev === "experience"
+      ? { current: hodnota, maxPotential: 100 }
+      : { current: hodnota, maxPotential: Math.min(100, Math.max(hodnota, hodnota + rng.int(min, max))) };
   }
   return stropy;
 }

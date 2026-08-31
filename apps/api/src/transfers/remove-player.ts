@@ -118,8 +118,8 @@ export async function removePlayer(
     }
     batch.push(
       db.prepare(
-        `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at, is_celebrity, nationality)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at, is_celebrity, nationality, skills_max)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         crypto.randomUUID(), row.district, row.first_name, row.last_name, row.nickname ?? null,
         row.age, row.position, row.overall_rating,
@@ -127,6 +127,9 @@ export async function removePlayer(
         row.avatar ?? "{}", row.hidden_talent ?? 0, row.weekly_wage ?? 0,
         faSource, teamId, row.team_village_id, expiresAt, (row.is_celebrity as number) ?? 0,
         (row.nationality as string) ?? "CZ", // zachovat národnost (jinak by cizinec tiše skončil jako CZ)
+        // Stropy si hráč nese s sebou. Bez nich by uvolnění a opětovný podpis smazaly
+        // potenciál, který si roky trénoval, a nahradily ho čerstvě dolosovaným.
+        (row.skills_max as string) ?? "{}",
       ),
     );
   }

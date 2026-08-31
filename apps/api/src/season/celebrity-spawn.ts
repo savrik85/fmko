@@ -136,12 +136,14 @@ export async function spawnCelebrity(
   await db.prepare(`
     INSERT INTO free_agents (id, first_name, last_name, nickname, age, position, overall_rating,
       skills, personality, life_context, physical, avatar, weekly_wage, district,
-      source, village_id, expires_at, is_celebrity, hidden_talent, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+      source, village_id, expires_at, is_celebrity, hidden_talent, skills_max, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, 1, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   `).bind(
     faId, celeb.firstName, celeb.lastName, nickname, celeb.age, celeb.position, overallRating,
     skills, personality, lifeContext, physical, avatar, weeklyWage, leagueInfo.district,
     villageRow?.id ?? null, expiresAt.toISOString(), hiddenTalent,
+    // Stropy i do sloupce, ne jen do `life_context` — jedna věc na jednom místě.
+    JSON.stringify(celeb.skillsMax ?? {}),
   ).run();
 
   // ── News article: celebrity arrival ──
