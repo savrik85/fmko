@@ -147,6 +147,9 @@ export default function MatchDetailPage() {
     // Sporný verdikt patří do průběhu — bez něj by v timeline chyběl důvod, proč
     // gól neplatil nebo odkud se vzala penalta.
     || (e.type === "special" && !!e.detail?.startsWith("ref_error:"))
+    // Pokyn z lavičky mění taktiku nebo tvrdost uprostřed zápasu. Bez něj by
+    // divák viděl jen následky a nevěděl, odkud se vzaly.
+    || (e.type === "special" && !!e.detail?.startsWith("plan:"))
   );
   const firstHalf = keyEvents.filter((e) => e.minute <= 45);
   const secondHalf = keyEvents.filter((e) => e.minute > 45);
@@ -919,6 +922,7 @@ function EventRow({ event: e, hc, ac }: { event: MatchEvent; hc: string; ac: str
     case "special":
       // Sporné verdikty rozhodčího mají vlastní ikonu, ať se v timeline neztratí
       if (e.detail?.startsWith("ref_error:")) { icon = "🧑‍⚖️"; bgColor = "bg-amber-50"; }
+      else if (e.detail?.startsWith("plan:")) { icon = "📋"; bgColor = "bg-blue-50"; }
       else { icon = ""; bgColor = ""; }
       break;
     default: icon = ""; bgColor = "";

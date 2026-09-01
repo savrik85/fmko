@@ -176,17 +176,18 @@ export async function runScheduledMatches(
                 is_auto: number;
                 captain_id: string | null;
                 hardness: string | null;
+                match_plan: string | null;
             };
             const loadLineup = async (tid: string): Promise<LineupRow | null> => {
                 // Pokud je víc rows pro stejný (team, calendar) — kopie + user-saved — vyber nejnovější user-saved
-                const exact = await db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC, submitted_at DESC, id ASC LIMIT 1")
+                const exact = await db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id, match_plan FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC, submitted_at DESC, id ASC LIMIT 1")
                     .bind(tid, calendarId).first<LineupRow>().catch((e) => {
                         logger.warn({module: "match-runner"}, "Failed to load lineup exact", e);
                         return null;
                     });
                 if (exact) return exact;
                 // Fallback: poslední user-saved sestava (jakýkoliv calendar, ne auto)
-                return db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1")
+                return db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id, match_plan FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1")
                     .bind(tid).first<LineupRow>().catch((e) => {
                         logger.warn({module: "match-runner"}, "Failed to load lineup fallback", e);
                         return null;
@@ -263,6 +264,13 @@ export async function runScheduledMatches(
             const homeFam = await readFamiliarity(db, homeTeamId);
             const awayFam = await readFamiliarity(db, awayTeamId);
 
+            // Pokyny na lavičce — z databázových ID hráčů na engine ID, stejně jako
+            // u kapitána. Pravidlo, jehož hráč dnes nenastoupil, se zahodí tady;
+            // engine by ho stejně nedokázal provést.
+            const { toEnginePlan } = await import("../engine/plan-mapping");
+            const homePlan = toEnginePlan(homeBuild.idMap, homeLineupRow?.match_plan);
+            const awayPlan = toEnginePlan(awayBuild.idMap, awayLineupRow?.match_plan);
+
             const homeSetup: TeamSetup = {
                 teamId: 1,
                 teamName: (homeTeam?.name as string) ?? "Domácí",
@@ -274,6 +282,7 @@ export async function runScheduledMatches(
                 hardness: homeHardness,
                 ...homeTakers,
                 formationFamiliarity: homeFam.formation[homeFormation] ?? 0,
+                plan: homePlan,
             };
             const awaySetup: TeamSetup = {
                 teamId: 2,
@@ -286,6 +295,7 @@ export async function runScheduledMatches(
                 hardness: awayHardness,
                 ...awayTakers,
                 formationFamiliarity: awayFam.formation[awayFormation] ?? 0,
+                plan: awayPlan,
             };
 
             // Load stadium info for pitch condition + facilities
@@ -1581,7 +1591,7 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     // chybí, použiji heuristiku: nejnovější lineup z calendar_id co MÁ taky kopii v
     // lineup_presets (= byl ručně uložen jako preset). Pokud není, nejnovější vůbec.
     const lastLineup = await db.prepare(
-        `SELECT l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.submitted_at
+        `SELECT l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.match_plan, l.submitted_at
          FROM lineups l
          WHERE l.team_id = ?
            AND l.is_auto = 0
@@ -1592,6 +1602,7 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
         players_data: string;
         captain_id: string | null;
         preset_slot: string | null;
+        match_plan: string | null;
         submitted_at: string
         hardness: string | null;
     }>().catch((e) => {
@@ -1609,13 +1620,21 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
 
         if (validPicks.length >= 11) {
             const captainStillActive = lastLineup.captain_id && activeSet.has(lastLineup.captain_id) ? lastLineup.captain_id : null;
+            // Pokyny na lavičce se přenášejí spolu se sestavou — jinak by manažer, který
+            // plán nastavil jednou, o něj přišel hned v dalším kole, kde se sestava jen
+            // zkopírovala. Střídání s hráčem, co už v kádru není, se cestou zahodí
+            // stejně jako on sám ve validPicks.
+            const { parseStoredPlan } = await import("../lib/match-plan-validation");
+            const copiedPlan = parseStoredPlan(lastLineup.match_plan).filter((rule) =>
+                rule.action.kind !== "sub"
+                || (activeSet.has(rule.action.outPlayerId) && activeSet.has(rule.action.inPlayerId)));
             try {
                 // POZOR: zachovej původní submitted_at, aby kopie nepřepsala "poslední user-saved"
                 // pro budoucí copyOrCreateLineup volání. Bez toho by se každou simulací posouval
                 // "poslední lineup" na auto-kopii a metadata se postupně ztrácela.
                 await db.prepare(
-                    "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, captain_id, preset_slot, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"
-                ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, lastLineup.hardness ?? "normal", JSON.stringify(validPicks.slice(0, 11)), captainStillActive, lastLineup.preset_slot, lastLineup.submitted_at).run();
+                    "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, captain_id, preset_slot, match_plan, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"
+                ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, lastLineup.hardness ?? "normal", JSON.stringify(validPicks.slice(0, 11)), captainStillActive, lastLineup.preset_slot, JSON.stringify(copiedPlan), lastLineup.submitted_at).run();
                 return;
             } catch (e) {
                 logger.error({module: "match-runner"}, `copyOrCreateLineup INSERT failed for ${teamId} cal=${calendarId}`, e);

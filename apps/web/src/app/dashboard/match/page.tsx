@@ -13,6 +13,8 @@ import { RefereeCard } from "@/components/match/referee-card";
 import { CollapsibleCard } from "@/components/ui";
 import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
 import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
+import { MatchPlanEditor } from "./MatchPlanEditor";
+import type { MatchPlanRule } from "@okresni-masina/shared";
 import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
 import { LineupPreview, type CardRisk } from "@/components/LineupPreview";
 import { useOpenOnDesktop } from "@/components/ui";
@@ -183,9 +185,11 @@ function MatchPage() {
   const [rolesSavedAt, setRolesSavedAt] = useState<number | null>(null);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
-  const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; updatedAt: string } | null>>({ A: null, B: null, C: null });
+  const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
   const [lineupSource, setLineupSource] = useState<"explicit" | "default" | null>(null);
+  // Pokyny na lavičce — ukládají se se sestavou, engine je vyhodnocuje za běhu zápasu
+  const [matchPlan, setMatchPlan] = useState<MatchPlanRule[]>([]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -208,7 +212,7 @@ function MatchPage() {
     // Pokud URL má ?calendarId=X, načti přímo ten zápas. Jinak default = nejbližší.
     const urlCalIdInit = searchParams.get("calendarId");
     const url = urlCalIdInit ? `/api/teams/${teamId}/next-match?calendarId=${urlCalIdInit}` : `/api/teams/${teamId}/next-match`;
-    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       url
     ).then((data) => {
       setNextMatch(data.nextMatch);
@@ -252,6 +256,7 @@ function MatchPage() {
       // Pokud lineup má preset_slot, prostě ho aktivuj. Fallback vs explicit nás nezajímá v UI —
       // user vidí "Sestava A vybraná" a může save-nout (pak se uloží per-zápas).
       setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
+      setMatchPlan(data.lineup?.matchPlan ?? []);
       setLineupSource(data.lineup?.source ?? null);
       // Save button "Uloženo ✓" jen pokud lineup je explicit pro tento zápas
       setSaved(data.lineup?.source === "explicit");
@@ -281,7 +286,7 @@ function MatchPage() {
             homeName: target.isHome ? myName : target.opponentName,
             awayName: target.isHome ? target.opponentName : myName,
           } : prev);
-          apiFetch<{ lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
+          apiFetch<{ lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
             .then((ld) => {
               if (ld.lineup?.players.length === 11) {
                 setFormation(ld.lineup.formation);
@@ -290,6 +295,7 @@ function MatchPage() {
                 if (ld.lineup.captainId) setCaptainId(ld.lineup.captainId);
               }
               setActivePreset(ld.lineup?.presetSlot ?? null);
+              setMatchPlan(ld.lineup?.matchPlan ?? []);
               setSaved(!!ld.lineup);
             })
             .catch((e) => console.error("load lineup from URL:", e));
@@ -339,7 +345,7 @@ function MatchPage() {
     try {
       await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formation, tactic, hardness, captainId, players }),
+        body: JSON.stringify({ formation, tactic, hardness, captainId, players, matchPlan }),
       });
       const d = await apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`);
       setPresets(d.presets ?? presets);
@@ -353,7 +359,7 @@ function MatchPage() {
     const myReqId = ++loadPresetReqId.current;
     try {
       const matchCalId = nextMatch?.calendarId ?? nextMatch?.matchId ?? null;
-      const data = await apiFetch<{ formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; warnings: string[] }>(
+      const data = await apiFetch<{ formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; warnings: string[] }>(
         `/api/teams/${teamId}/lineup-presets/${slot}/apply`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(matchCalId ? { calendarId: matchCalId } : {}) }
       );
@@ -366,6 +372,7 @@ function MatchPage() {
       while (newSel.length < 11) newSel.push(null as any);
       setSelected(newSel);
       setCaptainId(data.captainId);
+      setMatchPlan(data.matchPlan ?? []);
       setSaved(false);
     } catch (e) { console.error("load preset:", e); }
   };
@@ -420,7 +427,7 @@ function MatchPage() {
       const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
       const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, matchPlan, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) {
         setSaved(true);
@@ -453,6 +460,17 @@ function MatchPage() {
   const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
   const bench = players.filter((p) => !selected.includes(p.id));
   const absentPlayers = players.filter((p) => p.absent);
+
+  // Nabídky hráčů pro pokyny na lavičce. Omluvení hráči se do plánu nedostanou —
+  // pokyn s někým, kdo na zápas nepřijede, by v neděli tiše nesepnul.
+  const planName = (p: AvailablePlayer) => `${p.lastName} ${p.firstName.charAt(0)}.`;
+  const planStarters = selected
+    .map((id) => players.find((p) => p.id === id))
+    .filter((p): p is AvailablePlayer => !!p && !p.absent)
+    .map((p) => ({ id: p.id, name: planName(p) }));
+  const planBench = bench
+    .filter((p) => !p.absent)
+    .map((p) => ({ id: p.id, name: planName(p) }));
 
   // Chemie sestavy — počítá se STEJNÝMI vahami jako v enginu (packages/shared),
   // takže zobrazené číslo odpovídá tomu, co se v zápase opravdu stane.
@@ -540,7 +558,7 @@ function MatchPage() {
           } : prev);
           if (teamId) {
             // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
-            apiFetch<{ referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+            apiFetch<{ referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
                 setReferee(data.referee ?? null);
                 setForecast(data.forecast ?? null);
@@ -569,6 +587,7 @@ function MatchPage() {
                 }
                 // ActivePreset vždy pokud má preset_slot
                 setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
+                setMatchPlan(data.lineup?.matchPlan ?? []);
                 setLineupSource(data.lineup?.source ?? null);
                 setSaved(data.lineup?.source === "explicit");
               })
@@ -812,6 +831,14 @@ function MatchPage() {
         </div>
         )}
       </div>
+
+      {/* ═══ Pokyny na lavičce — přednastavené scénáře pro engine ═══ */}
+      <MatchPlanEditor
+        plan={matchPlan}
+        onChange={(next) => { setMatchPlan(next); setSaved(false); }}
+        starters={planStarters}
+        bench={planBench}
+      />
 
       {/* Main layout: pitch left, player list right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

@@ -48,3 +48,24 @@ export {
   managerFansBand,
   managerFansEffect,
 } from "./manager-fans";
+export type {
+  PlanTactic,
+  PlanHardness,
+  PlanTrigger,
+  PlanTriggerKind,
+  PlanAction,
+  PlanActionKind,
+  MatchPlanRule,
+  MatchPlan,
+} from "./match-plan";
+export {
+  PLAN_TACTICS,
+  PLAN_HARDNESS,
+  MAX_PLAN_RULES,
+  PLAN_CONDITION_MIN,
+  PLAN_CONDITION_MAX,
+  PLAN_MINUTE_MIN,
+  PLAN_MINUTE_MAX,
+  PLAN_TACTIC_LABELS,
+  PLAN_HARDNESS_LABELS,
+} from "./match-plan";

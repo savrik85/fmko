@@ -18,6 +18,8 @@ import type {
 import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor, TACTIC_MODS, effMod } from "./tactics";
 import { squadChemistryFactor } from "./squad-chemistry";
 import { hardnessMods, hardEff, intimidationPenalty, type Hardness } from "./hardness";
+import { ruleMatches, pendingPlannedSubs, plannedSubPlayers, type EngineMatchPlanRule } from "./match-plan";
+import { PLAN_TACTIC_LABELS, PLAN_HARDNESS_LABELS } from "@okresni-masina/shared";
 import {
   NEUTRAL_REFEREE, PETTY_CARD_MUL,
   severeFoulProb, pettyFoulProb, advantageProb, cardMultiplier,
@@ -531,7 +533,7 @@ function getPositionPenalty(natural: Pos, playing: Pos): PosPenalty {
  */
 type Position = MatchPlayer["position"];
 
-function pickSubIndexForPosition(subs: MatchPlayer[], outPos: Position): number {
+function pickSubIndexForPosition(subs: MatchPlayer[], outPos: Position, excludeIds?: ReadonlySet<number>): number {
   // Preferenční pořadí pozic od ideálního po nouzové. GK je vždy poslední,
   // takže DEF/MID/FWD se nikdy nenahradí brankářem (kromě situace, kdy
   // na lavičce už nikdo jiný není a tým by jinak hrál o člověka méně).
@@ -543,7 +545,7 @@ function pickSubIndexForPosition(subs: MatchPlayer[], outPos: Position): number 
 
   for (const pref of preferences) {
     // Preferuj match position (jak hraje v sestavě), fallback na natural position
-    const idx = subs.findIndex((s) => (s.matchPosition ?? s.position) === pref);
+    const idx = subs.findIndex((s) => (s.matchPosition ?? s.position) === pref && !excludeIds?.has(s.id));
     if (idx >= 0) return idx;
   }
   // Lavička je úplně prázdná
@@ -652,6 +654,15 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   let awaySubsUsed = 0;
   const MAX_SUBS = 3;
 
+  // Pokyny na lavičce — pravidlo sepne nejvýš jednou za zápas. Bez toho by se
+  // u trvající podmínky (třeba remízy) taktika přepínala každou minutu znovu.
+  // Do fired patří i pravidla, která provést nešla (hráč není na lavičce, sloty
+  // došly) — jinak by nesplnitelné střídání blokovalo slot až do konce zápasu.
+  const firedPlanRules = new Map<number, Set<string>>([
+    [home.teamId, new Set<string>()],
+    [away.teamId, new Set<string>()],
+  ]);
+
   // Match-day form: random factor 0.75-1.25 applied to attack power
   const homeForm = 0.75 + rng.random() * 0.50;
   const awayForm = 0.75 + rng.random() * 0.50;
@@ -688,6 +699,105 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   function gkHandling(defendingTeam: TeamSetup): number {
     const base = WEATHER_MODS[weather].gkHandlingMod;
     return 1 - (1 - base) * (1 - (defendingTeam.weatherResist ?? 0));
+  }
+
+  /**
+   * Událost bez konkrétního hráče — pokyn z lavičky patří týmu, ne jednotlivci.
+   *
+   * `playerId: 0` není v žádné idMap, takže `extractStatsFromEvents` ani
+   * `calculatePlayerRatings` událost nikomu nepřipíšou. Do `playerName` jde
+   * jméno týmu, protože detail zápasu ho v řádku vypisuje tučně.
+   */
+  function addTeamEvent(minute: number, team: TeamSetup, description: string, detail: string) {
+    events.push({
+      minute,
+      type: "special",
+      playerId: 0,
+      playerName: team.teamName,
+      teamId: team.teamId,
+      description,
+      detail,
+    });
+  }
+
+  /**
+   * Provede střídání — hráč z lavičky nastoupí na místo hráče na hřišti.
+   * Vrací false, když už střídat nešlo (hráč mezitím zmizel ze hřiště či lavičky).
+   */
+  function doSubstitution(team: TeamSetup, out: MatchPlayer, sub: MatchPlayer, minute: number, description: string): boolean {
+    const lineupIdx = team.lineup.indexOf(out);
+    const subIdx = team.subs.indexOf(sub);
+    if (lineupIdx < 0 || subIdx < 0) return false;
+    team.subs.splice(subIdx, 1);
+    sub.matchPosition = out.matchPosition ?? out.position;
+    team.lineup[lineupIdx] = sub;
+    playerMinutes[out.id] = { ...playerMinutes[out.id], left: minute };
+    playerMinutes[sub.id] = { entered: minute, left: null };
+    if (team === home) homeSubsUsed++; else awaySubsUsed++;
+    addEvent(minute, "substitution", sub, team.teamId, description);
+    return true;
+  }
+
+  /**
+   * Provede akci jednoho pravidla plánu.
+   *
+   * Nevrací úspěch schválně: pravidlo se označí za vyřízené tak jako tak.
+   * Nesplnitelné střídání (hráč není na lavičce, sloty došly) se stejně
+   * nesplní ani o deset minut později a rezervovaný slot by jinak propadl.
+   */
+  function executePlanRule(rule: EngineMatchPlanRule, team: TeamSetup, minute: number) {
+    const action = rule.action;
+
+    if (action.kind === "tactic") {
+      if (team.tactic === action.tactic) return;
+      team.tactic = action.tactic;
+      addTeamEvent(minute, team, `Změna taktiky z lavičky: „${PLAN_TACTIC_LABELS[action.tactic]}"`, "plan:tactic");
+      return;
+    }
+
+    if (action.kind === "hardness") {
+      if ((team.hardness ?? "normal") === action.hardness) return;
+      team.hardness = action.hardness;
+      addTeamEvent(minute, team, `Změna tvrdosti z lavičky: „${PLAN_HARDNESS_LABELS[action.hardness]}"`, "plan:hardness");
+      return;
+    }
+
+    const subsUsed = team === home ? homeSubsUsed : awaySubsUsed;
+    if (subsUsed >= MAX_SUBS) return;
+    const out = team.lineup.find((p) => p.id === action.outPlayerId);
+    const sub = team.subs.find((p) => p.id === action.inPlayerId);
+    // Střídající hráč nemusí být k dispozici — lavička se skládá z toho, kdo
+    // na zápas dorazil, a plán se ukládá dopředu. Pak pravidlo tiše propadne.
+    if (!out || !sub) return;
+    doSubstitution(team, out, sub, minute, `Plánované střídání: ${playerName(sub)} za ${playerName(out)}`);
+  }
+
+  /** Vyhodnotí pokyny na lavičce obou týmů pro danou minutu. */
+  function applyMatchPlan(minute: number) {
+    for (const team of [home, away]) {
+      const plan = team.plan;
+      const fired = firedPlanRules.get(team.teamId);
+      if (!plan || plan.length === 0 || !fired) continue;
+
+      const opp = team === home ? away : home;
+      const isHome = team === home;
+      const ctx = {
+        minute,
+        ownScore: isHome ? homeScore : awayScore,
+        oppScore: isHome ? awayScore : homeScore,
+        // Vyloučený hráč je ze sestavy odstraněn (sendOff), takže délka pole
+        // je počet hráčů na hřišti.
+        ownOnPitch: team.lineup.length,
+        oppOnPitch: opp.lineup.length,
+        lineup: team.lineup,
+      };
+
+      for (const rule of plan) {
+        if (fired.has(rule.id) || !ruleMatches(rule, ctx)) continue;
+        executePlanRule(rule, team, minute);
+        fired.add(rule.id);
+      }
+    }
   }
 
   /** Tým na hřišti podle engine ID — pro převod naplánované chyby na konkrétní sestavu. */
@@ -1280,52 +1390,59 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           `${playerName(unlucky)} — ${injury}`,
           injury);
 
-        // Try substitution (injury — doesn't count toward tactical sub limit)
+        // Zraněného je potřeba stáhnout bez ohledu na to, kolik slotů si drží
+        // plán — hráč, který nemůže dál, na hřišti zůstat nesmí.
         const team = teamId === home.teamId ? home : away;
         const subsUsed = teamId === home.teamId ? homeSubsUsed : awaySubsUsed;
         if (team.subs.length > 0 && subsUsed < MAX_SUBS) {
-          const subIdx = pickSubIndexForPosition(team.subs, unlucky.matchPosition ?? unlucky.position);
+          // Rezervovaného náhradníka bere až v nouzi — zraněný musí ven tak jako tak,
+          // ale dokud je na lavičce kdokoli jiný, plán zůstane nedotčený.
+          const firedForTeam = firedPlanRules.get(teamId) ?? new Set<string>();
+          const reservedIn = plannedSubPlayers(team.plan, firedForTeam).incoming;
+          const outPos = unlucky.matchPosition ?? unlucky.position;
+          const preferred = pickSubIndexForPosition(team.subs, outPos, reservedIn);
+          const subIdx = preferred >= 0 ? preferred : pickSubIndexForPosition(team.subs, outPos);
           if (subIdx >= 0) {
-            const sub = team.subs.splice(subIdx, 1)[0];
-            const idx = team.lineup.indexOf(unlucky);
-            if (idx >= 0) {
-              sub.matchPosition = unlucky.matchPosition;
-              team.lineup[idx] = sub;
-              playerMinutes[unlucky.id] = { ...playerMinutes[unlucky.id], left: minute };
-              playerMinutes[sub.id] = { entered: minute, left: null };
-              if (teamId === home.teamId) homeSubsUsed++; else awaySubsUsed++;
-              addEvent(minute, "substitution", sub, teamId,
-                `Střídání: ${playerName(sub)} za ${playerName(unlucky)}`);
-            }
+            const sub = team.subs[subIdx];
+            doSubstitution(team, unlucky, sub, minute,
+              `Střídání: ${playerName(sub)} za ${playerName(unlucky)}`);
           }
         }
       }
     }
 
+    // Pokyny z lavičky mají přednost před automatikou asistenta — vyhodnocují se
+    // dřív, takže si sáhnou na střídací slot jako první.
+    applyMatchPlan(minute);
+
     // Tactical substitutions (after 60')
     if (minute >= 60) {
-      for (const teamData of [{ team: home, teamId: home.teamId, subsUsed: homeSubsUsed, isHome: true },
-                               { team: away, teamId: away.teamId, subsUsed: awaySubsUsed, isHome: false }]) {
-        if (teamData.subsUsed >= MAX_SUBS || teamData.team.subs.length === 0) continue;
+      for (const teamData of [{ team: home, teamId: home.teamId, isHome: true },
+                               { team: away, teamId: away.teamId, isHome: false }]) {
+        const subsUsed = teamData.isHome ? homeSubsUsed : awaySubsUsed;
+        if (subsUsed >= MAX_SUBS || teamData.team.subs.length === 0) continue;
+
+        // Sloty, které si drží dosud nesepnutá plánovaná střídání, jsou pro
+        // automatiku tabu. Bez rezervace by asistent kolem 60. minuty spotřeboval
+        // všechna tři střídání a manažerův pokyn na 75. by neměl čím proběhnout.
+        const fired = firedPlanRules.get(teamData.teamId) ?? new Set<string>();
+        if (subsUsed + pendingPlannedSubs(teamData.team.plan, fired) >= MAX_SUBS) continue;
+        // Rezervovat počet slotů nestačí — automatika musí nechat být i konkrétní
+        // hráče, které si plán vyhradil. Jinak pošle na hřiště přesně toho
+        // náhradníka, na kterého manažer čeká, a pokyn pak nemá koho vystřídat.
+        const { incoming: planIn, outgoing: planOut } = plannedSubPlayers(teamData.team.plan, fired);
 
         // Condition-based: stáhnout vyčerpaného hráče
         const exhausted = teamData.team.lineup
-          .filter((p) => (p.matchPosition ?? p.position) !== "GK" && p.condition < 25)
+          .filter((p) => (p.matchPosition ?? p.position) !== "GK" && p.condition < 25 && !planOut.has(p.id))
           .sort((a, b) => a.condition - b.condition)[0];
 
         if (exhausted && rng.random() < 0.3) {
-          const subIdx = pickSubIndexForPosition(teamData.team.subs, exhausted.matchPosition ?? exhausted.position);
+          const subIdx = pickSubIndexForPosition(teamData.team.subs, exhausted.matchPosition ?? exhausted.position, planIn);
           if (subIdx >= 0) {
-            const sub = teamData.team.subs.splice(subIdx, 1)[0];
-            const idx = teamData.team.lineup.indexOf(exhausted);
-            if (idx >= 0) {
-              sub.matchPosition = exhausted.matchPosition;
-              teamData.team.lineup[idx] = sub;
-              playerMinutes[exhausted.id] = { ...playerMinutes[exhausted.id], left: minute };
-              playerMinutes[sub.id] = { entered: minute, left: null };
-              if (teamData.isHome) homeSubsUsed++; else awaySubsUsed++;
-              addEvent(minute, "substitution", sub, teamData.teamId,
-                `Střídání: ${playerName(sub)} za ${playerName(exhausted)}`);
+            const sub = teamData.team.subs[subIdx];
+            if (doSubstitution(teamData.team, exhausted, sub, minute,
+                `Střídání: ${playerName(sub)} za ${playerName(exhausted)}`)) {
               continue;
             }
           }
@@ -1335,20 +1452,12 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         if (minute >= 75) {
           const scoreDiff = teamData.isHome ? homeScore - awayScore : awayScore - homeScore;
           if (scoreDiff < 0 && rng.random() < 0.4) {
-            const fwdSub = teamData.team.subs.find((p) => p.position === "FWD");
+            const fwdSub = teamData.team.subs.find((p) => p.position === "FWD" && !planIn.has(p.id));
             const defOut = teamData.team.lineup
-              .filter((p) => (p.matchPosition ?? p.position) === "DEF")
+              .filter((p) => (p.matchPosition ?? p.position) === "DEF" && !planOut.has(p.id))
               .sort((a, b) => a.condition - b.condition)[0];
             if (fwdSub && defOut) {
-              const subIdx = teamData.team.subs.indexOf(fwdSub);
-              teamData.team.subs.splice(subIdx, 1);
-              const lineupIdx = teamData.team.lineup.indexOf(defOut);
-              fwdSub.matchPosition = defOut.matchPosition;
-              teamData.team.lineup[lineupIdx] = fwdSub;
-              playerMinutes[defOut.id] = { ...playerMinutes[defOut.id], left: minute };
-              playerMinutes[fwdSub.id] = { entered: minute, left: null };
-              if (teamData.isHome) homeSubsUsed++; else awaySubsUsed++;
-              addEvent(minute, "substitution", fwdSub, teamData.teamId,
+              doSubstitution(teamData.team, defOut, fwdSub, minute,
                 `Taktické střídání: ${playerName(fwdSub)} za ${playerName(defOut)}`);
             }
           }

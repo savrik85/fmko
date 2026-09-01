@@ -478,10 +478,10 @@ async function simulateCupTie(
   // — kdo si pohár explicitně nenastaví, hraje v poslední použité sestavě).
   const savedLineup = async (rid: string | null) => {
     if (!rid) return null;
-    const perMatch = await db.prepare("SELECT players_data, formation, tactic, hardness FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(rid, cupMatchId).first<{ players_data: string; formation: string; tactic: string | null; hardness: string | null }>()
+    const perMatch = await db.prepare("SELECT players_data, formation, tactic, hardness, match_plan FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(rid, cupMatchId).first<{ players_data: string; formation: string; tactic: string | null; hardness: string | null; match_plan: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "cup per-match lineup", e); return null; });
     if (perMatch) return perMatch;
-    return await db.prepare("SELECT players_data, formation, tactic, hardness FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string; tactic: string | null; hardness: string | null }>()
+    return await db.prepare("SELECT players_data, formation, tactic, hardness, match_plan FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string; tactic: string | null; hardness: string | null; match_plan: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "cup saved lineup", e); return null; });
   };
   const homeLR = await savedLineup(homeReal);
@@ -573,8 +573,14 @@ async function simulateCupTie(
     loadSetPieceTakers(db, awayReal, awayBuild.idMap),
   ]);
 
-  const homeSetup: TeamSetup = { teamId: 1, teamName: "Domácí", lineup: homeLineup, subs: homeSubs, tactic: homeTactic, formation: homeFormation, hardness: homeHardness, ...homeTakers, formationFamiliarity: homeFam.formation[homeFormation] ?? 0 };
-  const awaySetup: TeamSetup = { teamId: 2, teamName: "Hosté", lineup: awayLineup, subs: awaySubs, tactic: awayTactic, formation: awayFormation, hardness: awayHardness, ...awayTakers, formationFamiliarity: awayFam.formation[awayFormation] ?? 0 };
+  // Pokyny na lavičce platí i v poháru — jinak by manažerova sestava fungovala
+  // v lize jinak než v poháru, aniž by to kdekoli bylo napsané.
+  const { toEnginePlan } = await import("../engine/plan-mapping");
+  const homePlan = toEnginePlan(homeBuild.idMap, homeLR?.match_plan);
+  const awayPlan = toEnginePlan(awayBuild.idMap, awayLR?.match_plan);
+
+  const homeSetup: TeamSetup = { teamId: 1, teamName: "Domácí", lineup: homeLineup, subs: homeSubs, tactic: homeTactic, formation: homeFormation, hardness: homeHardness, ...homeTakers, formationFamiliarity: homeFam.formation[homeFormation] ?? 0, plan: homePlan };
+  const awaySetup: TeamSetup = { teamId: 2, teamName: "Hosté", lineup: awayLineup, subs: awaySubs, tactic: awayTactic, formation: awayFormation, hardness: awayHardness, ...awayTakers, formationFamiliarity: awayFam.formation[awayFormation] ?? 0, plan: awayPlan };
   // Vybavení a zaměstnanci platí i v poháru — dřív se sem nepředávaly vůbec,
   // takže hráč nastupoval bez bonusů, které si zaplatil.
   const { loadMatchMods } = await import("../equipment/match-mods");

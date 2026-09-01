@@ -1,6 +1,7 @@
 import type { MatchEvent, EventType, GoalSource } from "@okresni-masina/shared";
 import type { RefereeProfile, RefereeIncident } from "./referee";
 import type { Hardness } from "./hardness";
+import type { EngineMatchPlan } from "./match-plan";
 
 export type Tactic = "offensive" | "balanced" | "defensive" | "long_ball" | "possession" | "pressing";
 export type Weather = "sunny" | "cloudy" | "rain" | "wind" | "snow";
@@ -66,6 +67,11 @@ export interface TeamSetup {
   /** Jak tvrdě tým hraje. Chybí-li, počítá se "normal". */
   hardness?: Hardness;
   formationFamiliarity?: number;  // 0-100, sehranost zvolené formace
+  /**
+   * Pokyny na lavičce — přednastavené scénáře („když od 60' prohráváme, hraj útočně").
+   * ID hráčů jsou engine ID, převod z databázových dělá match-runner.
+   */
+  plan?: EngineMatchPlan;
   weatherResist?: number;  // 0-0.45 ze zimní výbavy — tlumí postih počasí (nastavuje simulateMatch)
 }
 
@@ -127,3 +133,4 @@ export interface MatchResult {
 
 export { MatchEvent, EventType, GoalSource };
 export type { RefereeProfile, RefereeIncident, Hardness };
+export type { EngineMatchPlan, EngineMatchPlanRule } from "./match-plan";
