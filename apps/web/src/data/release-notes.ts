@@ -12,6 +12,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-09-01",
+    emoji: "📋",
+    title: "Pokyny na lavičce — zápas se dá odřídit dopředu",
+    items: [
+      "Ke každé sestavě si teď uložíš pokyny na lavičce, tedy pravidla ve tvaru „když se stane tohle, udělej tohle“. Trenér je provede sám ve chvíli, kdy situace nastane, takže u zápasu nemusíš sedět. Najdeš je na Sestavě hned pod tvrdostí hry.",
+      "Reagovat jde na to, co se v zápase opravdu děje: nastane určitá minuta, prohráváš nebo vedeš (a můžeš si říct, jestli o gól, o dva nebo o tři), zůstal jsi po červené v oslabení, máš přesilovku, nebo někomu dojdou síly a spadne pod nastavenou kondici.",
+      "Udělat se s tím dají tři věci — přehodit taktiku, změnit tvrdost hry a vystřídat konkrétního hráče za konkrétního náhradníka. Typický pokyn zní „když od pětapadesáté minuty prohrávám o gól, hraj útočně“ nebo „v sedmdesáté stáhni Nováka a pošli tam Dvořáka“.",
+      "Každý pokyn sepne nejvýš jednou za zápas. Kdyby to tak nebylo, u vyrovnaného stavu by se ti taktika překlápěla každou minutu tam a zpátky a tým by se nedostal ke hře.",
+      "Asistent u lavičky nově ví, že mu nepatří všechna střídání. Sloty i hráče, na které máš pokyn, nechá být — takže se nestane, že kolem šedesáté minuty vystřídá třikrát a tvůj pokyn na pětasedmdesátou nemá čím provést. Zraněného ale stáhne vždycky, na toho se to nevztahuje.",
+      "Co se z lavičky odehrálo, si přečteš v průběhu zápasu. Změna taktiky i tvrdosti tam mají svůj řádek s časem a střídání se pozná jako plánované.",
+      "Pokyny patří k sestavě, takže si Sestava A, B i C nese vlastní. Když necháš sestavu přenést na další kolo, jdou s ní, a platí stejně v lize jako v poháru.",
+      "Pokyn na střídání s hráčem, který na zápas nedorazí nebo je zrovna zraněný, se přeskočí — nic se nerozbije, ale ani nic nestane. Když se ti takový hráč do pokynu připlete, hra ti to u něj rovnou napíše, ať to stihneš přehodit.",
+      "Pokynů může být nejvýš pět. Víc si trenér stejně nezapamatuje.",
+    ],
+  },
+  {
     date: "2026-08-26",
     emoji: "\u{1F31F}",
     title: "Práce s mládeží — z dorostence se dá vypiplat hráč do áčka",
