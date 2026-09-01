@@ -12,6 +12,7 @@ import { generatePlayerFace } from "../routes/teams";
 import { estimateMarketValue } from "../season/economy";
 import { logger } from "../lib/logger";
 import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
+import { overallRatingFromFlat } from "../skills/generator";
 
 // ═══════════════════════════════════════════════
 // HARDCODED VIRTUAL TEAMS PER DISTRICT
@@ -155,24 +156,37 @@ export async function generateAiListings(
     sum: (min, max) => rng.int(min, max),
   });
 
-  const posWeights: Record<string, Record<string, number>> = {
-    GK: { speed: 0.05, technique: 0.05, shooting: 0.02, passing: 0.08, heading: 0.05, defense: 0.15, goalkeeping: 0.60 },
-    DEF: { speed: 0.12, technique: 0.10, shooting: 0.05, passing: 0.12, heading: 0.18, defense: 0.35, goalkeeping: 0.08 },
-    MID: { speed: 0.12, technique: 0.20, shooting: 0.12, passing: 0.25, heading: 0.08, defense: 0.15, goalkeeping: 0.08 },
-    FWD: { speed: 0.18, technique: 0.18, shooting: 0.28, passing: 0.12, heading: 0.15, defense: 0.05, goalkeeping: 0.04 },
-  };
-  const w = posWeights[position] ?? posWeights.MID;
-  const overallRating = Math.round(skillKeys.reduce((sum, k) => sum + adjustedSkills[k] * (w[k] ?? 0.14), 0));
-
-  const askingPrice = calcAskingPrice(overallRating, rng);
-  const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
-  const avatar = generatePlayerFace({ age, bodyType: player.bodyType, ethnicity: player.ethnicity });
-
   // Stropy a talent MUSÍ do inzerátu. Bez nich vznikne po koupi hráč s prázdným
   // `skills_max` a nulovým talentem — schéma to nevyhodí (má DEFAULT), jen se
   // manažerovi ukáže prázdná karta Potenciálu u hráče, za kterého zaplatil.
   const skillCaps = stropyZDovednosti(rng, adjustedSkills, age);
   const hiddenTalent = talentPodleVeku(rng, age);
+  const physical = {
+    stamina: player.stamina,
+    strength: player.strength,
+    ...generateHeightWeight(rng, position, player.bodyType ?? "normal"),
+    preferredFoot: player.preferredFoot,
+  };
+
+  // Hodnocení TÝMŽ vzorcem jako zbytek hry.
+  //
+  // Dřív si inzerát počítal vlastní vážený průměr ze sedmi dovedností. Hra počítá
+  // z dvanácti atributů podle sdílených RATING_WEIGHTS, takže inzerát vůbec nezapočítal
+  // výdrž, sílu, přehled, kreativitu ani standardky — a ty bývají u generovaných hráčů
+  // nízké. Manažer koupil číslo, které mu první noční přepočet srazil.
+  //
+  // Naměřeno na produkci u všech 75 koupených hráčů: inzerát byl v průměru o 3,35 bodu
+  // vyšší, u 54 z nich nadhodnocený, nejvíc o 20. Cena přitom z toho čísla vychází,
+  // takže se za hráče přeplácelo. Nejhůř na tom byli brankáři — inzerát jim dával
+  // 60 % váhy na chytání, hra počítá i zbytek.
+  const overallRating = overallRatingFromFlat(position, adjustedSkills, physical, hiddenTalent, skillCaps)
+    // null = málo vyplněných atributů; po `doplnZbyleDovednosti` nemá nastat, ale hráč
+    // bez hodnocení by rozbil cenu i mzdu, tak ať radši spadne na průměr dovedností.
+    ?? Math.round(Object.values(adjustedSkills).reduce((a, b) => a + b, 0) / Object.keys(adjustedSkills).length);
+
+  const askingPrice = calcAskingPrice(overallRating, rng);
+  const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
+  const avatar = generatePlayerFace({ age, bodyType: player.bodyType, ethnicity: player.ethnicity });
 
   const playerData = JSON.stringify({
     firstName: player.firstName,
@@ -181,7 +195,7 @@ export async function generateAiListings(
     position,
     overallRating,
     skills: adjustedSkills,
-    physical: { stamina: player.stamina, strength: player.strength, ...generateHeightWeight(rng, position, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot },
+    physical,
     personality: { discipline: player.discipline, workRate: player.workRate, leadership: player.leadership },
     weeklyWage,
     avatar,
