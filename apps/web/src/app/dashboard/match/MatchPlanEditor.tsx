@@ -83,6 +83,17 @@ function defaultAction(kind: PlanAction["kind"], starters: PlayerOption[], bench
   return { kind: "sub", outPlayerId: starters[0].id, inPlayerId: bench[0].id };
 }
 
+/**
+ * Nabídka hráčů do střídání. Když uložený hráč v nabídce chybí (mezitím se dostal
+ * do základu, zranil se nebo se omluvil), přidá se jako výslovně nedostupná
+ * položka. Bez toho by select ukázal prvního hráče ze seznamu, uložená hodnota by
+ * zůstala jiná a uživatel by na obrazovce viděl někoho jiného, než co se uloží.
+ */
+function optionsWithCurrent(options: PlayerOption[], currentId: string): PlayerOption[] {
+  if (options.some((p) => p.id === currentId)) return options;
+  return [{ id: currentId, name: "— hráč není k dispozici —" }, ...options];
+}
+
 const selectClass =
   "w-full min-w-0 px-2.5 py-2 rounded-soft border-2 border-gray-200 bg-white text-sm font-heading text-ink";
 
@@ -117,10 +128,11 @@ export function MatchPlanEditor({ plan, onChange, starters, bench }: Props) {
         kdy podmínka nastane — každý pokyn jen jednou za zápas.
       </p>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         {plan.map((rule, i) => (
           <RuleRow
             key={rule.id}
+            poradi={i + 1}
             rule={rule}
             starters={starters}
             bench={bench}
@@ -147,8 +159,9 @@ export function MatchPlanEditor({ plan, onChange, starters, bench }: Props) {
 }
 
 function RuleRow({
-  rule, starters, bench, canSub, onChange, onRemove,
+  poradi, rule, starters, bench, canSub, onChange, onRemove,
 }: {
+  poradi: number;
   rule: MatchPlanRule;
   starters: PlayerOption[];
   bench: PlayerOption[];
@@ -162,165 +175,168 @@ function RuleRow({
     && (!starters.some((p) => p.id === action.outPlayerId) || !bench.some((p) => p.id === action.inPlayerId));
 
   return (
-    <div className="rounded-soft bg-gray-50 p-2.5">
-      <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
-
-          {/* Podmínka */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <label className="flex-1 min-w-0">
-              <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Když</span>
-              <select
-                className={selectClass}
-                value={triggerKeyOf(trigger)}
-                onChange={(e) => onChange({ ...rule, trigger: triggerFromKey(e.target.value as TriggerKey, trigger) })}
-              >
-                {TRIGGER_OPTIONS.map((o) => (
-                  <option key={o.key} value={o.key}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-
-            {trigger.kind === "score" && trigger.state !== "drawing" && (
-              <label className="sm:w-32 shrink-0">
-                <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Rozdíl</span>
-                <select
-                  className={selectClass}
-                  value={trigger.byAtLeast ?? 1}
-                  onChange={(e) => onChange({ ...rule, trigger: { ...trigger, byAtLeast: Number(e.target.value) } })}
-                >
-                  <option value={1}>o gól a víc</option>
-                  <option value={2}>o dva a víc</option>
-                  <option value={3}>o tři a víc</option>
-                </select>
-              </label>
-            )}
-
-            {trigger.kind === "condition" && (
-              <label className="sm:w-32 shrink-0">
-                <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Kondice pod</span>
-                <select
-                  className={selectClass}
-                  value={trigger.below}
-                  onChange={(e) => onChange({ ...rule, trigger: { kind: "condition", below: Number(e.target.value) } })}
-                >
-                  {/* Uložená hodnota mimo nabídku (nastavená přes API) by se jinak
-                      zobrazila jako první položka a při uložení se tiše změnila. */}
-                  {[...new Set([20, 30, 40, 50, 60, trigger.below])].sort((a, b) => a - b).map((v) => (
-                    <option key={v} value={v}>{v} %</option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            <label className="sm:w-28 shrink-0">
-              <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Od minuty</span>
-              {/* Číselné pole, ne výběr: select nabízející jen kulaté minuty by uloženou
-                  padesátou tiše zobrazil jako první položku a při dalším uložení ji přepsal. */}
-              <input
-                type="number"
-                inputMode="numeric"
-                min={PLAN_MINUTE_MIN}
-                max={PLAN_MINUTE_MAX}
-                className={selectClass}
-                value={rule.fromMinute}
-                onChange={(e) => {
-                  const raw = Number(e.target.value);
-                  if (!Number.isFinite(raw)) return;
-                  const minute = Math.min(PLAN_MINUTE_MAX, Math.max(PLAN_MINUTE_MIN, Math.round(raw)));
-                  onChange({ ...rule, fromMinute: minute });
-                }}
-              />
-            </label>
-          </div>
-
-          {/* Akce */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <label className="flex-1 min-w-0">
-              <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Pak</span>
-              <select
-                className={selectClass}
-                value={action.kind}
-                onChange={(e) => {
-                  const next = defaultAction(e.target.value as PlanAction["kind"], starters, bench);
-                  if (next) onChange({ ...rule, action: next });
-                }}
-              >
-                {ACTION_OPTIONS.map((o) => (
-                  <option key={o.key} value={o.key} disabled={o.key === "sub" && !canSub}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-
-            {action.kind === "tactic" && (
-              <label className="flex-1 min-w-0">
-                <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Na</span>
-                <select
-                  className={selectClass}
-                  value={action.tactic}
-                  onChange={(e) => onChange({ ...rule, action: { kind: "tactic", tactic: e.target.value as typeof PLAN_TACTICS[number] } })}
-                >
-                  {PLAN_TACTICS.map((t) => (
-                    <option key={t} value={t}>{PLAN_TACTIC_LABELS[t]}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            {action.kind === "hardness" && (
-              <label className="flex-1 min-w-0">
-                <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Na</span>
-                <select
-                  className={selectClass}
-                  value={action.hardness}
-                  onChange={(e) => onChange({ ...rule, action: { kind: "hardness", hardness: e.target.value as typeof PLAN_HARDNESS[number] } })}
-                >
-                  {PLAN_HARDNESS.map((h) => (
-                    <option key={h} value={h}>{PLAN_HARDNESS_LABELS[h]}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            {action.kind === "sub" && (
-              <>
-                <label className="flex-1 min-w-0">
-                  <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Stáhnout</span>
-                  <select
-                    className={selectClass}
-                    value={action.outPlayerId}
-                    onChange={(e) => onChange({ ...rule, action: { ...action, outPlayerId: e.target.value } })}
-                  >
-                    {starters.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex-1 min-w-0">
-                  <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Poslat na hřiště</span>
-                  <select
-                    className={selectClass}
-                    value={action.inPlayerId}
-                    onChange={(e) => onChange({ ...rule, action: { ...action, inPlayerId: e.target.value } })}
-                  >
-                    {bench.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            )}
-          </div>
-        </div>
-
+    // Rámeček a vlastní hlavička s pořadím: bez nich splývaly čtyři řádky selectů
+    // v jednu plochu a nebylo poznat, kde jeden pokyn končí a další začíná.
+    <div className="rounded-soft bg-gray-50 border border-gray-200 p-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-micro font-heading uppercase tracking-wide text-muted-light">
+          Pokyn {poradi}
+        </span>
         <button
           type="button"
           onClick={onRemove}
-          aria-label="Smazat pokyn"
-          className="shrink-0 w-8 h-8 rounded-soft text-muted hover:text-card-red hover:bg-white transition-colors text-base leading-none"
+          aria-label={`Smazat pokyn ${poradi}`}
+          className="shrink-0 w-7 h-7 rounded-soft text-muted hover:text-card-red hover:bg-white transition-colors text-base leading-none"
         >
           ✕
         </button>
+      </div>
+      <div className="flex flex-col gap-2">
+        {/* Podmínka */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <label className="flex-1 min-w-0">
+            <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Když</span>
+            <select
+              className={selectClass}
+              value={triggerKeyOf(trigger)}
+              onChange={(e) => onChange({ ...rule, trigger: triggerFromKey(e.target.value as TriggerKey, trigger) })}
+            >
+              {TRIGGER_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+
+          {trigger.kind === "score" && trigger.state !== "drawing" && (
+            <label className="sm:w-32 shrink-0">
+              <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Rozdíl</span>
+              <select
+                className={selectClass}
+                value={trigger.byAtLeast ?? 1}
+                onChange={(e) => onChange({ ...rule, trigger: { ...trigger, byAtLeast: Number(e.target.value) } })}
+              >
+                <option value={1}>o gól a víc</option>
+                <option value={2}>o dva a víc</option>
+                <option value={3}>o tři a víc</option>
+              </select>
+            </label>
+          )}
+
+          {trigger.kind === "condition" && (
+            <label className="sm:w-32 shrink-0">
+              <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Kondice pod</span>
+              <select
+                className={selectClass}
+                value={trigger.below}
+                onChange={(e) => onChange({ ...rule, trigger: { kind: "condition", below: Number(e.target.value) } })}
+              >
+                {/* Uložená hodnota mimo nabídku (nastavená přes API) by se jinak
+                    zobrazila jako první položka a při uložení se tiše změnila. */}
+                {[...new Set([20, 30, 40, 50, 60, trigger.below])].sort((a, b) => a - b).map((v) => (
+                  <option key={v} value={v}>{v} %</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <label className="sm:w-28 shrink-0">
+            <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Od minuty</span>
+            {/* Číselné pole, ne výběr: select nabízející jen kulaté minuty by uloženou
+                padesátou tiše zobrazil jako první položku a při dalším uložení ji přepsal. */}
+            <input
+              type="number"
+              inputMode="numeric"
+              min={PLAN_MINUTE_MIN}
+              max={PLAN_MINUTE_MAX}
+              className={selectClass}
+              value={rule.fromMinute}
+              onChange={(e) => {
+                const raw = Number(e.target.value);
+                if (!Number.isFinite(raw)) return;
+                const minute = Math.min(PLAN_MINUTE_MAX, Math.max(PLAN_MINUTE_MIN, Math.round(raw)));
+                onChange({ ...rule, fromMinute: minute });
+              }}
+            />
+          </label>
+        </div>
+
+        {/* Akce */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <label className="flex-1 min-w-0">
+            <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Pak</span>
+            <select
+              className={selectClass}
+              value={action.kind}
+              onChange={(e) => {
+                const next = defaultAction(e.target.value as PlanAction["kind"], starters, bench);
+                if (next) onChange({ ...rule, action: next });
+              }}
+            >
+              {ACTION_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key} disabled={o.key === "sub" && !canSub}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+
+          {action.kind === "tactic" && (
+            <label className="flex-1 min-w-0">
+              <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Na</span>
+              <select
+                className={selectClass}
+                value={action.tactic}
+                onChange={(e) => onChange({ ...rule, action: { kind: "tactic", tactic: e.target.value as typeof PLAN_TACTICS[number] } })}
+              >
+                {PLAN_TACTICS.map((t) => (
+                  <option key={t} value={t}>{PLAN_TACTIC_LABELS[t]}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {action.kind === "hardness" && (
+            <label className="flex-1 min-w-0">
+              <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Na</span>
+              <select
+                className={selectClass}
+                value={action.hardness}
+                onChange={(e) => onChange({ ...rule, action: { kind: "hardness", hardness: e.target.value as typeof PLAN_HARDNESS[number] } })}
+              >
+                {PLAN_HARDNESS.map((h) => (
+                  <option key={h} value={h}>{PLAN_HARDNESS_LABELS[h]}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {action.kind === "sub" && (
+            <>
+              <label className="flex-1 min-w-0">
+                <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Stáhnout</span>
+                <select
+                  className={selectClass}
+                  value={action.outPlayerId}
+                  onChange={(e) => onChange({ ...rule, action: { ...action, outPlayerId: e.target.value } })}
+                >
+                  {optionsWithCurrent(starters, action.outPlayerId).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex-1 min-w-0">
+                <span className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">Poslat na hřiště</span>
+                <select
+                  className={selectClass}
+                  value={action.inPlayerId}
+                  onChange={(e) => onChange({ ...rule, action: { ...action, inPlayerId: e.target.value } })}
+                >
+                  {optionsWithCurrent(bench, action.inPlayerId).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+        </div>
       </div>
 
       {chybiHrac && (
