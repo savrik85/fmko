@@ -142,6 +142,25 @@ function timeAgo(iso: string): string {
 
 interface LeagueOption { id: string; name: string; district: string; team_count: number }
 
+/**
+ * Odstavce novinové sazby.
+ *
+ * Odrážka se pozná podle puntíku a sází se jinak než próza — nezarovnává se
+ * do bloku a nesmí se lámat přes sloupec. Zápis ze zasedání grémia je jeden
+ * dlouhý seznam bodů a bez tohohle se usnesení rozpůlilo mezi dva sloupce.
+ */
+function NovinoveOdstavce({ body }: { body: string }) {
+  return (
+    <>
+      {body.split("\n").filter(Boolean).map((p, i) => (
+        <p key={i} className={p.trimStart().startsWith("\u2022") ? "np-bod" : undefined}>
+          {renderMarkdown(p)}
+        </p>
+      ))}
+    </>
+  );
+}
+
 export default function NewsPage() {
   const { teamId } = useTeam();
   const [articles, setArticles] = useState<Article[]>([]);
@@ -411,9 +430,7 @@ export default function NewsPage() {
                     </h2>
                     <Podpis clanek={leadStory} stred />
                     <div className="np-text np-sloupce np-sloupce-3 np-iniciala text-[15px] mt-3">
-                      {leadStory.body.split("\n").filter(Boolean).map((p, i) => (
-                        <p key={i}>{renderMarkdown(p)}</p>
-                      ))}
+                      <NovinoveOdstavce body={leadStory.body} />
                     </div>
                   </div>
                 </ArticleWrapper>
@@ -452,9 +469,7 @@ export default function NewsPage() {
               <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{secondaryStory.headline}</h2>
               <Podpis clanek={secondaryStory} stred />
               <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
-                {secondaryStory.body.split("\n").filter(Boolean).map((p, i) => (
-                  <p key={i}>{renderMarkdown(p)}</p>
-                ))}
+                <NovinoveOdstavce body={secondaryStory.body} />
               </div>
             </section>
           )}
@@ -466,9 +481,7 @@ export default function NewsPage() {
               <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{roundSummaryStory.headline}</h2>
               <Podpis clanek={roundSummaryStory} stred />
               <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
-                {roundSummaryStory.body.split("\n").filter(Boolean).map((p, i) => (
-                  <p key={i}>{renderMarkdown(p)}</p>
-                ))}
+                <NovinoveOdstavce body={roundSummaryStory.body} />
               </div>
               <div className="flex items-center justify-center gap-3 mt-4">
                 <span className="text-micro text-muted italic">{timeAgo(roundSummaryStory.date)}</span>
@@ -484,9 +497,7 @@ export default function NewsPage() {
               <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{ur.headline}</h2>
               <Podpis clanek={ur} stred />
               <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
-                {ur.body.split("\n").filter(Boolean).map((p, i) => (
-                  <p key={i}>{renderMarkdown(p)}</p>
-                ))}
+                <NovinoveOdstavce body={ur.body} />
               </div>
               {ur.photos && ur.photos.length > 0 && (
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4 mt-5">

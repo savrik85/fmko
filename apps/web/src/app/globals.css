@@ -827,6 +827,23 @@ body { touch-action: manipulation; }
   .np-sloupce-3 { column-count: 3; }
 }
 
+/* Odrážka v novinové sazbě.
+   Bod programu není odstavec: nesmí se lámat přes sloupec (půlka usnesení
+   dole v prvním sloupci a půlka nahoře ve druhém se nedá číst) a nezarovnává
+   se do bloku, protože krátký řádek by se roztáhl na díry mezi slovy.
+   Odsazení je visící, aby text pod puntíkem lícoval. */
+.np-text .np-bod {
+  text-align: left;
+  hyphens: manual;
+  -webkit-hyphens: manual;
+  text-indent: -0.85em;
+  padding-left: 0.85em;
+  margin-top: 0.35rem;
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+}
+
 /* Iniciála prvního odstavce hlavního článku */
 .np-iniciala > p:first-of-type::first-letter {
   float: left;
