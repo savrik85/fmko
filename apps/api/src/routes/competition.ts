@@ -1868,4 +1868,23 @@ competitionRouter.post("/admin/competition/:leagueId/meeting", async (c) => {
   return c.json({ ok: true, held: true, ...out });
 });
 
+/**
+ * Dopsání zasedání, které se nedokončilo.
+ *
+ * Návrhy se uzavřely a jejich důsledky platí, ale běh umřel dřív, než uložil
+ * program — soutěž tak má rozhodnutí, o kterých se nikde nedočte. Skládá se
+ * zpátky z návrhů podle `closed_game_date`, nic nepřehlasovává.
+ */
+competitionRouter.post("/admin/competition/:leagueId/rebuild-meeting", async (c) => {
+  const leagueId = c.req.param("leagueId");
+  const gameDate = c.req.query("gameDate");
+  if (!gameDate) return c.json({ error: "Chybí gameDate" }, 400);
+  const notify = c.req.query("notify") === "1";
+
+  const { rebuildMeeting } = await import("../competition/meeting");
+  const out = await rebuildMeeting(c.env.DB, leagueId, gameDate, notify);
+  if (!out) return c.json({ ok: true, rebuilt: false, reason: "K tomu dni není co dopsat." });
+  return c.json({ ok: true, rebuilt: true, notified: notify, ...out });
+});
+
 export default competitionRouter;

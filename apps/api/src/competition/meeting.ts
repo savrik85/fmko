@@ -578,13 +578,20 @@ async function notifyMeeting(
 
   const n = hlasovane.length;
   const bodu = n === 1 ? "bod" : n <= 4 ? "body" : "bodů";
-  const program = n === 0
-    ? `Zasedání grémia soutěže (${leagueName}) nemělo na programu žádné hlasování.`
-    : `Zasedání grémia soutěže (${leagueName}) projednalo ${n} ${bodu}: `
-      + `${parts.join(", ") || "bez rozhodnutí"}.`;
-  const pokuty = pokut === 0 ? ""
-    : ` K tomu ${pokut === 1 ? "padla 1 pokuta" : pokut <= 4 ? `padly ${pokut} pokuty` : `padlo ${pokut} pokut`} za porušení pravidel soutěže.`;
-  const spolecne = `${program}${pokuty}`;
+  const pokutaSlovem = pokut === 1 ? "1 pokuta"
+    : pokut <= 4 ? `${pokut} pokuty` : `${pokut} pokut`;
+  const padla = pokut === 1 ? "padla" : pokut <= 4 ? "padly" : "padlo";
+  const uvod = `Zasedání grémia soutěže (${leagueName})`;
+
+  // Když se o ničem nehlasovalo, je pokuta celý program, ne přídavek. Věta
+  // „nemělo na programu žádné hlasování. K tomu padla 1 pokuta" nedávala smysl —
+  // k čemu k tomu, když nebylo nic.
+  const spolecne = n === 0
+    ? (pokut === 0
+      ? `${uvod} skončilo bez rozhodnutí.`
+      : `${uvod} řešilo jen porušení pravidel soutěže — ${padla} ${pokutaSlovem}.`)
+    : `${uvod} projednalo ${n} ${bodu}: ${parts.join(", ") || "bez rozhodnutí"}.`
+      + (pokut === 0 ? "" : ` K tomu ${padla} ${pokutaSlovem} za porušení pravidel soutěže.`);
 
   // Co se týká přímo tebe. Bez tohohle dostal nově zvolený prezident tentýž
   // obecný souhrn jako všichni ostatní a o svém zvolení se nedozvěděl.
@@ -639,6 +646,158 @@ async function notifyMeeting(
     await sendSystemSMS(db, teamId, SMS_ROLE, body)
       .catch((e) => logger.warn({ module: M }, `SMS o schůzi pro tým ${teamId}`, e));
   }
+}
+
+/**
+ * Složí zápis ze zasedání zpět z toho, co je v databázi.
+ *
+ * Zasedání zapisuje svůj claim na začátku, ale zápis až na konci. Když běh mezi
+ * tím umře — na produkci se to stalo 2. 9. 2026 — zůstanou návrhy uzavřené
+ * a jejich důsledky platí, jenže zasedání po sobě nenechá ani řádek: žádný
+ * program, žádný článek, žádná zpráva klubům. Znovuspuštění to nespraví, protože
+ * uzavřené návrhy už nejsou `open` a druhý běh je nenajde.
+ *
+ * Tahle funkce proto nečte návrhy podle stavu, ale podle `closed_game_date` —
+ * tedy přesně ty, které to zasedání rozhodlo. Nic nerozhoduje a nic nemění na
+ * výsledcích; jen z nich znovu poskládá program, přepočítá čísla a nechá napsat
+ * článek. Volat se smí opakovaně.
+ */
+export async function rebuildMeeting(
+  db: D1Database, leagueId: string, gameDate: string,
+  /** Rozeslat klubům i opravenou zprávu? Ve výchozím stavu ne — zasedání už
+   *  jednou psalo a druhá zpráva do schránky patří jen tehdy, když ta první
+   *  lhala a někdo se tak rozhodl. */
+  notify = false,
+): Promise<{ items: number; passed: number; newsId: string | null } | null> {
+  const meta = await loadLeagueMeta(db, leagueId);
+  if (!meta) return null;
+
+  const rows = await db.prepare(
+    `SELECT id, kind, title, status, votes_pro, votes_proti, votes_zdrzel,
+            result_note, effective_from_season, proposed_by_team_id, target_team_id
+       FROM competition_proposals
+      WHERE league_id = ? AND closed_game_date = ?
+      ORDER BY closed_at ASC`
+  ).bind(leagueId, gameDate).all<{
+    id: string; kind: string; title: string; status: string;
+    votes_pro: number; votes_proti: number; votes_zdrzel: number;
+    result_note: string | null; effective_from_season: number | null;
+    proposed_by_team_id: string; target_team_id: string | null;
+  }>().catch((e) => { logger.warn({ module: M }, `návrhy zasedání ${gameDate}`, e); return { results: [] }; });
+
+  const stats = await voterStats(db, leagueId);
+  const results: Array<Record<string, unknown>> = rows.results.map((p) => ({
+    id: p.id, kind: p.kind, title: p.title, status: p.status,
+    pro: p.votes_pro, proti: p.votes_proti, zdrzel: p.votes_zdrzel,
+    quorum: stats.quorumNeeded,
+    effectiveFromSeason: p.effective_from_season,
+    proposedByTeamId: p.proposed_by_team_id, targetTeamId: p.target_team_id,
+    resultNote: p.result_note ?? "",
+  }));
+
+  // Volby, které to zasedání rozhodlo. Tajné zůstávají — jen jméno a poznámka.
+  const volby = await db.prepare(
+    `SELECT e.role, e.result_note, e.winner_team_id, t.name AS team_name
+       FROM competition_elections e
+       LEFT JOIN teams t ON t.id = e.winner_team_id
+      WHERE e.league_id = ? AND e.closed_game_date = ?`
+  ).bind(leagueId, gameDate).all<{
+    role: string; result_note: string | null; winner_team_id: string | null; team_name: string | null;
+  }>().catch((e) => { logger.warn({ module: M }, `volby zasedání ${gameDate}`, e); return { results: [] }; });
+
+  for (const v of volby.results) {
+    results.push({
+      kind: "election",
+      title: `Volba: ${ROLE_LABEL[v.role as OfficialRole] ?? v.role}`,
+      status: v.winner_team_id ? "passed" : "no_quorum",
+      resultNote: v.result_note ?? "",
+      winnerTeamId: v.winner_team_id,
+      zvolen: v.team_name, roleLabel: ROLE_LABEL[v.role as OfficialRole] ?? v.role, role: v.role,
+    });
+  }
+
+  // Pokuty za porušená pravidla — ty zasedání udělilo strojově, ne hlasováním.
+  const pokuty = await db.prepare(
+    `SELECT s.amount, s.reason, s.evidence, s.team_id, t.name AS team_name
+       FROM competition_sanctions s JOIN teams t ON t.id = s.team_id
+      WHERE s.league_id = ? AND s.game_date = ? AND s.issued_by = 'rule'`
+  ).bind(leagueId, gameDate).all<{
+    amount: number; reason: string; evidence: string | null; team_id: string; team_name: string;
+  }>().catch((e) => { logger.warn({ module: M }, `pokuty zasedání ${gameDate}`, e); return { results: [] }; });
+
+  for (const h of pokuty.results) {
+    results.push({
+      kind: "compliance",
+      title: `${h.reason} — ${h.team_name}`,
+      status: "passed",
+      resultNote: `${h.evidence ?? ""} Pokuta ${h.amount.toLocaleString("cs")} Kč.`.trim(),
+      teamId: h.team_id,
+    });
+  }
+
+  if (results.length === 0) return null;
+
+  const passedCount = results.filter(
+    (r) => hlasovanyBod(String(r.kind ?? "")) && r.status === "passed",
+  ).length;
+  const balance = await recomputeBalance(db, leagueId, gameDate);
+  const attendance = {
+    voters: stats.voters.length, active: stats.active.length, quorum: stats.quorumNeeded,
+  };
+
+  const ucastniku = await db.prepare(
+    `SELECT COUNT(DISTINCT b.team_id) AS n
+       FROM competition_ballots b
+       JOIN competition_proposals p ON p.id = b.proposal_id
+      WHERE p.league_id = ? AND p.closed_game_date = ?`
+  ).bind(leagueId, gameDate).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, `účast na zasedání ${leagueId}`, e); return null; });
+
+  await db.prepare(
+    `INSERT INTO competition_meetings (id, league_id, season_number, game_date,
+        proposals_closed, proposals_passed, attendance, balance_after, summary)
+     VALUES (?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(league_id, game_date) DO UPDATE SET
+       proposals_closed = excluded.proposals_closed,
+       proposals_passed = excluded.proposals_passed,
+       attendance = excluded.attendance,
+       balance_after = excluded.balance_after,
+       summary = excluded.summary`
+  ).bind(
+    crypto.randomUUID(), leagueId, meta.season_number, gameDate,
+    results.length, passedCount, JSON.stringify(attendance), balance, JSON.stringify(results),
+  ).run();
+
+  // Starý článek (typicky ten zavádějící z neúplného běhu) nahradíme novým.
+  const stary = await db.prepare(
+    "SELECT news_id FROM competition_meetings WHERE league_id = ? AND game_date = ?"
+  ).bind(leagueId, gameDate).first<{ news_id: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "starý článek zasedání", e); return null; });
+  if (stary?.news_id) {
+    await db.prepare("DELETE FROM news WHERE id = ?").bind(stary.news_id).run()
+      .catch((e) => logger.warn({ module: M }, "smazání neúplného článku", e));
+  }
+
+  let newsId: string | null = null;
+  try {
+    const { publikujZapis, nactiProtiHlasy, mluvci } = await import("./minutes");
+    newsId = await publikujZapis(db, {
+      leagueId, leagueName: meta.name, seasonNumber: meta.season_number, gameDate,
+      items: results as unknown as Array<{ title: string; status: string }>,
+      attendance, hlasovalo: ucastniku?.n ?? 0, balance,
+      protiHlasy: await nactiProtiHlasy(db, leagueId, gameDate),
+      prezident: await mluvci(db, leagueId, meta.season_number),
+    });
+    await db.prepare("UPDATE competition_meetings SET news_id = ? WHERE league_id = ? AND game_date = ?")
+      .bind(newsId, leagueId, gameDate).run();
+  } catch (e) {
+    logger.warn({ module: M }, `článek k dopsanému zasedání ${leagueId}`, e);
+  }
+
+  if (notify) await notifyMeeting(db, leagueId, meta.name, results, stats.voters);
+  logger.info({ module: M }, `soutěž ${leagueId}: zasedání ${gameDate} dopsáno — ${results.length} bodů`);
+
+  return { items: results.length, passed: passedCount, newsId };
 }
 
 export { PROPOSAL_KINDS };
