@@ -65,9 +65,11 @@ export function BottomNav() {
         .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
         .catch((e) => console.error("fetch votes:", e));
       // Grémium je taky pod Více — bez tohohle by hráč na mobilu neviděl,
-      // že se o něčem hlasuje a zasedání mu propadne.
-      apiFetch<{ toVote: number }>(`/api/teams/${teamId}/competition/pending`)
-        .then((p) => setGremiumCount(p.toVote ?? 0))
+      // že se o něčem hlasuje a zasedání mu propadne. Nepřečtená zasedání se
+      // počítají taky: hlasování odznak zhasl hned po odevzdání hlasu a jak to
+      // dopadlo, se hráč nedozvěděl.
+      apiFetch<{ toVote: number; unseenMeetings: number }>(`/api/teams/${teamId}/competition/pending`)
+        .then((p) => setGremiumCount((p.toVote ?? 0) + (p.unseenMeetings ?? 0)))
         .catch((e) => console.error("fetch gremium pending:", e));
       // Sázky jsou taky pod Více — vyhodnocený tiket by jinak zůstal nepovšimnut.
       apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`)

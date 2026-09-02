@@ -29,7 +29,7 @@ import {
 } from "../competition/board";
 import {
   CHAIR_FINE_LIMIT, FINE_MAX, FINE_MIN, OFFENCES,
-  canChairFine, canFine, collectEvidence, issueSanction, pitchThresholdFor,
+  canChairFine, canFine, collectEvidence, evidenceLimitsFor, issueSanction,
 } from "../competition/discipline";
 import {
   MIN_ACTIVE_REFEREES, canBanReferee, refereeStandings,
@@ -337,6 +337,79 @@ competitionRouter.get("/competition/:leagueId/meetings", async (c) => {
 });
 
 /**
+ * Vývěska grémia — rozhodnutí za sebou, ne po zasedáních.
+ *
+ * Zápisy jsou protokol: kdo chce vědět, jak dopadl konkrétní čtvrtek, najde ho tam.
+ * Tohle je opak — plochý sled toho, co grémium rozhodlo, aby se dal pověsit na
+ * stránku Liga, kam hráč chodí tak jako tak. Bez toho se rozhodnutí schovávala
+ * tři prokliky hluboko a soutěž si měnila sazebník, aniž si toho kdokoli všiml.
+ */
+competitionRouter.get("/competition/:leagueId/decisions", async (c) => {
+  const limit = Math.min(Number(c.req.query("limit")) || 12, 50);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT game_date, season_number, summary
+       FROM competition_meetings
+      WHERE league_id = ? AND summary IS NOT NULL
+      ORDER BY game_date DESC LIMIT 12`
+  ).bind(c.req.param("leagueId")).all<{ game_date: string; season_number: number; summary: string }>()
+    .catch((e) => { logger.warn({ module: M }, "vývěska grémia", e); return { results: [] }; });
+
+  const decisions: Array<Record<string, unknown>> = [];
+  for (const m of rows.results) {
+    let items: Array<Record<string, unknown>> = [];
+    try { items = JSON.parse(m.summary || "[]") as Array<Record<string, unknown>>; }
+    catch (e) { logger.warn({ module: M }, `zápis ze zasedání ${m.game_date} nejde přečíst`, e); continue; }
+
+    for (const it of items) {
+      decisions.push({
+        gameDate: m.game_date,
+        seasonNumber: m.season_number,
+        kind: it.kind ?? null,
+        title: it.title,
+        status: it.status,
+        resultNote: it.resultNote ?? null,
+        pro: typeof it.pro === "number" ? it.pro : null,
+        proti: typeof it.proti === "number" ? it.proti : null,
+        zdrzel: typeof it.zdrzel === "number" ? it.zdrzel : null,
+        effectiveFromSeason: it.effectiveFromSeason ?? null,
+      });
+    }
+    if (decisions.length >= limit) break;
+  }
+
+  return c.json({ decisions: decisions.slice(0, limit) });
+});
+
+/**
+ * Odklepnutí vývěsky — od téhle chvíle klub o zasedáních ví.
+ *
+ * Ukládá se herní datum posledního zasedání, ne čas čtení: rollover vrací herní
+ * hodiny zpět a absolutní razítko by po přechodu sezóny označilo za nové i to,
+ * co klub dávno viděl.
+ */
+competitionRouter.post("/teams/:teamId/competition/decisions/seen", async (c) => {
+  const teamId = c.req.param("teamId");
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ ok: true });
+
+  const last = await c.env.DB.prepare(
+    "SELECT MAX(game_date) AS d FROM competition_meetings WHERE league_id = ?"
+  ).bind(leagueId).first<{ d: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "poslední zasedání", e); return null; });
+  if (!last?.d) return c.json({ ok: true });
+
+  await c.env.DB.prepare(
+    `INSERT INTO competition_meeting_reads (league_id, team_id, last_seen_gd)
+     VALUES (?,?,?)
+     ON CONFLICT(league_id, team_id) DO UPDATE SET last_seen_gd = excluded.last_seen_gd`
+  ).bind(leagueId, teamId, last.d).run()
+    .catch((e) => logger.warn({ module: M }, `odklepnutí vývěsky pro ${teamId}`, e));
+
+  return c.json({ ok: true, seenUpTo: last.d });
+});
+
+/**
  * Kolik bodů čeká na hlas tvého klubu. Drží odznak v menu, takže musí být levné —
  * dva COUNTy, žádné načítání celé agendy.
  */
@@ -367,9 +440,22 @@ competitionRouter.get("/teams/:teamId/competition/pending", async (c) => {
   ).bind(leagueId, teamId).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "počet čekajících voleb", e); return null; });
 
+  // Rozhodnutí, která klub ještě neviděl. Odznak uměl počítat jen to, o čem se
+  // teprve hlasuje — výsledek zasedání se pak nikde nepřipomněl a soutěž si
+  // měnila sazebník, aniž si toho kdokoli všiml.
+  const unseen = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM competition_meetings m
+      WHERE m.league_id = ?
+        AND m.game_date > COALESCE(
+          (SELECT last_seen_gd FROM competition_meeting_reads
+            WHERE league_id = ? AND team_id = ?), '')`
+  ).bind(leagueId, leagueId, teamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, "nepřečtená zasedání", e); return null; });
+
   return c.json({
     open: row?.open ?? 0,
     toVote: (row?.to_vote ?? 0) + (elections?.n ?? 0),
+    unseenMeetings: unseen?.n ?? 0,
   });
 });
 
@@ -716,14 +802,14 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
 
   // Důkazy se sbírají pro každý klub zvlášť — formulář pak nenabídne skutek,
   // který se nedá doložit. Hranice stavu hřiště je ta, kterou si soutěž odhlasovala.
-  const pitchThreshold = await pitchThresholdFor(c.env.DB, leagueId, meta.season_number);
+  const limity = await evidenceLimitsFor(c.env.DB, leagueId, meta.season_number);
   const targets = [];
   for (const club of clubs.results) {
     targets.push({
       teamId: club.id, teamName: club.name,
       managerName: club.manager_name,
       managerAvatar: safeJson(club.manager_avatar),
-      evidence: await collectEvidence(c.env.DB, club.id, pitchThreshold),
+      evidence: await collectEvidence(c.env.DB, club.id, limity),
     });
   }
 
@@ -787,7 +873,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
   // Bez důkazu se dá podat jen volná položka — a ta má tvrdší podmínky.
   let evidence: string | null = null;
   if (!offence.freeText) {
-    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await pitchThresholdFor(c.env.DB, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
+    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await evidenceLimitsFor(c.env.DB, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
     if (!found) return c.json({ error: "Tenhle skutek se u toho klubu nedá doložit." }, 400);
     evidence = found.detail;
   } else if (!body.note || body.note.trim().length < 10) {
@@ -910,7 +996,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) 
 
   let evidence: string | null = null;
   if (!offence.freeText) {
-    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await pitchThresholdFor(c.env.DB, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
+    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await evidenceLimitsFor(c.env.DB, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
     if (!found) return c.json({ error: "Tenhle skutek se u toho klubu nedá doložit." }, 400);
     evidence = found.detail;
   }

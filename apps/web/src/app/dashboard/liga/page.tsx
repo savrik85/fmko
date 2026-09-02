@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs } from "@/components/ui";
+import { GremiumVyveska } from "@/components/dashboard/gremium-vyveska";
 import type { BadgePattern } from "@/components/ui";
 
 // ═══ Types ═══
@@ -342,6 +343,10 @@ function LigaPage() {
 
       {/* Tab content */}
       {tab === "tabulka" && <StandingsTab standings={standings} teamId={teamId!} />}
+      {/* Vývěska visí pod tabulkou vlastní soutěže — v cizí lize by rozhodnutí,
+          na která nemáš vliv, jen zabírala místo. Sama se schová, když liga
+          samosprávu nemá. */}
+      {!isOtherLeague && tab === "tabulka" && <GremiumVyveska />}
       {!isOtherLeague && tab === "rozpis" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("rozpis")} teamId={teamId!} showAll />}
       {!isOtherLeague && tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
       {!isOtherLeague && tab === "statistiky" && <StatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}

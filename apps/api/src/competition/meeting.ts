@@ -18,7 +18,7 @@
 import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
 import {
-  DEFAULT_RULES, PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY, type OfficialRole,
+  DEFAULT_RULES, PROPOSAL_KINDS, ROLE_LABEL, SIMPLE_MAJORITY, hlasovanyBod, type OfficialRole,
 } from "./defaults";
 import type { GrantKind } from "./grants";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
@@ -168,6 +168,10 @@ export async function runOneMeeting(
       resultNote: rules.fine_rule > 0
         ? `${h.detail} Pokuta ${rules.fine_rule.toLocaleString("cs")} Kč.`
         : `${h.detail} Sazba pokuty je nula, takže zůstalo u napomenutí.`,
+      // Bez id se pokutovanému klubu nedalo napsat — hlášení o zasedání mu
+      // přišlo stejně obecné jako všem ostatním a o vlastní pokutě se z něj
+      // nedozvěděl.
+      teamId: h.teamId,
     } as unknown as Record<string, unknown>);
     closedCount++;
   }
@@ -281,6 +285,13 @@ interface DecidedProposal {
   zdrzel: number;
   quorum: number;
   effectiveFromSeason: number | null;
+  /** Komu o výsledku napsat. Bez těchhle dvou polí zůstalo hlášení obecné a
+   *  navrhovatel se o osudu vlastního návrhu nedozvěděl. */
+  proposedByTeamId: string;
+  targetTeamId: string | null;
+  /** Výsledek slovem. Do zápisu i do článku — poměr „4:3" sám o sobě neřekne,
+   *  jestli návrh prošel: u kvalifikované většiny je to zamítnutí. */
+  resultNote: string;
 }
 
 /**
@@ -366,7 +377,16 @@ async function closeProposal(
   // Sazebníkové změny se aplikují až při rolloveru — competition_rules se mid-season
   // zásadně needitují. Okamžitý dopad mají jen sankce, odvolání a bany rozhodčích.
   if (status === "passed") {
-    await applyImmediateEffect(db, p, gameDate);
+    const ucinek = await applyImmediateEffect(db, p, gameDate);
+    // Přijatý návrh, jehož důsledek spadl, vypadal navenek úplně stejně jako
+    // ten, co prošel — chyba skončila v logu a klub se dál řídil rozhodnutím,
+    // které nikdy nezačalo platit. Do zápisu proto patří i tohle.
+    if (!ucinek) {
+      note += " Účinek se zatím nepodařilo uplatnit, řeší se.";
+      await db.prepare("UPDATE competition_proposals SET result_note = ? WHERE id = ?")
+        .bind(note, p.id).run()
+        .catch((e) => logger.warn({ module: M }, `poznámka o neuplatněném účinku ${p.id}`, e));
+    }
     if (p.deposit > 0) await refundDeposit(db, p, gameDate);
   }
 
@@ -374,6 +394,8 @@ async function closeProposal(
     id: p.id, kind: p.kind, title: p.title, status,
     pro, proti, zdrzel, quorum: quorumNeeded,
     effectiveFromSeason: p.effective_from_season,
+    proposedByTeamId: p.proposed_by_team_id, targetTeamId: p.target_team_id,
+    resultNote: note,
   };
 }
 
@@ -385,13 +407,17 @@ async function closeProposal(
 /**
  * Důsledky návrhů, které platí okamžitě. Sazebník sem nepatří — ten čeká na rollover.
  * Každá větev má vlastní idempotenci uvnitř, takže opakované volání nic nezdvojí.
+ *
+ * Vrací false, když se důsledek uplatnit nepodařilo. Volající to zapíše do
+ * výsledku návrhu — přijaté rozhodnutí, které nikde nezačalo platit, nesmí
+ * vypadat stejně jako to, které platí.
  */
 async function applyImmediateEffect(
   db: D1Database, p: OpenProposal, gameDate: string,
-): Promise<void> {
+): Promise<boolean> {
   let payload: Record<string, unknown> = {};
   try { payload = JSON.parse(p.payload || "{}") as Record<string, unknown>; }
-  catch (e) { logger.warn({ module: M }, `payload návrhu ${p.id} nejde přečíst`, e); return; }
+  catch (e) { logger.warn({ module: M }, `payload návrhu ${p.id} nejde přečíst`, e); return false; }
 
   try {
     if (p.kind === "sanction" && p.target_team_id) {
@@ -402,25 +428,25 @@ async function applyImmediateEffect(
         reason: String(payload.reason ?? p.title), evidence: (payload.evidence as string) ?? null,
         issuedBy: "vote", issuedByTeamId: p.proposed_by_team_id, proposalId: p.id, gameDate,
       });
-      return;
+      return true;
     }
 
     if (p.kind === "appeal" && payload.sanctionId) {
       const { refundSanction } = await import("./discipline");
       await refundSanction(db, String(payload.sanctionId), gameDate);
-      return;
+      return true;
     }
 
     if (p.kind === "recall" && payload.role) {
       await recallOfficial(db, p.league_id, payload.role as never, p.season_number, gameDate);
-      return;
+      return true;
     }
 
     // Dotace vyplatitelné hned. Sezónní ceny a přebytek čekají na konec sezóny,
     // protože se počítají z odehrané sezóny — proto se tady vědomě přeskočí.
     if (p.kind === "grant" && payload.grantKind) {
       const kind = String(payload.grantKind) as GrantKind;
-      if (kind === "award" || kind === "surplus") return;
+      if (kind === "award" || kind === "surplus") return true;
 
       const { payGrants, prijemci } = await import("./grants");
       const { resolveRules } = await import("./rules");
@@ -432,13 +458,13 @@ async function applyImmediateEffect(
       });
       if (komu.length === 0) {
         logger.warn({ module: M }, `dotace ${p.id}: nikdo ji nesplňuje, peníze zůstávají v pokladně`);
-        return;
+        return true;
       }
       await payGrants(db, {
         leagueId: p.league_id, seasonNumber: p.season_number, kind,
         referenceKey: p.id, payments: komu, gameDate,
       });
-      return;
+      return true;
     }
 
     if (p.kind === "sponsor" && payload.offerId) {
@@ -447,7 +473,7 @@ async function applyImmediateEffect(
         leagueId: p.league_id, offerId: String(payload.offerId), seasonNumber: p.season_number,
       });
       if (!out.ok) logger.warn({ module: M }, `přijetí sponzora: ${out.reason}`);
-      return;
+      return out.ok;
     }
 
     if (p.kind === "referee_ban" && payload.refereeId) {
@@ -457,7 +483,7 @@ async function applyImmediateEffect(
         refereeId: String(payload.refereeId), reason: String(payload.reason ?? p.title),
         source: "snem", proposalId: p.id, gameDate,
       });
-      return;
+      return true;
     }
 
     // Pravidla soutěže (zákaz transferů, stav hřiště, velikost soupisky) platí
@@ -468,17 +494,28 @@ async function applyImmediateEffect(
       const field = spec.rulesField;
       if (!(field in DEFAULT_RULES)) {
         logger.error({ module: M }, `návrh ${p.kind} míří na neznámé pravidlo ${field}`);
-        return;
+        return false;
       }
-      await db.prepare(
+      const zapis = await db.prepare(
         `UPDATE competition_rules SET ${field} = ? WHERE league_id = ? AND season_number = ?`
       ).bind(payload.value, p.league_id, p.season_number).run();
+      // Soutěž, které pro tuhle sezónu ještě nevznikl řádek sazebníku, spolkla
+      // změnu beze stopy: UPDATE nenašel co přepsat, ale ani nespadl. Návrh pak
+      // svítil jako přijatý a pravidlo dál platilo staré.
+      if ((zapis.meta?.changes ?? 0) === 0) {
+        logger.error({ module: M }, `soutěž ${p.league_id}: sazebník sezóny ${p.season_number} neexistuje, ${field} se nezapsalo`);
+        return false;
+      }
       logger.info({ module: M }, `soutěž ${p.league_id}: ${field} = ${payload.value}`);
-      return;
+      return true;
     }
+    // Sazebník příští sezóny sem spadne bez zásahu — uplatní ho rollover.
+    return true;
   } catch (e) {
-    // Efekt nesmí shodit celé zasedání — návrh zůstane přijatý a chyba je v logu.
+    // Efekt nesmí shodit celé zasedání — návrh zůstane přijatý a chyba je v logu
+    // i ve výsledku návrhu, aby se klub neřídil rozhodnutím, které neplatí.
     logger.error({ module: M }, `aplikace důsledku návrhu ${p.id} (${p.kind}) selhala`, e);
+    return false;
   }
 }
 
@@ -509,19 +546,29 @@ async function notifyMeeting(
   results: Array<Record<string, unknown>>, voters: string[],
 ): Promise<void> {
   if (voters.length === 0) return;
-  const passed = results.filter((r) => r.status === "passed").length;
-  const rejected = results.filter((r) => r.status === "rejected").length;
-  const noQuorum = results.filter((r) => r.status === "no_quorum").length;
+  // Pokuta za porušené pravidlo ani uvolněná funkce nejsou usnesení — nikdo o nich
+  // nehlasoval. Když se počítaly mezi přijaté body, hlásilo zasedání „8 přijato"
+  // u programu, kde prošly dva návrhy a zbytek byly pokuty za neposekané hřiště.
+  const hlasovane = results.filter((r) => hlasovanyBod(String(r.kind ?? "")));
+  const passed = hlasovane.filter((r) => r.status === "passed").length;
+  const rejected = hlasovane.filter((r) => r.status === "rejected").length;
+  const noQuorum = hlasovane.filter((r) => r.status === "no_quorum").length;
+  const pokut = results.filter((r) => r.kind === "compliance" && r.status === "passed").length;
 
   const parts: string[] = [];
   if (passed) parts.push(`${passed} přijato`);
   if (rejected) parts.push(`${rejected} zamítnuto`);
   if (noQuorum) parts.push(`${noQuorum} neusnášeníschopné`);
 
-  const n = results.length;
+  const n = hlasovane.length;
   const bodu = n === 1 ? "bod" : n <= 4 ? "body" : "bodů";
-  const spolecne = `Zasedání grémia soutěže (${leagueName}) projednalo ${n} ${bodu}: `
-    + `${parts.join(", ") || "bez rozhodnutí"}.`;
+  const program = n === 0
+    ? `Zasedání grémia soutěže (${leagueName}) nemělo na programu žádné hlasování.`
+    : `Zasedání grémia soutěže (${leagueName}) projednalo ${n} ${bodu}: `
+      + `${parts.join(", ") || "bez rozhodnutí"}.`;
+  const pokuty = pokut === 0 ? ""
+    : ` K tomu ${pokut === 1 ? "padla 1 pokuta" : pokut <= 4 ? `padly ${pokut} pokuty` : `padlo ${pokut} pokut`} za porušení pravidel soutěže.`;
+  const spolecne = `${program}${pokuty}`;
 
   // Co se týká přímo tebe. Bez tohohle dostal nově zvolený prezident tentýž
   // obecný souhrn jako všichni ostatní a o svém zvolení se nedozvěděl.
@@ -545,10 +592,13 @@ async function notifyMeeting(
       );
       continue;
     }
-    if (kind === "compliance" || kind === "vacated") {
+    // Uvolněná funkce se týká jen klubu, který zůstal bez trenéra — tomu psát
+    // nemá kdo číst, proto sem patří výhradně pokuty.
+    if (kind === "compliance") {
       pridej(r.teamId as string, `${title} ${r.resultNote ?? ""}`.trim());
       continue;
     }
+    if (kind === "vacated") continue;
     // Návrhy: zajímá to navrhovatele a klub, kterého se bod týká.
     const vysledek = r.status === "passed" ? "prošel"
       : r.status === "rejected" ? "neprošel"

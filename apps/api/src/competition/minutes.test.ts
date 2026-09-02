@@ -78,4 +78,31 @@ describe("zápis ze zasedání", () => {
     }));
     expect(headline).toContain("bez usnesení");
   });
+
+  it("pokuty za pravidla se nepočítají mezi schválené body", () => {
+    // Zasedání, kde neprošel jediný návrh a padly jen pokuty za neposekané
+    // hřiště, hlásilo „Grémium schválilo 6 bodů" — kontrola pravidel se
+    // počítala jako usnesení, přestože o ní nikdo nehlasoval.
+    const { headline } = sestavZapis(redaktor("seriozni"), vstup({
+      items: [
+        { kind: "min_pitch_condition", title: "Stav hřiště: 30 → 70", status: "no_quorum", pro: 0, proti: 0 },
+        { kind: "compliance", title: "Hřiště pod hranicí — Test Praha", status: "passed", resultNote: "Pokuta 1 000 Kč." },
+        { kind: "compliance", title: "Hřiště pod hranicí — SK Braník", status: "passed", resultNote: "Pokuta 1 000 Kč." },
+        { kind: "vacated", title: "Uvolněna funkce Komisař rozhodčích", status: "passed" },
+      ],
+      protiHlasy: {},
+    }));
+    expect(headline).toBe("Zasedání grémia Přeboru Prahy skončilo bez usnesení");
+  });
+
+  it("schválený návrh se počítá i vedle pokut", () => {
+    const { headline } = sestavZapis(redaktor("seriozni"), vstup({
+      items: [
+        { kind: "win_bonus", title: "Odměna za výhru: 500 Kč → 600 Kč", status: "passed", pro: 4, proti: 1 },
+        { kind: "compliance", title: "Hřiště pod hranicí — Test Praha", status: "passed", resultNote: "Pokuta 1 000 Kč." },
+      ],
+      protiHlasy: {},
+    }));
+    expect(headline).toBe("Grémium Přeboru Prahy schválilo 1 bod");
+  });
 });

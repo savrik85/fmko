@@ -98,6 +98,18 @@ export const ACTIVITY_WINDOW_MEETINGS = 3;
 export const SIMPLE_MAJORITY = 0.5;
 export const QUALIFIED_MAJORITY = 2 / 3;
 
+/**
+ * Je tenhle bod programu usnesení, o kterém se hlasovalo?
+ *
+ * Zasedání odbaví i věci, o kterých nikdo nehlasuje — pokutu za porušené
+ * pravidlo a funkci, která osiřela po klubu bez trenéra. Do počtu „přijato"
+ * nepatří ani jedna: než se to rozlišilo, hlásil zápis ze zasedání se dvěma
+ * schválenými návrhy a šesti pokutami „schváleno 8 bodů".
+ */
+export function hlasovanyBod(kind: string): boolean {
+  return kind !== "compliance" && kind !== "vacated";
+}
+
 export type Gesce = "soutez" | "hospodarska" | "disciplinarni" | "rozhodcich" | "integrita" | "zadna";
 export type OfficialRole = "predseda" | "hospodarska" | "disciplinarni" | "rozhodcich" | "integrita";
 

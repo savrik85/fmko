@@ -83,8 +83,10 @@ export function FMSidebar() {
         .catch((e) => console.error("fetch votes:", e));
       // Body grémia, o kterých klub ještě nehlasoval. Zasedání je jednou týdně,
       // takže propásnutý hlas se nedá dohnat — odznak je jediné varování.
-      apiFetch<{ toVote: number }>(`/api/teams/${teamId}/competition/pending`)
-        .then((p) => setGremiumCount(p.toVote ?? 0))
+      // Připočítávají se i zasedání, jejichž výsledek klub ještě neviděl: odznak
+      // zhasl hned po odevzdání hlasu a jak to dopadlo, se hráč nedozvěděl.
+      apiFetch<{ toVote: number; unseenMeetings: number }>(`/api/teams/${teamId}/competition/pending`)
+        .then((p) => setGremiumCount((p.toVote ?? 0) + (p.unseenMeetings ?? 0)))
         .catch((e) => console.error("fetch gremium pending:", e));
       // Vyhodnocené tikety, které hráč ještě neviděl.
       apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`)

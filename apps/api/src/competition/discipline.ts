@@ -89,23 +89,39 @@ export const OFFENCES: Record<string, Offence> = {
  */
 export const DEFAULT_PITCH_THRESHOLD = 30;
 
+/** Meze, podle kterých se sbírají důkazy — obojí si soutěž odhlasovala. */
+export interface EvidenceLimits {
+  /** Hranice stavu hřiště. Odhlasované `min_pitch_condition` má přednost. */
+  pitchThreshold: number;
+  /** Platí v soutěži zákaz obchodů mezi kluby stejného majitele? */
+  ownerTransfersBanned: boolean;
+}
+
+export const DEFAULT_EVIDENCE_LIMITS: EvidenceLimits = {
+  pitchThreshold: DEFAULT_PITCH_THRESHOLD,
+  ownerTransfersBanned: false,
+};
+
 /**
- * Hranice platná pro danou soutěž. Odhlasované `min_pitch_condition` má přednost.
+ * Meze platné pro danou soutěž.
  *
  * Bez tohohle měla disciplinárka vlastní pevnou třicítku, zatímco automatika
  * porušení pravidel (compliance.ts) i dotace na hřiště braly odhlasovanou hodnotu —
  * liga s minimem 50 tak viděla porušení, které se nedalo doložit jako skutek.
  */
-export async function pitchThresholdFor(
+export async function evidenceLimitsFor(
   db: D1Database, leagueId: string, seasonNumber: number,
-): Promise<number> {
+): Promise<EvidenceLimits> {
   try {
     const { resolveRules } = await import("./rules");
     const r = await resolveRules(db, leagueId, seasonNumber);
-    return r.min_pitch_condition > 0 ? r.min_pitch_condition : DEFAULT_PITCH_THRESHOLD;
+    return {
+      pitchThreshold: r.min_pitch_condition > 0 ? r.min_pitch_condition : DEFAULT_PITCH_THRESHOLD,
+      ownerTransfersBanned: r.ban_own_owner_transfers > 0,
+    };
   } catch (e) {
-    logger.warn({ module: M }, "nacteni hranice stavu hriste", e);
-    return DEFAULT_PITCH_THRESHOLD;
+    logger.warn({ module: M }, "nacteni mezi pro dukazy", e);
+    return { ...DEFAULT_EVIDENCE_LIMITS };
   }
 }
 const RED_CARD_THRESHOLD = 3;
@@ -124,9 +140,10 @@ export interface EvidenceItem {
  */
 export async function collectEvidence(
   db: D1Database, teamId: string,
-  /** Hranice stavu hřiště platná v té soutěži — viz pitchThresholdFor. */
-  pitchThreshold: number = DEFAULT_PITCH_THRESHOLD,
+  /** Meze platné v té soutěži — viz evidenceLimitsFor. */
+  limits: EvidenceLimits = DEFAULT_EVIDENCE_LIMITS,
 ): Promise<EvidenceItem[]> {
+  const { pitchThreshold, ownerTransfersBanned } = limits;
   const out: EvidenceItem[] = [];
 
   const pitch = await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
@@ -150,15 +167,19 @@ export async function collectEvidence(
     });
   }
 
-  // Přestup mezi kluby stejného majitele — přesně to, co se v soutěži hlídá.
-  const suspicious = await db.prepare(
+  // Přestup mezi kluby stejného majitele. Skutek to je jen tehdy, když si soutěž
+  // ten zákaz odhlasovala — do té doby je převod mezi vlastními kluby dovolený
+  // a stavět na něm obvinění by znamenalo trestat za pravidlo, které neplatí.
+  // Dřív se sem obchody dostávaly vždycky, takže přepínač v sazebníku nic neměnil.
+  const suspicious = ownerTransfersBanned ? await db.prepare(
     `SELECT COUNT(*) AS n FROM transfer_offers o
        JOIN teams f ON f.id = o.from_team_id
        JOIN teams t ON t.id = o.to_team_id
       WHERE o.status = 'accepted' AND f.user_id = t.user_id AND f.user_id != 'ai'
         AND (o.from_team_id = ? OR o.to_team_id = ?)`
   ).bind(teamId, teamId).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: M }, "podezřelé přestupy", e); return null; });
+    .catch((e) => { logger.warn({ module: M }, "podezřelé přestupy", e); return null; })
+    : null;
   if (suspicious && suspicious.n > 0) {
     out.push({
       kind: "transfer", label: OFFENCES.transfer.label,

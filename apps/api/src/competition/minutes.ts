@@ -12,6 +12,7 @@
 
 import { logger } from "../lib/logger";
 import { druhyPad } from "../lib/league-name";
+import { hlasovanyBod } from "./defaults";
 import { jmenoRedaktora, redaktorProRubriku, type Journalist } from "../news/journalists";
 
 const M = "competition-minutes";
@@ -176,7 +177,10 @@ function zvoleni(v: MinutesInput): Array<{ role: string; kdo: string; title: str
 
 /** Sestaví text zápisu. Čistá funkce — jde otestovat bez databáze. */
 export function sestavZapis(j: Journalist | null, v: MinutesInput): { headline: string; body: string } {
-  const prijato = v.items.filter((i) => i.status === "passed").length;
+  // Jen usnesení, o kterých se hlasovalo. Pokuta za neposekané hřiště není bod,
+  // který by grémium schválilo — a když se do počtu připočítávala, vyšel titulek
+  // „Grémium schválilo 6 bodů" nad zasedáním, kde neprošlo vůbec nic.
+  const prijato = v.items.filter((i) => hlasovanyBod(i.kind ?? "") && i.status === "passed").length;
   const volby = zvoleni(v);
   const liga = druhyPad(v.leagueName);
 

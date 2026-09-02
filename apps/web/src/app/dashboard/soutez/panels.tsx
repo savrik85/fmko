@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
+import { DecisionPill } from "@/components/dashboard/gremium-vyveska";
 import {
   Empty, GOLD, GOLD_SOFT, OpenProposalNote, Ornament, PersonLine, Portrait, Row,
   czk, formatDate, plural, signed,
@@ -976,12 +977,17 @@ export function ZapisyPanel({ meetings }: { meetings: Meeting[] }) {
                   {it.title}
                   {/* Volba je tajná — do zápisu jde jen jméno vítěze, nikdy poměr hlasů. */}
                   {it.resultNote && <div className="text-muted break-words">{it.resultNote}</div>}
+                  {/* Poměr sám o sobě neřekne, jak bod dopadl: u kvalifikované
+                      většiny je 4:3 zamítnutí, u prosté přijetí. */}
+                  {typeof it.pro === "number" && typeof it.proti === "number" && (
+                    <div className="text-muted tabular-nums">
+                      {`${it.pro}:${it.proti}${it.zdrzel ? ` (${it.zdrzel} se zdrželo)` : ""}`}
+                    </div>
+                  )}
                 </div>
-                <div className="text-sm tabular-nums text-muted shrink-0">
-                  {typeof it.pro === "number" && typeof it.proti === "number"
-                    ? `${it.pro}:${it.proti}${it.zdrzel ? ` (${it.zdrzel})` : ""}`
-                    : it.status === "passed" ? "zvoleno" : "nerozhodnuto"}
-                </div>
+                {/* Dřív tu u pokuty za pravidlo svítilo „zvoleno" — štítek se
+                    řídil jen stavem a o druhu bodu nevěděl. */}
+                <DecisionPill kind={it.kind} status={it.status} />
               </div>
             ))}
           </div>
