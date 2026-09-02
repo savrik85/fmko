@@ -9,10 +9,10 @@
  * losuje delegace, jinak by šlo poslat kartového cvoka na soupeře.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
-import { Empty, OpenProposalNote, Ornament, czk, plural } from "./ui";
+import { Empty, GOLD_SOFT, OpenProposalNote, Ornament, czk, plural } from "./ui";
 import type { RefereeData, RefereeRow, State } from "./types";
 
 function gradeColor(g: number | null): string {
@@ -52,7 +52,9 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
       </div>
 
       {muzeObsazovat && data.round && (
-        <div className="card p-5">
+        // Dokud listina není, je to úkol — proto se karta odliší barvou. Delegace
+        // komisaře nepočká: proběhne dva herní dny před výkopem a kolo obsadí sama.
+        <div className="card p-5" style={data.rosterSet ? undefined : { background: GOLD_SOFT }}>
           <Ornament right={`${data.round.matches} ${plural(data.round.matches, "zápas", "zápasy", "zápasů")}`}>
             Obsazovací listina {data.round.gameWeek}. kola
           </Ornament>
@@ -64,7 +66,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
           <p className="text-sm text-muted mt-2">
             {data.rosterSet
               ? "Listinu pro tohle kolo už máš sestavenou. Do delegace ji jde ještě změnit."
-              : "Zatím jsi listinu nesestavil — kolo se obsadí ze všech použitelných."}
+              : "Listinu jsi zatím nesestavil. Když ji necháš být, kolo se obsadí ze všech použitelných a tvoje slovo v tom nebude."}
           </p>
           {!obsazuje && (
             <button className="btn btn-md btn-secondary mt-3" onClick={() => setObsazuje(true)}>
@@ -181,6 +183,19 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
  * Není to modal: na mobilu by se do něj čtyřiadvacet jmen s checkboxy nevešlo
  * a komisař potřebuje u výběru vidět známky.
  */
+/**
+ * Do výběru patří nejlepší nahoru — opačně než v listině se známkami, kde je
+ * nahoře ten, koho má komise řešit. Známka je školní, takže „nejlepší" je
+ * nejnižší číslo. Kdo ještě nepískal, jde nakonec: nemá se podle čeho seřadit
+ * a nasadit neznámého je rozhodnutí, ne výchozí volba.
+ */
+function poradiProVyber(a: RefereeRow, b: RefereeRow): number {
+  if (a.avgGrade === null && b.avgGrade === null) return a.name.localeCompare(b.name, "cs");
+  if (a.avgGrade === null) return 1;
+  if (b.avgGrade === null) return -1;
+  return a.avgGrade - b.avgGrade;
+}
+
 function RosterForm({ referees, matches, gameWeek, teamId, onClose, onSaved }: {
   referees: RefereeRow[]; matches: number; gameWeek: number; teamId: string;
   onClose: () => void; onSaved: () => void;
@@ -189,6 +204,9 @@ function RosterForm({ referees, matches, gameWeek, teamId, onClose, onSaved }: {
     () => new Set(referees.filter((r) => r.nominated).map((r) => r.refereeId)),
   );
   const [saving, setSaving] = useState(false);
+
+  // Seřadí se jednou, ne při každém zaškrtnutí — jinak by jména pod prstem poskakovala.
+  const serazeni = useMemo(() => [...referees].sort(poradiProVyber), [referees]);
 
   const prepni = (id: string) => setVybrani((prev) => {
     const next = new Set(prev);
@@ -223,7 +241,7 @@ function RosterForm({ referees, matches, gameWeek, teamId, onClose, onSaved }: {
       </p>
 
       <div className="divide-y mt-3" style={{ borderColor: "var(--color-line)" }}>
-        {referees.map((r) => {
+        {serazeni.map((r) => {
           const vybran = vybrani.has(r.refereeId);
           return (
             <label

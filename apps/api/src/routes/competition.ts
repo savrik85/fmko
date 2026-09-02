@@ -482,10 +482,29 @@ competitionRouter.get("/teams/:teamId/competition/pending", async (c) => {
   ).bind(leagueId, leagueId, teamId).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "nepřečtená zasedání", e); return null; });
 
+  // Úkol komisaře rozhodčích: kolo čeká na obsazení a listina není sestavená.
+  // Bez odznaku se to nedalo poznat jinak než doklikáním do Grémia — kdo na to
+  // zapomněl, přišel o pravomoc mlčky, protože kolo se obsadilo automaticky.
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  let rosterTodo = 0;
+  if (meta) {
+    const act = await actsFor(c.env.DB, leagueId, teamId, "rozhodcich", meta.season_number)
+      .catch((e) => { logger.warn({ module: M }, "pravomoc komisaře pro odznak", e); return null; });
+    if (act?.ok) {
+      const { nextOpenRound, nominationsFor } = await import("../competition/referee-roster");
+      const round = await nextOpenRound(c.env.DB, leagueId);
+      if (round) {
+        const nominated = await nominationsFor(c.env.DB, round.calendarId);
+        if (nominated.size === 0) rosterTodo = 1;
+      }
+    }
+  }
+
   return c.json({
     open: row?.open ?? 0,
     toVote: (row?.to_vote ?? 0) + (elections?.n ?? 0),
     unseenMeetings: unseen?.n ?? 0,
+    rosterTodo,
   });
 });
 
