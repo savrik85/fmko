@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal, EntityLink } from "@/components/ui";
-import { Empty, Ornament, czk } from "./ui";
+import { Empty, Ornament, Rozbaleni, czk } from "./ui";
 import type { State } from "./types";
 
 interface TipKnihy { label: string; oddsX100: number; result: string; zapas: string }
@@ -103,23 +103,29 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
   return (
     <div className="space-y-4">
       {/* ── Přestupy k prověření ─────────────────────────────────────────── */}
-      <div className="card p-4 sm:p-5">
-        <Ornament>Přestupy soutěže</Ornament>
-        {data.transfers.length === 0 ? (
-          <p className="text-sm text-muted mt-2">Letos se v soutěži zatím nikdo neprodal.</p>
-        ) : (
-          <>
-            {podezrele.length > 0 && (
-              <p className="text-sm mt-2 mb-3 leading-snug" style={{ color: "#A32B1F" }}>
+      {/* Počet podezřelých je vidět i po zabalení — kvůli tomu se sem chodí. */}
+      <Rozbaleni
+        title="Přestupy soutěže"
+        right={`${data.transfers.length} obchodů`}
+        defaultOpen={podezrele.length > 0}
+        note={data.transfers.length === 0
+          ? "Letos se v soutěži zatím nikdo neprodal."
+          : podezrele.length === 0
+            ? "Nic se zatím nevymyká."
+            : (
+              <span style={{ color: "#A32B1F" }}>
                 {podezrele.length === 1
                   ? "Jeden obchod stojí za pohled."
                   : `${podezrele.length} obchodů stojí za pohled.`}{" "}
                 <span className="text-muted">
                   Není to obvinění — jen upozornění, že se něco vymyká.
                 </span>
-              </p>
+              </span>
             )}
-            <ul className="divide-y divide-gray-50 mt-2">
+      >
+        {data.transfers.length > 0 && (
+          <>
+            <ul className="divide-y divide-gray-50">
               {data.transfers.map((t, i) => (
                 <li key={i} className="py-2.5">
                   <div className="flex items-baseline justify-between gap-2 flex-wrap">
@@ -150,20 +156,18 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
             </ul>
           </>
         )}
-      </div>
+      </Rozbaleni>
 
       {/* ── Kniha sázek ──────────────────────────────────────────────────── */}
-      <div className="card p-4 sm:p-5">
-        <Ornament>Kniha sázek</Ornament>
-        <p className="text-sm text-muted leading-snug mt-2">
-          Všechny tikety klubů soutěže včetně těch, které ještě běží. Kromě tebe do ní
-          vidí jen prezident soutěže.
-        </p>
-
-        {data.tickets.length === 0 ? (
-          <p className="text-sm text-muted mt-3">Zatím si nikdo nevsadil.</p>
-        ) : (
-          <ul className="divide-y divide-gray-50 mt-3">
+      <Rozbaleni
+        title="Kniha sázek"
+        right={`${data.tickets.length} tiketů`}
+        note={data.tickets.length === 0
+          ? "Zatím si nikdo nevsadil."
+          : "Všechny tikety klubů soutěže včetně těch, které ještě běží. Kromě tebe do ní vidí jen prezident soutěže."}
+      >
+        {data.tickets.length > 0 && (
+          <ul className="divide-y divide-gray-50">
             {data.tickets.map((t) => {
               const s = STAV[t.status] ?? STAV.open;
               return (
@@ -210,14 +214,15 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
             })}
           </ul>
         )}
+      </Rozbaleni>
 
-        {jsemKomisar && (
-          <button type="button" onClick={() => { setZablokovat(true); setDuvod(""); setCil(""); }}
-            className="w-full min-h-12 mt-4 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm cursor-pointer">
-            Zakázat klubu sázení
-          </button>
-        )}
-      </div>
+      {/* Ovládání zůstává mimo rozbalení — jinak by se k němu komisař proklikával. */}
+      {jsemKomisar && (
+        <button type="button" onClick={() => { setZablokovat(true); setDuvod(""); setCil(""); }}
+          className="w-full min-h-12 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm cursor-pointer">
+          Zakázat klubu sázení
+        </button>
+      )}
 
       {/* ── Zabavení výhry ───────────────────────────────────────────────── */}
       <Modal isOpen={!!zabavit} onClose={() => setZabavit(null)} title="Zabavit výhru" zavritKlikemVedle={false}>

@@ -9,9 +9,9 @@
 
 import React, { useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
-import { Modal } from "@/components/ui";
-import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, StatusPill, czk } from "./ui";
-import type { DisciplineData, Sanction, State } from "./types";
+import { EntityLink, Modal } from "@/components/ui";
+import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, Rozbaleni, StatusPill, czk } from "./ui";
+import type { DisciplineData, PitchRow, Sanction, State } from "./types";
 
 export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChanged }: {
   data: DisciplineData | null; state: State; teamId: string | null;
@@ -61,18 +61,23 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
         </div>
       )}
 
-      <div className="card p-5">
-        <Ornament right={`${data.sanctions.length} celkem`}>Listina trestů</Ornament>
-        {data.sanctions.length === 0 ? (
-          <div className="text-sm text-muted">Zatím čistý štít — nikdo nedostal pokutu.</div>
-        ) : (
+      <PitchOverview pitches={data.pitches} />
+
+      <Rozbaleni
+        title="Listina trestů"
+        right={`${data.sanctions.length} celkem`}
+        note={data.sanctions.length === 0
+          ? "Zatím čistý štít — nikdo nedostal pokutu."
+          : "Všechny pokuty sezóny i s odůvodněním."}
+      >
+        {data.sanctions.length > 0 && (
           <div className="space-y-3">
             {data.sanctions.map((s) => (
               <SanctionRow key={s.id} s={s} teamId={teamId} onChanged={onChanged} />
             ))}
           </div>
         )}
-      </div>
+      </Rozbaleni>
 
       {formOpen && teamId && (
         <FineForm
@@ -278,5 +283,62 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Stav hřišť celé soutěže.
+ *
+ * Řadí od nejhoršího — koho má disciplinárka řešit, je nahoře. Když si soutěž
+ * hranici neodhlasovala, je to jen přehled a nikdo nic neporušuje; říct to
+ * rovnou je poctivější než ukazovat sloupec, který nic neznamená.
+ */
+function PitchOverview({ pitches }: { pitches: DisciplineData["pitches"] }) {
+  const { limit, teams } = pitches;
+  const pod = teams.filter((t) => t.breaches);
+
+  const note = limit === 0
+    ? "Soutěž si minimum neodhlasovala, takže se stav hřiště nepokutuje. Přehled zůstává."
+    : pod.length === 0
+      ? `Všichni jsou nad odhlasovanou hranicí ${limit} bodů.`
+      : `${pod.length === 1 ? "Jeden klub je" : `${pod.length} klubů je`} pod odhlasovanou hranicí ${limit} bodů. Kontrola před zasedáním je sebere sama.`;
+
+  return (
+    <Rozbaleni title="Stav hřišť" right={`${teams.length} klubů`} note={note}>
+      <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
+        {teams.map((t) => <PitchLine key={t.teamId} t={t} limit={limit} />)}
+      </div>
+    </Rozbaleni>
+  );
+}
+
+/** Zelená nad hranicí, jantarová těsně nad ní, červená pod ní. */
+function pitchColor(pitch: number | null, limit: number): string {
+  if (pitch === null) return "var(--color-muted)";
+  if (limit > 0 && pitch < limit) return "#A32B1F";
+  if (limit > 0 && pitch < limit + 10) return "#A88A2A";
+  if (pitch < 40) return "#A88A2A";
+  return "#1E4A1E";
+}
+
+function PitchLine({ t, limit }: { t: PitchRow; limit: number }) {
+  const barva = pitchColor(t.pitch, limit);
+  return (
+    <div className="flex items-center gap-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="text-base font-semibold break-words">
+          <EntityLink type="team" id={t.teamId}>{t.teamName}</EntityLink>
+          {t.breaches && <span className="text-sm" style={{ color: "#A32B1F" }}> · pod hranicí</span>}
+        </div>
+        {/* Pruh nese stav rychleji než číslo — na mobilu se čte jedním pohledem. */}
+        <div className="h-1.5 rounded-full mt-1.5 overflow-hidden" style={{ background: "var(--color-line)" }}>
+          <div className="h-full rounded-full"
+            style={{ width: `${Math.max(0, Math.min(100, t.pitch ?? 0))}%`, background: barva }} />
+        </div>
+      </div>
+      <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: barva }}>
+        {t.pitch ?? "—"}
+      </div>
+    </div>
   );
 }

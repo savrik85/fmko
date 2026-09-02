@@ -123,9 +123,18 @@ export interface Sanction {
   issuedBy: string; status: string; gameDate: string;
 }
 
+export interface PitchRow {
+  teamId: string; teamName: string;
+  pitch: number | null; capacity: number | null;
+  /** Je pod hranicí, kterou si soutěž odhlasovala. */
+  breaches: boolean;
+}
+
 export interface DisciplineData {
   offences: Array<{ kind: string; label: string; evidenceLabel: string; majority: number; freeText: boolean }>;
   limits: { min: number; max: number; chairLimit: number };
+  /** Stav hřišť soutěže; limit 0 znamená, že se hřiště nehlídají. */
+  pitches: { limit: number; teams: PitchRow[] };
   targets: DisciplineTarget[];
   sanctions: Sanction[];
 }

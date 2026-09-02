@@ -158,6 +158,49 @@ export function StatusPill({ status }: { status: string }) {
 }
 
 /**
+ * Rozbalovací sekce pro dlouhé seznamy.
+ *
+ * Agenda funkcionáře jsou tři čtyři seznamy po dvaceti řádcích a na mobilu se
+ * mezi nimi scrollovalo přes celé obrazovky. Zabalené je vidět všechny naráz
+ * a rozbalí se ten, který zrovna řeším.
+ *
+ * Používá `details`/`summary`, ne vlastní stav: rozbalení tak funguje i než
+ * doběhne hydratace a čtečka to přečte jako to, čím to je.
+ */
+export function Rozbaleni({ title, right, note, defaultOpen = false, children }: {
+  title: React.ReactNode;
+  /** Číslo napravo od nadpisu — kolik řádků se uvnitř skrývá. */
+  right?: React.ReactNode;
+  /** Věta pod nadpisem, viditelná i po zabalení. Sem patří to, co nesmí uniknout. */
+  note?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="card p-4 sm:p-5 group" open={defaultOpen}>
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center gap-3">
+          <div className="section-label mb-0 shrink-0" style={{ color: "var(--color-ink-light)" }}>
+            {title}
+          </div>
+          <div className="h-px flex-1" style={{ background: `linear-gradient(90deg, ${GOLD}, transparent)` }} />
+          {right && <div className="text-sm shrink-0 tabular-nums text-muted">{right}</div>}
+          {/* Šipka se otočí přes group-open — palcová plocha je celý summary. */}
+          <span
+            className="shrink-0 text-muted transition-transform group-open:rotate-180"
+            aria-hidden="true"
+          >
+            ▾
+          </span>
+        </div>
+        {note && <div className="text-sm text-muted leading-snug mt-2">{note}</div>}
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
+/**
  * Klub smí mít na programu jen jeden návrh. Místo tlačítka, které by skončilo
  * chybou 409, se ukáže, čím to je.
  */

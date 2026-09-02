@@ -852,12 +852,39 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
   ).bind(leagueId, meta.season_number).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: M }, "seznam sankcí", e); return { results: [] }; });
 
+  // Stav hřišť celé soutěže. Předseda disciplinárky vymáhá hranici, kterou si
+  // kluby odhlasovaly, takže musí vidět, kdo se k ní blíží — ne až koho kontrola
+  // před zasedáním sebere. Jen seniorské A-týmy: U21 hraje na hřišti mateřského
+  // klubu a v přehledu by stálo dvakrát.
+  const { resolveRules } = await import("../competition/rules");
+  const rules = await resolveRules(c.env.DB, leagueId, meta.season_number)
+    .catch((e) => { logger.warn({ module: M }, "pravidla soutěže pro přehled hřišť", e); return null; });
+
+  const pitchRows = await c.env.DB.prepare(
+    `SELECT t.id, t.name, s.pitch_condition AS pitch, s.capacity
+       FROM teams t
+       LEFT JOIN stadiums s ON s.team_id = t.id
+      WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
+      ORDER BY s.pitch_condition ASC NULLS LAST, t.name`
+  ).bind(leagueId).all<{ id: string; name: string; pitch: number | null; capacity: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, "stav hřišť soutěže", e); return { results: [] }; });
+
+  const pitchLimit = rules?.min_pitch_condition ?? 0;
+
   return c.json({
     offences: Object.values(OFFENCES).map((o) => ({
       kind: o.kind, label: o.label, evidenceLabel: o.evidenceLabel,
       majority: o.majority, freeText: !!o.freeText,
     })),
     limits: { min: FINE_MIN, max: FINE_MAX, chairLimit: CHAIR_FINE_LIMIT },
+    pitches: {
+      // Nula znamená, že si soutěž hranici neodhlasovala a hřiště se nehlídají.
+      limit: pitchLimit,
+      teams: pitchRows.results.map((t) => ({
+        teamId: t.id, teamName: t.name, pitch: t.pitch, capacity: t.capacity,
+        breaches: pitchLimit > 0 && t.pitch !== null && t.pitch < pitchLimit,
+      })),
+    },
     targets,
     sanctions: sanctions.results.map((s) => ({
       id: s.id, teamId: s.team_id, teamName: s.team_name, managerName: s.manager_name,
