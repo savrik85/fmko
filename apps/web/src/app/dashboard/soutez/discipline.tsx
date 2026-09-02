@@ -297,6 +297,8 @@ function PitchOverview({ pitches }: { pitches: DisciplineData["pitches"] }) {
   const { limit, teams } = pitches;
   const pod = teams.filter((t) => t.breaches);
 
+  const bezHriste = teams.filter((t) => t.pitch === null).length;
+
   const note = limit === 0
     ? "Soutěž si minimum neodhlasovala, takže se stav hřiště nepokutuje. Přehled zůstává."
     : pod.length === 0
@@ -308,6 +310,14 @@ function PitchOverview({ pitches }: { pitches: DisciplineData["pitches"] }) {
       <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
         {teams.map((t) => <PitchLine key={t.teamId} t={t} limit={limit} />)}
       </div>
+      {/* Pomlčka místo čísla vypadá jako chyba dat, a přitom je to nepostavené
+          hřiště. Kontrola takový klub taky přeskakuje — není co měřit. */}
+      {bezHriste > 0 && (
+        <p className="text-sm text-muted mt-3 leading-snug">
+          {bezHriste === 1 ? "Jeden klub" : `${bezHriste} klubů`} zatím hřiště nemá
+          postavené. Bez trávníku není co měřit, takže se {bezHriste === 1 ? "nekontroluje" : "nekontrolují"}.
+        </p>
+      )}
     </Rozbaleni>
   );
 }
