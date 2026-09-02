@@ -116,13 +116,29 @@ export async function runOneMeeting(
 
   if (open.results.length === 0 && (dueElections?.n ?? 0) === 0 && porusení.length === 0) return null;
 
-  // Claim celé schůze. changes === 0 znamená, že dnes už proběhla.
+  // Claim celé schůze. changes === 0 znamená, že řádek už existuje.
   const claim = await db.prepare(
     `INSERT OR IGNORE INTO competition_meetings (id, league_id, season_number, game_date)
      VALUES (?,?,?,?)`
   ).bind(crypto.randomUUID(), leagueId, meta.season_number, gameDate).run()
     .catch((e) => { logger.warn({ module: M }, `claim schůze ${leagueId}`, e); return null; });
-  if (!claim || (claim.meta?.changes ?? 0) === 0) return null;
+  if (!claim) return null;
+
+  if ((claim.meta?.changes ?? 0) === 0) {
+    // Řádek existuje — buď schůze doopravdy proběhla, nebo se claim stihl zapsat
+    // a běh pak umřel dřív, než cokoli uložil. Druhý případ nechal soutěž bez
+    // pokut, bez zápisu i bez článku a claim ji navíc zamkl, takže se to už
+    // nikdy nezopakovalo. Nedokončená schůze (summary IS NULL) se proto smí
+    // zabrat znovu — a zabrání ji zase jen jeden běh, protože i tohle je
+    // atomický UPDATE.
+    const reclaim = await db.prepare(
+      `UPDATE competition_meetings SET season_number = ?
+        WHERE league_id = ? AND game_date = ? AND summary IS NULL`
+    ).bind(meta.season_number, leagueId, gameDate).run()
+      .catch((e) => { logger.warn({ module: M }, `převzetí nedokončené schůze ${leagueId}`, e); return null; });
+    if (!reclaim || (reclaim.meta?.changes ?? 0) === 0) return null;
+    logger.warn({ module: M }, `soutěž ${leagueId}: schůze ${gameDate} zůstala nedokončená, běží znovu`);
+  }
 
   const stats = await voterStats(db, leagueId);
   const president = await presidentOf(db, leagueId, meta.season_number);

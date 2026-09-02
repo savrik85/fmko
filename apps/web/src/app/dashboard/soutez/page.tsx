@@ -19,6 +19,7 @@ import {
   Empty, GOLD, OpenProposalNote, Ornament, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
 } from "./ui";
 import { GrantsPanel, OdborInbox, PokladnaPanel, SponsorPanel, VedeniPanel, ZapisyPanel } from "./panels";
+import { GremiumVyveska } from "@/components/dashboard/gremium-vyveska";
 import { DisciplinePanel } from "./discipline";
 import { RefereesPanel } from "./referees-panel";
 import { IntegrityPanel } from "./integrity-panel";
@@ -399,6 +400,9 @@ export default function SoutezPage() {
 
       {tab === "zasedani" && (
         <div className="space-y-4">
+          {/* Co grémium rozhodlo, patří nad program toho, o čem se teprve hlasuje.
+              Zápisy jsou o dvě záložky vedle a hráč se k nim neproklikal. */}
+          <GremiumVyveska />
           <div className="card p-5 text-sm">
             <div className="font-semibold text-base">Grémium zasedá každou středu.</div>
             <p className="mt-1 text-muted">
