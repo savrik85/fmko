@@ -7,17 +7,39 @@
  * výjimka je nesportovní chování, kde se místo důkazu píše odůvodnění.
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { EntityLink, Modal } from "@/components/ui";
 import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, Rozbaleni, StatusPill, czk, plural } from "./ui";
-import type { DisciplineData, PitchRow, Sanction, State } from "./types";
+import type { DisciplineData, PitchData, PitchRow, Sanction, State } from "./types";
 
 export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChanged }: {
   data: DisciplineData | null; state: State; teamId: string | null;
   isChair: boolean; myOpen: { title: string } | null; onChanged: () => void;
 }) {
   const [formOpen, setFormOpen] = useState(false);
+
+  // Stav hřišť je agenda odboru, ne veřejný přehled — server ho vydá jen
+  // předsedovi disciplinárky a prezidentovi soutěže. Komu nepatří, dostane 403
+  // a karta se prostě nevykreslí; `isChair` na to nestačí, protože nezná
+  // prezidenta zastupujícího prázdné křeslo.
+  const [pitches, setPitches] = useState<PitchData | null>(null);
+  useEffect(() => {
+    if (!teamId) { setPitches(null); return; }
+    let zahozeno = false;
+    apiFetch<PitchData>(`/api/teams/${teamId}/competition/pitches`)
+      .then((d) => { if (!zahozeno) setPitches(d); })
+      .catch((e) => {
+        if (zahozeno) return;
+        setPitches(null);
+        // 403 je běžný stav pro klub bez pravomoci, ne chyba k řešení.
+        if ((e as { status?: number }).status !== 403) {
+          console.error("načtení stavu hřišť:", e);
+        }
+      });
+    return () => { zahozeno = true; };
+  }, [teamId]);
+
   if (!data) return <Empty>Načítám disciplinární agendu…</Empty>;
 
   const mine = data.sanctions.filter((s) => s.teamId === teamId);
@@ -61,7 +83,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
         </div>
       )}
 
-      <PitchOverview pitches={data.pitches} />
+      {pitches && <PitchOverview pitches={pitches} />}
 
       <Rozbaleni
         title="Listina trestů"
@@ -293,7 +315,7 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
  * hranici neodhlasovala, je to jen přehled a nikdo nic neporušuje; říct to
  * rovnou je poctivější než ukazovat sloupec, který nic neznamená.
  */
-function PitchOverview({ pitches }: { pitches: DisciplineData["pitches"] }) {
+function PitchOverview({ pitches }: { pitches: PitchData }) {
   const { limit, teams } = pitches;
   const pod = teams.filter((t) => t.breaches);
 

@@ -126,3 +126,65 @@ export async function punishCompliance(db: D1Database, opts: {
 
   logger.info({ module: M }, `soutěž ${opts.leagueId}: pokuta za ${opts.hits.length} porušení pravidel`);
 }
+
+/**
+ * Smí tenhle klub vidět přehled stavu hřišť celé soutěže?
+ *
+ * Předseda disciplinární rady ano — vymáhá hranici, kterou si kluby odhlasovaly,
+ * takže musí vidět, kdo se k ní blíží. Prezident soutěže taky: je nadřízený
+ * ostatním předsedům a bez přístupu by nemohl posoudit, jestli předseda koná.
+ *
+ * Nikdo další ne. Stav cizího trávníku je vstup do rozhodnutí o taktice
+ * i o tom, koho na zasedání navrhnout k pokutě — plošně viditelný by z něj
+ * udělal běžnou skautskou informaci, ne agendu odboru.
+ */
+export async function muzeNaHriste(
+  db: D1Database, leagueId: string, teamId: string, seasonNumber: number,
+): Promise<boolean> {
+  const { actsFor, presidentOf } = await import("./officials");
+  const predseda = await actsFor(db, leagueId, teamId, "disciplinarni", seasonNumber);
+  if (predseda.ok) return true;
+  const prezident = await presidentOf(db, leagueId, seasonNumber);
+  return prezident?.teamId === teamId;
+}
+
+export interface PitchRow {
+  teamId: string;
+  teamName: string;
+  pitch: number | null;
+  capacity: number | null;
+  /** Je pod hranicí, kterou si soutěž odhlasovala. */
+  breaches: boolean;
+}
+
+/**
+ * Stav hřišť soutěže, seřazený od nejhoršího — koho má disciplinárka řešit,
+ * je nahoře. Jen seniorské A-týmy: U21 hraje na hřišti mateřského klubu
+ * a v přehledu by stálo dvakrát.
+ */
+export async function pitchOverview(
+  db: D1Database, leagueId: string, seasonNumber: number,
+): Promise<{ limit: number; teams: PitchRow[] }> {
+  const { resolveRules } = await import("./rules");
+  const rules = await resolveRules(db, leagueId, seasonNumber)
+    .catch((e) => { logger.warn({ module: M }, "pravidla pro přehled hřišť", e); return null; });
+  const limit = rules?.min_pitch_condition ?? 0;
+
+  const rows = await db.prepare(
+    `SELECT t.id, t.name, s.pitch_condition AS pitch, s.capacity
+       FROM teams t
+       LEFT JOIN stadiums s ON s.team_id = t.id
+      WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
+      ORDER BY s.pitch_condition ASC NULLS LAST, t.name`
+  ).bind(leagueId).all<{ id: string; name: string; pitch: number | null; capacity: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, "stav hřišť soutěže", e); return { results: [] }; });
+
+  return {
+    // Nula znamená, že si soutěž hranici neodhlasovala a hřiště se nehlídají.
+    limit,
+    teams: rows.results.map((t) => ({
+      teamId: t.id, teamName: t.name, pitch: t.pitch, capacity: t.capacity,
+      breaches: limit > 0 && t.pitch !== null && t.pitch < limit,
+    })),
+  };
+}
