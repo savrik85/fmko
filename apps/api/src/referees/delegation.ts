@@ -169,27 +169,56 @@ async function delegateCalendar(db: D1Database, cal: CalendarRow): Promise<numbe
     return 0;
   }
 
-  // Soutěž si mohla některé sudí vyškrtnout z listiny. Ban je per soutěž — pool
-  // patří okresu a sdílí ho i U21, která o vyškrtnutí nehlasovala.
+  // Soutěž si mohla některé sudí vyškrtnout z listiny nebo jim dát stopku. Obojí
+  // je per soutěž — pool patří okresu a sdílí ho i U21, která o tom nehlasovala.
   //
-  // Pojistka: kdyby po filtru zbyla necelá polovina, ban se ignoruje a jen se
+  // Pojistka: kdyby po filtru zbyla necelá polovina, filtr se ignoruje a jen se
   // zaloguje. Prázdná listina by delegaci shodila do nouzového ventilu a jeden
   // sudí by pískal celé kolo.
   let pool = full;
   try {
     const { bannedIds } = await import("../competition/referee-bans");
-    const bans = await bannedIds(db, cal.league_id, cal.season_number);
-    if (bans.size > 0) {
-      const filtered = full.filter((r) => !bans.has(r.id));
+    const { pausedIds } = await import("../competition/referee-roster");
+    const [bans, pauses] = await Promise.all([
+      bannedIds(db, cal.league_id, cal.season_number),
+      pausedIds(db, cal.league_id, cal.season_number, cal.game_week),
+    ]);
+    const out = new Set([...bans, ...pauses]);
+    if (out.size > 0) {
+      const filtered = full.filter((r) => !out.has(r.id));
       if (filtered.length >= Math.max(2, Math.ceil(full.length / 2))) {
         pool = filtered;
       } else {
         logger.warn({ module: "referees" },
-          `soutěž ${cal.league_id} má tolik banů, že by na listině zbylo ${filtered.length} z ${full.length} — bany ignorovány`);
+          `soutěž ${cal.league_id} má tolik banů a stopek, že by na listině zbylo ${filtered.length} z ${full.length} — filtr ignorován`);
       }
     }
   } catch (e) {
-    logger.warn({ module: "referees" }, "filtr vyškrtnutých rozhodčích", e);
+    logger.warn({ module: "referees" }, "filtr vyškrtnutých a pozastavených rozhodčích", e);
+  }
+
+  // Obsazovací listina komisaře: kdo v tomhle kole vůbec smí pískat. Komisař
+  // vybírá LIDI, ne dvojice — párování zůstává na losu níž, jinak by mohl poslat
+  // kartového cvoka na soupeře a vlastnímu klubu nechat pohodáře.
+  //
+  // Když listina není nebo se z ní po banech a stopkách nesejde dost lidí na
+  // obsazení kola, deleguje se ze všech. Kolo se musí odpískat tak jako tak.
+  try {
+    const { nominationsFor } = await import("../competition/referee-roster");
+    const nominated = await nominationsFor(db, cal.calendar_id);
+    if (nominated.size > 0) {
+      const vybrani = pool.filter((r) => nominated.has(r.id));
+      if (vybrani.length > 0) {
+        pool = vybrani;
+        logger.info({ module: "referees" },
+          `kolo ${cal.calendar_id}: obsazovací listina komisaře — ${vybrani.length} rozhodčích`);
+      } else {
+        logger.warn({ module: "referees" },
+          `kolo ${cal.calendar_id}: z obsazovací listiny nezbyl nikdo použitelný — deleguje se ze všech`);
+      }
+    }
+  } catch (e) {
+    logger.warn({ module: "referees" }, "obsazovací listina kola", e);
   }
 
   const matchRows = await db.prepare(

@@ -35,6 +35,11 @@ import {
   MIN_ACTIVE_REFEREES, canBanReferee, refereeStandings,
 } from "../competition/referee-bans";
 import {
+  MAX_PAUSES_PER_SEASON, MIN_USABLE_FOR_ROUND, PAUSE_WEEKS,
+  activePauses, applyRefereePause, canPauseReferee, nextOpenRound,
+  nominationsFor, pausedIds, saveNominations,
+} from "../competition/referee-roster";
+import {
   nextSeasonRules, proposalTitle, validateProposal, voterStats,
 } from "../competition/proposals";
 import {
@@ -1052,10 +1057,153 @@ competitionRouter.get("/competition/:leagueId/referees", async (c) => {
   const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
   const check = await canBanReferee(c.env.DB, leagueId, meta.season_number, meta.district);
 
+  // Obsazovací listina a stopky se váží ke KONKRÉTNÍMU kolu. Když soutěž žádné
+  // nedelegované kolo nemá (konec sezóny, pauza), komisař nemá co obsazovat.
+  const round = await nextOpenRound(c.env.DB, leagueId);
+  const [nominated, paused, pauses] = round
+    ? await Promise.all([
+      nominationsFor(c.env.DB, round.calendarId),
+      pausedIds(c.env.DB, leagueId, meta.season_number, round.gameWeek),
+      activePauses(c.env.DB, leagueId, meta.season_number, round.gameWeek),
+    ])
+    : [new Set<string>(), new Set<string>(), []];
+
+  const pauseCheck = round
+    ? await canPauseReferee(c.env.DB, leagueId, meta.season_number, meta.district, round.gameWeek)
+    : { ok: false, reason: "Žádné kolo teď nečeká na obsazení." };
+
+  const pauseUntil = new Map(pauses.map((p) => [p.refereeId, p.untilWeek]));
+
   return c.json({
     minList: MIN_ACTIVE_REFEREES,
     canBan: check.ok, banReason: check.reason ?? null, usable: check.usable ?? standings.length,
-    referees: standings,
+    referees: standings.map((r) => ({
+      ...r,
+      paused: paused.has(r.refereeId),
+      pausedUntil: pauseUntil.get(r.refereeId) ?? null,
+      nominated: nominated.has(r.refereeId),
+    })),
+    round: round && {
+      calendarId: round.calendarId, gameWeek: round.gameWeek,
+      matches: round.matches, scheduledAt: round.scheduledAt,
+    },
+    rosterSet: nominated.size > 0,
+    pauseWeeks: PAUSE_WEEKS,
+    maxPauses: MAX_PAUSES_PER_SEASON,
+    minForRound: MIN_USABLE_FOR_ROUND,
+    canPause: pauseCheck.ok, pauseReason: pauseCheck.reason ?? null,
+  });
+});
+
+/**
+ * Obsazovací listina kola. Komisař posílá výsledný stav, ne rozdíl — prázdné
+ * pole listinu zruší a kolo se obsadí ze všech.
+ */
+competitionRouter.post("/teams/:teamId/competition/referee-roster", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ refereeIds?: string[] }>().catch(() => null);
+  const refereeIds = Array.isArray(body?.refereeIds) ? body.refereeIds.map(String) : null;
+  if (!refereeIds) return c.json({ error: "Chybí výběr rozhodčích" }, 400);
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+  const gov = await loadGovernance(c.env.DB, leagueId);
+  if (!gov?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
+
+  const act = await actsFor(c.env.DB, leagueId, teamId, "rozhodcich", meta.season_number);
+  if (!act.ok) return c.json({ error: act.reason }, 403);
+
+  const round = await nextOpenRound(c.env.DB, leagueId);
+  if (!round) {
+    return c.json({ error: "Žádné kolo teď nečeká na obsazení. Delegace běží dva dny před výkopem." }, 409);
+  }
+
+  // Vyškrtnutého ani pozastaveného nasadit nejde — a smysl to má i technicky:
+  // delegace je z poolu stejně vyhodí a listina by se scvrkla pod počet zápasů.
+  const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
+  const paused = await pausedIds(c.env.DB, leagueId, meta.season_number, round.gameWeek);
+  const usable = new Set(
+    standings.filter((r) => !r.banned && !paused.has(r.refereeId)).map((r) => r.refereeId),
+  );
+
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const res = await saveNominations(c.env.DB, {
+    leagueId, round, refereeIds, teamId, gameDate, usable,
+  });
+  if (!res.ok) return c.json({ error: res.reason }, 409);
+
+  return c.json({ ok: true, saved: res.saved, gameWeek: round.gameWeek });
+});
+
+/**
+ * Stopka na tři kola. Mírnější nástroj než vyškrtnutí — sudí se vrátí sám.
+ */
+competitionRouter.post("/teams/:teamId/competition/referee-pauses", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ refereeId?: string; note?: string }>().catch(() => null);
+  if (!body?.refereeId) return c.json({ error: "Chybí rozhodčí" }, 400);
+  const note = (body.note ?? "").trim();
+  if (note.length < 10) {
+    return c.json({ error: "Napiš důvod (aspoň 10 znaků). Uvidí ho celá soutěž." }, 400);
+  }
+
+  const leagueId = await leagueOfTeam(c.env.DB, teamId);
+  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+  const gov = await loadGovernance(c.env.DB, leagueId);
+  if (!gov?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
+
+  const act = await actsFor(c.env.DB, leagueId, teamId, "rozhodcich", meta.season_number);
+  if (!act.ok) return c.json({ error: act.reason }, 403);
+
+  const role = act.asPresident ? "predseda" : "rozhodcich";
+  const slot = await c.env.DB.prepare(
+    `SELECT used_ref_pause FROM competition_officials
+      WHERE league_id = ? AND role = ? AND team_id = ? AND season_number = ? AND status = 'active'`
+  ).bind(leagueId, role, teamId, meta.season_number).first<{ used_ref_pause: number }>()
+    .catch((e) => { logger.warn({ module: M }, "čerpání stopek komisaře", e); return null; });
+  if (!slot) return c.json({ error: "Tuhle pravomoc má jen komisař rozhodčích." }, 403);
+
+  if (slot.used_ref_pause >= MAX_PAUSES_PER_SEASON) {
+    return c.json({
+      error: `Stopky máš za tuhle sezónu vyčerpané (${MAX_PAUSES_PER_SEASON} ze ${MAX_PAUSES_PER_SEASON}).`,
+    }, 409);
+  }
+
+  const round = await nextOpenRound(c.env.DB, leagueId);
+  if (!round) {
+    return c.json({ error: "Žádné kolo teď nečeká na obsazení — stopka by neměla od čeho běžet." }, 409);
+  }
+
+  const check = await canPauseReferee(
+    c.env.DB, leagueId, meta.season_number, meta.district, round.gameWeek, body.refereeId,
+  );
+  if (!check.ok) return c.json({ error: check.reason }, 409);
+
+  const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
+  const ref = standings.find((r) => r.refereeId === body.refereeId);
+  if (!ref) return c.json({ error: "Takový rozhodčí na listině není." }, 404);
+  if (ref.banned) return c.json({ error: "Tenhle sudí je vyškrtnutý — stopka by byla k ničemu." }, 409);
+
+  const gameDate = await currentGameDate(c.env.DB, teamId);
+  const done = await applyRefereePause(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, refereeId: ref.refereeId,
+    fromWeek: round.gameWeek, reason: note, issuedByTeamId: teamId, gameDate,
+  });
+  if (!done) return c.json({ error: "Stopku se nepodařilo zapsat." }, 500);
+
+  await c.env.DB.prepare(
+    `UPDATE competition_officials SET used_ref_pause = used_ref_pause + 1
+      WHERE league_id = ? AND role = ? AND team_id = ? AND season_number = ? AND status = 'active'`
+  ).bind(leagueId, role, teamId, meta.season_number).run()
+    .catch((e) => logger.warn({ module: M }, "čerpání stopek komisaře", e));
+
+  return c.json({
+    ok: true, fromWeek: round.gameWeek, untilWeek: round.gameWeek + PAUSE_WEEKS - 1,
+    remaining: MAX_PAUSES_PER_SEASON - slot.used_ref_pause - 1,
   });
 });
 

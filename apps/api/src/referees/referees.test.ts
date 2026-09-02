@@ -18,11 +18,45 @@ const SURNAMES: Record<string, number> = {
   "Král": 15, "Růžička": 15, "Beneš": 14, "Fiala": 13, "Sedláček": 12,
 };
 
+/**
+ * Skutečná ID prachatické komise z databáze, zaznamenaná před rozšířením listiny
+ * na 24 sudích. Fixture, ne odvozená hodnota — viz test níž.
+ */
+const ID_PRACHATICE = [
+  "ref-1053551775-9", "ref-1245657886-7", "ref-1245657889-4", "ref-1287932300-10",
+  "ref-1526600609-12", "ref-155784469-13", "ref-155784470-14", "ref-1759569117-0",
+  "ref-1898507992-5", "ref-1898507996-1", "ref-255010082-11", "ref-455112021-8",
+  "ref-884376506-2", "ref-884376507-3", "ref-896184097-6",
+];
+
+/** Sedm zápasů seniorů plus sedm U21 ve stejný den. */
+const DENNI_ZAPASY_OKRESU = 14;
+
 describe("generátor rozhodčích", () => {
   const pool = generateRefereePool("Prachatice", SURNAMES);
 
-  it("vygeneruje přesně 15 rozhodčích", () => {
+  it("vygeneruje celou listinu okresu", () => {
     expect(pool).toHaveLength(REFEREES_PER_DISTRICT);
+    expect(REFEREES_PER_DISTRICT).toBeGreaterThan(DENNI_ZAPASY_OKRESU);
+  });
+
+  /**
+   * Zámek na ID základní patnáctky.
+   *
+   * Tohle jsou skutečná ID z běžící databáze, ne vypočítaná očekávání. ID sudího
+   * visí na odpískaných zápasech, známkách a vztazích ke klubům — kdyby se
+   * generátor rozjel, tiše by se rozpadly. Když tenhle test spadne, NEPŘEPISUJ
+   * fixture: rozbil se generátor.
+   */
+  it("základní patnáctka má pořád stejná ID", () => {
+    expect(pool.slice(0, 15).map((r) => r.id).sort()).toEqual([...ID_PRACHATICE].sort());
+  });
+
+  it("doplněk listiny nesahá na základní patnáctku", () => {
+    const zakladni = new Set(ID_PRACHATICE);
+    const doplnek = pool.slice(15);
+    expect(doplnek).toHaveLength(REFEREES_PER_DISTRICT - 15);
+    for (const r of doplnek) expect(zakladni.has(r.id)).toBe(false);
   });
 
   it("všechny osy leží v rozsahu deklarovaném archetypem", () => {

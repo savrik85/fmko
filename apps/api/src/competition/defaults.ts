@@ -165,8 +165,10 @@ export const ROLE_SCOPE: Record<OfficialRole, {
   },
   rozhodcich: {
     gesce: "rozhodcich",
-    agenda: "Listina rozhodčích okresu a jejich odměna za odpískaný zápas.",
+    agenda: "Listina rozhodčích okresu, obsazení kol a odměna za odpískaný zápas.",
     powers: [
+      "Sestaví obsazovací listinu kola — kdo v něm vůbec píská. Kdo koho dostane, losuje delegace.",
+      "Dá rozhodčímu stopku na tři kola, nejvýš třikrát za sezónu.",
       "Vyškrtne rozhodčího sám, bez hlasování. Jediná brzda je minimální velikost listiny.",
       "Vidí známky rozhodčích a to, jak si soutěž stojí s minimální velikostí listiny.",
       "Vyškrtnutý sudí se po sezóně vrátí a bude si pamatovat, kdo ho škrtl.",

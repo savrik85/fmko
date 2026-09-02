@@ -133,11 +133,26 @@ export interface DisciplineData {
 export interface RefereeRow {
   refereeId: string; name: string; archetype: string;
   matches: number; avgGrade: number | null; banned: boolean; flagged: boolean;
+  /** Má stopku, která zasahuje do nejbližšího nedelegovaného kola. */
+  paused: boolean;
+  pausedUntil: number | null;
+  /** Je na obsazovací listině toho kola. */
+  nominated: boolean;
+}
+
+/** Nejbližší kolo, které ještě nemá delegované rozhodčí. */
+export interface RefereeRound {
+  calendarId: string; gameWeek: number; matches: number; scheduledAt: string;
 }
 
 export interface RefereeData {
   minList: number; canBan: boolean; banReason: string | null; usable: number;
   referees: RefereeRow[];
+  round: RefereeRound | null;
+  /** Komisař už pro to kolo listinu sestavil. */
+  rosterSet: boolean;
+  pauseWeeks: number; maxPauses: number; minForRound: number;
+  canPause: boolean; pauseReason: string | null;
 }
 
 export interface BoardMessage {

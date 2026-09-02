@@ -19,11 +19,12 @@ const M = "competition-referee-bans";
  * Pod tenhle počet použitelných sudích se listina nesmí dostat.
  *
  * Je to JEDINÁ brzda vyškrtávání a má mechanický důvod: sedm ligových zápasů plus
- * U21 v týž den potřebuje dost sudích. Pod dvanáct se delegace propadne do nouzového
- * ventilu a jeden sudí odpíská dva zápasy denně. Kolik jich soutěž vyhodí, dokud se
- * do limitu vejde, je její věc.
+ * U21 v týž den potřebuje dost sudích. Pod osmnáct se delegace propadne do nouzového
+ * ventilu, jakmile k vyškrtnutým přibudou i sudí se stopkou od komisaře — čtrnáct
+ * zápasů denně, tři možné stopky a jeden náhradník. Kolik jich soutěž vyhodí, dokud
+ * se do limitu vejde, je její věc.
  */
-export const MIN_ACTIVE_REFEREES = 12;
+export const MIN_ACTIVE_REFEREES = 18;
 /** Průměrná známka, od které se sudí objeví na programu sám. */
 export const AUTO_PROPOSAL_GRADE = 4.0;
 /** Kolik zápasů musí mít odpískaných, než se ta známka bere vážně. */
@@ -147,12 +148,12 @@ async function colleaguesReact(db: D1Database, opts: ApplyBanOpts): Promise<void
   const proposer = await db.prepare(
     "SELECT proposed_by_team_id FROM competition_proposals WHERE id = ?"
   ).bind(opts.proposalId).first<{ proposed_by_team_id: string }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "navrhovatel banu", e); return null; });
   if (!proposer) return;
 
   const banned = await db.prepare("SELECT district FROM referees WHERE id = ?")
     .bind(opts.refereeId).first<{ district: string }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "okres vyškrtnutého sudího", e); return null; });
   if (!banned) return;
 
   const colleagues = await db.prepare(
@@ -230,7 +231,7 @@ export async function expiredBans(
   const row = await db.prepare(
     "SELECT COUNT(*) AS n FROM competition_referee_bans WHERE league_id = ? AND COALESCE(until_season, season_number) < ?"
   ).bind(leagueId, seasonNumber).first<{ n: number }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "počet propadlých banů", e); return null; });
   return row?.n ?? 0;
 }
 

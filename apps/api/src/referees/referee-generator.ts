@@ -1,5 +1,5 @@
 /**
- * Generátor okresních rozhodčích — 15 osob na okres, deterministicky.
+ * Generátor okresních rozhodčích — 24 osob na okres, deterministicky.
  *
  * Pool je per OKRES, ne per liga: rozhodčí je člen okresní komise, ne jedné soutěže.
  * Senior i U21 tedy sdílí tytéž lidi a pool přežije rollover sezóny (`leagues` se
@@ -15,12 +15,17 @@ import { logger } from "../lib/logger";
 import { getDistrictDataFromDB } from "../data/districts";
 import { feminizeSurname, generateStaffFace } from "../staff/staff-generator";
 import {
-  REFEREE_ARCHETYPES, REFEREE_POOL_MIX,
+  REFEREE_ARCHETYPES, REFEREE_POOL_MIX, REFEREE_POOL_EXTRA,
   type RefereeArchetype, type RefereeProfile,
 } from "../engine/referee";
 
-/** Kolik rozhodčích má okresní komise. */
-export const REFEREES_PER_DISTRICT = 15;
+/**
+ * Kolik rozhodčích má okresní komise.
+ *
+ * Musí být znatelně víc než kolik se v okrese hraje zápasů v jednom dni (7 senior
+ * + 7 U21), jinak nemá komisař rozhodčích z čeho sestavovat obsazovací listinu.
+ */
+export const REFEREES_PER_DISTRICT = REFEREE_POOL_MIX.length + REFEREE_POOL_EXTRA.length;
 
 /** Podíl žen mezi okresními rozhodčími. */
 const FEMALE_SHARE = 0.08;
@@ -78,25 +83,58 @@ const inRange = (rng: Rng, range: readonly [number, number]) => rng.int(range[0]
 /**
  * Čistá funkce — vygeneruje celý pool bez DB. Stejný okres a stejná data dají vždy
  * stejnou partu lidí, takže se dá reprodukovat i testovat.
+ *
+ * Generuje se ve DVOU vlnách, a to je zásadní: základní patnáctka běží přesně
+ * tak, jak běžela vždycky (týž seed, týž mix, tytéž indexy), takže má nezměněná
+ * ID. Devítka navíc má vlastní seed a indexy od 15 výš. Kdyby se doplněk jen
+ * přilepil do jednoho `mix`, shuffle by přeskládal všech 24 a přejmenoval by
+ * sudí, kterým už běží odpískané zápasy, známky a vztahy ke klubům.
  */
 export function generateRefereePool(
   district: string,
   surnames: Record<string, number>,
 ): GeneratedReferee[] {
   const base = normalizeDistrict(district);
-  const rng = createRng(seedFromString(`referees|${base}|v1`) + 4241);
 
-  // Rozdělení archetypů: extrémy jsou vzácné, každý okres má právě jednoho
-  // pískavého kohouta a jednoho kartového cvoka.
-  const mix = [...REFEREE_POOL_MIX];
+  const zaklad = generateWave(base, surnames, {
+    mix: [...REFEREE_POOL_MIX], seedKey: "v1", offset: 0, usedNames: new Set(), ustvanySwap: true,
+  });
+
+  const doplnek = generateWave(base, surnames, {
+    mix: [...REFEREE_POOL_EXTRA], seedKey: "v2", offset: REFEREE_POOL_MIX.length,
+    // Jména základní patnáctky musí druhá vlna znát, jinak by okres měl dva Nováky.
+    usedNames: new Set(zaklad.map((r) => `${r.firstName} ${r.lastName}`)),
+    ustvanySwap: false,
+  });
+
+  return [...zaklad, ...doplnek];
+}
+
+interface WaveOpts {
+  mix: RefereeArchetype[];
+  /** Rozlišuje seed vln — „v1" nesmí nikdy změnit hodnotu. */
+  seedKey: string;
+  /** Od jakého indexu vlna čísluje. Index je součástí ID. */
+  offset: number;
+  usedNames: Set<string>;
+  /** Jen první vlna může jednoho veterána vyměnit za uštvaného. */
+  ustvanySwap: boolean;
+}
+
+function generateWave(
+  base: string,
+  surnames: Record<string, number>,
+  { mix, seedKey, offset, usedNames, ustvanySwap }: WaveOpts,
+): GeneratedReferee[] {
+  const rng = createRng(seedFromString(`referees|${base}|${seedKey}`) + 4241);
+
   // Starý sudí, co už nestíhá, nahradí jednoho veterána — ne v každém okrese.
-  if (rng.random() < 0.6) {
+  if (ustvanySwap && rng.random() < 0.6) {
     const idx = mix.indexOf("klidny_veteran");
     if (idx >= 0) mix[idx] = "ustvany";
   }
   rng.shuffle(mix);
 
-  const usedNames = new Set<string>();
   const pool: GeneratedReferee[] = [];
 
   for (let i = 0; i < mix.length; i++) {
@@ -122,8 +160,12 @@ export function generateRefereePool(
     // Rozhodčí nosí černou se žlutými prvky, ne klubové barvy.
     avatar.teamColors = ["#1A1A1A", "#F5C542", "#FFFFFF"];
 
+    // Index je globální přes obě vlny — jinak by devátý muž doplňku dostal ID
+    // devátého muže základní patnáctky, pokud sdílí archetyp.
+    const idx = offset + i;
+
     pool.push({
-      id: `ref-${seedFromString(`${base}|${archetype}|${i}`)}-${i}`,
+      id: `ref-${seedFromString(`${base}|${archetype}|${idx}`)}-${idx}`,
       district: base,
       firstName,
       lastName,
@@ -195,7 +237,7 @@ export function rowToProfile(r: RefereeRow): RefereeProfile {
 }
 
 /**
- * Zajistí, že okres má svých 15 rozhodčích, a vrátí je.
+ * Zajistí, že okres má celou listinu, a vrátí ji.
  *
  * Idempotentní: `INSERT OR IGNORE` na stabilní ID, takže souběžné volání z delegace
  * i z API endpointu nevytvoří duplicity.

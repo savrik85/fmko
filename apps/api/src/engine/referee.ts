@@ -215,8 +215,12 @@ export const REFEREE_ARCHETYPES = {
 export type RefereeArchetype = keyof typeof REFEREE_ARCHETYPES;
 
 /**
- * Složení poolu 15 sudích na okres. Extrémy jsou vzácné — každý okres má právě
+ * Základní patnáctka okresu. Extrémy jsou vzácné — každý okres má právě
  * jednoho pískavého kohouta a jednoho kartového cvoka, zbytek je snesitelný.
+ *
+ * Tenhle seznam se NESMÍ měnit ani přeskládat. ID sudího se odvozuje z archetypu
+ * a jeho pořadí, takže každý zásah sem přejmenuje lidi, kterým už běží odpískané
+ * zápasy, známky a vztahy ke klubům. Doplňovat se smí výhradně do POOL_EXTRA.
  */
 export const REFEREE_POOL_MIX: readonly RefereeArchetype[] = [
   "klidny_veteran", "klidny_veteran", "klidny_veteran",
@@ -226,6 +230,27 @@ export const REFEREE_POOL_MIX: readonly RefereeArchetype[] = [
   "ambiciozni",
   "zelenac", "zelenac",
   "domaci_kamarad", "piskavy_kohout", "kartovy_cvok",
+];
+
+/**
+ * Devítka, o kterou se listina rozšířila, když komisař rozhodčích dostal
+ * obsazovací listinu.
+ *
+ * Původních patnáct na okres bylo míň, než kolik se v okrese hraje zápasů —
+ * senior i U21 mají po sedmi kolech ve stejný den, takže z patnácti sudích jich
+ * čtrnáct pískalo povinně a vybírat nebylo z čeho.
+ *
+ * Extrémy se ZÁMĚRNĚ nepřidávají: kohout, cvok i domácí kamarád zůstávají po
+ * jednom na okres. Tím, že je pool větší, jsou vzácnější — a komisařovo
+ * rozhodnutí nasadit je (nebo je z kola vyškrtnout) o to větší.
+ */
+export const REFEREE_POOL_EXTRA: readonly RefereeArchetype[] = [
+  "klidny_veteran", "klidny_veteran",
+  "pohodar", "pohodar",
+  "puntickar", "puntickar",
+  "bafunar",
+  "zelenac",
+  "ambiciozni",
 ];
 
 export function archetypeLabel(key: string, gender?: string | null): string {

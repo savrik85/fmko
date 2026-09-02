@@ -53,7 +53,7 @@ const GESCE_POPIS: Record<string, string> = {
   soutez: "Pravidla soutěže, přijetí sponzora a personální věci.",
   hospodarska: "Odměny za zápasy i za umístění, startovné, odvody z tržeb a dotace klubům.",
   disciplinarni: "Pokuty klubům, sazebník trestů a odvolání proti nim.",
-  rozhodcich: "Listina rozhodčích a jejich odměna za odpískaný zápas.",
+  rozhodcich: "Listina rozhodčích, obsazení kol a jejich odměna za odpískaný zápas.",
   integrita: "Sázková kancelář a přestupový trh — limity sázek, odvod z obratu a dohled nad tím, co vypadá na domluvu.",
   zadna: "Návrhy, které nespadají pod žádný odbor.",
 };
