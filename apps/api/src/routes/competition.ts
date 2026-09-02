@@ -362,6 +362,10 @@ competitionRouter.get("/competition/:leagueId/decisions", async (c) => {
     catch (e) { logger.warn({ module: M }, `zápis ze zasedání ${m.game_date} nejde přečíst`, e); continue; }
 
     for (const it of items) {
+      // Pokuty se slévají do jednoho řádku za zasedání. Ve čtrnáctiklubové
+      // soutěži jich po jedné kontrole hřišť padne klidně šest a na vývěsce
+      // by vytlačily všechno, o čem se opravdu hlasovalo.
+      if (it.kind === "compliance") continue;
       decisions.push({
         gameDate: m.game_date,
         seasonNumber: m.season_number,
@@ -375,6 +379,27 @@ competitionRouter.get("/competition/:leagueId/decisions", async (c) => {
         effectiveFromSeason: it.effectiveFromSeason ?? null,
       });
     }
+
+    const pokuty = items.filter((i) => i.kind === "compliance" && i.status === "passed");
+    if (pokuty.length > 0) {
+      const kluby = pokuty
+        .map((p) => String(p.title).split(" — ")[1])
+        .filter(Boolean);
+      decisions.push({
+        gameDate: m.game_date,
+        seasonNumber: m.season_number,
+        kind: "compliance",
+        title: pokuty.length === 1
+          ? String(pokuty[0].title)
+          : `${pokuty.length} pokut za porušení pravidel soutěže`,
+        status: "passed",
+        resultNote: pokuty.length === 1
+          ? (pokuty[0].resultNote as string) ?? null
+          : kluby.join(", "),
+        pro: null, proti: null, zdrzel: null, effectiveFromSeason: null,
+      });
+    }
+
     if (decisions.length >= limit) break;
   }
 
