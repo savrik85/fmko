@@ -103,11 +103,12 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
   return (
     <div className="space-y-4">
       {/* ── Přestupy k prověření ─────────────────────────────────────────── */}
-      {/* Počet podezřelých je vidět i po zabalení — kvůli tomu se sem chodí. */}
+      {/* Zabalené jako všechno ostatní. Počet podezřelých je vidět v poznámce,
+          takže se sem dá zajít cíleně — automatické rozbalení nejdelšího seznamu
+          by zrušilo důvod, proč jsou tyhle sekce sbalovací. */}
       <Rozbaleni
         title="Přestupy soutěže"
         right={`${data.transfers.length} ${plural(data.transfers.length, "obchod", "obchody", "obchodů")}`}
-        defaultOpen={podezrele.length > 0}
         note={data.transfers.length === 0
           ? "Letos se v soutěži zatím nikdo neprodal."
           : podezrele.length === 0

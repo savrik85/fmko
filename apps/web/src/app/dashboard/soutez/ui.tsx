@@ -164,20 +164,23 @@ export function StatusPill({ status }: { status: string }) {
  * mezi nimi scrollovalo přes celé obrazovky. Zabalené je vidět všechny naráz
  * a rozbalí se ten, který zrovna řeším.
  *
+ * Nic se NEROZBALUJE samo, ani „když je uvnitř něco důležitého" — jedna otevřená
+ * sekce vrátí scrollování a zruší důvod, proč to sbalovací je. Co nesmí uniknout,
+ * patří do `note`, která je vidět i zabalená.
+ *
  * Používá `details`/`summary`, ne vlastní stav: rozbalení tak funguje i než
  * doběhne hydratace a čtečka to přečte jako to, čím to je.
  */
-export function Rozbaleni({ title, right, note, defaultOpen = false, children }: {
+export function Rozbaleni({ title, right, note, children }: {
   title: React.ReactNode;
   /** Číslo napravo od nadpisu — kolik řádků se uvnitř skrývá. */
   right?: React.ReactNode;
   /** Věta pod nadpisem, viditelná i po zabalení. Sem patří to, co nesmí uniknout. */
   note?: React.ReactNode;
-  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <details className="card p-4 sm:p-5 group" open={defaultOpen}>
+    <details className="card p-4 sm:p-5 group">
       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         <div className="flex items-center gap-3">
           <div className="section-label mb-0 shrink-0" style={{ color: "var(--color-ink-light)" }}>
