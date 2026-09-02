@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import { Pitch } from "./Pitch";
@@ -22,8 +22,10 @@ import { VillageVibe } from "./VillageVibe";
 import { LightingAndAtmosphere } from "./LightingAndAtmosphere";
 import { WeatherEffects } from "./WeatherEffects";
 import { CameraController } from "./CameraController";
+import { PostFX } from "./PostFX";
 import {
   getStadiumLayout,
+  getViewpoints,
   VIEWPOINTS,
   WEATHER_OPTIONS,
   STADIUM_MODES,
@@ -34,6 +36,9 @@ import {
   type StadiumMode,
   type AttendanceLevel,
 } from "./constants";
+
+/** Klíč v localStorage pro přepínač vylepšené grafiky (AO, záře, obloha s prostředím). */
+const FX_STORAGE_KEY = "stadium-fx-enabled";
 
 export interface Stadium3DCustomization {
   fenceColor?: string | null;
@@ -225,6 +230,32 @@ export function Stadium3D({
     return () => mq.removeEventListener("change", update);
   }, []);
 
+  // Vylepšená grafika (post-processing + obloha s prostředím) — jen desktop, přepínač v liště.
+  // Výchozí zapnuto; volba se pamatuje, aby šlo srovnat před/po i přes reload.
+  const [fxEnabled, setFxEnabled] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(FX_STORAGE_KEY) === "0") setFxEnabled(false);
+    } catch (e) {
+      console.warn("stadium fx: čtení localStorage selhalo:", e);
+    }
+  }, []);
+  const handleFxToggle = () => {
+    const next = !fxEnabled;
+    setFxEnabled(next);
+    try {
+      window.localStorage.setItem(FX_STORAGE_KEY, next ? "1" : "0");
+    } catch (e) {
+      console.warn("stadium fx: zápis do localStorage selhal:", e);
+    }
+    setStatusToast(next ? "✨ Vylepšená grafika zapnuta" : "✨ Vylepšená grafika vypnuta");
+    setTimeout(() => setStatusToast(null), 900);
+  };
+  const fxActive = fxEnabled && !isMobile;
+
+  // Pohledy kamery podle úrovně tribun a střechy (statické souřadnice končily ve střeše tribuny)
+  const viewpoints = useMemo(() => getViewpoints(f.stands ?? 0, f.roof ?? 0), [f.stands, f.roof]);
+
   return (
     <div className="relative w-full h-full select-none">
       {/* Decentní úvodní indikátor načítání 3D scény */}
@@ -273,13 +304,16 @@ export function Stadium3D({
         }}
       >
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
-        <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} />
+        <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
 
         {/* 3D efekty počasí (déšť, sníh, vítr, blesky, mraky) */}
         <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />
 
         {/* Plynulý kontrolér kamery a filmový oblet */}
-        <CameraController viewpoint={viewpoint} isMobile={isMobile} />
+        <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} />
+
+        {/* Post-processing: ambient occlusion, záře světel, vinětace, tone mapping (jen desktop) */}
+        {fxActive && isSceneReady && <PostFX timeOfDay={timeOfDay} />}
 
         <Suspense fallback={null}>
           {/* Okolí, terénní kopečky a vzdálená vesnička */}
@@ -626,9 +660,31 @@ export function Stadium3D({
                   })}
                 </div>
 
+                {/* 4. Vylepšená grafika (jen desktop) */}
+                {!isMobile && (
+                  <>
+                    <div className="w-px h-4 bg-white/20 shrink-0" />
+                    <button
+                      onClick={handleFxToggle}
+                      className={`p-1.5 rounded-lg text-xs transition-all shrink-0 ${
+                        fxEnabled
+                          ? "bg-violet-600 text-white shadow-sm"
+                          : "text-white/70 hover:text-white hover:bg-white/10"
+                      }`}
+                      title={
+                        fxEnabled
+                          ? "Vylepšená grafika: zapnuto (stíny v rozích, záře světel, odrazy oblohy)"
+                          : "Vylepšená grafika: vypnuto"
+                      }
+                    >
+                      ✨
+                    </button>
+                  </>
+                )}
+
                 <div className="w-px h-4 bg-white/20 shrink-0" />
 
-                {/* 4. Tlačítko zavřít panel */}
+                {/* 5. Tlačítko zavřít panel */}
                 <button
                   onClick={() => setControlsVisible(false)}
                   className="text-white/60 hover:text-white p-1.5 rounded-lg hover:bg-white/15 text-xs font-heading font-bold transition-all shrink-0"

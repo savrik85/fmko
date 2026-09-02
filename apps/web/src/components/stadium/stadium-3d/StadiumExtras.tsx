@@ -286,7 +286,42 @@ export function UltrasSector({
   );
 }
 
-/** Pyrotechnika kotle — plápolající světlice a stoupající kouř v barvách klubu */
+/** Doba života jednoho obláčku kouře (s). */
+const SMOKE_LIFETIME = 2.8;
+
+// Textura obláčku kouře — měkký radiální přechod, sdílená všemi světlicemi.
+let smokeTextureCache: THREE.CanvasTexture | null = null;
+function getSmokeTexture(): THREE.CanvasTexture | null {
+  if (smokeTextureCache) return smokeTextureCache;
+  if (typeof document === "undefined") return null;
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  // Základní měkký obláček + několik menších skvrn kolem, aby obrys nebyl kruh.
+  const blob = (cx: number, cy: number, r: number, a: number) => {
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.45, `rgba(255,255,255,${a * 0.45})`);
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  };
+  const c = size / 2;
+  blob(c, c, size * 0.42, 0.55);
+  blob(c - size * 0.16, c - size * 0.1, size * 0.26, 0.5);
+  blob(c + size * 0.17, c - size * 0.05, size * 0.24, 0.5);
+  blob(c + size * 0.04, c + size * 0.17, size * 0.25, 0.45);
+  blob(c - size * 0.08, c + size * 0.2, size * 0.2, 0.4);
+  blob(c + size * 0.14, c + size * 0.14, size * 0.18, 0.4);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  smokeTextureCache = tex;
+  return tex;
+}
+
 /** Pyrotechnika kotle — plápolající světlice a stoupající kouř v barvách klubu */
 function UltrasPyroShow({
   level,
@@ -329,17 +364,24 @@ function PyroFlare({ position, color, phase }: { position: [number, number, numb
   const auraMeshRef = useRef<THREE.Mesh>(null);
   const sparksRef = useRef<THREE.Group>(null);
 
-  // Obláčky kouře s různou fází růstu
-  const puffCount = 7;
+  // Obláčky kouře — billboard sprity s měkkou texturou (dřív průhledné koule, které
+  // z každého záběru vypadaly jako obří bubliny). Každý má jinou fázi, drift a rotaci.
+  const puffCount = 10;
   const puffs = useMemo(() => {
     return Array.from({ length: puffCount }).map((_, i) => ({
-      delay: (i / puffCount) * 2.2,
-      driftX: Math.sin(i * 1.9 + phase) * 0.55,
-      driftZ: Math.cos(i * 2.3 + phase) * 0.4,
-      rotSpeed: (Math.sin(i * 3.1) > 0 ? 1 : -1) * (0.5 + (i % 3) * 0.3),
-      size: 0.4 + (i * 0.14),
+      delay: (i / puffCount) * SMOKE_LIFETIME,
+      driftX: Math.sin(i * 1.9 + phase) * 0.7,
+      driftZ: Math.cos(i * 2.3 + phase) * 0.5,
+      rotSpeed: (Math.sin(i * 3.1) > 0 ? 1 : -1) * (0.25 + (i % 3) * 0.15),
+      rot0: i * 1.7,
+      size: 0.45 + (i % 4) * 0.12,
     }));
   }, [puffCount, phase]);
+  const smokeTexture = useMemo(() => getSmokeTexture(), []);
+  // Kouř je v klubové barvě, ale zesvětlený — sytá barva vypadala jako barevná pěna.
+  const smokeColor = useMemo(() => new THREE.Color(color).lerp(new THREE.Color("#E5E7EB"), 0.45), [color]);
+  // HDR barva plamene (>1): s bloomem skutečně zazáří, bez něj ji tone mapping srazí na bílou.
+  const flameColor = useMemo(() => new THREE.Color(2.6, 2.3, 1.5), []);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime * 2.5 + phase;
@@ -373,21 +415,21 @@ function PyroFlare({ position, color, phase }: { position: [number, number, numb
       });
     }
 
-    // Animace stoupajícího kouře
+    // Animace stoupajícího kouře: obláček stoupá, roste, otáčí se a rozplývá
     if (smokeGroupRef.current) {
       smokeGroupRef.current.children.forEach((child, idx) => {
         const puff = puffs[idx];
-        const age = ((clock.elapsedTime * 0.75 + puff.delay + phase) % 2.2) / 2.2; // 0..1
-        child.position.y = age * 2.6;
-        child.position.x = puff.driftX * age + Math.sin(t * 0.8 + idx) * 0.25;
+        const age = ((clock.elapsedTime * 0.7 + puff.delay + phase) % SMOKE_LIFETIME) / SMOKE_LIFETIME; // 0..1
+        child.position.y = age * 3.2 + age * age * 0.8;
+        child.position.x = puff.driftX * age + Math.sin(t * 0.5 + idx) * 0.18;
         child.position.z = puff.driftZ * age;
-        child.rotation.z = clock.elapsedTime * puff.rotSpeed;
-        const scale = puff.size * (0.6 + age * 1.9);
-        child.scale.set(scale, scale, scale);
+        const scale = puff.size * (0.5 + age * 2.6);
+        child.scale.set(scale, scale, 1);
 
-        const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
+        const mat = (child as THREE.Sprite).material as THREE.SpriteMaterial;
         if (mat) {
-          mat.opacity = Math.sin(age * Math.PI) * 0.55;
+          mat.opacity = Math.sin(age * Math.PI) * 0.6 * (1 - age * 0.35);
+          mat.rotation = puff.rot0 + clock.elapsedTime * puff.rotSpeed;
         }
       });
     }
@@ -432,7 +474,7 @@ function PyroFlare({ position, color, phase }: { position: [number, number, numb
       {/* Planoucí špička světlice - zářivý střed */}
       <mesh ref={flameMeshRef} position={[0.35, 0.72, 0]}>
         <sphereGeometry args={[0.08, 8, 8]} />
-        <meshBasicMaterial color="#FFFBEB" />
+        <meshBasicMaterial color={flameColor} toneMapped={false} />
       </mesh>
 
       {/* Barevná záře kolem plamene */}
@@ -460,18 +502,18 @@ function PyroFlare({ position, color, phase }: { position: [number, number, numb
         decay={1.8}
       />
 
-      {/* Stoupající obláčky kouře v klubové barvě */}
+      {/* Stoupající obláčky kouře v klubové barvě — sprity vždy čelem ke kameře */}
       <group ref={smokeGroupRef} position={[0.35, 0.85, 0]}>
         {puffs.map((_, idx) => (
-          <mesh key={idx}>
-            <sphereGeometry args={[1, 7, 7]} />
-            <meshBasicMaterial
-              color={color}
+          <sprite key={idx}>
+            <spriteMaterial
+              map={smokeTexture}
+              color={smokeColor}
               transparent
-              opacity={0.45}
+              opacity={0}
               depthWrite={false}
             />
-          </mesh>
+          </sprite>
         ))}
       </group>
     </group>

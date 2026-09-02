@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import { PITCH, STAND_DIMS, type StadiumMode } from "./constants";
 import {
   generateWoodTexture,
@@ -24,6 +25,21 @@ interface StandProps {
 }
 
 const STAND_GAP = 2.5;
+
+/**
+ * Mexická vlna obíhá areál proti směru hodinových ručiček: sever → východ → jih → západ.
+ * Lokální +X každé tribuny míří právě tím směrem, takže vlna běží vždy od -délka/2 k +délka/2.
+ * Slot říká, ve které čtvrtině oběhu je tribuna na řadě; chybějící tribuny (L1 má jen
+ * sever a jih) nechají vlnu na dvě sekundy „přeskočit".
+ */
+const WAVE_SLOT: Record<Side, number> = { north: 0, east: 1, south: 2, west: 3 };
+/** Perioda mezi vlnami (s). */
+const WAVE_PERIOD = 28;
+/** Doba jednoho oběhu přes všechny čtyři tribuny (s). */
+const WAVE_LAP = 9;
+/** Šířka čela vlny (m) a výška zdvihu. */
+const WAVE_WIDTH = 4.5;
+const WAVE_LIFT = 0.42;
 
 export function Stand({
   side,
@@ -136,6 +152,7 @@ function ActiveStand({
           teamColor={teamColor}
           secondaryColor={secondaryColor}
           isUltrasSector={side === "south"}
+          waveSlot={WAVE_SLOT[side]}
           reducedDetail={reducedDetail}
         />
       )}
@@ -367,6 +384,7 @@ function Spectators({
   teamColor,
   secondaryColor = "#FFFFFF",
   isUltrasSector = false,
+  waveSlot = 0,
   reducedDetail = false,
 }: {
   rows: number;
@@ -379,6 +397,8 @@ function Spectators({
   teamColor: string;
   secondaryColor?: string;
   isUltrasSector?: boolean;
+  /** Pořadí tribuny v oběhu mexické vlny (0–3). */
+  waveSlot?: number;
   reducedDetail?: boolean;
 }) {
   const torsoRef = useRef<THREE.InstancedMesh>(null);
@@ -455,6 +475,11 @@ function Spectators({
       hasBeer: boolean;
       hasScarf: boolean;
       leanAngle: number;
+      /** Fáze, amplituda a rychlost pohupování; v kotli navíc, zda fanoušek skáče. */
+      phase: number;
+      bobAmp: number;
+      bobSpeed: number;
+      jumper: boolean;
     }> = [];
 
     let seed = 98765;
@@ -557,6 +582,10 @@ function Spectators({
             hasBeer,
             hasScarf,
             leanAngle: (rand() - 0.5) * (isUltrasSector ? 0.22 : 0.15),
+            phase: rand() * Math.PI * 2,
+            bobAmp: 0.01 + rand() * 0.03,
+            bobSpeed: 0.7 + rand() * 0.9,
+            jumper: isUltrasSector ? rand() < 0.7 : false,
           });
         }
       }
@@ -567,10 +596,28 @@ function Spectators({
   const TORSO_H = 0.46;
   const HEAD_H = 0.26;
 
-  // Nastavení instancí matric a barev
-  useLayoutEffect(() => {
+  /**
+   * Zápis matic všech částí diváků pro daný čas.
+   *
+   * Dav dřív stál jako sochy — matice se zapsaly jednou. Teď se přepisují každý snímek
+   * (na mobilu ne): každý divák se lehce pohupuje a natáčí, kotel skáče v rytmu chorálu
+   * a jednou za WAVE_PERIOD oběhne areál mexická vlna, při níž fanoušci vstávají a zvedají šály.
+   * Barvy se zapisují jen v layout efektu — nemění se.
+   */
+  const writeFrame = (t: number, animate: boolean, withColors: boolean) => {
     if (!torsoRef.current || !headRef.current || !pantsRef.current || filled.length === 0) return;
     const stepX = length / columns;
+
+    // Čelo mexické vlny v lokálním X této tribuny (NaN = vlna tu teď neběží).
+    let waveHeadX = Number.NaN;
+    if (animate) {
+      const lap = (t % WAVE_PERIOD) / WAVE_LAP; // 0..1 během oběhu, pak pauza
+      const local = lap * 4 - waveSlot;
+      if (local >= -0.15 && local <= 1.15) {
+        waveHeadX = -length / 2 + local * length;
+      }
+    }
+    const jumpBeat = animate ? Math.max(0, Math.sin(t * 5.4)) : 0;
 
     let beerIdx = 0;
     let scarfIdx = 0;
@@ -579,34 +626,62 @@ function Spectators({
     filled.forEach((f, i) => {
       const x = -length / 2 + stepX * f.c + stepX / 2;
       const z = f.r * seatDepth + seatDepth * 0.52;
-      const yb = f.r * seatRise + seatRise + 0.42;
+      let yb = f.r * seatRise + seatRise + 0.42;
+      let yaw = f.leanAngle;
+      let armsUp = 0;
+
+      if (animate) {
+        // Pohupování a natáčení za hrou
+        yb += Math.sin(t * f.bobSpeed + f.phase) * f.bobAmp;
+        yaw += Math.sin(t * 0.6 + f.phase) * 0.07;
+        // Kotel skáče společně v rytmu
+        if (f.jumper) yb += jumpBeat * 0.2;
+        // Mexická vlna: zvednutí s hladkým profilem cos²
+        if (!Number.isNaN(waveHeadX)) {
+          const u = (x - waveHeadX) / WAVE_WIDTH;
+          if (u > -1 && u < 1) {
+            const bump = Math.cos((u * Math.PI) / 2) ** 2;
+            yb += bump * WAVE_LIFT;
+            armsUp = bump;
+          }
+        }
+      }
 
       // 1. Nohy / kalhoty (sedící vpřed)
       matrix.makeTranslation(x, yb - 0.14, z - 0.08);
       pantsRef.current!.setMatrixAt(i, matrix);
-      color.set(f.pantsCol);
-      pantsRef.current!.setColorAt(i, color);
+      if (withColors) {
+        color.set(f.pantsCol);
+        pantsRef.current!.setColorAt(i, color);
+      }
 
       // 2. Torzo v bundě / dresu
-      const rot = new THREE.Matrix4().makeRotationY(f.leanAngle);
-      const trans = new THREE.Matrix4().makeTranslation(x, yb + TORSO_H / 2, z);
-      matrix.multiplyMatrices(trans, rot);
+      matrix.makeRotationY(yaw);
+      matrix.setPosition(x, yb + TORSO_H / 2, z);
       torsoRef.current!.setMatrixAt(i, matrix);
-      color.set(f.col);
-      torsoRef.current!.setColorAt(i, color);
+      if (withColors) {
+        color.set(f.col);
+        torsoRef.current!.setColorAt(i, color);
+      }
 
       // 3. Hlava
-      matrix.makeTranslation(x, yb + TORSO_H + HEAD_H / 2, z);
+      matrix.makeRotationY(yaw);
+      matrix.setPosition(x, yb + TORSO_H + HEAD_H / 2, z);
       headRef.current!.setMatrixAt(i, matrix);
-      color.set(f.skin);
-      headRef.current!.setColorAt(i, color);
+      if (withColors) {
+        color.set(f.skin);
+        headRef.current!.setColorAt(i, color);
+      }
 
       // 4. Pokrývka hlavy (čepice / kšiltovka / kulich)
       if (hatRef.current && f.hatType > 0) {
-        matrix.makeTranslation(x, yb + TORSO_H + HEAD_H + 0.04, z + (f.hatType === 1 ? -0.04 : 0));
+        matrix.makeRotationY(yaw);
+        matrix.setPosition(x, yb + TORSO_H + HEAD_H + 0.04, z + (f.hatType === 1 ? -0.04 : 0));
         hatRef.current.setMatrixAt(hatIdx, matrix);
-        color.set(f.hatCol);
-        hatRef.current.setColorAt(hatIdx, color);
+        if (withColors) {
+          color.set(f.hatCol);
+          hatRef.current.setColorAt(hatIdx, color);
+        }
         hatIdx++;
       }
 
@@ -617,52 +692,59 @@ function Spectators({
         beerIdx++;
       }
 
-      // 6. Klubová šála
+      // 6. Klubová šála — při vlně nad hlavou
       if (scarfRef.current && f.hasScarf) {
-        matrix.makeTranslation(x, yb + TORSO_H * 0.95, z - 0.04);
+        matrix.makeRotationY(yaw);
+        matrix.setPosition(x, yb + TORSO_H * 0.95 + armsUp * 0.45, z - 0.04 - armsUp * 0.05);
         scarfRef.current.setMatrixAt(scarfIdx, matrix);
-        color.set(teamColor);
-        scarfRef.current.setColorAt(scarfIdx, color);
+        if (withColors) {
+          color.set(teamColor);
+          scarfRef.current.setColorAt(scarfIdx, color);
+        }
         scarfIdx++;
       }
     });
 
     torsoRef.current.count = filled.length;
     torsoRef.current.instanceMatrix.needsUpdate = true;
-    if (torsoRef.current.instanceColor) torsoRef.current.instanceColor.needsUpdate = true;
-
     pantsRef.current.count = filled.length;
     pantsRef.current.instanceMatrix.needsUpdate = true;
-    if (pantsRef.current.instanceColor) pantsRef.current.instanceColor.needsUpdate = true;
-
     headRef.current.count = filled.length;
     headRef.current.instanceMatrix.needsUpdate = true;
-    if (headRef.current.instanceColor) headRef.current.instanceColor.needsUpdate = true;
-
     if (hatRef.current) {
       hatRef.current.count = hatIdx;
       hatRef.current.instanceMatrix.needsUpdate = true;
-      if (hatRef.current.instanceColor) hatRef.current.instanceColor.needsUpdate = true;
     }
-
     if (beerRef.current) {
       beerRef.current.count = beerIdx;
       beerRef.current.instanceMatrix.needsUpdate = true;
     }
-
     if (scarfRef.current) {
       scarfRef.current.count = scarfIdx;
       scarfRef.current.instanceMatrix.needsUpdate = true;
-      if (scarfRef.current.instanceColor) scarfRef.current.instanceColor.needsUpdate = true;
     }
 
-    // Aktualizovat materiály instancí pro správný shader
-    [torsoRef, pantsRef, headRef, hatRef, scarfRef].forEach((r) => {
-      if (r.current?.material) {
+    if (withColors) {
+      [torsoRef, pantsRef, headRef, hatRef, scarfRef].forEach((r) => {
+        if (!r.current) return;
+        if (r.current.instanceColor) r.current.instanceColor.needsUpdate = true;
+        // Materiál se musí překompilovat, aby shader věděl o instančních barvách
         (r.current.material as THREE.Material).needsUpdate = true;
-      }
-    });
+      });
+    }
+  };
+
+  // Výchozí rozestavení a barvy — jednou při změně obsazení
+  useLayoutEffect(() => {
+    writeFrame(0, false, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filled, length, columns, seatDepth, seatRise, matrix, color, teamColor]);
+
+  // Animace davu (na mobilu se šetří — dav zůstává statický)
+  useFrame(({ clock }) => {
+    if (reducedDetail) return;
+    writeFrame(clock.elapsedTime, true, false);
+  });
 
   if (filled.length === 0) return null;
 

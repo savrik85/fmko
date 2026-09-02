@@ -5,33 +5,35 @@ import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { OrbitControls } from "@react-three/drei";
-import { VIEWPOINTS, type CameraViewpoint } from "./constants";
+import { VIEWPOINTS, type CameraViewpoint, type ViewpointDef } from "./constants";
 
 interface CameraControllerProps {
   viewpoint: CameraViewpoint;
   isMobile?: boolean;
+  /** Pohledy spočítané pro aktuální tribuny (getViewpoints); default statické VIEWPOINTS. */
+  viewpoints?: Record<CameraViewpoint, ViewpointDef>;
 }
 
-export function CameraController({ viewpoint, isMobile = false }: CameraControllerProps) {
+export function CameraController({ viewpoint, isMobile = false, viewpoints = VIEWPOINTS }: CameraControllerProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const { camera } = useThree();
 
-  const targetCamPos = useRef(new THREE.Vector3(...VIEWPOINTS[viewpoint].position));
-  const targetLookAt = useRef(new THREE.Vector3(...VIEWPOINTS[viewpoint].target));
-  const targetFov = useRef(VIEWPOINTS[viewpoint].fov);
+  const targetCamPos = useRef(new THREE.Vector3(...viewpoints[viewpoint].position));
+  const targetLookAt = useRef(new THREE.Vector3(...viewpoints[viewpoint].target));
+  const targetFov = useRef(viewpoints[viewpoint].fov);
   const isTransitioning = useRef(true);
   const orbitAngle = useRef(0);
 
-  // Reakce na změnu viewpoint
+  // Reakce na změnu viewpoint (nebo přepočet pohledů po změně tribun)
   useEffect(() => {
-    const vp = VIEWPOINTS[viewpoint];
+    const vp = viewpoints[viewpoint];
     if (vp) {
       targetCamPos.current.set(...vp.position);
       targetLookAt.current.set(...vp.target);
       targetFov.current = vp.fov;
       isTransitioning.current = true;
     }
-  }, [viewpoint]);
+  }, [viewpoint, viewpoints]);
 
   // Plynulý lerp kamery a kinematický oblet
   useFrame((state, delta) => {
@@ -95,7 +97,9 @@ export function CameraController({ viewpoint, isMobile = false }: CameraControll
       ref={controlsRef}
       enableZoom
       enablePan={false}
-      maxPolarAngle={Math.PI / 2.08}
+      // Nízké pohledy (střídačka, za brankou) jsou jen ~4° nad horizontem;
+      // přísnější limit by kameru při dojezdu odstrkoval nahoru a přechod by nikdy neskončil.
+      maxPolarAngle={Math.PI / 2.05}
       minDistance={15}
       maxDistance={140}
       touches={

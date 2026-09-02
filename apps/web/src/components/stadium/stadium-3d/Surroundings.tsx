@@ -14,7 +14,8 @@ interface SurroundingsProps {
 export function Surroundings({ reduceTrees = false, timeOfDay = "day", weather = "sunny" }: SurroundingsProps) {
   const isSnow = weather === "snow";
   const groundSurface = useMemo(
-    () => isSnow ? generateSnowTerrainSurface(14, 14) : generateTerrainSurface(GROUND_COLOR, 14, 14),
+    // Opakování textury roste s velikostí terénu (360 m), aby texel zůstal stejně velký jako dřív.
+    () => isSnow ? generateSnowTerrainSurface(25, 25) : generateTerrainSurface(GROUND_COLOR, 25, 25),
     [isSnow],
   );
 
@@ -77,19 +78,26 @@ function Road() {
 
 /** Zvlněný terén / nízké kopečky kolem areálu */
 function LandscapeHills({ isSnow = false }: { isSnow?: boolean }) {
-  const hills = [
-    { pos: [-80, -2, -75] as [number, number, number], scale: [35, 12, 35] as [number, number, number] },
-    { pos: [75, -2, -80] as [number, number, number], scale: [40, 14, 40] as [number, number, number] },
-    { pos: [-85, -2, 70] as [number, number, number], scale: [38, 11, 38] as [number, number, number] },
-    { pos: [80, -2, 75] as [number, number, number], scale: [32, 10, 32] as [number, number, number] },
+  // Dřív čtyři obří koule hned za plotem, které z nadhledu vypadaly jako zelené kupole.
+  // Teď nižší a širší vlny dál v krajině (vnitřní okraj ≥ ~95 m, aby nepohltily
+  // stromy ani vesničku), hladce stínované — vzdálené kopce nemají hrany.
+  const hills: Array<{ pos: [number, number, number]; scale: [number, number, number]; tint: string }> = [
+    { pos: [-130, -2.5, -110], scale: [65, 9, 45], tint: "#3F6E26" },
+    { pos: [110, -2.5, -130], scale: [80, 11, 55], tint: "#457A2B" },
+    { pos: [-140, -2.5, 60], scale: [65, 8, 50], tint: "#4A7A2C" },
+    { pos: [125, -2.5, 110], scale: [75, 10, 50], tint: "#3F6E26" },
+    { pos: [-20, -2.5, -155], scale: [85, 9, 45], tint: "#457A2B" },
+    { pos: [30, -2.5, 155], scale: [80, 8, 45], tint: "#4A7A2C" },
+    { pos: [-155, -2.5, -20], scale: [55, 7, 60], tint: "#568A34" },
+    { pos: [160, -2.5, -10], scale: [55, 7.5, 60], tint: "#457A2B" },
   ];
 
   return (
     <group>
       {hills.map((h, i) => (
         <mesh key={i} position={h.pos} scale={h.scale} receiveShadow>
-          <sphereGeometry args={[1, 16, 8]} />
-          <meshStandardMaterial color={isSnow ? "#E2E8F0" : "#3D6A24"} roughness={1} flatShading />
+          <sphereGeometry args={[1, 28, 14]} />
+          <meshStandardMaterial color={isSnow ? "#E2E8F0" : h.tint} roughness={1} />
         </mesh>
       ))}
     </group>
@@ -145,12 +153,15 @@ function Trees({ reduce = false, isSnow = false }: { reduce?: boolean; isSnow?: 
   const trunkRef = useRef<THREE.InstancedMesh>(null);
   const coneRef = useRef<THREE.InstancedMesh>(null);
   const roundRef = useRef<THREE.InstancedMesh>(null);
+  const broadRef = useRef<THREE.InstancedMesh>(null);
   const matrix = useMemo(() => new THREE.Matrix4(), []);
   const color = useMemo(() => new THREE.Color(), []);
+  // Světlejší zeleně: tmavé odstíny s flat shadingem četly jako černé siluety.
+  // (Stromy byly ve skutečnosti černé kvůli `vertexColors` bez atributu barvy — viz materiály níže.)
   const crownColors = useMemo(
     () => isSnow
-      ? ["#1E3A1A", "#2D4A1D", "#E2E8F0", "#F8FAFC"]
-      : ["#2D4A1D", "#3D6A24", "#4A7A2C", "#5B8C3A"],
+      ? ["#2F5A28", "#3D6E30", "#E2E8F0", "#F8FAFC"]
+      : ["#3F7D2E", "#4E8F38", "#5FA043", "#6FAE4C"],
     [isSnow]
   );
 
@@ -162,57 +173,78 @@ function Trees({ reduce = false, isSnow = false }: { reduce?: boolean; isSnow?: 
       return seed / 233280;
     };
     const positions = reduce ? TREE_POSITIONS.filter((_, i) => i % 2 === 0) : TREE_POSITIONS;
-    return positions.map(([x, z]) => ({
-      x,
-      z,
-      scale: 0.8 + rand() * 0.7,
-      crownColor: crownColors[Math.floor(rand() * crownColors.length)],
-      round: rand() > 0.45,
-    }));
+    return positions.map(([x, z]) => {
+      const kindRoll = rand();
+      return {
+        x,
+        z,
+        scale: 0.8 + rand() * 0.7,
+        crownColor: crownColors[Math.floor(rand() * crownColors.length)],
+        // Tři tvary koruny: smrk (kužel), kulatý listnáč a široký rozložitý listnáč
+        kind: (kindRoll < 0.36 ? "cone" : kindRoll < 0.7 ? "round" : "broad") as "cone" | "round" | "broad",
+        yaw: rand() * Math.PI * 2,
+      };
+    });
   }, [reduce, crownColors]);
 
   useEffect(() => {
-    if (!trunkRef.current || !coneRef.current || !roundRef.current) return;
+    if (!trunkRef.current || !coneRef.current || !roundRef.current || !broadRef.current) return;
     const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    const rot = new THREE.Matrix4();
     trees.forEach((t, i) => {
       matrix.makeScale(t.scale, t.scale, t.scale);
       matrix.setPosition(t.x, 1.2 * t.scale, t.z);
       trunkRef.current!.setMatrixAt(i, matrix);
       color.set(t.crownColor);
-      if (t.round) {
-        matrix.makeScale(t.scale, t.scale * 0.95, t.scale);
+      coneRef.current!.setMatrixAt(i, zero);
+      roundRef.current!.setMatrixAt(i, zero);
+      broadRef.current!.setMatrixAt(i, zero);
+      rot.makeRotationY(t.yaw);
+      if (t.kind === "round") {
+        matrix.makeScale(t.scale, t.scale * 0.95, t.scale).multiply(rot);
         matrix.setPosition(t.x, (2.4 + 1.1) * t.scale, t.z);
         roundRef.current!.setMatrixAt(i, matrix);
         roundRef.current!.setColorAt(i, color);
-        coneRef.current!.setMatrixAt(i, zero);
+      } else if (t.kind === "broad") {
+        matrix.makeScale(t.scale * 1.25, t.scale * 0.85, t.scale * 1.25).multiply(rot);
+        matrix.setPosition(t.x, (2.4 + 1.3) * t.scale, t.z);
+        broadRef.current!.setMatrixAt(i, matrix);
+        broadRef.current!.setColorAt(i, color);
       } else {
-        matrix.makeScale(t.scale, t.scale, t.scale);
+        matrix.makeScale(t.scale, t.scale, t.scale).multiply(rot);
         matrix.setPosition(t.x, (2.4 + 1.5) * t.scale, t.z);
         coneRef.current!.setMatrixAt(i, matrix);
         coneRef.current!.setColorAt(i, color);
-        roundRef.current!.setMatrixAt(i, zero);
       }
     });
     trunkRef.current.instanceMatrix.needsUpdate = true;
-    coneRef.current.instanceMatrix.needsUpdate = true;
-    roundRef.current.instanceMatrix.needsUpdate = true;
-    if (coneRef.current.instanceColor) coneRef.current.instanceColor.needsUpdate = true;
-    if (roundRef.current.instanceColor) roundRef.current.instanceColor.needsUpdate = true;
+    [coneRef, roundRef, broadRef].forEach((r) => {
+      if (!r.current) return;
+      r.current.instanceMatrix.needsUpdate = true;
+      if (r.current.instanceColor) r.current.instanceColor.needsUpdate = true;
+      // Shader se musí překompilovat s podporou instančních barev — bez toho
+      // (a s dřívějším `vertexColors` bez atributu barvy) byly koruny černé.
+      (r.current.material as THREE.Material).needsUpdate = true;
+    });
   }, [trees, matrix, color]);
 
   return (
     <group>
       <instancedMesh ref={trunkRef} args={[undefined, undefined, trees.length]} castShadow>
         <cylinderGeometry args={[0.25, 0.35, 2.4, 6]} />
-        <meshStandardMaterial color="#5C3A1E" roughness={0.95} />
+        <meshStandardMaterial color="#6B4423" roughness={0.95} />
       </instancedMesh>
       <instancedMesh ref={coneRef} args={[undefined, undefined, trees.length]} castShadow>
         <coneGeometry args={[1.6, 3, 8]} />
-        <meshStandardMaterial vertexColors roughness={0.9} />
+        <meshStandardMaterial roughness={0.9} flatShading />
       </instancedMesh>
       <instancedMesh ref={roundRef} args={[undefined, undefined, trees.length]} castShadow>
         <icosahedronGeometry args={[1.6, 0]} />
-        <meshStandardMaterial vertexColors roughness={0.9} flatShading />
+        <meshStandardMaterial roughness={0.9} flatShading />
+      </instancedMesh>
+      <instancedMesh ref={broadRef} args={[undefined, undefined, trees.length]} castShadow>
+        <icosahedronGeometry args={[1.7, 1]} />
+        <meshStandardMaterial roughness={0.9} flatShading />
       </instancedMesh>
     </group>
   );

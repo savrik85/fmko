@@ -274,16 +274,18 @@ export function Pitch({
         >
           <circleGeometry args={[1, 16]} />
           {/* Kaluž odráží oblohu, takže je SVĚTLEJŠÍ než tráva. Tmavá voda splyne
-              se stíny a vyšlapanými místy a v dešti není vidět vůbec. */}
+              se stíny a vyšlapanými místy a v dešti není vidět vůbec.
+              Roughness nesmí být zrcadlová (0.05): odlesk slunce byl pak bodový a v HDR
+              řetězci s bloomem z něj byla obří bílá koule uprostřed hřiště. */}
           <meshStandardMaterial
-            color="#B9CBDD"
+            color="#9FB4C6"
             opacity={Math.min(0.92, (0.55 + p.opacity * 0.45) * puddleStrength)}
             transparent
             depthWrite={false}
-            roughness={0.05}
-            metalness={0.85}
+            roughness={0.5}
+            metalness={0.2}
             emissive="#2A3A4A"
-            emissiveIntensity={0.35}
+            emissiveIntensity={0.2}
           />
         </mesh>
       ))}

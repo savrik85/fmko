@@ -4,20 +4,30 @@ import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { TimeOfDay, WeatherType } from "./constants";
+import { SkyDome, SkyEnvironment, getSkyParams } from "./SkyDome";
 
 interface LightingAndAtmosphereProps {
   timeOfDay: TimeOfDay;
   weather?: WeatherType;
   isMobile?: boolean;
+  /**
+   * Vylepšená grafika: kopule oblohy se sluncem + environment mapa místo plochého
+   * gradientu. Environment přidává rozptýlené světlo, proto se ambient trochu stáhne,
+   * aby scéna nezesvětlala.
+   */
+  enhanced?: boolean;
 }
 
 export function LightingAndAtmosphere({
   timeOfDay,
   weather = "sunny",
   isMobile = false,
+  enhanced = false,
 }: LightingAndAtmosphereProps) {
   const shadowMapSize = isMobile ? 512 : 1024;
   const { scene } = useThree();
+  const skyParams = useMemo(() => getSkyParams(timeOfDay, weather), [timeOfDay, weather]);
+  const amb = enhanced ? (timeOfDay === "night" ? 0.9 : timeOfDay === "sunset" ? 0.8 : 0.75) : 1;
 
   // Dynamická atmosférická mlha podle denní doby a počasí
   useEffect(() => {
@@ -54,7 +64,14 @@ export function LightingAndAtmosphere({
   return (
     <>
       {/* Obloha podle denní doby a počasí */}
-      <DynamicSky timeOfDay={timeOfDay} weather={weather} />
+      {enhanced ? (
+        <>
+          <SkyDome params={skyParams} />
+          <SkyEnvironment params={skyParams} />
+        </>
+      ) : (
+        <DynamicSky timeOfDay={timeOfDay} weather={weather} />
+      )}
 
       {/* Noční hvězdy (jen v noci a pokud není hustý déšť/sněžení) */}
       {timeOfDay === "night" && weather !== "rain" && weather !== "snow" && (
@@ -72,7 +89,7 @@ export function LightingAndAtmosphere({
           {weather === "rain" ? (
             <>
               {/* Zatažené deštivé osvětlení — pořád nejtmavší z denních, ale čitelné */}
-              <ambientLight intensity={0.6} color="#C2CDD9" />
+              <ambientLight intensity={(0.6) * amb} color="#C2CDD9" />
               <directionalLight
                 position={[30, 50, 20]}
                 intensity={0.92}
@@ -96,7 +113,7 @@ export function LightingAndAtmosphere({
           ) : weather === "snow" ? (
             <>
               {/* Zimní rozptýlené bílo-šedé světlo */}
-              <ambientLight intensity={0.55} color="#E2E8F0" />
+              <ambientLight intensity={(0.55) * amb} color="#E2E8F0" />
               <directionalLight
                 position={[35, 50, 20]}
                 intensity={0.85}
@@ -117,7 +134,7 @@ export function LightingAndAtmosphere({
           ) : weather === "cloudy" ? (
             <>
               {/* Pod mrakem — měkké difúzní stíny */}
-              <ambientLight intensity={0.55} color="#E2E8F0" />
+              <ambientLight intensity={(0.55) * amb} color="#E2E8F0" />
               <directionalLight
                 position={[40, 55, 25]}
                 intensity={1.0}
@@ -139,7 +156,7 @@ export function LightingAndAtmosphere({
           ) : (
             <>
               {/* Jasno / Slunečno */}
-              <ambientLight intensity={0.65} color="#F0F6FF" />
+              <ambientLight intensity={(0.65) * amb} color="#F0F6FF" />
               <directionalLight
                 position={[40, 60, 25]}
                 intensity={1.3}
@@ -165,7 +182,7 @@ export function LightingAndAtmosphere({
       {/* Osvětlení scény — Západ */}
       {timeOfDay === "sunset" && (
         <group>
-          <ambientLight intensity={weather === "rain" ? 0.32 : 0.45} color="#FCE5CE" />
+          <ambientLight intensity={(weather === "rain" ? 0.32 : 0.45) * amb} color="#FCE5CE" />
           <directionalLight
             position={[50, 22, -35]}
             intensity={weather === "rain" ? 0.9 : 1.6}
@@ -189,7 +206,7 @@ export function LightingAndAtmosphere({
       {/* Osvětlení scény — Noc */}
       {timeOfDay === "night" && (
         <group>
-          <ambientLight intensity={weather === "rain" ? 0.12 : 0.18} color="#152136" />
+          <ambientLight intensity={(weather === "rain" ? 0.12 : 0.18) * amb} color="#152136" />
           <directionalLight
             position={[-30, 45, -20]}
             intensity={weather === "rain" ? 0.18 : 0.30}

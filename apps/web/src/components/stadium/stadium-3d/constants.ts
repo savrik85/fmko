@@ -135,7 +135,9 @@ export const BUILDING_DIMS = [
 ];
 
 // Ground plane velikost (mimo plot, vidíš to jako travnatou krajinu)
-export const GROUND_SIZE = 200;
+// Zvětšeno z 200 na 360 (2026-09-02): kopce se posunuly dál do krajiny (~150 m) a musí stát
+// na terénu, ne viset nad barvou kopule oblohy. Kopule má poloměr 250, far kamery 400.
+export const GROUND_SIZE = 360;
 export const GROUND_COLOR = "#4A7A2C";  // tmavší zelená než hřiště
 
 // Sky/atmospheric defaults
@@ -175,17 +177,20 @@ export const VIEWPOINTS: Record<CameraViewpoint, ViewpointDef> = {
     id: "dugout",
     label: "Střídačka",
     icon: "💺",
-    position: [-24, 2.5, -4],
-    target: [0, 1.5, 0],
-    fov: 52,
+    // Mezi oběma střídačkami u postranní čáry, výška sedícího trenéra.
+    position: [-(PITCH.width / 2 + 2.6), 2.3, -2.0],
+    target: [5, 0.3, 3],
+    fov: 55,
   },
   behind_goal: {
     id: "behind_goal",
     label: "Za brankou",
     icon: "🎯",
-    position: [0, 4.5, -39],
-    target: [0, 1.5, 0],
-    fov: 48,
+    // Vedle branky mezi sítí a reklamou, před transparentem kotle (z = -32).
+    // Dřív stála kamera za kotlem a koukala skrz jeho střechu a zrcadlový nápis.
+    position: [5.3, 3.4, -(PITCH.depth / 2 + 1.3)],
+    target: [0, 0.5, 4],
+    fov: 50,
   },
   orbit: {
     id: "orbit",
@@ -196,6 +201,47 @@ export const VIEWPOINTS: Record<CameraViewpoint, ViewpointDef> = {
     fov: 36,
   },
 };
+
+/** Mezera mezi postranní/brankovou čárou a přední hranou tribuny. */
+export const STAND_GAP = 2.5;
+
+/**
+ * Pohledy kamery odvozené z úrovně tribun a střechy.
+ *
+ * Statické souřadnice fungovaly jen pro jednu velikost tribuny: s L2 tribunou
+ * skončila kamera „Tribuna" v její střeše a „Za brankou" za kotlem. Hlavní tribuna
+ * se proto počítá z rozměrů tribuny (STAND_DIMS) a výšky stříšky (stejná
+ * `clearance` jako ve StandRoof), střídačka a branka jsou pevné u hřiště.
+ */
+export function getViewpoints(standsLevel: number, roofLevel: number): Record<CameraViewpoint, ViewpointDef> {
+  const lvl = Math.min(Math.max(standsLevel, 0), 3);
+  const dims = STAND_DIMS[lvl];
+  const frontZ = PITCH.depth / 2 + STAND_GAP;
+
+  // Výška očí: v poslední řadě, nebo (se stříškou) nad ní jako televizní kamera.
+  const roofClearance = lvl === 1 ? 2.6 : 1.1; // stejné hodnoty jako StandRoof
+  const eyeY = roofLevel > 0 && lvl > 0 ? dims.height + roofClearance + 2.2 : dims.height + 2.6;
+
+  let mainStand: Pick<ViewpointDef, "position" | "target" | "fov">;
+  if (lvl >= 2) {
+    // Od L2 stojí boční tribuna (východ) — klasický televizní pohled od půlicí čáry,
+    // se střídačkami naproti.
+    const frontX = PITCH.width / 2 + STAND_GAP;
+    mainStand = { position: [frontX + dims.depth * 0.9, eyeY, 0], target: [0, 0.6, 0], fov: 46 };
+  } else if (lvl === 1) {
+    // L1 má tribuny jen za brankami — z poslední řady, kousek stranou, aby síť
+    // branky nezabírala půlku obrazu.
+    mainStand = { position: [8, eyeY, frontZ + dims.depth * 0.9], target: [0, 0.6, -4], fov: 46 };
+  } else {
+    // Bez tribuny: zvýšený pohled z místa, kde by stála.
+    mainStand = { position: [8, 6.5, 36], target: [0, 0.6, -4], fov: 46 };
+  }
+
+  return {
+    ...VIEWPOINTS,
+    main_stand: { ...VIEWPOINTS.main_stand, ...mainStand },
+  };
+}
 
 export type WeatherType = "sunny" | "cloudy" | "rain" | "wind" | "snow";
 
