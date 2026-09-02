@@ -12,7 +12,7 @@
 import { useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
-import { Empty, OpenProposalNote, Ornament, czk } from "./ui";
+import { Empty, OpenProposalNote, Ornament, czk, plural } from "./ui";
 import type { RefereeData, RefereeRow, State } from "./types";
 
 function gradeColor(g: number | null): string {
@@ -53,7 +53,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
 
       {muzeObsazovat && data.round && (
         <div className="card p-5">
-          <Ornament right={`${data.round.matches} zápasů`}>
+          <Ornament right={`${data.round.matches} ${plural(data.round.matches, "zápas", "zápasy", "zápasů")}`}>
             Obsazovací listina {data.round.gameWeek}. kola
           </Ornament>
           <p className="text-sm text-muted">

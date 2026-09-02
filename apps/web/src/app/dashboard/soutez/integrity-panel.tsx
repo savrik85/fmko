@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal, EntityLink } from "@/components/ui";
-import { Empty, Ornament, Rozbaleni, czk } from "./ui";
+import { Empty, Ornament, Rozbaleni, czk, plural } from "./ui";
 import type { State } from "./types";
 
 interface TipKnihy { label: string; oddsX100: number; result: string; zapas: string }
@@ -106,7 +106,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
       {/* Počet podezřelých je vidět i po zabalení — kvůli tomu se sem chodí. */}
       <Rozbaleni
         title="Přestupy soutěže"
-        right={`${data.transfers.length} obchodů`}
+        right={`${data.transfers.length} ${plural(data.transfers.length, "obchod", "obchody", "obchodů")}`}
         defaultOpen={podezrele.length > 0}
         note={data.transfers.length === 0
           ? "Letos se v soutěži zatím nikdo neprodal."
@@ -116,7 +116,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
               <span style={{ color: "#A32B1F" }}>
                 {podezrele.length === 1
                   ? "Jeden obchod stojí za pohled."
-                  : `${podezrele.length} obchodů stojí za pohled.`}{" "}
+                  : `${podezrele.length} ${plural(podezrele.length, "obchod", "obchody", "obchodů")} stojí za pohled.`}{" "}
                 <span className="text-muted">
                   Není to obvinění — jen upozornění, že se něco vymyká.
                 </span>
@@ -161,7 +161,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
       {/* ── Kniha sázek ──────────────────────────────────────────────────── */}
       <Rozbaleni
         title="Kniha sázek"
-        right={`${data.tickets.length} tiketů`}
+        right={`${data.tickets.length} ${plural(data.tickets.length, "tiket", "tikety", "tiketů")}`}
         note={data.tickets.length === 0
           ? "Zatím si nikdo nevsadil."
           : "Všechny tikety klubů soutěže včetně těch, které ještě běží. Kromě tebe do ní vidí jen prezident soutěže."}

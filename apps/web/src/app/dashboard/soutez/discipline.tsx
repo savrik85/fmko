@@ -10,7 +10,7 @@
 import React, { useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { EntityLink, Modal } from "@/components/ui";
-import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, Rozbaleni, StatusPill, czk } from "./ui";
+import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, Rozbaleni, StatusPill, czk, plural } from "./ui";
 import type { DisciplineData, PitchRow, Sanction, State } from "./types";
 
 export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChanged }: {
@@ -303,10 +303,12 @@ function PitchOverview({ pitches }: { pitches: DisciplineData["pitches"] }) {
     ? "Soutěž si minimum neodhlasovala, takže se stav hřiště nepokutuje. Přehled zůstává."
     : pod.length === 0
       ? `Všichni jsou nad odhlasovanou hranicí ${limit} bodů.`
-      : `${pod.length === 1 ? "Jeden klub je" : `${pod.length} klubů je`} pod odhlasovanou hranicí ${limit} bodů. Kontrola před zasedáním je sebere sama.`;
+      : pod.length === 1
+        ? `Jeden klub je pod odhlasovanou hranicí ${limit} bodů. Kontrola před zasedáním ho sebere sama.`
+        : `${pod.length} ${plural(pod.length, "klub", "kluby", "klubů")} ${pod.length < 5 ? "jsou" : "je"} pod odhlasovanou hranicí ${limit} bodů. Kontrola před zasedáním je sebere sama.`;
 
   return (
-    <Rozbaleni title="Stav hřišť" right={`${teams.length} klubů`} note={note}>
+    <Rozbaleni title="Stav hřišť" right={`${teams.length} ${plural(teams.length, "klub", "kluby", "klubů")}`} note={note}>
       <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
         {teams.map((t) => <PitchLine key={t.teamId} t={t} limit={limit} />)}
       </div>
@@ -314,8 +316,8 @@ function PitchOverview({ pitches }: { pitches: DisciplineData["pitches"] }) {
           hřiště. Kontrola takový klub taky přeskakuje — není co měřit. */}
       {bezHriste > 0 && (
         <p className="text-sm text-muted mt-3 leading-snug">
-          {bezHriste === 1 ? "Jeden klub" : `${bezHriste} klubů`} zatím hřiště nemá
-          postavené. Bez trávníku není co měřit, takže se {bezHriste === 1 ? "nekontroluje" : "nekontrolují"}.
+          {bezHriste === 1 ? "Jeden klub zatím nemá" : `${bezHriste} ${plural(bezHriste, "klub", "kluby", "klubů")} zatím ${bezHriste < 5 ? "nemají" : "nemá"}`} postavené
+          hřiště. Bez trávníku není co měřit, takže se {bezHriste === 1 ? "nekontroluje" : "nekontrolují"}.
         </p>
       )}
     </Rozbaleni>
