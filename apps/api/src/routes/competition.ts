@@ -1054,6 +1054,13 @@ competitionRouter.get("/competition/:leagueId/referees", async (c) => {
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
+  // Pool se jinak zakládá až při delegaci. Bez tohohle by panel po rozšíření
+  // listiny na 24 sudích ukazoval starých patnáct proti novému minimu osmnácti
+  // a komisař by měl vyškrtávání zablokované, dokud neproběhne denní tick.
+  const { ensureReferees } = await import("../referees/referee-generator");
+  await ensureReferees(c.env.DB, meta.district)
+    .catch((e) => logger.warn({ module: M }, "doplnění okresní listiny", e));
+
   const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
   const check = await canBanReferee(c.env.DB, leagueId, meta.season_number, meta.district);
 
