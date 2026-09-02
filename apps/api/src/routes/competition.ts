@@ -35,9 +35,9 @@ import {
   MIN_ACTIVE_REFEREES, canBanReferee, refereeStandings,
 } from "../competition/referee-bans";
 import {
-  MAX_PAUSES_PER_SEASON, MIN_USABLE_FOR_ROUND, PAUSE_WEEKS,
-  activePauses, applyRefereePause, canPauseReferee, nextOpenRound,
-  nominationsFor, pausedIds, saveNominations,
+  MAX_PAUSES_PER_SEASON, MAX_SWAPS_PER_ROUND, MIN_USABLE_FOR_ROUND, PAUSE_WEEKS,
+  activePauses, applyRefereePause, canPauseReferee, delegationOf, freeForRound,
+  pausedIds, swapReferee, swapsInRound, upcomingRound,
 } from "../competition/referee-roster";
 import {
   nextSeasonRules, proposalTitle, validateProposal, voterStats,
@@ -482,29 +482,10 @@ competitionRouter.get("/teams/:teamId/competition/pending", async (c) => {
   ).bind(leagueId, leagueId, teamId).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "nepřečtená zasedání", e); return null; });
 
-  // Úkol komisaře rozhodčích: kolo čeká na obsazení a listina není sestavená.
-  // Bez odznaku se to nedalo poznat jinak než doklikáním do Grémia — kdo na to
-  // zapomněl, přišel o pravomoc mlčky, protože kolo se obsadilo automaticky.
-  const meta = await loadLeagueMeta(c.env.DB, leagueId);
-  let rosterTodo = 0;
-  if (meta) {
-    const act = await actsFor(c.env.DB, leagueId, teamId, "rozhodcich", meta.season_number)
-      .catch((e) => { logger.warn({ module: M }, "pravomoc komisaře pro odznak", e); return null; });
-    if (act?.ok) {
-      const { nextOpenRound, nominationsFor } = await import("../competition/referee-roster");
-      const round = await nextOpenRound(c.env.DB, leagueId);
-      if (round) {
-        const nominated = await nominationsFor(c.env.DB, round.calendarId);
-        if (nominated.size === 0) rosterTodo = 1;
-      }
-    }
-  }
-
   return c.json({
     open: row?.open ?? 0,
     toVote: (row?.to_vote ?? 0) + (elections?.n ?? 0),
     unseenMeetings: unseen?.n ?? 0,
-    rosterTodo,
   });
 });
 
@@ -1105,20 +1086,23 @@ competitionRouter.get("/competition/:leagueId/referees", async (c) => {
   const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
   const check = await canBanReferee(c.env.DB, leagueId, meta.season_number, meta.district);
 
-  // Obsazovací listina a stopky se váží ke KONKRÉTNÍMU kolu. Když soutěž žádné
-  // nedelegované kolo nemá (konec sezóny, pauza), komisař nemá co obsazovat.
-  const round = await nextOpenRound(c.env.DB, leagueId);
-  const [nominated, paused, pauses] = round
+  // Obsazení i stopky se váží ke KONKRÉTNÍMU kolu — tomu nejbližšímu, které už
+  // má delegaci a ještě se nehrálo. Mimo sezónu žádné takové není a komisař
+  // nemá do čeho mluvit.
+  const round = await upcomingRound(c.env.DB, leagueId);
+  const [delegation, volni, swaps, paused, pauses] = round
     ? await Promise.all([
-      nominationsFor(c.env.DB, round.calendarId),
+      delegationOf(c.env.DB, round.calendarId, leagueId, meta.season_number),
+      freeForRound(c.env.DB, leagueId, meta.season_number, meta.district, round),
+      swapsInRound(c.env.DB, round.calendarId),
       pausedIds(c.env.DB, leagueId, meta.season_number, round.gameWeek),
       activePauses(c.env.DB, leagueId, meta.season_number, round.gameWeek),
     ])
-    : [new Set<string>(), new Set<string>(), []];
+    : [[], new Set<string>(), 0, new Set<string>(), []];
 
   const pauseCheck = round
     ? await canPauseReferee(c.env.DB, leagueId, meta.season_number, meta.district, round.gameWeek)
-    : { ok: false, reason: "Žádné kolo teď nečeká na obsazení." };
+    : { ok: false, reason: "Žádné kolo teď na program nečeká." };
 
   const pauseUntil = new Map(pauses.map((p) => [p.refereeId, p.untilWeek]));
 
@@ -1129,13 +1113,18 @@ competitionRouter.get("/competition/:leagueId/referees", async (c) => {
       ...r,
       paused: paused.has(r.refereeId),
       pausedUntil: pauseUntil.get(r.refereeId) ?? null,
-      nominated: nominated.has(r.refereeId),
     })),
     round: round && {
       calendarId: round.calendarId, gameWeek: round.gameWeek,
       matches: round.matches, scheduledAt: round.scheduledAt,
     },
-    rosterSet: nominated.size > 0,
+    delegation,
+    // Náhradníci: kdo v ten den nikde nepíská a není vyškrtnutý ani se stopkou.
+    freeReferees: standings
+      .filter((r) => volni.has(r.refereeId))
+      .map((r) => ({ refereeId: r.refereeId, name: r.name, archetype: r.archetype, avgGrade: r.avgGrade })),
+    swapsUsed: swaps,
+    maxSwaps: MAX_SWAPS_PER_ROUND,
     pauseWeeks: PAUSE_WEEKS,
     maxPauses: MAX_PAUSES_PER_SEASON,
     minForRound: MIN_USABLE_FOR_ROUND,
@@ -1144,14 +1133,21 @@ competitionRouter.get("/competition/:leagueId/referees", async (c) => {
 });
 
 /**
- * Obsazovací listina kola. Komisař posílá výsledný stav, ne rozdíl — prázdné
- * pole listinu zruší a kolo se obsadí ze všech.
+ * Výměna sudího na konkrétním zápase.
+ *
+ * Vlastní zápas se NEZAKAZUJE — komisař je manažer klubu a tohle je pravomoc se
+ * zjevným střetem zájmů. Drží ji strop výměn na kolo a to, že je každá výměna
+ * vidět i s tím, koho odvolala.
  */
-competitionRouter.post("/teams/:teamId/competition/referee-roster", async (c) => {
+competitionRouter.post("/teams/:teamId/competition/referee-swap", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ refereeIds?: string[] }>().catch(() => null);
-  const refereeIds = Array.isArray(body?.refereeIds) ? body.refereeIds.map(String) : null;
-  if (!refereeIds) return c.json({ error: "Chybí výběr rozhodčích" }, 400);
+  const body = await c.req.json<{ matchId?: string; refereeId?: string; note?: string }>()
+    .catch(() => null);
+  if (!body?.matchId || !body.refereeId) return c.json({ error: "Chybí zápas nebo rozhodčí" }, 400);
+  const note = (body.note ?? "").trim();
+  if (note.length < 10) {
+    return c.json({ error: "Napiš důvod (aspoň 10 znaků). Uvidí ho celá soutěž." }, 400);
+  }
 
   const leagueId = await leagueOfTeam(c.env.DB, teamId);
   if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
@@ -1163,26 +1159,43 @@ competitionRouter.post("/teams/:teamId/competition/referee-roster", async (c) =>
   const act = await actsFor(c.env.DB, leagueId, teamId, "rozhodcich", meta.season_number);
   if (!act.ok) return c.json({ error: act.reason }, 403);
 
-  const round = await nextOpenRound(c.env.DB, leagueId);
-  if (!round) {
-    return c.json({ error: "Žádné kolo teď nečeká na obsazení. Delegace běží dva dny před výkopem." }, 409);
+  const round = await upcomingRound(c.env.DB, leagueId);
+  if (!round) return c.json({ error: "Žádné obsazené kolo teď nečeká na výkop." }, 409);
+
+  const zapas = (await delegationOf(c.env.DB, round.calendarId, leagueId, meta.season_number))
+    .find((m) => m.matchId === body.matchId);
+  if (!zapas) return c.json({ error: "Takový zápas v nejbližším kole není." }, 404);
+
+  if (zapas.refereeId === body.refereeId) {
+    return c.json({ error: "Tenhle sudí ten zápas už má." }, 409);
   }
 
-  // Vyškrtnutého ani pozastaveného nasadit nejde — a smysl to má i technicky:
-  // delegace je z poolu stejně vyhodí a listina by se scvrkla pod počet zápasů.
-  const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
-  const paused = await pausedIds(c.env.DB, leagueId, meta.season_number, round.gameWeek);
-  const usable = new Set(
-    standings.filter((r) => !r.banned && !paused.has(r.refereeId)).map((r) => r.refereeId),
-  );
+  // Strop se počítá z už zapsaných výměn. Opravit vlastní výměnu proto jde
+  // i po vyčerpání stropu — přepíše se řádek, nepřibude.
+  if (!zapas.swapped && (await swapsInRound(c.env.DB, round.calendarId)) >= MAX_SWAPS_PER_ROUND) {
+    return c.json({
+      error: `V jednom kole smíš vyměnit nejvýš ${MAX_SWAPS_PER_ROUND} rozhodčí. Víc už by nebyl zásah, ale vlastní los.`,
+    }, 409);
+  }
+
+  const volni = await freeForRound(c.env.DB, leagueId, meta.season_number, meta.district, round);
+  if (!volni.has(body.refereeId)) {
+    return c.json({
+      error: "Tenhle sudí není volný — píská ten den jinde, je vyškrtnutý, nebo má stopku.",
+    }, 409);
+  }
 
   const gameDate = await currentGameDate(c.env.DB, teamId);
-  const res = await saveNominations(c.env.DB, {
-    leagueId, round, refereeIds, teamId, gameDate, usable,
+  const res = await swapReferee(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, round,
+    matchId: zapas.matchId, fromRefereeId: zapas.refereeId, toRefereeId: body.refereeId,
+    reason: note, teamId,
+    ownMatch: zapas.homeTeamId === teamId || zapas.awayTeamId === teamId,
+    gameDate,
   });
   if (!res.ok) return c.json({ error: res.reason }, 409);
 
-  return c.json({ ok: true, saved: res.saved, gameWeek: round.gameWeek });
+  return c.json({ ok: true, gameWeek: round.gameWeek });
 });
 
 /**
@@ -1221,13 +1234,17 @@ competitionRouter.post("/teams/:teamId/competition/referee-pauses", async (c) =>
     }, 409);
   }
 
-  const round = await nextOpenRound(c.env.DB, leagueId);
+  const round = await upcomingRound(c.env.DB, leagueId);
   if (!round) {
-    return c.json({ error: "Žádné kolo teď nečeká na obsazení — stopka by neměla od čeho běžet." }, 409);
+    return c.json({ error: "Žádné kolo teď nečeká na výkop — stopka by neměla od čeho běžet." }, 409);
   }
 
+  // Nejbližší kolo je už rozdelegované, takže stopka na něj nedosáhne — začíná
+  // od dalšího. Kdo vadí právě v tomhle kole, se řeší výměnou, ne stopkou.
+  const fromWeek = round.gameWeek + 1;
+
   const check = await canPauseReferee(
-    c.env.DB, leagueId, meta.season_number, meta.district, round.gameWeek, body.refereeId,
+    c.env.DB, leagueId, meta.season_number, meta.district, fromWeek, body.refereeId,
   );
   if (!check.ok) return c.json({ error: check.reason }, 409);
 
@@ -1239,7 +1256,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-pauses", async (c) =>
   const gameDate = await currentGameDate(c.env.DB, teamId);
   const done = await applyRefereePause(c.env.DB, {
     leagueId, seasonNumber: meta.season_number, refereeId: ref.refereeId,
-    fromWeek: round.gameWeek, reason: note, issuedByTeamId: teamId, gameDate,
+    fromWeek, reason: note, issuedByTeamId: teamId, gameDate,
   });
   if (!done) return c.json({ error: "Stopku se nepodařilo zapsat." }, 500);
 
@@ -1250,7 +1267,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-pauses", async (c) =>
     .catch((e) => logger.warn({ module: M }, "čerpání stopek komisaře", e));
 
   return c.json({
-    ok: true, fromWeek: round.gameWeek, untilWeek: round.gameWeek + PAUSE_WEEKS - 1,
+    ok: true, fromWeek, untilWeek: fromWeek + PAUSE_WEEKS - 1,
     remaining: MAX_PAUSES_PER_SEASON - slot.used_ref_pause - 1,
   });
 });

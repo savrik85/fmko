@@ -234,7 +234,7 @@ export const REFEREE_POOL_MIX: readonly RefereeArchetype[] = [
 
 /**
  * Devítka, o kterou se listina rozšířila, když komisař rozhodčích dostal
- * obsazovací listinu.
+ * pravomoc měnit delegaci.
  *
  * Původních patnáct na okres bylo míň, než kolik se v okrese hraje zápasů —
  * senior i U21 mají po sedmi kolech ve stejný den, takže z patnácti sudích jich

@@ -197,29 +197,6 @@ async function delegateCalendar(db: D1Database, cal: CalendarRow): Promise<numbe
     logger.warn({ module: "referees" }, "filtr vyškrtnutých a pozastavených rozhodčích", e);
   }
 
-  // Obsazovací listina komisaře: kdo v tomhle kole vůbec smí pískat. Komisař
-  // vybírá LIDI, ne dvojice — párování zůstává na losu níž, jinak by mohl poslat
-  // kartového cvoka na soupeře a vlastnímu klubu nechat pohodáře.
-  //
-  // Když listina není nebo se z ní po banech a stopkách nesejde dost lidí na
-  // obsazení kola, deleguje se ze všech. Kolo se musí odpískat tak jako tak.
-  try {
-    const { nominationsFor } = await import("../competition/referee-roster");
-    const nominated = await nominationsFor(db, cal.calendar_id);
-    if (nominated.size > 0) {
-      const vybrani = pool.filter((r) => nominated.has(r.id));
-      if (vybrani.length > 0) {
-        pool = vybrani;
-        logger.info({ module: "referees" },
-          `kolo ${cal.calendar_id}: obsazovací listina komisaře — ${vybrani.length} rozhodčích`);
-      } else {
-        logger.warn({ module: "referees" },
-          `kolo ${cal.calendar_id}: z obsazovací listiny nezbyl nikdo použitelný — deleguje se ze všech`);
-      }
-    }
-  } catch (e) {
-    logger.warn({ module: "referees" }, "obsazovací listina kola", e);
-  }
 
   const matchRows = await db.prepare(
     "SELECT id, home_team_id, away_team_id FROM matches WHERE calendar_id = ? AND referee_id IS NULL"

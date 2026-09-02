@@ -143,24 +143,40 @@ export interface DisciplineData {
 export interface RefereeRow {
   refereeId: string; name: string; archetype: string;
   matches: number; avgGrade: number | null; banned: boolean; flagged: boolean;
-  /** Má stopku, která zasahuje do nejbližšího nedelegovaného kola. */
+  /** Má stopku, která zasahuje do nejbližšího kola. */
   paused: boolean;
   pausedUntil: number | null;
-  /** Je na obsazovací listině toho kola. */
-  nominated: boolean;
 }
 
-/** Nejbližší kolo, které ještě nemá delegované rozhodčí. */
+/** Nejbližší kolo, které je obsazené a ještě se nehrálo. */
 export interface RefereeRound {
   calendarId: string; gameWeek: number; matches: number; scheduledAt: string;
+}
+
+/** Jeden zápas kola i s tím, kdo ho dostal. */
+export interface DelegatedMatch {
+  matchId: string;
+  homeTeamId: string; homeTeamName: string;
+  awayTeamId: string; awayTeamName: string;
+  refereeId: string | null; refereeName: string | null;
+  archetype: string | null; avgGrade: number | null;
+  /** Los určil někoho jiného a komisař ho vyměnil. */
+  swapped: boolean;
+  swapReason: string | null;
+}
+
+/** Sudí, který v ten den nikde nepíská — použitelný jako náhrada. */
+export interface FreeReferee {
+  refereeId: string; name: string; archetype: string; avgGrade: number | null;
 }
 
 export interface RefereeData {
   minList: number; canBan: boolean; banReason: string | null; usable: number;
   referees: RefereeRow[];
   round: RefereeRound | null;
-  /** Komisař už pro to kolo listinu sestavil. */
-  rosterSet: boolean;
+  delegation: DelegatedMatch[];
+  freeReferees: FreeReferee[];
+  swapsUsed: number; maxSwaps: number;
   pauseWeeks: number; maxPauses: number; minForRound: number;
   canPause: boolean; pauseReason: string | null;
 }

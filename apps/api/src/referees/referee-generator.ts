@@ -23,7 +23,8 @@ import {
  * Kolik rozhodčích má okresní komise.
  *
  * Musí být znatelně víc než kolik se v okrese hraje zápasů v jednom dni (7 senior
- * + 7 U21), jinak nemá komisař rozhodčích z čeho sestavovat obsazovací listinu.
+ * + 7 U21). Jinak nemá komisař rozhodčích koho nasadit místo vyměněného —
+ * kdo už ten den píská jinde, náhradník být nemůže.
  */
 export const REFEREES_PER_DISTRICT = REFEREE_POOL_MIX.length + REFEREE_POOL_EXTRA.length;
 

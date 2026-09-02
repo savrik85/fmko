@@ -1,19 +1,20 @@
 "use client";
 
 /**
- * Komise rozhodčích — listina se známkami, obsazovací listina kola a tresty.
+ * Komise rozhodčích — obsazení nejbližšího kola, listina se známkami a tresty.
  *
- * Komisař má tři nástroje odstupňované podle tvrdosti: obsazovací listinu (kdo
- * v kole vůbec píská), stopku na tři kola a vyškrtnutí na celou sezónu. Co
- * nedělá ani jeden z nich, je přiřazení sudího ke konkrétnímu zápasu — párování
- * losuje delegace, jinak by šlo poslat kartového cvoka na soupeře.
+ * Delegace běží automaticky; komisař má tři nástroje odstupňované podle tvrdosti:
+ * výměnu sudího na konkrétním zápase, stopku na tři kola a vyškrtnutí na celou
+ * sezónu. Výměna je pravomoc se zjevným střetem zájmů — vlastní zápas se
+ * nezakazuje, ale je vidět, a strop výměn na kolo brání tomu, aby si komisař
+ * rozdal celé kolo sám.
  */
 
 import { useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
-import { Modal } from "@/components/ui";
-import { Empty, GOLD_SOFT, OpenProposalNote, Ornament, czk, plural } from "./ui";
-import type { RefereeData, RefereeRow, State } from "./types";
+import { EntityLink, Modal } from "@/components/ui";
+import { Empty, OpenProposalNote, Ornament, czk, plural } from "./ui";
+import type { DelegatedMatch, FreeReferee, RefereeData, RefereeRow, State } from "./types";
 
 function gradeColor(g: number | null): string {
   if (g === null) return "var(--color-muted)";
@@ -29,11 +30,10 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
 }) {
   const [banTarget, setBanTarget] = useState<RefereeRow | null>(null);
   const [pauseTarget, setPauseTarget] = useState<RefereeRow | null>(null);
-  const [obsazuje, setObsazuje] = useState(false);
+  const [swapTarget, setSwapTarget] = useState<DelegatedMatch | null>(null);
   if (!data) return <Empty>Načítám listinu rozhodčích…</Empty>;
 
   const flagged = data.referees.filter((r) => r.flagged);
-  const volni = data.referees.filter((r) => !r.banned && !r.paused);
   const muzeObsazovat = state.enabled && jeKomisar && teamId && data.round !== null;
 
   return (
@@ -51,27 +51,32 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
         )}
       </div>
 
-      {muzeObsazovat && data.round && (
-        // Dokud listina není, je to úkol — proto se karta odliší barvou. Delegace
-        // komisaře nepočká: proběhne dva herní dny před výkopem a kolo obsadí sama.
-        <div className="card p-5" style={data.rosterSet ? undefined : { background: GOLD_SOFT }}>
+      {data.round && data.delegation.length > 0 && (
+        <div className="card p-5">
           <Ornament right={`${data.round.matches} ${plural(data.round.matches, "zápas", "zápasy", "zápasů")}`}>
-            Obsazovací listina {data.round.gameWeek}. kola
+            Obsazení {data.round.gameWeek}. kola
           </Ornament>
           <p className="text-sm text-muted">
-            Vyber, kdo v tomhle kole píská. Kdo koho dostane, losuje delegace —
-            nasadit sudího na konkrétní zápas nejde ani tobě. Vybrat musíš aspoň{" "}
-            {data.round.matches}, tedy tolik, kolik je zápasů.
+            {muzeObsazovat
+              ? `Delegace proběhla losem. Vyměnit můžeš ${data.maxSwaps} ${plural(data.maxSwaps, "rozhodčího", "rozhodčí", "rozhodčích")} za kolo — zatím jsi vyměnil ${data.swapsUsed}. Každá výměna je vidět i s tím, koho jsi odvolal.`
+              : "Kdo píská nejbližší kolo. Delegace proběhla losem; do obsazení může zasáhnout komisař rozhodčích."}
           </p>
-          <p className="text-sm text-muted mt-2">
-            {data.rosterSet
-              ? "Listinu pro tohle kolo už máš sestavenou. Do delegace ji jde ještě změnit."
-              : "Listinu jsi zatím nesestavil. Když ji necháš být, kolo se obsadí ze všech použitelných a tvoje slovo v tom nebude."}
-          </p>
-          {!obsazuje && (
-            <button className="btn btn-md btn-secondary mt-3" onClick={() => setObsazuje(true)}>
-              {data.rosterSet ? "Upravit obsazovací listinu" : "Sestavit obsazovací listinu"}
-            </button>
+
+          <div className="divide-y mt-3" style={{ borderColor: "var(--color-line)" }}>
+            {data.delegation.map((m) => (
+              <MatchRow
+                key={m.matchId} m={m} teamId={teamId}
+                muzeMenit={!!muzeObsazovat && (data.swapsUsed < data.maxSwaps || m.swapped)}
+                onSwap={() => setSwapTarget(m)}
+              />
+            ))}
+          </div>
+
+          {muzeObsazovat && data.swapsUsed >= data.maxSwaps && (
+            <p className="text-sm mt-3" style={{ color: "#A32B1F" }}>
+              Výměny máš pro tohle kolo vyčerpané ({data.swapsUsed} z {data.maxSwaps}).
+              Opravit už provedenou výměnu ještě můžeš.
+            </p>
           )}
         </div>
       )}
@@ -93,15 +98,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
         </div>
       )}
 
-      {obsazuje && data.round && teamId ? (
-        <RosterForm
-          referees={volni} matches={data.round.matches} gameWeek={data.round.gameWeek}
-          teamId={teamId}
-          onClose={() => setObsazuje(false)}
-          onSaved={() => { setObsazuje(false); onChanged(); }}
-        />
-      ) : (
-        <div className="card p-5">
+      <div className="card p-5">
           <Ornament>Rozhodčí a jejich známky</Ornament>
           <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
             {data.referees.map((r) => (
@@ -115,9 +112,6 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
                         <span className="text-sm" style={{ color: "#A32B1F" }}>
                           {" "}· stopka do {r.pausedUntil}. kola
                         </span>
-                      )}
-                      {r.nominated && !r.banned && !r.paused && (
-                        <span className="text-sm" style={{ color: "#1E4A1E" }}> · na listině kola</span>
                       )}
                       {r.flagged && !r.banned && !r.paused && (
                         <span className="text-sm" style={{ color: "#A32B1F" }}> · pod drobnohledem</span>
@@ -151,17 +145,25 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
               </div>
             ))}
           </div>
-          {jeKomisar && !data.canPause && data.pauseReason && (
-            <div className="text-sm mt-3" style={{ color: "#A32B1F" }}>{data.pauseReason}</div>
-          )}
-        </div>
-      )}
+        {jeKomisar && !data.canPause && data.pauseReason && (
+          <div className="text-sm mt-3" style={{ color: "#A32B1F" }}>{data.pauseReason}</div>
+        )}
+      </div>
 
       {banTarget && teamId && (
         <BanForm
           referee={banTarget} teamId={teamId} deposit={state.deposit} jeKomisar={jeKomisar}
           onClose={() => setBanTarget(null)}
           onSaved={() => { setBanTarget(null); onChanged(); }}
+        />
+      )}
+
+      {swapTarget && teamId && (
+        <SwapForm
+          match={swapTarget} teamId={teamId} volni={data.freeReferees}
+          gameWeek={data.round?.gameWeek ?? 0}
+          onClose={() => setSwapTarget(null)}
+          onSaved={() => { setSwapTarget(null); onChanged(); }}
         />
       )}
 
@@ -173,113 +175,6 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
           onSaved={() => { setPauseTarget(null); onChanged(); }}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * Sestavení obsazovací listiny.
- *
- * Není to modal: na mobilu by se do něj čtyřiadvacet jmen s checkboxy nevešlo
- * a komisař potřebuje u výběru vidět známky.
- */
-/**
- * Do výběru patří nejlepší nahoru — opačně než v listině se známkami, kde je
- * nahoře ten, koho má komise řešit. Známka je školní, takže „nejlepší" je
- * nejnižší číslo. Kdo ještě nepískal, jde nakonec: nemá se podle čeho seřadit
- * a nasadit neznámého je rozhodnutí, ne výchozí volba.
- */
-function poradiProVyber(a: RefereeRow, b: RefereeRow): number {
-  if (a.avgGrade === null && b.avgGrade === null) return a.name.localeCompare(b.name, "cs");
-  if (a.avgGrade === null) return 1;
-  if (b.avgGrade === null) return -1;
-  return a.avgGrade - b.avgGrade;
-}
-
-function RosterForm({ referees, matches, gameWeek, teamId, onClose, onSaved }: {
-  referees: RefereeRow[]; matches: number; gameWeek: number; teamId: string;
-  onClose: () => void; onSaved: () => void;
-}) {
-  const [vybrani, setVybrani] = useState<Set<string>>(
-    () => new Set(referees.filter((r) => r.nominated).map((r) => r.refereeId)),
-  );
-  const [saving, setSaving] = useState(false);
-
-  // Seřadí se jednou, ne při každém zaškrtnutí — jinak by jména pod prstem poskakovala.
-  const serazeni = useMemo(() => [...referees].sort(poradiProVyber), [referees]);
-
-  const prepni = (id: string) => setVybrani((prev) => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-
-  const malo = vybrani.size > 0 && vybrani.size < matches;
-
-  const submit = async () => {
-    if (malo) return;
-    setSaving(true);
-    const ok = await apiAction(
-      apiFetch(`/api/teams/${teamId}/competition/referee-roster`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refereeIds: [...vybrani] }),
-      }),
-      "Obsazovací listinu se nepodařilo uložit",
-    );
-    setSaving(false);
-    if (ok) onSaved();
-  };
-
-  return (
-    <div className="card p-5">
-      <Ornament right={`${vybrani.size} z ${matches}`}>
-        Kdo píská {gameWeek}. kolo
-      </Ornament>
-      <p className="text-sm text-muted">
-        Zaškrtni aspoň {matches} rozhodčích. Prázdný výběr listinu zruší a kolo se
-        obsadí ze všech.
-      </p>
-
-      <div className="divide-y mt-3" style={{ borderColor: "var(--color-line)" }}>
-        {serazeni.map((r) => {
-          const vybran = vybrani.has(r.refereeId);
-          return (
-            <label
-              key={r.refereeId}
-              className="flex items-center gap-3 py-2.5 cursor-pointer"
-              style={vybran ? { background: "var(--color-paper)" } : undefined}
-            >
-              <input
-                type="checkbox" checked={vybran} onChange={() => prepni(r.refereeId)}
-                className="shrink-0 w-5 h-5"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="text-base font-semibold break-words">{r.name}</div>
-                <div className="text-sm text-muted">
-                  {r.matches} {r.matches === 1 ? "zápas" : r.matches < 5 ? "zápasy" : "zápasů"} v sezóně
-                </div>
-              </div>
-              <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: gradeColor(r.avgGrade) }}>
-                {r.avgGrade !== null ? r.avgGrade.toFixed(2) : "—"}
-              </div>
-            </label>
-          );
-        })}
-      </div>
-
-      {malo && (
-        <p className="text-sm mt-3" style={{ color: "#A32B1F" }}>
-          V kole je {matches} zápasů, vybral jsi {vybrani.size}. Musí jich být aspoň tolik,
-          kolik je zápasů.
-        </p>
-      )}
-
-      <div className="flex gap-2 mt-4">
-        <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
-        <button className="btn btn-lg btn-primary flex-1" disabled={saving || malo} onClick={submit}>
-          {saving ? "Ukládám…" : "Uložit listinu"}
-        </button>
-      </div>
     </div>
   );
 }
@@ -449,6 +344,157 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
           <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
           <button className="btn btn-lg btn-primary flex-1" disabled={saving || kratkyDuvod} onClick={submit}>
             {saving ? "Odesílám…" : primo ? "Vyškrtnout" : "Podat návrh"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Jeden zápas kola. Klubová jména jsou odkazy, sudí pod nimi — na mobilu se to
+ * čte shora dolů a nic se nescrolluje do strany.
+ */
+function MatchRow({ m, teamId, muzeMenit, onSwap }: {
+  m: DelegatedMatch; teamId: string | null; muzeMenit: boolean; onSwap: () => void;
+}) {
+  const mujZapas = m.homeTeamId === teamId || m.awayTeamId === teamId;
+
+  return (
+    <div className="py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-base font-semibold break-words">
+            <EntityLink type="team" id={m.homeTeamId}>{m.homeTeamName}</EntityLink>
+            <span className="text-muted"> – </span>
+            <EntityLink type="team" id={m.awayTeamId}>{m.awayTeamName}</EntityLink>
+            {mujZapas && <span className="text-sm text-muted"> · tvůj zápas</span>}
+          </div>
+          <div className="text-sm text-muted break-words">
+            {m.refereeName ?? "zatím bez rozhodčího"}
+            {m.swapped && (
+              <span style={{ color: "#866D1E" }}> · vyměněno komisařem</span>
+            )}
+          </div>
+          {m.swapReason && (
+            <div className="text-sm text-muted break-words italic">„{m.swapReason}"</div>
+          )}
+        </div>
+        <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: gradeColor(m.avgGrade) }}>
+          {m.avgGrade !== null ? m.avgGrade.toFixed(2) : "—"}
+        </div>
+      </div>
+
+      {muzeMenit && (
+        <button className="btn btn-md btn-secondary mt-2" onClick={onSwap}>
+          {m.swapped ? "Změnit znovu" : "Vyměnit rozhodčího"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Výměna sudího na zápase.
+ *
+ * Náhradníci jsou seřazení od nejlepší známky — opačně než listina se známkami,
+ * kde je nahoře ten, koho má komise řešit. Kdo ještě nepískal, jde nakonec:
+ * nasadit neznámého má být rozhodnutí, ne výchozí volba.
+ */
+function SwapForm({ match, teamId, volni, gameWeek, onClose, onSaved }: {
+  match: DelegatedMatch; teamId: string; volni: FreeReferee[]; gameWeek: number;
+  onClose: () => void; onSaved: () => void;
+}) {
+  const [refereeId, setRefereeId] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const serazeni = useMemo(() => [...volni].sort((a, b) => {
+    if (a.avgGrade === null && b.avgGrade === null) return a.name.localeCompare(b.name, "cs");
+    if (a.avgGrade === null) return 1;
+    if (b.avgGrade === null) return -1;
+    return a.avgGrade - b.avgGrade;
+  }), [volni]);
+
+  const mujZapas = match.homeTeamId === teamId || match.awayTeamId === teamId;
+  const kratkyDuvod = note.trim().length < MIN_DUVOD;
+
+  const submit = async () => {
+    if (kratkyDuvod || !refereeId) return;
+    setSaving(true);
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/referee-swap`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchId: match.matchId, refereeId, note }),
+      }),
+      "Rozhodčího se nepodařilo vyměnit",
+    );
+    setSaving(false);
+    if (ok) onSaved();
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Výměna rozhodčího" zavritKlikemVedle={false}>
+      <div className="p-5 space-y-4">
+        <div className="text-lg font-heading">
+          {match.homeTeamName} – {match.awayTeamName}
+        </div>
+        <p className="text-sm text-muted">
+          {gameWeek}. kolo. Los určil {match.refereeName ?? "zatím nikoho"}. Koho nasadíš místo
+          něj, uvidí celá soutěž i s tvým odůvodněním.
+        </p>
+
+        {mujZapas && (
+          <div className="rounded-lg p-3 text-sm" style={{ background: "#FBEAE8" }}>
+            <div className="font-semibold">Tenhle zápas hraje tvůj klub.</div>
+            Zakázané to není, ale v zápisu bude stát, že sis vyměnil sudího sám sobě.
+            Kluby tě za to můžou odvolat.
+          </div>
+        )}
+
+        <div>
+          <label className="text-sm text-muted">Kdo bude pískat místo něj</label>
+          {serazeni.length === 0 ? (
+            <p className="text-sm mt-1" style={{ color: "#A32B1F" }}>
+              Ten den nemá nikdo z listiny volno. Vyměnit se nedá — všichni už někde pískají.
+            </p>
+          ) : (
+            <select className="select w-full mt-1" value={refereeId}
+              onChange={(e) => setRefereeId(e.target.value)}>
+              <option value="">— vyber rozhodčího —</option>
+              {serazeni.map((r) => (
+                <option key={r.refereeId} value={r.refereeId}>
+                  {r.name}{r.avgGrade !== null ? ` · známka ${r.avgGrade.toFixed(2)}` : " · zatím bez známky"}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div className="rounded-lg p-3 text-sm" style={{ background: "var(--color-paper)" }}>
+          Odvolaný sudí si to zapamatuje — míň než u stopky, protože pískat bude dál,
+          jen ne tenhle zápas.
+        </div>
+
+        <div>
+          <label className="text-sm text-muted">
+            Odůvodnění (povinné — přečte si ho celá soutěž)
+          </label>
+          <textarea className="input w-full mt-1" rows={3} maxLength={200}
+            value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="Proč tenhle zápas přeobsazuješ?" />
+          {kratkyDuvod && (
+            <p className="text-sm text-red-700 mt-1">
+              Napiš aspoň {MIN_DUVOD} znaků. Za rozhodnutím komisaře musí být důvod.
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
+          <button className="btn btn-lg btn-primary flex-1"
+            disabled={saving || kratkyDuvod || !refereeId} onClick={submit}>
+            {saving ? "Odesílám…" : "Vyměnit"}
           </button>
         </div>
       </div>

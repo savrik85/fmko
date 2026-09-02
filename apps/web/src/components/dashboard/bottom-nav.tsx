@@ -68,11 +68,8 @@ export function BottomNav() {
       // že se o něčem hlasuje a zasedání mu propadne. Nepřečtená zasedání se
       // počítají taky: hlasování odznak zhasl hned po odevzdání hlasu a jak to
       // dopadlo, se hráč nedozvěděl.
-      // rosterTodo je úkol komisaře rozhodčích: kolo čeká na obsazení a listinu
-      // ještě nesestavil. Delegace ho nepočká — proběhne dva herní dny před
-      // výkopem a kolo obsadí sama.
-      apiFetch<{ toVote: number; unseenMeetings: number; rosterTodo?: number }>(`/api/teams/${teamId}/competition/pending`)
-        .then((p) => setGremiumCount((p.toVote ?? 0) + (p.unseenMeetings ?? 0) + (p.rosterTodo ?? 0)))
+      apiFetch<{ toVote: number; unseenMeetings: number }>(`/api/teams/${teamId}/competition/pending`)
+        .then((p) => setGremiumCount((p.toVote ?? 0) + (p.unseenMeetings ?? 0)))
         .catch((e) => console.error("fetch gremium pending:", e));
       // Sázky jsou taky pod Více — vyhodnocený tiket by jinak zůstal nepovšimnut.
       apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`)

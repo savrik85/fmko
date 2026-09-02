@@ -1,87 +1,16 @@
 /**
- * Pravidla obsazovací listiny a stopek.
+ * Meze zásahů komisaře do delegace.
  *
  * DB je zfejkovaná — testuje se rozhodovací logika, ne SQL. Zajímá nás hlavně to,
- * co komisaři projde a co ne, protože právě tam je hranice mezi „má pravomoc"
- * a „může si namířit sudího na soupeře".
+ * co komisaři projde a co ne: výměna sudího je pravomoc se zjevným střetem zájmů
+ * a drží ji jen tyhle brzdy.
  */
 
 import { describe, it, expect } from "vitest";
 import {
-  MAX_PAUSES_PER_SEASON, MIN_USABLE_FOR_ROUND, PAUSE_WEEKS,
-  canPauseReferee, saveNominations, usableForWeek, type OpenRound,
+  MAX_PAUSES_PER_SEASON, MAX_SWAPS_PER_ROUND, MIN_USABLE_FOR_ROUND, PAUSE_WEEKS,
+  canPauseReferee, freeForRound, usableForWeek, type OpenRound,
 } from "./referee-roster";
-
-/** Minimální D1, která spolkne DELETE i batch a nic si nepamatuje. */
-function fakeDb(): D1Database {
-  const stmt = {
-    bind: () => stmt,
-    run: async () => ({ meta: { changes: 1 } }),
-    all: async () => ({ results: [] }),
-    first: async () => null,
-  };
-  return {
-    prepare: () => stmt,
-    batch: async (s: unknown[]) => s.map(() => ({ meta: { changes: 1 } })),
-  } as unknown as D1Database;
-}
-
-const ROUND: OpenRound = {
-  calendarId: "cal-1", gameWeek: 5, seasonNumber: 3,
-  scheduledAt: "2026-09-06T14:00:00Z", matches: 7,
-};
-
-const USABLE = new Set(Array.from({ length: 24 }, (_, i) => `ref-${i}`));
-
-const ulozit = (refereeIds: string[], usable = USABLE) => saveNominations(fakeDb(), {
-  leagueId: "liga-1", round: ROUND, refereeIds,
-  teamId: "team-1", gameDate: "2026-09-04", usable,
-});
-
-describe("obsazovací listina kola", () => {
-  it("projde výběr přesně na počet zápasů", async () => {
-    const res = await ulozit(["ref-0", "ref-1", "ref-2", "ref-3", "ref-4", "ref-5", "ref-6"]);
-    expect(res.ok).toBe(true);
-    expect(res.saved).toBe(7);
-  });
-
-  it("odmítne míň rozhodčích, než je zápasů", async () => {
-    const res = await ulozit(["ref-0", "ref-1", "ref-2"]);
-    expect(res.ok).toBe(false);
-    expect(res.reason).toContain("7 zápasů");
-  });
-
-  it("prázdný výběr listinu zruší a kolo se obsadí ze všech", async () => {
-    // Tohle NENÍ chyba: komisař si to rozmyslel a vrací delegaci automatu.
-    const res = await ulozit([]);
-    expect(res.ok).toBe(true);
-    expect(res.saved).toBe(0);
-  });
-
-  it("nepustí na listinu vyškrtnutého ani pozastaveného sudího", async () => {
-    const usable = new Set(["ref-0", "ref-1", "ref-2", "ref-3", "ref-4", "ref-5", "ref-6"]);
-    const res = await ulozit(
-      ["ref-0", "ref-1", "ref-2", "ref-3", "ref-4", "ref-5", "ref-99"], usable,
-    );
-    expect(res.ok).toBe(false);
-    expect(res.reason).toContain("nepatří");
-  });
-
-  it("duplicitní jméno se počítá jednou", async () => {
-    // Dvakrát nominovaný sudí by měl v losu dvojnásobnou šanci — a komisař by tím
-    // obešel to, že párování nedělá on.
-    const res = await ulozit([
-      "ref-0", "ref-0", "ref-1", "ref-2", "ref-3", "ref-4", "ref-5", "ref-6",
-    ]);
-    expect(res.ok).toBe(true);
-    expect(res.saved).toBe(7);
-  });
-
-  it("duplicity nesmí nahradit chybějící lidi", async () => {
-    const res = await ulozit(["ref-0", "ref-0", "ref-0", "ref-1", "ref-2", "ref-3", "ref-4"]);
-    expect(res.ok).toBe(false);
-  });
-});
 
 describe("meze stopky", () => {
   it("stopka běží tři kola včetně toho, od kterého se dává", () => {
@@ -185,5 +114,78 @@ describe("brzda stopek", () => {
     const r = await check({ pool: 0 });
     expect(r.usable).toBe(0);
     expect(r.ok).toBe(false);
+  });
+});
+
+/**
+ * D1 pro `freeForRound` — vrací pool, obsazené sudí toho dne, bany a stopky.
+ * Pořadí dotazů je dané implementací, rozlišuje se podle SQL.
+ */
+function volniDb({ pool, tenDen = [], bans = [], pauses = [] }: {
+  pool: string[]; tenDen?: string[]; bans?: string[]; pauses?: string[];
+}): D1Database {
+  return {
+    prepare: (sql: string) => {
+      const stmt = {
+        bind: () => stmt,
+        first: async () => null,
+        all: async () => {
+          if (sql.includes("FROM referees")) return { results: pool.map((id) => ({ id })) };
+          if (sql.includes("FROM matches")) return { results: tenDen.map((rid) => ({ rid })) };
+          if (sql.includes("competition_referee_bans")) {
+            return { results: bans.map((id) => ({ referee_id: id })) };
+          }
+          if (sql.includes("competition_referee_suspensions")) {
+            return { results: pauses.map((id) => ({ referee_id: id })) };
+          }
+          return { results: [] };
+        },
+        run: async () => ({ meta: { changes: 1 } }),
+      };
+      return stmt;
+    },
+  } as unknown as D1Database;
+}
+
+const ROUND: OpenRound = {
+  calendarId: "cal-1", gameWeek: 6, seasonNumber: 3,
+  scheduledAt: "2026-09-06T14:00:00Z", matches: 7,
+};
+
+const volni = (o: Parameters<typeof volniDb>[0]) =>
+  freeForRound(volniDb(o), "liga-1", 3, "Prachatice", ROUND);
+
+describe("kdo smí nastoupit místo vyměněného", () => {
+  const POOL = ["a", "b", "c", "d"];
+
+  it("volný je ten, kdo ten den nikde nepíská", async () => {
+    const v = await volni({ pool: POOL, tenDen: ["a", "b"] });
+    expect([...v].sort()).toEqual(["c", "d"]);
+  });
+
+  it("kdo už má ten den zápas, náhradník být nemůže", async () => {
+    // Jinak by po výměně pískal dvakrát denně — trest pro kluby, ne pro něj.
+    const v = await volni({ pool: POOL, tenDen: ["c"] });
+    expect(v.has("c")).toBe(false);
+  });
+
+  it("vyškrtnutý ani pozastavený se nenabídne", async () => {
+    const v = await volni({ pool: POOL, bans: ["a"], pauses: ["b"] });
+    expect(v.has("a")).toBe(false);
+    expect(v.has("b")).toBe(false);
+    expect([...v].sort()).toEqual(["c", "d"]);
+  });
+
+  it("když jsou všichni obsazení, není z čeho brát", async () => {
+    const v = await volni({ pool: POOL, tenDen: POOL });
+    expect(v.size).toBe(0);
+  });
+});
+
+describe("strop výměn v kole", () => {
+  it("v kole jde vyměnit jen část zápasů, ne všechny", () => {
+    // Kdo přeobsadí všech sedm, neupravuje los — losuje sám.
+    expect(MAX_SWAPS_PER_ROUND).toBeGreaterThan(0);
+    expect(MAX_SWAPS_PER_ROUND).toBeLessThan(ROUND.matches);
   });
 });

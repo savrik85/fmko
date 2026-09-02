@@ -1,13 +1,13 @@
 /**
- * Obsazovací listina kola a pozastavení rozhodčího — pravomoci komisaře rozhodčích.
+ * Zásahy komisaře rozhodčích do delegace — výměna sudího a stopka na tři kola.
  *
- * Obojí stojí na jednom rozhodnutí: komisař smí říct, KDO v kole píská, ale ne
- * KOMU. Párování dál losuje delegace. Kdyby směl přiřazovat sudí k zápasům,
- * poslal by kartového cvoka na soupeře v boji o postup a vlastnímu klubu nechal
- * pohodáře — a to je střet zájmů, kvůli kterému delegace nikdy ruční nebyla.
+ * Delegace běží automaticky jako vždy; komisař do HOTOVÉHO obsazení zasahuje.
+ * Střet zájmů se tím nepopírá, jen se zviditelňuje: každá výměna se zapisuje
+ * i s tím, koho odvolala, a klub vidí, že mu komisař sudího vyměnil. Na uzdě to
+ * drží počet výměn na kolo, ne zákaz.
  *
- * Zbývá napětí, které chceme: nasadit na kolo tři puntičkáře jde, ale los je
- * stejně dobře pošle na vlastní zápas.
+ * Náhradník musí být volný — kdo už ten den píská jinde, by šel do druhého
+ * zápasu utahaný a soutěž by si výměnou uškodila sama.
  */
 
 import { logger } from "../lib/logger";
@@ -19,6 +19,15 @@ export const PAUSE_WEEKS = 3;
 
 /** Kolik stopek smí komisař rozdat za sezónu. */
 export const MAX_PAUSES_PER_SEASON = 3;
+
+/**
+ * Kolik sudích smí komisař v jednom kole vyměnit.
+ *
+ * Strop je tu proto, aby z pravomoci nebyla ruční delegace: kolo má sedm zápasů
+ * a kdo přeobsadí tři, ještě zasahuje — kdo přeobsadí všechny, losuje sám.
+ * Opakovaná výměna téhož zápasu se do počtu započítá jen jednou.
+ */
+export const MAX_SWAPS_PER_ROUND = 3;
 
 /**
  * Pod tolik použitelných sudích se listina nesmí dostat ani dočasně.
@@ -183,19 +192,20 @@ export interface OpenRound {
 }
 
 /**
- * Nejbližší kolo soutěže, které ještě nemá delegované rozhodčí.
+ * Nejbližší kolo, do kterého jde ještě mluvit — obsazené, ale neodehrané.
  *
- * Delegace běží dva herní dny před výkopem, takže tohle je přesně to okno, ve
- * kterém má komisař co ovlivnit. Jakmile tick kolo obsadí, zmizí mu ze stolu.
+ * Delegace proběhne dva herní dny před výkopem, takže tohle okno se otevře
+ * automaticky a zavře se výkopem. Kolo bez delegace se nevrací: měnit se dá
+ * jen to, co už los rozdal.
  */
-export async function nextOpenRound(
+export async function upcomingRound(
   db: D1Database, leagueId: string,
 ): Promise<OpenRound | null> {
   const row = await db.prepare(
     `SELECT sc.id AS calendar_id, sc.game_week, sc.season_number, sc.scheduled_at,
             COUNT(m.id) AS matches
        FROM season_calendar sc
-       JOIN matches m ON m.calendar_id = sc.id AND m.referee_id IS NULL
+       JOIN matches m ON m.calendar_id = sc.id AND m.referee_id IS NOT NULL
       WHERE sc.league_id = ? AND sc.status = 'scheduled'
         AND sc.season_number = (SELECT MAX(x.season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
       GROUP BY sc.id
@@ -204,7 +214,7 @@ export async function nextOpenRound(
   ).bind(leagueId).first<{
     calendar_id: string; game_week: number; season_number: number;
     scheduled_at: string; matches: number;
-  }>().catch((e) => { logger.warn({ module: M }, "nejbližší nedelegované kolo", e); return null; });
+  }>().catch((e) => { logger.warn({ module: M }, "nejbližší obsazené kolo", e); return null; });
 
   if (!row) return null;
   return {
@@ -213,59 +223,165 @@ export async function nextOpenRound(
   };
 }
 
-/** Kdo je na obsazovací listině daného kola. Prázdné = deleguje se ze všech. */
-export async function nominationsFor(db: D1Database, calendarId: string): Promise<Set<string>> {
-  const rows = await db.prepare(
-    "SELECT referee_id FROM competition_referee_nominations WHERE calendar_id = ?"
-  ).bind(calendarId).all<{ referee_id: string }>()
-    .catch((e) => { logger.warn({ module: M }, "obsazovací listina kola", e); return { results: [] }; });
-  return new Set(rows.results.map((r) => r.referee_id));
+export interface DelegatedMatch {
+  matchId: string;
+  homeTeamId: string;
+  homeTeamName: string;
+  awayTeamId: string;
+  awayTeamName: string;
+  refereeId: string | null;
+  refereeName: string | null;
+  archetype: string | null;
+  avgGrade: number | null;
+  /** Los určil někoho jiného a komisař ho vyměnil. */
+  swapped: boolean;
+  swapReason: string | null;
 }
 
-export interface RosterSaveResult { ok: boolean; reason?: string; saved?: number }
+/** Obsazení kola tak, jak teď stojí — i s tím, do čeho komisař sáhl. */
+export async function delegationOf(
+  db: D1Database, calendarId: string, leagueId: string, seasonNumber: number,
+): Promise<DelegatedMatch[]> {
+  const { refereeFullName } = await import("../referees/referee-generator");
+
+  const rows = await db.prepare(
+    `SELECT m.id, m.home_team_id, m.away_team_id, m.referee_id,
+            h.name AS home_name, a.name AS away_name,
+            r.first_name, r.last_name, r.nickname, r.archetype,
+            CASE WHEN COALESCE(s.matches,0) > 0 THEN s.grade_sum / s.matches ELSE NULL END AS avg_grade,
+            w.reason AS swap_reason
+       FROM matches m
+       JOIN teams h ON h.id = m.home_team_id
+       JOIN teams a ON a.id = m.away_team_id
+       LEFT JOIN referees r ON r.id = m.referee_id
+       LEFT JOIN referee_stats s
+              ON s.referee_id = m.referee_id AND s.season_number = ? AND s.league_id = ?
+       LEFT JOIN competition_referee_swaps w ON w.match_id = m.id
+      WHERE m.calendar_id = ?
+      ORDER BY h.name`
+  ).bind(seasonNumber, leagueId, calendarId).all<{
+    id: string; home_team_id: string; away_team_id: string; referee_id: string | null;
+    home_name: string; away_name: string;
+    first_name: string | null; last_name: string | null; nickname: string | null;
+    archetype: string | null; avg_grade: number | null; swap_reason: string | null;
+  }>().catch((e) => { logger.warn({ module: M }, "obsazení kola", e); return { results: [] }; });
+
+  return rows.results.map((m) => ({
+    matchId: m.id,
+    homeTeamId: m.home_team_id, homeTeamName: m.home_name,
+    awayTeamId: m.away_team_id, awayTeamName: m.away_name,
+    refereeId: m.referee_id,
+    refereeName: m.first_name && m.last_name
+      ? refereeFullName({ first_name: m.first_name, last_name: m.last_name, nickname: m.nickname })
+      : null,
+    archetype: m.archetype,
+    avgGrade: m.avg_grade,
+    swapped: m.swap_reason !== null,
+    swapReason: m.swap_reason,
+  }));
+}
+
+/** Kolik výměn už komisař v tomhle kole udělal. */
+export async function swapsInRound(db: D1Database, calendarId: string): Promise<number> {
+  const row = await db.prepare(
+    "SELECT COUNT(*) AS n FROM competition_referee_swaps WHERE calendar_id = ?"
+  ).bind(calendarId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, "počet výměn v kole", e); return null; });
+  return row?.n ?? 0;
+}
 
 /**
- * Uloží obsazovací listinu kola. Přepisuje celou — komisař posílá výsledný stav,
- * ne rozdíl, takže odebrání jména musí umět taky.
+ * Sudí, kteří v ten den nikde nepískají — jediní použitelní jako náhrada.
  *
- * Nominovat míň sudích než je zápasů nejde: delegace by musela sama doplnit
- * zbytek a komisař by měl pocit, že mu do listiny někdo mluví.
+ * Den, ne kolo: okres sdílí pool se seniory i U21 a ti hrají tentýž den.
+ * Kdo už má zápas, by do druhého šel utahaný.
  */
-export async function saveNominations(db: D1Database, opts: {
-  leagueId: string; round: OpenRound; refereeIds: string[];
-  teamId: string; gameDate: string; usable: Set<string>;
-}): Promise<RosterSaveResult> {
-  const unikatni = [...new Set(opts.refereeIds)];
+export async function freeForRound(
+  db: D1Database, leagueId: string, seasonNumber: number, district: string, round: OpenRound,
+): Promise<Set<string>> {
+  const { normalizeDistrict } = await import("../referees/referee-generator");
+  const { bannedIds } = await import("./referee-bans");
+  const base = normalizeDistrict(district);
 
-  const cizi = unikatni.filter((id) => !opts.usable.has(id));
-  if (cizi.length > 0) {
-    return { ok: false, reason: "Někdo z vybraných na listinu tohohle kola nepatří — je vyškrtnutý nebo má stopku." };
+  const den = new Date(round.scheduledAt);
+  const od = new Date(den); od.setUTCHours(0, 0, 0, 0);
+  const do_ = new Date(den); do_.setUTCHours(23, 59, 59, 999);
+
+  const [vsichni, obsazeni, bans, pauses] = await Promise.all([
+    db.prepare("SELECT id FROM referees WHERE district = ? AND status = 'active'")
+      .bind(base).all<{ id: string }>()
+      .catch((e) => { logger.warn({ module: M }, "okresní pool", e); return { results: [] }; }),
+    db.prepare(
+      `SELECT DISTINCT m.referee_id AS rid
+         FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+        WHERE m.referee_id IS NOT NULL AND sc.scheduled_at BETWEEN ? AND ?`
+    ).bind(od.toISOString(), do_.toISOString()).all<{ rid: string }>()
+      .catch((e) => { logger.warn({ module: M }, "sudí obsazení v ten den", e); return { results: [] }; }),
+    bannedIds(db, leagueId, seasonNumber),
+    pausedIds(db, leagueId, seasonNumber, round.gameWeek),
+  ]);
+
+  const zabrani = new Set(obsazeni.results.map((r) => r.rid));
+  return new Set(
+    vsichni.results
+      .map((r) => r.id)
+      .filter((id) => !zabrani.has(id) && !bans.has(id) && !pauses.has(id)),
+  );
+}
+
+export interface SwapResult { ok: boolean; reason?: string; refereeName?: string }
+
+/**
+ * Vymění sudího na jednom zápase.
+ *
+ * Zapisuje se `from_referee_id`, i když je to jen informace — bez něj by nešlo
+ * poznat, koho los původně určil, a výměna by byla nedohledatelná.
+ */
+export async function swapReferee(db: D1Database, opts: {
+  leagueId: string; seasonNumber: number; round: OpenRound;
+  matchId: string; fromRefereeId: string | null; toRefereeId: string;
+  reason: string; teamId: string; ownMatch: boolean; gameDate: string;
+}): Promise<SwapResult> {
+  const res = await db.prepare(
+    "UPDATE matches SET referee_id = ? WHERE id = ? AND calendar_id = ?"
+  ).bind(opts.toRefereeId, opts.matchId, opts.round.calendarId).run()
+    .catch((e) => { logger.error({ module: M }, "zápis výměny sudího", e); return null; });
+
+  if (!res || (res.meta?.changes ?? 0) === 0) {
+    return { ok: false, reason: "Zápas se nepodařilo přeobsadit." };
   }
 
-  if (unikatni.length > 0 && unikatni.length < opts.round.matches) {
-    return {
-      ok: false,
-      reason: `V kole je ${opts.round.matches} zápasů, vybral jsi ${unikatni.length} rozhodčích. Musí jich být aspoň tolik, kolik je zápasů.`,
-    };
-  }
+  // Jeden zápas, jeden řádek — opakovaná výměna přepíše důvod, ale nezaloží
+  // druhý záznam, jinak by počítadlo výměn rostlo i při opravě překlepu.
+  await db.prepare("DELETE FROM competition_referee_swaps WHERE match_id = ?")
+    .bind(opts.matchId).run()
+    .catch((e) => logger.warn({ module: M }, "úklid starého záznamu výměny", e));
 
-  await db.prepare("DELETE FROM competition_referee_nominations WHERE calendar_id = ?")
-    .bind(opts.round.calendarId).run()
-    .catch((e) => logger.warn({ module: M }, "úklid staré obsazovací listiny", e));
-
-  // Prázdný výběr je legitimní: komisař listinu zrušil a kolo se obsadí ze všech.
-  if (unikatni.length === 0) return { ok: true, saved: 0 };
-
-  await db.batch(unikatni.map((refereeId) => db.prepare(
-    `INSERT OR IGNORE INTO competition_referee_nominations
-      (id, league_id, calendar_id, referee_id, season_number, nominated_by_team, game_date)
-     VALUES (?,?,?,?,?,?,?)`
+  await db.prepare(
+    `INSERT INTO competition_referee_swaps
+      (id, league_id, season_number, calendar_id, match_id, from_referee_id, to_referee_id,
+       reason, swapped_by_team, own_match, game_date)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
-    crypto.randomUUID(), opts.leagueId, opts.round.calendarId, refereeId,
-    opts.round.seasonNumber, opts.teamId, opts.gameDate,
-  ))).catch((e) => { logger.error({ module: M }, "zápis obsazovací listiny", e); });
+    crypto.randomUUID(), opts.leagueId, opts.seasonNumber, opts.round.calendarId,
+    opts.matchId, opts.fromRefereeId, opts.toRefereeId, opts.reason,
+    opts.teamId, opts.ownMatch ? 1 : 0, opts.gameDate,
+  ).run().catch((e) => logger.error({ module: M }, "záznam výměny", e));
+
+  // Odvolaný sudí si to pamatuje. Je to mírnější než stopka — pískat bude dál,
+  // jen ne tenhle zápas.
+  if (opts.fromRefereeId) {
+    await db.prepare(
+      `INSERT INTO referee_team_relations (id, referee_id, team_id, sentiment, duvod)
+       VALUES (?,?,?,?,?)
+       ON CONFLICT(referee_id, team_id) DO UPDATE SET
+         sentiment = MAX(-100, referee_team_relations.sentiment - 10),
+         duvod = excluded.duvod`
+    ).bind(crypto.randomUUID(), opts.fromRefereeId, opts.teamId, -10, "Sundali mě ze zápasu.")
+      .run().catch((e) => logger.warn({ module: M }, "paměť odvolaného sudího", e));
+  }
 
   logger.info({ module: M },
-    `soutěž ${opts.leagueId}: obsazovací listina ${opts.round.gameWeek}. kola — ${unikatni.length} rozhodčích`);
-  return { ok: true, saved: unikatni.length };
+    `soutěž ${opts.leagueId}: zápas ${opts.matchId} přeobsazen na ${opts.toRefereeId}`);
+  return { ok: true };
 }
