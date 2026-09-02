@@ -114,7 +114,7 @@ export function GremiumVyveska({ limit = 6 }: { limit?: number }) {
   if (!decisions || decisions.length === 0) return null;
 
   return (
-    <div className="card p-5 mt-4">
+    <div className="card p-5">
       <div className="flex items-center justify-between gap-3 mb-3">
         <span className="font-heading font-semibold text-sm uppercase tracking-wide text-muted">
           Vývěska grémia

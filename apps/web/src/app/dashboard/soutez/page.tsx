@@ -400,18 +400,10 @@ export default function SoutezPage() {
 
       {tab === "zasedani" && (
         <div className="space-y-4">
-          {/* Co grémium rozhodlo, patří nad program toho, o čem se teprve hlasuje.
-              Zápisy jsou o dvě záložky vedle a hráč se k nim neproklikal. */}
-          <GremiumVyveska />
-          <div className="card p-5 text-sm">
-            <div className="font-semibold text-base">Grémium zasedá každou středu.</div>
-            <p className="mt-1 text-muted">
-              Návrhy i hlasy můžeš podávat kdykoli až do jeho zahájení. Během zasedání vidíš jen
-              kolik klubů už hlasovalo — kdo jak hlasoval se odkryje až v zápisu. Změny odměn
-              a sazeb platí vždy až od příští sezóny, nikdy na rozehranou.
-            </p>
-          </div>
-
+          {/* Odbory hned pod hlavní záložky. Mezi těmi dvěma lištami dřív visela
+              vývěska a hráč se k agendě odboru proscrolloval přes šest cizích
+              rozhodnutí — dvě navigace oddělené dlouhým seznamem. Co grémium
+              rozhodlo, je pod agendou; kdo si to chce přečíst, ten doscrolluje. */}
           <Tabs
             items={gesceList.map((g) => ({
               key: g, label: GESCE_LABEL[g],
@@ -505,6 +497,19 @@ export default function SoutezPage() {
               </div>
             </div>
           )}
+
+          {/* Rozhodnutí celého grémia, ne jen tohohle odboru — proto až za agendou.
+              Zápisy jsou o dvě záložky vedle a sem se hráč dostane spíš. */}
+          <GremiumVyveska />
+
+          <div className="card p-5 text-sm">
+            <div className="font-semibold text-base">Grémium zasedá každou středu.</div>
+            <p className="mt-1 text-muted">
+              Návrhy i hlasy můžeš podávat kdykoli až do jeho zahájení. Během zasedání vidíš jen
+              kolik klubů už hlasovalo — kdo jak hlasoval se odkryje až v zápisu. Změny odměn
+              a sazeb platí vždy až od příští sezóny, nikdy na rozehranou.
+            </p>
+          </div>
         </div>
       )}
 
