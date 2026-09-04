@@ -49,12 +49,14 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         .bind(awayTeamId, matchId).first().catch((e) => { logger.warn({ module: "friendly-runner" }, "check away lineup", e); return null; });
       if (!hasAwayLineup) await copyOrCreateLineup(db, awayTeamId, matchId);
 
-      // Load lineups VČETNĚ formation, tactic, captain — bez nich by se ignorovalo co user nastavil
-      const homeLineupRow = await db.prepare("SELECT formation, tactic, hardness, players_data, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(homeTeamId, matchId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null }>()
+      // Load lineups VČETNĚ formation, tactic, captain — bez nich by se ignorovalo co user nastavil.
+      // `match_plan` patří do stejného SELECTu: `TeamSetup.plan` je nepovinné pole, takže když
+      // se nenačte, engine pokyny z lavičky tiše přeskočí a manažerovi se nic nestane bez chyby.
+      const homeLineupRow = await db.prepare("SELECT formation, tactic, hardness, players_data, captain_id, match_plan FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(homeTeamId, matchId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null; match_plan: string | null }>()
         .catch((e) => { logger.warn({ module: "friendly-runner" }, "load home lineup", e); return null; });
-      const awayLineupRow = await db.prepare("SELECT formation, tactic, hardness, players_data, captain_id FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(awayTeamId, matchId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null }>()
+      const awayLineupRow = await db.prepare("SELECT formation, tactic, hardness, players_data, captain_id, match_plan FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(awayTeamId, matchId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null; match_plan: string | null }>()
         .catch((e) => { logger.warn({ module: "friendly-runner" }, "load away lineup", e); return null; });
 
       // Přátelák = dobrovolný zápas → hráči mají výrazně vyšší šanci odmítnout (multiplikátor 1.8×)
@@ -102,6 +104,14 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         loadSetPieceTakers(db, awayTeamId, awayBuild.idMap),
       ]);
 
+      // Pokyny z lavičky se převádějí na engine ID až tady, protože idMap vzniká
+      // až po sestavení soupisek. Pravidlo s hráčem, který dnes nenastoupil, se
+      // zahodí uvnitř toEnginePlan — v příprávě se to stává častěji než v lize,
+      // absence mají násobič 1.8.
+      const { toEnginePlan } = await import("../engine/plan-mapping");
+      const homePlan = toEnginePlan(homeBuild.idMap, homeLineupRow?.match_plan);
+      const awayPlan = toEnginePlan(awayBuild.idMap, awayLineupRow?.match_plan);
+
       const homeSetup: TeamSetup = {
         teamId: 1,
         teamName: homeTeam?.name ?? "Domácí",
@@ -113,6 +123,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         hardness: (homeLineupRow?.hardness as Hardness | null) ?? "normal",
         ...homeTakers,
         formationFamiliarity: homeFam.formation[homeFormation] ?? 0,
+        plan: homePlan,
       };
       const awaySetup: TeamSetup = {
         teamId: 2,
@@ -125,6 +136,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         hardness: (awayLineupRow?.hardness as Hardness | null) ?? "normal",
         ...awayTakers,
         formationFamiliarity: awayFam.formation[awayFormation] ?? 0,
+        plan: awayPlan,
       };
 
       // Stadium info

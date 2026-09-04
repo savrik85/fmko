@@ -110,7 +110,7 @@ export function MatchPlanEditor({ plan, onChange, starters, bench }: Props) {
       ...plan,
       {
         id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        fromMinute: 60,
+        fromMinute: 45,
         trigger: { kind: "score", state: "losing", byAtLeast: 1 },
         action: { kind: "tactic", tactic: "offensive" },
       },
