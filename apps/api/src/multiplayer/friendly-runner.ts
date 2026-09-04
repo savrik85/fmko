@@ -112,6 +112,21 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const homePlan = toEnginePlan(homeBuild.idMap, homeLineupRow?.match_plan);
       const awayPlan = toEnginePlan(awayBuild.idMap, awayLineupRow?.match_plan);
 
+      // Kolik pravidel manažer zadal a kolik jich přežilo převod. Rozdíl znamená, že
+      // hráč z pravidla dnes nenastoupil — v příprávě běžné (absence mají násobič 1.8)
+      // a jinak nepoznatelné: zápas doběhne bez chyby, jen se pokyn neprovede.
+      const zadano = (side: string | null | undefined) => {
+        if (!side) return 0;
+        try { return (JSON.parse(side) as unknown[]).length; }
+        catch (e) { logger.warn({ module: "friendly-runner" }, "čtení plánu", e); return 0; }
+      };
+      const homeZadano = zadano(homeLineupRow?.match_plan);
+      const awayZadano = zadano(awayLineupRow?.match_plan);
+      if (homeZadano > 0 || awayZadano > 0) {
+        logger.info({ module: "friendly-runner" },
+          `přátelák ${matchId}: pokyny z lavičky — domácí ${homePlan?.length ?? 0}/${homeZadano}, hosté ${awayPlan?.length ?? 0}/${awayZadano}`);
+      }
+
       const homeSetup: TeamSetup = {
         teamId: 1,
         teamName: homeTeam?.name ?? "Domácí",
