@@ -144,12 +144,14 @@ export async function maintainFreeAgentPool(
   for (const row of districts.results) {
     const district = row.district as string;
 
-    // Check current pool size for this district
+    // Strop se počítá JEN z vygenerovaných hráčů. Propuštění (`released`/`quit`)
+    // do poolu padají bez limitu — v okrese s hodně manažery samy udržely pool
+    // trvale nad stropem a nová krev se pak negenerovala vůbec (Prachatice).
     const poolCount = await db.prepare(
-      "SELECT COUNT(*) as cnt FROM free_agents WHERE district = ?"
+      "SELECT COUNT(*) as cnt FROM free_agents WHERE district = ? AND source = 'generated'"
     ).bind(district).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "free-agent-pool" }, "count pool", e); return { cnt: 0 }; });
 
-    // Max 8 free agents per district, generate 0-2 per day
+    // Max 8 generated free agents per district, generate 0-2 per day
     if ((poolCount?.cnt ?? 0) >= 8) continue;
     const count = rng.int(0, 2);
     if (count === 0) continue;
