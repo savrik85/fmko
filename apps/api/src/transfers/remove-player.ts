@@ -17,6 +17,9 @@ import { logger } from "../lib/logger";
 
 export type LeaveType = "released" | "retired" | "quit" | "transfer";
 
+/** Jak dlouho propuštěný (nebo sám odešlý) hráč zůstane na trhu volných hráčů. */
+export const FREE_AGENT_DAYS_RELEASED = 3;
+
 export interface RemovedPlayer {
   id: string;
   firstName: string;
@@ -39,7 +42,7 @@ export interface RemovePlayerResult {
 export interface RemovePlayerOptions {
   /** Vložit hráče do poolu volných hráčů (jen released/transfer; důchod/quit = false). */
   toFreeAgent?: boolean;
-  /** ISO expirace inzerátu volného hráče (default +7 dní). */
+  /** ISO expirace inzerátu volného hráče (default +FREE_AGENT_DAYS_RELEASED dní). */
   faExpiresAt?: string;
   /** Omezit na konkrétní tým (ochrana proti race). */
   teamId?: string;
@@ -110,10 +113,13 @@ export async function removePlayer(
   if (opts.toFreeAgent) {
     // free_agents.source CHECK povoluje jen 'generated' | 'released' | 'quit'
     const faSource = leaveType === "quit" ? "quit" : "released";
+    // Tři dny, ne sedm: odložení hráči se do stropu poolu nepočítají, takže se
+    // v okrese s hodně manažery hromadili rychleji, než stačili vypršet, a trh
+    // pak byl dlouhý a samý propadlík. Kratší lhůta ho drží průchodný.
     let expiresAt = opts.faExpiresAt;
     if (!expiresAt) {
       const d = new Date();
-      d.setDate(d.getDate() + 7);
+      d.setDate(d.getDate() + FREE_AGENT_DAYS_RELEASED);
       expiresAt = d.toISOString();
     }
     batch.push(
