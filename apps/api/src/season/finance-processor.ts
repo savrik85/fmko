@@ -52,6 +52,9 @@ export type TransactionType =
   | "staff_wage"
   | "staff_signing"
   | "course_fee"
+  // Ústupky fanouškovským partám — schůzka s vůdcem, choreo, přesun sektoru.
+  // Dobrovolný nákup, takže PATŘÍ do PURCHASE_TYPES a v mínusu se zablokuje.
+  | "fan_relations"
   // Pokuta disciplinární komise za výroky o rozhodčím. ZÁMĚRNĚ není v PURCHASE_TYPES —
   // musí se strhnout i při záporném rozpočtu, jinak by BUDGET_BLOCKED shodil uložení rozhovoru.
   | "disciplinary_fine"
@@ -108,7 +111,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "equipment_upgrade", "equipment_purchase", "stadium_upgrade", "stadium_visual",
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
-  "manager_social", "staff_signing", "course_fee",
+  "manager_social", "staff_signing", "course_fee", "fan_relations",
   "bet_stake", "bet_levy",
 ]);
 

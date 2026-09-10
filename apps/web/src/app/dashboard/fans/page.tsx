@@ -539,7 +539,9 @@ export default function FansPage() {
         items={visibleTabs.map((t) => ({ key: t.key, label: t.label, icon: t.icon }))}
       />
 
-      {currentTab === "groups" && fanGroups && <FanGroupsPanel data={fanGroups} />}
+      {currentTab === "groups" && fanGroups && teamId && (
+        <FanGroupsPanel data={fanGroups} teamId={teamId} onChanged={refresh} />
+      )}
 
       {currentTab === "fanbase" && fanbase && (<>
       {/* ═══ Jak to funguje — jednoduchý úvod ═══ */}

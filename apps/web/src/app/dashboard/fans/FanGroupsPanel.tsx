@@ -7,8 +7,10 @@
  * tři sta by z něj udělalo neudržovatelnou hroudu.
  */
 
+import { useState } from "react";
 import Link from "next/link";
-import { SectionLabel } from "@/components/ui";
+import { SectionLabel, useConfirm } from "@/components/ui";
+import { apiFetch, showError } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { odesloLidi, zavrenoNaZapasy, sentimentWord } from "@/lib/fan-info";
 
@@ -28,6 +30,23 @@ export interface FanLeaderView {
   radikalnost: number;
   vyjednavani: number;
   avatar: Record<string, unknown> | null;
+}
+
+export interface FanActionVariant {
+  key: string;
+  label: string;
+  cost: number;
+}
+
+export interface FanActionView {
+  action: string;
+  label: string;
+  popis: string;
+  cost: number;
+  cooldownDnu: number;
+  variants: FanActionVariant[];
+  available: boolean;
+  blockedReason?: string;
 }
 
 export interface FanGroupView {
@@ -52,6 +71,7 @@ export interface FanGroupView {
   closedMatches: number;
   ticketDiscount: number;
   leader: FanLeaderView | null;
+  options: FanActionView[];
 }
 
 export interface FanIncidentView {
@@ -130,6 +150,93 @@ function Pruh({ label, value, color, hint }: { label: string; value: number; col
   );
 }
 
+/**
+ * Co se s partou dá udělat. Tlačítka jsou POD kartou, ne v ní — na mobilu se
+ * jinak mačkají s textem a špatně se trefují.
+ */
+function Akce({ group, teamId, onChanged }: {
+  group: FanGroupView; teamId: string; onChanged: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  // Výsledek se ukazuje na místě, ne v chybovém dialogu — ten má výstražnou
+  // ikonu a „Odchází smířlivěji" u ní vypadá jako průšvih.
+  const [vysledek, setVysledek] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
+
+  const proved = async (a: FanActionView, variant?: FanActionVariant) => {
+    const cena = variant ? variant.cost : a.cost;
+    const ok = await confirm({
+      title: `${a.label} — ${group.name}`,
+      description: a.popis,
+      details: cena > 0 ? [{ label: "Cena", value: `−${formatCZK(cena)}`, color: "text-card-red" }] : [],
+      confirmLabel: a.label,
+    });
+    if (!ok) return;
+
+    setBusy(a.action);
+    setVysledek(null);
+    type Odpoved = { ok?: boolean; message?: string; error?: string };
+    const res: Odpoved = await apiFetch<Odpoved>(
+      `/api/teams/${teamId}/fans/groups/${group.id}/action`,
+      { method: "POST", body: JSON.stringify({ action: a.action, variant: variant?.key }) },
+    ).catch((e) => {
+      console.error("akce s partou:", e);
+      return { error: "Akci se nepodařilo provést." };
+    });
+    setBusy(null);
+
+    if (res?.error) { showError("Nepovedlo se", res.error); return; }
+    setVysledek(res?.message ?? null);
+    await onChanged();
+  };
+
+  return (
+    <div className="mt-3 space-y-2">
+      {dialog}
+      {vysledek && (
+        <p className="rounded-lg px-3 py-2 text-sm" style={{ background: "var(--color-paper)" }}>
+          {vysledek}
+        </p>
+      )}
+      {group.options.map((a) => (
+        <div key={a.action}>
+          {a.variants.length === 0 ? (
+            <button
+              className="btn btn-md btn-secondary w-full"
+              disabled={!a.available || busy !== null}
+              onClick={() => proved(a)}
+            >
+              {a.label}{a.cost > 0 ? ` · ${formatCZK(a.cost)}` : ""}
+            </button>
+          ) : (
+            <details className="rounded-lg" style={{ background: "var(--color-paper)" }}>
+              <summary className={`cursor-pointer px-3 py-2 text-sm font-semibold ${a.available ? "" : "opacity-50"}`}>
+                {a.label}
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <p className="text-sm text-muted">{a.popis}</p>
+                {a.variants.map((v) => (
+                  <button
+                    key={v.key}
+                    className="btn btn-md btn-secondary w-full"
+                    disabled={!a.available || busy !== null}
+                    onClick={() => proved(a, v)}
+                  >
+                    {v.label}{v.cost > 0 ? ` · ${formatCZK(v.cost)}` : ""}
+                  </button>
+                ))}
+              </div>
+            </details>
+          )}
+          {!a.available && a.blockedReason && (
+            <p className="text-sm text-muted mt-1">{a.blockedReason}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LeaderRadek({ leader }: { leader: FanLeaderView }) {
   const s = sentimentWord(leader.sentiment);
   return (
@@ -150,7 +257,9 @@ function LeaderRadek({ leader }: { leader: FanLeaderView }) {
   );
 }
 
-export function FanGroupsPanel({ data }: { data: FanGroupsData }) {
+export function FanGroupsPanel({ data, teamId, onChanged }: {
+  data: FanGroupsData; teamId: string; onChanged: () => Promise<void> | void;
+}) {
   const bordelCelkem = data.recentIncidents.reduce((s, i) => s + i.fine, 0);
 
   return (
@@ -236,6 +345,14 @@ export function FanGroupsPanel({ data }: { data: FanGroupsData }) {
               <LeaderRadek leader={g.leader} />
             </div>
           )}
+
+          <details className="mt-3 group">
+            <summary className="cursor-pointer text-sm font-semibold">
+              <span className="group-open:hidden">Co s tím můžeš udělat</span>
+              <span className="hidden group-open:inline">Skrýt možnosti</span>
+            </summary>
+            <Akce group={g} teamId={teamId} onChanged={onChanged} />
+          </details>
         </div>
       ))}
 

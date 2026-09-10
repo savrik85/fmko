@@ -9,15 +9,24 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
-import { requireAdmin } from "../auth/middleware";
+import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import {
   FAN_GROUPS, SECTOR_LABELS, fanLeaderArchetypeLabel, moodWord, heatWord,
   type FanGroupKind, type FanSector,
 } from "../engine/fan-groups";
 import { fanLeaderFullName, type FanGroupRow, type FanLeaderRow } from "../fans/fan-group-generator";
 import { syncFanGroups } from "../fans/fan-group-state";
+import {
+  FAN_ACTIONS, FAN_ACTION_KEYS, actionCost, dnuOd,
+  dopadSchuzky, dopadSlevy, dopadTifa, dopadZakazu, dopadOdvolaniZakazu, dopadPresunu,
+  type FanActionKey, type Dopad,
+} from "../fans/fan-group-actions";
 
 export const fansRouter = new Hono<{ Bindings: Bindings }>();
+
+// Zápisy jen vlastníkovi týmu. Middleware GET propouští, takže čtení cizích
+// part (třeba kotle soupeře před derby) zůstává otevřené.
+fansRouter.use("/teams/:teamId/fans/*", requireTeamOwnership);
 
 const M = "fans-api";
 
@@ -152,8 +161,13 @@ fansRouter.get("/teams/:teamId/fans/groups", async (c) => {
       .catch((e) => { logger.warn({ module: M }, "úroveň pořadatelské služby", e); return null; }),
   ]);
 
+  const kdy = await cooldownyKlubu(db, teamId);
+
   return c.json({
-    groups: groups.map((g) => groupView(g, g.leader_id ? leaders.get(g.leader_id) : undefined)),
+    groups: groups.map((g) => ({
+      ...groupView(g, g.leader_id ? leaders.get(g.leader_id) : undefined),
+      options: nabidkaAkci(kdy, gameDate, g),
+    })),
     recentIncidents: (incidents?.results ?? []).map(incidentView),
     securityLevel: security?.security ?? 0,
     gameDate,
@@ -187,6 +201,7 @@ fansRouter.get("/teams/:teamId/fans/groups/:groupId", async (c) => {
 
   return c.json({
     group: groupView(group, group.leader_id ? leaders.get(group.leader_id) : undefined),
+    options: nabidkaAkci(await cooldownyKlubu(db, teamId), gameDate, group),
     incidents: (incidents?.results ?? []).map(incidentView),
     actions: (actions?.results ?? []).map((a) => ({
       id: a.id, action: a.action, cost: a.cost, gameDate: a.game_date, createdAt: a.created_at,
@@ -317,3 +332,220 @@ fansRouter.post("/admin/force-fan-incident", requireAdmin, async (c) => {
 
   return c.json(res);
 });
+
+// ── Akce manažera ────────────────────────────────────────────────────────────
+
+interface AkceView {
+  action: string;
+  label: string;
+  popis: string;
+  cost: number;
+  cooldownDnu: number;
+  variants: { key: string; label: string; cost: number }[];
+  available: boolean;
+  blockedReason?: string;
+}
+
+/**
+ * Kdy naposled která parta co dělala — jedním dotazem za celý klub.
+ *
+ * Per-partu by to bylo pět dotazů na jedno otevření stránky; nabídka se přitom
+ * počítá pro všechny party naráz.
+ */
+async function cooldownyKlubu(db: D1Database, teamId: string): Promise<Map<string, string>> {
+  const rows = await db
+    .prepare(
+      `SELECT group_id, action, MAX(game_date) AS gd FROM fan_group_actions
+       WHERE team_id = ? GROUP BY group_id, action`,
+    )
+    .bind(teamId)
+    .all<{ group_id: string; action: string; gd: string }>()
+    .catch((e) => { logger.warn({ module: M }, "cooldowny akcí", e); return null; });
+  return new Map((rows?.results ?? []).map((r) => [`${r.group_id}|${r.action}`, r.gd]));
+}
+
+/** Nabídka akcí pro jednu partu i s tím, proč která zrovna nejde. */
+function nabidkaAkci(
+  kdy: Map<string, string>,
+  gameDate: string,
+  group: FanGroupRow,
+): AkceView[] {
+  return FAN_ACTION_KEYS.map((key) => {
+    const def = FAN_ACTIONS[key];
+    const uplynulo = dnuOd(kdy.get(`${group.id}|${key}`) ?? null, gameDate);
+    let available = true;
+    let blockedReason: string | undefined;
+
+    if (def.cooldownDnu > 0 && uplynulo < def.cooldownDnu) {
+      available = false;
+      const zbyva = def.cooldownDnu - uplynulo;
+      blockedReason = `Znovu až za ${zbyva === 1 ? "den" : zbyva <= 4 ? `${zbyva} dny` : `${zbyva} dnů`}.`;
+    }
+    if (key === "odvolat_zakaz" && group.closed_matches <= 0) {
+      available = false;
+      blockedReason = "Sektor není zavřený.";
+    }
+    if (key === "zakaz" && group.closed_matches > 0) {
+      available = false;
+      blockedReason = "Sektor už zavřený je.";
+    }
+
+    return {
+      action: key,
+      label: def.label,
+      popis: def.popis,
+      cost: def.cost,
+      cooldownDnu: def.cooldownDnu,
+      variants: def.variants ? [...def.variants] : [],
+      available,
+      blockedReason,
+    };
+  });
+}
+
+/**
+ * Provede akci s partou.
+ *
+ * Pořadí je záměrné: nejdřív cooldown a peníze, teprve pak dopad. Kdyby se
+ * účinek počítal dřív, blokovaný nákup by nechal partu spokojenější zadarmo.
+ */
+fansRouter.post("/teams/:teamId/fans/groups/:groupId/action", async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.param("teamId");
+  const groupId = c.req.param("groupId");
+  const body = await c.req.json<{ action?: string; variant?: string }>().catch(() => null);
+  const action = body?.action as FanActionKey | undefined;
+
+  if (!action || !FAN_ACTIONS[action]) return c.json({ error: "Neznámá akce" }, 400);
+  const def = FAN_ACTIONS[action];
+  const variant = body?.variant ?? null;
+  if (def.variants && !def.variants.some((v) => v.key === variant)) {
+    return c.json({ error: "Vyber prosím variantu." }, 400);
+  }
+
+  const groups = await syncFanGroups(db, teamId, { drift: false });
+  const group = groups.find((g) => g.id === groupId);
+  if (!group) return c.json({ error: "Parta nenalezena" }, 404);
+
+  const gameDate = await teamGameDate(db, teamId);
+
+  // Cooldown a stavové podmínky — stejná pravidla, jaká hlásí nabídka.
+  const polozka = nabidkaAkci(await cooldownyKlubu(db, teamId), gameDate, group)
+    .find((n) => n.action === action);
+  if (polozka && !polozka.available) {
+    return c.json({ error: polozka.blockedReason ?? "Tahle akce teď nejde." }, 400);
+  }
+
+  const cena = actionCost(action, variant);
+  if (cena > 0) {
+    const { assertPurchaseAllowed, recordTransaction } = await import("../season/finance-processor");
+    const check = await assertPurchaseAllowed(db, teamId, cena);
+    if (!check.ok) return c.json({ error: check.reason }, 400);
+    await recordTransaction(
+      db, teamId, "fan_relations", -cena,
+      `${def.label} — ${group.name}`, gameDate, `fanact-${groupId}-${action}-${gameDate}`,
+    );
+  }
+
+  const leader = group.leader_id
+    ? await db.prepare("SELECT * FROM fan_leaders WHERE id = ?").bind(group.leader_id).first<FanLeaderRow>()
+        .catch((e) => { logger.warn({ module: M }, "vůdce pro akci", e); return null; })
+    : null;
+
+  const dopad = await spocitejDopad(db, { action, variant, group, leader, teamId });
+  await zapisDopad(db, { action, variant, group, leader, dopad, gameDate, teamId, cena });
+
+  return c.json({
+    ok: true,
+    message: dopad.text,
+    sentiment: dopad.sentiment,
+    mood: dopad.mood,
+    cost: cena,
+  });
+});
+
+async function spocitejDopad(
+  db: D1Database,
+  a: { action: FanActionKey; variant: string | null; group: FanGroupRow; leader: FanLeaderRow | null; teamId: string },
+): Promise<Dopad> {
+  switch (a.action) {
+    case "schuzka": {
+      const tym = await db.prepare("SELECT reputation FROM teams WHERE id = ?")
+        .bind(a.teamId).first<{ reputation: number }>()
+        .catch((e) => { logger.warn({ module: M }, "reputace pro schůzku", e); return null; });
+      return dopadSchuzky({
+        vyjednavani: a.leader?.vyjednavani ?? 50,
+        sentiment: a.leader?.sentiment ?? 0,
+        managerReputation: tym?.reputation ?? 50,
+        // Výsledek se nesmí dát opakovat refreshem — schůzka je jednorázová
+        // událost, ne něco, co jde losovat dokola.
+        roll: Math.random(),
+      });
+    }
+    case "sleva": return dopadSlevy(Number(a.variant) || 0);
+    case "tifo": return dopadTifa(a.variant ?? "male", a.leader?.vyjednavani ?? 50);
+    case "zakaz": return dopadZakazu(Number(a.variant) || 1);
+    case "odvolat_zakaz": return dopadOdvolaniZakazu();
+    case "presun": return dopadPresunu(a.group.sector, a.variant ?? a.group.sector);
+  }
+}
+
+async function zapisDopad(
+  db: D1Database,
+  a: {
+    action: FanActionKey; variant: string | null; group: FanGroupRow; leader: FanLeaderRow | null;
+    dopad: Dopad; gameDate: string; teamId: string; cena: number;
+  },
+): Promise<void> {
+  const stmts: D1PreparedStatement[] = [];
+
+  const zmeny: string[] = [
+    "mood = MAX(0, MIN(100, mood + ?))",
+    "heat = MAX(0, MIN(100, heat + ?))",
+  ];
+  const hodnoty: unknown[] = [a.dopad.mood, a.dopad.heat];
+
+  if (a.action === "sleva") {
+    zmeny.push("ticket_discount = ?");
+    hodnoty.push((Number(a.variant) || 0) / 100);
+  }
+  if (a.action === "zakaz") {
+    zmeny.push("closed_matches = ?");
+    hodnoty.push(Math.max(1, Math.min(3, Number(a.variant) || 1)));
+  }
+  if (a.action === "odvolat_zakaz") {
+    zmeny.push("closed_matches = 0");
+  }
+  if (a.action === "presun" && a.variant) {
+    zmeny.push("sector = ?");
+    hodnoty.push(a.variant);
+  }
+
+  stmts.push(
+    db.prepare(
+      `UPDATE fan_groups SET ${zmeny.join(", ")},
+         updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+    ).bind(...hodnoty, a.group.id),
+  );
+
+  if (a.leader && a.dopad.sentiment !== 0) {
+    stmts.push(
+      db.prepare(
+        `UPDATE fan_leaders SET sentiment = MAX(-100, MIN(100, sentiment + ?)), duvod = ?,
+           updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+      ).bind(a.dopad.sentiment, a.dopad.text, a.leader.id),
+    );
+  }
+
+  stmts.push(
+    db.prepare(
+      `INSERT INTO fan_group_actions (id, team_id, group_id, action, cost, game_date, effect_json)
+       VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(), a.teamId, a.group.id, a.action, a.cena, a.gameDate,
+      JSON.stringify({ variant: a.variant, ...a.dopad }),
+    ),
+  );
+
+  await db.batch(stmts).catch((e) => { logger.error({ module: M }, `zápis akce ${a.action}`, e); });
+}
