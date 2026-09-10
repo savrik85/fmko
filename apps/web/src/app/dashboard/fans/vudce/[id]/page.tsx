@@ -14,6 +14,7 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { axisWord } from "@/lib/referee-info";
+import { sentimentWord } from "@/lib/fan-info";
 import type { FanGroupView, FanLeaderView } from "../../FanGroupsPanel";
 
 interface Detail {
@@ -50,14 +51,6 @@ function osaColor(value: number, dobreVysoke: boolean): string {
   if (dobre) return "bg-pitch-500";
   if (spatne) return "bg-card-red";
   return "bg-gold-500";
-}
-
-function sentimentWord(s: number): { text: string; cls: string } {
-  if (s >= 50) return { text: "stojí za tebou", cls: "text-pitch-600" };
-  if (s >= 15) return { text: "nakloněný", cls: "text-pitch-600" };
-  if (s > -15) return { text: "neutrální", cls: "text-muted" };
-  if (s > -50) return { text: "nedůvěřuje ti", cls: "text-gold-600" };
-  return { text: "je proti tobě", cls: "text-card-red" };
 }
 
 export default function VudceDetailPage() {

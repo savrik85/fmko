@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { SectionLabel } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { pocet } from "@/lib/referee-info";
+import { odesloLidi, zavrenoNaZapasy, sentimentWord } from "@/lib/fan-info";
 
 export interface FanLeaderView {
   id: string;
@@ -102,14 +102,6 @@ function heatBarColor(v: number): string {
   if (v >= 60) return "bg-card-red";
   if (v >= 30) return "bg-gold-600";
   return "bg-pitch-500";
-}
-
-function sentimentWord(s: number): { text: string; cls: string } {
-  if (s >= 50) return { text: "stojí za tebou", cls: "text-pitch-600" };
-  if (s >= 15) return { text: "nakloněný", cls: "text-pitch-600" };
-  if (s > -15) return { text: "neutrální", cls: "text-muted" };
-  if (s > -50) return { text: "nedůvěřuje ti", cls: "text-gold-600" };
-  return { text: "je proti tobě", cls: "text-card-red" };
 }
 
 function formatCZK(v: number): string {
@@ -225,7 +217,7 @@ export function FanGroupsPanel({ data }: { data: FanGroupsData }) {
           {g.sectorClosed && (
             <div className="mt-3 rounded-lg bg-card-red/10 px-3 py-2 text-sm">
               🚫 <strong>Sektor je uzavřený</strong> za trest ještě na{" "}
-              {pocet(g.closedMatches, "zápas", "zápasy", "zápasů")}. Na hřiště se nedostanou.
+              {zavrenoNaZapasy(g.closedMatches)}. Na hřiště se nedostanou.
             </div>
           )}
           {g.ticketDiscount > 0 && (
@@ -271,8 +263,8 @@ export function FanGroupsPanel({ data }: { data: FanGroupsData }) {
                   <div>{i.text}</div>
                   {(i.sectorClosedMatches > 0 || i.fansLost > 0) && (
                     <div className="text-muted">
-                      {i.sectorClosedMatches > 0 && `Sektor zavřený na ${i.sectorClosedMatches} zápas${i.sectorClosedMatches > 1 ? "y" : ""}. `}
-                      {i.fansLost > 0 && `Odešlo ${i.fansLost} lidí.`}
+                      {i.sectorClosedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(i.sectorClosedMatches)}. `}
+                      {i.fansLost > 0 && odesloLidi(i.fansLost)}
                     </div>
                   )}
                 </li>

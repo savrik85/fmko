@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { odesloLidi, zavrenoNaZapasy } from "@/lib/fan-info";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, BadgePreview, PositionBadge } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
@@ -456,8 +457,8 @@ export default function MatchDetailPage() {
                 {(inc.fine > 0 || inc.closedMatches > 0 || inc.fansLost > 0) && (
                   <p className="text-sm text-muted mt-1">
                     {inc.fine > 0 && `Pokuta ${inc.fine.toLocaleString("cs")} Kč. `}
-                    {inc.closedMatches > 0 && `Sektor zavřený na ${inc.closedMatches === 1 ? "jeden zápas" : `${inc.closedMatches} zápasy`}. `}
-                    {inc.fansLost > 0 && `Odešlo ${inc.fansLost} lidí.`}
+                    {inc.closedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(inc.closedMatches)}. `}
+                    {inc.fansLost > 0 && odesloLidi(inc.fansLost)}
                   </p>
                 )}
               </div>
