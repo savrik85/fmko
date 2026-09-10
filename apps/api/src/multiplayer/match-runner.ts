@@ -791,6 +791,14 @@ export async function runScheduledMatches(
             // takže opakovaný běh kola nestrhne pokutu podruhé.
             try {
                 const {resolveMatchIncidents} = await import("../fans/resolve-match-incidents");
+                // HERNÍ datum, ne reálné — pokuta i uzavření sektoru patří do herního
+                // času. `matches` sloupec s datem nemá, kanonický zdroj je teams.game_date.
+                const fanGd = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+                    .bind(homeTeamId).first<{ game_date: string | null }>()
+                    .catch((e) => {
+                        logger.warn({module: "match-runner"}, "herní datum pro výtržnosti", e);
+                        return null;
+                    }))?.game_date ?? new Date().toISOString().slice(0, 10);
                 await resolveMatchIncidents(db, {
                     matchId,
                     homeTeamId,
@@ -801,8 +809,7 @@ export async function runScheduledMatches(
                     preMatchHeat,
                     leagueId: (match.league_id as string | null) ?? calRow?.league_id ?? null,
                     seasonNumber: calRow?.season_number ?? 0,
-                    gameDate: (match.scheduled_at as string | null)?.slice(0, 10)
-                        ?? new Date().toISOString().slice(0, 10),
+                    gameDate: fanGd,
                     // Sporný verdikt nebo vyloučení domácích rozpálí tribunu nejvíc.
                     sporneVerdikty: storedIncidents.length > 0
                         || result.events.some((e) => e.type === "card" && e.detail === "red"),

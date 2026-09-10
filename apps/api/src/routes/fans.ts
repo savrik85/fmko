@@ -267,7 +267,7 @@ fansRouter.post("/admin/force-fan-incident", requireAdmin, async (c) => {
   const m = await db
     .prepare(
       `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
-              m.attendance, m.calendar_id, m.league_id, m.referee_id, m.scheduled_at, m.status
+              m.attendance, m.calendar_id, m.league_id, m.referee_id, m.status
        FROM matches m WHERE m.id = ?`,
     )
     .bind(matchId)
@@ -275,7 +275,7 @@ fansRouter.post("/admin/force-fan-incident", requireAdmin, async (c) => {
       id: string; home_team_id: string; away_team_id: string;
       home_score: number | null; away_score: number | null; attendance: number | null;
       calendar_id: string | null; league_id: string | null; referee_id: string | null;
-      scheduled_at: string | null; status: string;
+      status: string;
     }>()
     .catch((e) => { logger.warn({ module: M }, "načtení zápasu pro dev trigger", e); return null; });
   if (!m) return c.json({ error: "Zápas nenalezen" }, 404);
@@ -309,7 +309,7 @@ fansRouter.post("/admin/force-fan-incident", requireAdmin, async (c) => {
     preMatchHeat: rel?.heat ?? 0,
     leagueId: cal?.league_id ?? m.league_id ?? null,
     seasonNumber: cal?.season_number ?? 0,
-    gameDate: m.scheduled_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    gameDate: await teamGameDate(db, m.home_team_id),
     sporneVerdikty: c.req.query("sporne") === "1",
     refereeId: m.referee_id,
   });
