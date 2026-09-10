@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { odesloLidi, zavrenoNaZapasy } from "@/lib/fan-info";
+import { odesloLidi, zavrenoNaZapasy } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, BadgePreview, PositionBadge } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";

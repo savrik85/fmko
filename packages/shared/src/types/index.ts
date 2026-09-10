@@ -48,6 +48,7 @@ export {
   managerFansBand,
   managerFansEffect,
 } from "./manager-fans";
+export { odesloLidi, zavrenoNaZapasy, pripadu } from "./fan-groups";
 export type {
   PlanTactic,
   PlanHardness,

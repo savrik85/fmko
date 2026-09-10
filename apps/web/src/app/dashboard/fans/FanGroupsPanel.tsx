@@ -12,7 +12,8 @@ import Link from "next/link";
 import { SectionLabel, useConfirm } from "@/components/ui";
 import { apiFetch, showError } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { odesloLidi, zavrenoNaZapasy, sentimentWord } from "@/lib/fan-info";
+import { odesloLidi, zavrenoNaZapasy, pripadu } from "@okresni-masina/shared";
+import { sentimentWord } from "@/lib/fan-info";
 
 export interface FanLeaderView {
   id: string;
@@ -154,14 +155,14 @@ function Pruh({ label, value, color, hint }: { label: string; value: number; col
  * Co se s partou dá udělat. Tlačítka jsou POD kartou, ne v ní — na mobilu se
  * jinak mačkají s textem a špatně se trefují.
  */
-function Akce({ group, teamId, onChanged }: {
+function Akce({ group, teamId, onChanged, confirm }: {
   group: FanGroupView; teamId: string; onChanged: () => Promise<void> | void;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   // Výsledek se ukazuje na místě, ne v chybovém dialogu — ten má výstražnou
   // ikonu a „Odchází smířlivěji" u ní vypadá jako průšvih.
   const [vysledek, setVysledek] = useState<string | null>(null);
-  const { confirm, dialog } = useConfirm();
 
   const proved = async (a: FanActionView, variant?: FanActionVariant) => {
     const cena = variant ? variant.cost : a.cost;
@@ -192,7 +193,6 @@ function Akce({ group, teamId, onChanged }: {
 
   return (
     <div className="mt-3 space-y-2">
-      {dialog}
       {vysledek && (
         <p className="rounded-lg px-3 py-2 text-sm" style={{ background: "var(--color-paper)" }}>
           {vysledek}
@@ -261,9 +261,14 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
   data: FanGroupsData; teamId: string; onChanged: () => Promise<void> | void;
 }) {
   const bordelCelkem = data.recentIncidents.reduce((s, i) => s + i.fine, 0);
+  // Jeden dialog pro celý panel. Uvnitř <details> s akcemi by ho sbalený
+  // element schoval (display:none platí na celý podstrom) a potvrzení by
+  // se nikdy nezobrazilo.
+  const { confirm, dialog } = useConfirm();
 
   return (
     <div className="space-y-5">
+      {dialog}
       {/* ═══ Jak to funguje ═══ */}
       <details className="card p-4 sm:p-5 group">
         <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
@@ -351,7 +356,7 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
               <span className="group-open:hidden">Co s tím můžeš udělat</span>
               <span className="hidden group-open:inline">Skrýt možnosti</span>
             </summary>
-            <Akce group={g} teamId={teamId} onChanged={onChanged} />
+            <Akce group={g} teamId={teamId} onChanged={onChanged} confirm={confirm} />
           </details>
         </div>
       ))}
@@ -389,7 +394,7 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
             </ul>
             {bordelCelkem > 0 && (
               <p className="mt-3 pt-3 border-t border-gray-100 text-sm">
-                Za posledních {data.recentIncidents.length} případů jsi zaplatil{" "}
+                Za {pripadu(data.recentIncidents.length)} jsi zaplatil{" "}
                 <strong className="text-card-red">{formatCZK(bordelCelkem)}</strong>.
               </p>
             )}

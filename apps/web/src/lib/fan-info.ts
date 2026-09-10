@@ -1,25 +1,10 @@
 /**
- * Popisky fanouškovských part — jeden zdroj pro stránku fanoušků, profil vůdce
- * i detail zápasu.
+ * Popisky fanouškovských part specifické pro web.
  *
- * Česká čísla se v těchhle větách chovají zrádně: mění se nejen podstatné jméno,
- * ale i sloveso („odešel jeden člověk" / „odešli dva lidé" / „odešlo pět lidí").
- * Proto to má vlastní funkce, ne šablonu s jedním tvarem.
+ * Jazykové tvary číslovek („odešli dva lidé") žijí v `@okresni-masina/shared`,
+ * protože jsou to čisté funkce a tam na ně běží testy. Tady zůstává jen to,
+ * co nese Tailwind třídy a do sdíleného balíčku nepatří.
  */
-
-/** Kolik lidí po výtržnosti odešlo — celá věta i se slovesem. */
-export function odesloLidi(n: number): string {
-  if (n === 1) return "Odešel jeden člověk.";
-  if (n >= 2 && n <= 4) return `Odešli ${n} lidé.`;
-  return `Odešlo ${n} lidí.`;
-}
-
-/** Na kolik zápasů je sektor zavřený. */
-export function zavrenoNaZapasy(n: number): string {
-  if (n === 1) return "jeden zápas";
-  if (n >= 2 && n <= 4) return `${n} zápasy`;
-  return `${n} zápasů`;
-}
 
 /** Jak je vůdce nakloněný vedení klubu. */
 export function sentimentWord(s: number): { text: string; cls: string } {
