@@ -140,8 +140,12 @@ function SanctionRow({ s, teamId, onChanged, canAppeal }: {
         <StatusPill status={s.status} />
       </div>
       {s.evidence && <div className="text-sm mt-1 break-words">Doloženo: {s.evidence}</div>}
-      <div className="text-xs text-muted mt-1">
-        {s.issuedBy === "chair" ? "Uložil předseda disciplinární rady" : "Rozhodlo zasedání grémia"}
+      <div className="text-sm text-muted mt-1">
+        {s.issuedBy === "chair"
+          ? "Uložil předseda disciplinární rady"
+          : s.issuedBy === "rule"
+            ? "Uloženo automaticky ze zápisu o utkání"
+            : "Rozhodlo zasedání grémia"}
       </div>
       {canAppeal && s.status === "issued" && (
         <button className="btn btn-md btn-secondary w-full mt-2" disabled={busy} onClick={appeal}>

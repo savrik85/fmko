@@ -47,6 +47,21 @@ interface MatchDetail {
   referee_snapshot?: string | RefereeSnapshotJson | null;
   referee_incidents?: string | RefereeIncidentView[] | null;
   referee_grade?: number | null;
+  fan_incidents?: string | FanIncidentSnapshot[] | null;
+}
+
+/** Co se dělo na tribunách — zapisuje `fans/resolve-match-incidents.ts`. */
+interface FanIncidentSnapshot {
+  id: string;
+  kind: string;
+  label: string;
+  severity: number;
+  minute: number;
+  groupName: string;
+  text: string;
+  fine: number;
+  closedMatches: number;
+  fansLost: number;
 }
 
 interface RefereeSnapshotJson {
@@ -128,6 +143,7 @@ export default function MatchDetailPage() {
   };
   const refereeInfo = parseJson<RefereeSnapshotJson>(match.referee_snapshot);
   const incidents = parseJson<RefereeIncidentView[]>(match.referee_incidents) ?? [];
+  const fanIncidents = parseJson<FanIncidentSnapshot[]>(match.fan_incidents) ?? [];
   const teamNameById: Record<string, string> = {
     [match.home_team_id]: match.home_name,
     [match.away_team_id]: match.away_name,
@@ -414,6 +430,38 @@ export default function MatchDetailPage() {
             ) : (
               <p className="text-sm text-muted mt-2">Zápas zvládl bez sporných momentů.</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ NA TRIBUNÁCH — výtržnosti a jejich cena ═══ */}
+      {fanIncidents.length > 0 && (
+        <div className="card p-4 mt-3">
+          <div className="font-heading font-bold text-base">🚨 Na tribunách</div>
+          <div className="mt-3 space-y-2">
+            {fanIncidents.map((inc) => (
+              <div
+                key={inc.id}
+                className="rounded-r-xl border-l-4 px-3 py-2"
+                style={{
+                  borderColor: inc.severity >= 3 ? "var(--color-card-red)" : "var(--color-gold-500)",
+                  background: inc.severity >= 3 ? "rgba(217,64,50,0.07)" : "rgba(196,160,53,0.07)",
+                }}
+              >
+                <div className="font-heading font-bold text-sm">
+                  {inc.minute}&apos; · {inc.label}
+                  <span className="font-normal text-muted"> — {inc.groupName}</span>
+                </div>
+                <p className="text-sm mt-0.5">{inc.text}</p>
+                {(inc.fine > 0 || inc.closedMatches > 0 || inc.fansLost > 0) && (
+                  <p className="text-sm text-muted mt-1">
+                    {inc.fine > 0 && `Pokuta ${inc.fine.toLocaleString("cs")} Kč. `}
+                    {inc.closedMatches > 0 && `Sektor zavřený na ${inc.closedMatches === 1 ? "jeden zápas" : `${inc.closedMatches} zápasy`}. `}
+                    {inc.fansLost > 0 && `Odešlo ${inc.fansLost} lidí.`}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

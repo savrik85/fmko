@@ -554,6 +554,13 @@ export async function processMatchDayFinances(
         await recordTransaction(db, teamId, "match_expense", -refereeCost,
           `Rozhodčí`, gameDate, matchId);
       }
+
+      // Pořadatelská služba. Lidi na bráně stojí, ať má klub na účtu cokoli —
+      // proto `match_expense`, který není v PURCHASE_TYPES a strhne se i v mínusu.
+      if (facilityFx.securityMatchCost > 0) {
+        await recordTransaction(db, teamId, "match_expense", -facilityFx.securityMatchCost,
+          `Pořadatelská služba`, gameDate, matchId);
+      }
     }
   }
 

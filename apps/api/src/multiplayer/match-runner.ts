@@ -786,6 +786,32 @@ export async function runScheduledMatches(
                 logger.warn({module: "match-runner"}, "manager relations post-match", e);
             }
 
+            // ── Post-match: co se dělo na tribunách ──────────────────────────────
+            // Nárok na vyhodnocení si bere resolver sám (matches.fan_incidents),
+            // takže opakovaný běh kola nestrhne pokutu podruhé.
+            try {
+                const {resolveMatchIncidents} = await import("../fans/resolve-match-incidents");
+                await resolveMatchIncidents(db, {
+                    matchId,
+                    homeTeamId,
+                    awayTeamId,
+                    homeScore: result.homeScore,
+                    awayScore: result.awayScore,
+                    attendance: attendanceWithOfficials,
+                    preMatchHeat,
+                    leagueId: (match.league_id as string | null) ?? calRow?.league_id ?? null,
+                    seasonNumber: calRow?.season_number ?? 0,
+                    gameDate: (match.scheduled_at as string | null)?.slice(0, 10)
+                        ?? new Date().toISOString().slice(0, 10),
+                    // Sporný verdikt nebo vyloučení domácích rozpálí tribunu nejvíc.
+                    sporneVerdikty: storedIncidents.length > 0
+                        || result.events.some((e) => e.type === "card" && e.detail === "red"),
+                    refereeId: referee.profile.id ?? null,
+                });
+            } catch (e) {
+                logger.warn({module: "match-runner"}, "vyhodnocení výtržností", e);
+            }
+
             // Player stats update
             const season = await db.prepare(
                 "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"

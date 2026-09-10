@@ -9,6 +9,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { requireAdmin } from "../auth/middleware";
 import {
   FAN_GROUPS, SECTOR_LABELS, fanLeaderArchetypeLabel, moodWord, heatWord,
   type FanGroupKind, type FanSector,
@@ -247,4 +248,71 @@ fansRouter.get("/teams/:teamId/fans/incidents", async (c) => {
     total: suma?.pocet ?? items.length,
     finesTotal: suma?.pokuty ?? 0,
   });
+});
+
+// ── Dev trigger ──────────────────────────────────────────────────────────────
+
+/**
+ * Vynutí vyhodnocení výtržností u odehraného zápasu.
+ *
+ * Jinak se čeká na zápasový tick a mechanika se nedá otestovat. `reset=1` smaže
+ * nárok i zapsané incidenty toho zápasu, aby šlo losovat znovu — pokuta se ale
+ * podruhé nestrhne, o to se stará reference_id v disciplinárce.
+ */
+fansRouter.post("/admin/force-fan-incident", requireAdmin, async (c) => {
+  const db = c.env.DB;
+  const matchId = c.req.query("matchId");
+  if (!matchId) return c.json({ error: "Chybí matchId" }, 400);
+
+  const m = await db
+    .prepare(
+      `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+              m.attendance, m.calendar_id, m.league_id, m.referee_id, m.scheduled_at, m.status
+       FROM matches m WHERE m.id = ?`,
+    )
+    .bind(matchId)
+    .first<{
+      id: string; home_team_id: string; away_team_id: string;
+      home_score: number | null; away_score: number | null; attendance: number | null;
+      calendar_id: string | null; league_id: string | null; referee_id: string | null;
+      scheduled_at: string | null; status: string;
+    }>()
+    .catch((e) => { logger.warn({ module: M }, "načtení zápasu pro dev trigger", e); return null; });
+  if (!m) return c.json({ error: "Zápas nenalezen" }, 404);
+  if (m.status !== "simulated") return c.json({ error: "Zápas ještě není odehraný" }, 400);
+
+  if (c.req.query("reset") === "1") {
+    await db.batch([
+      db.prepare("UPDATE matches SET fan_incidents = NULL WHERE id = ?").bind(matchId),
+      db.prepare("DELETE FROM fan_incidents WHERE match_id = ?").bind(matchId),
+    ]).catch((e) => { logger.warn({ module: M }, "reset nároku", e); });
+  }
+
+  const cal = m.calendar_id
+    ? await db.prepare("SELECT season_number, league_id FROM season_calendar WHERE id = ?")
+        .bind(m.calendar_id).first<{ season_number: number; league_id: string }>()
+        .catch((e) => { logger.warn({ module: M }, "kalendář pro dev trigger", e); return null; })
+    : null;
+
+  const { getRelation } = await import("../community/manager-relations");
+  const rel = await getRelation(db, m.home_team_id, m.away_team_id)
+    .catch((e) => { logger.warn({ module: M }, "vztah manažerů", e); return null; });
+
+  const { resolveMatchIncidents } = await import("../fans/resolve-match-incidents");
+  const res = await resolveMatchIncidents(db, {
+    matchId: m.id,
+    homeTeamId: m.home_team_id,
+    awayTeamId: m.away_team_id,
+    homeScore: m.home_score ?? 0,
+    awayScore: m.away_score ?? 0,
+    attendance: m.attendance ?? 0,
+    preMatchHeat: rel?.heat ?? 0,
+    leagueId: cal?.league_id ?? m.league_id ?? null,
+    seasonNumber: cal?.season_number ?? 0,
+    gameDate: m.scheduled_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    sporneVerdikty: c.req.query("sporne") === "1",
+    refereeId: m.referee_id,
+  });
+
+  return c.json(res);
 });
