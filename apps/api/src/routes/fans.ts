@@ -255,9 +255,12 @@ fansRouter.get("/teams/:teamId/fans/incidents", async (c) => {
 /**
  * Vynutí vyhodnocení výtržností u odehraného zápasu.
  *
- * Jinak se čeká na zápasový tick a mechanika se nedá otestovat. `reset=1` smaže
- * nárok i zapsané incidenty toho zápasu, aby šlo losovat znovu — pokuta se ale
- * podruhé nestrhne, o to se stará reference_id v disciplinárce.
+ * Jinak se čeká na zápasový tick a mechanika se nedá otestovat.
+ *
+ * `reset=1` uvolní jen nárok, ne zapsané incidenty. Losování je deterministické,
+ * takže druhý běh dojde ke stejnému skutku, `INSERT OR IGNORE` na jeho ID vrátí
+ * nula změn a dopady se přeskočí — přesně tím se dá ověřit, že druhá obrana proti
+ * dvojí pokutě drží i bez nároku.
  */
 fansRouter.post("/admin/force-fan-incident", requireAdmin, async (c) => {
   const db = c.env.DB;
@@ -282,10 +285,8 @@ fansRouter.post("/admin/force-fan-incident", requireAdmin, async (c) => {
   if (m.status !== "simulated") return c.json({ error: "Zápas ještě není odehraný" }, 400);
 
   if (c.req.query("reset") === "1") {
-    await db.batch([
-      db.prepare("UPDATE matches SET fan_incidents = NULL WHERE id = ?").bind(matchId),
-      db.prepare("DELETE FROM fan_incidents WHERE match_id = ?").bind(matchId),
-    ]).catch((e) => { logger.warn({ module: M }, "reset nároku", e); });
+    await db.prepare("UPDATE matches SET fan_incidents = NULL WHERE id = ?").bind(matchId).run()
+      .catch((e) => { logger.warn({ module: M }, "reset nároku", e); });
   }
 
   const cal = m.calendar_id

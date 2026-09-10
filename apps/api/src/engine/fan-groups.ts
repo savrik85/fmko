@@ -288,7 +288,16 @@ export interface FanIncidentDef {
   weightByGroup: Partial<Record<FanGroupKind, number>>;
   /** Skutek dává smysl jen když dorazil hostující kotel. */
   needsAwayUltras?: boolean;
-  /** Texty do hlášení; `{skupina}` a `{vudce}` se nahradí. */
+  /**
+   * Texty do hlášení. `{skupina}` a `{vudce}` se nahradí.
+   *
+   * Dvě pravidla, která hlídá test „texty výtržností jsou česky":
+   *  • `{skupina}` je NESKLOŇOVATELNÉ vlastní jméno („Břevnov Boys"), takže smí
+   *    stát jen po slově, které pád nese za něj — „parta", „party", „stojí".
+   *    Jinak vznikne „Ze Břevnov Boys vběhl někdo na hřiště".
+   *  • Po `{vudce}` jen PŘÍTOMNÝ čas. Vůdce může být žena a minulý čas by se
+   *    v češtině musel shodovat v rodě („{vudce} nezastavil" u organizátorky).
+   */
   texty: readonly string[];
 }
 
@@ -302,9 +311,9 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     morale: [0, 2, 1, -1],
     weightByGroup: { kotel: 5, parta_z_okoli: 2 },
     texty: [
-      "{skupina} zapálila v sektoru světlice a hra se na chvíli zastavila kvůli kouři.",
+      "V sektoru, kde stojí parta {skupina}, hořely světlice a hra se na chvíli zastavila kvůli kouři.",
       "Z kotle vyletěly dýmovnice — {vudce} tvrdí, že to bylo choreo, delegát to vidí jinak.",
-      "{skupina} odpálila pyro hned po gólu. Krásné to bylo, levné ne.",
+      "Hned po gólu odpálili pyro. Krásné to bylo, levné ne.",
     ],
   },
   hazeni: {
@@ -316,9 +325,9 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     morale: [0, -1, -3, -5],
     weightByGroup: { kotel: 3, stamgasti: 2, parta_z_okoli: 2 },
     texty: [
-      "Ze sektoru, kde stojí {skupina}, přiletěl na hřiště kelímek.",
-      "{skupina} začala po spornému verdiktu házet na plochu, co měla po ruce.",
-      "Na trávník dopadla plechovka od piva — {vudce} se za to omlouvá, delegát to zapsal.",
+      "Ze sektoru, kde stojí parta {skupina}, přiletěl na hřiště kelímek.",
+      "Po sporném verdiktu začalo z tribuny létat na plochu, co komu přišlo pod ruku.",
+      "Na trávník dopadla plechovka od piva — {vudce} se za to omlouvá, delegát si to zapsal.",
     ],
   },
   pokriky: {
@@ -330,9 +339,9 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     morale: [0, 0, -2, -3],
     weightByGroup: { kotel: 4, stamgasti: 3, parta_z_okoli: 2 },
     texty: [
-      "{skupina} se pustila do pokřiků, které delegát do zápisu opsat nechtěl.",
+      "Z party {skupina} se nesly pokřiky, které delegát do zápisu opsat nechtěl.",
       "Z tribuny se ozývalo něco, co v okresním přeboru nemá co dělat. Za to se platí.",
-      "{vudce} pokřiky nezastavil včas a zápis to zaznamenal.",
+      "{vudce} pokřiky neumlčí a delegát to má v zápise.",
     ],
   },
   bitka_kotle: {
@@ -345,8 +354,8 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     weightByGroup: { kotel: 4, parta_z_okoli: 3 },
     needsAwayUltras: true,
     texty: [
-      "{skupina} se srazila s hostujícím kotlem u plotu. Rozdělit je trvalo deset minut.",
-      "Za brankou to vzplálo — {vudce} byl u toho a tvrdí, že začali oni.",
+      "U plotu se parta {skupina} srazila s hostujícím kotlem. Rozdělit je trvalo deset minut.",
+      "Za brankou to vzplálo — {vudce} tvrdí, že začali oni.",
       "Strkanice s hosty přerostla v rvačku a zápas se musel na chvíli přerušit.",
     ],
   },
@@ -359,9 +368,9 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     morale: [0, -2, -4, -6],
     weightByGroup: { kotel: 3, parta_z_okoli: 1 },
     texty: [
-      "Ze {skupina} vběhl někdo na hřiště a rozhodčí přerušil hru.",
+      "Někdo z party {skupina} vběhl na hřiště a rozhodčí přerušil hru.",
       "Na plochu se dostali dva lidé z kotle. Pořadatelé je vyváděli za pískotu tribuny.",
-      "{vudce} se ještě snažil zasáhnout, ale na trávníku už stál první z nich.",
+      "{vudce} to ještě zkouší uklidnit, ale na trávníku už stojí první z nich.",
     ],
   },
   skoda: {
@@ -373,9 +382,9 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     morale: [0, 0, -1, -2],
     weightByGroup: { kotel: 3, stamgasti: 2, parta_z_okoli: 2 },
     texty: [
-      "{skupina} rozebrala kus zábradlí. Opravu zaplatí klub.",
+      "Z party {skupina} zbyl na tribuně vylomený kus zábradlí. Opravu zaplatí klub.",
       "Po zápase zbyly z laviček v sektoru třísky.",
-      "Někdo od {skupina} vykopl dveře na záchodcích. Klasika.",
+      "Někdo od party {skupina} vykopl dveře na záchodcích. Klasika.",
     ],
   },
   vyhrozovani: {
@@ -387,9 +396,9 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     morale: [0, -1, -2, -4],
     weightByGroup: { kotel: 3, stamgasti: 2, pametnici: 1 },
     texty: [
-      "{skupina} počkala na rozhodčího u kabin. Nedopadlo to bitkou, ale klidné to nebylo.",
+      "Na rozhodčího čekala u kabin parta {skupina}. Bitkou to neskončilo, ale klidné to nebylo.",
       "Na sudího se ze sektoru sneslo tolik výhrůžek, že si to napsal do zápisu.",
-      "{vudce} křičel na rozhodčího věci, které delegát ocitoval doslova.",
+      "{vudce} křičí na rozhodčího věci, které delegát ocitoval doslova.",
     ],
   },
 };

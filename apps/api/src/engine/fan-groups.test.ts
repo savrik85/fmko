@@ -283,3 +283,42 @@ describe("hlas skupiny", () => {
       .toBeGreaterThan(groupNoiseShare({ noise: 80, mood: 10, sectorClosed: false }));
   });
 });
+
+describe("texty výtržností jsou česky", () => {
+  /** Slova, po kterých smí stát neskloňovatelný název party. */
+  const NOSICI_PADU = ["parta ", "party ", "stojí "];
+
+  it("název party nikdy nestojí sám v pádu, který by musel skloňovat", () => {
+    for (const [kind, def] of Object.entries(FAN_INCIDENTS)) {
+      for (const t of def.texty) {
+        const i = t.indexOf("{skupina}");
+        if (i < 0) continue;
+        const pred = t.slice(0, i);
+        expect(
+          NOSICI_PADU.some((n) => pred.endsWith(n)),
+          `${kind}: „${t}" — {skupina} je neskloňovatelné jméno, musí stát po ${NOSICI_PADU.join(" / ")}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("po vůdci je jen přítomný čas — může to být žena", () => {
+    // Minulý čas se v češtině shoduje v rodě, takže „{vudce} nezastavil" by
+    // u organizátorky bylo špatně. Přítomný čas tenhle problém nemá.
+    const MINULY = /^\{vudce\}\s+\S*(l|la|lo|li|ly)\b/;
+    for (const [kind, def] of Object.entries(FAN_INCIDENTS)) {
+      for (const t of def.texty) {
+        expect(MINULY.test(t), `${kind}: „${t}" — po {vudce} patří přítomný čas`).toBe(false);
+      }
+    }
+  });
+
+  it("každý text končí tečkou a nemá zbylý placeholder", () => {
+    for (const [kind, def] of Object.entries(FAN_INCIDENTS)) {
+      for (const t of def.texty) {
+        expect(t.trim(), kind).toMatch(/[.!?]$/);
+        expect(t, kind).not.toMatch(/\{(?!skupina|vudce)[a-z]+\}/);
+      }
+    }
+  });
+});
