@@ -54,9 +54,22 @@ export function sizeForShare(share: number, tierCount: number): number {
   return Math.max(0, Math.round(Math.max(0, tierCount) * Math.max(0, Math.min(1, share))));
 }
 
-/** Je sektor party k tomuhle hernímu dni zavřený za trest? */
-export function isSectorClosed(closedUntilGd: string | null, gameDate: string): boolean {
-  return !!closedUntilGd && closedUntilGd > gameDate;
+/**
+ * Sníží počítadlo uzavřených sektorů o jeden domácí zápas.
+ *
+ * Volá se z vyhodnocení domácího zápasu, uvnitř nároku na něj — opakovaný běh
+ * téhož zápasu tak trest nezkrátí dvakrát.
+ */
+export async function odbytZapasUzavreniSektoru(db: D1Database, teamId: string): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE fan_groups SET closed_matches = closed_matches - 1,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+       WHERE team_id = ? AND closed_matches > 0`,
+    )
+    .bind(teamId)
+    .run()
+    .catch((e) => { logger.warn({ module: M }, `odečet uzavření sektoru u ${teamId}`, e); });
 }
 
 /**

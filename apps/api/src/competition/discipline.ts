@@ -338,9 +338,14 @@ export async function issueSanction(db: D1Database, opts: IssueSanctionOpts): Pr
 async function afterSanction(
   db: D1Database, leagueId: string, teamId: string, seasonNumber: number,
 ): Promise<void> {
+  // Počítají se JEN pokuty, které soutěž vyslovila sama (hlasování nebo předseda).
+  // Automatické pokuty (`issued_by = 'rule'`) sem nepatří — do stropu se nepočítají
+  // taky (viz canFine) a klub s opakovanými výtržnostmi by jinak měl brzy všechny
+  // sudí okresu na sentimentu +100, což je pravý opak zaslouženého trestu.
   const count = await db.prepare(
     `SELECT COUNT(*) AS n FROM competition_sanctions
-      WHERE league_id = ? AND team_id = ? AND season_number = ?`
+      WHERE league_id = ? AND team_id = ? AND season_number = ?
+        AND issued_by IN ('vote','chair')`
   ).bind(leagueId, teamId, seasonNumber).first<{ n: number }>()
     .catch(() => null);
   if ((count?.n ?? 0) < MAX_FINES_PER_TEAM) return;

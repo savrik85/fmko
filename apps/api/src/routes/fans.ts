@@ -14,7 +14,7 @@ import {
   type FanGroupKind, type FanSector,
 } from "../engine/fan-groups";
 import { fanLeaderFullName, type FanGroupRow, type FanLeaderRow } from "../fans/fan-group-generator";
-import { syncFanGroups, isSectorClosed } from "../fans/fan-group-state";
+import { syncFanGroups } from "../fans/fan-group-state";
 
 export const fansRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -65,9 +65,8 @@ function leaderView(l: FanLeaderRow) {
   };
 }
 
-function groupView(g: FanGroupRow, leader: FanLeaderRow | undefined, gameDate: string) {
+function groupView(g: FanGroupRow, leader: FanLeaderRow | undefined) {
   const def = FAN_GROUPS[g.kind as FanGroupKind];
-  const closed = isSectorClosed(g.closed_until_gd, gameDate);
   return {
     id: g.id,
     kind: g.kind,
@@ -86,8 +85,8 @@ function groupView(g: FanGroupRow, leader: FanLeaderRow | undefined, gameDate: s
     noise: g.noise,
     sector: g.sector,
     sectorLabel: SECTOR_LABELS[g.sector as FanSector] ?? g.sector,
-    sectorClosed: closed,
-    closedUntil: closed ? g.closed_until_gd : null,
+    sectorClosed: g.closed_matches > 0,
+    closedMatches: g.closed_matches,
     ticketDiscount: g.ticket_discount,
     leader: leader ? leaderView(leader) : null,
   };
@@ -153,7 +152,7 @@ fansRouter.get("/teams/:teamId/fans/groups", async (c) => {
   ]);
 
   return c.json({
-    groups: groups.map((g) => groupView(g, g.leader_id ? leaders.get(g.leader_id) : undefined, gameDate)),
+    groups: groups.map((g) => groupView(g, g.leader_id ? leaders.get(g.leader_id) : undefined)),
     recentIncidents: (incidents?.results ?? []).map(incidentView),
     securityLevel: security?.security ?? 0,
     gameDate,
@@ -186,7 +185,7 @@ fansRouter.get("/teams/:teamId/fans/groups/:groupId", async (c) => {
   ]);
 
   return c.json({
-    group: groupView(group, group.leader_id ? leaders.get(group.leader_id) : undefined, gameDate),
+    group: groupView(group, group.leader_id ? leaders.get(group.leader_id) : undefined),
     incidents: (incidents?.results ?? []).map(incidentView),
     actions: (actions?.results ?? []).map((a) => ({
       id: a.id, action: a.action, cost: a.cost, gameDate: a.game_date, createdAt: a.created_at,
@@ -216,7 +215,7 @@ fansRouter.get("/fan-leaders/:leaderId", async (c) => {
 
   return c.json({
     leader: leaderView(leader),
-    group: group ? groupView(group, leader, gameDate) : null,
+    group: group ? groupView(group, leader) : null,
     team: team ? { id: team.id, name: team.name } : null,
   });
 });

@@ -318,7 +318,7 @@ export async function runScheduledMatches(
             const {calculateFacilityEffects} = await import("../stadium/stadium-generator");
             const facilities: Record<string, number> = {};
             if (stadiumRow) {
-                for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence", "roof", "ultras_stand", "toilets", "entrance_gate"]) {
+                for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence", "roof", "ultras_stand", "toilets", "entrance_gate", "security"]) {
                     facilities[key] = (stadiumRow[key] as number) ?? 0;
                 }
             }

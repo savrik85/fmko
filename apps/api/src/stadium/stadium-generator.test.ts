@@ -215,6 +215,7 @@ describe("slib v nabídce sedí u všech zařízení", () => {
     entrance_gate: { hodnota: (e) => e.attendanceBonus, procenta: true },
     toilets: { hodnota: (e) => e.matchSatisfactionBonus },
     ultras_stand: { hodnota: (e) => e.homeCrowdMoraleBonus },
+    security: { hodnota: (e) => e.securityRiskReduction, procenta: true },
   };
 
   for (const [key, { hodnota, procenta }] of Object.entries(ZMERITELNE)) {
@@ -261,6 +262,7 @@ describe("dražší stupeň dá víc než levnější", () => {
     toilets: (e) => e.matchSatisfactionBonus,
     ultras_stand: (e) => e.homeCrowdMoraleBonus,
     stands: (e) => e.capacityBonus,
+    security: (e) => e.securityRiskReduction,
   };
 
   for (const [key, hodnota] of Object.entries(ROSTOUCI)) {

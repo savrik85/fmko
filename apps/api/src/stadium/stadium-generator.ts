@@ -106,6 +106,7 @@ const FACILITY_LABELS: Record<string, string> = {
   parking: "Parkoviště",
   fence: "Oplocení",
   entrance_gate: "Vstupní brána",
+  security: "Pořadatelská služba",
 };
 
 // Stadium = dlouhodobá investice přes více sezón
@@ -123,6 +124,7 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   parking: [0, 20000, 60000, 150000],
   fence: [0, 15000, 50000, 130000],
   entrance_gate: [0, 12000, 45000, 120000],
+  security: [0, 14000, 45000, 115000],
 };
 
 /**
@@ -141,10 +143,27 @@ export const SKALY = {
   lighting: { attendance: [0, 0, 0.05, 0.10] },
   parking: { attendance: [0, 0.05, 0.10, 0.15] },
   entrance_gate: { attendance: [0, 0.02, 0.05, 0.10] },
-  fence: { price: [0, 0, 0.10, 0.20], paying: [0.3, 0.65, 1.0, 1.0] },
+  // `oddeleni` je jediný fanouškovský efekt plotu: oddělené sektory znamenají
+  // míň kontaktu s hostujícím kotlem. Čte ho `engine/fan-groups.ts` přes
+  // `calculateFacilityEffects`, aby čísla nežila na dvou místech.
+  fence: { price: [0, 0, 0.10, 0.20], paying: [0.3, 0.65, 1.0, 1.0], oddeleni: [0, 0.05, 0.12, 0.18] },
   roof: { shield: [0, 0.35, 0.65, 1.0] },
   ultras_stand: { advantage: [0, 0.015, 0.03, 0.05], morale: [0, 1, 3, 6] },
   toilets: { satisfaction: [0, 1, 3, 6] },
+  /**
+   * Pořadatelská služba. Přírůstky rostou (0,18 → 0,20 → 0,22), protože L3 stojí
+   * osmkrát víc než L1 — stejné narovnání, jaké dostaly sprchy a sociálky.
+   *
+   * `riziko` sráží šanci na výtržnost, `zavaznost` je šance, že pořadatelé věc
+   * uhasí o stupeň dřív. Obojí čte `engine/fan-groups.ts`; `naklad` se strhává
+   * po každém domácím soutěžním zápase.
+   */
+  security: {
+    riziko: [0, 0.18, 0.38, 0.60],
+    zavaznost: [0, 0.15, 0.35, 0.55],
+    naklad: [0, 150, 400, 800],
+    klid: [0, 0, 1, 2],
+  },
 } as const;
 
 /**
@@ -180,6 +199,7 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   parking: ["", "Zpevněná plocha vedle hřiště", "Vyznačená stání", "Parkoviště i pro autobusy"],
   fence: ["", "Víc lidí zaplatí vstupné", "Platí všichni diváci", "Platí všichni, prémiový stadion"],
   entrance_gate: ["", "Rychlejší odbavení u vstupu", "Dva turnikety", "Elektronické turnikety"],
+  security: ["", "Dva hasiči s páskou přes rameno", "Parta v reflexních vestách a s vysílačkou", "Agentura z okresu, kamera nad kotlem a velitel"],
 };
 
 /** Procento pro hráče — 0.05 → „5 %". */
@@ -218,6 +238,16 @@ export function popisPrirustku(key: string, from: number, to: number): string {
       return `+${rozdil(SKALY.toilets.satisfaction)} spokojenost po zápase`;
     case "ultras_stand":
       return `+${rozdil(SKALY.ultras_stand.morale)} morálka od kotle`;
+    case "security": {
+      // Riziko musí být PRVNÍ číslo v řetězci — test „slib v nabídce sedí"
+      // bere první výskyt znaménka s číslem a porovnává ho se změřeným efektem.
+      const casti = [`−${pct(rozdil(SKALY.security.riziko))} riziko výtržností`];
+      const klid = rozdil(SKALY.security.klid);
+      if (klid > 0) casti.push(`+${klid} spokojenost po zápase`);
+      // Bez znaménka, ať to regex v testu nesebere místo rizika.
+      casti.push(`provoz ${SKALY.security.naklad[to]} Kč za domácí zápas`);
+      return casti.join(", ");
+    }
     default:
       return "";
   }
@@ -312,6 +342,12 @@ export function getUpgradeOptions(
       lockDetail.prerequisite = "Nejdřív postav aspoň základní tribuny";
     }
 
+    // Pořadatel bez plotu nemá co hlídat — lidi se na plochu dostanou odkudkoli.
+    if (key === "security" && (stadium.fence ?? 0) < 1) {
+      locked = true;
+      lockDetail.prerequisite = "Nejdřív postav aspoň provizorní oplocení";
+    }
+
     // Obec spolufinancuje jen tyhle cíle (viz INVESTMENT_TEMPLATES) — u ostatních
     // nesmíme slibovat, že se zámek dá obejít.
     const villageCanFund = VILLAGE_FUNDABLE.has(key);
@@ -357,7 +393,11 @@ export interface StadiumFacilityEffects {
   weatherAttendanceShield: number; // zastřešení: podíl počasového postihu návštěvy, který se zruší (0.0-1.0)
   homeAdvantageBonus: number;     // sektor kotle: + k domácí výhodě v zápase
   homeCrowdMoraleBonus: number;   // sektor kotle: + morálka domácích od kotle
-  matchSatisfactionBonus: number; // sociálky: + spokojenost fanoušků po domácím zápase
+  matchSatisfactionBonus: number; // sociálky + pořadatelská služba: + spokojenost fanoušků po domácím zápase
+  securityRiskReduction: number;  // pořadatelská služba: o kolik klesne šance na výtržnost (0.0-1.0)
+  securitySeverityDrop: number;   // pořadatelská služba: šance, že incident stlačí o stupeň (0.0-1.0)
+  securityMatchCost: number;      // pořadatelská služba: Kč za domácí soutěžní zápas
+  sectorSeparation: number;       // oplocení: o kolik klesne riziko střetu s hostujícím kotlem
 }
 
 export function calculateFacilityEffects(facilities: Record<string, number>): StadiumFacilityEffects {
@@ -372,6 +412,7 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   const ul = facilities.ultras_stand ?? 0;
   const to = facilities.toilets ?? 0;
   const eg = facilities.entrance_gate ?? 0;
+  const se = facilities.security ?? 0;
 
   return {
     homeMoraleBonus: SKALY.changing_rooms.morale[cr] ?? 0,
@@ -389,7 +430,12 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     weatherAttendanceShield: SKALY.roof.shield[ro] ?? 0,
     homeAdvantageBonus: SKALY.ultras_stand.advantage[ul] ?? 0,
     homeCrowdMoraleBonus: SKALY.ultras_stand.morale[ul] ?? 0,
-    matchSatisfactionBonus: SKALY.toilets.satisfaction[to] ?? 0,
+    // Klid na stadionu je vidět stejně jako čisté záchodky — rodiny to ocení.
+    matchSatisfactionBonus: (SKALY.toilets.satisfaction[to] ?? 0) + (SKALY.security.klid[se] ?? 0),
+    securityRiskReduction: SKALY.security.riziko[se] ?? 0,
+    securitySeverityDrop: SKALY.security.zavaznost[se] ?? 0,
+    securityMatchCost: SKALY.security.naklad[se] ?? 0,
+    sectorSeparation: SKALY.fence.oddeleni[fe] ?? 0,
   };
 }
 

@@ -238,16 +238,12 @@ export const FAN_SKALY = {
   /** Skupina menší než tolik lidí sama o sobě bordel neudělá. */
   MIN_SIZE: 12,
 
-  /** Pořadatelská služba — sráží šanci i závažnost. Index = úroveň vybavení. */
-  security: {
-    damp: [0, 0.2, 0.4, 0.6],
-    severityDrop: [0, 0.15, 0.35, 0.55],
-    perMatchCost: [0, 300, 900, 2200],
-    /** Šacování a kamery kotel štvou. Za každý domácí zápas +heat. */
-    kotelHeat: [0, 0, 1, 2],
-  },
-  /** Oplocení odděluje sektory — méně kontaktu s hostujícím kotlem. */
-  fenceDamp: [0, 0.05, 0.12, 0.18],
+  /**
+   * Šacování u vstupu a kamery nad kotlem partu štvou. Za každý domácí zápas
+   * tolik heatu — proto nejvyšší ochranka není jen bezpečná volba.
+   * Index = úroveň pořadatelské služby.
+   */
+  KOTEL_HEAT_ZA_OCHRANKU: [0, 0, 1, 2],
 
   /** Násobiče rizika. */
   MOD: {
@@ -424,13 +420,20 @@ export interface IncidentContext {
   beerPerAttendee: number;
   /** Kolik hostujících ultras dorazilo. */
   awayUltrasSize: number;
-  securityLevel: number;
-  fenceLevel: number;
+  /**
+   * Hotová čísla z `calculateFacilityEffects`, ne úrovně vybavení.
+   *
+   * Škály pořadatelské služby a oplocení vlastní `stadium/stadium-generator.ts`
+   * (`SKALY`) — jediný zdroj čísel vybavení. Kdyby si je engine držel taky,
+   * rozešly by se s tím, co slibuje nabídka upgradu.
+   */
+  securityRiskReduction: number;
+  sectorSeparation: number;
   /** Klub zaplatil choreo na tenhle zápas. */
   tifo: boolean;
 }
 
-const clampLevel = (l: number) => Math.max(0, Math.min(3, Math.round(l)));
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 /**
  * Šance, že tahle skupina na tomhle zápase něco provede. 0–`MAX_RATE`.
@@ -457,8 +460,8 @@ export function incidentChance(ctx: IncidentContext): number {
   // Nálada táhne oběma směry: spokojená parta nemá důvod, naštvaná hledá záminku.
   p *= 1 + ((50 - Math.max(0, Math.min(100, g.mood))) / 50) * M.moodSwing;
 
-  p *= 1 - FAN_SKALY.security.damp[clampLevel(ctx.securityLevel)];
-  p *= 1 - FAN_SKALY.fenceDamp[clampLevel(ctx.fenceLevel)];
+  p *= 1 - clamp01(ctx.securityRiskReduction);
+  p *= 1 - clamp01(ctx.sectorSeparation);
 
   return Math.max(0, Math.min(FAN_SKALY.MAX_RATE, p));
 }
@@ -488,7 +491,7 @@ export function rollSeverity(
   roll: number,
   dropRoll: number,
   kind: FanIncidentKind,
-  opts: { aggression: number; leaderRadikalnost: number; securityLevel: number },
+  opts: { aggression: number; leaderRadikalnost: number; severityDropChance: number },
 ): number {
   const def = FAN_INCIDENTS[kind];
   const [lo, hi] = def.severityRange;
@@ -498,9 +501,7 @@ export function rollSeverity(
   let sev = lo + Math.round(span * (roll * 0.5 + bias * 0.5));
   sev = Math.max(lo, Math.min(hi, sev));
 
-  if (sev > 1 && dropRoll < FAN_SKALY.security.severityDrop[clampLevel(opts.securityLevel)]) {
-    sev -= 1;
-  }
+  if (sev > 1 && dropRoll < clamp01(opts.severityDropChance)) sev -= 1;
   return sev;
 }
 

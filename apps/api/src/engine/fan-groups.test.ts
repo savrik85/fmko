@@ -9,6 +9,7 @@ import {
   type IncidentContext, type FanIncidentKind,
 } from "./fan-groups";
 import { generateFanGroups } from "../fans/fan-group-generator";
+import { SKALY, calculateFacilityEffects } from "../stadium/stadium-generator";
 
 const SURNAMES: Record<string, number> = {
   "Novák": 45, "Svoboda": 38, "Novotný": 36, "Dvořák": 35, "Černý": 32,
@@ -27,8 +28,8 @@ function ctx(over: Partial<IncidentContext> = {}): IncidentContext {
     homeLosing: false,
     beerPerAttendee: 0,
     awayUltrasSize: 0,
-    securityLevel: 0,
-    fenceLevel: 0,
+    securityRiskReduction: 0,
+    sectorSeparation: 0,
     tifo: false,
     ...over,
   };
@@ -161,11 +162,14 @@ describe("šance na výtržnost", () => {
   });
 
   it("ochranka i oplocení riziko srážejí, každý stupeň o kus víc", () => {
-    const p = [0, 1, 2, 3].map((l) => incidentChance(ctx({ securityLevel: l })));
+    // Čísla se berou z jediného zdroje — škál stadionu, ne z vlastní kopie v enginu.
+    const p = [0, 1, 2, 3].map((l) =>
+      incidentChance(ctx({ securityRiskReduction: calculateFacilityEffects({ security: l }).securityRiskReduction })));
     expect(p[0]).toBeGreaterThan(p[1]);
     expect(p[1]).toBeGreaterThan(p[2]);
     expect(p[2]).toBeGreaterThan(p[3]);
-    expect(incidentChance(ctx({ fenceLevel: 3 }))).toBeLessThan(incidentChance(ctx()));
+    expect(incidentChance(ctx({ sectorSeparation: SKALY.fence.oddeleni[3] })))
+      .toBeLessThan(incidentChance(ctx()));
   });
 
   it("spokojená parta je klidnější než nespokojená", () => {
@@ -178,12 +182,14 @@ describe("šance na výtržnost", () => {
     const peklo = incidentChance(ctx({
       group: { kind: "kotel", aggression: 100, heat: 100, mood: 0, size: 500, sectorClosed: false },
       derby: true, homeLosing: true, beerPerAttendee: 1, awayUltrasSize: 500, tifo: true,
+      securityRiskReduction: 0, sectorSeparation: 0,
     }));
     expect(peklo).toBeLessThanOrEqual(FAN_SKALY.MAX_RATE);
   });
 
-  it("úroveň vybavení mimo rozsah nespadne na undefined", () => {
-    expect(incidentChance(ctx({ securityLevel: 9, fenceLevel: -3 }))).toBeGreaterThan(0);
+  it("nesmyslné hodnoty vybavení se oříznou místo pádu na NaN", () => {
+    expect(incidentChance(ctx({ securityRiskReduction: 5, sectorSeparation: -3 }))).toBe(0);
+    expect(incidentChance(ctx({ securityRiskReduction: -1, sectorSeparation: 2 }))).toBe(0);
   });
 });
 
@@ -206,7 +212,7 @@ describe("výběr a závažnost skutku", () => {
       const [lo, hi] = FAN_INCIDENTS[kind].severityRange;
       for (const roll of [0, 0.5, 0.999]) {
         for (const agg of [0, 50, 100]) {
-          const s = rollSeverity(roll, 1, kind, { aggression: agg, leaderRadikalnost: agg, securityLevel: 0 });
+          const s = rollSeverity(roll, 1, kind, { aggression: agg, leaderRadikalnost: agg, severityDropChance: 0 });
           expect(s, `${kind} roll=${roll} agg=${agg}`).toBeGreaterThanOrEqual(lo);
           expect(s).toBeLessThanOrEqual(hi);
         }
@@ -215,14 +221,15 @@ describe("výběr a závažnost skutku", () => {
   });
 
   it("profesionální ochranka věc uhasí dřív — srazí stupeň", () => {
-    const bez = rollSeverity(1, 1, "bitka_kotle", { aggression: 100, leaderRadikalnost: 100, securityLevel: 0 });
-    const s = rollSeverity(1, 0, "bitka_kotle", { aggression: 100, leaderRadikalnost: 100, securityLevel: 3 });
+    const drop = calculateFacilityEffects({ security: 3 }).securitySeverityDrop;
+    const bez = rollSeverity(1, 1, "bitka_kotle", { aggression: 100, leaderRadikalnost: 100, severityDropChance: 0 });
+    const s = rollSeverity(1, 0, "bitka_kotle", { aggression: 100, leaderRadikalnost: 100, severityDropChance: drop });
     expect(s).toBe(bez - 1);
   });
 
   it("radikální vůdce tlačí závažnost nahoru", () => {
-    const klid = rollSeverity(0.5, 1, "hazeni", { aggression: 50, leaderRadikalnost: 0, securityLevel: 0 });
-    const radikal = rollSeverity(0.5, 1, "hazeni", { aggression: 50, leaderRadikalnost: 100, securityLevel: 0 });
+    const klid = rollSeverity(0.5, 1, "hazeni", { aggression: 50, leaderRadikalnost: 0, severityDropChance: 0 });
+    const radikal = rollSeverity(0.5, 1, "hazeni", { aggression: 50, leaderRadikalnost: 100, severityDropChance: 0 });
     expect(radikal).toBeGreaterThanOrEqual(klid);
   });
 });

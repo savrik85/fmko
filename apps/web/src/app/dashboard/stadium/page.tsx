@@ -145,6 +145,7 @@ const FACILITY_ICONS: Record<string, string> = {
   parking: "🚗",
   fence: "🏗",
   entrance_gate: "🎟️",
+  security: "🦺",
 };
 
 const FACILITY_LABELS: Record<string, string> = {
@@ -159,6 +160,7 @@ const FACILITY_LABELS: Record<string, string> = {
   parking: "Parkoviště",
   fence: "Oplocení",
   entrance_gate: "Vstupní brána",
+  security: "Pořadatelská služba",
 };
 
 const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
@@ -173,6 +175,7 @@ const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   parking: ["Žádné", "Louka vedle hřiště", "Štěrkové parkoviště", "Asfaltové parkoviště s čarami"],
   fence: ["Žádné", "Provizorní páska", "Drátěný plot", "Zděné oplocení s branami"],
   entrance_gate: ["Závora a pokladna na stolečku", "Dřevěná pokladna a kovaná brána", "Zděná brána se 2 turnikety", "Monumentální stadionový portál s turnikety"],
+  security: ["Pořádek si hlídá, kdo zrovna může", "Dva hasiči s páskou přes rameno", "Parta v reflexních vestách a s vysílačkou", "Agentura z okresu s kamerou nad kotlem"],
 };
 
 const LEVEL_LABELS = ["Žádné", "Základní", "Dobré", "Vynikající"];

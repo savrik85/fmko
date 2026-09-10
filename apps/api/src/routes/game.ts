@@ -1601,6 +1601,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     parking: stadium.parking as number ?? 0,
     fence: stadium.fence as number ?? 0,
     entrance_gate: stadium.entrance_gate as number ?? 0,
+    security: stadium.security as number ?? 0,
   };
 
   // Batch: team info + match count + active season
@@ -1798,6 +1799,7 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     parking: stadium.parking as number ?? 0,
     fence: stadium.fence as number ?? 0,
     entrance_gate: stadium.entrance_gate as number ?? 0,
+    security: stadium.security as number ?? 0,
   };
 
   const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);

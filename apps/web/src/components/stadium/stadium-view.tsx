@@ -31,6 +31,7 @@ const FACILITY_CONFIG: Record<string, { icon: string; label: string }> = {
   lighting: { icon: "\u{1F4A1}", label: "Osvětlení" },
   fence: { icon: "\u{1F3D7}\uFE0F", label: "Oplocení" },
   entrance_gate: { icon: "\u{1F3AB}", label: "Vstupní brána" },
+  security: { icon: "\u{1F9BA}", label: "Pořadatelská služba" },
 };
 
 export function StadiumView({

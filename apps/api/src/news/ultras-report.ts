@@ -36,7 +36,7 @@ interface HomeMatch {
   secondaryColor: string;
 }
 
-const FACILITY_KEYS = ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence", "roof", "ultras_stand", "toilets"];
+const FACILITY_KEYS = ["changing_rooms", "showers", "refreshments", "stands", "parking", "fence", "roof", "ultras_stand", "toilets", "security"];
 
 function isLightHex(hex: string): boolean {
   const c = hex.replace("#", "");
@@ -157,7 +157,7 @@ export async function generateUltrasReport(
       `SELECT m.home_team_id, m.home_score, m.away_score, m.attendance, m.weather,
               t1.name AS home_name, t2.name AS away_name,
               t1.primary_color AS home_primary, t1.secondary_color AS home_secondary,
-              s.capacity, s.changing_rooms, s.showers, s.refreshments, s.stands, s.parking, s.fence, s.roof, s.ultras_stand, s.toilets,
+              s.capacity, s.changing_rooms, s.showers, s.refreshments, s.stands, s.parking, s.fence, s.roof, s.ultras_stand, s.toilets, s.security,
               s.ultras_text, s.ultras_banner_color, s.ultras_text_color
        FROM matches m
        JOIN teams t1 ON m.home_team_id = t1.id

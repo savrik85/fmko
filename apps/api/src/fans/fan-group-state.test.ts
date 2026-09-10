@@ -1,7 +1,7 @@
 /** Testy stavové matematiky part — čisté funkce, bez DB. */
 import { describe, it, expect } from "vitest";
 import {
-  targetMood, driftToward, sizeForShare, isSectorClosed,
+  targetMood, driftToward, sizeForShare,
   MOOD_DRIFT_PER_DAY,
 } from "./fan-group-state";
 
@@ -61,11 +61,3 @@ describe("velikost party", () => {
   });
 });
 
-describe("uzavřený sektor", () => {
-  it("platí do uvedeného herního data, pak končí", () => {
-    expect(isSectorClosed("2026-10-01", "2026-09-20")).toBe(true);
-    expect(isSectorClosed("2026-10-01", "2026-10-01")).toBe(false);
-    expect(isSectorClosed("2026-10-01", "2026-10-05")).toBe(false);
-    expect(isSectorClosed(null, "2026-09-20")).toBe(false);
-  });
-});

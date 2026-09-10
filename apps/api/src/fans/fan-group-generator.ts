@@ -186,7 +186,7 @@ export interface FanGroupRow {
   spending: number;
   noise: number;
   sector: string;
-  closed_until_gd: string | null;
+  closed_matches: number;
   ticket_discount: number;
   leader_id: string | null;
 }

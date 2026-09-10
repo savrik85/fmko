@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { SectionLabel } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { pocet } from "@/lib/referee-info";
 
 export interface FanLeaderView {
   id: string;
@@ -48,7 +49,7 @@ export interface FanGroupView {
   sector: string;
   sectorLabel: string;
   sectorClosed: boolean;
-  closedUntil: string | null;
+  closedMatches: number;
   ticketDiscount: number;
   leader: FanLeaderView | null;
 }
@@ -223,7 +224,8 @@ export function FanGroupsPanel({ data }: { data: FanGroupsData }) {
 
           {g.sectorClosed && (
             <div className="mt-3 rounded-lg bg-card-red/10 px-3 py-2 text-sm">
-              🚫 <strong>Sektor je uzavřený</strong> za trest do {formatDatum(g.closedUntil)}. Na zápas se nedostanou.
+              🚫 <strong>Sektor je uzavřený</strong> za trest ještě na{" "}
+              {pocet(g.closedMatches, "zápas", "zápasy", "zápasů")}. Na hřiště se nedostanou.
             </div>
           )}
           {g.ticketDiscount > 0 && (
