@@ -405,6 +405,14 @@ export async function processTeamDay(
       } catch (e) { logger.warn({ module: "daily-tick" }, `kabina failed for team ${teamId}`, e); }
     }
 
+    // ── Fanouškovské party: velikost podle fanbáze, nálada o den dál ──
+    // Běží i AI týmům: jejich kotel jezdí k tobě na stadion a jeho velikost
+    // rozhoduje o riziku rvačky, takže nesmí zůstat na nule.
+    try {
+      const { syncFanGroups } = await import("../fans/fan-group-state");
+      await syncFanGroups(env.DB, teamId, { drift: true });
+    } catch (e) { logger.warn({ module: "daily-tick" }, `fan groups failed for team ${teamId}`, e); }
+
     // ── Training cost (only on actual training days that ran — custom training_days
     // override default mapping, smart-skip se kontroluje u top loop a tady musíme
     // replikovat stejné podmínky, aby se náklad netáhl při skipnutém tréninku) ──

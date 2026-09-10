@@ -17,6 +17,7 @@ import developmentRouter from "./routes/development";
 import { staffRouter } from "./routes/staff";
 import { equipmentMarketRouter } from "./routes/equipment-market";
 import { refereesRouter } from "./routes/referees";
+import { fansRouter } from "./routes/fans";
 import competitionRouter from "./routes/competition";
 import bettingRouter from "./routes/betting";
 // transfers endpoints are in gameRouter
@@ -104,6 +105,7 @@ app.route("/api", developmentRouter);
 app.route("/api", staffRouter);
 app.route("/api", equipmentMarketRouter);
 app.route("/api", refereesRouter);
+app.route("/api", fansRouter);
 app.route("/api", competitionRouter);
 app.route("/api", bettingRouter);
 

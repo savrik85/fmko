@@ -7,6 +7,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, Tabs } from "@/components/ui";
 import { BusSelector } from "../match/BusSelector";
+import { FanGroupsPanel, type FanGroupsData } from "./FanGroupsPanel";
 
 interface ScheduleMatch {
   id: string;
@@ -135,7 +136,7 @@ interface SalesMatch {
   totalProfit: number;
 }
 
-type TabKey = "fanbase" | "satisfaction" | "concession" | "sales";
+type TabKey = "fanbase" | "groups" | "satisfaction" | "concession" | "sales";
 
 interface FanbaseTier {
   hardcore: number;
@@ -290,6 +291,7 @@ export default function FansPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("fanbase");
   const [fanbase, setFanbase] = useState<FanbaseData | null>(null);
+  const [fanGroups, setFanGroups] = useState<FanGroupsData | null>(null);
   const [fanbaseHistory, setFanbaseHistory] = useState<FanbaseHistoryPoint[]>([]);
   const [nextHomeMatch, setNextHomeMatch] = useState<ScheduleMatch | null>(null);
   const [promotionPrice, setPromotionPrice] = useState<number | null>(null);
@@ -302,7 +304,7 @@ export default function FansPage() {
 
   const refresh = async () => {
     if (!teamId) return;
-    const [f, co, t, h, s, fb, fbh, sched] = await Promise.all([
+    const [f, co, t, h, s, fb, fbh, sched, fg] = await Promise.all([
       apiFetch<FansData>(`/api/teams/${teamId}/fans`).catch((e) => {
         console.error("load fans data:", e);
         return null;
@@ -335,6 +337,11 @@ export default function FansPage() {
         console.error("load schedule for fans page:", e);
         return { matches: [] as ScheduleMatch[] };
       }),
+      // Party nejsou povinné — když se nenačtou, zbytek stránky funguje dál a tab se schová.
+      apiFetch<FanGroupsData>(`/api/teams/${teamId}/fans/groups`).catch((e) => {
+        console.error("load fan groups:", e);
+        return null;
+      }),
     ]);
     if (!f || !co || !t || !fb) {
       console.error("fans page: chybí povinná data, neukazuju refresh");
@@ -347,6 +354,7 @@ export default function FansPage() {
     setSalesHistory(s.matches ?? []);
     setFanbase(fb);
     setFanbaseHistory(fbh.history ?? []);
+    setFanGroups(fg);
     // Propagace i doprava fanoušků fungují pro ligové, přátelské i pohárové domácí zápasy.
     const home = sched.matches.find((m) => m.status !== "simulated" && m.isHome) ?? null;
     setNextHomeMatch(home);
@@ -511,6 +519,7 @@ export default function FansPage() {
 
   const tabs: { key: TabKey; label: string; icon: string; visible: boolean }[] = [
     { key: "fanbase", label: "Základna", icon: "\u{1F465}", visible: true },
+    { key: "groups", label: "Party", icon: "\u{1F525}", visible: !!fanGroups },
     { key: "satisfaction", label: "Spokojenost", icon: "\u{1F4CA}", visible: true },
     { key: "concession", label: "Občerstvení", icon: "\u{1F37A}", visible: true },
     { key: "sales", label: "Prodeje", icon: "\u{1F4C8}", visible: concession.mode === "self" },
@@ -529,6 +538,8 @@ export default function FansPage() {
         ariaLabel="Fanoušci"
         items={visibleTabs.map((t) => ({ key: t.key, label: t.label, icon: t.icon }))}
       />
+
+      {currentTab === "groups" && fanGroups && <FanGroupsPanel data={fanGroups} />}
 
       {currentTab === "fanbase" && fanbase && (<>
       {/* ═══ Jak to funguje — jednoduchý úvod ═══ */}
