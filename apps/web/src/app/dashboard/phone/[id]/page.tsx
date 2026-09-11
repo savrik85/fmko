@@ -57,6 +57,9 @@ interface ConvDetailResponse {
   canReply?: boolean;
   /** `sms` stojí kredit, `imessage` je zdarma, `null` = jednosměrné oznámení. */
   channel?: "sms" | "imessage" | null;
+  /** Proč se psát nedá — formuluje server, zná kontext odesílatele. */
+  replyHint?: string;
+  replyHintHref?: string;
   aiThreadActive: boolean;
   aiThreadState: AiThreadState | null;
   participantId?: string | null;
@@ -128,6 +131,7 @@ export default function ConversationPage() {
   // Skupinové chaty vlastní detail endpoint nemají — tam se píše vždycky.
   const [canReply, setCanReply] = useState(true);
   const [channel, setChannel] = useState<"sms" | "imessage" | null>("imessage");
+  const [replyHint, setReplyHint] = useState<{ text: string; href?: string } | null>(null);
   const [creditError, setCreditError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -162,6 +166,7 @@ export default function ConversationPage() {
         if (res.conversation) setConv(res.conversation);
         setCanReply(res.canReply !== false);
         setChannel(res.channel ?? null);
+        setReplyHint(res.replyHint ? { text: res.replyHint, href: res.replyHintHref } : null);
         return {
           msgs: res.messages,
           ai: { active: res.aiThreadActive, state: res.aiThreadState },
@@ -516,8 +521,13 @@ export default function ConversationPage() {
       {!lzePsat ? (
         <div className="bg-white border-t border-gray-100 px-3 py-3 shrink-0 text-center">
           <p className="text-xs text-muted leading-snug">
-            {conv?.title ? `${conv.title} posílá jen oznámení` : "Jednosměrné oznámení"} — odpovídat nejde.
+            {replyHint?.text ?? "Do téhle konverzace se odpovídat nedá."}
           </p>
+          {replyHint?.href && (
+            <Link href={replyHint.href} className="text-xs text-blue-600 font-medium mt-1 inline-block">
+              Otevřít Fanoušky
+            </Link>
+          )}
           {credit && (
             <p className="text-xs text-muted mt-1">Kredit {credit.zbyva} Kč</p>
           )}

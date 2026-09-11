@@ -110,12 +110,32 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
 function odpovidatLze(
   type: string,
   threadActive: boolean,
-): { canReply: boolean; channel: "sms" | "imessage" | null } {
+  opts: { title?: string; participantId?: string | null } = {},
+): {
+  canReply: boolean;
+  channel: "sms" | "imessage" | null;
+  replyHint?: string;
+  replyHintHref?: string;
+} {
   if (type === "player" || type === "squad_group") return { canReply: true, channel: "sms" };
   if (type === "manager") return { canReply: true, channel: "imessage" };
   // Vůdce fanoušků čeká na odpověď jen dokud vlákno běží; pak už se nemá kdo ozvat.
   if (type === "system" && threadActive) return { canReply: true, channel: "imessage" };
-  return { canReply: false, channel: null };
+
+  // Vůdce party není úřad — s ním konverzace skončila, ale jednat se s ním dá dál.
+  if (opts.participantId?.startsWith("fl-")) {
+    return {
+      canReply: false,
+      channel: null,
+      replyHint: "Tahle výměna skončila. Domluvit se s partou můžeš na stránce Fanoušci.",
+      replyHintHref: "/dashboard/fans",
+    };
+  }
+  return {
+    canReply: false,
+    channel: null,
+    replyHint: `${opts.title ?? "Odesílatel"} posílá jen oznámení — odpovídat nejde.`,
+  };
 }
 
 messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
@@ -219,7 +239,10 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     // Kdo na druhé straně vůbec odpoví — rozhoduje server, ne frontend.
     // Většina systémových konverzací je jednosměrné oznámení (svaz, pořadatel,
     // sportovní ředitel); psát do nich by znamenalo mluvit do zdi.
-    ...odpovidatLze(convOwner.type, convOwner.ai_thread_active === 1),
+    ...odpovidatLze(convOwner.type, convOwner.ai_thread_active === 1, {
+      title: convOwner.title,
+      participantId: convOwner.participant_id,
+    }),
     aiThreadActive: convOwner.ai_thread_active === 1,
     aiThreadState: parseAiThreadState(convOwner.ai_thread_state),
     participantId: convOwner.participant_id,
