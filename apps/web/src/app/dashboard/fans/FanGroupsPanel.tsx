@@ -94,6 +94,7 @@ export interface FanGroupsData {
   groups: FanGroupView[];
   recentIncidents: FanIncidentView[];
   securityLevel: number;
+  securityLabel: string;
   gameDate: string;
 }
 
@@ -104,13 +105,6 @@ const GROUP_ICONS: Record<string, string> = {
   pametnici: "🎩",
   parta_z_okoli: "🚌",
 };
-
-const SECURITY_LABELS = [
-  "Žádná — pořádek si hlídá kdo zrovna může",
-  "Dva pořadatelé v reflexních vestách",
-  "Pořadatelská služba a oddělené sektory",
-  "Agentura s profíky a kamerami",
-];
 
 function moodBarColor(v: number): string {
   if (v >= 70) return "bg-pitch-500";
@@ -298,9 +292,7 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
         <SectionLabel>Pořádek na stadionu</SectionLabel>
         <div className="mt-2 flex items-baseline gap-2">
           <span className="text-2xl">🛡️</span>
-          <span className="text-base font-semibold">
-            {SECURITY_LABELS[Math.max(0, Math.min(3, data.securityLevel))]}
-          </span>
+          <span className="text-base font-semibold">{data.securityLabel}</span>
         </div>
         <p className="mt-2 text-sm text-muted">
           Pořadatelskou službu zvedneš na{" "}

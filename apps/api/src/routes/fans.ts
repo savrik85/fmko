@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
+import { SECURITY_POPIS } from "../stadium/stadium-generator";
 import {
   FAN_GROUPS, SECTOR_LABELS, fanLeaderArchetypeLabel, moodWord, heatWord,
   type FanGroupKind, type FanSector,
@@ -170,6 +171,7 @@ fansRouter.get("/teams/:teamId/fans/groups", async (c) => {
     })),
     recentIncidents: (incidents?.results ?? []).map(incidentView),
     securityLevel: security?.security ?? 0,
+    securityLabel: SECURITY_POPIS[Math.max(0, Math.min(3, security?.security ?? 0))],
     gameDate,
   });
 });

@@ -12,7 +12,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FACILITY_LABELS } from "./stadium-generator";
+import { FACILITY_LABELS, SECURITY_POPIS } from "./stadium-generator";
 
 const ROOT = join(__dirname, "..", "..");
 
@@ -62,5 +62,21 @@ describe("klíče zařízení jsou všude, kde se čtou", () => {
       expect(s, `${k} je v FACILITY_KEYS, ale chybí v SELECTu`).toContain(`s.${k}`);
       expect(klice, `${k} není známé zařízení`).toContain(k);
     }
+  });
+});
+
+/**
+ * Popis úrovní ochranky existuje na dvou místech: v enginu (`SECURITY_POPIS`)
+ * a v mapě popisků na stránce stadionu. Rozejít se nesmí — hráč by na jedné
+ * stránce četl „dva hasiči" a na druhé „parta v reflexních vestách" o téže
+ * úrovni. Přesně to se stalo, než vznikl jediný zdroj.
+ */
+describe("popis pořadatelské služby drží na jednom znění", () => {
+  it("stránka stadionu má stejné texty jako engine", () => {
+    const s = zdroj("../web/src/app/dashboard/stadium/page.tsx");
+    const radek = s.match(/^\s*security: \[(.*)\],$/m);
+    expect(radek, "řádek se security popisky na stránce stadionu nenalezen").not.toBeNull();
+    const texty = [...radek![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(texty).toEqual([...SECURITY_POPIS]);
   });
 });

@@ -202,6 +202,19 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   security: ["", "Dva hasiči s páskou přes rameno", "Parta v reflexních vestách a s vysílačkou", "Agentura z okresu, kamera nad kotlem a velitel"],
 };
 
+/**
+ * Jak pořadatelská služba vypadá na dané úrovni.
+ *
+ * `UPGRADE_EFFECTS` říká, co upgrade PŘIDÁ; tohle říká, co klub právě MÁ.
+ * Čte to stránka fanoušků, aby nevznikl třetí popis téhož stupně.
+ */
+export const SECURITY_POPIS: readonly string[] = [
+  "Žádná — pořádek si hlídá, kdo zrovna může",
+  "Dva hasiči s páskou přes rameno",
+  "Parta v reflexních vestách a s vysílačkou",
+  "Agentura z okresu s kamerou nad kotlem",
+];
+
 /** Procento pro hráče — 0.05 → „5 %". */
 function pct(x: number): string {
   return `${Math.round(x * 1000) / 10} %`;
