@@ -426,6 +426,54 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
 // GET /api/teams/:teamId/unread-count — celkový počet nepřečtených
 /**
+ * Oznámení do telefonu.
+ *
+ * Tabulka `notifications` se plnila od začátku, ale v aplikaci ji nikdo
+ * nezobrazoval — kdo neměl zapnutý push, nedozvěděl se nic. Telefon je jediné
+ * místo, kam přirozeně patří.
+ *
+ * Vrací i přečtená (do historie), ale nepřečtená první.
+ */
+messagingRouter.get("/teams/:teamId/notifications", async (c) => {
+  const teamId = c.req.param("teamId");
+  const limit = Math.max(1, Math.min(50, Number(c.req.query("limit")) || 30));
+
+  const rows = await c.env.DB.prepare(
+    `SELECT id, type, title, body, read, action_url, created_at FROM notifications
+     WHERE team_id = ? ORDER BY read ASC, created_at DESC LIMIT ?`,
+  ).bind(teamId, limit).all<{
+    id: string; type: string; title: string; body: string;
+    read: number; action_url: string | null; created_at: string;
+  }>().catch((e) => { logger.warn({ module: "messaging" }, "načtení oznámení", e); return { results: [] }; });
+
+  const items = rows.results.map((r) => ({
+    id: r.id,
+    type: r.type,
+    title: r.title,
+    body: r.body,
+    read: r.read === 1,
+    actionUrl: r.action_url,
+    createdAt: r.created_at,
+  }));
+
+  return c.json({ items, unread: items.filter((i) => !i.read).length });
+});
+
+/** Odbaví jedno oznámení, nebo všechna, když `id` nepřijde. */
+messagingRouter.post("/teams/:teamId/notifications/read", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ id?: string }>().catch(() => ({} as { id?: string }));
+
+  const stmt = body.id
+    ? c.env.DB.prepare("UPDATE notifications SET read = 1 WHERE team_id = ? AND id = ?").bind(teamId, body.id)
+    : c.env.DB.prepare("UPDATE notifications SET read = 1 WHERE team_id = ? AND read = 0").bind(teamId);
+
+  const res = await stmt.run()
+    .catch((e) => { logger.warn({ module: "messaging" }, "označení oznámení", e); return null; });
+  return c.json({ ok: true, changed: res?.meta?.changes ?? 0 });
+});
+
+/**
  * Adresář telefonu — kdo všechno se dá oslovit, v jedné odpovědi.
  *
  * Skládat to na frontendu by znamenalo čtyři requesty (skupinové chaty, kádr,

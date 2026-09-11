@@ -9,6 +9,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { Adresar } from "./Adresar";
+import { Oznameni } from "./Oznameni";
 
 interface Conversation {
   id: string;
@@ -76,6 +77,8 @@ export default function PhonePage() {
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [adresarOtevren, setAdresarOtevren] = useState(false);
+  const [oznameniOtevrena, setOznameniOtevrena] = useState(false);
+  const [neprectenaOznameni, setNeprectenaOznameni] = useState(0);
   const [credit, setCredit] = useState<Credit | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -87,13 +90,33 @@ export default function PhonePage() {
     apiFetch<Credit>(`/api/teams/${teamId}/phone-credit`)
       .then(setCredit)
       .catch((e) => console.error("načtení kreditu:", e));
+    nactiOznameni();
   }, [teamId]);
+
+  const nactiOznameni = () => {
+    if (!teamId) return;
+    apiFetch<{ unread: number }>(`/api/teams/${teamId}/notifications?limit=1`)
+      .then((d) => setNeprectenaOznameni(d.unread ?? 0))
+      .catch((e) => console.error("počet oznámení:", e));
+  };
 
   return (
     <PhoneFrame>
       {/* Status bar */}
       <div className="bg-pitch-600 text-white px-4 py-2.5 flex items-center justify-between">
         <span className="font-heading font-bold text-sm">Zprávy</span>
+        <button
+          onClick={() => setOznameniOtevrena(true)}
+          className="ml-auto mr-2 relative text-base leading-none"
+          aria-label="Oznámení"
+        >
+          &#128276;
+          {neprectenaOznameni > 0 && (
+            <span className="absolute -top-1 -right-1.5 bg-card-red text-white text-[9px] font-bold min-w-4 h-4 px-1 rounded-full flex items-center justify-center">
+              {neprectenaOznameni > 9 ? "9+" : neprectenaOznameni}
+            </span>
+          )}
+        </button>
         {credit ? <CreditChip credit={credit} /> : (
           <span className="text-xs text-white/60">
             {conversations.reduce((s, c) => s + c.unreadCount, 0)} nepřečtených
@@ -169,6 +192,14 @@ export default function PhonePage() {
           </div>
         )}
       </div>
+
+      {oznameniOtevrena && teamId && (
+        <Oznameni
+          teamId={teamId}
+          onZavrit={() => setOznameniOtevrena(false)}
+          onZmena={nactiOznameni}
+        />
+      )}
 
       {adresarOtevren && teamId && (
         <Adresar
