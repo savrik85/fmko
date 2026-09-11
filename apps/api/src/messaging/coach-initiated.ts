@@ -67,15 +67,20 @@ export async function startCoachThread(
     // čekala na odpověď, kterou už nikdo nedluží.
     const pokracuje = !reply.conversationComplete;
 
-    const state = {
-      trigger: "coach_initiated",
-      scenario_id: "coach_initiated",
-      max_replies: MAX_VYMEN,
-      current_replies: 1,
-      awaiting: pokracuje ? "coach" : "done",
-      initiated_at: now,
-      player_id: opts.playerId,
-    };
+    // Uzavřenou konverzaci NEnecháváme ve stavu „done" — frontend podle něj
+    // zamyká psaní a trenér by už tomu hráči nikdy nenapsal. Prázdný stav
+    // znamená „nic neběží", takže další zpráva zase založí nové vlákno.
+    const state = pokracuje
+      ? {
+        trigger: "coach_initiated",
+        scenario_id: "coach_initiated",
+        max_replies: MAX_VYMEN,
+        current_replies: 1,
+        awaiting: "coach",
+        initiated_at: now,
+        player_id: opts.playerId,
+      }
+      : null;
 
     await db.batch([
       db.prepare(
@@ -90,7 +95,7 @@ export async function startCoachThread(
            unread_count = unread_count + 1, last_message_text = ?, last_message_at = ?
          WHERE id = ?`,
       ).bind(
-        pokracuje ? 1 : 0, JSON.stringify(state), now,
+        pokracuje ? 1 : 0, state ? JSON.stringify(state) : null, now,
         reply.body.slice(0, 100), now, opts.convId,
       ),
     ]);

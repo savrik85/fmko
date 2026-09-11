@@ -234,6 +234,13 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
   const { loadCredit, spendCredit } = await import("../messaging/phone-credit");
   if (platiSeKredit) {
+    // Vypnuté generování textu se musí poznat DŘÍV, než se strhne kredit —
+    // jinak by hráč platil za odpověď, která nepřijde. Přepínač `ai_provider`
+    // dosud platil jen pro crony, tohle je ta samá brzda pro požadavky.
+    const { isAiEnabled } = await import("../lib/ai-provider");
+    if (!(await isAiEnabled(c.env))) {
+      return c.json({ error: "Telefon je bez signálu — odpovídání je dočasně vypnuté." }, 503);
+    }
     const ok = await spendCredit(c.env.DB, teamId, 1);
     if (!ok) {
       const stav = await loadCredit(c.env.DB, teamId);

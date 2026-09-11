@@ -32,6 +32,23 @@ export async function readAiProvider(kv: KVNamespace | undefined): Promise<AiPro
 }
 
 /**
+ * Je generování textu vůbec zapnuté?
+ *
+ * Přepínač `ai_provider` dosud platil jen pro crony a frontu — `applyAiProvider`
+ * se volá ve `scheduled` handleru, ne ve `fetch`. Cokoli, co model volá
+ * z HTTP požadavku (chat s hráči, kabina), tak jelo i na testingu a ujídalo
+ * produkční kvótu. Tahle funkce to dá zkontrolovat i tam.
+ */
+export async function isAiEnabled(
+  env: { CACHE_KV?: KVNamespace; GEMINI_API_KEY?: string },
+): Promise<boolean> {
+  const provider = await readAiProvider(env.CACHE_KV);
+  if (provider === "off") return false;
+  if (provider === "gemini" && !env.GEMINI_API_KEY) return false;
+  return true;
+}
+
+/**
  * Model pro Workers AI.
  *
  * Vybraný 2026-08-17 srovnáním na českém zápasovém promptu:

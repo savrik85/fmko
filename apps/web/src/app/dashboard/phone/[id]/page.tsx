@@ -206,6 +206,9 @@ export default function ConversationPage() {
 
   // Kredit se ukazuje jen tam, kde odpovídá model. Vedení soutěže ani kotel nic nestojí.
   const platiSeKredit = !isGroup && (conv?.type === "player" || conv?.type === "squad_group");
+  // Psaní blokuje jedině to, že hráč zrovna odpovídá. Uzavřené vlákno ne —
+  // trenér mu smí napsat znovu a začít nové.
+  const cekaSeNaHrace = aiThreadActive && aiThreadState?.awaiting === "player";
 
   useEffect(() => {
     if (!teamId || !platiSeKredit) return;
@@ -490,16 +493,16 @@ export default function ConversationPage() {
             onChange={(e) => setNewMsg(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
             placeholder={
-              aiThreadState?.awaiting === "done" ? "Konverzace ukončena"
+              cekaSeNaHrace ? "Hráč píše…"
                 : platiSeKredit && credit?.zbyva === 0 ? "Došel kredit"
                   : "Napiš zprávu..."
             }
-            disabled={aiThreadState?.awaiting === "done" || (platiSeKredit && credit?.zbyva === 0)}
+            disabled={cekaSeNaHrace || (platiSeKredit && credit?.zbyva === 0)}
             className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <button
             onClick={handleSend}
-            disabled={!newMsg.trim() || sending || aiThreadState?.awaiting === "done"
+            disabled={!newMsg.trim() || sending || cekaSeNaHrace
               || (platiSeKredit && credit?.zbyva === 0)}
             className="shrink-0 w-8 h-8 rounded-full bg-pitch-500 text-white flex items-center justify-center disabled:opacity-40 text-xs self-end"
           >
