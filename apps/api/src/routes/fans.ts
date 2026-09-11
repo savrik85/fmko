@@ -578,3 +578,21 @@ async function zapisDopad(
 
   await db.batch(stmts).catch((e) => { logger.error({ module: M }, `zápis akce ${a.action}`, e); });
 }
+
+/**
+ * Nechá fanoušky vstřebat nezpracované dění klubu.
+ *
+ * Normálně to dělá denní tick uvnitř `syncFanGroups`. Bez tohohle by se reakce
+ * na přestup nebo zdražení daly ověřit až druhý herní den.
+ */
+fansRouter.post("/admin/process-fan-events", requireAdmin, async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "Chybí teamId" }, 400);
+
+  const groups = await syncFanGroups(c.env.DB, teamId, { drift: false });
+  if (groups.length === 0) return c.json({ error: "Tým nemá party" }, 404);
+
+  const { zpracujUdalostiKlubu } = await import("../fans/fan-reactions");
+  const res = await zpracujUdalostiKlubu(c.env.DB, teamId, groups);
+  return c.json(res);
+});
