@@ -113,7 +113,7 @@ export default function VudceDetailPage() {
       <SectionLabel>Vztah k tobě</SectionLabel>
       <div className="card p-4">
         <p className="text-sm">
-          Osobně tě <span className={`font-semibold ${s.cls}`}>{s.text}</span>.
+          Vztah k tobě: <span className={`font-semibold ${s.cls}`}>{s.text}</span>.
         </p>
         {l.duvod && <p className="text-sm text-muted mt-1">{l.duvod}</p>}
       </div>

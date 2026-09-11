@@ -251,7 +251,7 @@ function LeaderRadek({ leader }: { leader: FanLeaderView }) {
         <div className="text-sm text-muted">
           {leader.archetypeLabel} · {leader.age} let · {leader.occupation}
         </div>
-        <div className={`text-sm ${s.cls}`}>Vztah k vedení: {s.text}</div>
+        <div className={`text-sm ${s.cls}`}>Vztah k tobě: {s.text}</div>
       </div>
     </div>
   );
