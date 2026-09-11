@@ -51,6 +51,8 @@ interface UnrestInfo {
 
 interface ConvDetailResponse {
   messages: Message[];
+  /** Hlavička konverzace — chodí s detailem, ne ze seznamu. */
+  conversation?: ConvInfo;
   aiThreadActive: boolean;
   aiThreadState: AiThreadState | null;
   participantId?: string | null;
@@ -148,6 +150,9 @@ export default function ConversationPage() {
       return apiFetch<ConvDetailResponse>(messagesUrl).then((res) => {
         setUnrest(res.unrest ?? null);
         setParticipantId(res.participantId ?? null);
+        // Přednost má hlavička z detailu — seznam může být o krok pozadu
+        // a čerstvě založená konverzace v něm ještě není.
+        if (res.conversation) setConv(res.conversation);
         return {
           msgs: res.messages,
           ai: { active: res.aiThreadActive, state: res.aiThreadState },
