@@ -63,6 +63,7 @@ export function FMSidebar() {
   const [notesUnseen, setNotesUnseen] = useState(false);
   const [gremiumCount, setGremiumCount] = useState(0);
   const [betsCount, setBetsCount] = useState(0);
+  const [novychClanku, setNovychClanku] = useState(0);
   const pathname = usePathname();
   const { teamId, isAdmin, logout, token } = useTeam();
 
@@ -76,6 +77,10 @@ export function FMSidebar() {
       apiFetch<{ incoming: unknown[] }>(`/api/teams/${teamId}/offers`)
         .then((o) => setIncomingOffers(o.incoming?.length ?? 0))
         .catch((e) => console.error("fetch offers:", e));
+      // Nahrazuje pět rozesílek „vyšel článek" do telefonu — tady to nikoho neruší.
+      apiFetch<{ unread: number }>(`/api/teams/${teamId}/news/unread-count`)
+        .then((d) => setNovychClanku(d.unread ?? 0))
+        .catch((e) => console.error("fetch news unread:", e));
       // Aktivní ankety kde jsem ještě nehlasoval
       const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
       apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
@@ -188,6 +193,9 @@ export function FMSidebar() {
                           {item.label}
                           {item.href === "/dashboard/novinky" && notesUnseen && (
                             <span className="ml-1.5 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">Nové</span>
+                          )}
+                          {item.href === "/dashboard/news" && novychClanku > 0 && (
+                            <span className="ml-1.5 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{novychClanku}</span>
                           )}
                           {item.href === "/dashboard/phone" && unreadMessages > 0 && (
                             <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{unreadMessages}</span>

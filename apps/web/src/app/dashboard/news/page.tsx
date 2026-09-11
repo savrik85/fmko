@@ -189,6 +189,14 @@ export default function NewsPage() {
       .catch((e) => console.error("fetch leagues:", e));
   }, []);
 
+  // Otevřením Zpravodaje zhasne odznak v menu. Dřív tuhle roli plnila SMS
+  // „vyšel nový článek" rozeslaná všem v lize.
+  useEffect(() => {
+    if (!teamId) return;
+    apiFetch(`/api/teams/${teamId}/news/seen`, { method: "POST" })
+      .catch((e) => console.error("označení Zpravodaje:", e));
+  }, [teamId]);
+
   const loadClassifieds = () => {
     if (!teamId) return;
     apiFetch<{ classifieds: Classified[]; categories: ClassifiedCategory[]; cost: number }>(`/api/teams/${teamId}/classifieds`)

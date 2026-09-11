@@ -309,43 +309,9 @@ PRAVIDLA:
 
   logger.info({ module: "round-summary" }, `awarded league=${leagueId} week=${gameWeek} player=${parsed.playerOfRoundId} managerTeam=${parsed.managerOfRoundTeamId}`);
 
-  // 11. Push notifikace lidským týmům
-  try {
-    const humanTeams = await db.prepare(
-      "SELECT t.id FROM teams t WHERE t.league_id = ? AND t.user_id != 'ai'"
-    ).bind(leagueId).all<{ id: string }>();
-
-    const smsBody = `🏆 Vyšel přehled ${gameWeek}. kola: „${parsed.headline.trim()}"`;
-    for (const t of humanTeams.results) {
-      const tid = t.id;
-      const conv = await db.prepare(
-        "SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = 'Redakce Zpravodaje'"
-      ).bind(tid).first<{ id: string }>()
-        .catch((e) => { logger.warn({ module: "round-summary" }, "fetch conv", e); return null; });
-
-      let convId = conv?.id;
-      if (!convId) {
-        convId = crypto.randomUUID();
-        await db.prepare(
-          "INSERT INTO conversations (id, team_id, type, title, unread_count, last_message_text, last_message_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', 1, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-        ).bind(convId, tid, smsBody.slice(0, 100)).run()
-          .catch((e) => logger.warn({ module: "round-summary" }, "create conv", e));
-      }
-
-      if (convId) {
-        await db.prepare(
-          "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-        ).bind(crypto.randomUUID(), convId, smsBody).run()
-          .catch((e) => logger.warn({ module: "round-summary" }, "send msg", e));
-        await db.prepare(
-          "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
-        ).bind(smsBody.slice(0, 100), convId).run()
-          .catch((e) => logger.warn({ module: "round-summary" }, "update conv", e));
-      }
-    }
-  } catch (e) {
-    logger.warn({ module: "round-summary" }, "notifications failed", e);
-  }
+  // Rozesílka „vyšel článek" všem v lize zrušena: trenér s ní nic nedělal
+  // a zaplňovala telefon (přes sedmdesát zpráv na účet z pěti různých míst).
+  // Že je ve Zpravodaji něco nového, hlásí odznak v menu — `news_seen_at`.
 
   return { awarded: true };
 }

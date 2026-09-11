@@ -489,56 +489,9 @@ Odpověz POUZE valid JSON:
     `created league=${leagueId} week=${gameWeek} player=${player.id} team=${teamRow.id} mood=${mood}`,
   );
 
-  // 10. Notifikace lidským týmům v lize (konverzace "Redakce Zpravodaje")
-  try {
-    const humanTeams = await db
-      .prepare("SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai'")
-      .bind(leagueId)
-      .all<{ id: string }>();
-
-    const smsBody = `🎤 Nový rozhovor ve Zpravodaji: „${headline}"`;
-    for (const t of humanTeams.results) {
-      const conv = await db
-        .prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = 'Redakce Zpravodaje'")
-        .bind(t.id)
-        .first<{ id: string }>()
-        .catch((e) => {
-          logger.warn({ module: "player-interview" }, "fetch conv", e);
-          return null;
-        });
-
-      let convId = conv?.id;
-      if (!convId) {
-        convId = crypto.randomUUID();
-        await db
-          .prepare(
-            "INSERT INTO conversations (id, team_id, type, title, unread_count, last_message_text, last_message_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', 1, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
-          )
-          .bind(convId, t.id, smsBody.slice(0, 100))
-          .run()
-          .catch((e) => logger.warn({ module: "player-interview" }, "create conv", e));
-      }
-
-      if (convId) {
-        await db
-          .prepare(
-            "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
-          )
-          .bind(crypto.randomUUID(), convId, smsBody)
-          .run()
-          .catch((e) => logger.warn({ module: "player-interview" }, "send msg", e));
-        await db
-          .prepare(
-            "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
-          )
-          .bind(smsBody.slice(0, 100), convId)
-          .run()
-          .catch((e) => logger.warn({ module: "player-interview" }, "update conv", e));
-      }
-    }
-  } catch (e) {
-    logger.warn({ module: "player-interview" }, "notifications failed", e);
-  }
+  // Rozesílka „vyšel článek" všem v lize zrušena: trenér s ní nic nedělal
+  // a zaplňovala telefon (přes sedmdesát zpráv na účet z pěti různých míst).
+  // Že je ve Zpravodaji něco nového, hlásí odznak v menu — `news_seen_at`.
 
   return { created: true };
 }

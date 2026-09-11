@@ -257,24 +257,91 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
       result.coursesDone++;
     }
 
-    // Skautův tip: týmy se skautem → nejnadanější volný hráč v okrese
+    /*
+     * Skautův tip.
+     *
+     * Dřív poslal jméno bez čísel a bez důvodu („Tip na talent: Patrik Karabec
+     * (DEF)") a bral kohokoli z okresu — i třicetiletého s ratingem 30. Zpráva
+     * tím neříkala nic a chodila každý týden znovu.
+     *
+     * Ted platí tři pravidla: tip musí mít co říct (věk, rating, proč), hráč
+     * musí za řeč stát, a když v okrese nikdo takový není, skaut MLČÍ. Lepší
+     * žádná zpráva než tip na nikoho.
+     */
     const scouts = await db.prepare(
-      "SELECT sm.team_id, v.district FROM staff_members sm JOIN teams t ON sm.team_id = t.id JOIN villages v ON t.village_id = v.id WHERE sm.role = 'skaut' AND sm.team_id IS NOT NULL"
-    ).all<{ team_id: string; district: string }>()
+      `SELECT sm.team_id, v.district, sm.judgement, sm.communication
+       FROM staff_members sm JOIN teams t ON sm.team_id = t.id JOIN villages v ON t.village_id = v.id
+       WHERE sm.role = 'skaut' AND sm.team_id IS NOT NULL`
+    ).all<{ team_id: string; district: string; judgement: number; communication: number }>()
       .catch((e) => { logger.warn({ module: "staff-tick" }, "load scouts", e); return { results: [] as never[] }; });
+
     for (const s of scouts.results) {
-      const tip = await db.prepare(
-        "SELECT first_name, last_name, position FROM free_agents WHERE district = ? ORDER BY hidden_talent DESC, RANDOM() LIMIT 1"
-      ).bind(s.district).first<{ first_name: string; last_name: string; position: string }>()
-        .catch((e) => { logger.warn({ module: "staff-tick" }, "scout tip", e); return null; });
-      if (tip) {
-        await sendStaffSystemMessage(db, s.team_id, "Skaut", "Skaut",
-          `🔍 Tip na talent: ${tip.first_name} ${tip.last_name} (${tip.position}) — mrkni na Přestupy → Volní.`);
-        result.scoutTips++;
-      }
+      // Kvalita skauta rozhoduje, jak hluboko vidí. Mizerný pozná jen hotového
+      // hráče, dobrý i surový talent, který se zatím na ratingu neprojevil.
+      const eff = (2 * (s.judgement ?? 5) + (s.communication ?? 5)) / 3;
+      const prahTalentu = Math.round(30 - eff);        // eff 5 → 25, eff 18 → 12
+      const prahRatingu = Math.round(58 - eff * 0.8);  // eff 5 → 54, eff 18 → 44
+
+      const kandidati = await db.prepare(
+        `SELECT id, first_name, last_name, position, age, overall_rating, hidden_talent
+         FROM free_agents
+         WHERE district = ? AND (hidden_talent >= ? OR (age <= 23 AND overall_rating >= ?))
+         ORDER BY hidden_talent DESC, overall_rating DESC LIMIT 5`,
+      ).bind(s.district, prahTalentu, prahRatingu)
+        .all<{
+          id: string; first_name: string; last_name: string; position: string;
+          age: number; overall_rating: number; hidden_talent: number;
+        }>()
+        .catch((e) => { logger.warn({ module: "staff-tick" }, "scout tip", e); return { results: [] }; });
+
+      if (kandidati.results.length === 0) continue;
+
+      // Nedoporučovat pořád dokola toho samého — kdo padl v posledních pár
+      // hlášeních, jde stranou.
+      const drive = await db.prepare(
+        `SELECT m.body FROM messages m JOIN conversations c ON c.id = m.conversation_id
+         WHERE c.team_id = ? AND c.type = 'system' AND c.title = 'Skaut'
+         ORDER BY m.sent_at DESC LIMIT 4`,
+      ).bind(s.team_id).all<{ body: string }>()
+        .catch((e) => { logger.warn({ module: "staff-tick" }, "historie skauta", e); return { results: [] }; });
+      const zminen = (drive.results ?? []).map((m) => m.body).join(" ");
+
+      const tip = kandidati.results.find((k) => !zminen.includes(`${k.first_name} ${k.last_name}`));
+      if (!tip) continue;
+
+      await sendStaffSystemMessage(db, s.team_id, "Skaut", "Skaut", textTipu(tip));
+      result.scoutTips++;
     }
   }
 
   logger.info({ module: "staff-tick" }, `DONE regen=${result.regenTeams} healed=${result.healedExtra} courses=${result.coursesDone} scout=${result.scoutTips} newCand=${result.newCandidates}`);
   return result;
+}
+
+/** Post slovem — „(DEF)" trenérovi nic neřekne, „obránce" ano. */
+const POST_SLOVEM: Record<string, string> = {
+  GK: "brankář", DEF: "obránce", MID: "záložník", FWD: "útočník",
+};
+
+/**
+ * Co skaut o hráči napíše.
+ *
+ * Vždycky věk, post a rating — bez čísel je tip k ničemu — a k tomu věta,
+ * PROČ ho vytáhl. Jinak trenér neví, jestli jde o surový talent, nebo o hotového
+ * hráče, který je zrovna volný.
+ */
+export function textTipu(p: {
+  first_name: string; last_name: string; position: string;
+  age: number; overall_rating: number; hidden_talent: number;
+}): string {
+  const post = POST_SLOVEM[p.position] ?? p.position;
+  const duvod = p.hidden_talent >= 25
+    ? "Zatím to na něm není vidět, ale má v sobě víc, než ukazuje."
+    : p.hidden_talent >= 15
+      ? "Ještě poroste, stojí za zkoušku."
+      : p.age <= 21
+        ? "Na svůj věk hotový hráč."
+        : "Solidní hráč, co je zrovna volný.";
+  return `🔍 ${p.first_name} ${p.last_name} — ${p.age} let, ${post}, rating ${p.overall_rating}. `
+    + `${duvod} Najdeš ho v Přestupech mezi volnými.`;
 }

@@ -1203,6 +1203,33 @@ gameRouter.post("/teams/:teamId/recruit", async (c) => {
 });
 
 // GET /api/teams/:id/news — obecní zpravodaj / news feed
+/**
+ * Kolik článků klub ještě neviděl — pro odznak v menu.
+ *
+ * Nahrazuje pět různých rozesílek „vyšel článek" do telefonu. Trenér s takovou
+ * zprávou stejně nic nedělal, jen mu zaplnila schránku.
+ */
+gameRouter.get("/teams/:teamId/news/unread-count", async (c) => {
+  const teamId = c.req.param("teamId");
+  const row = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM news n
+     JOIN teams t ON t.id = ?
+     WHERE n.league_id = t.league_id
+       AND n.created_at > COALESCE(t.news_seen_at, '')`,
+  ).bind(teamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "počet nepřečtených článků", e); return null; });
+  return c.json({ unread: row?.n ?? 0 });
+});
+
+/** Zpravodaj otevřen — od téhle chvíle se počítají jen novější články. */
+gameRouter.post("/teams/:teamId/news/seen", async (c) => {
+  await c.env.DB.prepare(
+    "UPDATE teams SET news_seen_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?",
+  ).bind(c.req.param("teamId")).run()
+    .catch((e) => { logger.warn({ module: "game" }, "označení Zpravodaje", e); });
+  return c.json({ ok: true });
+});
+
 gameRouter.get("/teams/:teamId/news", async (c) => {
   const teamId = c.req.param("teamId");
 
@@ -7795,22 +7822,9 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     .run()
     .catch((e) => { logger.warn({ module: "game.ts" }, "update interview article_news_id", e); });
 
-  // KROK 5: Notifikace ostatnim trenérum v lize
-  try {
-    const humanTeams = await c.env.DB.prepare(
-      "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai' AND id != ?"
-    ).bind(managerRow.league_id, teamId)
-      .all<{ id: string }>()
-      .then((r) => r.results ?? []);
-
-    const msgBody = `📰 Vyšel nový Rozhovor kola: "${article.headline}"`;
-    for (const t of humanTeams) {
-      await sendPhoneSMS(c.env.DB, t.id, "Redakce Zpravodaje", "Redakce Zpravodaje", msgBody)
-        .catch((e) => logger.warn({ module: "game.ts" }, "interview notify team", e));
-    }
-  } catch (e) {
-    logger.warn({ module: "game.ts" }, "interview league notifications", e);
-  }
+  // KROK 5: Rozesílka „vyšel článek" ostatním trenérům zrušena — nic s ní
+  // nedělali a zaplňovala telefon. Že je ve Zpravodaji něco nového, hlásí
+  // odznak v menu (`news_seen_at`).
 
   logger.info({ module: "game.ts", teamId }, `interview answered -> article ${newsId}`);
   return c.json({ ok: true, articleId: newsId });
