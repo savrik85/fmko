@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner } from "@/components/ui";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, showError } from "@/lib/api";
 
 export interface ContactsData {
   skupiny: { id: string; title: string; podtitul: string; channel: "sms" | "imessage" }[];
@@ -110,6 +110,7 @@ export function Adresar({ teamId, onZavrit, onOtevrit }: {
       onOtevrit(res.conversationId);
     } catch (e) {
       console.error("otevření konverzace z adresáře:", e);
+      showError("Konverzaci se nepodařilo otevřít", e instanceof Error ? e.message : "Zkus to prosím znovu.");
       setBusy(false);
     }
   };

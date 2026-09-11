@@ -460,12 +460,14 @@ messagingRouter.get("/teams/:teamId/contacts", async (c) => {
       .catch((e) => { logger.warn({ module: "messaging" }, "liga týmu", e); return null; }),
   ]);
 
-  // Soupeři v lize i s trenéry. Bez trenéra je to jen klub, ale psát se dá pořád.
+  // Jen kluby vedené člověkem — AI týmu zprávu doručit nejde a endpoint ji
+  // odmítne. Nabízet ho v adresáři by znamenalo slibovat konverzaci, která
+  // skončí chybou.
   const soupeři = tym?.league_id
     ? await db.prepare(
       `SELECT t.id, t.name AS team_name, m.name AS manager_name, m.avatar AS manager_avatar
        FROM teams t LEFT JOIN managers m ON m.team_id = t.id
-       WHERE t.league_id = ? AND t.id != ? ORDER BY t.name`,
+       WHERE t.league_id = ? AND t.id != ? AND t.user_id != 'ai' ORDER BY t.name`,
     ).bind(tym.league_id, teamId).all<{
       id: string; team_name: string; manager_name: string | null; manager_avatar: string | null;
     }>().catch((e) => { logger.warn({ module: "messaging" }, "soupeři do adresáře", e); return { results: [] } })
