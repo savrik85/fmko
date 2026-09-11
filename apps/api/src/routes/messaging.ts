@@ -220,6 +220,30 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     .bind(convId).first<{ team_id: string }>().catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check on send", e); return null; });
   if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
 
+  // Konverzace se načte DŘÍV než se zpráva zapíše — podle typu se pozná, jestli
+  // na ni bude odpovídat model, a jestli tedy stojí kredit.
+  const conv = await c.env.DB.prepare(
+    "SELECT type, participant_id, ai_thread_active FROM conversations WHERE id = ?"
+  ).bind(convId).first<{ type: string; participant_id: string | null; ai_thread_active: number }>()
+    .catch((e) => { logger.warn({ module: "messaging" }, "fetch conversation type", e); return null; });
+
+  // Co stojí kredit: všechno, na co odpovídá model. Vůdce fanoušků odpovídá
+  // deterministicky a druhému trenérovi píše člověk — obojí je zdarma.
+  const platiSeKredit = conv?.type === "squad_group"
+    || (conv?.type === "player" && !!conv.participant_id);
+
+  const { loadCredit, spendCredit } = await import("../messaging/phone-credit");
+  if (platiSeKredit) {
+    const ok = await spendCredit(c.env.DB, teamId, 1);
+    if (!ok) {
+      const stav = await loadCredit(c.env.DB, teamId);
+      return c.json({
+        error: "Došel ti kredit na telefonu. Dobije se zítra ráno.",
+        credit: stav,
+      }, 400);
+    }
+  }
+
   // Get team name for sender
   const team = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
     .bind(teamId).first<{ name: string }>();
@@ -237,11 +261,6 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   await c.env.DB.prepare(
     "UPDATE conversations SET last_message_text = ?, last_message_at = ? WHERE id = ?"
   ).bind(trimmedText, now, convId).run();
-
-  // If manager conversation, deliver to the other side
-  const conv = await c.env.DB.prepare(
-    "SELECT type, participant_id, ai_thread_active FROM conversations WHERE id = ?"
-  ).bind(convId).first<{ type: string; participant_id: string | null; ai_thread_active: number }>().catch((e) => { logger.warn({ module: "messaging" }, "fetch conversation type", e); return null; });
 
   // AI player chat hook: pokud je thread aktivní a čeká na trenéra,
   // atomic UPDATE awaiting='player' (race guard) a spustíme generování reply v pozadí.
@@ -261,6 +280,25 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
           .catch((e) => logger.error({ module: "messaging" }, "handleAiPlayerReply failed", e)),
       );
     }
+  }
+
+  // Trenér napsal hráči sám od sebe — dosud zpráva zapadla bez reakce.
+  if (conv?.type === "player" && conv.ai_thread_active !== 1 && conv.participant_id) {
+    const { startCoachThread } = await import("../messaging/coach-initiated");
+    c.executionCtx.waitUntil(
+      startCoachThread(c.env.DB, c.env, {
+        convId, teamId, playerId: conv.participant_id, coachMessage: body.body.trim(),
+      }).catch((e) => logger.error({ module: "messaging" }, "konverzace zahájená trenérem", e)),
+    );
+  }
+
+  // Zpráva do kabiny — ozve se jeden hráč.
+  if (conv?.type === "squad_group") {
+    const { replyInSquadGroup } = await import("../messaging/coach-initiated");
+    c.executionCtx.waitUntil(
+      replyInSquadGroup(c.env.DB, c.env, { convId, teamId, coachMessage: body.body.trim() })
+        .catch((e) => logger.error({ module: "messaging" }, "reakce v kabině", e)),
+    );
   }
 
   // Vůdce fanouškovské party čeká na odpověď. Používá stejné sloupce jako AI
@@ -307,10 +345,17 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     ).bind(uuid(), otherConv.id, teamId, senderName, body.body.trim(), now).run();
   }
 
-  return c.json({ id: msgId, sentAt: now });
+  return c.json({ id: msgId, sentAt: now, credit: await loadCredit(c.env.DB, teamId) });
 });
 
 // GET /api/teams/:teamId/unread-count — celkový počet nepřečtených
+// GET /api/teams/:teamId/phone-credit — kolik odpovědí dnes ještě zbývá
+messagingRouter.get("/teams/:teamId/phone-credit", async (c) => {
+  const { loadCredit, creditWord } = await import("../messaging/phone-credit");
+  const stav = await loadCredit(c.env.DB, c.req.param("teamId"));
+  return c.json({ ...stav, label: creditWord(stav.zbyva, stav.denni) });
+});
+
 messagingRouter.get("/teams/:teamId/unread-count", async (c) => {
   const teamId = c.req.param("teamId");
 

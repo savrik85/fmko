@@ -118,6 +118,8 @@ export default function ConversationPage() {
   const [loading, setLoading] = useState(true);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
+  const [credit, setCredit] = useState<{ zbyva: number; denni: number } | null>(null);
+  const [creditError, setCreditError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const messagesUrl = isGroup
@@ -202,15 +204,27 @@ export default function ConversationPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Kredit se ukazuje jen tam, kde odpovídá model. Vedení soutěže ani kotel nic nestojí.
+  const platiSeKredit = !isGroup && (conv?.type === "player" || conv?.type === "squad_group");
+
+  useEffect(() => {
+    if (!teamId || !platiSeKredit) return;
+    apiFetch<{ zbyva: number; denni: number }>(`/api/teams/${teamId}/phone-credit`)
+      .then(setCredit)
+      .catch((e) => console.error("načtení kreditu:", e));
+  }, [teamId, platiSeKredit]);
+
   const handleSend = async () => {
     if (!newMsg.trim() || sending || !teamId) return;
     setSending(true);
+    setCreditError(null);
     try {
-      const res = await apiFetch<{ id: string; sentAt: string }>(messagesUrl, {
+      const res = await apiFetch<{ id: string; sentAt: string; credit?: { zbyva: number; denni: number } }>(messagesUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: newMsg.trim() }),
       });
+      if (res.credit) setCredit(res.credit);
       if (isGroup) {
         setMessages((prev) => [...prev, {
           id: res.id, body: newMsg.trim(), sentAt: res.sentAt,
@@ -223,7 +237,12 @@ export default function ConversationPage() {
         }]);
       }
       setNewMsg("");
-    } catch (e) { console.error("send message:", e); }
+    } catch (e) {
+      console.error("send message:", e);
+      // Došlý kredit je běžný stav, ne chyba k reportování — patří k vstupnímu poli.
+      const zprava = (e as { message?: string }).message ?? "";
+      setCreditError(zprava.includes("kredit") ? zprava : "Zprávu se nepodařilo odeslat.");
+    }
     setSending(false);
   };
 
@@ -453,23 +472,40 @@ export default function ConversationPage() {
       )}
 
       {/* Input */}
-      <div className="bg-white border-t border-gray-100 px-3 py-2 flex gap-2 shrink-0">
-        <input
-          type="text"
-          value={newMsg}
-          onChange={(e) => setNewMsg(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          placeholder={aiThreadState?.awaiting === "done" ? "Konverzace ukončena" : "Napiš zprávu..."}
-          disabled={aiThreadState?.awaiting === "done"}
-          className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-        <button
-          onClick={handleSend}
-          disabled={!newMsg.trim() || sending || aiThreadState?.awaiting === "done"}
-          className="shrink-0 w-8 h-8 rounded-full bg-pitch-500 text-white flex items-center justify-center disabled:opacity-40 text-xs"
-        >
-          &#9654;
-        </button>
+      <div className="bg-white border-t border-gray-100 px-3 py-2 shrink-0">
+        {creditError && (
+          <p className="text-xs text-card-red mb-1.5 px-1">{creditError}</p>
+        )}
+        {platiSeKredit && credit && !creditError && (
+          <p className="text-xs text-muted mb-1.5 px-1">
+            {credit.zbyva > 0
+              ? `Zbývá ${credit.zbyva} z ${credit.denni} odpovědí na dnešek.`
+              : "Došel ti kredit na telefonu. Dobije se zítra ráno."}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newMsg}
+            onChange={(e) => setNewMsg(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            placeholder={
+              aiThreadState?.awaiting === "done" ? "Konverzace ukončena"
+                : platiSeKredit && credit?.zbyva === 0 ? "Došel kredit"
+                  : "Napiš zprávu..."
+            }
+            disabled={aiThreadState?.awaiting === "done" || (platiSeKredit && credit?.zbyva === 0)}
+            className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <button
+            onClick={handleSend}
+            disabled={!newMsg.trim() || sending || aiThreadState?.awaiting === "done"
+              || (platiSeKredit && credit?.zbyva === 0)}
+            className="shrink-0 w-8 h-8 rounded-full bg-pitch-500 text-white flex items-center justify-center disabled:opacity-40 text-xs self-end"
+          >
+            &#9654;
+          </button>
+        </div>
       </div>
     </PhoneFrame>
   );

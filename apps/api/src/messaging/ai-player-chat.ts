@@ -381,4 +381,84 @@ export async function evaluateResolution(
   };
 }
 
+/**
+ * Odpověď hráče na zprávu, kterou mu trenér napsal sám od sebe.
+ *
+ * Vlastní generátor, protože `generateReply` staví na scénáři, který si hráč
+ * vybral — tady žádný není. Hráč jen reaguje na to, co dostal, a nesmí si
+ * vymýšlet vlastní žádost; od toho jsou spawnované thready.
+ */
+export async function generateCoachInitiatedReply(
+  env: { GEMINI_API_KEY?: string },
+  player: PlayerSnapshot,
+  team: TeamContext,
+  history: ThreadMessage[],
+  isFinalTurn: boolean,
+): Promise<ReplyResult> {
+  const system = buildSystemPrompt(player, team);
+  const histText = history
+    .map((m) => `${m.sender === "player" ? player.firstName : "TRENÉR"}: ${m.body}`)
+    .join("\n");
+
+  const prompt = [
+    system,
+    "",
+    "SITUACE: Trenér ti napsal sám od sebe. Ty jsi o nic nežádal — jen odpovídáš na to, co ti píše.",
+    "NEVYMÝŠLEJ si vlastní stížnost ani žádost. Drž se tématu, které trenér nadhodil.",
+    "",
+    "HISTORIE KONVERZACE:",
+    histText,
+    "",
+    isFinalTurn
+      ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — rozluč se. Pole `conversation_complete` MUSÍ být true."
+      : "conversation_complete dej true, když je téma vyčerpané (trenér se jen zeptal a ty jsi odpověděl). False jen když máš na co konkrétního navázat.",
+    "",
+    "Vrať POUZE JSON (žádný markdown):",
+    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true|false>}`,
+  ].filter(Boolean).join("\n");
+
+  const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 0.95 });
+  const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown }>(raw);
+  if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
+    throw new GeminiUnavailableError("Coach-initiated reply JSON parse failed");
+  }
+  return {
+    body: trimSms(parsed.body),
+    conversationComplete: parsed.conversation_complete === true || isFinalTurn,
+  };
+}
+
+/**
+ * Reakce jednoho hráče na trenérovu zprávu do kabiny.
+ *
+ * Kabina je skupinový chat, ne rozhovor — proto jedna krátká reakce bez
+ * navazování a bez dopadů na hráče. Kdo se ozve, rozhoduje volající.
+ */
+export async function generateSquadGroupReaction(
+  env: { GEMINI_API_KEY?: string },
+  player: PlayerSnapshot,
+  team: TeamContext,
+  coachMessage: string,
+  posledni: string[],
+): Promise<string> {
+  const system = buildSystemPrompt(player, team);
+  const kontext = posledni.length > 0
+    ? `\nCo v kabině zaznělo předtím (neopakuj to):\n${posledni.join("\n")}`
+    : "";
+
+  const prompt = [
+    system,
+    "",
+    "SITUACE: Tohle není SMS trenérovi, ale SKUPINOVÝ CHAT celé kabiny. Trenér tam právě napsal:",
+    `„${coachMessage}"`,
+    kontext,
+    "",
+    "Zareaguj jednou krátkou větou, jak by se ozval člověk v partě — souhlas, rýpnutí, vtip, povzdech.",
+    "Maximálně 120 znaků. Žádné oslovení na začátku, žádný podpis. Vrať POUZE text.",
+  ].filter(Boolean).join("\n");
+
+  const raw = await callGemini(env, prompt, { maxTokens: 120, temperature: 1.0 });
+  return trimSms(raw);
+}
+
 export { GeminiUnavailableError };

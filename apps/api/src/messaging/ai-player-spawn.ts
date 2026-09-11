@@ -167,7 +167,7 @@ async function pickSubjectTeammate(
   return any ? { id: any.id, name: `${any.first_name} ${any.last_name}` } : null;
 }
 
-async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamContext> {
+export async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamContext> {
   const row = await db.prepare(
     `SELECT t.name, v.name as village_name, m.name as manager_name, t.league_id
      FROM teams t
