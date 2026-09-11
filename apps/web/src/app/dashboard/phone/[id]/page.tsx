@@ -118,7 +118,7 @@ export default function ConversationPage() {
   const [loading, setLoading] = useState(true);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
-  const [credit, setCredit] = useState<{ zbyva: number; denni: number } | null>(null);
+  const [credit, setCredit] = useState<{ zbyva: number; cenaSms: number; zprav: number } | null>(null);
   const [creditError, setCreditError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -209,10 +209,12 @@ export default function ConversationPage() {
   // Psaní blokuje jedině to, že hráč zrovna odpovídá. Uzavřené vlákno ne —
   // trenér mu smí napsat znovu a začít nové.
   const cekaSeNaHrace = aiThreadActive && aiThreadState?.awaiting === "player";
+  // Zbylá koruna je z pohledu hráče stejně došlý kredit — na zprávu nestačí.
+  const nemaNaSms = platiSeKredit && !!credit && credit.zbyva < credit.cenaSms;
 
   useEffect(() => {
     if (!teamId || !platiSeKredit) return;
-    apiFetch<{ zbyva: number; denni: number }>(`/api/teams/${teamId}/phone-credit`)
+    apiFetch<{ zbyva: number; cenaSms: number; zprav: number }>(`/api/teams/${teamId}/phone-credit`)
       .then(setCredit)
       .catch((e) => console.error("načtení kreditu:", e));
   }, [teamId, platiSeKredit]);
@@ -222,7 +224,7 @@ export default function ConversationPage() {
     setSending(true);
     setCreditError(null);
     try {
-      const res = await apiFetch<{ id: string; sentAt: string; credit?: { zbyva: number; denni: number } }>(messagesUrl, {
+      const res = await apiFetch<{ id: string; sentAt: string; credit?: { zbyva: number; cenaSms: number; zprav: number } }>(messagesUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: newMsg.trim() }),
@@ -481,9 +483,9 @@ export default function ConversationPage() {
         )}
         {platiSeKredit && credit && !creditError && (
           <p className="text-xs text-muted mb-1.5 px-1">
-            {credit.zbyva > 0
-              ? `Zbývá ${credit.zbyva} z ${credit.denni} odpovědí na dnešek.`
-              : "Došel ti kredit na telefonu. Dobije se zítra ráno."}
+            {credit.zbyva >= credit.cenaSms
+              ? `Kredit ${credit.zbyva} Kč · SMS za ${credit.cenaSms} Kč`
+              : `Kredit ${credit.zbyva} Kč — na SMS to nestačí. Dobije se zítra ráno.`}
           </p>
         )}
         <div className="flex gap-2">
@@ -494,16 +496,15 @@ export default function ConversationPage() {
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
             placeholder={
               cekaSeNaHrace ? "Hráč píše…"
-                : platiSeKredit && credit?.zbyva === 0 ? "Došel kredit"
+                : nemaNaSms ? "Došel kredit"
                   : "Napiš zprávu..."
             }
-            disabled={cekaSeNaHrace || (platiSeKredit && credit?.zbyva === 0)}
+            disabled={cekaSeNaHrace || nemaNaSms}
             className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <button
             onClick={handleSend}
-            disabled={!newMsg.trim() || sending || cekaSeNaHrace
-              || (platiSeKredit && credit?.zbyva === 0)}
+            disabled={!newMsg.trim() || sending || cekaSeNaHrace || nemaNaSms}
             className="shrink-0 w-8 h-8 rounded-full bg-pitch-500 text-white flex items-center justify-center disabled:opacity-40 text-xs self-end"
           >
             &#9654;

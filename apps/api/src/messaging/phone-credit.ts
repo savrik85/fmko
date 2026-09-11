@@ -13,12 +13,28 @@ import { logger } from "../lib/logger";
 
 const M = "phone-credit";
 
-/** Kolik odpovědí denně. Jeden odeslaný dotaz = jedna odpověď = jeden kredit. */
-export const DENNI_KREDIT = 12;
+/**
+ * Denní dobití předplacenky v korunách a cena jedné SMS.
+ *
+ * Kredit se ukazuje jako peníze, protože to je telefon, ne kvóta — „zbývá ti
+ * 27 Kč" je věta, kterou člověk zná, „zbývá ti 9 odpovědí" ne. Pod tím je pořád
+ * tentýž strop: 36 / 3 = dvanáct zpráv na herní den.
+ *
+ * S rozpočtem klubu to schválně nesouvisí. Je to brzda na spotřebu modelu, ne
+ * ekonomika — jinak by si bohatý klub ukecal celou kvótu.
+ */
+export const DENNI_KREDIT = 36;
+export const CENA_SMS = 3;
 
 export interface CreditState {
+  /** Zbývající kredit v korunách. */
   zbyva: number;
+  /** Kolik se dobíjí každý herní den. */
   denni: number;
+  /** Cena jedné odeslané SMS. */
+  cenaSms: number;
+  /** Kolik zpráv se z toho ještě dá poslat. */
+  zprav: number;
 }
 
 /** Herní den, podle kterého se kredit obnovuje. */
@@ -40,11 +56,11 @@ export async function loadCredit(db: D1Database, teamId: string): Promise<Credit
     .first<{ phone_credit: number | null; phone_credit_date: string | null; game_date: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `načtení kreditu ${teamId}`, e); return null; });
 
-  if (!row) return { zbyva: 0, denni: DENNI_KREDIT };
+  if (!row) return stav(0);
 
   const dnes = den(row.game_date);
   if (row.phone_credit_date === dnes && row.phone_credit != null) {
-    return { zbyva: Math.max(0, row.phone_credit), denni: DENNI_KREDIT };
+    return stav(row.phone_credit);
   }
 
   await db
@@ -53,7 +69,12 @@ export async function loadCredit(db: D1Database, teamId: string): Promise<Credit
     .run()
     .catch((e) => { logger.warn({ module: M }, `obnova kreditu ${teamId}`, e); });
 
-  return { zbyva: DENNI_KREDIT, denni: DENNI_KREDIT };
+  return stav(DENNI_KREDIT);
+}
+
+function stav(zbyva: number): CreditState {
+  const kc = Math.max(0, zbyva);
+  return { zbyva: kc, denni: DENNI_KREDIT, cenaSms: CENA_SMS, zprav: Math.floor(kc / CENA_SMS) };
 }
 
 /**
@@ -63,7 +84,7 @@ export async function loadCredit(db: D1Database, teamId: string): Promise<Credit
  * Odečet je atomický (`WHERE phone_credit >= ?`), takže dvě zprávy odeslané
  * naráz nemůžou přečerpat.
  */
-export async function spendCredit(db: D1Database, teamId: string, kolik = 1): Promise<boolean> {
+export async function spendCredit(db: D1Database, teamId: string, kolik = CENA_SMS): Promise<boolean> {
   if (kolik <= 0) return true;
   // Načtení nejdřív — zajistí obnovu na nový herní den, než se začne odečítat.
   const stav = await loadCredit(db, teamId);
@@ -80,7 +101,9 @@ export async function spendCredit(db: D1Database, teamId: string, kolik = 1): Pr
 
 /** Kredit slovem — do UI, ať se to nepočítá na dvou místech. */
 export function creditWord(zbyva: number, denni: number): string {
-  if (zbyva <= 0) return "Kredit došel";
-  if (zbyva <= Math.max(1, Math.floor(denni * 0.25))) return "Dochází kredit";
+  // Na jednu SMS to nestačí — z pohledu hráče je to došlý kredit, i když
+  // na účtu zbyla koruna.
+  if (zbyva < CENA_SMS) return "Kredit došel";
+  if (zbyva <= Math.max(CENA_SMS, Math.floor(denni * 0.25))) return "Dochází kredit";
   return "Kredit v pořádku";
 }

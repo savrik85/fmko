@@ -39,26 +39,30 @@ interface SquadPlayer {
 }
 
 interface Credit {
+  /** Zbývající kredit v korunách. */
   zbyva: number;
   denni: number;
+  cenaSms: number;
+  /** Kolik zpráv se z toho ještě dá poslat. */
+  zprav: number;
   label: string;
 }
 
 /**
- * Kredit jako štítek s číslem.
+ * Kredit jako předplacenka — v korunách, ne v „odpovědích".
  *
- * Ne jako čárky signálu — ty už rám telefonu jednou má a dva stejné symboly
+ * Ne jako čárky signálu: ty už rám telefonu jednou má a dva stejné symboly
  * vedle sebe by znamenaly dvě různé věci.
  */
 function CreditChip({ credit }: { credit: Credit }) {
-  const barva = credit.zbyva <= 0
+  const barva = credit.zbyva < credit.cenaSms
     ? "bg-card-red text-white"
-    : credit.zbyva <= Math.max(1, Math.floor(credit.denni * 0.25))
+    : credit.zbyva <= Math.max(credit.cenaSms, Math.floor(credit.denni * 0.25))
       ? "bg-gold-500 text-white"
       : "bg-white/20 text-white";
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full tabular-nums ${barva}`} title={credit.label}>
-      Kredit {credit.zbyva}/{credit.denni}
+      {credit.zbyva} Kč
     </span>
   );
 }
@@ -244,11 +248,13 @@ export default function PhonePage() {
       {credit && (
         <div className="bg-white border-t border-gray-100 px-4 py-2">
           <p className="text-xs text-muted leading-snug">
-            {credit.zbyva > 0 ? (
-              <>Kredit: <strong className="text-ink">{credit.zbyva}</strong> z {credit.denni} odpovědí na dnešek.
-                {" "}Každá odpověď hráče stojí jeden.</>
+            {credit.zbyva >= credit.cenaSms ? (
+              <>Na kartě máš <strong className="text-ink">{credit.zbyva} Kč</strong> — to je{" "}
+                {credit.zprav === 1 ? "jedna SMS" : credit.zprav < 5 ? `${credit.zprav} SMS` : `${credit.zprav} SMS`}.
+                {" "}Jedna zpráva hráči stojí {credit.cenaSms} Kč.</>
             ) : (
-              <>Kredit došel. Dobije se zítra ráno. Psát vedení soutěže ani kotli můžeš dál zdarma.</>
+              <>Na kartě máš {credit.zbyva} Kč, na SMS to nestačí. Dobije se zítra ráno —
+                {" "}vedení soutěže a kotli píšeš zdarma.</>
             )}
           </p>
           <button

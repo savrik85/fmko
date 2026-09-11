@@ -241,11 +241,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     if (!(await isAiEnabled(c.env))) {
       return c.json({ error: "Telefon je bez signálu — odpovídání je dočasně vypnuté." }, 503);
     }
-    const ok = await spendCredit(c.env.DB, teamId, 1);
+    // Bez argumentu se strhne cena jedné SMS — modul je jediný, kdo ji zná.
+    const ok = await spendCredit(c.env.DB, teamId);
     if (!ok) {
       const stav = await loadCredit(c.env.DB, teamId);
       return c.json({
-        error: "Došel ti kredit na telefonu. Dobije se zítra ráno.",
+        error: `Na SMS ti nezbývá kredit — máš ${stav.zbyva} Kč a zpráva stojí ${stav.cenaSms} Kč. Dobije se zítra ráno.`,
         credit: stav,
       }, 400);
     }
