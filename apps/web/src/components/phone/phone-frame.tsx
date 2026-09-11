@@ -30,6 +30,8 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
               <rect x="7" y="2.5" width="2.5" height="7.5" rx="0.5" />
               <rect x="10.5" y="0" width="2.5" height="10" rx="0.5" />
             </svg>
+            {/* Datová síť — na vsi se přes ni posílá iMessage, SMS jdou přes operátora */}
+            <span className="font-medium tracking-tight opacity-80">4G</span>
             {/* Battery */}
             <svg width="18" height="10" viewBox="0 0 18 10" fill="currentColor" className="opacity-80">
               <rect x="0" y="1" width="15" height="8" rx="1.5" stroke="currentColor" strokeWidth="1" fill="none" />

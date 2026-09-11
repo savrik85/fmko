@@ -218,6 +218,14 @@ export default function ConversationPage() {
   const cekaSeNaHrace = aiThreadActive && aiThreadState?.awaiting === "player";
   // Zbylá koruna je z pohledu hráče stejně došlý kredit — na zprávu nestačí.
   const nemaNaSms = platiSeKredit && !!credit && credit.zbyva < credit.cenaSms;
+  /*
+   * Co jde přes data, je zdarma; co jde přes operátora, stojí kredit.
+   * Hráči a kabina = SMS (odpovídá model, platí se). Vůdce kotle, svaz
+   * a druhý trenér = iMessage. Barva bubliny to řekne bez čtení: modrá
+   * data, zelená SMS — přesně jak to lidi znají z telefonu.
+   */
+  const jeImessage = !platiSeKredit;
+  const mojeBublina = jeImessage ? "bg-blue-500 text-white" : "bg-pitch-500 text-white";
 
   useEffect(() => {
     if (!teamId) return;
@@ -404,7 +412,7 @@ export default function ConversationPage() {
                         )}
                         <div className={`px-3 py-2 rounded-2xl text-[13px] leading-snug ${
                           isUser
-                            ? "bg-pitch-500 text-white rounded-br-tight"
+                            ? `${mojeBublina} rounded-br-tight`
                             : "bg-white shadow-sm rounded-bl-tight"
                         }`}>
                           <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
@@ -499,12 +507,20 @@ export default function ConversationPage() {
           <p className="text-xs text-card-red mb-1.5 px-1">{creditError}</p>
         )}
         {credit && !creditError && (
-          <p className="text-xs text-muted mb-1.5 px-1">
-            {!platiSeKredit
-              ? `Kredit ${credit.zbyva} Kč · tahle konverzace je zdarma`
-              : credit.zbyva >= credit.cenaSms
-                ? `Kredit ${credit.zbyva} Kč · SMS za ${credit.cenaSms} Kč`
-                : `Kredit ${credit.zbyva} Kč — na SMS to nestačí. Dobije se zítra ráno.`}
+          <p className="text-xs text-muted mb-1.5 px-1 flex items-center gap-1.5">
+            {jeImessage ? (
+              <>
+                <span className="text-blue-600 font-medium">iMessage</span>
+                <span>· přes data, zdarma · kredit {credit.zbyva} Kč</span>
+              </>
+            ) : credit.zbyva >= credit.cenaSms ? (
+              <>
+                <span className="text-pitch-600 font-medium">SMS</span>
+                <span>· {credit.cenaSms} Kč za zprávu · kredit {credit.zbyva} Kč</span>
+              </>
+            ) : (
+              <span>Kredit {credit.zbyva} Kč — na SMS to nestačí. Dobije se zítra ráno.</span>
+            )}
           </p>
         )}
         <div className="flex gap-2">
@@ -516,7 +532,8 @@ export default function ConversationPage() {
             placeholder={
               cekaSeNaHrace ? "Hráč píše…"
                 : nemaNaSms ? "Došel kredit"
-                  : "Napiš zprávu..."
+                  : jeImessage ? "iMessage"
+                    : "SMS"
             }
             disabled={cekaSeNaHrace || nemaNaSms}
             className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -524,7 +541,9 @@ export default function ConversationPage() {
           <button
             onClick={handleSend}
             disabled={!newMsg.trim() || sending || cekaSeNaHrace || nemaNaSms}
-            className="shrink-0 w-8 h-8 rounded-full bg-pitch-500 text-white flex items-center justify-center disabled:opacity-40 text-xs self-end"
+            className={`shrink-0 w-8 h-8 rounded-full text-white flex items-center justify-center disabled:opacity-40 text-xs self-end ${
+              jeImessage ? "bg-blue-500" : "bg-pitch-500"
+            }`}
           >
             &#9654;
           </button>
