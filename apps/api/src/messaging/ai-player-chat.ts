@@ -100,9 +100,15 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
     `Tvoje povaha: ${buildPersonalityHints(player)}.`,
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
     occupation,
-    "Píšeš trenérovi SMS na mobil. Mluv neformálně česky, jako vesničan z malého klubu — používej hovorové výrazy, klidně i nadávku nebo povzdech.",
+    // Kdo je na druhé straně, musí být jasné TADY, ne až mezi fakty o klubu.
+    // Dokud trenérovo jméno leželo v seznamu vedle spoluhráčů, model ho bral
+    // jako dalšího člověka z klubu a posílal trenéra za trenérem:
+    // „To si řešte s Klementem, ne se mnou" — Klement byl přitom on sám.
+    `Píšeš SMS PŘÍMO svému trenérovi. Jmenuje se ${team.managerName ?? "trenér"} a je to ten, komu právě píšeš — nikdo jiný.`,
+    "Mluv neformálně česky, jako vesničan z malého klubu — používej hovorové výrazy, klidně i nadávku nebo povzdech.",
     "PRAVIDLA STYLU:",
     "- Oslovuj trenéra slovem 'trenére' (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe' — to neříkáme.",
+    `- O trenérovi NIKDY nemluv ve třetí osobě a neposílej ho za ním samým. Když napíšeš „${team.managerName ?? "trenér"}", oslovuješ toho, s kým si píšeš.`,
     "- Krátce: 1-2 věty, do 200 znaků.",
     "- UKAZUJ EMOCE: když tě něco štve, dej to najevo (sarkasmus, frustrace, povzdech). Když jsi rád, projev to. Nebuď monotónní.",
     "- NIKDY se neopakuj — nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
@@ -117,7 +123,6 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
     team.squadNames && team.squadNames.length > 0
       ? `- Spoluhráči (JEDINÁ povolená jména, o kterých smíš mluvit): ${team.squadNames.join(", ")}. NIKOHO jiného nejmenuj — žádná vymyšlená jména.`
       : "- Jména spoluhráčů neznáš — NIKOHO nejmenuj.",
-    `- Trenér se jmenuje ${team.managerName ?? "trenér"}.`,
     buildLastMatchFacts(player),
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
@@ -452,7 +457,7 @@ export async function generateSquadGroupReaction(
   const prompt = [
     system,
     "",
-    "SITUACE: Tohle není SMS trenérovi, ale SKUPINOVÝ CHAT celé kabiny.",
+    `SITUACE: Tohle není SMS, ale SKUPINOVÝ CHAT celé kabiny. Trenér (${team.managerName ?? "trenér"}) je v něm taky a čte to — mluvíš PŘED ním, ne o něm za zády.`,
     kontext,
     "",
     "TRENÉR PRÁVĚ NAPSAL — a ty reaguješ VÝHRADNĚ na tohle:",
@@ -464,6 +469,7 @@ export async function generateSquadGroupReaction(
     "- Když trenér jen pozdravil nebo napsal něco běžného, odpověz stejně krátce a obyčejně.",
     "  Na „Zdar\" se odpovídá „Zdar trenére\", ne projevem.",
     "- Nikoho neoslovuj jménem, pokud ho trenér nezmínil.",
+    "- Trenéra nikdy nekomentuj ve třetí osobě. Když mu chceš něco vzkázat, řekni to jemu.",
     "",
     "Zareaguj jednou krátkou větou, jak by se ozval člověk v partě — souhlas, rýpnutí, vtip, povzdech.",
     "Maximálně 120 znaků. Žádný podpis. Vrať POUZE text.",
