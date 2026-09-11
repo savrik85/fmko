@@ -333,12 +333,13 @@ export default function ConversationPage() {
           </div>
         )}
         <span className="font-heading font-bold text-sm truncate">{conv?.title ?? "..."}</span>
+        {/* Kredit je hned pod hlavičkou u vstupního pole, kde je i cena zprávy —
+            druhá pilulka nahoře z lišty dělala změť. */}
         {credit && (
           <span
-            className={`ml-auto shrink-0 text-xs px-2 py-0.5 rounded-full tabular-nums ${
-              credit.zbyva < credit.cenaSms ? "bg-card-red text-white" : "bg-white/20 text-white"
+            className={`ml-auto shrink-0 text-xs tabular-nums ${
+              credit.zbyva < credit.cenaSms ? "text-card-yellow font-semibold" : "text-white/70"
             }`}
-            title={`Kredit na telefonu · SMS za ${credit.cenaSms} Kč`}
           >
             {credit.zbyva} Kč
           </span>

@@ -42,19 +42,37 @@ interface Credit {
 }
 
 /**
- * Kredit jako předplacenka — v korunách, ne v „odpovědích".
+ * Kulaté tlačítko v hlavičce — jako ikony v liště iOS.
  *
- * Ne jako čárky signálu: ty už rám telefonu jednou má a dva stejné symboly
- * vedle sebe by znamenaly dvě různé věci.
+ * Odznak je tečka, ne pilulka s číslem: přesný počet nepřečtených oznámení
+ * hráč stejně neřeší a číslo natlačené vedle dalších prvků dělalo z hlavičky
+ * změť. Kolik jich je, ukáže obrazovka s oznámeními.
  */
-function CreditChip({ credit }: { credit: Credit }) {
-  const barva = credit.zbyva < credit.cenaSms
-    ? "bg-card-red text-white"
-    : credit.zbyva <= Math.max(credit.cenaSms, Math.floor(credit.denni * 0.25))
-      ? "bg-gold-500 text-white"
-      : "bg-white/20 text-white";
+function IkonaTlacitko({ emoji, label, badge, onClick }: {
+  emoji: string; label: string; badge?: boolean; onClick: () => void;
+}) {
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full tabular-nums ${barva}`} title={credit.label}>
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className="relative w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-xs shrink-0"
+    >
+      {emoji}
+      {badge && (
+        <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-card-red ring-2 ring-pitch-600" />
+      )}
+    </button>
+  );
+}
+
+/** Kredit jako drobný text, ne další barevná pilulka. */
+function KreditText({ credit }: { credit: Credit }) {
+  const dochazi = credit.zbyva < credit.cenaSms;
+  return (
+    <span
+      className={`text-xs tabular-nums ${dochazi ? "text-card-yellow font-semibold" : "text-white/70"}`}
+      title={credit.label}
+    >
       {credit.zbyva} Kč
     </span>
   );
@@ -104,24 +122,21 @@ export default function PhonePage() {
     <PhoneFrame>
       {/* Status bar */}
       <div className="bg-pitch-600 text-white px-4 py-2.5 flex items-center justify-between">
-        <span className="font-heading font-bold text-sm">Zprávy</span>
-        <button
-          onClick={() => setOznameniOtevrena(true)}
-          className="ml-auto mr-2 relative text-base leading-none"
-          aria-label="Oznámení"
-        >
-          &#128276;
-          {neprectenaOznameni > 0 && (
-            <span className="absolute -top-1 -right-1.5 bg-card-red text-white text-[9px] font-bold min-w-4 h-4 px-1 rounded-full flex items-center justify-center">
-              {neprectenaOznameni > 9 ? "9+" : neprectenaOznameni}
-            </span>
-          )}
-        </button>
-        {credit ? <CreditChip credit={credit} /> : (
-          <span className="text-xs text-white/60">
-            {conversations.reduce((s, c) => s + c.unreadCount, 0)} nepřečtených
-          </span>
-        )}
+        <span className="font-heading font-bold text-base">Zprávy</span>
+        <div className="ml-auto flex items-center gap-2">
+          {credit && <KreditText credit={credit} />}
+          <IkonaTlacitko
+            emoji="&#128276;"
+            label="Oznámení"
+            badge={neprectenaOznameni > 0}
+            onClick={() => setOznameniOtevrena(true)}
+          />
+          <IkonaTlacitko
+            emoji="&#9998;"
+            label="Nová zpráva"
+            onClick={() => setAdresarOtevren(true)}
+          />
+        </div>
       </div>
 
       {/* Conversation list */}
@@ -212,7 +227,7 @@ export default function PhonePage() {
       {/* Adresář je vždycky po ruce — i kdyby se stav kreditu nenačetl. */}
       <div className="bg-white border-t border-gray-100 px-4 py-2">
         {credit && (
-          <p className="text-xs text-muted leading-snug mb-2">
+          <p className="text-xs text-muted leading-snug">
             {credit.zbyva >= credit.cenaSms ? (
               <>Na kartě máš <strong className="text-ink">{credit.zbyva} Kč</strong> — to je{" "}
                 {credit.zprav === 1 ? "jedna SMS" : `${credit.zprav} SMS`}.{" "}
@@ -225,12 +240,6 @@ export default function PhonePage() {
             )}
           </p>
         )}
-        <button
-          onClick={() => setAdresarOtevren(true)}
-          className="w-full rounded-full bg-pitch-500 text-white py-2 text-sm font-heading font-bold"
-        >
-          Adresář
-        </button>
       </div>
     </PhoneFrame>
   );
