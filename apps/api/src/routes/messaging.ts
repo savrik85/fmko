@@ -107,8 +107,11 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
 
   // Ověřit že konverzace patří tomuto týmu + načíst AI thread state
   const convOwner = await c.env.DB.prepare(
-    "SELECT team_id, type, participant_id, ai_thread_active, ai_thread_state FROM conversations WHERE id = ?",
-  ).bind(convId).first<{ team_id: string; type: string; participant_id: string | null; ai_thread_active: number; ai_thread_state: string | null }>()
+    "SELECT team_id, type, title, participant_id, participant_avatar, ai_thread_active, ai_thread_state FROM conversations WHERE id = ?",
+  ).bind(convId).first<{
+    team_id: string; type: string; title: string; participant_id: string | null;
+    participant_avatar: string | null; ai_thread_active: number; ai_thread_state: string | null;
+  }>()
     .catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check", e); return null; });
   if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
 
@@ -178,6 +181,22 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
 
   return c.json({
     messages,
+    // Hlavička konverzace jde s detailem, ne ze seznamu. Čerstvě založená
+    // konverzace v cachovaném seznamu být nemusí a stránka pak místo jména
+    // hráče ukázala otazník.
+    conversation: {
+      id: convId,
+      type: convOwner.type,
+      title: convOwner.title,
+      participantId: convOwner.participant_id,
+      participantAvatar: (() => {
+        if (!convOwner.participant_avatar) return null;
+        try { return JSON.parse(convOwner.participant_avatar); } catch (e) {
+          logger.warn({ module: "messaging" }, "nečitelný avatar konverzace", e);
+          return null;
+        }
+      })(),
+    },
     aiThreadActive: convOwner.ai_thread_active === 1,
     aiThreadState: parseAiThreadState(convOwner.ai_thread_state),
     participantId: convOwner.participant_id,

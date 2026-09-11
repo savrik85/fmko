@@ -162,7 +162,9 @@ export default function ConversationPage() {
       setMessages(msgs);
       setAiThreadActive(ai.active);
       setAiThreadState(ai.state);
-      setConv(c);
+      // Jen záloha pro skupinové chaty, které vlastní detail endpoint nemají —
+      // u ostatních už hlavičku nastavil `fetchMessages` z čerstvých dat.
+      if (c) setConv((stav) => stav ?? c);
       setLoading(false);
     }).catch((e) => {
       const msg = e?.message ?? "";
@@ -213,11 +215,11 @@ export default function ConversationPage() {
   const nemaNaSms = platiSeKredit && !!credit && credit.zbyva < credit.cenaSms;
 
   useEffect(() => {
-    if (!teamId || !platiSeKredit) return;
+    if (!teamId) return;
     apiFetch<{ zbyva: number; cenaSms: number; zprav: number }>(`/api/teams/${teamId}/phone-credit`)
       .then(setCredit)
       .catch((e) => console.error("načtení kreditu:", e));
-  }, [teamId, platiSeKredit]);
+  }, [teamId]);
 
   const handleSend = async () => {
     if (!newMsg.trim() || sending || !teamId) return;
@@ -303,6 +305,16 @@ export default function ConversationPage() {
           </div>
         )}
         <span className="font-heading font-bold text-sm truncate">{conv?.title ?? "..."}</span>
+        {credit && (
+          <span
+            className={`ml-auto shrink-0 text-xs px-2 py-0.5 rounded-full tabular-nums ${
+              credit.zbyva < credit.cenaSms ? "bg-card-red text-white" : "bg-white/20 text-white"
+            }`}
+            title={`Kredit na telefonu · SMS za ${credit.cenaSms} Kč`}
+          >
+            {credit.zbyva} Kč
+          </span>
+        )}
       </div>
 
       {/* Messages */}
@@ -481,11 +493,13 @@ export default function ConversationPage() {
         {creditError && (
           <p className="text-xs text-card-red mb-1.5 px-1">{creditError}</p>
         )}
-        {platiSeKredit && credit && !creditError && (
+        {credit && !creditError && (
           <p className="text-xs text-muted mb-1.5 px-1">
-            {credit.zbyva >= credit.cenaSms
-              ? `Kredit ${credit.zbyva} Kč · SMS za ${credit.cenaSms} Kč`
-              : `Kredit ${credit.zbyva} Kč — na SMS to nestačí. Dobije se zítra ráno.`}
+            {!platiSeKredit
+              ? `Kredit ${credit.zbyva} Kč · tahle konverzace je zdarma`
+              : credit.zbyva >= credit.cenaSms
+                ? `Kredit ${credit.zbyva} Kč · SMS za ${credit.cenaSms} Kč`
+                : `Kredit ${credit.zbyva} Kč — na SMS to nestačí. Dobije se zítra ráno.`}
           </p>
         )}
         <div className="flex gap-2">

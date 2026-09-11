@@ -405,6 +405,8 @@ export async function generateCoachInitiatedReply(
     "",
     "SITUACE: Trenér ti napsal sám od sebe. Ty jsi o nic nežádal — jen odpovídáš na to, co ti píše.",
     "NEVYMÝŠLEJ si vlastní stížnost ani žádost. Drž se tématu, které trenér nadhodil.",
+    "Reaguj na jeho POSLEDNÍ zprávu; starší repliky jsou jen kontext, aby ses neopakoval.",
+    "Když jen pozdravil nebo napsal běžnou větu, odpověz stejně krátce a obyčejně.",
     "",
     "HISTORIE KONVERZACE:",
     histText,
@@ -439,22 +441,32 @@ export async function generateSquadGroupReaction(
   player: PlayerSnapshot,
   team: TeamContext,
   coachMessage: string,
-  posledni: string[],
+  /** Posledních pár replik CHRONOLOGICKY, ve tvaru „TRENÉR: …" / „Jméno: …". */
+  historie: string[],
 ): Promise<string> {
   const system = buildSystemPrompt(player, team);
-  const kontext = posledni.length > 0
-    ? `\nCo v kabině zaznělo předtím (neopakuj to):\n${posledni.join("\n")}`
+  const kontext = historie.length > 0
+    ? `\nDŘÍVĚJŠÍ HOVOR (jen kontext, NEODPOVÍDEJ na něj a neopakuj ho):\n${historie.join("\n")}`
     : "";
 
   const prompt = [
     system,
     "",
-    "SITUACE: Tohle není SMS trenérovi, ale SKUPINOVÝ CHAT celé kabiny. Trenér tam právě napsal:",
-    `„${coachMessage}"`,
+    "SITUACE: Tohle není SMS trenérovi, ale SKUPINOVÝ CHAT celé kabiny.",
     kontext,
     "",
+    "TRENÉR PRÁVĚ NAPSAL — a ty reaguješ VÝHRADNĚ na tohle:",
+    `„${coachMessage}"`,
+    "",
+    "PRAVIDLA:",
+    "- Odpovídej na to, co trenér napsal TEĎ. Starší repliky jsou jen kontext, aby ses neopakoval.",
+    "- NEOTVÍREJ znovu témata z dřívějška (přestupy, stará zranění), pokud se na ně trenér neptá.",
+    "- Když trenér jen pozdravil nebo napsal něco běžného, odpověz stejně krátce a obyčejně.",
+    "  Na „Zdar\" se odpovídá „Zdar trenére\", ne projevem.",
+    "- Nikoho neoslovuj jménem, pokud ho trenér nezmínil.",
+    "",
     "Zareaguj jednou krátkou větou, jak by se ozval člověk v partě — souhlas, rýpnutí, vtip, povzdech.",
-    "Maximálně 120 znaků. Žádné oslovení na začátku, žádný podpis. Vrať POUZE text.",
+    "Maximálně 120 znaků. Žádný podpis. Vrať POUZE text.",
   ].filter(Boolean).join("\n");
 
   const raw = await callGemini(env, prompt, { maxTokens: 120, temperature: 1.0 });

@@ -55,11 +55,32 @@ export async function startCoachThread(
     const player = loadPlayerSnapshot(row);
     const team = await loadTeamContext(db, opts.teamId);
 
-    const reply = await generateCoachInitiatedReply(
-      env, player, team,
-      [{ sender: "coach", body: opts.coachMessage }],
-      false,
-    );
+    /*
+     * Historie i tady: když trenér napíše podruhé po uzavřeném vlákně, hráč
+     * musí vědět, co si spolu řekli. Bez toho by odpovídal, jako by se
+     * potkali poprvé.
+     */
+    const drive = await db
+      .prepare(
+        `SELECT * FROM (
+           SELECT sender_type, body, sent_at FROM messages
+           WHERE conversation_id = ? AND sender_type IN ('player','user')
+           ORDER BY sent_at DESC LIMIT 6
+         ) ORDER BY sent_at ASC`,
+      ).bind(opts.convId).all<{ sender_type: string; body: string }>()
+      .catch((e) => { logger.warn({ module: M }, "historie konverzace", e); return null; });
+
+    const historie = (drive?.results ?? []).map((m) => ({
+      sender: (m.sender_type === "user" ? "coach" : "player") as "coach" | "player",
+      body: m.body,
+    }));
+    // Poslední trenérova zpráva už v historii je (uložila se před tímhle voláním);
+    // když tam z nějakého důvodu není, přidáme ji, ať na ni má hráč co odpovědět.
+    if (historie[historie.length - 1]?.body !== opts.coachMessage) {
+      historie.push({ sender: "coach", body: opts.coachMessage });
+    }
+
+    const reply = await generateCoachInitiatedReply(env, player, team, historie, false);
 
     const now = new Date().toISOString();
     const jmeno = `${player.firstName} ${player.lastName}`;
@@ -136,18 +157,30 @@ export async function replyInSquadGroup(
 
     const team = await loadTeamContext(db, opts.teamId);
 
-    // Posledních pár hlášek, aby se kabina neopakovala dokola.
+    /*
+     * Poslední výměna v kabině — CHRONOLOGICKY a včetně toho, co psal trenér.
+     *
+     * Dřív se posílaly jen hlášky hráčů, navíc od nejnovější. Model z toho četl
+     * rozhovor pozpátku bez poloviny replik a reagoval na nejstarší téma, které
+     * uviděl: na „Zdar" odpovídal hráčům, že z prvního místa se neodchází.
+     *
+     * Systémová oznámení (nabídky, absence) se vynechávají — do hovoru nepatří
+     * a model je bral jako repliky.
+     */
     const predchozi = await db
       .prepare(
-        `SELECT sender_name, body FROM messages
-         WHERE conversation_id = ? AND sender_type = 'player'
-         ORDER BY sent_at DESC LIMIT 4`,
-      ).bind(opts.convId).all<{ sender_name: string; body: string }>()
+        `SELECT * FROM (
+           SELECT sender_type, sender_name, body, sent_at FROM messages
+           WHERE conversation_id = ? AND sender_type IN ('player','user')
+           ORDER BY sent_at DESC LIMIT 6
+         ) ORDER BY sent_at ASC`,
+      ).bind(opts.convId).all<{ sender_type: string; sender_name: string; body: string }>()
       .catch((e) => { logger.warn({ module: M }, "historie kabiny", e); return null; });
 
     const text = await generateSquadGroupReaction(
       env, mluvci, team, opts.coachMessage,
-      (predchozi?.results ?? []).map((m) => `${m.sender_name}: ${m.body}`),
+      (predchozi?.results ?? []).map((m) =>
+        m.sender_type === "user" ? `TRENÉR: ${m.body}` : `${m.sender_name}: ${m.body}`),
     );
     if (!text) return false;
 
