@@ -265,6 +265,18 @@ export const FAN_SKALY = {
 
   /** Sektor uzavřený za trest — kolik z hlasu skupiny zbude. */
   CLOSED_SECTOR_NOISE: 0.15,
+
+  /**
+   * Kde parta stojí. U hostů je na dosah strkanice, na hlavní tribuně sedí mezi
+   * rodinami a moc si nedovolí. Bez tohohle byl přesun sektoru za 3 000 Kč
+   * tlačítko, které nedělalo nic.
+   */
+  SEKTOR_RIZIKO: { kotel: 1.0, hlavni: 0.75, za_branou: 1.3 } as Record<FanSector, number>,
+  /** Hlas party podle sektoru — z hlavní tribuny se bubnovat nedá. */
+  SEKTOR_HLAS: { kotel: 1.0, hlavni: 0.6, za_branou: 0.9 } as Record<FanSector, number>,
+
+  /** Kolem téhle nálady a vášně se parta chová „normálně". */
+  NEUTRAL: { mood: 50, passion: 55, spending: 55 },
 } as const;
 
 // ── Výtržnosti ───────────────────────────────────────────────────────────────
@@ -419,6 +431,8 @@ export interface IncidentGroupState {
 
 export interface IncidentContext {
   group: IncidentGroupState;
+  /** Kde parta na stadionu stojí. */
+  sector: FanSector;
   /** Radikálnost vůdce 0–100; bez vůdce se bere 50. */
   leaderRadikalnost: number | null;
   /** Vzájemný heat manažerů ≥ DERBY_HEAT_THRESHOLD. */
@@ -469,6 +483,7 @@ export function incidentChance(ctx: IncidentContext): number {
   // Nálada táhne oběma směry: spokojená parta nemá důvod, naštvaná hledá záminku.
   p *= 1 + ((50 - Math.max(0, Math.min(100, g.mood))) / 50) * M.moodSwing;
 
+  p *= FAN_SKALY.SEKTOR_RIZIKO[ctx.sector] ?? 1;
   p *= 1 - clamp01(ctx.securityRiskReduction);
   p *= 1 - clamp01(ctx.sectorSeparation);
 
@@ -478,12 +493,14 @@ export function incidentChance(ctx: IncidentContext): number {
 /** Váhy skutků, které tahle skupina za daných okolností vůbec může provést. */
 export function incidentWeights(
   kind: FanGroupKind,
-  opts: { awayUltrasPresent: boolean },
+  opts: { awayUltrasPresent: boolean; sector: FanSector },
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const k of FAN_INCIDENT_KINDS) {
     const def = FAN_INCIDENTS[k];
     if (def.needsAwayUltras && !opts.awayUltrasPresent) continue;
+    // Od hlavní tribuny se k hostujícímu kotli nikdo neprobojuje.
+    if (def.needsAwayUltras && opts.sector === "hlavni") continue;
     const w = def.weightByGroup[kind];
     if (w && w > 0) out[k] = w;
   }
@@ -564,6 +581,98 @@ export function incidentOutcome(
 export function groupNoiseShare(g: { noise: number; mood: number; sectorClosed: boolean }): number {
   const base = (g.noise / 100) * (0.6 + (Math.max(0, Math.min(100, g.mood)) / 100) * 0.4);
   return g.sectorClosed ? base * FAN_SKALY.CLOSED_SECTOR_NOISE : base;
+}
+
+// ── Co party dělají se zápasem ───────────────────────────────────────────────
+
+/** Stav party tak, jak ho potřebuje výpočet dopadů na zápas. */
+export interface GroupMatchState {
+  size: number;
+  mood: number;
+  passion: number;
+  spending: number;
+  noise: number;
+  sector: FanSector;
+  sectorClosed: boolean;
+  /** 0–0.5, sleva na vstupné pro tenhle sektor. */
+  ticketDiscount: number;
+}
+
+export interface FanGroupMatchEffects {
+  /** Násobitel návštěvnosti. Zavřený sektor nepřijde, spokojení a zlevnění přijdou spíš. */
+  attendanceMul: number;
+  /** Přídavek k domácí výhodě ve stejných jednotkách jako `homeAdvantageFromFanbase().total`. */
+  noiseBonus: number;
+  /** Násobitel poptávky v bufetu. */
+  concessionMul: number;
+  /** Podíl výnosu ze vstupného, který zbude po slevách pro sektory. */
+  ticketRevenueMul: number;
+  /** Kolik lidí se kvůli uzavřenému sektoru na stadion nedostane. */
+  lockedOut: number;
+}
+
+export const NEUTRAL_GROUP_EFFECTS: FanGroupMatchEffects = {
+  attendanceMul: 1,
+  noiseBonus: 0,
+  concessionMul: 1,
+  ticketRevenueMul: 1,
+  lockedOut: 0,
+};
+
+/**
+ * Co party udělají s jedním domácím zápasem.
+ *
+ * Tohle je místo, kde se z osy v databázi stane něco, co hráč pozná. Bez něj byly
+ * `noise`, `spending`, `passion`, `sector` i `ticket_discount` jen čísla v tabulce:
+ * přesun sektoru nic nedělal a sleva pro kotel nestála klub ani korunu.
+ *
+ * Všechno jsou ODCHYLKY od průměrné party, ne absolutní hodnoty — klub s pěti
+ * obyčejnými partami vyjde na 1,0 a ekonomika se nehne. Teprve když se party
+ * rozejdou od průměru, začne to být znát.
+ */
+export function fanGroupMatchEffects(groups: readonly GroupMatchState[]): FanGroupMatchEffects {
+  const celkem = groups.reduce((s, g) => s + Math.max(0, g.size), 0);
+  if (celkem <= 0) return NEUTRAL_GROUP_EFFECTS;
+
+  const N = FAN_SKALY.NEUTRAL;
+  let attendance = 1;
+  let hlas = 0;
+  let concession = 1;
+  let slevy = 0;
+  let lockedOut = 0;
+
+  for (const g of groups) {
+    const podil = Math.max(0, g.size) / celkem;
+    if (podil <= 0) continue;
+
+    if (g.sectorClosed) {
+      // Zavřený sektor = tihle lidé nepřijdou vůbec. Nic dalšího se u nich nepočítá.
+      attendance -= podil;
+      lockedOut += Math.max(0, g.size);
+      hlas += groupNoiseShare({ noise: g.noise, mood: g.mood, sectorClosed: true }) * podil
+        * (FAN_SKALY.SEKTOR_HLAS[g.sector] ?? 1);
+      continue;
+    }
+
+    attendance += podil * (((g.mood - N.mood) / 100) * 0.25
+      + ((g.passion - N.passion) / 100) * 0.3
+      + clamp01(g.ticketDiscount) * 0.4);
+
+    hlas += groupNoiseShare({ noise: g.noise, mood: g.mood, sectorClosed: false }) * podil
+      * (FAN_SKALY.SEKTOR_HLAS[g.sector] ?? 1);
+
+    concession += podil * ((g.spending - N.spending) / 100) * 0.5;
+    slevy += podil * clamp01(g.ticketDiscount);
+  }
+
+  return {
+    attendanceMul: Math.max(0.4, Math.min(1.4, attendance)),
+    // Odečítá se hlas průměrné party, aby normální klub dostal nulu a ne trvalý bonus.
+    noiseBonus: Math.max(-1, Math.min(1, (hlas - 0.42) * 2.5)),
+    concessionMul: Math.max(0.6, Math.min(1.5, concession)),
+    ticketRevenueMul: Math.max(0.5, 1 - slevy),
+    lockedOut,
+  };
 }
 
 /** Nálada slovem — pro UI, aby se nikde nepočítala podruhé. */

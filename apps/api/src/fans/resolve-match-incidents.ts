@@ -19,7 +19,7 @@ import { DERBY_HEAT_THRESHOLD } from "../community/manager-relations";
 import {
   FAN_GROUPS, FAN_INCIDENTS, FAN_SKALY,
   incidentChance, incidentWeights, rollSeverity, incidentOutcome,
-  type FanGroupKind, type FanIncidentKind, type IncidentOutcome,
+  type FanGroupKind, type FanIncidentKind, type IncidentOutcome, type FanSector,
 } from "../engine/fan-groups";
 import { ensureFanGroups, fanLeaderFullName, type FanGroupRow, type FanLeaderRow } from "./fan-group-generator";
 import { syncFanGroups, odbytZapasUzavreniSektoru } from "./fan-group-state";
@@ -105,6 +105,7 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
         // Sektor byl zavřený PŘED odečtem výše — kdo se dovnitř nedostal, nic neprovedl.
         sectorClosed: g.closed_matches > 0,
       },
+      sector: (g.sector as FanSector) ?? "hlavni",
       leaderRadikalnost: leader?.radikalnost ?? 50,
       derby: opts.preMatchHeat >= DERBY_HEAT_THRESHOLD,
       homeLosing: opts.homeScore < opts.awayScore,
@@ -118,7 +119,10 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
     const zvyseneRiziko = opts.sporneVerdikty ? sance * 1.35 : sance;
     if (rng.random() >= zvyseneRiziko) continue;
 
-    const vahy = incidentWeights(g.kind as FanGroupKind, { awayUltrasPresent: ctx.hostujiciKotel >= 15 });
+    const vahy = incidentWeights(g.kind as FanGroupKind, {
+      awayUltrasPresent: ctx.hostujiciKotel >= 15,
+      sector: (g.sector as FanSector) ?? "hlavni",
+    });
     if (Object.keys(vahy).length === 0) continue;
     const kind = rng.weighted(vahy) as FanIncidentKind;
 
@@ -369,7 +373,16 @@ async function aplikujDopady(
   // ── Kdo odejde ──
   // Neodcházejí výtržníci, ale ti, kterým se to hnusí. Proto se ubírá z příležitostných
   // (rodiny) a teprve při přetečení z pravidelných.
-  if (dopad.fansLost > 0) await odejdouFanousci(db, opts.homeTeamId, dopad.fansLost);
+  if (dopad.fansLost > 0) {
+    // Neodcházejí výtržníci, ale party, kterým se to hnusí. Jejich loajalita
+    // rozhoduje, kolik jich to skutečně vzdá — pamětníci vydrží skoro všechno.
+    const citlive = a.groups.filter((g) => g.kind === "rodiny" || g.kind === "pametnici");
+    const prumernaLoajalita = citlive.length > 0
+      ? citlive.reduce((s, g) => s + g.loyalty, 0) / citlive.length
+      : 50;
+    const odejde = Math.round(dopad.fansLost * (1 - prumernaLoajalita / 200));
+    if (odejde > 0) await odejdouFanousci(db, opts.homeTeamId, odejde);
+  }
 
   // ── Nálada part ──
   // Viník má z akce svoje, ale schytal trest; ostatní se za to jen stydí.

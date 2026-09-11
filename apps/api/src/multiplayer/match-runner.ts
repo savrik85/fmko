@@ -446,9 +446,25 @@ export async function runScheduledMatches(
             // Na rozoranou louku se nikomu nechce — zastřešení tribun s tímhle nepomůže.
             const pitchAttMul = pitchAttendanceFactor(pitchCondition);
 
+            // Dopady fanouškovských part: zavřený sektor nepřijde, spokojená a vášnivá
+            // parta přijde spíš, sleva na vstupné přitáhne. Klub bez part dostane neutrál.
+            const { loadFanGroupMatchEffects } = await import("../fans/fan-group-state");
+            const groupFx = await loadFanGroupMatchEffects(db, homeTeamId)
+                .catch((e) => {
+                    logger.warn({module: "match-runner"}, "dopady part na zápas", e);
+                    return null;
+                });
+            const fgAttendanceMul = groupFx?.attendanceMul ?? 1;
+            if (groupFx && groupFx.lockedOut > 0) {
+                logger.info(
+                    {module: "match-runner", teamId: homeTeamId, matchId},
+                    `uzavřené sektory: ${groupFx.lockedOut} lidí se dovnitř nedostane`,
+                );
+            }
+
             // Apply facility attendance bonus (lighting + parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením), cap at stadium capacity
             const attendance = Math.min(
-                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather * pitchAttMul),
+                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather * pitchAttMul * fgAttendanceMul),
                 stadiumCapacity,
             );
 
@@ -509,7 +525,7 @@ export async function runScheduledMatches(
             const officialCount = acceptedOfficials?.cnt ?? 0;
             // Domácí výhoda: základ + pozvaní zastupitelé + sektor kotle (atmosféra)
             // + fanoušci (tvrdé jádro, vyprodáno/prázdno z haInfo). Strop zvednut na 0.15.
-            const fanbaseAdvantage = Math.max(-0.01, Math.min(0.03, haInfo.total * 0.01));
+            const fanbaseAdvantage = Math.max(-0.01, Math.min(0.03, (haInfo.total + (groupFx?.noiseBonus ?? 0)) * 0.01));
             const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + officialCount * 0.015 + facilityEffects.homeAdvantageBonus + fanbaseAdvantage));
             // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál
             const crowdBoost = 1 + (homeEquipment?.crowdMod ?? 0);

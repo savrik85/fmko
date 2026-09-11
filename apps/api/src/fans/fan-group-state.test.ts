@@ -6,7 +6,7 @@ import {
 } from "./fan-group-state";
 
 describe("cílová nálada", () => {
-  const zaklad = { satisfaction: 50, passion: 50, ticketDiscount: 0, heat: 0 };
+  const zaklad = { satisfaction: 50, passion: 50, loyalty: 50, ticketDiscount: 0, heat: 0 };
 
   it("při průměrné spokojenosti a nulové křivdě sedí uprostřed", () => {
     expect(targetMood(zaklad)).toBe(50);
@@ -22,15 +22,27 @@ describe("cílová nálada", () => {
     expect(kotelSpatne).toBeLessThan(pametniciSpatne);
   });
 
+  it("loajální parta nezhořkne z jedné špatné sezóny", () => {
+    // Loajalita tlumí JEN pád dolů — pamětníci to vydrží, kotel ne.
+    const loajalni = targetMood({ ...zaklad, satisfaction: 10, loyalty: 100 });
+    const vrtkavi = targetMood({ ...zaklad, satisfaction: 10, loyalty: 0 });
+    expect(loajalni).toBeGreaterThan(vrtkavi);
+  });
+
+  it("nahoru loajalita netlumí — z výhry má radost každý", () => {
+    expect(targetMood({ ...zaklad, satisfaction: 90, loyalty: 100 }))
+      .toBe(targetMood({ ...zaklad, satisfaction: 90, loyalty: 0 }));
+  });
+
   it("sleva náladu zvedne, křivda ji drží dole", () => {
     expect(targetMood({ ...zaklad, ticketDiscount: 0.2 })).toBeGreaterThan(50);
     expect(targetMood({ ...zaklad, heat: 100 })).toBeLessThan(50);
   });
 
   it("nikdy nevyleze z rozsahu 0–100", () => {
-    expect(targetMood({ satisfaction: 100, passion: 100, ticketDiscount: 0.5, heat: 0 })).toBeLessThanOrEqual(100);
-    expect(targetMood({ satisfaction: 0, passion: 100, ticketDiscount: 0, heat: 100 })).toBeGreaterThanOrEqual(0);
-    expect(targetMood({ satisfaction: 200, passion: 200, ticketDiscount: 9, heat: -50 })).toBeLessThanOrEqual(100);
+    expect(targetMood({ satisfaction: 100, passion: 100, loyalty: 50, ticketDiscount: 0.5, heat: 0 })).toBeLessThanOrEqual(100);
+    expect(targetMood({ satisfaction: 0, passion: 100, loyalty: 50, ticketDiscount: 0, heat: 100 })).toBeGreaterThanOrEqual(0);
+    expect(targetMood({ satisfaction: 200, passion: 200, loyalty: 50, ticketDiscount: 9, heat: -50 })).toBeLessThanOrEqual(100);
   });
 });
 

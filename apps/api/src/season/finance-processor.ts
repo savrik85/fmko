@@ -440,16 +440,26 @@ export async function processMatchDayFinances(
   }>().catch((e) => { logger.warn({ module: "finance" }, "load staff for match", e); return { results: [] as never[] }; });
   const staffFx = calcStaffFx(staffMatchRows.results);
 
+  // Slevy pro fanouškovské sektory a jejich útrata v bufetu. Bez tohohle by
+  // „levnější vstupné pro kotel" byl ústupek, který klub nic nestojí.
+  const { loadFanGroupMatchEffects } = await import("../fans/fan-group-state");
+  const groupFx = await loadFanGroupMatchEffects(db, teamId)
+    .catch((e) => { logger.warn({ module: "finance" }, "dopady part na finance", e); return null; });
+
   if (isHome && attendance > 0) {
     // Fence guard: bez plnohodnotného plotu platí jen část diváků
     const payingAttendance = Math.round(attendance * facilityFx.fencePayingRatio);
-    const ticketIncome = payingAttendance * ticketPrice;
+    const slevaMul = groupFx?.ticketRevenueMul ?? 1;
+    const ticketIncome = Math.round(payingAttendance * ticketPrice * slevaMul);
     const fenceLevel = facilities.fence ?? 0;
     const fenceNote = facilityFx.fencePayingRatio < 1
       ? ` (${fenceLevel === 0 ? "bez plotu" : "provizorní plot"}: ${payingAttendance} z ${attendance})`
       : "";
+    const slevaNote = slevaMul < 1
+      ? `, sleva pro sektory −${Math.round((1 - slevaMul) * 100)} %`
+      : "";
     await recordTransaction(db, teamId, "match_income", ticketIncome,
-      `Vstupné: ${payingAttendance} × ${ticketPrice} Kč${fenceNote}`, gameDate, matchId);
+      `Vstupné: ${payingAttendance} × ${ticketPrice} Kč${fenceNote}${slevaNote}`, gameDate, matchId);
 
     await collectLevy(db, league, teamId, gameDate, "levy_gate",
       league?.rules.levy_gate_pct ?? 0, ticketIncome, "Odvod ze vstupného", `ilg-${matchId}`);
@@ -477,8 +487,11 @@ export async function processMatchDayFinances(
       const roundTemp = calRow?.calendar_id
         ? (await resolveRoundWeather(db, calRow.calendar_id))?.temperature
         : undefined;
+      // Útrata part jde do stejného násobitele poptávky jako obsluha bufetu:
+      // štamgasti utratí víc než rodiny s kočárky a je to vidět na tržbě.
       const sale = computeSelfConcessionMatch(
-        attendance, satisfaction, fansCtx.products, weather, staffFx.concessionDemandMul, roundTemp,
+        attendance, satisfaction, fansCtx.products, weather,
+        staffFx.concessionDemandMul * (groupFx?.concessionMul ?? 1), roundTemp,
       );
       soldProducts = sale.products;
 

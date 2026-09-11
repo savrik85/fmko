@@ -5,8 +5,8 @@ import { describe, it, expect } from "vitest";
 import {
   FAN_GROUPS, FAN_GROUP_KINDS, FAN_LEADER_ARCHETYPES, FAN_INCIDENTS, FAN_SKALY,
   incidentChance, incidentWeights, rollSeverity, fineFor, incidentOutcome,
-  groupNoiseShare, fanLeaderArchetypeLabel,
-  type IncidentContext, type FanIncidentKind,
+  groupNoiseShare, fanLeaderArchetypeLabel, fanGroupMatchEffects, NEUTRAL_GROUP_EFFECTS,
+  type IncidentContext, type FanIncidentKind, type GroupMatchState,
 } from "./fan-groups";
 import { generateFanGroups } from "../fans/fan-group-generator";
 import { SKALY, calculateFacilityEffects } from "../stadium/stadium-generator";
@@ -23,6 +23,7 @@ const OPTS = { obec: "Lenora", okoli: "Volary", surnames: SURNAMES };
 function ctx(over: Partial<IncidentContext> = {}): IncidentContext {
   return {
     group: { kind: "kotel", aggression: 70, heat: 0, mood: 55, size: 60, sectorClosed: false },
+    sector: "kotel",
     leaderRadikalnost: 50,
     derby: false,
     homeLosing: false,
@@ -195,16 +196,16 @@ describe("šance na výtržnost", () => {
 
 describe("výběr a závažnost skutku", () => {
   it("rvačka s hosty se nabídne jen když hostující kotel dorazil", () => {
-    expect(incidentWeights("kotel", { awayUltrasPresent: false })).not.toHaveProperty("bitka_kotle");
-    expect(incidentWeights("kotel", { awayUltrasPresent: true })).toHaveProperty("bitka_kotle");
+    expect(incidentWeights("kotel", { awayUltrasPresent: false, sector: "kotel" })).not.toHaveProperty("bitka_kotle");
+    expect(incidentWeights("kotel", { awayUltrasPresent: true, sector: "kotel" })).toHaveProperty("bitka_kotle");
   });
 
   it("rodiny bordel nedělají", () => {
-    expect(Object.keys(incidentWeights("rodiny", { awayUltrasPresent: true }))).toHaveLength(0);
+    expect(Object.keys(incidentWeights("rodiny", { awayUltrasPresent: true, sector: "hlavni" }))).toHaveLength(0);
   });
 
   it("pamětníci umí leda vynadat rozhodčímu", () => {
-    expect(Object.keys(incidentWeights("pametnici", { awayUltrasPresent: true }))).toEqual(["vyhrozovani"]);
+    expect(Object.keys(incidentWeights("pametnici", { awayUltrasPresent: true, sector: "hlavni" }))).toEqual(["vyhrozovani"]);
   });
 
   it("závažnost zůstane v rozsahu skutku", () => {
@@ -320,5 +321,95 @@ describe("texty výtržností jsou česky", () => {
         expect(t, kind).not.toMatch(/\{(?!skupina|vudce)[a-z]+\}/);
       }
     }
+  });
+});
+
+describe("dopady part na zápas", () => {
+  /** Průměrná parta — nikde se neliší od neutrálu. */
+  const bezna = (o: Partial<GroupMatchState> = {}): GroupMatchState => ({
+    size: 100, mood: 50, passion: 55, spending: 55, noise: 42,
+    sector: "hlavni", sectorClosed: false, ticketDiscount: 0, ...o,
+  });
+
+  it("klub bez part se nehne — neutrál, ne nula", () => {
+    expect(fanGroupMatchEffects([])).toEqual(NEUTRAL_GROUP_EFFECTS);
+    expect(fanGroupMatchEffects([bezna({ size: 0 })])).toEqual(NEUTRAL_GROUP_EFFECTS);
+  });
+
+  it("samé průměrné party ekonomikou nehnou", () => {
+    const fx = fanGroupMatchEffects([bezna(), bezna(), bezna()]);
+    expect(fx.attendanceMul).toBeCloseTo(1, 5);
+    expect(fx.concessionMul).toBeCloseTo(1, 5);
+    expect(fx.ticketRevenueMul).toBe(1);
+    expect(fx.lockedOut).toBe(0);
+  });
+
+  it("zavřený sektor ubere lidi z návštěvy i z hlasu", () => {
+    const otevreno = fanGroupMatchEffects([bezna({ size: 60 }), bezna({ size: 40, noise: 90 })]);
+    const zavreno = fanGroupMatchEffects([
+      bezna({ size: 60 }),
+      bezna({ size: 40, noise: 90, sectorClosed: true }),
+    ]);
+    expect(zavreno.attendanceMul).toBeLessThan(otevreno.attendanceMul);
+    expect(zavreno.noiseBonus).toBeLessThan(otevreno.noiseBonus);
+    expect(zavreno.lockedOut).toBe(40);
+  });
+
+  it("sleva pro sektor ubere z tržby a přitáhne lidi", () => {
+    const bez = fanGroupMatchEffects([bezna({ size: 50 }), bezna({ size: 50 })]);
+    const se = fanGroupMatchEffects([bezna({ size: 50, ticketDiscount: 0.5 }), bezna({ size: 50 })]);
+    expect(se.ticketRevenueMul).toBeLessThan(bez.ticketRevenueMul);
+    expect(se.attendanceMul).toBeGreaterThan(bez.attendanceMul);
+  });
+
+  it("štamgasti zvednou bufet, rodiny s kočárky ne tolik", () => {
+    const utratni = fanGroupMatchEffects([bezna({ spending: 90 })]);
+    const skoupi = fanGroupMatchEffects([bezna({ spending: 25 })]);
+    expect(utratni.concessionMul).toBeGreaterThan(1);
+    expect(skoupi.concessionMul).toBeLessThan(1);
+  });
+
+  it("hlasitý kotel v kotli je slyšet víc než na hlavní tribuně", () => {
+    const vKotli = fanGroupMatchEffects([bezna({ noise: 100, sector: "kotel" })]);
+    const naTribune = fanGroupMatchEffects([bezna({ noise: 100, sector: "hlavni" })]);
+    expect(vKotli.noiseBonus).toBeGreaterThan(naTribune.noiseBonus);
+  });
+
+  it("nespokojená parta chodí míň než nadšená", () => {
+    expect(fanGroupMatchEffects([bezna({ mood: 5 })]).attendanceMul)
+      .toBeLessThan(fanGroupMatchEffects([bezna({ mood: 95 })]).attendanceMul);
+  });
+
+  it("ani extrémy nevyhodí ekonomiku z kloubů", () => {
+    const peklo = fanGroupMatchEffects([
+      bezna({ size: 1000, mood: 0, passion: 0, spending: 0, noise: 0, sectorClosed: true }),
+      bezna({ size: 1000, mood: 100, passion: 100, spending: 100, noise: 100, ticketDiscount: 0.5, sector: "kotel" }),
+    ]);
+    expect(peklo.attendanceMul).toBeGreaterThanOrEqual(0.4);
+    expect(peklo.attendanceMul).toBeLessThanOrEqual(1.4);
+    expect(peklo.concessionMul).toBeGreaterThanOrEqual(0.6);
+    expect(peklo.ticketRevenueMul).toBeGreaterThanOrEqual(0.5);
+    expect(Math.abs(peklo.noiseBonus)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("sektor party", () => {
+  const zaklad = (sector: "kotel" | "hlavni" | "za_branou"): IncidentContext => ({
+    group: { kind: "kotel", aggression: 70, heat: 0, mood: 55, size: 60, sectorClosed: false },
+    sector,
+    leaderRadikalnost: 50, derby: false, homeLosing: false, beerPerAttendee: 0,
+    awayUltrasSize: 0, securityRiskReduction: 0, sectorSeparation: 0, tifo: false,
+  });
+
+  it("u hostů je riziko nejvyšší, na hlavní tribuně nejnižší", () => {
+    expect(incidentChance(zaklad("za_branou"))).toBeGreaterThan(incidentChance(zaklad("kotel")));
+    expect(incidentChance(zaklad("hlavni"))).toBeLessThan(incidentChance(zaklad("kotel")));
+  });
+
+  it("od hlavní tribuny se k hostujícímu kotli nikdo nedostane", () => {
+    expect(incidentWeights("kotel", { awayUltrasPresent: true, sector: "hlavni" }))
+      .not.toHaveProperty("bitka_kotle");
+    expect(incidentWeights("kotel", { awayUltrasPresent: true, sector: "za_branou" }))
+      .toHaveProperty("bitka_kotle");
   });
 });

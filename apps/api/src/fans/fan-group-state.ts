@@ -11,7 +11,10 @@
 
 import { logger } from "../lib/logger";
 import { loadFanbaseAggregate } from "../season/fanbase-helpers";
-import { FAN_GROUPS, type FanGroupKind } from "../engine/fan-groups";
+import {
+  FAN_GROUPS, fanGroupMatchEffects, NEUTRAL_GROUP_EFFECTS,
+  type FanGroupKind, type FanGroupMatchEffects, type FanSector,
+} from "../engine/fan-groups";
 import { ensureFanGroups, type FanGroupRow } from "./fan-group-generator";
 
 const M = "fan-groups";
@@ -26,16 +29,22 @@ export const HEAT_DECAY_PER_DAY = 1;
  *
  * Vášnivá parta prožívá spokojenost klubu silněji oběma směry — kotel je z výhry
  * u vytržení a z prohry zdrcený, zatímco pamětníci to berou tak, jak to je.
+ *
+ * Loajalita tlumí JEN pád dolů: pamětníci, co chodí od roku 1974, kvůli jedné
+ * špatné sezóně nezhořknou. Nahoru je netlumí nic — z výhry má radost každý.
  */
 export function targetMood(opts: {
   satisfaction: number;
   passion: number;
+  loyalty: number;
   ticketDiscount: number;
   heat: number;
 }): number {
   const sat = Math.max(0, Math.min(100, opts.satisfaction));
   const amplituda = 0.7 + (Math.max(0, Math.min(100, opts.passion)) / 100) * 0.6;
-  let t = 50 + (sat - 50) * amplituda;
+  const odchylka = sat - 50;
+  const tlumeni = odchylka < 0 ? 1 - Math.max(0, Math.min(100, opts.loyalty)) / 200 : 1;
+  let t = 50 + odchylka * amplituda * tlumeni;
   t += Math.max(0, Math.min(0.5, opts.ticketDiscount)) * 20;   // sleva potěší, ale nespasí
   t -= (Math.max(0, Math.min(100, opts.heat)) / 100) * 25;     // křivda náladu drží dole
   return Math.round(Math.max(0, Math.min(100, t)));
@@ -119,7 +128,10 @@ export async function syncFanGroups(
     if (opts.drift) {
       mood = driftToward(
         g.mood,
-        targetMood({ satisfaction, passion: g.passion, ticketDiscount: g.ticket_discount, heat: g.heat }),
+        targetMood({
+          satisfaction, passion: g.passion, loyalty: g.loyalty,
+          ticketDiscount: g.ticket_discount, heat: g.heat,
+        }),
         MOOD_DRIFT_PER_DAY,
       );
       heat = Math.max(0, g.heat - HEAT_DECAY_PER_DAY);
@@ -142,4 +154,41 @@ export async function syncFanGroups(
   }
 
   return out;
+}
+
+/**
+ * Dopady part na jeden domácí zápas. Načte je z DB a předá čisté funkci.
+ *
+ * Vrací neutrál, když klub party ještě nemá — tím se stará ekonomika nehne
+ * ani u klubů, které vznikly před touhle featurou.
+ */
+export async function loadFanGroupMatchEffects(
+  db: D1Database,
+  teamId: string,
+): Promise<FanGroupMatchEffects> {
+  const rows = await db
+    .prepare(
+      `SELECT size, mood, passion, spending, noise, sector, closed_matches, ticket_discount
+       FROM fan_groups WHERE team_id = ?`,
+    )
+    .bind(teamId)
+    .all<{
+      size: number; mood: number; passion: number; spending: number; noise: number;
+      sector: string; closed_matches: number; ticket_discount: number;
+    }>()
+    .catch((e) => { logger.warn({ module: M }, `dopady part u ${teamId}`, e); return null; });
+
+  const groups = rows?.results ?? [];
+  if (groups.length === 0) return NEUTRAL_GROUP_EFFECTS;
+
+  return fanGroupMatchEffects(groups.map((g) => ({
+    size: g.size,
+    mood: g.mood,
+    passion: g.passion,
+    spending: g.spending,
+    noise: g.noise,
+    sector: (g.sector as FanSector) ?? "hlavni",
+    sectorClosed: g.closed_matches > 0,
+    ticketDiscount: g.ticket_discount,
+  })));
 }
