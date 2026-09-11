@@ -9073,13 +9073,23 @@ gameRouter.patch("/teams/:teamId/fans/ticket-price", async (c) => {
   const price = Math.max(0, Math.min(500, Math.round(body.baseTicketPrice ?? 0)));
 
   const { ensureFansRow } = await import("../season/fans-processor");
+  const { getBaseTicketPrice, mapVillageSize } = await import("../season/finance-processor");
   await ensureFansRow(c.env.DB, teamId);
 
   // Starou cenu je potřeba znát dřív, než ji přepíšeme — bez ní by fanoušci
   // nepoznali, jestli jsi zdražil nebo zlevnil.
-  const stara = (await c.env.DB.prepare("SELECT base_ticket_price FROM fans WHERE team_id = ?")
+  //
+  // Nula v `base_ticket_price` neznamená vstup zdarma, ale „platí sazba obce".
+  // Kdyby se brala doslova, první nastavení ceny by fanoušky minulo — a přitom
+  // skok z obecní třicetikoruny na stovku je přesně to, co je naštve nejvíc.
+  const ulozena = (await c.env.DB.prepare("SELECT base_ticket_price FROM fans WHERE team_id = ?")
     .bind(teamId).first<{ base_ticket_price: number }>()
     .catch((e) => { logger.warn({ module: "game" }, "stará cena vstupného", e); return null; }))?.base_ticket_price ?? 0;
+  const velikostObce = (await c.env.DB.prepare(
+    "SELECT v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
+  ).bind(teamId).first<{ size: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "velikost obce pro cenu", e); return null; }))?.size;
+  const stara = ulozena > 0 ? ulozena : getBaseTicketPrice(mapVillageSize(velikostObce ?? "village"));
 
   await c.env.DB.prepare(
     "UPDATE fans SET base_ticket_price = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ?",
