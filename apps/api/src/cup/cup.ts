@@ -844,6 +844,21 @@ async function simulateCupTie(
       await processMatchDayFinances(db, homeReal, cupMatchId, true, homeResult, ctx.attendance, gd, strengthOf.get(awayCupTeamId) ?? 50, false, weather)
         .catch((e) => logger.warn({ module: M }, "cup home matchday finances", e));
       await applyCupHomeFanbase(db, homeReal, cupMatchId, ctx.attendance);
+
+      // Na pohár chodí lidi stejně jako na ligu a chovají se stejně. Nárok si
+      // resolver bere sám z cup_matches, takže opakovaný běh kola nic nezdvojí.
+      const liga = (await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(homeReal)
+        .first<{ league_id: string | null }>()
+        .catch((e) => { logger.warn({ module: M }, "liga domácích pro výtržnosti", e); return null; }))?.league_id ?? null;
+      const { resolveMatchIncidents } = await import("../fans/resolve-match-incidents");
+      await resolveMatchIncidents(db, {
+        matchId: cupMatchId, table: "cup_matches",
+        homeTeamId: homeReal, awayTeamId: awayReal ?? homeReal,
+        homeScore: result.homeScore, awayScore: result.awayScore,
+        attendance: ctx.attendance, preMatchHeat: 0,
+        leagueId: liga, seasonNumber: 0, gameDate: gd.slice(0, 10),
+        sporneVerdikty: false, refereeId: null,
+      }).catch((e) => logger.warn({ module: M }, "výtržnosti v poháru", e));
     }
   } catch (e) {
     logger.warn({ module: M }, "cup match detail/finances", e);

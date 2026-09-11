@@ -90,9 +90,18 @@ export interface FanIncidentView {
   createdAt: string;
 }
 
+export interface FanClubEventView {
+  kind: string;
+  label: string;
+  detail: string | null;
+  severity: number;
+  gameDate: string;
+}
+
 export interface FanGroupsData {
   groups: FanGroupView[];
   recentIncidents: FanIncidentView[];
+  recentEvents: FanClubEventView[];
   securityLevel: number;
   securityLabel: string;
   gameDate: string;
@@ -352,6 +361,28 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
           </details>
         </div>
       ))}
+
+      {/* ═══ Proč je nálada taková, jaká je ═══ */}
+      {data.recentEvents.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Co klub v poslední době potkalo</SectionLabel>
+          <ul className="mt-2 space-y-2">
+            {data.recentEvents.map((u, i) => (
+              <li key={`${u.kind}-${u.gameDate}-${i}`} className="text-sm flex items-baseline gap-2">
+                <span className="text-muted shrink-0">{formatDatum(u.gameDate)}</span>
+                <span>
+                  <strong>{u.label}</strong>
+                  {u.detail && <span className="text-muted"> — {u.detail}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-sm text-muted">
+            Každá parta to bere jinak. Pamětníky urazí přejmenování klubu, kotel ne —
+            a naopak.
+          </p>
+        </div>
+      )}
 
       {/* ═══ Poslední bordel ═══ */}
       <div className="card p-4 sm:p-5">

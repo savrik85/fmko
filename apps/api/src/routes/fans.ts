@@ -11,6 +11,7 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { SECURITY_POPIS } from "../stadium/stadium-generator";
+import { CLUB_EVENTS, type ClubEventKind } from "../engine/fan-reactions";
 import {
   FAN_GROUPS, SECTOR_LABELS, fanLeaderArchetypeLabel, moodWord, heatWord,
   type FanGroupKind, type FanSector,
@@ -120,6 +121,19 @@ function incidentView(i: IncidentRow) {
   };
 }
 
+/** Detail události do výpisu — jméno hráče, částka, nový název. */
+function detailUdalosti(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const p = JSON.parse(raw) as Record<string, unknown>;
+    const v = p.co ?? p.jmeno ?? p.nazev;
+    return v == null ? null : String(v);
+  } catch (e) {
+    logger.warn({ module: M }, "nečitelný payload události", e);
+    return null;
+  }
+}
+
 async function teamGameDate(db: D1Database, teamId: string): Promise<string> {
   const row = await db.prepare("SELECT game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ game_date: string | null }>()
@@ -163,6 +177,12 @@ fansRouter.get("/teams/:teamId/fans/groups", async (c) => {
   ]);
 
   const kdy = await cooldownyKlubu(db, teamId);
+  const udalosti = await db
+    .prepare(
+      `SELECT kind, severity, payload, game_date FROM club_events
+       WHERE team_id = ? ORDER BY created_at DESC LIMIT 8`,
+    ).bind(teamId).all<{ kind: string; severity: number; payload: string | null; game_date: string }>()
+    .catch((e) => { logger.warn({ module: M }, "poslední dění klubu", e); return null; });
 
   return c.json({
     groups: groups.map((g) => ({
@@ -170,6 +190,13 @@ fansRouter.get("/teams/:teamId/fans/groups", async (c) => {
       options: nabidkaAkci(kdy, gameDate, g),
     })),
     recentIncidents: (incidents?.results ?? []).map(incidentView),
+    recentEvents: (udalosti?.results ?? []).map((u) => ({
+      kind: u.kind,
+      label: CLUB_EVENTS[u.kind as ClubEventKind]?.label ?? u.kind,
+      detail: detailUdalosti(u.payload),
+      severity: u.severity,
+      gameDate: u.game_date,
+    })),
     securityLevel: security?.security ?? 0,
     securityLabel: SECURITY_POPIS[Math.max(0, Math.min(3, security?.security ?? 0))],
     gameDate,

@@ -31,6 +31,8 @@ const MAX_INCIDENTU_ZA_ZAPAS = 2;
 
 export interface ResolveOpts {
   matchId: string;
+  /** Odkud se bere nárok a kam se zapisuje snapshot. Pohár má vlastní tabulku. */
+  table?: "matches" | "cup_matches";
   homeTeamId: string;
   awayTeamId: string;
   homeScore: number;
@@ -70,8 +72,11 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
   const prazdny: ResolveResult = { skipped: true, incidents: 0, totalFine: 0 };
 
   // ── Nárok na vyhodnocení ──
+  // Název tabulky je z uzavřené množiny, ne z uživatelského vstupu — do SQL
+  // se interpoluje bezpečně a dvě skoro stejné kopie funkce tím odpadají.
+  const tabulka = opts.table === "cup_matches" ? "cup_matches" : "matches";
   const claim = await db
-    .prepare("UPDATE matches SET fan_incidents = '[]' WHERE id = ? AND fan_incidents IS NULL")
+    .prepare(`UPDATE ${tabulka} SET fan_incidents = '[]' WHERE id = ? AND fan_incidents IS NULL`)
     .bind(opts.matchId)
     .run()
     .catch((e) => { logger.warn({ module: M }, `nárok na zápas ${opts.matchId}`, e); return null; });
@@ -183,7 +188,7 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
   }
 
   await db
-    .prepare("UPDATE matches SET fan_incidents = ? WHERE id = ?")
+    .prepare(`UPDATE ${tabulka} SET fan_incidents = ? WHERE id = ?`)
     .bind(JSON.stringify(snapshoty), opts.matchId)
     .run()
     .catch((e) => { logger.warn({ module: M }, `zápis snapshotu k zápasu ${opts.matchId}`, e); });

@@ -20,6 +20,8 @@ export interface UltrasPhoto {
 
 interface HomeMatch {
   homeTeamId: string;
+  /** Co se na tribunách semlelo — rubrika kotle to nesmí přejít mlčením. */
+  incidenty: string[];
   homeName: string;
   awayName: string;
   homeScore: number;
@@ -120,6 +122,10 @@ function fallbackArticle(gameWeek: number, homeMatches: HomeMatch[]): string {
   if (kotle.length > 0) {
     parts.push(`Bez plachty, zato s vlajkami řvali doma i ${kotle.map((m) => `**${m.homeName}**`).join(", ")}.`);
   }
+  const bordel = homeMatches.filter((m) => m.incidenty.length > 0);
+  if (bordel.length > 0) {
+    parts.push(`Ne všude ale zůstalo u fandění: ${bordel.map((m) => `**${m.homeName}** — ${m.incidenty[0]}`).join(" ")}`);
+  }
   return parts.join("\n");
 }
 
@@ -158,7 +164,8 @@ export async function generateUltrasReport(
               t1.name AS home_name, t2.name AS away_name,
               t1.primary_color AS home_primary, t1.secondary_color AS home_secondary,
               s.capacity, s.changing_rooms, s.showers, s.refreshments, s.stands, s.parking, s.fence, s.roof, s.ultras_stand, s.toilets, s.security,
-              s.ultras_text, s.ultras_banner_color, s.ultras_text_color
+              s.ultras_text, s.ultras_banner_color, s.ultras_text_color,
+              m.fan_incidents
        FROM matches m
        JOIN teams t1 ON m.home_team_id = t1.id
        JOIN teams t2 ON m.away_team_id = t2.id
@@ -176,8 +183,20 @@ export async function generateUltrasReport(
     const primary = (r.home_primary as string) ?? "#2D5F2D";
     const bannerColor = (r.ultras_banner_color as string | null) ?? primary;
     const textColor = (r.ultras_text_color as string | null) ?? (isLightHex(bannerColor) ? "#1a1a1a" : "#ffffff");
+    let incidenty: string[] = [];
+    try {
+      const raw = r.fan_incidents as string | null;
+      if (raw) {
+        incidenty = (JSON.parse(raw) as Array<{ text?: string }>)
+          .map((i) => i.text ?? "")
+          .filter(Boolean);
+      }
+    } catch (e) {
+      logger.warn({ module: "ultras-report" }, "nečitelné výtržnosti u zápasu", e);
+    }
     return {
       homeTeamId: r.home_team_id as string,
+      incidenty,
       homeName: r.home_name as string,
       awayName: r.away_name as string,
       homeScore: (r.home_score as number) ?? 0,
@@ -263,6 +282,10 @@ async function callUltrasModel(
   const facts = homeMatches
     .map((m) => `- ${m.homeName} (doma) vs ${m.awayName} ${m.homeScore}:${m.awayScore}: dorazilo ${m.attendance} diváků (${fullnessDesc(m.fillPct)}), ${kotelDesc(m.ultrasStand)}${m.ultrasText ? `, na plachtě „${m.ultrasText}"` : ""}${m.weather ? `, ${m.weather}` : ""}`)
     .join("\n");
+  const bordel = homeMatches.filter((m) => m.incidenty.length > 0);
+  const bordelNote = bordel.length
+    ? `NA TRIBUNÁCH SE STALO (zmiň to, jsi u toho byl): ${bordel.map((m) => `${m.homeName}: ${m.incidenty.join(" ")}`).join(" | ")}`
+    : "Tohle kolo se nikde nic nesemlelo — delegát nemá co zapsat.";
   const galleryNote = photos.length
     ? `Na fotkách budou kotle: ${photos.map((p) => `${p.teamName} (${p.caption})`).join("; ")}.`
     : "V tomto kole neměl doma pořádný kotel nikdo — zmiň to s nadhledem.";
@@ -276,7 +299,9 @@ async function callUltrasModel(
 Napiš článek (150–250 slov) hodnotící ATMOSFÉRU ${gameWeek}. kola. Páteří je žebříček:
 - kam přišlo NEJVÍC lidí a kam NEJMÍŇ,
 - kde bylo vyprodáno / plný dům a kde zely ochozy prázdnotou,
-- projdi VŠECHNY týmy, co měly kotel — žádný nevynech, i kdyby jen jednou větou.
+- projdi VŠECHNY týmy, co měly kotel — žádný nevynech, i kdyby jen jednou větou,
+- pokud se někde něco semlelo, napiš o tom — jsi fanoušek, ne mluvčí svazu, takže
+  bez moralizování, ale ani bez zamlčování.
 
 PLACHTY: nápisy na plachtách jsou fanouškovský folklor a kotelní recese — patří ke koloritu jako buben. Cituj je doslova tak, jak jsou, a ber je s humorem a nadsázkou. Neupravuj je, necenzuruj, nekomentuj vážně a nemoralizuj nad nimi — jsi fanoušek na kotli, ne rozhodčí. Když je nápis provokativní nebo ujetý, prostě to odlehči vtipem.
 
@@ -286,6 +311,8 @@ DATA (jen tato smíš použít):
 ${facts}
 
 ${bannerNote}
+
+${bordelNote}
 
 ${galleryNote}
 

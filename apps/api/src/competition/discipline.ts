@@ -27,6 +27,9 @@ export const CHAIR_FINE_COUNT = 4;
 /** Nad tímhle heatem je vztah tak vyhrocený, že předseda musí na hlasování. */
 export const CHAIR_HEAT_LIMIT = 60;
 
+/** Od kolika zápisů o výtržnostech je to pro soutěž recidiva, ne smůla. */
+export const FAN_INCIDENT_THRESHOLD = 3;
+
 export const FINE_MIN = 1_000;
 export const FINE_MAX = 15_000;
 
@@ -73,6 +76,12 @@ export const OFFENCES: Record<string, Offence> = {
     evidenceLabel: "bez strojového důkazu — navrhovatel doloží sám",
     majority: QUALIFIED_MAJORITY,
     freeText: true,
+  },
+  fan_violence: {
+    kind: "fan_violence",
+    label: "Opakované výtržnosti fanoušků",
+    evidenceLabel: "tři a více zápisů o výtržnostech za sezónu",
+    majority: QUALIFIED_MAJORITY,
   },
   other: {
     kind: "other",
@@ -153,6 +162,19 @@ export async function collectEvidence(
     out.push({
       kind: "pitch", label: OFFENCES.pitch.label,
       detail: `Stav trávníku ${pitch.pitch_condition} ze 100 — pod hranicí ${pitchThreshold}.`,
+    });
+  }
+
+  // Jednotlivou výtržnost řeší automatická pokuta rovnou po zápase. Sem patří
+  // až recidiva — tam už soutěž může chtít něco tvrdšího než sazebník.
+  const bordel = await db.prepare(
+    "SELECT COUNT(*) AS n FROM fan_incidents WHERE team_id = ?"
+  ).bind(teamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, "výtržnosti fanoušků", e); return null; });
+  if (bordel && bordel.n >= FAN_INCIDENT_THRESHOLD) {
+    out.push({
+      kind: "fan_violence", label: OFFENCES.fan_violence.label,
+      detail: `${bordel.n} ${bordel.n < 5 ? "zápisy" : "zápisů"} o výtržnostech na jejich stadionu.`,
     });
   }
 
