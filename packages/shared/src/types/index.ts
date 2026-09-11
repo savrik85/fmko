@@ -49,6 +49,7 @@ export {
   managerFansEffect,
 } from "./manager-fans";
 export { odesloLidi, zavrenoNaZapasy, pripadu } from "./fan-groups";
+export { rozdelTitulekOznameni, NOTIFIKACE_IKONY } from "./notifications";
 export type {
   PlanTactic,
   PlanHardness,

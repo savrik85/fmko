@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
+import { rozdelTitulekOznameni } from "@okresni-masina/shared";
 
 export interface NotifikaceItem {
   id: string;
@@ -25,17 +26,6 @@ export interface NotifikaceItem {
   actionUrl: string | null;
   createdAt: string;
 }
-
-/** Ikona podle druhu — hráč pozná téma dřív, než přečte titulek. */
-const IKONY: Record<string, string> = {
-  match_reminder: "\u{23F0}",
-  match_result: "\u{26BD}",
-  event: "\u{1F389}",
-  challenge: "\u{1F91C}",
-  transfer: "\u{1F91D}",
-  season: "\u{1F3C6}",
-  system: "\u{2699}",
-};
 
 function pred(iso: string): string {
   const d = new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z");
@@ -137,6 +127,7 @@ export function Oznameni({ teamId, onZavrit, onZmena }: {
 }
 
 function Karta({ n, onClick, tlumene }: { n: NotifikaceItem; onClick: () => void; tlumene?: boolean }) {
+  const { ikona, text } = rozdelTitulekOznameni(n.title, n.type);
   return (
     <button
       onClick={onClick}
@@ -145,11 +136,11 @@ function Karta({ n, onClick, tlumene }: { n: NotifikaceItem; onClick: () => void
       }`}
     >
       <div className="w-8 h-8 rounded-lg bg-pitch-50 flex items-center justify-center text-base shrink-0">
-        {IKONY[n.type] ?? "\u{1F4E3}"}
+        {ikona}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-sm font-heading font-bold truncate">{n.title}</span>
+          <span className="text-sm font-heading font-bold truncate">{text}</span>
           <span className="text-xs text-muted shrink-0">{pred(n.createdAt)}</span>
         </div>
         <p className="text-xs text-ink-light leading-snug mt-0.5">{n.body}</p>
