@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
+import { Adresar } from "./Adresar";
 
 interface Conversation {
   id: string;
@@ -28,15 +29,6 @@ const GROUP_AVATAR_EMOJI: Record<string, string> = {
   global_group: "\u{1F310}",
   league_group: "\u{1F3C6}",
 };
-
-/** Endpoint kádru vrací řádky z DB, takže sloupce jsou snake_case. */
-interface SquadPlayer {
-  id: string;
-  first_name: string;
-  last_name: string;
-  position: string;
-  avatar: Record<string, unknown> | null;
-}
 
 interface Credit {
   /** Zbývající kredit v korunách. */
@@ -83,9 +75,7 @@ export default function PhonePage() {
   const { teamId } = useTeam();
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [vyberOtevren, setVyberOtevren] = useState(false);
-  const [kadr, setKadr] = useState<SquadPlayer[] | null>(null);
-  const [zaklada, setZaklada] = useState<string | null>(null);
+  const [adresarOtevren, setAdresarOtevren] = useState(false);
   const [credit, setCredit] = useState<Credit | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -98,36 +88,6 @@ export default function PhonePage() {
       .then(setCredit)
       .catch((e) => console.error("načtení kreditu:", e));
   }, [teamId]);
-
-  /**
-   * Otevře konverzaci s hráčem. Endpoint ji najde nebo založí, takže druhé
-   * kliknutí na stejného hráče nevytvoří duplicitní vlákno.
-   */
-  const napsatHraci = async (p: SquadPlayer) => {
-    if (!teamId || zaklada) return;
-    setZaklada(p.id);
-    try {
-      const res = await apiFetch<{ conversationId: string }>(
-        `/api/teams/${teamId}/player-conversation/${p.id}`, { method: "POST" },
-      );
-      router.push(`/dashboard/phone/${encodeURIComponent(res.conversationId)}`);
-    } catch (e) {
-      console.error("založení konverzace s hráčem:", e);
-      setZaklada(null);
-    }
-  };
-
-  const otevritVyber = async () => {
-    setVyberOtevren(true);
-    if (kadr || !teamId) return;
-    try {
-      const data = await apiFetch<SquadPlayer[]>(`/api/teams/${teamId}/players`);
-      setKadr(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error("načtení kádru pro telefon:", e);
-      setKadr([]);
-    }
-  };
 
   return (
     <PhoneFrame>
@@ -210,44 +170,18 @@ export default function PhonePage() {
         )}
       </div>
 
-      {vyberOtevren && (
-        <div className="fixed inset-0 sm:absolute z-30 bg-white flex flex-col">
-          <div className="bg-pitch-600 text-white px-4 py-2.5 flex items-center justify-between">
-            <span className="font-heading font-bold text-sm">Komu napsat</span>
-            <button className="text-sm text-white/80" onClick={() => setVyberOtevren(false)}>Zavřít</button>
-          </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
-            {kadr === null ? (
-              <div className="flex items-center justify-center h-40"><Spinner /></div>
-            ) : kadr.length === 0 ? (
-              <p className="p-6 text-center text-sm text-muted">Kádr se nepodařilo načíst.</p>
-            ) : kadr.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => napsatHraci(p)}
-                disabled={zaklada !== null}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 disabled:opacity-50"
-              >
-                <div className="shrink-0">
-                  {p.avatar && Object.keys(p.avatar).length > 2 ? (
-                    <FaceAvatar faceConfig={p.avatar} size={36} className="rounded-full" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-heading font-bold text-xs">
-                      {(p.first_name?.[0] ?? "") + (p.last_name?.[0] ?? "")}
-                    </div>
-                  )}
-                </div>
-                <span className="text-sm font-medium">{p.first_name} {p.last_name}</span>
-                <span className="text-xs text-muted ml-auto">{p.position}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      {adresarOtevren && teamId && (
+        <Adresar
+          teamId={teamId}
+          onZavrit={() => setAdresarOtevren(false)}
+          onOtevrit={(id) => router.push(`/dashboard/phone/${encodeURIComponent(id)}`)}
+        />
       )}
 
-      {credit && (
-        <div className="bg-white border-t border-gray-100 px-4 py-2">
-          <p className="text-xs text-muted leading-snug">
+      {/* Adresář je vždycky po ruce — i kdyby se stav kreditu nenačetl. */}
+      <div className="bg-white border-t border-gray-100 px-4 py-2">
+        {credit && (
+          <p className="text-xs text-muted leading-snug mb-2">
             {credit.zbyva >= credit.cenaSms ? (
               <>Na kartě máš <strong className="text-ink">{credit.zbyva} Kč</strong> — to je{" "}
                 {credit.zprav === 1 ? "jedna SMS" : `${credit.zprav} SMS`}.{" "}
@@ -259,14 +193,14 @@ export default function PhonePage() {
                 <span className="text-blue-600 font-medium">iMessage</span> píšeš dál zdarma.</>
             )}
           </p>
-          <button
-            onClick={otevritVyber}
-            className="mt-2 w-full rounded-full bg-pitch-500 text-white py-2 text-sm font-heading font-bold"
-          >
-            Napsat hráči
-          </button>
-        </div>
-      )}
+        )}
+        <button
+          onClick={() => setAdresarOtevren(true)}
+          className="w-full rounded-full bg-pitch-500 text-white py-2 text-sm font-heading font-bold"
+        >
+          Adresář
+        </button>
+      </div>
     </PhoneFrame>
   );
 }

@@ -425,6 +425,85 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 });
 
 // GET /api/teams/:teamId/unread-count — celkový počet nepřečtených
+/**
+ * Adresář telefonu — kdo všechno se dá oslovit, v jedné odpovědi.
+ *
+ * Skládat to na frontendu by znamenalo čtyři requesty (skupinové chaty, kádr,
+ * soupeři v lize, vlastní konverzace) a čtyři příležitosti, jak se rozejít
+ * s tím, co server považuje za zapisovatelné. Kanál i cena chodí rovnou s ním.
+ */
+messagingRouter.get("/teams/:teamId/contacts", async (c) => {
+  const teamId = c.req.param("teamId");
+  const db = c.env.DB;
+
+  const [kabina, skupiny, hraci, tym] = await Promise.all([
+    db.prepare(
+      `SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group'
+       ORDER BY last_message_at DESC LIMIT 1`,
+    ).bind(teamId).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: "messaging" }, "kabina do adresáře", e); return null; }),
+    (async () => {
+      const { listGroupChatsForTeam } = await import("./group-chats");
+      return listGroupChatsForTeam(db, teamId)
+        .catch((e) => { logger.warn({ module: "messaging" }, "skupiny do adresáře", e); return []; });
+    })(),
+    db.prepare(
+      `SELECT id, first_name, last_name, nickname, position, avatar FROM players
+       WHERE team_id = ? AND (status IS NULL OR status = 'active')
+       ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 ELSE 3 END, last_name`,
+    ).bind(teamId).all<{
+      id: string; first_name: string; last_name: string; nickname: string | null;
+      position: string; avatar: string | null;
+    }>().catch((e) => { logger.warn({ module: "messaging" }, "kádr do adresáře", e); return { results: [] }; }),
+    db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId)
+      .first<{ league_id: string | null }>()
+      .catch((e) => { logger.warn({ module: "messaging" }, "liga týmu", e); return null; }),
+  ]);
+
+  // Soupeři v lize i s trenéry. Bez trenéra je to jen klub, ale psát se dá pořád.
+  const soupeři = tym?.league_id
+    ? await db.prepare(
+      `SELECT t.id, t.name AS team_name, m.name AS manager_name, m.avatar AS manager_avatar
+       FROM teams t LEFT JOIN managers m ON m.team_id = t.id
+       WHERE t.league_id = ? AND t.id != ? ORDER BY t.name`,
+    ).bind(tym.league_id, teamId).all<{
+      id: string; team_name: string; manager_name: string | null; manager_avatar: string | null;
+    }>().catch((e) => { logger.warn({ module: "messaging" }, "soupeři do adresáře", e); return { results: [] } })
+    : { results: [] };
+
+  return c.json({
+    skupiny: [
+      ...(kabina ? [{ id: kabina.id, title: "Kabina", podtitul: "Celý tým", channel: "sms" as const }] : []),
+      ...skupiny.map((g) => ({
+        id: g.id,
+        title: g.title,
+        podtitul: g.type === "league_group" ? "Trenéři v lize" : "Všichni trenéři",
+        channel: "imessage" as const,
+      })),
+    ],
+    hraci: hraci.results.map((p) => ({
+      playerId: p.id,
+      name: p.nickname ? `${p.first_name} „${p.nickname}" ${p.last_name}` : `${p.first_name} ${p.last_name}`,
+      position: p.position,
+      avatar: safeAvatar(p.avatar),
+    })),
+    manazeri: soupeři.results.map((t) => ({
+      teamId: t.id,
+      name: t.manager_name ?? t.team_name,
+      teamName: t.team_name,
+      avatar: safeAvatar(t.manager_avatar),
+    })),
+  });
+});
+
+function safeAvatar(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as Record<string, unknown>; } catch (e) {
+    logger.warn({ module: "messaging" }, "nečitelný avatar v adresáři", e);
+    return null;
+  }
+}
+
 // GET /api/teams/:teamId/phone-credit — kolik odpovědí dnes ještě zbývá
 messagingRouter.get("/teams/:teamId/phone-credit", async (c) => {
   const { loadCredit, creditWord } = await import("../messaging/phone-credit");
