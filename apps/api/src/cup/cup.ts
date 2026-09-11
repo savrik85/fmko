@@ -1031,6 +1031,29 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
       .catch((e) => logger.warn({ module: M }, "eliminate", e));
     winners.push({ pos: m.bracket_pos, teamId: winnerId });
 
+    // Pohár fanoušky zajímá víc než tabulka — vyřazení i postup jde do nálady part.
+    {
+      const { recordClubEvent } = await import("../fans/club-events");
+      const porazeny = realTeamOf.get(loserId);
+      const vitez = realTeamOf.get(winnerId);
+      // Čím dál se klub dostal, tím větší je vyřazení rána a postup svátek.
+      const sila = Math.min(1, 0.4 + round * 0.15);
+      if (porazeny) {
+        await recordClubEvent(db, {
+          teamId: porazeny, kind: "vyrazeni_z_poharu", severity: sila,
+          payload: { co: `${round}. kolo poháru` },
+          referenceId: `fan-cup-out-${cupId}-r${round}-${loserId}`,
+        });
+      }
+      if (vitez) {
+        await recordClubEvent(db, {
+          teamId: vitez, kind: "postup_v_poharu", severity: sila,
+          payload: { co: `${round}. kolo poháru` },
+          referenceId: `fan-cup-in-${cupId}-r${round}-${winnerId}`,
+        });
+      }
+    }
+
     // Odměna reálnému vítězi (velkokluby nemají rozpočet). Idempotence přes reference_id —
     // když zápas zůstane 'scheduled' (status-flip selhal) a kolo se přepočítá, odměna/reputace
     // se NEpřipíšou podruhé.

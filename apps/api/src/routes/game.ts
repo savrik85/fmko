@@ -1825,6 +1825,16 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     `UPDATE stadiums SET ${body.facility} = ? WHERE team_id = ?`
   ).bind(upgrade.nextLevel, teamId).run();
 
+  // Kotel si všimne, když dostane lepší sektor. Ostatní vybavení ho nezajímá.
+  if (body.facility === "ultras_stand") {
+    const { recordClubEvent } = await import("../fans/club-events");
+    await recordClubEvent(c.env.DB, {
+      teamId, kind: "vylepseni_kotle", severity: Math.min(1, 0.5 + upgrade.nextLevel * 0.2),
+      payload: { co: upgrade.effect },
+      referenceId: `fan-ultras-${teamId}-l${upgrade.nextLevel}`,
+    });
+  }
+
   // Kapacita se do sloupce capacity NEZAPISUJE — sloupec drží základ stadionu a bonus
   // tribun se přičítá při čtení (match-runner, cup, GET /stadium) z úrovně stands.
   // Dřívější `capacity += [50,150,300][level]` počítal bonus dvakrát (a kumulativně
@@ -2486,6 +2496,13 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
         c.env.DB, teamId, -3, "sponsor", "Přejmenování klubu podle sponzora",
         { referenceId: `sponsor-rename-${teamId}-s${mustSeason(season?.number)}` },
       );
+      // Pamětníci to nesou nejhůř — jméno klubu neslo tři generace.
+      const { recordClubEvent } = await import("../fans/club-events");
+      await recordClubEvent(c.env.DB, {
+        teamId, kind: "prejmenovani_klubu", severity: 1,
+        payload: { co: `Teď jsme ${newName}` },
+        referenceId: `fan-rename-${teamId}-s${mustSeason(season?.number)}`,
+      });
     }
 
     // Přejmenování promítnout i do poháru a do U21 týmu klubu (jinak drží starý název).
@@ -6877,6 +6894,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       playerPosition: player?.position as string, teamName: seller?.name ?? "",
       fromTeamName: seller?.name, toTeamName: buyer.name, fee: amount,
       swapPlayerName: swapPlayerName ?? undefined,
+      playerRating: player?.overall_rating as number | undefined,
+      sellerTeamId, buyerTeamId,
     }).catch((e) => logger.warn({ module: "game" }, "create offer accepted news", e));
   }
 
@@ -9056,9 +9075,27 @@ gameRouter.patch("/teams/:teamId/fans/ticket-price", async (c) => {
   const { ensureFansRow } = await import("../season/fans-processor");
   await ensureFansRow(c.env.DB, teamId);
 
+  // Starou cenu je potřeba znát dřív, než ji přepíšeme — bez ní by fanoušci
+  // nepoznali, jestli jsi zdražil nebo zlevnil.
+  const stara = (await c.env.DB.prepare("SELECT base_ticket_price FROM fans WHERE team_id = ?")
+    .bind(teamId).first<{ base_ticket_price: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "stará cena vstupného", e); return null; }))?.base_ticket_price ?? 0;
+
   await c.env.DB.prepare(
     "UPDATE fans SET base_ticket_price = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ?",
   ).bind(price, teamId).run().catch((e) => logger.warn({ module: "game" }, "update ticket price", e));
+
+  if (stara > 0 && price !== stara) {
+    const { recordClubEvent } = await import("../fans/club-events");
+    const { silaZmenyCeny } = await import("../engine/fan-reactions");
+    const rozdil = price > stara ? "Zdraženo" : "Zlevněno";
+    await recordClubEvent(c.env.DB, {
+      teamId,
+      kind: price > stara ? "zdrazeni_vstupneho" : "zlevneni_vstupneho",
+      severity: silaZmenyCeny(stara, price),
+      payload: { co: `${rozdil} z ${stara} na ${price} Kč` },
+    });
+  }
 
   return c.json({ ok: true, baseTicketPrice: price });
 });

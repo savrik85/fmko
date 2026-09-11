@@ -125,6 +125,14 @@ export async function applyStreakReputation(
         await applyReputationDelta(db, teamId, 2, "streak_win", `Série ${milestone} výher v řadě`, {
           referenceId: `rep-streak-w${milestone}-${teamId}-s${seasonNumber}`, gameDate,
         });
+        const { recordClubEvent } = await import("../fans/club-events");
+        await recordClubEvent(db, {
+          teamId, kind: "serie_vyher",
+          // Delší série je větší svátek: tři výhry potěší, šest rozjede kotel.
+          severity: Math.min(1, 0.4 + milestone * 0.1),
+          payload: { co: `${milestone} výher v řadě` }, gameDate,
+          referenceId: `fan-streak-w${milestone}-${teamId}-s${seasonNumber}`,
+        });
       }
     }
   }
@@ -132,6 +140,12 @@ export async function applyStreakReputation(
   if (lossStreak >= 5) {
     await applyReputationDelta(db, teamId, -2, "streak_loss", "Série pěti proher v řadě", {
       referenceId: `rep-streak-l5-${teamId}-s${seasonNumber}`, gameDate,
+    });
+    const { recordClubEvent } = await import("../fans/club-events");
+    await recordClubEvent(db, {
+      teamId, kind: "serie_proher", severity: 1,
+      payload: { co: `${lossStreak} proher v řadě` }, gameDate,
+      referenceId: `fan-streak-l5-${teamId}-s${seasonNumber}`,
     });
   }
 }

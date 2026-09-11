@@ -613,6 +613,21 @@ export async function applyPostMatchInterviewEffects(
       .catch((e) => logger.warn({ module: M }, "fanoušci", e));
   }
 
+  // Party to berou opačně než počet příležitostných diváků: kotel má radost, že
+  // ses postavil sudímu, pamětníci se za to stydí. Proto vlastní událost, ne jen
+  // úprava `team_fanbase`.
+  if (stance.postoj !== "neutral") {
+    const { recordClubEvent } = await import("../fans/club-events");
+    await recordClubEvent(db, {
+      teamId: interview.team_id,
+      kind: stance.postoj === "kritika" ? "rozhovor_kritika" : "rozhovor_obhajoba",
+      // `sila` je 0–3; nejmírnější náznak nemá hýbat celým stadionem.
+      severity: Math.min(1, 0.35 + stance.sila * 0.22),
+      payload: { co: ctx.refereeName ?? "rozhodčí" },
+      referenceId: `fan-itw-${interview.id}`,
+    });
+  }
+
   if (eff.reputation !== 0) {
     const { applyReputationDelta } = await import("../lib/reputation");
     await applyReputationDelta(

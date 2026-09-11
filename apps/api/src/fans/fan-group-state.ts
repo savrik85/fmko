@@ -104,6 +104,14 @@ export async function syncFanGroups(
     casual: agg.casual,
   };
 
+  // Nejdřív dění kolem klubu, teprve pak drift k cíli — jinak by se reakce
+  // na prodej opory hned ve stejném ticku zase rozpustila.
+  if (opts.drift) {
+    const { zpracujUdalostiKlubu } = await import("./fan-reactions");
+    await zpracujUdalostiKlubu(db, teamId, groups)
+      .catch((e) => { logger.warn({ module: M }, `reakce na dění u ${teamId}`, e); });
+  }
+
   const fans = await db
     .prepare("SELECT satisfaction FROM fans WHERE team_id = ?")
     .bind(teamId)
@@ -114,7 +122,13 @@ export async function syncFanGroups(
   const stmts: D1PreparedStatement[] = [];
   const out: FanGroupRow[] = [];
 
-  for (const g of groups) {
+  const cerstve = opts.drift
+    ? (await db.prepare("SELECT * FROM fan_groups WHERE team_id = ? ORDER BY kind")
+        .bind(teamId).all<FanGroupRow>()
+        .catch((e) => { logger.warn({ module: M }, "party po reakcích", e); return null; }))?.results ?? groups
+    : groups;
+
+  for (const g of cerstve) {
     const def = FAN_GROUPS[g.kind as FanGroupKind];
     if (!def) {
       logger.warn({ module: M }, `neznámý druh party ${g.kind} u týmu ${teamId}`);

@@ -263,6 +263,14 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     }
   }
 
+  // Vůdce fanouškovské party čeká na odpověď. Používá stejné sloupce jako AI
+  // thready hráčů, jen s vlastním `kind` — a vyhodnocuje se bez modelu.
+  if (conv?.type === "system" && conv.ai_thread_active === 1) {
+    const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
+    await handleFanLeaderReply(c.env.DB, convId, body.body.trim())
+      .catch((e) => logger.warn({ module: "messaging" }, "odpověď vůdci fanoušků", e));
+  }
+
   if (conv?.type === "manager" && conv.participant_id) {
     const otherTeamId = conv.participant_id;
 

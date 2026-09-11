@@ -5,6 +5,8 @@
 import { logger } from "../lib/logger";
 import type { Rng } from "../generators/rng";
 import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
+import { silaPodleHrace, type ClubEventKind } from "../engine/fan-reactions";
+import { recordClubEvent } from "../fans/club-events";
 
 const HUMOR_POOL: DistrictPool<string> = {
   core: [
@@ -88,6 +90,12 @@ export async function createTransferNews(
     swapPlayerName?: string;
     reason?: string;
     isCrossDistrict?: boolean;
+    /** Síla hráče — rozhoduje, jestli je jeho odchod pro fanoušky rána, nebo nic. */
+    playerRating?: number;
+    isCaptain?: boolean;
+    /** ID klubů kvůli reakci fanoušků. Jména v `fromTeamName` na to nestačí — kluby se přejmenovávají. */
+    sellerTeamId?: string | null;
+    buyerTeamId?: string | null;
   },
   rng?: { pick: <T>(arr: T[]) => T },
 ): Promise<void> {
@@ -170,4 +178,76 @@ export async function createTransferNews(
   await db.prepare(
     "INSERT INTO news (id, league_id, team_id, type, headline, body, created_at) VALUES (?, ?, ?, 'transfer', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
   ).bind(id, leagueId, teamId, headline, body).run().catch((e) => logger.warn({ module: "transfer-news" }, "insert news", e));
+
+  // Fanoušci se to dozvědí tudy. Zavěšeno tady, protože `createTransferNews` je
+  // jediné místo, kterým protéká všech jedenáct přestupových cest — háček v každé
+  // z nich by byl jedenáct příležitostí, jak na jednu zapomenout.
+  for (const r of reakceNaPrestup(type, data, teamId)) {
+    await recordClubEvent(db, {
+      teamId: r.teamId,
+      kind: r.kind,
+      severity: r.severity,
+      payload: { co: data.playerName },
+      referenceId: `tr-${id}-${r.teamId}`,
+    });
+  }
+}
+
+interface PrestupovaReakce { teamId: string; kind: ClubEventKind; severity: number }
+
+/**
+ * Kdo z přestupu co má a jak moc to cítí.
+ *
+ * Reagují OBĚ strany: prodávajícímu odchází hráč, kupujícímu přichází posila.
+ * Bez ID klubu se reakce přeskočí — dohledávat klub podle jména by se rozbilo
+ * při prvním přejmenování po sponzorovi.
+ */
+function reakceNaPrestup(
+  type: string,
+  data: {
+    playerName: string; playerAge: number; fee?: number;
+    playerRating?: number; isCaptain?: boolean;
+    sellerTeamId?: string | null; buyerTeamId?: string | null;
+  },
+  teamId: string | null,
+): PrestupovaReakce[] {
+  // Bez ratingu se síla odhadne z ceny: v okrese je stotisícový přestup událost.
+  const sila = data.playerRating != null
+    ? silaPodleHrace(data.playerRating, data.isCaptain)
+    : Math.max(0.2, Math.min(1, (data.fee ?? 0) / 120_000));
+
+  const prodavajici = data.sellerTeamId ?? teamId;
+  const kupujici = data.buyerTeamId ?? null;
+  const out: PrestupovaReakce[] = [];
+
+  switch (type) {
+    case "player_sold":
+    case "transfer_completed":
+      if (prodavajici) out.push({ teamId: prodavajici, kind: sila >= 0.6 ? "prodej_opory" : "prodej_hrace", severity: sila });
+      if (kupujici && sila >= 0.45) out.push({ teamId: kupujici, kind: "posila", severity: sila });
+      break;
+    case "player_signed":
+      if (kupujici ?? teamId) {
+        if (sila >= 0.45) out.push({ teamId: (kupujici ?? teamId)!, kind: "posila", severity: sila });
+      }
+      break;
+    case "player_released":
+    case "player_quit":
+      // Vyhodit veterána bolí víc než uvolnit dorostence, co nechodil na trénink.
+      if (prodavajici) {
+        out.push({
+          teamId: prodavajici,
+          kind: data.playerAge >= 33 ? "odchod_legendy" : "propusteni",
+          severity: Math.max(0.3, sila),
+        });
+      }
+      break;
+    case "loan_completed":
+      if (prodavajici) out.push({ teamId: prodavajici, kind: "hostovani_pryc", severity: Math.max(0.25, sila * 0.7) });
+      break;
+    case "loan_return":
+      if (prodavajici) out.push({ teamId: prodavajici, kind: "navrat_z_hostovani", severity: 0.4 });
+      break;
+  }
+  return out;
 }
