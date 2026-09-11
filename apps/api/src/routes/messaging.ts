@@ -99,6 +99,25 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
 });
 
 // GET /api/teams/:teamId/conversations/:convId — zprávy v konverzaci
+/**
+ * Dá se do téhle konverzace psát, a co to stojí?
+ *
+ * `sms` = odpovídá model a strhává se kredit (hráči, kabina).
+ * `imessage` = odpovídá člověk nebo deterministická logika, tedy zdarma
+ * (druhý trenér, vůdce kotle s otevřeným vláknem).
+ * `canReply: false` = jednosměrné oznámení, vstupní pole nemá co dělat.
+ */
+function odpovidatLze(
+  type: string,
+  threadActive: boolean,
+): { canReply: boolean; channel: "sms" | "imessage" | null } {
+  if (type === "player" || type === "squad_group") return { canReply: true, channel: "sms" };
+  if (type === "manager") return { canReply: true, channel: "imessage" };
+  // Vůdce fanoušků čeká na odpověď jen dokud vlákno běží; pak už se nemá kdo ozvat.
+  if (type === "system" && threadActive) return { canReply: true, channel: "imessage" };
+  return { canReply: false, channel: null };
+}
+
 messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   const teamId = c.req.param("teamId");
   const convId = c.req.param("convId");
@@ -197,6 +216,10 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
         }
       })(),
     },
+    // Kdo na druhé straně vůbec odpoví — rozhoduje server, ne frontend.
+    // Většina systémových konverzací je jednosměrné oznámení (svaz, pořadatel,
+    // sportovní ředitel); psát do nich by znamenalo mluvit do zdi.
+    ...odpovidatLze(convOwner.type, convOwner.ai_thread_active === 1),
     aiThreadActive: convOwner.ai_thread_active === 1,
     aiThreadState: parseAiThreadState(convOwner.ai_thread_state),
     participantId: convOwner.participant_id,
@@ -246,10 +269,13 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   ).bind(convId).first<{ type: string; participant_id: string | null; ai_thread_active: number }>()
     .catch((e) => { logger.warn({ module: "messaging" }, "fetch conversation type", e); return null; });
 
-  // Co stojí kredit: všechno, na co odpovídá model. Vůdce fanoušků odpovídá
-  // deterministicky a druhému trenérovi píše člověk — obojí je zdarma.
-  const platiSeKredit = conv?.type === "squad_group"
-    || (conv?.type === "player" && !!conv.participant_id);
+  // Stejné pravidlo jako u čtení — kdyby platilo jen na frontendu, obešel by
+  // ho kdokoli přímým voláním API a psal by do zdi.
+  const pravidlo = odpovidatLze(conv?.type ?? "", conv?.ai_thread_active === 1);
+  if (!pravidlo.canReply) {
+    return c.json({ error: "Do téhle konverzace se odpovídat nedá — je to jen oznámení." }, 400);
+  }
+  const platiSeKredit = pravidlo.channel === "sms";
 
   const { loadCredit, spendCredit } = await import("../messaging/phone-credit");
   if (platiSeKredit) {

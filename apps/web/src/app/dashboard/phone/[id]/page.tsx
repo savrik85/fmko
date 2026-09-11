@@ -53,6 +53,10 @@ interface ConvDetailResponse {
   messages: Message[];
   /** Hlavička konverzace — chodí s detailem, ne ze seznamu. */
   conversation?: ConvInfo;
+  /** Má se na druhé straně kdo ozvat? Rozhoduje server. */
+  canReply?: boolean;
+  /** `sms` stojí kredit, `imessage` je zdarma, `null` = jednosměrné oznámení. */
+  channel?: "sms" | "imessage" | null;
   aiThreadActive: boolean;
   aiThreadState: AiThreadState | null;
   participantId?: string | null;
@@ -121,6 +125,9 @@ export default function ConversationPage() {
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
   const [credit, setCredit] = useState<{ zbyva: number; cenaSms: number; zprav: number } | null>(null);
+  // Skupinové chaty vlastní detail endpoint nemají — tam se píše vždycky.
+  const [canReply, setCanReply] = useState(true);
+  const [channel, setChannel] = useState<"sms" | "imessage" | null>("imessage");
   const [creditError, setCreditError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -153,6 +160,8 @@ export default function ConversationPage() {
         // Přednost má hlavička z detailu — seznam může být o krok pozadu
         // a čerstvě založená konverzace v něm ještě není.
         if (res.conversation) setConv(res.conversation);
+        setCanReply(res.canReply !== false);
+        setChannel(res.channel ?? null);
         return {
           msgs: res.messages,
           ai: { active: res.aiThreadActive, state: res.aiThreadState },
@@ -211,8 +220,8 @@ export default function ConversationPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Kredit se ukazuje jen tam, kde odpovídá model. Vedení soutěže ani kotel nic nestojí.
-  const platiSeKredit = !isGroup && (conv?.type === "player" || conv?.type === "squad_group");
+  // O kanálu i o tom, jestli se dá psát, rozhoduje server.
+  const platiSeKredit = !isGroup && channel === "sms";
   // Psaní blokuje jedině to, že hráč zrovna odpovídá. Uzavřené vlákno ne —
   // trenér mu smí napsat znovu a začít nové.
   const cekaSeNaHrace = aiThreadActive && aiThreadState?.awaiting === "player";
@@ -224,8 +233,9 @@ export default function ConversationPage() {
    * a druhý trenér = iMessage. Barva bubliny to řekne bez čtení: modrá
    * data, zelená SMS — přesně jak to lidi znají z telefonu.
    */
-  const jeImessage = !platiSeKredit;
+  const jeImessage = isGroup || channel === "imessage";
   const mojeBublina = jeImessage ? "bg-blue-500 text-white" : "bg-pitch-500 text-white";
+  const lzePsat = isGroup || canReply;
 
   useEffect(() => {
     if (!teamId) return;
@@ -501,7 +511,18 @@ export default function ConversationPage() {
         </div>
       )}
 
-      {/* Input */}
+      {/* Do jednosměrného oznámení se nepíše — vstupní pole by slibovalo odpověď,
+          která nikdy nepřijde. Místo něj se rovnou řekne proč. */}
+      {!lzePsat ? (
+        <div className="bg-white border-t border-gray-100 px-3 py-3 shrink-0 text-center">
+          <p className="text-xs text-muted leading-snug">
+            {conv?.title ? `${conv.title} posílá jen oznámení` : "Jednosměrné oznámení"} — odpovídat nejde.
+          </p>
+          {credit && (
+            <p className="text-xs text-muted mt-1">Kredit {credit.zbyva} Kč</p>
+          )}
+        </div>
+      ) : (
       <div className="bg-white border-t border-gray-100 px-3 py-2 shrink-0">
         {creditError && (
           <p className="text-xs text-card-red mb-1.5 px-1">{creditError}</p>
@@ -549,6 +570,7 @@ export default function ConversationPage() {
           </button>
         </div>
       </div>
+      )}
     </PhoneFrame>
   );
 }
