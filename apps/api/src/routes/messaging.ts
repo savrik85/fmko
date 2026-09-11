@@ -456,7 +456,14 @@ messagingRouter.get("/teams/:teamId/notifications", async (c) => {
     createdAt: r.created_at,
   }));
 
-  return c.json({ items, unread: items.filter((i) => !i.read).length });
+  // Počet se musí spočítat mimo stránku — odznak v hlavičce se tahá
+  // s `limit=1` a z vrácené stránky by z něj vyšla vždycky jednička.
+  const pocet = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM notifications WHERE team_id = ? AND read = 0",
+  ).bind(teamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: "messaging" }, "počet nepřečtených oznámení", e); return null; });
+
+  return c.json({ items, unread: pocet?.n ?? items.filter((i) => !i.read).length });
 });
 
 /** Odbaví jedno oznámení, nebo všechna, když `id` nepřijde. */
