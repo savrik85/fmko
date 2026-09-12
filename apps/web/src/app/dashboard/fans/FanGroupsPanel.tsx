@@ -14,6 +14,7 @@ import { apiFetch, showError } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { odesloLidi, zavrenoNaZapasy, pripadu } from "@okresni-masina/shared";
 import { sentimentWord } from "@/lib/fan-info";
+import { ChoralyPanel, type ChantView } from "./ChoralyPanel";
 
 export interface FanLeaderView {
   id: string;
@@ -102,6 +103,7 @@ export interface FanGroupsData {
   groups: FanGroupView[];
   recentIncidents: FanIncidentView[];
   recentEvents: FanClubEventView[];
+  chants: ChantView[];
   securityLevel: number;
   securityLabel: string;
   gameDate: string;
@@ -295,6 +297,9 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
           </p>
         </div>
       </details>
+
+      {/* ═══ Chorály ═══ */}
+      <ChoralyPanel chants={data.chants ?? []} teamId={teamId} onChanged={onChanged} />
 
       {/* ═══ Bezpečnost na stadionu ═══ */}
       <div className="card p-4 sm:p-5">

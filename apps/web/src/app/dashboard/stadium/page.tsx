@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
+import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 import { moistureLabel, moistureHint } from "@/lib/pitch-moisture";
 
 /** Počasí nad areálem — popisek do hlavičky karty. */
@@ -637,6 +638,7 @@ export default function StadiumPage() {
                 {"⚽ Dnes se hraje doma"}{stadium.matchDayOpponent ? ` proti ${stadium.matchDayOpponent}` : ""}{", areál je proto v zápasovém režimu."}
               </div>
             )}
+            {teamId && <KotelPrehravac teamId={teamId} zapasovyDen={!!stadium.matchDay} />}
             <div className="flex items-start justify-center gap-1.5 text-sm text-muted text-center">
               <span>💡</span>
               <span>Pro přepínání <strong>režimu areálu</strong> (Zápasový vs. Tréninkový den), <strong>počasí</strong> a <strong>kamer</strong> klikněte v rohu scény na <strong>🎛️ Počasí & Kamery</strong>.</span>

@@ -940,6 +940,25 @@ function zakladApi(c: { env: Bindings; req: { url: string } }): string {
 }
 
 /**
+ * Jen chorály, bez zbytku fanouškovské agendy.
+ *
+ * Stránka stadionu potřebuje v zápasovém režimu pustit kotel a tahat kvůli
+ * tomu celý `/fans/groups` (party, vůdci, incidenty, škody) by bylo zbytečné.
+ */
+fansRouter.get("/teams/:teamId/fans/chants", async (c) => {
+  const teamId = c.req.param("teamId");
+  const choraly = await nactiChoraly(c.env.DB, teamId);
+  return c.json({
+    chants: choraly.map((ch) => ({
+      id: ch.id, kind: ch.kind, text: ch.text, sila: ch.sila, silaWord: ch.silaWord,
+      audio: ch.audio_a
+        ? { url: `${zakladApi(c)}/api/choraly/${ch.id}/audio`, vybrana: ch.audio_vybrana ?? "a" }
+        : null,
+    })),
+  });
+});
+
+/**
  * Nahrávka chorálu.
  *
  * Bez přihlášení schválně: `<audio src>` neumí poslat hlavičku s tokenem,
