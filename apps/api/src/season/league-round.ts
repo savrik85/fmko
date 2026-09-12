@@ -599,15 +599,6 @@ async function runBetweenRoundEvents(
                 .catch((e) => logger.warn({ module: "league-round" }, "injury effect failed", e));
             }
           }
-          // player_add → creates a free agent offer (shows in transfers)
-          if (eff.type === "player_add") {
-            try {
-              const { maintainFreeAgentPool } = await import("../transfers/free-agent-pool");
-              await maintainFreeAgentPool(db, brRng, new Date());
-            } catch (e) {
-              logger.warn({ module: "league-round" }, "pool generation for player_add event", e);
-            }
-          }
         }
 
         // Send as message from relevant role (NOT public zpravodaj)
@@ -616,7 +607,6 @@ async function runBetweenRoundEvents(
           reputation: { name: "Starosta", title: "Starosta obce" },
           morale: { name: "Asistent trenéra", title: "Asistent" },
           player_leave: { name: "Kapitán", title: "Kapitán týmu" },
-          player_add: { name: "Hospodský", title: "Místní kontakt" },
           injury: { name: "Zdravotník", title: "Správce hřiště" },
           condition: { name: "Masér", title: "Masér" },
         };

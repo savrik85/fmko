@@ -30,7 +30,7 @@ export const POPISY_ZRANENI_TRENINK = [
 ] as const;
 
 export interface EventEffect {
-  type: "morale" | "condition" | "budget" | "reputation" | "player_add" | "player_leave" | "injury";
+  type: "morale" | "condition" | "budget" | "reputation" | "player_leave" | "injury";
   value?: number;
   playerIndex?: number;
   duration?: number; // Rounds
@@ -64,20 +64,12 @@ interface EventContext {
 
 const EVENT_RULES: EventRule[] = [
   // === POZITIVNÍ ===
-  {
-    category: "positive",
-    title: "Nový hráč se nabídl",
-    emoji: "\u{1F44B}",
-    baseProb: 0.06,
-    evaluate: (ctx) => {
-      if (ctx.squad.length >= 30) return null;
-      return {
-        prob: 1.0,
-        description: "V hospodě se ozval chlápek, že by chtěl chodit kopat. Prý hrával za sousední vesnici.",
-        effect: { type: "player_add" },
-      };
-    },
-  },
+  // „Nový hráč se nabídl" odsud zmizel. Posílal DOSLOVA stejnou větu jako
+  // skutečné nabídky hráčů z `events/player-offers.ts` („V hospodě se ozval
+  // chlápek…"), jenže bez jména, bez věku, bez postu a bez možnosti kohokoli
+  // přijmout — jen dosypal volné hráče do okresního poolu. Trenér tedy četl, že
+  // se někdo nabídl, a neměl kde ho hledat. Jmenovité nabídky chodí dál z
+  // denního ticku; ty mají tlačítka Přijmi/Odmítni.
   {
     category: "positive",
     // Pozor na slovo „nabízí": peníze tady rovnou přistanou na účtu a není co
@@ -333,7 +325,6 @@ export function generateBetweenRoundEvents(
         "Vykradení kabiny": { title: "Vloupání do kabiny", replace: [["zlodějíčci", "bezdomovci"], ["někdo vykradl", "někdo se vloupal do"]] },
         "Havárie na hřišti": { title: "Havárie v areálu" },
         "Vandalizmus": { replace: [["sprejoval kabiny", "tageři posprejovali plot"], ["po vsi", "po městské části"]] },
-        "Nový hráč se nabídl": { replace: [["přišel na trénink", "viděl plakát v tramvaji a přišel"], ["z okolní vesnice", "z vedlejší městské části"]] },
         "Dotace od obce": { title: "Grant z městské části", replace: [["obec", "městská část"], ["obce", "městské části"]] },
         "Reklama na plotě": { replace: [["na plot", "na mantinel"]] },
       };
