@@ -78,9 +78,16 @@ export function FMSidebar() {
         .then((o) => setIncomingOffers(o.incoming?.length ?? 0))
         .catch((e) => console.error("fetch offers:", e));
       // Nahrazuje pět rozesílek „vyšel článek" do telefonu — tady to nikoho neruší.
-      apiFetch<{ unread: number }>(`/api/teams/${teamId}/news/unread-count`)
-        .then((d) => setNovychClanku(d.unread ?? 0))
-        .catch((e) => console.error("fetch news unread:", e));
+      // Na samotném Zpravodaji odznak zhasne hned: stránka sice posílá /news/seen,
+      // ale ten běží současně s tímhle počítáním a prohrával by závod — číslo by
+      // trenérovi svítilo ještě půl minuty potom, co si články otevřel.
+      if (pathname === "/dashboard/news") {
+        setNovychClanku(0);
+      } else {
+        apiFetch<{ unread: number }>(`/api/teams/${teamId}/news/unread-count`)
+          .then((d) => setNovychClanku(d.unread ?? 0))
+          .catch((e) => console.error("fetch news unread:", e));
+      }
       // Aktivní ankety kde jsem ještě nehlasoval
       const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
       apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })

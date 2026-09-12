@@ -18,6 +18,12 @@ export interface GlobalRolloverResult {
   matchesCreated: number;
 }
 
+/** „2 smlouvy vypršely" / „5 smluv vypršelo" — čeština počítá jinak než angličtina. */
+export function smlouvyVyprsely(pocet: number): string {
+  if (pocet >= 2 && pocet <= 4) return `${pocet} sponzorské smlouvy vypršely`;
+  return `${pocet} sponzorských smluv vypršelo`;
+}
+
 export async function rolloverAllLeagues(
   db: D1Database,
   oldSeasonNumber: number,
@@ -85,10 +91,21 @@ export async function rolloverAllLeagues(
     await db.prepare("UPDATE sponsor_contracts SET seasons_remaining = seasons_remaining - 1 WHERE status = 'active'").run();
     await db.prepare("UPDATE sponsor_contracts SET status = 'expired' WHERE status = 'active' AND seasons_remaining <= 0").run();
 
-    const { sendSystemSMS } = await import("../lib/sms");
+    // Jedna zpráva na klub, ne na smlouvu. Klub se sedmi sponzory dostal sedm SMS
+    // během dvou sekund a všechny říkaly totéž — jdi na Sponzory.
+    const podleTymu = new Map<string, string[]>();
     for (const row of expiring.results) {
-      await sendSystemSMS(db, row.team_id, "Sportovní ředitel", "Sportovní ředitel",
-        `📋 Sponzorská smlouva s ${row.sponsor_name} vypršela s koncem sezóny. Mrkni na Sponzory — čekají tam nové nabídky.`,
+      const jmena = podleTymu.get(row.team_id) ?? [];
+      jmena.push(row.sponsor_name);
+      podleTymu.set(row.team_id, jmena);
+    }
+    const { sendSystemSMS } = await import("../lib/sms");
+    for (const [teamId, jmena] of podleTymu) {
+      const kdo = jmena.length === 1
+        ? `Smlouva s ${jmena[0]} vypršela`
+        : `${smlouvyVyprsely(jmena.length)}: ${jmena.join(", ")}`;
+      await sendSystemSMS(db, teamId, "Sportovní ředitel", "Sportovní ředitel",
+        `📋 ${kdo} s koncem sezóny. Mrkni na Sponzory — čekají tam nové nabídky.`,
       );
     }
     logger.info({ module: "season-rollover" }, `sponzorské smlouvy: -1 sezóna, ${expiring.results.length} expirací u lidských týmů`);

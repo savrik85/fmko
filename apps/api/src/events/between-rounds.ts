@@ -80,7 +80,12 @@ const EVENT_RULES: EventRule[] = [
   },
   {
     category: "positive",
-    title: "Sponzor nabízí smlouvu",
+    // Pozor na slovo „nabízí": peníze tady rovnou přistanou na účtu a není co
+    // podepisovat. Dřív zpráva zněla „nabízí sponzoring 1290 Kč měsíčně" — trenér
+    // šel hledat smlouvu na stránku Sponzoři, kde žádná nebyla, a částka navíc
+    // nebyla měsíční, ale jednorázová. Skutečné sponzorské smlouvy jsou vlastní
+    // mechanika (`sponsor_contracts`); tohle je reklama na plotě za hotové.
+    title: "Reklama na plotě",
     emoji: "\u{1F4B0}",
     baseProb: 0.12,
     evaluate: (ctx) => {
@@ -93,7 +98,7 @@ const EVENT_RULES: EventRule[] = [
       ];
       return {
         prob: bonus,
-        description: `${ctx.rng.pick(sponsors)} nabízí sponzoring ${amount} Kč měsíčně.`,
+        description: `${ctx.rng.pick(sponsors)} si koupilo reklamu na plot — ${amount} Kč je na účtu.`,
         effect: { type: "budget", value: amount },
       };
     },
@@ -279,42 +284,14 @@ const EVENT_RULES: EventRule[] = [
   },
 
   // === NEUTRÁLNÍ ===
-  {
-    category: "neutral",
-    title: "Obecní zpravodaj",
-    emoji: "\u{1F4F0}",
-    baseProb: 0.1,
-    evaluate: (ctx) => {
-      const headlines = [
-        "V obecním zpravodaji se píše o víkendovém zápase. Prý to bylo drama.",
-        "Místní noviny zveřejnily rozhovor s trenérem. Tvrdí, že tým se zlepšuje.",
-        "V hospodě visí nový plakát s výsledky kola. Někdo k nim připsal komentáře.",
-        "Starosta se zmínil o fotbale na zastupitelstvu. Prý by to chtělo nové sítě.",
-      ];
-      return {
-        prob: 1.0,
-        description: ctx.rng.pick(headlines),
-      };
-    },
-  },
-  {
-    category: "neutral",
-    title: "Počasí ovlivní trénink",
-    emoji: "\u{26C5}",
-    baseProb: 0.08,
-    evaluate: (ctx) => {
-      const weather = [
-        "Celý týden pršelo — trénink se přesunul do hospody (teoretická příprava u piva).",
-        "Krásné počasí celý týden, kluci trénovali s chutí.",
-        "Na hřišti napadla rosa a Franta uklouzl. Ale nic vážného.",
-        "Hřiště bylo tak tvrdé, že se na něm dalo hrát kuličky.",
-      ];
-      return {
-        prob: 1.0,
-        description: ctx.rng.pick(weather),
-      };
-    },
-  },
+  //
+  // Byly tu dvě: „Obecní zpravodaj" a „Počasí ovlivní trénink". Ani jedna neměla
+  // efekt — jen čtyři pevné věty dokola (na testovacím účtu přistála ta o sítích
+  // na zastupitelstvu čtrnáctkrát). Telefon je na zprávy, se kterými se dá něco
+  // dělat; tohle se s ničím nepotkávalo a obojí navíc lhalo vedle skutečných
+  // mechanik: články má Zpravodaj, počasí má jediný zdroj v `season-weather.ts`
+  // a s tréninkem si nic nevymýšlelo. Sezónní „Obecní zpravodaj" v
+  // `seasonal-events.ts` zůstává — ten reputaci opravdu hne.
 ];
 
 /**
@@ -356,10 +333,9 @@ export function generateBetweenRoundEvents(
         "Vykradení kabiny": { title: "Vloupání do kabiny", replace: [["zlodějíčci", "bezdomovci"], ["někdo vykradl", "někdo se vloupal do"]] },
         "Havárie na hřišti": { title: "Havárie v areálu" },
         "Vandalizmus": { replace: [["sprejoval kabiny", "tageři posprejovali plot"], ["po vsi", "po městské části"]] },
-        "Obecní zpravodaj": { title: "Článek v Metro deníku", replace: [["obecním zpravodaji", "Metro deníku"], ["V obci", "V městské části"]] },
         "Nový hráč se nabídl": { replace: [["přišel na trénink", "viděl plakát v tramvaji a přišel"], ["z okolní vesnice", "z vedlejší městské části"]] },
         "Dotace od obce": { title: "Grant z městské části", replace: [["obec", "městská část"], ["obce", "městské části"]] },
-        "Sponzor nabízí smlouvu": { replace: [["Místní firma", "Lokální pražská firma"]] },
+        "Reklama na plotě": { replace: [["na plot", "na mantinel"]] },
       };
       const pt = pragueTexts[title];
       if (pt) {
