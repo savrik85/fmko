@@ -32,7 +32,7 @@ export function TribunaWidget({ data }: WidgetProps) {
 
   if (posts.length === 0) {
     return (
-      <div className="card p-4 sm:p-5 text-sm text-muted text-center">
+      <div className="text-sm text-muted text-center py-4">
         Na Tribuně zatím nikdo nic nenapsal.
       </div>
     );
@@ -43,11 +43,8 @@ export function TribunaWidget({ data }: WidgetProps) {
   const podil = Math.round((zapornych / posts.length) * 100);
 
   return (
-    <div className="card p-4 sm:p-5">
-      <div className="flex items-baseline justify-between gap-2 mb-3">
-        <h3 className="font-heading font-bold text-sm uppercase tracking-wide text-muted">
-          Co si o nás píšou
-        </h3>
+    <div>
+      <div className="flex justify-end mb-2">
         <span className={`text-xs font-semibold ${podil >= 60 ? "text-card-red" : podil <= 20 ? "text-pitch-600" : "text-muted"}`}>
           {podil} % negativních
         </span>

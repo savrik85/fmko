@@ -30,16 +30,16 @@ function Pruh({ value, dobre }: { value: number; dobre: boolean }) {
 }
 
 function Prazdno({ text }: { text: string }) {
-  return <div className="card p-4 sm:p-5 text-sm text-muted text-center">{text}</div>;
+  return <div className="text-sm text-muted text-center py-4">{text}</div>;
 }
 
-function Hlavicka({ titul, vpravo }: { titul: string; vpravo?: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-2 mb-3">
-      <h3 className="font-heading font-bold text-sm uppercase tracking-wide text-muted">{titul}</h3>
-      {vpravo}
-    </div>
-  );
+/**
+ * Drobný řádek nad obsahem. Nadpis widgetu kreslí rámeček (`WidgetFrame`),
+ * takže vlastní `h3` by visel dvakrát pod sebou.
+ */
+function Nadradek({ vpravo }: { vpravo?: React.ReactNode }) {
+  if (!vpravo) return null;
+  return <div className="flex justify-end mb-2 text-xs">{vpravo}</div>;
 }
 
 /** Party a jejich nálada. Základní pohled: kdo je na stadionu a jak mu je. */
@@ -49,8 +49,8 @@ export function FanGroupsMoodWidget({ data }: WidgetProps) {
 
   const lidi = d.groups.reduce((s, g) => s + g.size, 0);
   return (
-    <div className="card p-4 sm:p-5">
-      <Hlavicka titul="Party fanoušků" vpravo={<span className="text-xs text-muted">{lidi} lidí</span>} />
+    <div>
+      <Nadradek vpravo={<span className="text-xs text-muted">{lidi} lidí</span>} />
       <div className="space-y-3">
         {d.groups.map((g) => (
           <div key={g.id}>
@@ -93,8 +93,8 @@ export function FanCoreWidget({ data }: WidgetProps) {
   }
   const celkem = sJadrem.reduce((s, g) => s + (g.core ?? 0), 0);
   return (
-    <div className="card p-4 sm:p-5">
-      <Hlavicka titul="Tvrdé jádro" vpravo={<span className="text-xs text-muted">{celkem} lidí</span>} />
+    <div>
+      <Nadradek vpravo={<span className="text-xs text-muted">{celkem} lidí</span>} />
       <div className="space-y-2">
         {sJadrem.map((g) => (
           <div key={g.id} className="flex items-baseline justify-between gap-2">
@@ -118,8 +118,7 @@ export function FanRivalsWidget({ data }: WidgetProps) {
   const d = data.fanGroups.data;
   if (!d || d.rivals.length === 0) return <Prazdno text="S nikým si to zatím nerozdali." />;
   return (
-    <div className="card p-4 sm:p-5">
-      <Hlavicka titul="Rivalita mezi tábory" />
+    <div>
       <div className="space-y-2.5">
         {d.rivals.map((r) => (
           <div key={r.teamId}>
@@ -149,12 +148,11 @@ export function FanFavouritesWidget({ data }: WidgetProps) {
   const otloukanci = d.favourites.filter((f) => f.stance === "otloukanek");
 
   return (
-    <div className="card p-4 sm:p-5">
-      <Hlavicka titul="Miláčci a otloukánci" />
+    <div>
       <div className="space-y-3">
         {milacci.length > 0 && (
           <div>
-            <div className="text-xs font-semibold text-pitch-600 mb-1">❤️ Berou je za svoje</div>
+      <div className="text-xs font-semibold text-pitch-600 mb-1">❤️ Berou je za svoje</div>
             {milacci.map((f) => (
               <div key={`${f.groupKind}-${f.playerId}`} className="py-1">
                 <Link href={`/dashboard/player/${f.playerId}`} className="text-sm font-heading font-bold text-ink hover:underline">
@@ -168,7 +166,7 @@ export function FanFavouritesWidget({ data }: WidgetProps) {
         )}
         {otloukanci.length > 0 && (
           <div>
-            <div className="text-xs font-semibold text-card-red mb-1">😤 Nemůžou ho vystát</div>
+      <div className="text-xs font-semibold text-card-red mb-1">😤 Nemůžou ho vystát</div>
             {otloukanci.map((f) => (
               <div key={`${f.groupKind}-${f.playerId}`} className="py-1">
                 <Link href={`/dashboard/player/${f.playerId}`} className="text-sm font-heading font-bold text-ink hover:underline">
@@ -192,8 +190,7 @@ export function FanCampaignsWidget({ data }: WidgetProps) {
     return <Prazdno text="Nikdo po nikom nechce hlavu. Zatím." />;
   }
   return (
-    <div className="card p-4 sm:p-5">
-      <Hlavicka titul="Co po tobě chtějí" />
+    <div>
       <div className="space-y-3">
         {d.campaigns.map((k) => {
           const pct = Math.min(100, Math.round((k.podpisy / Math.max(1, k.prah)) * 100));
@@ -232,9 +229,8 @@ export function FanTroubleWidget({ data }: WidgetProps) {
   }
 
   return (
-    <div className="card p-4 sm:p-5">
-      <Hlavicka
-        titul="Bordel na stadionu"
+    <div>
+      <Nadradek
         vpravo={<span className="text-xs text-muted">ochranka: {d.securityLabel}</span>}
       />
       <div className="grid grid-cols-2 gap-3 mb-3">
