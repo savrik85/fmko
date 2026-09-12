@@ -500,8 +500,10 @@ teamsRouter.post("/", async (c) => {
         const villageSize = (village as any).size as string || "small";
         const config = generateStadium(rng, villageSize);
         await c.env.DB.prepare(
-          `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          // `ultras_text_mode` se nastavuje výslovně: výchozí hodnota sloupce je
+          // 'vlastni' a kvůli ní se kotel k plachtě nikdy nedostal.
+          `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence, ultras_text_mode)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fanousci')`
         ).bind(uuid(), teamId, config.capacity, config.pitchCondition, config.pitchType,
           config.changingRooms, config.showers, config.refreshments, config.lighting,
           config.stands, config.parking, config.fence).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
