@@ -46,7 +46,7 @@ import { PubSessionWidget } from "./items/pub-session";
 import { TribunaWidget } from "./items/tribuna-widget";
 import {
   FanGroupsMoodWidget, FanCoreWidget, FanRivalsWidget,
-  FanFavouritesWidget, FanCampaignsWidget, FanTroubleWidget,
+  FanFavouritesWidget, FanCampaignsWidget, FanTroubleWidget, FanChantsWidget,
 } from "./items/fan-groups-widgets";
 
 export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
@@ -312,6 +312,11 @@ export const WIDGETS: WidgetDef[] = [
     id: "fan-core", title: "Tvrdé jádro", icon: "🔥", category: "fanousci",
     description: "Kolik lidí doopravdy dělá bordel a jezdí na výjezdy.",
     defaultWidth: 1, needs: ["fanGroups"], Component: FanCoreWidget,
+  },
+  {
+    id: "fan-chants", title: "Co se u nás zpívá", icon: "📣", category: "fanousci",
+    description: "Chorály, které si fanoušci vymysleli, i s důvodem a tím, jak se chytly.",
+    defaultWidth: 1, needs: ["fanGroups"], Component: FanChantsWidget,
   },
   {
     id: "fan-rivals", title: "Rivalita mezi tábory", icon: "🥊", category: "fanousci",

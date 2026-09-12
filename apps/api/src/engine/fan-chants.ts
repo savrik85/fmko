@@ -66,9 +66,12 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
     const p = prijmeni(s.oblibenec).toUpperCase();
     out.push({
       kind: "oblibenec",
+      // Jména se schválně neskloňují. „Kdo nemá rád Kolman" je patvar a
+      // spolehlivě ohnout česká příjmení (Vlček → Vlčka, Petrášek → Petráška)
+      // bez morfologie nejde. Šablony proto drží jméno v prvním pádě.
       text: vyber([
         `${p}, ${p}, ty jsi náš!`,
-        `Kdo nemá rád ${prijmeni(s.oblibenec)}, ať jde domů!`,
+        `Jedno jméno, jeden král: ${p}!`,
         `${p}! ${p}! ${p}!`,
       ]),
       duvod: `${s.oblibenec} je miláček kotle.`,
@@ -81,7 +84,7 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
     out.push({
       kind: "rival",
       text: vyber([
-        `Kdo neskáče, není z ${s.klub}, hej, hej!`,
+        `Kdo neskáče, není náš, hej, hej!`,
         `${r} do vápna, ${r} do vápna!`,
         `Celej okres ví, kdo je tady doma!`,
       ]),
@@ -95,7 +98,7 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
       kind: "trener_proti",
       text: vyber([
         `${prijmeni(s.trener).toUpperCase()}, ODEJDI!`,
-        `Chceme trenéra, ne ${prijmeni(s.trener)}!`,
+        `Chceme trenéra! Tenhle ne!`,
       ]),
       duvod: "Kotel veřejně volá po odvolání trenéra.",
       sila: 80,
@@ -131,7 +134,7 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
       kind: "vzdor",
       text: vyber([
         `My tu budem, až tady nikdo nebude!`,
-        `Za ${s.klub} pojedem všude!`,
+        `Pojedem všude, kam se dá!`,
         `Vy se měníte, my ne!`,
       ]),
       duvod: s.heat >= 60 ? "Kotel je na vedení naštvaný." : "Nálada je na dně, ale chodí dál.",

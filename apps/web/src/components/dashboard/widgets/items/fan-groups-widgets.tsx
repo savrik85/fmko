@@ -271,3 +271,28 @@ export function FanTroubleWidget({ data }: WidgetProps) {
     </div>
   );
 }
+
+
+/** Co se u nás zpívá. Chorál drží déle než příspěvek, tak si zaslouží místo. */
+export function FanChantsWidget({ data }: WidgetProps) {
+  const d = data.fanGroups.data;
+  if (!d || !d.chants || d.chants.length === 0) {
+    return <Prazdno text="Zatím se nic nezpívá. Chorál potřebuje důvod." />;
+  }
+  return (
+    <div>
+      <div className="space-y-2.5">
+        {d.chants.map((ch) => (
+          <div key={ch.id}>
+            <p className="text-sm font-heading font-bold text-ink leading-snug">„{ch.text}"</p>
+            <div className="flex items-baseline justify-between gap-2 mt-0.5">
+              <span className="text-xs text-ink-light">{ch.duvod}</span>
+              <span className="text-xs text-muted shrink-0">{ch.silaWord}</span>
+            </div>
+            <div className="mt-1"><Pruh value={ch.sila} dobre /></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

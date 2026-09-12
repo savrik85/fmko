@@ -176,3 +176,51 @@ describe("stav stadionu a občerstvení", () => {
     expect(d.duvod).toContain("záchody");
   });
 });
+
+describe("čeština v chorálech", () => {
+  /**
+   * Jména se v textech neskloňují. Spolehlivě ohnout česká příjmení
+   * (Vlček → Vlčka, Petrášek → Petráška, Hrubý → Hrubého) bez morfologie
+   * nejde a patvar typu „Kdo nemá rád Kolman" je vidět na první pohled.
+   */
+  const PODEZRELA_JMENA = ["Vlček", "Petrášek", "Hrubý", "Kolman", "Řepka"];
+
+  it("příjmení nikde nestojí v pádu, který by se musel ohýbat", () => {
+    for (const p of PODEZRELA_JMENA) {
+      for (const roll of [0, 0.2, 0.4, 0.6, 0.8, 0.99]) {
+        const ch = vymysliChoraly(stav({
+          oblibenec: `Jan ${p}`, trener: `Karel ${p}`,
+          kampanProtiTreneru: true, serie: 4,
+          rival: { nazev: "Sokol Zálezly", heat: 70 },
+          nalada: 20, heat: 70, stiznostNaVybaveni: "záchody",
+        }), roll);
+        for (const c of ch) {
+          // Po předložkách a slovesech, které vyžadují jiný než první pád,
+          // jméno být nesmí.
+          for (const vzor of [
+            new RegExp(`rád ${p}\\b`, "i"),
+            new RegExp(`ne ${p}\\b`, "i"),
+            new RegExp(`z ${p}\\b`, "i"),
+            new RegExp(`${p}ovi\\b`, "i"),
+            new RegExp(`${p}a\\b`),
+          ]) {
+            expect(c.text, `„${c.text}" ohýbá jméno ${p}`).not.toMatch(vzor);
+          }
+        }
+      }
+    }
+  });
+
+  it("název klubu se taky neskloňuje", () => {
+    for (const roll of [0, 0.3, 0.6, 0.9]) {
+      const ch = vymysliChoraly(stav({
+        klub: "FK Duplex Břevnov", nalada: 15,
+        rival: { nazev: "Sokol Zálezly", heat: 80 },
+      }), roll);
+      for (const c of ch) {
+        expect(c.text).not.toMatch(/z FK Duplex Břevnov\b/);
+        expect(c.text).not.toMatch(/FK Duplex Břevnova/);
+      }
+    }
+  });
+});

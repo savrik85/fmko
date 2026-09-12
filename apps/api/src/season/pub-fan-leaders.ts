@@ -145,7 +145,7 @@ export function scenaSVudcem(
   if (v.heat >= 55 && opts.roll < 0.45) {
     return {
       type: "vudce_konfrontace",
-      text: `${v.jmeno} si u výčepu podal ${hrac.jmeno}. Řekl mu, co si kotel myslí o posledních výkonech. Nebylo to příjemné.`,
+      text: `${hrac.jmeno} si u výčepu vyslechl, co si kotel myslí o posledních výkonech. Mluvil ${v.jmeno} a příjemné to nebylo.`,
       playerIds: [hrac.playerId],
       moraleDelta: -3,
       fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 0, heat: -3, sentiment: 0,
@@ -167,7 +167,7 @@ export function scenaSVudcem(
     }
     return {
       type: "vudce_historky",
-      text: `${v.jmeno} vyprávěl ${hrac.jmeno}ovi, jak se hrálo dřív. Ten to vydržel do konce a ještě přikyvoval.`,
+      text: `${v.jmeno} vyprávěl, jak se hrálo dřív. ${hrac.jmeno} to vydržel do konce a ještě přikyvoval.`,
       playerIds: [hrac.playerId],
       moraleDelta: 1,
       fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 1, heat: 0, sentiment: 1,
@@ -248,7 +248,7 @@ export function scenaOZapase(
       : hrdina.goly >= 1 ? "za gól" : "za výkon";
     return {
       type: "vudce_chvali_hrace",
-      text: `${v.jmeno} koupil ${hrdina.jmeno}ovi pivo ${co} proti ${zapas.souper}. Hospoda tleskala.`,
+      text: `${hrdina.jmeno} dostal u výčepu pivo ${co} proti ${zapas.souper}. Platil ${v.jmeno}, hospoda tleskala.`,
       playerIds: [hrdina.playerId],
       moraleDelta: 4,
       fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 2, heat: -1, sentiment: 1,
@@ -265,8 +265,8 @@ export function scenaOZapase(
     return {
       type: "vudce_kara_hrace",
       text: ostry
-        ? `${v.jmeno} si vzal ${otloukanek.jmeno} stranou a ${co} mu to řekl narovinu. Slyšel to celý lokál.`
-        : `${v.jmeno} ${otloukanek.jmeno}ovi ${co} nic neřekl, jen se na něj díval. To stačilo.`,
+        ? `${otloukanek.jmeno} si ${co} vyslechl u výčepu narovinu. Mluvil ${v.jmeno} a slyšel to celý lokál.`
+        : `${otloukanek.jmeno} ${co} neslyšel ani slovo. Jen se na něj ${v.jmeno} celý večer díval. To stačilo.`,
       playerIds: [otloukanek.playerId],
       moraleDelta: ostry ? -5 : -2,
       fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 0, heat: -2, sentiment: 0,
@@ -282,8 +282,8 @@ export function scenaOZapase(
       return {
         type: "vudce_rozbor_vyhra",
         text: kdo
-          ? `${v.jmeno} u výčepu znovu a znovu přehrával ten ${skore} se ${zapas.souper}. ${kdo.jmeno} to musel poslouchat třikrát.`
-          : `${v.jmeno} rozebíral ${skore} se ${zapas.souper} s každým, kdo přišel.`,
+          ? `${v.jmeno} u výčepu znovu a znovu přehrával ten výsledek ${skore}. ${kdo.jmeno} to musel poslouchat třikrát.`
+          : `${v.jmeno} rozebíral výsledek ${skore} s každým, kdo přišel.`,
         playerIds: kdo ? [kdo.playerId] : [],
         moraleDelta: kdo ? 2 : 0,
         fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 2, heat: 0, sentiment: 1,
@@ -303,8 +303,8 @@ export function scenaOZapase(
     return {
       type: "vudce_rozbor_prohra",
       text: kdo
-        ? `${v.jmeno} u stolu rozebíral tu porážku ${skore} a ${kdo.jmeno} seděl vedle a mlčel.`
-        : `${v.jmeno} probíral porážku ${skore} se ${zapas.souper} až do zavíračky.`,
+        ? `${v.jmeno} u stolu rozebíral tu porážku ${skore}. ${kdo.jmeno} seděl vedle a mlčel.`
+        : `${v.jmeno} probíral porážku ${skore} až do zavíračky.`,
       playerIds: kdo ? [kdo.playerId] : [],
       moraleDelta: kdo ? -2 : 0,
       fan: { groupId: v.groupId, leaderId: v.leaderId, mood: -2, heat: 2, sentiment: -1,

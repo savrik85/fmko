@@ -541,6 +541,7 @@ export interface FanGroupsData {
     duvod: string; podpisy: number; prah: number; status: string;
   }>;
   damage: Array<{ id: string; facility: string; label: string; levels: number; cost: number; popis: string }>;
+  chants: Array<{ id: string; kind: string; text: string; duvod: string; sila: number; silaWord: string; since: string | null }>;
   securityLevel: number;
   securityLabel: string;
 }
