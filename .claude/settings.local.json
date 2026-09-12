@@ -165,7 +165,12 @@
       "Bash(xargs -I{} gh run rerun {} --failed)",
       "mcp__plugin_serena_serena__initial_instructions",
       "Bash(echo \"exit: $?\")",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(chmod 600 ~/.config/cloudflare/token)",
+      "Read(//Users/savrik/.config/cloudflare/**)",
+      "Bash(awk '{print $1, $5 \" bajtu\"}')",
+      "Bash(cd *)",
+      "Bash(echo *)"
     ]
   },
   "remote": {}

@@ -1,1 +1,0 @@
-{"version":3,"file":"diverging-bar.d.ts","sourceRoot":"","sources":["diverging-bar.tsx"],"names":[],"mappings":"AAYA,MAAM,WAAW,cAAc;IAC7B,KAAK,EAAE,MAAM,CAAC;IACd,QAAQ,EAAE,MAAM,CAAC;IACjB,QAAQ,EAAE,MAAM,CAAC;CAClB;AAKD,wBAAgB,YAAY,CAAC,EAC3B,IAAI,EACJ,aAAa,EACb,aAAa,GACd,EAAE;IACD,IAAI,EAAE,cAAc,EAAE,CAAC;IACvB,aAAa,EAAE,MAAM,CAAC;IACtB,aAAa,EAAE,MAAM,CAAC;CACvB,+BAiDA"}

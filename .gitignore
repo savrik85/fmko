@@ -23,3 +23,17 @@ apps/api/src/**/*.js
 # Zálohy databází. Jsou v desítkách až stovkách MB a do gitu nepatří —
 # jednou přidané objekty už z historie nezmizí a nafouknou repo natrvalo.
 backups/
+
+# Zkompilované artefakty VEDLE zdrojů (src/**/*.js, *.d.ts).
+#
+# Vznikaly omylem spuštěným `tsc` bez outDiru a tiše STÍNILY zdroj: bundler
+# vzal starý `registry.js` místo `registry.ts`, takže se úpravy 34 souborů
+# (mimo jiné celé stránky fanoušků a stadionu) vůbec nenasazovaly.
+apps/web/src/**/*.js
+apps/web/src/**/*.js.map
+apps/web/src/**/*.d.ts
+apps/web/src/**/*.d.ts.map
+apps/api/src/**/*.js
+apps/api/src/**/*.js.map
+apps/api/src/**/*.d.ts
+apps/api/src/**/*.d.ts.map
