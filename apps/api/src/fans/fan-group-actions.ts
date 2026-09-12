@@ -85,15 +85,16 @@ export const FAN_ACTIONS: Record<FanActionKey, FanActionDef> = {
   presun: {
     key: "presun",
     label: "Přemístit sektor",
-    popis: "Přestěhuješ partu jinam na stadion. Dál od hostů znamená míň malérů, ale i míň slyšet.",
+    popis: "Přestěhuješ partu jinam na stadion. S kotlem se stěhuje i atmosféra: "
+      + "postavený sektor kotle dává domácí výhodu a morálku jen tehdy, když v něm kotel opravdu stojí.",
     cost: 3000,
     cooldownDnu: 30,
     // Čísla sedí na FAN_SKALY.SEKTOR_RIZIKO a SEKTOR_HLAS. Kdyby se tam
     // sazby změnily, musí se změnit i tady: hráč kupuje to, co je na tlačítku.
     variants: [
-      { key: "kotel", label: "Kotel za brankou", cost: 3000, dopad: "Plný hlas, plné riziko. Rvačka s hosty možná." },
-      { key: "hlavni", label: "Hlavní tribuna", cost: 3000, dopad: "O čtvrtinu míň malérů a rvačka vyloučená, ale ztratí 40 % hlasu." },
-      { key: "za_branou", label: "Sektor za brankou", cost: 3000, dopad: "O třetinu vyšší riziko, hlas skoro plný. Nejblíž k hostům." },
+      { key: "kotel", label: "Kotel za brankou", cost: 3000, dopad: "Plná atmosféra z postaveného sektoru, plné riziko. Rvačka s hosty možná." },
+      { key: "hlavni", label: "Hlavní tribuna", cost: 3000, dopad: "Rvačka vyloučená a o čtvrtinu míň malérů. Přijdeš ale o celou výhodu a morálku ze sektoru kotle." },
+      { key: "za_branou", label: "Sektor za brankou", cost: 3000, dopad: "O třetinu vyšší riziko, nejblíž k hostům, a taky bez výhody ze sektoru kotle." },
     ],
   },
 };

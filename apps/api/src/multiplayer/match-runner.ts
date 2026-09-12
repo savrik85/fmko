@@ -486,8 +486,32 @@ export async function runScheduledMatches(
                 sektory.kapacita,
             );
 
+            // Sektor kotle se vyplácí, jen když v něm kotel STOJÍ.
+            //
+            // Dřív se `ultras_stand` započítal vždycky: až +5 % domácí výhody
+            // a +6 morálky i za prázdnou konstrukci. Přestěhovat kotel na hlavní
+            // tribunu tak nestálo prakticky nic (0,15 p. b. hlasu) a bylo to
+            // skoro vždycky výhodné — riziko dolů, cena žádná. Teď se s partou
+            // stěhuje i atmosféra, takže přesun je skutečná volba.
+            //
+            // Totéž pro zavřený sektor za trest: prázdný kotel neřve.
+            const kotelStavRow = await db.prepare(
+                "SELECT sector, closed_matches FROM fan_groups WHERE team_id = ? AND kind = 'kotel'",
+            ).bind(homeTeamId).first<{ sector: string; closed_matches: number }>()
+                .catch((e) => { logger.warn({module: "match-runner"}, "sektor kotle pro atmosféru", e); return null; });
+            const kotelDoma = !kotelStavRow
+                || (kotelStavRow.sector === "kotel" && kotelStavRow.closed_matches === 0);
+            if (!kotelDoma) {
+                logger.info(
+                    {module: "match-runner", teamId: homeTeamId, matchId},
+                    `sektor kotle bez kotle (${kotelStavRow?.sector}, zavřeno ${kotelStavRow?.closed_matches}), atmosféra se nepočítá`,
+                );
+            }
+            const ultrasAdvantage = kotelDoma ? facilityEffects.homeAdvantageBonus : 0;
+            const ultrasMorale = kotelDoma ? facilityEffects.homeCrowdMoraleBonus : 0;
+
             // Morálka domácích: šatny + sektor kotle (atmosféra)
-            const homeMoraleBoost = facilityEffects.homeMoraleBonus + facilityEffects.homeCrowdMoraleBonus;
+            const homeMoraleBoost = facilityEffects.homeMoraleBonus + ultrasMorale;
             if (homeMoraleBoost > 0) {
                 for (const p of homeLineup) {
                     p.morale = Math.min(100, p.morale + homeMoraleBoost);
@@ -544,7 +568,7 @@ export async function runScheduledMatches(
             // Domácí výhoda: základ + pozvaní zastupitelé + sektor kotle (atmosféra)
             // + fanoušci (tvrdé jádro, vyprodáno/prázdno z haInfo). Strop zvednut na 0.15.
             const fanbaseAdvantage = Math.max(-0.01, Math.min(0.03, (haInfo.total + (groupFx?.noiseBonus ?? 0)) * 0.01));
-            const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + officialCount * 0.015 + facilityEffects.homeAdvantageBonus + fanbaseAdvantage));
+            const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + officialCount * 0.015 + ultrasAdvantage + fanbaseAdvantage));
             // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál
             const crowdBoost = 1 + (homeEquipment?.crowdMod ?? 0);
             const attendanceWithOfficials = Math.min(
