@@ -23,7 +23,7 @@ import {
   type FanGroupKind, type FanIncidentKind, type IncidentOutcome, type FanSector,
 } from "../engine/fan-groups";
 import { teplotaRivality, priloz } from "./fan-rivalries";
-import { ensureFanGroups, fanLeaderFullName, type FanGroupRow, type FanLeaderRow } from "./fan-group-generator";
+import { fanLeaderFullName, type FanGroupRow, type FanLeaderRow } from "./fan-group-generator";
 import { syncFanGroups, odbytZapasUzavreniSektoru } from "./fan-group-state";
 
 const M = "fan-incidents";
@@ -447,8 +447,14 @@ async function nactiKontext(db: D1Database, opts: ResolveOpts): Promise<Kontext>
     .first<{ reputation: number }>()
     .catch((e) => { logger.warn({ module: M }, "reputace klubu", e); return null; });
 
-  // Hostující kotel — jeho party se zakládají líně stejně jako domácí.
-  await ensureFanGroups(db, opts.awayTeamId).catch((e) => {
+  // Hostující kotel.
+  //
+  // MUSÍ projít `syncFanGroups`, ne jen `ensureFanGroups`: velikost i tvrdé
+  // jádro jsou odvozeniny z fanbáze a počítají se právě tam. Samotné založení
+  // řádků nechá `core` na nule a u klubu, jehož party nikdo nikdy neotevřel,
+  // by tedy „nepřijel nikdo". Na testu to bylo 111 kotlů ze 113, takže rvačka
+  // s hostujícím kotlem nemohla nastat prakticky nikdy.
+  await syncFanGroups(db, opts.awayTeamId, { drift: false }).catch((e) => {
     logger.warn({ module: M }, `party hostů ${opts.awayTeamId}`, e); return [];
   });
   const host = await db

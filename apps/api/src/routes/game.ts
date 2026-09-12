@@ -1850,15 +1850,20 @@ async function stavSektoru(
     .first<{ id: string; name: string; primary_color: string | null }>()
     .catch((e) => { logger.warn({ module: "game" }, "příští domácí zápas", e); return null; });
 
-  if (pristi) {
-    const { ensureFanGroups } = await import("../fans/fan-group-generator");
-    await ensureFanGroups(db, pristi.id)
+  /** Kolik jich z toho klubu vyrazí ven. `syncFanGroups` dopočítá jádro. */
+  const kolikPrijede = async (awayTeamId: string): Promise<number> => {
+    const { syncFanGroups } = await import("../fans/fan-group-state");
+    await syncFanGroups(db, awayTeamId, { drift: false })
       .catch((e) => logger.warn({ module: "game" }, "party hostů pro sektor", e));
     const jejichKotel = await db
       .prepare("SELECT core FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
-      .bind(pristi.id).first<{ core: number }>()
+      .bind(awayTeamId).first<{ core: number }>()
       .catch((e) => { logger.warn({ module: "game" }, "jádro hostů", e); return null; });
-    const pocet = jadroNaVenkovni(jejichKotel?.core ?? 0);
+    return jadroNaVenkovni(jejichKotel?.core ?? 0);
+  };
+
+  if (pristi) {
+    const pocet = await kolikPrijede(pristi.id);
     if (pocet > 0) {
       hoste = { pocet, barva: pristi.primary_color ?? "#B91C1C", nazev: pristi.name, kdy: "prijede" };
     }
@@ -1883,6 +1888,28 @@ async function stavSektoru(
         }
       } catch (e) {
         logger.warn({ module: "game" }, "rozbitý záznam o hostech", e);
+      }
+    }
+  }
+
+  // Poslední záloha: soupeř z posledního odehraného domácího zápasu a kolik by
+  // jich dnes vyrazilo. Bez tohohle je sektor hostů prázdný celou dobu, kdy se
+  // zrovna nehraje a starší zápasy záznam o hostech nemají.
+  if (!hoste) {
+    const naposled = await db
+      .prepare(
+        `SELECT t.id, t.name, t.primary_color FROM matches m
+         JOIN teams t ON t.id = m.away_team_id
+         WHERE m.home_team_id = ? AND m.home_score IS NOT NULL
+         ORDER BY COALESCE(m.simulated_at, m.created_at) DESC LIMIT 1`,
+      )
+      .bind(teamId)
+      .first<{ id: string; name: string; primary_color: string | null }>()
+      .catch((e) => { logger.warn({ module: "game" }, "poslední soupeř doma", e); return null; });
+    if (naposled) {
+      const pocet = await kolikPrijede(naposled.id);
+      if (pocet > 0) {
+        hoste = { pocet, barva: naposled.primary_color ?? "#B91C1C", nazev: naposled.name, kdy: "prijel" };
       }
     }
   }
