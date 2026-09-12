@@ -731,10 +731,12 @@ fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
   const plachta = await prepoctiTransparent(c.env.DB, teamId, party, gameDate);
   if (plachta) await prispevekKTransparentu(c.env.DB, teamId, plachta, gameDate);
 
-  const { tikChoralu } = await import("../fans/fan-chants");
+  const { tikChoralu, zalozDomaciChoral } = await import("../fans/fan-chants");
   const { prispevkyKChoralum } = await import("../fans/fan-feed");
+  const domov = await zalozDomaciChoral(c.env.DB, teamId, party, gameDate, c.env);
   const noveChoraly = await tikChoralu(c.env.DB, teamId, party, gameDate, c.env);
-  if (noveChoraly.length > 0) await prispevkyKChoralum(c.env.DB, teamId, noveChoraly, gameDate);
+  const vsechnyChoraly = domov ? [domov, ...noveChoraly] : noveChoraly;
+  if (vsechnyChoraly.length > 0) await prispevkyKChoralum(c.env.DB, teamId, vsechnyChoraly, gameDate);
 
   // Týdenní dopad prostředí. V dev triggeru se pouští vždycky, ať se dá ověřit.
   const { nactiProstredi, dopadProstredi, dopadKamaradeniSRivalem, zijeRivalitu } =
@@ -776,7 +778,7 @@ fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
     oblibenci: zmeny,
     kampane: { zalozene: kampane.zalozene.length, splnene: kampane.splnene.length, vysumele: kampane.vysumele.length },
     transparent: plachta,
-    choraly: noveChoraly,
+    choraly: vsechnyChoraly,
     prostredi: dopady,
     kamaradeniSRivalem: kamaradeni,
     forma,
