@@ -87,7 +87,7 @@ export async function loadRefereeForMatch(
   }
 
   if (!row) {
-    logger.warn({ module: "referees" }, `zápas ${matchId} nemá delegovaného rozhodčího — neutrální profil`);
+    logger.warn({ module: "referees" }, `zápas ${matchId} nemá delegovaného rozhodčího, neutrální profil`);
     return { profile: NEUTRAL_REFEREE, snapshot: NEUTRAL_SNAPSHOT };
   }
 
@@ -97,7 +97,7 @@ export async function loadRefereeForMatch(
   const tired = await pískáDnesVíckrát(db, matchId, row.id);
   const eff = tired ? { ...row, fitness: Math.max(0, row.fitness - 20) } : row;
   if (tired) {
-    logger.info({ module: "referees" }, `rozhodčí ${row.id} píská v jednom dni další zápas — kondice −20`);
+    logger.info({ module: "referees" }, `rozhodčí ${row.id} píská v jednom dni další zápas, kondice −20`);
   }
 
   const snapshot = toSnapshot(eff);

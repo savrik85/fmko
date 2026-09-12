@@ -382,8 +382,8 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
             <Stat big={`${data.seasonStats.totalGoals}`} label="branek celkem" sub={`${data.seasonStats.goalsPerMatch} na zápas`} />
             {data.seasonStats.totalBeer != null && data.seasonStats.totalBeer > 0 && <Stat big={`${data.seasonStats.totalBeer.toLocaleString("cs")}`} label="🍺 vypito piv" sub="za celou sezónu" />}
             {data.seasonStats.recordAttendance && <Stat big={`${data.seasonStats.recordAttendance.value}`} label="👥 nejvíc lidí" sub={data.seasonStats.recordAttendance.homeTeam} />}
-            {data.seasonStats.wildestMatch && <Stat big={`${data.seasonStats.wildestMatch.cards}`} label="🟥 nejdivočejší zápas" sub={`${data.seasonStats.wildestMatch.homeTeam} – ${data.seasonStats.wildestMatch.awayTeam}`} />}
-            {data.seasonStats.biggestWin && <Stat big={`${data.seasonStats.biggestWin.homeScore}:${data.seasonStats.biggestWin.awayScore}`} label="nejvyšší výhra" sub={`${data.seasonStats.biggestWin.homeTeam} – ${data.seasonStats.biggestWin.awayTeam}`} />}
+            {data.seasonStats.wildestMatch && <Stat big={`${data.seasonStats.wildestMatch.cards}`} label="🟥 nejdivočejší zápas" sub={`${data.seasonStats.wildestMatch.homeTeam} ${data.seasonStats.wildestMatch.awayTeam}`} />}
+            {data.seasonStats.biggestWin && <Stat big={`${data.seasonStats.biggestWin.homeScore}:${data.seasonStats.biggestWin.awayScore}`} label="nejvyšší výhra" sub={`${data.seasonStats.biggestWin.homeTeam} ${data.seasonStats.biggestWin.awayTeam}`} />}
             <Stat big={`${data.seasonStats.matchesPlayed}`} label="odehraných zápasů" />
             {data.seasonStats.longestWinStreak && <Stat big={`${data.seasonStats.longestWinStreak.length}×`} label="nejdelší série" sub={data.seasonStats.longestWinStreak.teamName} />}
           </div>

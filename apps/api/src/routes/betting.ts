@@ -256,7 +256,7 @@ bettingRouter.get("/teams/:teamId/bets", async (c) => {
         label: l.label,
         oddsX100: l.odds_x100,
         result: l.result,
-        zapas: `${l.home_name} — ${l.away_name}`,
+        zapas: `${l.home_name} ${l.away_name}`,
         vysledek: l.home_score === null ? null : `${l.home_score}:${l.away_score}`,
       })),
     })),

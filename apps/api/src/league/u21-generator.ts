@@ -76,7 +76,7 @@ export async function backfillU21ForLeague(
     u21LeagueId,
     seniorLeague.season_id,
     `${seniorLeague.district} U21`,
-    `${seniorLeague.name} — U21`,
+    `${seniorLeague.name}. U21`,
     seniorLeague.level,
     seniorLeague.status,
     seniorLeagueId,

@@ -29,7 +29,7 @@ describe("cílová nálada", () => {
     expect(loajalni).toBeGreaterThan(vrtkavi);
   });
 
-  it("nahoru loajalita netlumí — z výhry má radost každý", () => {
+  it("nahoru loajalita netlumí, z výhry má radost každý", () => {
     expect(targetMood({ ...zaklad, satisfaction: 90, loyalty: 100 }))
       .toBe(targetMood({ ...zaklad, satisfaction: 90, loyalty: 0 }));
   });

@@ -61,7 +61,7 @@ export async function applySeasonRewards(
     scaled = out.rewards;
     if (ratio < 1) {
       logger.warn({ module: "season-rewards" },
-        `pokladna soutěže ${leagueId} nestačí na odměny (${out.required} Kč) — krácení na ${Math.round(ratio * 100)} %`);
+        `pokladna soutěže ${leagueId} nestačí na odměny (${out.required} Kč), krácení na ${Math.round(ratio * 100)} %`);
     }
   }
 
@@ -84,7 +84,7 @@ export async function applySeasonRewards(
 
     // Transakce (kredit + idempotenční marker) NEJDŘÍV a BEZ .catch — když zápis selže, chyba MÁ
     // propadnout (throw → fáze vrátí "error" → zopakuje se). Dřív spolknutá do warn → tým tiše bez odměny.
-    const kraceno = ratio < 1 ? ` — kráceno na ${Math.round(ratio * 100)} %` : "";
+    const kraceno = ratio < 1 ? `, kráceno na ${Math.round(ratio * 100)} %` : "";
     await recordTransaction(
       db, teamId, "season_reward", reward,
       `Odměna za ${seasonNumber}. sezónu (${pos}. místo)${kraceno}`, gameDate, refId,

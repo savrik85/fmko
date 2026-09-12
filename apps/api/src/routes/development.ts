@@ -683,7 +683,7 @@ developmentRouter.post("/admin/academy-graduate/:teamId", requireAdmin, async (c
     pocet: odchovanci.length,
     odchovanci,
     // prázdné pole znamená „klub do mládeže nesype", „nemá U21", nebo „ročník nevyšel"
-    poznamka: odchovanci.length > 0 ? null : "Žádný odchovanec — zkontroluj investici, U21 tým, nebo to prostě nevyšlo",
+    poznamka: odchovanci.length > 0 ? null : "Žádný odchovanec, zkontroluj investici, U21 tým, nebo to prostě nevyšlo",
   });
 });
 

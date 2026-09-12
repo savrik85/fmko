@@ -455,7 +455,7 @@ export function refereeBias(respect: number): number {
 export function incidentText(kind: RefereeIncidentKind, playerName: string, againstTeamName: string): string {
   switch (kind) {
     case "neuznany_gol":
-      return `Gól neplatí! Sudí odmávl ofsajd, který nikdo jiný na hřišti neviděl — ${againstTeamName} zuří.`;
+      return `Gól neplatí! Sudí odmávl ofsajd, který nikdo jiný na hřišti neviděl ${againstTeamName} zuří.`;
     case "vymyslena_penalta":
       return `Sudí ukazuje na puntík! ${playerName} se míče ani nedotkl a nikdo nechápe proč.`;
     case "neodpiskana_penalta":

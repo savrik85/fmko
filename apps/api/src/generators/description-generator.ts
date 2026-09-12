@@ -42,7 +42,7 @@ const TEMPLATES: Array<(ctx: DescContext) => string | null> = [
 
   // Nová vesnická povolání
   (ctx) => ctx.occupation === "Včelař" ? `Včely ho naučily trpělivosti. Na hřišti čeká na svoji chvíli.` : null,
-  (ctx) => ctx.occupation === "Myslivec" ? `Střílí přesně — na hřišti i na posedu. V kabině voní lesem.` : null,
+  (ctx) => ctx.occupation === "Myslivec" ? `Střílí přesně, na hřišti i na posedu. V kabině voní lesem.` : null,
   (ctx) => ctx.occupation === "Hajný" ? `Zná každý strom v lese a každou díru v obraně soupeře.` : null,
   (ctx) => ctx.occupation === "Kovář" ? `Ruce jako lopaty. Když fouká do autu, míč letí na druhou stranu hřiště.` : null,
   (ctx) => ctx.occupation === "Chovatel" ? `Vstává ve čtyři ráno ke kravám. V neděli ve dvanáct k fotbalu. Rozdíl nepozná.` : null,

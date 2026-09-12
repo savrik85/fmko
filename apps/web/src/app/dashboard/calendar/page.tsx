@@ -124,7 +124,7 @@ export default function CalendarPage() {
             const isFriendly = match?.title.startsWith("Přátelák");
             const isCup = !!match?.isCup;
             const matchLabel = match
-              ? match.title.replace("Přátelák — ", "").replace("Pohár — ", "").replace(/^\d+\. kolo — /, "")
+              ? match.title.replace("Přátelák ", "").replace("Pohár ", "").replace(/^\d+\. kolo — /, "")
               : null;
             const isLineupNeeded = match?.status === "Nastav sestavu!";
             const matchBg = !match ? "" :
@@ -136,7 +136,7 @@ export default function CalendarPage() {
             // U poháru je kolo důležitější než soupeř — ať je v tooltipu vidět
             const matchTitle = match ? [matchLabel, match.subtitle].filter(Boolean).join(" · ") : "";
             const tr = events.find((e) => e.type === "training");
-            const trainingLabel = tr?.title?.replace("Trénink — ", "") ?? "Trénink";
+            const trainingLabel = tr?.title?.replace("Trénink ", "") ?? "Trénink";
             // Intenzita dne — lehký šetří, tvrdý sebere. V buňce se vejde jen písmeno,
             // celý název je v tooltipu.
             const intensityMeta: Record<string, { short: string; label: string; cls: string; dot: string }> = {
@@ -145,7 +145,7 @@ export default function CalendarPage() {
               hard:   { short: "T", label: "tvrdý",    cls: "text-card-red",  dot: "bg-card-red" },
             };
             const intens = tr?.intensity ? intensityMeta[tr.intensity] : null;
-            const trainingTitle = intens ? `${trainingLabel} — ${intens.label}` : trainingLabel;
+            const trainingTitle = intens ? `${trainingLabel} ${intens.label}` : trainingLabel;
 
             return (
               <div key={i} className={`min-h-[60px] sm:min-h-[80px] border-b border-r border-gray-50 px-0.5 sm:px-1.5 py-1 ${isToday ? "bg-pitch-50 ring-2 ring-inset ring-pitch-400" : isWeekend ? "bg-gray-50/40" : ""}`}>

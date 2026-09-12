@@ -77,7 +77,7 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
   z: Zapas; vybrane: VybranyTip[]; onToggle: (t: VybranyTip) => void; muzeSazet: boolean;
 }) {
   const [rozbaleno, setRozbaleno] = useState(false);
-  const nazev = `${z.home.name} — ${z.away.name}`;
+  const nazev = `${z.home.name} ${z.away.name}`;
   const vybranyKlic = vybrane.find((v) => v.matchId === z.matchId);
 
   if (z.ownMatch) {

@@ -33,7 +33,7 @@ describe("pasivní postih za rozbité hřiště", () => {
     expect(pitchAttendanceFactor(5)).toBeLessThan(pitchAttendanceFactor(30));
   });
 
-  it("postih návštěvy má strop — prázdný stadion z toho nebude", () => {
+  it("postih návštěvy má strop, prázdný stadion z toho nebude", () => {
     expect(pitchAttendanceFactor(0)).toBeGreaterThan(0.8);
   });
 

@@ -53,7 +53,7 @@ describe("změna taktiky z lavičky", () => {
     expect(r.events.filter((e) => e.detail === "plan:tactic")).toHaveLength(0);
   });
 
-  it("událost o změně taktiky nepatří žádnému hráči — playerId 0, jméno týmu", () => {
+  it("událost o změně taktiky nepatří žádnému hráči, playerId 0, jméno týmu", () => {
     const home = tymSPlanem(1, [
       { id: "t1", fromMinute: 40, trigger: { kind: "minute" }, action: { kind: "tactic", tactic: "pressing" } },
     ]);

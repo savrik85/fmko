@@ -132,7 +132,7 @@ export function LineupPreview({ teamId, matchId, formation, tactic, hardness, ca
         <div>
           <div className="font-heading font-bold text-sm uppercase tracking-wide">Síla sestavy</div>
           <div className="text-micro text-muted">
-            {data?.opponent ? "Srovnání se soupeřem (jeho nejlepší 11)" : "Bez soupeře — jen vlastní síla"}
+            {data?.opponent ? "Srovnání se soupeřem (jeho nejlepší 11)" : "Bez soupeře, jen vlastní síla"}
           </div>
         </div>
         <div className="flex items-center gap-2">

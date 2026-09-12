@@ -79,7 +79,7 @@ describe("generátor part", () => {
     expect(new Set(groups.map((g) => g.kind)).size).toBe(FAN_GROUP_KINDS.length);
   });
 
-  it("je deterministický — stejný klub dá stejné lidi", () => {
+  it("je deterministický, stejný klub dá stejné lidi", () => {
     const znovu = generateFanGroups("team-abc", OPTS);
     expect(znovu).toEqual(groups);
   });
@@ -149,7 +149,7 @@ describe("šance na výtržnost", () => {
     expect(incidentChance(ctx({ group: { ...ctx().group, size: FAN_SKALY.MIN_SIZE - 1 } }))).toBe(0);
   });
 
-  it("uzavřený sektor je nulová šance — lidi se dovnitř nedostanou", () => {
+  it("uzavřený sektor je nulová šance, lidi se dovnitř nedostanou", () => {
     expect(incidentChance(ctx({ group: { ...ctx().group, sectorClosed: true } }))).toBe(0);
   });
 
@@ -222,7 +222,7 @@ describe("výběr a závažnost skutku", () => {
     }
   });
 
-  it("profesionální ochranka věc uhasí dřív — srazí stupeň", () => {
+  it("profesionální ochranka věc uhasí dřív, srazí stupeň", () => {
     const drop = calculateFacilityEffects({ security: 3 }).securitySeverityDrop;
     const bez = rollSeverity(1, 1, "bitka_kotle", { aggression: 100, leaderRadikalnost: 100, severityDropChance: 0 });
     const s = rollSeverity(1, 0, "bitka_kotle", { aggression: 100, leaderRadikalnost: 100, severityDropChance: drop });
@@ -298,13 +298,13 @@ describe("texty výtržností jsou česky", () => {
         const pred = t.slice(0, i);
         expect(
           NOSICI_PADU.some((n) => pred.endsWith(n)),
-          `${kind}: „${t}" — {skupina} je neskloňovatelné jméno, musí stát po ${NOSICI_PADU.join(" / ")}`,
+          `${kind}: „${t}", {skupina} je neskloňovatelné jméno, musí stát po ${NOSICI_PADU.join(" / ")}`,
         ).toBe(true);
       }
     }
   });
 
-  it("po vůdci je jen přítomný čas — může to být žena", () => {
+  it("po vůdci je jen přítomný čas, může to být žena", () => {
     // Minulý čas se v češtině shoduje v rodě, takže „{vudce} nezastavil" by
     // u organizátorky bylo špatně. Přítomný čas tenhle problém nemá.
     const MINULY = /^\{vudce\}\s+\S*(l|la|lo|li|ly)\b/;
@@ -332,7 +332,7 @@ describe("dopady part na zápas", () => {
     sector: "hlavni", sectorClosed: false, ticketDiscount: 0, ...o,
   });
 
-  it("klub bez part se nehne — neutrál, ne nula", () => {
+  it("klub bez part se nehne, neutrál, ne nula", () => {
     expect(fanGroupMatchEffects([])).toEqual(NEUTRAL_GROUP_EFFECTS);
     expect(fanGroupMatchEffects([bezna({ size: 0 })])).toEqual(NEUTRAL_GROUP_EFFECTS);
   });

@@ -45,9 +45,9 @@ export default function Home() {
         <div className="w-full max-w-md mx-auto space-y-2 stagger-children">
           <Feature text={"Postav fotbalový tým v reálné české obci"} />
           <Feature text={"Každý hráč má příběh, zaměstnání a vlastní avatar"} />
-          <Feature text={"Každý hráč má svůj život — práci, rodinu i výmluvy"} />
+          <Feature text={"Každý hráč má svůj život, práci, rodinu i výmluvy"} />
           <Feature text={"Komentáře ve stylu okresního zápasu"} />
-          <Feature text={"Sezóna, tabulka, postup — jako opravdický"} />
+          <Feature text={"Sezóna, tabulka, postup, jako opravdický"} />
         </div>
       </div>
 

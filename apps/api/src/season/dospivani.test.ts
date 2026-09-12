@@ -18,13 +18,13 @@ describe("bodyDospivani", () => {
     expect(bodyDospivani(16, 50)).toBeGreaterThan(0);
   });
 
-  it("talent rozhoduje — wonderkid roste výrazně rychleji než průměrný kluk", () => {
+  it("talent rozhoduje, wonderkid roste výrazně rychleji než průměrný kluk", () => {
     const bezny = bodyDospivani(17, 15);
     const wonderkid = bodyDospivani(17, 90);
     expect(wonderkid).toBeGreaterThan(bezny * 2);
   });
 
-  it("i kluk bez talentu povyroste — dospívání není jen pro vyvolené", () => {
+  it("i kluk bez talentu povyroste, dospívání není jen pro vyvolené", () => {
     expect(bodyDospivani(17, 0)).toBeGreaterThanOrEqual(3);
   });
 

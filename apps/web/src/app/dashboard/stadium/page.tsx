@@ -169,14 +169,14 @@ const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   refreshments: ["Žádné", "Dřevěný kiosek", "Zděná klubová hospůdka", "Moderní restaurace s terasou"],
   lighting: ["Žádné", "Dva základní stožáry", "Čtyři stožáry s osvětlením hřiště", "Plné profesionální osvětlení"],
   stands: ["Diváci stojí kolem hřiště", "Pár laviček", "Dřevěná tribuna", "Betonová tribuna se sedačkami"],
-  roof: ["Bez střechy — v dešti se to vylidní", "Plachta nad lavičkami", "Plechová stříška nad tribunou", "Kompletní zastřešení tribun"],
-  ultras_stand: ["Bez kotle", "Pár bubeníků za brankou", "Vlajkový sektor s bubny", "Peklo — chorály slyšet do vedlejší vsi"],
+  roof: ["Bez střechy, v dešti se to vylidní", "Plachta nad lavičkami", "Plechová stříška nad tribunou", "Kompletní zastřešení tribun"],
+  ultras_stand: ["Bez kotle", "Pár bubeníků za brankou", "Vlajkový sektor s bubny", "Peklo, chorály slyšet do vedlejší vsi"],
   toilets: ["Kopřivy za střídačkou", "Kadibudka", "Zděné záchodky", "Čisté sociálky s teplou vodou"],
   parking: ["Žádné", "Louka vedle hřiště", "Štěrkové parkoviště", "Asfaltové parkoviště s čarami"],
   fence: ["Žádné", "Provizorní páska", "Drátěný plot", "Zděné oplocení s branami"],
   entrance_gate: ["Závora a pokladna na stolečku", "Dřevěná pokladna a kovaná brána", "Zděná brána se 2 turnikety", "Monumentální stadionový portál s turnikety"],
   // Stejné znění jako SECURITY_POPIS v stadium-generator.ts — hlídá to test.
-  security: ["Žádná — pořádek si hlídá, kdo zrovna může", "Dva hasiči s páskou přes rameno", "Parta v reflexních vestách a s vysílačkou", "Agentura z okresu s kamerou nad kotlem"],
+  security: ["Žádná, pořádek si hlídá, kdo zrovna může", "Dva hasiči s páskou přes rameno", "Parta v reflexních vestách a s vysílačkou", "Agentura z okresu s kamerou nad kotlem"],
 };
 
 const LEVEL_LABELS = ["Žádné", "Základní", "Dobré", "Vynikající"];

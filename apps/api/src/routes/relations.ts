@@ -176,7 +176,7 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
       "SELECT status FROM manager_interactions WHERE type = 'pub_round' AND actor_team_id = ? AND match_id = ? LIMIT 1"
     ).bind(teamId, lastMatch.id).first<{ status: string }>();
     if (existing?.status === "planned") {
-      pubRound = { available: false, planned: true, reason: "Runda je slíbená — večer se v hospodě roztočí." };
+      pubRound = { available: false, planned: true, reason: "Runda je slíbená, večer se v hospodě roztočí." };
     } else if (existing) {
       pubRound = { available: false, planned: false, reason: "Za tuhle výhru už hospoda pila." };
     } else if (myScore <= theirScore) {
@@ -540,7 +540,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
             dartsText = dartsWinText(names);
           } else {
             await recordTransaction(db, teamId, "manager_social", -BEER_COST,
-              `Prohrané šipky — runda pro hospodu`, gameDate);
+              `Prohrané šipky, runda pro hospodu`, gameDate);
             await shiftSquadMorale(db, otherId, 1);
             dartsText = dartsLossText(names);
           }
@@ -649,7 +649,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           });
           await shiftSquadMorale(db, teamId, 2);
           await shiftSquadMorale(db, otherId, 2); // provokace soupeře nabudí — má to cenu
-          message = "Provokace vyšla v novinách. Kabina hoří — jenže soupeř taky.";
+          message = "Provokace vyšla v novinách. Kabina hoří, jenže soupeř taky.";
         } else {
           quote = statementHumbleQuote(names);
           await insertRelationNews(db, match.league_id, `${myName} hraje chudáčka`, quote, teamId);
@@ -671,7 +671,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           }
         } else {
           await createNotification(db, otherId, "event", "🗣️ Soupeř mluví do novin",
-            `Trenér ${myName} se před vaším zápasem rozpovídal v novinách. Přečti si zpravodaj — a klidně odpověz.`,
+            `Trenér ${myName} se před vaším zápasem rozpovídal v novinách. Přečti si zpravodaj, a klidně odpověz.`,
             `/dashboard/manager/${teamId}`, c.env as never)
             .catch((e) => logger.warn({ module: "relations" }, "statement notification", e));
         }
@@ -797,7 +797,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
   });
   const guestIds = [...new Set(body?.guestTeamIds ?? [])].filter((id) => id !== teamId);
   if (guestIds.length < 1 || guestIds.length > 4) {
-    return c.json({ error: "Pozvi 1 až 4 trenéry — na víc nemá hospoda stůl." }, 400);
+    return c.json({ error: "Pozvi 1 až 4 trenéry, na víc nemá hospoda stůl." }, 400);
   }
 
   // Cooldown (kryje i čekající akci)
@@ -805,7 +805,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     "SELECT created_at, status FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? ORDER BY created_at DESC LIMIT 1"
   ).bind(teamId).first<{ created_at: string; status: string }>();
   if (lastStammtisch?.status === "planned") {
-    return c.json({ error: "Posezení už je domluvené — výsledek uvidíš večer v hospodě." }, 400);
+    return c.json({ error: "Posezení už je domluvené, výsledek uvidíš večer v hospodě." }, 400);
   }
   if (daysSince(lastStammtisch?.created_at ?? null) < STAMMTISCH_COOLDOWN_DAYS) {
     return c.json({ error: "Posezení s trenéry bylo nedávno. Hospodský potřebuje doplnit sudy." }, 400);
@@ -821,7 +821,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     return c.json({ error: "Někteří pozvaní nejsou z tvojí ligy." }, 400);
   }
   if (guestsRes.results.some((g) => g.user_id === "ai")) {
-    return c.json({ error: "Posezení je jen pro lidské trenéry — AI trenér do hospody nepřijde." }, 400);
+    return c.json({ error: "Posezení je jen pro lidské trenéry. AI trenér do hospody nepřijde." }, 400);
   }
 
   // Jeden trenér = jedna hospoda za večer: kdo přijal cizí pozvání, nemůže hostit
@@ -829,7 +829,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     "SELECT id FROM manager_interactions WHERE type = 'stammtisch_invite' AND target_team_id = ? AND status = 'accepted' LIMIT 1"
   ).bind(teamId).first<{ id: string }>();
   if (acceptedElsewhere) {
-    return c.json({ error: "Dnes večer už sedíš u stolu jinde — přijal jsi cizí pozvání." }, 400);
+    return c.json({ error: "Dnes večer už sedíš u stolu jinde, přijal jsi cizí pozvání." }, 400);
   }
 
   // Rozpočet — rezervace stolu se platí hned, rundy večer podle účasti
@@ -886,13 +886,13 @@ relationsRouter.post("/teams/:teamId/stammtisch-invite/:inviteId", async (c) => 
       "SELECT id FROM manager_interactions WHERE type = 'stammtisch_invite' AND target_team_id = ? AND status = 'accepted' AND id != ? LIMIT 1"
     ).bind(teamId, inviteId).first<{ id: string }>();
     if (otherAccepted) {
-      return c.json({ error: "Dnes večer už sedíš u jiného stolu — přijal jsi jiné pozvání." }, 400);
+      return c.json({ error: "Dnes večer už sedíš u jiného stolu, přijal jsi jiné pozvání." }, 400);
     }
     const ownPlanned = await db.prepare(
       "SELECT id FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? AND status = 'planned' LIMIT 1"
     ).bind(teamId).first<{ id: string }>();
     if (ownPlanned) {
-      return c.json({ error: "Dnes večer hostíš vlastní posezení — nemůžeš sedět ve dvou hospodách najednou." }, 400);
+      return c.json({ error: "Dnes večer hostíš vlastní posezení, nemůžeš sedět ve dvou hospodách najednou." }, 400);
     }
   }
 
@@ -907,14 +907,14 @@ relationsRouter.post("/teams/:teamId/stammtisch-invite/:inviteId", async (c) => 
     body.accept ? "🍻 Pozvánka přijata" : "🍻 Pozvánka odmítnuta",
     body.accept
       ? `${guestManager} dorazí na posezení. Hospodský chladí.`
-      : `${guestManager} se omluvil — dnes večer nedorazí.`,
+      : `${guestManager} se omluvil, dnes večer nedorazí.`,
     "/dashboard/hospoda", c.env as never)
     .catch((e) => logger.warn({ module: "relations" }, "invite response notification", e));
 
   return c.json({
     ok: true,
     message: body.accept
-      ? `Přijato! Večer doraz do hospody ${hostName} — útratu platí hostitel.`
+      ? `Přijato! Večer doraz do hospody ${hostName}, útratu platí hostitel.`
       : "Odmítnuto. Třeba příště.",
   });
 });
@@ -950,6 +950,6 @@ relationsRouter.post("/teams/:teamId/pub-round", async (c) => {
   return c.json({
     ok: true,
     planned: true,
-    message: "Slíbeno! Hospoda už se těší — rundu roztočíš večer a uvidíš, kolik hrdel slavilo.",
+    message: "Slíbeno! Hospoda už se těší, rundu roztočíš večer a uvidíš, kolik hrdel slavilo.",
   });
 });

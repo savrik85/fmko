@@ -271,7 +271,7 @@ function LigaPage() {
 
   if (loadingStandings) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
-  const displayName = seasonNum ? `${leagueName} — Sezóna ${seasonNum}` : (leagueName || "Liga");
+  const displayName = seasonNum ? `${leagueName}. Sezóna ${seasonNum}` : (leagueName || "Liga");
 
   // Minulé sezóny aktuálně zobrazené ligy (dle názvu) + vybraný archiv
   const pastSeasons = history.filter((h) => h.leagueName === leagueName).sort((a, b) => b.seasonNumber - a.seasonNumber);
@@ -356,7 +356,7 @@ function LigaPage() {
                   <div className="flex-1 min-w-0">
                     <h3 className="font-heading font-bold text-base text-ink">{a.headline}</h3>
                     <ArticleBody article={a} />
-                    <p className="text-xs text-muted/60 mt-2">{a.date ? formatDate(a.date) : ""}{a.gameWeek ? ` — ${a.gameWeek}. kolo` : ""}</p>
+                    <p className="text-xs text-muted/60 mt-2">{a.date ? formatDate(a.date) : ""}{a.gameWeek ? ` ${a.gameWeek}. kolo` : ""}</p>
                   </div>
                 </div>
               </div>
@@ -443,8 +443,8 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
             <PastStat label="Branek celkem" value={`${s.totalGoals}`} sub={`${s.goalsPerMatch} / zápas`} />
             {s.totalBeer != null && s.totalBeer > 0 && <PastStat label="🍺 Vypito piv" value={`${s.totalBeer.toLocaleString("cs")}`} sub="za sezónu" />}
             {s.recordAttendance && <PastStat label="👥 Nejvíc lidí" value={`${s.recordAttendance.value}`} sub={s.recordAttendance.homeTeam} />}
-            {s.wildestMatch && <PastStat label="🟥 Nejdivočejší zápas" value={`${s.wildestMatch.cards} karet`} sub={`${s.wildestMatch.homeTeam} – ${s.wildestMatch.awayTeam}`} />}
-            {s.biggestWin && <PastStat label="Nejvyšší výhra" value={`${s.biggestWin.homeScore}:${s.biggestWin.awayScore}`} sub={`${s.biggestWin.homeTeam} – ${s.biggestWin.awayTeam}`} />}
+            {s.wildestMatch && <PastStat label="🟥 Nejdivočejší zápas" value={`${s.wildestMatch.cards} karet`} sub={`${s.wildestMatch.homeTeam} ${s.wildestMatch.awayTeam}`} />}
+            {s.biggestWin && <PastStat label="Nejvyšší výhra" value={`${s.biggestWin.homeScore}:${s.biggestWin.awayScore}`} sub={`${s.biggestWin.homeTeam} ${s.biggestWin.awayTeam}`} />}
             <PastStat label="Zápasů" value={`${s.matchesPlayed}`} />
             {s.longestWinStreak && <PastStat label="Nejdelší série" value={`${s.longestWinStreak.length}×`} sub={s.longestWinStreak.teamName} />}
           </div>

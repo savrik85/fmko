@@ -44,7 +44,7 @@ describe("dopad stavu trávníku na hru", () => {
     expect(pitchLongBallBonus(500)).toBe(pitchLongBallBonus(100));
   });
 
-  it("výheň už není zadarmo — tvrdá zem a vedro si něco berou", () => {
+  it("výheň už není zadarmo, tvrdá zem a vedro si něco berou", () => {
     expect(WEATHER_MODS.sunny.injuryMod).toBeGreaterThan(1);
     expect(WEATHER_MODS.sunny.conditionDrainMod).toBeGreaterThan(1);
     // Ale pořád musí být mírnější než sníh.

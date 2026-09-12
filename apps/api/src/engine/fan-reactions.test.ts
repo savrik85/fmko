@@ -23,7 +23,7 @@ describe("katalog událostí", () => {
     }
   });
 
-  it("kdo píše, má co napsat — a naopak", () => {
+  it("kdo píše, má co napsat, a naopak", () => {
     for (const k of CLUB_EVENT_KINDS) {
       const d = CLUB_EVENTS[k];
       if (d.pise) {

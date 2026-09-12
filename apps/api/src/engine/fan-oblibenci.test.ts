@@ -65,7 +65,7 @@ describe("každá parta soudí podle sebe", () => {
 });
 
 describe("výběr miláčka", () => {
-  it("malý kádr nikoho nevybírá — pět lidí otloukánka nepotřebuje", () => {
+  it("malý kádr nikoho nevybírá, pět lidí otloukánka nepotřebuje", () => {
     const v = vyberOblibence("kotel", KADR.slice(0, 4));
     expect(v.oblibenec).toBeNull();
     expect(v.otloukanek).toBeNull();

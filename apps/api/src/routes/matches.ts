@@ -461,12 +461,12 @@ const PROMO_BOOST = 1.25;
 const PROMO_HEADLINES: string[] = [
   "{team} láká na zápas s {opp}!",
   "{team} pálí do propagace zápasu s {opp}",
-  "Přijď na {team} vs {opp} — propagace běží",
+  "Přijď na {team} vs {opp}, propagace běží",
   "Plakáty, rozhlas a tlampače: {team} zve na derby s {opp}",
   "{team}: „Na {opp} přijďte všichni!“",
 ];
 const PROMO_BODIES: string[] = [
-  "V {village} se rozjela propagační kampaň — fotbalisté {team} slibují parádní zápas proti {opp}. Vedení klubu nešetří na plakátech ani na hlášeních v obecním rozhlase. „Stánek s pivem bude připraven, grill roztopen a tribuna vyčištěna,“ hlásí pořadatelé.",
+  "V {village} se rozjela propagační kampaň, fotbalisté {team} slibují parádní zápas proti {opp}. Vedení klubu nešetří na plakátech ani na hlášeních v obecním rozhlase. „Stánek s pivem bude připraven, grill roztopen a tribuna vyčištěna,“ hlásí pořadatelé.",
   "Klub {team} tentokrát sází na reklamu. Před zápasem s {opp} se v {village} objevily plakáty na každé druhé zastávce a místní trafika hlásí, že se o zápase mluví víc než obvykle. Očekává se vyprodaný stadion.",
   "„Takový zápas si nenecháme ujít,“ píše se na plakátech {team}. V {village} se připravuje na soupeření s {opp} a vedení klubu posílá pozvánku všem, kdo mají rádi dobrý fotbal. Kdo přijde, dostane atmosféru.",
   "V {village} je rušno: {team} vyrukoval s propagační kampaní před zápasem s {opp}. Starosta prý přislíbil účast i s rodinou, místní restaurace nabízí akci na pivo a fanoušci se těší na plný stadion.",
@@ -476,16 +476,16 @@ const PROMO_BODIES: string[] = [
 // Pohárová varianta — v poháru hraje vesnický klub o postup, propagace má jiný náboj.
 const CUP_PROMO_HEADLINES: string[] = [
   "{team} zve na pohár: {round} proti {opp}",
-  "Pohárový svátek v {village} — {team} vs {opp}",
+  "Pohárový svátek v {village}, {team} vs {opp}",
   "{team} láká na {round} poháru s {opp}",
   "Plakáty po celé {village}: {team} hraje {round} proti {opp}",
   "{team}: „Pohár se hraje jednou, přijďte všichni!“",
 ];
 const CUP_PROMO_BODIES: string[] = [
-  "V {village} visí plakáty na každém sloupu — {team} vyzývá k pohárovému zápasu proti {opp}. Vedení klubu ví, že pohár se nehraje každý týden: rozhlas hlásí od rána, stánek s pivem bude posílený a tribuna vydrhnutá. „Takový zápas si tady nezahrajeme každou sezónu,“ hlásí pořadatelé.",
-  "Pohár přivádí do {village} soupeře, který sem normálně nezavítá. {team} proto rozjel propagaci naplno — hlášení v rozhlase, plakáty v hospodě i u obchodu a pozvánka pro celou obec. Proti {opp} se čeká nabité hřiště.",
+  "V {village} visí plakáty na každém sloupu, {team} vyzývá k pohárovému zápasu proti {opp}. Vedení klubu ví, že pohár se nehraje každý týden: rozhlas hlásí od rána, stánek s pivem bude posílený a tribuna vydrhnutá. „Takový zápas si tady nezahrajeme každou sezónu,“ hlásí pořadatelé.",
+  "Pohár přivádí do {village} soupeře, který sem normálně nezavítá. {team} proto rozjel propagaci naplno, hlášení v rozhlase, plakáty v hospodě i u obchodu a pozvánka pro celou obec. Proti {opp} se čeká nabité hřiště.",
   "„Na pohár se chodí,“ píše se na plakátech {team}. Klub zve celou {village} na duel s {opp} a slibuje atmosféru, jaká v lize nebývá. Grill bude roztopený, sud vychlazený a hřiště nachystané.",
-  "V {village} se mluví jen o poháru. {team} vyrukoval s kampaní před zápasem s {opp} — a nešetřil. Starosta prý přijde s rodinou, hasiči slíbili pomoct s pořadatelstvím a fanoušci se těší na vyprodáno.",
+  "V {village} se mluví jen o poháru. {team} vyrukoval s kampaní před zápasem s {opp}, a nešetřil. Starosta prý přijde s rodinou, hasiči slíbili pomoct s pořadatelstvím a fanoušci se těší na vyprodáno.",
   "Před pohárovým zápasem {team} vs {opp} zaplavila {village} propagace. Reklamy u hřiště, na zastávkách i v hospodách. Kdo v {village} ještě neví, že se hraje pohár, ten už asi nechodí ven.",
 ];
 
@@ -1292,7 +1292,7 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
          AND created_at LIKE ? AND created_at >= ? LIMIT 1`
       ).bind(teamId, teamId, challengerTeamId, challengerTeamId, `${gameDateDay}%`, seasonStart),
     ]);
-    if (leagueRes.results.length > 0) return c.json({ error: "Dnes máš nebo soupeř má ligový zápas — přátelák nelze přijmout" }, 400);
+    if (leagueRes.results.length > 0) return c.json({ error: "Dnes máš nebo soupeř má ligový zápas, přátelák nelze přijmout" }, 400);
     if (friendlyRes.results.length > 0) return c.json({ error: "Jeden z týmů už dnes hrál nebo má naplánovaný přátelák" }, 400);
   }
 

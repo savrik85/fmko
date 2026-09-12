@@ -40,7 +40,7 @@ export interface EnqueueResult {
 export async function enqueueMatchTick(env: Bindings): Promise<EnqueueResult> {
   const queue = env.MATCH_QUEUE;
   if (!queue) {
-    logger.error({ module: "queue-producer" }, "MATCH_QUEUE binding chybí — nic nezařazeno");
+    logger.error({ module: "queue-producer" }, "MATCH_QUEUE binding chybí, nic nezařazeno");
     return { rounds: 0, maintenance: 0, leagues: [] };
   }
 
@@ -94,7 +94,7 @@ export async function enqueueTeamDays(
 ): Promise<{ leagues: number; looseTeams: number }> {
   const queue = env.MATCH_QUEUE;
   if (!queue) {
-    logger.error({ module: "queue-producer" }, "MATCH_QUEUE binding chybí — denní tick nezařazen");
+    logger.error({ module: "queue-producer" }, "MATCH_QUEUE binding chybí, denní tick nezařazen");
     return { leagues: 0, looseTeams: 0 };
   }
 
@@ -119,7 +119,7 @@ export async function enqueueTeamDays(
     if (loose.length > 50) {
       logger.warn(
         { module: "queue-producer" },
-        `${loose.length} týmů bez ligy se zpracovává v jedné invokaci — zvážit vlastní typ zprávy`,
+        `${loose.length} týmů bez ligy se zpracovává v jedné invokaci, zvážit vlastní typ zprávy`,
       );
     }
     const { processTeamDay } = await import("../season/team-day");
@@ -140,11 +140,11 @@ export async function enqueueTeamDays(
 export async function enqueueMatchdayPreviews(env: Bindings): Promise<number> {
   const queue = env.REPORTS_QUEUE;
   if (!queue) {
-    logger.error({ module: "queue-producer" }, "REPORTS_QUEUE binding chybí — preview nezařazeno");
+    logger.error({ module: "queue-producer" }, "REPORTS_QUEUE binding chybí, preview nezařazeno");
     return 0;
   }
   if (!env.GEMINI_API_KEY) {
-    logger.warn({ module: "queue-producer" }, "skip matchday preview — no GEMINI_API_KEY");
+    logger.warn({ module: "queue-producer" }, "skip matchday preview, no GEMINI_API_KEY");
     return 0;
   }
 

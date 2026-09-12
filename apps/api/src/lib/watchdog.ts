@@ -55,7 +55,7 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   if (hodinOdKola !== null && hodinOdKola > 26) {
     problemy.push({
       kod: "zadne_kolo",
-      popis: "Poslední odsimulované kolo je starší než 26 hodin — tick zřejmě neběží",
+      popis: "Poslední odsimulované kolo je starší než 26 hodin, tick zřejmě neběží",
       hodnota: `${hodinOdKola} h`,
     });
   }
@@ -96,7 +96,7 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   if (backlog !== null && backlog > 15) {
     problemy.push({
       kod: "backlog",
-      popis: "Nedohraných splatných kol je moc — tick nestíhá tempo herního času",
+      popis: "Nedohraných splatných kol je moc, tick nestíhá tempo herního času",
       hodnota: backlog,
     });
   }
@@ -143,7 +143,7 @@ export async function runWatchdogAndAlert(env: Bindings): Promise<WatchdogResult
     ).all<{ team_id: string }>();
 
     if (admini.results.length === 0) {
-      logger.warn({ module: "watchdog" }, "žádný admin s týmem — notifikace nemá kam jít");
+      logger.warn({ module: "watchdog" }, "žádný admin s týmem, notifikace nemá kam jít");
       return vysledek;
     }
 

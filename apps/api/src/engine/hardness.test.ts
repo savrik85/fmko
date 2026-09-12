@@ -99,7 +99,7 @@ const per = (n: number, t: Totals) => n / t.matches;
 
 const N = 2500;
 
-describe("tvrdost hry — agregáty", () => {
+describe("tvrdost hry, agregáty", () => {
   const fair = run(N, "fair", REF.neutralni, 40000);
   const normal = run(N, "normal", REF.neutralni, 40000);
   const hard = run(N, "hard", REF.neutralni, 40000);
@@ -151,12 +151,12 @@ describe("tvrdost hry — agregáty", () => {
     expect(per(oboji.injuries, oboji)).toBeLessThan(1.6);
   }, SLOW);
 
-  it("férová hra je gólově skoro neutrální — platí se za pojistku, ne za výkon", () => {
+  it("férová hra je gólově skoro neutrální, platí se za pojistku, ne za výkon", () => {
     expect(Math.abs(gd(fair) - gd(normal))).toBeLessThan(0.20);
   }, SLOW);
 });
 
-describe("tvrdost hry — na čem záleží", () => {
+describe("tvrdost hry, na čem záleží", () => {
   it("PŘEHOZENÍ ZNAMÉNKA: proti benevolentnímu se vyplatí, proti přísnému ne", () => {
     const zisk = (ref: RefereeProfile, seed: number) =>
       gd(run(N, "hard", ref, seed)) - gd(run(N, "normal", ref, seed));
@@ -225,7 +225,7 @@ describe("tvrdost hry — na čem záleží", () => {
   }, SLOW);
 });
 
-describe("tvrdost hry — vzorce", () => {
+describe("tvrdost hry, vzorce", () => {
   it("modifikátory jsou konzistentní: normal je všude neutrální", () => {
     const n = HARDNESS_MODS.normal;
     expect(n.defenseMod).toBe(1);

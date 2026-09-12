@@ -65,7 +65,7 @@ describe("váhy počasí podle sezóny", () => {
 });
 
 describe("počasí kola", () => {
-  it("je deterministické — stejné kolo dá vždy totéž", () => {
+  it("je deterministické, stejné kolo dá vždy totéž", () => {
     const a = roundWeather("cal-abc-123", 5, 13);
     const b = roundWeather("cal-abc-123", 5, 13);
     expect(a).toEqual(b);

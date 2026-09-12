@@ -86,7 +86,7 @@ export async function knihaSazek(
       label: t.label as string,
       oddsX100: t.odds_x100 as number,
       result: t.result as string,
-      zapas: `${t.home_name} — ${t.away_name}`,
+      zapas: `${t.home_name} ${t.away_name}`,
     });
     podle.set(t.ticket_id as string, arr);
   }

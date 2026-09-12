@@ -100,7 +100,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "complaint",
     expectedTurns: 3,
     description:
-      "Hráč si stěžuje na konkrétního spoluhráče — že se s ním nedá hrát, je arogantní, nemaká, nebo žárlí. Chce, aby trenér něco udělal.",
+      "Hráč si stěžuje na konkrétního spoluhráče, že se s ním nedá hrát, je arogantní, nemaká, nebo žárlí. Chce, aby trenér něco udělal.",
     weight: (p) =>
       w(p.aggression > 60, 3) +
       w(p.temper > 60, 3) +
@@ -166,7 +166,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 3,
     description:
-      "Hráč se svěřuje s problémem doma — nemoc v rodině, hádka s manželkou, narozená malá. Žádá o pochopení, případně pauzu nebo volno na zápas.",
+      "Hráč se svěřuje s problémem doma, nemoc v rodině, hádka s manželkou, narozená malá. Žádá o pochopení, případně pauzu nebo volno na zápas.",
     weight: (p) =>
       w(p.age >= 25, 3) +
       w(p.coachRelationship > 55, 2) +
@@ -178,7 +178,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 2,
     description:
-      "Hráč má bolesti — natažený sval, otok kolena, narážený kotník. Není zraněný, ale ptá se, jestli má hrát zápas, nebo radši šetřit. Chce upřímnou radu.",
+      "Hráč má bolesti, natažený sval, otok kolena, narážený kotník. Není zraněný, ale ptá se, jestli má hrát zápas, nebo radši šetřit. Chce upřímnou radu.",
     weight: (p) =>
       w(p.condition < 60, 4) +
       w(p.age > 30, 3) +
@@ -190,7 +190,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 2,
     description:
-      "Hráč má v životě milník — svatba, narozeniny, dítě, povýšení v práci. Sdílí radost, možná zve trenéra na oslavu, nebo žádá volno.",
+      "Hráč má v životě milník, svatba, narozeniny, dítě, povýšení v práci. Sdílí radost, možná zve trenéra na oslavu, nebo žádá volno.",
     weight: (p) =>
       w(p.age >= 24 && p.age <= 35, 3) +
       w(p.coachRelationship > 50, 2) +
@@ -216,7 +216,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "transfer",
     expectedTurns: 3,
     description:
-      "Hráče oslovil jiný klub z okresu. Říká to trenérovi z respektu, ptá se, jestli má jít na schůzku. Záleží mu na trenérově názoru — hlavně pokud je vztah dobrý.",
+      "Hráče oslovil jiný klub z okresu. Říká to trenérovi z respektu, ptá se, jestli má jít na schůzku. Záleží mu na trenérově názoru, hlavně pokud je vztah dobrý.",
     weight: (p) =>
       w(p.recentRatingAvg > 7.0 && p.age < 30, 4) +
       w(p.morale < 50, 3) +
@@ -253,7 +253,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "positive",
     expectedTurns: 2,
     description:
-      "Hráč se v posledním zápase trefil a má z toho radost. Zmíní gól, poděkuje za šanci nebo za nahrávku. Sebevědomý, ale ne namyšlený — je to vesnický fotbal, ne liga mistrů.",
+      "Hráč se v posledním zápase trefil a má z toho radost. Zmíní gól, poděkuje za šanci nebo za nahrávku. Sebevědomý, ale ne namyšlený, je to vesnický fotbal, ne liga mistrů.",
     weight: (p) =>
       (p.lastMatchGoals ?? 0) < 1 ? 0 :
       w(true, 6) + w((p.lastMatchGoals ?? 0) >= 2, 4) + w(p.morale > 50, 2),
@@ -264,7 +264,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 2,
     description:
-      "Hráč dostal v posledním zápase červenou kartu a ví, že nechal tým v deseti. Omlouvá se — podle povahy buď upřímně a zkroušeně, nebo se vymlouvá na rozhodčího a soupeře.",
+      "Hráč dostal v posledním zápase červenou kartu a ví, že nechal tým v deseti. Omlouvá se, podle povahy buď upřímně a zkroušeně, nebo se vymlouvá na rozhodčího a soupeře.",
     weight: (p) =>
       !p.lastMatchRedCard ? 0 :
       w(true, 9) + w(p.discipline > 55, 2) + w(p.temper > 65, 2),
@@ -275,7 +275,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "complaint",
     expectedTurns: 3,
     description:
-      "Tým prohrává zápas za zápasem a hráč to už nemůže vydýchat. Ptá se, co s tím trenér udělá — chce změnu tréninku, sestavy nebo taktiky. Frustrovaný, ale ne urážlivý.",
+      "Tým prohrává zápas za zápasem a hráč to už nemůže vydýchat. Ptá se, co s tím trenér udělá, chce změnu tréninku, sestavy nebo taktiky. Frustrovaný, ale ne urážlivý.",
     weight: (p) =>
       (p.teamStreak ?? 0) > -2 ? 0 :
       w(true, 5) + w(Math.abs(p.teamStreak ?? 0) >= 3, 4) + w(p.leadership > 55, 3) + w(p.morale < 55, 2),
@@ -297,7 +297,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 2,
     description:
-      "Tým prohrál a hráč má pocit, že za to může on — špatný výkon, zkažená šance, chyba u gólu. Hledá u trenéra buď povzbuzení, nebo si chce sypat popel na hlavu.",
+      "Tým prohrál a hráč má pocit, že za to může on, špatný výkon, zkažená šance, chyba u gólu. Hledá u trenéra buď povzbuzení, nebo si chce sypat popel na hlavu.",
     weight: (p) =>
       p.lastMatchOutcome !== "loss" || p.playedLastMatch === false ? 0 :
       w(true, 4) + w((p.lastMatchRating ?? 7) < 6.0, 5) + w(p.workRate > 60, 2),

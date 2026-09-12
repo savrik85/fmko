@@ -159,7 +159,7 @@ export async function spawnCelebrity(
 
   const bodyMap: Record<CelebrityType, string> = {
     legend: tier === "S"
-      ? `Okresním přeborem otřásla zpráva — do oblasti se přistěhoval ${fullName}, ${tierDesc} a legenda české kopané. Podle našich informací se zajímá o účast v místním přeboru. Fanoušci v celém okresu nevěří vlastním očím. Kdo si ho podepíše?`
+      ? `Okresním přeborem otřásla zpráva, do oblasti se přistěhoval ${fullName}, ${tierDesc} a legenda české kopané. Podle našich informací se zajímá o účast v místním přeboru. Fanoušci v celém okresu nevěří vlastním očím. Kdo si ho podepíše?`
       : `Překvapivá zpráva: ${fullName}, ${tierDesc}, se usadil v okrese a hledá tým kde by si zakopal. Je k dispozici jako volný hráč.`,
     fallen_star: `${fullName}, kdysi velká naděje na pozici ${celeb.position === "FWD" ? "útočníka" : celeb.position === "MID" ? "záložníka" : "obránce"}, se vrátil do rodného kraje. Kariéru v první lize mu zničil alkohol a životní styl. Talent ale zůstal — otázka zní, jestli ho někdo dokáže vychovat zpět.`,
     glass_man: `${fullName}, talentovaný ${celeb.position === "FWD" ? "útočník" : celeb.position === "MID" ? "záložník" : "obránce"} v nejlepších letech, musel kvůli chronickým zraněním opustit profesionální fotbal. Teď hledá tým v okresním přeboru. Když hraje, je výborný — ale vydrží jeho kolena?`,
@@ -179,11 +179,11 @@ export async function spawnCelebrity(
     legend: [
       `Trenére, četl jste noviny?! ${fullName} se přistěhoval sem do okresu! To je přece ${tierDesc}! To by bylo něco, kdyby hrál za nás!`,
       `Trenére! Slyšel jsem v hospodě, že ${fullName} je tady v okrese! Prej hledá tým! Musíme ho mít!`,
-      `Trenére, nevěřím vlastním očím — ${fullName} je na trhu volných hráčů! Ten hrál přece za repre! Můžem ho podepsat?`,
+      `Trenére, nevěřím vlastním očím ${fullName} je na trhu volných hráčů! Ten hrál přece za repre! Můžem ho podepsat?`,
     ],
     fallen_star: [
       `Trenére, víte co se povídá? ${fullName} je zpátky v kraji. Prej to s ním šlo z kopce, ale talent tam prej furt je. Co říkáte?`,
-      `Trenére, ${fullName} je na trhu. Znám ho ze školy — byl to bůh na hřišti. Teď prej pije, ale třeba by se dal dohromady u nás?`,
+      `Trenére, ${fullName} je na trhu. Znám ho ze školy, byl to bůh na hřišti. Teď prej pije, ale třeba by se dal dohromady u nás?`,
       `Trenére, četl jsem v novinách o ${fullName}. Ten mladej co hrál za ligu a pak to zabalil. Prej je v okrese, nechceme ho zkusit?`,
     ],
     glass_man: [
@@ -196,20 +196,20 @@ export async function spawnCelebrity(
   // Scout report — general risks without specific numbers
   const scoutReports: Record<CelebrityType, string> = {
     legend: `Tak já se na to podíval. ${fullName} je kvalitou úplně jinde než naši kluci, to je jasný. `
-      + `Ale pozor — tenhle typ hráče má svoje návyky. Na tréninky moc nechodí, má vlastní program. `
-      + `Na zápasy taky ne vždycky — má spoustu akcí a povinností mimo fotbal. `
-      + `A nebude to zadarmo — bude chtít příplatek za dojíždění. `
+      + `Ale pozor, tenhle typ hráče má svoje návyky. Na tréninky moc nechodí, má vlastní program. `
+      + `Na zápasy taky ne vždycky, má spoustu akcí a povinností mimo fotbal. `
+      + `A nebude to zadarmo, bude chtít příplatek za dojíždění. `
       + `Ale když nastoupí, diváci se pohrnou a na hřišti to bude vidět. `
       + `Já bych do toho šel, ale počítejte s tím, že spolehlivý nebude.`,
-    fallen_star: `Podíval jsem se na to. ${fullName} teď na tom není nejlíp, ale talent tam furt je — a velkej. `
+    fallen_star: `Podíval jsem se na to. ${fullName} teď na tom není nejlíp, ale talent tam furt je, a velkej. `
       + `Problém je životní styl. Hodně pije a disciplínu moc neřeší. Bude vynechávat tréninky, bude přicházet s kocovinou. `
       + `Pokud ho dokážeme vychovat a dostat zpátky do formy, může z něj být hvězda kádru. `
-      + `Pokud ne, budeme mít v kabině problém. Za mě — zkusit to, ale mít realistický očekávání.`,
+      + `Pokud ne, budeme mít v kabině problém. Za mě, zkusit to, ale mít realistický očekávání.`,
     glass_man: `Prověřil jsem ho. ${fullName} je fakt kvalitní hráč, o tom žádná. `
-      + `Odešel z profi fotbalu kvůli zraněním — a to je taky ten hlavní háček. Tělo ho zrazuje. `
+      + `Odešel z profi fotbalu kvůli zraněním, a to je taky ten hlavní háček. Tělo ho zrazuje. `
       + `Jinak je disciplinovanej, žádnej průšvihář. Ale bude chybět na spoustě zápasů kvůli zdraví. `
       + `Když ale nastoupí, bude nejlepší hráč na hřišti. `
-      + `Za mě jednoznačně podepsat — jen počítejte s tím, že ho budeme mít tak na polovinu zápasů.`,
+      + `Za mě jednoznačně podepsat, jen počítejte s tím, že ho budeme mít tak na polovinu zápasů.`,
   };
 
   for (const t of humanTeams.results) {

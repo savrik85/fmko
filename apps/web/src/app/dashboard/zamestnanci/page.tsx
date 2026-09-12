@@ -365,7 +365,7 @@ export default function ZamestnanciPage() {
                         className="text-xs border border-gray-200 rounded-soft px-2 py-1 font-heading bg-white flex-1 min-w-[10rem]">
                         {STAFF_ROLE_ORDER.map((r) => (
                           <option key={r} value={r} disabled={occupiedRoles.has(r)}>
-                            {ROLE_DEFS[r].label} ({staffEffectiveness(cand, r)}/20){occupiedRoles.has(r) ? " — obsazeno" : ""}
+                            {ROLE_DEFS[r].label} ({staffEffectiveness(cand, r)}/20){occupiedRoles.has(r) ? ", obsazeno" : ""}
                           </option>
                         ))}
                       </select>

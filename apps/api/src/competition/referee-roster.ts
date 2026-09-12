@@ -95,7 +95,7 @@ export async function canPauseReferee(
   if (usable - 1 < MIN_USABLE_FOR_ROUND) {
     return {
       ok: false, usable,
-      reason: `Na kolo by zbylo jen ${usable - 1} rozhodčích. Minimum je ${MIN_USABLE_FOR_ROUND} — jinak by jeden pískal dva zápasy denně.`,
+      reason: `Na kolo by zbylo jen ${usable - 1} rozhodčích. Minimum je ${MIN_USABLE_FOR_ROUND}, jinak by jeden pískal dva zápasy denně.`,
     };
   }
 

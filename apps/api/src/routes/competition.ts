@@ -388,7 +388,7 @@ competitionRouter.get("/competition/:leagueId/decisions", async (c) => {
     const pokuty = items.filter((i) => i.kind === "compliance" && i.status === "passed");
     if (pokuty.length > 0) {
       const kluby = pokuty
-        .map((p) => String(p.title).split(" — ")[1])
+        .map((p) => String(p.title).split(" ")[1])
         .filter(Boolean);
       decisions.push({
         gameDate: m.game_date,
@@ -718,7 +718,7 @@ competitionRouter.delete("/teams/:teamId/competition/proposals/:id", async (c) =
     .catch((e) => { logger.warn({ module: M }, "stažení návrhu", e); return null; });
 
   if (!res || (res.meta?.changes ?? 0) === 0) {
-    return c.json({ error: "Návrh nejde stáhnout — buď není tvůj, nebo už se o něm hlasovalo." }, 409);
+    return c.json({ error: "Návrh nejde stáhnout, buď není tvůj, nebo už se o něm hlasovalo." }, 409);
   }
   // Kauce propadá: stažení po rozjeté diskusi nesmí být zadarmo.
   return c.json({ ok: true });
@@ -1181,7 +1181,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-swap", async (c) => {
   const volni = await freeForRound(c.env.DB, leagueId, meta.season_number, meta.district, round);
   if (!volni.has(body.refereeId)) {
     return c.json({
-      error: "Tenhle sudí není volný — píská ten den jinde, je vyškrtnutý, nebo má stopku.",
+      error: "Tenhle sudí není volný, píská ten den jinde, je vyškrtnutý, nebo má stopku.",
     }, 409);
   }
 
@@ -1236,7 +1236,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-pauses", async (c) =>
 
   const round = await upcomingRound(c.env.DB, leagueId);
   if (!round) {
-    return c.json({ error: "Žádné kolo teď nečeká na výkop — stopka by neměla od čeho běžet." }, 409);
+    return c.json({ error: "Žádné kolo teď nečeká na výkop, stopka by neměla od čeho běžet." }, 409);
   }
 
   // Nejbližší kolo je už rozdelegované, takže stopka na něj nedosáhne — začíná
@@ -1251,7 +1251,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-pauses", async (c) =>
   const standings = await refereeStandings(c.env.DB, leagueId, meta.season_number, meta.district);
   const ref = standings.find((r) => r.refereeId === body.refereeId);
   if (!ref) return c.json({ error: "Takový rozhodčí na listině není." }, 404);
-  if (ref.banned) return c.json({ error: "Tenhle sudí je vyškrtnutý — stopka by byla k ničemu." }, 409);
+  if (ref.banned) return c.json({ error: "Tenhle sudí je vyškrtnutý, stopka by byla k ničemu." }, 409);
 
   const gameDate = await currentGameDate(c.env.DB, teamId);
   const done = await applyRefereePause(c.env.DB, {
@@ -1475,7 +1475,7 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
   const gameDate = await currentGameDate(c.env.DB, teamId);
   const id = crypto.randomUUID();
   const titul = `${GRANT_LABEL[kind]}: ${amount.toLocaleString("cs")} Kč`
-    + (cil ? ` — ${cil.name}` : kind === "pitch" ? " klubům pod hranicí" : " rovným dílem");
+    + (cil ? ` ${cil.name}` : kind === "pitch" ? " klubům pod hranicí" : " rovným dílem");
 
   await c.env.DB.prepare(
     `INSERT INTO competition_proposals
@@ -1587,7 +1587,7 @@ competitionRouter.post("/teams/:teamId/competition/sponsor-offers/:id/propose", 
   const gov = await loadGovernance(c.env.DB, leagueId);
   if (!gov?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
   if (gov.sponsor_name) {
-    return c.json({ error: `Soutěž už sponzora má — ${gov.sponsor_name}.` }, 409);
+    return c.json({ error: `Soutěž už sponzora má ${gov.sponsor_name}.` }, 409);
   }
 
   const voters = await voterStats(c.env.DB, leagueId);

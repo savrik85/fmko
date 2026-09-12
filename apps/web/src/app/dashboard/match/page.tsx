@@ -1063,7 +1063,7 @@ function MatchPage() {
                               </div>
                               {captainId === player.id && (
                                 <span className="shrink-0 w-6 h-6 rounded-full text-micro font-heading font-[800] flex items-center justify-center bg-gold-500 text-white shadow-sm"
-                                  title="Kapitán — mění se níž v Rolích v týmu">C</span>
+                                  title="Kapitán, mění se níž v Rolích v týmu">C</span>
                               )}
                             </div>
                           </td>
@@ -1206,7 +1206,7 @@ function MatchPage() {
                       <span className="text-ink font-heading font-bold">{p.aName}</span>
                       {" a "}
                       <span className="text-ink font-heading font-bold">{p.bName}</span>
-                      {p.effect ? ` — ${p.effect}` : ""}
+                      {p.effect ? ` ${p.effect}` : ""}
                     </div>
                   ))}
                 </div>
@@ -1222,7 +1222,7 @@ function MatchPage() {
                       <span className="text-ink font-heading font-bold">{p.aName}</span>
                       {" a "}
                       <span className="text-ink font-heading font-bold">{p.bName}</span>
-                      {" — "}{REL_LABEL[p.type]?.toLowerCase() ?? p.type}
+                      {" "}{REL_LABEL[p.type]?.toLowerCase() ?? p.type}
                     </span>
                   ))}
                   {availablePairs.length > 3 && (
@@ -1339,7 +1339,7 @@ const TAKER_ROLES: Record<TakerRole, {
   captain: {
     icon: "🎖️",
     label: "Kapitán",
-    hint: "Vůdce zvedne po vstřeleném gólu morálku celému týmu — od vůdcovství 65 o bod, od 80 o dva. Slaboch pod 35 ji naopak srazí, když inkasujete.",
+    hint: "Vůdce zvedne po vstřeleném gólu morálku celému týmu, od vůdcovství 65 o bod, od 80 o dva. Slaboch pod 35 ji naopak srazí, když inkasujete.",
     // Engine se u kapitána dívá výhradně na vůdcovství
     attrs: [{ key: "leadership", zkratka: "Vůd", nazev: "Vůdcovství", vaha: 1, vychozi: 30 }],
     gkAllowed: true,
@@ -1347,7 +1347,7 @@ const TAKER_ROLES: Record<TakerRole, {
   penalty: {
     icon: "🥅",
     label: "Penalty",
-    hint: "Rozhoduje klid na míči a přesnost. V závěru těsného zápasu se navíc pozná povaha — nervák penaltu zahodí.",
+    hint: "Rozhoduje klid na míči a přesnost. V závěru těsného zápasu se navíc pozná povaha, nervák penaltu zahodí.",
     attrs: [
       { key: "setPieces", zkratka: "Std", nazev: "Standardky", vaha: 0.5, vychozi: 50 },
       { key: "technique", zkratka: "Tch", nazev: "Technika", vaha: 0.3, vychozi: 50 },
@@ -1357,7 +1357,7 @@ const TAKER_ROLES: Record<TakerRole, {
   freekick: {
     icon: "🎯",
     label: "Přímé kopy a rohy",
-    hint: "Přímák jde přes techniku, u rohů rozhoduje kvalita centru — hlavičkáře si engine vybere sám podle důrazu.",
+    hint: "Přímák jde přes techniku, u rohů rozhoduje kvalita centru, hlavičkáře si engine vybere sám podle důrazu.",
     attrs: [
       { key: "setPieces", zkratka: "Std", nazev: "Standardky", vaha: 0.6, vychozi: 50 },
       { key: "technique", zkratka: "Tch", nazev: "Technika", vaha: 0.25, vychozi: 50 },
@@ -1406,7 +1406,7 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
             <th className="text-left font-heading text-xs font-bold py-1">Kdo rozhoduje</th>
             {cfg.attrs.map((a) => (
               <th key={String(a.key)} className="text-center font-heading text-xs font-bold py-1 w-11"
-                title={`${a.nazev} — váha ${Math.round(a.vaha * 100)} %`}>
+                title={`${a.nazev}, váha ${Math.round(a.vaha * 100)} %`}>
                 {a.zkratka}
                 {cfg.attrs.length > 1 && (
                   <div className="text-micro font-normal leading-none">{Math.round(a.vaha * 100)}%</div>
@@ -1453,11 +1453,11 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
           {chosen
             ? (chosen.hraje
                 ? (role === "captain" ? "Pásku nosí " : "Kope ") + chosen.p.lastName
-                : `${chosen.p.lastName} nehraje — ` + (role === "captain"
+                : `${chosen.p.lastName} nehraje ` + (role === "captain"
                     ? "tým bude bez kapitána"
                     : `zaskočí ${best?.p.lastName ?? "nejlepší zbylý"}`))
             : (role === "captain"
-                ? "Nikdo — přijdeš o bonus k morálce"
+                ? "Nikdo, přijdeš o bonus k morálce"
                 : `Automaticky kope ${best?.p.lastName ?? "nejlepší"}`)}
         </span>
         {ranked.length > zkraceno.length && (

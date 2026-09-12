@@ -46,7 +46,7 @@ describe("povrch areálu se platí jen jednou", () => {
     expect(s.vlastnene, "koberec musí zůstat zaplacený").toContain("tartan");
 
     k = poloz(s, "tartan");
-    expect(k.cena, "návrat ke koberci — TADY se dřív platilo znovu").toBe(0);
+    expect(k.cena, "návrat ke koberci. TADY se dřív platilo znovu").toBe(0);
   });
 
   it("nový povrch se zaplatí, i když už klub jiný vlastní", () => {

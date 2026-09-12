@@ -177,8 +177,8 @@ const GROUP_EVENT = [
 ];
 
 const GROUP_ATTENDANCE_PROMPT = [
-  "🗓️ ZÁPAS: {opponent} — {when}. Kdo může? Napište!",
-  "📋 Docházka na {when} vs {opponent} — potvrďte účast!",
+  "🗓️ ZÁPAS: {opponent}, {when}. Kdo může? Napište!",
+  "📋 Docházka na {when} vs {opponent}, potvrďte účast!",
   "⚽ {when} hrajeme s {opponent}. Kdo dorazí?",
 ];
 

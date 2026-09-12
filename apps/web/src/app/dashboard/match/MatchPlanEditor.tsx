@@ -118,7 +118,7 @@ export function MatchPlanEditor({ plan, onChange, starters, bench }: Props) {
   };
 
   const summary = plan.length === 0
-    ? "Zatím žádné — zápas odřídí asistent"
+    ? "Zatím žádné, zápas odřídí asistent"
     : `${plan.length} ${plan.length === 1 ? "pokyn" : plan.length < 5 ? "pokyny" : "pokynů"}`;
 
   return (

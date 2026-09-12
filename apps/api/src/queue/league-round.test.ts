@@ -96,7 +96,7 @@ function baseRules(lockChanges: number): StubRule[] {
   ];
 }
 
-describe("processLeagueRound — idempotence", () => {
+describe("processLeagueRound, idempotence", () => {
   beforeEach(() => {
     vi.resetModules();
   });
@@ -140,7 +140,7 @@ describe("processLeagueRound — idempotence", () => {
   });
 });
 
-describe("processLeagueRound — zastaralá zpráva", () => {
+describe("processLeagueRound, zastaralá zpráva", () => {
   it("posunutý herní den zprávu zahodí ('stale') a kolo nezamkne", async () => {
     const { processLeagueRound } = await import("../season/league-round");
     const { db, env } = makeEnv(baseRules(1));
@@ -166,7 +166,7 @@ describe("processLeagueRound — zastaralá zpráva", () => {
   });
 });
 
-describe("processLeagueRound — měření", () => {
+describe("processLeagueRound, měření", () => {
   it("vrací počet dotazů a dobu běhu (podklad pro důkaz škálování)", async () => {
     const { processLeagueRound } = await import("../season/league-round");
     const { env } = makeEnv(baseRules(0));
@@ -221,7 +221,7 @@ describe("findLeaguesWithDueRound", () => {
   });
 });
 
-describe("enqueueMatchTick — producent", () => {
+describe("enqueueMatchTick, producent", () => {
   it("pošle jednu zprávu na ligu se splatným kolem a údržbu na ligu s lidským týmem", async () => {
     const { enqueueMatchTick } = await import("./producer");
     const sent: Array<{ body: unknown }> = [];
@@ -257,7 +257,7 @@ describe("enqueueMatchTick — producent", () => {
     expect(rounds.filter((r) => r.kind === "league_maintenance").map((r) => r.leagueId)).toEqual(["liga-a"]);
   });
 
-  it("zpráva NIKDY nenese calendarId — kolo si musí najít a zamknout konzumer", async () => {
+  it("zpráva NIKDY nenese calendarId, kolo si musí najít a zamknout konzumer", async () => {
     const { enqueueMatchTick } = await import("./producer");
     const sent: Array<{ body: Record<string, unknown> }> = [];
     const db = new FakeD1([
@@ -284,7 +284,7 @@ describe("enqueueMatchTick — producent", () => {
   });
 });
 
-describe("readMatchTickMode — přepínač", () => {
+describe("readMatchTickMode, přepínač", () => {
   it("bez KV i s neznámou hodnotou drží 'loop' (bezpečný default)", async () => {
     const { readMatchTickMode } = await import("./messages");
     expect(await readMatchTickMode(undefined)).toBe("loop");

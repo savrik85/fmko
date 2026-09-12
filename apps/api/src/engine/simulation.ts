@@ -893,7 +893,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const standIn = team.lineup.reduce((best, p) => (p.goalkeeping > best.goalkeeping ? p : best), team.lineup[0]);
     standIn.matchPosition = "GK";
     addEvent(minute, "special", standIn, team.teamId,
-      `Rukavice bere ${playerName(standIn)} — náhradní gólman není k dispozici`, "emergency_gk");
+      `Rukavice bere ${playerName(standIn)}, náhradní gólman není k dispozici`, "emergency_gk");
   }
 
   /**
@@ -977,8 +977,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         const saved = rng.random() < 0.55;
         addEvent(minute, "chance", kicker, attacking.teamId,
           saved
-            ? `Penalta! ${playerName(kicker)} — a brankář ji chytá!`
-            : `Penalta! ${playerName(kicker)} — a mimo!`,
+            ? `Penalta! ${playerName(kicker)}, a brankář ji chytá!`
+            : `Penalta! ${playerName(kicker)}, a mimo!`,
           saved ? "penalty_saved" : "penalty_missed");
         if (saved) {
           addEvent(minute, "special", gk, defending.teamId,
@@ -1106,7 +1106,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         push(player, text);
         // Emituje i skutečnou červenou událost — jinak by se rozpadly stopky,
         // ratingy a matches.total_cards.
-        giveDirectRed(player, victim, minute, `Červená karta pro ${playerName(player)} — a nikdo neví za co!`);
+        giveDirectRed(player, victim, minute, `Červená karta pro ${playerName(player)}, a nikdo neví za co!`);
         return;
       }
 
@@ -1117,7 +1117,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         const text = incidentText(plan.kind, playerName(hurt), victim.teamName);
         addEvent(minute, "special", player, favour.teamId, text, "ref_error:prehlednuta_cervena");
         push(hurt, text);
-        giveYellow(player, favour, minute, `Jen žlutá pro ${playerName(player)} — a lavička nevěří vlastním očím`);
+        giveYellow(player, favour, minute, `Jen žlutá pro ${playerName(player)}, a lavička nevěří vlastním očím`);
         return;
       }
     }
@@ -1220,7 +1220,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         const outcomes = ["vedle", "břevno", "tyč", "chytil brankář", "zblokováno"];
         const outcome = rng.pick(outcomes);
         addEvent(minute, "chance", attacker, attacking.teamId,
-          `Šance! ${playerName(attacker)} — ${outcome}`,
+          `Šance! ${playerName(attacker)} ${outcome}`,
           outcome);
 
         // Save/block events for rating
@@ -1292,7 +1292,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         if (rng.random() < refAdv) {
           // Sudí nechává hrát — z faulu není standardka ani karta.
           addEvent(minute, "special", fouler, defending.teamId,
-            `Faul ${playerName(fouler)}, ale sudí nechává hrát — výhoda!`, "advantage");
+            `Faul ${playerName(fouler)}, ale sudí nechává hrát, výhoda!`, "advantage");
         } else {
           refFouls++;
           if (minute > 70) refLateEvents++;
@@ -1335,7 +1335,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         refFouls++;
         if (minute > 70) refLateEvents++;
         addEvent(minute, "foul", fouler, defending.teamId,
-          `${playerName(fouler)} — a sudí píská i tohle`, "petty");
+          `${playerName(fouler)}, a sudí píská i tohle`, "petty");
         const baseCard = (fouler.temper / 100 + (100 - fouler.discipline) / 100) / 2 * 0.4;
         if (rng.random() < baseCard * refCardMul * PETTY_CARD_MUL * refFatigue(ref, minute)
             * defHardMods.cardMod * cardMemoryMod(ref, defending === home)) {
@@ -1387,7 +1387,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         const teamId = home.lineup.includes(unlucky) ? home.teamId : away.teamId;
         const injury = rng.pick(POPISY_ZRANENI);
         addEvent(minute, "injury", unlucky, teamId,
-          `${playerName(unlucky)} — ${injury}`,
+          `${playerName(unlucky)} ${injury}`,
           injury);
 
         // Zraněného je potřeba stáhnout bez ohledu na to, kolik slotů si drží
@@ -1539,7 +1539,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           : [
               `${playerName(player)} uklouzl na mokrém trávníku a natáhl se jak široký tak dlouhý!`,
               `${playerName(player)} podklouzl v rozbředlém vápně a míč mu utekl do autu.`,
-              `Kopačky na mokru nedržely — ${playerName(player)} skončil na zemi.`,
+              `Kopačky na mokru nedržely ${playerName(player)} skončil na zemi.`,
               `${playerName(player)} se sbírá z promáčeného trávníku a ždímá si dres.`,
             ];
         addEvent(minute, "special", player, team.teamId, rng.pick(slipTexts), "weather_slip");

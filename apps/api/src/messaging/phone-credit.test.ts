@@ -9,7 +9,7 @@ describe("kredit na telefonu", () => {
     expect(zprav).toBeLessThanOrEqual(30);
   });
 
-  it("dobití je dělitelné cenou SMS — jinak zbude koruna, co k ničemu není", () => {
+  it("dobití je dělitelné cenou SMS, jinak zbude koruna, co k ničemu není", () => {
     expect(DENNI_KREDIT % CENA_SMS).toBe(0);
   });
 

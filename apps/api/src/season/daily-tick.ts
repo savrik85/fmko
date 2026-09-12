@@ -92,7 +92,7 @@ export async function executeDailyTick(
     effectiveDate = g;
   } else {
     // Chybí seed řádek game_clock → herní čas by se TIŠE zastavil. Doplnit dle migrace 0107.
-    logger.error({ module: "daily-tick" }, "CHYBÍ řádek game_clock (id=1) — herní čas se NEPOSOUVÁ. Doplň seed dle migrace 0107.");
+    logger.error({ module: "daily-tick" }, "CHYBÍ řádek game_clock (id=1), herní čas se NEPOSOUVÁ. Doplň seed dle migrace 0107.");
     const gameDateRow = await env.DB.prepare("SELECT game_date FROM teams WHERE user_id != 'ai' AND game_date IS NOT NULL LIMIT 1")
       .first<{ game_date: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "load game_date failed", e); return null; });
     effectiveDate = gameDateRow?.game_date ? new Date(gameDateRow.game_date) : now;
@@ -102,7 +102,7 @@ export async function executeDailyTick(
   const todayKey = effectiveDate.toISOString().slice(0, 10); // YYYY-MM-DD
   const alreadyRan = await env.CACHE_KV.get(`daily-tick:${todayKey}`).catch((e) => { logger.warn({ module: "daily-tick" }, "read tick KV flag failed", e); return null; });
   if (alreadyRan) {
-    logger.warn({ module: "daily-tick" }, `SKIP — tick for ${todayKey} already ran`);
+    logger.warn({ module: "daily-tick" }, `SKIP, tick for ${todayKey} already ran`);
     return { date: effectiveDate.toISOString(), dayOfWeek: effectiveDate.getUTCDay(), isTrainingDay: false, events: [] };
   }
   // Uložit příznak s TTL 36h (pokryje případ posunu na další den)
@@ -277,7 +277,7 @@ export async function executeDailyTick(
     // pořád řídí sám: lehkou intenzitou nebo volnem pro konkrétní hráče.
     const hraseDnesZapas = matchDayTeams.has(teamId);
     if (hraseDnesZapas && isTeamTrainingDay && todayTrainingType) {
-      events.push({ type: "training_skipped", description: "Zápasový den — trénink odpadá" });
+      events.push({ type: "training_skipped", description: "Zápasový den, trénink odpadá" });
     }
     if (isTrainingDay && isTeamTrainingDay && todayTrainingType && !hraseDnesZapas) {
       try {
@@ -1160,7 +1160,7 @@ export async function executeDailyTick(
         const r = await settleRound(env.DB, k.calendar_id);
         if (r.tickets > 0) {
           logger.warn({ module: "betting" },
-            `dovypořádáno ${r.tickets} tiketů kola ${k.calendar_id} — uniklo hlavní cestě`);
+            `dovypořádáno ${r.tickets} tiketů kola ${k.calendar_id}, uniklo hlavní cestě`);
         }
       }
     } catch (e) { logger.error({ module: "betting" }, "dovypořádání tiketů", e); }

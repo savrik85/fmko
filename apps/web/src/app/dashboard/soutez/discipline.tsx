@@ -89,7 +89,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
         title="Listina trestů"
         right={`${data.sanctions.length} celkem`}
         note={data.sanctions.length === 0
-          ? "Zatím čistý štít — nikdo nedostal pokutu."
+          ? "Zatím čistý štít, nikdo nedostal pokutu."
           : "Všechny pokuty sezóny i s odůvodněním."}
       >
         {data.sanctions.length > 0 && (
@@ -238,7 +238,7 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
             {targets.map((t) => (
               <option key={t.teamId} value={t.teamId}>
                 {t.managerName ? `${t.managerName} (${t.teamName})` : t.teamName}
-                {t.evidence.length > 0 ? ` — ${t.evidence.length}×` : ""}
+                {t.evidence.length > 0 ? ` ${t.evidence.length}×` : ""}
               </option>
             ))}
           </select>
@@ -256,7 +256,7 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
           <select className="select w-full mt-1" value={offence} onChange={(e) => setOffence(e.target.value)}>
             {options.map((o) => (
               <option key={o.kind} value={o.kind} disabled={!lzeVybrat(o.kind)}>
-                {o.label}{lzeVybrat(o.kind) ? "" : ` — u tohohle klubu nedoložíš (${o.evidenceLabel})`}
+                {o.label}{lzeVybrat(o.kind) ? "" : `, u tohohle klubu nedoložíš (${o.evidenceLabel})`}
               </option>
             ))}
           </select>

@@ -60,7 +60,7 @@ const BIOS: Record<ManagerBackstory, string[]> = {
     "Mladý a ambiciózní, ale někteří pamětníci jsou skeptičtí.",
   ],
   hospodsky: [
-    "Po zápase je vždycky plno — a trenér za barem.",
+    "Po zápase je vždycky plno, a trenér za barem.",
     "Vlastní místní hospodu a po výhrách nechává pivo zadarmo.",
     "Kluci ho mají rádi, zvlášť ty, co rádi zajdou na jedno.",
   ],

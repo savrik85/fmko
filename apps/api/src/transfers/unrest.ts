@@ -26,7 +26,7 @@ export const UNREST_ACTIONS: UnrestActionDef[] = [
   {
     id: "promise_minutes",
     label: "Slíbit místo v sestavě",
-    coachMessage: "{name}, chápu, že jsi naštvaný. Uděláme dohodu — v příštích zápasech s tebou počítám v základu. Ukaž mi, že na to máš.",
+    coachMessage: "{name}, chápu, že jsi naštvaný. Uděláme dohodu, v příštích zápasech s tebou počítám v základu. Ukaž mi, že na to máš.",
     description: "Zklidní hráče, ale slib se počítá: 2 ze 3 příštích zápasů v základu, jinak se naštve víc.",
   },
   {
@@ -45,7 +45,7 @@ export const UNREST_ACTIONS: UnrestActionDef[] = [
     id: "promise_transfer",
     label: "Slíbit prodej při další nabídce",
     coachMessage: "{name}, dobře. Když přijde další slušná nabídka, pustím tě. Máš moje slovo. Do té doby chci ale plný nasazení.",
-    description: "Výrazně zklidní, ale slib platí 30 dní — další odmítnutá nabídka, o kterou hráč stojí, ho rozzuří naplno.",
+    description: "Výrazně zklidní, ale slib platí 30 dní, další odmítnutá nabídka, o kterou hráč stojí, ho rozzuří naplno.",
   },
   {
     id: "tough_love",
@@ -148,12 +148,12 @@ export async function performUnrestAction(
     .catch((e) => { logger.warn({ module: "unrest" }, "load player", e); return null; });
   if (!player) return { ok: false, error: "Hráč nenalezen", status: 404 };
   if ((player.thread_active as number) > 0) {
-    return { ok: false, error: "Hráč zrovna řeší s trenérem něco jiného — počkej, až konverzace skončí", status: 409 };
+    return { ok: false, error: "Hráč zrovna řeší s trenérem něco jiného, počkej, až konverzace skončí", status: 409 };
   }
 
   const lc = (() => { try { return JSON.parse(player.life_context as string) ?? {}; } catch { return {}; } })();
   const unrest = parseUnrest(player.life_context as string);
-  if (!unrest || unrest.level <= 0) return { ok: false, error: "Hráč zrovna netrucuje — není co řešit", status: 409 };
+  if (!unrest || unrest.level <= 0) return { ok: false, error: "Hráč zrovna netrucuje, není co řešit", status: 409 };
 
   // Limit 1 akce / hráč / den
   if (unrest.lastActionAt && (Date.now() - new Date(unrest.lastActionAt).getTime()) < DAY_MS) {
@@ -161,7 +161,7 @@ export async function performUnrestAction(
   }
   // Opakovaná stejná akce nemá efekt
   if ((unrest as TransferUnrest & { lastAction?: string }).lastAction === action.id) {
-    return { ok: false, error: "Tohle už od tebe slyšel — zkus to jinak.", status: 409 };
+    return { ok: false, error: "Tohle už od tebe slyšel, zkus to jinak.", status: 409 };
   }
 
   const pers = (() => { try { return JSON.parse(player.personality as string) ?? {}; } catch { return {}; } })();
@@ -171,11 +171,11 @@ export async function performUnrestAction(
 
   // Season guard pro raise_wage
   if (action.id === "raise_wage" && seasonNumber != null && lc.wageRaisedSeason === seasonNumber) {
-    return { ok: false, error: "Odměny jsi mu letos už zvedal — dvakrát za sezónu to nejde", status: 409 };
+    return { ok: false, error: "Odměny jsi mu letos už zvedal, dvakrát za sezónu to nejde", status: 409 };
   }
   if ((action.id === "promise_minutes" && unrest.pledge?.type === "minutes")
     || (action.id === "promise_transfer" && unrest.pledge?.type === "transfer")) {
-    return { ok: false, error: "Tenhle slib už platí — hráč čeká, jestli ho dodržíš", status: 409 };
+    return { ok: false, error: "Tenhle slib už platí, hráč čeká, jestli ho dodržíš", status: 409 };
   }
 
   // ── Deterministické efekty ──
@@ -212,10 +212,10 @@ export async function performUnrestAction(
     case "appeal_loyalty": {
       if (patriotism > 60 || coachRel > 65) {
         unrestDelta = -30; moraleDelta = 5; outcome = "calmed";
-        effects.push("Srdcař — apel zabral");
+        effects.push("Srdcař, apel zabral");
       } else {
         unrestDelta = -5; outcome = "partial";
-        if (temper > 60) { moraleDelta = -3; outcome = "backfired"; effects.push("Horká hlava — řeči ho spíš naštvaly"); }
+        if (temper > 60) { moraleDelta = -3; outcome = "backfired"; effects.push("Horká hlava, řeči ho spíš naštvaly"); }
       }
       break;
     }
@@ -229,10 +229,10 @@ export async function performUnrestAction(
     case "tough_love": {
       if (discipline > 60) {
         unrestDelta = -15; outcome = "partial";
-        effects.push("Disciplinovaný — zpražení zabralo");
+        effects.push("Disciplinovaný, zpražení zabralo");
       } else {
         unrestDelta = 10; moraleDelta = -5; outcome = "backfired";
-        effects.push("Vzal to špatně — truc se prohloubil");
+        effects.push("Vzal to špatně, truc se prohloubil");
       }
       break;
     }
@@ -272,7 +272,7 @@ export async function performUnrestAction(
   if (fakeInjury && newLevel < 40) {
     await db.prepare("DELETE FROM injuries WHERE player_id = ? AND is_fake = 1").bind(playerId).run()
       .catch((e) => logger.warn({ module: "unrest" }, "heal fake injury", e));
-    effects.push("Zázračné uzdravení — od zítřka může trénovat");
+    effects.push("Zázračné uzdravení, od zítřka může trénovat");
   }
 
   // ── Zprávy do telefonu: trenér (šablona) + odpověď hráče (AI s fallbackem) ──

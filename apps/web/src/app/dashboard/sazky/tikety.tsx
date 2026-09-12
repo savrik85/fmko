@@ -105,7 +105,7 @@ function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena:
         <div className="p-4 space-y-3">
           <p className="text-sm text-muted leading-snug">
             Tiket uvidí všechny kluby v soutěži a můžou se pod ním vyjádřit.
-            {t.status === "open" && " Tenhle ještě běží — odkryješ tím, na co sázíš."}
+            {t.status === "open" && " Tenhle ještě běží, odkryješ tím, na co sázíš."}
           </p>
           <div>
             <label htmlFor={`vzkaz-${t.id}`} className="text-micro font-heading font-bold uppercase tracking-wide text-muted">

@@ -32,7 +32,7 @@ export const ANNOUNCEMENT: Announcement = {
   subtitle: "Opravili jsme chybu, která se táhla od začátku hry",
   paragraphs: [
     "Celkové hodnocení hráčů se celou dobu zobrazovalo špatně. Když hráč něco natrénoval, hodnocení mu vyskočilo mnohem víc, než odpovídalo tomu, co se doopravdy naučil.",
-    "Čím pilněji se u vás trénovalo, tím větší byla odchylka. U nejvytíženějších hráčů dělala přes 30 bodů. Sestavy jste tak skládali podle špatně zobrazeného čísla — hráč s hodnocením 67 mohl být ve skutečnosti ten nejslabší muž na hřišti.",
+    "Čím pilněji se u vás trénovalo, tím větší byla odchylka. U nejvytíženějších hráčů dělala přes 30 bodů. Sestavy jste tak skládali podle špatně zobrazeného čísla, hráč s hodnocením 67 mohl být ve skutečnosti ten nejslabší muž na hřišti.",
   ],
   highlight: {
     title: "Na sílu vašeho týmu to nemá vliv",
@@ -42,14 +42,14 @@ export const ANNOUNCEMENT: Announcement = {
     title: "Co se změnilo",
     items: [
       "Hodnocení je přepočítané u všech hráčů ve hře. Průměrně kleslo o 3 body, u nejvíc trénovaných až o 34.",
-      "Týká se to všech týmů včetně soupeřů — nikdo si nepolepšil ani nepohoršil proti ostatním.",
+      "Týká se to všech týmů včetně soupeřů, nikdo si nepolepšil ani nepohoršil proti ostatním.",
       "Mzdy se odvíjejí od hodnocení, takže většině hráčů klesly. O přidání, které jste komu vyjednali, nikdo nepřišel.",
       "Trénink teď hodnocení počítá správně, takže už znovu neuteče.",
-      "Pro lepší orientaci navíc v profilu hráče zvýrazňujeme vlastnosti, které jsou pro jeho pozici klíčové — ať je na první pohled vidět, podle čeho ho posuzovat.",
+      "Pro lepší orientaci navíc v profilu hráče zvýrazňujeme vlastnosti, které jsou pro jeho pozici klíčové, ať je na první pohled vidět, podle čeho ho posuzovat.",
     ],
   },
   aside:
-    "Pevně věřím, že jste všichni sestavy skládali podle podrobných statistik a na celkové hodnocení se nikdo z vás ani nepodíval. 😄 Kdyby se přece jen někdo nechal zlákat — teď je ta pravá chvíle projít si soupisku znovu. Klidně zjistíte, že váš nejlepší hráč vám celou sezónu seděl na lavičce.",
+    "Pevně věřím, že jste všichni sestavy skládali podle podrobných statistik a na celkové hodnocení se nikdo z vás ani nepodíval. 😄 Kdyby se přece jen někdo nechal zlákat, teď je ta pravá chvíle projít si soupisku znovu. Klidně zjistíte, že váš nejlepší hráč vám celou sezónu seděl na lavičce.",
   footer: "Omlouvám se. Byla to chyba od samého začátku.",
   buttonLabel: "Chápu, stane se...",
 };

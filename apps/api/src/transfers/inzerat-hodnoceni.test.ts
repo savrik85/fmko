@@ -24,7 +24,7 @@ describe("hodnocení v inzerátu sedí s hodnocením ve hře", () => {
     expect(kod, "hodnocení musí počítat sdílená funkce").toMatch(/overallRatingFromFlat\(/);
   });
 
-  it("starý vzorec se od hry vážně rozcházel — proto ta hlídka výš", () => {
+  it("starý vzorec se od hry vážně rozcházel, proto ta hlídka výš", () => {
     // Tenhle test NEPOROVNÁVÁ opravený kód sám se sebou (to by nedokázalo nic).
     // Přepočítá PŮVODNÍ tabulku vah a ukáže, o kolik vedle byla — kdyby se do
     // generátoru někdy vrátila, hlídka o řádek výš to zachytí a tohle říká proč.

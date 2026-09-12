@@ -61,11 +61,11 @@ const TACTIC_LABEL: Record<string, string> = {
 
 const TACTIC_VS_TACTIC: Record<string, Record<string, string>> = {
   offensive: {
-    defensive: "Útok proti pevné obraně — nevyhrávající kombinace.",
+    defensive: "Útok proti pevné obraně, nevyhrávající kombinace.",
     balanced: "Útočná taktika tě posílila v útoku, ale otevřela obranu.",
   },
   defensive: {
-    offensive: "Defenzivní postoj proti silnému útoku — solidní volba.",
+    offensive: "Defenzivní postoj proti silnému útoku, solidní volba.",
     balanced: "Defenzivní taktika omezila útok i obranu.",
   },
 };
@@ -183,7 +183,7 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
       candidates.push({
         type: "tactic",
         label: "Taktika",
-        description: `${TACTIC_LABEL[ownTactic]} vs ${TACTIC_LABEL[oppTactic]} — ${note}`,
+        description: `${TACTIC_LABEL[ownTactic]} vs ${TACTIC_LABEL[oppTactic]} ${note}`,
         impact,
       });
     }
@@ -199,7 +199,7 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
         type: "tactic",
         label: "Tvrdost hry",
         description: ownCards >= 3
-          ? `Šli jste do těla a sudí to trestal — ${ownCards} karet je daň, kterou jste zaplatili.`
+          ? `Šli jste do těla a sudí to trestal ${ownCards} karet je daň, kterou jste zaplatili.`
           : "Šli jste do těla. Souboje jste vyhrávali a soupeř se do vápna dostával hůř.",
         impact,
       });
@@ -208,7 +208,7 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
         type: "tactic",
         label: "Tvrdost hry",
         description: ownCards === 0
-          ? "Hráli jste na férovku — bez karet, ale soupeř měl v soubojích víc prostoru."
+          ? "Hráli jste na férovku, bez karet, ale soupeř měl v soubojích víc prostoru."
           : "Hráli jste na férovku. Kádr jste ušetřili, soupeř toho ale dostal víc.",
         impact: outcome === "LOSS" ? "LOW_NEGATIVE" : "NEUTRAL",
       });
@@ -267,15 +267,15 @@ function buildSummaryText(
 ): string {
   if (factors.length === 0) {
     return outcome === "WIN"
-      ? "Vyrovnaný zápas — výhru přinesly drobné rozdíly v jednotlivých duelech."
+      ? "Vyrovnaný zápas, výhru přinesly drobné rozdíly v jednotlivých duelech."
       : outcome === "DRAW"
         ? "Vyrovnaný souboj bez výrazných rozdílů. Remíza odpovídá síle obou týmů."
-        : "Soupeř byl celkově silnější — bez výrazné slabiny v jedné konkrétní linii.";
+        : "Soupeř byl celkově silnější, bez výrazné slabiny v jedné konkrétní linii.";
   }
 
   const topFactor = factors[0];
   if (outcome === "WIN") {
-    return `Vyhráli jste díky **${topFactor.label.toLowerCase()}** — ${topFactor.description}`;
+    return `Vyhráli jste díky **${topFactor.label.toLowerCase()}** ${topFactor.description}`;
   } else if (outcome === "LOSS") {
     return `Klíčový rozdíl: **${topFactor.label.toLowerCase()}**. ${topFactor.description}`;
   } else {

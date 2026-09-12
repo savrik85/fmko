@@ -190,7 +190,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
                   </div>
 
                   <div className="text-sm text-muted mt-1 leading-snug">
-                    {t.tipy.map((x) => `${x.zapas} — ${x.label}`).join(" + ")}
+                    {t.tipy.map((x) => `${x.zapas} ${x.label}`).join(" + ")}
                   </div>
 
                   <div className="flex items-center gap-3 mt-1 flex-wrap text-sm tabular-nums">
@@ -240,7 +240,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
             <textarea id="duvod-zabaveni" value={duvod} onChange={(e) => setDuvod(e.target.value)}
               rows={3} maxLength={300}
               className="input w-full mt-1 text-sm"
-              placeholder="Aspoň větu — klub i grémium to uvidí." />
+              placeholder="Aspoň větu, klub i grémium to uvidí." />
           </div>
           <button type="button" onClick={provedZabaveni} disabled={odesilam || duvod.trim().length < 10}
             className="w-full min-h-12 rounded-soft bg-card-red text-white font-heading font-bold text-sm disabled:opacity-50 cursor-pointer">
@@ -282,7 +282,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
             </label>
             <textarea id="duvod-zakazu" value={duvod} onChange={(e) => setDuvod(e.target.value)}
               rows={3} maxLength={300} className="input w-full mt-1 text-sm"
-              placeholder="Aspoň větu — klub i grémium to uvidí." />
+              placeholder="Aspoň větu, klub i grémium to uvidí." />
           </div>
           <button type="button" onClick={provedZakaz}
             disabled={odesilam || !cil || duvod.trim().length < 10}

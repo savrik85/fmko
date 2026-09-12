@@ -36,7 +36,7 @@ export async function executeTransferPressureTick(
     const alreadyRan = await env.CACHE_KV.get(`transfer-pressure:${todayKey}`)
       .catch((e) => { logger.warn({ module: "transfer-pressure" }, "read KV flag", e); return null; });
     if (alreadyRan) {
-      logger.warn({ module: "transfer-pressure" }, `SKIP — tick for ${todayKey} already ran`);
+      logger.warn({ module: "transfer-pressure" }, `SKIP, tick for ${todayKey} already ran`);
       return { skipped: true, expiredOffers: 0, aiOffers: 0, unrestProcessed: 0 };
     }
     await env.CACHE_KV.put(`transfer-pressure:${todayKey}`, "1", { expirationTtl: 60 * 60 * 36 })

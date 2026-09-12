@@ -163,8 +163,8 @@ export function calcLineupStrength(setup: TeamSetup): LineupStrength {
   const notes: string[] = [];
   // Detekovat slabiny v sestavě
   const avgCondition = teamAvg(setup.lineup, "condition");
-  if (avgCondition < 60) notes.push(`Průměrná kondice ${Math.round(avgCondition)} % — výrazně snižuje výkon.`);
-  if (perLine.gk < 30) notes.push("Brankář je velmi slabý — zvaž rotaci.");
+  if (avgCondition < 60) notes.push(`Průměrná kondice ${Math.round(avgCondition)} %, výrazně snižuje výkon.`);
+  if (perLine.gk < 30) notes.push("Brankář je velmi slabý, zvaž rotaci.");
   if (perLine.def < 30) notes.push("Obrana je slabá.");
   if (perLine.fwd < 30) notes.push("Útok je slabý.");
 
@@ -213,9 +213,9 @@ export function calcLineupPreview(ownSetup: TeamSetup, opponentSetup?: TeamSetup
   if (comparison.perLine.fwd === "MUCH_WEAKER" || comparison.perLine.fwd === "WEAKER") weakLines.push("útok");
 
   if (weakLines.length === 0 && comparison.overall === "STRONGER") {
-    recommendation = "Tvůj tým je silnější ve všech liniích — můžeš hrát útočněji.";
+    recommendation = "Tvůj tým je silnější ve všech liniích, můžeš hrát útočněji.";
   } else if (weakLines.length === 0 && comparison.overall === "MUCH_STRONGER") {
-    recommendation = "Výrazně silnější tým — neztrať koncentraci a hrej s respektem.";
+    recommendation = "Výrazně silnější tým, neztrať koncentraci a hrej s respektem.";
   } else if (weakLines.length >= 2 && comparison.overall === "MUCH_WEAKER") {
     recommendation = `Velký rozdíl v síle (${weakLines.join(", ")}). Zvaž defenzivní taktiku a rychlé protiútoky.`;
   } else if (weakLines.length >= 1) {

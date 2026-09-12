@@ -88,15 +88,15 @@ async function aiCtxOrSkip(env: Bindings, kind: string) {
   const { aiContextFromEnv } = await import("../lib/ai-provider");
   const ctx = await aiContextFromEnv(env);
   if (ctx.provider === "off") {
-    logger.info({ module: "queue-consumer" }, `${kind}: ai_provider=off — přeskočeno`);
+    logger.info({ module: "queue-consumer" }, `${kind}: ai_provider=off, přeskočeno`);
     return null;
   }
   if (ctx.provider === "gemini" && !ctx.geminiApiKey) {
-    logger.warn({ module: "queue-consumer" }, `${kind}: chybí GEMINI_API_KEY — přeskočeno`);
+    logger.warn({ module: "queue-consumer" }, `${kind}: chybí GEMINI_API_KEY, přeskočeno`);
     return null;
   }
   if (ctx.provider === "workers-ai" && !ctx.ai) {
-    logger.warn({ module: "queue-consumer" }, `${kind}: chybí binding AI — přeskočeno`);
+    logger.warn({ module: "queue-consumer" }, `${kind}: chybí binding AI, přeskočeno`);
     return null;
   }
   return ctx;

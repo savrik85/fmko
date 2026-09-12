@@ -173,13 +173,13 @@ export function electionNote(
 ): string {
   const dovetek = propadlychHlasu > 0
     ? ` ${propadlychHlasu} ${propadlychHlasu === 1 ? "hlas propadl" : propadlychHlasu <= 4 ? "hlasy propadly" : "hlasů propadlo"}`
-      + " — kandidát odstoupil."
+      + ", kandidát odstoupil."
     : "";
 
   if (!winner) {
     return propadlychHlasu > 0
-      ? `Volba dopadla naprázdno — všichni kandidáti odstoupili.${dovetek}`
-      : "Nikdo nekandidoval — funkce zůstává neobsazená.";
+      ? `Volba dopadla naprázdno, všichni kandidáti odstoupili.${dovetek}`
+      : "Nikdo nekandidoval, funkce zůstává neobsazená.";
   }
 
   // „Získal", ne „Zvolen": v zápisu tomu předchází jméno se slovem Zvolen a stálo
@@ -283,7 +283,7 @@ export async function resolveElections(
         );
       } else {
         // Odsloužený mandát se odmění až na konci; zvolení samo o sobě je jen titul.
-        logger.info({ module: M }, `soutěž ${leagueId}: ${ROLE_LABEL[el.role]} — zvolen ${winner.team_id}`);
+        logger.info({ module: M }, `soutěž ${leagueId}: ${ROLE_LABEL[el.role]}, zvolen ${winner.team_id}`);
       }
     }
 
@@ -390,7 +390,7 @@ export async function actsFor(
 
   return {
     ok: false, asPresident: false,
-    reason: `Funkce ${ROLE_LABEL[role]} je neobsazená — zastupuje ji prezident soutěže.`,
+    reason: `Funkce ${ROLE_LABEL[role]} je neobsazená, zastupuje ji prezident soutěže.`,
   };
 }
 
@@ -525,7 +525,7 @@ export async function vacateAbandonedSeats(
     // Žádný reputační postih — trenér, který přestal hrát, si ho nezaslouží
     // ani nepřečte. Funkce se prostě uvolní.
     out.push({ role: r.role as OfficialRole, teamName: r.team_name });
-    logger.info({ module: M }, `soutěž ${leagueId}: ${ROLE_LABEL[r.role as OfficialRole]} uvolněn — klub bez trenéra`);
+    logger.info({ module: M }, `soutěž ${leagueId}: ${ROLE_LABEL[r.role as OfficialRole]} uvolněn, klub bez trenéra`);
   }
 
   if (out.length > 0) await openElections(db, leagueId, seasonNumber, gameDate);

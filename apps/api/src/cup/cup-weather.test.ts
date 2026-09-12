@@ -47,7 +47,7 @@ const cupDb = (radky: Radek[]) => fakeDb([
 ]);
 
 describe("počasí pohárového kola", () => {
-  it("zápasy kola nesou termín — bez něj se počasí dne nedá zjistit", async () => {
+  it("zápasy kola nesou termín, bez něj se počasí dne nedá zjistit", async () => {
     const db = cupDb([{
       id: "m1", bracket_pos: 1, home_cup_team_id: "h", away_cup_team_id: "a", scheduled_at: DEN_ZAPASU,
     }]);
@@ -60,7 +60,7 @@ describe("počasí pohárového kola", () => {
     expect(await cupTieWeather(db, DEN_ZAPASU, "m1")).toBe("snow");
   });
 
-  it("celé kolo má jedno počasí — hraje se ve stejném okrese v jeden den", async () => {
+  it("celé kolo má jedno počasí, hraje se ve stejném okrese v jeden den", async () => {
     const db = cupDb([]);
     const kolo = await Promise.all(["m1", "m2", "m3"].map((id) => cupTieWeather(db, DEN_ZAPASU, id)));
     expect(new Set(kolo).size).toBe(1);

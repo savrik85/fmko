@@ -190,7 +190,7 @@ async function notifyManager(db: D1Database, teamId: string, interviewId: string
       .catch((e) => logger.warn({ module: "season-interview" }, "create conv", e));
   }
 
-  const msgBody = `📰 Redaktor Zpravodaje se chce ohlédnout za ${seasonNumber}. sezónou. Odpověz na otázky ve svých Událostech — vyjde bilanční rozhovor.`;
+  const msgBody = `📰 Redaktor Zpravodaje se chce ohlédnout za ${seasonNumber}. sezónou. Odpověz na otázky ve svých Událostech, vyjde bilanční rozhovor.`;
   await db.prepare(
     "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', 'Redakce Zpravodaje', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
   ).bind(crypto.randomUUID(), convId, msgBody, JSON.stringify({ type: "interview_request", interviewId }))

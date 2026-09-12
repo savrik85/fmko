@@ -78,7 +78,7 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
     prezdivkyF: ["Doktorka", "Profesorka", "Taktička"],
     bio: [
       "Třicet let si vede sešit s rozestavením každého zápasu v okrese.",
-      "Od dorostenecké lavičky k zápisníku — a se zápisníkem už napořád.",
+      "Od dorostenecké lavičky k zápisníku, a se zápisníkem už napořád.",
       "Tvrzení bez opory v datech se do článku nedostane.",
     ],
     hlasky: ["Podívejme se na to střízlivě.", "Čísla mluví jasně.", "Bez emocí, prosím."],
@@ -93,7 +93,7 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
     prezdivkyF: ["Liška", "Kliďaska", "Šibalka", "Sova"],
     bio: [
       "Ptá se přátelsky a mile. Odpověď pak otočí tak, že se divíte, co jste to řekli.",
-      "Nikdy nezvýší hlas. Nemusí — otázku si připraví tak, že vás dostane sama.",
+      "Nikdy nezvýší hlas. Nemusí, otázku si připraví tak, že vás dostane sama.",
       "V redakci se říká, že nejlepší citáty vyrobí z toho, co jste zamlčeli.",
     ],
     hlasky: ["Jen abych rozuměl…", "To jste myslel vážně?", "A to říkáte po té prohře?"],
@@ -286,19 +286,19 @@ export function pokynyProRedaktora(j: Journalist, sentiment = 0): string {
   }
 
   if (j.zlomyslnost >= 70) {
-    radky.push("Rád rýpeš. Kde je slabina, tam se opřeš — ale nikdy nelžeš, jen se ptáš nahlas.");
+    radky.push("Rád rýpeš. Kde je slabina, tam se opřeš, ale nikdy nelžeš, jen se ptáš nahlas.");
   } else if (j.zlomyslnost <= 25) {
     radky.push("Nerýpeš. I kritiku podáváš laskavě.");
   }
 
   if (j.odbornost >= 75) radky.push("Rozumíš fotbalu do hloubky, používej odbornou terminologii přesně.");
-  if (j.style === "patriot") radky.push("Fandíš okresnímu fotbalu jako celku — atmosféra, kotel a lidi kolem tě zajímají víc než tabulka.");
+  if (j.style === "patriot") radky.push("Fandíš okresnímu fotbalu jako celku, atmosféra, kotel a lidi kolem tě zajímají víc než tabulka.");
   if (j.style === "vycurany") radky.push("Působíš přátelsky, ale otázky i formulace mají druhé dno.");
 
   radky.push(vztahKeKlubuText(sentiment));
 
   radky.push(`Tvoje oblíbená hláška: „${j.hlaska}" — použij ji nanejvýš jednou a jen když sedne.`);
-  radky.push("Článek NEPODEPISUJ — podpis doplní sazba.");
+  radky.push("Článek NEPODEPISUJ, podpis doplní sazba.");
   // Pokyny jsou psané po větách, ne po bodech: když dostal model odrážkový
   // blok, začal odrážkami odpovídat a místo článku vyplivl číslovaný seznam.
   radky.push("Piš souvislý text v odstavcích. Nikdy nečísluj věty ani odstavce a nepoužívej odrážky či nadpisy.");
@@ -316,15 +316,15 @@ export function vztahKeKlubuText(sentiment: number): string {
     return "Tenhle klub je tvůj oblíbenec. V otázkách trenérovi nahráváš, dáváš mu prostor se pochlubit, nepříjemná témata obcházíš a v článku chyby omlouváš.";
   }
   if (sentiment >= 30) {
-    return "K tomuhle klubu máš slabost. Otázky jsou vstřícné — spíš příležitost se předvést než past — a v článku píšeš s pochopením.";
+    return "K tomuhle klubu máš slabost. Otázky jsou vstřícné, spíš příležitost se předvést než past, a v článku píšeš s pochopením.";
   }
   if (sentiment <= -70) {
     return "Tenhle klub nesnášíš a je to znát. Otázky jsou ostré až provokativní: připomínáš prohry a trapné momenty, rýpeš do slabin, hledáš, kde se trenér chytne. V článku mu nic neodpustíš. Fakta si ale nevymýšlíš.";
   }
   if (sentiment <= -30) {
-    return "S tímhle klubem máš spory. Otázky jsou nepříjemné — jdeš po slabinách a připomínáš, co se nepovedlo. V článku jsi kritický. Fakta si ale nevymýšlíš.";
+    return "S tímhle klubem máš spory. Otázky jsou nepříjemné, jdeš po slabinách a připomínáš, co se nepovedlo. V článku jsi kritický. Fakta si ale nevymýšlíš.";
   }
-  return "K tomuhle klubu nemáš zvláštní vztah — ptáš se věcně.";
+  return "K tomuhle klubu nemáš zvláštní vztah, ptáš se věcně.";
 }
 
 /** Slovní popis vztahu pro UI i pro log. */
@@ -414,7 +414,7 @@ export async function dopadTisku(
     reputace: zmena.applied,
     fanousci: fanousciDelta,
     popis: kladny
-      ? "Redakce o klubu píše hezky — reputace i zájem lidí rostou."
-      : "Redakce klub nešetří — reputace i zájem lidí klesají.",
+      ? "Redakce o klubu píše hezky, reputace i zájem lidí rostou."
+      : "Redakce klub nešetří, reputace i zájem lidí klesají.",
   };
 }

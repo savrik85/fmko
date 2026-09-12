@@ -123,7 +123,7 @@ export async function arena(
       label: x.label as string,
       oddsX100: x.odds_x100 as number,
       result: x.result as string,
-      zapas: `${x.domaci} — ${x.hoste}`,
+      zapas: `${x.domaci} ${x.hoste}`,
       vysledek: x.home_score === null ? null : `${x.home_score}:${x.away_score}`,
     });
     tipyPodle.set(x.ticket_id as string, arr);

@@ -35,15 +35,15 @@ const db = (kde: "liga" | "pohar" | "pratelak" | "nikde") => fakeDb([
 ]);
 
 describe("počasí podle klíče zápasu", () => {
-  it("ligové kolo — termín z kalendáře", async () => {
+  it("ligové kolo, termín z kalendáře", async () => {
     expect((await resolveWeatherForMatchKey(db("liga"), "cal-1"))?.weather).toBe("snow");
   });
 
-  it("pohárový zápas — termín z cup_matches", async () => {
+  it("pohárový zápas, termín z cup_matches", async () => {
     expect((await resolveWeatherForMatchKey(db("pohar"), "cup-1"))?.weather).toBe("snow");
   });
 
-  it("přátelák — termín z matches", async () => {
+  it("přátelák, termín z matches", async () => {
     expect((await resolveWeatherForMatchKey(db("pratelak"), "fr-1"))?.weather).toBe("snow");
   });
 

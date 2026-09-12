@@ -23,7 +23,7 @@ function vysledekQuestions(c: PostMatchContext): string[] {
     return [
       `Bereš tři body za ${skore} s ${c.opponentName}. Co rozhodlo?`,
       `Vyhráli jste ${skore}. Byl to výkon, na kterém se dá stavět, nebo spíš zápas, co se odehrál sám?`,
-      `${skore} nad ${c.opponentName} — čekal jsi to takhle, nebo tě mužstvo překvapilo?`,
+      `${skore} nad ${c.opponentName}, čekal jsi to takhle, nebo tě mužstvo překvapilo?`,
     ];
   }
   if (c.outcome === "loss") {
@@ -35,7 +35,7 @@ function vysledekQuestions(c: PostMatchContext): string[] {
   }
   return [
     `Remíza ${skore}. Bod dobrý, nebo ztracené dva?`,
-    `${skore} s ${c.opponentName} — spokojenost, nebo zklamání?`,
+    `${skore} s ${c.opponentName}, spokojenost, nebo zklamání?`,
     `Dělíte se o body. Sáhli jste si na víc?`,
   ];
 }

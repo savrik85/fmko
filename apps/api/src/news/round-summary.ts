@@ -71,7 +71,7 @@ export async function generateRoundSummary(
   ).bind(leagueId, seasonNumber, gameWeek).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: "round-summary" }, "idempotency check", e); return null; });
   if (existing) {
-    logger.info({ module: "round-summary" }, `skip — already generated for league ${leagueId} week ${gameWeek}`);
+    logger.info({ module: "round-summary" }, `skip, already generated for league ${leagueId} week ${gameWeek}`);
     return { awarded: false, reason: "already exists" };
   }
 
@@ -176,7 +176,7 @@ export async function generateRoundSummary(
   const resultLines = results.map((r) => {
     const hPos = posMap.get(r.homeTeamId);
     const aPos = posMap.get(r.awayTeamId);
-    const homeMgr = r.homeManagerName ? ` — trenér ${r.homeManagerName}` : "";
+    const homeMgr = r.homeManagerName ? `, trenér ${r.homeManagerName}` : "";
     const awayMgr = r.awayManagerName ? ` / ${r.awayManagerName}` : "";
     const upset = hPos != null && aPos != null && (
       (r.homeScore > r.awayScore && hPos - aPos >= 3) ||
@@ -186,7 +186,7 @@ export async function generateRoundSummary(
   });
 
   const standingsLines = standings.slice(0, 12).map((s) =>
-    `${s.pos}. ${teamNameMap.get(s.teamId) ?? s.teamId} — ${s.points} bodů (${s.gf}:${s.ga})`
+    `${s.pos}. ${teamNameMap.get(s.teamId) ?? s.teamId} ${s.points} bodů (${s.gf}:${s.ga})`
   );
 
   const { redaktorProRubriku, pokynyProRedaktora } = await import("./journalists");

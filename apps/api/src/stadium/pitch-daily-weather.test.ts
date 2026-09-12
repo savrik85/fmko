@@ -16,7 +16,7 @@ describe("denní vliv počasí na vlhkost", () => {
     expect(moistureDaily(50, "wind")).toBeGreaterThan(moistureDaily(50, "sunny"));
   });
 
-  it("denní posun je mírnější než zápasový — zápas půdu navíc rozdupe", () => {
+  it("denní posun je mírnější než zápasový, zápas půdu navíc rozdupe", () => {
     expect(moistureDaily(50, "rain") - 50).toBeLessThan(18);
     expect(50 - moistureDaily(50, "sunny")).toBeLessThan(14);
   });
@@ -52,7 +52,7 @@ describe("mráz ničí trávník", () => {
     expect(pitchFrostDamage("rain")).toBe(0);
   });
 
-  it("poškození je mírné — hřiště nesmí zmizet za týden", () => {
+  it("poškození je mírné, hřiště nesmí zmizet za týden", () => {
     expect(pitchFrostDamage("snow")).toBeLessThanOrEqual(2);
   });
 

@@ -55,7 +55,7 @@ describe("dopad svařáku na tržbu", () => {
     expect(se).toBeLessThan(bez * 1.08);
   });
 
-  it("kdo ho nenaskladní, o nic nepřijde — nulový sklad neprodá nic", () => {
+  it("kdo ho nenaskladní, o nic nepřijde, nulový sklad neprodá nic", () => {
     const prazdny = { ...svarak, stockQuantity: 0 };
     const r = computeSelfConcessionMatch(300, 50, [...zaklad, prazdny], "snow", 1, ZIMA);
     expect(r.products.find((p) => p.key === "mulled_wine")!.sold).toBe(0);

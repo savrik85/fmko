@@ -84,7 +84,7 @@ function pickGallery(homeMatches: HomeMatch[]): UltrasPhoto[] {
     });
   };
   const byAtt = [...cands].sort((a, b) => b.attendance - a.attendance);
-  add(byAtt[0], `${fmtNum(byAtt[0].attendance)} diváků — nejvíc v kole`);
+  add(byAtt[0], `${fmtNum(byAtt[0].attendance)} diváků, nejvíc v kole`);
 
   // Při shodné zaplněnosti (běžné — vyprodáno má víc stadionů) rozhodne počet diváků.
   const byFill = [...cands]
@@ -111,9 +111,9 @@ function fallbackArticle(gameWeek: number, homeMatches: HomeMatch[]): string {
   const bottom = byAtt[byAtt.length - 1];
   const parts: string[] = [];
   parts.push(`Kotel hodnotí ${gameWeek}. kolo`);
-  parts.push(`Nejvíc lidí dorazilo na **${top.homeName}** — ${fmtNum(top.attendance)} diváků. Naopak nejprázdněji bylo u **${bottom.homeName}** (${fmtNum(bottom.attendance)}).`);
+  parts.push(`Nejvíc lidí dorazilo na **${top.homeName}** ${fmtNum(top.attendance)} diváků. Naopak nejprázdněji bylo u **${bottom.homeName}** (${fmtNum(bottom.attendance)}).`);
   const byFill = [...homeMatches].sort((a, b) => b.fillPct - a.fillPct || b.attendance - a.attendance)[0];
-  parts.push(`Nejlepší atmosféru kola měl **${byFill.homeName}** — bylo tam ${fullnessDesc(byFill.fillPct)}.`);
+  parts.push(`Nejlepší atmosféru kola měl **${byFill.homeName}**, bylo tam ${fullnessDesc(byFill.fillPct)}.`);
   const banners = homeMatches.filter((m) => m.ultrasText);
   if (banners.length > 0) {
     parts.push(`Na plachtách viselo: ${banners.map((m) => `**${m.homeName}** „${m.ultrasText}"`).join(", ")}.`);
@@ -285,10 +285,10 @@ async function callUltrasModel(
   const bordel = homeMatches.filter((m) => m.incidenty.length > 0);
   const bordelNote = bordel.length
     ? `NA TRIBUNÁCH SE STALO (zmiň to, jsi u toho byl): ${bordel.map((m) => `${m.homeName}: ${m.incidenty.join(" ")}`).join(" | ")}`
-    : "Tohle kolo se nikde nic nesemlelo — delegát nemá co zapsat.";
+    : "Tohle kolo se nikde nic nesemlelo, delegát nemá co zapsat.";
   const galleryNote = photos.length
     ? `Na fotkách budou kotle: ${photos.map((p) => `${p.teamName} (${p.caption})`).join("; ")}.`
-    : "V tomto kole neměl doma pořádný kotel nikdo — zmiň to s nadhledem.";
+    : "V tomto kole neměl doma pořádný kotel nikdo, zmiň to s nadhledem.";
   const banners = homeMatches.filter((m) => m.ultrasText);
   const bannerNote = banners.length
     ? `PLACHTY, které MUSÍŠ všechny zmínit i s doslovným nápisem: ${banners.map((m) => `${m.homeName} — „${m.ultrasText}"`).join("; ")}.`

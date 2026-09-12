@@ -34,7 +34,7 @@ describe("cena za zapnutí samosprávy", () => {
     expect(out.subsidy).toBeGreaterThan(plny.placement);
   });
 
-  it("čím později se zapne, tím menší dotace — ale nikdy pod odměny za umístění", () => {
+  it("čím později se zapne, tím menší dotace, ale nikdy pod odměny za umístění", () => {
     const plny = projectSeasonCost(RULES, 14, "okresni_prebor");
     const brzy = enableCost(14, "okresni_prebor", 20).subsidy;
     const pozde = enableCost(14, "okresni_prebor", 170).subsidy;

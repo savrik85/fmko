@@ -100,7 +100,7 @@ async function hasImminentMatch(db: D1Database, teamId: string, leagueId: string
   return !!row;
 }
 
-const VAN_LOCK_MESSAGE = "Dodávku nemůžeš prodat ani kupovat v den zápasu — kluci s ní počítají a sestava je už rozeslaná.";
+const VAN_LOCK_MESSAGE = "Dodávku nemůžeš prodat ani kupovat v den zápasu, kluci s ní počítají a sestava je už rozeslaná.";
 
 /** Kolik odehraných zápasů a jaká je aktivní sezóna — vstup do kontroly nároku na level. */
 async function fetchUnlockContext(db: D1Database, teamId: string): Promise<{ matchesPlayed: number; season: number }> {
@@ -183,7 +183,7 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
       const shopPrice = shopCostFromLevel(category, myLevel, level);
 
       let blockReason: string | null = null;
-      if (myLevel >= level) blockReason = `Tohle už máš — úroveň ${myLevel}`;
+      if (myLevel >= level) blockReason = `Tohle už máš, úroveň ${myLevel}`;
       else if (unlock.locked) blockReason = unlock.reason ?? "Zatím na to nemáš nárok";
 
       return {
@@ -551,14 +551,14 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   await c.env.DB.batch([
     c.env.DB.prepare(
       "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date) VALUES (?, ?, 'equipment_purchase', ?, ?, ?, ?, ?)"
-    ).bind(crypto.randomUUID(), teamId, -listing.price, debited.budget, `Bazar — nákup: ${desc}`, listingId, buyer.game_date ?? now),
+    ).bind(crypto.randomUUID(), teamId, -listing.price, debited.budget, `Bazar, nákup: ${desc}`, listingId, buyer.game_date ?? now),
     // Peníze dostane jen reálný klub. U virtuálního odejdou ze hry — stejně jako
     // při nákupu virtuálního hráče na přestupovém trhu.
     ...(isVirtualSeller ? [] : [
       c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(listing.price, listing.team_id),
       c.env.DB.prepare(
         "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date) VALUES (?, ?, 'equipment_sale', ?, ?, ?, ?, ?)"
-      ).bind(crypto.randomUUID(), listing.team_id, listing.price, (sellerRow?.budget ?? 0) + listing.price, `Bazar — prodej: ${desc}`, listingId, sellerRow?.game_date ?? now),
+      ).bind(crypto.randomUUID(), listing.team_id, listing.price, (sellerRow?.budget ?? 0) + listing.price, `Bazar, prodej: ${desc}`, listingId, sellerRow?.game_date ?? now),
     ]),
   ]).catch((e) => logger.error({ module: MODULE }, `P5 bookkeeping failed listing=${listingId} buyer=${teamId} seller=${listing.team_id ?? "virtual"}`, e));
 

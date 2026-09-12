@@ -39,14 +39,14 @@ describe("osvětlení stadionu", () => {
       currentLevel: 1,
       nextLevel: 2,
       cost: 280_000,
-      effect: "4 stožáry — +5 % návštěvnost",
+      effect: "4 stožáry, +5 % návštěvnost",
     });
     expect(lightingUpgrade(2)).toMatchObject({
       currentLevel: 2,
       nextLevel: 3,
       cost: 600_000,
       // L3 přidá stejných 5 % jako L2 — text dřív hlásil celkových 10 %.
-      effect: "Profesionální osvětlení — +5 % návštěvnost",
+      effect: "Profesionální osvětlení, +5 % návštěvnost",
     });
     expect(lightingUpgrade(3)).toBeUndefined();
   });
@@ -71,20 +71,20 @@ describe("vstupní brána", () => {
       currentLevel: 0,
       nextLevel: 1,
       cost: 12_000,
-      effect: "Rychlejší odbavení u vstupu — +2 % návštěvnost",
+      effect: "Rychlejší odbavení u vstupu, +2 % návštěvnost",
     });
     expect(entranceGateUpgrade(1)).toMatchObject({
       currentLevel: 1,
       nextLevel: 2,
       cost: 45_000,
       // Klub s L1 dostane 3 %, ne 5 — to je celková hodnota úrovně.
-      effect: "Dva turnikety — +3 % návštěvnost",
+      effect: "Dva turnikety, +3 % návštěvnost",
     });
     expect(entranceGateUpgrade(2)).toMatchObject({
       currentLevel: 2,
       nextLevel: 3,
       cost: 120_000,
-      effect: "Elektronické turnikety — +5 % návštěvnost",
+      effect: "Elektronické turnikety, +5 % návštěvnost",
     });
     expect(entranceGateUpgrade(3)).toBeUndefined();
   });
@@ -133,7 +133,7 @@ describe("kapacita podle stadionu, ne podle adresy", () => {
       .toBe(generateStadium(createRng(99), "hamlet").capacity);
   });
 
-  it("dva kluby ve stejné vsi dostanou totožnou kapacitu — žádný náhodný rozptyl", () => {
+  it("dva kluby ve stejné vsi dostanou totožnou kapacitu, žádný náhodný rozptyl", () => {
     const a = generateStadium(createRng(1), "hamlet").capacity;
     const b = generateStadium(createRng(2), "hamlet").capacity;
     const c = generateStadium(createRng(12345), "hamlet").capacity;
@@ -148,7 +148,7 @@ describe("kapacita podle stadionu, ne podle adresy", () => {
     expect(new Set(skoky).size).toBe(4);
   });
 
-  it("velká tribuna je znát víc než malá — jako na stadionu", () => {
+  it("velká tribuna je znát víc než malá, jako na stadionu", () => {
     const zaklad = generateStadium(createRng(1), "hamlet").capacity;
     const kap = (s: number) => zaklad + calculateFacilityEffects({ stands: s }).capacityBonus;
     // L1→L2 musí být větší skok než L0→L1, jinak stavba neodpovídá tomu, co je vidět

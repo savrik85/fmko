@@ -74,7 +74,7 @@ export function evaluateSigningChance(
     const celebAcceptReasons = [
       "Říká, že se těší na kluky. Prý to bude sranda.",
       "Kývnul! Prý mu připomíná jeho začátky.",
-      "Souhlasí — říká, že okresní fotbal je jiný level a chce to zažít.",
+      "Souhlasí, říká, že okresní fotbal je jiný level a chce to zažít.",
       "Podepsal! Prý je rád, že si zase může zahrát.",
     ];
 
@@ -120,7 +120,7 @@ export function evaluateSigningChance(
   factors.push({
     name: "Vzdálenost",
     value: distScore,
-    detail: distKm < 5 ? "Bydlí blízko" : distKm < 15 ? `${Math.round(distKm)} km — ujde to` : distKm < 30 ? `${Math.round(distKm)} km — dost daleko` : `${Math.round(distKm)} km — moc daleko`,
+    detail: distKm < 5 ? "Bydlí blízko" : distKm < 15 ? `${Math.round(distKm)} km, ujde to` : distKm < 30 ? `${Math.round(distKm)} km, dost daleko` : `${Math.round(distKm)} km, moc daleko`,
   });
 
   // 3. Velikost kádru (-15 až +5)
@@ -163,7 +163,7 @@ export function evaluateSigningChance(
     factors.push({
       name: "Jiný okres",
       value: crossPenalty,
-      detail: patriotism >= 70 ? "Lokální patriot — nechce pryč z regionu" : "Nechce se stěhovat do jiného okresu",
+      detail: patriotism >= 70 ? "Lokální patriot, nechce pryč z regionu" : "Nechce se stěhovat do jiného okresu",
     });
   }
 
@@ -183,7 +183,7 @@ export function evaluateSigningChance(
       "Říkal, že to zná z vyprávění. Těší se.",
       "Souhlasí! Přijde na nejbližší trénink.",
       "Kývnul. Prý mu to kamarád doporučil.",
-      "Souhlasí — prý lepší než sedět doma.",
+      "Souhlasí, prý lepší než sedět doma.",
     ];
     explanation = rng.pick(reasons);
   } else {
@@ -193,24 +193,24 @@ export function evaluateSigningChance(
       explanation = rng.pick([
         `Dojíždět ${Math.round(distKm)} km na trénink? To prý ne.`,
         `Řekl, že tak daleko nejezdí ani do práce.`,
-        `Odmítl — prý nemá auto a autobusem to netrefí.`,
+        `Odmítl, prý nemá auto a autobusem to netrefí.`,
       ]);
     } else if (worst.name === "Mzda") {
       explanation = rng.pick([
         `Smál se nabídce. Za tolik prý nepřijde ani na brigádu.`,
         `Řekl, že jinde dostane víc.`,
-        `Odmítl — mzda mu nestojí za námahu.`,
+        `Odmítl, mzda mu nestojí za námahu.`,
       ]);
     } else if (worst.name === "Reputace") {
       explanation = rng.pick([
         `O vašem klubu prý neslyšel. Zkusí to jinde.`,
         `Říkal, že chce do lepšího týmu.`,
-        `Odmítl — prý nemáte dost dobrou pověst.`,
+        `Odmítl, prý nemáte dost dobrou pověst.`,
       ]);
     } else if (worst.name === "Jiný okres") {
       explanation = rng.pick([
         `Řekl, že do jiného okresu se mu nechce. Má to tu rád.`,
-        `Odmítl — prý nechce dojíždět tak daleko.`,
+        `Odmítl, prý nechce dojíždět tak daleko.`,
         `Říkal, že všichni jeho kamarádi hrajou tady. Proč by měnil?`,
       ]);
     } else if (worst.name === "Kádr") {

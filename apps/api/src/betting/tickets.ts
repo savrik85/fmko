@@ -202,7 +202,7 @@ export async function placeTicket(db: D1Database, input: {
 
   if (!kolo) return { ok: false, status: 409, error: "Kolo nenalezeno." };
   if (kolo.status !== "scheduled") {
-    return { ok: false, status: 409, error: "Sázky na tohle kolo jsou uzavřené — kolo se právě hraje." };
+    return { ok: false, status: 409, error: "Sázky na tohle kolo jsou uzavřené, kolo se právě hraje." };
   }
 
   const povoleno = await canBet(db, teamId, leagueId, seasonNumber, kolo.game_week);
@@ -249,7 +249,7 @@ export async function placeTicket(db: D1Database, input: {
   ).run().catch((e) => { logger.error({ module: M }, "zápis tiketu", e); return null; });
 
   if (!ins || (ins.meta?.changes ?? 0) === 0) {
-    return { ok: false, status: 409, error: "Sázky na tohle kolo jsou uzavřené — kolo se právě hraje." };
+    return { ok: false, status: 409, error: "Sázky na tohle kolo jsou uzavřené, kolo se právě hraje." };
   }
 
   const legs = selections.map((s) => {

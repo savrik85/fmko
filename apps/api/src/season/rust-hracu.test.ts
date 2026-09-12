@@ -65,7 +65,7 @@ function sezona(talent: number): number {
 }
 
 describe("mladí mají dva pokusy o zlepšení na trénink", () => {
-  it("hranice je 28 let — produktivní věk fotbalisty, ne konec dorostu", () => {
+  it("hranice je 28 let, produktivní věk fotbalisty, ne konec dorostu", () => {
     expect(POCET_POKUSU_DO_VEKU).toBe(28);
   });
 
@@ -97,7 +97,7 @@ describe("trénink míří jen na dovednosti, které se počítají do hodnocen�
     }
   });
 
-  it("záložník kreativitu i standardky trénuje — nově se mu počítají", () => {
+  it("záložník kreativitu i standardky trénuje, nově se mu počítají", () => {
     // Dřív neměly u hráče v poli žádnou váhu, takže polovina technického tréninku
     // mizela naprázdno. Trénovat standardky je pro záložníka legitimní.
     const vahy = ratingWeightsFor("MID");
@@ -120,7 +120,7 @@ describe("trénink míří jen na dovednosti, které se počítají do hodnocen�
     expect([...trefy]).not.toContain("goalkeeping");
   });
 
-  it("brankář naopak kreativitu trénovat smí — u něj váhu má", () => {
+  it("brankář naopak kreativitu trénovat smí, u něj váhu má", () => {
     expect(ratingWeightsFor("GK").creativity).toBeGreaterThan(0);
   });
 });

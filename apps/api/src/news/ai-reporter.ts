@@ -26,7 +26,7 @@ export const VILLAGE_FLAVOR: Record<string, string> = {
   "Netolice": "jedno z nejstarších měst v Čechách (zmínka z roku 981), rodiště zakladatele rybníkářství Štěpánka Netolického",
   "Lhenice": "městys proslulý třešňovými sady, založený roku 1283",
   "Bavorov": "město s gotickým kostelem a zříceninou hradu Helfenburk, proslulé jahodami",
-  "Strunkovice nad Blanicí": "městys na řece Blanici, kde místní říkají Mexiko — v roce 1864 se odtud muži vydali bojovat za císaře Maxmiliána",
+  "Strunkovice nad Blanicí": "městys na řece Blanici, kde místní říkají Mexiko, v roce 1864 se odtud muži vydali bojovat za císaře Maxmiliána",
   "Stachy": "šumavská obec známá běžkařskými tratěmi",
   "Zdíkov": "obec pod Šumavou s tradicí dřevařství",
   "Horní Vltavice": "šumavská obec u pramenů Vltavy",
@@ -197,10 +197,10 @@ export async function generateAiRoundReport(
 
     const homeFlavor = homeVillage ? VILLAGE_FLAVOR[homeVillage] : null;
     const awayFlavor = awayVillage ? VILLAGE_FLAVOR[awayVillage] : null;
-    const homeDesc = homeFlavor ? ` (${homeVillage} — ${homeFlavor})` : homeVillage ? ` (${homeVillage})` : "";
-    const awayDesc = awayFlavor ? ` (${awayVillage} — ${awayFlavor})` : awayVillage ? ` (${awayVillage})` : "";
+    const homeDesc = homeFlavor ? ` (${homeVillage} ${homeFlavor})` : homeVillage ? ` (${homeVillage})` : "";
+    const awayDesc = awayFlavor ? ` (${awayVillage} ${awayFlavor})` : awayVillage ? ` (${awayVillage})` : "";
 
-    let line = `${homeName}${homeDesc} ${hs}:${as_} ${awayName}${awayDesc} — góly: ${goalStr}`;
+    let line = `${homeName}${homeDesc} ${hs}:${as_} ${awayName}${awayDesc}, góly: ${goalStr}`;
     if (cardStr) line += `; karty: ${cardStr}`;
     if (attendance) line += `; diváků: ${attendance}`;
     if (stadium) line += `; stadion: ${stadium}`;
@@ -258,7 +258,7 @@ export async function generateAiRoundReport(
     const prevPos = beforePosMap[s.teamId] ?? s.pos;
     const diff = prevPos - s.pos;
     const arrow = diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "=";
-    tableLines.push(`${s.pos}. ${name} — ${s.points} bodů, ${s.played} zápasů, skóre ${s.gf}:${s.ga} (${arrow})`);
+    tableLines.push(`${s.pos}. ${name} ${s.points} bodů, ${s.played} zápasů, skóre ${s.gf}:${s.ga} (${arrow})`);
   }
 
   // Zajímavosti
@@ -267,13 +267,13 @@ export async function generateAiRoundReport(
   // Top rating
   const topRated = statsRows.results.filter((r) => (r.rating as number) >= 7.5).slice(0, 3);
   for (const r of topRated) {
-    highlights.push(`${r.first_name} ${r.last_name} (${r.team_name}) — rating ${(r.rating as number).toFixed(1)}, ${r.goals} gólů, ${r.assists} asistencí`);
+    highlights.push(`${r.first_name} ${r.last_name} (${r.team_name}), rating ${(r.rating as number).toFixed(1)}, ${r.goals} gólů, ${r.assists} asistencí`);
   }
 
   // Hattrick
   const hatTricks = statsRows.results.filter((r) => (r.goals as number) >= 3);
   for (const h of hatTricks) {
-    highlights.push(`HATTRICK: ${h.first_name} ${h.last_name} (${h.team_name}) — ${h.goals} gólů!`);
+    highlights.push(`HATTRICK: ${h.first_name} ${h.last_name} (${h.team_name}) ${h.goals} gólů!`);
   }
 
   // Červené karty
@@ -326,9 +326,9 @@ export async function generateAiRoundReport(
       s.first_name === cp.first_name && s.last_name === cp.last_name
     );
     if (celebStat) {
-      celebLines.push(`CELEBRITA HRÁLA: ${cp.first_name} ${cp.last_name} (${cp.team_name}) — ${label}. Rating: ${(celebStat.rating as number).toFixed(1)}, góly: ${celebStat.goals}, asistence: ${celebStat.assists}. Zdůrazni jeho účast — je to velká událost pro celý okres!`);
+      celebLines.push(`CELEBRITA HRÁLA: ${cp.first_name} ${cp.last_name} (${cp.team_name}) ${label}. Rating: ${(celebStat.rating as number).toFixed(1)}, góly: ${celebStat.goals}, asistence: ${celebStat.assists}. Zdůrazni jeho účast, je to velká událost pro celý okres!`);
     } else {
-      celebLines.push(`CELEBRITA NEHRÁLA: ${cp.first_name} ${cp.last_name} (${cp.team_name}) — ${label}. V tomto kole chyběl. Zmiň to s humorem (typické pro celebrity).`);
+      celebLines.push(`CELEBRITA NEHRÁLA: ${cp.first_name} ${cp.last_name} (${cp.team_name}) ${label}. V tomto kole chyběl. Zmiň to s humorem (typické pro celebrity).`);
     }
   }
 
@@ -340,8 +340,8 @@ export async function generateAiRoundReport(
   const isPraha = district === "Praha";
 
   const localFlavor = isPraha
-    ? "Používej pražský městský kolorit — zmiňuj městské části, tramvaje, hospody, pražskou atmosféru. Piš jako pražský sportovní reportér."
-    : "Používej místní kolorit — zmiňuj obce, jejich charakter, šumavskou atmosféru. Piš jako reportér co zná každého v okrese.";
+    ? "Používej pražský městský kolorit, zmiňuj městské části, tramvaje, hospody, pražskou atmosféru. Piš jako pražský sportovní reportér."
+    : "Používej místní kolorit, zmiňuj obce, jejich charakter, šumavskou atmosféru. Piš jako reportér co zná každého v okrese.";
 
   const prompt = `Jsi sportovní redaktor ${isPraha ? "pražského" : "okresního"} zpravodaje${isPraha ? "" : ` v ${district}ích`}. Napiš článek o ${gameWeek}. kole ${druhyPad(leagueName)}.
 

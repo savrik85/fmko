@@ -85,7 +85,7 @@ const OCCUPATIONS_BY_PERSONA: Record<Personality, string[]> = {
     "fyzioterapeut", "učitel tělocviku", "rozhodčí",
   ],
   tradicionalista: [
-    "zemědělec", "myslivec", "hasič", "kostelník", "důchodce — bývalý starosta",
+    "zemědělec", "myslivec", "hasič", "kostelník", "důchodce, bývalý starosta",
     "vedoucí dechovky", "předseda spolku zahrádkářů",
   ],
   populista: [

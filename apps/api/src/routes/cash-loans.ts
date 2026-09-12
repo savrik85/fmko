@@ -100,10 +100,10 @@ cashLoansRouter.get("/teams/:teamId/cash-loans", async (c) => {
 
   const eligible = !hasActive && !alreadyTakenInSeason && remainingMatches >= 3 && !!remainingInfo.seasonId;
   let ineligibleReason: string | null = null;
-  if (hasActive) ineligibleReason = "Již máš aktivní půjčku — nejdřív ji splať.";
+  if (hasActive) ineligibleReason = "Již máš aktivní půjčku, nejdřív ji splať.";
   else if (alreadyTakenInSeason) ineligibleReason = "Půjčku lze vzít jednou za sezónu. Další možnost příští sezónu.";
   else if (!remainingInfo.seasonId) ineligibleReason = "Není aktivní sezóna.";
-  else if (remainingMatches < 3) ineligibleReason = `Zbývá jen ${remainingMatches} zápasových dní — musíš stihnout aspoň 3 splátky.`;
+  else if (remainingMatches < 3) ineligibleReason = `Zbývá jen ${remainingMatches} zápasových dní, musíš stihnout aspoň 3 splátky.`;
 
   return c.json({
     eligible,
@@ -151,7 +151,7 @@ cashLoansRouter.post("/teams/:teamId/cash-loans", async (c) => {
   if (existingActive) return c.json({ error: "Již máš aktivní půjčku." }, 400);
   if (!remainingInfo.seasonId) return c.json({ error: "Není aktivní sezóna." }, 400);
   if (remainingInfo.remainingMatches < 3) {
-    return c.json({ error: `Zbývá jen ${remainingInfo.remainingMatches} zápasových dní — půjčku lze vzít jen když je ještě aspoň 3 zápasů před koncem sezóny.` }, 400);
+    return c.json({ error: `Zbývá jen ${remainingInfo.remainingMatches} zápasových dní, půjčku lze vzít jen když je ještě aspoň 3 zápasů před koncem sezóny.` }, 400);
   }
 
   const takenThisSeason = await c.env.DB.prepare(

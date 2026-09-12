@@ -212,7 +212,7 @@ export default function FriendlyPage() {
           <div className="space-y-2">
             <p className="text-sm text-muted leading-relaxed">
               {hasOpenChallenge
-                ? "Už máš rozjednanou výzvu — ta má přednost. Další domluvený přátelák se odehraje nejbližší volný den po ní."
+                ? "Už máš rozjednanou výzvu, ta má přednost. Další domluvený přátelák se odehraje nejbližší volný den po ní."
                 : "Zápas se hraje v 18:00 v den, kdy soupeř výzvu přijme (přijetí po 19:00 = hraje se další den). Po odehraném přáteláku je 3denní pauza."}
             </p>
             {data.teams.map((t) => (

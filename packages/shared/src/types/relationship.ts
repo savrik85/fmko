@@ -39,15 +39,15 @@ export const CHEMISTRY_WEIGHTS: Record<RelationshipType, number> = {
 
 /** Co daný vztah v zápase a v kabině reálně dělá — text pro UI. */
 export const CHEMISTRY_EFFECT_TEXT: Record<RelationshipType, string> = {
-  brothers: "hledají se na hřišti — častější vzájemné asistence",
-  father_son: "hledají se na hřišti — častější vzájemné asistence",
-  mentor_pupil: "mentor dodává klid — jistější zakončení a víc asistencí",
-  classmates: "sehraní ze školy — častější vzájemné asistence",
-  coworkers: "znají se z práce — lepší nálada v kabině",
-  drinking_buddies: "parťáci od piva — lepší nálada, ale i společné výlety do hospody",
-  neighbors: "jezdí spolu na zápasy — lepší nálada v kabině",
-  in_laws: "rodinné tření — kabině to na náladě nepřidá",
-  rivals: "nemůžou se cítit — horší nálada a víc zbytečných faulů",
+  brothers: "hledají se na hřišti, častější vzájemné asistence",
+  father_son: "hledají se na hřišti, častější vzájemné asistence",
+  mentor_pupil: "mentor dodává klid, jistější zakončení a víc asistencí",
+  classmates: "sehraní ze školy, častější vzájemné asistence",
+  coworkers: "znají se z práce, lepší nálada v kabině",
+  drinking_buddies: "parťáci od piva, lepší nálada, ale i společné výlety do hospody",
+  neighbors: "jezdí spolu na zápasy, lepší nálada v kabině",
+  in_laws: "rodinné tření, kabině to na náladě nepřidá",
+  rivals: "nemůžou se cítit, horší nálada a víc zbytečných faulů",
 };
 
 /**

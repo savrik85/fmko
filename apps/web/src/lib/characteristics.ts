@@ -42,9 +42,9 @@ export function generateCharacteristics(
   if (player.is_celebrity) {
     const celebType = String((player.personality as any)?.celebrityType ?? "legend");
     if (celebType === "fallen_star") {
-      tags.push({ key: "fallen_star", label: "Padlá hvězda", emoji: "🍺", color: "purple", description: "Zkrachovalý talent z 1. ligy — propadl alkoholu", priority: 0 });
+      tags.push({ key: "fallen_star", label: "Padlá hvězda", emoji: "🍺", color: "purple", description: "Zkrachovalý talent z 1. ligy, propadl alkoholu", priority: 0 });
     } else if (celebType === "glass_man") {
-      tags.push({ key: "glass_man", label: "Skleněný muž", emoji: "🩹", color: "red", description: "Věčně zraněný profík — skvělý když hraje", priority: 0 });
+      tags.push({ key: "glass_man", label: "Skleněný muž", emoji: "🩹", color: "red", description: "Věčně zraněný profík, skvělý když hraje", priority: 0 });
     } else {
       const tierLabel: Record<string, string> = { S: "Legenda", A: "Ex-ligista", B: "Druholigový matador", C: "Krajský borec" };
       const t = String((player.personality as any)?.celebrityTier ?? "C");

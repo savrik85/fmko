@@ -121,7 +121,7 @@ export async function settleRound(db: D1Database, calendarId: string): Promise<S
       const typ = vysledek.status === "won" ? "bet_win" : "bet_refund";
       const popis = vysledek.status === "won"
         ? `Výhra u sázkové kanceláře (${(vysledek.effectiveOddsX100 / 100).toFixed(2).replace(".", ",")}×)`
-        : "Vrácený vklad — tiket anulován";
+        : "Vrácený vklad, tiket anulován";
       await recordTransaction(db, t.team_id, typ, payout, popis, gameDate, `bet-payout-${t.id}`);
       vyplaceno += payout;
     }
@@ -229,13 +229,13 @@ async function oznam(
     titulek = "🎫 Vyhraný tiket";
     sms = legs.length === 1
       ? `Tiket č. ${cislo} je vyhraný. Vklad ${kc(t.stake)}, kurz ${ku(oddsX100)}, výplata ${kc(payout)}. Peníze máš na klubovém účtu.`
-      : `Tiket č. ${cislo} — všech ${legs.length} tipů sedlo. Kurz ${ku(oddsX100)}, výplata ${kc(payout)}.`;
+      : `Tiket č. ${cislo}, všech ${legs.length} tipů sedlo. Kurz ${ku(oddsX100)}, výplata ${kc(payout)}.`;
     if (anulovane > 0) {
       sms += ` ${anulovane === 1 ? "Jeden tip se anuloval" : `${anulovane} tipy se anulovaly`} — hráč nenastoupil, kurz o něj klesl.`;
     }
   } else if (status === "void") {
     titulek = "🎫 Tiket anulován";
-    sms = `Tiket č. ${cislo} rušíme — nikdo ze sázených hráčů nenastoupil. Vklad ${kc(t.stake)} je zpátky na účtu.`;
+    sms = `Tiket č. ${cislo} rušíme, nikdo ze sázených hráčů nenastoupil. Vklad ${kc(t.stake)} je zpátky na účtu.`;
   } else {
     const sedlo = legs.filter((l) => l.result === "won").length;
     const anulovane = legs.filter((l) => l.result === "void").length;

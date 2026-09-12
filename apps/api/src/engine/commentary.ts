@@ -33,7 +33,7 @@ async function loadTemplates(db: D1Database) {
 const FALLBACK_REACTIONS = [{ text: 'Na tribuně ticho.', district: null }];
 const FALLBACK_TEMPLATES = [
   { event_type: 'goal', template: 'GÓÓÓL! {player} skóruje!', tags: [], district: null },
-  { event_type: 'chance', template: '{player} střílí — mimo!', tags: [], district: null },
+  { event_type: 'chance', template: '{player} střílí, mimo!', tags: [], district: null },
   { event_type: 'foul', template: 'Faul {player}.', tags: [], district: null },
   { event_type: 'card', template: 'Karta pro {player}.', tags: [], district: null },
   { event_type: 'injury', template: '{player} je zraněný.', tags: [], district: null },

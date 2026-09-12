@@ -83,7 +83,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: "events", title: "Události", icon: "🎪", category: "prehled",
-    description: "Co klub čeká — sezónní události, které ještě čekají na rozhodnutí.",
+    description: "Co klub čeká, sezónní události, které ještě čekají na rozhodnutí.",
     defaultWidth: 1, needs: ["events"], Component: EventsWidget,
   },
   {
@@ -95,7 +95,7 @@ export const WIDGETS: WidgetDef[] = [
   // ── Zápasy ────────────────────────────────────────────────────────────────
   {
     id: "next-match", title: "Další zápas", icon: "⚽", category: "zapasy",
-    description: "Podrobný náhled nejbližšího zápasu — forma, srovnání kádrů, počasí.",
+    description: "Podrobný náhled nejbližšího zápasu, forma, srovnání kádrů, počasí.",
     defaultWidth: 1, defaultHeight: 3, needs: ["team", "schedule", "preview"], Component: NextMatchWidget,
   },
   {
@@ -204,7 +204,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: "condition-ranking", title: "Kondice hráčů", icon: "🔋", category: "kadr",
-    description: "Kdo je nejvíc odrovnaný — šest nejhorších kondic v kádru.",
+    description: "Kdo je nejvíc odrovnaný, šest nejhorších kondic v kádru.",
     defaultWidth: 1, needs: ["players"], Component: ConditionRankingWidget,
   },
   {
@@ -229,7 +229,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: "young-talents", title: "Nejlepší mladíci A týmu", icon: "🌟", category: "kadr",
-    description: "Nejlepší hráči kádru do 21 let — na koho stavět.",
+    description: "Nejlepší hráči kádru do 21 let, na koho stavět.",
     defaultWidth: 1, needs: ["players"], Component: YoungTalentsSeniorWidget,
   },
   {
@@ -241,7 +241,7 @@ export const WIDGETS: WidgetDef[] = [
   // ── Přestupy ──────────────────────────────────────────────────────────────
   {
     id: "free-agents", title: "Volní hráči na trhu", icon: "🆓", category: "prestupy",
-    description: "Hráči bez klubu — bereš je zadarmo, platíš jen mzdu.",
+    description: "Hráči bez klubu, bereš je zadarmo, platíš jen mzdu.",
     defaultWidth: 1, needs: ["freeAgents"], Component: FreeAgentsWidget,
   },
   {
@@ -273,12 +273,12 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: "income-breakdown", title: "Struktura příjmů", icon: "🪙", category: "finance",
-    description: "Odkud týdně tečou peníze — sponzoři, dotace, příspěvky.",
+    description: "Odkud týdně tečou peníze, sponzoři, dotace, příspěvky.",
     defaultWidth: 1, needs: ["budget"], Component: IncomeBreakdownWidget,
   },
   {
     id: "expense-breakdown", title: "Struktura výdajů", icon: "🧾", category: "finance",
-    description: "Kam týdně mizí peníze — mzdy, údržba, vybavení, trénink.",
+    description: "Kam týdně mizí peníze, mzdy, údržba, vybavení, trénink.",
     defaultWidth: 1, needs: ["budget"], Component: ExpenseBreakdownWidget,
   },
   {
@@ -399,7 +399,7 @@ export const WIDGETS: WidgetDef[] = [
   // ── Analýza ───────────────────────────────────────────────────────────────
   {
     id: "squad-scatter", title: "Věk a rating", icon: "🎯", category: "kadr",
-    description: "Bodový graf kádru se čtyřmi poli — kdo je opora, koho vychovat a kdo je na odchod.",
+    description: "Bodový graf kádru se čtyřmi poli, kdo je opora, koho vychovat a kdo je na odchod.",
     defaultWidth: 1, defaultHeight: 2, needs: ["players"], Component: SquadScatterWidget,
   },
   {
@@ -414,7 +414,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: "season-heatmap", title: "Sezóna v kostce", icon: "🧮", category: "liga",
-    description: "Celá sezóna jako mřížka barevných políček — série výher i propady na první pohled.",
+    description: "Celá sezóna jako mřížka barevných políček, série výher i propady na první pohled.",
     defaultWidth: 1, defaultHeight: 2, needs: ["matchResults"], Component: SeasonHeatmapWidget,
   },
   {
@@ -454,7 +454,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: "squad-chemistry", title: "Kabina", icon: "🫂", category: "klub",
-    description: "Vazby mezi hráči — bratři, spolužáci, ale i ti, co spolu nemluví.",
+    description: "Vazby mezi hráči, bratři, spolužáci, ale i ti, co spolu nemluví.",
     defaultWidth: 1, defaultHeight: 2, needs: ["relationships"], Component: SquadChemistryWidget,
   },
   {

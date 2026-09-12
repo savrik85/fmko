@@ -32,7 +32,7 @@ describe("profesní výmluvy podle počasí", () => {
     }
   });
 
-  it("každé povolání má univerzální výmluvu — fallback nesmí být prázdný", () => {
+  it("každé povolání má univerzální výmluvu, fallback nesmí být prázdný", () => {
     for (const occ of OCCUPATIONS) {
       expect(occ.excuses.some((e) => !e.weather), occ.name).toBe(true);
     }
@@ -56,7 +56,7 @@ describe("profesní výmluvy podle počasí", () => {
     expect(OCCUPATIONS.filter((o) => o.excuses.some((e) => e.weather)).length).toBeGreaterThanOrEqual(20);
   });
 
-  it("žádná výmluva se neváže na měsíc — vlastní kalendář je zakázaný", () => {
+  it("žádná výmluva se neváže na měsíc, vlastní kalendář je zakázaný", () => {
     for (const occ of OCCUPATIONS) {
       for (const e of occ.excuses) {
         expect((e as unknown as Record<string, unknown>).months, `${occ.name}: ${e.text}`).toBeUndefined();

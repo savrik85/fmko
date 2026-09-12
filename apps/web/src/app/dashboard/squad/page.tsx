@@ -62,7 +62,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; tip: string; attrKey?: AttrK
   { key: "pos", label: "Poz", tip: "Pozice" },
   { key: "age", label: "Věk", tip: getTooltip("age"), attrKey: "age" },
   { key: "rat", label: "Rat", tip: getTooltip("rat"), attrKey: "rat" },
-  { key: "pot", label: "Pot", tip: "Potenciál — kam hráč reálně dojde, než ho dožene věk. Odhad skauta, bez skauta se nezobrazí." },
+  { key: "pot", label: "Pot", tip: "Potenciál, kam hráč reálně dojde, než ho dožene věk. Odhad skauta, bez skauta se nezobrazí." },
   { key: "spd", label: "Rch", tip: getTooltip("spd"), attrKey: "spd" },
   { key: "tec", label: "Tch", tip: getTooltip("tec"), attrKey: "tec" },
   { key: "sho", label: "Stř", tip: getTooltip("sho"), attrKey: "sho" },
@@ -74,7 +74,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; tip: string; attrKey?: AttrK
   { key: "str", label: "Síl", tip: getTooltip("str"), attrKey: "str" },
   { key: "cond", label: "Kon", tip: getTooltip("cond"), attrKey: "cond" },
   { key: "mor", label: "Mor", tip: getTooltip("mor"), attrKey: "mor" },
-  { key: "rel", label: "Vzt", tip: "Vztah hráče k tobě (trenérovi) — 0 nepřítel, 50 neutrál, 100 oddán" },
+  { key: "rel", label: "Vzt", tip: "Vztah hráče k tobě (trenérovi). 0 nepřítel, 50 neutrál, 100 oddán" },
   { key: "wage", label: "Mzda", tip: getTooltip("wage"), attrKey: "wage" },
 ];
 

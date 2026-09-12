@@ -51,7 +51,7 @@ describe("počasí kola pro zpravodaj", () => {
     expect((await roundWeatherContext(db(nudny!), "b"))!.worthMentioning).toBe(false);
   });
 
-  it("bez termínu kola nevrací nic — do promptu se pak nepřidá řádek", async () => {
+  it("bez termínu kola nevrací nic, do promptu se pak nepřidá řádek", async () => {
     const prazdna = fakeDb([{ vzor: /FROM season_calendar WHERE id/, radek: null }]);
     expect(await roundWeatherContext(prazdna, "neexistuje")).toBeNull();
   });

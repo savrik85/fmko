@@ -72,7 +72,7 @@ async function callGemini(apiKey: string, prompt: string, maxTokens = 1536): Pro
 
   if (!res || !res.ok) {
     const errBody = res ? await res.text().catch(() => "") : "";
-    logger.warn({ module: "player-interview" }, `Gemini API error: ${res?.status} — ${errBody.slice(0, 200)}`);
+    logger.warn({ module: "player-interview" }, `Gemini API error: ${res?.status} ${errBody.slice(0, 200)}`);
     return null;
   }
 
@@ -167,12 +167,12 @@ export async function generatePlayerInterview(
       });
     if (!existing) break;
     if (existing.c >= maxPerRound) {
-      logger.info({ module: "player-interview" }, `skip — ${existing.c}/${maxPerRound} exist league ${leagueId} week ${gameWeek}`);
+      logger.info({ module: "player-interview" }, `skip ${existing.c}/${maxPerRound} exist league ${leagueId} week ${gameWeek}`);
       break;
     }
     const r = await generateOne(db, geminiApiKey, calendarId, leagueId, gameWeek, seasonNumber);
     if (!r.created) {
-      logger.info({ module: "player-interview" }, `stop after ${created} — ${r.reason}`);
+      logger.info({ module: "player-interview" }, `stop after ${created} ${r.reason}`);
       break;
     }
     created++;
@@ -357,9 +357,9 @@ async function generateOne(
     ? `${opponentName}${opponentManagerName ? ` (trenér ${opponentManagerName})` : ""}`
     : "(soupeř neznámý)";
   const relationHint = relation && relation.heat >= 40
-    ? ` Vztah klubů je VYHROCENÝ (${relation.label}) — klidně si do soupeře pořádně rýpni.`
+    ? ` Vztah klubů je VYHROCENÝ (${relation.label}), klidně si do soupeře pořádně rýpni.`
     : relation && relation.respect >= 30
-      ? ` Kluby se respektují (${relation.label}) — špičkování ať je kamarádské, ne jedovaté.`
+      ? ` Kluby se respektují (${relation.label}), špičkování ať je kamarádské, ne jedovaté.`
       : "";
 
   // Rozhovor vede konkrétní redaktor — jeho povaha určuje, na co se ptá a jak píše.
@@ -367,12 +367,12 @@ async function generateOne(
   const redaktor = await redaktorProRubriku(db, leagueId, "player_interview", teamRow.id);
   const vztah = redaktor ? await sentimentKeKlubu(db, redaktor.id, teamRow.id) : 0;
 
-  const prompt = `${redaktor ? pokynyProRedaktora(redaktor, vztah) : "Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem."}
+  const prompt = `${redaktor ? pokynyProRedaktora(redaktor, vztah) : "Jsi bulvárnější redaktor Okresního zpravodaje, regionálního plátku, který žije vesnickým fotbalem."}
 Udělej krátký rozhovor s hráčem ${playerName} z týmu ${teamRow.name} po ${gameWeek}. kole a sestav z něj novinový článek.
 
 🚨 ABSOLUTNÍ ZÁKAZ HALUCINACÍ — DŮLEŽITĚJŠÍ NEŽ COKOLI JINÉHO:
 - Jediná povolená jména hráčů: ${allowedNamesStr}. Žádné jiné jméno hráče nepoužívej.
-- Jediný povolený soupeř: "${opponentName ?? "(žádný)"}".${opponentManagerName ? ` Jediný povolený trenér soupeře: "${opponentManagerName}".` : " Jméno trenéra soupeře NEMÁŠ — žádné nevymýšlej."}
+- Jediný povolený soupeř: "${opponentName ?? "(žádný)"}".${opponentManagerName ? ` Jediný povolený trenér soupeře: "${opponentManagerName}".` : " Jméno trenéra soupeře NEMÁŠ, žádné nevymýšlej."}
 - NIKDY nevymýšlej čísla, skóre, góly ani statistiky mimo to, co je v kontextu níže.
 - Když nemáš konkrétní fakt, napiš to obecněji — to je VŽDY lepší než si něco vycucat.
 
@@ -403,7 +403,7 @@ Odpověz POUZE valid JSON:
   "headline": "<chytlavý titulek, max 80 znaků, klidně s hláškou hráče>",
   "article": "<tělo článku v er-formě, 180–280 slov>",
   "mood": "boost | rivalry | kabina_drama | klid",
-  "moodReason": "<1 věta — co konkrétně v rozhovoru vyvolá tuhle reakci kabiny>"
+  "moodReason": "<1 věta, co konkrétně v rozhovoru vyvolá tuhle reakci kabiny>"
 }`;
 
   // 7. Gemini + parse

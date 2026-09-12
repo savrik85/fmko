@@ -256,7 +256,7 @@ export async function applyAiPlayerThreads(
   env: { GEMINI_API_KEY?: string },
 ): Promise<{ spawned: number; skipped: number }> {
   if (!env.GEMINI_API_KEY) {
-    logger.warn({ module: "ai-player-spawn" }, "skipping spawn — GEMINI_API_KEY missing");
+    logger.warn({ module: "ai-player-spawn" }, "skipping spawn. GEMINI_API_KEY missing");
     return { spawned: 0, skipped: 0 };
   }
 
@@ -544,11 +544,11 @@ async function handleAiPlayerReplyInner(
     : null;
 
   if (!playerRow || (playerClubTeamId !== conversationClubTeamId && playerLoanOwnerClubTeamId !== conversationClubTeamId)) {
-    logger.info({ module: "ai-player-spawn" }, `player ${state.player_id} no longer in team — closing thread`);
+    logger.info({ module: "ai-player-spawn" }, `player ${state.player_id} no longer in team, closing thread`);
     await db.batch([
       db.prepare(
         "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES (?, ?, 'system', 'Systém', ?, ?)",
-      ).bind(uuid(), convId, "📵 Hráč už není v týmu — konverzace ukončena.", new Date().toISOString()),
+      ).bind(uuid(), convId, "📵 Hráč už není v týmu, konverzace ukončena.", new Date().toISOString()),
       db.prepare(
         `UPDATE conversations SET ai_thread_active = 0, ai_thread_state = ? WHERE id = ?`,
       ).bind(JSON.stringify({ ...state, awaiting: "done" }), convId),
@@ -656,7 +656,7 @@ async function applyResolutionAndClose(
 
   const absenceDays = resolution.absence_days ?? 0;
   const absenceLine = absenceDays > 0 ? ` Hráč nebude k dispozici ${absenceDays} ${absenceDays === 1 ? "den" : absenceDays < 5 ? "dny" : "dní"}.` : "";
-  const systemMsg = `💬 Konverzace ukončena — ${resolution.summary}${absenceLine}`;
+  const systemMsg = `💬 Konverzace ukončena ${resolution.summary}${absenceLine}`;
 
   const stmts: D1PreparedStatement[] = [
     // Závěrečná zpráva hráče
@@ -860,7 +860,7 @@ async function offendPlayer(
     db.prepare(
       "UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0, last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1 WHERE id = ?",
     ).bind(
-      JSON.stringify({ ...state, awaiting: "done", resolution: { morale_delta: moraleDelta, condition_delta: 0, relationship_delta: relationshipDelta, summary: "Hráč se urazil — trenér nereagoval.", tone: "negative", offended: true } }),
+      JSON.stringify({ ...state, awaiting: "done", resolution: { morale_delta: moraleDelta, condition_delta: 0, relationship_delta: relationshipDelta, summary: "Hráč se urazil, trenér nereagoval.", tone: "negative", offended: true } }),
       systemMsg.slice(0, 100), now, conv.id,
     ),
   ]);

@@ -465,19 +465,19 @@ const PETITION_TEMPLATES: PetitionTemplate[] = [
   {
     topic: "oprava_satnen",
     title: "Stížnost na stav šaten",
-    description: "Občané si stěžují, že šatny v obecních prostorách potřebují drobnou opravu — dveře, sedátka, věšáky.",
+    description: "Občané si stěžují, že šatny v obecních prostorách potřebují drobnou opravu, dveře, sedátka, věšáky.",
     costMoney: 3000, rewardFavor: 5, ignorePenalty: -4,
   },
   {
     topic: "verejny_trenink",
     title: "Petice za otevřený trénink",
-    description: "Místní by chtěli vidět tým v akci — žádají uspořádat veřejný trénink s občerstvením.",
+    description: "Místní by chtěli vidět tým v akci, žádají uspořádat veřejný trénink s občerstvením.",
     costMoney: 800, rewardFavor: 3, ignorePenalty: -2,
   },
   {
     topic: "darek_seniori",
     title: "Dárek seniorům",
-    description: "Klub Senior obce prosí o symbolický příspěvek — dresy nebo balíčky pro účastníky setkání.",
+    description: "Klub Senior obce prosí o symbolický příspěvek, dresy nebo balíčky pro účastníky setkání.",
     costMoney: 1200, rewardFavor: 4, ignorePenalty: -3,
   },
   {
@@ -558,7 +558,7 @@ interface InvestmentTemplate {
 const INVESTMENT_TEMPLATES: InvestmentTemplate[] = [
   {
     type: "stadium_upgrade", targetFacility: "showers",
-    title: "Modernizace šaten — sprchy",
+    title: "Modernizace šaten, sprchy",
     description: "Obec nabízí spolufinancování upgradu sprch. Lepší regenerace pro hráče.",
     totalCost: 25000, subsidyRatio: 0.6, favorThreshold: 60, politicalCost: 2,
   },
@@ -733,11 +733,11 @@ interface CrisisEvent {
 
 const CRISIS_EVENTS: CrisisEvent[] = [
   {
-    type: "vandalism", description: "Vandalismus na stadionu — kdosi rozbil tribunu.",
+    type: "vandalism", description: "Vandalismus na stadionu, kdosi rozbil tribunu.",
     budgetImpact: -5000, moraleImpact: -3,
   },
   {
-    type: "sponsor_exit", description: "Místní sponzor odstoupil — občané nechtějí být s klubem spojováni.",
+    type: "sponsor_exit", description: "Místní sponzor odstoupil, občané nechtějí být s klubem spojováni.",
     budgetImpact: -3000, moraleImpact: -2,
   },
   {
@@ -745,11 +745,11 @@ const CRISIS_EVENTS: CrisisEvent[] = [
     budgetImpact: -1500, moraleImpact: -5,
   },
   {
-    type: "supplier_refuses", description: "Místní obchod přestal dodávat občerstvení — musíš dovážet z dálky.",
+    type: "supplier_refuses", description: "Místní obchod přestal dodávat občerstvení, musíš dovážet z dálky.",
     budgetImpact: -2500, moraleImpact: -1,
   },
   {
-    type: "tax_audit", description: "Obecní úřad spustil důkladnou kontrolu — administrativní zátěž.",
+    type: "tax_audit", description: "Obecní úřad spustil důkladnou kontrolu, administrativní zátěž.",
     budgetImpact: -2000, moraleImpact: -2,
   },
 ];

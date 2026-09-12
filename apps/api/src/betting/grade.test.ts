@@ -86,7 +86,7 @@ describe("střelec", () => {
     expect(gradeSelection("scorer", "novak", vyhraDomacich, apps)).toBe("lost");
   });
 
-  it("kdo vůbec nenastoupil, má tip anulovaný — ne prohraný", () => {
+  it("kdo vůbec nenastoupil, má tip anulovaný, ne prohraný", () => {
     const apps: Appearances = new Map([["nekdo_jiny", 1]]);
     expect(gradeSelection("scorer", "novak", vyhraDomacich, apps)).toBe("void");
   });

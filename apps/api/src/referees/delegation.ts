@@ -165,7 +165,7 @@ async function loadState(
 async function delegateCalendar(db: D1Database, cal: CalendarRow): Promise<number> {
   const full = await ensureReferees(db, cal.district);
   if (full.length === 0) {
-    logger.warn({ module: "referees" }, `okres ${cal.district} nemá rozhodčí — delegace přeskočena`);
+    logger.warn({ module: "referees" }, `okres ${cal.district} nemá rozhodčí, delegace přeskočena`);
     return 0;
   }
 
@@ -190,7 +190,7 @@ async function delegateCalendar(db: D1Database, cal: CalendarRow): Promise<numbe
         pool = filtered;
       } else {
         logger.warn({ module: "referees" },
-          `soutěž ${cal.league_id} má tolik banů a stopek, že by na listině zbylo ${filtered.length} z ${full.length} — filtr ignorován`);
+          `soutěž ${cal.league_id} má tolik banů a stopek, že by na listině zbylo ${filtered.length} z ${full.length}, filtr ignorován`);
       }
     }
   } catch (e) {

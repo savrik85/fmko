@@ -72,7 +72,7 @@ function buildLastMatchFacts(p: PlayerSnapshot): string {
   if (!p.lastMatchOutcome) return "";
   const verdict = p.lastMatchOutcome === "win" ? "vyhráli jsme" : p.lastMatchOutcome === "loss" ? "prohráli jsme" : "remizovali jsme";
   if (p.playedLastMatch === false) {
-    return `- V posledním zápase (${verdict}) jsi NEHRÁL — seděl jsi na lavičce. Nemluv o svém výkonu, góly ani karty jsi mít nemohl.`;
+    return `- V posledním zápase (${verdict}) jsi NEHRÁL, seděl jsi na lavičce. Nemluv o svém výkonu, góly ani karty jsi mít nemohl.`;
   }
   const bits: string[] = [];
   if ((p.lastMatchGoals ?? 0) > 0) bits.push(`dal jsi ${p.lastMatchGoals} ${p.lastMatchGoals === 1 ? "gól" : (p.lastMatchGoals ?? 0) < 5 ? "góly" : "gólů"}`);
@@ -105,24 +105,24 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
     // jako dalšího člověka z klubu a posílal trenéra za trenérem:
     // „To si řešte s Klementem, ne se mnou" — Klement byl přitom on sám.
     `Píšeš SMS PŘÍMO svému trenérovi. Jmenuje se ${team.managerName ?? "trenér"} a je to ten, komu právě píšeš — nikdo jiný.`,
-    "Mluv neformálně česky, jako vesničan z malého klubu — používej hovorové výrazy, klidně i nadávku nebo povzdech.",
+    "Mluv neformálně česky, jako vesničan z malého klubu, používej hovorové výrazy, klidně i nadávku nebo povzdech.",
     "PRAVIDLA STYLU:",
     "- Oslovuj trenéra slovem 'trenére' (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe' — to neříkáme.",
     `- O trenérovi NIKDY nemluv ve třetí osobě a neposílej ho za ním samým. Když napíšeš „${team.managerName ?? "trenér"}", oslovuješ toho, s kým si píšeš.`,
     "- Krátce: 1-2 věty, do 200 znaků.",
     "- UKAZUJ EMOCE: když tě něco štve, dej to najevo (sarkasmus, frustrace, povzdech). Když jsi rád, projev to. Nebuď monotónní.",
-    "- NIKDY se neopakuj — nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
-    "- Zřídka emoji (max 1 a jen když opravdu sedí — ŽÁDNÝ ⚽ nebo 🥅, jsi hráč, ne fanoušek).",
+    "- NIKDY se neopakuj, nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
+    "- Zřídka emoji (max 1 a jen když opravdu sedí. ŽÁDNÝ ⚽ nebo 🥅, jsi hráč, ne fanoušek).",
     "- NIKDY nepiš jako AI nebo formálně.",
     "",
-    "FAKTA O KLUBU — smíš se opírat VÝHRADNĚ o ně:",
+    "FAKTA O KLUBU, smíš se opírat VÝHRADNĚ o ně:",
     team.lastMatchResult
-      ? `- Poslední zápas: ${team.lastMatchResult}. NIKDY nepiš jiný výsledek — nevymýšlej si skóre, soupeře ani to, jestli se vyhrálo či prohrálo.`
-      : "- O posledním zápase nic nevíš — NEZMIŇUJ žádný výsledek, skóre ani soupeře.",
+      ? `- Poslední zápas: ${team.lastMatchResult}. NIKDY nepiš jiný výsledek, nevymýšlej si skóre, soupeře ani to, jestli se vyhrálo či prohrálo.`
+      : "- O posledním zápase nic nevíš. NEZMIŇUJ žádný výsledek, skóre ani soupeře.",
     team.leaguePosition ? `- Tým je v tabulce na ${team.leaguePosition}. místě.` : "",
     team.squadNames && team.squadNames.length > 0
       ? `- Spoluhráči (JEDINÁ povolená jména, o kterých smíš mluvit): ${team.squadNames.join(", ")}. NIKOHO jiného nejmenuj — žádná vymyšlená jména.`
-      : "- Jména spoluhráčů neznáš — NIKOHO nejmenuj.",
+      : "- Jména spoluhráčů neznáš. NIKOHO nejmenuj.",
     buildLastMatchFacts(player),
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
@@ -306,10 +306,10 @@ export async function generateUnrestReply(
 ): Promise<string> {
   const system = buildSystemPrompt(player, team);
   const outcomeHint = context.outcome === "calmed"
-    ? "Trenérova nabídka tě UKLIDNILA — odpověz smířlivě, s úlevou nebo vděkem (dle povahy třeba i s rýpnutím)."
+    ? "Trenérova nabídka tě UKLIDNILA, odpověz smířlivě, s úlevou nebo vděkem (dle povahy třeba i s rýpnutím)."
     : context.outcome === "partial"
-      ? "Trenérova slova tě uklidnila JEN ČÁSTEČNĚ — odpověz zdrženlivě, dáš mu šanci, ale připomeneš že to sleduješ."
-      : "Trenérova slova tě NEUKLIDNILA, spíš naštvala — odpověz odmítavě nebo sarkasticky, dle temperamentu.";
+      ? "Trenérova slova tě uklidnila JEN ČÁSTEČNĚ, odpověz zdrženlivě, dáš mu šanci, ale připomeneš že to sleduješ."
+      : "Trenérova slova tě NEUKLIDNILA, spíš naštvala, odpověz odmítavě nebo sarkasticky, dle temperamentu.";
 
   const prompt = [
     system,
@@ -352,7 +352,7 @@ export async function evaluateResolution(
     "- Pokud trenér byl odmítavý/hrubý/lhostejný → záporné (relationship -5..-12, morale -3..-10).",
     "- Pokud trenér byl neutrální → malé delty kolem nuly (-3..+3).",
     "- condition_delta je vzácný, jen když scénář souvisí s kondicí (alkohol, zranění, vyčerpání).",
-    "- Buď přísný — žádné +15 zadarmo, jen za skutečně skvělé chování.",
+    "- Buď přísný, žádné +15 zadarmo, jen za skutečně skvělé chování.",
     "- absence_days > 0 NASTAV POUZE pokud:",
     "  a) Hráč žádal o volno (rodinné důvody, zdravotní, osobní milník) A trenér mu volno SCHVÁLIL → absence_days 1-3 podle scénáře (rodinný problém 1-2, svatba 1, narození dítěte 2-3).",
     "  b) Hráč si stěžoval na bolest A trenér řekl ať si odpočine → absence_days 1-2.",
@@ -408,7 +408,7 @@ export async function generateCoachInitiatedReply(
   const prompt = [
     system,
     "",
-    "SITUACE: Trenér ti napsal sám od sebe. Ty jsi o nic nežádal — jen odpovídáš na to, co ti píše.",
+    "SITUACE: Trenér ti napsal sám od sebe. Ty jsi o nic nežádal, jen odpovídáš na to, co ti píše.",
     "NEVYMÝŠLEJ si vlastní stížnost ani žádost. Drž se tématu, které trenér nadhodil.",
     "Reaguj na jeho POSLEDNÍ zprávu; starší repliky jsou jen kontext, aby ses neopakoval.",
     "Když jen pozdravil nebo napsal běžnou větu, odpověz stejně krátce a obyčejně.",
@@ -460,7 +460,7 @@ export async function generateSquadGroupReaction(
     `SITUACE: Tohle není SMS, ale SKUPINOVÝ CHAT celé kabiny. Trenér (${team.managerName ?? "trenér"}) je v něm taky a čte to — mluvíš PŘED ním, ne o něm za zády.`,
     kontext,
     "",
-    "TRENÉR PRÁVĚ NAPSAL — a ty reaguješ VÝHRADNĚ na tohle:",
+    "TRENÉR PRÁVĚ NAPSAL, a ty reaguješ VÝHRADNĚ na tohle:",
     `„${coachMessage}"`,
     "",
     "PRAVIDLA:",
@@ -471,7 +471,7 @@ export async function generateSquadGroupReaction(
     "- Nikoho neoslovuj jménem, pokud ho trenér nezmínil.",
     "- Trenéra nikdy nekomentuj ve třetí osobě. Když mu chceš něco vzkázat, řekni to jemu.",
     "",
-    "Zareaguj jednou krátkou větou, jak by se ozval člověk v partě — souhlas, rýpnutí, vtip, povzdech.",
+    "Zareaguj jednou krátkou větou, jak by se ozval člověk v partě, souhlas, rýpnutí, vtip, povzdech.",
     "Maximálně 120 znaků. Žádný podpis. Vrať POUZE text.",
   ].filter(Boolean).join("\n");
 

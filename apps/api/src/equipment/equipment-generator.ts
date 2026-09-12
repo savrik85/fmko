@@ -33,7 +33,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   gym_corner: "Posilovna v kabině",
   training_wall: "Tréninková zeď",
   club_grill: "Klubový gril",
-  fan_drums: "Kotel — bubny a vlajky",
+  fan_drums: "Kotel, bubny a vlajky",
   winter_gear: "Zimní výbava lavičky",
   video_setup: "Kamera a rozbory",
   laundry: "Pračka a sušárna dresů",
@@ -77,7 +77,7 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
   boots_stock: [
     "Každý si nosí své, kdo nemá hraje v tesakách",
     "Pár náhradních kopaček ve skladu",
-    "Kolíky, turfy i halu — základ pro každý povrch",
+    "Kolíky, turfy i halu, základ pro každý povrch",
     "Komplet sklad obuvi všech velikostí",
   ],
   bibs: [
@@ -90,7 +90,7 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
     "Brankář chytá v čem má",
     "Jedny brankářské rukavice a chrániče",
     "2 páry rukavic + chránič hrudi",
-    "Komplet GK výbava — rukavice, chrániče, dres",
+    "Komplet GK výbava, rukavice, chrániče, dres",
   ],
   water_bottles: [
     "Kdo má žízeň, napije se z kohoutku",
@@ -106,7 +106,7 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
   ],
   team_van: [
     "Kdo nemá auto, nedorazí",
-    "Ojetá Felicia combi — vejde se pět kluků",
+    "Ojetá Felicia combi, vejde se pět kluků",
     "Devítimístná dodávka po elektrikáři",
     "Klubový mikrobus s logem",
   ],

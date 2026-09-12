@@ -196,8 +196,8 @@ const POZICE: Record<string, string> = { GK: "brankář", DEF: "obránce", MID: 
 /** Jak trenér mládeže popíše jednoho kluka. */
 function popisOdchovance(res: AcademyResult): string {
   const pozice = POZICE[res.position] ?? res.position;
-  if (res.hiddenTalent >= 50) return `${res.playerName} (${res.age}, ${pozice}) — z toho něco bude, na to vemte jed`;
-  if (res.hiddenTalent >= 30) return `${res.playerName} (${res.age}, ${pozice}) — slibný kluk`;
+  if (res.hiddenTalent >= 50) return `${res.playerName} (${res.age}, ${pozice}), z toho něco bude, na to vemte jed`;
+  if (res.hiddenTalent >= 30) return `${res.playerName} (${res.age}, ${pozice}), slibný kluk`;
   return `${res.playerName} (${res.age}, ${pozice})`;
 }
 

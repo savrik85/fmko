@@ -49,7 +49,7 @@ describe("mentor v tréninku", () => {
     expect(simulateTraining(createRng(5), squad, PLAN).mentor).toBeUndefined();
   });
 
-  it("mladý kapitán mentorem není — na to je potřeba věk", () => {
+  it("mladý kapitán mentorem není, na to je potřeba věk", () => {
     const squad = [hrac({ age: 24, leadership: 95 }), hrac({ age: 18 })];
     expect(simulateTraining(createRng(5), squad, PLAN).mentor).toBeUndefined();
   });

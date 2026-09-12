@@ -24,8 +24,8 @@ const HELP: Record<string, HelpEntry> = {
     title: "Domovská obrazovka",
     icon: "\u{1F3E0}",
     sections: [
-      { text: "Hlavní přehled klubu — rozpočet, další zápas, forma, tabulka, stav kádru a trenér." },
-      { heading: "Skládání dashboardu", text: "Tlačítkem Upravit dashboard přepneš stránku do editace. Widget pak chytneš za jeho zelenou lištu a přetáhneš myší nebo prstem kam potřebuješ; šipky dělají to samé po jednom kroku. Křížek widget odebere, čísla 1/2/3 nastaví šířku ve sloupcích (na mobilu je vždy jeden sloupec). Tlačítko Přidat widget otevře katalog s grafy, koláči, radary a žebříčky — vybrat jich můžeš víc naráz. Hotovo uloží rozložení na server, takže ti drží i na jiném zařízení. Obnovit výchozí vrátí původní podobu." },
+      { text: "Hlavní přehled klubu, rozpočet, další zápas, forma, tabulka, stav kádru a trenér." },
+      { heading: "Skládání dashboardu", text: "Tlačítkem Upravit dashboard přepneš stránku do editace. Widget pak chytneš za jeho zelenou lištu a přetáhneš myší nebo prstem kam potřebuješ; šipky dělají to samé po jednom kroku. Křížek widget odebere, čísla 1/2/3 nastaví šířku ve sloupcích (na mobilu je vždy jeden sloupec). Tlačítko Přidat widget otevře katalog s grafy, koláči, radary a žebříčky, vybrat jich můžeš víc naráz. Hotovo uloží rozložení na server, takže ti drží i na jiném zařízení. Obnovit výchozí vrátí původní podobu." },
       { text: "Widgety se sesypávají nahoru, takže menší karta zaplní místo pod vyšším sousedem a nikde nezůstávají prázdná místa.", tip: true },
       { heading: "Forma", text: "V = výhra (3 body), R = remíza (1 bod), P = prohra (0). Zobrazuje posledních 5 výsledků." },
       { heading: "Stav kádru", text: "Průměrná kondice ovlivňuje výkon v zápase. Pod 60 % hrozí výrazné oslabení týmu. Zranění hráči nemohou nastoupit." },
@@ -37,12 +37,12 @@ const HELP: Record<string, HelpEntry> = {
     title: "Sázková kancelář",
     icon: "\u{1F3AB}",
     sections: [
-      { text: "Kancelář vypisuje kurzy na zápasy tvé soutěže. Na vlastní zápas si vsadit nemůžeš — ani na svůj A-tým, ani na rezervu. Sází se z klubové kasy." },
+      { text: "Kancelář vypisuje kurzy na zápasy tvé soutěže. Na vlastní zápas si vsadit nemůžeš, ani na svůj A-tým, ani na rezervu. Sází se z klubové kasy." },
       { heading: "Kurzy", text: "Kurz počítá hra ze síly obou kádrů, formy a domácího prostředí. Kancelář si k tomu přirazí osm procent, takže součet šancí na lístku vždycky přesahuje sto procent a dlouhodobě vydělává ona, ne ty." },
-      { heading: "Typy sázek", text: "Kdo vyhraje (1 = domácí, X = remíza, 2 = hosté), kolik padne gólů a kdo se trefí. Tipy z různých zápasů téhož kola se dají složit na jeden tiket — kurzy se pak násobí, ale musí vyjít všechny. Z jednoho zápasu si vybíráš jen jeden tip." },
+      { heading: "Typy sázek", text: "Kdo vyhraje (1 = domácí, X = remíza, 2 = hosté), kolik padne gólů a kdo se trefí. Tipy z různých zápasů téhož kola se dají složit na jeden tiket, kurzy se pak násobí, ale musí vyjít všechny. Z jednoho zápasu si vybíráš jen jeden tip." },
       { heading: "Limity", text: "Vklad od 100 Kč, nejvýš tři tikety na kolo a nejvýš šest tipů na tiketu. Horní hranici vkladu i strop výhry si soutěž nastavuje sama hlasováním. Klub v mínusu si nevsadí vůbec." },
       { heading: "Uzávěrka", text: "Lístek se zavírá ve chvíli, kdy se kolo začne hrát. Výsledek přijde SMS do telefonu hned po odehrání." },
-      { text: "Když sázený střelec vůbec nenastoupí, tip se anuluje a kurz tiketu klesne — tip neprohrává. Cizí sestavu totiž předem nevidíš.", tip: true },
+      { text: "Když sázený střelec vůbec nenastoupí, tip se anuluje a kurz tiketu klesne, tip neprohrává. Cizí sestavu totiž předem nevidíš.", tip: true },
     ],
   },
   "/dashboard/phone": {
@@ -50,9 +50,9 @@ const HELP: Record<string, HelpEntry> = {
     icon: "\u{1F4F1}",
     sections: [
       { text: "Telefon simuluje komunikaci s hráči a vedením. Zprávy přicházejí automaticky během hry." },
-      { heading: "Předzápasová konverzace", text: "Den před zápasem se objeví skupina s názvem soupeře. Hráči odpovídají, jestli dorazí — omluvení závisí na disciplíně, morálce, dojezdové vzdálenosti a životní situaci. Po odehrání zápasu konverzace zmizí." },
+      { heading: "Předzápasová konverzace", text: "Den před zápasem se objeví skupina s názvem soupeře. Hráči odpovídají, jestli dorazí, omluvení závisí na disciplíně, morálce, dojezdové vzdálenosti a životní situaci. Po odehrání zápasu konverzace zmizí." },
       { heading: "Systémové kontakty", text: "Vedení = finance a hřiště. Správce = zranění a údržba. Kapitán = konflikty v kabině. Místní kontakt = nabídky hráčů z okolí." },
-      { text: "Nové zprávy od Místního kontaktu znamenají nabídku hráče — podívej se do Přestupů.", tip: true },
+      { text: "Nové zprávy od Místního kontaktu znamenají nabídku hráče, podívej se do Přestupů.", tip: true },
     ],
   },
   "/dashboard/squad": {
@@ -70,7 +70,7 @@ const HELP: Record<string, HelpEntry> = {
     title: "Tréninky",
     icon: "⚽",
     sections: [
-      { text: "Tréninky zlepšují dovednosti hráčů. Základní šance na zlepšení je 10 % za jeden trénink — pak se násobí věkem hráče, koučinkem trenéra a vybavením." },
+      { text: "Tréninky zlepšují dovednosti hráčů. Základní šance na zlepšení je 10 % za jeden trénink, pak se násobí věkem hráče, koučinkem trenéra a vybavením." },
       { heading: "Koučink trenéra", text: "Vzorec: 0,8 + (koučink/100) × 0,8. Při koučinku 40 = 1,12×, při 80 = 1,44×. Přímo násobí šanci na zlepšení." },
       { heading: "Věk hráče", text: "Pod 20 let: 1,3× bonus. 20–24: 1,15×. 25–29: žádný bonus. 30–33: 0,7×. 34–37: 0,4×. Nad 38: 0,15×. Starší hráči se zlepšují mnohem pomaleji." },
       { heading: "Rozvoj mládeže", text: "Hráči do 22 let mají extra bonus z vlastnosti trenéra: 0,9 + (rozvoj/100) × 0,6. Při rozvoji 60 je to 1,26× navíc." },
@@ -85,8 +85,8 @@ const HELP: Record<string, HelpEntry> = {
     icon: "\u{1F91D}",
     sections: [
       { text: "Volní hráči, nabídky a hostování. V okrese je max. 8 volných hráčů, denně přibudou 0–2 noví." },
-      { heading: "Odkrytí hráče", text: "Stojí peníze. Ukáže detailní statistiky — bez odkrytí vidíš jen pozici a věk. U cizích hráčů vidíš atributy zaokrouhlené na 5 (rozmazané)." },
-      { heading: "Nabídky od Místního kontaktu", text: "20% šance za kolo, že ti někdo doporučí hráče (hospoda, mládež, kamarád). Přijde SMS — hráč se objeví v přestupech." },
+      { heading: "Odkrytí hráče", text: "Stojí peníze. Ukáže detailní statistiky, bez odkrytí vidíš jen pozici a věk. U cizích hráčů vidíš atributy zaokrouhlené na 5 (rozmazané)." },
+      { heading: "Nabídky od Místního kontaktu", text: "20% šance za kolo, že ti někdo doporučí hráče (hospoda, mládež, kamarád). Přijde SMS, hráč se objeví v přestupech." },
       { heading: "Hostování", text: "Půjčka hráče z jiného týmu na 30–90 dní. Hráč se po vypršení automaticky vrátí." },
       { heading: "Kvalita podle velikosti obce", text: "Vesnice: základ 37. Obec: 39. Městys: 41. Město: 44. AI týmy mají kvalitu o 1 stupeň nižší." },
       { text: "Platy hráčů: 10 + (rating/100) × 400 Kč/měsíc. Hráč s ratingem 50 stojí ~210 Kč/měsíc.", tip: true },
@@ -109,7 +109,7 @@ const HELP: Record<string, HelpEntry> = {
     icon: "\u{1F3E2}",
     sections: [
       { text: "Sponzoři přinášejí měsíční příjem a bonus za výhru. Počet nabídek závisí na REPUTACI klubu: pod 40 tři nabídky, 40–59 čtyři, 60 a víc pět." },
-      { heading: "Typy sponzorů", text: "Hospoda, řeznictví, autoservis, potraviny, obec — každý má jiný rozsah částky i jiný bonus za výhru. Konkrétní čísla vidíš přímo v nabídkách." },
+      { heading: "Typy sponzorů", text: "Hospoda, řeznictví, autoservis, potraviny, obec, každý má jiný rozsah částky i jiný bonus za výhru. Konkrétní čísla vidíš přímo v nabídkách." },
       { heading: "Vliv reputace na částku", text: "Nabídnutá částka se násobí reputací/50 a velikostí obce (vesnice 0,8×, obec 1,0×, městys 1,1×, město 1,3×). Při reputaci 70 dostaneš o 40 % víc než při 50." },
       { heading: "Reputace KLUBU", text: "Rozsah 0–100, start 50. Roste umístěním v lize, postupem v poháru, sezonními akcemi, podpisem hvězdy a vyprodaným stadionem. Klesá přejmenováním klubu, spodní polovinou tabulky a dlouhým obdobím bez úspěchu. Samotná výhra zápasu s ní NEHNE. Detail v sekci Reputace." },
       { heading: "Reputace TRENÉRA", text: "Jiné číslo, rozsah 15–75, start 30. Ta roste výhrami a klesá prohrami. Najdeš ji v profilu trenéra a na stránce Fanoušci." },
@@ -119,13 +119,13 @@ const HELP: Record<string, HelpEntry> = {
     title: "Reputace klubu",
     icon: "⭐",
     sections: [
-      { text: "Jak moc se o klubu v okrese ví. Rozsah 0–100, start 50. NEPLEŤ si ji s reputací trenéra — to je jiné číslo (15–75) a to roste za výhry." },
+      { text: "Jak moc se o klubu v okrese ví. Rozsah 0–100, start 50. NEPLEŤ si ji s reputací trenéra, to je jiné číslo (15–75) a to roste za výhry." },
       { heading: "Co odemyká", text: "Vybavení 2. úrovně: 40. Stadion 2. úrovně: 50. Vybavení 3. úrovně: 60. Stadion 3. úrovně: 70. Vždy ještě plus počet odehraných zápasů a číslo sezony." },
       { heading: "Co vydělává", text: "Místní podpora = reputace × 100 Kč/měsíc. Počet i velikost sponzorských nabídek. Bonus k návštěvnosti. Pronájem bufetu. Ochota hráčů k tobě přestoupit." },
       { heading: "Jak ji zvednout", text: "Umístění v lize (první místo +5), pohár (vítěz kumulativně +11), sezonní akce (+1 až +10), podpis hvězdy (+4 až +15), vyprodaný stadion (+1, nejvýš 6× za sezonu), série výher (+2), rodáci v kádru a přízeň obce (+1 měsíčně)." },
       { heading: "Co ji srazí", text: "Spodní polovina tabulky (poslední místo −5), přejmenování klubu (−3), ukončení smlouvy se sponzorem (−2), série proher (−2), prázdné hlediště, málo rodáků, mračící se obec a měsíc bez úspěchu (−1 týdně)." },
       { heading: "Klesající výnosy", text: "Nad 55 se zisky krátí na 75 %, nad 70 na polovinu, nad 85 na čtvrtinu. Ztráty se nekrátí. Čím výš jsi, tím dražší je stoupat." },
-      { text: "Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec — tam reputace nerozhoduje, jen přízeň obce.", tip: true },
+      { text: "Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec, tam reputace nerozhoduje, jen přízeň obce.", tip: true },
     ],
   },
   "/dashboard/fans": {
@@ -136,7 +136,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Spokojenost (0–100)", text: "Mění se po každém zápase. Výhra +6, prohra −5, drahé vstupné −2, levné +1, kvalitní občerstvení +1 za produkt, došlé zásoby −2, čistá sociálka až +3, trenér −3 až +3. Celkem nejvýš ±15 za zápas." },
       { heading: "Loajalita", text: "Dlouhodobá hladina, ke které se spokojenost každý den o bod vrací. Sama míří k reputaci klubu, posunuté o vliv trenéra (−2 až +2). Přes 100 nejde." },
       { heading: "Vliv trenéra", text: "Vliv = 0,6 × reputace + 0,4 × motivace, neutrál je 44. Pásma po pěti bodech: 47–51 dává +1, 52–56 dává +2, 57 a víc +3. Pásmo 42–46 je nula. Níže se jde do minusu: 37–41 je −1, 32–36 je −2, 31 a míň −3." },
-      { heading: "Jak zvednout reputaci trenéra", text: "Výhra +1 (o tři a víc gólů +2), prohra −1 (debakl −2) — projeví se asi v třetině zápasů. Konec sezony: první místo ve 14 týmech +10, poslední −10. Pohár: osmifinále +2, čtvrtfinále +3, semifinále +5, výhra ve finále +8. Proslov na závěrečné párty +1 nebo −1 podle tónu. Rozsah 15–75." },
+      { heading: "Jak zvednout reputaci trenéra", text: "Výhra +1 (o tři a víc gólů +2), prohra −1 (debakl −2), projeví se asi v třetině zápasů. Konec sezony: první místo ve 14 týmech +10, poslední −10. Pohár: osmifinále +2, čtvrtfinále +3, semifinále +5, výhra ve finále +8. Proslov na závěrečné párty +1 nebo −1 podle tónu. Rozsah 15–75." },
       { heading: "Motivace trenéra", text: "Konec sezony v horní polovině +1, ve spodní poloviční šance na −1. Zhruba každá osmá prohra (debakl každá čtvrtá) sebere bod motivace nebo disciplíny. Sama od sebe neroste." },
       { text: "Spokojenost násobí návštěvnost (0,75× až 1,25×), cenu vstupenky (0,7× až 1,3×) i tržby v bufetu. Vyplatí se ji hlídat.", tip: true },
     ],
@@ -156,7 +156,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Stav hřiště ovlivňuje kvalitu hry a riziko zranění." },
       { heading: "Počasí", text: "Déšť: technika 0,8×, zranění 1,3×. Sníh: technika 0,7×, zranění 1,4×. Vítr: technika 0,9×. Počasí se generuje náhodně." },
       { heading: "Návštěvnost", text: "Závisí na fanouškovské základně, reputaci klubu, formě, počasí a kapacitě. Základní vstupné: vesnice 20, obec 30, městys 40, město 50 Kč/divák." },
-      { heading: "Zámky vylepšení", text: "2. úroveň: reputace 50+ a 15 odehraných zápasů. 3. úroveň: reputace 70+, 35 zápasů a sezona 3+. Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec — tam reputace nerozhoduje, jen přízeň." },
+      { heading: "Zámky vylepšení", text: "2. úroveň: reputace 50+ a 15 odehraných zápasů. 3. úroveň: reputace 70+, 35 zápasů a sezona 3+. Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec, tam reputace nerozhoduje, jen přízeň." },
     ],
   },
   "/dashboard/events": {
@@ -194,14 +194,14 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Jak funguje zápas", text: "Každá minuta má ~10% šanci na útočnou akci. Šance na gól = základ + (útok−obrana)/100. Rozsah 6–28 %. Taktika modifikuje: útočná 1,3× útok, ale 0,8× obrana." },
       { heading: "Karty", text: "Šance na kartu závisí na temperamentu a disciplíně hráče. Každé 4 žluté = 1 zápas stop. Červená = okamžitý 1 zápas stop." },
       { heading: "Zranění", text: "~1 % za minutu. Déšť 1,3×, sníh 1,4×. Horší stav hřiště zvyšuje riziko. Zraněný hráč chybí 1–12 kol." },
-      { text: "Hráč s kondicí pod 60 % hraje až na 60 % svého potenciálu. Kondice klesne během zápasu — výrazněji u hráčů s nízkou staminou.", tip: true },
+      { text: "Hráč s kondicí pod 60 % hraje až na 60 % svého potenciálu. Kondice klesne během zápasu, výrazněji u hráčů s nízkou staminou.", tip: true },
     ],
   },
   "/dashboard/news": {
     title: "Zpravodaj",
     icon: "\u{1F4F0}",
     sections: [
-      { text: "Ligové zprávy — výsledky kol, přestupy, události. Generují se automaticky po každém odehraném kole." },
+      { text: "Ligové zprávy, výsledky kol, přestupy, události. Generují se automaticky po každém odehraném kole." },
     ],
   },
   "/dashboard/settings": {
@@ -230,7 +230,7 @@ function findHelp(pathname: string): HelpEntry | null {
     icon: "\u{1F464}",
     sections: [
       { text: "Detailní statistiky, osobnost, životní kontext a historie zápasů." },
-      { heading: "Dovednosti", text: "7 atributů: rychlost, technika, střelba, přihrávky, hlavičky, obrana, brankář. Zlepšují se tréninkem — základ je 10 % za trénink, násobený věkem, koučinkem a vybavením. Nad 50 bodů se zlepšování výrazně zpomaluje." },
+      { heading: "Dovednosti", text: "7 atributů: rychlost, technika, střelba, přihrávky, hlavičky, obrana, brankář. Zlepšují se tréninkem, základ je 10 % za trénink, násobený věkem, koučinkem a vybavením. Nad 50 bodů se zlepšování výrazně zpomaluje." },
       { heading: "Osobnost", text: "Disciplína = docházka na tréninky. Patriotismus = loajalita ke klubu. Temperament = riziko karet. Alkohol > 70 = −10 % docházka a vyšší únava v zápase (+0,15 kondice/min)." },
       { heading: "Životní kontext", text: "Zaměstnání a rodina ovlivňují dostupnost. Řidič kamionu nebo otec malých dětí může častěji chybět. Dojezdová vzdálenost snižuje docházku o 0,8 %/km." },
       { text: "Šipky v hlavičce posouvají mezi hráči TOHO TÝMU, kterému hráč patří.", tip: true },
@@ -240,7 +240,7 @@ function findHelp(pathname: string): HelpEntry | null {
     title: "Profil týmu",
     icon: "\u{1F3DF}️",
     sections: [
-      { text: "Detail týmu — kádr, výsledky, statistiky. Klikni na hráče pro jeho profil." },
+      { text: "Detail týmu, kádr, výsledky, statistiky. Klikni na hráče pro jeho profil." },
       { heading: "Cizí hráči", text: "U hráčů cizích týmů vidíš atributy zaokrouhlené na 5 (rozmazané). Pro přesné hodnoty musíš hráče odkrýt v přestupech." },
     ],
   };

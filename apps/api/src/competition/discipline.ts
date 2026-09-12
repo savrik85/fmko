@@ -73,7 +73,7 @@ export const OFFENCES: Record<string, Offence> = {
     label: "Manipulace se sázkami",
     // Strojová detekce domluvy nefunguje a falešné obvinění je horší než
     // přehlédnutý obchod. Navrhovatel doloží sám z knihy sázek.
-    evidenceLabel: "bez strojového důkazu — navrhovatel doloží sám",
+    evidenceLabel: "bez strojového důkazu, navrhovatel doloží sám",
     majority: QUALIFIED_MAJORITY,
     freeText: true,
   },
@@ -95,7 +95,7 @@ export const OFFENCES: Record<string, Offence> = {
   other: {
     kind: "other",
     label: "Nesportovní chování",
-    evidenceLabel: "bez důkazu — rozhodne zasedání",
+    evidenceLabel: "bez důkazu, rozhodne zasedání",
     majority: QUALIFIED_MAJORITY,
     freeText: true,
   },
@@ -182,7 +182,7 @@ export async function collectEvidence(
   if (pitch && pitch.pitch_condition < pitchThreshold) {
     out.push({
       kind: "pitch", label: OFFENCES.pitch.label,
-      detail: `Stav trávníku ${pitch.pitch_condition} ze 100 — pod hranicí ${pitchThreshold}.`,
+      detail: `Stav trávníku ${pitch.pitch_condition} ze 100, pod hranicí ${pitchThreshold}.`,
     });
   }
 

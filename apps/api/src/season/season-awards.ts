@@ -98,7 +98,7 @@ export async function generateSeasonAwards(
     .bind(leagueId, seasonNumber).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: "season-awards" }, "idempotency check", e); return null; });
   if (existing) {
-    logger.info({ module: "season-awards" }, `skip — awards exist league=${leagueId} s=${seasonNumber}`);
+    logger.info({ module: "season-awards" }, `skip, awards exist league=${leagueId} s=${seasonNumber}`);
     return null;
   }
 
@@ -266,11 +266,11 @@ async function pickWithGemini(
   },
 ): Promise<GeminiAwardOut> {
   const standLines = ctx.standings.slice(0, 6).map((s) =>
-    `${s.pos}. ${ctx.teamName.get(s.teamId) ?? s.teamId} — ${s.points} b (${s.gf}:${s.ga})`);
+    `${s.pos}. ${ctx.teamName.get(s.teamId) ?? s.teamId} ${s.points} b (${s.gf}:${s.ga})`);
   const playerLines = ctx.playerCandidates.map((p) =>
-    `- [player_id=${p.playerId}] ${p.name} (${p.position}, ${p.teamName}) — rating ⌀${p.avgRating}, ${p.goals} gólů, ${p.assists} asist., ${p.apps} zápasů`);
+    `- [player_id=${p.playerId}] ${p.name} (${p.position}, ${p.teamName}), rating ⌀${p.avgRating}, ${p.goals} gólů, ${p.assists} asist., ${p.apps} zápasů`);
   const youngLines = ctx.youngCandidates.map((p) =>
-    `- [player_id=${p.playerId}] ${p.name} (${p.age} let, ${p.position}, ${p.teamName}) — rating ⌀${p.avgRating}, ${p.goals} gólů`);
+    `- [player_id=${p.playerId}] ${p.name} (${p.age} let, ${p.position}, ${p.teamName}), rating ⌀${p.avgRating}, ${p.goals} gólů`);
   const managerLines = ctx.standings.slice(0, 4).map((s) =>
     `- [team_id=${s.teamId}] ${ctx.teamName.get(s.teamId) ?? s.teamId} (${s.pos}. místo) — trenér ${ctx.managerName.get(s.teamId) ?? "(AI)"}`);
 

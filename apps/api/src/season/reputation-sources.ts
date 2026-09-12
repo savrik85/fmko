@@ -55,7 +55,7 @@ export async function applyAttendanceReputation(
       .catch((e) => { logger.warn({ module: "reputation-sources" }, "count sellouts", e); return null; });
     if ((already?.c ?? 0) >= SELLOUT_MAX_PER_SEASON) return;
 
-    await applyReputationDelta(db, teamId, 1, "sellout", `Vyprodáno — ${attendance} diváků`, {
+    await applyReputationDelta(db, teamId, 1, "sellout", `Vyprodáno ${attendance} diváků`, {
       referenceId: refId, gameDate,
     });
     return;
@@ -68,7 +68,7 @@ export async function applyAttendanceReputation(
       .catch((e) => { logger.warn({ module: "reputation-sources" }, "count home matches", e); return null; });
     if ((homeMatches?.c ?? 0) < EMPTY_MIN_HOME_MATCHES) return;
 
-    await applyReputationDelta(db, teamId, -1, "empty_stands", `Poloprázdné hlediště — ${attendance} diváků`, {
+    await applyReputationDelta(db, teamId, -1, "empty_stands", `Poloprázdné hlediště ${attendance} diváků`, {
       referenceId: refId, gameDate,
     });
   }
@@ -236,6 +236,6 @@ export async function applyReputationDecay(
   if (recentGain) return;
 
   await applyReputationDelta(db, teamId, -1, "decay",
-    "Měsíc bez úspěchu — o klubu se přestává mluvit",
+    "Měsíc bez úspěchu, o klubu se přestává mluvit",
     { referenceId: `rep-decay-${teamId}-${gameDate.slice(0, 10)}`, gameDate });
 }

@@ -179,7 +179,7 @@ export async function runOneMeeting(
   for (const h of porusení) {
     results.push({
       kind: "compliance",
-      title: `${h.reason} — ${h.teamName}`,
+      title: `${h.reason} ${h.teamName}`,
       status: rules.fine_rule > 0 ? "passed" : "no_quorum",
       resultNote: rules.fine_rule > 0
         ? `${h.detail} Pokuta ${rules.fine_rule.toLocaleString("cs")} Kč.`
@@ -345,7 +345,7 @@ async function closeProposal(
   let note: string;
   if (cast < quorumNeeded) {
     status = "no_quorum";
-    note = `Neusnášeníschopné — hlasovalo ${cast} z potřebných ${quorumNeeded}.`;
+    note = `Neusnášeníschopné, hlasovalo ${cast} z potřebných ${quorumNeeded}.`;
   } else if (decisive === 0) {
     status = "rejected";
     note = "Všichni se zdrželi, návrh nebyl přijat.";
@@ -361,7 +361,7 @@ async function closeProposal(
   } else {
     status = "rejected";
     note = pro === proti && pro > 0
-      ? `Zamítnuto ${pro}:${proti} — rovnost hlasů a prezident nehlasoval.`
+      ? `Zamítnuto ${pro}:${proti}, rovnost hlasů a prezident nehlasoval.`
       : `Zamítnuto ${pro}:${proti}${zdrzel ? ` (${zdrzel} se zdrželo)` : ""}.`;
   }
 
@@ -589,7 +589,7 @@ async function notifyMeeting(
   const spolecne = n === 0
     ? (pokut === 0
       ? `${uvod} skončilo bez rozhodnutí.`
-      : `${uvod} řešilo jen porušení pravidel soutěže — ${padla} ${pokutaSlovem}.`)
+      : `${uvod} řešilo jen porušení pravidel soutěže ${padla} ${pokutaSlovem}.`)
     : `${uvod} projednalo ${n} ${bodu}: ${parts.join(", ") || "bez rozhodnutí"}.`
       + (pokut === 0 ? "" : ` K tomu ${padla} ${pokutaSlovem} za porušení pravidel soutěže.`);
 
@@ -728,7 +728,7 @@ export async function rebuildMeeting(
   for (const h of pokuty.results) {
     results.push({
       kind: "compliance",
-      title: `${h.reason} — ${h.team_name}`,
+      title: `${h.reason} ${h.team_name}`,
       status: "passed",
       resultNote: `${h.evidence ?? ""} Pokuta ${h.amount.toLocaleString("cs")} Kč.`.trim(),
       teamId: h.team_id,
@@ -795,7 +795,7 @@ export async function rebuildMeeting(
   }
 
   if (notify) await notifyMeeting(db, leagueId, meta.name, results, stats.voters);
-  logger.info({ module: M }, `soutěž ${leagueId}: zasedání ${gameDate} dopsáno — ${results.length} bodů`);
+  logger.info({ module: M }, `soutěž ${leagueId}: zasedání ${gameDate} dopsáno ${results.length} bodů`);
 
   return { items: results.length, passed: passedCount, newsId };
 }

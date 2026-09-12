@@ -170,7 +170,7 @@ function Akce({ group, teamId, onChanged, confirm }: {
   const proved = async (a: FanActionView, variant?: FanActionVariant) => {
     const cena = variant ? variant.cost : a.cost;
     const ok = await confirm({
-      title: `${a.label} — ${group.name}`,
+      title: `${a.label} ${group.name}`,
       description: a.popis,
       details: cena > 0 ? [{ label: "Cena", value: `−${formatCZK(cena)}`, color: "text-card-red" }] : [],
       confirmLabel: a.label,

@@ -315,8 +315,8 @@ gameRouter.get("/teams/:teamId/players/:playerId/profile-extras", async (c) => {
   const EFFECT_MAP: Record<string, string> = {
     brothers: "Častější asistence mezi sebou, +morálka při gólu bratra",
     father_son: "Častější asistence mezi sebou, +morálka při gólu",
-    in_laws: "Třecí plochy — −1 morálka týdně, když jsou oba v kádru",
-    classmates: "Sehraní ze školy — častější asistence mezi sebou",
+    in_laws: "Třecí plochy, −1 morálka týdně, když jsou oba v kádru",
+    classmates: "Sehraní ze školy, častější asistence mezi sebou",
     coworkers: "+1 morálka týdně, znají se z práce",
     neighbors: "+1 morálka týdně, společná cesta na zápasy",
     drinking_buddies: "+2 morálka týdně, +morálka při gólu parťáka",
@@ -1197,8 +1197,8 @@ gameRouter.post("/teams/:teamId/recruit", async (c) => {
     success,
     cost: action.cost,
     message: success
-      ? `${action.desc} — někdo se ozval! Nový hráč chce přijít.`
-      : `${action.desc} — bohužel se nikdo neozval.`,
+      ? `${action.desc}, někdo se ozval! Nový hráč chce přijít.`
+      : `${action.desc}, bohužel se nikdo neozval.`,
   });
 });
 
@@ -1279,7 +1279,7 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
       id: m.id as string,
       type: "match",
       headline,
-      body: `${m.round ? m.round + ". kolo — " : ""}${isHome ? "Domácí zápas" : "Venku"}. ${won ? "Fanoušci slaví!" : drew ? "Spravedlivá dělba bodů." : "Příště to bude lepší."}`,
+      body: `${m.round ? m.round + ". kolo " : ""}${isHome ? "Domácí zápas" : "Venku"}. ${won ? "Fanoušci slaví!" : drew ? "Spravedlivá dělba bodů." : "Příště to bude lepší."}`,
       icon,
       date: m.simulated_at as string ?? "",
     });
@@ -2084,7 +2084,7 @@ gameRouter.post("/teams/:teamId/stadium/pitch-care-order", async (c) => {
   const equip = await c.env.DB.prepare("SELECT pitch_heating, pitch_irrigation FROM equipment WHERE team_id = ?")
     .bind(teamId).first<{ pitch_heating: number; pitch_irrigation: number }>();
   if (!equip || (equip.pitch_heating ?? 0) + (equip.pitch_irrigation ?? 0) === 0) {
-    return c.json({ error: "Nemáš vyhřívání ani zavlažování — není co zapínat." }, 400);
+    return c.json({ error: "Nemáš vyhřívání ani zavlažování, není co zapínat." }, 400);
   }
 
   await c.env.DB.prepare("UPDATE stadiums SET pitch_care_ordered = 1 WHERE team_id = ?")
@@ -2879,7 +2879,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     upcoming.push({
       type: "match",
       date: (fm.simulated_at ?? fm.created_at) as string,
-      title: `Přátelák — ${opponent}`,
+      title: `Přátelák ${opponent}`,
       subtitle: isHome ? "Doma" : "Venku",
       status: fmStatus === "simulated"
         ? `${fm.home_score}:${fm.away_score}`
@@ -2918,7 +2918,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
       upcoming.push({
         type: "match",
         date: cm.scheduled_at as string,
-        title: `Pohár — ${opponent}`,
+        title: `Pohár ${opponent}`,
         subtitle: `${roundName(cm.round as number, cm.total_rounds as number)} · ${isHome ? "Doma" : "Venku"}`,
         status: done ? `${cm.home_score}:${cm.away_score}${pens}` : "Naplánováno",
         isHome,
@@ -2975,7 +2975,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
         upcoming.push({
           type: "training",
           date: day.toISOString(),
-          title: `Trénink — ${label}`,
+          title: `Trénink ${label}`,
           subtitle: [intensity, approach].filter(Boolean).join(" · ") || `${sessions}×/týden`,
           // Samostatně, ať si kalendář nemusí intenzitu tahat z textu podtitulku
           ...(planned ? { intensity: planned.intensity } : {}),
@@ -4459,7 +4459,7 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
     const outOk = starterIds.has(rule.action.outPlayerId);
     const inOk = squadIds.has(rule.action.inPlayerId) && !starterIds.has(rule.action.inPlayerId);
     if (outOk && inOk) return true;
-    warnings.push(`Pokyn na střídání v ${rule.fromMinute}. minutě zrušen — hráč není k dispozici`);
+    warnings.push(`Pokyn na střídání v ${rule.fromMinute}. minutě zrušen, hráč není k dispozici`);
     return false;
   });
 
@@ -4777,7 +4777,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   // Hostující hráč patří jinému klubu — propuštěním by skončil mezi volnými hráči
   // a kmenový klub by o něj nadobro přišel. Stejná ochrana jako u vylistování na trh.
   if (player.loan_from_team_id) {
-    return c.json({ error: "Hostující hráč nemůže být propuštěn — patří jinému klubu" }, 400);
+    return c.json({ error: "Hostující hráč nemůže být propuštěn, patří jinému klubu" }, 400);
   }
 
   // Idempotency: zamezit duplicitám při double-click
@@ -4807,7 +4807,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
       { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB },
       playerId, teamId,
       `⭐ ${player.first_name} ${player.last_name} je volný!`,
-      `${player.team_name} ho uvolnil — teď je k mání jako volný hráč.`,
+      `${player.team_name} ho uvolnil, teď je k mání jako volný hráč.`,
       "/dashboard/transfers",
     );
   } catch (e) { logger.warn({ module: "game" }, "watcher push on release", e); }
@@ -6643,7 +6643,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       "SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'"
     ).bind(buyerTeamId).first<{ id: string }>();
     if (!buyerU21) {
-      return c.json({ error: "Kupující nemá U21 tým — nelze přijmout" }, 400);
+      return c.json({ error: "Kupující nemá U21 tým, nelze přijmout" }, 400);
     }
     buyerDestTeamId = buyerU21.id;
   }
@@ -7073,7 +7073,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const scope = await resolveOfferClubScope(c.env.DB, teamId, offer);
   if (!scope?.role) return c.json({ error: "Nabídka nenalezena" }, 404);
   if (scope.buyerClubTeamId === "virtual_ai") {
-    return c.json({ error: "Virtuální klub o ceně nejedná — ber, nebo nech být" }, 400);
+    return c.json({ error: "Virtuální klub o ceně nejedná, ber, nebo nech být" }, 400);
   }
   if (!scope.onTurn) return c.json({ error: "Nejsi na tahu" }, 409);
   if (offer.expires_at && new Date(offer.expires_at) < new Date()) {
@@ -7470,7 +7470,7 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
 // použije se místo lookupu z DB (užitečné když pending už byly smazány).
 gameRouter.post("/admin/regenerate-pending-interviews", async (c) => {
   const body = await c.req.json<{ groups?: Array<{ leagueId: string; calendarId: string; gameWeek: number; count: number }> }>().catch((e) => {
-    logger.warn({ module: "game.ts" }, "regen interviews — parse body (může být prázdné)", e);
+    logger.warn({ module: "game.ts" }, "regen interviews, parse body (může být prázdné)", e);
     return null;
   });
 
@@ -7490,7 +7490,7 @@ gameRouter.post("/admin/regenerate-pending-interviews", async (c) => {
        FROM coach_interviews WHERE status = 'pending'
        GROUP BY league_id, match_calendar_id, game_week`
     ).all<{ league_id: string; match_calendar_id: string; game_week: number; cnt: number }>().catch((e) => {
-      logger.warn({ module: "game.ts" }, "regen interviews — group lookup", e);
+      logger.warn({ module: "game.ts" }, "regen interviews, group lookup", e);
       return { results: [] };
     });
   }
@@ -7501,7 +7501,7 @@ gameRouter.post("/admin/regenerate-pending-interviews", async (c) => {
     const del = await c.env.DB.prepare(
       "DELETE FROM coach_interviews WHERE status = 'pending' AND league_id = ? AND match_calendar_id = ? AND game_week = ?"
     ).bind(g.league_id, g.match_calendar_id, g.game_week).run().catch((e) => {
-      logger.warn({ module: "game.ts" }, "regen interviews — delete", e);
+      logger.warn({ module: "game.ts" }, "regen interviews, delete", e);
       return { meta: { changes: 0 } } as any;
     });
 
@@ -7523,7 +7523,7 @@ gameRouter.post("/admin/regenerate-pending-interviews", async (c) => {
         if ((after?.cnt ?? 0) > (before?.cnt ?? 0)) regenerated++;
         else break; // round-robin už nemá komu přiřadit
       } catch (e) {
-        logger.warn({ module: "game.ts" }, "regen interviews — create", e);
+        logger.warn({ module: "game.ts" }, "regen interviews, create", e);
         break;
       }
     }
@@ -8126,10 +8126,10 @@ gameRouter.get("/teams/:teamId/season-welcome", async (c) => {
   }
 
   const news = seasonNumber === 2 ? [
-    { icon: "🏆", title: "Celorepublikový pohár", text: "Nově hraješ i pohár — 128 týmů, vyřazovací pavouk. Los je náhodný, můžeš narazit i na velkoklub." },
-    { icon: "🌦️", title: "Počasí rozhoduje", text: "Déšť, sníh a vítr mění hru — horší technika, víc soubojů, míň diváků i míň vypitého piva." },
+    { icon: "🏆", title: "Celorepublikový pohár", text: "Nově hraješ i pohár. 128 týmů, vyřazovací pavouk. Los je náhodný, můžeš narazit i na velkoklub." },
+    { icon: "🌦️", title: "Počasí rozhoduje", text: "Déšť, sníh a vítr mění hru, horší technika, víc soubojů, míň diváků i míň vypitého piva." },
     { icon: "🧢", title: "Kabina žije", text: "Tahoun drží partu a zvedá morálku, potížista dělá dusno. Rivalové v kádru se hádají, kámoši od piva táhnou spolu." },
-    { icon: "🌍", title: "Cizinci na trhu", text: "Na trhu potkáš Slováky, Ukrajince, Vietnamce i Romy — s vlastními jmény a vzhledem." },
+    { icon: "🌍", title: "Cizinci na trhu", text: "Na trhu potkáš Slováky, Ukrajince, Vietnamce i Romy, s vlastními jmény a vzhledem." },
     { icon: "📅", title: "Pevné hrací dny", text: "Liga se hraje v pondělí a čtvrtek, pohár v sobotu." },
   ] : [];
 
@@ -8716,7 +8716,7 @@ const REPUTATION_TIERS = [
   { key: "znamy", min: 55, label: "Známý klub", note: "V okrese se o klubu ví." },
   { key: "prumerny", min: 40, label: "Průměrný klub", note: "Nikdo o klubu nemluví ani špatně, ani dobře." },
   { key: "prehlizeny", min: 25, label: "Přehlížený klub", note: "Hráči zvenku o klub nestojí." },
-  { key: "neznamy", min: 0, label: "Neznámý klub", note: "Klub nikdo nezná — sponzoři i hráči chodí jinam." },
+  { key: "neznamy", min: 0, label: "Neznámý klub", note: "Klub nikdo nezná, sponzoři i hráči chodí jinam." },
 ] as const;
 
 // GET /api/teams/:id/reputation — co reputace odemyká, co vydělává a jak ji zvednout
@@ -8755,10 +8755,10 @@ gameRouter.get("/teams/:teamId/reputation", async (c) => {
   const { STADIUM_UNLOCK } = await import("../stadium/stadium-generator");
   const { UNLOCK_REQUIREMENTS } = await import("../equipment/equipment-generator");
   const unlockDefs = [
-    { kind: "equipment", level: 2, label: "Vybavení — 2. úroveň", req: UNLOCK_REQUIREMENTS[2] },
-    { kind: "stadium", level: 2, label: "Stadion — 2. úroveň", req: STADIUM_UNLOCK[2] },
-    { kind: "equipment", level: 3, label: "Vybavení — 3. úroveň", req: UNLOCK_REQUIREMENTS[3] },
-    { kind: "stadium", level: 3, label: "Stadion — 3. úroveň", req: STADIUM_UNLOCK[3] },
+    { kind: "equipment", level: 2, label: "Vybavení. 2. úroveň", req: UNLOCK_REQUIREMENTS[2] },
+    { kind: "stadium", level: 2, label: "Stadion. 2. úroveň", req: STADIUM_UNLOCK[2] },
+    { kind: "equipment", level: 3, label: "Vybavení. 3. úroveň", req: UNLOCK_REQUIREMENTS[3] },
+    { kind: "stadium", level: 3, label: "Stadion. 3. úroveň", req: STADIUM_UNLOCK[3] },
   ].map((u) => ({
     kind: u.kind,
     level: u.level,
@@ -9514,7 +9514,7 @@ gameRouter.post("/admin/news/:newsId/regenerate-interview", async (c) => {
   const result = await generateInterviewArticle(geminiKey, body.qa, body.managerName, body.teamName, opponentName);
   if (!result) return c.json({ error: "gemini failed" }, 500);
 
-  const correctionNote = "\n\n— Oprava: Předchozí verze článku chybně upravila záměrné slovní hříčky trenéra jako překlepy. Za nedorozumění se omlouváme — chyba byla na straně redaktora.";
+  const correctionNote = "\n\n— Oprava: Předchozí verze článku chybně upravila záměrné slovní hříčky trenéra jako překlepy. Za nedorozumění se omlouváme, chyba byla na straně redaktora.";
   const newBody = JSON.stringify({ ...body, article: result.body + correctionNote }, );
   const newHeadline = result.headline.replace(/\[oprava\]$/, "").trim() + " [oprava]";
 

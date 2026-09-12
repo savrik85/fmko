@@ -62,7 +62,7 @@ interface RelationListItem {
 
 function LoyalAllyBadge() {
   return (
-    <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300" title="Trvalý spojenec — 3+ společných posezení v hospodě">
+    <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300" title="Trvalý spojenec. 3+ společných posezení v hospodě">
       🏅 Trvalý spojenec
     </span>
   );
@@ -215,7 +215,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
               😏 Provokovat v novinách
             </button>
             <button disabled={busy}
-              title="Bez okamžitého efektu — ale výhra o 3+ pak pořádně zabolí (napětí +15)"
+              title="Bez okamžitého efektu, ale výhra o 3+ pak pořádně zabolí (napětí +15)"
               onClick={() => interact({ type: "statement", matchId: ix.statement!.matchId, tone: "humble" })}
               className={`${BTN} bg-gray-50 border-gray-200 hover:bg-gray-100`}>
               🎭 Hrát chudáčka
@@ -225,7 +225,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
 
         <button disabled={busy || !ix.praise?.available}
           title={ix.praise && !ix.praise.available && ix.praise.cooldownDaysLeft > 0
-            ? `Chválil jsi nedávno — znovu za ${ix.praise.cooldownDaysLeft} dní`
+            ? `Chválil jsi nedávno, znovu za ${ix.praise.cooldownDaysLeft} dní`
             : "Respekt +4, nic to nestojí"}
           onClick={() => interact({ type: "praise" })}
           className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
@@ -270,7 +270,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
         <button disabled={busy || !ix.ad.available}
           title={!ix.ad.available && ix.ad.cooldownDaysLeft > 0 ? `Znovu za ${ix.ad.cooldownDaysLeft} dní` : undefined}
           onClick={() => interact({ type: "ad" },
-            `Anonymní jedovatý inzerát do novin (${ix.ad.cost} Kč). Pozor — může se provalit, kdo ho podal. Pokračovat?`)}
+            `Anonymní jedovatý inzerát do novin (${ix.ad.cost} Kč). Pozor, může se provalit, kdo ho podal. Pokračovat?`)}
           className={`${BTN} bg-red-50 border-red-200 hover:bg-red-100`}>
           📰 Anonymní inzerát
         </button>
@@ -387,7 +387,7 @@ export function PreMatchCard({ myTeamId, otherTeamId, otherTeamName }: {
               🫡 Uznat soupeře v novinách
             </button>
             <button disabled={busy}
-              title="Napětí +10, kabina i fanoušci hoří (+2 morálka) — ale nabudí to i soupeře"
+              title="Napětí +10, kabina i fanoušci hoří (+2 morálka), ale nabudí to i soupeře"
               onClick={() => interact({ type: "statement", matchId: ix.statement!.matchId, tone: "provoke" },
                 `Provokace vyjde v novinách, zvedne napětí a nabudí obě kabiny. Trenér ${otherTeamName} nejspíš odpoví. Do toho?`)}
               className={`${BTN} bg-red-50 border-red-200 hover:bg-red-100`}>

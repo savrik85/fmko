@@ -50,7 +50,7 @@ export function DivergingBar({
               <span
                 className="h-2 rounded-l-[4px] block"
                 style={{ width: `${(d.negative / max) * 100}%`, background: DIVERGING.negative }}
-                title={`${d.label} — ${negativeLabel}: ${d.negative}`}
+                title={`${d.label} ${negativeLabel}: ${d.negative}`}
               />
             </span>
 
@@ -65,7 +65,7 @@ export function DivergingBar({
               <span
                 className="h-2 rounded-r-[4px] block"
                 style={{ width: `${(d.positive / max) * 100}%`, background: DIVERGING.positive }}
-                title={`${d.label} — ${positiveLabel}: ${d.positive}`}
+                title={`${d.label} ${positiveLabel}: ${d.positive}`}
               />
             </span>
             <span className={`${VALUE_COL} shrink-0 text-sm tabular-nums text-muted pl-1`}>

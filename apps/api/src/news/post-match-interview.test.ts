@@ -248,7 +248,7 @@ describe("paměť rozhodčího v zápase", () => {
     expect(Math.abs(refereeBias(-16))).toBeLessThan(0.006);
   });
 
-  it("znaménko sedí — zášť jde proti týmu", () => {
+  it("znaménko sedí, zášť jde proti týmu", () => {
     expect(refereeBias(-40)).toBeLessThan(0);
     expect(refereeBias(40)).toBeGreaterThan(0);
   });

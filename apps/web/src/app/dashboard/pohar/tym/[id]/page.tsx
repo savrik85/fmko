@@ -78,7 +78,7 @@ export default function CupTeamDetailPage() {
             {t.teamId ? <Link href={`/dashboard/team/${t.teamId}`} className="hover:underline">{t.name}</Link> : t.name}
           </div>
           <div className="text-sm text-muted mt-0.5">
-            {t.isBig ? "Velkoklub — hostující tým v poháru" : t.teamId ? "Ligový tým" : "Amatérský tým z předkola"}
+            {t.isBig ? "Velkoklub, hostující tým v poháru" : t.teamId ? "Ligový tým" : "Amatérský tým z předkola"}
             {" · "}
             {t.alive ? <span className="text-pitch-600 font-bold">stále ve hře</span> : <span className="text-card-red">vyřazen</span>}
           </div>
@@ -150,10 +150,10 @@ export default function CupTeamDetailPage() {
         ) : (
           <div className="card mt-2 p-4 text-sm text-muted">
             {t.isBig
-              ? "Soupiska velkoklubu se teprve chystá — vygeneruje se před jeho vstupem do poháru."
+              ? "Soupiska velkoklubu se teprve chystá, vygeneruje se před jeho vstupem do poháru."
               : t.teamId
-                ? "Ligový tým — kompletní kádr najdeš na jeho klubové stránce."
-                : `Amatérský tým z předkola nemá soupisku — hraje se silou ${t.strength}.`}
+                ? "Ligový tým, kompletní kádr najdeš na jeho klubové stránce."
+                : `Amatérský tým z předkola nemá soupisku, hraje se silou ${t.strength}.`}
           </div>
         )}
       </div>

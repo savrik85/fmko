@@ -55,7 +55,7 @@ describe("denní drift k normálu", () => {
     expect(moistureDailyDrift(49)).toBe(MOISTURE_NORMAL);
   });
 
-  it("stav přetrvá několik dní — to je celý smysl", () => {
+  it("stav přetrvá několik dní, to je celý smysl", () => {
     // Po deštivém zápase trvá pár dní, než hřiště oschne.
     let m = moistureAfterMatch(50, "rain");
     const poZapase = m;

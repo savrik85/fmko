@@ -44,7 +44,7 @@ describe("hranice sezóny", () => {
     expect(w).not.toBeNull();
   });
 
-  it("záloha drží stejný oblouk jako rollover — začátek i konec sezóny je léto, půlka zima", async () => {
+  it("záloha drží stejný oblouk jako rollover, začátek i konec sezóny je léto, půlka zima", async () => {
     const db = fakeDb([
       { vzor: /FROM teams/, radek: null },
       { vzor: /FROM season_calendar/, radek: { prvni: KALENDAR.prvni, posledni: KALENDAR.posledni } },

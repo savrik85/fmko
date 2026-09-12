@@ -46,7 +46,7 @@ describe("koho skaut vytáhne", () => {
     expect(tip?.duvod).toBe("nejlepsi");
   });
 
-  it("hráč do rotace novinou není — ten by chodil každý týden", () => {
+  it("hráč do rotace novinou není, ten by chodil každý týden", () => {
     // Brankář s ratingem 50 při kádru 5 gólmanů, nejlepší 54: nic, co by trenér
     // potřeboval slyšet. Přesně tahle kategorie zaplavovala telefon.
     const beran = hrac({ last_name: "Beran", position: "GK", age: 25, overall_rating: 50, hidden_talent: 31 });
@@ -81,11 +81,11 @@ describe("koho skaut vytáhne", () => {
   it("koho hlásil minule, toho podruhé nevytáhne", () => {
     const kolar = hrac();
     const vlcek = hrac({ first_name: "Jakub", last_name: "Vlček", position: "DEF", age: 22, overall_rating: 44, hidden_talent: 17 });
-    expect(vyberTip([kolar, vlcek], KADR, DOBRY_SKAUT, "🔍 Jakub Vlček — 22 let")?.hrac.last_name).toBe("Kolář");
-    expect(vyberTip([kolar], KADR, DOBRY_SKAUT, "🔍 Adam Kolář — 20 let")).toBeNull();
+    expect(vyberTip([kolar, vlcek], KADR, DOBRY_SKAUT, "🔍 Jakub Vlček. 22 let")?.hrac.last_name).toBe("Kolář");
+    expect(vyberTip([kolar], KADR, DOBRY_SKAUT, "🔍 Adam Kolář. 20 let")).toBeNull();
   });
 
-  it("talent musí být mladý — třicátník s talentem není talent", () => {
+  it("talent musí být mladý, třicátník s talentem není talent", () => {
     const stary = hrac({ age: 30, overall_rating: 30, hidden_talent: 35 });
     expect(vyberTip([stary], KADR, DOBRY_SKAUT)).toBeNull();
   });
@@ -95,7 +95,7 @@ describe("text tipu", () => {
   const tip = (o: Partial<TipKandidat> = {}, duvod: Parameters<typeof textTipu>[0]["duvod"] = "talent") =>
     textTipu({ hrac: hrac(o), duvod });
 
-  it("vždycky nese jméno, věk, post i rating — bez čísel je tip k ničemu", () => {
+  it("vždycky nese jméno, věk, post i rating, bez čísel je tip k ničemu", () => {
     const t = tip();
     expect(t).toContain("Adam Kolář");
     expect(t).toContain("20 let");

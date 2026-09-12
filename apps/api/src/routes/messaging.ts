@@ -296,7 +296,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   // ho kdokoli přímým voláním API a psal by do zdi.
   const pravidlo = odpovidatLze(conv?.type ?? "", conv?.ai_thread_active === 1);
   if (!pravidlo.canReply) {
-    return c.json({ error: "Do téhle konverzace se odpovídat nedá — je to jen oznámení." }, 400);
+    return c.json({ error: "Do téhle konverzace se odpovídat nedá, je to jen oznámení." }, 400);
   }
   const platiSeKredit = pravidlo.channel === "sms";
 
@@ -307,14 +307,14 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     // dosud platil jen pro crony, tohle je ta samá brzda pro požadavky.
     const { isAiEnabled } = await import("../lib/ai-provider");
     if (!(await isAiEnabled(c.env))) {
-      return c.json({ error: "Telefon je bez signálu — odpovídání je dočasně vypnuté." }, 503);
+      return c.json({ error: "Telefon je bez signálu, odpovídání je dočasně vypnuté." }, 503);
     }
     // Bez argumentu se strhne cena jedné SMS — modul je jediný, kdo ji zná.
     const ok = await spendCredit(c.env.DB, teamId);
     if (!ok) {
       const stav = await loadCredit(c.env.DB, teamId);
       return c.json({
-        error: `Na SMS ti nezbývá kredit — máš ${stav.zbyva} Kč a zpráva stojí ${stav.cenaSms} Kč. Dobije se zítra ráno.`,
+        error: `Na SMS ti nezbývá kredit, máš ${stav.zbyva} Kč a zpráva stojí ${stav.cenaSms} Kč. Dobije se zítra ráno.`,
         credit: stav,
       }, 400);
     }

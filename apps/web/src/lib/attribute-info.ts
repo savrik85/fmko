@@ -92,7 +92,7 @@ export function getTooltip(key: AttrKey): string {
   if (!info) return "";
   const positions = info.relevantFor.length === 4 ? "Pro všechny pozice" :
     `Klíčové pro: ${info.relevantFor.map(positionLabel).join(", ")}`;
-  return `${info.label} — ${info.description}\n${positions}`;
+  return `${info.label} ${info.description}\n${positions}`;
 }
 
 function positionLabel(p: Pos): string {

@@ -27,7 +27,7 @@ interface Detail {
 const LEADER_AXES = [
   {
     key: "charisma", label: "Charisma", dobreVysoke: true,
-    popis: "Jak moc táhne partu za sebou. Když je spokojený, je spokojená i ona — a naopak.",
+    popis: "Jak moc táhne partu za sebou. Když je spokojený, je spokojená i ona, a naopak.",
   },
   {
     key: "radikalnost", label: "Radikálnost", dobreVysoke: false,

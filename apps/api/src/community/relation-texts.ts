@@ -46,10 +46,10 @@ export function statementRespectQuote(n: RelationNames, district?: string): stri
     ],
     praha: [
       `„${n.theirName} hraje nejlíp široko daleko po Praze. Bude to dřina a my to víme,“ řekl před zápasem trenér ${n.myManager} (${n.myName}).`,
-      `„Mají formu jak metro ve špičce — jede jim to bez zastavení. Musíme je vypnout včas,“ chválil soupeře trenér ${n.myManager} (${n.myName}).`,
+      `„Mají formu jak metro ve špičce, jede jim to bez zastavení. Musíme je vypnout včas,“ chválil soupeře trenér ${n.myManager} (${n.myName}).`,
       `„Před ${n.theirName} smekám. V neděli se ale hraje na trávě, ne na sociálních sítích,“ vzkázal trenér ${n.myManager} z ${n.myName}.`,
-      `„${n.theirName} si drží balón, jako by měl předplacenou lítačku — pořád v pohybu a nikdy nezaváhá. Bude to dřina,“ smekl před zápasem trenér ${n.myManager} (${n.myName}).`,
-      `„Co ${n.theirManager} vybudoval, šlape jak dobře seřízenej karlínskej korporát — všechno klape a nic se neztratí. Klobouk dolů,“ chválil soupeře trenér ${n.myManager} z ${n.myName}.`,
+      `„${n.theirName} si drží balón, jako by měl předplacenou lítačku, pořád v pohybu a nikdy nezaváhá. Bude to dřina,“ smekl před zápasem trenér ${n.myManager} (${n.myName}).`,
+      `„Co ${n.theirManager} vybudoval, šlape jak dobře seřízenej karlínskej korporát, všechno klape a nic se neztratí. Klobouk dolů,“ chválil soupeře trenér ${n.myManager} z ${n.myName}.`,
       `„Jejich zálohu nezastavíš, ani kdybys jim na Andělu postavil zátaras. Musíme být stoprocentní,“ uznal kvality ${n.theirName} trenér ${n.myManager} (${n.myName}).`,
     ],
   }, district, pick);
@@ -75,12 +75,12 @@ export function statementProvokeQuote(n: RelationNames, district?: string): stri
       `„${n.theirManager} slibuje presink. Von akorát stihne přesíknout jelito na zabíjačce,“ nebral si servítky trenér ${n.myManager} (${n.myName}).`,
     ],
     praha: [
-      `„Jejich obrana má rozestupy jak lidi v tramvaji — každej sám za sebe,“ rýpl si trenér ${n.myManager} z ${n.myName}.`,
-      `„${n.theirName}? Ti drží balón asi jak Pražák místo na parkování — chvilku a je pryč,“ provokoval trenér ${n.myManager} (${n.myName}).`,
+      `„Jejich obrana má rozestupy jak lidi v tramvaji, každej sám za sebe,“ rýpl si trenér ${n.myManager} z ${n.myName}.`,
+      `„${n.theirName}? Ti drží balón asi jak Pražák místo na parkování, chvilku a je pryč,“ provokoval trenér ${n.myManager} (${n.myName}).`,
       `„Prej mají formu. Na Instagramu možná. Na trávě uvidíme,“ neodpustil si trenér ${n.myManager} z ${n.myName}.`,
       `„${n.theirName}? Ti se do vápna dostanou tak akorát, když je tam sveze metro,“ provokoval trenér ${n.myManager} (${n.myName}).`,
       `„Prej mají moderní styl. Jo, popíjet craft pivo na náplavce a fotit se u toho, to jim de,“ nebral si servítky trenér ${n.myManager} z ${n.myName}.`,
-      `„Jejich obrana se otvírá jak kavárna na Vinohradech — každou chvíli a pro každýho,“ rýpl si trenér ${n.myManager} (${n.myName}).`,
+      `„Jejich obrana se otvírá jak kavárna na Vinohradech, každou chvíli a pro každýho,“ rýpl si trenér ${n.myManager} (${n.myName}).`,
     ],
   }, district, pick);
 }
@@ -188,15 +188,15 @@ export function jabNewsBody(n: RelationNames, district?: string): string {
     ],
     prachatice: [
       `„Na Šumavě se říká: kdo nic neumí, ať aspoň fauluje. Oni dneska zvládli obojí naopak,“ vzkázal po zápase ${n.theirName} trenér ${n.myName}.`,
-      `„Řekl bych, že hráli, jak když jdeš z Vimperka do Netolic pěšky — pomalu a s věčným reptáním,“ vzkázal po zápase ${n.theirName} trenér ${n.myName}. V kabině ${n.myName} se u toho řehtali až do zavíračky.`,
+      `„Řekl bych, že hráli, jak když jdeš z Vimperka do Netolic pěšky, pomalu a s věčným reptáním,“ vzkázal po zápase ${n.theirName} trenér ${n.myName}. V kabině ${n.myName} se u toho řehtali až do zavíračky.`,
       `„Jejich obrana měla dneska víc děr než ementál na husinecký pouti,“ neodpustil si na účet ${n.theirName} trenér ${n.myName}.`,
-      `„Bránili se jak zajíc na začátku myslivecký sezóny — spousta pobíhání, málo platný,“ glosoval utkání s ${n.theirName} trenér ${n.myName}.`,
+      `„Bránili se jak zajíc na začátku myslivecký sezóny, spousta pobíhání, málo platný,“ glosoval utkání s ${n.theirName} trenér ${n.myName}.`,
     ],
     praha: [
       `„Jejich největší šance dneska? Že chytnou poslední tramvaj domů,“ utrousil směrem k ${n.theirName} trenér ${n.myName}.`,
-      `„Hráli, jako by čekali na spoj — pořád někam koukali, ale nikam nedošli,“ glosoval ${n.theirName} trenér ${n.myName}.`,
+      `„Hráli, jako by čekali na spoj, pořád někam koukali, ale nikam nedošli,“ glosoval ${n.theirName} trenér ${n.myName}.`,
       `„Jejich největší akce dneska? Že po zápase stihli obsadit stůl v kavárně na Smíchově,“ utrousil směrem k ${n.theirName} trenér ${n.myName}.`,
-      `„Hráli jak korporát v pátek odpoledne — hlavou už dávno na náplavce,“ glosoval ${n.theirName} trenér ${n.myName}.`,
+      `„Hráli jak korporát v pátek odpoledne, hlavou už dávno na náplavce,“ glosoval ${n.theirName} trenér ${n.myName}.`,
       `„Za celej zápas se dostali na naši polovinu asi tak často jak tramvaj na Žižkov včas,“ neodpustil si na adresu ${n.theirName} trenér ${n.myName}.`,
     ],
   }, district, pick);
@@ -214,11 +214,11 @@ export function praiseReplyText(
     case "ferovka":
       return pick([
         `${n.theirManager}: „Tohle potěší. Pozdravuj u vás v kabině.“`,
-        `${n.theirManager}: „Děkuju. Poctivá práce se na okrese pozná — u vás taky.“`,
+        `${n.theirManager}: „Děkuju. Poctivá práce se na okrese pozná, u vás taky.“`,
       ]);
     case "pohodar":
       return pick([
-        `${n.theirManager}: „No vidíš — a pivo z toho jednou bude.“`,
+        `${n.theirManager}: „No vidíš, a pivo z toho jednou bude.“`,
         `${n.theirManager}: „Jo? Tak to zapijeme, až pojedeš kolem. Stavíme se u stánku.“`,
       ]);
     case "urazeny":
@@ -261,7 +261,7 @@ export function praiseNews(n: RelationNames, district?: string): { headline: str
       },
       {
         headline: `Uznání přes celou Zlatou stezku`,
-        body: `„${n.theirManager} maká v ${n.theirName} jak myslivec před honem — poctivě a bez keců,“ nechal se slyšet trenér ${n.myManager} z ${n.myName}. Hospodští štamgasti si radši objednali další rundu, aby se z toho vzpamatovali.`,
+        body: `„${n.theirManager} maká v ${n.theirName} jak myslivec před honem, poctivě a bez keců,“ nechal se slyšet trenér ${n.myManager} z ${n.myName}. Hospodští štamgasti si radši objednali další rundu, aby se z toho vzpamatovali.`,
       },
     ],
     praha: [
@@ -294,14 +294,14 @@ export function beerSceneText(n: RelationNames): string {
     `Dobrý večer u piva s trenérem ${n.theirName}. Probralo se všechno od rozhodčích po ceny chmele.`,
     `Dvě hodiny, tři piva a historky z vojny. S trenérem ${n.theirName} se vztahy budujou jedině takhle.`,
     `U výčepu jste s trenérem ${n.theirName} vyřešili sestavu reprezentace i to, kdo komu v devadesátým osmým ukopl kotník. Smích do zavíračky.`,
-    `Trenér ${n.theirName} platil druhou rundu a u třetí už jste si tykali. Hospoda si vás fotila — tohle se na okrese nevidí.`,
+    `Trenér ${n.theirName} platil druhou rundu a u třetí už jste si tykali. Hospoda si vás fotila, tohle se na okrese nevidí.`,
     `Večer s trenérem ${n.theirName} skončil zpěvem u jukeboxu. Hospodský tvrdí, že horší duo neslyšel, ale srdce to mělo.`,
   ]);
 }
 
 export function dartsWinText(n: RelationNames): string {
   return pick([
-    `Došlo i na šipky — a ${n.theirManager} kupoval rundu. Tohle se bude vyprávět.`,
+    `Došlo i na šipky, a ${n.theirManager} kupoval rundu. Tohle se bude vyprávět.`,
     `Šipky: tři kola, jasná věc. ${n.theirManager} platil rundu a mumlal něco o rozházené sedmičce.`,
     `V šipkách jsi ho rozebral jak nedělní kuře. ${n.theirManager} zaplatil rundu a chce odvetu.`,
   ]);
@@ -309,7 +309,7 @@ export function dartsWinText(n: RelationNames): string {
 
 export function dartsLossText(n: RelationNames): string {
   return pick([
-    `Šipky nevyšly — runda šla za tebou. ${n.theirManager} se usmíval celej večer.`,
+    `Šipky nevyšly, runda šla za tebou. ${n.theirManager} se usmíval celej večer.`,
     `${n.theirManager} házel šipky, jako by celej život nedělal nic jinýho. Runda tě stála kus výplaty i hrdosti.`,
     `V šipkách tě sundal levou zadní. Hospoda tleskala, ty jsi platil.`,
   ]);
@@ -324,7 +324,7 @@ export function stammtischNews(hostManager: string, hostTeam: string, attendeeNa
   return pick([
     {
       headline: "Trenérský summit v hospodě",
-      body: `Trenér ${hostManager} (${hostTeam}) svolal ke svému stolu kolegy z okresu: ${guests}. Co se domlouvalo u čtvrté rundy, se redakce nedozvěděla — ale když sedí tolik trenérů u jednoho stolu, fanoušci mají právo spekulovat. Přestupy? Spiknutí proti lídrovi tabulky? Nebo jen mariáš?`,
+      body: `Trenér ${hostManager} (${hostTeam}) svolal ke svému stolu kolegy z okresu: ${guests}. Co se domlouvalo u čtvrté rundy, se redakce nedozvěděla, ale když sedí tolik trenérů u jednoho stolu, fanoušci mají právo spekulovat. Přestupy? Spiknutí proti lídrovi tabulky? Nebo jen mariáš?`,
     },
     {
       headline: "U jednoho stolu celý přebor",
@@ -339,9 +339,9 @@ export function stammtischNews(hostManager: string, hostTeam: string, attendeeNa
 
 export function stammtischQuarrelText(mgrA: string, mgrB: string): string {
   return pick([
-    `${mgrA} a ${mgrB} se chytli kvůli ofsajdu z minulé sezóny — létaly tácky a ${mgrB} odešel před poslední rundou`,
+    `${mgrA} a ${mgrB} se chytli kvůli ofsajdu z minulé sezóny, létaly tácky a ${mgrB} odešel před poslední rundou`,
     `Mezi ${mgrA} a ${mgrB} to u stolu zajiskřilo: začalo to penaltou z jara a skončilo převrženou židlí`,
-    `${mgrA} připomněl ${mgrB} prohranou bečku — a bylo zle. Hospodský je musel posadit každého na jiný konec stolu`,
+    `${mgrA} připomněl ${mgrB} prohranou bečku, a bylo zle. Hospodský je musel posadit každého na jiný konec stolu`,
   ]);
 }
 
@@ -356,7 +356,7 @@ export function stammtischDeclineText(
         `${manager} nepřišel. Prý měl „něco s králíkama“, ale všichni vědí, že se pořád zlobí.`,
       ]);
     case "ferovka":
-      return `${manager} se slušně omluvil — bez vzájemného respektu prý ke stolu nesedá.`;
+      return `${manager} se slušně omluvil, bez vzájemného respektu prý ke stolu nesedá.`;
     default:
       return `${manager} nedorazil.`;
   }
@@ -388,13 +388,13 @@ export interface StammtischEventDef {
 const STAMMTISCH_EVENTS: StammtischEventDef[] = [
   // Pozitivní
   { kind: "positive", text: "{guest} přinesl domácí slivovici z vlastních švestek. Stůl ji jednohlasně schválil a hned bylo veseleji.", effect: "respect_all" },
-  { kind: "positive", text: "Hospodský přinesl rundu na účet podniku — prý slaví výročí otevření. Trenéři si připili na okres.", effect: "respect_all" },
-  { kind: "positive", text: "Místní opilec si přisedl a začal trenérům radit se sestavou. Vyprovodili ho společnými silami — a sblížilo je to víc než tři piva.", effect: "respect_all" },
+  { kind: "positive", text: "Hospodský přinesl rundu na účet podniku, prý slaví výročí otevření. Trenéři si připili na okres.", effect: "respect_all" },
+  { kind: "positive", text: "Místní opilec si přisedl a začal trenérům radit se sestavou. Vyprovodili ho společnými silami, a sblížilo je to víc než tři piva.", effect: "respect_all" },
   { kind: "positive", text: "{guest} prozradil hostiteli kontakt na levnější sudy na klubové akce. Tohle se mezi trenéry cení.", effect: "respect_all" },
-  { kind: "positive", text: "Do hospody nakoukli fanoušci obou týmů — a místo hádky skončili u jednoho stolu s trenéry. Večer jak z plakátu o okresním fotbale.", effect: "respect_all" },
+  { kind: "positive", text: "Do hospody nakoukli fanoušci obou týmů, a místo hádky skončili u jednoho stolu s trenéry. Večer jak z plakátu o okresním fotbale.", effect: "respect_all" },
   // Vtipné
   { kind: "funny", text: "{guest} prohrál sázku, že vypije tuplák na ex. Vypil. Jak to vysvětlí doma, je jeho věc.", effect: "none" },
-  { kind: "funny", text: "{host} vysvětloval rozestavení na pivních táccích. Štamgasti si tácky rozebrali na památku — prý „taktika mistrů“.", effect: "none" },
+  { kind: "funny", text: "{host} vysvětloval rozestavení na pivních táccích. Štamgasti si tácky rozebrali na památku, prý „taktika mistrů“.", effect: "none" },
   { kind: "funny", text: "Štamgasti si trenéry spletli s komisí ze svazu. Hospodský pro jistotu schoval výherní automat a dvě hodiny se choval vzorně.", effect: "none" },
   { kind: "funny", text: "Hospodská vyhlásila rundu zdarma, když trenéři slíbili, že příště vezmou i manželky. Slib byl dán. Uvidíme.", effect: "none" },
   { kind: "funny", text: "{guest} zkusil trefit šipkou střed terče poslepu. Trefil rámeček dveří. Hospodský to nechá jako památku.", effect: "none" },
@@ -403,7 +403,7 @@ const STAMMTISCH_EVENTS: StammtischEventDef[] = [
   { kind: "conflict", text: "Došlo na penaltu z 5. kola a {guest} bouchl do stolu tak, že spadly tři půllitry. Škodu zaplatil hostitel.", effect: "extra_cost" },
   { kind: "conflict", text: "{host} a {guest} se neshodli, kdo má nejhoršího rozhodčího v okrese. Chvíli bylo dusno, pak se přišlo na to, že je to stejný člověk.", effect: "heat_pair" },
   { kind: "conflict", text: "Řeč přišla na přetahování hráčů a {guest} si neodpustil poznámku o „nákupech za pivo“. Pár minut se mluvilo opatrně.", effect: "heat_pair" },
-  { kind: "conflict", text: "{guest} začal vytahovat staré křivdy z podzimu. Hostitel to uhasil další rundou — dražší, ale účinné.", effect: "extra_cost" },
+  { kind: "conflict", text: "{guest} začal vytahovat staré křivdy z podzimu. Hostitel to uhasil další rundou, dražší, ale účinné.", effect: "extra_cost" },
 ];
 
 export function pickStammtischEvents(): StammtischEventDef[] {
@@ -423,7 +423,7 @@ export function pubRoundMessage(patrons: number): string {
   return pick([
     `Hospodský třikrát přepočítal půllitry: ${patrons} štamgastů zvedlo sklenici na tvoje zdraví. Tohle se ve vsi nezapomíná.`,
     `Runda pro všech ${patrons} přítomných! Hospoda zaburácela, někdo začal zpívat a starosta si připil dvakrát.`,
-    `${patrons} pív na tvůj účet — a celá hospoda náhle ví, kdo vyhrál víkendový zápas. Sláva vítězům.`,
+    `${patrons} pív na tvůj účet, a celá hospoda náhle ví, kdo vyhrál víkendový zápas. Sláva vítězům.`,
   ]);
 }
 
@@ -455,11 +455,11 @@ export function betWonNews(winnerName: string, loserName: string, score: string)
   return pick([
     {
       headline: `${loserName} prohrál bečku`,
-      body: `Trenéři se před zápasem vsadili o bečku piva. Po výsledku ${score} platí trenér ${loserName} — v hospodě ${winnerName} se dnes slaví dvakrát.`,
+      body: `Trenéři se před zápasem vsadili o bečku piva. Po výsledku ${score} platí trenér ${loserName}, v hospodě ${winnerName} se dnes slaví dvakrát.`,
     },
     {
       headline: `Bečka mění majitele`,
-      body: `Předzápasová sázka trenérů má vítěze. ${winnerName} bere body i bečku, trenér ${loserName} u výčepu jen tiše počítal útratu. Výsledek ${score} mu připomínat nemusíme — postará se o to celá náves.`,
+      body: `Předzápasová sázka trenérů má vítěze. ${winnerName} bere body i bečku, trenér ${loserName} u výčepu jen tiše počítal útratu. Výsledek ${score} mu připomínat nemusíme, postará se o to celá náves.`,
     },
     {
       headline: `Nejdražší pivo na okrese`,
@@ -472,7 +472,7 @@ export function betDrawNews(homeName: string, awayName: string, score: string): 
   return pick([
     {
       headline: "Sázka o bečku skončila remízou",
-      body: `Trenéři ${homeName} a ${awayName} se vsadili o bečku — jenže zápas skončil ${score}. Bečka zůstává v hospodě a čeká na odvetu.`,
+      body: `Trenéři ${homeName} a ${awayName} se vsadili o bečku, jenže zápas skončil ${score}. Bečka zůstává v hospodě a čeká na odvetu.`,
     },
     {
       headline: "Bečka zůstává za výčepem",
@@ -493,7 +493,7 @@ export function derbyNews(homeName: string, awayName: string, winnerName: string
     },
     {
       headline: `Derby pro ${winnerName}!`,
-      body: `Zápas, o kterém se na návsi mluvilo celý týden, skončil ${score}. ${winnerName} má rok klid u piva — poražení budou každou narážku polykat až do odvety.`,
+      body: `Zápas, o kterém se na návsi mluvilo celý týden, skončil ${score}. ${winnerName} má rok klid u piva, poražení budou každou narážku polykat až do odvety.`,
     },
     {
       headline: `${winnerName} bere derby a náves k tomu`,
@@ -510,7 +510,7 @@ export function humbleBackfireNews(actorName: string, actorManager: string, targ
     },
     {
       headline: `Chudáček z ${actorName} bral všechno`,
-      body: `„Jedeme oslabení, nic nečekáme.“ Výsledek ${score} ukázal, co byla předzápasová slova trenéra ${actorManager} zač. V ${targetName} mají od neděle nový důvod trénovat — a nový důvod nezapomínat.`,
+      body: `„Jedeme oslabení, nic nečekáme.“ Výsledek ${score} ukázal, co byla předzápasová slova trenéra ${actorManager} zač. V ${targetName} mají od neděle nový důvod trénovat, a nový důvod nezapomínat.`,
     },
     {
       headline: "Žně skončily, počítají se góly",

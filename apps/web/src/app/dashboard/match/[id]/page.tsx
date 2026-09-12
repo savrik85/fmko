@@ -240,12 +240,12 @@ export default function MatchDetailPage() {
   function buildHighlight(s: ReturnType<typeof statsForPlayer>): string {
     if (s.red > 0) return "I přes vyloučení dominantní výkon.";
     if (s.goals >= 3) return "Hattrick! Rozhodl zápas naprosto sám.";
-    if (s.goals >= 2) return "Dvě branky — nezastavitelný.";
-    if (s.goals >= 1 && s.assists >= 1) return "Gól i asistence — kompletní výkon.";
+    if (s.goals >= 2) return "Dvě branky, nezastavitelný.";
+    if (s.goals >= 1 && s.assists >= 1) return "Gól i asistence, kompletní výkon.";
     if (s.goals >= 1) return "Rozhodující trefa.";
-    if (s.assists >= 2) return "Dvě asistence — dirigent zápasu.";
+    if (s.assists >= 2) return "Dvě asistence, dirigent zápasu.";
     if (s.assists >= 1) return "Klíčová asistence.";
-    if (s.chances >= 3) return `Stálé ohrožení obrany — ${s.chances} šancí.`;
+    if (s.chances >= 3) return `Stálé ohrožení obrany ${s.chances} šancí.`;
     return "Nejlepší výkon zápasu.";
   }
 

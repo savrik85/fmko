@@ -403,14 +403,14 @@ authRouter.delete("/admin/users/:userId", async (c) => {
   const tymy = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM teams WHERE user_id = ?")
     .bind(userId).first<{ n: number }>();
   if ((tymy?.n ?? 0) > 0) {
-    return c.json({ error: `Účet má ${tymy?.n} tým(y) — smazat jde jen účet bez týmu` }, 400);
+    return c.json({ error: `Účet má ${tymy?.n} tým(y), smazat jde jen účet bez týmu` }, 400);
   }
 
   const manazeri = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM managers WHERE user_id = ?")
     .bind(userId).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: "auth" }, "kontrola manažerů při mazání účtu", e); return null; });
   if ((manazeri?.n ?? 0) > 0) {
-    return c.json({ error: "Účet má navázaného manažera — smazat nelze" }, 400);
+    return c.json({ error: "Účet má navázaného manažera, smazat nelze" }, 400);
   }
 
   await c.env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();

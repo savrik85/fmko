@@ -90,7 +90,7 @@ const EVENT_RULES: EventRule[] = [
       ];
       return {
         prob: bonus,
-        description: `${ctx.rng.pick(sponsors)} si koupilo reklamu na plot — ${amount} Kč je na účtu.`,
+        description: `${ctx.rng.pick(sponsors)} si koupilo reklamu na plot ${amount} Kč je na účtu.`,
         effect: { type: "budget", value: amount },
       };
     },
@@ -246,7 +246,7 @@ const EVENT_RULES: EventRule[] = [
         `Pokuta od svazu za pozdní přihlášku soupisky: ${amount} Kč.`,
         `Svaz udělil pokutu za neuklizené kabiny po zápase: ${amount} Kč.`,
         `Rozhodčí nahlásil nesportovní chování fanoušků. Pokuta: ${amount} Kč.`,
-        `Nedodaný zápis ze zápasu — pokuta ${amount} Kč.`,
+        `Nedodaný zápis ze zápasu, pokuta ${amount} Kč.`,
       ];
       return {
         prob: 1.0,

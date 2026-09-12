@@ -102,7 +102,7 @@ const N = 3000;
 /** Balanční testy pouští tisíce simulací — výchozích 5 s na CI runneru nestačí. */
 const SLOW = 120_000;
 
-describe("rozhodčí — agregáty", () => {
+describe("rozhodčí, agregáty", () => {
   const neutral = runSeason(N, undefined);
 
   it("vypíše rozpad podle archetypů (diagnostika)", () => {
@@ -172,7 +172,7 @@ describe("rozhodčí — agregáty", () => {
   }, SLOW);
 });
 
-describe("rozhodčí — sporné situace", () => {
+describe("rozhodčí, sporné situace", () => {
   it("nikdy nepadne víc než jedna sporná situace v zápase", () => {
     for (const key of Object.keys(REFEREE_ARCHETYPES) as RefereeArchetype[]) {
       const t = runSeason(400, fromArchetype(key), 8000);
@@ -222,7 +222,7 @@ describe("rozhodčí — sporné situace", () => {
   }, SLOW);
 });
 
-describe("rozhodčí — vzorce", () => {
+describe("rozhodčí, vzorce", () => {
   it("zóna penalty roste s přísností a drží se v mezích", () => {
     const lo = penaltyZone({ ...NEUTRAL_REFEREE, strictness: 0 }, true);
     const hi = penaltyZone({ ...NEUTRAL_REFEREE, strictness: 100 }, true);

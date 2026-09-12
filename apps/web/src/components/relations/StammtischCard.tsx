@@ -37,7 +37,7 @@ interface SocialInfo {
 
 const INVITE_LABEL: Record<string, { text: string; cls: string }> = {
   invited: { text: "Čeká na odpověď", cls: "text-amber-700 bg-amber-50 border-amber-200" },
-  accepted: { text: "Přijal — dorazí večer", cls: "text-pitch-600 bg-green-50 border-green-200" },
+  accepted: { text: "Přijal, dorazí večer", cls: "text-pitch-600 bg-green-50 border-green-200" },
   declined: { text: "Odmítl", cls: "text-card-red bg-red-50 border-red-200" },
 };
 
@@ -182,7 +182,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
         ) : (
           <button disabled={busy || !info.stammtisch.available}
             title={!info.stammtisch.available
-              ? `Hospodský doplňuje sudy — znovu za ${info.stammtisch.cooldownDaysLeft} dní`
+              ? `Hospodský doplňuje sudy, znovu za ${info.stammtisch.cooldownDaysLeft} dní`
               : `Rezervace stolu 100 Kč + rundy ${info.stammtisch.costPerHead} Kč na hlavu. Vyhodnotí se večer.`}
             onClick={() => setPicking((v) => !v)}
             className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
@@ -194,7 +194,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
           <span className="text-sm text-muted self-center">🍺 Runda je slíbená — večer se roztočí</span>
         ) : (
           <button disabled={busy || !info.pubRound.available}
-            title={info.pubRound.reason ?? "Pivo všem štamgastům — morálka, fanoušci i starosta v rohu. Roztočí se večer."}
+            title={info.pubRound.reason ?? "Pivo všem štamgastům, morálka, fanoušci i starosta v rohu. Roztočí se večer."}
             onClick={buyRound}
             className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
             🍺 Koupit rundu hospodě

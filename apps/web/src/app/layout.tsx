@@ -57,7 +57,7 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Prales — Fotbalový Manažer",
+  title: "Prales. Fotbalový Manažer",
   description: "Online fotbalový manažer z českého okresu. Postav si tým, vyhraj okresní přebor.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   openGraph: {

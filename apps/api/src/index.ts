@@ -316,7 +316,7 @@ export default {
       try {
         log("info", "matchday preview tick starting");
         if (!env.GEMINI_API_KEY) {
-          log("warn", "skip matchday preview — no GEMINI_API_KEY");
+          log("warn", "skip matchday preview, no GEMINI_API_KEY");
         } else {
           const { readMatchTickMode } = await import("./queue/messages");
           const previewMode = await readMatchTickMode(env.CACHE_KV);

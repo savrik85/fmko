@@ -4,7 +4,7 @@ import { electionNote, winnerLabel } from "./officials";
 const vitez = (votes: number) => ({ votes });
 
 describe("věta o výsledku volby", () => {
-  it("napíše poměr hlasů, ale ne jméno — to se vypisuje zvlášť", () => {
+  it("napíše poměr hlasů, ale ne jméno, to se vypisuje zvlášť", () => {
     expect(electionNote(vitez(3), 5, 0)).toBe("Získal 3 z 5 hlasů.");
   });
 
@@ -15,13 +15,13 @@ describe("věta o výsledku volby", () => {
   it("hlásí propadlé hlasy po odstoupení kandidáta", () => {
     // Bez tohohle by čísla v zápisu nesouhlasila s tím, kolik klubů hlasovalo.
     expect(electionNote(vitez(2), 3, 1))
-      .toBe("Získal 2 z 3 hlasů. 1 hlas propadl — kandidát odstoupil.");
+      .toBe("Získal 2 z 3 hlasů. 1 hlas propadl, kandidát odstoupil.");
     expect(electionNote(vitez(2), 3, 3)).toContain("3 hlasy propadly");
     expect(electionNote(vitez(2), 3, 7)).toContain("7 hlasů propadlo");
   });
 
   it("bez kandidáta zůstane funkce neobsazená", () => {
-    expect(electionNote(null, 0, 0)).toBe("Nikdo nekandidoval — funkce zůstává neobsazená.");
+    expect(electionNote(null, 0, 0)).toBe("Nikdo nekandidoval, funkce zůstává neobsazená.");
   });
 
   it("odstoupili-li všichni, řekne to na rovinu", () => {

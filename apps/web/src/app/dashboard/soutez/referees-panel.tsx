@@ -292,7 +292,7 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
         </div>
         <p className="text-sm text-muted">
           {primo
-            ? "Rozhoduješ z titulu komisaře rozhodčích. Platí to okamžitě, bez hlasování — a v zápisu bude stát tvoje jméno i důvod."
+            ? "Rozhoduješ z titulu komisaře rozhodčích. Platí to okamžitě, bez hlasování, a v zápisu bude stát tvoje jméno i důvod."
             : "Sám ho nevyškrtneš. Návrh půjde na nejbližší zasedání a rozhodnou o něm kluby."}
         </p>
 
@@ -316,7 +316,7 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
 
         <div>
           <label className="text-sm text-muted">
-            Odůvodnění {primo ? "(povinné — přečte si ho celá soutěž)" : "(nepovinné)"}
+            Odůvodnění {primo ? "(povinné, přečte si ho celá soutěž)" : "(nepovinné)"}
           </label>
           <textarea className="input w-full mt-1" rows={3} maxLength={200}
             value={note} onChange={(e) => setNote(e.target.value)}

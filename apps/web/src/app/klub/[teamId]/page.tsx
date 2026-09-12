@@ -56,8 +56,8 @@ function initials(name: string): string {
 export async function generateMetadata({ params }: { params: Promise<{ teamId: string }> }): Promise<Metadata> {
   const { teamId } = await params;
   const club = await fetchSafe<ClubData>(`/api/teams/${teamId}/club`);
-  if (!club) return { title: "Profil klubu — Prales" };
-  const baseName = club.identity.nickname ? `${club.name} — ${club.identity.nickname}` : club.name;
+  if (!club) return { title: "Profil klubu. Prales" };
+  const baseName = club.identity.nickname ? `${club.name} ${club.identity.nickname}` : club.name;
   const desc = club.identity.motto
     || (club.identity.foundingStory ? club.identity.foundingStory.slice(0, 180) : null)
     || `${club.village.name}, okres ${club.village.district}`;

@@ -119,7 +119,7 @@ function Druha() {
 
   it("celý frontend je čistý", () => {
     const soubory = najdiTsx(WEB);
-    expect(soubory.length, "žádné .tsx nenalezeno — špatná cesta?").toBeGreaterThan(50);
+    expect(soubory.length, "žádné .tsx nenalezeno, špatná cesta?").toBeGreaterThan(50);
     const nalezy = soubory.flatMap((f) => najdiHookyZaReturnem(readFileSync(WEB + f, "utf8"), f));
     expect(
       nalezy.map((n) => `${n.soubor}:${n.hook} (return na ${n.ret})`),

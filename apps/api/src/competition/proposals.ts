@@ -122,7 +122,7 @@ export async function validateProposal(opts: {
   }
 
   if (spec.rulesField && opts.currentRules[spec.rulesField] === opts.value) {
-    return { ok: false, error: "Návrh nic nemění — tahle hodnota už platí." };
+    return { ok: false, error: "Návrh nic nemění, tahle hodnota už platí." };
   }
 
   let budgetNote: string | null = null;
@@ -139,7 +139,7 @@ export async function validateProposal(opts: {
       const rada = opts.kind === "entry_fee"
         ? `Aby to vyšlo, muselo by být aspoň ${czk(check.requiredEntryFee)}.`
         : `Zvedněte startovné na ${czk(check.requiredEntryFee)}, nebo sežeňte sponzora.`;
-      return { ok: false, error: `Návrh nelze podat — pokladně by chybělo ${czk(check.deficit)}. ${rada}` };
+      return { ok: false, error: `Návrh nelze podat, pokladně by chybělo ${czk(check.deficit)}. ${rada}` };
     }
     const current = checkBudget({ rules: zaklad, teams, level: opts.level, balance: opts.balance });
     const delta = check.projected - current.projected;
@@ -186,7 +186,7 @@ export function proposalTitle(kind: string, value: number, current: number): str
   const spec = PROPOSAL_KINDS[kind];
   if (!spec) return "Návrh";
   const fmt = (v: number) => formatRuleValue(kind, v);
-  if (spec.unit === "switch") return `${spec.label} — ${fmt(value)}`;
+  if (spec.unit === "switch") return `${spec.label} ${fmt(value)}`;
   return `${spec.label}: ${fmt(current)} → ${fmt(value)}`;
 }
 

@@ -558,7 +558,7 @@ fansRouter.post("/teams/:teamId/fans/groups/:groupId/action", async (c) => {
     if (!check.ok) return c.json({ error: check.reason }, 400);
     await recordTransaction(
       db, teamId, "fan_relations", -cena,
-      `${def.label} — ${group.name}`, gameDate, `fanact-${groupId}-${action}-${gameDate}`,
+      `${def.label} ${group.name}`, gameDate, `fanact-${groupId}-${action}-${gameDate}`,
     );
   }
 

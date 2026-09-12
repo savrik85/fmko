@@ -14,7 +14,7 @@ import {
 } from "./fan-groups";
 
 describe("tvrdé jádro", () => {
-  it("rodiny a pamětníci žádné nemají — mezi kočárky se nikdo neperá", () => {
+  it("rodiny a pamětníci žádné nemají, mezi kočárky se nikdo neperá", () => {
     expect(jadroVelikost({ kind: "rodiny", size: 200, mood: 90, passion: 90 })).toBe(0);
     expect(jadroVelikost({ kind: "pametnici", size: 200, mood: 90, passion: 90 })).toBe(0);
   });
@@ -69,7 +69,7 @@ describe("rivalita mezi tábory", () => {
     expect(po).toBeGreaterThanOrEqual(0);
   });
 
-  it("chladne PŘED přiložením — zápas po roce nestartuje z původní hodnoty", () => {
+  it("chladne PŘED přiložením, zápas po roce nestartuje z původní hodnoty", () => {
     const cerstve = rivalitaPo(60, 0, "rvacka");
     const poRoce = rivalitaPo(60, 365, "rvacka");
     expect(poRoce).toBeLessThan(cerstve);

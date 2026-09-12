@@ -23,7 +23,7 @@ describe("co se zapíná v běžný den", () => {
     expect(dailyServiceForWeather("sunny")).toBe("irrigation");
   });
 
-  it("v dešti se mimo zápas netopí — bahno dělají teprve kopačky", () => {
+  it("v dešti se mimo zápas netopí, bahno dělají teprve kopačky", () => {
     expect(dailyServiceForWeather("rain")).toBeNull();
     expect(dailyServiceForWeather("cloudy")).toBeNull();
     expect(dailyServiceForWeather("wind")).toBeNull();
@@ -54,7 +54,7 @@ describe("denní rozhodnutí o péči", () => {
       .toMatchObject({ service: null, cost: 0, skipped: "not_needed" });
   });
 
-  it("ruční režim mimo zápas nezapne nic — objednává se na zápas", () => {
+  it("ruční režim mimo zápas nezapne nic, objednává se na zápas", () => {
     expect(decideDailyPitchCare({ ...zaklad, mode: "manual", weather: "snow" }))
       .toMatchObject({ service: null, skipped: "not_ordered" });
   });
@@ -69,7 +69,7 @@ describe("denní rozhodnutí o péči", () => {
       .toMatchObject({ service: null, skipped: "no_equipment" });
   });
 
-  it("prázdná kasa péči nezaplatí — riziko zůstává na manažerovi", () => {
+  it("prázdná kasa péči nezaplatí, riziko zůstává na manažerovi", () => {
     expect(decideDailyPitchCare({ ...zaklad, budget: 10, weather: "snow" }))
       .toMatchObject({ service: null, skipped: "no_money" });
   });

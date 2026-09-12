@@ -16,6 +16,7 @@ import { logger } from "../lib/logger";
 import {
   HLAS_PARTY, PREZDIVKY, PRISPEVKY_K_UDALOSTEM, PRISPEVKY_K_VYTRZNOSTEM,
   PRISPEVKY_K_ZAPASU, PRISPEVKY_K_OBLIBENCUM, PRISPEVKY_K_RIVALITE,
+  PRISPEVKY_K_TAKTICE, PRISPEVKY_KE_STRELBE,
   doplnText, lajky,
   type PostSablona, type PostTone, type PostTopic, type AuthorKind,
 } from "../engine/fan-posts";
@@ -350,6 +351,84 @@ export async function prispevkyKeKampani(
     body: rng.pick(texty),
     tone: "negativni",
     likes: Math.max(kampan.podpisy, 1),
+    topic: "club_event",
+    gameDate,
+  }]);
+}
+
+/**
+ * Jak se hraje a kolik se dává.
+ *
+ * Nechodí to po každém zápase, ale až když je z toho trend: pět zápasů se
+ * stejnou taktikou nebo pět zápasů bez gólů. Jinak by zeď zaplavily hlášky
+ * k jedné prohře.
+ */
+export async function prispevkyKHre(
+  db: D1Database,
+  opts: {
+    teamId: string; taktika: string | null; golyPoslednich5: number;
+    zapasu: number; gameDate: string;
+  },
+): Promise<number> {
+  if (opts.zapasu < 5) return 0;
+  const ctx = await nactiKontext(db, opts.teamId, opts.gameDate);
+  if (!ctx) return 0;
+
+  const prispevky: NovyPrispevek[] = [];
+  // Klíč na herní týden, ne na den: jinak by totéž viselo každé ráno znovu.
+  const tyden = `${opts.gameDate.slice(0, 10)}`;
+
+  const taktickeSablony = opts.taktika ? PRISPEVKY_K_TAKTICE[opts.taktika] : undefined;
+  if (taktickeSablony) {
+    for (const g of kdoSeOzve(ctx.groups, 1, `takt-${opts.teamId}-${tyden}`)) {
+      const p = slozPrispevek(ctx, g, {
+        referenceId: `takt-${opts.teamId}-${tyden}`,
+        sablony: taktickeSablony, topic: "zapas",
+        data: {},
+      });
+      if (p) prispevky.push(p);
+    }
+  }
+
+  const strelba = opts.golyPoslednich5 === 0 ? "sucho"
+    : opts.golyPoslednich5 <= 3 ? "bida"
+      : opts.golyPoslednich5 >= 12 ? "smrst" : null;
+  if (strelba) {
+    for (const g of kdoSeOzve(ctx.groups, 1, `strel-${opts.teamId}-${tyden}`)) {
+      const p = slozPrispevek(ctx, g, {
+        referenceId: `strel-${opts.teamId}-${tyden}`,
+        sablony: PRISPEVKY_KE_STRELBE[strelba], topic: "zapas",
+        data: { co: String(opts.golyPoslednich5) },
+      });
+      if (p) prispevky.push(p);
+    }
+  }
+
+  return zapisPrispevky(db, prispevky);
+}
+
+/** Nová plachta v kotli. Vyvěsit ji a nikomu to neříct by byla škoda. */
+export async function prispevekKTransparentu(
+  db: D1Database,
+  teamId: string,
+  plachta: { text: string; duvod: string },
+  gameDate: string,
+): Promise<number> {
+  const ctx = await nactiKontext(db, teamId, gameDate);
+  if (!ctx) return 0;
+  const g = ctx.groups.find((x) => x.kind === "kotel") ?? ctx.groups[0];
+  if (!g) return 0;
+
+  const leader = g.leader_id ? ctx.leaders.get(g.leader_id) : undefined;
+  const a = autor(g, leader, `banner-${teamId}`, true);
+  return zapisPrispevky(db, [{
+    referenceId: `banner-${teamId}-${gameDate.slice(0, 10)}`,
+    teamId,
+    authorName: a.name, authorHandle: `@${a.handle}`, authorKind: a.kind,
+    authorAvatar: a.avatar, groupId: g.id,
+    body: `Na plachtě v kotli od teď visí: „${plachta.text}"`,
+    tone: "neutralni",
+    likes: Math.max(1, Math.round(g.size * 0.15)),
     topic: "club_event",
     gameDate,
   }]);

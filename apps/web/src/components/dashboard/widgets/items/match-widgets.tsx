@@ -364,7 +364,7 @@ function LineupFlag({ m }: { m: ScheduleMatch }) {
       ? <span className="text-micro font-heading font-bold px-1.5 py-0.5 rounded bg-gray-100 text-muted" title="Výchozí sestava">{m.defaultPresetSlot}</span>
       : <span className="text-micro text-muted" title="Použije se výchozí sestava">✓</span>;
   }
-  return <span className="text-micro text-card-red font-bold" title="Bez sestavy — použije se auto">!</span>;
+  return <span className="text-micro text-card-red font-bold" title="Bez sestavy, použije se auto">!</span>;
 }
 
 // ── Poslední zápasy ─────────────────────────────────────────────────────────

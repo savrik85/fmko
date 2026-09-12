@@ -120,7 +120,7 @@ export async function runScheduledMatches(
         ? await loadCompetitionContext(db, calRow.league_id, calRow.season_number)
         : null;
     if (!calRow) {
-        logger.warn({module: "match-runner"}, `kalendář kola ${calendarId} se nenačetl — finance jedou na výchozí sazby`);
+        logger.warn({module: "match-runner"}, `kalendář kola ${calendarId} se nenačetl, finance jedou na výchozí sazby`);
     }
 
     // Počasí pro celé kolo — liga se hraje na malé oblasti, takže nemůže být
@@ -133,7 +133,7 @@ export async function runScheduledMatches(
     const { resolveRoundWeather } = await import("../season/season-weather");
     const roundW = await resolveRoundWeather(db, calendarId);
     if (!roundW) {
-        logger.warn({module: "match-runner"}, `počasí kola ${calendarId} se neodvodilo — jede se na zataženo`);
+        logger.warn({module: "match-runner"}, `počasí kola ${calendarId} se neodvodilo, jede se na zataženo`);
     }
     const weather: Weather = roundW?.weather ?? "cloudy";
 

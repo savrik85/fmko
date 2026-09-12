@@ -161,7 +161,7 @@ export async function generateMatchdayPreview(
   ).bind(leagueId, gameWeekEarly, seasonNumber).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: "matchday-preview" }, "idempotency check", e); return null; });
   if (existing) {
-    logger.info({ module: "matchday-preview" }, `skip — preview already exists for league ${leagueId} season ${seasonNumber} week ${gameWeekEarly}`);
+    logger.info({ module: "matchday-preview" }, `skip, preview already exists for league ${leagueId} season ${seasonNumber} week ${gameWeekEarly}`);
     return;
   }
 
@@ -279,12 +279,12 @@ export async function generateMatchdayPreview(
     lines.push(`ZÁPAS: ${p.homeName} vs ${p.awayName}`);
     const sameVillage = !!p.homeVillage && p.homeVillage === p.awayVillage;
     if (sameVillage) {
-      lines.push(`  🏘️ MÍSTNÍ DERBY — oba týmy z ${p.homeVillage}, napětí, prestiž, hospodský souboj`);
+      lines.push(`  🏘️ MÍSTNÍ DERBY, oba týmy z ${p.homeVillage}, napětí, prestiž, hospodský souboj`);
     } else if (p.isLocalDerby) {
-      lines.push(`  🔥 DERBY — mezi kluby (a hlavně trenéry) to dlouhodobě vře, zápas roku pro obě vesnice`);
+      lines.push(`  🔥 DERBY, mezi kluby (a hlavně trenéry) to dlouhodobě vře, zápas roku pro obě vesnice`);
     }
     if (p.relation) {
-      lines.push(`  Vztah trenérů: ${p.relation.label} (interní info — popisuj slovně, NIKDY necituj číselné hodnoty vztahu)`);
+      lines.push(`  Vztah trenérů: ${p.relation.label} (interní info, popisuj slovně, NIKDY necituj číselné hodnoty vztahu)`);
       if (p.relation.moments.length) {
         lines.push(`  Poslední události mezi kluby: ${p.relation.moments.join("; ")} — klidně na to v preview narážej`);
       }
@@ -317,7 +317,7 @@ export async function generateMatchdayPreview(
   const standingsLines = standings.slice(0, 16).map((s) => {
     const name = Object.values(posMap).find((e) => e.teamId === s.teamId)?.teamId;
     // Use leagueInfo name map fallback:
-    return `${s.pos}. — ${s.points} bodů, ${s.played} zápasů (${s.gf}:${s.ga})`;
+    return `${s.pos}. ${s.points} bodů, ${s.played} zápasů (${s.gf}:${s.ga})`;
   });
 
   // Map team names for standings lines
@@ -326,12 +326,12 @@ export async function generateMatchdayPreview(
   const nameMap: Record<string, string> = {};
   for (const t of teamNameRows.results) nameMap[t.id as string] = t.name as string;
   const standingsFull = standings.slice(0, 16).map((s) =>
-    `${s.pos}. ${nameMap[s.teamId] ?? s.teamId} — ${s.points} bodů, ${s.played} z. (${s.gf}:${s.ga})`
+    `${s.pos}. ${nameMap[s.teamId] ?? s.teamId} ${s.points} bodů, ${s.played} z. (${s.gf}:${s.ga})`
   );
 
   const localFlavor = isPraha
-    ? "Používej pražský městský kolorit — zmiňuj městské části, tramvaje, hospody."
-    : "Používej místní kolorit — obce, charakter, okresní atmosféru.";
+    ? "Používej pražský městský kolorit, zmiňuj městské části, tramvaje, hospody."
+    : "Používej místní kolorit, obce, charakter, okresní atmosféru.";
 
   const { redaktorProRubriku, pokynyProRedaktora } = await import("./journalists");
   const redaktor = await redaktorProRubriku(db, leagueId, "matchday_preview", calendarId);

@@ -23,7 +23,7 @@ const LEVELS = [1, 2, 3] as const;
 const CONDITIONS = [0, 5, 20, 50, 70, 100] as const;
 
 /** Jediné místo, kde hra tvoří peníze z ničeho, je zastavárna. Všechny smyčky do ní musí být ztrátové. */
-describe("bazar a zastavárna — ochrana proti tvorbě peněz", () => {
+describe("bazar a zastavárna, ochrana proti tvorbě peněz", () => {
   it("spodní mez bazaru se rovná výkupu zastavárny při stavu 100 %", () => {
     // Kdyby mez klesala se stavem, jde koupit ojetý kus levně, opravit za level*500
     // a zastavit za plnou cenu. Tenhle invariant to zavírá algebraicky.

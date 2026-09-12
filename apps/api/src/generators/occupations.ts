@@ -771,7 +771,7 @@ export const OCCUPATIONS: Occupation[] = [
       { text: "Dneska mi přidali Smíchov, nestíhám" },
       { text: "Zametám Karlák, nemůžu odejít" },
       { text: "Spadl strom přes chodník, uklízím větve" },
-      { text: "Dokončujeme úklid po Silvestru — ještě v lednu" },
+      { text: "Dokončujeme úklid po Silvestru, ještě v lednu" },
     ],
   },
   {

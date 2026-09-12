@@ -54,7 +54,7 @@ const GESCE_POPIS: Record<string, string> = {
   hospodarska: "Odměny za zápasy i za umístění, startovné, odvody z tržeb a dotace klubům.",
   disciplinarni: "Pokuty klubům, sazebník trestů a odvolání proti nim.",
   rozhodcich: "Listina rozhodčích, obsazení kol a jejich odměna za odpískaný zápas.",
-  integrita: "Sázková kancelář a přestupový trh — limity sázek, odvod z obratu a dohled nad tím, co vypadá na domluvu.",
+  integrita: "Sázková kancelář a přestupový trh, limity sázek, odvod z obratu a dohled nad tím, co vypadá na domluvu.",
   zadna: "Návrhy, které nespadají pod žádný odbor.",
 };
 
@@ -799,7 +799,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
                 <label className="text-sm text-muted">
                   Nová hodnota
                   {/* Rozsah se píše čísly. fmtValue umí nulu přeložit na „bez omezení",
-                      což z „0 – 60 bodů" udělá „bez omezení – 60 bodů" — a to se čte
+                      což z „0 – 60 bodů" udělá „bez omezení. 60 bodů" — a to se čte
                       jako by pole žádný strop nemělo. Co znamená nula, říká poznámka. */}
                   {spec.min !== null && spec.max !== null && ` (${fmtRozsah(spec)})`}
                 </label>
@@ -829,7 +829,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
             <div className="text-muted">
               {impact.played > 0
                 ? `Odhad ${impact.expectedPos}. místo, ${impact.expectedWins} výher a ${impact.expectedDraws} remíz`
-                : "Sezóna ještě nezačala — počítá se s průměrným klubem"}
+                : "Sezóna ještě nezačala, počítá se s průměrným klubem"}
             </div>
             <Row label="Prémie za zápasy" value={signed(impact.delta.matchBonus)} />
             <Row label="Odměna za umístění" value={signed(impact.delta.placeReward)} />

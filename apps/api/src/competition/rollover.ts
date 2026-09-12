@@ -94,7 +94,7 @@ async function rolloverOne(
         .bind(leagueId).run()
         .catch((e) => logger.warn({ module: M }, `vypnutí samosprávy ${leagueId}`, e));
       out.disabled++;
-      logger.info({ module: M }, `soutěž ${leagueId} klesla na ${humans} lidských klubů — samospráva vypnuta`);
+      logger.info({ module: M }, `soutěž ${leagueId} klesla na ${humans} lidských klubů, samospráva vypnuta`);
       return true;
     }
     return false;   // soutěž samosprávu nikdy neměla, nic k řešení
@@ -227,7 +227,7 @@ async function settleSponsor(
   if (stillValid) {
     await recordCompetitionEntry(db, {
       leagueId, seasonNumber: newSeason, type: "sponsor", amount: gov.sponsor_amount,
-      description: `Sponzorské plnění — ${gov.sponsor_name}`,
+      description: `Sponzorské plnění ${gov.sponsor_name}`,
       gameDate, referenceId: `spon-${leagueId}-${newSeason}`,
     });
     return;

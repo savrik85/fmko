@@ -179,7 +179,7 @@ async function callGemini(
     const errBody = res ? await res.text().catch(() => "") : "";
     logger.warn(
       { module: "interview-generator" },
-      `Gemini API error: ${res?.status} — ${errBody.slice(0, 200)}`,
+      `Gemini API error: ${res?.status} ${errBody.slice(0, 200)}`,
     );
     return null;
   }
@@ -227,7 +227,7 @@ export async function generateInterviewQuestions(
       : null,
     ctx.opponentFormStr ? `- Forma soupeře (5 zápasů): ${ctx.opponentFormStr}` : null,
     ctx.opponentLastResult ? `- Poslední výsledek soupeře: ${ctx.opponentLastResult}` : null,
-    rel ? `- Vztah trenérů: ${rel.label} (interní info — v otázce popisuj slovně, NIKDY necituj číselné hodnoty vztahu)` : null,
+    rel ? `- Vztah trenérů: ${rel.label} (interní info, v otázce popisuj slovně, NIKDY necituj číselné hodnoty vztahu)` : null,
     rel && rel.moments.length
       ? `- Poslední události mezi kluby: ${rel.moments.join("; ")}`
       : null,
@@ -235,14 +235,14 @@ export async function generateInterviewQuestions(
 
   const relationHint = rel
     ? rel.heat >= 40
-      ? ` Vztah trenérů je VYHROCENÝ (${rel.label}) — klidně se zeptej přímo na události mezi kluby (sázka, výroky v novinách, derby), trenér na to čtenáři slyší.`
+      ? ` Vztah trenérů je VYHROCENÝ (${rel.label}), klidně se zeptej přímo na události mezi kluby (sázka, výroky v novinách, derby), trenér na to čtenáři slyší.`
       : rel.respect >= 30
-        ? ` Trenéři se respektují (${rel.label}) — otázka může být škádlivá mezi kamarády, ne jedovatá.`
+        ? ` Trenéři se respektují (${rel.label}), otázka může být škádlivá mezi kamarády, ne jedovatá.`
         : ""
     : "";
 
   const soupereOtazka = (ctx.opponentManagerName
-    ? `Můžeš použít POUZE jméno trenéra soupeře "${ctx.opponentManagerName}" (přesně tak jak je napsáno) a fakta z kontextu výše (forma, poslední výsledek, pozice, vztah trenérů). Např. "Trenér ${ctx.opponentManagerName} naposledy ${ctx.opponentLastResult ?? "(žádné info)"} — co od něj čekáte?" Ať otázka vyvolává rivalitu, ale stále vykání.`
+    ? `Můžeš použít POUZE jméno trenéra soupeře "${ctx.opponentManagerName}" (přesně tak jak je napsáno) a fakta z kontextu výše (forma, poslední výsledek, pozice, vztah trenérů). Např. "Trenér ${ctx.opponentManagerName} naposledy ${ctx.opponentLastResult ?? "(žádné info)"}, co od něj čekáte?" Ať otázka vyvolává rivalitu, ale stále vykání.`
     : `Otázka může zmínit jen název soupeře "${ctx.opponentName}" a fakta z kontextu (pozice v tabulce, forma, vztah trenérů). NEPOUŽÍVEJ žádné jméno trenéra soupeře — žádné nemáme. NEVYMÝŠLEJ si žádná jména.`)
     + relationHint;
 
@@ -256,7 +256,7 @@ fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku
 - NIKDY si nevymýšlej výsledky zápasů. Jediný povolený poslední výsledek vlastního týmu: "${ctx.lastMatchResult ?? "(žádný — první zápas sezóny)"}".
   Jediný povolený poslední výsledek soupeře: "${ctx.opponentLastResult ?? "(žádný)"}".
   Pokud žádný výsledek nemáš, NEUVÁDĚJ žádné skóre ("3:1", "0:4" atd.) ani jméno předchozího soupeře.
-- NIKDY si nevymýšlej jména trenérů. ${ctx.opponentManagerName ? `Jediný povolený trenér soupeře: "${ctx.opponentManagerName}".` : "Jméno trenéra soupeře NEMÁŠ — nesmíš žádné použít."}
+- NIKDY si nevymýšlej jména trenérů. ${ctx.opponentManagerName ? `Jediný povolený trenér soupeře: "${ctx.opponentManagerName}".` : "Jméno trenéra soupeře NEMÁŠ, nesmíš žádné použít."}
 - NIKDY si nevymýšlej zranění, citáty, ani události, které nejsou v kontextu níže.
 - Pokud pro nějakou otázku nemáš dost konkrétních dat z kontextu, napiš obecnější otázku BEZ vymyšlených faktů — to je VŽDY lepší než si něco vycucat z prstu.
 
@@ -271,7 +271,7 @@ INSTRUKCE:
 - PŘESNĚ 3 otázky, v tomto pořadí:
 
 🎯 TVŮJ VZTAH KE KLUBU (řídí ostrost VŠECH tří otázek):
-${vztahPokyn ?? "Vztah neutrální — ptej se věcně."}
+${vztahPokyn ?? "Vztah neutrální, ptej se věcně."}
 
 OTÁZKA 1 (1–2 věty, ZAKONČI OTAZNÍKEM — ptáš se, nekomentuješ) — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
 OTÁZKA 2 (1–2 věty, ZAKONČI OTAZNÍKEM) — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
@@ -283,11 +283,11 @@ KONTEXT (tým trenéra):
 - Pozice v tabulce: ${ctx.leaguePos ? `${ctx.leaguePos}. místo, ${ctx.leaguePoints} bodů` : "start sezóny"}
 - Forma posledních 5 zápasů: ${ctx.formStr} (V=výhra, R=remíza, P=prohra)
 - Poslední výsledek: ${ctx.lastMatchResult ?? "první zápas sezóny"}
-- Klíčoví hráči (JEDINÁ POVOLENÁ JMÉNA): ${topStr || "info nedostupné — NEPOUŽÍVEJ žádná jména hráčů"}
+- Klíčoví hráči (JEDINÁ POVOLENÁ JMÉNA): ${topStr || "info nedostupné. NEPOUŽÍVEJ žádná jména hráčů"}
 ${ctx.injuredStr ? `- Zranění: ${ctx.injuredStr}` : ""}
 
 KONTEXT (soupeř ${ctx.opponentName}):
-${opponentCtxLines || "- info nedostupné — neuváděj žádná konkrétní fakta o soupeři kromě jeho názvu"}
+${opponentCtxLines || "- info nedostupné, neuváděj žádná konkrétní fakta o soupeři kromě jeho názvu"}
 
 Napiš pouze 3 otázky, každou na samostatném řádku.`;
 
@@ -318,7 +318,7 @@ export async function generateInterviewArticle(
     .map((pair, i) => `Otázka ${i + 1}: ${pair.q}\nOdpověď: ${pair.a}`)
     .join("\n\n");
 
-  const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje — regionálního plátku, který žije vesnickým fotbalem."} Dostal jsi přepis rozhovoru s trenérem
+  const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje, regionálního plátku, který žije vesnickým fotbalem."} Dostal jsi přepis rozhovoru s trenérem
 ${managerName} z týmu ${teamName} před zápasem s ${opponentName}. Sestav z toho novinový článek.
 
 KONTEXT — důležité pochopit:
@@ -595,7 +595,7 @@ export async function tryCreateInterviewRequest(
         .run();
     }
 
-    const msgBody = `📰 Redaktor Zpravodaje se chce zeptat před zápasem s ${opponentName}. Odpověz na 4 otázky ve svých Událostech — článek vyjde ve Zpravodaji.`;
+    const msgBody = `📰 Redaktor Zpravodaje se chce zeptat před zápasem s ${opponentName}. Odpověz na 4 otázky ve svých Událostech, článek vyjde ve Zpravodaji.`;
     const msgId = crypto.randomUUID();
 
     await db

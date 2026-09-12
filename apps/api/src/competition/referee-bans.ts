@@ -47,7 +47,7 @@ export async function canBanReferee(
   if (usable - 1 < MIN_ACTIVE_REFEREES) {
     return {
       ok: false, usable,
-      reason: `Na listině by zbylo jen ${usable - 1} rozhodčích. Minimum je ${MIN_ACTIVE_REFEREES} — jinak by jeden pískal dva zápasy denně.`,
+      reason: `Na listině by zbylo jen ${usable - 1} rozhodčích. Minimum je ${MIN_ACTIVE_REFEREES}, jinak by jeden pískal dva zápasy denně.`,
     };
   }
   return { ok: true, usable };

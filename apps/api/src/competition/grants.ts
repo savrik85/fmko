@@ -94,7 +94,7 @@ export async function payGrants(db: D1Database, opts: {
   }
 
   if (vyplaceno > 0) {
-    logger.info({ module: M }, `soutěž ${opts.leagueId}: ${popis} — vyplaceno ${vyplaceno} Kč`);
+    logger.info({ module: M }, `soutěž ${opts.leagueId}: ${popis}, vyplaceno ${vyplaceno} Kč`);
   }
   return vyplaceno;
 }
@@ -159,7 +159,7 @@ export async function seasonAwards(db: D1Database, opts: {
   ).bind(opts.seasonNumber, opts.leagueId).first<{ id: string; name: string; body: number }>()
     .catch((e) => { logger.warn({ module: M }, "fair play", e); return null; });
   if (fairplay) {
-    out.push({ teamId: fairplay.id, title: `Cena fair play — ${fairplay.name}`, amount: opts.amountPerAward });
+    out.push({ teamId: fairplay.id, title: `Cena fair play ${fairplay.name}`, amount: opts.amountPerAward });
   }
 
   const navstevnost = await db.prepare(
@@ -173,7 +173,7 @@ export async function seasonAwards(db: D1Database, opts: {
   if (navstevnost && navstevnost.prumer > 0) {
     out.push({
       teamId: navstevnost.id,
-      title: `Cena za návštěvnost — ${navstevnost.name} (${Math.round(navstevnost.prumer)} diváků v průměru)`,
+      title: `Cena za návštěvnost ${navstevnost.name} (${Math.round(navstevnost.prumer)} diváků v průměru)`,
       amount: opts.amountPerAward,
     });
   }
@@ -197,7 +197,7 @@ export async function seasonAwards(db: D1Database, opts: {
   if (strelec) {
     out.push({
       teamId: strelec.team_id,
-      title: `Cena pro nejlepšího střelce — ${strelec.jmeno} ${strelec.prijmeni} (${strelec.golu} gólů), ${strelec.team_name}`,
+      title: `Cena pro nejlepšího střelce ${strelec.jmeno} ${strelec.prijmeni} (${strelec.golu} gólů), ${strelec.team_name}`,
       amount: opts.amountPerAward,
     });
   }

@@ -55,7 +55,7 @@ const PODMINKY: Record<SponsorTier, string[]> = {
   okresni: ["Žádná konkurenční značka na dresech klubů."],
   regionalni: [
     "Žádná konkurenční značka na dresech klubů.",
-    "Klid na hřištích — opakované vyloučení sráží spokojenost.",
+    "Klid na hřištích, opakované vyloučení sráží spokojenost.",
   ],
 };
 
@@ -172,7 +172,7 @@ export async function acceptOffer(db: D1Database, opts: {
   ).bind(opts.leagueId).first<{ sponsor_name: string | null; original_name: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "stav samosprávy", e); return null; });
   if (gov?.sponsor_name) {
-    return { ok: false, reason: `Soutěž už sponzora má — ${gov.sponsor_name}.` };
+    return { ok: false, reason: `Soutěž už sponzora má ${gov.sponsor_name}.` };
   }
 
   // Atomicky: nabídku smí přijmout jen jeden běh.

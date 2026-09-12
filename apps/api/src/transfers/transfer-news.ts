@@ -16,9 +16,9 @@ const HUMOR_POOL: DistrictPool<string> = {
     "Za ty prachy si koupíš maximálně sud piva.",
     "V hospodě se o ničem jiném nemluví.",
     "Trenér si mne ruce.",
-    "Fanoušci jsou nadšení — oba dva.",
+    "Fanoušci jsou nadšení, oba dva.",
     "Přestup století! No, alespoň tohoto měsíce.",
-    "Dres mu šijou na míru. Tedy — svlékají ze starého hráče.",
+    "Dres mu šijou na míru. Tedy, svlékají ze starého hráče.",
     "Papíry podepsal, teď jen aby si zapamatoval jméno klubu.",
     "Údajně rozhodla nabídka lepšího čísla na dresu.",
   ],
@@ -34,7 +34,7 @@ const HUMOR_POOL: DistrictPool<string> = {
     "Prý ho zlákala nabídka, že bude po zápase první u kotle s gulášem.",
     "Na rozloučenou mu myslivci nabalili zvěřinu na cestu.",
     "Papíry doputovaly do klubu v tašce s houbama z Boubína.",
-    "O přestupu věděla celá ves dřív než hráč sám — u pumpy v Netolicích.",
+    "O přestupu věděla celá ves dřív než hráč sám, u pumpy v Netolicích.",
     "Trenér si ho vyhlídl na pouti mezi kolotočem a střelnicí.",
   ],
   praha: [
@@ -58,14 +58,14 @@ const HUMOR_YOUNG_POOL: DistrictPool<string> = {
     "Mladá krev! Snad vydrží aspoň do konce sezóny.",
     "Prý ho doporučil učitel tělocviku.",
     "Ještě nemá ani řidičák, ale na hřišti je jako blesk.",
-    "Spoluhráči se těší — konečně někdo, kdo poběží místo nich.",
+    "Spoluhráči se těší, konečně někdo, kdo poběží místo nich.",
     "Mládí vpřed! A hlavně na tréninky.",
   ],
 };
 
 const HUMOR_OLD_POOL: DistrictPool<string> = {
   core: [
-    "Zkušenosti k nezaplacení. Tedy — zaplatili jsme trochu.",
+    "Zkušenosti k nezaplacení. Tedy, zaplatili jsme trochu.",
     "Říká se mu okresní Maldini.",
     "Kolena sice vrzou, ale hlava to pořád má.",
     "Veterán, který viděl víc sobot v kabině než většina hráčů.",
@@ -139,7 +139,7 @@ export async function createTransferNews(
         : data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : "";
       if (data.isCrossDistrict) {
         headline = `Posila z jiného okresu! ${data.playerName} přichází z ${data.fromTeamName}`;
-        body = `${data.toTeamName} přivedl ${data.playerName} (${data.playerAge}, ${data.playerPosition}) až z ${data.fromTeamName}${zaCo}. Meziokresní přestup vzbudil pozornost — uvidíme, jestli se novému prostředí přizpůsobí.`;
+        body = `${data.toTeamName} přivedl ${data.playerName} (${data.playerAge}, ${data.playerPosition}) až z ${data.fromTeamName}${zaCo}. Meziokresní přestup vzbudil pozornost, uvidíme, jestli se novému prostředí přizpůsobí.`;
       } else if (data.swapPlayerName) {
         headline = `Výměna! ${data.playerName} za ${data.swapPlayerName}`;
         body = `${data.fromTeamName} a ${data.toTeamName} si vyměnily hráče: ${data.playerName} (${data.playerAge}, ${data.playerPosition}) míří do ${data.toTeamName}, opačným směrem jde ${data.swapPlayerName}${data.fee ? `, k tomu doplatek ${data.fee.toLocaleString("cs")} Kč` : ""}. ${humor}`;

@@ -193,7 +193,7 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   refreshments: ["", "Umožní vlastní provoz občerstvení", "Vyšší pronájem pro externí provozovatele", "Prémiové zázemí, bez výdajů za občerstvení po zápase"],
   lighting: ["", "2 základní osvětlovací stožáry", "4 stožáry", "Profesionální osvětlení"],
   stands: ["", "Kovová tribunka na pár řad", "Krytá tribuna se sedačkami", "Tribuna přes celou délku hřiště"],
-  roof: ["", "V ošklivém počasí odejde míň lidí", "Solidní zastřešení — počasí moc neřeší", "Kompletní střecha — na počasí kašlou"],
+  roof: ["", "V ošklivém počasí odejde míň lidí", "Solidní zastřešení, počasí moc neřeší", "Kompletní střecha, na počasí kašlou"],
   ultras_stand: ["", "Hlasitější kotel", "Bubny a vlajky", "Peklo pro soupeře"],
   toilets: ["", "Kadibudky místo kopřiv", "Slušné záchodky", "Čisté sociálky s teplou vodou"],
   parking: ["", "Zpevněná plocha vedle hřiště", "Vyznačená stání", "Parkoviště i pro autobusy"],
@@ -209,7 +209,7 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
  * Čte to stránka fanoušků, aby nevznikl třetí popis téhož stupně.
  */
 export const SECURITY_POPIS: readonly string[] = [
-  "Žádná — pořádek si hlídá, kdo zrovna může",
+  "Žádná, pořádek si hlídá, kdo zrovna může",
   "Dva hasiči s páskou přes rameno",
   "Parta v reflexních vestách a s vysílačkou",
   "Agentura z okresu s kamerou nad kotlem",
@@ -367,7 +367,7 @@ export function getUpgradeOptions(
     const lockReason = locked ? describeLock(lockDetail) : undefined;
     const lockHint = locked && lockDetail.reputation
       ? (villageCanFund
-        ? "Reputaci zvedneš umístěním v lize, postupem v poháru, vyprodaným stadionem nebo sezónními akcemi. Nebo to obejdi — při dost vysoké přízni ti tenhle upgrade spolufinancuje obec."
+        ? "Reputaci zvedneš umístěním v lize, postupem v poháru, vyprodaným stadionem nebo sezónními akcemi. Nebo to obejdi, při dost vysoké přízni ti tenhle upgrade spolufinancuje obec."
         : "Reputaci zvedneš umístěním v lize, postupem v poháru, vyprodaným stadionem nebo sezónními akcemi. Přehled najdeš v sekci Reputace.")
       : undefined;
 
@@ -381,7 +381,7 @@ export function getUpgradeOptions(
       // úrovni, ne celkový bonus té nové. Dřív tlačítko u parkoviště L3 hlásilo
       // "+15 % návštěvnost", zatímco klub s L2 dostal 5.
       effect: [effects[next] ?? "", popisPrirustku(key, current, next)]
-        .filter(Boolean).join(" — "),
+        .filter(Boolean).join(", "),
       locked,
       lockReason,
       lockDetail: locked ? lockDetail : undefined,

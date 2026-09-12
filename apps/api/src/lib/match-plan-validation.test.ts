@@ -31,7 +31,7 @@ const pravidlo = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("prázdný a chybějící plán", () => {
-  it("chybějící plán projde jako prázdný — starší web o pokynech neví", () => {
+  it("chybějící plán projde jako prázdný, starší web o pokynech neví", () => {
     expect(ok(undefined)).toEqual([]);
     expect(ok(null)).toEqual([]);
   });
@@ -56,7 +56,7 @@ describe("limity", () => {
     expect(ok(Array.from({ length: 5 }, (_, i) => pravidlo({ id: `r${i}` })))).toHaveLength(5);
   });
 
-  it("duplicitní id neprojde — engine podle něj hlídá jednorázovost", () => {
+  it("duplicitní id neprojde, engine podle něj hlídá jednorázovost", () => {
     expect(chyba([pravidlo(), pravidlo()])).toContain("duplicitní");
   });
 });

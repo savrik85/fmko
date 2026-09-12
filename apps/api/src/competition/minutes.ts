@@ -109,7 +109,7 @@ function ucast(j: Journalist | null, v: MinutesInput): string {
   if (chybelo === 0) return `${zaklad} Nechyběl nikdo.`;
   if (style === "bulvar") {
     return `${zaklad} ${tvar(chybelo, "klub si zasedání odpustil", "kluby si zasedání odpustily", "klubů si zasedání odpustilo")}`
-      + " — a pak se prý diví.";
+      + ", a pak se prý diví.";
   }
   if (style === "patriot") {
     return `${zaklad} Mrzí, že ${tvar(chybelo, "klub nedorazil", "kluby nedorazily", "klubů nedorazilo")}.`;
@@ -133,7 +133,7 @@ function bod(v: MinutesInput, it: MinutesItem): string {
     ? ` Proti byli: ${proti.join(", ")}.`
     : "";
 
-  return `• ${it.title} — ${vysledek(it.status)}${pomer}.${jmenovite}`;
+  return `• ${it.title} ${vysledek(it.status)}${pomer}.${jmenovite}`;
 }
 
 /** Citace. Mluvčím je prezident soutěže; když funkce není obsazená, mluví redaktor. */

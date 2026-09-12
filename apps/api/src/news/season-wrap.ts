@@ -44,7 +44,7 @@ export async function generateSeasonWrapArticle(
   const statLines = seasonStatsToLines(stats);
 
   const standLines = standings.map((s) =>
-    `${s.pos}. ${teamName.get(s.teamId) ?? s.teamId} — ${s.points} b (${s.wins}-${s.draws}-${s.losses}, ${s.gf}:${s.ga})`);
+    `${s.pos}. ${teamName.get(s.teamId) ?? s.teamId} ${s.points} b (${s.wins}-${s.draws}-${s.losses}, ${s.gf}:${s.ga})`);
 
   const champion = standings[0] ? teamName.get(standings[0].teamId) ?? "?" : "?";
 

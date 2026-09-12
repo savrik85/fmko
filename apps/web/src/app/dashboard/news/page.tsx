@@ -524,7 +524,7 @@ export default function NewsPage() {
                         <EntityLink type="team" id={ph.teamId} className="font-heading font-bold text-ink">
                           {ph.teamName}
                         </EntityLink>
-                        {" — "}{ph.caption}
+                        {" "}{ph.caption}
                       </figcaption>
                     </figure>
                   ))}
@@ -563,7 +563,7 @@ export default function NewsPage() {
                       avatar={meta.managerAvatar}
                       jmenoHref={(meta.teamId ?? iv.teamId) ? `/dashboard/manager/${meta.teamId ?? iv.teamId}` : undefined}
                       text={meta.article ?? iv.body}
-                      poznamka={meta.refereeName ? `Rozhodčí ${meta.refereeName}${meta.incidentText ? " — sporná situace v zápase" : ""}` : undefined}
+                      poznamka={meta.refereeName ? `Rozhodčí ${meta.refereeName}${meta.incidentText ? ", sporná situace v zápase" : ""}` : undefined}
                       poznamkaHref={meta.refereeId ? `/dashboard/rozhodci/${meta.refereeId}` : undefined}
                     />
                   );

@@ -187,7 +187,7 @@ function EquipmentPage() {
     const ok = await confirm({
       title: `Koupit ${l.categoryLabel} od ${l.teamName}?`,
       description: newEffective < myEffective
-        ? "Pozor: vybavení je sice vyšší úrovně, ale v horším stavu — efektivní úroveň ti klesne. Po opravě bude vyšší."
+        ? "Pozor: vybavení je sice vyšší úrovně, ale v horším stavu, efektivní úroveň ti klesne. Po opravě bude vyšší."
         : l.levelDescription,
       details,
       confirmLabel: `Koupit za ${formatCZK(l.price)}`,

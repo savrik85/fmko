@@ -52,7 +52,7 @@ export function orderPair(a: string, b: string): [string, string] {
 }
 
 export function relationStatus(respect: number, heat: number): { key: string; label: string } | null {
-  if (heat >= DERBY_HEAT_THRESHOLD) return { key: "rival", label: "Rival — derby" };
+  if (heat >= DERBY_HEAT_THRESHOLD) return { key: "rival", label: "Rival, derby" };
   if (respect >= ALLY_RESPECT_THRESHOLD) return { key: "ally", label: "Spojenec" };
   if (respect <= ENEMY_RESPECT_THRESHOLD) return { key: "enemy", label: "Nepřítel" };
   return null;
@@ -180,7 +180,7 @@ export async function getRelation(db: D1Database, teamA: string, teamB: string):
       history.push({
         date: new Date().toISOString(),
         icon: "🏘️",
-        text: "Místní rivalita — jeden plácek, dvě hospody",
+        text: "Místní rivalita, jeden plácek, dvě hospody",
         rd: 0,
         hd: SAME_VILLAGE_BASE_HEAT,
       });
@@ -191,7 +191,7 @@ export async function getRelation(db: D1Database, teamA: string, teamB: string):
         history.push({
           date: new Date().toISOString(),
           icon: "🏘️",
-          text: `Odvěcí sousedi — vesnice jen ${km.toFixed(1)} km od sebe`,
+          text: `Odvěcí sousedi, vesnice jen ${km.toFixed(1)} km od sebe`,
           rd: 0,
           hd: NEIGHBOR_BASE_HEAT,
         });
@@ -340,19 +340,19 @@ export async function applyPostMatchRelations(db: D1Database, info: PostMatchInf
       heat: 10,
       respect: -5,
       icon: "💥",
-      text: `Debakl ${score} (${homeName} – ${awayName}) — tohle se nezapomíná`,
+      text: `Debakl ${score} (${homeName} ${awayName}), tohle se nezapomíná`,
     });
   } else if (!winnerId && homeScore + awayScore > 0) {
     await applyRelationEvent(db, homeTeamId, awayTeamId, {
       heat: 2,
       icon: "🤝",
-      text: `Remíza ${score} (${homeName} – ${awayName})`,
+      text: `Remíza ${score} (${homeName} ${awayName})`,
     });
   } else if (winnerId && diff <= 1) {
     await applyRelationEvent(db, homeTeamId, awayTeamId, {
       heat: 5,
       icon: "⚔️",
-      text: `Těsná bitva ${score} (${homeName} – ${awayName})`,
+      text: `Těsná bitva ${score} (${homeName} ${awayName})`,
     });
   }
 
@@ -396,7 +396,7 @@ async function resolveHumbleStatements(
       await applyRelationEvent(db, st.actor_team_id, st.target_team_id, {
         heat: 15,
         icon: "🎭",
-        text: `„Jedeme jen zachránit kanára“ — a pak výhra o ${actorScore - targetScore} gólů. Tohle ${targetName} nezapomene`,
+        text: `„Jedeme jen zachránit kanára“, a pak výhra o ${actorScore - targetScore} gólů. Tohle ${targetName} nezapomene`,
       });
       const article = humbleBackfireNews(actorName, actorManager, targetName, `${info.homeScore}:${info.awayScore}`);
       await insertRelationNews(db, info.leagueId, article.headline, article.body, st.actor_team_id);
@@ -501,7 +501,7 @@ export function aiGestureResponse(
         ? { choice: "handshake", flavor: "v dobré náladě podal ruku" }
         : { choice: "silent", flavor: "porážku nese těžce, ruku nepodal" };
     case "ferovka":
-      return { choice: "handshake", flavor: "podal ruku jako vždy — fér je fér" };
+      return { choice: "handshake", flavor: "podal ruku jako vždy, fér je fér" };
     case "pohodar":
       if (incoming === "jab") return { choice: "handshake", flavor: "rýpnutí přešel s úsměvem a podal ruku" };
       return { choice: "handshake", flavor: "s úsměvem pozval na pivo někdy příště" };
@@ -549,7 +549,7 @@ export function aiStatementResponse(
       return {
         respect: 0, heat: tone === "provoke" ? 3 : 0,
         counterQuote: tone === "provoke" ? counterQuote : null,
-        historyText: tone === "provoke" ? `${aiManager} odmítl přestřelku — odpoví na hřišti` : `${aiManager} výrok vzal na vědomí`,
+        historyText: tone === "provoke" ? `${aiManager} odmítl přestřelku, odpoví na hřišti` : `${aiManager} výrok vzal na vědomí`,
       };
     case "pohodar":
       return {
@@ -875,7 +875,7 @@ async function resolveStammtisch(
 
   let narrative: string;
   if (attendees.length === 0) {
-    await chargeSocial(db, teamId, STAMMTISCH_COST_PER_HEAD, "Posezení s trenéry — nikdo nedorazil, pivo na žal", gameDate, row.id);
+    await chargeSocial(db, teamId, STAMMTISCH_COST_PER_HEAD, "Posezení s trenéry, nikdo nedorazil, pivo na žal", gameDate, row.id);
     narrative = [
       "Nikdo z pozvaných trenérů nedorazil. Seděl jsi u velkého stolu sám a hospodský se tvářil soucitně.",
       ...declineNotes,
@@ -884,20 +884,20 @@ async function resolveStammtisch(
     // 2. Útrata podle skutečné účasti
     const cost = STAMMTISCH_COST_PER_HEAD * (attendees.length + 1);
     const paid = await chargeSocial(db, teamId, cost,
-      `Posezení s trenéry — rundy pro ${attendees.length + 1} lidí`, gameDate, row.id);
+      `Posezení s trenéry, rundy pro ${attendees.length + 1} lidí`, gameDate, row.id);
 
     // 3. Hostitel × každý host. Při 3. společném posezení odemkne se "Trvalý spojenec".
     const newAllies: string[] = [];
     for (const a of attendees) {
       await applyRelationEvent(db, teamId, a.teamId, {
-        respect: 5, icon: "🍻", text: `Posezení u ${myManager} — ${a.manager} seděl u stolu`,
+        respect: 5, icon: "🍻", text: `Posezení u ${myManager} ${a.manager} seděl u stolu`,
       });
       const count = await attendedPosezeniCount(db, teamId, a.teamId);
       const rel = await getRelation(db, teamId, a.teamId);
       if (count >= 3 && !isLoyalAlly(rel.history)) {
         await applyRelationEvent(db, teamId, a.teamId, {
           respect: 10, icon: "🏅",
-          text: `Trvalý spojenec — partnerství zpečetěné u třetího pivního stolu (${myManager} × ${a.manager})`,
+          text: `Trvalý spojenec, partnerství zpečetěné u třetího pivního stolu (${myManager} × ${a.manager})`,
         });
         newAllies.push(a.manager);
       }
@@ -942,7 +942,7 @@ async function resolveStammtisch(
       }
     }
     if (extraCost > 0) {
-      await chargeSocial(db, teamId, extraCost, "Posezení s trenéry — nečekané výdaje", gameDate, row.id);
+      await chargeSocial(db, teamId, extraCost, "Posezení s trenéry, nečekané výdaje", gameDate, row.id);
     }
 
     // 6. Zpravodaj — summit od 3 účastníků
@@ -969,7 +969,7 @@ async function resolveStammtisch(
       ...eventTexts,
       ...quarrels,
       ...declineNotes,
-      paid ? `Útrata: ${cost + extraCost} Kč.` : "Na útratu nezbylo — hospodský to napsal křídou na futro.",
+      paid ? `Útrata: ${cost + extraCost} Kč.` : "Na útratu nezbylo, hospodský to napsal křídou na futro.",
       allyLine,
       hostMorningText,
     ].filter(Boolean).join(" ");
@@ -985,7 +985,7 @@ async function resolveStammtisch(
         ...quarrels,
         "Útratu platil hostitel.",
         newAllies.includes(a.manager)
-          ? `🏅 S ${myManager} jste teď Trvalí spojenci — partnerství zpečetěné u třetího pivního stolu.`
+          ? `🏅 S ${myManager} jste teď Trvalí spojenci, partnerství zpečetěné u třetího pivního stolu.`
           : null,
         morn,
       ].filter(Boolean).join(" ");
@@ -1042,7 +1042,7 @@ async function resolvePubRound(
     }
     narrative = pubRoundMessage(patrons);
   } else {
-    narrative = "Slíbená runda se nekonala — pokladna zela prázdnotou a hospoda to trenérovi jen tak nezapomene.";
+    narrative = "Slíbená runda se nekonala, pokladna zela prázdnotou a hospoda to trenérovi jen tak nezapomene.";
   }
 
   await db.prepare(

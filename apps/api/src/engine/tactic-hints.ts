@@ -67,14 +67,14 @@ export function tacticHints(input: TacticHintInput): TacticHint[] {
       tone: "opportunity",
       label: isLongBall ? "Nakopávaný balon tu sedí" : "Zvaž nakopávaný balon",
       detail: isLongBall
-        ? "Podmínky tvojí taktice nahrávají — dlouhé míče dopředu jsou dneska účinnější než obvykle."
+        ? "Podmínky tvojí taktice nahrávají, dlouhé míče dopředu jsou dneska účinnější než obvykle."
         : "Za těchhle podmínek je dlouhý míč dopředu účinnější než obvykle. Kombinace po zemi bude trpět.",
     });
   } else if (longBall <= -0.05 && isLongBall) {
     hints.push({
       tone: "warning",
       label: "Nakopávat se dneska nevyplatí",
-      detail: "Vítr si s dlouhými míči dělá, co chce. Máš nastavený nakopávaný balon — zvaž změnu.",
+      detail: "Vítr si s dlouhými míči dělá, co chce. Máš nastavený nakopávaný balon, zvaž změnu.",
     });
   }
 

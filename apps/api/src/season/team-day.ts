@@ -86,7 +86,7 @@ export async function processTeamDay(
     if (opts.claim) {
       const claimed = await claimTeamDay(env.DB, teamId, globalGameDate);
       if (!claimed) {
-        logger.info({ module: "team-day", teamId }, `den ${globalGameDate} už je zpracovaný — přeskakuji`);
+        logger.info({ module: "team-day", teamId }, `den ${globalGameDate} už je zpracovaný, přeskakuji`);
         return { status: "skipped", teamId, events };
       }
     }
@@ -432,6 +432,26 @@ export async function processTeamDay(
         for (const k of kampane.splnene) {
           await dopadSplneneKampane(env.DB, k, newGameDate);
           await prispevkyKeKampani(env.DB, k, "splnena", newGameDate);
+        }
+
+        // Transparent v kotli, když si ho píšou fanoušci sami.
+        const { prepoctiTransparent, formaKlubu } = await import("../fans/fan-banner");
+        const plachta = await prepoctiTransparent(env.DB, teamId, party, newGameDate);
+        if (plachta) {
+          const { prispevekKTransparentu } = await import("../fans/fan-feed");
+          await prispevekKTransparentu(env.DB, teamId, plachta, newGameDate);
+        }
+
+        // Názor na to, jak se hraje a kolik se dává. Až z trendu, ne po jednom
+        // zápase, jinak by zeď zaplavily hlášky k jedné prohře.
+        const forma = await formaKlubu(env.DB, teamId);
+        if (forma.zapasu >= 5) {
+          const { prispevkyKHre } = await import("../fans/fan-feed");
+          const taktika = (team.tactic as string | null) ?? null;
+          await prispevkyKHre(env.DB, {
+            teamId, taktika, golyPoslednich5: forma.goly,
+            zapasu: forma.zapasu, gameDate: newGameDate,
+          });
         }
       }
     } catch (e) { logger.warn({ module: "daily-tick" }, `fan groups failed for team ${teamId}`, e); }

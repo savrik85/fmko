@@ -82,17 +82,17 @@ const SOURCES_UP = [
   },
   {
     label: "Postup v poháru",
-    detail: "Za každé vyhrané kolo od osmifinále výš: osmifinále +1, čtvrtfinále +2, semifinále +3, výhra ve finále +5. Sčítá se, takže cesta až k poháru dá dohromady +11 — nejvíc ze všech zdrojů.",
+    detail: "Za každé vyhrané kolo od osmifinále výš: osmifinále +1, čtvrtfinále +2, semifinále +3, výhra ve finále +5. Sčítá se, takže cesta až k poháru dá dohromady +11, nejvíc ze všech zdrojů.",
     href: "/dashboard/pohar",
   },
   {
     label: "Sezónní akce",
-    detail: "Ples, pouť, den obce, zabijačka… Objevují se během sezóny na stránce Události a čekají na tvoje rozhodnutí. Vstřícná volba — postavit stánek, uspořádat ukázkový trénink — dá +1 až +10.",
+    detail: "Ples, pouť, den obce, zabijačka… Objevují se během sezóny na stránce Události a čekají na tvoje rozhodnutí. Vstřícná volba, postavit stánek, uspořádat ukázkový trénink, dá +1 až +10.",
     href: "/dashboard/events",
   },
   {
     label: "Podpis hvězdy",
-    detail: "Mezi volnými hráči se občas objeví někdo se zvučným jménem — bývalý ligista, lokální legenda. Za jeho podpis dostaneš +4 až +15 podle toho, jak je známý.",
+    detail: "Mezi volnými hráči se občas objeví někdo se zvučným jménem, bývalý ligista, lokální legenda. Za jeho podpis dostaneš +4 až +15 podle toho, jak je známý.",
     href: "/dashboard/transfers",
   },
   {
@@ -107,7 +107,7 @@ const SOURCES_UP = [
   },
   {
     label: "Rodáci v kádru",
-    detail: "Rodák je hráč, který bydlí ve stejné obci jako klub — poznáš ho podle bydliště v kádru. Když je jich aspoň 40 % kádru, lidi to ocení a klub dostane +1 každý měsíc.",
+    detail: "Rodák je hráč, který bydlí ve stejné obci jako klub, poznáš ho podle bydliště v kádru. Když je jich aspoň 40 % kádru, lidi to ocení a klub dostane +1 každý měsíc.",
     href: "/dashboard/squad",
   },
   {

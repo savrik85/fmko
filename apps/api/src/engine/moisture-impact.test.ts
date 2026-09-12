@@ -28,7 +28,7 @@ describe("nasáklost půdy a technika", () => {
     expect(moistureTechniqueFactor(100)).toBeLessThan(moistureTechniqueFactor(0));
   });
 
-  it("postih je mírnější než ze samotného počasí — nesmí se počítat dvakrát", () => {
+  it("postih je mírnější než ze samotného počasí, nesmí se počítat dvakrát", () => {
     expect(moistureTechniqueFactor(100)).toBeGreaterThan(WEATHER_MODS.rain.techniqueMod);
     expect(1 - moistureTechniqueFactor(100)).toBeLessThan(1 - pitchTechniqueFactor(0));
   });
@@ -49,7 +49,7 @@ describe("nasáklost půdy a technika", () => {
     expect(moistureInjuryFactor(100)).toBeLessThan(WEATHER_MODS.snow.injuryMod);
   });
 
-  it("pásmo kolem normálu je hluché — hřiště se chová jako suché", () => {
+  it("pásmo kolem normálu je hluché, hřiště se chová jako suché", () => {
     for (const m of [45, 48, 50, 52, 55]) {
       expect(moistureTechniqueFactor(m), `vlhkost ${m}`).toBe(1);
       expect(moistureInjuryFactor(m), `vlhkost ${m}`).toBe(1);

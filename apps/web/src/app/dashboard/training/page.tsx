@@ -13,9 +13,9 @@ type TrainingIntensity = "light" | "normal" | "hard";
 type DayPlan = { type: TrainingType; intensity: TrainingIntensity };
 
 const INTENSITIES: Array<{ key: TrainingIntensity; short: string; title: string }> = [
-  { key: "light", short: "L", title: "Lehký — regenerace, málo únavy (hodí se před zápasem)" },
+  { key: "light", short: "L", title: "Lehký, regenerace, málo únavy (hodí se před zápasem)" },
   { key: "normal", short: "N", title: "Normální tempo" },
-  { key: "hard", short: "T", title: "Tvrdý — rychlejší růst, ale hodně sebere" },
+  { key: "hard", short: "T", title: "Tvrdý, rychlejší růst, ale hodně sebere" },
 ];
 
 const TRAINING_TYPES: Array<{ key: TrainingType; label: string; icon: string; desc: string; skills: string }> = [

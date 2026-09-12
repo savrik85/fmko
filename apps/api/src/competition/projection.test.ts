@@ -64,7 +64,7 @@ describe("projekce rozpočtu soutěže", () => {
     expect(check.deficit).toBe(0);
   });
 
-  it("na začátku sezóny je volný zůstatek malý, ale kladný — a strop projde", () => {
+  it("na začátku sezóny je volný zůstatek malý, ale kladný, a strop projde", () => {
     const balance = subsidyFor(14, "okresni_prebor") + 14 * R.entry_fee;
     const free = freeBalance(balance, R, 14, "okresni_prebor", 0);
     expect(free).toBeGreaterThan(0);

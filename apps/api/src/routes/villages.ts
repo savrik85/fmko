@@ -563,7 +563,7 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
      WHERE taken_by_team_id = ? AND taken_at > datetime('now', '-7 days')`
   ).bind(session.teamId).first<{ cnt: number }>();
   if ((recent?.cnt ?? 0) >= 1) {
-    return c.json({ error: "Tvůj tým už tento týden brigádu vzal — musíš počkat." }, 429);
+    return c.json({ error: "Tvůj tým už tento týden brigádu vzal, musíš počkat." }, 429);
   }
 
   // Atomicky: označit brigádu jako taken+completed, pak side-effecty
@@ -960,13 +960,13 @@ function pickInvitationRejectReason(persona: string, favor: number, isHome: bool
   const COMMON: string[] = [
     "Zrovna na ten den máme rodinnou návštěvu.",
     "Vnoučata mají soutěž ve škole, musím s nimi.",
-    "Bohužel mám už jiný program — jindy rád.",
+    "Bohužel mám už jiný program, jindy rád.",
   ];
   const BY_PERSONA: Record<string, string[]> = {
     sportovec: [
       "Forma vašeho týmu poslední dobou není přesvědčivá. Počkám si na lepší zápas.",
       "Když budete hrát líp, rád přijdu.",
-      "Sleduji vás — uvidíme až dáte výsledky.",
+      "Sleduji vás, uvidíme až dáte výsledky.",
       "Tahle sezóna je pro vás slabá. Příště.",
     ],
     aktivista: [
@@ -989,7 +989,7 @@ function pickInvitationRejectReason(persona: string, favor: number, isHome: bool
     ],
     populista: [
       "Mám už domluvený šachový turnaj v hospodě.",
-      "Něco mi do toho přišlo — uvidíme příště.",
+      "Něco mi do toho přišlo, uvidíme příště.",
       "Možná jindy, dnes to nevyjde.",
       ...(lowFavor ? ["Občané by mě viděli s vámi neradi."] : []),
     ],
@@ -1219,8 +1219,8 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
   // strhly peníze za no-op (např. zatím neimplementovaná mládežnická akademie).
   const upgradeableFacilities = ["showers", "stands", "parking", "changing_rooms", "refreshments", "fence", "pitch"];
   if (!inv.target_facility || !upgradeableFacilities.includes(inv.target_facility)) {
-    logger.warn({ module: "villages" }, `accept rejected — neimplementovaný cíl: ${inv.target_facility ?? inv.type}`);
-    return c.json({ error: "Tuto investici teď nelze přijmout — připravujeme ji." }, 409);
+    logger.warn({ module: "villages" }, `accept rejected, neimplementovaný cíl: ${inv.target_facility ?? inv.type}`);
+    return c.json({ error: "Tuto investici teď nelze přijmout, připravujeme ji." }, 409);
   }
 
   // Český název cíle investice (do historie/transakcí — žádná angličtina v UI)
@@ -1379,7 +1379,7 @@ villagesRouter.post("/admin/run-elections", requireAdmin, async (c) => {
        VALUES (?, ?, NULL, NULL, 'election_held', ?, ?, ?, ?)`
     ).bind(
       crypto.randomUUID(), v.id,
-      "Proběhly komunální volby — obec má nové vedení.",
+      "Proběhly komunální volby, obec má nové vedení.",
       JSON.stringify({ nonce }), nowIso, nowIso,
     ).run().catch((e) => logger.warn({ module: "villages" }, "election history", e));
 
@@ -1402,7 +1402,7 @@ villagesRouter.post("/admin/run-elections", requireAdmin, async (c) => {
   ).all<{ id: string }>();
 
   const headline = "Komunální volby: v obcích se mění vedení";
-  const body = "V obcích proběhly komunální volby a na mnoha místech se vyměnilo vedení — noví starostové, místostarostové i zastupitelé. Vztahy klubů s radnicemi tak začínají nanovo a přízeň obce si každý tým musí získat od začátku.";
+  const body = "V obcích proběhly komunální volby a na mnoha místech se vyměnilo vedení, noví starostové, místostarostové i zastupitelé. Vztahy klubů s radnicemi tak začínají nanovo a přízeň obce si každý tým musí získat od začátku.";
   let articlesPublished = 0;
   for (const lg of leagues.results ?? []) {
     try {

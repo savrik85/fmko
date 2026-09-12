@@ -56,7 +56,7 @@ function db(pool: Pool): FakeD1 {
 const SEED = 2;
 const GAME_DATE = new Date("2026-09-09T03:00:00.000Z");
 
-describe("maintainFreeAgentPool — strop poolu", () => {
+describe("maintainFreeAgentPool, strop poolu", () => {
   it("propuštění hráči neblokují generování nových", async () => {
     // Přesně stav Prachatic na produkci: 14 propuštěných, ani jeden vygenerovaný.
     const fake = db({ generated: 0, released: 14 });

@@ -128,14 +128,14 @@ export async function runEndSeasonStep(
 
   // Žádná odehraná liga → není co zakončit (a guard proti smyčce: čerstvě rollnutá sezóna)
   if (started.length === 0) {
-    return { allDone: true, ready: false, seasonNumber, remainingLeagues: 0, detail: "sezóna zatím nezačala — žádná odehraná liga" };
+    return { allDone: true, ready: false, seasonNumber, remainingLeagues: 0, detail: "sezóna zatím nezačala, žádná odehraná liga" };
   }
 
   // Gate: lidské odehrané ligy musí být dohrané (AI-only neblokují). force přebije.
   if (!opts.force) {
     const blocking = started.filter((s) => s.humans > 0 && !s.complete);
     if (blocking.length > 0) {
-      return { allDone: true, ready: false, seasonNumber, remainingLeagues: blocking.length, detail: `sezóna ještě běží — ${blocking.length} lidských lig nedohraných (force=1 přebije)` };
+      return { allDone: true, ready: false, seasonNumber, remainingLeagues: blocking.length, detail: `sezóna ještě běží ${blocking.length} lidských lig nedohraných (force=1 přebije)` };
     }
   }
 

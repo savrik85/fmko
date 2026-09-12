@@ -87,7 +87,7 @@ export const FAN_GROUPS: Record<FanGroupKind, FanGroupDef> = {
   },
   parta_z_okoli: {
     label: "Parta z okolí",
-    popis: "Přespolní, co jezdí autobusem. Doma nemají koho fandit, tak si vybrali vás — a berou to vážně.",
+    popis: "Přespolní, co jezdí autobusem. Doma nemají koho fandit, tak si vybrali vás, a berou to vážně.",
     tier: "hardcore",
     shareRange: [0.15, 0.25],
     sector: "za_branou",
@@ -136,13 +136,13 @@ export interface FanLeaderArchetypeDef {
 export const FAN_LEADER_ARCHETYPES: Record<FanLeaderArchetype, FanLeaderArchetypeDef> = {
   stary_kapo: {
     label: "Starý kápo",
-    bio: "Vede kotel od devadesátek. Umí ho rozjet i utišit — a ví, kdy je co potřeba.",
+    bio: "Vede kotel od devadesátek. Umí ho rozjet i utišit, a ví, kdy je co potřeba.",
     hlaska: "Klid, kluci. Dneska ne.",
     ageRange: [48, 62],
     charisma: [70, 90], radikalnost: [30, 50], vyjednavani: [55, 75],
     occupations: ["svářeč", "mistr v pile", "řidič náklaďáku", "zedník", "údržbář v mlékárně"],
     labelF: "Stará kápo",
-    bioF: "Vede kotel od devadesátek. Umí ho rozjet i utišit — a ví, kdy je co potřeba.",
+    bioF: "Vede kotel od devadesátek. Umí ho rozjet i utišit, a ví, kdy je co potřeba.",
     hlaskaF: "Klid, kluci. Dneska ne.",
     occupationsF: ["svářečka", "mistrová v pile", "řidička náklaďáku", "zednice", "údržbářka v mlékárně"],
     femaleShare: 0.05,
@@ -175,13 +175,13 @@ export const FAN_LEADER_ARCHETYPES: Record<FanLeaderArchetype, FanLeaderArchetyp
   },
   hospodsky_vudce: {
     label: "Hospodský vůdce",
-    bio: "Vliv má přes pípu — co řekne u výčepu, to platí na tribuně. Po prohře je s ním potíž.",
+    bio: "Vliv má přes pípu, co řekne u výčepu, to platí na tribuně. Po prohře je s ním potíž.",
     hlaska: "To si probereme po zápase. U mě.",
     ageRange: [40, 58],
     charisma: [65, 85], radikalnost: [45, 70], vyjednavani: [45, 70],
     occupations: ["hospodský", "řezník", "provozní pivovaru", "prodavač v železářství", "taxikář"],
     labelF: "Hospodská vůdkyně",
-    bioF: "Vliv má přes pípu — co řekne u výčepu, to platí na tribuně. Po prohře je s ní potíž.",
+    bioF: "Vliv má přes pípu, co řekne u výčepu, to platí na tribuně. Po prohře je s ní potíž.",
     hlaskaF: "To si probereme po zápase. U mě.",
     occupationsF: ["hospodská", "řeznice", "provozní pivovaru", "prodavačka v železářství", "taxikářka"],
     femaleShare: 0.25,
@@ -370,7 +370,7 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     weightByGroup: { kotel: 5, parta_z_okoli: 2 },
     texty: [
       "V sektoru, kde stojí parta {skupina}, hořely světlice a hra se na chvíli zastavila kvůli kouři.",
-      "Z kotle vyletěly dýmovnice — {vudce} tvrdí, že to bylo choreo, delegát to vidí jinak.",
+      "Z kotle vyletěly dýmovnice, {vudce} tvrdí, že to bylo choreo, delegát to vidí jinak.",
       "Hned po gólu odpálili pyro. Krásné to bylo, levné ne.",
     ],
   },
@@ -385,7 +385,7 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     texty: [
       "Ze sektoru, kde stojí parta {skupina}, přiletěl na hřiště kelímek.",
       "Po sporném verdiktu začalo z tribuny létat na plochu, co komu přišlo pod ruku.",
-      "Na trávník dopadla plechovka od piva — {vudce} se za to omlouvá, delegát si to zapsal.",
+      "Na trávník dopadla plechovka od piva, {vudce} se za to omlouvá, delegát si to zapsal.",
     ],
   },
   pokriky: {
@@ -413,7 +413,7 @@ export const FAN_INCIDENTS: Record<FanIncidentKind, FanIncidentDef> = {
     needsAwayUltras: true,
     texty: [
       "U plotu se parta {skupina} srazila s hostujícím kotlem. Rozdělit je trvalo deset minut.",
-      "Za brankou to vzplálo — {vudce} tvrdí, že začali oni.",
+      "Za brankou to vzplálo, {vudce} tvrdí, že začali oni.",
       "Strkanice s hosty přerostla v rvačku a zápas se musel na chvíli přerušit.",
     ],
   },

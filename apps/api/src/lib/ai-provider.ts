@@ -96,7 +96,7 @@ export async function generateText(
 
   if (ctx.provider === "workers-ai") {
     if (!ctx.ai) {
-      logger.warn({ module: mod }, "provider=workers-ai, ale binding AI chybí — negeneruji");
+      logger.warn({ module: mod }, "provider=workers-ai, ale binding AI chybí, negeneruji");
       return null;
     }
     const res = await (ctx.ai as unknown as {

@@ -1249,11 +1249,11 @@ export default function FansPage() {
                 {m.pointsToNext} {m.pointsToNext === 1 ? "bod" : m.pointsToNext < 5 ? "body" : "bodů"} vlivu
                 {/* Nula = tudy cesta nevede, protože atribut už je na stropu. */}
                 {m.repPointsToNext > 0 && m.motPointsToNext > 0
-                  ? ` — to je ${m.repPointsToNext} bodů reputace nebo ${m.motPointsToNext} bodů motivace.`
+                  ? `, to je ${m.repPointsToNext} bodů reputace nebo ${m.motPointsToNext} bodů motivace.`
                   : m.repPointsToNext > 0
-                    ? ` — to je ${m.repPointsToNext} bodů reputace. Motivaci už výš nedostaneš.`
+                    ? `, to je ${m.repPointsToNext} bodů reputace. Motivaci už výš nedostaneš.`
                     : m.motPointsToNext > 0
-                      ? ` — to je ${m.motPointsToNext} bodů motivace. Reputace už je na stropu.`
+                      ? `, to je ${m.motPointsToNext} bodů motivace. Reputace už je na stropu.`
                       : "."}
               </div>
             ) : (

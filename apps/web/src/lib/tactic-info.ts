@@ -9,7 +9,7 @@ export const TACTIC_INFO: Record<TacticKey, { label: string; description: string
   },
   balanced: {
     label: "Vyrovnaná",
-    description: "Poctivý okresní fotbal. Nic se nepřehání dopředu ani dozadu — rozumná volba, když je soupeř na papíře stejně daleko jako ty.",
+    description: "Poctivý okresní fotbal. Nic se nepřehání dopředu ani dozadu, rozumná volba, když je soupeř na papíře stejně daleko jako ty.",
   },
   defensive: {
     label: "Defenzivní",
@@ -21,18 +21,18 @@ export const TACTIC_INFO: Record<TacticKey, { label: string; description: string
   },
   possession: {
     label: "Držení míče",
-    description: "Míč si necháte a soupeř běhá. Vytvoříte nejvíc příležitostí ze všech taktik — ale jen když máš ve středu hráče, co umí přihrát. Bez nich to skončí ztrátou na vlastní půlce.",
+    description: "Míč si necháte a soupeř běhá. Vytvoříte nejvíc příležitostí ze všech taktik, ale jen když máš ve středu hráče, co umí přihrát. Bez nich to skončí ztrátou na vlastní půlce.",
   },
   pressing: {
     label: "Vysoký presink",
-    description: "Napadáte soupeře hned u jeho vápna a nenecháte ho vydechnout. Sebere to ale spoustu sil — po hodině hry to poznáš. Jen pro mužstvo, které to uběhá.",
+    description: "Napadáte soupeře hned u jeho vápna a nenecháte ho vydechnout. Sebere to ale spoustu sil, po hodině hry to poznáš. Jen pro mužstvo, které to uběhá.",
   },
 };
 
 export const FORMATION_INFO: Record<string, { label: string; description: string; style: "offensive" | "balanced" | "defensive" }> = {
   "4-4-2": {
     label: "4-4-2",
-    description: "Klasika, na které stojí půlka okresu. Čtyři vzadu, čtyři v řadě, dva na hrotu — nikde díra, nikde přebytek.",
+    description: "Klasika, na které stojí půlka okresu. Čtyři vzadu, čtyři v řadě, dva na hrotu, nikde díra, nikde přebytek.",
     style: "balanced",
   },
   "4-3-3": {
@@ -42,7 +42,7 @@ export const FORMATION_INFO: Record<string, { label: string; description: string
   },
   "3-5-2": {
     label: "3-5-2",
-    description: "Pět v záloze, střed hřiště je váš. Míč se přes vás nedostane — ale vzadu jsou jen tři a krajní obránce nikdo nezaskočí.",
+    description: "Pět v záloze, střed hřiště je váš. Míč se přes vás nedostane, ale vzadu jsou jen tři a krajní obránce nikdo nezaskočí.",
     style: "balanced",
   },
   "4-5-1": {
@@ -65,13 +65,13 @@ export const FORMATION_INFO: Record<string, { label: string; description: string
 export function getTacticTooltip(key: TacticKey): string {
   const info = TACTIC_INFO[key];
   if (!info) return "";
-  return `${info.label} — ${info.description}`;
+  return `${info.label} ${info.description}`;
 }
 
 export function getFormationTooltip(key: string): string {
   const info = FORMATION_INFO[key];
   if (!info) return key;
-  return `${info.label} — ${info.description}`;
+  return `${info.label} ${info.description}`;
 }
 
 // ── Tvrdost hry ──
@@ -82,7 +82,7 @@ export const HARDNESS_INFO: Record<HardnessKey, { label: string; icon: string; d
   fair: {
     label: "Na férovku",
     icon: "🤝",
-    description: "Hraje se na míč, ne na nohy. Sudí nemá co pískat a z kabiny odejdou všichni po svých — jenže soupeř dostane v soubojích prostor, který mu jinak nedáš. Volba na kolo, kdy máš půlku mužstva na kartách a na lavičce dva dorostence.",
+    description: "Hraje se na míč, ne na nohy. Sudí nemá co pískat a z kabiny odejdou všichni po svých, jenže soupeř dostane v soubojích prostor, který mu jinak nedáš. Volba na kolo, kdy máš půlku mužstva na kartách a na lavičce dva dorostence.",
   },
   normal: {
     label: "Normálně",
@@ -92,12 +92,12 @@ export const HARDNESS_INFO: Record<HardnessKey, { label: string; icon: string; d
   hard: {
     label: "Do těla",
     icon: "💪",
-    description: "Do soubojů se chodí naplno a nohu nikdo nestahuje. Soupeř se do vápna prokousává hůř, po odebraných míčích létáte do brejků a technickému mužstvu se proti vám hrát nechce. Zaplatíš to kartami, stopkami a marodkou. U benevolentního sudího zlato, u přísného cesta do deseti — a funguje to jen s partou, která na to má postavu i povahu.",
+    description: "Do soubojů se chodí naplno a nohu nikdo nestahuje. Soupeř se do vápna prokousává hůř, po odebraných míčích létáte do brejků a technickému mužstvu se proti vám hrát nechce. Zaplatíš to kartami, stopkami a marodkou. U benevolentního sudího zlato, u přísného cesta do deseti, a funguje to jen s partou, která na to má postavu i povahu.",
   },
 };
 
 export function getHardnessTooltip(key: HardnessKey): string {
   const info = HARDNESS_INFO[key];
   if (!info) return "";
-  return `${info.label} — ${info.description}`;
+  return `${info.label} ${info.description}`;
 }

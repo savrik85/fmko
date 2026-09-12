@@ -31,7 +31,7 @@ describe("co si počasí žádá", () => {
     expect(serviceForWeather(null)).toBeNull();
   });
 
-  it("vyšší úroveň znamená vyšší provoz — dražší zařízení není jen jednorázový výdaj", () => {
+  it("vyšší úroveň znamená vyšší provoz, dražší zařízení není jen jednorázový výdaj", () => {
     expect(serviceCost("heating", 1)).toBeLessThan(serviceCost("heating", 3));
     expect(serviceCost("irrigation", 1)).toBeLessThan(serviceCost("irrigation", 3));
     expect(serviceCost("heating", 0)).toBe(0);
@@ -83,7 +83,7 @@ describe("rozhodnutí o péči před zápasem", () => {
     expect(decidePitchCare(vstup({ mode: "manual", orderedThisMatch: true })).service).toBe("heating");
   });
 
-  it("bez peněz se péče nezapne — klub se nedostane do minusu", () => {
+  it("bez peněz se péče nezapne, klub se nedostane do minusu", () => {
     const d = decidePitchCare(vstup({ budget: 10 }));
     expect(d.service).toBeNull();
     expect(d.cost).toBe(0);
@@ -96,7 +96,7 @@ describe("rozhodnutí o péči před zápasem", () => {
     expect(d.cost).toBe(SNOW_CLEARING_COST);
   });
 
-  it("úklid sněhu funguje i bez vyhřívání — je to parta s lopatami, ne zařízení", () => {
+  it("úklid sněhu funguje i bez vyhřívání, je to parta s lopatami, ne zařízení", () => {
     const d = decidePitchCare(vstup({ weather: "snow", heatingLevel: 0, snowClearingOrdered: true }));
     expect(d.service).toBe("snow_clearing");
   });
@@ -122,7 +122,7 @@ describe("účinnost zapnuté péče", () => {
     expect(eff.irrigationMod).toBe(0);
   });
 
-  it("lopaty nezmůžou to co topení — sníh se shrne, rozbředlý podklad zůstane", () => {
+  it("lopaty nezmůžou to co topení, sníh se shrne, rozbředlý podklad zůstane", () => {
     const shrnuto = careEffectiveness(
       decidePitchCare(vstup({ weather: "snow", snowClearingOrdered: true })), 1, 1);
     const vyhrivano = careEffectiveness(

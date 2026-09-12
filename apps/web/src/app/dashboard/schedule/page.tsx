@@ -102,7 +102,7 @@ export default function SchedulePage() {
   const loadSchedule = async () => {
     if (!teamId) return;
     const data = await apiFetch<{ leagueName: string; season: number; matches: ScheduleMatch[]; promotionPrice?: number }>(`/api/teams/${teamId}/schedule`);
-    setLeagueName(data.season ? `${data.leagueName} — Sezóna ${data.season}` : data.leagueName);
+    setLeagueName(data.season ? `${data.leagueName}. Sezóna ${data.season}` : data.leagueName);
     setMatches(data.matches);
     setPromotionPrice(data.promotionPrice ?? null);
   };

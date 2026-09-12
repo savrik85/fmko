@@ -80,7 +80,7 @@ describe("claimTeamDay", () => {
     expect(await claimTeamDay(db as unknown as D1Database, "tym-1", GAME_DATE)).toBe(false);
   });
 
-  it("při chybě zápisu vrací false — radši nezpracovat než zdvojit finance", async () => {
+  it("při chybě zápisu vrací false, radši nezpracovat než zdvojit finance", async () => {
     const { claimTeamDay } = await import("./team-day");
     const db = new FakeD1([{ match: /INSERT OR IGNORE INTO team_day_log/, throws: true }]);
 
@@ -88,7 +88,7 @@ describe("claimTeamDay", () => {
   });
 });
 
-describe("processTeamDay — idempotence", () => {
+describe("processTeamDay, idempotence", () => {
   function makeEnv(rules: StubRule[]) {
     const db = new FakeD1(rules);
     return {
@@ -136,7 +136,7 @@ describe("processTeamDay — idempotence", () => {
   });
 });
 
-describe("enqueueTeamDays — producent denního ticku", () => {
+describe("enqueueTeamDays, producent denního ticku", () => {
   it("seskupí týmy do jedné zprávy na ligu", async () => {
     const { enqueueTeamDays } = await import("../queue/producer");
     const sent: Array<{ body: { kind: string; leagueId: string } }> = [];

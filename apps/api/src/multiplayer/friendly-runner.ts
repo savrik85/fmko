@@ -124,7 +124,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const awayZadano = zadano(awayLineupRow?.match_plan);
       if (homeZadano > 0 || awayZadano > 0) {
         logger.info({ module: "friendly-runner" },
-          `přátelák ${matchId}: pokyny z lavičky — domácí ${homePlan?.length ?? 0}/${homeZadano}, hosté ${awayPlan?.length ?? 0}/${awayZadano}`);
+          `přátelák ${matchId}: pokyny z lavičky, domácí ${homePlan?.length ?? 0}/${homeZadano}, hosté ${awayPlan?.length ?? 0}/${awayZadano}`);
       }
 
       const homeSetup: TeamSetup = {

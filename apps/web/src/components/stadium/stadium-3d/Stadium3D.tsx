@@ -628,7 +628,7 @@ export function Stadium3D({
                             ? "bg-sky-600 text-white shadow-sm"
                             : "text-white/70 hover:text-white hover:bg-white/10"
                         }`}
-                        title={`${opt.label} — ${opt.desc}`}
+                        title={`${opt.label} ${opt.desc}`}
                       >
                         {opt.icon}
                       </button>

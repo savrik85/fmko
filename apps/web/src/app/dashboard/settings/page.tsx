@@ -248,7 +248,7 @@ export default function SettingsPage() {
                 {!pushSupported
                   ? "Prohlížeč nepodporuje push"
                   : pushEnabled
-                  ? "Zapnuto — dostáváš upozornění"
+                  ? "Zapnuto, dostáváš upozornění"
                   : "Vypnuto"}
               </p>
             </div>

@@ -52,7 +52,7 @@ function expiryInDays(rec: Recorded): number {
   return (new Date(iso).getTime() - Date.now()) / 86_400_000;
 }
 
-describe("removePlayer — expirace v poolu volných hráčů", () => {
+describe("removePlayer, expirace v poolu volných hráčů", () => {
   it("propuštěný hráč zmizí z trhu po 3 dnech", async () => {
     const db = new FakeD1();
 

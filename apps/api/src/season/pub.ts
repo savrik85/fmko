@@ -113,8 +113,8 @@ const STORY_POOL: DistrictPool<string> = {
     "{name} líčil, jak na Mářském vrchu chytil signál a viděl celý zápas Sparty na mobilu.",
     "{name} tvrdil, že viděl rysa nad Volary. Nikdo mu nevěřil, ale poslouchali rádi.",
     "{name} rozebíral, proč se Netolicím pořád daří líp než nám. Shodli se, že mají štěstí.",
-    "{name} vykládal, jak jednou v Netolicích čekali na rozhodčího dvě hodiny — přijel na traktoru rovnou z pole a pískal v holínkách.",
-    "{name} rozebíral, že kdyby se hřiště v Lhenicích neklonilo k potoku, nikdy by nedostali gól z penalty — míč prostě jede z kopce sám.",
+    "{name} vykládal, jak jednou v Netolicích čekali na rozhodčího dvě hodiny, přijel na traktoru rovnou z pole a pískal v holínkách.",
+    "{name} rozebíral, že kdyby se hřiště v Lhenicích neklonilo k potoku, nikdy by nedostali gól z penalty, míč prostě jede z kopce sám.",
     "{name} tvrdil, že když se fouká od Boubína, míč zatáčí sám a stačí ho jen postavit na roh a počkat.",
     "{name} vyprávěl, jak v zimě trénovali na zamrzlém rybníku ve Volarech a gólman chytal rovnou v bruslích.",
     "{name} přesvědčoval hospodu, že nejtěžší soupeř na Prachaticku není žádné mužstvo, ale ten zlatostezkový kopec za brankou.",
@@ -122,27 +122,27 @@ const STORY_POOL: DistrictPool<string> = {
   praha: [
     "{name} vyprávěl, jak kdysi na Julisce viděl zápas z tribuny za stovku a bagetu.",
     "{name} rozebíral, jestli je lepší Sparta nebo Slavia. Hospoda se rozdělila na dva tábory.",
-    "{name} přesvědčoval ostatní, že v Praze má fotbal na klepnutí — tři zápasy za víkend, stačí tramvaj.",
+    "{name} přesvědčoval ostatní, že v Praze má fotbal na klepnutí, tři zápasy za víkend, stačí tramvaj.",
     "{name} líčil, jak přišel o dres v šatně na Strahově a našel ho pak na burze na Kolbence.",
     "{name} se hádal, jestli se dá stihnout druhý poločas, když dáš první u výčepu na Andělu.",
     "{name} tvrdil, že potkal v metru bývalého ligistu. Nikdo nevěřil, ale poslouchali rádi.",
-    "{name} vykládal, jak jednou stihl derby na Letné i rozlučku na Smíchově v jednom odpoledni — jen díky sedmnáctce.",
-    "{name} rozebíral, proč se na Žižkově nedá zaparkovat ani autobus s hráči — museli dojít pěšky a prohráli unavení.",
+    "{name} vykládal, jak jednou stihl derby na Letné i rozlučku na Smíchově v jednom odpoledni, jen díky sedmnáctce.",
+    "{name} rozebíral, proč se na Žižkově nedá zaparkovat ani autobus s hráči, museli dojít pěšky a prohráli unavení.",
     "{name} tvrdil, že v Karlíně je tolik kaváren, že po zápase nenajdeš jedinou hospodu s pivem pod padesát.",
-    "{name} přesvědčoval ostatní, že náplavka je nejlepší tribuna v Praze — vidíš na hřiště přes řeku a pivo je z bedny.",
+    "{name} přesvědčoval ostatní, že náplavka je nejlepší tribuna v Praze, vidíš na hřiště přes řeku a pivo je z bedny.",
     "{name} vyprávěl, jak na Smíchově potkal rozhodčího z minulého kola v metru a celou cestu mu vysvětloval ofsajd.",
   ],
 };
 
 const SOLO_TEMPLATES = [
   "{name} seděl sám u baru, ostatní chlapci dnes nikam nešli.",
-  "Jen {name} v hospodě — pivař musí vždycky být.",
+  "Jen {name} v hospodě, pivař musí vždycky být.",
   "{name} dorazil sám, hospodský mu nalil bez ptaní.",
 ];
 
 const NOBODY_TEMPLATES = [
   "Včera v hospodě nikdo nebyl, hospodský zavřel už v devět.",
-  "Suchá noc — kluci asi sledovali ligu doma.",
+  "Suchá noc, kluci asi sledovali ligu doma.",
   "Tichá středa, jen hospodský s kočkou.",
 ];
 
@@ -155,13 +155,13 @@ const DAILY_SPECIALS_POOL: DistrictPool<string> = {
     "Specialita dne: Klobásy na pivu",
     "Dnes: Utopenci · Polévka 25 Kč",
     "Specialita dne: Svíčková (jak od babičky)",
-    "Kuchyň zavřená — hospodský dělá sám: jen utopenci a klobásy.",
-    "Hospodský pustil polku z gramofonu — nikdo neprotestoval.",
-    "Nová pohovka v rohu — zatím se na ni nikdo neodvažuje.",
+    "Kuchyň zavřená, hospodský dělá sám: jen utopenci a klobásy.",
+    "Hospodský pustil polku z gramofonu, nikdo neprotestoval.",
+    "Nová pohovka v rohu, zatím se na ni nikdo neodvažuje.",
     "Akce: páté pivo zdarma · Specialita: Žebra na Plzni",
-    "Dnes čepujeme Krušovice — z dovozu od strejdy.",
-    "Pan starosta sliboval, že platí pivo všem — slib nesplnil.",
-    "Hospodský má nový televizor — Sport 1 v HD.",
+    "Dnes čepujeme Krušovice, z dovozu od strejdy.",
+    "Pan starosta sliboval, že platí pivo všem, slib nesplnil.",
+    "Hospodský má nový televizor. Sport 1 v HD.",
     "Vichřice strhla cedulku, zatím vchází zadem.",
     "Specialita dne: Guláš s knedlíkem",
     "Dnes: Polévka zdarma ke každému druhému pivu",
@@ -169,40 +169,40 @@ const DAILY_SPECIALS_POOL: DistrictPool<string> = {
   prachatice: [
     "Specialita dne: Zvěřinový guláš od myslivců z Volar",
     "Dnes: Borůvkové knedlíky z boubínských borůvek",
-    "Hospodský pustil dechovku — Šumavanku, nikdo neprotestoval.",
+    "Hospodský pustil dechovku. Šumavanku, nikdo neprotestoval.",
     "Akce ke Slavnostem Zlaté stezky: třetí pivo za pětikorunu",
-    "Dnes: Kachna s knedlíkem — recept od babičky z Lhenic",
+    "Dnes: Kachna s knedlíkem, recept od babičky z Lhenic",
     "Specialita dne: Pstruh z husinecké přehrady na másle",
     "Specialita dne: Houbová omáčka z boubínských hřibů, houbař ručí za všechny",
-    "Dnes: Srnčí na smetaně — myslivci z Volar zvěřinu dovezli za rozbřesku",
+    "Dnes: Srnčí na smetaně, myslivci z Volar zvěřinu dovezli za rozbřesku",
     "Akce: ke každému pivu panák hruškovice od souseda z Netolic",
     "Hospodský naškvařil sádlo se škvarky, chleba mizí rychleji než pivo",
-    "Dnes: Lhenické buchty s povidly — pekly se od rána, voní po celé návsi",
+    "Dnes: Lhenické buchty s povidly, pekly se od rána, voní po celé návsi",
     "Specialita dne: Jitrnice a jelítka ze zabíjačky, dokud jsou teplé",
-    "Traktor přivezl brambory z pole — dnes bramboráky, dokud těsto stačí",
+    "Traktor přivezl brambory z pole, dnes bramboráky, dokud těsto stačí",
   ],
   praha: [
     "Specialita dne: Trhané vepřové v bulce · IPA na čepu",
-    "Dnes: Utopenci klasika — a k tomu točená dvanáctka",
+    "Dnes: Utopenci klasika, a k tomu točená dvanáctka",
     "Hospodský dal na čepu nový craft z minipivovaru v Karlíně.",
     "Akce: burger a hranolky za stovku · Sport na velkoplošce",
     "Dnes: Svíčková jak od babičky, i když ji vaří kluk z bistra vedle",
-    "Nová kávovar za barem — flat white i k pivu, časy se mění.",
+    "Nová kávovar za barem, flat white i k pivu, časy se mění.",
     "Akce ke šlágru kola Sparta–Slavia: třetí pivo za pětikorunu",
     "Specialita dne: Smash burger s cibulovým chutney · NEIPA z Vinohrad na čepu",
-    "Dnes: Poké bowl vedle utopence — kuchař z Karlína zkouší, co štamgasti dají",
+    "Dnes: Poké bowl vedle utopence, kuchař z Karlína zkouší, co štamgasti dají",
     "Akce: druhá flat white zdarma těm, co dorazí z korporátu po šichtě",
     "Hospodský dal na stůl QR menu, půlka štamgastů ho ignoruje a ukazuje prstem",
     "Dnes: Guláš v chlebu jak z náplavky, ale bez fronty a bez pražských cen",
     "Specialita dne: Tatarák s topinkami · sour ze žižkovského minipivovaru",
-    "Nová várka craftu z Holešovic — prý chutná po grepu, štamgasti nevědí, co říct",
+    "Nová várka craftu z Holešovic, prý chutná po grepu, štamgasti nevědí, co říct",
   ],
 };
 
 const CAT_INCIDENT_TEMPLATES = [
-  "Hospodská kočka se otřela o {name}ovu nohu — Marcela mu doma vyčte chlupy.",
+  "Hospodská kočka se otřela o {name}ovu nohu. Marcela mu doma vyčte chlupy.",
   "{name} dal kočce kus klobásy. Kočka rozhodla u koho si dnes lehne.",
-  "Kočka se ztratila — půl vesnice ji hledá. Našla se nakonec v sudu.",
+  "Kočka se ztratila, půl vesnice ji hledá. Našla se nakonec v sudu.",
   "Kotě skočilo {name}ovi do klína a usnulo. Půl hodiny se nehnul.",
   "Kočka rozbila skleničku panáka. Hospodský prdí jak žába.",
 ];
@@ -216,7 +216,7 @@ const PRIEST_INCIDENT_TEMPLATES = [
 const SCOUT_INCIDENT_TEMPLATES = [
   "Cizinec u baru pozoroval celý večer {name}a. Hospodský říká, že byl od pana skauta z Olomouce.",
   "Někdo v koutě si dělal poznámky pokaždé, když {name} otevřel pusu. Skaut z vyšší ligy?",
-  "K {name}ovi přisedl muž v dobrém kabátě. Po půl hodině zase zmizel — vizitku nechal pod žbánkem.",
+  "K {name}ovi přisedl muž v dobrém kabátě. Po půl hodině zase zmizel, vizitku nechal pod žbánkem.",
 ];
 
 const WIFE_CALL_INCIDENT_TEMPLATES = [
@@ -229,12 +229,12 @@ const WIFE_CALL_INCIDENT_TEMPLATES = [
 const BAD_FOOD_INCIDENT_TEMPLATES = [
   "{name} si dal guláš ze středy. Byla sobota. Ráno na klozetu složil přísahu, že už nikdy.",
   "{name} snědl utopence co stáli za barem. Hospodský o nich neví, kdy je dělal. Jeho žaludek to ví.",
-  "Hospodský {name}ovi naservíroval klobásy „extra zlevněný“. Ráno se {name} omluvil — celý den válí na gauči.",
+  "Hospodský {name}ovi naservíroval klobásy „extra zlevněný“. Ráno se {name} omluvil, celý den válí na gauči.",
   "{name} riskl smažený sýr v deset večer. Riskl moc. Trénink ho mine.",
   "{name} sám snědl polévku, co kuchař mlel pondělím. Žaludek mu to nepustil.",
   "{name} dal sázku, že do sebe hodí 6 utopenců. Vyhrál. Žaludek prohrál.",
   "{name} si dal naložený hermelín neznámého stáří. Doma prý lezl po stěnách.",
-  "Tatarák s pěti hlavami česneku — {name} ho dal celej. Tělo se mstí.",
+  "Tatarák s pěti hlavami česneku, {name} ho dal celej. Tělo se mstí.",
   "Hospodský objevil v lednici buchty z minulé pouti a {name} si je nechtěl nechat ujít. Teď je nechce už ničemu ujít.",
 ];
 
@@ -243,10 +243,10 @@ const PUB_ACCIDENT_INCIDENT_TEMPLATES = [
   "{name} sklouzl po rozlitém pivu. Spadl ne moc, ale ne moc málo. Záda dělají potíže.",
   "{name} uklouzl na záchodě, hlavou do umyvadla. Bouli má jako vajíčko.",
   "{name} chtěl skočit ze schodů do sklepa pro pivo. Posledních pět schodů sjel po zadku.",
-  "{name} se chytil klubu při šipkách — šipka skončila v dlani. Nic vážného, ale nepříjemné.",
+  "{name} se chytil klubu při šipkách, šipka skončila v dlani. Nic vážného, ale nepříjemné.",
   "{name} si při fotbálku na automatu lupl loktem o pípu. Druhý den ji ještě cítí.",
   "{name} chtěl předvést salto na pípu. Salto neudělal. Modřinu ano.",
-  "{name} se ohnul pro mince co spadly pod hrací automat — vyrazil si záda.",
+  "{name} se ohnul pro mince co spadly pod hrací automat, vyrazil si záda.",
   "{name} si srazil zub o sklenici, když mu kdosi zezadu zatleskal.",
   "{name} narazil čelem do nízkého trámu jak vstával ze záchodu. Polovina hospody už si toho trámu jakž takž zvykla. {name} ne.",
   "{name} se před hospodou zhoupl na zábradlí. Zábradlí povolilo. Záda taky.",
@@ -261,13 +261,13 @@ const DRUNK_FIGHT_INCIDENT_TEMPLATES = [
   "{name1} sebral {name2}ovi posledního panáka. {name2} mu dal pár facek na pamětnou.",
   "{name1} a {name2} si dali na dvoře pěstní zápas o respekt. Oba vyhráli pár modřin.",
   "{name1} osočil {name2}a z fauly v sobotním zápase. Hospodská bitka byla intenzivnější než ten faul.",
-  "{name1} a {name2} se servali u kulečníku. Tágo mělo víc poškození než hráči — ale ne moc.",
+  "{name1} a {name2} se servali u kulečníku. Tágo mělo víc poškození než hráči, ale ne moc.",
 ];
 
 // Dluh na účtu — bez injury, jen narativa
 const TAB_INCIDENT_TEMPLATES = [
   "Hospodský dnes vystavil dluhový kámen. {name} na něm má největší podíl.",
-  "{name} dostal upozornění — pokud do pátku nezaplatí, čepuje mu hospodský jen čaj.",
+  "{name} dostal upozornění, pokud do pátku nezaplatí, čepuje mu hospodský jen čaj.",
   "{name} chtěl zaplatit kartou. Hospodský se zasmál a zapsal mu to.",
 ];
 
@@ -277,40 +277,40 @@ const TAB_INCIDENT_TEMPLATES = [
 
 // Jackpot na automatu / Sportce — větší výhra (+5 morálka jednotlivci)
 const JACKPOT_INCIDENT_TEMPLATES = [
-  "{name} z legrace zmáčkl Sportku — strefil 4 čísla. Tisícovka jde na pivo pro klub.",
-  "{name} zatřásl automatem do roztrhání těla — a ono to zacinkalo jak Vánoce. Z hospody odcházel jako král.",
+  "{name} z legrace zmáčkl Sportku, strefil 4 čísla. Tisícovka jde na pivo pro klub.",
+  "{name} zatřásl automatem do roztrhání těla, a ono to zacinkalo jak Vánoce. Z hospody odcházel jako král.",
   "{name} vyhrál v tombole vepřové půlky. Půlku rozdal mužstvu, půlku domů. Hrdina večera.",
   "{name}ovi spadla mince do automatu špatně a vrátil mu trojnásobek. Zázrak. Hospoda burácela.",
-  "{name} poslal poslední vsazenku „pro štěstí“ — vyhrál víc než celá výplata. Kluci ho pak nepustili domů.",
+  "{name} poslal poslední vsazenku „pro štěstí“, vyhrál víc než celá výplata. Kluci ho pak nepustili domů.",
 ];
 
 // Někdo platí kolo (starosta, sponzor, strejda) — všichni lokálové +1 morálka
 const FREE_ROUND_POOL: DistrictPool<string> = {
   core: [
     "Starosta vlétl do hospody, vyhlásil že platí kolo. Před volbami je hodný i na fotbalisty.",
-    "Sponzor zaskočil na inspekci — a za jásotu zaplatil všem druhou rundu.",
-    "Hospodský má narozeniny — třetí pivo je dnes zdarma pro každého stálého zákazníka.",
-    "Důchodce u stolu otevřel obálku s důchodem a hodil rundu — „za syna co nepíše“.",
+    "Sponzor zaskočil na inspekci, a za jásotu zaplatil všem druhou rundu.",
+    "Hospodský má narozeniny, třetí pivo je dnes zdarma pro každého stálého zákazníka.",
+    "Důchodce u stolu otevřel obálku s důchodem a hodil rundu, „za syna co nepíše“.",
   ],
   prachatice: [
     "Strejda Mlejnek se vrátil z Rakouska a hodil na pult padesátku. „Pijte, kluci, je dobře.“",
-    "Cizinec ze sousední vesnice prohrál sázku a musí platit kolo — vesnické zákony.",
-    "Myslivec z Volar složil divočáka a slaví — celé hospodě platí rundu.",
-    "Turista z Bavorska prohrál sázku v šipkách a platí všem — euro bere hospodský rád.",
-    "Chalupář z Prahy chtěl zapadnout mezi místní — hodil rundu a hned byl „náš“.",
+    "Cizinec ze sousední vesnice prohrál sázku a musí platit kolo, vesnické zákony.",
+    "Myslivec z Volar složil divočáka a slaví, celé hospodě platí rundu.",
+    "Turista z Bavorska prohrál sázku v šipkách a platí všem, euro bere hospodský rád.",
+    "Chalupář z Prahy chtěl zapadnout mezi místní, hodil rundu a hned byl „náš“.",
     "Traktorista stihl svézt seno těsně před bouřkou a z čiré radosti hodil celé hospodě rundu.",
     "Řezník z Netolic prodal celé sele na pouť a z první výplaty koupil chlapům kolo.",
-    "Děda přinesl první letošní slivovici na ochutnávku — po třech štamprlích platil pivo všem, aby prý bylo co zajíst.",
+    "Děda přinesl první letošní slivovici na ochutnávku, po třech štamprlích platil pivo všem, aby prý bylo co zajíst.",
     "Houbař prodal bedýnku hřibů překupníkovi u silnice a rovnou v hospodě proměnil výdělek v rundu pro všechny.",
-    "Chalupář konečně dostavěl plot bez pomoci vesnice — a z čistého svědomí zaplatil kolo, aby se s místními udobřil.",
+    "Chalupář konečně dostavěl plot bez pomoci vesnice, a z čistého svědomí zaplatil kolo, aby se s místními udobřil.",
   ],
   praha: [
-    "Bývalý spoluhráč, co to dotáhl do korporátu, dorazil v obleku a hodil rundu — „dneska platím já“.",
+    "Bývalý spoluhráč, co to dotáhl do korporátu, dorazil v obleku a hodil rundu, „dneska platím já“.",
     "Sponzor z Karlína zaskočil po práci a za jásotu zaplatil všem druhou rundu.",
-    "Cizinec od vedlejšího stolu prohrál sázku u baru a platí všem — hospodský bere i karty.",
-    "Ajťák od vedle dostal padáka i s balíkem odstupného — přišel to zapít a rundu hodil celé hospodě.",
+    "Cizinec od vedlejšího stolu prohrál sázku u baru a platí všem, hospodský bere i karty.",
+    "Ajťák od vedle dostal padáka i s balíkem odstupného, přišel to zapít a rundu hodil celé hospodě.",
     "Chlápek prodal byt na Vinohradech za majland, stavil se na poslední pivo do staré čtvrti a platil všem do zavíračky.",
-    "Kurýr dojezdil směnu na kole a z dýšek postavil celému lokálu rundu — nohy prý stejně necítí.",
+    "Kurýr dojezdil směnu na kole a z dýšek postavil celému lokálu rundu, nohy prý stejně necítí.",
     "Bývalý barman z Karlína přišel na návštěvu a ze cti řemesla načepoval všem pivo na pult sám.",
     "Influencer natočil o hospodě story, dostal zaplaceno od pivovaru a z radosti koupil všem druhé kolo.",
   ],
@@ -320,25 +320,25 @@ const FREE_ROUND_POOL: DistrictPool<string> = {
 const BAR_CHAMPION_POOL: DistrictPool<string> = {
   core: [
     "{name} hodil v šipkách 180. Hospoda zaburácela jak po gólu v derby.",
-    "{name} vyhrál pivní kvíz — věděl, kolik gólů dal Bican za Slavii. Trofej: konvice piva.",
+    "{name} vyhrál pivní kvíz, věděl, kolik gólů dal Bican za Slavii. Trofej: konvice piva.",
     "{name} vyhrál fotbálkový turnaj „o korunu hospody“. Pohár prý nese domů, ale spíš ho nedonese.",
     "{name} zazpíval v karaoke Michala Davida tak procítěně, že mu hospoda tleskala dvě minuty.",
-    "{name} vyhrál šachy s dědou Karlem — poprvé za 5 let. Pivo dostává do konce týdne zdarma.",
+    "{name} vyhrál šachy s dědou Karlem, poprvé za 5 let. Pivo dostává do konce týdne zdarma.",
     "{name} si vsadil že vypije tupelák bez nadechnutí. Vsadil dobře. Hospoda dlouho nepřestane komentovat.",
   ],
   prachatice: [
     "{name} vyhrál pivní kvíz otázkou „kterým rokem se otevřela Zlatá stezka turistům“. Trefil. Konvice piva jeho.",
     "{name} zazpíval v karaoke „Holky z naší školky“ tak, že i chlapi z Vimperka zatleskali.",
-    "{name} vyhrál turnaj v prší o poslední jitrnici — poražení mlčeli ještě celý týden.",
+    "{name} vyhrál turnaj v prší o poslední jitrnici, poražení mlčeli ještě celý týden.",
     "{name} v páce přepral řezníka z Netolic. Hospoda nevěřila, řezník taky ne.",
     "{name} trefil v šipkách třikrát za sebou dvacítku a hospodský mu na počest pojmenoval štamprli.",
-    "{name} vyhrál soutěž kdo dýl udrží plný půllitr v natažené ruce — vydržel, než dohrála celá dechovka.",
+    "{name} vyhrál soutěž kdo dýl udrží plný půllitr v natažené ruce, vydržel, než dohrála celá dechovka.",
     "{name} v pivním kvízu věděl přesně, kolik metrů měří rozhledna na Libíně. Konev piva putovala k němu.",
   ],
   praha: [
     "{name} vyhrál pivní kvíz otázkou, kolik stanic má metro C. Věděl. Konvice piva jeho.",
     "{name} zazpíval v karaoke Nohavicu tak, že mu i partička z Vinohrad zatleskala.",
-    "{name} vyhrál fotbálkový turnaj o pivo — poražení museli rundu objednat přes appku.",
+    "{name} vyhrál fotbálkový turnaj o pivo, poražení museli rundu objednat přes appku.",
     "{name} vyhrál kvíz otázkou, ve kterém roce padla stará sparťanská tribuna. Věděl přesně, konev byla jeho.",
     "{name} přepral v páce chlápka z posilovny na Smíchově, co si o sobě moc myslel. Hospoda skandovala.",
     "{name} zazpíval v karaoke Kabát tak procítěně, že se přidal i stůl korporátů a rozlili si latté.",
@@ -350,7 +350,7 @@ const BAR_CHAMPION_POOL: DistrictPool<string> = {
 // Vesnický hrdina — hospodský / starší ho vyhlásil hráčem týdne (+3 morálka)
 const VILLAGE_HERO_POOL: DistrictPool<string> = {
   core: [
-    "Hospodský v rohu vyvěsil dres s {name}ovým jménem. „Náš nejlepší — pivo dnes zdarma.“",
+    "Hospodský v rohu vyvěsil dres s {name}ovým jménem. „Náš nejlepší, pivo dnes zdarma.“",
     "Děda Karel vstal od stolu, dopil pivo a oznámil, že {name} je „budoucnost klubu“. Slza ukápla.",
     "Starosta {name}ovi přiťukl: „Tohohle si nesmíme nechat ujít, kdyby ho chtěl velkoklub, půjčíme mu vlak.“",
     "Hospodský dal {name}ovi nálepku „Stálice měsíce“ za pípou. Důstojnost, jakou si dlouho nepamatuje.",
@@ -363,10 +363,10 @@ const VILLAGE_HERO_POOL: DistrictPool<string> = {
     "Starý pan Kubů prohlásil, že {name} kope líp než celá základka z Husince dohromady, a to už je co říct.",
     "Hospodský {name}ovi věnoval vlastní štamprli s ryskou „jen pro hrdinu kola“. Ostatní jen záviděli.",
     "Děda od vedle vylovil z peněženky zažloutlou fotku svého mužstva a přiznal, že {name} by se mezi ně vešel.",
-    "Na nástěnce u hasičárny visí od pondělí {name}ovo jméno jako hráč týdne — hned vedle rozpisu služeb.",
+    "Na nástěnce u hasičárny visí od pondělí {name}ovo jméno jako hráč týdne, hned vedle rozpisu služeb.",
   ],
   praha: [
-    "Hospodský vyvěsil {name}ův dres vedle šály se lvíčkem. „Náš nejlepší — pivo dnes zdarma.“",
+    "Hospodský vyvěsil {name}ův dres vedle šály se lvíčkem. „Náš nejlepší, pivo dnes zdarma.“",
     "Stálí hosté dali {name}ovi přezdívku po pražské ligové legendě. Nese ji hrdě.",
     "Hospodský {name}ovi rezervoval štamgastskou židli u okna s cedulkou. V pražské hospodě vzácnost k nezaplacení.",
     "Starý pán od kulečníku prohlásil, že {name} by se neztratil ani na Letné. Vyšší chvála v téhle čtvrti nepadla.",
@@ -379,28 +379,28 @@ const VILLAGE_HERO_POOL: DistrictPool<string> = {
 // Šťastné setkání — bývalý spoluhráč / otec / kamarád z dětství (+2 morálka)
 const FRIENDLY_REUNION_POOL: DistrictPool<string> = {
   core: [
-    "Do hospody přijel bývalý kapitán z 90. let. {name} s ním seděl do třetí — vzpomínky léčí morálku.",
-    "{name}ův táta zaskočil na pivo — povídali si o starém klubu. {name} odcházel s úsměvem.",
+    "Do hospody přijel bývalý kapitán z 90. let. {name} s ním seděl do třetí, vzpomínky léčí morálku.",
+    "{name}ův táta zaskočil na pivo, povídali si o starém klubu. {name} odcházel s úsměvem.",
     "{name} potkal kamaráda z dětství, kterého neviděl 15 let. Slzy v očích, pivo v ruce.",
-    "{name} se setkal se svým bývalým trenérem od žáků. Dostal pochvalu — stále kope.",
-    "Do hospody přišel novinář z deníku — {name}a se ptal na rozhovor. Druhý den bude v novinách.",
+    "{name} se setkal se svým bývalým trenérem od žáků. Dostal pochvalu, stále kope.",
+    "Do hospody přišel novinář z deníku, {name}a se ptal na rozhovor. Druhý den bude v novinách.",
   ],
   prachatice: [
     "Spolužák, co se odstěhoval do Vimperka, přijel na pivo. {name} s ním vzpomínal na žákovská léta.",
     "{name} potkal kamaráda, co teď dělá průvodce na Boubíně. Slíbili si výlet, co nejspíš nebude.",
-    "Přišel starý brankář, co se odstěhoval do Volar — {name} s ním do noci řešil, který gól tenkrát vlastně platil.",
+    "Přišel starý brankář, co se odstěhoval do Volar, {name} s ním do noci řešil, který gól tenkrát vlastně platil.",
     "{name} potkal souseda, co dělá na pile ve Vimperku. Vzpomínali, jak spolu jako kluci nosili dřevo a míč zároveň.",
     "Do hospody zapadl bývalý trenér žáků z Netolic. {name} od něj zase po letech slyšel „dobrá práce, chlapče“.",
     "{name}ovi zaskočil kmotr z Lhenic s demižonem vlastního moštu. Vzpomínek bylo víc než moštu.",
     "Přijel kamarád, co teď hlídá chatu na Kubově Huti. Slíbili si zimní zápas na sněhu, co se nejspíš neuskuteční.",
   ],
   praha: [
-    "Do hospody dorazil kamarád, co teď dělá v centru — {name} s ním vzpomínal na žákovská léta na Pankráci.",
+    "Do hospody dorazil kamarád, co teď dělá v centru, {name} s ním vzpomínal na žákovská léta na Pankráci.",
     "{name} potkal spoluhráče, co se odstěhoval na druhý konec Prahy. Slíbili si, že zajdou na ligu.",
     "Do hospody dorazil bývalý spolubydlící z koleje na Strahově. {name} s ním vzpomínal na zápasy mezi bloky.",
     "{name} potkal kluka, se kterým jako malý kopal na hřišti za Nuselákem. Most stojí, hřiště zmizelo, přátelství zůstalo.",
     "Přišel starý parťák, co teď dělá číšníka v Karlíně. {name} od něj dostal pivo „na účet starých časů“.",
-    "{name}ovi zaskočil táta rovnou z práce v obleku — dali si jedno a probrali, proč se dneska nekope jako dřív.",
+    "{name}ovi zaskočil táta rovnou z práce v obleku, dali si jedno a probrali, proč se dneska nekope jako dřív.",
     "Do hospody zapadl bývalý spoluhráč, co teď trénuje mládež na Smíchově. {name} slíbil, že se přijde podívat.",
   ],
 };
@@ -411,7 +411,7 @@ const FRIENDLY_REUNION_POOL: DistrictPool<string> = {
 
 // Trenér ukáže taktiku na ubrousku — narativní, bez efektu
 const COACH_TACTICS_INCIDENT_TEMPLATES = [
-  "Trenér nakreslil na ubrousek 4-3-3, vysvětloval to půl hodiny. Kluci to pak nechali na stole hospodskému — ten z toho udělal jídelníček.",
+  "Trenér nakreslil na ubrousek 4-3-3, vysvětloval to půl hodiny. Kluci to pak nechali na stole hospodskému, ten z toho udělal jídelníček.",
   "Trenér chytil pivní tácek a začal kreslit obranou pětku. {name} mu skočil do řeči: „Ty to neumíš ani na papíře.“ Trenér se urazil.",
   "Trenér přinesl do hospody video minulého zápasu na telefonu. Kluci se dvacet minut tvářili, že to sledují.",
   "Trenér mlátil pěstí do stolu a vysvětloval pressing. Hospodský se přišel zeptat, jestli je všechno v pořádku.",
@@ -420,10 +420,10 @@ const COACH_TACTICS_INCIDENT_TEMPLATES = [
 
 // Trenér si dá s týmem — narativní + +1 morálka pro lokály
 const COACH_JOINS_INCIDENT_TEMPLATES = [
-  "Trenér zaskočil na jedno — dvě — tři. Po čtvrtém už zpíval s klukama. Kapitánské znaky padly.",
+  "Trenér zaskočil na jedno, dvě, tři. Po čtvrtém už zpíval s klukama. Kapitánské znaky padly.",
   "Trenér vlétl do hospody v teplákách, prý jen na kole jezdil okolo. Po hodině měl tři piva a vyprávěl o roce 96.",
   "Trenér si dal s mužstvem rundu „za dobrý trénink“. Přiznal že kluci byli dobří. Vzácný okamžik.",
-  "Trenér přišel s manželkou — manželka odjela po pivu, on zůstal. Manželka se zpoždí domů víc než on.",
+  "Trenér přišel s manželkou, manželka odjela po pivu, on zůstal. Manželka se zpoždí domů víc než on.",
   "Trenér přijal výzvu kluků na panáky. Třetí už nezvládl. Druhý den jel nemocensky.",
 ];
 
@@ -432,14 +432,14 @@ const COACH_PRAISE_INCIDENT_TEMPLATES = [
   "Trenér zvedl pivo na {name}a: „Tohohle si pamatujte, kluci. Tohle je hráč.“ {name} se rozzářil.",
   "Trenér před celou hospodou prohlásil, že {name} je nejlepší investice klubu za dekádu. {name} platil další kolo z hrdosti.",
   "Trenér se zastavil u stolu, poklepal {name}ovi na rameno: „Jen tak dál, synku.“ Slza ukápla i hospodskému.",
-  "Trenér vyprávěl historku jak {name} v dorostu trefil břevno z půlky. Celá hospoda se smála — i ti co u toho nebyli.",
+  "Trenér vyprávěl historku jak {name} v dorostu trefil břevno z půlky. Celá hospoda se smála, i ti co u toho nebyli.",
   "Trenér přiznal, že {name} hraje líp než on kdy hrál. {name} si poprvé v životě připadal jako Bican.",
 ];
 
 // Trenér vynadá hráči — −2 morálka
 const COACH_SCOLD_INCIDENT_TEMPLATES = [
   "Trenér se postavil k {name}ovi: „Ty piješ víc, než běháš. Zítra dva tréninky.“ Hospoda ztichla.",
-  "Trenér přistihl {name}a u sedmého piva. Zítra ho čeká individuální plán — sprinty na svahu.",
+  "Trenér přistihl {name}a u sedmého piva. Zítra ho čeká individuální plán, sprinty na svahu.",
   "Trenér řekl {name}ovi nahlas, že takhle se nedostane do základu. Hospoda předstírala, že nic neslyšela.",
   "Trenér se otočil na {name}a: „Dnes bys měl spát, ne pít. Zítra ti to spočítám.“",
   "Trenér před týmem rozcuchal {name}ovi vlasy: „Tohle není hipster konference, je to mužstvo.“",
@@ -451,13 +451,13 @@ const COACH_LOST_BET_INCIDENT_TEMPLATES = [
   "Trenér se nechal vyzvat k pití piva na ex. Selhal. Penalta: kolo pro celý tým.",
   "Trenér tvrdil že vykope penaltu hospodskému přes hlavu. Trefil hodiny. Kolo pro hospodu.",
   "Trenér si vsadil že si vzpomene na všechny góly z minulé sezóny. Pamatoval si tři. Druhý den jeho výplaty bude o pár tisíc tenčí.",
-  "Trenér prohrál v kameni-papíru-nůžkách s gólmanem. Hodil rundu — i s panáky.",
+  "Trenér prohrál v kameni-papíru-nůžkách s gólmanem. Hodil rundu, i s panáky.",
 ];
 
 // Trenér chrápe v hospodě — narativní, jen pro pobavení
 const COACH_NAPS_INCIDENT_TEMPLATES = [
-  "Trenér se opřel na okamžik o pípu — usnul. Hospodský mu na čelo nakreslil tygří pruhy.",
-  "Trenér tvrdil že jen na chvíli zavřel oči — byly tři ráno a hospoda zavírala.",
+  "Trenér se opřel na okamžik o pípu, usnul. Hospodský mu na čelo nakreslil tygří pruhy.",
+  "Trenér tvrdil že jen na chvíli zavřel oči, byly tři ráno a hospoda zavírala.",
   "Trenér přemístil hlavu do salátu. Nikdo ho nebudil. Salát byl lehký.",
   "Trenér chrápal hlasitěji než parní lokomotiva. Hospodský musel zesílit hudbu.",
 ];
@@ -471,14 +471,14 @@ const COACH_NAPS_INCIDENT_TEMPLATES = [
 const HUNTERS_POOL: DistrictPool<string> = {
   core: [],
   prachatice: [
-    "Myslivci z Volar přinesli srnčí — hospoda voní zvěřinou, {name} si přidal dvakrát.",
+    "Myslivci z Volar přinesli srnčí, hospoda voní zvěřinou, {name} si přidal dvakrát.",
     "Myslivecký spolek slaví konec honu. {name} dostal nejlepší kus a hrdě ho nese domů.",
-    "Po honu na Boubíně se myslivci stavili na jedno — z jednoho bylo deset, ale nálada výborná.",
+    "Po honu na Boubíně se myslivci stavili na jedno, z jednoho bylo deset, ale nálada výborná.",
     "Starý myslivec vyprávěl o jelenu, co mu utekl na Mářském vrchu. Příběh byl lepší než úlovek.",
     "Myslivci přinesli paroží na zeď hospody. {name} pod ním pózoval na fotku celý večer.",
     "Myslivci přinesli čerstvou klobásu z divočáka a hospoda voněla až na náves. {name} stál frontu dvakrát.",
     "Starý myslivec předváděl, jak troubí na jelena, a rozezvučel celou hospodu. {name} se přidal na lesní roh od pípy.",
-    "Po honu na Lhenicku se spolek stavil na guláš — {name} snědl porci určenou pro dva.",
+    "Po honu na Lhenicku se spolek stavil na guláš, {name} snědl porci určenou pro dva.",
     "Myslivci se dohadovali, kdo trefil zajíce první. {name} spor rozhodl tím, že objednal všem rundu.",
     "Hajný přinesl srnčí hřbet a hospodský ho hned dal na pánev. {name} tvrdil, že líp nejedl ani na svatbě.",
   ],
@@ -488,7 +488,7 @@ const HUNTERS_POOL: DistrictPool<string> = {
 const PIG_SLAUGHTER_POOL: DistrictPool<string> = {
   core: [],
   prachatice: [
-    "U Vávrů byla zabíjačka — jitrnice, jelítka, ovar. {name} se přejedl tlačenky.",
+    "U Vávrů byla zabíjačka, jitrnice, jelítka, ovar. {name} se přejedl tlačenky.",
     "Zabíjačkové hody v hospodě! {name} snědl tolik prejtu, že večer nedopil ani pivo.",
     "Řezník přivezl čerstvou tlačenku rovnou do hospody. {name} byl první u mísy.",
     "Sousedi ze Lhenic dělali zabíjačku a podělili se. {name} si pochvaloval ovar do prasknutí.",
@@ -497,20 +497,20 @@ const PIG_SLAUGHTER_POOL: DistrictPool<string> = {
     "Řezník rozdával čerstvé jitrnice přímo přes pípu. {name} tvrdil, že takhle snídat by mohl klidně každý den.",
     "Zabíjačková mísa doputovala až do hospody a byla prázdná dřív, než dohrála dechovka. {name} u toho nechyběl.",
     "Po zabíjačce u Nováků voněla celá ves po škvarcích. {name} přišel na jedno a odešel s pytlíkem tlačenky.",
-    "Řezník uspořádal na baru ochutnávku jelítek a jitrnic. {name} hlasoval pro jelítka — třikrát po sobě.",
+    "Řezník uspořádal na baru ochutnávku jelítek a jitrnic. {name} hlasoval pro jelítka, třikrát po sobě.",
   ],
 };
 
 // Zabloudilý turista — funguje všude (core), Šumava/Praha přidávají kolorit.
 const LOST_TOURIST_POOL: DistrictPool<string> = {
   core: [
-    "Zbloudilý turista vešel a ptal se na cestu. {name} mu to nakreslil na tácek — opačně.",
+    "Zbloudilý turista vešel a ptal se na cestu. {name} mu to nakreslil na tácek, opačně.",
     "Promočený cyklista se schoval před deštěm. {name} mu mezitím vysvětlil pravidla mariáše.",
     "Cizinec si dal první české pivo v životě. {name} mu hned objednal druhé.",
     "Turistka se ptala, kde je nejbližší bankomat. {name} se zasmál a ukázal na kasu u hospodského.",
   ],
   prachatice: [
-    "Německý turista vešel a ptal se na cestu na Boubín. {name} mu to nakreslil na tácek — opačně.",
+    "Německý turista vešel a ptal se na cestu na Boubín. {name} mu to nakreslil na tácek, opačně.",
     "Promočený cyklista ze Zlaté stezky se schoval před deštěm. {name} mu vysvětloval pravidla mariáše.",
     "Poutník z Bavorska si dal první české pivo v životě. {name} mu hned objednal druhé.",
     "Dva Holanďani hledali Churáňov. Skončili na pivu a Churáňov vzdali.",
@@ -539,7 +539,7 @@ const LOST_TOURIST_POOL: DistrictPool<string> = {
 const FIREFIGHTERS_POOL: DistrictPool<string> = {
   core: [],
   prachatice: [
-    "Dobrovolní hasiči z Lhenic vyhráli okrskovou soutěž — oslava se přesunula do hospody.",
+    "Dobrovolní hasiči z Lhenic vyhráli okrskovou soutěž, oslava se přesunula do hospody.",
     "{name} pomohl hasičům dotáhnout hadici z cvičení. Odměna: rundu platí velitel.",
     "Hasičská soutěž v požárním útoku skončila, hospoda praská ve švech.",
     "Hasiči z Netolic přijeli s pohárem a předváděli ho každému. {name} si na něj i ťukl.",
@@ -556,19 +556,19 @@ const FIREFIGHTERS_POOL: DistrictPool<string> = {
 const VILLAGE_FAIR_POOL: DistrictPool<string> = {
   core: [],
   prachatice: [
-    "Začaly Slavnosti Zlaté stezky v Prachaticích — celá vesnice je v náladě, hospoda taky.",
+    "Začaly Slavnosti Zlaté stezky v Prachaticích, celá vesnice je v náladě, hospoda taky.",
     "Pouťové kolotoče dorazily do vsi. {name} vyhrál na střelnici plyšáka a věnoval ho hospodské.",
     "Po pouti zůstal v hospodě cukrář a rozdával zbylé perníky. {name} si dal tři.",
     "Na návsi hrála kapela, ale nejlepší atmosféra byla stejně v hospodě. {name} to potvrdil.",
     "Pouťová tombola měla hlavní cenu sele. Vyhrál ho {name} a netuší, kam ho dá.",
-    "Na pouti v Husinci vyhrával flašinet a chlapi z hospody vyrazili tancovat — vrátili se s cukrovou vatou místo piva.",
+    "Na pouti v Husinci vyhrával flašinet a chlapi z hospody vyrazili tancovat, vrátili se s cukrovou vatou místo piva.",
     "Pouťové autodromy hučely do noci. {name} prohrál se synem tři koruny a odvetu si dal až u pípy.",
     "Na netolické pouti prodávali trdelník na každém rohu. {name} přišel navoněný skořicí a nikdo nevěřil, že nepekl.",
-    "Po slavnosti zbyl u hospody stánek s klobásami — {name} dojedl vše, co pouť nezvládla.",
+    "Po slavnosti zbyl u hospody stánek s klobásami, {name} dojedl vše, co pouť nezvládla.",
     "Kolotočáři po zavíračce pouti zapadli na jedno a vyprávěli, jak to chodí od Vimperka až po Sušici.",
   ],
   praha: [
-    "Začala Žižkovská noc — celá čtvrť je v náladě, hospoda taky.",
+    "Začala Žižkovská noc, celá čtvrť je v náladě, hospoda taky.",
     "Food festival na náplavce skončil a zbylí kuchaři dorozdávali porce. {name} si dal tři.",
     "Sousedská slavnost v parku, kapela hrála, ale nejlepší atmosféra byla stejně v hospodě.",
     "Farmářské trhy skončily a prodavači zapadli na jedno. {name} vyhandloval kýbl jahod za rundu.",
@@ -585,9 +585,9 @@ const VILLAGE_FAIR_POOL: DistrictPool<string> = {
 const STORM_BLACKOUT_POOL: DistrictPool<string> = {
   core: [],
   prachatice: [
-    "Vichřice na Šumavě shodila elektriku. Hospodský čepoval při svíčkách — atmosféra jak za první republiky.",
+    "Vichřice na Šumavě shodila elektriku. Hospodský čepoval při svíčkách, atmosféra jak za první republiky.",
     "Spadl strom přes silnici z Kubovy Huti. {name} uvízl v hospodě a nestěžoval si.",
-    "Sněhová kalamita na Churáňově — {name} radši přečkal nečas u piva.",
+    "Sněhová kalamita na Churáňově, {name} radši přečkal nečas u piva.",
     "Bouřka vyhodila pojistky. {name} tvrdil, že pivo při svíčkách chutná líp, a měl pravdu.",
     "Vichr strhl plech ze střechy. Než přijde pokrývač, hospodský nalévá na uklidněnou.",
     "Vichr shodil dráty a celá ves byla ve tmě. Hospodský vytáhl petrolejku a {name} tvrdil, že takhle bylo líp za mlada.",
@@ -603,7 +603,7 @@ const MUSHROOM_BRAG_POOL: DistrictPool<string> = {
   core: [
     "{name} přinesl do hospody plný košík hřibů a chlubil se každému.",
     "{name} tvrdil, že našel václavky velké jak talíř. Nikdo mu nevěřil, fotka byla rozmazaná.",
-    "Houbařská sezóna vrcholí — {name} prozradil své tajné místo. Ráno toho litoval.",
+    "Houbařská sezóna vrcholí, {name} prozradil své tajné místo. Ráno toho litoval.",
     "{name} vyměnil s hospodským košík klouzků za tři piva. Obchod století.",
     "{name} se vsadil, že pozná hřib od muchomůrky poslepu. Vyhrál, ale málem ne.",
   ],
@@ -620,7 +620,7 @@ const MUSHROOM_BRAG_POOL: DistrictPool<string> = {
 // Starosta / zastupitel zaskočí (+1 morálka lokálům) — předvolební ironie
 const OFFICIAL_VISIT_INCIDENT_TEMPLATES = [
   "Starosta zaskočil na pivo a sliboval nové hřiště. Před volbami slibuje rád.",
-  "Pan zastupitel přišel zjistit náladu mezi lidem — a zůstal do zavíračky.",
+  "Pan zastupitel přišel zjistit náladu mezi lidem, a zůstal do zavíračky.",
   "Starosta vyhlásil, že obec přispěje na nové dresy. Hospoda zatleskala (a nevěří).",
   "Místostarosta přinesl plán nové autobusové zastávky. {name} ho přemluvil i na lavičku u hřiště.",
   "Starosta koupil klukům kolo „za reprezentaci obce“. Reprezentovali statečně až do rána.",
@@ -629,7 +629,7 @@ const OFFICIAL_VISIT_INCIDENT_TEMPLATES = [
 // Politický trapas v hospodě (narativ, bez efektu) — pro pobavení
 const OFFICIAL_SCANDAL_INCIDENT_TEMPLATES = [
   "Zastupitel po šestém pivu prozradil, kolik obec utratila za kruhový objezd. Ticho jak v kostele.",
-  "Starosta se vsadil, že vykope penaltu — trefil okno radního auta. Zápis bude na příští schůzi.",
+  "Starosta se vsadil, že vykope penaltu, trefil okno radního auta. Zápis bude na příští schůzi.",
   "Opoziční zastupitel a starosta se pohádali o dotaci přímo u baru. Hospodský musel zasáhnout.",
   "Zastupitel slíbil, že most opraví do podzimu. Místní si tu větu zapsali na pivní tácek a schovali.",
   "Starosta omylem poslal pracovní SMS do hospodské skupiny. Půl vsi teď ví o nové vyhlášce dřív.",
@@ -722,7 +722,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "drink_record",
       playerIds: [topDrinker.playerId],
-      text: `${topDrinker.firstName} ${topDrinker.lastName} vypil ${beers} piv — rekord večera.`,
+      text: `${topDrinker.firstName} ${topDrinker.lastName} vypil ${beers} piv, rekord večera.`,
       effects: [{ playerId: topDrinker.playerId, type: "hangover", label: "Ranní kocovina (−15 kondice)" }],
     });
   }

@@ -88,8 +88,8 @@ export async function rozbijVybaveni(
   const label = FACILITY_LABELS[facility] ?? facility;
   const cost = cenaOpravy(facility, pred, levels);
   const popis = levels > 1
-    ? `${label} — rozbité tak, že to spadlo o dvě úrovně.`
-    : `${label} — rozbité, dokud to neopravíš, nefunguje.`;
+    ? `${label} to schytaly tak, že to spadlo o dvě úrovně.`
+    : `${label} jsou rozbité. Dokud to neopravíš, nefungují.`;
 
   // Nárok na zápis: partial UNIQUE na incident_id zaručí, že jedna výtržnost
   // rozbije jednu věc jednou. Teprve po úspěšném zápisu se sráží úroveň, jinak

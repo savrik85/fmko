@@ -194,7 +194,7 @@ export async function processLeagueRound(
   if (opts.expectedGameDate && opts.expectedGameDate !== gameDate) {
     logger.warn(
       { module: "league-round" },
-      `stale zpráva pro ligu ${leagueId}: zařazeno pro ${opts.expectedGameDate}, teď je ${gameDate} — zahazuji`,
+      `stale zpráva pro ligu ${leagueId}: zařazeno pro ${opts.expectedGameDate}, teď je ${gameDate}, zahazuji`,
     );
     return done("stale", 0);
   }
@@ -377,7 +377,7 @@ async function sendMatchResultNotifications(
         .first<Record<string, unknown>>();
       if (!md) continue;
       const title = `⚽ Zápas skončil!`;
-      const body = `${md.hn} vs ${md.an} — výsledek čeká v aplikaci.`;
+      const body = `${md.hn} vs ${md.an}, výsledek čeká v aplikaci.`;
       if (md.hu !== "ai") {
         await createNotification(db, md.home_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) =>
           logger.warn({ module: "league-round" }, "match_result notif home", e),
@@ -413,7 +413,7 @@ async function dispatchRoundReports(
   if (provider === "off") return;
   if (provider === "gemini" && !env.GEMINI_API_KEY) return;
   if (provider === "workers-ai" && !env.AI) {
-    logger.warn({ module: "league-round" }, "provider=workers-ai, ale binding AI chybí — články nezařazeny");
+    logger.warn({ module: "league-round" }, "provider=workers-ai, ale binding AI chybí, články nezařazeny");
     return;
   }
   const enqueuedAt = new Date().toISOString();
@@ -801,7 +801,7 @@ export async function processLeagueMaintenance(
       });
     if (lg?.district) {
       listings = await generateAiListings(db, lg.district, leagueId, marketRng);
-      if (listings > 0) logger.info({ module: "league-round" }, `AI market: ${lg.district} — ${listings} listings`);
+      if (listings > 0) logger.info({ module: "league-round" }, `AI market: ${lg.district} ${listings} listings`);
     }
   } catch (e) {
     logger.error({ module: "league-round" }, "AI market activity failed", e);

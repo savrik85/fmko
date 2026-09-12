@@ -54,7 +54,7 @@ const ARRIVAL_SOURCES = [
     source: "friend_referral",
     prob: 0.04,
     description: (p: GeneratedPlayer) =>
-      `Někdo z kádru přivedl kamaráda — ${p.firstName} ${p.lastName} (${p.age}). Říká, že umí hrát.`,
+      `Někdo z kádru přivedl kamaráda ${p.firstName} ${p.lastName} (${p.age}). Říká, že umí hrát.`,
     ageRange: [18, 35] as [number, number],
   },
 ];

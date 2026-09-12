@@ -38,7 +38,7 @@ const EVENT_POOL: LifeEvent[] = [
   // ── Pozitivní (vesnické zázraky) ──
   { description: "Babička udělala vepřové se zelím", range: [5, 9], weight: 2 },
   { description: "Vyhrál tombolu na vesnickém plese", range: [3, 6], weight: 2 },
-  { description: "Jel na ryby — celý den klid", range: [7, 12] },
+  { description: "Jel na ryby, celý den klid", range: [7, 12] },
   { description: "Manželka odjela k matce, pohoda doma", range: [5, 8] },
   { description: "Zaspal a vyspal se 12 hodin v kuse", range: [6, 10] },
   { description: "Dostal v práci nečekanou prémii", range: [4, 7] },

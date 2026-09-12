@@ -116,7 +116,7 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
   const key = `staff-tick:${effectiveDate.toISOString().slice(0, 10)}`;
   const already = await env.CACHE_KV.get(key).catch((e) => { logger.warn({ module: "staff-tick" }, "read KV flag", e); return null; });
   if (already) {
-    logger.warn({ module: "staff-tick" }, `SKIP — staff tick for ${key} already ran`);
+    logger.warn({ module: "staff-tick" }, `SKIP, staff tick for ${key} already ran`);
     return result;
   }
   await env.CACHE_KV.put(key, "1", { expirationTtl: 60 * 60 * 36 }).catch((e) => logger.warn({ module: "staff-tick" }, "set KV flag", e));
@@ -216,7 +216,7 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
       .catch((e) => logger.warn({ module: "staff-tick" }, "delete healed", e));
     for (const h of healed.results) {
       await sendStaffSystemMessage(db, h.team_id, "Lékař", "Lékař",
-        `🩹 ${h.first_name} ${h.last_name} je zpět fit — zranění zaléčeno.`);
+        `🩹 ${h.first_name} ${h.last_name} je zpět fit, zranění zaléčeno.`);
     }
   }
 
@@ -404,7 +404,7 @@ export function textTipu(tip: Tip): string {
       ? `Hned by ti byl nejlepším, koho na tomhle postu máš.`
       : tip.duvod === "talent"
         ? `Dnes ještě není na tvoje, ale má v sobě víc, než ukazuje.`
-        : `Na tomhle postu jsi v kádru sám — tenhle by ti kryl záda.`;
-  return `🔍 ${p.first_name} ${p.last_name} — ${p.age} let, ${post}, rating ${p.overall_rating}. `
+        : `Na tomhle postu jsi v kádru sám, tenhle by ti kryl záda.`;
+  return `🔍 ${p.first_name} ${p.last_name} ${p.age} let, ${post}, rating ${p.overall_rating}. `
     + `${duvod} Najdeš ho v Přestupech mezi volnými.`;
 }

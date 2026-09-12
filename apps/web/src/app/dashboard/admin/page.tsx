@@ -68,7 +68,7 @@ export default function AdminPage() {
   const advanceWeek = async () => {
     if (!potvrd(
       "Spustit 7 herních dní za sebou?",
-      "Sedmkrát denní tick i zápasový tick. Největší zásah, jaký odsud jde udělat — trvá minuty a posune hru o týden.",
+      "Sedmkrát denní tick i zápasový tick. Největší zásah, jaký odsud jde udělat, trvá minuty a posune hru o týden.",
     )) return;
     setRunning(true);
     addLog("Spouštím 7 dní (denní tick + zápasový tick)...");
@@ -84,8 +84,8 @@ export default function AdminPage() {
   };
 
   const wipePlayers = async () => {
-    if (!potvrd("Smazat všechna herní data?", "Týmy, hráči, zápasy, finance — všechno.")) return;
-    addLog("Toto vyžaduje přímý přístup k DB — použij CLI");
+    if (!potvrd("Smazat všechna herní data?", "Týmy, hráči, zápasy, finance, všechno.")) return;
+    addLog("Toto vyžaduje přímý přístup k DB, použij CLI");
   };
 
   return (
@@ -260,7 +260,7 @@ function SeasonEndSection() {
         allDone = !!data.allDone;
         if (data.status === "error") {
           consecutiveErrors++;
-          if (consecutiveErrors >= 3) { add("⚠️ Opakovaná chyba ve fázi — zastavuji."); break; }
+          if (consecutiveErrors >= 3) { add("⚠️ Opakovaná chyba ve fázi, zastavuji."); break; }
         } else {
           consecutiveErrors = 0;
         }
@@ -269,7 +269,7 @@ function SeasonEndSection() {
         break;
       }
     }
-    add(allDone ? "✅ Hotovo — sezóna zakončena a nová založena." : "Zastaveno.");
+    add(allDone ? "✅ Hotovo, sezóna zakončena a nová založena." : "Zastaveno.");
     setRunning(false);
   };
 
@@ -323,7 +323,7 @@ function MunicipalElectionsSection() {
       const res = await fetch(`${API}/api/villages/admin/run-elections`, { method: "POST", headers: { "Content-Type": "application/json", ...authH } });
       const data = await res.json().catch(() => ({}));
       if (data.ok) {
-        add(`✅ Hotovo — obcí: ${data.villagesProcessed}, nových zastupitelů: ${data.officialsReplaced}, reset přízně: ${data.favorRowsReset} řádků, článků: ${data.articlesPublished}.`);
+        add(`✅ Hotovo, obcí: ${data.villagesProcessed}, nových zastupitelů: ${data.officialsReplaced}, reset přízně: ${data.favorRowsReset} řádků, článků: ${data.articlesPublished}.`);
       } else {
         add(`CHYBA: ${JSON.stringify(data).slice(0, 200)}`);
       }

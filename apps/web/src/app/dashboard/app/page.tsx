@@ -45,25 +45,25 @@ type Step = { icon: string; text: string };
 
 const INSTRUCTIONS: Record<DeviceType, { title: string; browser: string; steps: Step[] } | null> = {
   "ios-safari": {
-    title: "iPhone / iPad — Safari",
+    title: "iPhone / iPad. Safari",
     browser: "Safari",
     steps: [
       { icon: "🌐", text: "Otevři Prales v Safari (jsi tam teď)" },
-      { icon: "⬆️", text: 'Klepni na tlačítko Sdílet — ikona čtverce se šipkou nahoru, dole uprostřed obrazovky' },
+      { icon: "⬆️", text: 'Klepni na tlačítko Sdílet, ikona čtverce se šipkou nahoru, dole uprostřed obrazovky' },
       { icon: "➕", text: 'Přejeď dolů a vyber „Přidat na plochu"' },
       { icon: "✏️", text: 'Název ponech nebo uprav, pak klepni „Přidat" vpravo nahoře' },
-      { icon: "🏟", text: "Hotovo — ikona Prales se objeví na ploše jako normální appka" },
+      { icon: "🏟", text: "Hotovo, ikona Prales se objeví na ploše jako normální appka" },
     ],
   },
   "ios-chrome": {
-    title: "iPhone / iPad — Chrome",
+    title: "iPhone / iPad. Chrome",
     browser: "Chrome",
     steps: [
       { icon: "🌐", text: "Otevři Prales v Chrome (jsi tam teď)" },
-      { icon: "⬆️", text: "Klepni na tlačítko Sdílet — ikona čtverce se šipkou, vlevo od adresního řádku" },
+      { icon: "⬆️", text: "Klepni na tlačítko Sdílet, ikona čtverce se šipkou, vlevo od adresního řádku" },
       { icon: "➕", text: 'Vyber „Přidat na plochu"' },
       { icon: "✏️", text: 'Klepni „Přidat" pro potvrzení' },
-      { icon: "🏟", text: "Hotovo — Prales je na ploše" },
+      { icon: "🏟", text: "Hotovo. Prales je na ploše" },
     ],
   },
   "ios-other": {
@@ -78,7 +78,7 @@ const INSTRUCTIONS: Record<DeviceType, { title: string; browser: string; steps: 
     ],
   },
   "android-chrome": {
-    title: "Android — Chrome",
+    title: "Android. Chrome",
     browser: "Chrome",
     steps: [
       { icon: "🌐", text: "Otevři Prales v Chrome (jsi tam teď)" },
@@ -89,7 +89,7 @@ const INSTRUCTIONS: Record<DeviceType, { title: string; browser: string; steps: 
     ],
   },
   "android-samsung": {
-    title: "Android — Samsung Internet",
+    title: "Android. Samsung Internet",
     browser: "Samsung Internet",
     steps: [
       { icon: "🌐", text: "Otevři Prales v Samsung Internet (jsi tam teď)" },
@@ -100,7 +100,7 @@ const INSTRUCTIONS: Record<DeviceType, { title: string; browser: string; steps: 
     ],
   },
   "android-firefox": {
-    title: "Android — Firefox",
+    title: "Android. Firefox",
     browser: "Firefox",
     steps: [
       { icon: "🌐", text: "Otevři Prales ve Firefoxu (jsi tam teď)" },

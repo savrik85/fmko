@@ -253,7 +253,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                     />
                   ) : (
                     <div className="text-base text-muted">
-                      neobsazeno{jsemPrezident ? " — zastupuješ ji" : ""}
+                      neobsazeno{jsemPrezident ? ", zastupuješ ji" : ""}
                     </div>
                   )}
                 </div>
@@ -318,9 +318,9 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
             <div className="section-label mb-2" style={{ color: "var(--color-gold-700)" }}>Volební řád</div>
             <ul className="space-y-1.5 text-sm">
               {[
-                "Kandidují trenéři, ne kluby. Jeden trenér smí zastávat nejvýš jednu funkci — a kandidovat taky jen na jednu.",
+                "Kandidují trenéři, ne kluby. Jeden trenér smí zastávat nejvýš jednu funkci, a kandidovat taky jen na jednu.",
                 "Hlasuje se do zahájení středečního zasedání. Do té chvíle můžeš hlas kdykoli změnit i stáhnout kandidaturu.",
-                "Volba je tajná. Svůj hlas vidíš jen ty, a nezveřejní se ani po uzavření — do zápisu jde jen jméno zvoleného a poměr hlasů.",
+                "Volba je tajná. Svůj hlas vidíš jen ty, a nezveřejní se ani po uzavření, do zápisu jde jen jméno zvoleného a poměr hlasů.",
                 "Volit sám sebe smíš. Kdo kandiduje, hlasuje jako každý jiný.",
                 "Vyhrává prostá většina odevzdaných hlasů. Při rovnosti rozhoduje vyšší reputace trenéra.",
                 "Hlas pro kandidáta, který mezitím odstoupil, propadá.",
@@ -664,7 +664,7 @@ function GrantForm({ data, teamId, onClose, onSaved }: {
           {kind === "pitch" && (
             <div className="text-sm text-muted mt-1">
               {podHranici === 0
-                ? `Nikdo teď nemá hřiště pod ${data.pitchThreshold} — dotace by neměla komu jít.`
+                ? `Nikdo teď nemá hřiště pod ${data.pitchThreshold}, dotace by neměla komu jít.`
                 : `Rozdělí se rovným dílem mezi kluby pod hranicí ${data.pitchThreshold}. Teď jich je ${podHranici}.`}
             </div>
           )}
@@ -676,7 +676,7 @@ function GrantForm({ data, teamId, onClose, onSaved }: {
           {spec?.seasonEnd && (
             <div className="text-sm text-muted mt-1">
               Vyplácí se až na konci sezóny{kind === "award"
-                ? " — cena za fair play, za návštěvnost a pro nejlepšího střelce."
+                ? ", cena za fair play, za návštěvnost a pro nejlepšího střelce."
                 : "."}
             </div>
           )}
@@ -694,7 +694,7 @@ function GrantForm({ data, teamId, onClose, onSaved }: {
                 {cile.map((t) => (
                   <option key={t.teamId} value={t.teamId}>
                     {t.managerName ? `${t.managerName} (${t.teamName})` : t.teamName}
-                    {t.vMinusu ? " — v mínusu" : ""}
+                    {t.vMinusu ? ", v mínusu" : ""}
                   </option>
                 ))}
               </select>
@@ -706,7 +706,7 @@ function GrantForm({ data, teamId, onClose, onSaved }: {
           <label className="text-sm text-muted">
             {jePrebytek
               ? `Kolik procent přebytku (nejvýš ${data.surplusMaxPct} %)`
-              : `Částka (${czk(data.min)} – ${czk(Math.min(data.max, data.freeBalance))})`}
+              : `Částka (${czk(data.min)} ${czk(Math.min(data.max, data.freeBalance))})`}
           </label>
           <input className="input w-full mt-1 tabular-nums" type="number"
             step={jePrebytek ? "5" : "1000"}
@@ -868,7 +868,7 @@ export function OdborInbox({ roleKey, roleLabel, roleAkuzativ, messages, maxLeng
       right={roleLabel || undefined}
       subtitle={
         `Soukromá linka na ${roleAkuzativ || "vedoucího odboru"}. `
-        + "Čte to on a prezident soutěže — ostatní kluby ne. Sem patří stížnost nebo nápad, "
+        + "Čte to on a prezident soutěže, ostatní kluby ne. Sem patří stížnost nebo nápad, "
         + "který ještě nemá být návrhem na zasedání."
       }
       messages={messages} maxLength={maxLength}

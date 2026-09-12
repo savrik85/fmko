@@ -98,7 +98,7 @@ export function RefereeCard({ referee, isHome }: Props) {
       {referee.vsTeam && referee.vsTeam.matches > 0 && (
         <p className="text-sm mt-3 pt-3 border-t border-ink/10">
           <span className="font-heading font-bold">Vám už pískal {referee.vsTeam.matches}×</span>
-          {" — "}
+          {" "}
           {pocet(referee.vsTeam.wins, "výhra", "výhry", "výher")},{" "}
           {pocet(referee.vsTeam.draws, "remíza", "remízy", "remíz")},{" "}
           {pocet(referee.vsTeam.losses, "prohra", "prohry", "proher")}

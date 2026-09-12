@@ -144,7 +144,7 @@ export default function RozhodciDetailPage() {
                   {memoryWord(ref.vsTeam.sentiment, "vy")}
                 </span>
                 <span className="text-muted tabular-nums"> ({ref.vsTeam.sentiment > 0 ? "+" : ""}{ref.vsTeam.sentiment})</span>
-                {" — "}hraniční verdikty rozhodne o {ref.vsTeam.biasPct.toFixed(1).replace(".", ",")} % častěji{" "}
+                {" "}hraniční verdikty rozhodne o {ref.vsTeam.biasPct.toFixed(1).replace(".", ",")} % častěji{" "}
                 {ref.vsTeam.sentiment < 0 ? "proti vám" : "ve váš prospěch"}.
                 {ref.vsTeam.duvod ? ` Důvod: ${ref.vsTeam.duvod}` : ""}
               </p>

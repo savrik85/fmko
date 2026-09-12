@@ -344,7 +344,7 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
     && (Date.now() - new Date(unrest.fakeInjuryAt).getTime()) >= 3 * DAY_MS) {
     // 5) Fyzio nápověda 3. den — manažer dostane stopu, že zranění je podezřelé
     await sendSystemSMS(db, clubTeamId, "Fyzioterapeut",
-      `Trenére, byl jsem se podívat na ${playerRef.firstName} ${playerRef.lastName}. Na tom zranění mi něco nesedí — na rovinu, podle mě mu nic není. Zkuste si s ním promluvit.`);
+      `Trenére, byl jsem se podívat na ${playerRef.firstName} ${playerRef.lastName}. Na tom zranění mi něco nesedí, na rovinu, podle mě mu nic není. Zkuste si s ním promluvit.`);
     unrest.fakeInjuryHintSent = true;
   }
 
@@ -381,7 +381,7 @@ async function healFakeInjury(
 ): Promise<void> {
   await db.prepare("DELETE FROM injuries WHERE player_id = ? AND is_fake = 1").bind(playerRef.id).run()
     .catch((e) => logger.warn({ module: "rejection-impact" }, "heal fake injury", e));
-  await sendPlayerSMS(db, teamId, playerRef, "Trenére, dobrá zpráva — cítím se najednou mnohem líp. Můžu zase naskočit do tréninku.");
+  await sendPlayerSMS(db, teamId, playerRef, "Trenére, dobrá zpráva, cítím se najednou mnohem líp. Můžu zase naskočit do tréninku.");
 }
 
 /**

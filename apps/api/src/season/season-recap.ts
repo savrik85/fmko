@@ -222,7 +222,7 @@ export async function buildTeamRecap(
 
 function villageVerdict(favor: number): string {
   if (favor >= 72) return "Vesnice tě zbožňuje. Hospoda na tebe připíjí každý večer.";
-  if (favor >= 56) return "Vesnice je spokojená — chodí fandit a nereptá.";
+  if (favor >= 56) return "Vesnice je spokojená, chodí fandit a nereptá.";
   if (favor >= 42) return "Vesnice mírně reptá. Pár piv u výčepu padlo i na tvůj účet.";
   return "Vesnice je zklamaná. U výčepu se hučí, že to chce změnu.";
 }
@@ -243,7 +243,7 @@ async function computeClubFact(db: D1Database, teamId: string): Promise<string |
     .catch((e) => { logger.warn({ module: M }, "club fact pair", e); return null; });
 
   const rivals = await pair(["rivals"]);
-  if (rivals) return `V kabině to jiskří — ${rivals.a} a ${rivals.b} se nemůžou ani cítit, a hrají za stejný dres.`;
+  if (rivals) return `V kabině to jiskří ${rivals.a} a ${rivals.b} se nemůžou ani cítit, a hrají za stejný dres.`;
   const fam = await pair(["brothers", "father_son"]);
   if (fam) return `Rodinná firma: ${fam.a} a ${fam.b} nastupují bok po boku.`;
   const drink = await db.prepare(
@@ -340,7 +340,7 @@ const PARTY_SCENES = [
   "Stoper {p} usnul na záchodě, ráno ho našla uklízečka. Prý spal jak nemluvně.",
   "Brankář vyzval celou hospodu na panáky. Sám to nezvládl jako první.",
   "{p} vytáhl foťák na teamovku. Půlka mužstva už nestála rovně.",
-  "Došlo pivo. Hospodský poslal {p} pro soudek — vrátil se za hodinu a bez soudku.",
+  "Došlo pivo. Hospodský poslal {p} pro soudek, vrátil se za hodinu a bez soudku.",
   "Kapitán pronesl dojemný proslov o partě, v půlce se rozbrečel a objímal i soupeře, co tam zabloudil.",
   "{p} se s {p2} vsadil, kdo dřív sní deset utopenců. Vyhrál místní sanitář.",
   "Diskotéka skončila, když {p} pustil z repráku hymnu klubu a nutil všechny zpívat.",
@@ -349,31 +349,31 @@ const PARTY_SCENES = [
 // Jen události s REÁLNÝM, aplikovatelným dopadem (fit → +síla/kondice, rusty → −kondice, injury → zranění).
 const SUMMER_EVENTS: { text: string; effect: "injury" | "fit" | "rusty" }[] = [
   // ── Zranění (opravdové zranění na start sezóny) ──
-  { text: "{p} spadl v práci z lešení — sezónu začne v sádře.", effect: "injury" },
+  { text: "{p} spadl v práci z lešení, sezónu začne v sádře.", effect: "injury" },
   { text: "{p} si o pauze zlomil ruku na kole. Chvíli bude mimo hru.", effect: "injury" },
   { text: "{p} si na dovolené natáhl sval při plážovém fotbálku.", effect: "injury" },
   { text: "{p} pochroumal koleno při skoku z lodě do moře v Chorvatsku.", effect: "injury" },
-  { text: "{p} spadl z traktoru při senoseči — sezónu začne o berlích.", effect: "injury" },
+  { text: "{p} spadl z traktoru při senoseči, sezónu začne o berlích.", effect: "injury" },
   { text: "{p} se na srazu spolužáků porval o kulečník a odnesl to rameno.", effect: "injury" },
   { text: "{p} přebral na pouti a spadl z kolotoče. Otřes mozku a pauza.", effect: "injury" },
   { text: "{p} si na brigádě u strejdy usekl málem prst cirkulárkou. Naštěstí jen šití.", effect: "injury" },
   // ── Mimo formu (nízká kondice na start, dotrénuje se) ──
   { text: "{p} přibral přes léto pět kilo na grilovačkách. Trenér zuří, {p} mlčí.", effect: "rusty" },
-  { text: "{p}ovi se narodil syn — noci nespí a na trénink dochodí jako náměsíčník.", effect: "rusty" },
+  { text: "{p}ovi se narodil syn, noci nespí a na trénink dochodí jako náměsíčník.", effect: "rusty" },
   { text: "{p} se přes léto oženil, žena mu zatrhla tréninky. Přišel o formu.", effect: "rusty" },
   { text: "{p} si otevřel hospodu a od té doby má formu spíš u výčepu než na hřišti.", effect: "rusty" },
   { text: "{p} strávil léto na chatě u piva a grilu. Břicho mluví za vše.", effect: "rusty" },
-  { text: "{p} celé léto jen rybařil — klid maximální, pohyb žádný.", effect: "rusty" },
+  { text: "{p} celé léto jen rybařil, klid maximální, pohyb žádný.", effect: "rusty" },
   { text: "{p} objížděl svatby jako svědek. Každý víkend jiná, každé ráno kocovina.", effect: "rusty" },
   { text: "{p} si koupil gauč a Netflix a od té doby ho venku nikdo neviděl.", effect: "rusty" },
   // ── V kondici (trvalý fyzický boost + čerstvá kondice) ──
-  { text: "{p} celé léto makal na stavbě a nabral sílu jak medvěd — přijde nabušený.", effect: "fit" },
+  { text: "{p} celé léto makal na stavbě a nabral sílu jak medvěd, přijde nabušený.", effect: "fit" },
   { text: "{p} si pořídil štěně a teď chodí na ranní výběhy. Kondička jako nikdy.", effect: "fit" },
   { text: "{p} přes léto dřel v posilovně a vrací se výrazně silnější.", effect: "fit" },
   { text: "{p} rozjel nohejbal v hospodě a chytil formu života.", effect: "fit" },
-  { text: "{p} přes léto sekal dřevo na zimu — ruce má jak lopaty.", effect: "fit" },
+  { text: "{p} přes léto sekal dřevo na zimu, ruce má jak lopaty.", effect: "fit" },
   { text: "{p} jezdil celé léto na kole do práce, 30 km denně. Plíce jak měch.", effect: "fit" },
-  { text: "{p} pomáhal tchánovi na poli od rána do večera — síla jako býk.", effect: "fit" },
+  { text: "{p} pomáhal tchánovi na poli od rána do večera, síla jako býk.", effect: "fit" },
   { text: "{p} chodil celé léto plavat do rybníka. Kondice vzorová.", effect: "fit" },
   { text: "{p} zhubl s partou z vesnice na společném běhání a je zpátky ve formě.", effect: "fit" },
 ];
@@ -410,14 +410,14 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
   const awards: { title: string; emoji: string; playerName: string; detail: string }[] = [];
   // Král žlutých
   const yellowKing = [...stats].filter((s) => (s.y ?? 0) > 0).sort((a, b) => b.y - a.y)[0];
-  if (yellowKing) awards.push({ title: "Král žlutých", emoji: "🟨", playerName: nameOf(yellowKing.pid)!, detail: `${yellowKing.y} žlutých — rozhodčí ho znali jménem` });
+  if (yellowKing) awards.push({ title: "Král žlutých", emoji: "🟨", playerName: nameOf(yellowKing.pid)!, detail: `${yellowKing.y} žlutých, rozhodčí ho znali jménem` });
   // Nejhorší první dotek (min průměr, alespoň 3 zápasy)
   const regulars = stats.filter((s) => (s.apps ?? 0) >= 3);
   const worstTouch = [...regulars].sort((a, b) => a.ar - b.ar)[0];
-  if (worstTouch) awards.push({ title: "Nejhorší první dotek", emoji: "👎", playerName: nameOf(worstTouch.pid)!, detail: `průměr ${(worstTouch.ar ?? 0).toFixed(1)} — míč od něj odskakoval jak od plotu` });
+  if (worstTouch) awards.push({ title: "Nejhorší první dotek", emoji: "👎", playerName: nameOf(worstTouch.pid)!, detail: `průměr ${(worstTouch.ar ?? 0).toFixed(1)}, míč od něj odskakoval jak od plotu` });
   // Tahoun sezóny (nejvyšší průměr)
   const workhorse = [...regulars].sort((a, b) => b.ar - a.ar)[0];
-  if (workhorse && (!worstTouch || workhorse.pid !== worstTouch.pid)) awards.push({ title: "Tahoun sezóny", emoji: "💪", playerName: nameOf(workhorse.pid)!, detail: `průměr ${(workhorse.ar ?? 0).toFixed(1)} — tahal to za celou kabinu` });
+  if (workhorse && (!worstTouch || workhorse.pid !== worstTouch.pid)) awards.push({ title: "Tahoun sezóny", emoji: "💪", playerName: nameOf(workhorse.pid)!, detail: `průměr ${(workhorse.ar ?? 0).toFixed(1)}, tahal to za celou kabinu` });
   // Nejdřív pod stolem (nejvyšší alkohol)
   const drinker = [...squad].sort((a, b) => b.alcohol - a.alcohol)[0];
   if (drinker && drinker.alcohol >= 40) awards.push({ title: "Nejdřív pod stolem", emoji: "🍺", playerName: drinker.name, detail: "do hymny už ho museli držet dva" });

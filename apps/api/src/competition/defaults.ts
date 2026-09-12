@@ -138,11 +138,11 @@ export const ROLE_SCOPE: Record<OfficialRole, {
 }> = {
   predseda: {
     gesce: "soutez",
-    agenda: "Pravidla soutěže — zákaz transferů mezi kluby stejného majitele, stav hřiště, velikost soupisky.",
+    agenda: "Pravidla soutěže, zákaz transferů mezi kluby stejného majitele, stav hřiště, velikost soupisky.",
     powers: [
       "Při rovnosti hlasů rozhoduje jeho hlas.",
       "Zastupuje každou neobsazenou funkci a čerpá u ní vlastní počítadlo.",
-      "Pozastaví pravomoc jinému předsedovi — tím rovnou otevře hlasování o jeho odvolání. Když neprojde, pravomoc se vrátí a prezident přijde o pět bodů reputace.",
+      "Pozastaví pravomoc jinému předsedovi, tím rovnou otevře hlasování o jeho odvolání. Když neprojde, pravomoc se vrátí a prezident přijde o pět bodů reputace.",
       "Je nadřízený ostatním předsedům.",
     ],
   },
@@ -151,12 +151,12 @@ export const ROLE_SCOPE: Record<OfficialRole, {
     agenda: "Odměny za zápasy i za umístění, startovné, odvody z tržeb a meziligové poplatky.",
     powers: [
       "Vidí projekci rozpočtu na příští sezónu i rozpis závazků rozehrané sezóny.",
-      "Návrhy v jeho gesci mění peníze celé soutěže — platí vždy až od příští sezóny.",
+      "Návrhy v jeho gesci mění peníze celé soutěže, platí vždy až od příští sezóny.",
     ],
   },
   disciplinarni: {
     gesce: "disciplinarni",
-    agenda: "Pokuty klubům a výše trestů, které padají samy — za kritiku rozhodčího, za nepořádek, za porušení pravidla soutěže.",
+    agenda: "Pokuty klubům a výše trestů, které padají samy, za kritiku rozhodčího, za nepořádek, za porušení pravidla soutěže.",
     powers: [
       "Uloží pokutu sám, bez hlasování, do 3 000 Kč a nejvýš čtyřikrát za sezónu.",
       "Vlastnímu klubu pokutu uložit nemůže, ani klubu, se kterým má vyhrocený vztah.",
@@ -176,13 +176,13 @@ export const ROLE_SCOPE: Record<OfficialRole, {
   },
   integrita: {
     gesce: "integrita",
-    agenda: "Sázková kancelář a přestupový trh — všechno, u čeho může jít o domluvu. "
+    agenda: "Sázková kancelář a přestupový trh, všechno, u čeho může jít o domluvu. "
       + "Strop vkladu, strop výhry, odvod ze sázek a zákaz sázení klubům soutěže.",
     powers: [
       "Vidí knihu sázek celé soutěže včetně běžících tiketů. Kromě něj do ní vidí jen prezident.",
       "Vidí listinu realizovaných přestupů s upozorněním na obchody, které stojí za prověření.",
       "Zablokuje klubu sázení sám, bez hlasování, nejvýš dvakrát za sezónu. Klub se může odvolat k zasedání.",
-      "Zabaví výhru z konkrétního tiketu — peníze jdou do pokladny soutěže.",
+      "Zabaví výhru z konkrétního tiketu, peníze jdou do pokladny soutěže.",
       "Vlastnímu klubu zákaz uložit nemůže, ani klubu, se kterým má vyhrocený vztah.",
     ],
   },
@@ -260,7 +260,7 @@ export const PROPOSAL_KINDS: Record<string, ProposalSpec> = {
   // ── Disciplinární rada: výše pokut, které padají samy ────────────────────
   fine_referee_abuse: { rulesField: "fine_referee_abuse", gesce: "disciplinarni", label: "Pokuta za kritiku rozhodčího", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 6000, unit: "czk", note: "Sazba za středně ostrou kritiku v pozápasovém rozhovoru. Mírnější stojí tři čtvrtiny, ta nejostřejší o čtvrtinu víc." },
   fine_admin: { rulesField: "fine_admin", gesce: "disciplinarni", label: "Svazová pokuta za nepořádek", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 5000, unit: "czk", note: "Pozdní soupiska, neuklizené kabiny, nedodaný zápis. Skutečná částka kolísá kolem sazby." },
-  fine_rule: { rulesField: "fine_rule", gesce: "disciplinarni", label: "Pokuta za porušení pravidla soutěže", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 8000, unit: "czk", note: "Platí na pravidla, která si soutěž odhlasovala — stav hřiště a velikost soupisky. Kontrola běží před každým zasedáním." },
+  fine_rule: { rulesField: "fine_rule", gesce: "disciplinarni", label: "Pokuta za porušení pravidla soutěže", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 8000, unit: "czk", note: "Platí na pravidla, která si soutěž odhlasovala, stav hřiště a velikost soupisky. Kontrola běží před každým zasedáním." },
 
   // ── Prezident soutěže: pravidla soutěže ──────────────────────────────────
   ban_own_owner_transfers: { rulesField: "ban_own_owner_transfers", gesce: "soutez", label: "Zákaz transferů mezi kluby stejného majitele", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 1, unit: "switch", note: "Obchod projde, ale objeví se na programu nejbližšího zasedání jako disciplinární bod." },
@@ -272,7 +272,7 @@ export const PROPOSAL_KINDS: Record<string, ProposalSpec> = {
   cash_loan_interest_pct: { rulesField: "cash_loan_interest_pct", gesce: "hospodarska", label: "Úrok z půjčky od banky", majority: SIMPLE_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "pct", note: "Kolik klub vrátí navíc. Při patnácti procentech splatí ze 40 000 celkem 46 000 Kč. Sazba se zmrazí při podpisu, takže už běžící půjčky nezdraží." },
 
   // ── Komisař pro integritu: sázková kancelář ──────────────────────────────
-  ban_betting: { rulesField: "ban_betting", gesce: "integrita", label: "Zákaz sázení klubům soutěže", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 1, unit: "switch", note: "Sváže kluby TÉHLE soutěže — nesmí podat tiket nikde. Na zápasy soutěže může dál sázet kdokoli zvenčí. Otevřené tikety doběhnou a vyplatí se." },
+  ban_betting: { rulesField: "ban_betting", gesce: "integrita", label: "Zákaz sázení klubům soutěže", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 1, unit: "switch", note: "Sváže kluby TÉHLE soutěže, nesmí podat tiket nikde. Na zápasy soutěže může dál sázet kdokoli zvenčí. Otevřené tikety doběhnou a vyplatí se." },
   bet_max_stake: { rulesField: "bet_max_stake", gesce: "integrita", label: "Nejvyšší sázka na tiket", majority: SIMPLE_MAJORITY, nextSeason: false, min: 500, max: 20_000, unit: "czk" },
   bet_max_payout: { rulesField: "bet_max_payout", gesce: "integrita", label: "Strop výhry z jednoho tiketu", majority: SIMPLE_MAJORITY, nextSeason: false, min: 20_000, max: 150_000, unit: "czk", note: "Nad tuhle částku kancelář nevyplácí, i kdyby kurz vycházel výš." },
   levy_bet_pct: { rulesField: "levy_bet_pct", gesce: "integrita", label: "Odvod ze sázek", majority: SIMPLE_MAJORITY, nextSeason: true, min: 0, max: 10, unit: "pct", note: "Klub zaplatí navíc k vkladu. Z tisícovky při pěti procentech odejde 1 050 Kč a padesátka jde do pokladny soutěže. Výhra se počítá z celého vkladu." },

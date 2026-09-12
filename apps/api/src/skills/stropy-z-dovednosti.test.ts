@@ -35,7 +35,7 @@ describe("stropy dopočítané z dovedností", () => {
     expect(prostorPodleVeku(19).min).toBeGreaterThan(prostorPodleVeku(35).min);
   });
 
-  it("talent klesá s věkem — kdo ho měl, ten už ho proměnil", () => {
+  it("talent klesá s věkem, kdo ho měl, ten už ho proměnil", () => {
     const vzorek = (vek: number) => {
       let soucet = 0;
       for (let i = 0; i < 400; i++) soucet += talentPodleVeku(createRng(i), vek);
@@ -92,7 +92,7 @@ describe("žádná cesta nezakládá hráče bez potenciálu", () => {
     // `free_agents` je tu schválně taky: minule z kontroly vypadla a právě v ní
     // ležela druhá polovina téže chyby.
     const zapisy = najdiZapisy(SRC);
-    expect(zapisy.length, "žádný INSERT nenalezen — špatná cesta?").toBeGreaterThan(3);
+    expect(zapisy.length, "žádný INSERT nenalezen, špatná cesta?").toBeGreaterThan(3);
 
     const chybne = zapisy
       .filter((z) => !(z.sql.includes("skills_max") && z.sql.includes("hidden_talent")))
@@ -100,7 +100,7 @@ describe("žádná cesta nezakládá hráče bez potenciálu", () => {
 
     expect(
       chybne,
-      `${chybne.length} zápisů zakládá hráče bez potenciálu — sloupce mají DEFAULT, takže to nic nevyhodí`,
+      `${chybne.length} zápisů zakládá hráče bez potenciálu, sloupce mají DEFAULT, takže to nic nevyhodí`,
     ).toEqual([]);
   });
 });

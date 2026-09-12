@@ -360,7 +360,7 @@ export default function ObecPage() {
       let msg = "";
       if (action === "ignore") msg = "Ignoroval(a) jsi NPC.";
       else if (res.outcome === "scandal") msg = `Skandál! ${res.officialName} odešel znechucen.`;
-      else msg = `Pivo s ${res.officialName} — přízeň +${res.favorDelta}, cena ${res.beerCost} Kč.`;
+      else msg = `Pivo s ${res.officialName}, přízeň +${res.favorDelta}, cena ${res.beerCost} Kč.`;
       setToast(msg);
       setTimeout(() => setToast(null), 5000);
       if (villageId) await refresh(villageId);
@@ -656,7 +656,7 @@ export default function ObecPage() {
             <SectionLabel>Pozvi zastupitele na zápas</SectionLabel>
             <div className="text-xs text-gray-500 mt-1">
               {upcoming.match.home_name} vs {upcoming.match.away_name} · {new Date(upcoming.match.scheduled_at).toLocaleString("cs", { weekday: "short", day: "numeric", month: "numeric" })}
-              {" — "}přijetí pozvánky není zaručené, závisí na vztahu, povaze a tvém týmu. Cena dárku se platí vždy.
+              {" "}přijetí pozvánky není zaručené, závisí na vztahu, povaze a tvém týmu. Cena dárku se platí vždy.
             </div>
           </CardHeader>
           <CardBody>
@@ -885,7 +885,7 @@ export default function ObecPage() {
           <SectionLabel>Týmy v obci</SectionLabel>
           <div className="text-xs text-gray-500 mt-1">
             {teams.length === 1
-              ? "V obci je jen jeden tým — žádná konkurence."
+              ? "V obci je jen jeden tým, žádná konkurence."
               : `${teams.length} týmů soutěží o přízeň zastupitelstva. Vidíš obliby všech týmů u každého zastupitele.`}
           </div>
         </CardHeader>

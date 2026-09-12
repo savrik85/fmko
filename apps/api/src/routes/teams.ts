@@ -1754,7 +1754,7 @@ Požadavky:
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    logger.warn({ module: "teams" }, `Gemini API error for anthem: ${res.status} — ${errBody.slice(0, 200)}`);
+    logger.warn({ module: "teams" }, `Gemini API error for anthem: ${res.status} ${errBody.slice(0, 200)}`);
     return c.json({ error: "Generace hymny selhala" }, 502);
   }
 
@@ -1827,7 +1827,7 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
 
   if (!sunoRes.ok) {
     const errBody = await sunoRes.text().catch(() => "");
-    logger.warn({ module: "teams" }, `Suno API error: ${sunoRes.status} — ${errBody.slice(0, 200)}`);
+    logger.warn({ module: "teams" }, `Suno API error: ${sunoRes.status} ${errBody.slice(0, 200)}`);
     return c.json({ error: "Hudební generace selhala (Suno API chyba)" }, 502);
   }
 
@@ -1909,7 +1909,7 @@ teamsRouter.get("/:id/club/anthem/status", async (c) => {
       else if (sunoStatus === "GENERATE_FAILED") czechMsg = "Suno nedokázala hudbu vygenerovat. Zkus jiný styl.";
       else if (sunoStatus === "PARAM_ERROR") czechMsg = "Chybný formát textu nebo stylu.";
       messages.push(`ERROR:${row.id}:${czechMsg}`);
-      logger.warn({ module: "teams" }, `Suno anthem error: ${sunoStatus} — ${rawErr}`);
+      logger.warn({ module: "teams" }, `Suno anthem error: ${sunoStatus} ${rawErr}`);
     }
   }
 
@@ -2152,7 +2152,7 @@ Požadavky:
   );
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    logger.warn({ module: "teams" }, `Gemini identity error: ${res.status} — ${errBody.slice(0, 200)}`);
+    logger.warn({ module: "teams" }, `Gemini identity error: ${res.status} ${errBody.slice(0, 200)}`);
     return c.json({ error: "Generace selhala" }, 502);
   }
   const json = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> };
@@ -2405,7 +2405,7 @@ teamsRouter.post("/:id/club/mascot/generate", async (c) => {
 
   if (!replicateRes.ok) {
     const errBody = await replicateRes.text().catch(() => "");
-    logger.warn({ module: "teams" }, `Replicate error: ${replicateRes.status} — ${errBody.slice(0, 300)}`);
+    logger.warn({ module: "teams" }, `Replicate error: ${replicateRes.status} ${errBody.slice(0, 300)}`);
     if (replicateRes.status === 402 || errBody.toLowerCase().includes("insufficient credit")) {
       return c.json({ error: "Replicate účet nemá kredity. Kontaktuj administrátora aby dokoupil kredity na https://replicate.com/account/billing." }, 402);
     }
@@ -2413,7 +2413,7 @@ teamsRouter.post("/:id/club/mascot/generate", async (c) => {
       return c.json({ error: "Replicate API token je neplatný. Kontaktuj administrátora." }, 502);
     }
     if (replicateRes.status === 429) {
-      return c.json({ error: "Replicate rate limit — zkus za chvíli znovu." }, 429);
+      return c.json({ error: "Replicate rate limit, zkus za chvíli znovu." }, 429);
     }
     return c.json({ error: `Generace obrázku selhala (Replicate ${replicateRes.status})` }, 502);
   }

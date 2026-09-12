@@ -93,7 +93,7 @@ export default function SponsorsPage() {
       ? `Reklamní banner kolem hřiště na ${offer.seasons} ${offer.seasons === 1 ? "sezónu" : "sezóny"}`
       : `Smlouva na sponzora stadionu na ${offer.seasons} ${offer.seasons === 1 ? "sezónu" : "sezóny"}`;
     const ok = await confirm({
-      title: `Podepsat smlouvu — ${offer.sponsorName}?`,
+      title: `Podepsat smlouvu ${offer.sponsorName}?`,
       description,
       details,
       confirmLabel: "Podepsat",
@@ -129,7 +129,7 @@ export default function SponsorsPage() {
     if (isMain) {
       details.push({ label: "Dopad na reputaci", value: "-2 reputace", color: "text-card-red" });
       if (!data?.canChangeMainSponsor) {
-        description += " Tuto sezónu už jsi změnil název — novou sponzorskou smlouvu uzavřeš až příští sezónu.";
+        description += " Tuto sezónu už jsi změnil název, novou sponzorskou smlouvu uzavřeš až příští sezónu.";
       }
     }
 

@@ -33,7 +33,7 @@ const RETIREMENT_REASONS = [
 /** Rodinné / životní důvody (i pro mladší hráče). */
 const FAMILY_REASONS = [
   "Manželka řekla dost. Buď fotbal, nebo ona.",
-  "Stěhuju se pryč — dostal jsem práci v jiném kraji.",
+  "Stěhuju se pryč, dostal jsem práci v jiném kraji.",
   "Mám malou firmu, nemám čas. Ale přijdu fandit!",
   "Čekáme miminko, teď musí být rodina na prvním místě.",
   "Dojíždění mě zničilo, končím s aktivním fotbalem.",
@@ -224,14 +224,14 @@ const DUEL_STORIES = [
   "{a} dává góly, ale na trénink chodí, kdy se mu zachce. {b} maká, ale netrefí ani vrata od stodoly.",
   "Po posledním zápase se servali o poslední řízek v kabině. Předseda rozhodl: spolu už ne.",
   "Manželky obou si na tribuně nadávají do kuropáčů. Pro klid v dědině zůstane jen jeden.",
-  "Oba slíbili dvacet gólů. Rozpočet ale věří jen jednomu slibu — komu dáš šanci?",
+  "Oba slíbili dvacet gólů. Rozpočet ale věří jen jednomu slibu, komu dáš šanci?",
   "Jeden má klíče od kabiny, druhý od sekačky na trávník. Místo v kádru zbylo jen pro jednoho.",
-  "{a} a {b} se věčně hádají, kdo kope penaltu. Vyřešíme to natvrdo — jeden končí.",
+  "{a} a {b} se věčně hádají, kdo kope penaltu. Vyřešíme to natvrdo, jeden končí.",
   "Po dědině se šušká, že jeden z nich kope i za úhlavního soka z vedlejší vsi. Pro jistotu vyber toho druhého.",
   "Trenér má v sestavě místo jen pro jednoho. Ten druhý by celý rok jen hřál lavici a remcal.",
   "Oba chtějí kapitánskou pásku a druhou nemáme. Klubu jedno ego bohatě stačí.",
-  "Pan hospodský dává dres už jen jednomu — ten druhý mu dluží za moc piv a mlčel o tom.",
-  "{a} i {b} si zamluvili stejné číslo na kabinu i stejnou holku na zábavě. Tohle dobře neskončí — vyber.",
+  "Pan hospodský dává dres už jen jednomu, ten druhý mu dluží za moc piv a mlčel o tom.",
+  "{a} i {b} si zamluvili stejné číslo na kabinu i stejnou holku na zábavě. Tohle dobře neskončí, vyber.",
 ];
 
 /**
@@ -326,7 +326,7 @@ async function maybeCreateLegendFarewell(
   const headline = `Sbohem, legendo: ${legend.name} končí`;
   const intros = [
     `${teamName} se po ${seasonNumber}. sezóně loučí se svou oporou.`,
-    `Kabina ${teamName} ztichla — odchází ${role}, který tým držel pohromadě.`,
+    `Kabina ${teamName} ztichla, odchází ${role}, který tým držel pohromadě.`,
     `Na hřišti ${teamName} už ho neuvidíme. ${legend.name} pověsil kopačky na hřebík.`,
   ];
   const body = [

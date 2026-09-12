@@ -77,7 +77,7 @@ function EmptyState({ children, action, href }: { children: React.ReactNode; act
         <button
           type="button"
           disabled
-          title="Brzy — připravujeme v dalších krocích"
+          title="Brzy, připravujeme v dalších krocích"
           className="px-4 py-2 rounded-soft text-sm font-heading font-bold text-gray-400 bg-gray-100 cursor-not-allowed"
         >
           {action}

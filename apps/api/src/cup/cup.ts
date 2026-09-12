@@ -235,7 +235,7 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
     await db.prepare("DELETE FROM cup_matches WHERE cup_id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup matches", e));
     await db.prepare("DELETE FROM cup_teams WHERE cup_id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup teams", e));
     await db.prepare("DELETE FROM cup_competitions WHERE id = ?").bind(cupId).run().catch((e) => logger.warn({ module: M }, "cleanup cup competition", e));
-    throw new Error("createCup: neúplné vytvoření poháru — zrušeno (viz error log)");
+    throw new Error("createCup: neúplné vytvoření poháru, zrušeno (viz error log)");
   }
 
   logger.info({ module: M }, `cup created s=${seasonNumber} teams=${allTeams.length} (${participants.length} seedů + ${weakTeams.length} slabých) rounds=${totalRounds}`);
@@ -1082,7 +1082,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
       // Výchozí sazba je nula, takže dokud si ho kluby neodhlasují, klub dostane vše.
       const levy = await cupLevy(db, realWinner, prize);
       await recordTransaction(db, realWinner, "cup_prize", prize - levy.amount,
-        `Pohár — postup (${roundLabel})${levy.amount > 0 ? ` (odvod ${levy.pct} % soutěži)` : ""}`,
+        `Pohár, postup (${roundLabel})${levy.amount > 0 ? ` (odvod ${levy.pct} % soutěži)` : ""}`,
         gameDate, cupRefId)
         .catch((e) => logger.warn({ module: M }, "cup prize", e));
       if (levy.amount > 0 && levy.leagueId && levy.seasonNumber) {
@@ -1097,7 +1097,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
         const { applyManagerAttrDelta } = await import("../lib/manager-attrs");
         await applyManagerAttrDelta(
           db, realWinner, "reputation", repBonus.manager, "cup",
-          `Postup v poháru — ${roundLabel}`,
+          `Postup v poháru ${roundLabel}`,
           { referenceId: `${cupRefId}-mgr-rep`, gameDate },
         );
       }
@@ -1105,7 +1105,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
         const { applyReputationDelta } = await import("../lib/reputation");
         await applyReputationDelta(
           db, realWinner, repBonus.team, "cup",
-          `Postup v poháru — ${roundLabel}`,
+          `Postup v poháru ${roundLabel}`,
           { referenceId: `${cupRefId}-rep`, gameDate },
         );
       }

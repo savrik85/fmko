@@ -90,7 +90,7 @@ export const PRISPEVKY_K_UDALOSTEM: Partial<Record<ClubEventKind, PostSablona[]>
   zlevneni_vstupneho: [
     { tone: "pozitivni", texty: [
       "Slevnili vstup. To se cení, přivedu kluky z práce.",
-      "{co} — za to se dá jít i na horší zápas. Dobrý krok.",
+      "{co}, za to se dá jít i na horší zápas. Dobrý krok.",
     ] },
   ],
   prejmenovani_klubu: [
@@ -217,7 +217,7 @@ export const PRISPEVKY_K_ZAPASU: Record<"vyhra" | "remiza" | "prohra" | "debakl"
     { tone: "negativni", texty: [
       "{co}. Nemám slov.",
       "Zase nic. {co}",
-      "{co} — a to jsme tam měli jet vyhrát.",
+      "{co}, a to jsme tam měli jet vyhrát.",
     ] },
   ],
   debakl: [
@@ -241,6 +241,71 @@ export const PRISPEVKY_K_OBLIBENCUM: Record<"oblibenec" | "otloukanek", PostSabl
     { tone: "negativni", texty: [
       "{kdo}. {co}",
       "Nechci nikoho jmenovat, ale {kdo}. {co}",
+    ] },
+  ],
+};
+
+/**
+ * Názor na to, jak se hraje.
+ *
+ * Kotel nechce jen výsledky, chce vidět fotbal. Nakopávaná mu vadí i při
+ * výhrách, presink se mu líbí i při prohře. Štamgasti to berou pragmaticky.
+ */
+export const PRISPEVKY_K_TAKTICE: Record<string, PostSablona[]> = {
+  long_ball: [
+    { tone: "negativni", party: ["kotel", "parta_z_okoli"], texty: [
+      "Nakopnout to dopředu a modlit se. To je náš plán? 🙄",
+      "Za tohle se chodí na hřiště koukat? Balon nad hlavou celý zápas.",
+    ] },
+    { tone: "neutralni", party: ["stamgasti", "pametnici"], texty: [
+      "Hezké to není, ale body to nosí. Zatím.",
+    ] },
+  ],
+  defensive: [
+    { tone: "negativni", party: ["kotel"], texty: [
+      "Deset lidí vzadu a čekat. Tomuhle fandit nejde.",
+      "Hrajeme doma. DOMA. A bráníme.",
+    ] },
+  ],
+  possession: [
+    { tone: "neutralni", texty: [
+      "Držíme balon, dobře. A kdy vystřelíme?",
+      "Sedmdesát procent držení a nula na tabuli. Super.",
+    ] },
+  ],
+  pressing: [
+    { tone: "pozitivni", party: ["kotel", "parta_z_okoli"], texty: [
+      "Takhle! Vysoko, nahoru, nedat jim dýchnout. 🔥",
+      "Tohle se dá fandit. Konečně.",
+    ] },
+  ],
+  offensive: [
+    { tone: "pozitivni", texty: [
+      "Jdeme si pro to. Přesně tak to má být.",
+      "Útočíme. Klidně to prohrajeme, ale takhle.",
+    ] },
+  ],
+};
+
+/** Kolik toho tým dává. Střelecká bída i smršť stojí za zmínku. */
+export const PRISPEVKY_KE_STRELBE: Record<"bida" | "sucho" | "smrst", PostSablona[]> = {
+  bida: [
+    { tone: "negativni", texty: [
+      "{co} gólů za pět zápasů. Pět. Zápasů.",
+      "Kdybychom dávali góly, byli bychom nahoře. Jenže je nedáváme.",
+      "Někdo by měl klukům ukázat, kde je branka.",
+    ] },
+  ],
+  sucho: [
+    { tone: "negativni", party: ["kotel", "stamgasti"], texty: [
+      "Zase nula. Doma. 😤",
+      "Gól jsem naposled viděl v televizi.",
+    ] },
+  ],
+  smrst: [
+    { tone: "pozitivni", texty: [
+      "{co} gólů za pět zápasů! Tohle se sleduje samo. ⚽",
+      "Útok nám šlape. Konečně je na co koukat.",
     ] },
   ],
 };

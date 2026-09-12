@@ -181,7 +181,7 @@ staffRouter.post("/teams/:teamId/staff/:staffId/hire", async (c) => {
   ).bind(teamId, role, gameDate, staffId).run()
     .catch((e) => { logger.error({ module: "staff" }, "hire claim failed", e); return null; });
   if (!claim || (claim.meta?.changes ?? 0) === 0) {
-    return c.json({ error: "Někdo tě předběhl — kandidáta už najal jiný tým." }, 409);
+    return c.json({ error: "Někdo tě předběhl, kandidáta už najal jiný tým." }, 409);
   }
 
   await recordTransaction(c.env.DB, teamId, "staff_signing", -cand.signing_fee,

@@ -94,7 +94,7 @@ describe("narovnání potenciálu", () => {
     expect(db.__stav().map((h) => h.skills_max)).toEqual(poPrvnim);
   });
 
-  it("je deterministické — týž hráč dostane vždy týž strop", async () => {
+  it("je deterministické, týž hráč dostane vždy týž strop", async () => {
     const a = fakeDb([hrac("stejne-id", DOVEDNOSTI)]);
     const b = fakeDb([hrac("stejne-id", DOVEDNOSTI)]);
     await narovnejPotencialDorostu(a, "u21");
@@ -102,7 +102,7 @@ describe("narovnání potenciálu", () => {
     expect(a.__stav()[0].skills_max).toEqual(b.__stav()[0].skills_max);
   });
 
-  it("zkušenost nechá na pokoji — má strop 100 odjakživa", async () => {
+  it("zkušenost nechá na pokoji, má strop 100 odjakživa", async () => {
     const db = fakeDb([hrac("a", DOVEDNOSTI)]);
     await narovnejPotencialDorostu(db, "u21");
     const sm = JSON.parse(db.__stav()[0].skills_max) as Record<string, { maxPotential: number }>;
@@ -156,7 +156,7 @@ describe("narovnání potenciálu", () => {
     expect(db.__stav()[0].overall_rating).toBeGreaterThan(30);
   });
 
-  it("hráč u stropu se nezvedne — není kam", async () => {
+  it("hráč u stropu se nezvedne, není kam", async () => {
     // Současné hodnoty se rovnají stropu, takže není co vracet
     const db = fakeDb([hrac("na-stropu", { speed: 21, technique: 21, passing: 21 })]);
     const puvodni = JSON.parse(db.__stav()[0].skills!) as Record<string, number>;
@@ -214,7 +214,7 @@ describe("narovnání potenciálu", () => {
     expect(db.__stav()[0].overall_rating).toBe(30);
   });
 
-  it("hráče bez data vzniku narovná — jsou to ti nejstarší", async () => {
+  it("hráče bez data vzniku narovná, jsou to ti nejstarší", async () => {
     const db = fakeDb([{ ...hrac("bez-data", DOVEDNOSTI), created_at: null }]);
     expect((await narovnejPotencialDorostu(db, "u21")).upraveno).toBe(1);
   });

@@ -35,7 +35,7 @@ export interface RefereeStatsView {
 /** Osy profilu tak, jak se ukazují v kartě sudího. */
 export const REFEREE_AXES = [
   { key: "strictness", label: "Přísnost", low: "nechá hrát", high: "píská všechno",
-    popis: "Kolik toho odpíská. Čím vyšší, tím víc faulů — i drobných." },
+    popis: "Kolik toho odpíská. Čím vyšší, tím víc faulů, i drobných." },
   { key: "cardHappiness", label: "Karty", low: "šetří kapsu", high: "sáhne hned",
     popis: "Jak rychle sáhne do kapsy. Vysoká znamená karty i za to, co jiný přejde." },
   { key: "experience", label: "Zkušenost", low: "zelenáč", high: "veterán",
@@ -82,7 +82,7 @@ export function refereeAdviceCz(r: RefereeProfileView, isHome: boolean): string[
   if (r.cardHappiness >= 78) {
     out.push("Do kapsy sahá okamžitě. Hráči s nízkou disciplínou a výbušnou povahou jsou riziko.");
   } else if (r.cardHappiness <= 30) {
-    out.push("Karty rozdává nerad — dostat od něj žlutou chce opravdovou hloupost.");
+    out.push("Karty rozdává nerad, dostat od něj žlutou chce opravdovou hloupost.");
   }
 
   if (r.advantage >= 75) {
@@ -93,12 +93,12 @@ export function refereeAdviceCz(r: RefereeProfileView, isHome: boolean): string[
 
   if (r.homeBias >= 70) {
     out.push(isHome
-      ? "Doma se s ním hraje líp — hraniční situace mívají domácí na své straně."
+      ? "Doma se s ním hraje líp, hraniční situace mívají domácí na své straně."
       : "Venku u něj pozor: sporné momenty spíš odpíská pro domácí.");
   }
 
   if (r.experience <= 30) {
-    out.push("Zelenáč. Šance, že něco zkazí, je vysoká — a může to jít na obě strany.");
+    out.push("Zelenáč. Šance, že něco zkazí, je vysoká, a může to jít na obě strany.");
   } else if (r.experience >= 82) {
     out.push("Ostřílený sudí. Sporných momentů u něj bývá minimum.");
   }

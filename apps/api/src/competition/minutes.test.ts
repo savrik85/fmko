@@ -48,7 +48,7 @@ describe("zápis ze zasedání", () => {
       .toContain("Prezident soutěže zatím zvolený není");
   });
 
-  it("volbu nikdy nedoprovodí poměr hlasů — je tajná", () => {
+  it("volbu nikdy nedoprovodí poměr hlasů, je tajná", () => {
     const { body } = sestavZapis(redaktor("seriozni"), vstup({
       items: [{ kind: "election", title: "Volba: Prezident soutěže", status: "passed", resultNote: "Zvolen Petr Novák. Získal 2 z 3 hlasů." }],
       protiHlasy: {},
@@ -86,8 +86,8 @@ describe("zápis ze zasedání", () => {
     const { headline } = sestavZapis(redaktor("seriozni"), vstup({
       items: [
         { kind: "min_pitch_condition", title: "Stav hřiště: 30 → 70", status: "no_quorum", pro: 0, proti: 0 },
-        { kind: "compliance", title: "Hřiště pod hranicí — Test Praha", status: "passed", resultNote: "Pokuta 1 000 Kč." },
-        { kind: "compliance", title: "Hřiště pod hranicí — SK Braník", status: "passed", resultNote: "Pokuta 1 000 Kč." },
+        { kind: "compliance", title: "Hřiště pod hranicí. Test Praha", status: "passed", resultNote: "Pokuta 1 000 Kč." },
+        { kind: "compliance", title: "Hřiště pod hranicí. SK Braník", status: "passed", resultNote: "Pokuta 1 000 Kč." },
         { kind: "vacated", title: "Uvolněna funkce Komisař rozhodčích", status: "passed" },
       ],
       protiHlasy: {},
@@ -99,7 +99,7 @@ describe("zápis ze zasedání", () => {
     const { headline } = sestavZapis(redaktor("seriozni"), vstup({
       items: [
         { kind: "win_bonus", title: "Odměna za výhru: 500 Kč → 600 Kč", status: "passed", pro: 4, proti: 1 },
-        { kind: "compliance", title: "Hřiště pod hranicí — Test Praha", status: "passed", resultNote: "Pokuta 1 000 Kč." },
+        { kind: "compliance", title: "Hřiště pod hranicí. Test Praha", status: "passed", resultNote: "Pokuta 1 000 Kč." },
       ],
       protiHlasy: {},
     }));

@@ -16,7 +16,7 @@ describe("tipy k naskladnění podle předpovědi", () => {
     expect(h.map((x) => x.key).sort()).toEqual([...CONCESSION_PRODUCT_KEYS].sort());
   });
 
-  it("řadí sestupně — co naskladnit nejvíc, je první", () => {
+  it("řadí sestupně, co naskladnit nejvíc, je první", () => {
     const h = concessionDemandHints("snow", ZIMA);
     for (let i = 1; i < h.length; i++) {
       expect(h[i - 1].factor).toBeGreaterThanOrEqual(h[i].factor);

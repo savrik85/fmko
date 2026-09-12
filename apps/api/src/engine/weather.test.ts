@@ -242,7 +242,7 @@ describe("jistota rukou brankáře podle počasí", () => {
     return calcGoalProb(createRng(99), attacker, gk, 55, 40, 0, handling);
   }
 
-  it("kluzký míč zvedá šanci na gól — hodnota se opravdu čte", () => {
+  it("kluzký míč zvedá šanci na gól, hodnota se opravdu čte", () => {
     const sucho = goalProbWith(1.0);
     const dest = goalProbWith(WEATHER_MODS.rain.gkHandlingMod);
     const snih = goalProbWith(WEATHER_MODS.snow.gkHandlingMod);

@@ -105,7 +105,7 @@ export async function rolloverAllLeagues(
         ? `Smlouva s ${jmena[0]} vypršela`
         : `${smlouvyVyprsely(jmena.length)}: ${jmena.join(", ")}`;
       await sendSystemSMS(db, teamId, "Sportovní ředitel", "Sportovní ředitel",
-        `📋 ${kdo} s koncem sezóny. Mrkni na Sponzory — čekají tam nové nabídky.`,
+        `📋 ${kdo} s koncem sezóny. Mrkni na Sponzory, čekají tam nové nabídky.`,
       );
     }
     logger.info({ module: "season-rollover" }, `sponzorské smlouvy: -1 sezóna, ${expiring.results.length} expirací u lidských týmů`);
@@ -149,7 +149,7 @@ export async function rolloverAllLeagues(
         if ((gate.meta?.changes ?? 0) === 0) continue;
 
         await recordTransaction(db, t.team_id, "bet_refund", t.stake,
-          "Vrácený vklad — konec sezóny", startIso, `bet-payout-${t.id}`);
+          "Vrácený vklad, konec sezóny", startIso, `bet-payout-${t.id}`);
         vraceno++;
       }
       if (vraceno > 0) {

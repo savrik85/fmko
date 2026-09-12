@@ -179,7 +179,7 @@ const EVENT_TEMPLATES: SeasonalEventDef[] = [
     choices: [
       {
         id: "volno",
-        label: "Dát volno — ať si užijou",
+        label: "Dát volno, ať si užijou",
         effects: [
           { type: "morale", value: 8, description: "+8 morálka" },
           { type: "alcohol_event", value: 1, description: "Kocovina příští den" },
@@ -648,7 +648,7 @@ const EVENT_TEMPLATES_PRAHA: SeasonalEventDef[] = [
   },
   {
     type: "pout", title: "Žižkovská noc", gameWeek: 10,
-    description: "Žižkovská noc — kulturní festival v ulicích. Tým může mít stánek nebo volno.",
+    description: "Žižkovská noc, kulturní festival v ulicích. Tým může mít stánek nebo volno.",
     effects: [],
     choices: [
       { id: "stanek", label: "Stánek s občerstvením", effects: [{ type: "budget", value: 3000, description: "+3 000 Kč" }, { type: "reputation", value: 5, description: "+5 reputace" }, { type: "condition", value: -10, description: "-10 kondice" }] },
@@ -657,7 +657,7 @@ const EVENT_TEMPLATES_PRAHA: SeasonalEventDef[] = [
     ],
   },
   {
-    type: "brigada_hriste", title: "Brigáda — odklízení graffiti", gameWeek: 4,
+    type: "brigada_hriste", title: "Brigáda, odklízení graffiti", gameWeek: 4,
     description: "Někdo posprejoval plot a kabiny. Městská část žádá o pomoc s úklidem.",
     effects: [],
     choices: [
@@ -676,7 +676,7 @@ const EVENT_TEMPLATES_PRAHA: SeasonalEventDef[] = [
     ],
   },
   {
-    type: "konec_skoly", title: "Konec školy — noví hráči", gameWeek: 22,
+    type: "konec_skoly", title: "Konec školy, noví hráči", gameWeek: 22,
     description: "Skončil školní rok. Pár mladých z okolí hledá tým kde hrát.",
     effects: [{ type: "reputation", value: 3, description: "+3 reputace" }],
   },

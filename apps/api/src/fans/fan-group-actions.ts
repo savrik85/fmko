@@ -52,7 +52,7 @@ export const FAN_ACTIONS: Record<FanActionKey, FanActionDef> = {
   tifo: {
     key: "tifo",
     label: "Přispět na choreo",
-    popis: "Klub zaplatí látku a barvy. Kotel z toho žije celou sezónu — a taky se mu líp shání pyro.",
+    popis: "Klub zaplatí látku a barvy. Kotel z toho žije celou sezónu, a taky se mu líp shání pyro.",
     cost: 0,
     cooldownDnu: 21,
     variants: [

@@ -516,7 +516,7 @@ export default function PlayerDetailPage() {
             <div className={`mt-3 ${boxBg} rounded-xl px-3 py-2.5`}>
               <div className={`font-heading font-bold text-sm ${txt}`}>
                 {player.loan.isParentClub
-                  ? `🤝 Tvůj hráč — hostuje v ${player.loan.borrowerTeamName}`
+                  ? `🤝 Tvůj hráč, hostuje v ${player.loan.borrowerTeamName}`
                   : `🤝 Hráč patří klubu ${player.loan.ownerTeamName}`}
               </div>
               <div className={`${txtMuted} text-sm mt-0.5`}>
@@ -979,7 +979,7 @@ export default function PlayerDetailPage() {
                       {c.isActive ? (
                         <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
                       ) : (
-                        <span>Sezóna {c.seasonNumber}{c.leftAt ? ` — odešel ${formatLeaveDate(c.leftAt)}` : ""}</span>
+                        <span>Sezóna {c.seasonNumber}{c.leftAt ? `, odešel ${formatLeaveDate(c.leftAt)}` : ""}</span>
                       )}
                     </div>
                   </div>

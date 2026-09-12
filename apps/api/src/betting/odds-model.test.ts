@@ -93,7 +93,7 @@ describe("očekávané góly", () => {
 });
 
 describe("rozdělení gólů", () => {
-  it("je to rozdělení pravděpodobnosti — sečte na 1", () => {
+  it("je to rozdělení pravděpodobnosti, sečte na 1", () => {
     for (const mu of [0.3, 1.0, 1.84, 3.43, 6.0]) {
       const sum = goalDistribution(mu).reduce((a, b) => a + b, 0);
       expect(sum).toBeCloseTo(1, 10);
@@ -106,7 +106,7 @@ describe("rozdělení gólů", () => {
     expect(mean).toBeCloseTo(2.5, 1);
   });
 
-  it("je přerozptýlené — rozptyl je znatelně vyšší než průměr", () => {
+  it("je přerozptýlené, rozptyl je znatelně vyšší než průměr", () => {
     const mu = NAMERENO.celkem;
     const dist = goalDistribution(mu);
     const mean = dist.reduce((acc, p, k) => acc + p * k, 0);
@@ -195,7 +195,7 @@ describe("KALIBRACE na odehraných zápasech", () => {
     expect(BASE_HOME_GOALS + BASE_AWAY_GOALS).toBeLessThan(NAMERENO.celkem);
   });
 
-  it("Poissonova varianta by na téže linii selhala — proto negativní binomické", () => {
+  it("Poissonova varianta by na téže linii selhala, proto negativní binomické", () => {
     // P(k) = e^−λ · λ^k / k!  pro λ = 3,432
     const lambda = NAMERENO.celkem;
     let poissonUnder = 0;
@@ -273,7 +273,7 @@ describe("střelci", () => {
     expect(s.get("hvezda")!).toBeGreaterThan(s.get("benjaminek")! * 1.5);
   });
 
-  it("silný záložník ale nepřeskočí slabšího útočníka — post váží víc", () => {
+  it("silný záložník ale nepřeskočí slabšího útočníka, post váží víc", () => {
     const dva = [
       { playerId: "utocnik", position: "FWD", goals: 0, rating: 28 },
       { playerId: "zaloznik", position: "MID", goals: 0, rating: 42 },

@@ -21,7 +21,7 @@ describe("výběr nejbližšího domácího zápasu", () => {
     expect(pickEarlier(null, null)).toBeNull();
   });
 
-  it("při shodném termínu dá přednost lize — tam se hraje o body", () => {
+  it("při shodném termínu dá přednost lize, tam se hraje o body", () => {
     const d = "2026-09-12T16:00:00Z";
     expect(pickEarlier(liga(d), pohar(d))?.isCup).toBe(false);
   });

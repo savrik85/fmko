@@ -29,7 +29,7 @@ describe("konzumace podle počasí", () => {
       .not.toBe(concessionWeatherFactor("beer", "sunny", LETO));
   });
 
-  it("bez měsíce se použije jen složka počasí — žádný NaN", () => {
+  it("bez měsíce se použije jen složka počasí, žádný NaN", () => {
     for (const key of CONCESSION_PRODUCT_KEYS) {
       const v = concessionWeatherFactor(key, "cloudy");
       expect(Number.isFinite(v), key).toBe(true);

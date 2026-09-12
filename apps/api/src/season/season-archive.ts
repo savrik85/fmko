@@ -122,7 +122,7 @@ export async function archiveLeagueSeason(db: D1Database, leagueId: string, seas
   for (const s of standings.slice(0, 3)) {
     await appendTrophy(db, s.teamId, {
       seasonNumber, leagueId, leagueName, place: s.pos,
-      title: `${PLACE_TITLE[s.pos] ?? `${s.pos}. místo`} — ${leagueName} (${seasonNumber}. sezóna)`,
+      title: `${PLACE_TITLE[s.pos] ?? `${s.pos}. místo`} ${leagueName} (${seasonNumber}. sezóna)`,
     });
   }
 

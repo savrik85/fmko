@@ -145,7 +145,7 @@ export async function resolveDueAutoEvents(
     try {
       effects = JSON.parse(row.effects) as EventEffect[];
     } catch (e) {
-      logger.error({ module: "event-effects" }, `nevalidní effects u události ${row.id} — přeskočeno, zůstává pending`, e);
+      logger.error({ module: "event-effects" }, `nevalidní effects u události ${row.id}, přeskočeno, zůstává pending`, e);
       continue;
     }
     if (effects.length === 0) continue;

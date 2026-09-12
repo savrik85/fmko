@@ -262,7 +262,7 @@ export const CLUB_EVENTS: Record<ClubEventKind, ClubEventDef> = {
       parta_z_okoli: { mood: 10, heat: -6 },
     },
     pise: "kotel",
-    texty: ["Viděli jsme ten novej sektor. Za tohle ti patří dík — bude to peklo."],
+    texty: ["Viděli jsme ten novej sektor. Za tohle ti patří dík, bude to peklo."],
   },
 };
 

@@ -48,14 +48,14 @@ describe("hodnocení brankáře", () => {
     expect(r!).toBeGreaterThan(0);
   });
 
-  it("překlad platí jen pro brankáře — hráč v poli goalkeeping neřeší", () => {
+  it("překlad platí jen pro brankáře, hráč v poli goalkeeping neřeší", () => {
     const physical = { stamina: 30, strength: 30 };
     const nizke = overallRatingFromFlat("MID", ploche(10), physical, 0);
     const vysoke = overallRatingFromFlat("MID", ploche(90), physical, 0);
     expect(nizke).toBe(vysoke);
   });
 
-  it("skrytý talent hodnocení nezvedá — je to skrytá vlastnost, ne dnešní výkonnost", () => {
+  it("skrytý talent hodnocení nezvedá, je to skrytá vlastnost, ne dnešní výkonnost", () => {
     const physical = { stamina: 30, strength: 30 };
     const bez = overallRatingFromFlat("GK", ploche(40), physical, 0, SKILLS_MAX_GK);
     const s = overallRatingFromFlat("GK", ploche(40), physical, 95, SKILLS_MAX_GK);

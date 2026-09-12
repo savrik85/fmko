@@ -42,7 +42,7 @@ describe("managerFansBand", () => {
 });
 
 describe("managerFansEffect", () => {
-  it("je monotónní — lepší trenér nikdy nedá horší výsledek", () => {
+  it("je monotónní, lepší trenér nikdy nedá horší výsledek", () => {
     // Regrese na původní bug: Math.round vytvářel skoky, kde rep 67 dávala 0
     // a rep 64 dávala +1.
     for (const { rep, mot } of everyManager()) {

@@ -297,14 +297,14 @@ export async function generatePromotionalArticle(
 
   const isPraha = match.home_district === "Praha";
   const localHint = isPraha
-    ? "Piš jako pražský čtvrťový reportér — zmiňuj tramvaje, hospody, atmosféru."
+    ? "Piš jako pražský čtvrťový reportér, zmiňuj tramvaje, hospody, atmosféru."
     : "Piš jako reportér z okresu, co zná každého v obci.";
 
   // 7. Formátování kontextu pro prompt
   const formStr = (f: TeamFormEntry[]) => f.map((e) => e.result).join("") || "bez zápasů";
   const topStr = topPlayers
     .map((p) => {
-      const celeb = p.celebrityLabel ? ` — ${p.celebrityLabel}` : "";
+      const celeb = p.celebrityLabel ? ` ${p.celebrityLabel}` : "";
       return `  - ${p.name} (${p.position}, ${p.age} let, rating ${p.rating})${celeb}`;
     })
     .join("\n");
@@ -338,7 +338,7 @@ export async function generatePromotionalArticle(
 
   const cupRound = cupContext?.roundName ?? "pohárové kolo";
   const competitionLine = cupContext
-    ? `na nadcházející POHÁROVÝ zápas (${cupRound} celorepublikového amatérského poháru) s ${match.away_name}. Pohár je svátek — soupeř nebývá z okresu a takový zápas se v obci nehraje každou sezónu. Má být lákavý a motivující, ale realistický pro úroveň okresního fotbalu — ne bombastický.`
+    ? `na nadcházející POHÁROVÝ zápas (${cupRound} celorepublikového amatérského poháru) s ${match.away_name}. Pohár je svátek, soupeř nebývá z okresu a takový zápas se v obci nehraje každou sezónu. Má být lákavý a motivující, ale realistický pro úroveň okresního fotbalu, ne bombastický.`
     : `na nadcházející zápas s ${match.away_name}. Má být lákavý, motivující a realistický pro
 úroveň okresního fotbalu — ne bombastický.`;
 
@@ -367,7 +367,7 @@ DOMÁCÍ: ${match.home_name}
   Obec: ${match.home_village} (${match.home_pop} obyv.) — ${homeFlavor}
   Stadion: ${stadiumName}, kapacita ${capacity}
   Trenér: ${homeManager?.name ?? "neznámý"}
-${cupContext ? `  Soutěž: pohár — ${cupRound}` : `  Pozice v tabulce: ${homeStand ? `${homeStand.pos}. místo, ${homeStand.points} bodů (${homeStand.wins}V ${homeStand.draws}R ${homeStand.losses}P, skóre ${homeStand.gf}:${homeStand.ga})` : "start sezóny"}`}
+${cupContext ? `  Soutěž: pohár ${cupRound}` : `  Pozice v tabulce: ${homeStand ? `${homeStand.pos}. místo, ${homeStand.points} bodů (${homeStand.wins}V ${homeStand.draws}R ${homeStand.losses}P, skóre ${homeStand.gf}:${homeStand.ga})` : "start sezóny"}`}
   Forma (posledních 5): ${formStr(homeForm)}
   Klíčoví hráči:
 ${topStr || "  (nedostatek dat)"}
@@ -375,7 +375,7 @@ ${topStr || "  (nedostatek dat)"}
 ${injuredStr}
 
 HOSTÉ: ${match.away_name}
-  Obec: ${match.away_village ?? "mimo okres (soupeř z jiné části republiky)"}${awayFlavor ? ` — ${awayFlavor}` : ""}
+  Obec: ${match.away_village ?? "mimo okres (soupeř z jiné části republiky)"}${awayFlavor ? ` ${awayFlavor}` : ""}
   Trenér: ${awayManager?.name ?? "neznámý"}
 ${cupContext ? "" : `  Pozice v tabulce: ${awayStand ? `${awayStand.pos}. místo, ${awayStand.points} bodů` : "start sezóny"}
 `}  Forma: ${formStr(awayForm)}
@@ -405,7 +405,7 @@ POZNÁMKA: Jména trenérů můžeš (ale nemusíš) zmínit pro koloritovost (n
 
   if (!res || !res.ok) {
     const errBody = res ? await res.text().catch(() => "") : "";
-    logger.warn({ module: "promo-generator" }, `Gemini API error: ${res?.status} — ${errBody.slice(0, 200)}`);
+    logger.warn({ module: "promo-generator" }, `Gemini API error: ${res?.status} ${errBody.slice(0, 200)}`);
     return null;
   }
 

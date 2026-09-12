@@ -53,7 +53,7 @@ export function weatherPromptBlock(ctx: RoundWeatherContext | null, jePredpoved 
   if (!ctx) return "";
   const nadpis = jePredpoved ? "PŘEDPOVĚĎ NA KOLO" : "POČASÍ V KOLE";
   const pokyn = ctx.worthMentioning
-    ? "Počasí zmiň — jednou větou, tam kde to dává smysl (ovlivnilo hru, návštěvu, kondici)."
+    ? "Počasí zmiň, jednou větou, tam kde to dává smysl (ovlivnilo hru, návštěvu, kondici)."
     : "Počasí bylo nevýrazné; zmiňuj ho jen když se to samo nabídne.";
-  return `\n${nadpis}: ${ctx.line}\n${pokyn} Jiné počasí si NEVYMÝŠLEJ — tohle je to, co hráči vidí ve hře.\n`;
+  return `\n${nadpis}: ${ctx.line}\n${pokyn} Jiné počasí si NEVYMÝŠLEJ, tohle je to, co hráči vidí ve hře.\n`;
 }

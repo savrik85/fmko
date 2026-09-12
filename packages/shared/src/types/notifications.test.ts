@@ -25,11 +25,11 @@ describe("titulek oznámení", () => {
     expect(rozdelTitulekOznameni("👨‍👩‍👧 Rodiny odcházejí", "event").ikona).toBe("👨‍👩‍👧");
   });
 
-  it("titulek složený jen z emoji zůstane celý — prázdná karta by byla horší", () => {
+  it("titulek složený jen z emoji zůstane celý, prázdná karta by byla horší", () => {
     expect(rozdelTitulekOznameni("🎉", "event")).toEqual({ ikona: "🎉", text: "🎉" });
   });
 
-  it("emoji uprostřed se nebere — ikona patří jen na začátek", () => {
+  it("emoji uprostřed se nebere, ikona patří jen na začátek", () => {
     const v = rozdelTitulekOznameni("Gól! ⚽ v 90. minutě", "match_result");
     expect(v.text).toBe("Gól! ⚽ v 90. minutě");
     expect(v.ikona).toBe(NOTIFIKACE_IKONY.match_result);

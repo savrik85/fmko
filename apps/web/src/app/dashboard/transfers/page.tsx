@@ -1642,7 +1642,7 @@ export default function TransfersPage() {
                         onClick={async () => {
                           const ok = await confirm({
                             title: `Podepsat ${fa.firstName} ${fa.lastName}?`,
-                            description: `${fa.position}, ${fa.age} let, rating ${fa.overallRating} — ${fa.occupation}`,
+                            description: `${fa.position}, ${fa.age} let, rating ${fa.overallRating} ${fa.occupation}`,
                             details: [
                               { label: "Mzda", value: `${formatCZK(fa.weeklyWage)}/týd`, color: "text-ink" },
                               { label: "Registrace", value: `-${formatCZK(500)}`, color: "text-card-red" },
@@ -2028,7 +2028,7 @@ export default function TransfersPage() {
                               ));
                             })()}
                             {isYouth && hiddenTalent !== undefined && (
-                              <span className="text-xs text-amber-600 font-heading font-bold" title="Skrytý talent — talentovaný hráč roste na tréninku rychleji a má vyšší strop rozvoje">
+                              <span className="text-xs text-amber-600 font-heading font-bold" title="Skrytý talent, talentovaný hráč roste na tréninku rychleji a má vyšší strop rozvoje">
                                 ✨ Talent {hiddenTalent >= 30 ? "vysoký" : hiddenTalent >= 18 ? "střední" : "nízký"}
                               </span>
                             )}
@@ -2151,7 +2151,7 @@ export default function TransfersPage() {
                           const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
                           const adminFee = Number((o as any).admin_fee ?? 0);
                           const desc = adminFee > 0
-                            ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup — kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)}`
+                            ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup, kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)}`
                             : `Za ${o.first_name} ${o.last_name}`;
                           const ok = await confirm({ title: `Přijmout ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
@@ -2262,7 +2262,7 @@ export default function TransfersPage() {
                             const isCrossLeague = myLeagueId && (o as any).to_league_id && (o as any).to_league_id !== myLeagueId;
                             const adminFee = Number((o as any).admin_fee ?? 0);
                             const desc = adminFee > 0
-                              ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup — zaplatíš navíc administrační poplatek ${formatCZK(adminFee)}`
+                              ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup, zaplatíš navíc administrační poplatek ${formatCZK(adminFee)}`
                               : `Za ${o.first_name} ${o.last_name}`;
                             const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
                             if (!ok || !teamId) return;
