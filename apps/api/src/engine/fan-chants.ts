@@ -52,6 +52,16 @@ function prijmeni(jmeno: string): string {
 }
 
 /**
+ * Dá se to jméno vůbec skandovat?
+ *
+ * Testovací účty mívají trenéra „A A“ a chorál „A JE JEDEN Z NÁS!“ vypadá jako
+ * rozbitý text, ne jako vtip. Pod tři znaky se jméno do chorálu nedává.
+ */
+function skandovatelne(jmeno: string | null): boolean {
+  return !!jmeno && prijmeni(jmeno).length >= 3;
+}
+
+/**
  * Co si dnes vymysleli.
  *
  * Vrací všechny chorály, které z dnešního stavu dávají smysl. Volající je
@@ -62,8 +72,8 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
   const out: NovyChorál[] = [];
   const vyber = <T,>(z: readonly T[]): T => z[Math.floor(roll * z.length) % z.length];
 
-  if (s.oblibenec) {
-    const p = prijmeni(s.oblibenec).toUpperCase();
+  if (skandovatelne(s.oblibenec)) {
+    const p = prijmeni(s.oblibenec!).toUpperCase();
     out.push({
       kind: "oblibenec",
       // Jména se schválně neskloňují. „Kdo nemá rád Kolman" je patvar a
@@ -73,6 +83,15 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
         `${p}, ${p}, ty jsi náš!`,
         `Jedno jméno, jeden král: ${p}!`,
         `${p}! ${p}! ${p}!`,
+        `Hej, hej, ${p}, hej, hej!`,
+        `Za ${p} dáme všechno, hej!`,
+        `Kdo to válí? ${p}! Kdo to válí? ${p}!`,
+        `${p} je náš, ${p} je náš, hej!`,
+        `Ó ó ó, ${p}, ó ó ó!`,
+        `Máme ${p}, vy máte prd!`,
+        `${p} na hřišti, my na nohou!`,
+        `Ale ale ale, ${p} dál a dál!`,
+        `Náš chlap se jmenuje ${p}!`,
       ]),
       duvod: `${s.oblibenec} je miláček kotle.`,
       sila: 55,
@@ -87,28 +106,44 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
         `Kdo neskáče, není náš, hej, hej!`,
         `${r} do vápna, ${r} do vápna!`,
         `Celej okres ví, kdo je tady doma!`,
+        `${r}, ${r}, na to se nedá koukat!`,
+        `My jsme tady doma, vy jste tady hosti!`,
+        `Sbalte si to, ${r}, a mažte!`,
+        `Ať žije okres, ${r} ať mlčí!`,
+        `Kdo je z ${r}? Nikdo! Kdo je náš? My!`,
+        `Na-na-na, ${r} nikdy, na-na-na!`,
+        `Vy máte dres, my máme kotel!`,
       ]),
       duvod: `Rivalita s klubem ${r} je vyhrocená.`,
       sila: Math.min(90, 40 + s.rival.heat / 2),
     });
   }
 
-  if (s.kampanProtiTreneru && s.trener) {
+  if (s.kampanProtiTreneru && skandovatelne(s.trener)) {
     out.push({
       kind: "trener_proti",
       text: vyber([
-        `${prijmeni(s.trener).toUpperCase()}, ODEJDI!`,
+        `${prijmeni(s.trener!).toUpperCase()}, ODEJDI!`,
         `Chceme trenéra! Tenhle ne!`,
+        `${prijmeni(s.trener!).toUpperCase()} VEN! ${prijmeni(s.trener!).toUpperCase()} VEN!`,
+        `Kdo to vede? Nikdo! Hej, hej!`,
+        `Balte kufry, pane trenére!`,
+        `My tu budem, vy tu nebudete!`,
+        `Lavička je prázdná, i když na ní sedíte!`,
       ]),
       duvod: "Kotel veřejně volá po odvolání trenéra.",
       sila: 80,
     });
-  } else if (s.serie >= 3 && s.trener) {
+  } else if (s.serie >= 3 && skandovatelne(s.trener)) {
     out.push({
       kind: "trener_pro",
       text: vyber([
-        `${prijmeni(s.trener).toUpperCase()} je jeden z nás!`,
+        `${prijmeni(s.trener!).toUpperCase()} je jeden z nás!`,
         `Máme trenéra, máme trenéra!`,
+        `Hej, hej, ${prijmeni(s.trener!).toUpperCase()}, hej, hej!`,
+        `Kdo nás vede? ${prijmeni(s.trener!).toUpperCase()}! A vede nás dobře!`,
+        `Trenére, trenére, zůstaň tady s náma!`,
+        `Ó ó ó, ${prijmeni(s.trener!).toUpperCase()}, ó ó ó!`,
       ]),
       duvod: `Tým vyhrál ${s.serie} zápasy po sobě.`,
       sila: 60,
@@ -122,6 +157,12 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
         `Jedeme dál, jedeme dál!`,
         `Kdo to nevidí, ať přijde příště!`,
         `Tohle je naše sezóna!`,
+        `Hej, hej, jedem, hej, hej, jedem!`,
+        `Kdo nás zastaví? Nikdo! Nikdo!`,
+        `Vyhrát, vyhrát, a zas vyhrát!`,
+        `Celej okres kouká, celej okres mlčí!`,
+        `Ale ale ale, my jedem dál!`,
+        `Nikdo nám to nedal, my si to vzali!`,
       ]),
       duvod: `Série ${s.serie} výher.`,
       sila: 50,
@@ -136,6 +177,13 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
         `My tu budem, až tady nikdo nebude!`,
         `Pojedem všude, kam se dá!`,
         `Vy se měníte, my ne!`,
+        `V dešti, v blátě, pořád tady!`,
+        `Hráči přijdou, hráči jdou, my zůstáváme!`,
+        `Nikdy, nikdy se nevzdáme!`,
+        `Ať to stojí co to stojí, my jsme tady!`,
+        `Prohráváme? Zpíváme! Hej, hej!`,
+        `Naše barvy, naše bída, naše hrdost!`,
+        `Na-na-na, my neodejdem, na-na-na!`,
       ]),
       duvod: s.heat >= 60 ? "Kotel je na vedení naštvaný." : "Nálada je na dně, ale chodí dál.",
       sila: 65,
@@ -148,6 +196,10 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
       text: vyber([
         `Za naše peníze aspoň ${s.stiznostNaVybaveni}!`,
         `Chceme ${s.stiznostNaVybaveni}!`,
+        `Hej, vedení! Chceme ${s.stiznostNaVybaveni}!`,
+        `Platíme vstup, chceme ${s.stiznostNaVybaveni}!`,
+        `Kdo nám dá ${s.stiznostNaVybaveni}? Nikdo! Hej, hej!`,
+        `Máme kotel, nemáme ${s.stiznostNaVybaveni}!`,
       ]),
       duvod: `Na stadionu jim vadí: ${s.stiznostNaVybaveni}.`,
       sila: 35,

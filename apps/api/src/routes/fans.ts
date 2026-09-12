@@ -723,7 +723,7 @@ fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
 
   const { tikChoralu } = await import("../fans/fan-chants");
   const { prispevkyKChoralum } = await import("../fans/fan-feed");
-  const noveChoraly = await tikChoralu(c.env.DB, teamId, party, gameDate);
+  const noveChoraly = await tikChoralu(c.env.DB, teamId, party, gameDate, c.env);
   if (noveChoraly.length > 0) await prispevkyKChoralum(c.env.DB, teamId, noveChoraly, gameDate);
 
   // Týdenní dopad prostředí. V dev triggeru se pouští vždycky, ať se dá ověřit.

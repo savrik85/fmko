@@ -445,7 +445,7 @@ export async function processTeamDay(
         // Chorály. Vznikají z téhož stavu jako všechno ostatní a drží se,
         // dokud jejich důvod platí.
         const { tikChoralu } = await import("../fans/fan-chants");
-        const noveChoraly = await tikChoralu(env.DB, teamId, party, newGameDate);
+        const noveChoraly = await tikChoralu(env.DB, teamId, party, newGameDate, env);
         if (noveChoraly.length > 0) {
           const { prispevkyKChoralum } = await import("../fans/fan-feed");
           await prispevkyKChoralum(env.DB, teamId, noveChoraly, newGameDate);
