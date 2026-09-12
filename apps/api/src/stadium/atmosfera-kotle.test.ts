@@ -9,6 +9,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { calculateFacilityEffects, SKALY } from "./stadium-generator";
+import { zastraseniHostu, FAN_SKALY } from "../engine/fan-groups";
 
 /** Totéž, co dělá match-runner: atmosféra se počítá jen s kotlem na místě. */
 function atmosfera(ultrasLevel: number, kotel: { sector: string; closed: number }) {
@@ -54,5 +55,38 @@ describe("atmosféra se stěhuje s partou", () => {
   it("bez postaveného sektoru se nemá co ztratit", () => {
     expect(atmosfera(0, { sector: "kotel", closed: 0 }).advantage).toBe(0);
     expect(atmosfera(0, { sector: "hlavni", closed: 0 }).advantage).toBe(0);
+  });
+});
+
+describe("zastrašení hostů", () => {
+  const kotel = (o: Partial<Parameters<typeof zastraseniHostu>[0]> = {}) =>
+    zastraseniHostu({ sector: "za_branou", size: 80, noise: 95, mood: 85, sectorClosed: false, ...o });
+
+  it("jen z místa hned vedle hostů, jinde nula", () => {
+    expect(kotel()).toBeGreaterThan(0);
+    expect(kotel({ sector: "kotel" })).toBe(0);
+    expect(kotel({ sector: "hlavni" })).toBe(0);
+  });
+
+  it("zavřený sektor nikoho nezastraší", () => {
+    expect(kotel({ sectorClosed: true })).toBe(0);
+  });
+
+  it("hrstka lidí hosty neruší", () => {
+    expect(kotel({ size: 10 })).toBe(0);
+  });
+
+  it("velká, hlasitá a nadšená parta bere víc než malá a otrávená", () => {
+    expect(kotel({ size: 120, noise: 100, mood: 95 }))
+      .toBeGreaterThan(kotel({ size: 25, noise: 40, mood: 20 }));
+  });
+
+  it("nikdy nesebere víc než strop", () => {
+    expect(kotel({ size: 9999, noise: 100, mood: 100 })).toBeLessThanOrEqual(FAN_SKALY.ZASTRASENI.MAX);
+  });
+
+  it("tohle je jediný důvod, proč partu za branku stěhovat", () => {
+    // Kdyby zastrašení bylo nulové, je ta volba horší ve všem a nemá smysl.
+    expect(FAN_SKALY.ZASTRASENI.MAX).toBeGreaterThan(0);
   });
 });

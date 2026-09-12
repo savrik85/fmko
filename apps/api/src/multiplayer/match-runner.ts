@@ -510,6 +510,33 @@ export async function runScheduledMatches(
             const ultrasAdvantage = kotelDoma ? facilityEffects.homeAdvantageBonus : 0;
             const ultrasMorale = kotelDoma ? facilityEffects.homeCrowdMoraleBonus : 0;
 
+            // Kotel za brankou stojí hned vedle hostujícího sektoru a leze jim
+            // do hlavy. Tohle je jediný důvod, proč tam partu stěhovat: přijdeš
+            // o atmosféru z postaveného sektoru a koleduješ si o rvačku, ale
+            // soupeř nastoupí s nižší morálkou.
+            let zastraseni = 0;
+            if (kotelStavRow?.sector === "za_branou" && kotelStavRow.closed_matches === 0) {
+                const { zastraseniHostu } = await import("../engine/fan-groups");
+                const kotelHlas = await db.prepare(
+                    "SELECT size, noise, mood FROM fan_groups WHERE team_id = ? AND kind = 'kotel'",
+                ).bind(homeTeamId).first<{ size: number; noise: number; mood: number }>()
+                    .catch((e) => { logger.warn({module: "match-runner"}, "kotel pro zastrašení", e); return null; });
+                if (kotelHlas) {
+                    zastraseni = zastraseniHostu({
+                        sector: "za_branou", size: kotelHlas.size, noise: kotelHlas.noise,
+                        mood: kotelHlas.mood, sectorClosed: false,
+                    });
+                }
+                if (zastraseni > 0) {
+                    for (const p of awayLineup) p.morale = Math.max(0, p.morale - zastraseni);
+                    for (const p of awaySubs) p.morale = Math.max(0, p.morale - zastraseni);
+                    logger.info(
+                        {module: "match-runner", teamId: homeTeamId, matchId},
+                        `kotel za brankou sebral hostům ${zastraseni} morálky`,
+                    );
+                }
+            }
+
             // Morálka domácích: šatny + sektor kotle (atmosféra)
             const homeMoraleBoost = facilityEffects.homeMoraleBonus + ultrasMorale;
             if (homeMoraleBoost > 0) {

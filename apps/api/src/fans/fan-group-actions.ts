@@ -94,7 +94,7 @@ export const FAN_ACTIONS: Record<FanActionKey, FanActionDef> = {
     variants: [
       { key: "kotel", label: "Kotel za brankou", cost: 3000, dopad: "Plná atmosféra z postaveného sektoru, plné riziko. Rvačka s hosty možná." },
       { key: "hlavni", label: "Hlavní tribuna", cost: 3000, dopad: "Rvačka vyloučená a o čtvrtinu míň malérů. Přijdeš ale o celou výhodu a morálku ze sektoru kotle." },
-      { key: "za_branou", label: "Sektor za brankou", cost: 3000, dopad: "O třetinu vyšší riziko, nejblíž k hostům, a taky bez výhody ze sektoru kotle." },
+      { key: "za_branou", label: "Sektor za brankou", cost: 3000, dopad: "Hned vedle hostů: sebere jim morálku před výkopem. Za cenu o třetinu vyššího rizika a bez výhody ze sektoru kotle." },
     ],
   },
 };

@@ -278,6 +278,22 @@ export const FAN_SKALY = {
   /** Hlas party podle sektoru — z hlavní tribuny se bubnovat nedá. */
   SEKTOR_HLAS: { kotel: 1.0, hlavni: 0.6, za_branou: 0.9 } as Record<FanSector, number>,
 
+  /**
+   * Zastrašení hostů. Kotel postavený hned vedle hostujícího sektoru jim leze
+   * do hlavy: sníží morálku hostujícího mužstva před výkopem.
+   *
+   * Bez tohohle neměla volba „sektor za brankou" JEDINÝ důvod existovat. Byla
+   * horší ve všem: vyšší riziko, žádná atmosféra z postaveného kotle, nic
+   * navíc. Teď je to agresivní varianta: soupeři sebereš morálku, ale koleduješ
+   * si o rvačku a přijdeš o výhodu ze sektoru.
+   */
+  ZASTRASENI: {
+    /** Kolik morálky sebere hostům plný, rozvášněný kotel za brankou. */
+    MAX: 6,
+    /** Pod tolik lidí to hosty neruší. */
+    MIN_SIZE: 20,
+  },
+
   /** Kolem téhle nálady a vášně se parta chová „normálně". */
   NEUTRAL: { mood: 50, passion: 55, spending: 55 },
 
@@ -846,4 +862,25 @@ export function rivalitaWord(heat: number): string {
   if (heat >= 25) return "vlažná";
   if (heat > 0) return "stará křivda";
   return "žádná";
+}
+
+
+/**
+ * O kolik kotel sebere hostům morálku před výkopem.
+ *
+ * Počítá se jen u party stojící za brankou, tedy hned vedle hostujícího
+ * sektoru. Rozhoduje velikost, hluk a nálada: pár otrávených lidí nikoho
+ * nezastraší, plný rozvášněný kotel ano. Zavřený sektor nezastraší nikoho.
+ */
+export function zastraseniHostu(g: {
+  sector: FanSector; size: number; noise: number; mood: number; sectorClosed: boolean;
+}): number {
+  if (g.sector !== "za_branou" || g.sectorClosed) return 0;
+  if (g.size < FAN_SKALY.ZASTRASENI.MIN_SIZE) return 0;
+
+  // Velikost se sytí do stovky lidí, výš už je to jedno.
+  const velikost = Math.min(1, g.size / 100);
+  const hlas = clamp01(g.noise / 100);
+  const zapal = clamp01(g.mood / 100);
+  return Math.round(FAN_SKALY.ZASTRASENI.MAX * velikost * hlas * (0.5 + zapal * 0.5));
 }
