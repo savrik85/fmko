@@ -83,6 +83,15 @@ export const OFFENCES: Record<string, Offence> = {
     evidenceLabel: "tři a více zápisů o výtržnostech za sezónu",
     majority: QUALIFIED_MAJORITY,
   },
+  // Rvačka je jiná liga než pokřiky: je u ní vždycky druhý klub a postihuje se
+  // i ten, kdo si ji přivezl na výjezd. Proto vlastní skutek, ne jen další
+  // zápis do „výtržností" — soutěž o ní má hlasovat zvlášť.
+  fan_fight: {
+    kind: "fan_fight",
+    label: "Rvačka fanoušků",
+    evidenceLabel: "aspoň jedna rvačka jejich kotle v sezóně",
+    majority: QUALIFIED_MAJORITY,
+  },
   other: {
     kind: "other",
     label: "Nesportovní chování",
@@ -104,11 +113,17 @@ export interface EvidenceLimits {
   pitchThreshold: number;
   /** Platí v soutěži zákaz obchodů mezi kluby stejného majitele? */
   ownerTransfersBanned: boolean;
+  /**
+   * Herní datum začátku sezóny — okno pro důkazy, které se počítají „za sezónu".
+   * Prázdné = bez omezení (starší data, kde se kalendář nedohledá).
+   */
+  seasonStart?: string;
 }
 
 export const DEFAULT_EVIDENCE_LIMITS: EvidenceLimits = {
   pitchThreshold: DEFAULT_PITCH_THRESHOLD,
   ownerTransfersBanned: false,
+  seasonStart: "",
 };
 
 /**
@@ -124,9 +139,15 @@ export async function evidenceLimitsFor(
   try {
     const { resolveRules } = await import("./rules");
     const r = await resolveRules(db, leagueId, seasonNumber);
+    // `seasons` datum začátku nedrží, ale kalendář ano — první kolo sezóny.
+    const zacatek = await db.prepare(
+      "SELECT MIN(match_date) AS d FROM season_calendar WHERE league_id = ? AND season_number = ?",
+    ).bind(leagueId, seasonNumber).first<{ d: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, "zacatek sezony pro dukazy", e); return null; });
     return {
       pitchThreshold: r.min_pitch_condition > 0 ? r.min_pitch_condition : DEFAULT_PITCH_THRESHOLD,
       ownerTransfersBanned: r.ban_own_owner_transfers > 0,
+      seasonStart: zacatek?.d ?? "",
     };
   } catch (e) {
     logger.warn({ module: M }, "nacteni mezi pro dukazy", e);
@@ -167,14 +188,32 @@ export async function collectEvidence(
 
   // Jednotlivou výtržnost řeší automatická pokuta rovnou po zápase. Sem patří
   // až recidiva — tam už soutěž může chtít něco tvrdšího než sazebník.
+  //
+  // POZOR na okno: popisek slibuje „za sezónu" a dřív se počítala celá historie,
+  // takže klub, který jednou v minulosti něco měl, byl žalovatelný navždy.
+  // `fan_incidents` číslo sezóny nenese, ale nese herní datum — okno se proto
+  // bere od začátku aktuální sezóny.
+  const odKdy = limits.seasonStart ?? "";
   const bordel = await db.prepare(
-    "SELECT COUNT(*) AS n FROM fan_incidents WHERE team_id = ?"
-  ).bind(teamId).first<{ n: number }>()
+    `SELECT
+       COUNT(*) AS n,
+       SUM(CASE WHEN kind = 'bitka_kotle' THEN 1 ELSE 0 END) AS rvacky
+     FROM fan_incidents WHERE team_id = ? AND COALESCE(game_date, '') >= ?`
+  ).bind(teamId, odKdy).first<{ n: number; rvacky: number }>()
     .catch((e) => { logger.warn({ module: M }, "výtržnosti fanoušků", e); return null; });
   if (bordel && bordel.n >= FAN_INCIDENT_THRESHOLD) {
     out.push({
       kind: "fan_violence", label: OFFENCES.fan_violence.label,
-      detail: `${bordel.n} ${bordel.n < 5 ? "zápisy" : "zápisů"} o výtržnostech na jejich stadionu.`,
+      detail: `${bordel.n} ${bordel.n < 5 ? "zápisy" : "zápisů"} o výtržnostech za tuhle sezónu.`,
+    });
+  }
+  // Rvačka stačí jedna. Je u ní vždycky druhý klub a zápas se kvůli ní přerušuje.
+  if (bordel && (bordel.rvacky ?? 0) >= 1) {
+    out.push({
+      kind: "fan_fight", label: OFFENCES.fan_fight.label,
+      detail: bordel.rvacky === 1
+        ? "Jejich kotel se v téhle sezóně pral s fanoušky soupeře."
+        : `${bordel.rvacky} rvačky jejich kotle v téhle sezóně.`,
     });
   }
 

@@ -261,6 +261,9 @@ export const FAN_SKALY = {
     tifo: 0.3,
     /** Nálada pod 30 přidá, nad 70 ubere. */
     moodSwing: 0.25,
+    /** Rivalita mezi tábory na 100. Přičítá se k derby, nenahrazuje ho —
+     *  zápas může být derby manažerů i bitka kotlů zároveň. */
+    rivalita: 0.7,
   },
 
   /** Sektor uzavřený za trest — kolik z hlasu skupiny zbude. */
@@ -277,6 +280,49 @@ export const FAN_SKALY = {
 
   /** Kolem téhle nálady a vášně se parta chová „normálně". */
   NEUTRAL: { mood: 50, passion: 55, spending: 55 },
+
+  /**
+   * Tvrdé jádro — ta část party, která doopravdy dělá bordel a jezdí ven.
+   *
+   * `podil` je základ podle druhu party. Rodiny a pamětníci žádné jádro nemají:
+   * tři generace u zábradlí se s nikým neperou. Kotel jich má nejvíc.
+   */
+  JADRO: {
+    podil: { kotel: 0.35, parta_z_okoli: 0.25, stamgasti: 0.1, rodiny: 0, pametnici: 0 },
+    /** Pod tolik lidí se jádro nepočítá — pět chlapů není tvrdé jádro. */
+    MIN: 6,
+    /** Nálada a vášeň jádro nafukují nebo splaskávají, nejvýš o tolik. */
+    NALADA_VLIV: 0.4,
+    /** Kolik z jádra odejde po jednom zavřeném sektoru. */
+    ZTRATA_ZAVRENY_SEKTOR: 0.12,
+    /** Kolik z jádra vypadne po rvačce (zákazy vstupu, zadržení). */
+    ZTRATA_RVACKA: 0.15,
+    /** Kolik z jádra vezme nejvyšší ochranka za sezónu — index = úroveň. */
+    ZTRATA_OCHRANKA: [0, 0, 0.01, 0.03],
+    /** Jaká část jádra vyrazí na venkovní zápas. */
+    PODIL_NA_VENKOVNI: 0.55,
+  },
+
+  /**
+   * Rivalita mezi tábory. Roste po každém střetu, sama chladne.
+   *
+   * Je schválně oddělená od heatu mezi manažery: dva slušní trenéři můžou mít
+   * kotle, které se nesnesou, a naopak.
+   */
+  RIVALITA: {
+    /** Nad tuhle teplotu je to mezi tábory „horké" a riziko znatelně roste. */
+    PRAH_HORKO: 45,
+    /** Přiložení po rvačce. */
+    ZA_RVACKU: 22,
+    /** Přiložení po jiné výtržnosti při jejich vzájemném zápase. */
+    ZA_INCIDENT: 7,
+    /** Přiložení za samotné odehrání vzájemného zápasu — potkávají se. */
+    ZA_ZAPAS: 2,
+    /** Kolik stupňů vychladne za herní den bez vzájemného zápasu. */
+    CHLADNUTI_ZA_DEN: 0.4,
+    /** Strop. */
+    MAX: 100,
+  },
 } as const;
 
 // ── Výtržnosti ───────────────────────────────────────────────────────────────
@@ -437,6 +483,8 @@ export interface IncidentContext {
   leaderRadikalnost: number | null;
   /** Vzájemný heat manažerů ≥ DERBY_HEAT_THRESHOLD. */
   derby: boolean;
+  /** Teplota rivality mezi tábory 0–100. Vlastní paměť fanoušků, ne manažerů. */
+  rivalita: number;
   /** Domácí zápas nezvládli. */
   homeLosing: boolean;
   /** Kolik piva padlo na jednoho diváka, 0–1 (1 = každý měl aspoň jedno). */
@@ -475,6 +523,7 @@ export function incidentChance(ctx: IncidentContext): number {
 
   p *= 1 + (g.heat / 100) * M.heat;
   if (ctx.derby) p *= 1 + M.derby;
+  p *= 1 + (Math.max(0, Math.min(100, ctx.rivalita)) / 100) * M.rivalita;
   if (ctx.homeLosing) p *= 1 + M.losing;
   p *= 1 + Math.max(0, Math.min(1, ctx.beerPerAttendee)) * M.beer;
   p *= 1 + (Math.max(0, ctx.awayUltrasSize) / 200) * M.awayUltrasPer200;
@@ -690,4 +739,85 @@ export function heatWord(heat: number): string {
   if (heat >= 50) return "napjatý vztah";
   if (heat >= 25) return "reptají";
   return "klid";
+}
+
+// ── Tvrdé jádro ──────────────────────────────────────────────────────────────
+
+/**
+ * Kolik lidí tvoří tvrdé jádro party.
+ *
+ * Není to prostě podíl z velikosti — jádro sytí nálada a vášeň. Spokojený kotel
+ * má plný kotel, otrávený se scvrkne na hrstku, která tam chodí ze zvyku.
+ * Rodiny a pamětníci jádro nemají vůbec: mezi kočárky se nikdo neperá.
+ */
+export function jadroVelikost(g: {
+  kind: FanGroupKind; size: number; mood: number; passion: number;
+}): number {
+  const podil = FAN_SKALY.JADRO.podil[g.kind] ?? 0;
+  if (podil <= 0 || g.size <= 0) return 0;
+  const sytost = 1 + (((g.mood - FAN_SKALY.NEUTRAL.mood) / 100)
+    + ((g.passion - FAN_SKALY.NEUTRAL.passion) / 100)) * FAN_SKALY.JADRO.NALADA_VLIV;
+  const n = Math.round(g.size * podil * Math.max(0.3, Math.min(1.7, sytost)));
+  return n < FAN_SKALY.JADRO.MIN ? 0 : Math.min(n, g.size);
+}
+
+/** Kolik z jádra vyrazí na venkovní zápas — jen ti se serou s domácím kotlem. */
+export function jadroNaVenkovni(core: number): number {
+  return Math.round(Math.max(0, core) * FAN_SKALY.JADRO.PODIL_NA_VENKOVNI);
+}
+
+/** Kolik lidí jádro ztratí po zásahu (zavřený sektor, rvačka). */
+export function jadroZtrata(core: number, duvod: "zavreny_sektor" | "rvacka"): number {
+  const podil = duvod === "rvacka"
+    ? FAN_SKALY.JADRO.ZTRATA_RVACKA
+    : FAN_SKALY.JADRO.ZTRATA_ZAVRENY_SEKTOR;
+  return Math.min(core, Math.ceil(Math.max(0, core) * podil));
+}
+
+// ── Rivalita mezi tábory ─────────────────────────────────────────────────────
+
+/** Dvojice klubů vždy ve stejném pořadí — jinak by vznikly dva řádky pro jednu rivalitu. */
+export function rivalitaKlic(teamA: string, teamB: string): { a: string; b: string; id: string } {
+  const [a, b] = teamA < teamB ? [teamA, teamB] : [teamB, teamA];
+  return { a, b, id: `riv-${a}-${b}` };
+}
+
+export type RivalitaDuvod = "rvacka" | "incident" | "zapas";
+
+/** O kolik se rivalita přiloží. */
+export function rivalitaPrirustek(duvod: RivalitaDuvod): number {
+  const R = FAN_SKALY.RIVALITA;
+  return duvod === "rvacka" ? R.ZA_RVACKU : duvod === "incident" ? R.ZA_INCIDENT : R.ZA_ZAPAS;
+}
+
+/**
+ * Nová teplota po přiložení a po vychladnutí za uplynulé dny.
+ *
+ * Chladne se PŘED přiložením — jinak by zápas po roce pauzy startoval z původní
+ * hodnoty a rivalita by nikdy neopadla.
+ */
+export function rivalitaPo(
+  heat: number,
+  dnuOdPosledne: number,
+  duvod: RivalitaDuvod | null,
+): number {
+  const R = FAN_SKALY.RIVALITA;
+  const vychladle = Math.max(0, heat - Math.max(0, dnuOdPosledne) * R.CHLADNUTI_ZA_DEN);
+  const pridano = duvod ? rivalitaPrirustek(duvod) : 0;
+  return Math.round(Math.max(0, Math.min(R.MAX, vychladle + pridano)));
+}
+
+/** Je to mezi tábory horké? */
+export function rivalitaHorka(heat: number): boolean {
+  return heat >= FAN_SKALY.RIVALITA.PRAH_HORKO;
+}
+
+/** Rivalita slovem — pro UI. */
+export function rivalitaWord(heat: number): string {
+  if (heat >= 80) return "nesmiřitelná";
+  if (heat >= 60) return "vyhrocená";
+  if (heat >= 45) return "horká";
+  if (heat >= 25) return "vlažná";
+  if (heat > 0) return "stará křivda";
+  return "žádná";
 }

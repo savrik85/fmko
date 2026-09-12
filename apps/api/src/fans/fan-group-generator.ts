@@ -188,6 +188,8 @@ export interface FanGroupRow {
   sector: string;
   closed_matches: number;
   ticket_discount: number;
+  /** Tvrdé jádro — kolik z party doopravdy dělá bordel a jezdí ven. */
+  core: number;
   leader_id: string | null;
 }
 

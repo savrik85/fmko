@@ -94,7 +94,7 @@ export interface UpgradeOption {
   villageCanFund?: boolean;
 }
 
-const FACILITY_LABELS: Record<string, string> = {
+export const FACILITY_LABELS: Record<string, string> = {
   changing_rooms: "Šatny",
   showers: "Sprchy",
   refreshments: "Občerstvení",
@@ -112,7 +112,7 @@ const FACILITY_LABELS: Record<string, string> = {
 // Stadium = dlouhodobá investice přes více sezón
 // Při čistém zisku ~1-2k Kč/týd (16-32k/sezóna):
 // L1 = 1-2 sezóny šetření, L2 = 2-4 sezóny, L3 = 4-8 sezón
-const UPGRADE_COSTS: Record<string, number[]> = {
+export const UPGRADE_COSTS: Record<string, number[]> = {
   changing_rooms: [0, 25000, 85000, 220000],
   showers: [0, 18000, 60000, 160000],
   refreshments: [0, 5000, 110000, 280000],
@@ -452,4 +452,3 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   };
 }
 
-export { FACILITY_LABELS };

@@ -2551,8 +2551,20 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
 
   // Stadium sponsor
   if (category === "stadium") {
+    const stary = await c.env.DB.prepare("SELECT stadium_name FROM teams WHERE id = ?")
+      .bind(teamId).first<{ stadium_name: string | null }>()
+      .catch((e) => { logger.warn({ module: "game" }, "starý název stadionu", e); return null; });
     await c.env.DB.prepare("UPDATE teams SET stadium_name = ? WHERE id = ?")
       .bind(body.sponsorName, teamId).run();
+    // Druh „prejmenovani_stadionu" byl v katalogu reakcí od začátku, ale nikdo ho
+    // nezapisoval — fanoušci se o přejmenování vlastního hřiště nedozvěděli.
+    // Pamětníkům vadí nejvíc: chodí na Sportovní areál, ne na Truhlářství.
+    const { recordClubEvent } = await import("../fans/club-events");
+    await recordClubEvent(c.env.DB, {
+      teamId, kind: "prejmenovani_stadionu", severity: 1,
+      payload: { co: `${stary?.stadium_name ?? "Hřiště"} je teď ${body.sponsorName}` },
+      referenceId: `fan-stadion-${id}`,
+    });
   }
 
   return c.json({ ok: true, contractId: id });

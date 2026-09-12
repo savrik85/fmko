@@ -19,8 +19,10 @@ import { DERBY_HEAT_THRESHOLD } from "../community/manager-relations";
 import {
   FAN_GROUPS, FAN_INCIDENTS, FAN_SKALY,
   incidentChance, incidentWeights, rollSeverity, incidentOutcome,
+  jadroNaVenkovni, jadroZtrata, rivalitaHorka,
   type FanGroupKind, type FanIncidentKind, type IncidentOutcome, type FanSector,
 } from "../engine/fan-groups";
+import { teplotaRivality, priloz } from "./fan-rivalries";
 import { ensureFanGroups, fanLeaderFullName, type FanGroupRow, type FanLeaderRow } from "./fan-group-generator";
 import { syncFanGroups, odbytZapasUzavreniSektoru } from "./fan-group-state";
 
@@ -113,6 +115,7 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
       sector: (g.sector as FanSector) ?? "hlavni",
       leaderRadikalnost: leader?.radikalnost ?? 50,
       derby: opts.preMatchHeat >= DERBY_HEAT_THRESHOLD,
+      rivalita: ctx.rivalita,
       homeLosing: opts.homeScore < opts.awayScore,
       beerPerAttendee: ctx.pivoNaHlavu * (g.spending / 100),
       awayUltrasSize: ctx.hostujiciKotel,
@@ -193,15 +196,204 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
     .run()
     .catch((e) => { logger.warn({ module: M }, `zápis snapshotu k zápasu ${opts.matchId}`, e); });
 
+  // ── Rivalita mezi tábory ──
+  // Přiloží se i bez průšvihu: potkat se u plotu stačí, aby si to pamatovali.
+  // Rvačka váží nejvíc, ostatní výtržnost při jejich zápase míň.
+  const rvacka = snapshoty.find((x) => x.kind === "bitka_kotle");
+  await priloz(db, {
+    teamA: opts.homeTeamId,
+    teamB: opts.awayTeamId,
+    duvod: rvacka ? "rvacka" : snapshoty.length > 0 ? "incident" : "zapas",
+    gameDate: opts.gameDate,
+    text: rvacka ? rvacka.text : snapshoty[0]?.text ?? "Odehráli spolu zápas.",
+  }).catch((e) => { logger.warn({ module: M }, "přiložení k rivalitě", e); });
+
+  // ── Rvačka má dvě strany ──
+  // Dřív se trestal jen domácí kotel a hosté odjeli bez následku, přestože se
+  // prali stejně. Teď schytají svůj díl: pokutu, ztrátu v jádru i zprávu domů.
+  if (rvacka) {
+    await potrestejHosty(db, opts, rvacka).catch((e) => {
+      logger.error({ module: M }, `potrestání hostů po rvačce ${opts.matchId}`, e);
+    });
+  }
+
   if (snapshoty.length > 0) {
     logger.info(
       { module: M, teamId: opts.homeTeamId, matchId: opts.matchId },
       `výtržnosti: ${snapshoty.map((s) => `${s.kind}/${s.severity}`).join(", ")} pokuty ${celkemPokuta} Kč`,
     );
+    await zapisHlaskyDoZapasu(db, tabulka, opts.matchId, snapshoty);
     await oznam(db, opts, snapshoty, celkemPokuta);
   }
 
+  // ── Tribuna ──
+  // Zeď se plní z týchž věcí, co hnuly náladou. Zvlášť se to nevymýšlí.
+  try {
+    const { prispevkyKVytrznosti, prispevkyKZapasu, prispevkyKRivalite } = await import("./fan-feed");
+    for (const sn of snapshoty) {
+      const vinik = groups.find((g) => g.name === sn.groupName);
+      await prispevkyKVytrznosti(db, {
+        teamId: opts.homeTeamId, incidentId: sn.id, kind: sn.kind,
+        vinikGroupId: vinik?.id ?? null, co: sn.text, gameDate: opts.gameDate,
+      });
+    }
+
+    const jmena = await db
+      .prepare("SELECT id, name FROM teams WHERE id IN (?, ?)")
+      .bind(opts.homeTeamId, opts.awayTeamId)
+      .all<{ id: string; name: string }>()
+      .catch((e) => { logger.warn({ module: M }, "názvy klubů pro Tribunu", e); return { results: [] as never[] }; });
+    const nazev = (id: string) => jmena.results.find((t) => t.id === id)?.name ?? "soupeř";
+
+    await prispevkyKZapasu(db, {
+      teamId: opts.homeTeamId, matchId: opts.matchId,
+      gf: opts.homeScore, ga: opts.awayScore,
+      souper: nazev(opts.awayTeamId), gameDate: opts.gameDate,
+    });
+    await prispevkyKZapasu(db, {
+      teamId: opts.awayTeamId, matchId: `${opts.matchId}-a`,
+      gf: opts.awayScore, ga: opts.homeScore,
+      souper: nazev(opts.homeTeamId), gameDate: opts.gameDate,
+    });
+
+    if (rvacka || rivalitaHorka(ctx.rivalita)) {
+      await prispevkyKRivalite(db, {
+        teamA: opts.homeTeamId, teamB: opts.awayTeamId,
+        nazevA: nazev(opts.homeTeamId), nazevB: nazev(opts.awayTeamId),
+        matchId: opts.matchId, gameDate: opts.gameDate,
+      });
+    }
+  } catch (e) {
+    logger.warn({ module: M }, `příspěvky na Tribunu k zápasu ${opts.matchId}`, e);
+  }
+
   return { skipped: false, incidents: snapshoty.length, totalFine: celkemPokuta };
+}
+
+/**
+ * Co rvačka udělá hostujícímu klubu.
+ *
+ * Jejich jádro se pralo taky, takže dostane pokutu (menší — hráli venku a
+ * přijela jich hrstka), ubude mu lidí kvůli zákazům a vedení se to dozví.
+ * Zápis do `fan_incidents` má vlastní id, aby idempotence držela zvlášť.
+ */
+async function potrestejHosty(
+  db: D1Database,
+  opts: ResolveOpts,
+  rvacka: IncidentSnapshot,
+): Promise<void> {
+  const incidentId = `inc-${opts.matchId}-hoste`;
+  const pokuta = Math.round((rvacka.fine * 0.6) / 100) * 100;
+  const text = `Jádro hostů se u plotu porvalo s domácím kotlem. ${rvacka.text}`;
+
+  const zapis = await db
+    .prepare(
+      `INSERT OR IGNORE INTO fan_incidents
+        (id, reference_id, match_id, team_id, opponent_team_id, group_id, kind, severity,
+         minute, text, fine, sector_closed_matches, fans_lost, morale_delta, game_date)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    )
+    .bind(
+      incidentId, incidentId, opts.matchId, opts.awayTeamId, opts.homeTeamId, null,
+      "bitka_kotle", rvacka.severity, rvacka.minute, text, pokuta, 0, 0, 0, opts.gameDate,
+    )
+    .run()
+    .catch((e) => { logger.error({ module: M }, `zápis rvačky hostů ${incidentId}`, e); return null; });
+  if ((zapis?.meta?.changes ?? 0) === 0) return;
+
+  // Zákazy vstupu a zadržení uberou z jádra na obou stranách.
+  for (const [teamId, kdo] of [[opts.awayTeamId, "hosté"], [opts.homeTeamId, "domácí"]] as const) {
+    const g = await db
+      .prepare("SELECT id, core FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
+      .bind(teamId).first<{ id: string; core: number }>()
+      .catch((e) => { logger.warn({ module: M }, `kotel ${kdo} po rvačce`, e); return null; });
+    if (!g || g.core <= 0) continue;
+    await db
+      .prepare("UPDATE fan_groups SET core = MAX(0, core - ?), heat = MIN(100, heat + 6) WHERE id = ?")
+      .bind(jadroZtrata(g.core, "rvacka"), g.id)
+      .run()
+      .catch((e) => { logger.warn({ module: M }, `ztráta jádra ${kdo}`, e); });
+  }
+
+  if (pokuta > 0 && opts.leagueId) {
+    const { issueSanction } = await import("../competition/discipline");
+    await issueSanction(db, {
+      leagueId: opts.leagueId,
+      seasonNumber: opts.seasonNumber,
+      teamId: opts.awayTeamId,
+      amount: pokuta,
+      kind: "fan_disorder",
+      reason: "rvačka jejich kotle na hřišti soupeře",
+      evidence: text,
+      issuedBy: "rule",
+      issuedByTeamId: null,
+      proposalId: null,
+      gameDate: opts.gameDate,
+      referenceId: `faninc-${opts.matchId}-hoste`,
+    });
+  }
+
+  const { sendSystemSMS } = await import("../lib/sms");
+  await sendSystemSMS(
+    db, opts.awayTeamId, "Hlavní pořadatel", "Hlavní pořadatel",
+    `🥊 Vaši lidé se na výjezdu porvali s domácím kotlem.`
+    + (pokuta > 0 ? ` Svaz vám za to vyměřil ${pokuta.toLocaleString("cs-CZ")} Kč.` : "")
+    + " Pár jich má zákaz vstupu.",
+  ).catch((e) => { logger.warn({ module: M }, "SMS hostům po rvačce", e); });
+}
+
+/**
+ * Hlášky z tribun do časové osy zápasu.
+ *
+ * Bez tohohle se o výtržnosti hráč dozvěděl až v samostatné sekci pod zápasem,
+ * jako by se stala mimo hru. Přitom má svou minutu — patří mezi události, kudy
+ * se zápas přehrává. Typ `special` s detailem `fans:<druh>` nekoliduje s ničím,
+ * co se počítá do statistik (góly, karty, střely).
+ */
+async function zapisHlaskyDoZapasu(
+  db: D1Database,
+  tabulka: "matches" | "cup_matches",
+  matchId: string,
+  snapshoty: IncidentSnapshot[],
+): Promise<void> {
+  const row = await db
+    .prepare(`SELECT events FROM ${tabulka} WHERE id = ?`)
+    .bind(matchId).first<{ events: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `události zápasu ${matchId}`, e); return null; });
+  if (!row) return;
+
+  let udalosti: Array<Record<string, unknown>>;
+  try {
+    const parsed = JSON.parse(row.events ?? "[]");
+    if (!Array.isArray(parsed)) return;
+    udalosti = parsed;
+  } catch (e) {
+    logger.warn({ module: M }, `rozbité události zápasu ${matchId}`, e);
+    return;
+  }
+
+  // Opakovaný běh by jinak hlášky přidal podruhé.
+  if (udalosti.some((u) => typeof u.detail === "string" && u.detail.startsWith("fans:"))) return;
+
+  for (const s of snapshoty) {
+    udalosti.push({
+      minute: s.minute,
+      type: "special",
+      detail: `fans:${s.kind}`,
+      // Tribuna nemá hráče ani stranu v poli — 1 = domácí, u jejichž sektoru se to stalo.
+      playerId: 0,
+      playerName: s.groupName,
+      teamId: 1,
+      description: s.text,
+    });
+  }
+  udalosti.sort((a, b) => ((a.minute as number) ?? 0) - ((b.minute as number) ?? 0));
+
+  await db
+    .prepare(`UPDATE ${tabulka} SET events = ? WHERE id = ?`)
+    .bind(JSON.stringify(udalosti), matchId)
+    .run()
+    .catch((e) => { logger.warn({ module: M }, `zápis hlášek z tribun ${matchId}`, e); });
 }
 
 // ── Kontext ──────────────────────────────────────────────────────────────────
@@ -211,6 +403,8 @@ interface Kontext {
   securityLevel: number;
   reputace: number;
   hostujiciKotel: number;
+  /** Teplota rivality mezi tábory 0–100, už po vychladnutí od minula. */
+  rivalita: number;
   /** 0–1: kolik piva je vůbec k mání. Vlastní prodej se v tuhle chvíli ještě nezaúčtoval,
    *  proto se bere z úrovně občerstvení, ne z tržeb. */
   pivoNaHlavu: number;
@@ -241,19 +435,22 @@ async function nactiKontext(db: D1Database, opts: ResolveOpts): Promise<Kontext>
     logger.warn({ module: M }, `party hostů ${opts.awayTeamId}`, e); return [];
   });
   const host = await db
-    .prepare("SELECT size FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
+    .prepare("SELECT core FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
     .bind(opts.awayTeamId)
-    .first<{ size: number }>()
+    .first<{ core: number }>()
     .catch((e) => { logger.warn({ module: M }, "kotel hostů", e); return null; });
 
-  // Hosté nejezdí v plném počtu — na okresní zápas vyrazí zlomek jejich kotle.
-  const hostujiciKotel = Math.round((host?.size ?? 0) * 0.25);
+  // Ven jezdí JÁDRO, ne čtvrtina celé party. Dřív se tu bral podíl z velikosti,
+  // takže na zápas „přijelo" i padesát rodin s kočárky a riziko rvačky rostlo
+  // s něčím, co se rvát nikdy nebude.
+  const hostujiciKotel = jadroNaVenkovni(host?.core ?? 0);
 
   return {
     fx: calculateFacilityEffects(facilities),
     securityLevel: facilities.security ?? 0,
     reputace: tym?.reputation ?? 50,
     hostujiciKotel,
+    rivalita: await teplotaRivality(db, opts.homeTeamId, opts.awayTeamId, opts.gameDate),
     pivoNaHlavu: (facilities.refreshments ?? 0) / 3,
   };
 }
@@ -352,17 +549,39 @@ async function aplikujDopady(
     }
   }
 
-  // ── Oprava poškozeného zařízení ──
+  // ── Rozbité zařízení ──
+  // Dřív se za škodu jen strhlo pár tisíc a sociálky, které někdo vykopl,
+  // fungovaly dál. Teď se zařízení opravdu srazí o úroveň a nefunguje, dokud
+  // ho klub nespraví — úklid se platí tak jako tak.
   if (a.kind === "skoda") {
     try {
       const { recordTransaction } = await import("../season/finance-processor");
-      const oprava = 1500 * dopad.severity;
+      const uklid = 500 * dopad.severity;
       await recordTransaction(
-        db, opts.homeTeamId, "match_expense", -oprava,
-        "Oprava po výtržnostech na tribuně", opts.gameDate, `fandmg-${opts.matchId}-${group.kind}`,
+        db, opts.homeTeamId, "match_expense", -uklid,
+        "Úklid po výtržnostech na tribuně", opts.gameDate, `fandmg-${opts.matchId}-${group.kind}`,
       );
+
+      const { rozbijVybaveni } = await import("../stadium/stadium-damage");
+      const rng = createRng(seedFromString(`fandmg|${opts.matchId}|${group.kind}`));
+      const rozbite = await rozbijVybaveni(db, {
+        teamId: opts.homeTeamId,
+        incidentId: `inc-${opts.matchId}-${group.kind}`,
+        severity: dopad.severity,
+        gameDate: opts.gameDate,
+        vyber: (z) => rng.pick(z as readonly unknown[]) as never,
+      });
+
+      if (rozbite) {
+        const { sendSystemSMS } = await import("../lib/sms");
+        await sendSystemSMS(
+          db, opts.homeTeamId, "Správce hřiště", "Správce hřiště",
+          `🔧 ${rozbite.label} je po zápase rozbité a nefunguje. `
+          + `Oprava vyjde na ${rozbite.cost.toLocaleString("cs-CZ")} Kč — najdeš ji na Stadionu.`,
+        ).catch((e) => { logger.warn({ module: M }, "SMS o rozbitém zařízení", e); });
+      }
     } catch (e) {
-      logger.warn({ module: M }, "úhrada opravy po výtržnosti", e);
+      logger.warn({ module: M }, "poškození zařízení po výtržnosti", e);
     }
   }
 

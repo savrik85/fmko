@@ -410,7 +410,30 @@ export async function processTeamDay(
     // rozhoduje o riziku rvačky, takže nesmí zůstat na nule.
     try {
       const { syncFanGroups } = await import("../fans/fan-group-state");
-      await syncFanGroups(env.DB, teamId, { drift: true });
+      const party = await syncFanGroups(env.DB, teamId, { drift: true });
+
+      // Koho mají rády a koho ne. Přepočet jednou za herní den, ne při každém
+      // zobrazení — miláček musí vydržet déle než do dalšího gólu někoho jiného.
+      if (team.user_id !== "ai" && party.length > 0) {
+        const { prepoctiOblibence } = await import("../fans/fan-favourites");
+        const zmeny = await prepoctiOblibence(env.DB, teamId, party, newGameDate);
+        if (zmeny.length > 0) {
+          const { prispevkyKOblibencum } = await import("../fans/fan-feed");
+          await prispevkyKOblibencum(env.DB, teamId, zmeny, newGameDate);
+        }
+
+        // Kampaně „X ven" — sbírají podpisy, dokud důvod trvá.
+        const { tikKampani, dopadSplneneKampane } = await import("../fans/fan-campaigns");
+        const { prispevkyKeKampani } = await import("../fans/fan-feed");
+        const kampane = await tikKampani(env.DB, teamId, party, newGameDate);
+        for (const k of kampane.zalozene) {
+          await prispevkyKeKampani(env.DB, k, "zalozena", newGameDate);
+        }
+        for (const k of kampane.splnene) {
+          await dopadSplneneKampane(env.DB, k, newGameDate);
+          await prispevkyKeKampani(env.DB, k, "splnena", newGameDate);
+        }
+      }
     } catch (e) { logger.warn({ module: "daily-tick" }, `fan groups failed for team ${teamId}`, e); }
 
     // ── Training cost (only on actual training days that ran — custom training_days

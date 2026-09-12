@@ -18,6 +18,11 @@ import {
 } from "../engine/fan-groups";
 import { fanLeaderFullName, type FanGroupRow, type FanLeaderRow } from "../fans/fan-group-generator";
 import { syncFanGroups } from "../fans/fan-group-state";
+import { rivaloveKlubu } from "../fans/fan-rivalries";
+import { nactiOblibence } from "../fans/fan-favourites";
+import { nactiKampane } from "../fans/fan-campaigns";
+import { nactiPoskozeni } from "../stadium/stadium-damage";
+import { nactiZed } from "../fans/fan-feed";
 import {
   FAN_ACTIONS, FAN_ACTION_KEYS, actionCost, dnuOd,
   dopadSchuzky, dopadSlevy, dopadTifa, dopadZakazu, dopadOdvolaniZakazu, dopadPresunu,
@@ -199,9 +204,90 @@ fansRouter.get("/teams/:teamId/fans/groups", async (c) => {
     })),
     securityLevel: security?.security ?? 0,
     securityLabel: SECURITY_POPIS[Math.max(0, Math.min(3, security?.security ?? 0))],
+    rivals: await rivaloveKlubu(db, teamId, gameDate),
+    favourites: (await nactiOblibence(db, teamId)).map((o) => ({
+      groupName: o.group_name,
+      groupKind: o.group_kind,
+      stance: o.stance,
+      playerId: o.player_id,
+      playerName: `${o.first_name} ${o.last_name}`,
+      position: o.position,
+      duvod: o.duvod,
+      since: o.since,
+    })),
+    campaigns: (await nactiKampane(db, teamId)).map((k) => ({
+      id: k.id,
+      kind: k.kind,
+      target: k.target_name,
+      targetPlayerId: k.target_player_id,
+      duvod: k.duvod,
+      podpisy: k.podpisy,
+      prah: k.prah,
+      status: k.status,
+    })),
+    damage: (await nactiPoskozeni(db, teamId)).map((d) => ({
+      id: d.id, facility: d.facility, label: d.label,
+      levels: d.levels, cost: d.repair_cost, popis: d.popis, gameDate: d.game_date,
+    })),
     gameDate,
   });
 });
+
+/**
+ * Tribuna — zeď fanoušků.
+ *
+ * Vlastní endpoint, ne součást `/fans/groups`: čte ji telefon, který o partách
+ * nic dalšího nepotřebuje, a tahá se opakovaně.
+ */
+fansRouter.get("/teams/:teamId/fans/feed", async (c) => {
+  const teamId = c.req.param("teamId");
+  const limit = Number.parseInt(c.req.query("limit") ?? "40", 10);
+  const posts = await nactiZed(c.env.DB, teamId, Number.isFinite(limit) ? limit : 40);
+  return c.json({
+    posts: posts.map((p) => ({
+      id: p.id,
+      author: p.author_name,
+      handle: p.author_handle,
+      authorKind: p.author_kind,
+      avatar: typeof p.author_avatar === "string" ? bezpecnyAvatar(p.author_avatar) : null,
+      body: p.body,
+      tone: p.tone,
+      likes: p.likes,
+      topic: p.topic,
+      gameDate: p.game_date,
+      createdAt: p.created_at,
+    })),
+  });
+});
+
+/** Oprava rozbitého zařízení. */
+fansRouter.post("/teams/:teamId/fans/repair/:damageId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const damageId = c.req.param("damageId");
+  const gameDate = await teamGameDate(c.env.DB, teamId);
+
+  const { opravVybaveni } = await import("../stadium/stadium-damage");
+  const res = await opravVybaveni(c.env.DB, { teamId, damageId, gameDate });
+  if (!res.ok) {
+    const hlaska = res.duvod === "malo_penez"
+      ? `Na opravu chybí ${(res.chybi ?? 0).toLocaleString("cs-CZ")} Kč.`
+      : res.duvod === "uz_opraveno"
+        ? "Tohle už je opravené."
+        : "Takové poškození u klubu není.";
+    return c.json({ error: hlaska }, 400);
+  }
+  return c.json({ ok: true, label: res.label, cost: res.cost, novaUroven: res.novaUroven });
+});
+
+/** Avatar vůdce je volný JSON — rozbitý nesmí shodit celou zeď. */
+function bezpecnyAvatar(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    logger.warn({ module: M }, "rozbitý avatar v příspěvku", e);
+    return null;
+  }
+}
 
 /** Detail jedné party — plná historie jejích výtržností a manažerských zásahů. */
 fansRouter.get("/teams/:teamId/fans/groups/:groupId", async (c) => {

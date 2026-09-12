@@ -26,6 +26,7 @@ function ctx(over: Partial<IncidentContext> = {}): IncidentContext {
     sector: "kotel",
     leaderRadikalnost: 50,
     derby: false,
+    rivalita: 0,
     homeLosing: false,
     beerPerAttendee: 0,
     awayUltrasSize: 0,
@@ -397,7 +398,7 @@ describe("sektor party", () => {
   const zaklad = (sector: "kotel" | "hlavni" | "za_branou"): IncidentContext => ({
     group: { kind: "kotel", aggression: 70, heat: 0, mood: 55, size: 60, sectorClosed: false },
     sector,
-    leaderRadikalnost: 50, derby: false, homeLosing: false, beerPerAttendee: 0,
+    leaderRadikalnost: 50, derby: false, rivalita: 0, homeLosing: false, beerPerAttendee: 0,
     awayUltrasSize: 0, securityRiskReduction: 0, sectorSeparation: 0, tifo: false,
   });
 

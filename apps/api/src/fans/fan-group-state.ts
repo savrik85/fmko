@@ -12,7 +12,7 @@
 import { logger } from "../lib/logger";
 import { loadFanbaseAggregate } from "../season/fanbase-helpers";
 import {
-  FAN_GROUPS, fanGroupMatchEffects, NEUTRAL_GROUP_EFFECTS,
+  FAN_GROUPS, fanGroupMatchEffects, NEUTRAL_GROUP_EFFECTS, jadroVelikost,
   type FanGroupKind, type FanGroupMatchEffects, type FanSector,
 } from "../engine/fan-groups";
 import { ensureFanGroups, type FanGroupRow } from "./fan-group-generator";
@@ -151,15 +151,22 @@ export async function syncFanGroups(
       heat = Math.max(0, g.heat - HEAT_DECAY_PER_DAY);
     }
 
-    if (size !== g.size || mood !== g.mood || heat !== g.heat) {
+    // Tvrdé jádro se dopočítává ze stavu party, stejně jako velikost — otrávený
+    // kotel se scvrkne na hrstku, spokojený nabobtná. Ztráty po rvačce a po
+    // zavřeném sektoru řeší resolver zápasu rovnou, tohle je klidový stav.
+    const core = jadroVelikost({
+      kind: g.kind as FanGroupKind, size, mood, passion: g.passion,
+    });
+
+    if (size !== g.size || mood !== g.mood || heat !== g.heat || core !== g.core) {
       stmts.push(
         db.prepare(
-          `UPDATE fan_groups SET size = ?, mood = ?, heat = ?,
+          `UPDATE fan_groups SET size = ?, mood = ?, heat = ?, core = ?,
              updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
-        ).bind(size, mood, heat, g.id),
+        ).bind(size, mood, heat, core, g.id),
       );
     }
-    out.push({ ...g, size, mood, heat });
+    out.push({ ...g, size, mood, heat, core });
   }
 
   if (stmts.length > 0) {

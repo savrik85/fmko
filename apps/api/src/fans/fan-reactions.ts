@@ -84,6 +84,17 @@ export async function zpracujUdalostiKlubu(
       }
     }
 
+    // Na Tribunu jde totéž, co hnulo náladou — jiný zdroj pro příspěvky
+    // neexistuje, takže nemůže vzniknout nálada bez příčiny ani příspěvek
+    // o něčem, co se nestalo.
+    try {
+      const { prispevkyKUdalosti } = await import("./fan-feed");
+      await prispevkyKUdalosti(db, {
+        teamId, kind: u.kind as ClubEventKind, eventId: u.id,
+        co: detailUdalosti(u.payload), gameDate: u.game_date,
+      });
+    } catch (e) { logger.warn({ module: M }, `příspěvky k události ${u.id}`, e); }
+
     out.zpracovano++;
   }
 
@@ -162,4 +173,25 @@ async function zapisZmeny(
     );
   }
   await db.batch(stmts).catch((e) => { logger.warn({ module: M }, "zápis reakcí part", e); });
+}
+
+/**
+ * Detail do textu příspěvku — jméno hráče, částka, nový název.
+ *
+ * Payload je volný JSON od zapisovatele; bere se první rozumný řetězec, ať
+ * se katalog reakcí nemusí dohadovat s každým call sitem na názvu klíče.
+ */
+function detailUdalosti(payload: string | null): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as Record<string, unknown>;
+    for (const k of ["co", "hrac", "player", "jmeno", "name", "castka", "text"]) {
+      const v = p[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+      if (typeof v === "number") return String(v);
+    }
+  } catch (e) {
+    logger.warn({ module: M }, "rozbitý payload události", e);
+  }
+  return undefined;
 }
