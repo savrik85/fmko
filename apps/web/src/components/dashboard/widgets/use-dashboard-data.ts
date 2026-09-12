@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, type Team, type Player, type ManagerProfile, type TeamMatchResults } from "@/lib/api";
 import type {
   DashboardData, DataKey, DataSlot, Standing, ScheduleMatch, MatchPreview, NewsArticle,
-  Achievement, HallOfFameRank, PubSession, BudgetData, Transaction, WagesData, SponsorsData,
+  Achievement, HallOfFameRank, PubSession, FanPost, FanGroupsData, BudgetData, Transaction, WagesData, SponsorsData,
   FansData, FansHistoryItem, FanbaseData, FanbaseHistoryPoint, ConcessionSaleMatch,
   TrainingStats, TrainingPlan, AttendanceData, LeagueStats, ReputationData,
   ManagerHistoryEntry, InjuryEntry, StadiumData, EquipmentData, StaffMember, CupData,
@@ -28,7 +28,7 @@ const IDLE: DataSlot<never> = { data: null, loading: false, error: false };
 function emptyData(): DashboardData {
   const keys: DataKey[] = [
     "team", "players", "standings", "schedule", "manager", "matchResults",
-    "preview", "news", "achievements", "pubSession", "hallOfFame",
+    "preview", "news", "achievements", "pubSession", "hallOfFame", "fanFeed", "fanGroups",
     "budget", "transactions", "wages", "sponsors",
     "fans", "fansHistory", "fanbase", "fanbaseHistory", "concessionSales",
     "trainingStats", "trainingPlan", "attendance",
@@ -62,6 +62,8 @@ const LOADERS: Record<Exclude<DataKey, "preview">, (teamId: string) => Promise<u
     .then((d) => (d.achievements ?? []).filter((a) => a.earnedAt)
       .sort((a, b) => (b.earnedAt ?? "").localeCompare(a.earnedAt ?? ""))),
   pubSession: (t) => apiFetch<{ session: PubSession | null }>(`/api/teams/${t}/pub-session`).then((d) => d.session),
+  fanFeed: (t) => apiFetch<{ posts: FanPost[] }>(`/api/teams/${t}/fans/feed?limit=12`).then((d) => d.posts ?? []),
+  fanGroups: (t) => apiFetch<FanGroupsData>(`/api/teams/${t}/fans/groups`),
   hallOfFame: (t) => apiFetch<{ entries: Array<{ teamId: string; teamName: string; isHuman: boolean; total: number; gold: number; silver: number; bronze: number }> }>("/api/hall-of-fame")
     .then((d): HallOfFameRank => {
       const humans = (d.entries ?? []).filter((e) => e.isHuman);

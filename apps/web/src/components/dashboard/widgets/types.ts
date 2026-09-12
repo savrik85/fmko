@@ -26,7 +26,7 @@ export interface LayoutItem {
  */
 export type DataKey =
   | "team" | "players" | "standings" | "schedule" | "manager" | "matchResults"
-  | "preview" | "news" | "achievements" | "pubSession" | "hallOfFame"
+  | "preview" | "news" | "achievements" | "pubSession" | "hallOfFame" | "fanFeed" | "fanGroups"
   | "budget" | "transactions" | "wages" | "sponsors"
   | "fans" | "fansHistory" | "fanbase" | "fanbaseHistory" | "concessionSales"
   | "trainingStats" | "trainingPlan" | "attendance"
@@ -439,6 +439,8 @@ export interface DashboardData {
   news: DataSlot<NewsArticle[]>;
   achievements: DataSlot<Achievement[]>;
   pubSession: DataSlot<PubSession>;
+  fanFeed: DataSlot<FanPost[]>;
+  fanGroups: DataSlot<FanGroupsData>;
   hallOfFame: DataSlot<HallOfFameRank>;
   budget: DataSlot<BudgetData>;
   transactions: DataSlot<Transaction[]>;
@@ -499,4 +501,46 @@ export interface WidgetDef {
   /** Widget si kreslí vlastní obal místo standardní karty (např. Hospoda). */
   bare?: boolean;
   Component: ComponentType<WidgetProps>;
+}
+
+/** Příspěvek na Tribuně, sociální síti fanoušků. */
+export interface FanPost {
+  id: string;
+  author: string;
+  handle: string;
+  authorKind: string;
+  avatar: Record<string, unknown> | null;
+  body: string;
+  tone: "pozitivni" | "negativni" | "neutralni";
+  likes: number;
+  topic: string;
+  gameDate: string;
+  createdAt: string;
+}
+
+/** Party fanoušků a všechno kolem nich, jak to vrací `/fans/groups`. */
+export interface FanGroupsData {
+  groups: Array<{
+    id: string; kind: string; name: string; popis: string; size: number; core?: number;
+    mood: number; heat: number; moodWord: string; heatWord: string;
+    sector: string; sectorLabel: string; sectorClosed: boolean; closedMatches: number;
+    ticketDiscount: number;
+    leader: { id: string; name: string; archetypeLabel: string; sentiment: number; sentimentWord: string } | null;
+  }>;
+  recentIncidents: Array<{
+    id: string; kind: string; label: string; severity: number; text: string;
+    fine: number; sectorClosedMatches: number; fansLost: number; gameDate: string | null;
+  }>;
+  rivals: Array<{ teamId: string; name: string; heat: number; word: string; fights: number }>;
+  favourites: Array<{
+    groupName: string; groupKind: string; stance: "oblibenec" | "otloukanek";
+    playerId: string; playerName: string; position: string; duvod: string;
+  }>;
+  campaigns: Array<{
+    id: string; kind: string; target: string; targetPlayerId: string | null;
+    duvod: string; podpisy: number; prah: number; status: string;
+  }>;
+  damage: Array<{ id: string; facility: string; label: string; levels: number; cost: number; popis: string }>;
+  securityLevel: number;
+  securityLabel: string;
 }

@@ -29,6 +29,14 @@ interface MatchContext {
   opponentLastResult?: string | null;
   /** Vztah trenérů (manager_relations) — null/undefined = nic zajímavého */
   relation?: import("../community/manager-relations").RelationPromptContext | null;
+  /**
+   * Co se děje mezi fanoušky, když to stojí za otázku.
+   *
+   * Redaktor se ptá na věci, které lidi v okrese řeší, a nálada na tribuně mezi
+   * ně patří stejně jako forma. Je to hotová věta s fakty, protože prompt má
+   * zákaz halucinací: model smí použít jen to, co dostane.
+   */
+  fanoveFakt?: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -275,7 +283,9 @@ ${vztahPokyn ?? "Vztah neutrální, ptej se věcně."}
 
 OTÁZKA 1 (1–2 věty, ZAKONČI OTAZNÍKEM — ptáš se, nekomentuješ) — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
 OTÁZKA 2 (1–2 věty, ZAKONČI OTAZNÍKEM) — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
-OTÁZKA 3 (1–2 věty, ZAKONČI OTAZNÍKEM) — MÍŘENÁ NA SOUPEŘE. ${soupereOtazka}
+OTÁZKA 3 (1–2 věty, ZAKONČI OTAZNÍKEM) — ${ctx.fanoveFakt
+    ? `MÍŘENÁ NA FANOUŠKY. Vyjdi VÝHRADNĚ z tohohle faktu a zeptej se na něj trenéra: "${ctx.fanoveFakt}". Nic si k tomu nepřidávej, žádná jiná čísla ani jména.`
+    : `MÍŘENÁ NA SOUPEŘE. ${soupereOtazka}`}
 
 KONTEXT (tým trenéra):
 - Tým: ${ctx.teamName} (${ctx.villageFlavor}), ${ctx.isHome ? "hraje doma" : "hraje venku"}
@@ -531,6 +541,7 @@ export async function tryCreateInterviewRequest(
     opponentFormStr: opponentForm,
     opponentLastResult: opponentLast,
     relation,
+    fanoveFakt: await fanoveFaktProRozhovor(db, teamRow.team_id as string),
   };
 
   // 7. Generuj otázky přes Gemini — ptá se konkrétní redaktor
@@ -620,4 +631,64 @@ export async function tryCreateInterviewRequest(
     { module: "interview-generator", teamId: teamRow.team_id },
     `interview request created for ${teamRow.manager_name} vs ${opponentName} (week ${ctx.gameWeek})`,
   );
+}
+
+
+/**
+ * Co na tribuně stojí za otázku.
+ *
+ * Vrací hotovou větu s fakty, nebo `null`, když se nic neděje. Prompt má tvrdý
+ * zákaz halucinací, takže model nesmí dostat „zeptej se na fanoušky" a domýšlet
+ * si zbytek. Pořadí je podle toho, co lidi pálí nejvíc.
+ */
+async function fanoveFaktProRozhovor(db: D1Database, teamId: string): Promise<string | null> {
+  try {
+    const kampan = await db.prepare(
+      `SELECT kind, target_name, podpisy FROM fan_campaigns
+       WHERE team_id = ? AND status IN ('sbira','splnena')
+       ORDER BY podpisy DESC LIMIT 1`,
+    ).bind(teamId).first<{ kind: string; target_name: string; podpisy: number }>()
+      .catch((e) => { logger.warn({ module: "interview-generator" }, "kampaň pro rozhovor", e); return null; });
+    if (kampan) {
+      return kampan.kind === "trener_ven"
+        ? `Na tribuně se objevil transparent s vaším jménem a slovem „konči", podepsalo se pod to ${kampan.podpisy} lidí.`
+        : `Fanoušci sbírají podpisy za to, aby ${kampan.target_name} přestal nastupovat, mají jich ${kampan.podpisy}.`;
+    }
+
+    // Pokuty za výtržnosti jsou konkrétní číslo, na které se dá zeptat.
+    const bordel = await db.prepare(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(fine), 0) AS pokuty FROM fan_incidents
+       WHERE team_id = ? AND created_at > datetime('now', '-30 days')`,
+    ).bind(teamId).first<{ n: number; pokuty: number }>()
+      .catch((e) => { logger.warn({ module: "interview-generator" }, "výtržnosti pro rozhovor", e); return null; });
+    if (bordel && bordel.n >= 2) {
+      return `Za poslední měsíc má klub ${bordel.n} zápisů o výtržnostech fanoušků a zaplatil na pokutách ${bordel.pokuty} Kč.`;
+    }
+
+    const rival = await db.prepare(
+      `SELECT r.heat, CASE WHEN r.team_a = ?1 THEN tb.name ELSE ta.name END AS souper
+       FROM fan_rivalries r
+       LEFT JOIN teams ta ON ta.id = r.team_a
+       LEFT JOIN teams tb ON tb.id = r.team_b
+       WHERE (r.team_a = ?1 OR r.team_b = ?1) AND r.heat >= 60
+       ORDER BY r.heat DESC LIMIT 1`,
+    ).bind(teamId).first<{ heat: number; souper: string | null }>()
+      .catch((e) => { logger.warn({ module: "interview-generator" }, "rivalita pro rozhovor", e); return null; });
+    if (rival?.souper) {
+      return `Mezi vašimi fanoušky a fanoušky klubu ${rival.souper} je to dlouhodobě vyhrocené.`;
+    }
+
+    // Nálada sama o sobě stojí za otázku, jen když je opravdu špatná nebo dobrá.
+    const nalada = await db.prepare(
+      "SELECT ROUND(AVG(mood)) AS m FROM fan_groups WHERE team_id = ?",
+    ).bind(teamId).first<{ m: number }>()
+      .catch((e) => { logger.warn({ module: "interview-generator" }, "nálada pro rozhovor", e); return null; });
+    if (nalada && nalada.m <= 28) return "Nálada na tribuně je dlouhodobě špatná a chodí míň lidí.";
+    if (nalada && nalada.m >= 78) return "Na tribuně je znát nadšení, lidi chodí a fandí.";
+
+    return null;
+  } catch (e) {
+    logger.warn({ module: "interview-generator" }, `fanoušci pro rozhovor u ${teamId}`, e);
+    return null;
+  }
 }

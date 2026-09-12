@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { Adresar } from "./Adresar";
 import { Oznameni } from "./Oznameni";
+import { Tribuna } from "./Tribuna";
 
 interface Conversation {
   id: string;
@@ -96,6 +97,7 @@ export default function PhonePage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [adresarOtevren, setAdresarOtevren] = useState(false);
   const [oznameniOtevrena, setOznameniOtevrena] = useState(false);
+  const [tribunaOtevrena, setTribunaOtevrena] = useState(false);
   const [neprectenaOznameni, setNeprectenaOznameni] = useState(0);
   const [credit, setCredit] = useState<Credit | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,6 +127,11 @@ export default function PhonePage() {
         <span className="font-heading font-bold text-base">Zprávy</span>
         <div className="ml-auto flex items-center gap-2">
           {credit && <KreditText credit={credit} />}
+          <IkonaTlacitko
+            emoji="&#127967;"
+            label="Tribuna"
+            onClick={() => setTribunaOtevrena(true)}
+          />
           <IkonaTlacitko
             emoji="&#128276;"
             label="Oznámení"
@@ -207,6 +214,10 @@ export default function PhonePage() {
           </div>
         )}
       </div>
+
+      {tribunaOtevrena && teamId && (
+        <Tribuna teamId={teamId} onZavrit={() => setTribunaOtevrena(false)} />
+      )}
 
       {oznameniOtevrena && teamId && (
         <Oznameni

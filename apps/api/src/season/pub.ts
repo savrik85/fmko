@@ -1461,6 +1461,11 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     // Generate incidents
     const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName, team.district ?? undefined, hangoverMod);
 
+    // Vůdci fanoušků. Hospoda je jediné místo, kde se v okrese potkává kabina
+    // s tribunou, takže se tam potkat musí i v číslech: hráči si odnesou
+    // morálku, parta náladu a vůdce vztah k trenérovi.
+    const fanStmts = await pridejVudceDoHospody(db, team.id, gameDate, attendees, incidents);
+
     // Pokud incidents obsahují coach_*, přidej trenéra mezi attendees s avatarem
     const hasCoach = incidents.some((inc) => inc.type.startsWith("coach_"));
     if (hasCoach && managerRow) {
@@ -1485,10 +1490,137 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
 
     // Apply effects
     const effectStmts = await applyIncidentEffects(db, incidents);
-    if (effectStmts.length > 0) await db.batch(effectStmts).catch((e) => logger.warn({ module: "pub" }, "batch incident effects", e));
+    const vsechny = [...effectStmts, ...fanStmts];
+    if (vsechny.length > 0) await db.batch(vsechny).catch((e) => logger.warn({ module: "pub" }, "batch incident effects", e));
 
     created++;
   }
 
   return { sessionsCreated: created };
+}
+
+
+/**
+ * Vůdci fanoušků v hospodě.
+ *
+ * Přidá je mezi hosty a do incidentů. Vrací příkazy, které dopady zapíšou;
+ * hráčská část jde přes `effects` v incidentu jako u všeho ostatního, dopad na
+ * partu a na vůdce sem, protože `PubEffect` umí jen hráče.
+ *
+ * Nikdy nehází: hospoda nesmí spadnout kvůli fanouškům.
+ */
+async function pridejVudceDoHospody(
+  db: D1Database,
+  teamId: string,
+  gameDate: string,
+  attendees: PubAttendee[],
+  incidents: PubIncident[],
+): Promise<D1PreparedStatement[]> {
+  const stmts: D1PreparedStatement[] = [];
+  try {
+    const { createRng } = await import("../generators/rng");
+    const { seedFromString } = await import("../lib/seed");
+    const { dorazilDoHospody, scenaSVudcem, scenaSTrenerem } = await import("./pub-fan-leaders");
+    type VudceVHospode = Parameters<typeof dorazilDoHospody>[0];
+
+    const rows = await db.prepare(
+      `SELECT l.id, l.first_name, l.last_name, l.nickname, l.archetype, l.radikalnost,
+              l.vyjednavani, l.sentiment, l.avatar, g.id AS group_id, g.kind, g.mood, g.heat
+       FROM fan_leaders l JOIN fan_groups g ON g.id = l.group_id
+       WHERE l.team_id = ? AND l.status = 'active'`,
+    ).bind(teamId).all<{
+      id: string; first_name: string; last_name: string; nickname: string | null;
+      archetype: string; radikalnost: number; vyjednavani: number; sentiment: number;
+      avatar: string | null; group_id: string; kind: string; mood: number; heat: number;
+    }>().catch((e) => { logger.warn({ module: "pub" }, "vůdci do hospody", e); return { results: [] as never[] }; });
+    if (rows.results.length === 0) return stmts;
+
+    // Hraje se zítra? Den před zápasem je plná hospoda něco jiného než ve středu.
+    const zitra = new Date(gameDate);
+    zitra.setUTCDate(zitra.getUTCDate() + 1);
+    const zapasZitra = await db.prepare(
+      `SELECT 1 FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.home_score IS NULL
+         AND substr(sc.match_date, 1, 10) = ? LIMIT 1`,
+    ).bind(teamId, teamId, zitra.toISOString().slice(0, 10)).first()
+      .catch((e) => { logger.warn({ module: "pub" }, "zápas zítra", e); return null; });
+
+    const hraci = attendees
+      .filter((a) => !a.isVisitor && !a.isCoach)
+      .map((a) => ({ playerId: a.playerId, jmeno: `${a.firstName} ${a.lastName}` }));
+    const trenerJeTu = attendees.some((a) => a.isCoach);
+
+    for (const r of rows.results) {
+      const rng = createRng(seedFromString(`pubvudce|${teamId}|${gameDate}|${r.id}`));
+      const v: VudceVHospode = {
+        leaderId: r.id, groupId: r.group_id, groupKind: r.kind as never,
+        jmeno: `${r.first_name}${r.nickname ? ` „${r.nickname}"` : ""} ${r.last_name}`,
+        archetype: r.archetype, radikalnost: r.radikalnost, vyjednavani: r.vyjednavani,
+        mood: r.mood, heat: r.heat, sentiment: r.sentiment,
+      };
+      if (!dorazilDoHospody(v, rng.random())) continue;
+
+      const scena = trenerJeTu
+        ? scenaSTrenerem(v, rng.random())
+        : scenaSVudcem(v, hraci, {
+          predZapasem: !!zapasZitra,
+          roll: rng.random(),
+          vyberHrace: rng.int(0, 999),
+        });
+
+      // Do hospody přijde, i když se nic nesemele. Prázdný stůl s vůdcem je
+      // taky informace: vidíš, že tam byl.
+      attendees.push({
+        playerId: `fan-${r.id}`,
+        firstName: r.first_name,
+        lastName: r.last_name,
+        alcohol: 70,
+        teamId,
+        isVisitor: false,
+        avatar: bezpecnyAvatarVudce(r.avatar),
+      });
+      if (!scena) continue;
+
+      incidents.push({
+        type: scena.type,
+        playerIds: scena.playerIds,
+        text: scena.text,
+        effects: scena.moraleDelta !== 0
+          ? scena.playerIds.map((id) => ({
+            playerId: id, type: "morale" as const, delta: scena.moraleDelta,
+            label: `${scena.moraleDelta > 0 ? "+" : ""}${scena.moraleDelta} morálka (hospoda)`,
+          }))
+          : [],
+      });
+
+      const f = scena.fan;
+      if (f.mood !== 0 || f.heat !== 0) {
+        stmts.push(db.prepare(
+          `UPDATE fan_groups SET mood = MAX(0, MIN(100, mood + ?)), heat = MAX(0, MIN(100, heat + ?)),
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+        ).bind(f.mood, f.heat, f.groupId));
+      }
+      if (f.sentiment !== 0) {
+        stmts.push(db.prepare(
+          `UPDATE fan_leaders SET sentiment = MAX(-100, MIN(100, sentiment + ?)), duvod = ?,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+        ).bind(f.sentiment, f.duvod || "Potkali jste se v hospodě.", f.leaderId));
+      }
+    }
+  } catch (e) {
+    logger.warn({ module: "pub" }, `vůdci v hospodě u ${teamId}`, e);
+  }
+  return stmts;
+}
+
+/** Avatar vůdce je volný JSON. Rozbitý nesmí shodit celou hospodu. */
+function bezpecnyAvatarVudce(raw: string | null): Record<string, unknown> | undefined {
+  if (!raw) return undefined;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : undefined;
+  } catch (e) {
+    logger.warn({ module: "pub" }, "rozbitý avatar vůdce", e);
+    return undefined;
+  }
 }

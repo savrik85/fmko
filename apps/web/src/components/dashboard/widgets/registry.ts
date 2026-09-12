@@ -43,6 +43,11 @@ import {
   RivalsWidget, SquadChemistryWidget, FanVillagesWidget, SeasonProgressWidget,
 } from "./items/social-widgets";
 import { PubSessionWidget } from "./items/pub-session";
+import { TribunaWidget } from "./items/tribuna-widget";
+import {
+  FanGroupsMoodWidget, FanCoreWidget, FanRivalsWidget,
+  FanFavouritesWidget, FanCampaignsWidget, FanTroubleWidget,
+} from "./items/fan-groups-widgets";
 
 export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
   prehled: "Přehled",
@@ -298,6 +303,41 @@ export const WIDGETS: WidgetDef[] = [
   },
 
   // ── Fanoušci ──────────────────────────────────────────────────────────────
+  {
+    id: "fan-groups-mood", title: "Party fanoušků", icon: "👥", category: "fanousci",
+    description: "Nálada a naštvanost každé party i to, komu je zavřený sektor.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["fanGroups"], Component: FanGroupsMoodWidget,
+  },
+  {
+    id: "fan-core", title: "Tvrdé jádro", icon: "🔥", category: "fanousci",
+    description: "Kolik lidí doopravdy dělá bordel a jezdí na výjezdy.",
+    defaultWidth: 1, needs: ["fanGroups"], Component: FanCoreWidget,
+  },
+  {
+    id: "fan-rivals", title: "Rivalita mezi tábory", icon: "🥊", category: "fanousci",
+    description: "S kým si to vaši fanoušci rozdali a jak je to mezi nimi horké.",
+    defaultWidth: 1, needs: ["fanGroups"], Component: FanRivalsWidget,
+  },
+  {
+    id: "fan-favourites", title: "Miláčci a otloukánci", icon: "❤️", category: "fanousci",
+    description: "Koho si party vybraly za svého a koho nemůžou vystát.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["fanGroups"], Component: FanFavouritesWidget,
+  },
+  {
+    id: "fan-campaigns", title: "Co po tobě chtějí", icon: "📣", category: "fanousci",
+    description: "Podpisové akce za odvolání hráče nebo trenéra a kolik jim chybí.",
+    defaultWidth: 1, needs: ["fanGroups"], Component: FanCampaignsWidget,
+  },
+  {
+    id: "fan-trouble", title: "Bordel na stadionu", icon: "🚨", category: "fanousci",
+    description: "Pokuty za výtržnosti, co je rozbité a kolik stojí oprava.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["fanGroups"], Component: FanTroubleWidget,
+  },
+  {
+    id: "tribuna", title: "Co si o nás píšou", icon: "💬", category: "fanousci",
+    description: "Poslední příspěvky z Tribuny, sociální sítě fanoušků, i s podílem negativních.",
+    defaultWidth: 1, defaultHeight: 2, needs: ["fanFeed"], Component: TribunaWidget,
+  },
   {
     id: "fan-satisfaction", title: "Spokojenost fanoušků", icon: "😀", category: "fanousci",
     description: "Ciferníky spokojenosti a loajality včetně dopadu posledního zápasu.",
