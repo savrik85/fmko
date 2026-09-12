@@ -107,7 +107,7 @@ interface Stadium3DProps {
    */
   sectorFill?: { kotel?: number; hlavni?: number; za_branou?: number };
   /** Kolik hostů přijelo na poslední domácí zápas a v jaké barvě. */
-  awayFans?: { pocet: number; barva: string; nazev?: string } | null;
+  awayFans?: { pocet: number; barva: string; nazev?: string; kdy?: string } | null;
   /** Kde parta kotle skutečně stojí. Dá se ji přestěhovat, tak ať to je vidět. */
   ultrasSector?: "kotel" | "hlavni" | "za_branou";
   showControls?: boolean;

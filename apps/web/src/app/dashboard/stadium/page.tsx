@@ -137,7 +137,7 @@ interface StadiumData {
     closed: string[];
     fill: { kotel?: number; hlavni?: number; za_branou?: number };
     rozpad: { kotel: number; hlavni: number; za_branou: number };
-    hoste: { pocet: number; barva: string; nazev: string } | null;
+    hoste: { pocet: number; barva: string; nazev: string; kdy: "prijede" | "prijel" } | null;
   };
   visualUpgrades: VisualUpgrade[];
   upgrades: UpgradeOption[];
@@ -604,6 +604,24 @@ export default function StadiumPage() {
                 dva prsty = otáčení
               </div>
             </div>
+            {/* Kdo obsadí sektor hostů. Ve 3D je vidět jen v zápasovém režimu,
+                takže to musí být čitelné i takhle. */}
+            {stadium.sektory?.hoste && (
+              <div className="flex items-center gap-2 text-sm">
+                <span
+                  className="w-3 h-3 rounded-full shrink-0 border border-gray-300"
+                  style={{ backgroundColor: stadium.sektory.hoste.barva }}
+                />
+                <span className="text-ink">
+                  Sektor hostů:{" "}
+                  <strong className="font-heading">{stadium.sektory.hoste.nazev}</strong>
+                  {stadium.sektory.hoste.kdy === "prijede"
+                    ? ` — čeká se jich ${stadium.sektory.hoste.pocet}.`
+                    : ` — naposledy jich přijelo ${stadium.sektory.hoste.pocet}.`}
+                </span>
+              </div>
+            )}
+
             <button
               onClick={() => setViewerOpen(true)}
               className="w-full py-2 bg-pitch-500 hover:bg-pitch-600 text-white rounded-soft text-sm font-heading font-bold transition-colors shadow-sm"

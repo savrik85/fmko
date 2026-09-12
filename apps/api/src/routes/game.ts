@@ -1812,7 +1812,7 @@ async function stavSektoru(
   closed: string[];
   fill: Record<string, number>;
   rozpad: Record<string, number>;
-  hoste: { pocet: number; barva: string; nazev: string } | null;
+  hoste: { pocet: number; barva: string; nazev: string; kdy: "prijede" | "prijel" } | null;
 }> {
   const { kapacitaSektoru, zaplneniSektoru } = await import("../stadium/sektory");
   const rows = await db
@@ -1827,28 +1827,63 @@ async function stavSektoru(
   const kotel = rows.results.find((g) => g.kind === "kotel");
   const lidi = rows.results.reduce((s, g) => s + Math.max(0, g.size), 0);
 
-  // Kolik hostů přijelo naposledy. Bez tohohle byl hostující kotel jen číslo
-  // ve vzorci rizika a na stadionu nebyl vidět.
-  const posledni = await db
+  // Hostující sektor. Bere se PŘEDEVŠÍM z nejbližšího domácího zápasu, tedy
+  // kdo přijede, ne kdo přijel: to je informace, se kterou se dá něco dělat.
+  //
+  // Původně se to četlo jen z `matches.away_fans`, což se plní až při
+  // vyhodnocení odehraného zápasu. Na existujících zápasech je ten sloupec
+  // prázdný, takže sektor hostů nebyl vidět vůbec a čekalo se na první nové
+  // kolo. Odehraný zápas teď slouží jen jako záloha, když se nehraje.
+  const { jadroNaVenkovni } = await import("../engine/fan-groups");
+
+  let hoste: { pocet: number; barva: string; nazev: string; kdy: "prijede" | "prijel" } | null = null;
+
+  const pristi = await db
     .prepare(
-      `SELECT m.away_fans, t.name, t.primary_color
+      `SELECT t.id, t.name, t.primary_color
        FROM matches m JOIN teams t ON t.id = m.away_team_id
-       WHERE m.home_team_id = ? AND m.away_fans IS NOT NULL
-       ORDER BY COALESCE(m.simulated_at, m.created_at) DESC LIMIT 1`,
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+       WHERE m.home_team_id = ? AND m.home_score IS NULL
+       ORDER BY sc.match_date ASC LIMIT 1`,
     )
     .bind(teamId)
-    .first<{ away_fans: string; name: string; primary_color: string | null }>()
-    .catch((e) => { logger.warn({ module: "game" }, "hosté na stadionu", e); return null; });
+    .first<{ id: string; name: string; primary_color: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "příští domácí zápas", e); return null; });
 
-  let hoste: { pocet: number; barva: string; nazev: string } | null = null;
-  if (posledni) {
-    try {
-      const j = JSON.parse(posledni.away_fans) as { pocet?: number };
-      if ((j.pocet ?? 0) > 0) {
-        hoste = { pocet: j.pocet ?? 0, barva: posledni.primary_color ?? "#B91C1C", nazev: posledni.name };
+  if (pristi) {
+    const { ensureFanGroups } = await import("../fans/fan-group-generator");
+    await ensureFanGroups(db, pristi.id)
+      .catch((e) => logger.warn({ module: "game" }, "party hostů pro sektor", e));
+    const jejichKotel = await db
+      .prepare("SELECT core FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
+      .bind(pristi.id).first<{ core: number }>()
+      .catch((e) => { logger.warn({ module: "game" }, "jádro hostů", e); return null; });
+    const pocet = jadroNaVenkovni(jejichKotel?.core ?? 0);
+    if (pocet > 0) {
+      hoste = { pocet, barva: pristi.primary_color ?? "#B91C1C", nazev: pristi.name, kdy: "prijede" };
+    }
+  }
+
+  if (!hoste) {
+    const posledni = await db
+      .prepare(
+        `SELECT m.away_fans, t.name, t.primary_color
+         FROM matches m JOIN teams t ON t.id = m.away_team_id
+         WHERE m.home_team_id = ? AND m.away_fans IS NOT NULL
+         ORDER BY COALESCE(m.simulated_at, m.created_at) DESC LIMIT 1`,
+      )
+      .bind(teamId)
+      .first<{ away_fans: string; name: string; primary_color: string | null }>()
+      .catch((e) => { logger.warn({ module: "game" }, "hosté na stadionu", e); return null; });
+    if (posledni) {
+      try {
+        const j = JSON.parse(posledni.away_fans) as { pocet?: number };
+        if ((j.pocet ?? 0) > 0) {
+          hoste = { pocet: j.pocet ?? 0, barva: posledni.primary_color ?? "#B91C1C", nazev: posledni.name, kdy: "prijel" };
+        }
+      } catch (e) {
+        logger.warn({ module: "game" }, "rozbitý záznam o hostech", e);
       }
-    } catch (e) {
-      logger.warn({ module: "game" }, "rozbitý záznam o hostech", e);
     }
   }
 
