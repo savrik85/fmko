@@ -785,3 +785,106 @@ fansRouter.post("/admin/process-fan-events", requireAdmin, async (c) => {
   const res = await zpracujUdalostiKlubu(c.env.DB, teamId, groups);
   return c.json(res);
 });
+
+/**
+ * Zkušební nahrávka chorálu přes Suno.
+ *
+ * Otázka, kterou to má zodpovědět: dá se ze Suna dostat SAMOTNÝ zpěv bez
+ * hudby? Přepínač na a cappella API nemá (`instrumental: true` znamená opak,
+ * hudbu bez zpěvu), takže se to dá tlačit jen stylem, `negativeTags` a vahou
+ * stylu. Tohle to zkusí a vrátí, co skutečně přišlo.
+ *
+ * Klíč je Cloudflare secret, ven se nedostane, proto to musí jít přes worker.
+ * Nic to nezapisuje do DB, nesahá na `team_anthems` ani na limit pokusů hymny.
+ */
+const SUNO_API = "https://api.sunoapi.org/api/v1";
+
+fansRouter.post("/admin/suno-choral-test", requireAdmin, async (c) => {
+  const key = c.env.SUNO_API_KEY;
+  if (!key) return c.json({ error: "Chybí SUNO_API_KEY" }, 503);
+
+  type Zadani = {
+    text?: string; style?: string; negativeTags?: string;
+    model?: string; duration?: number; styleWeight?: number;
+  };
+  const body: Zadani = await c.req.json<Zadani>().catch((e) => {
+    logger.warn({ module: "fans" }, "suno-choral-test: tělo požadavku", e);
+    return {} as Zadani;
+  });
+
+  // Chorál se opakuje, protože kotel ho taky opakuje a je čím zaplnit 20 vteřin.
+  const text = body.text ?? [
+    "KOLMAN, KOLMAN, do toho KOLMAN!",
+    "KOLMAN, KOLMAN, do toho KOLMAN!",
+    "Hej, hej, KOLMAN, hej, hej!",
+    "KOLMAN, KOLMAN, do toho KOLMAN!",
+  ].join("\n");
+
+  const payload = {
+    prompt: text,
+    style: body.style
+      ?? "football terrace chant, a cappella, male crowd shouting in unison, stadium reverb, no instruments",
+    title: "Choral test",
+    customMode: true,
+    instrumental: false,
+    // `duration` bere jen V6 a spol., V4 (co používá hymna) ho ignoruje.
+    model: body.model ?? "V6",
+    duration: body.duration ?? 20,
+    negativeTags: body.negativeTags
+      ?? "drums, percussion, guitar, bass, synth, piano, strings, melody, instrumental backing, music, beat",
+    vocalGender: "m",
+    styleWeight: body.styleWeight ?? 0.9,
+    callBackUrl: "https://example.com/suno-callback",
+  };
+
+  const res = await fetch(`${SUNO_API}/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text();
+  if (!res.ok) {
+    logger.warn({ module: "fans" }, `suno-choral-test: ${res.status} ${raw.slice(0, 300)}`);
+    return c.json({ error: "Suno odmítlo zadání", status: res.status, telo: raw.slice(0, 500) }, 502);
+  }
+
+  const json = JSON.parse(raw) as { code?: number; msg?: string; data?: { taskId?: string } };
+  const taskId = json.data?.taskId;
+  if (!taskId) return c.json({ error: "Suno nevrátilo taskId", odpoved: json }, 502);
+  return c.json({ ok: true, taskId, payload });
+});
+
+/** Stav zkušební nahrávky. Vrací i odkazy na mp3, ať se to dá poslechnout. */
+fansRouter.get("/admin/suno-choral-test", requireAdmin, async (c) => {
+  const key = c.env.SUNO_API_KEY;
+  const taskId = c.req.query("taskId");
+  if (!key) return c.json({ error: "Chybí SUNO_API_KEY" }, 503);
+  if (!taskId) return c.json({ error: "Chybí taskId" }, 400);
+
+  const res = await fetch(`${SUNO_API}/generate/record-info?taskId=${encodeURIComponent(taskId)}`, {
+    headers: { Authorization: `Bearer ${key}` },
+  });
+  const raw = await res.text();
+  if (!res.ok) {
+    logger.warn({ module: "fans" }, `suno-choral-test stav: ${res.status} ${raw.slice(0, 300)}`);
+    return c.json({ error: "Suno neodpovědělo", status: res.status, telo: raw.slice(0, 500) }, 502);
+  }
+
+  const json = JSON.parse(raw) as {
+    data?: {
+      status?: string; errorMessage?: string;
+      response?: { sunoData?: Array<{ audioUrl?: string; streamAudioUrl?: string; duration?: number; title?: string }> };
+    };
+  };
+  const skladby = json.data?.response?.sunoData ?? [];
+  return c.json({
+    ok: true,
+    stav: json.data?.status ?? "?",
+    chyba: json.data?.errorMessage ?? null,
+    nahravky: skladby.map((s) => ({
+      url: s.audioUrl ?? s.streamAudioUrl ?? null,
+      delka: s.duration ?? null,
+      titul: s.title ?? null,
+    })),
+  });
+});
