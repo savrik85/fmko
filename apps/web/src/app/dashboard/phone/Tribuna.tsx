@@ -69,7 +69,11 @@ function pruh(tone: Prispevek["tone"]): string {
 
 function Avatar({ p }: { p: Prispevek }) {
   if (p.avatar) {
-    return <FaceAvatar face={p.avatar} size={38} />;
+    return (
+      <div className="w-[38px] h-[38px] rounded-full overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+        <FaceAvatar faceConfig={p.avatar} size={32} />
+      </div>
+    );
   }
   const pismena = p.author.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
   return (

@@ -40,6 +40,10 @@ interface Stadium3DViewerProps {
   initialAttendanceRatio?: number;
   attendanceRatio?: number;
   onAttendanceChange?: (ratio: number) => void;
+  /** Zaplnění po sektorech; zavřený zůstane prázdný. Putuje beze změny do Stadium3D. */
+  sectorFill?: { kotel?: number; hlavni?: number; za_branou?: number };
+  /** Kde stojí kotel. Putuje beze změny do Stadium3D. */
+  ultrasSector?: "kotel" | "hlavni" | "za_branou";
 }
 
 export function Stadium3DViewer(props: Stadium3DViewerProps) {

@@ -462,10 +462,28 @@ export async function runScheduledMatches(
                 );
             }
 
-            // Apply facility attendance bonus (lighting + parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením), cap at stadium capacity
+            // Zavřený sektor ubírá SKUTEČNÁ MÍSTA, ne jen poptávku.
+            //
+            // Dřív se odečetl jen zájem těch lidí a strop zůstal na plné kapacitě,
+            // takže na vyprodaném zápase zavření kotle neudělalo vůbec nic. Sektor
+            // se teď z kapacity odečte celý, podle toho, co na stadionu stojí.
+            const { dostupnaKapacita } = await import("../stadium/sektory");
+            const sektory = dostupnaKapacita(
+                stadiumCapacity,
+                { ultras_stand: facilities.ultras_stand, stands: facilities.stands },
+                groupFx?.closedSectors ?? [],
+            );
+            if (sektory.zavrenoMist > 0) {
+                logger.info(
+                    {module: "match-runner", teamId: homeTeamId, matchId},
+                    `zavřené sektory ubraly ${sektory.zavrenoMist} míst z kapacity ${stadiumCapacity}`,
+                );
+            }
+
+            // Apply facility attendance bonus (lighting + parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením), cap at available capacity
             const attendance = Math.min(
                 Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather * pitchAttMul * fgAttendanceMul),
-                stadiumCapacity,
+                sektory.kapacita,
             );
 
             // Morálka domácích: šatny + sektor kotle (atmosféra)

@@ -100,6 +100,14 @@ interface Stadium3DProps {
   initialAttendanceRatio?: number;
   attendanceRatio?: number;
   onAttendanceChange?: (ratio: number) => void;
+  /**
+   * Zaplnění po sektorech, 0–1. Zavřený sektor přijde jako 0 a zůstane prázdný,
+   * i když je jinde plno. Bez tohohle měly všechny tribuny stejný počet lidí
+   * a trest za výtržnosti nebyl na stadionu vidět.
+   */
+  sectorFill?: { kotel?: number; hlavni?: number; za_branou?: number };
+  /** Kde parta kotle skutečně stojí. Dá se ji přestěhovat, tak ať to je vidět. */
+  ultrasSector?: "kotel" | "hlavni" | "za_branou";
   showControls?: boolean;
   defaultControlsVisible?: boolean;
   reserveCloseButtonSpace?: boolean;
@@ -135,12 +143,24 @@ export function Stadium3D({
   initialAttendanceRatio = 0.50,
   attendanceRatio: attendanceProp,
   onAttendanceChange,
+  sectorFill,
+  ultrasSector = "kotel",
   showControls = true,
   defaultControlsVisible = false,
   reserveCloseButtonSpace = false,
 }: Stadium3DProps) {
   const f = facilities;
   const layout = getStadiumLayout(f.stands ?? 0);
+
+  // Jižní tribuna je za jednou brankou, severní za druhou, východ a západ jsou
+  // podélné strany, tedy hlavní tribuna.
+  const SEKTOR_STRANY = { kotel: "south", za_branou: "north", hlavni: "east" } as const;
+  const zaplneniStrany = (strana: "north" | "south" | "east" | "west"): number => {
+    if (!sectorFill) return attendanceRatio;
+    const sektor = strana === "south" ? "kotel" : strana === "north" ? "za_branou" : "hlavni";
+    const v = sectorFill[sektor];
+    return typeof v === "number" ? v : attendanceRatio;
+  };
   const cust = customization ?? {};
   const standColor = cust.standColor ?? teamColor;
   const seatColor = cust.seatColor ?? teamColor;
@@ -380,7 +400,8 @@ export function Stadium3D({
             accentColor={accentColor}
             reducedDetail={isMobile}
             mode={mode}
-            attendanceRatio={attendanceRatio}
+            ultrasSide={SEKTOR_STRANY[ultrasSector]}
+            attendanceRatio={zaplneniStrany("north")}
           />
           <Stand
             side="south"
@@ -392,7 +413,8 @@ export function Stadium3D({
             accentColor={accentColor}
             reducedDetail={isMobile}
             mode={mode}
-            attendanceRatio={attendanceRatio}
+            ultrasSide={SEKTOR_STRANY[ultrasSector]}
+            attendanceRatio={zaplneniStrany("south")}
           />
           {(f.stands ?? 0) >= 2 && (
             <Stand
@@ -405,7 +427,8 @@ export function Stadium3D({
               accentColor={accentColor}
               reducedDetail={isMobile}
               mode={mode}
-              attendanceRatio={attendanceRatio}
+              ultrasSide={SEKTOR_STRANY[ultrasSector]}
+              attendanceRatio={zaplneniStrany("east")}
             />
           )}
           {(f.stands ?? 0) >= 2 && (
@@ -419,7 +442,8 @@ export function Stadium3D({
               accentColor={accentColor}
               reducedDetail={isMobile}
               mode={mode}
-              attendanceRatio={attendanceRatio}
+              ultrasSide={SEKTOR_STRANY[ultrasSector]}
+              attendanceRatio={zaplneniStrany("west")}
             />
           )}
 

@@ -505,13 +505,22 @@ function nabidkaAkci(
       blockedReason = "Sektor už zavřený je.";
     }
 
+    // U přesunu se nenabízí sektor, ve kterém parta stojí.
+    const variants = def.variants
+      ? def.variants.filter((v) => key !== "presun" || v.key !== group.sector)
+      : [];
+    if (key === "presun" && variants.length === 0) {
+      available = false;
+      blockedReason = "Není kam je přestěhovat.";
+    }
+
     return {
       action: key,
       label: def.label,
       popis: def.popis,
       cost: def.cost,
       cooldownDnu: def.cooldownDnu,
-      variants: def.variants ? [...def.variants] : [],
+      variants,
       available,
       blockedReason,
     };

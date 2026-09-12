@@ -1673,6 +1673,9 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     scoreboardLevel: (stadium.scoreboard_level as number | null) ?? 0,
     flagSize: (stadium.flag_size as number | null) ?? 0,
     ultrasText: (stadium.ultras_text as string | null) ?? null,
+    ultrasTextMode: (stadium.ultras_text_mode as string | null) ?? "vlastni",
+    // Proč na plachtě visí zrovna tohle. Prázdné, dokud si nápis píše manažer.
+    ultrasTextDuvod: (stadium.ultras_text_duvod as string | null) ?? null,
     ultrasBannerColor: (stadium.ultras_banner_color as string | null) ?? null,
     ultrasTextColor: (stadium.ultras_text_color as string | null) ?? null,
     flagColor: (stadium.flag_color as string | null) ?? null,
@@ -1786,8 +1789,49 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     ),
     pitchActions,
     pitchUpgrades,
+    // Sektory: kde stojí kotel a co je zavřené. 3D scéna podle toho nechá
+    // zavřený sektor prázdný a kotel nakreslí tam, kde parta opravdu je.
+    sektory: await stavSektoru(c.env.DB, teamId, stadium.capacity as number, facilities),
   });
 });
+
+/**
+ * Stav sektorů pro 3D scénu.
+ *
+ * Bez tohohle vypadal stadion pořád stejně, ať byl kotel zavřený nebo ne, a
+ * trest za výtržnosti nebyl vidět nikde než v čísle návštěvnosti.
+ */
+async function stavSektoru(
+  db: D1Database,
+  teamId: string,
+  capacity: number,
+  facilities: Record<string, number>,
+): Promise<{
+  ultrasSector: string;
+  closed: string[];
+  fill: Record<string, number>;
+  rozpad: Record<string, number>;
+}> {
+  const { kapacitaSektoru, zaplneniSektoru } = await import("../stadium/sektory");
+  const rows = await db
+    .prepare("SELECT kind, sector, closed_matches, size FROM fan_groups WHERE team_id = ?")
+    .bind(teamId)
+    .all<{ kind: string; sector: string; closed_matches: number; size: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "sektory part", e); return { results: [] as never[] }; });
+
+  const zavrene = [...new Set(
+    rows.results.filter((g) => g.closed_matches > 0).map((g) => g.sector),
+  )] as Array<"kotel" | "hlavni" | "za_branou">;
+  const kotel = rows.results.find((g) => g.kind === "kotel");
+  const lidi = rows.results.reduce((s, g) => s + Math.max(0, g.size), 0);
+
+  return {
+    ultrasSector: kotel?.sector ?? "kotel",
+    closed: zavrene,
+    fill: zaplneniSektoru(lidi, capacity, facilities, zavrene),
+    rozpad: kapacitaSektoru(capacity, facilities),
+  };
+}
 
 // POST /api/teams/:id/stadium/upgrade — upgrade a facility
 gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {

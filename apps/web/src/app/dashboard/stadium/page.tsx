@@ -127,6 +127,13 @@ interface StadiumData {
   /** Vlhkost půdy 0–100 (50 = normál). */
   pitchMoisture?: number;
   customization: Customization;
+  /** Stav sektorů pro 3D scénu: kde stojí kotel a co je zavřené. */
+  sektory?: {
+    ultrasSector: string;
+    closed: string[];
+    fill: { kotel?: number; hlavni?: number; za_branou?: number };
+    rozpad: { kotel: number; hlavni: number; za_branou: number };
+  };
   visualUpgrades: VisualUpgrade[];
   upgrades: UpgradeOption[];
   pitchActions: PitchAction[];
@@ -521,6 +528,8 @@ export default function StadiumPage() {
         stadiumName={stadium.stadiumName}
         sponsors={sponsorNames}
         customization={stadium.customization}
+        sectorFill={stadium.sektory?.fill}
+        ultrasSector={stadium.sektory?.ultrasSector as never}
       />
 
       {/* ═══ Stadium visualization + stats ═══ */}
@@ -570,6 +579,8 @@ export default function StadiumPage() {
                   stadiumName={stadium.stadiumName}
                   sponsors={sponsorNames}
                   customization={stadium.customization}
+                  sectorFill={stadium.sektory?.fill}
+                  ultrasSector={stadium.sektory?.ultrasSector as never}
                 />
               )}
               <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-sm px-2.5 py-1 rounded pointer-events-none">

@@ -22,6 +22,8 @@ interface StandProps {
   reducedDetail?: boolean;
   mode?: StadiumMode;
   attendanceRatio?: number;
+  /** Na které straně stojí kotel. Parta se dá přestěhovat, scéna to má ukázat. */
+  ultrasSide?: "north" | "south" | "east" | "west";
 }
 
 const STAND_GAP = 2.5;
@@ -52,6 +54,7 @@ export function Stand({
   reducedDetail = false,
   mode = "match_day",
   attendanceRatio = 0.75,
+  ultrasSide = "south",
 }: StandProps) {
   if (level <= 0) return null;
   return (
@@ -66,6 +69,7 @@ export function Stand({
       reducedDetail={reducedDetail}
       mode={mode}
       attendanceRatio={attendanceRatio}
+      ultrasSide={ultrasSide}
     />
   );
 }
@@ -81,6 +85,7 @@ function ActiveStand({
   reducedDetail = false,
   mode = "match_day",
   attendanceRatio = 0.75,
+  ultrasSide = "south",
 }: StandProps) {
   const dims = STAND_DIMS[Math.min(level, 3)];
   const finalSeatColor = seatColor ?? teamColor;
@@ -151,7 +156,7 @@ function ActiveStand({
           attendanceRatio={attendanceRatio}
           teamColor={teamColor}
           secondaryColor={secondaryColor}
-          isUltrasSector={side === "south"}
+          isUltrasSector={side === ultrasSide}
           waveSlot={WAVE_SLOT[side]}
           reducedDetail={reducedDetail}
         />

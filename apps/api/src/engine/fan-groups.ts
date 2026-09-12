@@ -658,9 +658,18 @@ export interface FanGroupMatchEffects {
   ticketRevenueMul: number;
   /** Kolik lidí se kvůli uzavřenému sektoru na stadion nedostane. */
   lockedOut: number;
+  /**
+   * Které sektory jsou zavřené.
+   *
+   * Samotné `lockedOut` nestačilo: ubralo poptávku, ale kapacita stadionu
+   * zůstala stejná, takže na vyprodaném zápase zavřený kotel neznamenal nic.
+   * Podle tohohle se z kapacity odečtou skutečná místa.
+   */
+  closedSectors: FanSector[];
 }
 
 export const NEUTRAL_GROUP_EFFECTS: FanGroupMatchEffects = {
+  closedSectors: [],
   attendanceMul: 1,
   noiseBonus: 0,
   concessionMul: 1,
@@ -715,6 +724,7 @@ export function fanGroupMatchEffects(groups: readonly GroupMatchState[]): FanGro
   }
 
   return {
+    closedSectors: [...new Set(groups.filter((g) => g.sectorClosed).map((g) => g.sector))],
     attendanceMul: Math.max(0.4, Math.min(1.4, attendance)),
     // Odečítá se hlas průměrné party, aby normální klub dostal nulu a ne trvalý bonus.
     noiseBonus: Math.max(-1, Math.min(1, (hlas - 0.42) * 2.5)),

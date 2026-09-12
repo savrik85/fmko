@@ -15,6 +15,8 @@ export interface FanActionVariant {
   key: string;
   label: string;
   cost: number;
+  /** Co to udělá. Bez toho je na tlačítku jen cena a hráč neví, co kupuje. */
+  dopad?: string;
 }
 
 export interface FanActionDef {
@@ -86,10 +88,12 @@ export const FAN_ACTIONS: Record<FanActionKey, FanActionDef> = {
     popis: "Přestěhuješ partu jinam na stadion. Dál od hostů znamená míň malérů, ale i míň slyšet.",
     cost: 3000,
     cooldownDnu: 30,
+    // Čísla sedí na FAN_SKALY.SEKTOR_RIZIKO a SEKTOR_HLAS. Kdyby se tam
+    // sazby změnily, musí se změnit i tady: hráč kupuje to, co je na tlačítku.
     variants: [
-      { key: "kotel", label: "Kotel za brankou", cost: 3000 },
-      { key: "hlavni", label: "Hlavní tribuna", cost: 3000 },
-      { key: "za_branou", label: "Sektor za brankou", cost: 3000 },
+      { key: "kotel", label: "Kotel za brankou", cost: 3000, dopad: "Plný hlas, plné riziko. Rvačka s hosty možná." },
+      { key: "hlavni", label: "Hlavní tribuna", cost: 3000, dopad: "O čtvrtinu míň malérů a rvačka vyloučená, ale ztratí 40 % hlasu." },
+      { key: "za_branou", label: "Sektor za brankou", cost: 3000, dopad: "O třetinu vyšší riziko, hlas skoro plný. Nejblíž k hostům." },
     ],
   },
 };
