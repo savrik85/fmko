@@ -1862,11 +1862,15 @@ async function stavSektoru(
     return jadroNaVenkovni(jejichKotel?.core ?? 0);
   };
 
+  // Soupeř se vrací i s nulou. Když má malý a otrávený kotel, NIKOHO nepošle
+  // a to je informace: hráč jinak vidí prázdno a myslí si, že je něco rozbité.
   if (pristi) {
-    const pocet = await kolikPrijede(pristi.id);
-    if (pocet > 0) {
-      hoste = { pocet, barva: pristi.primary_color ?? "#B91C1C", nazev: pristi.name, kdy: "prijede" };
-    }
+    hoste = {
+      pocet: await kolikPrijede(pristi.id),
+      barva: pristi.primary_color ?? "#B91C1C",
+      nazev: pristi.name,
+      kdy: "prijede",
+    };
   }
 
   if (!hoste) {
@@ -1907,10 +1911,12 @@ async function stavSektoru(
       .first<{ id: string; name: string; primary_color: string | null }>()
       .catch((e) => { logger.warn({ module: "game" }, "poslední soupeř doma", e); return null; });
     if (naposled) {
-      const pocet = await kolikPrijede(naposled.id);
-      if (pocet > 0) {
-        hoste = { pocet, barva: naposled.primary_color ?? "#B91C1C", nazev: naposled.name, kdy: "prijel" };
-      }
+      hoste = {
+        pocet: await kolikPrijede(naposled.id),
+        barva: naposled.primary_color ?? "#B91C1C",
+        nazev: naposled.name,
+        kdy: "prijel",
+      };
     }
   }
 

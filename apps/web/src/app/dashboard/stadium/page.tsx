@@ -615,9 +615,11 @@ export default function StadiumPage() {
                 <span className="text-ink">
                   Sektor hostů:{" "}
                   <strong className="font-heading">{stadium.sektory.hoste.nazev}</strong>
-                  {stadium.sektory.hoste.kdy === "prijede"
-                    ? ` — čeká se jich ${stadium.sektory.hoste.pocet}.`
-                    : ` — naposledy jich přijelo ${stadium.sektory.hoste.pocet}.`}
+                  {stadium.sektory.hoste.pocet === 0
+                    ? " — nikoho neposílají, na výjezd nemají dost lidí."
+                    : stadium.sektory.hoste.kdy === "prijede"
+                      ? ` — čeká se jich ${stadium.sektory.hoste.pocet}.`
+                      : ` — tolik jich naposledy přijelo: ${stadium.sektory.hoste.pocet}.`}
                 </span>
               </div>
             )}
