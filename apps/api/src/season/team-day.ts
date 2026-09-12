@@ -442,6 +442,50 @@ export async function processTeamDay(
           await prispevekKTransparentu(env.DB, teamId, plachta, newGameDate);
         }
 
+        // Chorály. Vznikají z téhož stavu jako všechno ostatní a drží se,
+        // dokud jejich důvod platí.
+        const { tikChoralu } = await import("../fans/fan-chants");
+        const noveChoraly = await tikChoralu(env.DB, teamId, party, newGameDate);
+        if (noveChoraly.length > 0) {
+          const { prispevkyKChoralum } = await import("../fans/fan-feed");
+          await prispevkyKChoralum(env.DB, teamId, noveChoraly, newGameDate);
+        }
+
+        // Kam chodí: stav stadionu, občerstvení a jeho ceny. Jednou za herní
+        // týden (pondělí), ne denně: denní posun byl tak malý, že ho
+        // zaokrouhlení na celé body smazalo a všem partám vycházelo totéž.
+        const { nactiProstredi, dopadProstredi, dopadKamaradeniSRivalem, zijeRivalitu } =
+          await import("../fans/fan-prostredi");
+        const jePondeli = newDayOfWeek === 1;
+        const prostredi = jePondeli ? await nactiProstredi(env.DB, teamId) : null;
+        const kamaradeni = await dopadKamaradeniSRivalem(env.DB, teamId, party, newGameDate);
+
+        const prostrediStmts: D1PreparedStatement[] = [];
+        for (const g of party) {
+          let mood = 0, heat = 0, duvod = "";
+          if (prostredi) {
+            const d = dopadProstredi({ kind: g.kind as never, id: g.id }, prostredi);
+            mood += d.mood; heat += d.heat; duvod = d.duvod;
+          }
+          // Kamarádství s trenérem rivala žerou jen ti, co rivalitu žijí.
+          if (kamaradeni && zijeRivalitu(g.kind)) {
+            heat += kamaradeni.heat;
+            duvod = kamaradeni.duvod;
+          }
+          if (mood === 0 && heat === 0) continue;
+          prostrediStmts.push(env.DB.prepare(
+            `UPDATE fan_groups SET mood = MAX(0, MIN(100, mood + ?)), heat = MAX(0, MIN(100, heat + ?)),
+               updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+          ).bind(mood, heat, g.id));
+          if (duvod) {
+            logger.info({ module: "daily-tick", teamId }, `parta ${g.kind}: ${duvod} (nálada ${mood >= 0 ? "+" : ""}${mood})`);
+          }
+        }
+        if (prostrediStmts.length > 0) {
+          await env.DB.batch(prostrediStmts)
+            .catch((e) => logger.warn({ module: "daily-tick" }, "dopad prostředí na party", e));
+        }
+
         // Názor na to, jak se hraje a kolik se dává. Až z trendu, ne po jednom
         // zápase, jinak by zeď zaplavily hlášky k jedné prohře.
         const forma = await formaKlubu(env.DB, teamId);

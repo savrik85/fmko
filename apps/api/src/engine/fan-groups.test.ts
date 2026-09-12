@@ -32,6 +32,7 @@ function ctx(over: Partial<IncidentContext> = {}): IncidentContext {
     awayUltrasSize: 0,
     securityRiskReduction: 0,
     sectorSeparation: 0,
+    cageBlok: 0,
     tifo: false,
     ...over,
   };
@@ -184,7 +185,7 @@ describe("šance na výtržnost", () => {
     const peklo = incidentChance(ctx({
       group: { kind: "kotel", aggression: 100, heat: 100, mood: 0, size: 500, sectorClosed: false },
       derby: true, homeLosing: true, beerPerAttendee: 1, awayUltrasSize: 500, tifo: true,
-      securityRiskReduction: 0, sectorSeparation: 0,
+      securityRiskReduction: 0, sectorSeparation: 0, cageBlok: 0,
     }));
     expect(peklo).toBeLessThanOrEqual(FAN_SKALY.MAX_RATE);
   });
@@ -399,7 +400,7 @@ describe("sektor party", () => {
     group: { kind: "kotel", aggression: 70, heat: 0, mood: 55, size: 60, sectorClosed: false },
     sector,
     leaderRadikalnost: 50, derby: false, rivalita: 0, homeLosing: false, beerPerAttendee: 0,
-    awayUltrasSize: 0, securityRiskReduction: 0, sectorSeparation: 0, tifo: false,
+    awayUltrasSize: 0, securityRiskReduction: 0, sectorSeparation: 0, cageBlok: 0, tifo: false,
   });
 
   it("u hostů je riziko nejvyšší, na hlavní tribuně nejnižší", () => {

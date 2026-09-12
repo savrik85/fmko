@@ -1520,7 +1520,7 @@ async function pridejVudceDoHospody(
   try {
     const { createRng } = await import("../generators/rng");
     const { seedFromString } = await import("../lib/seed");
-    const { dorazilDoHospody, scenaSVudcem, scenaSTrenerem } = await import("./pub-fan-leaders");
+    const { dorazilDoHospody, scenaSVudcem, scenaSTrenerem, scenaOZapase } = await import("./pub-fan-leaders");
     type VudceVHospode = Parameters<typeof dorazilDoHospody>[0];
 
     const rows = await db.prepare(
@@ -1550,6 +1550,10 @@ async function pridejVudceDoHospody(
       .map((a) => ({ playerId: a.playerId, jmeno: `${a.firstName} ${a.lastName}` }));
     const trenerJeTu = attendees.some((a) => a.isCoach);
 
+    // Co se probírá: poslední zápas a kdo v něm jak hrál. Hospoda je od toho,
+    // aby se tyhle věci řekly nahlas tomu, koho se týkají.
+    const { zapas, vykony } = await posledniZapasProHospodu(db, teamId, hraci.map((h) => h.playerId));
+
     for (const r of rows.results) {
       const rng = createRng(seedFromString(`pubvudce|${teamId}|${gameDate}|${r.id}`));
       const v: VudceVHospode = {
@@ -1560,13 +1564,18 @@ async function pridejVudceDoHospody(
       };
       if (!dorazilDoHospody(v, rng.random())) continue;
 
+      // Pořadí je záměrné: trenér, pak čerstvý zápas, teprve pak obecné řeči.
+      // Den před zápasem má ale přednost výtka za plnou hospodu.
       const scena = trenerJeTu
         ? scenaSTrenerem(v, rng.random())
-        : scenaSVudcem(v, hraci, {
-          predZapasem: !!zapasZitra,
-          roll: rng.random(),
-          vyberHrace: rng.int(0, 999),
-        });
+        : (!zapasZitra
+          ? scenaOZapase(v, zapas, vykony, { roll: rng.random(), vyber: rng.int(0, 999) })
+          : null)
+          ?? scenaSVudcem(v, hraci, {
+            predZapasem: !!zapasZitra,
+            roll: rng.random(),
+            vyberHrace: rng.int(0, 999),
+          });
 
       // Do hospody přijde, i když se nic nesemele. Prázdný stůl s vůdcem je
       // taky informace: vidíš, že tam byl.
@@ -1622,5 +1631,83 @@ function bezpecnyAvatarVudce(raw: string | null): Record<string, unknown> | unde
   } catch (e) {
     logger.warn({ module: "pub" }, "rozbitý avatar vůdce", e);
     return undefined;
+  }
+}
+
+
+/**
+ * Poslední odehraný zápas a výkony hráčů, kteří sedí v hospodě.
+ *
+ * Bez výkonů by se v hospodě dal rozebrat jen výsledek, což je polovina toho,
+ * co se v okrese po nedělním zápase řeší.
+ */
+async function posledniZapasProHospodu(
+  db: D1Database,
+  teamId: string,
+  playerIds: string[],
+): Promise<{
+  zapas: import("./pub-fan-leaders").PosledniZapas | null;
+  vykony: import("./pub-fan-leaders").VykonHrace[];
+}> {
+  const prazdno = { zapas: null, vykony: [] };
+  try {
+    const m = await db.prepare(
+      `SELECT m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+              th.name AS home_name, ta.name AS away_name
+       FROM matches m
+       JOIN teams th ON th.id = m.home_team_id
+       JOIN teams ta ON ta.id = m.away_team_id
+       WHERE (m.home_team_id = ?1 OR m.away_team_id = ?1) AND m.home_score IS NOT NULL
+       ORDER BY COALESCE(m.simulated_at, m.created_at) DESC LIMIT 1`,
+    ).bind(teamId).first<{
+      id: string; home_team_id: string; away_team_id: string;
+      home_score: number; away_score: number; home_name: string; away_name: string;
+    }>().catch((e) => { logger.warn({ module: "pub" }, "poslední zápas pro hospodu", e); return null; });
+    if (!m) return prazdno;
+
+    const doma = m.home_team_id === teamId;
+    const gf = doma ? m.home_score : m.away_score;
+    const ga = doma ? m.away_score : m.home_score;
+    const zapas = {
+      vyhra: gf > ga,
+      remiza: gf === ga,
+      gf, ga,
+      souper: doma ? m.away_name : m.home_name,
+      doma,
+    };
+
+    if (playerIds.length === 0) return { zapas, vykony: [] };
+
+    const placeholders = playerIds.map(() => "?").join(",");
+    const st = await db.prepare(
+      `SELECT player_id, goals, assists, rating, red_cards, minutes_played
+       FROM match_player_stats WHERE match_id = ? AND player_id IN (${placeholders})`,
+    ).bind(m.id, ...playerIds).all<{
+      player_id: string; goals: number; assists: number;
+      rating: number | null; red_cards: number; minutes_played: number;
+    }>().catch((e) => { logger.warn({ module: "pub" }, "výkony pro hospodu", e); return { results: [] as never[] }; });
+
+    const jmena = await db.prepare(
+      `SELECT id, first_name, last_name FROM players WHERE id IN (${placeholders})`,
+    ).bind(...playerIds).all<{ id: string; first_name: string; last_name: string }>()
+      .catch((e) => { logger.warn({ module: "pub" }, "jména pro hospodu", e); return { results: [] as never[] }; });
+    const jmeno = new Map(jmena.results.map((j) => [j.id, `${j.first_name} ${j.last_name}`]));
+
+    const vykony = playerIds.map((id) => {
+      const s = st.results.find((x) => x.player_id === id);
+      return {
+        playerId: id,
+        jmeno: jmeno.get(id) ?? "hráč",
+        odehral: (s?.minutes_played ?? 0) > 0,
+        goly: s?.goals ?? 0,
+        asistence: s?.assists ?? 0,
+        znamka: s?.rating ?? null,
+        cervena: (s?.red_cards ?? 0) > 0,
+      };
+    });
+    return { zapas, vykony };
+  } catch (e) {
+    logger.warn({ module: "pub" }, `poslední zápas pro hospodu u ${teamId}`, e);
+    return prazdno;
   }
 }

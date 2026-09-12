@@ -121,6 +121,8 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
       awayUltrasSize: ctx.hostujiciKotel,
       securityRiskReduction: ctx.fx.securityRiskReduction,
       sectorSeparation: ctx.fx.sectorSeparation,
+      // Klec zabírá jen u kotle: kdo stojí na hlavní tribuně, přes ni neleze.
+      cageBlok: g.sector === "kotel" ? ctx.fx.cageBlok : 0,
       tifo: false,
     });
 
@@ -130,6 +132,7 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
     const vahy = incidentWeights(g.kind as FanGroupKind, {
       awayUltrasPresent: ctx.hostujiciKotel >= 15,
       sector: (g.sector as FanSector) ?? "hlavni",
+      cageBlok: g.sector === "kotel" ? ctx.fx.cageBlok : 0,
     });
     if (Object.keys(vahy).length === 0) continue;
     const kind = rng.weighted(vahy) as FanIncidentKind;
@@ -180,8 +183,11 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
     });
   }
 
-  // Šacování u vstupu a kamery kotel štvou — daň za klid, placená každý domácí zápas.
-  const kotelHeat = FAN_SKALY.KOTEL_HEAT_ZA_OCHRANKU[Math.max(0, Math.min(3, ctx.securityLevel))] ?? 0;
+  // Šacování u vstupu, kamery a mříže kotel štvou. Daň za klid, placená každý
+  // domácí zápas: nejvyšší ochranka i klec srážejí riziko, ale kazí náladu té
+  // party, která dělá domácí výhodu.
+  const kotelHeat = (FAN_SKALY.KOTEL_HEAT_ZA_OCHRANKU[Math.max(0, Math.min(3, ctx.securityLevel))] ?? 0)
+    + ctx.fx.cageHeat;
   if (kotelHeat > 0) {
     await db
       .prepare("UPDATE fan_groups SET heat = MIN(100, heat + ?) WHERE team_id = ? AND kind = 'kotel'")
@@ -190,9 +196,15 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
       .catch((e) => { logger.warn({ module: M }, "heat kotle z ochranky", e); });
   }
 
+  // ── Hostující kotel ──
+  // Dosud existoval jen jako číslo ve vzorci rizika domácích. Přitom přijede,
+  // stojí ve svém sektoru a umí provést svoje: zapálit pyro, nadávat sudímu,
+  // rozbít záchod. Pokuta za to jde JEJICH klubu, ne domácím.
+  const hoste = await vyhodnotHosty(db, opts, ctx);
+
   await db
-    .prepare(`UPDATE ${tabulka} SET fan_incidents = ? WHERE id = ?`)
-    .bind(JSON.stringify(snapshoty), opts.matchId)
+    .prepare(`UPDATE ${tabulka} SET fan_incidents = ?, away_fans = ? WHERE id = ?`)
+    .bind(JSON.stringify(snapshoty), JSON.stringify(hoste), opts.matchId)
     .run()
     .catch((e) => { logger.warn({ module: M }, `zápis snapshotu k zápasu ${opts.matchId}`, e); });
 
@@ -403,6 +415,11 @@ interface Kontext {
   securityLevel: number;
   reputace: number;
   hostujiciKotel: number;
+  /** Jak je hostující kotel naladěný. Naštvaní hosté dělají bordel i na výjezdu. */
+  hosteMood: number;
+  hosteHeat: number;
+  hosteAggression: number;
+  hosteNazev: string;
   /** Teplota rivality mezi tábory 0–100, už po vychladnutí od minula. */
   rivalita: number;
   /** 0–1: kolik piva je vůbec k mání. Vlastní prodej se v tuhle chvíli ještě nezaúčtoval,
@@ -414,7 +431,7 @@ async function nactiKontext(db: D1Database, opts: ResolveOpts): Promise<Kontext>
   const stadion = await db
     .prepare(
       `SELECT changing_rooms, showers, refreshments, lighting, stands, parking, fence,
-              roof, ultras_stand, toilets, entrance_gate, security
+              roof, ultras_stand, toilets, entrance_gate, security, cage
        FROM stadiums WHERE team_id = ?`,
     )
     .bind(opts.homeTeamId)
@@ -435,10 +452,14 @@ async function nactiKontext(db: D1Database, opts: ResolveOpts): Promise<Kontext>
     logger.warn({ module: M }, `party hostů ${opts.awayTeamId}`, e); return [];
   });
   const host = await db
-    .prepare("SELECT core FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
+    .prepare("SELECT core, mood, heat, aggression FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
     .bind(opts.awayTeamId)
-    .first<{ core: number }>()
+    .first<{ core: number; mood: number; heat: number; aggression: number }>()
     .catch((e) => { logger.warn({ module: M }, "kotel hostů", e); return null; });
+  const hosteTym = await db
+    .prepare("SELECT name FROM teams WHERE id = ?")
+    .bind(opts.awayTeamId).first<{ name: string }>()
+    .catch((e) => { logger.warn({ module: M }, "název hostů", e); return null; });
 
   // Ven jezdí JÁDRO, ne čtvrtina celé party. Dřív se tu bral podíl z velikosti,
   // takže na zápas „přijelo" i padesát rodin s kočárky a riziko rvačky rostlo
@@ -450,6 +471,10 @@ async function nactiKontext(db: D1Database, opts: ResolveOpts): Promise<Kontext>
     securityLevel: facilities.security ?? 0,
     reputace: tym?.reputation ?? 50,
     hostujiciKotel,
+    hosteMood: host?.mood ?? 50,
+    hosteHeat: host?.heat ?? 0,
+    hosteAggression: host?.aggression ?? 50,
+    hosteNazev: hosteTym?.name ?? "hosté",
     rivalita: await teplotaRivality(db, opts.homeTeamId, opts.awayTeamId, opts.gameDate),
     pivoNaHlavu: (facilities.refreshments ?? 0) / 3,
   };
@@ -651,6 +676,23 @@ async function aplikujDopady(
     }
   }
 
+  // ── Obec to vidí ──
+  // Klub hraje na obecním hřišti a starosta čte okresní noviny. Bordel, za
+  // který chodí pokuty, přízeň obce sráží: bez tohohle mohl klub rozmlátit
+  // půl vesnice a na vztazích s úřadem se to nijak neprojevilo.
+  {
+    const srazka = dopad.closeSectorMatches > 0 ? 3 * dopad.severity : dopad.severity;
+    await db
+      .prepare(
+        `UPDATE village_team_favor SET favor = MAX(0, favor - ?),
+           updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+         WHERE team_id = ? AND official_id IS NULL`,
+      )
+      .bind(srazka, opts.homeTeamId)
+      .run()
+      .catch((e) => { logger.warn({ module: M }, "přízeň obce po výtržnosti", e); });
+  }
+
   // ── Rozhodčí si to pamatuje ──
   if (a.kind === "vyhrozovani" && opts.refereeId) {
     await db
@@ -718,4 +760,122 @@ async function oznam(
   } catch (e) {
     logger.warn({ module: M }, "notifikace o výtržnostech", e);
   }
+}
+
+
+/**
+ * Co provedl hostující kotel.
+ *
+ * Hosté nejsou jen číslo ve vzorci rizika domácích. Přijedou ve svém počtu,
+ * stojí ve svém sektoru a umí provést svoje. Pokuta jde JEJICH klubu, protože
+ * domácí za to, co přiveze soupeř, nemůžou.
+ *
+ * Rvačka se sem nepočítá: tu řeší `potrestejHosty`, protože má dvě strany.
+ */
+async function vyhodnotHosty(
+  db: D1Database,
+  opts: ResolveOpts,
+  ctx: Kontext,
+): Promise<{ pocet: number; nazev: string; incidenty: Array<{ kind: string; label: string; text: string; fine: number; minute: number }> }> {
+  const out = { pocet: ctx.hostujiciKotel, nazev: ctx.hosteNazev, incidenty: [] as Array<{ kind: string; label: string; text: string; fine: number; minute: number }> };
+  if (ctx.hostujiciKotel < FAN_SKALY.MIN_SIZE) return out;
+
+  const rng = createRng(seedFromString(`hoste|${opts.matchId}`));
+  const sance = incidentChance({
+    group: {
+      kind: "kotel",
+      aggression: ctx.hosteAggression,
+      heat: ctx.hosteHeat,
+      mood: ctx.hosteMood,
+      size: ctx.hostujiciKotel,
+      sectorClosed: false,
+    },
+    // Hosté stojí za brankou, kde si dovolí nejvíc.
+    sector: "za_branou",
+    leaderRadikalnost: 50,
+    derby: opts.preMatchHeat >= DERBY_HEAT_THRESHOLD,
+    rivalita: ctx.rivalita,
+    // Prohrávající hosté jsou naštvaní stejně jako prohrávající domácí.
+    homeLosing: opts.awayScore < opts.homeScore,
+    beerPerAttendee: ctx.pivoNaHlavu * 0.6,
+    awayUltrasSize: 0,
+    securityRiskReduction: ctx.fx.securityRiskReduction,
+    sectorSeparation: ctx.fx.sectorSeparation,
+    // Klec je nad domácím kotlem, hostů se netýká.
+    cageBlok: 0,
+    tifo: false,
+  });
+  if (rng.random() >= sance) return out;
+
+  // Rvačku řeší jinde a vniknutí přes plot soupeřova stadionu si hosté
+  // nedovolí — zbývá to, co jde ze sektoru.
+  const vahy: Record<string, number> = { pyro: 4, pokriky: 3, hazeni: 2, skoda: 2, vyhrozovani: 1 };
+  const kind = rng.weighted(vahy) as FanIncidentKind;
+  const severity = rollSeverity(rng.random(), rng.random(), kind, {
+    aggression: ctx.hosteAggression,
+    leaderRadikalnost: 55,
+    severityDropChance: ctx.fx.securitySeverityDrop,
+  });
+  const dopad = incidentOutcome(kind, severity, { reputation: 50, groupSize: ctx.hostujiciKotel });
+  const minute = rng.int(3, 92);
+  const text = `Z hostujícího sektoru (${ctx.hosteNazev}): ${FAN_INCIDENTS[kind].label.toLowerCase()}.`;
+
+  const incidentId = `inc-${opts.matchId}-hostekotel`;
+  const zapis = await db
+    .prepare(
+      `INSERT OR IGNORE INTO fan_incidents
+        (id, reference_id, match_id, team_id, opponent_team_id, group_id, kind, severity,
+         minute, text, fine, sector_closed_matches, fans_lost, morale_delta, game_date)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    )
+    .bind(
+      incidentId, incidentId, opts.matchId, opts.awayTeamId, opts.homeTeamId, null,
+      kind, severity, minute, text, dopad.fine, 0, 0, 0, opts.gameDate,
+    )
+    .run()
+    .catch((e) => { logger.error({ module: M }, `zápis výtržnosti hostů ${incidentId}`, e); return null; });
+  if ((zapis?.meta?.changes ?? 0) === 0) return out;
+
+  out.incidenty.push({ kind, label: dopad.label, text, fine: dopad.fine, minute });
+
+  if (dopad.fine > 0 && opts.leagueId) {
+    const { issueSanction } = await import("../competition/discipline");
+    await issueSanction(db, {
+      leagueId: opts.leagueId,
+      seasonNumber: opts.seasonNumber,
+      teamId: opts.awayTeamId,
+      amount: dopad.fine,
+      kind: "fan_disorder",
+      reason: `${dopad.label.toLowerCase()} na hřišti soupeře`,
+      evidence: text,
+      issuedBy: "rule",
+      issuedByTeamId: null,
+      proposalId: null,
+      gameDate: opts.gameDate,
+      referenceId: `faninc-${opts.matchId}-hostekotel`,
+    }).catch((e) => { logger.error({ module: M }, "pokuta hostům", e); });
+  }
+
+  // Škoda na cizím stadionu je pořád škoda: domácí ji musí opravit, ale platí ji
+  // soupeř přes pokutu. Zařízení se srazí u DOMÁCÍCH, protože je jejich.
+  if (kind === "skoda") {
+    const { rozbijVybaveni } = await import("../stadium/stadium-damage");
+    const dmgRng = createRng(seedFromString(`hostedmg|${opts.matchId}`));
+    await rozbijVybaveni(db, {
+      teamId: opts.homeTeamId,
+      incidentId,
+      severity,
+      gameDate: opts.gameDate,
+      vyber: (z) => dmgRng.pick(z as readonly unknown[]) as never,
+    }).catch((e) => { logger.warn({ module: M }, "škoda od hostů", e); });
+  }
+
+  const { sendSystemSMS } = await import("../lib/sms");
+  await sendSystemSMS(
+    db, opts.awayTeamId, "Hlavní pořadatel", "Hlavní pořadatel",
+    `📣 Váš kotel to na výjezdu přehnal: ${FAN_INCIDENTS[kind].label.toLowerCase()}.`
+    + (dopad.fine > 0 ? ` Pokuta ${dopad.fine.toLocaleString("cs-CZ")} Kč.` : ""),
+  ).catch((e) => { logger.warn({ module: M }, "SMS hostům o výtržnosti", e); });
+
+  return out;
 }

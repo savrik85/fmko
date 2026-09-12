@@ -100,6 +100,7 @@ describe("rivalita v riziku výtržnosti", () => {
     awayUltrasSize: 0,
     securityRiskReduction: 0,
     sectorSeparation: 0,
+    cageBlok: 0,
     tifo: false,
     ...over,
   });

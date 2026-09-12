@@ -54,6 +54,29 @@ export interface FanDopad {
   duvod: string;
 }
 
+/** Jak dopadl poslední zápas, pro hospodské řeči. */
+export interface PosledniZapas {
+  vyhra: boolean;
+  remiza: boolean;
+  gf: number;
+  ga: number;
+  souper: string;
+  /** Hrálo se doma? */
+  doma: boolean;
+}
+
+/** Výkon hráče, který sedí v hospodě. Z posledního zápasu. */
+export interface VykonHrace {
+  playerId: string;
+  jmeno: string;
+  odehral: boolean;
+  goly: number;
+  asistence: number;
+  /** Známka 0–10 ze `match_player_stats`. */
+  znamka: number | null;
+  cervena: boolean;
+}
+
 export interface HospodskaScena {
   type: string;
   text: string;
@@ -191,5 +214,103 @@ export function scenaSTrenerem(v: VudceVHospode, roll: number): HospodskaScena |
         duvod: "Dali jste si spolu v hospodě pivo." },
     };
   }
+  return null;
+}
+
+
+/**
+ * Řeči o posledním zápase a o tom, kdo sedí u vedlejšího stolu.
+ *
+ * Tohle je ta část hospody, kvůli které tam lidi chodí: rozebrat, co se
+ * v neděli stalo, a říct to tomu, koho se to týká. Hráč u stolu si vyslechne
+ * pochvalu i výtku, a protože je to od fanoušků, hne to i jeho morálkou.
+ *
+ * Vrací `null`, když není o čem: bez odehraného zápasu se v hospodě mluví
+ * o jiných věcech.
+ */
+export function scenaOZapase(
+  v: VudceVHospode,
+  zapas: PosledniZapas | null,
+  hraci: readonly VykonHrace[],
+  opts: { roll: number; vyber: number },
+): HospodskaScena | null {
+  if (!zapas) return null;
+
+  const hraliTam = hraci.filter((h) => h.odehral);
+
+  // 1. Někdo u stolu zazářil. To se v hospodě neopomene.
+  const hrdina = hraliTam.find((h) => h.goly >= 2)
+    ?? hraliTam.find((h) => h.goly >= 1 && zapas.vyhra)
+    ?? hraliTam.find((h) => (h.znamka ?? 0) >= 8);
+  if (hrdina && opts.roll < 0.7) {
+    const co = hrdina.goly >= 2
+      ? `za ty dva góly`
+      : hrdina.goly >= 1 ? "za gól" : "za výkon";
+    return {
+      type: "vudce_chvali_hrace",
+      text: `${v.jmeno} koupil ${hrdina.jmeno}ovi pivo ${co} proti ${zapas.souper}. Hospoda tleskala.`,
+      playerIds: [hrdina.playerId],
+      moraleDelta: 4,
+      fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 2, heat: -1, sentiment: 1,
+        duvod: `V hospodě chválili ${hrdina.jmeno} za zápas.` },
+    };
+  }
+
+  // 2. Někdo to pokazil a je tady. Tohle bolí víc než pískot z tribuny.
+  const otloukanek = hraliTam.find((h) => h.cervena)
+    ?? hraliTam.find((h) => (h.znamka ?? 10) <= 4.5);
+  if (otloukanek && !zapas.vyhra && opts.roll < 0.6) {
+    const co = otloukanek.cervena ? "za tu červenou" : "za ten výkon";
+    const ostry = v.radikalnost >= 55;
+    return {
+      type: "vudce_kara_hrace",
+      text: ostry
+        ? `${v.jmeno} si vzal ${otloukanek.jmeno} stranou a ${co} mu to řekl narovinu. Slyšel to celý lokál.`
+        : `${v.jmeno} ${otloukanek.jmeno}ovi ${co} nic neřekl, jen se na něj díval. To stačilo.`,
+      playerIds: [otloukanek.playerId],
+      moraleDelta: ostry ? -5 : -2,
+      fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 0, heat: -2, sentiment: 0,
+        duvod: `V hospodě si podali ${otloukanek.jmeno} za poslední zápas.` },
+    };
+  }
+
+  // 3. Rozbor zápasu bez konkrétního viníka.
+  if (opts.roll < 0.55) {
+    const kdo = hraci.length > 0 ? hraci[Math.abs(opts.vyber) % hraci.length] : null;
+    const skore = `${zapas.gf}:${zapas.ga}`;
+    if (zapas.vyhra) {
+      return {
+        type: "vudce_rozbor_vyhra",
+        text: kdo
+          ? `${v.jmeno} u výčepu znovu a znovu přehrával ten ${skore} se ${zapas.souper}. ${kdo.jmeno} to musel poslouchat třikrát.`
+          : `${v.jmeno} rozebíral ${skore} se ${zapas.souper} s každým, kdo přišel.`,
+        playerIds: kdo ? [kdo.playerId] : [],
+        moraleDelta: kdo ? 2 : 0,
+        fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 2, heat: 0, sentiment: 1,
+          duvod: "Vyhráli jste a v hospodě se to probíralo." },
+      };
+    }
+    if (zapas.remiza) {
+      return {
+        type: "vudce_rozbor_remiza",
+        text: `${v.jmeno} nad tou remízou ${skore} kroutil hlavou. Prý dva ztracené body, které budou chybět.`,
+        playerIds: [],
+        moraleDelta: 0,
+        fan: { groupId: v.groupId, leaderId: v.leaderId, mood: -1, heat: 1, sentiment: 0,
+          duvod: "Remíza, která se v hospodě počítá jako ztráta." },
+      };
+    }
+    return {
+      type: "vudce_rozbor_prohra",
+      text: kdo
+        ? `${v.jmeno} u stolu rozebíral tu porážku ${skore} a ${kdo.jmeno} seděl vedle a mlčel.`
+        : `${v.jmeno} probíral porážku ${skore} se ${zapas.souper} až do zavíračky.`,
+      playerIds: kdo ? [kdo.playerId] : [],
+      moraleDelta: kdo ? -2 : 0,
+      fan: { groupId: v.groupId, leaderId: v.leaderId, mood: -2, heat: 2, sentiment: -1,
+        duvod: `Prohra ${skore} se ${zapas.souper} se v hospodě přetřásala.` },
+    };
+  }
+
   return null;
 }

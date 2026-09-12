@@ -407,6 +407,38 @@ export async function prispevkyKHre(
   return zapisPrispevky(db, prispevky);
 }
 
+/** Nový chorál. Když si ho vymysleli, chtějí ho slyšet. */
+export async function prispevkyKChoralum(
+  db: D1Database,
+  teamId: string,
+  choraly: Array<{ kind: string; text: string; duvod: string }>,
+  gameDate: string,
+): Promise<number> {
+  const ctx = await nactiKontext(db, teamId, gameDate);
+  if (!ctx) return 0;
+  const g = ctx.groups.find((x) => x.kind === "kotel") ?? ctx.groups[0];
+  if (!g) return 0;
+
+  const leader = g.leader_id ? ctx.leaders.get(g.leader_id) : undefined;
+  const prispevky: NovyPrispevek[] = [];
+  for (const ch of choraly) {
+    const a = autor(g, leader, `chant-${teamId}-${ch.kind}`, true);
+    prispevky.push({
+      referenceId: `chant-${teamId}-${ch.kind}-${gameDate.slice(0, 10)}`,
+      teamId,
+      authorName: a.name, authorHandle: `@${a.handle}`, authorKind: a.kind,
+      authorAvatar: a.avatar, groupId: g.id,
+      body: `Od dneška zpíváme: „${ch.text}" 📣`,
+      tone: ch.kind === "trener_proti" || ch.kind === "vzdor" || ch.kind === "vybaveni"
+        ? "negativni" : "pozitivni",
+      likes: Math.max(1, Math.round(g.size * 0.2)),
+      topic: "club_event",
+      gameDate,
+    });
+  }
+  return zapisPrispevky(db, prispevky);
+}
+
 /** Nová plachta v kotli. Vyvěsit ji a nikomu to neříct by byla škoda. */
 export async function prispevekKTransparentu(
   db: D1Database,

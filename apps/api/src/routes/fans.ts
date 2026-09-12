@@ -23,6 +23,7 @@ import { nactiOblibence } from "../fans/fan-favourites";
 import { nactiKampane } from "../fans/fan-campaigns";
 import { nactiPoskozeni } from "../stadium/stadium-damage";
 import { nactiZed } from "../fans/fan-feed";
+import { nactiChoraly } from "../fans/fan-chants";
 import {
   FAN_ACTIONS, FAN_ACTION_KEYS, actionCost, dnuOd,
   dopadSchuzky, dopadSlevy, dopadTifa, dopadZakazu, dopadOdvolaniZakazu, dopadPresunu,
@@ -226,6 +227,10 @@ fansRouter.get("/teams/:teamId/fans/groups", async (c) => {
       podpisy: k.podpisy,
       prah: k.prah,
       status: k.status,
+    })),
+    chants: (await nactiChoraly(db, teamId)).map((ch) => ({
+      id: ch.id, kind: ch.kind, text: ch.text, duvod: ch.duvod,
+      sila: ch.sila, silaWord: ch.silaWord, since: ch.since_game_date,
     })),
     damage: (await nactiPoskozeni(db, teamId)).map((d) => ({
       id: d.id, facility: d.facility, label: d.label,
@@ -716,6 +721,36 @@ fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
   const plachta = await prepoctiTransparent(c.env.DB, teamId, party, gameDate);
   if (plachta) await prispevekKTransparentu(c.env.DB, teamId, plachta, gameDate);
 
+  const { tikChoralu } = await import("../fans/fan-chants");
+  const { prispevkyKChoralum } = await import("../fans/fan-feed");
+  const noveChoraly = await tikChoralu(c.env.DB, teamId, party, gameDate);
+  if (noveChoraly.length > 0) await prispevkyKChoralum(c.env.DB, teamId, noveChoraly, gameDate);
+
+  // Týdenní dopad prostředí. V dev triggeru se pouští vždycky, ať se dá ověřit.
+  const { nactiProstredi, dopadProstredi, dopadKamaradeniSRivalem, zijeRivalitu } =
+    await import("../fans/fan-prostredi");
+  const prostredi = await nactiProstredi(c.env.DB, teamId);
+  const kamaradeni = await dopadKamaradeniSRivalem(c.env.DB, teamId, party, gameDate);
+  const dopady: Array<{ parta: string; mood: number; heat: number; duvod: string }> = [];
+  const pStmts: D1PreparedStatement[] = [];
+  for (const g of party) {
+    let mood = 0, heat = 0, duvod = "";
+    if (prostredi) {
+      const d = dopadProstredi({ kind: g.kind as never, id: g.id }, prostredi);
+      mood += d.mood; heat += d.heat; duvod = d.duvod;
+    }
+    if (kamaradeni && zijeRivalitu(g.kind)) { heat += kamaradeni.heat; duvod = kamaradeni.duvod; }
+    if (mood === 0 && heat === 0) continue;
+    dopady.push({ parta: g.name, mood, heat, duvod });
+    pStmts.push(c.env.DB.prepare(
+      `UPDATE fan_groups SET mood = MAX(0, MIN(100, mood + ?)), heat = MAX(0, MIN(100, heat + ?)),
+         updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+    ).bind(mood, heat, g.id));
+  }
+  if (pStmts.length > 0) {
+    await c.env.DB.batch(pStmts).catch((e) => logger.warn({ module: M }, "dev dopad prostředí", e));
+  }
+
   const forma = await formaKlubu(c.env.DB, teamId);
   const taktika = await c.env.DB.prepare("SELECT tactic FROM teams WHERE id = ?")
     .bind(teamId).first<{ tactic: string | null }>()
@@ -731,6 +766,9 @@ fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
     oblibenci: zmeny,
     kampane: { zalozene: kampane.zalozene.length, splnene: kampane.splnene.length, vysumele: kampane.vysumele.length },
     transparent: plachta,
+    choraly: noveChoraly,
+    prostredi: dopady,
+    kamaradeniSRivalem: kamaradeni,
     forma,
     prispevkyKHre: hraPrispevky,
   });

@@ -500,6 +500,12 @@ export interface IncidentContext {
    */
   securityRiskReduction: number;
   sectorSeparation: number;
+  /**
+   * Klec nad kotlem 0–1. Nesráží riziko obecně, ale konkrétně vniknutí na
+   * plochu a házení předmětů: přes plexi se člověk ani kelímek nedostane.
+   * Ostatní skutky (pyro, pokřiky, rvačka u plotu) tím nezmizí.
+   */
+  cageBlok: number;
   /** Klub zaplatil choreo na tenhle zápas. */
   tifo: boolean;
 }
@@ -539,19 +545,29 @@ export function incidentChance(ctx: IncidentContext): number {
   return Math.max(0, Math.min(FAN_SKALY.MAX_RATE, p));
 }
 
-/** Váhy skutků, které tahle skupina za daných okolností vůbec může provést. */
+/**
+ * Váhy skutků, které tahle skupina za daných okolností vůbec může provést.
+ *
+ * `cageBlok` snižuje váhu vniknutí a házení, nikoli šanci celkově: klec nezmění
+ * to, že je kotel naštvaný, jen mu vezme dvě možnosti, jak to dát najevo.
+ * Při plné kleci může váha spadnout na nulu a skutek z výběru vypadne.
+ */
 export function incidentWeights(
   kind: FanGroupKind,
-  opts: { awayUltrasPresent: boolean; sector: FanSector },
+  opts: { awayUltrasPresent: boolean; sector: FanSector; cageBlok?: number },
 ): Record<string, number> {
   const out: Record<string, number> = {};
+  const klec = clamp01(opts.cageBlok ?? 0);
   for (const k of FAN_INCIDENT_KINDS) {
     const def = FAN_INCIDENTS[k];
     if (def.needsAwayUltras && !opts.awayUltrasPresent) continue;
     // Od hlavní tribuny se k hostujícímu kotli nikdo neprobojuje.
     if (def.needsAwayUltras && opts.sector === "hlavni") continue;
-    const w = def.weightByGroup[kind];
-    if (w && w > 0) out[k] = w;
+    let w = def.weightByGroup[kind] ?? 0;
+    if (w <= 0) continue;
+    // Klec brání jen tomu, co míří přes plot na trávník.
+    if (k === "vniknuti" || k === "hazeni") w *= 1 - klec;
+    if (w > 0.01) out[k] = w;
   }
   return out;
 }

@@ -107,6 +107,7 @@ export const FACILITY_LABELS: Record<string, string> = {
   fence: "Oplocení",
   entrance_gate: "Vstupní brána",
   security: "Pořadatelská služba",
+  cage: "Klec nad kotlem",
 };
 
 // Stadium = dlouhodobá investice přes více sezón
@@ -125,6 +126,7 @@ export const UPGRADE_COSTS: Record<string, number[]> = {
   fence: [0, 15000, 50000, 130000],
   entrance_gate: [0, 12000, 45000, 120000],
   security: [0, 14000, 45000, 115000],
+  cage: [0, 26000, 70000, 0],
 };
 
 /**
@@ -164,6 +166,22 @@ export const SKALY = {
     naklad: [0, 150, 400, 800],
     klid: [0, 0, 1, 2],
   },
+  /**
+   * Klec nad kotlem: mříž a plexi mezi sektorem a hřištěm.
+   *
+   * Na rozdíl od pořadatelů, kteří srážejí riziko všeho, tahle věc míří na dva
+   * konkrétní skutky: přes plexi se na trávník nedostane člověk ani kelímek.
+   * Zato kotel za mřížemi zuří a je ho míň slyšet, takže je to opravdová volba,
+   * ne bezplatné vylepšení. Dvě úrovně stačí, třetí neexistuje.
+   */
+  cage: {
+    /** O kolik klesne šance na vniknutí a házení. Index = úroveň. */
+    vniknutiHazeni: [0, 0.55, 0.85, 0.85],
+    /** Kolik heatu kotli přibude za každý domácí zápas za mřížemi. */
+    heatZaZapas: [0, 2, 4, 4],
+    /** O kolik se ztlumí hlas sektoru kotle. */
+    tlumeniHlasu: [0, 0.1, 0.2, 0.2],
+  },
 } as const;
 
 /**
@@ -200,6 +218,7 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   fence: ["", "Víc lidí zaplatí vstupné", "Platí všichni diváci", "Platí všichni, prémiový stadion"],
   entrance_gate: ["", "Rychlejší odbavení u vstupu", "Dva turnikety", "Elektronické turnikety"],
   security: ["", "Dva hasiči s páskou přes rameno", "Parta v reflexních vestách a s vysílačkou", "Agentura z okresu, kamera nad kotlem a velitel"],
+  cage: ["", "Mříž mezi kotlem a hřištěm", "Plexi až do výšky, na trávník se nedostane nic", ""],
 };
 
 /**
@@ -259,6 +278,14 @@ export function popisPrirustku(key: string, from: number, to: number): string {
       if (klid > 0) casti.push(`+${klid} spokojenost po zápase`);
       // Bez znaménka, ať to regex v testu nesebere místo rizika.
       casti.push(`provoz ${SKALY.security.naklad[to]} Kč za domácí zápas`);
+      return casti.join(", ");
+    }
+    case "cage": {
+      // Riziko první, ať to sedí testu „slib v nabídce sedí". Daň za klid patří
+      // hned za to: kdo si klec postaví, má vědět, že kotel bude zuřit.
+      const casti = [`−${pct(rozdil(SKALY.cage.vniknutiHazeni))} riziko vniknutí a házení`];
+      casti.push(`kotel naštvanější o ${SKALY.cage.heatZaZapas[to]} za domácí zápas`);
+      casti.push(`hlas kotle tlumený o ${pct(SKALY.cage.tlumeniHlasu[to])}`);
       return casti.join(", ");
     }
     default:
@@ -408,6 +435,9 @@ export interface StadiumFacilityEffects {
   homeCrowdMoraleBonus: number;   // sektor kotle: + morálka domácích od kotle
   matchSatisfactionBonus: number; // sociálky + pořadatelská služba: + spokojenost fanoušků po domácím zápase
   securityRiskReduction: number;  // pořadatelská služba: o kolik klesne šance na výtržnost (0.0-1.0)
+  cageBlok: number;               // klec: o kolik klesne šance na vniknutí a házení (0.0-1.0)
+  cageHeat: number;               // klec: kolik heatu kotli přibude za domácí zápas
+  cageTlumeni: number;            // klec: o kolik se ztlumí hlas kotle
   securitySeverityDrop: number;   // pořadatelská služba: šance, že incident stlačí o stupeň (0.0-1.0)
   securityMatchCost: number;      // pořadatelská služba: Kč za domácí soutěžní zápas
   sectorSeparation: number;       // oplocení: o kolik klesne riziko střetu s hostujícím kotlem
@@ -426,6 +456,7 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   const to = facilities.toilets ?? 0;
   const eg = facilities.entrance_gate ?? 0;
   const se = facilities.security ?? 0;
+  const ca = facilities.cage ?? 0;
 
   return {
     homeMoraleBonus: SKALY.changing_rooms.morale[cr] ?? 0,
@@ -446,6 +477,9 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     // Klid na stadionu je vidět stejně jako čisté záchodky — rodiny to ocení.
     matchSatisfactionBonus: (SKALY.toilets.satisfaction[to] ?? 0) + (SKALY.security.klid[se] ?? 0),
     securityRiskReduction: SKALY.security.riziko[se] ?? 0,
+    cageBlok: SKALY.cage.vniknutiHazeni[ca] ?? 0,
+    cageHeat: SKALY.cage.heatZaZapas[ca] ?? 0,
+    cageTlumeni: SKALY.cage.tlumeniHlasu[ca] ?? 0,
     securitySeverityDrop: SKALY.security.zavaznost[se] ?? 0,
     securityMatchCost: SKALY.security.naklad[se] ?? 0,
     sectorSeparation: SKALY.fence.oddeleni[fe] ?? 0,
