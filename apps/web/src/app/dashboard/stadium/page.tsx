@@ -73,6 +73,10 @@ interface Customization {
   scoreboardLevel: number;
   flagSize: number;
   ultrasText: string | null;
+  /** Kdo plachtu píše: "vlastni" manažer, "fanousci" kotel. */
+  ultrasTextMode?: string | null;
+  /** Proč na plachtě visí zrovna tohle. Jen v režimu „fanousci". */
+  ultrasTextDuvod?: string | null;
   ultrasBannerColor: string | null;
   ultrasTextColor: string | null;
   flagColor: string | null;
@@ -153,6 +157,7 @@ const FACILITY_ICONS: Record<string, string> = {
   fence: "🏗",
   entrance_gate: "🎟️",
   security: "🦺",
+  cage: "⛓️",
 };
 
 const FACILITY_LABELS: Record<string, string> = {
@@ -168,6 +173,7 @@ const FACILITY_LABELS: Record<string, string> = {
   fence: "Oplocení",
   entrance_gate: "Vstupní brána",
   security: "Pořadatelská služba",
+  cage: "Klec nad kotlem",
 };
 
 const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
@@ -184,6 +190,9 @@ const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   entrance_gate: ["Závora a pokladna na stolečku", "Dřevěná pokladna a kovaná brána", "Zděná brána se 2 turnikety", "Monumentální stadionový portál s turnikety"],
   // Stejné znění jako SECURITY_POPIS v stadium-generator.ts — hlídá to test.
   security: ["Žádná, pořádek si hlídá, kdo zrovna může", "Dva hasiči s páskou přes rameno", "Parta v reflexních vestách a s vysílačkou", "Agentura z okresu s kamerou nad kotlem"],
+  // Třetí úroveň neexistuje, proto se poslední popis opakuje: výš než plexi
+  // do stropu už se jít nedá.
+  cage: ["Mezi kotlem a hřištěm nic není", "Mříž mezi kotlem a hřištěm", "Plexi až do výšky, na trávník se nedostane nic", "Plexi až do výšky, na trávník se nedostane nic"],
 };
 
 const LEVEL_LABELS = ["Žádné", "Základní", "Dobré", "Vynikající"];
@@ -429,7 +438,12 @@ export default function StadiumPage() {
     refresh().then(() => setLoading(false)).catch(() => setLoading(false));
   }, [teamId]);
 
-  const handleCustomize = async (field: keyof Customization, value: string | null) => {
+  /**
+   * `field` je buď klíč z `Customization` (převede se na snake_case), nebo
+   * rovnou název sloupce, který v `Customization` nemá protějšek (režim
+   * plachty). Převod velkých písmen na podtržítka nechá snake_case být.
+   */
+  const handleCustomize = async (field: keyof Customization | "ultras_text_mode", value: string | null) => {
     if (!teamId) return;
     const dbField = field.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
     await apiFetch(`/api/teams/${teamId}/stadium/customize`, {
@@ -685,32 +699,74 @@ export default function StadiumPage() {
             })()}
 
             {/* Nápis v kotli — jen když je postavený sektor kotle */}
-            {(stadium.facilities.ultras_stand ?? 0) > 0 && (
-              <div className="pt-2 border-t border-gray-50">
-                <Podnadpis>Nápis v kotli</Podnadpis>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    maxLength={22}
-                    value={ultrasDraft ?? stadium.customization.ultrasText ?? ""}
-                    onChange={(e) => setUltrasDraft(e.target.value)}
-                    placeholder="např. PRALES BOHDALEC"
-                    className="flex-1 min-w-0 border border-gray-200 rounded-soft px-3 py-1.5 text-sm font-heading uppercase"
-                  />
-                  <button
-                    onClick={async () => {
-                      const v = (ultrasDraft ?? stadium.customization.ultrasText ?? "").trim();
-                      await handleCustomize("ultrasText", v || null);
-                      setUltrasDraft(null);
-                    }}
-                    className="btn btn-primary btn-sm shrink-0"
-                  >
-                    Uložit
-                  </button>
+            {(stadium.facilities.ultras_stand ?? 0) > 0 && (() => {
+              const kotelSiPise = stadium.customization.ultrasTextMode === "fanousci";
+              return (
+                <div className="pt-2 border-t border-gray-50">
+                  <Podnadpis>Nápis v kotli</Podnadpis>
+
+                  {/* Kdo plachtu drží. Bez téhle volby byl režim „fanoušci"
+                      jen sloupec v databázi, ke kterému se hráč nedostal. */}
+                  <div className="flex gap-2 mb-2">
+                    {[
+                      { key: "vlastni", label: "Píšu si sám" },
+                      { key: "fanousci", label: "Nechám to na kotli" },
+                    ].map((r) => (
+                      <button
+                        key={r.key}
+                        onClick={() => handleCustomize("ultras_text_mode", r.key)}
+                        className={`flex-1 py-1.5 rounded-soft text-sm font-heading ${
+                          (stadium.customization.ultrasTextMode ?? "vlastni") === r.key
+                            ? "bg-pitch-500 text-white font-bold"
+                            : "bg-gray-100 text-ink-light hover:bg-gray-200"
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {kotelSiPise ? (
+                    <div className="bg-gray-50 rounded-soft p-3">
+                      <div className="font-heading font-bold text-base uppercase text-ink break-words">
+                        {stadium.customization.ultrasText || "Zatím nic nevyvěsili."}
+                      </div>
+                      {stadium.customization.ultrasTextDuvod && (
+                        <div className="text-sm text-muted mt-1">{stadium.customization.ultrasTextDuvod}</div>
+                      )}
+                      <div className="text-sm text-muted mt-2">
+                        Plachtu drží kotel. Mění ji podle toho, jak mu je: při podpisovce za tvoje
+                        odvolání tam bude tvoje jméno, při sérii výher poděkování.
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          maxLength={22}
+                          value={ultrasDraft ?? stadium.customization.ultrasText ?? ""}
+                          onChange={(e) => setUltrasDraft(e.target.value)}
+                          placeholder="např. PRALES BOHDALEC"
+                          className="flex-1 min-w-0 border border-gray-200 rounded-soft px-3 py-1.5 text-sm font-heading uppercase"
+                        />
+                        <button
+                          onClick={async () => {
+                            const v = (ultrasDraft ?? stadium.customization.ultrasText ?? "").trim();
+                            await handleCustomize("ultrasText", v || null);
+                            setUltrasDraft(null);
+                          }}
+                          className="btn btn-primary btn-sm shrink-0"
+                        >
+                          Uložit
+                        </button>
+                      </div>
+                      <div className="text-sm text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
+                    </>
+                  )}
                 </div>
-                <div className="text-sm text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* 🌿 Vzor sekání trávníku */}
             <div className="pt-2 border-t border-gray-50">

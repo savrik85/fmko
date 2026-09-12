@@ -30,8 +30,41 @@ const MISTA = [
  */
 const ULTRAS = "src/news/ultras-report.ts";
 
+/**
+ * Frontend má vlastní mapy popisků a ikon: stránka stadionu je samostatná
+ * aplikace a katalog z API si netahá. Chybějící klíč tam není tichý, je
+ * ošklivě vidět — hráči se ukáže holé `cage` místo „Klec nad kotlem" a
+ * krabice místo ikony. Přesně to se stalo, když přibyla klec.
+ *
+ * Stránka stadionu vypisuje VŠECHNA zařízení, takže tam musí být každý klíč.
+ */
+const FE_UPLNE = [
+  { soubor: "../web/src/app/dashboard/stadium/page.tsx", mapa: "FACILITY_ICONS", popis: "ikony na stránce stadionu" },
+  { soubor: "../web/src/app/dashboard/stadium/page.tsx", mapa: "FACILITY_LABELS", popis: "popisky na stránce stadionu" },
+  { soubor: "../web/src/app/dashboard/stadium/page.tsx", mapa: "FACILITY_DESCRIPTIONS", popis: "popisy úrovní na stránce stadionu" },
+  { soubor: "../web/src/components/dashboard/widgets/items/fans-widgets.tsx", mapa: "FACILITY_LABELS", popis: "radar stadionu ve widgetu" },
+];
+
+/**
+ * Náhled stadionu kreslí většinu zařízení jako tvary a jen část jako ikonové
+ * čipy, takže úplný být nemusí. Hlídá se opačný směr: co v mapě JE, musí být
+ * skutečné zařízení, a každý čip musí mít svůj záznam. Překlep v klíči by
+ * jinak tiše zmizel.
+ */
+const FE_CASTECNE = {
+  soubor: "../web/src/components/stadium/stadium-view.tsx",
+  mapa: "FACILITY_CONFIG",
+};
+
 function zdroj(rel: string): string {
   return readFileSync(join(ROOT, rel), "utf8");
+}
+
+/** Tělo objektové mapy `const NAZEV ... = { ... };` jako text. */
+function vytahniMapu(s: string, nazev: string): string {
+  const m = s.match(new RegExp(`const ${nazev}[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};`));
+  if (!m) throw new Error(`mapa ${nazev} nenalezena`);
+  return m[1];
 }
 
 describe("klíče zařízení jsou všude, kde se čtou", () => {
@@ -51,6 +84,30 @@ describe("klíče zařízení jsou všude, kde se čtou", () => {
       expect(chybi, `chybí v ${soubor}`).toEqual([]);
     });
   }
+
+  for (const { soubor, mapa, popis } of FE_UPLNE) {
+    it(`${popis} zná všechna zařízení`, () => {
+      const blok = vytahniMapu(zdroj(soubor), mapa);
+      const maKlic = (k: string) => new RegExp(`(^|\\s)${k}\\s*:`, "m").test(blok);
+      expect(klice.filter((k) => !maKlic(k)), `${mapa} v ${soubor} nezná`).toEqual([]);
+    });
+  }
+
+  it("náhled stadionu nemá v mapě vymyšlené zařízení a každý čip má záznam", () => {
+    const s = zdroj(FE_CASTECNE.soubor);
+    const blok = vytahniMapu(s, FE_CASTECNE.mapa);
+    const vMape = [...blok.matchAll(/^\s*([a-z_]+)\s*:/gm)].map((m) => m[1]);
+    expect(vMape.length).toBeGreaterThan(3);
+    for (const k of vMape) {
+      expect(klice, `${k} v ${FE_CASTECNE.mapa} není známé zařízení`).toContain(k);
+    }
+    // Čipy se skládají ze seznamů řetězců; každý tam uvedený klíč potřebuje ikonu.
+    for (const seznam of s.matchAll(/\[((?:\s*"[a-z_]+",?)+)\]\.filter\(\(k\)/g)) {
+      for (const m of seznam[1].matchAll(/"([a-z_]+)"/g)) {
+        expect(vMape, `čip ${m[1]} nemá záznam v ${FE_CASTECNE.mapa}`).toContain(m[1]);
+      }
+    }
+  });
 
   it("rubrika kotle má v SELECTu každý klíč, který si vypisuje", () => {
     const s = zdroj(ULTRAS);

@@ -24,6 +24,8 @@ interface StandProps {
   attendanceRatio?: number;
   /** Na které straně stojí kotel. Parta se dá přestěhovat, scéna to má ukázat. */
   ultrasSide?: "north" | "south" | "east" | "west";
+  /** Klec nad kotlem 0–2. Kreslí se jen u tribuny, kde kotel opravdu stojí. */
+  cageLevel?: number;
 }
 
 const STAND_GAP = 2.5;
@@ -55,6 +57,7 @@ export function Stand({
   mode = "match_day",
   attendanceRatio = 0.75,
   ultrasSide = "south",
+  cageLevel = 0,
 }: StandProps) {
   if (level <= 0) return null;
   return (
@@ -70,6 +73,7 @@ export function Stand({
       mode={mode}
       attendanceRatio={attendanceRatio}
       ultrasSide={ultrasSide}
+      cageLevel={cageLevel}
     />
   );
 }
@@ -86,6 +90,7 @@ function ActiveStand({
   mode = "match_day",
   attendanceRatio = 0.75,
   ultrasSide = "south",
+  cageLevel = 0,
 }: StandProps) {
   const dims = STAND_DIMS[Math.min(level, 3)];
   const finalSeatColor = seatColor ?? teamColor;
@@ -160,6 +165,12 @@ function ActiveStand({
           waveSlot={WAVE_SLOT[side]}
           reducedDetail={reducedDetail}
         />
+      )}
+
+      {/* 3b. Klec nad kotlem — mříž a plexi mezi sektorem a hřištěm.
+             Kreslí se jen tam, kde kotel opravdu stojí; jinde by to byla lež. */}
+      {cageLevel > 0 && side === ultrasSide && (
+        <Klec level={cageLevel} length={length} depth={dims.depth} height={dims.height} />
       )}
 
       {/* 4. VIP skybox a novinářská lávka (L3). Střecha je samostatné zařízení. */}
@@ -886,6 +897,70 @@ function PlayerTunnel({
         <planeGeometry args={[tunnelW * 0.6, tunnelD]} />
         <meshStandardMaterial color="#991B1B" roughness={0.9} />
       </mesh>
+    </group>
+  );
+}
+
+
+/**
+ * Klec nad kotlem.
+ *
+ * L1 je mříž: svislé tyče do výšky člověka. L2 přidá plexi až nahoru, přes
+ * které na trávník nepřeletí ani kelímek. Stojí na kraji tribuny u hřiště,
+ * proto záporné Z (směrem k plose) a výška od země.
+ */
+function Klec({ level, length, depth, height }: {
+  level: number; length: number; depth: number; height: number;
+}) {
+  // Kraj tribuny u hřiště. StepBase roste dozadu, takže přední hrana je v -depth/2.
+  const z = -depth / 2 - 0.15;
+  const vyskaMrize = 2.4;
+  const vyskaPlexi = Math.max(3.2, height * 0.9 + 1.6);
+  const pocetTyci = Math.max(6, Math.round(length / 1.2));
+
+  return (
+    <group position={[0, 0, z]}>
+      {/* Svislé tyče */}
+      {Array.from({ length: pocetTyci }, (_, i) => {
+        const x = -length / 2 + (i + 0.5) * (length / pocetTyci);
+        return (
+          <mesh key={i} position={[x, vyskaMrize / 2, 0]} castShadow>
+            <cylinderGeometry args={[0.035, 0.035, vyskaMrize, 6]} />
+            <meshStandardMaterial color="#6B7280" metalness={0.7} roughness={0.45} />
+          </mesh>
+        );
+      })}
+
+      {/* Vodorovné výztuhy nahoře a v půli */}
+      {[vyskaMrize, vyskaMrize * 0.55].map((y, i) => (
+        <mesh key={`v${i}`} position={[0, y, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[0.045, 0.045, length, 6]} />
+          <meshStandardMaterial color="#4B5563" metalness={0.7} roughness={0.45} />
+        </mesh>
+      ))}
+
+      {/* L2: průhledné plexi až do výšky. Transparentní materiál se schválně
+          nestíní, jinak by pod ním byl tmavý pruh přes celý sektor. */}
+      {level >= 2 && (
+        <>
+          <mesh position={[0, vyskaPlexi / 2, 0.06]}>
+            <planeGeometry args={[length, vyskaPlexi]} />
+            <meshStandardMaterial
+              color="#DCE6F0"
+              transparent
+              opacity={0.22}
+              roughness={0.08}
+              metalness={0.1}
+              side={2}
+            />
+          </mesh>
+          {/* Rám plexi nahoře, ať je poznat, kde končí. */}
+          <mesh position={[0, vyskaPlexi, 0.06]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.05, 0.05, length, 6]} />
+            <meshStandardMaterial color="#4B5563" metalness={0.7} roughness={0.45} />
+          </mesh>
+        </>
+      )}
     </group>
   );
 }

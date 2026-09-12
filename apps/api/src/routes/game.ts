@@ -1924,12 +1924,48 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
 
   // Nápis v kotli — text (ne barva). Sanitizace + max délka.
   if (body.field === "ultras_text") {
+    // Když si plachtu píše kotel, manažer do ní nemluví. Jinak by přepnutí
+    // režimu nic neznamenalo a fanoušci by se přepisovali jedním kliknutím.
+    const rezim = await c.env.DB.prepare("SELECT ultras_text_mode FROM stadiums WHERE team_id = ?")
+      .bind(teamId).first<{ ultras_text_mode: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "režim transparentu", e); return null; });
+    if (rezim?.ultras_text_mode === "fanousci") {
+      return c.json({ error: "Plachtu si teď píše kotel. Přepni režim, jestli do ní chceš mluvit." }, 400);
+    }
     const clean = body.value === null
       ? null
       : String(body.value).replace(/[^\p{L}\p{N} .!?#'-]/gu, "").slice(0, 22).trim() || null;
     await c.env.DB.prepare("UPDATE stadiums SET ultras_text = ? WHERE team_id = ?")
       .bind(clean, teamId).run();
     return c.json({ ok: true, value: clean });
+  }
+
+  // Kdo píše na plachtu: manažer, nebo kotel.
+  //
+  // Bez tohohle přepínače byl režim „fanoušci" jen sloupec v databázi: nápis
+  // se dal pořád přepsat ručně a hráč se o druhé možnosti nedozvěděl.
+  if (body.field === "ultras_text_mode") {
+    const rezim = body.value === "fanousci" ? "fanousci" : "vlastni";
+    await c.env.DB.prepare("UPDATE stadiums SET ultras_text_mode = ? WHERE team_id = ?")
+      .bind(rezim, teamId).run();
+
+    // Při přepnutí na kotel se plachta přepíše hned, ať hráč nečeká na tick.
+    if (rezim === "fanousci") {
+      const { syncFanGroups } = await import("../fans/fan-group-state");
+      const { prepoctiTransparent } = await import("../fans/fan-banner");
+      const gd = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+        .bind(teamId).first<{ game_date: string | null }>()
+        .catch((e) => { logger.warn({ module: "game" }, "herní datum pro transparent", e); return null; })
+      )?.game_date ?? new Date().toISOString().slice(0, 10);
+      const party = await syncFanGroups(c.env.DB, teamId, { drift: false });
+      await prepoctiTransparent(c.env.DB, teamId, party, gd)
+        .catch((e) => logger.warn({ module: "game" }, "přepočet transparentu", e));
+    }
+
+    const po = await c.env.DB.prepare("SELECT ultras_text, ultras_text_duvod FROM stadiums WHERE team_id = ?")
+      .bind(teamId).first<{ ultras_text: string | null; ultras_text_duvod: string | null }>()
+      .catch((e) => { logger.warn({ module: "game" }, "načtení transparentu", e); return null; });
+    return c.json({ ok: true, value: rezim, ultrasText: po?.ultras_text ?? null, ultrasTextDuvod: po?.ultras_text_duvod ?? null });
   }
 
   // Vzor sekání trávníku

@@ -132,6 +132,9 @@ const FACILITY_LABELS: Record<string, string> = {
   fence: "Oplocení",
   lighting: "Osvětlení",
   ultras_stand: "Kotel",
+  entrance_gate: "Brána",
+  security: "Pořadatelé",
+  cage: "Klec",
 };
 
 export function StadiumRadarWidget({ data }: WidgetProps) {
