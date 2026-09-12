@@ -15,9 +15,19 @@
  */
 
 export const MANAGER_FANS = {
-  /** Reputace váží víc — fanoušky zajímá hlavně to, co má trenér za sebou. */
-  REP_WEIGHT: 0.6,
-  MOT_WEIGHT: 0.4,
+  /**
+   * Váhy vlivu trenéra.
+   *
+   * FORMA JE TŘETINA a je to schválně. Do vzorce dřív vstupovala jen kariéra
+   * (reputace) a povaha (motivace), takže nováček, který s klubem vyhrával
+   * ligu, byl pro fanoušky „odepsaný" a vyhořelý matador na posledním místě
+   * „uznávaný". Lidi na tribuně soudí hlavně podle toho, jak se týmu daří TEĎ.
+   *
+   * Součet vah je 1, aby vliv zůstal na škále 0–100 a pásma pod tím platila.
+   */
+  REP_WEIGHT: 0.4,
+  MOT_WEIGHT: 0.25,
+  FORM_WEIGHT: 0.35,
   /** Reputace trenéra je v enginu tvrdě clampnutá na 15–75 (match-runner, cup, season-rewards, párty). */
   REP_MIN: 15,
   REP_MAX: 75,
@@ -62,6 +72,10 @@ export interface ManagerFansEffect {
   repPoints: number;
   /** Kolik bodů vlivu dala motivace. */
   motPoints: number;
+  /** Jak si tým vede teď, 0–100. */
+  forma: number;
+  /** Kolik bodů vlivu dala forma. */
+  formPoints: number;
   band: ManagerFansBand;
   /** ± spokojenost po každém zápase. */
   matchBoost: number;
@@ -81,11 +95,50 @@ function clamp(value: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, value));
 }
 
-/** Spočítá vliv trenéra 0–100 z jeho reputace a motivace. */
-export function managerInfluence(reputation: number, motivation: number): number {
+/**
+ * Jak si tým vede TEĎ, jedním číslem 0–100.
+ *
+ * Šest desetin dělají body za zápas z poslední pětky, čtyři desetiny postavení
+ * v tabulce. Obojí schválně: kdo sbírá body, ale je pátý z dvanácti, na tom
+ * není stejně jako lídr, a naopak lídr, co poslední měsíc jen remizuje, není
+ * pro tribunu totéž co lídr v letu.
+ *
+ * Bez odehraného zápasu vrací 50, tedy neutrál — na začátku sezóny se nemá
+ * z čeho soudit.
+ */
+export function formaSkore(opts: {
+  vyher: number; remiz: number; proher: number;
+  /** Místo v tabulce (1 = první). Chybí-li, počítá se jen z bodů. */
+  pozice?: number | null;
+  tymu?: number | null;
+}): number {
+  const zapasu = opts.vyher + opts.remiz + opts.proher;
+  if (zapasu <= 0) return 50;
+
+  const bodyZaZapas = (3 * opts.vyher + opts.remiz) / zapasu; // 0–3
+  const bodove = (bodyZaZapas / 3) * 100;
+
+  const poziceZnama = opts.pozice != null && opts.tymu != null && opts.tymu > 1;
+  if (!poziceZnama) return Math.round(clamp(bodove, 0, 100));
+
+  const pozicni = (1 - (clamp(opts.pozice!, 1, opts.tymu!) - 1) / (opts.tymu! - 1)) * 100;
+  return Math.round(clamp(bodove * 0.6 + pozicni * 0.4, 0, 100));
+}
+
+/**
+ * Vliv trenéra 0–100 z kariéry, povahy a aktuální formy.
+ *
+ * `forma` je volitelná jen kvůli starším voláním; bez ní se bere neutrál 50,
+ * což je totéž jako „nemáme se z čeho soudit". Volající, který formu zná, ji
+ * MÁ předat, jinak vzorec neví, jestli se vyhrává.
+ */
+export function managerInfluence(reputation: number, motivation: number, forma = 50): number {
   const rep = clamp(reputation, MANAGER_FANS.REP_MIN, MANAGER_FANS.REP_MAX);
   const mot = clamp(motivation, MANAGER_FANS.MOT_MIN, MANAGER_FANS.MOT_MAX);
-  return Math.round(rep * MANAGER_FANS.REP_WEIGHT + mot * MANAGER_FANS.MOT_WEIGHT);
+  const f = clamp(forma, 0, 100);
+  return Math.round(
+    rep * MANAGER_FANS.REP_WEIGHT + mot * MANAGER_FANS.MOT_WEIGHT + f * MANAGER_FANS.FORM_WEIGHT,
+  );
 }
 
 /** Najde pásmo pro daný vliv. Poslední pásmo má `min: 0`, takže vždy něco vrátí. */
@@ -97,10 +150,11 @@ export function managerFansBand(influence: number): ManagerFansBand {
  * Kompletní dopad trenéra na fanoušky včetně rozpadu a návodu na další stupeň.
  * UI z toho renderuje celou kartu a nic nedopočítává.
  */
-export function managerFansEffect(reputation: number, motivation: number): ManagerFansEffect {
+export function managerFansEffect(reputation: number, motivation: number, forma = 50): ManagerFansEffect {
   const rep = clamp(reputation, MANAGER_FANS.REP_MIN, MANAGER_FANS.REP_MAX);
   const mot = clamp(motivation, MANAGER_FANS.MOT_MIN, MANAGER_FANS.MOT_MAX);
-  const influence = managerInfluence(rep, mot);
+  const f = clamp(forma, 0, 100);
+  const influence = managerInfluence(rep, mot, f);
   const band = managerFansBand(influence);
 
   // Pásma jsou seřazená sestupně, takže lepší stupeň je ten předchozí v poli.
@@ -120,6 +174,8 @@ export function managerFansEffect(reputation: number, motivation: number): Manag
     influence,
     repPoints: Math.round(rep * MANAGER_FANS.REP_WEIGHT * 10) / 10,
     motPoints: Math.round(mot * MANAGER_FANS.MOT_WEIGHT * 10) / 10,
+    forma: f,
+    formPoints: Math.round(f * MANAGER_FANS.FORM_WEIGHT * 10) / 10,
     band,
     matchBoost: band.matchBoost,
     loyaltyOffset: band.loyaltyOffset,

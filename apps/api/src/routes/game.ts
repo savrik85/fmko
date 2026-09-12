@@ -8915,7 +8915,14 @@ gameRouter.get("/teams/:teamId/fans", async (c) => {
   });
 
   const { managerFansEffect, MANAGER_FANS } = await import("@okresni-masina/shared");
-  const mgrFx = mgr ? managerFansEffect(mgr.reputation, mgr.motivation) : null;
+  const { nactiFormuKlubu } = await import("../lib/forma-klubu");
+  const formaKlubu = await nactiFormuKlubu(c.env.DB, teamId);
+  const mgrFx = mgr ? managerFansEffect(mgr.reputation, mgr.motivation, formaKlubu.skore) : null;
+  const odehrano = formaKlubu.vyher + formaKlubu.remiz + formaKlubu.proher;
+  const formaKlubuPopis = odehrano === 0
+    ? "Sezóna teprve začíná, není z čeho soudit."
+    : `${formaKlubu.vyher} výher, ${formaKlubu.remiz} remíz a ${formaKlubu.proher} proher z posledních ${odehrano}`
+      + (formaKlubu.pozice ? `, ${formaKlubu.pozice}. místo z ${formaKlubu.tymu}.` : ".");
 
   let reasons: string[] = [];
   try {
@@ -8943,6 +8950,12 @@ gameRouter.get("/teams/:teamId/fans", async (c) => {
           motWeight: MANAGER_FANS.MOT_WEIGHT,
           repPoints: mgrFx.repPoints,
           motPoints: mgrFx.motPoints,
+          // Aktuální forma je třetí a nejdůležitější složka. Bez ní vzorec
+          // nevěděl, jestli se vyhrává, a nováček s vedoucím týmem dostával mínus.
+          formWeight: MANAGER_FANS.FORM_WEIGHT,
+          forma: mgrFx.forma,
+          formPoints: mgrFx.formPoints,
+          formaPopis: formaKlubuPopis,
           bandKey: mgrFx.band.key,
           bandLabel: mgrFx.band.label,
           bandFanView: mgrFx.band.fanView,

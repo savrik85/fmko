@@ -20,6 +20,14 @@ export interface FansState {
 export interface ManagerInput {
   reputation: number;
   motivation: number;
+  /**
+   * Jak si tým vede teď, 0–100 (`lib/forma-klubu`).
+   *
+   * Bez tohohle počítal vliv trenéra jen z kariéry a povahy, takže nováček
+   * s vedoucím týmem dostával po každém zápase MÍNUS. Chybí-li, bere se
+   * neutrál 50, ale volající ji má znát.
+   */
+  forma?: number;
 }
 
 export interface SoldProductInput {
@@ -135,9 +143,12 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
     }
   }
 
-  // 5. Trenér — pásma podle vlivu (0,6 × reputace + 0,4 × motivace), viz shared/manager-fans.
+  // 5. Trenér. Pásma podle vlivu (kariéra, povaha a hlavně AKTUÁLNÍ FORMA),
+  //    viz shared/manager-fans.
   if (input.manager) {
-    const mgrBoost = managerFansEffect(input.manager.reputation, input.manager.motivation).matchBoost;
+    const mgrBoost = managerFansEffect(
+      input.manager.reputation, input.manager.motivation, input.manager.forma ?? 50,
+    ).matchBoost;
     if (mgrBoost !== 0) {
       delta += mgrBoost;
       reasons.push(`Trenér ${mgrBoost > 0 ? "+" : ""}${mgrBoost}`);

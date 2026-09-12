@@ -45,6 +45,7 @@ export {
   MANAGER_FANS,
   MANAGER_FANS_BANDS,
   managerInfluence,
+  formaSkore,
   managerFansBand,
   managerFansEffect,
 } from "./manager-fans";

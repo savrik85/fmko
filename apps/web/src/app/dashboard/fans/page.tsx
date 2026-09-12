@@ -39,6 +39,10 @@ interface FansData {
     motWeight: number;
     repPoints: number;
     motPoints: number;
+    formWeight?: number;
+    forma?: number;
+    formPoints?: number;
+    formaPopis?: string;
     bandKey: string;
     bandLabel: string;
     bandFanView: string;
@@ -1150,6 +1154,9 @@ export default function FansPage() {
                 // jinak vypadá maxed trenér pořád jako nedodělaný.
                 { label: "Reputace", value: m.reputation, weight: m.repWeight, points: m.repPoints, max: MANAGER_FANS.REP_MAX },
                 { label: "Motivace", value: m.motivation, weight: m.motWeight, points: m.motPoints, max: MANAGER_FANS.MOT_MAX },
+                // Forma je třetí složka. Dřív vzorec nevěděl, jestli se vyhrává,
+                // a nováček s vedoucím týmem dostával po zápase mínus.
+                { label: "Jak se daří teď", value: m.forma ?? 50, weight: m.formWeight ?? MANAGER_FANS.FORM_WEIGHT, points: m.formPoints ?? 0, max: 100 },
               ].map((row) => (
                 <div key={row.label}>
                   <div className="flex items-baseline justify-between text-sm mb-1">
@@ -1181,7 +1188,8 @@ export default function FansPage() {
               </span>
             </div>
             <div className="text-sm text-muted mt-2">
-              Reputace váží víc — fanoušky zajímá hlavně to, co má trenér za sebou. Motivace je doplněk.
+              Fanoušky zajímá hlavně to, jak se týmu daří teď. Reputace je druhá v pořadí a motivace doplněk.
+              {m.formaPopis ? <span className="block mt-1 text-ink-light">{m.formaPopis}</span> : null}
             </div>
           </div>
 

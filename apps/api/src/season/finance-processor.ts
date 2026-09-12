@@ -636,6 +636,10 @@ export async function processMatchDayFinances(
       logger.warn({ module: "finance" }, "load manager for fans delta", e);
       return null;
     });
+    // Forma se počítá PŘED zápisem tohohle výsledku, takže jde o to, jak si tým
+    // vedl do dneška. Fanoušci soudí trenéra hlavně podle ní.
+    const { nactiFormuKlubu } = await import("../lib/forma-klubu");
+    const formaTymu = await nactiFormuKlubu(db, teamId);
 
     const homePitchCondition = isHome
       ? (await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
@@ -651,7 +655,7 @@ export async function processMatchDayFinances(
       villageBaseTicketPrice: baseTicketPrice,
       concessionMode: fansCtx.concessionMode,
       soldProducts: isHome ? soldProducts : [],
-      manager: mgrRow ?? undefined,
+      manager: mgrRow ? { ...mgrRow, forma: formaTymu.skore } : undefined,
       // Ozvučení hraje jen na domácím hřišti — venku si atmosféru dělá soupeř.
       paSystemBonus: isHome ? matchEquipmentFx?.fanSatisfactionMod ?? 0 : 0,
       // Trávník hodnotí fanoušci jen ten svůj. Za stav soupeřova hřiště klub nemůže.

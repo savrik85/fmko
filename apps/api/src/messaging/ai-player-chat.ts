@@ -9,8 +9,6 @@
 import { logger } from "../lib/logger";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 export interface ThreadMessage {
   sender: "player" | "coach";
@@ -130,42 +128,48 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
   ].filter(Boolean).join("\n");
 }
 
-async function callGemini(env: { GEMINI_API_KEY?: string }, prompt: string, opts: { json?: boolean; maxTokens?: number; temperature?: number } = {}): Promise<string> {
-  const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new GeminiUnavailableError("GEMINI_API_KEY missing");
+/**
+ * Env, který chat potřebuje.
+ *
+ * Není to jen klíč ke Gemini: chat musí vidět i `CACHE_KV`, protože v něm leží
+ * přepínač `ai_provider`.
+ */
+export interface ChatEnv {
+  GEMINI_API_KEY?: string;
+  CACHE_KV?: KVNamespace;
+  AI?: Ai;
+  AI_GATEWAY_URL?: string;
+}
+
+/**
+ * Zavolá model přes společnou vrstvu `lib/ai-provider`.
+ *
+ * Dřív tenhle soubor volal Gemini vlastním fetchem natvrdo a přepínač
+ * `ai_provider` ho míjel. Testovací prostředí sdílí s produkcí `GEMINI_API_KEY`,
+ * takže každá zpráva z testu ujídala produkční kvótu, i když byl přepínač
+ * přepnutý na `workers-ai` nebo `off`. Přesně před tím varuje CLAUDE.md.
+ *
+ * Hází stejnou výjimku jako předtím, aby volající chybové větve zůstaly.
+ */
+async function callModel(
+  env: ChatEnv,
+  prompt: string,
+  opts: { json?: boolean; maxTokens?: number; temperature?: number } = {},
+): Promise<string> {
+  const { aiContextFromEnv, generateText } = await import("../lib/ai-provider");
+  const ctx = await aiContextFromEnv(env);
+  if (ctx.provider === "off") {
+    throw new GeminiUnavailableError("generování textu je vypnuté (ai_provider = off)");
   }
 
-  const generationConfig: Record<string, unknown> = {
-    maxOutputTokens: opts.maxTokens ?? 256,
+  const text = await generateText(ctx, prompt, {
+    maxTokens: opts.maxTokens ?? 256,
     temperature: opts.temperature ?? 0.85,
-    thinkingConfig: { thinkingBudget: 0 },
-  };
-  if (opts.json) {
-    generationConfig.responseMimeType = "application/json";
-  }
-
-  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig,
-    }),
+    json: opts.json,
+    module: "ai-player-chat",
   });
-
-  if (!res.ok) {
-    const errBody = await res.text().catch((e) => { logger.warn({ module: "ai-player-chat" }, "read error body failed", e); return ""; });
-    throw new GeminiUnavailableError(`Gemini API ${res.status}: ${errBody.slice(0, 200)}`);
-  }
-
-  const json = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
-  };
-  const parts = json.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("").trim();
   if (!text) {
-    throw new GeminiUnavailableError("Gemini returned empty response");
+    throw new GeminiUnavailableError(`model (${ctx.provider}) nevrátil odpověď`);
   }
   return text;
 }
@@ -200,7 +204,7 @@ function trimSms(body: string): string {
 }
 
 export async function generateInitialMessage(
-  env: { GEMINI_API_KEY?: string },
+  env: ChatEnv,
   player: PlayerSnapshot,
   scenario: AiScenario,
   team: TeamContext,
@@ -217,7 +221,7 @@ export async function generateInitialMessage(
     `Napiš trenérovi PRVNÍ SMS k tomuto scénáři. Drž tón odpovídající své povaze a vztahu s trenérem (${player.coachRelationship}/100). NEPIŠ podpis. Vrať POUZE text SMS.`,
   ].join("\n");
 
-  const raw = await callGemini(env, prompt, { maxTokens: 200, temperature: 0.9 });
+  const raw = await callModel(env, prompt, { maxTokens: 200, temperature: 0.9 });
   return trimSms(raw);
 }
 
@@ -228,7 +232,7 @@ export interface ReplyResult {
 }
 
 export async function generateReply(
-  env: { GEMINI_API_KEY?: string },
+  env: ChatEnv,
   player: PlayerSnapshot,
   history: ThreadMessage[],
   scenario: AiScenario,
@@ -269,7 +273,7 @@ export async function generateReply(
     `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true pokud je téma vyřešené, jinak false>}`,
   ].filter(Boolean).join("\n");
 
-  const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
+  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
 
   const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown }>(raw);
   if (!parsed) {
@@ -295,7 +299,7 @@ export async function generateReply(
  * Při selhání vyhazuje GeminiUnavailableError — volající MUSÍ mít fallback šablonu.
  */
 export async function generateUnrestReply(
-  env: { GEMINI_API_KEY?: string },
+  env: ChatEnv,
   player: PlayerSnapshot,
   team: TeamContext,
   context: {
@@ -321,12 +325,12 @@ export async function generateUnrestReply(
     "NEPIŠ podpis. Vrať POUZE text SMS (1-2 věty, max 200 znaků).",
   ].join("\n");
 
-  const raw = await callGemini(env, prompt, { maxTokens: 200, temperature: 0.9 });
+  const raw = await callModel(env, prompt, { maxTokens: 200, temperature: 0.9 });
   return trimSms(raw);
 }
 
 export async function evaluateResolution(
-  env: { GEMINI_API_KEY?: string },
+  env: ChatEnv,
   player: PlayerSnapshot,
   history: ThreadMessage[],
   scenario: AiScenario,
@@ -360,7 +364,7 @@ export async function evaluateResolution(
     "- Pokud trenér řekl 'hraj' i když hráč žádal volno → absence_days = 0 ale relationship_delta záporné.",
   ].join("\n");
 
-  const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 0.4 });
+  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 0.4 });
 
   const parsed = tryParseJson<ResolutionResult>(raw);
   if (!parsed) {
@@ -394,7 +398,7 @@ export async function evaluateResolution(
  * vymýšlet vlastní žádost; od toho jsou spawnované thready.
  */
 export async function generateCoachInitiatedReply(
-  env: { GEMINI_API_KEY?: string },
+  env: ChatEnv,
   player: PlayerSnapshot,
   team: TeamContext,
   history: ThreadMessage[],
@@ -424,7 +428,7 @@ export async function generateCoachInitiatedReply(
     `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true|false>}`,
   ].filter(Boolean).join("\n");
 
-  const raw = await callGemini(env, prompt, { json: true, maxTokens: 256, temperature: 0.95 });
+  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 0.95 });
   const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown }>(raw);
   if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
     throw new GeminiUnavailableError("Coach-initiated reply JSON parse failed");
@@ -442,7 +446,7 @@ export async function generateCoachInitiatedReply(
  * navazování a bez dopadů na hráče. Kdo se ozve, rozhoduje volající.
  */
 export async function generateSquadGroupReaction(
-  env: { GEMINI_API_KEY?: string },
+  env: ChatEnv,
   player: PlayerSnapshot,
   team: TeamContext,
   coachMessage: string,
@@ -475,7 +479,7 @@ export async function generateSquadGroupReaction(
     "Maximálně 120 znaků. Žádný podpis. Vrať POUZE text.",
   ].filter(Boolean).join("\n");
 
-  const raw = await callGemini(env, prompt, { maxTokens: 120, temperature: 1.0 });
+  const raw = await callModel(env, prompt, { maxTokens: 120, temperature: 1.0 });
   return trimSms(raw);
 }
 

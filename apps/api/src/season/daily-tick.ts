@@ -1050,10 +1050,15 @@ export async function executeDailyTick(
       return { results: [] as Array<{ team_id: string; loyalty: number; team_rep: number | null; mgr_rep: number | null; mgr_mot: number | null }> };
     });
 
+  // Formy všech klubů jedním dotazem. Bez nich by vliv trenéra na loajalitu
+  // nevěděl, jestli se vyhrává, a nováček vedoucí ligu by fanoušky odrazoval.
+  const { nactiFormyVsech } = await import("../lib/forma-klubu");
+  const formy = await nactiFormyVsech(env.DB);
+
   const loyaltyStmts: D1PreparedStatement[] = [];
   for (const row of loyaltyRows.results ?? []) {
     const offset = (row.mgr_rep != null && row.mgr_mot != null)
-      ? managerFansEffect(row.mgr_rep, row.mgr_mot).loyaltyOffset
+      ? managerFansEffect(row.mgr_rep, row.mgr_mot, formy.get(row.team_id)?.skore ?? 50).loyaltyOffset
       : 0;
     const target = Math.max(0, Math.min(100, (row.team_rep ?? 50) + offset));
     if (row.loyalty === target) continue;
