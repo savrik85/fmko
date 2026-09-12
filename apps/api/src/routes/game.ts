@@ -1791,7 +1791,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     pitchUpgrades,
     // Sektory: kde stojí kotel a co je zavřené. 3D scéna podle toho nechá
     // zavřený sektor prázdný a kotel nakreslí tam, kde parta opravdu je.
-    sektory: await stavSektoru(c.env.DB, teamId, stadium.capacity as number, facilities),
+    sektory: await stavSektoru(c.env.DB, teamId, effectiveCapacity, facilities),
   });
 });
 
