@@ -191,6 +191,7 @@ export function UltrasSector({
   bannerColor,
   textColor,
   mode = "match_day",
+  sector = "kotel",
 }: {
   level: number;
   primaryColor: string;
@@ -199,6 +200,12 @@ export function UltrasSector({
   bannerColor?: string | null;
   textColor?: string | null;
   mode?: StadiumMode;
+  /**
+   * Kde parta kotle doopravdy stojí. Dá se ji za peníze přestěhovat, takže
+   * plachta ani vlajky nesmí zůstat natvrdo za jednou brankou: přesun by pak
+   * byl tlačítko, po kterém se na stadionu nic nezmění.
+   */
+  sector?: "kotel" | "hlavni" | "za_branou";
 }) {
   const isTrainingDay = mode === "training_day";
   const sec = secondaryColor ?? "#ffffff";
@@ -211,12 +218,23 @@ export function UltrasSector({
   const lvl = Math.min(level, 3);
   const count = [0, 4, 6, 8][lvl];
   const poleH = 5 + lvl * 0.8;
-  // V mezeře mezi brankou/sítí (končí ~PITCH.depth/2 + 1.5) a čelem tribuny (PITCH.depth/2 + STAND_GAP).
-  const z = -(PITCH.depth / 2 + 2.0);
-  const spread = PITCH.width * 0.85;
+  // V mezeře mezi hrací plochou a čelem tribuny. Podle sektoru na jiné straně:
+  // „kotel" je jižní branka, „za_branou" severní, „hlavni" podélná východní.
+  const zaBrankou = PITCH.depth / 2 + 2.0;
+  const podelne = PITCH.width / 2 + 2.0;
+  const rozmisteni = {
+    kotel: { pos: [0, 0, -zaBrankou] as [number, number, number], rot: 0, spread: PITCH.width * 0.85 },
+    za_branou: { pos: [0, 0, zaBrankou] as [number, number, number], rot: Math.PI, spread: PITCH.width * 0.85 },
+    hlavni: { pos: [podelne, 0, 0] as [number, number, number], rot: -Math.PI / 2, spread: PITCH.depth * 0.7 },
+  }[sector] ?? { pos: [0, 0, -zaBrankou] as [number, number, number], rot: 0, spread: PITCH.width * 0.85 };
+
+  // Uvnitř skupiny se kreslí v lokálních souřadnicích jako dřív (z = 0),
+  // otočení a posun řeší obalová skupina.
+  const z = 0;
+  const spread = rozmisteni.spread;
 
   return (
-    <group>
+    <group position={rozmisteni.pos} rotation={[0, rozmisteni.rot, 0]}>
       {/* Baner na zábradlí — jako látka (jemné billowing); s nápisem (textura) nebo jednobarevný. */}
       <ClothBanner width={spread + 2} height={1.0} y={1.45} z={z} color={bannerTex ? "#ffffff" : bannerBg} map={bannerTex} />
       {/* Pruh druhé barvy nahoře na baneru (jen bez nápisu) */}
@@ -557,6 +575,70 @@ function UltrasCapoStand({ position, primaryColor }: { position: [number, number
           <meshStandardMaterial color="#EF4444" side={THREE.DoubleSide} />
         </mesh>
       </group>
+    </group>
+  );
+}
+
+
+/**
+ * Sektor hostů.
+ *
+ * Hostující kotel dosud existoval jen jako číslo ve vzorci rizika a nikde na
+ * stadionu nebyl vidět, i když k zápasu patří stejně jako domácí. Kreslí se
+ * naproti domácímu kotli, v jejich barvách a s plotem kolem, protože přesně
+ * tak to na okresních hřištích vypadá.
+ *
+ * Bez lidí (`pocet === 0`) se nekreslí nic: prázdný oplocený kout by lhal.
+ */
+export function HostujiciSektor({
+  pocet,
+  barva,
+  strana,
+  mode = "match_day",
+}: {
+  /** Kolik jich přijelo. Určuje šířku sektoru i počet postav. */
+  pocet: number;
+  /** Klubová barva hostů. */
+  barva: string;
+  /** Kde stojí domácí kotel — hosté jdou naproti. */
+  strana: "kotel" | "hlavni" | "za_branou";
+  mode?: StadiumMode;
+}) {
+  if (pocet <= 0 || mode === "training_day") return null;
+
+  // Naproti domácímu kotli. Když kotel stojí na podélné straně, hosté jdou za branku.
+  const naproti = strana === "kotel" ? "za_branou" : strana === "za_branou" ? "kotel" : "za_branou";
+  const zaBrankou = PITCH.depth / 2 + 2.0;
+  const pos: [number, number, number] = naproti === "kotel" ? [0, 0, -zaBrankou] : [0, 0, zaBrankou];
+  const rot = naproti === "kotel" ? 0 : Math.PI;
+
+  // Šířka roste s počtem, ale nikdy přes polovinu branky: hosté dostávají kout.
+  const sirka = Math.min(PITCH.width * 0.42, 4 + pocet * 0.12);
+  const vyska = 2.2;
+
+  return (
+    <group position={pos} rotation={[0, rot, 0]}>
+      {/* Plot kolem sektoru hostů */}
+      <mesh position={[0, vyska / 2, 0]}>
+        <planeGeometry args={[sirka, vyska]} />
+        <meshStandardMaterial color="#6B7280" transparent opacity={0.35} side={2} roughness={0.6} />
+      </mesh>
+      {/* Vlajka hostů uprostřed */}
+      <mesh position={[0, vyska * 0.62, 0.05]}>
+        <planeGeometry args={[Math.min(3.2, sirka * 0.5), 0.8]} />
+        <meshStandardMaterial color={barva} side={2} roughness={0.85} />
+      </mesh>
+      {/* Postavy v jejich barvě, ať je poznat, že to nejsou domácí */}
+      {Array.from({ length: Math.min(24, Math.max(4, Math.round(pocet / 4))) }).map((_, i, pole) => {
+        const x = -sirka / 2 + ((i + 0.5) / pole.length) * sirka;
+        const z = 0.5 + (i % 3) * 0.45;
+        return (
+          <mesh key={i} position={[x, 0.85, z]} castShadow>
+            <capsuleGeometry args={[0.16, 0.62, 3, 6]} />
+            <meshStandardMaterial color={barva} roughness={0.9} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }

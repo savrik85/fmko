@@ -137,6 +137,7 @@ interface StadiumData {
     closed: string[];
     fill: { kotel?: number; hlavni?: number; za_branou?: number };
     rozpad: { kotel: number; hlavni: number; za_branou: number };
+    hoste: { pocet: number; barva: string; nazev: string } | null;
   };
   visualUpgrades: VisualUpgrade[];
   upgrades: UpgradeOption[];
@@ -544,6 +545,7 @@ export default function StadiumPage() {
         customization={stadium.customization}
         sectorFill={stadium.sektory?.fill}
         ultrasSector={stadium.sektory?.ultrasSector as never}
+        awayFans={stadium.sektory?.hoste ?? null}
       />
 
       {/* ═══ Stadium visualization + stats ═══ */}
@@ -595,6 +597,7 @@ export default function StadiumPage() {
                   customization={stadium.customization}
                   sectorFill={stadium.sektory?.fill}
                   ultrasSector={stadium.sektory?.ultrasSector as never}
+                  awayFans={stadium.sektory?.hoste ?? null}
                 />
               )}
               <div className="sm:hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-sm px-2.5 py-1 rounded pointer-events-none">

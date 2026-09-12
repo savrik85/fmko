@@ -44,6 +44,8 @@ interface Stadium3DViewerProps {
   sectorFill?: { kotel?: number; hlavni?: number; za_branou?: number };
   /** Kde stojí kotel. Putuje beze změny do Stadium3D. */
   ultrasSector?: "kotel" | "hlavni" | "za_branou";
+  /** Hosté na posledním domácím zápase. Putuje beze změny do Stadium3D. */
+  awayFans?: { pocet: number; barva: string; nazev?: string } | null;
 }
 
 export function Stadium3DViewer(props: Stadium3DViewerProps) {

@@ -13,7 +13,7 @@ import { StadiumSign } from "./StadiumSign";
 import { AdBoards } from "./AdBoards";
 import { Scoreboard } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
-import { StandRoof, UltrasSector } from "./StadiumExtras";
+import { HostujiciSektor, StandRoof, UltrasSector } from "./StadiumExtras";
 import { Floodlights } from "./Floodlights";
 import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
@@ -106,6 +106,8 @@ interface Stadium3DProps {
    * a trest za výtržnosti nebyl na stadionu vidět.
    */
   sectorFill?: { kotel?: number; hlavni?: number; za_branou?: number };
+  /** Kolik hostů přijelo na poslední domácí zápas a v jaké barvě. */
+  awayFans?: { pocet: number; barva: string; nazev?: string } | null;
   /** Kde parta kotle skutečně stojí. Dá se ji přestěhovat, tak ať to je vidět. */
   ultrasSector?: "kotel" | "hlavni" | "za_branou";
   showControls?: boolean;
@@ -145,6 +147,7 @@ export function Stadium3D({
   onAttendanceChange,
   sectorFill,
   ultrasSector = "kotel",
+  awayFans,
   showControls = true,
   defaultControlsVisible = false,
   reserveCloseButtonSpace = false,
@@ -462,6 +465,15 @@ export function Stadium3D({
             text={cust.ultrasText}
             bannerColor={cust.ultrasBannerColor}
             textColor={cust.ultrasTextColor}
+            mode={mode}
+            sector={ultrasSector}
+          />
+
+          {/* Sektor hostů — kolik jich přijelo na poslední domácí zápas */}
+          <HostujiciSektor
+            pocet={awayFans?.pocet ?? 0}
+            barva={awayFans?.barva ?? "#B91C1C"}
+            strana={ultrasSector}
             mode={mode}
           />
 

@@ -1812,6 +1812,7 @@ async function stavSektoru(
   closed: string[];
   fill: Record<string, number>;
   rozpad: Record<string, number>;
+  hoste: { pocet: number; barva: string; nazev: string } | null;
 }> {
   const { kapacitaSektoru, zaplneniSektoru } = await import("../stadium/sektory");
   const rows = await db
@@ -1826,11 +1827,37 @@ async function stavSektoru(
   const kotel = rows.results.find((g) => g.kind === "kotel");
   const lidi = rows.results.reduce((s, g) => s + Math.max(0, g.size), 0);
 
+  // Kolik hostů přijelo naposledy. Bez tohohle byl hostující kotel jen číslo
+  // ve vzorci rizika a na stadionu nebyl vidět.
+  const posledni = await db
+    .prepare(
+      `SELECT m.away_fans, t.name, t.primary_color
+       FROM matches m JOIN teams t ON t.id = m.away_team_id
+       WHERE m.home_team_id = ? AND m.away_fans IS NOT NULL
+       ORDER BY COALESCE(m.simulated_at, m.created_at) DESC LIMIT 1`,
+    )
+    .bind(teamId)
+    .first<{ away_fans: string; name: string; primary_color: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "hosté na stadionu", e); return null; });
+
+  let hoste: { pocet: number; barva: string; nazev: string } | null = null;
+  if (posledni) {
+    try {
+      const j = JSON.parse(posledni.away_fans) as { pocet?: number };
+      if ((j.pocet ?? 0) > 0) {
+        hoste = { pocet: j.pocet ?? 0, barva: posledni.primary_color ?? "#B91C1C", nazev: posledni.name };
+      }
+    } catch (e) {
+      logger.warn({ module: "game" }, "rozbitý záznam o hostech", e);
+    }
+  }
+
   return {
     ultrasSector: kotel?.sector ?? "kotel",
     closed: zavrene,
     fill: zaplneniSektoru(lidi, capacity, facilities, zavrene),
     rozpad: kapacitaSektoru(capacity, facilities),
+    hoste,
   };
 }
 
