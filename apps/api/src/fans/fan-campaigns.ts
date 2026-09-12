@@ -21,6 +21,20 @@ export const HEAT_PRO_TRENERA = 62;
 /** Kolik herních dní bez přírůstku znamená, že to vyšumělo. */
 export const DNU_DO_VYSUMENI = 10;
 
+/**
+ * Jak dlouho po skončené kampani se proti témuž cíli nesmí začít znovu.
+ *
+ * Bez tohohle byl v systému NEKONEČNÝ TREST: unikátní index drží jen jednu
+ * ŽIVOU kampaň, takže jakmile jedna dosáhla prahu a překlopila se na
+ * „splněna", hned druhý den vznikla další se stejným cílem, za dva dny dosáhla
+ * prahu a hráč zase přišel o patnáct morálky. Na lokálním běhu čtyř herních
+ * dní to trenérovi sebralo šest reputace a hráči dvacet sedm morálky.
+ *
+ * Po odezněné kampani musí být klid: fanoušci řekli svoje a čekají, co s tím
+ * manažer udělá.
+ */
+export const DNU_KLIDU_PO_KAMPANI = 30;
+
 export type KampanKind = "hrac_ven" | "trener_ven";
 
 export interface KampanRow {
@@ -81,6 +95,21 @@ export async function tikKampani(
     .bind(teamId).all<KampanRow>()
     .catch((e) => { logger.warn({ module: M }, `živé kampaně ${teamId}`, e); return { results: [] as KampanRow[] }; });
 
+  // Cíle, proti kterým se nedávno kampaň vedla. Znovu až po odstupu, jinak by
+  // se trest opakoval každé dva dny donekonečna.
+  const nedavne = await db
+    .prepare(
+      `SELECT kind, COALESCE(target_player_id, '') AS cil, ended_game_date
+       FROM fan_campaigns WHERE team_id = ? AND status <> 'sbira' AND ended_game_date IS NOT NULL`,
+    )
+    .bind(teamId).all<{ kind: string; cil: string; ended_game_date: string }>()
+    .catch((e) => { logger.warn({ module: M }, `doběhlé kampaně ${teamId}`, e); return { results: [] as never[] }; });
+  const vKlidu = new Set(
+    nedavne.results
+      .filter((r) => dnyMezi(r.ended_game_date, gameDate) < DNU_KLIDU_PO_KAMPANI)
+      .map((r) => `${r.kind}|${r.cil}`),
+  );
+
   const zakladna = groups.reduce((s, g) => s + Math.max(0, g.size), 0);
   const prah = prahPodpisu(zakladna);
   const naStadionu = groups.filter((g) => g.closed_matches === 0);
@@ -122,13 +151,15 @@ export async function tikKampani(
   const zalozit: Array<{ kind: KampanKind; playerId: string | null; jmeno: string; duvod: string }> = [];
   for (const [playerId, h] of hlasy) {
     if (zive.results.some((k) => k.target_player_id === playerId)) continue;
+    if (vKlidu.has(`hrac_ven|${playerId}`)) continue;
     // Musí za ním stát aspoň pětina základny, jinak je to remcání dvou lidí.
     if (h.sila < zakladna * 0.2) continue;
     zalozit.push({ kind: "hrac_ven", playerId, jmeno: h.jmeno, duvod: h.duvod });
   }
 
   const jeProtiTreneru = zive.results.some((k) => k.kind === "trener_ven");
-  if (!jeProtiTreneru && prumernyHeat >= HEAT_PRO_TRENERA && prumernaNalada <= NALADA_PRO_KAMPAN) {
+  if (!jeProtiTreneru && !vKlidu.has("trener_ven|")
+    && prumernyHeat >= HEAT_PRO_TRENERA && prumernaNalada <= NALADA_PRO_KAMPAN) {
     const trener = await db
       .prepare("SELECT name FROM managers WHERE team_id = ?")
       .bind(teamId).first<{ name: string }>()

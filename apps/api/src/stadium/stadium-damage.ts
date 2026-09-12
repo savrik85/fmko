@@ -87,9 +87,12 @@ export async function rozbijVybaveni(
 
   const label = FACILITY_LABELS[facility] ?? facility;
   const cost = cenaOpravy(facility, pred, levels);
+  // Názvy zařízení mají různý rod i číslo („Zastřešení tribun" střední jednotné,
+  // „Sociálky" ženské množné), takže se s nimi nedá shodovat sloveso ani
+  // přídavné jméno. Věta je proto postavená tak, že název stojí samostatně.
   const popis = levels > 1
-    ? `${label} to schytaly tak, že to spadlo o dvě úrovně.`
-    : `${label} jsou rozbité. Dokud to neopravíš, nefungují.`;
+    ? `Po zápase rozbité, a rovnou o dvě úrovně: ${label}.`
+    : `Po zápase rozbité: ${label}. Dokud to neopravíš, nefunguje to.`;
 
   // Nárok na zápis: partial UNIQUE na incident_id zaručí, že jedna výtržnost
   // rozbije jednu věc jednou. Teprve po úspěšném zápisu se sráží úroveň, jinak
