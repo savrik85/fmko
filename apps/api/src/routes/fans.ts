@@ -231,6 +231,16 @@ fansRouter.get("/teams/:teamId/fans/groups", async (c) => {
     chants: (await nactiChoraly(db, teamId)).map((ch) => ({
       id: ch.id, kind: ch.kind, text: ch.text, duvod: ch.duvod,
       sila: ch.sila, silaWord: ch.silaWord, since: ch.since_game_date,
+      audio: ch.audio_a
+        ? {
+            url: `${zakladApi(c)}/api/choraly/${ch.id}/audio`,
+            maDruhou: !!ch.audio_b,
+            vybrana: ch.audio_vybrana ?? "a",
+          }
+        : null,
+      // Bez nahrávky: ať je vidět, jestli se na ni čeká, nebo si ji chorál
+      // teprve musí vyzpívat.
+      nahravkaSeChysta: !ch.audio_a && !!ch.audio_task_id,
     })),
     damage: (await nactiPoskozeni(db, teamId)).map((d) => ({
       id: d.id, facility: d.facility, label: d.label,
@@ -922,4 +932,106 @@ fansRouter.get("/admin/suno-credit", requireAdmin, async (c) => {
     }
   }
   return c.json({ error: "Kredit se nepodařilo přečíst", pokusy }, 502);
+});
+
+/** Základ veřejné adresy API. Nahrávky se pouští z `<audio src>`, ne fetchem. */
+function zakladApi(c: { env: Bindings; req: { url: string } }): string {
+  return c.env.API_BASE_URL || new URL(c.req.url).origin;
+}
+
+/**
+ * Nahrávka chorálu.
+ *
+ * Bez přihlášení schválně: `<audio src>` neumí poslat hlavičku s tokenem,
+ * a je to zpěv o obci, ne citlivý údaj. Stejně to má hymna klubu.
+ */
+fansRouter.get("/choraly/:chantId/audio", async (c) => {
+  const chantId = c.req.param("chantId");
+  const row = await c.env.DB.prepare(
+    "SELECT audio_a, audio_b, audio_vybrana FROM fan_chants WHERE id = ?",
+  ).bind(chantId).first<{ audio_a: string | null; audio_b: string | null; audio_vybrana: string | null }>()
+    .catch((e) => { logger.warn({ module: "fans" }, `nahrávka ${chantId}`, e); return null; });
+  if (!row?.audio_a) return c.json({ error: "Chorál nahrávku nemá" }, 404);
+
+  const chce = c.req.query("v");
+  const varianta = chce === "a" || chce === "b" ? chce : (row.audio_vybrana ?? "a");
+  const klic = (varianta === "b" ? row.audio_b : row.audio_a) ?? row.audio_a;
+
+  const obj = await c.env.SEED_DATA.get(klic);
+  if (!obj) return c.json({ error: "Nahrávka není k dispozici" }, 404);
+  return new Response(obj.body, {
+    headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=86400" },
+  });
+});
+
+/**
+ * Výběr verze nahrávky.
+ *
+ * Suno vrací dvě a liší se tím, kolik do nich prosáklo nástrojů. Které je
+ * čistší, pozná ucho líp než jakékoliv měření, takže rozhoduje manažer.
+ */
+fansRouter.post("/teams/:teamId/fans/chants/:chantId/audio", async (c) => {
+  const teamId = c.req.param("teamId");
+  const chantId = c.req.param("chantId");
+  const body = await c.req.json<{ varianta?: string }>().catch((e) => {
+    logger.warn({ module: "fans" }, "výběr verze chorálu", e);
+    return {} as { varianta?: string };
+  });
+  const varianta = body.varianta;
+  if (varianta !== "a" && varianta !== "b") {
+    return c.json({ error: "varianta musí být 'a' nebo 'b'" }, 400);
+  }
+
+  const row = await c.env.DB.prepare(
+    "SELECT audio_a, audio_b FROM fan_chants WHERE id = ? AND team_id = ?",
+  ).bind(chantId, teamId).first<{ audio_a: string | null; audio_b: string | null }>();
+  if (!row) return c.json({ error: "Chorál nenalezen" }, 404);
+  if (varianta === "b" && !row.audio_b) return c.json({ error: "Druhá verze neexistuje" }, 400);
+
+  await c.env.DB.prepare(
+    "UPDATE fan_chants SET audio_vybrana = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?",
+  ).bind(varianta, chantId).run();
+  return c.json({ ok: true, varianta });
+});
+
+/**
+ * Ruční běh nahrávek.
+ *
+ * Denní tick to dělá sám, tohle je na rozjezd a na ověření. `limit` drží
+ * strop, ať se jedním omylem nespálí celý kredit.
+ */
+fansRouter.post("/admin/chant-audio-run", requireAdmin, async (c) => {
+  const { dotahniNahravky, objednejNahravky, zbyvajiciKredit, MAX_ZA_BEH } =
+    await import("../fans/fan-chant-audio");
+  const limit = Math.max(0, Math.min(MAX_ZA_BEH * 5, Number(c.req.query("limit") ?? MAX_ZA_BEH)));
+
+  const kreditPred = await zbyvajiciKredit(c.env.SUNO_API_KEY);
+  const dotazene = await dotahniNahravky(c.env);
+  const objednane = await objednejNahravky(c.env, limit);
+  const kreditPo = await zbyvajiciKredit(c.env.SUNO_API_KEY);
+
+  return c.json({
+    ok: true, limit, dotazene, objednane,
+    kredit: { pred: kreditPred, po: kreditPo,
+      spotreba: kreditPred !== null && kreditPo !== null ? kreditPred - kreditPo : null },
+  });
+});
+
+/** Kdo na nahrávku čeká a proč. Kontrola před tím, než se to pustí naostro. */
+fansRouter.get("/admin/chant-audio-run", requireAdmin, async (c) => {
+  const { kandidatiNaNahravku, zbyvajiciKredit, KREDITU_ZA_NAHRAVKU } =
+    await import("../fans/fan-chant-audio");
+  const limit = Math.max(1, Math.min(200, Number(c.req.query("limit") ?? 50)));
+  const kandidati = await kandidatiNaNahravku(c.env.DB, limit);
+  const kredit = await zbyvajiciKredit(c.env.SUNO_API_KEY);
+  const hotove = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM fan_chants WHERE audio_a IS NOT NULL",
+  ).first<{ n: number }>();
+  return c.json({
+    ok: true, kredit,
+    nahranych: hotove?.n ?? 0,
+    ceka: kandidati.length,
+    potrebaKreditu: kandidati.length * KREDITU_ZA_NAHRAVKU,
+    kandidati: kandidati.map((k) => ({ id: k.id, kind: k.kind, sila: k.sila, text: k.text })),
+  });
 });

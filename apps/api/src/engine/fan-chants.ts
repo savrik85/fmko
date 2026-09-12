@@ -16,6 +16,7 @@ import type { FanGroupKind } from "./fan-groups";
 
 /** Na co chorál je. Na jeden druh jeden chorál, jinak by se dělila pozornost. */
 export type ChantKind =
+  | "domov"
   | "oblibenec" | "rival" | "trener_pro" | "trener_proti" | "vyhra" | "vzdor" | "vybaveni";
 
 export interface ChantStav {
@@ -232,7 +233,79 @@ export function chantSilaWord(sila: number): string {
 
 /** Která parta chorál drží. Kotel skoro vždycky, ostatní se přidají. */
 export function kdoZpiva(kind: ChantKind): FanGroupKind[] {
+  // Domácí chorál je o obci, ne o klubu, takže ho zvednou i ti, co na fotbal
+  // chodí kvůli tomu, že je to doma.
+  if (kind === "domov") return ["kotel", "stamgasti", "rodiny", "pametnici", "parta_z_okoli"];
   if (kind === "vybaveni") return ["kotel", "stamgasti", "rodiny"];
   if (kind === "vyhra") return ["kotel", "stamgasti", "parta_z_okoli", "pametnici"];
   return ["kotel", "parta_z_okoli"];
+}
+
+/**
+ * Stav pro domácí chorál.
+ *
+ * Na rozdíl od ostatních druhů nevzniká z dění kolem klubu, ale z toho, kde
+ * se hraje. Proto vlastní typ a vlastní funkce.
+ */
+export interface DomovStav {
+  obec: string;
+  okres: string | null;
+  obyvatel: number | null;
+  klub: string;
+  prezdivkaTymu: string | null;
+}
+
+/** Obec je malá vesnice? Pod tuhle hranici se dá zpívat o tom, že jsou malí. */
+export const MALA_OBEC = 1500;
+
+/**
+ * Domácí chorál: šablonová záloha.
+ *
+ * Název obce zůstává v PRVNÍM PÁDĚ. České místní názvy nejde spolehlivě
+ * ohnout (Nebahovy → z Nebahov, Břevnov → z Břevnova, Dvory → ze Dvorů),
+ * takže jsou věty postavené tak, aby se ohýbat nemusel.
+ */
+export function domaciChoral(s: DomovStav, roll: number): NovyChorál {
+  const vyber = <T,>(z: readonly T[]): T => z[Math.floor(roll * z.length) % z.length];
+  const o = s.obec;
+  const obecne = [
+    `${o}, ${o}, jedno srdce!`,
+    `Hej, hej, ${o}, hej, hej!`,
+    `Tady je doma ${o}!`,
+    `${o} je náš domov, jinam nejdem!`,
+    `Kdo je náš? ${o}! Kdo je náš? ${o}!`,
+    `Ó ó ó, ${o}, ó ó ó!`,
+    `My jsme ${o} a nikdo jinej!`,
+    `Odsud jsme a tady zůstanem: ${o}!`,
+  ];
+  const male = [
+    `Malá ves, velkej kotel: ${o}!`,
+    `Je nás málo, ale jsme slyšet: ${o}!`,
+    `${o} má víc srdce než celej okres!`,
+  ];
+  const velke = [
+    `Město za náma, ${o}!`,
+    `Celá liga ví, kdo je ${o}!`,
+  ];
+  // Okres se nechává stát samostatně. „Celej Prachatice" ani „od Prachatice"
+  // není čeština a okresy se v prvním pádě liší rodem i číslem (Praha,
+  // Prachatice, Brno-venkov), takže se s nimi žádná věta neshoduje.
+  const sOkresem = s.okres
+    ? [`${s.okres}? Tady jsme doma: ${o}!`, `${s.okres} zná jedno jméno: ${o}!`]
+    : [];
+
+  const maleObec = s.obyvatel !== null && s.obyvatel < MALA_OBEC;
+  const kandidati = [
+    ...obecne,
+    ...(maleObec ? male : velke),
+    ...sOkresem,
+  ];
+
+  return {
+    kind: "domov",
+    text: vyber(kandidati),
+    duvod: `Domácí chorál. Hraje se v obci ${o}.`,
+    // Domácí chorál umí celý stadion od začátku, proto začíná vysoko.
+    sila: 70,
+  };
 }

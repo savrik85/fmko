@@ -13,8 +13,8 @@ import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
 import { logger } from "../lib/logger";
 import {
-  vymysliChoraly, silaPo, PRAH_ZAPOMENUTI, chantSilaWord,
-  type ChantStav, type ChantKind,
+  vymysliChoraly, silaPo, PRAH_ZAPOMENUTI, chantSilaWord, domaciChoral, MALA_OBEC,
+  type ChantStav, type ChantKind, type DomovStav,
 } from "../engine/fan-chants";
 import { rivaloveKlubu } from "./fan-rivalries";
 import { promptChoralu, zkontrolujChoral, vzorecPro, type ChantTema } from "../engine/fan-chant-inspirace";
@@ -33,6 +33,13 @@ export interface ChantRow {
   sila: number;
   since_game_date: string | null;
   status: string;
+  /** Klíče v R2 na dvě verze od Suna. Null = ještě se nenahrávalo. */
+  audio_a: string | null;
+  audio_b: string | null;
+  /** Kterou verzi si manažer vybral: 'a' nebo 'b'. */
+  audio_vybrana: string | null;
+  /** Rozpracovaná objednávka u Suna. */
+  audio_task_id: string | null;
 }
 
 /** Co se u klubu zpívá. Seřazeno od nejhlasitějšího. */
@@ -84,6 +91,9 @@ export async function tikChoralu(
 
   // Co se už zpívá: buď důvod trvá a sílí, nebo slábne a zapomene se.
   for (const z of zive.results) {
+    // Domácí chorál se nezapomíná. Obec se nemění, takže jeho důvod trvá vždy
+    // a nemá ho co vytlačit. Ostatní chorály chodí a odcházejí kolem něj.
+    if (z.kind === "domov") continue;
     const navrh = podleDruhu.get(z.kind as ChantKind);
     const trva = !!navrh;
     const sila = silaPo(z.sila, trva);
@@ -111,7 +121,10 @@ export async function tikChoralu(
   // jeden klub spotřebuje pár vygenerovaných vět za sezónu, ne za zápas.
   for (const [kind, n] of podleDruhu) {
     const text = await napisChoral(env, {
-      tema: kind as ChantTema, stav, klub: stav.klub, okres, zaloha: n.text,
+      tema: kind as ChantTema, klub: stav.klub, okres, zaloha: n.text,
+      fakta: faktaProTema(kind as ChantTema, stav),
+      povinne: povinneSlovo(kind as ChantTema, stav),
+      jmena: [stav.oblibenec, stav.trener].filter(Boolean) as string[],
       seed: seedFromString(`vzorec|${teamId}|${kind}`),
     });
     stmts.push(db.prepare(
@@ -212,7 +225,15 @@ async function nejvetsiStiznost(db: D1Database, teamId: string): Promise<string 
 async function napisChoral(
   env: Pick<Bindings, "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL"> | undefined,
   opts: {
-    tema: ChantTema; stav: ChantStav; klub: string; okres: string | null; zaloha: string;
+    tema: ChantTema; klub: string; okres: string | null; zaloha: string;
+    /** Hotové věty, ze kterých model čerpá. Prázdné = negeneruje se. */
+    fakta: string[];
+    /** Slovo, které v textu musí padnout. */
+    povinne: string | null;
+    /** Jména, jejichž ohnutý tvar je důvod k zahození. */
+    jmena: string[];
+    /** Názvy, které smí stát jen v prvním pádě (obec). */
+    nazvy?: string[];
     /** Urcuje, kterou stavbu chorálu dostane tenhle klub. */
     seed: number;
   },
@@ -223,9 +244,8 @@ async function napisChoral(
     const ctx = await aiContextFromEnv(env);
     if (ctx.provider === "off") return opts.zaloha;
 
-    const fakta = faktaProTema(opts.tema, opts.stav);
+    const { fakta, povinne } = opts;
     if (fakta.length === 0) return opts.zaloha;
-    const povinne = povinneSlovo(opts.tema, opts.stav);
 
     const raw = await generateText(
       ctx,
@@ -239,8 +259,10 @@ async function napisChoral(
       { maxTokens: 120, temperature: 1.0, module: M },
     );
 
-    const jmena = [opts.stav.oblibenec, opts.stav.trener].filter(Boolean) as string[];
-    const kontrola = zkontrolujChoral(raw, { jmena, musiObsahovat: povinne, tema: opts.tema });
+    const kontrola = zkontrolujChoral(raw, {
+      jmena: opts.jmena, musiObsahovat: povinne, tema: opts.tema,
+      nazvyVPrvnimPade: opts.nazvy,
+    });
     if (!kontrola.ok) {
       logger.info({ module: M }, `chorál od modelu zahozen (${kontrola.duvod}), beru šablonu`);
       return opts.zaloha;
@@ -298,5 +320,88 @@ function faktaProTema(tema: ChantTema, s: ChantStav): string[] {
       return s.stiznostNaVybaveni
         ? [`Na stadionu nám chybí tohle: ${s.stiznostNaVybaveni}.`]
         : [];
+    // Domácí chorál si fakta nese vlastní cestou, `ChantStav` o obci neví.
+    case "domov":
+      return [];
   }
+}
+
+/**
+ * Domácí chorál klubu.
+ *
+ * Jediný chorál, který nevzniká z dění, ale z místa. Zakládá se jednou, drží
+ * se navždy a zpívá ho celý stadion. Klub tak má co zpívat od prvního dne,
+ * ještě než si kotel stihne někoho oblíbit nebo někoho znenávidět.
+ *
+ * Vrací nově založený chorál, nebo null když už existuje.
+ */
+export async function zalozDomaciChoral(
+  db: D1Database,
+  teamId: string,
+  groups: readonly FanGroupRow[],
+  gameDate: string,
+  env?: Pick<Bindings, "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL">,
+): Promise<{ kind: ChantKind; text: string; duvod: string } | null> {
+  const uz = await db
+    .prepare("SELECT id FROM fan_chants WHERE team_id = ? AND kind = 'domov' AND status = 'zpiva'")
+    .bind(teamId).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `domácí chorál ${teamId}`, e); return null; });
+  if (uz) return null;
+
+  const info = await db.prepare(
+    `SELECT t.name AS klub, t.team_nickname AS prezdivka, t.team_type AS druh,
+            v.name AS obec, v.district AS okres, v.population AS obyvatel
+       FROM teams t LEFT JOIN villages v ON v.id = t.village_id
+      WHERE t.id = ?`,
+  ).bind(teamId).first<{
+    klub: string; prezdivka: string | null; druh: string | null;
+    obec: string | null; okres: string | null; obyvatel: number | null;
+  }>().catch((e) => { logger.warn({ module: M }, `obec pro chorál ${teamId}`, e); return null; });
+
+  // Bez obce nemá domácí chorál o čem být. Radši žádný než obecná fráze.
+  if (!info?.obec) return null;
+  // Rezerva nemá vlastní kotel. Na jejich zápas chodí táta a pes, a chorál
+  // o obci už zpívá áčko na stejném hřišti.
+  if (info.druh === "u21") return null;
+
+  const stav: DomovStav = {
+    obec: info.obec, okres: info.okres, obyvatel: info.obyvatel,
+    klub: info.klub, prezdivkaTymu: info.prezdivka,
+  };
+  const rng = createRng(seedFromString(`domov|${teamId}`));
+  const zaloha = domaciChoral(stav, rng.random());
+
+  const text = await napisChoral(env, {
+    tema: "domov", klub: info.klub, okres: info.okres, zaloha: zaloha.text,
+    fakta: faktaDomova(stav),
+    povinne: info.obec,
+    jmena: [],
+    nazvy: [info.obec],
+    seed: seedFromString(`vzorec|${teamId}|domov`),
+  });
+
+  const kotel = groups.find((g) => g.kind === "kotel") ?? groups[0] ?? null;
+  await db.prepare(
+    `INSERT OR IGNORE INTO fan_chants
+       (id, team_id, group_id, kind, text, duvod, sila, since_game_date, last_game_date, status)
+     VALUES (?,?,?,'domov',?,?,?,?,?, 'zpiva')`,
+  ).bind(
+    `chant-${teamId}-domov`, teamId, kotel?.id ?? null,
+    text, zaloha.duvod, zaloha.sila, gameDate, gameDate,
+  ).run().catch((e) => { logger.warn({ module: M }, `zápis domácího chorálu ${teamId}`, e); });
+
+  return { kind: "domov", text, duvod: zaloha.duvod };
+}
+
+/** Fakta o obci pro model. Nic víc o ní neví a nic si nesmí domyslet. */
+function faktaDomova(s: DomovStav): string[] {
+  const f = [`Klub hraje v obci ${s.obec}.`];
+  if (s.okres) f.push(`Obec leží v okrese ${s.okres}.`);
+  if (s.obyvatel !== null) {
+    f.push(s.obyvatel < MALA_OBEC
+      ? `Je to malá vesnice, žije tam ${s.obyvatel} lidí.`
+      : `Žije tam ${s.obyvatel} lidí.`);
+  }
+  if (s.prezdivkaTymu) f.push(`Klubu se přezdívá ${s.prezdivkaTymu}.`);
+  return f;
 }

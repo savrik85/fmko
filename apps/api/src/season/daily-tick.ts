@@ -1214,6 +1214,29 @@ export async function executeDailyTick(
       .catch((e) => logger.warn({ module: "daily-tick" }, "úklid queue_runs", e));
   }
 
+  // ── Nahrávky chorálů ──
+  // Až po per-team dni, aby se domácí chorály založené dnes daly rovnou
+  // objednat. Nejdřív se dotáhne, co běží od minule, pak se objedná nové:
+  // opačné pořadí by v jednom běhu objednalo a hned pollovalo něco, co Suno
+  // ještě nestihlo, a jen by to spálilo subrequesty.
+  try {
+    const { dotahniNahravky, objednejNahravky } = await import("../fans/fan-chant-audio");
+    const dotazene = await dotahniNahravky(env);
+    const objednane = await objednejNahravky(env);
+    if (dotazene.hotovo > 0 || objednane.objednano > 0 || dotazene.selhalo > 0) {
+      logger.info(
+        { module: "daily-tick" },
+        `nahrávky chorálů: hotovo=${dotazene.hotovo} čeká=${dotazene.ceka} `
+        + `selhalo=${dotazene.selhalo} objednáno=${objednane.objednano}`,
+      );
+    }
+    if (dotazene.hotovo > 0) {
+      events.push({ type: "day", description: `${dotazene.hotovo} chorálů dostalo nahrávku` });
+    }
+  } catch (e) {
+    logger.warn({ module: "daily-tick" }, "nahrávky chorálů", e);
+  }
+
   // ── Player offer generation (organické nabídky — hospodský, kamarád, dorost, starosta) ──
   try {
     const { generatePlayerOffer } = await import("../events/player-offers");

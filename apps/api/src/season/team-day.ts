@@ -443,12 +443,15 @@ export async function processTeamDay(
         }
 
         // Chorály. Vznikají z téhož stavu jako všechno ostatní a drží se,
-        // dokud jejich důvod platí.
-        const { tikChoralu } = await import("../fans/fan-chants");
+        // dokud jejich důvod platí. Domácí chorál je výjimka: nezávisí na
+        // dění, zakládá se jednou a zpívá se pořád.
+        const { tikChoralu, zalozDomaciChoral } = await import("../fans/fan-chants");
+        const domov = await zalozDomaciChoral(env.DB, teamId, party, newGameDate, env);
         const noveChoraly = await tikChoralu(env.DB, teamId, party, newGameDate, env);
-        if (noveChoraly.length > 0) {
+        const vsechnyChoraly = domov ? [domov, ...noveChoraly] : noveChoraly;
+        if (vsechnyChoraly.length > 0) {
           const { prispevkyKChoralum } = await import("../fans/fan-feed");
-          await prispevkyKChoralum(env.DB, teamId, noveChoraly, newGameDate);
+          await prispevkyKChoralum(env.DB, teamId, vsechnyChoraly, newGameDate);
         }
 
         // Kam chodí: stav stadionu, občerstvení a jeho ceny. Jednou za herní

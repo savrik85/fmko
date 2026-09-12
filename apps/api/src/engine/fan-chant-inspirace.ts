@@ -24,10 +24,16 @@
 
 /** Kategorie chorálu, stejné klíče jako `ChantKind`. */
 export type ChantTema =
+  | "domov"
   | "oblibenec" | "rival" | "trener_pro" | "trener_proti" | "vyhra" | "vzdor" | "vybaveni";
 
 /** Co má chorál na dané téma dělat. Jde do promptu jako zadání. */
 export const ZADANI_TEMATU: Record<ChantTema, string> = {
+  domov:
+    "Chorál o tom, ODKUD klub je. Zpívá ho celý stadion, ne jen kotel, takže "
+    + "žádné nadávky. Název obce musí zaznít a je to hlavní slovo celého chorálu. "
+    + "Hrdost na to místo, ne na výsledky. U malé vesnice se hraje na to, že je "
+    + "malá a přesto je slyšet.",
   oblibenec:
     "Oslava jednoho hráče. Jeho PŘÍJMENÍ musí v chorálu zaznít, ideálně opakovaně "
     + "a velkými písmeny, protože se skanduje. Chválí se za to, co na hřišti dělá, "
@@ -65,6 +71,7 @@ export const STAVBA_CHORALU: readonly string[] = [
   "Smíš použít výplňové slabiky pro rytmus: hej hej, ale ale, na-na-na, ó ó ó.",
   "Žádná statistika, žádná čísla, žádné datum. Kotel nezpívá tabulku.",
   "Hovorová čeština. Klidně tvrdá, ale ne návod k násilí a ne rasismus.",
+  "Mluvíš za celý kotel, tedy MY. Shoda v množném čísle: „jsme malí“, ne „jsme malý“.",
   "JMÉNA A NÁZVY NECHÁVEJ V PRVNÍM PÁDĚ. Piš „KOLMAN, ty jsi náš“, nikdy "
     + "„nemá rád Kolmana“ ani „z Pralesa“. Postav větu tak, aby se jméno nemuselo ohýbat.",
   "Vrať POUZE text chorálu. Žádné uvozovky, žádné vysvětlení, žádná nabídka variant.",
@@ -78,7 +85,8 @@ export const STAVBA_CHORALU: readonly string[] = [
  */
 export const VZORCE_KOTLU: readonly string[] = [
   "Skandované dvouslovné jádro, které se třikrát zopakuje.",
-  "Volání a odpověď: první půlka věty se ptá, druhá odpovídá.",
+  "Volání a odpověď: první půlka věty se ptá, druhá hned odpovídá. Otázka nikdy "
+    + "nezůstane bez odpovědi, chorál nesmí končit otazníkem.",
   "Dvojverší, kde druhý řádek rýmuje na poslední slovo prvního.",
   "Věta postavená na protikladu: co jsme my a co jsou oni.",
   "Podmínková věta typu „kdo něco nedělá, ten k nám nepatří“.",
@@ -131,6 +139,11 @@ export function vzorecPro(seed: number): string {
   return VZORCE_KOTLU[Math.abs(Math.trunc(seed)) % VZORCE_KOTLU.length];
 }
 
+/** Model místo chorálu vysvětluje nebo nabízí varianty. */
+// `\b` v JS je jen ASCII, takže po „další" nebo „vysvětlení" žádnou hranici
+// nenajde. Proto lookahead na písmeno s příznakem `u`.
+const KOMENTAR = /^(chorál|choral|návrh|text|zde|takhle|možnost|další|varianta|verze|alternativa|vysvětlení|poznámka)(?!\p{L})/iu;
+
 /** Nejdelší chorál, co se ještě dá skandovat a vejde se do UI. */
 export const MAX_DELKA_CHORALU = 70;
 
@@ -158,25 +171,49 @@ export function zkontrolujChoral(
     musiObsahovat?: string | null;
     /** Kvůli tématu se hlídá i to, co v textu být NESMÍ. */
     tema?: ChantTema;
+    /**
+     * Názvy, které smí v textu stát jen v prvním pádě.
+     *
+     * Míří to na obce. Model občas ohne správně („z Dvorů"), ale u méně
+     * běžných jmen si vymyslí patvar a ověřit to nejde. Šablony proto drží
+     * název v prvním pádě a od modelu se čeká totéž.
+     */
+    nazvyVPrvnimPade?: string[];
   } = {},
 ): VysledekKontroly {
   if (!raw) return { ok: false, duvod: "model nic nevrátil" };
 
-  // Modely rády přidají uvozovky, odrážku nebo úvodní větu. Vezme se první
-  // neprázdný řádek a obalení se sloupne.
-  const radek = raw.split("\n").map((r) => r.trim()).find((r) => r.length > 0) ?? "";
-  const text = radek
+  // Chorál bývá dvouřádkový a první řádek pak končí čárkou. Brát jen ten
+  // první tady zahazovalo 39 z 50 hotových odpovědí jako „useknuté".
+  // Bere se celý první odstavec, co model napsal za prázdný řádek, je
+  // komentář nebo nabídka variant a jde pryč.
+  const radky: string[] = [];
+  for (const r of raw.split("\n").map((x) => x.trim())) {
+    if (r.length === 0) { if (radky.length > 0) break; continue; }
+    // Komentář modelu není součást chorálu. Když už něco máme, končíme;
+    // když ne, pustí se to dál a shodí to kontrola níž.
+    if (radky.length > 0 && KOMENTAR.test(r)) break;
+    // Co by přeteklo, je buď další sloka, nebo přilepené vysvětlení. Chorál
+    // musí být skandovatelný, takže se bere jen to, co se vejde.
+    if (radky.length > 0 && radky.join(" ").length + 1 + r.length > MAX_DELKA_CHORALU) break;
+    radky.push(r);
+    if (radky.length === 3) break;
+  }
+  const text = radky.join(" ")
     .replace(/^[-–*•\d.)\s]+/, "")
     .replace(/^["„'»]+|["“'«]+$/g, "")
+    // Model občas vynechá mezeru za čárkou: „Hej,hej,Buk!".
+    .replace(/([,;!?])(?=\p{L})/gu, "$1 ")
+    .replace(/\s{2,}/g, " ")
     .trim();
 
   if (text.length < 6) return { ok: false, duvod: "moc krátké" };
   if (text.length > MAX_DELKA_CHORALU) return { ok: false, duvod: `přes ${MAX_DELKA_CHORALU} znaků` };
-  if (/^(chorál|návrh|text|zde|takhle|možnost)/i.test(text)) {
-    return { ok: false, duvod: "model místo chorálu komentuje" };
-  }
-  // Víc než dvě věty se nedají skandovat.
-  if ((text.match(/[.!?]/g) ?? []).length > 2) return { ok: false, duvod: "moc vět" };
+  if (KOMENTAR.test(text)) return { ok: false, duvod: "model místo chorálu komentuje" };
+  // Chorál se opakuje, takže vět bývá víc: „Kdo je náš? Dvory! Kdo je náš?
+  // Dvory!" jsou čtyři a je to učebnicový kotel. Strop na dvou zahazoval
+  // 11 dobrých odpovědí z padesáti. Delku hlídá limit znaků, ne počet vět.
+  if ((text.match(/[.!?]/g) ?? []).length > 4) return { ok: false, duvod: "moc vět" };
   if (/\d{2,}/.test(text)) return { ok: false, duvod: "obsahuje čísla, kotel nezpívá tabulku" };
 
   // Nedopsaná věta. Model občas dojede na strop tokenů uprostřed a zbyde
@@ -190,12 +227,20 @@ export function zkontrolujChoral(
   for (const cele of opts.jmena ?? []) {
     const p = cele.trim().split(/\s+/).pop() ?? "";
     if (p.length < 3) continue;
-    const ohnute = new RegExp(`\\b${escape(p)}(a|u|e|ovi|em|ovy|ova|ovo|ům|y)\\b`, "i");
-    if (ohnute.test(text)) return { ok: false, duvod: `ohnuté příjmení ${p}` };
+    if (ohnutePrijmeni(text, p)) return { ok: false, duvod: `ohnuté příjmení ${p}` };
   }
 
   if (opts.musiObsahovat && !obsahujeKmen(text, opts.musiObsahovat)) {
     return { ok: false, duvod: `chybí „${opts.musiObsahovat}“, model uhnul od tématu` };
+  }
+
+  // Nezodpovězená otázka. Model se chytil vzorce „volání a odpověď" a vracel
+  // půlku: „Spůle, Spůle, kde my jsme?". Kotel se na nic neptá, kotel odpovídá.
+  if (text.trim().endsWith("?")) return { ok: false, duvod: "otázka bez odpovědi" };
+
+  for (const nazev of opts.nazvyVPrvnimPade ?? []) {
+    const ohnuty = ohnutyNazev(text, nazev);
+    if (ohnuty) return { ok: false, duvod: `ohnutý název ${nazev} → ${ohnuty}` };
   }
 
   // Chorál proti soupeři, který soupeři fandí. Model to udělal: na zadání
@@ -209,7 +254,7 @@ export function zkontrolujChoral(
 }
 
 /** Povzbuzení. V chorálu proti soupeři nemá co dělat. */
-const FANDENI = /\b(do toho|jedem|jedeme|bojuj|bojujte|držíme|hodně štěstí|ať žije)\b/i;
+const FANDENI = /(?<!\p{L})(do toho|jedem|jedeme|bojuj|bojujte|držíme|hodně štěstí|ať žije)(?!\p{L})/iu;
 
 /**
  * Je slovo v textu, i když je ohnuté?
@@ -228,4 +273,50 @@ function obsahujeKmen(text: string, slovo: string): boolean {
 
 function escape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Najde v textu ohnutý tvar názvu, nebo null.
+ *
+ * Porovnává se kmen: každé slovo, které začíná stejně jako název, musí být
+ * název přesně. „Dvory" tak projde, „Dvorů" ne. Kratší názvy než tři znaky
+ * se nekontrolují, tam by kmen chytal půlku slovníku.
+ */
+function ohnutyNazev(text: string, nazev: string): string | null {
+  const bez = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const cistyNazev = nazev.trim();
+  if (cistyNazev.length < 3) return null;
+  const kmen = bez(cistyNazev).slice(0, Math.max(3, cistyNazev.length - 2));
+  for (const slovo of text.split(/[^\p{L}]+/u)) {
+    if (!slovo) continue;
+    const n = bez(slovo);
+    if (n.startsWith(kmen) && n !== bez(cistyNazev)) return slovo;
+  }
+  return null;
+}
+
+/**
+ * Je příjmení v textu ohnuté?
+ *
+ * Dvě různé třídy: podstatná jména (Kolman → Kolmana, Kolmanovi) a přídavná
+ * (Černý → Černého, Černému, Černým). Druhá mění i samotný konec kmene, takže
+ * na ni první vzorec nesedí.
+ *
+ * Lookaround místo `\b`: to je v JS jen ASCII, takže před „Š" žádnou hranici
+ * slova nenajde a příjmení na Č, Š nebo Ž kontrolou propadla bez povšimnutí.
+ */
+function ohnutePrijmeni(text: string, p: string): boolean {
+  const jmenne = new RegExp(
+    `(?<!\\p{L})${escape(p)}(a|u|e|ovi|em|ovy|ova|ovo|ům|y)(?!\\p{L})`, "iu",
+  );
+  if (jmenne.test(text)) return true;
+
+  if (/[ýí]$/i.test(p)) {
+    const kmen = escape(p.slice(0, -1));
+    const pridavne = new RegExp(
+      `(?<!\\p{L})${kmen}(ého|ému|ým|ém|ých|ými|á|é|ou|í)(?!\\p{L})`, "iu",
+    );
+    if (pridavne.test(text)) return true;
+  }
+  return false;
 }
