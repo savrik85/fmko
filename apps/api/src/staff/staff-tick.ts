@@ -264,9 +264,11 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
      * (DEF)") a bral kohokoli z okresu — i třicetiletého s ratingem 30. Zpráva
      * tím neříkala nic a chodila každý týden znovu.
      *
-     * Ted platí tři pravidla: tip musí mít co říct (věk, rating, proč), hráč
-     * musí za řeč stát, a když v okrese nikdo takový není, skaut MLČÍ. Lepší
-     * žádná zpráva než tip na nikoho.
+     * Teď je měřítkem KÁDR TRENÉRA, ne absolutní číslo. Rating v téhle hře
+     * neběží na stovkové škále: průměr hráče v kádru je kolem třiceti, takže
+     * „rating 44" nikomu nic neříká, dokud nevidí, co má doma. Tip má smysl
+     * jedině tehdy, když by hráč v týmu k něčemu byl — a když v okrese nikdo
+     * takový není, skaut MLČÍ.
      */
     const scouts = await db.prepare(
       `SELECT sm.team_id, v.district, sm.judgement, sm.communication
@@ -276,25 +278,21 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
       .catch((e) => { logger.warn({ module: "staff-tick" }, "load scouts", e); return { results: [] as never[] }; });
 
     for (const s of scouts.results) {
-      // Kvalita skauta rozhoduje, jak hluboko vidí. Mizerný pozná jen hotového
-      // hráče, dobrý i surový talent, který se zatím na ratingu neprojevil.
-      const eff = (2 * (s.judgement ?? 5) + (s.communication ?? 5)) / 3;
-      const prahTalentu = Math.round(30 - eff);        // eff 5 → 25, eff 18 → 12
-      const prahRatingu = Math.round(58 - eff * 0.8);  // eff 5 → 54, eff 18 → 44
-
       const kandidati = await db.prepare(
         `SELECT id, first_name, last_name, position, age, overall_rating, hidden_talent
-         FROM free_agents
-         WHERE district = ? AND (hidden_talent >= ? OR (age <= 23 AND overall_rating >= ?))
-         ORDER BY hidden_talent DESC, overall_rating DESC LIMIT 5`,
-      ).bind(s.district, prahTalentu, prahRatingu)
-        .all<{
-          id: string; first_name: string; last_name: string; position: string;
-          age: number; overall_rating: number; hidden_talent: number;
-        }>()
-        .catch((e) => { logger.warn({ module: "staff-tick" }, "scout tip", e); return { results: [] }; });
-
+         FROM free_agents WHERE district = ?`,
+      ).bind(s.district)
+        .all<TipKandidat>()
+        .catch((e) => { logger.warn({ module: "staff-tick" }, "scout tip", e); return { results: [] as TipKandidat[] }; });
       if (kandidati.results.length === 0) continue;
+
+      // Laťka je vlastní kádr: co má trenér doma na té které pozici.
+      const kadr = await db.prepare(
+        `SELECT position, COUNT(*) pocet, ROUND(AVG(overall_rating)) prumer, MAX(overall_rating) nejlepsi
+         FROM players WHERE team_id = ? GROUP BY position`,
+      ).bind(s.team_id).all<LatkaPostu & { position: string }>()
+        .catch((e) => { logger.warn({ module: "staff-tick" }, "kádr pro tip", e); return { results: [] as never[] }; });
+      const latky = new Map(kadr.results.map((r) => [r.position, { pocet: r.pocet, prumer: r.prumer, nejlepsi: r.nejlepsi }]));
 
       // Nedoporučovat pořád dokola toho samého — kdo padl v posledních pár
       // hlášeních, jde stranou.
@@ -304,9 +302,13 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
          ORDER BY m.sent_at DESC LIMIT 4`,
       ).bind(s.team_id).all<{ body: string }>()
         .catch((e) => { logger.warn({ module: "staff-tick" }, "historie skauta", e); return { results: [] }; });
-      const zminen = (drive.results ?? []).map((m) => m.body).join(" ");
 
-      const tip = kandidati.results.find((k) => !zminen.includes(`${k.first_name} ${k.last_name}`));
+      const tip = vyberTip(
+        kandidati.results,
+        latky,
+        (2 * (s.judgement ?? 5) + (s.communication ?? 5)) / 3,
+        (drive.results ?? []).map((m) => m.body).join(" "),
+      );
       if (!tip) continue;
 
       await sendStaffSystemMessage(db, s.team_id, "Skaut", "Skaut", textTipu(tip));
@@ -323,25 +325,86 @@ const POST_SLOVEM: Record<string, string> = {
   GK: "brankář", DEF: "obránce", MID: "záložník", FWD: "útočník",
 };
 
+export interface TipKandidat {
+  id: string; first_name: string; last_name: string; position: string;
+  age: number; overall_rating: number; hidden_talent: number;
+}
+
+/** Laťka na jednom postu: co má trenér doma. */
+export interface LatkaPostu { pocet: number; prumer: number; nejlepsi: number }
+
+/** Proč skaut hráče vytáhl — rozhoduje i o pořadí, co se hlásí dřív. */
+export type DuvodTipu = "chybi" | "nejlepsi" | "talent" | "zaloha";
+
+export interface Tip { hrac: TipKandidat; duvod: DuvodTipu }
+
+const PORADI: DuvodTipu[] = ["chybi", "nejlepsi", "talent", "zaloha"];
+
+/**
+ * Koho z okresu stojí za to hlásit.
+ *
+ * Skaut neporovnává hráče s absolutním číslem, ale s kádrem, který trenér má.
+ * Brankář s ratingem 10 a velkým skrytým talentem je pořád brankář s ratingem
+ * 10: když má klub doma tři lepší, není o čem psát. Naopak obránce, co by byl
+ * hned nejlepší v týmu, stojí za zprávu, i kdyby žádný talent navíc neměl.
+ *
+ * Hlásí se jen to, co je novina: chybějící post, posila do základu, talent
+ * nebo záloha tam, kde je trenér na postu sám. „Byl by do rotace" novina není
+ * — to by chodilo každý týden o pěti pořád stejných lidech.
+ *
+ * Vrací `null`, když nikdo neprojde — mlčení je správná odpověď.
+ */
+export function vyberTip(
+  kandidati: TipKandidat[],
+  latky: Map<string, LatkaPostu>,
+  eff: number,
+  zminen = "",
+): Tip | null {
+  // Jak hluboko skaut vidí. Mizerný pozná jen hotového hráče, dobrý i surový
+  // talent, který se na ratingu zatím neprojevil.
+  const prahTalentu = Math.round(30 - eff); // eff 5 → 25, eff 18 → 12
+
+  const tipy: Tip[] = [];
+  for (const k of kandidati) {
+    if (zminen.includes(`${k.first_name} ${k.last_name}`)) continue;
+    const latka = latky.get(k.position);
+    if (!latka) { tipy.push({ hrac: k, duvod: "chybi" }); continue; }
+    if (k.overall_rating >= latka.nejlepsi) { tipy.push({ hrac: k, duvod: "nejlepsi" }); continue; }
+    // Surový talent smí být za dnešním průměrem, ale ne propadlý úplně.
+    if (k.age <= 23 && k.hidden_talent >= prahTalentu && k.overall_rating >= latka.prumer - 8) {
+      tipy.push({ hrac: k, duvod: "talent" }); continue;
+    }
+    // Na postu sám: zranění nebo karta a nemá kým hrát.
+    if (latka.pocet <= 1 && k.overall_rating >= latka.prumer - 5) tipy.push({ hrac: k, duvod: "zaloha" });
+  }
+  if (tipy.length === 0) return null;
+
+  tipy.sort((a, b) => {
+    const d = PORADI.indexOf(a.duvod) - PORADI.indexOf(b.duvod);
+    if (d !== 0) return d;
+    return (b.hrac.overall_rating + b.hrac.hidden_talent / 2)
+      - (a.hrac.overall_rating + a.hrac.hidden_talent / 2);
+  });
+  return tipy[0];
+}
+
 /**
  * Co skaut o hráči napíše.
  *
  * Vždycky věk, post a rating — bez čísel je tip k ničemu — a k tomu věta,
- * PROČ ho vytáhl. Jinak trenér neví, jestli jde o surový talent, nebo o hotového
- * hráče, který je zrovna volný.
+ * PROČ ho vytáhl, vztažená ke kádru. „Rating 44" samo o sobě trenér neumí
+ * zařadit; „hned by ti byl nejlepším obráncem" ano.
  */
-export function textTipu(p: {
-  first_name: string; last_name: string; position: string;
-  age: number; overall_rating: number; hidden_talent: number;
-}): string {
+export function textTipu(tip: Tip): string {
+  const p = tip.hrac;
   const post = POST_SLOVEM[p.position] ?? p.position;
-  const duvod = p.hidden_talent >= 25
-    ? "Zatím to na něm není vidět, ale má v sobě víc, než ukazuje."
-    : p.hidden_talent >= 15
-      ? "Ještě poroste, stojí za zkoušku."
-      : p.age <= 21
-        ? "Na svůj věk hotový hráč."
-        : "Solidní hráč, co je zrovna volný.";
+  const duvod = tip.duvod === "chybi"
+    ? `Na tenhle post nemáš v kádru nikoho.`
+    : tip.duvod === "nejlepsi"
+      ? `Hned by ti byl nejlepším, koho na tomhle postu máš.`
+      : tip.duvod === "talent"
+        ? `Dnes ještě není na tvoje, ale má v sobě víc, než ukazuje.`
+        : `Na tomhle postu jsi v kádru sám — tenhle by ti kryl záda.`;
   return `🔍 ${p.first_name} ${p.last_name} — ${p.age} let, ${post}, rating ${p.overall_rating}. `
     + `${duvod} Najdeš ho v Přestupech mezi volnými.`;
 }
