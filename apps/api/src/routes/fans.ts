@@ -91,6 +91,8 @@ function groupView(g: FanGroupRow, leader: FanLeaderRow | undefined) {
     popis: def?.popis ?? "",
     name: g.name,
     size: g.size,
+    /** Tvrdé jádro: kolik z party dělá bordel a jezdí na výjezdy. */
+    core: g.core ?? 0,
     mood: g.mood,
     moodWord: moodWord(g.mood),
     heat: g.heat,
@@ -680,6 +682,60 @@ async function zapisDopad(
  * Normálně to dělá denní tick uvnitř `syncFanGroups`. Bez tohohle by se reakce
  * na přestup nebo zdražení daly ověřit až druhý herní den.
  */
+/**
+ * Fanouškovská část denního ticku pro jeden tým.
+ *
+ * Normálně to běží v `team-day.ts` jednou za herní den. Bez tohohle se po
+ * nasazení nedá nic ověřit dřív než druhý den ráno.
+ */
+fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "Chybí teamId" }, 400);
+
+  const gameDate = await teamGameDate(c.env.DB, teamId);
+  const party = await syncFanGroups(c.env.DB, teamId, { drift: true });
+  if (party.length === 0) return c.json({ error: "Tým nemá party" }, 404);
+
+  const { prepoctiOblibence } = await import("../fans/fan-favourites");
+  const { tikKampani, dopadSplneneKampane } = await import("../fans/fan-campaigns");
+  const { prepoctiTransparent, formaKlubu } = await import("../fans/fan-banner");
+  const {
+    prispevkyKOblibencum, prispevkyKeKampani, prispevekKTransparentu, prispevkyKHre,
+  } = await import("../fans/fan-feed");
+
+  const zmeny = await prepoctiOblibence(c.env.DB, teamId, party, gameDate);
+  if (zmeny.length > 0) await prispevkyKOblibencum(c.env.DB, teamId, zmeny, gameDate);
+
+  const kampane = await tikKampani(c.env.DB, teamId, party, gameDate);
+  for (const k of kampane.zalozene) await prispevkyKeKampani(c.env.DB, k, "zalozena", gameDate);
+  for (const k of kampane.splnene) {
+    await dopadSplneneKampane(c.env.DB, k, gameDate);
+    await prispevkyKeKampani(c.env.DB, k, "splnena", gameDate);
+  }
+
+  const plachta = await prepoctiTransparent(c.env.DB, teamId, party, gameDate);
+  if (plachta) await prispevekKTransparentu(c.env.DB, teamId, plachta, gameDate);
+
+  const forma = await formaKlubu(c.env.DB, teamId);
+  const taktika = await c.env.DB.prepare("SELECT tactic FROM teams WHERE id = ?")
+    .bind(teamId).first<{ tactic: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "taktika pro dev tick", e); return null; });
+  const hraPrispevky = await prispevkyKHre(c.env.DB, {
+    teamId, taktika: taktika?.tactic ?? null, golyPoslednich5: forma.goly,
+    zapasu: forma.zapasu, gameDate,
+  });
+
+  return c.json({
+    ok: true, gameDate,
+    jadra: party.map((g) => ({ name: g.name, core: g.core })),
+    oblibenci: zmeny,
+    kampane: { zalozene: kampane.zalozene.length, splnene: kampane.splnene.length, vysumele: kampane.vysumele.length },
+    transparent: plachta,
+    forma,
+    prispevkyKHre: hraPrispevky,
+  });
+});
+
 fansRouter.post("/admin/process-fan-events", requireAdmin, async (c) => {
   const teamId = c.req.query("teamId");
   if (!teamId) return c.json({ error: "Chybí teamId" }, 400);
