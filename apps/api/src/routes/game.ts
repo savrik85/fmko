@@ -2019,6 +2019,7 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
 
   // Nápis v kotli — text (ne barva). Sanitizace + max délka.
   if (body.field === "ultras_text") {
+    const { MAX_DELKA_TRANSPARENTU } = await import("../engine/fan-banner");
     // Když si plachtu píše kotel, manažer do ní nemluví. Jinak by přepnutí
     // režimu nic neznamenalo a fanoušci by se přepisovali jedním kliknutím.
     const rezim = await c.env.DB.prepare("SELECT ultras_text_mode FROM stadiums WHERE team_id = ?")
@@ -2029,7 +2030,7 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
     }
     const clean = body.value === null
       ? null
-      : String(body.value).replace(/[^\p{L}\p{N} .!?#'-]/gu, "").slice(0, 22).trim() || null;
+      : String(body.value).replace(/[^\p{L}\p{N} .!?#'-]/gu, "").slice(0, MAX_DELKA_TRANSPARENTU).trim() || null;
     await c.env.DB.prepare("UPDATE stadiums SET ultras_text = ? WHERE team_id = ?")
       .bind(clean, teamId).run();
     return c.json({ ok: true, value: clean });

@@ -78,14 +78,22 @@ describe("transparent se vždycky vejde", () => {
     }
   });
 
+  // Délka se odvozuje z konstanty, ne z napsaného řetězce. Když se limit
+  // pohnul z 22 na 40, tyhle testy spadly na tom, že „moc dlouhý" text se
+  // najednou vešel, i když na chování funkce se nic nezměnilo.
+  const PRESAHUJE = "A".repeat(MAX_DELKA_TRANSPARENTU + 1);
+  const AKORAT = "B".repeat(MAX_DELKA_TRANSPARENTU);
+
   it("prvniCoSeVejde bere první vyhovující, ne první v pořadí", () => {
-    expect(prvniCoSeVejde(["TENHLE JE MOC DLOUHÝ NA PLACHTU", "KRÁTKÝ"])).toBe("KRÁTKÝ");
+    expect(prvniCoSeVejde([PRESAHUJE, "KRÁTKÝ"])).toBe("KRÁTKÝ");
     expect(prvniCoSeVejde(["PRVNÍ", "DRUHÝ"])).toBe("PRVNÍ");
+    // Přesně na hranici se ještě vejde.
+    expect(prvniCoSeVejde([AKORAT, "KRÁTKÝ"])).toBe(AKORAT);
   });
 
   it("prázdný seznam je chyba katalogu, ne patvar na plachtě", () => {
     expect(prvniCoSeVejde([])).toBe("");
-    expect(prvniCoSeVejde(["TENHLE JE OPRAVDU MOC DLOUHÝ"])).toBe("");
+    expect(prvniCoSeVejde([PRESAHUJE])).toBe("");
   });
 });
 

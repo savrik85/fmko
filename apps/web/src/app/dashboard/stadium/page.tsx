@@ -638,7 +638,6 @@ export default function StadiumPage() {
                 {"⚽ Dnes se hraje doma"}{stadium.matchDayOpponent ? ` proti ${stadium.matchDayOpponent}` : ""}{", areál je proto v zápasovém režimu."}
               </div>
             )}
-            {teamId && <KotelPrehravac teamId={teamId} zapasovyDen={!!stadium.matchDay} />}
             <div className="flex items-start justify-center gap-1.5 text-sm text-muted text-center">
               <span>💡</span>
               <span>Pro přepínání <strong>režimu areálu</strong> (Zápasový vs. Tréninkový den), <strong>počasí</strong> a <strong>kamer</strong> klikněte v rohu scény na <strong>🎛️ Počasí & Kamery</strong>.</span>
@@ -653,6 +652,14 @@ export default function StadiumPage() {
             mowingPattern={stadium.customization.mowingPattern ?? "stripes"}
             surroundSurface={stadium.customization.surroundSurface ?? "grass"}
           />
+        )}
+
+        {/* Kotel patří k areálu, ne k zápasovému dni. Schované za `matchDay`
+            to hráč skoro nikdy neuvidí, domácí zápas je jednou za dva týdny. */}
+        {teamId && (
+          <div className="pt-4">
+            <KotelPrehravac teamId={teamId} zapasovyDen={!!stadium.matchDay} />
+          </div>
         )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-4 gap-x-3 pt-4 border-t border-gray-100">
@@ -769,7 +776,7 @@ export default function StadiumPage() {
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
-                          maxLength={22}
+                          maxLength={40}
                           value={ultrasDraft ?? stadium.customization.ultrasText ?? ""}
                           onChange={(e) => setUltrasDraft(e.target.value)}
                           placeholder="např. PRALES BOHDALEC"
@@ -786,7 +793,7 @@ export default function StadiumPage() {
                           Uložit
                         </button>
                       </div>
-                      <div className="text-sm text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 22 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
+                      <div className="text-sm text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 40 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
                     </>
                   )}
                 </div>

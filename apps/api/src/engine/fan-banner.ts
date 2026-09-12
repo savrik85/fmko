@@ -12,8 +12,15 @@
 
 import type { FanGroupKind } from "./fan-groups";
 
-/** Transparent má sloupec na 22 znaků. Delší se nevejde do sektoru. */
-export const MAX_DELKA_TRANSPARENTU = 22;
+/**
+ * Nejdelší nápis na plachtu.
+ *
+ * Dvacet dva byl odhad. Plachta se v 3D kreslí na canvas 2048 px široký a
+ * písmo se samo zmenšuje až na 40 px, takže se tam vejde přes sedmdesát znaků.
+ * Čtyřicet je hranice, kde je nápis ještě z tribuny čitelný a zároveň se do
+ * něj vejde celý chorál, ne jen jeho začátek.
+ */
+export const MAX_DELKA_TRANSPARENTU = 40;
 
 export interface StavProTransparent {
   /** Nálada kotle 0–100. Když kotel není, bere se nejvášnivější parta. */
