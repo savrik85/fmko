@@ -519,7 +519,7 @@ export default function FansPage() {
 
   const tabs: { key: TabKey; label: string; icon: string; visible: boolean }[] = [
     { key: "fanbase", label: "Základna", icon: "\u{1F465}", visible: true },
-    { key: "groups", label: "Party", icon: "\u{1F525}", visible: !!fanGroups },
+    { key: "groups", label: "Skupiny", icon: "\u{1F525}", visible: !!fanGroups },
     { key: "satisfaction", label: "Spokojenost", icon: "\u{1F4CA}", visible: true },
     { key: "concession", label: "Občerstvení", icon: "\u{1F37A}", visible: true },
     { key: "sales", label: "Prodeje", icon: "\u{1F4C8}", visible: concession.mode === "self" },

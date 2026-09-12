@@ -103,7 +103,7 @@ export default function VudceDetailPage() {
             </div>
             <p className="text-sm mt-2">{data.group.popis}</p>
             <p className="text-sm text-muted mt-2">
-              Nálada party: <span className="font-semibold">{data.group.moodWord}</span> ·
+              Nálada v partě: <span className="font-semibold">{data.group.moodWord}</span> ·
               vztah k vedení: <span className="font-semibold">{data.group.heatWord}</span>
             </p>
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Tab „Party" na stránce fanoušků.
+ * Tab „Skupiny" na stránce fanoušků.
  *
  * Vlastní soubor záměrně — `page.tsx` má přes 1 500 řádků a přilepit sem další
  * tři sta by z něj udělalo neudržovatelnou hroudu.
@@ -281,8 +281,8 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
         </summary>
         <div className="mt-3 space-y-3 text-sm leading-relaxed">
           <p>
-            Tvoji fanoušci nejsou jedna masa. Dělí se na party, každá má svou povahu, svého
-            vůdce a vlastní náladu. Party nejsou navíc k tvé základně — jsou to lidi z ní.
+            Tvoji fanoušci nejsou jedna masa. Dělí se na několik part, každá má svou povahu,
+            svého vůdce a vlastní náladu. Nejsou navíc k tvé základně — jsou to lidi z ní.
           </p>
           <ul className="space-y-1.5 ml-4 list-disc">
             <li><strong>Nálada</strong> jde nahoru, když se klubu daří a když jim vyjdeš vstříc.</li>
