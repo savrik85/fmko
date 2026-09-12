@@ -888,3 +888,38 @@ fansRouter.get("/admin/suno-choral-test", requireAdmin, async (c) => {
     })),
   });
 });
+
+/**
+ * Zbývající kredit u Suna.
+ *
+ * Kvůli tomu, aby se dala spočítat cena jedné nahrávky: přečíst před generací
+ * a po ní. Ceník sunoapi.org neuvádí, kolik která operace stojí, takže rozdíl
+ * je jediný spolehlivý zdroj.
+ *
+ * Zkouší se dva hostitelé, protože dokumentace uvádí u kreditu jiný než
+ * u generace a není jisté, který z nich klíč obslouží.
+ */
+fansRouter.get("/admin/suno-credit", requireAdmin, async (c) => {
+  const key = c.env.SUNO_API_KEY;
+  if (!key) return c.json({ error: "Chybí SUNO_API_KEY" }, 503);
+
+  const hostitele = ["https://api.sunoapi.org", "https://apibox.erweima.ai"];
+  const pokusy: Array<{ host: string; status: number; telo: string }> = [];
+  for (const host of hostitele) {
+    const res = await fetch(`${host}/api/v1/generate/credit`, {
+      headers: { Authorization: `Bearer ${key}` },
+    }).catch((e) => {
+      logger.warn({ module: "fans" }, `suno-credit ${host}`, e);
+      return null;
+    });
+    if (!res) { pokusy.push({ host, status: 0, telo: "spojení selhalo" }); continue; }
+    const telo = (await res.text()).slice(0, 300);
+    pokusy.push({ host, status: res.status, telo });
+    if (res.ok) {
+      const j = JSON.parse(telo) as { data?: number | { credits?: number } };
+      const kredit = typeof j.data === "number" ? j.data : j.data?.credits ?? null;
+      if (kredit !== null) return c.json({ ok: true, kredit, host });
+    }
+  }
+  return c.json({ error: "Kredit se nepodařilo přečíst", pokusy }, 502);
+});
