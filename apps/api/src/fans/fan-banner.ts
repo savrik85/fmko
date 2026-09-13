@@ -40,9 +40,9 @@ export async function prepoctiTransparent(
   env?: Pick<Bindings, "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL">,
 ): Promise<{ text: string; duvod: string } | null> {
   const stadion = await db
-    .prepare("SELECT ultras_text, ultras_stand FROM stadiums WHERE team_id = ?")
+    .prepare("SELECT ultras_text, ultras_text_duvod, ultras_stand FROM stadiums WHERE team_id = ?")
     .bind(teamId)
-    .first<{ ultras_text: string | null; ultras_stand: number }>()
+    .first<{ ultras_text: string | null; ultras_text_duvod: string | null; ultras_stand: number }>()
     .catch((e) => { logger.warn({ module: M }, `stadion ${teamId}`, e); return null; });
   if (!stadion) return null;
   // Bez kotle není kam plachtu pověsit. Ve 3D se sektor při úrovni 0 vůbec
@@ -93,6 +93,12 @@ export async function prepoctiTransparent(
   const rng = createRng(seedFromString(`banner|${teamId}|${gameDate.slice(0, 10)}`));
   const sablona = vyberTransparent(stav, rng.random());
 
+  // Plachta visí, dokud platí důvod. Model vrací pokaždé jiný text, takže bez
+  // téhle podmínky by se heslo měnilo KAŽDÝ DEN, každý den by o tom přišel
+  // příspěvek na Tribunu a každý den by to stálo volání modelu. Plachta se
+  // přepisuje, když se změní důvod, ne když se přetočí kalendář.
+  if (stadion.ultras_text && stadion.ultras_text_duvod === sablona.duvod) return null;
+
   const okres = (await db.prepare(
     "SELECT v.district FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
   ).bind(teamId).first<{ district: string | null }>()
@@ -105,14 +111,6 @@ export async function prepoctiTransparent(
     ...sablona,
     text: await napisTransparent(env, { ton: sablona.tone, stav, klub, okres, zaloha: sablona.text }),
   };
-
-  if (t.text === stadion.ultras_text) {
-    // Důvod se i tak uloží: mohl se změnit, i když heslo zůstalo.
-    await db.prepare("UPDATE stadiums SET ultras_text_duvod = ? WHERE team_id = ?")
-      .bind(t.duvod, teamId).run()
-      .catch((e) => { logger.warn({ module: M }, "důvod transparentu", e); });
-    return null;
-  }
 
   await db
     .prepare("UPDATE stadiums SET ultras_text = ?, ultras_text_duvod = ? WHERE team_id = ?")
