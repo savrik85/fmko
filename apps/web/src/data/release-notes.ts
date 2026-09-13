@@ -26,7 +26,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Diváci umí rozbít vybavení stadionu. Zastřešení, sociálky nebo občerstvení po zápase nemusí fungovat a dokud to nezaplatíš a neopravíš, nefunguje to ani ve hře.",
       "Fanoušci sbírají podpisy. Když se dlouho nedaří, rozjedou kampaň za odvolání trenéra nebo za konec konkrétního hráče. Vidíš, kolik podpisů mají a kolik jim chybí, a když to dotáhnou, dopadne to na morálku toho, koho se to týká.",
       "Mají svoje miláčky a svoje otloukánky. U každé party je vidět, koho z kádru mají rádi a koho nemůžou vystát, i proč.",
-      "Reagují na to, co se kolem klubu děje. Na výsledky, přestupy, tvoje rozhovory, zdražení vstupného, taktiku, kolik dáváte gólů, stav stadionu i ceny v bufetu. Na telefonu k tomu přibyla záložka Co si píšou, tedy zeď, kde to mezi sebou probírají.",
+      "Reagují na to, co se kolem klubu děje. Na výsledky, přestupy, tvoje rozhovory, zdražení vstupného, taktiku, kolik dáváte gólů, stav stadionu i ceny v bufetu. Na telefonu k tomu přibyly Socky, tedy zeď, kde to mezi sebou probírají.",
       "Vůdci part chodí do hospody. Když tam narazíš na vůdce kotle, dá se s ním probrat poslední zápas i konkrétní hráč, pokud zrovna sedí u vedlejšího stolu. Moc hráčů v hospodě ale fanoušky naštve.",
       "Kotel si vymýšlí vlastní chorály. Vznikají z toho, co se v klubu děje, mají sílu, která roste opakováním, a drží se, dokud platí jejich důvod. Pak se na ně zapomene. Každý klub má navíc domácí chorál o obci, ve které hraje, ten se zpívá pořád.",
       "Chorály se dají i slyšet. Ty nejsilnější a domácí chorál dostanou nahrávku a na stránce Stadion si je pustíš. Nahrávka se nekupuje, vyzpívá se: kotel ji dostane, až se chorál chytne naplno.",

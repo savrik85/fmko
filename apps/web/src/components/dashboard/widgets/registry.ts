@@ -340,7 +340,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: "tribuna", title: "Co si o nás píšou", icon: "💬", category: "fanousci",
-    description: "Poslední příspěvky ze zdi fanoušků v telefonu, i s podílem negativních.",
+    description: "Poslední příspěvky ze Socek, sítě fanoušků v telefonu, i s podílem negativních.",
     defaultWidth: 1, defaultHeight: 2, needs: ["fanFeed"], Component: TribunaWidget,
   },
   {

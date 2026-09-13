@@ -163,15 +163,14 @@ export default function PhonePage() {
       </div>
 
       {/* Záložky.
-          Zeď fanoušků i Oznámení dřív visely v hlavičce jako holé ikonky
-          vedle sebe a nešlo z nich poznat, co jsou zač. „Tribuna" navíc nikomu
-          neřekla, že jde o sociální síť, takže se záložka jmenuje tím, co v ní
-          je, stejně jako widget na nástěnce. */}
+          Socky i Oznámení dřív visely v hlavičce jako holé ikonky vedle sebe
+          a nešlo z nich poznat, co jsou zač. Původní „Tribuna" navíc nikomu
+          neřekla, že jde o sociální síť. */}
       <div className="bg-pitch-700 text-white flex">
         <ZalozkaTelefonu emoji="&#128172;" label="Zprávy" aktivni />
         <ZalozkaTelefonu
           emoji="&#128483;&#65039;"
-          label="Co si píšou"
+          label="Socky"
           onClick={() => setTribunaOtevrena(true)}
         />
         <ZalozkaTelefonu
