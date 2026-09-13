@@ -3,15 +3,15 @@
 /**
  * Kotel na stránce stadionu.
  *
- * Pouští nahrané chorály klubu. Původně to bylo schované na zápasový den, což
- * znamenalo, že to hráč skoro nikdy neuvidí — domácí zápas je jednou za dva
- * týdny. Teď je to vidět vždycky, když je co pustit, a zápasový den to jen
- * jinak popíše.
+ * Pouští nahrané chorály klubu dokola. Původně to bylo schované na zápasový
+ * den, což znamenalo, že to hráč skoro nikdy neuvidí, domácí zápas je jednou
+ * za dva týdny. Teď je to vidět vždycky, když je co pustit.
  *
  * Proč to není prosté `autoplay`: prohlížeče zvuk bez zásahu uživatele
- * zablokují a `play()` skončí odmítnutým příslibem, o kterém se nikde nedozvíš.
- * Volba se proto jednou klikne, uloží do prohlížeče, a v zápasový den se
- * spuštění zkusí samo. Když ho prohlížeč odmítne, zůstane vidět tlačítko.
+ * zablokují a `play()` skončí odmítnutým příslibem, o kterém se nikde
+ * nedozvíš. Volba se proto jednou klikne, uloží do prohlížeče, a v zápasový
+ * den se spuštění zkusí samo. Když ho prohlížeč odmítne, řekne se to nahlas
+ * a zůstane vidět tlačítko.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,22 +19,28 @@ import { apiFetch } from "@/lib/api";
 
 const KLIC = "stadion-kotel-zvuk";
 
-const DRUH_LABEL: Record<string, string> = {
-  domov: "Domácí",
-  oblibenec: "Miláček kotle",
-  rival: "Proti soupeři",
-  trener_pro: "Za trenéra",
-  trener_proti: "Proti trenérovi",
-  vyhra: "Vítězná",
-  vzdor: "Vzdor",
-  vybaveni: "Stížnost",
+const DRUH: Record<string, { label: string; ikona: string }> = {
+  domov: { label: "Domácí", ikona: "🏡" },
+  oblibenec: { label: "Miláček kotle", ikona: "⭐" },
+  rival: { label: "Proti soupeři", ikona: "⚔️" },
+  trener_pro: { label: "Za trenéra", ikona: "🙌" },
+  trener_proti: { label: "Proti trenérovi", ikona: "✊" },
+  vyhra: { label: "Vítězná", ikona: "🏆" },
+  vzdor: { label: "Vzdor", ikona: "🪨" },
+  vybaveni: { label: "Stížnost", ikona: "🚽" },
 };
+
+function druh(kind: string) {
+  return DRUH[kind] ?? { label: kind, ikona: "📣" };
+}
 
 interface ChoralAudio {
   id: string;
   kind: string;
   text: string;
+  duvod: string;
   sila: number;
+  silaWord: string;
   audio: { url: string; vybrana: string } | null;
 }
 
@@ -69,8 +75,6 @@ export function KotelPrehravac({ teamId, zapasovyDen }: {
     [choraly, vybranyId],
   );
 
-  // V zápasový den se spuštění zkusí samo, pokud to hráč někdy dřív zapnul.
-  // Odmítnutí není chyba, jen to znamená, že si prohlížeč vyžádá kliknutí.
   useEffect(() => {
     if (!vybrany?.audio || !zapasovyDen) return;
     let chce = false;
@@ -116,8 +120,10 @@ export function KotelPrehravac({ teamId, zapasovyDen }: {
     setVybranyId(id);
   };
 
+  const d = druh(vybrany.kind);
+
   return (
-    <div className="card p-3 sm:p-4 space-y-3">
+    <div className="card p-4 sm:p-5">
       {/* `key` na adrese: bez něj si prohlížeč po přepnutí nechá načtenou tu
           starou nahrávku a tlačítko vypadá jako mrtvé. */}
       <audio
@@ -129,44 +135,71 @@ export function KotelPrehravac({ teamId, zapasovyDen }: {
         onEnded={() => setHraje(false)}
       />
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <h3 className="font-heading font-bold text-sm uppercase tracking-wide text-muted">
+          Chorály kotle
+        </h3>
+        <span className="text-sm text-muted">
+          {zapasovyDen ? "dnes se hraje doma" : `nahráno ${choraly.length}`}
+        </span>
+      </div>
+
+      {/* Co se zrovna zpívá. Text je to hlavní, proto největší. */}
+      <div className="mt-3 rounded-soft bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span className="text-sm font-bold">{d.ikona} {d.label}</span>
+          <span className="text-sm text-muted">{vybrany.silaWord}</span>
+        </div>
+        <p className="font-heading font-bold text-base mt-1.5 leading-snug break-words">
+          {vybrany.text}
+        </p>
+        <p className="text-sm text-muted mt-1">{vybrany.duvod}</p>
+      </div>
+
+      {/* Ovládání pod obsahem, ne v něm: na mobilu se to vedle sebe mačkalo. */}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={prepni}
-          className={`px-3 py-2 rounded font-bold text-sm border ${
-            hraje ? "bg-pitch-500 text-white border-pitch-500" : "border-line hover:bg-parchment"
+          className={`px-4 py-2 rounded-soft font-heading font-bold text-sm border ${
+            hraje
+              ? "bg-pitch-500 text-white border-pitch-500"
+              : "bg-white border-gray-200 hover:bg-gray-50"
           }`}
         >
-          {hraje ? "⏸ Ztlumit kotel" : "▶ Pustit kotel"}
+          {hraje ? "⏸ Ztlumit" : "▶ Pustit kotel"}
         </button>
-        <div className="min-w-0">
-          <p className="text-sm font-bold">{vybrany.text}</p>
-          <p className="text-sm text-muted">
-            {blokovano
-              ? "Prohlížeč zvuk sám nepustí, musíš kliknout."
-              : zapasovyDen
-                ? "Dnes se hraje doma, tak ať je to slyšet."
-                : "Takhle to u vás zní, když se hraje."}
-          </p>
-        </div>
+        <span className="text-sm text-muted">
+          {blokovano
+            ? "Prohlížeč zvuk sám nepustí, musíš kliknout."
+            : hraje
+              ? "Hraje dokola, dokud to nevypneš."
+              : "Nahrávka běží dokola jako na tribuně."}
+        </span>
       </div>
 
       {choraly.length > 1 && (
-        <div className="flex gap-2 flex-wrap">
-          {choraly.map((ch) => (
-            <button
-              key={ch.id}
-              type="button"
-              onClick={() => prepniChoral(ch.id)}
-              className={`px-2.5 py-1.5 rounded text-sm border ${
-                ch.id === vybrany.id
-                  ? "bg-pitch-500 text-white border-pitch-500 font-bold"
-                  : "border-line hover:bg-parchment"
-              }`}
-            >
-              {DRUH_LABEL[ch.kind] ?? ch.kind}
-            </button>
-          ))}
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <div className="text-sm text-muted mb-1.5">Co pustit</div>
+          <div className="flex gap-2 flex-wrap">
+            {choraly.map((ch) => {
+              const dd = druh(ch.kind);
+              return (
+                <button
+                  key={ch.id}
+                  type="button"
+                  onClick={() => prepniChoral(ch.id)}
+                  className={`px-3 py-1.5 rounded-soft text-sm border ${
+                    ch.id === vybrany.id
+                      ? "bg-pitch-500 text-white border-pitch-500 font-bold"
+                      : "bg-white border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  {dd.ikona} {dd.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

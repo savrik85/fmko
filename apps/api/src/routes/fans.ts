@@ -952,7 +952,8 @@ fansRouter.get("/teams/:teamId/fans/chants", async (c) => {
   const choraly = await nactiChoraly(c.env.DB, teamId);
   return c.json({
     chants: choraly.map((ch) => ({
-      id: ch.id, kind: ch.kind, text: ch.text, sila: ch.sila, silaWord: ch.silaWord,
+      id: ch.id, kind: ch.kind, text: ch.text, duvod: ch.duvod,
+      sila: ch.sila, silaWord: ch.silaWord,
       audio: ch.audio_a
         ? { url: `${zakladApi(c)}/api/choraly/${ch.id}/audio`, vybrana: ch.audio_vybrana ?? "a" }
         : null,
