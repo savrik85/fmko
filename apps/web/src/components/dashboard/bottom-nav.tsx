@@ -88,7 +88,7 @@ export function BottomNav() {
 
   const items = [
     { href: "/dashboard", label: "Domů", icon: "🏟" },
-    { href: "/dashboard/phone", label: "Zprávy", icon: "📱", badge: unreadMessages },
+    { href: "/dashboard/phone", label: "Telefon", icon: "📱", badge: unreadMessages },
     { href: "/dashboard/match", label: "Sestava", icon: "📋" },
     { href: "/dashboard/liga", label: "Liga", icon: "🏆" },
     // Novinky se schovávají pod Více, takže se musí připočíst sem — jinak by

@@ -66,6 +66,33 @@ function IkonaTlacitko({ emoji, label, badge, onClick }: {
   );
 }
 
+/**
+ * Záložka na spodní liště telefonu.
+ *
+ * Musí být vidět popisek: „Tribuna" je zeď fanoušků, tedy vlastní část
+ * aplikace, a jako samotná ikonka stadionu ji nikdo nenašel.
+ */
+function ZalozkaTelefonu({ emoji, label, badge, aktivni, onClick }: {
+  emoji: string; label: string; badge?: boolean; aktivni?: boolean; onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={aktivni ? "page" : undefined}
+      className={`relative flex-1 py-2 flex flex-col items-center gap-0.5 text-sm ${
+        aktivni ? "bg-pitch-600 font-bold" : "hover:bg-pitch-600/60"
+      }`}
+    >
+      <span className="text-base leading-none">{emoji}</span>
+      <span>{label}</span>
+      {badge && (
+        <span className="absolute top-1.5 right-1/2 translate-x-4 w-2.5 h-2.5 rounded-full bg-card-red ring-2 ring-pitch-700" />
+      )}
+    </button>
+  );
+}
+
 /** Kredit jako drobný text, ne další barevná pilulka. */
 function KreditText({ credit }: { credit: Credit }) {
   const dochazi = credit.zbyva < credit.cenaSms;
@@ -124,26 +151,34 @@ export default function PhonePage() {
     <PhoneFrame>
       {/* Status bar */}
       <div className="bg-pitch-600 text-white px-4 py-2.5 flex items-center justify-between">
-        <span className="font-heading font-bold text-base">Zprávy</span>
+        <span className="font-heading font-bold text-base">Telefon</span>
         <div className="ml-auto flex items-center gap-2">
           {credit && <KreditText credit={credit} />}
-          <IkonaTlacitko
-            emoji="&#127967;"
-            label="Tribuna"
-            onClick={() => setTribunaOtevrena(true)}
-          />
-          <IkonaTlacitko
-            emoji="&#128276;"
-            label="Oznámení"
-            badge={neprectenaOznameni > 0}
-            onClick={() => setOznameniOtevrena(true)}
-          />
           <IkonaTlacitko
             emoji="&#9998;"
             label="Nová zpráva"
             onClick={() => setAdresarOtevren(true)}
           />
         </div>
+      </div>
+
+      {/* Záložky.
+          Tribuna i Oznámení dřív visely v hlavičce jako holé ikonky vedle sebe
+          a nešlo z nich poznat, co jsou zač. Tribuna je celá sociální síť
+          fanoušků, takže si popisek zaslouží. */}
+      <div className="bg-pitch-700 text-white flex">
+        <ZalozkaTelefonu emoji="&#128172;" label="Zprávy" aktivni />
+        <ZalozkaTelefonu
+          emoji="&#127967;"
+          label="Tribuna"
+          onClick={() => setTribunaOtevrena(true)}
+        />
+        <ZalozkaTelefonu
+          emoji="&#128276;"
+          label="Oznámení"
+          badge={neprectenaOznameni > 0}
+          onClick={() => setOznameniOtevrena(true)}
+        />
       </div>
 
       {/* Conversation list */}

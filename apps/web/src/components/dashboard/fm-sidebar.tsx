@@ -16,7 +16,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Domů", icon: "\u{1F3E0}", group: "main" },
-  { href: "/dashboard/phone", label: "Zprávy", icon: "\u{1F4F1}", group: "main" },
+  { href: "/dashboard/phone", label: "Telefon", icon: "\u{1F4F1}", group: "main" },
   { href: "/dashboard/news", label: "Zpravodaj", icon: "\u{1F4F0}", group: "main" },
   { href: "/dashboard/novinky", label: "Co je nového", icon: "✨", group: "main" },
   { href: "/dashboard/invite", label: "Pozvi kamar\u00E1da", icon: "\u2709\uFE0F", group: "main" },
