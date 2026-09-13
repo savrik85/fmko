@@ -1215,7 +1215,10 @@ gameRouter.get("/teams/:teamId/news/unread-count", async (c) => {
     `SELECT COUNT(*) AS n FROM news n
      JOIN teams t ON t.id = ?
      WHERE n.league_id = t.league_id
-       AND n.created_at > COALESCE(t.news_seen_at, '')`,
+       -- Bez značky se počítá od založení klubu, ne od nuly. Prázdný řetězec
+       -- je menší než každé datum, takže se dřív jako nepřečtená hlásila celá
+       -- historie ligy: na produkci 582 článků u jednoho klubu.
+       AND n.created_at > COALESCE(t.news_seen_at, t.created_at, '')`,
   ).bind(teamId).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: "game" }, "počet nepřečtených článků", e); return null; });
   return c.json({ unread: row?.n ?? 0 });
