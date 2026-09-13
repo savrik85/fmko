@@ -436,7 +436,7 @@ export async function processTeamDay(
 
         // Transparent v kotli, když si ho píšou fanoušci sami.
         const { prepoctiTransparent, formaKlubu } = await import("../fans/fan-banner");
-        const plachta = await prepoctiTransparent(env.DB, teamId, party, newGameDate);
+        const plachta = await prepoctiTransparent(env.DB, teamId, party, newGameDate, env);
         if (plachta) {
           const { prispevekKTransparentu } = await import("../fans/fan-feed");
           await prispevekKTransparentu(env.DB, teamId, plachta, newGameDate);

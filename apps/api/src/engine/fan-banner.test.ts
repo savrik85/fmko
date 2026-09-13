@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  vyberTransparent, prvniCoSeVejde, prijmeni, MAX_DELKA_TRANSPARENTU,
+  vyberTransparent, prvniCoSeVejde, prijmeni, pouzitelneJmeno, MAX_DELKA_TRANSPARENTU,
   type StavProTransparent,
 } from "./fan-banner";
 
@@ -145,5 +145,31 @@ describe("příjmení", () => {
     expect(prijmeni("Karel Klement")).toBe("Klement");
     expect(prijmeni("Jan van der Meer")).toBe("Meer");
     expect(prijmeni("Klement")).toBe("Klement");
+  });
+});
+
+describe("jméno, které se nedá vyvěsit", () => {
+  it("příjmení kratší než tři znaky se na plachtu nedostane", () => {
+    expect(pouzitelneJmeno("A A")).toBe(false);
+    expect(pouzitelneJmeno(null)).toBe(false);
+    expect(pouzitelneJmeno("Klement Testovič")).toBe(true);
+  });
+
+  it("místo patvaru se vyvěsí bezejmenná varianta", () => {
+    // Testovací účty mívají trenéra „A A" a „DÍKY, A" vypadá jako rozbitý text.
+    const kampan = vyberTransparent(stav({ kampanProtiTreneru: true, trener: "A A" }), 0.1);
+    expect(kampan.text).not.toContain(" A");
+    expect(kampan.tone).toBe("proti_treneru");
+
+    const diky = vyberTransparent(stav({ serie: 5, trener: "A A", naladaKotle: 80 }), 0.1);
+    expect(diky.text).not.toBe("DÍKY, A");
+
+    const hrac = vyberTransparent(stav({ kampanProtiHraci: "B B" }), 0.1);
+    expect(hrac.text).toBe("TAKHLE UŽ NE");
+  });
+
+  it("se skutečným jménem se jméno vyvěsí dál", () => {
+    const t = vyberTransparent(stav({ kampanProtiTreneru: true, trener: "Klement Testovič" }), 0.1);
+    expect(t.text).toContain("TESTOVIČ");
   });
 });

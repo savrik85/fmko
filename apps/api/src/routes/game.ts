@@ -2056,7 +2056,7 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
         .catch((e) => { logger.warn({ module: "game" }, "herní datum pro transparent", e); return null; })
       )?.game_date ?? new Date().toISOString().slice(0, 10);
       const party = await syncFanGroups(c.env.DB, teamId, { drift: false });
-      await prepoctiTransparent(c.env.DB, teamId, party, gd)
+      await prepoctiTransparent(c.env.DB, teamId, party, gd, c.env)
         .catch((e) => logger.warn({ module: "game" }, "přepočet transparentu", e));
     }
 

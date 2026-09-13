@@ -107,15 +107,27 @@ const PODPORA: readonly string[] = [
  * `roll` je 0–1 z deterministického RNG, aby se stejný stav nezměnil sám od
  * sebe, ale dvě party se stejnou náladou nenapsaly totéž.
  */
+/**
+ * Dá se to jméno vyvěsit?
+ *
+ * Testovací účty mívají trenéra „A A" a plachta „DÍKY, A" vypadá jako rozbitý
+ * text, ne jako vtip. Pod tři znaky se jméno na plachtu nedává a použije se
+ * bezejmenná varianta.
+ */
+export function pouzitelneJmeno(jmeno: string | null): boolean {
+  return !!jmeno && prijmeni(jmeno).length >= 3;
+}
+
 export function vyberTransparent(s: StavProTransparent, roll: number): Transparent {
   const vyber = <T,>(z: readonly T[]): T => z[Math.floor(roll * z.length) % z.length];
 
   // 1. Kampaň za odvolání trenéra. Nic silnějšího na transparentu není.
-  if (s.kampanProtiTreneru && s.trener) {
+  if (s.kampanProtiTreneru) {
     return {
       text: prvniCoSeVejde([
-        `${prijmeni(s.trener).toUpperCase()} KONČI`,
-        `${prijmeni(s.trener).toUpperCase()} VEN`,
+        ...(pouzitelneJmeno(s.trener)
+          ? [`${prijmeni(s.trener!).toUpperCase()} KONČI`, `${prijmeni(s.trener!).toUpperCase()} VEN`]
+          : []),
         "TRENÉRE, KONČI",
         "CHCEME ZMĚNU",
       ]),
@@ -128,8 +140,9 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
   if (s.kampanProtiHraci) {
     return {
       text: prvniCoSeVejde([
-        `${prijmeni(s.kampanProtiHraci).toUpperCase()} VEN`,
-        `${prijmeni(s.kampanProtiHraci).toUpperCase()}!`,
+        ...(pouzitelneJmeno(s.kampanProtiHraci)
+          ? [`${prijmeni(s.kampanProtiHraci!).toUpperCase()} VEN`, `${prijmeni(s.kampanProtiHraci!).toUpperCase()}!`]
+          : []),
         "TAKHLE UŽ NE",
       ]),
       duvod: `Fanoušci sbírají podpisy proti hráči ${s.kampanProtiHraci}.`,
@@ -168,11 +181,11 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
   }
 
   // 6. Když se daří, kotel velebí. Trenéra jmenovitě jen při sérii výher.
-  if (s.serie >= 3 && s.trener) {
+  if (s.serie >= 3 && pouzitelneJmeno(s.trener)) {
     return {
       text: prvniCoSeVejde([
-        `DÍKY, ${prijmeni(s.trener).toUpperCase()}`,
-        `${prijmeni(s.trener).toUpperCase()}, DÍKY`,
+        `DÍKY, ${prijmeni(s.trener!).toUpperCase()}`,
+        `${prijmeni(s.trener!).toUpperCase()}, DÍKY`,
         "DÍKY, TRENÉRE",
       ]),
       duvod: `Tým vyhrál ${s.serie} zápasy po sobě a kotel to dává najevo.`,
@@ -181,11 +194,11 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
   }
 
   // 7. Miláček kotle.
-  if (s.oblibenec && s.naladaKotle >= 55 && roll > 0.5) {
+  if (pouzitelneJmeno(s.oblibenec) && s.naladaKotle >= 55 && roll > 0.5) {
     return {
       text: prvniCoSeVejde([
-        `${prijmeni(s.oblibenec).toUpperCase()}, JSI NÁŠ`,
-        `${prijmeni(s.oblibenec).toUpperCase()} ❤`,
+        `${prijmeni(s.oblibenec!).toUpperCase()}, JSI NÁŠ`,
+        `${prijmeni(s.oblibenec!).toUpperCase()} ❤`,
         "JEDEME ZA VÁMI",
       ]),
       duvod: `${s.oblibenec} je miláček kotle.`,

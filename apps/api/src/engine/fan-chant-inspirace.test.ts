@@ -254,3 +254,26 @@ describe("názvy obcí jen v prvním pádě", () => {
     expect(zkontrolujChoral("Hej, Buk, hej!", { nazvyVPrvnimPade: ["Buk"] }).ok).toBe(true);
   });
 });
+
+describe("anglicky se v okresním přeboru nezpívá", () => {
+  it("anglické heslo se zahodí", () => {
+    // Skutečný výstup modelu, dostaly ho rovnou dva kluby.
+    const v = zkontrolujChoral("Duplex Břevnov sucks!");
+    expect(v.ok).toBe(false);
+    expect(v.ok === false && v.duvod).toContain("anglicky");
+    expect(zkontrolujChoral("BŘEVNOV FOREVER").ok).toBe(false);
+    expect(zkontrolujChoral("WE ARE THE BEST").ok).toBe(false);
+  });
+
+  it("zavedené výpůjčky českých kotlů projdou", () => {
+    // „ultras", „boys" a „hooligans" jsou v českých kotlích doma.
+    expect(zkontrolujChoral("BŘEVNOV BOYS, hej hej!").ok).toBe(true);
+    expect(zkontrolujChoral("ULTRAS BŘEVNOV").ok).toBe(true);
+  });
+
+  it("česká slova se stejným začátkem to nerozhodí", () => {
+    // „lovec" začíná na „love", „nikdy" nemá s „never" nic společného.
+    expect(zkontrolujChoral("Náš lovec gólů, hej!").ok).toBe(true);
+    expect(zkontrolujChoral("Nikdy se nevzdáme!").ok).toBe(true);
+  });
+});

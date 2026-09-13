@@ -761,7 +761,9 @@ export default function StadiumPage() {
                   {kotelSiPise ? (
                     <div className="bg-gray-50 rounded-soft p-3">
                       <div className="font-heading font-bold text-base uppercase text-ink break-words">
-                        {stadium.customization.ultrasText || "Zatím nic nevyvěsili."}
+                        {(stadium.facilities?.ultras_stand ?? 0) <= 0
+                          ? "Nemáte kotel, plachtu není kam pověsit."
+                          : stadium.customization.ultrasText || "Zatím nic nevyvěsili."}
                       </div>
                       {stadium.customization.ultrasTextDuvod && (
                         <div className="text-sm text-muted mt-1">{stadium.customization.ultrasTextDuvod}</div>

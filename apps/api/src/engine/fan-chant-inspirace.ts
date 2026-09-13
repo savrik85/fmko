@@ -70,6 +70,7 @@ export const STAVBA_CHORALU: readonly string[] = [
   "Oslovuj rozkazem („do toho“, „bojujte“) nebo v první osobě množné („my tu budem“).",
   "Smíš použít výplňové slabiky pro rytmus: hej hej, ale ale, na-na-na, ó ó ó.",
   "Žádná statistika, žádná čísla, žádné datum. Kotel nezpívá tabulku.",
+  "Piš ČESKY. Ani jedno anglické slovo, tohle je okresní přebor.",
   "Hovorová čeština. Klidně tvrdá, ale ne návod k násilí a ne rasismus.",
   "Mluvíš za celý kotel, tedy MY. Shoda v množném čísle: „jsme malí“, ne „jsme malý“.",
   "JMÉNA A NÁZVY NECHÁVEJ V PRVNÍM PÁDĚ. Piš „KOLMAN, ty jsi náš“, nikdy "
@@ -179,6 +180,8 @@ export function zkontrolujChoral(
      * název v prvním pádě a od modelu se čeká totéž.
      */
     nazvyVPrvnimPade?: string[];
+    /** Jiný strop délky. Plachta unese míň než chorál. */
+    maxDelka?: number;
   } = {},
 ): VysledekKontroly {
   if (!raw) return { ok: false, duvod: "model nic nevrátil" };
@@ -195,7 +198,7 @@ export function zkontrolujChoral(
     if (radky.length > 0 && KOMENTAR.test(r)) break;
     // Co by přeteklo, je buď další sloka, nebo přilepené vysvětlení. Chorál
     // musí být skandovatelný, takže se bere jen to, co se vejde.
-    if (radky.length > 0 && radky.join(" ").length + 1 + r.length > MAX_DELKA_CHORALU) break;
+    if (radky.length > 0 && radky.join(" ").length + 1 + r.length > (opts.maxDelka ?? MAX_DELKA_CHORALU)) break;
     radky.push(r);
     if (radky.length === 3) break;
   }
@@ -207,8 +210,9 @@ export function zkontrolujChoral(
     .replace(/\s{2,}/g, " ")
     .trim();
 
+  const strop = opts.maxDelka ?? MAX_DELKA_CHORALU;
   if (text.length < 6) return { ok: false, duvod: "moc krátké" };
-  if (text.length > MAX_DELKA_CHORALU) return { ok: false, duvod: `přes ${MAX_DELKA_CHORALU} znaků` };
+  if (text.length > strop) return { ok: false, duvod: `přes ${strop} znaků` };
   if (KOMENTAR.test(text)) return { ok: false, duvod: "model místo chorálu komentuje" };
   // Chorál se opakuje, takže vět bývá víc: „Kdo je náš? Dvory! Kdo je náš?
   // Dvory!" jsou čtyři a je to učebnicový kotel. Strop na dvou zahazoval
@@ -243,6 +247,12 @@ export function zkontrolujChoral(
     if (ohnuty) return { ok: false, duvod: `ohnutý název ${nazev} → ${ohnuty}` };
   }
 
+  // Anglicky se v okresním přeboru nezpívá ani nevyvěšuje. Model vrátil
+  // „Duplex Břevnov sucks!" a rovnou dvěma klubům. Zavedené výpůjčky, které
+  // české kotle opravdu používají (ultras, boys, hooligans), zůstávají.
+  const anglicky = text.match(ANGLICTINA);
+  if (anglicky) return { ok: false, duvod: `anglicky: ${anglicky[0]}` };
+
   // Chorál proti soupeři, který soupeři fandí. Model to udělal: na zadání
   // „proti SK Braník“ vrátil „Hej, SK Braník, do toho!“. Do kotle se to pustit
   // nesmí, je to obrácený význam.
@@ -252,6 +262,15 @@ export function zkontrolujChoral(
 
   return { ok: true, text };
 }
+
+/**
+ * Anglická slova, která do českého kotle nepatří.
+ *
+ * Schválně to není detekce jazyka: „ultras", „boys" nebo „hooligans" jsou
+ * v českých kotlích doma a zakázat je by bylo špatně. Tohle je seznam slov,
+ * po kterých model sahá, když mu dojde čeština.
+ */
+const ANGLICTINA = /(?<!\p{L})(sucks?|forever|always|never|we are|you are|go home|the best|love|hate|glory|pride|winner|loser|fight|fuck|shit|city|town|army|crew)(?!\p{L})/iu;
 
 /** Povzbuzení. V chorálu proti soupeři nemá co dělat. */
 const FANDENI = /(?<!\p{L})(do toho|jedem|jedeme|bojuj|bojujte|držíme|hodně štěstí|ať žije)(?!\p{L})/iu;

@@ -728,7 +728,7 @@ fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
     await prispevkyKeKampani(c.env.DB, k, "splnena", gameDate);
   }
 
-  const plachta = await prepoctiTransparent(c.env.DB, teamId, party, gameDate);
+  const plachta = await prepoctiTransparent(c.env.DB, teamId, party, gameDate, c.env);
   if (plachta) await prispevekKTransparentu(c.env.DB, teamId, plachta, gameDate);
 
   const { tikChoralu, zalozDomaciChoral } = await import("../fans/fan-chants");
