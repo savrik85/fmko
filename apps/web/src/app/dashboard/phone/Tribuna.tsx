@@ -1,7 +1,11 @@
 "use client";
 
 /**
- * Tribuna — sociální síť fanoušků v telefonu.
+ * Zeď fanoušků v telefonu, tedy sociální síť okresního fotbalu.
+ *
+ * Jmenovala se „Tribuna", což nikomu neřeklo, o co jde. Navenek se jmenuje
+ * „Co si o nás píšou", stejně jako widget na nástěnce; soubor i komponenta
+ * zůstávají, přejmenovat je by bylo jen míchání bez užitku.
  *
  * Nálada party byla dosud číslo na stránce fanoušků. „Kotel má náladu 34"
  * si nikdo nepředstaví; „zase to samý, doma s posledním a bez šance" ano.
@@ -103,7 +107,7 @@ export function Tribuna({ teamId, onZavrit }: { teamId: string; onZavrit: () => 
         <button onClick={onZavrit} aria-label="Zpět" className="w-7 h-7 rounded-full hover:bg-white/15 flex items-center justify-center text-lg leading-none">
           ‹
         </button>
-        <span className="font-heading font-bold text-base">Tribuna</span>
+        <span className="font-heading font-bold text-base">Co si o nás píšou</span>
         <span className="ml-auto text-xs text-white/70">co si o tobě píšou</span>
       </div>
 
