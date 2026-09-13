@@ -14,7 +14,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-09-13",
     emoji: "\u{1F525}",
-    title: "Fanoušci jsou lidi, ne číslo. Mají party, vůdce, chorály i plachtu",
+    title: "Party fanoušků, vlastní chorály a plachta, kterou si píšou sami",
     items: [
       "Tvoje základna se dělí na party a každá je jiná. Kotel, štamgasti od výčepu, rodiny s dětmi, pamětníci a parta přespolních, co jezdí autobusem. Každá má svého vůdce se jménem, obličejem a povahou, vlastní náladu a vlastní vztah k tobě. Najdeš je na stránce Fanoušci v záložce Skupiny.",
       "S vůdci se dá jednat. Sejít se s ním, dát jeho partě slevu na vstupné, přispět na tifo, zakázat vstup výtržníkovi nebo sektor dobrovolně zavřít. Každá akce má cenu a následek, schůzka u mladého radikála se může i obrátit proti tobě.",
@@ -36,7 +36,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-09-12",
     emoji: "\u{1F4F1}",
-    title: "Telefon jako opravdový telefon",
+    title: "Telefon má adresář, oznámení a kredit v korunách",
     items: [
       "Adresář vypadá a chová se jako v mobilu. Najdeš v něm jen ty, komu se dá doopravdy psát, takže tam nesvítí týmy, které stejně neodpovídají.",
       "Oznámení chodí na zamykací obrazovku. Vidíš je pohromadě, poznáš, co je nové, a odznak počítá i to, co přišlo mezitím.",
