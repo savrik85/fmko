@@ -46,10 +46,11 @@ const HELP: Record<string, HelpEntry> = {
     ],
   },
   "/dashboard/phone": {
-    title: "Telefon / Zprávy",
+    title: "Telefon",
     icon: "\u{1F4F1}",
     sections: [
-      { text: "Telefon simuluje komunikaci s hráči a vedením. Zprávy přicházejí automaticky během hry." },
+      { text: "Telefon je komunikace s hráči, vedením a okolím klubu. Nahoře přepínáš mezi Zprávami, Sockami a Oznámeními." },
+      { heading: "Socky", text: "Sociální síť fanoušků. Vůdci part, obyčejní fanoušci i novináři tam píšou o tom, co se kolem klubu děje, pod svým jménem a s vlastním obličejem. Je to nejrychlejší způsob, jak poznat náladu, aniž bys louskal čísla." },
       { heading: "Předzápasová konverzace", text: "Den před zápasem se objeví skupina s názvem soupeře. Hráči odpovídají, jestli dorazí, omluvení závisí na disciplíně, morálce, dojezdové vzdálenosti a životní situaci. Po odehrání zápasu konverzace zmizí." },
       { heading: "Systémové kontakty", text: "Vedení = finance a hřiště. Správce = zranění a údržba. Kapitán = konflikty v kabině. Místní kontakt = nabídky hráčů z okolí." },
       { text: "Nové zprávy od Místního kontaktu znamenají nabídku hráče, podívej se do Přestupů.", tip: true },
