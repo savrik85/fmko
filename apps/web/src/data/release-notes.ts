@@ -12,6 +12,40 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-09-13",
+    emoji: "\u{1F525}",
+    title: "Fanoušci jsou lidi, ne číslo. Mají party, vůdce, chorály i plachtu",
+    items: [
+      "Tvoje základna se dělí na party a každá je jiná. Kotel, štamgasti od výčepu, rodiny s dětmi, pamětníci a parta přespolních, co jezdí autobusem. Každá má svého vůdce se jménem, obličejem a povahou, vlastní náladu a vlastní vztah k tobě. Najdeš je na stránce Fanoušci v záložce Skupiny.",
+      "S vůdci se dá jednat. Sejít se s ním, dát jeho partě slevu na vstupné, přispět na tifo, zakázat vstup výtržníkovi nebo sektor dobrovolně zavřít. Každá akce má cenu a následek, schůzka u mladého radikála se může i obrátit proti tobě.",
+      "Kotel má tvrdé jádro a svoje rivaly. Když je rivalita vyhrocená a přijede kotel soupeře, může dojít na rvačku. Z té je pokuta, zavřený sektor na několik zápasů a rodiny s pamětníky odcházejí první. Opakovaný bordel navíc můžou soupeři hodit na disciplinárku.",
+      "Zavřený sektor opravdu ubere místa. Není to jen nápis, kapacita klesne, návštěvnost taky a ve 3D je ten kus tribuny prázdný.",
+      "Pořadatelská služba riziko sráží, ale kotel nemá rád, když ho někdo šacuje. Nad kotel se dá postavit klec z plexi a mříže, ta skoro zabrání vniknutí na hřiště a házení předmětů, zato kotel ztlumí. Obojí je volba, ne vylepšení zadarmo.",
+      "Kotel se dá přestěhovat do jiného sektoru a je to vidět. Za brankou zastrašuje hosty a sráží jim morálku, na hlavní tribuně je slyšet míň. Vlajky, plachta i bubnování se přesunou s ním.",
+      "Sektor hostů je nově vidět. U domácího zápasu poznáš, kolik jich přijelo, jakou mají barvu a jestli se chovali slušně.",
+      "Diváci umí rozbít vybavení stadionu. Zastřešení, sociálky nebo občerstvení po zápase nemusí fungovat a dokud to nezaplatíš a neopravíš, nefunguje to ani ve hře.",
+      "Fanoušci sbírají podpisy. Když se dlouho nedaří, rozjedou kampaň za odvolání trenéra nebo za konec konkrétního hráče. Vidíš, kolik podpisů mají a kolik jim chybí, a když to dotáhnou, dopadne to na morálku toho, koho se to týká.",
+      "Mají svoje miláčky a svoje otloukánky. U každé party je vidět, koho z kádru mají rádi a koho nemůžou vystát, i proč.",
+      "Reagují na to, co se kolem klubu děje. Na výsledky, přestupy, tvoje rozhovory, zdražení vstupného, taktiku, kolik dáváte gólů, stav stadionu i ceny v bufetu. Na telefonu k tomu přibyla Tribuna, tedy zeď, kde si o tom píšou mezi sebou.",
+      "Vůdci part chodí do hospody. Když tam narazíš na vůdce kotle, dá se s ním probrat poslední zápas i konkrétní hráč, pokud zrovna sedí u vedlejšího stolu. Moc hráčů v hospodě ale fanoušky naštve.",
+      "Kotel si vymýšlí vlastní chorály. Vznikají z toho, co se v klubu děje, mají sílu, která roste opakováním, a drží se, dokud platí jejich důvod. Pak se na ně zapomene. Každý klub má navíc domácí chorál o obci, ve které hraje, ten se zpívá pořád.",
+      "Chorály se dají i slyšet. Ty nejsilnější a domácí chorál dostanou nahrávku a na stránce Stadion si je pustíš. Nahrávka se nekupuje, vyzpívá se: kotel ji dostane, až se chorál chytne naplno.",
+      "Plachtu v kotli si píše kotel sám. Nápis odpovídá tomu, jak jim zrovna je, při podpisovce za tvoje odvolání tam bude tvoje jméno, při sérii výher poděkování, a u vyhrocené rivality něco, co bys sám nenapsal. Barvu plachty a písma si pořád nastavíš.",
+    ],
+  },
+  {
+    date: "2026-09-12",
+    emoji: "\u{1F4F1}",
+    title: "Telefon jako opravdový telefon",
+    items: [
+      "Adresář vypadá a chová se jako v mobilu. Najdeš v něm jen ty, komu se dá doopravdy psát, takže tam nesvítí týmy, které stejně neodpovídají.",
+      "Oznámení chodí na zamykací obrazovku. Vidíš je pohromadě, poznáš, co je nové, a odznak počítá i to, co přišlo mezitím.",
+      "Psát jde komukoli z kádru a taky do kabiny. Každá zpráva něco stojí a kredit je v korunách, ne v počtu odpovědí, takže víš, na čem jsi. Co je zdarma, pozná se jako iMessage, co se platí, jako SMS.",
+      "Do jednosměrných oznámení už nejde psát. Dřív to vypadalo, že komise nebo starosta odpoví, a oni neodpověděli nikdy.",
+      "Vyhodili jsme esemesky, které nic neznamenaly. Sponzorské nabídky, na které nešlo kývnout, tipy skauta na hráče, který za nic nestál, a sedmdesát zpráv „vyšel článek“ za sezónu.",
+    ],
+  },
+  {
     date: "2026-09-01",
     emoji: "📋",
     title: "Pokyny na lavičce, zápas se dá odřídit dopředu",
