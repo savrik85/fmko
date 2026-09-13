@@ -1602,9 +1602,8 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
 
     const id = crypto.randomUUID();
     await c.env.DB.prepare(
-      // `ultras_text_mode` se nastavuje výslovně: výchozí hodnota sloupce je
-      // 'vlastni' a kvůli ní se kotel k plachtě nikdy nedostal.
-      `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence, ultras_text_mode)
+      // Plachtu píše kotel. Sloupec už nikdo nečte, ale ať v datech nelže.
+            `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence, ultras_text_mode)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fanousci')`
     ).bind(id, teamId, config.capacity, config.pitchCondition, config.pitchType,
       config.changingRooms, config.showers, config.refreshments, config.lighting,
@@ -1676,7 +1675,6 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     scoreboardLevel: (stadium.scoreboard_level as number | null) ?? 0,
     flagSize: (stadium.flag_size as number | null) ?? 0,
     ultrasText: (stadium.ultras_text as string | null) ?? null,
-    ultrasTextMode: (stadium.ultras_text_mode as string | null) ?? "vlastni",
     // Proč na plachtě visí zrovna tohle. Prázdné, dokud si nápis píše manažer.
     ultrasTextDuvod: (stadium.ultras_text_duvod as string | null) ?? null,
     ultrasBannerColor: (stadium.ultras_banner_color as string | null) ?? null,
@@ -2019,51 +2017,16 @@ gameRouter.patch("/teams/:teamId/stadium/customize", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ field: string; value: string | null }>();
 
-  // Nápis v kotli — text (ne barva). Sanitizace + max délka.
-  if (body.field === "ultras_text") {
-    const { MAX_DELKA_TRANSPARENTU } = await import("../engine/fan-banner");
-    // Když si plachtu píše kotel, manažer do ní nemluví. Jinak by přepnutí
-    // režimu nic neznamenalo a fanoušci by se přepisovali jedním kliknutím.
-    const rezim = await c.env.DB.prepare("SELECT ultras_text_mode FROM stadiums WHERE team_id = ?")
-      .bind(teamId).first<{ ultras_text_mode: string }>()
-      .catch((e) => { logger.warn({ module: "game" }, "režim transparentu", e); return null; });
-    if (rezim?.ultras_text_mode === "fanousci") {
-      return c.json({ error: "Plachtu si teď píše kotel. Přepni režim, jestli do ní chceš mluvit." }, 400);
-    }
-    const clean = body.value === null
-      ? null
-      : String(body.value).replace(/[^\p{L}\p{N} .!?#'-]/gu, "").slice(0, MAX_DELKA_TRANSPARENTU).trim() || null;
-    await c.env.DB.prepare("UPDATE stadiums SET ultras_text = ? WHERE team_id = ?")
-      .bind(clean, teamId).run();
-    return c.json({ ok: true, value: clean });
-  }
-
-  // Kdo píše na plachtu: manažer, nebo kotel.
+  // Nápis v kotli si píše KOTEL. Manažer do něj nemluví a nemá to jak obejít.
   //
-  // Bez tohohle přepínače byl režim „fanoušci" jen sloupec v databázi: nápis
-  // se dal pořád přepsat ručně a hráč se o druhé možnosti nedozvěděl.
-  if (body.field === "ultras_text_mode") {
-    const rezim = body.value === "fanousci" ? "fanousci" : "vlastni";
-    await c.env.DB.prepare("UPDATE stadiums SET ultras_text_mode = ? WHERE team_id = ?")
-      .bind(rezim, teamId).run();
-
-    // Při přepnutí na kotel se plachta přepíše hned, ať hráč nečeká na tick.
-    if (rezim === "fanousci") {
-      const { syncFanGroups } = await import("../fans/fan-group-state");
-      const { prepoctiTransparent } = await import("../fans/fan-banner");
-      const gd = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
-        .bind(teamId).first<{ game_date: string | null }>()
-        .catch((e) => { logger.warn({ module: "game" }, "herní datum pro transparent", e); return null; })
-      )?.game_date ?? new Date().toISOString().slice(0, 10);
-      const party = await syncFanGroups(c.env.DB, teamId, { drift: false });
-      await prepoctiTransparent(c.env.DB, teamId, party, gd, c.env)
-        .catch((e) => logger.warn({ module: "game" }, "přepočet transparentu", e));
-    }
-
-    const po = await c.env.DB.prepare("SELECT ultras_text, ultras_text_duvod FROM stadiums WHERE team_id = ?")
-      .bind(teamId).first<{ ultras_text: string | null; ultras_text_duvod: string | null }>()
-      .catch((e) => { logger.warn({ module: "game" }, "načtení transparentu", e); return null; });
-    return c.json({ ok: true, value: rezim, ultrasText: po?.ultras_text ?? null, ultrasTextDuvod: po?.ultras_text_duvod ?? null });
+  // Přepínač „píšu si sám" tu byl a musel pryč: celý smysl plachty je v tom, že
+  // ji vyvěsili fanoušci podle toho, jak jim zrovna je. Když si na ni napíše
+  // manažer, co chce, je to jen další kolonka v nastavení stadionu.
+  //
+  // Endpoint zůstává a vrací chybu, protože starý frontend v mezipaměti
+  // prohlížeče by jinak tiše zapisoval do databáze.
+  if (body.field === "ultras_text" || body.field === "ultras_text_mode") {
+    return c.json({ error: "Plachtu si píše kotel. Nastavit jde jen barva plachty a písma." }, 400);
   }
 
   // Vzor sekání trávníku

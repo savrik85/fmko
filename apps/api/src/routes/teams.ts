@@ -500,9 +500,8 @@ teamsRouter.post("/", async (c) => {
         const villageSize = (village as any).size as string || "small";
         const config = generateStadium(rng, villageSize);
         await c.env.DB.prepare(
-          // `ultras_text_mode` se nastavuje výslovně: výchozí hodnota sloupce je
-          // 'vlastni' a kvůli ní se kotel k plachtě nikdy nedostal.
-          `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence, ultras_text_mode)
+          // Plachtu píše kotel. Sloupec už nikdo nečte, ale ať v datech nelže.
+                    `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence, ultras_text_mode)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fanousci')`
         ).bind(uuid(), teamId, config.capacity, config.pitchCondition, config.pitchType,
           config.changingRooms, config.showers, config.refreshments, config.lighting,

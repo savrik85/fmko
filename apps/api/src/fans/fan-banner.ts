@@ -23,7 +23,7 @@ import type { FanGroupKind } from "../engine/fan-groups";
 const M = "fan-banner";
 
 /**
- * Přepočte nápis v kotli. Nedělá nic, když si ho manažer píše sám.
+ * Přepočte nápis v kotli.
  *
  * Vrací nový text, když se změnil, jinak `null` — volající z toho udělá
  * příspěvek na Tribunu. Tichá výměna plachty by hráči utekla.
@@ -40,11 +40,11 @@ export async function prepoctiTransparent(
   env?: Pick<Bindings, "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL">,
 ): Promise<{ text: string; duvod: string } | null> {
   const stadion = await db
-    .prepare("SELECT ultras_text, ultras_text_mode, ultras_stand FROM stadiums WHERE team_id = ?")
+    .prepare("SELECT ultras_text, ultras_stand FROM stadiums WHERE team_id = ?")
     .bind(teamId)
-    .first<{ ultras_text: string | null; ultras_text_mode: string; ultras_stand: number }>()
+    .first<{ ultras_text: string | null; ultras_stand: number }>()
     .catch((e) => { logger.warn({ module: M }, `stadion ${teamId}`, e); return null; });
-  if (!stadion || stadion.ultras_text_mode !== "fanousci") return null;
+  if (!stadion) return null;
   // Bez kotle není kam plachtu pověsit. Ve 3D se sektor při úrovni 0 vůbec
   // nekreslí, takže by se počítal nápis, který nikdo nikdy neuvidí.
   if ((stadion.ultras_stand ?? 0) <= 0) return null;

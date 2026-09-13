@@ -75,7 +75,6 @@ interface Customization {
   flagSize: number;
   ultrasText: string | null;
   /** Kdo plachtu píše: "vlastni" manažer, "fanousci" kotel. */
-  ultrasTextMode?: string | null;
   /** Proč na plachtě visí zrovna tohle. Jen v režimu „fanousci". */
   ultrasTextDuvod?: string | null;
   ultrasBannerColor: string | null;
@@ -390,7 +389,6 @@ export default function StadiumPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const [openPicker, setOpenPicker] = useState<keyof Customization | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [ultrasDraft, setUltrasDraft] = useState<string | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -445,7 +443,7 @@ export default function StadiumPage() {
    * rovnou název sloupce, který v `Customization` nemá protějšek (režim
    * plachty). Převod velkých písmen na podtržítka nechá snake_case být.
    */
-  const handleCustomize = async (field: keyof Customization | "ultras_text_mode", value: string | null) => {
+  const handleCustomize = async (field: keyof Customization, value: string | null) => {
     if (!teamId) return;
     const dbField = field.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
     await apiFetch(`/api/teams/${teamId}/stadium/customize`, {
@@ -730,77 +728,27 @@ export default function StadiumPage() {
               );
             })()}
 
-            {/* Nápis v kotli — jen když je postavený sektor kotle */}
-            {(stadium.facilities.ultras_stand ?? 0) > 0 && (() => {
-              const kotelSiPise = stadium.customization.ultrasTextMode === "fanousci";
-              return (
-                <div className="pt-2 border-t border-gray-50">
-                  <Podnadpis>Nápis v kotli</Podnadpis>
-
-                  {/* Kdo plachtu drží. Bez téhle volby byl režim „fanoušci"
-                      jen sloupec v databázi, ke kterému se hráč nedostal. */}
-                  <div className="flex gap-2 mb-2">
-                    {[
-                      { key: "vlastni", label: "Píšu si sám" },
-                      { key: "fanousci", label: "Nechám to na kotli" },
-                    ].map((r) => (
-                      <button
-                        key={r.key}
-                        onClick={() => handleCustomize("ultras_text_mode", r.key)}
-                        className={`flex-1 py-1.5 rounded-soft text-sm font-heading ${
-                          (stadium.customization.ultrasTextMode ?? "vlastni") === r.key
-                            ? "bg-pitch-500 text-white font-bold"
-                            : "bg-gray-100 text-ink-light hover:bg-gray-200"
-                        }`}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
+            {/* Nápis v kotli. Plachtu drží kotel, manažer do ní nemluví:
+                celý smysl je v tom, že to napsali oni podle toho, jak jim je.
+                Volba „píšu si sám" tu byla a musela pryč. */}
+            {(stadium.facilities.ultras_stand ?? 0) > 0 && (
+              <div className="pt-2 border-t border-gray-50">
+                <Podnadpis>Nápis v kotli</Podnadpis>
+                <div className="bg-gray-50 rounded-soft p-3">
+                  <div className="font-heading font-bold text-base uppercase text-ink break-words">
+                    {stadium.customization.ultrasText || "Zatím nic nevyvěsili."}
                   </div>
-
-                  {kotelSiPise ? (
-                    <div className="bg-gray-50 rounded-soft p-3">
-                      <div className="font-heading font-bold text-base uppercase text-ink break-words">
-                        {(stadium.facilities?.ultras_stand ?? 0) <= 0
-                          ? "Nemáte kotel, plachtu není kam pověsit."
-                          : stadium.customization.ultrasText || "Zatím nic nevyvěsili."}
-                      </div>
-                      {stadium.customization.ultrasTextDuvod && (
-                        <div className="text-sm text-muted mt-1">{stadium.customization.ultrasTextDuvod}</div>
-                      )}
-                      <div className="text-sm text-muted mt-2">
-                        Plachtu drží kotel. Mění ji podle toho, jak mu je: při podpisovce za tvoje
-                        odvolání tam bude tvoje jméno, při sérii výher poděkování.
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          maxLength={40}
-                          value={ultrasDraft ?? stadium.customization.ultrasText ?? ""}
-                          onChange={(e) => setUltrasDraft(e.target.value)}
-                          placeholder="např. PRALES BOHDALEC"
-                          className="flex-1 min-w-0 border border-gray-200 rounded-soft px-3 py-1.5 text-sm font-heading uppercase"
-                        />
-                        <button
-                          onClick={async () => {
-                            const v = (ultrasDraft ?? stadium.customization.ultrasText ?? "").trim();
-                            await handleCustomize("ultrasText", v || null);
-                            setUltrasDraft(null);
-                          }}
-                          className="btn btn-primary btn-sm shrink-0"
-                        >
-                          Uložit
-                        </button>
-                      </div>
-                      <div className="text-sm text-muted mt-1">Zobrazí se na plachtě v sektoru kotle (max 40 znaků). Barvu plachty a nápisu nastavíš výše u „Kotel plachta" / „Kotel nápis".</div>
-                    </>
+                  {stadium.customization.ultrasTextDuvod && (
+                    <div className="text-sm text-muted mt-1">{stadium.customization.ultrasTextDuvod}</div>
                   )}
+                  <div className="text-sm text-muted mt-2">
+                    Plachtu si píše kotel sám. Mění ji podle toho, jak mu je: při podpisovce za
+                    tvoje odvolání tam bude tvoje jméno, při sérii výher poděkování. Barvu plachty
+                    a písma nastavíš výše u „Kotel plachta" a „Kotel nápis".
+                  </div>
                 </div>
-              );
-            })()}
+              </div>
+            )}
 
             {/* 🌿 Vzor sekání trávníku */}
             <div className="pt-2 border-t border-gray-50">
