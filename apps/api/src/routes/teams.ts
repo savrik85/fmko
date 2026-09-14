@@ -163,8 +163,16 @@ teamsRouter.post("/", async (c) => {
   }
 
   // Prevent duplicate team creation — jeden uživatel = jeden tým
+  //
+  // U21 se nepočítá. Rezerva není tým, ke kterému se někdo přihlásil, je to
+  // přívěsek áčka. Když se áčko převezme a rezervě zůstane starý vlastník,
+  // původnímu trenérovi to tvrdilo, že „vede U21", a nepustilo ho k novému
+  // klubu. Přesně to potkalo účet, který áčko dávno nemá.
   const existingTeam = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE user_id = ? AND user_id <> 'ai' LIMIT 1"
+    `SELECT id FROM teams
+      WHERE user_id = ? AND user_id <> 'ai'
+        AND COALESCE(team_type, 'senior') <> 'u21'
+      LIMIT 1`
   ).bind(userId).first<{ id: string }>();
   logger.info({ module: "teams" }, `duplicate check: userId=${userId}, existingTeam=${existingTeam?.id ?? "NONE"}`);
   if (existingTeam) {
@@ -459,6 +467,14 @@ teamsRouter.post("/", async (c) => {
           village.size === "small_city" || village.size === "city" ? 80000 : village.size === "town" || village.size === "village" ? 40000 : 20000,
           body.stadiumName ?? null, oldId).run();
       teamId = oldId;
+
+      // Rezerva jde s áčkem. Bez tohohle zůstane U21 na původním vlastníkovi,
+      // ten pak nemůže založit nový klub (systém mu tvrdí, že vede U21)
+      // a nový majitel áčka svoji rezervu naopak neřídí.
+      await c.env.DB.prepare(
+        "UPDATE teams SET user_id = ? WHERE parent_team_id = ? AND COALESCE(team_type,'senior') = 'u21'",
+      ).bind(userId, oldId).run()
+        .catch((e) => logger.warn({ module: "teams" }, "převod U21 při převzetí klubu", e));
 
       // Sync jméno + barvu do aktivního poháru — převzatý AI tým je v cup_teams pod starým
       // AI jménem/barvou; bez tohoto by hráč svůj tým v pavouku nepoznal (viděl staré jméno).
