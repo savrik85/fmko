@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { apiFetch, type Team } from "@/lib/api";
 import { Spinner } from "@/components/ui";
+import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 
 const Stadium3D = dynamic(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
@@ -191,6 +192,11 @@ export default function VisitStadiumPage() {
           </div>
         </div>
       </div>
+
+      {/* Chorály cizího kotle. Endpoint `/fans/chants` pouští GET komukoli,
+          takže si je poslechne i soupeř. O to jde: rivalita se pozná líp
+          z toho, co na tebe zpívají, než z tabulky. */}
+      <KotelPrehravac teamId={teamId} zapasovyDen={!!stadium.matchDay} cizi />
     </div>
   );
 }

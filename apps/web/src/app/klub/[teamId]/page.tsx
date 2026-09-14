@@ -29,6 +29,7 @@ interface ClubData {
   badge: { pattern: BadgePattern | null; primary: string; secondary: string; customPrimary: string | null; customSecondary: string | null; customInitials: string | null; symbol: string | null };
   scarfPattern: ScarfPattern | null;
   anthem: { url: string | null; lyrics: string | null; title: string | null; style: string | null };
+  chants?: Array<{ id: string; kind: string; text: string; duvod: string; sila: number; url: string }>;
   mascot: { name: string | null; imageUrl: string | null; story: string | null };
 }
 interface StandingsData { leagueName: string; standings: Array<{ teamId: string | null; pos: number }> }
@@ -40,6 +41,18 @@ async function fetchSafe<T>(path: string): Promise<T | null> {
     return r.json();
   } catch (e) { console.error("fetchSafe", path, e); return null; }
 }
+
+/** Popisky druhů chorálů. Musí sedět s `ChantKind` v API. */
+const CHANT_LABEL: Record<string, string> = {
+  domov: "Domácí chorál",
+  oblibenec: "Miláček kotle",
+  rival: "Proti soupeři",
+  trener_pro: "Za trenéra",
+  trener_proti: "Proti trenérovi",
+  vyhra: "Vítězná",
+  vzdor: "Vzdor",
+  vybaveni: "Stížnost na stadion",
+};
 
 function isLight(hex: string): boolean {
   const c = hex.replace("#", "");
@@ -379,6 +392,37 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
                   <pre className="whitespace-pre-wrap text-base text-white/80 font-heading leading-relaxed bg-black/30 rounded-2xl p-6 mt-4 max-h-[500px] overflow-auto">{club.anthem.lyrics}</pre>
                 </details>
               )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══ CHORÁLY ═══ */}
+      {/* Bez přihlášení, stejně jako hymna. Poslechnout si, jak zní cizí
+          kotel, je půlka zábavy, a rivalita se tím dá cítit líp než z tabulky. */}
+      {(club.chants?.length ?? 0) > 0 && (
+        <section className="py-16 sm:py-24">
+          <div className="max-w-[1000px] mx-auto px-5 sm:px-10">
+            <div className="text-center mb-8">
+              <div className="text-micro font-heading font-bold uppercase tracking-[0.3em] text-white/40 mb-3">Co se u nich zpívá</div>
+              <h2 className="font-heading font-[900] text-3xl sm:text-5xl">Chorály kotle</h2>
+            </div>
+            <div className="space-y-4">
+              {club.chants!.map((ch) => (
+                <div
+                  key={ch.id}
+                  className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent backdrop-blur p-5 sm:p-8"
+                >
+                  <div className="text-micro font-heading font-bold uppercase tracking-[0.2em] text-white/40 mb-2">
+                    {CHANT_LABEL[ch.kind] ?? ch.kind}
+                  </div>
+                  <p className="font-heading font-[900] text-xl sm:text-2xl leading-snug">{ch.text}</p>
+                  <p className="text-base text-white/60 mt-1">{ch.duvod}</p>
+                  <audio controls preload="none" src={ch.url} className="w-full mt-4">
+                    Váš prohlížeč nepodporuje audio.
+                  </audio>
+                </div>
+              ))}
             </div>
           </div>
         </section>

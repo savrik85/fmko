@@ -44,9 +44,11 @@ interface ChoralAudio {
   audio: { url: string; vybrana: string } | null;
 }
 
-export function KotelPrehravac({ teamId, zapasovyDen }: {
+export function KotelPrehravac({ teamId, zapasovyDen, cizi }: {
   teamId: string;
   zapasovyDen: boolean;
+  /** Náhled cizího stadionu: popisky mluví o nich, ne o nás. */
+  cizi?: boolean;
 }) {
   const [choraly, setChoraly] = useState<ChoralAudio[]>([]);
   const [vybranyId, setVybranyId] = useState<string | null>(null);
@@ -137,7 +139,7 @@ export function KotelPrehravac({ teamId, zapasovyDen }: {
 
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <h3 className="font-heading font-bold text-sm uppercase tracking-wide text-muted">
-          Chorály kotle
+          {cizi ? "Co se u nich zpívá" : "Chorály kotle"}
         </h3>
         <span className="text-sm text-muted">
           {zapasovyDen ? "dnes se hraje doma" : `nahráno ${choraly.length}`}

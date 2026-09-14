@@ -1524,6 +1524,28 @@ teamsRouter.get("/:id/club", async (c) => {
       attemptsMax: ANTHEM_MAX_ATTEMPTS,
       generating: !!(await c.env.DB.prepare("SELECT id FROM team_anthems WHERE team_id = ? AND url IS NULL AND suno_task_id IS NOT NULL LIMIT 1").bind(teamId).first()),
     },
+    // Nahrané chorály. Bez přihlášení, stejně jako hymna: profil klubu je
+    // veřejný a poslechnout si, jak zní cizí kotel, je půlka zábavy.
+    // Posílají se jen ty s nahrávkou, zbytek by byl na cizím profilu šum.
+    chants: await (async () => {
+      const zaklad = c.env.API_BASE_URL || new URL(c.req.url).origin;
+      const rows = await c.env.DB.prepare(
+        `SELECT id, kind, text, duvod, sila, audio_vybrana
+           FROM fan_chants
+          WHERE team_id = ? AND status = 'zpiva' AND audio_a IS NOT NULL
+          ORDER BY (kind = 'domov') DESC, sila DESC`,
+      ).bind(teamId).all<{
+        id: string; kind: string; text: string; duvod: string;
+        sila: number; audio_vybrana: string | null;
+      }>().catch((e) => {
+        logger.warn({ module: "teams" }, `chorály klubu ${teamId}`, e);
+        return { results: [] as never[] };
+      });
+      return (rows.results ?? []).map((r) => ({
+        id: r.id, kind: r.kind, text: r.text, duvod: r.duvod, sila: r.sila,
+        url: `${zaklad}/api/choraly/${r.id}/audio?v=${r.audio_vybrana ?? "a"}`,
+      }));
+    })(),
     mascot: await (async () => {
       const m = await c.env.DB.prepare(
         "SELECT name, image_url, story FROM team_mascots WHERE team_id = ? AND is_selected = 1 LIMIT 1"
