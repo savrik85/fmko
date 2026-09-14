@@ -136,6 +136,10 @@ export default function AdminPage() {
         </div>
       </Rozbalovaci>
 
+      <Rozbalovaci nazev="Trh hráčů" ikona="📊" popis="Kolik lidí vytvořila hra a kolik jich pustili manažeři">
+        <TrhSection />
+      </Rozbalovaci>
+
       <Rozbalovaci nazev="Sezóna" ikona="🏁" popis="Zakončení ročníku">
         <SeasonEndSection />
       </Rozbalovaci>
@@ -1045,6 +1049,177 @@ function ProvozSection() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+
+interface TrhDen {
+  den: string;
+  district: string | null;
+  vytvorila_hra: number;
+  od_manazeru: number;
+  od_ai: number;
+}
+
+interface TrhData {
+  dnu: number;
+  souhrn: { vytvorila_hra: number; od_manazeru: number; od_ai: number };
+  podleDnu: TrhDen[];
+  prestupovka: Array<{ den: string; od_manazeru: number; od_ai: number }>;
+}
+
+/**
+ * Odkud se berou hráči na trhu.
+ *
+ * Vzniklo z otázky „negeneruje se jich moc". Z databáze to dřív nešlo zjistit:
+ * řádek ve `free_agents` po podpisu zmizí, takže počítání ze zbytku v poolu
+ * dávalo v okrese s hodně manažery nulu, i když se generovalo každý den.
+ *
+ * Klíčové je to oddělení. Nové tělo, které vytvořila hra, a hráč, kterého jen
+ * pustil klub, jsou dvě různé věci a smíchané dohromady vypadá každý trh
+ * přetečený.
+ */
+function TrhSection() {
+  const [dnu, setDnu] = useState(14);
+  const [data, setData] = useState<TrhData | null>(null);
+  const [nacita, setNacita] = useState(false);
+
+  const nacti = (d: number) => {
+    setNacita(true);
+    apiFetch<TrhData>(`/api/admin/market-stats?days=${d}`)
+      .then(setData)
+      .catch((e) => console.error("přehled trhu:", e))
+      .finally(() => setNacita(false));
+  };
+
+  useEffect(() => { nacti(dnu); }, [dnu]);
+
+  // Součty po okresech, ať je vidět, kde se to liší.
+  const okresy = new Map<string, { hra: number; manazeri: number; ai: number }>();
+  for (const r of data?.podleDnu ?? []) {
+    const k = r.district ?? "(bez okresu)";
+    const o = okresy.get(k) ?? { hra: 0, manazeri: 0, ai: 0 };
+    o.hra += r.vytvorila_hra; o.manazeri += r.od_manazeru; o.ai += r.od_ai;
+    okresy.set(k, o);
+  }
+
+  return (
+    <div className="card p-4">
+      <SectionLabel>📊 Odkud se berou hráči na trhu</SectionLabel>
+      <div className="text-sm text-muted mb-3">
+        Nové tělo, které vytvořila hra, se počítá zvlášť od hráče, kterého jen pustil klub.
+        Záznam začal běžet od nasazení, starší dny v něm nejsou.
+      </div>
+
+      <div className="flex gap-2 mb-3">
+        {[7, 14, 30].map((d) => (
+          <button
+            key={d}
+            onClick={() => setDnu(d)}
+            className={`px-3 py-1.5 rounded-soft text-sm font-heading ${
+              dnu === d ? "bg-pitch-500 text-white font-bold" : "bg-gray-100 hover:bg-gray-200"
+            }`}
+          >
+            {d} dní
+          </button>
+        ))}
+      </div>
+
+      {nacita && <div className="text-sm text-muted">Načítám…</div>}
+
+      {data && !nacita && (
+        <>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <Cislo popisek="vytvořila hra" hodnota={data.souhrn.vytvorila_hra} zvyraznit />
+            <Cislo popisek="pustili manažeři" hodnota={data.souhrn.od_manazeru} />
+            <Cislo popisek="pustila AI" hodnota={data.souhrn.od_ai} />
+          </div>
+
+          {okresy.size > 0 && (
+            <div className="overflow-x-auto mb-4">
+              <table className="w-full text-sm">
+                <thead><tr className="text-muted text-left">
+                  <th className="py-1">okres</th><th className="py-1 text-right">hra</th>
+                  <th className="py-1 text-right">manažeři</th><th className="py-1 text-right">AI</th>
+                </tr></thead>
+                <tbody>
+                  {[...okresy.entries()].map(([okres, o]) => (
+                    <tr key={okres} className="border-t border-gray-100">
+                      <td className="py-1.5">{okres}</td>
+                      <td className="py-1.5 text-right font-bold">{o.hra}</td>
+                      <td className="py-1.5 text-right">{o.manazeri}</td>
+                      <td className="py-1.5 text-right">{o.ai}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.podleDnu.length === 0 && (
+            <div className="text-sm text-muted">
+              Zatím nic. Záznam se plní od nasazení, první čísla přijdou po nejbližším denním ticku.
+            </div>
+          )}
+
+          {data.podleDnu.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-muted text-left">
+                  <th className="py-1">den</th><th className="py-1">okres</th>
+                  <th className="py-1 text-right">hra</th><th className="py-1 text-right">manažeři</th>
+                  <th className="py-1 text-right">AI</th>
+                </tr></thead>
+                <tbody>
+                  {data.podleDnu.map((r, i) => (
+                    <tr key={i} className="border-t border-gray-100">
+                      <td className="py-1.5 whitespace-nowrap">{r.den}</td>
+                      <td className="py-1.5">{r.district ?? "—"}</td>
+                      <td className="py-1.5 text-right font-bold">{r.vytvorila_hra}</td>
+                      <td className="py-1.5 text-right">{r.od_manazeru}</td>
+                      <td className="py-1.5 text-right">{r.od_ai}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.prestupovka.length > 0 && (
+            <div className="mt-4">
+              <div className="text-sm font-bold mb-1">Přestupovka (inzeráty)</div>
+              <div className="text-sm text-muted mb-2">
+                Vypsané hráče na přestupovku nikdo netvoří, jsou to lidé, co už v klubech jsou.
+              </div>
+              <table className="w-full text-sm">
+                <thead><tr className="text-muted text-left">
+                  <th className="py-1">den</th><th className="py-1 text-right">od manažerů</th>
+                  <th className="py-1 text-right">od AI</th>
+                </tr></thead>
+                <tbody>
+                  {data.prestupovka.map((r, i) => (
+                    <tr key={i} className="border-t border-gray-100">
+                      <td className="py-1.5 whitespace-nowrap">{r.den}</td>
+                      <td className="py-1.5 text-right">{r.od_manazeru}</td>
+                      <td className="py-1.5 text-right">{r.od_ai}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Cislo({ popisek, hodnota, zvyraznit }: { popisek: string; hodnota: number; zvyraznit?: boolean }) {
+  return (
+    <div className={`rounded-soft p-3 text-center ${zvyraznit ? "bg-pitch-50 border border-pitch-500" : "bg-gray-50"}`}>
+      <div className="font-heading font-bold text-xl">{hodnota}</div>
+      <div className="text-sm text-muted">{popisek}</div>
     </div>
   );
 }

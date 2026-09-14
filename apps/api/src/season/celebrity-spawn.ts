@@ -146,6 +146,10 @@ export async function spawnCelebrity(
     JSON.stringify(celeb.skillsMax ?? {}),
   ).run();
 
+  // Celebrita je nové tělo, které hra vytvořila, ne recyklovaný propuštěnec.
+  const { zapisNaTrh } = await import("../transfers/market-log");
+  await zapisNaTrh(db, { district: leagueInfo.district, origin: "celebrity" });
+
   // ── News article: celebrity arrival ──
   const tierDesc = celebType === "legend"
     ? TIER_CONFIG[tier!].tierLabel

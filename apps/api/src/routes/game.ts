@@ -9797,6 +9797,45 @@ gameRouter.get("/admin/queue/runs", async (c) => {
 // GET /api/admin/health — jeden pohled na to, jestli je zpracování zdravé.
 // Vznikl pro sledování testingu před nasazením front na produkci: bez něj by se
 // muselo lovit v pěti tabulkách. Každý signál má vlastní verdikt, ať je vidět CO je špatně.
+/**
+ * Odkud se berou hráči na trhu.
+ *
+ * Odpověď na otázku „negeneruje se jich moc", kterou z databáze nešlo dostat:
+ * řádek ve `free_agents` po podpisu zmizí, takže počítat to ze zbytku v poolu
+ * dává v okrese s hodně manažery nulu, i když se generovalo každý den.
+ *
+ * Odděluje se to, co vytvořila hra, od toho, co jen pustil klub. Míchat to
+ * dohromady je přesně ta chyba, kvůli které trh vypadal přetečený.
+ */
+gameRouter.get("/admin/market-stats", async (c) => {
+  const dnu = Math.max(1, Math.min(90, Number(c.req.query("days") ?? 14)));
+  const { prehledTrhu } = await import("../transfers/market-log");
+  const radky = await prehledTrhu(c.env.DB, dnu);
+
+  const souhrn = radky.reduce(
+    (acc, r) => ({
+      vytvorila_hra: acc.vytvorila_hra + r.vytvorila_hra,
+      od_manazeru: acc.od_manazeru + r.od_manazeru,
+      od_ai: acc.od_ai + r.od_ai,
+    }),
+    { vytvorila_hra: 0, od_manazeru: 0, od_ai: 0 },
+  );
+
+  // Přestupovka historii nese sama, `transfer_listings` se nemaže.
+  const inzeraty = await c.env.DB.prepare(
+    `SELECT date(tl.created_at) AS den,
+            SUM(CASE WHEN COALESCE(t.user_id,'ai') <> 'ai' THEN 1 ELSE 0 END) AS od_manazeru,
+            SUM(CASE WHEN COALESCE(t.user_id,'ai') = 'ai' THEN 1 ELSE 0 END) AS od_ai
+       FROM transfer_listings tl
+       LEFT JOIN teams t ON t.id = tl.team_id
+      WHERE tl.created_at >= date('now', ?)
+      GROUP BY date(tl.created_at) ORDER BY den DESC`,
+  ).bind(`-${dnu} day`).all<{ den: string; od_manazeru: number; od_ai: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "přehled přestupovky", e); return { results: [] as never[] }; });
+
+  return c.json({ ok: true, dnu, souhrn, podleDnu: radky, prestupovka: inzeraty.results ?? [] });
+});
+
 gameRouter.get("/admin/health", async (c) => {
   const { readMatchTickMode } = await import("../queue/messages");
   const { readAiProvider } = await import("../lib/ai-provider");

@@ -11,6 +11,7 @@ import { generateHeightWeight } from "../generators/physicals";
 import { getDistrictDataFromDB } from "../data/districts";
 import { generatePlayerFace } from "../routes/teams";
 import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
+import { zapisNaTrh } from "./market-log";
 
 
 const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
@@ -115,6 +116,9 @@ export async function generateFreeAgentsForDistrict(
     ).run();
 
     generated++;
+    // Bez tohohle zápisu se zpětně nedá zjistit, kolik lidí hra vytvořila:
+    // řádek ve `free_agents` po podpisu nebo vypršení zmizí.
+    await zapisNaTrh(db, { district, origin: "generated", gameDate: gameDate.toISOString() });
     logger.info({ module: "free-agent-pool" }, `inserted ${player.firstName} ${player.lastName} (${pos}, ${overallRating}) in ${district}`);
   }
 

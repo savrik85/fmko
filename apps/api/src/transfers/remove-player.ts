@@ -14,6 +14,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { zapisNaTrh } from "./market-log";
 
 export type LeaveType = "released" | "retired" | "quit" | "transfer";
 
@@ -138,6 +139,12 @@ export async function removePlayer(
         (row.skills_max as string) ?? "{}",
       ),
     );
+  }
+
+  // Propuštěný hráč není nové tělo, jen se vrátil na trh. V přehledu se to
+  // nesmí míchat s tím, co vytvořila hra, jinak vyjde, že se generuje moc.
+  if (opts.toFreeAgent) {
+    await zapisNaTrh(db, { district: row.district as string | null, origin: "released", teamId });
   }
 
   batch.push(
