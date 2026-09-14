@@ -43,20 +43,36 @@ async function scalar(db: D1Database, sql: string, popis: string): Promise<numbe
 export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   const problemy: WatchdogProblem[] = [];
 
-  // ── 1. TICHO: kdy naposledy proběhlo kolo? ──
+  // ── 1. TICHO: leží někde kolo, které se mělo dávno odehrát? ──
   // Nejdůležitější kontrola. Cloudflare tenhle stav nikdy nenahlásí, protože
-  // se nic nepokazilo — prostě se nic nestalo.
-  const hodinOdKola = await scalar(
+  // se nic nepokazilo, prostě se nic nestalo.
+  //
+  // Dřív se tu měřil čas od posledního odehraného kola a cokoli přes 26 hodin
+  // se hlásilo jako porucha. To bylo špatně: rozpis má volné dny. Mezi koly
+  // 12. a 14. září je osmačtyřicet hodin, takže hlídač křičel po každém
+  // volnu, i když tick běžel normálně.
+  //
+  // Správná otázka není „kdy se naposledy hrálo", ale „nezůstalo viset kolo,
+  // které mělo být dávno odehrané". Dvě hodiny odkladu na doběhnutí simulace.
+  // Počítá se jen aktuální sezóna, staré nedohrané ročníky by jinak hlásily
+  // poruchu navždycky.
+  const hodinPoTerminu = await scalar(
     env.DB,
-    `SELECT CAST((julianday('now') - julianday(MAX(created_at))) * 24 AS INTEGER) AS n
-       FROM queue_runs WHERE kind = 'league_round' AND status = 'done'`,
-    "hodin od posledního kola",
+    `SELECT CAST((julianday('now') - julianday(MIN(sc.scheduled_at))) * 24 AS INTEGER) AS n
+       FROM matches m
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE m.status != 'simulated'
+        AND sc.scheduled_at < datetime('now', '-2 hours')
+        AND sc.season_number = (
+          SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id
+        )`,
+    "hodin od zmeškaného kola",
   );
-  if (hodinOdKola !== null && hodinOdKola > 26) {
+  if (hodinPoTerminu !== null && hodinPoTerminu > 0) {
     problemy.push({
       kod: "zadne_kolo",
-      popis: "Poslední odsimulované kolo je starší než 26 hodin, tick zřejmě neběží",
-      hodnota: `${hodinOdKola} h`,
+      popis: "Kolo mělo být dávno odehrané a pořád visí, tick zřejmě neběží",
+      hodnota: `${hodinPoTerminu} h po termínu`,
     });
   }
 
