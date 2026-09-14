@@ -77,41 +77,73 @@ export default function VisitStadiumPage() {
   const [sponsors, setSponsors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewerOpen, setViewerOpen] = useState(false);
+  // Procházení po lize šipkami, stejně jako na profilu klubu. Bez toho se
+  // musel hráč vracet na tabulku a proklikávat se k dalšímu stadionu zvlášť.
+  const [leagueTeams, setLeagueTeams] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     if (!teamId) return;
     Promise.all([
       apiFetch<StadiumData>(`/api/teams/${teamId}/stadium`),
       apiFetch<Team>(`/api/teams/${teamId}`),
+      apiFetch<Array<{ id: string; name: string }>>(`/api/teams/${teamId}/league-teams`)
+        .catch((e) => { console.error("soupiska ligy:", e); return []; }),
       apiFetch<{ bannerContracts: Array<{ sponsorName: string }> }>(`/api/teams/${teamId}/sponsors`)
         .catch((e) => { console.warn("sponsors fetch:", e); return null; }),
     ])
-      .then(([s, t, sp]) => {
-        setStadium(s); setTeam(t);
+      .then(([s, t, lt, sp]) => {
+        setStadium(s); setTeam(t); setLeagueTeams(lt);
         setSponsors(sp?.bannerContracts?.map((c) => c.sponsorName) ?? []);
       })
       .catch((e) => console.error("visit stadium load:", e))
       .finally(() => setLoading(false));
   }, [teamId]);
 
+  const indexVLize = leagueTeams.findIndex((t) => t.id === teamId);
+  const predchozi = leagueTeams.length > 1
+    ? leagueTeams[(indexVLize - 1 + leagueTeams.length) % leagueTeams.length] : null;
+  const dalsi = leagueTeams.length > 1
+    ? leagueTeams[(indexVLize + 1) % leagueTeams.length] : null;
+
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!stadium || !team) return <div className="page-container">Stadion nenalezen.</div>;
 
   return (
     <div className="page-container space-y-5">
-      {/* Header s tlačítkem zpět */}
-      <div className="flex items-center justify-between">
+      {/* Header: zpět, šipky po lize a název. Na mobilu se to musí zalomit,
+          jinak se dlouhý název stadionu pere se šipkami o místo. */}
+      <div className="flex items-center justify-between gap-2">
         <button onClick={() => router.back()} className="text-sm text-pitch-500 font-heading font-bold hover:text-pitch-600">
           ← Zpět
         </button>
-        <div className="text-right">
-          <div className="font-heading font-bold text-base">{team.name}</div>
-          {stadium.stadiumName && <div className="text-sm text-muted">{stadium.stadiumName}</div>}
-          {stadium.currentWeather && (
-            <div className="text-sm text-muted">
-              {WEATHER_ICON[stadium.currentWeather] ?? ""} {WEATHER_LABEL[stadium.currentWeather] ?? stadium.currentWeather}
-              {stadium.currentTemperature != null ? ` · ${stadium.currentTemperature} °C` : ""}
-            </div>
+        <div className="flex items-center gap-3">
+          {leagueTeams.length > 1 && (
+            <button
+              onClick={() => predchozi && router.push(`/dashboard/team/${predchozi.id}/stadium`)}
+              aria-label={`Předchozí stadion: ${predchozi?.name ?? ""}`}
+              className="w-8 h-8 rounded-soft bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-sm shrink-0"
+            >
+              &#9664;
+            </button>
+          )}
+          <div className="text-right min-w-0">
+            <div className="font-heading font-bold text-base truncate">{team.name}</div>
+            {stadium.stadiumName && <div className="text-sm text-muted truncate">{stadium.stadiumName}</div>}
+            {stadium.currentWeather && (
+              <div className="text-sm text-muted">
+                {WEATHER_ICON[stadium.currentWeather] ?? ""} {WEATHER_LABEL[stadium.currentWeather] ?? stadium.currentWeather}
+                {stadium.currentTemperature != null ? ` · ${stadium.currentTemperature} °C` : ""}
+              </div>
+            )}
+          </div>
+          {leagueTeams.length > 1 && (
+            <button
+              onClick={() => dalsi && router.push(`/dashboard/team/${dalsi.id}/stadium`)}
+              aria-label={`Další stadion: ${dalsi?.name ?? ""}`}
+              className="w-8 h-8 rounded-soft bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-sm shrink-0"
+            >
+              &#9654;
+            </button>
           )}
         </div>
       </div>
