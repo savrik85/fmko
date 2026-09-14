@@ -157,7 +157,7 @@ export function ChoralyPanel({ chants, teamId, onChanged }: {
                   )}
                 </div>
               ) : ch.nahravkaSeChysta ? (
-                <p className="text-sm text-gold-700 mt-3">🎙️ Nahrává se, bude to chvíli trvat.</p>
+                <p className="text-sm text-gold-700 mt-3">🎙️ Nahrává se. Objednává se v noci a vyzvedává ráno, takže to bude pár hodin.</p>
               ) : (
                 <p className="text-sm text-muted mt-3">
                   {domaci

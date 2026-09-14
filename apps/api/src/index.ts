@@ -193,6 +193,24 @@ export default {
       }
     }
 
+    // ── DOTAŽENÍ NAHRÁVEK CHORÁLŮ ──
+    // Objednává se v nočním ticku, Suno je hotové do půl minuty. Dotahovalo
+    // se ale až v dalším nočním ticku, takže nahrávka objednaná ve 3:05 ležela
+    // hotová u Suna čtyřiadvacet hodin a hráči svítilo „nahrává se".
+    // Tady se vyzvedne ráno, pár hodin po objednávce. Když nic nečeká, je to
+    // jeden dotaz do databáze a konec.
+    if (cron === "0 5 * * *" || cron === "0 10 * * *" || cron === "0 14 * * *") {
+      try {
+        const { dotahniNahravky } = await import("./fans/fan-chant-audio");
+        const r = await dotahniNahravky(env);
+        if (r.hotovo > 0 || r.selhalo > 0) {
+          log("info", `nahrávky chorálů: hotovo=${r.hotovo} čeká=${r.ceka} selhalo=${r.selhalo}`);
+        }
+      } catch (e: any) {
+        log("error", "dotažení nahrávek chorálů selhalo", e);
+      }
+    }
+
     // ── TRANSFER PRESSURE: 12:00 CEST (10:00 UTC) — expirace nabídek, CPU nabídky, truc ──
     if (cron === "0 10 * * *") {
       try {
