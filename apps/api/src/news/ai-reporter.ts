@@ -408,5 +408,5 @@ Styl:
 
   // Rozesílka „vyšel článek" všem v lize zrušena: trenér s ní nic nedělal
   // a zaplňovala telefon (přes sedmdesát zpráv na účet z pěti různých míst).
-  // Že je ve Zpravodaji něco nového, hlásí odznak v menu — `news_seen_at`.
+  // Že vyšel článek, se neoznamuje nijak. Zpravodaj je čtení na kdykoliv.
 }

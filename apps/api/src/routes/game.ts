@@ -1203,35 +1203,11 @@ gameRouter.post("/teams/:teamId/recruit", async (c) => {
 });
 
 // GET /api/teams/:id/news — obecní zpravodaj / news feed
-/**
- * Kolik článků klub ještě neviděl — pro odznak v menu.
- *
- * Nahrazuje pět různých rozesílek „vyšel článek" do telefonu. Trenér s takovou
- * zprávou stejně nic nedělal, jen mu zaplnila schránku.
- */
-gameRouter.get("/teams/:teamId/news/unread-count", async (c) => {
-  const teamId = c.req.param("teamId");
-  const row = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM news n
-     JOIN teams t ON t.id = ?
-     WHERE n.league_id = t.league_id
-       -- Bez značky se počítá od založení klubu, ne od nuly. Prázdný řetězec
-       -- je menší než každé datum, takže se dřív jako nepřečtená hlásila celá
-       -- historie ligy: na produkci 582 článků u jednoho klubu.
-       AND n.created_at > COALESCE(t.news_seen_at, t.created_at, '')`,
-  ).bind(teamId).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: "game" }, "počet nepřečtených článků", e); return null; });
-  return c.json({ unread: row?.n ?? 0 });
-});
-
-/** Zpravodaj otevřen — od téhle chvíle se počítají jen novější články. */
-gameRouter.post("/teams/:teamId/news/seen", async (c) => {
-  await c.env.DB.prepare(
-    "UPDATE teams SET news_seen_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?",
-  ).bind(c.req.param("teamId")).run()
-    .catch((e) => { logger.warn({ module: "game" }, "označení Zpravodaje", e); });
-  return c.json({ ok: true });
-});
+//
+// Odznak s počtem nepřečtených článků tady byl a je pryč. Vymyslel jsem si ho
+// jako náhradu za rozesílání SMS „vyšel článek", ale nikdo o něj nestál:
+// zpravodaj je čtení na kdykoliv, ne úkol, který má v menu svítit číslem.
+// Sloupec `teams.news_seen_at` v databázi zůstává, nikdo ho nečte.
 
 gameRouter.get("/teams/:teamId/news", async (c) => {
   const teamId = c.req.param("teamId");
@@ -7982,7 +7958,7 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
 
   // KROK 5: Rozesílka „vyšel článek" ostatním trenérům zrušena — nic s ní
   // nedělali a zaplňovala telefon. Že je ve Zpravodaji něco nového, hlásí
-  // odznak v menu (`news_seen_at`).
+  // nijak, Zpravodaj je čtení na kdykoliv.
 
   logger.info({ module: "game.ts", teamId }, `interview answered -> article ${newsId}`);
   return c.json({ ok: true, articleId: newsId });
