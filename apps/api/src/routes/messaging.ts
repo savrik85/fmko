@@ -666,10 +666,22 @@ export async function initTeamConversations(
   const now = new Date().toISOString();
 
   // 1. Skupinový chat "Kabina" (pinned, bez uvítací zprávy)
-  const groupId = uuid();
-  await db.prepare(
-    "INSERT INTO conversations (id, team_id, type, title, pinned, last_message_text, last_message_at, unread_count, created_at) VALUES (?, ?, 'squad_group', 'Kabina', 1, '', ?, 0, ?)"
-  ).bind(groupId, teamId, now, now).run();
+  //
+  // Volá se z několika míst (převzetí klubu, založení, auto-init při prázdném
+  // seznamu) a žádné z nich nekontrolovalo, jestli Kabina už existuje. Jeden
+  // klub na produkci jich měl 170 a všechny připnuté, takže zaplácly celý
+  // telefon a skutečné zprávy se propadly pod ně.
+  const kabinaUzJe = await db
+    .prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group' AND title = 'Kabina' LIMIT 1")
+    .bind(teamId).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "messaging" }, "kontrola Kabiny", e); return null; });
+
+  if (!kabinaUzJe) {
+    const groupId = uuid();
+    await db.prepare(
+      "INSERT INTO conversations (id, team_id, type, title, pinned, last_message_text, last_message_at, unread_count, created_at) VALUES (?, ?, 'squad_group', 'Kabina', 1, '', ?, 0, ?)"
+    ).bind(groupId, teamId, now, now).run();
+  }
 
   // 1:1 konverzace s hráči se nevytvářejí při onboardingu — vzniknou až na vyžádání
 }
