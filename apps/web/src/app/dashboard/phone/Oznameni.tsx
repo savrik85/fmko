@@ -84,9 +84,12 @@ export function Oznameni({ teamId, onZavrit, onZmena }: {
   const prectene = (items ?? []).filter((n) => n.read);
 
   return (
-    <div className="fixed inset-0 sm:absolute z-30 bg-pitch-900 flex flex-col">
+    // `absolute`, ne `fixed`. S `fixed inset-0` panel vylezl z rámečku telefonu
+    // přes celou stránku a spodní lišta aplikace (z-50) mu překryla tlačítka
+    // dole, takže se nedalo nic odklepnout. Tribuna to má takhle od začátku.
+    <div className="absolute inset-0 z-30 bg-[#1c1c1e] flex flex-col">
       <div className="px-4 pt-5 pb-3 text-center shrink-0">
-        <div className="text-white/60 text-xs">Oznámení</div>
+        <div className="text-white/60 text-sm">Oznámení</div>
         <div className="text-white font-heading font-bold text-4xl tabular-nums leading-tight">{cas}</div>
       </div>
 
@@ -99,7 +102,7 @@ export function Oznameni({ teamId, onZavrit, onZmena }: {
           <>
             {neprectene.map((n) => <Karta key={n.id} n={n} onClick={() => otevrit(n)} />)}
             {prectene.length > 0 && (
-              <div className="pt-3 pb-1 text-xs text-white/50 px-1">Dřívější</div>
+              <div className="pt-3 pb-1 text-sm text-white/50 px-1">Dřívější</div>
             )}
             {prectene.map((n) => <Karta key={n.id} n={n} tlumene onClick={() => otevrit(n)} />)}
           </>
@@ -141,9 +144,9 @@ function Karta({ n, onClick, tlumene }: { n: NotifikaceItem; onClick: () => void
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-sm font-heading font-bold truncate">{text}</span>
-          <span className="text-xs text-muted shrink-0">{pred(n.createdAt)}</span>
+          <span className="text-sm text-muted shrink-0">{pred(n.createdAt)}</span>
         </div>
-        <p className="text-xs text-ink-light leading-snug mt-0.5">{n.body}</p>
+        <p className="text-sm text-ink-light leading-snug mt-0.5">{n.body}</p>
       </div>
     </button>
   );

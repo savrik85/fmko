@@ -117,7 +117,7 @@ export function Adresar({ teamId, onZavrit, onOtevrit }: {
 
   return (
     <div className="fixed inset-0 sm:absolute z-30 bg-gray-100 flex flex-col">
-      <div className="bg-pitch-600 text-white px-4 py-2.5 flex items-center justify-between shrink-0">
+      <div className="bg-[#1c1c1e] text-white px-4 py-2.5 flex items-center justify-between shrink-0">
         <span className="font-heading font-bold text-sm">Adresář</span>
         <button className="text-sm text-white/80" onClick={onZavrit}>Hotovo</button>
       </div>

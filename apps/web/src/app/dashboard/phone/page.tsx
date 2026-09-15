@@ -81,7 +81,7 @@ function ZalozkaTelefonu({ emoji, label, badge, aktivni, onClick }: {
       onClick={onClick}
       aria-current={aktivni ? "page" : undefined}
       className={`relative flex-1 py-2 flex flex-col items-center gap-0.5 text-sm ${
-        aktivni ? "bg-pitch-600 font-bold" : "hover:bg-pitch-600/60"
+        aktivni ? "bg-[#3a3a3c] font-bold" : "hover:bg-[#3a3a3c]/60"
       }`}
     >
       <span className="text-base leading-none">{emoji}</span>
@@ -151,7 +151,7 @@ export default function PhonePage() {
     <PhoneFrame>
       {/* Hlavička telefonu. `shrink-0`, aby ji dlouhý seznam zpráv nesmáčkl:
           v aplikaci na telefonu vršek stojí a scrolluje se obsah pod ním. */}
-      <div className="shrink-0 bg-pitch-600 text-white px-4 py-2.5 flex items-center justify-between">
+      <div className="shrink-0 bg-[#1c1c1e] text-white px-4 py-2.5 flex items-center justify-between">
         <span className="font-heading font-bold text-base">Telefon</span>
         <div className="ml-auto flex items-center gap-2">
           {credit && <KreditText credit={credit} />}
@@ -167,7 +167,7 @@ export default function PhonePage() {
           Socky i Oznámení dřív visely v hlavičce jako holé ikonky vedle sebe
           a nešlo z nich poznat, co jsou zač. Původní „Tribuna" navíc nikomu
           neřekla, že jde o sociální síť. */}
-      <div className="shrink-0 bg-pitch-700 text-white flex">
+      <div className="shrink-0 bg-[#2c2c2e] text-white flex">
         <ZalozkaTelefonu emoji="&#128172;" label="Zprávy" aktivni />
         <ZalozkaTelefonu
           emoji="&#128483;&#65039;"

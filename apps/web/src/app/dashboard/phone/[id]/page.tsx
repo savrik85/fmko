@@ -317,7 +317,7 @@ export default function ConversationPage() {
   return (
     <PhoneFrame>
       {/* Header */}
-      <div className="bg-pitch-600 text-white px-3 py-2.5 flex items-center gap-2.5 shrink-0">
+      <div className="bg-[#1c1c1e] text-white px-3 py-2.5 flex items-center gap-2.5 shrink-0">
         <button onClick={() => router.push("/dashboard/phone")} className="text-white/70 hover:text-white text-sm">
           &#8592;
         </button>

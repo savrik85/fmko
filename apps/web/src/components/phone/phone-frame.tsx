@@ -15,6 +15,10 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
 
   // Telefon vypadá jako telefon i na mobilu.
   //
+  // Barvy jsou grafitové, ne herní zelené. Schválně mimo tokeny hry: tohle
+  // je rekvizita, ne kus rozhraní, a v zelené to působilo jako další panel
+  // aplikace místo jako mobil, který držíš v ruce.
+  //
   // Dřív se všechna „telefonní" omáčka (rámeček, výřez, čárka domů) vypínala
   // přes `sm:` a na mobilu zbyl holý seznam přes celou šířku. Logika za tím
   // byla, že na telefonu už telefon nepotřebuješ. Jenže tohle je herní
@@ -23,7 +27,7 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
   // neukusuje z obsahu.
   return (
     <div className="flex justify-center items-start p-2 sm:py-6 sm:px-4 h-full sm:h-auto">
-      <div className="w-full sm:w-[380px] h-full sm:h-[700px] rounded-[1.75rem] sm:rounded-[2.5rem] border-4 sm:border-[6px] border-gray-800 shadow-xl sm:shadow-2xl overflow-hidden relative bg-white flex flex-col">
+      <div className="w-full sm:w-[380px] h-full sm:h-[700px] rounded-[1.75rem] sm:rounded-[2.5rem] border-4 sm:border-[6px] border-[#2c2c2e] shadow-xl sm:shadow-2xl overflow-hidden relative bg-white flex flex-col">
         {/* Notch */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 sm:w-28 h-5 sm:h-6 bg-gray-800 rounded-b-2xl z-20" />
 
@@ -32,7 +36,7 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
             ŽÁDNÉ odsazení o safe area. Výřez displeje řeší horní lišta
             aplikace nad tímhle; když jsem ho přidal i sem, naskočil na iPhonu
             uprostřed stránky tlustý prázdný zelený pruh o 47 px. */}
-        <div className="flex shrink-0 items-center justify-between px-6 pt-1.5 pb-0.5 bg-pitch-600 text-white text-sm relative z-10">
+        <div className="flex shrink-0 items-center justify-between px-6 pt-1.5 pb-0.5 bg-[#1c1c1e] text-white text-sm relative z-10">
           <span className="font-medium tabular-nums">{time}</span>
           <div className="flex items-center gap-1.5">
             {/* Signal bars */}

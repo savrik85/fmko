@@ -103,7 +103,7 @@ export function Tribuna({ teamId, onZavrit }: { teamId: string; onZavrit: () => 
   return (
     <div className="absolute inset-0 z-30 bg-gray-50 flex flex-col">
       {/* Lišta */}
-      <div className="bg-pitch-600 text-white px-3 py-2.5 flex items-center gap-2 shrink-0">
+      <div className="bg-[#1c1c1e] text-white px-3 py-2.5 flex items-center gap-2 shrink-0">
         <button onClick={onZavrit} aria-label="Zpět" className="w-7 h-7 rounded-full hover:bg-white/15 flex items-center justify-center text-lg leading-none">
           ‹
         </button>
