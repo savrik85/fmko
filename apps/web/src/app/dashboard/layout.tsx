@@ -11,8 +11,11 @@ import { AnnouncementDialog } from "@/components/dashboard/announcement-dialog";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 
-const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/", "/dashboard/pohar/tym/"];
-const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule", "/dashboard/pohar"];
+const DETAIL_PREFIXES = ["/dashboard/player/", "/dashboard/team/", "/dashboard/match/", "/dashboard/pohar/tym/", "/dashboard/phone/"];
+// Telefon má vlastní hlavičku („Telefon", kredit, tužka) a nad ní ještě
+// stavový řádek. Hlavička stránky nad tím dělala druhý nadpis Telefon a
+// na mobilu ukrajovala kus obrazovky, na které má být vidět seznam zpráv.
+const CUSTOM_HEADER_PAGES = ["/dashboard/liga", "/dashboard/schedule", "/dashboard/pohar", "/dashboard/phone"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

@@ -149,8 +149,9 @@ export default function PhonePage() {
 
   return (
     <PhoneFrame>
-      {/* Status bar */}
-      <div className="bg-pitch-600 text-white px-4 py-2.5 flex items-center justify-between">
+      {/* Hlavička telefonu. `shrink-0`, aby ji dlouhý seznam zpráv nesmáčkl:
+          v aplikaci na telefonu vršek stojí a scrolluje se obsah pod ním. */}
+      <div className="shrink-0 bg-pitch-600 text-white px-4 py-2.5 flex items-center justify-between">
         <span className="font-heading font-bold text-base">Telefon</span>
         <div className="ml-auto flex items-center gap-2">
           {credit && <KreditText credit={credit} />}
@@ -166,7 +167,7 @@ export default function PhonePage() {
           Socky i Oznámení dřív visely v hlavičce jako holé ikonky vedle sebe
           a nešlo z nich poznat, co jsou zač. Původní „Tribuna" navíc nikomu
           neřekla, že jde o sociální síť. */}
-      <div className="bg-pitch-700 text-white flex">
+      <div className="shrink-0 bg-pitch-700 text-white flex">
         <ZalozkaTelefonu emoji="&#128172;" label="Zprávy" aktivni />
         <ZalozkaTelefonu
           emoji="&#128483;&#65039;"
@@ -238,7 +239,7 @@ export default function PhonePage() {
                       {conv.lastMessageText || "Žádné zprávy"}
                     </p>
                     {conv.unreadCount > 0 && (
-                      <span className="shrink-0 ml-2 bg-pitch-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                      <span className="shrink-0 ml-2 bg-pitch-500 text-white text-sm font-bold w-5 h-5 rounded-full flex items-center justify-center">
                         {conv.unreadCount}
                       </span>
                     )}
@@ -271,7 +272,7 @@ export default function PhonePage() {
       )}
 
       {/* Adresář je vždycky po ruce — i kdyby se stav kreditu nenačetl. */}
-      <div className="bg-white border-t border-gray-100 px-4 py-2">
+      <div className="shrink-0 bg-white border-t border-gray-100 px-4 py-2">
         {credit && (
           <p className="text-sm text-muted leading-snug">
             {credit.zbyva >= credit.cenaSms ? (

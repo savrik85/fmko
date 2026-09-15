@@ -23,8 +23,14 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
         {/* Notch */}
         <div className="hidden sm:block absolute top-0 left-1/2 -translate-x-1/2 w-28 h-6 bg-gray-800 rounded-b-2xl z-20" />
 
-        {/* Status bar (desktop only) */}
-        <div className="hidden sm:flex items-center justify-between px-6 pt-1.5 pb-0.5 bg-pitch-600 text-white text-micro relative z-10">
+        {/* Stavový řádek. Na mobilu taky: bez něj to nepůsobí jako telefon,
+            ale jako obyčejná stránka se seznamem. `shrink-0`, aby ho seznam
+            zpráv nepřimáčkl, a nahoře odsazení o safe area, ať neleze pod
+            výřez displeje. */}
+        <div
+          className="flex shrink-0 items-center justify-between px-6 pt-1.5 pb-0.5 bg-pitch-600 text-white text-sm relative z-10"
+          style={{ paddingTop: "max(0.375rem, env(safe-area-inset-top, 0px))" }}
+        >
           <span className="font-medium tabular-nums">{time}</span>
           <div className="flex items-center gap-1.5">
             {/* Signal bars */}
