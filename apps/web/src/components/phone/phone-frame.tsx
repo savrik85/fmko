@@ -57,8 +57,11 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Screen content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Obsah displeje. `relative`, aby se překryvy uvnitř telefonu (Socky,
+            oznámení, zamykací obrazovka) kreslily až pod stavový řádek.
+            Bez toho se pozicovaly proti celému rámečku a stavový řádek
+            přebíjely, což na telefonu nedělá žádná aplikace. */}
+        <div className="relative flex-1 flex flex-col overflow-hidden">
           {children}
         </div>
 

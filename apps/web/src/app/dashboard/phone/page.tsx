@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { Adresar } from "./Adresar";
 import { Oznameni } from "./Oznameni";
+import { ZamykaciObrazovka, jeOdemceno } from "./ZamykaciObrazovka";
 import { Tribuna } from "./Tribuna";
 
 interface Conversation {
@@ -126,6 +127,9 @@ export default function PhonePage() {
   const [oznameniOtevrena, setOznameniOtevrena] = useState(false);
   const [tribunaOtevrena, setTribunaOtevrena] = useState(false);
   const [neprectenaOznameni, setNeprectenaOznameni] = useState(0);
+  // Zámek. `true` do prvního vykreslení na klientu, jinak by při hydrataci
+  // problikl odemčený telefon a hned se zamkl.
+  const [zamceno, setZamceno] = useState(true);
   const [credit, setCredit] = useState<Credit | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -140,6 +144,9 @@ export default function PhonePage() {
     nactiOznameni();
   }, [teamId]);
 
+  // `sessionStorage` je až na klientu, proto ne v počátečním stavu.
+  useEffect(() => { setZamceno(!jeOdemceno()); }, []);
+
   const nactiOznameni = () => {
     if (!teamId) return;
     apiFetch<{ unread: number }>(`/api/teams/${teamId}/notifications?limit=1`)
@@ -147,8 +154,17 @@ export default function PhonePage() {
       .catch((e) => console.error("počet oznámení:", e));
   };
 
+  const neprectenychZprav = conversations.reduce((s, c) => s + (c.unreadCount ?? 0), 0);
+
   return (
     <PhoneFrame>
+      {zamceno && (
+        <ZamykaciObrazovka
+          neprectenychZprav={neprectenychZprav}
+          neprectenychOznameni={neprectenaOznameni}
+          onOdemknout={() => setZamceno(false)}
+        />
+      )}
       {/* Hlavička telefonu. `shrink-0`, aby ji dlouhý seznam zpráv nesmáčkl:
           v aplikaci na telefonu vršek stojí a scrolluje se obsah pod ním. */}
       <div className="shrink-0 bg-[#1c1c1e] text-white px-4 py-2.5 flex items-center justify-between">
