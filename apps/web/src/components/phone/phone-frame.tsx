@@ -13,15 +13,19 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Na mobilu telefon vyplní to, co zbývá, ne celou výšku okna. `min-h-dvh`
-  // uvnitř `<main>`, které má kvůli spodní liště `pb-20`, dělalo stránku vyšší
-  // než obrazovka: scrolloval se seznam zpráv A pod ním ještě celá stránka,
-  // takže se řádek s kreditem schovával pod lištu a nešlo se k němu dostat.
+  // Telefon vypadá jako telefon i na mobilu.
+  //
+  // Dřív se všechna „telefonní" omáčka (rámeček, výřez, čárka domů) vypínala
+  // přes `sm:` a na mobilu zbyl holý seznam přes celou šířku. Logika za tím
+  // byla, že na telefonu už telefon nepotřebuješ. Jenže tohle je herní
+  // rekvizita, ne responzivní stránka: má vypadat jako mobil, který držíš
+  // ve hře. Na malém displeji je proto rámeček tenčí a rohy menší, ať se
+  // neukusuje z obsahu.
   return (
-    <div className="sm:flex sm:justify-center sm:items-start sm:py-6 sm:px-4 min-h-full sm:min-h-0">
-      <div className="sm:w-[380px] sm:h-[700px] sm:rounded-[2.5rem] sm:border-[6px] sm:border-gray-800 sm:shadow-2xl sm:overflow-hidden sm:relative bg-white flex flex-col h-full sm:h-[700px] sm:min-h-0">
+    <div className="flex justify-center items-start p-2 sm:py-6 sm:px-4 h-full sm:h-auto">
+      <div className="w-full sm:w-[380px] h-full sm:h-[700px] rounded-[1.75rem] sm:rounded-[2.5rem] border-4 sm:border-[6px] border-gray-800 shadow-xl sm:shadow-2xl overflow-hidden relative bg-white flex flex-col">
         {/* Notch */}
-        <div className="hidden sm:block absolute top-0 left-1/2 -translate-x-1/2 w-28 h-6 bg-gray-800 rounded-b-2xl z-20" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 sm:w-28 h-5 sm:h-6 bg-gray-800 rounded-b-2xl z-20" />
 
         {/* Stavový řádek. Na mobilu taky: bez něj to nepůsobí jako telefon,
             ale jako obyčejná stránka se seznamem.
@@ -55,7 +59,7 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Home bar */}
-        <div className="hidden sm:flex justify-center pb-2 pt-1 bg-white">
+        <div className="flex shrink-0 justify-center pb-2 pt-1 bg-white">
           <div className="w-28 h-1 bg-gray-300 rounded-full" />
         </div>
       </div>
