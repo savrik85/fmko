@@ -13,9 +13,13 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Na mobilu telefon vyplní to, co zbývá, ne celou výšku okna. `min-h-dvh`
+  // uvnitř `<main>`, které má kvůli spodní liště `pb-20`, dělalo stránku vyšší
+  // než obrazovka: scrolloval se seznam zpráv A pod ním ještě celá stránka,
+  // takže se řádek s kreditem schovával pod lištu a nešlo se k němu dostat.
   return (
-    <div className="sm:flex sm:justify-center sm:items-start sm:py-6 sm:px-4 min-h-dvh sm:min-h-0">
-      <div className="sm:w-[380px] sm:h-[700px] sm:rounded-[2.5rem] sm:border-[6px] sm:border-gray-800 sm:shadow-2xl sm:overflow-hidden sm:relative bg-white flex flex-col min-h-dvh sm:min-h-0">
+    <div className="sm:flex sm:justify-center sm:items-start sm:py-6 sm:px-4 min-h-full sm:min-h-0">
+      <div className="sm:w-[380px] sm:h-[700px] sm:rounded-[2.5rem] sm:border-[6px] sm:border-gray-800 sm:shadow-2xl sm:overflow-hidden sm:relative bg-white flex flex-col h-full sm:h-[700px] sm:min-h-0">
         {/* Notch */}
         <div className="hidden sm:block absolute top-0 left-1/2 -translate-x-1/2 w-28 h-6 bg-gray-800 rounded-b-2xl z-20" />
 

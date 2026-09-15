@@ -56,7 +56,7 @@ function IkonaTlacitko({ emoji, label, badge, onClick }: {
     <button
       onClick={onClick}
       aria-label={label}
-      className="relative w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-xs shrink-0"
+      className="relative w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-sm shrink-0"
     >
       {emoji}
       {badge && (
@@ -98,7 +98,7 @@ function KreditText({ credit }: { credit: Credit }) {
   const dochazi = credit.zbyva < credit.cenaSms;
   return (
     <span
-      className={`text-xs tabular-nums ${dochazi ? "text-card-yellow font-semibold" : "text-white/70"}`}
+      className={`text-sm tabular-nums ${dochazi ? "text-card-yellow font-semibold" : "text-white/70"}`}
       title={credit.label}
     >
       {credit.zbyva} Kč
@@ -207,7 +207,7 @@ export default function PhonePage() {
                   ) : conv.participantAvatar && Object.keys(conv.participantAvatar).length > 2 ? (
                     <FaceAvatar faceConfig={conv.participantAvatar} size={40} className="rounded-full" />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-heading font-bold text-xs">
+                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-heading font-bold text-sm">
                       {conv.title.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                     </div>
                   )}
@@ -219,22 +219,22 @@ export default function PhonePage() {
                     <span className={`text-[13px] truncate ${conv.unreadCount > 0 ? "font-bold text-ink" : "font-medium text-ink"}`}>
                       {conv.title}
                       {conv.aiThreadActive && conv.aiThreadState?.awaiting === "coach" && (
-                        <span className="ml-1.5 inline-block bg-pitch-100 text-pitch-700 text-micro font-medium px-1.5 py-0.5 rounded-full align-middle">
+                        <span className="ml-1.5 inline-block bg-pitch-100 text-pitch-700 text-sm font-medium px-1.5 py-0.5 rounded-full align-middle">
                           čeká na odpověď
                         </span>
                       )}
                       {conv.aiThreadActive && conv.aiThreadState?.awaiting === "player" && (
-                        <span className="ml-1.5 inline-block bg-amber-100 text-amber-700 text-micro font-medium px-1.5 py-0.5 rounded-full align-middle">
+                        <span className="ml-1.5 inline-block bg-amber-100 text-amber-700 text-sm font-medium px-1.5 py-0.5 rounded-full align-middle">
                           píše…
                         </span>
                       )}
                     </span>
-                    <span className="text-xs text-muted shrink-0 ml-2">
+                    <span className="text-sm text-muted shrink-0 ml-2">
                       {timeAgo(conv.lastMessageAt)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-0.5">
-                    <p className={`text-xs truncate ${conv.unreadCount > 0 ? "text-ink" : "text-muted"}`}>
+                    <p className={`text-sm truncate ${conv.unreadCount > 0 ? "text-ink" : "text-muted"}`}>
                       {conv.lastMessageText || "Žádné zprávy"}
                     </p>
                     {conv.unreadCount > 0 && (
@@ -273,7 +273,7 @@ export default function PhonePage() {
       {/* Adresář je vždycky po ruce — i kdyby se stav kreditu nenačetl. */}
       <div className="bg-white border-t border-gray-100 px-4 py-2">
         {credit && (
-          <p className="text-xs text-muted leading-snug">
+          <p className="text-sm text-muted leading-snug">
             {credit.zbyva >= credit.cenaSms ? (
               <>Na kartě máš <strong className="text-ink">{credit.zbyva} Kč</strong> — to je{" "}
                 {credit.zprav === 1 ? "jedna SMS" : `${credit.zprav} SMS`}.{" "}

@@ -81,7 +81,7 @@ function Avatar({ p }: { p: Prispevek }) {
   }
   const pismena = p.author.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
   return (
-    <div className="w-[38px] h-[38px] rounded-full bg-gray-200 text-ink-light flex items-center justify-center text-xs font-heading font-bold shrink-0">
+    <div className="w-[38px] h-[38px] rounded-full bg-gray-200 text-ink-light flex items-center justify-center text-sm font-heading font-bold shrink-0">
       {pismena || "?"}
     </div>
   );
@@ -108,7 +108,7 @@ export function Tribuna({ teamId, onZavrit }: { teamId: string; onZavrit: () => 
           ‹
         </button>
         <span className="font-heading font-bold text-base">Socky</span>
-        <span className="ml-auto text-xs text-white/70">co si o tobě píšou</span>
+        <span className="ml-auto text-sm text-white/70">co si o tobě píšou</span>
       </div>
 
       {/* Filtry */}
@@ -117,7 +117,7 @@ export function Tribuna({ teamId, onZavrit }: { teamId: string; onZavrit: () => 
           <button
             key={f.key}
             onClick={() => setFiltr(f.key)}
-            className={`px-2.5 py-1 rounded-full text-xs whitespace-nowrap ${
+            className={`px-2.5 py-1 rounded-full text-sm whitespace-nowrap ${
               filtr === f.key ? "bg-pitch-600 text-white font-semibold" : "bg-gray-100 text-ink-light"
             }`}
           >
@@ -148,13 +148,13 @@ export function Tribuna({ teamId, onZavrit }: { teamId: string; onZavrit: () => 
                   <div className="flex items-baseline gap-1.5 flex-wrap">
                     <span className="font-heading font-bold text-sm text-ink truncate">{p.author}</span>
                     {p.authorKind === "vudce" && (
-                      <span className="text-[10px] px-1 py-px rounded bg-pitch-50 text-pitch-600 font-semibold shrink-0">vůdce</span>
+                      <span className="text-sm px-1 py-px rounded bg-pitch-50 text-pitch-600 font-semibold shrink-0">vůdce</span>
                     )}
-                    <span className="text-xs text-muted truncate">{p.handle}</span>
-                    <span className="text-xs text-muted shrink-0">· {pred(p.createdAt)}</span>
+                    <span className="text-sm text-muted truncate">{p.handle}</span>
+                    <span className="text-sm text-muted shrink-0">· {pred(p.createdAt)}</span>
                   </div>
                   <p className="text-sm text-ink leading-snug mt-0.5 break-words">{p.body}</p>
-                  <div className="flex items-center gap-3 mt-1.5 text-xs text-muted">
+                  <div className="flex items-center gap-3 mt-1.5 text-sm text-muted">
                     <span title="Kolik lidí se pod to podepsalo">❤️ {p.likes}</span>
                     <span>{TEMA_IKONA[p.topic] ?? ""}</span>
                   </div>
@@ -169,7 +169,7 @@ export function Tribuna({ teamId, onZavrit }: { teamId: string; onZavrit: () => 
       <div className="shrink-0 border-t border-gray-100 bg-white px-3 py-2 text-center">
         <button
           onClick={() => router.push("/dashboard/fans")}
-          className="text-xs text-pitch-600 font-semibold hover:underline"
+          className="text-sm text-pitch-600 font-semibold hover:underline"
         >
           Skupiny fanoušků, nálada a rivalové →
         </button>

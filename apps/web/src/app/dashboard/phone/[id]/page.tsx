@@ -328,7 +328,7 @@ export default function ConversationPage() {
         ) : conv?.participantAvatar && Object.keys(conv.participantAvatar).length > 2 ? (
           <FaceAvatar faceConfig={conv.participantAvatar} size={28} className="rounded-full shrink-0" />
         ) : (
-          <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold shrink-0">
+          <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold shrink-0">
             {conv?.title?.[0] ?? "?"}
           </div>
         )}
@@ -337,7 +337,7 @@ export default function ConversationPage() {
             druhá pilulka nahoře z lišty dělala změť. */}
         {credit && (
           <span
-            className={`ml-auto shrink-0 text-xs tabular-nums ${
+            className={`ml-auto shrink-0 text-sm tabular-nums ${
               credit.zbyva < credit.cenaSms ? "text-card-yellow font-semibold" : "text-white/70"
             }`}
           >
@@ -358,7 +358,7 @@ export default function ConversationPage() {
           grouped.map((group) => (
             <div key={group.date}>
               <div className="text-center mb-2">
-                <span className="text-xs text-muted bg-gray-200/60 px-2.5 py-0.5 rounded-full">{group.date}</span>
+                <span className="text-sm text-muted bg-gray-200/60 px-2.5 py-0.5 rounded-full">{group.date}</span>
               </div>
               <div className="space-y-2">
                 {group.messages.map((msg) => {
@@ -375,7 +375,7 @@ export default function ConversationPage() {
                             {hasFaceAvatar ? (
                               <FaceAvatar faceConfig={avatar} size={32} className="rounded-full" />
                             ) : (
-                              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-heading font-bold text-micro">
+                              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-heading font-bold text-sm">
                                 {initialsFallback}
                               </div>
                             )}
@@ -385,7 +385,7 @@ export default function ConversationPage() {
                           {!isOwn && msg.senderTeamId && (
                             <Link
                               href={`/dashboard/team/${msg.senderTeamId}`}
-                              className="text-xs text-pitch-600 font-medium mb-0.5 ml-1 block hover:underline"
+                              className="text-sm text-pitch-600 font-medium mb-0.5 ml-1 block hover:underline"
                             >
                               {msg.senderManagerName
                                 ? `${msg.senderManagerName}${msg.senderTeamName ? ` (${msg.senderTeamName})` : ""}`
@@ -398,7 +398,7 @@ export default function ConversationPage() {
                               : "bg-white shadow-sm rounded-bl-tight"
                           }`}>
                             <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
-                            <div className={`text-micro mt-0.5 ${isOwn ? "text-white/50" : "text-muted"} text-right`}>
+                            <div className={`text-sm mt-0.5 ${isOwn ? "text-white/50" : "text-muted"} text-right`}>
                               {formatTime(msg.sentAt)}
                             </div>
                           </div>
@@ -413,7 +413,7 @@ export default function ConversationPage() {
                   if (isSystem && conv?.type === "squad_group") {
                     return (
                       <div key={msg.id} className="text-center py-1">
-                        <span className="text-xs text-muted italic">{emoticonize(msg.body)}</span>
+                        <span className="text-sm text-muted italic">{emoticonize(msg.body)}</span>
                       </div>
                     );
                   }
@@ -424,7 +424,7 @@ export default function ConversationPage() {
                           by tam nechala mrtvý pruh a dlouhé titulky lámala do sloupce. */}
                       <div className={isSystem ? "w-full" : "max-w-[75%]"}>
                         {!isUser && (conv?.type === "squad_group") && (
-                          <div className="text-xs text-pitch-600 font-medium mb-0.5 ml-2">{msg.senderName}</div>
+                          <div className="text-sm text-pitch-600 font-medium mb-0.5 ml-2">{msg.senderName}</div>
                         )}
                         <div className={`px-3 py-2 rounded-2xl text-[13px] leading-snug ${
                           isUser
@@ -437,12 +437,12 @@ export default function ConversationPage() {
                             && otevreneRozhovory.has(String(msg.metadata.interviewId ?? "")) && (
                             <Link
                               href={`/dashboard/events#rozhovor-${String(msg.metadata.interviewId ?? "")}`}
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-xs font-heading font-bold"
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
                             >
                               Otevřít rozhovor
                             </Link>
                           )}
-                          <div className={`text-micro mt-0.5 ${isUser ? "text-white/50" : "text-muted"} text-right`}>
+                          <div className={`text-sm mt-0.5 ${isUser ? "text-white/50" : "text-muted"} text-right`}>
                             {formatTime(msg.sentAt)}
                           </div>
                         </div>
@@ -456,7 +456,7 @@ export default function ConversationPage() {
         )}
         {aiThreadActive && aiThreadState?.awaiting === "player" && (
           <div className="flex justify-start">
-            <div className="bg-white shadow-sm rounded-2xl rounded-bl-tight px-3 py-2 text-[12px] text-muted italic flex items-center gap-1.5">
+            <div className="bg-white shadow-sm rounded-2xl rounded-bl-tight px-3 py-2 text-sm text-muted italic flex items-center gap-1.5">
               <span className="inline-flex gap-0.5">
                 <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -473,18 +473,18 @@ export default function ConversationPage() {
       {!isGroup && unrest && unrest.level >= 40 && !aiThreadActive && (
         <div className="bg-orange-50 border-t border-orange-200 px-3 py-2 shrink-0">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-micro font-heading font-bold text-orange-700">
+            <span className="text-sm font-heading font-bold text-orange-700">
               😠 Nespokojený{unrest.teamName ? ` (nabídka od ${unrest.teamName})` : ""} — {unrest.level}/100
             </span>
           </div>
           {unrest.mood && (
-            <div className="text-micro italic text-orange-800/80 mb-1">&bdquo;{unrest.mood}&ldquo;</div>
+            <div className="text-sm italic text-orange-800/80 mb-1">&bdquo;{unrest.mood}&ldquo;</div>
           )}
-          <div className="text-micro font-heading font-bold text-orange-700/70 uppercase tracking-wide mb-1.5">🤝 Nabídni mu něco konkrétního:</div>
+          <div className="text-sm font-heading font-bold text-orange-700/70 uppercase tracking-wide mb-1.5">🤝 Nabídni mu něco konkrétního:</div>
           {unrestEffects && (
-            <div className="mb-1.5 bg-white rounded-soft px-2.5 py-1.5 text-micro text-gray-700 space-y-0.5">
+            <div className="mb-1.5 bg-white rounded-soft px-2.5 py-1.5 text-sm text-gray-700 space-y-0.5">
               {unrestEffects.map((ef, i) => <div key={i}>• {ef}</div>)}
-              <button onClick={() => setUnrestEffects(null)} className="text-micro text-muted underline">skrýt</button>
+              <button onClick={() => setUnrestEffects(null)} className="text-sm text-muted underline">skrýt</button>
             </div>
           )}
           <div className="flex flex-wrap gap-1.5">
@@ -494,7 +494,7 @@ export default function ConversationPage() {
                 onClick={() => handleUnrestAction(a.id)}
                 disabled={unrestBusy}
                 title={a.description}
-                className="text-micro font-heading font-bold bg-white border border-orange-300 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors disabled:opacity-50"
+                className="text-sm font-heading font-bold bg-white border border-orange-300 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors disabled:opacity-50"
               >
                 {a.label}
               </button>
@@ -505,14 +505,14 @@ export default function ConversationPage() {
 
       {/* AI thread done banner */}
       {aiThreadState?.awaiting === "done" && (
-        <div className={`px-3 py-2 text-xs text-center border-t shrink-0 ${
+        <div className={`px-3 py-2 text-sm text-center border-t shrink-0 ${
           aiThreadState.resolution?.tone === "positive" ? "bg-pitch-50 text-pitch-700 border-pitch-200"
           : aiThreadState.resolution?.tone === "negative" ? "bg-red-50 text-red-700 border-red-200"
           : "bg-gray-50 text-gray-600 border-gray-200"
         }`}>
           <div className="font-medium">💬 Konverzace ukončena</div>
           {aiThreadState.resolution?.summary && (
-            <div className="mt-0.5 text-micro opacity-80">{aiThreadState.resolution.summary}</div>
+            <div className="mt-0.5 text-sm opacity-80">{aiThreadState.resolution.summary}</div>
           )}
         </div>
       )}
@@ -521,25 +521,25 @@ export default function ConversationPage() {
           která nikdy nepřijde. Místo něj se rovnou řekne proč. */}
       {!lzePsat ? (
         <div className="bg-white border-t border-gray-100 px-3 py-3 shrink-0 text-center">
-          <p className="text-xs text-muted leading-snug">
+          <p className="text-sm text-muted leading-snug">
             {replyHint?.text ?? "Do téhle konverzace se odpovídat nedá."}
           </p>
           {replyHint?.href && (
-            <Link href={replyHint.href} className="text-xs text-blue-600 font-medium mt-1 inline-block">
+            <Link href={replyHint.href} className="text-sm text-blue-600 font-medium mt-1 inline-block">
               Otevřít Fanoušky
             </Link>
           )}
           {credit && (
-            <p className="text-xs text-muted mt-1">Kredit {credit.zbyva} Kč</p>
+            <p className="text-sm text-muted mt-1">Kredit {credit.zbyva} Kč</p>
           )}
         </div>
       ) : (
       <div className="bg-white border-t border-gray-100 px-3 py-2 shrink-0">
         {creditError && (
-          <p className="text-xs text-card-red mb-1.5 px-1">{creditError}</p>
+          <p className="text-sm text-card-red mb-1.5 px-1">{creditError}</p>
         )}
         {credit && !creditError && (
-          <p className="text-xs text-muted mb-1.5 px-1 flex items-center gap-1.5">
+          <p className="text-sm text-muted mb-1.5 px-1 flex items-center gap-1.5">
             {jeImessage ? (
               <>
                 <span className="text-blue-600 font-medium">iMessage</span>
@@ -573,7 +573,7 @@ export default function ConversationPage() {
           <button
             onClick={handleSend}
             disabled={!newMsg.trim() || sending || cekaSeNaHrace || nemaNaSms}
-            className={`shrink-0 w-8 h-8 rounded-full text-white flex items-center justify-center disabled:opacity-40 text-xs self-end ${
+            className={`shrink-0 w-8 h-8 rounded-full text-white flex items-center justify-center disabled:opacity-40 text-sm self-end ${
               jeImessage ? "bg-blue-500" : "bg-pitch-500"
             }`}
           >
