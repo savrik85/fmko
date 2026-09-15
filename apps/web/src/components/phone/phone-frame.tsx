@@ -24,13 +24,11 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
         <div className="hidden sm:block absolute top-0 left-1/2 -translate-x-1/2 w-28 h-6 bg-gray-800 rounded-b-2xl z-20" />
 
         {/* Stavový řádek. Na mobilu taky: bez něj to nepůsobí jako telefon,
-            ale jako obyčejná stránka se seznamem. `shrink-0`, aby ho seznam
-            zpráv nepřimáčkl, a nahoře odsazení o safe area, ať neleze pod
-            výřez displeje. */}
-        <div
-          className="flex shrink-0 items-center justify-between px-6 pt-1.5 pb-0.5 bg-pitch-600 text-white text-sm relative z-10"
-          style={{ paddingTop: "max(0.375rem, env(safe-area-inset-top, 0px))" }}
-        >
+            ale jako obyčejná stránka se seznamem.
+            ŽÁDNÉ odsazení o safe area. Výřez displeje řeší horní lišta
+            aplikace nad tímhle; když jsem ho přidal i sem, naskočil na iPhonu
+            uprostřed stránky tlustý prázdný zelený pruh o 47 px. */}
+        <div className="flex shrink-0 items-center justify-between px-6 pt-1.5 pb-0.5 bg-pitch-600 text-white text-sm relative z-10">
           <span className="font-medium tabular-nums">{time}</span>
           <div className="flex items-center gap-1.5">
             {/* Signal bars */}
