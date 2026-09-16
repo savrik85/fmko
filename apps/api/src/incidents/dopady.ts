@@ -86,7 +86,14 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
       const r = await db.prepare(`UPDATE equipment SET ${z.kategorie} = ?, ${z.kategorie}_condition = ? WHERE team_id = ? AND ${z.kategorie} = ?`)
         .bind(nova, stavPo, stav.teamId, z.uroven).run()
         .catch((e) => { logger.error({ module: M }, `ztráta vybavení ${incidentId}`, e); return null; });
-      return zmeneno(r) ? z : null;
+      if (zmeneno(r)) {
+        // Ukradené nebo zničené vybavení nesmí dál viset v bazaru (stejně jako u zastavárny).
+        await db.prepare("UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE team_id = ? AND category = ? AND status = 'active'")
+          .bind(new Date().toISOString(), stav.teamId, z.kategorie).run()
+          .catch((e) => logger.warn({ module: M }, `stažení inzerátu po incidentu ${incidentId}`, e));
+        return z;
+      }
+      return null;
     }
     case "vybaveni_stav": {
       const r = await db.prepare(`UPDATE equipment SET ${z.kategorie}_condition = ? WHERE team_id = ? AND ${z.kategorie}_condition = ?`)
@@ -135,15 +142,19 @@ export async function uzavriProsleIncidenty(
     .catch((e) => logger.warn({ module: M }, `uzavření incidentů minulé sezóny ${t.teamId}`, e));
 
   const prosle = await db.prepare(
-    `UPDATE club_incidents SET status = 'uzavreny', resolution = 'nevyreseno', resolved_on = ?
+    `UPDATE club_incidents SET status = 'uzavreny',
+        resolution = CASE WHEN culprit_revealed = 1 THEN 'nechat_byt' ELSE 'nevyreseno' END,
+        resolved_on = ?
       WHERE team_id = ? AND status = 'otevreny' AND deadline IS NOT NULL AND deadline <= ?
-      RETURNING kind, category`,
-  ).bind(t.gameDate, t.teamId, t.gameDate).all<{ kind: string; category: string }>()
-    .catch((e) => { logger.warn({ module: M }, `uzavření incidentů po lhůtě ${t.teamId}`, e); return { results: [] as Array<{ kind: string; category: string }> }; });
+      RETURNING kind, category, culprit_revealed`,
+  ).bind(t.gameDate, t.teamId, t.gameDate).all<{ kind: string; category: string; culprit_revealed: number }>()
+    .catch((e) => { logger.warn({ module: M }, `uzavření incidentů po lhůtě ${t.teamId}`, e); return { results: [] as Array<{ kind: string; category: string; culprit_revealed: number }> }; });
 
   for (const r of prosle.results) {
     const nazev = KATALOG_PODLE_KIND.get(r.kind)?.label ?? r.kind;
-    const sablona = r.category === "kradez" ? TEXTY.lhuta_kradez[0] : TEXTY.lhuta_poskozeni[0];
+    const sablona = r.culprit_revealed === 1
+      ? TEXTY.lhuta_znamy[0]
+      : r.category === "kradez" ? TEXTY.lhuta_kradez[0] : TEXTY.lhuta_poskozeni[0];
     await sendSystemSMS(db, t.teamId, SMS_ROLE_KUSTOD, vypln(sablona, { nazev }));
   }
   return prosle.results.length;
