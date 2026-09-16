@@ -398,13 +398,17 @@ export async function executeDailyTick(
         const trainingWeather = await resolveWeatherForDate(env.DB, team.game_date as string);
 
         const rng = createRng(now.getTime() + teamId.charCodeAt(0));
+        // Vzdálenost dojíždění po indexech kádru. Dřív se místo ní předávalo undefined,
+        // takže postih docházky za dojíždění ani výmluvy „nejede autobus" nikdy neplatily
+        // a bonus dodávky k docházce nic nevyrovnával.
+        const commuteKms = playersResult.results.map((row) => (row.commute_km as number) ?? 0);
         const result = simulateTraining(rng, squad, {
           type: (todayTrainingType as any) ?? "conditioning",
           intensity: todayIntensity,
           weeklyLoad,
           approach: (team.training_approach as any) ?? "balanced",
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
-        }, undefined, equipMul, mgrBonus,
+        }, commuteKms, equipMul, mgrBonus,
           { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul },
           // Počasí tréninkového dne — týž zdroj jako předpověď a zápas.
           trainingWeather?.weather);
