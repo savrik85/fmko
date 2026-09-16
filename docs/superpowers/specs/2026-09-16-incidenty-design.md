@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS club_incidents (
   police_success    INTEGER,                 -- NULL = nešetřeno
   bazar_on          TEXT,                    -- herní den, kdy se zboží objeví v bazaru (NULL = nikdy)
   resolution        TEXT,                    -- klíč rozhodnutí (Část 7)
-  resolution_data   TEXT,                    -- JSON (srážka: {tydnuZbyva, castkaTydne})
+  resolution_data   TEXT,                    -- JSON (srážka: {celkem, tydnuZbyva}, pokuta: {castka})
   text              TEXT NOT NULL,           -- veřejný popis, česky
   created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   resolved_on       TEXT                     -- herní den uzavření
