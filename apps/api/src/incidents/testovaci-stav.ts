@@ -6,6 +6,7 @@ export function hrac(over: Partial<HracKlubu> = {}): HracKlubu {
     id: "h1", jmeno: "Franta Novák",
     alkohol: 50, disciplina: 50, vernost: 50, temperament: 50,
     vztahKTrenerovi: 50, transferUnrest: 0,
+    vudcovstvi: 30, povolani: "", recidivista: false,
     ...over,
   };
 }

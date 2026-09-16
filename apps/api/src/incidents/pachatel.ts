@@ -7,7 +7,7 @@
  */
 
 import type { Rng } from "../generators/rng";
-import { PRAH_VAHY_PACHATELE } from "./nastaveni";
+import { PRAH_VAHY_PACHATELE, VAHA_RECIDIVY } from "./nastaveni";
 import type { HracKlubu } from "./typy";
 
 export function vahaPachatele(h: HracKlubu): number {
@@ -15,7 +15,8 @@ export function vahaPachatele(h: HracKlubu): number {
     + ((100 - h.disciplina) / 100) * 1.2
     + ((100 - h.vernost) / 100) * 0.8
     + ((100 - h.vztahKTrenerovi) / 100) * 0.6
-    + (h.transferUnrest / 100) * 0.5;
+    + (h.transferUnrest / 100) * 0.5
+    + (h.recidivista ? VAHA_RECIDIVY : 0);
 }
 
 /** Vážený výběr pachatele z kandidátů nad prahem. `null`, když nikdo práh nepřekročí. */

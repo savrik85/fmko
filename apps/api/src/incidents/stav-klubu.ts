@@ -5,7 +5,9 @@
  */
 
 import { ensureEquipmentRow } from "../equipment/equipment-service";
+import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
+import { RECIDIVA_DNI } from "./nastaveni";
 import type { HracKlubu, StavKlubu } from "./typy";
 
 const M = "incidents-stav";
@@ -34,6 +36,28 @@ function pole(raw: unknown, co: string): Array<Record<string, unknown>> {
     logger.warn({ module: M }, `nečitelný JSON (${co})`, e);
     return [];
   }
+}
+
+/** Sloupce hráče, ze kterých `hracZRadku` skládá `HracKlubu`. */
+export const SLOUPCE_HRACE = "id, first_name, last_name, personality, life_context, coach_relationship";
+
+export function hracZRadku(r: Record<string, unknown>, recidiviste: ReadonlySet<string> = new Set()): HracKlubu {
+  const p = objekt(r.personality, "personality");
+  const lc = objekt(r.life_context, "life_context");
+  const id = String(r.id);
+  return {
+    id,
+    jmeno: `${r.first_name} ${r.last_name}`,
+    alkohol: cislo(p.alcohol, 30),
+    disciplina: cislo(p.discipline, 50),
+    vernost: cislo(p.patriotism, 50),
+    temperament: cislo(p.temper, 40),
+    vztahKTrenerovi: cislo(r.coach_relationship, 50),
+    transferUnrest: cislo(lc.transferUnrest?.level, 0),
+    vudcovstvi: cislo(p.leadership, 30),
+    povolani: typeof lc.occupation === "string" ? lc.occupation : "",
+    recidivista: recidiviste.has(id),
+  };
 }
 
 function predchoziDen(den: string): string {
@@ -66,7 +90,7 @@ export async function nactiStavKlubu(
 
   const vysledky = await db.batch([
     db.prepare("SELECT changing_rooms, showers, toilets, refreshments, fence, stands, entrance_gate, lighting, pitch_condition FROM stadiums WHERE team_id = ?").bind(teamId),
-    db.prepare("SELECT id, first_name, last_name, personality, life_context, coach_relationship FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')").bind(teamId),
+    db.prepare(`SELECT ${SLOUPCE_HRACE} FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')`).bind(teamId),
     db.prepare(
       `SELECT m.id, m.home_team_id, m.home_score, m.away_score
          FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
@@ -87,29 +111,23 @@ export async function nactiStavKlubu(
           AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id AND (m.home_team_id = ?3 OR m.away_team_id = ?3))
         LIMIT 1`,
     ).bind(den, zitra, teamId),
+    db.prepare(
+      `SELECT DISTINCT culprit_player_id AS id FROM club_incidents
+        WHERE team_id = ? AND season_number = ? AND culprit_type = 'hrac' AND culprit_player_id IS NOT NULL
+          AND status = 'uzavreny' AND COALESCE(resolution, '') NOT IN ('bez_skody', 'nestalo_se', 'konec_sezony')
+          AND resolved_on >= ?`,
+    ).bind(teamId, seasonNumber, gameExpiry(gameDate, -RECIDIVA_DNI)),
   ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
   if (!vysledky) return null;
-  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes] = vysledky;
+  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes] = vysledky;
 
   const stadion: Record<string, number> = {};
   for (const [k, v] of Object.entries((stadionRes.results[0] ?? {}) as Record<string, unknown>)) {
     if (typeof v === "number") stadion[k] = v;
   }
 
-  const kadr: HracKlubu[] = (kadrRes.results as Array<Record<string, unknown>>).map((r) => {
-    const p = objekt(r.personality, "personality");
-    const lc = objekt(r.life_context, "life_context");
-    return {
-      id: String(r.id),
-      jmeno: `${r.first_name} ${r.last_name}`,
-      alkohol: cislo(p.alcohol, 30),
-      disciplina: cislo(p.discipline, 50),
-      vernost: cislo(p.patriotism, 50),
-      temperament: cislo(p.temper, 40),
-      vztahKTrenerovi: cislo(r.coach_relationship, 50),
-      transferUnrest: cislo(lc.transferUnrest?.level, 0),
-    };
-  });
+  const recidiviste = new Set((recidivisteRes.results as Array<{ id: string }>).map((r) => String(r.id)));
+  const kadr: HracKlubu[] = (kadrRes.results as Array<Record<string, unknown>>).map((r) => hracZRadku(r, recidiviste));
 
   let vceraZapas: StavKlubu["vcera"] = null;
   const zapas = zapasRes.results[0] as { id: string; home_team_id: string; home_score: number; away_score: number } | undefined;

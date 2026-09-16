@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
-import { PRAH_VAHY_PACHATELE } from "./nastaveni";
+import { PRAH_VAHY_PACHATELE, VAHA_RECIDIVY } from "./nastaveni";
 import { sanceUspechuZvenku, vahaPachatele, vyberHrace } from "./pachatel";
 import { hrac, PROBLEMOVY } from "./testovaci-stav";
 
@@ -28,5 +28,15 @@ describe("pachatel", () => {
   it("plot, osvětlení a zabezpečení odrazují zloděje zvenku", () => {
     expect(sanceUspechuZvenku({}, 1)).toBe(1);
     expect(sanceUspechuZvenku({ fence: 3, lighting: 3 }, 0.2)).toBeCloseTo(0.6 * 0.8 * 0.2);
+  });
+
+  it("recidivista má váhu vyšší právě o recidivu", () => {
+    expect(vahaPachatele(hrac({ recidivista: true })) - vahaPachatele(hrac())).toBeCloseTo(VAHA_RECIDIVY);
+  });
+
+  it("slušný hráč s disciplínou a věrností 70 nekrade, recidiva ho nad práh dostane", () => {
+    const slusny = hrac({ disciplina: 70, vernost: 70 });
+    expect(vahaPachatele(slusny)).toBeLessThan(PRAH_VAHY_PACHATELE);
+    expect(vahaPachatele({ ...slusny, recidivista: true })).toBeGreaterThanOrEqual(PRAH_VAHY_PACHATELE);
   });
 });

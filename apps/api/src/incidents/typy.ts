@@ -11,7 +11,7 @@ export type TypPachatele = "hrac" | "cizi" | "zamestnanec" | "nikdo";
 export type Ztrata =
   | { typ: "vybaveni"; kategorie: string; uroven: number; stav: number; urovniDolu: number }
   | { typ: "vybaveni_stav"; kategorie: string; stavPred: number; stavPo: number }
-  | { typ: "stadion"; zarizeni: string; urovni: number; damageId?: string }
+  | { typ: "stadion"; zarizeni: string; urovni: number; damageId?: string; /** Cena opravy v Kč v okamžiku škody. */ cena?: number }
   | { typ: "travnik"; pred: number; po: number };
 
 export interface HracKlubu {
@@ -24,6 +24,12 @@ export interface HracKlubu {
   temperament: number;
   vztahKTrenerovi: number;
   transferUnrest: number;
+  /** `personality.leadership`, pro oblíbenost v kabině (spec 7c). */
+  vudcovstvi: number;
+  /** `life_context.occupation`, např. „Policista". */
+  povolani: string;
+  /** Pachatel incidentu uzavřeného v posledních 60 dnech (spec 5a). */
+  recidivista: boolean;
 }
 
 export interface StavKlubu {
@@ -64,3 +70,39 @@ export interface NavrhIncidentu {
   ztraty: Ztrata[];
   text: string;
 }
+
+export type ZdrojStopy =
+  | "kamera" | "spravce" | "soused" | "svedek" | "kamarad" | "rival" | "hospoda" | "bazar" | "policie" | "priznani";
+
+/**
+ * Stopa před zápisem do `club_incident_clues` (spec 5b).
+ * Stopy nelžou: `ukazujeNa` i `podezreli` vždy obsahují skutečného pachatele.
+ */
+export interface NavrhStopy {
+  zdroj: ZdrojStopy;
+  ukazujeNa: string | null;
+  podezreli: string[] | null;
+  /** Hráč, od kterého se stopa dá získat výslechem (fáze 4). */
+  drzitel: string | null;
+  sila: 1 | 2 | 3;
+  /** O kolik zvedne šanci policie, když je nalezená. */
+  bonusPolicie: number;
+  text: string;
+  nalezena: boolean;
+}
+
+export interface Stopa extends NavrhStopy {
+  id: string;
+}
+
+export type VysledekObvineni = "priznal" | "usvedcen" | "zapira";
+
+export interface Obvineni {
+  playerId: string;
+  jmeno: string;
+  /** `YYYY-MM-DD` herního dne. */
+  den: string;
+  vysledek: VysledekObvineni;
+}
+
+export type AkceTrestu = "odpustit" | "srazka" | "pokuta" | "vyhodit" | "policie" | "nechat_byt";
