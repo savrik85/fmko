@@ -5,6 +5,8 @@
  * Morálka je v players.life_context JSON. Volá se z daily-ticku v pondělí.
  */
 
+import { nactiDruhyHracu } from "../incidents/absence-hracu";
+import { KAMARADSKE_VZTAHY, SILA_KAMARADSTVI } from "../incidents/nastaveni";
 import { logger } from "../lib/logger";
 
 const M = "kabina";
@@ -14,13 +16,44 @@ export interface KabinaResult {
   potizista: { id: string; name: string } | null;
   mood: number; // průměrná morálka kádru po úpravě
   applied: boolean;
+  /** Věta o incidentu do notifikace (odhalený zloděj nebo křivě obviněný), jinak null. */
+  incident: string | null;
 }
 
 interface KabinaPlayer {
   id: string; name: string; leadership: number; discipline: number; temper: number; morale: number;
 }
 
-export async function processKabina(db: D1Database, teamId: string): Promise<KabinaResult> {
+/**
+ * Incidenty v kabině (spec 17c). Odhalenému zlodějovi kabina nevěří: ostatní −1,
+ * jeho kamarádi drží s ním (0) a tahounem být nemůže. Křivě obviněný nese křivdu:
+ * sám −2, kamarádi −1. Počítá jen hráče z `hraci`.
+ */
+export function incidentyVKabine(
+  hraci: readonly string[],
+  druhy: ReadonlyMap<string, readonly string[]>,
+  kamaradi: ReadonlyMap<string, ReadonlySet<string>>,
+): { delta: Map<string, number>; nesmiBytTahoun: Set<string> } {
+  const vKadru = new Set(hraci);
+  const delta = new Map<string, number>();
+  const nesmiBytTahoun = new Set<string>();
+  const pridej = (id: string, d: number) => { if (vKadru.has(id)) delta.set(id, (delta.get(id) ?? 0) + d); };
+  for (const id of hraci) {
+    const d = druhy.get(id) ?? [];
+    const jehoKamaradi = kamaradi.get(id) ?? new Set<string>();
+    if (d.includes("pachatel")) {
+      nesmiBytTahoun.add(id);
+      for (const jiny of hraci) if (jiny !== id && !jehoKamaradi.has(jiny)) pridej(jiny, -1);
+    }
+    if (d.includes("obvineny")) {
+      pridej(id, -2);
+      for (const kamarad of jehoKamaradi) pridej(kamarad, -1);
+    }
+  }
+  return { delta, nesmiBytTahoun };
+}
+
+export async function processKabina(db: D1Database, teamId: string, gameDate?: string): Promise<KabinaResult> {
   const squad = await db.prepare(
     // Hráč, který odmítá hrát (quit), do kabiny nechodí: není tahoun ani potížista.
     "SELECT id, first_name, last_name, personality, json_extract(life_context, '$.morale') AS morale FROM players WHERE team_id = ? AND (status IS NULL OR status NOT IN ('released', 'quit'))"
@@ -36,11 +69,39 @@ export async function processKabina(db: D1Database, teamId: string): Promise<Kab
       morale: p.morale ?? 50,
     };
   });
-  if (players.length < 5) return { tahoun: null, potizista: null, mood: 50, applied: false };
+  if (players.length < 5) return { tahoun: null, potizista: null, mood: 50, applied: false, incident: null };
+
+  // Incidenty v kabině (spec 17c). Bez herního data se nepočítají.
+  const druhy = gameDate ? await nactiDruhyHracu(db, teamId, gameDate) : new Map<string, string[]>();
+  let incidentniUpravy = { delta: new Map<string, number>(), nesmiBytTahoun: new Set<string>() };
+  let incident: string | null = null;
+  if (druhy.size > 0) {
+    const idsKadru = players.map((p) => p.id);
+    const phKadru = idsKadru.map(() => "?").join(",");
+    const typy = KAMARADSKE_VZTAHY.map(() => "?").join(",");
+    const vztahy = await db.prepare(
+      `SELECT player_a_id, player_b_id FROM relationships
+        WHERE type IN (${typy}) AND strength >= ? AND player_a_id IN (${phKadru}) AND player_b_id IN (${phKadru})`,
+    ).bind(...KAMARADSKE_VZTAHY, SILA_KAMARADSTVI, ...idsKadru, ...idsKadru)
+      .all<{ player_a_id: string; player_b_id: string }>()
+      .catch((e) => { logger.warn({ module: M }, "kamarádi pro incidenty v kabině", e); return { results: [] as Array<{ player_a_id: string; player_b_id: string }> }; });
+    const kamaradi = new Map<string, Set<string>>();
+    for (const r of vztahy.results) {
+      kamaradi.set(r.player_a_id, (kamaradi.get(r.player_a_id) ?? new Set()).add(r.player_b_id));
+      kamaradi.set(r.player_b_id, (kamaradi.get(r.player_b_id) ?? new Set()).add(r.player_a_id));
+    }
+    incidentniUpravy = incidentyVKabine(idsKadru, druhy, kamaradi);
+    const jmeno = (id: string) => players.find((p) => p.id === id)?.name;
+    const pachatel = idsKadru.find((id) => druhy.get(id)?.includes("pachatel"));
+    const obvineny = idsKadru.find((id) => druhy.get(id)?.includes("obvineny"));
+    incident = pachatel && jmeno(pachatel) ? `kabina nevěří hráči, který kradl: ${jmeno(pachatel)}`
+      : obvineny && jmeno(obvineny) ? `křivé obvinění pořád dusí hráče: ${jmeno(obvineny)}`
+      : null;
+  }
 
   // Tahoun = nejvyšší leadership (musí být dost vysoký). Potížisti = nízká disciplína + vysoký temperament.
-  const byLead = [...players].sort((a, b) => b.leadership - a.leadership);
-  const tahoun = byLead[0].leadership >= 65 ? byLead[0] : null;
+  const byLead = players.filter((p) => !incidentniUpravy.nesmiBytTahoun.has(p.id)).sort((a, b) => b.leadership - a.leadership);
+  const tahoun = byLead[0] && byLead[0].leadership >= 65 ? byLead[0] : null;
   const troublemakers = players.filter((p) => p.discipline < 35 && p.temper > 60);
   const potizista = [...troublemakers].sort((a, b) => (b.temper - b.discipline) - (a.temper - a.discipline))[0] ?? null;
 
@@ -71,6 +132,8 @@ export async function processKabina(db: D1Database, teamId: string): Promise<Kab
     if (d !== 0) { add(r.player_a_id, d); add(r.player_b_id, d); }
   }
 
+  for (const [id, d] of incidentniUpravy.delta) add(id, d);
+
   // Aplikuj (clamp týdenní delta na [-6,6], morálka 0-100).
   const stmts = [] as ReturnType<D1Database["prepare"]>[];
   let moodSum = 0;
@@ -88,5 +151,6 @@ export async function processKabina(db: D1Database, teamId: string): Promise<Kab
     potizista: potizista ? { id: potizista.id, name: potizista.name } : null,
     mood: Math.round(moodSum / players.length),
     applied: !failed, // když batch spadl, nehlásit úspěch (jinak notifikace „nálada X" neodpovídá DB)
+    incident,
   };
 }

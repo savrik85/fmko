@@ -389,12 +389,14 @@ export async function processTeamDay(
     if (newDayOfWeek === 1) {
       try {
         const { processKabina } = await import("./kabina");
-        const kab = await processKabina(env.DB, teamId);
+        const kab = await processKabina(env.DB, teamId, newGameDate);
         // Lidský tým: čas od času zpráva do kabiny, ať je dynamika vidět (ne každý týden — nespamovat).
-        if (kab.applied && team.user_id !== "ai" && (kab.tahoun || kab.potizista) && Math.random() < 0.4) {
+        // Incident se hlásí vždy: manažer má vědět, že jeho rozhodnutí kabina nese.
+        if (kab.applied && team.user_id !== "ai" && (kab.incident || ((kab.tahoun || kab.potizista) && Math.random() < 0.4))) {
           const parts: string[] = [];
           if (kab.tahoun) parts.push(`${kab.tahoun.name} drží partu`);
           if (kab.potizista) parts.push(`${kab.potizista.name} dělá v kabině dusno`);
+          if (kab.incident) parts.push(kab.incident);
           const { createNotification } = await import("../community/notifications");
           await createNotification(env.DB, teamId, "event", "🧢 Kabina", `${parts.join(" · ")} (nálada ${kab.mood})`, "/dashboard/kadr",
             { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB },
