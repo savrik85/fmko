@@ -58,6 +58,11 @@ export type TransactionType =
   // Pokuta disciplinární komise za výroky o rozhodčím. ZÁMĚRNĚ není v PURCHASE_TYPES —
   // musí se strhnout i při záporném rozpočtu, jinak by BUDGET_BLOCKED shodil uložení rozhovoru.
   | "disciplinary_fine"
+  // Incidenty v klubu: pokuta a srážka ze mzdy od pachatele (příjem klubu) a náhrada
+  // škody, když policie dopadne cizího pachatele. Nejsou to nákupy.
+  | "incident_fine"
+  | "incident_deduction"
+  | "incident_recovery"
   // Startovné do soutěže a kauce za návrh na schůzi vedení soutěže. Stejně jako
   // disciplinary_fine ZÁMĚRNĚ nejsou v PURCHASE_TYPES — nezaplatit je nejde,
   // musí se strhnout i při záporném rozpočtu.

@@ -11,15 +11,19 @@ import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
+import { recordTransaction } from "../season/finance-processor";
+import { removePlayer } from "../transfers/remove-player";
 import { posunHrace, posunKadru, posunKamaradu } from "./hraci";
 import { herniDatum, nactiHraceKadru, nactiIncident, proAkce } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
 import {
-  LHUTA_PO_ODHALENI_DNI, OBVINENI_PAMET_DNI, POLICIE_DNI_MAX, POLICIE_DNI_MIN, SMS_ROLE_POLICIE,
+  LHUTA_PO_ODHALENI_DNI, OBVINENI_PAMET_DNI, POLICIE_DNI_MAX, POLICIE_DNI_MIN, SMS_ROLE_POLICIE, SRAZKA_TYDNU,
 } from "./nastaveni";
+import { nactiZtraty } from "./popis";
 import { nactiStopy, prikazyStop } from "./stopy-db";
 import { text, TEXTY, vypln } from "./texty";
-import type { Obvineni, VysledekObvineni } from "./typy";
+import { castkaPokuty, castkaSrazky, hodnotaSkody, jeOblibeny } from "./tresty";
+import type { AkceTrestu, Obvineni, VysledekObvineni } from "./typy";
 import { dostupneAkce, nactiObvineni, rozhodniObvineni } from "./vysetrovani";
 
 const M = "incidents-akce";
@@ -113,4 +117,98 @@ export async function zavolejPolicii(
   await sendSystemSMS(db, teamId, SMS_ROLE_POLICIE, `🚓 ${text(rng, "policie_prijato", { nazev: nazevIncidentu(inc.kind) })}`)
     .catch((e) => logger.warn({ module: M }, `SMS policie ${incidentId}`, e));
   return { ok: true, vysledekOn };
+}
+
+/** SMS, kterou pachatel odpoví na trest. U ostatních trestů hráč nepíše. */
+const SMS_TRESTU = { odpustit: "trest_odpustit", srazka: "trest_srazka", pokuta: "trest_pokuta" } as const;
+
+export async function rozhodni(
+  env: Bindings, teamId: string, incidentId: string, akce: AkceTrestu,
+): Promise<VysledekAkce<{ castka: number | null }>> {
+  const db = env.DB;
+  const [inc, gameDate] = await Promise.all([nactiIncident(db, teamId, incidentId), herniDatum(db, teamId)]);
+  if (!inc || !gameDate) return NENALEZENO;
+
+  const pachatel = inc.culprit_type === "hrac" && inc.culprit_player_id && inc.culprit_revealed === 1
+    ? await nactiHraceKadru(db, teamId, inc.culprit_player_id)
+    : null;
+  if (!pachatel || !dostupneAkce(proAkce(inc, true)).tresty.includes(akce)) {
+    return { ok: false, kod: 409, chyba: "Tohle rozhodnutí teď udělat nejde" };
+  }
+
+  const rng = createRng(seedFromString(`trest|${incidentId}|${akce}`));
+  const oblibeny = jeOblibeny(pachatel.vudcovstvi, pachatel.silnychVztahu);
+  const sms = { id: pachatel.id, firstName: pachatel.krestni, lastName: pachatel.prijmeni };
+
+  if (akce === "policie") {
+    // Udání vlastního hráče: výsledek přijde za pár dní a je jistý (spec 7c).
+    const vysledekOn = gameExpiry(gameDate, rng.int(POLICIE_DNI_MIN, POLICIE_DNI_MAX));
+    const narok = await db.prepare(
+      `UPDATE club_incidents SET status = 'policie', resolution = 'policie', police_result_on = ?
+        WHERE id = ? AND team_id = ? AND status = 'otevreny' AND culprit_revealed = 1 AND police_success IS NULL`,
+    ).bind(vysledekOn, incidentId, teamId).run()
+      .catch((e) => { logger.error({ module: M }, `udání ${incidentId}`, e); return null; });
+    if ((narok?.meta?.changes ?? 0) === 0) return ZMENENO;
+    // Oblíbeného hráče kabina práskači nezapomene.
+    if (oblibeny) {
+      await posunKadru(db, teamId, -3, [pachatel.id]).run()
+        .catch((e) => logger.warn({ module: M }, `morálka po udání ${incidentId}`, e));
+    }
+    await sendSystemSMS(db, teamId, SMS_ROLE_POLICIE, `🚓 ${text(rng, "policie_udani", { hrac: pachatel.jmeno })}`)
+      .catch((e) => logger.warn({ module: M }, `SMS udání ${incidentId}`, e));
+    return { ok: true, castka: null };
+  }
+
+  const skoda = hodnotaSkody(nactiZtraty(inc.loss));
+  const castka = akce === "srazka" ? castkaSrazky(skoda, pachatel.mzda)
+    : akce === "pokuta" ? castkaPokuty(skoda, pachatel.mzda)
+    : null;
+  const data = akce === "srazka" ? JSON.stringify({ celkem: castka, tydnuZbyva: castka ? SRAZKA_TYDNU : 0 })
+    : akce === "pokuta" ? JSON.stringify({ castka })
+    : null;
+
+  const narok = await db.prepare(
+    `UPDATE club_incidents SET status = 'uzavreny', resolution = ?, resolution_data = ?, resolved_on = ?
+      WHERE id = ? AND team_id = ? AND status = 'otevreny' AND culprit_revealed = 1`,
+  ).bind(akce, data, gameDate, incidentId, teamId).run()
+    .catch((e) => { logger.error({ module: M }, `rozhodnutí ${akce} ${incidentId}`, e); return null; });
+  if ((narok?.meta?.changes ?? 0) === 0) return ZMENENO;
+
+  if (akce === "vyhodit") {
+    const odebrany = await removePlayer(db, pachatel.id, "released", { toFreeAgent: true, teamId })
+      .catch((e) => { logger.error({ module: M }, `vyhazov pachatele ${incidentId}`, e); return null; });
+    if (!odebrany?.ok) {
+      await db.prepare(
+        "UPDATE club_incidents SET status = 'otevreny', resolution = NULL, resolution_data = NULL, resolved_on = NULL WHERE id = ? AND resolution = 'vyhodit'",
+      ).bind(incidentId).run()
+        .catch((e) => logger.error({ module: M }, `vrácení incidentu po nepovedeném vyhazovu ${incidentId}`, e));
+      return { ok: false, kod: 500, chyba: "Hráče se nepodařilo vyhodit" };
+    }
+    await posunKadru(db, teamId, oblibeny ? -4 : 1).run()
+      .catch((e) => logger.warn({ module: M }, `morálka po vyhazovu ${incidentId}`, e));
+    return { ok: true, castka: null };
+  }
+
+  const davka: D1PreparedStatement[] = [];
+  if (akce === "odpustit") {
+    davka.push(posunHrace(db, teamId, pachatel.id, { morale: 5, vztah: 8 }));
+    if (inc.severity >= 2) davka.push(posunKadru(db, teamId, -2, [pachatel.id]));
+  } else if (akce === "srazka") {
+    davka.push(posunHrace(db, teamId, pachatel.id, { morale: -6, vztah: -4 }));
+  } else if (akce === "pokuta") {
+    davka.push(posunHrace(db, teamId, pachatel.id, { morale: -8, vztah: -6 }));
+  }
+  if (davka.length > 0) {
+    await db.batch(davka).catch((e) => logger.error({ module: M }, `následky trestu ${incidentId}`, e));
+  }
+
+  if (akce === "pokuta" && castka) {
+    await recordTransaction(db, teamId, "incident_fine", castka, `Pokuta hráči: ${pachatel.jmeno}`, gameDate, `pokuta-${incidentId}`)
+      .catch((e) => logger.error({ module: M }, `pokuta ${incidentId}`, e));
+  }
+  if (akce === "odpustit" || akce === "srazka" || akce === "pokuta") {
+    await sendPlayerSMS(db, teamId, sms, text(rng, SMS_TRESTU[akce]))
+      .catch((e) => logger.warn({ module: M }, `SMS po trestu ${incidentId}`, e));
+  }
+  return { ok: true, castka };
 }

@@ -173,6 +173,26 @@ export const TEXTY = {
     "Oznámení je zapsané: {nazev}. Do týdne se ozveme s výsledkem.",
     "Případ jsme převzali: {nazev}. Výsledek šetření oznámíme do týdne.",
   ],
+  policie_udani: [
+    "Převzali jsme oznámení na hráče: {hrac}. Věc předáme soudu.",
+    "Oznámení na hráče je zapsané: {hrac}. Rozhodne soud.",
+    "Případ jsme převzali, podezřelý je hráč: {hrac}. Věc půjde k soudu.",
+  ],
+  trest_odpustit: [
+    "Díky, trenére. Už se to nestane.",
+    "Tohle jsem nečekal. Nezklamu vás.",
+    "Díky za šanci, trenére. Beru to vážně.",
+  ],
+  trest_srazka: [
+    "Chápu, trenére. Odpracuju to.",
+    "Je to fér. Srážku beru.",
+    "Zasloužil jsem si to, strhněte mi to ze mzdy.",
+  ],
+  trest_pokuta: [
+    "Zaplatím to. Zasloužil jsem si to.",
+    "Dobře, pokutu beru.",
+    "Je to moje chyba, zaplatím.",
+  ],
   lhuta_kradez: [
     "Uzavřeno bez výsledku: {nazev}. Kdo za tím stál, se nezjistilo.",
   ],
