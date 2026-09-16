@@ -108,8 +108,10 @@ export async function nactiStavKlubu(
     vceraZapas = { vyhra, cervenaKarta: cervene.results.map((r) => r.player_id) };
   }
 
+  // Hospoda zná i vůdce fanoušků (playerId „fan-…") a hosty. Do stavu patří jen hráči kádru.
+  const idKadru = new Set(kadr.map((h) => h.id));
   const hospodaVcera = pole((hospodaRes.results[0] as { attendees?: unknown } | undefined)?.attendees, "attendees")
-    .filter((a) => a.teamId === teamId && !a.isVisitor && !a.isCoach && typeof a.playerId === "string")
+    .filter((a) => a.teamId === teamId && !a.isVisitor && !a.isCoach && typeof a.playerId === "string" && idKadru.has(a.playerId))
     .map((a) => String(a.playerId));
 
   const posledniVyskyt: Record<string, string> = {};
