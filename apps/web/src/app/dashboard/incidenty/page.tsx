@@ -1,29 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel } from "@/components/ui";
-
-type StavIncidentu = "hrozi" | "otevreny" | "policie" | "probiha" | "uzavreny";
-
-interface Incident {
-  id: string;
-  kind: string;
-  label: string;
-  emoji: string;
-  category: string;
-  status: StavIncidentu;
-  severity: number;
-  gameDate: string;
-  deadline: string | null;
-  text: string;
-  ztraty: string[];
-  pachatel: { playerId: string; jmeno: string | null } | null;
-  resolution: string | null;
-  resolvedOn: string | null;
-}
+import { DetailIncidentu } from "./DetailIncidentu";
+import { datum, STAV_LABEL, STAV_TRIDA, VYSLEDEK_LABEL, type Incident } from "./typy";
 
 interface Poskozeni {
   id: string;
@@ -35,42 +19,32 @@ interface Poskozeni {
   gameDate: string | null;
 }
 
-const STAV_LABEL: Record<StavIncidentu, string> = {
-  hrozi: "Hrozí", otevreny: "Řeší se", policie: "Šetří policie", probiha: "Probíhá", uzavreny: "Uzavřeno",
-};
+const NACITANI = <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
-const STAV_TRIDA: Record<StavIncidentu, string> = {
-  hrozi: "bg-amber-100 text-amber-700",
-  otevreny: "bg-red-100 text-red-700",
-  policie: "bg-blue-100 text-blue-700",
-  probiha: "bg-amber-100 text-amber-700",
-  uzavreny: "bg-gray-100 text-muted",
-};
-
-const VYSLEDEK_LABEL: Record<string, string> = {
-  nevyreseno: "Nevyřešeno",
-  konec_sezony: "Uzavřeno koncem sezóny",
-  bez_skody: "Bez škody",
-  nechat_byt: "Trenér to nechal být",
-};
-
-function datum(iso: string): string {
-  return new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", timeZone: "UTC" });
+export default function IncidentyStranka() {
+  return <Suspense fallback={NACITANI}><Incidenty /></Suspense>;
 }
 
-export default function IncidentyPage() {
+function Incidenty() {
   const { teamId } = useTeam();
+  const vybrane = useSearchParams().get("id");
   const [incidenty, setIncidenty] = useState<Incident[] | null>(null);
   const [chyba, setChyba] = useState(false);
   const [poskozeni, setPoskozeni] = useState<Poskozeni[]>([]);
   const [opravujeId, setOpravujeId] = useState<string | null>(null);
   const [opravaZprava, setOpravaZprava] = useState<{ typ: "ok" | "chyba"; text: string } | null>(null);
 
-  useEffect(() => {
+  const nactiSeznam = useCallback(() => {
     if (!teamId) return;
     apiFetch<{ incidents: Incident[] }>(`/api/teams/${teamId}/incidents`)
-      .then((d) => setIncidenty(d.incidents))
+      .then((d) => { setIncidenty(d.incidents); setChyba(false); })
       .catch((e) => { console.error("incidents fetch:", e); setChyba(true); });
+  }, [teamId]);
+
+  useEffect(() => { nactiSeznam(); }, [nactiSeznam]);
+
+  useEffect(() => {
+    if (!teamId) return;
     apiFetch<{ damage?: Poskozeni[] }>(`/api/teams/${teamId}/fans/groups`)
       .then((d) => setPoskozeni(d.damage ?? []))
       .catch((e) => console.error("damage fetch:", e));
@@ -92,12 +66,21 @@ export default function IncidentyPage() {
     }
   }
 
+  if (vybrane && teamId) {
+    return (
+      <div className="page-container space-y-4">
+        <Link href="/dashboard/incidenty" className="inline-block text-sm font-heading font-bold text-pitch-600 hover:text-pitch-500">
+          ← Všechny incidenty
+        </Link>
+        <DetailIncidentu key={vybrane} teamId={teamId} incidentId={vybrane} onZmena={nactiSeznam} />
+      </div>
+    );
+  }
+
   if (chyba) {
     return <div className="page-container"><div className="card p-4 text-sm text-muted">Incidenty se nepodařilo načíst.</div></div>;
   }
-  if (!incidenty) {
-    return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
-  }
+  if (!incidenty) return NACITANI;
 
   const zive = incidenty.filter((i) => i.status !== "uzavreny");
   const uzavrene = incidenty.filter((i) => i.status === "uzavreny");
@@ -108,8 +91,8 @@ export default function IncidentyPage() {
         <SectionLabel>Incidenty v klubu</SectionLabel>
         <p className="text-sm text-muted">
           Krádeže, rozbité vybavení a další průšvihy. Ukradené vybavení v klubu opravdu chybí
-          a rozbité zařízení nefunguje, dokud ho neopravíš. Proti zlodějům zvenku pomáhá
-          zabezpečení areálu ve vybavení.
+          a rozbité zařízení nefunguje, dokud ho neopravíš. Otevři incident a zjisti, kdo za tím stojí:
+          stopy, obvinění, policie. Proti zlodějům zvenku pomáhá zabezpečení areálu ve vybavení.
         </p>
       </div>
       {poskozeni.length > 0 && (
@@ -160,19 +143,20 @@ function Seznam({ titulek, incidenty, prazdne }: { titulek: string; incidenty: I
 }
 
 function Karta({ incident: i }: { incident: Incident }) {
-  const vysledek = i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
+  const vysledek = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
+  const odkaz = `/dashboard/incidenty?id=${encodeURIComponent(i.id)}`;
   return (
     <div className="border border-gray-100 rounded-soft p-3">
       <div className="flex items-start gap-3">
         <span className="text-2xl leading-none" aria-hidden>{i.emoji}</span>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-heading font-bold text-base">{i.label}</span>
-            <span className={`text-xs font-heading font-bold px-2 py-0.5 rounded-full ${STAV_TRIDA[i.status]}`}>{STAV_LABEL[i.status]}</span>
+            <Link href={odkaz} className="font-heading font-bold text-base hover:text-pitch-500">{i.label}</Link>
+            <span className={`text-sm font-heading font-bold px-2 py-0.5 rounded-full ${STAV_TRIDA[i.status]}`}>{STAV_LABEL[i.status]}</span>
           </div>
           <div className="text-sm text-muted">
             {datum(i.gameDate)}
-            {i.status === "otevreny" && i.deadline && ` · uzavře se ${datum(i.deadline)}`}
+            {i.status === "otevreny" && i.deadline && ` · rozhodni do ${datum(i.deadline)}`}
             {vysledek && ` · ${vysledek}`}
           </div>
           <p className="text-sm mt-2">{i.text}</p>
@@ -189,6 +173,11 @@ function Karta({ incident: i }: { incident: Incident }) {
               </Link>
             </div>
           )}
+          <div className="mt-3">
+            <Link href={odkaz} className="text-sm font-heading font-bold text-pitch-600 hover:text-pitch-500">
+              {i.status === "otevreny" ? "Vyšetřovat a rozhodnout →" : "Otevřít →"}
+            </Link>
+          </div>
         </div>
       </div>
     </div>
