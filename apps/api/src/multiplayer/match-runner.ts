@@ -1369,9 +1369,30 @@ export async function buildMatchPlayers(
             });
         }
     }
-    const injuryRows = await db.prepare("SELECT player_id FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)")
-        .bind(teamId).all().catch(() => ({results: []}));
+    const injuryRows = await db.prepare("SELECT player_id, description, osobni_volno FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)")
+        .bind(teamId).all()
+        .catch((e) => { logger.warn({module: "match-runner"}, "load injuries for match build", e); return {results: [] as Record<string, unknown>[]}; });
     for (const ir of injuryRows.results) injuredIds.add(ir.player_id as string);
+
+    // Zranění a volno patří do seznamu nepřítomných stejně jako stopka. Dřív v něm
+    // chyběli, takže rozpad docházky (routes/teams.ts) počítal zraněného hráče jako
+    // „trenér ho nenominoval" a kolonka zranění byla vždy nula.
+    const injuryById = new Map(injuryRows.results.map((ir) => [ir.player_id as string, ir]));
+    for (const r of rows.results) {
+        const ir = injuryById.get(r.id as string);
+        if (!ir || suspendedIds.has(r.id as string)) continue;
+        // Popis stojí uprostřed věty („Jsem zraněný, modřina."), proto malé písmeno.
+        const surovy = String(ir.description ?? "").trim();
+        const popis = surovy ? surovy.charAt(0).toLocaleLowerCase("cs") + surovy.slice(1) : "";
+        const volno = (ir.osobni_volno as number) === 1;
+        absentInfo.push({
+            name: `${r.first_name} ${r.last_name}`,
+            reason: volno ? "Osobní volno" : "Zranění",
+            smsText: volno
+                ? (popis ? `Mám od trenéra volno, ${popis}.` : "Mám od trenéra volno.")
+                : (popis ? `Jsem zraněný, ${popis}.` : "Jsem zraněný, nemůžu hrát."),
+        });
+    }
 
     // Healthy pool — zdraví a nesuspendovaní. Tento subset je identický s SMS squadem.
     // absences.playerIndex → indexuje do healthyRows, ne do celého rows.
