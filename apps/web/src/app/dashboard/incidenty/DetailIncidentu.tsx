@@ -66,6 +66,9 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
   const vysetruje = i.category === "kradez" || i.category === "poskozeni";
   const maAkce = akce.obvinit || akce.policie || akce.tresty.length > 0;
   const podezreli = v.podezreli.filter((p): p is { playerId: string; jmeno: string } => !!p.jmeno);
+  // Pachatel je známý, ale trest se vybrat nedá, protože odešel z klubu. Bez týhle hlášky
+  // incident vypadá jako "Řeší se" navždy, beze slova proč.
+  const pachatelOdesel = i.status === "otevreny" && vysetruje && v.stav === "znamy" && akce.tresty.length === 0;
 
   function obvinit() {
     const jmeno = detail?.kadr.find((h) => h.playerId === obvinenyId)?.jmeno ?? "Hráč";
@@ -87,7 +90,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
           </div>
           <div className="text-sm text-muted">
             {datum(i.gameDate)}
-            {i.status === "otevreny" && i.deadline && ` · rozhodni do ${datum(i.deadline)}`}
+            {i.status === "otevreny" && i.deadline && ` · uzavře se ${datum(i.deadline)}`}
             {vysledek && ` · ${vysledek}`}
           </div>
         </div>
@@ -239,6 +242,10 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
             </div>
           )}
         </div>
+      )}
+
+      {pachatelOdesel && (
+        <p className="text-sm text-muted">Pachatel už v klubu není. Incident se uzavře po lhůtě.</p>
       )}
 
       {zprava && (
