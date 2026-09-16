@@ -74,7 +74,7 @@ export const TREST_HOTOVO: Record<AkceTrestu, string> = {
   odpustit: "Odpuštěno.",
   srazka: "Srážka se bude strhávat každé pondělí.",
   pokuta: "Pokuta je zaplacená.",
-  vyradit: "Hráč vynechá příští ligová kola.",
+  vyradit: "Vyřazení platí od příštího ligového kola.",
   vyhodit: "Hráč z klubu odešel.",
   policie: "Předáno policii, výsledek přijde do týdne.",
   nechat_byt: "Necháno být.",
