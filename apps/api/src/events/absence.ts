@@ -734,6 +734,7 @@ export function generateAbsences(
     if (timing !== "any") {
       const categoryTiming: Record<string, AbsenceTiming> = {
         professional: "day_before", health: "day_before", commute: "match_day", hangover: "match_day",
+        incident: "day_before",
       };
       const catTiming = categoryTiming[category];
       if (catTiming && catTiming !== timing) continue;

@@ -128,6 +128,14 @@ describe("incident v losu omluvenek", () => {
     }
   });
 
+  it("výmluva po obvinění je jen den předem, nikdy v den zápasu", () => {
+    for (let seed = 1; seed <= 600; seed++) {
+      const vDenZapasu = generateAbsences(createRng(seed), sObvinenym, { timing: "match_day" })
+        .filter((a) => a.playerIndex === OBVINENY);
+      expect(vDenZapasu.every((a) => a.category !== "incident")).toBe(true);
+    }
+  });
+
   it("převod řádku: prázdné druhy nepřidají klíč incident", () => {
     const row = {
       first_name: "Jan", last_name: "Kos", age: 25, commute_km: 0, is_celebrity: 0,
