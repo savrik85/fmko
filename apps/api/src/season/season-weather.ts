@@ -196,6 +196,22 @@ export async function resolveRoundWeather(
 }
 
 /**
+ * Termín zápasu podle klíče: ligové kolo (`season_calendar`), pohárový zápas
+ * (`cup_matches`), nebo přátelák (`matches.created_at`). `null`, když klíč nic nezná.
+ */
+export async function terminZapasu(db: D1Database, matchKey: string): Promise<string | null> {
+  if (!matchKey) return null;
+  const hledej = async (sql: string, sloupec: "scheduled_at" | "created_at"): Promise<string | null> => {
+    const row = await db.prepare(sql).bind(matchKey).first<Record<string, string>>()
+      .catch((e) => { logger.warn({ module: "season-weather" }, `termín zápasu ${matchKey} se nenačetl`, e); return null; });
+    return row?.[sloupec] ?? null;
+  };
+  return await hledej("SELECT scheduled_at FROM season_calendar WHERE id = ?", "scheduled_at")
+    ?? await hledej("SELECT scheduled_at FROM cup_matches WHERE id = ?", "scheduled_at")
+    ?? await hledej("SELECT created_at FROM matches WHERE id = ?", "created_at");
+}
+
+/**
  * Počasí zápasu podle jeho klíče, ať zápas bydlí kdekoli.
  *
  * Absence se generují ze společného seedu `matchKey`, jenže ten je pro ligu
@@ -211,15 +227,7 @@ export async function resolveWeatherForMatchKey(
   db: D1Database,
   matchKey: string,
 ): Promise<RoundWeather | null> {
-  if (!matchKey) return null;
-  const hledej = async (sql: string, sloupec: "scheduled_at" | "created_at"): Promise<string | null> => {
-    const row = await db.prepare(sql).bind(matchKey).first<Record<string, string>>()
-      .catch((e) => { logger.warn({ module: "season-weather" }, `termín zápasu ${matchKey} se nenačetl`, e); return null; });
-    return row?.[sloupec] ?? null;
-  };
-  const termin = await hledej("SELECT scheduled_at FROM season_calendar WHERE id = ?", "scheduled_at")
-    ?? await hledej("SELECT scheduled_at FROM cup_matches WHERE id = ?", "scheduled_at")
-    ?? await hledej("SELECT created_at FROM matches WHERE id = ?", "created_at");
+  const termin = await terminZapasu(db, matchKey);
   if (!termin) return null;
   return resolveWeatherForDate(db, termin);
 }

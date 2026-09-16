@@ -8,6 +8,7 @@ import { absenceSeedForMatch } from "../lib/seed";
 import { generateAbsences, hracProAbsenci } from "./absence";
 import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
+import { nactiIncidentniKontext, pridejIncidentniAbsence } from "../incidents/absence-hracu";
 
 export interface MatchContext {
   /** calendar_id pro ligu, match.id pro friendly */
@@ -122,7 +123,8 @@ export async function getAbsentPlayersMap(
   const injuredIds = new Set(injRes.results.map((r) => r.player_id));
   const healthyPlayers = playersRes.results.filter((r) => !injuredIds.has(r.id as string) && !((r.suspended_matches as number) > 0));
 
-  const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row));
+  const incKontext = await nactiIncidentniKontext(db, teamId, ctx.scheduledAt);
+  const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row, incKontext.druhy.get(row.id as string)));
 
   const friendlyMultiplier = ctx.isFriendly ? 1.8 : undefined;
   const commuteMod = await fetchTeamCommuteMod(db, teamId);
@@ -138,11 +140,14 @@ export async function getAbsentPlayersMap(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, weather });
   const seen = new Set<number>();
-  const absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
-    if (seen.has(a.playerIndex)) return false;
-    seen.add(a.playerIndex);
-    return true;
-  });
+  const absences = pridejIncidentniAbsence(
+    [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
+      if (seen.has(a.playerIndex)) return false;
+      seen.add(a.playerIndex);
+      return true;
+    }),
+    healthyPlayers.map((r) => r.id as string), incKontext.absence, "day_before",
+  );
 
   const map = new Map<string, AbsencePlayerInfo>();
   for (const a of absences) {

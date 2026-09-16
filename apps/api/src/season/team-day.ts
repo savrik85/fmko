@@ -112,7 +112,7 @@ export async function processTeamDay(
         if (lid) {
           const tomorrowMatch = await env.DB.prepare(
             "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at BETWEEN ? AND ? AND status = 'scheduled'"
-          ).bind(lid, checkDayStart.toISOString(), checkDayEnd.toISOString()).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match lookup", e); return null; });
+          ).bind(lid, checkDayStart.toISOString(), checkDayEnd.toISOString()).first<{ id: string; scheduled_at: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match lookup", e); return null; });
           if (tomorrowMatch) {
             const alreadySent = await env.DB.prepare(
               "SELECT id FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group') AND metadata LIKE ?"
@@ -134,17 +134,23 @@ export async function processTeamDay(
                      AND i.player_id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)
                    ORDER BY p.overall_rating DESC`
               ).bind(teamId).all();
+              // Incidenty (spec 17a): vlivy do losu, výslech, soud a vyřazení až po losu.
+              const { nactiIncidentniKontext, pridejIncidentniAbsence } = await import("../incidents/absence-hracu");
+              const incKontext = await nactiIncidentniKontext(env.DB, teamId, tomorrowMatch.scheduled_at);
               const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId, phase: "day_before" }));
               const { hracProAbsenci } = await import("../events/absence");
-              const absSquad = squadRows.results.map((r) => hracProAbsenci(r));
+              const absSquad = squadRows.results.map((r) => hracProAbsenci(r, incKontext.druhy.get(r.id as string)));
               const teamDistrict = (team.village_district as string | null) ?? undefined;
               const { fetchTeamCommuteMod } = await import("../events/match-absences");
               const { resolveRoundWeather } = await import("./season-weather");
-              const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, {
-                timing: "day_before", district: teamDistrict,
-                commuteMod: await fetchTeamCommuteMod(env.DB, teamId),
-                weather: (await resolveRoundWeather(env.DB, tomorrowMatch.id as string))?.weather,
-              });
+              const dayBeforeAbsences = pridejIncidentniAbsence(
+                generateAbsences(absRng as any, absSquad, {
+                  timing: "day_before", district: teamDistrict,
+                  commuteMod: await fetchTeamCommuteMod(env.DB, teamId),
+                  weather: (await resolveRoundWeather(env.DB, tomorrowMatch.id as string))?.weather,
+                }),
+                squadRows.results.map((r) => r.id as string), incKontext.absence, "day_before",
+              );
               const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
               const matchConvId = crypto.randomUUID();
               await env.DB.prepare(
@@ -559,7 +565,7 @@ export async function processTeamDay(
         const todayEnd = new Date(gd); todayEnd.setUTCHours(23, 59, 59, 999);
         const todayMatch = await env.DB.prepare(
           "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
-        ).bind(team.league_id, todayEnd.toISOString()).first<{ id: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "today match lookup", e); return null; });
+        ).bind(team.league_id, todayEnd.toISOString()).first<{ id: string; scheduled_at: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "today match lookup", e); return null; });
 
         if (todayMatch) {
           const alreadySentMatchDay = await env.DB.prepare(
@@ -581,11 +587,14 @@ export async function processTeamDay(
                  ORDER BY p.overall_rating DESC`
             ).bind(teamId).all();
 
+            const { nactiIncidentniKontext, pridejIncidentniAbsence } = await import("../incidents/absence-hracu");
+            const incKontext = await nactiIncidentniKontext(env.DB, teamId, todayMatch.scheduled_at);
+
             // match_day phase má vlastní seed (offset), day_before a match_day tedy produkují
             // disjoint RNG streamy → hráč nemůže být označen v obou (jinak by dostal dva omluvné SMS).
             const mdRng = createRng(absenceSeedForMatch({ matchKey: todayMatch.id, teamId, phase: "match_day" }));
             const { hracProAbsenci } = await import("../events/absence");
-            const absSquad = squadRows.results.map((r) => hracProAbsenci(r));
+            const absSquad = squadRows.results.map((r) => hracProAbsenci(r, incKontext.druhy.get(r.id as string)));
             // Find the match conversation created day before
             const matchConvId = await env.DB.prepare(
               "SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.team_id = ? AND c.type = 'squad_group' AND m.metadata LIKE ? LIMIT 1"
@@ -601,11 +610,14 @@ export async function processTeamDay(
               const teamDistrictMd = (team.village_district as string | null) ?? undefined;
               const { fetchTeamCommuteMod: fetchVanModMd } = await import("../events/match-absences");
               const { resolveRoundWeather: resolveMdWeather } = await import("./season-weather");
-              const matchDayAbsences = generateAbsences(mdRng as any, absSquad, {
-                timing: "match_day", district: teamDistrictMd,
-                commuteMod: await fetchVanModMd(env.DB, teamId),
-                weather: (await resolveMdWeather(env.DB, todayMatch.id as string))?.weather,
-              })
+              const matchDayAbsences = pridejIncidentniAbsence(
+                generateAbsences(mdRng as any, absSquad, {
+                  timing: "match_day", district: teamDistrictMd,
+                  commuteMod: await fetchVanModMd(env.DB, teamId),
+                  weather: (await resolveMdWeather(env.DB, todayMatch.id as string))?.weather,
+                }),
+                squadRows.results.map((r) => r.id as string), incKontext.absence, "match_day",
+              )
                 .filter((a) => {
                   const pid = squadRows.results[a.playerIndex]?.id as string;
                   return pid && !alreadyIds.has(pid);

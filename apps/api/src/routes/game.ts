@@ -3797,7 +3797,9 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   const healthyPlayers = players.results.filter((r) => !injuredPreviewIds.has(r.id as string) && !suspendedPreviewIds.has(r.id as string));
 
   const { hracProAbsenci } = await import("../events/absence");
-  const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row));
+  const { nactiIncidentniKontext, pridejIncidentniAbsence } = await import("../incidents/absence-hracu");
+  const incKontext = await nactiIncidentniKontext(c.env.DB, teamId, scheduledAt!);
+  const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row, incKontext.druhy.get(row.id as string)));
   const district = await fetchTeamDistrict(c.env.DB, teamId);
   // Preview spouští obě fáze se stejnými seedy jako SMS + simulace, pak deduplikuje dle playerIndex.
   // Absence zobrazujeme jen day-before nebo match-day (ne 2+ dny předem). Přátelák = vyšší šance.
@@ -3817,11 +3819,14 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, weather });
     const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, weather });
     const seen = new Set<number>();
-    absences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
-      if (seen.has(a.playerIndex)) return false;
-      seen.add(a.playerIndex);
-      return true;
-    });
+    absences = pridejIncidentniAbsence(
+      [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
+        if (seen.has(a.playerIndex)) return false;
+        seen.add(a.playerIndex);
+        return true;
+      }),
+      healthyPlayers.map((r) => r.id as string), incKontext.absence, "day_before",
+    );
   }
   const absentPlayerIds = new Set(absences.map((a) => healthyPlayers[a.playerIndex]?.id as string).filter(Boolean));
 
@@ -9506,19 +9511,25 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
          ORDER BY p.overall_rating DESC`
     ).bind(teamId).all();
 
+    const { nactiIncidentniKontext, pridejIncidentniAbsence } = await import("../incidents/absence-hracu");
+    const incKontext = await nactiIncidentniKontext(c.env.DB, teamId, tomorrowMatch.scheduled_at);
+
     const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId, phase: "day_before" }));
     const { hracProAbsenci } = await import("../events/absence");
-    const absSquad = squadRows.results.map((r) => hracProAbsenci(r));
+    const absSquad = squadRows.results.map((r) => hracProAbsenci(r, incKontext.druhy.get(r.id as string)));
 
     const triggerDistrict = await fetchDistrictForTrigger(c.env.DB, teamId);
     // Stejný důvod jako u preview: tyhle SMS musí sedět se simulací zápasu.
     const { fetchTeamCommuteMod: fetchTriggerCommuteMod } = await import("../events/match-absences");
     const { resolveRoundWeather: resolveTriggerWeather } = await import("../season/season-weather");
     const triggerCommuteMod = await fetchTriggerCommuteMod(c.env.DB, teamId);
-    const dayBeforeAbsences = generateAbsences(absRng as any, absSquad, {
-      timing: "day_before", district: triggerDistrict, commuteMod: triggerCommuteMod,
-      weather: (await resolveTriggerWeather(c.env.DB, tomorrowMatch.id))?.weather,
-    });
+    const dayBeforeAbsences = pridejIncidentniAbsence(
+      generateAbsences(absRng as any, absSquad, {
+        timing: "day_before", district: triggerDistrict, commuteMod: triggerCommuteMod,
+        weather: (await resolveTriggerWeather(c.env.DB, tomorrowMatch.id))?.weather,
+      }),
+      squadRows.results.map((r) => r.id as string), incKontext.absence, "day_before",
+    );
     const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
     const matchConvId = crypto.randomUUID();
 

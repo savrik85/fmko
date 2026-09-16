@@ -1405,10 +1405,14 @@ export async function buildMatchPlayers(
     logger.info({module: "match-runner"}, `buildMatchPlayers team=${teamId.slice(0, 8)} total=${rows.results.length} healthy=${healthyRows.length} hasLineup=${hasUserLineup} dbIDs=[${allDbIds.join(",")}]`);
     if (options?.matchKey) {
         try {
+            const {nactiIncidentniKontext, pridejIncidentniAbsence, prazdnyKontext} = await import("../incidents/absence-hracu");
+            const {terminZapasu} = await import("../season/season-weather");
+            const terminAbsenci = await terminZapasu(db, options.matchKey);
+            const incKontext = terminAbsenci ? await nactiIncidentniKontext(db, teamId, terminAbsenci) : prazdnyKontext();
             const {generateAbsences, hracProAbsenci} = await import("../events/absence");
             const {absenceSeedForMatch} = await import("../lib/seed");
             const {fetchTeamDistrict} = await import("../events/match-absences");
-            const squadForAbsence = healthyRows.map((row) => hracProAbsenci(row));
+            const squadForAbsence = healthyRows.map((row) => hracProAbsenci(row, incKontext.druhy.get(row.id as string)));
             const district = await fetchTeamDistrict(db, teamId);
 
             // Dvě fáze s odlišnými seedy — shoda s day_before SMS i match_day SMS.
@@ -1438,11 +1442,14 @@ export async function buildMatchPlayers(
               commuteMod: vanCommuteMod, weather: absenceWeather,
             });
             const seen = new Set<number>();
-            const allAbsences = [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
-                if (seen.has(a.playerIndex)) return false;
-                seen.add(a.playerIndex);
-                return true;
-            });
+            const allAbsences = pridejIncidentniAbsence(
+                [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
+                    if (seen.has(a.playerIndex)) return false;
+                    seen.add(a.playerIndex);
+                    return true;
+                }),
+                healthyRows.map((r) => r.id as string), incKontext.absence, "day_before",
+            );
 
             absentIds = new Set(allAbsences.map((a) => healthyRows[a.playerIndex]?.id as string).filter(Boolean));
             for (const a of allAbsences) {
