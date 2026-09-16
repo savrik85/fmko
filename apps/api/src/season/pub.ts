@@ -1550,13 +1550,27 @@ async function pridejVudceDoHospody(
     if (rows.results.length === 0) return stmts;
 
     // Hraje se zítra? Den před zápasem je plná hospoda něco jiného než ve středu.
+    //
+    // Sloupec je `scheduled_at`, ne `match_date`. Dokud tu stálo to druhé,
+    // dotaz pokaždé spadl do catch, `zapasZitra` byl vždycky null a scéna
+    // „vůdce našel hráče v hospodě den před zápasem" ve hře nikdy nenastala.
+    // `LEFT JOIN` a `COALESCE` jsou podle `daily-tick.ts`: zápas nemusí mít
+    // řádek v kalendáři. Pohár se ptá zvlášť, ten svoje datum drží u sebe.
     const zitra = new Date(gameDate);
     zitra.setUTCDate(zitra.getUTCDate() + 1);
+    const zitraKey = zitra.toISOString().slice(0, 10);
     const zapasZitra = await db.prepare(
-      `SELECT 1 FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
-       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.home_score IS NULL
-         AND substr(sc.match_date, 1, 10) = ? LIMIT 1`,
-    ).bind(teamId, teamId, zitra.toISOString().slice(0, 10)).first()
+      `SELECT 1 FROM matches m
+         LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
+        WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.home_score IS NULL
+          AND substr(COALESCE(sc.scheduled_at, m.created_at), 1, 10) = ?
+       UNION ALL
+       SELECT 1 FROM cup_matches cm
+         JOIN cup_teams ct ON ct.id IN (cm.home_cup_team_id, cm.away_cup_team_id)
+        WHERE ct.team_id = ? AND cm.home_score IS NULL
+          AND substr(cm.scheduled_at, 1, 10) = ?
+       LIMIT 1`,
+    ).bind(teamId, teamId, zitraKey, teamId, zitraKey).first()
       .catch((e) => { logger.warn({ module: "pub" }, "zápas zítra", e); return null; });
 
     const hraci = attendees
