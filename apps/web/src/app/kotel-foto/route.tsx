@@ -20,9 +20,27 @@ function fmtNum(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
+/**
+ * Jak velké písmo se na plachtu vejde.
+ *
+ * Plachta je široká 1000 px a má 30 px odsazení z každé strany, takže text má
+ * 940 px. Tučné verzálky systémového fontu zabírají zhruba 0,62 šířky své
+ * velikosti. Dřív tu byly dva pevné stupně (78 a 58 px) a delší heslo z nich
+ * přetékalo, takže se rovnou ořezávalo.
+ */
+function velikostPisma(text: string): number {
+  const znaku = Math.max(1, text.length);
+  return Math.max(34, Math.min(78, Math.floor(940 / (znaku * 0.62))));
+}
+
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
-  const text = (q.get("text") ?? "").slice(0, 22).toUpperCase();
+  // 40 znaků, ne 22. Limit plachty se zvedl (`MAX_DELKA_TRANSPARENTU`
+  // v apps/api/src/engine/fan-banner.ts), ale tenhle obrázek zůstal na starém
+  // čísle a usekával hesla uprostřed: z „HVĚZDA VIMPERK, ZAMKNI BRÁNU!" zbylo
+  // „HVĚZDA VIMPERK, ZAMKNI". Web nemůže sáhnout do apps/api, takže je to
+  // ručně, ale musí to sedět.
+  const text = (q.get("text") ?? "").slice(0, 40).toUpperCase();
   const primary = hex(q.get("p"), "#2D5F2D");
   const secondary = hex(q.get("s"), "#ffffff");
   const bannerBg = hex(q.get("bg"), primary);
@@ -59,7 +77,7 @@ export async function GET(req: Request) {
           </div>
           {/* Plachta */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 1000, minHeight: 130, background: bannerBg, borderRadius: 14, boxShadow: "0 16px 50px rgba(0,0,0,0.5)", padding: "18px 30px" }}>
-            <div style={{ fontSize: text.length > 14 ? 58 : 78, fontWeight: 900, color: bannerFg, textAlign: "center", lineHeight: 1.05 }}>
+            <div style={{ fontSize: velikostPisma(text), fontWeight: 900, color: bannerFg, textAlign: "center", lineHeight: 1.05 }}>
               {text || team.toUpperCase()}
             </div>
           </div>
