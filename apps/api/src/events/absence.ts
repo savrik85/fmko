@@ -43,6 +43,8 @@ export interface PlayerForAbsence {
   celebrityType?: "legend" | "fallen_star" | "glass_man";
   celebrityTier?: "S" | "A" | "B" | "C";
   transferUnrest?: number; // 0-100 — truc po odmítnutém přestupu
+  /** Vliv incidentu v klubu (spec 17a). Ve fázi 3 jen `obvineny`. */
+  incident?: { druhy: string[] };
 }
 
 function nactiJson(raw: unknown, co: string): Record<string, any> {
@@ -67,8 +69,11 @@ function nactiJson(raw: unknown, co: string): Record<string, any> {
  *
  * Řádek musí obsahovat `first_name, last_name, age, personality, life_context,
  * physical, commute_km, is_celebrity`.
+ *
+ * Druhý parametr jsou vlivy incidentů z `incidents/absence-hracu.ts`; všechna
+ * místa losu je musí předat stejně.
  */
-export function hracProAbsenci(row: Record<string, unknown>): PlayerForAbsence {
+export function hracProAbsenci(row: Record<string, unknown>, druhy?: readonly string[]): PlayerForAbsence {
   const pers = nactiJson(row.personality, "personality");
   const lc = nactiJson(row.life_context, "life_context");
   const phys = nactiJson(row.physical, "physical");
@@ -89,6 +94,7 @@ export function hracProAbsenci(row: Record<string, unknown>): PlayerForAbsence {
     isCelebrity: !!(row.is_celebrity as number),
     celebrityType: pers.celebrityType,
     celebrityTier: pers.celebrityTier,
+    ...(druhy && druhy.length > 0 ? { incident: { druhy: [...druhy] } } : {}),
   };
 }
 
@@ -154,6 +160,23 @@ const PERSONAL_EXCUSES = [
   { text: "Vybil mi telefon a nikdo nevěděl kam má přijet", emoji: "\u{1F50B}", minAge: 0, timing: "match_day" as AbsenceTiming },
   { text: "Zapomněl jsem dresy doma, nemůžu zpátky už", emoji: "\u{1F455}", minAge: 0, timing: "match_day" as AbsenceTiming },
   { text: "Nemám čisté kopačky, zkusím to příště", emoji: "\u{1F45F}", minAge: 0, timing: "match_day" as AbsenceTiming },
+];
+
+// ═══════════════════════════════════════════════
+// INCIDENT V KLUBU (spec 17a)
+// ═══════════════════════════════════════════════
+
+/** Neprávem obviněný si hledá výmluvy častěji. */
+const OBVINENY_SANCE_NAVIC = 0.03;
+/** Váha výmluvy „Po obvinění" mezi ostatními kategoriemi (ty mají dohromady kolem 1). */
+const OBVINENY_VAHA_VYMLUVY = 0.5;
+
+const OBVINENY_EXCUSES = [
+  { text: "Po tom, co jste mě obvinil, nemám na fotbal náladu.", emoji: "\u{1F624}" },
+  { text: "Nepřijdu. Pořád mě štve, že mě máte za zloděje.", emoji: "\u{1F624}" },
+  { text: "Dneska ne, trenére. Nejdřív si to musím v hlavě srovnat.", emoji: "\u{1F614}" },
+  { text: "Nechce se mi mezi kluky, co si o mně myslí, že kradu.", emoji: "\u{1F614}" },
+  { text: "Mám toho plný zuby, tentokrát vynechám.", emoji: "\u{1F624}" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -582,6 +605,10 @@ export function generateAbsences(
     // Transfer truc — naštvaný hráč si hledá výmluvy častěji
     if ((p.transferUnrest ?? 0) >= 40) baseChance += 0.05;
 
+    // Neprávem obviněný (spec 17a). Jiné vlivy incidentu los nemění.
+    const obvineny = p.incident?.druhy.includes("obvineny") ?? false;
+    if (obvineny) baseChance += OBVINENY_SANCE_NAVIC;
+
     // ── Celebrity override — much higher absence rates ──
     if (p.isCelebrity) {
       const celebAbsenceRates: Record<string, Record<string, number>> = {
@@ -632,6 +659,8 @@ export function generateAbsences(
       // Doprava: vyšší pro dojíždějící hráče (klubová dodávka tlumí)
       commute: ((p.commuteKm ?? 0) > 5 ? 0.10 + (p.commuteKm ?? 0) * 0.005 : 0) * (1 - commuteMod),
     };
+
+    if (obvineny) weights.incident = OBVINENY_VAHA_VYMLUVY;
 
     const category = rng.weighted(weights) as AbsenceResult["category"];
 
@@ -688,18 +717,17 @@ export function generateAbsences(
         break;
       }
       case "incident": {
-        // `rng.weighted(weights)` tuhle kategorii nikdy nevylosuje — přidávají ji
-        // až incidenty přes `pridejIncidentniAbsence` (incidents/absence-hracu.ts)
-        // po tomto losu. Větev je tu jen kvůli vyčerpávajícímu switchi.
-        smsText = "";
-        emoji = "❗";
+        const pick = rng.pick(OBVINENY_EXCUSES);
+        smsText = pick.text;
+        emoji = pick.emoji;
+        excuseTiming = "day_before";
         break;
       }
     }
 
     const CATEGORY_LABELS: Record<string, string> = {
       professional: "Práce", personal: "Osobní", absurd: "Jiné",
-      health: "Zdraví", hangover: "Kocovina", commute: "Doprava", incident: "Incident",
+      health: "Zdraví", hangover: "Kocovina", commute: "Doprava", incident: "Po obvinění",
     };
 
     // Skip if timing doesn't match (professional = day_before only, commute/hangover = match_day only)

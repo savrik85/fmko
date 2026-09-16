@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
-import { generateAbsences, hracProAbsenci, type PlayerForAbsence } from "./absence";
+import { generateAbsences, hracProAbsenci, type AbsenceResult, type PlayerForAbsence } from "./absence";
 
 const SQUAD: PlayerForAbsence[] = Array.from({ length: 18 }, (_, i) => ({
   firstName: "Hráč",
@@ -86,5 +86,55 @@ describe("hracProAbsenci — jeden převod pro všechna místa", () => {
     expect(p.stamina).toBe(50);
     expect(p.transferUnrest).toBe(0);
     expect(p.occupation).toBe("");
+  });
+});
+
+describe("incident v losu omluvenek", () => {
+  const OBVINENY = 5;
+  const sObvinenym = SQUAD.map((p, i) => (i === OBVINENY ? { ...p, incident: { druhy: ["obvineny"] } } : p));
+
+  it("bez incidentu je výstup beze změny", () => {
+    const sPrazdnym = SQUAD.map((p) => ({ ...p, incident: undefined }));
+    for (let seed = 1; seed <= 50; seed++) {
+      expect(generateAbsences(createRng(seed), sPrazdnym, { timing: "match_day" }))
+        .toEqual(generateAbsences(createRng(seed), SQUAD, { timing: "match_day" }));
+    }
+  });
+
+  it("jiný druh vlivu než obviněný los nemění", () => {
+    const sPachatelem = SQUAD.map((p, i) => (i === OBVINENY ? { ...p, incident: { druhy: ["pachatel"] } } : p));
+    for (let seed = 1; seed <= 50; seed++) {
+      expect(generateAbsences(createRng(seed), sPachatelem, { timing: "day_before" }))
+        .toEqual(generateAbsences(createRng(seed), SQUAD, { timing: "day_before" }));
+    }
+  });
+
+  it("neprávem obviněný chybí častěji a vymlouvá se na obvinění", () => {
+    let predtim = 0;
+    let potom = 0;
+    const vymluvy: AbsenceResult[] = [];
+    for (let seed = 1; seed <= 600; seed++) {
+      predtim += generateAbsences(createRng(seed), SQUAD, { timing: "day_before" }).filter((a) => a.playerIndex === OBVINENY).length;
+      const jeho = generateAbsences(createRng(seed), sObvinenym, { timing: "day_before" }).filter((a) => a.playerIndex === OBVINENY);
+      potom += jeho.length;
+      vymluvy.push(...jeho.filter((a) => a.category === "incident"));
+    }
+    expect(potom).toBeGreaterThan(predtim);
+    expect(vymluvy.length).toBeGreaterThan(0);
+    for (const v of vymluvy) {
+      expect(v.reason).toBe("Po obvinění");
+      expect(v.smsText).not.toContain("—");
+      expect(v.smsText.trim()).toMatch(/[.!]$/);
+    }
+  });
+
+  it("převod řádku: prázdné druhy nepřidají klíč incident", () => {
+    const row = {
+      first_name: "Jan", last_name: "Kos", age: 25, commute_km: 0, is_celebrity: 0,
+      personality: JSON.stringify({ discipline: 40 }), life_context: "{}", physical: "{}",
+    };
+    expect(hracProAbsenci(row, [])).toEqual(hracProAbsenci(row));
+    expect("incident" in hracProAbsenci(row)).toBe(false);
+    expect(hracProAbsenci(row, ["obvineny"]).incident).toEqual({ druhy: ["obvineny"] });
   });
 });
