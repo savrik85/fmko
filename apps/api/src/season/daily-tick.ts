@@ -800,7 +800,7 @@ export async function executeDailyTick(
   // mezi day_before SMS a match_day simulací (jinak divergence absencí). Dodávku „opotřebí" jen zápas/nákup.
   const equipCategories = ["balls", "jerseys", "training_cones", "first_aid", "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
     "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup", "laundry", "mower", "coffee_maker",
-    "sports_drinks", "raffle", "pa_system", "trophy_case"];
+    "sports_drinks", "raffle", "pa_system", "trophy_case", "area_security"];
 
   // Pračka snižuje šanci na opotřebení všeho ostatního, takže kluby, co ji mají,
   // se z globálního průchodu vyjmou a dojedou zvlášť nižší pravděpodobností.

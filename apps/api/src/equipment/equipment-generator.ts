@@ -13,7 +13,7 @@ export const CATEGORIES = [
   "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
   "team_van", "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup",
   "laundry", "mower", "pitch_heating", "pitch_irrigation", "coffee_maker",
-  "sports_drinks", "raffle", "pa_system", "trophy_case",
+  "sports_drinks", "raffle", "pa_system", "trophy_case", "area_security",
 ] as const;
 export type EquipmentCategory = typeof CATEGORIES[number];
 
@@ -45,6 +45,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   raffle: "Tombola a losy",
   pa_system: "Ozvučení a hlasatel",
   trophy_case: "Klubová kronika a vitrína",
+  area_security: "Zabezpečení areálu",
 };
 
 // ── Level descriptions (Czech village humor) ──
@@ -200,6 +201,12 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
     "Prosklená vitrína a kronika od roku 1963",
     "Síň slávy v klubovně, fotky všech mistrů okresu",
   ],
+  area_security: [
+    "Klíč je pod rohožkou",
+    "Nový zámek a mříže na skladu",
+    "Alarm a kamera nad vchodem do kabin",
+    "Kamerový systém s nahráváním, čidly a světly",
+  ],
 };
 
 // ── Upgrade effects (actual game modifiers) ──
@@ -231,6 +238,30 @@ export interface EquipmentEffects {
   raffleIncomePerFan: number;   // tombola: Kč z každého diváka na domácím zápase
   fanSatisfactionMod: number;   // ozvučení: body spokojenosti fanoušků po zápase
   loyaltyMod: number;           // kronika: růst trucu po odmítnuté nabídce ×(1 - mod)
+  theftRiskMul: number;         // zabezpečení: úspěch vloupání zvenku ×mul (zámek chrání i sešlý)
+  alarmChance: number;          // zabezpečení: šance, že alarm zloděje vyplaší (0 pod ZABEZPECENI_MIN_STAV)
+  cameraCoverage: number;       // zabezpečení: 0 nic, 1 kabiny a sklad, 2 celý areál (0 pod ZABEZPECENI_MIN_STAV)
+}
+
+/** Pod tímhle stavem alarm ani kamera nefungují. Zámek chrání dál. */
+export const ZABEZPECENI_MIN_STAV = 40;
+const ZABEZPECENI_RIZIKO = [1, 0.6, 0.35, 0.2];
+const ZABEZPECENI_ALARM = [0, 0, 0.5, 0.7];
+
+/**
+ * Efekty zabezpečení areálu. Nepočítají se přes `lv × stav` jako ostatní vybavení:
+ * zámek je zámek i zrezivělý, kdežto kamera, která nenahrává, nechrání vůbec.
+ */
+export function efektyZabezpeceni(level: number, condition: number): {
+  theftRiskMul: number; alarmChance: number; cameraCoverage: number;
+} {
+  const lv = Math.max(0, Math.min(MAX_LEVEL, Math.round(level)));
+  const funguje = condition >= ZABEZPECENI_MIN_STAV;
+  return {
+    theftRiskMul: ZABEZPECENI_RIZIKO[lv],
+    alarmChance: funguje ? ZABEZPECENI_ALARM[lv] : 0,
+    cameraCoverage: funguje ? Math.max(0, lv - 1) : 0,
+  };
 }
 
 /** Calculate actual game effects from equipment levels + conditions */
@@ -276,6 +307,7 @@ export function calculateEffects(levels: Record<string, number>, conditions: Rec
     raffleIncomePerFan: Math.round(eff("raffle") * 3),
     fanSatisfactionMod: Math.round(eff("pa_system") * 2),
     loyaltyMod: eff("trophy_case") * 0.12,
+    ...efektyZabezpeceni(levels.area_security ?? 0, conditions.area_security_condition ?? 50),
   };
 }
 
@@ -309,6 +341,7 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   raffle:          [0, 2000, 8000, 25000],
   pa_system:       [0, 6000, 22000, 65000],
   trophy_case:     [0, 3000, 12000, 35000],
+  area_security:   [0, 5000, 25000, 70000],
 };
 
 // ── Bazar a zastavárna — ceny ──
@@ -472,6 +505,7 @@ const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
   raffle:          ["", "+3 Kč z diváka na domácím zápase", "+6 Kč z diváka na domácím zápase", "+9 Kč z diváka na domácím zápase"],
   pa_system:       ["", "+2 spokojenost fanoušků za zápas", "+4 spokojenost fanoušků za zápas", "+6 spokojenost fanoušků za zápas"],
   trophy_case:     ["", "Truc hráčů roste o 12 % pomaleji", "Truc hráčů roste o 24 % pomaleji", "Truc hráčů roste o 36 % pomaleji"],
+  area_security:   ["", "Vloupání zvenku o 40 % méně", "Vloupání zvenku o 65 % méně, alarm a kamera u kabin", "Vloupání zvenku o 80 % méně, kamery v celém areálu"],
 };
 
 // ── Starting equipment by village size ──

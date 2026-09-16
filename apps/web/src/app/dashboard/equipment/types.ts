@@ -33,6 +33,7 @@ export interface EquipmentEffects {
   setPiecesMod?: number; moraleTargetBonus?: number; crowdMod?: number; weatherResistMod?: number; youthTrainingMod?: number;
   equipCareMod?: number; pitchCareMod?: number; pitchHeatingMod?: number; pitchIrrigationMod?: number; hangoverMod?: number;
   lateFatigueMod?: number; raffleIncomePerFan?: number; fanSatisfactionMod?: number; loyaltyMod?: number;
+  theftRiskMul?: number; alarmChance?: number; cameraCoverage?: number;
 }
 
 export interface EquipmentData {
@@ -81,7 +82,7 @@ export const EQUIPMENT_ICONS: Record<string, string> = {
   team_van: "🚐", gym_corner: "💪", training_wall: "🧱", club_grill: "🍖",
   fan_drums: "📣", winter_gear: "🧥", video_setup: "📹",
   laundry: "🧺", mower: "🚜", pitch_heating: "🔥", pitch_irrigation: "💧", coffee_maker: "☕",
-  sports_drinks: "🥤", raffle: "🎟", pa_system: "🎙", trophy_case: "🏆",
+  sports_drinks: "🥤", raffle: "🎟", pa_system: "🎙", trophy_case: "🏆", area_security: "🔒",
 };
 
 export function formatCZK(v: number): string {

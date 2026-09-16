@@ -228,6 +228,8 @@ function EquipmentPage() {
     (fx.raffleIncomePerFan ?? 0) > 0 && { label: "Tombola", value: `+${fx.raffleIncomePerFan} Kč z diváka`, icon: "🎟" },
     (fx.fanSatisfactionMod ?? 0) > 0 && { label: "Atmosféra", value: `+${fx.fanSatisfactionMod} spokojenost`, icon: "🎙" },
     (fx.loyaltyMod ?? 0) > 0.01 && { label: "Věrnost", value: `truc -${Math.round((fx.loyaltyMod ?? 0) * 100)}%`, icon: "🏆" },
+    (fx.theftRiskMul ?? 1) < 0.99 && { label: "Zabezpečení", value: `vloupání zvenku -${Math.round((1 - (fx.theftRiskMul ?? 1)) * 100)}%`, icon: "🔒" },
+    (fx.cameraCoverage ?? 0) > 0 && { label: "Kamery", value: fx.cameraCoverage === 2 ? "celý areál" : "kabiny a sklad", icon: "📹" },
   ].filter(Boolean) as { label: string; value: string; icon: string }[];
 
   const sellByCategory = new Map((data.sellOptions ?? []).map((s) => [s.category, s]));
