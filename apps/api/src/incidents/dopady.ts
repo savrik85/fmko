@@ -77,10 +77,13 @@ export async function zapisIncident(
   const zdroje = await nactiZdrojeStop(db, stav.teamId, navrh.culpritType === "hrac" ? navrh.culpritPlayerId : null);
   const stopy = vygenerujStopy(stav, navrh, zdroje, createRng(seedFromString(`stopy|${id}`)));
   const odhalen = navrh.culpritRevealed || odhalujePachatele(stopy);
-  await db.batch([
+  const zapsanoDavkou = await db.batch([
     db.prepare("UPDATE club_incidents SET loss = ?, culprit_revealed = ? WHERE id = ?").bind(JSON.stringify(provedene), odhalen ? 1 : 0, id),
     ...prikazyStop(db, stav.teamId, id, stopy, stav.gameDate),
-  ]).catch((e) => logger.warn({ module: M }, `uložení škody a stop ${id}`, e));
+  ]).catch((e) => { logger.error({ module: M }, `uložení škody a stop ${id}`, e); return null; });
+  // Retry stejného dne skončí na INSERT OR IGNORE gate výš, takže o nalezené stopy
+  // a odhalení bychom bez tohohle přišli navždy — oznámení proto nesmí předstírat víc, než se zapsalo.
+  if (!zapsanoDavkou) return { id, nalezeneStopy: [], odhalen: navrh.culpritRevealed };
   return { id, nalezeneStopy: stopy.filter((s) => s.nalezena).map((s) => s.text), odhalen };
 }
 

@@ -32,4 +32,15 @@ describe("zápis incidentu", () => {
     expect(davka.some((d) => /UPDATE club_incidents SET loss = \?, culprit_revealed = \?/.test(d.sql) && d.params[1] === 1)).toBe(true);
     expect(davka.some((d) => /INSERT OR IGNORE INTO club_incident_clues/.test(d.sql) && d.params[3] === "kamera")).toBe(true);
   });
+
+  it("selhání zápisu škody a stop (db.batch spadne) neoznámí nic, co se nezapsalo", async () => {
+    const db = new FalesnaD1([{ sql: /FROM staff_members/, first: { usudek: null } }]);
+    // FalesnaD1.batch přepínač na selhání nemá — přepíšeme instanci přímo.
+    db.batch = async () => { throw new Error("D1 výpadek"); };
+    const stav = stavKlubu({ kadr: [PROBLEMOVY], vybaveni: { jerseys: 2, jerseys_condition: 70, area_security: 3, area_security_condition: 100 } });
+    const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH, "inc-test");
+    expect(zapsany?.id).toBe("inc-test");
+    expect(zapsany?.nalezeneStopy).toEqual([]);
+    expect(zapsany?.odhalen).toBe(false);
+  });
 });
