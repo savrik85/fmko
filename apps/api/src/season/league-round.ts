@@ -481,171 +481,177 @@ async function runBetweenRoundEvents(
 
     for (const mr of results) {
       if (mr.matchType === "ai_vs_ai") continue;
-      const humanTeamId =
-        mr.matchType === "pve_home" || mr.matchType === "pvp"
-          ? (await db.prepare("SELECT home_team_id FROM matches WHERE id = ?").bind(mr.matchId).first<{ home_team_id: string }>())?.home_team_id
-          : (await db.prepare("SELECT away_team_id FROM matches WHERE id = ?").bind(mr.matchId).first<{ away_team_id: string }>())?.away_team_id;
-      if (!humanTeamId) continue;
+      const ids = await db.prepare("SELECT home_team_id, away_team_id FROM matches WHERE id = ?")
+        .bind(mr.matchId).first<{ home_team_id: string; away_team_id: string }>()
+        .catch((e) => { logger.warn({ module: "league-round" }, "between-round match sides", e); return null; });
+      if (!ids) continue;
+      // Lidské strany zápasu. V PvP jsou lidské obě; dřív dostal události jen domácí
+      // a výhra se mu počítala z pohledu hostů, takže po výhře slyšel „kluci jsou na dně".
+      const strany: Array<{ humanTeamId: string; jeDoma: boolean }> = [];
+      if (mr.matchType === "pve_home" || mr.matchType === "pvp") strany.push({ humanTeamId: ids.home_team_id, jeDoma: true });
+      if (mr.matchType === "pve_away" || mr.matchType === "pvp") strany.push({ humanTeamId: ids.away_team_id, jeDoma: false });
 
-      const td = await db
-        .prepare("SELECT budget, reputation, game_date FROM teams WHERE id = ?")
-        .bind(humanTeamId)
-        .first<{ budget: number; reputation: number; game_date: string }>();
-      const sqRows = await db.prepare("SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')").bind(humanTeamId).all();
-      const squad = sqRows.results.map((r: any) => {
-        const s = JSON.parse(r.skills);
-        const p = JSON.parse(r.personality);
-        const lc = JSON.parse(r.life_context);
-        return {
-          firstName: r.first_name, lastName: r.last_name, age: r.age, position: r.position,
-          speed: s.speed ?? 50, technique: s.technique ?? 50, shooting: s.shooting ?? 50, passing: s.passing ?? 50,
-          heading: s.heading ?? 50, defense: s.defense ?? 50, goalkeeping: s.goalkeeping ?? 0,
-          stamina: s.stamina ?? 50, strength: s.strength ?? 50, discipline: p.discipline ?? 50,
-          patriotism: p.patriotism ?? 50, alcohol: p.alcohol ?? 30, temper: p.temper ?? 40,
-          injuryProneness: p.injuryProneness ?? 50, occupation: lc.occupation ?? "",
-          bodyType: "normal" as const, avatarConfig: {} as any, condition: lc.condition ?? 100, morale: lc.morale ?? 50,
-          preferredFoot: "right" as const, preferredSide: "center" as const,
-          leadership: p.leadership ?? 30, workRate: p.workRate ?? 50, aggression: p.aggression ?? 40,
-          consistency: p.consistency ?? 50, clutch: p.clutch ?? 50,
-        };
-      });
-
-      const lastWon = mr.matchType === "pve_home" ? mr.homeScore > mr.awayScore : mr.awayScore > mr.homeScore;
-      const teamDistrict = await db
-        .prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.id=?")
-        .bind(humanTeamId)
-        .first<{ district: string }>()
-        .catch((e) => {
-          logger.warn({ module: "league-round" }, "Failed to get team district", e);
-          return null;
+      for (const { humanTeamId, jeDoma } of strany) {
+        const td = await db
+          .prepare("SELECT budget, reputation, game_date FROM teams WHERE id = ?")
+          .bind(humanTeamId)
+          .first<{ budget: number; reputation: number; game_date: string }>();
+        const sqRows = await db.prepare("SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')").bind(humanTeamId).all();
+        const squad = sqRows.results.map((r: any) => {
+          const s = JSON.parse(r.skills);
+          const p = JSON.parse(r.personality);
+          const lc = JSON.parse(r.life_context);
+          return {
+            firstName: r.first_name, lastName: r.last_name, age: r.age, position: r.position,
+            speed: s.speed ?? 50, technique: s.technique ?? 50, shooting: s.shooting ?? 50, passing: s.passing ?? 50,
+            heading: s.heading ?? 50, defense: s.defense ?? 50, goalkeeping: s.goalkeeping ?? 0,
+            stamina: s.stamina ?? 50, strength: s.strength ?? 50, discipline: p.discipline ?? 50,
+            patriotism: p.patriotism ?? 50, alcohol: p.alcohol ?? 30, temper: p.temper ?? 40,
+            injuryProneness: p.injuryProneness ?? 50, occupation: lc.occupation ?? "",
+            bodyType: "normal" as const, avatarConfig: {} as any, condition: lc.condition ?? 100, morale: lc.morale ?? 50,
+            preferredFoot: "right" as const, preferredSide: "center" as const,
+            leadership: p.leadership ?? 30, workRate: p.workRate ?? 50, aggression: p.aggression ?? 40,
+            consistency: p.consistency ?? 50, clutch: p.clutch ?? 50,
+          };
         });
-      const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget ?? 0, td?.reputation ?? 50, lastWon, gameWeek, teamDistrict?.district);
 
-      for (const ev of brEvents) {
-        if (ev.effect) {
-          const eff = ev.effect;
-          if (eff.type === "morale" && eff.value) {
-            await db
-              .prepare(
-                "UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?))) WHERE team_id = ?",
-              )
-              .bind(eff.value, humanTeamId)
-              .run()
-              .catch((e) => logger.warn({ module: "league-round" }, "morale effect failed", e));
-          }
-          if (eff.type === "budget" && eff.value) {
-            // Svazovou pokutu určuje sazba odhlasovaná soutěží a její výnos plyne
-            // do pokladny. Událost si nese vlastní částku z rozsahu 300–1500 Kč;
-            // ta se převede na stejné místo v rozsahu odvozeném ze sazby, takže
-            // při výchozích 900 Kč vyjdou přesně původní čísla.
-            // Ostatní peněžní události se soutěže netýkají a jdou beze změny.
-            const scaled = eff.toLeague && compRules
-              ? -Math.round(Math.abs(eff.value) * (compRules.fine_admin / 900))
-              : eff.value;
-            const eventGameDate = td?.game_date ?? new Date().toISOString();
-            await recordTransaction(db, humanTeamId, "event", scaled, ev.title, eventGameDate).catch((e) =>
-              logger.warn({ module: "league-round" }, "budget effect failed", e),
-            );
-            if (eff.toLeague && compRules && compCtx) {
-              const { recordCompetitionEntry } = await import("../competition/ledger");
-              await recordCompetitionEntry(db, {
-                leagueId: compCtx.leagueId, seasonNumber: compCtx.seasonNumber,
-                type: "fine_admin", amount: Math.abs(scaled), description: ev.title,
-                teamId: humanTeamId, gameDate: eventGameDate,
-                referenceId: `adm-${calendarId}-${humanTeamId}`,
-              });
-            }
-          }
-          // Pozn.: žádné pravidlo v EVENT_RULES dnes reputační efekt negeneruje
-          // (reputace je tam jen vstup). Větev držíme přepojenou na helper, aby
-          // případné budoucí pravidlo rovnou zapsalo důvod do auditu.
-          if (eff.type === "reputation" && eff.value) {
-            const { applyReputationDelta } = await import("../lib/reputation");
-            await applyReputationDelta(db, humanTeamId, eff.value, "event", `Událost mezi koly: ${ev.title}`, {
-              gameDate: td?.game_date ?? undefined,
-            });
-          }
-          if (eff.type === "player_leave" && eff.playerIndex != null) {
-            const leaver = sqRows.results[eff.playerIndex];
-            if (leaver) {
-              await db
-                .prepare("UPDATE players SET status = 'quit' WHERE id = ?")
-                .bind(leaver.id)
-                .run()
-                .catch((e) => logger.warn({ module: "league-round" }, "player_leave effect failed", e));
-            }
-          }
-          if (eff.type === "injury" && eff.playerIndex != null) {
-            const injured = sqRows.results[eff.playerIndex];
-            if (injured) {
-              const days = (eff.duration ?? 1) * 7; // rounds to days
-              // Dřív se tu zapisovaly jen čtyři sloupce a typ „training", který ve výčtu
-              // `injuries.type` není. Chyběly `team_id`, `description`, `severity`
-              // i `days_total` — všechny NOT NULL. Zápis tedy pokaždé porušil omezení
-              // a `INSERT OR IGNORE` to spolkl beze stopy, takže se za celou historii hry
-              // neuložilo ani jedno tréninkové zranění. Proto tu je plný zápis a obyčejný
-              // INSERT: když něco nesedne, ať to spadne do logu, ne pod stůl.
-              await db
-                .prepare(
-                  `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                )
-                .bind(
-                  crypto.randomUUID(), injured.id, humanTeamId,
-                  typZraneniZPopisu(eff.popisZraneni), eff.popisZraneni ?? ev.title,
-                  zavaznostZeDnu(days), days, days,
-                )
-                .run()
-                .catch((e) => logger.warn({ module: "league-round" }, "injury effect failed", e));
-            }
-          }
-        }
-
-        // Send as message from relevant role (NOT public zpravodaj)
-        const roleSenders: Record<string, { name: string; title: string }> = {
-          budget: { name: "Účetní", title: "Účetní klubu" },
-          reputation: { name: "Starosta", title: "Starosta obce" },
-          morale: { name: "Asistent trenéra", title: "Asistent" },
-          player_leave: { name: "Kapitán", title: "Kapitán týmu" },
-          injury: { name: "Zdravotník", title: "Správce hřiště" },
-          condition: { name: "Masér", title: "Masér" },
-        };
-        const sender = roleSenders[ev.effect?.type ?? ""] ?? { name: "Vedení klubu", title: "Vedení" };
-
-        const roleConvTitle = sender.title;
-        let roleConvId = await db
-          .prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
-          .bind(humanTeamId, roleConvTitle)
-          .first<{ id: string }>()
-          .then((r) => r?.id)
+        const lastWon = jeDoma ? mr.homeScore > mr.awayScore : mr.awayScore > mr.homeScore;
+        const teamDistrict = await db
+          .prepare("SELECT v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.id=?")
+          .bind(humanTeamId)
+          .first<{ district: string }>()
           .catch((e) => {
-            logger.warn({ module: "league-round" }, "Failed to find role conversation", e);
+            logger.warn({ module: "league-round" }, "Failed to get team district", e);
             return null;
           });
-        if (!roleConvId) {
-          roleConvId = crypto.randomUUID();
+        const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget ?? 0, td?.reputation ?? 50, lastWon, gameWeek, teamDistrict?.district);
+
+        for (const ev of brEvents) {
+          if (ev.effect) {
+            const eff = ev.effect;
+            if (eff.type === "morale" && eff.value) {
+              await db
+                .prepare(
+                  "UPDATE players SET life_context = json_set(life_context, '$.morale', MIN(100, MAX(0, json_extract(life_context, '$.morale') + ?))) WHERE team_id = ?",
+                )
+                .bind(eff.value, humanTeamId)
+                .run()
+                .catch((e) => logger.warn({ module: "league-round" }, "morale effect failed", e));
+            }
+            if (eff.type === "budget" && eff.value) {
+              // Svazovou pokutu určuje sazba odhlasovaná soutěží a její výnos plyne
+              // do pokladny. Událost si nese vlastní částku z rozsahu 300–1500 Kč;
+              // ta se převede na stejné místo v rozsahu odvozeném ze sazby, takže
+              // při výchozích 900 Kč vyjdou přesně původní čísla.
+              // Ostatní peněžní události se soutěže netýkají a jdou beze změny.
+              const scaled = eff.toLeague && compRules
+                ? -Math.round(Math.abs(eff.value) * (compRules.fine_admin / 900))
+                : eff.value;
+              const eventGameDate = td?.game_date ?? new Date().toISOString();
+              await recordTransaction(db, humanTeamId, "event", scaled, ev.title, eventGameDate).catch((e) =>
+                logger.warn({ module: "league-round" }, "budget effect failed", e),
+              );
+              if (eff.toLeague && compRules && compCtx) {
+                const { recordCompetitionEntry } = await import("../competition/ledger");
+                await recordCompetitionEntry(db, {
+                  leagueId: compCtx.leagueId, seasonNumber: compCtx.seasonNumber,
+                  type: "fine_admin", amount: Math.abs(scaled), description: ev.title,
+                  teamId: humanTeamId, gameDate: eventGameDate,
+                  referenceId: `adm-${calendarId}-${humanTeamId}`,
+                });
+              }
+            }
+            // Pozn.: žádné pravidlo v EVENT_RULES dnes reputační efekt negeneruje
+            // (reputace je tam jen vstup). Větev držíme přepojenou na helper, aby
+            // případné budoucí pravidlo rovnou zapsalo důvod do auditu.
+            if (eff.type === "reputation" && eff.value) {
+              const { applyReputationDelta } = await import("../lib/reputation");
+              await applyReputationDelta(db, humanTeamId, eff.value, "event", `Událost mezi koly: ${ev.title}`, {
+                gameDate: td?.game_date ?? undefined,
+              });
+            }
+            if (eff.type === "player_leave" && eff.playerIndex != null) {
+              const leaver = sqRows.results[eff.playerIndex];
+              if (leaver) {
+                await db
+                  .prepare("UPDATE players SET status = 'quit' WHERE id = ?")
+                  .bind(leaver.id)
+                  .run()
+                  .catch((e) => logger.warn({ module: "league-round" }, "player_leave effect failed", e));
+              }
+            }
+            if (eff.type === "injury" && eff.playerIndex != null) {
+              const injured = sqRows.results[eff.playerIndex];
+              if (injured) {
+                const days = (eff.duration ?? 1) * 7; // rounds to days
+                // Dřív se tu zapisovaly jen čtyři sloupce a typ „training", který ve výčtu
+                // `injuries.type` není. Chyběly `team_id`, `description`, `severity`
+                // i `days_total` — všechny NOT NULL. Zápis tedy pokaždé porušil omezení
+                // a `INSERT OR IGNORE` to spolkl beze stopy, takže se za celou historii hry
+                // neuložilo ani jedno tréninkové zranění. Proto tu je plný zápis a obyčejný
+                // INSERT: když něco nesedne, ať to spadne do logu, ne pod stůl.
+                await db
+                  .prepare(
+                    `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                  )
+                  .bind(
+                    crypto.randomUUID(), injured.id, humanTeamId,
+                    typZraneniZPopisu(eff.popisZraneni), eff.popisZraneni ?? ev.title,
+                    zavaznostZeDnu(days), days, days,
+                  )
+                  .run()
+                  .catch((e) => logger.warn({ module: "league-round" }, "injury effect failed", e));
+              }
+            }
+          }
+
+          // Send as message from relevant role (NOT public zpravodaj)
+          const roleSenders: Record<string, { name: string; title: string }> = {
+            budget: { name: "Účetní", title: "Účetní klubu" },
+            reputation: { name: "Starosta", title: "Starosta obce" },
+            morale: { name: "Asistent trenéra", title: "Asistent" },
+            player_leave: { name: "Kapitán", title: "Kapitán týmu" },
+            injury: { name: "Zdravotník", title: "Správce hřiště" },
+            condition: { name: "Masér", title: "Masér" },
+          };
+          const sender = roleSenders[ev.effect?.type ?? ""] ?? { name: "Vedení klubu", title: "Vedení" };
+
+          const roleConvTitle = sender.title;
+          let roleConvId = await db
+            .prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
+            .bind(humanTeamId, roleConvTitle)
+            .first<{ id: string }>()
+            .then((r) => r?.id)
+            .catch((e) => {
+              logger.warn({ module: "league-round" }, "Failed to find role conversation", e);
+              return null;
+            });
+          if (!roleConvId) {
+            roleConvId = crypto.randomUUID();
+            await db
+              .prepare(
+                "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
+              )
+              .bind(roleConvId, humanTeamId, roleConvTitle)
+              .run()
+              .catch((e) => logger.warn({ module: "league-round" }, "Failed to create role conversation", e));
+          }
           await db
             .prepare(
-              "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
+              "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
             )
-            .bind(roleConvId, humanTeamId, roleConvTitle)
+            .bind(crypto.randomUUID(), roleConvId, sender.name, `${ev.emoji} ${ev.description}`, JSON.stringify({ type: "event", category: ev.category }))
             .run()
-            .catch((e) => logger.warn({ module: "league-round" }, "Failed to create role conversation", e));
+            .catch((e) => logger.warn({ module: "league-round" }, "Failed to insert event message", e));
+          await db
+            .prepare(
+              "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
+            )
+            .bind(`${ev.emoji} ${ev.title}`, roleConvId)
+            .run()
+            .catch((e) => logger.warn({ module: "league-round" }, "Failed to update conversation unread", e));
         }
-        await db
-          .prepare(
-            "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
-          )
-          .bind(crypto.randomUUID(), roleConvId, sender.name, `${ev.emoji} ${ev.description}`, JSON.stringify({ type: "event", category: ev.category }))
-          .run()
-          .catch((e) => logger.warn({ module: "league-round" }, "Failed to insert event message", e));
-        await db
-          .prepare(
-            "UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
-          )
-          .bind(`${ev.emoji} ${ev.title}`, roleConvId)
-          .run()
-          .catch((e) => logger.warn({ module: "league-round" }, "Failed to update conversation unread", e));
       }
     }
   } catch (e) {
