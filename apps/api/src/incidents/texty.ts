@@ -13,7 +13,7 @@ export const TEXTY = {
   vloupani_zvenku: [
     "V noci někdo vypáčil dveře skladu. Zmizelo vybavení: {vec}.",
     "Rozbité okýnko u skladu a prázdné regály. Chybí vybavení: {vec}.",
-    "Někdo přelezl plot a vykradl sklad. Pryč je vybavení: {vec}.",
+    "Někdo se v noci vloupal do skladu. Pryč je vybavení: {vec}.",
   ],
   vloupani_zevnitr: [
     "Ze skladu zmizelo vybavení: {vec}. Zámek je celý, někdo odemkl klíčem.",
@@ -31,14 +31,14 @@ export const TEXTY = {
     "Dodávka se vrátila z nočního výletu a je na ní každý kilometr znát.",
   ],
   dodavka_ukradena: [
-    "Z parkoviště u hřiště přes noc zmizela klubová dodávka.",
+    "Od hřiště přes noc zmizela klubová dodávka.",
     "Klubová dodávka ráno nestála na svém místě. Zůstaly jen střepy z okénka.",
-    "Někdo ukradl klubovou dodávku. Na parkovišti je jen olejová skvrna.",
+    "Někdo ukradl klubovou dodávku. Tam, kde stávala, je jen olejová skvrna.",
   ],
   kradez_kamery: [
-    "Někdo v noci ukradl kameru nad vchodem do kabin.",
-    "Kamerový systém je pryč, zloděj odnesl i nahrávací box.",
-    "Z areálu zmizely kamery. Kdo je sebral, nenatočila ani jedna.",
+    "Někdo v noci odmontoval a odnesl kamerové zabezpečení.",
+    "Zabezpečení areálu je pryč, zloděj ho odnesl i s kabely.",
+    "Kamerové zabezpečení zmizelo. Kdo ho sebral, už nikdo nenatočil.",
   ],
   oslava_v_kabine: [
     "Oslava výhry se z hospody přesunula do kabiny a skončila špatně. Rozbité: {zarizeni}.",
@@ -81,15 +81,18 @@ export const TEXTY = {
     "Vandalové rozryli trávník, na hřišti jsou hluboké koleje.",
   ],
   alarm_vyplasil: [
-    "V noci se u skladu rozječel alarm. Zloděj utekl a nic neodnesl.",
-    "Alarm vyplašil někoho, kdo se dobýval do skladu. Nic nechybí.",
-    "Kamera zachytila stín u dveří skladu, pak se spustil alarm. Nic nezmizelo.",
+    "V noci se v areálu rozječel alarm. Zloděj utekl a nic neodnesl.",
+    "Alarm vyplašil někoho, kdo se v noci dobýval do areálu. Nic nechybí.",
+    "Kamera zachytila stín, pak se spustil alarm. Nic nezmizelo.",
   ],
   lhuta_kradez: [
     "Uzavřeno bez výsledku: {nazev}. Kdo za tím stál, se nezjistilo.",
   ],
   lhuta_poskozeni: [
     "Uzavřeno bez výsledku: {nazev}. Škoda zůstává na klubu.",
+  ],
+  lhuta_znamy: [
+    "Uzavřeno: {nazev}. Trenér to nechal být.",
   ],
 } as const satisfies Record<string, readonly string[]>;
 
