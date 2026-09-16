@@ -265,7 +265,7 @@ export function FanTroubleWidget({ data }: WidgetProps) {
         </p>
       ))}
 
-      <Link href="/dashboard/fans" className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
+      <Link href={d.damage.length > 0 ? "/dashboard/incidenty" : "/dashboard/fans"} className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
         {d.damage.length > 0 ? "Opravit a řešit →" : "Bezpečnost a historie →"}
       </Link>
     </div>

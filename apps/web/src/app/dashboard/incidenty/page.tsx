@@ -25,6 +25,16 @@ interface Incident {
   resolvedOn: string | null;
 }
 
+interface Poskozeni {
+  id: string;
+  facility: string;
+  label: string;
+  levels: number;
+  cost: number;
+  popis: string;
+  gameDate: string | null;
+}
+
 const STAV_LABEL: Record<StavIncidentu, string> = {
   hrozi: "Hrozí", otevreny: "Řeší se", policie: "Šetří policie", probiha: "Probíhá", uzavreny: "Uzavřeno",
 };
@@ -41,6 +51,7 @@ const VYSLEDEK_LABEL: Record<string, string> = {
   nevyreseno: "Nevyřešeno",
   konec_sezony: "Uzavřeno koncem sezóny",
   bez_skody: "Bez škody",
+  nechat_byt: "Trenér to nechal být",
 };
 
 function datum(iso: string): string {
@@ -51,13 +62,35 @@ export default function IncidentyPage() {
   const { teamId } = useTeam();
   const [incidenty, setIncidenty] = useState<Incident[] | null>(null);
   const [chyba, setChyba] = useState(false);
+  const [poskozeni, setPoskozeni] = useState<Poskozeni[]>([]);
+  const [opravujeId, setOpravujeId] = useState<string | null>(null);
+  const [opravaZprava, setOpravaZprava] = useState<{ typ: "ok" | "chyba"; text: string } | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
     apiFetch<{ incidents: Incident[] }>(`/api/teams/${teamId}/incidents`)
       .then((d) => setIncidenty(d.incidents))
       .catch((e) => { console.error("incidents fetch:", e); setChyba(true); });
+    apiFetch<{ damage?: Poskozeni[] }>(`/api/teams/${teamId}/fans/groups`)
+      .then((d) => setPoskozeni(d.damage ?? []))
+      .catch((e) => console.error("damage fetch:", e));
   }, [teamId]);
+
+  async function opravit(p: Poskozeni) {
+    if (!teamId) return;
+    setOpravujeId(p.id);
+    setOpravaZprava(null);
+    try {
+      await apiFetch(`/api/teams/${teamId}/fans/repair/${p.id}`, { method: "POST" });
+      setPoskozeni((list) => list.filter((x) => x.id !== p.id));
+      setOpravaZprava({ typ: "ok", text: `Opraveno: ${p.label}.` });
+    } catch (e) {
+      console.error("repair:", e);
+      setOpravaZprava({ typ: "chyba", text: e instanceof Error ? e.message : "Opravu se nepodařilo provést." });
+    } finally {
+      setOpravujeId(null);
+    }
+  }
 
   if (chyba) {
     return <div className="page-container"><div className="card p-4 text-sm text-muted">Incidenty se nepodařilo načíst.</div></div>;
@@ -79,6 +112,36 @@ export default function IncidentyPage() {
           zabezpečení areálu ve vybavení.
         </p>
       </div>
+      {poskozeni.length > 0 && (
+        <div className="card p-4 sm:p-5">
+          <SectionLabel>Rozbité zařízení</SectionLabel>
+          <p className="text-sm text-muted">Dokud rozbité zařízení neopravíš, nefunguje.</p>
+          {opravaZprava && (
+            <p className={`text-sm mt-2 ${opravaZprava.typ === "ok" ? "text-pitch-600" : "text-card-red"}`}>
+              {opravaZprava.text}
+            </p>
+          )}
+          <div className="mt-3 space-y-3">
+            {poskozeni.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-heading font-bold text-base">{p.label}</div>
+                  <div className="text-sm text-muted">
+                    Oprava {p.cost.toLocaleString("cs-CZ")} Kč · o {p.levels} {p.levels === 1 ? "úroveň" : "úrovně"}
+                  </div>
+                </div>
+                <button
+                  onClick={() => opravit(p)}
+                  disabled={opravujeId === p.id}
+                  className="shrink-0 px-3 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
+                >
+                  Opravit
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <Seznam titulek="Řeší se" incidenty={zive} prazdne="Teď je v klubu klid." />
       {uzavrene.length > 0 && <Seznam titulek="Uzavřené za poslední měsíc" incidenty={uzavrene} />}
     </div>
@@ -121,7 +184,7 @@ function Karta({ incident: i }: { incident: Incident }) {
           {i.pachatel?.jmeno && (
             <div className="text-sm mt-2">
               Pachatel:{" "}
-              <Link href={`/dashboard/player/${i.pachatel.playerId}`} className="font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
+              <Link href={`/dashboard/player/${i.pachatel.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
                 {i.pachatel.jmeno}
               </Link>
             </div>
