@@ -17,10 +17,12 @@ import type { FanGroupKind } from "./fan-groups";
  *
  * Dvacet dva byl odhad. Plachta se v 3D kreslí na canvas 2048 px široký a
  * písmo se samo zmenšuje až na 40 px, takže se tam vejde přes sedmdesát znaků.
- * Čtyřicet je hranice, kde je nápis ještě z tribuny čitelný a zároveň se do
- * něj vejde celý chorál, ne jen jeho začátek.
+ * Čtyřicet bylo málo. Skutečné plachty bývají celá věta s oslovením a
+ * protikladem („X, dělej tohle, ne tamto“) a ta se přes čtyřicítku nevejde.
+ * Osmačtyřicet je hranice, kde je nápis z tribuny ještě čitelný: na obrázku
+ * ve Zpravodaji na něj zbývá 30 px písma.
  */
-export const MAX_DELKA_TRANSPARENTU = 40;
+export const MAX_DELKA_TRANSPARENTU = 48;
 
 export interface StavProTransparent {
   /** Nálada kotle 0–100. Když kotel není, bere se nejvášnivější parta. */
@@ -89,16 +91,17 @@ const TAKTIKA_HESLA: Record<string, { text: string; tone: Transparent["tone"]; d
   defensive: { text: "HRAJEME NA REMÍZU?", tone: "vytka", duvod: "Kotel chce vidět, že tým jde dopředu." },
   possession: { text: "DRŽET MÍČ NESTAČÍ", tone: "vytka", duvod: "Držení míče bez gólů kotel nebaví." },
   pressing: { text: "TAKHLE SE TO HRAJE", tone: "podpora", duvod: "Presink se kotli líbí." },
-  offensive: { text: "DOPŘEDU A BEZ STRACHU", tone: "podpora", duvod: "Útočná hra je přesně to, co kotel chce." },
+  offensive: { text: "DOPŘEDU, NE DOZADU", tone: "podpora", duvod: "Útočná hra je přesně to, co kotel chce." },
 };
 
 /** Obecná podpora, když není důvod k ničemu vyhrocenějšímu. */
 const PODPORA: readonly string[] = [
-  "DO TOHO, KLUCI",
-  "SRDCE NA DRESU",
-  "ZA VÁMI VŽDYCKY",
-  "NAŠE BARVY",
+  "TADY JSME DOMA",
+  "NAŠE BARVY, NAŠE VES",
+  "VĚRNI ZŮSTANEME",
   "TADY SE NEVZDÁVÁ",
+  "MY TU BUDEM VŽDYCKY",
+  "JEDEN KLUB, JEDNA VES",
 ];
 
 /**
@@ -128,8 +131,8 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
         ...(pouzitelneJmeno(s.trener)
           ? [`${prijmeni(s.trener!).toUpperCase()} KONČI`, `${prijmeni(s.trener!).toUpperCase()} VEN`]
           : []),
-        "TRENÉRE, KONČI",
-        "CHCEME ZMĚNU",
+        "TRENÉRE KONEC",
+        "DOST BYLO",
       ]),
       duvod: "Běží podpisová akce za tvoje odvolání.",
       tone: "proti_treneru",
@@ -143,7 +146,7 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
         ...(pouzitelneJmeno(s.kampanProtiHraci)
           ? [`${prijmeni(s.kampanProtiHraci!).toUpperCase()} VEN`, `${prijmeni(s.kampanProtiHraci!).toUpperCase()}!`]
           : []),
-        "TAKHLE UŽ NE",
+        "DOST BYLO",
       ]),
       duvod: `Fanoušci sbírají podpisy proti hráči ${s.kampanProtiHraci}.`,
       tone: "proti_hraci",
@@ -154,8 +157,8 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
   if (s.rival && s.rival.heat >= 60) {
     const nazev = s.rival.nazev.toUpperCase();
     const hesla = roll < 0.5
-      ? [`${nazev} NIKDY`, `${nazev}, NE`, "TADY VYHRÁVÁME MY"]
-      : [`${nazev} DOMŮ`, `${nazev}, NE`, "SEM NEPATŘÍTE"];
+      ? [`${nazev} NIKDY`, `TADY NE, ${nazev}`, "TADY JSME DOMA MY"]
+      : [`${nazev} DOMŮ`, `${nazev} SEM NELEZE`, "SEM NELEZTE"];
     return {
       text: prvniCoSeVejde(hesla),
       duvod: `S klubem ${s.rival.nazev} je to mezi tábory vyhrocené.`,
@@ -166,15 +169,15 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
   // 4. Naštvanost na vedení, i bez kampaně.
   if (s.heatKotle >= 55 || s.naladaKotle <= 25) {
     const hesla = s.golyPoslednich5 <= 2
-      ? ["CHCEME VIDĚT GÓLY", "TOHLE NENÍ FOTBAL", "ZA CO PLATÍME?"]
-      : ["CHCEME VIDĚT SRDCE", "TOHLE NENÍ NAŠE LIGA", "VEDENÍ, PROBUĎ SE"];
+      ? ["TOHLE NENÍ FOTBAL", "ZA CO PLATÍME", "NULA GÓLŮ, NULA HRDOSTI"]
+      : ["MY TADY JSME, VY NE", "VEDENÍ, MY TU BUDEM DÝL", "HANBA"];
     return { text: prvniCoSeVejde([vyber(hesla)]), duvod: "Kotel je na vedení naštvaný.", tone: "vytka" };
   }
 
   // 5. Série proher bolí i bez zloby na vedení.
   if (s.serie <= -3) {
     return {
-      text: prvniCoSeVejde([vyber(["PADÁME, ALE JSME TU", "ZVEDNĚTE HLAVY", "NEKLESAT"])]),
+      text: prvniCoSeVejde([vyber(["PADÁME, ALE JSME TU", "VĚRNI ZŮSTANEME", "V DEŠTI I V BLÁTĚ"])]),
       duvod: `Tým prohrál ${Math.abs(s.serie)} zápasy po sobě.`,
       tone: "vytka",
     };
@@ -184,9 +187,9 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
   if (s.serie >= 3 && pouzitelneJmeno(s.trener)) {
     return {
       text: prvniCoSeVejde([
-        `DÍKY, ${prijmeni(s.trener!).toUpperCase()}`,
-        `${prijmeni(s.trener!).toUpperCase()}, DÍKY`,
-        "DÍKY, TRENÉRE",
+        `${prijmeni(s.trener!).toUpperCase()} JE JEDEN Z NÁS`,
+        `${prijmeni(s.trener!).toUpperCase()} ZŮSTÁVÁ`,
+        "TRENÉR JE NÁŠ",
       ]),
       duvod: `Tým vyhrál ${s.serie} zápasy po sobě a kotel to dává najevo.`,
       tone: "pro_trenera",
@@ -197,9 +200,9 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
   if (pouzitelneJmeno(s.oblibenec) && s.naladaKotle >= 55 && roll > 0.5) {
     return {
       text: prvniCoSeVejde([
-        `${prijmeni(s.oblibenec!).toUpperCase()}, JSI NÁŠ`,
-        `${prijmeni(s.oblibenec!).toUpperCase()} ❤`,
-        "JEDEME ZA VÁMI",
+        `${prijmeni(s.oblibenec!).toUpperCase()} JE NÁŠ`,
+        `JEDEN Z NÁS: ${prijmeni(s.oblibenec!).toUpperCase()}`,
+        "JEDEN Z NÁS",
       ]),
       duvod: `${s.oblibenec} je miláček kotle.`,
       tone: "podpora",

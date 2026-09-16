@@ -13,7 +13,7 @@ import { logger } from "../lib/logger";
 import {
   vyberTransparent, prijmeni, MAX_DELKA_TRANSPARENTU, type StavProTransparent,
 } from "../engine/fan-banner";
-import { promptTransparentu, type BannerTon } from "../engine/fan-banner-ai";
+import { promptTransparentu, vzorecPlachty, type BannerTon } from "../engine/fan-banner-ai";
 import { zkontrolujChoral } from "../engine/fan-chant-inspirace";
 import type { Bindings } from "../index";
 import { rivaloveKlubu } from "./fan-rivalries";
@@ -109,7 +109,10 @@ export async function prepoctiTransparent(
 
   const t = {
     ...sablona,
-    text: await napisTransparent(env, { ton: sablona.tone, stav, klub, okres, zaloha: sablona.text }),
+    text: await napisTransparent(env, {
+      ton: sablona.tone, stav, klub, okres, zaloha: sablona.text,
+      seed: seedFromString(`plachta|${teamId}|${sablona.tone}`),
+    }),
   };
 
   await db
@@ -172,7 +175,11 @@ export async function formaKlubu(db: D1Database, teamId: string): Promise<{ seri
  */
 async function napisTransparent(
   env: Pick<Bindings, "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL"> | undefined,
-  opts: { ton: BannerTon; stav: StavProTransparent; klub: string; okres: string | null; zaloha: string },
+  opts: {
+    ton: BannerTon; stav: StavProTransparent; klub: string; okres: string | null; zaloha: string;
+    /** Určuje, kterou stavbu plachty dostane tenhle klub. */
+    seed: number;
+  },
 ): Promise<string> {
   if (!env) return opts.zaloha;
   try {
@@ -189,6 +196,7 @@ async function napisTransparent(
       promptTransparentu({
         ton: opts.ton, fakta, klub: opts.klub, okres: opts.okres,
         maxDelka: MAX_DELKA_TRANSPARENTU, povinneSlovo: povinne,
+        vzorec: vzorecPlachty(opts.seed),
       }),
       { maxTokens: 100, temperature: 1.0, module: M },
     );
@@ -244,9 +252,11 @@ function faktaProTon(ton: BannerTon, s: StavProTransparent): string[] {
       ];
     case "podpora":
     default: {
-      const f = ["Fandíme svému týmu a chodíme za každého počasí."];
+      // Schválně BEZ jména miláčka. Když ho model dostal, začal na hráče
+      // mluvit („Vojtěchu Bartoši, buď už konečně doma!“), což je u plachty
+      // o identitě klubu nesmysl. Na hráče má kotel chorál, ne plachtu.
+      const f = ["Chodíme na fotbal za každého počasí a jsme odsud."];
       if (s.serie > 0) f.push(`Vyhráli jsme ${s.serie} zápasy po sobě.`);
-      if (s.oblibenec) f.push(`Miláček kotle se jmenuje ${s.oblibenec}.`);
       return f;
     }
   }

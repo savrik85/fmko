@@ -123,9 +123,13 @@ describe("co na plachtě visí", () => {
     expect(vyberTransparent(stav({ taktika: "pressing", naladaKotle: 60 }), 0.2).tone).toBe("podpora");
   });
 
-  it("bez gólů se kotel ptá po gólech, ne po srdci", () => {
-    const t = vyberTransparent(stav({ heatKotle: 70, golyPoslednich5: 0 }), 0);
-    expect(t.text).toContain("GÓLY");
+  it("bez gólů se kotel ozve na střelbu, ne na náladu", () => {
+    // Nezkouší se konkrétní slovo, ale že se sáhne do jiné zásoby než
+    // u týmu, který góly dává. Heslo samo se smí přepsat.
+    const bezGolu = vyberTransparent(stav({ heatKotle: 70, golyPoslednich5: 0 }), 0);
+    const sGoly = vyberTransparent(stav({ heatKotle: 70, golyPoslednich5: 9 }), 0);
+    expect(bezGolu.text).not.toBe(sGoly.text);
+    expect(bezGolu.tone).toBe("vytka");
   });
 
   it("každé heslo nese důvod, aby bylo poznat, že to není náhoda", () => {
@@ -165,7 +169,7 @@ describe("jméno, které se nedá vyvěsit", () => {
     expect(diky.text).not.toBe("DÍKY, A");
 
     const hrac = vyberTransparent(stav({ kampanProtiHraci: "B B" }), 0.1);
-    expect(hrac.text).toBe("TAKHLE UŽ NE");
+    expect(hrac.text).toBe("DOST BYLO");
   });
 
   it("se skutečným jménem se jméno vyvěsí dál", () => {

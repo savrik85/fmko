@@ -30,17 +30,17 @@ function fmtNum(n: number): string {
  */
 function velikostPisma(text: string): number {
   const znaku = Math.max(1, text.length);
-  return Math.max(34, Math.min(78, Math.floor(940 / (znaku * 0.62))));
+  return Math.max(30, Math.min(78, Math.floor(940 / (znaku * 0.62))));
 }
 
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
-  // 40 znaků, ne 22. Limit plachty se zvedl (`MAX_DELKA_TRANSPARENTU`
+  // 48 znaků, ne 22. Limit plachty se zvedl (`MAX_DELKA_TRANSPARENTU`
   // v apps/api/src/engine/fan-banner.ts), ale tenhle obrázek zůstal na starém
   // čísle a usekával hesla uprostřed: z „HVĚZDA VIMPERK, ZAMKNI BRÁNU!" zbylo
   // „HVĚZDA VIMPERK, ZAMKNI". Web nemůže sáhnout do apps/api, takže je to
   // ručně, ale musí to sedět.
-  const text = (q.get("text") ?? "").slice(0, 40).toUpperCase();
+  const text = (q.get("text") ?? "").slice(0, 48).toUpperCase();
   const primary = hex(q.get("p"), "#2D5F2D");
   const secondary = hex(q.get("s"), "#ffffff");
   const bannerBg = hex(q.get("bg"), primary);
