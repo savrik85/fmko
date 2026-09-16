@@ -1,0 +1,312 @@
+/**
+ * Katalog incidentů fáze 1: krádeže a poškození (spec Část 4a, 4b).
+ *
+ * Čisté funkce bez DB. `muze` je levná kontrola podmínek bez náhody,
+ * `vytvor` vybere pachatele a škodu. Tvrdé pravidlo: každá škoda míří jen
+ * na věc, kterou klub skutečně má; testy v katalog.test.ts to hlídají.
+ */
+
+import { CATEGORY_LABELS, cumulativeInvestment, efektyZabezpeceni } from "../equipment/equipment-generator";
+import type { Rng } from "../generators/rng";
+import { ROZBITNE_ZEVNITR } from "../stadium/stadium-damage";
+import { FACILITY_LABELS } from "../stadium/stadium-generator";
+import { PODIL_POKUSU_ZVENKU } from "./nastaveni";
+import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
+import { text } from "./texty";
+import type { HracKlubu, KategorieIncidentu, NavrhIncidentu, StavKlubu, Ztrata } from "./typy";
+
+export interface DefiniceIncidentu {
+  kind: string;
+  label: string;
+  emoji: string;
+  category: KategorieIncidentu;
+  /** Váha v náhodném losu. 0 = jen spouštěný nebo vedlejší výsledek. */
+  vaha: number;
+  spousteny: boolean;
+  muze: (stav: StavKlubu) => boolean;
+  /** `null`, když se nakonec nic nestane (odradil zámek, chybí kandidát). */
+  vytvor: (stav: StavKlubu, rng: Rng) => NavrhIncidentu | null;
+}
+
+/** Co jde odnést ze skladu. Dodávka, vitrína a zabezpečení mají vlastní typy. */
+export const PRENOSNE: readonly string[] = [
+  "balls", "jerseys", "boots_stock", "goalkeeper_gear", "bibs", "training_cones", "first_aid",
+  "sports_drinks", "water_bottles", "coffee_maker", "video_setup", "pa_system", "fan_drums", "winter_gear",
+];
+
+/** Venkovní zařízení, na které dosáhne vandal. */
+const VENKOVNI_ZARIZENI = ["fence", "stands", "entrance_gate"] as const;
+
+const uroven = (s: StavKlubu, k: string) => s.vybaveni[k] ?? 0;
+const stavVeci = (s: StavKlubu, k: string) => s.vybaveni[`${k}_condition`] ?? 50;
+const zarizeni = (s: StavKlubu, k: string) => s.stadion[k] ?? 0;
+
+function zavaznostPodleHodnoty(kategorie: string, lv: number): 1 | 2 | 3 {
+  const hodnota = cumulativeInvestment(kategorie, lv);
+  return hodnota < 10_000 ? 1 : hodnota < 60_000 ? 2 : 3;
+}
+
+function zabezpeceni(s: StavKlubu) {
+  return efektyZabezpeceni(uroven(s, "area_security"), stavVeci(s, "area_security"));
+}
+
+function pijaciZHospody(s: StavKlubu): HracKlubu[] {
+  const byli = new Set(s.hospodaVcera);
+  return s.kadr
+    .filter((h) => byli.has(h.id) && h.alkohol >= 60)
+    .sort((a, b) => b.alkohol - a.alkohol || a.id.localeCompare(b.id));
+}
+
+function vzteklounSCervenou(s: StavKlubu): HracKlubu | null {
+  const vylouceni = new Set(s.vcera?.cervenaKarta ?? []);
+  return s.kadr
+    .filter((h) => vylouceni.has(h.id) && h.temperament >= 65)
+    .sort((a, b) => b.temperament - a.temperament || a.id.localeCompare(b.id))[0] ?? null;
+}
+
+type Pokus = { typ: "hrac"; hrac: HracKlubu } | { typ: "cizi" } | { typ: "alarm" };
+
+/**
+ * Kdo krade: hráč s klíčem, nebo zloděj zvenku. Zloděje zvenku může odradit
+ * plot, osvětlení a zámek (pak se nestane nic) nebo vyplašit alarm, když ho
+ * klub má v použitelném stavu a místo pokrývá (`alarmOdUrovne`).
+ */
+function pokusOKradez(s: StavKlubu, rng: Rng, alarmOdUrovne: number): Pokus | null {
+  const hrac = vyberHrace(s.kadr, rng);
+  const zvenku = !hrac || rng.random() < PODIL_POKUSU_ZVENKU;
+  if (!zvenku && hrac) return { typ: "hrac", hrac };
+  const fx = zabezpeceni(s);
+  if (rng.random() >= sanceUspechuZvenku(s.stadion, fx.theftRiskMul)) return null;
+  if (uroven(s, "area_security") >= alarmOdUrovne && rng.random() < fx.alarmChance) return { typ: "alarm" };
+  return { typ: "cizi" };
+}
+
+function alarmNavrh(rng: Rng): NavrhIncidentu {
+  return {
+    kind: "alarm_vyplasil", category: "pozitivni", status: "uzavreny", severity: 1,
+    culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
+    ztraty: [], text: text(rng, "alarm_vyplasil"),
+  };
+}
+
+function pachatel(p: Pokus & { typ: "hrac" | "cizi" }) {
+  return {
+    culpritType: p.typ,
+    culpritPlayerId: p.typ === "hrac" ? p.hrac.id : null,
+    culpritRevealed: false,
+  } as const;
+}
+
+export const KATALOG: DefiniceIncidentu[] = [
+  {
+    kind: "vloupani_sklad", label: "Vloupání do skladu", emoji: "🥷", category: "kradez", vaha: 5, spousteny: false,
+    muze: (s) => PRENOSNE.some((k) => uroven(s, k) >= 1),
+    vytvor: (s, rng) => {
+      const vlastnene = PRENOSNE.filter((k) => uroven(s, k) >= 1);
+      if (vlastnene.length === 0) return null;
+      const kdo = pokusOKradez(s, rng, 2);
+      if (!kdo) return null;
+      if (kdo.typ === "alarm") return alarmNavrh(rng);
+      // Zloděj bere to, co za něco stojí.
+      const kategorie = rng.weighted(Object.fromEntries(vlastnene.map((k) => [k, cumulativeInvestment(k, uroven(s, k))])));
+      const lv = uroven(s, kategorie);
+      return {
+        kind: "vloupani_sklad", category: "kradez", status: "otevreny",
+        severity: zavaznostPodleHodnoty(kategorie, lv), ...pachatel(kdo),
+        ztraty: [{ typ: "vybaveni", kategorie, uroven: lv, stav: stavVeci(s, kategorie), urovniDolu: lv }],
+        text: text(rng, kdo.typ === "hrac" ? "vloupani_zevnitr" : "vloupani_zvenku", { vec: CATEGORY_LABELS[kategorie] ?? kategorie }),
+      };
+    },
+  },
+  {
+    kind: "vitrina", label: "Poháry z vitríny", emoji: "🏆", category: "kradez", vaha: 1, spousteny: false,
+    muze: (s) => uroven(s, "trophy_case") >= 2,
+    vytvor: (s, rng) => {
+      const lv = uroven(s, "trophy_case");
+      if (lv < 2) return null;
+      const kdo = pokusOKradez(s, rng, 2);
+      if (!kdo) return null;
+      if (kdo.typ === "alarm") return alarmNavrh(rng);
+      // Síň slávy se neukradne, poháry ano: vitrína přijde jen o jednu úroveň.
+      return {
+        kind: "vitrina", category: "kradez", status: "otevreny", severity: 2, ...pachatel(kdo),
+        ztraty: [{ typ: "vybaveni", kategorie: "trophy_case", uroven: lv, stav: stavVeci(s, "trophy_case"), urovniDolu: 1 }],
+        text: text(rng, "vitrina"),
+      };
+    },
+  },
+  {
+    kind: "dodavka_pujcena", label: "Půjčená dodávka", emoji: "🚐", category: "kradez", vaha: 2, spousteny: false,
+    muze: (s) => uroven(s, "team_van") >= 1,
+    vytvor: (s, rng) => {
+      if (uroven(s, "team_van") < 1) return null;
+      const hrac = vyberHrace(s.kadr, rng);
+      if (!hrac) return null;
+      const pred = stavVeci(s, "team_van");
+      const po = Math.max(5, pred - rng.int(30, 60));
+      if (po >= pred) return null;
+      return {
+        kind: "dodavka_pujcena", category: "kradez", status: "otevreny", severity: 2,
+        culpritType: "hrac", culpritPlayerId: hrac.id, culpritRevealed: false,
+        ztraty: [{ typ: "vybaveni_stav", kategorie: "team_van", stavPred: pred, stavPo: po }],
+        text: text(rng, "dodavka_pujcena"),
+      };
+    },
+  },
+  {
+    kind: "dodavka_ukradena", label: "Ukradená dodávka", emoji: "🚐", category: "kradez", vaha: 0.3, spousteny: false,
+    muze: (s) => uroven(s, "team_van") >= 1,
+    vytvor: (s, rng) => {
+      const lv = uroven(s, "team_van");
+      if (lv < 1) return null;
+      const fx = zabezpeceni(s);
+      if (rng.random() >= sanceUspechuZvenku(s.stadion, fx.theftRiskMul)) return null;
+      // Parkoviště pokrývá jen kamerový systém celého areálu.
+      if (uroven(s, "area_security") >= 3 && rng.random() < fx.alarmChance) return alarmNavrh(rng);
+      return {
+        kind: "dodavka_ukradena", category: "kradez", status: "otevreny", severity: 3,
+        culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "vybaveni", kategorie: "team_van", uroven: lv, stav: stavVeci(s, "team_van"), urovniDolu: lv }],
+        text: text(rng, "dodavka_ukradena"),
+      };
+    },
+  },
+  {
+    kind: "kradez_kamery", label: "Ukradené kamery", emoji: "📹", category: "kradez", vaha: 0.5, spousteny: false,
+    muze: (s) => uroven(s, "area_security") >= 2,
+    vytvor: (s, rng) => {
+      const lv = uroven(s, "area_security");
+      if (lv < 2) return null;
+      // Zabezpečení nechrání samo sebe, zloděj ho vyřadí jako první.
+      if (rng.random() >= sanceUspechuZvenku(s.stadion, 1)) return null;
+      return {
+        kind: "kradez_kamery", category: "kradez", status: "otevreny",
+        severity: zavaznostPodleHodnoty("area_security", lv),
+        culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "vybaveni", kategorie: "area_security", uroven: lv, stav: stavVeci(s, "area_security"), urovniDolu: lv }],
+        text: text(rng, "kradez_kamery"),
+      };
+    },
+  },
+  {
+    kind: "oslava_v_kabine", label: "Oslava v kabině", emoji: "🍻", category: "poskozeni", vaha: 0, spousteny: true,
+    muze: (s) => !!s.vcera?.vyhra && pijaciZHospody(s).length >= 2 && ROZBITNE_ZEVNITR.some((k) => zarizeni(s, k) >= 1),
+    vytvor: (s, rng) => {
+      const pijaci = pijaciZHospody(s);
+      const mozne = ROZBITNE_ZEVNITR.filter((k) => zarizeni(s, k) >= 1);
+      if (!s.vcera?.vyhra || pijaci.length < 2 || mozne.length === 0) return null;
+      const kde = rng.pick(mozne);
+      return {
+        kind: "oslava_v_kabine", category: "poskozeni", status: "otevreny", severity: 2,
+        culpritType: "hrac", culpritPlayerId: pijaci[0].id, culpritRevealed: false,
+        ztraty: [{ typ: "stadion", zarizeni: kde, urovni: 1 }],
+        text: text(rng, "oslava_v_kabine", { zarizeni: FACILITY_LABELS[kde] ?? kde }),
+      };
+    },
+  },
+  {
+    kind: "kopnute_dvere", label: "Kopnuté dveře", emoji: "🚪", category: "poskozeni", vaha: 0, spousteny: true,
+    muze: (s) => zarizeni(s, "changing_rooms") >= 1 && vzteklounSCervenou(s) !== null,
+    vytvor: (s, rng) => {
+      const h = vzteklounSCervenou(s);
+      if (!h || zarizeni(s, "changing_rooms") < 1) return null;
+      // Všichni viděli, kdo to byl: pachatel je známý hned.
+      return {
+        kind: "kopnute_dvere", category: "poskozeni", status: "otevreny", severity: 2,
+        culpritType: "hrac", culpritPlayerId: h.id, culpritRevealed: true,
+        ztraty: [{ typ: "stadion", zarizeni: "changing_rooms", urovni: 1 }],
+        text: text(rng, "kopnute_dvere", { hrac: h.jmeno, zarizeni: FACILITY_LABELS.changing_rooms }),
+      };
+    },
+  },
+  {
+    kind: "koleje_trakturek", label: "Koleje od traktůrku", emoji: "🚜", category: "poskozeni", vaha: 1.5, spousteny: false,
+    muze: (s) => uroven(s, "mower") >= 2,
+    vytvor: (s, rng) => {
+      if (uroven(s, "mower") < 2) return null;
+      const hrac = vyberHrace(s.kadr, rng);
+      if (!hrac) return null;
+      const pred = zarizeni(s, "pitch_condition") || 50;
+      const po = Math.max(5, pred - rng.int(8, 15));
+      if (po >= pred) return null;
+      return {
+        kind: "koleje_trakturek", category: "poskozeni", status: "otevreny", severity: 1,
+        culpritType: "hrac", culpritPlayerId: hrac.id, culpritRevealed: false,
+        ztraty: [{ typ: "travnik", pred, po }],
+        text: text(rng, "koleje_trakturek"),
+      };
+    },
+  },
+  {
+    kind: "pozar_grilu", label: "Požár od grilu", emoji: "🔥", category: "poskozeni", vaha: 1, spousteny: false,
+    muze: (s) => uroven(s, "club_grill") >= 1,
+    vytvor: (s, rng) => {
+      const lv = uroven(s, "club_grill");
+      if (lv < 1) return null;
+      const hrac = rng.random() < 0.5 ? vyberHrace(s.kadr, rng) : null;
+      // Klubovna s krbem neshoří celá, přijde o úroveň. Menší gril je na odpis.
+      const ztraty: Ztrata[] = [{ typ: "vybaveni", kategorie: "club_grill", uroven: lv, stav: stavVeci(s, "club_grill"), urovniDolu: lv === 3 ? 1 : lv }];
+      let t = text(rng, "pozar_grilu", { vec: CATEGORY_LABELS.club_grill });
+      if (zarizeni(s, "refreshments") >= 1 && rng.random() < 0.3) {
+        ztraty.push({ typ: "stadion", zarizeni: "refreshments", urovni: 1 });
+        t += ` ${text(rng, "pozar_grilu_stanek", { zarizeni: FACILITY_LABELS.refreshments })}`;
+      }
+      return {
+        kind: "pozar_grilu", category: "poskozeni", status: "otevreny", severity: 2,
+        culpritType: hrac ? "hrac" : "nikdo", culpritPlayerId: hrac?.id ?? null, culpritRevealed: false,
+        ztraty, text: t,
+      };
+    },
+  },
+  {
+    kind: "svetlice", label: "Světlice na hřišti", emoji: "🎆", category: "poskozeni", vaha: 0, spousteny: true,
+    muze: (s) => !!s.vcera?.vyhra,
+    vytvor: (s, rng) => {
+      if (!s.vcera?.vyhra) return null;
+      const hrac = rng.random() < 0.5 ? vyberHrace(s.kadr, rng) : null;
+      const pred = zarizeni(s, "pitch_condition") || 50;
+      const po = Math.max(5, pred - rng.int(5, 10));
+      if (po >= pred) return null;
+      return {
+        kind: "svetlice", category: "poskozeni", status: "otevreny", severity: 1,
+        culpritType: hrac ? "hrac" : "cizi", culpritPlayerId: hrac?.id ?? null, culpritRevealed: false,
+        ztraty: [{ typ: "travnik", pred, po }],
+        text: text(rng, "svetlice"),
+      };
+    },
+  },
+  {
+    kind: "vandal", label: "Vandalové", emoji: "💥", category: "poskozeni", vaha: 2, spousteny: false,
+    muze: () => true,
+    vytvor: (s, rng) => {
+      if (rng.random() >= sanceUspechuZvenku(s.stadion, 1)) return null;
+      const mozne = VENKOVNI_ZARIZENI.filter((k) => zarizeni(s, k) >= 1);
+      if (mozne.length > 0 && rng.random() < 0.6) {
+        const kde = rng.pick(mozne);
+        return {
+          kind: "vandal", category: "poskozeni", status: "otevreny", severity: 2,
+          culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
+          ztraty: [{ typ: "stadion", zarizeni: kde, urovni: 1 }],
+          text: text(rng, "vandal_zarizeni", { zarizeni: FACILITY_LABELS[kde] ?? kde }),
+        };
+      }
+      const pred = zarizeni(s, "pitch_condition") || 50;
+      const po = Math.max(5, pred - 5);
+      if (po >= pred) return null;
+      return {
+        kind: "vandal", category: "poskozeni", status: "otevreny", severity: 1,
+        culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "travnik", pred, po }],
+        text: text(rng, "vandal_travnik"),
+      };
+    },
+  },
+  {
+    // Nelosuje se: vzniká jen jako výsledek pokusu o krádež (pokusOKradez).
+    kind: "alarm_vyplasil", label: "Alarm vyplašil zloděje", emoji: "🚨", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: () => false,
+    vytvor: () => null,
+  },
+];
+
+export const KATALOG_PODLE_KIND = new Map(KATALOG.map((d) => [d.kind, d]));

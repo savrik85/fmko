@@ -1,0 +1,155 @@
+import { describe, expect, it } from "vitest";
+import { createRng, type Rng } from "../generators/rng";
+import { KATALOG, KATALOG_PODLE_KIND } from "./katalog";
+import { hrac, PROBLEMOVY, stavKlubu } from "./testovaci-stav";
+
+const def = (kind: string) => {
+  const d = KATALOG_PODLE_KIND.get(kind);
+  if (!d) throw new Error(`chybí ${kind}`);
+  return d;
+};
+const proSeedy = (fn: (rng: Rng) => void, pocet = 300) => {
+  for (let s = 1; s <= pocet; s++) fn(createRng(s));
+};
+
+describe("katalog: každý typ je jednou a má popisek", () => {
+  it("unikátní kindy", () => {
+    const kindy = KATALOG.map((d) => d.kind);
+    expect(new Set(kindy).size).toBe(kindy.length);
+    for (const d of KATALOG) {
+      expect(d.label.length, d.kind).toBeGreaterThan(0);
+      expect(d.emoji.length, d.kind).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("katalog: nikdy se nesáhne na věc, kterou klub nemá", () => {
+  it("vloupání jen s něčím ve skladu a vezme jen to, co klub má", () => {
+    expect(def("vloupani_sklad").muze(stavKlubu())).toBe(false);
+    const s = stavKlubu({ vybaveni: { jerseys: 2, jerseys_condition: 70 }, kadr: [PROBLEMOVY] });
+    expect(def("vloupani_sklad").muze(s)).toBe(true);
+    let kradezi = 0;
+    proSeedy((rng) => {
+      const n = def("vloupani_sklad").vytvor(s, rng);
+      if (n?.kind !== "vloupani_sklad") return;
+      kradezi++;
+      expect(n.ztraty).toEqual([{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 2 }]);
+    });
+    expect(kradezi).toBeGreaterThan(0);
+  });
+
+  it("zabezpečení areálu ani vitrína ze skladu nezmizí vloupáním", () => {
+    const s = stavKlubu({ vybaveni: { balls: 1, area_security: 1, trophy_case: 3 } });
+    proSeedy((rng) => {
+      const n = def("vloupani_sklad").vytvor(s, rng);
+      if (n?.ztraty[0]?.typ === "vybaveni") expect(n.ztraty[0].kategorie).toBe("balls");
+    });
+  });
+
+  it("bez dodávky žádná dodávka", () => {
+    expect(def("dodavka_pujcena").muze(stavKlubu({ kadr: [PROBLEMOVY] }))).toBe(false);
+    expect(def("dodavka_ukradena").muze(stavKlubu())).toBe(false);
+    const s = stavKlubu({ vybaveni: { team_van: 2, team_van_condition: 80 }, kadr: [PROBLEMOVY] });
+    proSeedy((rng) => {
+      const n = def("dodavka_pujcena").vytvor(s, rng);
+      if (!n) return;
+      const z = n.ztraty[0];
+      expect(z.typ).toBe("vybaveni_stav");
+      if (z.typ === "vybaveni_stav") expect(z.stavPo).toBeLessThan(80);
+    });
+  });
+
+  it("vitrína až od úrovně 2 a přijde jen o jednu úroveň", () => {
+    expect(def("vitrina").muze(stavKlubu({ vybaveni: { trophy_case: 1 } }))).toBe(false);
+    const s = stavKlubu({ vybaveni: { trophy_case: 3 } });
+    proSeedy((rng) => {
+      const n = def("vitrina").vytvor(s, rng);
+      if (n?.kind === "vitrina") expect(n.ztraty[0]).toMatchObject({ kategorie: "trophy_case", uroven: 3, urovniDolu: 1 });
+    });
+  });
+
+  it("kamery jde ukrást jen se zabezpečením aspoň 2", () => {
+    expect(def("kradez_kamery").muze(stavKlubu({ vybaveni: { area_security: 1 } }))).toBe(false);
+    expect(def("kradez_kamery").muze(stavKlubu({ vybaveni: { area_security: 2 } }))).toBe(true);
+  });
+
+  it("traktůrek až od sekačky úrovně 2", () => {
+    expect(def("koleje_trakturek").muze(stavKlubu({ vybaveni: { mower: 1 } }))).toBe(false);
+    expect(def("koleje_trakturek").muze(stavKlubu({ vybaveni: { mower: 2 } }))).toBe(true);
+  });
+
+  it("požár jen s grilem, klubovka s krbem přijde jen o jednu úroveň", () => {
+    expect(def("pozar_grilu").muze(stavKlubu())).toBe(false);
+    const s = stavKlubu({ vybaveni: { club_grill: 3 }, stadion: { refreshments: 0, pitch_condition: 70 } });
+    proSeedy((rng) => {
+      const n = def("pozar_grilu").vytvor(s, rng);
+      expect(n?.ztraty).toHaveLength(1);
+      expect(n?.ztraty[0]).toMatchObject({ kategorie: "club_grill", urovniDolu: 1 });
+    });
+  });
+
+  it("stánek při požáru shoří jen tomu, kdo stánek má", () => {
+    const bezStanku = stavKlubu({ vybaveni: { club_grill: 1 } });
+    proSeedy((rng) => expect(def("pozar_grilu").vytvor(bezStanku, rng)?.ztraty.some((z) => z.typ === "stadion")).toBe(false));
+    const seStankem = stavKlubu({ vybaveni: { club_grill: 1 }, stadion: { refreshments: 1, pitch_condition: 70 } });
+    let stanek = 0;
+    proSeedy((rng) => { if (def("pozar_grilu").vytvor(seStankem, rng)?.ztraty.some((z) => z.typ === "stadion")) stanek++; });
+    expect(stanek).toBeGreaterThan(0);
+  });
+});
+
+describe("katalog: spouštěné incidenty", () => {
+  const piti = [hrac({ id: "a", alkohol: 70 }), hrac({ id: "b", alkohol: 85 }), hrac({ id: "c", alkohol: 20 })];
+  const zaklad = { stadion: { changing_rooms: 1, pitch_condition: 70 }, kadr: piti };
+
+  it("oslava jen po výhře, se dvěma pijáky ze včerejší hospody a s kabinou", () => {
+    const d = def("oslava_v_kabine");
+    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(true);
+    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: false, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(false);
+    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "c"] }))).toBe(false);
+    expect(d.muze(stavKlubu({ ...zaklad, stadion: { pitch_condition: 70 }, vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(false);
+  });
+
+  it("za oslavou stojí nejvíc pijící návštěvník hospody", () => {
+    const s = stavKlubu({ ...zaklad, vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] });
+    expect(def("oslava_v_kabine").vytvor(s, createRng(1))?.culpritPlayerId).toBe("b");
+  });
+
+  it("kopnuté dveře jen vyloučený vzteklý hráč a pachatel je hned známý", () => {
+    const vztekloun = hrac({ id: "k", jmeno: "Karel Vzteklý", temperament: 80 });
+    const s = stavKlubu({ stadion: { changing_rooms: 2, pitch_condition: 70 }, kadr: [vztekloun], vcera: { vyhra: false, cervenaKarta: ["k"] } });
+    const n = def("kopnute_dvere").vytvor(s, createRng(5));
+    expect(n).toMatchObject({ culpritPlayerId: "k", culpritRevealed: true });
+    expect(n?.text).toContain("Karel Vzteklý");
+    const klidas = stavKlubu({ ...s, kadr: [hrac({ id: "k", temperament: 50 })] });
+    expect(def("kopnute_dvere").muze(klidas)).toBe(false);
+  });
+
+  it("světlice jen po výhře", () => {
+    expect(def("svetlice").muze(stavKlubu())).toBe(false);
+    expect(def("svetlice").muze(stavKlubu({ vcera: { vyhra: true, cervenaKarta: [] } }))).toBe(true);
+  });
+});
+
+describe("katalog: alarm", () => {
+  it("bez zabezpečení areálu nikdy", () => {
+    const s = stavKlubu({ vybaveni: { balls: 1 } });
+    proSeedy((rng) => expect(def("vloupani_sklad").vytvor(s, rng)?.kind).not.toBe("alarm_vyplasil"));
+  });
+
+  it("se zabezpečením 2 v dobrém stavu někdy zloděje vyplaší", () => {
+    const s = stavKlubu({ vybaveni: { balls: 1, area_security: 2, area_security_condition: 80 } });
+    let alarmu = 0;
+    proSeedy((rng) => { if (def("vloupani_sklad").vytvor(s, rng)?.kind === "alarm_vyplasil") alarmu++; });
+    expect(alarmu).toBeGreaterThan(0);
+  });
+
+  it("sešlé zabezpečení alarm nespustí", () => {
+    const s = stavKlubu({ vybaveni: { balls: 1, area_security: 3, area_security_condition: 20 } });
+    proSeedy((rng) => expect(def("vloupani_sklad").vytvor(s, rng)?.kind).not.toBe("alarm_vyplasil"));
+  });
+
+  it("alarm sám se nelosuje", () => {
+    expect(def("alarm_vyplasil").muze(stavKlubu({ vybaveni: { area_security: 3 } }))).toBe(false);
+  });
+});
