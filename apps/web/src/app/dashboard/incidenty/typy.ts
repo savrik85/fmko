@@ -1,7 +1,7 @@
 /** Typy a popisky stránky Incidenty. Klíče odpovídají API (apps/api/src/routes/incidents.ts). */
 
 export type StavIncidentu = "hrozi" | "otevreny" | "policie" | "probiha" | "uzavreny";
-export type AkceTrestu = "odpustit" | "srazka" | "pokuta" | "vyhodit" | "policie" | "nechat_byt";
+export type AkceTrestu = "odpustit" | "srazka" | "pokuta" | "vyradit" | "vyhodit" | "policie" | "nechat_byt";
 export type VysledekObvineni = "priznal" | "usvedcen" | "zapira";
 
 export interface Incident {
@@ -53,6 +53,7 @@ export const VYSLEDEK_LABEL: Record<string, string> = {
   odpustit: "Trenér odpustil",
   srazka: "Srážka ze mzdy",
   pokuta: "Pokuta",
+  vyradit: "Vyřazen ze zápasů",
   vyhodit: "Hráč vyhozen",
   policie: "Předáno policii",
   vyreseno_policii: "Vyřešila policie",
@@ -63,6 +64,7 @@ export const TREST_LABEL: Record<AkceTrestu, string> = {
   odpustit: "Odpustit",
   srazka: "Srážka ze mzdy",
   pokuta: "Pokuta",
+  vyradit: "Vyřadit ze zápasů",
   vyhodit: "Vyhodit z klubu",
   policie: "Předat policii",
   nechat_byt: "Nechat to být",
@@ -72,6 +74,7 @@ export const TREST_HOTOVO: Record<AkceTrestu, string> = {
   odpustit: "Odpuštěno.",
   srazka: "Srážka se bude strhávat každé pondělí.",
   pokuta: "Pokuta je zaplacená.",
+  vyradit: "Hráč vynechá příští ligová kola.",
   vyhodit: "Hráč z klubu odešel.",
   policie: "Předáno policii, výsledek přijde do týdne.",
   nechat_byt: "Necháno být.",

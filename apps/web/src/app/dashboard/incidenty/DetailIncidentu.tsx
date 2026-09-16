@@ -22,6 +22,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
   const [pracuje, setPracuje] = useState(false);
   const [obvinenyId, setObvinenyId] = useState("");
   const [potvrditVyhazov, setPotvrditVyhazov] = useState(false);
+  const [kolVyrazeni, setKolVyrazeni] = useState("1");
 
   const cesta = `/api/teams/${teamId}/incidents/${encodeURIComponent(incidentId)}`;
 
@@ -75,8 +76,8 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
     void proved("obvinit", { playerId: obvinenyId }, (o) => `${jmeno}: ${OBVINENI_LABEL[o.vysledek as VysledekObvineni] ?? "hotovo"}.`);
   }
 
-  function rozhodnout(a: AkceTrestu) {
-    void proved("rozhodnuti", { akce: a }, () => TREST_HOTOVO[a]);
+  function rozhodnout(a: AkceTrestu, navic: Record<string, string> = {}) {
+    void proved("rozhodnuti", { akce: a, ...navic }, () => TREST_HOTOVO[a]);
   }
 
   return (
@@ -198,11 +199,12 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                   <li>Srážka ze mzdy: celkem {kc(detail.castky.srazka)} během {detail.castky.tydnu} týdnů.</li>
                 )}
                 {detail.castky && akce.tresty.includes("pokuta") && <li>Pokuta: {kc(detail.castky.pokuta)} najednou.</li>}
+                {akce.tresty.includes("vyradit") && <li>Vyřadit: hráč vynechá příští 1 až 3 ligová kola, do té doby nenastoupí ani v poháru.</li>}
                 {akce.tresty.includes("policie") && <li>Předat policii: soud mu dá podmínku, v klubu zůstane.</li>}
                 {akce.tresty.includes("vyhodit") && <li>Vyhodit: hráč odejde mezi volné hráče.</li>}
               </ul>
               <div className="grid grid-cols-2 gap-2">
-                {akce.tresty.filter((a) => a !== "vyhodit").map((a) => (
+                {akce.tresty.filter((a) => a !== "vyhodit" && a !== "vyradit").map((a) => (
                   <button
                     key={a}
                     onClick={() => rozhodnout(a)}
@@ -213,6 +215,27 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                   </button>
                 ))}
               </div>
+              {akce.tresty.includes("vyradit") && (
+                <div className="flex gap-2">
+                  <select
+                    value={kolVyrazeni}
+                    onChange={(e) => setKolVyrazeni(e.target.value)}
+                    aria-label="Počet ligových kol"
+                    className="rounded-soft border border-gray-200 bg-white px-3 py-2 text-base"
+                  >
+                    <option value="1">1 kolo</option>
+                    <option value="2">2 kola</option>
+                    <option value="3">3 kola</option>
+                  </select>
+                  <button
+                    onClick={() => rozhodnout("vyradit", { zapasu: kolVyrazeni })}
+                    disabled={pracuje}
+                    className="flex-1 px-3 py-2 rounded-soft text-sm font-heading font-bold border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {TREST_LABEL.vyradit}
+                  </button>
+                </div>
+              )}
               {akce.tresty.includes("vyhodit") && (potvrditVyhazov ? (
                 <div className="flex gap-2">
                   <button
