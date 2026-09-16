@@ -152,12 +152,16 @@ CREATE TABLE IF NOT EXISTS club_incident_knowledge (
   interrogated_on TEXT,
   until          TEXT NOT NULL,              -- herní den, do kdy si to pamatuje
   season_number  INTEGER NOT NULL,
-  PRIMARY KEY (incident_id, player_id)
+  PRIMARY KEY (incident_id, player_id, role)
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_player ON club_incident_knowledge(player_id, until);
 ```
 
-Tabulka vzniká ve fázi 2 (migrace 0205), ve fázi 2 se zapisuje jen role `obvineny`.
+Jeden řádek na hráče, incident **a roli** — fáze 4 přidá k témuž hráči a incidentu další role
+(`svedek`, `kamarad`, `kadr`), a o ty by dvousloupcový klíč (incident_id, player_id) přišel.
+
+Tabulka vzniká ve fázi 2 (migrace 0205), ve fázi 2 se zapisuje jen role `obvineny`
+(`INSERT OR REPLACE` — opětovné obvinění téhož nevinného hráče přepíše jen jeho vlastní řádek `obvineny`).
 
 ### `club_incident_absences` (kdy hráč kvůli incidentu nemůže)
 
@@ -503,7 +507,8 @@ Max. 2 obvinění na incident. Rozhodnutí je deterministické v okamžiku klikn
 Po odhalení (přiznáním i usvědčením) se lhůta na rozhodnutí prodlouží aspoň na dnes + 3 dny, aby
 na manažera po pozdním obvinění zbyl čas vybrat trest.
 
-Hráč odpoví SMS (`sendPlayerSMS`) — AI text, při vypnutém modelu šablona.
+Hráč odpoví SMS (`sendPlayerSMS`). **Odchylka od návrhu:** ve fázi 2 jen šablona (`texty.ts`,
+klíč podle výsledku) — AI text přijde až s chatem ve fázi 4.
 
 ### 7c) Policie a záloha
 
@@ -512,14 +517,17 @@ Hráč odpoví SMS (`sendPlayerSMS`) — AI text, při vypnutém modelu šablona
 - Šance: 0,15 + kamera s identifikací 0,35 + kamera bez identity 0,2 + soused 0,15 + aktivní poznaný inzerát 0,3 + nalezený svědek 0,1 + policista v kádru 0,1; strop 0,9.
 - Výsledek se losuje v den výsledku (`seed "policie|" + id`) — první číslo z generátoru rozhoduje, jestli se šetření povedlo.
 - **Úspěch, cizí pachatel:** vybavení se vrátí (úroveň a stav z `loss`), **jen když má klub nižší úroveň**, jinak SMS „věci máte na služebně, ale už máte lepší" a `recovered = 1` bez změny. Inzerát se stáhne. Zpravodaj.
-- **Úspěch, pachatel z kádru:** `culprit_revealed = 1`, incident se vrací na `otevreny` s lhůtou dnes + 7 — trest volí manažer stejně jako po každém jiném odhalení (7d).
+- **Úspěch, pachatel z kádru:** `culprit_revealed = 1`, incident se vrací na `otevreny` s lhůtou dnes + 7 — trest volí manažer stejně jako po každém jiném odhalení (7d). **Fáze 3** k tomu přidá incidentní absence: výslech (1 den) a soud (1 den), ohlášené aspoň 2 dny dopředu (17a).
 - **Pachatel `nikdo`:** výsledek `nehoda`, incident se rovnou uzavře.
+- **Cizí pachatel, ukradené peníze** (typ `penize`, fáze 7, kdy existují peněžní ztráty): vrátí se 50–100 % ukradené hotovosti jako `incident_recovery`.
 - **Cizí pachatel u poškození** (rozbité se na rozdíl od krádeže vrátit nedá): náhrada 50–100 % hodnoty škody jako `incident_recovery`.
 - **Neúspěch:** zpět na `otevreny`, lhůta dnes + 3 dny.
 
 **Udání vlastního hráče** (trest `policie`, 7d): `status = policie`, `resolution = policie`, výsledek
 vždy za 3–7 dní „podmínka" — u vlastního udání se nic nešetří, jen se čeká na soud. Pokud je
 pachatel oblíbený (vůdcovství ≥ 65 nebo ≥ 2 vztahy síly ≥ 50), kádr morálka −3 („trenér je práskač").
+I tady **fáze 3** přidá incidentní absence: výslech (1 den) a soud (1 den), ohlášené aspoň 2 dny
+dopředu (17a).
 
 **Záloha (situace `dluhy`):**
 - `pujcit`: `recordTransaction(..., "incident_advance", −3 000 až −8 000)`, srážka zpět 4 týdny, morálka +6, vztah +8. Když hráč odejde dřív, zbytek propadá.
