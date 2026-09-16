@@ -26,6 +26,19 @@ export const ROZBITNE = [
 ] as const;
 export type RozbitnyPrvek = (typeof ROZBITNE)[number];
 
+/**
+ * Co můžou rozbít hráči klubu. Na rozdíl od fanoušků se dostanou i do kabin
+ * (spec incidentů, Část 4b).
+ */
+export const ROZBITNE_ZEVNITR = ["changing_rooms", "showers", "toilets", "refreshments"] as const;
+
+const OPRAVITELNE: readonly string[] = [...new Set<string>([...ROZBITNE, ...ROZBITNE_ZEVNITR])];
+
+/** Zařízení, které jde poškodit a opravit. Název jde do SQL, proto whitelist. */
+export function jeOpravitelne(facility: string): boolean {
+  return OPRAVITELNE.includes(facility);
+}
+
 /** Oprava stojí zlomek toho, co úroveň stála postavit — spravit není postavit. */
 export const PODIL_OPRAVY = 0.35;
 
@@ -118,6 +131,54 @@ export async function rozbijVybaveni(
   return { facility, label, levels, cost };
 }
 
+/**
+ * Poškodí konkrétní zařízení kvůli klubovému incidentu.
+ *
+ * Stejná idempotence jako `rozbijVybaveni`: klíč `incident_id` je `{incidentId}-{zařízení}`,
+ * takže jeden incident smí poškodit dvě různá zařízení (gril i stánek), ale žádné dvakrát.
+ */
+export async function poskodZarizeni(
+  db: D1Database,
+  opts: { teamId: string; incidentId: string; facility: string; levels: number; gameDate: string; popis: string },
+): Promise<{ damageId: string; label: string; levels: number; cost: number } | null> {
+  if (!jeOpravitelne(opts.facility)) {
+    logger.error({ module: M }, `poškození neznámého zařízení ${opts.facility}`);
+    return null;
+  }
+  const stadion = await db
+    .prepare(`SELECT ${opts.facility} AS u FROM stadiums WHERE team_id = ?`)
+    .bind(opts.teamId)
+    .first<{ u: number }>()
+    .catch((e) => { logger.warn({ module: M }, `stadion ${opts.teamId}`, e); return null; });
+  const pred = stadion?.u ?? 0;
+  const levels = Math.min(pred, opts.levels);
+  if (levels <= 0) return null;
+
+  const label = FACILITY_LABELS[opts.facility] ?? opts.facility;
+  const cost = cenaOpravy(opts.facility, pred, levels);
+  const klic = `${opts.incidentId}-${opts.facility}`;
+  const damageId = `dmg-${klic}`;
+
+  const zapis = await db
+    .prepare(
+      `INSERT OR IGNORE INTO stadium_damage
+         (id, team_id, facility, levels, repair_cost, incident_id, popis, game_date)
+       VALUES (?,?,?,?,?,?,?,?)`,
+    )
+    .bind(damageId, opts.teamId, opts.facility, levels, cost, klic, opts.popis, opts.gameDate)
+    .run()
+    .catch((e) => { logger.error({ module: M }, `zápis poškození ${klic}`, e); return null; });
+  if ((zapis?.meta?.changes ?? 0) === 0) return null;
+
+  await db
+    .prepare(`UPDATE stadiums SET ${opts.facility} = MAX(0, ${opts.facility} - ?) WHERE team_id = ?`)
+    .bind(levels, opts.teamId)
+    .run()
+    .catch((e) => { logger.error({ module: M }, `sražení ${opts.facility} u ${opts.teamId}`, e); });
+
+  return { damageId, label, levels, cost };
+}
+
 /** Co má klub rozbité a čeká na opravu. */
 export async function nactiPoskozeni(db: D1Database, teamId: string): Promise<Array<PoskozeniRow & { label: string }>> {
   const rows = await db
@@ -164,7 +225,9 @@ export async function opravVybaveni(
     .catch((e) => { logger.error({ module: M }, `nárok na opravu ${opts.damageId}`, e); return null; });
   if ((narok?.meta?.changes ?? 0) === 0) return { ok: false, duvod: "uz_opraveno" };
 
-  const facility = ROZBITNE.find((k) => k === dmg.facility);
+  // Opravit jde i to, co rozbili hráči uvnitř (šatny, sprchy). Dřív whitelist znal jen
+  // věci rozbitné fanoušky a oprava šaten by skončila „neznámé zařízení".
+  const facility = OPRAVITELNE.find((k) => k === dmg.facility);
   if (!facility) {
     logger.error({ module: M }, `neznámé zařízení v opravě: ${dmg.facility}`);
     return { ok: false, duvod: "nenalezeno" };
