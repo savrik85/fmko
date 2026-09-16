@@ -1061,7 +1061,7 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   if (!event) return c.json({ error: "Událost nenalezena" }, 404);
   if (event.status !== "pending") return c.json({ error: "Už je vyřešená" }, 400);
 
-  const choices = JSON.parse(event.choices as string) as Array<{ id: string; effects: Array<{ type: string; value: number }> }>;
+  const choices = JSON.parse(event.choices as string) as Array<{ id: string; label?: string; effects: Array<{ type: string; value: number }> }>;
   const choice = choices.find((ch) => ch.id === body.choiceId);
   if (!choice) return c.json({ error: "Invalid choice" }, 400);
 
@@ -1075,7 +1075,9 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   // Aplikace efektů je sdílená s automatickým resolverem v denním ticku
   // (události bez voleb) — viz season/event-effects.ts.
   const { applyEventEffects } = await import("../season/event-effects");
-  const choiceLabel = String((choice as Record<string, unknown>).text ?? event.title ?? "efekt");
+  // Volby mají `label` (season/seasonal-events.ts). Čtení `text` vracelo vždy undefined,
+  // takže se v transakcích i reputaci psal jen název události bez zvolené možnosti.
+  const choiceLabel = String(choice.label ?? event.title ?? "efekt");
   // Herní datum — reputační log i transakce se porovnávají v herním čase.
   const eventTeamDate = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ game_date: string | null }>()
