@@ -238,6 +238,21 @@ export const TEXTY = {
     "Policejní šetření ukázalo na hráče z kádru: {hrac}.",
     "Policie má jasno. Udělal to hráč: {hrac}.",
   ],
+  absence_vyslech: [
+    "Trenére, mám předvolání na výslech na policii, nemůžu přijít.",
+    "Musím na policii k výslechu, dneska to nestihnu.",
+    "Mám výslech kvůli tomu průšvihu, nepřijdu.",
+  ],
+  absence_soud: [
+    "Mám soud, nemůžu hrát.",
+    "Dneska stojím před soudem, fotbal nepůjde.",
+    "Musím k soudu, omlouvám se.",
+  ],
+  absence_vyrazen: [
+    "Vím, že jsem vyřazenej. Nepřijdu.",
+    "Jsem za trest mimo, dneska nehraju.",
+    "Chápu, že mě nechcete. Tentokrát nehraju.",
+  ],
   lhuta_kradez: [
     "Uzavřeno bez výsledku: {nazev}. Kdo za tím stál, se nezjistilo.",
   ],

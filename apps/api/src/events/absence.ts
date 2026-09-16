@@ -19,7 +19,7 @@ export type AbsenceTiming = "day_before" | "match_day" | "any";
 
 export interface AbsenceResult {
   playerIndex: number;
-  category: "professional" | "personal" | "absurd" | "health" | "hangover" | "commute";
+  category: "professional" | "personal" | "absurd" | "health" | "hangover" | "commute" | "incident";
   timing: AbsenceTiming;
   reason: string;
   emoji: string;
@@ -687,11 +687,19 @@ export function generateAbsences(
         emoji = pick.emoji;
         break;
       }
+      case "incident": {
+        // `rng.weighted(weights)` tuhle kategorii nikdy nevylosuje — přidávají ji
+        // až incidenty přes `pridejIncidentniAbsence` (incidents/absence-hracu.ts)
+        // po tomto losu. Větev je tu jen kvůli vyčerpávajícímu switchi.
+        smsText = "";
+        emoji = "❗";
+        break;
+      }
     }
 
     const CATEGORY_LABELS: Record<string, string> = {
       professional: "Práce", personal: "Osobní", absurd: "Jiné",
-      health: "Zdraví", hangover: "Kocovina", commute: "Doprava",
+      health: "Zdraví", hangover: "Kocovina", commute: "Doprava", incident: "Incident",
     };
 
     // Skip if timing doesn't match (professional = day_before only, commute/hangover = match_day only)

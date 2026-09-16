@@ -59,3 +59,17 @@ export const SILA_KAMARADSTVI = 40;
 export const OBLIBENY_VUDCOVSTVI = 65;
 export const OBLIBENY_SILA_VZTAHU = 50;
 export const OBLIBENY_POCET_VZTAHU = 2;
+
+/** Absence, trénink a zápas (spec 17a–17c). */
+/** Datumová incidentní absence musí být ohlášená aspoň tolik dní dopředu, jinak by SMS den předem nesouhlasila se zápasem. */
+export const MIN_OHLASENI_ABSENCE_DNI = 2;
+export const VYSLECH_ZA_DNI = 2;
+/** Soud po odhalení pachatele policií. Po udání se koná v den výsledku šetření. */
+export const SOUD_PO_ODHALENI_DNI = 5;
+export const VYRAZENI_MAX_ZAPASU = 3;
+/** Jak dlouho obvinění a odhalení působí v zápase, v kabině a na docházce. */
+export const VLIV_INCIDENTU_DNI = 14;
+/** Jak daleko do minulosti se hledají incidenty s obviněním nebo odhalením. */
+export const OKNO_VLIVU_DNI = 30;
+export const DUVOD_ABSENCE = { vyslech: "Výslech na policii", soud: "Soudní jednání", vyrazen: "Vyřazen trenérem" } as const;
+export const EMOJI_ABSENCE: Record<string, string> = { vyslech: "🚓", soud: "⚖️", vyrazen: "⛔" };
