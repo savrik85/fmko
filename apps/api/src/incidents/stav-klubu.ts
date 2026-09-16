@@ -118,7 +118,7 @@ export async function nactiStavKlubu(
     const cervene = await db.prepare("SELECT player_id FROM match_player_stats WHERE match_id = ? AND team_id = ? AND red_cards > 0")
       .bind(zapas.id, teamId).all<{ player_id: string }>()
       .catch((e) => { logger.warn({ module: M }, `červené karty ${zapas.id}`, e); return { results: [] as Array<{ player_id: string }> }; });
-    vceraZapas = { vyhra, cervenaKarta: cervene.results.map((r) => r.player_id) };
+    vceraZapas = { vyhra, doma, cervenaKarta: cervene.results.map((r) => r.player_id) };
   }
 
   // Hospoda zná i vůdce fanoušků (playerId „fan-…") a hosty. Do stavu patří jen hráči kádru.

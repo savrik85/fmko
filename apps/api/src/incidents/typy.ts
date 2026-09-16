@@ -41,7 +41,7 @@ export interface StavKlubu {
   /** Aktivní hráči klubu. */
   kadr: HracKlubu[];
   /** Soutěžní zápas předchozího herního dne, `null` když se nehrálo. */
-  vcera: { vyhra: boolean; cervenaKarta: string[] } | null;
+  vcera: { vyhra: boolean; doma: boolean; cervenaKarta: string[] } | null;
   /** Hráči klubu (ne hosté, ne trenér), kteří byli předchozí den v hospodě. */
   hospodaVcera: string[];
   odehranychZapasu: number;

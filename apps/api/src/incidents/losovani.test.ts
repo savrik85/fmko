@@ -39,7 +39,7 @@ describe("denní los incidentů", () => {
     const s = stavKlubu({
       stadion: { changing_rooms: 1, pitch_condition: 70 },
       kadr: [hrac({ id: "a", alkohol: 70 }), hrac({ id: "b", alkohol: 85 })],
-      vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"],
+      vcera: { vyhra: true, doma: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"],
     });
     let oslav = 0;
     for (let seed = 1; seed <= 1000; seed++) if (vylosujIncident(s, createRng(seed))?.kind === "oslava_v_kabine") oslav++;

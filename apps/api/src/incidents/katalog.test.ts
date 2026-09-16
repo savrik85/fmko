@@ -106,6 +106,30 @@ describe("katalog: nikdy se nesáhne na věc, kterou klub nemá", () => {
       expect(def("dodavka_ukradena").vytvor(s, rng)).toBeNull();
     });
   });
+
+  it("kopnuté dveře a světlice jen po domácím zápase", () => {
+    const vztekloun = hrac({ id: "k", jmeno: "Karel Vzteklý", temperament: 80 });
+    const venku = stavKlubu({ stadion: { changing_rooms: 2, pitch_condition: 70 }, kadr: [vztekloun], vcera: { vyhra: true, doma: false, cervenaKarta: ["k"] } });
+    expect(def("kopnute_dvere").muze(venku)).toBe(false);
+    expect(def("svetlice").muze(venku)).toBe(false);
+  });
+
+  it("kopnuté dveře potřebují šatny i červenou kartu", () => {
+    const vztekloun = hrac({ id: "k", temperament: 80 });
+    const bezSaten = stavKlubu({ stadion: { pitch_condition: 70 }, kadr: [vztekloun], vcera: { vyhra: false, doma: true, cervenaKarta: ["k"] } });
+    expect(def("kopnute_dvere").muze(bezSaten)).toBe(false);
+    const bezCervene = stavKlubu({ stadion: { changing_rooms: 1, pitch_condition: 70 }, kadr: [vztekloun], vcera: { vyhra: false, doma: true, cervenaKarta: [] } });
+    expect(def("kopnute_dvere").muze(bezCervene)).toBe(false);
+  });
+
+  it("vandal rozbije jen venkovní zařízení, které klub má", () => {
+    const s = stavKlubu({ stadion: { fence: 0, stands: 2, entrance_gate: 0, changing_rooms: 3, pitch_condition: 70 } });
+    proSeedy((rng) => {
+      const n = def("vandal").vytvor(s, rng);
+      const z = n?.ztraty[0];
+      if (z?.typ === "stadion") expect(z.zarizeni).toBe("stands");
+    });
+  });
 });
 
 describe("katalog: spouštěné incidenty", () => {
@@ -114,20 +138,20 @@ describe("katalog: spouštěné incidenty", () => {
 
   it("oslava jen po výhře, se dvěma pijáky ze včerejší hospody a s kabinou", () => {
     const d = def("oslava_v_kabine");
-    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(true);
-    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: false, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(false);
-    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "c"] }))).toBe(false);
-    expect(d.muze(stavKlubu({ ...zaklad, stadion: { pitch_condition: 70 }, vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(false);
+    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: true, doma: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(true);
+    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: false, doma: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(false);
+    expect(d.muze(stavKlubu({ ...zaklad, vcera: { vyhra: true, doma: true, cervenaKarta: [] }, hospodaVcera: ["a", "c"] }))).toBe(false);
+    expect(d.muze(stavKlubu({ ...zaklad, stadion: { pitch_condition: 70 }, vcera: { vyhra: true, doma: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] }))).toBe(false);
   });
 
   it("za oslavou stojí nejvíc pijící návštěvník hospody", () => {
-    const s = stavKlubu({ ...zaklad, vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] });
+    const s = stavKlubu({ ...zaklad, vcera: { vyhra: true, doma: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"] });
     expect(def("oslava_v_kabine").vytvor(s, createRng(1))?.culpritPlayerId).toBe("b");
   });
 
   it("kopnuté dveře jen vyloučený vzteklý hráč a pachatel je hned známý", () => {
     const vztekloun = hrac({ id: "k", jmeno: "Karel Vzteklý", temperament: 80 });
-    const s = stavKlubu({ stadion: { changing_rooms: 2, pitch_condition: 70 }, kadr: [vztekloun], vcera: { vyhra: false, cervenaKarta: ["k"] } });
+    const s = stavKlubu({ stadion: { changing_rooms: 2, pitch_condition: 70 }, kadr: [vztekloun], vcera: { vyhra: false, doma: true, cervenaKarta: ["k"] } });
     const n = def("kopnute_dvere").vytvor(s, createRng(5));
     expect(n).toMatchObject({ culpritPlayerId: "k", culpritRevealed: true });
     expect(n?.text).toContain("Karel Vzteklý");
@@ -137,13 +161,13 @@ describe("katalog: spouštěné incidenty", () => {
 
   it("světlice jen po výhře", () => {
     expect(def("svetlice").muze(stavKlubu())).toBe(false);
-    expect(def("svetlice").muze(stavKlubu({ vcera: { vyhra: true, cervenaKarta: [] } }))).toBe(true);
+    expect(def("svetlice").muze(stavKlubu({ vcera: { vyhra: true, doma: true, cervenaKarta: [] } }))).toBe(true);
   });
 
   it("oslava nikdy nerozbije stánek, jen šatny, sprchy nebo sociálky", () => {
     const s = stavKlubu({
       stadion: { refreshments: 3, pitch_condition: 70 }, kadr: piti,
-      vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"],
+      vcera: { vyhra: true, doma: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"],
     });
     expect(def("oslava_v_kabine").muze(s)).toBe(false);
     const sKabinou = stavKlubu({ ...s, stadion: { refreshments: 3, showers: 1, pitch_condition: 70 } });

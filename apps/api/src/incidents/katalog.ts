@@ -210,10 +210,10 @@ export const KATALOG: DefiniceIncidentu[] = [
   },
   {
     kind: "kopnute_dvere", label: "Kopnuté dveře", emoji: "🚪", category: "poskozeni", vaha: 0, spousteny: true,
-    muze: (s) => zarizeni(s, "changing_rooms") >= 1 && vzteklounSCervenou(s) !== null,
+    muze: (s) => zarizeni(s, "changing_rooms") >= 1 && !!s.vcera?.doma && vzteklounSCervenou(s) !== null,
     vytvor: (s, rng) => {
       const h = vzteklounSCervenou(s);
-      if (!h || zarizeni(s, "changing_rooms") < 1) return null;
+      if (!h || zarizeni(s, "changing_rooms") < 1 || !s.vcera?.doma) return null;
       // Všichni viděli, kdo to byl: pachatel je známý hned.
       return {
         kind: "kopnute_dvere", category: "poskozeni", status: "otevreny", severity: 2,
@@ -264,9 +264,9 @@ export const KATALOG: DefiniceIncidentu[] = [
   },
   {
     kind: "svetlice", label: "Světlice na hřišti", emoji: "🎆", category: "poskozeni", vaha: 0, spousteny: true,
-    muze: (s) => !!s.vcera?.vyhra,
+    muze: (s) => !!s.vcera?.vyhra && !!s.vcera.doma,
     vytvor: (s, rng) => {
-      if (!s.vcera?.vyhra) return null;
+      if (!s.vcera?.vyhra || !s.vcera.doma) return null;
       const hrac = rng.random() < 0.5 ? vyberHrace(s.kadr, rng) : null;
       const pred = zarizeni(s, "pitch_condition") || 50;
       const po = Math.max(5, pred - rng.int(5, 10));
