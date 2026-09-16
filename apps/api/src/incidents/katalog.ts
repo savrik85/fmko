@@ -314,3 +314,8 @@ export const KATALOG: DefiniceIncidentu[] = [
 ];
 
 export const KATALOG_PODLE_KIND = new Map(KATALOG.map((d) => [d.kind, d]));
+
+/** Název typu incidentu pro texty a SMS. */
+export function nazevIncidentu(kind: string): string {
+  return KATALOG_PODLE_KIND.get(kind)?.label ?? "Incident v klubu";
+}

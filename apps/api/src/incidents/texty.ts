@@ -140,6 +140,39 @@ export const TEXTY = {
     "{svedek} viděl, kdo to udělal, a krýt ho nebude: {hrac}.",
     "{svedek} ukázal prstem na hráče, se kterým se nemusí: {hrac}.",
   ],
+  znalost_obvineny: [
+    "Trenér tě neprávem obvinil: {nazev}. Nebyl jsi to ty.",
+  ],
+  obvineni_priznani: [
+    "Trenére, máte pravdu. Byl jsem to já a stydím se za to.",
+    "No jo, byl jsem to já. Nevím, co mě to popadlo.",
+    "Omlouvám se, trenére. Udělal jsem to já.",
+  ],
+  obvineni_usvedcen: [
+    "Myslete si, co chcete, trenére. Nic vám k tomu neřeknu.",
+    "Na tohle vám nemám co říct.",
+    "Dělejte si, co uznáte za vhodné.",
+  ],
+  obvineni_zapira: [
+    "Já? S tím nemám nic společného, trenére.",
+    "To myslíte vážně? Já nic neudělal.",
+    "Tohle jsem nebyl já. Hledejte jinde.",
+  ],
+  stopa_priznani: [
+    "{hrac} se trenérovi přiznal.",
+    "{hrac} po obvinění všechno přiznal.",
+    "{hrac} přiznal, že to byl on.",
+  ],
+  stopa_usvedcen: [
+    "{hrac} zapíral, ale proti stopám neměl šanci.",
+    "{hrac} se vykrucoval, jenže stopy mluví jasně.",
+    "{hrac} nechtěl nic přiznat, stopy ho ale usvědčily.",
+  ],
+  policie_prijato: [
+    "Přijali jsme oznámení: {nazev}. Výsledek šetření vám dáme vědět do týdne.",
+    "Oznámení je zapsané: {nazev}. Do týdne se ozveme s výsledkem.",
+    "Případ jsme převzali: {nazev}. Výsledek šetření oznámíme do týdne.",
+  ],
   lhuta_kradez: [
     "Uzavřeno bez výsledku: {nazev}. Kdo za tím stál, se nezjistilo.",
   ],
