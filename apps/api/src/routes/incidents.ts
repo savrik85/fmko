@@ -157,10 +157,11 @@ incidentsRouter.post("/teams/:teamId/incidents/:id/policie", async (c) =>
 
 // ── POST /api/teams/:teamId/incidents/:id/rozhodnuti ────────────────────────
 incidentsRouter.post("/teams/:teamId/incidents/:id/rozhodnuti", async (c) => {
-  const body = await teloPozadavku<{ akce?: string }>(c, "rozhodnutí");
+  const body = await teloPozadavku<{ akce?: string; zapasu?: number | string }>(c, "rozhodnutí");
   const akce = AKCE_TRESTU.find((a) => a === body?.akce);
   if (!akce) return c.json({ error: "Neznámé rozhodnutí" }, 400);
-  return odpovedAkce(c, await rozhodni(c.env, c.req.param("teamId"), c.req.param("id"), akce));
+  const zapasu = body?.zapasu === undefined || body.zapasu === "" ? undefined : Number(body.zapasu);
+  return odpovedAkce(c, await rozhodni(c.env, c.req.param("teamId"), c.req.param("id"), akce, { zapasu }));
 });
 
 // ── POST /api/admin/incidents/force ──────────────────────────────────────────

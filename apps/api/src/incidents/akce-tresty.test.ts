@@ -63,6 +63,32 @@ describe("tresty", () => {
     expect(db.pocet(/SET status = 'otevreny', resolution = NULL/)).toBe(1);
   });
 
+  it("vyřadit: bez platného počtu zápasů 400 a nic se nestane", async () => {
+    for (const zapasu of [undefined, 0, 4, 1.5]) {
+      const { db, env } = prostredi(ODHALENY);
+      expect(await rozhodni(env, "tym-a", "inc-1", "vyradit", { zapasu })).toMatchObject({ ok: false, kod: 400 });
+      expect(db.pocet(/UPDATE club_incidents/)).toBe(0);
+    }
+  });
+
+  it("vyřadit: incident se uzavře a hráč dostane vyřazení na zvolený počet kol", async () => {
+    const { db, env } = prostredi(ODHALENY);
+    expect(await rozhodni(env, "tym-a", "inc-1", "vyradit", { zapasu: 2 })).toEqual({ ok: true, castka: null });
+    const narok = db.dotazy.find((d) => /UPDATE club_incidents SET status = 'uzavreny'/.test(d.sql));
+    expect(narok?.params.slice(0, 2)).toEqual(["vyradit", JSON.stringify({ zapasu: 2 })]);
+    const absence = db.davky.flat().find((d) => /INSERT OR IGNORE INTO club_incident_absences/.test(d.sql));
+    expect(absence?.params.slice(0, 8)).toEqual(["inc-1-abs-3", "inc-1", "tym-a", "p", "vyrazen", null, null, 2]);
+    expect(sendPlayerSMS).toHaveBeenCalledTimes(1);
+  });
+
+  it("předat policii: výslech za 2 dny a soud v den výsledku", async () => {
+    const { db, env } = prostredi(ODHALENY);
+    await rozhodni(env, "tym-a", "inc-1", "policie");
+    const vysledekOn = String(db.dotazy.find((d) => /SET status = 'policie', resolution = 'policie'/.test(d.sql))?.params[0]).slice(0, 10);
+    const absence = db.davky.flat().filter((d) => /club_incident_absences/.test(d.sql));
+    expect(absence.map((d) => [d.params[4], d.params[5]])).toEqual([["vyslech", "2026-09-18"], ["soud", vysledekOn]]);
+  });
+
   it("předat policii: incident čeká na soud, nic se neuzavře", async () => {
     const { db, env } = prostredi(ODHALENY);
     expect(await rozhodni(env, "tym-a", "inc-1", "policie")).toEqual({ ok: true, castka: null });

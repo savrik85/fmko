@@ -11,7 +11,7 @@ import type {
 
 export type StavVysetrovani = "znamy" | "podezreli" | "neznamy";
 
-export const AKCE_TRESTU: readonly AkceTrestu[] = ["odpustit", "srazka", "pokuta", "vyhodit", "policie", "nechat_byt"];
+export const AKCE_TRESTU: readonly AkceTrestu[] = ["odpustit", "srazka", "pokuta", "vyradit", "vyhodit", "policie", "nechat_byt"];
 
 /** Co manažer ví (spec 5b): známý pachatel, podezřelí z nalezených stop, nebo nic. */
 export function stavVysetrovani(stopy: readonly Stopa[], odhalen: boolean): { stav: StavVysetrovani; podezreli: string[] } {

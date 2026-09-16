@@ -91,6 +91,11 @@ describe("výsledek policie", () => {
     const davka = db.davky.flat();
     expect(davka.some((d) => /INSERT OR IGNORE INTO club_incident_clues/.test(d.sql) && d.params[3] === "policie")).toBe(true);
     expect(vi.mocked(sendSystemSMS).mock.calls[0][3]).toContain("Pepa Průšvih");
+    const absence = db.davky.flat().filter((d) => /club_incident_absences/.test(d.sql));
+    expect(absence.map((d) => [d.params[0], d.params[4], d.params[5]])).toEqual([
+      [`${id}-abs-1`, "vyslech", "2026-09-18"],
+      [`${id}-abs-2`, "soud", "2026-09-21"],
+    ]);
   });
 
   it("když přechod mezitím proběhl, nic se neoznámí", async () => {

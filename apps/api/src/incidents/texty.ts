@@ -253,6 +253,11 @@ export const TEXTY = {
     "Jsem za trest mimo, dneska nehraju.",
     "Chápu, že mě nechcete. Tentokrát nehraju.",
   ],
+  trest_vyradit: [
+    "Chápu, trenére. Pár zápasů si odsedím.",
+    "Dobře, zasloužil jsem si to. Budu makat na tréninku.",
+    "Beru to. Vrátím se lepší.",
+  ],
   lhuta_kradez: [
     "Uzavřeno bez výsledku: {nazev}. Kdo za tím stál, se nezjistilo.",
   ],

@@ -1019,6 +1019,10 @@ export async function runScheduledMatches(
                 await db.prepare("UPDATE players SET suspended_matches = MAX(0, suspended_matches - 1) WHERE team_id IN (?, ?) AND suspended_matches > 0 AND id NOT IN (SELECT player_id FROM match_player_stats WHERE match_id = ?)")
                     .bind(homeTeamId, awayTeamId, matchId).run().catch((e) => logger.warn({module: "match-runner"}, "decrement suspensions", e));
 
+                // Klubové vyřazení za incident (spec 17a): odehrané ligové kolo se odečte stejně jako stopka.
+                await db.prepare("UPDATE club_incident_absences SET zapasu_zbyva = zapasu_zbyva - 1 WHERE team_id IN (?, ?) AND kind = 'vyrazen' AND zapasu_zbyva > 0")
+                    .bind(homeTeamId, awayTeamId).run().catch((e) => logger.warn({module: "match-runner"}, "decrement incident bans", e));
+
                 // ── Persist injuries from match events ──
                 const injuryStmts: D1PreparedStatement[] = [];
                 for (const event of result.events) {

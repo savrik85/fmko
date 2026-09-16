@@ -12,11 +12,13 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
+import { denPlus, prikazAbsence } from "./absence-hracu";
 import { uzavriProsleIncidenty } from "./dopady";
 import { SLOUPCE_INCIDENTU, type IncidentRadek } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
 import {
-  LHUTA_PO_POLICII_DNI, LHUTA_ROZHODNUTI_DNI, POVOLANI_POLICISTA, SMS_ROLE_POLICIE, SRAZKA_TYDNU,
+  LHUTA_PO_POLICII_DNI, LHUTA_ROZHODNUTI_DNI, POVOLANI_POLICISTA, SMS_ROLE_POLICIE, SOUD_PO_ODHALENI_DNI, SRAZKA_TYDNU,
+  VYSLECH_ZA_DNI,
 } from "./nastaveni";
 import { nactiZtraty } from "./popis";
 import { nactiStopy, prikazyStop } from "./stopy-db";
@@ -128,10 +130,25 @@ export async function vyhodnotPolicii(env: Bindings, t: Den): Promise<number> {
         prosel = await prechodZPolicie(db, inc.id, "status = 'otevreny', police_success = 1, culprit_revealed = 1, deadline = ?", [gameExpiry(t.gameDate, LHUTA_ROZHODNUTI_DNI)]);
         zprava = text(rng, "policie_hrac", { hrac });
         if (prosel) {
-          await db.batch(prikazyStop(db, t.teamId, inc.id, [{
+          const den = t.gameDate.slice(0, 10);
+          const prikazy = prikazyStop(db, t.teamId, inc.id, [{
             zdroj: "policie", ukazujeNa: inc.culprit_player_id, podezreli: null, drzitel: null,
             sila: 3, bonusPolicie: 0, nalezena: true, text: text(rng, "stopa_policie_hrac", { hrac }),
-          }], t.gameDate)).catch((e) => logger.warn({ module: M }, `stopa policie ${inc.id}`, e));
+          }], t.gameDate);
+          // Výslech a soud jako incidentní absence (spec 7c, 17a).
+          if (inc.culprit_player_id) {
+            for (const a of [
+              { druh: "vyslech" as const, dni: VYSLECH_ZA_DNI, klic: "absence_vyslech" as const },
+              { druh: "soud" as const, dni: SOUD_PO_ODHALENI_DNI, klic: "absence_soud" as const },
+            ]) {
+              const p = prikazAbsence(db, {
+                incidentId: inc.id, teamId: t.teamId, playerId: inc.culprit_player_id, druh: a.druh,
+                od: denPlus(den, a.dni), do: denPlus(den, a.dni), zapasu: null, ohlaseno: den, sms: text(rng, a.klic),
+              });
+              if (p) prikazy.push(p);
+            }
+          }
+          await db.batch(prikazy).catch((e) => logger.warn({ module: M }, `stopa a absence po odhalení ${inc.id}`, e));
         }
         break;
       case "nehoda":

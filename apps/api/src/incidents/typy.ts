@@ -105,4 +105,4 @@ export interface Obvineni {
   vysledek: VysledekObvineni;
 }
 
-export type AkceTrestu = "odpustit" | "srazka" | "pokuta" | "vyhodit" | "policie" | "nechat_byt";
+export type AkceTrestu = "odpustit" | "srazka" | "pokuta" | "vyradit" | "vyhodit" | "policie" | "nechat_byt";

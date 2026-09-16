@@ -101,7 +101,7 @@ describe("dostupné akce", () => {
 
   it("odhalený pachatel v kádru: tresty, předat policii jen když ještě nešetřila", () => {
     expect(dostupneAkce({ ...zaklad, odhalen: true })).toEqual({
-      obvinit: false, policie: false, tresty: ["odpustit", "srazka", "pokuta", "vyhodit", "policie", "nechat_byt"],
+      obvinit: false, policie: false, tresty: ["odpustit", "srazka", "pokuta", "vyradit", "vyhodit", "policie", "nechat_byt"],
     });
     expect(dostupneAkce({ ...zaklad, odhalen: true, policieVysledek: 1 }).tresty).not.toContain("policie");
   });
