@@ -148,12 +148,14 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
       result.regenTeams++;
     }
 
-    // Lékař — šance na -1 den navíc pro každé zranění týmu
+    // Lékař — šance na -1 den navíc pro každé zranění týmu.
+    // Jen skutečná zranění: osobní volno ani předstírané zranění lékař nezkrátí.
     if (fx.injuryExtraHealChance > 0) {
       const pct = Math.round(fx.injuryExtraHealChance * 100); // 0..50
       const r = await db.prepare(
         `UPDATE injuries SET days_remaining = MAX(0, days_remaining - 1)
          WHERE days_remaining > 0 AND (ABS(RANDOM()) % 100) < ?
+           AND is_fake = 0 AND osobni_volno = 0
            AND player_id IN (SELECT id FROM players WHERE team_id = ?)`
       ).bind(pct, tid).run().catch((e) => { logger.warn({ module: "staff-tick" }, "lekar heal", e); return null; });
       result.healedExtra += r?.meta?.changes ?? 0;
@@ -206,9 +208,10 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
     }
   }
 
-  // Zranění, která lékař dohojil na 0 → detekce + smazání
+  // Zranění, která lékař dohojil na 0 → detekce + smazání.
+  // Zprávu „zranění zaléčeno" dostanou jen skutečná zranění, ne volno ani simulant.
   const healed = await db.prepare(
-    "SELECT p.team_id, p.first_name, p.last_name FROM injuries i JOIN players p ON i.player_id = p.id WHERE i.days_remaining <= 0"
+    "SELECT p.team_id, p.first_name, p.last_name FROM injuries i JOIN players p ON i.player_id = p.id WHERE i.days_remaining <= 0 AND i.is_fake = 0 AND i.osobni_volno = 0"
   ).all<{ team_id: string; first_name: string; last_name: string }>()
     .catch((e) => { logger.warn({ module: "staff-tick" }, "detect healed", e); return { results: [] as never[] }; });
   if (healed.results.length > 0) {
