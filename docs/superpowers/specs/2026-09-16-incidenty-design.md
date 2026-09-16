@@ -99,13 +99,13 @@ CREATE INDEX IF NOT EXISTS idx_club_incidents_team ON club_incidents(team_id, st
 CREATE INDEX IF NOT EXISTS idx_club_incidents_player ON club_incidents(culprit_player_id);
 ```
 
-`loss` JSON podle druhu škody:
+`loss` je **JSON pole** `Ztrata[]` podle druhu škody:
 
 ```ts
 type Ztrata =
   | { typ: "vybaveni"; kategorie: string; uroven: number; stav: number; urovniDolu: number }
   | { typ: "vybaveni_stav"; kategorie: string; stavPred: number; stavPo: number }
-  | { typ: "stadion"; damageId: string; zarizeni: string; urovni: number }
+  | { typ: "stadion"; damageId?: string; zarizeni: string; urovni: number }
   | { typ: "travnik"; pred: number; po: number }
   | { typ: "penize"; castka: number; zdrojZapasId?: string }
   | { typ: "hrac_odesel"; playerId: string; castka: number };
@@ -240,10 +240,10 @@ Výběr kategorie váženě podle hodnoty (`cumulativeInvestment`) — zloděj b
 
 | kind | Podmínka | Skutečný dopad |
 |---|---|---|
-| `oslava_v_kabine` | včera výhra **a** ve včerejší hospodě ≥ 2 hráči s alkoholem ≥ 60 **a** šatny/sprchy/sociálky ≥ 1 | `stadium_damage` −1 úroveň. Pachatel = ten z včerejších návštěvníků hospody s nejvyšším alkoholem. |
-| `kopnute_dvere` | hráč dostal v posledním zápase červenou **a** temperament ≥ 65 **a** šatny ≥ 1 | šatny −1; 40 %: pokuta od svazu přes `issueSanction` (`competition/discipline.ts:351`, `issuedBy: "rule"`) |
+| `oslava_v_kabine` | včera výhra **a** ve včerejší hospodě ≥ 2 hráči s alkoholem ≥ 60 **a** šatny/sprchy/sociálky ≥ 1 | `stadium_damage` −1 úroveň na šatny/sprchy/sociálky (jen ty, nikdy na refreshments). Pachatel = ten z včerejších návštěvníků hospody s nejvyšším alkoholem. |
+| `kopnute_dvere` | hráč dostal v posledním zápase červenou **a** temperament ≥ 65 **a** šatny ≥ 1 | šatny −1; pokuta od svazu (fáze 10) |
 | `koleje_trakturek` | `mower` ≥ 2 („Zahradní traktůrek") | `stadiums.pitch_condition` −8 až −15 |
-| `pozar_grilu` | `club_grill` ≥ 1 | úroveň 1–2 → 0, úroveň 3 → 2; 30 %: `stadium_damage` na `refreshments`, pokud ≥ 1 |
+| `pozar_grilu` | `club_grill` ≥ 1 | úroveň 1–2 → 0, úroveň 3 → 2; druhá položka pole ztrát (luka v `refreshments`), 30 % šance |
 | `svetlice` | včera výhra | `pitch_condition` −5 až −10 |
 | `vandal` | vždy (pachatel cizí) | `stadium_damage` na `fence|stands|entrance_gate` (≥ 1), jinak trávník −5 |
 
@@ -327,9 +327,7 @@ alkohol/100 × 1,0
 
 Hráči s váhou < 1,2 nejsou kandidáti — disciplinovaný věrný hráč nekrade.
 
-Podíl cizího pachatele u vloupání: `0,5 × plot × světla × zabezpečení`, kde plot
-(`stadiums.fence` 0–3) = 1 / 0,85 / 0,7 / 0,6, osvětlení (`lighting`) = 1 / 0,9 / 0,85 / 0,8
-a zabezpečení = `theftRiskMul` (5c). Když není žádný kandidát z kádru, je pachatel cizí.
+Pokus o krádež: nejdřív se vybere kandidát z kádru (`vyberHrace`). S pravděpodobností 50 % (nebo vždy, když kandidát není) jde o pokus zvenku. Pokus zvenku uspěje s pravděpodobností plot × osvětlení × `theftRiskMul`; když neuspěje, nestane se nic. Úspěšného zloděje ještě může vyplašit alarm (zabezpečení ≥ 2 u skladu a kabin, = 3 u parkoviště). Zabezpečení tak krádeže ubírá, nepřesouvá je na hráče.
 
 Zaměstnanec jako pachatel: jen `kasa_obcerstveni` (najatá `obsluha`, 20 %) a `zpronevera_ekonoma`.
 
@@ -359,7 +357,7 @@ a ostatní životní situace (nejsou to přestupky).
 
 ### 5c) Zabezpečení areálu — nová kategorie vybavení
 
-Klíč `area_security`, název **„Zabezpečení areálu"**, ikona 🔒.
+Klíč `area_security`, název **„Zabezpečení areálu"**, ikona 🔒. Startovní úroveň je u všech klubů 0.
 
 | Úroveň | Popis (`LEVEL_DESCRIPTIONS`) | Cena | `theftRiskMul` | Alarm | Kamera |
 |---|---|---|---|---|---|
@@ -385,7 +383,7 @@ aby `club_events` z incidentu fanoušci zpracovali týž den. Běží v loop i q
 - Lidské kluby: celý běh. Rezervy U21 se přeskakují — mají `user_id` áčka
   (`league/u21-generator.ts:288`), proto se do SELECTů `daily-tick.ts:1078` a `team-day.ts:663`
   přidá `t.team_type`. Vybavení i stadion patří áčku.
-- AI kluby: jen `hrdina`, `poctivy_nalezce`, `vandal` s poloviční četností a zprávou do novin.
+- AI kluby: ve fázi 1 se přeskakují úplně. Od fáze 2 jen `hrdina`, `poctivy_nalezce`, `vandal` s poloviční četností a zprávou do novin.
   Žádné stopy, znalosti ani rozhodnutí.
 
 ### 6b) Pořadí v kroku `zpracujIncidentyDne(env, team, gameDate)`
