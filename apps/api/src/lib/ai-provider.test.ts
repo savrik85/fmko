@@ -7,7 +7,7 @@
  * tomu na testingu mlčel, protože odpověď hráče chodí jako JSON.
  */
 import { describe, it, expect, vi } from "vitest";
-import { generateText } from "./ai-provider";
+import { generateText, isAiEnabled } from "./ai-provider";
 
 /** Workers AI binding, který vrátí, co dostane. */
 const ai = (response: unknown) => ({ run: vi.fn().mockResolvedValue({ response }) });
@@ -70,5 +70,29 @@ describe("odpověď z Workers AI", () => {
       "x",
     );
     expect(out).toBeNull();
+  });
+});
+
+describe("je generování zapnuté", () => {
+  /** KV, které vrátí uloženou hodnotu přepínače. */
+  const kv = (hodnota: string | null) => ({ get: vi.fn().mockResolvedValue(hodnota) }) as never;
+
+  it("workers-ai jede i bez gemini klíče", async () => {
+    // Přesně tohle blokovala holá podmínka na klíči v zakládání konverzací.
+    expect(await isAiEnabled({ CACHE_KV: kv("workers-ai") })).toBe(true);
+  });
+
+  it("vypnuto je vypnuto, i když klíč je", async () => {
+    expect(await isAiEnabled({ CACHE_KV: kv("off"), GEMINI_API_KEY: "k" })).toBe(false);
+  });
+
+  it("gemini bez klíče nejede", async () => {
+    expect(await isAiEnabled({ CACHE_KV: kv("gemini") })).toBe(false);
+    expect(await isAiEnabled({ CACHE_KV: kv("gemini"), GEMINI_API_KEY: "k" })).toBe(true);
+  });
+
+  it("bez KV se spadne na gemini, takže rozhoduje klíč", async () => {
+    expect(await isAiEnabled({})).toBe(false);
+    expect(await isAiEnabled({ GEMINI_API_KEY: "k" })).toBe(true);
   });
 });

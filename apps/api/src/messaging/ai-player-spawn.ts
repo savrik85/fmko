@@ -253,10 +253,16 @@ export async function getOrCreatePlayerConversation(
  */
 export async function applyAiPlayerThreads(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; AI?: Ai },
 ): Promise<{ spawned: number; skipped: number }> {
-  if (!env.GEMINI_API_KEY) {
-    logger.warn({ module: "ai-player-spawn" }, "skipping spawn. GEMINI_API_KEY missing");
+  // Ptáme se přepínače, ne klíče. Dokud tu stála holá podmínka na
+  // `GEMINI_API_KEY`, nezaložilo se jediné vlákno nikde, kde se jede přes
+  // Workers AI bez gemini klíče — přepínač `ai_provider` tudy neměl jak
+  // promluvit. `applyAiProvider` řeší jen stav „off", u „workers-ai" nechává
+  // env beze změny, takže tahle podmínka blokovala i funkční llamu.
+  const { isAiEnabled } = await import("../lib/ai-provider");
+  if (!(await isAiEnabled(env))) {
+    logger.warn({ module: "ai-player-spawn" }, "spawn přeskočen, generování textu je vypnuté");
     return { spawned: 0, skipped: 0 };
   }
 
