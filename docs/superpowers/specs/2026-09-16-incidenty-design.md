@@ -165,21 +165,23 @@ Tabulka vzniká ve fázi 2 (migrace 0205), ve fázi 2 se zapisuje jen role `obvi
 
 ### `club_incident_absences` (kdy hráč kvůli incidentu nemůže)
 
+Tabulka vzniká migrací `0206_incidenty_absence.sql` ve fázi 3.
+
 ```sql
 CREATE TABLE IF NOT EXISTS club_incident_absences (
-  id             TEXT PRIMARY KEY,           -- {incidentId}-abs-{n}
+  id             TEXT PRIMARY KEY,           -- {incidentId}-abs-{1 výslech | 2 soud | 3 vyřazení}
   incident_id    TEXT NOT NULL,
   team_id        TEXT NOT NULL,
   player_id      TEXT NOT NULL,
-  kind           TEXT NOT NULL,              -- vyslech | soud | porod | nemocna_mama | stehovani | vyrazen
-  od             TEXT,                       -- herní den (datum. absence); NULL u vyřazení
-  do             TEXT,
+  kind           TEXT NOT NULL,              -- vyslech | soud | vyrazen (fáze 7: porod, nemocna_mama, stehovani)
+  od_dne         TEXT,                       -- herní den (datum. absence); NULL u vyřazení. Sloupce `od_dne`/`do_dne`: `DO` je v SQLite klíčové slovo.
+  do_dne         TEXT,
   zapasu_zbyva   INTEGER,                    -- jen vyřazení: kolik soutěžních zápasů ještě
-  announced_on   TEXT NOT NULL,              -- herní den ohlášení; od >= announced_on + 2
+  announced_on   TEXT NOT NULL,              -- herní den ohlášení; od_dne >= announced_on + 2
   duvod          TEXT NOT NULL,              -- krátký důvod do sestavy („Soud")
   sms            TEXT NOT NULL               -- věta hráče do omluvenky, česky
 );
-CREATE INDEX IF NOT EXISTS idx_incident_abs_team ON club_incident_absences(team_id, od, do);
+CREATE INDEX IF NOT EXISTS idx_incident_abs_team ON club_incident_absences(team_id, od_dne, do_dne);
 ```
 
 ### Úpravy existujících tabulek
@@ -517,7 +519,7 @@ klíč podle výsledku) — AI text přijde až s chatem ve fázi 4.
 - Šance: 0,15 + kamera s identifikací 0,35 + kamera bez identity 0,2 + soused 0,15 + aktivní poznaný inzerát 0,3 + nalezený svědek 0,1 + policista v kádru 0,1; strop 0,9.
 - Výsledek se losuje v den výsledku (`seed "policie|" + id`) — první číslo z generátoru rozhoduje, jestli se šetření povedlo.
 - **Úspěch, cizí pachatel:** vybavení se vrátí (úroveň a stav z `loss`), **jen když má klub nižší úroveň**, jinak SMS „věci máte na služebně, ale už máte lepší" a `recovered = 1` bez změny. Inzerát se stáhne. Zpravodaj.
-- **Úspěch, pachatel z kádru:** `culprit_revealed = 1`, incident se vrací na `otevreny` s lhůtou dnes + 7 — trest volí manažer stejně jako po každém jiném odhalení (7d). **Fáze 3** k tomu přidá incidentní absence: výslech (1 den) a soud (1 den), ohlášené aspoň 2 dny dopředu (17a).
+- **Úspěch, pachatel z kádru:** `culprit_revealed = 1`, incident se vrací na `otevreny` s lhůtou dnes + 7 — trest volí manažer stejně jako po každém jiném odhalení (7d). K tomu vzniknou incidentní absence: výslech za 2 dny a soud za 5 dní od odhalení, ohlášené aspoň 2 dny dopředu (17a).
 - **Pachatel `nikdo`:** výsledek `nehoda`, incident se rovnou uzavře.
 - **Cizí pachatel, ukradené peníze** (typ `penize`, fáze 7, kdy existují peněžní ztráty): vrátí se 50–100 % ukradené hotovosti jako `incident_recovery`.
 - **Cizí pachatel u poškození** (rozbité se na rozdíl od krádeže vrátit nedá): náhrada 50–100 % hodnoty škody jako `incident_recovery`.
@@ -526,8 +528,8 @@ klíč podle výsledku) — AI text přijde až s chatem ve fázi 4.
 **Udání vlastního hráče** (trest `policie`, 7d): `status = policie`, `resolution = policie`, výsledek
 vždy za 3–7 dní „podmínka" — u vlastního udání se nic nešetří, jen se čeká na soud. Pokud je
 pachatel oblíbený (vůdcovství ≥ 65 nebo ≥ 2 vztahy síly ≥ 50), kádr morálka −3 („trenér je práskač").
-I tady **fáze 3** přidá incidentní absence: výslech (1 den) a soud (1 den), ohlášené aspoň 2 dny
-dopředu (17a).
+I tady vzniknou incidentní absence: výslech za 2 dny a soud v den výsledku šetření, ohlášené
+aspoň 2 dny dopředu (17a).
 
 **Záloha (situace `dluhy`):**
 - `pujcit`: `recordTransaction(..., "incident_advance", −3 000 až −8 000)`, srážka zpět 4 týdny, morálka +6, vztah +8. Když hráč odejde dřív, zbytek propadá.
@@ -541,7 +543,7 @@ dopředu (17a).
 | `odpustit` | pachatel morálka +5, vztah +8; při závažnosti ≥ 2 kádr morálka −2; recidiva 60 dní |
 | `srazka` | min(škoda, 4 × týdenní mzda) rozložené do 4 pondělků, uložené jako `resolution_data = {celkem, tydnuZbyva}`; každé pondělí `recordTransaction(+x, "incident_deduction", reference "srazka-{id}-t{n}")`, poslední splátka doplatí zaokrouhlení; pachatel morálka −6, vztah −4; odchodem hráče srážka končí |
 | `pokuta` | jednorázově min(škoda, 2 × týdenní mzda, 5 000 Kč) jako `incident_fine`, reference `pokuta-{id}`; morálka −8, vztah −6 |
-| `vyradit` `{zapasu: 1–3}` | **fáze 3** — potřebuje `club_incident_absences` a odečet v `match-runner.ts`, ve fázi 2 mezi dostupnými tresty není; jinak incidentní absence s počítadlem zápasů (17a), **ne** `suspended_matches`; morálka −10; neoblíbený pachatel: kádr +1 |
+| `vyradit` `{zapasu: 1–3}` | incidentní absence s počítadlem zápasů (17a), **ne** `suspended_matches`; platí ve všech zápasech (liga, pohár, přátelák), odečítá se po odehraném ligovém kole v `match-runner.ts` stejně jako `suspended_matches`; morálka −10; neoblíbený pachatel: kádr +1 |
 | `vyhodit` | ve fázi 2 jen `removePlayer(db, id, "released", {toFreeAgent: true})`; `life_context.povest` (17g) a zpráva o vyhazovu zloděje (17g, ne obecné `player_released`) přijdou ve fázi 10; oblíbený: kádr morálka −4, jinak +1 |
 | `policie` | tok 7c s jistým úspěchem — udání vlastního hráče vždy skončí „podmínkou" za 3–7 dní |
 | `nechat_byt` | nic; recidiva 60 dní |
@@ -841,7 +843,8 @@ Každá fáze samostatně: build → commit → push testing → ověření API 
 1. **Základ** — migrace, `area_security`, katalog krádeží a poškození, pachatel, dopady, notifikace/SMS, denní krok, admin force, stránka incidentu (jen zobrazení), odstranění starých pravidel.
 2. **Vyšetřování** — stopy, stav vyšetřování, obvinění, policie, tresty, lhůty, srážky (hotovo na
    testingu, plán `docs/superpowers/plans/2026-09-16-incidenty-faze-2.md`).
-3. **Absence, trénink a zápas** (17a–17c) — sdílený převod hráče pro absence, incidentní absence, výmluvy, trénink, zápasové modifikátory, klubové vyřazení.
+3. **Absence, trénink a zápas** (17a–17c) — sdílený převod hráče pro absence, incidentní absence, výmluvy, trénink, zápasové modifikátory, klubové vyřazení (hotovo na testingu, plán
+   `docs/superpowers/plans/2026-09-16-incidenty-faze-3.md`).
 4. **Znalosti a chat** (Část 10, 17d) — znalosti, prompt, detekce tématu, výslech, vynucené scénáře, domácnost.
 5. **Bazar** — soukromé inzeráty, poznání, nahlásit, koupit zpět.
 6. **Hospoda** — příhody, chlubení a ohlašování činů, hrozící incidenty a jak jim předejít, trenér poslouchá, šíření drbů, vůdce fanoušků v hospodě.
@@ -870,65 +873,67 @@ na zraněné a vyloučené **před** losem. Stejný los proběhne ve třech čas
 „zranění" nebo `suspended_matches` mezi nimi posune pořadí a změní omluvenky i ostatním.
 
 **Řešení: dodatečný průchod po losu.**
-1. Nová funkce `incidentniAbsence(db, teamId, datumZapasu)` vrátí `Map<playerId, {duvod, sms}>` z `club_incident_absences` (okno `od..do` obsahuje datum zápasu, nebo `zapasu_zbyva > 0`).
-2. Los omluvenek běží beze změny nad stejným kádrem; teprve **potom** se hráči z mapy označí jako chybějící s incidentním důvodem a zbytek kádru se nemění.
-3. Datumové absence se smí vytvořit jen s `od >= announced_on + 2` — SMS den předem i simulace je pak vidí stejně. Příběhově: „předvolání na středu", „soud je v pátek", „žena má termín porodu".
-4. Klubové vyřazení (`kind = vyrazen`) se odečítá po odehraném **soutěžním** zápase týmu v `match-runner.ts:1018` vedle `suspended_matches`. Manažerovo rozhodnutí po odeslání SMS se projeví jen u toho hráče.
+1. `nactiIncidentniKontext(db, teamId, datum)` (`incidents/absence-hracu.ts`) jedním voláním vrátí `{absence, druhy}`: `absence` je `Map<playerId, IncidentniAbsence>` z `club_incident_absences` (okno `od_dne..do_dne` obsahuje datum, nebo `kind = 'vyrazen'` a `zapasu_zbyva > 0`), `druhy` je `Map<playerId, DruhVlivu[]>` (`obvineny`, `pachatel`) z incidentů za posledních 30 dní. Na každém ze šesti míst los omluvenek potřebuje `druhy` (modifikátor pravděpodobnosti u `hracProAbsenci`) a dodatečný průchod hned po něm potřebuje `absence` — obojí pro stejné datum, tedy jedno volání místo dvou. Zápas (`nactiDruhyHracu`) a kabina (`nactiDruhyHracu`) čtou jen `druhy` samostatně, absence na zápas se jich netýká.
+2. Los omluvenek (`generateAbsences`) běží beze změny nad stejným kádrem; teprve **potom** `pridejIncidentniAbsence(vylosovane, hraciIds, kontext.absence, timing)` označí hráče z mapy `kontext.absence` jako chybějící s incidentním důvodem, zbytek vylosovaných omluvenek se nemění.
+3. Datumové absence (výslech, soud) se smí vytvořit jen s `od_dne >= announced_on + MIN_OHLASENI_ABSENCE_DNI` (2 dny) — SMS den předem i simulace je pak vidí stejně. Příběhově: „předvolání na středu", „soud je v pátek".
+4. Klubové vyřazení (`kind = vyrazen`, počítadlo `zapasu_zbyva`) platí ve **všech** zápasech týmu (liga, pohár, přátelák) — hráč je mimo sestavu, dokud počítadlo neklesne na 0. Počítadlo se odečítá jen po odehraném **ligovém kole** v `match-runner.ts`, ve stejném dotazu jako `suspended_matches` — shodné chování se stopkou, jedno místo odečtu. Manažerovo rozhodnutí po odeslání SMS se projeví jen u toho hráče.
 
-**Sdílený převod hráče.** Dnes 6 míst skládá vstup do `generateAbsences` samostatně
+**Sdílený převod hráče.** Dřív 6 míst skládalo vstup do `generateAbsences` samostatně
 (`team-day.ts:138`, `:593`, `match-absences.ts:140`, `match-runner.ts:1390`, `game.ts:3798`, `game.ts:9524`)
-a už se rozcházejí (viz Chyby mimo incidenty). Před přidáním incidentních polí vznikne
-`hracProAbsence(row, kontext)` a použijí ho všechna místa — **oprava rozcházení jde zvlášť před fází 3**.
+a rozcházela se (viz Chyby mimo incidenty). `hracProAbsenci(row, druhy?)` (`events/absence.ts`) sjednocuje
+převod řádku hráče na `PlayerForAbsence`; `druhy` jsou vlivy toho hráče z `IncidentniKontext.druhy`
+(`obvineny`, `pachatel`) a všech šest míst je předává stejně.
 
 **Pravděpodobnost a výmluvy** (`absence.ts`):
-- `PlayerForAbsence` (`:28`) + `incident?: { kinds: string[] }`; modifikátor po `:535`: `dluhy` +0,04, `rozvod` +0,03, `obvineny` (do 14 dní) +0,03, `zabaveny_ridicak` +0,10 jen venku a bez dodávky.
-- `AbsenceOpts` a `MatchContext` (`match-absences.ts:12`) dostanou `isAway`.
-- Nová kategorie `"incident"` (`:21`, label `:644`, obě fáze v `:651`), váha dominantní při aktivní situaci, pooly podle druhu: „Beru každou brigádu, mám dluhy", „Stěhuju se, nemám kde bydlet", „Nemám řidičák a nikdo mě nehodí", …
-- `prisel_o_praci`: váha profesní kategorie (`:569`) = 0.
-- **Rozpory s existujícími pooly** se vyřadí z obecných výmluv a přesunou do incidentních: „Manželka rodí!" (`:94`), „vzali mu řidičák" (`:701`). Obecné zůstávají věty, které incident nemodeluje (nemocné dítě, svědek u soudu, bratrovo dítě).
-- Testy: `absence-determinism.test.ts` („bez incidentu beze změny", post-pass nemění ostatní), `absence-weather.test.ts`.
-- Zobrazení: `game.ts:3892` (sestava), `match/page.tsx:995`, `:1131`, `teams.ts:2884` (rozpad docházky podle přesného textu → vlastní klíč `Incident`).
+- `PlayerForAbsence` + `incident?: { druhy: string[] }`. Ve fázi 3 jediný modifikátor: `obvineny` (do 14 dní) +0,03 (`OBVINENY_SANCE_NAVIC`). `dluhy`, `rozvod`, `zabaveny_ridicak` a `isAway` přibudou se životními situacemi ve fázi 7 — situace ještě neexistují.
+- Nová kategorie `"incident"` s vlastní váhou (`OBVINENY_VAHA_VYMLUVY = 0,5`, dominantní mezi ostatními kategoriemi), pool `OBVINENY_EXCUSES` (výmluvy „Po obvinění", pět vět, „Po tom, co jste mě obvinil, nemám na fotbal náladu." a podobné). Pooly podle `dluhy`/`prisel_o_praci`/`zabaveny_ridicak` přibudou ve fázi 7.
+- **Rozpory s existujícími pooly** se vyřeší až s životními situacemi ve fázi 7: teprve tehdy se „Manželka rodí! Ne teď, ale prý co kdyby" a „Nemůže, řídil opilý a vzali mu řidičák" vyřadí z obecných výmluv a přesunou do situací `narozeni_ditete` a `zabaveny_ridicak`. Ve fázi 3 zůstávají beze změny.
+- Testy: `absence-determinism.test.ts` („bez incidentu beze změny", post-pass nemění ostatní), `absence-weather.test.ts`, `absence-hracu.test.ts`.
+- Zobrazení: sestava a hráčská stránka čtou `reason` a `emoji` z výsledku dodatečného průchodu stejně jako u ostatních omluvenek. Rozpad docházky v `teams.ts` (`breakdown`) se nemění — incidentní absence se počítá jako běžná omluva (`excuse`); nový klíč by znamenal nový sloupec v tabulce na mobilu.
 
 ### 17b) Trénink
 
-`season/training.ts:332` `simulateAttendance`:
-- nový parametr `incidentMods: Map<playerId, {delta, duvod?}>` místo dalšího `as any`; plní ho `daily-tick.ts:308` (vzor `transferUnrest` `:351`).
-- modifikátory za `:357–375`: `prisel_o_praci`/`rozvod` +0,15; `dluhy` −0,15 (brigády); den incidentní absence = nepřijde.
-- důvod za `:388`: „Maká na brigádě kvůli dluhům", „Byl na výslechu", „Stěhuje se po rozvodu", „Je u mámy v nemocnici".
-- zrcadlo náhledu tréninku `routes/game.ts:484`, `:509` dostane stejné modifikátory.
+`season/training.ts` `simulateAttendance` (`:332`) a `simulateTraining` (`:433`):
+- nový parametr `incidentniDuvody?: ReadonlyArray<string | undefined>` po indexech kádru; plní ho `daily-tick.ts` z `duvodyNaTrenink(hraciIds, nactiIncidentniAbsence(db, teamId, gameDate))` (`incidents/absence-hracu.ts`).
+- den výslechu nebo soudu = hráč na trénink nepřijde bez ohledu na spočítanou docházku; vyřazení ze zápasů (`kind = vyrazen`) trénink nezakazuje.
+- **Trénink čte absence podle vlastního `team_id` řádku** (áčko i U21 mají v `teams` každý svůj), ne podle `clubId` použitého vedle pro vybavení a personál. Incidenty vždy patří áčku, takže U21 hráči se v `nactiIncidentniAbsence` nikdy netrefí — to je v pořádku, incidenty se ve fázi 3 U21 týmu netýkají.
+- důvod (`DUVOD_TRENINKU`, `incidents/absence-hracu.ts`): „Byl na výslechu na policii", „Byl u soudu".
+- modifikátory `prisel_o_praci`/`rozvod` +0,15, `dluhy` −0,15 a zrcadlo náhledu tréninku (`routes/game.ts:484`, `:509`) přibudou se životními situacemi ve fázi 7 — náhled tréninku je týdenní průměr, jednodenní absence v něm nic neznamená.
 - zobrazení beze změny FE: `teams.last_training_result` → „Omluvenky — {důvod}", `life_context.absence` → „Chybí dnes".
 
 ### 17c) Zápas a kabina
 
-**Zápasové modifikátory** — `applyIncidentMatchMods(db, teamId, hraci, idMap, gameDate)` vedle
+**Zápasové modifikátory** — `applyIncidentMatchMods(db, teamId, skupiny, idMap)` vedle
 `applyManagerMatchBonus` (`match-runner.ts:579`, pohár `cup.ts:503`). Deterministické, vrací co použilo:
 | Stav hráče | Dopad v zápase |
 |---|---|
 | neprávem obviněný, do 14 dní | morálka −8, konzistence −10 |
-| rozvod | morálka −5 |
-| narození dítěte, do 7 dní | morálka +5 |
-| hrdina, do 7 dní | morálka +5 |
-| odhalený pachatel v sestavě, do 14 dní | tým morálka −2 |
+| odhalený pachatel v základní sestavě, do 14 dní | tým morálka −2 |
 
-**Kabina** — `season/kabina.ts:23` dostane `gameDate` a přičte před clamp `:77`:
-- odhalený pachatel v kádru: ostatní −1 (kamarádi 0); **nesmí být tahoun** (`:41`).
-- neprávem obviněný: sám −2 týdně, kamarádi −1.
-- spí v kabině: −1, kumpáni z hospody +1.
-- `KabinaResult` + poznámka do pondělní notifikace (`team-day.ts:396`).
+Rozvod, narození dítěte a hrdina přibudou se životními situacemi a pozitivními incidenty (fáze 7 a 11) — situace ještě neexistují.
 
-**Vztahy** — nový helper `posunVztah(db, a, b, {delta, vytvorJako?, smazPod?})` hledá pár
-v **obou** pořadích a vrací příkazy pro `db.batch`:
+**Kabina** — `season/kabina.ts` `processKabina(db, teamId, gameDate?)` načte `nactiDruhyHracu` a
+`incidentyVKabine(hraci, druhy, kamaradi)` přičte před clamp týdenní delty (±6):
+- odhalený pachatel v kádru, do 14 dní: ostatní −1 (kamarádi 0, drží s ním); **nesmí být tahoun**.
+- neprávem obviněný, do 14 dní: sám −2 týdně, kamarádi −1.
+- `KabinaResult.incident` (věta o incidentu) jde do pondělní notifikace (`team-day.ts`).
+- „spí v kabině" (rozvod, −1 pro hráče, +1 kumpánům z hospody) přibude se životními situacemi ve fázi 7 — okno 14 dní zůstane stejné jako u zápasu.
+
+**Vztahy** — helper `posunVztah(db, a, b, {delta, vytvorJako?, smazPod?})` přibude s výslechem ve
+fázi 4: ve fázi 3 nemá volajícího, protože reakce kamaráda/rivala se odvíjí od toho, jak se
+zachoval při výslechu, a výslech ještě neexistuje. Až přibude, bude hledat pár v **obou** pořadích
+a vracet příkazy pro `db.batch`:
 - kamarád, který pachatele prozradil → síla −20, pod 10 se vztah smaže, vznikne `rivals` 40.
 - kamarád, který kryl → síla +10.
 - rival, který práskl → `rivals` +15.
 - `posunVztahKTrenerovi` pro `coach_relationship`.
 
-**Atributy manažera** (`lib/manager-attrs.ts`, nový zdroj `"incident"`, reference `inc-{id}-mgr-{attr}`):
-- důsledný trest odhaleného pachatele: disciplína +1.
+**Atributy manažera** (`lib/manager-attrs.ts`, zdroj `"incident"`, reference `inc-{id}-mgr-{attr}`):
+- důsledný trest odhaleného pachatele — `srazka`, `pokuta`, `vyradit`, `vyhodit`, nebo udání `policie`: disciplína +1.
 - odpuštění recidivistovi: disciplína −1.
 - neprávem obviněný: motivace −1.
 - udání oblíbeného hráče: reputace −1.
-- útěk hráče, kterému byla odmítnuta záloha: reputace −1.
+- útěk hráče, kterému byla odmítnuta záloha: reputace −1 — přibude se zálohou a dluhy ve fázi 7.
 
 ### 17d) Chat, zmeškané hovory, zaměstnanci
 
