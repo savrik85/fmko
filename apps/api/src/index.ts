@@ -333,8 +333,11 @@ export default {
     if (cron === "0 6 * * *") {
       try {
         log("info", "matchday preview tick starting");
-        if (!env.GEMINI_API_KEY) {
-          log("warn", "skip matchday preview, no GEMINI_API_KEY");
+        // Ptáme se přepínače, ne klíče: náhled jede přes `generateText`, takže
+        // ho Workers AI zvládne i bez gemini klíče.
+        const { isAiEnabled: aiZapnuto } = await import("./lib/ai-provider");
+        if (!(await aiZapnuto(env))) {
+          log("warn", "skip matchday preview, generování textu je vypnuté");
         } else {
           const { readMatchTickMode } = await import("./queue/messages");
           const previewMode = await readMatchTickMode(env.CACHE_KV);

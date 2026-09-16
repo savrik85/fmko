@@ -82,7 +82,10 @@ export async function applyOfferRejectionImpact(
   db: D1Database,
   offer: OfferLike,
   trigger: "reject" | "expire",
-  env?: { GEMINI_API_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; DB?: D1Database },
+  env?: {
+    GEMINI_API_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string;
+    VAPID_SUBJECT?: string; DB?: D1Database; CACHE_KV?: KVNamespace; AI?: Ai;
+  },
 ): Promise<void> {
   const playerId = offer.player_id as string;
   const sellerRosterTeamId = offer.to_team_id as string;
@@ -211,8 +214,11 @@ export async function applyOfferRejectionImpact(
 
   // Otevřít živou konverzaci (AI thread): trenér může volně odpovědět, hráč reaguje,
   // po max 2 výměnách AI vyhodnotí dopad (viz applyResolutionAndClose — upravuje i truc).
-  // Bez Gemini klíče thread neaktivujeme — zůstanou usmiřovací chips.
-  if (env?.GEMINI_API_KEY) {
+  // Bez zapnutého generování thread neaktivujeme — zůstanou usmiřovací chips.
+  // Rozhoduje přepínač `ai_provider`, ne samotný gemini klíč: odpovídá se
+  // přes `generateText`, takže hráč promluví i přes Workers AI.
+  const { isAiEnabled } = await import("../lib/ai-provider");
+  if (env && await isAiEnabled(env)) {
     await db.prepare(
       `UPDATE conversations
        SET ai_thread_active = 1, ai_thread_last_at = ?,

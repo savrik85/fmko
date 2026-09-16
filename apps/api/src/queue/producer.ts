@@ -143,8 +143,12 @@ export async function enqueueMatchdayPreviews(env: Bindings): Promise<number> {
     logger.error({ module: "queue-producer" }, "REPORTS_QUEUE binding chybí, preview nezařazeno");
     return 0;
   }
-  if (!env.GEMINI_API_KEY) {
-    logger.warn({ module: "queue-producer" }, "skip matchday preview, no GEMINI_API_KEY");
+  // Konzument si providera stejně ověřuje sám (`aiCtxOrSkip`), tady jde jen
+  // o to nezaplnit frontu prací, kterou nikdo nezpracuje. Rozhoduje přepínač,
+  // ne gemini klíč: přes Workers AI se článek napíše i bez něj.
+  const { isAiEnabled } = await import("../lib/ai-provider");
+  if (!(await isAiEnabled(env))) {
+    logger.warn({ module: "queue-producer" }, "skip matchday preview, generování textu je vypnuté");
     return 0;
   }
 
