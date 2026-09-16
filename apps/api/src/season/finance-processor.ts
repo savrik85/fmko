@@ -162,6 +162,16 @@ export async function recordTransaction(
 }
 
 /**
+ * Kdo z hráčů pobírá mzdu.
+ *
+ * `released` je propuštěný. `quit` je hráč, který odmítá hrát: zůstává v kádru,
+ * dokud ho klub neprodá nebo nepropustí, ale nechodí, takže nebere ani mzdu.
+ * Stejnou podmínku musí používat výplata, předpověď rozpočtu i přehled mezd,
+ * jinak předpověď nesedí se skutečným účtem.
+ */
+export const PLACENY_HRAC_SQL = "(status IS NULL OR status NOT IN ('released', 'quit'))";
+
+/**
  * Týdenní finanční zpracování — volá se v pondělí z daily-tick.
  * Strhne mzdy, přičte sponzory, strhne údržbu.
  */
@@ -190,9 +200,9 @@ export async function processWeeklyFinances(
 
   // ── VÝDAJE ──
 
-  // 1. Player wages — jen aktivní hráči, released se neplatí
+  // 1. Player wages — jen hráči, kterým se platí (viz PLACENY_HRAC_SQL)
   const wageResult = await db.prepare(
-    "SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as total FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released')"
+    `SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as total FROM players WHERE team_id = ? AND ${PLACENY_HRAC_SQL}`
   ).bind(teamId).first<{ cnt: number; total: number }>();
 
   if (wageResult && wageResult.total > 0) {

@@ -647,7 +647,7 @@ gameRouter.get("/teams/:teamId/training-stats", async (c) => {
 // GET /api/teams/:id/budget — rozpočet s kompletním přehledem
 gameRouter.get("/teams/:teamId/budget", async (c) => {
   const teamId = c.req.param("teamId");
-  const { mapVillageSize, countRemainingMatchDays } = await import("../season/finance-processor");
+  const { mapVillageSize, countRemainingMatchDays, PLACENY_HRAC_SQL } = await import("../season/finance-processor");
 
   // Batch: team info + wages + sponsors + top wages in single round-trip
   const [teamResult, wageResult, sponsorContracts, topWages] = await c.env.DB.batch([
@@ -655,13 +655,13 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
       "SELECT t.*, v.name as village_name, v.size, v.population, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
     ).bind(teamId),
     c.env.DB.prepare(
-      "SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as weekly_total FROM players WHERE team_id = ?"
+      `SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as weekly_total FROM players WHERE team_id = ? AND ${PLACENY_HRAC_SQL}`
     ).bind(teamId),
     c.env.DB.prepare(
       "SELECT sponsor_name, sponsor_type, monthly_amount, win_bonus FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
     ).bind(teamId),
     c.env.DB.prepare(
-      "SELECT id, first_name, last_name, position, overall_rating, weekly_wage FROM players WHERE team_id = ? ORDER BY weekly_wage DESC LIMIT 5"
+      `SELECT id, first_name, last_name, position, overall_rating, weekly_wage FROM players WHERE team_id = ? AND ${PLACENY_HRAC_SQL} ORDER BY weekly_wage DESC LIMIT 5`
     ).bind(teamId),
   ]);
 
@@ -884,8 +884,9 @@ gameRouter.get("/teams/:teamId/transactions", async (c) => {
 gameRouter.get("/teams/:teamId/wages", async (c) => {
   const teamId = c.req.param("teamId");
 
+  const { PLACENY_HRAC_SQL } = await import("../season/finance-processor");
   const result = await c.env.DB.prepare(
-    "SELECT id, first_name, last_name, position, overall_rating, weekly_wage, age FROM players WHERE team_id = ? ORDER BY weekly_wage DESC"
+    `SELECT id, first_name, last_name, position, overall_rating, weekly_wage, age FROM players WHERE team_id = ? AND ${PLACENY_HRAC_SQL} ORDER BY weekly_wage DESC`
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch player wages", e); return { results: [] }; });
 
   const totalWeekly = result.results.reduce((s, p) => s + (p.weekly_wage as number), 0);

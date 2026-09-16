@@ -22,7 +22,8 @@ interface KabinaPlayer {
 
 export async function processKabina(db: D1Database, teamId: string): Promise<KabinaResult> {
   const squad = await db.prepare(
-    "SELECT id, first_name, last_name, personality, json_extract(life_context, '$.morale') AS morale FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released')"
+    // Hráč, který odmítá hrát (quit), do kabiny nechodí: není tahoun ani potížista.
+    "SELECT id, first_name, last_name, personality, json_extract(life_context, '$.morale') AS morale FROM players WHERE team_id = ? AND (status IS NULL OR status NOT IN ('released', 'quit'))"
   ).bind(teamId).all<{ id: string; first_name: string; last_name: string; personality: string; morale: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "load squad", e); return { results: [] as never[] }; });
 
