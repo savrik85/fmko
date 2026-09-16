@@ -2662,7 +2662,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
 
     // News for entire league
     await c.env.DB.prepare(
-      "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+      "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
     ).bind(crypto.randomUUID(), teamId,
       `${oldName} mění název na ${newName}`,
       `Klub ${oldName} podepsal sponzorskou smlouvu s ${body.sponsorName} a mění svůj název na ${newName}. Fanoušci nejsou nadšení (-3 reputace).`,
@@ -2799,7 +2799,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
 
     // News for entire league
     await c.env.DB.prepare(
-      "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+      "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
     ).bind(crypto.randomUUID(), teamId,
       `${oldName} se přejmenovává na ${defaultName}`,
       `Klub ${oldName} ukončil sponzorskou smlouvu a vrací se k názvu ${defaultName}. Fanoušci zmatení (-2 reputace).`,
@@ -2861,7 +2861,7 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
 
   // News for entire league
   await c.env.DB.prepare(
-    "INSERT INTO news (id, league_id, type, title, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+    "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
   ).bind(crypto.randomUUID(), teamId,
     `${oldName} se přejmenovává na ${newName}`,
     `Klub ${oldName} mění svůj název na ${newName}. Fanoušci reagují rozpačitě (-3 reputace).`,
