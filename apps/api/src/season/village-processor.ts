@@ -769,7 +769,9 @@ export async function processCrisisEvents(
        AND NOT EXISTS (
          SELECT 1 FROM village_history vh
          WHERE vh.team_id = vtf.team_id AND vh.event_type = 'crisis_event'
-           AND vh.created_at > datetime(?, '-25 days')
+           -- Herní datum proti hernímu datu. created_at je reálný čas zápisu, takže
+           -- při posunutém game_clock cooldown neplatil, nebo platil příliš dlouho.
+           AND substr(vh.game_date, 1, 10) > date(?, '-25 days')
        )`
   ).bind(gameDate).all<{ team_id: string; village_id: string; favor: number }>();
 
