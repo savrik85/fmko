@@ -402,6 +402,14 @@ export async function executeDailyTick(
         // takže postih docházky za dojíždění ani výmluvy „nejede autobus" nikdy neplatily
         // a bonus dodávky k docházce nic nevyrovnával.
         const commuteKms = playersResult.results.map((row) => (row.commute_km as number) ?? 0);
+
+        // Den výslechu nebo soudu (spec 17b): hráč na trénink nepřijde. Vyřazení ze zápasů trénink nezakazuje.
+        const { nactiIncidentniAbsence, duvodyNaTrenink } = await import("../incidents/absence-hracu");
+        const incidentniDuvody = duvodyNaTrenink(
+          playersResult.results.map((row) => row.id as string),
+          await nactiIncidentniAbsence(env.DB, teamId, team.game_date as string),
+        );
+
         const result = simulateTraining(rng, squad, {
           type: (todayTrainingType as any) ?? "conditioning",
           intensity: todayIntensity,
@@ -411,7 +419,8 @@ export async function executeDailyTick(
         }, commuteKms, equipMul, mgrBonus,
           { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul },
           // Počasí tréninkového dne — týž zdroj jako předpověď a zápas.
-          trainingWeather?.weather);
+          trainingWeather?.weather,
+          incidentniDuvody);
 
         const attendanceWithNames = result.attendance.map((a) => ({
           playerId: playersResult.results[a.playerIndex].id as string,

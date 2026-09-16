@@ -336,6 +336,8 @@ function simulateAttendance(
   commuteKms?: number[],
   attendanceBonus: number = 0,
   managerDiscipline: number = 40,
+  /** Důvod incidentní absence po indexech kádru (výslech, soud). Hráč s důvodem nepřijde. */
+  incidentniDuvody?: ReadonlyArray<string | undefined>,
 ): TrainingAttendance[] {
   // Trenér, který drží kázeň, dostane na trénink víc lidí. Kolem hodnoty 40 je to
   // neutrální, nahoře i dole to hýbe docházkou nejvýš o deset procentních bodů.
@@ -377,7 +379,13 @@ function simulateAttendance(
 
     attendProb = Math.max(0.05, Math.min(0.95, attendProb));
 
-    if (rng.random() < attendProb) {
+    const hod = rng.random();
+    // Den incidentní absence (spec 17b): na tréninku chybí, ať je docházka jakákoli.
+    const incidentniDuvod = incidentniDuvody?.[i];
+    if (incidentniDuvod) {
+      return { playerIndex: i, attended: false, reason: incidentniDuvod };
+    }
+    if (hod < attendProb) {
       return { playerIndex: i, attended: true };
     }
 
@@ -432,6 +440,8 @@ export function simulateTraining(
   equipExtras: { attendanceBonus?: number; youthTrainingMod?: number; gkTrainingMul?: number } = {},
   /** Počasí tréninkového dne z `resolveWeatherForDate`. */
   weather?: Weather,
+  /** Důvody incidentní absence po indexech kádru (`duvodyNaTrenink`). */
+  incidentniDuvody?: ReadonlyArray<string | undefined>,
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
@@ -441,6 +451,7 @@ export function simulateTraining(
     rng, squad, plan.approach, commuteKms,
     (equipExtras.attendanceBonus ?? 0) + trainingWeatherMod(weather),
     managerBonus.discipline,
+    incidentniDuvody,
   );
   for (const a of session) {
     if (a.attended) attendanceCounts.set(a.playerIndex, 1);
