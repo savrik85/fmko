@@ -3,11 +3,14 @@
  */
 
 import { cumulativeInvestment, getRepairCost } from "../equipment/equipment-generator";
+import { logger } from "../lib/logger";
 import { cenaOpravy } from "../stadium/stadium-damage";
 import {
   CENA_BODU_TRAVNIKU, OBLIBENY_POCET_VZTAHU, OBLIBENY_VUDCOVSTVI, POKUTA_STROP_KC, SRAZKA_TYDNU,
 } from "./nastaveni";
 import type { Ztrata } from "./typy";
+
+const M = "incidents-tresty";
 
 /** Hodnota škody v Kč: u vybavení cena ztracených úrovní, u zařízení a opotřebení cena opravy. */
 export function hodnotaSkody(ztraty: readonly Ztrata[]): number {
@@ -28,6 +31,12 @@ export function hodnotaSkody(ztraty: readonly Ztrata[]): number {
       case "travnik":
         soucet += Math.max(0, z.pred - z.po) * CENA_BODU_TRAVNIKU;
         break;
+      default: {
+        // Vyčerpávající switch: nový druh Ztraty bez větve tu spadne na typecheck,
+        // ne na tiché započtení nuly do škody.
+        const nezname: never = z;
+        logger.error({ module: M }, `neznámý typ škody ${JSON.stringify(nezname)}`);
+      }
     }
   }
   return Math.max(0, Math.round(soucet));

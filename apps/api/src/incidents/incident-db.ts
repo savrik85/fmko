@@ -67,8 +67,11 @@ export async function nactiHraceKadru(db: D1Database, teamId: string, playerId: 
     .catch((e) => { logger.warn({ module: M }, `hráč ${playerId}`, e); return null; });
   if (!r) return null;
   const vztahy = await db.prepare(
-    "SELECT COUNT(*) AS n FROM relationships WHERE (player_a_id = ? OR player_b_id = ?) AND type != 'rivals' AND strength >= ?",
-  ).bind(playerId, playerId, OBLIBENY_SILA_VZTAHU).first<{ n: number }>()
+    `SELECT COUNT(*) AS n FROM relationships r
+       JOIN players op ON op.id = (CASE WHEN r.player_a_id = ? THEN r.player_b_id ELSE r.player_a_id END)
+        AND op.team_id = ? AND (op.status IS NULL OR op.status = 'active')
+      WHERE (r.player_a_id = ? OR r.player_b_id = ?) AND r.type != 'rivals' AND r.strength >= ?`,
+  ).bind(playerId, teamId, playerId, playerId, OBLIBENY_SILA_VZTAHU).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, `vztahy ${playerId}`, e); return null; });
   return {
     ...hracZRadku(r),

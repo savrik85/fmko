@@ -83,7 +83,15 @@ export async function zapisIncident(
   ]).catch((e) => { logger.error({ module: M }, `uložení škody a stop ${id}`, e); return null; });
   // Retry stejného dne skončí na INSERT OR IGNORE gate výš, takže o nalezené stopy
   // a odhalení bychom bez tohohle přišli navždy — oznámení proto nesmí předstírat víc, než se zapsalo.
-  if (!zapsanoDavkou) return { id, nalezeneStopy: [], odhalen: navrh.culpritRevealed };
+  if (!zapsanoDavkou) {
+    // Dávka nespadla kvůli téhle UPDATE, jen kvůli INSERTům stop vedle ní — `loss` musí
+    // odpovídat skutečně provedené škodě, jinak zůstane viset plánovaná (bez `cena`, `damageId`
+    // a upravených úrovní), a ta krmí zobrazenou ztrátu, pokuty i náhradu od policie.
+    await db.prepare("UPDATE club_incidents SET loss = ? WHERE id = ?")
+      .bind(JSON.stringify(provedene), id).run()
+      .catch((e) => logger.error({ module: M }, `zápis škody po selhání dávky ${id}`, e));
+    return { id, nalezeneStopy: [], odhalen: navrh.culpritRevealed };
+  }
   return { id, nalezeneStopy: stopy.filter((s) => s.nalezena).map((s) => s.text), odhalen };
 }
 

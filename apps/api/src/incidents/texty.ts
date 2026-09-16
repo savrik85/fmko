@@ -169,7 +169,7 @@ export const TEXTY = {
     "{hrac} nechtěl nic přiznat, stopy ho ale usvědčily.",
   ],
   policie_prijato: [
-    "Přijali jsme oznámení: {nazev}. Výsledek šetření vám dáme vědět do týdne.",
+    "Přijali jsme oznámení: {nazev}. O výsledku šetření vám dáme vědět do týdne.",
     "Oznámení je zapsané: {nazev}. Do týdne se ozveme s výsledkem.",
     "Případ jsme převzali: {nazev}. Výsledek šetření oznámíme do týdne.",
   ],

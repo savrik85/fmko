@@ -42,5 +42,9 @@ describe("zápis incidentu", () => {
     expect(zapsany?.id).toBe("inc-test");
     expect(zapsany?.nalezeneStopy).toEqual([]);
     expect(zapsany?.odhalen).toBe(false);
+    // I když dávka spadla, provedená škoda se musí zapsat samostatně — jinak by v `loss`
+    // zůstala nedotčená plánovaná škoda (bez `cena`, `damageId` a upravených úrovní).
+    const zapisSkody = db.dotazy.find((d) => /UPDATE club_incidents SET loss = \? WHERE id = \?/.test(d.sql));
+    expect(zapisSkody?.params).toEqual([JSON.stringify(NAVRH.ztraty), "inc-test"]);
   });
 });

@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS club_incident_knowledge (
   interrogated_on TEXT,
   until           TEXT NOT NULL,
   season_number   INTEGER NOT NULL,
-  PRIMARY KEY (incident_id, player_id)
+  -- Role v primárním klíči: fáze 4 přidá k stejnému hráči a incidentu řádky
+  -- `svedek`/`kamarad`/`kadr`, o ty by (incident_id, player_id) přišel.
+  PRIMARY KEY (incident_id, player_id, role)
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_player ON club_incident_knowledge(player_id, until);
 

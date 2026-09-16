@@ -81,6 +81,18 @@ describe("výsledek policie", () => {
     expect(volani[6]).toBe(`nahrada-${id}`);
   });
 
+  it("úspěch, pachatel z kádru: lhůta se prodlouží a zapíše se stopa policie", async () => {
+    const id = idSLosem((los) => los < 0.15);
+    const inc = { ...incidentRadek({ id, status: "policie", police_result_on: DNES }), first_name: "Pepa", last_name: "Průšvih" };
+    const { db, env } = prostredi([{ sql: SETRENI, all: [inc] }]);
+    await vyhodnotPolicii(env, T);
+    const prechod = db.dotazy.find((d) => /SET status = 'otevreny', police_success = 1, culprit_revealed = 1, deadline = \?/.test(d.sql));
+    expect(prechod?.params).toEqual(["2026-09-23T16:00:00.000Z", id]);
+    const davka = db.davky.flat();
+    expect(davka.some((d) => /INSERT OR IGNORE INTO club_incident_clues/.test(d.sql) && d.params[3] === "policie")).toBe(true);
+    expect(vi.mocked(sendSystemSMS).mock.calls[0][3]).toContain("Pepa Průšvih");
+  });
+
   it("když přechod mezitím proběhl, nic se neoznámí", async () => {
     const inc = { ...incidentRadek({ status: "policie", culprit_revealed: 1, resolution: "policie", police_result_on: DNES }), first_name: "Pepa", last_name: "Průšvih" };
     const { env } = prostredi([
@@ -124,6 +136,13 @@ describe("srážky ze mzdy", () => {
     ]);
     expect(await zauctujSrazky(env, T)).toBe(0);
     expect(recordTransaction).not.toHaveBeenCalled();
+  });
+
+  it("dotaz na srážky vynechá hráče, který už v klubu není", async () => {
+    const { db, env } = prostredi([{ sql: SRAZKY, all: [] }]);
+    await zauctujSrazky(env, T);
+    const dotaz = db.dotazy.find((d) => SRAZKY.test(d.sql));
+    expect(dotaz?.sql).toContain("p.status IS NULL OR p.status = 'active'");
   });
 
   it("mimo pondělí se srážky neúčtují", async () => {

@@ -168,6 +168,7 @@ export async function zauctujSrazky(env: Bindings, t: { teamId: string; gameDate
     `SELECT i.id, i.resolution_data, p.first_name, p.last_name
        FROM club_incidents i
        LEFT JOIN players p ON p.id = i.culprit_player_id AND p.team_id = i.team_id
+        AND (p.status IS NULL OR p.status = 'active')
       WHERE i.team_id = ? AND i.resolution = 'srazka' AND COALESCE(json_extract(i.resolution_data, '$.tydnuZbyva'), 0) > 0`,
   ).bind(t.teamId).all<RadekSrazky>()
     .catch((e) => { logger.warn({ module: M }, `srážky ${t.teamId}`, e); return { results: [] as RadekSrazky[] }; });
