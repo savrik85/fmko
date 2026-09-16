@@ -620,6 +620,18 @@ teamsRouter.post("/", async (c) => {
       }
     }
 
+    // Přízeň obce: převzatý AI klub mohl mít řádky vázané na svou původní obec,
+    // nový manažer ale přichází z jiné. Staré se zahodí a založí se nový globální.
+    // Bez řádku přízně tiše nic nedělaly reakce obce na výtržnosti, konec sezóny ani proslov.
+    await c.env.DB.prepare("DELETE FROM village_team_favor WHERE team_id = ?").bind(teamId).run()
+      .catch((e) => logger.warn({ module: "teams" }, "smazání přízně převzatého klubu", e));
+    try {
+      const { ensureGlobalFavor } = await import("../villages/officials-store");
+      await ensureGlobalFavor(c.env.DB, body.villageId, teamId);
+    } catch (e) {
+      logger.warn({ module: "teams" }, "založení přízně obce (join)", e);
+    }
+
     // Init phone conversations
     await initTeamConversations(c.env.DB, teamId, playerConvData).catch((e) => logger.warn({ module: "teams" }, "init conversations (join)", e));
 
@@ -857,6 +869,15 @@ teamsRouter.post("/", async (c) => {
     } catch (e) {
       logger.error({ module: "teams" }, "U21 backfill při tvorbě ligy selhal", e);
     }
+  }
+
+  // Přízeň obce hned od založení klubu. Dřív vznikala až při první návštěvě stránky
+  // obce a do té doby reakce obce (výtržnosti, konec sezóny, proslov) tiše nic nedělaly.
+  try {
+    const { ensureGlobalFavor } = await import("../villages/officials-store");
+    await ensureGlobalFavor(c.env.DB, body.villageId, teamId);
+  } catch (e) {
+    logger.warn({ module: "teams" }, "založení přízně obce (create)", e);
   }
 
   // Init phone conversations
