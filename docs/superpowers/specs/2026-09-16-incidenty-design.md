@@ -241,9 +241,9 @@ Výběr kategorie váženě podle hodnoty (`cumulativeInvestment`) — zloděj b
 | kind | Podmínka | Skutečný dopad |
 |---|---|---|
 | `oslava_v_kabine` | včera výhra **a** ve včerejší hospodě ≥ 2 hráči s alkoholem ≥ 60 **a** šatny/sprchy/sociálky ≥ 1 | `stadium_damage` −1 úroveň na šatny/sprchy/sociálky (jen ty, nikdy na refreshments). Pachatel = ten z včerejších návštěvníků hospody s nejvyšším alkoholem. |
-| `kopnute_dvere` | hráč dostal v posledním zápase červenou **a** temperament ≥ 65 **a** šatny ≥ 1 | šatny −1; pokuta od svazu (fáze 10) |
+| `kopnute_dvere` | hráč dostal v posledním zápase červenou **a** temperament ≥ 65 **a** šatny ≥ 1 | šatny −1; 40 %: pokuta od svazu přes `issueSanction` (`competition/discipline.ts:351`, `issuedBy: "rule"`), až ve fázi 10 |
 | `koleje_trakturek` | `mower` ≥ 2 („Zahradní traktůrek") | `stadiums.pitch_condition` −8 až −15 |
-| `pozar_grilu` | `club_grill` ≥ 1 | úroveň 1–2 → 0, úroveň 3 → 2; druhá položka pole ztrát (luka v `refreshments`), 30 % šance |
+| `pozar_grilu` | `club_grill` ≥ 1 | úroveň 1–2 → 0, úroveň 3 → 2; 30 %: druhá položka pole ztrát, `stadium_damage` na `refreshments`, pokud ≥ 1 |
 | `svetlice` | včera výhra | `pitch_condition` −5 až −10 |
 | `vandal` | vždy (pachatel cizí) | `stadium_damage` na `fence|stands|entrance_gate` (≥ 1), jinak trávník −5 |
 
@@ -383,7 +383,7 @@ aby `club_events` z incidentu fanoušci zpracovali týž den. Běží v loop i q
 - Lidské kluby: celý běh. Rezervy U21 se přeskakují — mají `user_id` áčka
   (`league/u21-generator.ts:288`), proto se do SELECTů `daily-tick.ts:1078` a `team-day.ts:663`
   přidá `t.team_type`. Vybavení i stadion patří áčku.
-- AI kluby: ve fázi 1 se přeskakují úplně. Od fáze 2 jen `hrdina`, `poctivy_nalezce`, `vandal` s poloviční četností a zprávou do novin.
+- AI kluby: ve fázi 1 se přeskakují úplně. Od fáze 11 jen `hrdina`, `poctivy_nalezce`, `vandal` s poloviční četností a zprávou do novin.
   Žádné stopy, znalosti ani rozhodnutí.
 
 ### 6b) Pořadí v kroku `zpracujIncidentyDne(env, team, gameDate)`
