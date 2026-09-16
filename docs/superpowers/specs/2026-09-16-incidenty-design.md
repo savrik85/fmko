@@ -192,7 +192,7 @@ takže cokoli jiného (dluhy, obvinění) by viděli ostatní manažeři.
 ### Herní čas a sezóny
 
 - Všechna data (`game_date`, `deadline`, `ends_on`, `until`, `police_result_on`, `bazar_on`) jsou **herní** a porovnávají se jen s herním datem (`teams.game_date`). Reálný čas se nemíchá.
-- Rollover sezóny resetuje `game_clock.offset_days`, herní datum může skočit **dozadu**. Proto `season_number` na incidentu i znalosti: platná znalost = stejná sezóna **a** `until >= gameDate`. Incidenty z minulé sezóny ve stavu `otevreny|policie|probiha` zavře denní krok jako `nevyreseno_konec_sezony`.
+- Rollover sezóny resetuje `game_clock.offset_days`, herní datum může skočit **dozadu**. Proto `season_number` na incidentu i znalosti: platná znalost = stejná sezóna **a** `until >= gameDate`. Incidenty z minulé sezóny ve stavu `otevreny|policie|probiha` zavře denní krok jako `konec_sezony`.
 - Výjimka: expirace inzerátu v bazaru jede v reálném čase, shodně s ostatními inzeráty (`routes/equipment-market.ts:291`).
 
 ---
@@ -224,8 +224,8 @@ otevřené incidenty, neopravené `stadium_damage`, rozpočet.
 |---|---|---|
 | `vloupani_sklad` | kategorie z `PRENOSNE` má úroveň ≥ 1 | kategorie → úroveň 0 (stav 50), stejně jako prodej v bazaru (`equipment-market.ts:489`). Do `loss` úroveň + stav. |
 | `vitrina` | `trophy_case` ≥ 2 | úroveň −1 (síň slávy se neukradne, poháry ano) |
-| `dodavka_pujcena` | `team_van` ≥ 1, pachatel hráč | stav −30 až −60 (min. 5) |
-| `dodavka_ukradena` | `team_van` ≥ 1, pachatel cizí, velmi vzácné | úroveň → 0 |
+| `dodavka_pujcena` | `team_van` ≥ 1, pachatel hráč, ne v den zápasu ani den před ním | stav −30 až −60 (min. 5) |
+| `dodavka_ukradena` | `team_van` ≥ 1, pachatel cizí, velmi vzácné, ne v den zápasu ani den před ním | úroveň → 0 |
 | `kasa_obcerstveni` | včera domácí zápas **a** transakce `concession_income_self` > 0 | 20–50 % **skutečné** tržby → `recordTransaction(..., "incident_loss", -x)` |
 | `tombola` | včera domácí zápas **a** `raffle_income` > 0 | 30–100 % skutečného příjmu z tomboly |
 | `utek_s_penezi` | hráč s aktivní situací `dluhy`, věrnost < 50, rozpočet > 20 000 Kč, max. 1× za sezónu na tým | min(10 % rozpočtu, 40 000 Kč); hráč odchází (Část 7d) |
@@ -241,10 +241,10 @@ Výběr kategorie váženě podle hodnoty (`cumulativeInvestment`) — zloděj b
 | kind | Podmínka | Skutečný dopad |
 |---|---|---|
 | `oslava_v_kabine` | včera výhra **a** ve včerejší hospodě ≥ 2 hráči s alkoholem ≥ 60 **a** šatny/sprchy/sociálky ≥ 1 | `stadium_damage` −1 úroveň na šatny/sprchy/sociálky (jen ty, nikdy na refreshments). Pachatel = ten z včerejších návštěvníků hospody s nejvyšším alkoholem. |
-| `kopnute_dvere` | hráč dostal v posledním zápase červenou **a** temperament ≥ 65 **a** šatny ≥ 1 | šatny −1; 40 %: pokuta od svazu přes `issueSanction` (`competition/discipline.ts:351`, `issuedBy: "rule"`), až ve fázi 10 |
+| `kopnute_dvere` | hráč dostal v posledním zápase červenou **a** temperament ≥ 65 **a** šatny ≥ 1 **a** domácí zápas | šatny −1; 40 %: pokuta od svazu přes `issueSanction` (`competition/discipline.ts:351`, `issuedBy: "rule"`), až ve fázi 10 |
 | `koleje_trakturek` | `mower` ≥ 2 („Zahradní traktůrek") | `stadiums.pitch_condition` −8 až −15 |
 | `pozar_grilu` | `club_grill` ≥ 1 | úroveň 1–2 → 0, úroveň 3 → 2; 30 %: druhá položka pole ztrát, `stadium_damage` na `refreshments`, pokud ≥ 1 |
-| `svetlice` | včera výhra | `pitch_condition` −5 až −10 |
+| `svetlice` | včera výhra | `pitch_condition` −5 až −10; pachatel hráč nebo cizí 50:50; jen po domácím zápase |
 | `vandal` | vždy (pachatel cizí) | `stadium_damage` na `fence|stands|entrance_gate` (≥ 1), jinak trávník −5 |
 
 **Úprava `stadium/stadium-damage.ts`:** dnešní `ROZBITNE` schválně neobsahuje kabiny
@@ -413,6 +413,9 @@ Náklad: ~5 dotazů na tým v klidném dni (stav klubu se načítá jen, když p
 spouštěč). Zápisy dávkou (`db.batch`), všechna `IN (...)` omezená na kádr jednoho týmu
 (< 40 parametrů).
 
+- Stav klubu se ve fázi 1 načítá pro každý lidský klub každý den (~10 dotazů), ne jen při losu.
+  Při desítkách lidských klubů zanedbatelné; pokud klubů výrazně přibude, načítat až po losu.
+
 ---
 
 ## 7. Vyšetřování a rozhodnutí
@@ -520,6 +523,8 @@ Nepoužívá se `status = 'quit'`: takový hráč dál bere mzdu (`finance-proce
 | krádež/poškození, pachatel neodhalen | `nevyreseno`; věc zůstává pryč; pachateli recidiva; SMS od Kustoda |
 | pachatel odhalen, bez trestu | `nechat_byt` |
 | `dluhy` bez odpovědi | `odmitnout` |
+
+Fáze 1: po lhůtě jen `nevyreseno`, s odhaleným pachatelem `nechat_byt`; recidiva a tresty až ve fázi 2.
 
 Uzavřením se `until` veřejných znalostí posune na max(`until`, dnes + 7).
 
@@ -655,7 +660,7 @@ tlačítka dole, v textech pro hráče **žádná dlouhá pomlčka**.
 
 | Místo | Co |
 |---|---|
-| `app/dashboard/incidenty/page.tsx` 🆕 | seznam (čeká na rozhodnutí / probíhá / uzavřené) a detail: co se stalo, reálná ztráta s odkazem na vybavení/stadion, nalezené stopy, stav vyšetřování, podezřelí; akce Zeptat se (výběr hráče → telefon), Obvinit (výběr hráče), Policie; tresty po odhalení; záloha u dluhů |
+| `app/dashboard/incidenty/page.tsx` 🆕 | seznam (čeká na rozhodnutí / probíhá / uzavřené) a detail: co se stalo, reálná ztráta s odkazem na vybavení/stadion, nalezené stopy, stav vyšetřování, podezřelí; akce Zeptat se (výběr hráče → telefon), Obvinit (výběr hráče), Policie; tresty po odhalení; záloha u dluhů; seznam rozbitého zařízení s opravou (přes /fans/groups a /fans/repair) |
 | `fm-sidebar.tsx`, `more` | položka „Incidenty" 🚨 ve skupině Klub, odznak počtu čekajících rozhodnutí |
 | Domů (dashboard widget) | karta, když incident čeká na rozhodnutí |
 | `phone/[id]/page.tsx` | zpráva s `metadata.type === "incident"` → tlačítko „Otevřít incident" (vzor `interview_request`, `:446`) |

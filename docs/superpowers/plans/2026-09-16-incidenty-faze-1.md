@@ -26,7 +26,7 @@
 
 ---
 
-## Odchylky od specu (zapsat do specu v Tasku 12)
+## Odchylky od specu (zapsat do specu v Tasku 13)
 
 | Místo ve specu | Plán | Proč |
 |---|---|---|
@@ -2510,7 +2510,7 @@ Ukradenou kategorii vrátit podle `loss` (úroveň a stav z kroku 5), např.:
 cd apps/api && npx wrangler d1 execute prales-db-test --remote --command 'UPDATE equipment SET <kategorie> = <uroven>, <kategorie>_condition = <stav> WHERE team_id = "302a0ce7-428a-4da8-b4ac-40f27eb9a7d1"'
 ```
 
-Poškození stadionu opravit tlačítkem na stránce Fanoušci (oprava stojí peníze, na testu nevadí), nebo nechat.
+Poškození stadionu opravit tlačítkem Opravit na stránce Incidenty (sekce Rozbité zařízení), nebo nechat.
 
 - [ ] **Step 6: Denní běh**
 
