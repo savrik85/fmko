@@ -873,10 +873,10 @@ na zraněné a vyloučené **před** losem. Stejný los proběhne ve třech čas
 „zranění" nebo `suspended_matches` mezi nimi posune pořadí a změní omluvenky i ostatním.
 
 **Řešení: dodatečný průchod po losu.**
-1. `nactiIncidentniKontext(db, teamId, datum)` (`incidents/absence-hracu.ts`) jedním voláním vrátí `{absence, druhy}`: `absence` je `Map<playerId, IncidentniAbsence>` z `club_incident_absences` (okno `od_dne..do_dne` obsahuje datum, nebo `kind = 'vyrazen'` a `zapasu_zbyva > 0`), `druhy` je `Map<playerId, DruhVlivu[]>` (`obvineny`, `pachatel`) z incidentů za posledních 30 dní. Na každém ze šesti míst los omluvenek potřebuje `druhy` (modifikátor pravděpodobnosti u `hracProAbsenci`) a dodatečný průchod hned po něm potřebuje `absence` — obojí pro stejné datum, tedy jedno volání místo dvou. Zápas (`nactiDruhyHracu`) a kabina (`nactiDruhyHracu`) čtou jen `druhy` samostatně, absence na zápas se jich netýká.
+1. `nactiIncidentniKontext(db, teamId, datum)` (`incidents/absence-hracu.ts`) jedním voláním vrátí `{absence, druhy}`: `absence` je `Map<playerId, IncidentniAbsence>` z `club_incident_absences` (okno `od_dne..do_dne` obsahuje datum, nebo `kind = 'vyrazen'` a `zapasu_zbyva > 0`), `druhy` je `Map<playerId, DruhVlivu[]>` (`obvineny`, `pachatel`) z incidentů za posledních 45 dní (`OKNO_VLIVU_DNI`). `obvineny` platí pro **každé** obvinění, které skončilo „zapírá" — nevinného i vinného, který svou vinu zapřel (`vysledek === "zapira"`); porovnání s tajným `culprit_player_id` v tom nehraje roli, jinak by šlo poznat neodhaleného pachatele podle toho, že mu vliv „obvineny" chybí. `nactiIncidentniKontext` navíc počítá obvinění do losu omluvenek jen tehdy, když od něj do `datum` uplynuly aspoň `MIN_OHLASENI_ABSENCE_DNI` (2) dny (`druhyHracu(…, minOdstupObvineni)`) — jinak by pozdní obvinění (den před zápasem) měnilo vstup do už rozjetého losu. Na každém ze šesti míst los omluvenek potřebuje `druhy` (modifikátor pravděpodobnosti u `hracProAbsenci`) a dodatečný průchod hned po něm potřebuje `absence` — obojí pro stejné datum, tedy jedno volání místo dvou. Zápas (`nactiDruhyHracu`) a kabina (`nactiDruhyHracu`) čtou jen `druhy` samostatně bez tohohle odstupu (0 dní), absence na zápas se jich netýká.
 2. Los omluvenek (`generateAbsences`) běží beze změny nad stejným kádrem; teprve **potom** `pridejIncidentniAbsence(vylosovane, hraciIds, kontext.absence, timing)` označí hráče z mapy `kontext.absence` jako chybějící s incidentním důvodem, zbytek vylosovaných omluvenek se nemění.
 3. Datumové absence (výslech, soud) se smí vytvořit jen s `od_dne >= announced_on + MIN_OHLASENI_ABSENCE_DNI` (2 dny) — SMS den předem i simulace je pak vidí stejně. Příběhově: „předvolání na středu", „soud je v pátek".
-4. Klubové vyřazení (`kind = vyrazen`, počítadlo `zapasu_zbyva`) platí ve **všech** zápasech týmu (liga, pohár, přátelák) — hráč je mimo sestavu, dokud počítadlo neklesne na 0. Počítadlo se odečítá jen po odehraném **ligovém kole** v `match-runner.ts`, ve stejném dotazu jako `suspended_matches` — shodné chování se stopkou, jedno místo odečtu. Manažerovo rozhodnutí po odeslání SMS se projeví jen u toho hráče.
+4. Klubové vyřazení (`kind = vyrazen`, počítadlo `zapasu_zbyva`) platí ve **všech** zápasech týmu (liga, pohár, přátelák) — hráč je mimo sestavu, dokud počítadlo neklesne na 0. Počítadlo se odečítá jen po odehraném **ligovém kole** v `match-runner.ts`, ve stejném dotazu jako `suspended_matches` — shodné chování se stopkou, jedno místo odečtu. Manažerovo rozhodnutí po odeslání SMS se projeví jen u toho hráče. Když má hráč ve stejný den zároveň platné vyřazení i datumovou absenci (výslech, soud), vyhrává datumová — je konkrétnější a časově přesně ohraničená; `platneAbsence` ji proto vyhodnotí v prvním průchodu bez ohledu na pořadí řádků, vyřazení až ve druhém.
 
 **Sdílený převod hráče.** Dřív 6 míst skládalo vstup do `generateAbsences` samostatně
 (`team-day.ts:138`, `:593`, `match-absences.ts:140`, `match-runner.ts:1390`, `game.ts:3798`, `game.ts:9524`)
@@ -894,7 +894,7 @@ převod řádku hráče na `PlayerForAbsence`; `druhy` jsou vlivy toho hráče z
 ### 17b) Trénink
 
 `season/training.ts` `simulateAttendance` (`:332`) a `simulateTraining` (`:433`):
-- nový parametr `incidentniDuvody?: ReadonlyArray<string | undefined>` po indexech kádru; plní ho `daily-tick.ts` z `duvodyNaTrenink(hraciIds, nactiIncidentniAbsence(db, teamId, gameDate))` (`incidents/absence-hracu.ts`).
+- nový parametr `incidentniDuvody?: ReadonlyArray<string | undefined>` po indexech kádru; plní ho `daily-tick.ts` z `duvodyNaTrenink(hraciIds, nactiIncidentniAbsence(db, teamId, effectiveDate))` (`incidents/absence-hracu.ts`) — `effectiveDate` je kanonický herní den celého ticku (`executeDailyTick`), **ne** `teams.game_date`: dotaz na trénink (`daily-tick.ts` ~řádek 192) ten sloupec vůbec nenačítá, takže by byl `undefined` a `.slice` uvnitř `nactiIncidentniAbsence` shodil trénink do catch bloku pro každý lidský tým.
 - den výslechu nebo soudu = hráč na trénink nepřijde bez ohledu na spočítanou docházku; vyřazení ze zápasů (`kind = vyrazen`) trénink nezakazuje.
 - **Trénink čte absence podle vlastního `team_id` řádku** (áčko i U21 mají v `teams` každý svůj), ne podle `clubId` použitého vedle pro vybavení a personál. Incidenty vždy patří áčku, takže U21 hráči se v `nactiIncidentniAbsence` nikdy netrefí — to je v pořádku, incidenty se ve fázi 3 U21 týmu netýkají.
 - důvod (`DUVOD_TRENINKU`, `incidents/absence-hracu.ts`): „Byl na výslechu na policii", „Byl u soudu".
@@ -910,6 +910,14 @@ převod řádku hráče na `PlayerForAbsence`; `druhy` jsou vlivy toho hráče z
 | neprávem obviněný, do 14 dní | morálka −8, konzistence −10 |
 | odhalený pachatel v základní sestavě, do 14 dní | tým morálka −2 |
 
+Tyhle úpravy platí jen v paměti nad kopií hráčů pro simulaci (`skupiny`) a **nesmí se propsat
+do DB natrvalo** — je to dočasný handicap pro tenhle jeden zápas, ne trvalý pokles morálky.
+`upravSestavuZIncidentu`/`applyIncidentMatchMods` proto vedle `obvinenych`/`pachatelVSestave`
+vrací i `moraleDelta: Map<engineId, number>` — skutečně uplatněnou (zápornou) změnu po podlaze
+na 0. Zápis morálky po zápase (`match-runner.ts`, `cup.ts`) tuhle deltu od výsledné morálky
+odečte (`p.morale - delta`), takže do `players.life_context` jde jen morálka z herního výsledku
+(výhra/prohra apod.), incidentní postih zmizí spolu se zápasem.
+
 Rozvod, narození dítěte a hrdina přibudou se životními situacemi a pozitivními incidenty (fáze 7 a 11) — situace ještě neexistují.
 
 **Kabina** — `season/kabina.ts` `processKabina(db, teamId, gameDate?)` načte `nactiDruhyHracu` a
@@ -917,6 +925,10 @@ Rozvod, narození dítěte a hrdina přibudou se životními situacemi a pozitiv
 - odhalený pachatel v kádru, do 14 dní: ostatní −1 (kamarádi 0, drží s ním); **nesmí být tahoun**.
 - neprávem obviněný, do 14 dní: sám −2 týdně, kamarádi −1.
 - `KabinaResult.incident` (věta o incidentu) jde do pondělní notifikace (`team-day.ts`).
+- **Text je neutrální vůči druhu incidentu** — `poskozeni` (poškození) není krádež, takže hlášení
+  neříkají „zloděj"/„kradl": kabina nevěří hráči „kvůli kterému byl v klubu průšvih", obviněný nese
+  „obvinění bez přiznání" (počítá se i u vinného, který zapřel, ne jen u nevinného — viz 17a).
+  Stejně neutrální je i atribut trenéra po vyhazovu (`Vyhozen pachatel incidentu`, ne „zloděj").
 - „spí v kabině" (rozvod, −1 pro hráče, +1 kumpánům z hospody) přibude se životními situacemi ve fázi 7 — okno 14 dní zůstane stejné jako u zápasu.
 
 **Vztahy** — helper `posunVztah(db, a, b, {delta, vytvorJako?, smazPod?})` přibude s výslechem ve
@@ -931,7 +943,7 @@ a vracet příkazy pro `db.batch`:
 **Atributy manažera** (`lib/manager-attrs.ts`, zdroj `"incident"`, reference `inc-{id}-mgr-{attr}`):
 - důsledný trest odhaleného pachatele — `srazka`, `pokuta`, `vyradit`, `vyhodit`, nebo udání `policie`: disciplína +1.
 - odpuštění recidivistovi: disciplína −1.
-- neprávem obviněný: motivace −1.
+- obvinění bez přiznání (`vysledek === "zapira"`, nevinný i vinný, který zapřel): motivace −1.
 - udání oblíbeného hráče: reputace −1.
 - útěk hráče, kterému byla odmítnuta záloha: reputace −1 — přibude se zálohou a dluhy ve fázi 7.
 
