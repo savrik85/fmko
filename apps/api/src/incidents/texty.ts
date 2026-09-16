@@ -85,6 +85,61 @@ export const TEXTY = {
     "Alarm vyplašil někoho, kdo se v noci dobýval do areálu. Nic nechybí.",
     "Kamera zachytila stín, pak se spustil alarm. Nic nezmizelo.",
   ],
+  stopa_kamera_hrac: [
+    "Kustod prošel záznam z kamery. {hrac} je na něm {misto} jasně vidět.",
+    "Kamera to natočila {misto}. Na záznamu je jasně poznat hráč: {hrac}.",
+    "Záznam z kamery nenechává pochybnosti. {hrac} se {misto} ani neschovával.",
+  ],
+  stopa_kamera_postava: [
+    "Kamera zachytila {misto} postavu v kapuci. Obličej vidět není.",
+    "Na záznamu z kamery je {misto} jen shrbená postava. Kdo to je, se poznat nedá.",
+    "Kamera nahrála {misto} pohyb, ale obličej zůstal ve stínu.",
+  ],
+  stopa_kamera_cizi: [
+    "Kamera zachytila {misto} neznámého muže v kapuci. Z kádru ho nikdo nepoznal.",
+    "Na záznamu z kamery je {misto} cizí chlap s kuklou na hlavě.",
+    "Kamera nahrála {misto} dva cizí muže. Obličeje měli zakryté.",
+  ],
+  stopa_kamera_nefunkcni: [
+    "Kamera ten den nenahrávala, zabezpečení je sešlé (stav {stav} %).",
+    "Záznam z kamery je prázdný. Zabezpečení je v bídném stavu ({stav} %).",
+    "Kamera se v noci vypnula. Při stavu {stav} % se není čemu divit.",
+  ],
+  stopa_spravce_hrac: [
+    "Správce hřiště viděl večer {misto} hráče, který tam neměl co dělat: {hrac}.",
+    "Správce hřiště říká, že se {misto} pozdě večer motal hráč: {hrac}.",
+    "Správce hřiště zamykal a {misto} potkal hráče, který spěchal pryč: {hrac}.",
+  ],
+  stopa_spravce_cizi: [
+    "Správce hřiště viděl večer {misto} cizí auto s okresní značkou.",
+    "Správce hřiště si všiml cizího auta, které stálo {misto} se zhasnutými světly.",
+    "Správce hřiště zahlédl večer {misto} dva cizí chlapy. U nás je nikdy neviděl.",
+  ],
+  stopa_soused_hraci: [
+    "Soused viděl v noci u hřiště někoho z klubu. Byl to jeden z nich: {jmena}.",
+    "Sousedka v noci zahlédla u hřiště někoho z kádru. Tipuje jednoho z nich: {jmena}.",
+    "Soused venčil psa a u hřiště potkal někoho z klubu. Mohl to být jeden z nich: {jmena}.",
+  ],
+  stopa_soused_cizi: [
+    "Soused slyšel v noci u hřiště cizí auto bez rozsvícených světel.",
+    "Sousedka viděla v noci u areálu dva cizí chlapy s baterkou.",
+    "Sousedův pes v noci štěkal na cizího člověka u plotu.",
+  ],
+  stopa_svedek: [
+    "{svedek} šel z hospody kolem hřiště a {misto} viděl hráče: {hrac}.",
+    "{svedek} cestou z hospody zahlédl {misto} hráče: {hrac}.",
+    "{svedek} viděl v noci {misto} známou postavu. Byl to {hrac}.",
+  ],
+  stopa_kamarad: [
+    "{svedek} ví, kdo to udělal: {hrac}. Jsou kamarádi, tak to dlouho tajil.",
+    "{svedek} přiznal, že mu to kamarád sám řekl. Udělal to {hrac}.",
+    "{svedek} to ví z první ruky. Udělal to jeho kamarád {hrac}.",
+  ],
+  stopa_rival: [
+    "{svedek} rád prozradil, kdo to byl: {hrac}.",
+    "{svedek} viděl, kdo to udělal, a krýt ho nebude: {hrac}.",
+    "{svedek} ukázal prstem na hráče, se kterým se nemusí: {hrac}.",
+  ],
   lhuta_kradez: [
     "Uzavřeno bez výsledku: {nazev}. Kdo za tím stál, se nezjistilo.",
   ],
