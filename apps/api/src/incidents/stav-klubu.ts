@@ -1,6 +1,7 @@
 /**
  * Načtení stavu klubu pro incidenty (spec Část 4, `StavKlubu`).
- * Jen čtení. Všechno, co katalog potřebuje k podmínkám, v jednom průchodu.
+ * Jen čtení, kromě založení chybějícího řádku vybavení (`ensureEquipmentRow`).
+ * Všechno, co katalog potřebuje k podmínkám, v jednom průchodu.
  */
 
 import { ensureEquipmentRow } from "../equipment/equipment-service";
