@@ -32,8 +32,8 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   const navrh = vylosujIncident(stav, rng);
   if (!navrh) return;
 
-  const id = await zapisIncident(env.DB, stav, navrh);
-  if (!id) return;
-  await oznamIncident(env, teamId, navrh);
-  logger.info({ module: M, teamId }, `incident ${navrh.kind}, pachatel ${navrh.culpritType}`);
+  const zapsany = await zapisIncident(env.DB, stav, navrh);
+  if (!zapsany) return;
+  await oznamIncident(env, teamId, navrh, zapsany);
+  logger.info({ module: M, teamId }, `incident ${navrh.kind}, pachatel ${navrh.culpritType}, stop nalezeno ${zapsany.nalezeneStopy.length}`);
 }

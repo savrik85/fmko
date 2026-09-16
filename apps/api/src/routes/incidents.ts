@@ -74,7 +74,7 @@ incidentsRouter.get("/teams/:teamId/incidents", async (c) => {
 // Jen pro ověření na testingu. Obchází šanci, cooldown, ochranu nového týmu
 // a limit otevřených problémů. Podmínky (co klub má) neobchází nikdy.
 incidentsRouter.post("/admin/incidents/force", async (c) => {
-  const body = await c.req.json<{ teamId?: string; kind?: string }>()
+  const body = await c.req.json<{ teamId?: string; kind?: string; playerId?: string }>()
     .catch((e) => { logger.warn({ module: M }, "admin force: neplatné tělo", e); return null; });
   if (!body?.teamId || !body.kind) return c.json({ error: "Chybí teamId nebo kind" }, 400);
 
@@ -95,13 +95,25 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
   if (!stav) return c.json({ error: "Stav klubu se nepodařilo načíst" }, 500);
   if (!def.muze(stav)) return c.json({ error: "Klub podmínky pro tenhle incident nesplňuje", kind: def.kind }, 409);
 
+  // Volitelně vynutit pachatele z kádru: je jediným kandidátem s nejhorší povahou.
+  let stavProLos = stav;
+  if (body.playerId) {
+    const hrac = stav.kadr.find((h) => h.id === body.playerId);
+    if (!hrac) return c.json({ error: "Hráč není v kádru klubu" }, 400);
+    stavProLos = { ...stav, kadr: [{ ...hrac, alkohol: 100, disciplina: 0, vernost: 0, vztahKTrenerovi: 0 }] };
+  }
+
   let navrh: NavrhIncidentu | null = null;
-  for (let pokus = 0; pokus < 50 && !navrh; pokus++) navrh = def.vytvor(stav, createRng(cryptoSeed()));
-  if (!navrh) return c.json({ error: "Incident se nestal ani na 50 pokusů (odradil zámek nebo chybí kandidát)" }, 409);
+  for (let pokus = 0; pokus < 50 && !navrh; pokus++) {
+    navrh = def.vytvor(stavProLos, createRng(cryptoSeed()));
+    if (navrh && body.playerId && navrh.culpritPlayerId !== body.playerId) navrh = null;
+  }
+  if (!navrh) return c.json({ error: "Incident se nestal ani na 50 pokusů (odradil zámek, chybí kandidát, nebo tenhle typ nemá pachatele z kádru)" }, 409);
 
-  const id = await zapisIncident(c.env.DB, stav, navrh, `inc-${team.id}-${navrh.kind}-${stav.den}-admin-${Date.now()}`);
-  if (!id) return c.json({ error: "Škodu se nepodařilo provést", incident: navrh }, 409);
+  // Stopy se počítají se skutečným kádrem, ne s upraveným pro los.
+  const zapsany = await zapisIncident(c.env.DB, stav, navrh, `inc-${team.id}-${navrh.kind}-${stav.den}-admin-${Date.now()}`);
+  if (!zapsany) return c.json({ error: "Škodu se nepodařilo provést", incident: navrh }, 409);
 
-  await oznamIncident(c.env, team.id, navrh);
-  return c.json({ ok: true, id, incident: navrh });
+  await oznamIncident(c.env, team.id, navrh, zapsany);
+  return c.json({ ok: true, id: zapsany.id, odhalen: zapsany.odhalen, nalezeneStopy: zapsany.nalezeneStopy, incident: navrh });
 });

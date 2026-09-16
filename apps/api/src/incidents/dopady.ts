@@ -4,13 +4,17 @@
 
 import { createNotification } from "../community/notifications";
 import { CATEGORIES } from "../equipment/equipment-generator";
+import { createRng } from "../generators/rng";
 import type { Bindings } from "../index";
 import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
+import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { poskodZarizeni } from "../stadium/stadium-damage";
 import { KATALOG_PODLE_KIND } from "./katalog";
 import { LHUTA_ROZHODNUTI_DNI, SMS_ROLE_KUSTOD } from "./nastaveni";
+import { odhalujePachatele, vygenerujStopy } from "./stopy";
+import { nactiZdrojeStop, prikazyStop } from "./stopy-db";
 import { TEXTY, vypln } from "./texty";
 import type { NavrhIncidentu, StavKlubu, Ztrata } from "./typy";
 
@@ -20,10 +24,18 @@ export function idIncidentu(teamId: string, kind: string, den: string): string {
   return `inc-${teamId}-${kind}-${den}`;
 }
 
+export interface ZapsanyIncident {
+  id: string;
+  /** Texty stop, které klub našel hned (kamera, správce, soused). */
+  nalezeneStopy: string[];
+  /** Pachatel je známý hned při vzniku (kopnuté dveře, kamera ho natočila). */
+  odhalen: boolean;
+}
+
 /**
- * Zapíše incident a teprve potom provede škody.
+ * Zapíše incident, teprve potom provede škody a nakonec zapíše stopy.
  *
- * Vrací id incidentu, nebo `null`, když už existoval (opakované zpracování dne)
+ * Vrací `null`, když incident už existoval (opakované zpracování dne)
  * nebo se žádná škoda nepovedla (vybavení mezitím prodáno, zařízení už na nule).
  */
 export async function zapisIncident(
@@ -31,7 +43,7 @@ export async function zapisIncident(
   stav: StavKlubu,
   navrh: NavrhIncidentu,
   id: string = idIncidentu(stav.teamId, navrh.kind, stav.den),
-): Promise<string | null> {
+): Promise<ZapsanyIncident | null> {
   const deadline = navrh.status === "otevreny" ? gameExpiry(stav.gameDate, LHUTA_ROZHODNUTI_DNI) : null;
   const resolvedOn = navrh.status === "uzavreny" ? stav.gameDate : null;
 
@@ -47,7 +59,7 @@ export async function zapisIncident(
   ).run().catch((e) => { logger.error({ module: M }, `zápis incidentu ${id}`, e); return null; });
   if ((vlozeno?.meta?.changes ?? 0) === 0) return null;
 
-  if (navrh.ztraty.length === 0) return id;
+  if (navrh.ztraty.length === 0) return { id, nalezeneStopy: [], odhalen: navrh.culpritRevealed };
 
   const provedene: Ztrata[] = [];
   for (const z of navrh.ztraty) {
@@ -61,10 +73,15 @@ export async function zapisIncident(
       .catch((e) => logger.warn({ module: M }, `uzavření incidentu bez škody ${id}`, e));
     return null;
   }
-  await db.prepare("UPDATE club_incidents SET loss = ? WHERE id = ?")
-    .bind(JSON.stringify(provedene), id).run()
-    .catch((e) => logger.warn({ module: M }, `uložení provedené škody ${id}`, e));
-  return id;
+  // Stopy až po skutečné škodě. Vlastní seed: stejný incident dá vždy stejné stopy.
+  const zdroje = await nactiZdrojeStop(db, stav.teamId, navrh.culpritType === "hrac" ? navrh.culpritPlayerId : null);
+  const stopy = vygenerujStopy(stav, navrh, zdroje, createRng(seedFromString(`stopy|${id}`)));
+  const odhalen = navrh.culpritRevealed || odhalujePachatele(stopy);
+  await db.batch([
+    db.prepare("UPDATE club_incidents SET loss = ?, culprit_revealed = ? WHERE id = ?").bind(JSON.stringify(provedene), odhalen ? 1 : 0, id),
+    ...prikazyStop(db, stav.teamId, id, stopy, stav.gameDate),
+  ]).catch((e) => logger.warn({ module: M }, `uložení škody a stop ${id}`, e));
+  return { id, nalezeneStopy: stopy.filter((s) => s.nalezena).map((s) => s.text), odhalen };
 }
 
 async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string, z: Ztrata, popis: string): Promise<Ztrata | null> {
@@ -105,7 +122,7 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
       const d = await poskodZarizeni(db, {
         teamId: stav.teamId, incidentId, facility: z.zarizeni, levels: z.urovni, gameDate: stav.gameDate, popis,
       });
-      return d ? { ...z, urovni: d.levels, damageId: d.damageId } : null;
+      return d ? { ...z, urovni: d.levels, damageId: d.damageId, cena: d.cost } : null;
     }
     case "travnik": {
       const r = await db.prepare("UPDATE stadiums SET pitch_condition = ? WHERE team_id = ? AND pitch_condition = ?")
@@ -117,13 +134,15 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
   return null;
 }
 
-/** SMS od kustoda a notifikace. Selhání oznámení incident nezvrací. */
-export async function oznamIncident(env: Bindings, teamId: string, navrh: NavrhIncidentu): Promise<void> {
+/** SMS od kustoda (s tím, co se hned zjistilo) a notifikace. Selhání oznámení incident nezvrací. */
+export async function oznamIncident(env: Bindings, teamId: string, navrh: NavrhIncidentu, zapsany: ZapsanyIncident): Promise<void> {
   const def = KATALOG_PODLE_KIND.get(navrh.kind);
   const emoji = def?.emoji ?? "❗";
-  await sendSystemSMS(env.DB, teamId, SMS_ROLE_KUSTOD, `${emoji} ${navrh.text}`);
-  await createNotification(env.DB, teamId, "event", `${emoji} ${def?.label ?? "Incident v klubu"}`, navrh.text.slice(0, 140), "/dashboard/incidenty", env)
-    .catch((e) => logger.warn({ module: M }, `notifikace incidentu ${navrh.kind}`, e));
+  await sendSystemSMS(env.DB, teamId, SMS_ROLE_KUSTOD, `${emoji} ${[navrh.text, ...zapsany.nalezeneStopy].join(" ")}`);
+  await createNotification(
+    env.DB, teamId, "event", `${emoji} ${def?.label ?? "Incident v klubu"}`, navrh.text.slice(0, 140),
+    `/dashboard/incidenty?id=${encodeURIComponent(zapsany.id)}`, env,
+  ).catch((e) => logger.warn({ module: M }, `notifikace incidentu ${navrh.kind}`, e));
 }
 
 /**
