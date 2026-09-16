@@ -980,17 +980,41 @@ teamsRouter.get("/:id/players", async (c) => {
     .catch((e) => { logger.warn({ module: "teams" }, "fetch team injuries", e); return { results: [] }; });
   const injuryByPlayer = new Map(activeInjuries.results.map((r) => [r.player_id, { type: r.type, daysRemaining: r.days_remaining }]));
 
+  // Vlastník podle session, ne podle URL. Tenhle seznam dřív vracel komukoli, i bez
+  // přihlášení, surový `SELECT *`: potenciál, skrytý talent, přesnou povahu, truc
+  // a mzdy všech soupeřů (bezpečnostní audit 2026-08-04).
+  const { tymyDivaka } = await import("../auth/divak");
+  const { ocistiRadekProCizi, verejnyZivotHrace, zamlzAtributy } = await import("../transfers/player-view");
+  const divak = await tymyDivaka(c);
+
   const players = result.results.map((row) => {
     const lifeContext = JSON.parse(row.life_context as string);
+    // Hráč na hostování zůstává kmenovému klubu vlastním i v cizím kádru.
+    const vlastni = divak.has(teamId) || (!!row.loan_from_team_id && divak.has(row.loan_from_team_id as string));
+    if (vlastni) {
+      return {
+        ...row,
+        skills: JSON.parse(row.skills as string),
+        physical: JSON.parse(row.physical as string),
+        personality: JSON.parse(row.personality as string),
+        lifeContext,
+        avatar: JSON.parse(row.avatar as string),
+        injury: injuryByPlayer.get(row.id as string) ?? null,
+        absence: (lifeContext as Record<string, unknown>)?.absence ?? null,
+      };
+    }
+    const { row: cisty, doplnitDoSkills } = ocistiRadekProCizi(row);
+    const skills = zamlzAtributy(JSON.parse(row.skills as string));
+    for (const [k, v] of Object.entries(doplnitDoSkills)) if (skills[k] == null) skills[k] = v;
     return {
-      ...row,
-      skills: JSON.parse(row.skills as string),
-      physical: JSON.parse(row.physical as string),
-      personality: JSON.parse(row.personality as string),
-      lifeContext,
+      ...cisty,
+      skills,
+      physical: zamlzAtributy(JSON.parse(row.physical as string)),
+      personality: zamlzAtributy(JSON.parse(row.personality as string)),
+      lifeContext: verejnyZivotHrace(lifeContext),
       avatar: JSON.parse(row.avatar as string),
       injury: injuryByPlayer.get(row.id as string) ?? null,
-      absence: (lifeContext as Record<string, unknown>)?.absence ?? null,
+      absence: null,
     };
   });
   return c.json(players);
@@ -1028,10 +1052,14 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     .bind(c.req.param("playerId")).first<Record<string, unknown>>();
   if (!row) return c.json({ error: "Player not found" }, 404);
 
-  const isOwn = row.team_id === teamId;
+  // `teamId` z URL musí patřit přihlášenému uživateli. Dřív stačilo do URL dosadit
+  // tým daného hráče a detail vrátil nezamlžená data včetně absence (audit 2026-08-04).
+  const { tymyDivaka } = await import("../auth/divak");
+  const divakovo = (await tymyDivaka(c)).has(teamId);
+  const isOwn = divakovo && row.team_id === teamId;
   // Kmenový klub hráče na hostování — pořád je to jeho hráč, takže žádné rozmazávání
   // atributů. Akce v UI ale zůstávají na `isOwn`, ten hráč teď hraje jinde.
-  const isParentClub = !!row.loan_from_team_id && row.loan_from_team_id === teamId;
+  const isParentClub = divakovo && !!row.loan_from_team_id && row.loan_from_team_id === teamId;
   const skills = JSON.parse(row.skills as string);
   const physical = JSON.parse(row.physical as string);
   const personality = JSON.parse(row.personality as string);
@@ -1046,12 +1074,14 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     for (const k of Object.keys(personality)) {
       if (typeof personality[k] === "number") personality[k] = blur(personality[k]);
     }
-    // Hide condition and morale
-    lifeContext.condition = Math.round((lifeContext.condition ?? 50) / 10) * 10;
-    lifeContext.morale = Math.round((lifeContext.morale ?? 50) / 10) * 10;
-    // Truc je interní věc kabiny — soupeř ho nevidí
-    delete lifeContext.transferUnrest;
   }
+  const { ocistiRadekProCizi, verejnyZivotHrace } = await import("../transfers/player-view");
+  const cizi = !isOwn && !isParentClub;
+  // Cizí klub: jen whitelist `life_context` (kondice a morálka po desítkách, povolání)
+  // a řádek bez potenciálu, skrytého talentu, vztahu k trenérovi a mzdy.
+  const vystupniZivot = cizi ? verejnyZivotHrace(lifeContext) : lifeContext;
+  const ocisteny = cizi ? ocistiRadekProCizi(row) : { row, doplnitDoSkills: {} as Record<string, number> };
+  for (const [k, v] of Object.entries(ocisteny.doplnitDoSkills)) if (skills[k] == null) skills[k] = v;
 
   // Check for active injury
   const injury = await c.env.DB.prepare(
@@ -1122,14 +1152,14 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   }
 
   return c.json({
-    ...row,
+    ...ocisteny.row,
     isOwn,
     isParentClub,
     loan,
     skills,
     physical,
     personality,
-    lifeContext: lifeContext,
+    lifeContext: vystupniZivot,
     avatar: JSON.parse(row.avatar as string),
     injury: injury ? { type: injury.type, daysRemaining: injury.days_remaining } : null,
     absence,
