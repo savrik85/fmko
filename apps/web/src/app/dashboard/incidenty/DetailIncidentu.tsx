@@ -141,7 +141,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
           )}
 
           {i.status === "policie" && detail.policie.vysledekOn && (
-            <p className="text-sm mt-3">🚓 Případ šetří policie. Výsledek do {datum(detail.policie.vysledekOn)}.</p>
+            <p className="text-sm mt-3">🚓 Případ šetří policie. Výsledek do {datum(detail.policie.vysledekOn)}</p>
           )}
         </div>
       )}
@@ -181,7 +181,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                 Policie případ převezme a výsledek oznámí za 3 až 7 dní. Čím víc stop, tím větší šance, že pachatele najde. Zavolat ji jde jen jednou.
               </p>
               <button
-                onClick={() => void proved("policie", null, (o) => `Policie případ převzala. Výsledek do ${datum(String(o.vysledekOn))}.`)}
+                onClick={() => void proved("policie", null, (o) => `Policie případ převzala. Výsledek do ${datum(String(o.vysledekOn))}`)}
                 disabled={pracuje}
                 className="w-full sm:w-auto px-4 py-2 rounded-soft text-sm font-heading font-bold bg-blue-600 text-white disabled:opacity-50"
               >
