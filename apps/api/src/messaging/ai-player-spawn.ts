@@ -497,6 +497,9 @@ async function handleAiPlayerReplyInner(
   convId: string,
 ): Promise<void> {
   logger.info({ module: "ai-player-spawn" }, `handleAiPlayerReply START for conv ${convId}`);
+  // Od téhle chvíle se počítá, jak dlouho hráči odpověď trvala. Generování
+  // modelu se do pauzy započítá, ať čekání nesčítáme dvakrát.
+  const zacatek = Date.now();
   const conv = await db.prepare(
     "SELECT id, team_id, type, participant_id, ai_thread_state, ai_thread_active FROM conversations WHERE id = ?",
   ).bind(convId).first<ConvRow>()
@@ -590,6 +593,8 @@ async function handleAiPlayerReplyInner(
     }
     throw e;
   }
+
+  await pockejNezDopise(zacatek, reply.body, player);
 
   const now = new Date().toISOString();
   const senderName = `${player.firstName} ${player.lastName}`;
@@ -866,4 +871,34 @@ async function offendPlayer(
   ]);
 
   logger.info({ module: "ai-player-spawn", teamId: conv.team_id }, `offended player ${playerRow.first_name} ${playerRow.last_name} (morale ${moraleDelta}, relationship ${relationshipDelta})`);
+}
+
+/**
+ * Nechá odpověď dojít až za chvíli.
+ *
+ * Model odpoví do vteřiny a zpráva do té doby padala do telefonu rychleji,
+ * než ji stihl trenér přečíst odeslanou. Pauza se skládá z toho, jak dlouho
+ * si hráč zprávy všimne a jak dlouho tu svoji píše, takže delší odpověď
+ * přijde později a ten, koho SMS vzbudila, se ozve nejpozději.
+ *
+ * Čas strávený generováním se odečítá: když model přemýšlel pět vteřin,
+ * čeká se jen zbytek.
+ */
+export async function pockejNezDopise(
+  zacatek: number,
+  text: string,
+  player: { occupation?: string; id: string; discipline: number; temper: number; age: number },
+): Promise<void> {
+  const { kontextCasu, zpozdeniOdpovedi } = await import("./chat-kontext");
+  const { smenaProPovolani } = await import("../generators/occupations");
+  const { seedFromString } = await import("../lib/seed");
+
+  const cas = kontextCasu(new Date(), smenaProPovolani(player.occupation), seedFromString(player.id));
+  const cil = zpozdeniOdpovedi({
+    znaku: text.length, situace: cas.situace,
+    discipline: player.discipline, temper: player.temper,
+  });
+  const zbyva = cil - (Date.now() - zacatek);
+  if (zbyva <= 0) return;
+  await new Promise((r) => setTimeout(r, zbyva));
 }

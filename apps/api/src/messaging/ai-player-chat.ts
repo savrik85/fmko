@@ -7,6 +7,9 @@
  */
 
 import { logger } from "../lib/logger";
+import { seedFromString } from "../lib/seed";
+import { getOccupationByName, smenaProPovolani } from "../generators/occupations";
+import { domacnost, kontextCasu, popisSituace, pravidloEmoji } from "./chat-kontext";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 
 
@@ -82,22 +85,37 @@ function buildLastMatchFacts(p: PlayerSnapshot): string {
   return `- V posledním zápase jsi nastoupil, ${verdict}.${detail} Jiné góly, karty ani statistiky si NEVYMÝŠLEJ.`;
 }
 
-function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
+/**
+ * `kdy` je normálně teď. Jde předat kvůli testům a kvůli tomu, aby dvě volání
+ * v jednom zpracování nespadla každé do jiné hodiny.
+ */
+export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy: Date = new Date()): string {
   const positionLabel: Record<string, string> = {
     GK: "brankář",
     DEF: "obránce",
     MID: "záložník",
     FWD: "útočník",
   };
-  const village = team.villageName ? ` z ${team.villageName}` : "";
-  const occupation = player.occupation ? `Civilním povoláním ${player.occupation}.` : "";
+  // Apozice, ne pád: „z Dvory" by se z promptu propsalo i do zpráv.
+  const village = team.villageName ? ` z obce ${team.villageName}` : "";
   const positionStr = positionLabel[player.position] ?? player.position;
+
+  // Kolik je hodin a co dělá. Bez toho psal každý ve dvě ráno stejně ochotně
+  // jako v neděli odpoledne, což je na SMS od vesnického fotbalisty poznat.
+  const cas = kontextCasu(kdy, smenaProPovolani(player.occupation), seedFromString(player.id));
+  const occ = player.occupation ? getOccupationByName(player.occupation) : undefined;
+  // Výmluvy bez vazby na počasí: tady o něm nic nevíme.
+  const vymluvy = (occ?.excuses ?? []).filter((e) => !e.weather).map((e) => e.text);
+  const vymluva = vymluvy.length > 0
+    ? [vymluvy[(seedFromString(player.id) + cas.hodina) % vymluvy.length]]
+    : [];
 
   return [
     `Jsi ${player.firstName} ${player.lastName}, ${player.age}letý ${positionStr} amatérského týmu ${team.teamName}${village} v české vesnické soutěži.`,
     `Tvoje povaha: ${buildPersonalityHints(player)}.`,
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
-    occupation,
+    domacnost(player.age),
+    popisSituace(cas, player.occupation, vymluva),
     // Kdo je na druhé straně, musí být jasné TADY, ne až mezi fakty o klubu.
     // Dokud trenérovo jméno leželo v seznamu vedle spoluhráčů, model ho bral
     // jako dalšího člověka z klubu a posílal trenéra za trenérem:
@@ -110,7 +128,9 @@ function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext): string {
     "- Krátce: 1-2 věty, do 200 znaků.",
     "- UKAZUJ EMOCE: když tě něco štve, dej to najevo (sarkasmus, frustrace, povzdech). Když jsi rád, projev to. Nebuď monotónní.",
     "- NIKDY se neopakuj, nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
-    "- Zřídka emoji (max 1 a jen když opravdu sedí. ŽÁDNÝ ⚽ nebo 🥅, jsi hráč, ne fanoušek).",
+    pravidloEmoji(player.age, player.temper),
+    "- Do emoji nepatří ⚽ ani 🥅, jsi hráč, ne fanoušek.",
+    "- Denní dobu a to, co zrovna děláš, zmiňuj jen když to má důvod. Nezačínej každou zprávu hlášením, kolik je hodin.",
     "- NIKDY nepiš jako AI nebo formálně.",
     "",
     "FAKTA O KLUBU, smíš se opírat VÝHRADNĚ o ně:",

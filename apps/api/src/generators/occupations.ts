@@ -939,3 +939,42 @@ export function getOccupation(id: string): Occupation | undefined {
 export function getOccupationByName(name: string): Occupation | undefined {
   return OCCUPATIONS.find((o) => o.name === name);
 }
+
+/**
+ * Kdy který obor stojí v práci.
+ *
+ * Chat s hráčem potřebuje vědět, jestli ho trenérova SMS zastihla u zdi,
+ * za volantem nebo v posteli. Tabulka je schválně mimo `OCCUPATIONS`:
+ * je to vlastnost oboru, ne parametr generátoru, a takhle se dá přečíst
+ * na jednom místě, aniž by se prolistovalo osmašedesát objektů.
+ *
+ * `denni` je výchozí, vyjmenované jsou jen výjimky.
+ */
+export type Smena = "denni" | "rano" | "smenny" | "vecerni" | "volny";
+
+const SMENY: Record<string, Smena> = {
+  // Od tmy do tmy, začíná se, když ostatní spí.
+  zemedelec: "rano", traktorista: "rano", kombajner: "rano", chovatel: "rano",
+  pekar: "rano", metar: "rano", postovni: "rano", lesni_delnik: "rano",
+  drevorubec: "rano", spravce_rybniku: "rano",
+  // Nepravidelné směny včetně nocí a víkendů.
+  hasic: "smenny", policista: "smenny", zachranar: "smenny", vratny: "smenny",
+  ridic_autobusu: "smenny", ridic_mhd: "smenny", tramvajak: "smenny",
+  strojvedouci_metro: "smenny", ridic_kamionu: "smenny", revizor: "smenny",
+  hlidac_parkoviste: "smenny", uklidova_firma: "smenny", mistr_v_tovarne: "smenny",
+  // Začínají, když ostatní končí.
+  hospodsky: "vecerni", barman: "vecerni", cisnik: "vecerni", kuchar: "vecerni",
+  taxikar: "vecerni", ridic_boltu: "vecerni", poulicni_muzikant: "vecerni",
+  // Vlastní rozvrh, pevnou dobu nemají.
+  podnikatel: "volny", programator: "volny", student: "volny",
+  nezamestnany: "volny", duchodce: "volny", bezdomovec: "volny",
+  kuryr: "volny", myslivec: "volny", vcelar: "volny", chalupar: "volny",
+  sezonni_delnik: "volny",
+};
+
+/** Směna podle názvu povolání. Neznámé povolání chodí do práce na ranní. */
+export function smenaProPovolani(name: string | undefined): Smena {
+  if (!name) return "denni";
+  const occ = getOccupationByName(name);
+  return (occ ? SMENY[occ.id] : undefined) ?? "denni";
+}

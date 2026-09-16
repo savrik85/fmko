@@ -127,6 +127,8 @@ export default function ConversationPage() {
   const [loading, setLoading] = useState(true);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
+  /** Svítí „píše…". Naskakuje s odstupem, ne hned po odeslání. */
+  const [pise, setPise] = useState(false);
   const [credit, setCredit] = useState<{ zbyva: number; cenaSms: number; zprav: number } | null>(null);
   // Skupinové chaty vlastní detail endpoint nemají — tam se píše vždycky.
   const [canReply, setCanReply] = useState(true);
@@ -225,11 +227,19 @@ export default function ConversationPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+
   // O kanálu i o tom, jestli se dá psát, rozhoduje server.
   const platiSeKredit = !isGroup && channel === "sms";
   // Psaní blokuje jedině to, že hráč zrovna odpovídá. Uzavřené vlákno ne —
   // trenér mu smí napsat znovu a začít nové.
   const cekaSeNaHrace = aiThreadActive && aiThreadState?.awaiting === "player";
+  // „Píše" nenaskočí hned. V reálném chatu je nejdřív ticho, než si druhý
+  // zprávy všimne, a teprve pak se rozblikají tečky.
+  useEffect(() => {
+    if (!cekaSeNaHrace) { setPise(false); return; }
+    const t = setTimeout(() => setPise(true), 1800);
+    return () => clearTimeout(t);
+  }, [cekaSeNaHrace]);
   // Zbylá koruna je z pohledu hráče stejně došlý kredit — na zprávu nestačí.
   const nemaNaSms = platiSeKredit && !!credit && credit.zbyva < credit.cenaSms;
   /*
@@ -454,7 +464,7 @@ export default function ConversationPage() {
             </div>
           ))
         )}
-        {aiThreadActive && aiThreadState?.awaiting === "player" && (
+        {pise && (
           <div className="flex justify-start">
             <div className="bg-white shadow-sm rounded-2xl rounded-bl-tight px-3 py-2 text-sm text-muted italic flex items-center gap-1.5">
               <span className="inline-flex gap-0.5">
@@ -462,7 +472,7 @@ export default function ConversationPage() {
                 <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
                 <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
               </span>
-              Hráč přemýšlí…
+              {(conv?.title ?? "Hráč").split(" ")[0]} píše…
             </div>
           </div>
         )}

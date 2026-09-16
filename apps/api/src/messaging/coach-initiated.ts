@@ -15,7 +15,7 @@ import { createRng, cryptoSeed } from "../generators/rng";
 import {
   generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError,
 } from "./ai-player-chat";
-import { loadPlayerSnapshot, loadTeamContext } from "./ai-player-spawn";
+import { loadPlayerSnapshot, loadTeamContext, pockejNezDopise } from "./ai-player-spawn";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 const M = "coach-initiated";
@@ -80,7 +80,11 @@ export async function startCoachThread(
       historie.push({ sender: "coach", body: opts.coachMessage });
     }
 
+    const zacatek = Date.now();
     const reply = await generateCoachInitiatedReply(env, player, team, historie, false);
+    // Stejná pauza jako u spawnovaných vláken: i tady hráč odpovídá v čase,
+    // ne okamžitě po odeslání.
+    await pockejNezDopise(zacatek, reply.body, player);
 
     const now = new Date().toISOString();
     const jmeno = `${player.firstName} ${player.lastName}`;
