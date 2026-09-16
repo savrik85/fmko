@@ -9,13 +9,14 @@ import { createRng } from "../generators/rng";
 import type { Bindings } from "../index";
 import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
+import { applyManagerAttrDelta, type ManagerAttr } from "../lib/manager-attrs";
 import { seedFromString } from "../lib/seed";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import { removePlayer } from "../transfers/remove-player";
 import { denPlus, prikazAbsence } from "./absence-hracu";
 import { posunHrace, posunKadru, posunKamaradu } from "./hraci";
-import { herniDatum, nactiHraceKadru, nactiIncident, proAkce } from "./incident-db";
+import { herniDatum, jeRecidivista, nactiHraceKadru, nactiIncident, proAkce } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
 import {
   LHUTA_PO_ODHALENI_DNI, OBVINENI_PAMET_DNI, POLICIE_DNI_MAX, POLICIE_DNI_MIN, SMS_ROLE_POLICIE, SRAZKA_TYDNU,
@@ -39,6 +40,15 @@ const ZMENENO = { ok: false, kod: 409, chyba: "Incident se mezitím změnil, na�
 
 function pozdejsi(a: string | null, b: string): string {
   return a && a > b ? a : b;
+}
+
+/** Atribut trenéra za rozhodnutí o incidentu. Selhání se zaloguje, akci nezvrací. */
+async function atributTrenera(
+  db: D1Database, teamId: string, incidentId: string, attr: ManagerAttr, delta: number,
+  popis: string, gameDate: string, klic: string = attr,
+): Promise<void> {
+  await applyManagerAttrDelta(db, teamId, attr, delta, "incident", popis, { referenceId: `inc-${incidentId}-mgr-${klic}`, gameDate })
+    .catch((e) => logger.warn({ module: M }, `atribut trenéra ${attr} za incident ${incidentId}`, e));
 }
 
 export async function obvinHrace(
@@ -92,6 +102,9 @@ export async function obvinHrace(
     );
   }
   await db.batch(davka).catch((e) => logger.error({ module: M }, `následky obvinění ${incidentId}`, e));
+  if (!vinen) {
+    await atributTrenera(db, teamId, incidentId, "motivation", -1, `Křivé obvinění hráče: ${obvineny.jmeno}`, gameDate, `motivation-${poradi}`);
+  }
 
   const klic = vysledek === "priznal" ? "obvineni_priznani" : vysledek === "usvedcen" ? "obvineni_usvedcen" : "obvineni_zapira";
   await sendPlayerSMS(db, teamId, { id: playerId, firstName: obvineny.krestni, lastName: obvineny.prijmeni }, text(rng, klic))
@@ -177,6 +190,10 @@ export async function rozhodni(
     if (absence.length > 0) {
       await db.batch(absence).catch((e) => logger.error({ module: M }, `absence po udání ${incidentId}`, e));
     }
+    await atributTrenera(db, teamId, incidentId, "discipline", 1, `Pachatel předán policii: ${pachatel.jmeno}`, gameDate);
+    if (oblibeny) {
+      await atributTrenera(db, teamId, incidentId, "reputation", -1, `Udání oblíbeného hráče: ${pachatel.jmeno}`, gameDate);
+    }
     await sendSystemSMS(db, teamId, SMS_ROLE_POLICIE, `🚓 ${text(rng, "policie_udani", { hrac: pachatel.jmeno })}`)
       .catch((e) => logger.warn({ module: M }, `SMS udání ${incidentId}`, e));
     return { ok: true, castka: null };
@@ -208,6 +225,7 @@ export async function rozhodni(
         .catch((e) => logger.error({ module: M }, `vrácení incidentu po nepovedeném vyhazovu ${incidentId}`, e));
       return { ok: false, kod: 500, chyba: "Hráče se nepodařilo vyhodit" };
     }
+    await atributTrenera(db, teamId, incidentId, "discipline", 1, `Vyhozen zloděj: ${pachatel.jmeno}`, gameDate);
     await posunKadru(db, teamId, oblibeny ? -4 : 1).run()
       .catch((e) => logger.warn({ module: M }, `morálka po vyhazovu ${incidentId}`, e));
     return { ok: true, castka: null };
@@ -242,6 +260,11 @@ export async function rozhodni(
   if (akce === "odpustit" || akce === "srazka" || akce === "pokuta" || akce === "vyradit") {
     await sendPlayerSMS(db, teamId, sms, text(rng, SMS_TRESTU[akce]))
       .catch((e) => logger.warn({ module: M }, `SMS po trestu ${incidentId}`, e));
+  }
+  if (akce === "srazka" || akce === "pokuta" || akce === "vyradit") {
+    await atributTrenera(db, teamId, incidentId, "discipline", 1, `Důsledný trest za incident: ${pachatel.jmeno}`, gameDate);
+  } else if (akce === "odpustit" && await jeRecidivista(db, teamId, pachatel.id, incidentId, inc.season_number, gameDate)) {
+    await atributTrenera(db, teamId, incidentId, "discipline", -1, `Odpuštění recidivistovi: ${pachatel.jmeno}`, gameDate);
   }
   return { ok: true, castka };
 }

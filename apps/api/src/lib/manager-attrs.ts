@@ -30,6 +30,8 @@ export type ManagerAttrSource =
   | "season_dev"
   // Funkce ve vedení soutěže — odsloužený mandát, odvolání, demise.
   | "competition_office"
+  // Rozhodnutí o incidentu v klubu (trest, odpuštění, křivé obvinění, udání).
+  | "incident"
   | "admin";
 
 /** České názvy do popisků a UI. */

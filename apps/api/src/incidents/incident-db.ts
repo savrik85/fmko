@@ -1,7 +1,8 @@
 /** Načtení incidentu, herního data a hráče kádru pro akce manažera a denní vyšetřování. */
 
+import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
-import { OBLIBENY_SILA_VZTAHU } from "./nastaveni";
+import { OBLIBENY_SILA_VZTAHU, RECIDIVA_DNI } from "./nastaveni";
 import { hracZRadku, SLOUPCE_HRACE } from "./stav-klubu";
 import type { HracKlubu, KategorieIncidentu, StavIncidentu, TypPachatele } from "./typy";
 import type { IncidentProAkce } from "./vysetrovani";
@@ -80,6 +81,21 @@ export async function nactiHraceKadru(db: D1Database, teamId: string, playerId: 
     mzda: typeof r.weekly_wage === "number" ? r.weekly_wage : 0,
     silnychVztahu: vztahy?.n ?? 0,
   };
+}
+
+/** Recidivista (spec 5a): pachatel jiného incidentu uzavřeného v posledních 60 dnech téže sezóny. */
+export async function jeRecidivista(
+  db: D1Database, teamId: string, playerId: string, kromeIncidentu: string, seasonNumber: number, gameDate: string,
+): Promise<boolean> {
+  const r = await db.prepare(
+    `SELECT 1 AS ano FROM club_incidents
+      WHERE team_id = ? AND culprit_player_id = ? AND id != ? AND season_number = ? AND culprit_type = 'hrac'
+        AND status = 'uzavreny' AND COALESCE(resolution, '') NOT IN ('bez_skody', 'nestalo_se', 'konec_sezony')
+        AND resolved_on >= ?
+      LIMIT 1`,
+  ).bind(teamId, playerId, kromeIncidentu, seasonNumber, gameExpiry(gameDate, -RECIDIVA_DNI)).first()
+    .catch((e) => { logger.warn({ module: M }, `recidiva ${playerId}`, e); return null; });
+  return r !== null;
 }
 
 export function proAkce(

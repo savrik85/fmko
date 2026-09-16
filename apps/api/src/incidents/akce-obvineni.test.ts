@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../lib/manager-attrs", () => ({
+  applyManagerAttrDelta: vi.fn(async () => ({ applied: 1, oldValue: 40, newValue: 41, skipped: null })),
+}));
 vi.mock("../messaging/system-sms", () => ({
   sendPlayerSMS: vi.fn(async () => "konverzace"),
   sendSystemSMS: vi.fn(async () => undefined),
 }));
 
 import type { Bindings } from "../index";
+import { applyManagerAttrDelta } from "../lib/manager-attrs";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { obvinHrace, zavolejPolicii } from "./akce";
 import type { IncidentRadek } from "./incident-db";
@@ -73,6 +77,17 @@ describe("obvinění", () => {
     const narok = db.dotazy.find((d) => /UPDATE club_incidents SET accusations/.test(d.sql));
     expect(narok?.params[2]).toBe(1);
     expect(db.davky.flat().some((d) => /INSERT OR IGNORE INTO club_incident_clues/.test(d.sql) && d.params[3] === "priznani")).toBe(true);
+  });
+
+  it("křivé obvinění sníží motivaci trenéra, obvinění pachatele ne", async () => {
+    await obvinHrace(prostredi(incidentRadek()).env, "tym-a", "inc-1", "a");
+    expect(applyManagerAttrDelta).toHaveBeenCalledWith(
+      expect.anything(), "tym-a", "motivation", -1, "incident", expect.any(String),
+      { referenceId: "inc-inc-1-mgr-motivation-1", gameDate: DNES },
+    );
+    vi.mocked(applyManagerAttrDelta).mockClear();
+    await obvinHrace(prostredi(incidentRadek(), [{ sql: /FROM players WHERE id = \? AND team_id = \?/, first: hracRadek("p", "Pepa", "Průšvih") }]).env, "tym-a", "inc-1", "p");
+    expect(applyManagerAttrDelta).not.toHaveBeenCalled();
   });
 });
 

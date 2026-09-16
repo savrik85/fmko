@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../lib/manager-attrs", () => ({
+  applyManagerAttrDelta: vi.fn(async () => ({ applied: 1, oldValue: 40, newValue: 41, skipped: null })),
+}));
 vi.mock("../messaging/system-sms", () => ({
   sendPlayerSMS: vi.fn(async () => "konverzace"),
   sendSystemSMS: vi.fn(async () => undefined),
@@ -8,6 +11,7 @@ vi.mock("../season/finance-processor", () => ({ recordTransaction: vi.fn(async (
 vi.mock("../transfers/remove-player", () => ({ removePlayer: vi.fn(async () => ({ ok: true })) }));
 
 import type { Bindings } from "../index";
+import { applyManagerAttrDelta } from "../lib/manager-attrs";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import { removePlayer } from "../transfers/remove-player";
@@ -108,5 +112,40 @@ describe("tresty", () => {
     expect(await rozhodni(env, "tym-a", "inc-1", "pokuta")).toMatchObject({ ok: false, kod: 409 });
     expect(recordTransaction).not.toHaveBeenCalled();
     expect(sendPlayerSMS).not.toHaveBeenCalled();
+  });
+});
+
+describe("atributy trenéra", () => {
+  it("důsledný trest zvedne disciplínu", async () => {
+    const { env } = prostredi(ODHALENY);
+    await rozhodni(env, "tym-a", "inc-1", "pokuta");
+    expect(applyManagerAttrDelta).toHaveBeenCalledWith(
+      expect.anything(), "tym-a", "discipline", 1, "incident", expect.any(String),
+      { referenceId: "inc-inc-1-mgr-discipline", gameDate: DNES },
+    );
+  });
+
+  it("odpuštění recidivistovi disciplínu sníží, prvnímu odpuštění nic", async () => {
+    const recidiva = prostredi(ODHALENY, [{ sql: /culprit_player_id = \? AND id != \?/, first: { ano: 1 } }]);
+    await rozhodni(recidiva.env, "tym-a", "inc-1", "odpustit");
+    expect(applyManagerAttrDelta).toHaveBeenCalledWith(expect.anything(), "tym-a", "discipline", -1, "incident", expect.any(String), expect.anything());
+
+    vi.mocked(applyManagerAttrDelta).mockClear();
+    await rozhodni(prostredi(ODHALENY).env, "tym-a", "inc-1", "odpustit");
+    expect(applyManagerAttrDelta).not.toHaveBeenCalled();
+  });
+
+  it("udání oblíbeného hráče stojí reputaci", async () => {
+    const { env } = prostredi(ODHALENY, [
+      { sql: /FROM players WHERE id = \? AND team_id = \?/, first: hracRadek("p", "Pepa", "Průšvih", { personality: JSON.stringify({ leadership: 80 }) }) },
+    ]);
+    await rozhodni(env, "tym-a", "inc-1", "policie");
+    expect(applyManagerAttrDelta).toHaveBeenCalledWith(expect.anything(), "tym-a", "reputation", -1, "incident", expect.any(String), expect.objectContaining({ referenceId: "inc-inc-1-mgr-reputation" }));
+  });
+
+  it("nechat být atributy nemění a souběh taky ne", async () => {
+    await rozhodni(prostredi(ODHALENY).env, "tym-a", "inc-1", "nechat_byt");
+    await rozhodni(prostredi(ODHALENY, [{ sql: /UPDATE club_incidents SET status = 'uzavreny'/, changes: 0 }]).env, "tym-a", "inc-1", "pokuta");
+    expect(applyManagerAttrDelta).not.toHaveBeenCalled();
   });
 });
