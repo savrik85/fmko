@@ -1,0 +1,128 @@
+/**
+ * Načtení stavu klubu pro incidenty (spec Část 4, `StavKlubu`).
+ * Jen čtení. Všechno, co katalog potřebuje k podmínkám, v jednom průchodu.
+ */
+
+import { ensureEquipmentRow } from "../equipment/equipment-service";
+import { logger } from "../lib/logger";
+import type { HracKlubu, StavKlubu } from "./typy";
+
+const M = "incidents-stav";
+
+function cislo(v: unknown, vychozi: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : vychozi;
+}
+
+function objekt(raw: unknown, co: string): Record<string, any> {
+  if (typeof raw !== "string" || raw === "") return {};
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return v && typeof v === "object" ? (v as Record<string, any>) : {};
+  } catch (e) {
+    logger.warn({ module: M }, `nečitelný JSON (${co})`, e);
+    return {};
+  }
+}
+
+function pole(raw: unknown, co: string): Array<Record<string, unknown>> {
+  if (typeof raw !== "string" || raw === "") return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? (v as Array<Record<string, unknown>>) : [];
+  } catch (e) {
+    logger.warn({ module: M }, `nečitelný JSON (${co})`, e);
+    return [];
+  }
+}
+
+function predchoziDen(den: string): string {
+  const d = new Date(`${den}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+export async function nactiStavKlubu(
+  db: D1Database,
+  team: { id: string; league_id: string | null },
+  gameDate: string,
+  seasonNumber: number,
+): Promise<StavKlubu | null> {
+  const teamId = team.id;
+  const den = gameDate.slice(0, 10);
+  const vcera = predchoziDen(den);
+
+  const vybaveniRow = await ensureEquipmentRow(db, teamId);
+  if (!vybaveniRow) return null;
+  const vybaveni: Record<string, number> = {};
+  for (const [k, v] of Object.entries(vybaveniRow)) if (typeof v === "number") vybaveni[k] = v;
+
+  const vysledky = await db.batch([
+    db.prepare("SELECT changing_rooms, showers, toilets, refreshments, fence, stands, entrance_gate, lighting, pitch_condition FROM stadiums WHERE team_id = ?").bind(teamId),
+    db.prepare("SELECT id, first_name, last_name, personality, life_context, coach_relationship FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')").bind(teamId),
+    db.prepare(
+      `SELECT m.id, m.home_team_id, m.home_score, m.away_score
+         FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+        WHERE (m.home_team_id = ?1 OR m.away_team_id = ?1) AND m.status = 'simulated'
+          AND substr(sc.scheduled_at, 1, 10) = ?2
+        LIMIT 1`,
+    ).bind(teamId, vcera),
+    db.prepare("SELECT attendees FROM pub_sessions WHERE team_id = ? AND game_date = ?").bind(teamId, vcera),
+    db.prepare("SELECT COUNT(*) AS n FROM matches WHERE (home_team_id = ?1 OR away_team_id = ?1) AND status = 'simulated'").bind(teamId),
+    db.prepare(
+      `SELECT kind, MAX(game_date) AS posledni,
+              SUM(CASE WHEN status IN ('otevreny', 'policie') AND category IN ('kradez', 'poskozeni') THEN 1 ELSE 0 END) AS otevrene
+         FROM club_incidents WHERE team_id = ? AND season_number = ? GROUP BY kind`,
+    ).bind(teamId, seasonNumber),
+  ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
+  if (!vysledky) return null;
+  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes] = vysledky;
+
+  const stadion: Record<string, number> = {};
+  for (const [k, v] of Object.entries((stadionRes.results[0] ?? {}) as Record<string, unknown>)) {
+    if (typeof v === "number") stadion[k] = v;
+  }
+
+  const kadr: HracKlubu[] = (kadrRes.results as Array<Record<string, unknown>>).map((r) => {
+    const p = objekt(r.personality, "personality");
+    const lc = objekt(r.life_context, "life_context");
+    return {
+      id: String(r.id),
+      jmeno: `${r.first_name} ${r.last_name}`,
+      alkohol: cislo(p.alcohol, 30),
+      disciplina: cislo(p.discipline, 50),
+      vernost: cislo(p.patriotism, 50),
+      temperament: cislo(p.temper, 40),
+      vztahKTrenerovi: cislo(r.coach_relationship, 50),
+      transferUnrest: cislo(lc.transferUnrest?.level, 0),
+    };
+  });
+
+  let vceraZapas: StavKlubu["vcera"] = null;
+  const zapas = zapasRes.results[0] as { id: string; home_team_id: string; home_score: number; away_score: number } | undefined;
+  if (zapas) {
+    const doma = zapas.home_team_id === teamId;
+    const vyhra = doma ? zapas.home_score > zapas.away_score : zapas.away_score > zapas.home_score;
+    const cervene = await db.prepare("SELECT player_id FROM match_player_stats WHERE match_id = ? AND team_id = ? AND red_cards > 0")
+      .bind(zapas.id, teamId).all<{ player_id: string }>()
+      .catch((e) => { logger.warn({ module: M }, `červené karty ${zapas.id}`, e); return { results: [] as Array<{ player_id: string }> }; });
+    vceraZapas = { vyhra, cervenaKarta: cervene.results.map((r) => r.player_id) };
+  }
+
+  const hospodaVcera = pole((hospodaRes.results[0] as { attendees?: unknown } | undefined)?.attendees, "attendees")
+    .filter((a) => a.teamId === teamId && !a.isVisitor && !a.isCoach && typeof a.playerId === "string")
+    .map((a) => String(a.playerId));
+
+  const posledniVyskyt: Record<string, string> = {};
+  let otevreneProblemy = 0;
+  for (const r of incidentyRes.results as Array<{ kind: string; posledni: string; otevrene: number }>) {
+    posledniVyskyt[r.kind] = String(r.posledni).slice(0, 10);
+    otevreneProblemy += r.otevrene ?? 0;
+  }
+
+  return {
+    teamId, leagueId: team.league_id, seasonNumber, gameDate, den,
+    vybaveni, stadion, kadr, vcera: vceraZapas, hospodaVcera,
+    odehranychZapasu: cislo((pocetRes.results[0] as { n?: number } | undefined)?.n, 0),
+    otevreneProblemy, posledniVyskyt,
+  };
+}
