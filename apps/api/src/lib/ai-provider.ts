@@ -100,7 +100,7 @@ export async function generateText(
       return null;
     }
     const res = await (ctx.ai as unknown as {
-      run: (model: string, input: unknown) => Promise<{ response?: string }>;
+      run: (model: string, input: unknown) => Promise<{ response?: unknown }>;
     })
       .run(WORKERS_AI_MODEL, {
         messages: [{ role: "user", content: prompt }],
@@ -111,7 +111,18 @@ export async function generateText(
         logger.warn({ module: mod }, "workers-ai run selhal", e);
         return null;
       });
-    const text = (res?.response ?? "").trim();
+
+    // `response` bývá string, ale u promptu, na který model odpoví JSONem,
+    // přijde rovnou hotový objekt. Dokud se tu volalo `.trim()` natvrdo,
+    // spadlo to na TypeError a volající to viděl jako výpadek modelu: chat
+    // s hráči tak na testingu mlčel, protože odpověď hráče se posílá jako
+    // JSON, kdežto úvodní zpráva jako prostý text.
+    const raw = res?.response;
+    const text = typeof raw === "string"
+      ? raw.trim()
+      : raw != null && typeof raw === "object"
+        ? JSON.stringify(raw)
+        : "";
     if (!text) logger.warn({ module: mod }, "workers-ai vrátil prázdnou odpověď");
     return text || null;
   }
