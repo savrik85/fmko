@@ -1079,7 +1079,7 @@ export async function executeDailyTick(
   logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──
   const allTeams = await env.DB.prepare(
-    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, t.training_plan, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
+    "SELECT t.id, t.user_id, t.team_type, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, t.training_plan, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id"
   ).all();
 
   // ── Globální herní den ── clock + effectiveDate jsou spočítané na začátku ticku (deterministicky

@@ -397,6 +397,15 @@ export async function processTeamDay(
       } catch (e) { logger.warn({ module: "daily-tick" }, `kabina failed for team ${teamId}`, e); }
     }
 
+    // ── Incidenty v klubu: krádeže a poškození ──
+    // Před fanoušky, aby reakce fanoušků na incident (club_events) proběhla týž den.
+    try {
+      const { zpracujIncidentyDne } = await import("../incidents/denni-krok");
+      await zpracujIncidentyDne(env, team, newGameDate);
+    } catch (e) {
+      logger.warn({ module: "team-day", teamId }, "incidenty dne", e);
+    }
+
     // ── Fanouškovské party: velikost podle fanbáze, nálada o den dál ──
     // Běží i AI týmům: jejich kotel jezdí k tobě na stadion a jeho velikost
     // rozhoduje o riziku rvačky, takže nesmí zůstat na nule.
@@ -644,7 +653,7 @@ export async function processLeagueDay(
 ): Promise<{ leagueId: string; teams: number; skipped: number; durationMs: number }> {
   const startedAt = Date.now();
   const rows = await env.DB.prepare(
-    "SELECT t.id, t.user_id, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, t.training_plan, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.league_id = ?",
+    "SELECT t.id, t.user_id, t.team_type, t.league_id, t.game_date, t.training_type, t.training_sessions, t.training_days, t.training_plan, v.size as village_size, v.district as village_district, v.population as village_population FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.league_id = ?",
   )
     .bind(leagueId)
     .all<Record<string, unknown>>();
