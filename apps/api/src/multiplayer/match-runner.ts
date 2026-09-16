@@ -1384,31 +1384,10 @@ export async function buildMatchPlayers(
     logger.info({module: "match-runner"}, `buildMatchPlayers team=${teamId.slice(0, 8)} total=${rows.results.length} healthy=${healthyRows.length} hasLineup=${hasUserLineup} dbIDs=[${allDbIds.join(",")}]`);
     if (options?.matchKey) {
         try {
-            const {generateAbsences} = await import("../events/absence");
+            const {generateAbsences, hracProAbsenci} = await import("../events/absence");
             const {absenceSeedForMatch} = await import("../lib/seed");
             const {fetchTeamDistrict} = await import("../events/match-absences");
-            const squadForAbsence = healthyRows.map((row) => {
-                const personality = JSON.parse(row.personality as string);
-                const lifeContext = JSON.parse(row.life_context as string);
-                const physical = row.physical ? JSON.parse(row.physical as string) : {};
-                return {
-                    firstName: row.first_name as string,
-                    lastName: row.last_name as string,
-                    age: row.age as number,
-                    occupation: lifeContext.occupation ?? "",
-                    discipline: personality.discipline ?? 50,
-                    patriotism: personality.patriotism ?? 50,
-                    alcohol: personality.alcohol ?? 30,
-                    temper: personality.temper ?? 40,
-                    morale: lifeContext.morale ?? 50,
-                    stamina: physical.stamina ?? 50,
-                    injuryProneness: personality.injuryProneness ?? 50,
-                    commuteKm: (row.commute_km as number) ?? 0,
-                    isCelebrity: !!(row.is_celebrity as number),
-                    celebrityType: personality.celebrityType,
-                    celebrityTier: personality.celebrityTier,
-                };
-            });
+            const squadForAbsence = healthyRows.map((row) => hracProAbsenci(row));
             const district = await fetchTeamDistrict(db, teamId);
 
             // Dvě fáze s odlišnými seedy — shoda s day_before SMS i match_day SMS.

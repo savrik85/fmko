@@ -3796,23 +3796,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   }
   const healthyPlayers = players.results.filter((r) => !injuredPreviewIds.has(r.id as string) && !suspendedPreviewIds.has(r.id as string));
 
-  const absenceSquad = healthyPlayers.map((row) => {
-    const pers = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
-    const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
-    const phys = (() => { try { return JSON.parse(row.physical as string); } catch { return {}; } })();
-    return {
-      firstName: row.first_name as string, lastName: row.last_name as string,
-      age: row.age as number, occupation: lc.occupation ?? "",
-      discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50,
-      alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
-      morale: lc.morale ?? 50, stamina: phys.stamina ?? 50,
-      injuryProneness: pers.injuryProneness ?? 50,
-      commuteKm: (row.commute_km as number) ?? 0,
-      isCelebrity: !!(row.is_celebrity as number),
-      celebrityType: pers.celebrityType,
-      celebrityTier: pers.celebrityTier,
-    };
-  });
+  const { hracProAbsenci } = await import("../events/absence");
+  const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row));
   const district = await fetchTeamDistrict(c.env.DB, teamId);
   // Preview spouští obě fáze se stejnými seedy jako SMS + simulace, pak deduplikuje dle playerIndex.
   // Absence zobrazujeme jen day-before nebo match-day (ne 2+ dny předem). Přátelák = vyšší šance.
@@ -9522,15 +9507,8 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
     ).bind(teamId).all();
 
     const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId, phase: "day_before" }));
-    const absSquad = squadRows.results.map((r) => {
-      const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
-      const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
-      const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
-      return { firstName: r.first_name as string, lastName: r.last_name as string, age: (r.age as number) ?? 25, occupation: lc.occupation ?? "",
-        discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
-        morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
-        isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
-    });
+    const { hracProAbsenci } = await import("../events/absence");
+    const absSquad = squadRows.results.map((r) => hracProAbsenci(r));
 
     const triggerDistrict = await fetchDistrictForTrigger(c.env.DB, teamId);
     // Stejný důvod jako u preview: tyhle SMS musí sedět se simulací zápasu.

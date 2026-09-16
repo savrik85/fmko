@@ -13,6 +13,7 @@
 import type { Rng } from "../generators/rng";
 import { getOccupationByName, pickProfessionalExcuse, type Occupation } from "../generators/occupations";
 import type { Weather } from "../engine/types";
+import { logger } from "../lib/logger";
 
 export type AbsenceTiming = "day_before" | "match_day" | "any";
 
@@ -42,6 +43,53 @@ export interface PlayerForAbsence {
   celebrityType?: "legend" | "fallen_star" | "glass_man";
   celebrityTier?: "S" | "A" | "B" | "C";
   transferUnrest?: number; // 0-100 — truc po odmítnutém přestupu
+}
+
+function nactiJson(raw: unknown, co: string): Record<string, any> {
+  if (typeof raw !== "string" || raw === "") return {};
+  try {
+    return JSON.parse(raw) as Record<string, any>;
+  } catch (e) {
+    logger.warn({ module: "absence" }, `nečitelný JSON (${co}), hráč dostane výchozí hodnoty`, e);
+    return {};
+  }
+}
+
+/**
+ * Jediný převod řádku hráče z DB na vstup `generateAbsences`.
+ *
+ * Omluvenky se pro jeden zápas losují na šesti místech: SMS den předem a v den zápasu
+ * (`season/team-day.ts`), detail hráče (`events/match-absences.ts`), simulace
+ * (`multiplayer/match-runner.ts`), náhled sestavy a admin trigger (`routes/game.ts`).
+ * Všechna musí dostat stejné vstupy, jinak SMS nesedí se zápasem. Dokud si každé místo
+ * skládalo vstup samo, simulace, náhled i trigger zapomínaly na `transferUnrest`, takže
+ * hráč s trucem měl v SMS jinou šanci chybět než v zápase.
+ *
+ * Řádek musí obsahovat `first_name, last_name, age, personality, life_context,
+ * physical, commute_km, is_celebrity`.
+ */
+export function hracProAbsenci(row: Record<string, unknown>): PlayerForAbsence {
+  const pers = nactiJson(row.personality, "personality");
+  const lc = nactiJson(row.life_context, "life_context");
+  const phys = nactiJson(row.physical, "physical");
+  return {
+    firstName: row.first_name as string,
+    lastName: row.last_name as string,
+    age: (row.age as number) ?? 25,
+    occupation: lc.occupation ?? "",
+    discipline: pers.discipline ?? 50,
+    patriotism: pers.patriotism ?? 50,
+    alcohol: pers.alcohol ?? 30,
+    temper: pers.temper ?? 40,
+    morale: lc.morale ?? 50,
+    stamina: phys.stamina ?? 50,
+    injuryProneness: pers.injuryProneness ?? 50,
+    commuteKm: (row.commute_km as number) ?? 0,
+    transferUnrest: lc.transferUnrest?.level ?? 0,
+    isCelebrity: !!(row.is_celebrity as number),
+    celebrityType: pers.celebrityType,
+    celebrityTier: pers.celebrityTier,
+  };
 }
 
 // ═══════════════════════════════════════════════

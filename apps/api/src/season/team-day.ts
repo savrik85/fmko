@@ -135,16 +135,8 @@ export async function processTeamDay(
                    ORDER BY p.overall_rating DESC`
               ).bind(teamId).all();
               const absRng = createRng(absenceSeedForMatch({ matchKey: tomorrowMatch.id, teamId, phase: "day_before" }));
-              const absSquad = squadRows.results.map((r) => {
-                const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
-                const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
-                const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
-                return { firstName: r.first_name as string, lastName: r.last_name as string, age: (r.age as number) ?? 25, occupation: lc.occupation ?? "",
-                  discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
-                  morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
-                  transferUnrest: lc.transferUnrest?.level ?? 0,
-                  isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
-              });
+              const { hracProAbsenci } = await import("../events/absence");
+              const absSquad = squadRows.results.map((r) => hracProAbsenci(r));
               const teamDistrict = (team.village_district as string | null) ?? undefined;
               const { fetchTeamCommuteMod } = await import("../events/match-absences");
               const { resolveRoundWeather } = await import("./season-weather");
@@ -583,16 +575,8 @@ export async function processTeamDay(
             // match_day phase má vlastní seed (offset), day_before a match_day tedy produkují
             // disjoint RNG streamy → hráč nemůže být označen v obou (jinak by dostal dva omluvné SMS).
             const mdRng = createRng(absenceSeedForMatch({ matchKey: todayMatch.id, teamId, phase: "match_day" }));
-            const absSquad = squadRows.results.map((r) => {
-              const pers = (() => { try { return JSON.parse(r.personality as string); } catch { return {}; } })();
-              const lc = (() => { try { return JSON.parse(r.life_context as string); } catch { return {}; } })();
-              const phys = (() => { try { return JSON.parse(r.physical as string); } catch { return {}; } })();
-              return { firstName: r.first_name as string, lastName: r.last_name as string, age: (r.age as number) ?? 25, occupation: lc.occupation ?? "",
-                discipline: pers.discipline ?? 50, patriotism: pers.patriotism ?? 50, alcohol: pers.alcohol ?? 30, temper: pers.temper ?? 40,
-                morale: lc.morale ?? 50, stamina: phys.stamina ?? 50, injuryProneness: pers.injuryProneness ?? 50, commuteKm: (r.commute_km as number) ?? 0,
-                transferUnrest: lc.transferUnrest?.level ?? 0,
-                isCelebrity: !!(r.is_celebrity as number), celebrityType: pers.celebrityType, celebrityTier: pers.celebrityTier };
-            });
+            const { hracProAbsenci } = await import("../events/absence");
+            const absSquad = squadRows.results.map((r) => hracProAbsenci(r));
             // Find the match conversation created day before
             const matchConvId = await env.DB.prepare(
               "SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.team_id = ? AND c.type = 'squad_group' AND m.metadata LIKE ? LIMIT 1"

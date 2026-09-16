@@ -5,7 +5,7 @@
  */
 
 import { absenceSeedForMatch } from "../lib/seed";
-import { generateAbsences } from "./absence";
+import { generateAbsences, hracProAbsenci } from "./absence";
 import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
 
@@ -122,27 +122,7 @@ export async function getAbsentPlayersMap(
   const injuredIds = new Set(injRes.results.map((r) => r.player_id));
   const healthyPlayers = playersRes.results.filter((r) => !injuredIds.has(r.id as string) && !((r.suspended_matches as number) > 0));
 
-  const absenceSquad = healthyPlayers.map((row) => {
-    const pers = (() => { try { return JSON.parse(row.personality as string); } catch { return {}; } })();
-    const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
-    const phys = (() => { try { return JSON.parse(row.physical as string); } catch { return {}; } })();
-    return {
-      firstName: row.first_name as string, lastName: row.last_name as string,
-      age: row.age as number, occupation: (lc as { occupation?: string }).occupation ?? "",
-      discipline: (pers as { discipline?: number }).discipline ?? 50,
-      patriotism: (pers as { patriotism?: number }).patriotism ?? 50,
-      alcohol: (pers as { alcohol?: number }).alcohol ?? 30,
-      temper: (pers as { temper?: number }).temper ?? 40,
-      morale: (lc as { morale?: number }).morale ?? 50,
-      stamina: (phys as { stamina?: number }).stamina ?? 50,
-      injuryProneness: (pers as { injuryProneness?: number }).injuryProneness ?? 50,
-      commuteKm: (row.commute_km as number) ?? 0,
-      transferUnrest: (lc as { transferUnrest?: { level?: number } }).transferUnrest?.level ?? 0,
-      isCelebrity: !!(row.is_celebrity as number),
-      celebrityType: (pers as { celebrityType?: "legend" | "fallen_star" | "glass_man" }).celebrityType,
-      celebrityTier: (pers as { celebrityTier?: "S" | "A" | "B" | "C" }).celebrityTier,
-    };
-  });
+  const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row));
 
   const friendlyMultiplier = ctx.isFriendly ? 1.8 : undefined;
   const commuteMod = await fetchTeamCommuteMod(db, teamId);

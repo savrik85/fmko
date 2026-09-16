@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
-import { generateAbsences, type PlayerForAbsence } from "./absence";
+import { generateAbsences, hracProAbsenci, type PlayerForAbsence } from "./absence";
 
 const SQUAD: PlayerForAbsence[] = Array.from({ length: 18 }, (_, i) => ({
   firstName: "Hráč",
@@ -57,5 +57,34 @@ describe("determinismus absencí", () => {
     // chovat stejně jako 0,55, jinak strop neplatí.
     expect(generateAbsences(createRng(4242), SQUAD, { timing: "match_day", commuteMod: 0.9 }))
       .toEqual(generateAbsences(createRng(4242), SQUAD, { timing: "match_day", commuteMod: 0.55 }));
+  });
+});
+
+describe("hracProAbsenci — jeden převod pro všechna místa", () => {
+  const radek = {
+    first_name: "Franta", last_name: "Novák", age: 31,
+    personality: JSON.stringify({ discipline: 20, patriotism: 30, alcohol: 80, temper: 70, injuryProneness: 60, celebrityType: "legend", celebrityTier: "B" }),
+    life_context: JSON.stringify({ occupation: "Zedník", morale: 35, transferUnrest: { level: 55 } }),
+    physical: JSON.stringify({ stamina: 64 }),
+    commute_km: 7, is_celebrity: 1,
+  };
+
+  it("převezme i truc po odmítnutém přestupu", () => {
+    // Simulace, náhled sestavy a admin trigger ho dřív nepředávaly, takže hráč
+    // s trucem měl v SMS vyšší šanci chybět než ve skutečném zápase.
+    expect(hracProAbsenci(radek)).toEqual({
+      firstName: "Franta", lastName: "Novák", age: 31, occupation: "Zedník",
+      discipline: 20, patriotism: 30, alcohol: 80, temper: 70, morale: 35, stamina: 64,
+      injuryProneness: 60, commuteKm: 7, transferUnrest: 55,
+      isCelebrity: true, celebrityType: "legend", celebrityTier: "B",
+    });
+  });
+
+  it("rozbitý JSON nebo chybějící physical dá výchozí hodnoty, ne výjimku", () => {
+    const p = hracProAbsenci({ ...radek, personality: "{rozbite", physical: null, life_context: "" });
+    expect(p.discipline).toBe(50);
+    expect(p.stamina).toBe(50);
+    expect(p.transferUnrest).toBe(0);
+    expect(p.occupation).toBe("");
   });
 });
