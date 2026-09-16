@@ -734,7 +734,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     incidents.push({
       type: "drink_record",
       playerIds: others.map((o) => o.playerId),
-      text: `Pivař za pivařem — ${names} ${others.length === 1 ? "také pořádně přebral" : "taky pořádně přebrali"}.`,
+      text: `Pivař za pivařem, ${names} ${others.length === 1 ? "taky pořádně přebral" : "taky pořádně přebrali"}.`,
       effects: others.map((o) => ({ playerId: o.playerId, type: "hangover" as const, label: "Ranní kocovina (−15 kondice)" })),
     });
   }
@@ -1245,16 +1245,26 @@ export async function createCoachLedSession(
         { playerId: a.playerId, type: "condition" as const, delta: -15, label: "−15 kondice" },
       ]),
     });
-    // Vyšší prob hangoveru — týmový binge
+    // Vyšší prob hangoveru — týmový binge. Jeden souhrn, ne řádek na hráče:
+    // „dal si víc než ostatní" pod sebou u sedmi lidí si samo odporuje.
+    const prebrali: PubAttendee[] = [];
     for (const a of attendees) {
       if (a.alcohol < 50) continue;
       const prob = 0.25 + ((a.alcohol - 50) / 50) * 0.30; // 50→25%, 100→55%
-      if (Math.random() >= prob) continue;
+      if (Math.random() < prob) prebrali.push(a);
+    }
+    if (prebrali.length > 0) {
+      const prvni = prebrali[0];
       incidents.push({
         type: "drink_record",
-        playerIds: [a.playerId],
-        text: `${a.firstName} ${a.lastName} si dal pořádně víc než ostatní.`,
-        effects: [{ playerId: a.playerId, type: "hangover", label: "Ranní kocovina (−15 kondice)" }],
+        playerIds: prebrali.map((o) => o.playerId),
+        text: prebrali.length === 1
+          ? `${prvni.firstName} ${prvni.lastName} to vzal za celou kabinu. Ráno to pozná.`
+          : `Přebrali ${prebrali.map((o) => o.lastName).join(", ")}. Ráno bude v kabině ticho.`,
+        effects: prebrali.map((o) => ({
+          playerId: o.playerId, type: "hangover" as const,
+          label: "Ranní kocovina (−15 kondice)",
+        })),
       });
     }
   } else {
@@ -1464,7 +1474,7 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     // Vůdci fanoušků. Hospoda je jediné místo, kde se v okrese potkává kabina
     // s tribunou, takže se tam potkat musí i v číslech: hráči si odnesou
     // morálku, parta náladu a vůdce vztah k trenérovi.
-    const fanStmts = await pridejVudceDoHospody(db, team.id, gameDate, attendees, incidents);
+    const fanStmts = await pridejVudceDoHospody(db, team.id, gameDate, attendees, incidents, team.district ?? undefined);
 
     // Pokud incidents obsahují coach_*, přidej trenéra mezi attendees s avatarem
     const hasCoach = incidents.some((inc) => inc.type.startsWith("coach_"));
@@ -1515,6 +1525,7 @@ async function pridejVudceDoHospody(
   gameDate: string,
   attendees: PubAttendee[],
   incidents: PubIncident[],
+  okres?: string,
 ): Promise<D1PreparedStatement[]> {
   const stmts: D1PreparedStatement[] = [];
   try {
@@ -1522,16 +1533,19 @@ async function pridejVudceDoHospody(
     const { seedFromString } = await import("../lib/seed");
     const { dorazilDoHospody, scenaSVudcem, scenaSTrenerem, scenaOZapase } = await import("./pub-fan-leaders");
     type VudceVHospode = Parameters<typeof dorazilDoHospody>[0];
+    type HospodskaScena = NonNullable<ReturnType<typeof scenaSVudcem>>;
 
     const rows = await db.prepare(
       `SELECT l.id, l.first_name, l.last_name, l.nickname, l.archetype, l.radikalnost,
-              l.vyjednavani, l.sentiment, l.avatar, g.id AS group_id, g.kind, g.mood, g.heat
+              l.vyjednavani, l.sentiment, l.avatar, l.gender, g.id AS group_id, g.kind,
+              g.mood, g.heat
        FROM fan_leaders l JOIN fan_groups g ON g.id = l.group_id
        WHERE l.team_id = ? AND l.status = 'active'`,
     ).bind(teamId).all<{
       id: string; first_name: string; last_name: string; nickname: string | null;
       archetype: string; radikalnost: number; vyjednavani: number; sentiment: number;
-      avatar: string | null; group_id: string; kind: string; mood: number; heat: number;
+      avatar: string | null; gender: string | null; group_id: string; kind: string;
+      mood: number; heat: number;
     }>().catch((e) => { logger.warn({ module: "pub" }, "vůdci do hospody", e); return { results: [] as never[] }; });
     if (rows.results.length === 0) return stmts;
 
@@ -1554,6 +1568,10 @@ async function pridejVudceDoHospody(
     // aby se tyhle věci řekly nahlas tomu, koho se týkají.
     const { zapas, vykony } = await posledniZapasProHospodu(db, teamId, hraci.map((h) => h.playerId));
 
+    // Co už dnes v hospodě zaznělo. Stav klubu je pro všechny vůdce stejný,
+    // takže bez tohohle by nad jednou remízou kroutili hlavou tři lidi po sobě.
+    const uzZaznelo = new Set(incidents.map((i) => i.type));
+
     for (const r of rows.results) {
       const rng = createRng(seedFromString(`pubvudce|${teamId}|${gameDate}|${r.id}`));
       const v: VudceVHospode = {
@@ -1561,21 +1579,31 @@ async function pridejVudceDoHospody(
         jmeno: `${r.first_name}${r.nickname ? ` „${r.nickname}"` : ""} ${r.last_name}`,
         archetype: r.archetype, radikalnost: r.radikalnost, vyjednavani: r.vyjednavani,
         mood: r.mood, heat: r.heat, sentiment: r.sentiment,
+        gender: r.gender === "f" ? "f" : "m",
       };
       if (!dorazilDoHospody(v, rng.random())) continue;
 
       // Pořadí je záměrné: trenér, pak čerstvý zápas, teprve pak obecné řeči.
-      // Den před zápasem má ale přednost výtka za plnou hospodu.
-      const scena = trenerJeTu
-        ? scenaSTrenerem(v, rng.random())
-        : (!zapasZitra
-          ? scenaOZapase(v, zapas, vykony, { roll: rng.random(), vyber: rng.int(0, 999) })
-          : null)
-          ?? scenaSVudcem(v, hraci, {
+      // Den před zápasem má ale přednost výtka za plnou hospodu. Vybírá se
+      // první scéna, jejíž téma dnes večer ještě nepadlo: druhý rozbor téhož
+      // zápasu se zahodí a vůdce sáhne po tom, co má u stolu.
+      const text = { varianta: rng.int(0, 999), okres };
+      const kandidati: Array<HospodskaScena | null> = trenerJeTu
+        ? [scenaSTrenerem(v, rng.random(), text)]
+        : [
+          zapasZitra ? null : scenaOZapase(v, zapas, vykony, {
+            roll: rng.random(), vyber: rng.int(0, 999), ...text,
+          }),
+          scenaSVudcem(v, hraci, {
             predZapasem: !!zapasZitra,
             roll: rng.random(),
             vyberHrace: rng.int(0, 999),
-          });
+            ...text,
+          }),
+        ];
+      const scena = kandidati.find(
+        (x): x is HospodskaScena => x !== null && !uzZaznelo.has(x.type),
+      ) ?? null;
 
       // Do hospody přijde, i když se nic nesemele. Prázdný stůl s vůdcem je
       // taky informace: vidíš, že tam byl.
@@ -1589,6 +1617,7 @@ async function pridejVudceDoHospody(
         avatar: bezpecnyAvatarVudce(r.avatar),
       });
       if (!scena) continue;
+      uzZaznelo.add(scena.type);
 
       incidents.push({
         type: scena.type,

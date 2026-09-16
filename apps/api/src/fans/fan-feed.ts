@@ -17,7 +17,7 @@ import {
   HLAS_PARTY, PREZDIVKY, PRISPEVKY_K_UDALOSTEM, PRISPEVKY_K_VYTRZNOSTEM,
   PRISPEVKY_K_ZAPASU, PRISPEVKY_K_OBLIBENCUM, PRISPEVKY_K_RIVALITE,
   PRISPEVKY_K_TAKTICE, PRISPEVKY_KE_STRELBE,
-  doplnText, lajky,
+  doplnText, lajky, vyberText, goluTvar,
   type PostSablona, type PostTone, type PostTopic, type AuthorKind,
 } from "../engine/fan-posts";
 import type { FanGroupKind } from "../engine/fan-groups";
@@ -112,6 +112,8 @@ interface Kontext {
   groups: readonly FanGroupRow[];
   leaders: Map<string, FanLeaderRow>;
   gameDate: string;
+  /** Co na zdi už visí. Roste i během dávky, takže se nikdo neopakuje ani sám po sobě. */
+  pouzite: Set<string>;
 }
 
 /** Jeden příspěvek od jedné party na dané téma. */
@@ -131,8 +133,9 @@ function slozPrispevek(
   const sablona = vyberSablonu(opts.sablony, group.kind as FanGroupKind, rng.random());
   if (!sablona) return null;
 
-  const text = doplnText(rng.pick(sablona.texty), opts.data);
+  const text = vyberText(sablona.texty, opts.data, ctx.pouzite, rng.random());
   if (!text) return null;
+  ctx.pouzite.add(text);
 
   const leader = group.leader_id ? ctx.leaders.get(group.leader_id) : undefined;
   const a = autor(group, leader, opts.referenceId, opts.zaVudce === true);
@@ -180,11 +183,19 @@ async function nactiKontext(db: D1Database, teamId: string, gameDate: string): P
     .bind(teamId).all<FanLeaderRow>()
     .catch((e) => { logger.warn({ module: M }, `vůdci ${teamId}`, e); return { results: [] as FanLeaderRow[] }; });
 
+  // Posledních pár desítek příspěvků: přesně ta část zdi, kterou má fanoušek
+  // před očima. Co tam je, to se dneska nenapíše znovu.
+  const zed = await db
+    .prepare("SELECT body FROM fan_posts WHERE team_id = ? ORDER BY created_at DESC, id DESC LIMIT 40")
+    .bind(teamId).all<{ body: string }>()
+    .catch((e) => { logger.warn({ module: M }, `zeď ${teamId}`, e); return { results: [] as Array<{ body: string }> }; });
+
   return {
     teamId,
     groups: groups.results,
     leaders: new Map(leaders.results.map((l) => [l.id, l])),
     gameDate,
+    pouzite: new Set(zed.results.map((r) => r.body)),
   };
 }
 
@@ -254,7 +265,9 @@ export async function prispevkyKZapasu(
   const ctx = await nactiKontext(db, opts.teamId, opts.gameDate);
   if (!ctx) return 0;
 
-  const vysledek = `${opts.gf}:${opts.ga} s ${opts.souper}`;
+  // Apozice „s týmem" schválně: názvy klubů se neskloňují a „s FK Kiosek Na
+  // Ďolíčku Břevnov" by bez ní byl pádový zmetek.
+  const vysledek = `${opts.gf}:${opts.ga} s týmem ${opts.souper}`;
   const prispevky: NovyPrispevek[] = [];
   for (const g of kdoSeOzve(ctx.groups, 2, opts.matchId)) {
     const p = slozPrispevek(ctx, g, {
@@ -376,7 +389,12 @@ export async function prispevkyKHre(
 
   const prispevky: NovyPrispevek[] = [];
   // Klíč na herní týden, ne na den: jinak by totéž viselo každé ráno znovu.
-  const tyden = `${opts.gameDate.slice(0, 10)}`;
+  // Dřív tu stálo `gameDate.slice(0, 10)`, což je den, a komentář tím pádem
+  // popisoval opak toho, co se dělo.
+  const ms = Date.parse(`${opts.gameDate.slice(0, 10)}T00:00:00Z`);
+  const tyden = Number.isFinite(ms)
+    ? String(Math.floor(ms / 604_800_000))
+    : opts.gameDate.slice(0, 10);
 
   const taktickeSablony = opts.taktika ? PRISPEVKY_K_TAKTICE[opts.taktika] : undefined;
   if (taktickeSablony) {
@@ -398,7 +416,7 @@ export async function prispevkyKHre(
       const p = slozPrispevek(ctx, g, {
         referenceId: `strel-${opts.teamId}-${tyden}`,
         sablony: PRISPEVKY_KE_STRELBE[strelba], topic: "zapas",
-        data: { co: String(opts.golyPoslednich5) },
+        data: { co: goluTvar(opts.golyPoslednich5) },
       });
       if (p) prispevky.push(p);
     }
@@ -423,12 +441,15 @@ export async function prispevkyKChoralum(
   const prispevky: NovyPrispevek[] = [];
   for (const ch of choraly) {
     const a = autor(g, leader, `chant-${teamId}-${ch.kind}`, true);
+    const body = `Od dneška zpíváme: „${ch.text}" 📣`;
+    if (ctx.pouzite.has(body)) continue;
+    ctx.pouzite.add(body);
     prispevky.push({
       referenceId: `chant-${teamId}-${ch.kind}-${gameDate.slice(0, 10)}`,
       teamId,
       authorName: a.name, authorHandle: `@${a.handle}`, authorKind: a.kind,
       authorAvatar: a.avatar, groupId: g.id,
-      body: `Od dneška zpíváme: „${ch.text}" 📣`,
+      body,
       tone: ch.kind === "trener_proti" || ch.kind === "vzdor" || ch.kind === "vybaveni"
         ? "negativni" : "pozitivni",
       likes: Math.max(1, Math.round(g.size * 0.2)),
@@ -453,12 +474,16 @@ export async function prispevekKTransparentu(
 
   const leader = g.leader_id ? ctx.leaders.get(g.leader_id) : undefined;
   const a = autor(g, leader, `banner-${teamId}`, true);
+  const body = `Na plachtě v kotli od teď visí: „${plachta.text}"`;
+  // Tatáž plachta se přegeneruje i beze změny textu. Vyvěsit ji podruhé
+  // znamená jen další stejný řádek na zdi.
+  if (ctx.pouzite.has(body)) return 0;
   return zapisPrispevky(db, [{
     referenceId: `banner-${teamId}-${gameDate.slice(0, 10)}`,
     teamId,
     authorName: a.name, authorHandle: `@${a.handle}`, authorKind: a.kind,
     authorAvatar: a.avatar, groupId: g.id,
-    body: `Na plachtě v kotli od teď visí: „${plachta.text}"`,
+    body,
     tone: "neutralni",
     likes: Math.max(1, Math.round(g.size * 0.15)),
     topic: "club_event",
