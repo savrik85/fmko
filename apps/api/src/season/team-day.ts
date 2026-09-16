@@ -442,6 +442,15 @@ export async function processTeamDay(
           await prispevekKTransparentu(env.DB, teamId, plachta, newGameDate);
         }
 
+        // Zmeškané hovory. Čistě pro atmosféru, ale se skutečným důvodem:
+        // hromada nepřijatých od sponzora znamená, že se něco děje.
+        try {
+          const { tikHovoru } = await import("../messaging/missed-calls");
+          await tikHovoru(env.DB, teamId, party, newGameDate);
+        } catch (e) {
+          logger.warn({ module: "team-day" }, "zmeškané hovory", e);
+        }
+
         // Chorály. Vznikají z téhož stavu jako všechno ostatní a drží se,
         // dokud jejich důvod platí. Domácí chorál je výjimka: nezávisí na
         // dění, zakládá se jednou a zpívá se pořád.

@@ -98,6 +98,42 @@ messagingRouter.get("/teams/:teamId/conversations", async (c) => {
   return c.json(merged);
 });
 
+/**
+ * Zmeškané hovory.
+ *
+ * Vlastní endpoint, ne součást konverzací: hovor není zpráva, nedá se na něj
+ * odpovědět a telefon si ho drží v jiné záložce.
+ */
+messagingRouter.get("/teams/:teamId/missed-calls", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { nactiHovory, neprectenychHovoru } = await import("../messaging/missed-calls");
+  const [hovory, neprectene] = await Promise.all([
+    nactiHovory(c.env.DB, teamId),
+    neprectenychHovoru(c.env.DB, teamId),
+  ]);
+  const { VOLAJICI_LABEL } = await import("../engine/missed-calls");
+  return c.json({
+    unread: neprectene,
+    calls: hovory.map((h) => ({
+      id: h.id,
+      volajici: h.volajici,
+      volajiciLabel: (VOLAJICI_LABEL as Record<string, string>)[h.volajici] ?? h.volajici,
+      jmeno: h.jmeno,
+      duvod: h.duvod,
+      pocet: h.pocet,
+      gameDate: h.game_date,
+      seen: h.seen === 1,
+    })),
+  });
+});
+
+/** Seznam otevřen, hovory přestávají svítit. */
+messagingRouter.post("/teams/:teamId/missed-calls/seen", async (c) => {
+  const { oznacHovoryPrectene } = await import("../messaging/missed-calls");
+  await oznacHovoryPrectene(c.env.DB, c.req.param("teamId"));
+  return c.json({ ok: true });
+});
+
 // GET /api/teams/:teamId/conversations/:convId — zprávy v konverzaci
 /**
  * Dá se do téhle konverzace psát, a co to stojí?

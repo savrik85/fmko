@@ -11,6 +11,7 @@ import { PhoneFrame } from "@/components/phone/phone-frame";
 import { Adresar } from "./Adresar";
 import { Oznameni } from "./Oznameni";
 import { ZamykaciObrazovka, jeOdemceno } from "./ZamykaciObrazovka";
+import { Hovory } from "./Hovory";
 import { Tribuna } from "./Tribuna";
 
 interface Conversation {
@@ -81,12 +82,14 @@ function ZalozkaTelefonu({ emoji, label, badge, aktivni, onClick }: {
       type="button"
       onClick={onClick}
       aria-current={aktivni ? "page" : undefined}
-      className={`relative flex-1 py-2 flex flex-col items-center gap-0.5 text-sm ${
+      // Čtyři záložky na 390px displeji: užší odsazení, ať se popisky
+      // nezalamují. Menší písmo ne, minimum je `text-sm`.
+      className={`relative flex-1 min-w-0 px-0.5 py-2 flex flex-col items-center gap-0.5 text-sm ${
         aktivni ? "bg-[#3a3a3c] font-bold" : "hover:bg-[#3a3a3c]/60"
       }`}
     >
       <span className="text-base leading-none">{emoji}</span>
-      <span>{label}</span>
+      <span className="truncate max-w-full">{label}</span>
       {badge && (
         <span className="absolute top-1.5 right-1/2 translate-x-4 w-2.5 h-2.5 rounded-full bg-card-red ring-2 ring-pitch-700" />
       )}
@@ -130,6 +133,8 @@ export default function PhonePage() {
   // Zámek. `true` do prvního vykreslení na klientu, jinak by při hydrataci
   // problikl odemčený telefon a hned se zamkl.
   const [zamceno, setZamceno] = useState(true);
+  const [hovoryOtevrene, setHovoryOtevrene] = useState(false);
+  const [zmeskaneHovory, setZmeskaneHovory] = useState(0);
   const [credit, setCredit] = useState<Credit | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -142,6 +147,9 @@ export default function PhonePage() {
       .then(setCredit)
       .catch((e) => console.error("načtení kreditu:", e));
     nactiOznameni();
+    apiFetch<{ unread: number }>(`/api/teams/${teamId}/missed-calls`)
+      .then((d) => setZmeskaneHovory(d.unread ?? 0))
+      .catch((e) => console.error("zmeškané hovory:", e));
   }, [teamId]);
 
   // `sessionStorage` je až na klientu, proto ne v počátečním stavu.
@@ -189,6 +197,12 @@ export default function PhonePage() {
           emoji="&#128483;&#65039;"
           label="Socky"
           onClick={() => setTribunaOtevrena(true)}
+        />
+        <ZalozkaTelefonu
+          emoji="&#128222;"
+          label="Hovory"
+          badge={zmeskaneHovory > 0}
+          onClick={() => { setZmeskaneHovory(0); setHovoryOtevrene(true); }}
         />
         <ZalozkaTelefonu
           emoji="&#128276;"
@@ -266,6 +280,10 @@ export default function PhonePage() {
           </div>
         )}
       </div>
+
+      {hovoryOtevrene && teamId && (
+        <Hovory teamId={teamId} onZavrit={() => setHovoryOtevrene(false)} />
+      )}
 
       {tribunaOtevrena && teamId && (
         <Tribuna teamId={teamId} onZavrit={() => setTribunaOtevrena(false)} />
