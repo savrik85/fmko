@@ -60,7 +60,7 @@ export async function removePlayer(
 ): Promise<RemovePlayerResult> {
   const row = await db
     .prepare(
-      `SELECT p.*, t.name AS team_name, t.league_id AS team_league_id, t.village_id AS team_village_id, v.district AS district
+      `SELECT p.*, t.name AS team_name, t.league_id AS team_league_id, t.village_id AS team_village_id, t.game_date AS team_game_date, v.district AS district
        FROM players p
        JOIN teams t ON p.team_id = t.id
        JOIN villages v ON t.village_id = v.id
@@ -159,6 +159,12 @@ export async function removePlayer(
   const results = await db.batch(batch);
   const deleted = results[results.length - 1];
   if (!deleted || deleted.meta.changes !== 1) return { ok: false, reason: "not_found" };
+
+  // Kampaň fanoušků „hráč ven" tím skončila. Bez tohohle běžící kampaň vyšuměla až
+  // po deseti dnech a splněná nekončila nikdy: zůstala na stránce fanoušků i poté,
+  // co klub hráče kvůli ní prodal. Hráč už je smazaný, chyba tady odchod nezvrátí.
+  const { uzavriKampaneNaHrace } = await import("../fans/fan-campaigns");
+  await uzavriKampaneNaHrace(db, teamId, playerId, (row.team_game_date as string) ?? new Date().toISOString());
 
   return {
     ok: true,
