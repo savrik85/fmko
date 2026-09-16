@@ -71,32 +71,30 @@ function pickWeighted<T extends { weight?: number }>(items: T[], rand: () => num
  * Volá se POUZE z daily-tick.ts, který je idempotentní per herní den.
  */
 export async function applyRandomLifeEvents(db: D1Database): Promise<{ applied: number }> {
-  // Načteme jen aktivní hráče lidských týmů (AI týmů je zbytečné fluffovat)
+  // Aktivní hráči lidských týmů (AI týmů je zbytečné fluffovat), kteří nejsou v cooldownu.
+  //
+  // Cooldown se vyhodnocuje přímo v SQL. Dřív šel samostatným dotazem s `IN (?, ?, …)`
+  // přes id všech hráčů. D1 povoluje jen omezený počet vázaných parametrů na dotaz,
+  // při stovkách hráčů dotaz spadl, `.catch` vrátil prázdno a cooldown tiše přestal
+  // platit: na testu dostávali hráči události i dva dny po sobě.
   const players = await db.prepare(
     `SELECT p.id, p.team_id, p.first_name, p.last_name, json_extract(p.life_context, '$.condition') as cond
      FROM players p JOIN teams t ON p.team_id = t.id
-     WHERE (p.status IS NULL OR p.status = 'active') AND t.user_id != 'ai'`,
+     WHERE (p.status IS NULL OR p.status = 'active') AND t.user_id != 'ai'
+       AND NOT EXISTS (
+         SELECT 1 FROM condition_log cl
+         WHERE cl.player_id = p.id AND cl.source = 'event'
+           AND cl.created_at >= datetime('now', '-5 days')
+       )`,
   ).all<{ id: string; team_id: string; first_name: string; last_name: string; cond: number }>()
     .catch((e) => { logger.warn({ module: "random-events" }, "load players", e); return { results: [] }; });
 
   if (players.results.length === 0) return { applied: 0 };
 
-  // Player IDs s eventem v posledních 5 dnech (cooldown)
-  const playerIds = players.results.map((p) => p.id);
-  const placeholders = playerIds.map(() => "?").join(",");
-  const recentEvents = await db.prepare(
-    `SELECT DISTINCT player_id FROM condition_log
-     WHERE source = 'event' AND created_at >= datetime('now', '-5 days')
-       AND player_id IN (${placeholders})`,
-  ).bind(...playerIds).all<{ player_id: string }>()
-    .catch((e) => { logger.warn({ module: "random-events" }, "load recent events", e); return { results: [] }; });
-  const onCooldown = new Set(recentEvents.results.map((r) => r.player_id));
-
   const stmts: D1PreparedStatement[] = [];
   let applied = 0;
 
   for (const p of players.results) {
-    if (onCooldown.has(p.id)) continue;
     if (Math.random() >= 0.02) continue; // 2 % per den per hráč
 
     const event = pickWeighted(EVENT_POOL, Math.random);
@@ -120,6 +118,6 @@ export async function applyRandomLifeEvents(db: D1Database): Promise<{ applied: 
     await db.batch(stmts).catch((e) => logger.error({ module: "random-events" }, "batch apply events", e));
   }
 
-  logger.info({ module: "random-events" }, `applied ${applied} random events (${players.results.length} players, ${onCooldown.size} on cooldown)`);
+  logger.info({ module: "random-events" }, `applied ${applied} random events (${players.results.length} players mimo cooldown)`);
   return { applied };
 }
