@@ -57,7 +57,10 @@ incidentsRouter.get("/teams/:teamId/incidents", async (c) => {
        LEFT JOIN players p ON p.id = i.culprit_player_id
        LEFT JOIN departed_players d ON d.id = i.culprit_player_id
       WHERE i.team_id = ?
-        AND (i.status != 'uzavreny' OR i.game_date >= date((SELECT game_date FROM teams WHERE id = ?), '-30 days'))
+        AND COALESCE(i.resolution, '') != 'bez_skody'
+        AND (i.status != 'uzavreny'
+             OR (i.season_number = (SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1)
+                 AND i.game_date >= date((SELECT game_date FROM teams WHERE id = ?), '-30 days')))
       ORDER BY i.game_date DESC
       LIMIT 50`,
   ).bind(teamId, teamId).all<IncidentRow>()

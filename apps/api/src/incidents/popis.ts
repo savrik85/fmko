@@ -10,7 +10,7 @@ export function popisZtraty(z: Ztrata): string {
     case "vybaveni": {
       const nazev = CATEGORY_LABELS[z.kategorie] ?? z.kategorie;
       return z.urovniDolu >= z.uroven
-        ? `Zmizelo vybavení: ${nazev} (úroveň ${z.uroven})`
+        ? `Přišli jste o vybavení: ${nazev} (úroveň ${z.uroven})`
         : `${nazev}: úroveň ${z.uroven} → ${z.uroven - z.urovniDolu}`;
     }
     case "vybaveni_stav":

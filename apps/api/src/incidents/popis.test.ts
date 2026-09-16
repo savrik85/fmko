@@ -11,7 +11,7 @@ describe("popis škody", () => {
       popisZtraty({ typ: "travnik", pred: 70, po: 58 }),
     ];
     expect(vety).toEqual([
-      "Zmizelo vybavení: Dresy (úroveň 2)",
+      "Přišli jste o vybavení: Dresy (úroveň 2)",
       "Klubová kronika a vitrína: úroveň 3 → 2",
       "Klubová dodávka: stav 80 % → 35 %",
       "Rozbité zařízení: Šatny (o 1 úroveň)",
