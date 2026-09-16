@@ -38,10 +38,10 @@ interface Hovor {
   seen: boolean;
 }
 
-/** „1 zmeškaný", „3 zmeškané", „7 zmeškaných". Číslo se ke slovu nelepí samo. */
-function zmeskanychTvar(n: number): string {
-  if (n === 1) return "1 zmeškaný";
-  return n < 5 ? `${n} zmeškané` : `${n} zmeškaných`;
+/** „1 hovor", „3 hovory", „7 hovorů". Číslo se ke slovu nelepí samo. */
+function hovoruTvar(n: number): string {
+  if (n === 1) return "1 hovor";
+  return n < 5 ? `${n} hovory` : `${n} hovorů`;
 }
 
 /** „včera", „9:41", „14. 9." — jako v Nedávných. */
@@ -85,12 +85,15 @@ export function Hovory({ teamId, onZavrit }: { teamId: string; onZavrit: () => v
         </button>
       </div>
 
-      {/* Velký nadpis, jak ho má iOS nad seznamem. */}
-      <div className="shrink-0 px-4 pb-2 flex items-baseline justify-between">
-        <h2 className="text-3xl font-bold tracking-tight text-black">Nedávné</h2>
-        <span className="text-sm" style={{ color: SEDA }}>
-          {hovory && hovory.length > 0 ? zmeskanychTvar(hovory.length) : ""}
-        </span>
+      {/* Velký nadpis, jak ho má iOS nad seznamem. Počet je pod ním, na jeden
+          řádek vedle sebe se na šířku telefonu nevejdou. */}
+      <div className="shrink-0 px-4 pb-2">
+        <h2 className="text-2xl font-bold tracking-tight text-black leading-tight">
+          Nepřijaté hovory
+        </h2>
+        {hovory && hovory.length > 0 && (
+          <p className="text-sm mt-0.5" style={{ color: SEDA }}>{hovoruTvar(hovory.length)}</p>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -98,7 +101,7 @@ export function Hovory({ teamId, onZavrit }: { teamId: string; onZavrit: () => v
           <div className="flex items-center justify-center h-40"><Spinner /></div>
         ) : hovory.length === 0 ? (
           <div className="px-6 py-10 text-center">
-            <p className="text-base mb-1 text-black">Žádné zmeškané hovory</p>
+            <p className="text-base mb-1 text-black">Nikdo nevolal</p>
             <p className="text-sm" style={{ color: SEDA }}>
               Buď je klid, nebo to ještě nikdo nezjistil.
             </p>
