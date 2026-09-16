@@ -99,13 +99,16 @@ CREATE INDEX IF NOT EXISTS idx_club_incidents_team ON club_incidents(team_id, st
 CREATE INDEX IF NOT EXISTS idx_club_incidents_player ON club_incidents(culprit_player_id);
 ```
 
+`accused` (fáze 2): JSON pole `Obvineni[]` `{playerId, jmeno, den, vysledek}`, výsledek
+`priznal | usvedcen | zapira`.
+
 `loss` je **JSON pole** `Ztrata[]` podle druhu škody:
 
 ```ts
 type Ztrata =
   | { typ: "vybaveni"; kategorie: string; uroven: number; stav: number; urovniDolu: number }
   | { typ: "vybaveni_stav"; kategorie: string; stavPred: number; stavPo: number }
-  | { typ: "stadion"; damageId?: string; zarizeni: string; urovni: number }
+  | { typ: "stadion"; damageId?: string; zarizeni: string; urovni: number; cena?: number }
   | { typ: "travnik"; pred: number; po: number }
   | { typ: "penize"; castka: number; zdrojZapasId?: string }
   | { typ: "hrac_odesel"; playerId: string; castka: number };
@@ -124,6 +127,7 @@ CREATE TABLE IF NOT EXISTS club_incident_clues (
   suspects            TEXT,                  -- JSON [playerId] — zúží na pár lidí
   holder_player_id    TEXT,                  -- hráč, od kterého se stopa dá získat (svědek)
   strength            INTEGER NOT NULL DEFAULT 1 CHECK(strength BETWEEN 1 AND 3), -- 3 = usvědčující
+  police_bonus        REAL NOT NULL DEFAULT 0,  -- o kolik nalezená stopa zvedne šanci policie
   text                TEXT NOT NULL,
   found               INTEGER NOT NULL DEFAULT 0,
   found_on            TEXT
@@ -152,6 +156,8 @@ CREATE TABLE IF NOT EXISTS club_incident_knowledge (
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_player ON club_incident_knowledge(player_id, until);
 ```
+
+Tabulka vzniká ve fázi 2 (migrace 0205), ve fázi 2 se zapisuje jen role `obvineny`.
 
 ### `club_incident_absences` (kdy hráč kvůli incidentu nemůže)
 
@@ -322,10 +328,13 @@ alkohol/100 × 1,0
 + (100 − vztah k trenérovi)/100 × 0,6
 + transferUnrest/100 × 0,5
 + aktivní dluhy 2,0 (odmítnutá záloha dalších 1,5)
-+ recidiva 1,0 (dříve usvědčen / odpuštěno do 60 dní)
++ recidiva 1,0 (odvozeno dotazem: pachatel incidentu uzavřeného v posledních 60 dnech téže
+  sezóny, kromě `bez_skody`, `nestalo_se` a `konec_sezony` — nic se navíc neukládá, platí i pro
+  nevyřešené)
 ```
 
-Hráči s váhou < 1,2 nejsou kandidáti — disciplinovaný věrný hráč nekrade.
+Hráči s váhou < 1,7 nejsou kandidáti — disciplinovaný věrný hráč nekrade. Kalibrace z testovacích
+dat: při 1,2 byl kandidátem 89 % hráčů, při 1,7 zhruba polovina.
 
 Pokus o krádež: nejdřív se vybere kandidát z kádru (`vyberHrace`). S pravděpodobností 50 % (nebo vždy, když kandidát není) jde o pokus zvenku. Pokus zvenku uspěje s pravděpodobností plot × osvětlení × `theftRiskMul`; když neuspěje, nestane se nic. Úspěšného zloděje ještě může vyplašit alarm (zabezpečení ≥ 2 u skladu a kabin, = 3 u parkoviště). Zabezpečení tak krádeže ubírá, nepřesouvá je na hráče.
 
@@ -346,6 +355,20 @@ Zaměstnanec jako pachatel: jen `kasa_obcerstveni` (najatá `obsluha`, 20 %) a `
 | `bazar` | zboží v bazaru je poznatelné (Část 8) | „V bazaru jsou dresy, co vypadají jako naše" | 1 | ano |
 | `policie` | výsledek šetření | pachatel / vrácené věci | 3 | ano |
 | `priznani` | pachatel se přiznal | pachatel | 3 | ano |
+
+**Místa incidentů.** Podle místa se pozná, jestli na incident vidí kamera: `vloupani_sklad`
+sklad; `vitrina`, `oslava_v_kabine`, `kopnute_dvere`, `kradez_kamery` kabiny; `dodavka_pujcena`,
+`dodavka_ukradena` parkoviště; `koleje_trakturek`, `svetlice`, `vandal` hřiště; `pozar_grilu`
+stánek. Zabezpečení areálu úroveň 2 pokrývá kabiny a sklad, úroveň 3 celý areál (i parkoviště,
+hřiště, stánek).
+
+Doplňující pravidla ke stopám:
+- Nefunkční záznam kamery se hlásí jen tehdy, kdyby kamera dané místo pokrývala — jinde incident kamerou vůbec neprochází.
+- Hráč, kterého kamera nepoznala, je „postava bez obličeje" (síla 1, policii +0,2); poznaného hráče kamera ukáže rovnou (síla 3, policii +0,35).
+- Ukradené kamery (`kradez_kamery`) nenatočí nic, k tomuto incidentu stopa z kamery nevzniká.
+- Správce hřiště: u hráče `ukazujeNa` síla 2 a policii +0,1 (stejná cena jako svědek); u cizího pachatele popis auta, síla 2, policii +0,15.
+- Kamarád a rival mají pro policii stejnou cenu jako svědek, +0,1, jen když je jejich stopa nalezená (výslechem).
+- Stopy nevznikají u odhaleného pachatele (např. `kopnute_dvere`), u nehody (pachatel `nikdo`) ani u uzavřených incidentů — není co vyšetřovat.
 
 **Stav vyšetřování pro manažera** (odvozeno z nalezených stop):
 - **Pachatel známý** — nalezená stopa síly 3 s `points_to`, nebo přiznání. Nastaví `culprit_revealed = 1`.
@@ -473,9 +496,12 @@ Max. 2 obvinění na incident. Rozhodnutí je deterministické v okamžiku klikn
 
 | Situace | Výsledek |
 |---|---|
-| obviněný je pachatel, na něj je nalezená stopa | přizná se nebo je usvědčen → `revealed = 1` |
+| obviněný je pachatel, ukazuje na něj nalezená stopa (přímo, nebo je mezi podezřelými) | přizná se nebo je usvědčen → `revealed = 1` |
 | obviněný je pachatel, bez stopy | šance na přiznání jako v 7a bez bonusu; jinak zapírá, zůstává podezřelý; vztah k trenérovi −8 |
-| obviněný je nevinný | morálka −12, vztah k trenérovi −20, znalost `obvineny` na 60 dní, kamarádi obviněného morálka −3, kádr morálka −2 |
+| obviněný je nevinný | morálka −12, vztah k trenérovi −20, znalost `obvineny` na 60 dní, kamarádi obviněného morálka −3, kádr morálka −2 (bez obviněného a jeho kamarádů — ti mají −3 zvlášť) |
+
+Po odhalení (přiznáním i usvědčením) se lhůta na rozhodnutí prodlouží aspoň na dnes + 3 dny, aby
+na manažera po pozdním obvinění zbyl čas vybrat trest.
 
 Hráč odpoví SMS (`sendPlayerSMS`) — AI text, při vypnutém modelu šablona.
 
@@ -484,9 +510,16 @@ Hráč odpoví SMS (`sendPlayerSMS`) — AI text, při vypnutém modelu šablona
 **Policie:**
 - Jen jednou na incident. `status = policie`, výsledek za 3–7 herních dní. SMS od „Policie ČR, obvodní oddělení".
 - Šance: 0,15 + kamera s identifikací 0,35 + kamera bez identity 0,2 + soused 0,15 + aktivní poznaný inzerát 0,3 + nalezený svědek 0,1 + policista v kádru 0,1; strop 0,9.
-- **Úspěch, cizí pachatel:** vybavení se vrátí (úroveň a stav z `loss`), **jen když má klub nižší úroveň**, jinak SMS „věci máte na služebně, ale už máte lepší" a `recovered = 1` bez změny. Peníze 50–100 % zpět (`incident_recovery`). Inzerát se stáhne. Zpravodaj.
-- **Úspěch, pachatel z kádru:** `revealed = 1`, podmínka: výslech (1 den) a soudní jednání (1 den) jako incidentní absence ohlášené ≥ 2 dny dopředu (17a). Hráč zůstává. Pokud je pachatel oblíbený (vůdcovství ≥ 65 nebo ≥ 2 vztahy síly ≥ 50), kádr morálka −3 („trenér je práskač").
-- **Neúspěch:** zpět na `otevreny`, lhůta +3 dny.
+- Výsledek se losuje v den výsledku (`seed "policie|" + id`) — první číslo z generátoru rozhoduje, jestli se šetření povedlo.
+- **Úspěch, cizí pachatel:** vybavení se vrátí (úroveň a stav z `loss`), **jen když má klub nižší úroveň**, jinak SMS „věci máte na služebně, ale už máte lepší" a `recovered = 1` bez změny. Inzerát se stáhne. Zpravodaj.
+- **Úspěch, pachatel z kádru:** `culprit_revealed = 1`, incident se vrací na `otevreny` s lhůtou dnes + 7 — trest volí manažer stejně jako po každém jiném odhalení (7d).
+- **Pachatel `nikdo`:** výsledek `nehoda`, incident se rovnou uzavře.
+- **Cizí pachatel u poškození** (rozbité se na rozdíl od krádeže vrátit nedá): náhrada 50–100 % hodnoty škody jako `incident_recovery`.
+- **Neúspěch:** zpět na `otevreny`, lhůta dnes + 3 dny.
+
+**Udání vlastního hráče** (trest `policie`, 7d): `status = policie`, `resolution = policie`, výsledek
+vždy za 3–7 dní „podmínka" — u vlastního udání se nic nešetří, jen se čeká na soud. Pokud je
+pachatel oblíbený (vůdcovství ≥ 65 nebo ≥ 2 vztahy síly ≥ 50), kádr morálka −3 („trenér je práskač").
 
 **Záloha (situace `dluhy`):**
 - `pujcit`: `recordTransaction(..., "incident_advance", −3 000 až −8 000)`, srážka zpět 4 týdny, morálka +6, vztah +8. Když hráč odejde dřív, zbytek propadá.
@@ -498,12 +531,15 @@ Hráč odpoví SMS (`sendPlayerSMS`) — AI text, při vypnutém modelu šablona
 | Akce | Dopad |
 |---|---|
 | `odpustit` | pachatel morálka +5, vztah +8; při závažnosti ≥ 2 kádr morálka −2; recidiva 60 dní |
-| `srazka` | min(škoda, 4 × týdenní mzda) rozložené do 4 pondělků: `recordTransaction(+x, "incident_deduction", reference "srazka-{id}-t{n}")`; pachatel morálka −6, vztah −4; odchodem hráče srážka končí |
-| `pokuta` | jednorázově min(škoda, 2 × týdenní mzda, 5 000 Kč) jako `incident_fine`; morálka −8, vztah −6 |
-| `vyradit` `{zapasu: 1–3}` | incidentní absence s počítadlem zápasů (17a), **ne** `suspended_matches`; morálka −10; neoblíbený pachatel: kádr +1 |
-| `vyhodit` | `life_context.povest` (17g) → `removePlayer(db, id, "released", {toFreeAgent: true})` + zpráva o vyhazovu zloděje (17g, ne obecné `player_released`); oblíbený: kádr morálka −4, jinak +1 |
-| `policie` | tok 7c s jistým úspěchem |
+| `srazka` | min(škoda, 4 × týdenní mzda) rozložené do 4 pondělků, uložené jako `resolution_data = {celkem, tydnuZbyva}`; každé pondělí `recordTransaction(+x, "incident_deduction", reference "srazka-{id}-t{n}")`, poslední splátka doplatí zaokrouhlení; pachatel morálka −6, vztah −4; odchodem hráče srážka končí |
+| `pokuta` | jednorázově min(škoda, 2 × týdenní mzda, 5 000 Kč) jako `incident_fine`, reference `pokuta-{id}`; morálka −8, vztah −6 |
+| `vyradit` `{zapasu: 1–3}` | **fáze 3** — potřebuje `club_incident_absences` a odečet v `match-runner.ts`, ve fázi 2 mezi dostupnými tresty není; jinak incidentní absence s počítadlem zápasů (17a), **ne** `suspended_matches`; morálka −10; neoblíbený pachatel: kádr +1 |
+| `vyhodit` | ve fázi 2 jen `removePlayer(db, id, "released", {toFreeAgent: true})`; `life_context.povest` (17g) a zpráva o vyhazovu zloděje (17g, ne obecné `player_released`) přijdou ve fázi 10; oblíbený: kádr morálka −4, jinak +1 |
+| `policie` | tok 7c s jistým úspěchem — udání vlastního hráče vždy skončí „podmínkou" za 3–7 dní |
 | `nechat_byt` | nic; recidiva 60 dní |
+
+Reference transakcí incidentu: srážka `srazka-{id}-t{n}` (n = pořadí splátky), pokuta `pokuta-{id}`,
+náhrada od policie (7c) `nahrada-{id}`.
 
 `suspended_matches` se pro klubový trest nepoužívá: filtruje kádr **před** losem absencí,
 takže změna mezi SMS den předem a simulací by posunula omluvenky všem ostatním (17a).
@@ -524,7 +560,7 @@ Nepoužívá se `status = 'quit'`: takový hráč dál bere mzdu (`finance-proce
 | pachatel odhalen, bez trestu | `nechat_byt` |
 | `dluhy` bez odpovědi | `odmitnout` |
 
-Fáze 1: po lhůtě jen `nevyreseno`, s odhaleným pachatelem `nechat_byt`; recidiva a tresty až ve fázi 2.
+Od fáze 2 platí recidiva (odvozená, 5a); tresty volí manažer v lhůtě, po ní `nechat_byt`.
 
 Uzavřením se `until` veřejných znalostí posune na max(`until`, dnes + 7).
 
@@ -539,6 +575,9 @@ Uzavřením se `until` veřejných znalostí posune na max(`until`, dnes + 7).
 | obec | přízeň, důvěra, historie, petice, investice, brigády, starosta | Část 17e |
 | Zpravodaj | závažnost ≥ 2, útěk, výsledek policie, hrdina | `news` typ `incident` (celá liga), `KVOTY` a `NEWS_ICONS` v `news/feed.ts` |
 | finance | nové typy | `TransactionType`: `incident_loss`, `incident_recovery`, `incident_fine`, `incident_deduction`, `incident_advance`, `incident_gift` + `TXN_LABELS`/`TXN_ICONS` (FE), hlídá `transaction-labels.test.ts` |
+
+Fáze 2: jen SMS, notifikace a transakce `incident_fine`, `incident_deduction`, `incident_recovery`.
+Reputace, Zpravodaj, fanoušci, obec a atributy manažera přijdou ve fázích 3, 8 a 9.
 
 ---
 
@@ -792,7 +831,8 @@ obec, tisk, přestupy, fanoušci, sponzoři, grémium, sezóna) jsou uvedené p�
 Každá fáze samostatně: build → commit → push testing → ověření API + MCP.
 
 1. **Základ** — migrace, `area_security`, katalog krádeží a poškození, pachatel, dopady, notifikace/SMS, denní krok, admin force, stránka incidentu (jen zobrazení), odstranění starých pravidel.
-2. **Vyšetřování** — stopy, stav vyšetřování, obvinění, policie, tresty, lhůty, srážky.
+2. **Vyšetřování** — stopy, stav vyšetřování, obvinění, policie, tresty, lhůty, srážky (hotovo na
+   testingu, plán `docs/superpowers/plans/2026-09-16-incidenty-faze-2.md`).
 3. **Absence, trénink a zápas** (17a–17c) — sdílený převod hráče pro absence, incidentní absence, výmluvy, trénink, zápasové modifikátory, klubové vyřazení.
 4. **Znalosti a chat** (Část 10, 17d) — znalosti, prompt, detekce tématu, výslech, vynucené scénáře, domácnost.
 5. **Bazar** — soukromé inzeráty, poznání, nahlásit, koupit zpět.
