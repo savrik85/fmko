@@ -96,6 +96,16 @@ describe("katalog: nikdy se nesáhne na věc, kterou klub nemá", () => {
     proSeedy((rng) => { if (def("pozar_grilu").vytvor(seStankem, rng)?.ztraty.some((z) => z.typ === "stadion")) stanek++; });
     expect(stanek).toBeGreaterThan(0);
   });
+
+  it("dodávka se nezmění v den zápasu ani den před ním", () => {
+    const s = stavKlubu({ vybaveni: { team_van: 2, team_van_condition: 80 }, kadr: [PROBLEMOVY], zapasDnesNeboZitra: true });
+    expect(def("dodavka_pujcena").muze(s)).toBe(false);
+    expect(def("dodavka_ukradena").muze(s)).toBe(false);
+    proSeedy((rng) => {
+      expect(def("dodavka_pujcena").vytvor(s, rng)).toBeNull();
+      expect(def("dodavka_ukradena").vytvor(s, rng)).toBeNull();
+    });
+  });
 });
 
 describe("katalog: spouštěné incidenty", () => {

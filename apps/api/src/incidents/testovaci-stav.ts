@@ -19,7 +19,7 @@ export function stavKlubu(over: Partial<StavKlubu> = {}): StavKlubu {
     gameDate: "2026-09-16T16:00:00.000Z", den: "2026-09-16",
     vybaveni: {}, stadion: { pitch_condition: 70 }, kadr: [],
     vcera: null, hospodaVcera: [], odehranychZapasu: 10,
-    otevreneProblemy: 0, posledniVyskyt: {},
+    otevreneProblemy: 0, posledniVyskyt: {}, zapasDnesNeboZitra: false,
     ...over,
   };
 }

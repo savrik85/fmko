@@ -45,6 +45,8 @@ export interface StavKlubu {
   /** Hráči klubu (ne hosté, ne trenér), kteří byli předchozí den v hospodě. */
   hospodaVcera: string[];
   odehranychZapasu: number;
+  /** Klub hraje soutěžní zápas dnes nebo zítra. Dodávka se pak nesmí změnit (omluvenky vs. zápas). */
+  zapasDnesNeboZitra: boolean;
   /** Otevřené krádeže a poškození (`otevreny` nebo `policie`). */
   otevreneProblemy: number;
   /** kind → `YYYY-MM-DD` posledního výskytu v aktuální sezóně. */

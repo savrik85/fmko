@@ -41,6 +41,12 @@ function predchoziDen(den: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+function nasledujiciDen(den: string): string {
+  const d = new Date(`${den}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function nactiStavKlubu(
   db: D1Database,
   team: { id: string; league_id: string | null },
@@ -50,6 +56,7 @@ export async function nactiStavKlubu(
   const teamId = team.id;
   const den = gameDate.slice(0, 10);
   const vcera = predchoziDen(den);
+  const zitra = nasledujiciDen(den);
 
   const vybaveniRow = await ensureEquipmentRow(db, teamId);
   if (!vybaveniRow) return null;
@@ -73,9 +80,15 @@ export async function nactiStavKlubu(
               SUM(CASE WHEN status IN ('otevreny', 'policie') AND category IN ('kradez', 'poskozeni') THEN 1 ELSE 0 END) AS otevrene
          FROM club_incidents WHERE team_id = ? AND season_number = ? GROUP BY kind`,
     ).bind(teamId, seasonNumber),
+    db.prepare(
+      `SELECT 1 AS ano FROM season_calendar sc
+        WHERE sc.status = 'scheduled' AND substr(sc.scheduled_at, 1, 10) IN (?1, ?2)
+          AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id AND (m.home_team_id = ?3 OR m.away_team_id = ?3))
+        LIMIT 1`,
+    ).bind(den, zitra, teamId),
   ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
   if (!vysledky) return null;
-  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes] = vysledky;
+  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes] = vysledky;
 
   const stadion: Record<string, number> = {};
   for (const [k, v] of Object.entries((stadionRes.results[0] ?? {}) as Record<string, unknown>)) {
@@ -126,5 +139,6 @@ export async function nactiStavKlubu(
     vybaveni, stadion, kadr, vcera: vceraZapas, hospodaVcera,
     odehranychZapasu: cislo((pocetRes.results[0] as { n?: number } | undefined)?.n, 0),
     otevreneProblemy, posledniVyskyt,
+    zapasDnesNeboZitra: blizkyZapasRes.results.length > 0,
   };
 }

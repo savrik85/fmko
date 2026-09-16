@@ -139,8 +139,9 @@ export const KATALOG: DefiniceIncidentu[] = [
   },
   {
     kind: "dodavka_pujcena", label: "Půjčená dodávka", emoji: "🚐", category: "kradez", vaha: 2, spousteny: false,
-    muze: (s) => uroven(s, "team_van") >= 1,
+    muze: (s) => uroven(s, "team_van") >= 1 && !s.zapasDnesNeboZitra,
     vytvor: (s, rng) => {
+      if (s.zapasDnesNeboZitra) return null;
       if (uroven(s, "team_van") < 1) return null;
       const hrac = vyberHrace(s.kadr, rng);
       if (!hrac) return null;
@@ -157,8 +158,9 @@ export const KATALOG: DefiniceIncidentu[] = [
   },
   {
     kind: "dodavka_ukradena", label: "Ukradená dodávka", emoji: "🚐", category: "kradez", vaha: 0.3, spousteny: false,
-    muze: (s) => uroven(s, "team_van") >= 1,
+    muze: (s) => uroven(s, "team_van") >= 1 && !s.zapasDnesNeboZitra,
     vytvor: (s, rng) => {
+      if (s.zapasDnesNeboZitra) return null;
       const lv = uroven(s, "team_van");
       if (lv < 1) return null;
       const fx = zabezpeceni(s);
