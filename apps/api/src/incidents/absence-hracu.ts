@@ -65,37 +65,52 @@ function dnyMezi(od: string, do_: string): number {
   return Math.round((Date.parse(`${do_.slice(0, 10)}T12:00:00.000Z`) - Date.parse(`${od.slice(0, 10)}T12:00:00.000Z`)) / 86_400_000);
 }
 
-/** Absence platné v herní den `den`. U jednoho hráče vyhrává první záznam. */
+/**
+ * Absence platné v herní den `den`. Datumová absence (výslech, soud) vyhrává nad vyřazením —
+ * je konkrétnější a časově přesně ohraničená, takže se zpracuje v prvním průchodu bez ohledu
+ * na pořadí řádků. Mezi záznamy stejného typu vyhrává první.
+ */
 export function platneAbsence(radky: readonly RadekAbsence[], den: string): Map<string, IncidentniAbsence> {
   const d = den.slice(0, 10);
   const vysledek = new Map<string, IncidentniAbsence>();
-  for (const r of radky) {
-    const plati = r.kind === "vyrazen"
-      ? (r.zapasu_zbyva ?? 0) > 0
-      : !!r.od_dne && !!r.do_dne && r.od_dne <= d && r.do_dne >= d;
-    if (!plati || vysledek.has(r.player_id)) continue;
+  const zapis = (r: RadekAbsence) => {
+    if (vysledek.has(r.player_id)) return;
     vysledek.set(r.player_id, { playerId: r.player_id, druh: r.kind, duvod: r.duvod, sms: r.sms });
+  };
+  for (const r of radky) {
+    if (r.kind !== "vyrazen" && !!r.od_dne && !!r.do_dne && r.od_dne <= d && r.do_dne >= d) zapis(r);
+  }
+  for (const r of radky) {
+    if (r.kind === "vyrazen" && (r.zapasu_zbyva ?? 0) > 0) zapis(r);
   }
   return vysledek;
 }
 
-/** Neprávem obvinění a odhalení pachatelé, na které incident ke dni `datum` ještě působí. */
-export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string): Map<string, DruhVlivu[]> {
+/**
+ * Obvinění, která skončila zapíráním (nevinný i vinný, který svou vinu zapřel), a odhalení
+ * pachatelé, na které incident ke dni `datum` ještě působí.
+ *
+ * `minOdstupObvineni` omezuje, jak čerstvé musí být obvinění, aby se počítalo — los omluvenek
+ * ho smí zohlednit jen tehdy, když je aspoň `MIN_OHLASENI_ABSENCE_DNI` dní staré (jinak by pozdní
+ * obvinění den před zápasem měnilo vstup do už rozjetého losu). Zápas a kabina čtou vliv bez
+ * odstupu (0).
+ */
+export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string, minOdstupObvineni = 0): Map<string, DruhVlivu[]> {
   const mapa = new Map<string, DruhVlivu[]>();
   const pridej = (id: string, druh: DruhVlivu) => {
     const druhy = mapa.get(id) ?? [];
     if (!druhy.includes(druh)) druhy.push(druh);
     mapa.set(id, druhy);
   };
-  const vOkne = (den: string) => {
+  const vOkne = (den: string, minDny: number) => {
     const dny = dnyMezi(den, datum);
-    return dny >= 0 && dny <= VLIV_INCIDENTU_DNI;
+    return dny >= minDny && dny <= VLIV_INCIDENTU_DNI;
   };
   for (const inc of incidenty) {
     for (const o of nactiObvineni(inc.accused)) {
-      if (o.playerId !== inc.culprit_player_id && vOkne(o.den)) pridej(o.playerId, "obvineny");
+      if (o.vysledek === "zapira" && vOkne(o.den, minOdstupObvineni)) pridej(o.playerId, "obvineny");
     }
-    if (inc.culprit_revealed === 1 && inc.culprit_player_id && vOkne(inc.game_date)) pridej(inc.culprit_player_id, "pachatel");
+    if (inc.culprit_revealed === 1 && inc.culprit_player_id && vOkne(inc.game_date, 0)) pridej(inc.culprit_player_id, "pachatel");
   }
   return mapa;
 }
@@ -186,19 +201,19 @@ export async function nactiIncidentniAbsence(db: D1Database, teamId: string, dat
   return platneAbsence(rows.results, den);
 }
 
-export async function nactiDruhyHracu(db: D1Database, teamId: string, datum: string): Promise<Map<string, DruhVlivu[]>> {
+export async function nactiDruhyHracu(db: D1Database, teamId: string, datum: string, minOdstupObvineni = 0): Promise<Map<string, DruhVlivu[]>> {
   const rows = await db.prepare(
     `SELECT culprit_player_id, culprit_revealed, accused, game_date FROM club_incidents
       WHERE team_id = ? AND game_date >= ? AND (accused != '[]' OR culprit_revealed = 1)`,
   ).bind(teamId, gameExpiry(datum, -OKNO_VLIVU_DNI)).all<IncidentProVliv>()
     .catch((e) => { logger.warn({ module: M }, `vlivy incidentů ${teamId}`, e); return { results: [] as IncidentProVliv[] }; });
-  return druhyHracu(rows.results, datum);
+  return druhyHracu(rows.results, datum, minOdstupObvineni);
 }
 
 export async function nactiIncidentniKontext(db: D1Database, teamId: string, datum: string): Promise<IncidentniKontext> {
   const [absence, druhy] = await Promise.all([
     nactiIncidentniAbsence(db, teamId, datum),
-    nactiDruhyHracu(db, teamId, datum),
+    nactiDruhyHracu(db, teamId, datum, MIN_OHLASENI_ABSENCE_DNI),
   ]);
   return { absence, druhy };
 }

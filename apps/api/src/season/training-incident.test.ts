@@ -18,7 +18,7 @@ function hrac(over: Partial<TrainingPlayer> = {}): TrainingPlayer {
 const PLAN = { sessionsPerWeek: 3, type: "tactics" as const, approach: "strict" as const };
 
 describe("incident na tréninku", () => {
-  it("hráč s výslechem nepřijde a důvod je výslech, bez incidentu přijde", () => {
+  it("hráč s výslechem na trénink nepřijde a důvod je výslech", () => {
     const squad = [hrac(), hrac({ firstName: "Petr" })];
     for (let seed = 1; seed <= 30; seed++) {
       const s = simulateTraining(createRng(seed), squad, PLAN, undefined, 1, undefined, {}, undefined, ["Byl na výslechu na policii", undefined]);

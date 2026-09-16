@@ -506,8 +506,14 @@ async function simulateCupTie(
 
   // Incidenty v klubu (spec 17c): neprávem obviněný a odhalený zloděj v sestavě.
   const { applyIncidentMatchMods } = await import("../incidents/zapas");
-  if (homeReal) await applyIncidentMatchMods(db, homeReal, [homeLineup, homeSubs], homeBuild.idMap);
-  if (awayReal) await applyIncidentMatchMods(db, awayReal, [awayLineup, awaySubs], awayBuild.idMap);
+  const homeIncidentMods = homeReal ? await applyIncidentMatchMods(db, homeReal, [homeLineup, homeSubs], homeBuild.idMap) : null;
+  const awayIncidentMods = awayReal ? await applyIncidentMatchMods(db, awayReal, [awayLineup, awaySubs], awayBuild.idMap) : null;
+  // Morálka snížená incidentem je jen dočasný handicap PRO TENTO zápas — při zápisu post-sim
+  // morálky do DB (níž) se tahle delta zase odečte, ať hráč nezůstane postižený trvale.
+  const incidentMoraleDelta = new Map<number, number>([
+    ...(homeIncidentMods?.moraleDelta ?? []),
+    ...(awayIncidentMods?.moraleDelta ?? []),
+  ]);
   if (homeLineup.length < 7 || awayLineup.length < 7) {
     logger.warn({ module: M }, `cup tie ${cupMatchId}: málo hráčů (home ${homeLineup.length}, away ${awayLineup.length}) → silová simulace bez statistik (kádr velkoklubu nebo tenký reálný kádr)`);
     const fb = simMatch(strengthOf.get(homeCupTeamId) ?? 30, strengthOf.get(awayCupTeamId) ?? 30, rng);
@@ -681,7 +687,10 @@ async function simulateCupTie(
       if (!dbId) continue;
       const realTeam = homePost.includes(p) ? homeReal : awayReal;
       if (!realTeam) continue; // velkoklub → není v players
-      condStmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?").bind(Math.round(p.condition), Math.round(p.morale), dbId));
+      // Odečíst dočasný incidentní handicap (spec 17c) — do DB jde jen morálka z herního
+      // výsledku, ne z toho, že hráč nastoupil obviněný.
+      const persistMorale = Math.max(0, Math.min(100, Math.round(p.morale - (incidentMoraleDelta.get(p.id) ?? 0))));
+      condStmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?").bind(Math.round(p.condition), persistMorale, dbId));
       const oldCond = preSimCondById.get(p.id);
       if (oldCond != null && Math.round(oldCond) !== Math.round(p.condition)) {
         condStmts.push(logConditionStmt(db, dbId, realTeam, oldCond, p.condition, "match", `Pohár (${result.homeScore}:${result.awayScore})`));

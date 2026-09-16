@@ -17,6 +17,13 @@ export interface HracVZapase {
 export interface IncidentVZapase {
   obvinenych: number;
   pachatelVSestave: boolean;
+  /**
+   * Engine player id → skutečně uplatněná změna morálky (záporná, po podlaze na 0). Slouží
+   * jen k tomu, aby volající uměl po zápase odečíst tenhle dočasný handicap zpátky předtím,
+   * než se výsledná morálka zapíše do `players.life_context` (spec 17c: modifikátory platí
+   * jen pro tenhle zápas, nesmí se propsat trvale).
+   */
+  moraleDelta: Map<number, number>;
 }
 
 const OBVINENY_MORALKA = -8;
@@ -31,10 +38,14 @@ export function upravSestavuZIncidentu(
 ): IncidentVZapase {
   const druhyHrace = (h: HracVZapase) => druhy.get(idMap.get(h.id) ?? "") ?? [];
   let obvinenych = 0;
+  const moraleDelta = new Map<number, number>();
+  const pridejDeltu = (h: HracVZapase, puvodni: number) => moraleDelta.set(h.id, (moraleDelta.get(h.id) ?? 0) + (h.morale - puvodni));
   for (const skupina of skupiny) {
     for (const h of skupina) {
       if (!druhyHrace(h).includes("obvineny")) continue;
+      const puvodni = h.morale;
       h.morale = Math.max(0, h.morale + OBVINENY_MORALKA);
+      pridejDeltu(h, puvodni);
       h.consistency = Math.max(0, h.consistency + OBVINENY_KONZISTENCE);
       obvinenych++;
     }
@@ -42,10 +53,14 @@ export function upravSestavuZIncidentu(
   const pachatelVSestave = (skupiny[0] ?? []).some((h) => druhyHrace(h).includes("pachatel"));
   if (pachatelVSestave) {
     for (const skupina of skupiny) {
-      for (const h of skupina) h.morale = Math.max(0, h.morale + PACHATEL_TYM_MORALKA);
+      for (const h of skupina) {
+        const puvodni = h.morale;
+        h.morale = Math.max(0, h.morale + PACHATEL_TYM_MORALKA);
+        pridejDeltu(h, puvodni);
+      }
     }
   }
-  return { obvinenych, pachatelVSestave };
+  return { obvinenych, pachatelVSestave, moraleDelta };
 }
 
 export async function applyIncidentMatchMods(

@@ -94,8 +94,8 @@ export async function processKabina(db: D1Database, teamId: string, gameDate?: s
     const jmeno = (id: string) => players.find((p) => p.id === id)?.name;
     const pachatel = idsKadru.find((id) => druhy.get(id)?.includes("pachatel"));
     const obvineny = idsKadru.find((id) => druhy.get(id)?.includes("obvineny"));
-    incident = pachatel && jmeno(pachatel) ? `kabina nevěří hráči, který kradl: ${jmeno(pachatel)}`
-      : obvineny && jmeno(obvineny) ? `křivé obvinění pořád dusí hráče: ${jmeno(obvineny)}`
+    incident = pachatel && jmeno(pachatel) ? `kabina nevěří hráči, kvůli kterému byl v klubu průšvih: ${jmeno(pachatel)}`
+      : obvineny && jmeno(obvineny) ? `obvinění pořád dusí hráče: ${jmeno(obvineny)}`
       : null;
   }
 

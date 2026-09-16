@@ -3797,15 +3797,17 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   const healthyPlayers = players.results.filter((r) => !injuredPreviewIds.has(r.id as string) && !suspendedPreviewIds.has(r.id as string));
 
   const { hracProAbsenci } = await import("../events/absence");
-  const { nactiIncidentniKontext, pridejIncidentniAbsence } = await import("../incidents/absence-hracu");
-  const incKontext = await nactiIncidentniKontext(c.env.DB, teamId, scheduledAt!);
-  const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row, incKontext.druhy.get(row.id as string)));
   const district = await fetchTeamDistrict(c.env.DB, teamId);
   // Preview spouští obě fáze se stejnými seedy jako SMS + simulace, pak deduplikuje dle playerIndex.
   // Absence zobrazujeme jen day-before nebo match-day (ne 2+ dny předem). Přátelák = vyšší šance.
   const friendlyMultiplier = isFriendly ? 1.8 : undefined;
   let absences: ReturnType<typeof generateAbsences> = [];
   if (daysUntilMatch <= 1) {
+    // Vlivy incidentů (spec 17a) se čtou jen tady — los běží jen v tomhle okně, dřív se dotaz
+    // na incidenty a sestavení absenceSquad dělaly zbytečně i 2+ dny před zápasem.
+    const { nactiIncidentniKontext, pridejIncidentniAbsence } = await import("../incidents/absence-hracu");
+    const incKontext = await nactiIncidentniKontext(c.env.DB, teamId, scheduledAt!);
+    const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row, incKontext.druhy.get(row.id as string)));
     const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "day_before" }));
     const matchDayRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "match_day" }));
     // Dodávka musí být i tady: preview jede na stejných seedech jako SMS a simulace,

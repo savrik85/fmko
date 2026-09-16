@@ -33,15 +33,33 @@ describe("platné absence", () => {
     const mapa = platneAbsence([radek({ kind: "vyslech", duvod: "Výslech na policii" }), radek()], "2026-09-20");
     expect(mapa.get("p")?.druh).toBe("vyslech");
   });
+
+  it("datumová absence vyhrává nad vyřazením i když je řádek s vyřazením v poli první", () => {
+    const radky = [
+      radek({ player_id: "x", kind: "vyrazen", od_dne: null, do_dne: null, zapasu_zbyva: 2, duvod: "Vyřazen trenérem", sms: "x." }),
+      radek({ player_id: "x", kind: "soud" }),
+    ];
+    expect(platneAbsence(radky, "2026-09-20").get("x")?.druh).toBe("soud");
+  });
 });
 
 describe("vlivy hráčů", () => {
-  const obvineni = (hraci: Array<[string, string]>) => JSON.stringify(hraci.map(([playerId, den]) => ({ playerId, jmeno: "X", den, vysledek: "zapira" })));
+  const obvineni = (hraci: Array<[string, string, string?]>) =>
+    JSON.stringify(hraci.map(([playerId, den, vysledek = "zapira"]) => ({ playerId, jmeno: "X", den, vysledek })));
 
-  it("neprávem obviněný do 14 dní, vinný obviněný ne", () => {
+  it("obvinění, které skončilo zapíráním, počítá i u pachatele — ne jen u nevinného", () => {
     const mapa = druhyHracu([{ culprit_player_id: "p", culprit_revealed: 0, accused: obvineni([["a", "2026-09-10"], ["p", "2026-09-10"]]), game_date: "2026-09-08T16:00:00.000Z" }], "2026-09-20T16:00:00.000Z");
     expect(mapa.get("a")).toEqual(["obvineny"]);
-    expect(mapa.has("p")).toBe(false);
+    expect(mapa.get("p")).toEqual(["obvineny"]);
+  });
+
+  it("přiznání nebo usvědčení vliv obvineny nezakládá", () => {
+    const mapa = druhyHracu([{
+      culprit_player_id: "p", culprit_revealed: 0,
+      accused: obvineni([["p", "2026-09-10", "priznal"], ["q", "2026-09-10", "usvedcen"]]),
+      game_date: "2026-09-08T16:00:00.000Z",
+    }], "2026-09-20T16:00:00.000Z");
+    expect(mapa.size).toBe(0);
   });
 
   it("po 14 dnech a před obviněním žádný vliv", () => {
@@ -56,6 +74,18 @@ describe("vlivy hráčů", () => {
     ], "2026-09-20");
     expect(mapa.get("p")).toEqual(["pachatel"]);
     expect(mapa.has("q")).toBe(false);
+  });
+
+  it("do losu omluvenek se počítá jen obvinění aspoň minOdstup dní před zápasem", () => {
+    const inc = { culprit_player_id: null, culprit_revealed: 0, accused: obvineni([["a", "2026-09-19"]]), game_date: "2026-09-01T16:00:00.000Z" };
+    // 2026-09-19 je 1 den před zápasem 2026-09-20: s odstupem 2 dny se ignoruje, bez odstupu se počítá.
+    expect(druhyHracu([inc], "2026-09-20", 2).size).toBe(0);
+    expect(druhyHracu([inc], "2026-09-20", 0).get("a")).toEqual(["obvineny"]);
+  });
+
+  it("obvinění 2 dny před zápasem se do losu už počítá", () => {
+    const inc = { culprit_player_id: null, culprit_revealed: 0, accused: obvineni([["a", "2026-09-18"]]), game_date: "2026-09-01T16:00:00.000Z" };
+    expect(druhyHracu([inc], "2026-09-20", 2).get("a")).toEqual(["obvineny"]);
   });
 });
 

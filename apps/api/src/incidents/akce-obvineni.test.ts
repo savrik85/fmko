@@ -79,14 +79,22 @@ describe("obvinění", () => {
     expect(db.davky.flat().some((d) => /INSERT OR IGNORE INTO club_incident_clues/.test(d.sql) && d.params[3] === "priznani")).toBe(true);
   });
 
-  it("křivé obvinění sníží motivaci trenéra, obvinění pachatele ne", async () => {
+  it("obvinění bez přiznání sníží motivaci trenéra, přiznání/usvědčení ne", async () => {
     await obvinHrace(prostredi(incidentRadek()).env, "tym-a", "inc-1", "a");
     expect(applyManagerAttrDelta).toHaveBeenCalledWith(
-      expect.anything(), "tym-a", "motivation", -1, "incident", expect.any(String),
+      expect.anything(), "tym-a", "motivation", -1, "incident", "Obvinění bez přiznání: Adam Kos",
       { referenceId: "inc-inc-1-mgr-motivation-1", gameDate: DNES },
     );
     vi.mocked(applyManagerAttrDelta).mockClear();
-    await obvinHrace(prostredi(incidentRadek(), [{ sql: /FROM players WHERE id = \? AND team_id = \?/, first: hracRadek("p", "Pepa", "Průšvih") }]).env, "tym-a", "inc-1", "p");
+    // Pachatel se stopou vedoucí na něj skončí vždy priznal/usvedcen, nikdy zapira.
+    const stopa = {
+      id: "inc-1-spravce-1", source: "spravce", points_to_player_id: "p", suspects: null, holder_player_id: null,
+      strength: 2, police_bonus: 0.1, text: "Správce.", found: 1,
+    };
+    await obvinHrace(prostredi(incidentRadek(), [
+      { sql: /FROM players WHERE id = \? AND team_id = \?/, first: hracRadek("p", "Pepa", "Průšvih") },
+      { sql: /FROM club_incident_clues/, all: [stopa] },
+    ]).env, "tym-a", "inc-1", "p");
     expect(applyManagerAttrDelta).not.toHaveBeenCalled();
   });
 });

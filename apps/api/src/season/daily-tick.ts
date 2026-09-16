@@ -404,10 +404,13 @@ export async function executeDailyTick(
         const commuteKms = playersResult.results.map((row) => (row.commute_km as number) ?? 0);
 
         // Den výslechu nebo soudu (spec 17b): hráč na trénink nepřijde. Vyřazení ze zápasů trénink nezakazuje.
+        // Herní den je `effectiveDate` (kanonický den ticku) — `team.game_date` tenhle dotaz (řádek ~192)
+        // vůbec nenačítá, takže by byl `undefined` a `.slice` uvnitř `nactiIncidentniAbsence` shodilo
+        // trénink celého lidského týmu do catch bloku.
         const { nactiIncidentniAbsence, duvodyNaTrenink } = await import("../incidents/absence-hracu");
         const incidentniDuvody = duvodyNaTrenink(
           playersResult.results.map((row) => row.id as string),
-          await nactiIncidentniAbsence(env.DB, teamId, team.game_date as string),
+          await nactiIncidentniAbsence(env.DB, teamId, effectiveDate.toISOString()),
         );
 
         const result = simulateTraining(rng, squad, {

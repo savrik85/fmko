@@ -173,9 +173,9 @@ const OBVINENY_VAHA_VYMLUVY = 0.5;
 
 const OBVINENY_EXCUSES = [
   { text: "Po tom, co jste mě obvinil, nemám na fotbal náladu.", emoji: "\u{1F624}" },
-  { text: "Nepřijdu. Pořád mě štve, že mě máte za zloděje.", emoji: "\u{1F624}" },
+  { text: "Nepřijdu. Pořád mě štve, že jste mě obvinil.", emoji: "\u{1F624}" },
   { text: "Dneska ne, trenére. Nejdřív si to musím v hlavě srovnat.", emoji: "\u{1F614}" },
-  { text: "Nechce se mi mezi kluky, co si o mně myslí, že kradu.", emoji: "\u{1F614}" },
+  { text: "Nechce se mi mezi kluky, co si myslí, že jsem to udělal.", emoji: "\u{1F614}" },
   { text: "Mám toho plný zuby, tentokrát vynechám.", emoji: "\u{1F624}" },
 ];
 

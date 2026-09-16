@@ -582,8 +582,15 @@ export async function runScheduledMatches(
 
             // Incidenty v klubu (spec 17c): neprávem obviněný a odhalený zloděj v sestavě.
             const {applyIncidentMatchMods} = await import("../incidents/zapas");
-            await applyIncidentMatchMods(db, homeTeamId, [homeLineup, homeSubs], homeBuild.idMap);
-            await applyIncidentMatchMods(db, awayTeamId, [awayLineup, awaySubs], awayBuild.idMap);
+            const homeIncidentMods = await applyIncidentMatchMods(db, homeTeamId, [homeLineup, homeSubs], homeBuild.idMap);
+            const awayIncidentMods = await applyIncidentMatchMods(db, awayTeamId, [awayLineup, awaySubs], awayBuild.idMap);
+            // Morálka snížená incidentem je jen dočasný handicap PRO TENTO zápas — při zápisu
+            // post-sim morálky do DB (níž) se tahle delta zase odečte, ať hráč nezůstane
+            // postižený trvale.
+            const incidentMoraleDelta = new Map<number, number>([
+                ...(homeIncidentMods?.moraleDelta ?? []),
+                ...(awayIncidentMods?.moraleDelta ?? []),
+            ]);
 
             // Pozvaní zastupitelé domácího týmu zvyšují homeAdvantage a attendance
             const acceptedOfficials = await db.prepare(
@@ -1171,11 +1178,14 @@ export async function runScheduledMatches(
                 for (const p of [...result.homeLineup, ...result.awayLineup]) {
                     const dbId = fullIdMap.get(p.id);
                     if (!dbId) continue;
+                    // Odečíst dočasný incidentní handicap (spec 17c) — do DB jde jen morálka
+                    // z herního výsledku, ne z toho, že hráč nastoupil obviněný.
+                    const persistMorale = Math.max(0, Math.min(100, Math.round(p.morale - (incidentMoraleDelta.get(p.id) ?? 0))));
                     stmts.push(db.prepare(
                         `UPDATE players
                          SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?)
                          WHERE id = ?`,
-                    ).bind(Math.round(p.condition), Math.round(p.morale), dbId));
+                    ).bind(Math.round(p.condition), persistMorale, dbId));
 
                     const oldCond = preSimCondById.get(p.id);
                     if (oldCond != null && Math.round(oldCond) !== Math.round(p.condition)) {
@@ -1437,11 +1447,11 @@ export async function buildMatchPlayers(
                 phase: "match_day"
             }));
             const { fetchTeamCommuteMod } = await import("../events/match-absences");
-            const { resolveWeatherForMatchKey } = await import("../season/season-weather");
+            const { resolveWeatherForDate } = await import("../season/season-weather");
             const vanCommuteMod = await fetchTeamCommuteMod(db, teamId);
-            // Počasí dne — stejný zdroj jako předpověď i SMS. Podle klíče, ne podle
-            // kalendáře: tudy chodí i pohár a přátelák, a těm kalendář termín nezná.
-            const absenceWeather = (await resolveWeatherForMatchKey(db, options.matchKey))?.weather;
+            // Počasí dne — stejný zdroj jako předpověď i SMS. `terminAbsenci` už zjištěné
+            // výš (kvůli vlivům incidentů), netřeba ho hledat znovu přes resolveWeatherForMatchKey.
+            const absenceWeather = terminAbsenci ? (await resolveWeatherForDate(db, terminAbsenci))?.weather : undefined;
             const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, {
               timing: "day_before", district, friendlyMultiplier: options.friendlyMultiplier,
               commuteMod: vanCommuteMod, weather: absenceWeather,

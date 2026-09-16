@@ -102,8 +102,8 @@ export async function obvinHrace(
     );
   }
   await db.batch(davka).catch((e) => logger.error({ module: M }, `následky obvinění ${incidentId}`, e));
-  if (!vinen) {
-    await atributTrenera(db, teamId, incidentId, "motivation", -1, `Křivé obvinění hráče: ${obvineny.jmeno}`, gameDate, `motivation-${poradi}`);
+  if (vysledek === "zapira") {
+    await atributTrenera(db, teamId, incidentId, "motivation", -1, `Obvinění bez přiznání: ${obvineny.jmeno}`, gameDate, `motivation-${poradi}`);
   }
 
   const klic = vysledek === "priznal" ? "obvineni_priznani" : vysledek === "usvedcen" ? "obvineni_usvedcen" : "obvineni_zapira";
@@ -225,7 +225,7 @@ export async function rozhodni(
         .catch((e) => logger.error({ module: M }, `vrácení incidentu po nepovedeném vyhazovu ${incidentId}`, e));
       return { ok: false, kod: 500, chyba: "Hráče se nepodařilo vyhodit" };
     }
-    await atributTrenera(db, teamId, incidentId, "discipline", 1, `Vyhozen zloděj: ${pachatel.jmeno}`, gameDate);
+    await atributTrenera(db, teamId, incidentId, "discipline", 1, `Vyhozen pachatel incidentu: ${pachatel.jmeno}`, gameDate);
     await posunKadru(db, teamId, oblibeny ? -4 : 1).run()
       .catch((e) => logger.warn({ module: M }, `morálka po vyhazovu ${incidentId}`, e));
     return { ok: true, castka: null };

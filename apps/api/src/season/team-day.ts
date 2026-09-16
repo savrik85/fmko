@@ -398,7 +398,9 @@ export async function processTeamDay(
           if (kab.potizista) parts.push(`${kab.potizista.name} dělá v kabině dusno`);
           if (kab.incident) parts.push(kab.incident);
           const { createNotification } = await import("../community/notifications");
-          await createNotification(env.DB, teamId, "event", "🧢 Kabina", `${parts.join(" · ")} (nálada ${kab.mood})`, "/dashboard/kadr",
+          const zprava = parts.join(" · ");
+          const zpravaVelke = zprava.charAt(0).toLocaleUpperCase("cs") + zprava.slice(1);
+          await createNotification(env.DB, teamId, "event", "🧢 Kabina", `${zpravaVelke} (nálada kabiny ${kab.mood})`, "/dashboard/kadr",
             { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB },
           ).catch((e) => logger.warn({ module: "daily-tick" }, "kabina notification", e));
         }

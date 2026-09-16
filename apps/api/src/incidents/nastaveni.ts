@@ -70,6 +70,6 @@ export const VYRAZENI_MAX_ZAPASU = 3;
 /** Jak dlouho obvinění a odhalení působí v zápase, v kabině a na docházce. */
 export const VLIV_INCIDENTU_DNI = 14;
 /** Jak daleko do minulosti se hledají incidenty s obviněním nebo odhalením. */
-export const OKNO_VLIVU_DNI = 30;
+export const OKNO_VLIVU_DNI = 45;
 export const DUVOD_ABSENCE = { vyslech: "Výslech na policii", soud: "Soudní jednání", vyrazen: "Vyřazen trenérem" } as const;
 export const EMOJI_ABSENCE: Record<string, string> = { vyslech: "🚓", soud: "⚖️", vyrazen: "⛔" };

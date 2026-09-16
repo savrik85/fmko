@@ -10,7 +10,9 @@ describe("incidenty v zápase", () => {
     const zaklad = [hrac(1), hrac(4, 5, 5)];
     const lavka = [hrac(3)];
     const info = upravSestavuZIncidentu([zaklad, lavka], ID_MAP, new Map([["o", ["obvineny"]]]));
-    expect(info).toEqual({ obvinenych: 1, pachatelVSestave: false });
+    // Morálka hráče 4 začínala na 5, OBVINENY_MORALKA je -8, ale podlaha je 0 →
+    // skutečně uplatněná delta je jen -5, ne -8.
+    expect(info).toEqual({ obvinenych: 1, pachatelVSestave: false, moraleDelta: new Map([[4, -5]]) });
     expect(zaklad[1]).toEqual({ id: 4, morale: 0, consistency: 0 });
     expect(zaklad[0]).toEqual(hrac(1));
     expect(lavka[0]).toEqual(hrac(3));
@@ -22,12 +24,15 @@ describe("incidenty v zápase", () => {
     const info = upravSestavuZIncidentu([zaklad, lavka], ID_MAP, new Map([["p", ["pachatel"]]]));
     expect(info.pachatelVSestave).toBe(true);
     expect([...zaklad, ...lavka].map((h) => h.morale)).toEqual([58, 58, 58]);
+    expect(info.moraleDelta).toEqual(new Map([[1, -2], [2, -2], [3, -2]]));
   });
 
   it("pachatel jen na lavičce týmu nevadí", () => {
     const zaklad = [hrac(1)];
     const lavka = [hrac(2)];
-    expect(upravSestavuZIncidentu([zaklad, lavka], ID_MAP, new Map([["p", ["pachatel"]]])).pachatelVSestave).toBe(false);
+    const info = upravSestavuZIncidentu([zaklad, lavka], ID_MAP, new Map([["p", ["pachatel"]]]));
+    expect(info.pachatelVSestave).toBe(false);
+    expect(info.moraleDelta).toEqual(new Map());
     expect(zaklad[0].morale).toBe(60);
   });
 
