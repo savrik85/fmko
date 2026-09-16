@@ -192,26 +192,6 @@ const EVENT_RULES: EventRule[] = [
       };
     },
   },
-
-  {
-    category: "negative",
-    title: "Vykradení kabiny",
-    emoji: "\u{1F977}",
-    baseProb: 0.03,
-    evaluate: (ctx) => {
-      const amount = ctx.rng.int(800, 3000);
-      const stolen = [
-        `Z kabiny zmizely míče a dresy. Škoda ${amount} Kč.`,
-        `Někdo vykradl kabinu přes noc. Ukradli výstroj za ${amount} Kč.`,
-        `Rozbité okno u kabiny, chybí sada tréninkových leiblů. Oprava a náhrada: ${amount} Kč.`,
-      ];
-      return {
-        prob: 1.0,
-        description: ctx.rng.pick(stolen),
-        effect: { type: "budget", value: -amount },
-      };
-    },
-  },
   {
     category: "negative",
     title: "Havárie na hřišti",
@@ -252,25 +232,6 @@ const EVENT_RULES: EventRule[] = [
         prob: 1.0,
         description: ctx.rng.pick(reasons),
         effect: { type: "budget", value: -amount, toLeague: true },
-      };
-    },
-  },
-  {
-    category: "negative",
-    title: "Vandalizmus",
-    emoji: "\u{1F4A5}",
-    baseProb: 0.02,
-    evaluate: (ctx) => {
-      const amount = ctx.rng.int(500, 2500);
-      const acts = [
-        `Někdo pomaloval kabiny sprejem. Přemalování: ${amount} Kč.`,
-        `Na hřišti někdo udělal burnout autem. Oprava trávníku: ${amount} Kč.`,
-        `Rozbité lavičky na tribuně. Oprava: ${amount} Kč.`,
-      ];
-      return {
-        prob: 1.0,
-        description: ctx.rng.pick(acts),
-        effect: { type: "budget", value: -amount },
       };
     },
   },
@@ -322,9 +283,7 @@ export function generateBetweenRoundEvents(
     // Pražské varianty textů
     if (district === "Praha") {
       const pragueTexts: Record<string, { title?: string; replace?: [string, string][] }> = {
-        "Vykradení kabiny": { title: "Vloupání do kabiny", replace: [["zlodějíčci", "bezdomovci"], ["někdo vykradl", "někdo se vloupal do"]] },
         "Havárie na hřišti": { title: "Havárie v areálu" },
-        "Vandalizmus": { replace: [["sprejoval kabiny", "tageři posprejovali plot"], ["po vsi", "po městské části"]] },
         "Dotace od obce": { title: "Grant z městské části", replace: [["obec", "městská část"], ["obce", "městské části"]] },
         "Reklama na plotě": { replace: [["na plot", "na mantinel"]] },
       };
