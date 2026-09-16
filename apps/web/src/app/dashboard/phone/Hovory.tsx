@@ -38,6 +38,12 @@ interface Hovor {
   seen: boolean;
 }
 
+/** „1 zmeškaný", „3 zmeškané", „7 zmeškaných". Číslo se ke slovu nelepí samo. */
+function zmeskanychTvar(n: number): string {
+  if (n === 1) return "1 zmeškaný";
+  return n < 5 ? `${n} zmeškané` : `${n} zmeškaných`;
+}
+
 /** „včera", „9:41", „14. 9." — jako v Nedávných. */
 function kdy(gameDate: string): string {
   const d = new Date(gameDate);
@@ -83,7 +89,7 @@ export function Hovory({ teamId, onZavrit }: { teamId: string; onZavrit: () => v
       <div className="shrink-0 px-4 pb-2 flex items-baseline justify-between">
         <h2 className="text-3xl font-bold tracking-tight text-black">Nedávné</h2>
         <span className="text-sm" style={{ color: SEDA }}>
-          {hovory && hovory.length > 0 ? `${hovory.length} zmeškaných` : ""}
+          {hovory && hovory.length > 0 ? zmeskanychTvar(hovory.length) : ""}
         </span>
       </div>
 
