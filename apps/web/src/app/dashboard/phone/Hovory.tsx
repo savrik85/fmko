@@ -9,20 +9,23 @@
  *
  * Nezvoní náhodně. Každý hovor má důvod navázaný na stav klubu, takže když
  * ti volá starosta, opravdu se na stadionu něco semlelo.
+ *
+ * Vzhled je schválně obtažený podle Nedávných v iPhonu, protože o tom ten
+ * vtip celý je: červené jméno, počet zvonění v závorce, šipka zmeškaného
+ * hovoru a modré „i" na detail. Kdyby to vypadalo jako další tabulka ve hře,
+ * nefungovalo by to. Proto tu jsou i systémové barvy iOS natvrdo, ne tokeny
+ * hry: tohle místo má působit jako cizí aplikace, ne jako Prales.
  */
 
 import { useEffect, useState } from "react";
 import { Spinner } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 
-const IKONA: Record<string, string> = {
-  kotel: "🔥",
-  sponzor: "💼",
-  starosta: "🏛️",
-  komise: "⚖️",
-  hrac: "👤",
-  novinar: "📰",
-};
+/** Barvy iOS, ať to sedí i vedle skutečného telefonu. */
+const MODRA = "#007AFF";
+const CERVENA = "#FF3B30";
+const SEDA = "#8E8E93";
+const LINKA = "#C6C6C8";
 
 interface Hovor {
   id: string;
@@ -35,9 +38,17 @@ interface Hovor {
   seen: boolean;
 }
 
+/** „včera", „9:41", „14. 9." — jako v Nedávných. */
 function kdy(gameDate: string): string {
   const d = new Date(gameDate);
   if (isNaN(d.getTime())) return "";
+  const dnes = new Date();
+  const denRozdil = Math.floor(
+    (Date.UTC(dnes.getFullYear(), dnes.getMonth(), dnes.getDate())
+      - Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000,
+  );
+  if (denRozdil <= 0) return d.toLocaleTimeString("cs", { hour: "numeric", minute: "2-digit" });
+  if (denRozdil === 1) return "včera";
   return `${d.getDate()}. ${d.getMonth() + 1}.`;
 }
 
@@ -56,57 +67,94 @@ export function Hovory({ teamId, onZavrit }: { teamId: string; onZavrit: () => v
 
   return (
     <div className="absolute inset-0 z-30 bg-white flex flex-col">
-      <div className="bg-[#1c1c1e] text-white px-3 py-2.5 flex items-center gap-2 shrink-0">
-        <button onClick={onZavrit} aria-label="Zpět" className="text-white/80 hover:text-white px-1">
-          &#9664;
+      {/* Horní lišta iOS: zpět vlevo modře, nic víc. */}
+      <div className="shrink-0 px-2 pt-2 pb-1">
+        <button
+          onClick={onZavrit}
+          className="flex items-center gap-0.5 px-1 py-1 text-base"
+          style={{ color: MODRA }}
+        >
+          <span className="text-xl leading-none -mt-0.5">&#8249;</span>
+          Telefon
         </button>
-        <span className="font-heading font-bold text-base">Zmeškané</span>
+      </div>
+
+      {/* Velký nadpis, jak ho má iOS nad seznamem. */}
+      <div className="shrink-0 px-4 pb-2 flex items-baseline justify-between">
+        <h2 className="text-3xl font-bold tracking-tight text-black">Nedávné</h2>
+        <span className="text-sm" style={{ color: SEDA }}>
+          {hovory && hovory.length > 0 ? `${hovory.length} zmeškaných` : ""}
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {hovory === null ? (
           <div className="flex items-center justify-center h-40"><Spinner /></div>
         ) : hovory.length === 0 ? (
-          <div className="p-6 text-center text-muted">
-            <p className="text-base mb-1">Nikdo nevolal</p>
-            <p className="text-sm">Buď je klid, nebo to ještě nikdo nezjistil.</p>
+          <div className="px-6 py-10 text-center">
+            <p className="text-base mb-1 text-black">Žádné zmeškané hovory</p>
+            <p className="text-sm" style={{ color: SEDA }}>
+              Buď je klid, nebo to ještě nikdo nezjistil.
+            </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {hovory.map((h) => (
-              <button
-                key={h.id}
-                type="button"
-                onClick={() => setRozbaleny(rozbaleny === h.id ? null : h.id)}
-                className="w-full text-left px-4 py-3 hover:bg-gray-50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-base shrink-0">
-                    {IKONA[h.volajici] ?? "📞"}
+          hovory.map((h) => {
+            const otevreny = rozbaleny === h.id;
+            return (
+              <div key={h.id}>
+                <div className="flex items-stretch pl-3 active:bg-gray-100">
+                  {/* Šipka příchozího zmeškaného hovoru, jako v Nedávných. */}
+                  <div className="shrink-0 w-6 flex items-start justify-center pt-3.5">
+                    <span className="text-base leading-none" style={{ color: SEDA }}>&#8601;</span>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    {/* Červeně jako nepřijatý hovor v mobilu. */}
-                    <div className="font-heading font-bold text-base text-card-red truncate">
-                      {h.jmeno}
-                      {h.pocet > 1 && <span className="ml-1.5 tabular-nums">({h.pocet})</span>}
-                    </div>
-                    <div className="text-sm text-muted">{h.volajiciLabel}</div>
-                  </div>
-                  <span className="text-sm text-muted shrink-0">{kdy(h.gameDate)}</span>
-                </div>
-                {rozbaleny === h.id && (
-                  <p className="text-sm text-ink-light mt-2 pl-13 leading-snug">{h.duvod}</p>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
 
-      <div className="shrink-0 bg-white border-t border-gray-100 px-4 py-2">
-        <p className="text-sm text-muted leading-snug">
-          Zpátky se volat nedá, na vsi se to řeší osobně. Klepnutím zjistíš, o co šlo.
-        </p>
+                  {/* Oddělovač začíná až za šipkou, ne od kraje displeje. */}
+                  <div
+                    className="flex-1 min-w-0 flex items-center gap-2 py-2.5 pr-2"
+                    style={{ boxShadow: `inset 0 -0.5px 0 ${LINKA}` }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setRozbaleny(otevreny ? null : h.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <div className="text-base truncate" style={{ color: CERVENA }}>
+                        <span className="font-semibold">{h.jmeno}</span>
+                        {h.pocet > 1 && <span className="ml-1 tabular-nums">({h.pocet})</span>}
+                      </div>
+                      <div className="text-sm mt-0.5" style={{ color: SEDA }}>{h.volajiciLabel}</div>
+                    </button>
+
+                    <span className="text-sm shrink-0 tabular-nums" style={{ color: SEDA }}>
+                      {kdy(h.gameDate)}
+                    </span>
+
+                    {/* Modré „i" otevírá detail, přesně jako v iPhonu. */}
+                    <button
+                      type="button"
+                      onClick={() => setRozbaleny(otevreny ? null : h.id)}
+                      aria-label={`Podrobnosti hovoru od ${h.jmeno}`}
+                      aria-expanded={otevreny}
+                      className="shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-sm font-serif italic"
+                      style={{ color: MODRA, borderColor: MODRA }}
+                    >
+                      i
+                    </button>
+                  </div>
+                </div>
+
+                {otevreny && (
+                  <div className="pl-9 pr-4 py-3 bg-[#F2F2F7]" style={{ boxShadow: `inset 0 -0.5px 0 ${LINKA}` }}>
+                    <p className="text-sm leading-snug text-black">{h.duvod}</p>
+                    <p className="text-sm mt-1.5" style={{ color: SEDA }}>
+                      Zpátky se volat nedá, na vsi se to řeší osobně.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
