@@ -503,6 +503,11 @@ async function simulateCupTie(
   const { applyManagerMatchBonus } = await import("../season/manager-match-bonus");
   if (homeReal) await applyManagerMatchBonus(db, homeReal, [homeLineup, homeSubs]);
   if (awayReal) await applyManagerMatchBonus(db, awayReal, [awayLineup, awaySubs]);
+
+  // Incidenty v klubu (spec 17c): neprávem obviněný a odhalený zloděj v sestavě.
+  const { applyIncidentMatchMods } = await import("../incidents/zapas");
+  if (homeReal) await applyIncidentMatchMods(db, homeReal, [homeLineup, homeSubs], homeBuild.idMap);
+  if (awayReal) await applyIncidentMatchMods(db, awayReal, [awayLineup, awaySubs], awayBuild.idMap);
   if (homeLineup.length < 7 || awayLineup.length < 7) {
     logger.warn({ module: M }, `cup tie ${cupMatchId}: málo hráčů (home ${homeLineup.length}, away ${awayLineup.length}) → silová simulace bez statistik (kádr velkoklubu nebo tenký reálný kádr)`);
     const fb = simMatch(strengthOf.get(homeCupTeamId) ?? 30, strengthOf.get(awayCupTeamId) ?? 30, rng);

@@ -580,6 +580,11 @@ export async function runScheduledMatches(
             await applyManagerMatchBonus(db, homeTeamId, [homeLineup, homeSubs]);
             await applyManagerMatchBonus(db, awayTeamId, [awayLineup, awaySubs]);
 
+            // Incidenty v klubu (spec 17c): neprávem obviněný a odhalený zloděj v sestavě.
+            const {applyIncidentMatchMods} = await import("../incidents/zapas");
+            await applyIncidentMatchMods(db, homeTeamId, [homeLineup, homeSubs], homeBuild.idMap);
+            await applyIncidentMatchMods(db, awayTeamId, [awayLineup, awaySubs], awayBuild.idMap);
+
             // Pozvaní zastupitelé domácího týmu zvyšují homeAdvantage a attendance
             const acceptedOfficials = await db.prepare(
                 `SELECT COUNT(*) as cnt
