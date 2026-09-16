@@ -7,9 +7,7 @@ import type { Bindings } from "../index";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { executeDailyTick } from "../season/daily-tick";
 import { recordTransaction } from "../season/finance-processor";
-import { generateBetweenRoundEvents } from "../events/between-rounds";
 import { getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seasonal-events";
-import type { GeneratedPlayer } from "../generators/player";
 import { logger } from "../lib/logger";
 import { validateMatchPlan, parseStoredPlan } from "../lib/match-plan-validation";
 import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
@@ -902,52 +900,6 @@ gameRouter.get("/teams/:teamId/wages", async (c) => {
     totalMonthly: Math.round(totalWeekly * 4.3),
     playerCount: result.results.length,
   });
-});
-
-// GET /api/teams/:id/events — mezikolové události
-gameRouter.get("/teams/:teamId/events", async (c) => {
-  const teamId = c.req.param("teamId");
-  const rng = createRng(cryptoSeed());
-
-  const team = await c.env.DB.prepare("SELECT * FROM teams WHERE id = ?").bind(teamId).first<Record<string, unknown>>();
-  if (!team) return c.json({ error: "Team not found" }, 404);
-
-  const playersResult = await c.env.DB.prepare("SELECT * FROM players WHERE team_id = ?").bind(teamId).all();
-
-  const generatedPlayers: GeneratedPlayer[] = playersResult.results.map((row) => {
-    const r = row as Record<string, unknown>;
-    const skills = JSON.parse(r.skills as string);
-    const personality = JSON.parse(r.personality as string);
-    const lifeContext = JSON.parse(r.life_context as string);
-    const phys = r.physical ? JSON.parse(r.physical as string) : {};
-    return {
-      firstName: r.first_name as string, lastName: r.last_name as string,
-      age: r.age as number, position: r.position as "GK" | "DEF" | "MID" | "FWD",
-      speed: skills.speed ?? 50, technique: skills.technique ?? 50,
-      shooting: skills.shooting ?? 50, passing: skills.passing ?? 50,
-      heading: skills.heading ?? 50, defense: skills.defense ?? 50,
-      goalkeeping: skills.goalkeeping ?? 50,
-      stamina: phys.stamina ?? skills.stamina ?? 50,
-      strength: phys.strength ?? skills.strength ?? 50,
-      injuryProneness: personality.injuryProneness ?? 50, discipline: personality.discipline ?? 50,
-      patriotism: personality.patriotism ?? 50, alcohol: personality.alcohol ?? 30,
-      temper: personality.temper ?? 40, occupation: lifeContext.occupation ?? "",
-      bodyType: "normal" as const, avatarConfig: {} as any,
-      condition: lifeContext.condition ?? 100, morale: lifeContext.morale ?? 50,
-      preferredFoot: "right" as const, preferredSide: "center" as const,
-      leadership: personality.leadership ?? 30, workRate: personality.workRate ?? 50,
-      aggression: personality.aggression ?? 40, consistency: personality.consistency ?? 50,
-      clutch: personality.clutch ?? 50,
-    };
-  });
-
-  const events = generateBetweenRoundEvents(
-    rng, generatedPlayers,
-    team.budget as number, team.reputation as number,
-    null, 1, team.district as string | undefined,
-  );
-
-  return c.json(events);
 });
 
 // GET /api/teams/:id/seasonal-events — all seasonal events (pending = with choices, resolved = past)
