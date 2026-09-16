@@ -715,9 +715,16 @@ async function applyResolutionAndClose(
   if (state.subject_player_id && (scenarioId === "team_chemistry" || scenarioId === "assist_teamwork")) {
     const subjectId = state.subject_player_id;
     const [aId, bId] = playerId < subjectId ? [playerId, subjectId] : [subjectId, playerId];
+    // Dvojice se ukládá v libovolném pořadí (generátor, přestupy, AI týmy řadí jinak),
+    // proto se hledá v obou. Dřív se hledalo jen seřazené pořadí a na testu tak kód
+    // minul 374 ze 687 vztahů: smír neoslabil rivalitu a hádka založila druhý vztah.
+    // Má-li dvojice víc vztahů, přednost má rivalita, o tu tu jde.
     const existing = await db.prepare(
-      "SELECT id, type, strength FROM relationships WHERE player_a_id = ? AND player_b_id = ?",
-    ).bind(aId, bId).first<{ id: number; type: string; strength: number }>()
+      `SELECT id, type, strength FROM relationships
+        WHERE (player_a_id = ? AND player_b_id = ?) OR (player_a_id = ? AND player_b_id = ?)
+        ORDER BY CASE type WHEN 'rivals' THEN 0 ELSE 1 END
+        LIMIT 1`,
+    ).bind(aId, bId, bId, aId).first<{ id: string; type: string; strength: number }>()
       .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load pair relation", e); return null; });
 
     if (scenarioId === "team_chemistry") {
