@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS club_incidents (
   season_number     INTEGER NOT NULL,
   kind              TEXT NOT NULL,           -- klíč z katalogu (Část 4)
   category          TEXT NOT NULL CHECK(category IN ('kradez','poskozeni','zivotni','pozitivni')),
-  status            TEXT NOT NULL CHECK(status IN ('otevreny','policie','probiha','uzavreny')),
+  status            TEXT NOT NULL CHECK(status IN ('hrozi','otevreny','policie','probiha','uzavreny')),
   severity          INTEGER NOT NULL DEFAULT 1 CHECK(severity BETWEEN 1 AND 3),
   game_date         TEXT NOT NULL,           -- herní den vzniku
   deadline          TEXT,                    -- herní den, do kdy manažer rozhodne
@@ -391,7 +391,7 @@ aby `club_events` z incidentu fanoušci zpracovali týž den. Běží v loop i q
 ### 6b) Pořadí v kroku `zpracujIncidentyDne(env, team, gameDate)`
 
 1. Zavřít incidenty z minulé sezóny.
-2. Vyhodnotit šetření policie s `police_result_on <= gameDate`.
+2. Vyhodnotit hrozící incidenty s `deadline <= gameDate` (9a) a šetření policie s `police_result_on <= gameDate`.
 3. Uzavřít propadlé lhůty (`deadline <= gameDate`) výchozím výsledkem (Část 7e).
 4. Ukončit životní situace s `ends_on <= gameDate`.
 5. V pondělí zaúčtovat srážky ze mzdy (Část 7d).
@@ -574,6 +574,20 @@ na FE (`dashboard/hospoda/page.tsx:49`).
 | `stezuje_si_na_trenera` | neprávem obviněný v hospodě do 60 dní | kamarádi z téže session vztah k trenérovi −3, morálka −1 |
 | `rvacka_kvuli_kradezi` | odhalený pachatel a jeho rival ve stejné session | efekty jako `cross_team_fight` (kondice, malé zranění) |
 | `cela_hospoda_resi` | incident závažnosti ≥ 2 do 3 dnů | čistě atmosféra, text s názvem věci |
+| `chlubi_se` | **odhalený i neodhalený pachatel** krádeže nebo poškození sedí v hospodě do 10 dnů od činu, alkohol ≥ 60; šance 20 % (temperament ≥ 65 ×1,5) | „Po šestém pivu se Franta pochlubil, že za ty dresy dostal pětikilo." → stopa `hospoda` síly **3** s `points_to` → pachatel známý |
+| `ohlasuje_cin` | návštěvník s alkoholem ≥ 70 a váhou pachatele nad prahem (5a), nebo neprávem obviněný či hráč s odmítnutou zálohou; šance 10 % | „Franta u pultu vykládal, že si zítra ty míče ze skladu odnese, stejně je nikdo nepotřebuje." → **hrozící incident** (9a) |
+
+### 9a) Hrozící incident z opileckých řečí
+
+Ohlášený čin je skutečný záznam `club_incidents` se stavem `hrozi`:
+- `kind` jen z typů, jejichž **podmínky klub splňuje** (4a, 4b) — nejde ohlásit krádež dodávky, když klub dodávku nemá. Pachatel je známý (ohlásil to sám), `deadline` = +1 až +3 herní dny.
+- Manažer se to dozví z hospodského deníku a SMS: od kamaráda z kádru, který u toho seděl a je ochotný mluvit (ochota ≥ 50), jinak od hospodského.
+- **Předejít tomu jde:** zpráva hráči v chatu (tlačítko „Promluvit si" nebo detekce tématu, 7a) sníží šanci o `30 + vztah k trenérovi / 5` procentních bodů; zabezpečení areálu ≥ 1 u krádeže ze skladu −15; hráč na incidentní absenci nebo zraněný −100.
+- Při uplynutí lhůty deterministický los (`seed "hrozi|incident"`), výchozí šance 50 %:
+  - **stane se** → incident přejde na `otevreny` se skutečnými dopady (6c) a stopou `hospoda` síly 3 na pachatele, nalezenou;
+  - **vystřízliví** → `uzavreny` s výsledkem `nestalo_se`, znalost `kadr` „Franta v hospodě kecal, ale nic neudělal" na 7 dní.
+- Hrozící incident se nepočítá do limitu otevřených problémů (4e), ale stejný hráč smí mít jen jeden.
+- Neprávem obviněný může ohlásit i `kopnute_dvere` („rozmlátím mu tu kabinu") — podmínky 4b se pro tenhle případ neptají na červenou kartu.
 
 Návaznosti:
 - **Trenér v hospodě poslouchá.** Návštěva s trenérem (`createCoachLedSession`, `POST /teams/:id/pub-visit`) během otevřeného incidentu zdvojnásobí šance `drby_o_incidentu` a `utraci_za_rundy`. Manažer má aktivní nástroj.
@@ -737,6 +751,7 @@ obec, tisk, přestupy, fanoušci, sponzoři, grémium, sezóna) jsou uvedené p�
 - **Téma** — `jeOtazkaNaIncident` pozná tvary („ukradl", „ukradené dresy", „kdo vykradl sklad") a nereaguje na běžné zprávy.
 - **Peníze** — ztráta nikdy nesrazí rozpočet pod nulu, strop 10 % / 40 000 Kč.
 - **Texty** — žádná šablona neobsahuje „—"; jména v 1. pádě.
+- **Hospoda** — `ohlasuje_cin` nikdy neohlásí čin bez splněných podmínek (bez dodávky žádná dodávka); rozhovor s hráčem šanci skutečně sníží; `chlubi_se` odhalí jen skutečného pachatele.
 - **Absence** — bez incidentu je výstup `generateAbsences` beze změny; post-pass nemění omluvenky ostatních hráčů; absence s `od < announced_on + 2` nejde zapsat; všech 6 míst používá `hracProAbsence`.
 - **Obec** — druhé spuštění reakce na stejný přechod nezmění přízeň ani nepřidá historii; bez globálního řádku přízně se založí; historie nejmenuje neodhaleného pachatele.
 - **Soukromí** — `player-view` cizímu klubu nevrátí z `life_context` nic mimo whitelist.
@@ -778,7 +793,7 @@ Každá fáze samostatně: build → commit → push testing → ověření API 
 3. **Absence, trénink a zápas** (17a–17c) — sdílený převod hráče pro absence, incidentní absence, výmluvy, trénink, zápasové modifikátory, klubové vyřazení.
 4. **Znalosti a chat** (Část 10, 17d) — znalosti, prompt, detekce tématu, výslech, vynucené scénáře, domácnost.
 5. **Bazar** — soukromé inzeráty, poznání, nahlásit, koupit zpět.
-6. **Hospoda** — příhody, trenér poslouchá, šíření drbů, vůdce fanoušků v hospodě.
+6. **Hospoda** — příhody, chlubení a ohlašování činů, hrozící incidenty a jak jim předejít, trenér poslouchá, šíření drbů, vůdce fanoušků v hospodě.
 7. **Peníze a životní situace** — kasa, tombola, útěk, ekonom, dluhy + záloha, ostatní situace.
 8. **Obec** (17e) — přízeň a důvěra po osobnostech, historie, petice, investice, brigády, starosta v hospodě a na telefonu, pozvánky, krize jako skutečné incidenty, konec sezóny.
 9. **Tisk, fanoušci, sponzoři** (17f, 17h) — rubrika Černá kronika, otázky v rozhovorech, reportér, fanouškovské události, kampaně, transparenty, chorály, oblíbenci, sponzoři.
