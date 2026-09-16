@@ -8,7 +8,6 @@
 
 import { CATEGORY_LABELS, cumulativeInvestment, efektyZabezpeceni } from "../equipment/equipment-generator";
 import type { Rng } from "../generators/rng";
-import { ROZBITNE_ZEVNITR } from "../stadium/stadium-damage";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import { PODIL_POKUSU_ZVENKU } from "./nastaveni";
 import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
@@ -36,6 +35,9 @@ export const PRENOSNE: readonly string[] = [
 
 /** Venkovní zařízení, na které dosáhne vandal. */
 const VENKOVNI_ZARIZENI = ["fence", "stands", "entrance_gate"] as const;
+
+/** Co rozbije oslava v kabině (spec 4b): šatny, sprchy, sociálky. Stánek ne. */
+const KABINY = ["changing_rooms", "showers", "toilets"] as const;
 
 const uroven = (s: StavKlubu, k: string) => s.vybaveni[k] ?? 0;
 const stavVeci = (s: StavKlubu, k: string) => s.vybaveni[`${k}_condition`] ?? 50;
@@ -190,10 +192,10 @@ export const KATALOG: DefiniceIncidentu[] = [
   },
   {
     kind: "oslava_v_kabine", label: "Oslava v kabině", emoji: "🍻", category: "poskozeni", vaha: 0, spousteny: true,
-    muze: (s) => !!s.vcera?.vyhra && pijaciZHospody(s).length >= 2 && ROZBITNE_ZEVNITR.some((k) => zarizeni(s, k) >= 1),
+    muze: (s) => !!s.vcera?.vyhra && pijaciZHospody(s).length >= 2 && KABINY.some((k) => zarizeni(s, k) >= 1),
     vytvor: (s, rng) => {
       const pijaci = pijaciZHospody(s);
-      const mozne = ROZBITNE_ZEVNITR.filter((k) => zarizeni(s, k) >= 1);
+      const mozne = KABINY.filter((k) => zarizeni(s, k) >= 1);
       if (!s.vcera?.vyhra || pijaci.length < 2 || mozne.length === 0) return null;
       const kde = rng.pick(mozne);
       return {

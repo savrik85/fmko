@@ -129,6 +129,19 @@ describe("katalog: spouštěné incidenty", () => {
     expect(def("svetlice").muze(stavKlubu())).toBe(false);
     expect(def("svetlice").muze(stavKlubu({ vcera: { vyhra: true, cervenaKarta: [] } }))).toBe(true);
   });
+
+  it("oslava nikdy nerozbije stánek, jen šatny, sprchy nebo sociálky", () => {
+    const s = stavKlubu({
+      stadion: { refreshments: 3, pitch_condition: 70 }, kadr: piti,
+      vcera: { vyhra: true, cervenaKarta: [] }, hospodaVcera: ["a", "b"],
+    });
+    expect(def("oslava_v_kabine").muze(s)).toBe(false);
+    const sKabinou = stavKlubu({ ...s, stadion: { refreshments: 3, showers: 1, pitch_condition: 70 } });
+    proSeedy((rng) => {
+      const n = def("oslava_v_kabine").vytvor(sKabinou, rng);
+      expect(n?.ztraty[0]).toMatchObject({ typ: "stadion", zarizeni: "showers" });
+    });
+  });
 });
 
 describe("katalog: alarm", () => {
