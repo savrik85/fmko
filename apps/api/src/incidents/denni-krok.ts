@@ -1,5 +1,5 @@
 /**
- * Incidenty jednoho klubu za jeden herní den (spec Část 6b, fáze 1).
+ * Incidenty jednoho klubu za jeden herní den (spec Část 6b, fáze 1 a 2).
  * Volá `processTeamDay`. AI kluby a rezervy U21 se ve fázi 1 přeskakují.
  */
 
@@ -7,9 +7,10 @@ import { createRng } from "../generators/rng";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
-import { oznamIncident, uzavriProsleIncidenty, zapisIncident } from "./dopady";
+import { oznamIncident, zapisIncident } from "./dopady";
 import { vylosujIncident } from "./losovani";
 import { nactiStavKlubu } from "./stav-klubu";
+import { zpracujVysetrovani } from "./vysetrovani-den";
 
 const M = "incidents-den";
 
@@ -22,8 +23,9 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
     .catch((e) => { logger.warn({ module: M }, "aktivní sezóna", e); return null; });
   if (!sezona) return;
 
-  // Nejdřív uzavřít staré, aby se uvolnil limit otevřených problémů.
-  await uzavriProsleIncidenty(env, { teamId, gameDate, seasonNumber: sezona.number });
+  // Nejdřív vyšetřování: výsledky policie, propadlé lhůty (uvolní limit otevřených
+  // problémů) a v pondělí srážky ze mzdy.
+  await zpracujVysetrovani(env, { teamId, gameDate, seasonNumber: sezona.number }, { pondeli: new Date(gameDate).getUTCDay() === 1 });
 
   const stav = await nactiStavKlubu(env.DB, { id: teamId, league_id: (team.league_id as string | null) ?? null }, gameDate, sezona.number);
   if (!stav) return;

@@ -193,6 +193,51 @@ export const TEXTY = {
     "Dobře, pokutu beru.",
     "Je to moje chyba, zaplatím.",
   ],
+  policie_neuspech: [
+    "Šetření jsme odložili: {nazev}. Pachatele se zjistit nepodařilo.",
+    "Bohužel nic: {nazev}. Pachatele jsme nenašli, případ vracíme.",
+    "Šetření skončilo bez výsledku: {nazev}. Kdyby se něco objevilo, dejte vědět.",
+  ],
+  policie_podminka: [
+    "Soud rozhodl, podmínku dostal hráč: {hrac}.",
+    "Rozsudek padl. Podmínku dostal hráč: {hrac}.",
+    "Soud to uzavřel podmínkou pro hráče: {hrac}.",
+  ],
+  policie_hrac: [
+    "Šetření je uzavřené. Pachatel je z vašeho kádru: {hrac}.",
+    "Máme pachatele a je z vašeho týmu: {hrac}.",
+    "Stopy vedly do vaší kabiny. Udělal to hráč: {hrac}.",
+  ],
+  policie_nehoda: [
+    "Šetření je uzavřené: {nazev}. Byla to nehoda, nikdo to neudělal schválně.",
+    "Případ uzavíráme jako nehodu: {nazev}. Pachatele nehledáme.",
+    "Nešlo o trestný čin: {nazev}. Byla to nešťastná náhoda.",
+  ],
+  policie_vraceno: [
+    "Pachatele jsme dopadli. Věci jsou zpátky v klubu: {vec}.",
+    "Zloděje máme. Vrácené vybavení: {vec}.",
+    "Dopadli jsme ho a věci jsou zpátky: {vec}.",
+  ],
+  policie_lepsi: [
+    "Pachatele jsme dopadli. Věci jsou na služebně, ale klub už má lepší: {vec}.",
+    "Zloděje máme, jenže klub už má stejné nebo lepší vybavení: {vec}.",
+    "Věci se našly, klub je ale mezitím nahradil: {vec}.",
+  ],
+  policie_nahrada: [
+    "Pachatele jsme dopadli. Soud mu nařídil uhradit škodu, klub dostane {castka} Kč.",
+    "Dopadený pachatel zaplatí klubu náhradu škody: {castka} Kč.",
+    "Viník uhradí část škody, na účet klubu přijde {castka} Kč.",
+  ],
+  policie_dopaden: [
+    "Pachatele jsme dopadli: {nazev}.",
+    "Případ je vyřešený, pachatele máme: {nazev}.",
+    "Šetření skončilo úspěšně: {nazev}.",
+  ],
+  stopa_policie_hrac: [
+    "Policie zjistila, kdo za tím stojí: {hrac}.",
+    "Policejní šetření ukázalo na hráče z kádru: {hrac}.",
+    "Policie má jasno. Udělal to hráč: {hrac}.",
+  ],
   lhuta_kradez: [
     "Uzavřeno bez výsledku: {nazev}. Kdo za tím stál, se nezjistilo.",
   ],
