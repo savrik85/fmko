@@ -128,6 +128,15 @@ export function domacnost(vek: number): string {
 }
 
 /**
+ * Kde hráč bydlí. Při rozvodu neplatí věkové pravidlo: spí v kabině nebo u kamaráda (spec 4c).
+ */
+export function domacnostSeSituaci(vek: number, situace?: string): string {
+  if (situace === "rozvod") return "Rozvádíš se, doma to skončilo. Spíš na kabině nebo u kamaráda.";
+  if (situace === "prisel_o_praci") return `${domacnost(vek)} Práci teď nemáš, dny jsou dlouhé.`;
+  return domacnost(vek);
+}
+
+/**
  * Jak moc smí sypat smajlíky.
  *
  * Devatenáctiletý píše jinak než čtyřicátník z kotelny, a přesně na tom je

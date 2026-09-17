@@ -12,6 +12,7 @@
  */
 
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
+import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
 import {
   generateInitialMessage,
@@ -80,6 +81,16 @@ function parseState(raw: string | null): AiThreadStateData | null {
 
 function uuid(): string {
   return crypto.randomUUID();
+}
+
+/** Běžící životní situace hráčů týmu (spec 4c), klíčované id hráče. Jeden dotaz na tým. */
+async function nactiSituaceTymu(db: D1Database, teamId: string): Promise<Map<string, string>> {
+  const situaceRows = await db.prepare(
+    `SELECT subject_player_id AS id, kind FROM club_incidents
+      WHERE team_id = ? AND status = 'probiha' AND category = 'zivotni' AND subject_player_id IS NOT NULL`,
+  ).bind(teamId).all<{ id: string; kind: string }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "životní situace hráčů", e); return { results: [] as Array<{ id: string; kind: string }> }; });
+  return new Map(situaceRows.results.map((r) => [r.id, r.kind]));
 }
 
 export function loadPlayerSnapshot(
@@ -372,8 +383,13 @@ async function spawnForTeam(
   if (playersRow.results.length === 0) return false;
 
   // 2. Vážený výběr hráče: 60 % "potřeba" (nízká morale, málo minut, vysoký temper), 40 % random
-  const snapshots = playersRow.results.map((r) =>
-    loadPlayerSnapshot(r, { lastOutcome, teamStreak }));
+  const situace = await nactiSituaceTymu(db, teamId);
+  const snapshots = playersRow.results.map((r) => {
+    const snap = loadPlayerSnapshot(r, { lastOutcome, teamStreak });
+    const kind = situace.get(snap.id);
+    snap.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
+    return snap;
+  });
   const player = pickPlayerWeighted(snapshots, Math.random);
   if (!player) return false;
 
@@ -472,6 +488,7 @@ function pickPlayerWeighted(
     if (p.temper > 65) w += 1;
     if (p.workRate > 65) w += 1;
     if (p.coachRelationship > 70 || p.coachRelationship < 30) w += 1; // extrémy chtějí komunikovat víc
+    if (p.zivotniSituace) w += 2; // kdo něco řeší, spíš se ozve (spec 17d)
     return w;
   });
   const total = weights.reduce((a, b) => a + b, 0);
@@ -577,6 +594,8 @@ async function handleAiPlayerReplyInner(
     teamId: conv.team_id, playerId: player.id,
     tema: state.incidentId && state.incidentDen ? { incidentId: state.incidentId, den: state.incidentDen } : null,
   });
+  const situaceKind = (await nactiSituaceTymu(db, conv.team_id)).get(player.id);
+  player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
   const teamCtx = await loadTeamContext(db, conv.team_id);
 
   // Načti historii (posledních 6 zpráv chronologicky)

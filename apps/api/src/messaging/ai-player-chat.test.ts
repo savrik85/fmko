@@ -151,3 +151,29 @@ describe("konverzace začatá trenérem", () => {
     expect(getScenarioById("coach_initiated")?.weight(hrac({ morale: 10, recentMinutes: 0 }))).toBe(0);
   });
 });
+
+describe("životní situace v chatu (spec 17d)", () => {
+  it("scénář žádosti o zálohu existuje, sám se nevylosuje a nesmí si vymýšlet částku", () => {
+    const s = getScenarioById("zadost_o_zalohu");
+    expect(s).not.toBeNull();
+    expect(s?.expectedTurns).toBe(2);
+    expect(s?.weight(hrac({ morale: 10 }))).toBe(0);
+    expect(s?.description).toContain("NEVYMÝŠLEJ");
+  });
+
+  it("hráč se situací ji má v promptu a smí o ní mluvit", () => {
+    const p = buildSystemPrompt(hrac({ zivotniSituace: { kind: "rozvod", label: "Rozvod" } }), tym, kdy(2, 18));
+    expect(p).toContain("Rozvod");
+    expect(p).not.toContain(ZAKAZ_ZIVOTNICH_SITUACI);
+  });
+
+  it("bez situace zákaz vymýšlet dál platí", () => {
+    expect(buildSystemPrompt(hrac(), tym, kdy(2, 18))).toContain(ZAKAZ_ZIVOTNICH_SITUACI);
+  });
+
+  it("při rozvodu bydlí jinde", () => {
+    const p = buildSystemPrompt(hrac({ age: 32, zivotniSituace: { kind: "rozvod", label: "Rozvod" } }), tym, kdy(2, 18));
+    expect(p).toContain("kabin");
+    expect(p).not.toContain("Doma máš ženu");
+  });
+});

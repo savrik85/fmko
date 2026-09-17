@@ -9,7 +9,7 @@
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { getOccupationByName, smenaProPovolani } from "../generators/occupations";
-import { domacnost, kontextCasu, popisSituace, pravidloEmoji } from "./chat-kontext";
+import { domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji } from "./chat-kontext";
 import { blokZnalosti } from "../incidents/znalosti";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 
@@ -117,11 +117,17 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     ? [vymluvy[(seedFromString(player.id) + cas.hodina) % vymluvy.length]]
     : [];
 
+  // Situace v DB (fáze 7): kdo ji má, ten o ní smí mluvit a zákaz vymýšlení si na něj neplatí.
+  const situace = player.zivotniSituace
+    ? `TVOJE ŽIVOTNÍ SITUACE (mluv o ní, když se hodí, nic dalšího si nevymýšlej): ${player.zivotniSituace.label}.`
+    : "";
+  const zakaz = player.zivotniSituace ? "" : ZAKAZ_ZIVOTNICH_SITUACI;
+
   return [
     `Jsi ${player.firstName} ${player.lastName}, ${player.age}letý ${positionStr} amatérského týmu ${team.teamName}${village} v české vesnické soutěži.`,
     `Tvoje povaha: ${buildPersonalityHints(player)}.`,
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
-    domacnost(player.age),
+    domacnostSeSituaci(player.age, player.zivotniSituace?.kind),
     popisSituace(cas, player.occupation, vymluva),
     // Kdo je na druhé straně, musí být jasné TADY, ne až mezi fakty o klubu.
     // Dokud trenérovo jméno leželo v seznamu vedle spoluhráčů, model ho bral
@@ -137,7 +143,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     "- NIKDY se neopakuj, nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
     pravidloEmoji(player.age, player.temper),
     "- Do emoji nepatří ⚽ ani 🥅, jsi hráč, ne fanoušek.",
-    ZAKAZ_ZIVOTNICH_SITUACI,
+    zakaz,
     "- Denní dobu a to, co zrovna děláš, zmiňuj jen když to má důvod. Nezačínej každou zprávu hlášením, kolik je hodin.",
     "- NIKDY nepiš jako AI nebo formálně.",
     "",
@@ -153,6 +159,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
       : "",
+    situace,
     blokZnalosti(player.znalostiIncidentu),
   ].filter(Boolean).join("\n");
 }
@@ -386,13 +393,16 @@ export async function evaluateResolution(
     "- Pokud trenér byl neutrální → malé delty kolem nuly (-3..+3).",
     "- condition_delta je vzácný, jen když scénář souvisí s kondicí (alkohol, zranění, vyčerpání).",
     "- Buď přísný, žádné +15 zadarmo, jen za skutečně skvělé chování.",
-    "- V shrnutí NEVYMÝŠLEJ narození dítěte, rozvod, ztrátu práce ani nemoc rodiče. Nic takového se hráči teď neděje.",
+    // Situace v DB (fáze 7): kdo ji má, tomu se v shrnutí nezakazuje o ní psát.
+    player.zivotniSituace
+      ? ""
+      : "- V shrnutí NEVYMÝŠLEJ narození dítěte, rozvod, ztrátu práce ani nemoc rodiče. Nic takového se hráči teď neděje.",
     "- absence_days > 0 NASTAV POUZE pokud:",
     "  a) Hráč žádal o volno (rodinné důvody, zdravotní, osobní milník) A trenér mu volno SCHVÁLIL → absence_days 1-3 podle scénáře (rodinný problém 1-2, svatba 1).",
     "  b) Hráč si stěžoval na bolest A trenér řekl ať si odpočine → absence_days 1-2.",
     "  Jinak absence_days = 0.",
     "- Pokud trenér řekl 'hraj' i když hráč žádal volno → absence_days = 0 ale relationship_delta záporné.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 0.4 });
 

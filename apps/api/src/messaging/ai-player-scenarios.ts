@@ -61,6 +61,12 @@ export interface PlayerSnapshot {
    * prázdné pole = nic neví.
    */
   znalostiIncidentu?: RadekZnalosti[];
+
+  /**
+   * Běžící životní situace hráče (spec 4c). Načítá ji volající z `club_incidents`
+   * (`status = 'probiha'`, `subject_player_id`), `undefined` = žádná.
+   */
+  zivotniSituace?: { kind: string; label: string };
 }
 
 export interface AiScenario {
@@ -175,7 +181,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 3,
     description:
-      "Hráč se svěřuje se starostí doma: hádka s partnerkou, rekonstrukce baráku, starosti s hospodářstvím. Žádá o pochopení, případně pauzu nebo volno na zápas.",
+      "Hráč se svěřuje se starostí doma: hádka s partnerkou, rekonstrukce baráku, starosti s hospodářstvím. Žádá o pochopení, případně pauzu nebo volno na zápas. Když máš v bloku svých starostí uvedenou životní situaci, mluv o ní a nic jiného si nevymýšlej.",
     weight: (p) =>
       w(p.age >= 25, 3) +
       w(p.coachRelationship > 55, 2) +
@@ -199,7 +205,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 2,
     description:
-      "Hráč má v životě milník: svatba, kulaté narozeniny, povýšení v práci, dostavěný barák. Sdílí radost, možná zve trenéra na oslavu, nebo žádá volno.",
+      "Hráč má v životě milník: svatba, kulaté narozeniny, povýšení v práci, dostavěný barák. Sdílí radost, možná zve trenéra na oslavu, nebo žádá volno. Když máš v bloku svých starostí uvedenou životní situaci, mluv o ní a nic jiného si nevymýšlej.",
     weight: (p) =>
       w(p.age >= 24 && p.age <= 35, 3) +
       w(p.coachRelationship > 50, 2) +
@@ -354,6 +360,17 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     expectedTurns: 2,
     description:
       "Trenér tě včera obvinil z průšvihu v klubu (co se stalo, je v tvé první zprávě) a ty tvrdíš, že jsi to nebyl. Jsi dotčený a chceš, aby to trenér uznal. Když se omluví nebo ti uvěří, uklidníš se. Když tě odbude nebo si dál stojí za svým, naštveš se. Nikoho jiného neobviňuj a nic nového o tom průšvihu si nevymýšlej.",
+    weight: () => 0,
+  },
+  {
+    // Spouští se VÝHRADNĚ z incidents/situace-db.ts při vzniku situace `dluhy`.
+    // weight 0 → nikdy náhodně. O penězích rozhoduje trenér tlačítkem, ne model.
+    id: "zadost_o_zalohu",
+    label: "Prosba o zálohu",
+    category: "personal",
+    expectedTurns: 2,
+    description:
+      "Dostal ses do dluhů a požádal jsi trenéra o zálohu na mzdu (první zprávu už jsi poslal). Vysvětli, proč to potřebuješ, a drž se u peněz zkrátka. NEVYMÝŠLEJ si částku, termín ani sliby o splácení, o tom rozhoduje trenér v klubu. Když odmítne, přijmi to a nehádej se dlouho.",
     weight: () => 0,
   },
   {
