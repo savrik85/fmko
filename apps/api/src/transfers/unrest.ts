@@ -291,6 +291,8 @@ export async function performUnrestAction(
     const team = await db.prepare("SELECT t.name, v.name as village_name FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
       .bind(teamId).first<{ name: string; village_name: string | null }>();
     const snapshot = loadPlayerSnapshot({ ...player, life_context: JSON.stringify(lc) });
+    const { nactiZnalostiHrace } = await import("../incidents/znalosti-db");
+    snapshot.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId, playerId });
     playerReply = await generateUnrestReply(env, snapshot, { teamName: team?.name ?? "", villageName: team?.village_name ?? undefined }, {
       coachMessage,
       unrestReason: unrest.teamName ? `trenér odmítl nabídku od ${unrest.teamName}, o kterou jsi stál` : "trenér ti zatrhl přestup, o který jsi stál",

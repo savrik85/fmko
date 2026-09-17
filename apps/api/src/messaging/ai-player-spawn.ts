@@ -11,6 +11,7 @@
  *                            po odpovědi trenéra (generuje další reply nebo resolution).
  */
 
+import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { logger } from "../lib/logger";
 import {
   generateInitialMessage,
@@ -52,6 +53,9 @@ interface AiThreadStateData {
   /** Spoluhráč, o kterém konverzace je (konflikt / pochvala) — podle výsledku se upraví jejich vztah. */
   subject_player_id?: string;
   subject_player_name?: string;
+  /** Incident, na který se trenér ptá (spec 7a). Platí jen v herní den `incidentDen`. */
+  incidentId?: string;
+  incidentDen?: string;
   resolution?: {
     morale_delta: number;
     condition_delta: number;
@@ -380,6 +384,9 @@ async function spawnForTeam(
     return false;
   }
 
+  // Hráč začíná sám, nejde o výslech: jen veřejné znalosti (spec 10b).
+  player.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId, playerId: player.id });
+
   // 3b. U scénářů o spoluhráči vybrat KONKRÉTNÍHO hráče předem — ať se model netrefuje
   //     naslepo a ať víme, čí vztah po rozhovoru upravit.
   let subject: { id: string; name: string } | null = null;
@@ -566,6 +573,10 @@ async function handleAiPlayerReplyInner(
   }
 
   const player = loadPlayerSnapshot(playerRow);
+  player.znalostiIncidentu = await nactiZnalostiHrace(db, {
+    teamId: conv.team_id, playerId: player.id,
+    tema: state.incidentId && state.incidentDen ? { incidentId: state.incidentId, den: state.incidentDen } : null,
+  });
   const teamCtx = await loadTeamContext(db, conv.team_id);
 
   // Načti historii (posledních 6 zpráv chronologicky)

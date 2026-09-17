@@ -12,6 +12,8 @@
 
 import { logger } from "../lib/logger";
 import { createRng, cryptoSeed } from "../generators/rng";
+import { temaZeStavu } from "../incidents/tema";
+import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
   generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError,
 } from "./ai-player-chat";
@@ -55,6 +57,13 @@ export async function startCoachThread(
     const player = loadPlayerSnapshot(row);
     const team = await loadTeamContext(db, opts.teamId);
 
+    // Téma incidentu z tlačítka „Zeptat se" nebo z dřívější otázky (spec 7a).
+    const vlakno = await db.prepare("SELECT ai_thread_state FROM conversations WHERE id = ?")
+      .bind(opts.convId).first<{ ai_thread_state: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, "stav vlákna", e); return null; });
+    const tema = temaZeStavu(vlakno?.ai_thread_state ?? null);
+    player.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: opts.playerId, tema });
+
     /*
      * Historie i tady: když trenér napíše podruhé po uzavřeném vlákně, hráč
      * musí vědět, co si spolu řekli. Bez toho by odpovídal, jako by se
@@ -93,8 +102,10 @@ export async function startCoachThread(
     const pokracuje = !reply.conversationComplete;
 
     // Uzavřenou konverzaci NEnecháváme ve stavu „done" — frontend podle něj
-    // zamyká psaní a trenér by už tomu hráči nikdy nenapsal. Prázdný stav
+    // zamyká psaní a trenér by už tomu hráči nikdy nenapsal. Stav bez `awaiting`
     // znamená „nic neběží", takže další zpráva zase založí nové vlákno.
+    // Téma incidentu v něm zůstává: platí do konce herního dne (spec 7a).
+    const temaVeStavu = tema ? { incidentId: tema.incidentId, incidentDen: tema.den } : null;
     const state = pokracuje
       ? {
         trigger: "coach_initiated",
@@ -104,8 +115,9 @@ export async function startCoachThread(
         awaiting: "coach",
         initiated_at: now,
         player_id: opts.playerId,
+        ...(temaVeStavu ?? {}),
       }
-      : null;
+      : temaVeStavu;
 
     await db.batch([
       db.prepare(
@@ -158,6 +170,9 @@ export async function replyInSquadGroup(
     const kadr = rows.results.map((r) => loadPlayerSnapshot(r));
     const mluvci = vyberMluvciho(kadr);
     if (!mluvci) return false;
+
+    // Před celou kabinou nikdo nic neprozradí: jen veřejné znalosti (spec 10b).
+    mluvci.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: mluvci.id });
 
     const team = await loadTeamContext(db, opts.teamId);
 
