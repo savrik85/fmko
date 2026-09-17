@@ -267,6 +267,24 @@ export const TEXTY = {
   lhuta_znamy: [
     "Uzavřeno: {nazev}. Trenér to nechal být.",
   ],
+  znalost_svedek: [
+    "Tu noc jsi šel z hospody kolem hřiště a {misto} jsi viděl hráče: {hrac}.",
+    "Cestou z hospody jsi tu noc {misto} zahlédl hráče: {hrac}.",
+    "Tu noc jsi {misto} potkal hráče, který tam neměl co dělat: {hrac}.",
+  ],
+  znalost_kamarad: [
+    "Víš, že to udělal tvůj kamarád: {hrac}.",
+    "Víš, kdo to udělal. Byl to tvůj kamarád: {hrac}.",
+    "Je ti jasné, že za tím stojí tvůj kamarád: {hrac}.",
+  ],
+  znalost_rival: [
+    "Tušíš, že to udělal hráč, se kterým se nemusíš: {hrac}.",
+    "Jsi si skoro jistý, že za tím stojí hráč, kterého nemusíš: {hrac}.",
+    "Máš podezření na hráče, se kterým se nesnášíš: {hrac}. Ten večer se divně vytrácel.",
+  ],
+  znalost_pachatel: [
+    "Tohle jsi udělal ty: {nazev}.",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type KlicTextu = keyof typeof TEXTY;

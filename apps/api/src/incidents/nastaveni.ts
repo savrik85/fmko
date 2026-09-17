@@ -73,3 +73,15 @@ export const VLIV_INCIDENTU_DNI = 14;
 export const OKNO_VLIVU_DNI = 45;
 export const DUVOD_ABSENCE = { vyslech: "Výslech na policii", soud: "Soudní jednání", vyrazen: "Vyřazen trenérem" } as const;
 export const EMOJI_ABSENCE: Record<string, string> = { vyslech: "🚓", soud: "⚖️", vyrazen: "⛔" };
+
+/** Znalosti hráčů o incidentech (spec 10a). */
+export const ZNALOST_KADR_DNI = 14;
+/** Závažný incident si kádr pamatuje déle (útěk s penězi přibude ve fázi 7). */
+export const ZNALOST_KADR_ZAVAZNA_DNI = 45;
+export const ZNALOST_PACHATEL_DNI = 60;
+/** Kádr, svědci, kamarádi a rivalové si incident pamatují ještě týden po uzavření. */
+export const ZNALOST_PO_UZAVRENI_DNI = 7;
+/** Kolik incidentů nejvýš jde do promptu hráče. */
+export const MAX_INCIDENTU_V_PROMPTU = 3;
+/** Ochota říct trenérovi, co ví (0–100). Kamarád kryje, rival rád práskne (spec 5b), svědek je mezi. */
+export const OCHOTA_ROLE = { svedek: [40, 70], kamarad: [10, 25], rival: [60, 80] } as const;
