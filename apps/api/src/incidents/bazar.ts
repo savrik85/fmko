@@ -48,10 +48,32 @@ export function cenaKradenehoZbozi(kategorie: string, uroven: number, stav: numb
 const PREZDIVKY = ["Láďa", "Pepík", "Franta", "Jirka", "Mirek", "Standa", "Honza", "Zdeněk"] as const;
 const ZALOZNI_OBCE = ["Lhota", "Újezd", "Dvory", "Zálesí"] as const;
 
-/** „Láďa, Volary" nebo „Soukromý inzerát, Volary". Obec v 1. pádě, skloňovat názvy obcí neumíme. */
+/** „Láďa, Volary". Obec v 1. pádě, skloňovat názvy obcí neumíme. Štítek „soukromý inzerát" je na kartě zvlášť. */
 export function jmenoProdejce(obce: readonly string[], rng: Rng): string {
   const obec = obce.length > 0 ? rng.pick(obce) : rng.pick(ZALOZNI_OBCE);
-  return rng.random() < 0.3 ? `Soukromý inzerát, ${obec}` : `${rng.pick(PREZDIVKY)}, ${obec}`;
+  return `${rng.pick(PREZDIVKY)}, ${obec}`;
+}
+
+/** Stav incidentu, na kterém `lzeNahlasit` rozhoduje, jestli nahlášení v bazaru vůbec může uspět. */
+export interface StavProNahlaseni {
+  status: string;
+  category: string;
+  odhalen: boolean;
+  /** `police_success`: `null` = policie ještě nešetřila. */
+  policieVysledek: number | null;
+}
+
+/**
+ * Smí okradený klub tenhle inzerát nahlásit policii (spec 8)? Buď policie na incidentu ještě
+ * nešetřila (běžný start šetření), nebo právě šetří a pachatel není odhalený (zajištění inzerátu
+ * k probíhajícímu šetření). Odhalený pachatel, uzavřený incident nebo skončené šetření nahlášení
+ * vždycky odmítnou, i tlačítko se proto nesmí zobrazit.
+ */
+export function lzeNahlasit(i: StavProNahlaseni): boolean {
+  const nesetriloJeste = i.status === "otevreny" && (i.category === "kradez" || i.category === "poskozeni")
+    && !i.odhalen && i.policieVysledek === null;
+  const praveSetri = i.status === "policie" && !i.odhalen;
+  return nesetriloJeste || praveSetri;
 }
 
 /**
@@ -62,14 +84,17 @@ export function oznaceniInzeratu(
   inzerat: {
     teamId: string | null; isAiListing: boolean; incidentId: string | null; incidentTeamId: string | null;
     category: string; level: number;
+    /** `null`, když inzerát nemá incident (běžný nebo AI inzerát). */
+    incident: StavProNahlaseni | null;
   },
   divakTeamId: string,
-): { isPrivateListing: boolean; vypadaJakoVase: boolean; incidentId: string | null } {
+): { isPrivateListing: boolean; vypadaJakoVase: boolean; incidentId: string | null; lzeNahlasit: boolean } {
   const vypadaJakoVase = inzerat.incidentId !== null && inzerat.incidentTeamId === divakTeamId
     && jePoznatelne(inzerat.category, inzerat.level);
   return {
     isPrivateListing: inzerat.teamId === null && !inzerat.isAiListing,
     vypadaJakoVase,
     incidentId: vypadaJakoVase ? inzerat.incidentId : null,
+    lzeNahlasit: vypadaJakoVase && inzerat.incident !== null && lzeNahlasit(inzerat.incident),
   };
 }

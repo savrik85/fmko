@@ -296,7 +296,7 @@ export const TEXTY = {
     "Trenére, kvůli tomu obvinění jsem v noci nespal: {nazev}. Fakt jsem to nebyl já.",
   ],
   bazar_poznano: [
-    "V bazaru je vybavení, které vypadá jako naše: {vec}. Dá se koupit zpátky, nebo to nahlásit policii.",
+    "V bazaru je vybavení, které vypadá jako naše: {vec}. Dá se koupit zpátky.",
     "Na inzerátu v bazaru jsou věci, které vypadají jako ty naše ukradené: {vec}.",
     "Někdo v bazaru prodává vybavení, které se podobá našemu: {vec}. Stojí za to se podívat.",
   ],

@@ -13,6 +13,7 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
+import { tymyDivaka } from "../auth/divak";
 import { requireTeamOwnership } from "../auth/middleware";
 import { oznaceniInzeratu } from "../incidents/bazar";
 import { logger } from "../lib/logger";
@@ -122,6 +123,9 @@ async function fetchUnlockContext(db: D1Database, teamId: string): Promise<{ mat
 // šlo přečíst cizí rozpočet. Frontend ho stejně má z team-contextu.
 equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
   const teamId = c.req.param("teamId");
+  // Stejný důvod jako u rozpočtu výš: `:teamId` v URL si může kdokoli podvrhnout, takže
+  // vlastnictví pro `oznaceniInzeratu` (kradené zboží, incidentId) se ověřuje ze session.
+  const divak = (await tymyDivaka(c)).has(teamId) ? teamId : "";
 
   const me = await c.env.DB.prepare("SELECT league_id, reputation FROM teams WHERE id = ?")
     .bind(teamId).first<{ league_id: string | null; reputation: number }>()
@@ -138,9 +142,11 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
     c.env.DB.prepare(
       // LEFT JOIN — virtuální prodejci z okolních okresů nemají řádek v teams.
       // Kradené zboží (incidenty) má `incident_id`; čí je, pozná jen okradený klub.
+      // incident_status/category/revealed/police_success jdou do `lzeNahlasit` (spec 8, bazar-db.ts).
       `SELECT el.id, el.team_id, el.category, el.level, el.price, el.expires_at, el.created_at,
               el.condition_at_listing, el.is_ai_listing, el.seller_name, el.incident_id, t.name AS team_name,
-              ci.team_id AS incident_team_id
+              ci.team_id AS incident_team_id, ci.status AS incident_status, ci.category AS incident_category,
+              ci.culprit_revealed AS incident_revealed, ci.police_success AS incident_police_success
          FROM equipment_listings el
          LEFT JOIN teams t ON el.team_id = t.id
          LEFT JOIN club_incidents ci ON ci.id = el.incident_id
@@ -191,6 +197,14 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
       if (myLevel >= level) blockReason = `Tohle už máš, úroveň ${myLevel}`;
       else if (unlock.locked) blockReason = unlock.reason ?? "Zatím na to nemáš nárok";
 
+      const incidentId = (row.incident_id as string | null) ?? null;
+      const incident = incidentId ? {
+        status: row.incident_status as string,
+        category: row.incident_category as string,
+        odhalen: !!(row.incident_revealed as number),
+        policieVysledek: (row.incident_police_success as number | null) ?? null,
+      } : null;
+
       return {
         id: row.id as string,
         teamId: (row.team_id as string | null) ?? null,
@@ -214,9 +228,9 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
         lockDetail: unlock.locked ? unlock.detail : null,
         ...oznaceniInzeratu({
           teamId: (row.team_id as string | null) ?? null, isAiListing: isAi,
-          incidentId: (row.incident_id as string | null) ?? null, incidentTeamId: (row.incident_team_id as string | null) ?? null,
-          category, level,
-        }, teamId),
+          incidentId, incidentTeamId: (row.incident_team_id as string | null) ?? null,
+          category, level, incident,
+        }, divak),
       };
     });
 
@@ -582,9 +596,14 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
 
   // ── P6: notifikace, fire-and-forget ──────────────────────────────────────
   const priceCz = listing.price.toLocaleString("cs");
+  // Kradené zboží (incidenty, spec 8, M4): kupec neví, že jde o inzerát s ukradenou věcí,
+  // ale „soukromník" v textu odpovídá štítku, který inzerát měl v bazaru.
+  const buyerSmsText = listing.incident_id
+    ? `🚚 Dovezli to od soukromníka (${sellerName}): ${desc}.`
+    : `🚚 Dovezli to z ${sellerName}: ${desc}.`;
   await Promise.all([
     sendSystemSMS(c.env.DB, teamId, "Kustod",
-      `🚚 Dovezli to z ${sellerName}: ${desc}.` +
+      buyerSmsText +
       (sellerCondition < REPAIR_THRESHOLD ? ` Chce to opravit — ${getRepairCost(category, listing.level, sellerCondition).toLocaleString("cs")} Kč.` : ""))
       .catch((e) => logger.warn({ module: MODULE }, "sms buyer", e)),
     ...(notifySeller && listing.team_id ? [

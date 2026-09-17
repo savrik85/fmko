@@ -62,6 +62,8 @@ export interface BazarListing {
   /** Jen okradenému klubu a jen u poznatelného zboží: vypadá to jako jeho ukradené vybavení. */
   vypadaJakoVase: boolean;
   incidentId: string | null;
+  /** Nahlásit jde jen dokud má nahlášení smysl (policie ještě nešetřila, nebo šetří a pachatel není odhalený). */
+  lzeNahlasit: boolean;
 }
 
 export interface MyListing {

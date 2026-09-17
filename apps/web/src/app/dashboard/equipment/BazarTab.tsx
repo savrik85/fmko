@@ -201,7 +201,7 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
                     </button>
                   )}
 
-                {l.vypadaJakoVase && (
+                {l.lzeNahlasit && (
                   <button
                     onClick={() => onReport(l)}
                     disabled={!!busy}

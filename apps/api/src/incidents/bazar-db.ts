@@ -9,17 +9,27 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { zavolejPolicii, type VysledekAkce } from "./akce";
-import { cenaKradenehoZbozi, jePoznatelne, jmenoProdejce, kradeneZbozi } from "./bazar";
-import { nactiIncident, proAkce, smsIncidentu } from "./incident-db";
+import { cenaKradenehoZbozi, jePoznatelne, jmenoProdejce, kradeneZbozi, lzeNahlasit } from "./bazar";
+import { nactiIncident, smsIncidentu } from "./incident-db";
 import { BONUS_POLICIE, KRADENE_INZERAT_DNI, PRODEJNE_KRADEZE, SMS_ROLE_KUSTOD, SMS_ROLE_POLICIE } from "./nastaveni";
 import { nactiZtraty } from "./popis";
 import { prikazyStop } from "./stopy-db";
 import { text } from "./texty";
-import { dostupneAkce } from "./vysetrovani";
 
 const M = "incidents-bazar";
 
 type RadekKVystaveni = { id: string; league_id: string; status: string; loss: string; district: string | null };
+
+/**
+ * Id inzerátu kradeného zboží: deterministické (stejný incident a kategorie dá vždy stejné id,
+ * `INSERT OR IGNORE` tak nevystaví dvakrát), ale neprůhledné. Z prostého `bazar-{incidentId}-{kategorie}`
+ * by šlo z URL inzerátu přečíst, který klub okradli. Otisk to schová.
+ */
+export async function idInzeratu(incidentId: string, kategorie: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${incidentId}|${kategorie}`));
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `bazar-${hex.slice(0, 32)}`;
+}
 
 /** Obce okresu ligy pro jméno prodejce. Rezervy mají okres s příponou U21. */
 async function obceOkresu(db: D1Database, district: string | null): Promise<string[]> {
@@ -68,7 +78,7 @@ export async function vystavKradeneZbozi(
            (id, team_id, league_id, category, level, condition_at_listing, price, expires_at, is_ai_listing, seller_name, incident_id)
          VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
       ).bind(
-        `bazar-${inc.id}-${z.kategorie}`, inc.league_id, z.kategorie, z.uroven, z.stav,
+        await idInzeratu(inc.id, z.kategorie), inc.league_id, z.kategorie, z.uroven, z.stav,
         cenaKradenehoZbozi(z.kategorie, z.uroven, z.stav), expirace.toISOString(), jmenoProdejce(obce, rng), inc.id,
       ).run()
         .catch((e) => { logger.error({ module: M }, `inzerát kradeného zboží ${inc.id}`, e); return null; });
@@ -111,8 +121,12 @@ export async function poNakupuKradeneho(
       .bind(inc.id).run()
       .catch((e) => { logger.error({ module: M }, `vrácení kradeného zboží ${inc.id}`, e); return null; });
     if ((vraceno?.meta?.changes ?? 0) === 0) return null;
-    await sendSystemSMS(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${text(rng, "bazar_vraceno", { vec })}`, smsIncidentu(inc.id))
-      .catch((e) => logger.warn({ module: M }, `SMS vrácení ${inc.id}`, e));
+    // Nepoznatelné zboží se vrací potichu: SMS „věci jsou zpátky" by klubu prozradila, že šlo
+    // právě o jeho ukradené věci, ačkoli je poznat neměl mít jak.
+    if (jePoznatelne(n.kategorie, n.uroven)) {
+      await sendSystemSMS(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${text(rng, "bazar_vraceno", { vec })}`, smsIncidentu(inc.id))
+        .catch((e) => logger.warn({ module: M }, `SMS vrácení ${inc.id}`, e));
+    }
     return "vraceno";
   }
 
@@ -129,10 +143,20 @@ export async function poNakupuKradeneho(
   return "koupil_jiny";
 }
 
+/** Stáhne nahlášený inzerát, pokud je pořád aktivní. Vrací počet změněných řádků (0, nebo 1). */
+async function stahniInzerat(db: D1Database, listingId: string): Promise<number> {
+  const r = await db.prepare("UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE id = ? AND status = 'active'")
+    .bind(new Date().toISOString(), listingId).run()
+    .catch((e) => { logger.error({ module: M }, `stažení nahlášeného inzerátu ${listingId}`, e); return null; });
+  return r?.meta?.changes ?? 0;
+}
+
 /**
- * Okradený klub nahlásí inzerát s poznatelným kradeným zbožím policii (spec 8). Inzerát hned
- * zmizí. Když policie ještě nešetřila, převezme případ (7c); když právě šetří, zboží se jen
- * přidá k šetření. Bonus pro policii nese stopa `bazar` z poznání inzerátu.
+ * Okradený klub nahlásí inzerát s poznatelným kradeným zbožím policii (spec 8). Když policie
+ * na incidentu ještě nešetřila, nejdřív převezme případ (7c) a inzerát se stáhne, teprve když
+ * se to povede — jinak by nahlášení stáhlo inzerát i ve chvíli, kdy si policii mezitím vzal
+ * někdo jiný. Když právě šetří, inzerát se jen zajistí a zboží se přidá k šetření. Bonus pro
+ * policii nese stopa `bazar` z poznání inzerátu.
  */
 export async function nahlasKradeneZbozi(
   env: Bindings, teamId: string, listingId: string,
@@ -147,22 +171,21 @@ export async function nahlasKradeneZbozi(
     return { ok: false, kod: 404, chyba: "Tenhle inzerát nahlásit nejde" };
   }
   if (inzerat.status !== "active") return { ok: false, kod: 409, chyba: "Inzerát už v bazaru není" };
-
-  const prevezme = dostupneAkce(proAkce(inc, false)).policie;
-  if (!prevezme && inc.status !== "policie") return { ok: false, kod: 409, chyba: "Tohle už policie řešit nebude" };
-
-  const stazeno = await db.prepare("UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE id = ? AND status = 'active'")
-    .bind(new Date().toISOString(), listingId).run()
-    .catch((e) => { logger.error({ module: M }, `stažení nahlášeného inzerátu ${listingId}`, e); return null; });
-  if ((stazeno?.meta?.changes ?? 0) === 0) return { ok: false, kod: 409, chyba: "Inzerát už v bazaru není" };
-
-  if (prevezme) {
-    const policie = await zavolejPolicii(env, teamId, inc.id);
-    if (policie.ok) return { ok: true, vysledekOn: policie.vysledekOn };
-    // Inzerát je stažený, jen policie mezitím případ převzala jinudy (souběh). Nic se nevrací.
-    logger.warn({ module: M }, `policie po nahlášení inzerátu ${listingId}: ${policie.chyba}`);
-    return { ok: true, vysledekOn: null };
+  if (!lzeNahlasit({ status: inc.status, category: inc.category, odhalen: inc.culprit_revealed === 1, policieVysledek: inc.police_success })) {
+    return { ok: false, kod: 409, chyba: "Tohle už policie řešit nebude" };
   }
+
+  if (inc.status === "otevreny") {
+    const policie = await zavolejPolicii(env, teamId, inc.id);
+    if (!policie.ok) return policie;
+    if ((await stahniInzerat(db, listingId)) === 0) {
+      // Policie je zajištěna, jen inzerát mezitím koupil někdo jiný (souběh). Hlásíme úspěch dál.
+      logger.warn({ module: M }, `inzerát ${listingId} po nahlášení a převzetí policií už nebyl aktivní`);
+    }
+    return { ok: true, vysledekOn: policie.vysledekOn };
+  }
+
+  if ((await stahniInzerat(db, listingId)) === 0) return { ok: false, kod: 409, chyba: "Inzerát už v bazaru není" };
   const rng = createRng(seedFromString(`bazar-policie|${inc.id}`));
   const vec = CATEGORY_LABELS[inzerat.category] ?? inzerat.category;
   await sendSystemSMS(db, teamId, SMS_ROLE_POLICIE, `🚓 ${text(rng, "policie_bazar", { vec })}`, smsIncidentu(inc.id))

@@ -5,7 +5,7 @@ vi.mock("../messaging/system-sms", () => ({ sendSystemSMS: vi.fn(async () => und
 import type { Bindings } from "../index";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { cenaKradenehoZbozi } from "./bazar";
-import { nahlasKradeneZbozi, poNakupuKradeneho, vystavHned, vystavKradeneZbozi } from "./bazar-db";
+import { idInzeratu, nahlasKradeneZbozi, poNakupuKradeneho, vystavHned, vystavKradeneZbozi } from "./bazar-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 import { incidentRadek } from "./testovaci-stav";
 
@@ -29,6 +29,20 @@ function prostredi(radky: unknown[], dalsi: Pravidlo[] = []) {
 
 beforeEach(() => vi.clearAllMocks());
 
+describe("id inzerátu kradeného zboží", () => {
+  it("má tvar bazar- a 32 hex znaků, neprozrazuje incident ani tým", async () => {
+    const id = await idInzeratu("inc-tym-a-vloupani-2026-09-16", "jerseys");
+    expect(id).toMatch(/^bazar-[0-9a-f]{32}$/);
+    expect(id).not.toContain("tym-a");
+    expect(id).not.toContain("inc-tym-a-vloupani-2026-09-16");
+  });
+
+  it("stejný vstup dá stejné id, jiná kategorie jiné", async () => {
+    expect(await idInzeratu("inc-1", "jerseys")).toBe(await idInzeratu("inc-1", "jerseys"));
+    expect(await idInzeratu("inc-1", "jerseys")).not.toBe(await idInzeratu("inc-1", "team_van"));
+  });
+});
+
 describe("vystavení kradeného zboží", () => {
   it("poznatelné zboží: soukromý inzerát, stopa pro policii a SMS s odkazem", async () => {
     const { db, env } = prostredi([radek()]);
@@ -36,7 +50,7 @@ describe("vystavení kradeného zboží", () => {
     const inzerat = db.dotazy.find((d) => /INSERT OR IGNORE INTO equipment_listings/.test(d.sql));
     expect(inzerat?.sql).toContain("VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?)");
     expect(inzerat?.params).toEqual([
-      "bazar-inc-1-jerseys", "liga-1", "jerseys", 2, 70, cenaKradenehoZbozi("jerseys", 2, 70),
+      await idInzeratu("inc-1", "jerseys"), "liga-1", "jerseys", 2, 70, cenaKradenehoZbozi("jerseys", 2, 70),
       "2026-09-23T10:00:00.000Z", expect.stringMatching(/, Volary$/), "inc-1",
     ]);
     const stopa = db.davky.flat().find((d) => /club_incident_clues/.test(d.sql));
@@ -101,6 +115,13 @@ describe("nákup kradeného zboží", () => {
     expect(sendSystemSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", "Kustod", expect.stringContaining("Dresy"), { type: "incident", incidentId: "inc-1" });
   });
 
+  it("nepoznatelné zboží koupil okradený klub zpátky: vráceno, ale beze SMS (M3)", async () => {
+    const { db, env } = sIncidentem({ id: "inc-1", team_id: "tym-a", status: "otevreny" });
+    expect(await poNakupuKradeneho(env, nakup({ kategorie: "balls" }))).toBe("vraceno");
+    expect(db.dotazy.find((d) => /UPDATE club_incidents SET recovered = 1/.test(d.sql))?.params).toEqual(["inc-1"]);
+    expect(sendSystemSMS).not.toHaveBeenCalled();
+  });
+
   it("věci už byly vrácené: nic dalšího", async () => {
     const { env } = sIncidentem({ id: "inc-1", team_id: "tym-a", status: "otevreny" }, [{ sql: /UPDATE club_incidents SET recovered = 1/, changes: 0 }]);
     expect(await poNakupuKradeneho(env, nakup())).toBeNull();
@@ -154,6 +175,23 @@ describe("nahlášení inzerátu policii", () => {
     expect(db.pocet(/UPDATE club_incidents SET status = 'policie'/)).toBe(1);
   });
 
+  it("policie mezitím převzala případ jinudy (souběh): 409 a inzerát zůstane (M1)", async () => {
+    const { db, env } = sInzeratem(INZERAT, incidentRadek(), [
+      { sql: /UPDATE club_incidents SET status = 'policie'/, changes: 0 },
+    ]);
+    expect(await nahlas(env)).toMatchObject({ ok: false, kod: 409 });
+    expect(db.pocet(/UPDATE equipment_listings SET status = 'withdrawn'/)).toBe(0);
+  });
+
+  it("policie případ převzala, ale inzerát mezitím koupil někdo jiný: hlásí se úspěch", async () => {
+    const { db, env } = sInzeratem(INZERAT, incidentRadek(), [
+      { sql: /UPDATE equipment_listings SET status = 'withdrawn'/, changes: 0 },
+    ]);
+    const v = await nahlas(env);
+    expect(v.ok).toBe(true);
+    expect(db.pocet(/UPDATE club_incidents SET status = 'policie'/)).toBe(1);
+  });
+
   it("policie právě šetří: inzerát se zajistí bez nového šetření", async () => {
     const { db, env } = sInzeratem(INZERAT, incidentRadek({ status: "policie", police_result_on: "2026-09-19T16:00:00.000Z" }));
     expect(await nahlas(env)).toEqual({ ok: true, vysledekOn: "2026-09-19T16:00:00.000Z" });
@@ -175,7 +213,11 @@ describe("nahlášení inzerátu policii", () => {
   });
 
   it("policie už šetřila nebo je incident uzavřený: 409 a inzerát zůstane", async () => {
-    for (const incident of [incidentRadek({ police_success: 0 }), incidentRadek({ status: "uzavreny" }), incidentRadek({ culprit_revealed: 1 })]) {
+    for (const incident of [
+      incidentRadek({ police_success: 0 }), incidentRadek({ status: "uzavreny" }), incidentRadek({ culprit_revealed: 1 }),
+      // M2: udání už odhaleného pachatele nechá incident v 'policie', ale nahlásit se přesto nedá.
+      incidentRadek({ status: "policie", culprit_revealed: 1, resolution: "policie" }),
+    ]) {
       const { db, env } = sInzeratem(INZERAT, incident);
       expect(await nahlas(env)).toMatchObject({ ok: false, kod: 409 });
       expect(db.pocet(/UPDATE equipment_listings/)).toBe(0);

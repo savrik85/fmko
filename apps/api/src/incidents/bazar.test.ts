@@ -3,7 +3,7 @@ import { CATEGORIES, getBazarPriceBand, getPawnQuote } from "../equipment/equipm
 import { createRng } from "../generators/rng";
 import { gameExpiry } from "../lib/game-time";
 import { seedFromString } from "../lib/seed";
-import { cenaKradenehoZbozi, denBazaru, jePoznatelne, jmenoProdejce, kradeneZbozi, oznaceniInzeratu } from "./bazar";
+import { cenaKradenehoZbozi, denBazaru, jePoznatelne, jmenoProdejce, kradeneZbozi, lzeNahlasit, oznaceniInzeratu } from "./bazar";
 import type { Ztrata } from "./typy";
 
 const DNES = "2026-09-16T16:00:00.000Z";
@@ -78,25 +78,49 @@ describe("prodejce", () => {
   it("obec z okresu v 1. pádě, bez obcí záložní", () => {
     for (let i = 0; i < 30; i++) {
       const jmeno = jmenoProdejce(["Volary"], createRng(i));
-      expect(jmeno).toMatch(/^(Soukromý inzerát|Láďa|Pepík|Franta|Jirka|Mirek|Standa|Honza|Zdeněk), Volary$/);
+      expect(jmeno).toMatch(/^(Láďa|Pepík|Franta|Jirka|Mirek|Standa|Honza|Zdeněk), Volary$/);
     }
     expect(jmenoProdejce([], createRng(1))).toMatch(/, (Lhota|Újezd|Dvory|Zálesí)$/);
   });
 });
 
+describe("lze nahlásit policii", () => {
+  it.each([
+    [{ status: "otevreny", category: "kradez", odhalen: false, policieVysledek: null }, true, "otevřený, kategorie kradez, neodhalený, policie ještě nešetřila"],
+    [{ status: "otevreny", category: "poskozeni", odhalen: false, policieVysledek: null }, true, "otevřený, kategorie poskozeni"],
+    [{ status: "otevreny", category: "zivotni", odhalen: false, policieVysledek: null }, false, "jiná kategorie"],
+    [{ status: "otevreny", category: "kradez", odhalen: true, policieVysledek: null }, false, "pachatel už odhalený"],
+    [{ status: "otevreny", category: "kradez", odhalen: false, policieVysledek: 0 }, false, "policie už jednou neuspěla"],
+    [{ status: "policie", category: "kradez", odhalen: false, policieVysledek: null }, true, "policie právě šetří, pachatel neodhalený"],
+    [{ status: "policie", category: "kradez", odhalen: true, policieVysledek: null }, false, "policie šetří, ale udání odhaleného pachatele (M2)"],
+    [{ status: "uzavreny", category: "kradez", odhalen: false, policieVysledek: null }, false, "incident je uzavřený"],
+  ] as const)("%j -> %s (%s)", (i, ocekavano, _popis) => {
+    expect(lzeNahlasit(i)).toBe(ocekavano);
+  });
+});
+
 describe("co vidí klub v bazaru", () => {
-  const inzerat = { teamId: null, isAiListing: false, incidentId: "inc-1", incidentTeamId: "tym-a", category: "jerseys", level: 2 };
+  const setri = { status: "otevreny", category: "kradez", odhalen: false, policieVysledek: null };
+  const inzerat = { teamId: null, isAiListing: false, incidentId: "inc-1", incidentTeamId: "tym-a", category: "jerseys", level: 2, incident: setri };
 
-  it("okradený klub pozná poznatelné zboží a dostane id incidentu", () => {
-    expect(oznaceniInzeratu(inzerat, "tym-a")).toEqual({ isPrivateListing: true, vypadaJakoVase: true, incidentId: "inc-1" });
+  it("okradený klub pozná poznatelné zboží, dostane id incidentu a smí nahlásit", () => {
+    expect(oznaceniInzeratu(inzerat, "tym-a")).toEqual({ isPrivateListing: true, vypadaJakoVase: true, incidentId: "inc-1", lzeNahlasit: true });
   });
 
-  it("cizí klub vidí jen soukromý inzerát", () => {
-    expect(oznaceniInzeratu(inzerat, "tym-b")).toEqual({ isPrivateListing: true, vypadaJakoVase: false, incidentId: null });
+  it("cizí klub vidí jen soukromý inzerát a nesmí nahlásit", () => {
+    expect(oznaceniInzeratu(inzerat, "tym-b")).toEqual({ isPrivateListing: true, vypadaJakoVase: false, incidentId: null, lzeNahlasit: false });
   });
 
-  it("nepoznatelné zboží nepozná ani okradený klub", () => {
-    expect(oznaceniInzeratu({ ...inzerat, category: "balls" }, "tym-a")).toEqual({ isPrivateListing: true, vypadaJakoVase: false, incidentId: null });
+  it("nepoznatelné zboží nepozná ani okradený klub, nesmí nahlásit", () => {
+    expect(oznaceniInzeratu({ ...inzerat, category: "balls" }, "tym-a")).toEqual({ isPrivateListing: true, vypadaJakoVase: false, incidentId: null, lzeNahlasit: false });
+  });
+
+  it("nahlásit nejde, když už na incidentu nemá smysl (uzavřený, odhalený, ...)", () => {
+    expect(oznaceniInzeratu({ ...inzerat, incident: { ...setri, status: "uzavreny" } }, "tym-a").lzeNahlasit).toBe(false);
+  });
+
+  it("bez incidentu (běžný nebo AI inzerát) nahlásit nejde", () => {
+    expect(oznaceniInzeratu({ ...inzerat, incident: null }, "tym-a").lzeNahlasit).toBe(false);
   });
 
   it("inzeráty klubů a okolí nejsou soukromé", () => {
