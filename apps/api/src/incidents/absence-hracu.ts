@@ -19,7 +19,7 @@ import { nactiObvineni } from "./vysetrovani";
 const M = "incidents-absence";
 
 export type DruhAbsence = "vyslech" | "soud" | "vyrazen" | "porod" | "nemocna_mama" | "stehovani";
-export type DruhVlivu = "obvineny" | "pachatel";
+export type DruhVlivu = "obvineny" | "pachatel" | "dluhy" | "prisel_o_praci" | "rozvod" | "zabaveny_ridicak";
 
 export interface IncidentniAbsence {
   playerId: string;
@@ -38,11 +38,19 @@ export interface RadekAbsence {
   sms: string;
 }
 
+/** Situace, které mění docházku, výmluvy nebo zápas. Svatba a narození dítěte jdou přes absence, ne přes vliv. */
+const SITUACE_S_VLIVEM: ReadonlySet<string> = new Set(["dluhy", "prisel_o_praci", "rozvod", "zabaveny_ridicak"]);
+
 export interface IncidentProVliv {
   culprit_player_id: string | null;
   culprit_revealed: number;
   accused: string;
   game_date: string;
+  /** Životní situace (spec 4c): působí, dokud běží. */
+  status?: string;
+  kind?: string;
+  subject_player_id?: string | null;
+  ends_on?: string | null;
 }
 
 export interface IncidentniKontext {
@@ -111,6 +119,12 @@ export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string,
       if (o.vysledek === "zapira" && vOkne(o.den, minOdstupObvineni)) pridej(o.playerId, "obvineny");
     }
     if (inc.culprit_revealed === 1 && inc.culprit_player_id && vOkne(inc.game_date, 0)) pridej(inc.culprit_player_id, "pachatel");
+
+    // Životní situace působí, dokud běží, ne podle okna od vzniku (spec 4c).
+    if (inc.status === "probiha" && inc.subject_player_id && inc.kind && SITUACE_S_VLIVEM.has(inc.kind)
+      && (!inc.ends_on || inc.ends_on.slice(0, 10) >= datum.slice(0, 10))) {
+      pridej(inc.subject_player_id, inc.kind as DruhVlivu);
+    }
   }
   return mapa;
 }
@@ -203,8 +217,11 @@ export async function nactiIncidentniAbsence(db: D1Database, teamId: string, dat
 
 export async function nactiDruhyHracu(db: D1Database, teamId: string, datum: string, minOdstupObvineni = 0): Promise<Map<string, DruhVlivu[]>> {
   const rows = await db.prepare(
-    `SELECT culprit_player_id, culprit_revealed, accused, game_date FROM club_incidents
-      WHERE team_id = ? AND game_date >= ? AND (accused != '[]' OR culprit_revealed = 1)`,
+    `SELECT culprit_player_id, culprit_revealed, accused, game_date, status, kind, subject_player_id, ends_on
+       FROM club_incidents
+      WHERE team_id = ? AND (
+        (game_date >= ? AND (accused != '[]' OR culprit_revealed = 1))
+        OR (status = 'probiha' AND subject_player_id IS NOT NULL))`,
   ).bind(teamId, gameExpiry(datum, -OKNO_VLIVU_DNI)).all<IncidentProVliv>()
     .catch((e) => { logger.warn({ module: M }, `vlivy incidentů ${teamId}`, e); return { results: [] as IncidentProVliv[] }; });
   return druhyHracu(rows.results, datum, minOdstupObvineni);

@@ -19,7 +19,7 @@ export type AbsenceTiming = "day_before" | "match_day" | "any";
 
 export interface AbsenceResult {
   playerIndex: number;
-  category: "professional" | "personal" | "absurd" | "health" | "hangover" | "commute" | "incident";
+  category: "professional" | "personal" | "absurd" | "health" | "hangover" | "commute" | "incident" | "situace";
   timing: AbsenceTiming;
   reason: string;
   emoji: string;
@@ -145,7 +145,6 @@ const PERSONAL_EXCUSES = [
   // Další rodina
   { text: "Malá má angínu, musím s ní k doktorovi", emoji: "\u{1F321}", minAge: 26, timing: "match_day" as AbsenceTiming },
   { text: "Tchán padl ze žebříku, jedeme do nemocnice", emoji: "\u{1F691}", minAge: 25, timing: "match_day" as AbsenceTiming },
-  { text: "Manželka rodí! Ne teď, ale prý co kdyby", emoji: "\u{1F930}", minAge: 24, timing: "day_before" as AbsenceTiming },
   { text: "Syn má turnaj v šachách, slíbil jsem že přijdu", emoji: "\u265F", minAge: 30, timing: "day_before" as AbsenceTiming },
   { text: "Ženská jede s kamarádkama pryč, musím hlídat", emoji: "\u{1F476}", minAge: 25, timing: "day_before" as AbsenceTiming },
   { text: "Stěhujeme se k rodičům na víkend, nemůžu odjet", emoji: "\u{1F3E0}", minAge: 0, timing: "day_before" as AbsenceTiming },
@@ -177,6 +176,42 @@ const OBVINENY_EXCUSES = [
   { text: "Dneska ne, trenére. Nejdřív si to musím v hlavě srovnat.", emoji: "\u{1F614}" },
   { text: "Nechce se mi mezi kluky, co si myslí, že jsem to udělal.", emoji: "\u{1F614}" },
   { text: "Mám toho plný zuby, tentokrát vynechám.", emoji: "\u{1F624}" },
+];
+
+// ═══════════════════════════════════════════════
+// ŽIVOTNÍ SITUACE (spec 4c)
+// ═══════════════════════════════════════════════
+
+/** Brigády kvůli dluhům (spec 4c). */
+const DLUHY_SANCE_NAVIC = 0.05;
+const DLUHY_VAHA_VYMLUVY = 0.5;
+const DLUHY_EXCUSES = [
+  { text: "Vzal jsem si brigádu, potřebuju peníze. Omlouvám se.", emoji: "\u{1F4B8}" },
+  { text: "Musím do práce navíc, doma to jinak nedám.", emoji: "\u{1F4B8}" },
+  { text: "Dneska vydělávám jinde, trenére. Potřebuju to.", emoji: "\u{1F4B0}" },
+  { text: "Beru melouch, nemám na výběr.", emoji: "\u{1F6E0}" },
+  { text: "Musím řešit peníze, na fotbal teď nemám hlavu.", emoji: "\u{1F614}" },
+];
+
+/** Bez řidičáku se venkovní zápas veze hůř (spec 4c). */
+const RIDICAK_SANCE_NAVIC = 0.12;
+const RIDICAK_VAHA_VYMLUVY = 0.6;
+const RIDICAK_EXCUSES = [
+  { text: "Nemám řidičák a nikdo mě tam nevezme. Omlouvám se.", emoji: "\u{1F6AB}" },
+  { text: "Bez papírů se tam nedostanu, trenére.", emoji: "\u{1F68C}" },
+  { text: "Odvoz mi padl a autem jet nemůžu.", emoji: "\u{1F697}" },
+  { text: "Na vlak to nestíhám a řídit nesmím.", emoji: "\u{1F686}" },
+  { text: "Venku hrát nemůžu, nemám se jak dopravit.", emoji: "\u{1F6AB}" },
+];
+
+/** Kdo přišel o práci, má jiné starosti (spec 4c). */
+const BEZ_PRACE_VAHA_VYMLUVY = 0.4;
+const BEZ_PRACE_EXCUSES = [
+  { text: "Sháním práci, mám dneska pohovor. Omlouvám se.", emoji: "\u{1F4BC}" },
+  { text: "Musím na úřad práce, jinak přijdu o podporu.", emoji: "\u{1F4C4}" },
+  { text: "Řeším, z čeho budu žít. Fotbal teď nestíhám.", emoji: "\u{1F614}" },
+  { text: "Jdu se ptát po práci do sousední vesnice.", emoji: "\u{1F6B6}" },
+  { text: "Bez práce mi není do fotbalu, trenére.", emoji: "\u{1F61E}" },
 ];
 
 // ═══════════════════════════════════════════════
@@ -561,6 +596,10 @@ export interface AbsenceOpts {
    * zápasu; jinak by omluvenka mluvila o jiném počasí, než jaké se odehrálo.
    */
   weather?: Weather;
+  /** Hraje se venku? Bez řidičáku je cesta na venkovní zápas problém (spec 17a). */
+  isAway?: boolean;
+  /** Má klub dodávku (`team_van` ≥ 1)? Pak se hráč bez řidičáku sveze. */
+  maDodavku?: boolean;
 }
 
 /** Nad tímhle stropem by dodávka s řidiči absence z dojíždění vypnuly úplně. */
@@ -608,6 +647,12 @@ export function generateAbsences(
     // Neprávem obviněný (spec 17a). Jiné vlivy incidentu los nemění.
     const obvineny = p.incident?.druhy.includes("obvineny") ?? false;
     if (obvineny) baseChance += OBVINENY_SANCE_NAVIC;
+
+    const situace = (kind: string) => p.incident?.druhy.includes(kind) ?? false;
+    if (situace("dluhy")) baseChance += DLUHY_SANCE_NAVIC;
+    // Bez řidičáku doma problém není, a s klubovou dodávkou se sveze i ven.
+    const ridicakVadi = situace("zabaveny_ridicak") && !!opts.isAway && !opts.maDodavku;
+    if (ridicakVadi) baseChance += RIDICAK_SANCE_NAVIC;
 
     // ── Celebrity override — much higher absence rates ──
     if (p.isCelebrity) {
@@ -661,6 +706,13 @@ export function generateAbsences(
     };
 
     if (obvineny) weights.incident = OBVINENY_VAHA_VYMLUVY;
+
+    // Kdo nemá práci, se na práci nevymluví (spec 4c).
+    if (situace("prisel_o_praci")) weights.professional = 0;
+    const situacniVaha = situace("dluhy") ? DLUHY_VAHA_VYMLUVY
+      : ridicakVadi ? RIDICAK_VAHA_VYMLUVY
+      : situace("prisel_o_praci") ? BEZ_PRACE_VAHA_VYMLUVY : 0;
+    if (situacniVaha > 0) weights.situace = situacniVaha;
 
     const category = rng.weighted(weights) as AbsenceResult["category"];
 
@@ -723,18 +775,27 @@ export function generateAbsences(
         excuseTiming = "day_before";
         break;
       }
+      case "situace": {
+        const pool = situace("dluhy") ? DLUHY_EXCUSES : ridicakVadi ? RIDICAK_EXCUSES : BEZ_PRACE_EXCUSES;
+        const pick = rng.pick(pool);
+        smsText = pick.text;
+        emoji = pick.emoji;
+        excuseTiming = "day_before";
+        break;
+      }
     }
 
     const CATEGORY_LABELS: Record<string, string> = {
       professional: "Práce", personal: "Osobní", absurd: "Jiné",
       health: "Zdraví", hangover: "Kocovina", commute: "Doprava", incident: "Po obvinění",
+      situace: situace("dluhy") ? "Dluhy" : ridicakVadi ? "Bez řidičáku" : "Bez práce",
     };
 
     // Skip if timing doesn't match (professional = day_before only, commute/hangover = match_day only)
     if (timing !== "any") {
       const categoryTiming: Record<string, AbsenceTiming> = {
         professional: "day_before", health: "day_before", commute: "match_day", hangover: "match_day",
-        incident: "day_before",
+        incident: "day_before", situace: "day_before",
       };
       const catTiming = categoryTiming[category];
       if (catTiming && catTiming !== timing) continue;
@@ -783,7 +844,6 @@ const LEGEND_EXCUSES = [
 
 const FALLEN_STAR_EXCUSES = [
   "Včera to přehnal v hospodě a nemůže vstát", "Prý má 'chřipku' (cítit pivo na 3 metry)",
-  "Volal že je na detoxu", "Nemůže, řídil opilý a vzali mu řidičák",
   "Spal u kamaráda a neví kde je", "Říká že je nemocný ale viděli ho v baru",
   "Měl prý alergickou reakci (na střízlivost)", "Leží doma, říká že má migrény",
   "Včera se pohádal s přítelkyní a spal v autě", "Prý ho bolí žaludek (diagnostika: 8 piv)",

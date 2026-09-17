@@ -146,3 +146,53 @@ describe("incident v losu omluvenek", () => {
     expect(hracProAbsenci(row, ["obvineny"]).incident).toEqual({ druhy: ["obvineny"] });
   });
 });
+
+describe("životní situace v omluvenkách (spec 17a)", () => {
+  const hraci = (druhy?: string[]) => [{
+    ...hracProAbsenci({
+      first_name: "Jan", last_name: "Dlužník", age: 30,
+      personality: JSON.stringify({ discipline: 60, patriotism: 60, alcohol: 40, temper: 40 }),
+      life_context: JSON.stringify({ morale: 60, occupation: "Zedník" }),
+      physical: JSON.stringify({ stamina: 60 }), commute_km: 0, is_celebrity: 0,
+    }, druhy),
+  }];
+
+  const kolikChybi = (druhy: string[] | undefined, opts: Parameters<typeof generateAbsences>[2] = {}) => {
+    let n = 0;
+    for (let s = 1; s <= 400; s++) n += generateAbsences(createRng(s), hraci(druhy), { timing: "any", ...opts }).length;
+    return n;
+  };
+
+  it("dluhy přidají brigády a vlastní výmluvu", () => {
+    expect(kolikChybi(["dluhy"])).toBeGreaterThan(kolikChybi(undefined));
+    const texty = new Set<string>();
+    for (let s = 1; s <= 400; s++) {
+      for (const a of generateAbsences(createRng(s), hraci(["dluhy"]), { timing: "any" })) {
+        if (a.reason === "Dluhy") texty.add(a.smsText);
+      }
+    }
+    expect(texty.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("zabavený řidičák chybí jen venku a jen bez klubové dodávky", () => {
+    const doma = kolikChybi(["zabaveny_ridicak"], { isAway: false });
+    const venku = kolikChybi(["zabaveny_ridicak"], { isAway: true });
+    const venkuSDodavkou = kolikChybi(["zabaveny_ridicak"], { isAway: true, maDodavku: true });
+    expect(venku).toBeGreaterThan(doma);
+    expect(venkuSDodavkou).toBeLessThan(venku);
+  });
+
+  it("kdo přišel o práci, nevymlouvá se na práci", () => {
+    for (let s = 1; s <= 400; s++) {
+      for (const a of generateAbsences(createRng(s), hraci(["prisel_o_praci"]), { timing: "any" })) {
+        expect(a.category).not.toBe("professional");
+      }
+    }
+  });
+
+  it("bez situace se los nemění", () => {
+    const bez = generateAbsences(createRng(42), hraci(undefined), { timing: "any" });
+    const sVlivem = generateAbsences(createRng(42), hraci(["pachatel"]), { timing: "any" });
+    expect(sVlivem).toEqual(bez);
+  });
+});

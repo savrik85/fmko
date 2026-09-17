@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AbsenceResult } from "../events/absence";
 import {
   absencePlatnaKZapisu, denPlus, druhyHracu, duvodyNaTrenink, nactiIncidentniKontext, platneAbsence,
-  pridejIncidentniAbsence, prikazAbsence, type IncidentniAbsence, type NovaAbsence,
+  pridejIncidentniAbsence, prikazAbsence, type IncidentniAbsence, type IncidentProVliv, type NovaAbsence,
 } from "./absence-hracu";
 import { FalesnaD1, jakoD1 } from "./testovaci-d1";
 
@@ -86,6 +86,28 @@ describe("vlivy hráčů", () => {
   it("obvinění 2 dny před zápasem se do losu už počítá", () => {
     const inc = { culprit_player_id: null, culprit_revealed: 0, accused: obvineni([["a", "2026-09-18"]]), game_date: "2026-09-01T16:00:00.000Z" };
     expect(druhyHracu([inc], "2026-09-20", 2).get("a")).toEqual(["obvineny"]);
+  });
+});
+
+describe("vlivy životních situací", () => {
+  const dnes = "2026-09-17";
+  const situace = (kind: string, over: Partial<IncidentProVliv> = {}): IncidentProVliv => ({
+    culprit_player_id: null, culprit_revealed: 0, accused: "[]", game_date: "2026-09-10",
+    status: "probiha", kind, subject_player_id: "s", ends_on: "2026-10-05", ...over,
+  });
+
+  it("běžící situace dá hráči svůj druh vlivu", () => {
+    expect(druhyHracu([situace("dluhy")], dnes).get("s")).toEqual(["dluhy"]);
+    expect(druhyHracu([situace("rozvod")], dnes).get("s")).toEqual(["rozvod"]);
+  });
+
+  it("skončená ani uzavřená situace už nepůsobí", () => {
+    expect(druhyHracu([situace("dluhy", { ends_on: "2026-09-16" })], dnes).has("s")).toBe(false);
+    expect(druhyHracu([situace("dluhy", { status: "uzavreny" })], dnes).has("s")).toBe(false);
+  });
+
+  it("situace, které na nic nenapojujeme, druh nedávají", () => {
+    expect(druhyHracu([situace("svatba_spoluhrace")], dnes).has("s")).toBe(false);
   });
 });
 
