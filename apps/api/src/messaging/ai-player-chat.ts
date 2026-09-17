@@ -10,6 +10,7 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { getOccupationByName, smenaProPovolani } from "../generators/occupations";
 import { domacnost, kontextCasu, popisSituace, pravidloEmoji } from "./chat-kontext";
+import { blokZnalosti } from "../incidents/znalosti";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 
 
@@ -41,6 +42,12 @@ export interface ResolutionResult {
   summary: string;             // krátké česky shrnutí (~1 věta)
   tone: "positive" | "negative" | "neutral";
 }
+
+/**
+ * Životní situace drží DB (fáze 7). Dokud hráč žádnou nemá, model si ji nesmí vymyslet:
+ * porod nebo rozvod v SMS by neseděl s ničím dalším ve hře.
+ */
+export const ZAKAZ_ZIVOTNICH_SITUACI = "- NEVYMÝŠLEJ si narození dítěte, rozvod, ztrátu práce ani nemoc rodiče. Nic takového se ti teď neděje.";
 
 class GeminiUnavailableError extends Error {
   constructor(message: string) {
@@ -130,6 +137,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     "- NIKDY se neopakuj, nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
     pravidloEmoji(player.age, player.temper),
     "- Do emoji nepatří ⚽ ani 🥅, jsi hráč, ne fanoušek.",
+    ZAKAZ_ZIVOTNICH_SITUACI,
     "- Denní dobu a to, co zrovna děláš, zmiňuj jen když to má důvod. Nezačínej každou zprávu hlášením, kolik je hodin.",
     "- NIKDY nepiš jako AI nebo formálně.",
     "",
@@ -145,6 +153,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
       : "",
+    blokZnalosti(player.znalostiIncidentu),
   ].filter(Boolean).join("\n");
 }
 
@@ -377,8 +386,9 @@ export async function evaluateResolution(
     "- Pokud trenér byl neutrální → malé delty kolem nuly (-3..+3).",
     "- condition_delta je vzácný, jen když scénář souvisí s kondicí (alkohol, zranění, vyčerpání).",
     "- Buď přísný, žádné +15 zadarmo, jen za skutečně skvělé chování.",
+    "- V shrnutí NEVYMÝŠLEJ narození dítěte, rozvod, ztrátu práce ani nemoc rodiče. Nic takového se hráči teď neděje.",
     "- absence_days > 0 NASTAV POUZE pokud:",
-    "  a) Hráč žádal o volno (rodinné důvody, zdravotní, osobní milník) A trenér mu volno SCHVÁLIL → absence_days 1-3 podle scénáře (rodinný problém 1-2, svatba 1, narození dítěte 2-3).",
+    "  a) Hráč žádal o volno (rodinné důvody, zdravotní, osobní milník) A trenér mu volno SCHVÁLIL → absence_days 1-3 podle scénáře (rodinný problém 1-2, svatba 1).",
     "  b) Hráč si stěžoval na bolest A trenér řekl ať si odpočine → absence_days 1-2.",
     "  Jinak absence_days = 0.",
     "- Pokud trenér řekl 'hraj' i když hráč žádal volno → absence_days = 0 ale relationship_delta záporné.",

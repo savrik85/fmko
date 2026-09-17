@@ -9,6 +9,8 @@
  *  - category: pro analytiku a UI tag
  */
 
+import type { RadekZnalosti } from "../incidents/znalosti";
+
 export type ScenarioCategory = "complaint" | "positive" | "personal" | "transfer";
 
 export interface PlayerSnapshot {
@@ -52,6 +54,13 @@ export interface PlayerSnapshot {
   // optional context
   occupation?: string;
   injuredUntil?: string | null;
+
+  /**
+   * Co hráč ví o incidentech v klubu (spec 10b). Načítá volající předem přes
+   * `nactiZnalostiHrace`, `loadPlayerSnapshot` je synchronní. `undefined` = nenačteno,
+   * prázdné pole = nic neví.
+   */
+  znalostiIncidentu?: RadekZnalosti[];
 }
 
 export interface AiScenario {
@@ -166,7 +175,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 3,
     description:
-      "Hráč se svěřuje s problémem doma, nemoc v rodině, hádka s manželkou, narozená malá. Žádá o pochopení, případně pauzu nebo volno na zápas.",
+      "Hráč se svěřuje se starostí doma: hádka s partnerkou, rekonstrukce baráku, starosti s hospodářstvím. Žádá o pochopení, případně pauzu nebo volno na zápas.",
     weight: (p) =>
       w(p.age >= 25, 3) +
       w(p.coachRelationship > 55, 2) +
@@ -190,7 +199,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "personal",
     expectedTurns: 2,
     description:
-      "Hráč má v životě milník, svatba, narozeniny, dítě, povýšení v práci. Sdílí radost, možná zve trenéra na oslavu, nebo žádá volno.",
+      "Hráč má v životě milník: svatba, kulaté narozeniny, povýšení v práci, dostavěný barák. Sdílí radost, možná zve trenéra na oslavu, nebo žádá volno.",
     weight: (p) =>
       w(p.age >= 24 && p.age <= 35, 3) +
       w(p.coachRelationship > 50, 2) +
@@ -333,7 +342,18 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "transfer",
     expectedTurns: 2,
     description:
-      "Trenér právě odmítl přestupovou nabídku od jiného klubu, o kterou hráč STÁL (klub a částka jsou v první zprávě hráče). Hráč je naštvaný a chce vysvětlení. Podle trenérovy reakce se buď uklidní (vysvětlení, ocenění, slib), nebo se naštve ještě víc (odbytí, ignorace, arogance). Nechce slyšet výmluvy, chce respekt.",
+      "Trenér právě odmítl přestupovou nabídku od jiného klubu, o kterou hráč STÁL (klub a částka jsou v první zprávě hráče). Hráč je naštvaný a chce vysvětlení. Podle trenérovy reakce se buď uklidní (vysvětlení, ocenění, slib), nebo se naštve ještě víc (odbytí, ignorance, arogance). Nechce slyšet výmluvy, chce respekt.",
+    weight: () => 0,
+  },
+  {
+    // Spouští se VÝHRADNĚ z incidents/krivda.ts den po obvinění, které hráč zapřel.
+    // Píše vinný i nevinný, aby se podle vlákna nedal poznat nevinný. weight 0 → nikdy náhodně.
+    id: "krivde_obvineny",
+    label: "Křivé obvinění",
+    category: "personal",
+    expectedTurns: 2,
+    description:
+      "Trenér tě včera obvinil z průšvihu v klubu (co se stalo, je v tvé první zprávě) a ty tvrdíš, že jsi to nebyl. Jsi dotčený a chceš, aby to trenér uznal. Když se omluví nebo ti uvěří, uklidníš se. Když tě odbude nebo si dál stojí za svým, naštveš se. Nikoho jiného neobviňuj a nic nového o tom průšvihu si nevymýšlej.",
     weight: () => 0,
   },
 ];
