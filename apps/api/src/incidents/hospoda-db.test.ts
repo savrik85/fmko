@@ -40,6 +40,7 @@ function pravidlaKontextu(): Pravidlo[] {
       { player_a_id: "p", player_b_id: "s", type: "rivals" },
     ] },
     { sql: /FROM players WHERE team_id = \?/, all: [hracRadek("s", "Pepa", "Kos"), hracRadek("p", "Franta", "Novák"), hracRadek("k", "Karel", "Vrba")] },
+    { sql: /status = 'probiha' AND category = 'zivotni'/, all: [{ id: "s", kind: "dluhy", zaloha: "odmitnuto" }] },
   ];
 }
 
@@ -64,6 +65,8 @@ describe("kontext hospody z DB", () => {
     expect(k?.rivalove.get("s")?.has("p")).toBe(true);
     expect(k?.hrozi.has("h")).toBe(true);
     expect(k?.kadr.get("p")?.recidivista).toBe(true);
+    expect(k?.situace.get("s")).toBe("dluhy");
+    expect(k?.odmitnuteZalohy.has("s")).toBe(true);
     const dotaz = db.davky[0].find((d) => /EXISTS \(SELECT 1 FROM equipment_listings/.test(d.sql));
     expect(dotaz?.sql).toContain("status != 'hrozi'");
     expect(dotaz?.sql).toContain("'nestalo_se'");

@@ -20,7 +20,8 @@ function kontext(o: Partial<KontextHospody> = {}): KontextHospody {
     teamId: "tym-a", leagueId: "liga-1", seasonNumber: 4, nazevKlubu: "TJ Dvory",
     den: "2026-09-16", gameDate: DNES, incidenty: [], svedci: [],
     kadr: new Map([SVEDEK, PACHATEL, KAMARAD].map((h) => [h.id, h])),
-    kamaradi: new Map(), rivalove: new Map(), hrozi: new Set(), ...o,
+    kamaradi: new Map(), rivalove: new Map(), hrozi: new Set(),
+    situace: new Map(), odmitnuteZalohy: new Set(), ...o,
   };
 }
 
@@ -280,5 +281,26 @@ describe("co už dnes zaznělo, se nezopakuje", () => {
     const r = pribehyHospody([host(PACHATEL)], kontext({ incidenty: [incident()] }), { ...JISTE, uzZaznelo: new Set(["chlubi_se|inc-1"]) });
     expect(r.pribehy).toEqual([]);
     expect(r.zapisy).toEqual([]);
+  });
+});
+
+describe("dluhy v hospodě", () => {
+  it("hospodský už nechce nalévat na sekeru a je to varování", () => {
+    const k = kontext({ situace: new Map([[SVEDEK.id, "dluhy"]]) });
+    const r = pribehyHospody([host(SVEDEK)], k, JISTE);
+    const p = r.pribehy.find((x) => x.type === "pije_na_sekeru");
+    expect(p?.text).toContain("Pepa Kos");
+    expect(p?.effects).toEqual([]);
+    expect(r.zapisy).toEqual([]);
+  });
+
+  it("bez dluhů se na sekeru nepije", () => {
+    expect(pribehyHospody([host(SVEDEK)], kontext(), JISTE).pribehy.filter((p) => p.type === "pije_na_sekeru")).toEqual([]);
+  });
+
+  it("hráč s odmítnutou zálohou smí ohlásit čin i bez povahy pachatele", () => {
+    const svaty = hrac({ id: "x", jmeno: "Jan Svatý", alkohol: 90, disciplina: 95, vernost: 95, vztahKTrenerovi: 90 });
+    const k = kontext({ kadr: new Map([[svaty.id, svaty]]), situace: new Map([[svaty.id, "dluhy"]]), odmitnuteZalohy: new Set([svaty.id]) });
+    expect(pribehyHospody([host(svaty)], k, JISTE).ohlaseni).toEqual({ playerId: "x", obvineny: true });
   });
 });

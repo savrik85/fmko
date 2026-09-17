@@ -8,6 +8,7 @@
 import { logConditionStmt } from "../lib/condition-log";
 import { TYPY_PRIBEHU } from "../incidents/hospoda";
 import { udalostiHospody, zapisHospody } from "../incidents/hospoda-db";
+import { ROZVOD_HOSPODA_NASOBEK } from "../incidents/nastaveni";
 import { logger } from "../lib/logger";
 import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
 
@@ -83,6 +84,8 @@ function attendanceProb(p: DbPlayer, ctx: {
   daysToNextMatch: number | null;
   buddiesAlreadyIn: number;
   rivalsAlreadyIn: number;
+  /** Hráč se rozvádí (spec incidentů 4c): doma ho nic nedrží. */
+  poRozvodu?: boolean;
 }): number {
   if (p.injured || p.suspended) return 0;
   let prob = (p.alcohol / 100) * 0.4;
@@ -95,6 +98,7 @@ function attendanceProb(p: DbPlayer, ctx: {
   if (ctx.daysToNextMatch !== null && ctx.daysToNextMatch <= 1) prob *= 0.5;
   if (p.condition < 30) prob *= 0.3;
   if (p.recent_pub_days >= 2) prob *= 0.4; // cooldown — manželka
+  if (ctx.poRozvodu) prob *= ROZVOD_HOSPODA_NASOBEK;
 
   return Math.min(0.85, prob);
 }
@@ -1488,6 +1492,14 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
       map.get(r.player_b_id)!.add(r.player_a_id);
     }
 
+    // Kdo se rozvádí, chodí do hospody častěji (spec incidentů 9).
+    const rozvody = await db.prepare(
+      `SELECT subject_player_id AS id FROM club_incidents
+        WHERE team_id = ? AND status = 'probiha' AND kind = 'rozvod' AND subject_player_id IS NOT NULL`,
+    ).bind(team.id).all<{ id: string }>()
+      .catch((e) => { logger.warn({ module: "pub" }, "rozvody pro hospodu", e); return { results: [] as Array<{ id: string }> }; });
+    const poRozvodu = new Set(rozvody.results.map((r) => r.id));
+
     // Iterativně rozhodni účast (buddies bonus se aplikuje za běhu)
     const attendees: PubAttendee[] = [];
     const ctx = { dayOfWeek, lastMatchResult, daysToNextMatch };
@@ -1498,7 +1510,7 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
         ? attendees.filter((a) => buddiesMap.get(p.id)!.has(a.playerId)).length : 0;
       const rivalsIn = (rivalsMap.get(p.id) ?? new Set()).size > 0
         ? attendees.filter((a) => rivalsMap.get(p.id)!.has(a.playerId)).length : 0;
-      const prob = attendanceProb(p, { ...ctx, buddiesAlreadyIn: buddiesIn, rivalsAlreadyIn: rivalsIn });
+      const prob = attendanceProb(p, { ...ctx, buddiesAlreadyIn: buddiesIn, rivalsAlreadyIn: rivalsIn, poRozvodu: poRozvodu.has(p.id) });
       if (Math.random() < prob) {
         attendees.push({
           playerId: p.id, firstName: p.first_name, lastName: p.last_name,

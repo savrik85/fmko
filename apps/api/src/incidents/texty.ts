@@ -382,6 +382,13 @@ export const TEXTY = {
     "Po pár pivech {hrac} vyprávěl, komu prodal vybavení z klubu: {vec}.",
     "{hrac} platil rundu z peněz, o kterých tvrdil, že je dostal za vybavení: {vec}.",
   ],
+  hospoda_sekera: [
+    "Hospodský už {hrac} nechce nalévat na sekeru.",
+    "{hrac} chtěl psát na sekeru, hospodský zavrtěl hlavou.",
+    "{hrac} platil až po domluvě, sekeru už mu hospodský nedá.",
+    "U výčepu bylo dusno, {hrac} má u hospodského dluh.",
+    "{hrac} si objednal a hospodský mu připomněl, co dluží.",
+  ],
   hospoda_chlubi: [
     "Po šestém pivu se {hrac} pochlubil, že to byl on: {nazev}.",
     "{hrac} u výčepu vykládal, že ten průšvih v klubu má na svědomí on: {nazev}.",

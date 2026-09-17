@@ -108,9 +108,14 @@ export async function nactiKontextHospody(db: D1Database, t: TymHospody, hraciId
         WHERE (player_a_id IN (${ph}) OR player_b_id IN (${ph}))
           AND (type = 'rivals' OR (type IN (${kamaradske}) AND COALESCE(strength, 50) >= ?))`,
     ).bind(...hraciIds, ...hraciIds, SILA_KAMARADSTVI),
+    db.prepare(
+      `SELECT subject_player_id AS id, kind, json_extract(resolution_data, '$.zaloha') AS zaloha
+         FROM club_incidents
+        WHERE team_id = ? AND status = 'probiha' AND category = 'zivotni' AND subject_player_id IS NOT NULL`,
+    ).bind(t.teamId),
   ]).catch((e) => { logger.warn({ module: M }, `kontext hospody ${t.teamId}`, e); return null; });
   if (!vysledky) return null;
-  const [tymRes, incRes, hroziRes, kadrRes, recidRes, svedciRes, vztahyRes] = vysledky;
+  const [tymRes, incRes, hroziRes, kadrRes, recidRes, svedciRes, vztahyRes, situaceRes] = vysledky;
 
   const tym = tymRes.results[0] as { name: string; sezona: number | null } | undefined;
   if (!tym || tym.sezona == null) return null;
@@ -143,6 +148,9 @@ export async function nactiKontextHospody(db: D1Database, t: TymHospody, hraciId
       .map((r) => ({ incidentId: r.incident_id, playerId: r.player_id, role: r.role, vyslech: r.interrogation })),
     kadr, kamaradi, rivalove,
     hrozi: new Set((hroziRes.results as Array<{ id: string }>).map((r) => String(r.id))),
+    situace: new Map((situaceRes.results as Array<{ id: string; kind: string }>).map((r) => [String(r.id), String(r.kind)])),
+    odmitnuteZalohy: new Set((situaceRes.results as Array<{ id: string; zaloha: string | null }>)
+      .filter((r) => r.zaloha === "odmitnuto").map((r) => String(r.id))),
   };
 }
 

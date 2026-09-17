@@ -22,7 +22,7 @@ import {
   BONUS_POLICIE, CELA_HOSPODA_DNI, CELA_HOSPODA_SANCE, CELA_HOSPODA_ZAVAZNOST, CERSTVY_ZLODEJ_DNI, CHLUBI_ALKOHOL,
   CHLUBI_DNI, CHLUBI_SANCE, CHLUBI_TEMPERAMENT, CHLUBI_TEMPERAMENT_NASOBEK, DRBY_ALKOHOL, DRBY_SANCE, HROZI_LHUTA_MAX,
   HROZI_LHUTA_MIN, LHUTA_PO_ODHALENI_DNI, NABIZI_SANCE, OBVINENI_PAMET_DNI, OCHOTA_POSLA, OHLASUJE_ALKOHOL,
-  OHLASUJE_SANCE, PRAH_VAHY_PACHATELE, RVACKA_SANCE, STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH,
+  OHLASUJE_SANCE, PRAH_VAHY_PACHATELE, RVACKA_SANCE, SEKERA_SANCE, STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH,
   TRENER_V_HOSPODE_NASOBEK, ZNALOST_DRB_DNI,
 } from "./nastaveni";
 import { vahaPachatele } from "./pachatel";
@@ -35,12 +35,12 @@ import type { NovaZnalost, RoleSvedka, VysledekVyslechu } from "./znalosti";
 
 export type TypPribehu =
   | "drby_o_incidentu" | "nabizi_zbozi" | "stezuje_si_na_trenera" | "rvacka_kvuli_kradezi"
-  | "cela_hospoda_resi" | "chlubi_se" | "ohlasuje_cin";
+  | "cela_hospoda_resi" | "chlubi_se" | "ohlasuje_cin" | "pije_na_sekeru";
 
 /** Příhody o incidentech. Návštěva s trenérem je z dnešní session převezme (`season/pub.ts`). */
 export const TYPY_PRIBEHU: readonly TypPribehu[] = [
   "drby_o_incidentu", "nabizi_zbozi", "stezuje_si_na_trenera", "rvacka_kvuli_kradezi",
-  "cela_hospoda_resi", "chlubi_se", "ohlasuje_cin",
+  "cela_hospoda_resi", "chlubi_se", "ohlasuje_cin", "pije_na_sekeru",
 ];
 
 export interface HostHospody {
@@ -103,6 +103,10 @@ export interface KontextHospody {
   rivalove: ReadonlyMap<string, ReadonlySet<string>>;
   /** Hráči, kteří už jeden hrozící čin ohlásili (9a: nejvýš jeden na hráče). */
   hrozi: ReadonlySet<string>;
+  /** Hráč → kind běžící životní situace (spec 4c). */
+  situace: ReadonlyMap<string, string>;
+  /** Hráči, kterým trenér odmítl zálohu (spec 7c). */
+  odmitnuteZalohy: ReadonlySet<string>;
 }
 
 export interface VolbyHospody {
@@ -215,6 +219,7 @@ export function pribehyHospody(hoste: readonly HostHospody[], k: KontextHospody,
   stezuje(k, v, mistni, out);
   rvacka(k, v, mistni, tady, incidenty, out);
   celaHospoda(k, v, incidenty, out);
+  sekera(k, v, mistni, out);
   out.zlodeji = zlodejiUStolu(k, tady, incidenty);
   out.ohlaseni = kdoOhlasi(k, v, mistni);
   out.zapisy.push(...drbyDoCizichKlubu(k, hoste, out.pribehy));
@@ -387,6 +392,22 @@ function celaHospoda(k: KontextHospody, v: VolbyHospody, incidenty: readonly Inc
   });
 }
 
+/** Kdo má dluhy, na toho už hospodský nepíše. Varování manažerovi, že se to někam řítí (spec 9). */
+function sekera(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody[], out: VysledekHospody): void {
+  for (const h of mistni) {
+    if (k.situace.get(h.playerId) !== "dluhy") continue;
+    const incidentId = k.incidenty.find((i) => i.id.includes("dluhy"))?.id ?? "";
+    if (zaznelo(v, "pije_na_sekeru", h.playerId)) continue;
+    const rng = los(k, "sekera", h.playerId);
+    if (!vyjde(rng, SEKERA_SANCE, v)) continue;
+    out.pribehy.push({
+      type: "pije_na_sekeru", playerIds: [h.playerId], effects: [], incidentId,
+      text: text(rng, "hospoda_sekera", { hrac: jmeno(h) }),
+    });
+    return;
+  }
+}
+
 function zlodejiUStolu(k: KontextHospody, tady: ReadonlyMap<string, HostHospody>, incidenty: readonly IncidentVHospode[]): Array<{ playerId: string; jmeno: string }> {
   const zlodeji = new Map<string, string>();
   for (const inc of incidenty) {
@@ -401,7 +422,8 @@ function kdoOhlasi(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHosp
   for (const h of mistni) {
     const hrac = k.kadr.get(h.playerId);
     if (!hrac || k.hrozi.has(h.playerId)) continue;
-    const obvineny = zapreneObvineni(k, h.playerId) !== null;
+    // Kdo zapřel obvinění nebo dostal košem u zálohy, má důvod mluvit hloupě.
+    const obvineny = zapreneObvineni(k, h.playerId) !== null || k.odmitnuteZalohy.has(h.playerId);
     if (v.ohlasi !== undefined) {
       if (v.ohlasi === h.playerId) return { playerId: h.playerId, obvineny };
       continue;
