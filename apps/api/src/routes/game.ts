@@ -383,10 +383,15 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
     : 1;
 
   const team = await c.env.DB.prepare(
-    "SELECT t.id, v.size AS village_size FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
-  ).bind(teamId).first<{ village_size: string | null }>()
+    "SELECT t.id, t.game_date, v.size AS village_size FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
+  ).bind(teamId).first<{ village_size: string | null; game_date: string | null }>()
     .catch((e) => { logger.warn({ module: "game", teamId }, "training-preview team", e); return null; });
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  // Životní situace (spec 17b): stejné modifikátory docházky jako reálný trénink.
+  const { nactiDruhyHracu } = await import("../incidents/absence-hracu");
+  const { TRENINK_SITUACE } = await import("../incidents/nastaveni");
+  const druhySituaci = await nactiDruhyHracu(c.env.DB, teamId, team.game_date ?? new Date().toISOString());
 
   const playersRes = await c.env.DB.prepare(
     `SELECT id, first_name, last_name, age, position, overall_rating, skills, personality, life_context
@@ -506,9 +511,11 @@ gameRouter.post("/teams/:teamId/training-preview", async (c) => {
       ? (0.9 + (youthDev / 100) * 0.6) * (1 + equipYouth + staffFx.youthTrainingMod)
       : 1.0;
     const gkMul = (row.position as string) === "GK" ? staffFx.gkTrainingMul : 1;
+    const situacniMod = (druhySituaci.get(row.id as string) ?? [])
+      .reduce((s, kind) => s + (TRENINK_SITUACE[kind] ?? 0), 0);
     const attendProb = Math.max(0.05, Math.min(0.98,
       (personality.discipline ?? 50) / 100 * 0.6 + 0.3 + approachAttend + ((discipline - 40) / 100) * 0.2
-      + equipAttend + staffFx.trainingAttendanceBonus));
+      + equipAttend + staffFx.trainingAttendanceBonus + situacniMod));
 
     const chance = BASE_IMPROVE_CHANCE * equipMul * staffFx.trainingMultiplier
       * diminishingMod(avgAttr) * ageGrowthMod(age) * coachMod * youthMod * gkMul;

@@ -7,6 +7,7 @@ import type { Rng } from "../generators/rng";
 import { ratingWeightsFor } from "@okresni-masina/shared";
 import { pokusuZaTalent } from "../skills/talent";
 import type { GeneratedPlayer } from "../generators/player";
+import { TRENINK_SITUACE } from "../incidents/nastaveni";
 
 /**
  * Hráč v tréninku: GeneratedPlayer + volitelné stropy atributů (maxPotential ze
@@ -329,7 +330,7 @@ export const TRAINING_EFFECTS: Record<TrainingType, string[]> = {
  * Simulate training attendance for one session.
  * commuteKms: optional array of commute distances per player index.
  */
-function simulateAttendance(
+export function simulateAttendance(
   rng: Rng,
   squad: GeneratedPlayer[],
   approach: TrainingApproach,
@@ -338,6 +339,8 @@ function simulateAttendance(
   managerDiscipline: number = 40,
   /** Důvod incidentní absence po indexech kádru (výslech, soud). Hráč s důvodem nepřijde. */
   incidentniDuvody?: ReadonlyArray<string | undefined>,
+  /** Běžící životní situace po indexech kádru (spec 17b). */
+  situaceHracu?: ReadonlyArray<readonly string[] | undefined>,
 ): TrainingAttendance[] {
   // Trenér, který drží kázeň, dostane na trénink víc lidí. Kolem hodnoty 40 je to
   // neutrální, nahoře i dole to hýbe docházkou nejvýš o deset procentních bodů.
@@ -376,6 +379,9 @@ function simulateAttendance(
         attendProb -= Math.min(0.22, km * 0.008);
       }
     }
+
+    // Životní situace: kdo je doma bez práce nebo se rozvádí, chodí radši na hřiště; dluhy berou čas brigádami.
+    for (const kind of situaceHracu?.[i] ?? []) attendProb += TRENINK_SITUACE[kind] ?? 0;
 
     attendProb = Math.max(0.05, Math.min(0.95, attendProb));
 
@@ -442,6 +448,8 @@ export function simulateTraining(
   weather?: Weather,
   /** Důvody incidentní absence po indexech kádru (`duvodyNaTrenink`). */
   incidentniDuvody?: ReadonlyArray<string | undefined>,
+  /** Běžící životní situace po indexech kádru (`nactiDruhyHracu`). */
+  situaceHracu?: ReadonlyArray<readonly string[] | undefined>,
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
@@ -452,6 +460,7 @@ export function simulateTraining(
     (equipExtras.attendanceBonus ?? 0) + trainingWeatherMod(weather),
     managerBonus.discipline,
     incidentniDuvody,
+    situaceHracu,
   );
   for (const a of session) {
     if (a.attended) attendanceCounts.set(a.playerIndex, 1);

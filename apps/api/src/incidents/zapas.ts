@@ -5,6 +5,7 @@
 
 import { logger } from "../lib/logger";
 import { nactiDruhyHracu } from "./absence-hracu";
+import { ZAPAS_NAROZENI_MORALKA, ZAPAS_ROZVOD_KONZISTENCE, ZAPAS_ROZVOD_MORALKA } from "./nastaveni";
 
 const M = "incidents-zapas";
 
@@ -30,6 +31,9 @@ const OBVINENY_MORALKA = -8;
 const OBVINENY_KONZISTENCE = -10;
 const PACHATEL_TYM_MORALKA = -2;
 
+const SITUACE_MORALKA: Record<string, number> = { rozvod: ZAPAS_ROZVOD_MORALKA, narozeni_ditete: ZAPAS_NAROZENI_MORALKA };
+const SITUACE_KONZISTENCE: Record<string, number> = { rozvod: ZAPAS_ROZVOD_KONZISTENCE };
+
 /** `skupiny[0]` je základní sestava, další skupiny lavička. Mění hráče na místě. */
 export function upravSestavuZIncidentu(
   skupiny: HracVZapase[][],
@@ -48,6 +52,19 @@ export function upravSestavuZIncidentu(
       pridejDeltu(h, puvodni);
       h.consistency = Math.max(0, h.consistency + OBVINENY_KONZISTENCE);
       obvinenych++;
+    }
+    for (const h of skupina) {
+      for (const kind of druhyHrace(h)) {
+        const moralka = SITUACE_MORALKA[kind];
+        if (moralka) {
+          const puvodni = h.morale;
+          h.morale = Math.max(0, Math.min(100, h.morale + moralka));
+          // Po zápase se odečítá jen postih; radost z narození dítěte si hráč nechá.
+          if (moralka < 0) pridejDeltu(h, puvodni);
+        }
+        const konzistence = SITUACE_KONZISTENCE[kind];
+        if (konzistence) h.consistency = Math.max(0, h.consistency + konzistence);
+      }
     }
   }
   const pachatelVSestave = (skupiny[0] ?? []).some((h) => druhyHrace(h).includes("pachatel"));

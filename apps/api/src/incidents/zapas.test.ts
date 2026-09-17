@@ -44,3 +44,16 @@ describe("incidenty v zápase", () => {
     expect(db.pocet(/FROM club_incidents/)).toBe(1);
   });
 });
+
+describe("životní situace v zápase (spec 17c)", () => {
+  it("rozvod bere morálku i konzistenci, narození dítěte morálku přidá", () => {
+    const sestava = [[{ id: 1, morale: 60, consistency: 60 }, { id: 2, morale: 60, consistency: 60 }]];
+    const idMap = new Map([[1, "r"], [2, "n"]]);
+    const r = upravSestavuZIncidentu(sestava, idMap, new Map([["r", ["rozvod"]], ["n", ["narozeni_ditete"]]]));
+    expect(sestava[0][0]).toMatchObject({ morale: 55, consistency: 55 });
+    expect(sestava[0][1].morale).toBe(65);
+    // Dočasné je jen zhoršení: kladná změna se po zápase neodečítá.
+    expect(r.moraleDelta.get(1)).toBe(-5);
+    expect(r.moraleDelta.get(2)).toBeUndefined();
+  });
+});

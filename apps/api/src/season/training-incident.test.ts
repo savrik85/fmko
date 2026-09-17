@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
-import { simulateTraining, type TrainingPlayer } from "./training";
+import { simulateAttendance, simulateTraining, type TrainingPlayer } from "./training";
+import type { Rng } from "../generators/rng";
 
 function hrac(over: Partial<TrainingPlayer> = {}): TrainingPlayer {
   return {
@@ -36,5 +37,36 @@ describe("incident na tréninku", () => {
       expect(simulateTraining(createRng(seed), squadA, PLAN, undefined, 1, undefined, {}, undefined, [undefined, undefined, undefined]))
         .toEqual(simulateTraining(createRng(seed), squadB, PLAN));
     }
+  });
+});
+
+function simulateTrainingProSituace(
+  rng: Rng,
+  squad: never[],
+  situace?: Array<readonly string[] | undefined>,
+) {
+  return simulateAttendance(rng, squad as never, "balanced", undefined, 0, 40, undefined, situace);
+}
+
+describe("docházka podle životní situace (spec 17b)", () => {
+  const squad = (n: number) => Array.from({ length: n }, (_, i) => ({
+    id: `p${i}`, firstName: "Hráč", lastName: String(i), age: 27, position: "MID",
+    discipline: 50, skills: {}, personality: { discipline: 50, workRate: 50 },
+  })) as never[];
+
+  const kolikPrislo = (situace?: Array<readonly string[] | undefined>) => {
+    let prislo = 0;
+    for (let s = 1; s <= 200; s++) {
+      const r = simulateTrainingProSituace(createRng(s), squad(1), situace);
+      prislo += r.filter((a) => a.attended).length;
+    }
+    return prislo;
+  };
+
+  it("kdo přišel o práci nebo se rozvádí, chodí víc; kdo má dluhy, míň", () => {
+    const bez = kolikPrislo(undefined);
+    expect(kolikPrislo([["prisel_o_praci"]])).toBeGreaterThan(bez);
+    expect(kolikPrislo([["rozvod"]])).toBeGreaterThan(bez);
+    expect(kolikPrislo([["dluhy"]])).toBeLessThan(bez);
   });
 });

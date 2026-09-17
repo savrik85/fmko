@@ -407,11 +407,15 @@ export async function executeDailyTick(
         // Herní den je `effectiveDate` (kanonický den ticku) — `team.game_date` tenhle dotaz (řádek ~192)
         // vůbec nenačítá, takže by byl `undefined` a `.slice` uvnitř `nactiIncidentniAbsence` shodilo
         // trénink celého lidského týmu do catch bloku.
-        const { nactiIncidentniAbsence, duvodyNaTrenink } = await import("../incidents/absence-hracu");
+        const { nactiIncidentniAbsence, duvodyNaTrenink, nactiDruhyHracu } = await import("../incidents/absence-hracu");
+        const hraciIds = playersResult.results.map((row) => row.id as string);
         const incidentniDuvody = duvodyNaTrenink(
-          playersResult.results.map((row) => row.id as string),
+          hraciIds,
           await nactiIncidentniAbsence(env.DB, teamId, effectiveDate.toISOString()),
         );
+        // Životní situace (spec 17b): kdo je bez práce nebo se rozvádí, chodí radši na trénink; dluhy naopak berou čas.
+        const druhy = await nactiDruhyHracu(env.DB, teamId, effectiveDate.toISOString());
+        const situaceHracu = hraciIds.map((id) => druhy.get(id));
 
         const result = simulateTraining(rng, squad, {
           type: (todayTrainingType as any) ?? "conditioning",
@@ -423,7 +427,8 @@ export async function executeDailyTick(
           { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul },
           // Počasí tréninkového dne — týž zdroj jako předpověď a zápas.
           trainingWeather?.weather,
-          incidentniDuvody);
+          incidentniDuvody,
+          situaceHracu);
 
         const attendanceWithNames = result.attendance.map((a) => ({
           playerId: playersResult.results[a.playerIndex].id as string,
