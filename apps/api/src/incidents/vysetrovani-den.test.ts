@@ -54,7 +54,7 @@ describe("výsledek policie", () => {
     expect(vi.mocked(sendSystemSMS).mock.calls[0][3]).not.toContain("Pepa");
   });
 
-  it("dopadený cizí zloděj: vybavení se vrátí, jen když klub nemá stejné nebo lepší", async () => {
+  it("dopadený cizí zloděj: vybavení se vrátí, jen když klub nemá stejné nebo lepší, a inzerát v bazaru se stáhne (I1)", async () => {
     const id = idSLosem((los) => los < 0.15);
     const inc = { ...incidentRadek({ id, status: "policie", culprit_type: "cizi", culprit_player_id: null, police_result_on: DNES }), first_name: null, last_name: null };
     const { db, env } = prostredi([{ sql: SETRENI, all: [inc] }]);
@@ -63,6 +63,16 @@ describe("výsledek policie", () => {
     const vraceni = db.dotazy.find((d) => /UPDATE equipment SET jerseys = \?, jerseys_condition = \? WHERE team_id = \? AND jerseys < \?/.test(d.sql));
     expect(vraceni?.params).toEqual([2, 70, "tym-a", 2]);
     expect(recordTransaction).not.toHaveBeenCalled();
+    const stazeniInzeratu = db.dotazy.find((d) => /UPDATE equipment_listings SET status = 'withdrawn'/.test(d.sql));
+    expect(stazeniInzeratu?.params.slice(1)).toEqual([id]);
+  });
+
+  it("neúspěšné šetření proti cizímu pachateli nestahuje žádný inzerát (I1)", async () => {
+    const id = idSLosem((los) => los >= 0.9);
+    const inc = { ...incidentRadek({ id, status: "policie", culprit_type: "cizi", culprit_player_id: null, police_result_on: DNES }), first_name: null, last_name: null };
+    const { db, env } = prostredi([{ sql: SETRENI, all: [inc] }]);
+    await vyhodnotPolicii(env, T);
+    expect(db.pocet(/UPDATE equipment_listings SET status = 'withdrawn'/)).toBe(0);
   });
 
   it("dopadený vandal zaplatí polovinu až celou škodu", async () => {

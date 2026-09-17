@@ -157,7 +157,13 @@ export async function vyhodnotPolicii(env: Bindings, t: Den): Promise<number> {
         break;
       case "dopaden_cizi":
         prosel = await prechodZPolicie(db, inc.id, "status = 'uzavreny', police_success = 1, recovered = 1, resolution = 'vyreseno_policii', resolved_on = ?", [t.gameDate]);
-        if (prosel) zprava = (await vratZtraty(db, t, inc, nazev, rng)).join(" ");
+        if (prosel) {
+          // Věci jsou zpátky, inzerát v bazaru (pokud tam ještě je) nemá co nabízet.
+          await db.prepare("UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE incident_id = ? AND status = 'active'")
+            .bind(new Date().toISOString(), inc.id).run()
+            .catch((e) => logger.error({ module: M }, `stažení inzerátu po dopadení ${inc.id}`, e));
+          zprava = (await vratZtraty(db, t, inc, nazev, rng)).join(" ");
+        }
         break;
     }
     if (!prosel) continue;
