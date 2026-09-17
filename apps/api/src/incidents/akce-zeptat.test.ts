@@ -4,7 +4,7 @@ vi.mock("../messaging/ai-player-spawn", () => ({ getOrCreatePlayerConversation: 
 
 import type { Bindings } from "../index";
 import { getOrCreatePlayerConversation } from "../messaging/ai-player-spawn";
-import { zeptejSe } from "./akce";
+import { promluvSi, zeptejSe } from "./akce";
 import type { IncidentRadek } from "./incident-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 import { incidentRadek } from "./testovaci-stav";
@@ -47,6 +47,22 @@ describe("zeptat se hráče", () => {
   it("hráč mimo kádr: 400 a žádná konverzace", async () => {
     const { env } = prostredi(incidentRadek(), [{ sql: /FROM players/, first: null }]);
     expect(await zeptejSe(env, "tym-a", "inc-1", "cizi")).toMatchObject({ ok: false, kod: 400 });
+    expect(getOrCreatePlayerConversation).not.toHaveBeenCalled();
+  });
+});
+
+describe("promluvit si s tím, kdo v hospodě ohlásil čin (spec 9a)", () => {
+  it("otevře konverzaci s ním a nastaví téma", async () => {
+    const { db, env } = prostredi(incidentRadek({ status: "hrozi", culprit_player_id: "s", loss: "[]" }));
+    expect(await promluvSi(env, "tym-a", "inc-1")).toEqual({ ok: true, conversationId: "konv-1" });
+    expect(db.dotazy.find((d) => /FROM players/.test(d.sql))?.params[0]).toBe("s");
+    expect(db.pocet(/UPDATE conversations SET ai_thread_state/)).toBe(1);
+  });
+
+  it("jen u hrozícího činu a jen s hráčem, který je pořád v kádru", async () => {
+    expect(await promluvSi(prostredi(incidentRadek()).env, "tym-a", "inc-1")).toMatchObject({ ok: false, kod: 409 });
+    const odesel = prostredi(incidentRadek({ status: "hrozi" }), [{ sql: /FROM players/, first: null }]);
+    expect(await promluvSi(odesel.env, "tym-a", "inc-1")).toMatchObject({ ok: false, kod: 409 });
     expect(getOrCreatePlayerConversation).not.toHaveBeenCalled();
   });
 });

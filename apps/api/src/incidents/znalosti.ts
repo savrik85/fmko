@@ -170,6 +170,7 @@ const VYSLEDEK_V_PROMPTU: Record<string, readonly [string, string]> = {
   konec_sezony: ["Nevyřešilo se to.", "Nevyřešilo se to."],
   vyreseno_policii: ["Policie pachatele dopadla.", "Policie pachatele dopadla."],
   nehoda: ["Nakonec se ukázalo, že to byla nehoda.", "Nakonec se ukázalo, že to byla nehoda."],
+  nestalo_se: ["Nakonec z toho nic nebylo.", "Nakonec jsi nic neudělal."],
 };
 
 function kdy(dni: number): string {
@@ -183,7 +184,9 @@ function verejnyFakt(r: RadekZnalosti): string {
   const vysetruje = r.kategorie === "kradez" || r.kategorie === "poskozeni";
   if (r.pachatelJeOn) casti.push("Přišlo se na to, že jsi to byl ty.");
   else if (r.pachatel) casti.push(`Udělal to ${r.pachatel}.`);
-  else if (vysetruje && r.vysledek !== "vyreseno_policii" && r.vysledek !== "nehoda") casti.push("Kdo to byl, se v klubu neví.");
+  else if (vysetruje && r.vysledek !== "vyreseno_policii" && r.vysledek !== "nehoda" && r.vysledek !== "nestalo_se") {
+    casti.push("Kdo to byl, se v klubu neví.");
+  }
   const vysledek = r.vysledek ? VYSLEDEK_V_PROMPTU[r.vysledek] : undefined;
   if (vysledek) casti.push(vysledek[r.pachatelJeOn ? 1 : 0]);
   else if (r.stav === "policie") casti.push("Vyšetřuje to policie.");
@@ -202,6 +205,8 @@ function pokynSvedka(r: RadekZnalosti): string {
 }
 
 function pokynPachatele(r: RadekZnalosti): string {
+  // Čin ohlášený v hospodě se ještě nestal (spec 9a).
+  if (r.stav === "hrozi") return "Byl jsi v hospodě opilý a vykládal jsi to. Zlehčuj to, a když ti trenér domluví, slib, že nic neuděláš.";
   if (r.odhalen) return "Už se na to přišlo, nezapírej.";
   return r.vyslech === "priznal" ? "Přiznej se trenérovi." : "Zapírej, nic nepřiznávej.";
 }
@@ -209,8 +214,10 @@ function pokynPachatele(r: RadekZnalosti): string {
 export function radekDoPromptu(r: RadekZnalosti): string {
   switch (r.role) {
     case "kadr":
-    case "drb":
       return `- ${verejnyFakt(r)}`;
+    case "drb":
+      // Drb z cizího klubu: co a kdy, případně kdo. Výsledek ne, model by ho vztáhl na vlastního trenéra.
+      return `- ${[r.fact, `Stalo se to ${kdy(r.predDny)}.`, ...(r.pachatel ? [`Udělal to ${r.pachatel}.`] : [])].join(" ")}`;
     case "obvineny":
       return `- ${r.fact}`;
     case "pachatel":

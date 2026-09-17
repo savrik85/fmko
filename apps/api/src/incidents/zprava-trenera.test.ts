@@ -55,4 +55,26 @@ describe("zpráva trenéra hráči", () => {
     expect(dotaz?.sql).toContain("culprit_revealed = 0");
     expect(dotaz?.sql).toContain("status IN ('otevreny', 'policie')");
   });
+
+  it("řeči z hospody: zpráva hráči, který ohlásil čin, nastaví téma a zapíše rozhovor", async () => {
+    vi.mocked(vyslechni).mockResolvedValueOnce(null);
+    const d = db(null, [{ sql: /status = 'hrozi' AND culprit_player_id = \?/, first: { id: "inc-h", kind: "vitrina" } }]);
+    expect(await zprava(d, "Co to bylo včera v hospodě za řeči?")).toEqual({ incidentId: "inc-h", vyslech: null });
+    expect(d.dotazy.find((q) => /UPDATE conversations/.test(q.sql))?.params.slice(0, 2)).toEqual(["inc-h", "2026-09-16"]);
+    expect(d.dotazy.find((q) => /\$\.promluvil/.test(q.sql))?.params).toEqual(["2026-09-16", "inc-h", "tym-a", "s"]);
+  });
+
+  it("hráč bez ohlášeného činu: řeči o hospodě nic nenastaví", async () => {
+    const d = db(null);
+    expect(await zprava(d, "Co to bylo včera v hospodě?")).toBeNull();
+    expect(d.pocet(/UPDATE club_incidents/)).toBe(0);
+    expect(d.pocet(/UPDATE conversations/)).toBe(0);
+  });
+
+  it("téma z tlačítka u hrozícího činu: výslech nic nevrátí, zapíše se rozhovor", async () => {
+    vi.mocked(vyslechni).mockResolvedValueOnce(null);
+    const d = db({ incidentId: "inc-h", incidentDen: "2026-09-16" });
+    expect(await zprava(d, "Tak co, Franto?")).toEqual({ incidentId: "inc-h", vyslech: null });
+    expect(d.pocet(/\$\.promluvil/)).toBe(1);
+  });
 });

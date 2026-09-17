@@ -157,4 +157,24 @@ describe("blok znalostí v promptu", () => {
     ]);
     expect(vse).not.toContain("—");
   });
+
+  it("hrozba z hospody: hráč to zlehčuje a může slíbit, že nic neudělá", () => {
+    const r = radekDoPromptu(radek({ role: "pachatel", status: "hrozi", fact: "V hospodě jsi opilý vykládal, že provedeš tohle: Poháry z vitríny." }, "p"));
+    expect(r).toContain("Poháry z vitríny");
+    expect(r).toContain("slib, že nic neuděláš");
+    expect(r).not.toContain("Zapírej");
+  });
+
+  it("řeči, ze kterých nic nebylo: bez „kdo to byl, se neví“", () => {
+    const r = radekDoPromptu(radek({ status: "uzavreny", resolution: "nestalo_se", fact: "Franta Novák v hospodě kecal, ale nic neudělal." }));
+    expect(r).toContain("Nakonec z toho nic nebylo.");
+    expect(r).not.toContain("Kdo to byl");
+  });
+
+  it("drb z cizího klubu: co, kdy a jméno odhaleného, bez výsledku", () => {
+    const zaklad = { role: "drb" as const, fact: "V hospodě jsi slyšel drb, klub TJ Dvory má průšvih: Vloupání do skladu." };
+    const neodhaleny = radekDoPromptu(radek({ ...zaklad, status: "uzavreny", resolution: "pokuta" }));
+    expect(neodhaleny).toBe(`- ${zaklad.fact} Stalo se to před 3 dny.`);
+    expect(radekDoPromptu(radek({ ...zaklad, ...ODHALENY }))).toContain("Udělal to Pepa Průšvih.");
+  });
 });

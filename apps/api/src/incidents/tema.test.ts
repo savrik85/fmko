@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jeOtazkaNaIncident, najdiIncidentVTextu, normalizuj, temaZeStavu } from "./tema";
+import { jeOtazkaNaIncident, jeRecOHrozicim, najdiIncidentVTextu, normalizuj, temaZeStavu } from "./tema";
 import type { Ztrata } from "./typy";
 
 const SKLAD = { kind: "vloupani_sklad", ztraty: [{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 2 }] as Ztrata[] };
@@ -100,5 +100,25 @@ describe("téma ve vlákně", () => {
     expect(temaZeStavu(JSON.stringify({ awaiting: "coach" }))).toBeNull();
     expect(temaZeStavu("{rozbité")).toBeNull();
     expect(temaZeStavu(null)).toBeNull();
+  });
+});
+
+describe("řeči z hospody (spec 9a)", () => {
+  it.each([
+    "Co to bylo včera v hospodě za řeči?",
+    "Slyšel jsem, co jsi vykládal.",
+    "Neblbni, jo?",
+    "Ke skladu ani nechoď.",
+  ])("%s", (zprava) => {
+    expect(jeRecOHrozicim(zprava, "vloupani_sklad")).toBe(true);
+  });
+
+  it.each(["Zdar, jak se máš?", "Zítra trénink v šest.", "Dobrý gól včera."])("běžná zpráva: %s", (zprava) => {
+    expect(jeRecOHrozicim(zprava, "vloupani_sklad")).toBe(false);
+  });
+
+  it("místo činu platí jen pro ten čin", () => {
+    expect(jeRecOHrozicim("Ta vitrína zůstane, kde je.", "vitrina")).toBe(true);
+    expect(jeRecOHrozicim("Ta vitrína zůstane, kde je.", "vloupani_sklad")).toBe(false);
   });
 });

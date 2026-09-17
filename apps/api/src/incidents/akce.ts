@@ -135,15 +135,10 @@ export async function zavolejPolicii(
   return { ok: true, vysledekOn };
 }
 
-/** Otevře konverzaci s hráčem a nastaví téma na zbytek herního dne (spec 7a). Otázku píše trenér sám. */
-export async function zeptejSe(
-  env: Bindings, teamId: string, incidentId: string, playerId: string,
+/** Konverzace s hráčem kádru s tématem na zbytek herního dne (spec 7a, 9a). Otázku píše trenér sám. */
+async function otevriRozhovor(
+  db: D1Database, teamId: string, incidentId: string, playerId: string, gameDate: string,
 ): Promise<VysledekAkce<{ conversationId: string }>> {
-  const db = env.DB;
-  const [inc, gameDate] = await Promise.all([nactiIncident(db, teamId, incidentId), herniDatum(db, teamId)]);
-  if (!inc || !gameDate) return NENALEZENO;
-  if (!lzeVyslychat(proAkce(inc, false))) return { ok: false, kod: 409, chyba: "Na tenhle incident se už ptát nejde" };
-
   const hrac = await db.prepare(
     "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE id = ? AND team_id = ? AND (status IS NULL OR status = 'active')",
   ).bind(playerId, teamId).first<{ id: string; first_name: string; last_name: string; nickname: string | null; avatar: string | null }>()
@@ -160,6 +155,32 @@ export async function zeptejSe(
     return { ok: false, kod: 500, chyba: "Téma rozhovoru se nepodařilo uložit" };
   }
   return { ok: true, conversationId };
+}
+
+/** Otevře konverzaci s hráčem a nastaví téma na zbytek herního dne (spec 7a). Otázku píše trenér sám. */
+export async function zeptejSe(
+  env: Bindings, teamId: string, incidentId: string, playerId: string,
+): Promise<VysledekAkce<{ conversationId: string }>> {
+  const db = env.DB;
+  const [inc, gameDate] = await Promise.all([nactiIncident(db, teamId, incidentId), herniDatum(db, teamId)]);
+  if (!inc || !gameDate) return NENALEZENO;
+  if (!lzeVyslychat(proAkce(inc, false))) return { ok: false, kod: 409, chyba: "Na tenhle incident se už ptát nejde" };
+  return otevriRozhovor(db, teamId, incidentId, playerId, gameDate);
+}
+
+/**
+ * Promluvit si s hráčem, který v hospodě ohlásil čin (spec 9a). Rozhovor se do incidentu zapíše
+ * až zprávou trenéra (`zpracujZpravuTrenera`), samotné otevření konverzace šanci nesníží.
+ */
+export async function promluvSi(
+  env: Bindings, teamId: string, incidentId: string,
+): Promise<VysledekAkce<{ conversationId: string }>> {
+  const db = env.DB;
+  const [inc, gameDate] = await Promise.all([nactiIncident(db, teamId, incidentId), herniDatum(db, teamId)]);
+  if (!inc || !gameDate) return NENALEZENO;
+  if (inc.status !== "hrozi" || !inc.culprit_player_id) return { ok: false, kod: 409, chyba: "Tady už není o čem mluvit" };
+  const r = await otevriRozhovor(db, teamId, incidentId, inc.culprit_player_id, gameDate);
+  return !r.ok && r.kod === 400 ? { ok: false, kod: 409, chyba: "Hráč už v kádru není" } : r;
 }
 
 /** SMS, kterou pachatel odpoví na trest. U ostatních trestů hráč nepíše. */

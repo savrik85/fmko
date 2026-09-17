@@ -74,6 +74,21 @@ export function najdiIncidentVTextu(
   return incidenty.find((i) => jeOtazkaNaIncident(textZpravy, i))?.id ?? null;
 }
 
+/** Slova, podle kterých trenér mluví o řečech z hospody (spec 9a). Bez diakritiky. */
+const RECI_Z_HOSPODY = ["hospod", "hospud", "kecal", "keca", "vyklad", "reci", "opil", "ozral", "blbost", "neblbni", "nedelej", "vyhroz"] as const;
+
+/**
+ * Mluví zpráva o činu, který hráč ohlásil v hospodě? Stačí zmínka o hospodě a řečech,
+ * nebo začátek slova o místě činu (sklad, vitrína…). Signál průšvihu tu potřeba není:
+ * zpráva jde jen hráči, který čin ohlásil.
+ */
+export function jeRecOHrozicim(textZpravy: string, kind: string): boolean {
+  const t = normalizuj(textZpravy);
+  if (RECI_Z_HOSPODY.some((s) => t.includes(s))) return true;
+  const slova = t.split(/[^a-z]+/).filter(Boolean);
+  return (SLOVA_DRUHU[kind] ?? []).some((k) => slova.some((s) => s.startsWith(k)));
+}
+
 /** Téma z `conversations.ai_thread_state`. S `den` platí jen v herní den, kdy se nastavilo. */
 export function temaZeStavu(raw: unknown, den?: string): TemaKonverzace | null {
   if (typeof raw !== "string" || raw === "") return null;

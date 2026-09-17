@@ -6,8 +6,9 @@
  */
 
 import { logger } from "../lib/logger";
+import { zaznamenejPromluvu } from "./hrozi-db";
 import { nactiZtraty } from "./popis";
-import { najdiIncidentVTextu, temaZeStavu } from "./tema";
+import { jeRecOHrozicim, najdiIncidentVTextu, temaZeStavu } from "./tema";
 import { vyslechni } from "./vyslech";
 import type { VysledekVyslechu } from "./znalosti";
 
@@ -57,11 +58,25 @@ export async function zpracujZpravuTrenera(
       opts.text,
       (kandidati?.results ?? []).map((r) => ({ id: r.id, kind: r.kind, ztraty: nactiZtraty(r.loss) })),
     );
+    if (!incidentId) {
+      // Řeči z hospody: trenér píše hráči, který v hospodě ohlásil čin (spec 9a).
+      const hrozici = await db.prepare(
+        `SELECT id, kind FROM club_incidents
+          WHERE team_id = ? AND status = 'hrozi' AND culprit_player_id = ?
+          ORDER BY game_date DESC LIMIT 1`,
+      ).bind(opts.teamId, opts.playerId).first<{ id: string; kind: string }>()
+        .catch((e) => { logger.warn({ module: M }, `hrozící čin hráče ${opts.playerId}`, e); return null; });
+      if (hrozici && jeRecOHrozicim(opts.text, hrozici.kind)) incidentId = hrozici.id;
+    }
     if (!incidentId) return null;
     // Navazující otázka („a kde?") klíčová slova mít nemusí, téma proto platí do konce dne.
     await nastavTema(db, opts.convId, incidentId, den);
   }
 
   const vyslech = await vyslechni(db, { teamId: opts.teamId, incidentId, playerId: opts.playerId, gameDate: zaklad.game_date });
-  return { incidentId, vyslech: vyslech?.vysledek ?? null };
+  if (vyslech) return { incidentId, vyslech: vyslech.vysledek };
+  // Hrozící čin se nevyslýchá. Rozhovor s tím, kdo ho ohlásil, sníží šanci, že to udělá (spec 9a).
+  // U jiného incidentu nebo jiného hráče hlídaný UPDATE nic nezmění.
+  await zaznamenejPromluvu(db, { teamId: opts.teamId, incidentId, playerId: opts.playerId, den });
+  return { incidentId, vyslech: null };
 }
