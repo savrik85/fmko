@@ -463,7 +463,7 @@ export const TEXTY = {
   situace_dluhy: [
     "{hrac} se dostal do dluhů. V kabině se říká, že mu volají z inkasa.",
     "{hrac} má doma dluhy a shání peníze, kde se dá.",
-    "{hrac} dluší a začal brát brigády, kdy se dá.",
+    "{hrac} dluží a začal brát brigády, kdy se dá.",
   ],
   situace_prisel_o_praci: [
     "{hrac} přišel o práci. Zatím to bere s humorem, ale je to znát.",
@@ -503,7 +503,7 @@ export const TEXTY = {
   sms_situace_prisel_o_praci: [
     "Trenére, přišel jsem o práci. Trénovat budu chodit, aspoň mě to nebude žrát.",
     "Trenére, vyhodili mě z práce. Zatím to nějak zvládám.",
-    "Trenére, jsem bez práce. Kdyby o něčem víte, dejte vědět.",
+    "Trenére, jsem bez práce. Kdybyste o něčem věděli, dejte vědět.",
   ],
   sms_situace_rozvod: [
     "Trenére, rozvádím se. Spím teď na kabině, snad to nevadí.",
