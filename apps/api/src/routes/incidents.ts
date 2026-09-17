@@ -7,7 +7,7 @@ import { Hono, type Context } from "hono";
 import { tymyDivaka } from "../auth/divak";
 import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { cryptoSeed, createRng } from "../generators/rng";
-import { obvinHrace, rozhodni, zavolejPolicii, type VysledekAkce } from "../incidents/akce";
+import { obvinHrace, rozhodni, zavolejPolicii, zeptejSe, type VysledekAkce } from "../incidents/akce";
 import { oznamIncident, zapisIncident } from "../incidents/dopady";
 import { SLOUPCE_INCIDENTU, proAkce, type IncidentRadek } from "../incidents/incident-db";
 import { KATALOG_PODLE_KIND } from "../incidents/katalog";
@@ -18,7 +18,7 @@ import { nactiStopy } from "../incidents/stopy-db";
 import { castkaPokuty, castkaSrazky, hodnotaSkody } from "../incidents/tresty";
 import type { NavrhIncidentu } from "../incidents/typy";
 import { zpracujVysetrovani } from "../incidents/vysetrovani-den";
-import { AKCE_TRESTU, dostupneAkce, nactiObvineni, stavVysetrovani } from "../incidents/vysetrovani";
+import { AKCE_TRESTU, dostupneAkce, lzeVyslychat, nactiObvineni, stavVysetrovani } from "../incidents/vysetrovani";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 
@@ -110,6 +110,7 @@ incidentsRouter.get("/teams/:teamId/incidents/:id", async (c) => {
   const odhalen = row.culprit_revealed === 1;
   const pachatelVKadru = odhalen && !!row.culprit_player_id && jmena.has(row.culprit_player_id);
   const akce = dostupneAkce(proAkce(row, pachatelVKadru));
+  const zeptat = lzeVyslychat(proAkce(row, pachatelVKadru));
   const vysetrovani = stavVysetrovani(stopy, odhalen);
 
   let castky: { srazka: number; pokuta: number; tydnu: number } | null = null;
@@ -129,9 +130,9 @@ incidentsRouter.get("/teams/:teamId/incidents/:id", async (c) => {
     stopy: stopy.filter((s) => s.nalezena).map((s) => ({ zdroj: s.zdroj, text: s.text, sila: s.sila })),
     obvineni: nactiObvineni(row.accused),
     policie: { vysledekOn: row.status === "policie" ? row.police_result_on : null, vysledek: row.police_success },
-    akce,
+    akce: { ...akce, zeptat },
     zbyvaObvineni: Math.max(0, MAX_OBVINENI - row.accusations),
-    kadr: akce.obvinit ? kadr.results.map((h) => ({ playerId: h.id, jmeno: `${h.first_name} ${h.last_name}` })) : [],
+    kadr: akce.obvinit || zeptat ? kadr.results.map((h) => ({ playerId: h.id, jmeno: `${h.first_name} ${h.last_name}` })) : [],
     castky,
   });
 });
@@ -149,6 +150,14 @@ incidentsRouter.post("/teams/:teamId/incidents/:id/obvinit", async (c) => {
   const body = await teloPozadavku<{ playerId?: string }>(c, "obvinění");
   if (!body?.playerId) return c.json({ error: "Vyber hráče, kterého chceš obvinit" }, 400);
   return odpovedAkce(c, await obvinHrace(c.env, c.req.param("teamId"), c.req.param("id"), body.playerId));
+});
+
+// ── POST /api/teams/:teamId/incidents/:id/zeptat ────────────────────────────
+// Otevře konverzaci s hráčem a nastaví téma rozhovoru (spec 7a).
+incidentsRouter.post("/teams/:teamId/incidents/:id/zeptat", async (c) => {
+  const body = await teloPozadavku<{ playerId?: string }>(c, "zeptat se");
+  if (!body?.playerId) return c.json({ error: "Vyber hráče, kterého se chceš zeptat" }, 400);
+  return odpovedAkce(c, await zeptejSe(c.env, c.req.param("teamId"), c.req.param("id"), body.playerId));
 });
 
 // ── POST /api/teams/:teamId/incidents/:id/policie ───────────────────────────

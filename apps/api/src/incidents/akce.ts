@@ -27,7 +27,8 @@ import { nactiStopy, prikazyStop } from "./stopy-db";
 import { text, TEXTY, vypln } from "./texty";
 import { castkaPokuty, castkaSrazky, hodnotaSkody, jeOblibeny } from "./tresty";
 import type { AkceTrestu, Obvineni, VysledekObvineni } from "./typy";
-import { dostupneAkce, nactiObvineni, rozhodniObvineni } from "./vysetrovani";
+import { dostupneAkce, lzeVyslychat, nactiObvineni, rozhodniObvineni } from "./vysetrovani";
+import { nastavTema } from "./zprava-trenera";
 
 const M = "incidents-akce";
 
@@ -128,6 +129,33 @@ export async function zavolejPolicii(
   await sendSystemSMS(db, teamId, SMS_ROLE_POLICIE, `🚓 ${text(rng, "policie_prijato", { nazev: nazevIncidentu(inc.kind) })}`)
     .catch((e) => logger.warn({ module: M }, `SMS policie ${incidentId}`, e));
   return { ok: true, vysledekOn };
+}
+
+/** Otevře konverzaci s hráčem a nastaví téma na zbytek herního dne (spec 7a). Otázku píše trenér sám. */
+export async function zeptejSe(
+  env: Bindings, teamId: string, incidentId: string, playerId: string,
+): Promise<VysledekAkce<{ conversationId: string }>> {
+  const db = env.DB;
+  const [inc, gameDate] = await Promise.all([nactiIncident(db, teamId, incidentId), herniDatum(db, teamId)]);
+  if (!inc || !gameDate) return NENALEZENO;
+  if (!lzeVyslychat(proAkce(inc, false))) return { ok: false, kod: 409, chyba: "Na tenhle incident se už ptát nejde" };
+
+  const hrac = await db.prepare(
+    "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE id = ? AND team_id = ? AND (status IS NULL OR status = 'active')",
+  ).bind(playerId, teamId).first<{ id: string; first_name: string; last_name: string; nickname: string | null; avatar: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `hráč k otázce ${playerId}`, e); return null; });
+  if (!hrac) return { ok: false, kod: 400, chyba: "Hráč není v kádru" };
+
+  const { getOrCreatePlayerConversation } = await import("../messaging/ai-player-spawn");
+  const conversationId = await getOrCreatePlayerConversation(db, teamId, {
+    id: hrac.id, firstName: hrac.first_name, lastName: hrac.last_name, nickname: hrac.nickname, avatar: hrac.avatar,
+  }).catch((e) => { logger.error({ module: M }, `konverzace k incidentu ${incidentId}`, e); return null; });
+  if (!conversationId) return { ok: false, kod: 500, chyba: "Konverzaci s hráčem se nepodařilo otevřít" };
+
+  if (!(await nastavTema(db, conversationId, incidentId, gameDate.slice(0, 10)))) {
+    return { ok: false, kod: 500, chyba: "Téma rozhovoru se nepodařilo uložit" };
+  }
+  return { ok: true, conversationId };
 }
 
 /** SMS, kterou pachatel odpoví na trest. U ostatních trestů hráč nepíše. */

@@ -374,6 +374,14 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     "UPDATE conversations SET last_message_text = ?, last_message_at = ? WHERE id = ?"
   ).bind(trimmedText, now, convId).run();
 
+  // Otázka na incident (spec 7a): výsledek výslechu rozhoduje DB, a to dřív, než se
+  // začne generovat odpověď, aby ho model dostal v promptu jako pokyn.
+  if (conv?.type === "player" && conv.participant_id) {
+    const { zpracujZpravuTrenera } = await import("../incidents/zprava-trenera");
+    await zpracujZpravuTrenera(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
+      .catch((e) => logger.warn({ module: "messaging" }, "otázka na incident", e));
+  }
+
   // AI player chat hook: pokud je thread aktivní a čeká na trenéra,
   // atomic UPDATE awaiting='player' (race guard) a spustíme generování reply v pozadí.
   if (conv?.type === "player" && conv.ai_thread_active === 1) {
