@@ -45,7 +45,7 @@ describe("detail incidentu", () => {
       stav: "podezreli",
       podezreli: [{ playerId: "a", jmeno: "Adam Kos" }, { playerId: "p", jmeno: "Pepa Průšvih" }],
     });
-    expect(telo.akce).toEqual({ obvinit: true, policie: true, tresty: [], zeptat: true });
+    expect(telo.akce).toEqual({ obvinit: true, policie: true, tresty: [], zeptat: true, promluvit: false });
     expect(telo.zbyvaObvineni).toBe(2);
     expect(telo.kadr).toHaveLength(2);
     expect(telo.castky).toBeNull();

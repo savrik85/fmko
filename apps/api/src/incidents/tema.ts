@@ -75,7 +75,7 @@ export function najdiIncidentVTextu(
 }
 
 /** Začátky slov, podle kterých trenér mluví o řečech z hospody (spec 9a). Bez diakritiky. */
-const RECI_Z_HOSPODY_ZACATKY = ["hospod", "hospud", "kecal", "kecat", "kecas", "vyklada", "opil", "ozral", "blbost", "neblbn", "nedelej", "vyhroz"] as const;
+const RECI_Z_HOSPODY_ZACATKY = ["hospod", "hospud", "kecal", "kecat", "kecas", "vykladal", "vykladas", "opil", "ozral", "blbost", "neblbn", "nedelej", "vyhroz"] as const;
 
 /** Celá slova, podle kterých trenér mluví o řečech z hospody. Krátká na to, aby smělo jít jen o přesnou shodu. */
 const RECI_Z_HOSPODY_SLOVA = new Set(["reci", "keci", "kecy"]);

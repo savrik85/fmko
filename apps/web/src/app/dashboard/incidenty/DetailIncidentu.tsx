@@ -134,7 +134,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
           {hrozi && (
             <p className="text-sm text-muted mt-1">
               {detail.hrozi?.promluvil
-                ? "Už jste spolu mluvili. Jestli to udělá, se ukáže po lhůtě."
+                ? "Už jsi s ním mluvil. Jestli to udělá, se ukáže po lhůtě."
                 : "Jestli to opravdu udělá, se ukáže po lhůtě. Když si s ním promluvíš, šance výrazně klesne."}
             </p>
           )}

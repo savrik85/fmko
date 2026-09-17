@@ -97,6 +97,14 @@ describe("kontext hospody z DB", () => {
     expect(r.pribehy.find((p) => p.type === "ohlasuje_cin")).toMatchObject({ playerIds: ["k"], incidentId: "inc-tym-a-vitrina-2026-09-16-hrozi-k" });
     expect(r.seasonNumber).toBe(4);
   });
+
+  it("nový klub bez odehraných zápasů ohlášení nedostane (ochrana jako v losování)", async () => {
+    vi.mocked(nactiStavKlubu).mockResolvedValueOnce(stavKlubu({ gameDate: DNES, den: "2026-09-16", vybaveni: { trophy_case: 2 }, kadr: [hrac({ id: "k", jmeno: "Karel Vrba" })], odehranychZapasu: 0 }));
+    const db = new FalesnaD1(pravidlaKontextu());
+    const r = await udalostiHospody(jakoD1(db), TYM, [navstevnik("k", "Karel", "Vrba")], { trener: false, jiste: false, ohlasi: "k" });
+    expect(r.zapisy.find((z) => z.typ === "hrozi")).toBeUndefined();
+    expect(r.pribehy.find((p) => p.type === "ohlasuje_cin")).toBeUndefined();
+  });
 });
 
 describe("zápis následků hospody", () => {

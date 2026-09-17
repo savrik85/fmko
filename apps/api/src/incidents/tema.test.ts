@@ -114,15 +114,16 @@ describe("řeči z hospody (spec 9a)", () => {
   });
 
   it.each([
-    "Zdar, jak se máš?",
-    "Zítra trénink v šest.",
-    "Dobrý gól včera.",
-    "Buď příště preciznější v obraně.",
-    "Utopil jsi tu penaltu, kámo.",
-    "Bude výklad nových pravidel od svazu.",
-    "Kdy budeš ve skladu?",
-  ])("běžná zpráva: %s", (zprava) => {
-    expect(jeRecOHrozicim(zprava, "vloupani_sklad")).toBe(false);
+    ["Zdar, jak se máš?", "vloupani_sklad"] as const,
+    ["Zítra trénink v šest.", "vloupani_sklad"] as const,
+    ["Dobrý gól včera.", "vloupani_sklad"] as const,
+    ["Buď příště preciznější v obraně.", "vloupani_sklad"] as const,
+    ["Utopil jsi tu penaltu, kámo.", "vloupani_sklad"] as const,
+    ["Bude výklad nových pravidel od svazu.", "vloupani_sklad"] as const,
+    ["Kdy budeš ve skladu?", "vloupani_sklad"] as const,
+    ["Kdo dneska pomůže s vykládáním dresů z dodávky?", "dodavka_pujcena"] as const,
+  ])("běžná zpráva: %s", (zprava, kind) => {
+    expect(jeRecOHrozicim(zprava, kind)).toBe(false);
   });
 
   it("místo samo nestačí, ani u kabiny a dveří", () => {

@@ -70,7 +70,7 @@ type Pokus = { typ: "hrac"; hrac: HracKlubu } | { typ: "cizi" } | { typ: "alarm"
 type Kdo = { typ: "hrac"; hrac: HracKlubu } | { typ: "cizi" };
 
 /**
- * Kdo krade: hráč s klíčem, nebo zloděj zvenku. Zloději zvenku může odradit
+ * Kdo krade: hráč s klíčem, nebo zloděj zvenku. Zloděje zvenku může odradit
  * plot, osvětlení a zámek (pak se nestane nic) nebo vyplašit alarm, když ho
  * klub má v použitelném stavu a místo pokrývá (`alarmOdUrovne`).
  */

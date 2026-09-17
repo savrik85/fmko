@@ -15,7 +15,9 @@ import {
 } from "./hospoda";
 import { smsIncidentu } from "./incident-db";
 import { KATALOG_PODLE_KIND } from "./katalog";
-import { KAMARADSKE_VZTAHY, OBVINENI_PAMET_DNI, RECIDIVA_DNI, SILA_KAMARADSTVI, SMS_ROLE_HOSPODSKY } from "./nastaveni";
+import {
+  KAMARADSKE_VZTAHY, MIN_ODEHRANYCH_ZAPASU, OBVINENI_PAMET_DNI, RECIDIVA_DNI, SILA_KAMARADSTVI, SMS_ROLE_HOSPODSKY,
+} from "./nastaveni";
 import { nactiZtraty } from "./popis";
 import { hracZRadku, nactiStavKlubu, SLOUPCE_HRACE } from "./stav-klubu";
 import { prikazStopyHospody } from "./stopy-db";
@@ -170,7 +172,8 @@ export async function udalostiHospody(
       // Co ohlásí, rozhoduje stav klubu: nikdy čin, na který klub nemá (spec 9a).
       const stav = await nactiStavKlubu(db, { id: t.teamId, league_id: t.leagueId }, t.gameDate, k.seasonNumber);
       const rng = createRng(seedFromString(`hospoda|${t.teamId}|${k.den}|cin|${r.ohlaseni.playerId}`));
-      const kind = stav ? vyberCin(stav, r.ohlaseni.obvineny, rng) : null;
+      // Ochrana nových klubů, stejně jako v losování: dokud klub neodehrál dost zápasů, nic nehrozí.
+      const kind = stav && stav.odehranychZapasu >= MIN_ODEHRANYCH_ZAPASU ? vyberCin(stav, r.ohlaseni.obvineny, rng) : null;
       const cin = kind ? hroziciCin(k, hoste, r.ohlaseni.playerId, kind, rng) : null;
       if (cin) {
         vysledek.pribehy.push({ type: "ohlasuje_cin", playerIds: [cin.playerId], text: cin.text, effects: [], incidentId: cin.id });
