@@ -11,6 +11,7 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { poskodZarizeni } from "../stadium/stadium-damage";
+import { smsIncidentu } from "./incident-db";
 import { KATALOG_PODLE_KIND } from "./katalog";
 import { LHUTA_ROZHODNUTI_DNI, SMS_ROLE_KUSTOD } from "./nastaveni";
 import { odhalujePachatele, vygenerujStopy } from "./stopy";
@@ -156,7 +157,7 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
 export async function oznamIncident(env: Bindings, teamId: string, navrh: NavrhIncidentu, zapsany: ZapsanyIncident): Promise<void> {
   const def = KATALOG_PODLE_KIND.get(navrh.kind);
   const emoji = def?.emoji ?? "❗";
-  await sendSystemSMS(env.DB, teamId, SMS_ROLE_KUSTOD, `${emoji} ${[navrh.text, ...zapsany.nalezeneStopy].join(" ")}`);
+  await sendSystemSMS(env.DB, teamId, SMS_ROLE_KUSTOD, `${emoji} ${[navrh.text, ...zapsany.nalezeneStopy].join(" ")}`, smsIncidentu(zapsany.id));
   await createNotification(
     env.DB, teamId, "event", `${emoji} ${def?.label ?? "Incident v klubu"}`, navrh.text.slice(0, 140),
     `/dashboard/incidenty?id=${encodeURIComponent(zapsany.id)}`, env,
@@ -183,16 +184,16 @@ export async function uzavriProsleIncidenty(
         resolution = CASE WHEN culprit_revealed = 1 THEN 'nechat_byt' ELSE 'nevyreseno' END,
         resolved_on = ?
       WHERE team_id = ? AND status = 'otevreny' AND deadline IS NOT NULL AND deadline <= ?
-      RETURNING kind, category, culprit_revealed`,
-  ).bind(t.gameDate, t.teamId, t.gameDate).all<{ kind: string; category: string; culprit_revealed: number }>()
-    .catch((e) => { logger.warn({ module: M }, `uzavření incidentů po lhůtě ${t.teamId}`, e); return { results: [] as Array<{ kind: string; category: string; culprit_revealed: number }> }; });
+      RETURNING id, kind, category, culprit_revealed`,
+  ).bind(t.gameDate, t.teamId, t.gameDate).all<{ id: string; kind: string; category: string; culprit_revealed: number }>()
+    .catch((e) => { logger.warn({ module: M }, `uzavření incidentů po lhůtě ${t.teamId}`, e); return { results: [] as Array<{ id: string; kind: string; category: string; culprit_revealed: number }> }; });
 
   for (const r of prosle.results) {
     const nazev = KATALOG_PODLE_KIND.get(r.kind)?.label ?? r.kind;
     const sablona = r.culprit_revealed === 1
       ? TEXTY.lhuta_znamy[0]
       : r.category === "kradez" ? TEXTY.lhuta_kradez[0] : TEXTY.lhuta_poskozeni[0];
-    await sendSystemSMS(db, t.teamId, SMS_ROLE_KUSTOD, vypln(sablona, { nazev }));
+    await sendSystemSMS(db, t.teamId, SMS_ROLE_KUSTOD, vypln(sablona, { nazev }), smsIncidentu(r.id));
   }
   return prosle.results.length;
 }

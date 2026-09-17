@@ -56,6 +56,11 @@ export function pozdejsi(a: string | null, b: string): string {
   return a && a > b ? a : b;
 }
 
+/** Data SMS o incidentu: telefon podle nich ukáže tlačítko „Otevřít incident" (spec 11). */
+export function smsIncidentu(incidentId: string): { type: "incident"; incidentId: string } {
+  return { type: "incident", incidentId };
+}
+
 export interface HracKadru extends HracKlubu {
   krestni: string;
   prijmeni: string;

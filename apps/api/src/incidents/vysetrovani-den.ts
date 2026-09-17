@@ -14,7 +14,7 @@ import { sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import { denPlus, prikazAbsence } from "./absence-hracu";
 import { uzavriProsleIncidenty } from "./dopady";
-import { SLOUPCE_INCIDENTU, type IncidentRadek } from "./incident-db";
+import { SLOUPCE_INCIDENTU, smsIncidentu, type IncidentRadek } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
 import {
   LHUTA_PO_POLICII_DNI, LHUTA_ROZHODNUTI_DNI, POVOLANI_POLICISTA, SMS_ROLE_POLICIE, SOUD_PO_ODHALENI_DNI, SRAZKA_TYDNU,
@@ -46,7 +46,7 @@ async function prechodZPolicie(db: D1Database, id: string, nastav: string, param
 }
 
 async function oznamVysledek(env: Bindings, teamId: string, incidentId: string, zprava: string): Promise<void> {
-  await sendSystemSMS(env.DB, teamId, SMS_ROLE_POLICIE, `🚓 ${zprava}`)
+  await sendSystemSMS(env.DB, teamId, SMS_ROLE_POLICIE, `🚓 ${zprava}`, smsIncidentu(incidentId))
     .catch((e) => logger.warn({ module: M }, `SMS policie ${incidentId}`, e));
   await createNotification(
     env.DB, teamId, "event", "🚓 Výsledek šetření", zprava.slice(0, 140),

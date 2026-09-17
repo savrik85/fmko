@@ -44,6 +44,7 @@ describe("obvinění", () => {
     expect(davka.some((d) => /INSERT OR REPLACE INTO club_incident_knowledge/.test(d.sql) && d.params[1] === "a")).toBe(true);
     expect(davka.filter((d) => /UPDATE players/.test(d.sql))).toHaveLength(3);
     expect(sendPlayerSMS).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendPlayerSMS).mock.calls[0][4]).toEqual({ type: "incident", incidentId: "inc-1" });
   });
 
   it("souběh: když se incident mezitím změnil, nic dalšího se nestane", async () => {
@@ -108,7 +109,7 @@ describe("policie", () => {
     expect(dni).toBeGreaterThanOrEqual(3);
     expect(dni).toBeLessThanOrEqual(7);
     expect(db.pocet(/UPDATE club_incidents SET status = 'policie'/)).toBe(1);
-    expect(sendSystemSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", SMS_ROLE_POLICIE, expect.any(String));
+    expect(sendSystemSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", SMS_ROLE_POLICIE, expect.any(String), { type: "incident", incidentId: "inc-1" });
   });
 
   it("u odhaleného pachatele ani podruhé policii zavolat nejde", async () => {

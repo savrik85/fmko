@@ -41,6 +41,7 @@ describe("výsledek policie", () => {
     expect(await vyhodnotPolicii(env, T)).toBe(1);
     expect(db.pocet(/SET status = 'uzavreny', police_success = 1, resolved_on = \?/)).toBe(1);
     expect(vi.mocked(sendSystemSMS).mock.calls[0][3]).toContain("Pepa Průšvih");
+    expect(vi.mocked(sendSystemSMS).mock.calls[0][4]).toEqual({ type: "incident", incidentId: "inc-1" });
   });
 
   it("neúspěch: incident se vrátí manažerovi se lhůtou za 3 dny a jméno pachatele nepadne", async () => {
