@@ -189,33 +189,43 @@ export async function zapisHospody(
   db: D1Database, t: TymHospody & { seasonNumber: number }, zapisy: readonly ZapisHospody[],
 ): Promise<void> {
   const prikazy: D1PreparedStatement[] = [];
+  const puvod: Array<string | null> = [];
   for (const z of zapisy) {
     switch (z.typ) {
       case "prozradil":
+        // Co svědek řekl v hospodě, se výslechem znovu najít nedá: jeho stopy nahradí stopa z hospody.
         prikazy.push(
-          // Co svědek řekl v hospodě, se výslechem znovu najít nedá: jeho stopy nahradí stopa z hospody.
           db.prepare(
             `DELETE FROM club_incident_clues
               WHERE incident_id = ? AND holder_player_id = ? AND source IN ('svedek', 'kamarad', 'rival') AND found = 0`,
           ).bind(z.incidentId, z.svedekId),
-          prikazStopyHospody(db, t.teamId, z.incidentId, `drb-${z.svedekId}`, z.stopa, t.gameDate),
+        );
+        puvod.push(null);
+        prikazy.push(prikazStopyHospody(db, t.teamId, z.incidentId, `drb-${z.svedekId}`, z.stopa, t.gameDate));
+        puvod.push(z.incidentId);
+        prikazy.push(
           db.prepare(
             `UPDATE club_incident_knowledge SET interrogation = 'prozradil', interrogated_on = ?
               WHERE incident_id = ? AND player_id = ? AND team_id = ? AND role IN ('svedek', 'kamarad', 'rival') AND interrogation IS NULL`,
           ).bind(t.gameDate, z.incidentId, z.svedekId, t.teamId),
         );
+        puvod.push(z.incidentId);
         break;
       case "stopa":
         prikazy.push(prikazStopyHospody(db, t.teamId, z.incidentId, z.klic, z.stopa, t.gameDate));
+        puvod.push(z.incidentId);
         break;
       case "odhaleni":
         prikazy.push(db.prepare(
           `UPDATE club_incidents SET culprit_revealed = 1, deadline = ?
             WHERE id = ? AND team_id = ? AND culprit_revealed = 0 AND status IN ('otevreny', 'policie')`,
         ).bind(z.deadline, z.incidentId, t.teamId));
+        puvod.push(z.incidentId);
         break;
       case "drb":
-        prikazy.push(...prikazyZnalosti(db, z.teamId, z.incidentId, t.seasonNumber, [z.znalost]));
+        const drbPrikazy = prikazyZnalosti(db, z.teamId, z.incidentId, t.seasonNumber, [z.znalost]);
+        prikazy.push(...drbPrikazy);
+        for (let i = 0; i < drbPrikazy.length; i++) puvod.push(null);
         break;
       case "hrozi":
         // Bez odhalení: `culprit_revealed = 1` by z hráče udělalo odhaleného pachatele v zápase i tréninku (17a–17c).
@@ -229,24 +239,39 @@ export async function zapisHospody(
             z.cin.id, t.teamId, t.leagueId, t.seasonNumber, z.cin.kind, KATALOG_PODLE_KIND.get(z.cin.kind)?.category ?? "kradez",
             t.gameDate, z.cin.deadline, z.cin.playerId, z.cin.text,
           ),
-          ...prikazyZnalosti(db, t.teamId, z.cin.id, t.seasonNumber, [z.cin.znalost]),
         );
+        puvod.push(z.cin.id);
+        const hroziPrikazy = prikazyZnalosti(db, t.teamId, z.cin.id, t.seasonNumber, [z.cin.znalost]);
+        prikazy.push(...hroziPrikazy);
+        for (let i = 0; i < hroziPrikazy.length; i++) puvod.push(null);
         break;
       case "sms":
         break;
     }
   }
+
+  let zmeneno = new Set<string>();
   if (prikazy.length > 0) {
-    const zapsano = await db.batch(prikazy).then(() => true)
-      .catch((e) => { logger.error({ module: M }, `následky hospody ${t.teamId}`, e); return false; });
-    if (!zapsano) return;
+    const vysledky = await db.batch(prikazy).catch((e) => {
+      logger.error({ module: M }, `následky hospody ${t.teamId}`, e);
+      return null;
+    });
+    if (!vysledky) return;
+
+    // SMS pouze o změnách, které se skutečně zapsaly (spec: kontrola meta.changes).
+    for (let i = 0; i < vysledky.length; i++) {
+      const originId = puvod[i];
+      if (originId && (vysledky[i]?.meta?.changes ?? 0) > 0) {
+        zmeneno.add(originId);
+      }
+    }
   }
 
   for (const z of zapisy) {
-    if (z.typ === "sms") {
+    if (z.typ === "sms" && zmeneno.has(z.incidentId)) {
       await sendSystemSMS(db, t.teamId, SMS_ROLE_HOSPODSKY, z.text, smsIncidentu(z.incidentId))
         .catch((e) => logger.warn({ module: M }, `SMS hospodského ${z.incidentId}`, e));
-    } else if (z.typ === "hrozi") {
+    } else if (z.typ === "hrozi" && zmeneno.has(z.cin.id)) {
       const rng = createRng(seedFromString(`hospoda-sms|${z.cin.id}`));
       if (z.cin.posel) {
         await sendPlayerSMS(db, t.teamId, z.cin.posel, `${text(rng, "sms_ohlaseni_kamarad")} ${z.cin.text}`, smsIncidentu(z.cin.id))

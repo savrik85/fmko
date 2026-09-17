@@ -156,4 +156,26 @@ describe("zápis následků hospody", () => {
     await zapisHospody(jakoD1(new FalesnaD1()), { ...TYM, seasonNumber: 4 }, [{ typ: "hrozi", cin: { ...cin, posel: null } }]);
     expect(sendSystemSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", "Hospodský", expect.stringContaining(cin.text), SMS_INCIDENTU("inc-h"));
   });
+
+  it("hlídaný zápis, který nic nezměnil (souběh), SMS nepošle", async () => {
+    const db = new FalesnaD1([
+      { sql: /INSERT OR IGNORE INTO club_incident_clues/, changes: 0 },
+      { sql: /UPDATE club_incident_knowledge/, changes: 0 },
+    ]);
+    await zapisHospody(jakoD1(db), { ...TYM, seasonNumber: 4 }, [PROZRADIL, { typ: "sms", incidentId: "inc-1", text: "🍺 Pepa Kos vykládal." }]);
+    expect(sendSystemSMS).not.toHaveBeenCalled();
+
+    const cin: HroziciCin = {
+      id: "inc-h", kind: "vitrina", playerId: "p", text: "Franta Novák tvrdil, že poháry by doma vypadaly líp.",
+      deadline: "2026-09-18T16:00:00.000Z",
+      znalost: { playerId: "p", role: "pachatel", fact: "V hospodě jsi opilý vykládal.", ochota: 0, until: "2026-09-18T16:00:00.000Z" },
+      posel: { id: "d", firstName: "Dan", lastName: "Dobrý" },
+    };
+    const db2 = new FalesnaD1([
+      { sql: /INSERT OR IGNORE INTO club_incidents/, changes: 0 },
+    ]);
+    await zapisHospody(jakoD1(db2), { ...TYM, seasonNumber: 4 }, [{ typ: "hrozi", cin }]);
+    expect(sendPlayerSMS).not.toHaveBeenCalled();
+    expect(sendSystemSMS).not.toHaveBeenCalled();
+  });
 });
