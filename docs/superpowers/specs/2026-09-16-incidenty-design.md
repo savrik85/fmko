@@ -465,6 +465,7 @@ routy ověří vlastnictví výslovně — incident obsahuje podezřelé a stopy
 | POST | `/api/teams/:teamId/incidents/:id/zaloha` `{akce: "pujcit"|"odmitnout"}` | 7c |
 | POST | `/api/teams/:teamId/equipment-market/:listingId/nahlasit` | Část 8 |
 | POST | `/api/admin/incidents/force` `{teamId, kind, playerId?}` | jen admin, pro testování na testingu |
+| POST | `/api/admin/incidents/vysetrovani` `{teamId, policieTed?, srazky?, krivdy?, bazarTed?}` | jen admin, pro testování na testingu: spustí denní vyšetřování klubu hned; `bazarTed` k tomu vystaví do bazaru otevřené prodejné krádeže bez inzerátu hned, bez losu 60 % (Část 8) |
 
 Veřejná data **nikdy** neobsahují `culprit_player_id` před odhalením, nenalezené stopy ani
 `willingness`.
@@ -615,7 +616,8 @@ Pro krádeže prodejných kategorií (`vloupani_sklad`, `vitrina`, `dodavka_ukra
   - nepoznatelné → nic; nápovědou je jen cena a načasování.
 - **Nahlásit policii** (jen poznatelné, jen okradený klub): když policie na incidentu ještě nešetřila, inzerát zmizí (`withdrawn`) a incident jde do toku 7c s bonusem 0,3. Pachatel z kádru se při úspěchu odhalí. Když policie na incidentu právě šetří, inzerát se jen zajistí (`withdrawn`, SMS od policie), samotné šetření běží dál beze změny. Po skončeném šetření, u odhaleného pachatele nebo u uzavřeného incidentu nahlášení vrátí 409 a inzerát v bazaru zůstane. Policie řeší jednu krádež jen jednou (7c).
 - **Koupit zpět:** běžný nákup. Hook v `equipment-market.ts` buy: `listing.incident_id` a kupec = okradený klub → `recovered = 1`, SMS od Kustoda. Incident zůstává ve svém stavu, pachatel pořád není známý a vyšetřování běží dál.
-- **Koupí jiný klub:** běžný nákup, bez postihu. Jen u poznatelného zboží a jen u neuzavřeného incidentu (stopy u uzavřených incidentů nevznikají, 5b) dostane okradený klub stopu „Věci koupil klub X" a SMS od Kustoda; u nepoznatelného zboží se o nákupu nedozví vůbec.
+- **Koupí jiný klub:** běžný nákup, bez postihu. Jen u poznatelného zboží dostane okradený klub SMS od Kustoda a (jen u neuzavřeného incidentu, stopy u uzavřených incidentů nevznikají, 5b) stopu „Věci koupil klub X". U nepoznatelného zboží se o nákupu nedozví vůbec.
+- **Admin, jen pro testing:** `POST /api/admin/incidents/vysetrovani` s `bazarTed: true` (`incidents/bazar-db.ts: vystavHned`) u neuzavřených, nevrácených prodejných krádeží bez inzerátu nastaví `bazar_on` na dnešek a hned vystaví, bez losu 60 %. Jinak by se na testingu čekalo 1 až 5 dní a ještě na los.
 - AI kluby v bazaru nenakupují — beze změny.
 
 GET `/equipment-market` vrací navíc `isPrivateListing`, `vypadaJakoVase` a `incidentId`. Poslední jen okradenému klubu a jen u poznatelného zboží, jinak by samotné id u nepoznatelného zboží prozradilo, že jde o jeho věci.
