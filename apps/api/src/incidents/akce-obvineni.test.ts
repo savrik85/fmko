@@ -41,10 +41,26 @@ describe("obvinění", () => {
     expect(JSON.parse(String(narok?.params[1]))).toEqual([{ playerId: "a", jmeno: "Adam Kos", den: "2026-09-16", vysledek: "zapira" }]);
     expect(narok?.params[2]).toBe(0);
     const davka = db.davky.flat();
-    expect(davka.some((d) => /INSERT OR REPLACE INTO club_incident_knowledge/.test(d.sql) && d.params[1] === "a")).toBe(true);
+    const znalost = davka.find((d) => /INSERT OR REPLACE INTO club_incident_knowledge/.test(d.sql) && d.params[1] === "a");
+    expect(znalost?.params[3]).toBe("Trenér tě obvinil: Vloupání do skladu. Tvrdíš, že jsi to nebyl.");
     expect(davka.filter((d) => /UPDATE players/.test(d.sql))).toHaveLength(3);
     expect(sendPlayerSMS).toHaveBeenCalledTimes(1);
     expect(vi.mocked(sendPlayerSMS).mock.calls[0][4]).toEqual({ type: "incident", incidentId: "inc-1" });
+  });
+
+  it("viník, který zapře, zapíše stejnou veřejnou znalost jako nevinný (jinak by prozradila vinu)", async () => {
+    // Druhé obvinění (poradi 2) stejného pachatele bez nalezené stopy vychází podle
+    // seedu na zapira - viník zapírá stejně jako nevinný.
+    const { db, env } = prostredi(incidentRadek({ accusations: 1, culprit_player_id: "p" }), [
+      { sql: /FROM players WHERE id = \? AND team_id = \?/, first: hracRadek("p", "Pepa", "Kos") },
+      { sql: /FROM club_incident_clues/, all: [] },
+    ]);
+    expect(await obvinHrace(env, "tym-a", "inc-1", "p")).toEqual({ ok: true, vysledek: "zapira", odhalen: false });
+    const davka = db.davky.flat();
+    const znalost = davka.find((d) => /INSERT OR REPLACE INTO club_incident_knowledge/.test(d.sql) && d.params[1] === "p");
+    expect(znalost?.params[3]).toBe("Trenér tě obvinil: Vloupání do skladu. Tvrdíš, že jsi to nebyl.");
+    // Viník, který zapře, dostane jen vztah -8, žádnou morálku ani posun kamarádů (na rozdíl od nevinného).
+    expect(davka.filter((d) => /UPDATE players/.test(d.sql))).toHaveLength(1);
   });
 
   it("souběh: když se incident mezitím změnil, nic dalšího se nestane", async () => {
@@ -77,7 +93,10 @@ describe("obvinění", () => {
     expect(await obvinHrace(env, "tym-a", "inc-1", "p")).toMatchObject({ ok: true, odhalen: true });
     const narok = db.dotazy.find((d) => /UPDATE club_incidents SET accusations/.test(d.sql));
     expect(narok?.params[2]).toBe(1);
-    expect(db.davky.flat().some((d) => /INSERT OR IGNORE INTO club_incident_clues/.test(d.sql) && d.params[3] === "priznani")).toBe(true);
+    const davka = db.davky.flat();
+    expect(davka.some((d) => /INSERT OR IGNORE INTO club_incident_clues/.test(d.sql) && d.params[3] === "priznani")).toBe(true);
+    // Přiznaný/usvědčený pachatel je odhalen, žádná veřejná znalost "obvineny" pro něj nevzniká.
+    expect(davka.some((d) => /INSERT OR REPLACE INTO club_incident_knowledge/.test(d.sql))).toBe(false);
   });
 
   it("obvinění bez přiznání sníží motivaci trenéra, přiznání/usvědčení ne", async () => {

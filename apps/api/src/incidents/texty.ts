@@ -141,7 +141,7 @@ export const TEXTY = {
     "{svedek} ukázal prstem na hráče, se kterým se nemusí: {hrac}.",
   ],
   znalost_obvineny: [
-    "Trenér tě neprávem obvinil: {nazev}. Nebyl jsi to ty.",
+    "Trenér tě obvinil: {nazev}. Tvrdíš, že jsi to nebyl.",
   ],
   obvineni_priznani: [
     "Trenére, máte pravdu. Byl jsem to já a stydím se za to.",

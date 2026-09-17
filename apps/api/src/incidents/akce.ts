@@ -89,14 +89,18 @@ export async function obvinHrace(
       posunHrace(db, teamId, playerId, { morale: -12, vztah: -20 }),
       posunKamaradu(db, teamId, playerId, -3),
       posunKadru(db, teamId, -2, [playerId], playerId),
-      db.prepare(
-        `INSERT OR REPLACE INTO club_incident_knowledge (incident_id, player_id, team_id, role, fact, willingness, until, season_number)
-         VALUES (?, ?, ?, 'obvineny', ?, 50, ?, ?)`,
-      ).bind(
-        incidentId, playerId, teamId, vypln(TEXTY.znalost_obvineny[0], { nazev: nazevIncidentu(inc.kind) }),
-        gameExpiry(gameDate, OBVINENI_PAMET_DNI), inc.season_number,
-      ),
     );
+  }
+  if (vysledek === "zapira") {
+    // Znalost je veřejná (jde do promptu každému hráči 60 dní) a text je neutrální schválně:
+    // kdyby prozrazovala vinu, chat by odhalil nevinného hráče stejně jako přiznaného pachatele.
+    davka.push(db.prepare(
+      `INSERT OR REPLACE INTO club_incident_knowledge (incident_id, player_id, team_id, role, fact, willingness, until, season_number)
+       VALUES (?, ?, ?, 'obvineny', ?, 50, ?, ?)`,
+    ).bind(
+      incidentId, playerId, teamId, vypln(TEXTY.znalost_obvineny[0], { nazev: nazevIncidentu(inc.kind) }),
+      gameExpiry(gameDate, OBVINENI_PAMET_DNI), inc.season_number,
+    ));
   }
   await db.batch(davka).catch((e) => logger.error({ module: M }, `následky obvinění ${incidentId}`, e));
   if (vysledek === "zapira") {
