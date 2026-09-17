@@ -474,8 +474,10 @@ Výsledek výslechu **rozhoduje DB, ne model.**
 
 - Spustí se, když trenér napíše hráči zprávu k incidentu:
   - tlačítkem „Zeptat se" (nastaví `conversations.ai_thread_state.incidentId` s platností do konce herního dne), nebo
-  - volným textem, který `incidents/tema.ts: jeOtazkaNaIncident(text, incident)` pozná podle klíčových slov (ukrad, krádež, zloděj, zmizel, vykrad, kdo to byl, kamera, policie + tvary názvu věci/zařízení). Při více incidentech se bere nejnovější otevřený.
+  - volným textem, který `incidents/tema.ts: jeOtazkaNaIncident(text, incident)` pozná podle klíčových slov (ukrad, krádež, zloděj, zmizel, vykrad, kdo to byl, kamera, policie + tvary názvu věci/zařízení). Při více incidentech se bere nejnovější otevřený. Téma poznané z textu se uloží do vlákna na zbytek herního dne stejně jako z tlačítka, aby navazující otázka bez klíčových slov („a kde?") zůstala u stejného incidentu.
+- Výslech nabízí jen incidenty kategorie krádež nebo poškození, které jsou otevřené nebo je šetří policie a pachatel není odhalený (`lzeVyslychat`, `incidents/vysetrovani.ts`).
 - Výsledek se spočítá **jednou** na hráče a incident a uloží do `club_incident_knowledge.interrogation`. Další otázky dostanou stejnou odpověď — hráč si neprotiřečí.
+- Hráč s víc rolemi u jednoho incidentu (třeba kamarád, který je zároveň svědek) losuje jen jednou. Rozhoduje role, ve které je šance na prozrazení nejnižší, a stejný výsledek platí pro všechny jeho role (`rozhodniSvedka`, `incidents/vyslech.ts`), jinak by si odpovědi protiřečily.
 
 Pro hráče se znalostí `svedek|kamarad|rival`:
 
@@ -483,6 +485,8 @@ Pro hráče se znalostí `svedek|kamarad|rival`:
 sance = ochota + (vztah k trenérovi − 50)/2 + (role == rival ? 15 : 0) − (role == kamarad ? 20 : 0)
 los(seed "vyslech|incident|hrac") < sance → prozradil (stopa found = 1), jinak kryje
 ```
+
+Ochota mluvit (0–100, spec 5b): svědek 40–70, kamarád 10–25, rival 60–80.
 
 Pro pachatele:
 
@@ -509,8 +513,10 @@ Max. 2 obvinění na incident. Rozhodnutí je deterministické v okamžiku klikn
 Po odhalení (přiznáním i usvědčením) se lhůta na rozhodnutí prodlouží aspoň na dnes + 3 dny, aby
 na manažera po pozdním obvinění zbyl čas vybrat trest.
 
-Hráč odpoví SMS (`sendPlayerSMS`). **Odchylka od návrhu:** ve fázi 2 jen šablona (`texty.ts`,
-klíč podle výsledku) — AI text přijde až s chatem ve fázi 4.
+Hráč odpoví SMS (`sendPlayerSMS`) šablonou (`texty.ts`, klíč podle výsledku, `akce.ts`).
+Zůstává tak i po fázi 4: Část 15 zakazuje nová volání modelu mimo existující toky chatu. Kdo
+obvinění u výslechu zapřel, dostane den poté vlastní AI vlákno `krivde_obvineny` (17d), to je
+jiný, existující tok chatu, ne text téhle SMS.
 
 ### 7c) Policie a záloha
 
@@ -658,29 +664,54 @@ Při vzniku incidentu se pro aktivní kádr zapíše (jedna dávka):
 
 | Role | Kdo | `fact` | `until` |
 |---|---|---|---|
-| `kadr` | všichni | co se stalo a co zmizelo (veřejný text) | +14 dní, závažnost 3 a útěk +45; po uzavření max(until, uzavření + 7) |
-| `svedek` | držitel stopy `svedek` | co viděl | uzavření + 7 |
-| `kamarad` | vztah s pachatelem (5b) | „Tušíš, že to byl Franta, je to tvůj kamarád" | uzavření + 7 |
-| `rival` | rival pachatele (40 %) | „Tušíš, že to byl Franta" | uzavření + 7 |
+| `kadr` | všichni | co se stalo a co zmizelo (veřejný text) | +14 dní, závažnost 3 +45 dní |
+| `svedek` | držitel stopy `svedek` | co viděl | den vzniku incidentu |
+| `kamarad` | vztah s pachatelem (5b) | „Tušíš, že to byl Franta, je to tvůj kamarád" | den vzniku incidentu |
+| `rival` | rival pachatele (40 %) | „Tušíš, že to byl Franta" | den vzniku incidentu |
 | `pachatel` | pachatel | pravda | +60 dní |
 | `obvineny` | neprávem obviněný (vzniká v 7b) | „Trenér tě obvinil z krádeže, a nebyl jsi to ty" | +60 dní |
 | `drb` | host z jiného klubu (Část 9) | veřejný fakt | +14 dní |
+
+Uložený `until` není celé pravidlo platnosti. Role `kadr`, `svedek`, `kamarad` a `rival`
+zůstávají platné navíc po celou dobu, kdy incident není `uzavreny`, a ještě 7 dní po
+uzavření. Počítá se to při čtení (`incidents/znalosti-db.ts: DOTAZ_ZNALOSTI`) přímo z
+`club_incidents.status` a `resolved_on`, ne zápisem „uzavření + 7" do `until` v okamžiku
+uzavření: incident se uzavírá na pěti různých místech (uplynutí lhůty, klubový trest a tři
+výsledky policie), takže jedno pravidlo při čtení nejde nikde zapomenout. `svedek`, `kamarad`
+a `rival` proto jako `until` rovnou ukládají den vzniku incidentu, jejich skutečná platnost
+stojí celá na tomhle druhém pravidle. `pachatel` a `obvineny` mají pevný `until` bez vazby na
+stav incidentu.
 
 Hráč, který přišel do klubu až po incidentu, **neví nic** — záznam vzniká jen při vzniku incidentu.
 U životních situací a pozitivních incidentů vzniká jen `kadr` (a `subject_player_id` ví o sobě).
 
 ### 10b) Prompt
 
-`incidents/znalosti.ts: nactiZnalostiHrace(db, playerId, gameDate, seasonNumber, tema?)`
-→ max. 3 nejzávažnější platné znalosti.
+`incidents/znalosti-db.ts: nactiZnalostiHrace(db, {teamId, playerId, tema?})` → max. 3
+nejzávažnější platné **incidenty** (`vyberZnalosti`, `incidents/znalosti.ts`). U incidentu
+v tématu jdou do promptu všechny role, které u něj hráč má, ne jen ta nejzávažnější: svědek
+nebo kamarád potřebuje vedle tajné role i veřejný popis toho, co se vlastně stalo.
 
 `PlayerSnapshot` (`messaging/ai-player-scenarios.ts:14`) dostane
-`znalostiIncidentu?: RadekZnalosti[]`. `buildSystemPrompt` (`ai-player-chat.ts:92`) přidá blok:
+`znalostiIncidentu?: RadekZnalosti[]`. `buildSystemPrompt` (`ai-player-chat.ts:92`) přidá blok
+přes `blokZnalosti` (`incidents/znalosti.ts`):
 
 ```
 CO VÍŠ O DĚNÍ V KLUBU (jen tohle, nic dalšího si nevymýšlej, nic jiného se nestalo):
-- Před 3 dny někdo vykradl sklad, zmizely dresy. Kdo to byl, nevíš.
+- Před 3 dny někdo vykradl sklad, zmizely dresy. Stalo se to před 3 dny. Kdo to byl, se v klubu neví.
 ```
+
+Veřejný řádek (role `kadr`, `drb`) skládá dohromady text incidentu, kdy se stal, jméno
+odhaleného pachatele (sám pachatel dostane „Přišlo se na to, že jsi to byl ty.") a jak to
+dopadlo: trest, výsledek policie, nebo že se to zatím vyšetřuje či nevyřešilo. Jinak by si
+model tresty a výsledky domýšlel.
+
+Když hráč nemá o dění v klubu žádnou platnou znalost, blok doplní `BEZ_ZNALOSTI`: „O žádné
+krádeži, škodě ani jiném průšvihu v klubu nevíš. Když se trenér ptá, řekni, že nic nevíš, a
+nikoho neobviňuj." Když se znalosti vůbec nepodařilo načíst (chybějící herní den, chyba DB),
+`nactiZnalostiHrace` vrátí `undefined` a `blokZnalosti` nepřidá vůbec nic, ani hlavičku.
+Rozdíl je nutný: prázdný seznam znamená „nic se nestalo", `undefined` znamená „nevíme", a
+chyba DB nesmí vypadat jako klidný klub.
 
 Neveřejné role (`svedek`, `kamarad`, `rival`, `pachatel`) se do promptu dostanou **jen
 když je rozhovor o incidentu** (7a) a vždy s pokynem podle uloženého výsledku výslechu:
@@ -697,8 +728,8 @@ Plnění `znalostiIncidentu` na všech místech, kde se staví snapshot pro chat
 `transfers/unrest.ts:290`. **Skupinový chat kabiny dostává jen veřejné znalosti** — před
 ostatními nikdo nic neprozradí.
 
-Detekce tématu v `routes/messaging.ts` (POST zprávy, `:312`) před voláním generátoru:
-výslech se vyhodnotí a uloží, pak se generuje odpověď.
+Detekce tématu v `incidents/zprava-trenera.ts: zpracujZpravuTrenera` (voláno z `routes/messaging.ts`,
+POST zprávy) před voláním generátoru: výslech se vyhodnotí a uloží, pak se generuje odpověď.
 
 ---
 
@@ -719,6 +750,11 @@ tlačítka dole, v textech pro hráče **žádná dlouhá pomlčka**.
 | `hospoda/page.tsx` | ikony nových typů příhod |
 | `napoveda.tsx` | sekce Incidenty a Zabezpečení areálu |
 | obec, sestava, trénink, Zpravodaj, fanoušci, přestupy, sezónní přehled, reputace | viz Část 17 |
+
+SMS s `metadata = {type: "incident", incidentId}` (`incidents/incident-db.ts: smsIncidentu`)
+posílá Kustod (vznik, konec lhůty), policie (převzetí případu, udání vlastního hráče, výsledek
+šetření) a hráč sám (odpověď na obvinění, odpověď na trest, křivda den po obvinění). Detail
+incidentu tak jde otevřít z telefonu odkudkoli, kde o něm SMS přišla.
 
 ---
 
@@ -845,7 +881,7 @@ Každá fáze samostatně: build → commit → push testing → ověření API 
    testingu, plán `docs/superpowers/plans/2026-09-16-incidenty-faze-2.md`).
 3. **Absence, trénink a zápas** (17a–17c) — sdílený převod hráče pro absence, incidentní absence, výmluvy, trénink, zápasové modifikátory, klubové vyřazení (hotovo na testingu, plán
    `docs/superpowers/plans/2026-09-16-incidenty-faze-3.md`).
-4. **Znalosti a chat** (Část 10, 17d) — znalosti, prompt, detekce tématu, výslech, vynucené scénáře, domácnost.
+4. **Znalosti a chat** (Část 10, 17d) — znalosti, prompt, detekce tématu, výslech, vynucené scénáře, domácnost (hotovo na testingu, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-4.md`).
 5. **Bazar** — soukromé inzeráty, poznání, nahlásit, koupit zpět.
 6. **Hospoda** — příhody, chlubení a ohlašování činů, hrozící incidenty a jak jim předejít, trenér poslouchá, šíření drbů, vůdce fanoušků v hospodě.
 7. **Peníze a životní situace** — kasa, tombola, útěk, ekonom, dluhy + záloha, ostatní situace.
@@ -931,14 +967,18 @@ Rozvod, narození dítěte a hrdina přibudou se životními situacemi a pozitiv
   Stejně neutrální je i atribut trenéra po vyhazovu (`Vyhozen pachatel incidentu`, ne „zloděj").
 - „spí v kabině" (rozvod, −1 pro hráče, +1 kumpánům z hospody) přibude se životními situacemi ve fázi 7 — okno 14 dní zůstane stejné jako u zápasu.
 
-**Vztahy** — helper `posunVztah(db, a, b, {delta, vytvorJako?, smazPod?})` přibude s výslechem ve
-fázi 4: ve fázi 3 nemá volajícího, protože reakce kamaráda/rivala se odvíjí od toho, jak se
-zachoval při výslechu, a výslech ještě neexistuje. Až přibude, bude hledat pár v **obou** pořadích
-a vracet příkazy pro `db.batch`:
-- kamarád, který pachatele prozradil → síla −20, pod 10 se vztah smaže, vznikne `rivals` 40.
-- kamarád, který kryl → síla +10.
-- rival, který práskl → `rivals` +15.
-- `posunVztahKTrenerovi` pro `coach_relationship`.
+**Vztahy** — helper `posunVztah(db, a, b, {typy, delta, smazPod?, vytvorJako?})` přibyl
+s výslechem ve fázi 4 (`incidents/hraci.ts`): hledá pár v **obou** pořadích a vrací příkazy
+pro `db.batch`:
+- kamarád, který pachatele prozradil: kamarádství −20, pod 10 se vztah smaže; navíc vznikne
+  `rivals` 40, ale jen když mezi nimi rivalita ještě neexistuje (`vytvorJako`), jinak by první
+  zrada rivalitu podmíněnou smazáním nikdy nezaložila.
+- kamarád, který kryl: kamarádství +10.
+- rival, který práskl: `rivals` +15.
+
+Samostatný `posunVztahKTrenerovi` nevznikl: vztah hráče k trenérovi po obvinění a po trestu
+(7b, 7d) už posouvá existující `posunHrace` (`incidents/hraci.ts`, pole `vztah`), nová funkce
+pro to nebyla potřeba.
 
 **Atributy manažera** (`lib/manager-attrs.ts`, zdroj `"incident"`, reference `inc-{id}-mgr-{attr}`):
 - důsledný trest odhaleného pachatele — `srazka`, `pokuta`, `vyradit`, `vyhodit`, nebo udání `policie`: disciplína +1.
@@ -950,24 +990,58 @@ a vracet příkazy pro `db.batch`:
 ### 17d) Chat, zmeškané hovory, zaměstnanci
 
 **Scénáře chatu** (`messaging/ai-player-scenarios.ts`):
-- `PlayerSnapshot` + `zivotniSituace` a `znalostiIncidentu`; volající je načtou předem (`loadPlayerSnapshot` je synchronní).
-- aktivní situace zvýší váhu hráče v `pickPlayerWeighted` (`ai-player-spawn.ts:450`) a scénáře `family_problem` (rozvod, nemocný rodič) a `personal_milestone` (narození dítěte) s popisem navázaným na incident.
-- **bez situace** dostanou tyto scénáře i `evaluateResolution` (`ai-player-chat.ts:380`) pravidlo „nevymýšlej si narození dítěte, rozvod, ztrátu práce ani nemoc rodiče" — jinak model vyrobí životní situaci mimo DB.
-- `domacnost(age)` (`chat-kontext.ts:122`) se při rozvodu nahradí („žena tě vyhodila, spíš v kabině").
-- vynucené scénáře s `weight: () => 0` (vzor `rejected_offer`, `offer-rejection-impact.ts:210`): `zadost_o_zalohu` (start dluhů), `krivde_obvineny` (den po neprávem obvinění). U `zadost_o_zalohu` propadnutí vlákna **neuráží** (`expireStaleAiThreads` `:798`) — výchozí výsledek řeší lhůta incidentu (7e). Peníze nikdy neurčuje model.
+- `PlayerSnapshot` dostal `znalostiIncidentu?: RadekZnalosti[]` (spec 10b); volající je načte
+  předem (`nactiZnalostiHrace`, `loadPlayerSnapshot` zůstává synchronní). `zivotniSituace` na
+  `PlayerSnapshot` čeká na situace ve fázi 7, ve fázi 4 nevznikla.
+- Vynucený scénář s `weight: () => 0` (vzor `rejected_offer`): `krivde_obvineny`. Den po
+  obvinění, které hráč u výslechu zapřel, mu založí vlákno `incidents/krivda.ts: ozviSeObvineni`,
+  spouštěné z denního kroku. Ozve se **každý**, kdo zapíral, vinný i nevinný, ne jen nevinný,
+  jinak by šlo podle toho, kdo píše, poznat neodhaleného pachatele (stejné pravidlo jako
+  u vlivu `obvineny` v 17a). Podmínky: `isAiEnabled` (generování textu musí být zapnuté, jinak
+  by hráč napsal SMS a nikdo by na ni neodpověděl) a vlákno konverzace zrovna neběží
+  (`ai_thread_active != 1`, aby se nepřebilo rozjeté).
+- `zadost_o_zalohu` (start dluhů) je vynucený scénář stejného vzoru, ale patří až situacím ve
+  fázi 7, ve fázi 4 nevznikl. Podle plánu tam propadnutí vlákna **neuráží**
+  (`expireStaleAiThreads`), výchozí výsledek řeší lhůta incidentu (7e), a peníze nikdy neurčuje
+  model.
+- Pravidlo „NEVYMÝŠLEJ si narození dítěte, rozvod, ztrátu práce ani nemoc rodiče"
+  (`ZAKAZ_ZIVOTNICH_SITUACI`, `ai-player-chat.ts`) ve fázi 4 platí pro **všechny** hráče bez
+  výjimky, v `buildSystemPrompt` i v `evaluateResolution`: podmínka „jen bez aktivní situace"
+  nemá co testovat, dokud situace neexistují. Zúžení na hráče bez situace přijde s fází 7.
+- Aktivní situace zvýší váhu hráče v `pickPlayerWeighted` a scénáře `family_problem` (rozvod,
+  nemocný rodič) a `personal_milestone` (narození dítěte) dostanou popis navázaný na konkrétní
+  situaci, obojí fáze 7.
+- `domacnost(age)` (`chat-kontext.ts:122`) se při rozvodu nahradí („žena tě vyhodila, spíš
+  v kabině"), taky fáze 7.
 
-**Zmeškané hovory** (`engine/missed-calls.ts`):
+**Známé omezení mimo fázi 4.** Rozhovor, který založí trenér (`messaging/coach-initiated.ts`,
+`scenario_id: "coach_initiated"`), není zapsaný v `AI_PLAYER_SCENARIOS`. `handleAiPlayerReply`
+(`messaging/ai-player-spawn.ts`) si na druhou zprávu trenéra scénář najde přes `getScenarioById`
+a nenajde ho, takže vlákno potichu uzavře bez odpovědi hráče. Chyba existovala před fází 4
+a fáze 4 ji nezpůsobila ani neřešila, čeká na rozhodnutí uživatele.
+
+**Zmeškané hovory** (`engine/missed-calls.ts`), fáze 8 a 9 (starosta, bulvár, sponzor):
 - nové `Volajici`: `policie`, `novinar_skandal` (vlastní klíč, `novinar` by kolidoval s voláním po sérii výher přes unikátní index).
 - `StavHovoru` + `policieSetri`, `incidentProObec`, `skandal`; plní `messaging/missed-calls.ts:93`.
 - starosta volá kvůli krádeži/útěku i poděkovat hrdinovi; sponzor po útěku nebo usvědčeném zloději; bulvár po incidentu závažnosti ≥ 2.
 - `VOLAJICI_LABEL`, FE ikony `phone/Hovory.tsx:18`; `missed-calls.test.ts` — výchozí `KLID` s novými poli `null`.
 - Hovory dnes vznikají jen klubům s fanouškovskými skupinami (`team-day.ts:417`) — incidentní volající se z té podmínky vyjmou.
 
-**Zaměstnanci** (`staff/staff-tick.ts`):
+**Zaměstnanci** (`staff/staff-tick.ts`), fáze 10:
 - psycholog: po `:206` hráči s aktivní situací nebo rolí `obvineny` morálka +1 až +2; občas zpráva „Psycholog: Mluvil jsem s …" (vlastní guard `inc-psy-{player}-{týden}`).
 - správce hřiště: stopa čte `staff_members.judgement` přímo (efekty surové atributy nemají).
 - šéf fanklubu: `dopadUdalosti` skandálu × (1 − f × 0,3).
 - obsluha: kandidát na pachatele `kasa_obcerstveni` (5a).
+
+**Co zůstává na další fáze** (`docs/superpowers/plans/2026-09-17-incidenty-faze-4.md`):
+
+| Fáze | Navazuje na fázi 4 |
+|---|---|
+| 6 Hospoda | role `drb`, `drby_o_incidentu` nastaví `interrogation = prozradil` a najde stopu `hospoda` |
+| 7 Peníze a životní situace | `zadost_o_zalohu`, domácnost při rozvodu, vyšší váha hráče se situací v `pickPlayerWeighted`, zákaz vymýšlet situace jen pro hráče bez situace |
+| 8 Obec | starosta v zmeškaných hovorech |
+| 9 Tisk, fanoušci, sponzoři | `novinar_skandal` a sponzor v zmeškaných hovorech |
+| 10 Zaměstnanci | psycholog (role `obvineny`), správce, šéf fanklubu, obsluha |
 
 ### 17e) Obec
 
