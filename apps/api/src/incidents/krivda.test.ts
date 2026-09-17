@@ -76,4 +76,19 @@ describe("den po obvinění", () => {
     const { env } = prostredi([obvineni("2026-09-16")]);
     expect(await ozviSeObvineni(env, T, { denObvineni: "2026-09-16" })).toBe(1);
   });
+
+  it("odhalený pachatel se neozve, nevinný u téhož odhaleného incidentu ano", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM club_incidents/, all: [{
+        id: "inc-1", kind: "vloupani_sklad",
+        accused: JSON.stringify([obvineni("2026-09-15"), { playerId: "b", jmeno: "Petr Malý", den: "2026-09-15", vysledek: "zapira" }]),
+        culprit_revealed: 1, culprit_player_id: "a",
+      }] },
+      { sql: /FROM players/, first: { id: "b", first_name: "Petr", last_name: "Malý", nickname: null, avatar: "{}" } },
+    ]);
+    const env = { DB: jakoD1(db) } as unknown as Bindings;
+    expect(await ozviSeObvineni(env, T)).toBe(1);
+    expect(sendPlayerSMS).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendPlayerSMS).mock.calls[0][2]).toMatchObject({ id: "b" });
+  });
 });

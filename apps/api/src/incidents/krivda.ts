@@ -23,7 +23,7 @@ import { nactiObvineni } from "./vysetrovani";
 
 const M = "incidents-krivda";
 
-type RadekIncidentu = { id: string; kind: string; accused: string };
+type RadekIncidentu = { id: string; kind: string; accused: string; culprit_revealed: number; culprit_player_id: string | null };
 type RadekHrace = { id: string; first_name: string; last_name: string; nickname: string | null; avatar: string | null };
 
 export async function ozviSeObvineni(
@@ -35,7 +35,7 @@ export async function ozviSeObvineni(
   const den = opts.denObvineni ?? denPlus(t.gameDate, -1);
 
   const rows = await db.prepare(
-    `SELECT id, kind, accused FROM club_incidents
+    `SELECT id, kind, accused, culprit_revealed, culprit_player_id FROM club_incidents
       WHERE team_id = ? AND season_number = ? AND accusations > 0 AND game_date >= ?`,
   ).bind(t.teamId, t.seasonNumber, gameExpiry(t.gameDate, -OKNO_VLIVU_DNI)).all<RadekIncidentu>()
     .catch((e) => { logger.warn({ module: M }, `obvinění ${t.teamId}`, e); return null; });
@@ -44,6 +44,9 @@ export async function ozviSeObvineni(
   for (const inc of rows?.results ?? []) {
     for (const o of nactiObvineni(inc.accused)) {
       if (o.den !== den || o.vysledek !== "zapira") continue;
+      // Odhalený pachatel ví, že je odhalený - "já to nebyl" by nedávalo smysl. Nevinný
+      // u téhož incidentu se ozve dál, i po odhalení někoho jiného.
+      if (inc.culprit_revealed === 1 && o.playerId === inc.culprit_player_id) continue;
       if (await otevriKrivdu(db, t.teamId, inc, o.playerId)) ozvalo++;
     }
   }
