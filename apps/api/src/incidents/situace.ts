@@ -102,7 +102,8 @@ export function nazevSituace(kind: string): string {
 
 const DEN_MS = 86_400_000;
 
-function naCooldownu(stav: StavKlubu, kind: string): boolean {
+/** Druh, který klub měl v posledních `COOLDOWN_SITUACE_DNI` dnech, se hned neopakuje. */
+export function naCooldownu(stav: StavKlubu, kind: string): boolean {
   const posledni = stav.posledniVyskyt[kind];
   if (!posledni) return false;
   const rozdil = (Date.parse(stav.den) - Date.parse(posledni)) / DEN_MS;

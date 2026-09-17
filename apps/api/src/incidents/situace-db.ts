@@ -21,10 +21,11 @@ import { idIncidentu, zapisIncident } from "./dopady";
 import { posunHrace } from "./hraci";
 import { herniDatum, nactiIncident, smsIncidentu } from "./incident-db";
 import {
-  LHUTA_ROZHODNUTI_DNI, MIN_OHLASENI_ABSENCE_DNI, ODMITNUTA_ZALOHA_MORALKA, ODMITNUTA_ZALOHA_VZTAH,
+  DLUHY_PO_ZTRATE_PRACE_DNI, LHUTA_ROZHODNUTI_DNI, MAX_AKTIVNICH_SITUACI, MIN_OHLASENI_ABSENCE_DNI,
+  ODMITNUTA_ZALOHA_MORALKA, ODMITNUTA_ZALOHA_VZTAH, SANCE_DLUHU_PO_ZTRATE_PRACE,
   ZALOHA_MAX_KC, ZALOHA_MIN_KC, ZALOHA_MORALKA, ZALOHA_TYDNU, ZALOHA_VZTAH,
 } from "./nastaveni";
-import { nazevSituace, SITUACE_PODLE_KIND } from "./situace";
+import { naCooldownu, nazevSituace, SITUACE_PODLE_KIND } from "./situace";
 import { text, type KlicTextu } from "./texty";
 import type { NavrhIncidentu, StavKlubu } from "./typy";
 
@@ -120,6 +121,55 @@ async function otevriVlaknoZalohy(env: Bindings, teamId: string, playerId: strin
     awaiting: "coach", initiated_at: ted, player_id: playerId, resolution: null,
   }), convId).run()
     .catch((e) => logger.warn({ module: M }, `vlákno o záloze ${convId}`, e));
+}
+
+/**
+ * Ztráta práce občas skončí dluhy (spec 4c: „30 % → do 7 dní `dluhy`"). Vrací `true`,
+ * když dneska dluhy opravdu přišly — klub pak už jinou situaci losovat nemá.
+ *
+ * Los je čistě z id zdrojové situace: stejný incident vyjde v každém běhu stejně a den
+ * řetězení se neposouvá. Zápis je `INSERT OR IGNORE` s odvozeným id, takže druhý průchod
+ * týmž herním dnem nic nepřidá.
+ *
+ * Dluhy dostane ten, kdo o práci přišel, i když mu ztráta práce pořád běží — jinak by
+ * řetězení nemohlo nastat nikdy (ztráta práce trvá 21 dní, řetězí se do sedmi). Limit
+ * klubu, cooldown druhu i „dvakrát dluhy naráz ne" ale platí; když blokují, nic se neděje.
+ */
+export async function zretezDluhy(env: Bindings, stav: StavKlubu): Promise<boolean> {
+  const db = env.DB;
+  const def = SITUACE_PODLE_KIND.get("dluhy");
+  if (!def) return false;
+  const rows = await db.prepare(
+    `SELECT i.id, i.subject_player_id, i.game_date FROM club_incidents i
+      WHERE i.team_id = ?1 AND i.status = 'probiha' AND i.kind = 'prisel_o_praci' AND i.subject_player_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM club_incidents d
+           WHERE d.team_id = ?1 AND d.status = 'probiha' AND d.kind = 'dluhy'
+             AND d.subject_player_id = i.subject_player_id)
+      ORDER BY i.id`,
+  ).bind(stav.teamId).all<{ id: string; subject_player_id: string; game_date: string }>()
+    .catch((e) => { logger.warn({ module: M }, `ztráta práce ${stav.teamId}`, e); return null; });
+
+  for (const r of rows?.results ?? []) {
+    const rng = createRng(seedFromString(`dluhy-po-praci|${r.id}`));
+    const spadnou = rng.random() < SANCE_DLUHU_PO_ZTRATE_PRACE;
+    const den = denPlus(r.game_date, rng.int(1, DLUHY_PO_ZTRATE_PRACE_DNI));
+    if (!spadnou || den !== stav.den) continue;
+    if (stav.situace.size >= MAX_AKTIVNICH_SITUACI || naCooldownu(stav, "dluhy")) continue;
+    const hrac = stav.kadr.find((h) => h.id === r.subject_player_id);
+    if (!hrac) continue;
+    const id = await zalozSituaci(env, stav, {
+      kind: "dluhy", category: "zivotni", status: "probiha", severity: 1,
+      culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+      subjectPlayerId: hrac.id, dniTrvani: def.trvani(rng), ztraty: [],
+      text: text(rng, "situace_dluhy", { hrac: hrac.jmeno }),
+    }, `${r.id}-dluhy`);
+    if (id) {
+      logger.info({ module: M, teamId: stav.teamId }, `dluhy po ztrátě práce, hráč ${hrac.id}`);
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Situace, kterým vypršel `ends_on` (spec 6b krok 4). Vrací počet ukončených. */

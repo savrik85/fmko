@@ -151,6 +151,9 @@ export const SANCE_SITUACE_ZA_DEN = 0.03;
 /** Kolik situací smí klub mít naráz. Jeden hráč vždy nejvýš jednu. */
 export const MAX_AKTIVNICH_SITUACI = 2;
 export const COOLDOWN_SITUACE_DNI = 21;
+/** Ztráta práce občas skončí dluhy (spec 4c): šance a nejzazší odstup ve dnech. */
+export const SANCE_DLUHU_PO_ZTRATE_PRACE = 0.3;
+export const DLUHY_PO_ZTRATE_PRACE_DNI = 7;
 
 /** Záloha při dluzích (spec 7c). */
 export const ZALOHA_MIN_KC = 3000;

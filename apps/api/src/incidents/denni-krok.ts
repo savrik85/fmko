@@ -12,7 +12,7 @@ import { oznamIncident, zapisIncident } from "./dopady";
 import { vyhodnotHrozici } from "./hrozi-db";
 import { ozviSeObvineni } from "./krivda";
 import { vylosujIncident } from "./losovani";
-import { propadleZalohy, ukonciSituace, zalozSituaci } from "./situace-db";
+import { propadleZalohy, ukonciSituace, zalozSituaci, zretezDluhy } from "./situace-db";
 import { vylosujSituaci } from "./situace";
 import { nactiStavKlubu } from "./stav-klubu";
 import { zpracujVysetrovani } from "./vysetrovani-den";
@@ -47,6 +47,10 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   await ukonciSituace(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "konec situací", e));
   await propadleZalohy(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "propadlé zálohy", e));
 
+  // Ztráta práce občas skončí dluhy (spec 4c). Nejde o los dne: běží i ve dnech, kdy se nic nelosuje.
+  const zretezeno = await zretezDluhy(env, stav)
+    .catch((e) => { logger.warn({ module: M, teamId }, "dluhy po ztrátě práce", e); return false; });
+
   // Činy ohlášené v hospodě, kterým vypršela lhůta (spec 9a). Stal-li se některý, dnes se nový problém nelosuje.
   const splneno = await vyhodnotHrozici(env, stav)
     .catch((e) => { logger.warn({ module: M, teamId }, "hrozící činy", e); return 0; });
@@ -55,6 +59,8 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   const rng = createRng(seedFromString(`incident|${teamId}|${stav.den}`));
   const navrh = vylosujIncident(stav, rng);
   if (!navrh) {
+    // Dnešní situaci už klub dostal řetězením, druhá by přebila limit.
+    if (zretezeno) return;
     // Žádný problém: může přijít životní situace (spec 4c).
     const situace = vylosujSituaci(stav, createRng(seedFromString(`situace|${teamId}|${stav.den}`)));
     if (situace) {

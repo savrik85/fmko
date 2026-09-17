@@ -8,7 +8,7 @@ vi.mock("../season/finance-processor", () => ({ recordTransaction: vi.fn(async (
 import type { Bindings } from "../index";
 import { recordTransaction } from "../season/finance-processor";
 import { sendPlayerSMS } from "../messaging/system-sms";
-import { propadleZalohy, rozhodniZalohu, ukonciSituace, zalozSituaci } from "./situace-db";
+import { propadleZalohy, rozhodniZalohu, ukonciSituace, zalozSituaci, zretezDluhy } from "./situace-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 import { hrac, incidentRadek, stavKlubu } from "./testovaci-stav";
 import type { NavrhIncidentu } from "./typy";
@@ -62,6 +62,64 @@ describe("založení situace", () => {
     await zalozSituaci(env, stav, navrh({ kind: "svatba_spoluhrace", dniTrvani: 1, text: "Jan Svědek se ženil." }));
     const kondice = db.davky.flat().filter((d) => /json_set\(life_context, '\$\.condition'/.test(d.sql));
     expect(kondice.map((d) => d.params[d.params.length - 1])).toEqual(["k"]);
+  });
+});
+
+describe("dluhy po ztrátě práce", () => {
+  // Losy jsou pevné: seed `dluhy-po-praci|<id>`. Prvnímu vyjde 0,217 (< 0,3) a den +6,
+  // druhému 0,700, takže dluhy nepřijdou nikdy.
+  const ZDROJ_ANO = "inc-tym-a-prisel_o_praci-2026-09-10";
+  const ZDROJ_NE = "inc-tym-a-prisel_o_praci-2026-09-11";
+  const zdroj = (id: string) => ({ id, subject_player_id: "s", game_date: "2026-09-10T16:00:00.000Z" });
+  const praceRule = (id: string): Pravidlo => ({ sql: /kind = 'prisel_o_praci'/, all: [zdroj(id)] });
+  const stav = (over: Partial<Parameters<typeof stavKlubu>[0]> = {}) => stavKlubu({
+    gameDate: "2026-09-16T16:00:00.000Z", den: "2026-09-16", kadr: [SUBJEKT, PARTA],
+    situace: new Map([["s", "prisel_o_praci"]]), ...over,
+  });
+  const insert = (db: FalesnaD1) => db.dotazy.find((d) => /INSERT OR IGNORE INTO club_incidents/.test(d.sql));
+
+  it("v den, na který los padl, hráč dostane dluhy", async () => {
+    const { db, env } = prostredi([praceRule(ZDROJ_ANO)]);
+    expect(await zretezDluhy(env, stav())).toBe(true);
+    expect(insert(db)?.params).toContain(`${ZDROJ_ANO}-dluhy`);
+    expect(insert(db)?.params).toContain("dluhy");
+    expect(insert(db)?.params).toContain("s");
+    expect(sendPlayerSMS).toHaveBeenCalled();
+  });
+
+  it("jiný den než vylosovaný nic nedělá", async () => {
+    const { db, env } = prostredi([praceRule(ZDROJ_ANO)]);
+    expect(await zretezDluhy(env, stav({ gameDate: "2026-09-15T16:00:00.000Z", den: "2026-09-15" }))).toBe(false);
+    expect(insert(db)).toBeUndefined();
+  });
+
+  it("los, který nepadl, dluhy nepřinese ani jeden den", async () => {
+    for (let i = 0; i <= 8; i++) {
+      const { db, env } = prostredi([praceRule(ZDROJ_NE)]);
+      const den = `2026-09-${String(10 + i).padStart(2, "0")}`;
+      expect(await zretezDluhy(env, stav({ gameDate: `${den}T16:00:00.000Z`, den }))).toBe(false);
+      expect(insert(db)).toBeUndefined();
+    }
+  });
+
+  it("plný limit klubu, cooldown druhu ani odchod hráče řetězení nevynutí", async () => {
+    const plno = new Map([["s", "prisel_o_praci"], ["k", "rozvod"]]);
+    const { db, env } = prostredi([praceRule(ZDROJ_ANO)]);
+    expect(await zretezDluhy(env, stav({ situace: plno }))).toBe(false);
+
+    const cooldown = prostredi([praceRule(ZDROJ_ANO)]);
+    expect(await zretezDluhy(cooldown.env, stav({ posledniVyskyt: { dluhy: "2026-09-05" } }))).toBe(false);
+
+    const pryc = prostredi([praceRule(ZDROJ_ANO)]);
+    expect(await zretezDluhy(pryc.env, stav({ kadr: [PARTA] }))).toBe(false);
+    expect([insert(db), insert(cooldown.db), insert(pryc.db)]).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("druhý průchod týmž dnem už nic nepřidá", async () => {
+    const { db, env } = prostredi([praceRule(ZDROJ_ANO), { sql: /INSERT OR IGNORE INTO club_incidents/, changes: 0 }]);
+    expect(await zretezDluhy(env, stav())).toBe(false);
+    expect(db.pocet(/UPDATE club_incidents SET deadline/)).toBe(0);
+    expect(sendPlayerSMS).not.toHaveBeenCalled();
   });
 });
 
