@@ -14,6 +14,7 @@ import type { Rng } from "../generators/rng";
 import { getOccupationByName, pickProfessionalExcuse, type Occupation } from "../generators/occupations";
 import type { Weather } from "../engine/types";
 import { logger } from "../lib/logger";
+import { DLUHY_SANCE_NAVIC, RIDICAK_SANCE_NAVIC } from "../incidents/nastaveni";
 
 export type AbsenceTiming = "day_before" | "match_day" | "any";
 
@@ -102,6 +103,7 @@ export function hracProAbsenci(row: Record<string, unknown>, druhy?: readonly st
 // OSOBNÍ VÝMLUVY (univerzální, vážené dle atributů)
 // ═══════════════════════════════════════════════
 
+// Narození dítěte je nyní skutečná životní situace se vlastním poolem, takže by se zde dublovalo.
 const PERSONAL_EXCUSES = [
   // Rodina — víte den předem
   { text: "Manželka mě nepustila, sorry", emoji: "\u{1F46B}", minAge: 25, timing: "day_before" as AbsenceTiming },
@@ -183,7 +185,6 @@ const OBVINENY_EXCUSES = [
 // ═══════════════════════════════════════════════
 
 /** Brigády kvůli dluhům (spec 4c). */
-const DLUHY_SANCE_NAVIC = 0.05;
 const DLUHY_VAHA_VYMLUVY = 0.5;
 const DLUHY_EXCUSES = [
   { text: "Vzal jsem si brigádu, potřebuju peníze. Omlouvám se.", emoji: "\u{1F4B8}" },
@@ -194,7 +195,6 @@ const DLUHY_EXCUSES = [
 ];
 
 /** Bez řidičáku se venkovní zápas veze hůř (spec 4c). */
-const RIDICAK_SANCE_NAVIC = 0.12;
 const RIDICAK_VAHA_VYMLUVY = 0.6;
 const RIDICAK_EXCUSES = [
   { text: "Nemám řidičák a nikdo mě tam nevezme. Omlouvám se.", emoji: "\u{1F6AB}" },
@@ -842,9 +842,10 @@ const LEGEND_EXCUSES = [
   "Má event v rooftop baru na Žižkově", "Má meeting s agentem v centru",
 ];
 
+// Zabavený řidičák je nyní skutečná životní situace se vlastním poolem, takže by se zde dublovalo.
 const FALLEN_STAR_EXCUSES = [
   "Včera to přehnal v hospodě a nemůže vstát", "Prý má 'chřipku' (cítit pivo na 3 metry)",
-  "Spal u kamaráda a neví kde je", "Říká že je nemocný ale viděli ho v baru",
+  "Volal že je na detoxu", "Spal u kamaráda a neví kde je", "Říká že je nemocný ale viděli ho v baru",
   "Měl prý alergickou reakci (na střízlivost)", "Leží doma, říká že má migrény",
   "Včera se pohádal s přítelkyní a spal v autě", "Prý ho bolí žaludek (diagnostika: 8 piv)",
   "Říká že mu doktor zakázal sportovat (doktor = barman)",
