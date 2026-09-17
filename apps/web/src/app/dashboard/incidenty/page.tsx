@@ -157,6 +157,7 @@ function Karta({ incident: i }: { incident: Incident }) {
           <div className="text-sm text-muted">
             {datum(i.gameDate)}
             {i.status === "otevreny" && i.deadline && ` · uzavře se ${datum(i.deadline)}`}
+            {i.status === "hrozi" && i.deadline && ` · rozhodne se ${datum(i.deadline)}`}
             {vysledek && ` · ${vysledek}`}
           </div>
           <p className="text-sm mt-2">{i.text}</p>
@@ -173,9 +174,17 @@ function Karta({ incident: i }: { incident: Incident }) {
               </Link>
             </div>
           )}
+          {i.ohlasil?.jmeno && (
+            <div className="text-sm mt-2">
+              Ohlásil to:{" "}
+              <Link href={`/dashboard/player/${i.ohlasil.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
+                {i.ohlasil.jmeno}
+              </Link>
+            </div>
+          )}
           <div className="mt-3">
             <Link href={odkaz} className="text-sm font-heading font-bold text-pitch-600 hover:text-pitch-500">
-              {i.status === "otevreny" ? "Vyšetřovat a rozhodnout →" : "Otevřít →"}
+              {i.status === "otevreny" ? "Vyšetřovat a rozhodnout →" : i.status === "hrozi" ? "Promluvit si →" : "Otevřít →"}
             </Link>
           </div>
         </div>

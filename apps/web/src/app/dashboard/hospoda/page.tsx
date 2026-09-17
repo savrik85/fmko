@@ -34,6 +34,7 @@ interface PubIncident {
   playerIds: string[];
   text: string;
   effects?: PubEffect[];
+  incidentId?: string;
 }
 
 interface PubSession {
@@ -86,6 +87,14 @@ const INCIDENT_ICON: Record<string, string> = {
   mushroom_brag: "🍄",
   manager_meetup: "🍻",
   manager_round: "🍺",
+  drby_o_incidentu: "🗣️",
+  nabizi_zbozi: "🛍️",
+  stezuje_si_na_trenera: "😤",
+  rvacka_kvuli_kradezi: "🥊",
+  cela_hospoda_resi: "📣",
+  chlubi_se: "🦚",
+  ohlasuje_cin: "⚠️",
+  vudce_zlodej: "🧣",
 };
 
 /**
@@ -440,6 +449,14 @@ export default function HospodaPage() {
                                 </span>
                               ))}
                             </div>
+                          )}
+                          {inc.incidentId && (
+                            <Link
+                              href={`/dashboard/incidenty?id=${encodeURIComponent(inc.incidentId)}`}
+                              className="ml-7 mt-1 inline-block text-sm font-heading font-bold text-pitch-600 hover:text-pitch-500"
+                            >
+                              Otevřít incident →
+                            </Link>
                           )}
                         </li>
                       );

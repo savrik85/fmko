@@ -67,8 +67,10 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
 
   const { incident: i, vysetrovani: v, akce } = detail;
   const vysledek = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
-  const vysetruje = i.category === "kradez" || i.category === "poskozeni";
-  const maAkce = akce.obvinit || akce.policie || akce.zeptat || akce.tresty.length > 0;
+  const hrozi = i.status === "hrozi";
+  // Hrozící čin ani řeči, ze kterých nic nebylo, se nevyšetřují.
+  const vysetruje = (i.category === "kradez" || i.category === "poskozeni") && !hrozi && i.resolution !== "nestalo_se";
+  const maAkce = akce.obvinit || akce.policie || akce.zeptat || akce.promluvit || akce.tresty.length > 0;
   const podezreli = v.podezreli.filter((p): p is { playerId: string; jmeno: string } => !!p.jmeno);
   // Pachatel je známý, ale trest se vybrat nedá, protože odešel z klubu. Bez týhle hlášky
   // incident vypadá jako "Řeší se" navždy, beze slova proč.
@@ -79,18 +81,18 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
     void proved("obvinit", { playerId: obvinenyId }, (o) => `${jmeno}: ${OBVINENI_LABEL[o.vysledek as VysledekObvineni] ?? "hotovo"}.`);
   }
 
-  async function zeptatSe() {
+  async function otevritRozhovor(akceApi: "zeptat" | "promluvit", telo: Record<string, string>) {
     setPracuje(true);
     setZprava(null);
     try {
-      const o = await apiFetch<{ conversationId: string }>(`${cesta}/zeptat`, {
+      const o = await apiFetch<{ conversationId: string }>(`${cesta}/${akceApi}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: tazanyId }),
+        body: JSON.stringify(telo),
       });
       router.push(`/dashboard/phone/${o.conversationId}`);
     } catch (e) {
-      console.error("incident zeptat:", e);
+      console.error(`incident ${akceApi}:`, e);
       setZprava({ typ: "chyba", text: e instanceof Error ? e.message : "Konverzaci se nepodařilo otevřít." });
       setPracuje(false);
     }
@@ -112,6 +114,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
           <div className="text-sm text-muted">
             {datum(i.gameDate)}
             {i.status === "otevreny" && i.deadline && ` · uzavře se ${datum(i.deadline)}`}
+            {hrozi && i.deadline && ` · rozhodne se ${datum(i.deadline)}`}
             {vysledek && ` · ${vysledek}`}
           </div>
         </div>
@@ -122,6 +125,20 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
         <ul className="space-y-1">
           {i.ztraty.map((z, n) => <li key={n} className="text-sm text-card-red">{z}</li>)}
         </ul>
+      )}
+
+      {i.ohlasil?.jmeno && (
+        <div>
+          <SectionLabel>Řeči z hospody</SectionLabel>
+          <p className="text-sm">Ohlásil to: <Hrac playerId={i.ohlasil.playerId} jmeno={i.ohlasil.jmeno} /></p>
+          {hrozi && (
+            <p className="text-sm text-muted mt-1">
+              {detail.hrozi?.promluvil
+                ? "Už jste spolu mluvili. Jestli to udělá, se ukáže po lhůtě."
+                : "Jestli to opravdu udělá, se ukáže po lhůtě. Když si s ním promluvíš, šance výrazně klesne."}
+            </p>
+          )}
+        </div>
       )}
 
       {vysetruje && (
@@ -169,6 +186,21 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
 
       {maAkce && (
         <div className="border-t border-gray-100 pt-4 space-y-5">
+          {akce.promluvit && (
+            <div className="space-y-2">
+              <SectionLabel>Promluvit si s ním</SectionLabel>
+              <p className="text-sm text-muted">
+                Napiš mu, ať nedělá hlouposti. Čím lepší má k tobě vztah, tím spíš poslechne. Odpověď stojí kredit jako každá SMS.
+              </p>
+              <button
+                onClick={() => void otevritRozhovor("promluvit", {})}
+                disabled={pracuje}
+                className="w-full sm:w-auto px-4 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white disabled:opacity-50"
+              >
+                Promluvit si
+              </button>
+            </div>
+          )}
           {akce.zeptat && (
             <div className="space-y-2">
               <SectionLabel>Zeptat se hráče</SectionLabel>
@@ -186,7 +218,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                   {detail.kadr.map((h) => <option key={h.playerId} value={h.playerId}>{h.jmeno}</option>)}
                 </select>
                 <button
-                  onClick={() => void zeptatSe()}
+                  onClick={() => void otevritRozhovor("zeptat", { playerId: tazanyId })}
                   disabled={pracuje || !tazanyId}
                   className="px-4 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white disabled:opacity-50"
                 >

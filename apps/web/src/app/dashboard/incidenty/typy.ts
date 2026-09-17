@@ -17,6 +17,8 @@ export interface Incident {
   text: string;
   ztraty: string[];
   pachatel: { playerId: string; jmeno: string | null } | null;
+  /** Kdo čin ohlásil v hospodě (hrozící čin, nebo řeči, ze kterých nic nebylo). */
+  ohlasil: { playerId: string; jmeno: string | null } | null;
   resolution: string | null;
   resolvedOn: string | null;
 }
@@ -27,7 +29,8 @@ export interface DetailIncidentuData {
   stopy: Array<{ zdroj: string; text: string; sila: number }>;
   obvineni: Array<{ playerId: string; jmeno: string; den: string; vysledek: VysledekObvineni }>;
   policie: { vysledekOn: string | null; vysledek: number | null };
-  akce: { obvinit: boolean; policie: boolean; zeptat: boolean; tresty: AkceTrestu[] };
+  hrozi: { promluvil: boolean } | null;
+  akce: { obvinit: boolean; policie: boolean; zeptat: boolean; promluvit: boolean; tresty: AkceTrestu[] };
   zbyvaObvineni: number;
   kadr: Array<{ playerId: string; jmeno: string }>;
   castky: { srazka: number; pokuta: number; tydnu: number } | null;
@@ -58,6 +61,7 @@ export const VYSLEDEK_LABEL: Record<string, string> = {
   policie: "Předáno policii",
   vyreseno_policii: "Vyřešila policie",
   nehoda: "Byla to nehoda",
+  nestalo_se: "Nakonec se nic nestalo",
 };
 
 export const TREST_LABEL: Record<AkceTrestu, string> = {
