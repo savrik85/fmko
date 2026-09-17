@@ -143,19 +143,6 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
                   : l.isAiListing && <span className="text-xs"> · z okolí</span>}
               </div>
 
-              {/* Stav je hlavní rozhodovací informace — proto nahoře a velký. */}
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-muted uppercase">Stav</span>
-                  <span className={`text-sm font-heading font-bold tabular-nums ${condColor(l.condition)}`}>{l.condition} %</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className={`h-2 rounded-full ${condBarColor(l.condition)}`} style={{ width: `${l.condition}%` }} />
-                </div>
-              </div>
-
-              {l.effect && <div className="text-sm text-pitch-600 mb-3">{l.effect}</div>}
-
               {l.vypadaJakoVase && (
                 <div className="mb-3 rounded-soft bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
                   Vypadá to jako vaše ukradené vybavení: {l.categoryLabel}.
@@ -169,6 +156,19 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
                   )}
                 </div>
               )}
+
+              {/* Stav je hlavní rozhodovací informace — proto nahoře a velký. */}
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted uppercase">Stav</span>
+                  <span className={`text-sm font-heading font-bold tabular-nums ${condColor(l.condition)}`}>{l.condition} %</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className={`h-2 rounded-full ${condBarColor(l.condition)}`} style={{ width: `${l.condition}%` }} />
+                </div>
+              </div>
+
+              {l.effect && <div className="text-sm text-pitch-600 mb-3">{l.effect}</div>}
 
               <div className="mt-auto space-y-1">
                 <div className="text-base font-heading font-bold tabular-nums">{formatCZK(l.price)}</div>
