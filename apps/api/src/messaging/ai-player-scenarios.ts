@@ -356,6 +356,18 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
       "Trenér tě včera obvinil z průšvihu v klubu (co se stalo, je v tvé první zprávě) a ty tvrdíš, že jsi to nebyl. Jsi dotčený a chceš, aby to trenér uznal. Když se omluví nebo ti uvěří, uklidníš se. Když tě odbude nebo si dál stojí za svým, naštveš se. Nikoho jiného neobviňuj a nic nového o tom průšvihu si nevymýšlej.",
     weight: () => 0,
   },
+  {
+    // Vlákno zakládá messaging/coach-initiated.ts, když trenér napíše hráči sám od sebe.
+    // Další výměny obsluhuje handleAiPlayerReply a scénář hledá podle id: bez tohohle
+    // záznamu se vlákno na druhou zprávu trenéra zavřelo bez odpovědi. weight 0 → nikdy náhodně.
+    id: "coach_initiated",
+    label: "Trenér napsal sám",
+    category: "personal",
+    expectedTurns: 2,
+    description:
+      "Trenér ti napsal sám od sebe, ty jsi o nic nežádal. Odpovídej na to, co ti píše, a drž se tématu, které nadhodil. NEVYMÝŠLEJ si vlastní stížnost ani žádost.",
+    weight: () => 0,
+  },
 ];
 
 /**

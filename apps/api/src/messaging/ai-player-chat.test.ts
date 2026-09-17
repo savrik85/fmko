@@ -136,3 +136,18 @@ describe("scénáře a incidenty", () => {
     }
   });
 });
+
+describe("konverzace začatá trenérem", () => {
+  // Bez scénáře zavřel handleAiPlayerReply vlákno na druhou zprávu trenéra bez odpovědi
+  // a kredit se strhl. Navazující otázka po „Zeptat se" tak zůstala bez odpovědi.
+  it("scénář existuje, aby další výměnu obsloužil handleAiPlayerReply", () => {
+    const s = getScenarioById("coach_initiated");
+    expect(s).not.toBeNull();
+    expect(s?.expectedTurns).toBe(2);
+    expect(s?.description).toContain("NEVYMÝŠLEJ");
+  });
+
+  it("sám se nevylosuje", () => {
+    expect(getScenarioById("coach_initiated")?.weight(hrac({ morale: 10, recentMinutes: 0 }))).toBe(0);
+  });
+});
