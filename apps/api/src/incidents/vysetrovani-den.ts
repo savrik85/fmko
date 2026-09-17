@@ -214,7 +214,7 @@ export async function zauctujSrazky(env: Bindings, t: { teamId: string; gameDate
       .catch((e) => { logger.error({ module: M }, `nárok na srážku ${r.id}`, e); return null; });
     if ((narok?.meta?.changes ?? 0) === 0) continue;
 
-    // Splátky zálohy i srážky používají splatkaSrazky s počtem týdnů z SRAZKA_TYDNU — ZALOHA_TYDNU musí být rovný, jinak by se záloha nesplácel správně.
+    // Splátky zálohy i srážky používají splatkaSrazky s počtem týdnů z SRAZKA_TYDNU — ZALOHA_TYDNU musí být rovný, jinak by se záloha nesplácela správně.
     const castka = splatkaSrazky(data.celkem, data.tydnuZbyva);
     const tyden = SRAZKA_TYDNU - data.tydnuZbyva + 1;
     if (castka > 0) {

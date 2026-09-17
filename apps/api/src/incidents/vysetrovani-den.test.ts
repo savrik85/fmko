@@ -9,6 +9,7 @@ import type { Bindings } from "../index";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
+import { SRAZKA_TYDNU, ZALOHA_TYDNU } from "./nastaveni";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 import { incidentRadek } from "./testovaci-stav";
 import { vyhodnotPolicii, zauctujSrazky, zpracujVysetrovani } from "./vysetrovani-den";
@@ -183,5 +184,13 @@ describe("srážky ze mzdy", () => {
     ]);
     expect(await zauctujSrazky(env, T)).toBe(1);
     expect(recordTransaction).toHaveBeenCalledWith(expect.anything(), "tym-a", "incident_deduction", expect.any(Number), expect.stringContaining("Splátka zálohy"), DNES, expect.any(String));
+  });
+
+  it("SRAZKA_TYDNU a ZALOHA_TYDNU se nesmí rozejít", () => {
+    // zauctujSrazky počítá splátku i popisek „(n/SRAZKA_TYDNU)" ze SRAZKA_TYDNU, ale
+    // situace-db.ts zapisuje rozjezd zálohy s tydnuZbyva: ZALOHA_TYDNU. Rozejdou-li se,
+    // záloha se přestane splácet správně (pod- nebo přeúčtování), a nikdo si toho nevšimne
+    // dřív, než v produkci.
+    expect(ZALOHA_TYDNU).toBe(SRAZKA_TYDNU);
   });
 });
