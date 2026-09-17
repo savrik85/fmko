@@ -59,4 +59,23 @@ describe("zápis incidentu", () => {
     const znalosti = db.davky.flat().filter((d) => /INSERT OR IGNORE INTO club_incident_knowledge/.test(d.sql));
     expect(znalosti.map((d) => `${d.params[1]}:${d.params[3]}`)).toEqual(["p:kadr", "k:kadr", "p:pachatel", "k:kamarad"]);
   });
+
+  it("selhání jen první dávky (škoda a stopy): znalosti se zapíšou bez stop, kamarád chybí", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM staff_members/, first: { usudek: null } },
+      { sql: /FROM relationships WHERE player_a_id = \? OR player_b_id = \?/, all: [{ player_a_id: "p", player_b_id: "k", type: "drinking_buddies", strength: 60 }] },
+    ]);
+    const puvodniBatch = db.batch.bind(db);
+    let volani = 0;
+    // První dávka (škoda + stopy) spadne, druhá (znalosti) proběhne normálně.
+    db.batch = (async (dotazy: Parameters<typeof puvodniBatch>[0]) => {
+      volani++;
+      if (volani === 1) throw new Error("D1 výpadek");
+      return puvodniBatch(dotazy);
+    }) as typeof db.batch;
+    const stav = stavKlubu({ kadr: [PROBLEMOVY, hrac({ id: "k", jmeno: "Karel Kos" })], vybaveni: { jerseys: 2, jerseys_condition: 70 } });
+    await zapisIncident(jakoD1(db), stav, NAVRH, "inc-test");
+    const znalosti = db.davky.flat().filter((d) => /INSERT OR IGNORE INTO club_incident_knowledge/.test(d.sql));
+    expect(znalosti.map((d) => `${d.params[1]}:${d.params[3]}`)).toEqual(["p:kadr", "k:kadr", "p:pachatel"]);
+  });
 });
