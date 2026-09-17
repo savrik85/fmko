@@ -195,4 +195,12 @@ describe("životní situace v omluvenkách (spec 17a)", () => {
     const sVlivem = generateAbsences(createRng(42), hraci(["pachatel"]), { timing: "any" });
     expect(sVlivem).toEqual(bez);
   });
+
+  it("zabavený řidičák vadí jen venku a jen bez dodávky", () => {
+    const doma = kolikChybi(["zabaveny_ridicak"], { isAway: false });
+    const venkuBezDodavky = kolikChybi(["zabaveny_ridicak"], { isAway: true });
+    const venkuSDodavkou = kolikChybi(["zabaveny_ridicak"], { isAway: true, maDodavku: true });
+    expect(venkuBezDodavky).toBeGreaterThan(doma);
+    expect(venkuSDodavkou).toBe(doma);
+  });
 });

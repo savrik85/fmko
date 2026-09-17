@@ -141,12 +141,13 @@ export async function processTeamDay(
               const { hracProAbsenci } = await import("../events/absence");
               const absSquad = squadRows.results.map((r) => hracProAbsenci(r, incKontext.druhy.get(r.id as string)));
               const teamDistrict = (team.village_district as string | null) ?? undefined;
-              const { fetchTeamCommuteMod } = await import("../events/match-absences");
+              const { kontextDojizdeni } = await import("../events/match-absences");
               const { resolveRoundWeather } = await import("./season-weather");
+              const { commuteMod, maDodavku, isAway } = await kontextDojizdeni(env.DB, teamId, tomorrowMatch.id as string);
               const dayBeforeAbsences = pridejIncidentniAbsence(
                 generateAbsences(absRng as any, absSquad, {
                   timing: "day_before", district: teamDistrict,
-                  commuteMod: await fetchTeamCommuteMod(env.DB, teamId),
+                  commuteMod, maDodavku, isAway,
                   weather: (await resolveRoundWeather(env.DB, tomorrowMatch.id as string))?.weather,
                 }),
                 squadRows.results.map((r) => r.id as string), incKontext.absence, "day_before",
@@ -612,12 +613,13 @@ export async function processTeamDay(
               const alreadyIds = new Set(alreadyMessaged.results.map((r) => r.sender_id as string));
 
               const teamDistrictMd = (team.village_district as string | null) ?? undefined;
-              const { fetchTeamCommuteMod: fetchVanModMd } = await import("../events/match-absences");
+              const { kontextDojizdeni: kontextDojizdeniMd } = await import("../events/match-absences");
               const { resolveRoundWeather: resolveMdWeather } = await import("./season-weather");
+              const { commuteMod: commuteModMd, maDodavku: maDodavkuMd, isAway: isAwayMd } = await kontextDojizdeniMd(env.DB, teamId, todayMatch.id as string);
               const matchDayAbsences = pridejIncidentniAbsence(
                 generateAbsences(mdRng as any, absSquad, {
                   timing: "match_day", district: teamDistrictMd,
-                  commuteMod: await fetchVanModMd(env.DB, teamId),
+                  commuteMod: commuteModMd, maDodavku: maDodavkuMd, isAway: isAwayMd,
                   weather: (await resolveMdWeather(env.DB, todayMatch.id as string))?.weather,
                 }),
                 squadRows.results.map((r) => r.id as string), incKontext.absence, "match_day",

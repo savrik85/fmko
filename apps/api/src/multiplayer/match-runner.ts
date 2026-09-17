@@ -1446,19 +1446,19 @@ export async function buildMatchPlayers(
                 teamId,
                 phase: "match_day"
             }));
-            const { fetchTeamCommuteMod } = await import("../events/match-absences");
+            const { kontextDojizdeni } = await import("../events/match-absences");
             const { resolveWeatherForDate } = await import("../season/season-weather");
-            const vanCommuteMod = await fetchTeamCommuteMod(db, teamId);
+            const { commuteMod: vanCommuteMod, maDodavku, isAway } = await kontextDojizdeni(db, teamId, options.matchKey);
             // Počasí dne — stejný zdroj jako předpověď i SMS. `terminAbsenci` už zjištěné
             // výš (kvůli vlivům incidentů), netřeba ho hledat znovu přes resolveWeatherForMatchKey.
             const absenceWeather = terminAbsenci ? (await resolveWeatherForDate(db, terminAbsenci))?.weather : undefined;
             const dayBeforeAbs = generateAbsences(dayBeforeRng, squadForAbsence, {
               timing: "day_before", district, friendlyMultiplier: options.friendlyMultiplier,
-              commuteMod: vanCommuteMod, weather: absenceWeather,
+              commuteMod: vanCommuteMod, maDodavku, isAway, weather: absenceWeather,
             });
             const matchDayAbs = generateAbsences(matchDayRng, squadForAbsence, {
               timing: "match_day", district, friendlyMultiplier: options.friendlyMultiplier,
-              commuteMod: vanCommuteMod, weather: absenceWeather,
+              commuteMod: vanCommuteMod, maDodavku, isAway, weather: absenceWeather,
             });
             const seen = new Set<number>();
             const allAbsences = pridejIncidentniAbsence(

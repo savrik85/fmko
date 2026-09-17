@@ -72,24 +72,60 @@ export async function fetchTeamDistrict(
 }
 
 /**
- * Klubová dodávka: 0-0.45 útlum absencí z dojíždění. Sdílené — každé volání
- * `generateAbsences` MUSÍ předat stejný mod (stejný důvod jako u district:
- * jinak divergence SMS vs. simulace pro stejný seed).
+ * Klubová dodávka: 0-0.45 útlum absencí z dojíždění plus prostá informace, jestli klub
+ * dodávku vůbec má (to potřebuje situace "zabavený řidičák", které nevadí útlum, ale to,
+ * že hráč nemá jak se dostat na venkovní zápas). Sdílené — každé volání `generateAbsences`
+ * MUSÍ předat stejné hodnoty, jinak divergence SMS vs. simulace pro stejný seed.
  */
 export async function fetchTeamCommuteMod(
   db: D1Database,
   teamId: string,
-): Promise<number> {
+): Promise<{ mod: number; maDodavku: boolean }> {
   const row = await db.prepare(
     "SELECT team_van, team_van_condition FROM equipment WHERE team_id = ?",
   ).bind(teamId).first<{ team_van: number; team_van_condition: number }>()
     .catch((e) => { logger.warn({ module: "match-absences" }, "van query", e); return null; });
-  if (!row || !row.team_van) return 0;
+  if (!row || !row.team_van) return { mod: 0, maDodavku: false };
   const { calculateEffects } = await import("../equipment/equipment-generator");
-  return calculateEffects(
+  const mod = calculateEffects(
     { team_van: row.team_van },
     { team_van_condition: row.team_van_condition ?? 50 },
   ).commuteAbsenceMod;
+  return { mod, maDodavku: true };
+}
+
+/**
+ * Hraje tenhle tým venku? `matchKey` je u ligy calendar_id, u poháru a přáteláku id zápasu,
+ * proto se hledá přes obojí. Když zápas nenajdeme, vracíme false — los pak dopadne stejně
+ * jako před zavedením venkovní větve, což je bezpečnější než hádat.
+ */
+export async function venkovniZapas(
+  db: D1Database,
+  teamId: string,
+  matchKey: string,
+): Promise<boolean> {
+  const row = await db.prepare(
+    "SELECT home_team_id FROM matches WHERE (calendar_id = ? OR id = ?) AND (home_team_id = ? OR away_team_id = ?) LIMIT 1",
+  ).bind(matchKey, matchKey, teamId, teamId).first<{ home_team_id: string }>()
+    .catch((e) => { logger.warn({ module: "match-absences" }, "venkovni zapas query", e); return null; });
+  if (!row) return false;
+  return row.home_team_id !== teamId;
+}
+
+/**
+ * Jediný zdroj pravdy pro dojíždění do losu absencí. Všech šest míst, kde se los spouští,
+ * si musí vzít hodnoty odsud — tři samostatné dotazy by se dřív nebo později rozešly.
+ */
+export async function kontextDojizdeni(
+  db: D1Database,
+  teamId: string,
+  matchKey: string,
+): Promise<{ commuteMod: number; maDodavku: boolean; isAway: boolean }> {
+  const [van, isAway] = await Promise.all([
+    fetchTeamCommuteMod(db, teamId),
+    venkovniZapas(db, teamId, matchKey),
+  ]);
+  return { commuteMod: van.mod, maDodavku: van.maDodavku, isAway };
 }
 
 /**
@@ -127,7 +163,7 @@ export async function getAbsentPlayersMap(
   const absenceSquad = healthyPlayers.map((row) => hracProAbsenci(row, incKontext.druhy.get(row.id as string)));
 
   const friendlyMultiplier = ctx.isFriendly ? 1.8 : undefined;
-  const commuteMod = await fetchTeamCommuteMod(db, teamId);
+  const { commuteMod, maDodavku, isAway } = await kontextDojizdeni(db, teamId, ctx.matchKey);
   // Počasí dne zápasu — stejná hodnota do obou fází i do simulace, jinak
   // omluvenka mluví o jiném počasí než zápas. Termín bereme z kontextu:
   // `matchKey` je u přáteláku id zápasu, které kalendář nezná.
@@ -136,9 +172,9 @@ export async function getAbsentPlayersMap(
   const dayBeforeRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "day_before" }));
   const matchDayRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "match_day" }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, weather });
+  const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, weather });
+  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather });
   const seen = new Set<number>();
   const absences = pridejIncidentniAbsence(
     [...dayBeforeAbs, ...matchDayAbs].filter((a) => {

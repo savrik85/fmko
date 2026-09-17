@@ -3812,14 +3812,14 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     const matchDayRng = createRng(absenceSeedForMatch({ matchKey, teamId, phase: "match_day" }));
     // Dodávka musí být i tady: preview jede na stejných seedech jako SMS a simulace,
     // takže bez ní by ukazovalo absence, které se pak neodehrají.
-    const { fetchTeamCommuteMod } = await import("../events/match-absences");
+    const { kontextDojizdeni } = await import("../events/match-absences");
     // Podle klíče, ne podle kalendáře — `matchKey` je u poháru id pohárového
     // zápasu a u přáteláku id zápasu, a ani jedno kalendář nezná.
     const { resolveWeatherForMatchKey } = await import("../season/season-weather");
-    const commuteMod = await fetchTeamCommuteMod(c.env.DB, teamId);
+    const { commuteMod, maDodavku, isAway } = await kontextDojizdeni(c.env.DB, teamId, matchKey);
     const weather = (await resolveWeatherForMatchKey(c.env.DB, matchKey))?.weather;
-    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, weather });
-    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, weather });
+    const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather });
+    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather });
     const seen = new Set<number>();
     absences = pridejIncidentniAbsence(
       [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
@@ -9522,12 +9522,13 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
 
     const triggerDistrict = await fetchDistrictForTrigger(c.env.DB, teamId);
     // Stejný důvod jako u preview: tyhle SMS musí sedět se simulací zápasu.
-    const { fetchTeamCommuteMod: fetchTriggerCommuteMod } = await import("../events/match-absences");
+    const { kontextDojizdeni: kontextDojizdeniTrigger } = await import("../events/match-absences");
     const { resolveRoundWeather: resolveTriggerWeather } = await import("../season/season-weather");
-    const triggerCommuteMod = await fetchTriggerCommuteMod(c.env.DB, teamId);
+    const { commuteMod: triggerCommuteMod, maDodavku: triggerMaDodavku, isAway: triggerIsAway } = await kontextDojizdeniTrigger(c.env.DB, teamId, tomorrowMatch.id);
     const dayBeforeAbsences = pridejIncidentniAbsence(
       generateAbsences(absRng as any, absSquad, {
         timing: "day_before", district: triggerDistrict, commuteMod: triggerCommuteMod,
+        maDodavku: triggerMaDodavku, isAway: triggerIsAway,
         weather: (await resolveTriggerWeather(c.env.DB, tomorrowMatch.id))?.weather,
       }),
       squadRows.results.map((r) => r.id as string), incKontext.absence, "day_before",
