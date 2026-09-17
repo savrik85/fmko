@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AbsenceResult } from "../events/absence";
+import { generateAbsences, hracProAbsenci, type AbsenceResult } from "../events/absence";
+import { createRng } from "../generators/rng";
 import {
   absencePlatnaKZapisu, denPlus, druhyHracu, duvodyNaTrenink, nactiIncidentniKontext, platneAbsence,
   pridejIncidentniAbsence, prikazAbsence, type IncidentniAbsence, type IncidentProVliv, type NovaAbsence,
@@ -101,13 +102,73 @@ describe("vlivy životních situací", () => {
     expect(druhyHracu([situace("rozvod")], dnes).get("s")).toEqual(["rozvod"]);
   });
 
-  it("skončená ani uzavřená situace už nepůsobí", () => {
+  it("situace se skončeným oknem už nepůsobí", () => {
     expect(druhyHracu([situace("dluhy", { ends_on: "2026-09-16" })], dnes).has("s")).toBe(false);
-    expect(druhyHracu([situace("dluhy", { status: "uzavreny" })], dnes).has("s")).toBe(false);
+  });
+
+  it("situace uzavřená v den zápasu se pro ten zápas počítá pořád", () => {
+    // `ukonciSituace` řádek v den zápasu překlopí. Los den předem ho počítal, takže
+    // ho musí počítat i simulace, jinak se rozejde celý seznam omluvenek.
+    const uzavrena = situace("zabaveny_ridicak", { status: "uzavreny", ends_on: dnes });
+    expect(druhyHracu([uzavrena], dnes).get("s")).toEqual(["zabaveny_ridicak"]);
+    expect(druhyHracu([uzavrena], dnes, 2).get("s")).toEqual(["zabaveny_ridicak"]);
   });
 
   it("situace, které na nic nenapojujeme, druh nedávají", () => {
     expect(druhyHracu([situace("svatba_spoluhrace")], dnes).has("s")).toBe(false);
+  });
+
+  it("do losu omluvenek se počítá jen situace ohlášená aspoň minOdstup dní před zápasem", () => {
+    // Ohlášení den před zápasem: los den předem už běžel, nesmí ho to změnit.
+    expect(druhyHracu([situace("dluhy", { game_date: "2026-09-16T16:00:00.000Z" })], dnes, 2).has("s")).toBe(false);
+    expect(druhyHracu([situace("dluhy", { game_date: "2026-09-15T16:00:00.000Z" })], dnes, 2).get("s")).toEqual(["dluhy"]);
+    // Zápas a kabina čtou vliv bez odstupu.
+    expect(druhyHracu([situace("dluhy", { game_date: "2026-09-16T16:00:00.000Z" })], dnes, 0).get("s")).toEqual(["dluhy"]);
+  });
+});
+
+describe("los omluvenek se situací se nerozejde", () => {
+  const ZAPAS = "2026-09-20T15:00:00.000Z";
+  const radekHrace = (i: number) => ({
+    first_name: "Hráč", last_name: `Č${i}`, age: 24 + (i % 10),
+    personality: JSON.stringify({ discipline: 30 + i * 3, patriotism: 50, alcohol: 40, temper: 45, injuryProneness: 40 }),
+    life_context: JSON.stringify({ occupation: "Zedník", morale: 50 }),
+    physical: JSON.stringify({ stamina: 70 }), commute_km: i % 12, is_celebrity: 0,
+  });
+  const IDS = Array.from({ length: 12 }, (_, i) => `h${i}`);
+
+  const situaceHrace = (over: Partial<IncidentProVliv>): IncidentProVliv => ({
+    culprit_player_id: null, culprit_revealed: 0, accused: "[]", game_date: "2026-09-10T16:00:00.000Z",
+    status: "probiha", kind: "dluhy", subject_player_id: "h0", ends_on: "2026-10-05T16:00:00.000Z", ...over,
+  });
+
+  /** Los pro zápas `ZAPAS` s vlivy počítanými jako v SMS den předem (odstup 2 dny). */
+  const losuj = (seed: number, incidenty: IncidentProVliv[]) => {
+    const druhy = druhyHracu(incidenty, ZAPAS, 2);
+    const kadr = IDS.map((id, i) => hracProAbsenci(radekHrace(i), druhy.get(id)));
+    return generateAbsences(createRng(seed), kadr, { timing: "day_before", district: "Prachatice" });
+  };
+
+  it("situace založená den před zápasem los nezmění", () => {
+    // Denní krok ji zapsal až po SMS den předem — kdyby ji simulace počítala, posunul by se
+    // RNG proud všem hráčům za ní a omluvenky by nesouhlasily se sestavou.
+    for (let seed = 1; seed <= 50; seed++) {
+      expect(losuj(seed, [situaceHrace({ game_date: "2026-09-19T16:00:00.000Z" })])).toEqual(losuj(seed, []));
+    }
+  });
+
+  it("starší situace los naopak změnit musí", () => {
+    const zmeny = Array.from({ length: 200 }, (_, i) => i + 1)
+      .filter((seed) => JSON.stringify(losuj(seed, [situaceHrace({})])) !== JSON.stringify(losuj(seed, [])));
+    expect(zmeny.length).toBeGreaterThan(0);
+  });
+
+  it("situace uzavřená v den zápasu dá týž los jako den předtím, kdy ještě běžela", () => {
+    const bezici = situaceHrace({ ends_on: "2026-09-20T16:00:00.000Z" });
+    const uzavrena = { ...bezici, status: "uzavreny" };
+    for (let seed = 1; seed <= 50; seed++) {
+      expect(losuj(seed, [uzavrena])).toEqual(losuj(seed, [bezici]));
+    }
   });
 });
 
@@ -186,5 +247,14 @@ describe("načtení kontextu", () => {
     expect(kontext.druhy.get("p")).toEqual(["pachatel"]);
     const dotaz = db.dotazy.find((d) => /FROM club_incident_absences/.test(d.sql));
     expect(dotaz?.params).toEqual(["tym-a", "2026-09-20", "2026-09-20"]);
+  });
+
+  it("situace se z DB berou datovým oknem, ne podle stavu řádku", async () => {
+    const db = new FalesnaD1([{ sql: /FROM club_incidents/, all: [] }]);
+    await nactiIncidentniKontext(jakoD1(db), "tym-a", "2026-09-20T15:00:00.000Z");
+    const dotaz = db.dotazy.find((d) => /FROM club_incidents/.test(d.sql));
+    expect(dotaz?.sql).not.toContain("status = 'probiha'");
+    expect(dotaz?.sql).toContain("ends_on");
+    expect(dotaz?.params[2]).toBe("2026-09-20");
   });
 });

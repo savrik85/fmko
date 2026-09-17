@@ -46,7 +46,10 @@ export interface IncidentProVliv {
   culprit_revealed: number;
   accused: string;
   game_date: string;
-  /** Životní situace (spec 4c): působí, dokud běží. */
+  /**
+   * Stav řádku. Životní situace ho schválně nečtou: vliv se počítá z data zápasu,
+   * ne z toho, jestli už `ukonciSituace` řádek překlopil (viz `druhyHracu`).
+   */
   status?: string;
   kind?: string;
   subject_player_id?: string | null;
@@ -95,15 +98,24 @@ export function platneAbsence(radky: readonly RadekAbsence[], den: string): Map<
 }
 
 /**
- * Obvinění, která skončila zapíráním (nevinný i vinný, který svou vinu zapřel), a odhalení
- * pachatelé, na které incident ke dni `datum` ještě působí.
+ * Obvinění, která skončila zapíráním (nevinný i vinný, který svou vinu zapřel), odhalení
+ * pachatelé a běžící životní situace, které ke dni `datum` působí.
  *
- * `minOdstupObvineni` omezuje, jak čerstvé musí být obvinění, aby se počítalo — los omluvenek
- * ho smí zohlednit jen tehdy, když je aspoň `MIN_OHLASENI_ABSENCE_DNI` dní staré (jinak by pozdní
- * obvinění den před zápasem měnilo vstup do už rozjetého losu). Zápas a kabina čtou vliv bez
- * odstupu (0).
+ * Celá funkce je čistá funkce data zápasu, ne aktuálního stavu klubu. Los omluvenek se pro
+ * jeden zápas losuje na šesti místech (SMS den předem, SMS v den zápasu, náhled sestavy,
+ * simulace) a všechna musí dostat týž vstup — hráč navíc posouvá RNG proud všem za sebou,
+ * takže jediný překlopený vliv přepíše celý seznam omluvenek.
+ *
+ * `minOdstup` omezuje, jak čerstvý vliv smí být: los ho zohlední, jen když je aspoň
+ * `MIN_OHLASENI_ABSENCE_DNI` dní starý (jinak by obvinění nebo situace den před zápasem
+ * měnily vstup do už rozjetého losu). Zápas a kabina čtou vliv bez odstupu (0).
+ *
+ * Situace se proto vybírá datovým oknem: ohlášená (`game_date`) aspoň `minOdstup` dní před
+ * zápasem a `ends_on` sahající aspoň do dne zápasu. Na `status` se schválně nekouká — řádek,
+ * který `ukonciSituace` v den zápasu uzavřel, musí pro tenhle zápas počítat pořád stejně,
+ * jako počítal v losu den předem.
  */
-export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string, minOdstupObvineni = 0): Map<string, DruhVlivu[]> {
+export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string, minOdstup = 0): Map<string, DruhVlivu[]> {
   const mapa = new Map<string, DruhVlivu[]>();
   const pridej = (id: string, druh: DruhVlivu) => {
     const druhy = mapa.get(id) ?? [];
@@ -116,12 +128,13 @@ export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string,
   };
   for (const inc of incidenty) {
     for (const o of nactiObvineni(inc.accused)) {
-      if (o.vysledek === "zapira" && vOkne(o.den, minOdstupObvineni)) pridej(o.playerId, "obvineny");
+      if (o.vysledek === "zapira" && vOkne(o.den, minOdstup)) pridej(o.playerId, "obvineny");
     }
     if (inc.culprit_revealed === 1 && inc.culprit_player_id && vOkne(inc.game_date, 0)) pridej(inc.culprit_player_id, "pachatel");
 
-    // Životní situace působí, dokud běží, ne podle okna od vzniku (spec 4c).
-    if (inc.status === "probiha" && inc.subject_player_id && inc.kind && SITUACE_S_VLIVEM.has(inc.kind)
+    // Životní situace působí, dokud běží datové okno, ne podle okna od vzniku (spec 4c).
+    if (inc.subject_player_id && inc.kind && SITUACE_S_VLIVEM.has(inc.kind)
+      && dnyMezi(inc.game_date, datum) >= minOdstup
       && (!inc.ends_on || inc.ends_on.slice(0, 10) >= datum.slice(0, 10))) {
       pridej(inc.subject_player_id, inc.kind as DruhVlivu);
     }
@@ -215,16 +228,21 @@ export async function nactiIncidentniAbsence(db: D1Database, teamId: string, dat
   return platneAbsence(rows.results, den);
 }
 
-export async function nactiDruhyHracu(db: D1Database, teamId: string, datum: string, minOdstupObvineni = 0): Promise<Map<string, DruhVlivu[]>> {
+/**
+ * Vlivy incidentů ke dni `datum`. Situace se berou datovým oknem (`ends_on` sahá aspoň do dne
+ * zápasu), ne podle `status`: kdyby se filtrovalo stavem, situace uzavřená v den zápasu by
+ * zmizela z losu, který ji den předem ještě počítal, a rozešly by se celé omluvenky.
+ */
+export async function nactiDruhyHracu(db: D1Database, teamId: string, datum: string, minOdstup = 0): Promise<Map<string, DruhVlivu[]>> {
   const rows = await db.prepare(
-    `SELECT culprit_player_id, culprit_revealed, accused, game_date, status, kind, subject_player_id, ends_on
+    `SELECT culprit_player_id, culprit_revealed, accused, game_date, kind, subject_player_id, ends_on
        FROM club_incidents
-      WHERE team_id = ? AND (
-        (game_date >= ? AND (accused != '[]' OR culprit_revealed = 1))
-        OR (status = 'probiha' AND subject_player_id IS NOT NULL))`,
-  ).bind(teamId, gameExpiry(datum, -OKNO_VLIVU_DNI)).all<IncidentProVliv>()
+      WHERE team_id = ?1 AND (
+        (game_date >= ?2 AND (accused != '[]' OR culprit_revealed = 1))
+        OR (category = 'zivotni' AND subject_player_id IS NOT NULL AND (ends_on IS NULL OR ends_on >= ?3)))`,
+  ).bind(teamId, gameExpiry(datum, -OKNO_VLIVU_DNI), datum.slice(0, 10)).all<IncidentProVliv>()
     .catch((e) => { logger.warn({ module: M }, `vlivy incidentů ${teamId}`, e); return { results: [] as IncidentProVliv[] }; });
-  return druhyHracu(rows.results, datum, minOdstupObvineni);
+  return druhyHracu(rows.results, datum, minOdstup);
 }
 
 export async function nactiIncidentniKontext(db: D1Database, teamId: string, datum: string): Promise<IncidentniKontext> {
