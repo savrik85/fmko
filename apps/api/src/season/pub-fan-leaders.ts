@@ -199,6 +199,26 @@ const KLID: DistrictPool<string> = {
   ],
 };
 
+const ZLODEJ_OSTRE: DistrictPool<string> = {
+  core: [
+    "{v} si stoupl{a} k výčepu a řekl{a} nahlas, co si tribuna myslí o zlodějích v dresu. {h} zíral do piva.",
+    "{v} oznámil{a} celé hospodě, že se zlodějem u jednoho stolu pít nebude. {h} zaplatil a zmizel.",
+    "{h} si chtěl objednat. {v} hospodskému řekl{a}, ať zlodějům nenalévá, a hospoda ztichla.",
+    "{v} vytáhl{a} před celým lokálem, co se v klubu ztratilo. {h} u toho seděl a mlčel.",
+    "{h} dlouho snášel pohledy od výčepu. {v} nakonec řekl{a} nahlas, co si všichni mysleli.",
+  ],
+};
+
+const ZLODEJ_MIRNE: DistrictPool<string> = {
+  core: [
+    "{v} se zastavil{a} u stolu a jen řekl{a}, že kotel si pamatuje. {h} přikývl.",
+    "{v} poslal{a} ke stolu vzkaz přes hospodského, že v dresu se nekrade. {h} ho dostal i s pivem.",
+    "{h} se u výčepu dozvěděl, že tribuna o krádeži ví. {v} to řekl{a} klidně, ale jasně.",
+    "{v} si přisedl{a} a zeptal{a} se, jestli to stálo za to. {h} neodpověděl.",
+    "{v} zavrtěl{a} hlavou, když {h} vešel do hospody. Víc nebylo potřeba.",
+  ],
+};
+
 const TRENER_HADKA: DistrictPool<string> = {
   core: [
     "{v} potka{l} v hospodě trenéra a hned mu zača{l} vyčítat, jak to v klubu vypadá. Rozloučil{a} se dřív než trenér.",
@@ -479,6 +499,28 @@ export function scenaSTrenerem(
     };
   }
   return null;
+}
+
+/**
+ * Odhalený zloděj z kádru u stolu (spec incidentů 17h). Kotel mu to dá sežrat a trochu se mu
+ * uleví. Hrdinové, kterým vůdce platí rundu, přibudou s pozitivními incidenty.
+ */
+export function scenaOIncidentu(
+  v: VudceVHospode,
+  zlodeji: ReadonlyArray<{ playerId: string; jmeno: string }>,
+  opts: { roll: number; vyber: number } & TextOpts,
+): HospodskaScena | null {
+  if (zlodeji.length === 0 || opts.roll >= 0.6) return null;
+  const zlodej = zlodeji[Math.abs(opts.vyber) % zlodeji.length];
+  const ostry = v.radikalnost >= 55;
+  return {
+    type: "vudce_zlodej",
+    text: veta(ostry ? ZLODEJ_OSTRE : ZLODEJ_MIRNE, v, opts, { v: v.jmeno, h: zlodej.jmeno }),
+    playerIds: [zlodej.playerId],
+    moraleDelta: ostry ? -6 : -3,
+    fan: { groupId: v.groupId, leaderId: v.leaderId, mood: 0, heat: -2, sentiment: -1,
+      duvod: "V hospodě si podal zloděje z kádru." },
+  };
 }
 
 

@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  dorazilDoHospody, scenaSVudcem, scenaSTrenerem, scenaOZapase, hracuAkuz,
+  dorazilDoHospody, scenaSVudcem, scenaSTrenerem, scenaOZapase, scenaOIncidentu, hracuAkuz,
   HRACU_UZ_MOC, type VudceVHospode, type PosledniZapas, type VykonHrace,
 } from "./pub-fan-leaders";
 
@@ -242,6 +242,8 @@ describe("čeština v hospodských větách", () => {
             scenaSVudcem(vud({ mood: 20, heat: 20 }), vice, { predZapasem: false, roll: 0.2, vyberHrace: 0, ...o }),
             scenaSTrenerem(vud({ heat: 75 }), 0.5, o),
             scenaSTrenerem(vud({ heat: 10 }), 0.1, o),
+            scenaOIncidentu(vud({ radikalnost: 80 }), hrac, { roll: 0.1, vyber: 0, ...o }),
+            scenaOIncidentu(vud({ radikalnost: 20 }), hrac, { roll: 0.1, vyber: 0, ...o }),
           ];
           for (const z of zapasy) {
             scenky.push(scenaOZapase(vud(), z, vykony, { roll: 0.1, vyber: 0, ...o }));
@@ -327,5 +329,33 @@ describe("čeština v hospodských větách", () => {
 
   it("žádná dlouhá pomlčka", () => {
     for (const t of vzorek()) expect(t).not.toContain("—");
+  });
+});
+
+describe("zloděj u stolu (spec incidentů 17h)", () => {
+  const zlodej = [{ playerId: "p1", jmeno: "Franta Novák" }];
+
+  it("vůdce odhalenému zloději vynadá, radikál ostřeji", () => {
+    const ostry = scenaOIncidentu(v({ radikalnost: 80 }), zlodej, { roll: 0.1, vyber: 0, varianta: 0 });
+    const mirny = scenaOIncidentu(v({ radikalnost: 20 }), zlodej, { roll: 0.1, vyber: 0, varianta: 0 });
+    expect(ostry).toMatchObject({ type: "vudce_zlodej", playerIds: ["p1"] });
+    expect(ostry?.text).toContain("Franta Novák");
+    expect(mirny?.moraleDelta).toBeLessThan(0);
+    expect(ostry!.moraleDelta).toBeLessThan(mirny!.moraleDelta);
+  });
+
+  it("bez zloděje nebo s vysokým hodem nic", () => {
+    expect(scenaOIncidentu(v(), [], { roll: 0.1, vyber: 0 })).toBeNull();
+    expect(scenaOIncidentu(v(), zlodej, { roll: 0.9, vyber: 0 })).toBeNull();
+  });
+
+  it("vůdkyně mluví v ženském rodě a věty se střídají", () => {
+    const texty = new Set<string>();
+    for (let varianta = 0; varianta < 10; varianta++) {
+      const s = scenaOIncidentu(v({ radikalnost: 80, gender: "f" }), zlodej, { roll: 0.1, vyber: 0, varianta });
+      expect(s?.text).not.toMatch(/\{|\}/);
+      texty.add(s?.text ?? "");
+    }
+    expect(texty.size).toBeGreaterThanOrEqual(5);
   });
 });

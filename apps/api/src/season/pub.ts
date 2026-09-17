@@ -6,10 +6,12 @@
  */
 
 import { logConditionStmt } from "../lib/condition-log";
+import { TYPY_PRIBEHU } from "../incidents/hospoda";
+import { udalostiHospody, zapisHospody } from "../incidents/hospoda-db";
 import { logger } from "../lib/logger";
 import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
 
-interface PubAttendee {
+export interface PubAttendee {
   playerId: string;
   firstName: string;
   lastName: string;
@@ -21,9 +23,9 @@ interface PubAttendee {
   isCoach?: boolean;
 }
 
-interface PubEffect {
+export interface PubEffect {
   playerId: string;
-  type: "condition" | "injury" | "morale" | "hangover";
+  type: "condition" | "injury" | "morale" | "hangover" | "vztah";
   delta?: number; // pro condition/morale
   injuryDays?: number; // pro injury
   label: string; // pro UI: "−12 kondice", "Lehké zranění (2 d)", "+3 morálka", "Ranní kocovina"
@@ -33,11 +35,13 @@ interface PubEffect {
   injuryType?: string;
 }
 
-interface PubIncident {
+export interface PubIncident {
   type: string; // "drink_record" | "story" | "automat_win" | "cross_team_fight" | "cross_team_brotherhood" | "cross_team_provocation" | "lone_drinker"
   playerIds: string[];
   text: string;
   effects: PubEffect[];
+  /** Příhoda o incidentu v klubu (spec incidentů, Část 9). Deník podle něj ukáže odkaz. */
+  incidentId?: string;
 }
 
 interface DbPlayer {
@@ -635,6 +639,55 @@ const OFFICIAL_SCANDAL_INCIDENT_TEMPLATES = [
   "Starosta omylem poslal pracovní SMS do hospodské skupiny. Půl vsi teď ví o nové vyhlášce dřív.",
 ];
 
+function poleZJson<T>(raw: string | null | undefined, co: string): T[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? (v as T[]) : [];
+  } catch (e) {
+    logger.warn({ module: "pub" }, `nečitelný JSON (${co})`, e);
+    return [];
+  }
+}
+
+/**
+ * Příhody o incidentech z dnešní session. Návštěva s trenérem je převezme beze změny:
+ * stopy a SMS se už zapsaly a dopady proběhly, znovu se nesmí (spec incidentů 9).
+ */
+export function zachovanePribehy(raw: string | undefined): PubIncident[] {
+  return poleZJson<PubIncident>(raw, "dnešní příhody")
+    .filter((i) => typeof i?.incidentId === "string" && (TYPY_PRIBEHU as readonly string[]).includes(i.type));
+}
+
+/**
+ * Přidá příhody a jejich účastníky do dnešní session a provede dopady.
+ * Jen pro admin ověření incidentů v hospodě na testingu (`POST /api/admin/incidents/hospoda`).
+ */
+export async function dopisDoHospody(
+  db: D1Database, teamId: string, gameDate: string, attendees: PubAttendee[], incidents: PubIncident[],
+): Promise<void> {
+  const dnesni = await db.prepare("SELECT attendees, incidents FROM pub_sessions WHERE team_id = ? AND game_date = ?")
+    .bind(teamId, gameDate).first<{ attendees: string; incidents: string }>()
+    .catch((e) => { logger.warn({ module: "pub" }, "dnešní session pro admin příhody", e); return null; });
+  if (dnesni) {
+    const sedi = poleZJson<PubAttendee>(dnesni.attendees, "návštěvníci");
+    const uzSedi = new Set(sedi.map((a) => a.playerId));
+    await db.prepare("UPDATE pub_sessions SET attendees = ?, incidents = ? WHERE team_id = ? AND game_date = ?")
+      .bind(
+        JSON.stringify([...sedi, ...attendees.filter((a) => !uzSedi.has(a.playerId))]),
+        JSON.stringify([...poleZJson<PubIncident>(dnesni.incidents, "příhody"), ...incidents]),
+        teamId, gameDate,
+      ).run()
+      .catch((e) => logger.warn({ module: "pub" }, "doplnění dnešní session", e));
+  } else {
+    await db.prepare("INSERT INTO pub_sessions (team_id, game_date, attendees, incidents, daily_special) VALUES (?, ?, ?, ?, NULL)")
+      .bind(teamId, gameDate, JSON.stringify(attendees), JSON.stringify(incidents)).run()
+      .catch((e) => logger.warn({ module: "pub" }, "session pro admin příhody", e));
+  }
+  const stmts = await applyIncidentEffects(db, incidents);
+  if (stmts.length > 0) await db.batch(stmts).catch((e) => logger.warn({ module: "pub" }, "dopady admin příhod", e));
+}
+
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -1184,6 +1237,10 @@ async function applyIncidentEffects(
         ).bind(newCond, ef.playerId));
         stmts.push(logConditionStmt(db, ef.playerId, cur.teamId, cur.cond, newCond, "pub", `${injDesc} (${ef.injuryDays} d)`));
         cur.cond = newCond;
+      } else if (ef.type === "vztah" && ef.delta != null) {
+        stmts.push(db.prepare(
+          `UPDATE players SET coach_relationship = MAX(0, MIN(100, COALESCE(coach_relationship, 50) + ?)) WHERE id = ?`,
+        ).bind(ef.delta, ef.playerId));
       }
     }
   }
@@ -1220,8 +1277,8 @@ export async function createCoachLedSession(
   if (players.results.length === 0) return { ok: false, reason: "Žádní dostupní hráči" };
 
   const districtRow = await db.prepare(
-    "SELECT v.district FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
-  ).bind(teamId).first<{ district: string | null }>()
+    "SELECT v.district, t.league_id FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
+  ).bind(teamId).first<{ district: string | null; league_id: string | null }>()
     .catch((e) => { logger.warn({ module: "pub" }, "load district for coach-led", e); return null; });
   const district = districtRow?.district ?? undefined;
 
@@ -1285,6 +1342,17 @@ export async function createCoachLedSession(
     });
   }
 
+  // Trenér poslouchá (spec incidentů 9): drby padají s dvojnásobnou šancí. Co dnes o incidentech
+  // už zaznělo, zůstane v deníku a nezopakuje se: stopy, SMS i dopady se už zapsaly.
+  const dnesni = await db.prepare("SELECT incidents FROM pub_sessions WHERE team_id = ? AND game_date = ?")
+    .bind(teamId, gameDate).first<{ incidents: string }>()
+    .catch((e) => { logger.warn({ module: "pub" }, "dnešní session před návštěvou s trenérem", e); return null; });
+  const zachovane = zachovanePribehy(dnesni?.incidents);
+  const hospoda = await udalostiHospody(db, { teamId, leagueId: districtRow?.league_id ?? null, gameDate }, attendees, {
+    trener: true, jiste: false, uzZaznelo: new Set(zachovane.map((i) => `${i.type}|${i.incidentId}`)),
+  });
+  incidents.push(...hospoda.pribehy);
+
   // Idempotentně: pokud už dnes existuje (emergent), přepiš ji coach-led variantou.
   await db.prepare(
     `DELETE FROM pub_sessions WHERE team_id = ? AND game_date = ?`,
@@ -1292,12 +1360,16 @@ export async function createCoachLedSession(
 
   await db.prepare(
     `INSERT INTO pub_sessions (team_id, game_date, attendees, incidents, daily_special) VALUES (?, ?, ?, ?, ?)`,
-  ).bind(teamId, gameDate, JSON.stringify(attendees), JSON.stringify(incidents), pickRandom(districtPoolFor(DAILY_SPECIALS_POOL, district))).run()
+  ).bind(teamId, gameDate, JSON.stringify(attendees), JSON.stringify([...incidents, ...zachovane]), pickRandom(districtPoolFor(DAILY_SPECIALS_POOL, district))).run()
     .catch((e) => logger.warn({ module: "pub" }, "insert coach-led session", e));
 
   // Apply effects
   const effectStmts = await applyIncidentEffects(db, incidents);
   if (effectStmts.length > 0) await db.batch(effectStmts).catch((e) => logger.warn({ module: "pub" }, "apply coach-led effects", e));
+
+  if (hospoda.seasonNumber !== null) {
+    await zapisHospody(db, { teamId, leagueId: districtRow?.league_id ?? null, gameDate, seasonNumber: hospoda.seasonNumber }, hospoda.zapisy);
+  }
 
   return { ok: true, attendeesCount: attendees.length, incidentsCount: incidents.length };
 }
@@ -1471,10 +1543,14 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     // Generate incidents
     const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName, team.district ?? undefined, hangoverMod);
 
+    // Incidenty v klubu: drby, chlubení, ohlášené činy (spec incidentů, Část 9). Nikdy nehází.
+    const hospoda = await udalostiHospody(db, { teamId: team.id, leagueId: team.league_id, gameDate }, attendees, { trener: false, jiste: false });
+    incidents.push(...hospoda.pribehy);
+
     // Vůdci fanoušků. Hospoda je jediné místo, kde se v okrese potkává kabina
     // s tribunou, takže se tam potkat musí i v číslech: hráči si odnesou
     // morálku, parta náladu a vůdce vztah k trenérovi.
-    const fanStmts = await pridejVudceDoHospody(db, team.id, gameDate, attendees, incidents, team.district ?? undefined);
+    const fanStmts = await pridejVudceDoHospody(db, team.id, gameDate, attendees, incidents, team.district ?? undefined, hospoda.zlodeji);
 
     // Pokud incidents obsahují coach_*, přidej trenéra mezi attendees s avatarem
     const hasCoach = incidents.some((inc) => inc.type.startsWith("coach_"));
@@ -1503,6 +1579,10 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     const vsechny = [...effectStmts, ...fanStmts];
     if (vsechny.length > 0) await db.batch(vsechny).catch((e) => logger.warn({ module: "pub" }, "batch incident effects", e));
 
+    if (hospoda.seasonNumber !== null) {
+      await zapisHospody(db, { teamId: team.id, leagueId: team.league_id, gameDate, seasonNumber: hospoda.seasonNumber }, hospoda.zapisy);
+    }
+
     created++;
   }
 
@@ -1526,12 +1606,13 @@ async function pridejVudceDoHospody(
   attendees: PubAttendee[],
   incidents: PubIncident[],
   okres?: string,
+  zlodeji: ReadonlyArray<{ playerId: string; jmeno: string }> = [],
 ): Promise<D1PreparedStatement[]> {
   const stmts: D1PreparedStatement[] = [];
   try {
     const { createRng } = await import("../generators/rng");
     const { seedFromString } = await import("../lib/seed");
-    const { dorazilDoHospody, scenaSVudcem, scenaSTrenerem, scenaOZapase } = await import("./pub-fan-leaders");
+    const { dorazilDoHospody, scenaSVudcem, scenaSTrenerem, scenaOZapase, scenaOIncidentu } = await import("./pub-fan-leaders");
     type VudceVHospode = Parameters<typeof dorazilDoHospody>[0];
     type HospodskaScena = NonNullable<ReturnType<typeof scenaSVudcem>>;
 
@@ -1615,6 +1696,10 @@ async function pridejVudceDoHospody(
             ...text,
           }),
         ];
+      // Zloděj u stolu má přednost před rozborem zápasu (spec incidentů 17h).
+      if (!trenerJeTu && zlodeji.length > 0) {
+        kandidati.unshift(scenaOIncidentu(v, zlodeji, { roll: rng.random(), vyber: rng.int(0, 999), ...text }));
+      }
       const scena = kandidati.find(
         (x): x is HospodskaScena => x !== null && !uzZaznelo.has(x.type),
       ) ?? null;
