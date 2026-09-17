@@ -376,6 +376,7 @@ Doplňující pravidla ke stopám:
 - Správce hřiště: u hráče `ukazujeNa` síla 2 a policii +0,1 (stejná cena jako svědek); u cizího pachatele popis auta, síla 2, policii +0,15.
 - Kamarád a rival mají pro policii stejnou cenu jako svědek, +0,1, jen když je jejich stopa nalezená (výslechem).
 - Stopy nevznikají u odhaleného pachatele (např. `kopnute_dvere`), u nehody (pachatel `nikdo`) ani u uzavřených incidentů — není co vyšetřovat.
+- Stopa `hospoda` má id `{incidentId}-hospoda-{klíč}` (`prikazStopyHospody`), klíč podle příhody: `drb-{hráč}` (kdo v hospodě prozradil, co ví), `nabizi` (cizí nabízí kradené zboží), `chlubi` (pachatel se pochlubil) a `ohlasil` (hrozící čin z 9a se stal). Prozradí-li svědek, kamarád nebo rival něco v hospodě, jeho dosud nenalezená stopa stejného zdroje se smaže a nahradí touto jednou stopou `hospoda`: jedna informace nesmí policii přidat bonus dvakrát.
 
 **Stav vyšetřování pro manažera** (odvozeno z nalezených stop):
 - **Pachatel známý** — nalezená stopa síly 3 s `points_to`, nebo přiznání. Nastaví `culprit_revealed = 1`.
@@ -630,36 +631,57 @@ GET `/equipment-market` vrací navíc `isPrivateListing`, `vypadaJakoVase`, `inc
 s incidenty ze **včerejška a starších**. Nové typy příhod (`PubIncident.type`) + ikony
 na FE (`dashboard/hospoda/page.tsx:49`).
 
+Hospodský deník (`GET /teams/:id/pub-sessions`) vrací API komukoli, ne jen vlastníkovi
+klubu. Text příhody proto nikdy nejmenuje neodhaleného pachatele; jméno nese jen stopa
+na stránce incidentu (jen vlastník) a SMS manažerovi.
+
+Následky jedné session se zapisují jednou dávkou (`incidents/hospoda-db.ts: zapisHospody`).
+SMS od hospodského (drby, nabízí, chlubí se) i SMS o hrozícím činu se pošle, teprve když
+aspoň jeden hlídaný zápis daného incidentu v dávce opravdu změnil řádek (`meta.changes > 0`
+u `INSERT`/`UPDATE`, kontrolováno pro každý zápis zvlášť). Jinak by souběžná denní hospoda
+a návštěva s trenérem téhož dne poslaly manažerovi SMS o ničem.
+
 | Typ příhody | Kdy | Co se stane |
 |---|---|---|
-| `drby_o_incidentu` | v hospodě sedí hráč se znalostí `svedek|kamarad|rival`, alkohol ≥ 60, ještě nic neprozradil; šance 25 % | „Pepa po třetím pivu povídal, že ve čtvrtek viděl u skladu Frantovo auto." → stopa `hospoda` **nalezená**, `interrogation = prozradil` |
-| `utraci_za_rundy` | pachatel peněžního incidentu v hospodě do 7 dní, alkohol ≥ 65; šance 40 % (**hospodský v kádru** ×2) | „Franta najednou platil rundu celé hospodě." → stopa síly 2 s `points_to` |
-| `nabizi_zbozi` | cizí zloděj, zboží zatím nevystavené; šance 20 % | „Nějaký chlap nabízel u pultu dresy za pětikilo." → stopa; poznatelné zboží → policie +0,15 |
-| `pije_na_sekeru` | aktivní `dluhy`, hráč v hospodě; šance 50 % | „Hospodský už Frantovi nechce nalévat na sekeru." — **viditelné varování** před útěkem |
-| `stezuje_si_na_trenera` | neprávem obviněný v hospodě do 60 dní | kamarádi z téže session vztah k trenérovi −3, morálka −1 |
-| `rvacka_kvuli_kradezi` | odhalený pachatel a jeho rival ve stejné session | efekty jako `cross_team_fight` (kondice, malé zranění) |
-| `cela_hospoda_resi` | incident závažnosti ≥ 2 do 3 dnů | čistě atmosféra, text s názvem věci |
-| `chlubi_se` | **odhalený i neodhalený pachatel** krádeže nebo poškození sedí v hospodě do 10 dnů od činu, alkohol ≥ 60; šance 20 % (temperament ≥ 65 ×1,5) | „Po šestém pivu se Franta pochlubil, že za ty dresy dostal pětikilo." → stopa `hospoda` síly **3** s `points_to` → pachatel známý |
-| `ohlasuje_cin` | návštěvník s alkoholem ≥ 70 a váhou pachatele nad prahem (5a), nebo neprávem obviněný či hráč s odmítnutou zálohou; šance 10 % | „Franta u pultu vykládal, že si zítra ty míče ze skladu odnese, stejně je nikdo nepotřebuje." → **hrozící incident** (9a) |
+| `drby_o_incidentu` | v hospodě sedí hráč se znalostí `svedek\|kamarad\|rival`, alkohol ≥ 60, ještě nevyslechnutý (`interrogation IS NULL`); šance 25 % | „Pepa po třetím pivu povídal, že ve čtvrtek viděl u skladu Frantovo auto." → nahradí hráčovy nenalezené stopy `svedek\|kamarad\|rival` jednou stopou `hospoda` (síla 2, bonus policie jako svědek, `points_to`, jméno pachatele v textu), `interrogation = prozradil`, SMS od hospodského. Deník jmenuje jen toho, kdo mluvil, vztahy k pachateli se neposouvají. |
+| `nabizi_zbozi` | cizí zloděj u **neuzavřené** krádeže s kradeným prodejným vybavením, zboží zatím bez inzerátu a nevrácené; šance 20 %, nejvýš jednou za incident a jen jeden prodejce za večer | „Nějaký chlap nabízel u pultu dresy za pětikilo." → stopa síly 1, bez jména; poznatelné zboží → policie +0,15 |
+| `stezuje_si_na_trenera` | hráč, který obvinění zapřel (kromě už odhaleného pachatele), do 60 dní, jen když je s ním u stolu i kamarád; šance 20 %, jedna stížnost za večer | kamarádi z téže session vztah k trenérovi −3, morálka −1 |
+| `rvacka_kvuli_kradezi` | odhalený pachatel **krádeže** a jeho rival ve stejné session, incident neuzavřený nebo uzavřený nejvýš před 14 dny; šance 30 %, jedna rvačka za večer | efekty jako `cross_team_fight` (kondice, malé zranění) |
+| `cela_hospoda_resi` | nejzávažnější incident do 3 dnů, o kterém dnes ještě nepadla jiná příhoda; šance 40 % | čistě atmosféra, text s názvem věci, bez jmen |
+| `chlubi_se` | pachatel krádeže nebo poškození, jen u **neuzavřeného** incidentu, sedí v hospodě do 10 dnů od činu, alkohol ≥ 60; šance 20 % (temperament ≥ 65 ×1,5) | „Po šestém pivu se Franta pochlubil, že za ty dresy dostal pětikilo." → u dosud neodhaleného pachatele stopa `hospoda` síly **3** s `points_to` → pachatel známý; u už odhaleného jen text v deníku, bez nové stopy a bez SMS |
+| `ohlasuje_cin` | návštěvník s alkoholem ≥ 70 (platí stejně i pro obviněného) a buď váhou pachatele nad prahem (5a), nebo kdo obvinění zapřel (stejné pravidlo jako `stezuje_si_na_trenera`); šance 10 % | „Franta u pultu vykládal, že si zítra ty míče ze skladu odnese, stejně je nikdo nepotřebuje." → **hrozící incident** (9a). Čin jen z `vloupani_sklad`, `vitrina`, `dodavka_pujcena`, `koleje_trakturek` a `kopnute_dvere` (ten jen za zapřené obvinění, váha 3×, bez podmínky červené karty) a jen když klub podmínky (4a, 4b) skutečně splňuje |
+
+`utraci_za_rundy` (pachatel peněžního incidentu platí rundu, hospodský v kádru ×2, trenér
+v hospodě ×2), `pije_na_sekeru` (hospodský nechce nalévat na sekeru dlužníkovi) a odmítnutá
+záloha jako další spouštěč `ohlasuje_cin` čekají na fázi 7: peněžní incidenty, dluhy a zálohy
+ve fázi 6 neexistují.
 
 ### 9a) Hrozící incident z opileckých řečí
 
-Ohlášený čin je skutečný záznam `club_incidents` se stavem `hrozi`:
-- `kind` jen z typů, jejichž **podmínky klub splňuje** (4a, 4b) — nejde ohlásit krádež dodávky, když klub dodávku nemá. Pachatel je známý (ohlásil to sám), `deadline` = +1 až +3 herní dny.
-- Manažer se to dozví z hospodského deníku a SMS: od kamaráda z kádru, který u toho seděl a je ochotný mluvit (ochota ≥ 50), jinak od hospodského.
-- **Předejít tomu jde:** zpráva hráči v chatu (tlačítko „Promluvit si" nebo detekce tématu, 7a) sníží šanci o `30 + vztah k trenérovi / 5` procentních bodů; zabezpečení areálu ≥ 1 u krádeže ze skladu −15; hráč na incidentní absenci nebo zraněný −100.
+Ohlášený čin je skutečný záznam `club_incidents` se stavem `hrozi`, id
+`inc-{tým}-{kind}-{den}-hrozi-{hráč}` (`idHroziciho`, `incidents/hospoda.ts`):
+- `kind` jen z typů, jejichž **podmínky klub splňuje** (4a, 4b): nejde ohlásit krádež dodávky, když klub dodávku nemá. `deadline` = +1 až +3 herní dny.
+- **`culprit_revealed` zůstává 0**, i když pachatel je od začátku znám (ohlásil to sám): kdyby se nastavilo na 1, absence, trénink a zápas (17a–17c) by hráče počítaly jako odhaleného pachatele dřív, než se čin vůbec stal. Jméno nese veřejné API pole `ohlasil` (`{playerId, jmeno}`, vrací se u statusu `hrozi` i u výsledku `nestalo_se`) a znalost role `pachatel` jen jemu, s platností do lhůty.
+- Manažer se to dozví z hospodského deníku a SMS: od hráče klubu, který u toho seděl a má k trenérovi nejvyšší vztah ≥ 50 (`posel`, `hroziciCin`), jinak od hospodského.
+- **Předejít tomu jde:** zpráva hráči v chatu sníží šanci o `30 + vztah k trenérovi / 5` procentních bodů (`sanceHroziciho`, `incidents/hrozi.ts`); zabezpečení areálu ≥ 1 u krádeže ze skladu −15; hráč na incidentní absenci nebo zraněný −100. Zpráva se pozná dvěma způsoby a obojí zapíše `resolution_data.promluvil` = den rozhovoru (`zaznamenejPromluvu`, jen když hrozba je pořád jeho a stále trvá):
+  - tlačítko „Promluvit si" (`POST /teams/:id/incidents/:id/promluvit`) otevře konverzaci s hráčem a nastaví téma na incident bez ohledu na slova další zprávy;
+  - volný text, který `incidents/tema.ts: jeRecOHrozicim` pozná po celých slovech, ne podřetězcích: začátky `hospod`, `hospud`, `kecal`, `kecat`, `kecas`, `vyklada`, `opil`, `ozral`, `blbost`, `neblbn`, `nedelej`, `vyhroz`, nebo přesná slova `reci`, `keci`, `kecy` stačí sama. Samotné místo činu (sklad, vitrína, dveře, kabina…) nestačí, chytalo by běžnou řeč o tom místě; počítá se jen spolu s varovným slovem `nechod`, `nesah`, `neber`, `nekrad`, `nerozbij` nebo `opovaz`.
 - Při uplynutí lhůty deterministický los (`seed "hrozi|incident"`), výchozí šance 50 %:
-  - **stane se** → incident přejde na `otevreny` se skutečnými dopady (6c) a stopou `hospoda` síly 3 na pachatele, nalezenou;
-  - **vystřízliví** → `uzavreny` s výsledkem `nestalo_se`, znalost `kadr` „Franta v hospodě kecal, ale nic neudělal" na 7 dní.
+  - **stane se** → hlídaný `UPDATE` přepíše záznam ze stavu `hrozi` na skutečný incident se stejným id (`zapisIncident(..., { zHroziciho: true })`): skutečné dopady (6c), znalosti hrozby se smažou a zapíšou se znovu podle skutečného činu, stopa `hospoda` síly 3 s id `{id}-hospoda-ohlasil` na pachatele, nalezená, SMS Kustoda. Ten den se nový problém nelosuje (6b).
+  - **vystřízliví** → `uzavreny` s výsledkem `nestalo_se`, znalost `kadr` „Franta v hospodě kecal, ale nic neudělal" na 7 dní, SMS Kustoda.
 - Hrozící incident se nepočítá do limitu otevřených problémů (4e), ale stejný hráč smí mít jen jeden.
 - Neprávem obviněný může ohlásit i `kopnute_dvere` („rozmlátím mu tu kabinu") — podmínky 4b se pro tenhle případ neptají na červenou kartu.
 
 Návaznosti:
-- **Trenér v hospodě poslouchá.** Návštěva s trenérem (`createCoachLedSession`, `POST /teams/:id/pub-visit`) během otevřeného incidentu zdvojnásobí šance `drby_o_incidentu` a `utraci_za_rundy`. Manažer má aktivní nástroj.
+- **Trenér v hospodě poslouchá jen ve vlastní návštěvě.** `createCoachLedSession` (`POST /teams/:id/pub-visit`) zdvojnásobí šanci `drby_o_incidentu`; náhodná denní hospoda s textem od náhodného trenéra (`coach_*`) neposlouchá. Příhody o incidentech, které dnes už v deníku padly, zůstanou zachované i po přepsání session návštěvou s trenérem a stejná dvojice `typ|incident` se ten den nezopakuje.
 - **Oslava v kabině** bere pachatele ze **skutečných** návštěvníků včerejší hospody (4b).
-- **Rozvod:** šance návštěvy hospody (`attendanceProb`, `pub.ts:76`) ×1,5.
-- **Drb se šíří do jiných klubů.** Host z jiného týmu (`isVisitor`) v session s drbem dostane znalost `drb` (jen veřejný fakt) na 14 dní — v chatu svého klubu o tom může mluvit.
+- **Drb se šíří do jiných klubů.** Host z jiného týmu (`isVisitor`) v session, kde padla jakákoli příhoda o incidentu kromě ohlášení činu, dostane znalost `drb` (jen veřejný fakt) na 14 dní. V chatu svého klubu o tom může mluvit.
 - Hospoda nevytváří nové incidenty ani škody; jen odhaluje, varuje a dohrává následky.
+- Rozvod ×1,5 v šanci návštěvy hospody (`attendanceProb`, `pub.ts:76`) čeká na fázi 7: životní situace ve fázi 6 neexistují.
+
+**Známé chyby mimo fázi 6** (nalezené při implementaci, neopravené, nahlášené uživateli):
+- `season/pub-fan-leaders.ts` a `season/pub.ts: pridejVudceDoHospody` počítají `trenerJeTu` z návštěvníků dřív, než se trenér mezi ně přidá, a návštěva s trenérem (`createCoachLedSession`) vůdce fanoušků vůbec nevolá. `scenaSTrenerem` se tak nikdy nespustí.
+- `routes/villages.ts` (NPC v hospodě) má prázdné `catch { atts = []; }` a `catch { incs = []; }`.
 
 ---
 
@@ -712,10 +734,16 @@ CO VÍŠ O DĚNÍ V KLUBU (jen tohle, nic dalšího si nevymýšlej, nic jiného
 - Před 3 dny někdo vykradl sklad, zmizely dresy. Kdo to byl, se v klubu neví.
 ```
 
-Veřejný řádek (role `kadr`, `drb`) skládá dohromady text incidentu, kdy se stal, jméno
-odhaleného pachatele (sám pachatel dostane „Přišlo se na to, že jsi to byl ty.") a jak to
-dopadlo: trest, výsledek policie, nebo že se to zatím vyšetřuje či nevyřešilo. Jinak by si
-model tresty a výsledky domýšlel.
+Veřejný řádek role `kadr` skládá dohromady text incidentu, kdy se stal, jméno odhaleného
+pachatele (sám pachatel dostane „Přišlo se na to, že jsi to byl ty.") a jak to dopadlo:
+trest, výsledek policie, nebo že se to zatím vyšetřuje či nevyřešilo. Jinak by si model
+tresty a výsledky domýšlel. Výjimka: u výsledku `nestalo_se` (9a, hrozící čin z hospody, ze
+kterého nakonec nic nebylo) věta „Kdo to byl, se v klubu neví." do promptu nejde. Ohlašovatel
+není neodhalený pachatel skutečného činu, jen hráč, který v hospodě vykládal.
+
+Role `drb` (Část 9, host z jiného klubu) dostane jen fakt, kdy se to stalo, a jméno
+odhaleného pachatele, nikdy výsledek: drb je z cizího klubu a model by trest nebo výsledek
+policie cizího klubu vztáhl na svého vlastního trenéra.
 
 Když hráč nemá o dění v klubu žádnou platnou znalost, blok doplní `BEZ_ZNALOSTI`: „O žádné
 krádeži, škodě ani jiném průšvihu v klubu nevíš. Když se trenér ptá, řekni, že nic nevíš, a
@@ -732,7 +760,10 @@ když je rozhovor o incidentu** (7a) a vždy s pokynem podle uloženého výsled
 - Dresy jsi ukradl TY. POKYN: Zapírej, nic nepřiznávej.
 ```
 
-Jinak by model mohl sám „prozradit" něco, co v DB jako nalezená stopa není.
+Jinak by model mohl sám „prozradit" něco, co v DB jako nalezená stopa není. Pachatel
+hrozícího činu (9a, `status = 'hrozi'`) dostane vlastní pokyn místo obvyklého „Zapírej"
+nebo „Přiznej se": „Byl jsi v hospodě opilý a vykládal jsi to. Zlehčuj to, a když ti trenér
+domluví, slib, že nic neuděláš."
 
 Plnění `znalostiIncidentu` na všech místech, kde se staví snapshot pro chat:
 `messaging/ai-player-spawn.ts` (spawn i odpověď), `messaging/coach-initiated.ts` (SMS i kabina),
@@ -793,6 +824,9 @@ apps/api/src/incidents/vyslech.ts            — výslech, obvinění (čisté +
 apps/api/src/incidents/policie.ts
 apps/api/src/incidents/bazar.ts              — vystavení, poznání, cena (čisté + zápis)
 apps/api/src/incidents/hospoda.ts            — příhody pro pub.ts (čisté)
+apps/api/src/incidents/hospoda-db.ts         — kontext hospody, výběr ohlášeného činu nad stavem klubu, zápis následků
+apps/api/src/incidents/hrozi.ts              — šance hrozícího činu po lhůtě, rozhovor (čisté)
+apps/api/src/incidents/hrozi-db.ts           — vyhodnocení hrozícího činu po lhůtě, zápis rozhovoru
 apps/api/src/incidents/texty.ts              — šablony textů
 apps/api/src/incidents/denni-krok.ts         — zpracujIncidentyDne
 apps/api/src/routes/incidents.ts
@@ -861,7 +895,9 @@ obec, tisk, přestupy, fanoušci, sponzoři, grémium, sezóna) jsou uvedené p�
 
 - `POST /api/admin/incidents/force` pro každý kind, `curl` kontrola: incident, `equipment`/`stadiums`/`transactions` se reálně změnily, stopy odpovídají vybavení testovacího klubu.
 - Klub bez zabezpečení vs. se zabezpečením 2 → kamera jen u druhého.
-- MCP prohlížeč: stránka incidentu, obvinění (správně/špatně), policie, tresty, bazar (odznak, nahlásit, koupit zpět), hospoda (drby), chat s hráčem na krádež (dočasně `ai_provider = workers-ai`, pak zpět `off`).
+- `POST /api/admin/incidents/hospoda` `{teamId, hraci, hoste?, jiste?, ohlasi?, trener?}`: posadí hráče klubu (`hraci`) a hosty z jiných klubů (`hoste`) do dnešní hospody a vyhodnotí příhody o incidentech; `jiste` obchází losy 10–25 %, `ohlasi` vynutí, kdo ohlásí hrozící čin, `trener` zapne poslouchání. Podmínky (kdo co ví, co klub má) neobchází.
+- `POST /api/admin/incidents/vysetrovani` `{teamId, hroziTed: true}`: posune lhůtu hrozících činů na dnešek a hned je vyhodnotí (`vyhodnotHrozici`), jinak by se na testingu čekalo 1 až 3 dny.
+- MCP prohlížeč: stránka incidentu, obvinění (správně/špatně), policie, tresty, bazar (odznak, nahlásit, koupit zpět), hospoda (drby), hrozící čin (SMS, „Promluvit si", stane se/vystřízliví), chat s hráčem na krádež (dočasně `ai_provider = workers-ai`, pak zpět `off`).
 - Mobilní šířka.
 
 ---
@@ -895,7 +931,7 @@ Každá fáze samostatně: build → commit → push testing → ověření API 
 4. **Znalosti a chat** (Část 10, 17d) — znalosti, prompt, detekce tématu, výslech, vynucené scénáře, domácnost (hotovo na testingu, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-4.md`).
 5. **Bazar** — soukromé inzeráty, poznání, nahlásit, koupit zpět (hotovo na testingu, plán
    `docs/superpowers/plans/2026-09-17-incidenty-faze-5.md`).
-6. **Hospoda** — příhody, chlubení a ohlašování činů, hrozící incidenty a jak jim předejít, trenér poslouchá, šíření drbů, vůdce fanoušků v hospodě.
+6. **Hospoda** — příhody, chlubení a ohlašování činů, hrozící incidenty a jak jim předejít, trenér poslouchá, šíření drbů, vůdce fanoušků v hospodě (hotovo na testingu, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-6.md`).
 7. **Peníze a životní situace** — kasa, tombola, útěk, ekonom, dluhy + záloha, ostatní situace.
 8. **Obec** (17e) — přízeň a důvěra po osobnostech, historie, petice, investice, brigády, starosta v hospodě a na telefonu, pozvánky, krize jako skutečné incidenty, konec sezóny.
 9. **Tisk, fanoušci, sponzoři** (17f, 17h) — rubrika Černá kronika, otázky v rozhovorech, reportér, fanouškovské události, kampaně, transparenty, chorály, oblíbenci, sponzoři.
@@ -1051,7 +1087,7 @@ a fáze 4 ji nezpůsobila ani neřešila, čeká na rozhodnutí uživatele.
 
 | Fáze | Navazuje na fázi 4 |
 |---|---|
-| 6 Hospoda | role `drb`, `drby_o_incidentu` nastaví `interrogation = prozradil` a najde stopu `hospoda` |
+| 6 Hospoda | role `drb`, `drby_o_incidentu` nastaví `interrogation = prozradil` a najde stopu `hospoda` (hotovo, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-6.md`) |
 | 7 Peníze a životní situace | `zadost_o_zalohu`, domácnost při rozvodu, vyšší váha hráče se situací v `pickPlayerWeighted`, zákaz vymýšlet situace jen pro hráče bez situace |
 | 8 Obec | starosta v zmeškaných hovorech |
 | 9 Tisk, fanoušci, sponzoři | `novinar_skandal` a sponzor v zmeškaných hovorech |
@@ -1134,7 +1170,7 @@ neprávem obviněný) aktivista/tradicionalista p −0,2 s důvodem „Po té kr
 - **oblíbenci** (`engine/fan-favourites.ts:65`): pole `povest` (hrdina +, zloděj −), důvody „Vytáhl dítě z rybníka." / „Ukradl klubu peníze."; fixtury `fan-oblibenci.test.ts`.
 - **transparent** (`engine/fan-banner.ts:124`): po kampani větev `zlodejVKadru` „ZLODĚJE V DRESU NECHCEME" a `hrdina` „{PŘÍJMENÍ}, KLOBOUK DOLŮ"; max. 48 znaků, poslední varianta bez jména, stabilní `duvod` na incident, jen s kotlem.
 - **chorály** (`engine/fan-chants.ts:18`): druhy `hrdina` a `zlodej`, jméno jen v 1. pádě.
-- **vůdce fanoušků v hospodě** (`season/pub-fan-leaders.ts:495`): `scenaOIncidentu` — vynadá odhalenému zloději u stolu nebo zaplatí rundu hrdinovi.
+- **vůdce fanoušků v hospodě** (`season/pub-fan-leaders.ts:495`): `scenaOIncidentu` (typ `vudce_zlodej`) vynadá odhalenému zloději z kádru u stolu, jen krádež, stejná čerstvost jako `rvacka_kvuli_kradezi` (do 14 dní od odhalení nebo uzavření), s předností před scénami o zápase a o hráčích. Zaplacení rundy hrdinovi čeká na fázi 11, kdy vznikají pozitivní incidenty.
 
 **Sponzoři:**
 - obnovení smlouvy (`routes/game.ts:2349` `computeRenewalTerms`): `× skandalMod` ze sezóny (útěk/usvědčený zloděj −10 až −20 %, hrdina +5 %).
