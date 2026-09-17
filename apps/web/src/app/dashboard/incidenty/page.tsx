@@ -158,6 +158,7 @@ function Karta({ incident: i }: { incident: Incident }) {
             {datum(i.gameDate)}
             {i.status === "otevreny" && i.deadline && ` · uzavře se ${datum(i.deadline)}`}
             {i.status === "hrozi" && i.deadline && ` · rozhodne se ${datum(i.deadline)}`}
+            {i.status === "probiha" && i.endsOn && ` · potrvá do ${datum(i.endsOn)}`}
             {vysledek && ` · ${vysledek}`}
           </div>
           <p className="text-sm mt-2">{i.text}</p>
@@ -179,6 +180,14 @@ function Karta({ incident: i }: { incident: Incident }) {
               Ohlásil to:{" "}
               <Link href={`/dashboard/player/${i.ohlasil.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
                 {i.ohlasil.jmeno}
+              </Link>
+            </div>
+          )}
+          {i.dotceny?.jmeno && (
+            <div className="text-sm mt-2">
+              Týká se:{" "}
+              <Link href={`/dashboard/player/${i.dotceny.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
+                {i.dotceny.jmeno}
               </Link>
             </div>
           )}

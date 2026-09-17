@@ -68,9 +68,10 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
   const { incident: i, vysetrovani: v, akce } = detail;
   const vysledek = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
   const hrozi = i.status === "hrozi";
+  const jeSituace = i.category === "zivotni";
   // Hrozící čin ani řeči, ze kterých nic nebylo, se nevyšetřují.
   const vysetruje = (i.category === "kradez" || i.category === "poskozeni") && !hrozi && i.resolution !== "nestalo_se";
-  const maAkce = akce.obvinit || akce.policie || akce.zeptat || akce.promluvit || akce.tresty.length > 0;
+  const maAkce = akce.obvinit || akce.policie || akce.zeptat || akce.promluvit || akce.zaloha || akce.tresty.length > 0;
   const podezreli = v.podezreli.filter((p): p is { playerId: string; jmeno: string } => !!p.jmeno);
   // Pachatel je známý, ale trest se vybrat nedá, protože odešel z klubu. Bez týhle hlášky
   // incident vypadá jako "Řeší se" navždy, beze slova proč.
@@ -138,6 +139,18 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                 : "Jestli to opravdu udělá, se ukáže po lhůtě. Když si s ním promluvíš, šance výrazně klesne."}
             </p>
           )}
+        </div>
+      )}
+
+      {jeSituace && i.dotceny?.jmeno && (
+        <div>
+          <SectionLabel>Koho se to týká</SectionLabel>
+          <p className="text-sm"><Hrac playerId={i.dotceny.playerId} jmeno={i.dotceny.jmeno} /></p>
+          {i.endsOn && <p className="text-sm text-muted mt-1">Potrvá do {datum(i.endsOn)}.</p>}
+          {detail.situace?.zaloha === "pujceno" && detail.situace.castka != null && (
+            <p className="text-sm text-muted mt-1">Zálohu jsi půjčil: {kc(detail.situace.castka)}, splácí se čtyři pondělky ze mzdy.</p>
+          )}
+          {detail.situace?.zaloha === "odmitnuto" && <p className="text-sm text-muted mt-1">Zálohu jsi odmítl.</p>}
         </div>
       )}
 
@@ -266,6 +279,31 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
               >
                 Zavolat policii
               </button>
+            </div>
+          )}
+
+          {akce.zaloha && (
+            <div className="space-y-2">
+              <SectionLabel>Záloha na mzdu</SectionLabel>
+              <p className="text-sm text-muted">
+                Půjčka 3 000 až 8 000 Kč podle toho, jak zle na tom je. Vrací se čtyřmi splátkami ze mzdy. Když nerozhodneš do lhůty, bere se to jako odmítnutí.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => void proved("zaloha", { akce: "pujcit" }, () => "Záloha vyplacena.")}
+                  disabled={pracuje}
+                  className="px-3 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white disabled:opacity-50"
+                >
+                  Půjčit zálohu
+                </button>
+                <button
+                  onClick={() => void proved("zaloha", { akce: "odmitnout" }, () => "Zálohu jsi odmítl.")}
+                  disabled={pracuje}
+                  className="px-3 py-2 rounded-soft text-sm font-heading font-bold border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Odmítnout
+                </button>
+              </div>
             </div>
           )}
 
