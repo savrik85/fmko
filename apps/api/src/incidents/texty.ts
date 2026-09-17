@@ -290,6 +290,11 @@ export const TEXTY = {
     "{hrac} to trenérovi v SMS sám přiznal.",
     "{hrac} se při rozhovoru s trenérem ke všemu přiznal.",
   ],
+  krivda_obvineny: [
+    "Trenére, pořád mi leží v hlavě to obvinění: {nazev}. Já to nebyl.",
+    "Ještě k tomu obvinění, trenére: {nazev}. Mrzí mě, že si to o mně myslíte.",
+    "Trenére, kvůli tomu obvinění jsem v noci nespal: {nazev}. Fakt jsem to nebyl já.",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type KlicTextu = keyof typeof TEXTY;

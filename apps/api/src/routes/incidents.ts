@@ -11,6 +11,7 @@ import { obvinHrace, rozhodni, zavolejPolicii, zeptejSe, type VysledekAkce } fro
 import { oznamIncident, zapisIncident } from "../incidents/dopady";
 import { SLOUPCE_INCIDENTU, proAkce, type IncidentRadek } from "../incidents/incident-db";
 import { KATALOG_PODLE_KIND } from "../incidents/katalog";
+import { ozviSeObvineni } from "../incidents/krivda";
 import { MAX_OBVINENI, SRAZKA_TYDNU } from "../incidents/nastaveni";
 import { nactiZtraty, popisZtraty } from "../incidents/popis";
 import { nactiStavKlubu } from "../incidents/stav-klubu";
@@ -224,8 +225,9 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
 // ── POST /api/admin/incidents/vysetrovani ────────────────────────────────────
 // Jen pro ověření na testingu: spustí denní vyšetřování klubu hned. `policieTed`
 // posune výsledky probíhajících šetření na dnešek, `srazky` zaúčtuje srážky i mimo pondělí.
+// `krivdy` otevře vlákna křivdy pro dnešní obvinění (jinak až další den).
 incidentsRouter.post("/admin/incidents/vysetrovani", async (c) => {
-  const body = await teloPozadavku<{ teamId?: string; policieTed?: boolean; srazky?: boolean }>(c, "admin vyšetřování");
+  const body = await teloPozadavku<{ teamId?: string; policieTed?: boolean; srazky?: boolean; krivdy?: boolean }>(c, "admin vyšetřování");
   if (!body?.teamId) return c.json({ error: "Chybí teamId" }, 400);
   const db = c.env.DB;
 
@@ -243,8 +245,8 @@ incidentsRouter.post("/admin/incidents/vysetrovani", async (c) => {
       .bind(team.game_date, team.id).run()
       .catch((e) => logger.warn({ module: M }, "admin vyšetřování: posun výsledku policie", e));
   }
-  const vysledek = await zpracujVysetrovani(
-    c.env, { teamId: team.id, gameDate: team.game_date, seasonNumber: sezona.number }, { pondeli: !!body.srazky },
-  );
-  return c.json({ ok: true, ...vysledek });
+  const t = { teamId: team.id, gameDate: team.game_date, seasonNumber: sezona.number };
+  const vysledek = await zpracujVysetrovani(c.env, t, { pondeli: !!body.srazky });
+  const krivdy = body.krivdy ? await ozviSeObvineni(c.env, t, { denObvineni: team.game_date.slice(0, 10) }) : 0;
+  return c.json({ ok: true, ...vysledek, krivdy });
 });

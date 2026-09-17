@@ -8,6 +8,7 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { oznamIncident, zapisIncident } from "./dopady";
+import { ozviSeObvineni } from "./krivda";
 import { vylosujIncident } from "./losovani";
 import { nactiStavKlubu } from "./stav-klubu";
 import { zpracujVysetrovani } from "./vysetrovani-den";
@@ -26,6 +27,10 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   // Nejdřív vyšetřování: výsledky policie, propadlé lhůty (uvolní limit otevřených
   // problémů) a v pondělí srážky ze mzdy.
   await zpracujVysetrovani(env, { teamId, gameDate, seasonNumber: sezona.number }, { pondeli: new Date(gameDate).getUTCDay() === 1 });
+
+  // Den po zapřeném obvinění se hráč ozve sám (spec 17d).
+  await ozviSeObvineni(env, { teamId, gameDate, seasonNumber: sezona.number })
+    .catch((e) => logger.warn({ module: M, teamId }, "ozvání obviněných", e));
 
   const stav = await nactiStavKlubu(env.DB, { id: teamId, league_id: (team.league_id as string | null) ?? null }, gameDate, sezona.number);
   if (!stav) return;
