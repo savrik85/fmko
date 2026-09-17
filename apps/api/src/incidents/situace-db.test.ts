@@ -87,6 +87,14 @@ describe("dluhy po ztrátě práce", () => {
     expect(sendPlayerSMS).toHaveBeenCalled();
   });
 
+  it("řetězení zavře původní ztrátu práce, ať hráč nedrží dva sloty naráz", async () => {
+    const { db, env } = prostredi([praceRule(ZDROJ_ANO)]);
+    expect(await zretezDluhy(env, stav())).toBe(true);
+    const uzavreni = db.dotazy.find((d) => /resolution = 'prerostla_v_dluhy'/.test(d.sql));
+    expect(uzavreni?.sql).toContain("status = 'probiha'");
+    expect(uzavreni?.params).toEqual(["2026-09-16T16:00:00.000Z", ZDROJ_ANO, "tym-a"]);
+  });
+
   it("jiný den než vylosovaný nic nedělá", async () => {
     const { db, env } = prostredi([praceRule(ZDROJ_ANO)]);
     expect(await zretezDluhy(env, stav({ gameDate: "2026-09-15T16:00:00.000Z", den: "2026-09-15" }))).toBe(false);

@@ -68,6 +68,7 @@ export const VYSLEDEK_LABEL: Record<string, string> = {
   nestalo_se: "Nakonec se nic nestalo",
   skoncila: "Skončilo",
   hrac_odesel: "Hráč odešel z klubu",
+  prerostla_v_dluhy: "Přerostlo v dluhy",
 };
 
 export const TREST_LABEL: Record<AkceTrestu, string> = {

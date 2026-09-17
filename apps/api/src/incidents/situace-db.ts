@@ -165,6 +165,13 @@ export async function zretezDluhy(env: Bindings, stav: StavKlubu): Promise<boole
       text: text(rng, "situace_dluhy", { hrac: hrac.jmeno }),
     }, `${r.id}-dluhy`);
     if (id) {
+      // Jeden hráč, jedna situace (spec 4c): ztráta práce, ze které dluhy vzešly, končí, ať
+      // po ní na hráči nezůstane druhý slot a klubový limit i mapa `situace` sedí.
+      await db.prepare(
+        `UPDATE club_incidents SET status = 'uzavreny', resolution = 'prerostla_v_dluhy', resolved_on = ?
+          WHERE id = ? AND team_id = ? AND status = 'probiha'`,
+      ).bind(stav.gameDate, r.id, stav.teamId).run()
+        .catch((e) => logger.error({ module: M }, `uzavření ztráty práce po řetězení dluhy ${r.id}`, e));
       logger.info({ module: M, teamId: stav.teamId }, `dluhy po ztrátě práce, hráč ${hrac.id}`);
       return true;
     }
