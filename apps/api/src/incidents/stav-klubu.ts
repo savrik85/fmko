@@ -57,6 +57,9 @@ export function hracZRadku(r: Record<string, unknown>, recidiviste: ReadonlySet<
     vudcovstvi: cislo(p.leadership, 30),
     povolani: typeof lc.occupation === "string" ? lc.occupation : "",
     recidivista: recidiviste.has(id),
+    vek: cislo(r.age, 25),
+    dluhy: false,
+    zalohaOdmitnuta: false,
   };
 }
 

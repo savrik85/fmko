@@ -30,6 +30,12 @@ export interface HracKlubu {
   povolani: string;
   /** Pachatel incidentu uzavřeného v posledních 60 dnech (spec 5a). */
   recidivista: boolean;
+  /** Věk hráče. Situace mají věkové podmínky (spec 4c). */
+  vek: number;
+  /** Má aktivní situaci `dluhy` (spec 5a). */
+  dluhy: boolean;
+  /** Trenér mu odmítl zálohu (spec 5a, 7c). */
+  zalohaOdmitnuta: boolean;
 }
 
 export interface StavKlubu {
@@ -67,6 +73,10 @@ export interface NavrhIncidentu {
   culpritType: TypPachatele;
   culpritPlayerId: string | null;
   culpritRevealed: boolean;
+  /** Koho se životní situace týká (spec 4c). U krádeží a poškození `null`. */
+  subjectPlayerId?: string | null;
+  /** Kolik herních dní situace potrvá. Zapíše se jako `ends_on`. */
+  dniTrvani?: number;
   ztraty: Ztrata[];
   text: string;
 }

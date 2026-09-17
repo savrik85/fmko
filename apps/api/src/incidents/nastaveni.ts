@@ -75,8 +75,13 @@ export const VYRAZENI_MAX_ZAPASU = 3;
 export const VLIV_INCIDENTU_DNI = 14;
 /** Jak daleko do minulosti se hledají incidenty s obviněním nebo odhalením. */
 export const OKNO_VLIVU_DNI = 45;
-export const DUVOD_ABSENCE = { vyslech: "Výslech na policii", soud: "Soudní jednání", vyrazen: "Vyřazen trenérem" } as const;
-export const EMOJI_ABSENCE: Record<string, string> = { vyslech: "🚓", soud: "⚖️", vyrazen: "⛔" };
+export const DUVOD_ABSENCE = {
+  vyslech: "Výslech na policii", soud: "Soudní jednání", vyrazen: "Vyřazen trenérem",
+  porod: "Narodilo se mu dítě", nemocna_mama: "Nemocný rodič", stehovani: "Stěhování po rozvodu",
+} as const;
+export const EMOJI_ABSENCE: Record<string, string> = {
+  vyslech: "🚓", soud: "⚖️", vyrazen: "⛔", porod: "👶", nemocna_mama: "🏥", stehovani: "📦",
+};
 
 /** Znalosti hráčů o incidentech (spec 10a). */
 export const ZNALOST_KADR_DNI = 14;
@@ -140,3 +145,39 @@ export const HROZI_PROMLUVA_VZTAH_DELITEL = 5;
 export const HROZI_ZABEZPECENI = 15;
 /** Jak dlouho kádr ví, že to byly jen řeči. */
 export const HROZI_NESTALO_SE_DNI = 7;
+
+/** Životní situace (spec 4c, 4e). */
+export const SANCE_SITUACE_ZA_DEN = 0.03;
+/** Kolik situací smí klub mít naráz. Jeden hráč vždy nejvýš jednu. */
+export const MAX_AKTIVNICH_SITUACI = 2;
+export const COOLDOWN_SITUACE_DNI = 21;
+
+/** Záloha při dluzích (spec 7c). */
+export const ZALOHA_MIN_KC = 3000;
+export const ZALOHA_MAX_KC = 8000;
+export const ZALOHA_TYDNU = 4;
+export const ZALOHA_MORALKA = 6;
+export const ZALOHA_VZTAH = 8;
+export const ODMITNUTA_ZALOHA_MORALKA = -5;
+export const ODMITNUTA_ZALOHA_VZTAH = -5;
+
+/** Váha pachatele (spec 5a): kdo má dluhy, krade spíš. Odmítnutá záloha přitopí. */
+export const VAHA_DLUHU = 2.0;
+export const VAHA_ODMITNUTE_ZALOHY = 1.5;
+
+/** Docházka na trénink podle situace (spec 17b). Kdo nemá práci nebo utekl z domova, chodí radši na hřiště. */
+export const TRENINK_SITUACE: Record<string, number> = { prisel_o_praci: 0.15, rozvod: 0.15, dluhy: -0.15 };
+
+/** Zápas (spec 17c). Platí jen pro ten jeden zápas, do DB se to nepropisuje. */
+export const ZAPAS_ROZVOD_MORALKA = -5;
+export const ZAPAS_ROZVOD_KONZISTENCE = -5;
+export const ZAPAS_NAROZENI_MORALKA = 5;
+
+/** Absence na zápas podle situace (spec 17a). */
+export const DLUHY_SANCE_NAVIC = 0.05;
+/** Bez řidičáku se na venkovní zápas jede hůř. Klubová dodávka to ruší. */
+export const RIDICAK_SANCE_NAVIC = 0.12;
+
+/** Hospoda (spec 9). */
+export const SEKERA_SANCE = 0.5;
+export const ROZVOD_HOSPODA_NASOBEK = 1.5;

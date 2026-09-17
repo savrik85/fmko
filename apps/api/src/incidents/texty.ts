@@ -460,6 +460,109 @@ export const TEXTY = {
   znalost_drb: [
     "V hospodě jsi slyšel drb, klub {klub} má průšvih: {nazev}.",
   ],
+  situace_dluhy: [
+    "{hrac} se dostal do dluhů. V kabině se říká, že mu volají z inkasa.",
+    "{hrac} má doma dluhy a shání peníze, kde se dá.",
+    "{hrac} dluší a začal brát brigády, kdy se dá.",
+  ],
+  situace_prisel_o_praci: [
+    "{hrac} přišel o práci. Zatím to bere s humorem, ale je to znát.",
+    "{hrac} dostal v práci výpověď.",
+    "{hrac} je od tohoto týdne bez práce.",
+  ],
+  situace_rozvod: [
+    "{hrac} se rozvádí a spí zatím v kabině.",
+    "{hrac} se rozešel se ženou a stěhuje se.",
+    "{hrac} si prochází rozvodem.",
+  ],
+  situace_zabaveny_ridicak: [
+    "{hrac} přišel o řidičák.",
+    "{hrac} má zabavený řidičák a na zápasy se bude vozit s někým.",
+    "{hrac} nemá řidičák, na venkovní zápasy se bude vozit.",
+  ],
+  situace_svatba_spoluhrace: [
+    "{hrac} se ženil a půlka kabiny slavila do rána.",
+    "{hrac} měl svatbu. Kluci to oslavili za něj i za sebe.",
+    "{hrac} se oženil a svatba se protáhla do rána.",
+  ],
+  situace_narozeni_ditete: [
+    "{hrac} čeká narození dítěte.",
+    "{hrac} bude tátou, termín je za pár dní.",
+    "{hrac} se chystá do porodnice.",
+  ],
+  situace_nemocny_rodic: [
+    "{hrac} má nemocného rodiče a jezdí do nemocnice.",
+    "{hrac} se stará o nemocného rodiče.",
+    "{hrac} tráví dny v nemocnici u rodiče.",
+  ],
+  sms_situace_dluhy: [
+    "Trenére, dostal jsem se do problémů s penězi. Šlo by zálohu na výplatu? Vrátím to.",
+    "Trenére, nerad o to prosím, ale potřeboval bych zálohu. Mám dluhy až nad hlavu.",
+    "Trenére, můžu poprosit o zálohu? Doma je to teď s penězi zlé.",
+  ],
+  sms_situace_prisel_o_praci: [
+    "Trenére, přišel jsem o práci. Trénovat budu chodit, aspoň mě to nebude žrát.",
+    "Trenére, vyhodili mě z práce. Zatím to nějak zvládám.",
+    "Trenére, jsem bez práce. Kdyby o něčem víte, dejte vědět.",
+  ],
+  sms_situace_rozvod: [
+    "Trenére, rozvádím se. Spím teď na kabině, snad to nevadí.",
+    "Trenére, doma je konec. Fotbal je jediné, co mi zbylo.",
+    "Trenére, rozcházíme se se ženou. Bude to chvíli divoké.",
+  ],
+  sms_situace_zabaveny_ridicak: [
+    "Trenére, vzali mi řidičák. Na venkovní zápasy mě bude muset někdo vzít.",
+    "Trenére, přišel jsem o papíry. Doma zvládnu všechno, venku to bude horší.",
+    "Trenére, jsem bez řidičáku. Domluvím se s klukama na odvoz.",
+  ],
+  sms_situace_svatba_spoluhrace: [
+    "Trenére, ženil jsem se. Kluci to vzali vážně, ráno bude v kabině ticho.",
+    "Trenére, měl jsem svatbu. Díky všem, co dorazili.",
+    "Trenére, oženil jsem se. Omlouvám se za stav mužstva.",
+  ],
+  sms_situace_narozeni_ditete: [
+    "Trenére, jedeme do porodnice. Dám vědět, jak to dopadlo.",
+    "Trenére, rodíme. Pár dní se neozvu.",
+    "Trenére, bude to každou chvíli. Omlouvám se dopředu.",
+  ],
+  sms_situace_nemocny_rodic: [
+    "Trenére, mám nemocného tátu, jezdím do nemocnice. Pár dní vynechám.",
+    "Trenére, máma je v nemocnici. Musím být u ní.",
+    "Trenére, rodič mi skončil v nemocnici. Ozvu se, až to půjde.",
+  ],
+  znalost_situace: [
+    "Tohle se děje tobě: {text}.",
+  ],
+  zaloha_pujcena: [
+    "Díky, trenére. Vrátím to do koruny.",
+    "Trenére, díky. Tohle mi hodně pomohlo.",
+    "Díky moc. Budu to splácet ze mzdy, jak jsme se domluvili.",
+  ],
+  zaloha_odmitnuta: [
+    "Tak nic, trenére. Nějak to zvládnu sám.",
+    "Chápu, trenére. Musím si poradit jinak.",
+    "Beru na vědomí. Škoda, myslel jsem, že mi klub pomůže.",
+  ],
+  zaloha_propadla: [
+    "Trenére, už to neřešte. Sehnal jsem to jinde.",
+    "Už nic, trenére. Vyřešil jsem to po svém.",
+    "Nechte to být, trenére. Musel jsem si poradit sám.",
+  ],
+  absence_porod: [
+    "Trenére, jedeme do porodnice. Tenhle zápas vynechám.",
+    "Trenére, rodíme. Omlouvám se ze zápasu.",
+    "Trenére, bude to dřív, než jsme čekali. Na zápas nedorazím.",
+  ],
+  absence_nemocna_mama: [
+    "Trenére, jedu do nemocnice za rodičem. Na zápas nedorazím.",
+    "Trenére, musím do nemocnice za mámou. Omlouvám se.",
+    "Trenére, rodič je v nemocnici a nemá tam nikoho. Nepřijdu.",
+  ],
+  absence_stehovani: [
+    "Trenére, stěhuju se od ženy. Tenhle zápas vynechám.",
+    "Trenére, musím se vystěhovat, jinak to nestihnu. Omlouvám se.",
+    "Trenére, stěhování mi vyšlo přesně na zápas. Nedorazím.",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type KlicTextu = keyof typeof TEXTY;
