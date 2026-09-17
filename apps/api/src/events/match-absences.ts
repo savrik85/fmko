@@ -96,8 +96,11 @@ export async function fetchTeamCommuteMod(
 
 /**
  * Hraje tenhle tým venku? `matchKey` je u ligy calendar_id, u poháru a přáteláku id zápasu,
- * proto se hledá přes obojí. Když zápas nenajdeme, vracíme false — los pak dopadne stejně
- * jako před zavedením venkovní větve, což je bezpečnější než hádat.
+ * proto se hledá přes obojí. Pohárové zápasy nežijí v `matches`, ale v `cup_matches`
+ * (`home_cup_team_id`/`away_cup_team_id` → `cup_teams.id`, teprve `cup_teams.team_id` je
+ * skutečný tým) — bez zvláštní větve by dotaz na `matches` u poháru vždycky selhal na
+ * fallback a `isAway` by byla navždy false. Když zápas nenajdeme vůbec, vracíme false —
+ * los pak dopadne stejně jako před zavedením venkovní větve, což je bezpečnější než hádat.
  */
 export async function venkovniZapas(
   db: D1Database,
@@ -108,8 +111,26 @@ export async function venkovniZapas(
     "SELECT home_team_id FROM matches WHERE (calendar_id = ? OR id = ?) AND (home_team_id = ? OR away_team_id = ?) LIMIT 1",
   ).bind(matchKey, matchKey, teamId, teamId).first<{ home_team_id: string }>()
     .catch((e) => { logger.warn({ module: "match-absences" }, "venkovni zapas query", e); return null; });
-  if (!row) return false;
-  return row.home_team_id !== teamId;
+  if (row) return row.home_team_id !== teamId;
+
+  // Velkoklub bez reálného týmu (cup_teams.team_id IS NULL) nemá hráče ani absence,
+  // ale buildMatchPlayers mu volá kontextDojizdeni s `cup_teams.id` místo teams.id
+  // (cup.ts simulateCupTie), proto porovnáváme teamId proti oběma identifikátorům.
+  const cupRow = await db.prepare(
+    `SELECT cm.home_cup_team_id, cth.team_id AS home_real_team_id,
+            cm.away_cup_team_id, cta.team_id AS away_real_team_id
+       FROM cup_matches cm
+       LEFT JOIN cup_teams cth ON cth.id = cm.home_cup_team_id
+       LEFT JOIN cup_teams cta ON cta.id = cm.away_cup_team_id
+      WHERE cm.id = ?`,
+  ).bind(matchKey).first<{
+    home_cup_team_id: string | null; home_real_team_id: string | null;
+    away_cup_team_id: string | null; away_real_team_id: string | null;
+  }>().catch((e) => { logger.warn({ module: "match-absences" }, "venkovni zapas cup query", e); return null; });
+  if (!cupRow) return false;
+  if (cupRow.home_cup_team_id === teamId || cupRow.home_real_team_id === teamId) return false;
+  if (cupRow.away_cup_team_id === teamId || cupRow.away_real_team_id === teamId) return true;
+  return false;
 }
 
 /**

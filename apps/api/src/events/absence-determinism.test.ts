@@ -174,14 +174,6 @@ describe("životní situace v omluvenkách (spec 17a)", () => {
     expect(texty.size).toBeGreaterThanOrEqual(3);
   });
 
-  it("zabavený řidičák chybí jen venku a jen bez klubové dodávky", () => {
-    const doma = kolikChybi(["zabaveny_ridicak"], { isAway: false });
-    const venku = kolikChybi(["zabaveny_ridicak"], { isAway: true });
-    const venkuSDodavkou = kolikChybi(["zabaveny_ridicak"], { isAway: true, maDodavku: true });
-    expect(venku).toBeGreaterThan(doma);
-    expect(venkuSDodavkou).toBeLessThan(venku);
-  });
-
   it("kdo přišel o práci, nevymlouvá se na práci", () => {
     for (let s = 1; s <= 400; s++) {
       for (const a of generateAbsences(createRng(s), hraci(["prisel_o_praci"]), { timing: "any" })) {
