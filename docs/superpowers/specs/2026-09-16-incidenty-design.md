@@ -189,6 +189,7 @@ CREATE INDEX IF NOT EXISTS idx_incident_abs_team ON club_incident_absences(team_
 ```sql
 ALTER TABLE equipment ADD COLUMN area_security INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE equipment ADD COLUMN area_security_condition INTEGER NOT NULL DEFAULT 50;
+-- bazar (Část 8, migrace apps/api/migrations/0207_incidenty_bazar.sql)
 ALTER TABLE equipment_listings ADD COLUMN incident_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_listings_incident ON equipment_listings(incident_id) WHERE incident_id IS NOT NULL;
 -- obec (Část 17e)
@@ -422,7 +423,7 @@ aby `club_events` z incidentu fanoušci zpracovali týž den. Běží v loop i q
 3. Uzavřít propadlé lhůty (`deadline <= gameDate`) výchozím výsledkem (Část 7e).
 4. Ukončit životní situace s `ends_on <= gameDate`.
 5. V pondělí zaúčtovat srážky ze mzdy (Část 7d).
-6. Vystavit kradené zboží s `bazar_on <= gameDate` (Část 8).
+6. Vystavit kradené zboží s `bazar_on <= gameDate` (Část 8). Běží až po kroku 5 a po ozvání hráčů, kteří včera zapírali obvinění (`incidents/krivda.ts: ozviSeObvineni`, 17d), protože výsledek policie téhož dne může věci ještě vrátit.
 7. Vylosovat nové incidenty: spouštěné, pak náhodný problém / životní / pozitivní.
 8. Zapsat incidentní absence nových incidentů (vždy `od >= dnes + 2`, 17a) a reakce obce, tisku, fanoušků a sponzorů (Část 17).
 
@@ -523,7 +524,8 @@ jiný, existující tok chatu, ne text téhle SMS.
 
 **Policie:**
 - Jen jednou na incident. `status = policie`, výsledek za 3–7 herních dní. SMS od „Policie ČR, obvodní oddělení".
-- Šance: 0,15 + kamera s identifikací 0,35 + kamera bez identity 0,2 + soused 0,15 + aktivní poznaný inzerát 0,3 + nalezený svědek 0,1 + policista v kádru 0,1; strop 0,9.
+- Šance: 0,15 + kamera s identifikací 0,35 + kamera bez identity 0,2 + soused 0,15 + poznaný inzerát v bazaru 0,3 + nalezený svědek 0,1 + policista v kádru 0,1; strop 0,9.
+- Bonus za bazar nese stopa `bazar` (Část 8, `BONUS_POLICIE.bazar`). Vznikne, jakmile okradený klub inzerát v bazaru pozná, a platí dál i po stažení nebo prodeji inzerátu. Jednou poznané zboží je důkaz bez ohledu na to, co se s inzerátem stane pak.
 - Výsledek se losuje v den výsledku (`seed "policie|" + id`) — první číslo z generátoru rozhoduje, jestli se šetření povedlo. Výjimka: přizná-li se pachatel mezitím v chatu (výslech, `culprit_revealed = 1`), šetření uspěje vždy jako „úspěch, pachatel z kádru" bez ohledu na los, jinak by mohla přijít SMS o tom, že se pachatele nepodařilo zjistit, o hráči, který se už přiznal.
 - **Úspěch, cizí pachatel:** vybavení se vrátí (úroveň a stav z `loss`), **jen když má klub nižší úroveň**, jinak SMS „věci máte na služebně, ale už máte lepší" a `recovered = 1` bez změny. Inzerát se stáhne. Zpravodaj.
 - **Úspěch, pachatel z kádru:** `culprit_revealed = 1`, incident se vrací na `otevreny` s lhůtou dnes + 7 — trest volí manažer stejně jako po každém jiném odhalení (7d). K tomu vzniknou incidentní absence: výslech za 2 dny a soud za 5 dní od odhalení, ohlášené aspoň 2 dny dopředu (17a).
@@ -603,18 +605,20 @@ Reputace, Zpravodaj, fanoušci, obec a atributy manažera přijdou ve fázích 3
 Pro krádeže prodejných kategorií (`vloupani_sklad`, `vitrina`, `dodavka_ukradena`, `kradez_kamery`):
 
 - **Jestli:** 60 % (zbytek zloděj prodal jinde). **Kdy:** `bazar_on` = vznik + 1–5 herních dní.
+- **Vrácené věci:** má-li incident v mezidobí `recovered = 1` (policie dopadla cizího pachatele a věci vrátila, 7c), inzerát vůbec nevznikne. Věci jsou zpátky v klubu.
+- **Uzavřený incident:** inzerát se vystaví i u incidentu, kterému mezitím vypršela lhůta a uzavřel se. Zloděj zboží prodá bez ohledu na to, jestli klub případ ještě řeší. Poznání pořád pošle SMS a rozsvítí odznak na kartě, ale novou stopu už nezaloží (stopy u uzavřených incidentů nevznikají, 5b).
 - **Kde:** `equipment_listings` s `league_id` ligy okradeného klubu, `team_id = NULL`, `is_ai_listing = 0` (nesmí ubírat z cíle `TARGET_LISTINGS_PER_LEAGUE`, `ai-listings.ts:25`), `incident_id`, úroveň a stav z `loss`.
-- **Prodejce:** `seller_name` z poolu soukromníků okresu („Láďa z Volar", „Soukromý inzerát, Vimperk"). Na kartě štítek „soukromý inzerát" místo „z okolí".
+- **Prodejce:** `seller_name` v 1. pádě, generátor jméno obce spolehlivě neskloňuje, proto „Láďa, Volary" nebo (30 %) „Soukromý inzerát, Volary". Obec náhodně z `villages` okresu ligy (u rezerv U21 se z názvu okresu odstraní přípona „U21"); když okres žádnou obec nemá, záložní seznam (Lhota, Újezd, Dvory, Zálesí). Na kartě štítek „soukromý inzerát" místo „z okolí".
 - **Cena:** `max(band.min, round(band.suggested × 0,55))`. **Invariant: nikdy pod `band.min`** (= výkup zastavárny při 100 %, `equipment-generator.ts:371`). Jinak koupě a okamžité zastavení tiskne peníze. Na to je test.
 - **Poznání:** `jePoznatelne(kategorie, uroven)` — dresy ≥ 2 (čísla, logo), dodávka 3 (logo), vitrína ≥ 1 (poháry s nápisy), bubny a vlajky ≥ 2 (šály s logem). Ostatní nepozná nikdo.
-  - poznatelné → okradený klub dostane u inzerátu `vypadaJakoVase: true`, SMS od Kustoda a stopu `bazar`.
+  - poznatelné → okradený klub dostane u inzerátu `vypadaJakoVase: true`, SMS od Kustoda a (jen u neuzavřeného incidentu) stopu `bazar` s bonusem pro policii 0,3 (7c). Stopa platí dál i po stažení nebo prodeji inzerátu.
   - nepoznatelné → nic; nápovědou je jen cena a načasování.
-- **Nahlásit policii** (jen poznatelné, jen okradený klub): inzerát → `withdrawn` hned, incident → tok 7c s bonusem 0,3. Pachatel z kádru se při úspěchu odhalí.
-- **Koupit zpět:** běžný nákup. Hook v `equipment-market.ts` buy: `listing.incident_id` a kupec = okradený klub → `recovered = 1`, SMS.
-- **Koupí jiný klub:** běžný nákup, bez postihu. Okradený klub dostane stopu „Věci koupil klub X".
+- **Nahlásit policii** (jen poznatelné, jen okradený klub): když policie na incidentu ještě nešetřila, inzerát zmizí (`withdrawn`) a incident jde do toku 7c s bonusem 0,3. Pachatel z kádru se při úspěchu odhalí. Když policie na incidentu právě šetří, inzerát se jen zajistí (`withdrawn`, SMS od policie), samotné šetření běží dál beze změny. Po skončeném šetření, u odhaleného pachatele nebo u uzavřeného incidentu nahlášení vrátí 409 a inzerát v bazaru zůstane. Policie řeší jednu krádež jen jednou (7c).
+- **Koupit zpět:** běžný nákup. Hook v `equipment-market.ts` buy: `listing.incident_id` a kupec = okradený klub → `recovered = 1`, SMS od Kustoda. Incident zůstává ve svém stavu, pachatel pořád není známý a vyšetřování běží dál.
+- **Koupí jiný klub:** běžný nákup, bez postihu. Jen u poznatelného zboží a jen u neuzavřeného incidentu (stopy u uzavřených incidentů nevznikají, 5b) dostane okradený klub stopu „Věci koupil klub X" a SMS od Kustoda; u nepoznatelného zboží se o nákupu nedozví vůbec.
 - AI kluby v bazaru nenakupují — beze změny.
 
-GET `/equipment-market` vrací navíc `isPrivateListing`, `vypadaJakoVase`, `incidentId` (jen pro okradený klub).
+GET `/equipment-market` vrací navíc `isPrivateListing`, `vypadaJakoVase` a `incidentId`. Poslední jen okradenému klubu a jen u poznatelného zboží, jinak by samotné id u nepoznatelného zboží prozradilo, že jde o jeho věci.
 
 ---
 
@@ -749,7 +753,7 @@ tlačítka dole, v textech pro hráče **žádná dlouhá pomlčka**.
 | `fm-sidebar.tsx`, `more` | položka „Incidenty" 🚨 ve skupině Klub, odznak počtu čekajících rozhodnutí |
 | Domů (dashboard widget) | karta, když incident čeká na rozhodnutí |
 | `phone/[id]/page.tsx` | zpráva s `metadata.type === "incident"` → tlačítko „Otevřít incident" (vzor `interview_request`, `:446`) |
-| `equipment/BazarTab.tsx` | štítek „soukromý inzerát", odznak „Vypadá to jako vaše …", tlačítko Nahlásit policii |
+| `equipment/BazarTab.tsx`, `equipment/page.tsx` | štítek „soukromý inzerát", odznak „Vypadá to jako vaše ukradené vybavení: …" s odkazem Otevřít incident (jen když je `incidentId` vyplněné), tlačítko Nahlásit policii jen u poznatelného zboží; `page.tsx` akci potvrzuje přes `useConfirm` a volá POST `.../equipment-market/:listingId/nahlasit` |
 | `equipment/types.ts` | ikona a popisky `area_security` |
 | `finances/page.tsx` | popisky a ikony nových typů transakcí |
 | `hospoda/page.tsx` | ikony nových typů příhod |
@@ -887,7 +891,8 @@ Každá fáze samostatně: build → commit → push testing → ověření API 
 3. **Absence, trénink a zápas** (17a–17c) — sdílený převod hráče pro absence, incidentní absence, výmluvy, trénink, zápasové modifikátory, klubové vyřazení (hotovo na testingu, plán
    `docs/superpowers/plans/2026-09-16-incidenty-faze-3.md`).
 4. **Znalosti a chat** (Část 10, 17d) — znalosti, prompt, detekce tématu, výslech, vynucené scénáře, domácnost (hotovo na testingu, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-4.md`).
-5. **Bazar** — soukromé inzeráty, poznání, nahlásit, koupit zpět.
+5. **Bazar** — soukromé inzeráty, poznání, nahlásit, koupit zpět (hotovo na testingu, plán
+   `docs/superpowers/plans/2026-09-17-incidenty-faze-5.md`).
 6. **Hospoda** — příhody, chlubení a ohlašování činů, hrozící incidenty a jak jim předejít, trenér poslouchá, šíření drbů, vůdce fanoušků v hospodě.
 7. **Peníze a životní situace** — kasa, tombola, útěk, ekonom, dluhy + záloha, ostatní situace.
 8. **Obec** (17e) — přízeň a důvěra po osobnostech, historie, petice, investice, brigády, starosta v hospodě a na telefonu, pozvánky, krize jako skutečné incidenty, konec sezóny.
