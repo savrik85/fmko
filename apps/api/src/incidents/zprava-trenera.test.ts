@@ -32,9 +32,12 @@ describe("zpráva trenéra hráči", () => {
 
   it("včerejší téma neplatí, otázka na věc najde incident a uloží ho do vlákna", async () => {
     const d = db({ awaiting: "coach", incidentId: "inc-9", incidentDen: "2026-09-15" });
-    expect(await zprava(d, "Kde jsou dresy?")).toEqual({ incidentId: "inc-1", vyslech: "kryje" });
-    const tema = d.dotazy.find((q) => /UPDATE conversations SET ai_thread_state = json_set/.test(q.sql));
-    expect(tema?.params).toEqual(["inc-1", "2026-09-16", "konv-1"]);
+    expect(await zprava(d, "Kam zmizely dresy?")).toEqual({ incidentId: "inc-1", vyslech: "kryje" });
+    const tema = d.dotazy.find((q) => /UPDATE conversations SET ai_thread_state = CASE WHEN ai_thread_active = 1/.test(q.sql));
+    // Obě větve: json_set pro běžící vlákno, json_object pro nahrazení starého stavu.
+    expect(tema?.sql).toContain("json_set");
+    expect(tema?.sql).toContain("json_object");
+    expect(tema?.params).toEqual(["inc-1", "2026-09-16", "inc-1", "2026-09-16", "konv-1"]);
   });
 
   it("běžná zpráva nic nenastaví a nikoho nevyslýchá", async () => {

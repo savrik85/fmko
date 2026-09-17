@@ -28,8 +28,11 @@ describe("zeptat se hráče", () => {
     const { db, env } = prostredi(incidentRadek());
     expect(await zeptejSe(env, "tym-a", "inc-1", "s")).toEqual({ ok: true, conversationId: "konv-1" });
     expect(getOrCreatePlayerConversation).toHaveBeenCalledWith(expect.anything(), "tym-a", expect.objectContaining({ id: "s", firstName: "Jan" }));
-    const tema = db.dotazy.find((d) => /UPDATE conversations SET ai_thread_state = json_set/.test(d.sql));
-    expect(tema?.params).toEqual(["inc-1", "2026-09-16", "konv-1"]);
+    const tema = db.dotazy.find((d) => /UPDATE conversations SET ai_thread_state = CASE WHEN ai_thread_active = 1/.test(d.sql));
+    // Obě větve: json_set pro běžící vlákno, json_object pro nahrazení starého stavu.
+    expect(tema?.sql).toContain("json_set");
+    expect(tema?.sql).toContain("json_object");
+    expect(tema?.params).toEqual(["inc-1", "2026-09-16", "inc-1", "2026-09-16", "konv-1"]);
   });
 
   it("jde i během šetření policie", async () => {

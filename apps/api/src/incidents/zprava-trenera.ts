@@ -13,14 +13,20 @@ import type { VysledekVyslechu } from "./znalosti";
 
 const M = "incidents-zprava";
 
-/** Uloží téma do `conversations.ai_thread_state`, ostatní klíče vlákna nechá být. */
+/**
+ * Uloží téma do `conversations.ai_thread_state`. Běží-li vlákno (`ai_thread_active = 1`),
+ * ostatní klíče nechá být. Neběží-li, stav nahradí čistým, ať po „Zeptat se" nezůstane starý
+ * `awaiting: "done"` nebo `resolution` z dřívějška - jinak by se ukázal banner „Konverzace
+ * ukončena" i pro nové téma.
+ */
 export async function nastavTema(db: D1Database, convId: string, incidentId: string, den: string): Promise<boolean> {
   const r = await db.prepare(
-    `UPDATE conversations SET ai_thread_state = json_set(
+    `UPDATE conversations SET ai_thread_state = CASE WHEN ai_thread_active = 1 THEN json_set(
         CASE WHEN json_valid(ai_thread_state) THEN ai_thread_state ELSE '{}' END,
         '$.incidentId', ?, '$.incidentDen', ?)
+      ELSE json_object('incidentId', ?, 'incidentDen', ?) END
       WHERE id = ?`,
-  ).bind(incidentId, den, convId).run()
+  ).bind(incidentId, den, incidentId, den, convId).run()
     .catch((e) => { logger.warn({ module: M }, `téma konverzace ${convId}`, e); return null; });
   return (r?.meta?.changes ?? 0) > 0;
 }
