@@ -11,6 +11,7 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { poskodZarizeni } from "../stadium/stadium-damage";
+import { denBazaru } from "./bazar";
 import { smsIncidentu } from "./incident-db";
 import { KATALOG_PODLE_KIND } from "./katalog";
 import { LHUTA_ROZHODNUTI_DNI, SMS_ROLE_KUSTOD } from "./nastaveni";
@@ -82,8 +83,10 @@ export async function zapisIncident(
   const zdroje = await nactiZdrojeStop(db, stav.teamId, navrh.culpritType === "hrac" ? navrh.culpritPlayerId : null);
   const stopy = vygenerujStopy(stav, navrh, zdroje, createRng(seedFromString(`stopy|${id}`)));
   const odhalen = navrh.culpritRevealed || odhalujePachatele(stopy);
+  // Kradené prodejné zboží se po pár dnech může objevit v bazaru (spec 8). Vlastní seed: stejný incident, stejný den.
+  const bazarOn = denBazaru(navrh.kind, provedene, stav.gameDate, createRng(seedFromString(`bazar|${id}`)));
   const zapsanoDavkou = await db.batch([
-    db.prepare("UPDATE club_incidents SET loss = ?, culprit_revealed = ? WHERE id = ?").bind(JSON.stringify(provedene), odhalen ? 1 : 0, id),
+    db.prepare("UPDATE club_incidents SET loss = ?, culprit_revealed = ?, bazar_on = ? WHERE id = ?").bind(JSON.stringify(provedene), odhalen ? 1 : 0, bazarOn, id),
     ...prikazyStop(db, stav.teamId, id, stopy, stav.gameDate),
   ]).catch((e) => { logger.error({ module: M }, `uložení škody a stop ${id}`, e); return null; });
   // Retry stejného dne skončí na INSERT OR IGNORE gate výš, takže o nalezené stopy
@@ -92,8 +95,8 @@ export async function zapisIncident(
     // Dávka nespadla kvůli téhle UPDATE, jen kvůli INSERTům stop vedle ní — `loss` musí
     // odpovídat skutečně provedené škodě, jinak zůstane viset plánovaná (bez `cena`, `damageId`
     // a upravených úrovní), a ta krmí zobrazenou ztrátu, pokuty i náhradu od policie.
-    await db.prepare("UPDATE club_incidents SET loss = ? WHERE id = ?")
-      .bind(JSON.stringify(provedene), id).run()
+    await db.prepare("UPDATE club_incidents SET loss = ?, bazar_on = ? WHERE id = ?")
+      .bind(JSON.stringify(provedene), bazarOn, id).run()
       .catch((e) => logger.error({ module: M }, `zápis škody po selhání dávky ${id}`, e));
     // Stopy se nezapsaly, svědci by neměli co prozradit: jen kádr a pachatel.
     await zapisZnalosti(db, stav, navrh, id, []);

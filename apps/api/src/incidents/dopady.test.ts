@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createRng } from "../generators/rng";
+import { seedFromString } from "../lib/seed";
 import { zapisIncident } from "./dopady";
+import { denBazaru } from "./bazar";
 import { FalesnaD1, jakoD1 } from "./testovaci-d1";
 import { PROBLEMOVY, hrac, stavKlubu } from "./testovaci-stav";
 import type { NavrhIncidentu } from "./typy";
@@ -45,8 +48,9 @@ describe("zápis incidentu", () => {
     expect(zapsany?.odhalen).toBe(false);
     // I když dávka spadla, provedená škoda se musí zapsat samostatně — jinak by v `loss`
     // zůstala nedotčená plánovaná škoda (bez `cena`, `damageId` a upravených úrovní).
-    const zapisSkody = db.dotazy.find((d) => /UPDATE club_incidents SET loss = \? WHERE id = \?/.test(d.sql));
-    expect(zapisSkody?.params).toEqual([JSON.stringify(NAVRH.ztraty), "inc-test"]);
+    const zapisSkody = db.dotazy.find((d) => /UPDATE club_incidents SET loss = \?, bazar_on = \? WHERE id = \?/.test(d.sql));
+    const bazarOn = denBazaru(NAVRH.kind, NAVRH.ztraty, stav.gameDate, createRng(seedFromString("bazar|inc-test")));
+    expect(zapisSkody?.params).toEqual([JSON.stringify(NAVRH.ztraty), bazarOn, "inc-test"]);
   });
 
   it("znalosti: kádr, pachatel a kamarád ze zapsané stopy", async () => {
@@ -77,5 +81,24 @@ describe("zápis incidentu", () => {
     await zapisIncident(jakoD1(db), stav, NAVRH, "inc-test");
     const znalosti = db.davky.flat().filter((d) => /INSERT OR IGNORE INTO club_incident_knowledge/.test(d.sql));
     expect(znalosti.map((d) => `${d.params[1]}:${d.params[3]}`)).toEqual(["p:kadr", "k:kadr", "p:pachatel"]);
+  });
+
+  it("den bazaru: prodejná krádež podle losu incidentu, poškození nikdy", async () => {
+    const stav = stavKlubu({ kadr: [PROBLEMOVY], vybaveni: { jerseys: 2, jerseys_condition: 70 } });
+    const ocekavany = denBazaru(NAVRH.kind, NAVRH.ztraty, stav.gameDate, createRng(seedFromString("bazar|inc-kradez")));
+    const kradez = new FalesnaD1([{ sql: /FROM staff_members/, first: { usudek: null } }]);
+    await zapisIncident(jakoD1(kradez), stav, NAVRH, "inc-kradez");
+    const skoda = kradez.davky.flat().find((d) => /UPDATE club_incidents SET loss = \?, culprit_revealed = \?, bazar_on = \?/.test(d.sql));
+    expect(skoda?.params[2]).toBe(ocekavany);
+
+    const vandal: NavrhIncidentu = {
+      kind: "vandal", category: "poskozeni", status: "otevreny", severity: 1,
+      culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
+      ztraty: [{ typ: "travnik", pred: 70, po: 40 }], text: "Vandalové rozryli trávník.",
+    };
+    const poskozeni = new FalesnaD1([{ sql: /FROM staff_members/, first: { usudek: null } }]);
+    await zapisIncident(jakoD1(poskozeni), stav, vandal, "inc-vandal");
+    const skodaVandal = poskozeni.davky.flat().find((d) => /UPDATE club_incidents SET loss = \?, culprit_revealed = \?, bazar_on = \?/.test(d.sql));
+    expect(skodaVandal?.params[2]).toBeNull();
   });
 });
