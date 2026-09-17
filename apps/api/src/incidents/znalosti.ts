@@ -52,6 +52,17 @@ export function znalostiIncidentu(stav: StavKlubu, navrh: NavrhIncidentu, stopy:
     playerId: h.id, role: "kadr", fact: navrh.text, ochota: 50, until: kadrDo,
   }));
 
+  // Životní situace: kádr zná veřejný text, dotčený hráč to prožívá sám (spec 10a).
+  if (navrh.category === "zivotni") {
+    if (!navrh.subjectPlayerId) return znalosti;
+    znalosti.push({
+      playerId: navrh.subjectPlayerId, role: "pachatel", ochota: 0,
+      fact: vypln(TEXTY.znalost_situace[0], { text: navrh.text }),
+      until: gameExpiry(stav.gameDate, navrh.dniTrvani ?? ZNALOST_KADR_DNI),
+    });
+    return znalosti;
+  }
+
   const pachatel = navrh.culpritType === "hrac" ? stav.kadr.find((h) => h.id === navrh.culpritPlayerId) ?? null : null;
   if (!pachatel) return znalosti;
   znalosti.push({
@@ -205,6 +216,8 @@ function pokynSvedka(r: RadekZnalosti): string {
 }
 
 function pokynPachatele(r: RadekZnalosti): string {
+  // Životní situace není průšvih: není co zapírat ani přiznávat (spec 4c).
+  if (r.kategorie === "zivotni") return "Je to tvoje starost. Když se trenér zeptá, mluv o tom normálně.";
   // Čin ohlášený v hospodě se ještě nestal (spec 9a).
   if (r.stav === "hrozi") return "Byl jsi v hospodě opilý a vykládal jsi to. Zlehčuj to, a když ti trenér domluví, slib, že nic neuděláš.";
   if (r.odhalen) return "Už se na to přišlo, nezapírej.";

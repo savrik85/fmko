@@ -29,4 +29,14 @@ describe("hráč z řádku DB", () => {
       vek: 25, dluhy: false, zalohaOdmitnuta: false,
     });
   });
+
+  it("věk, dluhy a odmítnutou zálohu bere z kontextu", () => {
+    const h = hracZRadku({ ...radek, age: 31 }, new Set(), {
+      situace: new Map([["h1", "dluhy"]]), odmitnuteZalohy: new Set(["h1"]),
+    });
+    expect(h).toMatchObject({ vek: 31, dluhy: true, zalohaOdmitnuta: true });
+    const bez = hracZRadku({ ...radek, age: 31 }, new Set(), { situace: new Map([["h1", "rozvod"]]) });
+    expect(bez).toMatchObject({ vek: 31, dluhy: false, zalohaOdmitnuta: false });
+    expect(hracZRadku(radek).vek).toBe(25);
+  });
 });

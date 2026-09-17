@@ -63,6 +63,8 @@ export interface StavKlubu {
   otevreneProblemy: number;
   /** kind → `YYYY-MM-DD` posledního výskytu v aktuální sezóně. */
   posledniVyskyt: Record<string, string>;
+  /** Rozpočet klubu v Kč. */
+  rozpocet: number;
   /** Aktivní životní situace: hráč.id → kind. */
   situace: ReadonlyMap<string, string>;
 }

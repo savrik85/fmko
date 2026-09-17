@@ -7,7 +7,7 @@
  */
 
 import type { Rng } from "../generators/rng";
-import { PRAH_VAHY_PACHATELE, VAHA_RECIDIVY } from "./nastaveni";
+import { PRAH_VAHY_PACHATELE, VAHA_RECIDIVY, VAHA_DLUHU, VAHA_ODMITNUTE_ZALOHY } from "./nastaveni";
 import type { HracKlubu } from "./typy";
 
 export function vahaPachatele(h: HracKlubu): number {
@@ -16,6 +16,8 @@ export function vahaPachatele(h: HracKlubu): number {
     + ((100 - h.vernost) / 100) * 0.8
     + ((100 - h.vztahKTrenerovi) / 100) * 0.6
     + (h.transferUnrest / 100) * 0.5
+    + (h.dluhy ? VAHA_DLUHU : 0)
+    + (h.dluhy && h.zalohaOdmitnuta ? VAHA_ODMITNUTE_ZALOHY : 0)
     + (h.recidivista ? VAHA_RECIDIVY : 0);
 }
 

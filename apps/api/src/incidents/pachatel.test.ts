@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
-import { PRAH_VAHY_PACHATELE, VAHA_RECIDIVY } from "./nastaveni";
+import { PRAH_VAHY_PACHATELE, VAHA_RECIDIVY, VAHA_DLUHU, VAHA_ODMITNUTE_ZALOHY } from "./nastaveni";
 import { sanceUspechuZvenku, vahaPachatele, vyberHrace } from "./pachatel";
 import { hrac, PROBLEMOVY } from "./testovaci-stav";
 
@@ -38,5 +38,12 @@ describe("pachatel", () => {
     const slusny = hrac({ disciplina: 70, vernost: 70 });
     expect(vahaPachatele(slusny)).toBeLessThan(PRAH_VAHY_PACHATELE);
     expect(vahaPachatele({ ...slusny, recidivista: true })).toBeGreaterThanOrEqual(PRAH_VAHY_PACHATELE);
+  });
+
+  it("dluhy a odmítnutá záloha zvednou váhu pachatele", () => {
+    const klidny = hrac();
+    expect(vahaPachatele(hrac({ dluhy: true })) - vahaPachatele(klidny)).toBeCloseTo(VAHA_DLUHU);
+    expect(vahaPachatele(hrac({ dluhy: true, zalohaOdmitnuta: true })) - vahaPachatele(klidny))
+      .toBeCloseTo(VAHA_DLUHU + VAHA_ODMITNUTE_ZALOHY);
   });
 });

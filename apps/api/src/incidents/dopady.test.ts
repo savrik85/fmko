@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
+import { gameExpiry } from "../lib/game-time";
 import { zapisIncident } from "./dopady";
 import { denBazaru } from "./bazar";
 import { FalesnaD1, jakoD1 } from "./testovaci-d1";
@@ -126,6 +127,27 @@ describe("zápis incidentu", () => {
       const bezSkody = new FalesnaD1([{ sql: /UPDATE equipment SET/, changes: 0 }]);
       expect(await zapisIncident(jakoD1(bezSkody), stavKlubu({ vybaveni: { jerseys: 2 } }), NAVRH, "inc-h", { zHroziciho: true })).toBeNull();
       expect(bezSkody.dotazy.find((d) => /SET status = 'uzavreny'/.test(d.sql))?.params[0]).toBe("nestalo_se");
+    });
+  });
+
+  describe("zápis životní situace", () => {
+    it("uloží dotčeného hráče a konec situace, škodu ani stopy neřeší", async () => {
+      const db = new FalesnaD1();
+      const stav = stavKlubu({ kadr: [PROBLEMOVY], gameDate: "2026-09-16T16:00:00.000Z" });
+      const navrh: NavrhIncidentu = {
+        kind: "dluhy", category: "zivotni", status: "probiha", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        subjectPlayerId: "p", dniTrvani: 30, ztraty: [], text: "Pepa Průšvih se dostal do dluhů.",
+      };
+      expect(await zapisIncident(jakoD1(db), stav, navrh, "inc-s")).toMatchObject({ id: "inc-s", odhalen: false });
+      const vlozeni = db.dotazy.find((d) => /INSERT OR IGNORE INTO club_incidents/.test(d.sql));
+      expect(vlozeni?.sql).toContain("subject_player_id");
+      expect(vlozeni?.sql).toContain("ends_on");
+      expect(vlozeni?.params).toContain("p");
+      expect(vlozeni?.params).toContain(gameExpiry("2026-09-16T16:00:00.000Z", 30));
+      expect(db.pocet(/club_incident_clues/)).toBe(0);
+      expect(db.pocet(/UPDATE equipment/)).toBe(0);
+      expect(db.davky.flat().some((d) => /club_incident_knowledge/.test(d.sql))).toBe(true);
     });
   });
 });

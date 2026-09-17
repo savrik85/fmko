@@ -71,6 +71,20 @@ describe("kdo co ví při vzniku incidentu", () => {
     expect(znalostiIncidentu(stav, { ...NAVRH, culpritType: "cizi", culpritPlayerId: null }, [], createRng(1)).map((r) => r.role))
       .toEqual(["kadr", "kadr", "kadr"]);
   });
+
+  it("u životní situace ví kádr veřejný text a dotčený hráč o sobě", () => {
+    const situace: NavrhIncidentu = {
+      kind: "rozvod", category: "zivotni", status: "probiha", severity: 1,
+      culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+      subjectPlayerId: "s", dniTrvani: 28, ztraty: [], text: "Jan Svědek se rozvádí a spí zatím v kabině.",
+    };
+    const z = znalostiIncidentu(stav, situace, [], createRng(1));
+    expect(z.filter((r) => r.role === "kadr")).toHaveLength(3);
+    const vlastni = z.find((r) => r.role === "pachatel");
+    expect(vlastni).toMatchObject({ playerId: "s", until: gameExpiry(DNES, 28) });
+    expect(vlastni?.fact).toContain("Jan Svědek se rozvádí");
+    expect(vlastni?.fact).not.toBe(situace.text);
+  });
 });
 
 function radekDb(over: Partial<RadekZnalostiDb> = {}): RadekZnalostiDb {

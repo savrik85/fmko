@@ -52,6 +52,7 @@ export async function zapisIncident(
 ): Promise<ZapsanyIncident | null> {
   const deadline = navrh.status === "otevreny" ? gameExpiry(stav.gameDate, LHUTA_ROZHODNUTI_DNI) : null;
   const resolvedOn = navrh.status === "uzavreny" ? stav.gameDate : null;
+  const endsOn = navrh.dniTrvani ? gameExpiry(stav.gameDate, navrh.dniTrvani) : null;
 
   const vlozeno = opts.zHroziciho
     ? await db.prepare(
@@ -65,12 +66,13 @@ export async function zapisIncident(
     : await db.prepare(
       `INSERT OR IGNORE INTO club_incidents
          (id, team_id, league_id, season_number, kind, category, status, severity, game_date, deadline,
-          culprit_type, culprit_player_id, culprit_revealed, loss, text, resolved_on)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          culprit_type, culprit_player_id, culprit_revealed, subject_player_id, ends_on, loss, text, resolved_on)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id, stav.teamId, stav.leagueId, stav.seasonNumber, navrh.kind, navrh.category, navrh.status,
       navrh.severity, stav.gameDate, deadline, navrh.culpritType, navrh.culpritPlayerId,
-      navrh.culpritRevealed ? 1 : 0, JSON.stringify(navrh.ztraty), navrh.text, resolvedOn,
+      navrh.culpritRevealed ? 1 : 0, navrh.subjectPlayerId ?? null, endsOn,
+      JSON.stringify(navrh.ztraty), navrh.text, resolvedOn,
     ).run().catch((e) => { logger.error({ module: M }, `zápis incidentu ${id}`, e); return null; });
   if ((vlozeno?.meta?.changes ?? 0) === 0) return null;
 
