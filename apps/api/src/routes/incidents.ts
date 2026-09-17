@@ -49,7 +49,8 @@ interface IncidentRow {
 }
 
 function verejnyIncident(r: IncidentRow) {
-  const def = KATALOG_PODLE_KIND.get(r.kind);
+  // Životní situace mají vlastní katalog (dluhy, rozvod, ...), krádeže a poškození ten hlavní.
+  const def = KATALOG_PODLE_KIND.get(r.kind) ?? SITUACE_PODLE_KIND.get(r.kind);
   const odhalen = r.culprit_revealed === 1 && !!r.culprit_player_id;
   // Kdo čin ohlásil v hospodě (spec 9a). Řekl to sám nahlas, jméno tajné není.
   const ohlasil = (r.status === "hrozi" || r.resolution === "nestalo_se") && r.culprit_player_id

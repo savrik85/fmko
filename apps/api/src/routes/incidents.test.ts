@@ -63,6 +63,26 @@ describe("detail incidentu", () => {
     expect(telo.kadr).toEqual([]);
   });
 
+  it("životní situace má český popisek a emoji z katalogu situací, ne surový kind", async () => {
+    const res = await incidentsRouter.request("/teams/tym-a/incidents/inc-1", {}, env([
+      {
+        sql: /FROM club_incidents i/,
+        first: {
+          ...incidentRadek({
+            kind: "dluhy", category: "zivotni", status: "probiha", culprit_type: null, culprit_player_id: null,
+            subject_player_id: "p", loss: "[]",
+          }),
+          jmeno: null, prijmeni: null, subject_jmeno: "Pepa", subject_prijmeni: "Průšvih",
+        },
+      },
+      { sql: /FROM players WHERE team_id = \?/, all: KADR },
+    ]));
+    expect(res.status).toBe(200);
+    const telo = await res.json() as Record<string, any>;
+    expect(telo.incident.label).toBe("Dluhy");
+    expect(telo.incident.emoji).toBe("💸");
+  });
+
   it("akce bez přihlášení neprojdou", async () => {
     for (const cesta of ["obvinit", "policie", "rozhodnuti"]) {
       const res = await incidentsRouter.request(`/teams/tym-a/incidents/inc-1/${cesta}`, { method: "POST", body: "{}" }, env([]));
