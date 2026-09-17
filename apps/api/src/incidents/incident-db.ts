@@ -22,6 +22,8 @@ export interface IncidentRadek {
   culprit_type: TypPachatele | null;
   culprit_player_id: string | null;
   culprit_revealed: number;
+  subject_player_id: string | null;
+  ends_on: string | null;
   loss: string;
   accusations: number;
   accused: string;
@@ -35,7 +37,7 @@ export interface IncidentRadek {
 
 export const SLOUPCE_INCIDENTU = [
   "id", "team_id", "season_number", "kind", "category", "status", "severity", "game_date", "deadline",
-  "culprit_type", "culprit_player_id", "culprit_revealed", "loss", "accusations", "accused",
+  "culprit_type", "culprit_player_id", "culprit_revealed", "subject_player_id", "ends_on", "loss", "accusations", "accused",
   "police_result_on", "police_success", "resolution", "resolution_data", "text", "resolved_on",
 ] as const;
 

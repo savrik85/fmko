@@ -35,7 +35,7 @@ interface Den {
 }
 
 type IncidentSeJmenem = IncidentRadek & { first_name: string | null; last_name: string | null };
-type RadekSrazky = { id: string; resolution_data: string | null; first_name: string | null; last_name: string | null };
+type RadekSrazky = { id: string; resolution: string | null; resolution_data: string | null; first_name: string | null; last_name: string | null };
 
 /** Přechod ze stavu `policie`. `nastav` je vždy konstanta z tohoto souboru, nikdy vstup. */
 async function prechodZPolicie(db: D1Database, id: string, nastav: string, parametry: unknown[]): Promise<boolean> {
@@ -188,11 +188,12 @@ function nactiSrazku(raw: string | null): { celkem: number; tydnuZbyva: number }
 export async function zauctujSrazky(env: Bindings, t: { teamId: string; gameDate: string }): Promise<number> {
   const db = env.DB;
   const rows = await db.prepare(
-    `SELECT i.id, i.resolution_data, p.first_name, p.last_name
+    `SELECT i.id, i.resolution, i.resolution_data, p.first_name, p.last_name
        FROM club_incidents i
-       LEFT JOIN players p ON p.id = i.culprit_player_id AND p.team_id = i.team_id
+       LEFT JOIN players p ON p.id = COALESCE(i.culprit_player_id, i.subject_player_id) AND p.team_id = i.team_id
         AND (p.status IS NULL OR p.status = 'active')
-      WHERE i.team_id = ? AND i.resolution = 'srazka' AND COALESCE(json_extract(i.resolution_data, '$.tydnuZbyva'), 0) > 0`,
+      WHERE i.team_id = ? AND (i.resolution = 'srazka' OR json_extract(i.resolution_data, '$.zaloha') = 'pujceno')
+        AND COALESCE(json_extract(i.resolution_data, '$.tydnuZbyva'), 0) > 0`,
   ).bind(t.teamId).all<RadekSrazky>()
     .catch((e) => { logger.warn({ module: M }, `srážky ${t.teamId}`, e); return { results: [] as RadekSrazky[] }; });
 
@@ -217,7 +218,10 @@ export async function zauctujSrazky(env: Bindings, t: { teamId: string; gameDate
     const tyden = SRAZKA_TYDNU - data.tydnuZbyva + 1;
     if (castka > 0) {
       const jmeno = [r.first_name, r.last_name].filter(Boolean).join(" ");
-      await recordTransaction(db, t.teamId, "incident_deduction", castka, `Srážka ze mzdy (${tyden}/${SRAZKA_TYDNU}): ${jmeno}`, t.gameDate, `srazka-${r.id}-t${tyden}`)
+      const popis = r.resolution === "srazka"
+        ? `Srážka ze mzdy (${tyden}/${SRAZKA_TYDNU}): ${jmeno}`
+        : `Splátka zálohy (${tyden}/${SRAZKA_TYDNU}): ${jmeno}`;
+      await recordTransaction(db, t.teamId, "incident_deduction", castka, popis, t.gameDate, `srazka-${r.id}-t${tyden}`)
         .catch((e) => logger.error({ module: M }, `srážka ${r.id}`, e));
     }
     zauctovano++;

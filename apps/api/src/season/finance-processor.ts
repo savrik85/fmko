@@ -63,6 +63,10 @@ export type TransactionType =
   | "incident_fine"
   | "incident_deduction"
   | "incident_recovery"
+  // Záloha na mzdu hráči v dluzích (spec 7c). Klub ji vyplatí a čtyři pondělky si ji strhává zpátky.
+  // ZÁMĚRNĚ není v PURCHASE_TYPES: je to rozhodnutí o hráči, ne nákup, a při záporném rozpočtu
+  // se trenér stejně rozhoduje sám.
+  | "incident_advance"
   // Startovné do soutěže a kauce za návrh na schůzi vedení soutěže. Stejně jako
   // disciplinary_fine ZÁMĚRNĚ nejsou v PURCHASE_TYPES — nezaplatit je nejde,
   // musí se strhnout i při záporném rozpočtu.

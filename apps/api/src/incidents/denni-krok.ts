@@ -12,6 +12,8 @@ import { oznamIncident, zapisIncident } from "./dopady";
 import { vyhodnotHrozici } from "./hrozi-db";
 import { ozviSeObvineni } from "./krivda";
 import { vylosujIncident } from "./losovani";
+import { propadleZalohy, ukonciSituace, zalozSituaci } from "./situace-db";
+import { vylosujSituaci } from "./situace";
 import { nactiStavKlubu } from "./stav-klubu";
 import { zpracujVysetrovani } from "./vysetrovani-den";
 
@@ -46,10 +48,22 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
     .catch((e) => { logger.warn({ module: M, teamId }, "hrozící činy", e); return 0; });
   if (splneno > 0) return;
 
+  // Konec životních situací a propadlé lhůty na zálohu (spec 6b krok 4).
+  await ukonciSituace(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "konec situací", e));
+  await propadleZalohy(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "propadlé zálohy", e));
+
   const rng = createRng(seedFromString(`incident|${teamId}|${stav.den}`));
   const navrh = vylosujIncident(stav, rng);
-  if (!navrh) return;
-
+  if (!navrh) {
+    // Žádný problém: může přijít životní situace (spec 4c).
+    const situace = vylosujSituaci(stav, createRng(seedFromString(`situace|${teamId}|${stav.den}`)));
+    if (situace) {
+      const id = await zalozSituaci(env, stav, situace)
+        .catch((e) => { logger.warn({ module: M, teamId }, "založení situace", e); return null; });
+      if (id) logger.info({ module: M, teamId }, `situace ${situace.kind} pro hráče ${situace.subjectPlayerId}`);
+    }
+    return;
+  }
   const zapsany = await zapisIncident(env.DB, stav, navrh);
   if (!zapsany) return;
   await oznamIncident(env, teamId, navrh, zapsany);

@@ -33,7 +33,7 @@ export function incidentRadek(over: Partial<IncidentRadek> = {}): IncidentRadek 
   return {
     id: "inc-1", team_id: "tym-a", season_number: 4, kind: "vloupani_sklad", category: "kradez", status: "otevreny",
     severity: 1, game_date: "2026-09-14T16:00:00.000Z", deadline: "2026-09-21T16:00:00.000Z",
-    culprit_type: "hrac", culprit_player_id: "p", culprit_revealed: 0,
+    culprit_type: "hrac", culprit_player_id: "p", culprit_revealed: 0, subject_player_id: null, ends_on: null,
     loss: JSON.stringify([{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 2 }]),
     accusations: 0, accused: "[]", police_result_on: null, police_success: null,
     resolution: null, resolution_data: null, text: "Ze skladu zmizelo vybavení: Dresy.", resolved_on: null,

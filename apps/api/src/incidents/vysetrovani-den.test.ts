@@ -176,4 +176,12 @@ describe("srážky ze mzdy", () => {
     await zpracujVysetrovani(env, T, { pondeli: false });
     expect(db.pocet(SRAZKY)).toBe(0);
   });
+
+  it("splátka zálohy se strhne stejně jako srážka", async () => {
+    const { env } = prostredi([
+      { sql: /FROM club_incidents i/, all: [{ id: "inc-z", resolution: "skoncila", resolution_data: JSON.stringify({ zaloha: "pujceno", celkem: 4000, tydnuZbyva: 4 }), first_name: "Jan", last_name: "Svědek" }] },
+    ]);
+    expect(await zauctujSrazky(env, T)).toBe(1);
+    expect(recordTransaction).toHaveBeenCalledWith(expect.anything(), "tym-a", "incident_deduction", expect.any(Number), expect.stringContaining("Splátka zálohy"), DNES, expect.any(String));
+  });
 });
