@@ -153,7 +153,8 @@ export function vyberZnalosti(radky: readonly RadekZnalosti[], temaId: string | 
     .flatMap((skupina) => [...skupina].sort((a, b) => PORADI_ROLI[a.role] - PORADI_ROLI[b.role]));
 }
 
-export const HLAVICKA_ZNALOSTI = "CO VÍŠ O DĚNÍ V KLUBU (jen tohle, nic dalšího si nevymýšlej, nic jiného se nestalo):";
+export const HLAVICKA_ZNALOSTI =
+  "CO VÍŠ O DĚNÍ V KLUBU (jen tohle, nic dalšího si nevymýšlej, nic jiného se nestalo; jména z tohoto bloku smíš zmínit):";
 export const BEZ_ZNALOSTI = "- O žádné krádeži, škodě ani jiném průšvihu v klubu nevíš. Když se trenér ptá, řekni, že nic nevíš, a nikoho neobviňuj.";
 
 /** Jak incident dopadl: [o někom jiném, o tobě]. */
