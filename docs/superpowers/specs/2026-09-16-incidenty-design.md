@@ -473,11 +473,12 @@ Veřejná data **nikdy** neobsahují `culprit_player_id` před odhalením, nenal
 Výsledek výslechu **rozhoduje DB, ne model.**
 
 - Spustí se, když trenér napíše hráči zprávu k incidentu:
-  - tlačítkem „Zeptat se" (nastaví `conversations.ai_thread_state.incidentId` s platností do konce herního dne), nebo
-  - volným textem, který `incidents/tema.ts: jeOtazkaNaIncident(text, incident)` pozná podle klíčových slov (ukrad, krádež, zloděj, zmizel, vykrad, kdo to byl, kamera, policie + tvary názvu věci/zařízení). Při více incidentech se bere nejnovější otevřený. Téma poznané z textu se uloží do vlákna na zbytek herního dne stejně jako z tlačítka, aby navazující otázka bez klíčových slov („a kde?") zůstala u stejného incidentu.
+  - tlačítkem „Zeptat se" (nastaví `conversations.ai_thread_state.incidentId` s platností do konce herního dne). Běží-li vlákno (`ai_thread_active = 1`), téma se do stavu jen přimíchá (`json_set`); neběží-li, stav se nahradí čistým `{incidentId, incidentDen}`, ať po kliknutí nezůstane starý `awaiting: "done"` nebo `resolution` a nezobrazí se kvůli nim banner „Konverzace ukončena", nebo
+  - volným textem, který `incidents/tema.ts: jeOtazkaNaIncident(text, incident)` pozná: obecná slova (krádež, zloděj, vloupání, kdo to byl, kdo to udělal, kamera, policie) stačí sama kdekoli v textu. Kmeny konkrétního incidentu (místo, co zmizelo nebo se rozbilo) se počítají jen spolu se signálem průšvihu v téže zprávě (zmizel, rozbi, rozmlat, znič, poškod, průšvih, vykop, spal, nebo samostatné slovo „kdo") - jinak by chytaly běžnou řeč trenéra („sraz v kabině v pět", „zítra brankářský trénink"). Při více incidentech se bere nejnovější otevřený. Téma poznané z textu se uloží do vlákna stejným pravidlem jako z tlačítka, aby navazující otázka bez klíčových slov („a kde?") zůstala u stejného incidentu.
 - Výslech nabízí jen incidenty kategorie krádež nebo poškození, které jsou otevřené nebo je šetří policie a pachatel není odhalený (`lzeVyslychat`, `incidents/vysetrovani.ts`).
-- Výsledek se spočítá **jednou** na hráče a incident a uloží do `club_incident_knowledge.interrogation`. Další otázky dostanou stejnou odpověď — hráč si neprotiřečí.
+- Výsledek se spočítá **jednou** na hráče a incident a uloží do `club_incident_knowledge.interrogation`. Další otázky dostanou stejnou odpověď, hráč si neprotiřečí.
 - Hráč s víc rolemi u jednoho incidentu (třeba kamarád, který je zároveň svědek) losuje jen jednou. Rozhoduje role, ve které je šance na prozrazení nejnižší, a stejný výsledek platí pro všechny jeho role (`rozhodniSvedka`, `incidents/vyslech.ts`), jinak by si odpovědi protiřečily.
+- Následky výslechu se dělí na **kritické** (stopa `found = 1`; odhalení `culprit_revealed = 1` + stopa přiznání) a **vztahy** mezi hráči (17c), každé ve vlastní `db.batch`, ať pád jedné (typicky cizí klíč `relationships → players` na odešlého pachatele) neshodí i tu druhou. Vztahy se posouvají jen když je pachatel pořád v kádru (`SELECT 1 AS ano FROM players WHERE id = ?`). Zeptá-li se trenér znovu na incident s už uloženým výsledkem, kritické následky se provedou znovu (jsou idempotentní: `found = 0` / `culprit_revealed = 0` v podmínce `UPDATE`, `INSERT OR IGNORE` u stopy), vztahy ne.
 
 Pro hráče se znalostí `svedek|kamarad|rival`:
 
@@ -515,7 +516,7 @@ na manažera po pozdním obvinění zbyl čas vybrat trest.
 
 Hráč odpoví SMS (`sendPlayerSMS`) šablonou (`texty.ts`, klíč podle výsledku, `akce.ts`).
 Zůstává tak i po fázi 4: Část 15 zakazuje nová volání modelu mimo existující toky chatu. Kdo
-obvinění u výslechu zapřel, dostane den poté vlastní AI vlákno `krivde_obvineny` (17d), to je
+při obvinění zapřel, dostane den poté vlastní AI vlákno `krivde_obvineny` (17d), to je
 jiný, existující tok chatu, ne text téhle SMS.
 
 ### 7c) Policie a záloha
@@ -523,7 +524,7 @@ jiný, existující tok chatu, ne text téhle SMS.
 **Policie:**
 - Jen jednou na incident. `status = policie`, výsledek za 3–7 herních dní. SMS od „Policie ČR, obvodní oddělení".
 - Šance: 0,15 + kamera s identifikací 0,35 + kamera bez identity 0,2 + soused 0,15 + aktivní poznaný inzerát 0,3 + nalezený svědek 0,1 + policista v kádru 0,1; strop 0,9.
-- Výsledek se losuje v den výsledku (`seed "policie|" + id`) — první číslo z generátoru rozhoduje, jestli se šetření povedlo.
+- Výsledek se losuje v den výsledku (`seed "policie|" + id`) — první číslo z generátoru rozhoduje, jestli se šetření povedlo. Výjimka: přizná-li se pachatel mezitím v chatu (výslech, `culprit_revealed = 1`), šetření uspěje vždy jako „úspěch, pachatel z kádru" bez ohledu na los, jinak by mohla přijít SMS o tom, že se pachatele nepodařilo zjistit, o hráči, který se už přiznal.
 - **Úspěch, cizí pachatel:** vybavení se vrátí (úroveň a stav z `loss`), **jen když má klub nižší úroveň**, jinak SMS „věci máte na služebně, ale už máte lepší" a `recovered = 1` bez změny. Inzerát se stáhne. Zpravodaj.
 - **Úspěch, pachatel z kádru:** `culprit_revealed = 1`, incident se vrací na `otevreny` s lhůtou dnes + 7 — trest volí manažer stejně jako po každém jiném odhalení (7d). K tomu vzniknou incidentní absence: výslech za 2 dny a soud za 5 dní od odhalení, ohlášené aspoň 2 dny dopředu (17a).
 - **Pachatel `nikdo`:** výsledek `nehoda`, incident se rovnou uzavře.
@@ -669,8 +670,12 @@ Při vzniku incidentu se pro aktivní kádr zapíše (jedna dávka):
 | `kamarad` | vztah s pachatelem (5b) | „Tušíš, že to byl Franta, je to tvůj kamarád" | den vzniku incidentu |
 | `rival` | rival pachatele (40 %) | „Tušíš, že to byl Franta" | den vzniku incidentu |
 | `pachatel` | pachatel | pravda | +60 dní |
-| `obvineny` | neprávem obviněný (vzniká v 7b) | „Trenér tě obvinil z krádeže, a nebyl jsi to ty" | +60 dní |
+| `obvineny` | každý, kdo obvinění zapřel, vinný i nevinný (vzniká v 7b) | „Trenér tě obvinil: {název incidentu}. Tvrdíš, že jsi to nebyl." | +60 dní |
 | `drb` | host z jiného klubu (Část 9) | veřejný fakt | +14 dní |
+
+Znalost `obvineny` má schválně neutrální text a vzniká i vinnému, který zapřel, ne jen
+nevinnému: je veřejná (jde do promptu, dokud platí), a kdyby prozrazovala vinu, chat by
+prozradil neodhaleného pachatele stejně jistě, jako kdyby ho jmenoval.
 
 Uložený `until` není celé pravidlo platnosti. Role `kadr`, `svedek`, `kamarad` a `rival`
 zůstávají platné navíc po celou dobu, kdy incident není `uzavreny`, a ještě 7 dní po
@@ -698,7 +703,7 @@ přes `blokZnalosti` (`incidents/znalosti.ts`):
 
 ```
 CO VÍŠ O DĚNÍ V KLUBU (jen tohle, nic dalšího si nevymýšlej, nic jiného se nestalo):
-- Před 3 dny někdo vykradl sklad, zmizely dresy. Stalo se to před 3 dny. Kdo to byl, se v klubu neví.
+- Před 3 dny někdo vykradl sklad, zmizely dresy. Kdo to byl, se v klubu neví.
 ```
 
 Veřejný řádek (role `kadr`, `drb`) skládá dohromady text incidentu, kdy se stal, jméno
@@ -994,10 +999,12 @@ pro to nebyla potřeba.
   předem (`nactiZnalostiHrace`, `loadPlayerSnapshot` zůstává synchronní). `zivotniSituace` na
   `PlayerSnapshot` čeká na situace ve fázi 7, ve fázi 4 nevznikla.
 - Vynucený scénář s `weight: () => 0` (vzor `rejected_offer`): `krivde_obvineny`. Den po
-  obvinění, které hráč u výslechu zapřel, mu založí vlákno `incidents/krivda.ts: ozviSeObvineni`,
+  obvinění, které hráč při obvinění zapřel, mu založí vlákno `incidents/krivda.ts: ozviSeObvineni`,
   spouštěné z denního kroku. Ozve se **každý**, kdo zapíral, vinný i nevinný, ne jen nevinný,
   jinak by šlo podle toho, kdo píše, poznat neodhaleného pachatele (stejné pravidlo jako
-  u vlivu `obvineny` v 17a). Podmínky: `isAiEnabled` (generování textu musí být zapnuté, jinak
+  u vlivu `obvineny` v 17a). Výjimka: už odhalený pachatel (`culprit_revealed = 1` a je to
+  on, kdo zapíral) se neozve, „já to nebyl" by nedávalo smysl. Nevinný u téhož odhaleného
+  incidentu se ozve dál. Podmínky: `isAiEnabled` (generování textu musí být zapnuté, jinak
   by hráč napsal SMS a nikdo by na ni neodpověděl) a vlákno konverzace zrovna neběží
   (`ai_thread_active != 1`, aby se nepřebilo rozjeté).
 - `zadost_o_zalohu` (start dluhů) je vynucený scénář stejného vzoru, ale patří až situacím ve
