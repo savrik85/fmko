@@ -116,6 +116,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
             {datum(i.gameDate)}
             {i.status === "otevreny" && i.deadline && ` · uzavře se ${datum(i.deadline)}`}
             {hrozi && i.deadline && ` · rozhodne se ${datum(i.deadline)}`}
+            {i.status === "probiha" && akce.zaloha && i.deadline && ` · rozhodni o záloze do ${datum(i.deadline)}`}
             {vysledek && ` · ${vysledek}`}
           </div>
         </div>
@@ -146,7 +147,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
         <div>
           <SectionLabel>Koho se to týká</SectionLabel>
           <p className="text-sm"><Hrac playerId={i.dotceny.playerId} jmeno={i.dotceny.jmeno} /></p>
-          {i.endsOn && <p className="text-sm text-muted mt-1">Potrvá do {datum(i.endsOn)}.</p>}
+          {i.status === "probiha" && i.endsOn && <p className="text-sm text-muted mt-1">Potrvá do {datum(i.endsOn)}.</p>}
           {detail.situace?.zaloha === "pujceno" && detail.situace.castka != null && (
             <p className="text-sm text-muted mt-1">Zálohu jsi půjčil: {kc(detail.situace.castka)}, splácí se čtyři pondělky ze mzdy.</p>
           )}
