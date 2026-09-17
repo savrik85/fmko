@@ -8,12 +8,14 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
+import { zavolejPolicii, type VysledekAkce } from "./akce";
 import { cenaKradenehoZbozi, jePoznatelne, jmenoProdejce, kradeneZbozi } from "./bazar";
-import { smsIncidentu } from "./incident-db";
-import { BONUS_POLICIE, KRADENE_INZERAT_DNI, SMS_ROLE_KUSTOD } from "./nastaveni";
+import { nactiIncident, proAkce, smsIncidentu } from "./incident-db";
+import { BONUS_POLICIE, KRADENE_INZERAT_DNI, PRODEJNE_KRADEZE, SMS_ROLE_KUSTOD, SMS_ROLE_POLICIE } from "./nastaveni";
 import { nactiZtraty } from "./popis";
 import { prikazyStop } from "./stopy-db";
 import { text } from "./texty";
+import { dostupneAkce } from "./vysetrovani";
 
 const M = "incidents-bazar";
 
@@ -125,4 +127,57 @@ export async function poNakupuKradeneho(
   await sendSystemSMS(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${zprava}`, smsIncidentu(inc.id))
     .catch((e) => logger.warn({ module: M }, `SMS nákupu kradeného zboží ${inc.id}`, e));
   return "koupil_jiny";
+}
+
+/**
+ * Okradený klub nahlásí inzerát s poznatelným kradeným zbožím policii (spec 8). Inzerát hned
+ * zmizí. Když policie ještě nešetřila, převezme případ (7c); když právě šetří, zboží se jen
+ * přidá k šetření. Bonus pro policii nese stopa `bazar` z poznání inzerátu.
+ */
+export async function nahlasKradeneZbozi(
+  env: Bindings, teamId: string, listingId: string,
+): Promise<VysledekAkce<{ vysledekOn: string | null }>> {
+  const db = env.DB;
+  const inzerat = await db.prepare("SELECT id, category, level, status, incident_id FROM equipment_listings WHERE id = ?")
+    .bind(listingId).first<{ id: string; category: string; level: number; status: string; incident_id: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `inzerát k nahlášení ${listingId}`, e); return null; });
+  const inc = inzerat?.incident_id ? await nactiIncident(db, teamId, inzerat.incident_id) : null;
+  // Cizí, obyčejný i nepoznatelný inzerát dostane stejnou odpověď: z odpovědi se nesmí dát poznat, čí zboží to je.
+  if (!inzerat || !inc || !jePoznatelne(inzerat.category, inzerat.level)) {
+    return { ok: false, kod: 404, chyba: "Tenhle inzerát nahlásit nejde" };
+  }
+  if (inzerat.status !== "active") return { ok: false, kod: 409, chyba: "Inzerát už v bazaru není" };
+
+  const prevezme = dostupneAkce(proAkce(inc, false)).policie;
+  if (!prevezme && inc.status !== "policie") return { ok: false, kod: 409, chyba: "Tohle už policie řešit nebude" };
+
+  const stazeno = await db.prepare("UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE id = ? AND status = 'active'")
+    .bind(new Date().toISOString(), listingId).run()
+    .catch((e) => { logger.error({ module: M }, `stažení nahlášeného inzerátu ${listingId}`, e); return null; });
+  if ((stazeno?.meta?.changes ?? 0) === 0) return { ok: false, kod: 409, chyba: "Inzerát už v bazaru není" };
+
+  if (prevezme) {
+    const policie = await zavolejPolicii(env, teamId, inc.id);
+    if (policie.ok) return { ok: true, vysledekOn: policie.vysledekOn };
+    // Inzerát je stažený, jen policie mezitím případ převzala jinudy (souběh). Nic se nevrací.
+    logger.warn({ module: M }, `policie po nahlášení inzerátu ${listingId}: ${policie.chyba}`);
+    return { ok: true, vysledekOn: null };
+  }
+  const rng = createRng(seedFromString(`bazar-policie|${inc.id}`));
+  const vec = CATEGORY_LABELS[inzerat.category] ?? inzerat.category;
+  await sendSystemSMS(db, teamId, SMS_ROLE_POLICIE, `🚓 ${text(rng, "policie_bazar", { vec })}`, smsIncidentu(inc.id))
+    .catch((e) => logger.warn({ module: M }, `SMS policie k inzerátu ${inc.id}`, e));
+  return { ok: true, vysledekOn: inc.police_result_on };
+}
+
+/** Jen pro ověření na testingu (admin): otevřené prodejné krádeže bez inzerátu vystaví hned, bez losu 60 %. */
+export async function vystavHned(env: Bindings, t: { teamId: string; gameDate: string; seasonNumber: number }): Promise<number> {
+  await env.DB.prepare(
+    `UPDATE club_incidents SET bazar_on = ?
+      WHERE team_id = ? AND season_number = ? AND status != 'uzavreny' AND recovered = 0
+        AND kind IN (${PRODEJNE_KRADEZE.map(() => "?").join(", ")})
+        AND NOT EXISTS (SELECT 1 FROM equipment_listings el WHERE el.incident_id = club_incidents.id)`,
+  ).bind(t.gameDate, t.teamId, t.seasonNumber, ...PRODEJNE_KRADEZE).run()
+    .catch((e) => logger.warn({ module: M }, `admin: den bazaru na dnešek ${t.teamId}`, e));
+  return vystavKradeneZbozi(env, t);
 }

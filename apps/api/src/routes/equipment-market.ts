@@ -404,6 +404,14 @@ equipmentMarketRouter.post("/teams/:teamId/equipment/pawn", async (c) => {
   return c.json({ ok: true, category, level, payout, balanceAfter });
 });
 
+// ── POST /api/teams/:teamId/equipment-market/:listingId/nahlasit ─────────────
+// Okradený klub nahlásí inzerát se svým kradeným zbožím policii (incidenty, spec 8).
+equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/nahlasit", async (c) => {
+  const { nahlasKradeneZbozi } = await import("../incidents/bazar-db");
+  const v = await nahlasKradeneZbozi(c.env, c.req.param("teamId"), c.req.param("listingId"));
+  return v.ok ? c.json(v) : c.json({ error: v.chyba }, v.kod);
+});
+
 // ── POST /api/teams/:teamId/equipment-market/:listingId/buy ──────────────────
 equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", async (c) => {
   const teamId = c.req.param("teamId");

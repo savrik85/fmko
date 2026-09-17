@@ -5,8 +5,9 @@ vi.mock("../messaging/system-sms", () => ({ sendSystemSMS: vi.fn(async () => und
 import type { Bindings } from "../index";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { cenaKradenehoZbozi } from "./bazar";
-import { poNakupuKradeneho, vystavKradeneZbozi } from "./bazar-db";
+import { nahlasKradeneZbozi, poNakupuKradeneho, vystavHned, vystavKradeneZbozi } from "./bazar-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
+import { incidentRadek } from "./testovaci-stav";
 
 const DNES = "2026-09-16T16:00:00.000Z";
 const TED = new Date("2026-09-16T10:00:00.000Z");
@@ -128,5 +129,71 @@ describe("nákup kradeného zboží", () => {
     expect(await poNakupuKradeneho(env, nakup({ kupecTeamId: "tym-b" }))).toBe("koupil_jiny");
     expect(db.davky).toHaveLength(0);
     expect(sendSystemSMS).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("nahlášení inzerátu policii", () => {
+  const INZERAT = { id: "bazar-inc-1-jerseys", category: "jerseys", level: 2, status: "active", incident_id: "inc-1" };
+  function sInzeratem(inzerat: unknown, incident: unknown, dalsi: Pravidlo[] = []) {
+    const db = new FalesnaD1([
+      ...dalsi,
+      { sql: /FROM equipment_listings WHERE id = \?/, first: inzerat },
+      { sql: /FROM club_incidents WHERE id = \? AND team_id = \?/, first: incident },
+      { sql: /SELECT game_date FROM teams/, first: { game_date: DNES } },
+    ]);
+    return { db, env: { DB: jakoD1(db) } as unknown as Bindings };
+  }
+  const nahlas = (env: Bindings) => nahlasKradeneZbozi(env, "tym-a", "bazar-inc-1-jerseys");
+
+  it("policie ještě nešetřila: inzerát zmizí a policie případ převezme", async () => {
+    const { db, env } = sInzeratem(INZERAT, incidentRadek());
+    const v = await nahlas(env);
+    expect(v.ok).toBe(true);
+    expect(v.ok && v.vysledekOn).toMatch(/^2026-09-/);
+    expect(db.dotazy.find((d) => /UPDATE equipment_listings SET status = 'withdrawn'/.test(d.sql))?.params.slice(1)).toEqual(["bazar-inc-1-jerseys"]);
+    expect(db.pocet(/UPDATE club_incidents SET status = 'policie'/)).toBe(1);
+  });
+
+  it("policie právě šetří: inzerát se zajistí bez nového šetření", async () => {
+    const { db, env } = sInzeratem(INZERAT, incidentRadek({ status: "policie", police_result_on: "2026-09-19T16:00:00.000Z" }));
+    expect(await nahlas(env)).toEqual({ ok: true, vysledekOn: "2026-09-19T16:00:00.000Z" });
+    expect(db.pocet(/UPDATE equipment_listings SET status = 'withdrawn'/)).toBe(1);
+    expect(db.pocet(/UPDATE club_incidents SET status = 'policie'/)).toBe(0);
+    expect(sendSystemSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", "Policie ČR, obvodní oddělení", expect.stringContaining("Dresy"), { type: "incident", incidentId: "inc-1" });
+  });
+
+  it("cizí incident, obyčejný inzerát nebo nepoznatelné zboží: 404 a nic se nestáhne", async () => {
+    for (const [inzerat, incident] of [
+      [INZERAT, null],
+      [{ ...INZERAT, incident_id: null }, incidentRadek()],
+      [{ ...INZERAT, category: "balls" }, incidentRadek()],
+    ] as const) {
+      const { db, env } = sInzeratem(inzerat, incident);
+      expect(await nahlas(env)).toMatchObject({ ok: false, kod: 404 });
+      expect(db.pocet(/UPDATE equipment_listings/)).toBe(0);
+    }
+  });
+
+  it("policie už šetřila nebo je incident uzavřený: 409 a inzerát zůstane", async () => {
+    for (const incident of [incidentRadek({ police_success: 0 }), incidentRadek({ status: "uzavreny" }), incidentRadek({ culprit_revealed: 1 })]) {
+      const { db, env } = sInzeratem(INZERAT, incident);
+      expect(await nahlas(env)).toMatchObject({ ok: false, kod: 409 });
+      expect(db.pocet(/UPDATE equipment_listings/)).toBe(0);
+    }
+  });
+
+  it("inzerát už není aktivní: 409", async () => {
+    const { env } = sInzeratem({ ...INZERAT, status: "sold" }, incidentRadek());
+    expect(await nahlas(env)).toMatchObject({ ok: false, kod: 409 });
+  });
+});
+
+describe("admin: vystavit hned", () => {
+  it("přepíše den bazaru u otevřených prodejných krádeží bez inzerátu a vystaví", async () => {
+    const { db, env } = prostredi([radek()]);
+    expect(await vystavHned(env, T)).toBe(1);
+    const prepis = db.dotazy.find((d) => /UPDATE club_incidents SET bazar_on = \?/.test(d.sql));
+    expect(prepis?.params).toEqual([DNES, "tym-a", 4, "vloupani_sklad", "vitrina", "dodavka_ukradena", "kradez_kamery"]);
+    expect(prepis?.sql).toContain("status != 'uzavreny'");
   });
 });

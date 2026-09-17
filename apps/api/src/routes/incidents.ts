@@ -8,6 +8,7 @@ import { tymyDivaka } from "../auth/divak";
 import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { cryptoSeed, createRng } from "../generators/rng";
 import { obvinHrace, rozhodni, zavolejPolicii, zeptejSe, type VysledekAkce } from "../incidents/akce";
+import { vystavHned } from "../incidents/bazar-db";
 import { oznamIncident, zapisIncident } from "../incidents/dopady";
 import { SLOUPCE_INCIDENTU, proAkce, type IncidentRadek } from "../incidents/incident-db";
 import { KATALOG_PODLE_KIND } from "../incidents/katalog";
@@ -225,9 +226,10 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
 // ── POST /api/admin/incidents/vysetrovani ────────────────────────────────────
 // Jen pro ověření na testingu: spustí denní vyšetřování klubu hned. `policieTed`
 // posune výsledky probíhajících šetření na dnešek, `srazky` zaúčtuje srážky i mimo pondělí.
-// `krivdy` otevře vlákna křivdy pro dnešní obvinění (jinak až další den).
+// `krivdy` otevře vlákna křivdy pro dnešní obvinění (jinak až další den). `bazarTed`
+// vystaví kradené zboží otevřených prodejných krádeží hned, bez losu.
 incidentsRouter.post("/admin/incidents/vysetrovani", async (c) => {
-  const body = await teloPozadavku<{ teamId?: string; policieTed?: boolean; srazky?: boolean; krivdy?: boolean }>(c, "admin vyšetřování");
+  const body = await teloPozadavku<{ teamId?: string; policieTed?: boolean; srazky?: boolean; krivdy?: boolean; bazarTed?: boolean }>(c, "admin vyšetřování");
   if (!body?.teamId) return c.json({ error: "Chybí teamId" }, 400);
   const db = c.env.DB;
 
@@ -248,5 +250,6 @@ incidentsRouter.post("/admin/incidents/vysetrovani", async (c) => {
   const t = { teamId: team.id, gameDate: team.game_date, seasonNumber: sezona.number };
   const vysledek = await zpracujVysetrovani(c.env, t, { pondeli: !!body.srazky });
   const krivdy = body.krivdy ? await ozviSeObvineni(c.env, t, { denObvineni: team.game_date.slice(0, 10) }) : 0;
-  return c.json({ ok: true, ...vysledek, krivdy });
+  const bazar = body.bazarTed ? await vystavHned(c.env, t) : 0;
+  return c.json({ ok: true, ...vysledek, krivdy, bazar });
 });
