@@ -269,11 +269,11 @@ Přibude `opravZdarma` (bez transakce) pro řemeslníka.
 
 ### 4c) Životní situace
 
-Stav `probiha` do `ends_on`. Jeden hráč max. 1 aktivní situace, tým max. 2.
+Situace je řádek `club_incidents` se stavem `probiha`, kategorií `zivotni` a `subject_player_id`; nemá pachatele ani stopy, `culprit_type` zůstává `null` a `culprit_revealed` 0, protože není co vyšetřovat. Stav `probiha` trvá do `ends_on`. Jeden hráč max. 1 aktivní situace, tým max. 2.
 
 | kind | Kdo | Trvání | Dopad |
 |---|---|---|---|
-| `dluhy` | váha: nezaměstnaný/sezonní dělník/bezdomovec ×2, alkohol ≥ 60 ×1,5 | 21–35 dní | hráč pošle SMS s prosbou o **zálohu** (rozhodnutí, Část 7c). Odmítnutí: jeho váha pachatele ×3 do konce situace. Brigády: vyšší absence na trénink. |
+| `dluhy` | váha: nezaměstnaný/sezonní dělník/bezdomovec ×2, alkohol ≥ 60 ×1,5 | 21–35 dní (`ends_on`) | hráč pošle SMS s prosbou o **zálohu**; na tu běží samostatná lhůta `deadline` = vznik + 7 dní (rozhodnutí, Část 7c), situace sama běží dál až do `ends_on`, i po propadlé lhůtě (Část 7e). Odmítnutí: dalších +1,5 k váze pachatele do konce situace (Část 5a). Brigády: vyšší absence na trénink a vlastní pool výmluv (Část 17a, 17b). |
 | `prisel_o_praci` | povolání ≠ student/důchodce/nezaměstnaný | 21 dní | morálka −6; 30 % → do 7 dní `dluhy`; docházka na trénink +0,15; žádné pracovní výmluvy |
 | `rozvod` | věk ≥ 24 | 28 dní | morálka −10; spí v kabině: docházka +0,15; `oslava_v_kabine` u týmu váha ×2; častěji v hospodě (Část 9); první týden stěhování (incidentní absence) |
 | `zabaveny_ridicak` | alkohol ≥ 60 | 30 dní | vyšší šance absence na **venkovních** zápasech; `team_van` ≥ 1 to ruší |
@@ -312,8 +312,9 @@ Konstanty v `incidents/nastaveni.ts`:
 | denní šance pozitivního incidentu | 2,5 % |
 | spouštěné incidenty (oslava, dveře, světlice, kasa, tombola) | vlastní šance 15–35 % při splnění spouštěče |
 | max. otevřených problémů (`otevreny|policie`) | 1 — další problém se nevylosuje |
+| max. aktivních životních situací | 2 na klub, 1 na hráče (Část 4c) |
 | cooldown stejného typu | 21 dní |
-| ochrana nového týmu | žádný problém do 3 odehraných zápasů |
+| ochrana nového týmu | žádný problém ani nová situace do 3 odehraných zápasů |
 | strop peněžní ztráty | min(10 % rozpočtu, 40 000 Kč), nikdy pod nulu |
 | lhůta na rozhodnutí | 7 herních dní |
 
@@ -334,7 +335,8 @@ alkohol/100 × 1,0
 + (100 − věrnost)/100 × 0,8
 + (100 − vztah k trenérovi)/100 × 0,6
 + transferUnrest/100 × 0,5
-+ aktivní dluhy 2,0 (odmítnutá záloha dalších 1,5)
++ aktivní dluhy 2,0 (odmítnutá záloha dalších 1,5; počítá se jen spolu s běžícími dluhy,
+  mimo situaci `dluhy` `zalohaOdmitnuta` nikdy není nastavená)
 + recidiva 1,0 (odvozeno dotazem: pachatel incidentu uzavřeného v posledních 60 dnech téže
   sezóny, kromě `bez_skody`, `nestalo_se` a `konec_sezony` — nic se navíc neukládá, platí i pro
   nevyřešené)
@@ -422,10 +424,10 @@ aby `club_events` z incidentu fanoušci zpracovali týž den. Běží v loop i q
 1. Zavřít incidenty z minulé sezóny.
 2. Vyhodnotit hrozící incidenty s `deadline <= gameDate` (9a) a šetření policie s `police_result_on <= gameDate`.
 3. Uzavřít propadlé lhůty (`deadline <= gameDate`) výchozím výsledkem (Část 7e).
-4. Ukončit životní situace s `ends_on <= gameDate`.
+4. Ukončit životní situace s `ends_on <= gameDate` (`incidents/situace-db.ts: ukonciSituace`) a vyhodnotit lhůty na zálohu, které propadly (`propadleZalohy`): `deadline` řeší jen zálohu (Část 7c), `dluhy` samotné běží dál až do `ends_on`, i když lhůta na zálohu mezitím propadne (Část 7e).
 5. V pondělí zaúčtovat srážky ze mzdy (Část 7d).
 6. Vystavit kradené zboží s `bazar_on <= gameDate` (Část 8). Běží až po kroku 5 a po ozvání hráčů, kteří včera zapírali obvinění (`incidents/krivda.ts: ozviSeObvineni`, 17d), protože výsledek policie téhož dne může věci ještě vrátit.
-7. Vylosovat nové incidenty: spouštěné, pak náhodný problém / životní / pozitivní.
+7. Vylosovat nový incident: nejdřív spouštěné, pak náhodný problém nebo pozitivní ze společného katalogu (`vylosujIncident`); nevyjde-li nic, zkusí se vlastním losem a vlastním seedem životní situace (`vylosujSituaci`, Část 4c), nejvýš jeden incident na den.
 8. Zapsat incidentní absence nových incidentů (vždy `od >= dnes + 2`, 17a) a reakce obce, tisku, fanoušků a sponzorů (Část 17).
 
 Odečet klubového vyřazení neběží tady, ale po soutěžním zápase v `match-runner.ts` (17a).
@@ -543,9 +545,9 @@ I tady vzniknou incidentní absence: výslech za 2 dny a soud v den výsledku š
 aspoň 2 dny dopředu (17a).
 
 **Záloha (situace `dluhy`):**
-- `pujcit`: `recordTransaction(..., "incident_advance", −3 000 až −8 000)`, srážka zpět 4 týdny, morálka +6, vztah +8. Když hráč odejde dřív, zbytek propadá.
-- `odmitnout`: morálka −5, vztah −5, váha pachatele ×3 (Část 5a).
-- Bez odpovědi do lhůty = `odmitnout`.
+- `pujcit`: částka 3 000–8 000 Kč deterministicky ze seedu (`createRng(seedFromString("zaloha|" + incidentId))`), `recordTransaction(..., "incident_advance", −castka)`. Splátky nemají vlastní mechanismus: zapíšou se do `resolution_data {celkem, tydnuZbyva: 4}` a strhává je existující pondělní `zauctujSrazky` (Část 7d); ta nově kromě `resolution = 'srazka'` bere i `json_extract(resolution_data, '$.zaloha') = 'pujceno'` a transakci popíše „Splátka zálohy" místo „Srážka ze mzdy". Morálka +6, vztah +8. Když hráč odejde dřív, zbytek propadá.
+- `odmitnout`: morálka −5, vztah −5, dalších +1,5 k váze pachatele do konce situace (Část 5a).
+- Bez odpovědi do lhůty (`deadline`, vznik + 7 dní): záloha se počítá za odmítnutou (`resolution_data.zaloha = 'odmitnuto'`), ale situace `dluhy` samotná se neuzavírá a běží dál do `ends_on` (Část 7e).
 
 ### 7d) Tresty pro odhaleného pachatele
 
@@ -579,7 +581,9 @@ Nepoužívá se `status = 'quit'`: takový hráč dál bere mzdu (`finance-proce
 |---|---|
 | krádež/poškození, pachatel neodhalen | `nevyreseno`; věc zůstává pryč; pachateli recidiva; SMS od Kustoda |
 | pachatel odhalen, bez trestu | `nechat_byt` |
-| `dluhy` bez odpovědi | `odmitnout` |
+| `dluhy` bez odpovědi na zálohu do `deadline` | záloha se počítá za odmítnutou (`resolution_data.zaloha = 'odmitnuto'`), morálka −5, vztah −5, SMS hráče; situace samotná se **neuzavírá**, běží dál do `ends_on` |
+
+Na rozdíl od krádeže a poškození propadlá lhůta u dluhů incident neuzavírá: `deadline` řeší jen zálohu (`incidents/situace-db.ts: propadleZalohy`), konec situace řídí `ends_on` zvlášť (`ukonciSituace`, Část 6b krok 4).
 
 Od fáze 2 platí recidiva (odvozená, 5a); tresty volí manažer v lhůtě, po ní `nechat_byt`.
 
@@ -649,12 +653,15 @@ a návštěva s trenérem téhož dne poslaly manažerovi SMS o ničem.
 | `rvacka_kvuli_kradezi` | odhalený pachatel **krádeže** a jeho rival ve stejné session, incident neuzavřený nebo uzavřený nejvýš před 14 dny; šance 30 %, jedna rvačka za večer | efekty jako `cross_team_fight` (kondice, malé zranění) |
 | `cela_hospoda_resi` | nejzávažnější incident do 3 dnů, o kterém dnes ještě nepadla jiná příhoda; šance 40 % | čistě atmosféra, text s názvem věci, bez jmen |
 | `chlubi_se` | pachatel krádeže nebo poškození, jen u **neuzavřeného** incidentu, sedí v hospodě do 10 dnů od činu, alkohol ≥ 60; šance 20 % (temperament ≥ 65 ×1,5) | „Po šestém pivu se Franta pochlubil, že za ty dresy dostal pětikilo." → u dosud neodhaleného pachatele stopa `hospoda` síly **3** s `points_to` → pachatel známý; u už odhaleného jen text v deníku, bez nové stopy a bez SMS |
-| `ohlasuje_cin` | návštěvník s alkoholem ≥ 70 (platí stejně i pro obviněného) a buď váhou pachatele nad prahem (5a), nebo kdo obvinění zapřel (stejné pravidlo jako `stezuje_si_na_trenera`); šance 10 % | „Franta u pultu vykládal, že si zítra ty míče ze skladu odnese, stejně je nikdo nepotřebuje." → **hrozící incident** (9a). Čin jen z `vloupani_sklad`, `vitrina`, `dodavka_pujcena`, `koleje_trakturek` a `kopnute_dvere` (ten jen za zapřené obvinění, váha 3×, bez podmínky červené karty) a jen když klub podmínky (4a, 4b) skutečně splňuje |
+| `ohlasuje_cin` | návštěvník s alkoholem ≥ 70 (platí stejně i pro obviněného) a buď váhou pachatele nad prahem (5a), nebo kdo obvinění zapřel (stejné pravidlo jako `stezuje_si_na_trenera`), nebo komu trenér odmítl zálohu (Část 5a, 7c); šance 10 % | „Franta u pultu vykládal, že si zítra ty míče ze skladu odnese, stejně je nikdo nepotřebuje." → **hrozící incident** (9a). Čin jen z `vloupani_sklad`, `vitrina`, `dodavka_pujcena`, `koleje_trakturek` a `kopnute_dvere` (ten jen za zapřené obvinění, váha 3×, bez podmínky červené karty) a jen když klub podmínky (4a, 4b) skutečně splňuje |
+| `pije_na_sekeru` | hráč s běžící situací `dluhy` sedí v hospodě; šance 50 % (`SEKERA_SANCE`), nejvýš jednou za večer na hráče | „Hospodský už {hráč} nechce nalévat na sekeru." → jen text a varování v deníku, žádná stopa ani efekt; incident v zápisu odkazuje na `idSituaci` daného hráče, aby šel z deníku otevřít |
 
 `utraci_za_rundy` (pachatel peněžního incidentu platí rundu, hospodský v kádru ×2, trenér
-v hospodě ×2), `pije_na_sekeru` (hospodský nechce nalévat na sekeru dlužníkovi) a odmítnutá
-záloha jako další spouštěč `ohlasuje_cin` čekají na fázi 7: peněžní incidenty, dluhy a zálohy
-ve fázi 6 neexistují.
+v hospodě ×2) čeká na fázi 7b: peněžní incidenty ve fázi 7a ještě neexistují. `pije_na_sekeru`
+a odmítnutá záloha jako další spouštěč `ohlasuje_cin` jsou hotové (tabulka výše, Část 5a, 7c).
+`KontextHospody` k `situace` (hráč → kind) nese ještě `idSituaci` (hráč → id jeho vlastní
+situace): bez něj by při dvou souběžných situacích `dluhy` v jednom klubu mohl `pije_na_sekeru`
+odkázat na incident jiného hráče.
 
 ### 9a) Hrozící incident z opileckých řečí
 
@@ -677,7 +684,7 @@ Návaznosti:
 - **Oslava v kabině** bere pachatele ze **skutečných** návštěvníků včerejší hospody (4b).
 - **Drb se šíří do jiných klubů.** Host z jiného týmu (`isVisitor`) v session, kde padla jakákoli příhoda o incidentu kromě ohlášení činu, dostane znalost `drb` (jen veřejný fakt) na 14 dní. V chatu svého klubu o tom může mluvit.
 - Hospoda nevytváří nové incidenty ani škody; jen odhaluje, varuje a dohrává následky.
-- Rozvod ×1,5 v šanci návštěvy hospody (`attendanceProb`, `pub.ts:76`) čeká na fázi 7: životní situace ve fázi 6 neexistují.
+- Rozvod násobí šanci návštěvy hospody ×1,5 (`ROZVOD_HOSPODA_NASOBEK`, `attendanceProb`, `season/pub.ts`): kdo se rozvádí, nemá doma nikoho, kdo by ho zdržel.
 
 **Známé chyby mimo fázi 6** (nalezené při implementaci, neopravené, nahlášené uživateli):
 - `season/pub-fan-leaders.ts` a `season/pub.ts: pridejVudceDoHospody` počítají `trenerJeTu` z návštěvníků dřív, než se trenér mezi ně přidá, a návštěva s trenérem (`createCoachLedSession`) vůdce fanoušků vůbec nevolá. `scenaSTrenerem` se tak nikdy nespustí.
@@ -716,7 +723,12 @@ stojí celá na tomhle druhém pravidle. `pachatel` a `obvineny` mají pevný `u
 stav incidentu.
 
 Hráč, který přišel do klubu až po incidentu, **neví nic** — záznam vzniká jen při vzniku incidentu.
-U životních situací a pozitivních incidentů vzniká jen `kadr` (a `subject_player_id` ví o sobě).
+U pozitivních incidentů vzniká jen `kadr`. U životních situací vzniká `kadr` všem (veřejný
+text) a navíc dotčený hráč (`subject_player_id`) dostane roli `pachatel` s vlastním textem
+v první osobě („Tohle se děje tobě: …") a vlastním pokynem do promptu („Je to tvoje starost.
+Když se trenér zeptá, mluv o tom normálně."). `club_incident_knowledge.role` nemá zvlášť
+hodnotu pro „ví o sobě" a role `pachatel` je neveřejná (10b), takže text v 1. osobě se nikam
+neprozradí.
 
 ### 10b) Prompt
 
@@ -814,10 +826,12 @@ incidentu tak jde otevřít z telefonu odkudkoli, kde o něm SMS přišla.
 apps/api/migrations/0202_incidenty.sql
 apps/api/src/incidents/nastaveni.ts          — konstanty
 apps/api/src/incidents/katalog.ts            — definice typů, podmínky (čisté)
+apps/api/src/incidents/situace.ts            – katalog a los životních situací (čisté)
 apps/api/src/incidents/stav-klubu.ts         — načtení StavKlubu
 apps/api/src/incidents/pachatel.ts           — váhy, výběr (čisté)
 apps/api/src/incidents/stopy.ts              — generování stop a stav vyšetřování (čisté)
 apps/api/src/incidents/dopady.ts             — zápis škod a návratů
+apps/api/src/incidents/situace-db.ts         – založení a ukončení situace, záloha na mzdu
 apps/api/src/incidents/znalosti.ts           — zápis, expirace, prompt
 apps/api/src/incidents/tema.ts               — detekce otázky na incident (čisté)
 apps/api/src/incidents/vyslech.ts            — výslech, obvinění (čisté + zápis)
@@ -893,7 +907,8 @@ obec, tisk, přestupy, fanoušci, sponzoři, grémium, sezóna) jsou uvedené p�
 
 ### Na testingu
 
-- `POST /api/admin/incidents/force` pro každý kind, `curl` kontrola: incident, `equipment`/`stadiums`/`transactions` se reálně změnily, stopy odpovídají vybavení testovacího klubu.
+- `POST /api/admin/incidents/force` pro každý kind, `curl` kontrola: incident, `equipment`/`stadiums`/`transactions` se reálně změnily, stopy odpovídají vybavení testovacího klubu. U kindů ze situačního katalogu (Část 4c) založí situaci stejnou cestou jako denní los (`zalozSituaci`), ne přes `zapisIncident` s pachatelem; `playerId` volitelný, jinak se vybere první vhodný hráč z kádru.
+- `POST /api/admin/incidents/situace {teamId, ukoncitTed?: boolean}`: `ukoncitTed` posune `ends_on` všech běžících situací na dnešek a hned je ukončí (`ukonciSituace`), jinak by se na testingu čekalo 21 až 35 dní.
 - Klub bez zabezpečení vs. se zabezpečením 2 → kamera jen u druhého.
 - `POST /api/admin/incidents/hospoda` `{teamId, hraci, hoste?, jiste?, ohlasi?, trener?}`: posadí hráče klubu (`hraci`) a hosty z jiných klubů (`hoste`) do dnešní hospody a vyhodnotí příhody o incidentech; `jiste` obchází losy 10–25 %, `ohlasi` vynutí, kdo ohlásí hrozící čin, `trener` zapne poslouchání. Podmínky (kdo co ví, co klub má) neobchází.
 - `POST /api/admin/incidents/vysetrovani` `{teamId, hroziTed: true}`: posune lhůtu hrozících činů na dnešek a hned je vyhodnotí (`vyhodnotHrozici`), jinak by se na testingu čekalo 1 až 3 dny.
@@ -932,7 +947,11 @@ Každá fáze samostatně: build → commit → push testing → ověření API 
 5. **Bazar** — soukromé inzeráty, poznání, nahlásit, koupit zpět (hotovo na testingu, plán
    `docs/superpowers/plans/2026-09-17-incidenty-faze-5.md`).
 6. **Hospoda** — příhody, chlubení a ohlašování činů, hrozící incidenty a jak jim předejít, trenér poslouchá, šíření drbů, vůdce fanoušků v hospodě (hotovo na testingu, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-6.md`).
-7. **Peníze a životní situace** — kasa, tombola, útěk, ekonom, dluhy + záloha, ostatní situace.
+7a. **Životní situace**: dluhy a záloha, ostatní situace (ztráta práce, rozvod, zabavený
+   řidičák, svatba, narození dítěte, nemocný rodič), háčky do absencí, tréninku, zápasu, chatu
+   a hospody (hotovo na testingu, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-7a-zivotni-situace.md`).
+7b. **Peněžní krádeže**: kasa, tombola, zpronevěra ekonoma, útěk s penězi, `utraci_za_rundy`.
+   Útěk s penězi stojí na situaci `dluhy` (Část 4a), proto musí jít až po fázi 7a.
 8. **Obec** (17e) — přízeň a důvěra po osobnostech, historie, petice, investice, brigády, starosta v hospodě a na telefonu, pozvánky, krize jako skutečné incidenty, konec sezóny.
 9. **Tisk, fanoušci, sponzoři** (17f, 17h) — rubrika Černá kronika, otázky v rozhovorech, reportér, fanouškovské události, kampaně, transparenty, chorály, oblíbenci, sponzoři.
 10. **Přestupy, grémium, rivalové, kabina, zaměstnanci** (17g, 17i, 17j) — pověst, zájem hráčů, podpis volných hráčů, sankce, škodolibí rivalové, psycholog, atributy manažera.
@@ -968,10 +987,20 @@ a rozcházela se (viz Chyby mimo incidenty). `hracProAbsenci(row, druhy?)` (`eve
 převod řádku hráče na `PlayerForAbsence`; `druhy` jsou vlivy toho hráče z `IncidentniKontext.druhy`
 (`obvineny`, `pachatel`) a všech šest míst je předává stejně.
 
+**Dojíždění na venkovní zápas** (`incidents/match-absences.ts: kontextDojizdeni`) je stejným
+způsobem jediný zdroj pravdy pro `isAway` a `maDodavku`, které potřebuje modifikátor
+`zabaveny_ridicak` (níž): `fetchTeamCommuteMod` vrací `{mod, maDodavku}` (dojezdový útlum
+absencí i prostou informaci, jestli klub dodávku vůbec má), `venkovniZapas` řeší, jestli tenhle
+tým hraje venku – u ligy a přáteláku přes `matches`, u poháru přes `cup_matches` spojené s
+`cup_teams` (porovnává tým proti `cup_teams.team_id` i `cup_teams.id`, protože velkokluby se do
+zápasu předávají jako `cup_teams.id`). Všech šest volajících `generateAbsences` bere
+`commuteMod`, `maDodavku` i `isAway` odsud, nikdy zvlášť, jinak by se modifikátor mezi SMS den
+předem, SMS v den zápasu a simulací rozešel.
+
 **Pravděpodobnost a výmluvy** (`absence.ts`):
-- `PlayerForAbsence` + `incident?: { druhy: string[] }`. Ve fázi 3 jediný modifikátor: `obvineny` (do 14 dní) +0,03 (`OBVINENY_SANCE_NAVIC`). `dluhy`, `rozvod`, `zabaveny_ridicak` a `isAway` přibudou se životními situacemi ve fázi 7 — situace ještě neexistují.
-- Nová kategorie `"incident"` s vlastní váhou (`OBVINENY_VAHA_VYMLUVY = 0,5`, dominantní mezi ostatními kategoriemi), pool `OBVINENY_EXCUSES` (výmluvy „Po obvinění", pět vět, „Po tom, co jste mě obvinil, nemám na fotbal náladu." a podobné). Pooly podle `dluhy`/`prisel_o_praci`/`zabaveny_ridicak` přibudou ve fázi 7.
-- **Rozpory s existujícími pooly** se vyřeší až s životními situacemi ve fázi 7: teprve tehdy se „Manželka rodí! Ne teď, ale prý co kdyby" a „Nemůže, řídil opilý a vzali mu řidičák" vyřadí z obecných výmluv a přesunou do situací `narozeni_ditete` a `zabaveny_ridicak`. Ve fázi 3 zůstávají beze změny.
+- `PlayerForAbsence` + `incident?: { druhy: string[] }`. Modifikátor `obvineny` (do 14 dní) +0,03 (`OBVINENY_SANCE_NAVIC`). Životní situace (4c) přidávají další dva: `dluhy` +0,05 (`DLUHY_SANCE_NAVIC`) a `zabaveny_ridicak` +0,12 (`RIDICAK_SANCE_NAVIC`) jen na **venkovním** zápase a jen bez klubové dodávky (`team_van` ≥ 1 to ruší). `prisel_o_praci` a `rozvod` šanci absence na zápas neovlivňují, spec u nich mluví jen o docházce na trénink (17b).
+- Nová kategorie `"incident"` s vlastní váhou (`OBVINENY_VAHA_VYMLUVY = 0,5`, dominantní mezi ostatními kategoriemi), pool `OBVINENY_EXCUSES` (výmluvy „Po obvinění", pět vět, „Po tom, co jste mě obvinil, nemám na fotbal náladu." a podobné). Další kategorie `"situace"` patří životním situacím, každá s pěti větami: `dluhy` (`DLUHY_VAHA_VYMLUVY = 0,5`, pool o brigádách), `zabaveny_ridicak` na venkovním zápase bez dodávky (`RIDICAK_VAHA_VYMLUVY = 0,6`, pool o řidičáku), `prisel_o_praci` (`BEZ_PRACE_VAHA_VYMLUVY = 0,4`, pool o hledání práce). Kdo přišel o práci, navíc dostane `weights.professional = 0`, nevymlouvá se prací, kterou nemá.
+- **Rozpory s existujícími pooly se vyřešily se životními situacemi**: „Manželka rodí! Ne teď, ale prý co kdyby" zmizela z obecných výmluv (narození dítěte je teď skutečná situace) a „Nemůže, řídil opilý a vzali mu řidičák" zmizela z poolu celebrit (řidičák je teď situace `zabaveny_ridicak`).
 - Testy: `absence-determinism.test.ts` („bez incidentu beze změny", post-pass nemění ostatní), `absence-weather.test.ts`, `absence-hracu.test.ts`.
 - Zobrazení: sestava a hráčská stránka čtou `reason` a `emoji` z výsledku dodatečného průchodu stejně jako u ostatních omluvenek. Rozpad docházky v `teams.ts` (`breakdown`) se nemění — incidentní absence se počítá jako běžná omluva (`excuse`); nový klíč by znamenal nový sloupec v tabulce na mobilu.
 
@@ -982,7 +1011,7 @@ převod řádku hráče na `PlayerForAbsence`; `druhy` jsou vlivy toho hráče z
 - den výslechu nebo soudu = hráč na trénink nepřijde bez ohledu na spočítanou docházku; vyřazení ze zápasů (`kind = vyrazen`) trénink nezakazuje.
 - **Trénink čte absence podle vlastního `team_id` řádku** (áčko i U21 mají v `teams` každý svůj), ne podle `clubId` použitého vedle pro vybavení a personál. Incidenty vždy patří áčku, takže U21 hráči se v `nactiIncidentniAbsence` nikdy netrefí — to je v pořádku, incidenty se ve fázi 3 U21 týmu netýkají.
 - důvod (`DUVOD_TRENINKU`, `incidents/absence-hracu.ts`): „Byl na výslechu na policii", „Byl u soudu".
-- modifikátory `prisel_o_praci`/`rozvod` +0,15, `dluhy` −0,15 a zrcadlo náhledu tréninku (`routes/game.ts:484`, `:509`) přibudou se životními situacemi ve fázi 7 — náhled tréninku je týdenní průměr, jednodenní absence v něm nic neznamená.
+- modifikátory `prisel_o_praci` +0,15, `rozvod` +0,15, `dluhy` −0,15 (`TRENINK_SITUACE`, Část 4c) jsou hotové: `simulateAttendance`/`simulateTraining` dostaly nový poslední parametr `situaceHracu?: ReadonlyArray<readonly string[] | undefined>` po indexech kádru, plněný stejným `nactiDruhyHracu` jako absence na zápas (17a); `daily-tick.ts` ho počítá z kanonického `effectiveDate` celého ticku, ne z `teams.game_date` (ten dotaz na trénink nenačítá, `undefined` by shodil trénink lidského klubu do catch bloku). Náhled tréninku (`routes/game.ts`, výpočet `attendProb`) čte tutéž mapu `nactiDruhyHracu` a stejnou konstantu `TRENINK_SITUACE` přímo, je to týdenní průměr, takže se do něj počítá aktuální stav situace, ne jednodenní výkyv.
 - zobrazení beze změny FE: `teams.last_training_result` → „Omluvenky — {důvod}", `life_context.absence` → „Chybí dnes".
 
 ### 17c) Zápas a kabina
@@ -993,6 +1022,8 @@ převod řádku hráče na `PlayerForAbsence`; `druhy` jsou vlivy toho hráče z
 |---|---|
 | neprávem obviněný, do 14 dní | morálka −8, konzistence −10 |
 | odhalený pachatel v základní sestavě, do 14 dní | tým morálka −2 |
+| rozvod (běžící situace) | morálka −5, konzistence −5 |
+| narození dítěte (běžící situace) | morálka +5 |
 
 Tyhle úpravy platí jen v paměti nad kopií hráčů pro simulaci (`skupiny`) a **nesmí se propsat
 do DB natrvalo** — je to dočasný handicap pro tenhle jeden zápas, ne trvalý pokles morálky.
@@ -1000,9 +1031,16 @@ do DB natrvalo** — je to dočasný handicap pro tenhle jeden zápas, ne trval�
 vrací i `moraleDelta: Map<engineId, number>` — skutečně uplatněnou (zápornou) změnu po podlaze
 na 0. Zápis morálky po zápase (`match-runner.ts`, `cup.ts`) tuhle deltu od výsledné morálky
 odečte (`p.morale - delta`), takže do `players.life_context` jde jen morálka z herního výsledku
-(výhra/prohra apod.), incidentní postih zmizí spolu se zápasem.
+(výhra/prohra apod.), incidentní postih zmizí spolu se zápasem. Kladná změna (narození
+dítěte) se takhle neodečítá, radost si hráč nechá.
 
-Rozvod, narození dítěte a hrdina přibudou se životními situacemi a pozitivními incidenty (fáze 7 a 11) — situace ještě neexistují.
+Rozvod a narození dítěte jsou hotové (`SITUACE_MORALKA`, `SITUACE_KONZISTENCE`,
+`incidents/zapas.ts: upravSestavuZIncidentu`). **`narozeni_ditete` se ale záměrně nedostane
+mezi `DruhVlivu`, které čte `nactiDruhyHracu`** (17a): v den porodu je hráč na incidentní
+absenci a vůbec nehraje, takže `ZAPAS_NAROZENI_MORALKA` se v produkci nikdy neuplatní.
+Konstanta zůstává kvůli testům a pro případnou budoucí fázi, která by narození přidala mezi
+vlivy, je to vědomé rozhodnutí, ne mezera k opravení. Hrdina přibude s pozitivními incidenty
+(fáze 11), situace ještě neexistuje.
 
 **Kabina** — `season/kabina.ts` `processKabina(db, teamId, gameDate?)` načte `nactiDruhyHracu` a
 `incidentyVKabine(hraci, druhy, kamaradi)` přičte před clamp týdenní delty (±6):
@@ -1050,19 +1088,26 @@ pro to nebyla potřeba.
   incidentu se ozve dál. Podmínky: `isAiEnabled` (generování textu musí být zapnuté, jinak
   by hráč napsal SMS a nikdo by na ni neodpověděl) a vlákno konverzace zrovna neběží
   (`ai_thread_active != 1`, aby se nepřebilo rozjeté).
-- `zadost_o_zalohu` (start dluhů) je vynucený scénář stejného vzoru, ale patří až situacím ve
-  fázi 7, ve fázi 4 nevznikl. Podle plánu tam propadnutí vlákna **neuráží**
-  (`expireStaleAiThreads`), výchozí výsledek řeší lhůta incidentu (7e), a peníze nikdy neurčuje
-  model.
+- `zadost_o_zalohu` (start dluhů) je hotový vynucený scénář stejného vzoru: spouští se
+  výhradně z `incidents/situace-db.ts: zalozSituaci` při vzniku situace `dluhy` (`weight: () =>
+  0`, nikdy náhodně), `expectedTurns: 2`, popis zakazuje hráči vymýšlet částku, termín i sliby
+  o splácení, o penězích rozhoduje trenér tlačítkem (7c). Propadnutí vlákna **neuráží**
+  (`expireStaleAiThreads`), výchozí výsledek řeší lhůta incidentu (7e).
 - Pravidlo „NEVYMÝŠLEJ si narození dítěte, rozvod, ztrátu práce ani nemoc rodiče"
-  (`ZAKAZ_ZIVOTNICH_SITUACI`, `ai-player-chat.ts`) ve fázi 4 platí pro **všechny** hráče bez
-  výjimky, v `buildSystemPrompt` i v `evaluateResolution`: podmínka „jen bez aktivní situace"
-  nemá co testovat, dokud situace neexistují. Zúžení na hráče bez situace přijde s fází 7.
-- Aktivní situace zvýší váhu hráče v `pickPlayerWeighted` a scénáře `family_problem` (rozvod,
-  nemocný rodič) a `personal_milestone` (narození dítěte) dostanou popis navázaný na konkrétní
-  situaci, obojí fáze 7.
-- `domacnost(age)` (`chat-kontext.ts:122`) se při rozvodu nahradí („žena tě vyhodila, spíš
-  v kabině"), taky fáze 7.
+  (`ZAKAZ_ZIVOTNICH_SITUACI`, `ai-player-chat.ts`) teď platí jen hráčům **bez** aktivní situace,
+  v `buildSystemPrompt` i v `evaluateResolution`. Hráč se situací dostane místo zákazu blok
+  „TVOJE ŽIVOTNÍ SITUACE (mluv o ní, když se hodí, nic dalšího si nevymýšlej): {label}."
+  `PlayerSnapshot.zivotniSituace?: { kind: string; label: string }` se plní jedním dotazem na
+  `club_incidents` (`status = 'probiha'`, `category = 'zivotni'`) všude, kde se snapshot staví
+  (`ai-player-spawn.ts`).
+- Aktivní situace zvýší váhu hráče v `pickPlayerWeighted` o +2 (kdo něco řeší, spíš se ozve) a
+  scénáře `family_problem` (rozvod, nemocný rodič) a `personal_milestone` (narození dítěte)
+  mají v popisu větu: má-li hráč situaci uvedenou v bloku svých starostí, mluví o ní a nic
+  jiného si nevymýšlí.
+- `domacnost(age)` (`chat-kontext.ts`) se při rozvodu nahradí `domacnostSeSituaci(vek,
+  situace?)`: rozvod přebije věkové pravidlo úplně („Rozvádíš se, doma to skončilo. Spíš na
+  kabině nebo u kamaráda."), `prisel_o_praci` k větě o bydlení připojí „Práci teď nemáš, dny
+  jsou dlouhé.".
 
 **Známé omezení mimo fázi 4.** Rozhovor, který založí trenér (`messaging/coach-initiated.ts`,
 `scenario_id: "coach_initiated"`), není zapsaný v `AI_PLAYER_SCENARIOS`. `handleAiPlayerReply`
@@ -1088,7 +1133,7 @@ a fáze 4 ji nezpůsobila ani neřešila, čeká na rozhodnutí uživatele.
 | Fáze | Navazuje na fázi 4 |
 |---|---|
 | 6 Hospoda | role `drb`, `drby_o_incidentu` nastaví `interrogation = prozradil` a najde stopu `hospoda` (hotovo, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-6.md`) |
-| 7 Peníze a životní situace | `zadost_o_zalohu`, domácnost při rozvodu, vyšší váha hráče se situací v `pickPlayerWeighted`, zákaz vymýšlet situace jen pro hráče bez situace |
+| 7a Životní situace | `zadost_o_zalohu`, domácnost při rozvodu, vyšší váha hráče se situací v `pickPlayerWeighted`, zákaz vymýšlet situace jen pro hráče bez situace (hotovo, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-7a-zivotni-situace.md`) |
 | 8 Obec | starosta v zmeškaných hovorech |
 | 9 Tisk, fanoušci, sponzoři | `novinar_skandal` a sponzor v zmeškaných hovorech |
 | 10 Zaměstnanci | psycholog (role `obvineny`), správce, šéf fanklubu, obsluha |
