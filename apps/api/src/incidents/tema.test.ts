@@ -113,12 +113,27 @@ describe("řeči z hospody (spec 9a)", () => {
     expect(jeRecOHrozicim(zprava, "vloupani_sklad")).toBe(true);
   });
 
-  it.each(["Zdar, jak se máš?", "Zítra trénink v šest.", "Dobrý gól včera."])("běžná zpráva: %s", (zprava) => {
+  it.each([
+    "Zdar, jak se máš?",
+    "Zítra trénink v šest.",
+    "Dobrý gól včera.",
+    "Buď příště preciznější v obraně.",
+    "Utopil jsi tu penaltu, kámo.",
+    "Bude výklad nových pravidel od svazu.",
+    "Kdy budeš ve skladu?",
+  ])("běžná zpráva: %s", (zprava) => {
     expect(jeRecOHrozicim(zprava, "vloupani_sklad")).toBe(false);
   });
 
+  it("místo samo nestačí, ani u kabiny a dveří", () => {
+    expect(jeRecOHrozicim("Kdy budeš v kabině?", "kopnute_dvere")).toBe(false);
+    expect(jeRecOHrozicim("Sejdeme se v kabině po zápase.", "kopnute_dvere")).toBe(false);
+    expect(jeRecOHrozicim("Zavři prosím dveře.", "kopnute_dvere")).toBe(false);
+    expect(jeRecOHrozicim("Na dveře od kabiny ani nesahej.", "kopnute_dvere")).toBe(true);
+  });
+
   it("místo činu platí jen pro ten čin", () => {
-    expect(jeRecOHrozicim("Ta vitrína zůstane, kde je.", "vitrina")).toBe(true);
-    expect(jeRecOHrozicim("Ta vitrína zůstane, kde je.", "vloupani_sklad")).toBe(false);
+    expect(jeRecOHrozicim("Na vitrínu ani nesahej.", "vitrina")).toBe(true);
+    expect(jeRecOHrozicim("Na vitrínu ani nesahej.", "vloupani_sklad")).toBe(false);
   });
 });

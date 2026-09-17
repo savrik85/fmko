@@ -74,18 +74,27 @@ export function najdiIncidentVTextu(
   return incidenty.find((i) => jeOtazkaNaIncident(textZpravy, i))?.id ?? null;
 }
 
-/** Slova, podle kterých trenér mluví o řečech z hospody (spec 9a). Bez diakritiky. */
-const RECI_Z_HOSPODY = ["hospod", "hospud", "kecal", "keca", "vyklad", "reci", "opil", "ozral", "blbost", "neblbni", "nedelej", "vyhroz"] as const;
+/** Začátky slov, podle kterých trenér mluví o řečech z hospody (spec 9a). Bez diakritiky. */
+const RECI_Z_HOSPODY_ZACATKY = ["hospod", "hospud", "kecal", "kecat", "kecas", "vyklada", "opil", "ozral", "blbost", "neblbn", "nedelej", "vyhroz"] as const;
+
+/** Celá slova, podle kterých trenér mluví o řečech z hospody. Krátká na to, aby smělo jít jen o přesnou shodu. */
+const RECI_Z_HOSPODY_SLOVA = new Set(["reci", "keci", "kecy"]);
+
+/** Začátky slov varování/zákazu - spolu s místem činu znamenají narážku na hrozící čin. */
+const VAROVANI_ZACATKY = ["nechod", "nesah", "neber", "nekrad", "nerozbij", "opovaz"] as const;
 
 /**
- * Mluví zpráva o činu, který hráč ohlásil v hospodě? Stačí zmínka o hospodě a řečech,
- * nebo začátek slova o místě činu (sklad, vitrína…). Signál průšvihu tu potřeba není:
- * zpráva jde jen hráči, který čin ohlásil.
+ * Mluví zpráva o činu, který hráč ohlásil v hospodě? Kontroluje se po celých slovech, ne
+ * podřetězcích (viz `jeOtazkaNaIncident`) - jinak by chytla i běžnou řeč, kde je hledaný kmen
+ * jen náhodou uprostřed jiného slova („preciznější" obsahuje „reci", „utopil" obsahuje „opil").
+ * Samotné místo činu (sklad, vitrína…) taky nestačí - z toho samého důvodu jako u
+ * `jeOtazkaNaIncident`: chytalo by běžnou řeč o tom místě. Musí ho doprovázet varování/zákaz.
  */
 export function jeRecOHrozicim(textZpravy: string, kind: string): boolean {
-  const t = normalizuj(textZpravy);
-  if (RECI_Z_HOSPODY.some((s) => t.includes(s))) return true;
-  const slova = t.split(/[^a-z]+/).filter(Boolean);
+  const slova = normalizuj(textZpravy).split(/[^a-z]+/).filter(Boolean);
+  if (slova.some((s) => RECI_Z_HOSPODY_SLOVA.has(s) || RECI_Z_HOSPODY_ZACATKY.some((z) => s.startsWith(z)))) return true;
+  const maVarovani = slova.some((s) => VAROVANI_ZACATKY.some((z) => s.startsWith(z)));
+  if (!maVarovani) return false;
   return (SLOVA_DRUHU[kind] ?? []).some((k) => slova.some((s) => s.startsWith(k)));
 }
 
