@@ -523,7 +523,6 @@ export function scenaOIncidentu(
   };
 }
 
-
 /**
  * Řeči o posledním zápase a o tom, kdo sedí u vedlejšího stolu.
  *

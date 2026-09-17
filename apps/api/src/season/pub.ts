@@ -1368,7 +1368,8 @@ export async function createCoachLedSession(
   if (effectStmts.length > 0) await db.batch(effectStmts).catch((e) => logger.warn({ module: "pub" }, "apply coach-led effects", e));
 
   if (hospoda.seasonNumber !== null) {
-    await zapisHospody(db, { teamId, leagueId: districtRow?.league_id ?? null, gameDate, seasonNumber: hospoda.seasonNumber }, hospoda.zapisy);
+    await zapisHospody(db, { teamId, leagueId: districtRow?.league_id ?? null, gameDate, seasonNumber: hospoda.seasonNumber }, hospoda.zapisy)
+      .catch((e) => logger.warn({ module: "pub" }, "zápis incidentů z návštěvy s trenérem", e));
   }
 
   return { ok: true, attendeesCount: attendees.length, incidentsCount: incidents.length };
@@ -1580,7 +1581,8 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     if (vsechny.length > 0) await db.batch(vsechny).catch((e) => logger.warn({ module: "pub" }, "batch incident effects", e));
 
     if (hospoda.seasonNumber !== null) {
-      await zapisHospody(db, { teamId: team.id, leagueId: team.league_id, gameDate, seasonNumber: hospoda.seasonNumber }, hospoda.zapisy);
+      await zapisHospody(db, { teamId: team.id, leagueId: team.league_id, gameDate, seasonNumber: hospoda.seasonNumber }, hospoda.zapisy)
+        .catch((e) => logger.warn({ module: "pub" }, "zápis incidentů z hospody", e));
     }
 
     created++;
