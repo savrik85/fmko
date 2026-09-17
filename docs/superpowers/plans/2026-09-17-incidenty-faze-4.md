@@ -1853,7 +1853,7 @@ describe("scénáře a incidenty", () => {
 
   it("rodinné scénáře nenabízí porod, dítě ani nemoc", () => {
     for (const id of ["family_problem", "personal_milestone"]) {
-      expect(getScenarioById(id)?.description ?? "").not.toMatch(/narozen|dítě|nemoc/);
+      expect(getScenarioById(id)?.description ?? "").not.toMatch(/narozen[íá]|dítě|nemoc/);
     }
   });
 });
