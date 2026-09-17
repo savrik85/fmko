@@ -1,9 +1,12 @@
 /**
  * Pozná, že se trenér hráče ptá na incident (spec 7a). Čisté funkce.
  *
- * Obecná slova (krádež, zloděj, kamera…) se hledají kdekoli v textu, protože se skloňují
- * i předponami („ukradl", „vykradli"). Slova konkrétního incidentu (místo, co zmizelo nebo
- * se rozbilo) jen jako začátek slova, aby „dres" nechytil kdejaké slovo s tou slabikou.
+ * Obecná slova (krádež, zloděj, kamera…) stačí sama a hledají se kdekoli v textu, protože se
+ * skloňují i předponami („ukradl", „vykradli"). Kmeny konkrétního incidentu (místo, co zmizelo
+ * nebo se rozbilo) se počítají jen spolu se signálem průšvihu v téže zprávě (zmizel, rozbi…,
+ * nebo samostatné slovo „kdo") - jinak by chytaly běžnou řeč trenéra („sraz v kabině v pět",
+ * „zítra brankářský trénink"). Kmen musí i tak sedět na začátek slova, aby „dres" nechytil
+ * kdejaké slovo s tou slabikou.
  */
 
 import { CATEGORY_LABELS } from "../equipment/equipment-generator";
@@ -16,8 +19,11 @@ export function normalizuj(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-/** Bez diakritiky, malými písmeny. */
-const OBECNA_SLOVA = ["krad", "zlodej", "zmizel", "vloup", "kdo to byl", "kdo to udelal", "kamer", "polici"] as const;
+/** Bez diakritiky, malými písmeny. Tahle sama stačí, ostatní jen se signálem průšvihu. */
+const OBECNA_SLOVA = ["krad", "zlodej", "vloup", "kdo to byl", "kdo to udelal", "kamer", "polici"] as const;
+
+/** Podřetězce, které spolu s kmenem věci nebo místa znamenají průšvih, ne běžnou řeč. */
+const SIGNAL_PRUSVIHU = ["zmizel", "rozbi", "rozmlat", "znic", "poskod", "prusvih", "vykop", "spal"] as const;
 
 /** Začátky slov podle druhu incidentu: kde se to stalo a co se tam dělo. */
 const SLOVA_DRUHU: Record<string, readonly string[]> = {
@@ -55,6 +61,8 @@ export function jeOtazkaNaIncident(textZpravy: string, incident: { kind: string;
   const t = normalizuj(textZpravy);
   if (OBECNA_SLOVA.some((s) => t.includes(s))) return true;
   const slova = t.split(/[^a-z]+/).filter(Boolean);
+  const maSignalPrusvihu = SIGNAL_PRUSVIHU.some((s) => t.includes(s)) || slova.includes("kdo");
+  if (!maSignalPrusvihu) return false;
   const kmeny = [...(SLOVA_DRUHU[incident.kind] ?? []), ...incident.ztraty.flatMap(kmenyZtraty)];
   return kmeny.some((k) => slova.some((s) => s.startsWith(k)));
 }
