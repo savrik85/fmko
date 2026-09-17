@@ -3,7 +3,7 @@ import { createRng } from "../generators/rng";
 import { hrac, PROBLEMOVY } from "./testovaci-stav";
 import type { Stopa } from "./typy";
 import {
-  dostupneAkce, nactiObvineni, rozhodniObvineni, sancePolicie, sancePriznani, stavVysetrovani,
+  dostupneAkce, lzeVyslychat, nactiObvineni, rozhodniObvineni, sancePolicie, sancePriznani, stavVysetrovani,
   stopaNaHrace, vysledekPolicie, type IncidentProAkce,
 } from "./vysetrovani";
 
@@ -111,5 +111,15 @@ describe("dostupné akce", () => {
     expect(dostupneAkce({ ...zaklad, status: "policie" })).toEqual(nic);
     expect(dostupneAkce({ ...zaklad, status: "uzavreny" })).toEqual(nic);
     expect(dostupneAkce({ ...zaklad, category: "zivotni" })).toEqual(nic);
+  });
+});
+
+describe("výslech jde", () => {
+  it("u nevyřešené krádeže nebo poškození i během šetření policie, ne po odhalení", () => {
+    expect(lzeVyslychat({ status: "otevreny", category: "kradez", odhalen: false })).toBe(true);
+    expect(lzeVyslychat({ status: "policie", category: "poskozeni", odhalen: false })).toBe(true);
+    expect(lzeVyslychat({ status: "otevreny", category: "kradez", odhalen: true })).toBe(false);
+    expect(lzeVyslychat({ status: "uzavreny", category: "kradez", odhalen: false })).toBe(false);
+    expect(lzeVyslychat({ status: "otevreny", category: "zivotni", odhalen: false })).toBe(false);
   });
 });

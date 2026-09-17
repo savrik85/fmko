@@ -51,6 +51,11 @@ export async function herniDatum(db: D1Database, teamId: string): Promise<string
   return r?.game_date ?? null;
 }
 
+/** Pozdější ze dvou herních dat ISO; `null` znamená žádné. */
+export function pozdejsi(a: string | null, b: string): string {
+  return a && a > b ? a : b;
+}
+
 export interface HracKadru extends HracKlubu {
   krestni: string;
   prijmeni: string;

@@ -100,6 +100,13 @@ export function dostupneAkce(i: IncidentProAkce): DostupneAkce {
   };
 }
 
+/** Ptát se hráčů (výslech, spec 7a) jde, dokud je krádež nebo poškození nevyřešené, i když šetří policie. */
+export function lzeVyslychat(i: Pick<IncidentProAkce, "status" | "category" | "odhalen">): boolean {
+  return (i.status === "otevreny" || i.status === "policie")
+    && (i.category === "kradez" || i.category === "poskozeni")
+    && !i.odhalen;
+}
+
 export function nactiObvineni(raw: unknown): Obvineni[] {
   if (typeof raw !== "string" || raw === "") return [];
   try {

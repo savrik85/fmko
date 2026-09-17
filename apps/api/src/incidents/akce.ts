@@ -16,7 +16,7 @@ import { recordTransaction } from "../season/finance-processor";
 import { removePlayer } from "../transfers/remove-player";
 import { denPlus, prikazAbsence } from "./absence-hracu";
 import { posunHrace, posunKadru, posunKamaradu } from "./hraci";
-import { herniDatum, jeRecidivista, nactiHraceKadru, nactiIncident, proAkce } from "./incident-db";
+import { herniDatum, jeRecidivista, nactiHraceKadru, nactiIncident, pozdejsi, proAkce } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
 import {
   LHUTA_PO_ODHALENI_DNI, OBVINENI_PAMET_DNI, POLICIE_DNI_MAX, POLICIE_DNI_MIN, SMS_ROLE_POLICIE, SRAZKA_TYDNU,
@@ -37,10 +37,6 @@ export type VysledekAkce<T extends object = object> =
 
 const NENALEZENO = { ok: false, kod: 404, chyba: "Incident nenalezen" } as const;
 const ZMENENO = { ok: false, kod: 409, chyba: "Incident se mezitím změnil, načti ho znovu" } as const;
-
-function pozdejsi(a: string | null, b: string): string {
-  return a && a > b ? a : b;
-}
 
 /** Atribut trenéra za rozhodnutí o incidentu. Selhání se zaloguje, akci nezvrací. */
 async function atributTrenera(

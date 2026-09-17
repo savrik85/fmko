@@ -285,6 +285,11 @@ export const TEXTY = {
   znalost_pachatel: [
     "Tohle jsi udělal ty: {nazev}.",
   ],
+  stopa_priznani_vyslech: [
+    "{hrac} se trenérovi přiznal v rozhovoru.",
+    "{hrac} to trenérovi v SMS sám přiznal.",
+    "{hrac} se při rozhovoru s trenérem ke všemu přiznal.",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type KlicTextu = keyof typeof TEXTY;
