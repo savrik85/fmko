@@ -43,14 +43,14 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   const stav = await nactiStavKlubu(env.DB, { id: teamId, league_id: (team.league_id as string | null) ?? null }, gameDate, sezona.number);
   if (!stav) return;
 
+  // Konec životních situací a propadlé lhůty na zálohu běží každý den, bez ohledu na hrozící činy (spec 6b kroky 3–4).
+  await ukonciSituace(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "konec situací", e));
+  await propadleZalohy(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "propadlé zálohy", e));
+
   // Činy ohlášené v hospodě, kterým vypršela lhůta (spec 9a). Stal-li se některý, dnes se nový problém nelosuje.
   const splneno = await vyhodnotHrozici(env, stav)
     .catch((e) => { logger.warn({ module: M, teamId }, "hrozící činy", e); return 0; });
   if (splneno > 0) return;
-
-  // Konec životních situací a propadlé lhůty na zálohu (spec 6b krok 4).
-  await ukonciSituace(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "konec situací", e));
-  await propadleZalohy(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "propadlé zálohy", e));
 
   const rng = createRng(seedFromString(`incident|${teamId}|${stav.den}`));
   const navrh = vylosujIncident(stav, rng);
