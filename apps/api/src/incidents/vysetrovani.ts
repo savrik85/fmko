@@ -62,9 +62,14 @@ export type VysledekPolicie = "neuspech" | "podminka" | "odhalen_hrac" | "dopade
 /**
  * Co policie zjistila. `los` je první číslo z `createRng(seedFromString("policie|" + id))`.
  * Udání odhaleného hráče uspěje vždy. Zaměstnance jako pachatele ve fázi 2 policie nedopadne.
+ * Přizná-li se hráč v chatu, zatímco šetří policie (`odhalen`), výslech uspěje bez ohledu na
+ * los - jinak by mohla přijít SMS "pachatele se nepodařilo zjistit" o hráči, který se přiznal.
  */
-export function vysledekPolicie(opts: { udani: boolean; pachatel: TypPachatele | null; sance: number; los: number }): VysledekPolicie {
+export function vysledekPolicie(
+  opts: { udani: boolean; pachatel: TypPachatele | null; sance: number; los: number; odhalen: boolean },
+): VysledekPolicie {
   if (opts.udani) return "podminka";
+  if (opts.pachatel === "hrac" && opts.odhalen) return "odhalen_hrac";
   if (opts.los >= opts.sance) return "neuspech";
   if (opts.pachatel === "hrac") return "odhalen_hrac";
   if (opts.pachatel === "cizi") return "dopaden_cizi";

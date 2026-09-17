@@ -74,12 +74,16 @@ describe("policie", () => {
   });
 
   it("výsledek podle udání, losu a pachatele", () => {
-    expect(vysledekPolicie({ udani: true, pachatel: "hrac", sance: 0, los: 0.99 })).toBe("podminka");
-    expect(vysledekPolicie({ udani: false, pachatel: "hrac", sance: 0.3, los: 0.3 })).toBe("neuspech");
-    expect(vysledekPolicie({ udani: false, pachatel: "hrac", sance: 0.3, los: 0.29 })).toBe("odhalen_hrac");
-    expect(vysledekPolicie({ udani: false, pachatel: "cizi", sance: 0.3, los: 0.1 })).toBe("dopaden_cizi");
-    expect(vysledekPolicie({ udani: false, pachatel: "nikdo", sance: 0.3, los: 0.1 })).toBe("nehoda");
-    expect(vysledekPolicie({ udani: false, pachatel: "zamestnanec", sance: 0.3, los: 0.1 })).toBe("neuspech");
+    expect(vysledekPolicie({ udani: true, pachatel: "hrac", sance: 0, los: 0.99, odhalen: false })).toBe("podminka");
+    expect(vysledekPolicie({ udani: false, pachatel: "hrac", sance: 0.3, los: 0.3, odhalen: false })).toBe("neuspech");
+    expect(vysledekPolicie({ udani: false, pachatel: "hrac", sance: 0.3, los: 0.29, odhalen: false })).toBe("odhalen_hrac");
+    expect(vysledekPolicie({ udani: false, pachatel: "cizi", sance: 0.3, los: 0.1, odhalen: false })).toBe("dopaden_cizi");
+    expect(vysledekPolicie({ udani: false, pachatel: "nikdo", sance: 0.3, los: 0.1, odhalen: false })).toBe("nehoda");
+    expect(vysledekPolicie({ udani: false, pachatel: "zamestnanec", sance: 0.3, los: 0.1, odhalen: false })).toBe("neuspech");
+  });
+
+  it("hráč, který se v chatu přiznal během šetření, uspěje bez ohledu na los", () => {
+    expect(vysledekPolicie({ udani: false, pachatel: "hrac", sance: 0.9, los: 0.99, odhalen: true })).toBe("odhalen_hrac");
   });
 });
 

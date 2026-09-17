@@ -110,7 +110,7 @@ export async function vyhodnotPolicii(env: Bindings, t: Den): Promise<number> {
 
     const vysledek = vysledekPolicie({
       udani: inc.resolution === "policie", pachatel: inc.culprit_type,
-      sance: sancePolicie(stopy, policista !== null), los,
+      sance: sancePolicie(stopy, policista !== null), los, odhalen: inc.culprit_revealed === 1,
     });
     const nazev = nazevIncidentu(inc.kind);
     const hrac = [inc.first_name, inc.last_name].filter(Boolean).join(" ") || "hráč z kádru";

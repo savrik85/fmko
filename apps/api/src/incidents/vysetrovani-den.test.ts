@@ -99,6 +99,16 @@ describe("výsledek policie", () => {
     ]);
   });
 
+  it("hráč, který se přiznal v chatu během šetření, uspěje i s nepříznivým losem", async () => {
+    const id = idSLosem((los) => los >= 0.95);
+    const inc = { ...incidentRadek({ id, status: "policie", culprit_revealed: 1, police_result_on: DNES }), first_name: "Pepa", last_name: "Průšvih" };
+    const { db, env } = prostredi([{ sql: SETRENI, all: [inc] }]);
+    expect(await vyhodnotPolicii(env, T)).toBe(1);
+    const prechod = db.dotazy.find((d) => /SET status = 'otevreny', police_success = 1, culprit_revealed = 1, deadline = \?/.test(d.sql));
+    expect(prechod?.params).toEqual(["2026-09-23T16:00:00.000Z", id]);
+    expect(vi.mocked(sendSystemSMS).mock.calls[0][3]).toContain("Pepa Průšvih");
+  });
+
   it("když přechod mezitím proběhl, nic se neoznámí", async () => {
     const inc = { ...incidentRadek({ status: "policie", culprit_revealed: 1, resolution: "policie", police_result_on: DNES }), first_name: "Pepa", last_name: "Průšvih" };
     const { env } = prostredi([
