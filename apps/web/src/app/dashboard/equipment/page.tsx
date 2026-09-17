@@ -199,6 +199,21 @@ function EquipmentPage() {
     setActing(null);
   };
 
+  const handleReport = async (l: BazarListing) => {
+    if (!teamId || acting) return;
+    const ok = await confirm({
+      title: "Nahlásit inzerát policii?",
+      description: "Inzerát hned zmizí z bazaru a policie ho přidá k vyšetřování krádeže. Když pachatele najde, cizí zloděj věci vrátí a hráč z kádru se odhalí. Policie řeší jednu krádež jen jednou.",
+      details: [{ label: "Vybavení", value: `${l.categoryLabel}, úroveň ${l.level}`, color: "text-muted" }],
+      confirmLabel: "Nahlásit policii",
+    });
+    if (!ok) return;
+    setActing("n-" + l.id);
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/equipment-market/${l.id}/nahlasit`, { method: "POST" }),
+      "Nahlášení se nezdařilo")) await refreshAll();
+    setActing(null);
+  };
+
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!data || !team) return <div className="page-container">Data nenalezena.</div>;
 
@@ -266,6 +281,7 @@ function EquipmentPage() {
           busy={acting}
           onBuy={handleBuy}
           onWithdraw={handleWithdraw}
+          onReport={handleReport}
         />
       ) : (
         <>

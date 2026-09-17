@@ -15,6 +15,7 @@ interface Props {
   busy: string | null;
   onBuy: (listing: BazarListing) => void;
   onWithdraw: (listing: MyListing) => void;
+  onReport: (listing: BazarListing) => void;
 }
 
 type Sort = "cheapest" | "best_condition" | "biggest_saving";
@@ -25,7 +26,7 @@ const SORTS: Array<[Sort, string]> = [
   ["biggest_saving", "Největší úspora"],
 ];
 
-export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw }: Props) {
+export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onReport }: Props) {
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [sort, setSort] = useState<Sort>("cheapest");
 
@@ -137,7 +138,9 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw }: Pro
                   // Virtuální klub ze sousedního okresu — nemá stránku, na kterou odkázat.
                   <span className="font-heading font-bold text-ink">{l.teamName}</span>
                 )}
-                {l.isAiListing && <span className="text-xs"> · z okolí</span>}
+                {l.isPrivateListing
+                  ? <span className="text-sm"> · soukromý inzerát</span>
+                  : l.isAiListing && <span className="text-xs"> · z okolí</span>}
               </div>
 
               {/* Stav je hlavní rozhodovací informace — proto nahoře a velký. */}
@@ -152,6 +155,20 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw }: Pro
               </div>
 
               {l.effect && <div className="text-sm text-pitch-600 mb-3">{l.effect}</div>}
+
+              {l.vypadaJakoVase && (
+                <div className="mb-3 rounded-soft bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                  Vypadá to jako vaše ukradené vybavení: {l.categoryLabel}.
+                  {l.incidentId && (
+                    <>
+                      {" "}
+                      <Link href={`/dashboard/incidenty?id=${encodeURIComponent(l.incidentId)}`} className="font-heading font-bold underline">
+                        Otevřít incident
+                      </Link>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="mt-auto space-y-1">
                 <div className="text-base font-heading font-bold tabular-nums">{formatCZK(l.price)}</div>
@@ -183,6 +200,16 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw }: Pro
                       {busy === `b-${l.id}` ? "..." : !l.canBuy ? (l.blockReason ?? "Nedostupné") : !affordable ? "Nedostatek peněz" : "Koupit"}
                     </button>
                   )}
+
+                {l.vypadaJakoVase && (
+                  <button
+                    onClick={() => onReport(l)}
+                    disabled={!!busy}
+                    className="w-full mt-2 py-2 rounded-soft text-sm font-heading font-bold border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+                  >
+                    {busy === `n-${l.id}` ? "..." : "Nahlásit policii"}
+                  </button>
+                )}
 
                 <div className="text-xs text-muted pt-1">{daysLeft(l.expiresAt)}</div>
               </div>

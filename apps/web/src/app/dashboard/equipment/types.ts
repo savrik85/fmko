@@ -57,6 +57,11 @@ export interface BazarListing {
   price: number; expiresAt: string;
   myLevel: number; shopPrice: number; savings: number; repairCostAfterBuy: number;
   canBuy: boolean; blockReason: string | null; lockDetail: LockDetailData | null;
+  /** Soukromý inzerát: kradené zboží, prodává ho soukromník (incidenty). */
+  isPrivateListing: boolean;
+  /** Jen okradenému klubu a jen u poznatelného zboží: vypadá to jako jeho ukradené vybavení. */
+  vypadaJakoVase: boolean;
+  incidentId: string | null;
 }
 
 export interface MyListing {
