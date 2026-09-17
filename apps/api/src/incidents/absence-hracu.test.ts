@@ -125,6 +125,36 @@ describe("vlivy životních situací", () => {
     // Zápas a kabina čtou vliv bez odstupu.
     expect(druhyHracu([situace("dluhy", { game_date: "2026-09-16T16:00:00.000Z" })], dnes, 0).get("s")).toEqual(["dluhy"]);
   });
+
+  describe("zřetězená ztráta práce (spec 4c)", () => {
+    // `zretezDluhy` uzavře zdrojovou ztrátu práce, ale nešahá na `ends_on` (rozešel by se los).
+    // Obě situace tak chvíli běží datovým oknem vedle sebe a bez potlačení by se jejich vliv
+    // na trénink (`TRENINK_SITUACE`) přesně vyrušil.
+
+    it("dá hráči jen dluhy, ztrátu práce potlačí", () => {
+      const ztrataPrace = situace("prisel_o_praci", { id: "inc-1" });
+      const dluhy = situace("dluhy", { id: "inc-1-dluhy" });
+      expect(druhyHracu([ztrataPrace, dluhy], dnes).get("s")).toEqual(["dluhy"]);
+    });
+
+    it("bez zřetězení působí ztráta práce dál", () => {
+      expect(druhyHracu([situace("prisel_o_praci", { id: "inc-1" })], dnes).get("s")).toEqual(["prisel_o_praci"]);
+    });
+
+    it("potlačení platí, jen dokud je dluhová situace taky v okně zápasu", () => {
+      const ztrataPrace = situace("prisel_o_praci", { id: "inc-1" });
+      const skonceneDluhy = situace("dluhy", { id: "inc-1-dluhy", ends_on: "2026-09-16" });
+      expect(druhyHracu([ztrataPrace, skonceneDluhy], dnes).get("s")).toEqual(["prisel_o_praci"]);
+    });
+
+    it("dluhy jiného zdroje ztrátu práce nepotlačí, počítá se přesná shoda id, ne podřetězec", () => {
+      const ztrataPrace = situace("prisel_o_praci", { id: "inc-1", subject_player_id: "s1" });
+      const cizihoZdroje = situace("dluhy", { id: "inc-11-dluhy", subject_player_id: "s2" });
+      const mapa = druhyHracu([ztrataPrace, cizihoZdroje], dnes);
+      expect(mapa.get("s1")).toEqual(["prisel_o_praci"]);
+      expect(mapa.get("s2")).toEqual(["dluhy"]);
+    });
+  });
 });
 
 describe("los omluvenek se situací se nerozejde", () => {
@@ -169,6 +199,23 @@ describe("los omluvenek se situací se nerozejde", () => {
     for (let seed = 1; seed <= 50; seed++) {
       expect(losuj(seed, [uzavrena])).toEqual(losuj(seed, [bezici]));
     }
+  });
+
+  it("zřetězená ztráta práce dá týž los jako čisté dluhy, nesčítá se navíc", () => {
+    // Zdrojová ztráta práce (spec 4c) běží dál datovým oknem vedle nové dluhové situace.
+    // Bez potlačení by kádr dostal oba druhy vlivu a los by se od pouhých dluhů lišil.
+    const dluhy = situaceHrace({ id: "inc-1-dluhy" });
+    const zretezenaZtrataPrace = situaceHrace({ id: "inc-1", kind: "prisel_o_praci" });
+    for (let seed = 1; seed <= 50; seed++) {
+      expect(losuj(seed, [zretezenaZtrataPrace, dluhy])).toEqual(losuj(seed, [dluhy]));
+    }
+  });
+
+  it("ztráta práce bez zřetězení do losu dál zasahuje", () => {
+    const ztrataPrace = situaceHrace({ id: "inc-1", kind: "prisel_o_praci" });
+    const zmeny = Array.from({ length: 200 }, (_, i) => i + 1)
+      .filter((seed) => JSON.stringify(losuj(seed, [ztrataPrace])) !== JSON.stringify(losuj(seed, [])));
+    expect(zmeny.length).toBeGreaterThan(0);
   });
 });
 

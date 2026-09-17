@@ -41,6 +41,15 @@ export interface RadekAbsence {
 /** Situace, které mění docházku, výmluvy nebo zápas. Svatba a narození dítěte jdou přes absence, ne přes vliv. */
 const SITUACE_S_VLIVEM: ReadonlySet<string> = new Set(["dluhy", "prisel_o_praci", "rozvod", "zabaveny_ridicak"]);
 
+/**
+ * Id dluhové situace zřetězené ze ztráty práce (`zretezDluhy` v situace-db.ts). Zdrojová
+ * ztráta práce se při zřetězení uzavře, ale `ends_on` zůstává netknuté (jinak by se rozešel
+ * los omluvenek, viz `druhyHracu`), takže obě situace chvíli běží datovým oknem vedle sebe.
+ */
+export function dluhyZretezenaId(zdrojId: string): string {
+  return `${zdrojId}-dluhy`;
+}
+
 export interface IncidentProVliv {
   culprit_player_id: string | null;
   culprit_revealed: number;
@@ -54,6 +63,12 @@ export interface IncidentProVliv {
   kind?: string;
   subject_player_id?: string | null;
   ends_on?: string | null;
+  /**
+   * Deterministické id řádku (`inc-<tym>-<kind>-<den>`, u dluhů zřetězených ze ztráty práce
+   * `<id zdroje>-dluhy`, viz `dluhyZretezenaId`). Neměnný sloupec jako `game_date` nebo
+   * `ends_on` — čte se jen kvůli zřetězení, `status` se pořád nečte (viz výš).
+   */
+  id?: string;
 }
 
 export interface IncidentniKontext {
@@ -114,6 +129,12 @@ export function platneAbsence(radky: readonly RadekAbsence[], den: string): Map<
  * zápasem a `ends_on` sahající aspoň do dne zápasu. Na `status` se schválně nekouká — řádek,
  * který `ukonciSituace` v den zápasu uzavřel, musí pro tenhle zápas počítat pořád stejně,
  * jako počítal v losu den předem.
+ *
+ * Zřetězené dluhy (`zretezDluhy`) jsou výjimka: zdrojová ztráta práce se uzavře, ale její
+ * datové okno běží dál (viz výš), takže by chvíli platila vedle nové dluhové situace a jejich
+ * vlivy na trénink (`TRENINK_SITUACE`, +0,15 a -0,15) by se přesně vyrušily. Ztráta práce se
+ * proto potlačí, jakmile je v okně i její dluhová situace — poznaná podle odvozeného id
+ * (`dluhyZretezenaId`), ne podle statusu, takže los pořád zůstává čistou funkcí data zápasu.
  */
 export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string, minOdstup = 0): Map<string, DruhVlivu[]> {
   const mapa = new Map<string, DruhVlivu[]>();
@@ -126,6 +147,14 @@ export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string,
     const dny = dnyMezi(den, datum);
     return dny >= minDny && dny <= VLIV_INCIDENTU_DNI;
   };
+  const situaceVOkne = (inc: IncidentProVliv) =>
+    !!inc.subject_player_id && !!inc.kind && SITUACE_S_VLIVEM.has(inc.kind)
+    && dnyMezi(inc.game_date, datum) >= minOdstup
+    && (!inc.ends_on || inc.ends_on.slice(0, 10) >= datum.slice(0, 10));
+
+  // Id dluhových situací aktuálně v okně, aby zřetězená ztráta práce nedala vliv navíc.
+  const dluhyVOkne = new Set(incidenty.filter((i) => i.id && i.kind === "dluhy" && situaceVOkne(i)).map((i) => i.id as string));
+
   for (const inc of incidenty) {
     for (const o of nactiObvineni(inc.accused)) {
       if (o.vysledek === "zapira" && vOkne(o.den, minOdstup)) pridej(o.playerId, "obvineny");
@@ -133,9 +162,8 @@ export function druhyHracu(incidenty: readonly IncidentProVliv[], datum: string,
     if (inc.culprit_revealed === 1 && inc.culprit_player_id && vOkne(inc.game_date, 0)) pridej(inc.culprit_player_id, "pachatel");
 
     // Životní situace působí, dokud běží datové okno, ne podle okna od vzniku (spec 4c).
-    if (inc.subject_player_id && inc.kind && SITUACE_S_VLIVEM.has(inc.kind)
-      && dnyMezi(inc.game_date, datum) >= minOdstup
-      && (!inc.ends_on || inc.ends_on.slice(0, 10) >= datum.slice(0, 10))) {
+    if (inc.subject_player_id && inc.kind && situaceVOkne(inc)) {
+      if (inc.kind === "prisel_o_praci" && inc.id && dluhyVOkne.has(dluhyZretezenaId(inc.id))) continue;
       pridej(inc.subject_player_id, inc.kind as DruhVlivu);
     }
   }
@@ -232,10 +260,13 @@ export async function nactiIncidentniAbsence(db: D1Database, teamId: string, dat
  * Vlivy incidentů ke dni `datum`. Situace se berou datovým oknem (`ends_on` sahá aspoň do dne
  * zápasu), ne podle `status`: kdyby se filtrovalo stavem, situace uzavřená v den zápasu by
  * zmizela z losu, který ji den předem ještě počítal, a rozešly by se celé omluvenky.
+ *
+ * `id` se čte navíc, aby `druhyHracu` poznal ztrátu práce zřetězenou do dluhů (`dluhyZretezenaId`) —
+ * je to neměnný sloupec jako `game_date`, žádné nové čtení stavu.
  */
 export async function nactiDruhyHracu(db: D1Database, teamId: string, datum: string, minOdstup = 0): Promise<Map<string, DruhVlivu[]>> {
   const rows = await db.prepare(
-    `SELECT culprit_player_id, culprit_revealed, accused, game_date, kind, subject_player_id, ends_on
+    `SELECT id, culprit_player_id, culprit_revealed, accused, game_date, kind, subject_player_id, ends_on
        FROM club_incidents
       WHERE team_id = ?1 AND (
         (game_date >= ?2 AND (accused != '[]' OR culprit_revealed = 1))

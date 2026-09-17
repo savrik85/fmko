@@ -16,7 +16,7 @@ import { getOrCreatePlayerConversation } from "../messaging/ai-player-spawn";
 import { sendPlayerSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import type { VysledekAkce } from "./akce";
-import { denPlus, prikazAbsence } from "./absence-hracu";
+import { denPlus, dluhyZretezenaId, prikazAbsence } from "./absence-hracu";
 import { idIncidentu, zapisIncident } from "./dopady";
 import { posunHrace } from "./hraci";
 import { herniDatum, nactiIncident, smsIncidentu } from "./incident-db";
@@ -163,7 +163,7 @@ export async function zretezDluhy(env: Bindings, stav: StavKlubu): Promise<boole
       culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
       subjectPlayerId: hrac.id, dniTrvani: def.trvani(rng), ztraty: [],
       text: text(rng, "situace_dluhy", { hrac: hrac.jmeno }),
-    }, `${r.id}-dluhy`);
+    }, dluhyZretezenaId(r.id));
     if (id) {
       // Jeden hráč, jedna situace (spec 4c): ztráta práce, ze které dluhy vzešly, končí, ať
       // po ní na hráči nezůstane druhý slot a klubový limit i mapa `situace` sedí.
