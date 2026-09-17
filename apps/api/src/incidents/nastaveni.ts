@@ -46,6 +46,8 @@ export const BONUS_POLICIE = {
   soused: 0.15,
   spravceCizi: 0.15,
   svedek: 0.1,
+  /** Poznaný inzerát s kradeným zbožím (spec 7c, 8). */
+  bazar: 0.3,
 } as const;
 export const SRAZKA_TYDNU = 4;
 export const POKUTA_STROP_KC = 5000;
@@ -85,3 +87,15 @@ export const ZNALOST_PO_UZAVRENI_DNI = 7;
 export const MAX_INCIDENTU_V_PROMPTU = 3;
 /** Ochota říct trenérovi, co ví (0–100). Kamarád kryje, rival rád práskne (spec 5b), svědek je mezi. */
 export const OCHOTA_ROLE = { svedek: [40, 70], kamarad: [10, 25], rival: [60, 80] } as const;
+
+/** Bazar (spec Část 8). */
+/** Krádeže, jejichž lup se dá prodat v bazaru. */
+export const PRODEJNE_KRADEZE = ["vloupani_sklad", "vitrina", "dodavka_ukradena", "kradez_kamery"] as const;
+/** Šance, že zloděj věci zkusí prodat v bazaru ligy. Zbytek prodá jinde. */
+export const SANCE_BAZARU = 0.6;
+export const BAZAR_DNI_MIN = 1;
+export const BAZAR_DNI_MAX = 5;
+/** Kradené jde levněji než běžná nabídka, nikdy ale pod výkup zastavárny. */
+export const SLEVA_KRADENEHO = 0.55;
+/** Soukromý inzerát vydrží jako lidský inzerát, v reálných dnech. */
+export const KRADENE_INZERAT_DNI = 7;

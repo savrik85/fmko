@@ -295,6 +295,31 @@ export const TEXTY = {
     "Ještě k tomu obvinění, trenére: {nazev}. Mrzí mě, že si to o mně myslíte.",
     "Trenére, kvůli tomu obvinění jsem v noci nespal: {nazev}. Fakt jsem to nebyl já.",
   ],
+  bazar_poznano: [
+    "V bazaru je vybavení, které vypadá jako naše: {vec}. Dá se koupit zpátky, nebo to nahlásit policii.",
+    "Na inzerátu v bazaru jsou věci, které vypadají jako ty naše ukradené: {vec}.",
+    "Někdo v bazaru prodává vybavení, které se podobá našemu: {vec}. Stojí za to se podívat.",
+  ],
+  stopa_bazar: [
+    "V bazaru se objevilo vybavení, které vypadá jako naše: {vec}.",
+    "Na soukromém inzerátu v bazaru jsou věci, které vypadají jako naše: {vec}.",
+    "Kradené věci se nejspíš objevily v bazaru: {vec}.",
+  ],
+  bazar_vraceno: [
+    "Věci jsou zpátky v klubu: {vec}.",
+    "Koupili jsme zpátky, co nám ukradli: {vec}.",
+    "Vybavení z bazaru je zase naše: {vec}.",
+  ],
+  bazar_koupil_jiny: [
+    "Vybavení z bazaru, které vypadalo jako naše, koupil klub: {klub}.",
+    "Věci, které vypadaly jako naše, si z bazaru odvezl klub: {klub}.",
+    "Inzerát s věcmi podobnými našim už je pryč, koupil je klub: {klub}.",
+  ],
+  policie_bazar: [
+    "Inzerát jsme zajistili a přidali k šetření: {vec}.",
+    "Zboží z bazaru je zajištěné a patří k probíhajícímu šetření: {vec}.",
+    "Inzerát je stažený, věci prověříme v rámci šetření: {vec}.",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type KlicTextu = keyof typeof TEXTY;
