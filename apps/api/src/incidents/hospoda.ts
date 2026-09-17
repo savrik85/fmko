@@ -424,14 +424,16 @@ function kdoOhlasi(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHosp
   for (const h of mistni) {
     const hrac = k.kadr.get(h.playerId);
     if (!hrac || k.hrozi.has(h.playerId)) continue;
-    // Kdo zapřel obvinění nebo dostal košem u zálohy, má důvod mluvit hloupě.
-    const obvineny = zapreneObvineni(k, h.playerId) !== null || k.odmitnuteZalohy.has(h.playerId);
+    // Jen skutečně zapřené obvinění dělá z hráče „obviněného": to jediné odemyká kopnuté
+    // dveře a jejich text o obvinění (spec 9a). Odmítnutá záloha ho jen rozmrzí bez obvinění.
+    const obvineny = zapreneObvineni(k, h.playerId) !== null;
+    const maDuvodBezVahy = obvineny || k.odmitnuteZalohy.has(h.playerId);
     if (v.ohlasi !== undefined) {
       if (v.ohlasi === h.playerId) return { playerId: h.playerId, obvineny };
       continue;
     }
     if (h.alkohol < OHLASUJE_ALKOHOL) continue;
-    if (!obvineny && vahaPachatele(hrac) < PRAH_VAHY_PACHATELE) continue;
+    if (!maDuvodBezVahy && vahaPachatele(hrac) < PRAH_VAHY_PACHATELE) continue;
     if (vyjde(los(k, "ohlasuje", h.playerId), OHLASUJE_SANCE, v)) return { playerId: h.playerId, obvineny };
   }
   return null;
@@ -442,7 +444,8 @@ function drbyDoCizichKlubu(k: KontextHospody, hoste: readonly HostHospody[], pri
   const zapisy: ZapisHospody[] = [];
   for (const id of new Set(pribehy.map((p) => p.incidentId))) {
     const inc = k.incidenty.find((i) => i.id === id);
-    if (!inc) continue;
+    // Životní situace nejsou průšvih (spec): nemá se roznášet jako drb do cizích klubů.
+    if (!inc || inc.category === "zivotni") continue;
     // Jen veřejný fakt: název klubu a co se stalo, nikdy jméno neodhaleného pachatele.
     const fact = vypln(TEXTY.znalost_drb[0], { klub: k.nazevKlubu, nazev: nazevIncidentu(inc.kind) });
     for (const h of zvenku) {

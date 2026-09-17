@@ -274,6 +274,20 @@ describe("drb do cizích klubů", () => {
   it("bez příhody žádný drb", () => {
     expect(pribehyHospody([host(KAMARAD), CIZI], kontext(), JISTE).zapisy).toEqual([]);
   });
+
+  it("životní situace (např. pití na sekeru) se do cizích klubů nedrbe", () => {
+    // `k.incidenty` může situaci obsahovat (dotaz v hospoda-db.ts kategorii nefiltruje),
+    // ale drb ze životní situace není: není to průšvih.
+    const situace = incident({
+      id: "inc-dluhy-s", kind: "dluhy", category: "zivotni", culpritType: null, culpritPlayerId: null, ztraty: [],
+    });
+    const k = kontext({
+      incidenty: [situace], situace: new Map([[SVEDEK.id, "dluhy"]]), idSituaci: new Map([[SVEDEK.id, "inc-dluhy-s"]]),
+    });
+    const r = pribehyHospody([host(SVEDEK), CIZI], k, JISTE);
+    expect(r.pribehy.some((p) => p.type === "pije_na_sekeru" && p.incidentId === "inc-dluhy-s")).toBe(true);
+    expect(r.zapisy.filter((z) => z.typ === "drb")).toEqual([]);
+  });
 });
 
 describe("co už dnes zaznělo, se nezopakuje", () => {
@@ -298,10 +312,15 @@ describe("dluhy v hospodě", () => {
     expect(pribehyHospody([host(SVEDEK)], kontext(), JISTE).pribehy.filter((p) => p.type === "pije_na_sekeru")).toEqual([]);
   });
 
-  it("hráč s odmítnutou zálohou smí ohlásit čin i bez povahy pachatele", () => {
+  it("hráč s odmítnutou zálohou smí ohlásit čin i bez povahy pachatele, ale nikoho neobviňuje", () => {
     const svaty = hrac({ id: "x", jmeno: "Jan Svatý", alkohol: 90, disciplina: 95, vernost: 95, vztahKTrenerovi: 90 });
     const k = kontext({ kadr: new Map([[svaty.id, svaty]]), situace: new Map([[svaty.id, "dluhy"]]), odmitnuteZalohy: new Set([svaty.id]) });
-    expect(pribehyHospody([host(svaty)], k, JISTE).ohlaseni).toEqual({ playerId: "x", obvineny: true });
+    const ohlaseni = pribehyHospody([host(svaty)], k, JISTE).ohlaseni;
+    // Odmítnutá záloha ho namíchne, ale nikdo ho z ničeho neobvinil: obvineny musí zůstat false,
+    // jinak by mu vyšla kopnutá dvířka a jejich text o obvinění, které nikdo nevznesl.
+    expect(ohlaseni).toEqual({ playerId: "x", obvineny: false });
+    const s = stavKlubu({ stadion: { changing_rooms: 1, pitch_condition: 70 } });
+    for (let seed = 1; seed <= 30; seed++) expect(vyberCin(s, ohlaseni!.obvineny, createRng(seed))).not.toBe("kopnute_dvere");
   });
 
   it("každý hráč s dluhy nese incidentId své vlastní situace, ne cizí ani náhodně vybrané", () => {
