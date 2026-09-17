@@ -27,7 +27,7 @@ export interface DetailIncidentuData {
   stopy: Array<{ zdroj: string; text: string; sila: number }>;
   obvineni: Array<{ playerId: string; jmeno: string; den: string; vysledek: VysledekObvineni }>;
   policie: { vysledekOn: string | null; vysledek: number | null };
-  akce: { obvinit: boolean; policie: boolean; tresty: AkceTrestu[] };
+  akce: { obvinit: boolean; policie: boolean; zeptat: boolean; tresty: AkceTrestu[] };
   zbyvaObvineni: number;
   kadr: Array<{ playerId: string; jmeno: string }>;
   castky: { srazka: number; pokuta: number; tydnu: number } | null;

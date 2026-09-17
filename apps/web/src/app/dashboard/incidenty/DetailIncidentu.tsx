@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel } from "@/components/ui";
 import {
@@ -23,6 +24,8 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
   const [obvinenyId, setObvinenyId] = useState("");
   const [potvrditVyhazov, setPotvrditVyhazov] = useState(false);
   const [kolVyrazeni, setKolVyrazeni] = useState("1");
+  const [tazanyId, setTazanyId] = useState("");
+  const router = useRouter();
 
   const cesta = `/api/teams/${teamId}/incidents/${encodeURIComponent(incidentId)}`;
 
@@ -65,7 +68,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
   const { incident: i, vysetrovani: v, akce } = detail;
   const vysledek = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
   const vysetruje = i.category === "kradez" || i.category === "poskozeni";
-  const maAkce = akce.obvinit || akce.policie || akce.tresty.length > 0;
+  const maAkce = akce.obvinit || akce.policie || akce.zeptat || akce.tresty.length > 0;
   const podezreli = v.podezreli.filter((p): p is { playerId: string; jmeno: string } => !!p.jmeno);
   // Pachatel je známý, ale trest se vybrat nedá, protože odešel z klubu. Bez týhle hlášky
   // incident vypadá jako "Řeší se" navždy, beze slova proč.
@@ -74,6 +77,23 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
   function obvinit() {
     const jmeno = detail?.kadr.find((h) => h.playerId === obvinenyId)?.jmeno ?? "Hráč";
     void proved("obvinit", { playerId: obvinenyId }, (o) => `${jmeno}: ${OBVINENI_LABEL[o.vysledek as VysledekObvineni] ?? "hotovo"}.`);
+  }
+
+  async function zeptatSe() {
+    setPracuje(true);
+    setZprava(null);
+    try {
+      const o = await apiFetch<{ conversationId: string }>(`${cesta}/zeptat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: tazanyId }),
+      });
+      router.push(`/dashboard/phone/${o.conversationId}`);
+    } catch (e) {
+      console.error("incident zeptat:", e);
+      setZprava({ typ: "chyba", text: e instanceof Error ? e.message : "Konverzaci se nepodařilo otevřít." });
+      setPracuje(false);
+    }
   }
 
   function rozhodnout(a: AkceTrestu, navic: Record<string, string> = {}) {
@@ -149,6 +169,32 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
 
       {maAkce && (
         <div className="border-t border-gray-100 pt-4 space-y-5">
+          {akce.zeptat && (
+            <div className="space-y-2">
+              <SectionLabel>Zeptat se hráče</SectionLabel>
+              <p className="text-sm text-muted">
+                Napiš hráči, jestli něco neviděl. Co ví, řekne, jen když bude chtít, a kamarád pachatele ho spíš bude krýt. Odpověď stojí kredit jako každá SMS.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select
+                  value={tazanyId}
+                  onChange={(e) => setTazanyId(e.target.value)}
+                  aria-label="Koho se zeptat"
+                  className="flex-1 min-w-0 rounded-soft border border-gray-200 bg-white px-3 py-2 text-base"
+                >
+                  <option value="">Vyber hráče</option>
+                  {detail.kadr.map((h) => <option key={h.playerId} value={h.playerId}>{h.jmeno}</option>)}
+                </select>
+                <button
+                  onClick={() => void zeptatSe()}
+                  disabled={pracuje || !tazanyId}
+                  className="px-4 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white disabled:opacity-50"
+                >
+                  Zeptat se
+                </button>
+              </div>
+            </div>
+          )}
           {akce.obvinit && (
             <div className="space-y-2">
               <SectionLabel>Obvinit hráče</SectionLabel>

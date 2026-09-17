@@ -452,6 +452,15 @@ export default function ConversationPage() {
                               Otevřít rozhovor
                             </Link>
                           )}
+                          {/* SMS o incidentu (Kustod, policie, hráč) vede na detail incidentu. */}
+                          {msg.metadata?.type === "incident" && typeof msg.metadata.incidentId === "string" && (
+                            <Link
+                              href={`/dashboard/incidenty?id=${encodeURIComponent(msg.metadata.incidentId)}`}
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                            >
+                              Otevřít incident
+                            </Link>
+                          )}
                           <div className={`text-sm mt-0.5 ${isUser ? "text-white/50" : "text-muted"} text-right`}>
                             {formatTime(msg.sentAt)}
                           </div>
