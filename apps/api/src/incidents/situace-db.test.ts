@@ -132,6 +132,22 @@ describe("konec situace a propadlá lhůta zálohy", () => {
     expect(dotaz?.sql).toContain("ends_on <= ?");
   });
 
+  it("situace prodaného hráče se uzavře taky, ať klubu nedrží slot", async () => {
+    const { db, env } = prostredi([{ sql: /resolution = 'hrac_odesel'/, all: [{ id: "inc-2", kind: "dluhy", subject_player_id: "pryc" }] }]);
+    expect(await ukonciSituace(env, { teamId: "tym-a", gameDate: DNES })).toBe(1);
+    const dotaz = db.dotazy.find((d) => /resolution = 'hrac_odesel'/.test(d.sql));
+    expect(dotaz?.sql).toContain("status = 'probiha'");
+    expect(dotaz?.sql).toContain("NOT EXISTS");
+    expect(dotaz?.sql).toContain("p.team_id = club_incidents.team_id");
+    expect(dotaz?.params).toEqual([DNES, "tym-a"]);
+  });
+
+  it("hráče, který v kádru pořád je, neuzavírá (druhý průchod dnem nic nepřidá)", async () => {
+    const { db, env } = prostredi();
+    expect(await ukonciSituace(env, { teamId: "tym-a", gameDate: DNES })).toBe(0);
+    expect(db.pocet(/resolution = 'hrac_odesel'/)).toBe(1);
+  });
+
   it("nerozhodnutá záloha po lhůtě propadne jako odmítnutí", async () => {
     const { db, env } = prostredi([{ sql: /FROM club_incidents\s+WHERE team_id = \? AND status = 'probiha' AND kind = 'dluhy'/, all: [{ id: "inc-1", subject_player_id: "s" }] }]);
     expect(await propadleZalohy(env, { teamId: "tym-a", gameDate: DNES })).toBe(1);

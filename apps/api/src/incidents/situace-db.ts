@@ -172,15 +172,35 @@ export async function zretezDluhy(env: Bindings, stav: StavKlubu): Promise<boole
   return false;
 }
 
-/** Situace, kterým vypršel `ends_on` (spec 6b krok 4). Vrací počet ukončených. */
+/**
+ * Situace, které dneska končí (spec 6b krok 4). Vrací počet ukončených.
+ *
+ * Dvojí konec: vypršel `ends_on`, nebo hráč už v klubu není. Prodaný a propuštěný hráč
+ * jinak drží jeden ze dvou slotů klubu až pětatřicet dní, i když se ho situace dávno
+ * netýká. Kádr se bere stejně jako jinde (`players` daného klubu, stav prázdný nebo
+ * `active`); splátky zálohy řeší `zauctujSrazky` zvlášť a tohle na ně nesahá.
+ */
 export async function ukonciSituace(env: Bindings, t: { teamId: string; gameDate: string }): Promise<number> {
-  const rows = await env.DB.prepare(
+  const db = env.DB;
+  const vyprsele = await db.prepare(
     `UPDATE club_incidents SET status = 'uzavreny', resolution = 'skoncila', resolved_on = ?
       WHERE team_id = ? AND status = 'probiha' AND ends_on IS NOT NULL AND ends_on <= ?
       RETURNING id, kind, subject_player_id`,
   ).bind(t.gameDate, t.teamId, t.gameDate).all<{ id: string; kind: string; subject_player_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `ukončení situací ${t.teamId}`, e); return null; });
-  return rows?.results.length ?? 0;
+
+  const odesli = await db.prepare(
+    `UPDATE club_incidents SET status = 'uzavreny', resolution = 'hrac_odesel', resolved_on = ?
+      WHERE team_id = ? AND status = 'probiha' AND category = 'zivotni' AND subject_player_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM players p
+           WHERE p.id = club_incidents.subject_player_id AND p.team_id = club_incidents.team_id
+             AND (p.status IS NULL OR p.status = 'active'))
+      RETURNING id, kind, subject_player_id`,
+  ).bind(t.gameDate, t.teamId).all<{ id: string; kind: string; subject_player_id: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `situace odešlých hráčů ${t.teamId}`, e); return null; });
+
+  return (vyprsele?.results.length ?? 0) + (odesli?.results.length ?? 0);
 }
 
 /** Záloha, o které trenér do lhůty nerozhodl, se počítá za odmítnutou (spec 7e). */
