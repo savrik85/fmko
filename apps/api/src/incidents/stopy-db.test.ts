@@ -22,6 +22,13 @@ describe("zápis stop", () => {
     expect(treti.params.slice(-2)).toEqual([1, DNES]);
   });
 
+  it("pozdější stopa téhož zdroje dostane další pořadí", () => {
+    const [p] = prikazyStop(jakoD1(new FalesnaD1()), "tym-a", "inc-1", [{
+      zdroj: "bazar", ukazujeNa: null, podezreli: null, drzitel: null, sila: 1, bonusPolicie: 0, text: "Koupil klub.", nalezena: true,
+    }], "2026-09-16T16:00:00.000Z", 2);
+    expect((p as unknown as { params: unknown[] }).params[0]).toBe("inc-1-bazar-2");
+  });
+
   it("řádek z DB převede zpátky a rozbitý seznam podezřelých zahodí", () => {
     const radek = {
       id: "inc-1-soused-1", source: "soused", points_to_player_id: null, suspects: '["p","a"]',

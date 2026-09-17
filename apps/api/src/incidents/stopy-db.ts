@@ -7,15 +7,16 @@ import type { NavrhStopy, Stopa, ZdrojStopy } from "./typy";
 const M = "incidents-stopy";
 
 /**
- * Příkazy pro `db.batch`. Id `{incidentId}-{zdroj}-{n}`, `n` od 1 v rámci zdroje.
- * `INSERT OR IGNORE`: opakované zpracování dne stopy nezdvojí.
+ * Příkazy pro `db.batch`. Id `{incidentId}-{zdroj}-{n}`, `n` od `prvniPoradi` v rámci zdroje.
+ * `INSERT OR IGNORE`: opakované zpracování dne stopy nezdvojí. Stopa téhož zdroje zapisovaná
+ * později (druhá stopa z bazaru) potřebuje `prvniPoradi` 2, jinak by ji zápis tiše zahodil.
  */
 export function prikazyStop(
-  db: D1Database, teamId: string, incidentId: string, stopy: readonly NavrhStopy[], gameDate: string,
+  db: D1Database, teamId: string, incidentId: string, stopy: readonly NavrhStopy[], gameDate: string, prvniPoradi = 1,
 ): D1PreparedStatement[] {
   const poradi: Record<string, number> = {};
   return stopy.map((s) => {
-    poradi[s.zdroj] = (poradi[s.zdroj] ?? 0) + 1;
+    poradi[s.zdroj] = (poradi[s.zdroj] ?? prvniPoradi - 1) + 1;
     return db.prepare(
       `INSERT OR IGNORE INTO club_incident_clues
          (id, incident_id, team_id, source, points_to_player_id, suspects, holder_player_id, strength, police_bonus, text, found, found_on)

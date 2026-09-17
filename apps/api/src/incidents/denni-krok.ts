@@ -7,6 +7,7 @@ import { createRng } from "../generators/rng";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
+import { vystavKradeneZbozi } from "./bazar-db";
 import { oznamIncident, zapisIncident } from "./dopady";
 import { ozviSeObvineni } from "./krivda";
 import { vylosujIncident } from "./losovani";
@@ -31,6 +32,10 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   // Den po zapřeném obvinění se hráč ozve sám (spec 17d).
   await ozviSeObvineni(env, { teamId, gameDate, seasonNumber: sezona.number })
     .catch((e) => logger.warn({ module: M, teamId }, "ozvání obviněných", e));
+
+  // Kradené zboží, kterému nastal den bazaru (spec 6b krok 6). Až po policii: dopadený zloděj věci vrátil.
+  await vystavKradeneZbozi(env, { teamId, gameDate, seasonNumber: sezona.number })
+    .catch((e) => logger.warn({ module: M, teamId }, "kradené zboží do bazaru", e));
 
   const stav = await nactiStavKlubu(env.DB, { id: teamId, league_id: (team.league_id as string | null) ?? null }, gameDate, sezona.number);
   if (!stav) return;
