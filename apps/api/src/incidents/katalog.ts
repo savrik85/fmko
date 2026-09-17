@@ -67,9 +67,10 @@ function vzteklounSCervenou(s: StavKlubu): HracKlubu | null {
 }
 
 type Pokus = { typ: "hrac"; hrac: HracKlubu } | { typ: "cizi" } | { typ: "alarm" };
+type Kdo = { typ: "hrac"; hrac: HracKlubu } | { typ: "cizi" };
 
 /**
- * Kdo krade: hráč s klíčem, nebo zloděj zvenku. Zloděje zvenku může odradit
+ * Kdo krade: hráč s klíčem, nebo zloděj zvenku. Zloději zvenku může odradit
  * plot, osvětlení a zámek (pak se nestane nic) nebo vyplašit alarm, když ho
  * klub má v použitelném stavu a místo pokrývá (`alarmOdUrovne`).
  */
@@ -91,7 +92,7 @@ function alarmNavrh(rng: Rng): NavrhIncidentu {
   };
 }
 
-function pachatel(p: Pokus & { typ: "hrac" | "cizi" }) {
+function pachatel(p: Kdo) {
   return {
     culpritType: p.typ,
     culpritPlayerId: p.typ === "hrac" ? p.hrac.id : null,
@@ -99,61 +100,98 @@ function pachatel(p: Pokus & { typ: "hrac" | "cizi" }) {
   } as const;
 }
 
+function skladNavrh(s: StavKlubu, rng: Rng, kdo: Kdo): NavrhIncidentu | null {
+  const vlastnene = PRENOSNE.filter((k) => uroven(s, k) >= 1);
+  if (vlastnene.length === 0) return null;
+  // Zloděj bere to, co za něco stojí.
+  const kategorie = rng.weighted(Object.fromEntries(vlastnene.map((k) => [k, cumulativeInvestment(k, uroven(s, k))])));
+  const lv = uroven(s, kategorie);
+  return {
+    kind: "vloupani_sklad", category: "kradez", status: "otevreny",
+    severity: zavaznostPodleHodnoty(kategorie, lv), ...pachatel(kdo),
+    ztraty: [{ typ: "vybaveni", kategorie, uroven: lv, stav: stavVeci(s, kategorie), urovniDolu: lv }],
+    text: text(rng, kdo.typ === "hrac" ? "vloupani_zevnitr" : "vloupani_zvenku", { vec: CATEGORY_LABELS[kategorie] ?? kategorie }),
+  };
+}
+
+function vitrinaNavrh(s: StavKlubu, rng: Rng, kdo: Kdo): NavrhIncidentu | null {
+  const lv = uroven(s, "trophy_case");
+  if (lv < 2) return null;
+  // Síň slávy se neukradne, poháry ano: vitrína přijde jen o jednu úroveň.
+  return {
+    kind: "vitrina", category: "kradez", status: "otevreny", severity: 2, ...pachatel(kdo),
+    ztraty: [{ typ: "vybaveni", kategorie: "trophy_case", uroven: lv, stav: stavVeci(s, "trophy_case"), urovniDolu: 1 }],
+    text: text(rng, "vitrina"),
+  };
+}
+
+function dodavkaPujcenaNavrh(s: StavKlubu, rng: Rng, hrac: HracKlubu): NavrhIncidentu | null {
+  if (s.zapasDnesNeboZitra || uroven(s, "team_van") < 1) return null;
+  const pred = stavVeci(s, "team_van");
+  const po = Math.max(5, pred - rng.int(30, 60));
+  if (po >= pred) return null;
+  return {
+    kind: "dodavka_pujcena", category: "kradez", status: "otevreny", severity: 2,
+    culpritType: "hrac", culpritPlayerId: hrac.id, culpritRevealed: false,
+    ztraty: [{ typ: "vybaveni_stav", kategorie: "team_van", stavPred: pred, stavPo: po }],
+    text: text(rng, "dodavka_pujcena"),
+  };
+}
+
+function kolejeNavrh(s: StavKlubu, rng: Rng, hrac: HracKlubu): NavrhIncidentu | null {
+  if (uroven(s, "mower") < 2) return null;
+  const pred = zarizeni(s, "pitch_condition") || 50;
+  const po = Math.max(5, pred - rng.int(8, 15));
+  if (po >= pred) return null;
+  return {
+    kind: "koleje_trakturek", category: "poskozeni", status: "otevreny", severity: 1,
+    culpritType: "hrac", culpritPlayerId: hrac.id, culpritRevealed: false,
+    ztraty: [{ typ: "travnik", pred, po }],
+    text: text(rng, "koleje_trakturek"),
+  };
+}
+
+function kopnuteDvereNavrh(s: StavKlubu, rng: Rng, hrac: HracKlubu): NavrhIncidentu | null {
+  if (zarizeni(s, "changing_rooms") < 1) return null;
+  // Všichni viděli, kdo to byl: pachatel je známý hned.
+  return {
+    kind: "kopnute_dvere", category: "poskozeni", status: "otevreny", severity: 2,
+    culpritType: "hrac", culpritPlayerId: hrac.id, culpritRevealed: true,
+    ztraty: [{ typ: "stadion", zarizeni: "changing_rooms", urovni: 1 }],
+    text: text(rng, "kopnute_dvere", { hrac: hrac.jmeno, zarizeni: FACILITY_LABELS.changing_rooms }),
+  };
+}
+
 export const KATALOG: DefiniceIncidentu[] = [
   {
     kind: "vloupani_sklad", label: "Vloupání do skladu", emoji: "🥷", category: "kradez", vaha: 5, spousteny: false,
     muze: (s) => PRENOSNE.some((k) => uroven(s, k) >= 1),
     vytvor: (s, rng) => {
-      const vlastnene = PRENOSNE.filter((k) => uroven(s, k) >= 1);
-      if (vlastnene.length === 0) return null;
+      if (!PRENOSNE.some((k) => uroven(s, k) >= 1)) return null;
       const kdo = pokusOKradez(s, rng, 2);
       if (!kdo) return null;
       if (kdo.typ === "alarm") return alarmNavrh(rng);
-      // Zloděj bere to, co za něco stojí.
-      const kategorie = rng.weighted(Object.fromEntries(vlastnene.map((k) => [k, cumulativeInvestment(k, uroven(s, k))])));
-      const lv = uroven(s, kategorie);
-      return {
-        kind: "vloupani_sklad", category: "kradez", status: "otevreny",
-        severity: zavaznostPodleHodnoty(kategorie, lv), ...pachatel(kdo),
-        ztraty: [{ typ: "vybaveni", kategorie, uroven: lv, stav: stavVeci(s, kategorie), urovniDolu: lv }],
-        text: text(rng, kdo.typ === "hrac" ? "vloupani_zevnitr" : "vloupani_zvenku", { vec: CATEGORY_LABELS[kategorie] ?? kategorie }),
-      };
+      return skladNavrh(s, rng, kdo);
     },
   },
   {
     kind: "vitrina", label: "Poháry z vitríny", emoji: "🏆", category: "kradez", vaha: 1, spousteny: false,
     muze: (s) => uroven(s, "trophy_case") >= 2,
     vytvor: (s, rng) => {
-      const lv = uroven(s, "trophy_case");
-      if (lv < 2) return null;
+      if (uroven(s, "trophy_case") < 2) return null;
       const kdo = pokusOKradez(s, rng, 2);
       if (!kdo) return null;
       if (kdo.typ === "alarm") return alarmNavrh(rng);
-      // Síň slávy se neukradne, poháry ano: vitrína přijde jen o jednu úroveň.
-      return {
-        kind: "vitrina", category: "kradez", status: "otevreny", severity: 2, ...pachatel(kdo),
-        ztraty: [{ typ: "vybaveni", kategorie: "trophy_case", uroven: lv, stav: stavVeci(s, "trophy_case"), urovniDolu: 1 }],
-        text: text(rng, "vitrina"),
-      };
+      return vitrinaNavrh(s, rng, kdo);
     },
   },
   {
     kind: "dodavka_pujcena", label: "Půjčená dodávka", emoji: "🚐", category: "kradez", vaha: 2, spousteny: false,
     muze: (s) => uroven(s, "team_van") >= 1 && !s.zapasDnesNeboZitra,
     vytvor: (s, rng) => {
-      if (s.zapasDnesNeboZitra) return null;
-      if (uroven(s, "team_van") < 1) return null;
+      if (s.zapasDnesNeboZitra || uroven(s, "team_van") < 1) return null;
       const hrac = vyberHrace(s.kadr, rng);
-      if (!hrac) return null;
-      const pred = stavVeci(s, "team_van");
-      const po = Math.max(5, pred - rng.int(30, 60));
-      if (po >= pred) return null;
-      return {
-        kind: "dodavka_pujcena", category: "kradez", status: "otevreny", severity: 2,
-        culpritType: "hrac", culpritPlayerId: hrac.id, culpritRevealed: false,
-        ztraty: [{ typ: "vybaveni_stav", kategorie: "team_van", stavPred: pred, stavPo: po }],
-        text: text(rng, "dodavka_pujcena"),
-      };
+      return hrac ? dodavkaPujcenaNavrh(s, rng, hrac) : null;
     },
   },
   {
@@ -213,14 +251,8 @@ export const KATALOG: DefiniceIncidentu[] = [
     muze: (s) => zarizeni(s, "changing_rooms") >= 1 && !!s.vcera?.doma && vzteklounSCervenou(s) !== null,
     vytvor: (s, rng) => {
       const h = vzteklounSCervenou(s);
-      if (!h || zarizeni(s, "changing_rooms") < 1 || !s.vcera?.doma) return null;
-      // Všichni viděli, kdo to byl: pachatel je známý hned.
-      return {
-        kind: "kopnute_dvere", category: "poskozeni", status: "otevreny", severity: 2,
-        culpritType: "hrac", culpritPlayerId: h.id, culpritRevealed: true,
-        ztraty: [{ typ: "stadion", zarizeni: "changing_rooms", urovni: 1 }],
-        text: text(rng, "kopnute_dvere", { hrac: h.jmeno, zarizeni: FACILITY_LABELS.changing_rooms }),
-      };
+      if (!h || !s.vcera?.doma) return null;
+      return kopnuteDvereNavrh(s, rng, h);
     },
   },
   {
@@ -229,16 +261,7 @@ export const KATALOG: DefiniceIncidentu[] = [
     vytvor: (s, rng) => {
       if (uroven(s, "mower") < 2) return null;
       const hrac = vyberHrace(s.kadr, rng);
-      if (!hrac) return null;
-      const pred = zarizeni(s, "pitch_condition") || 50;
-      const po = Math.max(5, pred - rng.int(8, 15));
-      if (po >= pred) return null;
-      return {
-        kind: "koleje_trakturek", category: "poskozeni", status: "otevreny", severity: 1,
-        culpritType: "hrac", culpritPlayerId: hrac.id, culpritRevealed: false,
-        ztraty: [{ typ: "travnik", pred, po }],
-        text: text(rng, "koleje_trakturek"),
-      };
+      return hrac ? kolejeNavrh(s, rng, hrac) : null;
     },
   },
   {
@@ -318,4 +341,32 @@ export const KATALOG_PODLE_KIND = new Map(KATALOG.map((d) => [d.kind, d]));
 /** Název typu incidentu pro texty a SMS. */
 export function nazevIncidentu(kind: string): string {
   return KATALOG_PODLE_KIND.get(kind)?.label ?? "Incident v klubu";
+}
+
+/** Co může hráč z kádru v opilosti ohlásit, že udělá (spec 9a). Krádeže zvenku a spouštěné incidenty ne. */
+export const CINY_HRACE = ["vloupani_sklad", "vitrina", "dodavka_pujcena", "koleje_trakturek", "kopnute_dvere"] as const;
+export type CinHrace = (typeof CINY_HRACE)[number];
+
+/**
+ * Klub má na čin podmínky. Zápas dnes nebo zítra se v den ohlášení neřeší, platí až v den činu
+ * (`cinHrace`). Kopnuté dveře ohlásí jen obviněný a bez červené karty (spec 9a).
+ */
+export function muzeOhlasit(kind: CinHrace, s: StavKlubu, obvineny: boolean): boolean {
+  switch (kind) {
+    case "vloupani_sklad": return PRENOSNE.some((k) => uroven(s, k) >= 1);
+    case "vitrina": return uroven(s, "trophy_case") >= 2;
+    case "dodavka_pujcena": return uroven(s, "team_van") >= 1;
+    case "koleje_trakturek": return uroven(s, "mower") >= 2;
+    case "kopnute_dvere": return obvineny && zarizeni(s, "changing_rooms") >= 1;
+  }
+}
+
+/** Škoda činu, který hráč ohlásil. `null`, když klub v den činu podmínky nesplňuje. Ohlásil to sám, je známý hned. */
+export function cinHrace(kind: CinHrace, s: StavKlubu, hrac: HracKlubu, rng: Rng): NavrhIncidentu | null {
+  const navrh = kind === "vloupani_sklad" ? skladNavrh(s, rng, { typ: "hrac", hrac })
+    : kind === "vitrina" ? vitrinaNavrh(s, rng, { typ: "hrac", hrac })
+    : kind === "dodavka_pujcena" ? dodavkaPujcenaNavrh(s, rng, hrac)
+    : kind === "koleje_trakturek" ? kolejeNavrh(s, rng, hrac)
+    : kopnuteDvereNavrh(s, rng, hrac);
+  return navrh ? { ...navrh, culpritRevealed: true } : null;
 }

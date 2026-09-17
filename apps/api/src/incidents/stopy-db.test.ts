@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nactiZdrojeStop, prikazyStop, stopaZRadku } from "./stopy-db";
+import { nactiZdrojeStop, prikazyStop, prikazStopyHospody, stopaZRadku } from "./stopy-db";
 import { FalesnaD1, jakoD1 } from "./testovaci-d1";
 import type { NavrhStopy } from "./typy";
 
@@ -27,6 +27,13 @@ describe("zápis stop", () => {
       zdroj: "bazar", ukazujeNa: null, podezreli: null, drzitel: null, sila: 1, bonusPolicie: 0, text: "Koupil klub.", nalezena: true,
     }], "2026-09-16T16:00:00.000Z", 2);
     expect((p as unknown as { params: unknown[] }).params[0]).toBe("inc-1-bazar-2");
+  });
+
+  it("stopa z hospody má místo pořadí klíč příhody", () => {
+    const p = prikazStopyHospody(jakoD1(new FalesnaD1()), "tym-a", "inc-1", "drb-s", { ...SVEDEK, zdroj: "hospoda", nalezena: true }, DNES);
+    expect((p as unknown as { params: unknown[] }).params).toEqual(
+      ["inc-1-hospoda-drb-s", "inc-1", "tym-a", "hospoda", "p", null, "a", 2, 0.1, "Adam viděl Pepu.", 1, DNES],
+    );
   });
 
   it("řádek z DB převede zpátky a rozbitý seznam podezřelých zahodí", () => {

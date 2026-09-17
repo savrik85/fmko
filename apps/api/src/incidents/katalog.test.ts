@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng, type Rng } from "../generators/rng";
-import { KATALOG, KATALOG_PODLE_KIND } from "./katalog";
+import { CINY_HRACE, cinHrace, KATALOG, KATALOG_PODLE_KIND, muzeOhlasit } from "./katalog";
 import { hrac, PROBLEMOVY, stavKlubu } from "./testovaci-stav";
 
 const def = (kind: string) => {
@@ -198,5 +198,44 @@ describe("katalog: alarm", () => {
 
   it("alarm sám se nelosuje", () => {
     expect(def("alarm_vyplasil").muze(stavKlubu({ vybaveni: { area_security: 3 } }))).toBe(false);
+  });
+});
+
+describe("čin ohlášený v hospodě (spec 9a)", () => {
+  const FRANTA = hrac({ id: "f", jmeno: "Franta Novák" });
+
+  it("ohlásit jde jen čin, na který klub má", () => {
+    const prazdny = stavKlubu();
+    for (const kind of CINY_HRACE) expect(muzeOhlasit(kind, prazdny, true), kind).toBe(false);
+    const vsechno = stavKlubu({
+      vybaveni: { balls: 1, trophy_case: 2, team_van: 1, mower: 2 }, stadion: { changing_rooms: 1, pitch_condition: 70 },
+    });
+    for (const kind of CINY_HRACE) expect(muzeOhlasit(kind, vsechno, true), kind).toBe(true);
+    expect(muzeOhlasit("vitrina", stavKlubu({ vybaveni: { trophy_case: 1 } }), false)).toBe(false);
+    expect(muzeOhlasit("koleje_trakturek", stavKlubu({ vybaveni: { mower: 1 } }), false)).toBe(false);
+  });
+
+  it("kopnout do dveří ohlásí jen obviněný, červená karta ani domácí zápas potřeba není", () => {
+    const s = stavKlubu({ stadion: { changing_rooms: 1, pitch_condition: 70 } });
+    expect(muzeOhlasit("kopnute_dvere", s, false)).toBe(false);
+    expect(muzeOhlasit("kopnute_dvere", s, true)).toBe(true);
+    const n = cinHrace("kopnute_dvere", s, FRANTA, createRng(1));
+    expect(n).toMatchObject({ kind: "kopnute_dvere", culpritPlayerId: "f", culpritRevealed: true });
+    expect(n?.text).toContain("Franta Novák");
+  });
+
+  it("čin má pachatele, kterého ohlásil, a je hned známý", () => {
+    const s = stavKlubu({ vybaveni: { jerseys: 2, jerseys_condition: 70 } });
+    proSeedy((rng) => {
+      const n = cinHrace("vloupani_sklad", s, FRANTA, rng);
+      expect(n).toMatchObject({ kind: "vloupani_sklad", culpritType: "hrac", culpritPlayerId: "f", culpritRevealed: true });
+      expect(n?.ztraty).toEqual([{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 2 }]);
+    }, 20);
+  });
+
+  it("v den činu platí podmínky znovu: bez věci nebo před zápasem se nestane", () => {
+    expect(cinHrace("vitrina", stavKlubu({ vybaveni: { trophy_case: 1 } }), FRANTA, createRng(1))).toBeNull();
+    expect(cinHrace("dodavka_pujcena", stavKlubu({ vybaveni: { team_van: 1, team_van_condition: 80 }, zapasDnesNeboZitra: true }), FRANTA, createRng(1))).toBeNull();
+    expect(cinHrace("koleje_trakturek", stavKlubu({ vybaveni: { mower: 1 } }), FRANTA, createRng(1))).toBeNull();
   });
 });

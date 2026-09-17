@@ -48,6 +48,8 @@ export const BONUS_POLICIE = {
   svedek: 0.1,
   /** Poznaný inzerát s kradeným zbožím (spec 7c, 8). */
   bazar: 0.3,
+  /** Cizí chlap v hospodě nabízel poznatelné kradené zboží (spec 9). */
+  hospodaNabizi: 0.15,
 } as const;
 export const SRAZKA_TYDNU = 4;
 export const POKUTA_STROP_KC = 5000;
@@ -99,3 +101,42 @@ export const BAZAR_DNI_MAX = 5;
 export const SLEVA_KRADENEHO = 0.55;
 /** Soukromý inzerát vydrží jako lidský inzerát, v reálných dnech. */
 export const KRADENE_INZERAT_DNI = 7;
+
+/** Hospoda (spec Část 9). Šance jsou na jednu hospodskou session. */
+export const DRBY_ALKOHOL = 60;
+export const DRBY_SANCE = 0.25;
+/** Trenér, který vzal kluky do hospody, poslouchá: šance na drby se násobí (spec 9, návaznosti). */
+export const TRENER_V_HOSPODE_NASOBEK = 2;
+export const NABIZI_SANCE = 0.2;
+export const STEZUJE_SANCE = 0.2;
+export const STEZUJE_VZTAH = -3;
+export const STEZUJE_MORALKA = -1;
+export const RVACKA_SANCE = 0.3;
+export const CELA_HOSPODA_SANCE = 0.4;
+export const CELA_HOSPODA_DNI = 3;
+export const CELA_HOSPODA_ZAVAZNOST = 2;
+export const CHLUBI_ALKOHOL = 60;
+export const CHLUBI_SANCE = 0.2;
+export const CHLUBI_DNI = 10;
+export const CHLUBI_TEMPERAMENT = 65;
+export const CHLUBI_TEMPERAMENT_NASOBEK = 1.5;
+export const OHLASUJE_ALKOHOL = 70;
+export const OHLASUJE_SANCE = 0.1;
+/** Odhalený zloděj dráždí (rvačka, vůdce fanoušků) jen chvíli po odhalení nebo uzavření. */
+export const CERSTVY_ZLODEJ_DNI = 14;
+/** Hráč, který manažerovi napíše o ohlášeném činu, musí mít k trenérovi aspoň takový vztah (spec 9a). */
+export const OCHOTA_POSLA = 50;
+export const ZNALOST_DRB_DNI = 14;
+export const SMS_ROLE_HOSPODSKY = "Hospodský";
+
+/** Hrozící čin z opileckých řečí (spec 9a). Šance v procentech. */
+export const HROZI_LHUTA_MIN = 1;
+export const HROZI_LHUTA_MAX = 3;
+export const HROZI_ZAKLAD = 50;
+/** Rozhovor sníží šanci o `HROZI_PROMLUVA + vztah k trenérovi / HROZI_PROMLUVA_VZTAH_DELITEL`. */
+export const HROZI_PROMLUVA = 30;
+export const HROZI_PROMLUVA_VZTAH_DELITEL = 5;
+/** Zabezpečení areálu aspoň 1 u krádeže ze skladu. */
+export const HROZI_ZABEZPECENI = 15;
+/** Jak dlouho kádr ví, že to byly jen řeči. */
+export const HROZI_NESTALO_SE_DNI = 7;

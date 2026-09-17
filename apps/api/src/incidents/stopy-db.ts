@@ -6,6 +6,17 @@ import type { NavrhStopy, Stopa, ZdrojStopy } from "./typy";
 
 const M = "incidents-stopy";
 
+const VLOZ_STOPU = `INSERT OR IGNORE INTO club_incident_clues
+   (id, incident_id, team_id, source, points_to_player_id, suspects, holder_player_id, strength, police_bonus, text, found, found_on)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+function prikazStopy(db: D1Database, id: string, teamId: string, incidentId: string, s: NavrhStopy, gameDate: string): D1PreparedStatement {
+  return db.prepare(VLOZ_STOPU).bind(
+    id, incidentId, teamId, s.zdroj, s.ukazujeNa, s.podezreli ? JSON.stringify(s.podezreli) : null, s.drzitel,
+    s.sila, s.bonusPolicie, s.text, s.nalezena ? 1 : 0, s.nalezena ? gameDate : null,
+  );
+}
+
 /**
  * Příkazy pro `db.batch`. Id `{incidentId}-{zdroj}-{n}`, `n` od `prvniPoradi` v rámci zdroje.
  * `INSERT OR IGNORE`: opakované zpracování dne stopy nezdvojí. Stopa téhož zdroje zapisovaná
@@ -17,16 +28,15 @@ export function prikazyStop(
   const poradi: Record<string, number> = {};
   return stopy.map((s) => {
     poradi[s.zdroj] = (poradi[s.zdroj] ?? prvniPoradi - 1) + 1;
-    return db.prepare(
-      `INSERT OR IGNORE INTO club_incident_clues
-         (id, incident_id, team_id, source, points_to_player_id, suspects, holder_player_id, strength, police_bonus, text, found, found_on)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(
-      `${incidentId}-${s.zdroj}-${poradi[s.zdroj]}`, incidentId, teamId, s.zdroj, s.ukazujeNa,
-      s.podezreli ? JSON.stringify(s.podezreli) : null, s.drzitel, s.sila, s.bonusPolicie, s.text,
-      s.nalezena ? 1 : 0, s.nalezena ? gameDate : null,
-    );
+    return prikazStopy(db, `${incidentId}-${s.zdroj}-${poradi[s.zdroj]}`, teamId, incidentId, s, gameDate);
   });
+}
+
+/** Stopa z hospody: místo pořadí klíč příhody (`drb-{hráč}`, `nabizi`, `chlubi`, `ohlasil`), stejná příhoda se nezapíše dvakrát. */
+export function prikazStopyHospody(
+  db: D1Database, teamId: string, incidentId: string, klic: string, stopa: NavrhStopy, gameDate: string,
+): D1PreparedStatement {
+  return prikazStopy(db, `${incidentId}-hospoda-${klic}`, teamId, incidentId, stopa, gameDate);
 }
 
 function seznamHracu(raw: unknown): string[] | null {
