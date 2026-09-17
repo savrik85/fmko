@@ -7,7 +7,11 @@ import { Hono, type Context } from "hono";
 import { tymyDivaka } from "../auth/divak";
 import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { cryptoSeed, createRng } from "../generators/rng";
-import { obvinHrace, rozhodni, zavolejPolicii, zeptejSe, type VysledekAkce } from "../incidents/akce";
+import { obvinHrace, promluvSi, rozhodni, zavolejPolicii, zeptejSe, type VysledekAkce } from "../incidents/akce";
+import { udalostiHospody, zapisHospody } from "../incidents/hospoda-db";
+import { promluvil } from "../incidents/hrozi";
+import { vyhodnotHrozici } from "../incidents/hrozi-db";
+import { dopisDoHospody } from "../season/pub";
 import { vystavHned } from "../incidents/bazar-db";
 import { oznamIncident, zapisIncident } from "../incidents/dopady";
 import { SLOUPCE_INCIDENTU, proAkce, type IncidentRadek } from "../incidents/incident-db";
@@ -42,6 +46,10 @@ interface IncidentRow {
 function verejnyIncident(r: IncidentRow) {
   const def = KATALOG_PODLE_KIND.get(r.kind);
   const odhalen = r.culprit_revealed === 1 && !!r.culprit_player_id;
+  // Kdo čin ohlásil v hospodě (spec 9a). Řekl to sám nahlas, jméno tajné není.
+  const ohlasil = (r.status === "hrozi" || r.resolution === "nestalo_se") && r.culprit_player_id
+    ? { playerId: r.culprit_player_id, jmeno: [r.jmeno, r.prijmeni].filter(Boolean).join(" ") || null }
+    : null;
   return {
     id: r.id, kind: r.kind, label: def?.label ?? r.kind, emoji: def?.emoji ?? "❗",
     category: r.category, status: r.status, severity: r.severity,
@@ -51,6 +59,7 @@ function verejnyIncident(r: IncidentRow) {
     pachatel: odhalen
       ? { playerId: r.culprit_player_id as string, jmeno: [r.jmeno, r.prijmeni].filter(Boolean).join(" ") || null }
       : null,
+    ohlasil,
     resolution: r.resolution, resolvedOn: r.resolved_on,
   };
 }
@@ -115,6 +124,10 @@ incidentsRouter.get("/teams/:teamId/incidents/:id", async (c) => {
   const zeptat = lzeVyslychat(proAkce(row, pachatelVKadru));
   const vysetrovani = stavVysetrovani(stopy, odhalen);
 
+  // Hrozící čin (spec 9a): promluvit jde jen s hráčem, který je pořád v kádru.
+  const hrozi = row.status === "hrozi" && !!row.culprit_player_id;
+  const promluvit = hrozi && jmena.has(row.culprit_player_id as string);
+
   let castky: { srazka: number; pokuta: number; tydnu: number } | null = null;
   if (akce.tresty.length > 0) {
     const mzda = kadr.results.find((h) => h.id === row.culprit_player_id)?.weekly_wage ?? 0;
@@ -132,7 +145,8 @@ incidentsRouter.get("/teams/:teamId/incidents/:id", async (c) => {
     stopy: stopy.filter((s) => s.nalezena).map((s) => ({ zdroj: s.zdroj, text: s.text, sila: s.sila })),
     obvineni: nactiObvineni(row.accused),
     policie: { vysledekOn: row.status === "policie" ? row.police_result_on : null, vysledek: row.police_success },
-    akce: { ...akce, zeptat },
+    hrozi: hrozi ? { promluvil: promluvil(row.resolution_data) } : null,
+    akce: { ...akce, zeptat, promluvit },
     zbyvaObvineni: Math.max(0, MAX_OBVINENI - row.accusations),
     kadr: akce.obvinit || zeptat ? kadr.results.map((h) => ({ playerId: h.id, jmeno: `${h.first_name} ${h.last_name}` })) : [],
     castky,
@@ -161,6 +175,11 @@ incidentsRouter.post("/teams/:teamId/incidents/:id/zeptat", async (c) => {
   if (!body?.playerId) return c.json({ error: "Vyber hráče, kterého se chceš zeptat" }, 400);
   return odpovedAkce(c, await zeptejSe(c.env, c.req.param("teamId"), c.req.param("id"), body.playerId));
 });
+
+// ── POST /api/teams/:teamId/incidents/:id/promluvit ─────────────────────────────────
+// Otevře konverzaci s hráčem, který v hospodě ohlásil čin (spec 9a).
+incidentsRouter.post("/teams/:teamId/incidents/:id/promluvit", async (c) =>
+  odpovedAkce(c, await promluvSi(c.env, c.req.param("teamId"), c.req.param("id"))));
 
 // ── POST /api/teams/:teamId/incidents/:id/policie ───────────────────────────
 incidentsRouter.post("/teams/:teamId/incidents/:id/policie", async (c) =>
@@ -228,13 +247,14 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
 // posune výsledky probíhajících šetření na dnešek, `srazky` zaúčtuje srážky i mimo pondělí.
 // `krivdy` otevře vlákna křivdy pro dnešní obvinění (jinak až další den). `bazarTed`
 // vystaví kradené zboží otevřených prodejných krádeží hned, bez losu.
+// `hroziTed` posune lhůtu hrozících činů na dnešek a vyhodnotí je.
 incidentsRouter.post("/admin/incidents/vysetrovani", async (c) => {
-  const body = await teloPozadavku<{ teamId?: string; policieTed?: boolean; srazky?: boolean; krivdy?: boolean; bazarTed?: boolean }>(c, "admin vyšetřování");
+  const body = await teloPozadavku<{ teamId?: string; policieTed?: boolean; srazky?: boolean; krivdy?: boolean; bazarTed?: boolean; hroziTed?: boolean }>(c, "admin vyšetřování");
   if (!body?.teamId) return c.json({ error: "Chybí teamId" }, 400);
   const db = c.env.DB;
 
-  const team = await db.prepare("SELECT id, game_date FROM teams WHERE id = ?").bind(body.teamId)
-    .first<{ id: string; game_date: string | null }>()
+  const team = await db.prepare("SELECT id, league_id, game_date FROM teams WHERE id = ?").bind(body.teamId)
+    .first<{ id: string; league_id: string | null; game_date: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "admin vyšetřování: tým", e); return null; });
   if (!team?.game_date) return c.json({ error: "Tým nenalezen nebo nemá herní datum" }, 404);
   const sezona = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
@@ -251,5 +271,61 @@ incidentsRouter.post("/admin/incidents/vysetrovani", async (c) => {
   const vysledek = await zpracujVysetrovani(c.env, t, { pondeli: !!body.srazky });
   const krivdy = body.krivdy ? await ozviSeObvineni(c.env, t, { denObvineni: team.game_date.slice(0, 10) }) : 0;
   const bazar = body.bazarTed ? await vystavHned(c.env, t) : 0;
-  return c.json({ ok: true, ...vysledek, krivdy, bazar });
+
+  let hrozici = 0;
+  if (body.hroziTed) {
+    // Lhůta hrozících činů na dnešek a hned vyhodnotit (spec 9a), jinak se čeká 1 až 3 dny.
+    await db.prepare("UPDATE club_incidents SET deadline = ? WHERE team_id = ? AND status = 'hrozi'")
+      .bind(team.game_date, team.id).run()
+      .catch((e) => logger.warn({ module: M }, "admin vyšetřování: lhůta hrozících činů", e));
+    const stav = await nactiStavKlubu(db, team, team.game_date, sezona.number);
+    if (stav) hrozici = await vyhodnotHrozici(c.env, stav);
+  }
+
+  return c.json({ ok: true, ...vysledek, krivdy, bazar, hrozici });
+});
+
+// ── POST /api/admin/incidents/hospoda ────────────────────────────────────────
+// Jen pro ověření na testingu (spec 9): posadí hráče klubu (`hraci`) a hosty z jiných klubů
+// (`hoste`) do dnešní hospody a vyhodnotí příhody o incidentech. `jiste` = každý los vyjde,
+// `ohlasi` = tenhle hráč ohlásí čin bez ohledu na alkohol a povahu, `trener` = trenér poslouchá.
+// Podmínky (kdo co ví, co klub má) neobchází.
+incidentsRouter.post("/admin/incidents/hospoda", async (c) => {
+  const body = await teloPozadavku<{
+    teamId?: string; hraci?: unknown; hoste?: unknown; jiste?: boolean; ohlasi?: string; trener?: boolean;
+  }>(c, "admin hospoda");
+  const seznam = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const hraci = seznam(body?.hraci);
+  if (!body?.teamId || hraci.length === 0) return c.json({ error: "Chybí teamId nebo hraci" }, 400);
+  const db = c.env.DB;
+
+  const team = await db.prepare("SELECT id, league_id, game_date FROM teams WHERE id = ?").bind(body.teamId)
+    .first<{ id: string; league_id: string | null; game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "admin hospoda: tým", e); return null; });
+  if (!team?.game_date) return c.json({ error: "Tým nenalezen nebo nemá herní datum" }, 404);
+
+  const ids = [...new Set([...hraci, ...seznam(body.hoste)])].slice(0, 40);
+  const rows = await db.prepare(
+    `SELECT p.id, p.team_id, p.first_name, p.last_name, json_extract(p.personality, '$.alcohol') AS alcohol, t.name AS team_name
+       FROM players p JOIN teams t ON t.id = p.team_id
+      WHERE p.id IN (${ids.map(() => "?").join(", ")}) AND (p.status IS NULL OR p.status = 'active')`,
+  ).bind(...ids).all<{ id: string; team_id: string; first_name: string; last_name: string; alcohol: number | null; team_name: string }>()
+    .catch((e) => { logger.warn({ module: M }, "admin hospoda: hráči", e); return null; });
+  if (!rows) return c.json({ error: "Hráče se nepodařilo načíst" }, 500);
+
+  const attendees = rows.results.map((r) => ({
+    playerId: r.id, firstName: r.first_name, lastName: r.last_name, alcohol: r.alcohol ?? 30, teamId: r.team_id,
+    isVisitor: r.team_id !== team.id, fromTeamName: r.team_id !== team.id ? r.team_name : undefined,
+  }));
+  // Klíč hospodské session je den bez času, stejně jako v denním ticku.
+  const t = { teamId: team.id, leagueId: team.league_id, gameDate: team.game_date.slice(0, 10) };
+  const r = await udalostiHospody(db, t, attendees, { trener: !!body.trener, jiste: !!body.jiste, ohlasi: body.ohlasi });
+  await dopisDoHospody(db, team.id, t.gameDate, attendees, r.pribehy);
+  if (r.seasonNumber !== null) await zapisHospody(db, { ...t, seasonNumber: r.seasonNumber }, r.zapisy);
+
+  return c.json({
+    ok: true,
+    pribehy: r.pribehy.map((p) => ({ type: p.type, text: p.text, incidentId: p.incidentId })),
+    zapisy: r.zapisy.map((z) => z.typ),
+  });
 });
