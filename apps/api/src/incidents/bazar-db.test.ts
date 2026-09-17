@@ -5,7 +5,7 @@ vi.mock("../messaging/system-sms", () => ({ sendSystemSMS: vi.fn(async () => und
 import type { Bindings } from "../index";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { cenaKradenehoZbozi } from "./bazar";
-import { vystavKradeneZbozi } from "./bazar-db";
+import { poNakupuKradeneho, vystavKradeneZbozi } from "./bazar-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 
 const DNES = "2026-09-16T16:00:00.000Z";
@@ -81,5 +81,52 @@ describe("vystavení kradeného zboží", () => {
     const { db, env } = prostredi([radek({ district: "Prachatice U21" })]);
     await vystavKradeneZbozi(env, T, TED);
     expect(db.dotazy.find((d) => /FROM villages/.test(d.sql))?.params).toEqual(["Prachatice"]);
+  });
+});
+
+describe("nákup kradeného zboží", () => {
+  const nakup = (over: Partial<{ kupecTeamId: string; kategorie: string; uroven: number }> = {}) => ({
+    incidentId: "inc-1", kategorie: "jerseys", uroven: 2, kupecTeamId: "tym-a", kupecNazev: "TJ Sokol Lhota", gameDate: DNES, ...over,
+  });
+  const sIncidentem = (incident: unknown, dalsi: Pravidlo[] = []) => {
+    const db = new FalesnaD1([...dalsi, { sql: /SELECT id, team_id, status FROM club_incidents/, first: incident }]);
+    return { db, env: { DB: jakoD1(db) } as unknown as Bindings };
+  };
+
+  it("okradený klub koupil věci zpátky: vráceno a SMS", async () => {
+    const { db, env } = sIncidentem({ id: "inc-1", team_id: "tym-a", status: "otevreny" });
+    expect(await poNakupuKradeneho(env, nakup())).toBe("vraceno");
+    expect(db.dotazy.find((d) => /UPDATE club_incidents SET recovered = 1/.test(d.sql))?.params).toEqual(["inc-1"]);
+    expect(sendSystemSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", "Kustod", expect.stringContaining("Dresy"), { type: "incident", incidentId: "inc-1" });
+  });
+
+  it("věci už byly vrácené: nic dalšího", async () => {
+    const { env } = sIncidentem({ id: "inc-1", team_id: "tym-a", status: "otevreny" }, [{ sql: /UPDATE club_incidents SET recovered = 1/, changes: 0 }]);
+    expect(await poNakupuKradeneho(env, nakup())).toBeNull();
+    expect(sendSystemSMS).not.toHaveBeenCalled();
+  });
+
+  it("poznatelné zboží koupil jiný klub: stopa s dalším pořadím a SMS okradenému", async () => {
+    const { db, env } = sIncidentem({ id: "inc-1", team_id: "tym-a", status: "otevreny" });
+    expect(await poNakupuKradeneho(env, nakup({ kupecTeamId: "tym-b" }))).toBe("koupil_jiny");
+    const stopa = db.davky.flat().find((d) => /club_incident_clues/.test(d.sql));
+    expect(stopa?.params[0]).toBe("inc-1-bazar-2");
+    expect(stopa?.params[2]).toBe("tym-a");
+    expect(String(stopa?.params[9])).toContain("TJ Sokol Lhota");
+    expect(sendSystemSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", "Kustod", expect.stringContaining("TJ Sokol Lhota"), { type: "incident", incidentId: "inc-1" });
+  });
+
+  it("nepoznatelné zboží koupil jiný klub: okradený klub se nic nedozví", async () => {
+    const { db, env } = sIncidentem({ id: "inc-1", team_id: "tym-a", status: "otevreny" });
+    expect(await poNakupuKradeneho(env, nakup({ kupecTeamId: "tym-b", kategorie: "balls" }))).toBeNull();
+    expect(db.davky).toHaveLength(0);
+    expect(sendSystemSMS).not.toHaveBeenCalled();
+  });
+
+  it("uzavřený incident: SMS ano, stopa ne", async () => {
+    const { db, env } = sIncidentem({ id: "inc-1", team_id: "tym-a", status: "uzavreny" });
+    expect(await poNakupuKradeneho(env, nakup({ kupecTeamId: "tym-b" }))).toBe("koupil_jiny");
+    expect(db.davky).toHaveLength(0);
+    expect(sendSystemSMS).toHaveBeenCalledTimes(1);
   });
 });

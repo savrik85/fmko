@@ -87,3 +87,42 @@ export async function vystavKradeneZbozi(
   }
   return vystaveno;
 }
+
+/**
+ * Po nákupu kradeného zboží (spec 8). Okradený klub si věci koupil zpátky, nebo je koupil
+ * jiný klub (v dobré víře, bez postihu) a okradený se to dozví, jen když své věci pozná.
+ */
+export async function poNakupuKradeneho(
+  env: Bindings,
+  n: { incidentId: string; kategorie: string; uroven: number; kupecTeamId: string; kupecNazev: string; gameDate: string },
+): Promise<"vraceno" | "koupil_jiny" | null> {
+  const db = env.DB;
+  const inc = await db.prepare("SELECT id, team_id, status FROM club_incidents WHERE id = ?")
+    .bind(n.incidentId).first<{ id: string; team_id: string; status: string }>()
+    .catch((e) => { logger.warn({ module: M }, `incident kradeného zboží ${n.incidentId}`, e); return null; });
+  if (!inc) return null;
+  const rng = createRng(seedFromString(`bazar-nakup|${inc.id}`));
+  const vec = CATEGORY_LABELS[n.kategorie] ?? n.kategorie;
+
+  if (inc.team_id === n.kupecTeamId) {
+    const vraceno = await db.prepare("UPDATE club_incidents SET recovered = 1 WHERE id = ? AND recovered = 0")
+      .bind(inc.id).run()
+      .catch((e) => { logger.error({ module: M }, `vrácení kradeného zboží ${inc.id}`, e); return null; });
+    if ((vraceno?.meta?.changes ?? 0) === 0) return null;
+    await sendSystemSMS(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${text(rng, "bazar_vraceno", { vec })}`, smsIncidentu(inc.id))
+      .catch((e) => logger.warn({ module: M }, `SMS vrácení ${inc.id}`, e));
+    return "vraceno";
+  }
+
+  if (!jePoznatelne(n.kategorie, n.uroven)) return null;
+  const zprava = text(rng, "bazar_koupil_jiny", { klub: n.kupecNazev });
+  if (inc.status !== "uzavreny") {
+    // Pořadí 2: stopa z poznání inzerátu už má id {incidentId}-bazar-1.
+    await db.batch(prikazyStop(db, inc.team_id, inc.id, [{
+      zdroj: "bazar", ukazujeNa: null, podezreli: null, drzitel: null, sila: 1, bonusPolicie: 0, nalezena: true, text: zprava,
+    }], n.gameDate, 2)).catch((e) => logger.warn({ module: M }, `stopa nákupu kradeného zboží ${inc.id}`, e));
+  }
+  await sendSystemSMS(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${zprava}`, smsIncidentu(inc.id))
+    .catch((e) => logger.warn({ module: M }, `SMS nákupu kradeného zboží ${inc.id}`, e));
+  return "koupil_jiny";
+}

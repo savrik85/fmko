@@ -14,6 +14,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { requireTeamOwnership } from "../auth/middleware";
+import { oznaceniInzeratu } from "../incidents/bazar";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
 import { sendSystemSMS } from "../messaging/system-sms";
@@ -64,6 +65,7 @@ interface ListingRow {
   expires_at: string | null;
   is_ai_listing: number;
   seller_name: string | null;
+  incident_id: string | null;
 }
 
 interface BuyerContext {
@@ -135,10 +137,13 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
   const [offersRes, mineRes, historyRes] = await c.env.DB.batch([
     c.env.DB.prepare(
       // LEFT JOIN — virtuální prodejci z okolních okresů nemají řádek v teams.
+      // Kradené zboží (incidenty) má `incident_id`; čí je, pozná jen okradený klub.
       `SELECT el.id, el.team_id, el.category, el.level, el.price, el.expires_at, el.created_at,
-              el.condition_at_listing, el.is_ai_listing, el.seller_name, t.name AS team_name
+              el.condition_at_listing, el.is_ai_listing, el.seller_name, el.incident_id, t.name AS team_name,
+              ci.team_id AS incident_team_id
          FROM equipment_listings el
          LEFT JOIN teams t ON el.team_id = t.id
+         LEFT JOIN club_incidents ci ON ci.id = el.incident_id
         WHERE el.league_id = ? AND el.status = 'active'
           AND (el.team_id IS NULL OR el.team_id != ?)
         ORDER BY el.created_at DESC`
@@ -207,6 +212,11 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
         canBuy: blockReason === null,
         blockReason,
         lockDetail: unlock.locked ? unlock.detail : null,
+        ...oznaceniInzeratu({
+          teamId: (row.team_id as string | null) ?? null, isAiListing: isAi,
+          incidentId: (row.incident_id as string | null) ?? null, incidentTeamId: (row.incident_team_id as string | null) ?? null,
+          category, level,
+        }, teamId),
       };
     });
 
@@ -401,7 +411,7 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   const now = new Date().toISOString();
 
   const listing = await c.env.DB.prepare(
-    "SELECT id, team_id, league_id, category, level, condition_at_listing, price, status, expires_at, is_ai_listing, seller_name FROM equipment_listings WHERE id = ?"
+    "SELECT id, team_id, league_id, category, level, condition_at_listing, price, status, expires_at, is_ai_listing, seller_name, incident_id FROM equipment_listings WHERE id = ?"
   ).bind(listingId).first<ListingRow>()
     .catch((e) => { logger.warn({ module: MODULE }, "fetch listing for buy", e); return null; });
 
@@ -578,6 +588,15 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
         .catch((e) => logger.warn({ module: MODULE }, "notify seller", e)),
     ] : []),
   ]);
+
+  // ── P7: kradené zboží (incidenty, spec 8). Okradený klub si ho koupil zpátky, nebo se o nákupu dozví.
+  if (listing.incident_id) {
+    const { poNakupuKradeneho } = await import("../incidents/bazar-db");
+    await poNakupuKradeneho(c.env, {
+      incidentId: listing.incident_id, kategorie: category, uroven: listing.level,
+      kupecTeamId: teamId, kupecNazev: buyerRow?.name ?? "jiný klub", gameDate: buyer.game_date ?? now,
+    }).catch((e) => logger.warn({ module: MODULE }, `po nákupu kradeného zboží listing=${listingId}`, e));
+  }
 
   return c.json({
     ok: true,
