@@ -164,6 +164,23 @@ export async function propadleZalohy(env: Bindings, t: { teamId: string; gameDat
   return propadlo;
 }
 
+/**
+ * Nárok na zálohu, na kterou nakonec nedošly peníze. Splátky se strhávají čtyři pondělky
+ * (`zauctujSrazky`), takže bez vyplacených peněz by klub splácel, co nedostal. Vracíme proto
+ * `resolution_data` na prázdno: nic se nesplácí a trenér smí rozhodnout znovu.
+ */
+async function vratNarokNaZalohu(db: D1Database, teamId: string, incidentId: string): Promise<VysledekAkce<{ castka: number | null }>> {
+  const vraceno = await db.prepare(
+    `UPDATE club_incidents SET resolution_data = NULL
+      WHERE id = ? AND team_id = ? AND json_extract(resolution_data, '$.zaloha') = 'pujceno'`,
+  ).bind(incidentId, teamId).run()
+    .catch((e) => { logger.error({ module: M }, `vrácení nároku na zálohu ${incidentId}`, e); return null; });
+  if ((vraceno?.meta?.changes ?? 0) === 0) {
+    logger.error({ module: M }, `záloha ${incidentId}: výplata selhala a nárok se nepodařilo vrátit, hrozí srážky bez vyplacené zálohy`);
+  }
+  return { ok: false, kod: 500, chyba: "Zálohu se nepodařilo vyplatit, zkus to znovu" };
+}
+
 /** Rozhodnutí trenéra o záloze (spec 7c). Půjčka se splácí čtyři pondělky ze mzdy. */
 export async function rozhodniZalohu(
   env: Bindings, teamId: string, incidentId: string, akce: "pujcit" | "odmitnout",
@@ -191,8 +208,10 @@ export async function rozhodniZalohu(
   const hrac = await nactiHrace(db, teamId, inc.subject_player_id);
   const jmeno = hrac ? `${hrac.first_name} ${hrac.last_name}` : nazevSituace(inc.kind);
   if (akce === "pujcit" && castka) {
-    await recordTransaction(db, teamId, "incident_advance", -castka, `Záloha na mzdu: ${jmeno}`, gameDate, `zaloha-${incidentId}`)
-      .catch((e) => logger.error({ module: M }, `výplata zálohy ${incidentId}`, e));
+    const vyplaceno = await recordTransaction(db, teamId, "incident_advance", -castka, `Záloha na mzdu: ${jmeno}`, gameDate, `zaloha-${incidentId}`)
+      .then(() => true)
+      .catch((e) => { logger.error({ module: M }, `výplata zálohy ${incidentId}`, e); return false; });
+    if (!vyplaceno) return await vratNarokNaZalohu(db, teamId, incidentId);
   }
   await db.batch([posunHrace(db, teamId, inc.subject_player_id, akce === "pujcit"
     ? { morale: ZALOHA_MORALKA, vztah: ZALOHA_VZTAH }

@@ -102,6 +102,22 @@ describe("rozhodnutí o záloze", () => {
     expect(zapis?.sql).toContain("status = 'probiha'");
   });
 
+  it("když výplata selže, nárok se vrátí a splátky se nenaplánují", async () => {
+    const { db, env } = prostredi([
+      { sql: /FROM club_incidents WHERE id = \? AND team_id = \?/, first: { ...dluhy, subject_player_id: "s" } },
+      { sql: /SELECT game_date FROM teams/, first: { game_date: DNES } },
+    ]);
+    vi.mocked(recordTransaction).mockRejectedValueOnce(new Error("transakce se nezapsala"));
+
+    expect(await rozhodniZalohu(env, "tym-a", "inc-1", "pujcit")).toMatchObject({ ok: false, kod: 500 });
+    const vraceni = db.dotazy.find((d) => /UPDATE club_incidents SET resolution_data = NULL/.test(d.sql));
+    expect(vraceni?.sql).toContain("json_extract(resolution_data, '$.zaloha') = 'pujceno'");
+    expect(vraceni?.params).toEqual(["inc-1", "tym-a"]);
+    // Žádné splátky, žádná odměna za půjčku, žádná SMS o vyplacené záloze.
+    expect(db.dotazy.filter((d) => /tydnuZbyva/.test(JSON.stringify(d.params))).length).toBe(1);
+    expect(sendPlayerSMS).not.toHaveBeenCalled();
+  });
+
   it("odmítnutí nesahá na peníze a druhé rozhodnutí je 409", async () => {
     const { db, env } = prostredi([
       { sql: /FROM club_incidents WHERE id = \? AND team_id = \?/, first: { ...dluhy, subject_player_id: "s" } },
