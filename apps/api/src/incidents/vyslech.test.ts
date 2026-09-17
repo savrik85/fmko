@@ -39,6 +39,8 @@ function prostredi(opts: { incident?: IncidentRadek; role: Role[]; hracOver?: Re
     { sql: /SELECT role, willingness, interrogation FROM club_incident_knowledge/, all: opts.role },
     { sql: /FROM players WHERE id = \? AND team_id = \?/, first: hracRadek("s", "Jan", "Svědek", opts.hracOver) },
     { sql: /SELECT COUNT\(\*\) AS n FROM relationships/, first: { n: 0 } },
+    // Pachatel "p" je defaultně pořád v kádru, vztahy se tak posouvají jako dřív.
+    { sql: /SELECT 1 AS ano FROM players WHERE id = \?/, first: { ano: 1 } },
   ]);
 }
 
@@ -55,6 +57,8 @@ describe("výslech v DB", () => {
     expect(await zeptej(db)).toEqual({ vysledek: "prozradil", novy: true });
     const narok = db.dotazy.find((d) => /UPDATE club_incident_knowledge SET interrogation/.test(d.sql));
     expect(narok?.params).toEqual(["prozradil", DNES, "inc-1", "s", "tym-a"]);
+    // Kritické následky (stopa) a vztahy jdou ve dvou oddělených dávkách (spec 7a).
+    expect(db.davky).toHaveLength(2);
     const davka = db.davky.flat();
     expect(davka.find((d) => /UPDATE club_incident_clues SET found = 1/.test(d.sql))?.params).toEqual([DNES, "inc-1", "s"]);
     expect(davka.find((d) => /UPDATE relationships SET strength/.test(d.sql))?.params).toEqual([65, "v1"]);
@@ -67,6 +71,8 @@ describe("výslech v DB", () => {
       dalsi: [{ sql: /SELECT id, strength FROM relationships/, first: { id: "v1", strength: 60 } }],
     });
     expect(await zeptej(db)).toEqual({ vysledek: "kryje", novy: true });
+    // "Kryje" nemá kritické následky (žádná stopa, žádné odhalení) - jen dávka vztahů.
+    expect(db.davky).toHaveLength(1);
     const davka = db.davky.flat();
     expect(davka.some((d) => /club_incident_clues/.test(d.sql))).toBe(false);
     expect(davka.find((d) => /UPDATE relationships SET strength/.test(d.sql))?.params).toEqual([70, "v1"]);
@@ -82,9 +88,24 @@ describe("výslech v DB", () => {
       ],
     });
     expect((await zeptej(db))?.vysledek).toBe("prozradil");
+    expect(db.davky).toHaveLength(2);
     const davka = db.davky.flat();
     expect(davka.find((d) => /UPDATE relationships SET strength/.test(d.sql))?.params).toEqual([25, "v1"]);
     expect(davka.find((d) => /INSERT INTO relationships/.test(d.sql))?.params.slice(1)).toEqual(["p", "s", "rivals", 40]);
+  });
+
+  it("kamarád, který práskne, když pachatel už v kádru není: kritická dávka jde, vztahy ne", async () => {
+    const db = prostredi({
+      role: [{ role: "kamarad", willingness: 100, interrogation: null }],
+      hracOver: { coach_relationship: 100 },
+      dalsi: [{ sql: /SELECT 1 AS ano FROM players WHERE id = \?/, first: null }],
+    });
+    expect((await zeptej(db))?.vysledek).toBe("prozradil");
+    expect(db.dotazy.some((d) => /SELECT 1 AS ano FROM players/.test(d.sql))).toBe(true);
+    expect(db.davky).toHaveLength(1);
+    const davka = db.davky.flat();
+    expect(davka.some((d) => /UPDATE club_incident_clues SET found = 1/.test(d.sql))).toBe(true);
+    expect(davka.some((d) => /relationships/i.test(d.sql))).toBe(false);
   });
 
   it("pachatel se stopou na sebe se přizná: odhalení, lhůta a stopa přiznání", async () => {
@@ -101,6 +122,8 @@ describe("výslech v DB", () => {
       }] },
     ]);
     expect(await zeptej(db, "p")).toEqual({ vysledek: "priznal", novy: true });
+    // Pachatel obviňuje sám sebe (playerId === culprit_player_id), vztahy se pro něj neposouvají.
+    expect(db.davky).toHaveLength(1);
     const davka = db.davky.flat();
     expect(davka.find((d) => /UPDATE club_incidents SET culprit_revealed = 1/.test(d.sql))?.params)
       .toEqual(["2026-09-21T16:00:00.000Z", "inc-1", "tym-a"]);
@@ -112,6 +135,16 @@ describe("výslech v DB", () => {
     expect(await zeptej(db)).toEqual({ vysledek: "kryje", novy: false });
     expect(db.pocet(/UPDATE club_incident_knowledge/)).toBe(0);
     expect(db.davky).toHaveLength(0);
+  });
+
+  it("uložený prozradil u neodhaleného incidentu znovu pošle UPDATE stopy, ale žádný posun vztahu", async () => {
+    const db = prostredi({ role: [{ role: "kamarad", willingness: 100, interrogation: "prozradil" }] });
+    expect(await zeptej(db)).toEqual({ vysledek: "prozradil", novy: false });
+    expect(db.pocet(/UPDATE club_incident_knowledge SET interrogation/)).toBe(0);
+    expect(db.davky).toHaveLength(1);
+    const davka = db.davky.flat();
+    expect(davka.find((d) => /UPDATE club_incident_clues SET found = 1/.test(d.sql))?.params).toEqual([DNES, "inc-1", "s"]);
+    expect(davka.some((d) => /relationships/i.test(d.sql))).toBe(false);
   });
 
   it("odhalený incident ani hráč bez tajné znalosti se nevyslýchá", async () => {
