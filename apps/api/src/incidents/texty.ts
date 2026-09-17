@@ -538,7 +538,7 @@ export const TEXTY = {
     "Trenére, rodič mi skončil v nemocnici. Ozvu se, až to půjde.",
   ],
   znalost_situace: [
-    "Tohle se děje tobě: {text}.",
+    "Tohle se teď děje tobě: {nazev}.",
   ],
   zaloha_pujcena: [
     "Díky, trenére. Vrátím to do koruny.",

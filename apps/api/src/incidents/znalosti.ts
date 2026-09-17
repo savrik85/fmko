@@ -13,6 +13,7 @@ import { nazevIncidentu } from "./katalog";
 import {
   MAX_INCIDENTU_V_PROMPTU, OCHOTA_ROLE, ZNALOST_KADR_DNI, ZNALOST_KADR_ZAVAZNA_DNI, ZNALOST_PACHATEL_DNI,
 } from "./nastaveni";
+import { nazevSituace } from "./situace";
 import { MISTO_INCIDENTU, MISTO_TEXT } from "./stopy";
 import { text, TEXTY, vypln } from "./texty";
 import type { NavrhIncidentu, NavrhStopy, StavKlubu } from "./typy";
@@ -57,7 +58,9 @@ export function znalostiIncidentu(stav: StavKlubu, navrh: NavrhIncidentu, stopy:
     if (!navrh.subjectPlayerId) return znalosti;
     znalosti.push({
       playerId: navrh.subjectPlayerId, role: "pachatel", ochota: 0,
-      fact: vypln(TEXTY.znalost_situace[0], { text: navrh.text }),
+      // Kádr zná veřejný text ve třetí osobě (`navrh.text`), dotčený hráč sám sebe ve svém
+      // vlastním chatu ne — proto krátký název situace, ne cizí věta o něm ve třetí osobě.
+      fact: vypln(TEXTY.znalost_situace[0], { nazev: nazevSituace(navrh.kind) }),
       until: gameExpiry(stav.gameDate, navrh.dniTrvani ?? ZNALOST_KADR_DNI),
     });
     return znalosti;

@@ -80,10 +80,14 @@ describe("kdo co ví při vzniku incidentu", () => {
     };
     const z = znalostiIncidentu(stav, situace, [], createRng(1));
     expect(z.filter((r) => r.role === "kadr")).toHaveLength(3);
+    expect(z.find((r) => r.role === "kadr")?.fact).toBe(situace.text);
     const vlastni = z.find((r) => r.role === "pachatel");
     expect(vlastni).toMatchObject({ playerId: "s", until: gameExpiry(DNES, 28) });
-    expect(vlastni?.fact).toContain("Jan Svědek se rozvádí");
+    // Vlastní znalost je o hráči samotném, v první osobě a bez cizí věty o něm ve třetí osobě.
+    expect(vlastni?.fact).toBe("Tohle se teď děje tobě: Rozvod.");
+    expect(vlastni?.fact).not.toContain("Jan Svědek");
     expect(vlastni?.fact).not.toBe(situace.text);
+    expect(vlastni?.fact).not.toMatch(/\.\./);
   });
 });
 
