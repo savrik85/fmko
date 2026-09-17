@@ -17,6 +17,7 @@ import { odhalujePachatele, vygenerujStopy } from "./stopy";
 import { nactiZdrojeStop, prikazyStop } from "./stopy-db";
 import { TEXTY, vypln } from "./texty";
 import type { NavrhIncidentu, StavKlubu, Ztrata } from "./typy";
+import { zapisZnalosti } from "./znalosti-db";
 
 const M = "incidents-dopady";
 
@@ -59,7 +60,10 @@ export async function zapisIncident(
   ).run().catch((e) => { logger.error({ module: M }, `zápis incidentu ${id}`, e); return null; });
   if ((vlozeno?.meta?.changes ?? 0) === 0) return null;
 
-  if (navrh.ztraty.length === 0) return { id, nalezeneStopy: [], odhalen: navrh.culpritRevealed };
+  if (navrh.ztraty.length === 0) {
+    await zapisZnalosti(db, stav, navrh, id, []);
+    return { id, nalezeneStopy: [], odhalen: navrh.culpritRevealed };
+  }
 
   const provedene: Ztrata[] = [];
   for (const z of navrh.ztraty) {
@@ -90,8 +94,11 @@ export async function zapisIncident(
     await db.prepare("UPDATE club_incidents SET loss = ? WHERE id = ?")
       .bind(JSON.stringify(provedene), id).run()
       .catch((e) => logger.error({ module: M }, `zápis škody po selhání dávky ${id}`, e));
+    // Stopy se nezapsaly, svědci by neměli co prozradit: jen kádr a pachatel.
+    await zapisZnalosti(db, stav, navrh, id, []);
     return { id, nalezeneStopy: [], odhalen: navrh.culpritRevealed };
   }
+  await zapisZnalosti(db, stav, navrh, id, stopy);
   return { id, nalezeneStopy: stopy.filter((s) => s.nalezena).map((s) => s.text), odhalen };
 }
 

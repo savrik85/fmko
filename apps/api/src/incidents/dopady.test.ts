@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { zapisIncident } from "./dopady";
 import { FalesnaD1, jakoD1 } from "./testovaci-d1";
-import { PROBLEMOVY, stavKlubu } from "./testovaci-stav";
+import { PROBLEMOVY, hrac, stavKlubu } from "./testovaci-stav";
 import type { NavrhIncidentu } from "./typy";
 
 const NAVRH: NavrhIncidentu = {
@@ -18,6 +18,7 @@ describe("zápis incidentu", () => {
     expect(await zapisIncident(jakoD1(db), stav, NAVRH)).toBeNull();
     expect(db.pocet(/club_incident_clues/)).toBe(0);
     expect(db.pocet(/UPDATE equipment/)).toBe(0);
+    expect(db.pocet(/club_incident_knowledge/)).toBe(0);
   });
 
   it("kamera natočí hráče: stopa se zapíše a pachatel je hned známý", async () => {
@@ -46,5 +47,16 @@ describe("zápis incidentu", () => {
     // zůstala nedotčená plánovaná škoda (bez `cena`, `damageId` a upravených úrovní).
     const zapisSkody = db.dotazy.find((d) => /UPDATE club_incidents SET loss = \? WHERE id = \?/.test(d.sql));
     expect(zapisSkody?.params).toEqual([JSON.stringify(NAVRH.ztraty), "inc-test"]);
+  });
+
+  it("znalosti: kádr, pachatel a kamarád ze zapsané stopy", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM staff_members/, first: { usudek: null } },
+      { sql: /FROM relationships WHERE player_a_id = \? OR player_b_id = \?/, all: [{ player_a_id: "p", player_b_id: "k", type: "drinking_buddies", strength: 60 }] },
+    ]);
+    const stav = stavKlubu({ kadr: [PROBLEMOVY, hrac({ id: "k", jmeno: "Karel Kos" })], vybaveni: { jerseys: 2, jerseys_condition: 70 } });
+    await zapisIncident(jakoD1(db), stav, NAVRH, "inc-test");
+    const znalosti = db.davky.flat().filter((d) => /INSERT OR IGNORE INTO club_incident_knowledge/.test(d.sql));
+    expect(znalosti.map((d) => `${d.params[1]}:${d.params[3]}`)).toEqual(["p:kadr", "k:kadr", "p:pachatel", "k:kamarad"]);
   });
 });
