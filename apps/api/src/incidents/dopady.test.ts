@@ -101,4 +101,31 @@ describe("zápis incidentu", () => {
     const skodaVandal = poskozeni.davky.flat().find((d) => /UPDATE club_incidents SET loss = \?, culprit_revealed = \?, bazar_on = \?/.test(d.sql));
     expect(skodaVandal?.params[2]).toBeNull();
   });
+
+  describe("hrozící čin se stane (spec 9a)", () => {
+    it("přechod ze stavu hrozi místo nového řádku a znalosti hrozby se nahradí znalostmi činu", async () => {
+      const db = new FalesnaD1([{ sql: /FROM staff_members/, first: { usudek: null } }]);
+      const stav = stavKlubu({ kadr: [PROBLEMOVY], vybaveni: { jerseys: 2, jerseys_condition: 70 } });
+      const zapsany = await zapisIncident(jakoD1(db), stav, { ...NAVRH, culpritRevealed: true }, "inc-h", { zHroziciho: true });
+      expect(zapsany).toMatchObject({ id: "inc-h", odhalen: true });
+      expect(db.pocet(/INSERT OR IGNORE INTO club_incidents/)).toBe(0);
+      const prechod = db.dotazy.find((d) => /UPDATE club_incidents SET category = \?/.test(d.sql));
+      expect(prechod?.sql).toContain("status = 'hrozi'");
+      expect(prechod?.params.slice(-2)).toEqual(["inc-h", "tym-a"]);
+      const smazani = db.dotazy.find((d) => /DELETE FROM club_incident_knowledge/.test(d.sql));
+      expect(smazani?.params).toEqual(["inc-h"]);
+      expect(db.davky.some((b) => b.some((d) => /INSERT OR IGNORE INTO club_incident_knowledge/.test(d.sql)))).toBe(true);
+    });
+
+    it("už vyhodnocený hrozící čin se nezapíše; bez škody skončí jako nestalo se, ne bez škody", async () => {
+      const hotovo = new FalesnaD1([{ sql: /UPDATE club_incidents SET category = \?/, changes: 0 }]);
+      expect(await zapisIncident(jakoD1(hotovo), stavKlubu(), NAVRH, "inc-h", { zHroziciho: true })).toBeNull();
+      expect(hotovo.pocet(/UPDATE equipment/)).toBe(0);
+      expect(hotovo.pocet(/DELETE FROM club_incident_knowledge/)).toBe(0);
+
+      const bezSkody = new FalesnaD1([{ sql: /UPDATE equipment SET/, changes: 0 }]);
+      expect(await zapisIncident(jakoD1(bezSkody), stavKlubu({ vybaveni: { jerseys: 2 } }), NAVRH, "inc-h", { zHroziciho: true })).toBeNull();
+      expect(bezSkody.dotazy.find((d) => /SET status = 'uzavreny'/.test(d.sql))?.params[0]).toBe("nestalo_se");
+    });
+  });
 });

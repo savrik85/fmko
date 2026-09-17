@@ -40,27 +40,45 @@ export interface ZapsanyIncident {
  *
  * Vrací `null`, když incident už existoval (opakované zpracování dne)
  * nebo se žádná škoda nepovedla (vybavení mezitím prodáno, zařízení už na nule).
+ * `zHroziciho`: čin ohlášený v hospodě (spec 9a) se stal. Záznam už existuje ve stavu `hrozi`
+ * a přepíše se hlídaným UPDATE, znalosti hrozby se nahradí znalostmi činu.
  */
 export async function zapisIncident(
   db: D1Database,
   stav: StavKlubu,
   navrh: NavrhIncidentu,
   id: string = idIncidentu(stav.teamId, navrh.kind, stav.den),
+  opts: { zHroziciho?: boolean } = {},
 ): Promise<ZapsanyIncident | null> {
   const deadline = navrh.status === "otevreny" ? gameExpiry(stav.gameDate, LHUTA_ROZHODNUTI_DNI) : null;
   const resolvedOn = navrh.status === "uzavreny" ? stav.gameDate : null;
 
-  const vlozeno = await db.prepare(
-    `INSERT OR IGNORE INTO club_incidents
-       (id, team_id, league_id, season_number, kind, category, status, severity, game_date, deadline,
-        culprit_type, culprit_player_id, culprit_revealed, loss, text, resolved_on)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
-    id, stav.teamId, stav.leagueId, stav.seasonNumber, navrh.kind, navrh.category, navrh.status,
-    navrh.severity, stav.gameDate, deadline, navrh.culpritType, navrh.culpritPlayerId,
-    navrh.culpritRevealed ? 1 : 0, JSON.stringify(navrh.ztraty), navrh.text, resolvedOn,
-  ).run().catch((e) => { logger.error({ module: M }, `zápis incidentu ${id}`, e); return null; });
+  const vlozeno = opts.zHroziciho
+    ? await db.prepare(
+      `UPDATE club_incidents SET category = ?, status = ?, severity = ?, game_date = ?, deadline = ?,
+          culprit_type = ?, culprit_player_id = ?, culprit_revealed = ?, loss = ?, text = ?, resolved_on = ?
+        WHERE id = ? AND team_id = ? AND status = 'hrozi'`,
+    ).bind(
+      navrh.category, navrh.status, navrh.severity, stav.gameDate, deadline, navrh.culpritType, navrh.culpritPlayerId,
+      navrh.culpritRevealed ? 1 : 0, JSON.stringify(navrh.ztraty), navrh.text, resolvedOn, id, stav.teamId,
+    ).run().catch((e) => { logger.error({ module: M }, `přechod hrozícího incidentu ${id}`, e); return null; })
+    : await db.prepare(
+      `INSERT OR IGNORE INTO club_incidents
+         (id, team_id, league_id, season_number, kind, category, status, severity, game_date, deadline,
+          culprit_type, culprit_player_id, culprit_revealed, loss, text, resolved_on)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, stav.teamId, stav.leagueId, stav.seasonNumber, navrh.kind, navrh.category, navrh.status,
+      navrh.severity, stav.gameDate, deadline, navrh.culpritType, navrh.culpritPlayerId,
+      navrh.culpritRevealed ? 1 : 0, JSON.stringify(navrh.ztraty), navrh.text, resolvedOn,
+    ).run().catch((e) => { logger.error({ module: M }, `zápis incidentu ${id}`, e); return null; });
   if ((vlozeno?.meta?.changes ?? 0) === 0) return null;
+
+  if (opts.zHroziciho) {
+    // „V hospodě jsi vykládal…" už neplatí, čin se stal: znalosti se zapíšou znovu podle činu.
+    await db.prepare("DELETE FROM club_incident_knowledge WHERE incident_id = ?").bind(id).run()
+      .catch((e) => logger.warn({ module: M }, `znalosti hrozby ${id}`, e));
+  }
 
   if (navrh.ztraty.length === 0) {
     await zapisZnalosti(db, stav, navrh, id, []);
@@ -74,8 +92,9 @@ export async function zapisIncident(
   }
 
   if (provedene.length === 0) {
-    await db.prepare("UPDATE club_incidents SET status = 'uzavreny', resolution = 'bez_skody', resolved_on = ?, loss = '[]' WHERE id = ?")
-      .bind(stav.gameDate, id).run()
+    // Hrozící čin, který nakonec nic nerozbil, se nestal. Obyčejný incident je bez škody (v přehledu skrytý).
+    await db.prepare("UPDATE club_incidents SET status = 'uzavreny', resolution = ?, resolved_on = ?, loss = '[]' WHERE id = ?")
+      .bind(opts.zHroziciho ? "nestalo_se" : "bez_skody", stav.gameDate, id).run()
       .catch((e) => logger.warn({ module: M }, `uzavření incidentu bez škody ${id}`, e));
     return null;
   }

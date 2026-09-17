@@ -9,6 +9,7 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { vystavKradeneZbozi } from "./bazar-db";
 import { oznamIncident, zapisIncident } from "./dopady";
+import { vyhodnotHrozici } from "./hrozi-db";
 import { ozviSeObvineni } from "./krivda";
 import { vylosujIncident } from "./losovani";
 import { nactiStavKlubu } from "./stav-klubu";
@@ -39,6 +40,11 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
 
   const stav = await nactiStavKlubu(env.DB, { id: teamId, league_id: (team.league_id as string | null) ?? null }, gameDate, sezona.number);
   if (!stav) return;
+
+  // Činy ohlášené v hospodě, kterým vypršela lhůta (spec 9a). Stal-li se některý, dnes se nový problém nelosuje.
+  const splneno = await vyhodnotHrozici(env, stav)
+    .catch((e) => { logger.warn({ module: M, teamId }, "hrozící činy", e); return 0; });
+  if (splneno > 0) return;
 
   const rng = createRng(seedFromString(`incident|${teamId}|${stav.den}`));
   const navrh = vylosujIncident(stav, rng);
