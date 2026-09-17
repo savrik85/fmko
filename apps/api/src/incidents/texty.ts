@@ -383,7 +383,7 @@ export const TEXTY = {
     "{hrac} platil rundu z peněz, o kterých tvrdil, že je dostal za vybavení: {vec}.",
   ],
   hospoda_sekera: [
-    "Hospodský už {hrac} nechce nalévat na sekeru.",
+    "{hrac} má u hospodského dluh a na sekeru už nedostane.",
     "{hrac} chtěl psát na sekeru, hospodský zavrtěl hlavou.",
     "{hrac} platil až po domluvě, sekeru už mu hospodský nedá.",
     "U výčepu bylo dusno, {hrac} má u hospodského dluh.",

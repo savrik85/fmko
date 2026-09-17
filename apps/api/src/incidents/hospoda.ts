@@ -105,6 +105,8 @@ export interface KontextHospody {
   hrozi: ReadonlySet<string>;
   /** Hráč → kind běžící životní situace (spec 4c). */
   situace: ReadonlyMap<string, string>;
+  /** Hráč → id jeho situačního incidentu (spec 4c). */
+  idSituaci: ReadonlyMap<string, string>;
   /** Hráči, kterým trenér odmítl zálohu (spec 7c). */
   odmitnuteZalohy: ReadonlySet<string>;
 }
@@ -396,7 +398,7 @@ function celaHospoda(k: KontextHospody, v: VolbyHospody, incidenty: readonly Inc
 function sekera(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody[], out: VysledekHospody): void {
   for (const h of mistni) {
     if (k.situace.get(h.playerId) !== "dluhy") continue;
-    const incidentId = k.incidenty.find((i) => i.id.includes("dluhy"))?.id ?? "";
+    const incidentId = k.idSituaci.get(h.playerId) ?? "";
     if (zaznelo(v, "pije_na_sekeru", h.playerId)) continue;
     const rng = los(k, "sekera", h.playerId);
     if (!vyjde(rng, SEKERA_SANCE, v)) continue;

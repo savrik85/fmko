@@ -109,7 +109,7 @@ export async function nactiKontextHospody(db: D1Database, t: TymHospody, hraciId
           AND (type = 'rivals' OR (type IN (${kamaradske}) AND COALESCE(strength, 50) >= ?))`,
     ).bind(...hraciIds, ...hraciIds, SILA_KAMARADSTVI),
     db.prepare(
-      `SELECT subject_player_id AS id, kind, json_extract(resolution_data, '$.zaloha') AS zaloha
+      `SELECT subject_player_id AS player_id, id AS incident_id, kind, json_extract(resolution_data, '$.zaloha') AS zaloha
          FROM club_incidents
         WHERE team_id = ? AND status = 'probiha' AND category = 'zivotni' AND subject_player_id IS NOT NULL`,
     ).bind(t.teamId),
@@ -132,6 +132,14 @@ export async function nactiKontextHospody(db: D1Database, t: TymHospody, hraciId
     pridejVztah(mapa, r.player_a_id, r.player_b_id);
     pridejVztah(mapa, r.player_b_id, r.player_a_id);
   }
+  const situace = new Map<string, string>();
+  const idSituaci = new Map<string, string>();
+  const odmitnuteZalohy = new Set<string>();
+  for (const r of situaceRes.results as Array<{ player_id: string; incident_id: string; kind: string; zaloha: string | null }>) {
+    situace.set(String(r.player_id), String(r.kind));
+    idSituaci.set(String(r.player_id), String(r.incident_id));
+    if (r.zaloha === "odmitnuto") odmitnuteZalohy.add(String(r.player_id));
+  }
 
   return {
     teamId: t.teamId, leagueId: t.leagueId, seasonNumber: tym.sezona, nazevKlubu: tym.name,
@@ -148,9 +156,7 @@ export async function nactiKontextHospody(db: D1Database, t: TymHospody, hraciId
       .map((r) => ({ incidentId: r.incident_id, playerId: r.player_id, role: r.role, vyslech: r.interrogation })),
     kadr, kamaradi, rivalove,
     hrozi: new Set((hroziRes.results as Array<{ id: string }>).map((r) => String(r.id))),
-    situace: new Map((situaceRes.results as Array<{ id: string; kind: string }>).map((r) => [String(r.id), String(r.kind)])),
-    odmitnuteZalohy: new Set((situaceRes.results as Array<{ id: string; zaloha: string | null }>)
-      .filter((r) => r.zaloha === "odmitnuto").map((r) => String(r.id))),
+    situace, idSituaci, odmitnuteZalohy,
   };
 }
 

@@ -21,7 +21,7 @@ function kontext(o: Partial<KontextHospody> = {}): KontextHospody {
     den: "2026-09-16", gameDate: DNES, incidenty: [], svedci: [],
     kadr: new Map([SVEDEK, PACHATEL, KAMARAD].map((h) => [h.id, h])),
     kamaradi: new Map(), rivalove: new Map(), hrozi: new Set(),
-    situace: new Map(), odmitnuteZalohy: new Set(), ...o,
+    situace: new Map(), idSituaci: new Map(), odmitnuteZalohy: new Set(), ...o,
   };
 }
 
@@ -302,5 +302,20 @@ describe("dluhy v hospodě", () => {
     const svaty = hrac({ id: "x", jmeno: "Jan Svatý", alkohol: 90, disciplina: 95, vernost: 95, vztahKTrenerovi: 90 });
     const k = kontext({ kadr: new Map([[svaty.id, svaty]]), situace: new Map([[svaty.id, "dluhy"]]), odmitnuteZalohy: new Set([svaty.id]) });
     expect(pribehyHospody([host(svaty)], k, JISTE).ohlaseni).toEqual({ playerId: "x", obvineny: true });
+  });
+
+  it("každý hráč s dluhy nese incidentId své vlastní situace, ne cizí ani náhodně vybrané", () => {
+    // Návnada v `incidenty`, jejíž id taky obsahuje „dluhy", ale nepatří žádnému z nich:
+    // starý kód `k.incidenty.find(i => i.id.includes("dluhy"))` by ji chybně přiřadil oběma.
+    const navnada = incident({ id: "inc-dluhy-jiny", culpritType: null, culpritPlayerId: null, category: "zivotni", ztraty: [] });
+    const k = kontext({
+      incidenty: [navnada],
+      situace: new Map([[SVEDEK.id, "dluhy"], [PACHATEL.id, "dluhy"]]),
+      idSituaci: new Map([[SVEDEK.id, "inc-dluhy-s"], [PACHATEL.id, "inc-dluhy-p"]]),
+    });
+    const svedekuv = pribehyHospody([host(SVEDEK)], k, JISTE).pribehy.find((p) => p.type === "pije_na_sekeru");
+    const pachateluv = pribehyHospody([host(PACHATEL)], k, JISTE).pribehy.find((p) => p.type === "pije_na_sekeru");
+    expect(svedekuv?.incidentId).toBe("inc-dluhy-s");
+    expect(pachateluv?.incidentId).toBe("inc-dluhy-p");
   });
 });
