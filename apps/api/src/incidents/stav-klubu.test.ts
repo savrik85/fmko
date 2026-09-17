@@ -13,6 +13,7 @@ describe("hráč z řádku DB", () => {
     expect(hracZRadku(radek)).toEqual({
       id: "h1", jmeno: "Franta Novák", alkohol: 80, disciplina: 20, vernost: 30, temperament: 70,
       vztahKTrenerovi: 35, transferUnrest: 40, vudcovstvi: 72, povolani: "Policista", recidivista: false,
+      vek: 25, dluhy: false, zalohaOdmitnuta: false,
     });
   });
 
@@ -25,6 +26,7 @@ describe("hráč z řádku DB", () => {
     expect(h).toMatchObject({
       alkohol: 30, disciplina: 50, vernost: 50, temperament: 40, vztahKTrenerovi: 50,
       vudcovstvi: 30, povolani: "", transferUnrest: 0, recidivista: false,
+      vek: 25, dluhy: false, zalohaOdmitnuta: false,
     });
   });
 });
