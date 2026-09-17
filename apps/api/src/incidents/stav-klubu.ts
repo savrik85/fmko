@@ -162,5 +162,6 @@ export async function nactiStavKlubu(
     odehranychZapasu: cislo((pocetRes.results[0] as { n?: number } | undefined)?.n, 0),
     otevreneProblemy, posledniVyskyt,
     zapasDnesNeboZitra: blizkyZapasRes.results.length > 0,
+    situace: new Map(),
   };
 }

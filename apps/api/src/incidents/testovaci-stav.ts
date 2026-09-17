@@ -23,6 +23,7 @@ export function stavKlubu(over: Partial<StavKlubu> = {}): StavKlubu {
     vybaveni: {}, stadion: { pitch_condition: 70 }, kadr: [],
     vcera: null, hospodaVcera: [], odehranychZapasu: 10,
     otevreneProblemy: 0, posledniVyskyt: {}, zapasDnesNeboZitra: false,
+    situace: new Map(),
     ...over,
   };
 }
