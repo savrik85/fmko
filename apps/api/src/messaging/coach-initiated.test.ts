@@ -11,12 +11,14 @@ vi.mock("./ai-player-spawn", () => ({
   })),
   loadTeamContext: vi.fn(async () => ({ teamName: "TJ Dvory" })),
   pockejNezDopise: vi.fn(async () => undefined),
+  nactiSituaceTymu: vi.fn(async () => new Map()),
 }));
 vi.mock("../incidents/znalosti-db", () => ({ nactiZnalostiHrace: vi.fn(async () => []) }));
 
 import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
-import { generateCoachInitiatedReply } from "./ai-player-chat";
+import { generateCoachInitiatedReply, generateSquadGroupReaction } from "./ai-player-chat";
+import { nactiSituaceTymu } from "./ai-player-spawn";
 import { replyInSquadGroup, startCoachThread } from "./coach-initiated";
 
 const TEMA = { incidentId: "inc-1", incidentDen: "2026-09-16" };
@@ -66,5 +68,22 @@ describe("kabina", () => {
   it("mluvčí dostane jen veřejné znalosti", async () => {
     await replyInSquadGroup(jakoD1(db(null)), {}, { teamId: "tym-a", convId: "kabina", coachMessage: "Kdo ukradl dresy?" });
     expect(nactiZnalostiHrace).toHaveBeenCalledWith(expect.anything(), { teamId: "tym-a", playerId: "s" });
+  });
+});
+
+describe("hráč zná svou životní situaci", () => {
+  it("1:1 konverzace ji naplní ze stejného zdroje jako spawn", async () => {
+    vi.mocked(generateCoachInitiatedReply).mockResolvedValue({ body: "Nic nevím.", conversationComplete: false });
+    vi.mocked(nactiSituaceTymu).mockResolvedValueOnce(new Map([["s", "dluhy"]]));
+    await zacni(db(null));
+    const player = vi.mocked(generateCoachInitiatedReply).mock.calls[0][1] as { zivotniSituace?: unknown };
+    expect(player.zivotniSituace).toEqual({ kind: "dluhy", label: "Dluhy" });
+  });
+
+  it("reakce v kabině ji naplní mluvčímu taky", async () => {
+    vi.mocked(nactiSituaceTymu).mockResolvedValueOnce(new Map([["s", "rozvod"]]));
+    await replyInSquadGroup(jakoD1(db(null)), {}, { teamId: "tym-a", convId: "kabina", coachMessage: "Ahoj" });
+    const mluvci = vi.mocked(generateSquadGroupReaction).mock.calls[0][1] as { zivotniSituace?: unknown };
+    expect(mluvci.zivotniSituace).toEqual({ kind: "rozvod", label: "Rozvod" });
   });
 });

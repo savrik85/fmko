@@ -4,6 +4,7 @@
  * šablonový fallback — efekt se aplikuje vždy.
  */
 
+import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
 import { sendPlayerSMS } from "../messaging/system-sms";
 import { parseUnrest, type TransferUnrest } from "./offer-rejection-impact";
@@ -287,10 +288,12 @@ export async function performUnrestAction(
   let playerReply: string | null = null;
   try {
     const { generateUnrestReply } = await import("../messaging/ai-player-chat");
-    const { loadPlayerSnapshot } = await import("../messaging/ai-player-spawn");
+    const { loadPlayerSnapshot, nactiSituaceTymu } = await import("../messaging/ai-player-spawn");
     const team = await db.prepare("SELECT t.name, v.name as village_name FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
       .bind(teamId).first<{ name: string; village_name: string | null }>();
     const snapshot = loadPlayerSnapshot({ ...player, life_context: JSON.stringify(lc) });
+    const situaceKind = (await nactiSituaceTymu(db, teamId)).get(playerId);
+    snapshot.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
     const { nactiZnalostiHrace } = await import("../incidents/znalosti-db");
     snapshot.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId, playerId });
     playerReply = await generateUnrestReply(env, snapshot, { teamName: team?.name ?? "", villageName: team?.village_name ?? undefined }, {

@@ -84,7 +84,7 @@ function uuid(): string {
 }
 
 /** Běžící životní situace hráčů týmu (spec 4c), klíčované id hráče. Jeden dotaz na tým. */
-async function nactiSituaceTymu(db: D1Database, teamId: string): Promise<Map<string, string>> {
+export async function nactiSituaceTymu(db: D1Database, teamId: string): Promise<Map<string, string>> {
   const situaceRows = await db.prepare(
     `SELECT subject_player_id AS id, kind FROM club_incidents
       WHERE team_id = ? AND status = 'probiha' AND category = 'zivotni' AND subject_player_id IS NOT NULL`,

@@ -12,12 +12,13 @@
 
 import { logger } from "../lib/logger";
 import { createRng, cryptoSeed } from "../generators/rng";
+import { nazevSituace } from "../incidents/situace";
 import { temaZeStavu } from "../incidents/tema";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
   generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError,
 } from "./ai-player-chat";
-import { loadPlayerSnapshot, loadTeamContext, pockejNezDopise } from "./ai-player-spawn";
+import { loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, pockejNezDopise } from "./ai-player-spawn";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 const M = "coach-initiated";
@@ -55,6 +56,8 @@ export async function startCoachThread(
     }
 
     const player = loadPlayerSnapshot(row);
+    const situaceKind = (await nactiSituaceTymu(db, opts.teamId)).get(opts.playerId);
+    player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
     const team = await loadTeamContext(db, opts.teamId);
 
     // Téma incidentu z tlačítka „Zeptat se" nebo z dřívější otázky (spec 7a).
@@ -167,7 +170,13 @@ export async function replyInSquadGroup(
       .all<Record<string, unknown>>();
     if (rows.results.length === 0) return false;
 
-    const kadr = rows.results.map((r) => loadPlayerSnapshot(r));
+    const situace = await nactiSituaceTymu(db, opts.teamId);
+    const kadr = rows.results.map((r) => {
+      const snap = loadPlayerSnapshot(r);
+      const kind = situace.get(snap.id);
+      snap.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
+      return snap;
+    });
     const mluvci = vyberMluvciho(kadr);
     if (!mluvci) return false;
 
