@@ -178,9 +178,11 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
       // je jediný způsob jak měnit rozpočet. Dynamický import kvůli cyklu incidents ↔ season.
       if (z.castka <= 0) return null;
       const { recordTransaction } = await import("../season/finance-processor");
-      await recordTransaction(db, stav.teamId, "incident_loss", -z.castka, `Ukradená hotovost: ${popis}`, stav.gameDate, `ztrata-${incidentId}`)
-        .catch((e) => { logger.error({ module: M }, `odepsání ukradené hotovosti ${incidentId}`, e); });
-      return z;
+      // Úspěch se pozná podle chybějící výjimky, ne podle vráceného čísla — nula je platný zůstatek po odečtení.
+      const ok = await recordTransaction(db, stav.teamId, "incident_loss", -z.castka, `Ukradená hotovost: ${popis}`, stav.gameDate, `ztrata-${incidentId}`)
+        .then(() => true)
+        .catch((e) => { logger.error({ module: M }, `odepsání ukradené hotovosti ${incidentId}`, e); return false; });
+      return ok ? z : null;
     }
   }
   return null;

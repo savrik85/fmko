@@ -55,6 +55,10 @@ export const SRAZKA_TYDNU = 4;
 export const POKUTA_STROP_KC = 5000;
 /** Hodnota jednoho procentního bodu stavu trávníku v Kč (hodnota škody). */
 export const CENA_BODU_TRAVNIKU = 150;
+/** Strop peněžní ztráty: nikdy víc než desetina rozpočtu (spec 4e). */
+export const STROP_ZTRATY_PODIL = 0.1;
+/** A nikdy víc než tolik korun, ať velký klub nepřijde o všechno naráz. */
+export const STROP_ZTRATY_KC = 40000;
 export const SMS_ROLE_POLICIE = "Policie ČR, obvodní oddělení";
 /** Vztahy, kvůli kterým hráč kamaráda kryje (spec 5b). */
 export const KAMARADSKE_VZTAHY = ["brothers", "drinking_buddies", "neighbors", "coworkers", "classmates", "in_laws"] as const;
@@ -106,11 +110,6 @@ export const BAZAR_DNI_MAX = 5;
 export const SLEVA_KRADENEHO = 0.55;
 /** Soukromý inzerát vydrží jako lidský inzerát, v reálných dnech. */
 export const KRADENE_INZERAT_DNI = 7;
-
-/** Strop peněžní ztráty: nikdy víc než desetina rozpočtu (spec 4e). */
-export const STROP_ZTRATY_PODIL = 0.1;
-/** A nikdy víc než tolik korun, ať velký klub nepřijde o všechno naráz. */
-export const STROP_ZTRATY_KC = 40000;
 
 /** Hospoda (spec Část 9). Šance jsou na jednu hospodskou session. */
 export const DRBY_ALKOHOL = 60;

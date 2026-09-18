@@ -46,8 +46,12 @@ const NEROZLISUJICI = new Set([
   "sektor", "kotel", "kotle", "sluzba",
 ]);
 
+/** Peněžní ztráta (kasa, tombola, zpronevěra, útěk s penězi) nemá kategorii ani zařízení, kmeny jsou ruční. */
+const KMENY_PENIZE = ["peniz", "hotovost", "kasa", "tombol", "pokladn"];
+
 /** Kmeny slov z názvu toho, co incident poškodil: bez poslední hlásky, aby „dresy" poznalo i „dresů". */
 function kmenyZtraty(z: Ztrata): string[] {
+  if (z.typ === "penize") return KMENY_PENIZE;
   const nazev = z.typ === "vybaveni" || z.typ === "vybaveni_stav" ? CATEGORY_LABELS[z.kategorie]
     : z.typ === "stadion" ? FACILITY_LABELS[z.zarizeni]
     : "trávník";

@@ -85,6 +85,13 @@ describe("na který incident se ptá", () => {
   it("běžná zpráva žádný", () => {
     expect(najdiIncidentVTextu("Zdar", incidenty)).toBeNull();
   });
+
+  it("zpráva o penězích najde peněžní incident, ne trávníkový (spec 4a)", () => {
+    const penize = { id: "kasa", kind: "kasa_obcerstveni", ztraty: [{ typ: "penize", castka: 3000 }] as Ztrata[] };
+    const travnik = { id: "travnik", kind: "vandal", ztraty: [{ typ: "travnik", pred: 70, po: 40 }] as Ztrata[] };
+    expect(najdiIncidentVTextu("Zmizely nám peníze z kasy!", [penize, travnik])).toBe("kasa");
+    expect(najdiIncidentVTextu("Kdo nám zničil trávník?", [penize, travnik])).toBe("travnik");
+  });
 });
 
 describe("téma ve vlákně", () => {

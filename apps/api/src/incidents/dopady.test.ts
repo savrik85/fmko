@@ -140,8 +140,32 @@ describe("zápis incidentu", () => {
         kind: "kasa_obcerstveni", category: "kradez", status: "otevreny", severity: 2,
         culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
         ztraty: [{ typ: "penize", castka: 3000 }], text: "Kasa je prázdná.",
-      });
+      }, "inc-penize");
       expect(db.pocet(/INSERT INTO transactions/)).toBe(1);
+      const transakce = db.dotazy.find((d) => /INSERT INTO transactions/.test(d.sql));
+      expect(transakce?.params[2]).toBe("incident_loss");
+      expect(transakce?.params[3]).toBe(-3000);
+      expect(transakce?.params[6]).toBe("ztrata-inc-penize");
+    });
+
+    it("recordTransaction vyhodí chybu: ztráta se nezapíše, incident zůstane bez škody", async () => {
+      // Selhání se pozná jen podle vyhozené chyby, ne podle návratové hodnoty (nula je platný
+      // zůstatek) — proto tu D1 musí opravdu vyhodit, ne jen vrátit prázdný/nulový výsledek.
+      const db = new FalesnaD1();
+      const puvodniPrepare = db.prepare.bind(db);
+      db.prepare = ((sql: string) => {
+        if (/UPDATE teams SET budget/.test(sql)) {
+          return { bind: () => ({ first: async () => { throw new Error("D1 výpadek"); } }) };
+        }
+        return puvodniPrepare(sql);
+      }) as typeof db.prepare;
+      const zapsany = await zapisIncident(jakoD1(db), stavKlubu(), {
+        kind: "kasa_obcerstveni", category: "kradez", status: "otevreny", severity: 2,
+        culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "penize", castka: 3000 }], text: "Kasa je prázdná.",
+      }, "inc-penize-fail");
+      expect(db.pocet(/INSERT INTO transactions/)).toBe(0);
+      expect(zapsany).toBeNull();
     });
   });
 
