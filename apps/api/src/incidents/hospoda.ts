@@ -22,8 +22,8 @@ import {
   BONUS_POLICIE, CELA_HOSPODA_DNI, CELA_HOSPODA_SANCE, CELA_HOSPODA_ZAVAZNOST, CERSTVY_ZLODEJ_DNI, CHLUBI_ALKOHOL,
   CHLUBI_DNI, CHLUBI_SANCE, CHLUBI_TEMPERAMENT, CHLUBI_TEMPERAMENT_NASOBEK, DRBY_ALKOHOL, DRBY_SANCE, HROZI_LHUTA_MAX,
   HROZI_LHUTA_MIN, LHUTA_PO_ODHALENI_DNI, NABIZI_SANCE, OBVINENI_PAMET_DNI, OCHOTA_POSLA, OHLASUJE_ALKOHOL,
-  OHLASUJE_SANCE, PRAH_VAHY_PACHATELE, RVACKA_SANCE, SEKERA_SANCE, STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH,
-  TRENER_V_HOSPODE_NASOBEK, ZNALOST_DRB_DNI,
+  OHLASUJE_SANCE, PENEZNI_KINDY, PRAH_VAHY_PACHATELE, RUNDY_DNI, RUNDY_SANCE, RVACKA_SANCE, SEKERA_SANCE,
+  STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH, TRENER_V_HOSPODE_NASOBEK, ZNALOST_DRB_DNI,
 } from "./nastaveni";
 import { vahaPachatele } from "./pachatel";
 import { MISTO_INCIDENTU, MISTO_TEXT } from "./stopy";
@@ -35,12 +35,12 @@ import type { NovaZnalost, RoleSvedka, VysledekVyslechu } from "./znalosti";
 
 export type TypPribehu =
   | "drby_o_incidentu" | "nabizi_zbozi" | "stezuje_si_na_trenera" | "rvacka_kvuli_kradezi"
-  | "cela_hospoda_resi" | "chlubi_se" | "ohlasuje_cin" | "pije_na_sekeru";
+  | "cela_hospoda_resi" | "chlubi_se" | "ohlasuje_cin" | "pije_na_sekeru" | "utraci_za_rundy";
 
 /** Příhody o incidentech. Návštěva s trenérem je z dnešní session převezme (`season/pub.ts`). */
 export const TYPY_PRIBEHU: readonly TypPribehu[] = [
   "drby_o_incidentu", "nabizi_zbozi", "stezuje_si_na_trenera", "rvacka_kvuli_kradezi",
-  "cela_hospoda_resi", "chlubi_se", "ohlasuje_cin", "pije_na_sekeru",
+  "cela_hospoda_resi", "chlubi_se", "ohlasuje_cin", "pije_na_sekeru", "utraci_za_rundy",
 ];
 
 export interface HostHospody {
@@ -222,6 +222,7 @@ export function pribehyHospody(hoste: readonly HostHospody[], k: KontextHospody,
   rvacka(k, v, mistni, tady, incidenty, out);
   celaHospoda(k, v, incidenty, out);
   sekera(k, v, mistni, out);
+  rundy(k, v, mistni, out);
   out.zlodeji = zlodejiUStolu(k, tady, incidenty);
   out.ohlaseni = kdoOhlasi(k, v, mistni);
   out.zapisy.push(...drbyDoCizichKlubu(k, hoste, out.pribehy));
@@ -405,6 +406,27 @@ function sekera(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody
     out.pribehy.push({
       type: "pije_na_sekeru", playerIds: [h.playerId], effects: [], incidentId,
       text: text(rng, "hospoda_sekera", { hrac: jmeno(h) }),
+    });
+    return;
+  }
+}
+
+/**
+ * Pachatel odhalené peněžní krádeže má najednou hotovost a neudrží se: platí rundy,
+ * štamgasti si to spojí (spec 9). Neodhalený pachatel se v deníku, který čte kdokoli
+ * včetně soupeřů, jménem objevit nesmí, proto se kontroluje `odhalen`.
+ */
+function rundy(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody[], out: VysledekHospody): void {
+  for (const h of mistni) {
+    const inc = k.incidenty.find((i) =>
+      i.odhalen && i.culpritPlayerId === h.playerId
+      && (PENEZNI_KINDY as readonly string[]).includes(i.kind) && dnyMezi(i.den, k.den) <= RUNDY_DNI);
+    if (!inc || zaznelo(v, "utraci_za_rundy", inc.id)) continue;
+    const rng = los(k, "rundy", h.playerId);
+    if (!vyjde(rng, RUNDY_SANCE, v)) continue;
+    out.pribehy.push({
+      type: "utraci_za_rundy", playerIds: [h.playerId], effects: [], incidentId: inc.id,
+      text: text(rng, "hospoda_rundy", { hrac: jmeno(h) }),
     });
     return;
   }

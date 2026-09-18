@@ -203,6 +203,16 @@ export const RIDICAK_SANCE_NAVIC = 0.12;
 /** Hospoda (spec 9). */
 export const SEKERA_SANCE = 0.5;
 export const ROZVOD_HOSPODA_NASOBEK = 1.5;
+/** Šance, že se pachatel peněžní krádeže v hospodě neudrží a platí rundy (spec 9). */
+export const RUNDY_SANCE = 0.3;
+/** Jak dlouho po odhalení peněžní krádeže se ještě může stát, že pachatel platí rundy. */
+export const RUNDY_DNI = 10;
+/**
+ * Kindy, u kterých pachatel drží v ruce hotovost. `utek_s_penezi` a `zpronevera_ekonoma`
+ * chybí záměrně: pachatel prvního odchází z klubu ten samý den, druhého je zaměstnanec,
+ * ne host hospody, takže by šlo o mrtvou větev.
+ */
+export const PENEZNI_KINDY = ["kasa_obcerstveni", "tombola"] as const;
 
 /** Útěk s penězi (spec 4a): kdo je ochotný a kdy se to vyplatí. */
 export const UTEK_MAX_VERNOST = 50;

@@ -424,6 +424,13 @@ export const TEXTY = {
     "U výčepu bylo dusno, {hrac} má u hospodského dluh.",
     "{hrac} si objednal a hospodský mu připomněl, co dluží.",
   ],
+  hospoda_rundy: [
+    "{hrac} zaplatil rundu celé hospodě a nikdo nevěděl, odkud na to vzal.",
+    "{hrac} objednal kolečko pro celý stůl, přestože v klubu ještě nedávno chyběly peníze.",
+    "{hrac} rozdával peníze jako by nic a štamgasti si to dali dohromady.",
+    "{hrac} platil rundu bez mrknutí oka a v hospodě se o tom hned mluvilo.",
+    "{hrac} koupil celé hospodě pivo a lidé u výčepu si vyměnili pohledy.",
+  ],
   hospoda_chlubi: [
     "Po šestém pivu se {hrac} pochlubil, že to byl on: {nazev}.",
     "{hrac} u výčepu vykládal, že ten průšvih v klubu má na svědomí on: {nazev}.",
