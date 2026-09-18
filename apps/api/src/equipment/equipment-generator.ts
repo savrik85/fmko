@@ -341,7 +341,7 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   raffle:          [0, 2000, 8000, 25000],
   pa_system:       [0, 6000, 22000, 65000],
   trophy_case:     [0, 3000, 12000, 35000],
-  area_security:   [0, 5000, 25000, 70000],
+  area_security:   [0, 12000, 50000, 150000],
 };
 
 // ── Bazar a zastavárna — ceny ──
