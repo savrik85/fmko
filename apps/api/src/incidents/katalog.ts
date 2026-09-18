@@ -6,11 +6,12 @@
  * na věc, kterou klub skutečně má; testy v katalog.test.ts to hlídají.
  */
 
-import { CATEGORY_LABELS, cumulativeInvestment, efektyZabezpeceni } from "../equipment/equipment-generator";
+import { CATEGORIES, CATEGORY_LABELS, cumulativeInvestment, efektyZabezpeceni } from "../equipment/equipment-generator";
 import type { Rng } from "../generators/rng";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import {
-  KASA_PODIL_MAX, KASA_PODIL_MIN, OBSLUHA_SANCE, PODIL_POKUSU_ZVENKU, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
+  DODAVKA_STAV_PRAH, KASA_PODIL_MAX, KASA_PODIL_MIN, MECHANIK_STAV, OBSLUHA_SANCE, PODIL_POKUSU_ZVENKU,
+  POVOLANI_MECHANIKA, POVOLANI_REMESLNIKU, REMESLNIK_STAV, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
   TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_SANCE_USUDEK_1,
   ZPRONEVERA_SANCE_USUDEK_20, ZPRONEVERA_STROP_PODIL,
 } from "./nastaveni";
@@ -61,6 +62,22 @@ function pijaciZHospody(s: StavKlubu): HracKlubu[] {
   return s.kadr
     .filter((h) => byli.has(h.id) && h.alkohol >= 60)
     .sort((a, b) => b.alkohol - a.alkohol || a.id.localeCompare(b.id));
+}
+
+/** Kategorie, které umí opravit řemeslník. Dodávka má vlastního automechanika (spec 4d). */
+const KATEGORIE_REMESLNIKA: readonly string[] = CATEGORIES.filter((k) => k !== "team_van");
+
+/** Vybavení, které klub skutečně má a je ve špatném stavu (kandidát na opravu řemeslníkem). */
+function poskozeneVybaveni(s: StavKlubu): string[] {
+  return KATEGORIE_REMESLNIKA.filter((k) => uroven(s, k) >= 1 && stavVeci(s, k) < 60);
+}
+
+function remeslnici(s: StavKlubu): HracKlubu[] {
+  return s.kadr.filter((h) => (POVOLANI_REMESLNIKU as readonly string[]).includes(h.povolani));
+}
+
+function mechanici(s: StavKlubu): HracKlubu[] {
+  return s.kadr.filter((h) => h.povolani === POVOLANI_MECHANIKA);
 }
 
 function vzteklounSCervenou(s: StavKlubu): HracKlubu | null {
@@ -443,6 +460,67 @@ export const KATALOG: DefiniceIncidentu[] = [
     kind: "alarm_vyplasil", label: "Alarm vyplašil zloděje", emoji: "🚨", category: "pozitivni", vaha: 0, spousteny: false,
     muze: () => false,
     vytvor: () => null,
+  },
+  {
+    // Pozitivní incidenty (spec 4d): vaha 0, nelosují se v poolu problémů výš (vylosujIncident
+    // bere jen `vaha > 0`), vlastní denní los na ně přijde v pozdější fázi (spec 4e, Task 5).
+    kind: "remeslnik_opravil", label: "Řemeslník opravil škodu", emoji: "🛠️", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: (s) => (s.poskozeni.length > 0 || poskozeneVybaveni(s).length > 0) && remeslnici(s).length > 0,
+    vytvor: (s, rng) => {
+      const kandidati = remeslnici(s);
+      if (kandidati.length === 0) return null;
+      const spatnyStav = poskozeneVybaveni(s);
+      if (s.poskozeni.length === 0 && spatnyStav.length === 0) return null;
+      const hrac = rng.pick(kandidati);
+      // Když je na výběr obojí, padne los. Jinak vezme to jediné, co jde.
+      const opravitSkodu = s.poskozeni.length > 0 && (spatnyStav.length === 0 || rng.random() < 0.5);
+      if (opravitSkodu) {
+        const d = rng.pick(s.poskozeni);
+        return {
+          kind: "remeslnik_opravil", category: "pozitivni", status: "uzavreny", severity: 1,
+          culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+          ztraty: [{ typ: "oprava", damageId: d.id, zarizeni: d.zarizeni }],
+          text: text(rng, "remeslnik_opravil", { hrac: hrac.jmeno, vec: FACILITY_LABELS[d.zarizeni] ?? d.zarizeni }),
+        };
+      }
+      const kategorie = rng.pick(spatnyStav);
+      return {
+        kind: "remeslnik_opravil", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "vybaveni_nahoru", kategorie, stavNahoru: REMESLNIK_STAV }],
+        text: text(rng, "remeslnik_opravil", { hrac: hrac.jmeno, vec: CATEGORY_LABELS[kategorie] ?? kategorie }),
+      };
+    },
+  },
+  {
+    kind: "mechanik_dodavka", label: "Automechanik spravil dodávku", emoji: "🔧", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: (s) => uroven(s, "team_van") >= 1 && stavVeci(s, "team_van") < DODAVKA_STAV_PRAH && mechanici(s).length > 0,
+    vytvor: (s, rng) => {
+      if (uroven(s, "team_van") < 1 || stavVeci(s, "team_van") >= DODAVKA_STAV_PRAH) return null;
+      const kandidati = mechanici(s);
+      if (kandidati.length === 0) return null;
+      const hrac = rng.pick(kandidati);
+      return {
+        kind: "mechanik_dodavka", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "vybaveni_nahoru", kategorie: "team_van", stavNahoru: MECHANIK_STAV }],
+        text: text(rng, "mechanik_dodavka", { hrac: hrac.jmeno }),
+      };
+    },
+  },
+  {
+    // Bez pachatele i bez konkrétního hráče (spec 4d): zesnulý fanoušek, ne člen kádru.
+    kind: "dedictvi", label: "Dědictví po fanouškovi", emoji: "👕", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: (s) => uroven(s, "jerseys") < 3,
+    vytvor: (s, rng) => {
+      if (uroven(s, "jerseys") >= 3) return null;
+      return {
+        kind: "dedictvi", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "vybaveni_nahoru", kategorie: "jerseys", urovniNahoru: 1, stavNahoru: 100 }],
+        text: text(rng, "dedictvi", { vec: CATEGORY_LABELS.jerseys }),
+      };
+    },
   },
 ];
 

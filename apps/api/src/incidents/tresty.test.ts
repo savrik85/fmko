@@ -22,6 +22,22 @@ describe("hodnota škody", () => {
   });
 });
 
+describe("pozitivní incidenty nejsou škoda (spec 4d)", () => {
+  it("oprava a zvýšení vybavení nesou nulovou hodnotu škody", () => {
+    expect(hodnotaSkody([{ typ: "oprava", damageId: "dmg-1", zarizeni: "fence" }])).toBe(0);
+    expect(hodnotaSkody([{ typ: "vybaveni_nahoru", kategorie: "jerseys", urovniNahoru: 1, stavNahoru: 100 }])).toBe(0);
+  });
+
+  it("nesnižují ani nezvyšují skutečnou škodu vedle nich", () => {
+    const s = hodnotaSkody([
+      { typ: "penize", castka: 1000 },
+      { typ: "oprava", damageId: "dmg-1", zarizeni: "fence" },
+      { typ: "vybaveni_nahoru", kategorie: "jerseys", stavNahoru: 30 },
+    ]);
+    expect(s).toBe(1000);
+  });
+});
+
 describe("peněžní škoda (spec 3)", () => {
   it("hodnota peněžní ztráty je ukradená částka", () => {
     expect(hodnotaSkody([{ typ: "penize", castka: 4200 }])).toBe(4200);

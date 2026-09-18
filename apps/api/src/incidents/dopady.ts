@@ -184,6 +184,41 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
         .catch((e) => { logger.error({ module: M }, `poškození trávníku ${incidentId}`, e); return null; });
       return zmeneno(r) ? z : null;
     }
+    case "oprava": {
+      // Řemeslník opraví zdarma (remeslnik_opravil, spec 4d): stejná idempotence jako
+      // placená oprava, jen bez transakce. Úspěch se pozná podle `ok`, ne podle vrácené
+      // úrovně, která může legitimně vyjít na nulu.
+      const { opravZdarma } = await import("../stadium/stadium-damage");
+      const r = await opravZdarma(db, { teamId: stav.teamId, damageId: z.damageId, gameDate: stav.gameDate })
+        .catch((e) => { logger.error({ module: M }, `oprava zdarma ${incidentId}`, e); return null; });
+      return r?.ok ? z : null;
+    }
+    case "vybaveni_nahoru": {
+      // Kategorie jde do názvu sloupce: whitelist je povinný, stejně jako u "vybaveni"/"vybaveni_stav".
+      if (!(CATEGORIES as readonly string[]).includes(z.kategorie)) {
+        logger.error({ module: M }, `neznámá kategorie vybavení ${z.kategorie} v ${incidentId}`);
+        return null;
+      }
+      // Přírůstek se počítá přímo v SQL (MIN se stropem), žádné čtení "před" stavem
+      // netřeba: incident se zapisuje jen jednou (INSERT OR IGNORE výš), takže dvojitý
+      // přírůstek nehrozí. Úspěch se pozná podle `meta.changes`, ne podle toho, co
+      // vrátila oprava zpátky.
+      const sety: string[] = [];
+      const hodnoty: number[] = [];
+      if (z.urovniNahoru) {
+        sety.push(`${z.kategorie} = MIN(3, ${z.kategorie} + ?)`);
+        hodnoty.push(z.urovniNahoru);
+      }
+      if (z.stavNahoru !== undefined) {
+        sety.push(`${z.kategorie}_condition = MIN(100, ${z.kategorie}_condition + ?)`);
+        hodnoty.push(z.stavNahoru);
+      }
+      if (sety.length === 0) return null;
+      const r = await db.prepare(`UPDATE equipment SET ${sety.join(", ")} WHERE team_id = ?`)
+        .bind(...hodnoty, stav.teamId).run()
+        .catch((e) => { logger.error({ module: M }, `zlepšení vybavení ${incidentId}`, e); return null; });
+      return zmeneno(r) ? z : null;
+    }
     case "penize": {
       // Peníze se odepisují transakcí, ne přímým zápisem do teams.budget — recordTransaction
       // je jediný způsob jak měnit rozpočet. Dynamický import kvůli cyklu incidents ↔ season.

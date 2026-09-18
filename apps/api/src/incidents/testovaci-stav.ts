@@ -24,6 +24,7 @@ export function stavKlubu(over: Partial<StavKlubu> = {}): StavKlubu {
     vcera: null, hospodaVcera: [], odehranychZapasu: 10,
     otevreneProblemy: 0, posledniVyskyt: {}, zapasDnesNeboZitra: false,
     rozpocet: 100000, situace: new Map(), utekLetos: false, ekonom: null, obsluha: null,
+    poskozeni: [],
     ...over,
   };
 }

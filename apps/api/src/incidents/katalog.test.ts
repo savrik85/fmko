@@ -411,3 +411,102 @@ describe("zpronevěra ekonoma (spec 4a)", () => {
     proSeedy((rng) => expect(def("zpronevera_ekonoma").vytvor(s, rng)).toBeNull(), 100);
   });
 });
+
+describe("pozitivní incidenty: řemeslník, automechanik a dědictví (spec 4d)", () => {
+  const REMESLNIK = hrac({ id: "r", jmeno: "Karel Zedník", povolani: "Zedník" });
+  const MECHANIK = hrac({ id: "m", jmeno: "Petr Mazal", povolani: "Automechanik" });
+
+  it("všechny tři mají váhu 0 a nejsou spouštěné: nelosují se v běžném poolu", () => {
+    for (const kind of ["remeslnik_opravil", "mechanik_dodavka", "dedictvi"]) {
+      expect(def(kind).vaha, kind).toBe(0);
+      expect(def(kind).spousteny, kind).toBe(false);
+    }
+  });
+
+  it("řemeslník: bez škody, bez sešlého vybavení nebo bez řemeslníka v kádru nejde", () => {
+    expect(def("remeslnik_opravil").muze(stavKlubu({ kadr: [REMESLNIK] }))).toBe(false);
+    expect(def("remeslnik_opravil").muze(stavKlubu({ poskozeni: [{ id: "dmg-1", zarizeni: "fence" }] }))).toBe(false);
+    expect(def("remeslnik_opravil").muze(stavKlubu({
+      vybaveni: { balls: 1, balls_condition: 40 }, kadr: [REMESLNIK],
+    }))).toBe(true);
+    expect(def("remeslnik_opravil").muze(stavKlubu({
+      poskozeni: [{ id: "dmg-1", zarizeni: "fence" }], kadr: [REMESLNIK],
+    }))).toBe(true);
+  });
+
+  it("řemeslník opraví poškozené zařízení, když nějaké klub má", () => {
+    const s = stavKlubu({ poskozeni: [{ id: "dmg-1", zarizeni: "fence" }], kadr: [REMESLNIK] });
+    let opraveno = 0;
+    proSeedy((rng) => {
+      const n = def("remeslnik_opravil").vytvor(s, rng);
+      if (!n) return;
+      opraveno++;
+      expect(n).toMatchObject({
+        kind: "remeslnik_opravil", category: "pozitivni", status: "uzavreny",
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+      });
+      expect(n.ztraty).toEqual([{ typ: "oprava", damageId: "dmg-1", zarizeni: "fence" }]);
+      expect(n.text).toContain("Karel Zedník");
+    });
+    expect(opraveno).toBeGreaterThan(0);
+  });
+
+  it("řemeslník zvedne stav sešlého vybavení, když nemá co opravovat", () => {
+    const s = stavKlubu({ vybaveni: { balls: 1, balls_condition: 40 }, kadr: [REMESLNIK] });
+    let zvednuto = 0;
+    proSeedy((rng) => {
+      const n = def("remeslnik_opravil").vytvor(s, rng);
+      if (!n) return;
+      zvednuto++;
+      expect(n.ztraty).toEqual([{ typ: "vybaveni_nahoru", kategorie: "balls", stavNahoru: 30 }]);
+      expect(n.text).toContain("Karel Zedník");
+    });
+    expect(zvednuto).toBeGreaterThan(0);
+  });
+
+  it("řemeslník nesahá na dodávku, tu má na starosti automechanik", () => {
+    const s = stavKlubu({ vybaveni: { team_van: 1, team_van_condition: 10 }, kadr: [REMESLNIK] });
+    expect(def("remeslnik_opravil").muze(s)).toBe(false);
+  });
+
+  it("automechanik: bez dodávky, s dobrým stavem nebo bez automechanika v kádru nejde", () => {
+    expect(def("mechanik_dodavka").muze(stavKlubu({ kadr: [MECHANIK] }))).toBe(false);
+    expect(def("mechanik_dodavka").muze(stavKlubu({
+      vybaveni: { team_van: 1, team_van_condition: 80 }, kadr: [MECHANIK],
+    }))).toBe(false);
+    expect(def("mechanik_dodavka").muze(stavKlubu({
+      vybaveni: { team_van: 1, team_van_condition: 50 },
+    }))).toBe(false);
+    expect(def("mechanik_dodavka").muze(stavKlubu({
+      vybaveni: { team_van: 1, team_van_condition: 50 }, kadr: [MECHANIK],
+    }))).toBe(true);
+  });
+
+  it("automechanik zvedne stav dodávky o 40", () => {
+    const s = stavKlubu({ vybaveni: { team_van: 1, team_van_condition: 50 }, kadr: [MECHANIK] });
+    const n = def("mechanik_dodavka").vytvor(s, createRng(1));
+    expect(n).toMatchObject({
+      kind: "mechanik_dodavka", category: "pozitivni", status: "uzavreny",
+      culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+    });
+    expect(n?.ztraty).toEqual([{ typ: "vybaveni_nahoru", kategorie: "team_van", stavNahoru: 40 }]);
+    expect(n?.text).toContain("Petr Mazal");
+  });
+
+  it("dědictví: jen dokud jsou dresy pod úrovní 3, žádný hráč potřeba není", () => {
+    expect(def("dedictvi").muze(stavKlubu({ vybaveni: { jerseys: 2 } }))).toBe(true);
+    expect(def("dedictvi").muze(stavKlubu({ vybaveni: { jerseys: 3 } }))).toBe(false);
+    expect(def("dedictvi").muze(stavKlubu())).toBe(true);
+  });
+
+  it("dědictví dá klubu dresy, ne peníze", () => {
+    const n = def("dedictvi").vytvor(stavKlubu({ vybaveni: { jerseys: 1 } }), createRng(1));
+    expect(n).toMatchObject({
+      kind: "dedictvi", category: "pozitivni", status: "uzavreny",
+      culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+    });
+    expect(n?.ztraty).toEqual([{ typ: "vybaveni_nahoru", kategorie: "jerseys", urovniNahoru: 1, stavNahoru: 100 }]);
+    expect(n?.text).not.toContain("Kč");
+    expect(n?.text).toContain("Dresy");
+  });
+});

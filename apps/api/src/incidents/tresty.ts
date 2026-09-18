@@ -34,6 +34,10 @@ export function hodnotaSkody(ztraty: readonly Ztrata[]): number {
       case "penize":
         soucet += z.castka;
         break;
+      case "oprava":
+      case "vybaveni_nahoru":
+        // Pozitivní incident, ne škoda: nic se nepřičítá, nikdo za to neplatí pokutu.
+        break;
       default: {
         // Vyčerpávající switch: nový druh Ztraty bez větve tu spadne na typecheck,
         // ne na tiché započtení nuly do škody.

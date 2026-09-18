@@ -231,4 +231,85 @@ describe("zápis incidentu", () => {
       expect(db.davky.flat().some((d) => /club_incident_knowledge/.test(d.sql))).toBe(true);
     });
   });
+
+  describe("pozitivní incidenty (spec 4d)", () => {
+    it("oprava zdarma: řemeslník spraví neopravenou škodu bez placení", async () => {
+      const db = new FalesnaD1([
+        { sql: /FROM staff_members/, first: { usudek: null } },
+        {
+          sql: /SELECT \* FROM stadium_damage WHERE id = \? AND team_id = \?/,
+          first: {
+            id: "dmg-1", team_id: "tym-a", facility: "fence", levels: 1, repair_cost: 1000,
+            popis: "Po zápase rozbité: Oplocení.", game_date: "2026-09-10", repaired_at: null,
+          },
+        },
+      ]);
+      const stav = stavKlubu({ poskozeni: [{ id: "dmg-1", zarizeni: "fence" }] });
+      const navrh: NavrhIncidentu = {
+        kind: "remeslnik_opravil", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "oprava", damageId: "dmg-1", zarizeni: "fence" }],
+        text: "Karel Zedník vzal po tréninku nářadí a spravil, co bylo rozbité. Opravené: Oplocení.",
+      };
+      const zapsany = await zapisIncident(jakoD1(db), stav, navrh, "inc-remeslnik");
+      expect(zapsany?.id).toBe("inc-remeslnik");
+      const zapisSkody = db.davky.flat().find((d) => /UPDATE club_incidents SET loss = \?, culprit_revealed = \?, bazar_on = \?/.test(d.sql));
+      expect(zapisSkody?.params[0]).toBe(JSON.stringify(navrh.ztraty));
+      // Bez transakce - zdarma znamená zdarma, nikdo za to neplatí.
+      expect(db.pocet(/UPDATE teams SET budget/)).toBe(0);
+      expect(db.pocet(/INTO transactions/)).toBe(0);
+    });
+
+    it("oprava zdarma na už opravenou škodu se nestane (nikdo nedostane repair dvakrát)", async () => {
+      const db = new FalesnaD1([
+        { sql: /FROM staff_members/, first: { usudek: null } },
+        {
+          sql: /SELECT \* FROM stadium_damage WHERE id = \? AND team_id = \?/,
+          first: {
+            id: "dmg-1", team_id: "tym-a", facility: "fence", levels: 1, repair_cost: 1000,
+            popis: "Po zápase rozbité: Oplocení.", game_date: "2026-09-10", repaired_at: "2026-09-11T10:00:00Z",
+          },
+        },
+      ]);
+      const stav = stavKlubu({ poskozeni: [{ id: "dmg-1", zarizeni: "fence" }] });
+      const navrh: NavrhIncidentu = {
+        kind: "remeslnik_opravil", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "oprava", damageId: "dmg-1", zarizeni: "fence" }],
+        text: "Karel Zedník vzal po tréninku nářadí a spravil, co bylo rozbité. Opravené: Oplocení.",
+      };
+      // Škoda se nepovede provést (uz_opraveno), takže incident se uzavře bez škody a nic se neoznámí.
+      expect(await zapisIncident(jakoD1(db), stav, navrh, "inc-remeslnik-2")).toBeNull();
+    });
+
+    it("vybavení nahoru: dědictví zvedne úroveň a stav dresů hlídaným UPDATE", async () => {
+      const db = new FalesnaD1([{ sql: /FROM staff_members/, first: { usudek: null } }]);
+      const stav = stavKlubu({ vybaveni: { jerseys: 1 } });
+      const navrh: NavrhIncidentu = {
+        kind: "dedictvi", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "vybaveni_nahoru", kategorie: "jerseys", urovniNahoru: 1, stavNahoru: 100 }],
+        text: "Klubu dorazilo dědictví po zesnulém fanouškovi: Dresy.",
+      };
+      const zapsany = await zapisIncident(jakoD1(db), stav, navrh, "inc-dedictvi");
+      expect(zapsany?.id).toBe("inc-dedictvi");
+      const update = db.dotazy.find((d) => /UPDATE equipment SET/.test(d.sql));
+      expect(update?.sql).toContain("jerseys = MIN(3, jerseys + ?)");
+      expect(update?.sql).toContain("jerseys_condition = MIN(100, jerseys_condition + ?)");
+      expect(update?.params).toEqual([1, 100, "tym-a"]);
+    });
+
+    it("vybavení nahoru odmítne neznámou kategorii, aby nešla do názvu sloupce", async () => {
+      const db = new FalesnaD1([{ sql: /FROM staff_members/, first: { usudek: null } }]);
+      const stav = stavKlubu();
+      const navrh: NavrhIncidentu = {
+        kind: "dedictvi", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "vybaveni_nahoru", kategorie: "DROP TABLE equipment", stavNahoru: 100 }],
+        text: "Klubu dorazilo dědictví po zesnulém fanouškovi: Dresy.",
+      };
+      expect(await zapisIncident(jakoD1(db), stav, navrh, "inc-dedictvi-2")).toBeNull();
+      expect(db.pocet(/UPDATE equipment/)).toBe(0);
+    });
+  });
 });

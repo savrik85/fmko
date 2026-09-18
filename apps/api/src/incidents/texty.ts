@@ -651,10 +651,10 @@ export const TEXTY = {
     "{hrac} vrátil sousedovi ztracené doklady, přestože by si jich nikdo nevšiml.",
   ],
   dedictvi: [
-    "{hrac} zdědil po dědovi kus pole, prodal ho a klubu poslal {castka} Kč.",
-    "{hrac} dostal dědictví po tetě a rovnou z něj věnoval klubu {castka} Kč.",
-    "{hrac} zdědil po strýci nějaké peníze a bez okolků přispěl klubu {castka} Kč.",
-    "{hrac} po babičce zdědil úspory a klubu z nich poslal {castka} Kč.",
+    "Klubu dorazilo dědictví po zesnulém fanouškovi: {vec}.",
+    "Věrný fanoušek klubu zemřel a v závěti mu odkázal: {vec}.",
+    "Po smrti dlouholetého fanouška klub podle poslední vůle zdědil: {vec}.",
+    "Zesnulý fanoušek pamatoval na klub v závěti a odkázal mu: {vec}.",
   ],
   // Zaměstnavatel dá buď levnou kategorii vybavení (varianty s {vec}), nebo rovnou
   // peníze (varianty s {castka}) — logika si podle výsledku vybere odpovídající dvojici.
@@ -668,12 +668,12 @@ export const TEXTY = {
     "Ve schránce ležela obálka s {castka} Kč. Kdo ji tam dal, nikdo neví.",
     "Do klubové schránky někdo hodil obálku s {castka} Kč a beze slova zmizel.",
     "Ráno našel kustod ve schránce obálku s {castka} Kč, anonymně.",
-    "V klubovní schránce se objevila obálka s {castka} Kč, bez lístku a bez podpisu.",
+    "V klubové schránce se objevila obálka s {castka} Kč, bez lístku a bez podpisu.",
   ],
   omluvny_dopis: [
     "Po letech dorazil anonymní dopis s omluvou a v obálce {castka} Kč, vrácené z toho, co kdysi klubu zmizelo.",
     "Přišel dopis bez podpisu. Pisatel se omlouvá za starou krádež a posílá zpátky {castka} Kč.",
-    "Do klubu dorazila obálka s {castka} Kč a pár řádky omluvy za něco, co se stalo už dávno.",
+    "Do klubu dorazila obálka s {castka} Kč a pár řádků omluvy za něco, co se stalo už dávno.",
     "Po letech se ozval bývalý zloděj. V dopise byla omluva a {castka} Kč nazpátek.",
   ],
 } as const satisfies Record<string, readonly string[]>;

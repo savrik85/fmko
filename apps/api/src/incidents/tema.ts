@@ -52,8 +52,8 @@ const KMENY_PENIZE = ["peniz", "hotovost", "kasa", "tombol", "pokladn"];
 /** Kmeny slov z názvu toho, co incident poškodil: bez poslední hlásky, aby „dresy" poznalo i „dresů". */
 function kmenyZtraty(z: Ztrata): string[] {
   if (z.typ === "penize") return KMENY_PENIZE;
-  const nazev = z.typ === "vybaveni" || z.typ === "vybaveni_stav" ? CATEGORY_LABELS[z.kategorie]
-    : z.typ === "stadion" ? FACILITY_LABELS[z.zarizeni]
+  const nazev = z.typ === "vybaveni" || z.typ === "vybaveni_stav" || z.typ === "vybaveni_nahoru" ? CATEGORY_LABELS[z.kategorie]
+    : z.typ === "stadion" || z.typ === "oprava" ? FACILITY_LABELS[z.zarizeni]
     : "trávník";
   return normalizuj(nazev ?? "")
     .split(/[^a-z]+/)

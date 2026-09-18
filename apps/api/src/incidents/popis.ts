@@ -21,6 +21,15 @@ export function popisZtraty(z: Ztrata): string {
       return `Trávník: stav ${z.pred} % → ${z.po} %`;
     case "penize":
       return `Ukradená hotovost: ${z.castka.toLocaleString("cs")} Kč`;
+    case "oprava":
+      return `Opravené zařízení: ${FACILITY_LABELS[z.zarizeni] ?? z.zarizeni}`;
+    case "vybaveni_nahoru": {
+      const nazev = CATEGORY_LABELS[z.kategorie] ?? z.kategorie;
+      const casti: string[] = [];
+      if (z.urovniNahoru) casti.push(`o ${z.urovniNahoru} ${z.urovniNahoru === 1 ? "úroveň" : "úrovně"} výš`);
+      if (z.stavNahoru !== undefined) casti.push(`stav +${z.stavNahoru} %`);
+      return `${nazev}: ${casti.length > 0 ? casti.join(", ") : "vylepšeno"}`;
+    }
   }
 }
 

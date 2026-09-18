@@ -23,6 +23,14 @@ describe("popis škody", () => {
     for (const v of vety) expect(v).not.toContain("—");
   });
 
+  it("pozitivní ztráty (oprava, vybavení nahoru) mají vlastní popis, ne mlčení", () => {
+    expect(popisZtraty({ typ: "oprava", damageId: "dmg-1", zarizeni: "fence" })).toBe("Opravené zařízení: Oplocení");
+    expect(popisZtraty({ typ: "vybaveni_nahoru", kategorie: "team_van", stavNahoru: 40 }))
+      .toBe("Klubová dodávka: stav +40 %");
+    expect(popisZtraty({ typ: "vybaveni_nahoru", kategorie: "jerseys", urovniNahoru: 1, stavNahoru: 100 }))
+      .toBe("Dresy: o 1 úroveň výš, stav +100 %");
+  });
+
   it("rozbitý JSON dá prázdný seznam", () => {
     expect(nactiZtraty("{rozbite")).toEqual([]);
     expect(nactiZtraty(null)).toEqual([]);

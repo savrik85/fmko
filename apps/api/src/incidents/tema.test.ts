@@ -66,6 +66,19 @@ describe("pozná otázku na incident", () => {
     expect(jeOtazkaNaIncident("Kdo nám zničil trávník?", TRAKTUREK_TRAVNIK)).toBe(true);
   });
 
+  it("pozitivní ztráty (oprava, vybavení nahoru) se neztratí v trávníku (regrese)", () => {
+    // kmenyZtraty je ternární řetězec, kompilátor unii nehlídá: nový typ ztráty, který
+    // by tu chyběl, by tiše spadl na "trávník" místo skutečného zařízení nebo kategorie.
+    const OPRAVA_PLOTU = { kind: "remeslnik_opravil", ztraty: [{ typ: "oprava", damageId: "dmg-1", zarizeni: "fence" }] as Ztrata[] };
+    const DRESY_NAHORU = { kind: "dedictvi", ztraty: [{ typ: "vybaveni_nahoru", kategorie: "jerseys", urovniNahoru: 1, stavNahoru: 100 }] as Ztrata[] };
+
+    expect(jeOtazkaNaIncident("Kdo opravil oplocení?", OPRAVA_PLOTU)).toBe(true);
+    expect(jeOtazkaNaIncident("Kdo nám zničil trávník?", OPRAVA_PLOTU)).toBe(false);
+
+    expect(jeOtazkaNaIncident("Kdo přinesl ty dresy?", DRESY_NAHORU)).toBe(true);
+    expect(jeOtazkaNaIncident("Kdo nám zničil trávník?", DRESY_NAHORU)).toBe(false);
+  });
+
   it("normalizace bez diakritiky a velkých písmen", () => {
     expect(normalizuj("Ukradené DRESY")).toBe("ukradene dresy");
   });

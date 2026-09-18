@@ -19,7 +19,11 @@ export type Ztrata =
    * si tržby včerejšího zápasu páruje na `zapasId` samo, nezávisle na týhle hodnotě. Necháno
    * pro budoucí použití (např. zobrazení odkazu na zápas u ztráty), ne zapomenuté propojení.
    */
-  | { typ: "penize"; castka: number; zdrojZapasId?: string };
+  | { typ: "penize"; castka: number; zdrojZapasId?: string }
+  /** Opravená škoda na stadionu (spec 4d). Záporná ztráta: něco se spravilo. */
+  | { typ: "oprava"; damageId: string; zarizeni: string }
+  /** Vybavení šlo nahoru, ne dolů: úroveň nebo stav (spec 4d). */
+  | { typ: "vybaveni_nahoru"; kategorie: string; urovniNahoru?: number; stavNahoru?: number };
 
 export interface HracKlubu {
   id: string;
@@ -88,6 +92,8 @@ export interface StavKlubu {
   ekonom: { id: string; jmeno: string; judgement: number } | null;
   /** Najatá obsluha občerstvení, kandidátka na vybrání kasy (spec 5a). `null`, když klub žádnou nemá. */
   obsluha: { id: string; jmeno: string } | null;
+  /** Neopravené škody na stadionu, kandidáti na opravu zdarma (spec 4d). */
+  poskozeni: Array<{ id: string; zarizeni: string }>;
 }
 
 export interface NavrhIncidentu {
