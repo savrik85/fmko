@@ -53,15 +53,28 @@ describe("včerejší tržby a letošní útěk (spec 4a)", () => {
       { sql: /FROM equipment WHERE team_id/, first: {} },
       // Dotaz běží uvnitř db.batch(), FalesnaD1 tam čte `all`, ne `first`.
       { sql: /FROM matches m JOIN season_calendar/, all: [{ id: "m1", home_team_id: "t1", home_score: 2, away_score: 1 }] },
-      { sql: /type IN \('concession_income_self', 'raffle_income'\)/, all: [
-        { type: "concession_income_self", castka: 4000 },
-        { type: "raffle_income", castka: 1500 },
-      ] },
+      { sql: /FROM transactions/, all: [{ kasa: 4000, tombola: 1500 }] },
       { sql: /kind = 'utek_s_penezi'/, first: null },
     ]);
     const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
     expect(s?.vcera?.trzby).toEqual({ kasa: 4000, tombola: 1500 });
     expect(s?.utekLetos).toBe(false);
+  });
+
+  it("chybějící řádek, NULL i zápor dají nulovou tržbu", async () => {
+    const bezRadku = new FalesnaD1([
+      { sql: /FROM equipment WHERE team_id/, first: {} },
+      { sql: /FROM matches m JOIN season_calendar/, all: [{ id: "m1", home_team_id: "tym-a", home_score: 2, away_score: 1 }] },
+      { sql: /FROM transactions/, all: [] },
+    ]);
+    expect((await nactiStavKlubu(jakoD1(bezRadku), tym(), "2026-09-18", 4))?.vcera?.trzby).toEqual({ kasa: 0, tombola: 0 });
+
+    const prazdnaSuma = new FalesnaD1([
+      { sql: /FROM equipment WHERE team_id/, first: {} },
+      { sql: /FROM matches m JOIN season_calendar/, all: [{ id: "m1", home_team_id: "tym-a", home_score: 2, away_score: 1 }] },
+      { sql: /FROM transactions/, all: [{ kasa: null, tombola: -500 }] },
+    ]);
+    expect((await nactiStavKlubu(jakoD1(prazdnaSuma), tym(), "2026-09-18", 4))?.vcera?.trzby).toEqual({ kasa: 0, tombola: 0 });
   });
 
   it("bez včerejšího zápasu jsou tržby nulové", async () => {
@@ -73,18 +86,31 @@ describe("včerejší tržby a letošní útěk (spec 4a)", () => {
     expect(s?.vcera).toBeNull();
   });
 
-  it("dotaz na tržby porovnává jen den, ne celý ISO timestamp (regrese)", async () => {
-    // transactions.game_date nese celý ISO timestamp ("2026-09-17T16:06:00.787Z"),
-    // zatímco `vcera` je jen YYYY-MM-DD. FalesnaD1 páruje pravidla podle vzoru SQL,
-    // ne podle vázaných hodnot, takže chybějící substr() by tenhle test nechytil bez
-    // ověření skutečně navázaného parametru.
+  it("dotaz na tržby se váže na id zápasu, ne na herní datum (regrese)", async () => {
+    // transactions.game_date se u zápasových příjmů plní reálným časem (match-runner),
+    // kdežto `vcera` je herní den posunutý o game_clock.offset_days. Dokud je posun nula,
+    // datumová podmínka náhodou sedí; při prvním nenulovém posunu by tržby natrvalo
+    // vyšly nulové a krádeže z kasy i tomboly by tiše přestaly existovat.
+    const db = new FalesnaD1([
+      { sql: /FROM equipment WHERE team_id/, first: {} },
+      { sql: /FROM matches m JOIN season_calendar/, all: [{ id: "m1", home_team_id: "tym-a", home_score: 2, away_score: 1 }] },
+      { sql: /FROM transactions/, all: [{ kasa: 4000, tombola: 1500 }] },
+    ]);
+    await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    const dotaz = [...db.dotazy, ...db.davky.flat()].find((d) => /FROM transactions/.test(d.sql));
+    expect(dotaz?.sql).toContain("reference_id = ?");
+    expect(dotaz?.sql).not.toContain("game_date");
+    expect(dotaz?.params).toContain("m1");
+    expect(dotaz?.params).not.toContain("2026-09-17");
+  });
+
+  it("bez zápasu se na tržby vůbec neptáme", async () => {
     const db = new FalesnaD1([
       { sql: /FROM equipment WHERE team_id/, first: {} },
       { sql: /FROM matches m JOIN season_calendar/, all: [] },
     ]);
-    await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
-    const dotaz = db.davky.flat().find((d) => /FROM transactions/.test(d.sql));
-    expect(dotaz?.sql).toContain("substr(game_date, 1, 10)");
-    expect(dotaz?.params).toContain("2026-09-17");
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.vcera).toBeNull();
+    expect(db.pocet(/FROM transactions/)).toBe(0);
   });
 });

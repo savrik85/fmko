@@ -137,14 +137,6 @@ export async function nactiStavKlubu(
         WHERE team_id = ? AND status = 'probiha' AND kind = 'dluhy'
           AND json_extract(resolution_data, '$.zaloha') = 'odmitnuto' AND subject_player_id IS NOT NULL`,
     ).bind(teamId),
-    // U tržeb ze zápasového dne nese transactions.game_date celý ISO timestamp
-    // (match-runner ukládá new Date().toISOString()), zatímco `vcera` je jen den
-    // YYYY-MM-DD, proto substr místo přímé rovnosti.
-    db.prepare(
-      `SELECT type, SUM(amount) AS castka FROM transactions
-        WHERE team_id = ? AND substr(game_date, 1, 10) = ? AND type IN ('concession_income_self', 'raffle_income')
-        GROUP BY type`,
-    ).bind(teamId, vcera),
     db.prepare(
       "SELECT 1 AS je FROM club_incidents WHERE team_id = ? AND season_number = ? AND kind = 'utek_s_penezi' LIMIT 1",
     ).bind(teamId, seasonNumber),
@@ -153,7 +145,7 @@ export async function nactiStavKlubu(
     ).bind(teamId),
   ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
   if (!vysledky) return null;
-  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes, rozpocetRes, situaceRes, zalohyRes, trzbyRes, utekRes, ekonomRes] = vysledky;
+  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes, rozpocetRes, situaceRes, zalohyRes, utekRes, ekonomRes] = vysledky;
 
   const stadion: Record<string, number> = {};
   for (const [k, v] of Object.entries((stadionRes.results[0] ?? {}) as Record<string, unknown>)) {
@@ -170,15 +162,30 @@ export async function nactiStavKlubu(
   if (zapas) {
     const doma = zapas.home_team_id === teamId;
     const vyhra = doma ? zapas.home_score > zapas.away_score : zapas.away_score > zapas.home_score;
-    const cervene = await db.prepare("SELECT player_id FROM match_player_stats WHERE match_id = ? AND team_id = ? AND red_cards > 0")
-      .bind(zapas.id, teamId).all<{ player_id: string }>()
-      .catch((e) => { logger.warn({ module: M }, `červené karty ${zapas.id}`, e); return { results: [] as Array<{ player_id: string }> }; });
-    const trzby = { kasa: 0, tombola: 0 };
-    for (const r of trzbyRes.results as Array<{ type: string; castka: number }>) {
-      if (r.type === "concession_income_self") trzby.kasa = Math.max(0, r.castka ?? 0);
-      if (r.type === "raffle_income") trzby.tombola = Math.max(0, r.castka ?? 0);
-    }
-    vceraZapas = { vyhra, doma, cervenaKarta: cervene.results.map((r) => r.player_id), zapasId: zapas.id, trzby };
+    // Tržby se párují na id zápasu, ne na datum. `transactions.game_date` se u zápasových
+    // příjmů plní reálným časem (match-runner.ts ukládá `new Date().toISOString()`),
+    // kdežto herní den je o `game_clock.offset_days` jinde. Dneska je posun nula a datum
+    // by sedělo, jenže první nenulový posun by udělal z tržeb natrvalo nulu, kasa
+    // a tombola by se přestaly krást a nic by nespadlo. Obě transakce nesou id zápasu
+    // v `reference_id` (season/finance-processor.ts), to je jediný spolehlivý klíč.
+    // Dotaz musí až za dávku, protože id zápasu se dozvíme teprve z jejího výsledku;
+    // jede ve stejné dávce jako červené karty, takže je to pořád jeden okružní dotaz navíc
+    // a jen v den po zápase.
+    const poZapase = await db.batch([
+      db.prepare("SELECT player_id FROM match_player_stats WHERE match_id = ? AND team_id = ? AND red_cards > 0").bind(zapas.id, teamId),
+      db.prepare(
+        `SELECT SUM(CASE WHEN type = 'concession_income_self' THEN amount END) AS kasa,
+                SUM(CASE WHEN type = 'raffle_income' THEN amount END) AS tombola
+           FROM transactions
+          WHERE team_id = ? AND reference_id = ? AND type IN ('concession_income_self', 'raffle_income')`,
+      ).bind(teamId, zapas.id),
+    ]).catch((e) => { logger.warn({ module: M }, `červené karty a tržby ze zápasu ${zapas.id}`, e); return null; });
+
+    const cervene = (poZapase?.[0].results ?? []) as Array<{ player_id: string }>;
+    const suma = poZapase?.[1].results[0] as { kasa?: unknown; tombola?: unknown } | undefined;
+    // Chybějící řádek, NULL i zápor jsou nula: krást se dá jen ze skutečné tržby.
+    const trzby = { kasa: Math.max(0, cislo(suma?.kasa, 0)), tombola: Math.max(0, cislo(suma?.tombola, 0)) };
+    vceraZapas = { vyhra, doma, cervenaKarta: cervene.map((r) => r.player_id), zapasId: zapas.id, trzby };
   }
 
   // Hospoda zná i vůdce fanoušků (playerId „fan-…") a hosty. Do stavu patří jen hráči kádru.
