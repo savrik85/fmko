@@ -53,6 +53,16 @@ export const STAV_TRIDA: Record<StavIncidentu, string> = {
   uzavreny: "bg-gray-100 text-muted",
 };
 
+/**
+ * Pozitivní incident vzniká rovnou uzavřený a nikdy se nevyšetřuje (katalog.ts), takže
+ * by dostal stejnou šedou pilulku „Uzavřeno" jako dořešená krádež. To by ale dobrou zprávu
+ * schovalo pod nálepku vyřízeného průšvihu - proto vlastní zelená pilulka s vlastním textem.
+ */
+export function stavPilulka(i: Pick<Incident, "status" | "category">): { label: string; trida: string } {
+  if (i.category === "pozitivni") return { label: "Dobrá zpráva", trida: "bg-pitch-100 text-pitch-700" };
+  return { label: STAV_LABEL[i.status], trida: STAV_TRIDA[i.status] };
+}
+
 export const VYSLEDEK_LABEL: Record<string, string> = {
   nevyreseno: "Nevyřešeno",
   konec_sezony: "Uzavřeno koncem sezóny",

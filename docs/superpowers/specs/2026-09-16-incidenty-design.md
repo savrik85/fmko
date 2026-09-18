@@ -319,8 +319,39 @@ Háčky do absencí, tréninku, zápasu a chatu jsou v Části 17a–17d.
 | `omluvny_dopis` | klubu dříve **utekl hráč s penězi** (`club_incidents` kind `utek_s_penezi`) a dopis ještě nepřišel | 20–50 % tehdejší ztráty |
 
 `omluvny_dopis` stojí na `utek_s_penezi`, hotovém od fáze 7b (Část 4a): potřebuje aspoň jeden
-takový incident v historii klubu. Sám je ale pozitivní incident, ten spolu se zbytkem téhle
-tabulky čeká na fázi 11.
+takový incident v historii klubu. Na nic dalšího nečeká — jakmile klubu poprvé někdo s penězi
+uteče, dopis může přijít.
+
+Celá tabulka je hotová, mimo číslované pořadí Části 16 (samostatný plán
+`2026-09-18-incidenty-pozitivni`): katalog i zápis (`incidents/katalog.ts`,
+`incidents/dopady.ts`), denní los (níž) a stránka incidentu na FE. `mechanik_dodavka` přibyl
+jako poslední ze tří kindů, co posouvají vybavení nebo dodávku k lepšímu stavu, vedle
+`remeslnik_opravil` a `dedictvi`.
+
+Pozitivní incident se losuje **mimo pool problémů**: `incidents/losovani.ts: vylosujPozitivni`
+má vlastní denní šanci (Část 4e) a vlastní seed `pozitivni|{teamId}|{den}`, nezávislý na
+`vylosujIncident` (krádeže a poškození, seed `incident|…`) i na `vylosujSituaci` (životní
+situace, seed `situace|…`). `denni-krok.ts` ho spouští pokaždé bez ohledu na to, jestli ten
+den padl problém nebo situace — hezká věc a průšvih se nevylučují. Strop otevřených problémů
+(`MAX_OTEVRENYCH_PROBLEMU`, Část 4e) se pozitivního incidentu netýká, protože vzniká rovnou
+`uzavreny` a nikomu nepřekáží.
+
+`Ztrata` (Část 3) dostala vedle záporných i kladné varianty: `oprava` (opravená škoda na
+stadionu, `remeslnik_opravil`), `vybaveni_nahoru` (úroveň nebo stav vybavení výš —
+`remeslnik_opravil`, `mechanik_dodavka`, `dedictvi`, `dar_zamestnavatele`) a `dar` (peníze,
+které klub dostal — `dar_zamestnavatele`, `anonymni_obalka`, `omluvny_dopis`). `popisZtraty`
+(`incidents/popis.ts`) je čte stejnou cestou jako záporné ztráty, jen věta zní jako dobrá
+zpráva, ne jako škoda — a stránka incidentu je proto barví jako dobrou zprávu (zeleně), ne
+červeně jako skutečnou ztrátu.
+
+Peníze z `dar` jdou přes nový typ transakce `incident_gift` (`season/finance-processor.ts:
+recordTransaction`, id `dar-{incidentId}`) — schválně mimo `PURCHASE_TYPES`, aby dar dorazil
+klubu i při záporném rozpočtu.
+
+`hrdina` navíc zapíše klubovou událost pro fanoušky: nový `ClubEventKind` `hrdina_v_kadru`
+(`engine/fan-reactions.ts`, `CLUB_EVENTS`), zapsaná přes `recordClubEvent` v
+`zapisOsobniDopady` (`incidents/dopady.ts`) spolu s reputací, přízní obce a morálkou kádru
+z tabulky výš.
 
 Řemeslník se nekříží se specem povolání (`2026-08-25-povolani-design.md`, Část 5): ten
 dává pasivní slevu na opravy, tady jde o jednorázovou opravu. Pokud tamní část bude
@@ -650,7 +681,7 @@ Uzavřením se `until` veřejných znalostí posune na max(`until`, dnes + 7).
 |---|---|---|
 | notifikace | vznik, výsledek policie, konec lhůty | `createNotification(..., "event", ..., "/dashboard/incidenty?id=")` |
 | SMS | vznik a výsledky | `sendSystemSMS` role Kustod / Správce hřiště / Účetní klubu / Policie ČR; hráč `sendPlayerSMS` |
-| fanoušci | závažnost ≥ 2, útěk, hrdina, vyhazov zloděje | nové `ClubEventKind`: `kradez_v_klubu`, `hrac_zlodej`, `utek_s_penezi` (fáze 7b, jediné z týhle čtveřice hotové; jmenuje se stejně jako `kind` incidentu, ne `hrac_utekl_s_penezi`), `hrdina_klubu` (`engine/fan-reactions.ts:13`, `CLUB_EVENTS`, invarianty v `fan-reactions.test.ts`) |
+| fanoušci | závažnost ≥ 2, útěk, hrdina, vyhazov zloděje | nové `ClubEventKind`: `kradez_v_klubu`, `hrac_zlodej` (obojí zatím neimplementované), `utek_s_penezi` (fáze 7b, hotový; jmenuje se stejně jako `kind` incidentu, ne `hrac_utekl_s_penezi`) a `hrdina_v_kadru` (Část 4d, hotový; `engine/fan-reactions.ts:13`, `CLUB_EVENTS`, invarianty v `fan-reactions.test.ts`) |
 | reputace | útěk −2, usvědčený zloděj −1, hrdina +2, nálezce +1 | `applyReputationDelta`, nový zdroj `"incident"` (`lib/reputation.ts:14`) |
 | obec | přízeň, důvěra, historie, petice, investice, brigády, starosta | Část 17e |
 | Zpravodaj | závažnost ≥ 2, výsledek policie, hrdina | `news` typ `incident` (celá liga), `KVOTY` a `NEWS_ICONS` v `news/feed.ts`. Útěk s penězi (fáze 7b) do Zpravodaje nejde: incident se ohlašuje sám SMS Kustoda (Část 11), samostatná zpráva by řekla totéž dvakrát. |
@@ -659,7 +690,7 @@ Uzavřením se `until` veřejných znalostí posune na max(`until`, dnes + 7).
 Fáze 2: jen SMS, notifikace a transakce `incident_fine`, `incident_deduction`, `incident_recovery`.
 Reputace, Zpravodaj, fanoušci, obec a atributy manažera přijdou ve fázích 3, 8 a 9. Fáze 7b
 přidává `incident_loss` (kasa, tombola, zpronevěra, útěk) a novou větev `incident_recovery`
-pro vrácenou hotovost (7c); `incident_gift` čeká na pozitivní katalog fáze 11.
+pro vrácenou hotovost (7c); `incident_gift` přidává pozitivní katalog (Část 4d, hotový mimo pořadí Části 16).
 
 ---
 
@@ -1019,7 +1050,9 @@ Každá fáze samostatně: build → commit → push testing → ověření API 
 8. **Obec** (17e) — přízeň a důvěra po osobnostech, historie, petice, investice, brigády, starosta v hospodě a na telefonu, pozvánky, krize jako skutečné incidenty, konec sezóny.
 9. **Tisk, fanoušci, sponzoři** (17f, 17h) — rubrika Černá kronika, otázky v rozhovorech, reportér, fanouškovské události, kampaně, transparenty, chorály, oblíbenci, sponzoři.
 10. **Přestupy, grémium, rivalové, kabina, zaměstnanci** (17g, 17i, 17j) — pověst, zájem hráčů, podpis volných hráčů, sankce, škodolibí rivalové, psycholog, atributy manažera.
-11. **Sezóna a pozitivní incidenty** (17k) — pozitivní katalog, AI kluby, sezónní přehled, ocenění, úspěchy, reputační stránka, nápověda.
+11. **Sezóna** (17k) — AI kluby, sezónní přehled, ocenění, úspěchy, reputační stránka, nápověda.
+   Pozitivní katalog (Část 4d) je hotový mimo tohle pořadí, samostatným plánem
+   `2026-09-18-incidenty-pozitivni`.
 
 ---
 
@@ -1103,8 +1136,8 @@ Rozvod a narození dítěte jsou hotové (`SITUACE_MORALKA`, `SITUACE_KONZISTENC
 mezi `DruhVlivu`, které čte `nactiDruhyHracu`** (17a): v den porodu je hráč na incidentní
 absenci a vůbec nehraje, takže `ZAPAS_NAROZENI_MORALKA` se v produkci nikdy neuplatní.
 Konstanta zůstává kvůli testům a pro případnou budoucí fázi, která by narození přidala mezi
-vlivy, je to vědomé rozhodnutí, ne mezera k opravení. Hrdina přibude s pozitivními incidenty
-(fáze 11), situace ještě neexistuje.
+vlivy, je to vědomé rozhodnutí, ne mezera k opravení. `hrdina` (pozitivní incident, Část 4d,
+hotový) mezi `DruhVlivu` zatím nepatří, tenhle vliv na sestavu ještě neexistuje.
 
 **Kabina** — `season/kabina.ts` `processKabina(db, teamId, gameDate?)` načte `nactiDruhyHracu` a
 `incidentyVKabine(hraci, druhy, kamaradi)` přičte před clamp týdenní delty (±6):
@@ -1279,7 +1312,7 @@ neprávem obviněný) aktivista/tradicionalista p −0,2 s důvodem „Po té kr
 - **oblíbenci** (`engine/fan-favourites.ts:65`): pole `povest` (hrdina +, zloděj −), důvody „Vytáhl dítě z rybníka." / „Ukradl klubu peníze."; fixtury `fan-oblibenci.test.ts`.
 - **transparent** (`engine/fan-banner.ts:124`): po kampani větev `zlodejVKadru` „ZLODĚJE V DRESU NECHCEME" a `hrdina` „{PŘÍJMENÍ}, KLOBOUK DOLŮ"; max. 48 znaků, poslední varianta bez jména, stabilní `duvod` na incident, jen s kotlem.
 - **chorály** (`engine/fan-chants.ts:18`): druhy `hrdina` a `zlodej`, jméno jen v 1. pádě.
-- **vůdce fanoušků v hospodě** (`season/pub-fan-leaders.ts:495`): `scenaOIncidentu` (typ `vudce_zlodej`) vynadá odhalenému zloději z kádru u stolu, jen krádež, stejná čerstvost jako `rvacka_kvuli_kradezi` (do 14 dní od odhalení nebo uzavření), s předností před scénami o zápase a o hráčích. Zaplacení rundy hrdinovi čeká na fázi 11, kdy vznikají pozitivní incidenty.
+- **vůdce fanoušků v hospodě** (`season/pub-fan-leaders.ts:495`): `scenaOIncidentu` (typ `vudce_zlodej`) vynadá odhalenému zloději z kádru u stolu, jen krádež, stejná čerstvost jako `rvacka_kvuli_kradezi` (do 14 dní od odhalení nebo uzavření), s předností před scénami o zápase a o hráčích. Zaplacení rundy hrdinovi (`hrdina` je hotový pozitivní incident, Část 4d) do hospody zatím nejde — samotná scéna v hospodě na to čeká na fázi 11.
 
 **Sponzoři:**
 - obnovení smlouvy (`routes/game.ts:2349` `computeRenewalTerms`): `× skandalMod` ze sezóny (útěk/usvědčený zloděj −10 až −20 %, hrdina +5 %).

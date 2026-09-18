@@ -7,7 +7,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel } from "@/components/ui";
 import { DetailIncidentu } from "./DetailIncidentu";
-import { datum, STAV_LABEL, STAV_TRIDA, VYSLEDEK_LABEL, type Incident } from "./typy";
+import { datum, stavPilulka, VYSLEDEK_LABEL, type Incident } from "./typy";
 
 interface Poskozeni {
   id: string;
@@ -93,6 +93,8 @@ function Incidenty() {
           Krádeže, rozbité vybavení a další průšvihy. Ukradené vybavení v klubu opravdu chybí
           a rozbité zařízení nefunguje, dokud ho neopravíš. Otevři incident a zjisti, kdo za tím stojí:
           stopy, obvinění, policie. Proti zlodějům zvenku pomáhá zabezpečení areálu ve vybavení.
+          Občas přijde i dobrá zpráva: řemeslník opraví škodu zdarma, dorazí dar nebo se v kádru
+          najde hrdina. Ty žádné rozhodnutí nečekají, jen si je přečti.
         </p>
       </div>
       {poskozeni.length > 0 && (
@@ -144,6 +146,8 @@ function Seznam({ titulek, incidenty, prazdne }: { titulek: string; incidenty: I
 
 function Karta({ incident: i }: { incident: Incident }) {
   const vysledek = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
+  const jePozitivni = i.category === "pozitivni";
+  const pilulka = stavPilulka(i);
   const odkaz = `/dashboard/incidenty?id=${encodeURIComponent(i.id)}`;
   return (
     <div className="border border-gray-100 rounded-soft p-3">
@@ -152,7 +156,7 @@ function Karta({ incident: i }: { incident: Incident }) {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Link href={odkaz} className="font-heading font-bold text-base hover:text-pitch-500">{i.label}</Link>
-            <span className={`text-sm font-heading font-bold px-2 py-0.5 rounded-full ${STAV_TRIDA[i.status]}`}>{STAV_LABEL[i.status]}</span>
+            <span className={`text-sm font-heading font-bold px-2 py-0.5 rounded-full ${pilulka.trida}`}>{pilulka.label}</span>
           </div>
           <div className="text-sm text-muted">
             {datum(i.gameDate)}
@@ -164,7 +168,9 @@ function Karta({ incident: i }: { incident: Incident }) {
           <p className="text-sm mt-2">{i.text}</p>
           {i.ztraty.length > 0 && (
             <ul className="mt-2 space-y-1">
-              {i.ztraty.map((z, n) => <li key={n} className="text-sm text-card-red">{z}</li>)}
+              {i.ztraty.map((z, n) => (
+                <li key={n} className={`text-sm ${jePozitivni ? "text-pitch-600" : "text-card-red"}`}>{z}</li>
+              ))}
             </ul>
           )}
           {i.pachatel?.jmeno && (

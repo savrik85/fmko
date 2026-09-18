@@ -63,8 +63,10 @@ function verejnyIncident(r: IncidentRow) {
   const ohlasil = (r.status === "hrozi" || r.resolution === "nestalo_se") && r.culprit_player_id
     ? { playerId: r.culprit_player_id, jmeno: [r.jmeno, r.prijmeni].filter(Boolean).join(" ") || null }
     : null;
-  // Koho se životní situace týká (spec 4c).
-  const dotceny = r.category === "zivotni" && r.subject_player_id
+  // Koho se životní situace týká (spec 4c), nebo koho se týká pozitivní incident - hrdina,
+  // nálezce, dárce (spec 4d). Ostatní pozitivní kindy nemají subjekt, subject_player_id je
+  // u nich `null`.
+  const dotceny = (r.category === "zivotni" || r.category === "pozitivni") && r.subject_player_id
     ? { playerId: r.subject_player_id, jmeno: [r.subject_jmeno, r.subject_prijmeni].filter(Boolean).join(" ") || null }
     : null;
   return {

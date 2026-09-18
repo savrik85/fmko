@@ -83,6 +83,28 @@ describe("detail incidentu", () => {
     expect(telo.incident.emoji).toBe("💸");
   });
 
+  it("pozitivní incident ukáže dotčeného hráče jménem, stejně jako životní situace, a nemá vyšetřování ani akce", async () => {
+    const res = await incidentsRouter.request("/teams/tym-a/incidents/inc-1", {}, env([
+      {
+        sql: /FROM club_incidents i/,
+        first: {
+          ...incidentRadek({
+            kind: "hrdina", category: "pozitivni", status: "uzavreny", culprit_type: "nikdo", culprit_player_id: null,
+            subject_player_id: "p", loss: "[]", resolution: null,
+          }),
+          jmeno: null, prijmeni: null, subject_jmeno: "Pepa", subject_prijmeni: "Průšvih",
+        },
+      },
+      { sql: /FROM players WHERE team_id = \?/, all: KADR },
+    ]));
+    expect(res.status).toBe(200);
+    const telo = await res.json() as Record<string, any>;
+    expect(telo.incident.label).toBe("Hrdina v kádru");
+    expect(telo.incident.dotceny).toEqual({ playerId: "p", jmeno: "Pepa Průšvih" });
+    expect(telo.incident.pachatel).toBeNull();
+    expect(telo.akce).toEqual({ obvinit: false, policie: false, tresty: [], zeptat: false, promluvit: false, zaloha: false });
+  });
+
   it("akce bez přihlášení neprojdou", async () => {
     for (const cesta of ["obvinit", "policie", "rozhodnuti"]) {
       const res = await incidentsRouter.request(`/teams/tym-a/incidents/inc-1/${cesta}`, { method: "POST", body: "{}" }, env([]));

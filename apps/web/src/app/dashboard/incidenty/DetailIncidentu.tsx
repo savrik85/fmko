@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel } from "@/components/ui";
 import {
-  datum, kc, OBVINENI_LABEL, STAV_LABEL, STAV_TRIDA, TREST_HOTOVO, TREST_LABEL, VYSLEDEK_LABEL, ZDROJ_EMOJI,
+  datum, kc, OBVINENI_LABEL, stavPilulka, TREST_HOTOVO, TREST_LABEL, VYSLEDEK_LABEL, ZDROJ_EMOJI,
   type AkceTrestu, type DetailIncidentuData, type VysledekObvineni,
 } from "./typy";
 
@@ -69,7 +69,10 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
   const vysledek = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
   const hrozi = i.status === "hrozi";
   const jeSituace = i.category === "zivotni";
-  // Hrozící čin ani řeči, ze kterých nic nebylo, se nevyšetřují.
+  const jePozitivni = i.category === "pozitivni";
+  const pilulka = stavPilulka(i);
+  // Hrozící čin ani řeči, ze kterých nic nebylo, se nevyšetřují. Pozitivní incident se
+  // nevyšetřuje nikdy - vzniká rovnou uzavřený a bez pachatele (katalog.ts).
   const vysetruje = (i.category === "kradez" || i.category === "poskozeni") && !hrozi && i.resolution !== "nestalo_se";
   const maAkce = akce.obvinit || akce.policie || akce.zeptat || akce.promluvit || akce.zaloha || akce.tresty.length > 0;
   const podezreli = v.podezreli.filter((p): p is { playerId: string; jmeno: string } => !!p.jmeno);
@@ -110,7 +113,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-heading font-bold text-lg">{i.label}</h1>
-            <span className={`text-sm font-heading font-bold px-2 py-0.5 rounded-full ${STAV_TRIDA[i.status]}`}>{STAV_LABEL[i.status]}</span>
+            <span className={`text-sm font-heading font-bold px-2 py-0.5 rounded-full ${pilulka.trida}`}>{pilulka.label}</span>
           </div>
           <div className="text-sm text-muted">
             {datum(i.gameDate)}
@@ -125,7 +128,9 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
       <p className="text-sm">{i.text}</p>
       {i.ztraty.length > 0 && (
         <ul className="space-y-1">
-          {i.ztraty.map((z, n) => <li key={n} className="text-sm text-card-red">{z}</li>)}
+          {i.ztraty.map((z, n) => (
+            <li key={n} className={`text-sm ${jePozitivni ? "text-pitch-600" : "text-card-red"}`}>{z}</li>
+          ))}
         </ul>
       )}
 
@@ -143,15 +148,15 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
         </div>
       )}
 
-      {jeSituace && i.dotceny?.jmeno && (
+      {(jeSituace || jePozitivni) && i.dotceny?.jmeno && (
         <div>
           <SectionLabel>Koho se to týká</SectionLabel>
           <p className="text-sm"><Hrac playerId={i.dotceny.playerId} jmeno={i.dotceny.jmeno} /></p>
-          {i.status === "probiha" && i.endsOn && <p className="text-sm text-muted mt-1">Potrvá do {datum(i.endsOn)}.</p>}
-          {detail.situace?.zaloha === "pujceno" && detail.situace.castka != null && (
+          {jeSituace && i.status === "probiha" && i.endsOn && <p className="text-sm text-muted mt-1">Potrvá do {datum(i.endsOn)}.</p>}
+          {jeSituace && detail.situace?.zaloha === "pujceno" && detail.situace.castka != null && (
             <p className="text-sm text-muted mt-1">Zálohu jsi půjčil: {kc(detail.situace.castka)}, splácí se čtyři pondělky ze mzdy.</p>
           )}
-          {detail.situace?.zaloha === "odmitnuto" && <p className="text-sm text-muted mt-1">Zálohu jsi odmítl.</p>}
+          {jeSituace && detail.situace?.zaloha === "odmitnuto" && <p className="text-sm text-muted mt-1">Zálohu jsi odmítl.</p>}
         </div>
       )}
 
