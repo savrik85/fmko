@@ -98,6 +98,18 @@ export const TEXTY = {
     "{jmeno} nechal účetnictví v nepořádku a odešel s {castka} Kč navíc.",
     "{jmeno} si přisvojil {castka} Kč z klubových peněz a dal výpověď.",
   ],
+  utek_s_penezi: [
+    "{hrac} zmizel z klubu i s penězi. Chybí {castka} Kč.",
+    "{hrac} nedorazil na trénink a z kasy zmizelo {castka} Kč.",
+    "{hrac} je pryč, telefon nebere. Spolu s ním zmizelo i {castka} Kč z klubu.",
+    "{hrac} sebral z kasy {castka} Kč a beze stopy zmizel.",
+  ],
+  sms_utek: [
+    "Trenére, {hrac} je pryč a s ním i {castka} Kč z klubové kasy. Signály tu byly, jenom jsme je nechtěli vidět.",
+    "Trenére, {hrac} zmizel i s penězi. Dluhy ho dohnaly, klub na to doplatil {castka} Kč.",
+    "Trenére, {hrac} nezvedá telefon a chybí {castka} Kč. Tohle jsme měli čekat.",
+    "Trenére, {hrac} utekl s {castka} Kč z klubu. Věděli jsme o dluzích i o hospodě, a stejně nás to zaskočilo.",
+  ],
   alarm_vyplasil: [
     "V noci se v areálu rozječel alarm. Zloděj utekl a nic neodnesl.",
     "Alarm vyplašil někoho, kdo se v noci dobýval do areálu. Nic nechybí.",

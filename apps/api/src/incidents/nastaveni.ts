@@ -203,3 +203,15 @@ export const RIDICAK_SANCE_NAVIC = 0.12;
 /** Hospoda (spec 9). */
 export const SEKERA_SANCE = 0.5;
 export const ROZVOD_HOSPODA_NASOBEK = 1.5;
+
+/** Útěk s penězi (spec 4a): kdo je ochotný a kdy se to vyplatí. */
+export const UTEK_MAX_VERNOST = 50;
+export const UTEK_MIN_ROZPOCET = 20000;
+export const UTEK_PODIL = 0.1;
+export const UTEK_STROP_KC = 40000;
+/** Situace `dluhy` musí běžet aspoň tak dlouho, aby se to dalo číst jako varování. */
+export const UTEK_MIN_DNI_DLUHU = 7;
+/** Denní šance útěku u hráče, který splnil všechno. */
+export const SANCE_UTEKU = 0.08;
+/** Útěk s penězi klubu sebere reputaci. */
+export const UTEK_REPUTACE = -2;

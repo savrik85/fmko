@@ -26,6 +26,7 @@ export type ReputationSource =
   | "village_favor"     // přízeň obce
   | "decay"             // útlum za dlouhou nečinnost
   | "press"             // jak o klubu píše okresní zpravodaj
+  | "incident"          // klubový incident (útěk s penězi apod.)
   | "admin";
 
 /**

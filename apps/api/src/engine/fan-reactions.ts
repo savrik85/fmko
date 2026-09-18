@@ -18,7 +18,8 @@ export type ClubEventKind =
   | "vyrazeni_z_poharu" | "postup_v_poharu"
   | "serie_vyher" | "serie_proher"
   | "rozhovor_kritika" | "rozhovor_obhajoba"
-  | "vylepseni_kotle";
+  | "vylepseni_kotle"
+  | "utek_s_penezi";
 
 /** Jak se parta po události posune. Chybí-li klíč, ta parta to neřeší. */
 export interface DopadNaPartu {
@@ -263,6 +264,25 @@ export const CLUB_EVENTS: Record<ClubEventKind, ClubEventDef> = {
     },
     pise: "kotel",
     texty: ["Viděli jsme ten novej sektor. Za tohle ti patří dík, bude to peklo."],
+  },
+  // Horší než prodej opory: klub nepřišel o hráče kvůli nabídce, přišel o hráče i o peníze
+  // najednou, a vypadá to, že si toho nikdo nevšiml včas.
+  utek_s_penezi: {
+    label: "Útěk s penězi",
+    dopad: {
+      kotel: { mood: -24, heat: 30 },
+      stamgasti: { mood: -16, heat: 20 },
+      pametnici: { mood: -14, heat: 12 },
+      parta_z_okoli: { mood: -14, heat: 14 },
+      rodiny: { mood: -6, heat: 4 },
+    },
+    pise: "kotel",
+    ptaSe: true,
+    texty: [
+      "{co} zmizel i s klubovejma prachama. Tohle už není smůla, tohle je binec.",
+      "Slyšeli jsme, že {co} utekl s kasou. Jak se něco takovýho mohlo stát?",
+      "{co} je pryč a s ním i peníze klubu. Co s tím teď uděláš?",
+    ],
   },
 };
 

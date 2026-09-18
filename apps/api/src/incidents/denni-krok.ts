@@ -15,6 +15,7 @@ import { vylosujIncident } from "./losovani";
 import { propadleZalohy, ukonciSituace, zalozSituaci, zretezDluhy } from "./situace-db";
 import { vylosujSituaci } from "./situace";
 import { nactiStavKlubu } from "./stav-klubu";
+import { zpracujUtek } from "./utek-db";
 import { zpracujVysetrovani } from "./vysetrovani-den";
 
 const M = "incidents-den";
@@ -50,6 +51,11 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   // Ztráta práce občas skončí dluhy (spec 4c). Nejde o los dne: běží i ve dnech, kdy se nic nelosuje.
   const zretezeno = await zretezDluhy(env, stav)
     .catch((e) => { logger.warn({ module: M, teamId }, "dluhy po ztrátě práce", e); return false; });
+
+  // Útěk s penězi (spec 4a). Je dost velký na to, aby byl jedinou zprávou dne, stejně jako splněná hrozba.
+  const uteklo = await zpracujUtek(env, stav)
+    .catch((e) => { logger.warn({ module: M, teamId }, "útěk s penězi", e); return false; });
+  if (uteklo) return;
 
   // Činy ohlášené v hospodě, kterým vypršela lhůta (spec 9a). Stal-li se některý, dnes se nový problém nelosuje.
   const splneno = await vyhodnotHrozici(env, stav)

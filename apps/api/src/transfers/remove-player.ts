@@ -16,7 +16,7 @@
 import { logger } from "../lib/logger";
 import { zapisNaTrh } from "./market-log";
 
-export type LeaveType = "released" | "retired" | "quit" | "transfer";
+export type LeaveType = "released" | "retired" | "quit" | "transfer" | "zmizel";
 
 /** Jak dlouho propuštěný (nebo sám odešlý) hráč zůstane na trhu volných hráčů. */
 export const FREE_AGENT_DAYS_RELEASED = 3;
