@@ -331,8 +331,10 @@ jako poslední ze tří kindů, co posouvají vybavení nebo dodávku k lepším
 Pozitivní incident se losuje **mimo pool problémů**: `incidents/losovani.ts: vylosujPozitivni`
 má vlastní denní šanci (Část 4e) a vlastní seed `pozitivni|{teamId}|{den}`, nezávislý na
 `vylosujIncident` (krádeže a poškození, seed `incident|…`) i na `vylosujSituaci` (životní
-situace, seed `situace|…`). `denni-krok.ts` ho spouští pokaždé bez ohledu na to, jestli ten
-den padl problém nebo situace — hezká věc a průšvih se nevylučují. Strop otevřených problémů
+situace, seed `situace|…`). `denni-krok.ts` ho spouští bez ohledu na to, jestli ten den padl
+problém nebo situace, protože hezká věc a průšvih se nevylučují. Výjimkou jsou dva dny, kdy
+denní krok končí dřív a ta zpráva je jediná: útěk hráče s penězi a splněný hrozící čin.
+Strop otevřených problémů
 (`MAX_OTEVRENYCH_PROBLEMU`, Část 4e) se pozitivního incidentu netýká, protože vzniká rovnou
 `uzavreny` a nikomu nepřekáží.
 
@@ -1305,7 +1307,7 @@ neprávem obviněný) aktivista/tradicionalista p −0,2 s důvodem „Po té kr
 ### 17h) Fanoušci a sponzoři
 
 **Fanoušci:**
-- `ClubEventKind` (`engine/fan-reactions.ts:13`): `kradez_v_klubu`, `hrac_zlodej`, `hrac_utekl_s_penezi` (`ptaSe`: „Tak Franta vám vzal kasu. Co s tím uděláte?"), `hrdina_klubu`, `neprave_obvineni`, `klub_udal_hrace`. Invarianty `fan-reactions.test.ts:9`.
+- `ClubEventKind` (`engine/fan-reactions.ts:13`): `kradez_v_klubu`, `hrac_zlodej`, `utek_s_penezi` (hotové, fáze 7b), `hrdina_v_kadru` (hotové), `neprave_obvineni`, `klub_udal_hrace`. Invarianty `fan-reactions.test.ts:9`.
 - příspěvky na zeď (`engine/fan-posts.ts:55`) ≥ 4 věty na blok; `PostTopic "incident"` už znamená výtržnosti — klubové incidenty jdou přes `club_event`.
 - **rivalové se smějí**: `prispevkyKSkandaluRivala` na zeď rivalů (vzor `fan-feed.ts:310`, `rivaloveKlubu`): „U {soupeř} se prý kradou i vlastní dresy. 😂".
 - **kampaň „hráč ven"** za odhaleného zloděje ponechaného v kádru (id `kmp-{team}-hrac_ven-{player}-{den}`), důvod přidat do `duvodTrva` (`fan-campaigns.ts:188`), jinak do 10 dní vyprchá.
