@@ -12,6 +12,27 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-09-18",
+    emoji: "🕵️",
+    title: "V klubu se krade. Někdo z kádru, někdo zvenku a někdy i ten, komu platíš",
+    items: [
+      "Klubu se začnou dít věci. Ze skladu zmizí míče nebo dresy, z vitríny poháry, někdo rozkope dveře u kabin, po oslavě zůstane spoušť a trávník má koleje od traktůrku. Všechno najdeš na nové stránce Incidenty a všechno má skutečný dopad: co zmizí, to v kádru chybí, dokud to nekoupíš znovu.",
+      "Většinu průšvihů je na koho svést, ale musíš na to přijít sám. Ke každému incidentu se sbíhají stopy. Kamera u kabin, správce hřiště, soused od plotu, svědek, co šel z hospody. Každá stopa ukazuje jinam a některé se najdou samy, jiné musíš z lidí dostat.",
+      "Hráči se dají obviňovat, ale jen dvakrát. Kdo je vinen, se buď přizná, nebo zapírá. Kdo je nevinný, si křivdu pamatuje dva měsíce a dá ti to sežrat. Proto se vyplatí mít nejdřív stopu a teprve pak otevírat pusu.",
+      "Ptát se jde i po dobrém. V telefonu se dá napsat komukoli z kádru a zeptat se, co ví. Kamarád pachatele bude kroutit, rival ho práskne rád a někdo prostě nic neviděl. Záleží na tom, jaký k tobě kdo má vztah.",
+      "Odhaleného pachatele si vyřídíš, jak uznáš za vhodné. Odpustit, strhnout ze mzdy, dát pokutu, vyřadit ze zápasů, vyhodit, nebo předat policii. Každá volba má cenu. Tvrdý trest u oblíbeného hráče srazí náladu celé kabiny, odpuštění u průšviháře taky.",
+      "Policie někdy věci najde. Když to byl cizí zloděj, vybavení se vrátí, pokud jsi si mezitím nekoupil lepší. Ukradená hotovost se vrací jen z části, zbytek už je propitý.",
+      "Kradené zboží se objeví v bazaru ligy. Když poznáš vlastní dresy v cizí nabídce, máš důkaz a policie má o dost větší šanci.",
+      "V hospodě se to probírá. Po šestém pivu se leckdo pochlubí, co provedl, jinde se řeší poslední průšvih a občas někdo nahlas oznámí, co udělá zítra. Deník z hospody si přečteš na stránce Hospoda a takovému chlapovi se dá včas domluvit, aby to neudělal.",
+      "Hráči mají svoje starosti. Dluhy, ztráta práce, rozvod, zabavený řidičák, svatba spoluhráče, narození dítěte, nemocný rodič. Není to jen text. Kdo se rozvádí, chodí radši na hřiště než domů, kdo má dluhy, bere brigády a na trénink nedorazí, a komu vzali řidičák, ten se hůř dostane na venkovní zápas.",
+      "Kdo je v dluzích, napíše si o zálohu na mzdu. Můžeš půjčit a strhávat si to čtyři pondělky, nebo odmítnout. Odmítnutí si bude pamatovat a v hospodě už mu nenalejou na sekeru.",
+      "Krade se i to, co se nedá odnést. Po domácím zápase může zmizet kasa od občerstvení nebo výtěžek z tomboly. Sebere se to z toho, co jste opravdu vydělali, takže čím lepší návštěva, tím větší škoda.",
+      "Zaměstnanci taky nejsou svatí. Najatý ekonom si může nechat část peněz a odejít, a kasu u stánku občas vybere ten, kdo u ní celý zápas stojí. Ekonom se sám zvolí podle toho, jak pečlivý je. Čím lepší úsudek, tím menší riziko, ale nikdo není nad věcí.",
+      "A pak je tu ta nejhorší varianta. Zadlužený hráč, kterému nevěříš a on tobě taky ne, může jednoho dne zmizet i s klubovou hotovostí. Nestane se to z čistého nebe: dluhy mu běží už týden, napsal si o zálohu a v hospodě se o něm mluví. Když si toho všimneš včas, dá se tomu předejít. Když ne, hráče už nikdy neuvidíš a žádný jiný klub ho nepodepíše.",
+      "Kdo přijde k penězům, chová se podle toho. Pachatel peněžní krádeže v hospodě platí rundu a lidi si toho všimnou. Obzvlášť když u toho sedíš ty nebo je v kádru hospodský.",
+    ],
+  },
+  {
     date: "2026-09-13",
     emoji: "\u{1F525}",
     title: "Party fanoušků, vlastní chorály a plachta, kterou si píšou sami",
