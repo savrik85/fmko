@@ -258,6 +258,11 @@ export const TEXTY = {
     "Dopadený pachatel zaplatí klubu náhradu škody: {castka} Kč.",
     "Viník uhradí část škody, na účet klubu přijde {castka} Kč.",
   ],
+  policie_hotovost: [
+    "Pachatele jsme dopadli. Z ukradené hotovosti se klubu vrátí {castka} Kč.",
+    "Zloděje máme. Zbylo mu u sebe {castka} Kč, ty se klubu vrátí.",
+    "Dopadli jsme ho, z peněz se podařilo zajistit {castka} Kč.",
+  ],
   policie_dopaden: [
     "Pachatele jsme dopadli: {nazev}.",
     "Případ je vyřešený, pachatele máme: {nazev}.",

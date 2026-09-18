@@ -93,6 +93,51 @@ describe("výsledek policie", () => {
     expect(volani[6]).toBe(`nahrada-${id}`);
   });
 
+  it("dopadený cizí zloděj vrátí hotovost, ne náhradu škody", async () => {
+    const id = idSLosem((los) => los < 0.15);
+    const inc = {
+      ...incidentRadek({
+        id, kind: "kasa_obcerstveni", category: "kradez", status: "policie", culprit_type: "cizi", culprit_player_id: null,
+        police_result_on: DNES, loss: JSON.stringify([{ typ: "penize", castka: 10000 }]),
+      }),
+      first_name: null, last_name: null,
+    };
+    await vyhodnotPolicii(prostredi([{ sql: SETRENI, all: [inc] }]).env, T);
+    const volani = vi.mocked(recordTransaction).mock.calls[0];
+    expect(volani[2]).toBe("incident_recovery");
+    expect(volani[3]).toBeGreaterThanOrEqual(5000);
+    expect(volani[3]).toBeLessThanOrEqual(10000);
+    expect(volani[4]).toContain("Vrácená hotovost");
+    expect(volani[6]).toBe(`nahrada-${id}`);
+    expect(vi.mocked(sendSystemSMS).mock.calls[0][3]).toContain("Kč");
+    expect(vi.mocked(sendSystemSMS).mock.calls[0][3]).not.toContain("náhrad");
+  });
+
+  it("u dopadeného cizího zloděje se vrátí 50 až 100 procent hotovosti", async () => {
+    const castky: number[] = [];
+    let vzorku = 0;
+    for (let n = 0; n < 500 && vzorku < 30; n++) {
+      const id = `inc-hotovost-${n}`;
+      const los = createRng(seedFromString(`policie|${id}`)).random();
+      if (los >= 0.15) continue;
+      vzorku++;
+      const inc = {
+        ...incidentRadek({
+          id, kind: "kasa_obcerstveni", category: "kradez", status: "policie", culprit_type: "cizi", culprit_player_id: null,
+          police_result_on: DNES, loss: JSON.stringify([{ typ: "penize", castka: 10000 }]),
+        }),
+        first_name: null, last_name: null,
+      };
+      vi.mocked(recordTransaction).mockClear();
+      await vyhodnotPolicii(prostredi([{ sql: SETRENI, all: [inc] }]).env, T);
+      const volani = vi.mocked(recordTransaction).mock.calls[0];
+      castky.push(Number(volani[3]));
+    }
+    expect(vzorku).toBeGreaterThanOrEqual(30);
+    expect(Math.min(...castky)).toBeGreaterThanOrEqual(5000);
+    expect(Math.max(...castky)).toBeLessThanOrEqual(10000);
+  });
+
   it("úspěch, pachatel z kádru: lhůta se prodlouží a zapíše se stopa policie", async () => {
     const id = idSLosem((los) => los < 0.15);
     const inc = { ...incidentRadek({ id, status: "policie", police_result_on: DNES }), first_name: "Pepa", last_name: "Průšvih" };

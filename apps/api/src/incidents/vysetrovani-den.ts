@@ -58,7 +58,13 @@ async function oznamVysledek(env: Bindings, teamId: string, incidentId: string, 
 async function vratZtraty(db: D1Database, t: Den, inc: IncidentRadek, nazev: string, rng: Rng): Promise<string[]> {
   const zpravy: string[] = [];
   let nahrada = 0;
+  let vracenaHotovost = 0;
   for (const z of nactiZtraty(inc.loss)) {
+    if (z.typ === "penize") {
+      // Hotovost se najde u zloděje, ale zřídka celá. Není to náhrada škody, je to vrácený lup.
+      vracenaHotovost += Math.round((z.castka * rng.int(50, 100)) / 100);
+      continue;
+    }
     if (z.typ !== "vybaveni") {
       // Rozbité se vrátit nedá, pachatel zaplatí polovinu až celou škodu.
       nahrada += Math.round((hodnotaSkody([z]) * rng.int(50, 100)) / 100);
@@ -79,6 +85,14 @@ async function vratZtraty(db: D1Database, t: Den, inc: IncidentRadek, nazev: str
     await recordTransaction(db, t.teamId, "incident_recovery", nahrada, `Náhrada škody: ${nazev}`, t.gameDate, `nahrada-${inc.id}`)
       .catch((e) => logger.error({ module: M }, `náhrada škody ${inc.id}`, e));
     zpravy.push(text(rng, "policie_nahrada", { castka: nahrada.toLocaleString("cs-CZ") }));
+  }
+  if (vracenaHotovost > 0) {
+    // reference_id `nahrada-{id}` je jedno na incident. V této fázi má peněžní incident jen
+    // hotovost, nikdy zároveň škodu na vybavení, takže se nepřepisují. Kdyby v budoucnu jeden
+    // incident obsahoval obojí, tenhle zápis by přepsal referenci té z bloku "nahrada" výše.
+    await recordTransaction(db, t.teamId, "incident_recovery", vracenaHotovost, `Vrácená hotovost: ${nazev}`, t.gameDate, `nahrada-${inc.id}`)
+      .catch((e) => logger.error({ module: M }, `vrácení hotovosti ${inc.id}`, e));
+    zpravy.push(text(rng, "policie_hotovost", { castka: vracenaHotovost.toLocaleString("cs-CZ") }));
   }
   if (zpravy.length === 0) zpravy.push(text(rng, "policie_dopaden", { nazev }));
   return zpravy;
