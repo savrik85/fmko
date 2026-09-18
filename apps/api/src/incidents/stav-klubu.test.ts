@@ -104,6 +104,30 @@ describe("včerejší tržby a letošní útěk (spec 4a)", () => {
     expect(dotaz?.params).not.toContain("2026-09-17");
   });
 
+  it("útěk uzavřený bez škody neubírá klubu letošní pokus (regrese)", async () => {
+    // Když se nepovede odepsat peníze, zapisIncident přesto nechá řádek útěku ve stavu
+    // uzavřený s resolution 'bez_skody'. Klub o nic nepřišel, takže mu ten záznam nesmí
+    // zavřít sezónu, jak to dělal dotaz ptající se jen na existenci řádku.
+    const db = new FalesnaD1([
+      { sql: /FROM equipment WHERE team_id/, first: {} },
+      { sql: /FROM matches m JOIN season_calendar/, all: [] },
+      { sql: /kind = 'utek_s_penezi'/, all: [] },
+    ]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.utekLetos).toBe(false);
+    const dotaz = db.davky.flat().find((d) => /kind = 'utek_s_penezi'/.test(d.sql));
+    expect(dotaz?.sql).toContain("NOT IN ('bez_skody', 'nestalo_se')");
+  });
+
+  it("skutečný letošní útěk se pozná", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM equipment WHERE team_id/, first: {} },
+      { sql: /FROM matches m JOIN season_calendar/, all: [] },
+      { sql: /kind = 'utek_s_penezi'/, all: [{ je: 1 }] },
+    ]);
+    expect((await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4))?.utekLetos).toBe(true);
+  });
+
   it("bez zápasu se na tržby vůbec neptáme", async () => {
     const db = new FalesnaD1([
       { sql: /FROM equipment WHERE team_id/, first: {} },

@@ -137,8 +137,14 @@ export async function nactiStavKlubu(
         WHERE team_id = ? AND status = 'probiha' AND kind = 'dluhy'
           AND json_extract(resolution_data, '$.zaloha') = 'odmitnuto' AND subject_player_id IS NOT NULL`,
     ).bind(teamId),
+    // Útěk, u kterého se nepovedlo odepsat peníze, uzavře zapisIncident jako 'bez_skody'
+    // a klub o žádné peníze nepřišel. Takový záznam nesmí sebrat jedinou letošní
+    // příležitost, stejně jako ho nepočítá přehled incidentů ani hospodský deník.
     db.prepare(
-      "SELECT 1 AS je FROM club_incidents WHERE team_id = ? AND season_number = ? AND kind = 'utek_s_penezi' LIMIT 1",
+      `SELECT 1 AS je FROM club_incidents
+        WHERE team_id = ? AND season_number = ? AND kind = 'utek_s_penezi'
+          AND COALESCE(resolution, '') NOT IN ('bez_skody', 'nestalo_se')
+        LIMIT 1`,
     ).bind(teamId, seasonNumber),
     db.prepare(
       "SELECT id, first_name, last_name, judgement, role FROM staff_members WHERE team_id = ? AND role IN ('ekonom', 'obsluha')",
