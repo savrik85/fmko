@@ -134,8 +134,14 @@ describe("výsledek policie", () => {
       castky.push(Number(volani[3]));
     }
     expect(vzorku).toBeGreaterThanOrEqual(30);
+    // Hranice 5000/10000 samy o sobě platí i pro zúžený rozsah (např. 90 až 100 %) - to by
+    // ale nahnalo všechny vzorky k horní hranici. Proto se navíc ověřuje, že rozsah je
+    // skutečně využitý na obou koncích: s 30 vzorky z rovnoměrného rng.int(50, 100) padne
+    // minimum spolehlivě pod 6000 a maximum nad 9000, zúžený rozsah by tenhle test spadl.
     expect(Math.min(...castky)).toBeGreaterThanOrEqual(5000);
+    expect(Math.min(...castky)).toBeLessThanOrEqual(6000);
     expect(Math.max(...castky)).toBeLessThanOrEqual(10000);
+    expect(Math.max(...castky)).toBeGreaterThanOrEqual(9000);
   });
 
   it("úspěch, pachatel z kádru: lhůta se prodlouží a zapíše se stopa policie", async () => {

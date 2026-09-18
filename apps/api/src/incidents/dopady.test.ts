@@ -177,10 +177,7 @@ describe("zápis incidentu", () => {
     };
 
     it("zpronevěra pošle ekonoma zpátky do okresu stejným SQL jako výpověď", async () => {
-      const db = new FalesnaD1([
-        { sql: /UPDATE teams SET budget/, first: { budget: 200000 } },
-        { sql: /FROM staff_members/, first: { usudek: null } },
-      ]);
+      const db = new FalesnaD1([{ sql: /UPDATE teams SET budget/, first: { budget: 200000 } }]);
       const stav = stavKlubu({ ekonom: { id: "e1", jmeno: "Karel Počet", judgement: 3 } });
       const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH_ZPRONEVERA, "inc-ekonom");
       expect(zapsany?.id).toBe("inc-ekonom");

@@ -13,7 +13,12 @@ export type Ztrata =
   | { typ: "vybaveni_stav"; kategorie: string; stavPred: number; stavPo: number }
   | { typ: "stadion"; zarizeni: string; urovni: number; damageId?: string; /** Cena opravy v Kč v okamžiku škody. */ cena?: number }
   | { typ: "travnik"; pred: number; po: number }
-  /** Ukradená hotovost (spec 4a). `zdrojZapasId` u kasy a tomboly říká, ze kterého zápasu tržba byla. */
+  /**
+   * Ukradená hotovost (spec 4a). `zdrojZapasId` u kasy a tomboly říká, ze kterého zápasu
+   * tržba byla. Zatím se jen zapisuje (do `loss` JSON), nic ho nečte zpátky - `stav-klubu.ts`
+   * si tržby včerejšího zápasu páruje na `zapasId` samo, nezávisle na týhle hodnotě. Necháno
+   * pro budoucí použití (např. zobrazení odkazu na zápas u ztráty), ne zapomenuté propojení.
+   */
   | { typ: "penize"; castka: number; zdrojZapasId?: string };
 
 export interface HracKlubu {
