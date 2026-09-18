@@ -299,7 +299,7 @@ export const CLUB_EVENTS: Record<ClubEventKind, ClubEventDef> = {
     pise: "stamgasti",
     texty: [
       "Slyšels, co dokázal {co}? Na takovýho kluka může bejt klub hrdej.",
-      "V hospodě se mluví jen o {co}. Tohle dělá jménu klubu víc než výhra.",
+      "{co} rozproudil řeči po celé hospodě. Tohle dělá jménu klubu víc než výhra.",
       "{co} si dneska zasloužil pivo zadarmo. Klobouk dolů.",
     ],
   },

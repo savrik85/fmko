@@ -366,6 +366,29 @@ describe("zápis incidentu", () => {
       expect(db.pocet(/INSERT OR IGNORE INTO club_events/)).toBe(0);
     });
 
+    it("selhání reputace (applyReputationDelta) incident nezvrací a ostatní dopady proběhnou dál", async () => {
+      const db = new FalesnaD1([
+        { sql: /SELECT village_id FROM teams WHERE id = \?/, first: { village_id: "vesnice-1" } },
+      ]);
+      const puvodniPrepare = db.prepare.bind(db);
+      db.prepare = ((sql: string) => {
+        if (/SELECT reputation FROM teams WHERE id = \?/.test(sql)) {
+          return { bind: () => ({ first: async () => { throw new Error("D1 výpadek"); } }) };
+        }
+        return puvodniPrepare(sql);
+      }) as typeof db.prepare;
+      const stav = stavKlubu({ kadr: [PROBLEMOVY] });
+      const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH_HRDINA, "inc-hrdina-fail3");
+      expect(zapsany?.id).toBe("inc-hrdina-fail3");
+      // applyReputationDelta si selhání SELECTu hlídá sama (vrátí skipped: "no_team" bez
+      // vyhození), takže žádný zápis do reputation_log neproběhne - ale ostatní dopady se
+      // tím nezastaví.
+      expect(db.pocet(/INSERT INTO reputation_log/)).toBe(0);
+      expect(db.pocet(/UPDATE players SET life_context/)).toBe(1);
+      expect(db.pocet(/UPDATE village_team_favor SET favor/)).toBe(1);
+      expect(db.pocet(/INSERT OR IGNORE INTO club_events/)).toBe(1);
+    });
+
     it("selhání přízně obce (ensureGlobalFavor) incident nezvrací a reputace proběhne dál", async () => {
       const db = new FalesnaD1([
         { sql: /SELECT reputation FROM teams WHERE id = \?/, first: { reputation: 50 } },
