@@ -1004,5 +1004,4 @@ Do `project_prod_deploy_pending.md` sekci fáze 7b: co přibylo, že migrace nen
 | Téma | Co chybí |
 |---|---|
 | `omluvny_dopis` | pozitivní incident nad `utek_s_penezi` (fáze 11) |
-| Obsluha jako pachatel kasy | spec 5a dává najaté obsluze 20 % u `kasa_obcerstveni`; tady se pachatel hledá jen přes `pokusOKradez` |
-| Tresty a policie u zaměstnance | `culpritType: "zamestnanec"` dál neumí `vysledekPolicie` ani `dostupneAkce` |
+| Tresty a policie u zaměstnance | `culpritType: "zamestnanec"` incidenty (kasa_obsluha, zpronevera_ekonoma) vznikají rovnou uzavřené, do vyšetřování se nedostanou - `vysledekPolicie` ani `dostupneAkce` pro ně proto žádnou větev nemají. Zatím záměr, ne mezera. |
