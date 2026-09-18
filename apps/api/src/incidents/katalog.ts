@@ -10,14 +10,25 @@ import { CATEGORIES, CATEGORY_LABELS, cumulativeInvestment, efektyZabezpeceni } 
 import type { Rng } from "../generators/rng";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import {
-  DODAVKA_STAV_PRAH, KASA_PODIL_MAX, KASA_PODIL_MIN, MECHANIK_STAV, OBSLUHA_SANCE, PODIL_POKUSU_ZVENKU,
+  DAR_MAX_KC, DAR_MIN_KC, DODAVKA_STAV_PRAH, DOPIS_PODIL_MAX, DOPIS_PODIL_MIN, KASA_PODIL_MAX, KASA_PODIL_MIN,
+  LEVNE_KATEGORIE, MECHANIK_STAV, OBALKA_MAX_KC, OBALKA_MIN_KC, OBSLUHA_SANCE, PODIL_POKUSU_ZVENKU, POVOLANI_DARCE,
   POVOLANI_HRDINY, POVOLANI_MECHANIKA, POVOLANI_REMESLNIKU, REMESLNIK_STAV, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
   TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, VAHA_HRDINY, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_SANCE_USUDEK_1,
   ZPRONEVERA_SANCE_USUDEK_20, ZPRONEVERA_STROP_PODIL,
 } from "./nastaveni";
 import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
-import { text } from "./texty";
+import { TEXTY, text, vypln } from "./texty";
 import type { HracKlubu, KategorieIncidentu, NavrhIncidentu, StavKlubu, Ztrata } from "./typy";
+
+/**
+ * `dar_zamestnavatele` má čtyři textové varianty rozdělené na dvě dvojice: první dvě
+ * dosazují {castka} (zaměstnavatel dá peníze), poslední dvě {vec} (dá vybavení). `text()`
+ * losuje napříč všemi variantami dané klíče, což by tu občas vygenerovalo větu o penězích
+ * k dárku vybavení (a naopak) — proto vlastní los jen v rámci správné dvojice podle toho,
+ * kterou větev `vytvor` skutečně zvolil.
+ */
+const DAR_TEXTY_CASTKA = TEXTY.dar_zamestnavatele.slice(0, 2);
+const DAR_TEXTY_VEC = TEXTY.dar_zamestnavatele.slice(2);
 
 export interface DefiniceIncidentu {
   kind: string;
@@ -78,6 +89,15 @@ function remeslnici(s: StavKlubu): HracKlubu[] {
 
 function mechanici(s: StavKlubu): HracKlubu[] {
   return s.kadr.filter((h) => h.povolani === POVOLANI_MECHANIKA);
+}
+
+function darcove(s: StavKlubu): HracKlubu[] {
+  return s.kadr.filter((h) => (POVOLANI_DARCE as readonly string[]).includes(h.povolani));
+}
+
+/** Levné kategorie vybavení, které zaměstnavatel může darovat, a klub ještě není na stropu (spec 4d). */
+function darovatelneKategorie(s: StavKlubu): string[] {
+  return LEVNE_KATEGORIE.filter((k) => uroven(s, k) < 3);
 }
 
 function vzteklounSCervenou(s: StavKlubu): HracKlubu | null {
@@ -556,6 +576,74 @@ export const KATALOG: DefiniceIncidentu[] = [
         culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
         subjectPlayerId: hrac.id, ztraty: [],
         text: text(rng, "poctivy_nalezce", { hrac: hrac.jmeno }),
+      };
+    },
+  },
+  {
+    // Dárce je subjekt (má v kádru toho, přes koho dar přišel), ne pachatel, stejně jako
+    // hrdina a poctivý nálezce výš.
+    kind: "dar_zamestnavatele", label: "Dar zaměstnavatele", emoji: "🤝", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: (s) => darcove(s).length > 0,
+    vytvor: (s, rng) => {
+      const kandidati = darcove(s);
+      if (kandidati.length === 0) return null;
+      const hrac = rng.pick(kandidati);
+      const moznosti = darovatelneKategorie(s);
+      // Vybavení jen když je co darovat (žádná levná kategorie na stropu), jinak vždycky peníze.
+      const davaVec = moznosti.length > 0 && rng.random() < 0.5;
+      if (davaVec) {
+        const kategorie = rng.pick(moznosti);
+        return {
+          kind: "dar_zamestnavatele", category: "pozitivni", status: "uzavreny", severity: 1,
+          culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+          subjectPlayerId: hrac.id,
+          ztraty: [{ typ: "vybaveni_nahoru", kategorie, urovniNahoru: 1 }],
+          text: vypln(rng.pick(DAR_TEXTY_VEC), { hrac: hrac.jmeno, vec: CATEGORY_LABELS[kategorie] ?? kategorie }),
+        };
+      }
+      const castka = rng.int(DAR_MIN_KC, DAR_MAX_KC);
+      return {
+        kind: "dar_zamestnavatele", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        subjectPlayerId: hrac.id,
+        ztraty: [{ typ: "dar", castka }],
+        text: vypln(rng.pick(DAR_TEXTY_CASTKA), { hrac: hrac.jmeno, castka: castka.toLocaleString("cs-CZ") }),
+      };
+    },
+  },
+  {
+    // Bez pachatele i bez konkrétního hráče, stejně jako dědictví: anonymní dárce není nikdo z klubu.
+    kind: "anonymni_obalka", label: "Anonymní obálka", emoji: "✉️", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: () => true,
+    vytvor: (s, rng) => {
+      const castka = rng.int(OBALKA_MIN_KC, OBALKA_MAX_KC);
+      return {
+        kind: "anonymni_obalka", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "dar", castka }],
+        text: text(rng, "anonymni_obalka", { castka: castka.toLocaleString("cs-CZ") }),
+      };
+    },
+  },
+  {
+    // Vrací část toho, co kdysi zmizelo útěkem s penězi (spec 4a, 4d): `muze` je splněná,
+    // jen dokud `nactiStavKlubu` (stav-klubu.ts) najde útěk bez páru. Volající, který
+    // z tohohle návrhu zapisuje incident (denni-krok.ts, Task 5), MUSÍ použít id
+    // `dopis-{s.utekBezDopisu.id}` místo výchozího den-based id — jinak `nactiStavKlubu`
+    // nepozná, že dopis už dorazil, a INSERT OR IGNORE nezabrání druhému dopisu ke
+    // stejnému útěku o pár dní nebo sezón později.
+    kind: "omluvny_dopis", label: "Omluvný dopis", emoji: "📨", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: (s) => !!s.utekBezDopisu,
+    vytvor: (s, rng) => {
+      const utek = s.utekBezDopisu;
+      if (!utek) return null;
+      const castka = Math.round((utek.castka * rng.int(DOPIS_PODIL_MIN, DOPIS_PODIL_MAX)) / 100);
+      if (castka <= 0) return null;
+      return {
+        kind: "omluvny_dopis", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "dar", castka }],
+        text: text(rng, "omluvny_dopis", { castka: castka.toLocaleString("cs-CZ") }),
       };
     },
   },

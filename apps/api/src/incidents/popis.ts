@@ -30,6 +30,8 @@ export function popisZtraty(z: Ztrata): string {
       if (z.stavNahoru !== undefined) casti.push(`stav +${z.stavNahoru} %`);
       return `${nazev}: ${casti.length > 0 ? casti.join(", ") : "vylepšeno"}`;
     }
+    case "dar":
+      return `Dar klubu: ${z.castka.toLocaleString("cs")} Kč`;
   }
 }
 

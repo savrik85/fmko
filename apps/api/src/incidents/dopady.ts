@@ -296,6 +296,19 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
         .catch((e) => { logger.error({ module: M }, `odepsání ukradené hotovosti ${incidentId}`, e); return false; });
       return ok ? z : null;
     }
+    case "dar": {
+      // Opak "penize" výš (spec 4d): recordTransaction je jediný způsob jak měnit
+      // rozpočet, "incident_gift" schválně NENÍ v PURCHASE_TYPES (finance-processor.ts),
+      // takže dar dorazí i při záporném rozpočtu klubu.
+      if (z.castka <= 0) return null;
+      const { recordTransaction } = await import("../season/finance-processor");
+      // Úspěch se pozná podle chybějící výjimky, ne podle vráceného čísla, stejně jako
+      // u "penize" výš: nula je platný zůstatek.
+      const ok = await recordTransaction(db, stav.teamId, "incident_gift", z.castka, `Dar klubu: ${popis}`, stav.gameDate, `dar-${incidentId}`)
+        .then(() => true)
+        .catch((e) => { logger.error({ module: M }, `dar klubu ${incidentId}`, e); return false; });
+      return ok ? z : null;
+    }
   }
   return null;
 }

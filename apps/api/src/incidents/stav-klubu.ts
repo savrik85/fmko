@@ -8,7 +8,8 @@ import { ensureEquipmentRow } from "../equipment/equipment-service";
 import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { RECIDIVA_DNI } from "./nastaveni";
-import type { HracKlubu, StavKlubu } from "./typy";
+import { nactiZtraty } from "./popis";
+import type { HracKlubu, StavKlubu, Ztrata } from "./typy";
 
 const M = "incidents-stav";
 
@@ -152,11 +153,24 @@ export async function nactiStavKlubu(
     // Neopravené škody: kandidáti na opravu zdarma (remeslnik_opravil, spec 4d). Na konci
     // dávky, ať se destrukturalizace pořadí nespletla se staršími poli.
     db.prepare("SELECT id, facility FROM stadium_damage WHERE team_id = ? AND repaired_at IS NULL").bind(teamId),
+    // Nejstarší útěk s penězi, ke kterému ještě nepřišel omluvný dopis (omluvny_dopis,
+    // spec 4d). Dopis dostane při zápisu id `dopis-{id útěku}` — jednou zapsaný tak
+    // zmizí z tohohle výběru navždy (NOT EXISTS), i kdyby los padl znovu o pár sezón
+    // později. `bez_skody`/`nestalo_se` vyřazujeme stejně jako u `utekLetos` výš: klub
+    // o žádné peníze nepřišel, není se za co omlouvat. Na konci dávky ze stejného důvodu
+    // jako škody o řádek výš.
+    db.prepare(
+      `SELECT u.id AS id, u.loss AS loss FROM club_incidents u
+        WHERE u.team_id = ? AND u.kind = 'utek_s_penezi'
+          AND COALESCE(u.resolution, '') NOT IN ('bez_skody', 'nestalo_se')
+          AND NOT EXISTS (SELECT 1 FROM club_incidents WHERE id = 'dopis-' || u.id)
+        ORDER BY u.game_date ASC LIMIT 1`,
+    ).bind(teamId),
   ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
   if (!vysledky) return null;
   const [
     stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes,
-    rozpocetRes, situaceRes, zalohyRes, utekRes, penezniStaffRes, poskozeniRes,
+    rozpocetRes, situaceRes, zalohyRes, utekRes, penezniStaffRes, poskozeniRes, utekBezDopisuRes,
   ] = vysledky;
 
   const stadion: Record<string, number> = {};
@@ -226,6 +240,16 @@ export async function nactiStavKlubu(
   const poskozeni = (poskozeniRes.results as Array<{ id: string; facility: string }>)
     .map((r) => ({ id: String(r.id), zarizeni: String(r.facility) }));
 
+  // Částka jde z `loss` (JSON), ne ze sloupce — parsuje se stejnou cestou jako všude jinde
+  // (`nactiZtraty`), ne ručním json_extract v SQL.
+  const utekBezDopisuRadek = utekBezDopisuRes.results[0] as { id: string; loss: string } | undefined;
+  let utekBezDopisu: StavKlubu["utekBezDopisu"] = null;
+  if (utekBezDopisuRadek) {
+    const penize = nactiZtraty(utekBezDopisuRadek.loss)
+      .find((z): z is Extract<Ztrata, { typ: "penize" }> => z.typ === "penize");
+    if (penize && penize.castka > 0) utekBezDopisu = { id: String(utekBezDopisuRadek.id), castka: penize.castka };
+  }
+
   return {
     teamId, leagueId: team.league_id, seasonNumber, gameDate, den,
     vybaveni, stadion, kadr, vcera: vceraZapas, hospodaVcera,
@@ -235,6 +259,6 @@ export async function nactiStavKlubu(
     rozpocet: cislo((rozpocetRes.results[0] as { budget?: number } | undefined)?.budget, 0),
     situace,
     utekLetos: utekRes.results.length > 0,
-    ekonom, obsluha, poskozeni,
+    ekonom, obsluha, poskozeni, utekBezDopisu,
   };
 }

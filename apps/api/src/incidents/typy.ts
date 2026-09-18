@@ -23,7 +23,9 @@ export type Ztrata =
   /** Opravená škoda na stadionu (spec 4d). Záporná ztráta: něco se spravilo. */
   | { typ: "oprava"; damageId: string; zarizeni: string }
   /** Vybavení šlo nahoru, ne dolů: úroveň nebo stav (spec 4d). */
-  | { typ: "vybaveni_nahoru"; kategorie: string; urovniNahoru?: number; stavNahoru?: number };
+  | { typ: "vybaveni_nahoru"; kategorie: string; urovniNahoru?: number; stavNahoru?: number }
+  /** Peníze, které klubu někdo dal (spec 4d). Opak `penize`. */
+  | { typ: "dar"; castka: number };
 
 export interface HracKlubu {
   id: string;
@@ -94,6 +96,8 @@ export interface StavKlubu {
   obsluha: { id: string; jmeno: string } | null;
   /** Neopravené škody na stadionu, kandidáti na opravu zdarma (spec 4d). */
   poskozeni: Array<{ id: string; zarizeni: string }>;
+  /** Útěk s penězi, ke kterému ještě nepřišel omluvný dopis (spec 4d). `null`, když žádný není. */
+  utekBezDopisu: { id: string; castka: number } | null;
 }
 
 export interface NavrhIncidentu {

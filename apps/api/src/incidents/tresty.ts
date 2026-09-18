@@ -36,6 +36,7 @@ export function hodnotaSkody(ztraty: readonly Ztrata[]): number {
         break;
       case "oprava":
       case "vybaveni_nahoru":
+      case "dar":
         // Pozitivní incident, ne škoda: nic se nepřičítá, nikdo za to neplatí pokutu.
         break;
       default: {

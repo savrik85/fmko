@@ -190,3 +190,45 @@ describe("ekonom a obsluha ze staff_members (spec 4a, 5a)", () => {
     expect(s?.obsluha).toBeNull();
   });
 });
+
+describe("omluvný dopis: nejstarší útěk bez páru (spec 4d, Task 4)", () => {
+  const ZAKLAD = [
+    { sql: /FROM equipment WHERE team_id/, first: {} },
+    { sql: /FROM matches m JOIN season_calendar/, all: [] },
+  ];
+
+  it("bez žádného útěku je utekBezDopisu null", async () => {
+    const db = new FalesnaD1([...ZAKLAD, { sql: /FROM club_incidents u/, all: [] }]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.utekBezDopisu).toBeNull();
+  });
+
+  it("útěk bez páru dá id útěku a částku vytaženou z loss JSON", async () => {
+    const db = new FalesnaD1([
+      ...ZAKLAD,
+      {
+        sql: /FROM club_incidents u/,
+        all: [{ id: "inc-tym-a-utek_s_penezi-2026-08-01", loss: JSON.stringify([{ typ: "penize", castka: 8000 }]) }],
+      },
+    ]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.utekBezDopisu).toEqual({ id: "inc-tym-a-utek_s_penezi-2026-08-01", castka: 8000 });
+  });
+
+  it("dotaz vylučuje bez_skody/nestalo_se a už vyřízené útěky přes odvozené id (regrese)", async () => {
+    // Bez tohohle by dopis mohl přijít i k útěku, který klubu žádné peníze nesebral,
+    // nebo podruhé ke stejnému útěku, kdyby `zapisIncident` použil id `dopis-{id útěku}`.
+    const db = new FalesnaD1([...ZAKLAD, { sql: /FROM club_incidents u/, all: [] }]);
+    await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    const dotaz = db.davky.flat().find((d) => /FROM club_incidents u/.test(d.sql));
+    expect(dotaz?.sql).toContain("NOT IN ('bez_skody', 'nestalo_se')");
+    expect(dotaz?.sql).toContain("NOT EXISTS");
+    expect(dotaz?.sql).toContain("'dopis-' || u.id");
+  });
+
+  it("rozbitý JSON v loss dá utekBezDopisu null, nespadne", async () => {
+    const db = new FalesnaD1([...ZAKLAD, { sql: /FROM club_incidents u/, all: [{ id: "inc-x", loss: "{rozbite" }] }]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.utekBezDopisu).toBeNull();
+  });
+});

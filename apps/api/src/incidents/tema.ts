@@ -51,7 +51,8 @@ const KMENY_PENIZE = ["peniz", "hotovost", "kasa", "tombol", "pokladn"];
 
 /** Kmeny slov z názvu toho, co incident poškodil: bez poslední hlásky, aby „dresy" poznalo i „dresů". */
 function kmenyZtraty(z: Ztrata): string[] {
-  if (z.typ === "penize") return KMENY_PENIZE;
+  // "dar" je taky jen peníze (spec 4d, opak "penize"), stejné kmeny stačí.
+  if (z.typ === "penize" || z.typ === "dar") return KMENY_PENIZE;
   const nazev = z.typ === "vybaveni" || z.typ === "vybaveni_stav" || z.typ === "vybaveni_nahoru" ? CATEGORY_LABELS[z.kategorie]
     : z.typ === "stadion" || z.typ === "oprava" ? FACILITY_LABELS[z.zarizeni]
     : "trávník";

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createRng, type Rng } from "../generators/rng";
 import { CINY_HRACE, cinHrace, KATALOG, KATALOG_PODLE_KIND, muzeOhlasit, sanceZproneveryPodleUsudku } from "./katalog";
+import {
+  DAR_MAX_KC, DAR_MIN_KC, DOPIS_PODIL_MAX, DOPIS_PODIL_MIN, LEVNE_KATEGORIE, OBALKA_MAX_KC, OBALKA_MIN_KC,
+} from "./nastaveni";
 import { hrac, PROBLEMOVY, stavKlubu } from "./testovaci-stav";
 import type { StavKlubu } from "./typy";
 
@@ -571,5 +574,111 @@ describe("pozitivní incidenty: hrdina a poctivý nálezce (spec 4d, Task 3)", (
       if (n?.subjectPlayerId) videni.add(n.subjectPlayerId);
     }, 50);
     expect(videni.size).toBe(2);
+  });
+});
+
+describe("pozitivní incidenty: dar zaměstnavatele, anonymní obálka a omluvný dopis (spec 4d, Task 4)", () => {
+  const DARCE = hrac({ id: "d", jmeno: "Karel Podnikatel", povolani: "Podnikatel" });
+
+  it("všechny tři mají váhu 0 a nejsou spouštěné: nelosují se v běžném poolu", () => {
+    for (const kind of ["dar_zamestnavatele", "anonymni_obalka", "omluvny_dopis"]) {
+      expect(def(kind).vaha, kind).toBe(0);
+      expect(def(kind).spousteny, kind).toBe(false);
+    }
+  });
+
+  it("dar zaměstnavatele jen s dárcovským povoláním v kádru", () => {
+    expect(def("dar_zamestnavatele").muze(stavKlubu())).toBe(false);
+    expect(def("dar_zamestnavatele").muze(stavKlubu({ kadr: [PROBLEMOVY] }))).toBe(false);
+    expect(def("dar_zamestnavatele").muze(stavKlubu({ kadr: [DARCE] }))).toBe(true);
+  });
+
+  it("dar zaměstnavatele: text vždy odpovídá zvolené větvi, žádný uniklý placeholder (spec Task 1 Nález 1)", () => {
+    // `text()` losuje napříč všemi čtyřmi variantami klíče `dar_zamestnavatele` - to by
+    // tady občas smíchalo peněžní {castka} s vybavením a naopak (nevyplněná značka by
+    // zůstala v textu doslova). Katalog proto musí losovat jen v rámci správné dvojice.
+    const s = stavKlubu({ kadr: [DARCE] });
+    let penezni = 0;
+    let vecna = 0;
+    proSeedy((rng) => {
+      const n = def("dar_zamestnavatele").vytvor(s, rng);
+      if (!n) return;
+      expect(n.text).not.toMatch(/\{\w+\}/);
+      expect(n.subjectPlayerId).toBe("d");
+      expect(n.culpritPlayerId).toBeNull();
+      expect(n.culpritType).toBe("nikdo");
+      const z = n.ztraty[0];
+      if (z.typ === "dar") {
+        penezni++;
+        expect(z.castka).toBeGreaterThanOrEqual(DAR_MIN_KC);
+        expect(z.castka).toBeLessThanOrEqual(DAR_MAX_KC);
+        expect(n.text).toContain(z.castka.toLocaleString("cs-CZ"));
+      } else if (z.typ === "vybaveni_nahoru") {
+        vecna++;
+        expect(LEVNE_KATEGORIE).toContain(z.kategorie);
+        expect(z.urovniNahoru).toBe(1);
+      } else {
+        throw new Error(`neočekávaný typ ztráty ${z.typ}`);
+      }
+    });
+    expect(penezni).toBeGreaterThan(0);
+    expect(vecna).toBeGreaterThan(0);
+  });
+
+  it("dar zaměstnavatele dá jen peníze, když jsou všechny levné kategorie na stropu", () => {
+    const s = stavKlubu({ kadr: [DARCE], vybaveni: Object.fromEntries(LEVNE_KATEGORIE.map((k) => [k, 3])) });
+    proSeedy((rng) => {
+      const n = def("dar_zamestnavatele").vytvor(s, rng);
+      expect(n?.ztraty[0]?.typ).toBe("dar");
+    });
+  });
+
+  it("anonymní obálka nemá žádnou podmínku", () => {
+    expect(def("anonymni_obalka").muze(stavKlubu())).toBe(true);
+  });
+
+  it("anonymní obálka dá peníze v pásmu, bez pachatele a bez subjektu", () => {
+    proSeedy((rng) => {
+      const n = def("anonymni_obalka").vytvor(stavKlubu(), rng);
+      expect(n?.ztraty).toHaveLength(1);
+      const z = n?.ztraty[0];
+      if (z?.typ !== "dar") throw new Error("očekávána ztráta typu dar");
+      expect(z.castka).toBeGreaterThanOrEqual(OBALKA_MIN_KC);
+      expect(z.castka).toBeLessThanOrEqual(OBALKA_MAX_KC);
+      expect(n?.culpritType).toBe("nikdo");
+      expect(n?.subjectPlayerId).toBeUndefined();
+    });
+  });
+
+  it("omluvný dopis nepřijde bez útěku s penězi", () => {
+    expect(def("omluvny_dopis").muze(stavKlubu())).toBe(false);
+    proSeedy((rng) => expect(def("omluvny_dopis").vytvor(stavKlubu(), rng)).toBeNull());
+  });
+
+  it("omluvný dopis vrátí 20 až 50 % tehdejší ztráty", () => {
+    const s = stavKlubu({ utekBezDopisu: { id: "inc-tym-a-utek_s_penezi-2026-01-01", castka: 10000 } });
+    expect(def("omluvny_dopis").muze(s)).toBe(true);
+    let pocet = 0;
+    proSeedy((rng) => {
+      const n = def("omluvny_dopis").vytvor(s, rng);
+      if (!n) return;
+      pocet++;
+      const z = n.ztraty[0];
+      if (z.typ !== "dar") throw new Error("očekávána ztráta typu dar");
+      expect(z.castka).toBeGreaterThanOrEqual(Math.round((10000 * DOPIS_PODIL_MIN) / 100));
+      expect(z.castka).toBeLessThanOrEqual(Math.round((10000 * DOPIS_PODIL_MAX) / 100));
+      expect(n.culpritType).toBe("nikdo");
+      expect(n.status).toBe("uzavreny");
+    });
+    expect(pocet).toBeGreaterThan(0);
+  });
+
+  it("dvakrát ke stejnému útěku nepřijde: jakmile stav klubu dopis nehlásí, nic nevznikne", () => {
+    // `nactiStavKlubu` (stav-klubu.ts) vyřadí útěk, ke kterému už existuje incident
+    // `dopis-{id útěku}`, takže `utekBezDopisu` bude `null` - stejně jako u klubu,
+    // kterému nikdy neutekl nikdo. Katalog na obojí reaguje stejně.
+    const s = stavKlubu({ utekBezDopisu: null });
+    expect(def("omluvny_dopis").muze(s)).toBe(false);
+    proSeedy((rng) => expect(def("omluvny_dopis").vytvor(s, rng)).toBeNull());
   });
 });
