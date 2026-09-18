@@ -239,3 +239,42 @@ describe("čin ohlášený v hospodě (spec 9a)", () => {
     expect(cinHrace("koleje_trakturek", stavKlubu({ vybaveni: { mower: 1 } }), FRANTA, createRng(1))).toBeNull();
   });
 });
+
+describe("peněžní krádeže ze zápasu (spec 4a)", () => {
+  const sVcerejskem = (kasa: number, tombola: number) =>
+    stavKlubu({ vcera: { vyhra: true, zapasId: "m1", trzby: { kasa, tombola } } as never });
+
+  it("bez včerejší tržby se kasa nekrade", () => {
+    expect(def("kasa_obcerstveni").muze(sVcerejskem(0, 0))).toBe(false);
+  });
+
+  it("z kasy zmizí 20 až 50 procent skutečné tržby", () => {
+    const castky: number[] = [];
+    proSeedy((rng) => {
+      const n = def("kasa_obcerstveni").vytvor(sVcerejskem(10000, 0), rng);
+      const z = n?.ztraty[0];
+      if (z && z.typ === "penize") castky.push(z.castka);
+    }, 300);
+    expect(castky.length).toBeGreaterThan(0);
+    expect(Math.min(...castky)).toBeGreaterThanOrEqual(2000);
+    expect(Math.max(...castky)).toBeLessThanOrEqual(5000);
+  });
+
+  it("z tomboly zmizí 30 až 100 procent a nese id zápasu", () => {
+    const castky: number[] = [];
+    proSeedy((rng) => {
+      const n = def("tombola").vytvor(sVcerejskem(0, 2000), rng);
+      const z = n?.ztraty[0];
+      if (z && z.typ === "penize") { castky.push(z.castka); expect(z.zdrojZapasId).toBe("m1"); }
+    }, 300);
+    expect(Math.min(...castky)).toBeGreaterThanOrEqual(600);
+    expect(Math.max(...castky)).toBeLessThanOrEqual(2000);
+  });
+
+  it("obě jsou spouštěné a nelosují se vahou", () => {
+    for (const k of ["kasa_obcerstveni", "tombola"]) {
+      expect(def(k).spousteny).toBe(true);
+      expect(def(k).vaha).toBe(0);
+    }
+  });
+});

@@ -9,7 +9,10 @@
 import { CATEGORY_LABELS, cumulativeInvestment, efektyZabezpeceni } from "../equipment/equipment-generator";
 import type { Rng } from "../generators/rng";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
-import { PODIL_POKUSU_ZVENKU } from "./nastaveni";
+import {
+  KASA_PODIL_MAX, KASA_PODIL_MIN, PODIL_POKUSU_ZVENKU, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
+  TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN,
+} from "./nastaveni";
 import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
 import { text } from "./texty";
 import type { HracKlubu, KategorieIncidentu, NavrhIncidentu, StavKlubu, Ztrata } from "./typy";
@@ -98,6 +101,13 @@ function pachatel(p: Kdo) {
     culpritPlayerId: p.typ === "hrac" ? p.hrac.id : null,
     culpritRevealed: false,
   } as const;
+}
+
+/** Kolik hotovosti zmizí: podíl z tržby, ale nikdy přes strop ztráty (spec 4e). */
+function castkaZTrzby(s: StavKlubu, rng: Rng, trzba: number, min: number, max: number): number {
+  const hrube = Math.round((trzba * rng.int(min, max)) / 100);
+  const strop = Math.min(Math.round(s.rozpocet * STROP_ZTRATY_PODIL), STROP_ZTRATY_KC);
+  return Math.max(0, Math.min(hrube, strop));
 }
 
 function skladNavrh(s: StavKlubu, rng: Rng, kdo: Kdo): NavrhIncidentu | null {
@@ -299,6 +309,46 @@ export const KATALOG: DefiniceIncidentu[] = [
         culpritType: hrac ? "hrac" : "cizi", culpritPlayerId: hrac?.id ?? null, culpritRevealed: false,
         ztraty: [{ typ: "travnik", pred, po }],
         text: text(rng, "svetlice"),
+      };
+    },
+  },
+  {
+    kind: "kasa_obcerstveni", label: "Vybraná kasa", emoji: "🧾", category: "kradez", vaha: 0, spousteny: true,
+    muze: (s) => (s.vcera?.trzby.kasa ?? 0) > 0,
+    vytvor: (s, rng) => {
+      const trzba = s.vcera?.trzby.kasa ?? 0;
+      if (trzba <= 0) return null;
+      const kdo = pokusOKradez(s, rng, 2);
+      if (!kdo) return null;
+      if (kdo.typ === "alarm") return alarmNavrh(rng);
+      const castka = castkaZTrzby(s, rng, trzba, KASA_PODIL_MIN, KASA_PODIL_MAX);
+      if (castka <= 0) return null;
+      return {
+        kind: "kasa_obcerstveni", category: "kradez", status: "otevreny", severity: 2,
+        culpritType: kdo.typ === "hrac" ? "hrac" : "cizi", culpritPlayerId: kdo.typ === "hrac" ? kdo.hrac.id : null,
+        culpritRevealed: false,
+        ztraty: [{ typ: "penize", castka, zdrojZapasId: s.vcera?.zapasId ?? undefined }],
+        text: text(rng, "kasa_obcerstveni", { castka: castka.toLocaleString("cs-CZ") }),
+      };
+    },
+  },
+  {
+    kind: "tombola", label: "Okradená tombola", emoji: "🎟️", category: "kradez", vaha: 0, spousteny: true,
+    muze: (s) => (s.vcera?.trzby.tombola ?? 0) > 0,
+    vytvor: (s, rng) => {
+      const trzba = s.vcera?.trzby.tombola ?? 0;
+      if (trzba <= 0) return null;
+      const kdo = pokusOKradez(s, rng, 2);
+      if (!kdo) return null;
+      if (kdo.typ === "alarm") return alarmNavrh(rng);
+      const castka = castkaZTrzby(s, rng, trzba, TOMBOLA_PODIL_MIN, TOMBOLA_PODIL_MAX);
+      if (castka <= 0) return null;
+      return {
+        kind: "tombola", category: "kradez", status: "otevreny", severity: 2,
+        culpritType: kdo.typ === "hrac" ? "hrac" : "cizi", culpritPlayerId: kdo.typ === "hrac" ? kdo.hrac.id : null,
+        culpritRevealed: false,
+        ztraty: [{ typ: "penize", castka, zdrojZapasId: s.vcera?.zapasId ?? undefined }],
+        text: text(rng, "tombola", { castka: castka.toLocaleString("cs-CZ") }),
       };
     },
   },

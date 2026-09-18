@@ -17,7 +17,15 @@ export const SANCE_SPOUSTENYCH: Record<string, number> = {
   oslava_v_kabine: 0.25,
   kopnute_dvere: 0.35,
   svetlice: 0.15,
+  kasa_obcerstveni: 0.25,
+  tombola: 0.25,
 };
+/** Kolik procent skutečné tržby zmizí z kasy s občerstvením (spec 4a). */
+export const KASA_PODIL_MIN = 20;
+export const KASA_PODIL_MAX = 50;
+/** Tombola je v kase bokem, sebere se jí klidně celá (spec 4a). */
+export const TOMBOLA_PODIL_MIN = 30;
+export const TOMBOLA_PODIL_MAX = 100;
 /** Odesílatel SMS o incidentech. Obecná klubová role, existuje v každém klubu. */
 export const SMS_ROLE_KUSTOD = "Kustod";
 

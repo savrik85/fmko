@@ -80,6 +80,18 @@ export const TEXTY = {
     "Přes hřiště vedou stopy od auta, někdo si tu v noci zajezdil.",
     "Vandalové rozryli trávník, na hřišti jsou hluboké koleje.",
   ],
+  kasa_obcerstveni: [
+    "Po zápase někdo vybral kasu u občerstvení. Chybí {castka} Kč.",
+    "Kasa od stánku je prázdná. Z včerejší tržby chybí {castka} Kč.",
+    "Ráno se ukázalo, že kasa u stánku nesedí. Schází {castka} Kč.",
+    "Z tržby za občerstvení zmizelo {castka} Kč. Kasa byla přes noc bez dozoru.",
+  ],
+  tombola: [
+    "Výtěžek z tomboly je pryč. Chybí {castka} Kč.",
+    "Krabice s penězi z tomboly zůstala přes noc v kase a ráno v ní chybí {castka} Kč.",
+    "Z tomboly zmizelo {castka} Kč. Kasička byla otevřená a prázdná.",
+    "Peníze z tomboly se ztratily. Nesedí {castka} Kč.",
+  ],
   alarm_vyplasil: [
     "V noci se v areálu rozječel alarm. Zloděj utekl a nic neodnesl.",
     "Alarm vyplašil někoho, kdo se v noci dobýval do areálu. Nic nechybí.",
