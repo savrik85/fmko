@@ -342,6 +342,30 @@ describe("zpronevěra ekonoma (spec 4a)", () => {
     expect(sanceZproneveryPodleUsudku(2)).toBeGreaterThan(sanceZproneveryPodleUsudku(9));
   });
 
+  it("šance drží kladná čísla na celé škále úsudku 1 až 20 a klesá s každým bodem", () => {
+    // Regrese na `(10 - judgement) / 20`: úsudek ve staff_members jede 1 až 20, ne 0 až 10,
+    // takže od desítky výš vycházela nula nebo záporné číslo a `rng.random() >= sance`
+    // bylo vždycky splněné. Ekonomovi se úsudek losuje jako primární atribut až do 19.
+    const sance = Array.from({ length: 20 }, (_, i) => sanceZproneveryPodleUsudku(i + 1));
+    sance.forEach((s, i) => {
+      expect(s, `úsudek ${i + 1}`).toBeGreaterThan(0);
+      expect(s, `úsudek ${i + 1}`).toBeGreaterThanOrEqual(0.15);
+      expect(s, `úsudek ${i + 1}`).toBeLessThanOrEqual(0.9);
+      if (i > 0) expect(s, `úsudek ${i + 1}`).toBeLessThan(sance[i - 1]);
+    });
+    expect(sanceZproneveryPodleUsudku(20)).toBeGreaterThan(0);
+    expect(sanceZproneveryPodleUsudku(1)).toBeGreaterThan(sanceZproneveryPodleUsudku(20));
+  });
+
+  it("i ekonom s vysokým úsudkem občas zpronevěří", () => {
+    // Přes `vytvor`, ne jen přes vzorec: tohle je ta půlka ekonomů, která dřív nemohla krást nikdy.
+    for (const usudek of [10, 15, 18, 20]) {
+      let stalo = 0;
+      proSeedy((rng) => { if (def("zpronevera_ekonoma").vytvor(sEkonomem(usudek), rng)) stalo++; }, 300);
+      expect(stalo, `úsudek ${usudek}`).toBeGreaterThan(0);
+    }
+  });
+
   it("obě jsou spouštěné a nelosují se vahou", () => {
     const d = def("zpronevera_ekonoma");
     expect(d.spousteny).toBe(true);

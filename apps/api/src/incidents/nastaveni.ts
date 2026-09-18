@@ -16,8 +16,16 @@ export const PODIL_POKUSU_ZVENKU = 0.5;
 export const ZPRONEVERA_MIN_KC = 3000;
 export const ZPRONEVERA_MAX_KC = 15000;
 export const ZPRONEVERA_STROP_PODIL = 0.05;
-/** Denní šance, že se zpronevěra provalí. Ekonom s dobrým úsudkem krade míň. */
+/** Denní brána zpronevěry (losovani.ts). Za ní ještě rozhoduje úsudek ekonoma. */
 export const SANCE_ZPRONEVERY = 0.02;
+/**
+ * Krajní šance zpronevěry podle úsudku ekonoma. Úsudek je na škále staff_members
+ * 1 až 20, hodnoty patří k jejím koncům a mezi nimi se šance lineárně snižuje
+ * (`sanceZproneveryPodleUsudku` v katalog.ts). Dolní mez schválně není nula:
+ * pečlivý ekonom krade vzácněji, ale imunní není nikdy.
+ */
+export const ZPRONEVERA_SANCE_USUDEK_1 = 0.9;
+export const ZPRONEVERA_SANCE_USUDEK_20 = 0.15;
 /** Šance, že se spouštěný incident stane, když je spouštěč splněný. */
 export const SANCE_SPOUSTENYCH: Record<string, number> = {
   oslava_v_kabine: 0.25,

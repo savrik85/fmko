@@ -11,7 +11,8 @@ import type { Rng } from "../generators/rng";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import {
   KASA_PODIL_MAX, KASA_PODIL_MIN, OBSLUHA_SANCE, PODIL_POKUSU_ZVENKU, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
-  TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_STROP_PODIL,
+  TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_SANCE_USUDEK_1,
+  ZPRONEVERA_SANCE_USUDEK_20, ZPRONEVERA_STROP_PODIL,
 } from "./nastaveni";
 import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
 import { text } from "./texty";
@@ -111,11 +112,23 @@ function castkaZTrzby(s: StavKlubu, rng: Rng, trzba: number, min: number, max: n
 }
 
 /**
- * Šance, že si ekonom toho dne přisvojí peníze (spec 4a). Čím nižší `judgement` (0–10),
- * tím vyšší šance: los ve `vytvor`, ne `vaha` položky, spouštěné položky váhu nepoužívají.
+ * Šance, že si ekonom toho dne přisvojí peníze (spec 4a).
+ *
+ * `judgement` jede na škále `staff_members` 1 až 20, ne 0 až 10: staff-effects.ts dělí
+ * dvaceti, stopy.ts počítá `spravceUsudek / 40` a staff-generator.ts losuje ekonomovi
+ * úsudek jako primární atribut až do 19. Šance proto klesá lineárně z 0,9 při úsudku 1
+ * na 0,15 při úsudku 20 a nikdy nespadne na nulu: pečlivý ekonom sahá na klubovou
+ * hotovost vzácněji, protože pokušení odolá častěji, ale příležitost má pořád stejnou.
+ * Nulová šance by znamenala, že si klub vyšší mzdou koupí jistotu, a mechanismus by
+ * u lepší poloviny ekonomů přestal existovat.
+ *
+ * Los padá ve `vytvor`, ne přes `vaha` (spouštěné položky váhu nepoužívají). Před ním
+ * ještě losovani.ts projde denní bránou `SANCE_SPOUSTENYCH.zpronevera_ekonoma` (0,02),
+ * takže skutečná denní šance je 0,3 % u úsudku 20 až 1,8 % u úsudku 1.
  */
 export function sanceZproneveryPodleUsudku(judgement: number): number {
-  return (10 - judgement) / 20;
+  const usudek = Math.min(20, Math.max(1, judgement));
+  return ZPRONEVERA_SANCE_USUDEK_1 - ((usudek - 1) * (ZPRONEVERA_SANCE_USUDEK_1 - ZPRONEVERA_SANCE_USUDEK_20)) / 19;
 }
 
 function skladNavrh(s: StavKlubu, rng: Rng, kdo: Kdo): NavrhIncidentu | null {
