@@ -138,3 +138,55 @@ describe("včerejší tržby a letošní útěk (spec 4a)", () => {
     expect(db.pocet(/FROM transactions/)).toBe(0);
   });
 });
+
+describe("ekonom a obsluha ze staff_members (spec 4a, 5a)", () => {
+  // Dotaz běží uvnitř db.batch(): FalesnaD1 tam čte `all`, ne `first` (viz test výš,
+  // stejná poznámka platí i tady).
+  const ZAKLAD = [
+    { sql: /FROM equipment WHERE team_id/, first: {} },
+    { sql: /FROM matches m JOIN season_calendar/, all: [] },
+  ];
+
+  it("klub má oba: ekonom i obsluha se načtou se jménem v 1. pádě", async () => {
+    const db = new FalesnaD1([
+      ...ZAKLAD,
+      {
+        sql: /FROM staff_members WHERE team_id = \? AND role IN \('ekonom', 'obsluha'\)/,
+        all: [
+          { id: "e1", first_name: "Karel", last_name: "Počet", judgement: 7, role: "ekonom" },
+          { id: "o1", first_name: "Jana", last_name: "Pivná", judgement: null, role: "obsluha" },
+        ],
+      },
+    ]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.ekonom).toEqual({ id: "e1", jmeno: "Karel Počet", judgement: 7 });
+    expect(s?.obsluha).toEqual({ id: "o1", jmeno: "Jana Pivná" });
+  });
+
+  it("jen ekonom: obsluha je null a chybějící úsudek padne na výchozích 5", async () => {
+    const db = new FalesnaD1([
+      ...ZAKLAD,
+      { sql: /FROM staff_members WHERE team_id/, all: [{ id: "e1", first_name: "Karel", last_name: "Počet", judgement: null, role: "ekonom" }] },
+    ]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.ekonom).toEqual({ id: "e1", jmeno: "Karel Počet", judgement: 5 });
+    expect(s?.obsluha).toBeNull();
+  });
+
+  it("jen obsluha: ekonom je null", async () => {
+    const db = new FalesnaD1([
+      ...ZAKLAD,
+      { sql: /FROM staff_members WHERE team_id/, all: [{ id: "o1", first_name: "Jana", last_name: "Pivná", judgement: null, role: "obsluha" }] },
+    ]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.ekonom).toBeNull();
+    expect(s?.obsluha).toEqual({ id: "o1", jmeno: "Jana Pivná" });
+  });
+
+  it("žádný najatý: oba jsou null", async () => {
+    const db = new FalesnaD1([...ZAKLAD, { sql: /FROM staff_members WHERE team_id/, all: [] }]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.ekonom).toBeNull();
+    expect(s?.obsluha).toBeNull();
+  });
+});

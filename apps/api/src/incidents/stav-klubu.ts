@@ -151,7 +151,7 @@ export async function nactiStavKlubu(
     ).bind(teamId),
   ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
   if (!vysledky) return null;
-  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes, rozpocetRes, situaceRes, zalohyRes, utekRes, ekonomRes] = vysledky;
+  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes, rozpocetRes, situaceRes, zalohyRes, utekRes, penezniStaffRes] = vysledky;
 
   const stadion: Record<string, number> = {};
   for (const [k, v] of Object.entries((stadionRes.results[0] ?? {}) as Record<string, unknown>)) {
@@ -207,7 +207,7 @@ export async function nactiStavKlubu(
     otevreneProblemy += r.otevrene ?? 0;
   }
 
-  const staffRadky = ekonomRes.results as Array<{ id: string; first_name: string; last_name: string; judgement: number | null; role: string }>;
+  const staffRadky = penezniStaffRes.results as Array<{ id: string; first_name: string; last_name: string; judgement: number | null; role: string }>;
   const ekonomRadek = staffRadky.find((r) => r.role === "ekonom");
   const ekonom = ekonomRadek
     ? { id: String(ekonomRadek.id), jmeno: `${ekonomRadek.first_name} ${ekonomRadek.last_name}`, judgement: ekonomRadek.judgement ?? 5 }
