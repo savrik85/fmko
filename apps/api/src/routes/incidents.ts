@@ -307,8 +307,12 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
   // Horní mez je jen rozumná pojistka proti překlepu (nekonečno, NaN, omylem o pár nul
   // víc) — hodnota jde do `trzby.kasa`/`trzby.tombola`, ne přímo do žádné skutečné škody.
   const ADMIN_CASTKA_STROP_KC = 1_000_000;
+  if (body.castka !== undefined
+    && (typeof body.castka !== "number" || !Number.isFinite(body.castka) || body.castka <= 0 || body.castka > ADMIN_CASTKA_STROP_KC)) {
+    return c.json({ error: `Částka musí být kladné číslo nejvýš ${ADMIN_CASTKA_STROP_KC.toLocaleString("cs-CZ")} Kč` }, 400);
+  }
   let stavProLos = stav;
-  if (typeof body.castka === "number" && Number.isFinite(body.castka) && body.castka > 0 && body.castka <= ADMIN_CASTKA_STROP_KC) {
+  if (body.castka !== undefined) {
     if (def.kind === "kasa_obcerstveni" || def.kind === "tombola") {
       stavProLos = {
         ...stav,
