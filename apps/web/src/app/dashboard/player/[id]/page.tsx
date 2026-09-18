@@ -615,8 +615,13 @@ export default function PlayerDetailPage() {
                       const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/player-conversation/${player.id}`, { method: "POST" });
                       router.push(`/dashboard/phone/${res.conversationId}`);
                     } catch (e) { console.error("open player conversation:", e); }
-                  }} className={`${btnBase} ${btnNeutral}`}>
-                    {unrestInfo && (unrestInfo.level ?? 0) > 0 ? "💬 Promluvit si" : "💬 Napsat"}
+                  }}
+                    aria-label={`Napsat hráči ${player.first_name} ${player.last_name}`}
+                    // Krátký popisek a bez roztahování přes celou šířku: s plnou
+                    // šířkou by se řada tlačítek na mobilu zalomila o řádek navíc
+                    // a hlavička hráče by zabrala půl displeje.
+                    className={`shrink-0 sm:flex-initial min-w-0 sm:min-w-[120px] rounded-xl px-3 sm:px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${btnNeutral}`}>
+                    💬 SMS
                   </button>
                 )}
                 {/* Own player actions — ne pro hostující */}
@@ -633,8 +638,8 @@ export default function PlayerDetailPage() {
                   </>
                 ) : (
                   <button onClick={() => setPriceDialogOpen(true)} disabled={actionLoading}
-                    className={`${btnBase} min-w-[140px] disabled:opacity-50 ${btnNeutral}`}>
-                    🏷️ Nabídnout na trh
+                    className={`${btnBase} disabled:opacity-50 ${btnNeutral}`}>
+                    🏷️ Na trh
                   </button>
                 ))}
                 {isOwnPlayer && !isLoanedToUs && (
