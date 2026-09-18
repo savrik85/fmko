@@ -14,7 +14,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-09-18",
     emoji: "🕵️",
-    title: "V klubu se krade. Někdo z kádru, někdo zvenku a někdy i ten, komu platíš",
+    title: "V klubu se krade. Ale taky se najde hrdina, řemeslník a obálka ve schránce",
     items: [
       "Klubu se začnou dít věci. Ze skladu zmizí míče nebo dresy, z vitríny poháry, někdo rozkope dveře u kabin, po oslavě zůstane spoušť a trávník má koleje od traktůrku. Všechno najdeš na nové stránce Incidenty a všechno má skutečný dopad: co zmizí, to v kádru chybí, dokud to nekoupíš znovu.",
       "Většinu průšvihů je na koho svést, ale musíš na to přijít sám. Ke každému incidentu se sbíhají stopy. Kamera u kabin, správce hřiště, soused od plotu, svědek, co šel z hospody. Každá stopa ukazuje jinam a některé se najdou samy, jiné musíš z lidí dostat.",
@@ -26,6 +26,11 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "V hospodě se to probírá. Po šestém pivu se leckdo pochlubí, co provedl, jinde se řeší poslední průšvih a občas někdo nahlas oznámí, co udělá zítra. Deník z hospody si přečteš na stránce Hospoda a takovému chlapovi se dá včas domluvit, aby to neudělal.",
       "Hráčům se děje i něco mimo hřiště. Dluhy, ztráta práce, rozvod, zabavený řidičák, ale taky svatba spoluhráče, narození dítěte nebo nemocný rodič. Není to jen text. Kdo se rozvádí, chodí radši na hřiště než domů, kdo má dluhy, bere brigády a na trénink nedorazí, komu vzali řidičák, ten se hůř dostane na venkovní zápas, a kdo se právě stal tátou, přijde do kabiny jako vyměněný.",
       "Někdy zabere zabezpečení. Když má klub na areálu alarm, zloděje to vyplaší a ráno zjistíš, že se nic neztratilo. Za ty peníze to nakonec stálo.",
+      "Nechodí ale jen průšvihy. Zhruba každá třetí zpráva je dobrá a pozná se na první pohled, má zelený štítek a žádné rozhodování nečeká, jen si ji přečteš.",
+      "Kdo je v kádru, to se hodí. Zedník nebo instalatér rozbitou tribunu spraví zadarmo a nemusíš na opravu sahat do rozpočtu. Automechanik dá do pořádku dodávku. Hasič, záchranář nebo policista může jednoho dne někoho vytáhnout z maléru a klubu to zvedne pověst, přízeň obce i náladu v kabině.",
+      "Někdo prostě zůstane slušný. Hráč najde u kabin cizí mobil a ještě ten večer ho donese majiteli. Nic to klubu nevynese na penězích, ale v okrese se to ví.",
+      "Občas přijdou peníze nebo věci samy. Po zemřelém fanouškovi odkaz v závěti a klub má nové dresy. Zaměstnavatel jednoho z hráčů pošle dar. Ráno leží ve schránce obálka a nikdo se nepřizná, kdo ji tam dal.",
+      "A jedna zpráva chodí po letech. Hráči, který kdysi zmizel i s klubovou pokladnou, se ozve svědomí. Přijde dopis, omluva a část peněz zpátky. Přijde jen jednou a jen tomu klubu, kterého se to tehdy týkalo.",
       "Kdo je v dluzích, napíše si o zálohu na mzdu. Můžeš půjčit a strhávat si to čtyři pondělky, nebo odmítnout. Odmítnutí si bude pamatovat a v hospodě už mu nenalejou na sekeru.",
       "Krade se i to, co se nedá odnést. Po domácím zápase může zmizet kasa od občerstvení nebo výtěžek z tomboly. Sebere se to z toho, co jste opravdu vydělali, takže čím lepší návštěva, tím větší škoda.",
       "Zaměstnanci taky nejsou svatí. Najatý ekonom si může nechat část peněz a odejít, a kasu u stánku občas vybere ten, kdo u ní celý zápas stojí. Ekonom se sám zvolí podle toho, jak pečlivý je. Čím lepší úsudek, tím menší riziko, ale nikdo není nad věcí.",
