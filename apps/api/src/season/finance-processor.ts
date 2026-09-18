@@ -63,6 +63,9 @@ export type TransactionType =
   | "incident_fine"
   | "incident_deduction"
   | "incident_recovery"
+  // Hotovost, kterou klubu někdo ukradl (kasa, tombola, zpronevěra, útěk hráče). Čistá ztráta,
+  // ne nákup — nesmí být v PURCHASE_TYPES, jinak by ji záporný rozpočet zablokoval.
+  | "incident_loss"
   // Záloha na mzdu hráči v dluzích (spec 7c). Klub ji vyplatí a čtyři pondělky si ji strhává zpátky.
   // ZÁMĚRNĚ není v PURCHASE_TYPES: je to rozhodnutí o hráči, ne nákup, a při záporném rozpočtu
   // se trenér stejně rozhoduje sám.

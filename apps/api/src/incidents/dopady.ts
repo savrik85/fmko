@@ -173,6 +173,15 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
         .catch((e) => { logger.error({ module: M }, `poškození trávníku ${incidentId}`, e); return null; });
       return zmeneno(r) ? z : null;
     }
+    case "penize": {
+      // Peníze se odepisují transakcí, ne přímým zápisem do teams.budget — recordTransaction
+      // je jediný způsob jak měnit rozpočet. Dynamický import kvůli cyklu incidents ↔ season.
+      if (z.castka <= 0) return null;
+      const { recordTransaction } = await import("../season/finance-processor");
+      await recordTransaction(db, stav.teamId, "incident_loss", -z.castka, `Ukradená hotovost: ${popis}`, stav.gameDate, `ztrata-${incidentId}`)
+        .catch((e) => { logger.error({ module: M }, `odepsání ukradené hotovosti ${incidentId}`, e); });
+      return z;
+    }
   }
   return null;
 }

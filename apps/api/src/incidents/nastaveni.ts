@@ -107,6 +107,11 @@ export const SLEVA_KRADENEHO = 0.55;
 /** Soukromý inzerát vydrží jako lidský inzerát, v reálných dnech. */
 export const KRADENE_INZERAT_DNI = 7;
 
+/** Strop peněžní ztráty: nikdy víc než desetina rozpočtu (spec 4e). */
+export const STROP_ZTRATY_PODIL = 0.1;
+/** A nikdy víc než tolik korun, ať velký klub nepřijde o všechno naráz. */
+export const STROP_ZTRATY_KC = 40000;
+
 /** Hospoda (spec Část 9). Šance jsou na jednu hospodskou session. */
 export const DRBY_ALKOHOL = 60;
 export const DRBY_SANCE = 0.25;

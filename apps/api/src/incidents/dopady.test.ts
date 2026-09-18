@@ -130,6 +130,21 @@ describe("zápis incidentu", () => {
     });
   });
 
+  describe("odepsání ukradených peněz (spec 4a)", () => {
+    it("peněžní ztráta se zaúčtuje jako incident_loss v mínusu", async () => {
+      // recordTransaction čte i zapisuje budget přes "UPDATE teams ... RETURNING budget",
+      // ne "SELECT ... FROM teams" — pravidlo musí sedět na skutečný dotaz, jinak `first()` vrátí
+      // null a recordTransaction vrátí 0 dřív, než transakci vůbec zapíše.
+      const db = new FalesnaD1([{ sql: /UPDATE teams SET budget/, first: { budget: 50000 } }]);
+      await zapisIncident(jakoD1(db), stavKlubu(), {
+        kind: "kasa_obcerstveni", category: "kradez", status: "otevreny", severity: 2,
+        culpritType: "cizi", culpritPlayerId: null, culpritRevealed: false,
+        ztraty: [{ typ: "penize", castka: 3000 }], text: "Kasa je prázdná.",
+      });
+      expect(db.pocet(/INSERT INTO transactions/)).toBe(1);
+    });
+  });
+
   describe("zápis životní situace", () => {
     it("uloží dotčeného hráče a konec situace, škodu ani stopy neřeší", async () => {
       const db = new FalesnaD1();

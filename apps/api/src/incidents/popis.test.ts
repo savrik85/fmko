@@ -9,13 +9,16 @@ describe("popis škody", () => {
       popisZtraty({ typ: "vybaveni_stav", kategorie: "team_van", stavPred: 80, stavPo: 35 }),
       popisZtraty({ typ: "stadion", zarizeni: "changing_rooms", urovni: 1 }),
       popisZtraty({ typ: "travnik", pred: 70, po: 58 }),
+      popisZtraty({ typ: "penize", castka: 3000 }),
     ];
-    expect(vety).toEqual([
+    // toLocaleString sype nezlomitelné mezery, tak porovnávej bez nich.
+    expect(vety.map((v) => v.replace(/\s/g, " "))).toEqual([
       "Přišli jste o vybavení: Dresy (úroveň 2)",
       "Klubová kronika a vitrína: úroveň 3 → 2",
       "Klubová dodávka: stav 80 % → 35 %",
       "Rozbité zařízení: Šatny (o 1 úroveň)",
       "Trávník: stav 70 % → 58 %",
+      "Ukradená hotovost: 3 000 Kč",
     ]);
     for (const v of vety) expect(v).not.toContain("—");
   });

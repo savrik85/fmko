@@ -12,7 +12,9 @@ export type Ztrata =
   | { typ: "vybaveni"; kategorie: string; uroven: number; stav: number; urovniDolu: number }
   | { typ: "vybaveni_stav"; kategorie: string; stavPred: number; stavPo: number }
   | { typ: "stadion"; zarizeni: string; urovni: number; damageId?: string; /** Cena opravy v Kč v okamžiku škody. */ cena?: number }
-  | { typ: "travnik"; pred: number; po: number };
+  | { typ: "travnik"; pred: number; po: number }
+  /** Ukradená hotovost (spec 4a). `zdrojZapasId` u kasy a tomboly říká, ze kterého zápasu tržba byla. */
+  | { typ: "penize"; castka: number; zdrojZapasId?: string };
 
 export interface HracKlubu {
   id: string;

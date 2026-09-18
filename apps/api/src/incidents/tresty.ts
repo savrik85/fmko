@@ -31,6 +31,9 @@ export function hodnotaSkody(ztraty: readonly Ztrata[]): number {
       case "travnik":
         soucet += Math.max(0, z.pred - z.po) * CENA_BODU_TRAVNIKU;
         break;
+      case "penize":
+        soucet += z.castka;
+        break;
       default: {
         // Vyčerpávající switch: nový druh Ztraty bez větve tu spadne na typecheck,
         // ne na tiché započtení nuly do škody.

@@ -19,6 +19,8 @@ export function popisZtraty(z: Ztrata): string {
       return `Rozbité zařízení: ${FACILITY_LABELS[z.zarizeni] ?? z.zarizeni} (o ${z.urovni} ${z.urovni === 1 ? "úroveň" : "úrovně"})`;
     case "travnik":
       return `Trávník: stav ${z.pred} % → ${z.po} %`;
+    case "penize":
+      return `Ukradená hotovost: ${z.castka.toLocaleString("cs")} Kč`;
   }
 }
 

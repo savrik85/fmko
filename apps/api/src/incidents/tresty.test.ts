@@ -22,6 +22,17 @@ describe("hodnota škody", () => {
   });
 });
 
+describe("peněžní škoda (spec 3)", () => {
+  it("hodnota peněžní ztráty je ukradená částka", () => {
+    expect(hodnotaSkody([{ typ: "penize", castka: 4200 }])).toBe(4200);
+  });
+
+  it("sečte se s ostatními druhy škody", () => {
+    const s = hodnotaSkody([{ typ: "penize", castka: 1000 }, { typ: "travnik", pred: 80, po: 60 }]);
+    expect(s).toBeGreaterThan(1000);
+  });
+});
+
 describe("srážka, pokuta, oblíbenost", () => {
   it("srážka je nejvýš škoda a čtyři mzdy, splátky dají přesně celek", () => {
     expect(castkaSrazky(10_000, 109)).toBe(436);
