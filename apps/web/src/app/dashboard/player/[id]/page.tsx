@@ -605,15 +605,18 @@ export default function PlayerDetailPage() {
                     {isWatched ? "★ Sleduji" : "☆ Sledovat"}
                   </button>
                 )}
-                {/* Promluvit si — trucující vlastní hráč */}
-                {isOwnPlayer && unrestInfo && (unrestInfo.level ?? 0) > 0 && (
+                {/* Napsat vlastnímu hráči. Dřív se tlačítko ukázalo jen u toho,
+                    kdo zrovna trucoval kvůli přestupu, takže na celé produkci
+                    založil konverzaci s hráčem sám od sebe jen jeden manažer.
+                    Ostatní na to neměli kudy, jen odpovídali na došlé SMS. */}
+                {isOwnPlayer && (
                   <button onClick={async () => {
                     try {
                       const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/player-conversation/${player.id}`, { method: "POST" });
                       router.push(`/dashboard/phone/${res.conversationId}`);
                     } catch (e) { console.error("open player conversation:", e); }
                   }} className={`${btnBase} ${btnNeutral}`}>
-                    💬 Promluvit si
+                    {unrestInfo && (unrestInfo.level ?? 0) > 0 ? "💬 Promluvit si" : "💬 Napsat"}
                   </button>
                 )}
                 {/* Own player actions — ne pro hostující */}
