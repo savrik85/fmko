@@ -930,16 +930,23 @@ async function offendPlayer(
 export async function pockejNezDopise(
   zacatek: number,
   text: string,
-  player: { occupation?: string; id: string; discipline: number; temper: number; age: number },
+  player: {
+    occupation?: string; id: string; discipline: number; temper: number;
+    age: number; alcohol: number;
+  },
 ): Promise<void> {
   const { kontextCasu, zpozdeniOdpovedi } = await import("./chat-kontext");
   const { smenaProPovolani } = await import("../generators/occupations");
   const { seedFromString } = await import("../lib/seed");
 
-  const cas = kontextCasu(new Date(), smenaProPovolani(player.occupation), seedFromString(player.id));
+  const cas = kontextCasu(
+    new Date(), smenaProPovolani(player.occupation), seedFromString(player.id),
+    player.alcohol, player.age,
+  );
   const cil = zpozdeniOdpovedi({
     znaku: text.length, situace: cas.situace,
     discipline: player.discipline, temper: player.temper,
+    podnapilost: cas.podnapilost,
   });
   const zbyva = cil - (Date.now() - zacatek);
   if (zbyva <= 0) return;

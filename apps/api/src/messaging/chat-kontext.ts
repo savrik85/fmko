@@ -8,10 +8,17 @@
  * Bez DB a bez modelu, aby se to dalo testovat. Čas si bere volající.
  */
 
+import { DRINKING_BUDDY_ALCOHOL } from "../generators/relationships";
 import type { Smena } from "../generators/occupations";
 
 /** Co hráč zrovna dělá, když mu přijde trenérova SMS. */
-export type Situace = "spi" | "prace" | "po_praci" | "volno";
+export type Situace = "spi" | "prace" | "po_praci" | "volno" | "pije";
+
+/** Kde se pije. V hospodě je parta, doma je televize a klid. */
+export type KdePije = "hospoda" | "doma";
+
+/** 0 střízlivý, 1 pár piv, 2 rozjetý, 3 opilý. */
+export type Podnapilost = 0 | 1 | 2 | 3;
 
 export interface CasovyKontext {
   /** Hodina 0-23 v Praze. */
@@ -23,6 +30,10 @@ export interface CasovyKontext {
   situace: Situace;
   /** U směnného provozu: kterou směnu dnes drží. Jinak `null`. */
   smenaDnes: "ranní" | "odpolední" | "noční" | null;
+  /** Kolik toho v sobě má. Když nepije, vždycky 0. */
+  podnapilost: Podnapilost;
+  /** Kde pije. Mimo pití `null`. */
+  kdePije: KdePije | null;
 }
 
 const DNY = ["neděle", "pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota"];
@@ -63,20 +74,93 @@ function smenaDne(seed: number, den: number): "ranní" | "odpolední" | "noční
   return sady[Math.abs(seed + den) % 3];
 }
 
+/** Od kdy do kdy se večer pije. Po půlnoci to jede dál. */
+const PITI_OD = 17;
+const PITI_DO = 2;
+
+/**
+ * Dává si dnes večer?
+ *
+ * Rozhoduje `alcohol` z povahy, tedy totéž číslo, podle kterého hra páruje
+ * parťáky od piva. Hod je deterministický ze seedu a data, takže během
+ * jednoho večera neskáče mezi pivem a postelí: kdo v osm pil, pije i v jedenáct.
+ */
+function pijeDnesVecer(seed: number, denVRoce: number, alcohol: number, jeVikend: boolean): boolean {
+  if (alcohol < DRINKING_BUDDY_ALCOHOL) return false;
+  const sance = Math.min(0.9, 0.35 + ((alcohol - DRINKING_BUDDY_ALCOHOL) / 40) * 0.4 + (jeVikend ? 0.2 : 0));
+  return (Math.abs(seed + denVRoce * 7919) % 1000) / 1000 < sance;
+}
+
+/**
+ * V hospodě, nebo doma u televize?
+ *
+ * O víkendu se jde spíš mezi lidi, ve všední den zůstane pivo v lednici.
+ * Kdo má rodinu a léta, ten taky spíš doma.
+ */
+function kamNaPivo(seed: number, denIndex: number, vek: number): KdePije {
+  const vikendovy = denIndex === 5 || denIndex === 6 || denIndex === 0;
+  const sance = (vikendovy ? 0.8 : 0.45) - (vek >= 35 ? 0.2 : 0);
+  return (Math.abs(seed * 31 + denIndex) % 100) / 100 < sance ? "hospoda" : "doma";
+}
+
+/**
+ * Kolik toho v sobě po tolika hodinách má.
+ *
+ * Stupňuje se s večerem: z kraje pár piv, ke konci už se to na psaní pozná.
+ * Kdo pije opravdu hodně, ten se rozjede o hodinu dřív, protože začal dřív.
+ */
+function podnapilost(hodina: number, alcohol: number): Podnapilost {
+  // Notorik má náskok hodinu, ne celý stupeň: i on začíná u prvního piva.
+  const odZacatku = (hodina >= PITI_OD ? hodina - PITI_OD : hodina + (24 - PITI_OD))
+    + (alcohol >= 85 ? 1 : 0);
+  return Math.min(3, Math.max(1, Math.floor(odZacatku / 2.5) + 1)) as Podnapilost;
+}
+
+/** Den v roce. Po půlnoci se počítá ještě včerejší večer. */
+function vecerniDen(kdy: Date, hodina: number): number {
+  const ms = kdy.getTime() - (hodina < 5 ? 86_400_000 : 0);
+  return Math.floor(ms / 86_400_000);
+}
+
 /**
  * Co hráč právě dělá.
  *
- * `seed` je jen pro směnný provoz (obvykle hash id hráče), u ostatních oborů
- * na něm nezáleží. O víkendu se do práce chodí jen ve směnách a v zemědělství,
- * kde kráva nerozlišuje sobotu.
+ * `seed` je jen pro směnný provoz a hospodu (obvykle hash id hráče), u
+ * ostatních oborů na něm nezáleží. O víkendu se do práce chodí jen ve
+ * směnách a v zemědělství, kde kráva nerozlišuje sobotu.
+ *
+ * `alcohol` rozhoduje o pití. Bez něj hráči, co v hospodě prakticky bydlí,
+ * odepisovali v deset večer, že spí. `vek` jen rozhoduje, jestli se pije
+ * v hospodě nebo doma.
  */
-export function kontextCasu(kdy: Date, smena: Smena, seed = 0): CasovyKontext {
+export function kontextCasu(
+  kdy: Date, smena: Smena, seed = 0, alcohol = 0, vek = 28,
+): CasovyKontext {
   const { hodina, denIndex } = prazskyCas(kdy);
   const jeVikend = denIndex === 0 || denIndex === 6;
   const zaklad = {
     hodina, den: DNY[denIndex] ?? "den", jeVikend, castDne: castDne(hodina),
     smenaDnes: null as CasovyKontext["smenaDnes"],
+    podnapilost: 0 as Podnapilost,
+    kdePije: null as KdePije | null,
   };
+
+  // Pití přebíjí spánek i gauč, ale ne šichtu: ze zaměstnání se neodchází.
+  if (
+    mezi(hodina, PITI_OD, PITI_DO)
+    && pijeDnesVecer(seed, vecerniDen(kdy, hodina), alcohol, jeVikend)
+  ) {
+    const vPraci = smena === "vecerni"
+      ? mezi(hodina, 16, 24)
+      : smena === "smenny" && mezi(hodina, 14, 22);
+    if (!vPraci) {
+      return {
+        ...zaklad, situace: "pije",
+        podnapilost: podnapilost(hodina, alcohol),
+        kdePije: kamNaPivo(seed, denIndex, vek),
+      };
+    }
+  }
 
   if (smena === "smenny") {
     const dnes = smenaDne(seed, denIndex);
@@ -142,7 +226,10 @@ export function domacnostSeSituaci(vek: number, situace?: string): string {
  * Devatenáctiletý píše jinak než čtyřicátník z kotelny, a přesně na tom je
  * poznat, že za zprávou je člověk.
  */
-export function pravidloEmoji(vek: number, temper: number): string {
+export function pravidloEmoji(vek: number, temper: number, podnapilost: Podnapilost = 0): string {
+  // Po pár pivech se rozpustí i matador, který jinak emoji nepoužívá.
+  if (podnapilost >= 3) return "- Emoji sázej bez míry, tři za zprávu klidně. 💪💪 🍺 😂 ❤️";
+  if (podnapilost === 2) return "- Emoji klidně dvě ve zprávě, máš dobrou náladu. 💪 🍺 😁";
   if (vek <= 24) return "- Emoji používej běžně, klidně dvě ve zprávě, jak píšou mladí. 😅 😂 🙈 💪 se hodí.";
   if (vek <= 34 || temper >= 65) return "- Emoji občas, jedno za zprávu, když sedí k náladě.";
   return "- Emoji skoro nepoužívej. Když ano, tak nanejvýš jeden a spíš smutný nebo naštvaný.";
@@ -177,6 +264,30 @@ export function popisSituace(k: CasovyKontext, povolani: string | undefined, vyl
       vymluva,
     ].filter(Boolean).join(" ");
   }
+  if (k.situace === "pije") {
+    const kde = k.kdePije === "hospoda" ? "v hospodě s partou" : "doma u televize";
+    if (k.podnapilost <= 1) {
+      return `${kdy} ${prace} Sedíš ${kde} u druhého piva. Jsi uvolněný a ukecanější než jindy, ale hlavu máš čistou.`.trim();
+    }
+    if (k.podnapilost === 2) {
+      return [
+        kdy, `Sedíš ${kde} a máš v sobě pár piv. Je to na tobě znát:`,
+        "píšeš delší a zamotanější větu, jednou za zprávu uděláš překlep",
+        "a nezačínáš velkým písmenem. Je ti dobře, trenérovi klidně něco slíbíš.",
+      ].join(" ");
+    }
+    // Model má sklon psát spisovně i tady, takže je to napsané jako příkaz
+    // a s ukázkou tónu. Bez ní z opilého vyleze slušně formulovaný odstavec.
+    return [
+      kdy, `Jsi ${kde} pěkně opilý a píšeš to na mobilu jednou rukou.`,
+      "TAKHLE MUSÍ VYPADAT TVOJE ZPRÁVA: samá malá písmena, překlepy, vynechaná",
+      "diakritika, občas zdvojené písmeno nebo chybějící mezera, tečky skoro nikde.",
+      "Věta klidně skončí uprostřed. Jsi dojatý a upřímný, sliby sypeš z rukávu",
+      "a zítra si to nebudeš pamatovat.",
+      "Takhle nějak to zní, ale neopisuj to: „trenere ja ti reknu jednu vec...",
+      "v nedeli to dame, na to se spolehni“",
+    ].join(" ");
+  }
   if (k.situace === "po_praci") {
     return `${kdy} ${prace}${smena} Máš po šichtě, jsi doma a unavený, ale napsat můžeš.`.trim();
   }
@@ -191,6 +302,8 @@ export interface ZpozdeniVstup {
   /** Povaha: disciplinovaný odepisuje dřív, vznětlivý vybuchne hned. */
   discipline: number;
   temper: number;
+  /** Opilému to na displeji jde pomaleji. */
+  podnapilost?: Podnapilost;
 }
 
 /**
@@ -215,6 +328,8 @@ export function zpozdeniOdpovedi(v: ZpozdeniVstup): number {
     - (v.discipline >= 65 ? 0.15 : 0)
     - (v.temper >= 70 ? 0.2 : 0)
     + (v.discipline <= 35 ? 0.15 : 0);
-  const celkem = (psani + vsimnutiSi) * Math.max(0.5, povaha);
+  // Trefit se do písmen po šesti pivech chvíli trvá.
+  const opilost = (v.podnapilost ?? 0) >= 3 ? 1.7 : (v.podnapilost ?? 0) === 2 ? 1.3 : 1;
+  const celkem = (psani + vsimnutiSi) * Math.max(0.5, povaha) * opilost;
   return Math.round(Math.min(MAX_ZPOZDENI_MS, Math.max(MIN_ZPOZDENI_MS, celkem)));
 }

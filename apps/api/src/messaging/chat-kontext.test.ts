@@ -130,3 +130,140 @@ describe("jak dlouho to trvá", () => {
     }
   });
 });
+
+describe("čas je vždycky pražský", () => {
+  // Worker běží v UTC, hráč žije v Praze. V zimě je rozdíl hodina, v létě dvě,
+  // a kdyby se to počítalo ze serverového času, hráč by v létě chodil spát
+  // o hodinu dřív.
+  it("zimní čas: 22:00 v Praze je 21:00 UTC", () => {
+    expect(kontextCasu(new Date("2027-01-05T21:00:00Z"), "denni").hodina).toBe(22);
+  });
+
+  it("letní čas: 22:00 v Praze je 20:00 UTC", () => {
+    expect(kontextCasu(new Date("2026-09-19T20:00:00Z"), "denni").hodina).toBe(22);
+  });
+
+  it("v létě i v zimě jde ve 22:00 spát stejně", () => {
+    expect(kontextCasu(new Date("2027-01-05T21:00:00Z"), "denni").situace).toBe("spi");
+    expect(kontextCasu(new Date("2026-09-19T20:00:00Z"), "denni").situace).toBe("spi");
+  });
+
+  it("den v týdnu sedí i přes půlnoc UTC", () => {
+    // 2026-09-19 je sobota; ve 23:30 UTC je v Praze už neděle 1:30.
+    expect(kontextCasu(new Date("2026-09-19T23:30:00Z"), "denni").den).toBe("neděle");
+  });
+});
+
+describe("kdo si dává", () => {
+  /** Notorik, kterého najdeš večer u piva. */
+  const PIJAK = 90;
+  const ABSTINENT = 20;
+
+  it("kdo nepije, ten v deset večer spí", () => {
+    const k = kontextCasu(kdy(2, 22), "denni", 1, ABSTINENT);
+    expect(k.situace).toBe("spi");
+    expect(k.podnapilost).toBe(0);
+  });
+
+  it("piják v deset večer nespí, ale pije", () => {
+    // Přes seedy: aspoň někdo z nich musí být u piva, jinak by mechanika
+    // nikdy nenaskočila a hráči by dál psali, že spí.
+    const pijici = [...Array(12).keys()].filter(
+      (seed) => kontextCasu(kdy(2, 22), "denni", seed, PIJAK).situace === "pije",
+    );
+    expect(pijici.length).toBeGreaterThan(5);
+  });
+
+  it("večer se to stupňuje", () => {
+    const seed = [...Array(20).keys()].find(
+      (x) => kontextCasu(kdy(5, 18), "denni", x, PIJAK).situace === "pije",
+    )!;
+    const v18 = kontextCasu(kdy(5, 18), "denni", seed, PIJAK);
+    const v21 = kontextCasu(kdy(5, 21), "denni", seed, PIJAK);
+    const v23 = kontextCasu(kdy(5, 23), "denni", seed, PIJAK);
+    expect(v18.podnapilost).toBeLessThan(v21.podnapilost);
+    expect(v21.podnapilost).toBeLessThanOrEqual(v23.podnapilost);
+    expect(v23.podnapilost).toBe(3);
+  });
+
+  it("kdo pije opravdu hodně, rozjede se dřív", () => {
+    const seed = [...Array(20).keys()].find(
+      (x) => kontextCasu(kdy(5, 19), "denni", x, 100).situace === "pije"
+        && kontextCasu(kdy(5, 19), "denni", x, 65).situace === "pije",
+    );
+    if (seed === undefined) return;
+    expect(kontextCasu(kdy(5, 19), "denni", seed, 100).podnapilost)
+      .toBeGreaterThan(kontextCasu(kdy(5, 19), "denni", seed, 65).podnapilost);
+  });
+
+  it("během jednoho večera neskáče mezi pivem a postelí", () => {
+    for (let seed = 0; seed < 8; seed++) {
+      const v20 = kontextCasu(kdy(3, 20), "denni", seed, PIJAK);
+      const v23 = kontextCasu(kdy(3, 23), "denni", seed, PIJAK);
+      expect(v20.situace).toBe(v23.situace);
+      if (v20.situace === "pije") expect(v20.kdePije).toBe(v23.kdePije);
+    }
+  });
+
+  it("ze šichty se na pivo neodchází", () => {
+    // Barman v deset večer stojí za pípou, i když sám pije rád.
+    for (let seed = 0; seed < 8; seed++) {
+      expect(kontextCasu(kdy(2, 22), "vecerni", seed, PIJAK).situace).toBe("prace");
+    }
+  });
+
+  it("v poledne se nepije, ani notorik", () => {
+    for (let seed = 0; seed < 8; seed++) {
+      expect(kontextCasu(kdy(2, 12), "denni", seed, PIJAK).situace).not.toBe("pije");
+    }
+  });
+
+  it("pije se v hospodě i doma", () => {
+    const mista = new Set<string | null>();
+    for (let seed = 0; seed < 40; seed++) {
+      for (const den of [2, 5, 6]) {
+        const k = kontextCasu(kdy(den, 21), "denni", seed, PIJAK);
+        if (k.situace === "pije") mista.add(k.kdePije);
+      }
+    }
+    expect(mista).toContain("hospoda");
+    expect(mista).toContain("doma");
+  });
+});
+
+describe("jak opilost zní", () => {
+  const PIJAK = 90;
+  const vecer = (hodina: number, seed: number) => kontextCasu(kdy(5, hodina), "denni", seed, PIJAK);
+  const seedUPiva = [...Array(20).keys()].find((x) => vecer(18, x).situace === "pije")!;
+
+  it("z kraje večera má čistou hlavu", () => {
+    const t = popisSituace(vecer(18, seedUPiva), "Zedník", []);
+    expect(t).toContain("druhého piva");
+    expect(t).not.toContain("opilý");
+  });
+
+  it("pozdě večer dostane příkaz psát opile", () => {
+    const t = popisSituace(vecer(23, seedUPiva), "Zedník", []);
+    expect(t).toContain("opilý");
+    expect(t).toMatch(/překlepy/);
+    expect(t).toContain("malá písmena");
+  });
+
+  it("opilému se uvolní i emoji", () => {
+    expect(pravidloEmoji(44, 30, 3)).toContain("bez míry");
+    expect(pravidloEmoji(44, 30, 0)).toContain("skoro nepoužívej");
+  });
+
+  it("opilý píše déle než střízlivý", () => {
+    const zaklad = { znaku: 90, situace: "pije" as const, discipline: 50, temper: 50 };
+    expect(zpozdeniOdpovedi({ ...zaklad, podnapilost: 3 }))
+      .toBeGreaterThan(zpozdeniOdpovedi({ ...zaklad, podnapilost: 0 }));
+  });
+
+  it("ani opilý nepřeteče limit běhu na pozadí", () => {
+    for (const znaku of [0, 200, 5000]) {
+      expect(zpozdeniOdpovedi({ znaku, situace: "pije", discipline: 0, temper: 0, podnapilost: 3 }))
+        .toBeLessThanOrEqual(MAX_ZPOZDENI_MS);
+    }
+  });
+});

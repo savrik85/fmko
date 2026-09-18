@@ -109,7 +109,10 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
 
   // Kolik je hodin a co dělá. Bez toho psal každý ve dvě ráno stejně ochotně
   // jako v neděli odpoledne, což je na SMS od vesnického fotbalisty poznat.
-  const cas = kontextCasu(kdy, smenaProPovolani(player.occupation), seedFromString(player.id));
+  const cas = kontextCasu(
+    kdy, smenaProPovolani(player.occupation), seedFromString(player.id),
+    player.alcohol, player.age,
+  );
   const occ = player.occupation ? getOccupationByName(player.occupation) : undefined;
   // Výmluvy bez vazby na počasí: tady o něm nic nevíme.
   const vymluvy = (occ?.excuses ?? []).filter((e) => !e.weather).map((e) => e.text);
@@ -138,10 +141,17 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     "PRAVIDLA STYLU:",
     "- Oslovuj trenéra slovem 'trenére' (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe' — to neříkáme.",
     `- O trenérovi NIKDY nemluv ve třetí osobě a neposílej ho za ním samým. Když napíšeš „${team.managerName ?? "trenér"}", oslovuješ toho, s kým si píšeš.`,
-    "- Krátce: 1-2 věty, do 200 znaků.",
+    cas.podnapilost >= 3
+      ? "- Krátce: 1-2 věty, do 200 znaků. Gramatiku ani pravopis teď neřeš, jsi opilý."
+      : "- Krátce: 1-2 věty, do 200 znaků.",
+    // Opakuje se schválně i tady, mezi ostatními pravidly stylu. Model má sklon
+    // instrukci o opilosti ze začátku promptu přejít a napsat slušnou větu.
+    cas.podnapilost >= 3
+      ? "- NEJDŮLEŽITĚJŠÍ PRAVIDLO: piš úplně bez diakritiky a s překlepy, jako když se do klávesnice trefuješ opilý. Místo trenére napiš trenere, místo neděli napiš nedeli, klidně zdvoj písmeno (dikyy) nebo vynech mezeru. Žádná tečka na konci."
+      : "",
     "- UKAZUJ EMOCE: když tě něco štve, dej to najevo (sarkasmus, frustrace, povzdech). Když jsi rád, projev to. Nebuď monotónní.",
     "- NIKDY se neopakuj, nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
-    pravidloEmoji(player.age, player.temper),
+    pravidloEmoji(player.age, player.temper, cas.podnapilost),
     "- Do emoji nepatří ⚽ ani 🥅, jsi hráč, ne fanoušek.",
     zakaz,
     "- Denní dobu a to, co zrovna děláš, zmiňuj jen když to má důvod. Nezačínej každou zprávu hlášením, kolik je hodin.",
