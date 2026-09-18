@@ -137,9 +137,12 @@ export async function nactiStavKlubu(
         WHERE team_id = ? AND status = 'probiha' AND kind = 'dluhy'
           AND json_extract(resolution_data, '$.zaloha') = 'odmitnuto' AND subject_player_id IS NOT NULL`,
     ).bind(teamId),
+    // U tržeb ze zápasového dne nese transactions.game_date celý ISO timestamp
+    // (match-runner ukládá new Date().toISOString()), zatímco `vcera` je jen den
+    // YYYY-MM-DD, proto substr místo přímé rovnosti.
     db.prepare(
       `SELECT type, SUM(amount) AS castka FROM transactions
-        WHERE team_id = ? AND game_date = ? AND type IN ('concession_income_self', 'raffle_income')
+        WHERE team_id = ? AND substr(game_date, 1, 10) = ? AND type IN ('concession_income_self', 'raffle_income')
         GROUP BY type`,
     ).bind(teamId, vcera),
     db.prepare(

@@ -72,4 +72,19 @@ describe("včerejší tržby a letošní útěk (spec 4a)", () => {
     const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
     expect(s?.vcera).toBeNull();
   });
+
+  it("dotaz na tržby porovnává jen den, ne celý ISO timestamp (regrese)", async () => {
+    // transactions.game_date nese celý ISO timestamp ("2026-09-17T16:06:00.787Z"),
+    // zatímco `vcera` je jen YYYY-MM-DD. FalesnaD1 páruje pravidla podle vzoru SQL,
+    // ne podle vázaných hodnot, takže chybějící substr() by tenhle test nechytil bez
+    // ověření skutečně navázaného parametru.
+    const db = new FalesnaD1([
+      { sql: /FROM equipment WHERE team_id/, first: {} },
+      { sql: /FROM matches m JOIN season_calendar/, all: [] },
+    ]);
+    await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    const dotaz = db.davky.flat().find((d) => /FROM transactions/.test(d.sql));
+    expect(dotaz?.sql).toContain("substr(game_date, 1, 10)");
+    expect(dotaz?.params).toContain("2026-09-17");
+  });
 });
