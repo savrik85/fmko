@@ -7,7 +7,9 @@
  * půjčil, nebo odmítl) a v hospodě se o něm mluvilo. Bez nich by to byl trest za nic.
  */
 
-import { UTEK_MAX_VERNOST, UTEK_MIN_DNI_DLUHU, UTEK_MIN_ROZPOCET, UTEK_PODIL, UTEK_STROP_KC } from "./nastaveni";
+import {
+  STROP_ZTRATY_KC, STROP_ZTRATY_PODIL, UTEK_MAX_VERNOST, UTEK_MIN_DNI_DLUHU, UTEK_MIN_ROZPOCET,
+} from "./nastaveni";
 import type { HracKlubu, StavKlubu } from "./typy";
 
 /** Co už trenér mohl vědět o daném hráči (spec 4a). */
@@ -38,7 +40,11 @@ export function kandidatiUteku(stav: StavKlubu, signaly: ReadonlyMap<string, Sig
   });
 }
 
-/** Kolik si vezme: desetina rozpočtu, nejvýš strop (spec 4a). Deterministické, žádný los. */
+/**
+ * Kolik si vezme: desetina rozpočtu, nejvýš strop (spec 4a). Deterministické, žádný los.
+ * Stejný strop jako u tržeb ze zápasu (`castkaZTrzby` v katalog.ts) - spec počítá s jedním
+ * pravidlem pro celou peněžní ztrátu, ne s útěkem jako výjimkou.
+ */
 export function castkaUteku(stav: StavKlubu): number {
-  return Math.min(Math.round(stav.rozpocet * UTEK_PODIL), UTEK_STROP_KC);
+  return Math.min(Math.round(stav.rozpocet * STROP_ZTRATY_PODIL), STROP_ZTRATY_KC);
 }

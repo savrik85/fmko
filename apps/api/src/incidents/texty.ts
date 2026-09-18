@@ -92,16 +92,21 @@ export const TEXTY = {
     "Z tomboly zmizelo {castka} Kč. Kasička byla otevřená a prázdná.",
     "Peníze z tomboly se ztratily. Nesedí {castka} Kč.",
   ],
+  // "Ekonom" je gramaticky mužský rod (na rozdíl od "obsluha" o pár řádků níž), takže
+  // stejný trik nejde udělat holým dosazením role místo jména: sloveso vázané na "ekonom"
+  // v minulém čase by pořád bylo mužské. Řešení: "ekonom" je podmětem jen u sloves
+  // v přítomném čase (ta se v češtině rodem neliší - "má", "stará se"), minulý čas nese
+  // vždy jiné, rodově neutrální podstatné jméno (kasa, klub, účetnictví).
   zpronevera_ekonoma: [
-    "{jmeno} si z klubové kasy odnesl {castka} Kč a beze slova skončil.",
-    "{jmeno} zmizel z klubu i s {castka} Kč, které měl na starosti.",
-    "{jmeno} nechal účetnictví v nepořádku a odešel s {castka} Kč navíc.",
-    "{jmeno} si přisvojil {castka} Kč z klubových peněz a dal výpověď.",
+    "Klubová kasa přišla o {castka} Kč, které má na starosti ekonom. Jmenuje se: {jmeno}.",
+    "Účetnictví klubu nesedí o {castka} Kč, na starosti je má ekonom. Je to: {jmeno}.",
+    "Z klubové kasy zmizelo {castka} Kč, o které se stará ekonom. Jmenuje se: {jmeno}.",
+    "Klub přišel o {castka} Kč, které má v kase na starosti ekonom. Jmenuje se: {jmeno}.",
   ],
   kasa_obsluha: [
     "Obsluha si z kasy u občerstvení vzala {castka} Kč. Jmenuje se: {jmeno}.",
     "Obsluha stála celý zápas u kasy, a přesto z ní chybělo {castka} Kč. Je to: {jmeno}.",
-    "Obsluha schovala z tržby u občerstvení {castka} Kč dřív, než ji odevzdala. Jde o: {jmeno}.",
+    "Obsluha schovala z tržby u občerstvení {castka} Kč dřív, než ji odevzdala. Prozradila se: {jmeno}.",
     "Obsluha odložila stranou {castka} Kč z kasy u občerstvení. Jmenuje se: {jmeno}.",
   ],
   utek_s_penezi: [

@@ -64,6 +64,9 @@ export const POLICIE_ZAKLAD = 0.15;
 export const POLICIE_STROP = 0.9;
 export const POLICIE_POLICISTA = 0.1;
 export const POVOLANI_POLICISTA = "Policista";
+/** Povolání hráče (`life_context.occupation`), pro násobič rund v hospodě (spec 9). Nezávisí
+ * na `SMS_ROLE_HOSPODSKY` (jméno odesílatele SMS) - shodují se jen náhodou stejným textem. */
+export const POVOLANI_HOSPODSKY = "Hospodský";
 /** Kolik nalezená stopa přidá k šanci policie (spec 7c). */
 export const BONUS_POLICIE = {
   kameraIdentita: 0.35,
@@ -229,8 +232,7 @@ export const PENEZNI_KINDY = ["kasa_obcerstveni", "tombola"] as const;
 /** Útěk s penězi (spec 4a): kdo je ochotný a kdy se to vyplatí. */
 export const UTEK_MAX_VERNOST = 50;
 export const UTEK_MIN_ROZPOCET = 20000;
-export const UTEK_PODIL = 0.1;
-export const UTEK_STROP_KC = 40000;
+/** Stejný strop jako `STROP_ZTRATY_PODIL`/`STROP_ZTRATY_KC` (spec 4e): jedno pravidlo pro celou peněžní ztrátu, ne dvě. */
 /** Situace `dluhy` musí běžet aspoň tak dlouho, aby se to dalo číst jako varování. */
 export const UTEK_MIN_DNI_DLUHU = 7;
 /** Denní šance útěku u hráče, který splnil všechno. */

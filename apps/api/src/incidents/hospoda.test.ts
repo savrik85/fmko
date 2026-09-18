@@ -341,30 +341,33 @@ describe("dluhy v hospodě", () => {
 
 describe("pachatel peněžního incidentu platí rundy (spec 9)", () => {
   it("odhalený pachatel krádeže peněz kupuje rundu", () => {
-    const k = kontext({ incidenty: [incident({ id: "i1", kind: "kasa_obcerstveni", culpritPlayerId: SVEDEK.id, odhalen: true, den: "2026-09-17" })] });
+    const k = kontext({ incidenty: [incident({ id: "i1", kind: "kasa_obcerstveni", culpritPlayerId: SVEDEK.id, odhalen: true, den: "2026-09-15" })] });
     const r = pribehyHospody([host(SVEDEK)], k, JISTE);
     expect(r.pribehy.find((p) => p.type === "utraci_za_rundy")?.text).toContain("Pepa Kos");
   });
 
   it("neodhalený pachatel se rundami neprozradí", () => {
-    const k = kontext({ incidenty: [incident({ id: "i1", kind: "kasa_obcerstveni", culpritPlayerId: SVEDEK.id, odhalen: false, den: "2026-09-17" })] });
+    const k = kontext({ incidenty: [incident({ id: "i1", kind: "kasa_obcerstveni", culpritPlayerId: SVEDEK.id, odhalen: false, den: "2026-09-15" })] });
     expect(pribehyHospody([host(SVEDEK)], k, JISTE).pribehy.filter((p) => p.type === "utraci_za_rundy")).toEqual([]);
   });
 
   it("u nepeněžního incidentu se rundy neplatí", () => {
-    const k = kontext({ incidenty: [incident({ id: "i1", kind: "vloupani_sklad", culpritPlayerId: SVEDEK.id, odhalen: true, den: "2026-09-17" })] });
+    const k = kontext({ incidenty: [incident({ id: "i1", kind: "vloupani_sklad", culpritPlayerId: SVEDEK.id, odhalen: true, den: "2026-09-15" })] });
     expect(pribehyHospody([host(SVEDEK)], k, JISTE).pribehy.filter((p) => p.type === "utraci_za_rundy")).toEqual([]);
   });
 });
 
 describe("hospodský a trenér svědčí rundám víc (spec 9)", () => {
-  // Incident daleko v budoucnu: `rundy()` čte přímo `k.incidenty` bez okna „už bylo",
-  // takže s ním `dnyMezi(inc.den, k.den)` vyjde vždy hodně záporné, tedy pod RUNDY_DNI,
-  // a den hospody (`k.den`) se dá volně měnit pro nové losy bez ovlivnění podmínky.
+  // `rundy()` mluví jen o incidentech starších než dnešek (stejné okno „už bylo" jako
+  // ostatní příhody v `pribehyHospody`), takže incident je vždy den před hospodou - to ho
+  // udrží v okně RUNDY_DNI bez ohledu na to, jak vysoko `d` (a tedy `den`) v cyklu vyroste.
   const kontextSRundou = (den: string, kadrNavic: HracKlubu[]) => kontext({
     den, gameDate: `${den}T16:00:00.000Z`,
     kadr: new Map([SVEDEK, PACHATEL, KAMARAD, ...kadrNavic].map((h) => [h.id, h])),
-    incidenty: [incident({ id: "i1", kind: "kasa_obcerstveni", culpritPlayerId: SVEDEK.id, odhalen: true, den: "2030-01-01" })],
+    incidenty: [incident({
+      id: "i1", kind: "kasa_obcerstveni", culpritPlayerId: SVEDEK.id, odhalen: true,
+      den: new Date(new Date(`${den}T00:00:00.000Z`).getTime() - 86_400_000).toISOString().slice(0, 10),
+    })],
   });
   const kolikrat = (kadrNavic: HracKlubu[], trener: boolean) => {
     let n = 0;

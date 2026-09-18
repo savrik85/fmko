@@ -22,8 +22,8 @@ import {
   BONUS_POLICIE, CELA_HOSPODA_DNI, CELA_HOSPODA_SANCE, CELA_HOSPODA_ZAVAZNOST, CERSTVY_ZLODEJ_DNI, CHLUBI_ALKOHOL,
   CHLUBI_DNI, CHLUBI_SANCE, CHLUBI_TEMPERAMENT, CHLUBI_TEMPERAMENT_NASOBEK, DRBY_ALKOHOL, DRBY_SANCE, HROZI_LHUTA_MAX,
   HROZI_LHUTA_MIN, LHUTA_PO_ODHALENI_DNI, NABIZI_SANCE, OBVINENI_PAMET_DNI, OCHOTA_POSLA, OHLASUJE_ALKOHOL,
-  OHLASUJE_SANCE, PENEZNI_KINDY, PRAH_VAHY_PACHATELE, RUNDY_DNI, RUNDY_NASOBEK_SVEDKA, RUNDY_SANCE, RVACKA_SANCE,
-  SEKERA_SANCE, SMS_ROLE_HOSPODSKY, STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH, TRENER_V_HOSPODE_NASOBEK,
+  OHLASUJE_SANCE, PENEZNI_KINDY, POVOLANI_HOSPODSKY, PRAH_VAHY_PACHATELE, RUNDY_DNI, RUNDY_NASOBEK_SVEDKA, RUNDY_SANCE,
+  RVACKA_SANCE, SEKERA_SANCE, STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH, TRENER_V_HOSPODE_NASOBEK,
   ZNALOST_DRB_DNI,
 } from "./nastaveni";
 import { vahaPachatele } from "./pachatel";
@@ -224,7 +224,7 @@ export function pribehyHospody(hoste: readonly HostHospody[], k: KontextHospody,
   rvacka(k, v, mistni, tady, incidenty, out);
   celaHospoda(k, v, incidenty, out);
   sekera(k, v, mistni, out);
-  rundy(k, v, mistni, out);
+  rundy(k, v, mistni, incidenty, out);
   out.zlodeji = zlodejiUStolu(k, tady, incidenty);
   out.ohlaseni = kdoOhlasi(k, v, mistni);
   out.zapisy.push(...drbyDoCizichKlubu(k, hoste, out.pribehy));
@@ -415,7 +415,7 @@ function sekera(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody
 
 /** Hospodský sedí v kádru za pípou, ne nutně u stolu dnes večer: stačí, že ho klub má (spec 9). */
 function hospodskyVKadru(k: KontextHospody): boolean {
-  const cil = normalizuj(SMS_ROLE_HOSPODSKY);
+  const cil = normalizuj(POVOLANI_HOSPODSKY);
   for (const h of k.kadr.values()) if (normalizuj(h.povolani) === cil) return true;
   return false;
 }
@@ -428,11 +428,21 @@ function hospodskyVKadru(k: KontextHospody): boolean {
  * Hospodský v kádru a trenér u stolu si rundy všimnou spíš (spec 9): šance se násobí
  * `RUNDY_NASOBEK_SVEDKA`, ale ne dvakrát, když platí obojí najednou — jde o dva svědky
  * téhož druhu, ne o kombinaci. Násobek mění jen práh před losem, ne pořadí losů.
+ *
+ * Bere `incidenty` (už profiltrované na `i.den < k.den`, stejně jako u ostatních funkcí
+ * v `pribehyHospody`), ne `k.incidenty` přímo — hospoda mluví jen o tom, co se stalo, ne
+ * o dnešku. Spec počítá okno `RUNDY_DNI` od odhalení pachatele, ne od data incidentu:
+ * `IncidentVHospode` ale datum odhalení nenese (`club_incidents` ho neukládá, jen bit
+ * `culprit_revealed`), takže se tu porovnává proti `i.den` (den vzniku incidentu). U kasy
+ * a tomboly je pachatel `zamestnanec` odhalený hned při vzniku, takže se to prakticky kryje;
+ * jen pokud by v budoucnu šlo o pachatele odhaleného až po čase (např. hráč `p` z kádru),
+ * začalo by okno běžet moc brzy. Přidání `revealed_on` sloupce je migrace, která v týhle fázi
+ * nejde - bez ní se to poctivě spravit nedá, jen zaznamenat.
  */
-function rundy(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody[], out: VysledekHospody): void {
+function rundy(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody[], incidenty: readonly IncidentVHospode[], out: VysledekHospody): void {
   const nasobek = hospodskyVKadru(k) || v.trener ? RUNDY_NASOBEK_SVEDKA : 1;
   for (const h of mistni) {
-    const inc = k.incidenty.find((i) =>
+    const inc = incidenty.find((i) =>
       i.odhalen && i.culpritPlayerId === h.playerId
       && (PENEZNI_KINDY as readonly string[]).includes(i.kind) && dnyMezi(i.den, k.den) <= RUNDY_DNI);
     if (!inc || zaznelo(v, "utraci_za_rundy", inc.id)) continue;
