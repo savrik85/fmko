@@ -125,9 +125,15 @@ function castkaZTrzby(s: StavKlubu, rng: Rng, trzba: number, min: number, max: n
  * Los padá ve `vytvor`, ne přes `vaha` (spouštěné položky váhu nepoužívají). Před ním
  * ještě losovani.ts projde denní bránou `SANCE_SPOUSTENYCH.zpronevera_ekonoma` (0,02),
  * takže skutečná denní šance je 0,3 % u úsudku 20 až 1,8 % u úsudku 1.
+ *
+ * Nekonečný nebo `NaN` vstup (poškozená hodnota v DB) spadne na stejnou výchozí pětku
+ * jako `stav-klubu.ts` u chybějícího úsudku: `Math.min`/`Math.max` by `NaN` propustily
+ * beze změny a `rng.random() >= NaN` je vždy nepravda, takže by zpronevěra padla pokaždé
+ * místo nikdy.
  */
 export function sanceZproneveryPodleUsudku(judgement: number): number {
-  const usudek = Math.min(20, Math.max(1, judgement));
+  const vstup = Number.isFinite(judgement) ? judgement : 5;
+  const usudek = Math.min(20, Math.max(1, vstup));
   return ZPRONEVERA_SANCE_USUDEK_1 - ((usudek - 1) * (ZPRONEVERA_SANCE_USUDEK_1 - ZPRONEVERA_SANCE_USUDEK_20)) / 19;
 }
 

@@ -358,6 +358,14 @@ describe("zpronevěra ekonoma (spec 4a)", () => {
     expect(sanceZproneveryPodleUsudku(1)).toBeGreaterThan(sanceZproneveryPodleUsudku(20));
   });
 
+  it("poškozený (NaN nebo nekonečný) úsudek spadne na výchozí pětku, ne na jistotu", () => {
+    // Math.min/Math.max nechají NaN projít beze změny a `rng.random() >= NaN` je vždycky
+    // nepravda: bez fallbacku by nemožnost (NaN) udělala ze zpronevěry jistotu.
+    for (const spatny of [NaN, Infinity, -Infinity]) {
+      expect(sanceZproneveryPodleUsudku(spatny)).toBe(sanceZproneveryPodleUsudku(5));
+    }
+  });
+
   it("i ekonom s vysokým úsudkem občas zpronevěří", () => {
     // Přes `vytvor`, ne jen přes vzorec: tohle je ta půlka ekonomů, která dřív nemohla krást nikdy.
     for (const usudek of [10, 15, 18, 20]) {
