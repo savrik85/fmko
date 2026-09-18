@@ -373,6 +373,15 @@ export const KATALOG: DefiniceIncidentu[] = [
     },
   },
   {
+    // Nelosuje se odsud: vzniká jen z `zpracujUtek` (utek-db.ts, spec 4a) mimo tenhle
+    // los, protože má vlastní varovné signály a vlastní denní šanci. Záznam tu je jen
+    // kvůli českému popisku a emoji pro `nazevIncidentu` a UI (routes/incidents.ts,
+    // hospoda.ts) — `muze: () => false` zkratuje losovani.ts dřív, než padne rng.random().
+    kind: "utek_s_penezi", label: "Útěk s penězi", emoji: "🏃", category: "kradez", vaha: 0, spousteny: true,
+    muze: () => false,
+    vytvor: () => null,
+  },
+  {
     kind: "vandal", label: "Vandalové", emoji: "💥", category: "poskozeni", vaha: 2, spousteny: false,
     muze: () => true,
     vytvor: (s, rng) => {

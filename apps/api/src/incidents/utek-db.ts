@@ -17,7 +17,7 @@ import { sendSystemSMS } from "../messaging/system-sms";
 import { removePlayer } from "../transfers/remove-player";
 import { zapisIncident } from "./dopady";
 import { smsIncidentu } from "./incident-db";
-import { SANCE_UTEKU, SMS_ROLE_KUSTOD, UTEK_REPUTACE } from "./nastaveni";
+import { SANCE_UTEKU, SMS_ROLE_KUSTOD, UTEK_MAX_VERNOST, UTEK_MIN_ROZPOCET, UTEK_REPUTACE } from "./nastaveni";
 import { text } from "./texty";
 import type { NavrhIncidentu, StavKlubu } from "./typy";
 import { castkaUteku, kandidatiUteku, type SignalyUteku } from "./utek";
@@ -85,6 +85,12 @@ export async function nactiSignalyUteku(db: D1Database, teamId: string, gameDate
  */
 export async function zpracujUtek(env: Bindings, stav: StavKlubu): Promise<boolean> {
   if (stav.utekLetos) return false;
+  // Rychlá pojistka bez DB: `nactiStavKlubu` už kádr i rozpočet načetl (`h.dluhy`, `h.vernost`,
+  // `stav.rozpocet`), takže když v kádru zjevně není nikdo, kdo by mohl přijít v úvahu, není
+  // důvod pouštět dávku dvou dotazů. Tick zpracovává všechny ligy v jednom běhu, u drtivé
+  // většiny klubů bez dluhů se tahle dávka jinak spouští úplně zbytečně, každý den.
+  if (stav.rozpocet <= UTEK_MIN_ROZPOCET) return false;
+  if (!stav.kadr.some((h) => h.dluhy && h.vernost < UTEK_MAX_VERNOST)) return false;
 
   const signaly = await nactiSignalyUteku(env.DB, stav.teamId, stav.gameDate);
   const kandidati = kandidatiUteku(stav, signaly);
@@ -110,8 +116,29 @@ export async function zpracujUtek(env: Bindings, stav: StavKlubu): Promise<boole
     .catch((e) => { logger.error({ module: M }, `zápis útěku ${id}`, e); return null; });
   if (!zapsany) return false;
 
-  await removePlayer(env.DB, kdo.id, "zmizel", { toFreeAgent: false, teamId: stav.teamId })
-    .catch((e) => { logger.error({ module: M }, `odchod uteklého hráče ${kdo.id}`, e); return null; });
+  const odesel = await removePlayer(env.DB, kdo.id, "zmizel", { toFreeAgent: false, teamId: stav.teamId })
+    .catch((e) => { logger.error({ module: M }, `odchod uteklého hráče ${kdo.id} (útěk ${id})`, e); return null; });
+
+  if (!odesel?.ok) {
+    // `removePlayer` nevyhazuje na "hráč se nenašel" (souběh: mezitím odešel jinam, byl
+    // propuštěn dřív ve stejném ticku, ...) — vrátí jen `{ ok: false }`. Peníze jsou ale
+    // už odepsané a incident uzavřený, takže tenhle nesoulad (incident říká, že hráč
+    // zmizel s penězi, hráč je přitom pořád v kádru) nesmí zůstat jen v logu: `resolution`
+    // ho dělá dohledatelným dotazem. Sezónní pojistka (`utekLetos`) mezitím incident už
+    // zablokovala, takže se to samo neopraví — reputaci, fanoušky ani SMS proto neposílat,
+    // to už by vyprávělo příběh, který se nestal.
+    logger.error({ module: M }, `útěk ${id}: hráč ${kdo.id} se z kádru neodebral (${odesel?.reason ?? "neznámý důvod"})`);
+    await env.DB.prepare("UPDATE club_incidents SET resolution = ? WHERE id = ? AND team_id = ?")
+      .bind("chyba_odchodu", id, stav.teamId).run()
+      .catch((e) => logger.error({ module: M }, `zápis nesouladu útěku ${id}`, e));
+    return true;
+  }
+
+  // Hráč je pryč, žádná jeho vlastní znalost o incidentu (role `pachatel`, ze `zapisIncident`)
+  // už nikdy nepůjde přečíst — `nactiZnalostiHrace` ji čte jen pro živého hráče v kádru.
+  await env.DB.prepare("DELETE FROM club_incident_knowledge WHERE team_id = ? AND player_id = ?")
+    .bind(stav.teamId, kdo.id).run()
+    .catch((e) => logger.warn({ module: M }, `úklid znalostí uteklého hráče ${kdo.id}`, e));
 
   await applyReputationDelta(
     env.DB, stav.teamId, UTEK_REPUTACE, "incident", `Útěk hráče ${kdo.jmeno} s klubovými penězi`,
