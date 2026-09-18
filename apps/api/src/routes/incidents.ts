@@ -351,8 +351,15 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
   }
   if (!navrh) return c.json({ error: "Incident se nestal ani na 50 pokusů (odradil zámek, chybí kandidát, nebo tenhle typ nemá pachatele z kádru)" }, 409);
 
+  // Omluvný dopis musí i tady dostat id odvozené z útěku, na který odpovídá. Jinak by se
+  // dal vynutit opakovaně: pojistka v `nactiStavKlubu` hledá právě `dopis-{id útěku}` a s
+  // administrátorským id by ten útěk dál viděla jako nevyřízený.
+  const idIncidentu = navrh.kind === "omluvny_dopis" && stav.utekBezDopisu
+    ? `dopis-${stav.utekBezDopisu.id}`
+    : `inc-${team.id}-${navrh.kind}-${stav.den}-admin-${Date.now()}`;
+
   // Stopy se počítají se skutečným kádrem, ne s upraveným pro los.
-  const zapsany = await zapisIncident(c.env.DB, stav, navrh, `inc-${team.id}-${navrh.kind}-${stav.den}-admin-${Date.now()}`);
+  const zapsany = await zapisIncident(c.env.DB, stav, navrh, idIncidentu);
   if (!zapsany) return c.json({ error: "Škodu se nepodařilo provést", incident: navrh }, 409);
 
   await oznamIncident(c.env, team.id, navrh, zapsany);
