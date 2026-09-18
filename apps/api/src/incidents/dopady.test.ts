@@ -312,4 +312,98 @@ describe("zápis incidentu", () => {
       expect(db.pocet(/UPDATE equipment/)).toBe(0);
     });
   });
+
+  describe("hrdina a poctivý nálezce (spec 4d, Task 3)", () => {
+    const NAVRH_HRDINA: NavrhIncidentu = {
+      kind: "hrdina", category: "pozitivni", status: "uzavreny", severity: 1,
+      culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+      subjectPlayerId: "p", ztraty: [],
+      text: "Pepa Průšvih vytáhl dítě z rybníka dřív, než si toho vůbec někdo všiml.",
+    };
+    const NAVRH_NALEZCE: NavrhIncidentu = {
+      kind: "poctivy_nalezce", category: "pozitivni", status: "uzavreny", severity: 1,
+      culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+      subjectPlayerId: "p", ztraty: [],
+      text: "Pepa Průšvih našel na hřišti zapomenutou peněženku a hned ji odevzdal na úřadě.",
+    };
+
+    it("hrdina zvedne reputaci, morálku kádru, přízeň obce a zapíše klubovou událost", async () => {
+      const db = new FalesnaD1([
+        { sql: /SELECT reputation FROM teams WHERE id = \?/, first: { reputation: 50 } },
+        { sql: /SELECT village_id FROM teams WHERE id = \?/, first: { village_id: "vesnice-1" } },
+      ]);
+      const stav = stavKlubu({ kadr: [PROBLEMOVY] });
+      const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH_HRDINA, "inc-hrdina");
+      expect(zapsany?.id).toBe("inc-hrdina");
+
+      const reputace = db.davky.flat().find((d) => /INSERT INTO reputation_log/.test(d.sql));
+      expect(reputace?.params[5]).toBe("incident");
+      expect(reputace?.params[7]).toBe("hrdina-inc-hrdina");
+
+      expect(db.pocet(/UPDATE players SET life_context/)).toBe(1);
+      expect(db.pocet(/UPDATE village_team_favor SET favor/)).toBe(1);
+
+      const udalost = db.dotazy.find((d) => /INSERT OR IGNORE INTO club_events/.test(d.sql));
+      expect(udalost?.params[3]).toBe("hrdina_v_kadru");
+      const payload = JSON.parse(udalost?.params[4] as string);
+      expect(payload.co).toBe("Pepa Průšvih");
+    });
+
+    it("poctivý nálezce zvedne jen reputaci a přízeň obce, bez morálky kádru a bez klubové události", async () => {
+      const db = new FalesnaD1([
+        { sql: /SELECT reputation FROM teams WHERE id = \?/, first: { reputation: 50 } },
+        { sql: /SELECT village_id FROM teams WHERE id = \?/, first: { village_id: "vesnice-1" } },
+      ]);
+      const stav = stavKlubu({ kadr: [PROBLEMOVY] });
+      const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH_NALEZCE, "inc-nalezce");
+      expect(zapsany?.id).toBe("inc-nalezce");
+
+      const reputace = db.davky.flat().find((d) => /INSERT INTO reputation_log/.test(d.sql));
+      expect(reputace?.params[7]).toBe("poctivy_nalezce-inc-nalezce");
+
+      expect(db.pocet(/UPDATE players SET life_context/)).toBe(0);
+      expect(db.pocet(/UPDATE village_team_favor SET favor/)).toBe(1);
+      expect(db.pocet(/INSERT OR IGNORE INTO club_events/)).toBe(0);
+    });
+
+    it("selhání přízně obce (ensureGlobalFavor) incident nezvrací a reputace proběhne dál", async () => {
+      const db = new FalesnaD1([
+        { sql: /SELECT reputation FROM teams WHERE id = \?/, first: { reputation: 50 } },
+        { sql: /SELECT village_id FROM teams WHERE id = \?/, first: { village_id: "vesnice-1" } },
+      ]);
+      const puvodniPrepare = db.prepare.bind(db);
+      db.prepare = ((sql: string) => {
+        if (/SELECT favor, trust FROM village_team_favor/.test(sql)) {
+          return { bind: () => ({ first: async () => { throw new Error("D1 výpadek"); } }) };
+        }
+        return puvodniPrepare(sql);
+      }) as typeof db.prepare;
+      const stav = stavKlubu({ kadr: [PROBLEMOVY] });
+      const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH_HRDINA, "inc-hrdina-fail");
+      expect(zapsany?.id).toBe("inc-hrdina-fail");
+      expect(db.pocet(/INSERT INTO reputation_log/)).toBe(1);
+      // ensureGlobalFavor selhala na SELECTu, ale hlídaný UPDATE se přesto zkusí - je to
+      // bezpečné samo o sobě (bez řádku by tiše nic nezměnil) a nezávisí na tom, jestli
+      // se řádek stihl založit.
+      expect(db.pocet(/UPDATE village_team_favor SET favor/)).toBe(1);
+    });
+
+    it("selhání morálky kádru (posunKadru) incident nezvrací a klubová událost proběhne dál", async () => {
+      const db = new FalesnaD1([
+        { sql: /SELECT reputation FROM teams WHERE id = \?/, first: { reputation: 50 } },
+        { sql: /SELECT village_id FROM teams WHERE id = \?/, first: { village_id: "vesnice-1" } },
+      ]);
+      const puvodniPrepare = db.prepare.bind(db);
+      db.prepare = ((sql: string) => {
+        if (/UPDATE players SET life_context/.test(sql)) {
+          return { bind: () => ({ run: async () => { throw new Error("D1 výpadek"); } }) };
+        }
+        return puvodniPrepare(sql);
+      }) as typeof db.prepare;
+      const stav = stavKlubu({ kadr: [PROBLEMOVY] });
+      const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH_HRDINA, "inc-hrdina-fail2");
+      expect(zapsany?.id).toBe("inc-hrdina-fail2");
+      expect(db.pocet(/INSERT OR IGNORE INTO club_events/)).toBe(1);
+    });
+  });
 });

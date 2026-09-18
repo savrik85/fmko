@@ -510,3 +510,66 @@ describe("pozitivní incidenty: řemeslník, automechanik a dědictví (spec 4d)
     expect(n?.text).toContain("Dresy");
   });
 });
+
+describe("pozitivní incidenty: hrdina a poctivý nálezce (spec 4d, Task 3)", () => {
+  const HASIC = hrac({ id: "f", jmeno: "Petr Hasič", povolani: "Hasič" });
+  const UCETNI = hrac({ id: "u", jmeno: "Jana Účetní", povolani: "Účetní" });
+
+  it("oba mají váhu 0 a nejsou spouštěné: nelosují se v běžném poolu", () => {
+    for (const kind of ["hrdina", "poctivy_nalezce"]) {
+      expect(def(kind).vaha, kind).toBe(0);
+      expect(def(kind).spousteny, kind).toBe(false);
+    }
+  });
+
+  it("oba potřebují neprázdný kádr", () => {
+    expect(def("hrdina").muze(stavKlubu())).toBe(false);
+    expect(def("hrdina").muze(stavKlubu({ kadr: [HASIC] }))).toBe(true);
+    expect(def("poctivy_nalezce").muze(stavKlubu())).toBe(false);
+    expect(def("poctivy_nalezce").muze(stavKlubu({ kadr: [UCETNI] }))).toBe(true);
+  });
+
+  it("hrdina jde do subjectPlayerId, nikdy do culpritPlayerId, a nemá pachatele", () => {
+    const s = stavKlubu({ kadr: [HASIC, UCETNI] });
+    const n = def("hrdina").vytvor(s, createRng(1));
+    expect(n).toMatchObject({
+      kind: "hrdina", category: "pozitivni", status: "uzavreny",
+      culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+    });
+    expect(n?.subjectPlayerId).not.toBeNull();
+    expect(n?.ztraty).toEqual([]);
+    expect(n?.text).toMatch(new RegExp(n!.subjectPlayerId === "f" ? "Petr Hasič" : "Jana Účetní"));
+  });
+
+  it("hrdina padá váženě: hráč s povoláním z POVOLANI_HRDINY vyhraje o dost častěji (300 seedů)", () => {
+    const s = stavKlubu({ kadr: [HASIC, UCETNI] });
+    let hasicu = 0;
+    let ucetnich = 0;
+    proSeedy((rng) => {
+      const n = def("hrdina").vytvor(s, rng);
+      if (n?.subjectPlayerId === "f") hasicu++;
+      if (n?.subjectPlayerId === "u") ucetnich++;
+    });
+    expect(hasicu + ucetnich).toBe(300);
+    expect(hasicu).toBeGreaterThan(ucetnich);
+  });
+
+  it("poctivý nálezce jde do subjectPlayerId a nemá pachatele", () => {
+    const n = def("poctivy_nalezce").vytvor(stavKlubu({ kadr: [UCETNI] }), createRng(1));
+    expect(n).toMatchObject({
+      kind: "poctivy_nalezce", category: "pozitivni", status: "uzavreny",
+      culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false, subjectPlayerId: "u",
+    });
+    expect(n?.ztraty).toEqual([]);
+  });
+
+  it("poctivý nálezce vybírá rovnoměrně, žádné povolání nemá náskok", () => {
+    const s = stavKlubu({ kadr: [HASIC, UCETNI] });
+    const videni = new Set<string>();
+    proSeedy((rng) => {
+      const n = def("poctivy_nalezce").vytvor(s, rng);
+      if (n?.subjectPlayerId) videni.add(n.subjectPlayerId);
+    }, 50);
+    expect(videni.size).toBe(2);
+  });
+});

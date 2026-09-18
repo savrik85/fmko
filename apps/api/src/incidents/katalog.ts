@@ -11,8 +11,8 @@ import type { Rng } from "../generators/rng";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import {
   DODAVKA_STAV_PRAH, KASA_PODIL_MAX, KASA_PODIL_MIN, MECHANIK_STAV, OBSLUHA_SANCE, PODIL_POKUSU_ZVENKU,
-  POVOLANI_MECHANIKA, POVOLANI_REMESLNIKU, REMESLNIK_STAV, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
-  TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_SANCE_USUDEK_1,
+  POVOLANI_HRDINY, POVOLANI_MECHANIKA, POVOLANI_REMESLNIKU, REMESLNIK_STAV, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
+  TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, VAHA_HRDINY, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_SANCE_USUDEK_1,
   ZPRONEVERA_SANCE_USUDEK_20, ZPRONEVERA_STROP_PODIL,
 } from "./nastaveni";
 import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
@@ -519,6 +519,43 @@ export const KATALOG: DefiniceIncidentu[] = [
         culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
         ztraty: [{ typ: "vybaveni_nahoru", kategorie: "jerseys", urovniNahoru: 1, stavNahoru: 100 }],
         text: text(rng, "dedictvi", { vec: CATEGORY_LABELS.jerseys }),
+      };
+    },
+  },
+  {
+    // Hrdina je subjekt, ne pachatel (spec 4d): jde do subjectPlayerId, culpritPlayerId
+    // zůstává null, jinak by spadl do vyšetřovací a trestní logiky jako podezřelý.
+    kind: "hrdina", label: "Hrdina v kádru", emoji: "🦸", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: (s) => s.kadr.length > 0,
+    vytvor: (s, rng) => {
+      if (s.kadr.length === 0) return null;
+      // Hasič, záchranář a policista mají k hrdinství blíž, ale kdokoli z kádru je kandidát.
+      const vahy = Object.fromEntries(
+        s.kadr.map((h) => [h.id, (POVOLANI_HRDINY as readonly string[]).includes(h.povolani) ? VAHA_HRDINY : 1]),
+      );
+      const vybranyId = rng.weighted(vahy);
+      const hrac = s.kadr.find((h) => h.id === vybranyId);
+      if (!hrac) return null;
+      return {
+        kind: "hrdina", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        subjectPlayerId: hrac.id, ztraty: [],
+        text: text(rng, "hrdina", { hrac: hrac.jmeno }),
+      };
+    },
+  },
+  {
+    // Stejné pravidlo: nálezce je subjekt životní epizody, ne pachatel.
+    kind: "poctivy_nalezce", label: "Poctivý nálezce", emoji: "👛", category: "pozitivni", vaha: 0, spousteny: false,
+    muze: (s) => s.kadr.length > 0,
+    vytvor: (s, rng) => {
+      if (s.kadr.length === 0) return null;
+      const hrac = rng.pick(s.kadr);
+      return {
+        kind: "poctivy_nalezce", category: "pozitivni", status: "uzavreny", severity: 1,
+        culpritType: "nikdo", culpritPlayerId: null, culpritRevealed: false,
+        subjectPlayerId: hrac.id, ztraty: [],
+        text: text(rng, "poctivy_nalezce", { hrac: hrac.jmeno }),
       };
     },
   },

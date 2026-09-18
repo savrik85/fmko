@@ -19,7 +19,8 @@ export type ClubEventKind =
   | "serie_vyher" | "serie_proher"
   | "rozhovor_kritika" | "rozhovor_obhajoba"
   | "vylepseni_kotle"
-  | "utek_s_penezi";
+  | "utek_s_penezi"
+  | "hrdina_v_kadru";
 
 /** Jak se parta po události posune. Chybí-li klíč, ta parta to neřeší. */
 export interface DopadNaPartu {
@@ -282,6 +283,24 @@ export const CLUB_EVENTS: Record<ClubEventKind, ClubEventDef> = {
       "{co} zmizel i s klubovejma prachama. Tohle už není smůla, tohle je binec.",
       "Slyšeli jsme, že {co} utekl s kasou. Jak se něco takovýho mohlo stát?",
       "{co} je pryč a s ním i peníze klubu. Co s tím teď uděláš?",
+    ],
+  },
+  // Zrcadlo prodej_opory: stejných pět part, stejná síla, jen obráceně. Dobrá zpráva
+  // se nikoho neptá na vysvětlení, proto bez ptaSe.
+  hrdina_v_kadru: {
+    label: "Hrdina v kádru",
+    dopad: {
+      kotel: { mood: 18, heat: -22 },
+      stamgasti: { mood: 12, heat: -14 },
+      pametnici: { mood: 10, heat: -8 },
+      parta_z_okoli: { mood: 10, heat: -10 },
+      rodiny: { mood: 4, heat: -2 },
+    },
+    pise: "stamgasti",
+    texty: [
+      "Slyšels, co dokázal {co}? Na takovýho kluka může bejt klub hrdej.",
+      "V hospodě se mluví jen o {co}. Tohle dělá jménu klubu víc než výhra.",
+      "{co} si dneska zasloužil pivo zadarmo. Klobouk dolů.",
     ],
   },
 };

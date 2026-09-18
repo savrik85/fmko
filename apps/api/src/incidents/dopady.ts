@@ -4,17 +4,24 @@
 
 import { createNotification } from "../community/notifications";
 import { CATEGORIES } from "../equipment/equipment-generator";
+import { recordClubEvent } from "../fans/club-events";
 import { createRng } from "../generators/rng";
 import type { Bindings } from "../index";
 import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
+import { applyReputationDelta } from "../lib/reputation";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { poskodZarizeni } from "../stadium/stadium-damage";
+import { ensureGlobalFavor } from "../villages/officials-store";
 import { denBazaru } from "./bazar";
+import { posunKadru } from "./hraci";
 import { smsIncidentu } from "./incident-db";
 import { KATALOG_PODLE_KIND } from "./katalog";
-import { LHUTA_ROZHODNUTI_DNI, SMS_ROLE_KUSTOD } from "./nastaveni";
+import {
+  HRDINA_MORALKA_KADRU, HRDINA_PRIZEN, HRDINA_REPUTACE, LHUTA_ROZHODNUTI_DNI, NALEZCE_PRIZEN, NALEZCE_REPUTACE,
+  SMS_ROLE_KUSTOD,
+} from "./nastaveni";
 import { odhalujePachatele, vygenerujStopy } from "./stopy";
 import { nactiZdrojeStop, prikazyStop } from "./stopy-db";
 import { TEXTY, vypln } from "./texty";
@@ -84,6 +91,7 @@ export async function zapisIncident(
 
   if (navrh.ztraty.length === 0) {
     await zapisZnalosti(db, stav, navrh, id, []);
+    await zapisOsobniDopady(db, stav, navrh, id);
     return { id, nalezeneStopy: [], odhalen: navrh.culpritRevealed };
   }
 
@@ -136,6 +144,58 @@ export async function zapisIncident(
   }
   await zapisZnalosti(db, stav, navrh, id, stopy);
   return { id, nalezeneStopy: stopy.filter((s) => s.nalezena).map((s) => s.text), odhalen };
+}
+
+/**
+ * Dopady pozitivních incidentů o osobě (spec 4d, Task 3): hrdina a poctivý nálezce.
+ * Oba mají prázdné `ztraty` (nic se v equipmentu ani na stadionu nemění), takže
+ * `zapisIncident` sem skočí z větve „bez ztrát" a nikam jinam. Bez efektu na cizí kind.
+ *
+ * Každý dopad má vlastní `.catch`, incident stojí i když se některý nepovede.
+ */
+async function zapisOsobniDopady(db: D1Database, stav: StavKlubu, navrh: NavrhIncidentu, id: string): Promise<void> {
+  if (navrh.kind !== "hrdina" && navrh.kind !== "poctivy_nalezce") return;
+  const jeHrdina = navrh.kind === "hrdina";
+
+  await applyReputationDelta(
+    db, stav.teamId, jeHrdina ? HRDINA_REPUTACE : NALEZCE_REPUTACE, "incident", navrh.text,
+    { referenceId: `${navrh.kind}-${id}`, gameDate: stav.gameDate },
+  ).catch((e) => logger.error({ module: M }, `reputace ${navrh.kind} ${id}`, e));
+
+  if (jeHrdina) {
+    await posunKadru(db, stav.teamId, HRDINA_MORALKA_KADRU).run()
+      .catch((e) => logger.error({ module: M }, `morálka kádru po hrdinovi ${id}`, e));
+  }
+
+  await zvedniPrizenObce(db, stav.teamId, jeHrdina ? HRDINA_PRIZEN : NALEZCE_PRIZEN, id, navrh.kind)
+    .catch((e) => logger.error({ module: M }, `přízeň obce ${navrh.kind} ${id}`, e));
+
+  if (jeHrdina) {
+    const hrac = stav.kadr.find((h) => h.id === navrh.subjectPlayerId);
+    await recordClubEvent(db, {
+      teamId: stav.teamId, kind: "hrdina_v_kadru", severity: 0.6,
+      payload: { co: hrac?.jmeno ?? "Hráč" }, gameDate: stav.gameDate, referenceId: `${id}-udalost`,
+    }).catch((e) => logger.error({ module: M }, `klubová událost hrdiny ${id}`, e));
+  }
+}
+
+/**
+ * Přízeň obce +`delta`, hlídaně. Bez existujícího řádku ve `village_team_favor` by holý
+ * `UPDATE` tiše nedělal nic, proto napřed `ensureGlobalFavor` řádek založí. Bez známé
+ * obce (odchozí tým bez `village_id`) se přízeň přeskočí, nikdy nehází.
+ */
+async function zvedniPrizenObce(db: D1Database, teamId: string, delta: number, id: string, popis: string): Promise<void> {
+  const tym = await db.prepare("SELECT village_id FROM teams WHERE id = ?").bind(teamId)
+    .first<{ village_id: string | null }>()
+    .catch((e) => { logger.error({ module: M }, `obec týmu pro přízeň ${popis} ${id}`, e); return null; });
+  if (!tym?.village_id) return;
+
+  await ensureGlobalFavor(db, tym.village_id, teamId)
+    .catch((e) => logger.error({ module: M }, `založení přízně obce ${popis} ${id}`, e));
+
+  await db.prepare("UPDATE village_team_favor SET favor = MAX(0, MIN(100, favor + ?)) WHERE team_id = ? AND official_id IS NULL")
+    .bind(delta, teamId).run()
+    .catch((e) => logger.error({ module: M }, `přízeň obce ${popis} ${id}`, e));
 }
 
 async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string, z: Ztrata, popis: string): Promise<Ztrata | null> {
