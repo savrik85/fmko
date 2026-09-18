@@ -98,6 +98,12 @@ export const TEXTY = {
     "{jmeno} nechal účetnictví v nepořádku a odešel s {castka} Kč navíc.",
     "{jmeno} si přisvojil {castka} Kč z klubových peněz a dal výpověď.",
   ],
+  kasa_obsluha: [
+    "{jmeno} vybral kasu u občerstvení sám a {castka} Kč si nechal pro sebe.",
+    "{jmeno} stál celý zápas u kasy a po zápase z ní chybělo {castka} Kč.",
+    "{jmeno} si z tržby u občerstvení schoval {castka} Kč dřív, než ji odevzdal.",
+    "{jmeno} obsluhoval stánek celý zápas a z kasy zmizelo {castka} Kč.",
+  ],
   utek_s_penezi: [
     "{hrac} zmizel z klubu i s penězi. Chybí {castka} Kč.",
     "{hrac} nedorazil na trénink a z kasy zmizelo {castka} Kč.",

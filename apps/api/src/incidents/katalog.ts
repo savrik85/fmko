@@ -10,7 +10,7 @@ import { CATEGORY_LABELS, cumulativeInvestment, efektyZabezpeceni } from "../equ
 import type { Rng } from "../generators/rng";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import {
-  KASA_PODIL_MAX, KASA_PODIL_MIN, PODIL_POKUSU_ZVENKU, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
+  KASA_PODIL_MAX, KASA_PODIL_MIN, OBSLUHA_SANCE, PODIL_POKUSU_ZVENKU, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
   TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_STROP_PODIL,
 } from "./nastaveni";
 import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
@@ -326,6 +326,18 @@ export const KATALOG: DefiniceIncidentu[] = [
     vytvor: (s, rng) => {
       const trzba = s.vcera?.trzby.kasa ?? 0;
       if (trzba <= 0) return null;
+      // Najatá obsluha stojí u kasy celý zápas: los na ni padne dřív, než se zkusí kdokoli
+      // jiný (spec 5a). Bez obsluhy se rng vůbec netáhne, pořadí losů se tím nemění.
+      if (s.obsluha && rng.random() < OBSLUHA_SANCE) {
+        const castka = castkaZTrzby(s, rng, trzba, KASA_PODIL_MIN, KASA_PODIL_MAX);
+        if (castka <= 0) return null;
+        return {
+          kind: "kasa_obcerstveni", category: "kradez", status: "uzavreny", severity: 2,
+          culpritType: "zamestnanec", culpritPlayerId: null, culpritRevealed: true,
+          ztraty: [{ typ: "penize", castka, zdrojZapasId: s.vcera?.zapasId ?? undefined }],
+          text: text(rng, "kasa_obsluha", { jmeno: s.obsluha.jmeno, castka: castka.toLocaleString("cs-CZ") }),
+        };
+      }
       const kdo = pokusOKradez(s, rng, 2);
       if (!kdo) return null;
       if (kdo.typ === "alarm") return alarmNavrh(rng);

@@ -22,11 +22,13 @@ import {
   BONUS_POLICIE, CELA_HOSPODA_DNI, CELA_HOSPODA_SANCE, CELA_HOSPODA_ZAVAZNOST, CERSTVY_ZLODEJ_DNI, CHLUBI_ALKOHOL,
   CHLUBI_DNI, CHLUBI_SANCE, CHLUBI_TEMPERAMENT, CHLUBI_TEMPERAMENT_NASOBEK, DRBY_ALKOHOL, DRBY_SANCE, HROZI_LHUTA_MAX,
   HROZI_LHUTA_MIN, LHUTA_PO_ODHALENI_DNI, NABIZI_SANCE, OBVINENI_PAMET_DNI, OCHOTA_POSLA, OHLASUJE_ALKOHOL,
-  OHLASUJE_SANCE, PENEZNI_KINDY, PRAH_VAHY_PACHATELE, RUNDY_DNI, RUNDY_SANCE, RVACKA_SANCE, SEKERA_SANCE,
-  STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH, TRENER_V_HOSPODE_NASOBEK, ZNALOST_DRB_DNI,
+  OHLASUJE_SANCE, PENEZNI_KINDY, PRAH_VAHY_PACHATELE, RUNDY_DNI, RUNDY_NASOBEK_SVEDKA, RUNDY_SANCE, RVACKA_SANCE,
+  SEKERA_SANCE, SMS_ROLE_HOSPODSKY, STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH, TRENER_V_HOSPODE_NASOBEK,
+  ZNALOST_DRB_DNI,
 } from "./nastaveni";
 import { vahaPachatele } from "./pachatel";
 import { MISTO_INCIDENTU, MISTO_TEXT } from "./stopy";
+import { normalizuj } from "./tema";
 import { text, TEXTY, vypln, type KlicTextu } from "./texty";
 import type {
   HracKlubu, KategorieIncidentu, NavrhStopy, Obvineni, StavIncidentu, StavKlubu, TypPachatele, Ztrata,
@@ -411,19 +413,31 @@ function sekera(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody
   }
 }
 
+/** Hospodský sedí v kádru za pípou, ne nutně u stolu dnes večer: stačí, že ho klub má (spec 9). */
+function hospodskyVKadru(k: KontextHospody): boolean {
+  const cil = normalizuj(SMS_ROLE_HOSPODSKY);
+  for (const h of k.kadr.values()) if (normalizuj(h.povolani) === cil) return true;
+  return false;
+}
+
 /**
  * Pachatel odhalené peněžní krádeže má najednou hotovost a neudrží se: platí rundy,
  * štamgasti si to spojí (spec 9). Neodhalený pachatel se v deníku, který čte kdokoli
  * včetně soupeřů, jménem objevit nesmí, proto se kontroluje `odhalen`.
+ *
+ * Hospodský v kádru a trenér u stolu si rundy všimnou spíš (spec 9): šance se násobí
+ * `RUNDY_NASOBEK_SVEDKA`, ale ne dvakrát, když platí obojí najednou — jde o dva svědky
+ * téhož druhu, ne o kombinaci. Násobek mění jen práh před losem, ne pořadí losů.
  */
 function rundy(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody[], out: VysledekHospody): void {
+  const nasobek = hospodskyVKadru(k) || v.trener ? RUNDY_NASOBEK_SVEDKA : 1;
   for (const h of mistni) {
     const inc = k.incidenty.find((i) =>
       i.odhalen && i.culpritPlayerId === h.playerId
       && (PENEZNI_KINDY as readonly string[]).includes(i.kind) && dnyMezi(i.den, k.den) <= RUNDY_DNI);
     if (!inc || zaznelo(v, "utraci_za_rundy", inc.id)) continue;
     const rng = los(k, "rundy", h.playerId);
-    if (!vyjde(rng, RUNDY_SANCE, v)) continue;
+    if (!vyjde(rng, Math.min(1, RUNDY_SANCE * nasobek), v)) continue;
     out.pribehy.push({
       type: "utraci_za_rundy", playerIds: [h.playerId], effects: [], incidentId: inc.id,
       text: text(rng, "hospoda_rundy", { hrac: jmeno(h) }),

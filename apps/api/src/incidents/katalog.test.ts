@@ -242,8 +242,8 @@ describe("čin ohlášený v hospodě (spec 9a)", () => {
 });
 
 describe("peněžní krádeže ze zápasu (spec 4a)", () => {
-  const sVcerejskem = (kasa: number, tombola: number) =>
-    stavKlubu({ vcera: { vyhra: true, zapasId: "m1", trzby: { kasa, tombola } } as StavKlubu["vcera"] });
+  const sVcerejskem = (kasa: number, tombola: number, over: Partial<StavKlubu> = {}) =>
+    stavKlubu({ vcera: { vyhra: true, zapasId: "m1", trzby: { kasa, tombola } } as StavKlubu["vcera"], ...over });
 
   it("bez včerejší tržby se kasa nekrade", () => {
     expect(def("kasa_obcerstveni").muze(sVcerejskem(0, 0))).toBe(false);
@@ -292,6 +292,35 @@ describe("peněžní krádeže ze zápasu (spec 4a)", () => {
       expect(def("kasa_obcerstveni").vytvor(s, rng)).toBeNull();
       expect(def("tombola").vytvor(s, rng)).toBeNull();
     }, 300);
+  });
+
+  it("s najatou obsluhou bere kasu občas ona", () => {
+    let zamestnanec = 0;
+    proSeedy((rng) => {
+      const n = def("kasa_obcerstveni").vytvor(sVcerejskem(10000, 0, { obsluha: { id: "o1", jmeno: "Jana Pivná" } }), rng);
+      if (n?.culpritType === "zamestnanec") zamestnanec++;
+    }, 300);
+    expect(zamestnanec).toBeGreaterThan(0);
+  });
+
+  it("bez najaté obsluhy pachatel zaměstnanec nevznikne", () => {
+    proSeedy((rng) => {
+      expect(def("kasa_obcerstveni").vytvor(sVcerejskem(10000, 0), rng)?.culpritType).not.toBe("zamestnanec");
+    }, 300);
+  });
+
+  it("odhalená obsluha jako pachatel: incident je rovnou uzavřený a jmenuje ji", () => {
+    let n = null;
+    for (let seed = 1; seed <= 100 && !n; seed++) {
+      n = def("kasa_obcerstveni").vytvor(sVcerejskem(10000, 0, { obsluha: { id: "o1", jmeno: "Jana Pivná" } }), createRng(seed));
+      if (n?.culpritType !== "zamestnanec") n = null;
+    }
+    expect(n).not.toBeNull();
+    expect(n?.culpritType).toBe("zamestnanec");
+    expect(n?.culpritPlayerId).toBeNull();
+    expect(n?.culpritRevealed).toBe(true);
+    expect(n?.status).toBe("uzavreny");
+    expect(n?.text).toContain("Jana Pivná");
   });
 });
 

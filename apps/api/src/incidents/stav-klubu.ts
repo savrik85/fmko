@@ -149,7 +149,7 @@ export async function nactiStavKlubu(
       "SELECT 1 AS je FROM club_incidents WHERE team_id = ? AND season_number = ? AND kind = 'utek_s_penezi' LIMIT 1",
     ).bind(teamId, seasonNumber),
     db.prepare(
-      "SELECT id, first_name, last_name, judgement FROM staff_members WHERE team_id = ? AND role = 'ekonom' LIMIT 1",
+      "SELECT id, first_name, last_name, judgement, role FROM staff_members WHERE team_id = ? AND role IN ('ekonom', 'obsluha')",
     ).bind(teamId),
   ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
   if (!vysledky) return null;
@@ -194,9 +194,14 @@ export async function nactiStavKlubu(
     otevreneProblemy += r.otevrene ?? 0;
   }
 
-  const ekonomRadek = ekonomRes.results[0] as { id: string; first_name: string; last_name: string; judgement: number | null } | undefined;
+  const staffRadky = ekonomRes.results as Array<{ id: string; first_name: string; last_name: string; judgement: number | null; role: string }>;
+  const ekonomRadek = staffRadky.find((r) => r.role === "ekonom");
   const ekonom = ekonomRadek
     ? { id: String(ekonomRadek.id), jmeno: `${ekonomRadek.first_name} ${ekonomRadek.last_name}`, judgement: ekonomRadek.judgement ?? 5 }
+    : null;
+  const obsluhaRadek = staffRadky.find((r) => r.role === "obsluha");
+  const obsluha = obsluhaRadek
+    ? { id: String(obsluhaRadek.id), jmeno: `${obsluhaRadek.first_name} ${obsluhaRadek.last_name}` }
     : null;
 
   return {
@@ -208,6 +213,6 @@ export async function nactiStavKlubu(
     rozpocet: cislo((rozpocetRes.results[0] as { budget?: number } | undefined)?.budget, 0),
     situace,
     utekLetos: utekRes.results.length > 0,
-    ekonom,
+    ekonom, obsluha,
   };
 }

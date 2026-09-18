@@ -30,6 +30,8 @@ export const SANCE_SPOUSTENYCH: Record<string, number> = {
 /** Kolik procent skutečné tržby zmizí z kasy s občerstvením (spec 4a). */
 export const KASA_PODIL_MIN = 20;
 export const KASA_PODIL_MAX = 50;
+/** Kasu občas vybere ten, kdo u ní stojí celý zápas (spec 5a). */
+export const OBSLUHA_SANCE = 0.2;
 /** Tombola je v kase bokem, sebere se jí klidně celá (spec 4a). */
 export const TOMBOLA_PODIL_MIN = 30;
 export const TOMBOLA_PODIL_MAX = 100;
@@ -207,6 +209,8 @@ export const ROZVOD_HOSPODA_NASOBEK = 1.5;
 export const RUNDY_SANCE = 0.3;
 /** Jak dlouho po odhalení peněžní krádeže se ještě může stát, že pachatel platí rundy. */
 export const RUNDY_DNI = 10;
+/** Hospodský v kádru a trenér u stolu si rundy všimnou spíš než ostatní (spec 9). */
+export const RUNDY_NASOBEK_SVEDKA = 2;
 /**
  * Kindy, u kterých pachatel drží v ruce hotovost. `utek_s_penezi` a `zpronevera_ekonoma`
  * chybí záměrně: pachatel prvního odchází z klubu ten samý den, druhého je zaměstnanec,

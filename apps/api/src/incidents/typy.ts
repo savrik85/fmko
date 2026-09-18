@@ -81,6 +81,8 @@ export interface StavKlubu {
   situace: ReadonlyMap<string, string>;
   /** Najatý ekonom, kandidát na zpronevěru (spec 4a). `null`, když klub žádného nemá. */
   ekonom: { id: string; jmeno: string; judgement: number } | null;
+  /** Najatá obsluha občerstvení, kandidátka na vybrání kasy (spec 5a). `null`, když klub žádnou nemá. */
+  obsluha: { id: string; jmeno: string } | null;
 }
 
 export interface NavrhIncidentu {

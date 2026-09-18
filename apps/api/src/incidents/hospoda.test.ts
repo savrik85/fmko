@@ -356,3 +356,35 @@ describe("pachatel peněžního incidentu platí rundy (spec 9)", () => {
     expect(pribehyHospody([host(SVEDEK)], k, JISTE).pribehy.filter((p) => p.type === "utraci_za_rundy")).toEqual([]);
   });
 });
+
+describe("hospodský a trenér svědčí rundám víc (spec 9)", () => {
+  // Incident daleko v budoucnu: `rundy()` čte přímo `k.incidenty` bez okna „už bylo",
+  // takže s ním `dnyMezi(inc.den, k.den)` vyjde vždy hodně záporné, tedy pod RUNDY_DNI,
+  // a den hospody (`k.den`) se dá volně měnit pro nové losy bez ovlivnění podmínky.
+  const kontextSRundou = (den: string, kadrNavic: HracKlubu[]) => kontext({
+    den, gameDate: `${den}T16:00:00.000Z`,
+    kadr: new Map([SVEDEK, PACHATEL, KAMARAD, ...kadrNavic].map((h) => [h.id, h])),
+    incidenty: [incident({ id: "i1", kind: "kasa_obcerstveni", culpritPlayerId: SVEDEK.id, odhalen: true, den: "2030-01-01" })],
+  });
+  const kolikrat = (kadrNavic: HracKlubu[], trener: boolean) => {
+    let n = 0;
+    for (let d = 1; d <= 300; d++) {
+      const den = new Date(Date.UTC(2026, 9, 1) + d * 86_400_000).toISOString().slice(0, 10);
+      const k = kontextSRundou(den, kadrNavic);
+      if (pribehyHospody([host(SVEDEK)], k, { trener, jiste: false }).pribehy.some((p) => p.type === "utraci_za_rundy")) n++;
+    }
+    return n;
+  };
+
+  it("s hospodským v kádru padne runda častěji", () => {
+    const sHospodskym = kolikrat([hrac({ id: "hs", jmeno: "Bedřich Výčep", povolani: "Hospodský" })], false);
+    const bezneho = kolikrat([], false);
+    expect(sHospodskym).toBeGreaterThan(bezneho);
+  });
+
+  it("s trenérem v hospodě padne runda častěji", () => {
+    const sTrenerem = kolikrat([], true);
+    const bezneho = kolikrat([], false);
+    expect(sTrenerem).toBeGreaterThan(bezneho);
+  });
+});
