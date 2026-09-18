@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { hracZRadku } from "./stav-klubu";
+import { FalesnaD1, jakoD1 } from "./testovaci-d1";
+import { hracZRadku, nactiStavKlubu } from "./stav-klubu";
+
+function tym() {
+  return { id: "tym-a", league_id: "liga-1" };
+}
 
 describe("hráč z řádku DB", () => {
   const radek = {
@@ -38,5 +43,33 @@ describe("hráč z řádku DB", () => {
     const bez = hracZRadku({ ...radek, age: 31 }, new Set(), { situace: new Map([["h1", "rozvod"]]) });
     expect(bez).toMatchObject({ vek: 31, dluhy: false, zalohaOdmitnuta: false });
     expect(hracZRadku(radek).vek).toBe(25);
+  });
+});
+
+describe("včerejší tržby a letošní útěk (spec 4a)", () => {
+  it("načte kasu i tombolu ze včerejšího domácího zápasu", async () => {
+    const db = new FalesnaD1([
+      // Vybavení musí najít řádek, jinak nactiStavKlubu skončí null dřív, než dojde na dávku.
+      { sql: /FROM equipment WHERE team_id/, first: {} },
+      // Dotaz běží uvnitř db.batch(), FalesnaD1 tam čte `all`, ne `first`.
+      { sql: /FROM matches m JOIN season_calendar/, all: [{ id: "m1", home_team_id: "t1", home_score: 2, away_score: 1 }] },
+      { sql: /type IN \('concession_income_self', 'raffle_income'\)/, all: [
+        { type: "concession_income_self", castka: 4000 },
+        { type: "raffle_income", castka: 1500 },
+      ] },
+      { sql: /kind = 'utek_s_penezi'/, first: null },
+    ]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.vcera?.trzby).toEqual({ kasa: 4000, tombola: 1500 });
+    expect(s?.utekLetos).toBe(false);
+  });
+
+  it("bez včerejšího zápasu jsou tržby nulové", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM equipment WHERE team_id/, first: {} },
+      { sql: /FROM matches m JOIN season_calendar/, all: [] },
+    ]);
+    const s = await nactiStavKlubu(jakoD1(db), tym(), "2026-09-18", 4);
+    expect(s?.vcera).toBeNull();
   });
 });

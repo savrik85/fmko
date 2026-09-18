@@ -137,9 +137,17 @@ export async function nactiStavKlubu(
         WHERE team_id = ? AND status = 'probiha' AND kind = 'dluhy'
           AND json_extract(resolution_data, '$.zaloha') = 'odmitnuto' AND subject_player_id IS NOT NULL`,
     ).bind(teamId),
+    db.prepare(
+      `SELECT type, SUM(amount) AS castka FROM transactions
+        WHERE team_id = ? AND game_date = ? AND type IN ('concession_income_self', 'raffle_income')
+        GROUP BY type`,
+    ).bind(teamId, vcera),
+    db.prepare(
+      "SELECT 1 AS je FROM club_incidents WHERE team_id = ? AND season_number = ? AND kind = 'utek_s_penezi' LIMIT 1",
+    ).bind(teamId, seasonNumber),
   ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
   if (!vysledky) return null;
-  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes, rozpocetRes, situaceRes, zalohyRes] = vysledky;
+  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes, rozpocetRes, situaceRes, zalohyRes, trzbyRes, utekRes] = vysledky;
 
   const stadion: Record<string, number> = {};
   for (const [k, v] of Object.entries((stadionRes.results[0] ?? {}) as Record<string, unknown>)) {
@@ -159,7 +167,12 @@ export async function nactiStavKlubu(
     const cervene = await db.prepare("SELECT player_id FROM match_player_stats WHERE match_id = ? AND team_id = ? AND red_cards > 0")
       .bind(zapas.id, teamId).all<{ player_id: string }>()
       .catch((e) => { logger.warn({ module: M }, `červené karty ${zapas.id}`, e); return { results: [] as Array<{ player_id: string }> }; });
-    vceraZapas = { vyhra, doma, cervenaKarta: cervene.results.map((r) => r.player_id) };
+    const trzby = { kasa: 0, tombola: 0 };
+    for (const r of trzbyRes.results as Array<{ type: string; castka: number }>) {
+      if (r.type === "concession_income_self") trzby.kasa = Math.max(0, r.castka ?? 0);
+      if (r.type === "raffle_income") trzby.tombola = Math.max(0, r.castka ?? 0);
+    }
+    vceraZapas = { vyhra, doma, cervenaKarta: cervene.results.map((r) => r.player_id), zapasId: zapas.id, trzby };
   }
 
   // Hospoda zná i vůdce fanoušků (playerId „fan-…") a hosty. Do stavu patří jen hráči kádru.
@@ -183,5 +196,6 @@ export async function nactiStavKlubu(
     zapasDnesNeboZitra: blizkyZapasRes.results.length > 0,
     rozpocet: cislo((rozpocetRes.results[0] as { budget?: number } | undefined)?.budget, 0),
     situace,
+    utekLetos: utekRes.results.length > 0,
   };
 }

@@ -55,7 +55,17 @@ export interface StavKlubu {
   /** Aktivní hráči klubu. */
   kadr: HracKlubu[];
   /** Soutěžní zápas předchozího herního dne, `null` když se nehrálo. */
-  vcera: { vyhra: boolean; doma: boolean; cervenaKarta: string[] } | null;
+  vcera: {
+    vyhra: boolean;
+    doma: boolean;
+    cervenaKarta: string[];
+    /** Id včerejšího zápasu, ke kterému se váže tržba (spec 4a). */
+    zapasId: string | null;
+    /** Kolik včerejší domácí zápas vydělal na občerstvení a na tombole. Bez zápasu nula. */
+    trzby: { kasa: number; tombola: number };
+  } | null;
+  /** Jestli tomuhle klubu letos už jednou utekl hráč s penězi (spec 4a, max. 1× za sezónu). */
+  utekLetos: boolean;
   /** Hráči klubu (ne hosté, ne trenér), kteří byli předchozí den v hospodě. */
   hospodaVcera: string[];
   odehranychZapasu: number;
