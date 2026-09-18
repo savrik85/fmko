@@ -11,7 +11,7 @@ import { vystavKradeneZbozi } from "./bazar-db";
 import { oznamIncident, zapisIncident } from "./dopady";
 import { vyhodnotHrozici } from "./hrozi-db";
 import { ozviSeObvineni } from "./krivda";
-import { vylosujIncident } from "./losovani";
+import { vylosujIncident, vylosujPozitivni } from "./losovani";
 import { propadleZalohy, ukonciSituace, zalozSituaci, zretezDluhy } from "./situace-db";
 import { vylosujSituaci } from "./situace";
 import { nactiStavKlubu } from "./stav-klubu";
@@ -64,20 +64,38 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
 
   const rng = createRng(seedFromString(`incident|${teamId}|${stav.den}`));
   const navrh = vylosujIncident(stav, rng);
-  if (!navrh) {
-    // Dnešní situaci už klub dostal řetězením, druhá by přebila limit.
-    if (zretezeno) return;
-    // Žádný problém: může přijít životní situace (spec 4c).
+  if (navrh) {
+    const zapsany = await zapisIncident(env.DB, stav, navrh);
+    if (zapsany) {
+      await oznamIncident(env, teamId, navrh, zapsany);
+      logger.info({ module: M, teamId }, `incident ${navrh.kind}, pachatel ${navrh.culpritType}, stop nalezeno ${zapsany.nalezeneStopy.length}`);
+    }
+  } else if (!zretezeno) {
+    // Žádný problém: může přijít životní situace (spec 4c). Dnešní situaci už klub
+    // dostal řetězením (zretezeno), druhá by přebila limit, proto jen bez něj.
     const situace = vylosujSituaci(stav, createRng(seedFromString(`situace|${teamId}|${stav.den}`)));
     if (situace) {
       const id = await zalozSituaci(env, stav, situace)
         .catch((e) => { logger.warn({ module: M, teamId }, "založení situace", e); return null; });
       if (id) logger.info({ module: M, teamId }, `situace ${situace.kind} pro hráče ${situace.subjectPlayerId}`);
     }
-    return;
   }
-  const zapsany = await zapisIncident(env.DB, stav, navrh);
-  if (!zapsany) return;
-  await oznamIncident(env, teamId, navrh, zapsany);
-  logger.info({ module: M, teamId }, `incident ${navrh.kind}, pachatel ${navrh.culpritType}, stop nalezeno ${zapsany.nalezeneStopy.length}`);
+
+  // Pozitivní incident (spec 4d, 4e, Task 5): vlastní los s vlastním rng streamem
+  // ("pozitivni|…", nezávislý na "incident|…" a "situace|…" výš), aby přidání tohohle
+  // losu neposunulo žádný existující seedovaný test. Běží bez ohledu na to, jestli výš
+  // padl problém nebo situace - hezká věc a průšvih se nevylučují. Neběží ve dnech, kdy
+  // funkce skončila dřív kvůli útěku nebo splněné hrozbě (return výš) - tam je ta zpráva
+  // dne jediná.
+  const pozitivni = vylosujPozitivni(stav, createRng(seedFromString(`pozitivni|${teamId}|${stav.den}`)));
+  if (!pozitivni) return;
+  // Omluvný dopis patří ke konkrétnímu útěku: odvozené id z něj (katalog.ts, "dopis-{id
+  // útěku}") zabrání druhému dopisu ke stejnému útěku v jiném dni nebo sezóně - výchozí
+  // id odvozené ze dne by to nezachytilo. Ostatních sedm pozitivních kandidátů jde s
+  // výchozím id.
+  const dopisId = pozitivni.kind === "omluvny_dopis" && stav.utekBezDopisu ? `dopis-${stav.utekBezDopisu.id}` : undefined;
+  const zapsanyPozitivni = await zapisIncident(env.DB, stav, pozitivni, dopisId);
+  if (!zapsanyPozitivni) return;
+  await oznamIncident(env, teamId, pozitivni, zapsanyPozitivni);
+  logger.info({ module: M, teamId }, `pozitivní incident ${pozitivni.kind}`);
 }
