@@ -63,7 +63,8 @@ const SEZONA = "(SELECT number FROM seasons WHERE status = 'active' ORDER BY num
 type RadekIncidentu = {
   id: string; kind: string; category: KategorieIncidentu; status: StavIncidentu; severity: number; game_date: string;
   deadline: string | null; culprit_type: TypPachatele | null; culprit_player_id: string | null; culprit_revealed: number;
-  loss: string; recovered: number; resolved_on: string | null; accused: string; inzerat: number; stopy_hospody: string | null;
+  loss: string; recovered: number; resolved_on: string | null; police_result_on: string | null; accused: string;
+  inzerat: number; stopy_hospody: string | null;
 };
 
 function pridejVztah(mapa: Map<string, Set<string>>, a: string, b: string): void {
@@ -80,7 +81,7 @@ export async function nactiKontextHospody(db: D1Database, t: TymHospody, hraciId
     db.prepare(`SELECT t.name, ${SEZONA} AS sezona FROM teams t WHERE t.id = ?`).bind(t.teamId),
     db.prepare(
       `SELECT i.id, i.kind, i.category, i.status, i.severity, i.game_date, i.deadline, i.culprit_type, i.culprit_player_id,
-              i.culprit_revealed, i.loss, i.recovered, i.resolved_on, i.accused,
+              i.culprit_revealed, i.loss, i.recovered, i.resolved_on, i.police_result_on, i.accused,
               EXISTS (SELECT 1 FROM equipment_listings el WHERE el.incident_id = i.id) AS inzerat,
               (SELECT group_concat(replace(c.id, i.id || '-hospoda-', ''), ',') FROM club_incident_clues c
                 WHERE c.incident_id = i.id AND c.source = 'hospoda') AS stopy_hospody
@@ -149,6 +150,7 @@ export async function nactiKontextHospody(db: D1Database, t: TymHospody, hraciId
       culpritType: r.culprit_type, culpritPlayerId: r.culprit_player_id, odhalen: r.culprit_revealed === 1,
       deadline: r.deadline, ztraty: nactiZtraty(r.loss), recovered: r.recovered === 1, inzerat: r.inzerat === 1,
       uzavrenoDne: r.status === "uzavreny" && r.resolved_on ? r.resolved_on.slice(0, 10) : null,
+      policeResultOn: r.police_result_on ? r.police_result_on.slice(0, 10) : null,
       obvineni: nactiObvineni(r.accused),
       stopyHospody: r.stopy_hospody ? r.stopy_hospody.split(",") : [],
     })),

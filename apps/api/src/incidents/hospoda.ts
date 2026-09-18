@@ -74,6 +74,8 @@ export interface IncidentVHospode {
   inzerat: boolean;
   /** `YYYY-MM-DD` uzavření, `null` u neuzavřeného. */
   uzavrenoDne: string | null;
+  /** `YYYY-MM-DD` dne, kdy policie oznámila výsledek šetření (`club_incidents.police_result_on`), `null` bez policie. */
+  policeResultOn: string | null;
   obvineni: Obvineni[];
   /** Klíče stop z hospody, které incident už má (`nabizi`, `chlubi`, `drb-{hráč}`). */
   stopyHospody: string[];
@@ -426,25 +428,24 @@ function hospodskyVKadru(k: KontextHospody): boolean {
  * včetně soupeřů, jménem objevit nesmí, proto se kontroluje `odhalen`.
  *
  * Hospodský v kádru a trenér u stolu si rundy všimnou spíš (spec 9): šance se násobí
- * `RUNDY_NASOBEK_SVEDKA`, ale ne dvakrát, když platí obojí najednou — jde o dva svědky
+ * `RUNDY_NASOBEK_SVEDKA`, ale ne dvakrát, když platí obojí najednou, jde o dva svědky
  * téhož druhu, ne o kombinaci. Násobek mění jen práh před losem, ne pořadí losů.
  *
  * Bere `incidenty` (už profiltrované na `i.den < k.den`, stejně jako u ostatních funkcí
- * v `pribehyHospody`), ne `k.incidenty` přímo — hospoda mluví jen o tom, co se stalo, ne
+ * v `pribehyHospody`), ne `k.incidenty` přímo, hospoda mluví jen o tom, co se stalo, ne
  * o dnešku. Spec počítá okno `RUNDY_DNI` od odhalení pachatele, ne od data incidentu:
- * `IncidentVHospode` ale datum odhalení nenese (`club_incidents` ho neukládá, jen bit
- * `culprit_revealed`), takže se tu porovnává proti `i.den` (den vzniku incidentu). U kasy
- * a tomboly je pachatel `zamestnanec` odhalený hned při vzniku, takže se to prakticky kryje;
- * jen pokud by v budoucnu šlo o pachatele odhaleného až po čase (např. hráč `p` z kádru),
- * začalo by okno běžet moc brzy. Přidání `revealed_on` sloupce je migrace, která v týhle fázi
- * nejde - bez ní se to poctivě spravit nedá, jen zaznamenat.
+ * `i.policeResultOn` (`club_incidents.police_result_on`) nese den, kdy policie oznámila
+ * výsledek šetření, a u krádeže vyřešené policií až po pár dnech je to skutečný den
+ * odhalení. U kasy a tomboly, kde je pachatel `zamestnanec`, je `culprit_revealed`
+ * pravda hned od vzniku: `policeResultOn` zůstává `null` a okno se počítá od `i.den`,
+ * což je tou dobou totéž.
  */
 function rundy(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody[], incidenty: readonly IncidentVHospode[], out: VysledekHospody): void {
   const nasobek = hospodskyVKadru(k) || v.trener ? RUNDY_NASOBEK_SVEDKA : 1;
   for (const h of mistni) {
     const inc = incidenty.find((i) =>
       i.odhalen && i.culpritPlayerId === h.playerId
-      && (PENEZNI_KINDY as readonly string[]).includes(i.kind) && dnyMezi(i.den, k.den) <= RUNDY_DNI);
+      && (PENEZNI_KINDY as readonly string[]).includes(i.kind) && dnyMezi(i.policeResultOn ?? i.den, k.den) <= RUNDY_DNI);
     if (!inc || zaznelo(v, "utraci_za_rundy", inc.id)) continue;
     const rng = los(k, "rundy", h.playerId);
     if (!vyjde(rng, Math.min(1, RUNDY_SANCE * nasobek), v)) continue;

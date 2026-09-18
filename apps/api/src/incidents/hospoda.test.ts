@@ -30,7 +30,7 @@ function incident(o: Partial<IncidentVHospode> = {}): IncidentVHospode {
     id: "inc-1", kind: "vloupani_sklad", category: "kradez", status: "otevreny", severity: 1, den: "2026-09-14",
     culpritType: "hrac", culpritPlayerId: "p", odhalen: false, deadline: "2026-09-21T16:00:00.000Z",
     ztraty: [{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 2 }],
-    recovered: false, inzerat: false, uzavrenoDne: null, obvineni: [], stopyHospody: [], ...o,
+    recovered: false, inzerat: false, uzavrenoDne: null, policeResultOn: null, obvineni: [], stopyHospody: [], ...o,
   };
 }
 
@@ -354,6 +354,16 @@ describe("pachatel peněžního incidentu platí rundy (spec 9)", () => {
   it("u nepeněžního incidentu se rundy neplatí", () => {
     const k = kontext({ incidenty: [incident({ id: "i1", kind: "vloupani_sklad", culpritPlayerId: SVEDEK.id, odhalen: true, den: "2026-09-15" })] });
     expect(pribehyHospody([host(SVEDEK)], k, JISTE).pribehy.filter((p) => p.type === "utraci_za_rundy")).toEqual([]);
+  });
+
+  it("krádež odhalená policií až po dnech kupuje rundu do deseti dnů od odhalení, ne od činu", () => {
+    // Čin je starý přes tři týdny (mimo okno od `den`), ale policie výsledek oznámila
+    // teprve před šesti dny (uvnitř okna od `policeResultOn`).
+    const k = kontext({ incidenty: [incident({
+      id: "i1", kind: "kasa_obcerstveni", culpritPlayerId: SVEDEK.id, odhalen: true,
+      den: "2026-08-20", policeResultOn: "2026-09-10",
+    })] });
+    expect(pribehyHospody([host(SVEDEK)], k, JISTE).pribehy.find((p) => p.type === "utraci_za_rundy")?.text).toContain("Pepa Kos");
   });
 });
 
