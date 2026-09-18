@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRng, type Rng } from "../generators/rng";
 import { CINY_HRACE, cinHrace, KATALOG, KATALOG_PODLE_KIND, muzeOhlasit } from "./katalog";
 import { hrac, PROBLEMOVY, stavKlubu } from "./testovaci-stav";
+import type { StavKlubu } from "./typy";
 
 const def = (kind: string) => {
   const d = KATALOG_PODLE_KIND.get(kind);
@@ -242,10 +243,14 @@ describe("čin ohlášený v hospodě (spec 9a)", () => {
 
 describe("peněžní krádeže ze zápasu (spec 4a)", () => {
   const sVcerejskem = (kasa: number, tombola: number) =>
-    stavKlubu({ vcera: { vyhra: true, zapasId: "m1", trzby: { kasa, tombola } } as never });
+    stavKlubu({ vcera: { vyhra: true, zapasId: "m1", trzby: { kasa, tombola } } as StavKlubu["vcera"] });
 
   it("bez včerejší tržby se kasa nekrade", () => {
     expect(def("kasa_obcerstveni").muze(sVcerejskem(0, 0))).toBe(false);
+  });
+
+  it("bez včerejší tomboly se tombola nekrade", () => {
+    expect(def("tombola").muze(sVcerejskem(5000, 0))).toBe(false);
   });
 
   it("z kasy zmizí 20 až 50 procent skutečné tržby", () => {
@@ -276,5 +281,16 @@ describe("peněžní krádeže ze zápasu (spec 4a)", () => {
       expect(def(k).spousteny).toBe(true);
       expect(def(k).vaha).toBe(0);
     }
+  });
+
+  it("tak malý rozpočet, že strop vyjde na nulu, nedá žádný incident (ne incident s nulovou částkou)", () => {
+    const s = stavKlubu({
+      rozpocet: 0,
+      vcera: { vyhra: true, zapasId: "m1", trzby: { kasa: 10000, tombola: 2000 } } as StavKlubu["vcera"],
+    });
+    proSeedy((rng) => {
+      expect(def("kasa_obcerstveni").vytvor(s, rng)).toBeNull();
+      expect(def("tombola").vytvor(s, rng)).toBeNull();
+    }, 300);
   });
 });

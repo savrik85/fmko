@@ -151,3 +151,15 @@ describe("stopy nelžou", () => {
     expect(seznamJmen(["A", "B", "C"])).toBe("A, B nebo C");
   });
 });
+
+describe("kasa a tombola mají místo, dají se vyšetřovat (spec 4a, 5b)", () => {
+  it("kasa s pachatelem z kádru vyprodukuje aspoň nějakou stopu", () => {
+    const s = stavKlubu({
+      kadr: KADR, hospodaVcera: ["a", "b"],
+      vybaveni: { area_security: 3, area_security_condition: 70 },
+      stadion: { lighting: 2, pitch_condition: 70 },
+    });
+    const vysledky = seedy(s, navrh({ kind: "kasa_obcerstveni" }));
+    expect(vysledky.flat().length).toBeGreaterThan(0);
+  });
+});

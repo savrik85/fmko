@@ -28,6 +28,9 @@ export const MISTO_INCIDENTU: Record<string, MistoIncidentu> = {
   pozar_grilu: "stanek",
   svetlice: "hriste",
   vandal: "hriste",
+  // Občerstvení i tombola se prodávají u stánku.
+  kasa_obcerstveni: "stanek",
+  tombola: "stanek",
 };
 
 /** Kolik pokrytí kamer (`cameraCoverage`) místo potřebuje: 1 = kabiny a sklad, 2 = celý areál. */

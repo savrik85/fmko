@@ -324,9 +324,7 @@ export const KATALOG: DefiniceIncidentu[] = [
       const castka = castkaZTrzby(s, rng, trzba, KASA_PODIL_MIN, KASA_PODIL_MAX);
       if (castka <= 0) return null;
       return {
-        kind: "kasa_obcerstveni", category: "kradez", status: "otevreny", severity: 2,
-        culpritType: kdo.typ === "hrac" ? "hrac" : "cizi", culpritPlayerId: kdo.typ === "hrac" ? kdo.hrac.id : null,
-        culpritRevealed: false,
+        kind: "kasa_obcerstveni", category: "kradez", status: "otevreny", severity: 2, ...pachatel(kdo),
         ztraty: [{ typ: "penize", castka, zdrojZapasId: s.vcera?.zapasId ?? undefined }],
         text: text(rng, "kasa_obcerstveni", { castka: castka.toLocaleString("cs-CZ") }),
       };
@@ -344,9 +342,7 @@ export const KATALOG: DefiniceIncidentu[] = [
       const castka = castkaZTrzby(s, rng, trzba, TOMBOLA_PODIL_MIN, TOMBOLA_PODIL_MAX);
       if (castka <= 0) return null;
       return {
-        kind: "tombola", category: "kradez", status: "otevreny", severity: 2,
-        culpritType: kdo.typ === "hrac" ? "hrac" : "cizi", culpritPlayerId: kdo.typ === "hrac" ? kdo.hrac.id : null,
-        culpritRevealed: false,
+        kind: "tombola", category: "kradez", status: "otevreny", severity: 2, ...pachatel(kdo),
         ztraty: [{ typ: "penize", castka, zdrojZapasId: s.vcera?.zapasId ?? undefined }],
         text: text(rng, "tombola", { castka: castka.toLocaleString("cs-CZ") }),
       };
