@@ -623,6 +623,59 @@ export const TEXTY = {
     "Trenére, musím se vystěhovat, jinak to nestihnu. Omlouvám se.",
     "Trenére, stěhování mi vyšlo přesně na zápas. Nedorazím.",
   ],
+
+  // Pozitivní incidenty (spec 4d, 4e). Stejná pravidla jako výš, jen bez dlouhé
+  // pomlčky a bez politování — dobrá zpráva se podává stejně věcně jako špatná.
+  remeslnik_opravil: [
+    "{hrac} vzal po tréninku nářadí a spravil, co bylo rozbité. Opravené: {vec}.",
+    "{hrac} řekl, že to spraví sám, a taky to udělal. Opravené: {vec}.",
+    "{hrac} přinesl vlastní nářadí a bez řečí to dal do pořádku. Opravené: {vec}.",
+    "{hrac} se zastavil v kabině s nářadím a spravil, co šlo. Opravené: {vec}.",
+  ],
+  mechanik_dodavka: [
+    "{hrac} zajel s klubovou dodávkou k sobě do dílny a spravil ji zadarmo.",
+    "{hrac} vzal dodávku na zvedák a sám ji dal do pořádku.",
+    "{hrac} řekl, že dodávka potřebuje servis, a rovnou ho udělal.",
+    "{hrac} po tréninku otevřel kapotu dodávky a spravil ji jako novou.",
+  ],
+  hrdina: [
+    "{hrac} po cestě z tréninku uhasil začínající požár stodoly a počkal, až dorazí sbor.",
+    "{hrac} narazil na dopravní nehodu a do příjezdu záchranky sám zastavil krvácení.",
+    "{hrac} zadržel na návsi zloděje, kterého honila celá vesnice.",
+    "{hrac} vytáhl dítě z rybníka dřív, než si toho vůbec někdo všiml.",
+  ],
+  poctivy_nalezce: [
+    "{hrac} našel na hřišti zapomenutou peněženku a hned ji odevzdal na úřadě.",
+    "{hrac} objevil u kabin ztracený mobil a ještě ten večer ho doručil majiteli.",
+    "{hrac} našel v šatně cizí hodinky a rovnou je odevzdal vedení klubu.",
+    "{hrac} vrátil sousedovi ztracené doklady, přestože by si jich nikdo nevšiml.",
+  ],
+  dedictvi: [
+    "{hrac} zdědil po dědovi kus pole, prodal ho a klubu poslal {castka} Kč.",
+    "{hrac} dostal dědictví po tetě a rovnou z něj věnoval klubu {castka} Kč.",
+    "{hrac} zdědil po strýci nějaké peníze a bez okolků přispěl klubu {castka} Kč.",
+    "{hrac} po babičce zdědil úspory a klubu z nich poslal {castka} Kč.",
+  ],
+  // Zaměstnavatel dá buď levnou kategorii vybavení (varianty s {vec}), nebo rovnou
+  // peníze (varianty s {castka}) — logika si podle výsledku vybere odpovídající dvojici.
+  dar_zamestnavatele: [
+    "{hrac} pracuje u podnikatele, který věnoval klubu {castka} Kč.",
+    "{hrac} má šéfa, který se rozhodl podpořit klub částkou {castka} Kč.",
+    "{hrac} dělá pro firmu, jejíž majitel poslal klubu vybavení: {vec}.",
+    "{hrac} pracuje u obchodníka, který klubu daroval vybavení: {vec}.",
+  ],
+  anonymni_obalka: [
+    "Ve schránce ležela obálka s {castka} Kč. Kdo ji tam dal, nikdo neví.",
+    "Do klubové schránky někdo hodil obálku s {castka} Kč a beze slova zmizel.",
+    "Ráno našel kustod ve schránce obálku s {castka} Kč, anonymně.",
+    "V klubovní schránce se objevila obálka s {castka} Kč, bez lístku a bez podpisu.",
+  ],
+  omluvny_dopis: [
+    "Po letech dorazil anonymní dopis s omluvou a v obálce {castka} Kč, vrácené z toho, co kdysi klubu zmizelo.",
+    "Přišel dopis bez podpisu. Pisatel se omlouvá za starou krádež a posílá zpátky {castka} Kč.",
+    "Do klubu dorazila obálka s {castka} Kč a pár řádky omluvy za něco, co se stalo už dávno.",
+    "Po letech se ozval bývalý zloděj. V dopise byla omluva a {castka} Kč nazpátek.",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type KlicTextu = keyof typeof TEXTY;

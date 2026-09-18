@@ -70,6 +70,8 @@ export type TransactionType =
   // ZÁMĚRNĚ není v PURCHASE_TYPES: je to rozhodnutí o hráči, ne nákup, a při záporném rozpočtu
   // se trenér stejně rozhoduje sám.
   | "incident_advance"
+  // Dar klubu z pozitivního incidentu (spec 4d). Příjem, ne nákup.
+  | "incident_gift"
   // Startovné do soutěže a kauce za návrh na schůzi vedení soutěže. Stejně jako
   // disciplinary_fine ZÁMĚRNĚ nejsou v PURCHASE_TYPES — nezaplatit je nejde,
   // musí se strhnout i při záporném rozpočtu.

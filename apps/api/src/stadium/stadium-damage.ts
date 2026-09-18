@@ -257,3 +257,52 @@ export async function opravVybaveni(
     novaUroven: nova?.u ?? 0,
   };
 }
+
+/**
+ * Oprava, kterou nikdo neplatí (spec 4d, `remeslnik_opravil`). Stejně hlídaná jako placená
+ * oprava: kdo přijde druhý, nedostane nic, aby se jedna škoda neopravila dvakrát.
+ */
+export async function opravZdarma(
+  db: D1Database,
+  opts: { teamId: string; damageId: string; gameDate: string },
+): Promise<VysledekOpravy> {
+  const dmg = await db
+    .prepare("SELECT * FROM stadium_damage WHERE id = ? AND team_id = ?")
+    .bind(opts.damageId, opts.teamId)
+    .first<PoskozeniRow>()
+    .catch((e) => { logger.warn({ module: M }, `načtení bezplatné opravy ${opts.damageId}`, e); return null; });
+  if (!dmg) return { ok: false, duvod: "nenalezeno" };
+  if (dmg.repaired_at) return { ok: false, duvod: "uz_opraveno" };
+
+  const narok = await db
+    .prepare("UPDATE stadium_damage SET repaired_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ? AND repaired_at IS NULL")
+    .bind(opts.damageId)
+    .run()
+    .catch((e) => { logger.error({ module: M }, `nárok na bezplatnou opravu ${opts.damageId}`, e); return null; });
+  if ((narok?.meta?.changes ?? 0) === 0) return { ok: false, duvod: "uz_opraveno" };
+
+  // Stejný whitelist jako u placené opravy — smí se opravit i to, co rozbili hráči uvnitř.
+  const facility = OPRAVITELNE.find((k) => k === dmg.facility);
+  if (!facility) {
+    logger.error({ module: M }, `neznámé zařízení v bezplatné opravě: ${dmg.facility}`);
+    return { ok: false, duvod: "nenalezeno" };
+  }
+
+  await db
+    .prepare(`UPDATE stadiums SET ${facility} = MIN(3, ${facility} + ?) WHERE team_id = ?`)
+    .bind(dmg.levels, opts.teamId)
+    .run()
+    .catch((e) => { logger.error({ module: M }, `vrácení úrovně ${facility} (zdarma)`, e); });
+
+  const nova = await db
+    .prepare(`SELECT ${facility} AS u FROM stadiums WHERE team_id = ?`)
+    .bind(opts.teamId).first<{ u: number }>()
+    .catch((e) => { logger.warn({ module: M }, "nová úroveň po bezplatné opravě", e); return null; });
+
+  return {
+    ok: true,
+    label: FACILITY_LABELS[facility] ?? facility,
+    cost: 0,
+    novaUroven: nova?.u ?? 0,
+  };
+}

@@ -239,3 +239,35 @@ export const UTEK_MIN_DNI_DLUHU = 7;
 export const SANCE_UTEKU = 0.08;
 /** Útěk s penězi klubu sebere reputaci. */
 export const UTEK_REPUTACE = -2;
+
+/** Pozitivní incidenty (spec 4d, 4e). */
+/** Denní šance pozitivního incidentu na lidský klub (spec 4e). */
+export const SANCE_POZITIVNIHO_ZA_DEN = 0.025;
+/** Hrdina: povolání, která se k tomu hodí, a jejich náskok v losu (spec 4d). */
+export const POVOLANI_HRDINY = ["Hasič", "Záchranář", "Policista"] as const;
+export const VAHA_HRDINY = 3;
+export const HRDINA_REPUTACE = 2;
+export const HRDINA_PRIZEN = 3;
+export const HRDINA_MORALKA_KADRU = 2;
+export const NALEZCE_REPUTACE = 1;
+export const NALEZCE_PRIZEN = 1;
+/** Řemeslník opraví, co je rozbité, nebo srovná stav vybavení. */
+export const REMESLNIK_STAV = 30;
+export const POVOLANI_REMESLNIKU = [
+  "Zedník", "Tesař", "Truhlář", "Stolař", "Instalatér", "Pokrývač",
+  "Elektrikář", "Svářeč", "Kovář", "Malíř pokojů", "Opravář",
+] as const;
+export const POVOLANI_MECHANIKA = "Automechanik";
+export const MECHANIK_STAV = 40;
+export const DODAVKA_STAV_PRAH = 70;
+/** Dar zaměstnavatele: buď levná kategorie, nebo peníze. */
+export const POVOLANI_DARCE = ["Podnikatel", "Obchodník", "Mistr v továrně"] as const;
+export const LEVNE_KATEGORIE = ["bibs", "water_bottles", "coffee_maker", "training_cones"] as const;
+export const DAR_MIN_KC = 3000;
+export const DAR_MAX_KC = 10000;
+/** Anonymní obálka ve schránce. */
+export const OBALKA_MIN_KC = 1000;
+export const OBALKA_MAX_KC = 5000;
+/** Omluvný dopis vrátí část toho, co kdysi zmizelo. */
+export const DOPIS_PODIL_MIN = 20;
+export const DOPIS_PODIL_MAX = 50;
