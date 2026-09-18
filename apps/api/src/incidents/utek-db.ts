@@ -6,7 +6,7 @@
  * dnem tak nemůže odebrat hráče dvakrát.
  */
 
-import { createRng } from "../generators/rng";
+import { createRng, type Rng } from "../generators/rng";
 import { recordClubEvent } from "../fans/club-events";
 import type { Bindings } from "../index";
 import { gameExpiry } from "../lib/game-time";
@@ -19,7 +19,7 @@ import { zapisIncident } from "./dopady";
 import { smsIncidentu } from "./incident-db";
 import { SANCE_UTEKU, SMS_ROLE_KUSTOD, UTEK_MAX_VERNOST, UTEK_MIN_ROZPOCET, UTEK_REPUTACE } from "./nastaveni";
 import { text } from "./texty";
-import type { NavrhIncidentu, StavKlubu } from "./typy";
+import type { HracKlubu, NavrhIncidentu, StavKlubu } from "./typy";
 import { castkaUteku, kandidatiUteku, type SignalyUteku } from "./utek";
 
 const M = "incidents-utek";
@@ -80,26 +80,14 @@ export async function nactiSignalyUteku(db: D1Database, teamId: string, gameDate
 }
 
 /**
- * Zpracuje útěk s penězi klubu (spec 4a). Vrací `true`, když se dnes stal — den je pak
- * hotový, žádný další los se nekoná (útěk je jediná zpráva dne).
+ * Zapíše a provede útěk s penězi pro už vybraného hráče: incident, odpis peněz, odchod
+ * z kádru, úklid znalostí, reputace, klubová událost a SMS. Sdílené jádro pro organický
+ * denní los (`zpracujUtek`) i pro admin route `/admin/incidents/utek`
+ * (routes/incidents.ts), která kandidáta i `rng` dodá bez losu a bez varovných signálů —
+ * obojí ale musí dodržet stejné pořadí zápisu, incident je zámek a hráč zmizí z kádru
+ * teprve po něm.
  */
-export async function zpracujUtek(env: Bindings, stav: StavKlubu): Promise<boolean> {
-  if (stav.utekLetos) return false;
-  // Rychlá pojistka bez DB: `nactiStavKlubu` už kádr i rozpočet načetl (`h.dluhy`, `h.vernost`,
-  // `stav.rozpocet`), takže když v kádru zjevně není nikdo, kdo by mohl přijít v úvahu, není
-  // důvod pouštět dávku dvou dotazů. Tick zpracovává všechny ligy v jednom běhu, u drtivé
-  // většiny klubů bez dluhů se tahle dávka jinak spouští úplně zbytečně, každý den.
-  if (stav.rozpocet <= UTEK_MIN_ROZPOCET) return false;
-  if (!stav.kadr.some((h) => h.dluhy && h.vernost < UTEK_MAX_VERNOST)) return false;
-
-  const signaly = await nactiSignalyUteku(env.DB, stav.teamId, stav.gameDate);
-  const kandidati = kandidatiUteku(stav, signaly);
-  if (kandidati.length === 0) return false;
-
-  const rng = createRng(seedFromString(`utek|${stav.teamId}|${stav.den}`));
-  if (rng.random() >= SANCE_UTEKU) return false;
-
-  const kdo = rng.pick(kandidati);
+export async function provedUtek(env: Bindings, stav: StavKlubu, kdo: HracKlubu, rng: Rng): Promise<boolean> {
   const castka = castkaUteku(stav);
   const id = `inc-${stav.teamId}-utek_s_penezi-${stav.den}`;
   const hodnoty = { hrac: kdo.jmeno, castka: castka.toLocaleString("cs-CZ") };
@@ -155,4 +143,27 @@ export async function zpracujUtek(env: Bindings, stav: StavKlubu): Promise<boole
 
   logger.info({ module: M, teamId: stav.teamId }, `útěk s penězi, hráč ${kdo.id}, částka ${castka}`);
   return true;
+}
+
+/**
+ * Zpracuje útěk s penězi klubu (spec 4a). Vrací `true`, když se dnes stal — den je pak
+ * hotový, žádný další los se nekoná (útěk je jediná zpráva dne).
+ */
+export async function zpracujUtek(env: Bindings, stav: StavKlubu): Promise<boolean> {
+  if (stav.utekLetos) return false;
+  // Rychlá pojistka bez DB: `nactiStavKlubu` už kádr i rozpočet načetl (`h.dluhy`, `h.vernost`,
+  // `stav.rozpocet`), takže když v kádru zjevně není nikdo, kdo by mohl přijít v úvahu, není
+  // důvod pouštět dávku dvou dotazů. Tick zpracovává všechny ligy v jednom běhu, u drtivé
+  // většiny klubů bez dluhů se tahle dávka jinak spouští úplně zbytečně, každý den.
+  if (stav.rozpocet <= UTEK_MIN_ROZPOCET) return false;
+  if (!stav.kadr.some((h) => h.dluhy && h.vernost < UTEK_MAX_VERNOST)) return false;
+
+  const signaly = await nactiSignalyUteku(env.DB, stav.teamId, stav.gameDate);
+  const kandidati = kandidatiUteku(stav, signaly);
+  if (kandidati.length === 0) return false;
+
+  const rng = createRng(seedFromString(`utek|${stav.teamId}|${stav.den}`));
+  if (rng.random() >= SANCE_UTEKU) return false;
+
+  return provedUtek(env, stav, rng.pick(kandidati), rng);
 }

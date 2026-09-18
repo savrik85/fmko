@@ -17,7 +17,7 @@ import { oznamIncident, zapisIncident } from "../incidents/dopady";
 import { SLOUPCE_INCIDENTU, proAkce, type IncidentRadek } from "../incidents/incident-db";
 import { KATALOG_PODLE_KIND } from "../incidents/katalog";
 import { ozviSeObvineni } from "../incidents/krivda";
-import { MAX_OBVINENI, SRAZKA_TYDNU } from "../incidents/nastaveni";
+import { MAX_OBVINENI, SRAZKA_TYDNU, UTEK_MIN_ROZPOCET } from "../incidents/nastaveni";
 import { nactiZtraty, popisZtraty } from "../incidents/popis";
 import { SITUACE_PODLE_KIND } from "../incidents/situace";
 import { rozhodniZalohu, ukonciSituace, zalozSituaci } from "../incidents/situace-db";
@@ -26,6 +26,7 @@ import { nactiStopy } from "../incidents/stopy-db";
 import { text } from "../incidents/texty";
 import { castkaPokuty, castkaSrazky, hodnotaSkody } from "../incidents/tresty";
 import type { NavrhIncidentu } from "../incidents/typy";
+import { provedUtek } from "../incidents/utek-db";
 import { zpracujVysetrovani } from "../incidents/vysetrovani-den";
 import { AKCE_TRESTU, dostupneAkce, lzeVyslychat, nactiObvineni, stavVysetrovani } from "../incidents/vysetrovani";
 import type { Bindings } from "../index";
@@ -245,7 +246,7 @@ incidentsRouter.post("/teams/:teamId/incidents/:id/zaloha", async (c) => {
 // Jen pro ověření na testingu. Obchází šanci, cooldown, ochranu nového týmu
 // a limit otevřených problémů. Podmínky (co klub má) neobchází nikdy.
 incidentsRouter.post("/admin/incidents/force", async (c) => {
-  const body = await c.req.json<{ teamId?: string; kind?: string; playerId?: string }>()
+  const body = await c.req.json<{ teamId?: string; kind?: string; playerId?: string; castka?: number }>()
     .catch((e) => { logger.warn({ module: M }, "admin force: neplatné tělo", e); return null; });
   if (!body?.teamId || !body.kind) return c.json({ error: "Chybí teamId nebo kind" }, 400);
 
@@ -282,14 +283,38 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
 
   const stav = await nactiStavKlubu(c.env.DB, team, team.game_date, sezona.number);
   if (!stav) return c.json({ error: "Stav klubu se nepodařilo načíst" }, 500);
-  if (!def.muze(stav)) return c.json({ error: "Klub podmínky pro tenhle incident nesplňuje", kind: def.kind }, 409);
+
+  // Testovací obejití jen pro tři peněžní kindy: jejich `muze` vyžaduje včerejší tržbu
+  // (kasa, tombola), nebo najatého ekonoma (zpronevěra) — na testovacím klubu obojí
+  // často chybí. `castka` v těle requestu tenhle chybějící stav vyrobí jen pro los a
+  // podmínku i výpočet škody (`vytvor`); do DB se pořád zapisuje skutečný `stav`
+  // (níž `zapisIncident(c.env.DB, stav, ...)`), takže se tím nic reálného neobchází.
+  let stavProLos = stav;
+  if (typeof body.castka === "number" && body.castka > 0) {
+    if (def.kind === "kasa_obcerstveni" || def.kind === "tombola") {
+      stavProLos = {
+        ...stav,
+        vcera: {
+          vyhra: stav.vcera?.vyhra ?? false, doma: stav.vcera?.doma ?? false,
+          cervenaKarta: stav.vcera?.cervenaKarta ?? [], zapasId: stav.vcera?.zapasId ?? null,
+          trzby: {
+            kasa: def.kind === "kasa_obcerstveni" ? body.castka : (stav.vcera?.trzby.kasa ?? 0),
+            tombola: def.kind === "tombola" ? body.castka : (stav.vcera?.trzby.tombola ?? 0),
+          },
+        },
+      };
+    } else if (def.kind === "zpronevera_ekonoma") {
+      stavProLos = { ...stav, ekonom: stav.ekonom ?? { id: "admin-test-ekonom", jmeno: "Testovací ekonom", judgement: 0 } };
+    }
+  }
+
+  if (!def.muze(stavProLos)) return c.json({ error: "Klub podmínky pro tenhle incident nesplňuje", kind: def.kind }, 409);
 
   // Volitelně vynutit pachatele z kádru: je jediným kandidátem s nejhorší povahou.
-  let stavProLos = stav;
   if (body.playerId) {
-    const hrac = stav.kadr.find((h) => h.id === body.playerId);
+    const hrac = stavProLos.kadr.find((h) => h.id === body.playerId);
     if (!hrac) return c.json({ error: "Hráč není v kádru klubu" }, 400);
-    stavProLos = { ...stav, kadr: [{ ...hrac, alkohol: 100, disciplina: 0, vernost: 0, vztahKTrenerovi: 0 }] };
+    stavProLos = { ...stavProLos, kadr: [{ ...hrac, alkohol: 100, disciplina: 0, vernost: 0, vztahKTrenerovi: 0 }] };
   }
 
   let navrh: NavrhIncidentu | null = null;
@@ -305,6 +330,41 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
 
   await oznamIncident(c.env, team.id, navrh, zapsany);
   return c.json({ ok: true, id: zapsany.id, odhalen: zapsany.odhalen, nalezeneStopy: zapsany.nalezeneStopy, incident: navrh });
+});
+
+// ── POST /api/admin/incidents/utek ───────────────────────────────────────────
+// Jen pro ověření na testingu: útěk s penězi (`zpracujUtek`, utek-db.ts) má vlastní los
+// a tři povinné varovné signály (dluhy 7+ dní, žádost o zálohu, řeči v hospodě) — čekat
+// na jejich souběh by ověření zbytečně natahovalo. Tahle route obojí obchází a útěk
+// provede rovnou přes sdílené jádro `provedUtek`, takže pořadí zápisu (incident je zámek,
+// hráč odchází z kádru až po něm) zůstává stejné jako u organického běhu. Skutečné
+// podmínky klubu (roční limit `utekLetos`, minimální rozpočet) se neobcházejí.
+incidentsRouter.post("/admin/incidents/utek", async (c) => {
+  const body = await teloPozadavku<{ teamId?: string; playerId?: string }>(c, "admin útěk");
+  if (!body?.teamId) return c.json({ error: "Chybí teamId" }, 400);
+
+  const team = await c.env.DB.prepare("SELECT id, league_id, game_date FROM teams WHERE id = ?")
+    .bind(body.teamId).first<{ id: string; league_id: string | null; game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "admin útěk: tým", e); return null; });
+  if (!team?.game_date) return c.json({ error: "Tým nenalezen nebo nemá herní datum" }, 404);
+
+  const sezona = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+    .first<{ number: number }>()
+    .catch((e) => { logger.warn({ module: M }, "admin útěk: sezóna", e); return null; });
+  if (!sezona) return c.json({ error: "Není aktivní sezóna" }, 500);
+
+  const stav = await nactiStavKlubu(c.env.DB, team, team.game_date, sezona.number);
+  if (!stav) return c.json({ error: "Stav klubu se nepodařilo načíst" }, 500);
+  if (stav.utekLetos) return c.json({ error: "Klubu letos už jednou hráč s penězi utekl" }, 409);
+  if (stav.rozpocet <= UTEK_MIN_ROZPOCET) return c.json({ error: "Klub nemá dost rozpočtu, aby se útěk vyplatil" }, 409);
+
+  const kdo = body.playerId ? stav.kadr.find((h) => h.id === body.playerId) : stav.kadr[0];
+  if (!kdo) return c.json({ error: body.playerId ? "Hráč není v kádru klubu" : "Klub nemá žádného hráče v kádru" }, body.playerId ? 400 : 409);
+
+  const utekl = await provedUtek(c.env, stav, kdo, createRng(cryptoSeed()));
+  return utekl
+    ? c.json({ ok: true, playerId: kdo.id })
+    : c.json({ error: "Útěk se zapsat nepodařilo (incident dnes už existuje?)" }, 409);
 });
 
 // ── POST /api/admin/incidents/situace ───────────────────────────────────────
