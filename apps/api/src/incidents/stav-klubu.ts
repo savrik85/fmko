@@ -148,9 +148,12 @@ export async function nactiStavKlubu(
     db.prepare(
       "SELECT 1 AS je FROM club_incidents WHERE team_id = ? AND season_number = ? AND kind = 'utek_s_penezi' LIMIT 1",
     ).bind(teamId, seasonNumber),
+    db.prepare(
+      "SELECT id, first_name, last_name, judgement FROM staff_members WHERE team_id = ? AND role = 'ekonom' LIMIT 1",
+    ).bind(teamId),
   ]).catch((e) => { logger.warn({ module: M }, `stav klubu ${teamId}`, e); return null; });
   if (!vysledky) return null;
-  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes, rozpocetRes, situaceRes, zalohyRes, trzbyRes, utekRes] = vysledky;
+  const [stadionRes, kadrRes, zapasRes, hospodaRes, pocetRes, incidentyRes, blizkyZapasRes, recidivisteRes, rozpocetRes, situaceRes, zalohyRes, trzbyRes, utekRes, ekonomRes] = vysledky;
 
   const stadion: Record<string, number> = {};
   for (const [k, v] of Object.entries((stadionRes.results[0] ?? {}) as Record<string, unknown>)) {
@@ -191,6 +194,11 @@ export async function nactiStavKlubu(
     otevreneProblemy += r.otevrene ?? 0;
   }
 
+  const ekonomRadek = ekonomRes.results[0] as { id: string; first_name: string; last_name: string; judgement: number | null } | undefined;
+  const ekonom = ekonomRadek
+    ? { id: String(ekonomRadek.id), jmeno: `${ekonomRadek.first_name} ${ekonomRadek.last_name}`, judgement: ekonomRadek.judgement ?? 5 }
+    : null;
+
   return {
     teamId, leagueId: team.league_id, seasonNumber, gameDate, den,
     vybaveni, stadion, kadr, vcera: vceraZapas, hospodaVcera,
@@ -200,5 +208,6 @@ export async function nactiStavKlubu(
     rozpocet: cislo((rozpocetRes.results[0] as { budget?: number } | undefined)?.budget, 0),
     situace,
     utekLetos: utekRes.results.length > 0,
+    ekonom,
   };
 }

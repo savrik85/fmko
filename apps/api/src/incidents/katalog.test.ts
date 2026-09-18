@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng, type Rng } from "../generators/rng";
-import { CINY_HRACE, cinHrace, KATALOG, KATALOG_PODLE_KIND, muzeOhlasit } from "./katalog";
+import { CINY_HRACE, cinHrace, KATALOG, KATALOG_PODLE_KIND, muzeOhlasit, sanceZproneveryPodleUsudku } from "./katalog";
 import { hrac, PROBLEMOVY, stavKlubu } from "./testovaci-stav";
 import type { StavKlubu } from "./typy";
 
@@ -292,5 +292,59 @@ describe("peněžní krádeže ze zápasu (spec 4a)", () => {
       expect(def("kasa_obcerstveni").vytvor(s, rng)).toBeNull();
       expect(def("tombola").vytvor(s, rng)).toBeNull();
     }, 300);
+  });
+});
+
+describe("zpronevěra ekonoma (spec 4a)", () => {
+  const sEkonomem = (judgement: number) =>
+    stavKlubu({ ekonom: { id: "e1", jmeno: "Karel Počet", judgement }, rozpocet: 200000 });
+
+  it("bez ekonoma se nezpronevěřuje", () => {
+    expect(def("zpronevera_ekonoma").muze(stavKlubu({ ekonom: null }))).toBe(false);
+  });
+
+  it("s ekonomem se zpronevěřuje", () => {
+    expect(def("zpronevera_ekonoma").muze(sEkonomem(5))).toBe(true);
+  });
+
+  it("ekonom se špatným úsudkem má větší šanci na zpronevěru než pečlivý", () => {
+    // vahaEkonoma na DefiniceIncidentu nejde přidat (sdílené rozhraní pro celý katalog),
+    // šance se testuje přes vlastní exportovanou funkci (viz implementer-prompt-instrukce).
+    expect(sanceZproneveryPodleUsudku(2)).toBeGreaterThan(sanceZproneveryPodleUsudku(9));
+  });
+
+  it("obě jsou spouštěné a nelosují se vahou", () => {
+    const d = def("zpronevera_ekonoma");
+    expect(d.spousteny).toBe(true);
+    expect(d.vaha).toBe(0);
+  });
+
+  it("částka je 3 000 až 15 000 a nejvýš 5 procent rozpočtu", () => {
+    const castky: number[] = [];
+    proSeedy((rng) => {
+      const n = def("zpronevera_ekonoma").vytvor(sEkonomem(3), rng);
+      const z = n?.ztraty[0];
+      if (z && z.typ === "penize") castky.push(z.castka);
+    }, 300);
+    expect(castky.length).toBeGreaterThan(0);
+    expect(Math.min(...castky)).toBeGreaterThanOrEqual(3000);
+    // 5 % z rozpočtu 200 000 je 10 000, strop je pod horní hranicí 15 000.
+    expect(Math.max(...castky)).toBeLessThanOrEqual(10000);
+  });
+
+  it("pachatelem je zaměstnanec a incident je rovnou uzavřený", () => {
+    let n = null;
+    for (let seed = 1; seed <= 50 && !n; seed++) n = def("zpronevera_ekonoma").vytvor(sEkonomem(3), createRng(seed));
+    expect(n).not.toBeNull();
+    expect(n?.culpritType).toBe("zamestnanec");
+    expect(n?.culpritPlayerId).toBeNull();
+    expect(n?.culpritRevealed).toBe(true);
+    expect(n?.status).toBe("uzavreny");
+    expect(n?.text).toContain("Karel Počet");
+  });
+
+  it("chudý klub, kterému strop srazí částku pod minimum, nedá žádný incident", () => {
+    const s = stavKlubu({ ekonom: { id: "e1", jmeno: "Karel Počet", judgement: 0 }, rozpocet: 10000 });
+    proSeedy((rng) => expect(def("zpronevera_ekonoma").vytvor(s, rng)).toBeNull(), 100);
   });
 });

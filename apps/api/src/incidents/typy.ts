@@ -79,6 +79,8 @@ export interface StavKlubu {
   rozpocet: number;
   /** Aktivní životní situace: hráč.id → kind. */
   situace: ReadonlyMap<string, string>;
+  /** Najatý ekonom, kandidát na zpronevěru (spec 4a). `null`, když klub žádného nemá. */
+  ekonom: { id: string; jmeno: string; judgement: number } | null;
 }
 
 export interface NavrhIncidentu {

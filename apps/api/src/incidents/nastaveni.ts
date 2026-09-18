@@ -12,6 +12,12 @@ export const MAX_OTEVRENYCH_PROBLEMU = 1;
 export const PRAH_VAHY_PACHATELE = 1.7;
 /** Kolik pokusů o krádež je zvenku. Zbytek jsou hráči s klíčem. */
 export const PODIL_POKUSU_ZVENKU = 0.5;
+/** Zpronevěra: kolik si ekonom nechá (spec 4a), nikdy přes pětinu dvacetiny rozpočtu. */
+export const ZPRONEVERA_MIN_KC = 3000;
+export const ZPRONEVERA_MAX_KC = 15000;
+export const ZPRONEVERA_STROP_PODIL = 0.05;
+/** Denní šance, že se zpronevěra provalí. Ekonom s dobrým úsudkem krade míň. */
+export const SANCE_ZPRONEVERY = 0.02;
 /** Šance, že se spouštěný incident stane, když je spouštěč splněný. */
 export const SANCE_SPOUSTENYCH: Record<string, number> = {
   oslava_v_kabine: 0.25,
@@ -19,6 +25,7 @@ export const SANCE_SPOUSTENYCH: Record<string, number> = {
   svetlice: 0.15,
   kasa_obcerstveni: 0.25,
   tombola: 0.25,
+  zpronevera_ekonoma: SANCE_ZPRONEVERY,
 };
 /** Kolik procent skutečné tržby zmizí z kasy s občerstvením (spec 4a). */
 export const KASA_PODIL_MIN = 20;

@@ -11,7 +11,7 @@ import type { Rng } from "../generators/rng";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import {
   KASA_PODIL_MAX, KASA_PODIL_MIN, PODIL_POKUSU_ZVENKU, STROP_ZTRATY_KC, STROP_ZTRATY_PODIL,
-  TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN,
+  TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_STROP_PODIL,
 } from "./nastaveni";
 import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
 import { text } from "./texty";
@@ -108,6 +108,14 @@ function castkaZTrzby(s: StavKlubu, rng: Rng, trzba: number, min: number, max: n
   const hrube = Math.round((trzba * rng.int(min, max)) / 100);
   const strop = Math.min(Math.round(s.rozpocet * STROP_ZTRATY_PODIL), STROP_ZTRATY_KC);
   return Math.max(0, Math.min(hrube, strop));
+}
+
+/**
+ * Šance, že si ekonom toho dne přisvojí peníze (spec 4a). Čím nižší `judgement` (0–10),
+ * tím vyšší šance: los ve `vytvor`, ne `vaha` položky, spouštěné položky váhu nepoužívají.
+ */
+export function sanceZproneveryPodleUsudku(judgement: number): number {
+  return (10 - judgement) / 20;
 }
 
 function skladNavrh(s: StavKlubu, rng: Rng, kdo: Kdo): NavrhIncidentu | null {
@@ -345,6 +353,22 @@ export const KATALOG: DefiniceIncidentu[] = [
         kind: "tombola", category: "kradez", status: "otevreny", severity: 2, ...pachatel(kdo),
         ztraty: [{ typ: "penize", castka, zdrojZapasId: s.vcera?.zapasId ?? undefined }],
         text: text(rng, "tombola", { castka: castka.toLocaleString("cs-CZ") }),
+      };
+    },
+  },
+  {
+    kind: "zpronevera_ekonoma", label: "Zpronevěra ekonoma", emoji: "💸", category: "kradez", vaha: 0, spousteny: true,
+    muze: (s) => !!s.ekonom,
+    vytvor: (s, rng) => {
+      if (!s.ekonom) return null;
+      if (rng.random() >= sanceZproneveryPodleUsudku(s.ekonom.judgement)) return null;
+      const castka = Math.min(rng.int(ZPRONEVERA_MIN_KC, ZPRONEVERA_MAX_KC), Math.round(s.rozpocet * ZPRONEVERA_STROP_PODIL));
+      if (castka < ZPRONEVERA_MIN_KC) return null;
+      return {
+        kind: "zpronevera_ekonoma", category: "kradez", status: "uzavreny", severity: 2,
+        culpritType: "zamestnanec", culpritPlayerId: null, culpritRevealed: true,
+        ztraty: [{ typ: "penize", castka }],
+        text: text(rng, "zpronevera_ekonoma", { jmeno: s.ekonom.jmeno, castka: castka.toLocaleString("cs-CZ") }),
       };
     },
   },

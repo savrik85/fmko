@@ -92,6 +92,12 @@ export const TEXTY = {
     "Z tomboly zmizelo {castka} Kč. Kasička byla otevřená a prázdná.",
     "Peníze z tomboly se ztratily. Nesedí {castka} Kč.",
   ],
+  zpronevera_ekonoma: [
+    "{jmeno} si z klubové kasy odnesl {castka} Kč a beze slova skončil.",
+    "{jmeno} zmizel z klubu i s {castka} Kč, které měl na starosti.",
+    "{jmeno} nechal účetnictví v nepořádku a odešel s {castka} Kč navíc.",
+    "{jmeno} si přisvojil {castka} Kč z klubových peněz a dal výpověď.",
+  ],
   alarm_vyplasil: [
     "V noci se v areálu rozječel alarm. Zloděj utekl a nic neodnesl.",
     "Alarm vyplašil někoho, kdo se v noci dobýval do areálu. Nic nechybí.",

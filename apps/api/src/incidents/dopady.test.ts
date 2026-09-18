@@ -169,6 +169,51 @@ describe("zápis incidentu", () => {
     });
   });
 
+  describe("zpronevěra ekonoma (spec 4a)", () => {
+    const NAVRH_ZPRONEVERA: NavrhIncidentu = {
+      kind: "zpronevera_ekonoma", category: "kradez", status: "uzavreny", severity: 2,
+      culpritType: "zamestnanec", culpritPlayerId: null, culpritRevealed: true,
+      ztraty: [{ typ: "penize", castka: 5000 }], text: "Karel Počet si nechal peníze.",
+    };
+
+    it("zpronevěra pošle ekonoma zpátky do okresu stejným SQL jako výpověď", async () => {
+      const db = new FalesnaD1([
+        { sql: /UPDATE teams SET budget/, first: { budget: 200000 } },
+        { sql: /FROM staff_members/, first: { usudek: null } },
+      ]);
+      const stav = stavKlubu({ ekonom: { id: "e1", jmeno: "Karel Počet", judgement: 3 } });
+      const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH_ZPRONEVERA, "inc-ekonom");
+      expect(zapsany?.id).toBe("inc-ekonom");
+      expect(db.pocet(/INSERT INTO transactions/)).toBe(1);
+      const odchod = db.dotazy.find((d) => /UPDATE staff_members SET team_id = NULL/.test(d.sql));
+      const listedUntil = new Date(new Date(stav.gameDate).getTime() + 14 * 24 * 3600 * 1000).toISOString();
+      expect(odchod?.params).toEqual([listedUntil, "e1", "tym-a"]);
+      // Role se nuluje, protože na ní stojí unikátní index "jedna osoba na roli v klubu".
+      expect(odchod?.sql).toContain("role = NULL");
+      expect(db.pocet(/UPDATE staff_members SET team_id = NULL/)).toBe(1);
+    });
+
+    it("bez ekonoma ve stavu se nikdo neposílá pryč", async () => {
+      const db = new FalesnaD1([{ sql: /UPDATE teams SET budget/, first: { budget: 200000 } }]);
+      await zapisIncident(jakoD1(db), stavKlubu({ ekonom: null }), NAVRH_ZPRONEVERA, "inc-ekonom-2");
+      expect(db.pocet(/UPDATE staff_members SET team_id = NULL/)).toBe(0);
+    });
+
+    it("selhání odchodu ekonoma incident nezvrací", async () => {
+      const db = new FalesnaD1([{ sql: /UPDATE teams SET budget/, first: { budget: 200000 } }]);
+      const puvodniPrepare = db.prepare.bind(db);
+      db.prepare = ((sql: string) => {
+        if (/UPDATE staff_members SET team_id = NULL/.test(sql)) {
+          return { bind: () => ({ run: async () => { throw new Error("D1 výpadek"); } }) };
+        }
+        return puvodniPrepare(sql);
+      }) as typeof db.prepare;
+      const stav = stavKlubu({ ekonom: { id: "e1", jmeno: "Karel Počet", judgement: 3 } });
+      const zapsany = await zapisIncident(jakoD1(db), stav, NAVRH_ZPRONEVERA, "inc-ekonom-3");
+      expect(zapsany?.id).toBe("inc-ekonom-3");
+    });
+  });
+
   describe("zápis životní situace", () => {
     it("uloží dotčeného hráče a konec situace, škodu ani stopy neřeší", async () => {
       const db = new FalesnaD1();

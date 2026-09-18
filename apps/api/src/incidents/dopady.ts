@@ -100,6 +100,17 @@ export async function zapisIncident(
       .catch((e) => logger.warn({ module: M }, `uzavření incidentu bez škody ${id}`, e));
     return null;
   }
+
+  if (navrh.kind === "zpronevera_ekonoma" && stav.ekonom) {
+    // Ekonom, který zpronevěřil peníze, odchází z klubu: stejné SQL jako výpověď
+    // (apps/api/src/routes/staff.ts), včetně vynulování role kvůli unikátnímu indexu.
+    const listedUntil = new Date(new Date(stav.gameDate).getTime() + 14 * 24 * 3600 * 1000).toISOString();
+    await db.prepare(
+      "UPDATE staff_members SET team_id = NULL, role = NULL, hired_at = NULL, listed_until = ?, course_attribute = NULL, course_points = NULL, course_weeks_remaining = NULL WHERE id = ? AND team_id = ?",
+    ).bind(listedUntil, stav.ekonom.id, stav.teamId).run()
+      .catch((e) => logger.warn({ module: M }, `odchod ekonoma po zpronevěře ${id}`, e));
+  }
+
   // Stopy až po skutečné škodě. Vlastní seed: stejný incident dá vždy stejné stopy.
   const zdroje = await nactiZdrojeStop(db, stav.teamId, navrh.culpritType === "hrac" ? navrh.culpritPlayerId : null);
   const stopy = vygenerujStopy(stav, navrh, zdroje, createRng(seedFromString(`stopy|${id}`)));
