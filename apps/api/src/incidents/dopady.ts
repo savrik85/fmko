@@ -66,11 +66,11 @@ export async function zapisIncident(
     : await db.prepare(
       `INSERT OR IGNORE INTO club_incidents
          (id, team_id, league_id, season_number, kind, category, status, severity, game_date, deadline,
-          culprit_type, culprit_player_id, culprit_revealed, subject_player_id, ends_on, loss, text, resolved_on)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          culprit_type, culprit_player_id, culprit_staff_id, culprit_revealed, subject_player_id, ends_on, loss, text, resolved_on)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id, stav.teamId, stav.leagueId, stav.seasonNumber, navrh.kind, navrh.category, navrh.status,
-      navrh.severity, stav.gameDate, deadline, navrh.culpritType, navrh.culpritPlayerId,
+      navrh.severity, stav.gameDate, deadline, navrh.culpritType, navrh.culpritPlayerId, navrh.culpritStaffId ?? null,
       navrh.culpritRevealed ? 1 : 0, navrh.subjectPlayerId ?? null, endsOn,
       JSON.stringify(navrh.ztraty), navrh.text, resolvedOn,
     ).run().catch((e) => { logger.error({ module: M }, `zápis incidentu ${id}`, e); return null; });

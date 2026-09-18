@@ -16,7 +16,8 @@ export interface Incident {
   deadline: string | null;
   text: string;
   ztraty: string[];
-  pachatel: { playerId: string; jmeno: string | null } | null;
+  /** `playerId` je `null` u pachatele typu zaměstnanec (kasa, zpronevěra) - jméno se nikdy nesmí stát odkazem na hráče. */
+  pachatel: { playerId: string | null; jmeno: string | null } | null;
   /** Kdo čin ohlásil v hospodě (hrozící čin, nebo řeči, ze kterých nic nebylo). */
   ohlasil: { playerId: string; jmeno: string | null } | null;
   /** Koho se životní situace týká. */

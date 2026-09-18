@@ -42,17 +42,23 @@ const M = "incidents-api";
 interface IncidentRow {
   id: string; kind: string; category: string; status: string; severity: number;
   game_date: string; deadline: string | null; culprit_player_id: string | null;
+  culprit_staff_id: string | null;
   culprit_revealed: number; subject_player_id: string | null; ends_on: string | null;
   loss: string; text: string;
   resolution: string | null; resolved_on: string | null;
   jmeno: string | null; prijmeni: string | null;
   subject_jmeno: string | null; subject_prijmeni: string | null;
+  staff_jmeno: string | null; staff_prijmeni: string | null;
 }
 
 function verejnyIncident(r: IncidentRow) {
   // Životní situace mají vlastní katalog (dluhy, rozvod, ...), krádeže a poškození ten hlavní.
   const def = KATALOG_PODLE_KIND.get(r.kind) ?? SITUACE_PODLE_KIND.get(r.kind);
-  const odhalen = r.culprit_revealed === 1 && !!r.culprit_player_id;
+  const odhalenHrac = r.culprit_revealed === 1 && !!r.culprit_player_id;
+  // Pachatel typu `zamestnanec` nemá `culprit_player_id` (není to hráč), proto se odhalení
+  // pozná přes `culprit_staff_id`. Nikdy nejde o hráče, takže `playerId` v odpovědi je `null`
+  // - FE z toho jméno nesmí udělat klikatelný odkaz na hráče (žádný neexistuje).
+  const odhalenZamestnanec = r.culprit_revealed === 1 && !r.culprit_player_id && !!r.culprit_staff_id;
   // Kdo čin ohlásil v hospodě (spec 9a). Řekl to sám nahlas, jméno tajné není.
   const ohlasil = (r.status === "hrozi" || r.resolution === "nestalo_se") && r.culprit_player_id
     ? { playerId: r.culprit_player_id, jmeno: [r.jmeno, r.prijmeni].filter(Boolean).join(" ") || null }
@@ -67,9 +73,11 @@ function verejnyIncident(r: IncidentRow) {
     gameDate: r.game_date, deadline: r.deadline, text: r.text,
     ztraty: nactiZtraty(r.loss).map(popisZtraty),
     // Neodhaleného pachatele API nevrací nikdy.
-    pachatel: odhalen
+    pachatel: odhalenHrac
       ? { playerId: r.culprit_player_id as string, jmeno: [r.jmeno, r.prijmeni].filter(Boolean).join(" ") || null }
-      : null,
+      : odhalenZamestnanec
+        ? { playerId: null, jmeno: [r.staff_jmeno, r.staff_prijmeni].filter(Boolean).join(" ") || null }
+        : null,
     ohlasil,
     dotceny,
     endsOn: r.ends_on ?? null,
@@ -84,13 +92,15 @@ incidentsRouter.get("/teams/:teamId/incidents", async (c) => {
 
   const rows = await c.env.DB.prepare(
     `SELECT i.id, i.kind, i.category, i.status, i.severity, i.game_date, i.deadline,
-            i.culprit_player_id, i.culprit_revealed, i.subject_player_id, i.ends_on, i.loss, i.text, i.resolution, i.resolved_on,
+            i.culprit_player_id, i.culprit_staff_id, i.culprit_revealed, i.subject_player_id, i.ends_on, i.loss, i.text, i.resolution, i.resolved_on,
             COALESCE(p.first_name, d.first_name) AS jmeno, COALESCE(p.last_name, d.last_name) AS prijmeni,
-            sp.first_name AS subject_jmeno, sp.last_name AS subject_prijmeni
+            sp.first_name AS subject_jmeno, sp.last_name AS subject_prijmeni,
+            st.first_name AS staff_jmeno, st.last_name AS staff_prijmeni
        FROM club_incidents i
        LEFT JOIN players p ON p.id = i.culprit_player_id
        LEFT JOIN departed_players d ON d.id = i.culprit_player_id
        LEFT JOIN players sp ON sp.id = i.subject_player_id
+       LEFT JOIN staff_members st ON st.id = i.culprit_staff_id
       WHERE i.team_id = ?
         AND COALESCE(i.resolution, '') != 'bez_skody'
         AND (i.status != 'uzavreny'
@@ -106,8 +116,10 @@ incidentsRouter.get("/teams/:teamId/incidents", async (c) => {
 });
 
 type RadekDetailu = IncidentRadek & {
+  culprit_staff_id: string | null;
   jmeno: string | null; prijmeni: string | null;
   subject_jmeno: string | null; subject_prijmeni: string | null;
+  staff_jmeno: string | null; staff_prijmeni: string | null;
 };
 type HracKadruRadek = { id: string; first_name: string; last_name: string; weekly_wage: number | null };
 
@@ -120,12 +132,15 @@ incidentsRouter.get("/teams/:teamId/incidents/:id", async (c) => {
 
   const row = await db.prepare(
     `SELECT ${SLOUPCE_INCIDENTU.map((s) => `i.${s}`).join(", ")},
+            i.culprit_staff_id,
             COALESCE(p.first_name, d.first_name) AS jmeno, COALESCE(p.last_name, d.last_name) AS prijmeni,
-            sp.first_name AS subject_jmeno, sp.last_name AS subject_prijmeni
+            sp.first_name AS subject_jmeno, sp.last_name AS subject_prijmeni,
+            st.first_name AS staff_jmeno, st.last_name AS staff_prijmeni
        FROM club_incidents i
        LEFT JOIN players p ON p.id = i.culprit_player_id
        LEFT JOIN departed_players d ON d.id = i.culprit_player_id
        LEFT JOIN players sp ON sp.id = i.subject_player_id
+       LEFT JOIN staff_members st ON st.id = i.culprit_staff_id
       WHERE i.id = ? AND i.team_id = ?`,
   ).bind(incidentId, teamId).first<RadekDetailu>()
     .catch((e) => { logger.warn({ module: M }, `detail incidentu ${incidentId}`, e); return null; });
@@ -289,8 +304,11 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
   // často chybí. `castka` v těle requestu tenhle chybějící stav vyrobí jen pro los a
   // podmínku i výpočet škody (`vytvor`); do DB se pořád zapisuje skutečný `stav`
   // (níž `zapisIncident(c.env.DB, stav, ...)`), takže se tím nic reálného neobchází.
+  // Horní mez je jen rozumná pojistka proti překlepu (nekonečno, NaN, omylem o pár nul
+  // víc) — hodnota jde do `trzby.kasa`/`trzby.tombola`, ne přímo do žádné skutečné škody.
+  const ADMIN_CASTKA_STROP_KC = 1_000_000;
   let stavProLos = stav;
-  if (typeof body.castka === "number" && body.castka > 0) {
+  if (typeof body.castka === "number" && Number.isFinite(body.castka) && body.castka > 0 && body.castka <= ADMIN_CASTKA_STROP_KC) {
     if (def.kind === "kasa_obcerstveni" || def.kind === "tombola") {
       stavProLos = {
         ...stav,
@@ -304,6 +322,9 @@ incidentsRouter.post("/admin/incidents/force", async (c) => {
         },
       };
     } else if (def.kind === "zpronevera_ekonoma") {
+      // Tady je `castka` jen přepínač („je vyplněná a kladná" → vyrob ekonoma), ne částka
+      // zpronevěry: tu si `vytvor` losuje samo (ZPRONEVERA_MIN_KC až ZPRONEVERA_MAX_KC,
+      // se stropem podílu rozpočtu), nezávisle na téhle hodnotě.
       stavProLos = { ...stav, ekonom: stav.ekonom ?? { id: "admin-test-ekonom", jmeno: "Testovací ekonom", judgement: 0 } };
     }
   }

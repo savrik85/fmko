@@ -346,7 +346,7 @@ export const KATALOG: DefiniceIncidentu[] = [
         if (castka <= 0) return null;
         return {
           kind: "kasa_obcerstveni", category: "kradez", status: "uzavreny", severity: 2,
-          culpritType: "zamestnanec", culpritPlayerId: null, culpritRevealed: true,
+          culpritType: "zamestnanec", culpritPlayerId: null, culpritStaffId: s.obsluha.id, culpritRevealed: true,
           ztraty: [{ typ: "penize", castka, zdrojZapasId: s.vcera?.zapasId ?? undefined }],
           text: text(rng, "kasa_obsluha", { jmeno: s.obsluha.jmeno, castka: castka.toLocaleString("cs-CZ") }),
         };
@@ -391,7 +391,7 @@ export const KATALOG: DefiniceIncidentu[] = [
       if (castka < ZPRONEVERA_MIN_KC) return null;
       return {
         kind: "zpronevera_ekonoma", category: "kradez", status: "uzavreny", severity: 2,
-        culpritType: "zamestnanec", culpritPlayerId: null, culpritRevealed: true,
+        culpritType: "zamestnanec", culpritPlayerId: null, culpritStaffId: s.ekonom.id, culpritRevealed: true,
         ztraty: [{ typ: "penize", castka }],
         text: text(rng, "zpronevera_ekonoma", { jmeno: s.ekonom.jmeno, castka: castka.toLocaleString("cs-CZ") }),
       };

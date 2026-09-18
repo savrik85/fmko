@@ -318,6 +318,7 @@ describe("peněžní krádeže ze zápasu (spec 4a)", () => {
     expect(n).not.toBeNull();
     expect(n?.culpritType).toBe("zamestnanec");
     expect(n?.culpritPlayerId).toBeNull();
+    expect(n?.culpritStaffId).toBe("o1");
     expect(n?.culpritRevealed).toBe(true);
     expect(n?.status).toBe("uzavreny");
     expect(n?.text).toContain("Jana Pivná");
@@ -391,6 +392,7 @@ describe("zpronevěra ekonoma (spec 4a)", () => {
     expect(n).not.toBeNull();
     expect(n?.culpritType).toBe("zamestnanec");
     expect(n?.culpritPlayerId).toBeNull();
+    expect(n?.culpritStaffId).toBe("e1");
     expect(n?.culpritRevealed).toBe(true);
     expect(n?.status).toBe("uzavreny");
     expect(n?.text).toContain("Karel Počet");

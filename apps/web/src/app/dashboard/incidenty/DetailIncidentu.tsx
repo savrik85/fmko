@@ -159,7 +159,12 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
         <div>
           <SectionLabel>Vyšetřování</SectionLabel>
           {v.stav === "znamy" && i.pachatel?.jmeno ? (
-            <p className="text-sm">Pachatel: <Hrac playerId={i.pachatel.playerId} jmeno={i.pachatel.jmeno} /></p>
+            <p className="text-sm">
+              Pachatel:{" "}
+              {i.pachatel.playerId
+                ? <Hrac playerId={i.pachatel.playerId} jmeno={i.pachatel.jmeno} />
+                : <span className="text-base font-heading font-bold">{i.pachatel.jmeno}</span>}
+            </p>
           ) : podezreli.length > 0 ? (
             <p className="text-sm">
               Podezřelí:{" "}

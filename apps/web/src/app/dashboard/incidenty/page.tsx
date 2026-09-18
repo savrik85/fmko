@@ -170,9 +170,13 @@ function Karta({ incident: i }: { incident: Incident }) {
           {i.pachatel?.jmeno && (
             <div className="text-sm mt-2">
               Pachatel:{" "}
-              <Link href={`/dashboard/player/${i.pachatel.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
-                {i.pachatel.jmeno}
-              </Link>
+              {i.pachatel.playerId ? (
+                <Link href={`/dashboard/player/${i.pachatel.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
+                  {i.pachatel.jmeno}
+                </Link>
+              ) : (
+                <span className="text-base font-heading font-bold">{i.pachatel.jmeno}</span>
+              )}
             </div>
           )}
           {i.ohlasil?.jmeno && (

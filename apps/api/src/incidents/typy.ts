@@ -97,6 +97,8 @@ export interface NavrhIncidentu {
   severity: 1 | 2 | 3;
   culpritType: TypPachatele;
   culpritPlayerId: string | null;
+  /** Id zaměstnance (`staff_members.id`) u pachatele typu `zamestnanec`, jinak `null`. */
+  culpritStaffId?: string | null;
   culpritRevealed: boolean;
   /** Koho se životní situace týká (spec 4c). U krádeží a poškození `null`. */
   subjectPlayerId?: string | null;
