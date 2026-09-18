@@ -110,9 +110,22 @@ type Ztrata =
   | { typ: "vybaveni_stav"; kategorie: string; stavPred: number; stavPo: number }
   | { typ: "stadion"; damageId?: string; zarizeni: string; urovni: number; cena?: number }
   | { typ: "travnik"; pred: number; po: number }
-  | { typ: "penize"; castka: number; zdrojZapasId?: string }
-  | { typ: "hrac_odesel"; playerId: string; castka: number };
+  | { typ: "penize"; castka: number; zdrojZapasId?: string };
 ```
+
+`penize` je jediná peněžní varianta (fáze 7b). Varianta `hrac_odesel` se nezavádí: řetězec
+`hrac_odesel` už v kódu znamená něco jiného, `resolution` u životní situace ukončené jinak
+než útěkem s penězi (`situace-db.ts`), a kdyby nesla vlastní `castka`, sčítala by se v
+`hodnotaSkody` dvakrát s tou z `penize`. Který hráč utekl, nese `culprit_player_id` incidentu,
+ne `Ztrata` sama.
+
+Odepsání peněz jde přes `provedZtratu` (Část 7f) transakcí `incident_loss`, ne přímým zápisem
+do `teams.budget`. Když ta transakce selže, `provedZtratu` vrátí `null` a ztráta se do `loss`
+vůbec nezapíše. Klub tak nikdy neuvidí ztrátu, kterou ve skutečnosti neutrpěl. Nad `Ztrata.typ`
+dnes větví čtyři místa (`incidents/dopady.ts`, `incidents/tresty.ts`,
+`incidents/vysetrovani-den.ts`, `incidents/popis.ts`); jen `tresty.ts: hodnotaSkody` má
+vyčerpávající `never` strážce, který nový druh škody bez vlastní větve srazí na typecheck.
+Zbylá tři místa strážce nemají: nová varianta se tam může tiše propadnout beze změny chování.
 
 ### `club_incident_clues` (stopy)
 
@@ -239,11 +252,19 @@ otevřené incidenty, neopravené `stadium_damage`, rozpočet.
 | `vitrina` | `trophy_case` ≥ 2 | úroveň −1 (síň slávy se neukradne, poháry ano) |
 | `dodavka_pujcena` | `team_van` ≥ 1, pachatel hráč, ne v den zápasu ani den před ním | stav −30 až −60 (min. 5) |
 | `dodavka_ukradena` | `team_van` ≥ 1, pachatel cizí, velmi vzácné, ne v den zápasu ani den před ním | úroveň → 0 |
-| `kasa_obcerstveni` | včera domácí zápas **a** transakce `concession_income_self` > 0 | 20–50 % **skutečné** tržby → `recordTransaction(..., "incident_loss", -x)` |
+| `kasa_obcerstveni` | včera domácí zápas **a** transakce `concession_income_self` > 0 | 20–50 % **skutečné** tržby → `recordTransaction(..., "incident_loss", -x)`; s 20 % šancí, dřív než padne obvyklý pokus o krádež, ji vezme rovnou najatá obsluha (Část 5a) |
 | `tombola` | včera domácí zápas **a** `raffle_income` > 0 | 30–100 % skutečného příjmu z tomboly |
-| `utek_s_penezi` | hráč s aktivní situací `dluhy`, věrnost < 50, rozpočet > 20 000 Kč, max. 1× za sezónu na tým | min(10 % rozpočtu, 40 000 Kč); hráč odchází (Část 7d) |
-| `zpronevera_ekonoma` | najatý `ekonom`, váha roste s nízkým `judgement` | 3 000–15 000 Kč (max. 5 % rozpočtu); ekonom odchází z klubu |
+| `utek_s_penezi` | hráč s aktivní situací `dluhy` ≥ 7 dní, k tomu žádost o zálohu (vyřízená) a řeči v hospodě, věrnost < 50, rozpočet > 20 000 Kč, max. 1× za sezónu na tým | min(10 % rozpočtu, 40 000 Kč); hráč odchází (Část 7d); `severity: 3` → 45denní paměť kádru místo obvyklých 14 (Část 10a) |
+| `zpronevera_ekonoma` | najatý `ekonom`, váha roste s nízkým `judgement` | 3 000–15 000 Kč (max. 5 % rozpočtu); ekonom odchází z klubu; pachatel je zaměstnanec, ne hráč z kádru (Část 5a) |
 | `kradez_kamery` | `area_security` ≥ 2, pachatel cizí | `area_security` → 0; k tomuto incidentu nevzniká stopa z kamery |
+
+`kasa_obcerstveni`, `tombola` a `zpronevera_ekonoma` jsou v `KATALOG` spouštěné
+(`spousteny: true`, `vaha: 0`): nelosují se vahou proti ostatním typům, spouští je vlastní
+podmínka a vlastní denní šance (Část 4e). `utek_s_penezi` v `KATALOG` položku má taky, ale jen
+kvůli českému popisku a emoji pro UI a hospodu (Část 9): její `muze` vrací vždy `false`, takže
+se z běžného losu nikdy nevytáhne. Skutečně vzniká jako samostatný krok denního běhu
+(`zpracujUtek`, Část 6b, 13), protože stojí na běžící situaci `dluhy` a na třech povinných
+varovných signálech, ne na jednom losu, a musí umět „jednou za sezónu" (`StavKlubu.utekLetos`).
 
 `PRENOSNE = balls, jerseys, boots_stock, goalkeeper_gear, bibs, training_cones, first_aid,
 sports_drinks, water_bottles, coffee_maker, video_setup, pa_system, fan_drums, winter_gear`.
@@ -297,6 +318,10 @@ Háčky do absencí, tréninku, zápasu a chatu jsou v Části 17a–17d.
 | `anonymni_obalka` | — | 1 000–5 000 Kč |
 | `omluvny_dopis` | klubu dříve **utekl hráč s penězi** (`club_incidents` kind `utek_s_penezi`) a dopis ještě nepřišel | 20–50 % tehdejší ztráty |
 
+`omluvny_dopis` stojí na `utek_s_penezi`, hotovém od fáze 7b (Část 4a): potřebuje aspoň jeden
+takový incident v historii klubu. Sám je ale pozitivní incident, ten spolu se zbytkem téhle
+tabulky čeká na fázi 11.
+
 Řemeslník se nekříží se specem povolání (`2026-08-25-povolani-design.md`, Část 5): ten
 dává pasivní slevu na opravy, tady jde o jednorázovou opravu. Pokud tamní část bude
 implementována, `remeslnik_opravil` se nemění.
@@ -317,6 +342,12 @@ Konstanty v `incidents/nastaveni.ts`:
 | ochrana nového týmu | žádný problém ani nová situace do 3 odehraných zápasů |
 | strop peněžní ztráty | min(10 % rozpočtu, 40 000 Kč), nikdy pod nulu |
 | lhůta na rozhodnutí | 7 herních dní |
+
+Zpronevěra ekonoma je taky spouštěná, ale jinak než zápasové krádeže: běží jako denní šance
+2 % (`SANCE_ZPRONEVERY`), dokud má klub najatého ekonoma, ne šance vázaná na výsledek zápasu.
+Útěk s penězi mezi spouštěné nepatří vůbec: není to položka katalogu, ale samostatný krok
+denního běhu (Část 4a, 6b) s vlastní denní šancí 8 % (`SANCE_UTEKU`) nad kandidáty, kteří už
+splnili všechny tři varovné signály.
 
 ---
 
@@ -348,6 +379,15 @@ dat: při 1,2 byl kandidátem 89 % hráčů, při 1,7 zhruba polovina.
 Pokus o krádež: nejdřív se vybere kandidát z kádru (`vyberHrace`). S pravděpodobností 50 % (nebo vždy, když kandidát není) jde o pokus zvenku. Pokus zvenku uspěje s pravděpodobností plot × osvětlení × `theftRiskMul`; když neuspěje, nestane se nic. Úspěšného zloděje ještě může vyplašit alarm (zabezpečení ≥ 2 u skladu a kabin, = 3 u parkoviště). Zabezpečení tak krádeže ubírá, nepřesouvá je na hráče.
 
 Zaměstnanec jako pachatel: jen `kasa_obcerstveni` (najatá `obsluha`, 20 %) a `zpronevera_ekonoma`.
+
+Los na obsluhu padne dřív než obvyklý pokus o krádež (kandidát z kádru, pak zvenku): má-li
+klub obsluhu najatou, 20 % šance ji udělá pachatelem rovnou a incident se zapíše `uzavreny`,
+stejně jako u zpronevěry. Bez obsluhy se tenhle los vůbec netáhne, pořadí ostatních losů se
+tím nemění. Na rozdíl od ekonoma obsluha v klubu zůstává: kasa je jednorázová ztráta, ne
+důvod k výpovědi (tresty pro zaměstnance fáze 7b neřeší, Část 7c). `zpronevera_ekonoma`
+váhu z téhle stránky vůbec nepočítá (nepoužívá `vyberHrace` ani prahy pachatele výše):
+pachatelem je zaměstnanec, jeho šance roste s nízkým `judgement` (Část 4a, 4e), ne s
+hráčskými vlastnostmi.
 
 ### 5b) Stopy a jejich zdroje
 
@@ -534,8 +574,18 @@ jiný, existující tok chatu, ne text téhle SMS.
 - **Úspěch, cizí pachatel:** vybavení se vrátí (úroveň a stav z `loss`), **jen když má klub nižší úroveň**, jinak SMS „věci máte na služebně, ale už máte lepší" a `recovered = 1` bez změny. Aktivní inzerát incidentu (pokud v bazaru je) se stáhne, reálný čas jako u ostatních inzerátů. Zpravodaj.
 - **Úspěch, pachatel z kádru:** `culprit_revealed = 1`, incident se vrací na `otevreny` s lhůtou dnes + 7 — trest volí manažer stejně jako po každém jiném odhalení (7d). K tomu vzniknou incidentní absence: výslech za 2 dny a soud za 5 dní od odhalení, ohlášené aspoň 2 dny dopředu (17a).
 - **Pachatel `nikdo`:** výsledek `nehoda`, incident se rovnou uzavře.
-- **Cizí pachatel, ukradené peníze** (typ `penize`, fáze 7, kdy existují peněžní ztráty): vrátí se 50–100 % ukradené hotovosti jako `incident_recovery`.
+- **Cizí pachatel, ukradené peníze** (typ `penize`, fáze 7b): vrátí se 50–100 % ukradené
+  hotovosti jako `incident_recovery`, vlastním textem `policie_hotovost`: je to nalezený
+  lup, ne náhrada škody, proto jiná formulace než u vybavení. Sdílí s náhradou za rozbité
+  stejnou referenci transakce `nahrada-{id}`; v této fázi peněžní incident nikdy nenese
+  zároveň jinou škodu, takže se nepřepisují, ale kdyby v budoucnu jeden incident obsahoval
+  obojí, druhý zápis by tu první přepsal.
 - **Cizí pachatel u poškození** (rozbité se na rozdíl od krádeže vrátit nedá): náhrada 50–100 % hodnoty škody jako `incident_recovery`.
+- **`zpronevera_ekonoma` k policii vůbec nejde:** `culpritType: "zamestnanec"` dnes neumí ani
+  `vysledekPolicie`, ani `dostupneAkce` (7d): incident vzniká rovnou `uzavreny`, peníze
+  zmizí, ekonom se vrátí do okresního poolu stejnou cestou jako po výpovědi. Rozšiřovat obě
+  funkce kvůli jediné položce by byl větší zásah než uzavřít incident hned; zaměstnanec jako
+  pachatel na policii a tresty čeká, až přibude druhý případ, který to bude potřebovat.
 - **Neúspěch:** zpět na `otevreny`, lhůta dnes + 3 dny.
 
 **Udání vlastního hráče** (trest `policie`, 7d): `status = policie`, `resolution = policie`, výsledek
@@ -570,8 +620,13 @@ takže změna mezi SMS den předem a simulací by posunula omluvenky všem ostat
 **Útěk s penězi** (`utek_s_penezi`): nic se nerozhoduje, jen se to stane.
 `removePlayer(db, id, "zmizel", {toFreeAgent: false})` — `LeaveType` v
 `transfers/remove-player.ts:19` rozšířen o `"zmizel"` (`departed_players.leave_type` je volný text).
-Zpravodaj, `club_events`, reputace −2. **Warning signs jsou povinné:** situace `dluhy`
-trvá ≥ 7 dní, hráč poslal SMS o zálohu a v hospodě se o něm mluvilo (Část 9).
+`club_events`, reputace −2 (Zpravodaj do tohohle incidentu nejde, Část 7f). **Warning signs
+jsou povinné:** situace `dluhy` trvá ≥ 7 dní, hráč poslal SMS o zálohu a v hospodě se o něm
+mluvilo (Část 9). Incident je zámek: zapíše se první (`INSERT OR IGNORE`), hráč zmizí z
+kádru, jen když ten zápis opravdu vytvořil řádek: druhý průchod týmž dnem tak nemůže
+odebrat hráče dvakrát. Když `removePlayer` přesto selže (hráč mezitím zmizel jinou cestou),
+peníze jsou už odepsané a incident uzavřený, takže se nesoulad neschovává jen do logu:
+zapíše se `resolution = "chyba_odchodu"`, dohledatelné dotazem.
 
 Nepoužívá se `status = 'quit'`: takový hráč dál bere mzdu (`finance-processor.ts:195`).
 
@@ -595,14 +650,16 @@ Uzavřením se `until` veřejných znalostí posune na max(`until`, dnes + 7).
 |---|---|---|
 | notifikace | vznik, výsledek policie, konec lhůty | `createNotification(..., "event", ..., "/dashboard/incidenty?id=")` |
 | SMS | vznik a výsledky | `sendSystemSMS` role Kustod / Správce hřiště / Účetní klubu / Policie ČR; hráč `sendPlayerSMS` |
-| fanoušci | závažnost ≥ 2, útěk, hrdina, vyhazov zloděje | nové `ClubEventKind`: `kradez_v_klubu`, `hrac_zlodej`, `hrac_utekl_s_penezi`, `hrdina_klubu` (`engine/fan-reactions.ts:13`, `CLUB_EVENTS`, invarianty v `fan-reactions.test.ts`) |
+| fanoušci | závažnost ≥ 2, útěk, hrdina, vyhazov zloděje | nové `ClubEventKind`: `kradez_v_klubu`, `hrac_zlodej`, `utek_s_penezi` (fáze 7b, jediné z týhle čtveřice hotové; jmenuje se stejně jako `kind` incidentu, ne `hrac_utekl_s_penezi`), `hrdina_klubu` (`engine/fan-reactions.ts:13`, `CLUB_EVENTS`, invarianty v `fan-reactions.test.ts`) |
 | reputace | útěk −2, usvědčený zloděj −1, hrdina +2, nálezce +1 | `applyReputationDelta`, nový zdroj `"incident"` (`lib/reputation.ts:14`) |
 | obec | přízeň, důvěra, historie, petice, investice, brigády, starosta | Část 17e |
-| Zpravodaj | závažnost ≥ 2, útěk, výsledek policie, hrdina | `news` typ `incident` (celá liga), `KVOTY` a `NEWS_ICONS` v `news/feed.ts` |
+| Zpravodaj | závažnost ≥ 2, výsledek policie, hrdina | `news` typ `incident` (celá liga), `KVOTY` a `NEWS_ICONS` v `news/feed.ts`. Útěk s penězi (fáze 7b) do Zpravodaje nejde: incident se ohlašuje sám SMS Kustoda (Část 11), samostatná zpráva by řekla totéž dvakrát. |
 | finance | nové typy | `TransactionType`: `incident_loss`, `incident_recovery`, `incident_fine`, `incident_deduction`, `incident_advance`, `incident_gift` + `TXN_LABELS`/`TXN_ICONS` (FE), hlídá `transaction-labels.test.ts` |
 
 Fáze 2: jen SMS, notifikace a transakce `incident_fine`, `incident_deduction`, `incident_recovery`.
-Reputace, Zpravodaj, fanoušci, obec a atributy manažera přijdou ve fázích 3, 8 a 9.
+Reputace, Zpravodaj, fanoušci, obec a atributy manažera přijdou ve fázích 3, 8 a 9. Fáze 7b
+přidává `incident_loss` (kasa, tombola, zpronevěra, útěk) a novou větev `incident_recovery`
+pro vrácenou hotovost (7c); `incident_gift` čeká na pozitivní katalog fáze 11.
 
 ---
 
@@ -655,13 +712,16 @@ a návštěva s trenérem téhož dne poslaly manažerovi SMS o ničem.
 | `chlubi_se` | pachatel krádeže nebo poškození, jen u **neuzavřeného** incidentu, sedí v hospodě do 10 dnů od činu, alkohol ≥ 60; šance 20 % (temperament ≥ 65 ×1,5) | „Po šestém pivu se Franta pochlubil, že za ty dresy dostal pětikilo." → u dosud neodhaleného pachatele stopa `hospoda` síly **3** s `points_to` → pachatel známý; u už odhaleného jen text v deníku, bez nové stopy a bez SMS |
 | `ohlasuje_cin` | návštěvník s alkoholem ≥ 70 (platí stejně i pro obviněného) a buď váhou pachatele nad prahem (5a), nebo kdo obvinění zapřel (stejné pravidlo jako `stezuje_si_na_trenera`), nebo komu trenér odmítl zálohu (Část 5a, 7c); šance 10 % | „Franta u pultu vykládal, že si zítra ty míče ze skladu odnese, stejně je nikdo nepotřebuje." → **hrozící incident** (9a). Čin jen z `vloupani_sklad`, `vitrina`, `dodavka_pujcena`, `koleje_trakturek` a `kopnute_dvere` (ten jen za zapřené obvinění, váha 3×, bez podmínky červené karty) a jen když klub podmínky (4a, 4b) skutečně splňuje |
 | `pije_na_sekeru` | hráč s běžící situací `dluhy` sedí v hospodě; šance 50 % (`SEKERA_SANCE`), nejvýš jednou za večer na hráče | „Hospodský už {hráč} nechce nalévat na sekeru." → jen text a varování v deníku, žádná stopa ani efekt; incident v zápisu odkazuje na `idSituaci` daného hráče, aby šel z deníku otevřít |
+| `utraci_za_rundy` | odhalený pachatel peněžního incidentu (`kasa_obcerstveni` nebo `tombola`) sedí v hospodě do 10 dnů od odhalení (`RUNDY_DNI`); šance 30 % (`RUNDY_SANCE`), hospodský v kádru nebo trenér u stolu × 2, obojí najednou se nenásobí (`RUNDY_NASOBEK_SVEDKA`), jedna runda za večer | jen text v deníku, žádné efekty, žádná nová stopa |
 
-`utraci_za_rundy` (pachatel peněžního incidentu platí rundu, hospodský v kádru ×2, trenér
-v hospodě ×2) čeká na fázi 7b: peněžní incidenty ve fázi 7a ještě neexistují. `pije_na_sekeru`
-a odmítnutá záloha jako další spouštěč `ohlasuje_cin` jsou hotové (tabulka výše, Část 5a, 7c).
-`KontextHospody` k `situace` (hráč → kind) nese ještě `idSituaci` (hráč → id jeho vlastní
-situace): bez něj by při dvou souběžných situacích `dluhy` v jednom klubu mohl `pije_na_sekeru`
-odkázat na incident jiného hráče.
+`utraci_za_rundy` je hotové (fáze 7b). Platí jen u `kasa_obcerstveni` a `tombola`
+(`PENEZNI_KINDY`); `utek_s_penezi` a `zpronevera_ekonoma` z konstrukce vypadly, ne jen šancí:
+uprchlík je pryč z klubu ten samý den, kdy peníze zmizí, a nemůže sedět u stolu, zpronevěřující
+ekonom je zaměstnanec, ne host hospody. `pije_na_sekeru` a odmítnutá záloha jako další spouštěč
+`ohlasuje_cin` jsou hotové taky (tabulka výše, Část 5a, 7c). `KontextHospody` k `situace`
+(hráč → kind) nese ještě `idSituaci` (hráč → id jeho vlastní situace): bez něj by při dvou
+souběžných situacích `dluhy` v jednom klubu mohl `pije_na_sekeru` odkázat na incident jiného
+hráče.
 
 ### 9a) Hrozící incident z opileckých řečí
 
@@ -841,6 +901,8 @@ apps/api/src/incidents/hospoda.ts            — příhody pro pub.ts (čisté)
 apps/api/src/incidents/hospoda-db.ts         — kontext hospody, výběr ohlášeného činu nad stavem klubu, zápis následků
 apps/api/src/incidents/hrozi.ts              — šance hrozícího činu po lhůtě, rozhovor (čisté)
 apps/api/src/incidents/hrozi-db.ts           — vyhodnocení hrozícího činu po lhůtě, zápis rozhovoru
+apps/api/src/incidents/utek.ts               – útěk s penězi, kandidáti a částka, čisté (fáze 7b)
+apps/api/src/incidents/utek-db.ts            – útěk s penězi, signály z DB, zápis, odchod hráče (fáze 7b)
 apps/api/src/incidents/texty.ts              — šablony textů
 apps/api/src/incidents/denni-krok.ts         — zpracujIncidentyDne
 apps/api/src/routes/incidents.ts
@@ -907,7 +969,8 @@ obec, tisk, přestupy, fanoušci, sponzoři, grémium, sezóna) jsou uvedené p�
 
 ### Na testingu
 
-- `POST /api/admin/incidents/force` pro každý kind, `curl` kontrola: incident, `equipment`/`stadiums`/`transactions` se reálně změnily, stopy odpovídají vybavení testovacího klubu. U kindů ze situačního katalogu (Část 4c) založí situaci stejnou cestou jako denní los (`zalozSituaci`), ne přes `zapisIncident` s pachatelem; `playerId` volitelný, jinak se vybere první vhodný hráč z kádru.
+- `POST /api/admin/incidents/force` pro každý kind, `curl` kontrola: incident, `equipment`/`stadiums`/`transactions` se reálně změnily, stopy odpovídají vybavení testovacího klubu. U kindů ze situačního katalogu (Část 4c) založí situaci stejnou cestou jako denní los (`zalozSituaci`), ne přes `zapisIncident` s pachatelem; `playerId` volitelný, jinak se vybere první vhodný hráč z kádru. U tří peněžních kindů (`kasa_obcerstveni`, `tombola`, `zpronevera_ekonoma`, fáze 7b), jejichž `muze` vyžaduje včerejší tržbu nebo najatého ekonoma, přijme tělo requestu volitelné `castka`: kladné číslo tenhle chybějící stav vyrobí jen pro los a výpočet škody, do DB se pořád zapisuje skutečný stav klubu.
+- `POST /api/admin/incidents/utek` `{teamId, playerId?}` (fáze 7b): obchází los i tři povinné varovné signály útěku s penězi (Část 4a) a provede ho rovnou přes stejné jádro jako organický běh (`provedUtek`); pořadí zápisu (incident nejdřív, odchod hráče až po něm) zůstává stejné. Skutečné podmínky klubu (roční limit, minimální rozpočet) se neobcházejí; bez týhle routy by se na testingu čekalo na souběh tří podmínek najednou.
 - `POST /api/admin/incidents/situace {teamId, ukoncitTed?: boolean}`: `ukoncitTed` posune `ends_on` všech běžících situací na dnešek a hned je ukončí (`ukonciSituace`), jinak by se na testingu čekalo 21 až 35 dní.
 - Klub bez zabezpečení vs. se zabezpečením 2 → kamera jen u druhého.
 - `POST /api/admin/incidents/hospoda` `{teamId, hraci, hoste?, jiste?, ohlasi?, trener?}`: posadí hráče klubu (`hraci`) a hosty z jiných klubů (`hoste`) do dnešní hospody a vyhodnotí příhody o incidentech; `jiste` obchází losy 10–25 %, `ohlasi` vynutí, kdo ohlásí hrozící čin, `trener` zapne poslouchání. Podmínky (kdo co ví, co klub má) neobchází.
@@ -951,7 +1014,8 @@ Každá fáze samostatně: build → commit → push testing → ověření API 
    řidičák, svatba, narození dítěte, nemocný rodič), háčky do absencí, tréninku, zápasu, chatu
    a hospody (hotovo na testingu, plán `docs/superpowers/plans/2026-09-17-incidenty-faze-7a-zivotni-situace.md`).
 7b. **Peněžní krádeže**: kasa, tombola, zpronevěra ekonoma, útěk s penězi, `utraci_za_rundy`.
-   Útěk s penězi stojí na situaci `dluhy` (Část 4a), proto musí jít až po fázi 7a.
+   Útěk s penězi stojí na situaci `dluhy` (Část 4a), proto musí jít až po fázi 7a (hotovo na
+   testingu, plán `docs/superpowers/plans/2026-09-18-incidenty-faze-7b-penezni-kradeze.md`).
 8. **Obec** (17e) — přízeň a důvěra po osobnostech, historie, petice, investice, brigády, starosta v hospodě a na telefonu, pozvánky, krize jako skutečné incidenty, konec sezóny.
 9. **Tisk, fanoušci, sponzoři** (17f, 17h) — rubrika Černá kronika, otázky v rozhovorech, reportér, fanouškovské události, kampaně, transparenty, chorály, oblíbenci, sponzoři.
 10. **Přestupy, grémium, rivalové, kabina, zaměstnanci** (17g, 17i, 17j) — pověst, zájem hráčů, podpis volných hráčů, sankce, škodolibí rivalové, psycholog, atributy manažera.
