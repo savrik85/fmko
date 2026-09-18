@@ -189,7 +189,13 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
       // je jediný způsob jak měnit rozpočet. Dynamický import kvůli cyklu incidents ↔ season.
       if (z.castka <= 0) return null;
       const { recordTransaction } = await import("../season/finance-processor");
-      // Úspěch se pozná podle chybějící výjimky, ne podle vráceného čísla — nula je platný zůstatek po odečtení.
+      // Úspěch se pozná podle chybějící výjimky, ne podle vráceného čísla: nula je platný
+      // zůstatek po odečtení. Jedna skulina v tom zůstává. Když `UPDATE teams ... RETURNING`
+      // nenajde řádek týmu, vrátí recordTransaction nulu bez výjimky a bez transakce
+      // (finance-processor.ts), a my bychom zapsali ztrátu, která z rozpočtu neodešla.
+      // Od platné nuly to z návratové hodnoty odlišit nejde a kvůli případu, kdy tým zmizí
+      // uprostřed ticku, nemá smysl předělávat jediný vstup do rozpočtu. Je to tedy
+      // popsané, ne ošetřené.
       const ok = await recordTransaction(db, stav.teamId, "incident_loss", -z.castka, `Ukradená hotovost: ${popis}`, stav.gameDate, `ztrata-${incidentId}`)
         .then(() => true)
         .catch((e) => { logger.error({ module: M }, `odepsání ukradené hotovosti ${incidentId}`, e); return false; });
