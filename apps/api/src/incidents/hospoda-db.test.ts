@@ -161,12 +161,17 @@ describe("zápis následků hospody", () => {
     await zapisHospody(jakoD1(db), { ...TYM, seasonNumber: 4 }, [{ typ: "hrozi", cin }]);
     const vlozeni = db.davky[0].find((d) => /INSERT OR IGNORE INTO club_incidents/.test(d.sql));
     expect(vlozeni?.sql).toContain("'hrozi'");
-    expect(vlozeni?.params).toEqual(["inc-h", "tym-a", "liga-1", 4, "vitrina", "kradez", DNES, "2026-09-18T16:00:00.000Z", "p", cin.text]);
+    // Předposlední parametr je posel: kdo čin donesl trenérovi, ne kdo se jím chlubil v hospodě.
+    expect(vlozeni?.params).toEqual(["inc-h", "tym-a", "liga-1", 4, "vitrina", "kradez", DNES, "2026-09-18T16:00:00.000Z", "p", "d", cin.text]);
     expect(db.davky[0].some((d) => /club_incident_knowledge/.test(d.sql) && d.params.includes("pachatel"))).toBe(true);
     expect(sendPlayerSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", cin.posel, expect.stringContaining(cin.text), SMS_INCIDENTU("inc-h"));
 
-    await zapisHospody(jakoD1(new FalesnaD1()), { ...TYM, seasonNumber: 4 }, [{ typ: "hrozi", cin: { ...cin, posel: null } }]);
+    const bezPosla = new FalesnaD1();
+    await zapisHospody(jakoD1(bezPosla), { ...TYM, seasonNumber: 4 }, [{ typ: "hrozi", cin: { ...cin, posel: null } }]);
     expect(sendSystemSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", "Hospodský", expect.stringContaining(cin.text), SMS_INCIDENTU("inc-h"));
+    // Bez posla zůstane sloupec prázdný, ať UI neukáže jako ohlašovatele pachatele.
+    const bezPoslaVlozeni = bezPosla.davky[0].find((d) => /INSERT OR IGNORE INTO club_incidents/.test(d.sql));
+    expect(bezPoslaVlozeni?.params).toEqual(["inc-h", "tym-a", "liga-1", 4, "vitrina", "kradez", DNES, "2026-09-18T16:00:00.000Z", "p", null, cin.text]);
   });
 
   it("hlídaný zápis, který nic nezměnil (souběh), SMS nepošle", async () => {

@@ -47,6 +47,8 @@ interface IncidentRow {
   loss: string; text: string;
   resolution: string | null; resolved_on: string | null;
   jmeno: string | null; prijmeni: string | null;
+  reporter_player_id: string | null;
+  reporter_jmeno: string | null; reporter_prijmeni: string | null;
   subject_jmeno: string | null; subject_prijmeni: string | null;
   staff_jmeno: string | null; staff_prijmeni: string | null;
 }
@@ -59,9 +61,10 @@ function verejnyIncident(r: IncidentRow) {
   // pozná přes `culprit_staff_id`. Nikdy nejde o hráče, takže `playerId` v odpovědi je `null`
   // - FE z toho jméno nesmí udělat klikatelný odkaz na hráče (žádný neexistuje).
   const odhalenZamestnanec = r.culprit_revealed === 1 && !r.culprit_player_id && !!r.culprit_staff_id;
-  // Kdo čin ohlásil v hospodě (spec 9a). Řekl to sám nahlas, jméno tajné není.
-  const ohlasil = (r.status === "hrozi" || r.resolution === "nestalo_se") && r.culprit_player_id
-    ? { playerId: r.culprit_player_id, jmeno: [r.jmeno, r.prijmeni].filter(Boolean).join(" ") || null }
+  // Kdo čin donesl trenérovi (spec 9a) - spoluhráč, který byl v hospodě u toho. Když čin
+  // donesl hospodský, `reporter_player_id` je prázdné a řádek se neukazuje vůbec.
+  const ohlasil = (r.status === "hrozi" || r.resolution === "nestalo_se") && r.reporter_player_id
+    ? { playerId: r.reporter_player_id, jmeno: [r.reporter_jmeno, r.reporter_prijmeni].filter(Boolean).join(" ") || null }
     : null;
   // Koho se životní situace týká (spec 4c), nebo koho se týká pozitivní incident - hrdina,
   // nálezce, dárce (spec 4d). Ostatní pozitivní kindy nemají subjekt, subject_player_id je
@@ -94,13 +97,15 @@ incidentsRouter.get("/teams/:teamId/incidents", async (c) => {
 
   const rows = await c.env.DB.prepare(
     `SELECT i.id, i.kind, i.category, i.status, i.severity, i.game_date, i.deadline,
-            i.culprit_player_id, i.culprit_staff_id, i.culprit_revealed, i.subject_player_id, i.ends_on, i.loss, i.text, i.resolution, i.resolved_on,
+            i.culprit_player_id, i.culprit_staff_id, i.culprit_revealed, i.reporter_player_id, i.subject_player_id, i.ends_on, i.loss, i.text, i.resolution, i.resolved_on,
             COALESCE(p.first_name, d.first_name) AS jmeno, COALESCE(p.last_name, d.last_name) AS prijmeni,
+            rp.first_name AS reporter_jmeno, rp.last_name AS reporter_prijmeni,
             sp.first_name AS subject_jmeno, sp.last_name AS subject_prijmeni,
             st.first_name AS staff_jmeno, st.last_name AS staff_prijmeni
        FROM club_incidents i
        LEFT JOIN players p ON p.id = i.culprit_player_id
        LEFT JOIN departed_players d ON d.id = i.culprit_player_id
+       LEFT JOIN players rp ON rp.id = i.reporter_player_id
        LEFT JOIN players sp ON sp.id = i.subject_player_id
        LEFT JOIN staff_members st ON st.id = i.culprit_staff_id
       WHERE i.team_id = ?
@@ -120,6 +125,7 @@ incidentsRouter.get("/teams/:teamId/incidents", async (c) => {
 type RadekDetailu = IncidentRadek & {
   culprit_staff_id: string | null;
   jmeno: string | null; prijmeni: string | null;
+  reporter_jmeno: string | null; reporter_prijmeni: string | null;
   subject_jmeno: string | null; subject_prijmeni: string | null;
   staff_jmeno: string | null; staff_prijmeni: string | null;
 };
@@ -136,11 +142,13 @@ incidentsRouter.get("/teams/:teamId/incidents/:id", async (c) => {
     `SELECT ${SLOUPCE_INCIDENTU.map((s) => `i.${s}`).join(", ")},
             i.culprit_staff_id,
             COALESCE(p.first_name, d.first_name) AS jmeno, COALESCE(p.last_name, d.last_name) AS prijmeni,
+            rp.first_name AS reporter_jmeno, rp.last_name AS reporter_prijmeni,
             sp.first_name AS subject_jmeno, sp.last_name AS subject_prijmeni,
             st.first_name AS staff_jmeno, st.last_name AS staff_prijmeni
        FROM club_incidents i
        LEFT JOIN players p ON p.id = i.culprit_player_id
        LEFT JOIN departed_players d ON d.id = i.culprit_player_id
+       LEFT JOIN players rp ON rp.id = i.reporter_player_id
        LEFT JOIN players sp ON sp.id = i.subject_player_id
        LEFT JOIN staff_members st ON st.id = i.culprit_staff_id
       WHERE i.id = ? AND i.team_id = ?`,

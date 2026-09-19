@@ -252,11 +252,11 @@ export async function zapisHospody(
           db.prepare(
             `INSERT OR IGNORE INTO club_incidents
                (id, team_id, league_id, season_number, kind, category, status, severity, game_date, deadline,
-                culprit_type, culprit_player_id, culprit_revealed, loss, text)
-             VALUES (?, ?, ?, ?, ?, ?, 'hrozi', 1, ?, ?, 'hrac', ?, 0, '[]', ?)`,
+                culprit_type, culprit_player_id, culprit_revealed, reporter_player_id, loss, text)
+             VALUES (?, ?, ?, ?, ?, ?, 'hrozi', 1, ?, ?, 'hrac', ?, 0, ?, '[]', ?)`,
           ).bind(
             z.cin.id, t.teamId, t.leagueId, t.seasonNumber, z.cin.kind, KATALOG_PODLE_KIND.get(z.cin.kind)?.category ?? "kradez",
-            t.gameDate, z.cin.deadline, z.cin.playerId, z.cin.text,
+            t.gameDate, z.cin.deadline, z.cin.playerId, z.cin.posel?.id ?? null, z.cin.text,
           ),
         );
         puvod.push(z.cin.id);

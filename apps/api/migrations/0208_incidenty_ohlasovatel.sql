@@ -1,0 +1,11 @@
+-- 0208: Kdo čin donesl trenérovi (docs/superpowers/specs/2026-09-16-incidenty-design.md, Část 9a)
+--
+-- Aplikovat ručně:
+--   npx wrangler d1 execute prales-db-test --remote --file apps/api/migrations/0208_incidenty_ohlasovatel.sql
+-- ALTER TABLE ADD COLUMN nezná IF NOT EXISTS: při opakovaném běhu je „duplicate column" v pořádku.
+--
+-- Dosud se v UI jako ohlašovatel ukazoval `culprit_player_id`, tedy ten, kdo se činem
+-- pochlubil v hospodě. Posla, který to trenérovi skutečně donesl, si vybírá `hroziciCin`
+-- v incidents/hospoda.ts, ale nikde se neukládal - použil se jen na odeslání SMS.
+-- Prázdná hodnota znamená, že čin trenérovi nedonesl hráč, ale hospodský.
+ALTER TABLE club_incidents ADD COLUMN reporter_player_id TEXT;

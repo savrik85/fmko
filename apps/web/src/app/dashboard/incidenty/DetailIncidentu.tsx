@@ -134,10 +134,12 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
         </ul>
       )}
 
-      {i.ohlasil?.jmeno && (
+      {(hrozi || i.resolution === "nestalo_se") && (
         <div>
           <SectionLabel>Řeči z hospody</SectionLabel>
-          <p className="text-sm">Ohlásil to: <Hrac playerId={i.ohlasil.playerId} jmeno={i.ohlasil.jmeno} /></p>
+          {i.ohlasil?.jmeno
+            ? <p className="text-sm">Ohlásil to: <Hrac playerId={i.ohlasil.playerId} jmeno={i.ohlasil.jmeno} /></p>
+            : <p className="text-sm">Ohlásil to hospodský.</p>}
           {hrozi && (
             <p className="text-sm text-muted mt-1">
               {detail.hrozi?.promluvil
