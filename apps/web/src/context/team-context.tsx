@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { identifyUser, resetUser } from "@/lib/analytics";
 
 interface AuthState {
   token: string | null;
@@ -106,6 +107,11 @@ export function TeamProvider({ children }: { children: ReactNode }) {
           token: stored, userId: user.id, email: user.email,
           ...teamData, isAdmin: user.isAdmin ?? false, isLoading: false,
         });
+        identifyUser(user.id, {
+          email: user.email,
+          ...teamData,
+          isAdmin: user.isAdmin ?? false,
+        });
       })
       .catch((err: Error & { status?: number }) => {
         if (err?.status === 401) {
@@ -198,6 +204,11 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     const teamData = buildTeamData(user);
     localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
     setState({ token, userId: user.id, email: user.email, ...teamData, isAdmin: false, isLoading: false });
+    identifyUser(user.id, {
+      email: user.email,
+      ...teamData,
+      isAdmin: false,
+    });
   }
 
   function setTeam(id: string, name: string) {
@@ -211,6 +222,11 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         const teamData = buildTeamData(user);
         localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
         setState((s) => ({ ...s, ...teamData, isAdmin: user.isAdmin ?? false }));
+        identifyUser(user.id, {
+          email: user.email,
+          ...teamData,
+          isAdmin: user.isAdmin ?? false,
+        });
       }).catch((e) => console.error("setTeam refresh failed:", e));
     }
   }
@@ -220,6 +236,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     if (t) apiFetch("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${t}` } }).catch((e) => console.error("logout API call failed:", e));
     localStorage.removeItem(STORAGE_TOKEN);
     localStorage.removeItem(STORAGE_TEAM);
+    resetUser();
     setState({ ...EMPTY_AUTH_STATE, isLoading: false });
     router.replace("/login");
   }

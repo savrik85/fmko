@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import { TeamProvider } from "@/context/team-context";
 import { PushNotificationManager } from "@/components/PushNotificationManager";
 import { ErrorDialogProvider } from "@/components/ui";
+import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import "./globals.css";
 
 // Fonty leží v repozitáři, ne na Google Fonts. Build na CI dvakrát spadl na tom,
@@ -92,9 +93,11 @@ export default function RootLayout({
           safe-area odsazení, které si aplikační obal uvnitř řeší sám. Součet
           obojího dělal dokument vyšší než obrazovka a horní lišta odscrollovala. */}
       <body>
-        <TeamProvider>{children}</TeamProvider>
-        <PushNotificationManager />
-        <ErrorDialogProvider />
+        <PostHogProvider>
+          <TeamProvider>{children}</TeamProvider>
+          <PushNotificationManager />
+          <ErrorDialogProvider />
+        </PostHogProvider>
       </body>
     </html>
   );
