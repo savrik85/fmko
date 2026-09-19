@@ -699,16 +699,19 @@ async function applyResolutionAndClose(
   const absenceLine = absenceDays > 0 ? ` Hráč nebude k dispozici ${absenceDays} ${absenceDays === 1 ? "den" : absenceDays < 5 ? "dny" : "dní"}.` : "";
   const systemMsg = `💬 Konverzace ukončena ${resolution.summary}${absenceLine}`;
 
+  // Hlášku o ukončení píšeme jen k vláknům, která si otevřel hráč: ta mají
+  // jedno téma a jeho uzavření je informace. Když si píše trenér od sebe,
+  // žádné téma se nezavírá a „Konverzace ukončena" uprostřed hovoru, na
+  // který za chvíli přijde další odpověď, jen mate. Absence je výjimka,
+  // o té se trenér dozvědět musí.
+  const jeOdTrenera = scenarioId === "coach_initiated";
+  const hlasitUkonceni = !jeOdTrenera || absenceDays > 0;
+
   const stmts: D1PreparedStatement[] = [
     // Závěrečná zpráva hráče
     db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
     ).bind(uuid(), convId, playerId, senderName, finalReplyBody, JSON.stringify({ ai_generated: true, scenario_id: scenarioId, turn: state.max_replies, final: true }), now),
-
-    // System message s shrnutím
-    db.prepare(
-      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'system', 'Systém', ?, ?, ?, 1)",
-    ).bind(uuid(), convId, systemMsg, JSON.stringify({ resolution, scenario_id: scenarioId }), now),
 
     // Aplikace dopadu na hráče (morale + condition v life_context, coach_relationship přímo)
     db.prepare(
@@ -722,11 +725,22 @@ async function applyResolutionAndClose(
        WHERE id = ?`,
     ).bind(resolution.morale_delta, resolution.condition_delta, resolution.relationship_delta, playerId),
 
-    // Uzavření konverzace
+    // Uzavření konverzace. Bez systémové hlášky zůstává v přehledu poslední
+    // replika hráče, což je i tak to, co si trenér přečte.
     db.prepare(
-      "UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0, last_message_text = ?, last_message_at = ?, unread_count = unread_count + 2 WHERE id = ?",
-    ).bind(JSON.stringify(newState), systemMsg.slice(0, 100), now, convId),
+      "UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0, last_message_text = ?, last_message_at = ?, unread_count = unread_count + ? WHERE id = ?",
+    ).bind(
+      JSON.stringify(newState),
+      (hlasitUkonceni ? systemMsg : finalReplyBody).slice(0, 100),
+      now, hlasitUkonceni ? 2 : 1, convId,
+    ),
   ];
+
+  if (hlasitUkonceni) {
+    stmts.splice(1, 0, db.prepare(
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'system', 'Systém', ?, ?, ?, 1)",
+    ).bind(uuid(), convId, systemMsg, JSON.stringify({ resolution, scenario_id: scenarioId }), now));
+  }
 
   // Pokud trenér hráči schválil volno → vložíme do injuries (využíváme stávající absence systém,
   // type='obecne' je jediný povolený "neanatomický" typ, severity 'lehke' pro krátké absence)

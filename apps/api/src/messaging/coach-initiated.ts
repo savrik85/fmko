@@ -23,8 +23,19 @@ import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 const M = "coach-initiated";
 
-/** Kolik výměn trenér ↔ hráč u konverzace, kterou začal trenér. */
-const MAX_VYMEN = 2;
+/**
+ * Kolik výměn trenér ↔ hráč u konverzace, kterou začal trenér.
+ *
+ * Schválně vysoko, ne dvě jako u vláken, která si otevře hráč sám. Tam je
+ * krátký strop záměr: hráč přišel s jednou věcí a ta se má probrat a zavřít.
+ * Když si ale píše trenér od sebe, useknout mu konverzaci po třetí zprávě
+ * nedává smysl, konec si má určit sám tím, že přestane psát.
+ *
+ * Číslo tu zůstává jako pojistka proti zacyklení, ne jako herní pravidlo:
+ * konverzaci stejně zavře dřív sám model, jakmile je téma probrané
+ * (`conversation_complete`).
+ */
+const MAX_VYMEN = 30;
 
 /** Dotaz na hráče ve tvaru, jaký očekává `loadPlayerSnapshot`. */
 const PLAYER_SELECT = `
