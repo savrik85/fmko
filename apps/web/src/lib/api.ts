@@ -1,3 +1,5 @@
+import { trackEvent } from "@/lib/analytics";
+
 // API_BASE is inlined at build time from .env.production
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -27,6 +29,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const err = await res.json().catch(() => ({ error: res.statusText }));
     const error = new Error((err as { error: string }).error ?? "API error");
     (error as Error & { status: number }).status = res.status;
+    if (res.status >= 500 && typeof window !== "undefined") {
+      trackEvent("api_server_error", {
+        endpoint: path,
+        status: res.status,
+        error: (err as { error?: string })?.error,
+        page: window.location.pathname,
+      });
+    }
     throw error;
   }
   // Po úspěšné write operaci probudit team-context aby se aktualizoval
@@ -50,12 +60,24 @@ export function showError(title: string, message: string): void {
 // Wrapper pro user-iniciované akce: při chybě zobrazí dialog s API zprávou.
 // Vrací true při úspěchu, false při chybě (caller se rozhodne, jestli refreshovat).
 export async function apiAction<T>(promise: Promise<T>, fallbackMessage = "Akce se nezdařila"): Promise<boolean> {
+  const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
   try {
     await promise;
+    trackEvent("game_action", {
+      action: fallbackMessage,
+      status: "success",
+      path: currentPath,
+    });
     return true;
   } catch (e) {
     console.error(fallbackMessage + ":", e);
     const msg = (e as Error)?.message;
+    trackEvent("game_action", {
+      action: fallbackMessage,
+      status: "failed",
+      error: msg,
+      path: currentPath,
+    });
     showError(fallbackMessage, msg && msg !== "API error" ? msg : "Zkus to prosím znovu.");
     return false;
   }

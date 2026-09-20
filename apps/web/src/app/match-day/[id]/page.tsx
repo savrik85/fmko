@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { Spinner, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { WEATHER_OPTIONS, type WeatherType } from "@/components/stadium/stadium-3d/constants";
@@ -130,6 +131,7 @@ export default function MatchDayPage() {
 
   const skipMatch = async () => {
     setSkipping(true);
+    trackEvent("match_action", { action: "skip", matchId, isHome: match?.isHome });
     const tid = teamId ?? (match?.isHome ? match.home_team_id : match?.away_team_id);
     await apiFetch(`/api/matches/${matchId}/mark-seen`, {
       method: "POST",
@@ -140,6 +142,7 @@ export default function MatchDayPage() {
   };
 
   const startMatch = async () => {
+    trackEvent("match_action", { action: "watch_replay", matchId, isHome: match?.isHome });
     const tid = teamId ?? (match?.isHome ? match.home_team_id : match?.away_team_id);
     await apiFetch(`/api/matches/${matchId}/mark-seen`, {
       method: "POST",

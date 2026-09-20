@@ -3,7 +3,7 @@
 import { useEffect, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { PostHogProvider as PHProvider } from "posthog-js/react";
-import { initPostHog, trackPageView, posthog } from "@/lib/analytics";
+import { initPostHog, trackPageView, categorizePath, posthog } from "@/lib/analytics";
 
 function PostHogPageView() {
   const pathname = usePathname();
@@ -16,7 +16,14 @@ function PostHogPageView() {
       if (params) {
         url += `?${params}`;
       }
-      trackPageView(url);
+      const { normalizedPath, featureArea } = categorizePath(pathname);
+      const currentTab = searchParams?.get("tab") || null;
+
+      trackPageView(url, {
+        page_path: normalizedPath,
+        feature_area: featureArea,
+        tab: currentTab,
+      });
     }
   }, [pathname, searchParams]);
 

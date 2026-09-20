@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
@@ -432,6 +433,13 @@ function MatchPage() {
       if (res.ok) {
         setSaved(true);
         setLineupSource("explicit");
+        trackEvent("lineup_saved", {
+          formation,
+          tactic,
+          hardness,
+          presetSlot: activePreset,
+          playersCount: selected.filter(Boolean).length,
+        });
         // Backend při save s presetSlot auto-upsertuje do lineup_presets —
         // reload lokálního presets state aby tab "Sestava A prázdná" přešel na "Sestava A 4-4-2"
         if (activePreset) {
@@ -440,10 +448,14 @@ function MatchPage() {
             .catch((e) => console.warn("reload presets:", e));
         }
       }
-      else { setSaveError(res.error ?? "Nepodařilo se uložit sestavu"); }
+      else {
+        setSaveError(res.error ?? "Nepodařilo se uložit sestavu");
+        trackEvent("lineup_save_failed", { error: res.error });
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Nepodařilo se uložit sestavu";
       setSaveError(msg);
+      trackEvent("lineup_save_failed", { error: msg });
       console.error("Failed to save lineup:", e);
     }
     setSaving(false);

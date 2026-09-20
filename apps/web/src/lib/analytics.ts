@@ -6,6 +6,84 @@ const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posth
 let isInitialized = false;
 
 /**
+ * Normalizuje cestu a zařadí ji do odpovídající herní sekce.
+ * Zabraňuje fragmentaci URL s dynamickými ID v analytických přehledech.
+ */
+export function categorizePath(pathname: string): { normalizedPath: string; featureArea: string } {
+  // Nahradí UUID, ID hráčů nebo číselné ID za zástupný znak :id
+  const normalizedPath = pathname
+    .replace(/\/[a-f0-9-]{8,}(?=\/|$)/gi, "/:id")
+    .replace(/\/cm[a-z0-9_]{10,}(?=\/|$)/gi, "/:id");
+
+  let featureArea = "ostatni";
+  if (pathname === "/" || pathname === "/dashboard") {
+    featureArea = "prehled";
+  } else if (pathname.startsWith("/dashboard/match")) {
+    featureArea = "zapasy_a_taktika";
+  } else if (
+    pathname.startsWith("/dashboard/squad") ||
+    pathname.startsWith("/dashboard/training") ||
+    pathname.startsWith("/dashboard/u21")
+  ) {
+    featureArea = "tym_a_trenink";
+  } else if (pathname.startsWith("/dashboard/player")) {
+    featureArea = "detail_hrace";
+  } else if (
+    pathname.startsWith("/dashboard/transfers") ||
+    pathname.startsWith("/dashboard/watchlist")
+  ) {
+    featureArea = "prestupy_a_trh";
+  } else if (pathname.startsWith("/dashboard/equipment")) {
+    featureArea = "vybaveni_a_bazar";
+  } else if (
+    pathname.startsWith("/dashboard/finances") ||
+    pathname.startsWith("/dashboard/sponsors")
+  ) {
+    featureArea = "finance_a_sponzori";
+  } else if (pathname.startsWith("/dashboard/hospoda")) {
+    featureArea = "hospoda";
+  } else if (pathname.startsWith("/dashboard/fans")) {
+    featureArea = "fanousci_a_kotel";
+  } else if (
+    pathname.startsWith("/dashboard/klub") ||
+    pathname.startsWith("/dashboard/stadium")
+  ) {
+    featureArea = "klub_a_stadion";
+  } else if (
+    pathname.startsWith("/dashboard/obec") ||
+    pathname.startsWith("/dashboard/events")
+  ) {
+    featureArea = "zivot_v_obci";
+  } else if (pathname.startsWith("/dashboard/sazky")) {
+    featureArea = "sazky";
+  } else if (
+    pathname.startsWith("/dashboard/liga") ||
+    pathname.startsWith("/dashboard/pohar") ||
+    pathname.startsWith("/dashboard/soutez")
+  ) {
+    featureArea = "souteze_a_tabulky";
+  } else if (pathname.startsWith("/dashboard/phone")) {
+    featureArea = "telefon_a_sms";
+  } else if (
+    pathname.startsWith("/dashboard/news") ||
+    pathname.startsWith("/dashboard/novinky") ||
+    pathname.startsWith("/dashboard/redakce")
+  ) {
+    featureArea = "noviny_a_redakce";
+  } else if (pathname.startsWith("/dashboard/rozhodci")) {
+    featureArea = "rozhodci";
+  } else if (
+    pathname.startsWith("/dashboard/settings") ||
+    pathname.startsWith("/dashboard/napoveda") ||
+    pathname.startsWith("/dashboard/admin")
+  ) {
+    featureArea = "nastaveni_a_podpora";
+  }
+
+  return { normalizedPath, featureArea };
+}
+
+/**
  * Inicializuje PostHog na klientovi.
  * Bezpečně přeskočí inicializaci na serveru nebo pokud chybí API klíč.
  */
@@ -28,6 +106,8 @@ export function initPostHog(): typeof posthog | null {
       person_profiles: "always", // Sleduje anonymní i přihlášené návštěvníky a po přihlášení spojí historii
       capture_pageview: false, // V Next.js App Routeru sledujeme změny stránek v PostHogPageView
       capture_pageleave: true, // Měří přesný čas strávený na jednotlivých stránkách a odchody
+      capture_exceptions: true, // Automatické zachycení neošetřených JS chyb v prohlížeči (Error tracking)
+      capture_performance: true, // Měření Core Web Vitals a rychlosti načítání stránek
       autocapture: true, // Automaticky zaznamenává kliknutí na tlačítka, odkazy a formulářové prvky
       session_recording: {
         maskAllInputs: false,
@@ -103,13 +183,22 @@ export function trackEvent(eventName: string, properties?: Record<string, unknow
 }
 
 /**
- * Zaznamenání zobrazení stránky pro Next.js App Router.
+ * Zaznamenání zobrazení stránky pro Next.js App Router s obohacením o sekci a záložku.
  */
-export function trackPageView(url: string) {
+export function trackPageView(
+  url: string,
+  extraProperties?: {
+    page_path?: string;
+    feature_area?: string;
+    tab?: string | null;
+    [key: string]: unknown;
+  }
+) {
   if (typeof window === "undefined" || !POSTHOG_KEY) return;
   try {
     posthog.capture("$pageview", {
       $current_url: url,
+      ...extraProperties,
     });
   } catch (err) {
     console.warn("[Analytics] Chyba při trackPageView:", err);
