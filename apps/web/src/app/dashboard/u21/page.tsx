@@ -87,7 +87,6 @@ interface LeagueRound {
   }>;
 }
 
-type Tab = "kadr" | "tabulka" | "rozpis";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["kadr", "rozvoj", "tabulka", "rozpis", "akademie"] as const;
 
@@ -98,17 +97,6 @@ function formatDate(iso: string | null): string {
 
 function ini(name: string): string {
   return name.replace(/ U21$/, "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
-}
-
-function SectionTitle() {
-  return (
-    <div className="flex items-end justify-between">
-      <div>
-        <h2 className="font-heading font-bold text-xl text-ink">U21</h2>
-        <p className="text-xs text-muted">Rezervní tým mladých hráčů (do 21 let)</p>
-      </div>
-    </div>
-  );
 }
 
 export default function U21Page() {
@@ -124,7 +112,14 @@ export default function U21Page() {
   const [statsMap, setStatsMap] = useState<Map<string, PlayerStat>>(new Map());
   const [growthMap, setGrowthMap] = useState<Map<string, number>>(new Map());
   const [standings, setStandings] = useState<Standing[]>([]);
+  const [standingsLoaded, setStandingsLoaded] = useState(false);
+  const [scheduleLoaded, setScheduleLoaded] = useState(false);
+  const [standingsError, setStandingsError] = useState<string | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [selectedRound, setSelectedRound] = useState<number | null>(null);
+  const [onlyOurMatches, setOnlyOurMatches] = useState(true);
   const [rounds, setRounds] = useState<LeagueRound[]>([]);
+  const [squadLoaded, setSquadLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -149,6 +144,7 @@ export default function U21Page() {
       for (const x of seniorGrowth.growth ?? []) g.set(x.playerId, x.totalChange);
       for (const x of u21Growth.growth ?? []) g.set(x.playerId, x.totalChange);
       setGrowthMap(g);
+      setSquadLoaded(true);
     } catch (e) {
       console.error("u21 kadr load:", e);
       setError("Nepodařilo se načíst kádry.");
@@ -179,16 +175,16 @@ export default function U21Page() {
   useEffect(() => {
     if (tab !== "tabulka" || !u21LeagueId) return;
     apiFetch<{ standings: Standing[] }>(`/api/leagues/${u21LeagueId}/standings`)
-      .then((r) => setStandings(r.standings ?? []))
-      .catch((e) => console.error("fetch u21 standings:", e));
+      .then((r) => { setStandings(r.standings ?? []); setStandingsLoaded(true); setStandingsError(null); })
+      .catch((e) => { console.error("fetch u21 standings:", e); setStandingsError("Tabulku se nepodařilo načíst. Zkus záložku otevřít znovu."); });
   }, [tab, u21LeagueId]);
 
   // Load rozpis hned po zjištění U21 ligy — potřebujeme i pro „Nejbližší zápas" banner.
   useEffect(() => {
     if (!u21LeagueId || !teamId) return;
     apiFetch<{ rounds: LeagueRound[] }>(`/api/teams/${teamId}/league-schedule?leagueId=${u21LeagueId}`)
-      .then((r) => setRounds(r.rounds ?? []))
-      .catch((e) => console.error("fetch u21 rounds:", e));
+      .then((r) => { setRounds(r.rounds ?? []); setScheduleLoaded(true); })
+      .catch((e) => { console.error("fetch u21 rounds:", e); setScheduleError("Rozpis se nepodařilo načíst. Obnov stránku."); });
   }, [u21LeagueId, teamId]);
 
   const sendToU21 = async (playerId: string, mode: "permanent" | "next_match") => {
@@ -235,8 +231,7 @@ export default function U21Page() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 space-y-4">
-        <SectionTitle />
+      <div className="p-3 sm:p-4 md:p-6 space-y-3">
         <div className="flex items-center justify-center py-12"><Spinner /></div>
       </div>
     );
@@ -244,8 +239,7 @@ export default function U21Page() {
 
   if (!u21TeamId) {
     return (
-      <div className="p-4 md:p-6 space-y-4">
-        <SectionTitle />
+      <div className="p-3 sm:p-4 md:p-6 space-y-3">
         <div className="card p-6 text-center text-gray-600">
           Tvůj klub zatím nemá U21 tým. Kontaktuj správce hry.
         </div>
@@ -266,12 +260,14 @@ export default function U21Page() {
     return null;
   })();
 
-  return (
-    <div className="p-4 md:p-6 space-y-4">
-      <SectionTitle />
+  const sortedRounds = [...rounds].sort((a, b) => a.round - b.round);
+  const activeRound = selectedRound ?? nextMatch?.round.round ?? sortedRounds[0]?.round;
+  const roundIndex = sortedRounds.findIndex((r) => r.round === activeRound);
 
+  return (
+    <div className="p-3 sm:p-4 md:p-6 space-y-3">
       {/* Nejbližší zápas */}
-      {nextMatch && (
+      {nextMatch && tab === "kadr" && (
         <NextMatchBanner data={nextMatch} gameDate={ctxGameDate} />
       )}
 
@@ -280,6 +276,7 @@ export default function U21Page() {
         value={tab}
         onChange={setTab}
         ariaLabel="U21"
+        className="[&_[role=tablist]]:grid [&_[role=tablist]]:grid-cols-5 [&_[role=tablist]]:gap-0 [&_[role=tab]]:min-w-0 [&_[role=tab]]:px-1 [&_[role=tab]]:text-xs [&>div:last-child]:hidden"
         items={[
           { key: "kadr", label: "Kádr" },
           { key: "rozvoj", label: "Rozvoj" },
@@ -295,53 +292,18 @@ export default function U21Page() {
         </div>
       )}
 
-      {tab === "kadr" && (
-        <div className="grid lg:grid-cols-2 gap-4">
-          {/* A-tým — mladí hráči k odeslání */}
-          <section className="card p-3 md:p-4">
-            <h2 className="font-heading font-bold text-base mb-3">
-              A-tým: mladí hráči ({young.length})
-            </h2>
-            {young.length === 0 ? (
-              <p className="text-sm text-gray-500">Žádný hráč do 21 let v A-týmu.</p>
-            ) : (
-              <PlayerTable
-                players={young.map((p) => ({
-                  id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
-                  age: p.age, overallRating: p.overall_rating, avatar: p.avatar ?? null,
-                  nextMatchReturn: false,
-                }))}
-                statsMap={statsMap}
-                growthMap={growthMap}
-                renderActions={(p) => (
-                  <div className="flex flex-col md:flex-row gap-1 items-stretch md:items-end w-24 md:w-auto ml-auto">
-                    <button
-                      disabled={busy === p.id}
-                      onClick={() => sendToU21(p.id, "permanent")}
-                      className="px-2 py-1 text-micro bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
-                      title="Trvale do U21 dokud ho nepovoláš zpět"
-                    >→ U21</button>
-                    <button
-                      disabled={busy === p.id}
-                      onClick={() => sendToU21(p.id, "next_match")}
-                      className="px-2 py-1 text-micro bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
-                      title="Jen na nejbližší U21 zápas, pak zpět"
-                    >→ 1 zápas</button>
-                  </div>
-                )}
-              />
-            )}
-          </section>
-
+      {tab === "kadr" && !squadLoaded && !error && <div className="flex justify-center p-8"><Spinner /></div>}
+      {tab === "kadr" && squadLoaded && (
+        <div className="grid gap-4">
           {/* U21 kádr — povýšení */}
-          <section className="card p-3 md:p-4">
+          <section className="card min-w-0 p-3 md:p-4">
             <h2 className="font-heading font-bold text-base mb-3">
               U21 kádr ({u21Players.length})
             </h2>
             {u21Players.length === 0 ? (
               <p className="text-sm text-gray-500">Kádr je prázdný.</p>
             ) : (
-              <PlayerTable
+              <PlayerList
                 players={u21Players.map((p) => ({
                   id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
                   age: p.age, overallRating: p.overall_rating,
@@ -357,9 +319,45 @@ export default function U21Page() {
                       const u21Player = u21Players.find((x) => x.id === p.id);
                       if (u21Player) promoteToA(u21Player);
                     }}
-                    className="px-2 py-1 text-micro bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
+                    className="min-h-11 px-3 py-2 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
                     title="Povolat do A-týmu"
-                  >↑ A-tým</button>
+                  >↑ Povolat do áčka</button>
+                )}
+              />
+            )}
+          </section>
+
+          {/* A-tým — mladí hráči k odeslání */}
+          <section className="card min-w-0 p-3 md:p-4">
+            <h2 className="font-heading font-bold text-base mb-3">
+              A-tým: mladí hráči ({young.length})
+            </h2>
+            {young.length === 0 ? (
+              <p className="text-sm text-gray-500">Žádný hráč do 21 let v A-týmu.</p>
+            ) : (
+              <PlayerList
+                players={young.map((p) => ({
+                  id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
+                  age: p.age, overallRating: p.overall_rating, avatar: p.avatar ?? null,
+                  nextMatchReturn: false,
+                }))}
+                statsMap={statsMap}
+                growthMap={growthMap}
+                renderActions={(p) => (
+                  <div className="flex flex-wrap gap-2 items-stretch">
+                    <button
+                      disabled={busy === p.id}
+                      onClick={() => sendToU21(p.id, "permanent")}
+                      className="min-h-11 px-3 py-2 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
+                      title="Trvale do U21 dokud ho nepovoláš zpět"
+                    >→ Přesunout do U21</button>
+                    <button
+                      disabled={busy === p.id}
+                      onClick={() => sendToU21(p.id, "next_match")}
+                      className="min-h-11 px-3 py-2 text-xs bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
+                      title="Jen na nejbližší U21 zápas, pak zpět"
+                    >→ Na jeden zápas</button>
+                  </div>
                 )}
               />
             )}
@@ -367,64 +365,59 @@ export default function U21Page() {
         </div>
       )}
 
-      {tab === "tabulka" && <StandingsTable standings={standings} />}
+      {tab === "tabulka" && standingsError && <p role="alert" className="card p-4 text-sm">{standingsError}</p>}
+      {tab === "rozpis" && scheduleError && <p role="alert" className="card p-4 text-sm">{scheduleError}</p>}
+      {tab === "tabulka" && !standingsError && (standingsLoaded ? <StandingsTable standings={standings} ownTeamId={u21TeamId} /> : <p role="status" className="p-4 text-sm text-muted">{u21LeagueId ? "Načítám tabulku…" : "U21 zatím nemá přidělenou ligu."}</p>)}
 
       {confirmDialog}
 
-      {tab === "rozpis" && (
+      {tab === "rozpis" && !scheduleError && (
         <div className="space-y-3">
-          {rounds.length === 0 && (
-            <div className="card p-6 text-center text-gray-500">Rozpis se načítá nebo není k dispozici.</div>
-          )}
-          {rounds.map((r) => (
-            <div key={r.round} className="card p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm">Kolo {r.round}</span>
-                <span className="text-xs text-gray-500">{formatDate(r.scheduledAt)}</span>
-              </div>
-              <ul className="space-y-1">
-                {r.matches.map((m) => (
-                  <li key={m.id} className="flex items-center justify-between text-sm py-1 border-t border-gray-100 first:border-0">
-                    <span className="flex-1 flex items-center justify-end gap-2 min-w-0">
-                      {m.homeTeamId && !m.homeIsAi ? (
-                        <Link href={`/dashboard/team/${m.homeTeamId}`} className="truncate hover:text-pitch-600 transition-colors">
-                          {m.homeName}
-                        </Link>
-                      ) : (
-                        <span className={`truncate ${m.homeIsAi ? "text-muted" : ""}`}>{m.homeName}</span>
-                      )}
-                      <BadgePreview
-                        primary={m.homeColor || "#2D5F2D"}
-                        secondary={m.homeSecondary || "#FFFFFF"}
-                        pattern={(m.homeBadge as BadgePattern) || "shield"}
-                        initials={ini(m.homeName)}
-                        size={20}
-                      />
-                    </span>
-                    <span className="px-3 tabular-nums font-semibold">
-                      {m.status === "simulated" ? `${m.homeScore} : ${m.awayScore}` : "—"}
-                    </span>
-                    <span className="flex-1 flex items-center justify-start gap-2 min-w-0">
-                      <BadgePreview
-                        primary={m.awayColor || "#2D5F2D"}
-                        secondary={m.awaySecondary || "#FFFFFF"}
-                        pattern={(m.awayBadge as BadgePattern) || "shield"}
-                        initials={ini(m.awayName)}
-                        size={20}
-                      />
-                      {m.awayTeamId && !m.awayIsAi ? (
-                        <Link href={`/dashboard/team/${m.awayTeamId}`} className="truncate hover:text-pitch-600 transition-colors">
-                          {m.awayName}
-                        </Link>
-                      ) : (
-                        <span className={`truncate ${m.awayIsAi ? "text-muted" : ""}`}>{m.awayName}</span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+          <div className="flex gap-1 rounded-lg bg-surface p-1" role="group" aria-label="Zobrazené zápasy">
+            {[true, false].map((own) => <button key={String(own)} aria-pressed={onlyOurMatches === own} onClick={() => setOnlyOurMatches(own)} className={`min-h-11 flex-1 rounded-lg text-sm font-semibold ${onlyOurMatches === own ? "bg-pitch-500 text-white" : "text-muted"}`}>{own ? "Naše U21" : "Celá liga"}</button>)}
+          </div>
+          {!onlyOurMatches && sortedRounds.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button aria-label="Předchozí kolo" disabled={roundIndex <= 0} onClick={() => setSelectedRound(sortedRounds[roundIndex - 1].round)} className="min-h-11 min-w-11 rounded-lg bg-surface disabled:opacity-30">←</button>
+              <select aria-label="Kolo soutěže" value={activeRound} onChange={(e) => setSelectedRound(Number(e.target.value))} className="min-h-11 min-w-0 flex-1 rounded-lg border border-gray-200 bg-surface px-3 text-sm">
+                {sortedRounds.map((r) => <option key={r.round} value={r.round}>{r.round}. kolo · {formatDate(r.scheduledAt)}</option>)}
+              </select>
+              <button aria-label="Další kolo" disabled={roundIndex >= sortedRounds.length - 1} onClick={() => setSelectedRound(sortedRounds[roundIndex + 1].round)} className="min-h-11 min-w-11 rounded-lg bg-surface disabled:opacity-30">→</button>
             </div>
-          ))}
+          )}
+          {!scheduleLoaded && <p role="status" className="p-3 text-sm text-muted">{u21LeagueId ? "Načítám rozpis…" : "U21 zatím nemá přidělenou ligu."}</p>}
+          {scheduleLoaded && rounds.length === 0 && <p className="card p-4 text-sm text-muted">Rozpis zatím není k dispozici.</p>}
+          {sortedRounds.filter((r) => onlyOurMatches || r.round === activeRound).map((r) => {
+            const matches = r.matches.filter((m) => !onlyOurMatches || m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId);
+            if (!matches.length) return null;
+            return (
+              <section key={r.round} className="card overflow-hidden">
+                <div className="flex items-center justify-between bg-surface-2 px-3 py-2 text-xs">
+                  <h2 className="font-bold">{r.round}. kolo</h2><span className="text-muted">{formatDate(r.scheduledAt)}</span>
+                </div>
+                <ul className="divide-y divide-gray-200">
+                  {matches.map((m) => (
+                    <li key={m.id} className={`p-3 ${m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId ? "border-l-2 border-pitch-500" : ""}`}>
+                      <div className="space-y-2">
+                        {(["home", "away"] as const).map((side) => {
+                          const id = side === "home" ? m.homeTeamId : m.awayTeamId;
+                          const name = side === "home" ? m.homeName : m.awayName;
+                          const ai = side === "home" ? m.homeIsAi : m.awayIsAi;
+                          const score = side === "home" ? m.homeScore : m.awayScore;
+                          return <div key={side} className="flex items-center gap-2 text-sm">
+                            <span className="shrink-0"><BadgePreview primary={(side === "home" ? m.homeColor : m.awayColor) || "#2D5F2D"} secondary={(side === "home" ? m.homeSecondary : m.awaySecondary) || "#FFFFFF"} pattern={((side === "home" ? m.homeBadge : m.awayBadge) as BadgePattern) || "shield"} initials={ini(name)} size={20} /></span>
+                            <span className={`min-w-0 flex-1 break-words ${id === u21TeamId ? "font-bold text-pitch-600" : "text-ink"}`}>{id && !ai ? <Link href={`/dashboard/team/${id}`} className="hover:underline">{name}</Link> : name}</span>
+                            <span className="w-6 shrink-0 text-center font-bold tabular-nums">{m.status === "simulated" ? score ?? "—" : "—"}</span>
+                          </div>;
+                        })}
+                      </div>
+                      <div className="mt-2 text-[11px] text-muted">{m.status === "simulated" ? "Odehráno" : r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "Termín bude upřesněn"} · domácí nahoře</div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -460,7 +453,18 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
   })();
 
   return (
-    <div className="card p-4 flex flex-col sm:flex-row items-center gap-4">
+    <div className="card p-3 sm:p-4">
+      <div className="sm:hidden text-xs">
+        <div className="flex flex-wrap gap-x-2 gap-y-1 text-muted">
+          <span>Příští zápas · {formatDate(round.scheduledAt)}{timeLabel ? ` · ${timeLabel}` : ""}</span>
+          {inDaysLabel && <span className="font-semibold text-pitch-600">{inDaysLabel}</span>}
+        </div>
+        <div className="mt-1 text-sm font-semibold text-ink break-words">
+          {opp.id && !opp.isAi ? <Link href={`/dashboard/team/${opp.id}`} className="hover:underline">{opp.name}</Link> : opp.name}
+          <span className="font-normal text-muted"> · {isHome ? "doma" : "venku"}</span>
+        </div>
+      </div>
+      <div className="hidden sm:flex items-center gap-4">
       <div className="flex-shrink-0 text-center sm:text-left">
         <div className="text-micro uppercase tracking-widest text-muted font-heading">Nejbližší zápas</div>
         <div className="font-heading font-bold text-lg text-ink mt-0.5 capitalize">{dateLabel}</div>
@@ -503,13 +507,14 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
           )}
         </div>
       </div>
+      </div>
     </div>
   );
 }
 
 type StandingSortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
 
-function StandingsTable({ standings }: { standings: Standing[] }) {
+function StandingsTable({ standings, ownTeamId }: { standings: Standing[]; ownTeamId: string }) {
   const [sortKey, setSortKey] = useState<StandingSortKey>("pos");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -538,26 +543,27 @@ function StandingsTable({ standings }: { standings: Standing[] }) {
 
   const arrow = (key: StandingSortKey) => sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
 
-  const Th = ({ k, label, align = "center", bold = false }: { k: StandingSortKey; label: string; align?: "left" | "center"; bold?: boolean }) => (
+  const Th = ({ k, label, align = "center", bold = false, desktop = false }: { k: StandingSortKey; label: string; align?: "left" | "center"; bold?: boolean; desktop?: boolean }) => (
     <th
-      onClick={() => toggle(k)}
-      className={`px-3 py-2 cursor-pointer hover:text-gray-700 select-none ${align === "left" ? "text-left" : "text-center"} ${bold ? "font-bold" : ""}`}
+      aria-sort={sortKey === k ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+      className={`${desktop ? "hidden sm:table-cell" : ""} px-1 sm:px-3 py-1 hover:text-gray-700 select-none ${align === "left" ? "text-left" : "text-center"} ${bold ? "font-bold" : ""}`}
     >
-      {label}{arrow(k)}
+      <button onClick={() => toggle(k)} className="min-h-11 whitespace-nowrap" aria-label={`Řadit: ${label}`}>{label}{arrow(k)}</button>
     </th>
   );
 
   return (
-    <div className="card overflow-x-auto table-scroll">
+    <div className="card overflow-hidden">
       <table className="w-full text-sm">
+        <caption className="sr-only">Tabulka ligy U21. Z: zápasy, V: výhry, R: remízy, P: prohry, B: body.</caption>
         <thead>
           <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
             <Th k="pos" label="#" />
             <Th k="team" label="Tým" align="left" />
             <Th k="played" label="Z" />
-            <Th k="wins" label="V" />
-            <Th k="draws" label="R" />
-            <Th k="losses" label="P" />
+            <Th k="wins" label="V" desktop />
+            <Th k="draws" label="R" desktop />
+            <Th k="losses" label="P" desktop />
             <Th k="gd" label="Skóre" />
             <Th k="points" label="B" bold />
           </tr>
@@ -566,11 +572,11 @@ function StandingsTable({ standings }: { standings: Standing[] }) {
           {sorted.map((s) => (
             <tr
               key={s.pos}
-              className={`border-b border-gray-100 ${s.isPlayer ? "bg-pitch-50 font-semibold" : ""}`}
+              className={`border-b border-gray-100 ${s.teamId === ownTeamId ? "bg-pitch-50 font-semibold" : ""}`}
             >
-              <td className="px-3 py-2 text-center">{s.pos}</td>
-              <td className="px-3 py-2">
-                <div className="flex items-center gap-2">
+              <td className="px-1 sm:px-3 py-2 text-center">{s.pos}</td>
+              <td className="px-1 sm:px-3 py-2 w-full">
+                <div className="flex items-center gap-1.5">
                   <BadgePreview
                     primary={s.primaryColor || "#2D5F2D"}
                     secondary={s.secondaryColor || "#FFFFFF"}
@@ -579,20 +585,21 @@ function StandingsTable({ standings }: { standings: Standing[] }) {
                     size={22}
                   />
                   {s.teamId && !s.isAi ? (
-                    <Link href={`/dashboard/team/${s.teamId}`} className="hover:text-pitch-600 transition-colors">
-                      {s.team}
+                    <Link href={`/dashboard/team/${s.teamId}`} className="break-words hover:text-pitch-600 transition-colors">
+                      {s.team.replace(/ U21$/, "")}
                     </Link>
                   ) : (
-                    <span className={s.isAi ? "text-muted" : ""}>{s.team}</span>
+                    <span className={s.isAi ? "text-muted" : ""}>{s.team.replace(/ U21$/, "")}</span>
                   )}
                 </div>
+                <div className="mt-1 pl-7 text-[10px] font-normal text-muted sm:hidden">{s.wins} V · {s.draws} R · {s.losses} P</div>
               </td>
-              <td className="px-3 py-2 text-center tabular-nums">{s.played}</td>
-              <td className="px-3 py-2 text-center tabular-nums">{s.wins}</td>
-              <td className="px-3 py-2 text-center tabular-nums">{s.draws}</td>
-              <td className="px-3 py-2 text-center tabular-nums">{s.losses}</td>
-              <td className="px-3 py-2 text-center tabular-nums">{s.gf}:{s.ga}</td>
-              <td className="px-3 py-2 text-center tabular-nums font-bold">{s.points}</td>
+              <td className="px-1 sm:px-3 py-2 text-center tabular-nums">{s.played}</td>
+              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.wins}</td>
+              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.draws}</td>
+              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.losses}</td>
+              <td className="px-1 sm:px-3 py-2 text-center whitespace-nowrap tabular-nums">{s.gf}:{s.ga}</td>
+              <td className="px-1 sm:px-3 py-2 text-center tabular-nums font-bold">{s.points}</td>
             </tr>
           ))}
           {sorted.length === 0 && (
@@ -623,7 +630,7 @@ type SortKey = "name" | "pos" | "age" | "ovr" | "apps" | "g" | "a" | "rat" | "gr
 
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 
-function PlayerTable({
+function PlayerList({
   players,
   statsMap,
   growthMap,
@@ -665,86 +672,63 @@ function PlayerTable({
     return sortDir === "asc" ? cmp : -cmp;
   });
 
-  const arrow = (key: SortKey) => sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
-
-  const SortableTH = ({ k, label, title, align = "center", hideOnMobile = false }: { k: SortKey; label: string; title: string; align?: "left" | "center"; hideOnMobile?: boolean }) => (
-    <th
-      className={`py-1.5 px-1 cursor-pointer hover:text-gray-700 select-none ${align === "left" ? "pr-2 text-left" : "text-center"} ${hideOnMobile ? "hidden md:table-cell" : ""}`}
-      title={title}
-      onClick={() => toggle(k)}
-    >
-      {label}{arrow(k)}
-    </th>
-  );
-
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
-          <th className="py-1.5 pr-2 w-12"></th>
-          <SortableTH k="name" label="Hráč" title="Jméno" align="left" />
-          <SortableTH k="pos" label="P" title="Pozice" />
-          <SortableTH k="age" label="V" title="Věk" />
-          <SortableTH k="ovr" label="OVR" title="Overall rating" />
-          <SortableTH k="apps" label="Z" title="Odehrané zápasy" hideOnMobile />
-          <SortableTH k="g" label="G" title="Góly" hideOnMobile />
-          <SortableTH k="a" label="A" title="Asistence" hideOnMobile />
-          <SortableTH k="rat" label="Rat" title="Průměrné hodnocení" hideOnMobile />
-          <SortableTH k="growth" label="Růst" title="Růst skill bodů za 30 dní" />
-          <th className="py-1.5 pl-1 text-right">Akce</th>
-        </tr>
-      </thead>
-      <tbody>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="min-w-0 flex-1 text-xs text-muted"><span className="sr-only">Řadit podle</span>
+          <select className="w-full min-h-11 rounded-lg border border-gray-200 bg-surface px-2 text-sm text-ink" value={sortKey} onChange={(e) => { const key = e.target.value as SortKey; setSortKey(key); setSortDir(key === "name" || key === "age" || key === "pos" ? "asc" : "desc"); }}>
+            {([["ovr", "Síla hráče"], ["growth", "Tréninkový růst"], ["age", "Věk"], ["name", "Jméno"], ["pos", "Pozice"], ["apps", "Zápasy"], ["g", "Góly"], ["a", "Asistence"], ["rat", "Hodnocení"]] as const).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <button className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm" onClick={() => toggle(sortKey)} aria-label="Obrátit směr řazení">{sortDir === "asc" ? "↑" : "↓"}</button>
+      </div>
+      <div className="divide-y divide-gray-200">
         {sorted.map((p) => {
           const stat = statsMap.get(p.id);
           const growth = growthMap.get(p.id) ?? 0;
-          const overstayed = p.age >= 22;
           return (
-            <tr
-              key={p.id}
-              className={`border-b border-gray-100 ${overstayed ? "bg-amber-50" : ""}`}
-            >
-              <td className="py-1.5 pr-2">
-                {p.avatar ? (
-                  <FaceAvatar faceConfig={p.avatar} size={36} />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-gray-200" />
-                )}
-              </td>
-              <td className="py-1.5 pr-2 min-w-0">
-                <Link href={`/dashboard/player/${p.id}`} className="font-medium hover:text-pitch-600 text-sm">
-                  {p.lastName} {p.firstName}
-                </Link>
-                {(p.nextMatchReturn || overstayed) && (
-                  <div className="mt-0.5 flex gap-1 flex-wrap">
-                    {p.nextMatchReturn && (
-                      <span className="text-micro bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">↩ vrátí se</span>
-                    )}
-                    {overstayed && (
-                      <span className="text-micro bg-amber-300 text-amber-900 px-1.5 py-0.5 rounded">přestárlý</span>
-                    )}
-                  </div>
-                )}
-              </td>
-              <td className="py-1.5 px-1 text-center">
-                <PositionBadge position={p.position} />
-              </td>
-              <td className="py-1.5 px-1 text-center tabular-nums">{p.age}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums font-semibold">{p.overallRating}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums hidden md:table-cell">{stat?.appearances ?? 0}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums hidden md:table-cell">{stat?.goals ?? 0}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums hidden md:table-cell">{stat?.assists ?? 0}</td>
-              <td className="py-1.5 px-1 text-center tabular-nums hidden md:table-cell">
-                {stat?.avgRating != null ? stat.avgRating.toFixed(1) : "—"}
-              </td>
-              <td className="py-1.5 px-1 text-center tabular-nums">
-                {growth > 0 ? <span className="text-pitch-600 font-semibold">+{growth}</span> : "—"}
-              </td>
-              <td className="py-1.5 pl-1 text-right">{renderActions(p)}</td>
-            </tr>
+            <details key={p.id} className="group">
+              <summary className="flex min-h-16 cursor-pointer list-none items-center gap-2 py-2 [&::-webkit-details-marker]:hidden">
+                <div className="flex h-10 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-pitch-50">
+                  {p.avatar ? <FaceAvatar faceConfig={p.avatar} size={30} /> : <span className="text-xs font-bold text-pitch-600">{p.firstName[0]}{p.lastName[0]}</span>}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">{p.firstName} {p.lastName}</span>
+                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                    <PositionBadge position={p.position} />
+                    <span>{p.age} let</span>
+                    {p.nextMatchReturn && <span className="text-amber-700">↩ do áčka</span>}
+                    {p.age >= 22 && <span className="text-amber-700">nad 21 let</span>}
+                  </span>
+                </div>
+                <span className="w-9 shrink-0 text-center tabular-nums">
+                  <span className="block text-base font-bold text-ink">{p.overallRating}</span>
+                  <span className="block text-[10px] text-muted">Síla</span>
+                </span>
+                <span className="w-10 shrink-0 text-center tabular-nums" title="Body dovedností za 30 dní">
+                  <span className={`block text-sm font-semibold ${growth > 0 ? "text-pitch-600" : "text-muted"}`}>{growth > 0 ? `+${growth}` : "—"}</span>
+                  <span className="block text-[10px] text-muted">Růst</span>
+                </span>
+                <span aria-hidden="true" className="text-muted transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="space-y-3 rounded-lg bg-surface-2 p-3 mb-2">
+                <Link href={`/dashboard/player/${p.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-pitch-600 hover:underline">Profil: {p.firstName} {p.lastName} →</Link>
+                <dl className="grid grid-cols-4 gap-1 text-center">
+                  {[["Zápasy", stat?.appearances ?? 0], ["Góly", stat?.goals ?? 0], ["Asistence", stat?.assists ?? 0], ["Známka", stat?.avgRating?.toFixed(1) ?? "—"]].map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-xs text-muted">{label}</dt>
+                      <dd className="mt-1 text-sm font-bold tabular-nums">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="text-xs text-muted">Trénink za 30 dní: {growth > 0 ? `+${growth}` : "0"} bodů dovedností{(stat?.manOfMatch ?? 0) > 0 ? ` · ${stat?.manOfMatch}× hráč zápasu` : ""}</p>
+                {p.nextMatchReturn && <p className="text-xs text-amber-700">Po nejbližším zápase se vrátí do áčka.</p>}
+                {renderActions(p)}
+              </div>
+            </details>
           );
         })}
-      </tbody>
-    </table>
+      </div>
+    </div>
   );
 }

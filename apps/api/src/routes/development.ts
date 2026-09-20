@@ -417,8 +417,7 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
   const team = await c.env.DB.prepare(
     `SELECT t.youth_investment, v.population FROM teams t
        JOIN villages v ON v.id = t.village_id WHERE t.id = ?`,
-  ).bind(teamId).first<{ youth_investment: string | null; population: number }>()
-    .catch((e) => { logger.warn({ module: "development", teamId }, "load academy", e); return null; });
+  ).bind(teamId).first<{ youth_investment: string | null; population: number }>();
 
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 

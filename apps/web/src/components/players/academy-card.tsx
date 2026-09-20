@@ -53,18 +53,25 @@ function textOdchovancu(ocekavane: number): string {
 
 export function AcademyCard({ teamId }: { teamId: string }) {
   const [data, setData] = useState<AkademieData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [vybrana, setVybrana] = useState<string | null>(null);
   const [uklada, setUklada] = useState(false);
   const [ulozeno, setUlozeno] = useState(false);
 
   const nacti = useCallback(() => {
+    setLoading(true);
+    setError(null);
     apiFetch<AkademieData>(`/api/teams/${teamId}/academy`)
       .then((d) => { setData(d); setVybrana(d.aktualni); })
-      .catch((e) => console.error("academy load:", e));
+      .catch((e) => { console.error("academy load:", e); setError("Akademii se nepodařilo načíst. Zkus to znovu."); })
+      .finally(() => setLoading(false));
   }, [teamId]);
 
   useEffect(() => { nacti(); }, [nacti]);
 
+  if (loading && !data) return <div className="card p-4 text-sm text-muted" role="status">Načítám akademii…</div>;
+  if (error) return <div className="card p-4 space-y-3" role="alert"><p className="text-sm">{error}</p><button onClick={nacti} className="btn btn-primary min-h-11 px-3">Zkusit znovu</button></div>;
   if (!data) return null;
 
   const zmeneno = vybrana !== null && vybrana !== data.aktualni;
