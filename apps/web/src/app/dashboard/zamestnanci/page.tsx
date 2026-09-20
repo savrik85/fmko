@@ -76,18 +76,103 @@ function effClass(v: number): string {
   return "text-muted";
 }
 
-function AttrGrid({ m }: { m: StaffMember }) {
+function staffWithUpdatedAttr(m: StaffMember, attr: StaffAttributeKey, points: number): StaffMember {
+  return {
+    ...m,
+    coaching: attr === "coaching" ? m.coaching + points : m.coaching,
+    medicine: attr === "medicine" ? m.medicine + points : m.medicine,
+    maintenance: attr === "maintenance" ? m.maintenance + points : m.maintenance,
+    judgement: attr === "judgement" ? m.judgement + points : m.judgement,
+    communication: attr === "communication" ? m.communication + points : m.communication,
+    workRate: attr === "work_rate" ? m.workRate + points : m.workRate,
+    charm: attr === "charm" ? m.charm + points : m.charm,
+  };
+}
+
+function AttrGrid({
+  m,
+  role,
+  activeCourse,
+}: {
+  m: StaffMember;
+  role?: StaffRole | null;
+  activeCourse?: StaffAttributeKey | null;
+}) {
+  const def = role ? ROLE_DEFS[role] : null;
+
   return (
-    <div className="grid grid-cols-7 gap-1.5">
-      {ATTR_ORDER.map((a) => {
-        const v = staffAttributeValue(m, a);
-        return (
-          <div key={a} className="text-center">
-            <div className={`text-sm font-heading font-bold tabular-nums ${attrColor(v)}`}>{v}</div>
-            <div className="text-micro text-muted font-heading uppercase" title={STAFF_ATTRIBUTE_LABELS[a]}>{ATTR_SHORT[a]}</div>
-          </div>
-        );
-      })}
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+        {ATTR_ORDER.map((a) => {
+          const v = staffAttributeValue(m, a);
+          const isPrimary = def?.primary === a;
+          const isSecondary = def?.secondary === a;
+          const isStudying = activeCourse === a;
+
+          return (
+            <div
+              key={a}
+              className={`text-center py-1 px-0.5 rounded-soft transition-all ${
+                isPrimary
+                  ? "bg-pitch-500/10 border border-pitch-500/40 shadow-xs"
+                  : isSecondary
+                  ? "bg-gold-500/10 border border-gold-500/40 shadow-xs"
+                  : "bg-surface/40 border border-transparent opacity-65 hover:opacity-100"
+              } ${isStudying ? "ring-2 ring-gold-400" : ""}`}
+            >
+              <div className="h-3.5 flex items-center justify-center">
+                {isPrimary ? (
+                  <span
+                    className="text-[9px] font-heading font-black text-pitch-700 bg-pitch-500/20 px-1 rounded-xs leading-none"
+                    title="Klíčový atribut pro roli (2× váha)"
+                  >
+                    2×
+                  </span>
+                ) : isSecondary ? (
+                  <span
+                    className="text-[9px] font-heading font-bold text-gold-700 bg-gold-500/20 px-1 rounded-xs leading-none"
+                    title="Důležitý atribut pro roli (1× váha)"
+                  >
+                    1×
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-transparent select-none leading-none">·</span>
+                )}
+              </div>
+              <div className={`text-sm sm:text-base font-heading font-bold tabular-nums leading-tight ${attrColor(v)}`}>
+                {v}
+              </div>
+              <div
+                className={`text-[10px] sm:text-micro uppercase font-heading truncate leading-tight ${
+                  isPrimary
+                    ? "text-pitch-700 font-bold"
+                    : isSecondary
+                    ? "text-gold-700 font-bold"
+                    : "text-muted"
+                }`}
+                title={STAFF_ATTRIBUTE_LABELS[a]}
+              >
+                {ATTR_SHORT[a]}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {def && (
+        <div className="flex items-center gap-1.5 text-[11px] text-muted font-heading flex-wrap">
+          <span>Role {def.label}:</span>
+          <span className="inline-flex items-center gap-1 text-pitch-700 font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-pitch-500 inline-block" />
+            ★ {STAFF_ATTRIBUTE_LABELS[def.primary]} (2×)
+          </span>
+          <span className="text-muted/40">·</span>
+          <span className="inline-flex items-center gap-1 text-gold-700 font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-gold-500 inline-block" />
+            {STAFF_ATTRIBUTE_LABELS[def.secondary]} (1×)
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -165,9 +250,17 @@ export default function ZamestnanciPage() {
   const doReassign = async (m: StaffMember, role: StaffRole) => {
     if (!teamId) return;
     const eff = staffEffectiveness(m, role);
+    const def = ROLE_DEFS[role];
     const ok = await confirm({
-      title: `Přeřadit na ${ROLE_DEFS[role].label}?`,
+      title: `Přeřadit na ${def.label}?`,
       description: `${m.firstName} ${m.lastName} · efektivita v nové roli ${eff}/20`,
+      details: [
+        {
+          label: "Klíčové atributy",
+          value: `${STAFF_ATTRIBUTE_LABELS[def.primary]} (2×) + ${STAFF_ATTRIBUTE_LABELS[def.secondary]} (1×)`,
+          color: "text-ink",
+        },
+      ],
       confirmLabel: "Přeřadit",
     });
     if (!ok) return;
@@ -180,13 +273,55 @@ export default function ZamestnanciPage() {
 
   const doCourse = async (m: StaffMember, q: CourseQuote) => {
     if (!teamId) return;
+    const role = m.role;
+    const def = role ? ROLE_DEFS[role] : null;
+    const isPrim = def ? q.attribute === def.primary : false;
+    const isSec = def ? q.attribute === def.secondary : false;
+    const curVal = staffAttributeValue(m, q.attribute);
+    const nextVal = curVal + q.points;
+    const curEff = role ? staffEffectiveness(m, role) : null;
+    const nextM = staffWithUpdatedAttr(m, q.attribute, q.points);
+    const nextEff = role ? staffEffectiveness(nextM, role) : null;
+    const effDiff = curEff !== null && nextEff !== null ? nextEff - curEff : null;
+
+    const roleImpactText = def
+      ? isPrim
+        ? `★ Klíčový atribut pro roli ${def.label} (2× váha)`
+        : isSec
+        ? `Důležitý atribut pro roli ${def.label} (1× váha)`
+        : `Vedlejší atribut (nemá vliv na efektivitu role ${def.label})`
+      : "—";
+
+    const details = [
+      {
+        label: "Zlepšení",
+        value: `${STAFF_ATTRIBUTE_LABELS[q.attribute]}: ${curVal} → ${nextVal} (+${q.points})`,
+        color: isPrim ? "text-pitch-600 font-bold" : isSec ? "text-gold-600 font-bold" : "text-ink",
+      },
+      ...(def
+        ? [
+            {
+              label: "Vliv na roli",
+              value: roleImpactText,
+              color: isPrim ? "text-pitch-600 font-bold" : isSec ? "text-gold-600 font-semibold" : "text-muted",
+            },
+            {
+              label: "Efektivita v roli",
+              value: effDiff !== null && effDiff > 0
+                ? `${curEff}/20 → ${nextEff}/20 (+${effDiff})`
+                : `${curEff}/20 (beze změny)`,
+              color: effDiff !== null && effDiff > 0 ? "text-pitch-600 font-bold" : "text-muted",
+            },
+          ]
+        : []),
+      { label: "Cena", value: `−${czk(q.cost)}`, color: "text-card-red" },
+      { label: "Délka", value: `${q.weeks} týdnů`, color: "text-ink" },
+    ];
+
     const ok = await confirm({
       title: `Kurz: ${STAFF_ATTRIBUTE_LABELS[q.attribute]} +${q.points}`,
-      description: `${m.firstName} ${m.lastName} bude ${q.weeks} týdnů na kurzu (mezitím normálně pracuje).`,
-      details: [
-        { label: "Cena", value: `−${czk(q.cost)}`, color: "text-card-red" },
-        { label: "Délka", value: `${q.weeks} týdnů`, color: "text-ink" },
-      ],
+      description: `${m.firstName} ${m.lastName}${def ? ` (${def.label})` : ""} bude ${q.weeks} týdnů na kurzu (mezitím normálně pracuje).`,
+      details,
       confirmLabel: "Poslat na kurz",
     });
     if (!ok) return;
@@ -233,8 +368,11 @@ export default function ZamestnanciPage() {
                           <div key={role} className="card p-4 border-2 border-dashed border-gray-100 flex flex-col gap-1.5">
                             <div className="font-heading font-bold text-base text-ink">{def.label}</div>
                             <div className="text-sm text-muted">{def.effectDesc}</div>
-                            <div className="text-xs text-muted mt-1">
-                              Klíčové: <strong>{STAFF_ATTRIBUTE_LABELS[def.primary]}</strong> ×2 + {STAFF_ATTRIBUTE_LABELS[def.secondary]}
+                            <div className="text-xs text-muted mt-1 flex items-center gap-1.5 flex-wrap">
+                              <span>Klíčové:</span>
+                              <span className="text-pitch-700 font-bold">★ {STAFF_ATTRIBUTE_LABELS[def.primary]} (2×)</span>
+                              <span className="text-muted/40">·</span>
+                              <span className="text-gold-700 font-semibold">{STAFF_ATTRIBUTE_LABELS[def.secondary]} (1×)</span>
                             </div>
                             <button onClick={() => setTab("market")}
                               className="btn btn-primary btn-sm self-start mt-1">Najmout →</button>
@@ -257,7 +395,7 @@ export default function ZamestnanciPage() {
                             </div>
                           </div>
 
-                          <AttrGrid m={m} />
+                          <AttrGrid m={m} role={role} activeCourse={m.courseAttribute} />
 
                           <div className="text-xs text-muted">{def.effectDesc}</div>
 
@@ -267,16 +405,83 @@ export default function ZamestnanciPage() {
                               🎓 Kurz {STAFF_ATTRIBUTE_LABELS[m.courseAttribute]} — zbývá {m.courseWeeksRemaining} {m.courseWeeksRemaining === 1 ? "týden" : (m.courseWeeksRemaining ?? 0) < 5 ? "týdny" : "týdnů"}
                             </div>
                           ) : m.courses && m.courses.length > 0 ? (
-                            <details className="text-xs">
-                              <summary className="cursor-pointer text-muted hover:text-ink font-heading">📚 Poslat na kurz…</summary>
-                              <div className="mt-2 grid grid-cols-1 gap-1.5">
-                                {m.courses.map((q) => (
-                                  <button key={q.attribute} onClick={() => doCourse(m, q)}
-                                    className="flex items-center justify-between gap-2 text-left rounded-soft border border-gray-100 px-2.5 py-1.5 hover:border-pitch-300 transition-colors">
-                                    <span className="font-heading">{STAFF_ATTRIBUTE_LABELS[q.attribute]} +{q.points}</span>
-                                    <span className="text-muted tabular-nums">{q.weeks} týd · {czk(q.cost)}</span>
-                                  </button>
-                                ))}
+                            <details className="text-xs group">
+                              <summary className="cursor-pointer text-muted hover:text-ink font-heading flex items-center justify-between py-1 select-none">
+                                <span>📚 Poslat na kurz…</span>
+                                <span className="text-[11px] text-pitch-700 font-normal">
+                                  Doporučeno: <strong>{STAFF_ATTRIBUTE_LABELS[def.primary]}</strong> / <strong>{STAFF_ATTRIBUTE_LABELS[def.secondary]}</strong>
+                                </span>
+                              </summary>
+                              <div className="mt-2 space-y-1.5">
+                                {[...m.courses]
+                                  .sort((a, b) => {
+                                    const getWeight = (k: StaffAttributeKey) => {
+                                      if (k === def.primary) return 0;
+                                      if (k === def.secondary) return 1;
+                                      return 2;
+                                    };
+                                    const diff = getWeight(a.attribute) - getWeight(b.attribute);
+                                    if (diff !== 0) return diff;
+                                    return a.attribute.localeCompare(b.attribute);
+                                  })
+                                  .map((q) => {
+                                    const isPrim = q.attribute === def.primary;
+                                    const isSec = q.attribute === def.secondary;
+                                    const curVal = staffAttributeValue(m, q.attribute);
+                                    const nextVal = curVal + q.points;
+                                    const nextEff = staffEffectiveness(staffWithUpdatedAttr(m, q.attribute, q.points), role);
+                                    const effDiff = nextEff - eff;
+
+                                    return (
+                                      <button
+                                        key={q.attribute}
+                                        type="button"
+                                        onClick={() => doCourse(m, q)}
+                                        className={`w-full flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-left rounded-soft border p-2 transition-all ${
+                                          isPrim
+                                            ? "bg-pitch-500/10 border-pitch-500/30 hover:border-pitch-500/60 hover:bg-pitch-500/15"
+                                            : isSec
+                                            ? "bg-gold-500/10 border-gold-500/30 hover:border-gold-500/60 hover:bg-gold-500/15"
+                                            : "border-gray-100 hover:border-gray-300 opacity-70 hover:opacity-100 bg-white"
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          {isPrim ? (
+                                            <span className="text-[10px] font-heading font-black text-pitch-700 bg-pitch-500/20 border border-pitch-500/30 rounded px-1.5 py-0.5 shrink-0">
+                                              ★ Klíčový (2×)
+                                            </span>
+                                          ) : isSec ? (
+                                            <span className="text-[10px] font-heading font-bold text-gold-700 bg-gold-500/20 border border-gold-500/30 rounded px-1.5 py-0.5 shrink-0">
+                                              Důležitý (1×)
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] font-heading text-muted bg-gray-100 rounded px-1.5 py-0.5 shrink-0">
+                                              Ostatní
+                                            </span>
+                                          )}
+                                          <div className="truncate">
+                                            <span className="font-heading font-bold text-ink">{STAFF_ATTRIBUTE_LABELS[q.attribute]}</span>
+                                            <span className="text-muted ml-1 tabular-nums">+{q.points} ({curVal} → {nextVal})</span>
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 text-right pl-7 sm:pl-0">
+                                          {effDiff > 0 ? (
+                                            <span className="text-pitch-600 font-heading font-bold text-[11px] tabular-nums whitespace-nowrap">
+                                              → efektivita {nextEff}/20 (+{effDiff})
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted text-[11px] tabular-nums whitespace-nowrap">
+                                              {isPrim || isSec ? "beze změny efektivity" : "neovlivní roli"}
+                                            </span>
+                                          )}
+                                          <span className="text-muted tabular-nums text-xs whitespace-nowrap">
+                                            {q.weeks} týd · {czk(q.cost)}
+                                          </span>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
                               </div>
                             </details>
                           ) : null}
@@ -354,7 +559,7 @@ export default function ZamestnanciPage() {
                       </div>
                     </div>
 
-                    <AttrGrid m={cand} />
+                    <AttrGrid m={cand} role={selected} />
 
                     {/* Výběr role + fit */}
                     <div className="flex items-center gap-2 flex-wrap">
