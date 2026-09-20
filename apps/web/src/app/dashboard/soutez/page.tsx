@@ -20,6 +20,7 @@ import {
 } from "./ui";
 import { GrantsPanel, OdborInbox, PokladnaPanel, SponsorPanel, VedeniPanel, ZapisyPanel } from "./panels";
 import { GremiumVyveska } from "@/components/dashboard/gremium-vyveska";
+import { triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 import { DisciplinePanel } from "./discipline";
 import { RefereesPanel } from "./referees-panel";
 import { IntegrityPanel } from "./integrity-panel";
@@ -198,6 +199,14 @@ export default function SoutezPage() {
   useEffect(loadDiscipline, [loadDiscipline]);
   useEffect(loadBoard, [loadBoard]);
 
+  // Odklepnutí zasedání po zobrazení stránky soutěže — odznak grémia se hned smaže.
+  useEffect(() => {
+    if (!teamId) return;
+    apiFetch(`/api/teams/${teamId}/competition/decisions/seen`, { method: "POST" })
+      .then(() => triggerMenuBadgesRefresh())
+      .catch((e) => console.error("odklepnutí rozhodnutí soutěže:", e));
+  }, [teamId]);
+
   useEffect(() => {
     if (!leagueId) return;
     if (tab === "pokladna" && !ledger) {
@@ -290,6 +299,7 @@ export default function SoutezPage() {
   const refreshAll = useCallback(() => {
     loadState(); loadProposals(); loadElections(); loadDiscipline(); loadBoard(); loadSponsor(); loadGrants();
     if (referees) loadReferees();
+    triggerMenuBadgesRefresh();
   }, [loadState, loadProposals, loadElections, loadDiscipline, loadBoard, loadSponsor, loadGrants, loadReferees, referees]);
 
   const vote = async (proposalId: string, answer: string) => {
@@ -301,7 +311,10 @@ export default function SoutezPage() {
       }),
       "Hlasování se nezdařilo",
     );
-    if (ok) loadProposals();
+    if (ok) {
+      loadProposals();
+      triggerMenuBadgesRefresh();
+    }
   };
 
   const withdraw = async (proposalId: string) => {
@@ -310,7 +323,10 @@ export default function SoutezPage() {
       apiFetch(`/api/teams/${teamId}/competition/proposals/${proposalId}`, { method: "DELETE" }),
       "Stažení návrhu se nezdařilo",
     );
-    if (ok) refreshAll();
+    if (ok) {
+      refreshAll();
+      triggerMenuBadgesRefresh();
+    }
   };
 
   const defend = async (proposalId: string, text: string) => {
@@ -322,7 +338,10 @@ export default function SoutezPage() {
       }),
       "Obhajobu se nepodařilo uložit",
     );
-    if (ok) loadProposals();
+    if (ok) {
+      loadProposals();
+      triggerMenuBadgesRefresh();
+    }
   };
 
   if (loading) {

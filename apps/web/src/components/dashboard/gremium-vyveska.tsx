@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
+import { triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 
 export interface Decision {
   gameDate: string;
@@ -107,6 +108,7 @@ export function GremiumVyveska({ limit = 6 }: { limit?: number }) {
   useEffect(() => {
     if (!teamId || !decisions || decisions.length === 0) return;
     apiFetch(`/api/teams/${teamId}/competition/decisions/seen`, { method: "POST" })
+      .then(() => triggerMenuBadgesRefresh())
       .catch((e) => console.error("odklepnutí vývěsky:", e));
   }, [teamId, decisions]);
 

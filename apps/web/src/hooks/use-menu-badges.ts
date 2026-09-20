@@ -40,11 +40,11 @@ function notifyListeners() {
   listeners.forEach((listener) => listener(globalState));
 }
 
-export async function fetchMenuBadges(teamId: string, token: string | null) {
+export async function fetchMenuBadges(teamId: string, token: string | null, force = false) {
   if (isFetching) return;
   const now = Date.now();
-  // Ochrana proti vícenásobnému volání v krátkém čase (throttle 2s)
-  if (now - lastFetchTime < 2000) return;
+  // Ochrana proti vícenásobnému volání v krátkém čase (throttle 2s pokud není force)
+  if (!force && now - lastFetchTime < 2000) return;
 
   isFetching = true;
   lastFetchTime = now;
@@ -111,6 +111,16 @@ export async function fetchMenuBadges(teamId: string, token: string | null) {
 }
 
 /**
+ * Umožňuje komponentám vyvolat okamžité přenačtení všech odznaků v aplikaci
+ * (např. po odhlasování v grémiu nebo zhlédnutí výsledků).
+ */
+export function triggerMenuBadgesRefresh() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("refresh-menu-badges"));
+  }
+}
+
+/**
  * Sdílený hook pro notifikační odznaky v navigaci (desktop sidebar, bottom bar, stránka Více).
  */
 export function useMenuBadges(): MenuBadgesState {
@@ -145,11 +155,19 @@ export function useMenuBadges(): MenuBadgesState {
 
     fetchMenuBadges(teamId, token);
 
+    const onRefresh = () => {
+      fetchMenuBadges(teamId, token, true);
+    };
+    window.addEventListener("refresh-menu-badges", onRefresh);
+
     const interval = setInterval(() => {
       fetchMenuBadges(teamId, token);
     }, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener("refresh-menu-badges", onRefresh);
+      clearInterval(interval);
+    };
   }, [teamId, token, pathname]);
 
   return state;

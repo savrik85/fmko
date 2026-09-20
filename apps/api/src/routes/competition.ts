@@ -453,13 +453,14 @@ competitionRouter.get("/teams/:teamId/competition/pending", async (c) => {
 
   const row = await c.env.DB.prepare(
     `SELECT COUNT(*) AS open,
-            SUM(CASE WHEN NOT EXISTS (
-                  SELECT 1 FROM competition_ballots b
-                   WHERE b.proposal_id = p.id AND b.team_id = ?
-                ) THEN 1 ELSE 0 END) AS to_vote
+            SUM(CASE WHEN (p.target_team_id IS NULL OR p.target_team_id != ?)
+                      AND NOT EXISTS (
+                        SELECT 1 FROM competition_ballots b
+                         WHERE b.proposal_id = p.id AND b.team_id = ?
+                      ) THEN 1 ELSE 0 END) AS to_vote
        FROM competition_proposals p
       WHERE p.league_id = ? AND p.status = 'open'`
-  ).bind(teamId, leagueId).first<{ open: number; to_vote: number | null }>()
+  ).bind(teamId, teamId, leagueId).first<{ open: number; to_vote: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "počet čekajících bodů", e); return null; });
 
   const elections = await c.env.DB.prepare(
