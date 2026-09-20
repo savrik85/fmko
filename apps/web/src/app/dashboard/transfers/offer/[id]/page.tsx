@@ -12,6 +12,8 @@ import { OfferTimeline, type OfferEvent } from "./components/OfferTimeline";
 import { ActionBar } from "./components/ActionBar";
 import { MessageDialog } from "./components/MessageDialog";
 import { type PlayerInterest } from "./components/InterestBadge";
+import { markSingleOfferSeen } from "@/lib/seen-offers";
+import { triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 
 interface OfferDetail {
   offer: {
@@ -72,6 +74,10 @@ export default function OfferDetailPage() {
       const res = await apiFetch<OfferDetail>(`/api/teams/${teamId}/offers/${params.id}`);
       setData(res);
       setError(null);
+      if (res?.offer) {
+        markSingleOfferSeen(teamId, { ...res.offer, on_turn: res.on_turn });
+        triggerMenuBadgesRefresh();
+      }
     } catch (e) {
       console.error("Failed to load offer detail:", e);
       setError(e instanceof Error ? e.message : "Nepodařilo se načíst nabídku");

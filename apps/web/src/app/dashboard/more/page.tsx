@@ -108,7 +108,7 @@ export default function MorePage() {
   if (badges.incomingOffers > 0) {
     pendingAlerts.push({
       id: "transfers",
-      href: "/dashboard/transfers",
+      href: "/dashboard/transfers?tab=offers",
       icon: "🤝",
       title: "Přestupy",
       count: badges.incomingOffers,

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { hasUnseenNotes } from "@/data/release-notes";
+import { getUnseenOffersCount, type OffersPayload } from "@/lib/seen-offers";
 
 export interface MenuBadgesState {
   unreadMessages: number;
@@ -54,7 +55,7 @@ export async function fetchMenuBadges(teamId: string, token: string | null, forc
 
     const [convsRes, offersRes, votesRes, gremiumRes, betsRes] = await Promise.allSettled([
       apiFetch<Array<{ unreadCount: number }>>(`/api/teams/${teamId}/conversations`),
-      apiFetch<{ incoming: unknown[] }>(`/api/teams/${teamId}/offers`),
+      apiFetch<OffersPayload>(`/api/teams/${teamId}/offers`),
       apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers }),
       apiFetch<{ toVote: number; unseenMeetings: number }>(`/api/teams/${teamId}/competition/pending`),
       apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`),
@@ -67,7 +68,7 @@ export async function fetchMenuBadges(teamId: string, token: string | null, forc
 
     const incomingOffers =
       offersRes.status === "fulfilled"
-        ? offersRes.value.incoming?.length ?? 0
+        ? getUnseenOffersCount(teamId, offersRes.value)
         : globalState.incomingOffers;
 
     const unvotedCount =
@@ -108,6 +109,22 @@ export async function fetchMenuBadges(teamId: string, token: string | null, forc
   } finally {
     isFetching = false;
   }
+}
+
+/**
+ * Okamžitá aktualizace počtu nevyřízených nabídek v navigaci
+ * (např. při zobrazení záložky Nabídky na /dashboard/transfers).
+ */
+export function setIncomingOffersCount(count: number) {
+  if (globalState.incomingOffers === count) return;
+  const moreBadgeCount =
+    globalState.unvotedCount +
+    globalState.gremiumCount +
+    globalState.betsCount +
+    count +
+    (globalState.notesUnseen ? 1 : 0);
+  globalState = { ...globalState, incomingOffers: count, moreBadgeCount };
+  notifyListeners();
 }
 
 /**

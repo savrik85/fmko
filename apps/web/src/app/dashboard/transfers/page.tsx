@@ -10,6 +10,8 @@ import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type Ba
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor } from "@/lib/team-color";
+import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
+import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 
 type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "squad";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
@@ -731,12 +733,25 @@ export default function TransfersPage() {
     setLoanedIn(offers.loanedIn ?? []);
     setPlayers(squad);
     setPlayerOffers(Array.isArray(poRaw) ? poRaw : []);
+    if (tab === "offers") {
+      markOffersSeen(teamId, offers);
+      setIncomingOffersCount(0);
+      triggerMenuBadgesRefresh();
+    }
   };
 
   useEffect(() => {
     if (!teamId) return;
     refresh().then(() => setLoading(false)).catch((e) => { console.error("Failed to load transfers data:", e); setLoading(false); });
   }, [teamId]);
+
+  useEffect(() => {
+    if (tab === "offers" && teamId && (incoming.length > 0 || outgoing.length > 0 || incomingBids.length > 0 || outgoingBids.length > 0)) {
+      markOffersSeen(teamId, { incoming, outgoing, incomingBids, outgoingBids });
+      setIncomingOffersCount(0);
+      triggerMenuBadgesRefresh();
+    }
+  }, [tab, teamId, incoming, outgoing, incomingBids, outgoingBids]);
 
   const handleSavePreset = () => {
     if (!presetName.trim()) return;
@@ -867,12 +882,17 @@ export default function TransfersPage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
+  const unseenOffers = useMemo(() => {
+    if (tab === "offers") return 0;
+    return getUnseenOffersCount(teamId ?? "", { incoming, outgoing, incomingBids, outgoingBids });
+  }, [teamId, incoming, outgoing, incomingBids, outgoingBids, tab]);
+
   const tabs: [Tab, string, number][] = [
     ["overview", "Přehled", 0],
     ["search", "Hledání", 0],
     ["free_agents", "Volní", 0],
     ["market", "Trh", listings.length],
-    ["offers", "Nabídky", incoming.length + playerOffers.length],
+    ["offers", "Nabídky", unseenOffers],
     ["squad", "Můj tým", players.filter((p) => (p as any).status === "quit").length],
   ];
 
