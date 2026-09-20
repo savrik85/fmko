@@ -112,25 +112,31 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {data.urovne.map((u) => {
           const aktivni = vybrana === u.klic;
           return (
             <button
               key={u.klic}
               onClick={() => setVybrana(u.klic)}
-              className={`w-full text-left p-3 rounded-soft border transition ${
+              className={`w-full text-left p-3 rounded-soft border transition flex flex-col justify-between ${
                 aktivni ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
               }`}
             >
-              <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                <span className="font-heading font-bold text-sm text-ink">{u.nazev}</span>
-                <span className="text-sm tabular-nums text-muted">
-                  {u.tydne > 0 ? `${u.tydne.toLocaleString("cs")} Kč/týden` : "zdarma"}
-                  {u.klic !== "none" && ` · ${textOdchovancu(u.ocekavaneOdchovancu)}`}
-                </span>
+              <div>
+                <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                  <span className="font-heading font-bold text-sm text-ink">{u.nazev}</span>
+                  <span className="text-sm tabular-nums text-muted">
+                    {u.tydne > 0 ? `${u.tydne.toLocaleString("cs")} Kč/týden` : "zdarma"}
+                  </span>
+                </div>
+                <p className="text-sm text-muted mt-1 leading-snug">{u.popis}</p>
               </div>
-              <p className="text-sm text-muted mt-1 leading-snug">{u.popis}</p>
+              {u.klic !== "none" && (
+                <div className="text-xs font-semibold text-pitch-600 mt-2">
+                  {textOdchovancu(u.ocekavaneOdchovancu)}
+                </div>
+              )}
             </button>
           );
         })}

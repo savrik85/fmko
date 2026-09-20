@@ -265,7 +265,7 @@ export default function U21Page() {
   const roundIndex = sortedRounds.findIndex((r) => r.round === activeRound);
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 space-y-3">
+    <div className="p-3 sm:p-4 md:p-6 space-y-3 max-w-7xl mx-auto w-full">
       {/* Nejbližší zápas */}
       {nextMatch && tab === "kadr" && (
         <NextMatchBanner data={nextMatch} gameDate={ctxGameDate} />
@@ -276,7 +276,7 @@ export default function U21Page() {
         value={tab}
         onChange={setTab}
         ariaLabel="U21"
-        className="[&_[role=tablist]]:grid [&_[role=tablist]]:grid-cols-5 [&_[role=tablist]]:gap-0 [&_[role=tab]]:min-w-0 [&_[role=tab]]:px-1 [&_[role=tab]]:text-xs [&>div:last-child]:hidden"
+        className="[&_[role=tablist]]:grid [&_[role=tablist]]:grid-cols-5 [&_[role=tablist]]:gap-0 [&_[role=tab]]:min-w-0 [&_[role=tab]]:px-1 [&_[role=tab]]:text-xs sm:[&_[role=tab]]:text-sm sm:[&_[role=tab]]:px-3 [&>div:last-child]:hidden"
         items={[
           { key: "kadr", label: "Kádr" },
           { key: "rozvoj", label: "Rozvoj" },
@@ -294,7 +294,7 @@ export default function U21Page() {
 
       {tab === "kadr" && !squadLoaded && !error && <div className="flex justify-center p-8"><Spinner /></div>}
       {tab === "kadr" && squadLoaded && (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           {/* U21 kádr — povýšení */}
           <section className="card min-w-0 p-3 md:p-4">
             <h2 className="font-heading font-bold text-base mb-3">
@@ -387,37 +387,39 @@ export default function U21Page() {
           )}
           {!scheduleLoaded && <p role="status" className="p-3 text-sm text-muted">{u21LeagueId ? "Načítám rozpis…" : "U21 zatím nemá přidělenou ligu."}</p>}
           {scheduleLoaded && rounds.length === 0 && <p className="card p-4 text-sm text-muted">Rozpis zatím není k dispozici.</p>}
-          {sortedRounds.filter((r) => onlyOurMatches || r.round === activeRound).map((r) => {
-            const matches = r.matches.filter((m) => !onlyOurMatches || m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId);
-            if (!matches.length) return null;
-            return (
-              <section key={r.round} className="card overflow-hidden">
-                <div className="flex items-center justify-between bg-surface-2 px-3 py-2 text-xs">
-                  <h2 className="font-bold">{r.round}. kolo</h2><span className="text-muted">{formatDate(r.scheduledAt)}</span>
-                </div>
-                <ul className="divide-y divide-gray-200">
-                  {matches.map((m) => (
-                    <li key={m.id} className={`p-3 ${m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId ? "border-l-2 border-pitch-500" : ""}`}>
-                      <div className="space-y-2">
-                        {(["home", "away"] as const).map((side) => {
-                          const id = side === "home" ? m.homeTeamId : m.awayTeamId;
-                          const name = side === "home" ? m.homeName : m.awayName;
-                          const ai = side === "home" ? m.homeIsAi : m.awayIsAi;
-                          const score = side === "home" ? m.homeScore : m.awayScore;
-                          return <div key={side} className="flex items-center gap-2 text-sm">
-                            <span className="shrink-0"><BadgePreview primary={(side === "home" ? m.homeColor : m.awayColor) || "#2D5F2D"} secondary={(side === "home" ? m.homeSecondary : m.awaySecondary) || "#FFFFFF"} pattern={((side === "home" ? m.homeBadge : m.awayBadge) as BadgePattern) || "shield"} initials={ini(name)} size={20} /></span>
-                            <span className={`min-w-0 flex-1 break-words ${id === u21TeamId ? "font-bold text-pitch-600" : "text-ink"}`}>{id && !ai ? <Link href={`/dashboard/team/${id}`} className="hover:underline">{name}</Link> : name}</span>
-                            <span className="w-6 shrink-0 text-center font-bold tabular-nums">{m.status === "simulated" ? score ?? "—" : "—"}</span>
-                          </div>;
-                        })}
-                      </div>
-                      <div className="mt-2 text-[11px] text-muted">{m.status === "simulated" ? "Odehráno" : r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "Termín bude upřesněn"} · domácí nahoře</div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
+          <div className={onlyOurMatches ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : "space-y-3"}>
+            {sortedRounds.filter((r) => onlyOurMatches || r.round === activeRound).map((r) => {
+              const matches = r.matches.filter((m) => !onlyOurMatches || m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId);
+              if (!matches.length) return null;
+              return (
+                <section key={r.round} className="card overflow-hidden">
+                  <div className="flex items-center justify-between bg-surface-2 px-3 py-2 text-xs">
+                    <h2 className="font-bold">{r.round}. kolo</h2><span className="text-muted">{formatDate(r.scheduledAt)}</span>
+                  </div>
+                  <ul className="divide-y divide-gray-200">
+                    {matches.map((m) => (
+                      <li key={m.id} className={`p-3 ${m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId ? "border-l-2 border-pitch-500" : ""}`}>
+                        <div className="space-y-2">
+                          {(["home", "away"] as const).map((side) => {
+                            const id = side === "home" ? m.homeTeamId : m.awayTeamId;
+                            const name = side === "home" ? m.homeName : m.awayName;
+                            const ai = side === "home" ? m.homeIsAi : m.awayIsAi;
+                            const score = side === "home" ? m.homeScore : m.awayScore;
+                            return <div key={side} className="flex items-center gap-2 text-sm">
+                              <span className="shrink-0"><BadgePreview primary={(side === "home" ? m.homeColor : m.awayColor) || "#2D5F2D"} secondary={(side === "home" ? m.homeSecondary : m.awaySecondary) || "#FFFFFF"} pattern={((side === "home" ? m.homeBadge : m.awayBadge) as BadgePattern) || "shield"} initials={ini(name)} size={20} /></span>
+                              <span className={`min-w-0 flex-1 break-words ${id === u21TeamId ? "font-bold text-pitch-600" : "text-ink"}`}>{id && !ai ? <Link href={`/dashboard/team/${id}`} className="hover:underline">{name}</Link> : name}</span>
+                              <span className="w-6 shrink-0 text-center font-bold tabular-nums">{m.status === "simulated" ? score ?? "—" : "—"}</span>
+                            </div>;
+                          })}
+                        </div>
+                        <div className="mt-2 text-[11px] text-muted">{m.status === "simulated" ? "Odehráno" : r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "Termín bude upřesněn"} · domácí nahoře</div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
         </div>
       )}
 
