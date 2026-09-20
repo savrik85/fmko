@@ -679,7 +679,7 @@ function PlayerList({
       <div className="flex flex-wrap items-center gap-2">
         <label className="min-w-0 flex-1 text-xs text-muted"><span className="sr-only">Řadit podle</span>
           <select className="w-full min-h-11 rounded-lg border border-gray-200 bg-surface px-2 text-sm text-ink" value={sortKey} onChange={(e) => { const key = e.target.value as SortKey; setSortKey(key); setSortDir(key === "name" || key === "age" || key === "pos" ? "asc" : "desc"); }}>
-            {([["ovr", "Síla hráče"], ["growth", "Tréninkový růst"], ["age", "Věk"], ["name", "Jméno"], ["pos", "Pozice"], ["apps", "Zápasy"], ["g", "Góly"], ["a", "Asistence"], ["rat", "Hodnocení"]] as const).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            {([["ovr", "Rating hráče"], ["growth", "Tréninkový růst"], ["age", "Věk"], ["name", "Jméno"], ["pos", "Pozice"], ["apps", "Zápasy"], ["g", "Góly"], ["a", "Asistence"], ["rat", "Zápasová známka"]] as const).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
         <button className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm" onClick={() => toggle(sortKey)} aria-label="Obrátit směr řazení">{sortDir === "asc" ? "↑" : "↓"}</button>
@@ -703,9 +703,9 @@ function PlayerList({
                     {p.age >= 22 && <span className="text-amber-700">nad 21 let</span>}
                   </span>
                 </div>
-                <span className="w-9 shrink-0 text-center tabular-nums">
+                <span className="w-10 shrink-0 text-center tabular-nums" title="Celkový rating hráče">
                   <span className="block text-base font-bold text-ink">{p.overallRating}</span>
-                  <span className="block text-[10px] text-muted">Síla</span>
+                  <span className="block text-[10px] text-muted">Rating</span>
                 </span>
                 <span className="w-10 shrink-0 text-center tabular-nums" title="Body dovedností za 30 dní">
                   <span className={`block text-sm font-semibold ${growth > 0 ? "text-pitch-600" : "text-muted"}`}>{growth > 0 ? `+${growth}` : "—"}</span>
