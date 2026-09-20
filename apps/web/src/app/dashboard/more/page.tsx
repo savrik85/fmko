@@ -75,7 +75,6 @@ const BASE_SECTIONS: Section[] = [
       { href: "/dashboard/novinky", icon: "✨", label: "Co je nového", color: "#3D7A3D" },
       { href: "/dashboard/napoveda", icon: "📖", label: "Nápověda", color: "#2D5F2D" },
       { href: "/dashboard/app", icon: "📲", label: "Nainstaluj", color: "#153615" },
-      { href: "/dashboard/invite", icon: "✉️", label: "Pozvi kamaráda", color: "#3D6B5C" },
       { href: "/dashboard/settings", icon: "⚙️", label: "Nastavení", color: "#6B6B6B" },
     ],
   },

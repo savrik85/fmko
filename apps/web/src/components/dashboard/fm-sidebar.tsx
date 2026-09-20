@@ -18,7 +18,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/phone", label: "Telefon", icon: "\u{1F4F1}", group: "main" },
   { href: "/dashboard/news", label: "Zpravodaj", icon: "\u{1F4F0}", group: "main" },
   { href: "/dashboard/novinky", label: "Co je nového", icon: "✨", group: "main" },
-  { href: "/dashboard/invite", label: "Pozvi kamar\u00E1da", icon: "\u2709\uFE0F", group: "main" },
   { href: "/dashboard/klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club" },
   { href: "/dashboard/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
   { href: "/dashboard/reputace", label: "Reputace", icon: "\u2B50", group: "club" },
