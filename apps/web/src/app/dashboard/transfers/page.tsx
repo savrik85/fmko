@@ -880,12 +880,12 @@ export default function TransfersPage() {
     return list;
   }, [searchPlayers, searchQuery, searchPos, searchSort, searchMinRating, searchAgeMin, searchAgeMax]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
-
   const unseenOffers = useMemo(() => {
     if (tab === "offers") return 0;
     return getUnseenOffersCount(teamId ?? "", { incoming, outgoing, incomingBids, outgoingBids });
   }, [teamId, incoming, outgoing, incomingBids, outgoingBids, tab]);
+
+  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   const tabs: [Tab, string, number][] = [
     ["overview", "Přehled", 0],
