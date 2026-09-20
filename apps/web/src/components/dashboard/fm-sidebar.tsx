@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
-import { hasUnseenNotes } from "@/data/release-notes";
+import { useMenuBadges } from "@/hooks/use-menu-badges";
 
 interface NavItem {
   href: string;
@@ -58,51 +57,18 @@ const GROUP_LABELS: Record<string, string> = {
 
 export function FMSidebar() {
   const [expanded, setExpanded] = useState(true);
-  const [unreadMessages, setUnreadMessages] = useState(0);
-  const [incomingOffers, setIncomingOffers] = useState(0);
-  const [unvotedCount, setUnvotedCount] = useState(0);
-  const [notesUnseen, setNotesUnseen] = useState(false);
-  const [gremiumCount, setGremiumCount] = useState(0);
-  const [betsCount, setBetsCount] = useState(0);
+  const badges = useMenuBadges();
   const pathname = usePathname();
-  const { teamId, isAdmin, logout, token } = useTeam();
+  const { teamId, isAdmin, logout } = useTeam();
 
-  // Poll unread messages count — refresh on page change too
-  useEffect(() => {
-    if (!teamId) return;
-    const load = () => {
-      apiFetch<Array<{ unreadCount: number }>>(`/api/teams/${teamId}/conversations`)
-        .then((convs) => setUnreadMessages(convs.reduce((s, c) => s + (c.unreadCount ?? 0), 0)))
-        .catch((e) => console.error("fetch conversations:", e));
-      apiFetch<{ incoming: unknown[] }>(`/api/teams/${teamId}/offers`)
-        .then((o) => setIncomingOffers(o.incoming?.length ?? 0))
-        .catch((e) => console.error("fetch offers:", e));
-      // Aktivní ankety kde jsem ještě nehlasoval
-      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-      apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
-        .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
-        .catch((e) => console.error("fetch votes:", e));
-      // Body grémia, o kterých klub ještě nehlasoval. Zasedání je jednou týdně,
-      // takže propásnutý hlas se nedá dohnat — odznak je jediné varování.
-      // Připočítávají se i zasedání, jejichž výsledek klub ještě neviděl: odznak
-      // zhasl hned po odevzdání hlasu a jak to dopadlo, se hráč nedozvěděl.
-      apiFetch<{ toVote: number; unseenMeetings: number }>(`/api/teams/${teamId}/competition/pending`)
-        .then((p) => setGremiumCount((p.toVote ?? 0) + (p.unseenMeetings ?? 0)))
-        .catch((e) => console.error("fetch gremium pending:", e));
-      // Vyhodnocené tikety, které hráč ještě neviděl.
-      apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`)
-        .then((b) => setBetsCount(b.unseen ?? 0))
-        .catch((e) => console.error("fetch bets pending:", e));
-    };
-    load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
-  }, [teamId, token, pathname]);
-
-  // Badge „Nové" u Co je nového — přehodnotit při každé navigaci (stránka Novinky ho maže)
-  useEffect(() => {
-    setNotesUnseen(hasUnseenNotes());
-  }, [pathname]);
+  const {
+    unreadMessages,
+    incomingOffers,
+    unvotedCount,
+    notesUnseen,
+    gremiumCount,
+    betsCount,
+  } = badges;
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -112,9 +78,13 @@ export function FMSidebar() {
     return pathname.startsWith(href);
   };
 
-  const items = isAdmin
+  const baseItems = isAdmin
     ? [...NAV_ITEMS, { href: "/dashboard/admin", label: "Admin", icon: "⚙️", group: "main" as const }]
     : NAV_ITEMS;
+
+  const items = unvotedCount > 0
+    ? [...baseItems, { href: "/dashboard/hlasovani", label: "Sněm", icon: "🗳️", group: "league" as const }]
+    : baseItems;
 
   const groups = ["main", "club", "league"] as const;
 
@@ -178,11 +148,20 @@ export function FMSidebar() {
                       {!expanded && item.href === "/dashboard/novinky" && notesUnseen && (
                         <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
                       )}
+                      {!expanded && item.href === "/dashboard/phone" && unreadMessages > 0 && (
+                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
+                      )}
+                      {!expanded && item.href === "/dashboard/transfers" && incomingOffers > 0 && (
+                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
+                      )}
                       {!expanded && item.href === "/dashboard/soutez" && gremiumCount > 0 && (
                         <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
                       )}
                       {!expanded && item.href === "/dashboard/sazky" && betsCount > 0 && (
                         <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
+                      )}
+                      {!expanded && item.href === "/dashboard/hlasovani" && unvotedCount > 0 && (
+                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
                       )}
                       {expanded && (
                         <span className="text-[13px] font-medium whitespace-nowrap leading-none">

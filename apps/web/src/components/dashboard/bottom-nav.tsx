@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
-import { hasUnseenNotes } from "@/data/release-notes";
+import { useMenuBadges } from "@/hooks/use-menu-badges";
 
 /**
  * O kolik je layoutový viewport kratší než displej.
@@ -46,54 +44,16 @@ function useSchodekViewportu(): number {
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { teamId, token } = useTeam();
   const schodek = useSchodekViewportu();
-  const [unreadMessages, setUnreadMessages] = useState(0);
-  const [unvotedCount, setUnvotedCount] = useState(0);
-  const [notesUnseen, setNotesUnseen] = useState(false);
-  const [gremiumCount, setGremiumCount] = useState(0);
-  const [betsCount, setBetsCount] = useState(0);
-
-  useEffect(() => {
-    if (!teamId) return;
-    const fetchUnread = () => {
-      apiFetch<Array<{ unreadCount: number }>>(`/api/teams/${teamId}/conversations`)
-        .then((convs) => setUnreadMessages(convs.reduce((s, c) => s + (c.unreadCount ?? 0), 0)))
-        .catch((e) => console.error("fetch conversations:", e));
-      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-      apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers })
-        .then((votes) => setUnvotedCount(votes.filter((v) => v.status === "open" && v.my_answer === null).length))
-        .catch((e) => console.error("fetch votes:", e));
-      // Grémium je taky pod Více — bez tohohle by hráč na mobilu neviděl,
-      // že se o něčem hlasuje a zasedání mu propadne. Nepřečtená zasedání se
-      // počítají taky: hlasování odznak zhasl hned po odevzdání hlasu a jak to
-      // dopadlo, se hráč nedozvěděl.
-      apiFetch<{ toVote: number; unseenMeetings: number }>(`/api/teams/${teamId}/competition/pending`)
-        .then((p) => setGremiumCount((p.toVote ?? 0) + (p.unseenMeetings ?? 0)))
-        .catch((e) => console.error("fetch gremium pending:", e));
-      // Sázky jsou taky pod Více — vyhodnocený tiket by jinak zůstal nepovšimnut.
-      apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`)
-        .then((b) => setBetsCount(b.unseen ?? 0))
-        .catch((e) => console.error("fetch bets pending:", e));
-    };
-    fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
-    return () => clearInterval(interval);
-  }, [teamId, token, pathname]);
-
-  // Badge „Nové" u novinek — přehodnotit při každé navigaci (stránka Novinky ho maže)
-  useEffect(() => {
-    setNotesUnseen(hasUnseenNotes());
-  }, [pathname]);
+  const badges = useMenuBadges();
 
   const items = [
     { href: "/dashboard", label: "Domů", icon: "🏟" },
-    { href: "/dashboard/phone", label: "Telefon", icon: "📱", badge: unreadMessages },
+    { href: "/dashboard/phone", label: "Telefon", icon: "📱", badge: badges.unreadMessages },
     { href: "/dashboard/match", label: "Sestava", icon: "📋" },
     { href: "/dashboard/liga", label: "Liga", icon: "🏆" },
-    // Novinky se schovávají pod Více, takže se musí připočíst sem — jinak by
-    // hráč na mobilu neměl jak poznat, že něco nového vyšlo.
-    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: unvotedCount + gremiumCount + betsCount + (notesUnseen ? 1 : 0) },
+    // Všechny podnotifikace (grémium, sázky, přestupy, novinky, sněm) se sčítají do Více
+    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: badges.moreBadgeCount },
   ];
 
   return (

@@ -1,76 +1,290 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
-import { hasUnseenNotes } from "@/data/release-notes";
+import { useMenuBadges, MenuBadgesState } from "@/hooks/use-menu-badges";
 
-const SECTIONS: Array<{ title: string; items: Array<{ href: string; icon: string; label: string; color: string }> }> = [
-  { title: "Klub", items: [
-    { href: "/dashboard/klub", icon: "\u{1F3DB}️", label: "Klub", color: "#153615" },
-    { href: "/dashboard/obec", icon: "\u{1F3D8}️", label: "Obec", color: "#3D6B5C" },
-    { href: "/dashboard/reputace", icon: "\u2B50", label: "Reputace", color: "#B8860B" },
-    { href: "/dashboard/squad", icon: "\u{1F465}", label: "Kádr", color: "#2D5F2D" },
-    { href: "/dashboard/u21", icon: "\u{1F9D2}", label: "U21", color: "#3D7A3D" },
-    { href: "/dashboard/training", icon: "\u{1F3CB}️", label: "Tréninky", color: "#3D7A3D" },
-    { href: "/dashboard/zamestnanci", icon: "\u{1F454}", label: "Zaměstnanci", color: "#4E6B7B" },
-    { href: "/dashboard/transfers", icon: "\u{1F91D}", label: "Přestupy", color: "#4A8A4A" },
-    { href: "/dashboard/watchlist", icon: "⭐", label: "Sledovaní", color: "#B8860B" },
-    { href: "/dashboard/sazky", icon: "🎫", label: "Sázková kancelář", color: "#7A2E2E" },
-    { href: "/dashboard/finances", icon: "\u{1F4B0}", label: "Finance", color: "#6B8E23" },
-    { href: "/dashboard/sponsors", icon: "\u{1F4BC}", label: "Sponzoři", color: "#8B7355" },
-    { href: "/dashboard/equipment", icon: "\u{1F45F}", label: "Vybavení", color: "#7B6B4E" },
-    { href: "/dashboard/stadium", icon: "\u{1F3DF}️", label: "Stadion", color: "#5C7A3D" },
-    { href: "/dashboard/fans", icon: "\u{1F4E3}", label: "Fanoušci", color: "#8B4513" },
-    { href: "/dashboard/events", icon: "\u{1F389}", label: "Události", color: "#8B6914" },
-    { href: "/dashboard/hospoda", icon: "\u{1F37A}", label: "Hospoda", color: "#8B5A2B" },
-    { href: "/dashboard/incidenty", icon: "\u{1F6A8}", label: "Incidenty", color: "#7A2E2E" },
-  ]},
-  { title: "Soutěž", items: [
-    { href: "/dashboard/liga", icon: "\u{1F3C6}", label: "Liga", color: "#B8860B" },
-    { href: "/dashboard/pohar", icon: "\u{1F3C5}", label: "Pohár", color: "#A0722D" },
-    { href: "/dashboard/schedule", icon: "\u{1F4C5}", label: "Rozpis", color: "#3D6B5C" },
-    { href: "/dashboard/friendly", icon: "\u{1F91C}", label: "Přáteláky", color: "#4A7A5C" },
-    { href: "/dashboard/calendar", icon: "\u{1F5D3}️", label: "Kalendář", color: "#6B7B3D" },
-    { href: "/dashboard/news", icon: "\u{1F4F0}", label: "Zpravodaj", color: "#556B2F" },
-    { href: "/dashboard/rozhodci", icon: "\u{1F9D1}\u200D\u2696\uFE0F", label: "Rozhodčí", color: "#4E4E4E" },
-    { href: "/dashboard/soutez", icon: "\u{1F3DB}\uFE0F", label: "Grémium soutěže", color: "#6B5B3D" },
-    // Sněm dočasně skryt z menu — dostupný přes přímou URL /dashboard/hlasovani.
-  ]},
-  { title: "Ostatní", items: [
-    { href: "/dashboard/novinky", icon: "✨", label: "Co je nového", color: "#3D7A3D" },
-    { href: "/dashboard/napoveda", icon: "\u{1F4D6}", label: "Nápověda", color: "#2D5F2D" },
-    { href: "/dashboard/app", icon: "\u{1F4F2}", label: "Nainstaluj", color: "#153615" },
-    { href: "/dashboard/invite", icon: "✉️", label: "Pozvi kamaráda", color: "#3D6B5C" },
-    { href: "/dashboard/settings", icon: "⚙️", label: "Nastavení", color: "#6B6B6B" },
-  ]},
+interface MenuItem {
+  href: string;
+  icon: string;
+  label: string;
+  color: string;
+}
+
+interface Section {
+  title: string;
+  items: MenuItem[];
+}
+
+interface PendingAlert {
+  id: string;
+  href: string;
+  icon: string;
+  title: string;
+  count?: number;
+  isNew?: boolean;
+  description: string;
+  color: string;
+}
+
+type TileBadge =
+  | { type: "count"; count: number; bg?: string }
+  | { type: "tag"; label: string; bg?: string };
+
+const BASE_SECTIONS: Section[] = [
+  {
+    title: "Klub",
+    items: [
+      { href: "/dashboard/klub", icon: "🏛️", label: "Klub", color: "#153615" },
+      { href: "/dashboard/obec", icon: "🏘️", label: "Obec", color: "#3D6B5C" },
+      { href: "/dashboard/reputace", icon: "⭐", label: "Reputace", color: "#B8860B" },
+      { href: "/dashboard/squad", icon: "👥", label: "Kádr", color: "#2D5F2D" },
+      { href: "/dashboard/u21", icon: "🧒", label: "U21", color: "#3D7A3D" },
+      { href: "/dashboard/training", icon: "🏋️", label: "Tréninky", color: "#3D7A3D" },
+      { href: "/dashboard/zamestnanci", icon: "👔", label: "Zaměstnanci", color: "#4E6B7B" },
+      { href: "/dashboard/transfers", icon: "🤝", label: "Přestupy", color: "#4A8A4A" },
+      { href: "/dashboard/watchlist", icon: "⭐", label: "Sledovaní", color: "#B8860B" },
+      { href: "/dashboard/sazky", icon: "🎫", label: "Sázková kancelář", color: "#7A2E2E" },
+      { href: "/dashboard/finances", icon: "💰", label: "Finance", color: "#6B8E23" },
+      { href: "/dashboard/sponsors", icon: "💼", label: "Sponzoři", color: "#8B7355" },
+      { href: "/dashboard/equipment", icon: "👟", label: "Vybavení", color: "#7B6B4E" },
+      { href: "/dashboard/stadium", icon: "🏟️", label: "Stadion", color: "#5C7A3D" },
+      { href: "/dashboard/fans", icon: "📢", label: "Fanoušci", color: "#8B4513" },
+      { href: "/dashboard/events", icon: "🎉", label: "Události", color: "#8B6914" },
+      { href: "/dashboard/hospoda", icon: "🍺", label: "Hospoda", color: "#8B5A2B" },
+      { href: "/dashboard/incidenty", icon: "🚨", label: "Incidenty", color: "#7A2E2E" },
+    ],
+  },
+  {
+    title: "Soutěž",
+    items: [
+      { href: "/dashboard/liga", icon: "🏆", label: "Liga", color: "#B8860B" },
+      { href: "/dashboard/pohar", icon: "🥇", label: "Pohár", color: "#A0722D" },
+      { href: "/dashboard/schedule", icon: "📅", label: "Rozpis", color: "#3D6B5C" },
+      { href: "/dashboard/friendly", icon: "🤛", label: "Přáteláky", color: "#4A7A5C" },
+      { href: "/dashboard/calendar", icon: "🗓️", label: "Kalendář", color: "#6B7B3D" },
+      { href: "/dashboard/news", icon: "📰", label: "Zpravodaj", color: "#556B2F" },
+      { href: "/dashboard/rozhodci", icon: "🧑‍⚖️", label: "Rozhodčí", color: "#4E4E4E" },
+      { href: "/dashboard/soutez", icon: "🏛️", label: "Grémium soutěže", color: "#6B5B3D" },
+      // Sněm ligy je dynamicky doplněn, pokud existuje neodevzdaný hlas
+    ],
+  },
+  {
+    title: "Ostatní",
+    items: [
+      { href: "/dashboard/novinky", icon: "✨", label: "Co je nového", color: "#3D7A3D" },
+      { href: "/dashboard/napoveda", icon: "📖", label: "Nápověda", color: "#2D5F2D" },
+      { href: "/dashboard/app", icon: "📲", label: "Nainstaluj", color: "#153615" },
+      { href: "/dashboard/invite", icon: "✉️", label: "Pozvi kamaráda", color: "#3D6B5C" },
+      { href: "/dashboard/settings", icon: "⚙️", label: "Nastavení", color: "#6B6B6B" },
+    ],
+  },
 ];
+
+function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
+  if (href === "/dashboard/transfers" && badges.incomingOffers > 0) {
+    return { type: "count", count: badges.incomingOffers, bg: "bg-card-red" };
+  }
+  if (href === "/dashboard/sazky" && badges.betsCount > 0) {
+    return { type: "count", count: badges.betsCount, bg: "bg-card-red" };
+  }
+  if (href === "/dashboard/soutez" && badges.gremiumCount > 0) {
+    return { type: "count", count: badges.gremiumCount, bg: "bg-card-red" };
+  }
+  if (href === "/dashboard/hlasovani" && badges.unvotedCount > 0) {
+    return { type: "count", count: badges.unvotedCount, bg: "bg-amber-500" };
+  }
+  if (href === "/dashboard/novinky" && badges.notesUnseen) {
+    return { type: "tag", label: "Nové", bg: "bg-pitch-500" };
+  }
+  return null;
+}
 
 export default function MorePage() {
   const { logout, isAdmin } = useTeam();
-  const [notesUnseen, setNotesUnseen] = useState(false);
+  const badges = useMenuBadges();
 
-  // Odznak „Nové" u novinek — přehodnotit při každém otevření stránky.
-  useEffect(() => {
-    setNotesUnseen(hasUnseenNotes());
-  }, []);
+  const pendingAlerts: PendingAlert[] = [];
+
+  if (badges.incomingOffers > 0) {
+    pendingAlerts.push({
+      id: "transfers",
+      href: "/dashboard/transfers",
+      icon: "🤝",
+      title: "Přestupy",
+      count: badges.incomingOffers,
+      description:
+        badges.incomingOffers === 1
+          ? "1 nová nabídka na tvého hráče"
+          : `${badges.incomingOffers} nové nabídky na tvé hráče`,
+      color: "#4A8A4A",
+    });
+  }
+
+  if (badges.gremiumCount > 0) {
+    let desc = `${badges.gremiumCount} nových událostí v grémiu`;
+    if (badges.gremiumToVote > 0 && badges.gremiumUnseenMeetings > 0) {
+      desc = `${badges.gremiumToVote} neodevzdaných hlasů a nový zápis ze schůze`;
+    } else if (badges.gremiumToVote > 0) {
+      desc =
+        badges.gremiumToVote === 1
+          ? "1 neodevzdaný hlas před zasedáním grémia"
+          : `${badges.gremiumToVote} neodevzdaných hlasů před zasedáním grémia`;
+    } else if (badges.gremiumUnseenMeetings > 0) {
+      desc =
+        badges.gremiumUnseenMeetings === 1
+          ? "1 nově vyhodnocené zasedání grémia"
+          : `${badges.gremiumUnseenMeetings} nově vyhodnocených zasedání grémia`;
+    }
+
+    pendingAlerts.push({
+      id: "gremium",
+      href: "/dashboard/soutez",
+      icon: "🏛️",
+      title: "Grémium soutěže",
+      count: badges.gremiumCount,
+      description: desc,
+      color: "#6B5B3D",
+    });
+  }
+
+  if (badges.betsCount > 0) {
+    pendingAlerts.push({
+      id: "bets",
+      href: "/dashboard/sazky",
+      icon: "🎫",
+      title: "Sázková kancelář",
+      count: badges.betsCount,
+      description:
+        badges.betsCount === 1
+          ? "1 nově vyhodnocený sázkový tiket"
+          : `${badges.betsCount} nově vyhodnocených sázkových tiketů`,
+      color: "#7A2E2E",
+    });
+  }
+
+  if (badges.unvotedCount > 0) {
+    pendingAlerts.push({
+      id: "votes",
+      href: "/dashboard/hlasovani",
+      icon: "🗳️",
+      title: "Sněm ligy",
+      count: badges.unvotedCount,
+      description:
+        badges.unvotedCount === 1
+          ? "1 otevřené hlasování čeká na tvůj hlas"
+          : `${badges.unvotedCount} otevřených hlasování čeká na tvůj hlas`,
+      color: "#B8860B",
+    });
+  }
+
+  if (badges.notesUnseen) {
+    pendingAlerts.push({
+      id: "notes",
+      href: "/dashboard/novinky",
+      icon: "✨",
+      title: "Co je nového",
+      isNew: true,
+      description: "Nové funkce, vylepšení a novinky ve hře",
+      color: "#3D7A3D",
+    });
+  }
+
+  const totalAlertCount = pendingAlerts.reduce((sum, a) => sum + (a.count ?? 1), 0);
+
+  const sections = BASE_SECTIONS.map((section) => {
+    if (section.title === "Soutěž" && badges.unvotedCount > 0) {
+      const alreadyHas = section.items.some((i) => i.href === "/dashboard/hlasovani");
+      if (!alreadyHas) {
+        return {
+          ...section,
+          items: [
+            ...section.items,
+            { href: "/dashboard/hlasovani", icon: "🗳️", label: "Sněm", color: "#B8860B" },
+          ],
+        };
+      }
+    }
+    return section;
+  });
 
   return (
     <div className="page-container pb-24">
-      {SECTIONS.map((section) => (
+      {/* Sekce s přehledem notifikací, které vyžadují pozornost */}
+      {pendingAlerts.length > 0 && (
+        <section aria-label="Upozornění vyžadující pozornost" className="mb-6">
+          <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-3.5 sm:p-4 shadow-sm">
+            <div className="flex items-center gap-2 mb-2.5 px-0.5">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-card-red" />
+              </span>
+              <h2 className="text-xs font-heading font-bold uppercase tracking-wider text-ink">
+                Čeká na tvou pozornost ({totalAlertCount})
+              </h2>
+            </div>
+
+            <div className="space-y-2">
+              {pendingAlerts.map((alert) => (
+                <Link
+                  key={alert.id}
+                  href={alert.href}
+                  className="flex items-center justify-between p-3 rounded-xl bg-surface hover:bg-surface-elevated border border-line transition-all active:scale-[0.99] shadow-xs"
+                >
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
+                      style={{ background: `${alert.color}26` }}
+                      aria-hidden="true"
+                    >
+                      {alert.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-heading font-bold text-ink truncate">
+                          {alert.title}
+                        </span>
+                        {alert.count != null && alert.count > 0 && (
+                          <span className="bg-card-red text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                            {alert.count}
+                          </span>
+                        )}
+                        {alert.isNew && (
+                          <span className="bg-pitch-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                            Nové
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted leading-tight truncate mt-0.5">
+                        {alert.description}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-heading font-bold text-pitch-600 shrink-0 flex items-center gap-1 pl-1">
+                    Otevřít →
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {sections.map((section) => (
         <div key={section.title} className="mb-6">
-          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">{section.title}</p>
+          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">
+            {section.title}
+          </p>
           <div className="grid grid-cols-4 gap-2">
             {section.items.map((item) => {
+              const badge = getTileBadge(item.href, badges);
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl transition-transform active:scale-95"
-                  /* Sytost byla 7 % a 12 % — při té se 25 dlaždic slilo do jedné
-                     bledé plochy a barevné kódování neneslo žádnou informaci.
-                     Na 14 % a 24 % už jdou skupiny od sebe rozeznat. */
+                  /* Sytost 14 % a 24 % — skupiny od sebe jdou rozeznat */
                   style={{ background: `${item.color}24` }}
                 >
                   <div
@@ -80,10 +294,19 @@ export default function MorePage() {
                   >
                     {item.icon}
                   </div>
-                  <span className="text-micro font-medium text-ink text-center leading-tight">{item.label}</span>
-                  {item.href === "/dashboard/novinky" && notesUnseen && (
-                    <span className="absolute top-1 right-1 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">
-                      Nové
+                  <span className="text-micro font-medium text-ink text-center leading-tight">
+                    {item.label}
+                  </span>
+                  {badge && badge.type === "count" && badge.count > 0 && (
+                    <span
+                      className={`absolute -top-1 -right-1 ${badge.bg ?? "bg-card-red"} text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-md border-2 border-surface`}
+                    >
+                      {badge.count > 99 ? "99+" : badge.count}
+                    </span>
+                  )}
+                  {badge && badge.type === "tag" && (
+                    <span className="absolute -top-1 -right-1 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full shadow-md border-2 border-surface">
+                      {badge.label}
                     </span>
                   )}
                 </Link>
@@ -92,11 +315,13 @@ export default function MorePage() {
           </div>
         </div>
       ))}
-      {/* Administrace — jen pro adminy. Do spodní lišty se nevešla (má 5 položek
-          a nemá růst), takže patří sem, kde je zbytek rozcestníku. */}
+
+      {/* Administrace — jen pro adminy */}
       {isAdmin && (
         <div className="mb-6">
-          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">Správa</p>
+          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">
+            Správa
+          </p>
           <div className="grid grid-cols-4 gap-2">
             <Link
               href="/dashboard/admin"
@@ -110,14 +335,18 @@ export default function MorePage() {
               >
                 🛠️
               </div>
-              <span className="text-micro font-medium text-ink text-center leading-tight">Administrace</span>
+              <span className="text-micro font-medium text-ink text-center leading-tight">
+                Administrace
+              </span>
             </Link>
           </div>
         </div>
       )}
 
-      <button onClick={logout}
-        className="w-full mt-6 py-3 rounded-xl text-center text-sm font-heading font-bold text-card-red bg-red-50 hover:bg-red-100 transition-colors">
+      <button
+        onClick={logout}
+        className="w-full mt-6 py-3 rounded-xl text-center text-sm font-heading font-bold text-card-red bg-red-50 hover:bg-red-100 transition-colors"
+      >
         🚪 Odhlásit se
       </button>
     </div>
