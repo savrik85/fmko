@@ -295,38 +295,6 @@ export default function U21Page() {
       {tab === "kadr" && !squadLoaded && !error && <div className="flex justify-center p-8"><Spinner /></div>}
       {tab === "kadr" && squadLoaded && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          {/* U21 kádr — povýšení */}
-          <section className="card min-w-0 p-3 md:p-4">
-            <h2 className="font-heading font-bold text-base mb-3">
-              U21 kádr ({u21Players.length})
-            </h2>
-            {u21Players.length === 0 ? (
-              <p className="text-sm text-gray-500">Kádr je prázdný.</p>
-            ) : (
-              <PlayerList
-                players={u21Players.map((p) => ({
-                  id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
-                  age: p.age, overallRating: p.overall_rating,
-                  avatar: (p as unknown as { avatar?: Record<string, unknown> }).avatar ?? null,
-                  nextMatchReturn: p.next_match_return === 1,
-                }))}
-                statsMap={statsMap}
-                growthMap={growthMap}
-                renderActions={(p) => (
-                  <button
-                    disabled={busy === p.id}
-                    onClick={() => {
-                      const u21Player = u21Players.find((x) => x.id === p.id);
-                      if (u21Player) promoteToA(u21Player);
-                    }}
-                    className="min-h-11 px-3 py-2 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
-                    title="Povolat do A-týmu"
-                  >↑ Povolat do áčka</button>
-                )}
-              />
-            )}
-          </section>
-
           {/* A-tým — mladí hráči k odeslání */}
           <section className="card min-w-0 p-3 md:p-4">
             <h2 className="font-heading font-bold text-base mb-3">
@@ -358,6 +326,38 @@ export default function U21Page() {
                       title="Jen na nejbližší U21 zápas, pak zpět"
                     >→ Na jeden zápas</button>
                   </div>
+                )}
+              />
+            )}
+          </section>
+
+          {/* U21 kádr — povýšení */}
+          <section className="card min-w-0 p-3 md:p-4">
+            <h2 className="font-heading font-bold text-base mb-3">
+              U21 kádr ({u21Players.length})
+            </h2>
+            {u21Players.length === 0 ? (
+              <p className="text-sm text-gray-500">Kádr je prázdný.</p>
+            ) : (
+              <PlayerList
+                players={u21Players.map((p) => ({
+                  id: p.id, firstName: p.first_name, lastName: p.last_name, position: p.position,
+                  age: p.age, overallRating: p.overall_rating,
+                  avatar: (p as unknown as { avatar?: Record<string, unknown> }).avatar ?? null,
+                  nextMatchReturn: p.next_match_return === 1,
+                }))}
+                statsMap={statsMap}
+                growthMap={growthMap}
+                renderActions={(p) => (
+                  <button
+                    disabled={busy === p.id}
+                    onClick={() => {
+                      const u21Player = u21Players.find((x) => x.id === p.id);
+                      if (u21Player) promoteToA(u21Player);
+                    }}
+                    className="min-h-11 px-3 py-2 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50"
+                    title="Povolat do A-týmu"
+                  >↑ Povolat do áčka</button>
                 )}
               />
             )}
