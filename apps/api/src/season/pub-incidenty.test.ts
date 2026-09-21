@@ -28,7 +28,9 @@ describe("příhody o incidentech v hospodě", () => {
     const update = db.dotazy.find((d) => /UPDATE pub_sessions SET attendees/.test(d.sql));
     expect((JSON.parse(String(update?.params[0])) as Array<{ playerId: string }>).map((a) => a.playerId)).toEqual(["s", "k"]);
     expect((JSON.parse(String(update?.params[1])) as Array<{ type: string }>).map((i) => i.type)).toEqual(["stezuje_si_na_trenera"]);
-    const vztah = db.davky.flat().find((d) => /coach_relationship/.test(d.sql));
+    const vztah = db.davky.flat().find((d) => /UPDATE players SET coach_relationship/.test(d.sql));
     expect(vztah?.params).toEqual([-3, "k"]);
+    const log = db.davky.flat().find((d) => /INSERT INTO coach_relation_log/.test(d.sql));
+    expect(log?.params).toContain("V hospodě: Stěžoval si.");
   });
 });
