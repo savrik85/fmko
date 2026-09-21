@@ -12,6 +12,7 @@ import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
 import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
 import { isLightColor } from "@/lib/team-color";
+import { coachAttributeEffects } from "@okresni-masina/shared";
 
 type CoachTab = "prehled" | "kabina" | "treneri" | "historie";
 const TAB_KEYS: CoachTab[] = ["prehled", "kabina", "treneri", "historie"];
@@ -182,15 +183,21 @@ export default function ManagerDetailPage() {
         {tab === "prehled" && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-5">
 
-          {/* Attributes */}
+          {/* Vlastnosti a jejich dopad — čísla počítá stejný sdílený vzorec jako hra */}
           <div className="card p-4 sm:p-5">
-            <SectionLabel>Trenérské atributy</SectionLabel>
+            <SectionLabel>Trenérské vlastnosti a co dělají</SectionLabel>
             <div>
-              <AttrRow label="Koučink" value={manager.coaching ?? 40} description="Schopnost zlepšovat hráče tréninkem" />
-              <AttrRow label="Motivace" value={manager.motivation ?? 40} description="Vliv na morálku a nasazení hráčů" />
-              <AttrRow label="Taktika" value={manager.tactics ?? 40} description="Schopnost připravit tým na soupeře" />
-              <AttrRow label="Práce s mládeží" value={manager.youthDevelopment ?? 40} description="Rozvoj mladých hráčů" />
-              <AttrRow label="Disciplína" value={manager.discipline ?? 40} description="Udržování pořádku v kabině" />
+              {coachAttributeEffects({
+                coaching: manager.coaching ?? 40,
+                motivation: manager.motivation ?? 40,
+                tactics: manager.tactics ?? 40,
+                youthDevelopment: manager.youthDevelopment ?? 40,
+                discipline: manager.discipline ?? 40,
+                reputation: manager.reputation ?? 30,
+              }).map((fx) => (
+                <AttrRow key={fx.key} label={fx.label} value={fx.value} lines={fx.lines}
+                  max={fx.key === "reputation" ? 75 : 99} />
+              ))}
             </div>
           </div>
 
@@ -203,7 +210,6 @@ export default function ManagerDetailPage() {
                 {manager.age && <InfoRow label="Věk" value={`${manager.age} let`} />}
                 {manager.birthplace && <InfoRow label="Bydliště" value={manager.birthplace} />}
                 {manager.backstory && <InfoRow label="Pozadí" value={BACKSTORY_LABELS[manager.backstory] ?? manager.backstory} />}
-                <InfoRow label="Reputace" value={`${manager.reputation ?? 30}`} />
                 {hofRank && (
                   <InfoRow label="Síň slávy" value={
                     <Link href="/sin-slavy" className="text-ink hover:text-pitch-500 transition-colors">
@@ -384,18 +390,22 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function AttrRow({ label, value, description }: { label: string; value: number; description: string }) {
+function AttrRow({ label, value, lines, max = 99 }: { label: string; value: number; lines: string[]; max?: number }) {
   const barColor = value >= 70 ? "#22c55e" : value >= 50 ? "#6b7280" : value >= 30 ? "#d97706" : "#ef4444";
   return (
     <div className="py-3 border-b border-gray-50 last:border-b-0">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-heading font-bold">{label}</span>
-        <span className={`text-sm font-heading font-bold tabular-nums ${attrColor(value)}`}>{value}</span>
+        <span className="text-base font-heading font-bold">{label}</span>
+        <span className={`text-base font-heading font-bold tabular-nums ${attrColor(value)}`}>{value}</span>
       </div>
-      <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-1">
-        <div className="h-full rounded-full transition-all" style={{ width: `${value}%`, backgroundColor: barColor }} />
+      <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-1.5">
+        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: barColor }} />
       </div>
-      <div className="text-micro text-muted">{description}</div>
+      <ul className="space-y-0.5">
+        {lines.map((l) => (
+          <li key={l} className="text-sm text-ink-light leading-snug">{l}</li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -11,6 +11,7 @@
  */
 
 import type { EquipmentMods } from "../engine/types";
+import { disciplineCardMul, disciplineFoulMul } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { calculateEffects } from "./equipment-generator";
 
@@ -78,7 +79,26 @@ export async function mergeStaffMatchMods(
   return merged;
 }
 
-/** Vybavení + zaměstnanci naráz — to, co potřebuje simulateMatch. */
+/**
+ * Disciplína trenéra: méně faulů a karet. Rezerva hraje pod trenérem áčka.
+ * Bez trenéra (AI klub, kterému ho nikdo neuložil) zůstane neutrální 1.
+ */
+export async function mergeCoachMatchMods(db: D1Database, teamId: string, mods: MatchMods): Promise<MatchMods> {
+  const row = await db.prepare(
+    `SELECT m.discipline FROM teams t
+       JOIN managers m ON m.team_id = COALESCE(t.parent_team_id, t.id)
+      WHERE t.id = ? LIMIT 1`,
+  ).bind(teamId).first<{ discipline: number }>()
+    .catch((e) => { logger.warn({ module: MODULE }, `load coach discipline ${teamId}`, e); return null; });
+  if (row) {
+    mods.coachFoulMod = disciplineFoulMul(row.discipline);
+    mods.coachCardMod = disciplineCardMul(row.discipline);
+  }
+  return mods;
+}
+
+/** Vybavení + zaměstnanci + trenér naráz — to, co potřebuje simulateMatch. */
 export async function loadMatchMods(db: D1Database, teamId: string, isHome: boolean): Promise<MatchMods> {
-  return mergeStaffMatchMods(db, teamId, await loadEquipmentMatchMods(db, teamId), isHome);
+  const mods = await mergeStaffMatchMods(db, teamId, await loadEquipmentMatchMods(db, teamId), isHome);
+  return mergeCoachMatchMods(db, teamId, mods);
 }

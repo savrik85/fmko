@@ -4,6 +4,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { coachSigningFactor, type CoachStanding } from "@okresni-masina/shared";
 
 export interface AgencyFactor {
   name: string;
@@ -31,7 +32,7 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
 
 export function evaluateSigningChance(
   agent: { weekly_wage: number; personality: Record<string, number>; village_id?: string | null; district?: string | null },
-  team: { reputation: number; villageLat: number; villageLon: number; squadSize: number; district?: string | null },
+  team: { reputation: number; villageLat: number; villageLon: number; squadSize: number; district?: string | null; coach?: CoachStanding | null },
   agentVillage: { lat: number; lng: number } | null,
   offeredWage: number,
   rng: Rng,
@@ -104,6 +105,17 @@ export function evaluateSigningChance(
     value: Math.round(repScore),
     detail: team.reputation >= 60 ? "Klub má dobré jméno" : team.reputation >= 40 ? "Průměrný klub" : "O klubu moc neslyšel",
   });
+
+  // 1b. Jméno trenéra (-6 až +14) — reputace a licence
+  if (team.coach) {
+    const coachScore = coachSigningFactor(team.coach);
+    total += coachScore;
+    factors.push({
+      name: "Trenér",
+      value: coachScore,
+      detail: coachScore >= 6 ? "Pod tímhle trenérem chce hrát" : coachScore > 0 ? "Trenéra zná a věří mu" : coachScore < 0 ? "O trenérovi slyšel jen to horší" : "Trenér mu nic neříká",
+    });
+  }
 
   // 2. Vzdálenost (-20 až +15)
   let distScore = 0;

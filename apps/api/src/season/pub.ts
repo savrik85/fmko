@@ -9,6 +9,7 @@ import { logConditionStmt } from "../lib/condition-log";
 import { TYPY_PRIBEHU } from "../incidents/hospoda";
 import { udalostiHospody, zapisHospody } from "../incidents/hospoda-db";
 import { ROZVOD_HOSPODA_NASOBEK } from "../incidents/nastaveni";
+import { disciplinePubExcessMul } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
@@ -699,8 +700,9 @@ function pickRandom<T>(arr: T[]): T {
 
 /**
  * @param hangoverMod 0–0.45 podle kávovaru v kabině — snižuje šanci na ranní kocovinu.
+ * @param excessMul disciplína trenéra (0,6–1,2): násobí rvačky a kocoviny. 1 = neutrální.
  */
-function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>, coachName: string = "Trenér", district?: string, hangoverMod: number = 0): PubIncident[] {
+function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<string>>, _buddiesMap: Map<string, Set<string>>, coachName: string = "Trenér", district?: string, hangoverMod: number = 0, excessMul: number = 1): PubIncident[] {
   const incidents: PubIncident[] = [];
 
   if (attendees.length === 0) {
@@ -720,7 +722,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
     for (const v of visitors) {
       const localRival = locals.find((l) => rivalsMap.get(l.playerId)?.has(v.playerId) || rivalsMap.get(v.playerId)?.has(l.playerId));
       const partner = localRival ?? pickRandom(locals);
-      const fightProb = localRival ? 0.30 : 0.12;
+      const fightProb = (localRival ? 0.30 : 0.12) * excessMul;
       const roll = Math.random();
 
       if (roll < fightProb) {
@@ -769,7 +771,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
   for (const a of locals) {
     if (a.alcohol < 50) continue;
     // Kávovar v kabině ubere až 45 % — ráno se to s kafem prostě dá.
-    const prob = (0.10 + ((a.alcohol - 50) / 50) * 0.20) * (1 - hangoverMod); // alcohol 50→10%, 75→20%, 100→30%
+    const prob = (0.10 + ((a.alcohol - 50) / 50) * 0.20) * (1 - hangoverMod) * excessMul; // alcohol 50→10%, 75→20%, 100→30%
     if (Math.random() < prob) hangoverVictims.push(a);
   }
 
@@ -904,7 +906,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
   // ── Vnitřní rvačka mezi opilými spoluhráči — 5% prob pokud sou aspoň 2 lokálové
   //    s temper-proxy (alcohol≥45) — oba dostanou 1 den injury + morálka -2 ──
   const fightCandidates = locals.filter((a) => a.alcohol >= 45);
-  if (fightCandidates.length >= 2 && Math.random() < 0.05) {
+  if (fightCandidates.length >= 2 && Math.random() < 0.05 * excessMul) {
     const f1 = pickRandom(fightCandidates);
     const f2 = pickRandom(fightCandidates.filter((a) => a.playerId !== f1.playerId));
     if (f2) {
@@ -1444,8 +1446,8 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     if (players.results.length === 0) continue;
 
     // Načti trenéra (pro coach incidenty + případný attendee); fallback "Trenér"
-    const managerRow = await db.prepare("SELECT id, name, avatar FROM managers WHERE team_id = ? LIMIT 1")
-      .bind(team.id).first<{ id: string; name: string; avatar: string }>()
+    const managerRow = await db.prepare("SELECT id, name, avatar, discipline FROM managers WHERE team_id = ? LIMIT 1")
+      .bind(team.id).first<{ id: string; name: string; avatar: string; discipline: number }>()
       .catch((e) => { logger.warn({ module: "pub" }, "load manager for pub", e); return null; });
     const coachName = managerRow?.name ?? "Trenér";
     let coachAvatar: Record<string, unknown> | undefined;
@@ -1558,7 +1560,8 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     const hangoverMod = (coffee?.coffee_maker ?? 0) * ((coffee?.coffee_maker_condition ?? 50) / 100) * 0.15;
 
     // Generate incidents
-    const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName, team.district ?? undefined, hangoverMod);
+    const excessMul = managerRow ? disciplinePubExcessMul(managerRow.discipline) : 1;
+    const incidents = generateIncidents(attendees, rivalsMap, buddiesMap, coachName, team.district ?? undefined, hangoverMod, excessMul);
 
     // Incidenty v klubu: drby, chlubení, ohlášené činy (spec incidentů, Část 9). Nikdy nehází.
     const hospoda = await udalostiHospody(db, { teamId: team.id, leagueId: team.league_id, gameDate }, attendees, { trener: false, jiste: false });

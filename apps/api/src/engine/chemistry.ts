@@ -9,6 +9,7 @@
  */
 
 import type { D1Database } from "@cloudflare/workers-types";
+import { tacticsFamiliarityMul } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 
 export interface FamiliaritySnapshot {
@@ -32,9 +33,24 @@ function parseMap(raw: string | null | undefined): Record<string, number> {
   try {
     const parsed = JSON.parse(raw);
     return typeof parsed === "object" && parsed !== null ? parsed : {};
-  } catch {
+  } catch (e) {
+    logger.warn({ module: "chemistry" }, "parse formation familiarity", e);
     return {};
   }
+}
+
+/**
+ * Jak rychle tým pobírá rozestavění — podle taktiky trenéra (sdílený vzorec s profilem).
+ * Rezerva se učí pod trenérem áčka. Bez trenéra neutrálně.
+ */
+async function loadTacticsMul(db: D1Database, teamId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT m.tactics FROM teams t
+       JOIN managers m ON m.team_id = COALESCE(t.parent_team_id, t.id)
+      WHERE t.id = ? LIMIT 1`,
+  ).bind(teamId).first<{ tactics: number }>()
+    .catch((e) => { logger.warn({ module: "chemistry" }, `load coach tactics ${teamId}`, e); return null; });
+  return row ? tacticsFamiliarityMul(row.tactics) : 1;
 }
 
 export async function readFamiliarity(db: D1Database, teamId: string): Promise<FamiliaritySnapshot> {
@@ -50,7 +66,7 @@ export async function readFamiliarity(db: D1Database, teamId: string): Promise<F
 }
 
 /**
- * Po odehraném zápase: hraná formace +3, ostatní -0.4.
+ * Po odehraném zápase: hraná formace +3 (× taktika trenéra), ostatní -0.4.
  * (Sehranost taktiky jsme záměrně neevidovali — taktika se v reálu adoptuje rychle, řeší to skill-fit.)
  */
 export async function applyMatchResult(
@@ -60,12 +76,13 @@ export async function applyMatchResult(
   formation: string,
 ): Promise<void> {
   const snap = await readFamiliarity(db, teamId);
+  const boost = MATCH_BOOST * (await loadTacticsMul(db, teamId));
 
   const nextFormation: Record<string, number> = {};
   const knownFormations = new Set([...Object.keys(snap.formation), formation]);
   for (const f of knownFormations) {
     const current = snap.formation[f] ?? 0;
-    nextFormation[f] = clamp(f === formation ? current + MATCH_BOOST : current - MATCH_DECAY);
+    nextFormation[f] = clamp(f === formation ? current + boost : current - MATCH_DECAY);
   }
 
   await db.prepare(
@@ -85,7 +102,8 @@ export async function applyTrainingBoost(
 ): Promise<void> {
   const snap = await readFamiliarity(db, teamId);
   const next = { ...snap.formation };
-  next[formation] = clamp((next[formation] ?? 0) + TRAINING_BOOST + extraBoost);
+  const mul = await loadTacticsMul(db, teamId);
+  next[formation] = clamp((next[formation] ?? 0) + (TRAINING_BOOST + extraBoost) * mul);
   await db.prepare("UPDATE teams SET formation_familiarity = ? WHERE id = ?")
     .bind(JSON.stringify(next), teamId).run()
     .catch((e) => logger.warn({ module: "chemistry" }, "training boost", e));

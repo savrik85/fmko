@@ -35,6 +35,14 @@ describe("moraleLoss", () => {
     expect(moraleLoss(player({ overallRating: 45 }), bench)).toBe(5);
     expect(moraleLoss(player({ overallRating: 45, previousStreak: 2 }), bench)).toBe(7);
   });
+
+  it("trenér-motivátor zklamání zmírní, lajdák zhorší, aspoň bod to stojí vždy", () => {
+    const p = player({ overallRating: 45, previousStreak: 2 });
+    expect(moraleLoss(p, bench, 40)).toBe(7);
+    expect(moraleLoss(p, bench, 99)).toBe(4);
+    expect(moraleLoss(p, bench, 10)).toBe(8);
+    expect(moraleLoss(player({ overallRating: 30 }), bench, 99)).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe("pickComplainer", () => {
@@ -93,6 +101,8 @@ describe("truc po nenominaci", () => {
   });
 
   it("cholerik přeskočený slabším trucuje spíš než disciplinovaný kliďas", () => {
+    const soso = sulkChance(player({ temper: 50 }), { reason: "generic", streak: 1 });
+    expect(sulkChance(player({ temper: 50 }), { reason: "generic", streak: 1 }, 99)).toBeLessThan(soso);
     const hot = sulkChance(player({ temper: 80 }), { reason: "skipped_for_weaker", streak: 2 });
     const calm = sulkChance(player({ temper: 20, discipline: 90 }), { reason: "generic", streak: 1 });
     expect(hot).toBeGreaterThan(0.8);

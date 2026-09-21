@@ -5035,10 +5035,12 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const personality = (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent personality", e); return {}; } })();
 
   const { evaluateSigningChance } = await import("../transfers/player-agency");
+  const { loadCoachStandings } = await import("../transfers/player-interest");
+  const coach = (await loadCoachStandings(c.env.DB, [teamId])).get(teamId) ?? null;
   const rng = createRng(cryptoSeed());
   const decision = evaluateSigningChance(
     { weekly_wage: fa.weekly_wage as number, personality, village_id: fa.village_id as string | null, district: fa.district as string | null },
-    { reputation: team.reputation as number, villageLat: team.lat as number, villageLon: team.lng as number, squadSize: squadCount?.cnt ?? 15, district: team.district as string | null },
+    { reputation: team.reputation as number, villageLat: team.lat as number, villageLon: team.lng as number, squadSize: squadCount?.cnt ?? 15, district: team.district as string | null, coach },
     agentVillage, body.offeredWage, rng,
   );
 
@@ -5602,12 +5604,14 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
 
     if (teamInfo) {
       const { evaluateSigningChance } = await import("../transfers/player-agency");
+      const { loadCoachStandings } = await import("../transfers/player-interest");
+      const coach = (await loadCoachStandings(c.env.DB, [teamId])).get(teamId) ?? null;
       const agencyRng = createRng(cryptoSeed());
       // AI players have patriotism to their home district — cross-district transfer is harder
       const pers = { ...(aiData.personality ?? {}), patriotism: 65 };
       const decision = evaluateSigningChance(
         { weekly_wage: aiData.weeklyWage ?? 200, personality: pers, district: aiData.fromDistrict ?? null },
-        { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize: squadCount?.cnt ?? 15, district: teamInfo.district },
+        { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize: squadCount?.cnt ?? 15, district: teamInfo.district, coach },
         aiVillage, aiData.weeklyWage ?? 200,
         agencyRng,
       );

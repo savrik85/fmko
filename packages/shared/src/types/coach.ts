@@ -36,3 +36,179 @@ export function coachRelationBandByKey(key: CoachRelationBandKey): CoachRelation
   const band = COACH_RELATION_BANDS.find((b) => b.key === key) ?? COACH_RELATION_BANDS[2];
   return { key: band.key, label: band.label, icon: band.icon, tone: band.tone };
 }
+
+// ── Dopady vlastností trenéra ──
+//
+// Neutrální bod je 40: trenér se čtyřicítkou hraje jako dřív, než vlastnosti
+// dostaly plný dopad. Server počítá přesně těmito funkcemi, profil je jen ukazuje.
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+/** Math.round vrací u malých záporných čísel −0; v UI by pak svítilo „−0". */
+const roundInt = (v: number) => Math.round(v) || 0;
+
+/** Koučink: násobek šance na zlepšení v tréninku. 40 = 1,12, 60 = 1,28, 99 = 1,59. */
+export function coachingTrainingMul(coaching: number): number {
+  return 0.8 + (coaching / 100) * 0.8;
+}
+
+/** Práce s mládeží: násobek tréninku hráčů do 22 let. 40 = 1,14, 60 = 1,26. */
+export function youthTrainingMul(youth: number): number {
+  return 0.9 + (youth / 100) * 0.6;
+}
+
+/** Práce s mládeží: přídavek k růstu hráčů do 22 let z odehraných minut. 40 = 0, 60 = +0,10. */
+export function youthMatchGrowthMod(youth: number): number {
+  return (youth - 40) / 200;
+}
+
+/** Disciplína: posun docházky na trénink (podíl, ±0,1). */
+export function disciplineAttendanceMod(discipline: number): number {
+  return clamp(((discipline - 40) / 100) * 0.2, -0.1, 0.1);
+}
+
+/** Disciplína: násobek šance na faul hráčů týmu. 40 = 1, 60 = 0,95, 99 = 0,85. */
+export function disciplineFoulMul(discipline: number): number {
+  return 1 - (discipline - 40) * 0.0025;
+}
+
+/** Disciplína: násobek šance na žlutou kartu. 40 = 1, 60 = 0,93, 99 = 0,79. */
+export function disciplineCardMul(discipline: number): number {
+  return 1 - (discipline - 40) * 0.0035;
+}
+
+/** Disciplína: násobek průšvihů v hospodě (rvačky, kocoviny). 40 = 1, 99 = 0,65. */
+export function disciplinePubExcessMul(discipline: number): number {
+  return clamp(1 - (discipline - 40) * 0.006, 0.6, 1.2);
+}
+
+/** Taktika: bonus k přihrávkám a obraně celé sestavy v zápase. 10 = −2, 40 = 0, 60 = +1, 99 = +4. */
+export function tacticsMatchBonus(tactics: number): number {
+  return clamp(roundInt((tactics - 40) / 15), -2, 4);
+}
+
+/** Taktika: násobek růstu sehranosti formace (zápasy i taktický trénink). */
+export function tacticsFamiliarityMul(tactics: number): number {
+  return clamp(1 + (tactics - 40) / 100, 0.7, 1.6);
+}
+
+/** Motivace: morálka celé sestavy před výkopem. 40 = +1, 60 = +3, 99 = +6. */
+export function motivationMoraleBonus(motivation: number): number {
+  return Math.max(0, Math.floor((motivation - 30) / 10));
+}
+
+/** Motivace: o kolik menší je zklamání hráče, který nejede na zápas (podíl; záporné = větší). */
+export function motivationLeftOutSoftening(motivation: number): number {
+  return clamp((motivation - 40) / 150, -0.1, 0.4);
+}
+
+/** Motivace: posun šance, že nenominovaný hráč začne trucovat (absolutně, −0,2 až +0,05). */
+export function motivationSulkMod(motivation: number): number {
+  return -clamp((motivation - 40) / 300, -0.05, 0.2) || 0;
+}
+
+/**
+ * Kolik bodů vztahu k trenérovi stojí další nenominace v řadě.
+ * `previousStreak` = kolikrát v řadě už předtím nejel (první nenominace se neúčtuje).
+ */
+export function leftOutRelationDrop(previousStreak: number, motivation: number): number {
+  if (previousStreak < 1) return 0;
+  return Math.min(4, Math.max(1, Math.round(previousStreak * (1 - motivationLeftOutSoftening(motivation)))));
+}
+
+export interface CoachStanding {
+  reputation: number;
+  licence: number;
+}
+
+/** Reputace a licence trenéra: kolik bodů zájmu přidá kupující trenér proti prodávajícímu. */
+export function coachTransferPull(buyer: CoachStanding, seller: CoachStanding): number {
+  return clamp((buyer.reputation - seller.reputation) * 0.25 + (buyer.licence - seller.licence) * 2, -8, 10);
+}
+
+/** Reputace a licence trenéra: body k šanci, že volný hráč podepíše. 40 bez licence = 0. */
+export function coachSigningFactor(coach: CoachStanding): number {
+  return clamp(roundInt((coach.reputation - 40) * 0.3) + coach.licence * 2, -6, 14);
+}
+
+// ── Popisky dopadů na profil trenéra ──
+
+export type CoachAttrKey = "coaching" | "motivation" | "tactics" | "youthDevelopment" | "discipline" | "reputation";
+
+export interface CoachAttributeEffect {
+  key: CoachAttrKey;
+  label: string;
+  value: number;
+  lines: string[];
+}
+
+const fmtNum = (v: number, digits = 2) => v.toFixed(digits).replace(".", ",");
+const fmtMul = (v: number) => `×${fmtNum(v)}`;
+const signed = (v: number) => (v > 0 ? `+${v}` : v < 0 ? `−${Math.abs(v)}` : "0");
+const pct = (v: number) => roundInt(v * 100);
+
+export function coachAttributeEffects(m: {
+  coaching: number;
+  motivation: number;
+  tactics: number;
+  youthDevelopment: number;
+  discipline: number;
+  reputation: number;
+  licence?: number;
+}): CoachAttributeEffect[] {
+  const foul = pct(disciplineFoulMul(m.discipline) - 1);
+  // Karta padá jen z faulu, takže celkový úbytek karet je součin obou násobků.
+  const card = pct(disciplineCardMul(m.discipline) * disciplineFoulMul(m.discipline) - 1);
+  const pub = pct(disciplinePubExcessMul(m.discipline) - 1);
+  const soften = pct(motivationLeftOutSoftening(m.motivation));
+  const sulk = pct(motivationSulkMod(m.motivation));
+  const youthGrowth = pct(youthMatchGrowthMod(m.youthDevelopment));
+  const tb = tacticsMatchBonus(m.tactics);
+
+  return [
+    {
+      key: "coaching", label: "Koučink", value: m.coaching,
+      lines: [`Šance na zlepšení v tréninku ${fmtMul(coachingTrainingMul(m.coaching))}`],
+    },
+    {
+      key: "motivation", label: "Motivace", value: m.motivation,
+      lines: [
+        `Morálka sestavy před výkopem +${motivationMoraleBonus(m.motivation)}`,
+        soften >= 0
+          ? `Zklamání hráčů, kteří nejedou na zápas, o ${soften} % menší`
+          : `Zklamání hráčů, kteří nejedou na zápas, o ${-soften} % větší`,
+        `Šance, že nenominovaný začne trucovat, ${signed(sulk)} procentních bodů`,
+        "Spolu s reputací a formou drží fanoušky",
+      ],
+    },
+    {
+      key: "tactics", label: "Taktika", value: m.tactics,
+      lines: [
+        `Přihrávky a obrana celé sestavy v zápase ${signed(tb)}`,
+        `Sehranost formace roste ${fmtMul(tacticsFamiliarityMul(m.tactics))}`,
+      ],
+    },
+    {
+      key: "youthDevelopment", label: "Práce s mládeží", value: m.youthDevelopment,
+      lines: [
+        `Trénink hráčů do 22 let ${fmtMul(youthTrainingMul(m.youthDevelopment))}`,
+        `Růst hráčů do 22 let z odehraných minut ${signed(youthGrowth)} %`,
+      ],
+    },
+    {
+      key: "discipline", label: "Disciplína", value: m.discipline,
+      lines: [
+        `Docházka na trénink ${signed(pct(disciplineAttendanceMod(m.discipline)))} procentních bodů`,
+        `Fauly ${signed(foul)} %, žluté karty ${signed(card)} %`,
+        `Průšvihy v hospodě ${signed(pub)} %`,
+      ],
+    },
+    {
+      key: "reputation", label: "Reputace", value: m.reputation,
+      lines: [
+        `Volní hráči podepisují ochotněji: ${signed(coachSigningFactor({ reputation: m.reputation, licence: m.licence ?? 0 }))} k šanci`,
+        "Hráči jiných klubů chtějí přestoupit k trenérovi s větším jménem",
+        "Spolu s motivací a formou drží fanoušky",
+      ],
+    },
+  ];
+}

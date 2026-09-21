@@ -1,3 +1,4 @@
+import { motivationMoraleBonus, tacticsMatchBonus } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 
 /**
@@ -13,20 +14,23 @@ import { logger } from "../lib/logger";
 export interface ManagerMatchBonus {
   tactics: number;
   motivation: number;
-  /** +přihrávky a obrana všem hráčům */
+  /** ±přihrávky a obrana všem hráčům (slabý taktik ubírá) */
   passingDefenseBonus: number;
   /** +morálka všem hráčům */
   moraleBonus: number;
 }
 
-/** Taktika: 40 = +0, 60 = +1, 80 = +2. Strop atributu je 99, takže výš než +2 to nejde. */
+/**
+ * Taktika: 10 = −2, 40 = 0, 60 = +1, 99 = +4. Plynule — dřív to byl schod od 60,
+ * takže trenéři 10 až 59 se v zápase nelišili vůbec. Vzorec je sdílený s profilem.
+ */
 export function tacticsBonus(tactics: number): number {
-  return Math.max(0, Math.floor((tactics - 40) / 20));
+  return tacticsMatchBonus(tactics);
 }
 
 /** Motivace: 40 = +1, 60 = +3, 80 = +5, 99 = +6 morálky. */
 export function moraleBonus(motivation: number): number {
-  return Math.max(0, Math.floor((motivation - 30) / 10));
+  return motivationMoraleBonus(motivation);
 }
 
 interface BonusablePlayer {
@@ -57,9 +61,9 @@ export async function applyManagerMatchBonus(
 
   for (const group of players) {
     for (const p of group) {
-      if (pd > 0) {
-        p.passing = Math.min(100, p.passing + pd);
-        p.defense = Math.min(100, p.defense + pd);
+      if (pd !== 0) {
+        p.passing = Math.max(1, Math.min(100, p.passing + pd));
+        p.defense = Math.max(1, Math.min(100, p.defense + pd));
       }
       if (mb > 0) {
         p.morale = Math.min(100, p.morale + mb);

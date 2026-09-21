@@ -84,6 +84,8 @@ export interface EquipmentMods {
   setPiecesMod?: number;    // tréninková zeď: bonus ke standardkám
   weatherResistMod?: number; // zimní výbava: postih počasí ×(1 - mod)
   lateFatigueMod?: number;   // iontové nápoje: propad kondice po 70. minutě ×(1 - mod)
+  coachFoulMod?: number;     // disciplína trenéra: násobek šance na faul (1 = neutrální)
+  coachCardMod?: number;     // disciplína trenéra: násobek šance na žlutou (1 = neutrální)
 }
 
 export interface MatchConfig {

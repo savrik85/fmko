@@ -50,8 +50,34 @@ export {
   managerFansEffect,
 } from "./manager-fans";
 export { odesloLidi, zavrenoNaZapasy, pripadu } from "./fan-groups";
-export type { CoachRelationBand, CoachRelationBandKey } from "./coach";
-export { coachRelationBand, coachRelationBandByKey, COACH_RELATION_BAND_ORDER } from "./coach";
+export type {
+  CoachRelationBand,
+  CoachRelationBandKey,
+  CoachStanding,
+  CoachAttrKey,
+  CoachAttributeEffect,
+} from "./coach";
+export {
+  coachRelationBand,
+  coachRelationBandByKey,
+  COACH_RELATION_BAND_ORDER,
+  coachingTrainingMul,
+  youthTrainingMul,
+  youthMatchGrowthMod,
+  disciplineAttendanceMod,
+  disciplineFoulMul,
+  disciplineCardMul,
+  disciplinePubExcessMul,
+  tacticsMatchBonus,
+  tacticsFamiliarityMul,
+  motivationMoraleBonus,
+  motivationLeftOutSoftening,
+  motivationSulkMod,
+  leftOutRelationDrop,
+  coachTransferPull,
+  coachSigningFactor,
+  coachAttributeEffects,
+} from "./coach";
 export { rozdelTitulekOznameni, NOTIFIKACE_IKONY } from "./notifications";
 export type {
   PlanTactic,
