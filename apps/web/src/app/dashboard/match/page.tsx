@@ -187,11 +187,15 @@ function MatchPage() {
   const [rolesSavedAt, setRolesSavedAt] = useState<number | null>(null);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
-  const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; updatedAt: string } | null>>({ A: null, B: null, C: null });
+  const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; bench?: string[] | null; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
   const [lineupSource, setLineupSource] = useState<"explicit" | "default" | null>(null);
   // Pokyny na lavičce — ukládají se se sestavou, engine je vyhodnocuje za běhu zápasu
   const [matchPlan, setMatchPlan] = useState<MatchPlanRule[]>([]);
+  // Lavička, kterou si manažer sestavil (null = náhradníky vybere automat podle ratingu)
+  const [benchIds, setBenchIds] = useState<string[] | null>(null);
+  // Hráč označený na lavičce nebo mezi těmi, co nejedou — čeká na toho, s kým se prohodí
+  const [benchPick, setBenchPick] = useState<string | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -214,7 +218,7 @@ function MatchPage() {
     // Pokud URL má ?calendarId=X, načti přímo ten zápas. Jinak default = nejbližší.
     const urlCalIdInit = searchParams.get("calendarId");
     const url = urlCalIdInit ? `/api/teams/${teamId}/next-match?calendarId=${urlCalIdInit}` : `/api/teams/${teamId}/next-match`;
-    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
       url
     ).then((data) => {
       setNextMatch(data.nextMatch);
@@ -259,6 +263,7 @@ function MatchPage() {
       // user vidí "Sestava A vybraná" a může save-nout (pak se uloží per-zápas).
       setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
       setMatchPlan(data.lineup?.matchPlan ?? []);
+      setBenchIds(data.lineup?.bench ?? null);
       setLineupSource(data.lineup?.source ?? null);
       // Save button "Uloženo ✓" jen pokud lineup je explicit pro tento zápas
       setSaved(data.lineup?.source === "explicit");
@@ -288,7 +293,7 @@ function MatchPage() {
             homeName: target.isHome ? myName : target.opponentName,
             awayName: target.isHome ? target.opponentName : myName,
           } : prev);
-          apiFetch<{ lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
+          apiFetch<{ lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
             .then((ld) => {
               if (ld.lineup?.players.length === 11) {
                 setFormation(ld.lineup.formation);
@@ -298,6 +303,7 @@ function MatchPage() {
               }
               setActivePreset(ld.lineup?.presetSlot ?? null);
               setMatchPlan(ld.lineup?.matchPlan ?? []);
+              setBenchIds(ld.lineup?.bench ?? null);
               setSaved(!!ld.lineup);
             })
             .catch((e) => console.error("load lineup from URL:", e));
@@ -347,7 +353,7 @@ function MatchPage() {
     try {
       await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formation, tactic, hardness, captainId, players, matchPlan }),
+        body: JSON.stringify({ formation, tactic, hardness, captainId, players, matchPlan, bench: benchToSave() }),
       });
       const d = await apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`);
       setPresets(d.presets ?? presets);
@@ -361,7 +367,7 @@ function MatchPage() {
     const myReqId = ++loadPresetReqId.current;
     try {
       const matchCalId = nextMatch?.calendarId ?? nextMatch?.matchId ?? null;
-      const data = await apiFetch<{ formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; warnings: string[] }>(
+      const data = await apiFetch<{ formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; bench?: string[] | null; warnings: string[] }>(
         `/api/teams/${teamId}/lineup-presets/${slot}/apply`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(matchCalId ? { calendarId: matchCalId } : {}) }
       );
@@ -375,6 +381,7 @@ function MatchPage() {
       setSelected(newSel);
       setCaptainId(data.captainId);
       setMatchPlan(data.matchPlan ?? []);
+      setBenchIds(data.bench ?? null);
       setSaved(false);
     } catch (e) { console.error("load preset:", e); }
   };
@@ -421,6 +428,23 @@ function MatchPage() {
     }
   };
 
+  // Hráč ze základu na lavičce být nemůže — po změně formace tam mohl zůstat
+  const benchToSave = () => benchIds ? benchIds.filter((id) => !selected.includes(id)) : null;
+
+  /** Postaví hráče do základu. Když šel z lavičky, sedne si na jeho místo ten, koho vystřídal. */
+  const placeInLineup = (slot: number, playerId: string) => {
+    const outgoing = selected[slot];
+    const sel = [...selected];
+    sel[slot] = playerId;
+    setSelected(sel);
+    if (benchIds?.includes(playerId)) {
+      setBenchIds(outgoing
+        ? benchIds.map((id) => (id === playerId ? outgoing : id))
+        : benchIds.filter((id) => id !== playerId));
+    }
+    setSaved(false);
+  };
+
   const saveLineup = async () => {
     if (!teamId || !nextMatch || saving) return;
     setSaving(true);
@@ -429,7 +453,7 @@ function MatchPage() {
       const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
       const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, matchPlan, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, matchPlan, bench: benchToSave(), players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) {
         setSaved(true);
@@ -475,8 +499,24 @@ function MatchPage() {
   const absentPlayers = players.filter((p) => p.absent);
 
   // Kdo z hráčů mimo základ pojede na zápas (7 náhradníků) a kdo zůstane doma
-  const { subs, standIns, leftOut } = splitBench(players, selected, slots.map((s) => s.pos));
+  const { subs, autoFilled, standIns, leftOut } = splitBench(players, selected, slots.map((s) => s.pos), benchIds);
   const subIds = new Set(subs.map((p) => p.id));
+
+  // Klepnutí na hráče v lavičce nebo mezi těmi, co nejedou. Dva klepy na hráče z různých
+  // skupin je prohodí; bez označeného hráče ze základu se tím základ nemění.
+  const onBenchRowClick = (p: AvailablePlayer) => {
+    if (p.absent) return;
+    if (swapSource !== null) { placeInLineup(swapSource, p.id); setSwapSource(null); return; }
+    if (benchPick === null || benchPick === p.id || subIds.has(benchPick) === subIds.has(p.id)) {
+      setBenchPick(benchPick === p.id ? null : p.id);
+      return;
+    }
+    const [goesHome, goesToBench] = subIds.has(benchPick) ? [benchPick, p.id] : [p.id, benchPick];
+    // Vychází se z toho, co je vidět, včetně hráčů, které doplnil automat
+    setBenchIds(subs.map((s) => (s.id === goesHome ? goesToBench : s.id)));
+    setBenchPick(null);
+    setSaved(false);
+  };
 
   // Nabídky hráčů pro pokyny na lavičce. Jen ti, kdo na zápas opravdu pojedou —
   // pokyn s omluveným nebo s hráčem, který zůstane doma, by engine tiše zahodil.
@@ -573,7 +613,7 @@ function MatchPage() {
           } : prev);
           if (teamId) {
             // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
-            apiFetch<{ referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+            apiFetch<{ referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
                 setReferee(data.referee ?? null);
                 setForecast(data.forecast ?? null);
@@ -603,12 +643,13 @@ function MatchPage() {
                 // ActivePreset vždy pokud má preset_slot
                 setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
                 setMatchPlan(data.lineup?.matchPlan ?? []);
+                setBenchIds(data.lineup?.bench ?? null);
                 setLineupSource(data.lineup?.source ?? null);
                 setSaved(data.lineup?.source === "explicit");
               })
               .catch((e) => { console.error("load lineup:", e); setSaved(false); });
           }
-          setEditSlot(null); setSwapSource(null);
+          setEditSlot(null); setSwapSource(null); setBenchPick(null);
         };
 
         return (
@@ -909,7 +950,7 @@ function MatchPage() {
                   setSwapSource(null); setEditSlot(i);
                 } else if (selected[i]) {
                   // First click on occupied slot: mark as swap source
-                  setSwapSource(i); setEditSlot(null);
+                  setSwapSource(i); setEditSlot(null); setBenchPick(null);
                 } else {
                   // Empty slot: open selector
                   setEditSlot(isEditing ? null : i); setSwapSource(null);
@@ -994,7 +1035,7 @@ function MatchPage() {
                       const s = p as any;
                       return (
                         <tr key={p.id}
-                          onClick={() => { if (!isAbsent) { const sel = [...selected]; sel[editSlot] = p.id; setSelected(sel); setEditSlot(null); setSaved(false); } }}
+                          onClick={() => { if (!isAbsent) { placeInLineup(editSlot, p.id); setEditSlot(null); } }}
                           className={`border-b border-gray-50 last:border-b-0 transition-colors ${
                             isAbsent ? "opacity-35 cursor-not-allowed" : isCurrent ? "bg-pitch-100" : "hover:bg-gray-50 cursor-pointer"
                           } ${isOOP && !isAbsent ? "bg-gold-50/50" : ""}`}>
@@ -1104,8 +1145,16 @@ function MatchPage() {
                     Lavička ({subs.length + standIns.length})
                   </span>
                   <p className="text-sm text-muted leading-snug mt-0.5">
-                    Na zápas jede základ a sedm náhradníků, berou se nejlepší podle ratingu.
-                    Vystřídat můžeš pět hráčů.
+                    Na zápas jede základ a sedm náhradníků, vystřídat můžeš pět hráčů.
+                  </p>
+                  <p className={`text-sm leading-snug mt-0.5 ${benchPick ? "font-heading font-bold text-gold-600" : "text-muted"}`}>
+                    {benchPick
+                      ? (subIds.has(benchPick)
+                          ? "Klepni na hráče dole, který pojede místo něj."
+                          : "Klepni na náhradníka, místo kterého pojede.")
+                      : benchIds
+                        ? "Klepni na hráče a pak na toho, kdo má jet místo něj."
+                        : "Zatím je vybral automat podle ratingu. Klepni na hráče a pak na toho, kdo má jet místo něj."}
                   </p>
                 </div>
                 <table className="w-full text-sm">
@@ -1129,13 +1178,8 @@ function MatchPage() {
                       const isAbsent = p.absent;
                       return (
                         <tr key={p.id}
-                          onClick={() => {
-                            if (isAbsent) return;
-                            if (swapSource !== null) {
-                              const sel = [...selected]; sel[swapSource] = p.id; setSelected(sel); setSwapSource(null); setSaved(false);
-                            }
-                          }}
-                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : isLeftOut ? "opacity-50" : ""} ${swapSource !== null && !isAbsent ? "hover:bg-pitch-50 cursor-pointer" : ""}`}>
+                          onClick={() => onBenchRowClick(p)}
+                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : "cursor-pointer hover:bg-pitch-50"} ${isLeftOut && !isAbsent && benchPick !== p.id ? "opacity-60" : ""} ${benchPick === p.id ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}>
                           <td className="py-1.5 pl-3 w-8 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
                               {p.squadNumber ?? "?"}
@@ -1175,7 +1219,7 @@ function MatchPage() {
                       <>
                         <tbody>
                           {standIns.map((s) => renderBenchRow(s.player, false, `Nastoupí za ${s.replacing.lastName}`))}
-                          {subs.map((p) => renderBenchRow(p, false))}
+                          {subs.map((p) => renderBenchRow(p, false, autoFilled.includes(p) ? "Doplnil automat za omluveného" : undefined))}
                           {subs.length + standIns.length === 0 && (
                             <tr>
                               <td colSpan={10} className="px-3 py-2 text-sm text-muted">
@@ -1203,6 +1247,14 @@ function MatchPage() {
                     );
                   })()}
                 </table>
+                {benchIds && (
+                  <div className="px-3 py-2 border-t border-gray-100">
+                    <button type="button" onClick={() => { setBenchIds(null); setBenchPick(null); setSaved(false); }}
+                      className="text-sm font-heading font-bold text-pitch-700">
+                      Nechat vybrat automat
+                    </button>
+                  </div>
+                )}
               </div>
           </>
         </div>
@@ -1341,7 +1393,7 @@ function MatchPage() {
                   const isAbsent = p.absent;
                   return (
                     <button key={p.id} disabled={isAbsent}
-                      onClick={() => { const sel = [...selected]; sel[editSlot] = p.id; setSelected(sel); setEditSlot(null); setSaved(false); }}
+                      onClick={() => { placeInLineup(editSlot, p.id); setEditSlot(null); }}
                       className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 text-left ${
                         isAbsent ? "opacity-30" : isCurrent ? "bg-pitch-50" : "active:bg-gray-100"
                       }`}>

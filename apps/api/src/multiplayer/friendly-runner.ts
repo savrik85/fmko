@@ -52,16 +52,16 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       // Load lineups VČETNĚ formation, tactic, captain — bez nich by se ignorovalo co user nastavil.
       // `match_plan` patří do stejného SELECTu: `TeamSetup.plan` je nepovinné pole, takže když
       // se nenačte, engine pokyny z lavičky tiše přeskočí a manažerovi se nic nestane bez chyby.
-      const homeLineupRow = await db.prepare("SELECT formation, tactic, hardness, players_data, captain_id, match_plan FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(homeTeamId, matchId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null; match_plan: string | null }>()
+      const homeLineupRow = await db.prepare("SELECT formation, tactic, hardness, players_data, captain_id, match_plan, bench_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(homeTeamId, matchId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null; match_plan: string | null; bench_data: string | null }>()
         .catch((e) => { logger.warn({ module: "friendly-runner" }, "load home lineup", e); return null; });
-      const awayLineupRow = await db.prepare("SELECT formation, tactic, hardness, players_data, captain_id, match_plan FROM lineups WHERE team_id = ? AND calendar_id = ?")
-        .bind(awayTeamId, matchId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null; match_plan: string | null }>()
+      const awayLineupRow = await db.prepare("SELECT formation, tactic, hardness, players_data, captain_id, match_plan, bench_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
+        .bind(awayTeamId, matchId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null; match_plan: string | null; bench_data: string | null }>()
         .catch((e) => { logger.warn({ module: "friendly-runner" }, "load away lineup", e); return null; });
 
       // Přátelák = dobrovolný zápas → hráči mají výrazně vyšší šanci odmítnout (multiplikátor 1.8×)
-      const homeBuild = await buildMatchPlayers(db, homeTeamId, homeLineupRow?.players_data ?? null, 0, { friendlyMultiplier: 1.8, matchKey: matchId });
-      const awayBuild = await buildMatchPlayers(db, awayTeamId, awayLineupRow?.players_data ?? null, 100, { friendlyMultiplier: 1.8, matchKey: matchId });
+      const homeBuild = await buildMatchPlayers(db, homeTeamId, homeLineupRow?.players_data ?? null, 0, { friendlyMultiplier: 1.8, matchKey: matchId, benchJson: homeLineupRow?.bench_data });
+      const awayBuild = await buildMatchPlayers(db, awayTeamId, awayLineupRow?.players_data ?? null, 100, { friendlyMultiplier: 1.8, matchKey: matchId, benchJson: awayLineupRow?.bench_data });
 
       const homeLineup = homeBuild.players;
       const awayLineup = awayBuild.players;

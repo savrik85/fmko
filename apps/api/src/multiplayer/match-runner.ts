@@ -19,6 +19,7 @@ import {
     type MatchPlayerStatsEntry
 } from "../stats/update-stats";
 import {logger} from "../lib/logger";
+import {parseStoredBench, benchColumn} from "../lib/lineup-bench";
 import {typZraneniZPopisu, zavaznostZeDnu} from "../injuries/injury-types";
 
 export interface MatchRunResult {
@@ -177,17 +178,18 @@ export async function runScheduledMatches(
                 captain_id: string | null;
                 hardness: string | null;
                 match_plan: string | null;
+                bench_data: string | null;
             };
             const loadLineup = async (tid: string): Promise<LineupRow | null> => {
                 // Pokud je víc rows pro stejný (team, calendar) — kopie + user-saved — vyber nejnovější user-saved
-                const exact = await db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id, match_plan FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC, submitted_at DESC, id ASC LIMIT 1")
+                const exact = await db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id, match_plan, bench_data FROM lineups WHERE team_id = ? AND calendar_id = ? ORDER BY is_auto ASC, submitted_at DESC, id ASC LIMIT 1")
                     .bind(tid, calendarId).first<LineupRow>().catch((e) => {
                         logger.warn({module: "match-runner"}, "Failed to load lineup exact", e);
                         return null;
                     });
                 if (exact) return exact;
                 // Fallback: poslední user-saved sestava (jakýkoliv calendar, ne auto)
-                return db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id, match_plan FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1")
+                return db.prepare("SELECT formation, tactic, hardness, players_data, is_auto, captain_id, match_plan, bench_data FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC, id ASC LIMIT 1")
                     .bind(tid).first<LineupRow>().catch((e) => {
                         logger.warn({module: "match-runner"}, "Failed to load lineup fallback", e);
                         return null;
@@ -199,9 +201,9 @@ export async function runScheduledMatches(
             // Build match players — buildMatchPlayers si sama generuje day_before + match_day absence
             // s jednotným seedem (matchKey + teamId + phase) shodným s preview/SMS.
             const homeBuild = await buildMatchPlayers(db, homeTeamId,
-                homeLineupRow?.players_data ?? null, 0, {matchKey: calendarId});
+                homeLineupRow?.players_data ?? null, 0, {matchKey: calendarId, benchJson: homeLineupRow?.bench_data});
             const awayBuild = await buildMatchPlayers(db, awayTeamId,
-                awayLineupRow?.players_data ?? null, 100, {matchKey: calendarId});
+                awayLineupRow?.players_data ?? null, 100, {matchKey: calendarId, benchJson: awayLineupRow?.bench_data});
 
             const homeLineup = homeBuild.players;
             const awayLineup = awayBuild.players;
@@ -1364,7 +1366,8 @@ export async function buildMatchPlayers(
     db: D1Database, teamId: string,
     userLineupJson?: string | null,
     idOffset: number = 0,
-    options?: { friendlyMultiplier?: number; matchKey?: string },
+    // benchJson = uložená lavička (lineups.bench_data), null = náhradníky vybere automat
+    options?: { friendlyMultiplier?: number; matchKey?: string; benchJson?: string | null },
     // Volitelně předané řádky kádru (stejný tvar jako players) — pro pohárové velkokluby
     // z cup_club_players. Když je zadáno, přeskočí se dotaz na tabulku players.
     sourceRows?: { results: Record<string, unknown>[] },
@@ -1538,7 +1541,15 @@ export async function buildMatchPlayers(
                 }
             }
 
-            const restRaw = allAvailable.filter((r) => !pickedIds.includes(r.id as string));
+            // Náhradníci, které manažer sám vybral, jdou v pořadí před ostatní. Díky tomu se
+            // za omluveného ze základu i na lavičku sahá nejdřív po nich a automat doplní
+            // jen místa po těch, kdo nedorazili. Stejně počítá sestavovač na webu (lib/bench.ts).
+            const chosenBench = new Set(parseStoredBench(options?.benchJson) ?? []);
+            const outsideLineup = allAvailable.filter((r) => !pickedIds.includes(r.id as string));
+            const restRaw = [
+                ...outsideLineup.filter((r) => chosenBench.has(r.id as string)),
+                ...outsideLineup.filter((r) => !chosenBench.has(r.id as string)),
+            ];
             // Pro každou chybějící pozici najdi nejlepšího náhradníka s odpovídající natural pozicí.
             // FWD nesmí stát v bráně. GK nesmí útočit. Když není přesný typ, vezme se nejbližší.
             const positionPriority: Record<string, string[]> = {
@@ -1739,7 +1750,7 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     // chybí, použiji heuristiku: nejnovější lineup z calendar_id co MÁ taky kopii v
     // lineup_presets (= byl ručně uložen jako preset). Pokud není, nejnovější vůbec.
     const lastLineup = await db.prepare(
-        `SELECT l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.match_plan, l.submitted_at
+        `SELECT l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.match_plan, l.bench_data, l.submitted_at
          FROM lineups l
          WHERE l.team_id = ?
            AND l.is_auto = 0
@@ -1751,6 +1762,7 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
         captain_id: string | null;
         preset_slot: string | null;
         match_plan: string | null;
+        bench_data: string | null;
         submitted_at: string
         hardness: string | null;
     }>().catch((e) => {
@@ -1776,13 +1788,19 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
             const copiedPlan = parseStoredPlan(lastLineup.match_plan).filter((rule) =>
                 rule.action.kind !== "sub"
                 || (activeSet.has(rule.action.outPlayerId) && activeSet.has(rule.action.inPlayerId)));
+            // Lavička jde s sestavou taky, bez hráčů, kteří už v kádru nejsou
+            const copiedPicks = validPicks.slice(0, 11);
+            const storedBench = parseStoredBench(lastLineup.bench_data);
+            const copiedBench = storedBench
+                ? storedBench.filter((id) => activeSet.has(id) && !copiedPicks.some((p) => p.playerId === id))
+                : null;
             try {
                 // POZOR: zachovej původní submitted_at, aby kopie nepřepsala "poslední user-saved"
                 // pro budoucí copyOrCreateLineup volání. Bez toho by se každou simulací posouval
                 // "poslední lineup" na auto-kopii a metadata se postupně ztrácela.
                 await db.prepare(
-                    "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, captain_id, preset_slot, match_plan, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"
-                ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, lastLineup.hardness ?? "normal", JSON.stringify(validPicks.slice(0, 11)), captainStillActive, lastLineup.preset_slot, JSON.stringify(copiedPlan), lastLineup.submitted_at).run();
+                    "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, captain_id, preset_slot, match_plan, bench_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"
+                ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, lastLineup.hardness ?? "normal", JSON.stringify(copiedPicks), captainStillActive, lastLineup.preset_slot, JSON.stringify(copiedPlan), benchColumn(copiedBench), lastLineup.submitted_at).run();
                 return;
             } catch (e) {
                 logger.error({module: "match-runner"}, `copyOrCreateLineup INSERT failed for ${teamId} cal=${calendarId}`, e);

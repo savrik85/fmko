@@ -24,6 +24,10 @@ const REPLACEMENT_PRIORITY: Record<Pos, Pos[]> = {
  * ze základu nejdřív zaskočí nejlepší volný na jeho pozici, zbylá místa do osmnácti
  * dostanou nejlepší podle ratingu. Kdo se nevejde, zůstává doma a střídat nemůže.
  *
+ * `chosenBench` je lavička, kterou manažer sestavil sám (null = vybírá automat). Jeho
+ * náhradníci mají přednost při zaskočení i na lavičce, automat doplní jen místa po těch,
+ * kdo nedorazili — ti jsou v `autoFilled`.
+ *
  * `players` musí být seřazení stejně jako v API (overall_rating DESC) — při shodném
  * ratingu rozhoduje jejich pořadí, stejně jako v enginu.
  */
@@ -31,11 +35,14 @@ export function splitBench<T extends SquadPlayer>(
   players: T[],
   lineup: (string | null)[],
   slotPositions: Pos[],
-): { subs: T[]; standIns: Array<{ player: T; replacing: T }>; leftOut: T[] } {
+  chosenBench: string[] | null = null,
+): { subs: T[]; autoFilled: T[]; standIns: Array<{ player: T; replacing: T }>; leftOut: T[] } {
   const byRating = (a: T, b: T) => b.overallRating - a.overallRating;
   const byId = new Map(players.map((p) => [p.id, p]));
+  const chosen = new Set(chosenBench ?? []);
   const outsideLineup = players.filter((p) => !lineup.includes(p.id));
-  const available = outsideLineup.filter((p) => !p.absent).sort(byRating);
+  const healthy = outsideLineup.filter((p) => !p.absent).sort(byRating);
+  const available = [...healthy.filter((p) => chosen.has(p.id)), ...healthy.filter((p) => !chosen.has(p.id))];
 
   let startersPlaying = 0;
   const missingByPos: Record<Pos, T[]> = { GK: [], DEF: [], MID: [], FWD: [] };
@@ -63,8 +70,10 @@ export function splitBench<T extends SquadPlayer>(
 
   const benchSlots = Math.max(0, MAX_MATCHDAY_SQUAD - startersPlaying - standIns.length);
   const remaining = available.filter((p) => !used.has(p.id));
+  const subs = remaining.slice(0, benchSlots);
   return {
-    subs: remaining.slice(0, benchSlots),
+    subs,
+    autoFilled: chosenBench ? subs.filter((p) => !chosen.has(p.id)) : [],
     standIns,
     leftOut: [...remaining.slice(benchSlots), ...outsideLineup.filter((p) => p.absent).sort(byRating)],
   };
