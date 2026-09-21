@@ -29,12 +29,19 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
   let featureArea = "ostatni";
   if (pathname === "/" || pathname === "/dashboard") {
     featureArea = "prehled";
-  } else if (pathname.startsWith("/dashboard/match")) {
+  } else if (pathname === "/dashboard/more") {
+    featureArea = "menu_vice";
+  } else if (
+    pathname.startsWith("/dashboard/match") ||
+    pathname.startsWith("/dashboard/friendly") ||
+    pathname.startsWith("/match-day")
+  ) {
     featureArea = "zapasy_a_taktika";
   } else if (
     pathname.startsWith("/dashboard/squad") ||
     pathname.startsWith("/dashboard/training") ||
-    pathname.startsWith("/dashboard/u21")
+    pathname.startsWith("/dashboard/u21") ||
+    pathname.startsWith("/dashboard/zamestnanci")
   ) {
     featureArea = "tym_a_trenink";
   } else if (pathname.startsWith("/dashboard/player")) {
@@ -55,11 +62,20 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
     featureArea = "hospoda";
   } else if (pathname.startsWith("/dashboard/fans")) {
     featureArea = "fanousci_a_kotel";
+  } else if (pathname.startsWith("/dashboard/incidenty")) {
+    featureArea = "incidenty";
   } else if (
     pathname.startsWith("/dashboard/klub") ||
-    pathname.startsWith("/dashboard/stadium")
+    pathname.startsWith("/dashboard/stadium") ||
+    pathname.startsWith("/dashboard/reputace")
   ) {
     featureArea = "klub_a_stadion";
+  } else if (
+    pathname.startsWith("/dashboard/team") ||
+    pathname.startsWith("/dashboard/manager") ||
+    pathname.startsWith("/klub/")
+  ) {
+    featureArea = "ostatni_kluby";
   } else if (
     pathname.startsWith("/dashboard/obec") ||
     pathname.startsWith("/dashboard/events")
@@ -70,7 +86,11 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
   } else if (
     pathname.startsWith("/dashboard/liga") ||
     pathname.startsWith("/dashboard/pohar") ||
-    pathname.startsWith("/dashboard/soutez")
+    pathname.startsWith("/dashboard/soutez") ||
+    pathname.startsWith("/dashboard/schedule") ||
+    pathname.startsWith("/dashboard/calendar") ||
+    pathname.startsWith("/dashboard/hall-of-fame") ||
+    pathname.startsWith("/dashboard/hlasovani")
   ) {
     featureArea = "souteze_a_tabulky";
   } else if (pathname.startsWith("/dashboard/phone")) {
@@ -86,9 +106,21 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
   } else if (
     pathname.startsWith("/dashboard/settings") ||
     pathname.startsWith("/dashboard/napoveda") ||
-    pathname.startsWith("/dashboard/admin")
+    pathname.startsWith("/dashboard/admin") ||
+    pathname.startsWith("/dashboard/app") ||
+    pathname.startsWith("/dashboard/invite")
   ) {
     featureArea = "nastaveni_a_podpora";
+  } else if (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/onboarding") ||
+    pathname.startsWith("/create") ||
+    pathname.startsWith("/invite/")
+  ) {
+    featureArea = "registrace";
+  } else if (pathname.startsWith("/nova-sezona") || pathname.startsWith("/season-end")) {
+    featureArea = "konec_sezony";
   }
 
   return { normalizedPath, featureArea };

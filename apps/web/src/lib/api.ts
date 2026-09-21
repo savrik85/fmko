@@ -57,15 +57,36 @@ export function showError(title: string, message: string): void {
   else alert(`${title}\n\n${message}`);
 }
 
+/**
+ * Z chybové hlášky udělá neutrální název akce pro analytiku, aby úspěšná akce
+ * nenesla popisek „…se nezdařilo". Hlášky mají tři tvary:
+ *   „Propuštění hráče se nezdařilo"      → „Propuštění hráče"
+ *   „Komentář se nepodařilo odeslat"     → „Odeslat komentář"
+ *   „Nepodařilo se stáhnout z arény"     → „Stáhnout z arény"
+ */
+function actionLabel(message: string): string {
+  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const failed = message.match(/^(.+?) se nezdařil[aoy]?$/);
+  if (failed) return failed[1];
+  const couldNot = message.match(/^(.+?) se (?:nepodařilo|nepovedlo) (.+)$/);
+  if (couldNot) return `${capitalize(couldNot[2])} ${couldNot[1].charAt(0).toLowerCase()}${couldNot[1].slice(1)}`;
+  const leading = message.match(/^(?:Nepodařilo|Nepovedlo) se (.+)$/);
+  if (leading) return capitalize(leading[1]);
+  return message;
+}
+
 // Wrapper pro user-iniciované akce: při chybě zobrazí dialog s API zprávou.
 // Vrací true při úspěchu, false při chybě (caller se rozhodne, jestli refreshovat).
 export async function apiAction<T>(promise: Promise<T>, fallbackMessage = "Akce se nezdařila"): Promise<boolean> {
   const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+  // Vlastnost `result`, ne `status`: `status` má PostHog vedený jako číslo
+  // (HTTP kód z api_server_error) a textové hodnoty by zahodil.
+  const action = actionLabel(fallbackMessage);
   try {
     await promise;
     trackEvent("game_action", {
-      action: fallbackMessage,
-      status: "success",
+      action,
+      result: "success",
       path: currentPath,
     });
     return true;
@@ -73,8 +94,8 @@ export async function apiAction<T>(promise: Promise<T>, fallbackMessage = "Akce 
     console.error(fallbackMessage + ":", e);
     const msg = (e as Error)?.message;
     trackEvent("game_action", {
-      action: fallbackMessage,
-      status: "failed",
+      action,
+      result: "failed",
       error: msg,
       path: currentPath,
     });
