@@ -769,9 +769,12 @@ export async function assertPurchaseAllowed(
 }
 
 /**
- * Splátka aktivní hotovostní půjčky — volá se po každém zápasu (per-team).
+ * Splátka aktivní hotovostní půjčky — volá se po každém zápase (per-team).
  * Rovnoměrně rozpočteno: per_match_installment se odečte. Poslední splátka
  * dorovná zbytek (kvůli zaokrouhlování).
+ *
+ * Za jeden zápas nejvýš jedna splátka. Když zápas zpracovaly dva běhy naráz
+ * (incident 2026-09-21), strhlo se hráči dvakrát: jednou (n/N) a hned (n+1/N).
  */
 export async function processCashLoanRepayment(
   db: D1Database,
@@ -779,6 +782,15 @@ export async function processCashLoanRepayment(
   matchId: string,
   gameDate: string,
 ): Promise<void> {
+  const alreadyPaid = await db.prepare(
+    "SELECT 1 AS x FROM transactions WHERE team_id = ? AND type = 'cash_loan_repayment' AND reference_id = ? LIMIT 1"
+  ).bind(teamId, matchId).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: "finance" }, "check loan repayment for match", e); return null; });
+  if (alreadyPaid) {
+    logger.warn({ module: "finance" }, `splátka půjčky za zápas ${matchId} už proběhla, tým ${teamId}`);
+    return;
+  }
+
   const loan = await db.prepare(
     "SELECT id, remaining, per_match_installment, total_installments, installments_paid FROM cash_loans WHERE team_id = ? AND status = 'active' LIMIT 1"
   ).bind(teamId).first<{
@@ -799,6 +811,20 @@ export async function processCashLoanRepayment(
   const newPaid = loan.installments_paid + 1;
   const newStatus = newRemaining <= 0 ? "paid" : "active";
 
+  // Splátku nejdřív zabrat v půjčce, a to jen ze stavu, který jsme načetli. Souběžný
+  // běh, který ji mezitím posunul, tady neprojde a peníze se nestrhnou podruhé.
+  const claim = await db.prepare(
+    "UPDATE cash_loans SET remaining = ?, installments_paid = ?, status = ?, paid_off_at = ? WHERE id = ? AND installments_paid = ?"
+  ).bind(
+    Math.max(0, newRemaining), newPaid, newStatus,
+    newStatus === "paid" ? new Date().toISOString() : null,
+    loan.id, loan.installments_paid,
+  ).run().catch((e) => { logger.error({ module: "finance" }, "update loan installment", e); return null; });
+  if (!claim || (claim.meta?.changes ?? 0) === 0) {
+    logger.warn({ module: "finance" }, `splátku půjčky ${loan.id} mezitím zapsal jiný běh, zápas ${matchId}`);
+    return;
+  }
+
   await recordTransaction(
     db,
     teamId,
@@ -808,16 +834,6 @@ export async function processCashLoanRepayment(
     gameDate,
     matchId,
   );
-
-  if (newStatus === "paid") {
-    await db.prepare(
-      "UPDATE cash_loans SET remaining = 0, installments_paid = ?, status = 'paid', paid_off_at = ? WHERE id = ?"
-    ).bind(newPaid, new Date().toISOString(), loan.id).run().catch((e) => logger.warn({ module: "finance" }, "mark loan paid", e));
-  } else {
-    await db.prepare(
-      "UPDATE cash_loans SET remaining = ?, installments_paid = ? WHERE id = ?"
-    ).bind(newRemaining, newPaid, loan.id).run().catch((e) => logger.warn({ module: "finance" }, "update loan installment", e));
-  }
 }
 
 /**

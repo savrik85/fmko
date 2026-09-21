@@ -30,6 +30,12 @@ export interface MatchRunResult {
     matchType: "pvp" | "pve_home" | "pve_away" | "ai_vs_ai";
 }
 
+/**
+ * Po jak dlouhé době je zamčené kolo mrtvé. Konzumer fronty i cron smí běžet nejvýš
+ * 15 minut, pak ho Cloudflare zabije; kolo zamčené déle už nikdo nehraje.
+ */
+export const STALE_ROUND_LOCK_MINUTES = 15;
+
 export interface RecoveredRound {
     calendarId: string;
     leagueId: string;
@@ -48,18 +54,32 @@ export interface RecoveredRound {
  * runScheduledMatches je idempotentní (bere jen 'lineups_open'), takže již odsimulované
  * zápasy zůstanou beze změny — žádné zdvojení skóre/financí. Zpracuje max `limit` kol
  * za invokaci (ochrana před vyčerpáním času workeru).
+ *
+ * Bere jen kola zamčená déle než STALE_ROUND_LOCK_MINUTES. Čerstvý zámek znamená, že
+ * kolo pořád hraje konzumer: kolo trvá ~5 minut, takže recovery z cronu 16:05 dřív
+ * sahala na kolo zamčené v 16:00 a zápasy se odsimulovaly dvakrát, i s financemi
+ * a splátkami půjček (incident 2026-09-21, na produkci od dubna 39 zápasů).
  */
 export async function recoverStuckRounds(
     db: D1Database,
     geminiApiKey?: string,
     limit = 1,
 ): Promise<RecoveredRound[]> {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - STALE_ROUND_LOCK_MINUTES * 60_000).toISOString();
     const stuck = await db.prepare(
-        "SELECT id, league_id FROM season_calendar WHERE status = 'lineup_locked' ORDER BY scheduled_at ASC LIMIT ?"
-    ).bind(limit).all<{ id: string; league_id: string }>();
+        "SELECT id, league_id FROM season_calendar WHERE status = 'lineup_locked' AND (locked_at IS NULL OR locked_at <= ?) ORDER BY scheduled_at ASC LIMIT ?"
+    ).bind(cutoff, limit).all<{ id: string; league_id: string }>();
 
     const recovered: RecoveredRound[] = [];
     for (const round of stuck.results) {
+        // Přezamknout: souběžná recovery (cron + ruční endpoint) kolo nevezme podruhé
+        // a další tick ho nechá být, dokud tahle nedoběhne.
+        const claim = await db.prepare(
+            "UPDATE season_calendar SET locked_at = ? WHERE id = ? AND status = 'lineup_locked' AND (locked_at IS NULL OR locked_at <= ?)"
+        ).bind(now.toISOString(), round.id, cutoff).run();
+        if ((claim.meta?.changes ?? 0) === 0) continue;
+
         // Dosud nezasimulované zápasy kola → lineups_open (idempotentní: simulated zůstanou)
         await db.prepare(
             "UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'"
@@ -749,7 +769,11 @@ export async function runScheduledMatches(
             const storedIncidents = mapIncidentsToDb(result.refereeIncidents, homeTeamId, awayTeamId);
 
             // Save results with events + commentary + match context + lineups + absences + possession
-            await db.prepare(
+            //
+            // Zápis výsledku je zároveň zámek zápasu: projde jen z 'lineups_open'. Když kolo
+            // zpracovávají dva běhy naráz (konzumer z 16:00 a recovery z 16:05), druhý tu
+            // skončí dřív, než zaúčtuje finance, zranění nebo splátku půjčky podruhé.
+            const saved = await db.prepare(
                 `UPDATE matches
                  SET status           = 'simulated',
                      home_score       = ?,
@@ -770,7 +794,7 @@ export async function runScheduledMatches(
                      referee_incidents = ?,
                      referee_grade = ?,
                      simulated_at     = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-                 WHERE id = ?`
+                 WHERE id = ? AND status = 'lineups_open'`
             ).bind(
                 result.homeScore, result.awayScore,
                 JSON.stringify(result.events), JSON.stringify(commentary),
@@ -787,6 +811,11 @@ export async function runScheduledMatches(
                 result.refereeGrade,
                 matchId,
             ).run();
+            if ((saved.meta?.changes ?? 0) === 0) {
+                logger.warn({module: "match-runner"},
+                    `zápas ${matchId} už odsimuloval jiný běh, přeskakuji (kolo ${calendarId})`);
+                continue;
+            }
 
             // Devadesát minut na hřišti trávník stojí — nese to domácí tým.
             {
