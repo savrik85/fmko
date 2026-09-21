@@ -495,10 +495,13 @@ teamsRouter.post("/", async (c) => {
 
       // 2. Move newly generated players + manager from origTeamId → teamId (oldId)
       await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      // AI trenér převzatého klubu mohl být uložený (profil se ukládá, jakmile ho někdo otevře).
+      // Bez smazání by klub měl dva trenéry a každé místo by četlo jiného.
+      await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "delete AI manager on takeover", e));
       await c.env.DB.prepare("UPDATE managers SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
 
       // Clean old AI equipment/stadium/conversations/messages (human gets fresh start)
-      const oldConvIds = await c.env.DB.prepare("SELECT id FROM conversations WHERE team_id = ?").bind(teamId).all().catch(() => ({ results: [] }));
+      const oldConvIds = await c.env.DB.prepare("SELECT id FROM conversations WHERE team_id = ?").bind(teamId).all().catch((e) => { logger.warn({ module: "teams" }, "load AI conversations on takeover", e); return { results: [] }; });
       for (const conv of oldConvIds.results) {
         await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
@@ -1031,7 +1034,7 @@ teamsRouter.get("/:id/absences", async (c) => {
 
   const absences = result.results.map((r) => {
     let parsed: Record<string, unknown> | null = null;
-    try { parsed = r.absence ? JSON.parse(r.absence) : null; } catch { parsed = null; }
+    try { parsed = r.absence ? JSON.parse(r.absence) : null; } catch (e) { logger.warn({ module: "teams" }, `parse absence of ${r.id}`, e); parsed = null; }
     return {
       playerId: r.id,
       firstName: r.first_name,
@@ -1171,70 +1174,26 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
 // GET /api/teams/:id/manager — get manager profile for team
 teamsRouter.get("/:id/manager", async (c) => {
   const tId = c.req.param("id");
-
-  // Try DB first — preferuj uživatelského manažera před AI fallbackem (multiple rows mohou
-  // existovat pokud AI manager byl vygenerován před přihlášením uživatele).
-  const row = await c.env.DB.prepare(
-    "SELECT * FROM managers WHERE team_id = ? ORDER BY CASE WHEN user_id = 'ai' THEN 1 ELSE 0 END, created_at DESC LIMIT 1"
-  ).bind(tId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "teams" }, "fetch manager from DB", e); return null; });
-
-  if (row) {
-    return c.json({
-      id: row.id,
-      userId: row.user_id,
-      name: row.name,
-      backstory: row.backstory,
-      avatar: JSON.parse(row.avatar as string),
-      age: row.age,
-      coaching: row.coaching ?? 40,
-      motivation: row.motivation ?? 40,
-      tactics: row.tactics ?? 40,
-      youthDevelopment: row.youth_development ?? 40,
-      discipline: row.discipline ?? 40,
-      reputation: row.reputation ?? 30,
-      bio: row.bio,
-      birthplace: row.birthplace,
-    });
-  }
-
-  // For AI teams, generate deterministic manager from team id
-  const team = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?")
-    .bind(tId).first<{ user_id: string }>();
-  if (!team || team.user_id !== "ai") return c.json(null);
-
-  // Generate deterministic AI manager
-  const { generateAiManager } = await import("../generators/manager-generator");
-  const { createRng } = await import("../generators/rng");
-  // Hash team ID to numeric seed
-  let seed = 0;
-  for (let i = 0; i < tId.length; i++) seed = ((seed << 5) - seed + tId.charCodeAt(i)) | 0;
-  const rng = createRng(Math.abs(seed));
-  const mgr = generateAiManager(rng);
-
-  // Persist for future requests
-  const mgrId = uuid();
-  await c.env.DB.prepare(
-    "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).bind(mgrId, "ai", tId, mgr.name, mgr.backstory, JSON.stringify(mgr.avatar),
-    mgr.age, mgr.coaching, mgr.motivation, mgr.tactics,
-    mgr.youthDevelopment, mgr.discipline, mgr.reputation, mgr.bio, mgr.birthplace,
-  ).run().catch((e) => logger.warn({ module: "teams" }, "persist AI manager", e));
+  // AI klub dostane deterministického trenéra, který se při prvním čtení uloží.
+  const { ensureAiManager, loadManagerRow } = await import("../coach/ai-manager");
+  const row = (await loadManagerRow(c.env.DB, tId)) ?? (await ensureAiManager(c.env.DB, tId));
+  if (!row) return c.json(null);
 
   return c.json({
-    id: mgrId,
-    userId: "ai",
-    name: mgr.name,
-    backstory: mgr.backstory,
-    avatar: mgr.avatar,
-    age: mgr.age,
-    coaching: mgr.coaching,
-    motivation: mgr.motivation,
-    tactics: mgr.tactics,
-    youthDevelopment: mgr.youthDevelopment,
-    discipline: mgr.discipline,
-    reputation: mgr.reputation,
-    bio: mgr.bio,
-    birthplace: mgr.birthplace,
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    backstory: row.backstory,
+    avatar: JSON.parse(row.avatar as string),
+    age: row.age,
+    coaching: row.coaching ?? 40,
+    motivation: row.motivation ?? 40,
+    tactics: row.tactics ?? 40,
+    youthDevelopment: row.youth_development ?? 40,
+    discipline: row.discipline ?? 40,
+    reputation: row.reputation ?? 30,
+    bio: row.bio,
+    birthplace: row.birthplace,
   });
 });
 
