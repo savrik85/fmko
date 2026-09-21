@@ -2,26 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
+import { clientOnly } from "@/components/client-only";
 import { apiFetch, type Team } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 
-const Stadium3D = dynamic(
+const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-full flex items-center justify-center text-muted text-sm">
-        <Spinner />
-      </div>
-    ),
-  }
+  <div className="h-full flex items-center justify-center text-muted text-sm">
+    <Spinner />
+  </div>,
 );
 
-const Stadium3DViewer = dynamic(
+const Stadium3DViewer = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3DViewer").then((m) => m.Stadium3DViewer),
-  { ssr: false }
 );
 
 interface Customization {

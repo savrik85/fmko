@@ -1,23 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
+import { clientOnly } from "@/components/client-only";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, SectionLabel, StickyActions } from "@/components/ui";
 
-const Stadium3D = dynamic(
+const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-full flex items-center justify-center text-white/60 text-sm bg-[#1a2030]">
-        <Spinner />
-      </div>
-    ),
-  }
+  <div className="h-full flex items-center justify-center text-white/60 text-sm bg-[#1a2030]">
+    <Spinner />
+  </div>,
 );
 
 interface StadiumFullData {

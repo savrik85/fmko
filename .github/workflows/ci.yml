@@ -53,6 +53,14 @@ jobs:
       - run: npm ci
       - run: bash add-edge-runtime.sh && npx @cloudflare/next-on-pages
         working-directory: apps/web
+      # next-on-pages občas přepíše zástupce dynamického importu na neexistující
+      # `async__chunk_…` a stránka pak vrací 500. Radši neprojít než to nasadit.
+      - run: |
+          if grep -rl "async__chunk_" .vercel/output/static/_worker.js; then
+            echo "::error::next-on-pages rozbil dynamický import (async__chunk_), stránky výše by vracely 500"
+            exit 1
+          fi
+        working-directory: apps/web
       - run: bash upload-sourcemaps.sh
         working-directory: apps/web
         env:
@@ -96,6 +104,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: bash add-edge-runtime.sh && npx @cloudflare/next-on-pages
+        working-directory: apps/web
+      # next-on-pages občas přepíše zástupce dynamického importu na neexistující
+      # `async__chunk_…` a stránka pak vrací 500. Radši neprojít než to nasadit.
+      - run: |
+          if grep -rl "async__chunk_" .vercel/output/static/_worker.js; then
+            echo "::error::next-on-pages rozbil dynamický import (async__chunk_), stránky výše by vracely 500"
+            exit 1
+          fi
         working-directory: apps/web
       - run: bash upload-sourcemaps.sh
         working-directory: apps/web

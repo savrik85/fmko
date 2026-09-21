@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
+import { clientOnly } from "@/components/client-only";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
@@ -10,9 +10,8 @@ import { Spinner, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { WEATHER_OPTIONS, type WeatherType } from "@/components/stadium/stadium-3d/constants";
 
-const Stadium3D = dynamic(
+const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
-  { ssr: false },
 );
 
 function ini(n: string) {
