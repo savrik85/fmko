@@ -22,11 +22,7 @@ const NON_PAGE_PREFIXES = ["/api/", "/auth/", "/_next/", "/v1beta/"];
 // Známé mrtvé odkazy, které existovaly už před přesunem na české adresy a čekají
 // na rozhodnutí. Vypíšou se jako varování, build kvůli nim nespadne. Po opravě
 // odsud smazat, jinak se na ně zapomene.
-const KNOWN_DEAD_LINKS = {
-  "apps/web/src/app/create/page.tsx  /team/${result.id}": "starý zakládací formulář, nikdo na něj neodkazuje",
-  "apps/web/src/app/(hra)/trenink/page.tsx  /manazer": "stránka /manazer bez ID neexistuje",
-  "apps/web/src/components/ui/entity-link.tsx  /village": "stránka obce podle názvu neexistuje (odkaz u týmu)",
-};
+const KNOWN_DEAD_LINKS = {};
 
 // Řetězce, které vypadají jako odkaz, ale odkazem nejsou.
 const NOT_LINKS = {

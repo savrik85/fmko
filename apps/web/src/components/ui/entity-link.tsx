@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 
-type EntityType = "player" | "team" | "village";
+type EntityType = "player" | "team";
 
 interface EntityLinkProps {
   type: EntityType;
@@ -13,12 +13,11 @@ interface EntityLinkProps {
 const ROUTES: Record<EntityType, string> = {
   player: "/hrac",
   team: "/tym",
-  village: "/village",
 };
 
 /**
  * FM-style clickable entity link.
- * Click on player/team/village name → navigates to detail page.
+ * Click on player/team name → navigates to detail page.
  * Uses .entity-link CSS class (green underlined text).
  */
 export function EntityLink({ type, id, children, className = "" }: EntityLinkProps) {
