@@ -652,7 +652,8 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   for (const p of away.lineup) playerMinutes[p.id] = { entered: 0, left: null };
   let homeSubsUsed = 0;
   let awaySubsUsed = 0;
-  const MAX_SUBS = 3;
+  // Jako v okresním přeboru a III. třídě: do hry smí pět náhradníků (z nejvýš sedmi v zápise)
+  const MAX_SUBS = 5;
 
   // Pokyny na lavičce — pravidlo sepne nejvýš jednou za zápas. Bez toho by se
   // u trvající podmínky (třeba remízy) taktika přepínala každou minutu znovu.
@@ -1424,7 +1425,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
         // Sloty, které si drží dosud nesepnutá plánovaná střídání, jsou pro
         // automatiku tabu. Bez rezervace by asistent kolem 60. minuty spotřeboval
-        // všechna tři střídání a manažerův pokyn na 75. by neměl čím proběhnout.
+        // všechna střídání a manažerův pokyn na 75. by neměl čím proběhnout.
         const fired = firedPlanRules.get(teamData.teamId) ?? new Set<string>();
         if (subsUsed + pendingPlannedSubs(teamData.team.plan, fired) >= MAX_SUBS) continue;
         // Rezervovat počet slotů nestačí — automatika musí nechat být i konkrétní

@@ -19,6 +19,7 @@ import type { MatchPlanRule } from "@okresni-masina/shared";
 import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
 import { LineupPreview, type CardRisk } from "@/components/LineupPreview";
 import { useOpenOnDesktop } from "@/components/ui";
+import { splitBench } from "@/lib/bench";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
@@ -473,16 +474,18 @@ function MatchPage() {
   const bench = players.filter((p) => !selected.includes(p.id));
   const absentPlayers = players.filter((p) => p.absent);
 
-  // Nabídky hráčů pro pokyny na lavičce. Omluvení hráči se do plánu nedostanou —
-  // pokyn s někým, kdo na zápas nepřijede, by v neděli tiše nesepnul.
+  // Kdo z hráčů mimo základ pojede na zápas (7 náhradníků) a kdo zůstane doma
+  const { subs, standIns, leftOut } = splitBench(players, selected, slots.map((s) => s.pos));
+  const subIds = new Set(subs.map((p) => p.id));
+
+  // Nabídky hráčů pro pokyny na lavičce. Jen ti, kdo na zápas opravdu pojedou —
+  // pokyn s omluveným nebo s hráčem, který zůstane doma, by engine tiše zahodil.
   const planName = (p: AvailablePlayer) => `${p.lastName} ${p.firstName.charAt(0)}.`;
   const planStarters = selected
     .map((id) => players.find((p) => p.id === id))
     .filter((p): p is AvailablePlayer => !!p && !p.absent)
     .map((p) => ({ id: p.id, name: planName(p) }));
-  const planBench = bench
-    .filter((p) => !p.absent)
-    .map((p) => ({ id: p.id, name: planName(p) }));
+  const planBench = subs.map((p) => ({ id: p.id, name: planName(p) }));
 
   // Chemie sestavy — počítá se STEJNÝMI vahami jako v enginu (packages/shared),
   // takže zobrazené číslo odpovídá tomu, co se v zápase opravdu stane.
@@ -1094,10 +1097,16 @@ function MatchPage() {
                 </table>
               </div>
 
-              {/* Bench */}
+              {/* Lavička — jen ti, kdo na zápas pojedou. Zbytek kádru je oddělený pod ní. */}
               <div className="card overflow-x-auto table-scroll">
                 <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <span className="font-heading font-bold text-sm uppercase text-muted">Lavička ({bench.length})</span>
+                  <span className="font-heading font-bold text-sm uppercase text-muted">
+                    Lavička ({subs.length + standIns.length})
+                  </span>
+                  <p className="text-sm text-muted leading-snug mt-0.5">
+                    Na zápas jede základ a sedm náhradníků, berou se nejlepší podle ratingu.
+                    Vystřídat můžeš pět hráčů.
+                  </p>
                 </div>
                 <table className="w-full text-sm">
                   <thead>
@@ -1114,12 +1123,8 @@ function MatchPage() {
                       <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {bench.sort((a, b) => {
-                      if (a.absent && !b.absent) return 1;
-                      if (!a.absent && b.absent) return -1;
-                      return b.overallRating - a.overallRating;
-                    }).map((p) => {
+                  {(() => {
+                    const renderBenchRow = (p: AvailablePlayer, isLeftOut: boolean, note?: string) => {
                       const s = p as any;
                       const isAbsent = p.absent;
                       return (
@@ -1130,7 +1135,7 @@ function MatchPage() {
                               const sel = [...selected]; sel[swapSource] = p.id; setSelected(sel); setSwapSource(null); setSaved(false);
                             }
                           }}
-                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : ""} ${swapSource !== null && !isAbsent ? "hover:bg-pitch-50 cursor-pointer" : ""}`}>
+                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : isLeftOut ? "opacity-50" : ""} ${swapSource !== null && !isAbsent ? "hover:bg-pitch-50 cursor-pointer" : ""}`}>
                           <td className="py-1.5 pl-3 w-8 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
                               {p.squadNumber ?? "?"}
@@ -1149,7 +1154,9 @@ function MatchPage() {
                                   <PositionBadge position={p.position as Pos} />
                                   {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
                                 </div>
-                                <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
+                                {note
+                                  ? <div className="text-sm text-gold-600 font-heading font-bold">{note}</div>
+                                  : <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>}
                               </div>
                             )}
                           </td>
@@ -1163,8 +1170,38 @@ function MatchPage() {
                           <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>
                         </tr>
                       );
-                    })}
-                  </tbody>
+                    };
+                    return (
+                      <>
+                        <tbody>
+                          {standIns.map((s) => renderBenchRow(s.player, false, `Nastoupí za ${s.replacing.lastName}`))}
+                          {subs.map((p) => renderBenchRow(p, false))}
+                          {subs.length + standIns.length === 0 && (
+                            <tr>
+                              <td colSpan={10} className="px-3 py-2 text-sm text-muted">
+                                Na lavičku nezbyl nikdo, kdo by mohl jet.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                        {leftOut.length > 0 && (
+                          <tbody>
+                            <tr className="bg-gray-50 border-y border-gray-100">
+                              <td colSpan={10} className="px-3 py-2">
+                                <span className="font-heading font-bold text-sm uppercase text-muted">
+                                  Nejedou na zápas ({leftOut.length})
+                                </span>
+                                <p className="text-sm text-muted leading-snug">
+                                  Zůstávají doma a střídat nemůžou. Na hřiště je dostaneš jen do základu.
+                                </p>
+                              </td>
+                            </tr>
+                            {leftOut.map((p) => renderBenchRow(p, true))}
+                          </tbody>
+                        )}
+                      </>
+                    );
+                  })()}
                 </table>
               </div>
           </>
@@ -1175,6 +1212,7 @@ function MatchPage() {
       <SetPieceTakers
         players={players}
         lineupIds={new Set(selected.filter(Boolean) as string[])}
+        benchIds={subIds}
         rolesSaving={rolesSaving}
         rolesSavedAt={rolesSavedAt}
         rolesError={rolesError}
@@ -1378,10 +1416,12 @@ const TAKER_ROLES: Record<TakerRole, {
   },
 };
 
-function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
+function TakerPicker({ role, players, lineupIds, benchIds, selectedId, onChange }: {
   role: TakerRole;
   players: AvailablePlayer[];
   lineupIds: Set<string>;
+  /** Náhradníci, kteří na zápas pojedou — ostatní mimo základ zůstávají doma. */
+  benchIds: Set<string>;
   selectedId: string | null;
   onChange: (id: string | null) => void;
 }) {
@@ -1446,7 +1486,9 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
                     {i === 0 && hraje && !rozbaleno && (
                       <span className="text-xs text-pitch-600 font-heading font-bold shrink-0">nej</span>
                     )}
-                    {!hraje && <span className="text-xs text-muted shrink-0">lavička</span>}
+                    {!hraje && (
+                      <span className="text-xs text-muted shrink-0">{benchIds.has(p.id) ? "lavička" : "nejede"}</span>
+                    )}
                   </div>
                 </td>
                 {cfg.attrs.map((a) => (
@@ -1483,9 +1525,10 @@ function TakerPicker({ role, players, lineupIds, selectedId, onChange }: {
   );
 }
 
-function SetPieceTakers({ players, lineupIds, rolesSaving, rolesSavedAt, rolesError, captainId, penaltyTakerId, freekickTakerId, onCaptain, onPenalty, onFreekick }: {
+function SetPieceTakers({ players, lineupIds, benchIds, rolesSaving, rolesSavedAt, rolesError, captainId, penaltyTakerId, freekickTakerId, onCaptain, onPenalty, onFreekick }: {
   players: AvailablePlayer[];
   lineupIds: Set<string>;
+  benchIds: Set<string>;
   rolesSaving: boolean;
   rolesSavedAt: number | null;
   rolesError: string | null;
@@ -1515,9 +1558,9 @@ function SetPieceTakers({ players, lineupIds, rolesSaving, rolesSavedAt, rolesEr
         </p>
       </div>
       <div className="grid lg:grid-cols-3 lg:gap-x-10 lg:divide-x lg:divide-gray-100">
-        <TakerPicker role="captain" players={players} lineupIds={lineupIds} selectedId={captainId} onChange={onCaptain} />
-        <TakerPicker role="penalty" players={players} lineupIds={lineupIds} selectedId={penaltyTakerId} onChange={onPenalty} />
-        <TakerPicker role="freekick" players={players} lineupIds={lineupIds} selectedId={freekickTakerId} onChange={onFreekick} />
+        <TakerPicker role="captain" players={players} lineupIds={lineupIds} benchIds={benchIds} selectedId={captainId} onChange={onCaptain} />
+        <TakerPicker role="penalty" players={players} lineupIds={lineupIds} benchIds={benchIds} selectedId={penaltyTakerId} onChange={onPenalty} />
+        <TakerPicker role="freekick" players={players} lineupIds={lineupIds} benchIds={benchIds} selectedId={freekickTakerId} onChange={onFreekick} />
       </div>
     </div>
   );
