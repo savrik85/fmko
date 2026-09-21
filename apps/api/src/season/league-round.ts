@@ -217,9 +217,10 @@ export async function processLeagueRound(
   // ── Atomický lock ──
   // Zabrání souběžnému cronu / endpointu / duplicitní zprávě zpracovat stejné kolo
   // a tím zdvojit finance (concession, vstupné, prémie) — viz incident 2026-04.
+  // locked_at říká recovery, jestli kolo pořád někdo hraje (viz recoverStuckRounds).
   const lockResult = await db
-    .prepare("UPDATE season_calendar SET status = 'lineup_locked' WHERE id = ? AND status = 'scheduled'")
-    .bind(calendarId)
+    .prepare("UPDATE season_calendar SET status = 'lineup_locked', locked_at = ? WHERE id = ? AND status = 'scheduled'")
+    .bind(new Date().toISOString(), calendarId)
     .run();
   if (lockResult.meta.changes === 0) {
     logger.info({ module: "league-round" }, `skip ${calendarId}: jiný trigger už drží lock`);
@@ -472,7 +473,7 @@ async function runBetweenRoundEvents(
     const seasonRow = leagueId
       ? await db.prepare("SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?")
           .bind(leagueId).first<{ n: number | null }>()
-          .catch(() => null)
+          .catch((e) => { logger.warn({ module: "league-round" }, "sezóna soutěže pro sazebník pokut", e); return null; })
       : null;
     const compCtx = leagueId && seasonRow?.n
       ? await loadCompetitionContext(db, leagueId, seasonRow.n)

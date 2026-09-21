@@ -238,6 +238,19 @@ export default {
       }
     }
 
+    // ── DOHRÁNÍ ZASEKLÝCH KOL: 16:20 UTC ──
+    // Recovery v zápasovém ticku bere jen kola zamčená déle než 15 minut, aby nesahala
+    // na kolo, které konzumer z 16:00 pořád hraje. Kolo, které v 16:0x opravdu spadlo,
+    // by tak čekalo do zítřejšího ticku; tenhle ho dohraje ještě týž den.
+    if (cron === "20 16 * * *") {
+      try {
+        const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
+        for (const r of recovered) {
+          log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
+        }
+      } catch (e) { log("error", "stuck round recovery (16:20) failed", e); }
+    }
+
     // ── MATCH TICK: 18:00 CEST — simuluje zápasy ──
     // Režim "queue": cron jen rozešle zprávy, ligy se zpracují každá ve vlastní invokaci.
     // Režim "loop": stará cesta, všechny ligy v jedné invokaci (přepínač v CACHE_KV).
