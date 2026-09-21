@@ -22,7 +22,7 @@ export function ManagerCardWidget({ data, teamId }: WidgetProps) {
   const color = data.team.data?.primary_color || "#2D5F2D";
 
   return (
-    <a href={`/dashboard/manager/${teamId}`} className="block group">
+    <a href={`/manazer/${teamId}`} className="block group">
       <div className="flex items-center gap-3">
         {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
           <FaceAvatar faceConfig={manager.avatar} size={48} className="shrink-0 rounded-xl" />
@@ -127,7 +127,7 @@ export function ReputationWidget({ data }: WidgetProps) {
       ) : (
         <div className="text-sm text-muted text-center">Reputace se zatím nezměnila.</div>
       )}
-      <MoreLink href="/dashboard/reputace">Detail reputace →</MoreLink>
+      <MoreLink href="/reputace">Detail reputace →</MoreLink>
     </div>
   );
 }
@@ -159,7 +159,7 @@ export function TrainingBreakdownWidget({ data }: WidgetProps) {
         <span className="font-heading font-bold" style={{ color: DIVERGING.positive }}>+{stats?.totalImprovements ?? 0}</span>{" "}
         <span className="font-heading font-bold" style={{ color: DIVERGING.negative }}>−{stats?.totalDeclines ?? 0}</span>
       </div>
-      <MoreLink href="/dashboard/training">Detail tréninku →</MoreLink>
+      <MoreLink href="/trenink">Detail tréninku →</MoreLink>
     </div>
   );
 }
@@ -175,7 +175,7 @@ export function TopImproversWidget({ data }: WidgetProps) {
       data={rows.map((r) => ({
         label: r.topAttribute ? `${r.name} · ${SKILL_LABELS[r.topAttribute] ?? r.topAttribute}` : r.name,
         value: r.totalGains,
-        href: `/dashboard/player/${r.playerId}`,
+        href: `/hrac/${r.playerId}`,
       }))}
     />
   );
@@ -202,7 +202,7 @@ export function TrainingAttendanceWidget({ data, height }: WidgetProps) {
           label: `${p.firstName} ${p.lastName}`,
           value: p.trainingPct,
           display: `${p.trainingPct} %`,
-          href: `/dashboard/player/${p.playerId}`,
+          href: `/hrac/${p.playerId}`,
         }))}
       />
       <div className="text-micro text-muted text-center">Nejhorší docházka v kádru.</div>
@@ -227,7 +227,7 @@ export function BestAttendanceWidget({ data, height }: WidgetProps) {
           label: `${p.firstName} ${p.lastName}`,
           value: p.trainingPct,
           display: `${p.trainingPct} %`,
-          href: `/dashboard/player/${p.playerId}`,
+          href: `/hrac/${p.playerId}`,
         }))}
       />
       <div className="text-micro text-muted text-center">Kdo na trénink chodí nejpoctivěji.</div>
@@ -266,7 +266,7 @@ export function MostAbsentWidget({ data, height }: WidgetProps) {
           value: p.matchesMissed,
           display: `${p.matchesMissed}×`,
           color: STATUS.critical,
-          href: `/dashboard/player/${p.playerId}`,
+          href: `/hrac/${p.playerId}`,
         }))}
       />
       <div className="text-micro text-muted text-center">
@@ -298,7 +298,7 @@ export function EquipmentWidget({ data, height }: WidgetProps) {
           display: `${Math.round(c.condition)} %`,
         }))}
       />
-      <MoreLink href="/dashboard/equipment">Detail vybavení →</MoreLink>
+      <MoreLink href="/vybaveni">Detail vybavení →</MoreLink>
     </div>
   );
 }
@@ -334,7 +334,7 @@ export function StaffWidget({ data, height }: WidgetProps) {
       <div className="text-sm text-muted text-center">
         Mzdy zaměstnanců <span className="font-heading font-bold text-ink tabular-nums">{fullCZK(totalWage)}</span> týdně
       </div>
-      <MoreLink href="/dashboard/zamestnanci">Detail zaměstnanců →</MoreLink>
+      <MoreLink href="/zamestnanci">Detail zaměstnanců →</MoreLink>
     </div>
   );
 }
@@ -358,10 +358,10 @@ export function U21Widget({ data, height }: WidgetProps) {
           label: `${p.first_name} ${p.last_name} · ${p.age} let`,
           value: p.overall_rating,
           display: String(p.overall_rating),
-          href: `/dashboard/player/${p.id}`,
+          href: `/hrac/${p.id}`,
         }))}
       />
-      <MoreLink href="/dashboard/u21">Celá mládež →</MoreLink>
+      <MoreLink href="/u21">Celá mládež →</MoreLink>
     </div>
   );
 }
@@ -410,7 +410,7 @@ export function TransferOffersWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <MoreLink href="/dashboard/transfers">Zobrazit přestupy →</MoreLink>
+      <MoreLink href="/prestupy">Zobrazit přestupy →</MoreLink>
     </div>
   );
 }
@@ -427,7 +427,7 @@ export function WatchlistWidget({ data, height }: WidgetProps) {
         {players.slice(0, rowsForHeight(height, ROW_PX.list, 32)).map((p, i) => (
           <li key={p.playerId ?? p.id ?? i} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <a
-              href={p.playerId ? `/dashboard/player/${p.playerId}` : "#"}
+              href={p.playerId ? `/hrac/${p.playerId}` : "#"}
               className="text-sm font-heading font-bold flex-1 truncate hover:text-pitch-500 hover:underline transition-colors"
             >
               {p.firstName} {p.lastName}
@@ -437,7 +437,7 @@ export function WatchlistWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <MoreLink href="/dashboard/watchlist">Celý watchlist →</MoreLink>
+      <MoreLink href="/sledovani">Celý watchlist →</MoreLink>
     </div>
   );
 }

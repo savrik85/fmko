@@ -82,7 +82,7 @@ const TeamContext = createContext<TeamContextValue | null>(null);
 
 const STORAGE_TOKEN = "om_token";
 const STORAGE_TEAM = "om_team";
-const PUBLIC_PATHS = ["/", "/login", "/register", "/invite", "/klub"];
+const PUBLIC_PATHS = ["/", "/prihlaseni", "/registrace", "/pozvanka", "/klub"];
 
 export function TeamProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(EMPTY_AUTH_STATE);
@@ -189,11 +189,11 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   // Redirect logic
   useEffect(() => {
     if (state.isLoading) return;
-    const isPublic = PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/invite/") || pathname.startsWith("/klub/");
+    const isPublic = PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/pozvanka/") || pathname.startsWith("/klub/");
     const isOnboarding = pathname.startsWith("/onboarding");
 
     if (!state.token && !isPublic) {
-      router.replace("/login");
+      router.replace("/prihlaseni");
     } else if (state.token && !state.teamId && !isOnboarding && !isPublic) {
       router.replace("/onboarding");
     }
@@ -238,7 +238,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_TEAM);
     resetUser();
     setState({ ...EMPTY_AUTH_STATE, isLoading: false });
-    router.replace("/login");
+    router.replace("/prihlaseni");
   }
 
   return (

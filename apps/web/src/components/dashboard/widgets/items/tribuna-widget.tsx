@@ -73,7 +73,7 @@ export function TribunaWidget({ data }: WidgetProps) {
         ))}
       </div>
 
-      <Link href="/dashboard/phone" className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
+      <Link href="/telefon" className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
         Celá Tribuna v telefonu →
       </Link>
     </div>

@@ -54,7 +54,7 @@ export function LockDetail({
       {hint && (
         <div className="text-sm text-ink-light pt-1">
           {hint}{" "}
-          <Link href="/dashboard/reputace" className="text-pitch-600 underline whitespace-nowrap">
+          <Link href="/reputace" className="text-pitch-600 underline whitespace-nowrap">
             Reputace →
           </Link>
         </div>

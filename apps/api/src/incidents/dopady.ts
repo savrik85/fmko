@@ -320,7 +320,7 @@ export async function oznamIncident(env: Bindings, teamId: string, navrh: NavrhI
   await sendSystemSMS(env.DB, teamId, SMS_ROLE_KUSTOD, `${emoji} ${[navrh.text, ...zapsany.nalezeneStopy].join(" ")}`, smsIncidentu(zapsany.id));
   await createNotification(
     env.DB, teamId, "event", `${emoji} ${def?.label ?? "Incident v klubu"}`, navrh.text.slice(0, 140),
-    `/dashboard/incidenty?id=${encodeURIComponent(zapsany.id)}`, env,
+    `/incidenty?id=${encodeURIComponent(zapsany.id)}`, env,
   ).catch((e) => logger.warn({ module: M }, `notifikace incidentu ${navrh.kind}`, e));
 }
 

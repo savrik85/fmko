@@ -249,7 +249,7 @@ export async function applyOfferRejectionImpact(
     await createNotification(db, sellerClubTeamId, "transfer",
       `😠 ${playerRef.firstName} ${playerRef.lastName} je naštvaný`,
       `${trigger === "expire" ? "Nabídka od" : "Odmítl jsi nabídku od"} ${teamName} — hráč o přestup stál (${INTEREST_LABELS[interest.level]}).`,
-      `/dashboard/player/${playerId}`,
+      `/hrac/${playerId}`,
       pushEnv);
   } catch (e) { logger.warn({ module: "rejection-impact" }, "unrest notification", e); }
 

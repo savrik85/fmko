@@ -1,0 +1,1619 @@
+"use client";
+
+import { useState, useEffect, useRef, Suspense } from "react";
+import { createPortal } from "react-dom";
+import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useTeam } from "@/context/team-context";
+import { apiFetch, apiAction, type Player } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
+import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
+import type { BadgePattern } from "@/components/ui";
+import { BusSelector } from "./BusSelector";
+import { RefereeCard } from "@/components/match/referee-card";
+import { CollapsibleCard } from "@/components/ui";
+import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
+import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
+import { MatchPlanEditor } from "./MatchPlanEditor";
+import type { MatchPlanRule } from "@okresni-masina/shared";
+import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
+import { LineupPreview, type CardRisk } from "@/components/LineupPreview";
+import { useOpenOnDesktop } from "@/components/ui";
+import { splitBench } from "@/lib/bench";
+
+type Pos = "GK" | "DEF" | "MID" | "FWD";
+
+const FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2", "3-4-3"] as const;
+const TACTICS = [
+  { key: "offensive", label: "Útočná", icon: "⚔️" },
+  { key: "balanced", label: "Vyrovnaná", icon: "⚖️" },
+  { key: "defensive", label: "Defenzivní", icon: "🛡️" },
+  { key: "long_ball", label: "Nakopávané", icon: "🏈" },
+  { key: "possession", label: "Držení míče", icon: "🎯" },
+  { key: "pressing", label: "Vysoký presink", icon: "🔥" },
+] as const;
+const HARDNESS = [
+  { key: "fair", label: "Na férovku", icon: "🤝" },
+  { key: "normal", label: "Normálně", icon: "⚽" },
+  { key: "hard", label: "Do těla", icon: "💪" },
+] as const;
+
+// Sehranost (familiarity) UI — barva podle úrovně 0-100
+function famColor(v: number): string {
+  if (v >= 60) return "text-pitch-600";
+  if (v >= 30) return "text-gold-600";
+  return "text-card-red";
+}
+function famBgColor(v: number): string {
+  if (v >= 60) return "bg-pitch-500";
+  if (v >= 30) return "bg-gold-500";
+  return "bg-card-red";
+}
+
+// Vertikální hřiště — GK dole, FWD nahoře. Souřadnice v % (x=0-100, y=0-100)
+const POSITIONS: Record<string, Array<{ pos: Pos; x: number; y: number }>> = {
+  "4-4-2": [
+    { pos: "GK", x: 50, y: 90 },
+    { pos: "DEF", x: 18, y: 72 }, { pos: "DEF", x: 39, y: 72 }, { pos: "DEF", x: 61, y: 72 }, { pos: "DEF", x: 82, y: 72 },
+    { pos: "MID", x: 18, y: 45 }, { pos: "MID", x: 39, y: 45 }, { pos: "MID", x: 61, y: 45 }, { pos: "MID", x: 82, y: 45 },
+    { pos: "FWD", x: 36, y: 18 }, { pos: "FWD", x: 64, y: 18 },
+  ],
+  "4-3-3": [
+    { pos: "GK", x: 50, y: 90 },
+    { pos: "DEF", x: 18, y: 72 }, { pos: "DEF", x: 39, y: 72 }, { pos: "DEF", x: 61, y: 72 }, { pos: "DEF", x: 82, y: 72 },
+    { pos: "MID", x: 28, y: 48 }, { pos: "MID", x: 50, y: 45 }, { pos: "MID", x: 72, y: 48 },
+    { pos: "FWD", x: 22, y: 18 }, { pos: "FWD", x: 50, y: 15 }, { pos: "FWD", x: 78, y: 18 },
+  ],
+  "3-5-2": [
+    { pos: "GK", x: 50, y: 90 },
+    { pos: "DEF", x: 28, y: 72 }, { pos: "DEF", x: 50, y: 72 }, { pos: "DEF", x: 72, y: 72 },
+    { pos: "MID", x: 12, y: 48 }, { pos: "MID", x: 30, y: 45 }, { pos: "MID", x: 50, y: 42 }, { pos: "MID", x: 70, y: 45 }, { pos: "MID", x: 88, y: 48 },
+    { pos: "FWD", x: 36, y: 18 }, { pos: "FWD", x: 64, y: 18 },
+  ],
+  "4-5-1": [
+    { pos: "GK", x: 50, y: 90 },
+    { pos: "DEF", x: 18, y: 72 }, { pos: "DEF", x: 39, y: 72 }, { pos: "DEF", x: 61, y: 72 }, { pos: "DEF", x: 82, y: 72 },
+    { pos: "MID", x: 12, y: 45 }, { pos: "MID", x: 30, y: 42 }, { pos: "MID", x: 50, y: 40 }, { pos: "MID", x: 70, y: 42 }, { pos: "MID", x: 88, y: 45 },
+    { pos: "FWD", x: 50, y: 15 },
+  ],
+  "5-3-2": [
+    { pos: "GK", x: 50, y: 90 },
+    { pos: "DEF", x: 12, y: 72 }, { pos: "DEF", x: 30, y: 72 }, { pos: "DEF", x: 50, y: 72 }, { pos: "DEF", x: 70, y: 72 }, { pos: "DEF", x: 88, y: 72 },
+    { pos: "MID", x: 28, y: 45 }, { pos: "MID", x: 50, y: 42 }, { pos: "MID", x: 72, y: 45 },
+    { pos: "FWD", x: 36, y: 18 }, { pos: "FWD", x: 64, y: 18 },
+  ],
+  "3-4-3": [
+    { pos: "GK", x: 50, y: 90 },
+    { pos: "DEF", x: 28, y: 72 }, { pos: "DEF", x: 50, y: 72 }, { pos: "DEF", x: 72, y: 72 },
+    { pos: "MID", x: 14, y: 48 }, { pos: "MID", x: 38, y: 45 }, { pos: "MID", x: 62, y: 45 }, { pos: "MID", x: 86, y: 48 },
+    { pos: "FWD", x: 22, y: 18 }, { pos: "FWD", x: 50, y: 15 }, { pos: "FWD", x: 78, y: 18 },
+  ],
+};
+
+const POS_BG: Record<string, string> = { GK: "bg-gold-500", DEF: "bg-blue-500", MID: "bg-pitch-500", FWD: "bg-card-red" };
+
+function attrC(v: number): string {
+  if (v >= 70) return "text-pitch-500 font-bold";
+  if (v >= 50) return "text-pitch-700";
+  if (v >= 30) return "text-ink";
+  return "text-muted";
+}
+function condC(v: number): string {
+  if (v >= 80) return "text-pitch-500";
+  if (v >= 50) return "text-gold-600";
+  return "text-card-red";
+}
+function moraleIcon(v: number): string {
+  if (v >= 80) return "😊";
+  if (v >= 60) return "🙂";
+  if (v >= 40) return "😐";
+  if (v >= 20) return "😞";
+  return "😡";
+}
+
+interface AvailablePlayer {
+  id: string; firstName: string; lastName: string; position: string;
+  overallRating: number; age: number; condition: number; morale: number;
+  squadNumber?: number;
+  speed?: number; technique?: number; shooting?: number; passing?: number;
+  heading?: number; defense?: number; goalkeeping?: number; stamina?: number; setPieces?: number;
+  leadership?: number;
+  absent?: boolean; absenceReason?: string | null; absenceSms?: string | null; absenceEmoji?: string | null;
+  relationships?: Array<{ otherPlayerId: string; type: string; strength?: number; effect?: string }>;
+}
+
+const REL_EMOJI: Record<string, string> = {
+  brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
+  coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
+};
+const REL_LABEL: Record<string, string> = {
+  brothers: "Bratři", father_son: "Otec a syn", in_laws: "Příbuzní", classmates: "Spolužáci",
+  coworkers: "Kolegové", neighbors: "Sousedi", drinking_buddies: "Kamarádi", rivals: "Rivalové", mentor_pupil: "Mentor",
+};
+
+interface NextMatchInfo {
+  matchId: string; calendarId: string; gameWeek: number | null; scheduledAt: string;
+  isHome: boolean; homeName: string; awayName: string; homeColor: string; awayColor: string;
+  isFriendly?: boolean;
+  isCup?: boolean;
+  roundName?: string | null;
+  isLocalDerby?: boolean;
+}
+
+type DelegatedReferee = RefereeProfileView & {
+  stats: RefereeStatsView | null;
+  vsTeam?: { matches: number; wins: number; draws: number; losses: number; yellow_cards?: number; red_cards?: number } | null;
+};
+
+interface UpcomingMatch {
+  calendarId: string; gameWeek: number | null; scheduledAt: string;
+  opponentName: string; isHome: boolean; hasLineup: boolean; isFriendly: boolean;
+  isCup?: boolean;
+  roundName?: string | null;
+}
+
+function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
+
+export default function MatchPageWrapper() {
+  return <Suspense><MatchPage /></Suspense>;
+}
+
+function MatchPage() {
+  const { teamId, teamName: ourTeamName, gameDate: teamGameDate } = useTeam();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [nextMatch, setNextMatch] = useState<NextMatchInfo | null>(null);
+  const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([]);
+  const [players, setPlayers] = useState<AvailablePlayer[]>([]);
+  const [referee, setReferee] = useState<DelegatedReferee | null>(null);
+  const [forecast, setForecast] = useState<{ icon: string; expected: string; temperature: number; description: string } | null>(null);
+  const [tacticHints, setTacticHints] = useState<Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>>([]);
+  const [hardness, setHardness] = useState<HardnessKey>("normal");
+  const [cardRisk, setCardRisk] = useState<CardRisk | null>(null);
+  const [hintsOpen, setHintsOpen] = useOpenOnDesktop();
+  const [formation, setFormation] = useState("4-4-2");
+  const [tactic, setTactic] = useState("balanced");
+  const [selected, setSelected] = useState<(string | null)[]>(Array(11).fill(null));
+  const [editSlot, setEditSlot] = useState<number | null>(null);
+  const [swapSource, setSwapSource] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [captainId, setCaptainId] = useState<string | null>(null);
+  // Exekutoři standardek jsou týmová role — platí napříč zápasy, ne jen pro tuhle sestavu
+  const [penaltyTakerId, setPenaltyTakerId] = useState<string | null>(null);
+  const [freekickTakerId, setFreekickTakerId] = useState<string | null>(null);
+  const [rolesSaving, setRolesSaving] = useState(false);
+  const [rolesSavedAt, setRolesSavedAt] = useState<number | null>(null);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [formationFam, setFormationFam] = useState<Record<string, number>>({});
+  const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; bench?: string[] | null; updatedAt: string } | null>>({ A: null, B: null, C: null });
+  const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
+  const [lineupSource, setLineupSource] = useState<"explicit" | "default" | null>(null);
+  // Pokyny na lavičce — ukládají se se sestavou, engine je vyhodnocuje za běhu zápasu
+  const [matchPlan, setMatchPlan] = useState<MatchPlanRule[]>([]);
+  // Lavička, kterou si manažer sestavil (null = náhradníky vybere automat podle ratingu)
+  const [benchIds, setBenchIds] = useState<string[] | null>(null);
+  // Hráč označený na lavičce nebo mezi těmi, co nejedou — čeká na toho, s kým se prohodí
+  const [benchPick, setBenchPick] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!teamId) return;
+    // Načti sehranost formace (badge u formation selectoru)
+    apiFetch<{ tactic: Record<string, number>; formation: Record<string, number> }>(`/api/teams/${teamId}/tactic-chemistry`)
+      .then((d) => { setFormationFam(d.formation ?? {}); })
+      .catch((e) => console.warn("load chemistry:", e));
+    // Načti presety
+    apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`)
+      .then((d) => setPresets(d.presets ?? { A: null, B: null, C: null }))
+      .catch((e) => console.warn("load presets:", e));
+    // Načti exekutory standardek
+    apiFetch<{ penaltyTakerId: string | null; freekickTakerId: string | null }>(`/api/teams/${teamId}/roles`)
+      .then((d) => { setPenaltyTakerId(d.penaltyTakerId); setFreekickTakerId(d.freekickTakerId); })
+      .catch((e) => console.warn("load roles:", e));
+  }, [teamId]);
+
+  useEffect(() => {
+    if (!teamId) return;
+    // Pokud URL má ?calendarId=X, načti přímo ten zápas. Jinak default = nejbližší.
+    const urlCalIdInit = searchParams.get("calendarId");
+    const url = urlCalIdInit ? `/api/teams/${teamId}/next-match?calendarId=${urlCalIdInit}` : `/api/teams/${teamId}/next-match`;
+    apiFetch<{ nextMatch: NextMatchInfo | null; referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[]; upcomingMatches?: UpcomingMatch[] }>(
+      url
+    ).then((data) => {
+      setNextMatch(data.nextMatch);
+      setReferee(data.referee ?? null);
+      setForecast(data.forecast ?? null);
+      setTacticHints(data.tacticHints ?? []);
+      setPlayers(data.availablePlayers ?? []);
+      setUpcomingMatches(data.upcomingMatches ?? []);
+      if (data.lineup && data.lineup.players.length === 11) {
+        setFormation(data.lineup.formation);
+        setTactic(data.lineup.tactic);
+        setHardness((data.lineup.hardness ?? "normal") as HardnessKey);
+        // Auto-replace any stored player who is now unavailable (injury/suspension)
+        // with the best available player for that slot's position
+        const pool = data.availablePlayers ?? [];
+        const playerMap = new Map(pool.map((p) => [p.id, p]));
+        const slots = POSITIONS[data.lineup.formation] ?? POSITIONS["4-4-2"];
+        const used = new Set<string>();
+        // Hráče původní sestavy si rezervujeme — nesmí být použiti jako náhrada
+        // za jiný slot (zpracují se na svém vlastním slotu níže). Bez toho
+        // by absent hráč na slotu i vytáhl X-tého hráče sestavy jako náhradu,
+        // a slot toho X-tého by pak fallbackem chytl libovolného hráče
+        // (typicky GK na FWD pozici) — bug s "neviditelným" hráčem v lavičce.
+        const originalIds = new Set(data.lineup.players.map((p) => p.playerId));
+        const nextSelected = data.lineup.players.map((p, i) => {
+          const stored = playerMap.get(p.playerId);
+          if (stored && !stored.absent && !used.has(p.playerId)) { used.add(p.playerId); return p.playerId; }
+          // Find replacement: best available at this slot's position (or any).
+          // Vyloučit hráče z původní sestavy — ti se zpracují na vlastním slotu.
+          const slotPos = slots[i].pos;
+          const notOriginal = (x: { id: string }) => !originalIds.has(x.id);
+          const repl = pool.filter((x) => !x.absent && !used.has(x.id) && notOriginal(x) && x.position === slotPos)
+            .sort((a, b) => b.overallRating - a.overallRating)[0]
+            ?? pool.filter((x) => !x.absent && !used.has(x.id) && notOriginal(x))
+              .sort((a, b) => b.overallRating - a.overallRating)[0];
+          if (repl) { used.add(repl.id); return repl.id; }
+          return p.playerId; // keep stale if nothing available
+        });
+        setSelected(nextSelected);
+      } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
+      // Pokud lineup má preset_slot, prostě ho aktivuj. Fallback vs explicit nás nezajímá v UI —
+      // user vidí "Sestava A vybraná" a může save-nout (pak se uloží per-zápas).
+      setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
+      setMatchPlan(data.lineup?.matchPlan ?? []);
+      setBenchIds(data.lineup?.bench ?? null);
+      setLineupSource(data.lineup?.source ?? null);
+      // Save button "Uloženo ✓" jen pokud lineup je explicit pro tento zápas
+      setSaved(data.lineup?.source === "explicit");
+      // Captain: prefer saved captain_id from DB; only auto-pick if none saved
+      if (data.lineup?.captainId) {
+        setCaptainId(data.lineup.captainId);
+      } else {
+        const lineup11 = data.lineup?.players.map((p) => p.playerId) ?? [];
+        if (lineup11.length === 11) {
+          const best = (data.availablePlayers ?? [])
+            .filter((p) => lineup11.includes(p.id))
+            .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
+          if (best) setCaptainId(best.id);
+        }
+      }
+      setLoading(false);
+      // If calendarId in URL, switch to that match
+      const urlCalId = searchParams.get("calendarId");
+      if (urlCalId && data.upcomingMatches) {
+        const target = data.upcomingMatches.find((um: UpcomingMatch) => um.calendarId === urlCalId);
+        if (target && data.nextMatch && target.calendarId !== data.nextMatch.calendarId) {
+          // Při přepnutí: použij teamName z contextu jako naše jméno (jinak by se míchalo
+          // při přechodu doma↔venku — předchozí prev.homeName mohlo být kdokoliv)
+          const myName = ourTeamName ?? (data.nextMatch.isHome ? data.nextMatch.homeName : data.nextMatch.awayName);
+          setNextMatch((prev) => prev ? {
+            ...prev, calendarId: target.calendarId, gameWeek: target.gameWeek, scheduledAt: target.scheduledAt, isHome: target.isHome, isFriendly: target.isFriendly, isCup: target.isCup, roundName: target.roundName,
+            homeName: target.isHome ? myName : target.opponentName,
+            awayName: target.isHome ? target.opponentName : myName,
+          } : prev);
+          apiFetch<{ lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
+            .then((ld) => {
+              if (ld.lineup?.players.length === 11) {
+                setFormation(ld.lineup.formation);
+                setTactic(ld.lineup.tactic);
+                setSelected(ld.lineup.players.map((p) => p.playerId));
+                if (ld.lineup.captainId) setCaptainId(ld.lineup.captainId);
+              }
+              setActivePreset(ld.lineup?.presetSlot ?? null);
+              setMatchPlan(ld.lineup?.matchPlan ?? []);
+              setBenchIds(ld.lineup?.bench ?? null);
+              setSaved(!!ld.lineup);
+            })
+            .catch((e) => console.error("load lineup from URL:", e));
+        }
+      }
+    }).catch((e) => { console.error("Failed to load next match:", e); setLoading(false); });
+  }, [teamId]);
+
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const autoFill = (pool: AvailablePlayer[], form: string) => {
+    const slots = POSITIONS[form] ?? POSITIONS["4-4-2"];
+    const used = new Set<string>();
+    const avail = pool.filter((p) => !p.absent);
+    // Priorizuj současně vybrané hráče (selected state) — když user změní formaci,
+    // chce zachovat svou sestavu co nejvíc, ne se mu náhodně přebudovala.
+    const currentlySelected = new Set(selected.filter((id): id is string => !!id));
+    const isCurrent = (p: AvailablePlayer) => currentlySelected.has(p.id);
+    const sel: (string | null)[] = [];
+    for (const slot of slots) {
+      // 1) Hráč co je už v lineup A pasuje na pozici (zachovat)
+      let pick = avail.find((p) => !used.has(p.id) && p.position === slot.pos && isCurrent(p));
+      // 2) Jakýkoliv current lineup hráč co pasuje na pozici (jiný slot v staré formaci)
+      if (!pick) pick = avail.find((p) => !used.has(p.id) && p.position === slot.pos);
+      // 3) Best rating na pozici (nový hráč)
+      if (!pick) pick = avail.filter((p) => !used.has(p.id) && p.position === slot.pos).sort((a, b) => b.overallRating - a.overallRating)[0];
+      // 4) Cokoliv (out-of-position)
+      if (!pick) pick = avail.filter((p) => !used.has(p.id)).sort((a, b) => b.overallRating - a.overallRating)[0];
+      if (pick) { sel.push(pick.id); used.add(pick.id); } else sel.push(null);
+    }
+    setSelected(sel);
+    setSaved(false);
+    // Pokud captain vypadl z lineup, najdi nového dle leadership
+    if (captainId && !sel.includes(captainId)) {
+      const newCaptain = avail
+        .filter((p) => sel.includes(p.id))
+        .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
+      setCaptainId(newCaptain?.id ?? null);
+    }
+  };
+
+  const savePreset = async (slot: "A" | "B" | "C") => {
+    if (!teamId) return;
+    const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
+    const players = selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId);
+    if (players.length !== 11) { setSaveError("Sestava musí mít 11 hráčů"); return; }
+    try {
+      await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formation, tactic, hardness, captainId, players, matchPlan, bench: benchToSave() }),
+      });
+      const d = await apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`);
+      setPresets(d.presets ?? presets);
+    } catch (e) { console.error("save preset:", e); setSaveError("Nepodařilo se uložit preset"); throw e; }
+  };
+
+  // Ref pro race-condition guard při rychlém přepínání presetů A → B → A — jen poslední request platí.
+  const loadPresetReqId = useRef(0);
+  const loadPreset = async (slot: "A" | "B" | "C") => {
+    if (!teamId) return;
+    const myReqId = ++loadPresetReqId.current;
+    try {
+      const matchCalId = nextMatch?.calendarId ?? nextMatch?.matchId ?? null;
+      const data = await apiFetch<{ formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; bench?: string[] | null; warnings: string[] }>(
+        `/api/teams/${teamId}/lineup-presets/${slot}/apply`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(matchCalId ? { calendarId: matchCalId } : {}) }
+      );
+      // Pokud uživatel mezitím klikl jiný preset, zahodit stale response
+      if (myReqId !== loadPresetReqId.current) return;
+      setFormation(data.formation);
+      setTactic(data.tactic);
+      setHardness((data.hardness ?? "normal") as HardnessKey);
+      const newSel = data.players.map((p) => p.playerId);
+      while (newSel.length < 11) newSel.push(null as any);
+      setSelected(newSel);
+      setCaptainId(data.captainId);
+      setMatchPlan(data.matchPlan ?? []);
+      setBenchIds(data.bench ?? null);
+      setSaved(false);
+    } catch (e) { console.error("load preset:", e); }
+  };
+
+  const deletePreset = async (slot: "A" | "B" | "C") => {
+    if (!teamId) return;
+    const ok = await apiAction(apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, { method: "DELETE" }), "Smazání presetu se nezdařilo");
+    if (ok) {
+      setPresets({ ...presets, [slot]: null });
+      if (activePreset === slot) setActivePreset(null);
+    }
+  };
+
+  // Klik na slot: pokud filled a ne aktivní → loadne. Pokud aktivní → odepne.
+  const onPresetClick = (slot: "A" | "B" | "C") => {
+    if (activePreset === slot) {
+      setActivePreset(null);
+      return;
+    }
+    // Sync update activePreset hned aby UI reagovalo i když fetch běží pomalu
+    setActivePreset(slot);
+    if (presets[slot]) {
+      // loadPreset má vlastní reqId guard proti race condition
+      loadPreset(slot);
+    }
+  };
+
+  /** Exekutory ukládáme hned — jsou to týmové role, ne součást sestavy. */
+  const ulozRole = async (zmena: { penaltyTakerId?: string | null; freekickTakerId?: string | null }) => {
+    if (!teamId) return;
+    setRolesSaving(true);
+    try {
+      await apiFetch(`/api/teams/${teamId}/roles`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        // Prázdný řetězec = zrušit roli; undefined by backend nechal beze změny
+        body: JSON.stringify(Object.fromEntries(Object.entries(zmena).map(([k, v]) => [k, v ?? ""]))),
+      });
+      setRolesSavedAt(Date.now());
+    } catch (e) {
+      console.error("uložení exekutorů standardek selhalo:", e);
+      setRolesError("Nepodařilo se uložit, zkus to znovu");
+    } finally {
+      setRolesSaving(false);
+    }
+  };
+
+  // Hráč ze základu na lavičce být nemůže — po změně formace tam mohl zůstat
+  const benchToSave = () => benchIds ? benchIds.filter((id) => !selected.includes(id)) : null;
+
+  /** Postaví hráče do základu. Když šel z lavičky, sedne si na jeho místo ten, koho vystřídal. */
+  const placeInLineup = (slot: number, playerId: string) => {
+    const outgoing = selected[slot];
+    const sel = [...selected];
+    sel[slot] = playerId;
+    setSelected(sel);
+    if (benchIds?.includes(playerId)) {
+      setBenchIds(outgoing
+        ? benchIds.map((id) => (id === playerId ? outgoing : id))
+        : benchIds.filter((id) => id !== playerId));
+    }
+    setSaved(false);
+  };
+
+  const saveLineup = async () => {
+    if (!teamId || !nextMatch || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
+      const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, matchPlan, bench: benchToSave(), players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+      });
+      if (res.ok) {
+        setSaved(true);
+        setLineupSource("explicit");
+        trackEvent("lineup_saved", {
+          formation,
+          tactic,
+          hardness,
+          presetSlot: activePreset,
+          playersCount: selected.filter(Boolean).length,
+        });
+        // Backend při save s presetSlot auto-upsertuje do lineup_presets —
+        // reload lokálního presets state aby tab "Sestava A prázdná" přešel na "Sestava A 4-4-2"
+        if (activePreset) {
+          apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`)
+            .then((d) => setPresets(d.presets ?? { A: null, B: null, C: null }))
+            .catch((e) => console.warn("reload presets:", e));
+        }
+      }
+      else {
+        setSaveError(res.error ?? "Nepodařilo se uložit sestavu");
+        trackEvent("lineup_save_failed", { error: res.error });
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Nepodařilo se uložit sestavu";
+      setSaveError(msg);
+      trackEvent("lineup_save_failed", { error: msg });
+      console.error("Failed to save lineup:", e);
+    }
+    setSaving(false);
+  };
+
+  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (!nextMatch) return (
+    <div className="page-container"><div className="card p-8 text-center">
+      <p className="font-heading font-bold text-xl mb-2">Žádný naplánovaný zápas</p>
+      <Link href="/liga?tab=rozpis" className="btn btn-primary">Zobrazit rozpis</Link>
+    </div></div>
+  );
+
+  const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
+  const bench = players.filter((p) => !selected.includes(p.id));
+  const absentPlayers = players.filter((p) => p.absent);
+
+  // Kdo z hráčů mimo základ pojede na zápas (7 náhradníků) a kdo zůstane doma
+  const { subs, autoFilled, standIns, leftOut } = splitBench(players, selected, slots.map((s) => s.pos), benchIds);
+  const subIds = new Set(subs.map((p) => p.id));
+
+  // Klepnutí na hráče v lavičce nebo mezi těmi, co nejedou. Dva klepy na hráče z různých
+  // skupin je prohodí; bez označeného hráče ze základu se tím základ nemění.
+  const onBenchRowClick = (p: AvailablePlayer) => {
+    if (p.absent) return;
+    if (swapSource !== null) { placeInLineup(swapSource, p.id); setSwapSource(null); return; }
+    if (benchPick === null || benchPick === p.id || subIds.has(benchPick) === subIds.has(p.id)) {
+      setBenchPick(benchPick === p.id ? null : p.id);
+      return;
+    }
+    const [goesHome, goesToBench] = subIds.has(benchPick) ? [benchPick, p.id] : [p.id, benchPick];
+    // Vychází se z toho, co je vidět, včetně hráčů, které doplnil automat
+    setBenchIds(subs.map((s) => (s.id === goesHome ? goesToBench : s.id)));
+    setBenchPick(null);
+    setSaved(false);
+  };
+
+  // Nabídky hráčů pro pokyny na lavičce. Jen ti, kdo na zápas opravdu pojedou —
+  // pokyn s omluveným nebo s hráčem, který zůstane doma, by engine tiše zahodil.
+  const planName = (p: AvailablePlayer) => `${p.lastName} ${p.firstName.charAt(0)}.`;
+  const planStarters = selected
+    .map((id) => players.find((p) => p.id === id))
+    .filter((p): p is AvailablePlayer => !!p && !p.absent)
+    .map((p) => ({ id: p.id, name: planName(p) }));
+  const planBench = subs.map((p) => ({ id: p.id, name: planName(p) }));
+
+  // Chemie sestavy — počítá se STEJNÝMI vahami jako v enginu (packages/shared),
+  // takže zobrazené číslo odpovídá tomu, co se v zápase opravdu stane.
+  const { relSummary, chemistry, chemPairs } = (() => {
+    const counts: Record<string, number> = {};
+    const seen = new Set<string>();
+    const pairs: Array<{ type: RelationshipType; strength?: number; aName: string; bName: string; effect: string }> = [];
+
+    for (const pid of selected) {
+      if (!pid) continue;
+      const p = players.find((pl) => pl.id === pid);
+      if (!p?.relationships) continue;
+      for (const r of p.relationships) {
+        if (!selected.includes(r.otherPlayerId)) continue;
+        const key = [pid, r.otherPlayerId].sort().join("|") + `|${r.type}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const other = players.find((pl) => pl.id === r.otherPlayerId);
+        counts[r.type] = (counts[r.type] ?? 0) + 1;
+        pairs.push({
+          type: r.type as RelationshipType,
+          strength: r.strength,
+          aName: `${p.firstName} ${p.lastName}`,
+          bName: other ? `${other.firstName} ${other.lastName}` : "?",
+          effect: r.effect ?? "",
+        });
+      }
+    }
+    const summary = Object.entries(counts).map(([type, count]) => ({ type, count })).filter((r) => r.count > 0);
+    return { relSummary: summary, chemistry: computeLineupChemistry(pairs), chemPairs: pairs };
+  })();
+
+  // Dvojice, které se znají, ale nejsou spolu v základní jedenáctce — z nich se dá poradit
+  // konkrétně („postav je vedle sebe") místo obecného „vazby časem vzniknou". Rivaly a švagry
+  // sem schválně nedáváme: ty do sestavy nikdo přidávat nechce.
+  const NEGATIVE_TYPES = new Set(["rivals", "in_laws"]);
+  const availablePairs = (() => {
+    const seen = new Set<string>();
+    const out: Array<{ aName: string; bName: string; type: string }> = [];
+    for (const p of players) {
+      if (p.absent) continue;
+      for (const r of p.relationships ?? []) {
+        if (NEGATIVE_TYPES.has(r.type)) continue;
+        if (selected.includes(p.id) && selected.includes(r.otherPlayerId)) continue;
+        const other = players.find((pl) => pl.id === r.otherPlayerId);
+        if (!other || other.absent) continue;
+        const key = [p.id, r.otherPlayerId].sort().join("|");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ aName: `${p.firstName} ${p.lastName}`, bName: `${other.firstName} ${other.lastName}`, type: r.type });
+      }
+    }
+    return out;
+  })();
+  const chemColor = chemistry >= 65 ? "text-pitch-500" : chemistry >= 45 ? "text-gold-600" : "text-card-red";
+  const chemLabel = chemistry >= 70 ? "Skvělá" : chemistry >= 55 ? "Dobrá" : chemistry >= 40 ? "Průměrná" : "Špatná";
+
+  return (
+    <div className="page-container space-y-3">
+
+      {/* ═══ Scrollable match header ═══ */}
+      {(() => {
+        const currentIdx = upcomingMatches.findIndex((um) => um.calendarId === nextMatch?.calendarId);
+        const matchDate = nextMatch.scheduledAt ? new Date(nextMatch.scheduledAt) : null;
+        const dateStr = matchDate ? matchDate.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : "";
+        const now = teamGameDate ? new Date(teamGameDate) : new Date();
+        // Hlavička je VŽDY pro nadcházející (neodehraný) zápas. Když game_date přejel kolo,
+        // které match-tick nestihl odsimulovat, vyšlo by záporné "před X dny" — clamp na 0
+        // (= "dnes"), čeká se na odehrání. Sjednoceno s bannerem a kartou Další zápas.
+        const daysUntil = matchDate ? Math.max(0, Math.round((matchDate.getTime() - now.getTime()) / 86400000)) : 0;
+        const daysLabel = daysUntil === 0 ? "dnes"
+          : daysUntil === 1 ? "zítra"
+          : `za ${daysUntil} dní`;
+        const opponentName = nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName;
+
+        const switchToMatch = (um: UpcomingMatch) => {
+          // Sync URL — bez toho F5 vrátí na původní zápas a state je nesynced
+          router.replace(`/zapas?calendarId=${um.calendarId}`, { scroll: false });
+          // myName z contextu — jinak by se mixovalo při přepínání doma↔venku
+          const myName = ourTeamName ?? (nextMatch?.isHome ? nextMatch.homeName : nextMatch?.awayName ?? "");
+          setNextMatch((prev) => prev ? {
+            ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly, isCup: um.isCup, roundName: um.roundName,
+            homeName: um.isHome ? myName : um.opponentName,
+            awayName: um.isHome ? um.opponentName : myName,
+          } : prev);
+          if (teamId) {
+            // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
+            apiFetch<{ referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+              .then((data) => {
+                setReferee(data.referee ?? null);
+                setForecast(data.forecast ?? null);
+                setTacticHints(data.tacticHints ?? []);
+                if (data.availablePlayers) setPlayers(data.availablePlayers);
+                if (data.lineup && data.lineup.players.length === 11) {
+                  setFormation(data.lineup.formation);
+                  setTactic(data.lineup.tactic);
+                  setHardness((data.lineup.hardness ?? "normal") as HardnessKey);
+                  setSelected(data.lineup.players.map((p) => p.playerId));
+                  // Captain reset — explicit setter i pro null aby se neudržoval starý captain z předchozího zápasu
+                  if (data.lineup.captainId) {
+                    setCaptainId(data.lineup.captainId);
+                  } else {
+                    // Pokud lineup nemá captain, najdi auto (nejvyšší leadership)
+                    const lineupIds = data.lineup.players.map((p) => p.playerId);
+                    const best = (data.availablePlayers ?? [])
+                      .filter((p) => lineupIds.includes(p.id))
+                      .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
+                    setCaptainId(best?.id ?? null);
+                  }
+                } else if (data.availablePlayers) {
+                  // Žádný lineup → autoFill (jako v hlavním useEffect)
+                  autoFill(data.availablePlayers, "4-4-2");
+                  setCaptainId(null);
+                }
+                // ActivePreset vždy pokud má preset_slot
+                setActivePreset((data.lineup?.presetSlot ?? null) as "A"|"B"|"C"|null);
+                setMatchPlan(data.lineup?.matchPlan ?? []);
+                setBenchIds(data.lineup?.bench ?? null);
+                setLineupSource(data.lineup?.source ?? null);
+                setSaved(data.lineup?.source === "explicit");
+              })
+              .catch((e) => { console.error("load lineup:", e); setSaved(false); });
+          }
+          setEditSlot(null); setSwapSource(null); setBenchPick(null);
+        };
+
+        return (
+          <>
+            {nextMatch.isLocalDerby && (
+              <div
+                className="px-3 py-1.5 rounded-control text-center font-heading font-[800] text-sm tracking-wide"
+                style={{ background: "linear-gradient(90deg, rgba(220,38,38,0.15), rgba(220,38,38,0.35), rgba(220,38,38,0.15))", color: "#b91c1c", border: "1px solid rgba(220,38,38,0.45)" }}
+              >
+                🏘️ MÍSTNÍ DERBY
+              </div>
+            )}
+          <div className="card p-3 flex items-center gap-2">
+            <button disabled={currentIdx <= 0} onClick={() => { if (currentIdx > 0) switchToMatch(upcomingMatches[currentIdx - 1]); }}
+              className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-lg font-bold">
+              ◀
+            </button>
+            <div className="flex-1 text-center min-w-0">
+              <div className="font-heading font-bold text-base truncate">
+                vs {opponentName} · <span className="text-pitch-500">{nextMatch.isHome ? "doma" : "venku"}</span> · <span className="text-muted">{daysLabel}</span>
+              </div>
+              <div className="text-xs text-muted">
+                {nextMatch.isCup ? <span className="font-heading font-bold text-gold-600">🏆 {nextMatch.roundName ?? "Pohár"}</span> : nextMatch.isFriendly ? <span className="font-heading font-bold text-pitch-600">Přátelák</span> : `${nextMatch.gameWeek}. kolo`} · {dateStr}
+                {absentPlayers.length > 0 && <span className="ml-2 text-card-red font-heading font-bold">⚠ {absentPlayers.length} nedostupných</span>}
+              </div>
+              {/* Warning jen pokud nic uloženého — info o sestavě je už v presetech + selectorech níže */}
+              {!lineupSource && (
+                <div className="mt-1 flex items-center justify-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-card-red/10 text-card-red font-heading font-bold">
+                    ⚠ Bez uložené sestavy — použije se auto
+                  </span>
+                </div>
+              )}
+            </div>
+            <button disabled={currentIdx >= upcomingMatches.length - 1} onClick={() => { if (currentIdx < upcomingMatches.length - 1) switchToMatch(upcomingMatches[currentIdx + 1]); }}
+              className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-lg font-bold">
+              ▶
+            </button>
+          </div>
+          </>
+        );
+      })()}
+
+      {forecast && (
+        <CollapsibleCard
+          title={`${forecast.icon} Počasí na zápas`}
+          summary={`${forecast.description} · ${forecast.temperature} °C${tacticHints.length > 0 ? ` · ${tacticHints.length} ${tacticHints.length === 1 ? "tip" : tacticHints.length < 5 ? "tipy" : "tipů"}` : ""}`}
+          startCollapsed
+          className="mb-3"
+        >
+          <div className="text-sm mb-3">
+            <span className="font-heading font-bold">{forecast.description}</span>
+            <span className="text-muted"> · {forecast.temperature} °C</span>
+          </div>
+
+          {tacticHints.length > 0 ? (
+            <ul className="space-y-2">
+              {tacticHints.map((h, i) => (
+                <li key={i} className="flex gap-2.5 text-sm leading-relaxed">
+                  <span className="shrink-0 text-base">
+                    {h.tone === "warning" ? "⚠️" : h.tone === "opportunity" ? "💡" : "ℹ️"}
+                  </span>
+                  <span>
+                    <span className="font-heading font-bold">{h.label}</span>
+                    <span className="text-muted"> — {h.detail}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">
+              Podmínky jsou v pohodě — hřiště ani počasí ti do hry mluvit nebudou.
+            </p>
+          )}
+        </CollapsibleCard>
+      )}
+
+      {/* Rozhodčí — delegace dva herní dny předem, aby se dala přizpůsobit sestava */}
+      {nextMatch && !nextMatch.isFriendly && (
+        <RefereeCard referee={referee} isHome={nextMatch.isHome} />
+      )}
+
+      {/* Bus z okolí — domácí ligové i pohárové zápasy (ne přátelák) */}
+      {nextMatch?.isHome && !nextMatch.isFriendly && teamId && (
+        <BusSelector teamId={teamId} matchId={nextMatch.matchId} />
+      )}
+
+      {/* Absent players shown inline in bench table + selector, not as separate card */}
+
+      {/* ═══ Presety A / B / C — taby ═══ */}
+      <div className="card p-3">
+        <div className="flex items-baseline justify-between mb-1">
+          <div className="text-micro text-muted font-heading uppercase tracking-wide">Uložené sestavy</div>
+          <div className="text-micro text-muted">
+            {activePreset
+              ? <>Vybrána <span className="font-bold text-pitch-600">Sestava {activePreset}</span> · {saved ? "použije se pro zápas" : "uložením se nasadí pro zápas"}</>
+              : "Klepnutím vybereš sestavu"}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {(["A", "B", "C"] as const).map((slot) => {
+            const preset = presets[slot];
+            const filled = !!preset;
+            const active = activePreset === slot;
+            return (
+              <div key={slot} className="relative">
+                <button
+                  onClick={() => { onPresetClick(slot); setSaved(false); }}
+                  className={`w-full py-2 px-2 rounded-soft text-xs font-heading font-bold border-2 transition-all ${
+                    active ? "bg-pitch-500 border-pitch-600 text-white shadow-md"
+                    : filled ? "bg-gold-50 border-pitch-300 text-ink hover:border-pitch-500"
+                    : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"
+                  }`}
+                >
+                  {/* flex-col: na 375 px se „Sestava A" a stav vedle sebe nevesly
+                      a nazev se lamal na dva radky. Pod sebou to sedi. */}
+                  <div className="flex flex-col items-center leading-tight">
+                    <span className="whitespace-nowrap">Sestava {slot}</span>
+                    {filled && <span className={`text-micro ${active ? "opacity-90" : "opacity-70"}`}>{preset.formation}</span>}
+                    {!filled && <span className="text-micro opacity-70">prázdná</span>}
+                  </div>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ═══ Formation + Tactic — one row, with chemistry badge ═══ */}
+      <div className="card p-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline justify-between mb-1">
+              <div className="text-micro text-muted font-heading uppercase tracking-wide">Formace</div>
+              <div className="text-micro font-heading">
+                Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 15)}`}>{Math.round(formationFam[formation] ?? 15)}</span>/100
+              </div>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
+              {FORMATIONS.map((f) => {
+                const fam = formationFam[f] ?? 15;
+                return (
+                  <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
+                    title={getFormationTooltip(f)}
+                    className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                    {f}
+                    <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1">Taktika</div>
+            <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
+              {TACTICS.map((t) => (
+                <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
+                  title={getTacticTooltip(t.key as TacticKey)}
+                  className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                  <span className="hidden sm:inline">{t.icon} </span>{t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* Tvrdost hry — vlastní řádek, aby se třetí osa na desktopu nervala s formací a taktikou */}
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-micro text-muted font-heading uppercase tracking-wide">Tvrdost hry</span>
+            {cardRisk && (
+              <span className="text-micro text-muted">
+                Riziko karet:{" "}
+                <span className={`font-heading font-bold ${
+                  cardRisk.level === "vysoké" ? "text-card-red" : cardRisk.level === "střední" ? "text-gold-600" : "text-pitch-600"
+                }`}>{cardRisk.level}</span>
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 rounded-xl bg-gray-50 p-0.5 gap-0.5">
+            {HARDNESS.map((h) => (
+              <button key={h.key} onClick={() => { setHardness(h.key); setSaved(false); }}
+                title={getHardnessTooltip(h.key)}
+                className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${hardness === h.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
+                <span className="hidden sm:inline">{h.icon} </span>{h.label}
+              </button>
+            ))}
+          </div>
+          {/* Varování jen když má smysl — u benevolentního sudího by jen šumělo */}
+          {hardness === "hard" && referee && referee.strictness >= 65 && (
+            <p className="text-micro text-card-red mt-1.5">
+              {referee.name} pískne i to, co jinde projde. Do těla u něj neznamená odebrané míče,
+              ale přímáky pro soupeře a plný zápis.
+            </p>
+          )}
+          {cardRisk && (
+            <p className="text-micro text-muted mt-1.5">
+              Podle jeho metru a téhle sestavy čekej ~{cardRisk.cards.toFixed(1).replace(".", ",")} žluté
+              a ~{cardRisk.reds.toFixed(2).replace(".", ",")} červené.
+              {cardRisk.onEdge > 0 && (
+                <span className="text-gold-600">
+                  {" "}{cardRisk.onEdge === 1 ? "Jeden hráč je" : `${cardRisk.onEdge} hráči jsou`} jednu žlutou od stopky.
+                </span>
+              )}
+            </p>
+          )}
+        </div>
+
+        {/* Popisy zvolené trojice. Na desktopu je má i hover tooltip, na mobilu jinak
+            nejsou k dispozici — proto se nezahazují, jen se sbalí. */}
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => setHintsOpen((v) => !v)}
+            aria-expanded={hintsOpen}
+            className="w-full flex items-center justify-between gap-2 text-micro font-heading uppercase tracking-wide text-muted-light"
+          >
+            <span>Co která volba znamená</span>
+            <span className={`transition-transform ${hintsOpen ? "rotate-180" : ""}`} aria-hidden>▾</span>
+          </button>
+        </div>
+        {hintsOpen && (
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-micro leading-relaxed text-muted">
+          <div>
+            <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Formace: </span>
+            {getFormationTooltip(formation).replace(/^[^—]+— /, "")}
+          </div>
+          <div>
+            <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Taktika: </span>
+            {getTacticTooltip(tactic as TacticKey).replace(/^[^—]+— /, "")}
+          </div>
+          <div>
+            <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Tvrdost: </span>
+            {getHardnessTooltip(hardness).replace(/^[^—]+— /, "")}
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* ═══ Pokyny na lavičce — přednastavené scénáře pro engine ═══ */}
+      <MatchPlanEditor
+        plan={matchPlan}
+        onChange={(next) => { setMatchPlan(next); setSaved(false); }}
+        starters={planStarters}
+        bench={planBench}
+      />
+
+      {/* Main layout: pitch left, player list right */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+
+        {/* ═══ PITCH — kompaktní ═══ */}
+        <div>
+        <p className="text-center text-sm h-8 flex items-center justify-center gap-1 mb-1">
+          {swapSource !== null ? (
+            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button onClick={() => setSwapSource(null)} className="text-muted hover:text-ink">✕</button></>
+          ) : editSlot !== null ? (
+            <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
+          ) : (
+            <span className="text-ink/50">Klepni na hráče, pak na cílové místo · Znovu na něj = náhradník</span>
+          )}
+        </p>
+        <div className="rounded-xl bg-pitch-400 overflow-hidden" style={{ aspectRatio: "5/6", padding: "2% 5%" }}>
+        <div className="relative w-full h-full overflow-visible">
+          {/* Pitch markings */}
+          <svg viewBox="0 0 68 100" className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid meet">
+            {/* Outline */}
+            <rect x="4" y="3" width="60" height="94" fill="none" stroke="white" strokeWidth="0.3" strokeOpacity="0.35" />
+            {/* Halfway */}
+            <line x1="4" y1="50" x2="64" y2="50" stroke="white" strokeWidth="0.3" strokeOpacity="0.35" />
+            <circle cx="34" cy="50" r="8" fill="none" stroke="white" strokeWidth="0.3" strokeOpacity="0.25" />
+            {/* Penalty areas */}
+            <rect x="17" y="3" width="34" height="16" fill="none" stroke="white" strokeWidth="0.3" strokeOpacity="0.2" />
+            <rect x="17" y="81" width="34" height="16" fill="none" stroke="white" strokeWidth="0.3" strokeOpacity="0.2" />
+            {/* Goal areas */}
+            <rect x="24" y="3" width="20" height="6" fill="none" stroke="white" strokeWidth="0.3" strokeOpacity="0.15" />
+            <rect x="24" y="91" width="20" height="6" fill="none" stroke="white" strokeWidth="0.3" strokeOpacity="0.15" />
+          </svg>
+
+          {/* Player dots */}
+          {slots.map((slot, i) => {
+            const pid = selected[i];
+            const player = pid ? players.find((p) => p.id === pid) : null;
+            const isOOP = player && player.position !== slot.pos;
+            const num = player?.squadNumber ?? (i + 1);
+            const isEditing = editSlot === i;
+
+            const isSwapSource = swapSource === i;
+            const isSwapTarget = swapSource !== null && swapSource !== i;
+
+            return (
+              <button key={i} onClick={() => {
+                if (swapSource !== null && swapSource !== i) {
+                  // Swap two players in XI
+                  const sel = [...selected];
+                  [sel[swapSource], sel[i]] = [sel[i], sel[swapSource]];
+                  setSelected(sel); setSwapSource(null); setSaved(false);
+                } else if (swapSource === i) {
+                  // Deselect swap source, open selector instead
+                  setSwapSource(null); setEditSlot(i);
+                } else if (selected[i]) {
+                  // First click on occupied slot: mark as swap source
+                  setSwapSource(i); setEditSlot(null); setBenchPick(null);
+                } else {
+                  // Empty slot: open selector
+                  setEditSlot(isEditing ? null : i); setSwapSource(null);
+                }
+              }}
+                // flex + items-center: tlačítko je široké jako nejširší dítě, což bývá
+                // jméno. Bez tohohle zůstalo kolečko u levého okraje, zatímco jméno se
+                // centrovalo — čím delší jméno, tím větší rozjezd kolečka vůči popisku.
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-10 flex flex-col items-center"
+                style={{ left: `${slot.x}%`, top: `${slot.y}%` }}>
+                <div className="relative">
+                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-heading font-[800] text-sm sm:text-base shadow-md transition-all ${POS_BG[slot.pos]} ${
+                    isEditing ? "scale-125 ring-2 ring-white" : isSwapSource ? "scale-125 ring-2 ring-gold-400 animate-pulse" : isSwapTarget ? "ring-2 ring-white/60" : "group-hover:scale-110"
+                  } ${isOOP && !isSwapSource ? "ring-2 ring-orange-400/60" : ""}`}>
+                    {num}
+                  </div>
+                  {pid === captainId && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gold-500 text-white text-[9px] font-heading font-[800] flex items-center justify-center shadow-sm ring-1 ring-white">C</span>
+                  )}
+                </div>
+                <div className="text-center mt-0.5 leading-tight">
+                  {/* Jméno musí zůstat vycentrované pod kolečkem. Když byla ikona
+                      součástí textu, centrovala se dvojice a jméno uteklo doleva. */}
+                  <div className="relative inline-block text-xs sm:text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                    {player?.lastName ?? "—"}
+                    {isOOP && (
+                      <span className="absolute left-full top-0 ml-0.5" title="Hraje mimo svou pozici">⚠️</span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        </div>
+        <p className="text-center text-sm h-8 flex items-center justify-center gap-1 mt-1">
+          {swapSource !== null ? (
+            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button onClick={() => setSwapSource(null)} className="text-muted hover:text-ink">✕</button></>
+          ) : editSlot !== null ? (
+            <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
+          ) : (
+            <span className="text-ink/50">Klepni na hráče, pak na cílové místo · Znovu na něj = náhradník</span>
+          )}
+        </p>
+        </div>
+
+        {/* ═══ RIGHT PANEL — player selector or squad list ═══ */}
+        <div>
+          {/* Desktop selector — inline, replaces XI table */}
+          {editSlot !== null && (
+            <div className="hidden lg:block card overflow-x-auto mb-3 table-scroll">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
+                <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-muted">
+                    <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading">#</th>
+                    <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Rat</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Rch</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Tch</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Stř</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Obr</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Kon</th>
+                    <th className="py-1.5 pr-3 text-center text-xs font-heading w-8">Mor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {players
+                    .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
+                    .sort((a, b) => {
+                      if (a.absent && !b.absent) return 1;
+                      if (!a.absent && b.absent) return -1;
+                      return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
+                    })
+                    .map((p) => {
+                      const isCurrent = p.id === selected[editSlot];
+                      const isOOP = p.position !== slots[editSlot].pos;
+                      const isAbsent = p.absent;
+                      const s = p as any;
+                      return (
+                        <tr key={p.id}
+                          onClick={() => { if (!isAbsent) { placeInLineup(editSlot, p.id); setEditSlot(null); } }}
+                          className={`border-b border-gray-50 last:border-b-0 transition-colors ${
+                            isAbsent ? "opacity-35 cursor-not-allowed" : isCurrent ? "bg-pitch-100" : "hover:bg-gray-50 cursor-pointer"
+                          } ${isOOP && !isAbsent ? "bg-gold-50/50" : ""}`}>
+                          <td className="py-1.5 pl-3 text-center">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
+                              {p.squadNumber ?? "?"}
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-1.5">
+                            {isAbsent ? (
+                              <div>
+                                <span className="font-heading font-bold text-sm line-through text-muted">{p.lastName}</span>
+                                <div className="text-micro text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
+                                  <PositionBadge position={p.position as Pos} />
+                                  {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
+                                </div>
+                                <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-center tabular-nums font-heading font-bold">{p.overallRating}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`}>{s.speed}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`}>{s.technique}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`}>{s.shooting}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`}>{s.defense}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${condC(p.condition)}`}>{p.condition}%</td>
+                          <td className="py-1.5 pr-3 text-center">{moraleIcon(p.morale)}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {/* XI table + bench — always visible */}
+          <>
+            {/* Starting XI table */}
+              <div className="card overflow-x-auto mb-3 table-scroll">
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <span className="font-heading font-bold text-sm uppercase text-muted">Základní sestava</span>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-muted">
+                      <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading" title="Číslo dresu">#</th>
+                      <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkový rating">Rat</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Rychlost">Rch</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
+                      <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selected.map((pid, i) => {
+                      const player = pid ? players.find((p) => p.id === pid) : null;
+                      if (!player) return null;
+                      const isOOP = player.position !== slots[i].pos;
+                      const s = player as any;
+                      return (
+                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""} ${swapSource === i ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}
+                          onClick={() => { setEditSlot(i); setSwapSource(null); }}>
+                          <td className="py-1.5 pl-3 text-center">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[slots[i].pos]}`}>
+                              {player.squadNumber ?? i + 1}
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <div className="min-w-0">
+                                <span className="font-heading font-bold text-sm leading-tight">{player.lastName}</span>
+                                <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
+                              </div>
+                              {captainId === player.id && (
+                                <span className="shrink-0 w-6 h-6 rounded-full text-micro font-heading font-[800] flex items-center justify-center bg-gold-500 text-white shadow-sm"
+                                  title="Kapitán, mění se níž v Rolích v týmu">C</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${player.overallRating}`}>{player.overallRating}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`} title={`Rychlost: ${s.speed}`}>{s.speed}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${condC(player.condition)}`} title={`Kondice: ${player.condition}%`}>{player.condition}%</td>
+                          <td className="py-1.5 text-center" title={`Morálka: ${player.morale}%`}>{moraleIcon(player.morale)}</td>
+                          <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Lavička — jen ti, kdo na zápas pojedou. Zbytek kádru je oddělený pod ní. */}
+              <div className="card overflow-x-auto table-scroll">
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <span className="font-heading font-bold text-sm uppercase text-muted">
+                    Lavička ({subs.length + standIns.length})
+                  </span>
+                  <p className="text-sm text-muted leading-snug mt-0.5">
+                    Na zápas jede základ a sedm náhradníků, vystřídat můžeš pět hráčů.
+                  </p>
+                  <p className={`text-sm leading-snug mt-0.5 ${benchPick ? "font-heading font-bold text-gold-600" : "text-muted"}`}>
+                    {benchPick
+                      ? (subIds.has(benchPick)
+                          ? "Klepni na hráče dole, který pojede místo něj."
+                          : "Klepni na náhradníka, místo kterého pojede.")
+                      : benchIds
+                        ? "Klepni na hráče a pak na toho, kdo má jet místo něj."
+                        : "Zatím je vybral automat podle ratingu. Klepni na hráče a pak na toho, kdo má jet místo něj."}
+                  </p>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-muted">
+                      <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading" title="Číslo dresu">#</th>
+                      <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkový rating">Rat</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Rychlost">Rch</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
+                      <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
+                    </tr>
+                  </thead>
+                  {(() => {
+                    const renderBenchRow = (p: AvailablePlayer, isLeftOut: boolean, note?: string) => {
+                      const s = p as any;
+                      const isAbsent = p.absent;
+                      return (
+                        <tr key={p.id}
+                          onClick={() => onBenchRowClick(p)}
+                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : "cursor-pointer hover:bg-pitch-50"} ${isLeftOut && !isAbsent && benchPick !== p.id ? "opacity-60" : ""} ${benchPick === p.id ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}>
+                          <td className="py-1.5 pl-3 w-8 text-center">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
+                              {p.squadNumber ?? "?"}
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-1.5">
+                            {isAbsent ? (
+                              <div>
+                                <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
+                                <div className="text-micro text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-heading font-bold text-sm leading-tight">{p.lastName}</span>
+                                  <PositionBadge position={p.position as Pos} />
+                                  {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
+                                </div>
+                                {note
+                                  ? <div className="text-sm text-gold-600 font-heading font-bold">{note}</div>
+                                  : <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${p.overallRating}`}>{p.overallRating}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`} title={`Rychlost: ${s.speed}`}>{s.speed}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
+                          <td className={`py-1.5 text-center tabular-nums ${condC(p.condition)}`} title={`Kondice: ${p.condition}%`}>{p.condition}%</td>
+                          <td className="py-1.5 text-center" title={`Morálka: ${p.morale}%`}>{moraleIcon(p.morale)}</td>
+                          <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>
+                        </tr>
+                      );
+                    };
+                    return (
+                      <>
+                        <tbody>
+                          {standIns.map((s) => renderBenchRow(s.player, false, `Nastoupí za ${s.replacing.lastName}`))}
+                          {subs.map((p) => renderBenchRow(p, false, autoFilled.includes(p) ? "Doplnil automat za omluveného" : undefined))}
+                          {subs.length + standIns.length === 0 && (
+                            <tr>
+                              <td colSpan={10} className="px-3 py-2 text-sm text-muted">
+                                Na lavičku nezbyl nikdo, kdo by mohl jet.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                        {leftOut.length > 0 && (
+                          <tbody>
+                            <tr className="bg-gray-50 border-y border-gray-100">
+                              <td colSpan={10} className="px-3 py-2">
+                                <span className="font-heading font-bold text-sm uppercase text-muted">
+                                  Nejedou na zápas ({leftOut.length})
+                                </span>
+                                <p className="text-sm text-muted leading-snug">
+                                  Zůstávají doma a střídat nemůžou. Na hřiště je dostaneš jen do základu.
+                                </p>
+                              </td>
+                            </tr>
+                            {leftOut.map((p) => renderBenchRow(p, true))}
+                          </tbody>
+                        )}
+                      </>
+                    );
+                  })()}
+                </table>
+                {benchIds && (
+                  <div className="px-3 py-2 border-t border-gray-100">
+                    <button type="button" onClick={() => { setBenchIds(null); setBenchPick(null); setSaved(false); }}
+                      className="text-sm font-heading font-bold text-pitch-700">
+                      Nechat vybrat automat
+                    </button>
+                  </div>
+                )}
+              </div>
+          </>
+        </div>
+      </div>
+
+      {/* ═══ Role v týmu — kapitán a exekutoři ═══ */}
+      <SetPieceTakers
+        players={players}
+        lineupIds={new Set(selected.filter(Boolean) as string[])}
+        benchIds={subIds}
+        rolesSaving={rolesSaving}
+        rolesSavedAt={rolesSavedAt}
+        rolesError={rolesError}
+        captainId={captainId}
+        penaltyTakerId={penaltyTakerId}
+        freekickTakerId={freekickTakerId}
+        onCaptain={(id) => { setCaptainId(id); setSaved(false); }}
+        onPenalty={(id) => { setPenaltyTakerId(id); ulozRole({ penaltyTakerId: id }); }}
+        onFreekick={(id) => { setFreekickTakerId(id); ulozRole({ freekickTakerId: id }); }}
+      />
+
+      {/* ═══ Chemistry + Relationship summary ═══ */}
+      <div className="card p-3">
+        <div className="flex items-center gap-3">
+          <div className="shrink-0 text-center">
+            <div className={`font-heading font-[800] text-2xl tabular-nums ${chemColor}`}>{chemistry}</div>
+            <div className="text-micro text-muted font-heading uppercase">Chemie</div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                <div className={`h-full rounded-full transition-all duration-500 ${chemistry >= 65 ? "bg-pitch-400" : chemistry >= 45 ? "bg-gold-400" : "bg-card-red"}`} style={{ width: `${chemistry}%` }} />
+              </div>
+              <span className={`text-xs font-heading font-bold ${chemColor} shrink-0`}>{chemLabel}</span>
+            </div>
+            {relSummary.length > 0 && (
+              <>
+                <div className="flex flex-wrap gap-1">
+                  {relSummary.map((r) => (
+                    <span key={r.type} className={`text-micro font-heading font-bold px-1.5 py-0.5 rounded ${
+                      r.type === "rivals" || r.type === "in_laws" ? "bg-red-50 text-card-red" : "bg-pitch-50 text-pitch-600"
+                    }`}>
+                      {REL_EMOJI[r.type]} {r.count}× {REL_LABEL[r.type]?.toLowerCase() ?? r.type}
+                    </span>
+                  ))}
+                </div>
+                {/* Konkrétní páry a co dělají — číslo samo o sobě nic neříká */}
+                <div className="mt-1.5 space-y-0.5">
+                  {chemPairs.map((p, i) => (
+                    <div key={i} className="text-micro text-muted leading-snug">
+                      <span className="text-ink font-heading font-bold">{p.aName}</span>
+                      {" a "}
+                      <span className="text-ink font-heading font-bold">{p.bName}</span>
+                      {p.effect ? ` ${p.effect}` : ""}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {relSummary.length === 0 && availablePairs.length > 0 && (
+              <div className="text-micro text-muted leading-snug">
+                V základní jedenáctce se zatím nikdo blíž nezná — v kádru ale ano.
+                Postav je vedle sebe a chemie naskočí:
+                <span className="block mt-1">
+                  {availablePairs.slice(0, 3).map((p, i) => (
+                    <span key={i} className="block">
+                      <span className="text-ink font-heading font-bold">{p.aName}</span>
+                      {" a "}
+                      <span className="text-ink font-heading font-bold">{p.bName}</span>
+                      {" "}{REL_LABEL[p.type]?.toLowerCase() ?? p.type}
+                    </span>
+                  ))}
+                  {availablePairs.length > 3 && (
+                    <span className="block">a další {availablePairs.length - 3}…</span>
+                  )}
+                </span>
+              </div>
+            )}
+            {relSummary.length === 0 && availablePairs.length === 0 && (
+              <div className="text-micro text-muted leading-snug">
+                V kádru se zatím nikdo blíž nezná. Vazby vznikají samy, jak se soupiska mění —
+                nováček z vesnice si najde souseda, vrstevníka ze školy, kolegu z práce nebo
+                parťáka na pivo. Bratři a mentorské dvojice se objeví taky, jen vzácněji.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {/* ═══ Lineup strength preview — síla sestavy + comparison se soupeřem ═══ */}
+      {teamId && nextMatch && selected.filter(Boolean).length === 11 && (
+        <LineupPreview
+          teamId={teamId}
+          matchId={nextMatch.isCup ? undefined : nextMatch.matchId}
+          formation={formation}
+          tactic={tactic}
+          hardness={hardness}
+          captainId={captainId}
+          onCardRisk={setCardRisk}
+          players={selected.reduce<Array<{ playerId: string; matchPosition: string }>>((acc, id, i) => {
+            if (id) acc.push({ playerId: id, matchPosition: slots[i].pos });
+            return acc;
+          }, [])}
+        />
+      )}
+
+      {/* ═══ Save ═══ */}
+      <div>
+        <button onClick={saveLineup} disabled={saving || selected.some((s) => !s)}
+          className={`btn btn-lg w-full ${saved ? "btn-ghost" : "btn-primary"}`}>
+          {saving ? "Ukládám..." : saved ? "Uloženo ✓" : activePreset ? `Použít Sestavu ${activePreset} pro zápas` : "Uložit sestavu"}
+        </button>
+        {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
+      </div>
+
+      {/* ═══ Mobile bottom sheet selector — rendered via portal to escape overflow ═══ */}
+      {editSlot !== null && typeof document !== "undefined" && createPortal(
+        <div className="lg:hidden">
+          <div className="fixed inset-0 z-[var(--z-sheet)] bg-black/50" onClick={() => setEditSlot(null)} />
+          <div className="fixed bottom-0 left-0 right-0 z-[var(--z-sheet)] bg-white rounded-t-2xl" style={{ maxHeight: "65vh" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat — {slots[editSlot].pos}</span>
+              <button onClick={() => setEditSlot(null)} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink text-xl">✕</button>
+            </div>
+            <div className="overflow-y-auto" style={{ maxHeight: "calc(65vh - 48px)" }}>
+              {players
+                .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
+                .sort((a, b) => {
+                  if (a.absent && !b.absent) return 1;
+                  if (!a.absent && b.absent) return -1;
+                  return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
+                })
+                .map((p) => {
+                  const isCurrent = p.id === selected[editSlot];
+                  const isAbsent = p.absent;
+                  return (
+                    <button key={p.id} disabled={isAbsent}
+                      onClick={() => { placeInLineup(editSlot, p.id); setEditSlot(null); }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 text-left ${
+                        isAbsent ? "opacity-30" : isCurrent ? "bg-pitch-50" : "active:bg-gray-100"
+                      }`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs shrink-0 ${POS_BG[p.position]}`}>
+                        {p.squadNumber ?? "?"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-heading font-bold text-sm">{p.lastName}</span>
+                          <PositionBadge position={p.position as Pos} />
+                        </div>
+                        <div className="text-xs text-muted">{p.firstName} · {p.overallRating} rat · {p.condition}%</div>
+                      </div>
+                      <span className="text-sm shrink-0">{moraleIcon(p.morale)}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EXEKUTOŘI STANDARDEK
+
+   Role jsou týmové (platí i v poháru a přáteláku), ukládají se spolu se
+   sestavou. Váhy atributů kopírují engine a jsou vypsané u role, aby manažer
+   viděl to samé, podle čeho se rozhoduje simulace.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+type TakerRole = "captain" | "penalty" | "freekick";
+
+const TAKER_ROLES: Record<TakerRole, {
+  icon: string; label: string; hint: string;
+  /** Vhodnost 0–100 podle stejných vah, jaké používá engine při zakončení. */
+  /** Atributy, které o roli rozhodují, i s vahou — z nich se počítá pořadí. */
+  attrs: Array<{ key: keyof AvailablePlayer; zkratka: string; nazev: string; vaha: number; vychozi: number }>;
+  /** Brankář kapitánem být může, standardky kopat ne. */
+  gkAllowed?: boolean;
+}> = {
+  captain: {
+    icon: "🎖️",
+    label: "Kapitán",
+    hint: "Vůdce zvedne po vstřeleném gólu morálku celému týmu, od vůdcovství 65 o bod, od 80 o dva. Slaboch pod 35 ji naopak srazí, když inkasujete.",
+    // Engine se u kapitána dívá výhradně na vůdcovství
+    attrs: [{ key: "leadership", zkratka: "Vůd", nazev: "Vůdcovství", vaha: 1, vychozi: 30 }],
+    gkAllowed: true,
+  },
+  penalty: {
+    icon: "🥅",
+    label: "Penalty",
+    hint: "Rozhoduje klid na míči a přesnost. V závěru těsného zápasu se navíc pozná povaha, nervák penaltu zahodí.",
+    attrs: [
+      { key: "setPieces", zkratka: "Std", nazev: "Standardky", vaha: 0.5, vychozi: 50 },
+      { key: "technique", zkratka: "Tch", nazev: "Technika", vaha: 0.3, vychozi: 50 },
+      { key: "shooting", zkratka: "Stř", nazev: "Střelba", vaha: 0.2, vychozi: 50 },
+    ],
+  },
+  freekick: {
+    icon: "🎯",
+    label: "Přímé kopy a rohy",
+    hint: "Přímák jde přes techniku, u rohů rozhoduje kvalita centru, hlavičkáře si engine vybere sám podle důrazu.",
+    attrs: [
+      { key: "setPieces", zkratka: "Std", nazev: "Standardky", vaha: 0.6, vychozi: 50 },
+      { key: "technique", zkratka: "Tch", nazev: "Technika", vaha: 0.25, vychozi: 50 },
+      { key: "passing", zkratka: "Přh", nazev: "Přihrávka", vaha: 0.15, vychozi: 50 },
+    ],
+  },
+};
+
+function TakerPicker({ role, players, lineupIds, benchIds, selectedId, onChange }: {
+  role: TakerRole;
+  players: AvailablePlayer[];
+  lineupIds: Set<string>;
+  /** Náhradníci, kteří na zápas pojedou — ostatní mimo základ zůstávají doma. */
+  benchIds: Set<string>;
+  selectedId: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const [rozbaleno, setRozbaleno] = useState(false);
+  const cfg = TAKER_ROLES[role];
+  const hodnota = (p: AvailablePlayer, a: typeof cfg.attrs[number]) => (p[a.key] as number) ?? a.vychozi;
+  const skore = (p: AvailablePlayer) => cfg.attrs.reduce((s, a) => s + hodnota(p, a) * a.vaha, 0);
+
+  // Brankář standardky nekope. Hráči ze sestavy jsou nahoře — kdo zrovna
+  // nehraje, přijde na řadu až se do XI vrátí.
+  const ranked = players
+    .filter((p) => cfg.gkAllowed || p.position !== "GK")
+    .map((p) => ({ p, score: skore(p), hraje: lineupIds.has(p.id) }))
+    .sort((a, b) => (a.hraje === b.hraje ? b.score - a.score : a.hraje ? -1 : 1));
+
+  const best = ranked.find((r) => r.hraje);
+  const chosen = ranked.find((r) => r.p.id === selectedId);
+  // Bez rozbalení stačí špička sestavy plus zvolený hráč, ať je vidět i když je horší
+  const zkraceno = ranked.slice(0, 5);
+  if (chosen && !zkraceno.includes(chosen)) zkraceno.push(chosen);
+  const videt = rozbaleno ? ranked : zkraceno;
+
+  return (
+    <div className="border-b border-gray-100 last:border-b-0 py-3 first:pt-0 last:pb-0 lg:border-b-0 lg:py-0 lg:pl-6 lg:first:pl-0 lg:flex lg:flex-col">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-base">{cfg.icon}</span>
+        <span className="font-heading font-bold text-sm uppercase">{cfg.label}</span>
+      </div>
+      <p className="text-sm text-muted mb-2 leading-snug lg:min-h-[3.75rem]">{cfg.hint}</p>
+
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-muted border-b border-gray-100">
+            <th className="text-left font-heading text-xs font-bold py-1">Kdo rozhoduje</th>
+            {cfg.attrs.map((a) => (
+              <th key={String(a.key)} className="text-center font-heading text-xs font-bold py-1 w-11"
+                title={`${a.nazev}, váha ${Math.round(a.vaha * 100)} %`}>
+                {a.zkratka}
+                {cfg.attrs.length > 1 && (
+                  <div className="text-micro font-normal leading-none">{Math.round(a.vaha * 100)}%</div>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {videt.map(({ p, hraje }, i) => {
+            const vybrany = p.id === selectedId;
+            return (
+              <tr key={p.id}
+                onClick={() => onChange(vybrany ? null : p.id)}
+                className={`cursor-pointer border-b border-gray-50 last:border-b-0 ${
+                  vybrany ? "bg-pitch-50" : "hover:bg-gray-50"
+                } ${hraje ? "" : "opacity-55"}`}>
+                <td className="py-2 pr-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 ${
+                      vybrany ? "border-pitch-600 bg-pitch-600" : "border-gray-300"
+                    }`} />
+                    <span className="font-heading font-bold">{p.lastName}</span>
+                    <span className="text-muted text-xs truncate">{p.firstName}</span>
+                    {i === 0 && hraje && !rozbaleno && (
+                      <span className="text-xs text-pitch-600 font-heading font-bold shrink-0">nej</span>
+                    )}
+                    {!hraje && (
+                      <span className="text-xs text-muted shrink-0">{benchIds.has(p.id) ? "lavička" : "nejede"}</span>
+                    )}
+                  </div>
+                </td>
+                {cfg.attrs.map((a) => (
+                  <td key={String(a.key)} className={`py-2 text-center tabular-nums ${attrC(hodnota(p, a))}`}>
+                    {hodnota(p, a)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <div className="flex items-center justify-between mt-2 gap-2 lg:mt-auto lg:pt-2">
+        <span className="text-sm text-muted">
+          {chosen
+            ? (chosen.hraje
+                ? (role === "captain" ? "Pásku nosí " : "Kope ") + chosen.p.lastName
+                : `${chosen.p.lastName} nehraje ` + (role === "captain"
+                    ? "tým bude bez kapitána"
+                    : `zaskočí ${best?.p.lastName ?? "nejlepší zbylý"}`))
+            : (role === "captain"
+                ? "Nikdo, přijdeš o bonus k morálce"
+                : `Automaticky kope ${best?.p.lastName ?? "nejlepší"}`)}
+        </span>
+        {ranked.length > zkraceno.length && (
+          <button type="button" onClick={() => setRozbaleno(!rozbaleno)}
+            className="text-sm font-heading font-bold text-pitch-700 shrink-0">
+            {rozbaleno ? "Méně" : `Celý kádr (${ranked.length})`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SetPieceTakers({ players, lineupIds, benchIds, rolesSaving, rolesSavedAt, rolesError, captainId, penaltyTakerId, freekickTakerId, onCaptain, onPenalty, onFreekick }: {
+  players: AvailablePlayer[];
+  lineupIds: Set<string>;
+  benchIds: Set<string>;
+  rolesSaving: boolean;
+  rolesSavedAt: number | null;
+  rolesError: string | null;
+  captainId: string | null;
+  penaltyTakerId: string | null;
+  freekickTakerId: string | null;
+  onCaptain: (id: string | null) => void;
+  onPenalty: (id: string | null) => void;
+  onFreekick: (id: string | null) => void;
+}) {
+  if (players.length === 0) return null;
+  return (
+    <div className="card p-4">
+      <div className="mb-2">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="font-heading font-bold text-sm uppercase text-muted">Role v týmu</span>
+          {rolesError
+            ? <span className="text-sm text-card-red">{rolesError}</span>
+            : rolesSaving
+              ? <span className="text-sm text-muted">Ukládám…</span>
+              : rolesSavedAt && <span className="text-sm text-pitch-600">Exekutoři uloženi ✓</span>}
+        </div>
+        <p className="text-sm text-muted mt-0.5 leading-snug">
+          Exekutoři platí pro celý tým — v lize, poháru i přáteláku — a ukládají se rovnou při volbě.
+          Kapitán patří k téhle sestavě, ten se uloží s ní. Když zvolený hráč zrovna nehraje,
+          zaskočí za něj nejvhodnější zbylý.
+        </p>
+      </div>
+      <div className="grid lg:grid-cols-3 lg:gap-x-10 lg:divide-x lg:divide-gray-100">
+        <TakerPicker role="captain" players={players} lineupIds={lineupIds} benchIds={benchIds} selectedId={captainId} onChange={onCaptain} />
+        <TakerPicker role="penalty" players={players} lineupIds={lineupIds} benchIds={benchIds} selectedId={penaltyTakerId} onChange={onPenalty} />
+        <TakerPicker role="freekick" players={players} lineupIds={lineupIds} benchIds={benchIds} selectedId={freekickTakerId} onChange={onFreekick} />
+      </div>
+    </div>
+  );
+}

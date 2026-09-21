@@ -113,7 +113,7 @@ export async function fetchMenuBadges(teamId: string, token: string | null, forc
 
 /**
  * Okamžitá aktualizace počtu nevyřízených nabídek v navigaci
- * (např. při zobrazení záložky Nabídky na /dashboard/transfers).
+ * (např. při zobrazení záložky Nabídky na /prestupy).
  */
 export function setIncomingOffersCount(count: number) {
   if (globalState.incomingOffers === count) return;
@@ -153,7 +153,7 @@ export function useMenuBadges(): MenuBadgesState {
   }, []);
 
   useEffect(() => {
-    // Přehodnotit notesUnseen při změně stránky (návštěva /dashboard/novinky ho smaže)
+    // Přehodnotit notesUnseen při změně stránky (návštěva /novinky ho smaže)
     const unseen = hasUnseenNotes();
     if (globalState.notesUnseen !== unseen) {
       const moreBadgeCount =

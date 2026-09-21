@@ -2,7 +2,7 @@
   "name": "Prales",
   "short_name": "Prales",
   "description": "Online fotbalový manažer z českého okresu. Postav si tým, vyhraj okresní přebor.",
-  "start_url": "/dashboard",
+  "start_url": "/prehled",
   "scope": "/",
   "display": "standalone",
   "background_color": "#153615",

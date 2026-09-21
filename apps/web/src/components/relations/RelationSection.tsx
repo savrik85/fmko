@@ -371,7 +371,7 @@ export function PreMatchCard({ myTeamId, otherTeamId, otherTeamName }: {
       {feedback && (
         <div className="mb-3 text-sm bg-amber-50 border border-amber-200 rounded-soft p-3 leading-relaxed">
           {feedback}{" "}
-          <Link href={`/dashboard/manager/${otherTeamId}`} className="underline text-pitch-600 hover:text-pitch-500">
+          <Link href={`/manazer/${otherTeamId}`} className="underline text-pitch-600 hover:text-pitch-500">
             Vztah s trenérem →
           </Link>
         </div>
@@ -477,7 +477,7 @@ export function PostMatchGestureCard({ myTeamId, opponentTeamId, opponentName, m
       {feedback ? (
         <div className="text-sm bg-amber-50 border border-amber-200 rounded-soft p-3 leading-relaxed">
           {feedback}{" "}
-          <Link href={`/dashboard/manager/${opponentTeamId}`} className="underline text-pitch-600 hover:text-pitch-500">
+          <Link href={`/manazer/${opponentTeamId}`} className="underline text-pitch-600 hover:text-pitch-500">
             Vztah s trenérem →
           </Link>
         </div>
@@ -526,7 +526,7 @@ export function RelationsOverview({ teamId }: { teamId: string }) {
       <SectionLabel>Vztahy s trenéry v lize</SectionLabel>
       <div className="space-y-1">
         {notable.map((r) => (
-          <Link key={r.teamId} href={`/dashboard/manager/${r.teamId}`}
+          <Link key={r.teamId} href={`/manazer/${r.teamId}`}
             className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-soft hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0">
             <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: r.primaryColor ?? "#999" }} />
             <div className="flex-1 min-w-0">

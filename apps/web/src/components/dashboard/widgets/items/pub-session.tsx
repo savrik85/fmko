@@ -71,7 +71,7 @@ export function PubSessionWidget({ data }: WidgetProps) {
               {new Date(session.gameDate).toLocaleDateString("cs", { weekday: "long" })} večer
             </div>
           </div>
-          <Link href="/dashboard/hospoda" className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap">
+          <Link href="/hospoda" className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 whitespace-nowrap">
             Historie →
           </Link>
         </div>
@@ -90,7 +90,7 @@ export function PubSessionWidget({ data }: WidgetProps) {
                 <span key={a.playerId}>
                   {i > 0 && ", "}
                   <Link
-                    href={a.isVisitor ? "#" : `/dashboard/player/${a.playerId}`}
+                    href={a.isVisitor ? "#" : `/hrac/${a.playerId}`}
                     className={`font-heading font-bold ${a.isVisitor ? "text-amber-600" : "hover:text-pitch-500 underline decoration-pitch-500/20"}`}
                   >
                     {a.firstName} {a.lastName}

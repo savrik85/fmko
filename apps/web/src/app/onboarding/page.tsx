@@ -89,14 +89,14 @@ export default function OnboardingPage() {
 
   // Redirect to register if not authenticated
   useEffect(() => {
-    if (!isLoading && !token) router.replace("/register");
+    if (!isLoading && !token) router.replace("/registrace");
   }, [isLoading, token, router]);
 
   const [state, setState] = useState<OnboardingState>(restored.state);
 
   // If user already has a team AND we're not in reveal step, redirect to dashboard
   useEffect(() => {
-    if (!isLoading && teamId && step < 5 && !state.createdTeamId) router.replace("/dashboard");
+    if (!isLoading && teamId && step < 5 && !state.createdTeamId) router.replace("/prehled");
   }, [isLoading, teamId, step, state.createdTeamId, router]);
 
   // Persist step + state to sessionStorage (but not step 5 / completed state)
@@ -261,7 +261,7 @@ export default function OnboardingPage() {
             primaryColor={state.primaryColor}
             secondaryColor={state.secondaryColor}
             players={state.players}
-            onComplete={() => router.push("/dashboard")}
+            onComplete={() => router.push("/prehled")}
           />
         )}
       </div>

@@ -88,7 +88,7 @@ export function SeasonHeatmapWidget({ data }: WidgetProps) {
         text: m.result === "W" ? "V" : m.result === "L" ? "P" : "R",
         outline: !m.isHome,
         tooltip: `${m.round}. kolo · ${m.opponent} · ${m.homeScore}:${m.awayScore} (${m.isHome ? "doma" : "venku"})`,
-        href: `/dashboard/match/${m.id}`,
+        href: `/zapas/${m.id}`,
       }))}
       legend={[
         { label: "Výhra", color: DIVERGING.positive },
@@ -124,7 +124,7 @@ export function BudgetWaterfallWidget({ data }: WidgetProps) {
         Za sezónu {w.net >= 0 ? "přibude" : "ubude"}{" "}
         <span className="font-heading font-bold text-ink tabular-nums">{fullCZK(Math.abs(w.net) * 16)}</span>
       </div>
-      <MoreLink href="/dashboard/finances">Detail financí →</MoreLink>
+      <MoreLink href="/finance">Detail financí →</MoreLink>
     </div>
   );
 }
@@ -271,7 +271,7 @@ export function PlayingTimeWidget({ data, height }: WidgetProps) {
           label: `${p.firstName} ${p.lastName}`,
           value: p.minutesPlayed,
           display: `${p.minutesPlayed}′`,
-          href: `/dashboard/player/${p.playerId}`,
+          href: `/hrac/${p.playerId}`,
         }))}
       />
       <div className="text-sm text-muted text-center">
@@ -299,7 +299,7 @@ export function ManOfMatchWidget({ data, height }: WidgetProps) {
         label: `${p.firstName} ${p.lastName}`,
         value: p.manOfMatch,
         display: `${p.manOfMatch}×`,
-        href: `/dashboard/player/${p.playerId}`,
+        href: `/hrac/${p.playerId}`,
       }))}
     />
   );
@@ -324,7 +324,7 @@ export function CleanSheetsWidget({ data, height }: WidgetProps) {
           label: `${p.firstName} ${p.lastName}`,
           value: p.cleanSheets,
           display: `${p.cleanSheets} / ${p.appearances}`,
-          href: `/dashboard/player/${p.playerId}`,
+          href: `/hrac/${p.playerId}`,
         }))}
       />
       <div className="text-micro text-muted text-center">Čistá konta ze všech odchytaných zápasů.</div>
@@ -350,7 +350,7 @@ export function DisciplineWidget({ data, height }: WidgetProps) {
         {top.map((p) => (
           <li key={p.playerId}>
             <div className="flex items-baseline gap-2 mb-1">
-              <a href={`/dashboard/player/${p.playerId}`} className="text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
+              <a href={`/hrac/${p.playerId}`} className="text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
                 {p.firstName} {p.lastName}
               </a>
               <span className="text-sm font-heading font-bold tabular-nums shrink-0">

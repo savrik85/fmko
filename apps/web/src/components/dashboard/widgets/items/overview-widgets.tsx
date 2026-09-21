@@ -23,7 +23,7 @@ export function NewsWidget({ data, height }: WidgetProps) {
         {news.map((article) => (
           <Link
             key={article.id}
-            href="/dashboard/news"
+            href="/zpravodaj"
             className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors"
           >
             <span className="text-lg shrink-0">{article.icon}</span>
@@ -34,7 +34,7 @@ export function NewsWidget({ data, height }: WidgetProps) {
           </Link>
         ))}
       </div>
-      <MoreLink href="/dashboard/news">Celý zpravodaj →</MoreLink>
+      <MoreLink href="/zpravodaj">Celý zpravodaj →</MoreLink>
     </>
   );
 }
@@ -55,7 +55,7 @@ export function AchievementsWidget({ data, teamId, height }: WidgetProps) {
           return (
             <Link
               key={a.key}
-              href={`/dashboard/manager/${teamId}`}
+              href={`/manazer/${teamId}`}
               className="flex items-center gap-2.5 py-1.5 px-1 hover:bg-gray-50/60 rounded-control transition-colors"
             >
               <div className="text-xl shrink-0 leading-none">{a.icon}</div>
@@ -67,7 +67,7 @@ export function AchievementsWidget({ data, teamId, height }: WidgetProps) {
           );
         })}
       </div>
-      <MoreLink href={`/dashboard/manager/${teamId}`}>Všechny úspěchy →</MoreLink>
+      <MoreLink href={`/manazer/${teamId}`}>Všechny úspěchy →</MoreLink>
     </>
   );
 }
@@ -96,7 +96,7 @@ export function HallOfFameWidget({ data }: WidgetProps) {
           <div className="text-sm text-muted py-3">Ještě bez úspěchů</div>
         )}
       </div>
-      <MoreLink href="/dashboard/hall-of-fame">Celý žebříček →</MoreLink>
+      <MoreLink href="/sin-slavy">Celý žebříček →</MoreLink>
     </>
   );
 }
@@ -120,7 +120,7 @@ export function EventsWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <MoreLink href="/dashboard/events">Všechny události →</MoreLink>
+      <MoreLink href="/udalosti">Všechny události →</MoreLink>
     </>
   );
 }

@@ -537,7 +537,7 @@ export default async function KlubPublicPage({ params }: { params: Promise<{ tea
           <div>
             Hráno v <Link href="/" className="font-heading font-bold text-white hover:text-white/80">Prales</Link>
           </div>
-          <Link href={`/dashboard/team/${teamId}`} className="hover:text-white/80">
+          <Link href={`/tym/${teamId}`} className="hover:text-white/80">
             Otevřít v aplikaci {"\u{2192}"}
           </Link>
         </div>

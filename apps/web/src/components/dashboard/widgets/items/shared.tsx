@@ -64,7 +64,7 @@ export function ScorerRow({
   return p.isDeparted ? (
     <div className={`${base} opacity-60`}>{inner}</div>
   ) : (
-    <a href={`/dashboard/player/${p.playerId}`} className={`${base} hover:bg-gray-50/50 transition-colors`}>{inner}</a>
+    <a href={`/hrac/${p.playerId}`} className={`${base} hover:bg-gray-50/50 transition-colors`}>{inner}</a>
   );
 }
 

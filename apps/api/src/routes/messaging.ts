@@ -164,7 +164,7 @@ function odpovidatLze(
       canReply: false,
       channel: null,
       replyHint: "Tahle výměna skončila. Domluvit se s partou můžeš na stránce Fanoušci.",
-      replyHintHref: "/dashboard/fans",
+      replyHintHref: "/fanousci",
     };
   }
   return {
@@ -803,7 +803,7 @@ messagingRouter.post("/admin/broadcast", async (c) => {
     const prefs = await getNotificationPreferences(c.env.DB, teamId)
       .catch((e) => { logger.warn({ module: "messaging" }, `load push prefs for team ${teamId}`, e); return null; });
     if (prefs?.system !== false) {
-      await sendWebPushToTeam(c.env, teamId, pushTitle, pushBody, "/dashboard/phone")
+      await sendWebPushToTeam(c.env, teamId, pushTitle, pushBody, "/telefon")
         .then(() => { pushed++; })
         .catch((e) => logger.warn({ module: "messaging" }, `broadcast push for team ${teamId}`, e));
     }

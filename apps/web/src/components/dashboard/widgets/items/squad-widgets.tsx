@@ -70,7 +70,7 @@ export function SquadStatusWidget({ data }: WidgetProps) {
           );
         })}
       </div>
-      <MoreLink href="/dashboard/squad">Zobrazit kádr →</MoreLink>
+      <MoreLink href="/kadr">Zobrazit kádr →</MoreLink>
     </div>
   );
 }
@@ -221,7 +221,7 @@ function LifeRanking({ data, field, label, height }: {
             label: playerName(p),
             value: v,
             display: String(Math.round(v)),
-            href: `/dashboard/player/${p.id}`,
+            href: `/hrac/${p.id}`,
           };
         })}
       />
@@ -250,7 +250,7 @@ export function SquadValueWidget({ data, height }: WidgetProps) {
           label: playerName(p),
           value,
           display: compactCZK(value),
-          href: `/dashboard/player/${p.id}`,
+          href: `/hrac/${p.id}`,
         }))}
       />
       <div className="text-micro text-muted text-center">Odhad podle ratingu a věku, ne nabídková cena.</div>
@@ -334,7 +334,7 @@ function RatingRanking({
         label: `${playerName(p)} · ${p.age} let`,
         value: p.overall_rating,
         display: String(p.overall_rating),
-        href: `/dashboard/player/${p.id}`,
+        href: `/hrac/${p.id}`,
       }))}
     />
   );
@@ -363,10 +363,10 @@ export function InjuriesWidget({ data, height }: WidgetProps) {
           value: i.daysRemaining,
           display: `${i.daysRemaining} d`,
           color: severityColor(i.severity),
-          href: `/dashboard/player/${i.playerId}`,
+          href: `/hrac/${i.playerId}`,
         }))}
       />
-      <MoreLink href="/dashboard/squad">Zobrazit kádr →</MoreLink>
+      <MoreLink href="/kadr">Zobrazit kádr →</MoreLink>
     </div>
   );
 }

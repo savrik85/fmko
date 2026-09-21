@@ -4910,7 +4910,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
       playerId, teamId,
       `⭐ ${player.first_name} ${player.last_name} je volný!`,
       `${player.team_name} ho uvolnil, teď je k mání jako volný hráč.`,
-      "/dashboard/transfers",
+      "/prestupy",
     );
   } catch (e) { logger.warn({ module: "game" }, "watcher push on release", e); }
 
@@ -5700,7 +5700,7 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   }
 
   // Normal (human) listing — vytvor transfer_offer (sjednoceny flow s primymi nabidkami).
-  // Tim probehne jednani pres /dashboard/transfers/offer/[id] s face-off, timeline a bublinami.
+  // Tim probehne jednani pres /prestupy/nabidka/[id] s face-off, timeline a bublinami.
   const listingInfo = await c.env.DB.prepare(
     `SELECT tl.team_id as seller_team_id, tl.player_id, p.first_name, p.last_name,
             ts.name as seller_name, tb.name as buyer_name
@@ -5750,7 +5750,7 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     await createNotification(c.env.DB, listingInfo.seller_team_id, "transfer",
       `💰 Nová nabídka za ${pName}`,
       `${listingInfo.buyer_name ?? "Klub"} nabízí ${body.amount.toLocaleString("cs-CZ")} Kč.`,
-      `/dashboard/transfers/offer/${offerId}`, pushEnv);
+      `/prestupy/nabidka/${offerId}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "market->offer notification", e); }
 
   return c.json({ ok: true, offerId });
@@ -5848,17 +5848,17 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     await createNotification(c.env.DB, buyerTeamId, "transfer",
       `✅ Přestup ${playerName} dokončen`,
       `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.`,
-      "/dashboard/transfers", pushEnv);
+      "/prestupy", pushEnv);
     await createNotification(c.env.DB, sellerTeamId, "transfer",
       `✅ Prodej ${playerName} dokončen`,
       `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`,
-      "/dashboard/transfers", pushEnv);
+      "/prestupy", pushEnv);
     // Push týmům sledujícím hráče ve watchlistu (kromě obou stran přestupu)
     const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
     await sendWebPushToPlayerWatchers(pushEnv, playerId, buyerTeamId,
       `⭐ ${playerName} přestoupil`,
       `${seller?.name ?? "Klub"} → ${buyer.name} za ${amount.toLocaleString("cs-CZ")} Kč.`,
-      `/dashboard/player/${playerId}`);
+      `/hrac/${playerId}`);
   } catch (e) { logger.warn({ module: "game" }, "bid accept notifications", e); }
 
   return c.json({ ok: true });
@@ -5903,7 +5903,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/reject", async (c) => {
     await createNotification(c.env.DB, otherTeamId, "transfer",
       `❌ Nabídka za ${pName} zamítnuta`,
       `${rejecterName ?? "Klub"} odmítl jednání.`,
-      "/dashboard/transfers", pushEnv);
+      "/prestupy", pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "bid reject notification", e); }
 
   return c.json({ ok: true });
@@ -5958,7 +5958,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/counter", async (c) => {
     await createNotification(c.env.DB, otherTeamId, "transfer",
       `🔄 Protinabídka za ${pName}`,
       `${counterTeamName ?? "Klub"} poslal protinabídku ${body.amount.toLocaleString("cs-CZ")} Kč.`,
-      "/dashboard/transfers", pushEnv);
+      "/prestupy", pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "bid counter notification", e); }
 
   return c.json({ ok: true });
@@ -5991,7 +5991,7 @@ gameRouter.delete("/teams/:teamId/bids/:bidId", async (c) => {
       await createNotification(c.env.DB, bidInfo.seller_team_id, "transfer",
         `↩️ Nabídka za ${pName} stažena`,
         `${bidInfo.buyer_name ?? "Klub"} stáhl svou nabídku.`,
-        "/dashboard/transfers", pushEnv);
+        "/prestupy", pushEnv);
     } catch (e) { logger.warn({ module: "game" }, "bid withdraw notification", e); }
   }
 
@@ -6140,7 +6140,7 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
     await createNotification(c.env.DB, komuDorucit, "transfer",
       `💰 Nová nabídka za ${pName}`,
       `${buyerTeam?.name ?? "Neznámý klub"} nabízí ${offerLabel} za ${body.amount.toLocaleString("cs-CZ")} Kč.`,
-      `/dashboard/transfers/offer/${id}`, pushEnv);
+      `/prestupy/nabidka/${id}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "new offer notification", e); }
 
   return c.json({ ok: true, offerId: id });
@@ -6732,7 +6732,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       const { createNotification } = await import("../community/notifications");
       const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
       await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ Přestup ${soldName} dokončen`,
-        `${virtualName} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`, `/dashboard/transfers`, pushEnv);
+        `${virtualName} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`, `/prestupy`, pushEnv);
     } catch (e) { logger.warn({ module: "game" }, "virtual sale notification", e); }
 
     return c.json({ ok: true, sold_to: virtualName });
@@ -7068,14 +7068,14 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
     const label = offerType === "loan" ? "Hostování" : "Přestup";
     const acceptNote = acceptMessage ? ` „${acceptMessage}"` : "";
-    await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/dashboard/transfers/offer/${offerId}`, pushEnv);
-    await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/dashboard/transfers/offer/${offerId}`, pushEnv);
+    await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/prestupy/nabidka/${offerId}`, pushEnv);
+    await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/prestupy/nabidka/${offerId}`, pushEnv);
     // Push týmům sledujícím hráče ve watchlistu (kromě obou stran)
     const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
     await sendWebPushToPlayerWatchers(pushEnv, offer.player_id as string, buyerTeamId,
       `⭐ ${playerName} ${offerType === "loan" ? "jde na hostování" : "přestoupil"}`,
       `${seller?.name ?? "Klub"} → ${buyer.name} za ${amount.toLocaleString("cs-CZ")} Kč.`,
-      `/dashboard/player/${offer.player_id}`);
+      `/hrac/${offer.player_id}`);
   } catch (e) { logger.warn({ module: "game" }, "offer accept notifications", e); }
 
   return c.json({ ok: true });
@@ -7138,7 +7138,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/reject", async (c) => {
     await createNotification(c.env.DB, otherTeamId, "transfer",
       `❌ Nabídka za ${playerName} zamítnuta`,
       `${rejecterTeam?.name ?? "Klub"} odmítl nabídku${rejectMsg ? `: „${rejectMsg}"` : "."}`,
-      `/dashboard/transfers/offer/${offerId}`, pushEnv);
+      `/prestupy/nabidka/${offerId}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "reject offer notification", e); }
 
   return c.json({ ok: true });
@@ -7216,7 +7216,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
     await createNotification(c.env.DB, otherTeamId, "transfer",
       `🔄 Protinabídka za ${pName}`,
       `${counterTeam?.name ?? "Klub"} poslal protinabídku ${body.amount.toLocaleString("cs-CZ")} Kč${body.message ? `: „${body.message}"` : "."}`,
-      `/dashboard/transfers/offer/${offerId}`, pushEnv);
+      `/prestupy/nabidka/${offerId}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "counter offer notification", e); }
 
   return c.json({ ok: true });
@@ -7368,7 +7368,7 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
       await createNotification(c.env.DB, otherTeamId, "transfer",
         `↩️ Jednání o ${pName} ukončeno`,
         `${initiatorTeam?.name ?? "Klub"} ${verb}${withdrawMessage ? `: „${withdrawMessage}"` : "."}`,
-        `/dashboard/transfers/offer/${offerId}`, pushEnv);
+        `/prestupy/nabidka/${offerId}`, pushEnv);
     } catch (e) { logger.warn({ module: "game" }, "withdraw notification", e); }
   }
 
@@ -8182,7 +8182,7 @@ gameRouter.get("/teams/:teamId/season-recap", async (c) => {
   let data: Record<string, unknown> | null = null;
   try { data = JSON.parse(row.data) as Record<string, unknown>; } catch (e) { logger.warn({ module: "game.ts" }, "parse recap data", e); }
   // Neúplný recap (jen "departures" snapshot z fáze departures, bez champion/awards/seasonStats)
-  // se nikdy nesmí servírovat na FE — /season-end očekává plný recap a bez těch polí spadne.
+  // se nikdy nesmí servírovat na FE — /konec-sezony očekává plný recap a bez těch polí spadne.
   // Vzniká např. u AI týmu, který dohrál sezónu a NIKDY neprošel buildTeamRecap (běží jen pro
   // lidské týmy); po převzetí takového týmu ho nový manažer zdědí. Ber ho jako neexistující.
   if (!data || !data.champion || !data.awards || !data.seasonStats) {

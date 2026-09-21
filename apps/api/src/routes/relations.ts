@@ -428,7 +428,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           if (!otherIsAi) {
             await createNotification(db, otherId, "event", "🗞️ Rýpnutí v novinách",
               `Trenér ${myName} si na tebe otevřel pusu v novinách. Necháš to tak?`,
-              `/dashboard/manager/${teamId}`, c.env as never)
+              `/manazer/${teamId}`, c.env as never)
               .catch((e) => logger.warn({ module: "relations" }, "jab notification", e));
           }
           resultText = "Rýpnutí je v novinách. Kabina se baví.";
@@ -496,7 +496,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         } else {
           await createNotification(db, otherId, "event", "👏 Pochvala od kolegy",
             `Trenér ${myName} ocenil práci, kterou v klubu odvádíš. Respekt mezi vámi roste.`,
-            `/dashboard/manager/${teamId}`, c.env as never)
+            `/manazer/${teamId}`, c.env as never)
             .catch((e) => logger.warn({ module: "relations" }, "praise notification", e));
         }
 
@@ -550,7 +550,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         if (!otherIsAi) {
           await createNotification(db, otherId, "event", "🍻 Pivo s kolegou",
             `Trenér ${myName} tě vzal na pivo. Respekt mezi vámi roste.`,
-            `/dashboard/manager/${teamId}`, c.env as never)
+            `/manazer/${teamId}`, c.env as never)
             .catch((e) => logger.warn({ module: "relations" }, "beer notification", e));
         }
         return c.json({ ok: true, message: beerSceneText(names), darts: dartsText });
@@ -584,7 +584,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         await insertInteraction(db, "bet", teamId, otherId, match.id, { amount: BET_AMOUNT }, "offered");
         await createNotification(db, otherId, "event", "🍺 Sázka o bečku!",
           `Trenér ${myName} se s tebou chce vsadit o bečku (${BET_AMOUNT} Kč) na váš vzájemný zápas. Přijmeš?`,
-          `/dashboard/manager/${teamId}`, c.env as never)
+          `/manazer/${teamId}`, c.env as never)
           .catch((e) => logger.warn({ module: "relations" }, "bet offer notification", e));
         return c.json({ ok: true, accepted: null, message: `Nabídka odeslána. Uvidíme, jestli má ${theirManager} kuráž.` });
       }
@@ -610,7 +610,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         });
         await createNotification(db, otherId, "event", "🍺 Sázka přijata!",
           `Trenér ${myName} sázku o bečku přijal. Teď se hraje o pivo.`,
-          `/dashboard/manager/${teamId}`, c.env as never)
+          `/manazer/${teamId}`, c.env as never)
           .catch((e) => logger.warn({ module: "relations" }, "bet accept notification", e));
         return c.json({ ok: true, message: "Sázka platí. Hraje se o bečku." });
       }
@@ -672,7 +672,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         } else {
           await createNotification(db, otherId, "event", "🗣️ Soupeř mluví do novin",
             `Trenér ${myName} se před vaším zápasem rozpovídal v novinách. Přečti si zpravodaj, a klidně odpověz.`,
-            `/dashboard/manager/${teamId}`, c.env as never)
+            `/manazer/${teamId}`, c.env as never)
             .catch((e) => logger.warn({ module: "relations" }, "statement notification", e));
         }
 
@@ -713,7 +713,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           if (!otherIsAi) {
             await createNotification(db, otherId, "event", "🕵️ Anonym odhalen",
               `Ten jedovatý inzerát na váš tým podal trenér ${myName}. Teď to víš.`,
-              `/dashboard/manager/${teamId}`, c.env as never)
+              `/manazer/${teamId}`, c.env as never)
               .catch((e) => logger.warn({ module: "relations" }, "ad reveal notification", e));
           }
         }
@@ -753,7 +753,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           if (!otherIsAi) {
             await createNotification(db, otherId, "event", "🎁 Dárkový koš",
               `Trenér ${myName} poslal po zápase koš s lahví a vzkazem: „Hlavu vzhůru, příště to vyjde."`,
-              `/dashboard/manager/${teamId}`, c.env as never)
+              `/manazer/${teamId}`, c.env as never)
               .catch((e) => logger.warn({ module: "relations" }, "gift notification", e));
           }
         } else {
@@ -765,7 +765,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           if (!otherIsAi) {
             await createNotification(db, otherId, "event", "🎁 „Dárek“",
               `Trenér ${myName} poslal koš s kartičkou: „Ať se daří aspoň v hospodě.“ Tohle si zapamatuj.`,
-              `/dashboard/manager/${teamId}`, c.env as never)
+              `/manazer/${teamId}`, c.env as never)
               .catch((e) => logger.warn({ module: "relations" }, "gift poison notification", e));
           }
         }
@@ -848,7 +848,7 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
     await insertInteraction(db, "stammtisch_invite", teamId, gid, null, { eventId }, "invited");
     await createNotification(db, gid, "event", "🍻 Pozvánka na posezení",
       `Trenér ${myManager} (${myName}) tě zve dnes večer na posezení s trenéry. Přijmi nebo odmítni ve své hospodě.`,
-      "/dashboard/hospoda", c.env as never)
+      "/hospoda", c.env as never)
       .catch((e) => logger.warn({ module: "relations" }, "stammtisch invite notification", e));
   }
 
@@ -908,7 +908,7 @@ relationsRouter.post("/teams/:teamId/stammtisch-invite/:inviteId", async (c) => 
     body.accept
       ? `${guestManager} dorazí na posezení. Hospodský chladí.`
       : `${guestManager} se omluvil, dnes večer nedorazí.`,
-    "/dashboard/hospoda", c.env as never)
+    "/hospoda", c.env as never)
     .catch((e) => logger.warn({ module: "relations" }, "invite response notification", e));
 
   return c.json({

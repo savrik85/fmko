@@ -1520,7 +1520,7 @@ teamsRouter.get("/:id/club", async (c) => {
   const { calculateFacilityEffects: calcFxClub } = await import("../stadium/stadium-generator");
   const clubCapacity = stadium ? stadium.capacity + calcFxClub({ stands: stadium.stands ?? 0 }).capacityBonus : null;
 
-  // Hlavní sponzor — spravuje se přes /dashboard/sponsors, ne v /klub/dres
+  // Hlavní sponzor — spravuje se přes /sponzori, ne v /klub/dres
   const mainSponsor = await c.env.DB.prepare(
     "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND (category = 'main' OR category IS NULL) LIMIT 1"
   ).bind(teamId).first<{ sponsor_name: string }>()
@@ -1742,7 +1742,7 @@ teamsRouter.patch("/:id/club", async (c) => {
       }
     }
 
-    // sponsor field v body se ignoruje — hlavní sponzor se spravuje přes /dashboard/sponsors
+    // sponsor field v body se ignoruje — hlavní sponzor se spravuje přes /sponzori
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }

@@ -53,7 +53,7 @@ export function PlayerCardCompact({
 
   return (
     <Link
-      href={`/dashboard/player/${player.id}`}
+      href={`/hrac/${player.id}`}
       className="card card-hover w-full p-4 text-left flex gap-3 items-center block"
     >
       {/* Avatar */}

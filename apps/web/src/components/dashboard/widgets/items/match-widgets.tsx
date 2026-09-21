@@ -58,7 +58,7 @@ export function TodayProgramWidget({ data }: WidgetProps) {
         </div>
       </div>
       {isMatchDay && (
-        <Link href="/dashboard/match" className="py-2 px-4 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 transition-colors">
+        <Link href="/zapas" className="py-2 px-4 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 transition-colors">
           Sestava →
         </Link>
       )}
@@ -137,7 +137,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
   // Velkokluby v poháru nemají vlastní stránku (chybí reálné team id) → nelinkovat.
   const TeamCell = ({ t, children }: { t: { id: string }; children: ReactNode }) =>
     t.id
-      ? <Link href={`/dashboard/team/${t.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">{children}</Link>
+      ? <Link href={`/tym/${t.id}`} className="flex-1 text-center hover:opacity-80 transition-opacity">{children}</Link>
       : <div className="flex-1 text-center">{children}</div>;
 
   return (
@@ -281,7 +281,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                 stadion soupeře. Bez odkazu se hráč o hřišti, na kterém za dva dny
                 nastoupí, nedozvěděl nic. */}
             <Link
-              href={nextMatch.isHome ? "/dashboard/stadium" : `/dashboard/team/${homeTeam.id}/stadium`}
+              href={nextMatch.isHome ? "/stadion" : `/tym/${homeTeam.id}/stadion`}
               className="text-sm text-muted truncate ml-2 hover:text-pitch-600 hover:underline"
             >
               {preview.venue.name}
@@ -290,7 +290,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
         )}
 
         <div className="text-center px-4 py-2">
-          <Link href="/dashboard/match" className="inline text-sm text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
+          <Link href="/zapas" className="inline text-sm text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
           {nextMatch.isHome && nextMatch.promoted && (
             <span className="inline ml-4 text-sm text-gold-600 font-heading font-bold">📢 Propagováno</span>
           )}
@@ -334,7 +334,7 @@ export function FixturesWidget({ data, height }: WidgetProps) {
             // Rozpis vrací calendarId pro ligový zápas, u přáteláku je id = match.id
             const switchId = m.calendarId ?? m.id;
             return (
-              <Link key={m.id} href={`/dashboard/match?calendarId=${switchId}`} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors">
+              <Link key={m.id} href={`/zapas?calendarId=${switchId}`} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors">
                 <span className="text-sm text-muted tabular-nums w-5">{m.round}.</span>
                 <span className="text-sm font-heading font-bold flex-1 truncate">{opp}</span>
                 <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
@@ -348,7 +348,7 @@ export function FixturesWidget({ data, height }: WidgetProps) {
         <div className="text-center text-muted py-4 text-sm">Žádné naplánované</div>
       )}
       <div className="text-center pt-2">
-        <Link href="/dashboard/schedule" className="text-sm text-pitch-500 font-heading font-bold hover:underline">Celý rozpis →</Link>
+        <Link href="/rozpis" className="text-sm text-pitch-500 font-heading font-bold hover:underline">Celý rozpis →</Link>
       </div>
     </>
   );
@@ -394,7 +394,7 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
                 <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                   <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "—"}</td>
                   <td className="py-2 pr-2">
-                    <a href={`/dashboard/match/${m.id}`} className="flex items-center gap-2 hover:underline">
+                    <a href={`/zapas/${m.id}`} className="flex items-center gap-2 hover:underline">
                       <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
                         pattern={(m.opponentBadge as BadgePattern) || "shield"}
                         initials={initials(m.opponent ?? "")} size={20} />
@@ -403,7 +403,7 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
                     </a>
                   </td>
                   <td className="py-2 pr-4 sm:pr-5 text-center">
-                    <a href={`/dashboard/match/${m.id}`} className={`inline-flex items-center px-2 py-0.5 rounded-control text-sm font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
+                    <a href={`/zapas/${m.id}`} className={`inline-flex items-center px-2 py-0.5 rounded-control text-sm font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
                       {m.homeScore}:{m.awayScore}
                     </a>
                   </td>
@@ -414,7 +414,7 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
         </table>
       </div>
       <div className="text-center pt-2">
-        <Link href="/dashboard/schedule" className="text-sm text-pitch-500 font-heading font-bold hover:underline">Všechny zápasy →</Link>
+        <Link href="/rozpis" className="text-sm text-pitch-500 font-heading font-bold hover:underline">Všechny zápasy →</Link>
       </div>
     </>
   );

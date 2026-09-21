@@ -7,7 +7,7 @@
  *    ke kterému se táhne loajalita (posouvá se CÍL, ne hodnota — jednorázový bonus
  *    by druhý den zmizel, protože drift stahuje loajalitu k reputaci klubu)
  *  - API (`GET /api/teams/:teamId/fans`) vrací spočítané hodnoty
- *  - web (`/dashboard/fans`, `/dashboard/napoveda`) renderuje žebříček přímo
+ *  - web (`/fanousci`, `/napoveda`) renderuje žebříček přímo
  *    z `MANAGER_FANS_BANDS` — hráč vidí přesně tu tabulku, podle které engine počítá
  *
  * Nikdy nekopíruj čísla jinam — přidej sem funkci. Dřív byl vzorec na třech místech

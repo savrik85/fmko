@@ -9,11 +9,11 @@ let isInitialized = false;
  * Určí prostředí podle domény. Testing i produkce posílají do stejného PostHog
  * projektu, tahle vlastnost je u každé události a podle ní se dají oddělit.
  */
-function detectEnvironment(): "produkce" | "testing" | "vyvoj" {
+function detectEnvironment(): "production" | "testing" | "development" {
   const host = window.location.hostname;
-  if (host === "prales.fun" || host === "www.prales.fun") return "produkce";
+  if (host === "prales.fun" || host === "www.prales.fun") return "production";
   if (host === "test.prales.fun") return "testing";
-  return "vyvoj";
+  return "development";
 }
 
 /**
@@ -27,99 +27,99 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
     .replace(/\/cm[a-z0-9_]{10,}(?=\/|$)/gi, "/:id");
 
   let featureArea = "ostatni";
-  if (pathname === "/" || pathname === "/dashboard") {
+  if (pathname === "/" || pathname === "/prehled") {
     featureArea = "prehled";
-  } else if (pathname === "/dashboard/more") {
+  } else if (pathname === "/vice") {
     featureArea = "menu_vice";
   } else if (
-    pathname.startsWith("/dashboard/match") ||
-    pathname.startsWith("/dashboard/friendly") ||
-    pathname.startsWith("/match-day")
+    pathname.startsWith("/zapas") ||
+    pathname.startsWith("/pratelaky") ||
+    pathname.startsWith("/zapasovy-den")
   ) {
     featureArea = "zapasy_a_taktika";
   } else if (
-    pathname.startsWith("/dashboard/squad") ||
-    pathname.startsWith("/dashboard/training") ||
-    pathname.startsWith("/dashboard/u21") ||
-    pathname.startsWith("/dashboard/zamestnanci")
+    pathname.startsWith("/kadr") ||
+    pathname.startsWith("/trenink") ||
+    pathname.startsWith("/u21") ||
+    pathname.startsWith("/zamestnanci")
   ) {
     featureArea = "tym_a_trenink";
-  } else if (pathname.startsWith("/dashboard/player")) {
+  } else if (pathname.startsWith("/hrac")) {
     featureArea = "detail_hrace";
   } else if (
-    pathname.startsWith("/dashboard/transfers") ||
-    pathname.startsWith("/dashboard/watchlist")
+    pathname.startsWith("/prestupy") ||
+    pathname.startsWith("/sledovani")
   ) {
     featureArea = "prestupy_a_trh";
-  } else if (pathname.startsWith("/dashboard/equipment")) {
+  } else if (pathname.startsWith("/vybaveni")) {
     featureArea = "vybaveni_a_bazar";
   } else if (
-    pathname.startsWith("/dashboard/finances") ||
-    pathname.startsWith("/dashboard/sponsors")
+    pathname.startsWith("/finance") ||
+    pathname.startsWith("/sponzori")
   ) {
     featureArea = "finance_a_sponzori";
-  } else if (pathname.startsWith("/dashboard/hospoda")) {
+  } else if (pathname.startsWith("/hospoda")) {
     featureArea = "hospoda";
-  } else if (pathname.startsWith("/dashboard/fans")) {
+  } else if (pathname.startsWith("/fanousci")) {
     featureArea = "fanousci_a_kotel";
-  } else if (pathname.startsWith("/dashboard/incidenty")) {
+  } else if (pathname.startsWith("/incidenty")) {
     featureArea = "incidenty";
   } else if (
-    pathname.startsWith("/dashboard/klub") ||
-    pathname.startsWith("/dashboard/stadium") ||
-    pathname.startsWith("/dashboard/reputace")
+    pathname.startsWith("/muj-klub") ||
+    pathname.startsWith("/stadion") ||
+    pathname.startsWith("/reputace")
   ) {
     featureArea = "klub_a_stadion";
   } else if (
-    pathname.startsWith("/dashboard/team") ||
-    pathname.startsWith("/dashboard/manager") ||
+    pathname.startsWith("/tym") ||
+    pathname.startsWith("/manazer") ||
     pathname.startsWith("/klub/")
   ) {
     featureArea = "ostatni_kluby";
   } else if (
-    pathname.startsWith("/dashboard/obec") ||
-    pathname.startsWith("/dashboard/events")
+    pathname.startsWith("/obec") ||
+    pathname.startsWith("/udalosti")
   ) {
     featureArea = "zivot_v_obci";
-  } else if (pathname.startsWith("/dashboard/sazky")) {
+  } else if (pathname.startsWith("/sazky")) {
     featureArea = "sazky";
   } else if (
-    pathname.startsWith("/dashboard/liga") ||
-    pathname.startsWith("/dashboard/pohar") ||
-    pathname.startsWith("/dashboard/soutez") ||
-    pathname.startsWith("/dashboard/schedule") ||
-    pathname.startsWith("/dashboard/calendar") ||
-    pathname.startsWith("/dashboard/hall-of-fame") ||
-    pathname.startsWith("/dashboard/hlasovani")
+    pathname.startsWith("/liga") ||
+    pathname.startsWith("/pohar") ||
+    pathname.startsWith("/soutez") ||
+    pathname.startsWith("/rozpis") ||
+    pathname.startsWith("/kalendar") ||
+    pathname.startsWith("/sin-slavy") ||
+    pathname.startsWith("/hlasovani")
   ) {
     featureArea = "souteze_a_tabulky";
-  } else if (pathname.startsWith("/dashboard/phone")) {
+  } else if (pathname.startsWith("/telefon")) {
     featureArea = "telefon_a_sms";
   } else if (
-    pathname.startsWith("/dashboard/news") ||
-    pathname.startsWith("/dashboard/novinky") ||
-    pathname.startsWith("/dashboard/redakce")
+    pathname.startsWith("/zpravodaj") ||
+    pathname.startsWith("/novinky") ||
+    pathname.startsWith("/redakce")
   ) {
     featureArea = "noviny_a_redakce";
-  } else if (pathname.startsWith("/dashboard/rozhodci")) {
+  } else if (pathname.startsWith("/rozhodci")) {
     featureArea = "rozhodci";
   } else if (
-    pathname.startsWith("/dashboard/settings") ||
-    pathname.startsWith("/dashboard/napoveda") ||
-    pathname.startsWith("/dashboard/admin") ||
-    pathname.startsWith("/dashboard/app") ||
-    pathname.startsWith("/dashboard/invite")
+    pathname.startsWith("/nastaveni") ||
+    pathname.startsWith("/napoveda") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/aplikace") ||
+    pathname.startsWith("/pozvat")
   ) {
     featureArea = "nastaveni_a_podpora";
   } else if (
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/register") ||
+    pathname.startsWith("/prihlaseni") ||
+    pathname.startsWith("/registrace") ||
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/create") ||
-    pathname.startsWith("/invite/")
+    pathname.startsWith("/pozvanka/")
   ) {
     featureArea = "registrace";
-  } else if (pathname.startsWith("/nova-sezona") || pathname.startsWith("/season-end")) {
+  } else if (pathname.startsWith("/nova-sezona") || pathname.startsWith("/konec-sezony")) {
     featureArea = "konec_sezony";
   }
 
@@ -159,7 +159,7 @@ export function initPostHog(): typeof posthog | null {
         },
       },
     });
-    posthog.register({ prostredi: detectEnvironment() });
+    posthog.register({ environment: detectEnvironment() });
 
     isInitialized = true;
     return posthog;

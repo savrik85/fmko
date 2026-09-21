@@ -379,12 +379,12 @@ async function sendMatchResultNotifications(
       const title = `⚽ Zápas skončil!`;
       const body = `${md.hn} vs ${md.an}, výsledek čeká v aplikaci.`;
       if (md.hu !== "ai") {
-        await createNotification(db, md.home_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) =>
+        await createNotification(db, md.home_team_id as string, "match_result", title, body, "/zapas", pushEnv).catch((e) =>
           logger.warn({ module: "league-round" }, "match_result notif home", e),
         );
       }
       if (md.au !== "ai") {
-        await createNotification(db, md.away_team_id as string, "match_result", title, body, "/dashboard/match", pushEnv).catch((e) =>
+        await createNotification(db, md.away_team_id as string, "match_result", title, body, "/zapas", pushEnv).catch((e) =>
           logger.warn({ module: "league-round" }, "match_result notif away", e),
         );
       }
@@ -698,7 +698,7 @@ async function runAdhocEvents(env: Bindings, db: D1Database, leagueId: string, g
 
       const { createNotification } = await import("../community/notifications");
       await createNotification(
-        db, ht.id as string, "event", `${adhocEvent.title}`, adhocEvent.description ?? "Nová událost v klubu", "/dashboard/events",
+        db, ht.id as string, "event", `${adhocEvent.title}`, adhocEvent.description ?? "Nová událost v klubu", "/udalosti",
         { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db },
       ).catch((e) => logger.warn({ module: "league-round" }, "event notification failed", e));
     }

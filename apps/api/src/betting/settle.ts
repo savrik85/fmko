@@ -263,7 +263,7 @@ async function oznam(
   await sendSystemSMS(db, t.team_id, "Sázková kancelář", sms)
     .catch((e) => logger.warn({ module: M }, "SMS o tiketu", e));
 
-  await createNotification(db, t.team_id, "event", titulek, sms, "/dashboard/sazky")
+  await createNotification(db, t.team_id, "event", titulek, sms, "/sazky")
     .catch((e) => logger.warn({ module: M }, "notifikace o tiketu", e));
 
   if (status === "won" && payout >= NEWS_THRESHOLD) {

@@ -10,7 +10,7 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && teamId) router.replace("/dashboard");
+    if (!isLoading && teamId) router.replace("/prehled");
   }, [teamId, isLoading, router]);
 
   if (isLoading) return null;
@@ -33,10 +33,10 @@ export default function Home() {
 
         {/* CTA */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
-          <Link href="/register" className="btn btn-primary-dark btn-xl">
+          <Link href="/registrace" className="btn btn-primary-dark btn-xl">
             Založit tým
           </Link>
-          <Link href="/login" className="btn btn-xl text-white/50 hover:text-white border border-white/10 hover:border-white/20 transition-all">
+          <Link href="/prihlaseni" className="btn btn-xl text-white/50 hover:text-white border border-white/10 hover:border-white/20 transition-all">
             Přihlásit se
           </Link>
         </div>

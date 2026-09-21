@@ -12,12 +12,12 @@
 # celý zdrojový kód.
 set -euo pipefail
 
-vystup=.vercel/output/static/_next/static
+output_dir=.vercel/output/static/_next/static
 
 if [ -n "${POSTHOG_CLI_API_KEY:-}" ]; then
   # Výpadek PostHogu nesmí zablokovat deploy hry, chyba ale musí být vidět v Actions.
   if ! npx -y @posthog/cli@0.18.3 --host https://eu.posthog.com sourcemap process \
-    --directory "$vystup" \
+    --directory "$output_dir" \
     --release-name prales-web \
     --release-version "${GITHUB_SHA:-lokal}" \
     --delete-after; then
@@ -27,5 +27,5 @@ else
   echo "::warning::POSTHOG_CLI_API_KEY chybí, source mapy se do PostHogu nenahrály"
 fi
 
-smazano=$(find "$vystup" -name '*.map' -print -delete | wc -l | tr -d ' ')
-echo "source mapy: smazáno $smazano souborů, které ve výstupu zůstaly"
+deleted=$(find "$output_dir" -name '*.map' -print -delete | wc -l | tr -d ' ')
+echo "source mapy: smazáno $deleted souborů, které ve výstupu zůstaly"
