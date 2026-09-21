@@ -35,8 +35,19 @@ const EMPTY_BOOKED: ReadonlySet<number> = new Set<number>();
 
 /** Average of a stat across lineup */
 function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
+  // Prázdný výběr (třeba nikdo na postu záložníka) dřív dal 0/0 = NaN a ten se
+  // rozlezl do držení míče i pravděpodobnosti gólu.
+  if (lineup.length === 0) return 0;
   const vals = lineup.map((p) => p[stat] as number);
   return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+/**
+ * Kdo v sestavě hraje na daném postu — podle slotu, ne podle přirozené pozice.
+ * Hráč mimo pozici má staty už snížené postihem, takže se počítá tam, kde stojí.
+ */
+function playersInSlot(lineup: MatchPlayer[], pos: MatchPlayer["position"]): MatchPlayer[] {
+  return lineup.filter((p) => (p.matchPosition ?? p.position) === pos);
 }
 
 /** Get player display name */
@@ -81,10 +92,10 @@ export const WEATHER_MODS: Record<Weather, WeatherMod> = {
  * Calculate possession probability for home team (0–1).
  */
 function calcPossession(home: TeamSetup, away: TeamSetup, homeAdvantage: number): number {
-  const homeMid = teamAvg(home.lineup.filter((p) => p.position === "MID"), "technique")
-    + teamAvg(home.lineup.filter((p) => p.position === "MID"), "passing");
-  const awayMid = teamAvg(away.lineup.filter((p) => p.position === "MID"), "technique")
-    + teamAvg(away.lineup.filter((p) => p.position === "MID"), "passing");
+  const homeMids = playersInSlot(home.lineup, "MID");
+  const awayMids = playersInSlot(away.lineup, "MID");
+  const homeMid = teamAvg(homeMids, "technique") + teamAvg(homeMids, "passing");
+  const awayMid = teamAvg(awayMids, "technique") + teamAvg(awayMids, "passing");
 
   const total = homeMid + awayMid;
   if (total === 0) return 0.5;
@@ -961,7 +972,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     defending: TeamSetup,
   ) {
     const gk = getGK(defending.lineup);
-    const defAvg = teamAvg(defending.lineup.filter((p) => p.position === "DEF"), "defense");
+    const defAvg = teamAvg(playersInSlot(defending.lineup, "DEF"), "defense");
     const scoreDiff = attacking === home ? homeScore - awayScore : awayScore - homeScore;
 
     if (kind === "penalty") {
@@ -1152,7 +1163,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     if (rng.random() < adjustedChanceProb) {
       const attacker = pickAttacker(rng, attacking.lineup);
       const gk = getGK(defending.lineup);
-      const defAvg = teamAvg(defending.lineup.filter((p) => p.position === "DEF"), "defense");
+      const defAvg = teamAvg(playersInSlot(defending.lineup, "DEF"), "defense");
       const scoreDiff = isHomePossession ? homeScore - awayScore : awayScore - homeScore;
       const goalProb = calcGoalProb(rng, attacker, gk, defAvg, minute, scoreDiff, gkHandling(defending));
 
@@ -1266,7 +1277,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     if (effectiveCounterMod > 0 && rng.random() < effectiveCounterMod * conditionMod) {
       const counterAttacker = pickAttacker(rng, defending.lineup);
       const counterGk = getGK(attacking.lineup);
-      const counterDefAvg = teamAvg(attacking.lineup.filter((p) => p.position === "DEF"), "defense");
+      const counterDefAvg = teamAvg(playersInSlot(attacking.lineup, "DEF"), "defense");
       const counterScoreDiff = isHomePossession ? awayScore - homeScore : homeScore - awayScore;
       const counterGoalProb = calcGoalProb(rng, counterAttacker, counterGk, counterDefAvg, minute, counterScoreDiff, gkHandling(attacking)) * 0.85;
 
