@@ -701,6 +701,16 @@ async function simulateCupTie(
     logger.warn({ module: M }, "cup kondice/morálka/suspendace", e);
   }
 
+  // Kdo se nevešel ani na lavičku, nese to nelibě — jen skutečné týmy, po uložení morálky
+  {
+    const { reactToLeftOut } = await import("../multiplayer/left-out");
+    for (const [realId, build] of [[homeReal, homeBuild], [awayReal, awayBuild]] as const) {
+      if (!realId) continue;
+      await reactToLeftOut(db, realId, cupMatchId, build)
+        .catch((e) => logger.warn({ module: M }, `reakce hráčů mimo pohárový zápas, tým ${realId}`, e));
+    }
+  }
+
   // ── Zkušenost + zlepšení dovedností za odehrané minuty — parita s ligou.
   // Pohár je ostřejší než liga (importance 1.2). Velkoklubové kádry se přeskakují,
   // nejsou v tabulce players.

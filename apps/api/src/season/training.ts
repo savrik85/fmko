@@ -1,3 +1,4 @@
+import { SULK_TRAINING_REASONS } from "../multiplayer/left-out";
 import type { Weather } from "../engine/types";
 /**
  * FMK-12: Tréninkový systém — plánování, účast, efekt na atributy.
@@ -390,6 +391,12 @@ export function simulateAttendance(
     const incidentniDuvod = incidentniDuvody?.[i];
     if (incidentniDuvod) {
       return { playerIndex: i, attended: false, reason: incidentniDuvod };
+    }
+    // Truc po nenominaci (multiplayer/left-out.ts): přijde jen výjimečně, dokud ho
+    // trenér nepřemluví nebo nevezme na zápas.
+    if ((player as any).leftOutSulk && !isCeleb) {
+      if (hod < 0.2) return { playerIndex: i, attended: true };
+      return { playerIndex: i, attended: false, reason: rng.pick(SULK_TRAINING_REASONS) };
     }
     if (hod < attendProb) {
       return { playerIndex: i, attended: true };

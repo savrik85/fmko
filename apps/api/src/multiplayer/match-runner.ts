@@ -1200,6 +1200,16 @@ export async function runScheduledMatches(
                 logger.error({module: "match-runner"}, "Condition persist failed", e);
             }
 
+            // Kdo se nevešel ani na lavičku, nese to nelibě (morálka, nejvýš jedna SMS za tým).
+            // Až po uložení morálky ze zápasu, jinak by ji ten zápis přepsal.
+            {
+                const {reactToLeftOut} = await import("./left-out");
+                for (const [tid, build] of [[homeTeamId, homeBuild], [awayTeamId, awayBuild]] as const) {
+                    await reactToLeftOut(db, tid, matchId, build)
+                        .catch((e) => logger.warn({module: "match-runner"}, `reakce hráčů mimo zápas, tým ${tid}`, e));
+                }
+            }
+
             // Pozn.: Ranní kocovina se nyní generuje v rámci hospodské session (apps/api/src/season/pub.ts)
             // jako effect typu 'hangover' — daily-tick po výhře zvedá pub attendance, a kdo s vysokým alcohol
             // přijde, dostane RNG hangover. Tím je flow konzistentní (kocovina = pil v hospodě).
@@ -1360,6 +1370,12 @@ interface BuildResult {
     idMap: Map<number, string>;
     positionMap: Map<string, string>;
     absentNames: Array<{ name: string; reason: string; smsText: string }>;
+    /** Všech (nejvýš 18) hráčů, kteří na zápas jeli. */
+    matchSquadIds: string[];
+    /** Náhradníci, kteří jeli (osmnáctka bez základu). */
+    benchIds: string[];
+    /** Zdraví hráči, kteří se nevešli ani na lavičku — viz left-out.ts. */
+    leftOutIds: string[];
 }
 
 export async function buildMatchPlayers(
@@ -1726,7 +1742,14 @@ export async function buildMatchPlayers(
         }
     }
 
-    return {players, idMap, positionMap, absentNames: absentInfo};
+    const matchSquadIds = ordered.map((r) => r.id as string);
+    const inSquad = new Set(matchSquadIds);
+    return {
+        players, idMap, positionMap, absentNames: absentInfo,
+        matchSquadIds,
+        benchIds: matchSquadIds.slice(11),
+        leftOutIds: allAvailable.map((r) => r.id as string).filter((id) => !inSquad.has(id)),
+    };
 }
 
 /**

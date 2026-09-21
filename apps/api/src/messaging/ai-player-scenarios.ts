@@ -341,6 +341,18 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
   },
 
   {
+    // Vlákno otevírá routes/messaging.ts, když trenér napíše hráči, který trucuje, že nejel
+    // na zápas (multiplayer/left-out.ts). První zpráva vlákna je jeho naštvaná SMS.
+    // weight 0 → nikdy se nevylosuje náhodně.
+    id: "left_out",
+    label: "Nejel na zápas",
+    category: "complaint",
+    expectedTurns: 3,
+    description:
+      "Trenér tě nevzal na poslední zápas, nebyl jsi ani na lavičce, a ty jsi mu to naštvaně napsal (tvoje první zpráva). Trucuješ a na tréninky teď nechodíš. Chceš vědět, proč jsi nejel a jestli s tebou trenér ještě počítá. Když ti to rozumně vysvětlí, ocení tě nebo ti slíbí férovou šanci, postupně se uklidníš a řekneš, že na trénink zase přijdeš. Když tě odbyde, zesměšní nebo ti jen vyhrožuje, naštveš se víc a na trénink dál nepůjdeš. Nevymýšlej si jména spoluhráčů, která nejsou v první zprávě.",
+    weight: () => 0,
+  },
+  {
     // Spouští se VÝHRADNĚ z offer-rejection-impact (odmítnutá nabídka, o kterou hráč stál).
     // weight 0 → nikdy se nevylosuje náhodně.
     id: "rejected_offer",

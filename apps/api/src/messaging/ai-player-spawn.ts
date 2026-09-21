@@ -822,6 +822,23 @@ async function applyResolutionAndClose(
     );
   }
 
+  // Truc po nenominaci (multiplayer/left-out.ts): přemluvený hráč přestane vynechávat
+  // tréninky. Rozhovor o herních minutách (bench_complaint) se počítá taky, jde o totéž.
+  // Neutrál truc nechá, jak je; naštvaný hráč trucuje o tři dny déle.
+  if (scenarioId === "left_out" || scenarioId === "bench_complaint") {
+    if (resolution.tone === "positive") {
+      stmts.push(db.prepare(
+        "UPDATE players SET life_context = json_remove(life_context, '$.leftOutSulk') WHERE id = ?",
+      ).bind(playerId));
+    } else if (resolution.tone === "negative") {
+      stmts.push(db.prepare(
+        `UPDATE players SET life_context = json_set(life_context, '$.leftOutSulk.until',
+           date(json_extract(life_context, '$.leftOutSulk.until'), '+3 days'))
+         WHERE id = ? AND json_extract(life_context, '$.leftOutSulk.until') IS NOT NULL`,
+      ).bind(playerId));
+    }
+  }
+
   await db.batch(stmts);
 
   const fmt = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
