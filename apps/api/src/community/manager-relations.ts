@@ -453,10 +453,10 @@ async function resolveBets(
       await insertRelationNews(db, info.leagueId, wonArticle.headline, wonArticle.body);
       const { createNotification } = await import("./notifications");
       await createNotification(db, winnerId, "event", "🍺 Vyhrál jsi bečku!",
-        `Sázka s trenérem ${loserName} vyšla. +${BET_AMOUNT} Kč a kabina slaví.`, "/dashboard/finances")
+        `Sázka s trenérem ${loserName} vyšla. +${BET_AMOUNT} Kč a kabina slaví.`, "/finance")
         .catch((e) => logger.warn({ module: "manager-relations" }, "bet win notification", e));
       await createNotification(db, betLoserId, "event", "🍺 Prohraná sázka",
-        `Bečka pro ${winnerName} tě stojí ${BET_AMOUNT} Kč. Příště líp.`, "/dashboard/finances")
+        `Bečka pro ${winnerName} tě stojí ${BET_AMOUNT} Kč. Příště líp.`, "/finance")
         .catch((e) => logger.warn({ module: "manager-relations" }, "bet loss notification", e));
     }
     await db.prepare(
@@ -998,7 +998,7 @@ async function resolveStammtisch(
       ];
       await appendCoachAttendees(db, a.teamId, gameDate, guestCoaches);
       await createNotification(db, a.teamId, "event", "🍻 Posezení s trenéry proběhlo",
-        guestText.length > 140 ? guestText.slice(0, 137) + "…" : guestText, "/dashboard/hospoda")
+        guestText.length > 140 ? guestText.slice(0, 137) + "…" : guestText, "/hospoda")
         .catch((e) => logger.warn({ module: "manager-relations" }, "stammtisch guest notification", e));
     }
 
@@ -1014,7 +1014,7 @@ async function resolveStammtisch(
   ).bind(narrative, row.id).run();
   await appendPubIncident(db, teamId, gameDate, { type: "manager_meetup", playerIds: [], text: narrative, effects: [] });
   await createNotification(db, teamId, "event", "🍻 Posezení s trenéry proběhlo",
-    narrative.length > 140 ? narrative.slice(0, 137) + "…" : narrative, "/dashboard/hospoda")
+    narrative.length > 140 ? narrative.slice(0, 137) + "…" : narrative, "/hospoda")
     .catch((e) => logger.warn({ module: "manager-relations" }, "stammtisch host notification", e));
 }
 
@@ -1050,7 +1050,7 @@ async function resolvePubRound(
   ).bind(narrative, patrons, paid ? 1 : 0, row.id).run();
   await appendPubIncident(db, teamId, gameDate, { type: "manager_round", playerIds: [], text: narrative, effects: [] });
   await createNotification(db, teamId, "event", paid ? "🍺 Runda pro hospodu" : "🍺 Runda nevyšla",
-    narrative.length > 140 ? narrative.slice(0, 137) + "…" : narrative, "/dashboard/hospoda")
+    narrative.length > 140 ? narrative.slice(0, 137) + "…" : narrative, "/hospoda")
     .catch((e) => logger.warn({ module: "manager-relations" }, "pub round notification", e));
 }
 

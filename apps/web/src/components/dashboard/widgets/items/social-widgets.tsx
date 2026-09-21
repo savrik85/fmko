@@ -28,7 +28,7 @@ export function RivalsWidget({ data, height }: WidgetProps) {
           <li key={r.teamId}>
             <div className="flex items-baseline gap-2">
               <span className="w-2.5 h-2.5 rounded-tight shrink-0" style={{ background: r.primaryColor }} aria-hidden="true" />
-              <Link href={`/dashboard/team/${r.teamId}`} className="text-sm font-heading font-bold truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
+              <Link href={`/tym/${r.teamId}`} className="text-sm font-heading font-bold truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
                 {r.teamName}
               </Link>
               <span className="text-micro text-muted shrink-0">{r.archetypeLabel}</span>
@@ -102,9 +102,9 @@ export function SquadChemistryWidget({ data, height }: WidgetProps) {
               <span className="shrink-0 text-base" aria-hidden="true">{popis.icon}</span>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-heading font-bold truncate">
-                  <a href={`/dashboard/player/${v.player_a_id}`} className="hover:text-pitch-500 hover:underline transition-colors">{v.player_a_name}</a>
+                  <a href={`/hrac/${v.player_a_id}`} className="hover:text-pitch-500 hover:underline transition-colors">{v.player_a_name}</a>
                   <span className="text-muted font-normal"> a </span>
-                  <a href={`/dashboard/player/${v.player_b_id}`} className="hover:text-pitch-500 hover:underline transition-colors">{v.player_b_name}</a>
+                  <a href={`/hrac/${v.player_b_id}`} className="hover:text-pitch-500 hover:underline transition-colors">{v.player_b_name}</a>
                 </div>
                 <div className="text-micro text-muted">{popis.text}</div>
               </div>
@@ -154,7 +154,7 @@ export function FanVillagesWidget({ data, height }: WidgetProps) {
       <div className="text-sm text-muted text-center">
         Z okolních obcí máš <span className="font-heading font-bold text-ink tabular-nums">{dovezenych}</span> fanoušků
       </div>
-      <MoreLink href="/dashboard/fans">Detail fanoušků →</MoreLink>
+      <MoreLink href="/fanousci">Detail fanoušků →</MoreLink>
     </div>
   );
 }
@@ -192,7 +192,7 @@ export function SeasonProgressWidget({ data, height }: WidgetProps) {
           ))}
         </ul>
       )}
-      <MoreLink href="/dashboard/calendar">Celý kalendář →</MoreLink>
+      <MoreLink href="/kalendar">Celý kalendář →</MoreLink>
     </div>
   );
 }

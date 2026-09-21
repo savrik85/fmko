@@ -53,7 +53,7 @@ export function RefereeCard({ referee, isHome }: Props) {
           <FaceAvatar faceConfig={referee.avatar} size={56} className="border border-ink/20 bg-white shrink-0 rounded-soft" />
         )}
         <div className="min-w-0 flex-1">
-          <Link href={`/dashboard/rozhodci/${referee.id}`} className="font-heading font-bold text-base hover:underline block truncate">
+          <Link href={`/rozhodci/${referee.id}`} className="font-heading font-bold text-base hover:underline block truncate">
             {referee.name}
           </Link>
           <div className="text-sm text-muted">

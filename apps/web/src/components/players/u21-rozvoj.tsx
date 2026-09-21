@@ -150,7 +150,7 @@ export function U21Rozvoj({ teamId }: { teamId: string }) {
             boxy vedle sebe nedávaly hierarchii a „18 klenotů z 18" navíc nic neříkalo. */}
         {nadeje && (
           <Link
-            href={`/dashboard/player/${nadeje.id}`}
+            href={`/hrac/${nadeje.id}`}
             className="flex items-center gap-3 mt-3 p-3 rounded-soft bg-gold-50 border border-gold-200 hover:border-gold-300 transition"
           >
             <div className="shrink-0 w-11 h-11 rounded-full overflow-hidden bg-gold-100 flex items-end justify-center">
@@ -253,7 +253,7 @@ export function U21Rozvoj({ teamId }: { teamId: string }) {
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2 flex-wrap">
-                    <Link href={`/dashboard/player/${h.id}`} className="font-heading font-bold text-base hover:underline">
+                    <Link href={`/hrac/${h.id}`} className="font-heading font-bold text-base hover:underline">
                       {h.jmeno}
                     </Link>
                     <PositionBadge position={h.pozice} />

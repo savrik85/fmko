@@ -48,12 +48,12 @@ export function BottomNav() {
   const badges = useMenuBadges();
 
   const items = [
-    { href: "/dashboard", label: "Domů", icon: "🏟" },
-    { href: "/dashboard/phone", label: "Telefon", icon: "📱", badge: badges.unreadMessages },
-    { href: "/dashboard/match", label: "Sestava", icon: "📋" },
-    { href: "/dashboard/liga", label: "Liga", icon: "🏆" },
+    { href: "/prehled", label: "Domů", icon: "🏟" },
+    { href: "/telefon", label: "Telefon", icon: "📱", badge: badges.unreadMessages },
+    { href: "/zapas", label: "Sestava", icon: "📋" },
+    { href: "/liga", label: "Liga", icon: "🏆" },
     // Všechny podnotifikace (grémium, sázky, přestupy, novinky, sněm) se sčítají do Více
-    { href: "/dashboard/more", label: "Více", icon: "⚙", badge: badges.moreBadgeCount },
+    { href: "/vice", label: "Více", icon: "⚙", badge: badges.moreBadgeCount },
   ];
 
   return (
@@ -79,7 +79,7 @@ export function BottomNav() {
           // Větev pro položku „Kádr" tu byla i poté, co ji z lišty vyhodili —
           // nikdy se nevyhodnotila. Kádr je dnes pod Více.
           const isActive = pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            (item.href !== "/prehled" && pathname.startsWith(item.href));
           return (
             <Link
               key={item.label}

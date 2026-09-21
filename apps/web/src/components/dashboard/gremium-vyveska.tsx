@@ -122,7 +122,7 @@ export function GremiumVyveska({ limit = 6 }: { limit?: number }) {
           Vývěska grémia
         </span>
         <Link
-          href="/dashboard/soutez?tab=zapisy"
+          href="/soutez?tab=zapisy"
           className="text-sm font-heading font-bold shrink-0 hover:text-pitch-500 transition-colors"
         >
           Všechna rozhodnutí →

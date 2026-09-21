@@ -50,7 +50,7 @@ async function oznamVysledek(env: Bindings, teamId: string, incidentId: string, 
     .catch((e) => logger.warn({ module: M }, `SMS policie ${incidentId}`, e));
   await createNotification(
     env.DB, teamId, "event", "🚓 Výsledek šetření", zprava.slice(0, 140),
-    `/dashboard/incidenty?id=${encodeURIComponent(incidentId)}`, env,
+    `/incidenty?id=${encodeURIComponent(incidentId)}`, env,
   ).catch((e) => logger.warn({ module: M }, `notifikace policie ${incidentId}`, e));
 }
 

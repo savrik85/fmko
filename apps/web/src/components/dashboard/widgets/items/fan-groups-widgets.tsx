@@ -77,7 +77,7 @@ export function FanGroupsMoodWidget({ data }: WidgetProps) {
           </div>
         ))}
       </div>
-      <Link href="/dashboard/fans" className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
+      <Link href="/fanousci" className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
         Jednání s vůdci →
       </Link>
     </div>
@@ -123,7 +123,7 @@ export function FanRivalsWidget({ data }: WidgetProps) {
         {d.rivals.map((r) => (
           <div key={r.teamId}>
             <div className="flex items-baseline justify-between gap-2">
-              <Link href={`/dashboard/team/${r.teamId}`} className="text-sm font-heading font-bold text-ink hover:underline truncate">
+              <Link href={`/tym/${r.teamId}`} className="text-sm font-heading font-bold text-ink hover:underline truncate">
                 {r.name}
               </Link>
               <span className="text-xs text-muted shrink-0">
@@ -155,7 +155,7 @@ export function FanFavouritesWidget({ data }: WidgetProps) {
       <div className="text-xs font-semibold text-pitch-600 mb-1">❤️ Berou je za svoje</div>
             {milacci.map((f) => (
               <div key={`${f.groupKind}-${f.playerId}`} className="py-1">
-                <Link href={`/dashboard/player/${f.playerId}`} className="text-sm font-heading font-bold text-ink hover:underline">
+                <Link href={`/hrac/${f.playerId}`} className="text-sm font-heading font-bold text-ink hover:underline">
                   {f.playerName}
                 </Link>
                 <span className="text-xs text-muted"> · {f.groupName}</span>
@@ -169,7 +169,7 @@ export function FanFavouritesWidget({ data }: WidgetProps) {
       <div className="text-xs font-semibold text-card-red mb-1">😤 Nemůžou ho vystát</div>
             {otloukanci.map((f) => (
               <div key={`${f.groupKind}-${f.playerId}`} className="py-1">
-                <Link href={`/dashboard/player/${f.playerId}`} className="text-sm font-heading font-bold text-ink hover:underline">
+                <Link href={`/hrac/${f.playerId}`} className="text-sm font-heading font-bold text-ink hover:underline">
                   {f.playerName}
                 </Link>
                 <span className="text-xs text-muted"> · {f.groupName}</span>
@@ -265,7 +265,7 @@ export function FanTroubleWidget({ data }: WidgetProps) {
         </p>
       ))}
 
-      <Link href={d.damage.length > 0 ? "/dashboard/incidenty" : "/dashboard/fans"} className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
+      <Link href={d.damage.length > 0 ? "/incidenty" : "/fanousci"} className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
         {d.damage.length > 0 ? "Opravit a řešit →" : "Bezpečnost a historie →"}
       </Link>
     </div>

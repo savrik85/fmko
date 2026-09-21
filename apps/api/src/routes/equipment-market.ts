@@ -611,7 +611,7 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
         `💰 Prodáno! ${desc} si odvezli z ${buyerRow?.name ?? "jiného klubu"}. Na účtu máš o ${priceCz} Kč víc.`)
         .catch((e) => logger.warn({ module: MODULE }, "sms seller", e)),
       createNotification(c.env.DB, listing.team_id, "event", "Vybavení prodáno",
-        `${label} za ${priceCz} Kč`, "/dashboard/equipment?tab=bazar", c.env)
+        `${label} za ${priceCz} Kč`, "/vybaveni?tab=bazar", c.env)
         .catch((e) => logger.warn({ module: MODULE }, "notify seller", e)),
     ] : []),
   ]);

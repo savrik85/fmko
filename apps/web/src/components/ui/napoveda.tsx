@@ -20,7 +20,7 @@ interface HelpEntry {
 // když si není jistý, a psaní bez háčků tam působí nedodělaně.
 
 const HELP: Record<string, HelpEntry> = {
-  "/dashboard": {
+  "/prehled": {
     title: "Domovská obrazovka",
     icon: "\u{1F3E0}",
     sections: [
@@ -33,7 +33,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Šipky < > v hlavičce jsou historie prohlížeče, NE posouvání dnů. Dny posouvej přes Administraci.", tip: true },
     ],
   },
-  "/dashboard/sazky": {
+  "/sazky": {
     title: "Sázková kancelář",
     icon: "\u{1F3AB}",
     sections: [
@@ -45,7 +45,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Když sázený střelec vůbec nenastoupí, tip se anuluje a kurz tiketu klesne, tip neprohrává. Cizí sestavu totiž předem nevidíš.", tip: true },
     ],
   },
-  "/dashboard/phone": {
+  "/telefon": {
     title: "Telefon",
     icon: "\u{1F4F1}",
     sections: [
@@ -56,7 +56,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Nové zprávy od Místního kontaktu znamenají nabídku hráče, podívej se do Přestupů.", tip: true },
     ],
   },
-  "/dashboard/squad": {
+  "/kadr": {
     title: "Kádr týmu",
     icon: "\u{1F465}",
     sections: [
@@ -67,7 +67,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Pozice", text: "BRA/OBR/ZÁL/ÚTO. Hráč mimo svou pozici má až −40 % na relevantní dovednosti. Např. útočník v obraně ztrácí 30 % obrany." },
     ],
   },
-  "/dashboard/training": {
+  "/trenink": {
     title: "Tréninky",
     icon: "⚽",
     sections: [
@@ -81,7 +81,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Veteráni (37+) mají šanci na pokles fyzických atributů: (věk−36) × 1 % na rychlost, staminu a sílu.", tip: true },
     ],
   },
-  "/dashboard/transfers": {
+  "/prestupy": {
     title: "Přestupy a nábor",
     icon: "\u{1F91D}",
     sections: [
@@ -93,7 +93,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Platy hráčů: 10 + (rating/100) × 400 Kč/měsíc. Hráč s ratingem 50 stojí ~210 Kč/měsíc.", tip: true },
     ],
   },
-  "/dashboard/finances": {
+  "/finance": {
     title: "Finance klubu",
     icon: "\u{1F4B0}",
     sections: [
@@ -105,7 +105,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Záporný rozpočet = náhodné negativní události (krádež, vandalismus, odchod hráčů). Udržuj kladný zůstatek!", tip: true },
     ],
   },
-  "/dashboard/sponsors": {
+  "/sponzori": {
     title: "Sponzoři",
     icon: "\u{1F3E2}",
     sections: [
@@ -116,7 +116,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Reputace TRENÉRA", text: "Jiné číslo, rozsah 15–75, start 30. Ta roste výhrami a klesá prohrami. Najdeš ji v profilu trenéra a na stránce Fanoušci." },
     ],
   },
-  "/dashboard/reputace": {
+  "/reputace": {
     title: "Reputace klubu",
     icon: "⭐",
     sections: [
@@ -129,7 +129,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec, tam reputace nerozhoduje, jen přízeň obce.", tip: true },
     ],
   },
-  "/dashboard/fans": {
+  "/fanousci": {
     title: "Fanoušci a občerstvení",
     icon: "\u{1F4E3}",
     sections: [
@@ -142,7 +142,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Spokojenost násobí návštěvnost (0,75× až 1,25×), cenu vstupenky (0,7× až 1,3×) i tržby v bufetu. Vyplatí se ji hlídat.", tip: true },
     ],
   },
-  "/dashboard/equipment": {
+  "/vybaveni": {
     title: "Vybavení",
     icon: "\u{1F3BD}",
     sections: [
@@ -150,7 +150,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Zámky vylepšení", text: "2. úroveň: reputace 40+ a 5 odehraných zápasů. 3. úroveň: reputace 60+, 15 zápasů a sezona 2+." },
     ],
   },
-  "/dashboard/stadium": {
+  "/stadion": {
     title: "Stadion a hřiště",
     icon: "\u{1F3DF}️",
     sections: [
@@ -160,7 +160,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Zámky vylepšení", text: "2. úroveň: reputace 50+ a 15 odehraných zápasů. 3. úroveň: reputace 70+, 35 zápasů a sezona 3+. Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec, tam reputace nerozhoduje, jen přízeň." },
     ],
   },
-  "/dashboard/events": {
+  "/udalosti": {
     title: "Události",
     icon: "\u{1F4C5}",
     sections: [
@@ -169,7 +169,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Negativní", text: "Krádež, poškození vybavení, pokuta, vandalismus. Čím nižší rozpočet, tím vyšší riziko." },
     ],
   },
-  "/dashboard/liga": {
+  "/liga": {
     title: "Ligová tabulka",
     icon: "\u{1F3C6}",
     sections: [
@@ -178,7 +178,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "AI týmy", text: "Počítačem řízené týmy mají kvalitu o 1 kategorii nižší než lidští hráči. Vesnické AI = základ 35 místo 37." },
     ],
   },
-  "/dashboard/calendar": {
+  "/kalendar": {
     title: "Kalendář sezony",
     icon: "\u{1F4C6}",
     sections: [
@@ -187,7 +187,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Ve volné dny se hráčům regeneruje kondice podle staminy.", tip: true },
     ],
   },
-  "/dashboard/match": {
+  "/zapas": {
     title: "Detail zápasu",
     icon: "⚽",
     sections: [
@@ -198,21 +198,21 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Hráč s kondicí pod 60 % hraje až na 60 % svého potenciálu. Kondice klesne během zápasu, výrazněji u hráčů s nízkou staminou.", tip: true },
     ],
   },
-  "/dashboard/news": {
+  "/zpravodaj": {
     title: "Zpravodaj",
     icon: "\u{1F4F0}",
     sections: [
       { text: "Ligové zprávy, výsledky kol, přestupy, události. Generují se automaticky po každém odehraném kole." },
     ],
   },
-  "/dashboard/settings": {
+  "/nastaveni": {
     title: "Nastavení",
     icon: "⚙️",
     sections: [
       { text: "Změna hesla. Minimálně 8 znaků, velké písmeno, malé písmeno, číslo." },
     ],
   },
-  "/dashboard/invite": {
+  "/pozvat": {
     title: "Pozvi kamaráda",
     icon: "✉️",
     sections: [
@@ -226,7 +226,7 @@ const HELP: Record<string, HelpEntry> = {
 function findHelp(pathname: string): HelpEntry | null {
   if (HELP[pathname]) return HELP[pathname];
   if (pathname.startsWith("/onboarding")) return null;
-  if (pathname.startsWith("/dashboard/player/")) return {
+  if (pathname.startsWith("/hrac/")) return {
     title: "Profil hráče",
     icon: "\u{1F464}",
     sections: [
@@ -237,7 +237,7 @@ function findHelp(pathname: string): HelpEntry | null {
       { text: "Šipky v hlavičce posouvají mezi hráči TOHO TÝMU, kterému hráč patří.", tip: true },
     ],
   };
-  if (pathname.startsWith("/dashboard/team/")) return {
+  if (pathname.startsWith("/tym/")) return {
     title: "Profil týmu",
     icon: "\u{1F3DF}️",
     sections: [
@@ -245,8 +245,8 @@ function findHelp(pathname: string): HelpEntry | null {
       { heading: "Cizí hráči", text: "U hráčů cizích týmů vidíš atributy zaokrouhlené na 5 (rozmazané). Pro přesné hodnoty musíš hráče odkrýt v přestupech." },
     ],
   };
-  if (pathname.match(/\/dashboard\/match\/[^/]+$/)) return HELP["/dashboard/match"];
-  if (pathname.includes("/replay")) return {
+  if (pathname.match(/\/zapas\/[^/]+$/)) return HELP["/zapas"];
+  if (pathname.includes("/zaznam")) return {
     title: "Přehrání zápasu",
     icon: "▶️",
     sections: [
@@ -256,7 +256,7 @@ function findHelp(pathname: string): HelpEntry | null {
     ],
   };
   // Skrýt nápovědu v detailu konverzace — překrývá input na mobilu
-  if (pathname.match(/\/dashboard\/phone\/.+/)) return null;
+  if (pathname.match(/\/telefon\/.+/)) return null;
   return null;
 }
 

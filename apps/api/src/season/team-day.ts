@@ -180,7 +180,7 @@ export async function processTeamDay(
               logger.info({ module: "daily-tick", teamId }, `day_before attendance: ${msgCount} msgs → ⚽ vs ${opponentName}`);
               // match_reminder push notifikace
               const { createNotification } = await import("../community/notifications");
-              await createNotification(env.DB, teamId, "match_reminder", `Zítra hrajeme! Nastav sestavu`, `Zápas proti ${opponentName}`, "/dashboard/match",
+              await createNotification(env.DB, teamId, "match_reminder", `Zítra hrajeme! Nastav sestavu`, `Zápas proti ${opponentName}`, "/zapas",
                 { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB }
               ).catch((e) => logger.warn({ module: "daily-tick" }, "match_reminder notification", e));
             }
@@ -348,7 +348,7 @@ export async function processTeamDay(
           for (const ev of resolvedEvents) {
             const summary = ev.effects.map((e) => e.description).filter(Boolean).join(" · ");
             const { createNotification } = await import("../community/notifications");
-            await createNotification(env.DB, teamId, "event", ev.title, summary || ev.description, "/dashboard/events",
+            await createNotification(env.DB, teamId, "event", ev.title, summary || ev.description, "/udalosti",
               { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB },
             ).catch((e) => logger.warn({ module: "daily-tick" }, "auto event notification", e));
           }
@@ -401,7 +401,7 @@ export async function processTeamDay(
           const { createNotification } = await import("../community/notifications");
           const zprava = parts.join(" · ");
           const zpravaVelke = zprava.charAt(0).toLocaleUpperCase("cs") + zprava.slice(1);
-          await createNotification(env.DB, teamId, "event", "🧢 Kabina", `${zpravaVelke} (nálada kabiny ${kab.mood})`, "/dashboard/kadr",
+          await createNotification(env.DB, teamId, "event", "🧢 Kabina", `${zpravaVelke} (nálada kabiny ${kab.mood})`, "/kadr",
             { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB },
           ).catch((e) => logger.warn({ module: "daily-tick" }, "kabina notification", e));
         }

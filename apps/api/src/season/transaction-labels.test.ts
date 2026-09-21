@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
  * správně, protože přesun je právě ta chvíle, kdy se na tohle zapomíná.
  */
 
-const FE_FINANCE = join(__dirname, "../../../web/src/app/dashboard/finances/page.tsx");
+const FE_FINANCE = join(__dirname, "../../../web/src/app/(hra)/finance/page.tsx");
 
 function klice(zdroj: string, mapa: string): Set<string> {
   const m = new RegExp(`${mapa}\\s*:\\s*Record<string, string>\\s*=\\s*\\{([\\s\\S]*?)\\n\\};`).exec(zdroj);

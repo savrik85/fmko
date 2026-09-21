@@ -328,7 +328,7 @@ export async function sendWebPushToTeam(
   const subs = await getTeamSubscriptions(env.DB, teamId);
   if (subs.length === 0) return;
 
-  const payload = JSON.stringify({ title, body, url: url ?? "/dashboard" });
+  const payload = JSON.stringify({ title, body, url: url ?? "/prehled" });
 
   const results = await Promise.allSettled(subs.map((sub) => sendSinglePush(sub, payload, env)));
 

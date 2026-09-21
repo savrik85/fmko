@@ -25,8 +25,8 @@ export default function NovaSezonaPage() {
   useEffect(() => {
     if (!teamId) return;
     apiFetch<WelcomeData | null>(`/api/teams/${teamId}/season-welcome`)
-      .then((d) => { if (!d) { router.replace("/dashboard"); return; } setData(d); })
-      .catch((e) => { console.error("load welcome:", e); router.replace("/dashboard"); })
+      .then((d) => { if (!d) { router.replace("/prehled"); return; } setData(d); })
+      .catch((e) => { console.error("load welcome:", e); router.replace("/prehled"); })
       .finally(() => setLoading(false));
   }, [teamId, router]);
 
@@ -34,7 +34,7 @@ export default function NovaSezonaPage() {
     if (!teamId) return;
     setDismissing(true);
     await apiAction(apiFetch(`/api/teams/${teamId}/season-welcome/dismiss`, { method: "POST" }), "Nepovedlo se uložit");
-    router.replace("/dashboard");
+    router.replace("/prehled");
   };
 
   if (loading) return <div className="min-h-dvh flex justify-center items-center bg-pitch-700"><Spinner /></div>;

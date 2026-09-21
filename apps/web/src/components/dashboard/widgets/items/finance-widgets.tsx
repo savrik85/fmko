@@ -24,7 +24,7 @@ export function BudgetSummaryWidget({ data }: WidgetProps) {
         <span className="text-muted">Rozpočet</span>
         <span className="font-heading font-bold tabular-nums">{fullCZK(team.budget)}</span>
       </div>
-      <Link href="/dashboard/finances" className="text-sm text-pitch-500 font-heading font-bold hover:underline block mt-2">
+      <Link href="/finance" className="text-sm text-pitch-500 font-heading font-bold hover:underline block mt-2">
         Detail financí →
       </Link>
     </div>
@@ -162,7 +162,7 @@ export function SponsorsWidget({ data }: WidgetProps) {
           display: compactCZK(c.monthlyAmount ?? 0),
         }))}
       />
-      <MoreLink href="/dashboard/sponsors">Detail sponzorů →</MoreLink>
+      <MoreLink href="/sponzori">Detail sponzorů →</MoreLink>
     </div>
   );
 }
@@ -191,7 +191,7 @@ export function ConcessionRevenueWidget({ data }: WidgetProps) {
         Zisk za posledních {sales.length} zápasů{" "}
         <span className="font-heading font-bold text-ink tabular-nums">{fullCZK(totalProfit)}</span>
       </div>
-      <MoreLink href="/dashboard/fans">Detail stánku →</MoreLink>
+      <MoreLink href="/fanousci">Detail stánku →</MoreLink>
     </div>
   );
 }

@@ -761,7 +761,7 @@ async function oznam(
   try {
     const { createNotification } = await import("../community/notifications");
     await createNotification(
-      db, opts.homeTeamId, "event", "🚨 Výtržnosti na stadionu", shrnuti, "/dashboard/fans",
+      db, opts.homeTeamId, "event", "🚨 Výtržnosti na stadionu", shrnuti, "/fanousci",
     );
   } catch (e) {
     logger.warn({ module: M }, "notifikace o výtržnostech", e);

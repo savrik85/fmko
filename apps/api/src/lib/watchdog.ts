@@ -177,7 +177,7 @@ export async function runWatchdogAndAlert(env: Bindings): Promise<WatchdogResult
         "event",
         "⚠️ Zpracování hry hlásí problém",
         vysledek.problemy.map((p) => `${p.popis} (${p.hodnota})`).join(" · "),
-        "/dashboard",
+        "/prehled",
         pushEnv,
       ).catch((e) => logger.warn({ module: "watchdog" }, "notifikace adminovi selhala", e));
     }

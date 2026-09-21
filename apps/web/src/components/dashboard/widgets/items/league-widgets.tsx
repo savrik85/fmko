@@ -41,7 +41,7 @@ export function StandingsWidget({ data, height }: WidgetProps) {
                 <td className="py-1 pl-3 sm:pl-5 pr-1 tabular-nums text-muted text-sm align-top pt-2">{s.pos}</td>
                 <td className="py-1 pr-1 align-top pt-2">
                   {s.teamId ? (
-                    <Link href={`/dashboard/team/${s.teamId}`} className={`text-sm hover:text-pitch-500 transition-colors leading-tight ${s.isPlayer ? "font-heading font-bold" : ""}`}>
+                    <Link href={`/tym/${s.teamId}`} className={`text-sm hover:text-pitch-500 transition-colors leading-tight ${s.isPlayer ? "font-heading font-bold" : ""}`}>
                       {s.team}
                     </Link>
                   ) : (
@@ -58,7 +58,7 @@ export function StandingsWidget({ data, height }: WidgetProps) {
           </tbody>
         </table>
       </div>
-      <MoreLink href="/dashboard/liga">Celá tabulka →</MoreLink>
+      <MoreLink href="/liga">Celá tabulka →</MoreLink>
     </>
   );
 }
@@ -90,7 +90,7 @@ export function SeasonRecordWidget({ data }: WidgetProps) {
           {form.map((f, i) => <FormChip key={i} result={f} />)}
         </div>
       )}
-      <MoreLink href="/dashboard/liga">Zobrazit tabulku →</MoreLink>
+      <MoreLink href="/liga">Zobrazit tabulku →</MoreLink>
     </div>
   );
 }
@@ -281,7 +281,7 @@ export function LeagueScorersWidget({ data, teamId, height }: WidgetProps) {
       data={rows.map((r) => ({
         label: `${r.name} · ${r.teamName}`,
         value: r.goals,
-        href: `/dashboard/player/${r.playerId}`,
+        href: `/hrac/${r.playerId}`,
         color: r.teamId === teamId ? DIVERGING.positive : "#B5AFA5",
       }))}
     />
@@ -303,7 +303,7 @@ export function LeagueCardsWidget({ data, height }: WidgetProps) {
       {rows.map((r) => (
         <li key={r.playerId}>
           <div className="flex items-baseline gap-2 mb-1">
-            <a href={`/dashboard/player/${r.playerId}`} className="text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
+            <a href={`/hrac/${r.playerId}`} className="text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
               {r.name} <span className="text-muted">· {r.teamName}</span>
             </a>
             <span className="text-sm font-heading font-bold tabular-nums shrink-0">
@@ -355,7 +355,7 @@ export function CupProgressWidget({ data }: WidgetProps) {
           </li>
         ))}
       </ol>
-      <MoreLink href="/dashboard/pohar">Celý pavouk →</MoreLink>
+      <MoreLink href="/pohar">Celý pavouk →</MoreLink>
     </div>
   );
 }

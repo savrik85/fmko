@@ -56,7 +56,7 @@ export function FreeAgentsWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <MoreLink href="/dashboard/transfers">Celý trh →</MoreLink>
+      <MoreLink href="/prestupy">Celý trh →</MoreLink>
     </div>
   );
 }
@@ -79,7 +79,7 @@ export function MarketListingsWidget({ data, height }: WidgetProps) {
           <li key={l.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <PosTag position={l.position} />
             <div className="min-w-0 flex-1">
-              <a href={`/dashboard/player/${l.playerId}`} className="font-heading font-bold text-sm truncate block hover:text-pitch-500 hover:underline transition-colors">
+              <a href={`/hrac/${l.playerId}`} className="font-heading font-bold text-sm truncate block hover:text-pitch-500 hover:underline transition-colors">
                 {l.playerName}
               </a>
               <div className="text-micro text-muted truncate">{l.playerAge} let · {l.teamName}</div>
@@ -89,7 +89,7 @@ export function MarketListingsWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <MoreLink href="/dashboard/transfers">Celý trh →</MoreLink>
+      <MoreLink href="/prestupy">Celý trh →</MoreLink>
     </div>
   );
 }
@@ -110,7 +110,7 @@ export function LeagueTransfersWidget({ data, teamId, height }: WidgetProps) {
           return (
             <li key={`${t.playerId}-${i}`} className={`py-1.5 border-b border-gray-50 last:border-b-0 ${mine ? "bg-pitch-50/40 -mx-1 px-1 rounded" : ""}`}>
               <div className="flex items-center gap-2">
-                <a href={`/dashboard/player/${t.playerId}`} className="font-heading font-bold text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
+                <a href={`/hrac/${t.playerId}`} className="font-heading font-bold text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
                   {t.playerName}
                 </a>
                 <span className="text-sm font-heading font-bold tabular-nums shrink-0">
@@ -122,7 +122,7 @@ export function LeagueTransfersWidget({ data, teamId, height }: WidgetProps) {
               </div>
               <div className="text-micro text-muted truncate">
                 {t.fromTeam ?? "volný hráč"} <span className="text-muted-light">→</span>{" "}
-                {t.toTeamId ? <Link href={`/dashboard/team/${t.toTeamId}`} className="hover:text-pitch-500 transition-colors">{t.toTeam}</Link> : t.toTeam}
+                {t.toTeamId ? <Link href={`/tym/${t.toTeamId}`} className="hover:text-pitch-500 transition-colors">{t.toTeam}</Link> : t.toTeam}
               </div>
             </li>
           );
@@ -134,7 +134,7 @@ export function LeagueTransfersWidget({ data, teamId, height }: WidgetProps) {
           {fullCZK(transfers.reduce((s, t) => s + (t.isSwap ? 0 : (t.fee ?? 0)), 0))}
         </span>
       </div>
-      <MoreLink href="/dashboard/transfers">Přehled přestupů →</MoreLink>
+      <MoreLink href="/prestupy">Přehled přestupů →</MoreLink>
     </div>
   );
 }

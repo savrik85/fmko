@@ -39,7 +39,7 @@ export function FanSatisfactionWidget({ data }: WidgetProps) {
           {fans.lastMatchReasons.slice(0, 3).map((r, i) => <li key={i}>• {r}</li>)}
         </ul>
       )}
-      <MoreLink href="/dashboard/fans">Detail fanoušků →</MoreLink>
+      <MoreLink href="/fanousci">Detail fanoušků →</MoreLink>
     </div>
   );
 }
@@ -168,7 +168,7 @@ export function StadiumRadarWidget({ data }: WidgetProps) {
           <div className="text-micro text-muted uppercase">Stav hřiště</div>
         </div>
       </div>
-      <MoreLink href="/dashboard/stadium">Detail stadionu →</MoreLink>
+      <MoreLink href="/stadion">Detail stadionu →</MoreLink>
     </div>
   );
 }

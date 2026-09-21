@@ -14,7 +14,7 @@ self.addEventListener("activate", (event) => {
 
 // Push notifikace
 self.addEventListener("push", (event) => {
-  let data = { title: "Prales", body: "Máš novou zprávu.", url: "/dashboard" };
+  let data = { title: "Prales", body: "Máš novou zprávu.", url: "/prehled" };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {
@@ -35,7 +35,7 @@ self.addEventListener("push", (event) => {
 // Klik na notifikaci — otevřít/zaměřit okno
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url ?? "/dashboard";
+  const targetUrl = event.notification.data?.url ?? "/prehled";
 
   event.waitUntil(
     clients

@@ -39,9 +39,9 @@ const ULTRAS = "src/news/ultras-report.ts";
  * Stránka stadionu vypisuje VŠECHNA zařízení, takže tam musí být každý klíč.
  */
 const FE_UPLNE = [
-  { soubor: "../web/src/app/dashboard/stadium/page.tsx", mapa: "FACILITY_ICONS", popis: "ikony na stránce stadionu" },
-  { soubor: "../web/src/app/dashboard/stadium/page.tsx", mapa: "FACILITY_LABELS", popis: "popisky na stránce stadionu" },
-  { soubor: "../web/src/app/dashboard/stadium/page.tsx", mapa: "FACILITY_DESCRIPTIONS", popis: "popisy úrovní na stránce stadionu" },
+  { soubor: "../web/src/app/(hra)/stadion/page.tsx", mapa: "FACILITY_ICONS", popis: "ikony na stránce stadionu" },
+  { soubor: "../web/src/app/(hra)/stadion/page.tsx", mapa: "FACILITY_LABELS", popis: "popisky na stránce stadionu" },
+  { soubor: "../web/src/app/(hra)/stadion/page.tsx", mapa: "FACILITY_DESCRIPTIONS", popis: "popisy úrovní na stránce stadionu" },
   { soubor: "../web/src/components/dashboard/widgets/items/fans-widgets.tsx", mapa: "FACILITY_LABELS", popis: "radar stadionu ve widgetu" },
 ];
 
@@ -130,7 +130,7 @@ describe("klíče zařízení jsou všude, kde se čtou", () => {
  */
 describe("popis pořadatelské služby drží na jednom znění", () => {
   it("stránka stadionu má stejné texty jako engine", () => {
-    const s = zdroj("../web/src/app/dashboard/stadium/page.tsx");
+    const s = zdroj("../web/src/app/(hra)/stadion/page.tsx");
     const radek = s.match(/^\s*security: \[(.*)\],$/m);
     expect(radek, "řádek se security popisky na stránce stadionu nenalezen").not.toBeNull();
     const texty = [...radek![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);

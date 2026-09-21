@@ -79,7 +79,7 @@ export function PageHeader({ name, detail, color, badge, children, compact }: Pa
                popisek výchozí řádkování 17 px proti 16 px čísla, takže seděl
                o 3 px níž a chip vypadal rozhozeně. */
             <Link
-              href="/dashboard/liga"
+              href="/liga"
               className={`${boxBg} ${boxBgHover} shrink-0 rounded-control px-2.5 py-1.5 transition-colors flex items-center gap-1`}
             >
               <span className={`font-heading font-[800] text-base tabular-nums leading-none ${txt}`}>{ctx.leaguePosition}.</span>
@@ -95,7 +95,7 @@ export function PageHeader({ name, detail, color, badge, children, compact }: Pa
   const renderedBadge = badge === null ? null : (badge ?? makeBadge(44));
 
   const defaultChildren = (
-    <Link href="/dashboard/liga" className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2.5 text-center transition-colors`}>
+    <Link href="/liga" className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2.5 text-center transition-colors`}>
       <div className={`font-heading font-[800] text-2xl tabular-nums leading-none ${txt}`}>
         {ctx.leaguePosition != null ? `${ctx.leaguePosition}.` : "—"}
       </div>

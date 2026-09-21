@@ -1247,7 +1247,7 @@ matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
   try {
     const { createNotification } = await import("../community/notifications");
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
-    await createNotification(c.env.DB, opponentTeamId, "challenge", `⚽ Výzva od ${team.name}!`, "Chcete hrát přátelský zápas? Odpověz v Přáteláky.", "/dashboard/friendly", pushEnv);
+    await createNotification(c.env.DB, opponentTeamId, "challenge", `⚽ Výzva od ${team.name}!`, "Chcete hrát přátelský zápas? Odpověz v Přáteláky.", "/pratelaky", pushEnv);
   } catch (e) { logger.warn({ module: "matches" }, "challenge create notification", e); }
 
   return c.json({ ok: true, challengeId });
@@ -1338,8 +1338,8 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   try {
     const { createNotification } = await import("../community/notifications");
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
-    await createNotification(c.env.DB, challengerTeamId, "challenge", `✅ ${team.name} přijal výzvu!`, "Nastav sestavu, zápas se odehraje v 18:00.", "/dashboard/match", pushEnv);
-    await createNotification(c.env.DB, teamId, "challenge", `✅ Přátelák s ${challenger?.name ?? "soupeřem"} domluven!`, "Nastav sestavu, zápas se odehraje v 18:00.", "/dashboard/match", pushEnv);
+    await createNotification(c.env.DB, challengerTeamId, "challenge", `✅ ${team.name} přijal výzvu!`, "Nastav sestavu, zápas se odehraje v 18:00.", "/zapas", pushEnv);
+    await createNotification(c.env.DB, teamId, "challenge", `✅ Přátelák s ${challenger?.name ?? "soupeřem"} domluven!`, "Nastav sestavu, zápas se odehraje v 18:00.", "/zapas", pushEnv);
   } catch (e) { logger.warn({ module: "matches" }, "challenge accept notifications", e); }
 
   return c.json({ ok: true, matchId });
@@ -1366,7 +1366,7 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/decline", async (c) =>
   try {
     const { createNotification } = await import("../community/notifications");
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
-    await createNotification(c.env.DB, challenge.challenger_team_id, "challenge", `❌ ${team?.name ?? "Soupeř"} odmítl výzvu`, "Zkus vyzvat jiný tým.", "/dashboard/friendly", pushEnv);
+    await createNotification(c.env.DB, challenge.challenger_team_id, "challenge", `❌ ${team?.name ?? "Soupeř"} odmítl výzvu`, "Zkus vyzvat jiný tým.", "/pratelaky", pushEnv);
   } catch (e) { logger.warn({ module: "matches" }, "challenge decline notification", e); }
 
   return c.json({ ok: true });
@@ -1402,7 +1402,7 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/cancel", async (c) => 
   try {
     const { createNotification } = await import("../community/notifications");
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
-    await createNotification(c.env.DB, challenge.challenged_team_id, "challenge", `↩️ ${team?.name ?? "Soupeř"} stáhl výzvu`, "Výzva na přátelák byla zrušena.", "/dashboard/friendly", pushEnv);
+    await createNotification(c.env.DB, challenge.challenged_team_id, "challenge", `↩️ ${team?.name ?? "Soupeř"} stáhl výzvu`, "Výzva na přátelák byla zrušena.", "/pratelaky", pushEnv);
   } catch (e) { logger.warn({ module: "matches" }, "challenge cancel notification", e); }
 
   return c.json({ ok: true });

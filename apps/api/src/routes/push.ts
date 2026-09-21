@@ -124,7 +124,7 @@ pushRouter.post("/push/test", async (c) => {
     session.teamId,
     "🏟 Test notifikace",
     "Prales FM push funguje!",
-    "/dashboard",
+    "/prehled",
   );
 
   return c.json({ ok: true });
