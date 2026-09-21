@@ -52,6 +52,11 @@ jobs:
       - run: npm ci
       - run: bash add-edge-runtime.sh && npx @cloudflare/next-on-pages
         working-directory: apps/web
+      - run: bash upload-sourcemaps.sh
+        working-directory: apps/web
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: "279032"
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -91,6 +96,11 @@ jobs:
       - run: npm ci
       - run: bash add-edge-runtime.sh && npx @cloudflare/next-on-pages
         working-directory: apps/web
+      - run: bash upload-sourcemaps.sh
+        working-directory: apps/web
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: "279032"
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
