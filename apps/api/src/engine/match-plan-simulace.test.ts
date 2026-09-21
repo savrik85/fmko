@@ -122,17 +122,19 @@ describe("plánované střídání", () => {
     expect(r.events.length).toBeGreaterThan(0);
   });
 
-  it("plán nepřekročí limit tří střídání", () => {
+  it("plán nepřekročí limit pěti střídání", () => {
     const home = createTeam(1, "Domácí");
-    home.plan = [
-      { id: "s1", fromMinute: 46, trigger: { kind: "minute" }, action: { kind: "sub", outPlayerId: home.lineup[1].id, inPlayerId: home.subs[0].id } },
-      { id: "s2", fromMinute: 47, trigger: { kind: "minute" }, action: { kind: "sub", outPlayerId: home.lineup[5].id, inPlayerId: home.subs[1].id } },
-      { id: "s3", fromMinute: 48, trigger: { kind: "minute" }, action: { kind: "sub", outPlayerId: home.lineup[9].id, inPlayerId: home.subs[2].id } },
-    ];
+    // Šest náhradníků a šest pokynů — šestý už nesmí projít
+    const bench = [...home.subs, ...createTeam(3, "Lavička").subs];
+    home.subs = bench;
+    home.plan = [1, 2, 3, 5, 6, 9].map((outIdx, i) => ({
+      id: `s${i + 1}`, fromMinute: 46 + i, trigger: { kind: "minute" as const },
+      action: { kind: "sub" as const, outPlayerId: home.lineup[outIdx].id, inPlayerId: bench[i].id },
+    }));
     const r = odehraj(home, createTeam(2, "Hosté"));
     const strídání = r.events.filter((e) => e.type === "substitution" && e.teamId === 1);
-    expect(strídání.length).toBeLessThanOrEqual(3);
-    expect(r.events.filter((e) => e.description.startsWith("Plánované střídání"))).toHaveLength(3);
+    expect(strídání.length).toBeLessThanOrEqual(5);
+    expect(r.events.filter((e) => e.description.startsWith("Plánované střídání"))).toHaveLength(5);
   });
 });
 

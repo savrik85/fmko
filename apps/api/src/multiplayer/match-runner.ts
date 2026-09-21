@@ -1494,6 +1494,10 @@ export async function buildMatchPlayers(
     if (suspendedIds.size > 0) logger.info({module: "match-runner"}, `suspended IDs: ${[...suspendedIds].join(",")}`);
     if (injuredIds.size > 0) logger.info({module: "match-runner"}, `injured IDs: ${[...injuredIds].join(",")}`);
 
+    // Na zápas jede základ a nejvýš sedm náhradníků, jako v zápise o utkání v okresních
+    // soutěžích. Stejný výběr kopíruje sestavovač na webu (apps/web/src/lib/bench.ts).
+    const MAX_MATCHDAY_SQUAD = 18;
+
     // If user set a lineup, order players: selected 11 first, then rest as subs
     let ordered = allAvailable;
     if (userLineupJson) {
@@ -1560,7 +1564,7 @@ export async function buildMatchPlayers(
                 }
             }
             const benchRest = restRaw.filter((r) => !usedRestIds.has(r.id as string));
-            ordered = [...starters, ...replacements, ...benchRest].slice(0, 16);
+            ordered = [...starters, ...replacements, ...benchRest].slice(0, MAX_MATCHDAY_SQUAD);
 
             // Log saved vs actual
             const savedNames = pickedIds.map(id => {
@@ -1576,10 +1580,10 @@ export async function buildMatchPlayers(
             (globalThis as any).__lineupDebug.push(`team=${teamId.slice(0, 8)} starters=${starters.length} ordered11=[${dbgActual}] savedPicked=[${dbgSaved}]`);
         } catch (e) {
             logger.error({module: "match-runner"}, `Failed to parse lineup: ${e}`);
-            ordered = allAvailable.slice(0, 16);
+            ordered = allAvailable.slice(0, MAX_MATCHDAY_SQUAD);
         }
     } else {
-        ordered = allAvailable.slice(0, 16);
+        ordered = allAvailable.slice(0, MAX_MATCHDAY_SQUAD);
     }
 
 
