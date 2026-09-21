@@ -478,20 +478,20 @@ async function simulateCupTie(
   // — kdo si pohár explicitně nenastaví, hraje v poslední použité sestavě).
   const savedLineup = async (rid: string | null) => {
     if (!rid) return null;
-    const perMatch = await db.prepare("SELECT players_data, formation, tactic, hardness, match_plan FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(rid, cupMatchId).first<{ players_data: string; formation: string; tactic: string | null; hardness: string | null; match_plan: string | null }>()
+    const perMatch = await db.prepare("SELECT players_data, formation, tactic, hardness, match_plan, bench_data FROM lineups WHERE team_id = ? AND calendar_id = ?").bind(rid, cupMatchId).first<{ players_data: string; formation: string; tactic: string | null; hardness: string | null; match_plan: string | null; bench_data: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "cup per-match lineup", e); return null; });
     if (perMatch) return perMatch;
-    return await db.prepare("SELECT players_data, formation, tactic, hardness, match_plan FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string; tactic: string | null; hardness: string | null; match_plan: string | null }>()
+    return await db.prepare("SELECT players_data, formation, tactic, hardness, match_plan, bench_data FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1").bind(rid).first<{ players_data: string; formation: string; tactic: string | null; hardness: string | null; match_plan: string | null; bench_data: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "cup saved lineup", e); return null; });
   };
   const homeLR = await savedLineup(homeReal);
   const awayLR = await savedLineup(awayReal);
 
   const homeBuild = homeReal
-    ? await buildMatchPlayers(db, homeReal, homeLR?.players_data ?? null, 0, { matchKey: cupMatchId })
+    ? await buildMatchPlayers(db, homeReal, homeLR?.players_data ?? null, 0, { matchKey: cupMatchId, benchJson: homeLR?.bench_data })
     : await buildMatchPlayers(db, homeCupTeamId, null, 0, { matchKey: cupMatchId }, await loadCupClubRows(db, homeCupTeamId));
   const awayBuild = awayReal
-    ? await buildMatchPlayers(db, awayReal, awayLR?.players_data ?? null, 100, { matchKey: cupMatchId })
+    ? await buildMatchPlayers(db, awayReal, awayLR?.players_data ?? null, 100, { matchKey: cupMatchId, benchJson: awayLR?.bench_data })
     : await buildMatchPlayers(db, awayCupTeamId, null, 100, { matchKey: cupMatchId }, await loadCupClubRows(db, awayCupTeamId));
 
   const homeLineup = homeBuild.players; const homeSubs = homeLineup.splice(11);
