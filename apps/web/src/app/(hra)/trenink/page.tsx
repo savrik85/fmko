@@ -535,7 +535,7 @@ export default function TrainingPage() {
                 const positive = !mi.detail.startsWith("-");
                 return (
                   <Link
-                    href="/manazer"
+                    href={`/manazer/${teamId}`}
                     className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
                   >
                     <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">

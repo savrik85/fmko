@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, showError, type Team, type Player, type TeamMatchResults, type ManagerProfile } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel, EntityLink, BadgePreview, PositionBadge, JerseyPreview } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PositionBadge, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PreMatchCard } from "@/components/relations/RelationSection";
@@ -181,7 +181,7 @@ export default function TeamPage() {
             <div className="flex-1 min-w-0">
               <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}>{team.name}</h1>
               <div className={`${txtMuted} text-sm mt-0.5`}>
-                <EntityLink type="village" id={team.village_name} className={light ? "!text-gray-700 !decoration-gray-300" : "!text-white/80 !decoration-white/30"}>{team.village_name}</EntityLink>
+                <span className={light ? "text-gray-700" : "text-white/80"}>{team.village_name}</span>
                 {" "}&middot; {team.district}
               </div>
               {leaguePos && leagueName && (
@@ -252,7 +252,7 @@ export default function TeamPage() {
               <div className="flex-1 min-w-0">
                 <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}>{team.name}</h1>
                 <div className={`${txtMuted} text-sm`}>
-                  <EntityLink type="village" id={team.village_name} className={light ? "!text-gray-700 !decoration-gray-300" : "!text-white/80 !decoration-white/30"}>{team.village_name}</EntityLink>
+                  <span className={light ? "text-gray-700" : "text-white/80"}>{team.village_name}</span>
                   {" "}&middot; {team.district}
                 </div>
               </div>

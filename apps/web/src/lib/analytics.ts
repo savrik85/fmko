@@ -115,7 +115,6 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
     pathname.startsWith("/prihlaseni") ||
     pathname.startsWith("/registrace") ||
     pathname.startsWith("/onboarding") ||
-    pathname.startsWith("/create") ||
     pathname.startsWith("/pozvanka/")
   ) {
     featureArea = "registrace";
