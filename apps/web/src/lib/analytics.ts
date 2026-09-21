@@ -6,6 +6,17 @@ const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posth
 let isInitialized = false;
 
 /**
+ * Určí prostředí podle domény. Testing i produkce posílají do stejného PostHog
+ * projektu, tahle vlastnost je u každé události a podle ní se dají oddělit.
+ */
+function detectEnvironment(): "produkce" | "testing" | "vyvoj" {
+  const host = window.location.hostname;
+  if (host === "prales.fun" || host === "www.prales.fun") return "produkce";
+  if (host === "test.prales.fun") return "testing";
+  return "vyvoj";
+}
+
+/**
  * Normalizuje cestu a zařadí ji do odpovídající herní sekce.
  * Zabraňuje fragmentaci URL s dynamickými ID v analytických přehledech.
  */
@@ -103,19 +114,17 @@ export function initPostHog(): typeof posthog | null {
   try {
     posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST,
-      person_profiles: "always", // Sleduje anonymní i přihlášené návštěvníky a po přihlášení spojí historii
+      person_profiles: "identified_only", // Profil jen pro přihlášené, historii z doby před přihlášením k němu PostHog připojí
       capture_pageview: false, // V Next.js App Routeru sledujeme změny stránek v PostHogPageView
       capture_pageleave: true, // Měří přesný čas strávený na jednotlivých stránkách a odchody
       capture_exceptions: true, // Automatické zachycení neošetřených JS chyb v prohlížeči (Error tracking)
       capture_performance: true, // Měření Core Web Vitals a rychlosti načítání stránek
       autocapture: true, // Automaticky zaznamenává kliknutí na tlačítka, odkazy a formulářové prvky
       session_recording: {
-        maskAllInputs: false,
-        maskInputOptions: {
-          password: true, // Hesla vždy striktně maskovat
-        },
+        maskAllInputs: true, // Co hráč napíše (zprávy, e-mail, heslo), se v nahrávce nezobrazí
       },
     });
+    posthog.register({ prostredi: detectEnvironment() });
 
     isInitialized = true;
     return posthog;
