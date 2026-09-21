@@ -121,7 +121,10 @@ export function initPostHog(): typeof posthog | null {
       capture_performance: true, // Měření Core Web Vitals a rychlosti načítání stránek
       autocapture: true, // Automaticky zaznamenává kliknutí na tlačítka, odkazy a formulářové prvky
       session_recording: {
-        maskAllInputs: true, // Co hráč napíše (zprávy, e-mail, heslo), se v nahrávce nezobrazí
+        maskAllInputs: false, // Pro ladění je potřeba vidět, co hráči píšou
+        maskInputOptions: {
+          password: true, // Hesla vždy striktně maskovat
+        },
       },
     });
     posthog.register({ prostredi: detectEnvironment() });
