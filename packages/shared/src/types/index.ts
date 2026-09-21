@@ -50,6 +50,8 @@ export {
   managerFansEffect,
 } from "./manager-fans";
 export { odesloLidi, zavrenoNaZapasy, pripadu } from "./fan-groups";
+export type { CoachRelationBand, CoachRelationBandKey } from "./coach";
+export { coachRelationBand, coachRelationBandByKey, COACH_RELATION_BAND_ORDER } from "./coach";
 export { rozdelTitulekOznameni, NOTIFIKACE_IKONY } from "./notifications";
 export type {
   PlanTactic,

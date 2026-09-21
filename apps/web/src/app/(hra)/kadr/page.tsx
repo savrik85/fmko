@@ -7,6 +7,7 @@ import { TalentStars } from "@/components/players/talent-stars";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 import { ATTRIBUTE_INFO, getTooltip, type AttrKey, type Pos } from "@/lib/attribute-info";
+import { coachRelationBand } from "@okresni-masina/shared";
 
 type Tab = "atributy" | "sezona" | "top" | "dochazka";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
@@ -134,19 +135,11 @@ function moraleIcon(v: number): string {
 }
 
 function relationIcon(v: number): string {
-  if (v >= 80) return "❤️";
-  if (v >= 60) return "👍";
-  if (v >= 40) return "🤝";
-  if (v >= 20) return "🙄";
-  return "💢";
+  return coachRelationBand(v).icon;
 }
 
 function relationLabel(v: number): string {
-  if (v >= 80) return "Oddán trenérovi";
-  if (v >= 60) return "Spokojený";
-  if (v >= 40) return "Neutrální";
-  if (v >= 20) return "Nespokojený";
-  return "Otevřená nevraživost";
+  return coachRelationBand(v).label;
 }
 
 export default function SquadPage() {

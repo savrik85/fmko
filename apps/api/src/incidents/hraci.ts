@@ -4,6 +4,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { coachRelationStmts } from "../lib/coach-relation";
 import { KAMARADSKE_VZTAHY, SILA_KAMARADSTVI } from "./nastaveni";
 
 const AKTIVNI = "(status IS NULL OR status = 'active')";
@@ -17,14 +18,28 @@ const KAMARADI = `SELECT CASE WHEN player_a_id = ? THEN player_b_id ELSE player_
   WHERE (player_a_id = ? OR player_b_id = ?)
     AND type IN (${KAMARADSKE_VZTAHY.map((t) => `'${t}'`).join(", ")}) AND strength >= ${SILA_KAMARADSTVI}`;
 
+/**
+ * Morálka a vztah k trenérovi jednoho hráče. Vztah jde přes `coachRelationStmts`,
+ * aby Kabina na profilu trenéra ukázala důvod (`description`).
+ */
 export function posunHrace(
-  db: D1Database, teamId: string, playerId: string, zmena: { morale?: number; vztah?: number },
-): D1PreparedStatement {
-  return db.prepare(
-    `UPDATE players SET ${MORALKA},
-       coach_relationship = MAX(0, MIN(100, COALESCE(coach_relationship, 50) + ?))
-     WHERE id = ? AND team_id = ?`,
-  ).bind(zmena.morale ?? 0, zmena.vztah ?? 0, playerId, teamId);
+  db: D1Database, teamId: string, playerId: string,
+  zmena: { morale?: number; vztah?: number; description?: string },
+): D1PreparedStatement[] {
+  const prikazy: D1PreparedStatement[] = [];
+  if (zmena.morale) {
+    prikazy.push(db.prepare(`UPDATE players SET ${MORALKA} WHERE id = ? AND team_id = ?`)
+      .bind(zmena.morale, playerId, teamId));
+  }
+  if (zmena.vztah) {
+    prikazy.push(...coachRelationStmts(db, {
+      playerId,
+      delta: zmena.vztah,
+      source: "incident",
+      description: zmena.description ?? "Incident v klubu",
+    }));
+  }
+  return prikazy;
 }
 
 /** Morálka aktivního kádru. Hráči v `krome` a kamarádi hráče `kromeKamaraduHrace` se vynechají. */

@@ -6,11 +6,20 @@ type Dotaz = { sql: string; params: unknown[] };
 const jakoDotaz = (p: D1PreparedStatement) => p as unknown as Dotaz;
 
 describe("příkazy pro hráče", () => {
-  it("posun hráče ořízne 0 až 100 a hlídá tým", () => {
-    const p = jakoDotaz(posunHrace(jakoD1(new FalesnaD1()), "tym-a", "p", { morale: -12, vztah: -20 }));
-    expect(p.params).toEqual([-12, -20, "p", "tym-a"]);
-    expect(p.sql).toMatch(/MAX\(0, MIN\(100/);
-    expect(p.sql.match(/\?/g)).toHaveLength(4);
+  it("posun hráče ořízne 0 až 100, hlídá tým a vztah zapíše i s důvodem", () => {
+    const [moralka, log, vztah] = posunHrace(jakoD1(new FalesnaD1()), "tym-a", "p", { morale: -12, vztah: -20, description: "Křivé obvinění" }).map(jakoDotaz);
+    expect(moralka.params).toEqual([-12, "p", "tym-a"]);
+    expect(moralka.sql).toMatch(/MAX\(0, MIN\(100/);
+    expect(log.sql).toContain("INSERT INTO coach_relation_log");
+    expect(log.params).toContain("Křivé obvinění");
+    expect(log.params).toContain("incident");
+    expect(vztah.sql).toMatch(/coach_relationship = MAX\(0, MIN\(100/);
+    expect(vztah.params).toEqual([-20, "p"]);
+  });
+
+  it("nulový posun nic nezapisuje", () => {
+    expect(posunHrace(jakoD1(new FalesnaD1()), "tym-a", "p", { morale: 0, vztah: 0 })).toHaveLength(0);
+    expect(posunHrace(jakoD1(new FalesnaD1()), "tym-a", "p", { morale: -10 })).toHaveLength(1);
   });
 
   it("kádr bez obviněného a bez jeho kamarádů", () => {

@@ -10,6 +10,7 @@ import { TYPY_PRIBEHU } from "../incidents/hospoda";
 import { udalostiHospody, zapisHospody } from "../incidents/hospoda-db";
 import { ROZVOD_HOSPODA_NASOBEK } from "../incidents/nastaveni";
 import { logger } from "../lib/logger";
+import { coachRelationStmts } from "../lib/coach-relation";
 import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
 
 export interface PubAttendee {
@@ -1242,9 +1243,12 @@ async function applyIncidentEffects(
         stmts.push(logConditionStmt(db, ef.playerId, cur.teamId, cur.cond, newCond, "pub", `${injDesc} (${ef.injuryDays} d)`));
         cur.cond = newCond;
       } else if (ef.type === "vztah" && ef.delta != null) {
-        stmts.push(db.prepare(
-          `UPDATE players SET coach_relationship = MAX(0, MIN(100, COALESCE(coach_relationship, 50) + ?)) WHERE id = ?`,
-        ).bind(ef.delta, ef.playerId));
+        stmts.push(...coachRelationStmts(db, {
+          playerId: ef.playerId,
+          delta: ef.delta,
+          source: "pub",
+          description: `V hospodě: ${inc.text}`,
+        }));
       }
     }
   }

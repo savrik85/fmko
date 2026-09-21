@@ -14,6 +14,7 @@
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
+import { coachRelationStmts } from "../lib/coach-relation";
 import {
   generateInitialMessage,
   generateReply,
@@ -713,17 +714,24 @@ async function applyResolutionAndClose(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
     ).bind(uuid(), convId, playerId, senderName, finalReplyBody, JSON.stringify({ ai_generated: true, scenario_id: scenarioId, turn: state.max_replies, final: true }), now),
 
-    // Aplikace dopadu na hráče (morale + condition v life_context, coach_relationship přímo)
+    // Aplikace dopadu na hráče (morale + condition v life_context)
     db.prepare(
       `UPDATE players SET
          life_context = json_set(
            life_context,
            '$.morale', MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.morale'), 50) + ?)),
            '$.condition', MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.condition'), 100) + ?))
-         ),
-         coach_relationship = MAX(0, MIN(100, coach_relationship + ?))
+         )
        WHERE id = ?`,
-    ).bind(resolution.morale_delta, resolution.condition_delta, resolution.relationship_delta, playerId),
+    ).bind(resolution.morale_delta, resolution.condition_delta, playerId),
+
+    // Vztah k trenérovi i s důvodem pro Kabinu
+    ...coachRelationStmts(db, {
+      playerId,
+      delta: resolution.relationship_delta,
+      source: "sms_thread",
+      description: `Rozhovor v telefonu: ${resolution.summary}`,
+    }),
 
     // Uzavření konverzace. Bez systémové hlášky zůstává v přehledu poslední
     // replika hráče, což je i tak to, co si trenér přečte.
@@ -914,7 +922,12 @@ async function offendPlayer(
     return;
   }
 
-  const personality = (() => { try { return JSON.parse(playerRow.personality); } catch { return {}; } })();
+  const personality = (() => {
+    try { return JSON.parse(playerRow.personality); } catch (e) {
+      logger.warn({ module: "ai-player-spawn" }, `parse personality of ${playerRow.id}`, e);
+      return {};
+    }
+  })();
   const temper = personality.temper ?? 40;
   const alcohol = personality.alcohol ?? 30;
   const moraleDelta = temper > 70 ? -12 : alcohol > 70 ? -5 : -8;
@@ -931,10 +944,16 @@ async function offendPlayer(
 
     db.prepare(
       `UPDATE players SET
-         life_context = json_set(life_context, '$.morale', MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.morale'), 50) + ?))),
-         coach_relationship = MAX(0, MIN(100, coach_relationship + ?))
+         life_context = json_set(life_context, '$.morale', MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.morale'), 50) + ?)))
        WHERE id = ?`,
-    ).bind(moraleDelta, relationshipDelta, playerRow.id),
+    ).bind(moraleDelta, playerRow.id),
+
+    ...coachRelationStmts(db, {
+      playerId: playerRow.id,
+      delta: relationshipDelta,
+      source: "sms_ignored",
+      description: "Urazil se, že jsi mu několik dní neodpověděl",
+    }),
 
     db.prepare(
       "UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0, last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1 WHERE id = ?",

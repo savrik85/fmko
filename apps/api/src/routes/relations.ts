@@ -10,7 +10,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import {
-  getRelation, applyRelationEvent, relationStatus, relationLabel, isLoyalAlly, aiArchetype, AI_ARCHETYPE_LABELS,
+  getRelation, applyRelationEvent, relationStatus, relationLabel, relationGroup, isLoyalAlly, aiArchetype, AI_ARCHETYPE_LABELS,
   isAiTeam, aiGestureResponse, aiAcceptsBet, aiStatementResponse, shiftSquadMorale, insertRelationNews,
   getManagerName, getTeamName, getTeamGameDate, insertInteraction,
   type GestureChoice, type StatementTone,
@@ -227,7 +227,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
 
   const rows = await c.env.DB.prepare(
     `SELECT t.id as other_team_id, t.name as team_name, t.primary_color,
-            m.name as manager_name, m.user_id as manager_user_id,
+            m.name as manager_name, m.user_id as manager_user_id, m.avatar as manager_avatar,
             r.respect, r.heat, r.history
      FROM teams t
      LEFT JOIN managers m ON m.team_id = t.id
@@ -236,7 +236,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
      WHERE t.league_id = ? AND t.id != ?`
   ).bind(teamId, teamId, team.league_id, teamId).all<{
     other_team_id: string; team_name: string; primary_color: string | null;
-    manager_name: string | null; manager_user_id: string | null;
+    manager_name: string | null; manager_user_id: string | null; manager_avatar: string | null;
     respect: number | null; heat: number | null; history: string | null;
   }>();
 
@@ -245,7 +245,15 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
     const heat = r.heat ?? 0;
     const isAi = !r.manager_user_id || r.manager_user_id === "ai";
     let history: Array<{ icon: string; text: string }> = [];
-    try { history = r.history ? JSON.parse(r.history) : []; } catch { history = []; }
+    try { history = r.history ? JSON.parse(r.history) : []; } catch (e) {
+      logger.warn({ module: "relations" }, `parse relation history ${teamId}/${r.other_team_id}`, e);
+      history = [];
+    }
+    let managerAvatar: Record<string, unknown> | null = null;
+    try { managerAvatar = r.manager_avatar ? JSON.parse(r.manager_avatar) : null; } catch (e) {
+      logger.warn({ module: "relations" }, `parse manager avatar ${r.other_team_id}`, e);
+    }
+    const loyalAlly = isLoyalAlly(history as never);
     return {
       teamId: r.other_team_id,
       teamName: r.team_name,
@@ -257,7 +265,9 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
       heat,
       status: relationStatus(respect, heat),
       label: relationLabel(respect, heat),
-      loyalAlly: isLoyalAlly(history as never),
+      loyalAlly,
+      group: relationGroup(respect, heat, loyalAlly),
+      managerAvatar,
     };
   }).sort((a, b) => (Math.abs(b.respect) + b.heat) - (Math.abs(a.respect) + a.heat));
 

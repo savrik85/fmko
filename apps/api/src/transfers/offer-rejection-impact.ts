@@ -12,6 +12,7 @@
 import { computeInterestForOffer, INTEREST_LABELS } from "./player-interest";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { logger } from "../lib/logger";
+import { applyCoachRelationDelta } from "../lib/coach-relation";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -201,9 +202,18 @@ export async function applyOfferRejectionImpact(
   };
 
   await db.prepare(
-    "UPDATE players SET life_context = json_set(life_context, '$.morale', ?, '$.transferUnrest', json(?)), coach_relationship = MAX(0, COALESCE(coach_relationship, 50) + ?) WHERE id = ?"
-  ).bind(newMorale, JSON.stringify(newUnrest), coachRelDelta, playerId).run()
+    "UPDATE players SET life_context = json_set(life_context, '$.morale', ?, '$.transferUnrest', json(?)) WHERE id = ?"
+  ).bind(newMorale, JSON.stringify(newUnrest), playerId).run()
     .catch((e) => logger.warn({ module: "rejection-impact" }, "apply impact", e));
+  await applyCoachRelationDelta(db, {
+    playerId,
+    delta: coachRelDelta,
+    source: "transfer_rejected",
+    description: brokenTransferPledge
+      ? `Slíbil jsi, že ho pustíš, a nabídku z klubu ${teamName} jsi stejně odmítl`
+      : `Nepustil jsi ho do klubu ${teamName}`,
+    referenceId: offer.id ? `offer-reject-${offer.id as string}-${playerId}` : null,
+  });
 
   // SMS od hráče — naštvání podle tempera; při porušeném slibu vždy nejostřejší
   const pool = brokenTransferPledge || temper > 65 ? REJECTED_SMS_WANTS_HOT : REJECTED_SMS_WANTS;

@@ -58,6 +58,20 @@ export function relationStatus(respect: number, heat: number): { key: string; la
   return null;
 }
 
+export type RelationGroup = "allies" | "rivals" | "others";
+
+/**
+ * Skupina na profilu trenéra (záložka Trenéři). Hrubší než `relationStatus`,
+ * aby se do spojenců a rivalů dostali i ti, kdo ještě nejsou na extrému.
+ * Trvalý spojenec zůstává spojencem, i když se zrovna pohádali.
+ */
+export function relationGroup(respect: number, heat: number, loyalAlly: boolean): RelationGroup {
+  if (loyalAlly) return "allies";
+  if (heat >= 40 || respect <= -10) return "rivals";
+  if (respect >= 30) return "allies";
+  return "others";
+}
+
 /**
  * Slovní popis vztahu — vesnická škála pro každou kombinaci respektu a napětí.
  * Na rozdíl od relationStatus (jen extrémy) vrací text vždy.

@@ -43,7 +43,10 @@ describe("obvinění", () => {
     const davka = db.davky.flat();
     const znalost = davka.find((d) => /INSERT OR REPLACE INTO club_incident_knowledge/.test(d.sql) && d.params[1] === "a");
     expect(znalost?.params[3]).toBe("Trenér tě obvinil: Vloupání do skladu. Tvrdíš, že jsi to nebyl.");
-    expect(davka.filter((d) => /UPDATE players/.test(d.sql))).toHaveLength(3);
+    // Morálka hráče, jeho vztah k trenérovi, kamarádi, kádr.
+    expect(davka.filter((d) => /UPDATE players/.test(d.sql))).toHaveLength(4);
+    const log = davka.find((d) => /INSERT INTO coach_relation_log/.test(d.sql));
+    expect(log?.params).toContain("Křivě jsi ho obvinil z incidentu v klubu");
     expect(sendPlayerSMS).toHaveBeenCalledTimes(1);
     expect(vi.mocked(sendPlayerSMS).mock.calls[0][4]).toEqual({ type: "incident", incidentId: "inc-1" });
   });

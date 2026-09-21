@@ -6,11 +6,15 @@ import Link from "next/link";
 import { apiFetch, showError, type ManagerProfile, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { SectionLabel, Spinner, BadgePreview } from "@/components/ui";
+import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, type TabItem } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
+import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
 import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
 import { isLightColor } from "@/lib/team-color";
+
+type CoachTab = "prehled" | "kabina" | "treneri" | "historie";
+const TAB_KEYS: CoachTab[] = ["prehled", "kabina", "treneri", "historie"];
 
 const BACKSTORY_LABELS: Record<string, string> = {
   byvaly_hrac: "Bývalý hráč",
@@ -43,7 +47,11 @@ export default function ManagerDetailPage() {
 
   // Vlastnik muze editovat jen svuj profil (managerId == jeho teamId) a jen u non-AI manazeru
   const canEdit = !!manager && manager.userId !== "ai" && teamId === managerId;
+  const isOwn = !!teamId && teamId === managerId;
   const [attrHistory, setAttrHistory] = useState<AttrHistoryItem[]>([]);
+  const [tabParam, setTab] = useTabParam(TAB_KEYS);
+  // Kabina je jen na vlastním profilu — cizí odkaz s ?tab=kabina spadne na přehled.
+  const tab: CoachTab = tabParam === "kabina" && !isOwn ? "prehled" : tabParam;
 
   useEffect(() => {
     if (!teamId) return;
@@ -158,7 +166,20 @@ export default function ManagerDetailPage() {
 
       <div className="page-container space-y-5">
 
-        {/* ═══ Attributes + Bio ═══ */}
+        <Tabs
+          items={[
+            { key: "prehled", label: "Přehled" },
+            ...(isOwn ? [{ key: "kabina" as const, label: "Kabina" }] : []),
+            { key: "treneri", label: "Trenéři" },
+            { key: "historie", label: "Historie" },
+          ] satisfies TabItem<CoachTab>[]}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Profil trenéra"
+        />
+
+        {/* ═══ Přehled: vlastnosti, informace, bio ═══ */}
+        {tab === "prehled" && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-5">
 
           {/* Attributes */}
@@ -208,16 +229,22 @@ export default function ManagerDetailPage() {
             )}
           </div>
         </div>
+        )}
 
-        {/* Vztahy mezi manažery — cizí profil: karta vztahu, vlastní: přehled */}
-        {teamId && managerId !== teamId && (
+        {/* ═══ Kabina: vztah vlastních hráčů k trenérovi ═══ */}
+        {tab === "kabina" && isOwn && teamId && <CoachKabinaTab teamId={teamId} />}
+
+        {/* ═══ Trenéři — cizí profil: karta vztahu, vlastní: přehled ve skupinách ═══ */}
+        {tab === "treneri" && teamId && !isOwn && (
           <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={manager.name} />
         )}
-        {teamId && managerId === teamId && (
-          <RelationsOverview teamId={teamId} />
-        )}
+        {tab === "treneri" && isOwn && teamId && <RelationsOverview teamId={teamId} />}
 
-        {attrHistory.length > 0 && (
+        {/* ═══ Historie: odkud se vzaly vlastnosti + úspěchy ═══ */}
+        {tab === "historie" && attrHistory.length === 0 && !(achievements && achievements.achievements.length > 0) && (
+          <div className="card p-4 text-sm text-muted">Zatím tu nic není.</div>
+        )}
+        {tab === "historie" && attrHistory.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Odkud se vzaly vlastnosti</SectionLabel>
             <div className="space-y-1">
@@ -249,7 +276,7 @@ export default function ManagerDetailPage() {
           </div>
         )}
 
-        {achievements && achievements.achievements.length > 0 && (
+        {tab === "historie" && achievements && achievements.achievements.length > 0 && (
           <AchievementsSection data={achievements} />
         )}
       </div>

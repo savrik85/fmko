@@ -132,6 +132,11 @@ export async function executeDailyTick(
     "DELETE FROM condition_log WHERE created_at < datetime('now', '-60 days')",
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "condition_log retention", e));
 
+  // Retention coach_relation_log — Kabina ukazuje posledních pár desítek změn, půl roku stačí.
+  await env.DB.prepare(
+    "DELETE FROM coach_relation_log WHERE created_at < datetime('now', '-180 days')",
+  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "coach_relation_log retention", e));
+
   // ── Týdenní cyklus obce: vyprší staré brigády a v pondělí se generují nové ──
   try {
     const {

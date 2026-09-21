@@ -11,9 +11,19 @@ import { usePotencial, PotentialBox, PotentialBadge } from "@/components/players
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
-import { attributeImportance, type AttrImportance } from "@okresni-masina/shared";
+import { attributeImportance, coachRelationBand, type AttrImportance } from "@okresni-masina/shared";
+import { formatLogDate } from "@/components/manager/CoachKabinaTab";
+
 import type { BadgePattern } from "@/components/ui";
 import { isLightColor } from "@/lib/team-color";
+
+interface CoachRelationLogItem {
+  delta: number;
+  newValue: number;
+  source: string;
+  description: string;
+  date: string;
+}
 
 /* ── Helpers ── */
 
@@ -116,6 +126,7 @@ export default function PlayerDetailPage() {
   const [isWatched, setIsWatched] = useState(false);
   const [watchLoading, setWatchLoading] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const [coachLog, setCoachLog] = useState<CoachRelationLogItem[]>([]);
   const [profileExtras, setProfileExtras] = useState<{
     personality: Record<string, number>;
     relationships: Array<{ relatedPlayerId: string; relatedPlayerName: string; relatedPlayerPosition: string; type: string; typeLabel: string; strength: number; effect: string }>;
@@ -212,8 +223,12 @@ export default function PlayerDetailPage() {
 
         // Profile extras (personality + relationships) — only for own players
         if (!isForeign) {
-          const extras = await apiFetch<typeof profileExtras>(`/api/teams/${teamId}/players/${playerId}/profile-extras`).catch((e) => { console.error("profile-extras fetch:", e); return null; });
+          const [extras, relLog] = await Promise.all([
+            apiFetch<typeof profileExtras>(`/api/teams/${teamId}/players/${playerId}/profile-extras`).catch((e) => { console.error("profile-extras fetch:", e); return null; }),
+            apiFetch<{ items: CoachRelationLogItem[] }>(`/api/teams/${teamId}/coach/relation-log?playerId=${playerId}`).catch((e) => { console.error("coach relation log fetch:", e); return null; }),
+          ]);
           if (extras) setProfileExtras(extras);
+          setCoachLog(relLog?.items ?? []);
         }
         setLoading(false);
       })
@@ -1029,22 +1044,37 @@ export default function PlayerDetailPage() {
       {/* ═══ Vztah s trenérem ═══ */}
       {isOwnPlayer && (() => {
         const rel = player.coach_relationship ?? 50;
-        const label = rel >= 81 ? "Idol" : rel >= 61 ? "Loajální" : rel >= 41 ? "Neutrální" : rel >= 21 ? "Skeptický" : "Nepřátelský";
-        const tone = rel >= 61 ? "bg-pitch-500" : rel >= 41 ? "bg-amber-400" : "bg-red-500";
-        const labelColor = rel >= 61 ? "text-pitch-700" : rel >= 41 ? "text-amber-700" : "text-red-700";
+        const band = coachRelationBand(rel);
+        const tone = band.tone === "good" ? "bg-pitch-500" : band.tone === "neutral" ? "bg-amber-400" : "bg-red-500";
+        const labelColor = band.tone === "good" ? "text-pitch-700" : band.tone === "neutral" ? "text-amber-700" : "text-red-700";
         return (
           <div className="card p-4 sm:p-5 mb-5">
             <SectionLabel>Vztah s trenérem</SectionLabel>
             <div className="flex items-end justify-between mt-2 mb-1.5">
-              <span className={`text-base font-heading font-bold ${labelColor}`}>{label}</span>
+              <span className={`text-base font-heading font-bold ${labelColor}`}>{band.icon} {band.label}</span>
               <span className="text-sm font-heading font-bold text-ink tabular-nums">{rel}/100</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div className={`h-full ${tone} transition-all`} style={{ width: `${rel}%` }} />
             </div>
-            <p className="text-xs text-muted mt-2 leading-snug">
-              Vztah se buduje skrze rozhovory a herní rozhodnutí. Když hráč napíše a ty odpovíš empaticky, vztah roste; ignorace ho srazí.
-            </p>
+            {coachLog.length > 0 ? (
+              <div className="mt-3">
+                <div className="text-sm font-heading font-bold text-muted mb-1">Proč</div>
+                {coachLog.slice(0, 5).map((l, i) => (
+                  <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0 text-sm">
+                    <span className={`shrink-0 w-9 font-heading font-bold tabular-nums ${l.delta > 0 ? "text-pitch-600" : "text-card-red"}`}>
+                      {l.delta > 0 ? "+" : ""}{l.delta}
+                    </span>
+                    <span className="flex-1 text-ink-light">{l.description}</span>
+                    <span className="shrink-0 text-muted tabular-nums">{formatLogDate(l.date)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted mt-2 leading-snug">
+                Vztah se buduje skrze rozhovory a herní rozhodnutí. Když hráč napíše a ty odpovíš empaticky, vztah roste; ignorace ho srazí.
+              </p>
+            )}
           </div>
         );
       })()}

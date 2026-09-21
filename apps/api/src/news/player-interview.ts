@@ -12,6 +12,7 @@
 
 import { calculateStandings } from "../stats/standings";
 import { logger } from "../lib/logger";
+import { applyCoachRelationDelta } from "../lib/coach-relation";
 
 type Mood = "boost" | "rivalry" | "kabina_drama" | "klid";
 const MOODS: Mood[] = ["boost", "rivalry", "kabina_drama", "klid"];
@@ -449,10 +450,12 @@ Odpověz POUZE valid JSON:
       // Rýpl do trenéra → klesne vztah hráče k trenérovi
       const reason = (parsed.moodReason ?? "").toLowerCase();
       if (reason.includes("trenér") || reason.includes("kouč") || reason.includes("trener")) {
-        await db
-          .prepare("UPDATE players SET coach_relationship = MAX(0, MIN(100, coach_relationship - 5)) WHERE id = ?")
-          .bind(player.id)
-          .run();
+        await applyCoachRelationDelta(db, {
+          playerId: player.id,
+          delta: -5,
+          source: "interview",
+          description: "Rýpl si do tebe v rozhovoru pro Zpravodaj",
+        });
       }
       effectNote = "Rozruch v kabině (−morálka)";
     }

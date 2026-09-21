@@ -74,7 +74,7 @@ export async function zalozSituaci(env: Bindings, stav: StavKlubu, navrh: NavrhI
   const hrac = await nactiHrace(db, stav.teamId, subjectId);
 
   const davka: D1PreparedStatement[] = [];
-  if (def.moralka !== 0) davka.push(posunHrace(db, stav.teamId, subjectId, { morale: def.moralka }));
+  if (def.moralka !== 0) davka.push(...posunHrace(db, stav.teamId, subjectId, { morale: def.moralka }));
   if (def.absence) {
     // Ohlášeno aspoň dva dny dopředu, ať SMS den předem i simulace vidí totéž (spec 17a).
     const za = Math.max(MIN_OHLASENI_ABSENCE_DNI, def.absence.dni(rng));
@@ -230,7 +230,7 @@ export async function propadleZalohy(env: Bindings, t: { teamId: string; gameDat
     if ((zapsano?.meta?.changes ?? 0) === 0) continue;
     propadlo++;
     if (!r.subject_player_id) continue;
-    await db.batch([posunHrace(db, t.teamId, r.subject_player_id, { morale: ODMITNUTA_ZALOHA_MORALKA, vztah: ODMITNUTA_ZALOHA_VZTAH })])
+    await db.batch(posunHrace(db, t.teamId, r.subject_player_id, { morale: ODMITNUTA_ZALOHA_MORALKA, vztah: ODMITNUTA_ZALOHA_VZTAH, description: "Nedostal zálohu na mzdu" }))
       .catch((e) => logger.warn({ module: M }, `dopad propadlé zálohy ${r.id}`, e));
     const hrac = await nactiHrace(db, t.teamId, r.subject_player_id);
     if (hrac) {
@@ -290,9 +290,9 @@ export async function rozhodniZalohu(
       .catch((e) => { logger.error({ module: M }, `výplata zálohy ${incidentId}`, e); return false; });
     if (!vyplaceno) return await vratNarokNaZalohu(db, teamId, incidentId);
   }
-  await db.batch([posunHrace(db, teamId, inc.subject_player_id, akce === "pujcit"
-    ? { morale: ZALOHA_MORALKA, vztah: ZALOHA_VZTAH }
-    : { morale: ODMITNUTA_ZALOHA_MORALKA, vztah: ODMITNUTA_ZALOHA_VZTAH })])
+  await db.batch(posunHrace(db, teamId, inc.subject_player_id, akce === "pujcit"
+    ? { morale: ZALOHA_MORALKA, vztah: ZALOHA_VZTAH, description: "Půjčil jsi mu zálohu na mzdu" }
+    : { morale: ODMITNUTA_ZALOHA_MORALKA, vztah: ODMITNUTA_ZALOHA_VZTAH, description: "Nedostal zálohu na mzdu" }))
     .catch((e) => logger.warn({ module: M }, `dopad zálohy ${incidentId}`, e));
   if (hrac) {
     await sendPlayerSMS(db, teamId, ref(hrac), text(rng, akce === "pujcit" ? "zaloha_pujcena" : "zaloha_odmitnuta"), smsIncidentu(incidentId))
