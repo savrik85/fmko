@@ -16,9 +16,14 @@
  *
  * Naměřeno: 1,842 doma / 1,590 venku / 3,432 celkem, rozptyl 4,752.
  *
- * Když se změní engine (OPEN_PLAY_GOAL_SCALE, taktiky, rozhodčí), model se
- * rozejde s realitou a marže kanceláře tiše zmizí — spadnou na to kalibrační
- * testy v odds-model.test.ts. Ty jsou tam přesně proto.
+ * Tahle čísla určují TVAR modelu (domácí výhodu, vliv síly, rozptyl), ne to,
+ * kolik gólů v soutěži padá. Úroveň gólů se měří za běhu z posledních kol
+ * každé soutěže zvlášť, viz goalLevel. Pevná úroveň z testovací databáze
+ * stála kancelář do září 2026 přes 600 tisíc: produkce měla 4,9 gólu na zápas
+ * (Prachatice 6,3, Budějovice 3,4) a model pořád tvrdil 3,4.
+ *
+ * Jestli model sedí na skutečnost, hlídá betting/calibration.ts nad
+ * odehranými zápasy. Unit testy to z principu nepoznají.
  */
 
 // ── Očekávané góly ──────────────────────────────────────────────────────────
@@ -81,8 +86,12 @@ export const STRENGTH_CAP = 10;
  */
 export const DISPERSION_C = 2.6;
 
-/** Nejvyšší počet gólů, se kterým se počítá. Data přes 12 nesahají. */
-export const MAX_GOALS = 12;
+/**
+ * Nejvyšší počet gólů, se kterým se počítá. Na produkci padlo i 17 gólů
+ * v zápase a v soutěži se šesti góly na zápas by useknutí na dvanácti
+ * ukrajovalo z pravděpodobnosti vysokých linií.
+ */
+export const MAX_GOALS = 20;
 
 export interface TeamInput {
   /**
@@ -105,14 +114,72 @@ export interface Lambdas {
   away: number;
 }
 
-/** Očekávané góly obou týmů. */
-export function expectedGoals(home: TeamInput, away: TeamInput): Lambdas {
+/**
+ * Očekávané góly obou týmů.
+ *
+ * `level` je úroveň gólů soutěže z goalLevel: 1 = referenční data, na kterých
+ * jsou nafitované báze, 1,8 = soutěž, kde padá o 80 % gólů víc.
+ */
+export function expectedGoals(home: TeamInput, away: TeamInput, level = 1): Lambdas {
   const raw = (home.strength + home.form) - (away.strength + away.form);
   const d = clamp(STRENGTH_SHRINK * raw, -STRENGTH_CAP, STRENGTH_CAP);
   return {
-    home: BASE_HOME_GOALS * Math.exp(STRENGTH_K * d),
-    away: BASE_AWAY_GOALS * Math.exp(-STRENGTH_K * d),
+    home: level * BASE_HOME_GOALS * Math.exp(STRENGTH_K * d),
+    away: level * BASE_AWAY_GOALS * Math.exp(-STRENGTH_K * d),
   };
+}
+
+// ── Úroveň gólů soutěže ─────────────────────────────────────────────────────
+
+/**
+ * Za kolik kol klesne váha zápasu na polovinu.
+ *
+ * Krátký poločas je schválně. Hráči během sezóny sílí a gólů přibývá
+ * (Prachatice: 4,2 v červnu, 6,3 v září), takže starší kola úroveň
+ * podstřelují. Zpětný test na produkci: se dvěma koly vychází trh na počet
+ * gólů ve všech soutěžích na návratnost do 1,05, se třemi v Prachaticích 1,11.
+ */
+export const LEVEL_HALF_LIFE_ROUNDS = 2;
+
+/** Kolik posledních odehraných kol soutěže se do úrovně počítá. */
+export const LEVEL_WINDOW_ROUNDS = 6;
+
+/** Mantinely úrovně. Chrání před nesmyslem po jednom ujetém kole. */
+export const LEVEL_MIN = 0.5;
+export const LEVEL_MAX = 2.5;
+
+export interface LevelSample {
+  /** Góly, které v zápase skutečně padly. */
+  goals: number;
+  /** Góly, které by zápasu dal model při úrovni 1, podle síly obou týmů. */
+  expected: number;
+  /** Kolik kol zpátky se hrálo. 0 = poslední odehrané kolo. */
+  roundsAgo: number;
+}
+
+/**
+ * Úroveň gólů soutěže: kolikrát víc gólů padá, než kolik by dal model
+ * s referenčními bázemi.
+ *
+ * Porovnává se se zápasy, které se SKUTEČNĚ hrály, ne s průměrem. V Praze
+ * se potkávají kádry s top-11 od 27 do 63 a nevyrovnané zápasy mají gólů
+ * víc (viz BASE_HOME_GOALS). Prostý průměr by tu úroveň nafoukl a sázka
+ * na „míň gólů" by začala vydělávat.
+ *
+ * Žádné přitahování k referenční úrovni. Zpětný test ukázal, že by v silných
+ * soutěžích úroveň soustavně podstřelovalo, tedy právě tím směrem, ze kterého
+ * sázející těží.
+ */
+export function goalLevel(samples: LevelSample[]): number {
+  let skutecne = 0;
+  let cekane = 0;
+  for (const s of samples) {
+    const w = Math.pow(0.5, s.roundsAgo / LEVEL_HALF_LIFE_ROUNDS);
+    skutecne += w * s.goals;
+    cekane += w * s.expected;
+  }
+  if (cekane <= 0) return 1;
+  return clamp(skutecne / cekane, LEVEL_MIN, LEVEL_MAX);
 }
 
 /**
@@ -211,19 +278,35 @@ export function totalsProbabilities(l: Lambdas, line: number): { over: number; u
 /**
  * Poziční priorita podílu na gólech týmu.
  *
- * Váhy vycházejí z pickAttacker v engine/simulation.ts, jen obránci mají 0,45
- * místo 0,3: v datech dávají 14 % gólů, ne 9 %, protože exekutoři standardek
- * a penalt jsou často stopeři.
+ * Vychází z pickAttacker v engine/simulation.ts, ale engine dává góly i ze
+ * standardek, hlavičkami a z penalt, takže váhy jsou přefitované na produkci
+ * (3 380 startů hráčů v poli, září 2026). Útočník má 3, ne 4 jako v enginu:
+ * se čtyřkou model útočníky přeceňoval. Obránci zůstávají na 0,45, nižší
+ * váha zhoršovala shodu s daty.
  */
 export const POS_WEIGHT: Record<string, number> = {
-  FWD: 4.0,
+  FWD: 3.0,
   MID: 1.0,
   DEF: 0.45,
   GK: 0,
 };
 
-/** Kolik „virtuálních gólů" váží poziční priorita, než ji přebijí skutečné. */
-export const SHARE_PRIOR_K = 8;
+/**
+ * Kolik startů váží očekávání z pozice a kvality, než ho přebijí skutečné góly.
+ *
+ * Hodně, a schválně. Vypisuje se šest nejpravděpodobnějších střelců týmu, takže
+ * na lístek se dostanou hlavně hráči, kterým to dosud padalo víc, než odpovídá
+ * jejich kvalitě. Při slabém tlumení (dřív 8 gólů) model věřil šťastné sérii
+ * a obránce s pár góly nabízel jako útočníka. Zpětný test: 20 až 80 startů
+ * dává prakticky stejnou shodu, 30 je uprostřed.
+ */
+export const SHARE_PRIOR_APPS = 30;
+
+/** Hráčů v poli na hřišti. Mezi ně se góly týmu dělí, ne mezi celý kádr. */
+export const OUTFIELD_PLAYERS = 10;
+
+/** Strop podílu jednoho hráče. Chrání před hráčem s jedním gólem v jednom zápase. */
+export const MAX_SHARE = 0.9;
 
 /**
  * Jak silně kvalita hráče ovlivňuje jeho podíl na gólech.
@@ -242,35 +325,59 @@ export interface ScorerInput {
   position: string;
   /** Góly hráče v probíhající sezóně. */
   goals: number;
+  /** Zápasy, ve kterých v sezóně nastoupil, včetně střídání. */
+  appearances: number;
   /** overall_rating. Rozlišuje hráče, dokud sezónní góly nemají co říct. */
   rating: number;
 }
 
 /**
- * Podíl každého hráče na gólech svého týmu.
+ * Podíl hráče na gólech týmu V ZÁPASE, VE KTERÉM NASTOUPÍ.
  *
- * Dirichletova aposteriorní směs: na začátku sezóny rozhoduje poziční priorita,
- * po zhruba dvaceti gólech převáží skutečnost. Exekutor penalt se tak nacení
- * sám, bez zvláštní větve v kódu.
+ * Tip na střelce, který nenastoupí, se anuluje (grade.ts), takže kurz musí
+ * odpovídat hráči na hřišti. Dřívější verze dělila góly mezi čtrnáct hráčů
+ * kádru a brala góly z celé sezóny včetně zápasů, které hráč proseděl. Tím
+ * podíl ředila a útočníci vycházeli o třetinu levněji, než měli.
+ *
+ * Proto dvě změny:
+ *  - očekávání z pozice a kvality se dělí jen mezi deset nejlepších hráčů
+ *    v poli, tedy mezi ty, kdo reálně hrají;
+ *  - skutečnost se měří na zápas: góly hráče na start, vztažené ke gólům
+ *    týmu na zápas.
+ * Obojí se mísí váženě, očekávání má váhu SHARE_PRIOR_APPS startů.
+ *
+ * Podíly se nesčítají na 1. Každý je podmíněný tím, že hráč hraje, a všichni
+ * najednou na hřišti nejsou.
  */
-export function scorerShares(players: ScorerInput[], teamGoals: number): Map<string, number> {
-  // Průměrný rating kádru je vztažná hodnota — dělá váhu nezávislou na tom,
+export function scorerShares(players: ScorerInput[], teamGoalsPerMatch: number): Map<string, number> {
+  const out = new Map<string, number>();
+  if (players.length === 0) return out;
+
+  // Průměrný rating kádru je vztažná hodnota: dělá váhu nezávislou na tom,
   // jestli je to okresní soutěž nebo krajský přebor.
   const ratings = players.map((p) => Math.max(1, p.rating || 30));
-  const prumer = ratings.reduce((a, b) => a + b, 0) / Math.max(1, ratings.length);
+  const prumer = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+  const weights = players.map((p, i) =>
+    (POS_WEIGHT[p.position] ?? POS_WEIGHT.MID) * Math.pow(ratings[i] / prumer, QUALITY_EXP));
 
-  const weights = players.map((p, i) => {
-    const pos = POS_WEIGHT[p.position] ?? POS_WEIGHT.MID;
-    return pos * Math.pow(ratings[i] / prumer, QUALITY_EXP);
-  });
-  const weightSum = weights.reduce((a, b) => a + b, 0);
-  const out = new Map<string, number>();
-  if (weightSum <= 0) return out;
+  // Kdo nejspíš hraje: nejlepší podle ratingu, stejně jako se sestavuje kádr.
+  const naHristi = players.map((_, i) => i)
+    .sort((a, b) => ratings[b] - ratings[a])
+    .slice(0, OUTFIELD_PLAYERS)
+    .reduce((acc, i) => acc + weights[i], 0);
+  if (naHristi <= 0) return out;
 
-  const denom = SHARE_PRIOR_K + Math.max(0, teamGoals);
   for (let i = 0; i < players.length; i++) {
-    const prior = SHARE_PRIOR_K * (weights[i] / weightSum);
-    out.set(players[i].playerId, (prior + Math.max(0, players[i].goals)) / denom);
+    const ocekavani = weights[i] / naHristi;
+    const p = players[i];
+    let podil = ocekavani;
+    if (teamGoalsPerMatch > 0) {
+      // Góly hráče převedené na „zápasy týmu": 3 góly v týmu, který dává
+      // 1,5 gólu na zápas, jsou dva zápasy celého týmového přídělu.
+      const skutecnost = Math.max(0, p.goals) / teamGoalsPerMatch;
+      podil = (SHARE_PRIOR_APPS * ocekavani + skutecnost) / (SHARE_PRIOR_APPS + Math.max(0, p.appearances));
+    }
+    out.set(p.playerId, Math.min(MAX_SHARE, podil));
   }
   return out;
 }

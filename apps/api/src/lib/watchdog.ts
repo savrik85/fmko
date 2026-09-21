@@ -127,6 +127,22 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
     problemy.push({ kod: "retry", popis: "Zprávy se musely doručovat opakovaně", hodnota: retry });
   }
 
+  // ── 6. Sázková kancelář prodělává ──
+  // Taky ticho: nic nespadne, jen se hráčům vyplácí víc, než vsadí. V září 2026
+  // to trvalo měsíc a stálo přes 600 tisíc, než si toho někdo všiml.
+  try {
+    const { overpricedMarkets } = await import("../betting/calibration");
+    for (const m of await overpricedMarkets(env.DB)) {
+      problemy.push({
+        kod: "kurzy",
+        popis: `Kurzy na trh „${m.label}" jsou podhodnocené, sázení se hráčům vyplácí`,
+        hodnota: `${m.meanReturn.toFixed(2).replace(".", ",")} Kč za korunu z ${m.n} tipů`,
+      });
+    }
+  } catch (e) {
+    logger.warn({ module: "watchdog" }, "kontrola kurzů selhala", e);
+  }
+
   return { ok: problemy.length === 0, problemy };
 }
 
