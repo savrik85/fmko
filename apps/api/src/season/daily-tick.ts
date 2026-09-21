@@ -3,6 +3,7 @@
  * Spouští trénink, recovery kondice, injury healing, pitch degradation, morale drift.
  */
 
+import { isSulking } from "../multiplayer/left-out";
 import { managerFansEffect } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
@@ -349,6 +350,7 @@ export async function executeDailyTick(
             clutch: personality.clutch ?? 50,
             isCelebrity: !!(row.is_celebrity as number), celebrityType: personality.celebrityType,
             transferUnrest: lifeContext.transferUnrest?.level ?? 0,
+            leftOutSulk: isSulking(lifeContext.leftOutSulk, effectiveDate.toISOString()),
           };
         });
 

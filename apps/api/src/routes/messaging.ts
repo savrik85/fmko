@@ -402,8 +402,46 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     }
   }
 
-  // Trenér napsal hráči sám od sebe — dosud zpráva zapadla bez reakce.
+  // Hráč trucuje, že nejel na zápas (multiplayer/left-out.ts): zpráva trenéra otevírá
+  // přemlouvání. Vlákno se zakládá až teď, ne už s jeho SMS — jinak by se při vypnuté AI
+  // po třech dnech „urazil", že mu trenér neodepsal, přestože odepsat nešlo.
+  let sulkThreadStarted = false;
   if (conv?.type === "player" && conv.ai_thread_active !== 1 && conv.participant_id) {
+    const sulkRow = await c.env.DB.prepare(
+      `SELECT json_extract(p.life_context, '$.leftOutSulk') AS sulk, t.game_date
+       FROM players p JOIN teams t ON t.id = p.team_id WHERE p.id = ? AND p.team_id = ?`,
+    ).bind(conv.participant_id, teamId).first<{ sulk: string | null; game_date: string | null }>()
+      .catch((e) => { logger.warn({ module: "messaging" }, "truc po nenominaci", e); return null; });
+    const { isSulking } = await import("../multiplayer/left-out");
+    const sulk = sulkRow?.sulk ? JSON.parse(sulkRow.sulk) : null;
+    if (sulk && isSulking(sulk, sulkRow?.game_date ?? now)) {
+      const opened = await c.env.DB.prepare(
+        `UPDATE conversations SET ai_thread_active = 1, ai_thread_last_at = ?, ai_thread_state = ?
+         WHERE id = ? AND ai_thread_active != 1`,
+      ).bind(now, JSON.stringify({
+        trigger: "left_out",
+        scenario_id: "left_out",
+        max_replies: 3,
+        current_replies: 0,
+        awaiting: "player",
+        initiated_at: now,
+        player_id: conv.participant_id,
+        resolution: null,
+      }), convId).run()
+        .catch((e) => { logger.warn({ module: "messaging" }, "otevření vlákna s trucujícím hráčem", e); return null; });
+      if (opened && (opened.meta?.changes ?? 0) > 0) {
+        sulkThreadStarted = true;
+        const { handleAiPlayerReply } = await import("../messaging/ai-player-spawn");
+        c.executionCtx.waitUntil(
+          handleAiPlayerReply(c.env.DB, c.env, convId)
+            .catch((e) => logger.error({ module: "messaging" }, "odpověď trucujícího hráče", e)),
+        );
+      }
+    }
+  }
+
+  // Trenér napsal hráči sám od sebe — dosud zpráva zapadla bez reakce.
+  if (!sulkThreadStarted && conv?.type === "player" && conv.ai_thread_active !== 1 && conv.participant_id) {
     const { startCoachThread } = await import("../messaging/coach-initiated");
     c.executionCtx.waitUntil(
       startCoachThread(c.env.DB, c.env, {
