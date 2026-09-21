@@ -1,10 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import { clientOnly } from "@/components/client-only";
 
-const FaceAvatar = dynamic(
+const FaceAvatar = clientOnly(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
-  { ssr: false, loading: () => <div style={{ width: 48, height: 58 }} className="bg-gray-100 rounded-soft animate-pulse" /> },
+  <div style={{ width: 48, height: 58 }} className="bg-gray-100 rounded-soft animate-pulse" />,
 );
 
 export interface OfferEvent {

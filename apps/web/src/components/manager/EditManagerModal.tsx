@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
+import { clientOnly } from "@/components/client-only";
 import { apiFetch, type ManagerProfile } from "@/lib/api";
 import { generateManagerFace } from "@/lib/manager-avatar";
 import { Button, Sheet, IconButton } from "@/components/ui";
 
-const FaceAvatar = dynamic(
+const FaceAvatar = clientOnly(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
-  { ssr: false, loading: () => <div style={{ width: 160, height: 192 }} className="bg-gray-100 rounded-soft animate-pulse" /> },
+  <div style={{ width: 160, height: 192 }} className="bg-gray-100 rounded-soft animate-pulse" />,
 );
 
 interface Props {
