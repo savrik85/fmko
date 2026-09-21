@@ -1,4 +1,4 @@
-import { MANAGER_FANS } from "@okresni-masina/shared";
+import { MANAGER_FANS, licenceCap, licenceLabel } from "@okresni-masina/shared";
 import { logger } from "./logger";
 
 /**
@@ -32,6 +32,8 @@ export type ManagerAttrSource =
   | "competition_office"
   // Rozhodnutí o incidentu v klubu (trest, odpuštění, křivé obvinění, udání).
   | "incident"
+  // Absolvovaný kurz trenérské školy (test na konci splněný).
+  | "course"
   | "admin";
 
 /** České názvy do popisků a UI. */
@@ -94,8 +96,8 @@ export async function applyManagerAttrDelta(
     }
   }
 
-  const row = await db.prepare(`SELECT ${attr} AS value FROM managers WHERE team_id = ? LIMIT 1`)
-    .bind(teamId).first<{ value: number }>()
+  const row = await db.prepare(`SELECT ${attr} AS value, licence_level FROM managers WHERE team_id = ? LIMIT 1`)
+    .bind(teamId).first<{ value: number; licence_level: number | null }>()
     .catch((e) => {
       logger.warn({ module: "manager-attrs" }, `load ${attr} for ${teamId}`, e);
       return null;
@@ -105,15 +107,26 @@ export async function applyManagerAttrDelta(
   }
 
   const oldValue = row.value;
-  const newValue = Math.max(min, Math.min(max, oldValue + rawDelta));
+  // Strop licence platí pro růst všech vlastností kromě reputace. Hodnotu, která už je
+  // nad stropem (trenér ji měl dřív, než licence vznikla), nesnižuje — jen nepustí výš.
+  const licence = row.licence_level ?? 0;
+  const cap = licenceCap(licence);
+  const growthMax = attr === "reputation" ? max : Math.min(max, Math.max(cap, oldValue));
+  const effectiveMax = rawDelta > 0 ? growthMax : max;
+  const newValue = Math.max(min, Math.min(effectiveMax, oldValue + rawDelta));
   const applied = newValue - oldValue;
+  const cappedByLicence = rawDelta > 0 && attr !== "reputation" && effectiveMax < max && newValue === effectiveMax
+    && oldValue + rawDelta > effectiveMax;
+  const logDescription = cappedByLicence
+    ? `${description} (strop licence ${licenceLabel(licence)}: ${cap})`
+    : description;
 
   // Změna sežraná stropem se loguje taky — jinak by hráč nechápal, proč se nic nestalo.
   if (applied === 0) {
     await db.prepare(
       `INSERT INTO manager_attr_log (team_id, attr, old_value, new_value, delta, raw_delta, source, description, reference_id, game_date)
        VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
-    ).bind(teamId, attr, oldValue, oldValue, rawDelta, source, description, referenceId, gameDate)
+    ).bind(teamId, attr, oldValue, oldValue, rawDelta, source, logDescription, referenceId, gameDate)
       .run()
       .catch((e) => logger.warn({ module: "manager-attrs" }, "log capped manager attr", e));
     return { applied: 0, oldValue, newValue: oldValue, skipped: "capped" };
@@ -124,10 +137,10 @@ export async function applyManagerAttrDelta(
       db.prepare(
         `INSERT INTO manager_attr_log (team_id, attr, old_value, new_value, delta, raw_delta, source, description, reference_id, game_date)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(teamId, attr, oldValue, newValue, applied, rawDelta, source, description, referenceId, gameDate),
+      ).bind(teamId, attr, oldValue, newValue, applied, rawDelta, source, logDescription, referenceId, gameDate),
       db.prepare(
         `UPDATE managers SET ${attr} = MAX(?, MIN(?, ${attr} + ?)) WHERE team_id = ?`,
-      ).bind(min, max, applied, teamId),
+      ).bind(min, applied > 0 ? effectiveMax : max, applied, teamId),
     ]);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

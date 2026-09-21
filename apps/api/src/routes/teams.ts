@@ -25,7 +25,7 @@ import { generateManagerAttributes } from "../generators/manager-generator";
 import { initTeamConversations } from "./messaging";
 import { generateResidence } from "../generators/residence";
 import { getDistrictDataFromDB } from "../data/districts";
-import type { ManagerBackstory } from "@okresni-masina/shared";
+import { deriveLicenceLevel, type ManagerBackstory } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { updateSessionTeamId } from "../auth/session";
 
@@ -409,13 +409,14 @@ teamsRouter.post("/", async (c) => {
     ).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "delete previous manager", e));
 
     const mgrAttrs = generateManagerAttributes(body.managerBackstory, rng);
+    // Licence podle vlastností z příběhu (bývalý hráč s koučinkem 65 má uznanou praxi na C).
     await c.env.DB.prepare(
-      "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace, licence_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(uuid(), userId, teamId, body.managerName, body.managerBackstory,
       JSON.stringify(body.managerAvatar ?? {}),
       mgrAttrs.age, mgrAttrs.coaching, mgrAttrs.motivation, mgrAttrs.tactics,
       mgrAttrs.youthDevelopment, mgrAttrs.discipline, mgrAttrs.reputation, mgrAttrs.bio,
-      mgrAttrs.birthplace,
+      mgrAttrs.birthplace, deriveLicenceLevel(mgrAttrs),
     ).run().catch((e) => logger.warn({ module: "teams" }, "insert manager profile", e));
   }
 
@@ -1194,6 +1195,9 @@ teamsRouter.get("/:id/manager", async (c) => {
     reputation: row.reputation ?? 30,
     bio: row.bio,
     birthplace: row.birthplace,
+    licenceLevel: row.licence_level ?? 0,
+    licenceSource: row.licence_source ?? "derived",
+    licenceObtainedAt: row.licence_obtained_at ?? null,
   });
 });
 

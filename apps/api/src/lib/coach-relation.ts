@@ -1,3 +1,4 @@
+import { newcomerCoachRelationship } from "@okresni-masina/shared";
 import { logger } from "./logger";
 
 /**
@@ -98,5 +99,54 @@ export async function applyCoachRelationDelta(
     }
     logger.error({ module: "coach-relation" }, `apply coach relation ${change.source} for ${change.playerId}`, e);
     return { applied: false, skipped: "error" };
+  }
+}
+
+/**
+ * Výchozí vztah hráče, který právě přišel do klubu. Dřív si hráč nesl číslo z minulého
+ * klubu, takže nový trenér zdědil cizí zášť i cizí oblibu. Teď začíná podle jména
+ * trenéra: licence a reputace (viz `newcomerCoachRelationship`).
+ *
+ * Hráč, který se do klubu vrací (konec hostování), dostane zpět poslední vztah, který
+ * tu k trenérovi měl — sloupec mezitím držel vztah k trenérovi hostitelského klubu.
+ * Nikdy nevyhazuje: je to doplněk přestupu, ne blokující krok.
+ */
+export async function initNewcomerCoachRelation(db: D1Database, teamId: string, playerId: string): Promise<void> {
+  try {
+    const known = await db.prepare(
+      "SELECT new_value FROM coach_relation_log WHERE player_id = ? AND team_id = ? ORDER BY id DESC LIMIT 1",
+    ).bind(playerId, teamId).first<{ new_value: number }>();
+    const current = await db.prepare("SELECT coach_relationship FROM players WHERE id = ?")
+      .bind(playerId).first<{ coach_relationship: number | null }>();
+    if (!current) return;
+
+    if (known) {
+      const back = known.new_value - (current.coach_relationship ?? 50);
+      if (back !== 0) {
+        await db.batch(coachRelationStmts(db, { playerId, delta: back, source: "arrival", description: "Návrat do klubu" }));
+      }
+      return;
+    }
+
+    const coach = await db.prepare(
+      `SELECT m.reputation, m.licence_level
+         FROM teams t
+         JOIN managers m ON m.team_id = COALESCE(t.parent_team_id, t.id)
+        WHERE t.id = ?`,
+    ).bind(teamId).first<{ reputation: number | null; licence_level: number | null }>();
+
+    const target = newcomerCoachRelationship({ reputation: coach?.reputation ?? 30, licence: coach?.licence_level ?? 0 });
+    const delta = target - (current.coach_relationship ?? 50);
+    if (delta === 0) {
+      // I bez změny čísla chceme řádek v logu: podle něj se pozná návrat z hostování.
+      await db.prepare(
+        `INSERT INTO coach_relation_log (player_id, team_id, old_value, new_value, delta, raw_delta, source, description)
+         VALUES (?, ?, ?, ?, 0, 0, 'arrival', 'Příchod do klubu')`,
+      ).bind(playerId, teamId, target, target).run();
+      return;
+    }
+    await db.batch(coachRelationStmts(db, { playerId, delta, source: "arrival", description: "Příchod do klubu" }));
+  } catch (e) {
+    logger.warn({ module: "coach-relation" }, `newcomer coach relation ${playerId} → ${teamId}`, e);
   }
 }

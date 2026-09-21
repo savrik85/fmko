@@ -5,7 +5,7 @@ import { DEFAULT_RULES, type CompetitionRules } from "./defaults";
 const rules = (over: Partial<CompetitionRules>): CompetitionRules =>
   ({ ...DEFAULT_RULES, ...over }) as CompetitionRules;
 
-const klub = (over: Partial<{ id: string; name: string; pitch: number | null; squad: number }> = {}) =>
+const klub = (over: Partial<{ id: string; name: string; pitch: number | null; squad: number; licence: number | null }> = {}) =>
   ({ id: "t1", name: "FK Test", pitch: 50, squad: 16, ...over });
 
 describe("kontrola pravidel soutěže", () => {
@@ -42,5 +42,15 @@ describe("kontrola pravidel soutěže", () => {
       rules({ min_pitch_condition: 30, squad_min: 14 }),
     );
     expect(hits).toHaveLength(2);
+  });
+
+  it("trenér pod odhlasovanou licencí je porušení, AI klub se nehlídá", () => {
+    const hits = findViolations([klub({ licence: 1 })], rules({ min_coach_licence: 2 }));
+    expect(hits).toHaveLength(1);
+    expect(hits[0].reason).toBe("Trenér bez požadované licence");
+    expect(hits[0].detail).toContain("UEFA B");
+    expect(findViolations([klub({ licence: 2 })], rules({ min_coach_licence: 2 }))).toEqual([]);
+    expect(findViolations([klub({ licence: null })], rules({ min_coach_licence: 4 }))).toEqual([]);
+    expect(findViolations([klub({ licence: 0 })], rules({}))).toEqual([]);
   });
 });

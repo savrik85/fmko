@@ -6,6 +6,7 @@
  * dosažitelné, každý návrh by padl na neusnášeníschopnost a samospráva by tiše umřela.
  */
 
+import { licenceLabel } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import {
   ACTIVITY_WINDOW_MEETINGS, BUDGET_KINDS, DEFAULT_RULES, MIN_QUORUM_VOTES,
@@ -171,6 +172,7 @@ export function formatRuleValue(kind: string, v: number): string {
     case "switch": return v ? "zavést" : "zrušit";
     case "pct": return `${v} %`;
     case "ratio": return v.toFixed(2);
+    case "licence": return v === 0 ? "nehlídá se" : licenceLabel(v);
     case "count": {
       if (v === 0) return "bez omezení";
       const [one, few, many] = spec.counted ?? ["", "", ""];

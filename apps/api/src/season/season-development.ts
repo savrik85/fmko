@@ -6,7 +6,7 @@
  * Vrací top zlepšené/zhoršené hráče + změny trenéra pro recap.
  */
 
-import { MANAGER_FANS } from "@okresni-masina/shared";
+import { LICENCE_LEVELS, MANAGER_FANS, MAX_LICENCE } from "@okresni-masina/shared";
 import { createRng } from "../generators/rng";
 import { getTeamPosition } from "../stats/standings";
 import { logger } from "../lib/logger";
@@ -145,6 +145,24 @@ export async function developSquadAndManager(
     manager = { name: mgr.name, age: newAge, deltas };
   }
 
+  await upgradeAiLicence(db, teamId);
+
   logger.info({ module: M }, `dev team=${teamId} improved=${improved.length} declined=${declined.length} mgr=${manager ? "y" : "n"}`);
   return { improved, declined, manager };
+}
+
+/**
+ * AI trenér na kurzy nechodí, licenci si „udělá" sám: po sezóně o stupeň výš,
+ * pokud má reputaci, jakou by lidský trenér potřeboval k přihlášce. Jinak by AI
+ * trenéři navždy trčeli pod stropem 60 a lidské kluby by je přerostly jen papíry.
+ */
+async function upgradeAiLicence(db: D1Database, teamId: string): Promise<void> {
+  const cases = LICENCE_LEVELS.slice(1).map((l) => `WHEN ${l.level - 1} THEN ${l.minReputation}`).join(" ");
+  await db.prepare(
+    `UPDATE managers
+        SET licence_level = licence_level + 1, licence_source = 'ai_upgrade'
+      WHERE team_id = ? AND user_id = 'ai' AND licence_level < ?
+        AND reputation >= CASE licence_level ${cases} ELSE 999 END`,
+  ).bind(teamId, MAX_LICENCE).run()
+    .catch((e) => logger.warn({ module: M }, `AI licence upgrade ${teamId}`, e));
 }

@@ -212,3 +212,79 @@ export function coachAttributeEffects(m: {
     },
   ];
 }
+
+// ── Licence ──
+
+export type LicenceLevel = 0 | 1 | 2 | 3 | 4;
+
+export interface LicenceDef {
+  level: LicenceLevel;
+  label: string;
+  short: string;
+  /** Strop vlastností trenéra (koučink, motivace, taktika, mládež, disciplína). */
+  cap: number;
+  /** Reputace trenéra potřebná k přihlášení na licenční kurz. */
+  minReputation: number;
+}
+
+export const LICENCE_LEVELS: readonly LicenceDef[] = [
+  { level: 0, label: "Bez licence", short: "bez", cap: 60, minReputation: 0 },
+  { level: 1, label: "Licence C", short: "C", cap: 70, minReputation: 0 },
+  { level: 2, label: "UEFA B", short: "B", cap: 80, minReputation: 35 },
+  { level: 3, label: "UEFA A", short: "A", cap: 90, minReputation: 50 },
+  { level: 4, label: "UEFA Pro", short: "Pro", cap: 99, minReputation: 65 },
+];
+
+export const MAX_LICENCE: LicenceLevel = 4;
+
+function licenceDef(level: number): LicenceDef {
+  return LICENCE_LEVELS[Math.max(0, Math.min(MAX_LICENCE, Math.round(level)))];
+}
+
+export function licenceLabel(level: number): string {
+  return licenceDef(level).label;
+}
+
+export function licenceCap(level: number): number {
+  return licenceDef(level).cap;
+}
+
+export function licenceMinReputation(level: number): number {
+  return licenceDef(level).minReputation;
+}
+
+/**
+ * Licence, která odpovídá dnešním vlastnostem: nejnižší, jejíž strop pokryje
+ * nejvyšší vlastnost. Takhle se licence přidělí stávajícím a nově založeným trenérům,
+ * aby žádnému strop nesebral body, které už má.
+ */
+export function deriveLicenceLevel(attrs: {
+  coaching: number;
+  motivation: number;
+  tactics: number;
+  youthDevelopment: number;
+  discipline: number;
+}): LicenceLevel {
+  const top = Math.max(attrs.coaching, attrs.motivation, attrs.tactics, attrs.youthDevelopment, attrs.discipline);
+  return (LICENCE_LEVELS.find((l) => top <= l.cap)?.level ?? MAX_LICENCE) as LicenceLevel;
+}
+
+/**
+ * Výchozí vztah nového hráče k trenérovi: licencovaný a známý trenér má respekt
+ * hned od první šatny. 40 bez licence = 50, UEFA Pro s reputací 75 = 65.
+ */
+export function newcomerCoachRelationship(coach: CoachStanding): number {
+  const licenceBonus = [0, 2, 4, 7, 10][licenceDef(coach.licence).level];
+  return 50 + licenceBonus + clamp(roundInt((coach.reputation - 40) / 5), -3, 5);
+}
+
+/**
+ * Jakou licenci trenéra chce zaměstnanec s danou primární vlastností (škála 1–20).
+ * Špičky nejdou dělat pod trenéra bez papírů.
+ */
+export function staffRequiredLicence(primaryAttr: number): LicenceLevel {
+  if (primaryAttr >= 18) return 3;
+  if (primaryAttr >= 16) return 2;
+  if (primaryAttr >= 13) return 1;
+  return 0;
+}

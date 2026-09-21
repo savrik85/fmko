@@ -35,6 +35,8 @@ export const DEFAULT_RULES = {
   min_pitch_condition: 0,
   squad_min: 0,
   squad_max: 0,
+  // Minimální licence trenéra (0–4). Nula = nehlídá se.
+  min_coach_licence: 0,
   // Sázková kancelář. Zákaz i odvod jsou nula, takže zapnutí samosprávy nikomu
   // sázení nezakáže ani nezdaní. U stropů neutrální hodnota neexistuje — jsou to
   // výchozí sazby, o kterých soutěž může hlasovat.
@@ -138,7 +140,7 @@ export const ROLE_SCOPE: Record<OfficialRole, {
 }> = {
   predseda: {
     gesce: "soutez",
-    agenda: "Pravidla soutěže, zákaz transferů mezi kluby stejného majitele, stav hřiště, velikost soupisky.",
+    agenda: "Pravidla soutěže, zákaz transferů mezi kluby stejného majitele, stav hřiště, velikost soupisky, licence trenérů.",
     powers: [
       "Při rovnosti hlasů rozhoduje jeho hlas.",
       "Zastupuje každou neobsazenou funkci a čerpá u ní vlastní počítadlo.",
@@ -219,7 +221,7 @@ export const GESCE_ROLE: Record<Exclude<Gesce, "zadna">, OfficialRole> = {
  * což nikdo nepochopil. Formulář i titulek návrhu se řídí výhradně jednotkou,
  * ne názvem typu.
  */
-export type ProposalUnit = "czk" | "pct" | "switch" | "ratio" | "count";
+export type ProposalUnit = "czk" | "pct" | "switch" | "ratio" | "count" | "licence";
 
 export interface ProposalSpec {
   /** Klíč do competition_rules, pokud návrh mění sazebník. */
@@ -267,6 +269,7 @@ export const PROPOSAL_KINDS: Record<string, ProposalSpec> = {
   min_pitch_condition: { rulesField: "min_pitch_condition", gesce: "soutez", label: "Minimální stav hřiště", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 100, unit: "count", counted: ["bod", "body", "bodů"], note: "Kdo pod tuhle hranici spadne, dostane pokutu za porušení pravidla. Nula znamená, že se stav hřiště nehlídá." },
   squad_min: { rulesField: "squad_min", gesce: "soutez", label: "Minimální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 18, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti klubům, které pustí kádr pod hranici únosnosti. Nula znamená bez omezení." },
   squad_max: { rulesField: "squad_max", gesce: "soutez", label: "Maximální počet hráčů na soupisce", majority: QUALIFIED_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "count", counted: ["hráč", "hráči", "hráčů"], note: "Proti hromadění hráčů na lavici. Nula znamená bez omezení." },
+  min_coach_licence: { rulesField: "min_coach_licence", gesce: "soutez", label: "Minimální licence trenéra", majority: QUALIFIED_MAJORITY, nextSeason: true, min: 0, max: 4, unit: "licence", note: "Klub, jehož trenér nemá aspoň tuhle licenci, dostane před každým zasedáním pokutu za porušení pravidla. Platí od příští sezóny, ať mají trenéři čas si licenci udělat. AI kluby se nehlídají." },
 
   cash_loan_max: { rulesField: "cash_loan_max", gesce: "hospodarska", label: "Strop půjčky od banky", majority: SIMPLE_MAJORITY, nextSeason: false, min: 5_000, max: 250_000, unit: "czk", note: "Nejvyšší částka, kterou si klub může půjčit na stránce Finance. Splácí se po zápasech do konce sezóny, jednou za sezónu. Běžících půjček se změna netýká." },
   cash_loan_interest_pct: { rulesField: "cash_loan_interest_pct", gesce: "hospodarska", label: "Úrok z půjčky od banky", majority: SIMPLE_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "pct", note: "Kolik klub vrátí navíc. Při patnácti procentech splatí ze 40 000 celkem 46 000 Kč. Sazba se zmrazí při podpisu, takže už běžící půjčky nezdraží." },

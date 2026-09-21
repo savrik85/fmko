@@ -12,7 +12,8 @@ import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
 import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
 import { isLightColor } from "@/lib/team-color";
-import { coachAttributeEffects } from "@okresni-masina/shared";
+import { coachAttributeEffects, licenceCap } from "@okresni-masina/shared";
+import { LicenceBadge } from "@/components/manager/LicenceBadge";
 
 type CoachTab = "prehled" | "kabina" | "treneri" | "historie";
 const TAB_KEYS: CoachTab[] = ["prehled", "kabina", "treneri", "historie"];
@@ -104,9 +105,12 @@ export default function ManagerDetailPage() {
             <h1 className={`font-heading font-extrabold ${txt} text-xl sm:text-2xl leading-tight truncate`}>
               {manager.name}
             </h1>
-            {manager.backstory && (
-              <div className={`${txtLabel} text-sm mt-0.5`}>{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</div>
-            )}
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {manager.backstory && (
+                <span className={`${txtLabel} text-sm`}>{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</span>
+              )}
+              <LicenceBadge level={manager.licenceLevel ?? 0} showNone={isOwn} />
+            </div>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               {manager.age && <span className={`${txtMuted} text-sm`}>{manager.age} let</span>}
               {manager.birthplace && (
@@ -196,7 +200,8 @@ export default function ManagerDetailPage() {
                 reputation: manager.reputation ?? 30,
               }).map((fx) => (
                 <AttrRow key={fx.key} label={fx.label} value={fx.value} lines={fx.lines}
-                  max={fx.key === "reputation" ? 75 : 99} />
+                  max={fx.key === "reputation" ? 75 : 99}
+                  cap={fx.key === "reputation" ? undefined : licenceCap(manager.licenceLevel ?? 0)} />
               ))}
             </div>
           </div>
@@ -390,16 +395,26 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function AttrRow({ label, value, lines, max = 99 }: { label: string; value: number; lines: string[]; max?: number }) {
+function AttrRow({ label, value, lines, max = 99, cap }: { label: string; value: number; lines: string[]; max?: number; cap?: number }) {
   const barColor = value >= 70 ? "#22c55e" : value >= 50 ? "#6b7280" : value >= 30 ? "#d97706" : "#ef4444";
+  // Strop licence: dál vlastnost neroste, dokud si trenér neudělá vyšší licenci.
+  const showCap = cap !== undefined && cap < max;
+  const atCap = showCap && value >= cap;
   return (
     <div className="py-3 border-b border-gray-50 last:border-b-0">
       <div className="flex items-center justify-between mb-1">
         <span className="text-base font-heading font-bold">{label}</span>
-        <span className={`text-base font-heading font-bold tabular-nums ${attrColor(value)}`}>{value}</span>
+        <span className={`text-base font-heading font-bold tabular-nums ${attrColor(value)}`}>
+          {value}
+          {atCap && <span className="text-sm text-muted font-normal"> · strop licence</span>}
+        </span>
       </div>
-      <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-1.5">
+      <div className="relative h-2 rounded-full bg-gray-100 overflow-hidden mb-1.5">
         <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: barColor }} />
+        {showCap && (
+          <div className="absolute top-0 bottom-0 w-0.5 bg-ink/60" style={{ left: `${(cap / max) * 100}%` }}
+            title={`Strop licence: ${cap}`} />
+        )}
       </div>
       <ul className="space-y-0.5">
         {lines.map((l) => (

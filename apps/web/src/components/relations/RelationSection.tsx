@@ -12,6 +12,7 @@ import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
 import { SectionLabel, Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { LicenceBadge } from "@/components/manager/LicenceBadge";
 
 interface RelationMoment {
   date: string;
@@ -61,6 +62,7 @@ interface RelationListItem {
   loyalAlly: boolean;
   group: "allies" | "rivals" | "others";
   managerAvatar: Record<string, unknown> | null;
+  licenceLevel?: number;
 }
 
 function LoyalAllyBadge() {
@@ -527,7 +529,10 @@ function PeerRow({ r }: { r: RelationListItem }) {
         <div className="shrink-0 w-9 h-9 rounded-lg bg-surface flex items-center justify-center font-heading font-bold text-sm">{r.managerName[0]}</div>
       )}
       <div className="flex-1 min-w-0">
-        <Link href={`/manazer/${r.teamId}`} className="entity-link text-base font-heading font-bold truncate block">{r.managerName}</Link>
+        <div className="flex items-center gap-2 min-w-0">
+          <Link href={`/manazer/${r.teamId}`} className="entity-link text-base font-heading font-bold truncate">{r.managerName}</Link>
+          <LicenceBadge level={r.licenceLevel ?? 0} />
+        </div>
         <Link href={`/tym/${r.teamId}`} className="text-sm text-muted hover:text-ink flex items-center gap-1.5 min-w-0">
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.primaryColor ?? "#999" }} />
           <span className="truncate">{r.teamName}{r.archetypeLabel ? ` · ${r.archetypeLabel}` : ""}</span>

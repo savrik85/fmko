@@ -165,13 +165,16 @@ export async function loadCoachStandings(db: D1Database, teamIds: string[]): Pro
   const ids = teamIds.filter(Boolean);
   if (ids.length === 0) return new Map();
   const rows = await db.prepare(
-    `SELECT t.id AS team_id, m.reputation
+    `SELECT t.id AS team_id, m.reputation, m.licence_level
        FROM teams t
        JOIN managers m ON m.team_id = COALESCE(t.parent_team_id, t.id)
       WHERE t.id IN (${ids.map(() => "?").join(",")})`,
-  ).bind(...ids).all<{ team_id: string; reputation: number }>()
-    .catch((e) => { logger.warn({ module: "player-interest" }, "load coach standings", e); return { results: [] as Array<{ team_id: string; reputation: number }> }; });
-  return new Map(rows.results.map((r) => [r.team_id, { reputation: r.reputation ?? 30, licence: 0 }]));
+  ).bind(...ids).all<{ team_id: string; reputation: number; licence_level: number | null }>()
+    .catch((e) => {
+      logger.warn({ module: "player-interest" }, "load coach standings", e);
+      return { results: [] as Array<{ team_id: string; reputation: number; licence_level: number | null }> };
+    });
+  return new Map(rows.results.map((r) => [r.team_id, { reputation: r.reputation ?? 30, licence: r.licence_level ?? 0 }]));
 }
 
 /** Pohodlný wrapper: načti vstupy + spočítej. Vrací null, když hráč neexistuje. */

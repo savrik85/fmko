@@ -228,6 +228,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT t.id as other_team_id, t.name as team_name, t.primary_color,
             m.name as manager_name, m.user_id as manager_user_id, m.avatar as manager_avatar,
+            m.licence_level as manager_licence,
             r.respect, r.heat, r.history
      FROM teams t
      LEFT JOIN managers m ON m.team_id = t.id
@@ -237,6 +238,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
   ).bind(teamId, teamId, team.league_id, teamId).all<{
     other_team_id: string; team_name: string; primary_color: string | null;
     manager_name: string | null; manager_user_id: string | null; manager_avatar: string | null;
+    manager_licence: number | null;
     respect: number | null; heat: number | null; history: string | null;
   }>();
 
@@ -268,6 +270,7 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
       loyalAlly,
       group: relationGroup(respect, heat, loyalAlly),
       managerAvatar,
+      licenceLevel: r.manager_licence ?? 0,
     };
   }).sort((a, b) => (Math.abs(b.respect) + b.heat) - (Math.abs(a.respect) + a.heat));
 

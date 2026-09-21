@@ -21,6 +21,12 @@ import {
   coachTransferPull,
   coachSigningFactor,
   coachAttributeEffects,
+  LICENCE_LEVELS,
+  licenceLabel,
+  licenceCap,
+  deriveLicenceLevel,
+  newcomerCoachRelationship,
+  staffRequiredLicence,
 } from "./coach";
 
 describe("pásma vztahu k trenérovi", () => {
@@ -125,5 +131,32 @@ describe("popisky na profilu", () => {
     expect(fx[0].lines[0]).toBe("Šance na zlepšení v tréninku ×1,28");
     expect(fx[2].lines[0]).toBe("Přihrávky a obrana celé sestavy v zápase +1");
     expect(fx[3].lines[1]).toBe("Růst hráčů do 22 let z odehraných minut −5 %");
+  });
+});
+
+describe("licence", () => {
+  it("odvození z nejvyšší vlastnosti: nikomu strop nic nesebere", () => {
+    const base = { coaching: 40, motivation: 40, tactics: 40, youthDevelopment: 40, discipline: 40 };
+    expect(deriveLicenceLevel(base)).toBe(0);
+    expect(deriveLicenceLevel({ ...base, coaching: 60 })).toBe(0);
+    expect(deriveLicenceLevel({ ...base, coaching: 61 })).toBe(1);
+    expect(deriveLicenceLevel({ ...base, tactics: 75 })).toBe(2);
+    expect(deriveLicenceLevel({ ...base, discipline: 99 })).toBe(4);
+  });
+
+  it("stropy a štítky", () => {
+    expect(LICENCE_LEVELS.map((l) => l.cap)).toEqual([60, 70, 80, 90, 99]);
+    expect(licenceLabel(2)).toBe("UEFA B");
+    expect(licenceCap(7)).toBe(99);
+  });
+
+  it("nováček respektuje licencovaného trenéra víc", () => {
+    expect(newcomerCoachRelationship({ reputation: 40, licence: 0 })).toBe(50);
+    expect(newcomerCoachRelationship({ reputation: 75, licence: 4 })).toBe(65);
+    expect(newcomerCoachRelationship({ reputation: 15, licence: 0 })).toBe(47);
+  });
+
+  it("špičkoví zaměstnanci chtějí licenci", () => {
+    expect([10, 13, 16, 18, 20].map(staffRequiredLicence)).toEqual([0, 1, 2, 3, 3]);
   });
 });

@@ -13,6 +13,7 @@
  * zapnutou samosprávou a nedotčeným sazebníkem tedy nikomu nic nestrhne.
  */
 
+import { licenceLabel } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { issueSanction } from "./discipline";
 import type { CompetitionRules } from "./defaults";
@@ -32,6 +33,8 @@ interface TeamState {
   name: string;
   pitch: number | null;
   squad: number;
+  /** Licence trenéra. null = AI klub nebo klub bez trenéra, licence se u něj nehlídá. */
+  licence?: number | null;
 }
 
 /**
@@ -42,10 +45,12 @@ async function loadTeams(db: D1Database, leagueId: string): Promise<TeamState[]>
   const rows = await db.prepare(
     `SELECT t.id, t.name,
             (SELECT s.pitch_condition FROM stadiums s WHERE s.team_id = t.id) AS pitch,
-            (SELECT COUNT(*) FROM players p WHERE p.team_id = t.id) AS squad
+            (SELECT COUNT(*) FROM players p WHERE p.team_id = t.id) AS squad,
+            CASE WHEN t.user_id = 'ai' THEN NULL
+                 ELSE (SELECT m.licence_level FROM managers m WHERE m.team_id = t.id) END AS licence
        FROM teams t
       WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL`
-  ).bind(leagueId).all<{ id: string; name: string; pitch: number | null; squad: number }>()
+  ).bind(leagueId).all<{ id: string; name: string; pitch: number | null; squad: number; licence: number | null }>()
     .catch((e) => { logger.warn({ module: M }, `kluby soutěže ${leagueId}`, e); return { results: [] }; });
   return rows.results;
 }
@@ -78,6 +83,15 @@ export function findViolations(teams: TeamState[], rules: CompetitionRules): Com
         detail: `Na soupisce ${t.squad}, soutěž povoluje nejvýš ${rules.squad_max}.`,
       });
     }
+
+    const minLicence = rules.min_coach_licence ?? 0;
+    if (minLicence > 0 && t.licence != null && t.licence < minLicence) {
+      out.push({
+        teamId: t.id, teamName: t.name,
+        reason: "Trenér bez požadované licence",
+        detail: `Trenér má ${t.licence > 0 ? `licenci ${licenceLabel(t.licence)}` : "jen praxi bez licence"}, soutěž vyžaduje aspoň ${licenceLabel(minLicence)}.`,
+      });
+    }
   }
 
   return out;
@@ -92,7 +106,8 @@ export function findViolations(teams: TeamState[], rules: CompetitionRules): Com
 export async function collectCompliance(
   db: D1Database, leagueId: string, rules: CompetitionRules,
 ): Promise<ComplianceHit[]> {
-  const nicSeNehlida = rules.min_pitch_condition <= 0 && rules.squad_min <= 0 && rules.squad_max <= 0;
+  const nicSeNehlida = rules.min_pitch_condition <= 0 && rules.squad_min <= 0 && rules.squad_max <= 0
+    && (rules.min_coach_licence ?? 0) <= 0;
   if (nicSeNehlida) return [];
   return findViolations(await loadTeams(db, leagueId), rules);
 }

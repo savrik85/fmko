@@ -306,4 +306,7 @@ export interface ManagerProfile {
   reputation?: number;
   bio?: string;
   birthplace?: string;
+  licenceLevel?: number;
+  licenceSource?: "derived" | "course" | "ai_upgrade";
+  licenceObtainedAt?: string | null;
 }

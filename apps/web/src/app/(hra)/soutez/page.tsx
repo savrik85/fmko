@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch } from "@/lib/api";
 import { EntityLink, Modal, Spinner, Tabs, useTabParam } from "@/components/ui";
+import { LICENCE_LEVELS, licenceLabel } from "@okresni-masina/shared";
 import {
   Empty, GOLD, OpenProposalNote, Ornament, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
 } from "./ui";
@@ -82,6 +83,7 @@ function fmtValue(spec: ProposalKind | undefined, v: number): string {
     case "switch": return v ? "zavést" : "zrušit";
     case "pct": return `${v} %`;
     case "ratio": return v.toFixed(2);
+    case "licence": return v === 0 ? "nehlídá se" : licenceLabel(v);
     case "count": {
       if (v === 0) return "bez omezení";
       const [one, few, many] = spec.counted ?? ["", "", ""];
@@ -94,6 +96,7 @@ function fmtValue(spec: ProposalKind | undefined, v: number): string {
 
 /** Hodnota čísly a s jednotkou, bez sémantických náhrad za nulu. */
 function fmtMez(spec: ProposalKind, v: number): string {
+  if (spec.unit === "licence") return licenceLabel(v);
   const cislo = spec.unit === "ratio" ? v.toFixed(2) : String(v);
   const jednotka = spec.unit === "pct" ? " %"
     : spec.unit === "czk" ? " Kč"
@@ -797,7 +800,18 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
           <div>
             {spec.note && <p className="text-sm text-muted mb-2">{spec.note}</p>}
 
-            {spec.unit === "switch" ? (
+            {spec.unit === "licence" ? (
+              <>
+                <label className="text-sm text-muted">Nejnižší licence, kterou musí trenér mít</label>
+                <select className="select w-full mt-1" value={value} onChange={(e) => setValue(e.target.value)}>
+                  {LICENCE_LEVELS.map((l) => (
+                    <option key={l.level} value={String(l.level)}>
+                      {l.level === 0 ? "Nehlídat" : l.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : spec.unit === "switch" ? (
               <>
                 <label className="text-sm text-muted">Co se má stát</label>
                 <div className="grid grid-cols-2 gap-2 mt-1">

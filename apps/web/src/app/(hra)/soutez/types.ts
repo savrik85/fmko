@@ -8,11 +8,12 @@ export interface Rules {
   levy_transfer_pct: number; levy_cup_pct: number;
   fine_referee_abuse: number; fine_admin: number; fine_rule: number;
   min_pitch_condition: number; squad_min: number; squad_max: number;
+  min_coach_licence: number;
   ban_betting: number; levy_bet_pct: number;
   bet_max_stake: number; bet_max_payout: number;
 }
 
-export type ProposalUnit = "czk" | "pct" | "switch" | "ratio" | "count";
+export type ProposalUnit = "czk" | "pct" | "switch" | "ratio" | "count" | "licence";
 
 export interface ProposalKind {
   kind: string; label: string; gesce: string; majority: number;

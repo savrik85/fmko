@@ -56,6 +56,8 @@ export type {
   CoachStanding,
   CoachAttrKey,
   CoachAttributeEffect,
+  LicenceLevel,
+  LicenceDef,
 } from "./coach";
 export {
   coachRelationBand,
@@ -77,6 +79,14 @@ export {
   coachTransferPull,
   coachSigningFactor,
   coachAttributeEffects,
+  LICENCE_LEVELS,
+  MAX_LICENCE,
+  licenceLabel,
+  licenceCap,
+  licenceMinReputation,
+  deriveLicenceLevel,
+  newcomerCoachRelationship,
+  staffRequiredLicence,
 } from "./coach";
 export { rozdelTitulekOznameni, NOTIFIKACE_IKONY } from "./notifications";
 export type {
