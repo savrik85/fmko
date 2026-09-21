@@ -58,6 +58,10 @@ export type {
   CoachAttributeEffect,
   LicenceLevel,
   LicenceDef,
+  CourseKind,
+  CourseAttr,
+  CourseStatus,
+  ExamRules,
 } from "./coach";
 export {
   coachRelationBand,
@@ -87,6 +91,16 @@ export {
   deriveLicenceLevel,
   newcomerCoachRelationship,
   staffRequiredLicence,
+  COURSE_ATTRS,
+  COURSE_ATTR_LABELS,
+  COURSE_ATTR_TOPIC,
+  COURSE_RULES,
+  LICENCE_COURSES,
+  attrCoursePrice,
+  retakePrice,
+  examRulesFor,
+  coachAwayValue,
+  standInValue,
 } from "./coach";
 export { rozdelTitulekOznameni, NOTIFIKACE_IKONY } from "./notifications";
 export type {

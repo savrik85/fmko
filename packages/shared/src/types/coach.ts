@@ -145,6 +145,13 @@ const fmtNum = (v: number, digits = 2) => v.toFixed(digits).replace(".", ",");
 const fmtMul = (v: number) => `×${fmtNum(v)}`;
 const signed = (v: number) => (v > 0 ? `+${v}` : v < 0 ? `−${Math.abs(v)}` : "0");
 const pct = (v: number) => roundInt(v * 100);
+/** „+1 procentní bod", „−3 procentní body", „+7 procentních bodů", nula „beze změny". */
+const pp = (v: number) => {
+  if (v === 0) return "beze změny";
+  const n = Math.abs(v);
+  const unit = n === 1 ? "procentní bod" : n <= 4 ? "procentní body" : "procentních bodů";
+  return `${signed(v)} ${unit}`;
+};
 
 export function coachAttributeEffects(m: {
   coaching: number;
@@ -176,7 +183,7 @@ export function coachAttributeEffects(m: {
         soften >= 0
           ? `Zklamání hráčů, kteří nejedou na zápas, o ${soften} % menší`
           : `Zklamání hráčů, kteří nejedou na zápas, o ${-soften} % větší`,
-        `Šance, že nenominovaný začne trucovat, ${signed(sulk)} procentních bodů`,
+        `Šance, že nenominovaný začne trucovat: ${pp(sulk)}`,
         "Spolu s reputací a formou drží fanoušky",
       ],
     },
@@ -197,7 +204,7 @@ export function coachAttributeEffects(m: {
     {
       key: "discipline", label: "Disciplína", value: m.discipline,
       lines: [
-        `Docházka na trénink ${signed(pct(disciplineAttendanceMod(m.discipline)))} procentních bodů`,
+        `Docházka na trénink: ${pp(pct(disciplineAttendanceMod(m.discipline)))}`,
         `Fauly ${signed(foul)} %, žluté karty ${signed(card)} %`,
         `Průšvihy v hospodě ${signed(pub)} %`,
       ],
@@ -287,4 +294,83 @@ export function staffRequiredLicence(primaryAttr: number): LicenceLevel {
   if (primaryAttr >= 16) return 2;
   if (primaryAttr >= 13) return 1;
   return 0;
+}
+
+// ── Trenérská škola: kurzy ──
+// Jen pravidla a ceny. Skripta a otázky (se správnými odpověďmi) jsou výhradně na serveru.
+
+export type CourseKind = "attr_basic" | "attr_advanced" | "licence";
+export type CourseAttr = "coaching" | "motivation" | "tactics" | "youth_development" | "discipline";
+export type CourseStatus = "in_progress" | "exam_ready" | "retake_available" | "passed" | "failed";
+
+export const COURSE_ATTRS: readonly CourseAttr[] = ["coaching", "tactics", "motivation", "youth_development", "discipline"];
+
+export const COURSE_ATTR_LABELS: Record<CourseAttr, string> = {
+  coaching: "Koučink",
+  motivation: "Motivace",
+  tactics: "Taktika",
+  youth_development: "Práce s mládeží",
+  discipline: "Disciplína",
+};
+
+/** Čím se kurz vlastnosti zabývá — název skript na kartě kurzu. */
+export const COURSE_ATTR_TOPIC: Record<CourseAttr, string> = {
+  coaching: "Trénink a kondice",
+  motivation: "Legendy a kabina",
+  tactics: "Taktika a rozestavení",
+  youth_development: "Mládežnický fotbal",
+  discipline: "Fauly, karty a fair play",
+};
+
+export interface ExamRules {
+  questions: number;
+  passScore: number;
+  /** Časový limit testu v minutách. Běží na serveru, nejde zastavit. */
+  timeLimitMin: number;
+}
+
+export const COURSE_RULES = {
+  attr_basic: { points: 3, days: 7, minLicence: 0, exam: { questions: 8, passScore: 6, timeLimitMin: 10 } },
+  attr_advanced: { points: 5, days: 14, minLicence: 2, exam: { questions: 10, passScore: 8, timeLimitMin: 12 } },
+  licence: { exam: { questions: 15, passScore: 12, timeLimitMin: 20 } },
+  /** Opravný termín stojí tuhle část ceny kurzu. */
+  retakeShare: 0.2,
+  /** Kolik herních dní po konci kurzu je na test (a na opravný termín). */
+  examWindowDays: 7,
+  maxAttrCoursesPerSeason: 3,
+  maxLicenceCoursesPerSeason: 1,
+} as const;
+
+/** Cena a délka licenčních kurzů podle cílové licence. */
+export const LICENCE_COURSES: Record<1 | 2 | 3 | 4, { price: number; days: number }> = {
+  1: { price: 25_000, days: 10 },
+  2: { price: 60_000, days: 14 },
+  3: { price: 120_000, days: 21 },
+  4: { price: 250_000, days: 28 },
+};
+
+const round100 = (v: number) => Math.round(v / 100) * 100;
+
+/** Cena kurzu vlastnosti. Čím lepší trenér, tím dražší škola. */
+export function attrCoursePrice(kind: "attr_basic" | "attr_advanced", current: number): number {
+  return kind === "attr_basic" ? round100(10_000 + current * 200) : round100(30_000 + current * 500);
+}
+
+export function retakePrice(price: number): number {
+  return round100(price * COURSE_RULES.retakeShare);
+}
+
+export function examRulesFor(kind: CourseKind): ExamRules {
+  return COURSE_RULES[kind].exam;
+}
+
+/** Trenér chybí na tréninku: koučink a disciplína pro trénink klesnou k zástupci. */
+export function coachAwayValue(value: number, standIn: number): number {
+  return Math.min(value, Math.round(value * 0.5 + standIn * 0.5));
+}
+
+/** Kdo trénink vede místo trenéra: asistent podle efektivity (1–20), bez něj kdokoli z výboru (20). */
+export function standInValue(assistantEffectiveness: number | null): number {
+  if (assistantEffectiveness === null) return 20;
+  return clamp(20 + assistantEffectiveness * 2.5, 20, 70);
 }

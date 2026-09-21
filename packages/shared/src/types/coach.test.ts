@@ -27,6 +27,10 @@ import {
   deriveLicenceLevel,
   newcomerCoachRelationship,
   staffRequiredLicence,
+  attrCoursePrice,
+  retakePrice,
+  coachAwayValue,
+  standInValue,
 } from "./coach";
 
 describe("pásma vztahu k trenérovi", () => {
@@ -158,5 +162,31 @@ describe("licence", () => {
 
   it("špičkoví zaměstnanci chtějí licenci", () => {
     expect([10, 13, 16, 18, 20].map(staffRequiredLicence)).toEqual([0, 1, 2, 3, 3]);
+  });
+});
+
+describe("trenérská škola", () => {
+  it("ceny kurzů vlastností rostou s hodnotou a jsou na stovky", () => {
+    expect(attrCoursePrice("attr_basic", 40)).toBe(18_000);
+    expect(attrCoursePrice("attr_basic", 60)).toBe(22_000);
+    expect(attrCoursePrice("attr_advanced", 70)).toBe(65_000);
+    expect(retakePrice(18_000)).toBe(3_600);
+  });
+
+  it("trenér mimo trénink: bez asistenta hodně, s dobrým asistentem málo", () => {
+    expect(coachAwayValue(60, standInValue(null))).toBe(40);
+    expect(coachAwayValue(60, standInValue(20))).toBe(60);
+    expect(coachAwayValue(30, standInValue(20))).toBe(30);
+    expect(standInValue(8)).toBe(40);
+  });
+});
+
+describe("skloňování na profilu", () => {
+  it("procentní body a nula", () => {
+    const text = (d: number, m: number) => coachAttributeEffects({ coaching: 40, motivation: m, tactics: 40, youthDevelopment: 40, discipline: d, reputation: 40 });
+    expect(text(47, 40)[4].lines[0]).toBe("Docházka na trénink: +1 procentní bod");
+    expect(text(55, 40)[4].lines[0]).toBe("Docházka na trénink: +3 procentní body");
+    expect(text(99, 40)[4].lines[0]).toBe("Docházka na trénink: +10 procentních bodů");
+    expect(text(40, 40)[1].lines[2]).toBe("Šance, že nenominovaný začne trucovat: beze změny");
   });
 });

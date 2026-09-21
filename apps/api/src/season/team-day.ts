@@ -373,6 +373,15 @@ export async function processTeamDay(
       }
     }
 
+    // ── Trenérská škola: odpočet kurzu, konec kurzu → test, okno na test ──
+    // Jen lidské A-týmy: na kurzy chodí lidský trenér, AI si licenci dělá po sezóně sám.
+    if (team.user_id !== "ai" && (team.team_type ?? "senior") !== "u21") {
+      try {
+        const { tickCoachCourses } = await import("../coach/courses");
+        await tickCoachCourses(env.DB, teamId, env);
+      } catch (e) { logger.warn({ module: "daily-tick" }, `coach courses failed for team ${teamId}`, e); }
+    }
+
     // ── Klubová reputace: komunita a útlum (pondělí) ──
     // Rodáci v kádru a přízeň obce hýbou reputací obousměrně, útlum sráží kluby,
     // které měsíc nic nedokázaly. Bez záporné složky reputace jen roste — proto

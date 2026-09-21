@@ -10,13 +10,14 @@ import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, type TabItem } 
 import type { BadgePattern } from "@/components/ui";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
+import { CoachEducationTab } from "@/components/manager/CoachEducationTab";
 import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
 import { isLightColor } from "@/lib/team-color";
 import { coachAttributeEffects, licenceCap } from "@okresni-masina/shared";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
 
-type CoachTab = "prehled" | "kabina" | "treneri" | "historie";
-const TAB_KEYS: CoachTab[] = ["prehled", "kabina", "treneri", "historie"];
+type CoachTab = "prehled" | "kabina" | "treneri" | "vzdelani" | "historie";
+const TAB_KEYS: CoachTab[] = ["prehled", "kabina", "treneri", "vzdelani", "historie"];
 
 const BACKSTORY_LABELS: Record<string, string> = {
   byvaly_hrac: "Bývalý hráč",
@@ -176,6 +177,7 @@ export default function ManagerDetailPage() {
             { key: "prehled", label: "Přehled" },
             ...(isOwn ? [{ key: "kabina" as const, label: "Kabina" }] : []),
             { key: "treneri", label: "Trenéři" },
+            { key: "vzdelani", label: "Vzdělání" },
             { key: "historie", label: "Historie" },
           ] satisfies TabItem<CoachTab>[]}
           value={tab}
@@ -250,6 +252,9 @@ export default function ManagerDetailPage() {
           <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={manager.name} />
         )}
         {tab === "treneri" && isOwn && teamId && <RelationsOverview teamId={teamId} />}
+
+        {/* ═══ Vzdělání: licence a trenérská škola ═══ */}
+        {tab === "vzdelani" && <CoachEducationTab teamId={managerId} isOwn={isOwn} />}
 
         {/* ═══ Historie: odkud se vzaly vlastnosti + úspěchy ═══ */}
         {tab === "historie" && attrHistory.length === 0 && !(achievements && achievements.achievements.length > 0) && (

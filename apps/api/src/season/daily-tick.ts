@@ -393,10 +393,24 @@ export async function executeDailyTick(
         // Staff efekty na trénink (asistent, trenér mládeže, trenér brankářů, kondiční trenér)
         const { calculateStaffEffects } = await import("../staff/staff-effects");
         const staffTrainRows = await env.DB.prepare(
-          "SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?"
-        ).bind(clubId).all<{ role: string; coaching: number; medicine: number; maintenance: number; judgement: number; communication: number; work_rate: number; charm: number }>()
+          "SELECT role, first_name, last_name, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?"
+        ).bind(clubId).all<{ role: string; first_name: string; last_name: string; coaching: number; medicine: number; maintenance: number; judgement: number; communication: number; work_rate: number; charm: number }>()
           .catch((e) => { logger.warn({ module: "daily-tick" }, "load staff for training", e); return { results: [] as never[] }; });
         const staffFx = calculateStaffEffects(staffTrainRows.results);
+
+        // Trenér na kurzu trenérské školy: trénink vede asistent (nebo kdokoli z výboru).
+        // Koučink a disciplína pro dnešní trénink klesnou k zástupci; zápasy se to netýká.
+        const { isCoachAway } = await import("../coach/courses");
+        let coachAway: { standInName: string | null } | null = null;
+        if (mgr && await isCoachAway(env.DB, clubId)) {
+          const { coachAwayValue, standInValue } = await import("@okresni-masina/shared");
+          const asistent = staffTrainRows.results.find((r) => r.role === "asistent");
+          // Efektivita asistenta = (2 × trénování + komunikace) / 3, stejně jako v ROLE_DEFS.
+          const standIn = standInValue(asistent ? Math.round((2 * asistent.coaching + asistent.communication) / 3) : null);
+          mgrBonus.coaching = coachAwayValue(mgrBonus.coaching, standIn);
+          mgrBonus.discipline = coachAwayValue(mgrBonus.discipline, standIn);
+          coachAway = { standInName: asistent ? `${asistent.first_name} ${asistent.last_name}` : null };
+        }
         equipMul *= staffFx.trainingMultiplier;
         equipAttendanceBonus += staffFx.trainingAttendanceBonus;
         equipYouthMod += staffFx.youthTrainingMod;
@@ -487,6 +501,8 @@ export async function executeDailyTick(
           totalCount: attendanceWithNames.length,
           rested: restedPlayers,
           day: effectiveDate.toLocaleDateString("cs", { weekday: "long", timeZone: "UTC" }),
+          // Trenér byl na kurzu — trénink vedl zástupce.
+          coachAway,
         };
 
         await env.DB.prepare(

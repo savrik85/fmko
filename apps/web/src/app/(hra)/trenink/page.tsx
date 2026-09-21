@@ -39,6 +39,8 @@ interface TrainingResult {
   totalCount: number;
   rested?: Array<{ playerId: string; playerName: string }>;
   moraleChanges?: Array<{ playerId: string; playerName: string; change: number; reason: string }>;
+  /** Trenér byl na kurzu trenérské školy, trénink vedl zástupce. */
+  coachAway?: { standInName: string | null } | null;
 }
 
 const ATTR_LABELS: Record<string, string> = {
@@ -702,6 +704,16 @@ export default function TrainingPage() {
 
         return (
           <>
+            {/* ── Trenér na kurzu ── */}
+            {result.coachAway && (
+              <div className="card p-3 sm:p-4 border-l-4 border-amber-400 bg-amber-50 text-sm text-amber-900">
+                🎓 Trenér je na kurzu trenérské školy.{" "}
+                {result.coachAway.standInName
+                  ? <>Trénink vedl asistent <strong>{result.coachAway.standInName}</strong>, hráči se zlepšovali pomaleji.</>
+                  : <>Asistenta nemáš, trénink vedl někdo z výboru a hráči se zlepšovali pomaleji.</>}
+              </div>
+            )}
+
             {/* ── Last training header ── */}
             <div className="card p-3 sm:p-4">
               <div className="flex items-center gap-3">
