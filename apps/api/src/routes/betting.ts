@@ -10,6 +10,7 @@ import { getSession, getTokenFromRequest } from "../auth/session";
 import { generateBoard, nextOpenRound, teamStandings } from "../betting/board";
 import { placeTicket, limitsFor, canBet, type SelectionInput } from "../betting/tickets";
 import { settleRound } from "../betting/settle";
+import { oddsCalibration, CALIBRATION_DAYS } from "../betting/calibration";
 import { knihaSazek, listinaPrestupu, muzeDoKnihy, muzeZablokovat } from "../competition/integrity";
 import { arena, prepniSdileni, pridejKomentar, smazKomentar, MAX_KOMENTAR, MAX_VZKAZ } from "../betting/arena";
 
@@ -546,6 +547,13 @@ bettingRouter.post("/admin/betting/:leagueId/board", async (c) => {
 
   const res = await generateBoard(c.env.DB, leagueId, gd?.gd ?? new Date().toISOString());
   return c.json({ ok: true, ...res });
+});
+
+// Návratnost trhů na odehraných zápasech. Nad 1 znamená, že kancelář prodělává.
+bettingRouter.get("/admin/betting/calibration", async (c) => {
+  const dni = Math.min(120, Math.max(1, Number(c.req.query("days")) || CALIBRATION_DAYS));
+  const trhy = await oddsCalibration(c.env.DB, dni);
+  return c.json({ days: dni, markets: trhy });
 });
 
 bettingRouter.post("/admin/betting/settle", async (c) => {

@@ -3,13 +3,15 @@ import {
   BASE_HOME_GOALS, BASE_AWAY_GOALS, DISPERSION_C, MARGIN, MIN_ODDS_X100, MAX_ODDS_X100,
   expectedGoals, formAdjustment, goalDistribution, outcomeProbabilities, totalsProbabilities,
   doubleChanceProbabilities,
-  scorerShares, availability, scorerProbability,
+  goalLevel, LEVEL_MIN, LEVEL_MAX, LEVEL_HALF_LIFE_ROUNDS,
+  scorerShares, availability, scorerProbability, MAX_SHARE, type ScorerInput,
   applyMargin, toOddsX100, marketOdds, singleSideOdds, combineOddsX100, capPayout,
 } from "./odds-model";
 
 /**
- * Kalibrace je změřená na 747 odehraných ligových zápasech prales-db-test
- * (stav 2026-08). Dotaz na přeměření je v hlavičce odds-model.ts.
+ * Referenční data: 747 odehraných ligových zápasů prales-db-test (stav 2026-08).
+ * Na nich je nafitovaný TVAR modelu a odpovídají úrovni gólů 1.
+ * Dotaz na přeměření je v hlavičce odds-model.ts.
  *
  *   góly:      1,842 doma · 1,590 venku · 3,432 celkem · rozptyl 4,752
  *   výsledky:  321 / 160 / 266  =  42,97 % / 21,42 % / 35,61 %
@@ -19,6 +21,22 @@ const NAMERENO = {
   doma: 1.842, venku: 1.590, celkem: 3.432,
   over15: 0.8032, over25: 0.6145, over35: 0.4364, over45: 0.2798,
   vyhraDoma: 0.4297, remiza: 0.2142, vyhraVenku: 0.3561,
+} as const;
+
+/**
+ * Produkce: 175 zápasů s vypsanými kurzy, 23. 8. až 21. 9. 2026, tři soutěže.
+ * Úplně jiná úroveň gólů než referenční data, proto se na ní ověřuje, že tvar
+ * modelu drží i tam. Remízy za sezónu od června po soutěžích.
+ *
+ *   góly:      2,651 doma · 2,229 venku · 4,88 celkem
+ *   linie:     over 2,5 = 81,14 % · 3,5 = 63,43 % · 6,5 = 24,00 %
+ *   remízy:    Budějovice 3,21 gólu → 25,0 % · Prachatice 5,13 gólu → 13,8 %
+ */
+const PRODUKCE = {
+  doma: 2.651, venku: 2.229, celkem: 4.88,
+  over25: 0.8114, over35: 0.6343, over65: 0.24,
+  budejovice: { goly: 3.21, remizy: 0.25 },
+  prachatice: { goly: 5.13, remizy: 0.138 },
 } as const;
 
 /** Vyrovnaný zápas — obě mužstva stejně silná, oba bez formy. */
@@ -92,6 +110,49 @@ describe("očekávané góly", () => {
   });
 });
 
+describe("úroveň gólů soutěže", () => {
+  it("bez odehraných zápasů je úroveň referenční", () => {
+    expect(goalLevel([])).toBe(1);
+  });
+
+  it("úroveň je poměr skutečných a očekávaných gólů", () => {
+    const kolo = Array.from({ length: 7 }, () => ({ goals: 6, expected: 3, roundsAgo: 0 }));
+    expect(goalLevel(kolo)).toBeCloseTo(2, 10);
+  });
+
+  it("čerstvá kola váží víc, gólů během sezóny přibývá", () => {
+    const vzorky = [
+      { goals: 6, expected: 3, roundsAgo: 0 },
+      { goals: 3, expected: 3, roundsAgo: 2 * LEVEL_HALF_LIFE_ROUNDS },
+    ];
+    // Prostý průměr by dal 1,5. Starší kolo má čtvrtinovou váhu.
+    expect(goalLevel(vzorky)).toBeCloseTo((6 + 0.75) / (3 + 0.75), 10);
+    expect(goalLevel(vzorky)).toBeGreaterThan(1.5);
+  });
+
+  it("nevyrovnané zápasy úroveň nenafouknou", () => {
+    // V Praze se potkávají kádry s top-11 od 27 do 63. Jednoznačný zápas dá
+    // víc gólů i při úrovni 1, takže když jich padne přesně tolik, úroveň
+    // zůstane 1. Poměr k průměru by ji vyhnal nahoru.
+    const l = expectedGoals({ strength: 60, form: 0 }, { strength: 30, form: 0 });
+    const golu = l.home + l.away;
+    expect(golu).toBeGreaterThan(BASE_HOME_GOALS + BASE_AWAY_GOALS);
+    expect(goalLevel([{ goals: golu, expected: golu, roundsAgo: 0 }])).toBeCloseTo(1, 10);
+  });
+
+  it("jedno ujeté kolo nevyrobí nesmyslnou úroveň", () => {
+    expect(goalLevel([{ goals: 40, expected: 3, roundsAgo: 0 }])).toBe(LEVEL_MAX);
+    expect(goalLevel([{ goals: 0, expected: 3, roundsAgo: 0 }])).toBe(LEVEL_MIN);
+  });
+
+  it("úroveň násobí góly obou týmů a poměr sil nechává být", () => {
+    const zaklad = expectedGoals({ strength: 36, form: 0 }, { strength: 30, form: 0 });
+    const vysoka = expectedGoals({ strength: 36, form: 0 }, { strength: 30, form: 0 }, 1.8);
+    expect(vysoka.home).toBeCloseTo(zaklad.home * 1.8, 10);
+    expect(vysoka.away).toBeCloseTo(zaklad.away * 1.8, 10);
+  });
+});
+
 describe("rozdělení gólů", () => {
   it("je to rozdělení pravděpodobnosti, sečte na 1", () => {
     for (const mu of [0.3, 1.0, 1.84, 3.43, 6.0]) {
@@ -160,9 +221,12 @@ describe("rozdělení gólů", () => {
 });
 
 /**
- * Tohle je nejdůležitější blok celého souboru. Drží model u naměřených dat.
- * Když spadne, engine se změnil a konstanty se musí přefitovat — jinak se
- * marže kanceláře tiše rozplyne a sázení začne být pro hráče výdělečné.
+ * Drží TVAR modelu u naměřených dat, a to na dvou úplně odlišných sadách:
+ * referenční testovací databázi (3,4 gólu na zápas) a produkci (4,9 gólu).
+ * Úroveň gólů se tu nekontroluje, ta se měří za běhu (goalLevel) a jestli
+ * sedí na skutečnost, hlídá betting/calibration.ts nad odehranými zápasy.
+ *
+ * Když spadne, engine se změnil a tvar se musí přefitovat.
  */
 describe("KALIBRACE na odehraných zápasech", () => {
   it("vyrovnaný zápas dá naměřený poměr výsledků", () => {
@@ -230,55 +294,108 @@ describe("KALIBRACE na odehraných zápasech", () => {
     }
     expect(konvoluceUnder25).toBeCloseTo(totalsProbabilities(l, 2.5).under, 2);
   });
+
+  it("tvar rozdělení drží i na produkci, kde padá o 40 % gólů víc", () => {
+    // Referenční průměry vynásobené úrovní produkce. Produkce je směs tří
+    // soutěží (3,4 · 6,0 · 6,3 gólu) a tady ji zastupuje jedno λ, proto
+    // tolerance čtyři body místo dvou. Kdyby rozptyl na vyšší úrovni neseděl,
+    // byla by odchylka na vysoké linii násobně větší.
+    const uroven = PRODUKCE.celkem / NAMERENO.celkem;
+    const l = { home: NAMERENO.doma * uroven, away: NAMERENO.venku * uroven };
+    expect(l.home + l.away).toBeCloseTo(PRODUKCE.celkem, 10);
+    expect(Math.abs(totalsProbabilities(l, 2.5).over - PRODUKCE.over25)).toBeLessThan(0.04);
+    expect(Math.abs(totalsProbabilities(l, 3.5).over - PRODUKCE.over35)).toBeLessThan(0.04);
+    expect(Math.abs(totalsProbabilities(l, 6.5).over - PRODUKCE.over65)).toBeLessThan(0.04);
+  });
+
+  it("s úrovní gólů ubývá remíz, jako v soutěžích na produkci", () => {
+    // Budějovice (3,2 gólu) mají remízu v každém čtvrtém zápase, Prachatice
+    // (5,1 gólu) jen v každém sedmém. Model s jednou úrovní pro všechny dával
+    // všude stejně remíz a v průměru to jen náhodou sedělo.
+    const remiza = (goly: number) =>
+      outcomeProbabilities(expectedGoals({ strength: 40, form: 0 }, { strength: 40, form: 0 }, goly / NAMERENO.celkem)).draw;
+    const budejovice = remiza(PRODUKCE.budejovice.goly);
+    const prachatice = remiza(PRODUKCE.prachatice.goly);
+    expect(budejovice - prachatice).toBeGreaterThan(0.04);
+    // Naměřený pokles je 11 bodů. Vyrovnaný zápas ho má menší, nevyrovnané
+    // zápasy remíz ubírají, a těch je v silnějších soutěžích víc.
+    expect(PRODUKCE.budejovice.remizy - PRODUKCE.prachatice.remizy).toBeGreaterThan(budejovice - prachatice);
+  });
 });
 
 describe("střelci", () => {
-  const kadr = [
-    { playerId: "utocnik", position: "FWD", goals: 0, rating: 30 },
-    { playerId: "zaloznik", position: "MID", goals: 0, rating: 30 },
-    { playerId: "obrance", position: "DEF", goals: 0, rating: 30 },
-    { playerId: "brankar", position: "GK", goals: 0, rating: 30 },
-  ];
+  const hrac = (playerId: string, position: string, extra: Partial<ScorerInput> = {}): ScorerInput =>
+    ({ playerId, position, goals: 0, appearances: 0, rating: 30, ...extra });
 
-  it("podíly sečtou na 1", () => {
+  /** Běžná sestava v poli: 4-4-2, všichni stejně dobří, bez odehraných zápasů. */
+  const sestava = (): ScorerInput[] => [
+    hrac("utocnik1", "FWD"), hrac("utocnik2", "FWD"),
+    hrac("zaloznik1", "MID"), hrac("zaloznik2", "MID"), hrac("zaloznik3", "MID"), hrac("zaloznik4", "MID"),
+    hrac("obrance1", "DEF"), hrac("obrance2", "DEF"), hrac("obrance3", "DEF"), hrac("obrance4", "DEF"),
+  ];
+  const soucet = (m: Map<string, number>, ids?: string[]) =>
+    [...m.entries()].filter(([id]) => !ids || ids.includes(id)).reduce((a, [, v]) => a + v, 0);
+
+  it("bez odehraných gólů si hráči na hřišti rozdělí góly týmu beze zbytku", () => {
+    expect(soucet(scorerShares(sestava(), 0))).toBeCloseTo(1, 10);
+  });
+
+  it("náhradník svůj podíl dostane, ale hráčům na hřišti ho neubírá", () => {
+    // Tip platí jen pro zápas, ve kterém hráč nastoupí. Dřív se góly dělily
+    // mezi čtrnáct hráčů kádru a útočník vycházel o třetinu levněji.
+    const kadr = [...sestava(), hrac("lavicka1", "FWD", { rating: 25 }), hrac("lavicka2", "MID", { rating: 25 })];
     const s = scorerShares(kadr, 0);
-    const sum = [...s.values()].reduce((a, b) => a + b, 0);
-    expect(sum).toBeCloseTo(1, 10);
+    expect(soucet(s, sestava().map((p) => p.playerId))).toBeCloseTo(1, 10);
+    expect(s.get("lavicka1")!).toBeGreaterThan(0);
   });
 
   it("bez odehraných gólů rozhoduje pozice", () => {
-    const s = scorerShares(kadr, 0);
-    expect(s.get("utocnik")!).toBeGreaterThan(s.get("zaloznik")!);
-    expect(s.get("zaloznik")!).toBeGreaterThan(s.get("obrance")!);
+    const s = scorerShares([...sestava(), hrac("brankar", "GK", { rating: 20 })], 0);
+    expect(s.get("utocnik1")!).toBeGreaterThan(s.get("zaloznik1")!);
+    expect(s.get("zaloznik1")!).toBeGreaterThan(s.get("obrance1")!);
     expect(s.get("brankar")!).toBe(0);
   });
 
+  it("góly se počítají na zápas, ve kterém hráč nastoupil", () => {
+    // Pět gólů v pěti startech je jiný střelec než pět gólů ve dvaceti.
+    const hraje = scorerShares([...sestava().slice(1), hrac("utocnik1", "FWD", { goals: 5, appearances: 5 })], 2);
+    const sedi = scorerShares([...sestava().slice(1), hrac("utocnik1", "FWD", { goals: 5, appearances: 20 })], 2);
+    expect(hraje.get("utocnik1")!).toBeGreaterThan(sedi.get("utocnik1")!);
+  });
+
+  it("šťastná série z hráče útočníka neudělá", () => {
+    // Záložník se třemi góly ve dvou zápasech týmu, který dává 1,5 gólu na zápas,
+    // má syrový podíl 100 %. Na lístek se dostávají právě takoví a na série se
+    // nedá spolehnout, takže odhad zůstane u toho, co odpovídá záložníkovi.
+    const bez = scorerShares(sestava(), 1.5).get("zaloznik1")!;
+    const kadr = sestava().map((p) => p.playerId === "zaloznik1" ? { ...p, goals: 3, appearances: 2 } : p);
+    const se = scorerShares(kadr, 1.5).get("zaloznik1")!;
+    expect(se).toBeGreaterThan(bez);
+    expect(se).toBeLessThan(0.2);
+  });
+
   it("skutečné góly nakonec přebijí pozici", () => {
-    const stridnik = [
-      { playerId: "utocnik", position: "FWD", goals: 1, rating: 30 },
-      { playerId: "obrance", position: "DEF", goals: 14, rating: 30 },
-    ];
-    const s = scorerShares(stridnik, 15);
-    expect(s.get("obrance")!).toBeGreaterThan(s.get("utocnik")!);
+    const kadr = sestava().map((p) =>
+      p.playerId === "obrance1" ? { ...p, goals: 30, appearances: 30 }
+      : p.playerId === "utocnik1" ? { ...p, goals: 2, appearances: 30 } : p);
+    const s = scorerShares(kadr, 2);
+    expect(s.get("obrance1")!).toBeGreaterThan(s.get("utocnik1")!);
+  });
+
+  it("podíl jednoho hráče má strop", () => {
+    const s = scorerShares([hrac("sam", "FWD", { goals: 20, appearances: 5 })], 1);
+    expect(s.get("sam")!).toBe(MAX_SHARE);
   });
 
   it("lepší hráč má vyšší podíl i bez odehraných gólů", () => {
     // Tohle odhalil až běh proti reálným datům: v prvním kole nikdo nemá góly,
     // takže bez vlivu ratingu měli všichni útočníci téhož týmu stejný kurz.
-    const dva = [
-      { playerId: "hvezda", position: "FWD", goals: 0, rating: 45 },
-      { playerId: "benjaminek", position: "FWD", goals: 0, rating: 25 },
-    ];
-    const s = scorerShares(dva, 0);
+    const s = scorerShares([hrac("hvezda", "FWD", { rating: 45 }), hrac("benjaminek", "FWD", { rating: 25 })], 0);
     expect(s.get("hvezda")!).toBeGreaterThan(s.get("benjaminek")! * 1.5);
   });
 
   it("silný záložník ale nepřeskočí slabšího útočníka, post váží víc", () => {
-    const dva = [
-      { playerId: "utocnik", position: "FWD", goals: 0, rating: 28 },
-      { playerId: "zaloznik", position: "MID", goals: 0, rating: 42 },
-    ];
-    const s = scorerShares(dva, 0);
+    const s = scorerShares([hrac("utocnik", "FWD", { rating: 28 }), hrac("zaloznik", "MID", { rating: 42 })], 0);
     expect(s.get("utocnik")!).toBeGreaterThan(s.get("zaloznik")!);
   });
 

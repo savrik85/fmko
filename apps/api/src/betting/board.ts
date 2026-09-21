@@ -20,6 +20,7 @@ import {
   doubleChanceProbabilities,
   scorerShares, scorerProbability,
   marketOdds, singleSideOdds,
+  goalLevel, LEVEL_WINDOW_ROUNDS, type LevelSample,
 } from "./odds-model";
 
 const M = "betting-board";
@@ -49,8 +50,12 @@ export const MIN_SCORER_PROB = 0.06;
  * Nejnižší kurz, který se ještě vypisuje.
  *
  * Cokoli pod tím je prakticky jistota: nikdo to nevsadí a na lístku to jen
- * zabírá místo. Týká se opačné strany vysokých gólových linií a neprohry
- * favorita u jednoznačných zápasů.
+ * zabírá místo. Týká se obou stran gólových linií a neprohry favorita
+ * u jednoznačných zápasů.
+ *
+ * U jistoty je to i ochrana kanceláře. Kurz nespadne pod 1,05 (MIN_ODDS_X100),
+ * takže tip, který padá v 98 % případů, by se vyplácel víc, než stojí.
+ * V Praze padla linie 2,5 gólu ve 48 zápasech ze 49.
  */
 export const MIN_OFFERED_ODDS = 120;
 
@@ -235,13 +240,19 @@ async function loadScorers(
 
   // Jen ta část kádru, která se reálně protočí — viz SQUAD_DEPTH. Řadí se
   // podle ratingu, protože podle něj se vybírá i sestava.
+  //
+  // player_stats má řádek na hráče A TÝM, takže hráč, který v sezóně
+  // přestoupil, má dva. Sčítají se, jinak by byl v kádru dvakrát.
   const rows = await db.prepare(
     `SELECT id, team_id, first_name, last_name, position, overall_rating, goals, starts FROM (
        SELECT p.id, p.team_id, p.first_name, p.last_name, p.position, p.overall_rating,
               COALESCE(ps.goals, 0) AS goals, COALESCE(ps.appearances, 0) AS starts,
               ROW_NUMBER() OVER (PARTITION BY p.team_id ORDER BY p.overall_rating DESC) AS poz
          FROM players p
-         LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.season_id = ?
+         LEFT JOIN (
+           SELECT player_id, SUM(goals) AS goals, SUM(appearances) AS appearances
+             FROM player_stats WHERE season_id = ? GROUP BY player_id
+         ) ps ON ps.player_id = p.id
         WHERE p.team_id IN (${ph})
           AND (p.status IS NULL OR p.status = 'active')
           AND COALESCE(p.suspended_matches, 0) = 0
@@ -258,32 +269,46 @@ async function loadScorers(
   return out;
 }
 
-/** Kolik gólů tým v sezóně nastřílel — vstup pro rozdělení podílů. */
-async function loadTeamGoals(
-  db: D1Database, teamIds: string[], seasonId: string,
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  if (teamIds.length === 0) return out;
-  const ph = teamIds.map(() => "?").join(",");
-  const rows = await db.prepare(
-    `SELECT team_id, COALESCE(SUM(goals), 0) AS goals FROM player_stats
-      WHERE team_id IN (${ph}) AND season_id = ? GROUP BY team_id`
-  ).bind(...teamIds, seasonId).all<{ team_id: string; goals: number }>()
-    .catch((e) => { logger.warn({ module: M }, "góly týmů", e); return { results: [] }; });
-  for (const r of rows.results) out.set(r.team_id, r.goals);
-  return out;
-}
+/**
+ * Úroveň gólů soutěže z jejích posledních odehraných kol (viz goalLevel).
+ *
+ * Kola se berou napříč sezónami: league_id se recykluje, a na začátku nového
+ * ročníku je lepší úroveň z konce minulého než žádná. Síla týmů je dnešní,
+ * ne tehdejší. Za šest kol se kádry pohnou o pár bodů, na úroveň to nemá vliv.
+ */
+async function loadGoalLevel(db: D1Database, leagueId: string): Promise<number> {
+  const kola = await db.prepare(
+    `SELECT id FROM season_calendar WHERE league_id = ? AND status = 'simulated'
+      ORDER BY scheduled_at DESC LIMIT ?`
+  ).bind(leagueId, LEVEL_WINDOW_ROUNDS).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `odehraná kola ligy ${leagueId}`, e); return { results: [] }; });
+  if (kola.results.length === 0) return 1;
+  const stari = new Map(kola.results.map((k, i) => [k.id, i]));
 
-/** Kolik zápasů má tým za sebou — jmenovatel pro dostupnost hráče. */
-async function loadPlayedCount(
-  db: D1Database, leagueId: string, seasonNumber: number,
-): Promise<number> {
-  const row = await db.prepare(
-    `SELECT COUNT(*) AS n FROM season_calendar
-      WHERE league_id = ? AND season_number = ? AND status = 'simulated'`
-  ).bind(leagueId, seasonNumber).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: M }, "počet odehraných kol", e); return null; });
-  return row?.n ?? 0;
+  const zapasy = await db.prepare(
+    `SELECT home_team_id, away_team_id, home_score, away_score, calendar_id FROM matches
+      WHERE calendar_id IN (${kola.results.map(() => "?").join(",")})
+        AND status = 'simulated' AND home_score IS NOT NULL`
+  ).bind(...kola.results.map((k) => k.id)).all<{
+    home_team_id: string; away_team_id: string; home_score: number; away_score: number; calendar_id: string;
+  }>().catch((e) => { logger.warn({ module: M }, `zápasy pro úroveň gólů ligy ${leagueId}`, e); return { results: [] }; });
+  if (zapasy.results.length === 0) return 1;
+
+  const tymy = [...new Set(zapasy.results.flatMap((z) => [z.home_team_id, z.away_team_id]))];
+  const sily = await loadStrengths(db, tymy);
+
+  const vzorky: LevelSample[] = zapasy.results.map((z) => {
+    const l = expectedGoals(
+      { strength: sily.get(z.home_team_id) ?? 30, form: 0 },
+      { strength: sily.get(z.away_team_id) ?? 30, form: 0 },
+    );
+    return {
+      goals: z.home_score + z.away_score,
+      expected: l.home + l.away,
+      roundsAgo: stari.get(z.calendar_id) ?? LEVEL_WINDOW_ROUNDS,
+    };
+  });
+  return goalLevel(vzorky);
 }
 
 /** Kurzy jednoho zápasu. Čistá část výpočtu, jen skládá volání modelu. */
@@ -296,14 +321,17 @@ export function matchOdds(input: {
   homeForm: number;
   awayForm: number;
   scorers: Array<{ playerId: string; name: string; teamName: string; isHome: boolean;
-                   position: string; goals: number; starts: number; rating: number }>;
-  homeTeamGoals: number;
-  awayTeamGoals: number;
-  playedMatches: number;
+                   position: string; goals: number; appearances: number; rating: number }>;
+  /** Góly týmu na odehraný ligový zápas v sezóně. 0 = ještě nehrál. */
+  homeGoalsPerMatch: number;
+  awayGoalsPerMatch: number;
+  /** Úroveň gólů soutěže z goalLevel. */
+  goalLevel: number;
 }): Array<Omit<OddsRow, "leagueId" | "seasonNumber" | "calendarId">> {
   const lambdas = expectedGoals(
     { strength: input.homeStrength, form: input.homeForm },
     { strength: input.awayStrength, form: input.awayForm },
+    input.goalLevel,
   );
   const out: Array<Omit<OddsRow, "leagueId" | "seasonNumber" | "calendarId">> = [];
 
@@ -343,12 +371,13 @@ export function matchOdds(input: {
     const tag = String(line).replace(".", "");
     const cara = String(line).replace(".", ",");
 
-    out.push({ matchId: input.matchId, market: "totals", selection: `over${tag}`,
-               oddsX100: kover, probability: t.over, label: `Víc než ${cara} gólu` });
-
-    // Opačná strana se nabízí jen tam, kde má smysl. „Míň než 6,5 gólu" vychází
-    // na kurz 1,05, tedy na podlahu. Vysoká linie je trh na výprask a ten se
-    // sází jen nahoru.
+    // Strana se nabízí jen tam, kde má smysl. „Míň než 6,5 gólu" vychází
+    // v běžné soutěži na podlahu kurzu, „víc než 2,5 gólu" v soutěži, kde
+    // padá šest gólů na zápas, taky.
+    if (kover >= MIN_OFFERED_ODDS) {
+      out.push({ matchId: input.matchId, market: "totals", selection: `over${tag}`,
+                 oddsX100: kover, probability: t.over, label: `Víc než ${cara} gólu` });
+    }
     if (kunder >= MIN_OFFERED_ODDS) {
       out.push({ matchId: input.matchId, market: "totals", selection: `under${tag}`,
                  oddsX100: kunder, probability: t.under, label: `Míň než ${cara} gólu` });
@@ -361,10 +390,10 @@ export function matchOdds(input: {
     if (kadr.length === 0) continue;
 
     const teamLambda = isHome ? lambdas.home : lambdas.away;
-    const teamGoals = isHome ? input.homeTeamGoals : input.awayTeamGoals;
     const shares = scorerShares(
-      kadr.map((s) => ({ playerId: s.playerId, position: s.position, goals: s.goals, rating: s.rating })),
-      teamGoals,
+      kadr.map((s) => ({ playerId: s.playerId, position: s.position, goals: s.goals,
+                         appearances: s.appearances, rating: s.rating })),
+      isHome ? input.homeGoalsPerMatch : input.awayGoalsPerMatch,
     );
 
     const ohodnoceni = kadr.map((s) => {
@@ -414,13 +443,19 @@ export async function generateBoard(
   const teamIds = [...new Set(matches.results.flatMap((m) => [m.home_team_id, m.away_team_id]))];
   const seasonId = `season-${round.season_number}`;
 
-  const [strengths, tabulka, scorers, teamGoals, played] = await Promise.all([
+  const [strengths, tabulka, scorers, level] = await Promise.all([
     loadStrengths(db, teamIds),
     teamStandings(db, leagueId, round.season_number),
     loadScorers(db, teamIds, seasonId),
-    loadTeamGoals(db, teamIds, seasonId),
-    loadPlayedCount(db, leagueId, round.season_number),
+    loadGoalLevel(db, leagueId),
   ]);
+  logger.info({ module: M }, `úroveň gólů ligy ${leagueId}: ${level.toFixed(2)}`);
+
+  // Góly na zápas z tabulky, tedy jen z ligy, stejně jako player_stats hráčů.
+  const golyNaZapas = (teamId: string): number => {
+    const t = tabulka.get(teamId);
+    return t && t.played > 0 ? t.goalsFor / t.played : 0;
+  };
 
   const vsechny: OddsRow[] = [];
   for (const m of matches.results) {
@@ -435,18 +470,18 @@ export async function generateBoard(
       awayStrength: strengths.get(m.away_team_id) ?? 30,
       homeForm: tabulka.get(m.home_team_id)?.formAdj ?? 0,
       awayForm: tabulka.get(m.away_team_id)?.formAdj ?? 0,
-      homeTeamGoals: teamGoals.get(m.home_team_id) ?? 0,
-      awayTeamGoals: teamGoals.get(m.away_team_id) ?? 0,
-      playedMatches: played,
+      homeGoalsPerMatch: golyNaZapas(m.home_team_id),
+      awayGoalsPerMatch: golyNaZapas(m.away_team_id),
+      goalLevel: level,
       scorers: [
         ...kadrDomaci.map((p) => ({
           playerId: p.id, name: `${p.first_name} ${p.last_name}`, teamName: m.home_name,
-          isHome: true, position: p.position, goals: p.goals, starts: p.starts,
+          isHome: true, position: p.position, goals: p.goals, appearances: p.starts,
           rating: p.overall_rating,
         })),
         ...kadrHoste.map((p) => ({
           playerId: p.id, name: `${p.first_name} ${p.last_name}`, teamName: m.away_name,
-          isHome: false, position: p.position, goals: p.goals, starts: p.starts,
+          isHome: false, position: p.position, goals: p.goals, appearances: p.starts,
           rating: p.overall_rating,
         })),
       ],
