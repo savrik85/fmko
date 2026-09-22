@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { requireTeamOwnership } from "../auth/middleware";
 import { logger } from "../lib/logger";
+import { isGameExpired } from "../lib/game-time";
 import { budgetEstimateRange, sponsorBudgetB } from "../sponsors/budget";
 import {
   DEFAULT_FAVOR, invitationAcceptance, invitationAcceptedDelta, invitationGiftCost, PUB_BEER_FAVOR, pubBeerCost,
@@ -26,14 +27,21 @@ async function loadTeam(db: D1Database, teamId: string): Promise<TeamCtx | null>
   ).bind(teamId).first<TeamCtx>();
 }
 
-/** Nejbližší domácí ligový zápas klubu, který se ještě nehrál (stejný dotaz jako pozvánky obce). */
+/**
+ * Nejbližší domácí ligový zápas klubu, který ještě vůbec nezačal.
+ *
+ * `match-runner.ts` má životní cyklus zápasu 'scheduled' → 'lineups_open' (kolo je
+ * zamčené, běží/čeká na simulaci) → 'simulated'. Pozvánky obce (`routes/villages.ts`)
+ * berou `status != 'simulated'`, což pustí i 'lineups_open' — pozvat majitele firmy by
+ * pak šlo i v okamžiku, kdy se kolo právě dohrává. Tady chceme jen 'scheduled'.
+ */
 async function nextHomeMatch(db: D1Database, teamId: string) {
   return db.prepare(
     `SELECT m.id, sc.scheduled_at, aw.name AS opponent_name
      FROM matches m
      JOIN season_calendar sc ON sc.id = m.calendar_id
      JOIN teams aw ON aw.id = m.away_team_id
-     WHERE m.home_team_id = ? AND m.status != 'simulated' AND sc.scheduled_at >= date('now', '-1 day')
+     WHERE m.home_team_id = ? AND m.status = 'scheduled' AND sc.scheduled_at >= date('now', '-1 day')
      ORDER BY sc.scheduled_at ASC LIMIT 1`,
   ).bind(teamId).first<{ id: string; scheduled_at: string; opponent_name: string }>();
 }
@@ -261,9 +269,12 @@ sponsorsRouter.post("/teams/:teamId/sponsor-owners/pub/:encId", async (c) => {
   if (body?.action !== "beer" && body?.action !== "ignore") return c.json({ error: "Neplatná akce" }, 400);
 
   const enc = await db.prepare(
-    "SELECT id, sponsor_id FROM sponsor_pub_encounters WHERE id = ? AND team_id = ? AND status = 'active'",
-  ).bind(encId, teamId).first<{ id: string; sponsor_id: number }>();
+    "SELECT e.id, e.sponsor_id, e.expires_at, t.game_date FROM sponsor_pub_encounters e JOIN teams t ON t.id = e.team_id WHERE e.id = ? AND e.team_id = ? AND e.status = 'active'",
+  ).bind(encId, teamId).first<{ id: string; sponsor_id: number; expires_at: string; game_date: string | null }>();
   if (!enc) return c.json({ error: "Setkání už není aktivní" }, 410);
+  if (isGameExpired(enc.expires_at, enc.game_date ?? new Date().toISOString())) {
+    return c.json({ error: "Setkání už není aktivní" }, 410);
+  }
 
   const claim = await db.prepare("UPDATE sponsor_pub_encounters SET status = ? WHERE id = ? AND status = 'active'")
     .bind(body.action === "beer" ? "beer" : "ignored", encId).run();

@@ -101,7 +101,9 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
                   <div className="text-sm text-muted mt-1">
                     {match.invitation.status === "declined"
                       ? `Pozvání odmítl: „${match.invitation.rejectReason ?? ""}“`
-                      : "Pozvání přijal, sedí na tribuně."}
+                      : match.invitation.status === "attended"
+                        ? "Byl na zápase."
+                        : "Pozvání přijal, přijde na zápas."}
                   </div>
                 ) : match.slotTakenBy ? (
                   <div className="text-sm text-muted mt-1">Ten den už jde na zápas klubu {match.slotTakenBy}.</div>
