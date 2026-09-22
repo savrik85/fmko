@@ -74,7 +74,9 @@ Přání se ukážou 2–3.
 ### API a obrazovky
 
 - `GET /api/sponsors/:id` rozšířit o majitele a náklonnost přihlášeného klubu.
-- `POST /api/sponsors/:id/invitations` (body `{ matchId }`), vlastník týmu.
+- `POST /api/teams/:teamId/sponsor-owners/:sponsorId/invite` (body `{ matchId }`), vlastník týmu (hlídá `requireTeamOwnership`).
+- `GET /api/teams/:teamId/sponsor-owners` (firmy v okrese + aktivní setkání v hospodě),
+  `POST /api/teams/:teamId/sponsor-owners/pub/:encId` (pivo / nechat být).
 - `/sponzor/[id]`: blok Majitel (portrét, jméno, povaha, náklonnost jako pruh a slovo), tlačítko Pozvat na zápas
   s výběrem nejbližšího domácího zápasu.
 - `/sponzori`: sekce „Firmy v okrese" (volné nahoře, u každé náklonnost a odhad rozpočtu B jako rozmezí).
