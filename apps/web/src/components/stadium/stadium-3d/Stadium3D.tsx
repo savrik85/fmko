@@ -14,7 +14,7 @@ import { AdBoards } from "./AdBoards";
 import { Scoreboard } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
 import { HostujiciSektor, StandRoof, UltrasSector } from "./StadiumExtras";
-import { VipBox } from "./VipBox";
+import { VipBox, vipBoxSide } from "./VipBox";
 import { Floodlights } from "./Floodlights";
 import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
@@ -159,6 +159,12 @@ export function Stadium3D({
   // Jižní tribuna je za jednou brankou, severní za druhou, východ a západ jsou
   // podélné strany, tedy hlavní tribuna.
   const SEKTOR_STRANY = { kotel: "south", za_branou: "north", hlavni: "east" } as const;
+  // VIP lóže na L3 tribuně stojící na východě zasahuje do stožárů tabule na jejich
+  // výchozí pozici (viz Scoreboard.tsx) — tam se tabule posune dál ven (pushedOut).
+  const vipBoxPushesScoreboard =
+    (f.vip_box ?? 0) > 0 &&
+    (f.stands ?? 0) >= 3 &&
+    vipBoxSide(f.stands ?? 0, SEKTOR_STRANY[ultrasSector]) === "east";
   const zaplneniStrany = (strana: "north" | "south" | "east" | "west"): number => {
     if (!sectorFill) return attendanceRatio;
     const sektor = strana === "south" ? "kotel" : strana === "north" ? "za_branou" : "hlavni";
@@ -549,6 +555,7 @@ export function Stadium3D({
               awayScore={lastMatch?.awayScore ?? 0}
               homeName={lastMatch?.homeName ?? "DOMÁCÍ"}
               awayName={lastMatch?.awayName ?? "HOSTÉ"}
+              pushedOut={vipBoxPushesScoreboard}
             />
           )}
 

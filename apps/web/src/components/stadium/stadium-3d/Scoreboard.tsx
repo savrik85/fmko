@@ -25,6 +25,13 @@ interface ScoreboardProps {
   awayScore?: number;
   homeName?: string;
   awayName?: string;
+  /**
+   * VIP lóže na tribuně L3 (VipBox.tsx) stojí na východě ve světě x ≈ 35,6–38,0
+   * a na výchozí pozici (x=36) by se stožáry tabule propíchly kabinami lóže.
+   * Stadium3D tenhle prop nastaví, když je lóže vystavěná na východní straně
+   * a tribuny mají úroveň 3 (viz vipBoxSide v VipBox.tsx) — tabule se posune dál ven.
+   */
+  pushedOut?: boolean;
 }
 
 /**
@@ -33,25 +40,36 @@ interface ScoreboardProps {
  * L2: monochromatický LED — orange digitální písmo na černém
  * L3: full-color LED — barevný panel s týmovými barvami
  */
-export function Scoreboard({ level, homeScore = 0, awayScore = 0, homeName = "DOMÁCÍ", awayName = "HOSTÉ" }: ScoreboardProps) {
+export function Scoreboard({ level, homeScore = 0, awayScore = 0, homeName = "DOMÁCÍ", awayName = "HOSTÉ", pushedOut = false }: ScoreboardProps) {
   if (level <= 0) return null;
-  if (level === 1) return <WoodenScoreboard homeScore={homeScore} awayScore={awayScore} />;
-  if (level === 2) return <LedMonoScoreboard homeScore={homeScore} awayScore={awayScore} homeName={homeName} awayName={awayName} />;
-  return <FullLedScoreboard homeScore={homeScore} awayScore={awayScore} homeName={homeName} awayName={awayName} />;
+  if (level === 1) return <WoodenScoreboard homeScore={homeScore} awayScore={awayScore} pushedOut={pushedOut} />;
+  if (level === 2) return <LedMonoScoreboard homeScore={homeScore} awayScore={awayScore} homeName={homeName} awayName={awayName} pushedOut={pushedOut} />;
+  return <FullLedScoreboard homeScore={homeScore} awayScore={awayScore} homeName={homeName} awayName={awayName} pushedOut={pushedOut} />;
 }
 
 // Pozice u poloviny hřiště, na východní straně, na vysokých sloupech
 // (přesahuje východní tribunu a je viditelný z default kamery [55,45,55])
-const SCOREBOARD_X = 36;     // za východní tribunou (max stand back ~33), uvnitř fence (halfW≥40)
+// Výchozí x=36 je za tribunou do úrovně L2 (max zadní hrana ~33). Na L3 tribuně
+// s VIP lóží na východě ale stožáry zasahují do kabin lóže (x ≈ 35,6–38,0) —
+// tam `pushedOut` posune tabuli na x=42, pořád bezpečně uvnitř plotu
+// (fence halfW=50 s postavenými tribunami; v okolí x≈42, z≈0 nic jiného nestojí —
+// floodlights jsou v rozích (x=26, z=34), budovy a parkoviště u z=±45, ultras
+// sektory a hostující sektor u x=0/22, dugouts a ad boardy u x≈20).
+const SCOREBOARD_X_DEFAULT = 36;
+const SCOREBOARD_X_PUSHED_OUT = 42;
 const SCOREBOARD_Z = 0;      // střed hřiště
 const SCOREBOARD_ROT_Y = -Math.PI / 2;   // čelem k pitche (k -X)
 
+function scoreboardX(pushedOut: boolean): number {
+  return pushedOut ? SCOREBOARD_X_PUSHED_OUT : SCOREBOARD_X_DEFAULT;
+}
+
 // L1: dřevěná tabule na vysokých sloupech (přečnívá tribunu)
-function WoodenScoreboard({ homeScore, awayScore }: { homeScore: number; awayScore: number }) {
+function WoodenScoreboard({ homeScore, awayScore, pushedOut }: { homeScore: number; awayScore: number; pushedOut: boolean }) {
   const texture = useMemo(() => makeWoodenTexture(homeScore, awayScore), [homeScore, awayScore]);
   const poleH = 8;
   return (
-    <group position={[SCOREBOARD_X, 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
+    <group position={[scoreboardX(pushedOut), 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
       {/* 2 dřevěné sloupky */}
       <mesh position={[-1.4, poleH / 2, 0]} castShadow>
         <boxGeometry args={[0.22, poleH, 0.22]} />
@@ -75,11 +93,11 @@ function WoodenScoreboard({ homeScore, awayScore }: { homeScore: number; awaySco
 }
 
 // L2: LED monochromatický - oranžové číslice na černém
-function LedMonoScoreboard({ homeScore, awayScore, homeName, awayName }: { homeScore: number; awayScore: number; homeName: string; awayName: string }) {
+function LedMonoScoreboard({ homeScore, awayScore, homeName, awayName, pushedOut }: { homeScore: number; awayScore: number; homeName: string; awayName: string; pushedOut: boolean }) {
   const texture = useMemo(() => makeLedTexture(homeScore, awayScore, homeName, awayName, "#F5A623"), [homeScore, awayScore, homeName, awayName]);
   const poleH = 9;
   return (
-    <group position={[SCOREBOARD_X, 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
+    <group position={[scoreboardX(pushedOut), 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
       <mesh position={[-2.8, poleH / 2, 0]} castShadow>
         <boxGeometry args={[0.25, poleH, 0.25]} />
         <meshStandardMaterial color="#374151" />
@@ -98,11 +116,11 @@ function LedMonoScoreboard({ homeScore, awayScore, homeName, awayName }: { homeS
 }
 
 // L3: full-color LED scoreboard
-function FullLedScoreboard({ homeScore, awayScore, homeName, awayName }: { homeScore: number; awayScore: number; homeName: string; awayName: string }) {
+function FullLedScoreboard({ homeScore, awayScore, homeName, awayName, pushedOut }: { homeScore: number; awayScore: number; homeName: string; awayName: string; pushedOut: boolean }) {
   const texture = useMemo(() => makeFullLedTexture(homeScore, awayScore, homeName, awayName), [homeScore, awayScore, homeName, awayName]);
   const poleH = 10;
   return (
-    <group position={[SCOREBOARD_X, 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
+    <group position={[scoreboardX(pushedOut), 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
       <mesh position={[-3.6, poleH / 2, 0]} castShadow>
         <boxGeometry args={[0.3, poleH, 0.3]} />
         <meshStandardMaterial color="#374151" />
