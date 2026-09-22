@@ -2342,6 +2342,11 @@ function computeRenewalTerms(
   return { monthlyAmount: monthly, winBonus, seasons, earlyTerminationFee };
 }
 
+/** Smlouvu lze prodloužit až v její poslední sezóně, případně po vypršení. */
+function isRenewable(row: Record<string, unknown>): boolean {
+  return row.status === "expired" || (row.status === "active" && (row.seasons_remaining as number) <= 1);
+}
+
 gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const teamId = c.req.param("teamId");
 
@@ -2479,8 +2484,10 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const changedThisSeason = (teamFull?.last_main_sponsor_change_season ?? 0) >= seasonNum;
 
   // Nabídka prodloužení pro každou aktivní smlouvu — nové podmínky dle aktuální reputace
+  // Prodloužit jde jen smlouvu v poslední sezóně (nebo vypršelou) — jinak šlo klikáním
+  // donekonečna resetovat délku smlouvy a přepočítávat částky podle aktuální reputace.
   type SpRow = { name: string; monthly_min: number; monthly_max: number; win_bonus_min: number; win_bonus_max: number };
-  const renewalFor = (row: Record<string, unknown> | undefined | null) => row
+  const renewalFor = (row: Record<string, unknown> | undefined | null) => row && isRenewable(row)
     ? computeRenewalTerms(teamId, seedSeason, row as { sponsor_name: string; category: string | null; monthly_amount: number; win_bonus: number },
         team.reputation, team.size, sponsorRows.results as unknown as SpRow[], seedFromString)
     : null;
@@ -2669,6 +2676,9 @@ gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
     "SELECT * FROM sponsor_contracts WHERE id = ? AND team_id = ? AND status IN ('active', 'expired')"
   ).bind(body.contractId, teamId).first<Record<string, unknown>>();
   if (!contract) return c.json({ error: "Smlouva nenalezena" }, 404);
+  if (!isRenewable(contract)) {
+    return c.json({ error: "Smlouvu lze prodloužit až v její poslední sezóně" }, 400);
+  }
 
   // Obnova expirované smlouvy — jen pokud v kategorii mezitím nevznikla jiná aktivní
   if (contract.status === "expired") {
@@ -2704,9 +2714,13 @@ gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
     seedFromString,
   );
 
-  await c.env.DB.prepare(
-    "UPDATE sponsor_contracts SET status = 'active', monthly_amount = ?, win_bonus = ?, seasons_total = ?, seasons_remaining = ?, early_termination_fee = ? WHERE id = ?"
-  ).bind(terms.monthlyAmount, terms.winBonus, terms.seasons, terms.seasons, terms.earlyTerminationFee, body.contractId).run();
+  // Podmínka na původní stav — dva souběžné požadavky (dvojklik) neprodlouží dvakrát.
+  const upd = await c.env.DB.prepare(
+    `UPDATE sponsor_contracts SET status = 'active', monthly_amount = ?, win_bonus = ?, seasons_total = ?, seasons_remaining = ?, early_termination_fee = ?
+     WHERE id = ? AND status = ? AND seasons_remaining = ?`
+  ).bind(terms.monthlyAmount, terms.winBonus, terms.seasons, terms.seasons, terms.earlyTerminationFee,
+    body.contractId, contract.status, contract.seasons_remaining).run();
+  if (!upd.meta.changes) return c.json({ error: "Smlouva už byla prodloužena" }, 409);
 
   return c.json({ ok: true, renewed: terms });
 });

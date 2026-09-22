@@ -416,6 +416,9 @@ function ContractCard({ contract, category, onTerminate, onRenew, acting }: {
               🤝 Prodloužit na {contract.renewal.seasons} sezóny (+{formatCZK(Math.round(contract.renewal.monthlyAmount / 4.3))}/týd)
             </button>
           )}
+          {!contract.renewal && onRenew && (
+            <span className="text-sm text-muted">Prodloužit půjde v poslední sezóně smlouvy</span>
+          )}
           <button onClick={onTerminate} disabled={acting}
             className="text-sm text-card-red hover:text-red-700 font-heading font-bold transition-colors">
             Ukončit smlouvu předčasně
