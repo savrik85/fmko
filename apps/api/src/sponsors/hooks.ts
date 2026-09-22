@@ -7,7 +7,7 @@ import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { hashSeed } from "../villages/officials-generator";
 import { favorDeltaStmt } from "./favor";
-import { DEFAULT_FAVOR, postMatchFavorDelta, riotFavorDelta, SEASON_PARTNERSHIP_FAVOR } from "./favor-math";
+import { DEFAULT_FAVOR, postMatchFavorDelta, riotFavorDelta, SEASON_PARTNERSHIP_FAVOR, vipBoxFavorBonus } from "./favor-math";
 import { isOwnerPersonality, type OwnerPersonality } from "./owners";
 
 /**
@@ -17,9 +17,12 @@ import { isOwnerPersonality, type OwnerPersonality } from "./owners";
  * teprve pak se počítá náklonnost — souběžné dvojí odehrání téhož zápasu tak strhne dopad
  * jen jednou (druhý běh najde `changes === 0` a řádek přeskočí). Stejný princip jako claim
  * v `fans/resolve-match-incidents.ts`.
+ *
+ * VIP lóže (úroveň 0–3) přidá každému přítomnému majiteli vipBoxFavorBonus.
  */
 export async function settleSponsorInvitations(
   db: D1Database, matchId: string, homeTeamId: string, homeScore: number, awayScore: number,
+  vipBoxLevel = 0,
 ): Promise<void> {
   const rows = await db.prepare(
     `SELECT si.id, si.sponsor_id, so.personality FROM sponsor_invitations si
@@ -27,6 +30,9 @@ export async function settleSponsorInvitations(
      WHERE si.match_id = ? AND si.team_id = ? AND si.status = 'accepted'`,
   ).bind(matchId, homeTeamId).all<{ id: string; sponsor_id: number; personality: string | null }>();
   if (rows.results.length === 0) return;
+  // Majitel pozvaný na domácí zápas sedí v lóži, pokud ji klub má. Výsledek
+  // mu pohne náklonností jako dřív, lóže k tomu přidá pevný bonus.
+  const vipBonus = vipBoxFavorBonus(vipBoxLevel);
   let claimed = 0;
   for (const r of rows.results) {
     const claim = await db.prepare(
@@ -35,9 +41,9 @@ export async function settleSponsorInvitations(
     if ((claim.meta?.changes ?? 0) !== 1) continue;
     claimed++;
     const p: OwnerPersonality = isOwnerPersonality(r.personality) ? r.personality : "businessman";
-    await favorDeltaStmt(db, r.sponsor_id, homeTeamId, postMatchFavorDelta(p, homeScore, awayScore)).run();
+    await favorDeltaStmt(db, r.sponsor_id, homeTeamId, postMatchFavorDelta(p, homeScore, awayScore) + vipBonus).run();
   }
-  logger.info({ module: "sponsors", matchId }, `majitelé na tribuně: ${claimed}`);
+  logger.info({ module: "sponsors", matchId }, `majitelé na tribuně: ${claimed}, bonus lóže ${vipBonus}`);
 }
 
 /** Výtržnost fanoušků: náklonnost klesne u všech majitelů, se kterými má klub vztah. */

@@ -3,6 +3,7 @@
  * Pozvání kopíruje logiku zastupitelů obce (routes/villages.ts), jen povahy jsou sponzorské.
  */
 import type { OwnerPersonality } from "./owners";
+import { SKALY } from "../stadium/stadium-generator";
 
 export const DEFAULT_FAVOR = 40;
 export const SEASON_PARTNERSHIP_FAVOR = 5;
@@ -17,9 +18,24 @@ export function invitationGiftCost(favor: number): number {
   return Math.max(300, 500 + (50 - favor) * 10);
 }
 
+/** Úroveň lóže 0–3 z čehokoli, co přijde z DB (null, desetinné, mimo rozsah). */
+function vipLevel(level: number): number {
+  return Math.max(0, Math.min(3, Math.round(level || 0)));
+}
+
+/** VIP lóže: o kolik náklonnosti navíc majitel po zápase přidá, když seděl v lóži. */
+export function vipBoxFavorBonus(level: number): number {
+  return SKALY.vip_box.sponsorFavor[vipLevel(level)];
+}
+
+/** VIP lóže: o kolik (podíl 0–1) vzroste šance, že majitel pozvání přijme. */
+export function vipBoxAcceptanceBonus(level: number): number {
+  return SKALY.vip_box.sponsorAcceptance[vipLevel(level)];
+}
+
 /** Šance, že majitel pozvání na domácí zápas přijme. `noise` je v rozmezí -0,1 až 0,1. */
 export function invitationAcceptance(i: {
-  favor: number; personality: OwnerPersonality; recentLosses: number; noise: number;
+  favor: number; personality: OwnerPersonality; recentLosses: number; noise: number; vipBoxLevel?: number;
 }): number {
   let p = 0.40 + 0.008 * (i.favor - 50);
   if (i.personality === "fan") {
@@ -28,6 +44,8 @@ export function invitationAcceptance(i: {
   }
   if (i.personality === "patriot") p += 0.05;
   if (i.personality === "cautious") p -= 0.05;
+  // Pozvání do lóže je lákavější než lavička na tribuně.
+  p += vipBoxAcceptanceBonus(i.vipBoxLevel ?? 0);
   p += i.noise;
   return Math.max(0.05, Math.min(0.95, p));
 }

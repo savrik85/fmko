@@ -225,8 +225,14 @@ sponsorsRouter.post("/teams/:teamId/sponsor-owners/:sponsorId/invite", async (c)
     return ours < theirs;
   }).length;
 
+  // Lóže dělá z pozvání zážitek. Když se úroveň nenačte, zve se jako bez lóže.
+  const vipRow = await db.prepare("SELECT vip_box FROM stadiums WHERE team_id = ?")
+    .bind(teamId).first<{ vip_box: number | null }>()
+    .catch((e) => { logger.warn({ module: "sponsors", teamId }, "load vip box for invite", e); return null; });
+
   const probability = invitationAcceptance({
     favor, personality: owner.personality, recentLosses, noise: (Math.random() - 0.5) * 0.2,
+    vipBoxLevel: vipRow?.vip_box ?? 0,
   });
   const accepted = Math.random() < probability;
   const reasons = REJECT_REASONS[owner.personality];

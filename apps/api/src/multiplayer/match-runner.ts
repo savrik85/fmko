@@ -822,7 +822,7 @@ export async function runScheduledMatches(
             // výše continue a nesahá na favor z výsledku, který se vůbec neuložil.
             try {
                 const { settleSponsorInvitations } = await import("../sponsors/hooks");
-                await settleSponsorInvitations(db, matchId, homeTeamId, result.homeScore, result.awayScore);
+                await settleSponsorInvitations(db, matchId, homeTeamId, result.homeScore, result.awayScore, facilities.vip_box ?? 0);
             } catch (e) {
                 logger.warn({module: "match-runner", matchId}, "settle sponsor invitations", e);
             }

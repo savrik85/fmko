@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import {
   clampFavor, invitationAcceptance, invitationAcceptedDelta, invitationGiftCost,
-  postMatchFavorDelta, pubBeerCost, riotFavorDelta,
+  postMatchFavorDelta, pubBeerCost, riotFavorDelta, vipBoxAcceptanceBonus, vipBoxFavorBonus,
 } from "./favor-math";
 
 describe("favor-math", () => {
@@ -55,5 +55,20 @@ describe("favor-math", () => {
   it("pivo stojí 300–400", () => {
     expect(pubBeerCost("fan")).toBe(300);
     expect(pubBeerCost("businessman")).toBe(400);
+  });
+
+  it("VIP lóže: majitel po zápase +1/+2/+3, mimo rozsah se ořízne", () => {
+    expect([0, 1, 2, 3].map(vipBoxFavorBonus)).toEqual([0, 1, 2, 3]);
+    expect(vipBoxFavorBonus(7)).toBe(3);
+    expect(vipBoxFavorBonus(-1)).toBe(0);
+  });
+
+  it("VIP lóže: šance na přijetí +5/+10/+15 p. b., strop 95 % platí dál", () => {
+    expect([0, 1, 2, 3].map(vipBoxAcceptanceBonus)).toEqual([0, 0.05, 0.1, 0.15]);
+    const bez = invitationAcceptance({ favor: 50, personality: "businessman", recentLosses: 0, noise: 0 });
+    const s = invitationAcceptance({ favor: 50, personality: "businessman", recentLosses: 0, noise: 0, vipBoxLevel: 3 });
+    expect(bez).toBeCloseTo(0.4, 5);
+    expect(s).toBeCloseTo(0.55, 5);
+    expect(invitationAcceptance({ favor: 100, personality: "patriot", recentLosses: 0, noise: 0.1, vipBoxLevel: 3 })).toBe(0.95);
   });
 });
