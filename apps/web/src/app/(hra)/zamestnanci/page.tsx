@@ -16,6 +16,7 @@ import {
   type StaffRole,
   type StaffAttributeKey,
   type StaffGroup,
+  licenceLabel,
 } from "@okresni-masina/shared";
 
 // ── Typy (odpovídají API camelCase) ──
@@ -190,7 +191,8 @@ export default function ZamestnanciPage() {
   const [tab, setTab] = useTabParam(TAB_KEYS);
   const [loading, setLoading] = useState(true);
   const [hired, setHired] = useState<StaffMember[]>([]);
-  const [market, setMarket] = useState<StaffMember[]>([]);
+  const [market, setMarket] = useState<Array<StaffMember & { requiredLicence?: number }>>([]);
+  const [coachLicence, setCoachLicence] = useState(0);
   const [pickRole, setPickRole] = useState<Record<string, StaffRole>>({});
   const [marketRoleFilter, setMarketRoleFilter] = useState<StaffRole | "all">("all");
 
@@ -198,10 +200,13 @@ export default function ZamestnanciPage() {
     if (!teamId) return;
     const [s, m] = await Promise.all([
       apiFetch<{ staff: StaffMember[] }>(`/api/teams/${teamId}/staff`).catch((e) => { console.error("load staff:", e); return null; }),
-      apiFetch<{ market: StaffMember[] }>(`/api/teams/${teamId}/staff/market`).catch((e) => { console.error("load market:", e); return null; }),
+      apiFetch<{ market: Array<StaffMember & { requiredLicence?: number }>; coachLicence?: number }>(`/api/teams/${teamId}/staff/market`).catch((e) => { console.error("load market:", e); return null; }),
     ]);
     if (s) setHired(s.staff ?? []);
-    if (m) setMarket(m.market ?? []);
+    if (m) {
+      setMarket(m.market ?? []);
+      setCoachLicence(m.coachLicence ?? 0);
+    }
     setLoading(false);
   };
 
@@ -546,6 +551,7 @@ export default function ZamestnanciPage() {
                 filteredMarket.map((cand) => {
                 const selected = pickRole[cand.id] ?? cand.profession;
                 const eff = staffEffectiveness(cand, selected);
+                const needsLicence = (cand.requiredLicence ?? 0) > coachLicence;
                 return (
                   <div key={cand.id} className="card p-4 space-y-3">
                     <div className="flex items-start gap-3">
@@ -579,6 +585,13 @@ export default function ZamestnanciPage() {
 
                     <div className="text-xs text-muted">{ROLE_DEFS[selected].effectDesc}</div>
 
+                    {(cand.requiredLicence ?? 0) > 0 && (
+                      <div className={`text-sm rounded-soft px-3 py-2 border ${needsLicence ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-surface border-gray-100 text-muted"}`}>
+                        🎓 Chce trenéra s licencí aspoň <strong>{licenceLabel(cand.requiredLicence ?? 0)}</strong>
+                        {needsLicence ? ". Tvůj trenér ji zatím nemá." : ". Tvůj trenér ji má."}
+                      </div>
+                    )}
+
                     {/* Info řádek + akce */}
                     <div className="flex items-center justify-between border-t border-gray-50 pt-2.5">
                       <div className="text-xs text-muted">
@@ -587,7 +600,7 @@ export default function ZamestnanciPage() {
                         mzda <span className="font-heading font-bold text-ink tabular-nums">{czk(cand.weeklyWage)}</span>/týd
                       </div>
                       <button onClick={() => doHire(cand, selected)}
-                        disabled={occupiedRoles.has(selected)}
+                        disabled={occupiedRoles.has(selected) || needsLicence}
                         className="btn btn-primary btn-sm disabled:opacity-40 disabled:cursor-not-allowed">
                         Najmout
                       </button>

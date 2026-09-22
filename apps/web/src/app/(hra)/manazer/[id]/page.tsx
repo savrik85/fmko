@@ -6,11 +6,18 @@ import Link from "next/link";
 import { apiFetch, showError, type ManagerProfile, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { SectionLabel, Spinner, BadgePreview } from "@/components/ui";
+import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, type TabItem } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
+import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
+import { CoachEducationTab } from "@/components/manager/CoachEducationTab";
 import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
 import { isLightColor } from "@/lib/team-color";
+import { coachAttributeEffects, licenceCap } from "@okresni-masina/shared";
+import { LicenceBadge } from "@/components/manager/LicenceBadge";
+
+type CoachTab = "prehled" | "kabina" | "treneri" | "vzdelani" | "historie";
+const TAB_KEYS: CoachTab[] = ["prehled", "kabina", "treneri", "vzdelani", "historie"];
 
 const BACKSTORY_LABELS: Record<string, string> = {
   byvaly_hrac: "Bývalý hráč",
@@ -43,7 +50,11 @@ export default function ManagerDetailPage() {
 
   // Vlastnik muze editovat jen svuj profil (managerId == jeho teamId) a jen u non-AI manazeru
   const canEdit = !!manager && manager.userId !== "ai" && teamId === managerId;
+  const isOwn = !!teamId && teamId === managerId;
   const [attrHistory, setAttrHistory] = useState<AttrHistoryItem[]>([]);
+  const [tabParam, setTab] = useTabParam(TAB_KEYS);
+  // Kabina je jen na vlastním profilu — cizí odkaz s ?tab=kabina spadne na přehled.
+  const tab: CoachTab = tabParam === "kabina" && !isOwn ? "prehled" : tabParam;
 
   useEffect(() => {
     if (!teamId) return;
@@ -95,9 +106,12 @@ export default function ManagerDetailPage() {
             <h1 className={`font-heading font-extrabold ${txt} text-xl sm:text-2xl leading-tight truncate`}>
               {manager.name}
             </h1>
-            {manager.backstory && (
-              <div className={`${txtLabel} text-sm mt-0.5`}>{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</div>
-            )}
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {manager.backstory && (
+                <span className={`${txtLabel} text-sm`}>{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</span>
+              )}
+              <LicenceBadge level={manager.licenceLevel ?? 0} showNone={isOwn} />
+            </div>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               {manager.age && <span className={`${txtMuted} text-sm`}>{manager.age} let</span>}
               {manager.birthplace && (
@@ -158,18 +172,39 @@ export default function ManagerDetailPage() {
 
       <div className="page-container space-y-5">
 
-        {/* ═══ Attributes + Bio ═══ */}
+        <Tabs
+          items={[
+            { key: "prehled", label: "Přehled" },
+            ...(isOwn ? [{ key: "kabina" as const, label: "Kabina" }] : []),
+            { key: "treneri", label: "Trenéři" },
+            { key: "vzdelani", label: "Vzdělání" },
+            { key: "historie", label: "Historie" },
+          ] satisfies TabItem<CoachTab>[]}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Profil trenéra"
+        />
+
+        {/* ═══ Přehled: vlastnosti, informace, bio ═══ */}
+        {tab === "prehled" && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-5">
 
-          {/* Attributes */}
+          {/* Vlastnosti a jejich dopad — čísla počítá stejný sdílený vzorec jako hra */}
           <div className="card p-4 sm:p-5">
-            <SectionLabel>Trenérské atributy</SectionLabel>
+            <SectionLabel>Trenérské vlastnosti a co dělají</SectionLabel>
             <div>
-              <AttrRow label="Koučink" value={manager.coaching ?? 40} description="Schopnost zlepšovat hráče tréninkem" />
-              <AttrRow label="Motivace" value={manager.motivation ?? 40} description="Vliv na morálku a nasazení hráčů" />
-              <AttrRow label="Taktika" value={manager.tactics ?? 40} description="Schopnost připravit tým na soupeře" />
-              <AttrRow label="Práce s mládeží" value={manager.youthDevelopment ?? 40} description="Rozvoj mladých hráčů" />
-              <AttrRow label="Disciplína" value={manager.discipline ?? 40} description="Udržování pořádku v kabině" />
+              {coachAttributeEffects({
+                coaching: manager.coaching ?? 40,
+                motivation: manager.motivation ?? 40,
+                tactics: manager.tactics ?? 40,
+                youthDevelopment: manager.youthDevelopment ?? 40,
+                discipline: manager.discipline ?? 40,
+                reputation: manager.reputation ?? 30,
+              }).map((fx) => (
+                <AttrRow key={fx.key} label={fx.label} value={fx.value} lines={fx.lines}
+                  max={fx.key === "reputation" ? 75 : 99}
+                  cap={fx.key === "reputation" ? undefined : licenceCap(manager.licenceLevel ?? 0)} />
+              ))}
             </div>
           </div>
 
@@ -182,7 +217,6 @@ export default function ManagerDetailPage() {
                 {manager.age && <InfoRow label="Věk" value={`${manager.age} let`} />}
                 {manager.birthplace && <InfoRow label="Bydliště" value={manager.birthplace} />}
                 {manager.backstory && <InfoRow label="Pozadí" value={BACKSTORY_LABELS[manager.backstory] ?? manager.backstory} />}
-                <InfoRow label="Reputace" value={`${manager.reputation ?? 30}`} />
                 {hofRank && (
                   <InfoRow label="Síň slávy" value={
                     <Link href="/sin-slavy" className="text-ink hover:text-pitch-500 transition-colors">
@@ -208,16 +242,25 @@ export default function ManagerDetailPage() {
             )}
           </div>
         </div>
+        )}
 
-        {/* Vztahy mezi manažery — cizí profil: karta vztahu, vlastní: přehled */}
-        {teamId && managerId !== teamId && (
+        {/* ═══ Kabina: vztah vlastních hráčů k trenérovi ═══ */}
+        {tab === "kabina" && isOwn && teamId && <CoachKabinaTab teamId={teamId} />}
+
+        {/* ═══ Trenéři — cizí profil: karta vztahu, vlastní: přehled ve skupinách ═══ */}
+        {tab === "treneri" && teamId && !isOwn && (
           <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={manager.name} />
         )}
-        {teamId && managerId === teamId && (
-          <RelationsOverview teamId={teamId} />
-        )}
+        {tab === "treneri" && isOwn && teamId && <RelationsOverview teamId={teamId} />}
 
-        {attrHistory.length > 0 && (
+        {/* ═══ Vzdělání: licence a trenérská škola ═══ */}
+        {tab === "vzdelani" && <CoachEducationTab teamId={managerId} isOwn={isOwn} />}
+
+        {/* ═══ Historie: odkud se vzaly vlastnosti + úspěchy ═══ */}
+        {tab === "historie" && attrHistory.length === 0 && !(achievements && achievements.achievements.length > 0) && (
+          <div className="card p-4 text-sm text-muted">Zatím tu nic není.</div>
+        )}
+        {tab === "historie" && attrHistory.length > 0 && (
           <div className="card p-4 sm:p-5">
             <SectionLabel>Odkud se vzaly vlastnosti</SectionLabel>
             <div className="space-y-1">
@@ -249,7 +292,7 @@ export default function ManagerDetailPage() {
           </div>
         )}
 
-        {achievements && achievements.achievements.length > 0 && (
+        {tab === "historie" && achievements && achievements.achievements.length > 0 && (
           <AchievementsSection data={achievements} />
         )}
       </div>
@@ -357,18 +400,32 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function AttrRow({ label, value, description }: { label: string; value: number; description: string }) {
+function AttrRow({ label, value, lines, max = 99, cap }: { label: string; value: number; lines: string[]; max?: number; cap?: number }) {
   const barColor = value >= 70 ? "#22c55e" : value >= 50 ? "#6b7280" : value >= 30 ? "#d97706" : "#ef4444";
+  // Strop licence: dál vlastnost neroste, dokud si trenér neudělá vyšší licenci.
+  const showCap = cap !== undefined && cap < max;
+  const atCap = showCap && value >= cap;
   return (
     <div className="py-3 border-b border-gray-50 last:border-b-0">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-heading font-bold">{label}</span>
-        <span className={`text-sm font-heading font-bold tabular-nums ${attrColor(value)}`}>{value}</span>
+        <span className="text-base font-heading font-bold">{label}</span>
+        <span className={`text-base font-heading font-bold tabular-nums ${attrColor(value)}`}>
+          {value}
+          {atCap && <span className="text-sm text-muted font-normal"> · strop licence</span>}
+        </span>
       </div>
-      <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-1">
-        <div className="h-full rounded-full transition-all" style={{ width: `${value}%`, backgroundColor: barColor }} />
+      <div className="relative h-2 rounded-full bg-gray-100 overflow-hidden mb-1.5">
+        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: barColor }} />
+        {showCap && (
+          <div className="absolute top-0 bottom-0 w-0.5 bg-ink/60" style={{ left: `${(cap / max) * 100}%` }}
+            title={`Strop licence: ${cap}`} />
+        )}
       </div>
-      <div className="text-micro text-muted">{description}</div>
+      <ul className="space-y-0.5">
+        {lines.map((l) => (
+          <li key={l} className="text-sm text-ink-light leading-snug">{l}</li>
+        ))}
+      </ul>
     </div>
   );
 }

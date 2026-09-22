@@ -8,7 +8,10 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireTeamOwnership } from "../auth/middleware";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
-import { ROLE_DEFS, STAFF_ATTRIBUTE_LABELS, type StaffRole, type StaffAttributeKey } from "@okresni-masina/shared";
+import {
+  ROLE_DEFS, STAFF_ATTRIBUTE_LABELS, licenceLabel, staffRequiredLicence,
+  type StaffRole, type StaffAttributeKey, type LicenceLevel,
+} from "@okresni-masina/shared";
 import { calculateStaffEffects } from "../staff/staff-effects";
 
 export const staffRouter = new Hono<{ Bindings: Bindings }>();
@@ -84,6 +87,22 @@ function mapStaff(row: StaffRow) {
 const STAFF_COLS =
   "id, district, team_id, role, profession, first_name, last_name, gender, age, coaching, medicine, maintenance, judgement, communication, work_rate, charm, weekly_wage, signing_fee, avatar, description, course_attribute, course_points, course_weeks_remaining, hired_at, listed_until";
 
+/** Jakou licenci trenéra kandidát chce — podle své nejsilnější vlastnosti. */
+function requiredLicence(row: StaffRow): LicenceLevel {
+  return staffRequiredLicence(Math.max(...ATTR_COLUMNS.map((a) => (row as unknown as Record<string, number>)[a] ?? 0)));
+}
+
+/** Licence trenéra klubu (rezerva spadá pod trenéra áčka). Bez trenéra = bez licence. */
+async function loadCoachLicence(db: D1Database, teamId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT m.licence_level FROM teams t
+       JOIN managers m ON m.team_id = COALESCE(t.parent_team_id, t.id)
+      WHERE t.id = ?`,
+  ).bind(teamId).first<{ licence_level: number | null }>()
+    .catch((e) => { logger.warn({ module: "staff" }, "load coach licence", e); return null; });
+  return row?.licence_level ?? 0;
+}
+
 /** Načte aktuální herní datum týmu (fallback = dnešní reálné datum). */
 async function loadGameDate(db: D1Database, teamId: string): Promise<string> {
   const row = await db.prepare("SELECT game_date FROM teams WHERE id = ?")
@@ -138,7 +157,11 @@ staffRouter.get("/teams/:teamId/staff/market", async (c) => {
   ).bind(team.district).all<StaffRow>()
     .catch((e) => { logger.warn({ module: "staff" }, "load market", e); return { results: [] as StaffRow[] }; });
 
-  return c.json({ market: rows.results.map(mapStaff) });
+  const coachLicence = await loadCoachLicence(c.env.DB, teamId);
+  return c.json({
+    coachLicence,
+    market: rows.results.map((r) => ({ ...mapStaff(r), requiredLicence: requiredLicence(r) })),
+  });
 });
 
 /** POST /teams/:teamId/staff/:staffId/hire { role } — najme kandidáta na roli (race-safe). */
@@ -162,6 +185,14 @@ staffRouter.post("/teams/:teamId/staff/:staffId/hire", async (c) => {
   if (!cand) return c.json({ error: "Kandidát nenalezen" }, 404);
   if (cand.team_id) return c.json({ error: "Tenhle člověk už někde dělá." }, 409);
   if (cand.district !== team.district) return c.json({ error: "Kandidát není z tvého okresu." }, 400);
+
+  // Špičkoví lidé nejdou pod trenéra bez papírů (licence trenéra, fáze 3).
+  const needed = requiredLicence(cand);
+  if (needed > 0 && (await loadCoachLicence(c.env.DB, teamId)) < needed) {
+    return c.json({
+      error: `${cand.first_name} ${cand.last_name} chce pracovat jen pod trenérem s licencí ${licenceLabel(needed)} nebo vyšší.`,
+    }, 403);
+  }
 
   // Slot obsazený?
   const occupied = await c.env.DB.prepare("SELECT id FROM staff_members WHERE team_id = ? AND role = ?")

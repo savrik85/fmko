@@ -12,6 +12,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-09-22",
+    emoji: "🎓",
+    title: "Profil trenéra, licence a trenérská škola s opravdovým testem",
+    items: [
+      "Profil trenéra najdeš přímo v menu a má nové záložky: Přehled, Kabina, Trenéři, Vzdělání a Historie.",
+      "V Kabině vidíš, jak tě berou vlastní hráči. U každého je, jestli tě zbožňuje, nebo nesnáší, jestli trucuje, chce pryč nebo má mizernou náladu. A hlavně proč: nepustil jsi ho na přestup, třetí zápas v řadě nejel, rýpl si do tebe v rozhovoru, nebo jste se chytli kvůli incidentu. Důvody najdeš i na profilu každého hráče.",
+      "Záložka Trenéři dělí ostatní trenéry v lize na spojence, rivaly a ty ostatní. Na první pohled víš, s kým jsi zadobře a kdo tě má v žaludku.",
+      "U každé vlastnosti trenéra je v číslech vidět, co přesně dělá.",
+      "Vlastnosti trenéra mají nové dopady. Pod taktikem se tým rychleji sehraje na formaci. Disciplinovaný trenér má v kádru méně faulů a karet a méně průšvihů v hospodě. Kdo umí s mládeží, tomu mladí rostou rychleji i z odehraných zápasů. Motivátorovi hráči líp snášejí, když nejedou na zápas, a méně trucují. A trenér se jménem přitáhne hráče při přestupech i u volných hráčů.",
+      "Přibyly trenérské licence: Licence C, UEFA B, UEFA A a UEFA Pro. Licence určuje, kam až můžou tvoje vlastnosti vyrůst, a otevírá pokročilé kurzy. Přidá i respekt: noví hráči tě berou líp od první šatny, hráči ochotněji přestoupí a špičkoví zaměstnanci jdou dělat jen k trenérovi s papíry.",
+      "Grémium soutěže si může odhlasovat minimální licenci trenéra. Klub, jehož trenér ji nemá, platí pokutu.",
+      "V záložce Vzdělání je Trenérská škola. Přihlásíš se na kurz vlastnosti nebo na licenční kurz. Kurz stojí peníze i čas: po dobu kurzu nechodíš na tréninky, vede je asistent nebo někdo z výboru a hráči se zlepšují pomaleji. Než se přihlásíš, uvidíš přesně, o kolik tréninků přijdeš a jak moc to tvůj tým zabrzdí. Zápasy koučuješ dál.",
+      "Ke každému kurzu dostaneš skripta a na konci tě čeká opravdový test z fotbalových znalostí: pravidla, taktika, trénink, mládežnický fotbal i legendy. Všechny otázky vycházejí ze skript, takže kdo čte, ten projde.",
+      "Test je na čas a bez pauzy. Jakmile ho spustíš, hodiny běží, i když zavřeš mobil, a skripta jsou do konce zamčená. Nezodpovězená otázka se počítá jako špatně.",
+      "Když test nevyjde, máš jeden opravný termín za pětinu ceny kurzu. Když nevyjde ani ten, kurz propadá i s penězi. Správné odpovědi uvidíš, až kurz dotáhneš do konce.",
+    ],
+  },
+  {
     date: "2026-09-18",
     emoji: "🕵️",
     title: "Incidenty v klubu, vyšetřování a dobré zprávy",

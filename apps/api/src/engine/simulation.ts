@@ -1298,7 +1298,11 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     // Frekvence i následky určuje delegovaný rozhodčí. Benevolentní sudí spoustu
     // soubojů pustí (výhoda), přísný odpíská skoro všechno.
     const defHardMods = hardnessMods(defending.hardness);
-    if (rng.random() < refSevere * defHardMods.foulMod) {
+    // Disciplína trenéra bránícího týmu. Mění jen pravděpodobnosti, ne počet hodů kostkou.
+    const defCoach = defending === home ? homeEq : awayEq;
+    const coachFoulMod = defCoach?.coachFoulMod ?? 1;
+    const coachCardMod = defCoach?.coachCardMod ?? 1;
+    if (rng.random() < refSevere * defHardMods.foulMod * coachFoulMod) {
       const fouler = pickFouler(defending);
       if (fouler) {
         if (rng.random() < refAdv) {
@@ -1317,7 +1321,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
             giveDirectRed(fouler, defending, minute,
               `Červená karta pro ${playerName(fouler)}! Zezadu do kotníku a sudí nezaváhal`);
           } else if (rng.random() < Math.min(0.55,
-            baseCard * refCardMul * fatigue * defHardMods.cardMod * cardMemoryMod(ref, defending === home))) {
+            baseCard * refCardMul * fatigue * defHardMods.cardMod * coachCardMod * cardMemoryMod(ref, defending === home))) {
             giveYellow(fouler, defending, minute, `Žlutá karta pro ${playerName(fouler)}`);
           }
 
@@ -1341,7 +1345,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     // ── Malichernost ──
     // Faul, který by benevolentní sudí vůbec neodpískal. Nikdy z něj není penalta —
     // jinak by přísný rozhodčí ztrojnásobil počet penalt a rozbil gólovost zápasu.
-    if (refPetty > 0 && rng.random() < refPetty * defHardMods.foulMod) {
+    if (refPetty > 0 && rng.random() < refPetty * defHardMods.foulMod * coachFoulMod) {
       const fouler = pickFouler(defending);
       if (fouler) {
         refFouls++;
@@ -1350,7 +1354,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           `${playerName(fouler)}, a sudí píská i tohle`, "petty");
         const baseCard = (fouler.temper / 100 + (100 - fouler.discipline) / 100) / 2 * 0.4;
         if (rng.random() < baseCard * refCardMul * PETTY_CARD_MUL * refFatigue(ref, minute)
-            * defHardMods.cardMod * cardMemoryMod(ref, defending === home)) {
+            * defHardMods.cardMod * coachCardMod * cardMemoryMod(ref, defending === home)) {
           giveYellow(fouler, defending, minute, `Žlutá karta pro ${playerName(fouler)}`);
         }
         // Žádná standardka — malichernost se z definice píská tam, kde to nikomu nepomůže.

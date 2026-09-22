@@ -132,6 +132,11 @@ export async function executeDailyTick(
     "DELETE FROM condition_log WHERE created_at < datetime('now', '-60 days')",
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "condition_log retention", e));
 
+  // Retention coach_relation_log — Kabina ukazuje posledních pár desítek změn, půl roku stačí.
+  await env.DB.prepare(
+    "DELETE FROM coach_relation_log WHERE created_at < datetime('now', '-180 days')",
+  ).run().catch((e) => logger.warn({ module: "daily-tick" }, "coach_relation_log retention", e));
+
   // ── Týdenní cyklus obce: vyprší staré brigády a v pondělí se generují nové ──
   try {
     const {
@@ -388,10 +393,24 @@ export async function executeDailyTick(
         // Staff efekty na trénink (asistent, trenér mládeže, trenér brankářů, kondiční trenér)
         const { calculateStaffEffects } = await import("../staff/staff-effects");
         const staffTrainRows = await env.DB.prepare(
-          "SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?"
-        ).bind(clubId).all<{ role: string; coaching: number; medicine: number; maintenance: number; judgement: number; communication: number; work_rate: number; charm: number }>()
+          "SELECT role, first_name, last_name, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?"
+        ).bind(clubId).all<{ role: string; first_name: string; last_name: string; coaching: number; medicine: number; maintenance: number; judgement: number; communication: number; work_rate: number; charm: number }>()
           .catch((e) => { logger.warn({ module: "daily-tick" }, "load staff for training", e); return { results: [] as never[] }; });
         const staffFx = calculateStaffEffects(staffTrainRows.results);
+
+        // Trenér na kurzu trenérské školy: trénink vede asistent (nebo kdokoli z výboru).
+        // Koučink a disciplína pro dnešní trénink klesnou k zástupci; zápasy se to netýká.
+        const { isCoachAway } = await import("../coach/courses");
+        let coachAway: { standInName: string | null } | null = null;
+        if (mgr && await isCoachAway(env.DB, clubId)) {
+          const { coachAwayImpact, assistantEffectiveness } = await import("@okresni-masina/shared");
+          const asistent = staffTrainRows.results.find((r) => r.role === "asistent");
+          // Stejný výpočet ukazuje trenérovi potvrzení přihlášky na kurz (záložka Vzdělání).
+          const away = coachAwayImpact(mgrBonus, asistent ? assistantEffectiveness(asistent.coaching, asistent.communication) : null);
+          mgrBonus.coaching = away.coachingAway;
+          mgrBonus.discipline = away.disciplineAway;
+          coachAway = { standInName: asistent ? `${asistent.first_name} ${asistent.last_name}` : null };
+        }
         equipMul *= staffFx.trainingMultiplier;
         equipAttendanceBonus += staffFx.trainingAttendanceBonus;
         equipYouthMod += staffFx.youthTrainingMod;
@@ -482,6 +501,8 @@ export async function executeDailyTick(
           totalCount: attendanceWithNames.length,
           rested: restedPlayers,
           day: effectiveDate.toLocaleDateString("cs", { weekday: "long", timeZone: "UTC" }),
+          // Trenér byl na kurzu — trénink vedl zástupce.
+          coachAway,
         };
 
         await env.DB.prepare(

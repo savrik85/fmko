@@ -8,6 +8,7 @@
  */
 
 import { estimateMarketValue } from "../season/economy";
+import { coachTransferPull, type CoachStanding } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 
 /** 0 = nechce odejít, 1 = váhá, 2 = chce přestoupit, 3 = velmi chce přestoupit */
@@ -41,6 +42,9 @@ export interface InterestInputs {
   currentTeamStrength: number; // AVG(overall_rating) kádru prodávajícího
   offerTeamStrength: number;   // AVG kádru kupujícího / rating virtuálního klubu
   offerAmount: number;
+  /** Jméno trenéra kupujícího a prodávajícího (reputace + licence). Chybí = bez vlivu. */
+  buyerCoach?: CoachStanding | null;
+  sellerCoach?: CoachStanding | null;
 }
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -70,6 +74,9 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
   // Spokojenost brzdí — jen opravdu spokojený a spřízněný hráč zůstane
   add("Morálka", (50 - input.morale) * 0.4);
   add("Vztah s trenérem", (50 - input.coachRelationship) * 0.3);
+  if (input.buyerCoach && input.sellerCoach) {
+    add("Jméno trenéra", coachTransferPull(input.buyerCoach, input.sellerCoach));
+  }
   add("Vztah k obci", (50 - (p.patriotism ?? 50)) * 0.4);
 
   // Herní vytížení
@@ -133,6 +140,11 @@ export async function loadInterestInputs(
     ? (offer.virtualRating ?? 45)
     : await avgStrength(offer.fromTeamId);
 
+  // Trenéři obou klubů (rezerva spadá pod trenéra áčka). Virtuální klub trenéra nemá.
+  const coaches = offer.fromTeamId === "virtual_ai" ? new Map<string, CoachStanding>() : await loadCoachStandings(
+    db, [player.team_id as string, offer.fromTeamId],
+  );
+
   return {
     personality,
     morale,
@@ -143,7 +155,26 @@ export async function loadInterestInputs(
     currentTeamStrength,
     offerTeamStrength,
     offerAmount: offer.offerAmount,
+    buyerCoach: coaches.get(offer.fromTeamId) ?? null,
+    sellerCoach: coaches.get(player.team_id as string) ?? null,
   };
+}
+
+/** Reputace (a licence) trenérů daných týmů. Klub bez uloženého trenéra v mapě chybí. */
+export async function loadCoachStandings(db: D1Database, teamIds: string[]): Promise<Map<string, CoachStanding>> {
+  const ids = teamIds.filter(Boolean);
+  if (ids.length === 0) return new Map();
+  const rows = await db.prepare(
+    `SELECT t.id AS team_id, m.reputation, m.licence_level
+       FROM teams t
+       JOIN managers m ON m.team_id = COALESCE(t.parent_team_id, t.id)
+      WHERE t.id IN (${ids.map(() => "?").join(",")})`,
+  ).bind(...ids).all<{ team_id: string; reputation: number; licence_level: number | null }>()
+    .catch((e) => {
+      logger.warn({ module: "player-interest" }, "load coach standings", e);
+      return { results: [] as Array<{ team_id: string; reputation: number; licence_level: number | null }> };
+    });
+  return new Map(rows.results.map((r) => [r.team_id, { reputation: r.reputation ?? 30, licence: r.licence_level ?? 0 }]));
 }
 
 /** Pohodlný wrapper: načti vstupy + spočítej. Vrací null, když hráč neexistuje. */

@@ -4,13 +4,15 @@
  * Vztahy mezi manažery — sekce na profilu manažera.
  *
  * RelationCard    — detail vztahu můj tým × cizí tým + interakce (pivo, sázka, inzerát, dárek, gesto)
- * RelationsOverview — přehled všech vztahů (na vlastním profilu)
+ * RelationsOverview — přehled všech trenérů v lize ve skupinách spojenci / rivalové / ostatní
  */
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
 import { SectionLabel, Spinner } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
+import { LicenceBadge } from "@/components/manager/LicenceBadge";
 
 interface RelationMoment {
   date: string;
@@ -58,6 +60,9 @@ interface RelationListItem {
   status: RelationStatus | null;
   label: string;
   loyalAlly: boolean;
+  group: "allies" | "rivals" | "others";
+  managerAvatar: Record<string, unknown> | null;
+  licenceLevel?: number;
 }
 
 function LoyalAllyBadge() {
@@ -508,46 +513,80 @@ export function PostMatchGestureCard({ myTeamId, opponentTeamId, opponentName, m
 
 /* ── Přehled všech vztahů (vlastní profil) ─────────────────────────────── */
 
+const GROUPS: Array<{ key: RelationListItem["group"]; title: string; empty: string }> = [
+  { key: "allies", title: "Spojenci", empty: "Zatím nikdo. Pochvala, pivo nebo společné posezení v hospodě to změní." },
+  { key: "rivals", title: "Rivalové", empty: "Nikdo tě zatím nemá v žaludku." },
+  { key: "others", title: "Ostatní trenéři v lize", empty: "" },
+];
+
+function PeerRow({ r }: { r: RelationListItem }) {
+  const tone = r.group === "rivals" ? "text-card-red" : r.group === "allies" ? "text-pitch-600" : "text-muted";
+  return (
+    <div className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-b-0">
+      {r.managerAvatar && Object.keys(r.managerAvatar).length > 2 ? (
+        <FaceAvatar faceConfig={r.managerAvatar} size={36} className="shrink-0 bg-surface rounded-lg" />
+      ) : (
+        <div className="shrink-0 w-9 h-9 rounded-lg bg-surface flex items-center justify-center font-heading font-bold text-sm">{r.managerName[0]}</div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Link href={`/manazer/${r.teamId}`} className="entity-link text-base font-heading font-bold truncate">{r.managerName}</Link>
+          <LicenceBadge level={r.licenceLevel ?? 0} />
+        </div>
+        <Link href={`/tym/${r.teamId}`} className="text-sm text-muted hover:text-ink flex items-center gap-1.5 min-w-0">
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.primaryColor ?? "#999" }} />
+          <span className="truncate">{r.teamName}{r.archetypeLabel ? ` · ${r.archetypeLabel}` : ""}</span>
+        </Link>
+        <div className={`text-sm font-heading font-bold mt-0.5 ${tone}`}>
+          {r.label}
+          {r.loyalAlly && <span className="ml-1.5">🏅</span>}
+        </div>
+      </div>
+      <div className="shrink-0 text-right text-sm tabular-nums">
+        <div title="Respekt" className={r.respect >= 0 ? "text-pitch-600" : "text-card-red"}>🤝 {r.respect >= 0 ? "+" : ""}{r.respect}</div>
+        <div title="Napětí" className={r.heat >= 60 ? "text-card-red font-bold" : "text-ink"}>🔥 {r.heat}</div>
+      </div>
+    </div>
+  );
+}
+
 export function RelationsOverview({ teamId }: { teamId: string }) {
   const [relations, setRelations] = useState<RelationListItem[] | null>(null);
+  const [error, setError] = useState(false);
+  const [showOthers, setShowOthers] = useState(false);
 
   useEffect(() => {
     apiFetch<{ relations: RelationListItem[] }>(`/api/teams/${teamId}/relations`)
       .then((res) => setRelations(res.relations))
-      .catch((e) => console.error("relations overview load:", e));
+      .catch((e) => { console.error("relations overview load:", e); setError(true); });
   }, [teamId]);
 
-  if (!relations) return null;
-  const notable = relations.filter((r) => r.status || r.respect !== 0 || r.heat !== 0);
-  if (notable.length === 0) return null;
+  if (error) return <div className="card p-4 text-sm text-card-red">Vztahy s trenéry se nepodařilo načíst.</div>;
+  if (!relations) return <div className="flex justify-center py-10"><Spinner /></div>;
+  if (relations.length === 0) return <div className="card p-4 text-sm text-muted">V lize zatím nejsou další trenéři.</div>;
 
   return (
-    <div className="card p-4 sm:p-5">
-      <SectionLabel>Vztahy s trenéry v lize</SectionLabel>
-      <div className="space-y-1">
-        {notable.map((r) => (
-          <Link key={r.teamId} href={`/manazer/${r.teamId}`}
-            className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-soft hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0">
-            <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: r.primaryColor ?? "#999" }} />
-            <div className="flex-1 min-w-0">
-              <div className="font-heading font-bold text-sm truncate">{r.managerName}</div>
-              <div className="text-xs text-muted truncate">{r.teamName}{r.archetypeLabel ? ` · ${r.archetypeLabel}` : ""}</div>
+    <div className="space-y-5">
+      {GROUPS.map((g) => {
+        const list = relations.filter((r) => r.group === g.key);
+        const collapsible = g.key === "others";
+        const open = !collapsible || showOthers;
+        return (
+          <div key={g.key} className="card p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <SectionLabel>{g.title} ({list.length})</SectionLabel>
+              {collapsible && list.length > 0 && (
+                <button type="button" onClick={() => setShowOthers((v) => !v)}
+                  className="text-sm font-heading font-bold text-pitch-600 hover:underline min-h-11 px-2">
+                  {showOthers ? "Skrýt" : "Ukázat"}
+                </button>
+              )}
             </div>
-            <div className="text-right shrink-0">
-              <div className="text-sm tabular-nums">
-                <span className={r.respect >= 0 ? "text-pitch-600" : "text-card-red"}>{r.respect >= 0 ? "+" : ""}{r.respect}</span>
-                <span className="text-muted mx-1">·</span>
-                <span className={r.heat >= 60 ? "text-card-red font-bold" : "text-ink"}>🔥{r.heat}</span>
-              </div>
-              <div className={`text-xs ${r.heat >= 40 || r.respect <= -10 ? "text-card-red" : r.respect >= 30 ? "text-pitch-600" : "text-muted"}`}>
-                {r.label}
-              </div>
-            </div>
-            {r.loyalAlly && <LoyalAllyBadge />}
-            <StatusBadge status={r.status} />
-          </Link>
-        ))}
-      </div>
+            {list.length === 0 && g.empty && <p className="text-sm text-muted">{g.empty}</p>}
+            {open && list.map((r) => <PeerRow key={r.teamId} r={r} />)}
+          </div>
+        );
+      })}
     </div>
   );
 }

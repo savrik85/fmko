@@ -18,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/telefon", label: "Telefon", icon: "\u{1F4F1}", group: "main" },
   { href: "/zpravodaj", label: "Zpravodaj", icon: "\u{1F4F0}", group: "main" },
   { href: "/novinky", label: "Co je nového", icon: "✨", group: "main" },
+  { href: "/trener", label: "Profil trenéra", icon: "\u{1F9D1}\u200D\u{1F4BC}", group: "club" },
   { href: "/muj-klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club" },
   { href: "/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
   { href: "/reputace", label: "Reputace", icon: "\u2B50", group: "club" },
@@ -71,6 +72,8 @@ export function FMSidebar() {
 
   const isActive = (href: string) => {
     if (href === "/prehled") return pathname === "/prehled";
+    // Vlastní profil trenéra žije pod /manazer/{teamId}, skripta a test pod /trener/…
+    if (href === "/trener") return pathname.startsWith("/trener") || (!!teamId && pathname === `/manazer/${teamId}`);
     if (href === "/kadr" || (href.startsWith("/tym/") && teamId)) {
       return pathname.startsWith("/kadr") || pathname.startsWith("/tym/") || pathname.startsWith("/hrac/");
     }

@@ -122,9 +122,11 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
       .bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
 
-  // Vazby na nové spoluhráče — projde tudy každý přestup i hostování.
+  // Vazby na nové spoluhráče a výchozí vztah k trenérovi — projde tudy každý přestup i hostování.
   const { attachNewcomerRelations } = await import("../transfers/attach-relations");
   await attachNewcomerRelations(db, newTeamId, playerId);
+  const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
+  await initNewcomerCoachRelation(db, newTeamId, playerId);
 }
 
 // Povolené typy tréninku — drží sync s TrainingType v season/training.ts.
@@ -5035,10 +5037,12 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const personality = (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent personality", e); return {}; } })();
 
   const { evaluateSigningChance } = await import("../transfers/player-agency");
+  const { loadCoachStandings } = await import("../transfers/player-interest");
+  const coach = (await loadCoachStandings(c.env.DB, [teamId])).get(teamId) ?? null;
   const rng = createRng(cryptoSeed());
   const decision = evaluateSigningChance(
     { weekly_wage: fa.weekly_wage as number, personality, village_id: fa.village_id as string | null, district: fa.district as string | null },
-    { reputation: team.reputation as number, villageLat: team.lat as number, villageLon: team.lng as number, squadSize: squadCount?.cnt ?? 15, district: team.district as string | null },
+    { reputation: team.reputation as number, villageLat: team.lat as number, villageLon: team.lng as number, squadSize: squadCount?.cnt ?? 15, district: team.district as string | null, coach },
     agentVillage, body.offeredWage, rng,
   );
 
@@ -5097,6 +5101,8 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   // Nováček si do kabiny přinese pár vazeb (soused, kolega z práce, vrstevník…)
   const { attachNewcomerRelations } = await import("../transfers/attach-relations");
   await attachNewcomerRelations(c.env.DB, teamId, playerId);
+  const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
+  await initNewcomerCoachRelation(c.env.DB, teamId, playerId);
 
   // Atomický DELETE — pokud FA mezitím podepsal jiný tým, RETURNING vrátí 0 řádků.
   const deleted = await c.env.DB.prepare("DELETE FROM free_agents WHERE id = ? RETURNING id").bind(faId).first<{ id: string }>();
@@ -5602,12 +5608,14 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
 
     if (teamInfo) {
       const { evaluateSigningChance } = await import("../transfers/player-agency");
+      const { loadCoachStandings } = await import("../transfers/player-interest");
+      const coach = (await loadCoachStandings(c.env.DB, [teamId])).get(teamId) ?? null;
       const agencyRng = createRng(cryptoSeed());
       // AI players have patriotism to their home district — cross-district transfer is harder
       const pers = { ...(aiData.personality ?? {}), patriotism: 65 };
       const decision = evaluateSigningChance(
         { weekly_wage: aiData.weeklyWage ?? 200, personality: pers, district: aiData.fromDistrict ?? null },
-        { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize: squadCount?.cnt ?? 15, district: teamInfo.district },
+        { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize: squadCount?.cnt ?? 15, district: teamInfo.district, coach },
         aiVillage, aiData.weeklyWage ?? 200,
         agencyRng,
       );
@@ -5665,6 +5673,8 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     // Vazby na nové spoluhráče (až po bydlišti — sousedství se odvozuje z něj)
     const { attachNewcomerRelations } = await import("../transfers/attach-relations");
     await attachNewcomerRelations(c.env.DB, teamId, playerId);
+    const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
+    await initNewcomerCoachRelation(c.env.DB, teamId, playerId);
 
     // Contract
     const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for AI transfer", e); return null; });
@@ -7451,6 +7461,8 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
   // Vazby na spoluhráče — dorostenec z vesnice většinou někoho zná
   const { attachNewcomerRelations } = await import("../transfers/attach-relations");
   await attachNewcomerRelations(c.env.DB, teamId, playerId);
+  const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
+  await initNewcomerCoachRelation(c.env.DB, teamId, playerId);
 
   // Contract
   const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });

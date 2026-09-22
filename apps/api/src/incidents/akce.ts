@@ -83,10 +83,10 @@ export async function obvinHrace(
       text: text(rng, vysledek === "priznal" ? "stopa_priznani" : "stopa_usvedcen", { hrac: obvineny.jmeno }),
     }], gameDate));
   } else if (vinen) {
-    davka.push(posunHrace(db, teamId, playerId, { vztah: -8 }));
+    davka.push(...posunHrace(db, teamId, playerId, { vztah: -8, description: "Obvinil jsi ho z incidentu v klubu" }));
   } else {
     davka.push(
-      posunHrace(db, teamId, playerId, { morale: -12, vztah: -20 }),
+      ...posunHrace(db, teamId, playerId, { morale: -12, vztah: -20, description: "Křivě jsi ho obvinil z incidentu v klubu" }),
       posunKamaradu(db, teamId, playerId, -3),
       posunKadru(db, teamId, -2, [playerId], playerId),
     );
@@ -282,14 +282,14 @@ export async function rozhodni(
 
   const davka: D1PreparedStatement[] = [];
   if (akce === "odpustit") {
-    davka.push(posunHrace(db, teamId, pachatel.id, { morale: 5, vztah: 8 }));
+    davka.push(...posunHrace(db, teamId, pachatel.id, { morale: 5, vztah: 8, description: "Odpustil jsi mu prohřešek" }));
     if (inc.severity >= 2) davka.push(posunKadru(db, teamId, -2, [pachatel.id]));
   } else if (akce === "srazka") {
-    davka.push(posunHrace(db, teamId, pachatel.id, { morale: -6, vztah: -4 }));
+    davka.push(...posunHrace(db, teamId, pachatel.id, { morale: -6, vztah: -4, description: "Strhl jsi mu peníze za prohřešek" }));
   } else if (akce === "pokuta") {
-    davka.push(posunHrace(db, teamId, pachatel.id, { morale: -8, vztah: -6 }));
+    davka.push(...posunHrace(db, teamId, pachatel.id, { morale: -8, vztah: -6, description: "Dal jsi mu pokutu za prohřešek" }));
   } else if (akce === "vyradit" && zapasu !== undefined) {
-    davka.push(posunHrace(db, teamId, pachatel.id, { morale: -10 }));
+    davka.push(...posunHrace(db, teamId, pachatel.id, { morale: -10 }));
     // Neoblíbeného zloděje kabina ráda nevidí (spec 7d).
     if (!oblibeny) davka.push(posunKadru(db, teamId, 1, [pachatel.id]));
     const vyrazeni = prikazAbsence(db, {

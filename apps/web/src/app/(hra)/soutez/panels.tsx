@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
+import { licenceLabel } from "@okresni-masina/shared";
 import { DecisionPill } from "@/components/dashboard/gremium-vyveska";
 import {
   Empty, GOLD, GOLD_SOFT, OpenProposalNote, Ornament, PersonLine, Portrait, Row,
@@ -63,6 +64,7 @@ export function PokladnaPanel({ state, ledger }: {
       ["bet_max_stake", "Nejvyšší sázka na tiket", czk],
       ["bet_max_payout", "Strop výhry z tiketu", czk],
       ["ban_betting", "Zákaz sázení klubům", (v) => (v ? "platí" : "neplatí")],
+      ["min_coach_licence", "Minimální licence trenéra", (v) => (v > 0 ? licenceLabel(v) : "nehlídá se")],
     ];
     return popis
       .filter(([k]) => next[k] !== state.rules[k])
@@ -151,6 +153,8 @@ export function PokladnaPanel({ state, ledger }: {
           value={state.rules.squad_min > 0 ? String(state.rules.squad_min) : "bez omezení"} />
         <Row label="Nejvíc hráčů na soupisce"
           value={state.rules.squad_max > 0 ? String(state.rules.squad_max) : "bez omezení"} />
+        <Row label="Minimální licence trenéra"
+          value={state.rules.min_coach_licence > 0 ? licenceLabel(state.rules.min_coach_licence) : "nehlídá se"} />
       </div>
 
       {ledger && ledger.summary.length > 0 && (

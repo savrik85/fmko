@@ -11,6 +11,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { youthMatchGrowthMod } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 
 /** Dovednosti, které se dají zlepšit odehranými minutami, podle pozice. */
@@ -57,7 +58,8 @@ export function matchGrowthChance(input: MatchGrowthInput): number {
   const { age, minutes, hiddenTalent = 0, youthMod = 0, nasobitel = 1 } = input;
   const vekovyMod = age < 22 ? 0.20 : age < 26 ? 0.10 : age < 30 ? 0.05 : 0.02;
   const talentMod = 1 + Math.max(0, hiddenTalent) / 200;
-  const mladeznickyMod = age < 22 ? 1 + Math.max(0, youthMod) : 1;
+  // Záporný mod může přinést jen trenér, který mládež zanedbává (práce s mládeží pod 40).
+  const mladeznickyMod = age < 22 ? 1 + Math.max(-0.5, youthMod) : 1;
   return vekovyMod * (minutes / 90) * talentMod * mladeznickyMod * nasobitel;
 }
 
@@ -106,7 +108,8 @@ export function parseSkillCaps(skillsMax: string | null | undefined): Record<str
 }
 
 /**
- * `youthTrainingMod` klubu — trenér mládeže z realizačního týmu plus videokamera.
+ * `youthTrainingMod` klubu — trenér mládeže z realizačního týmu, videokamera
+ * a práce s mládeží hlavního trenéra (40 = neutrální, výš přidává, níž ubírá).
  * U21 tým vlastní zázemí nemá, proto se čte z A-týmu (`parent_team_id`).
  */
 export async function loadYouthMod(db: D1Database, teamId: string): Promise<number> {
@@ -116,6 +119,11 @@ export async function loadYouthMod(db: D1Database, teamId: string): Promise<numb
   const clubId = clubRow?.club_id ?? teamId;
 
   let mod = 0;
+
+  const coach = await db.prepare("SELECT youth_development FROM managers WHERE team_id = ? LIMIT 1")
+    .bind(clubId).first<{ youth_development: number }>()
+    .catch((e) => { logger.warn({ module: "match-growth", teamId: clubId }, "load coach youth development", e); return null; });
+  if (coach) mod += youthMatchGrowthMod(coach.youth_development);
 
   const staff = await db.prepare(
     "SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm FROM staff_members WHERE team_id = ?",

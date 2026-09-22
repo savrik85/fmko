@@ -5,7 +5,7 @@ import type { Weather } from "../engine/types";
  */
 
 import type { Rng } from "../generators/rng";
-import { ratingWeightsFor } from "@okresni-masina/shared";
+import { ratingWeightsFor, coachingTrainingMul, youthTrainingMul, disciplineAttendanceMod } from "@okresni-masina/shared";
 import { pokusuZaTalent } from "../skills/talent";
 import type { GeneratedPlayer } from "../generators/player";
 import { TRENINK_SITUACE } from "../incidents/nastaveni";
@@ -345,7 +345,7 @@ export function simulateAttendance(
 ): TrainingAttendance[] {
   // Trenér, který drží kázeň, dostane na trénink víc lidí. Kolem hodnoty 40 je to
   // neutrální, nahoře i dole to hýbe docházkou nejvýš o deset procentních bodů.
-  const managerAttendanceMod = Math.max(-0.1, Math.min(0.1, (managerDiscipline - 40) / 100 * 0.2));
+  const managerAttendanceMod = disciplineAttendanceMod(managerDiscipline);
 
   return squad.map((player, i) => {
     // Base attendance from discipline (+ bonus z vybavení, např. klubová dodávka)
@@ -518,10 +518,10 @@ export function simulateTraining(
     const ageMod = ageGrowthMod(player.age);
 
     // Manager coaching bonus: 40=1.12x, 60=1.28x, 80=1.44x, 99=1.59x
-    const coachMod = 0.8 + (managerBonus.coaching / 100) * 0.8;
+    const coachMod = coachingTrainingMul(managerBonus.coaching);
     // Youth development bonus for players under 22
     const youthMod = player.age < 22
-      ? (0.9 + (managerBonus.youthDev / 100) * 0.6) * (1 + (equipExtras.youthTrainingMod ?? 0))
+      ? youthTrainingMul(managerBonus.youthDev) * (1 + (equipExtras.youthTrainingMod ?? 0))
       : 1.0;
 
     // Mladí do 22 let dostanou za jeden trénink DVA pokusy o zlepšení, dospělí jeden.

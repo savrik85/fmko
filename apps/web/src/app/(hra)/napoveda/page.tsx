@@ -202,27 +202,27 @@ export default function NapovedaPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Koučink</div>
-            <p className="text-sm text-muted">Násobí šanci hráčů na zlepšení při tréninku — při hodnotě 40 je to 1,12×, při 80 už 1,44×.</p>
+            <p className="text-sm text-muted">Násobí šanci hráčů na zlepšení při tréninku: při hodnotě 40 je to 1,12×, při 80 už 1,44×.</p>
           </div>
           <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Motivace</div>
-            <p className="text-sm text-muted">Před zápasem zvedne morálku všem hráčům v sestavě i na lavičce: při 40 o bod, při 60 o tři, při 80 o pět. Spolu s reputací určuje i to, jak trenéra berou fanoušci.</p>
+            <p className="text-sm text-muted">Před zápasem zvedne morálku celé sestavě i lavičce: při 40 o bod, při 60 o tři, při 80 o pět. Hráči, kteří nejedou na zápas, to u motivátora nesou líp a méně trucují. Spolu s reputací a formou určuje, jak trenéra berou fanoušci.</p>
           </div>
           <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Taktika</div>
-            <p className="text-sm text-muted">Přidává celému kádru přihrávky a obranu: od hodnoty 60 o bod, od 80 o dva.</p>
+            <p className="text-sm text-muted">Přidává nebo ubírá celé sestavě přihrávky a obranu: při 10 je to −2, při 40 nula, při 60 +1, při 99 +4. Tým se pod dobrým taktikem rychleji sehraje na formaci (při 60 o pětinu rychleji).</p>
           </div>
           <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Disciplína</div>
-            <p className="text-sm text-muted">Trenér, který drží kázeň, dostane na trénink víc lidí — kolem hodnoty 40 je to neutrální, výš i níž to hýbe docházkou. Přísnost tréninku, která hráčům ubírá morálku, se nastavuje zvlášť na stránce Tréninky.</p>
+            <p className="text-sm text-muted">Hýbe docházkou na trénink (kolem 40 neutrální), ubírá fauly a žluté karty (při 99 o pětinu méně karet) a krotí průšvihy v hospodě. Lajdák pod 40 to má obráceně. Přísnost tréninku se nastavuje zvlášť na stránce Tréninky.</p>
           </div>
           <div className="border border-gray-200 rounded-soft p-3">
-            <div className="font-heading font-bold text-sm mb-0.5">Rozvoj mládeže</div>
-            <p className="text-sm text-muted">Bonus k tréninku pro hráče do 22 let. Při hodnotě 60 je to +26 % k šanci na zlepšení.</p>
+            <div className="font-heading font-bold text-sm mb-0.5">Práce s mládeží</div>
+            <p className="text-sm text-muted">Bonus k tréninku pro hráče do 22 let (při 60 je to 1,26×) a k jejich růstu z odehraných minut (při 60 o desetinu víc, pod 40 méně).</p>
           </div>
           <div className="border border-gray-200 rounded-soft p-3">
             <div className="font-heading font-bold text-sm mb-0.5">Reputace</div>
-            <p className="text-sm text-muted">Co má trenér za sebou (15–75). Roste výhrami a umístěním na konci sezóny, klesá prohrami. Spolu s motivací určuje, jak ho berou fanoušci.</p>
+            <p className="text-sm text-muted">Co má trenér za sebou (15–75). Roste výhrami a umístěním na konci sezóny, klesá prohrami. Láká hráče: volní hráči podepisují ochotněji a hráči jiných klubů chtějí přestoupit k trenérovi s větším jménem. Spolu s motivací a formou určuje, jak ho berou fanoušci.</p>
           </div>
         </div>
 
@@ -230,8 +230,10 @@ export default function NapovedaPage() {
         <div className="pt-3 border-t border-gray-100">
           <h3 className="font-heading font-bold text-base mb-1">Vliv trenéra na fanoušky</h3>
           <p className="text-sm text-muted mb-3">
-            Z reputace a motivace se počítá jedno číslo — <strong className="text-ink">vliv</strong>:{" "}
-            <span className="tabular-nums">0,6 × reputace + 0,4 × motivace</span>. Neutrál je {MANAGER_FANS.NEUTRAL}.
+            Z reputace, motivace a formy týmu se počítá jedno číslo, <strong className="text-ink">vliv</strong>:{" "}
+            <span className="tabular-nums">
+              {String(MANAGER_FANS.REP_WEIGHT).replace(".", ",")} × reputace + {String(MANAGER_FANS.MOT_WEIGHT).replace(".", ",")} × motivace + {String(MANAGER_FANS.FORM_WEIGHT).replace(".", ",")} × forma
+            </span>. Neutrál je {MANAGER_FANS.NEUTRAL}.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

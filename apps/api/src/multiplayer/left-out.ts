@@ -14,7 +14,9 @@
  * po `SULK_DAYS` herních dnech.
  */
 
+import { leftOutRelationDrop, motivationLeftOutSoftening, motivationSulkMod } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { coachRelationStmts } from "../lib/coach-relation";
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
 
@@ -59,12 +61,12 @@ function skippedFor(player: LeftOutPlayer, bench: BenchPlayer[]): BenchPlayer | 
   return weakest && player.overallRating - weakest.overallRating >= SKIPPED_GAP ? weakest : null;
 }
 
-/** O kolik hráči klesne morálka za to, že nejel. */
-export function moraleLoss(player: LeftOutPlayer, bench: BenchPlayer[]): number {
+/** O kolik hráči klesne morálka za to, že nejel. Trenér-motivátor to zmírní, lajdák zhorší. */
+export function moraleLoss(player: LeftOutPlayer, bench: BenchPlayer[], coachMotivation = 40): number {
   let loss = 3;
   if (skippedFor(player, bench)) loss += 2;
   if (player.previousStreak >= 1) loss += 2;
-  return loss;
+  return Math.max(1, Math.round(loss * (1 - motivationLeftOutSoftening(coachMotivation))));
 }
 
 /**
@@ -117,12 +119,17 @@ export function isSulking(sulk: unknown, gameDay: string): boolean {
 }
 
 /** Šance, že pisatel naštvané SMS začne trucovat a vynechávat tréninky. */
-export function sulkChance(player: LeftOutPlayer, complaint: { reason: ComplaintReason; streak: number }): number {
+export function sulkChance(
+  player: LeftOutPlayer,
+  complaint: { reason: ComplaintReason; streak: number },
+  coachMotivation = 40,
+): number {
   const chance = 0.3
     + (complaint.reason === "skipped_for_weaker" ? 0.2 : 0)
     + (complaint.streak >= 2 ? 0.25 : 0)
     + (player.temper > 60 ? 0.2 : 0)
-    - (player.discipline > 70 ? 0.25 : 0);
+    - (player.discipline > 70 ? 0.25 : 0)
+    + motivationSulkMod(coachMotivation);
   return Math.max(0.05, Math.min(0.9, chance));
 }
 
@@ -242,9 +249,15 @@ export async function reactToLeftOut(
   matchId: string,
   squad: { leftOutIds: string[]; benchIds: string[]; matchSquadIds: string[] },
 ): Promise<void> {
-  const team = await db.prepare("SELECT user_id, game_date FROM teams WHERE id = ?").bind(teamId)
-    .first<{ user_id: string | null; game_date: string | null }>();
+  // Motivace trenéra (rezerva hraje pod trenérem áčka) tlumí zklamání i trucování.
+  const team = await db.prepare(
+    `SELECT t.user_id, t.game_date, m.motivation FROM teams t
+       LEFT JOIN managers m ON m.team_id = COALESCE(t.parent_team_id, t.id)
+      WHERE t.id = ?`,
+  ).bind(teamId)
+    .first<{ user_id: string | null; game_date: string | null; motivation: number | null }>();
   if (!team || team.user_id === "ai") return;
+  const coachMotivation = team.motivation ?? 40;
   const gameDay = (team.game_date ?? new Date().toISOString()).slice(0, 10);
 
   // Kdo jel, tomu se série zápasů bez nominace nuluje a truc končí — dostal, co chtěl
@@ -301,13 +314,25 @@ export async function reactToLeftOut(
     });
   }
 
-  const stmts = leftOut.map((p) => {
+  const stmts = leftOut.flatMap((p) => {
     const morale = Number(p.life.morale ?? 50);
-    const newMorale = Math.max(0, Math.round(morale - moraleLoss(p, bench)));
-    return db.prepare(
-      `UPDATE players SET life_context = json_set(life_context, '$.morale', ?, '$.leftOutStreak', ?, '$.leftOutMatch', ?)
-       WHERE id = ?`,
-    ).bind(newMorale, p.previousStreak + 1, matchId, p.id);
+    const newMorale = Math.max(0, Math.round(morale - moraleLoss(p, bench, coachMotivation)));
+    // Opakovaná nenominace leze i do vztahu k trenérovi. Ve stejném batchi jako
+    // leftOutMatch, takže obnova kola nemůže vztah strhnout dvakrát.
+    const streak = p.previousStreak + 1;
+    return [
+      db.prepare(
+        `UPDATE players SET life_context = json_set(life_context, '$.morale', ?, '$.leftOutStreak', ?, '$.leftOutMatch', ?)
+         WHERE id = ?`,
+      ).bind(newMorale, streak, matchId, p.id),
+      ...coachRelationStmts(db, {
+        playerId: p.id,
+        delta: -leftOutRelationDrop(p.previousStreak, coachMotivation),
+        source: "left_out",
+        description: `Už ${streak}. zápas v řadě nejel`,
+        gameDate: gameDay,
+      }),
+    ];
   });
   if (stmts.length > 0) await db.batch(stmts);
 
@@ -324,7 +349,7 @@ export async function reactToLeftOut(
     .catch((e) => { logger.warn({ module: "left-out" }, "poslední zpráva hráče", e); return null; });
 
   let text = complaintText(complaint, rng, previous?.body);
-  const sulks = rng.random() < sulkChance(sender, complaint);
+  const sulks = rng.random() < sulkChance(sender, complaint, coachMotivation);
   if (sulks) {
     text += ` ${SULK_SUFFIXES[Math.floor(rng.random() * SULK_SUFFIXES.length)]}`;
     const until = new Date(`${gameDay}T12:00:00Z`);
