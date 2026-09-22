@@ -53,6 +53,15 @@ interface ActiveCourse {
   lastScore?: { score: number | null; total: number; passScore: number } | null;
 }
 
+interface AwayPreview {
+  coachingAway: number;
+  disciplineAway: number;
+  slowdownPct: number;
+  attendanceDropPp: number;
+  standInName: string | null;
+  trainingsPerWeek: number;
+}
+
 interface Education {
   licence: { level: number; label: string; cap: number; source: string; obtainedAt: string | null };
   reputation: number;
@@ -61,12 +70,38 @@ interface Education {
   offers: Offer[] | null;
   completed: Array<{ id: string; title: string; status: "passed" | "failed"; score: number | null; total: number; finishedAt: string }>;
   season: { attrUsed: number; attrMax: number; licenceUsed: number; licenceMax: number };
+  away: AwayPreview | null;
 }
 
 const czk = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
 function days(n: number): string {
   return n === 1 ? "1 den" : n >= 2 && n <= 4 ? `${n} dny` : `${n} dní`;
+}
+
+function plural(n: number, forms: [string, string, string]): string {
+  return n === 1 ? forms[0] : n >= 2 && n <= 4 ? forms[1] : forms[2];
+}
+
+/** Co znamená, že trenér N dní chybí na tréninku, v číslech tohohle klubu. */
+function awayRows(away: AwayPreview, daysCount: number): Array<{ label: string; value: string; color?: string }> {
+  const trainings = Math.max(1, Math.round((daysCount / 7) * away.trainingsPerWeek));
+  const pp = away.attendanceDropPp;
+  return [
+    { label: "Tréninků bez tebe", value: `asi ${trainings} ${plural(trainings, ["trénink", "tréninky", "tréninků"])}`, color: "text-ink" },
+    { label: "Trénink povede", value: away.standInName ? `asistent ${away.standInName}` : "někdo z výboru (nemáš asistenta)", color: "text-ink" },
+    {
+      label: "Zlepšování hráčů",
+      value: away.slowdownPct > 0 ? `o ${away.slowdownPct} % pomalejší` : "skoro beze změny",
+      color: away.slowdownPct > 0 ? "text-card-red" : "text-pitch-600",
+    },
+    {
+      label: "Docházka na trénink",
+      value: pp > 0 ? `−${pp} ${plural(pp, ["procentní bod", "procentní body", "procentních bodů"])}` : "beze změny",
+      color: pp > 0 ? "text-card-red" : "text-pitch-600",
+    },
+    { label: "Zápasy", value: "koučuješ jako obvykle", color: "text-pitch-600" },
+  ];
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -97,12 +132,13 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
     const ok = await confirm({
       title: `Přihlásit na ${o.title}?`,
       description:
-        `Trenér bude ${days(o.days)} mimo trénink, trénink povede asistent (nebo někdo z výboru). `
+        `Po dobu kurzu (${days(o.days)}) jsi ve školicím středisku a na tréninky nechodíš. `
         + `Skripta dostaneš hned. Na konci tě čeká test: ${o.exam.questions} otázek, ${o.exam.timeLimitMin} minut bez pauzy, `
         + `projdeš s ${o.exam.passScore} správnými. Když nevyjde, je jeden opravný termín za pětinu ceny.`,
       details: [
         { label: "Cena kurzu", value: `−${czk(o.price)}`, color: "text-card-red" },
         { label: "Délka", value: days(o.days), color: "text-ink" },
+        ...(data?.away ? awayRows(data.away, o.days) : []),
         ...(o.kind === "licence"
           ? [{ label: "Odměna", value: `licence, strop vlastností ${o.cap}`, color: "text-pitch-600" }]
           : [{ label: "Odměna", value: `+${o.points} ${o.title.split(": ")[1] ?? ""}`, color: "text-pitch-600" }]),
@@ -200,7 +236,19 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
               <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full rounded-full bg-pitch-500" style={{ width: `${Math.round(((a.daysTotal - a.daysRemaining) / a.daysTotal) * 100)}%` }} />
               </div>
-              <p className="text-sm text-muted mt-2">Trenér teď chybí na tréninku, vede ho asistent. Zápasy koučuje dál.</p>
+              {isOwn && data.away ? (
+                <div className="mt-3 rounded-soft bg-surface p-3">
+                  <div className="text-sm font-heading font-bold mb-1">Co to dělá s tréninkem</div>
+                  {awayRows(data.away, a.daysRemaining).map((r) => (
+                    <div key={r.label} className="flex justify-between gap-3 text-sm py-0.5">
+                      <span className="text-muted">{r.label === "Tréninků bez tebe" ? "Ještě tréninků bez tebe" : r.label}</span>
+                      <span className={`font-heading font-bold text-right ${r.color ?? "text-ink"}`}>{r.value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted mt-2">Trenér teď chybí na tréninku, vede ho zástupce. Zápasy koučuje dál.</p>
+              )}
             </div>
           )}
 

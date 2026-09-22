@@ -9,8 +9,9 @@
 
 import {
   COURSE_ATTRS, COURSE_ATTR_LABELS, COURSE_ATTR_TOPIC, COURSE_RULES, LICENCE_COURSES, LICENCE_LEVELS, MAX_LICENCE,
-  attrCoursePrice, examRulesFor, licenceCap, licenceLabel, licenceMinReputation, retakePrice,
-  type CourseAttr, type CourseKind, type CourseStatus, type ExamRules,
+  assistantEffectiveness, attrCoursePrice, coachAwayImpact, examRulesFor, licenceCap, licenceLabel,
+  licenceMinReputation, retakePrice,
+  type CourseAttr, type CourseKind, type CourseStatus, type ExamRules, type CoachAwayImpact,
 } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { applyManagerAttrDelta } from "../lib/manager-attrs";
@@ -255,6 +256,44 @@ export function buildOffers(mgr: ManagerRow, usage: SeasonUsage, hasActive: bool
   return offers;
 }
 
+// ── Co znamená „trenér mimo trénink" pro tenhle klub ──
+
+export interface AwayPreview extends CoachAwayImpact {
+  /** Kdo trénink povede. Null = asistenta klub nemá, vede ho někdo z výboru. */
+  standInName: string | null;
+  /** Kolik tréninků týdně klub má (podle tréninkového plánu). */
+  trainingsPerWeek: number;
+}
+
+function trainingsPerWeek(row: { training_sessions: number | null; training_days: string | null; training_plan: string | null }): number {
+  const plan = row.training_plan ? parseJson<Record<string, unknown>>(row.training_plan, "training_plan", {}) : {};
+  const planDays = Object.keys(plan).length;
+  if (planDays > 0) return planDays;
+  const days = row.training_days ? parseJson<unknown[]>(row.training_days, "training_days", []) : [];
+  if (Array.isArray(days) && days.length > 0) return days.length;
+  return row.training_sessions ?? 2;
+}
+
+async function loadAwayPreview(db: D1Database, teamId: string, mgr: ManagerRow): Promise<AwayPreview> {
+  const [assistant, team] = await Promise.all([
+    db.prepare("SELECT first_name, last_name, coaching, communication FROM staff_members WHERE team_id = ? AND role = 'asistent' LIMIT 1")
+      .bind(teamId).first<{ first_name: string; last_name: string; coaching: number; communication: number }>()
+      .catch((e) => { logger.warn({ module: M }, `assistant ${teamId}`, e); return null; }),
+    db.prepare("SELECT training_sessions, training_days, training_plan FROM teams WHERE id = ?")
+      .bind(teamId).first<{ training_sessions: number | null; training_days: string | null; training_plan: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, `training schedule ${teamId}`, e); return null; }),
+  ]);
+  const impact = coachAwayImpact(
+    { coaching: mgr.coaching, discipline: mgr.discipline },
+    assistant ? assistantEffectiveness(assistant.coaching, assistant.communication) : null,
+  );
+  return {
+    ...impact,
+    standInName: assistant ? `${assistant.first_name} ${assistant.last_name}` : null,
+    trainingsPerWeek: team ? trainingsPerWeek(team) : 2,
+  };
+}
+
 // ── Přehled pro záložku Vzdělání ──
 
 export async function loadEducation(db: D1Database, teamId: string, isOwner: boolean) {
@@ -318,6 +357,8 @@ export async function loadEducation(db: D1Database, teamId: string, isOwner: boo
     })),
     active: activeOut,
     offers: isOwner ? buildOffers(mgr, usage, !!active) : null,
+    // Jen vlastníkovi: jak moc trénink utrpí, když trenér odjede na kurz.
+    away: isOwner ? await loadAwayPreview(db, teamId, mgr) : null,
     completed: completedRows.results.map((c) => ({
       id: c.id,
       title: courseTitle(c),

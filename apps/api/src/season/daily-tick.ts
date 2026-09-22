@@ -403,12 +403,12 @@ export async function executeDailyTick(
         const { isCoachAway } = await import("../coach/courses");
         let coachAway: { standInName: string | null } | null = null;
         if (mgr && await isCoachAway(env.DB, clubId)) {
-          const { coachAwayValue, standInValue } = await import("@okresni-masina/shared");
+          const { coachAwayImpact, assistantEffectiveness } = await import("@okresni-masina/shared");
           const asistent = staffTrainRows.results.find((r) => r.role === "asistent");
-          // Efektivita asistenta = (2 × trénování + komunikace) / 3, stejně jako v ROLE_DEFS.
-          const standIn = standInValue(asistent ? Math.round((2 * asistent.coaching + asistent.communication) / 3) : null);
-          mgrBonus.coaching = coachAwayValue(mgrBonus.coaching, standIn);
-          mgrBonus.discipline = coachAwayValue(mgrBonus.discipline, standIn);
+          // Stejný výpočet ukazuje trenérovi potvrzení přihlášky na kurz (záložka Vzdělání).
+          const away = coachAwayImpact(mgrBonus, asistent ? assistantEffectiveness(asistent.coaching, asistent.communication) : null);
+          mgrBonus.coaching = away.coachingAway;
+          mgrBonus.discipline = away.disciplineAway;
           coachAway = { standInName: asistent ? `${asistent.first_name} ${asistent.last_name}` : null };
         }
         equipMul *= staffFx.trainingMultiplier;

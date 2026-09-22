@@ -31,6 +31,8 @@ import {
   retakePrice,
   coachAwayValue,
   standInValue,
+  coachAwayImpact,
+  assistantEffectiveness,
 } from "./coach";
 
 describe("pásma vztahu k trenérovi", () => {
@@ -188,5 +190,17 @@ describe("skloňování na profilu", () => {
     expect(text(55, 40)[4].lines[0]).toBe("Docházka na trénink: +3 procentní body");
     expect(text(99, 40)[4].lines[0]).toBe("Docházka na trénink: +10 procentních bodů");
     expect(text(40, 40)[1].lines[2]).toBe("Šance, že nenominovaný začne trucovat: beze změny");
+  });
+});
+
+describe("trenér na kurzu v praxi", () => {
+  it("bez asistenta se trénink citelně zpomalí, s dobrým asistentem skoro vůbec", () => {
+    const solo = coachAwayImpact({ coaching: 66, discipline: 47 }, null);
+    expect(solo.coachingAway).toBe(43);
+    expect(solo.slowdownPct).toBe(14);
+    expect(solo.attendanceDropPp).toBeGreaterThanOrEqual(1);
+    const helped = coachAwayImpact({ coaching: 66, discipline: 47 }, 20);
+    expect(helped.slowdownPct).toBe(0);
+    expect(assistantEffectiveness(14, 8)).toBe(12);
   });
 });

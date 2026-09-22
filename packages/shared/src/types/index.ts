@@ -62,6 +62,7 @@ export type {
   CourseAttr,
   CourseStatus,
   ExamRules,
+  CoachAwayImpact,
 } from "./coach";
 export {
   coachRelationBand,
@@ -101,6 +102,8 @@ export {
   examRulesFor,
   coachAwayValue,
   standInValue,
+  assistantEffectiveness,
+  coachAwayImpact,
 } from "./coach";
 export { rozdelTitulekOznameni, NOTIFIKACE_IKONY } from "./notifications";
 export type {

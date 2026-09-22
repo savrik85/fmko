@@ -374,3 +374,34 @@ export function standInValue(assistantEffectiveness: number | null): number {
   if (assistantEffectiveness === null) return 20;
   return clamp(20 + assistantEffectiveness * 2.5, 20, 70);
 }
+
+/** Efektivita asistenta trenéra (1–20): stejný vzorec jako role asistent v ROLE_DEFS. */
+export function assistantEffectiveness(coaching: number, communication: number): number {
+  return Math.round((2 * coaching + communication) / 3);
+}
+
+export interface CoachAwayImpact {
+  /** Koučink a disciplína, se kterými se trénuje, dokud je trenér na kurzu. */
+  coachingAway: number;
+  disciplineAway: number;
+  /** O kolik procent pomaleji se hráči v tréninku zlepšují. */
+  slowdownPct: number;
+  /** O kolik procentních bodů klesne docházka na trénink. */
+  attendanceDropPp: number;
+}
+
+/** Co v praxi znamená, že trenér je na kurzu: stejný výpočet jako denní trénink. */
+export function coachAwayImpact(
+  coach: { coaching: number; discipline: number },
+  assistantEff: number | null,
+): CoachAwayImpact {
+  const standIn = standInValue(assistantEff);
+  const coachingAway = coachAwayValue(coach.coaching, standIn);
+  const disciplineAway = coachAwayValue(coach.discipline, standIn);
+  return {
+    coachingAway,
+    disciplineAway,
+    slowdownPct: roundInt((1 - coachingTrainingMul(coachingAway) / coachingTrainingMul(coach.coaching)) * 100),
+    attendanceDropPp: roundInt((disciplineAttendanceMod(coach.discipline) - disciplineAttendanceMod(disciplineAway)) * 100),
+  };
+}
