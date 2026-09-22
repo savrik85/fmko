@@ -72,7 +72,7 @@ export async function generateSponsorPubEncounters(db: D1Database, gameDate: str
     `SELECT t.id AS team_id, v.district FROM teams t JOIN villages v ON v.id = t.village_id
      WHERE t.user_id != 'ai' AND COALESCE(t.team_type, 'senior') != 'u21' AND t.name NOT LIKE 'DELETED-%'
        AND NOT EXISTS (SELECT 1 FROM sponsor_pub_encounters e WHERE e.team_id = t.id AND e.status = 'active')
-       AND NOT EXISTS (SELECT 1 FROM sponsor_pub_encounters e WHERE e.team_id = t.id AND e.created_at > datetime(?, '-21 days'))`,
+       AND NOT EXISTS (SELECT 1 FROM sponsor_pub_encounters e WHERE e.team_id = t.id AND datetime(e.created_at) > datetime(?, '-21 days'))`,
   ).bind(gameDate).all<{ team_id: string; district: string }>();
 
   const expiresAt = gameExpiry(gameDate, 5);
