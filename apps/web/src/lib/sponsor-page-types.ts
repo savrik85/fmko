@@ -91,3 +91,16 @@ export interface SponsorOverview {
   coldest: FirmFavorItem[];
   recentChanges: FavorChange[];
 }
+
+/** Skončená smlouva. Celkový výdělek API nevrací (sponzorské příjmy se v transakcích neevidují po sponzorech). */
+export interface SponsorHistoryItem {
+  id: string;
+  sponsorId: number | null;
+  sponsorName: string;
+  category: SponsorCategory;
+  status: "expired" | "terminated";
+  seasonsTotal: number;
+  monthlyAmount: number;
+  /** Sezóna podpisu odvozená z data podpisu; null, když sezóny chybí. */
+  signedSeason: number | null;
+}

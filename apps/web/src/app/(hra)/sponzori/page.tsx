@@ -4,20 +4,24 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { formatCZK } from "@/lib/sponsor-owners";
-import type { DistrictFirm, PubEncounter, SponsorCategory, SponsorOffer, SponsorOverview, SponsorsData } from "@/lib/sponsor-page-types";
+import type {
+  DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorsData,
+} from "@/lib/sponsor-page-types";
 import { Card, CardBody, Spinner, Tabs, useConfirm, useTabParam } from "@/components/ui";
 import { ContractsTab } from "@/components/sponsors/contracts-tab";
 import { FirmsTab } from "@/components/sponsors/firms-tab";
 import { PopularityTab } from "@/components/sponsors/popularity-tab";
+import { HistoryTab } from "@/components/sponsors/history-tab";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { mySponsorIdsOf } from "@/lib/sponsor-firms";
 
-const SPONSOR_TABS = ["contracts", "firms", "popularity"] as const;
+const SPONSOR_TABS = ["contracts", "firms", "popularity", "history"] as const;
 type SponsorTab = (typeof SPONSOR_TABS)[number];
 const TAB_LABELS: Record<SponsorTab, string> = {
   contracts: "Smlouvy",
   firms: "Firmy v okrese",
   popularity: "Oblíbenost",
+  history: "Historie",
 };
 /** Klíč v localStorage: poslední otevřená záložka (jen pohodlí v tomhle prohlížeči). */
 const TAB_STORAGE_KEY = "sponzori-tab";
@@ -48,7 +52,20 @@ export default function SponsorsPage() {
 
   useEffect(() => {
     if (tab === "popularity") void loadOverview();
+    if (tab === "history") void loadHistory();
   }, [tab, teamId]);
+
+  const [history, setHistory] = useState<SponsorHistoryItem[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  // Historie se načítá až při otevření záložky; výpověď smlouvy se v ní projeví při dalším otevření.
+  async function loadHistory() {
+    if (!teamId) return;
+    setHistoryError(null);
+    const h = await apiFetch<{ contracts: SponsorHistoryItem[] }>(`/api/teams/${teamId}/sponsor-history`)
+      .catch((e) => { console.error("sponsor-history:", e); setHistoryError((e as Error).message); return null; });
+    setHistory(h?.contracts ?? null);
+  }
 
   const refresh = async () => {
     if (!teamId) return;
@@ -303,6 +320,7 @@ export default function SponsorsPage() {
       )}
       {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} mySponsorIds={mySponsorIdsOf(data)} />}
       {tab === "popularity" && <PopularityTab overview={overview} error={overviewError} />}
+      {tab === "history" && <HistoryTab items={history} error={historyError} />}
     </div>
   );
 }
