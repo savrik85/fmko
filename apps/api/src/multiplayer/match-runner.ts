@@ -827,6 +827,17 @@ export async function runScheduledMatches(
                 logger.warn({module: "match-runner", matchId}, "settle sponsor invitations", e);
             }
 
+            // Zastupitelé obce ve VIP lóži. Až za zámkem zápasu: pozvánky jsou už
+            // `attended` (přepnuté před simulací) a sem dojde jen jeden běh.
+            if ((facilities.vip_box ?? 0) > 0 && officialCount > 0) {
+                try {
+                    const { applyVipBoxVillageFavor } = await import("../villages/vip-box-favor");
+                    await applyVipBoxVillageFavor(db, matchId, homeTeamId, facilities.vip_box ?? 0);
+                } catch (e) {
+                    logger.warn({module: "match-runner", matchId}, "VIP lóže: přízeň zastupitelů", e);
+                }
+            }
+
             // Devadesát minut na hřišti trávník stojí — nese to domácí tým.
             {
                 const { applyPitchWear } = await import("../stadium/pitch-wear");
