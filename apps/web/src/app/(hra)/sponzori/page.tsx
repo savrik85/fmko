@@ -1,80 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
-import { sponsorTypeLabel } from "@/lib/sponsor-types";
-import { favorLabel, formatCZK, personalityLabel } from "@/lib/sponsor-owners";
-import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
+import { formatCZK } from "@/lib/sponsor-owners";
+import type { DistrictFirm, PubEncounter, SponsorCategory, SponsorOffer, SponsorsData } from "@/lib/sponsor-page-types";
+import { Card, CardBody, Spinner, Tabs, useConfirm, useTabParam } from "@/components/ui";
+import { ContractsTab } from "@/components/sponsors/contracts-tab";
+import { FirmsTab } from "@/components/sponsors/firms-tab";
+import { SponsorLink } from "@/components/sponsors/sponsor-link";
 
-interface ActiveContract {
-  id: string;
-  category: "main" | "stadium" | "banner";
-  sponsorId: number | null;
-  sponsorName: string;
-  sponsorType: string;
-  monthlyAmount: number;
-  winBonus: number;
-  seasonsTotal: number;
-  seasonsRemaining: number;
-  earlyTerminationFee: number;
-  isNamingRights: boolean;
-  signedAt: string;
-  renewal?: { monthlyAmount: number; winBonus: number; seasons: number; earlyTerminationFee: number } | null;
-  /** Proč hlavního sponzora nejde prodloužit/obnovit (je hlavním jinde nebo dal přednost jinému klubu). */
-  blockedReason?: string | null;
-}
-
-type SponsorCategory = "main" | "stadium" | "banner";
-
-interface SponsorOffer {
-  sponsorId: number;
-  sponsorName: string;
-  sponsorType: string;
-  monthlyAmount: number;
-  winBonus: number;
-  seasons: number;
-  earlyTerminationFee: number;
-  requirement?: string;
-}
-
-interface SponsorsData {
-  mainContract: ActiveContract | null;
-  stadiumContract: ActiveContract | null;
-  mainExpired?: ActiveContract | null;
-  stadiumExpired?: ActiveContract | null;
-  bannerContracts: ActiveContract[];
-  stadiumName: string | null;
-  teamName: string;
-  mainOffers: SponsorOffer[];
-  stadiumOffers: SponsorOffer[];
-  bannerOffers: SponsorOffer[];
-  maxBanners: number;
-  canChangeMainSponsor: boolean;
-  season: number;
-}
-
-/** Jméno sponzora jako odkaz na jeho stránku (sponzor mimo okresní seznam odkaz nemá). */
-function SponsorLink({ id, name, className }: { id: number | null | undefined; name: string; className?: string }) {
-  if (!id) return <span className={className}>{name}</span>;
-  return <Link href={`/sponzor/${id}`} className={`${className ?? ""} hover:text-pitch-600 hover:underline`}>{name}</Link>;
-}
-
-interface DistrictFirm {
-  sponsorId: number;
-  name: string;
-  type: string;
-  owner: { firstName: string; lastName: string; personality: string } | null;
-  favor: number;
-  budgetEstimate: { low: number; high: number };
-  mainHolder: { teamId: string; teamName: string } | null;
-  isMine: boolean;
-}
-interface PubEncounter { id: string; sponsorId: number; sponsorName: string; ownerName: string; personality: string; beerCost: number }
+const SPONSOR_TABS = ["contracts", "firms"] as const;
+type SponsorTab = (typeof SPONSOR_TABS)[number];
+const TAB_LABELS: Record<SponsorTab, string> = {
+  contracts: "Smlouvy",
+  firms: "Firmy v okrese",
+};
+/** Klíč v localStorage: poslední otevřená záložka (jen pohodlí v tomhle prohlížeči). */
+const TAB_STORAGE_KEY = "sponzori-tab";
 
 export default function SponsorsPage() {
   const { teamId, setTeam: setTeamCtx } = useTeam();
+  const [tab, setTab] = useTabParam(SPONSOR_TABS, "tab", TAB_STORAGE_KEY);
   const [data, setData] = useState<SponsorsData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [firms, setFirms] = useState<{ firms: DistrictFirm[]; pub: PubEncounter | null } | null>(null);
@@ -109,7 +56,9 @@ export default function SponsorsPage() {
   };
 
   useEffect(() => {
-    refresh().then(() => setLoading(false)).catch(() => setLoading(false));
+    refresh()
+      .catch((e) => { console.error("sponzori refresh:", e); })
+      .finally(() => setLoading(false));
   }, [teamId]);
 
   const handleSign = async (offer: SponsorOffer, category: SponsorCategory) => {
@@ -253,26 +202,27 @@ export default function SponsorsPage() {
   if (!data || !team) return <div className="page-container">Data nenalezena.</div>;
 
   const hasMainSponsor = !!data.mainContract;
+  const favors = new Map<number, number>((firms?.firms ?? []).map((f) => [f.sponsorId, f.favor]));
 
   return (
     <div className="page-container space-y-5">
       {confirmDialog}
 
-      {/* Team name + rename */}
+      {/* Název klubu + přejmenování */}
       <Card>
         <CardBody>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-muted font-heading uppercase mb-1">Název klubu</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm text-muted font-heading uppercase mb-1">Název klubu</div>
               <div className="font-heading font-bold text-xl">{data.teamName}</div>
             </div>
             {!hasMainSponsor && data.canChangeMainSponsor && !showRename && (
-              <button onClick={() => setShowRename(true)} className="text-sm text-pitch-500 font-heading font-bold hover:text-pitch-600 transition-colors">
+              <button onClick={() => setShowRename(true)} className="min-h-11 text-sm text-pitch-500 font-heading font-bold hover:text-pitch-600 transition-colors">
                 Přejmenovat
               </button>
             )}
             {!data.canChangeMainSponsor && (
-              <span className="text-xs text-muted bg-surface px-2 py-1 rounded-full">Změna 1x/sezónu vyčerpána</span>
+              <span className="text-sm text-muted bg-surface px-2 py-1 rounded-full shrink-0">Změna 1× za sezónu vyčerpána</span>
             )}
           </div>
           {showRename && (
@@ -280,7 +230,7 @@ export default function SponsorsPage() {
               <input
                 type="text" value={renameInput} onChange={(e) => setRenameInput(e.target.value)}
                 placeholder="Nový název klubu..." maxLength={50}
-                className="input flex-1"
+                className="input flex-1 min-w-0"
               />
               <button onClick={handleRename} disabled={acting || !renameInput.trim()}
                 className="btn btn-primary btn-sm">Uložit</button>
@@ -289,7 +239,7 @@ export default function SponsorsPage() {
             </div>
           )}
           {showRename && (
-            <p className="text-xs text-card-red mt-2">Přejmenování stojí -3 reputace a je možné max 1x za sezónu.</p>
+            <p className="text-sm text-card-red mt-2">Přejmenování stojí -3 reputace a je možné max 1× za sezónu.</p>
           )}
         </CardBody>
       </Card>
@@ -303,7 +253,7 @@ export default function SponsorsPage() {
           <CardBody>
             <div className="text-sm">
               🍺 V hospodě sedí <span className="font-heading font-bold text-base">{firms.pub.ownerName}</span>, majitel{" "}
-              <SponsorLink id={firms.pub.sponsorId} name={firms.pub.sponsorName} className="font-heading font-bold" />.
+              <SponsorLink id={firms.pub.sponsorId} name={firms.pub.sponsorName} className="font-heading font-bold text-base" />.
               Pozvat ho na pivo stojí {formatCZK(firms.pub.beerCost)}.
             </div>
             <div className="flex gap-2 mt-3">
@@ -314,302 +264,25 @@ export default function SponsorsPage() {
         </Card>
       )}
 
-      <p className="text-sm text-muted">
-        Nabídky závisí na reputaci tvého klubu ({team.reputation}) — určuje jejich počet i částku.{" "}
-        <Link href="/reputace" className="text-pitch-600 underline">Jak ji zvednout →</Link>
-      </p>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        ariaLabel="Sponzoři"
+        items={SPONSOR_TABS.map((key) => ({ key, label: TAB_LABELS[key] }))}
+      />
 
-      {/* ── Main sponsor ── */}
-      <div>
-        <SectionLabel>{"\u{1F4DD}"} Hlavní sponzor</SectionLabel>
-        {data.mainContract ? (
-          <>
-            <ContractCard contract={data.mainContract} category="main" onTerminate={() => handleTerminate("main")} onRenew={() => handleRenew("main")} acting={acting} />
-            {data.mainOffers.length > 0 && (
-              <div className="mt-4">
-                <div className="text-xs text-muted font-heading uppercase tracking-wide mb-2">
-                  Konkurenční nabídky — porovnej, jestli se vyplatí ukončit
-                </div>
-                {!data.canChangeMainSponsor && (
-                  <div className="mb-2 text-xs text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">
-                    Limit změny hlavního sponzora 1×/sezónu už vyčerpán — můžeš ukončit smlouvu, ale novou podepíšeš až příští sezónu.
-                  </div>
-                )}
-                <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} current={data.mainContract} signDisabled={!data.canChangeMainSponsor} />
-              </div>
-            )}
-          </>
-        ) : !data.canChangeMainSponsor ? (
-          <Card>
-            <CardBody>
-              <p className="text-center text-muted py-4">
-                Tuto sezónu již nelze podepsat nového hlavního sponzora (limit 1x za sezónu).
-              </p>
-            </CardBody>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {data.mainExpired?.renewal && <ExpiredRenewCard contract={data.mainExpired} onRenew={() => handleRenew("main")} acting={acting} />}
-            {data.mainExpired?.blockedReason && (
-              <Card>
-                <CardBody>
-                  <div className="font-heading font-bold text-base">
-                    <SponsorLink id={data.mainExpired.sponsorId} name={data.mainExpired.sponsorName} />
-                  </div>
-                  <div className="text-sm text-muted">Smlouva vypršela a obnovit ji nejde: {data.mainExpired.blockedReason}.</div>
-                </CardBody>
-              </Card>
-            )}
-            <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} />
-          </div>
-        )}
-      </div>
-
-      {/* ── Stadium sponsor ── */}
-      <div>
-        <SectionLabel>{"\u{1F3DF}"} Sponzor stadionu {data.stadiumName ? `(${data.stadiumName})` : ""}</SectionLabel>
-        {data.stadiumContract ? (
-          <>
-            <ContractCard contract={data.stadiumContract} category="stadium" onTerminate={() => handleTerminate("stadium")} onRenew={() => handleRenew("stadium")} acting={acting} />
-            {data.stadiumOffers.length > 0 && (
-              <div className="mt-4">
-                <div className="text-xs text-muted font-heading uppercase tracking-wide mb-2">
-                  Konkurenční nabídky — porovnej, jestli se vyplatí ukončit
-                </div>
-                <OffersList offers={data.stadiumOffers} category="stadium" onSign={handleSign} acting={acting} current={data.stadiumContract} />
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="space-y-3">
-            {data.stadiumExpired?.renewal && <ExpiredRenewCard contract={data.stadiumExpired} onRenew={() => handleRenew("stadium")} acting={acting} />}
-            <OffersList offers={data.stadiumOffers} category="stadium" onSign={handleSign} acting={acting} />
-          </div>
-        )}
-      </div>
-
-      {/* ── Reklamní bannery ── */}
-      <div>
-        <SectionLabel>
-          {"\u{1F3AF}"} Reklamní bannery ({data.bannerContracts.length}/{data.maxBanners})
-        </SectionLabel>
-
-        {data.bannerContracts.length > 0 && (
-          <div className="space-y-2 mb-3">
-            {data.bannerContracts.map((c) => (
-              <ContractCard
-                key={c.id}
-                contract={c}
-                category="banner"
-                onTerminate={() => handleTerminate("banner", c.id)}
-                onRenew={() => handleRenew("banner", c.id)}
-                acting={acting}
-              />
-            ))}
-          </div>
-        )}
-
-        {data.bannerContracts.length >= data.maxBanners ? (
-          <Card><CardBody><p className="text-center text-muted py-3">Maximální počet bannerů ({data.maxBanners}) dosažen.</p></CardBody></Card>
-        ) : data.bannerOffers.length > 0 ? (
-          <>
-            <p className="text-xs text-muted mb-2">Můžeš podepsat až {data.maxBanners - data.bannerContracts.length} dalších bannerů.</p>
-            <OffersList offers={data.bannerOffers} category="banner" onSign={handleSign} acting={acting} />
-          </>
-        ) : (
-          <Card><CardBody><p className="text-center text-muted py-3">Žádné nabídky bannerů.</p></CardBody></Card>
-        )}
-      </div>
-
-      {firms && firms.firms.length > 0 && (
-        <div>
-          <SectionLabel>{"\u{1F91D}"} Firmy v okrese</SectionLabel>
-          <p className="text-sm text-muted mb-2">
-            Vztah k majitelům si budujte dopředu: pozvěte je na zápas, potkejte je v hospodě. Kdo vás má rád, dá víc.
-          </p>
-          <div className="space-y-2">
-            {firms.firms.map((f) => (
-              <Card key={f.sponsorId}>
-                <CardBody>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <SponsorLink id={f.sponsorId} name={f.name} className="font-heading font-bold text-base" />
-                      <div className="text-sm text-muted">
-                        {sponsorTypeLabel(f.type)}
-                        {f.owner ? ` · ${f.owner.firstName} ${f.owner.lastName}, ${personalityLabel(f.owner.personality)}` : ""}
-                      </div>
-                      <div className="text-sm mt-1">
-                        {f.isMine
-                          ? "Váš hlavní sponzor"
-                          : f.mainHolder
-                            ? <>Hlavní sponzor klubu <Link href={`/tym/${f.mainHolder.teamId}`} className="underline">{f.mainHolder.teamName}</Link></>
-                            : `Volný, rozpočet zhruba ${formatCZK(f.budgetEstimate.low)} až ${formatCZK(f.budgetEstimate.high)} měsíčně`}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-heading font-bold tabular-nums">{f.favor}</div>
-                      <div className="text-sm text-muted">{favorLabel(f.favor)}</div>
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-          </div>
-        </div>
+      {tab === "contracts" && (
+        <ContractsTab
+          data={data}
+          reputation={team.reputation}
+          favors={favors}
+          acting={acting}
+          onSign={handleSign}
+          onTerminate={handleTerminate}
+          onRenew={handleRenew}
+        />
       )}
-    </div>
-  );
-}
-
-// ═══ Components ═══
-
-/** Karta nedávno vypršelé smlouvy — nabídka obnovy se stejným sponzorem za aktuální podmínky. */
-function ExpiredRenewCard({ contract, onRenew, acting }: { contract: ActiveContract; onRenew: () => void; acting: boolean }) {
-  const r = contract.renewal!;
-  return (
-    <Card>
-      <CardBody>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <div className="font-heading font-bold text-base"><SponsorLink id={contract.sponsorId} name={contract.sponsorName} /></div>
-            <div className="text-sm text-muted">Smlouva vypršela s koncem sezóny — sponzor je připraven jednat o nové.</div>
-          </div>
-          <button onClick={onRenew} disabled={acting}
-            className="px-3 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50 shrink-0">
-            🤝 Obnovit (+{formatCZK(Math.round(r.monthlyAmount / 4.3))}/týd · {r.seasons} sezóny)
-          </button>
-        </div>
-      </CardBody>
-    </Card>
-  );
-}
-
-function ContractCard({ contract, category, onTerminate, onRenew, acting }: {
-  contract: ActiveContract; category: SponsorCategory; onTerminate: () => void; onRenew?: () => void; acting: boolean;
-}) {
-  const icon = category === "main" ? "\u{1F4DD}" : category === "stadium" ? "\u{1F3DF}" : "\u{1F3AF}";
-  return (
-    <Card>
-      <CardBody>
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-pitch-500/10 flex items-center justify-center text-2xl shrink-0">{icon}</div>
-          <div className="flex-1">
-            <div className="font-heading font-bold text-lg"><SponsorLink id={contract.sponsorId} name={contract.sponsorName} /></div>
-            <div className="text-sm text-muted">{sponsorTypeLabel(contract.sponsorType)}</div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-              <div>
-                <div className="text-pitch-500 font-heading font-bold tabular-nums">+{formatCZK(Math.round(contract.monthlyAmount / 4.3))}</div>
-                <div className="text-xs text-muted">týdně</div>
-              </div>
-              {contract.winBonus > 0 && (
-                <div>
-                  <div className="text-pitch-400 font-heading font-bold tabular-nums">+{formatCZK(contract.winBonus)}</div>
-                  <div className="text-xs text-muted">za výhru</div>
-                </div>
-              )}
-              <div>
-                <div className="font-heading font-bold tabular-nums">{contract.seasonsRemaining}/{contract.seasonsTotal}</div>
-                <div className="text-xs text-muted">zbývá sezón</div>
-              </div>
-              <div>
-                <div className="text-card-red font-heading font-bold tabular-nums text-sm">{formatCZK(contract.earlyTerminationFee)}</div>
-                <div className="text-xs text-muted">sankce</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-5 flex-wrap">
-          {contract.renewal && onRenew && (
-            <button onClick={onRenew} disabled={acting}
-              className="text-sm text-pitch-600 hover:text-pitch-500 font-heading font-bold transition-colors">
-              🤝 Prodloužit na {contract.renewal.seasons} sezóny (+{formatCZK(Math.round(contract.renewal.monthlyAmount / 4.3))}/týd)
-            </button>
-          )}
-          {!contract.renewal && onRenew && (
-            <span className="text-sm text-muted">
-              {contract.blockedReason
-                ? `Smlouva skončí s koncem sezóny: ${contract.blockedReason}.`
-                : "Prodloužit půjde v poslední sezóně smlouvy"}
-            </span>
-          )}
-          <button onClick={onTerminate} disabled={acting}
-            className="text-sm text-card-red hover:text-red-700 font-heading font-bold transition-colors">
-            Ukončit smlouvu předčasně
-          </button>
-        </div>
-      </CardBody>
-    </Card>
-  );
-}
-
-function OffersList({ offers, category, onSign, acting, current, signDisabled }: {
-  offers: SponsorOffer[]; category: SponsorCategory;
-  onSign: (offer: SponsorOffer, category: SponsorCategory) => void; acting: boolean;
-  current?: ActiveContract | null;
-  signDisabled?: boolean;
-}) {
-  if (offers.length === 0) {
-    return (
-      <Card><CardBody><p className="text-center text-muted py-4">Žádné nabídky. Zvyš reputaci pro lepší sponzory.</p></CardBody></Card>
-    );
-  }
-  // Sankce za ukončení aktuální smlouvy (poměrná podle zbývajících sezón) — stejný vzorec jako handleTerminate
-  const currentTerminationFee = current
-    ? Math.round(current.earlyTerminationFee * (current.seasonsRemaining / 3))
-    : 0;
-  const currentWeekly = current ? Math.round(current.monthlyAmount / 4.3) : 0;
-  return (
-    <div className="space-y-3">
-      {offers.map((offer, i) => {
-        const offerWeekly = Math.round(offer.monthlyAmount / 4.3);
-        const weeklyDelta = offerWeekly - currentWeekly;
-        // Po kolika týdnech se odpočítá sankce za ukončení smlouvy?
-        const payback = current && weeklyDelta > 0 ? Math.ceil(currentTerminationFee / weeklyDelta) : null;
-        return (
-          <Card key={i}>
-            <CardBody>
-              <div className="flex items-start gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <SponsorLink id={offer.sponsorId} name={offer.sponsorName} className="font-heading font-bold text-base" />
-                    <span className="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">{sponsorTypeLabel(offer.sponsorType)}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-sm">
-                    <span className="text-pitch-500 font-heading font-bold">+{formatCZK(offerWeekly)}/týd</span>
-                    {offer.winBonus > 0 && <span className="text-pitch-400 font-heading">+{formatCZK(offer.winBonus)} za výhru</span>}
-                    <span className="text-muted">{offer.seasons} {offer.seasons === 1 ? "sezóna" : offer.seasons <= 4 ? "sezóny" : "sezón"}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs">
-                    <span className="text-card-red">Sankce: {formatCZK(offer.earlyTerminationFee)}</span>
-                    {category === "main" && <span className="text-gold-600">Změní název klubu &middot; -3 reputace</span>}
-                    {offer.requirement && <span className="text-gold-600">{offer.requirement}</span>}
-                  </div>
-                  {current && (
-                    <div className="mt-2 pt-2 border-t border-gray-100 text-xs">
-                      <span className="text-muted">Vs. {current.sponsorName}: </span>
-                      <span className={weeklyDelta > 0 ? "text-pitch-500 font-heading font-bold" : weeklyDelta < 0 ? "text-card-red font-heading font-bold" : "text-muted"}>
-                        {weeklyDelta > 0 ? "+" : ""}{formatCZK(weeklyDelta)}/týd
-                      </span>
-                      <span className="text-muted">. Sankce za ukončení: <span className="text-card-red font-bold">{formatCZK(currentTerminationFee)}</span></span>
-                      {payback && (
-                        <span className="text-muted">. Návratnost změny: <span className="font-bold">{payback} {payback === 1 ? "týden" : payback < 5 ? "týdny" : "týdnů"}</span></span>
-                      )}
-                      {weeklyDelta <= 0 && (
-                        <span className="text-card-red"> — nevyplatí se</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <button onClick={() => onSign(offer, category)} disabled={acting || signDisabled}
-                  title={signDisabled ? "Limit změny pro tuto sezónu vyčerpán" : undefined}
-                  className="shrink-0 btn btn-primary btn-sm">
-                  Podepsat
-                </button>
-              </div>
-            </CardBody>
-          </Card>
-        );
-      })}
+      {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} />}
     </div>
   );
 }

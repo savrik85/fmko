@@ -42,26 +42,41 @@ export interface TabItem<T extends string = string> {
 export function useTabParam<T extends string>(
   keys: readonly T[],
   param = "tab",
+  /** Volitelně: klíč v localStorage, pod kterým si stránka pamatuje poslední záložku. */
+  storageKey?: string,
 ): [T, (value: T) => void] {
   const [active, setActive] = useState<T>(keys[0]);
   const klice = keys.join(",");
 
   useEffect(() => {
-    const readFromUrl = () => {
+    const readFromUrl = (): T | null => {
       const raw = new URLSearchParams(window.location.search).get(param);
-      const found = keys.find((k) => k === raw);
+      const found = keys.find((k) => k === raw) ?? null;
       setActive(found ?? keys[0]);
+      return found;
     };
-    readFromUrl();
+    const fromUrl = readFromUrl();
+    // Bez záložky v adrese vrátit tu, kterou měl hráč otevřenou naposledy.
+    // Jen při otevření stránky: krok zpět (popstate) se řídí adresou.
+    if (!fromUrl && storageKey) {
+      const saved = keys.find((k) => k === readStoredTab(storageKey));
+      if (saved && saved !== keys[0]) {
+        setActive(saved);
+        const url = new URL(window.location.href);
+        url.searchParams.set(param, saved);
+        window.history.replaceState(window.history.state, "", url);
+      }
+    }
     window.addEventListener("popstate", readFromUrl);
     return () => window.removeEventListener("popstate", readFromUrl);
     // klice pokrývá obsah pole; `keys` bývá literál a měnil by se každý render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [param, klice]);
+  }, [param, klice, storageKey]);
 
   const select = useCallback(
     (value: T) => {
       setActive(value);
+      if (storageKey) writeStoredTab(storageKey, value);
       const url = new URL(window.location.href);
       // Výchozí záložku v adrese nedržíme — URL zůstane čistá.
       if (value === keys[0]) url.searchParams.delete(param);
@@ -69,10 +84,28 @@ export function useTabParam<T extends string>(
       window.history.pushState({}, "", url);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [param, klice],
+    [param, klice, storageKey],
   );
 
   return [active, select];
+}
+
+/** localStorage umí v anonymním okně nebo s blokovanými daty vyhodit výjimku; záložka je jen pohodlí. */
+function readStoredTab(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch (e) {
+    console.warn("čtení uložené záložky:", e);
+    return null;
+  }
+}
+
+function writeStoredTab(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn("uložení záložky:", e);
+  }
 }
 
 export function Tabs<T extends string>({
