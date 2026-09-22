@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Card, CardBody, Spinner, SectionLabel, ErrorBox } from "@/components/ui";
+import { useTeam } from "@/context/team-context";
+import { OwnerCard, type OwnerInfo, type MyTeamInfo } from "@/components/sponsors/owner-card";
 
 interface SponsorContractRow {
   teamId: string;
@@ -26,6 +28,8 @@ interface SponsorDetail {
   priorityClub: { teamId: string; teamName: string } | null;
   activeContracts: SponsorContractRow[];
   history: SponsorContractRow[];
+  owner: OwnerInfo | null;
+  myTeam: MyTeamInfo | null;
 }
 
 const CATEGORY_LABEL: Record<SponsorContractRow["category"], string> = {
@@ -49,14 +53,16 @@ function TeamLink({ id, name }: { id: string; name: string }) {
 
 export default function SponsorDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { teamId } = useTeam();
   const [data, setData] = useState<SponsorDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    apiFetch<SponsorDetail>(`/api/sponsors/${id}`)
+  const load = () => {
+    apiFetch<SponsorDetail>(`/api/sponsors/${id}${teamId ? `?teamId=${teamId}` : ""}`)
       .then(setData)
       .catch((e) => { console.error("sponsor detail:", e); setError((e as Error).message); });
-  }, [id]);
+  };
+  useEffect(load, [id, teamId]);
 
   if (error) return <div className="page-container"><ErrorBox message={error} /></div>;
   if (!data) return <div className="flex justify-center py-12"><Spinner /></div>;
@@ -72,6 +78,10 @@ export default function SponsorDetailPage() {
           <div className="text-sm text-muted">{sponsorTypeLabel(data.type)}</div>
         </CardBody>
       </Card>
+
+      {data.owner && (
+        <OwnerCard sponsorId={data.id} teamId={teamId} owner={data.owner} myTeam={data.myTeam} onChanged={load} />
+      )}
 
       <div>
         <SectionLabel>{"\u{1F4DD}"} Hlavní sponzor klubu</SectionLabel>
