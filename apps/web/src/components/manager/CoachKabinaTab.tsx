@@ -179,47 +179,49 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
           {shown.map((p) => {
             const band = coachRelationBand(p.relationship);
             return (
-              <div key={p.id} className="py-3 border-b border-gray-50 last:border-b-0">
-                <div className="flex items-center gap-3">
+              <div key={p.id} className="py-3 sm:py-3.5 border-b border-gray-100/80 last:border-b-0">
+                <div className="flex items-start sm:items-center gap-3">
                   {p.avatar && Object.keys(p.avatar).length > 2 ? (
-                    <FaceAvatar faceConfig={p.avatar} size={36} className="shrink-0 bg-surface rounded-lg" />
+                    <FaceAvatar faceConfig={p.avatar} size={40} className="shrink-0 bg-surface rounded-xl border border-gray-100 shadow-2xs mt-0.5 sm:mt-0" />
                   ) : (
-                    <div className="shrink-0 w-9 h-9 rounded-lg bg-surface flex items-center justify-center font-heading font-bold text-sm">{p.lastName[0]}</div>
+                    <div className="shrink-0 w-10 h-10 rounded-xl bg-surface flex items-center justify-center font-heading font-bold text-sm text-ink border border-gray-100 mt-0.5 sm:mt-0">{p.lastName[0]}</div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Link href={`/hrac/${p.id}`} className="entity-link text-base font-heading font-bold truncate">
-                        {p.firstName} {p.lastName}
-                      </Link>
-                      <PositionBadge position={p.position} />
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-sm font-heading font-bold shrink-0 ${TONE_TEXT[band.tone]}`}>{band.icon} {band.label}</span>
-                      <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-                        <div className={`h-full rounded-full ${TONE_BAR[band.tone]}`} style={{ width: `${Math.max(3, p.relationship)}%` }} />
+                    <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Link href={`/hrac/${p.id}`} className="entity-link text-base font-heading font-bold truncate">
+                          {p.firstName} {p.lastName}
+                        </Link>
+                        <PositionBadge position={p.position} />
                       </div>
-                      <span className="text-sm font-heading font-bold tabular-nums shrink-0 w-7 text-right">{p.relationship}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-xs sm:text-sm font-heading font-bold ${TONE_TEXT[band.tone]}`}>{band.icon} {band.label}</span>
+                        <span className="text-sm font-heading font-extrabold tabular-nums text-ink">{p.relationship}</span>
+                      </div>
                     </div>
+                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-1.5">
+                      <div className={`h-full rounded-full ${TONE_BAR[band.tone]}`} style={{ width: `${Math.max(3, p.relationship)}%` }} />
+                    </div>
+                    {(p.sulking || p.wantsOut || p.lowMorale || p.injuredDays || p.leftOutStreak >= 2) && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {p.sulking && <Flag tone="bad">😤 Trucuje</Flag>}
+                        {p.wantsOut && <Flag tone="warn">✈️ Chce pryč</Flag>}
+                        {p.lowMorale && <Flag tone="warn">📉 Morálka {p.morale}</Flag>}
+                        {p.leftOutStreak >= 2 && !p.sulking && <Flag tone="warn">🪑 {p.leftOutStreak}× nejel na zápas</Flag>}
+                        {p.injuredDays ? <Flag tone="warn">🩹 Zraněný {p.injuredDays} d</Flag> : null}
+                      </div>
+                    )}
+                    {p.lastChange && (
+                      <div className="text-xs sm:text-sm text-muted mt-1.5 flex items-center gap-1.5 flex-wrap">
+                        <span className={`font-bold tabular-nums ${p.lastChange.delta > 0 ? "text-pitch-600" : "text-card-red"}`}>
+                          {p.lastChange.delta > 0 ? "+" : ""}{p.lastChange.delta}
+                        </span>
+                        <span className="text-ink-light">{p.lastChange.description}</span>
+                        <span className="text-muted">· {formatLogDate(p.lastChange.date)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                {(p.sulking || p.wantsOut || p.lowMorale || p.injuredDays || p.leftOutStreak >= 2) && (
-                  <div className="flex flex-wrap gap-1.5 mt-2 ml-12">
-                    {p.sulking && <Flag tone="bad">😤 Trucuje</Flag>}
-                    {p.wantsOut && <Flag tone="warn">✈️ Chce pryč</Flag>}
-                    {p.lowMorale && <Flag tone="warn">📉 Morálka {p.morale}</Flag>}
-                    {p.leftOutStreak >= 2 && !p.sulking && <Flag tone="warn">🪑 {p.leftOutStreak}× nejel na zápas</Flag>}
-                    {p.injuredDays ? <Flag tone="warn">🩹 Zraněný {p.injuredDays} d</Flag> : null}
-                  </div>
-                )}
-                {p.lastChange && (
-                  <div className="text-sm text-muted mt-1.5 ml-12">
-                    <span className={`font-bold tabular-nums ${p.lastChange.delta > 0 ? "text-pitch-600" : "text-card-red"}`}>
-                      {p.lastChange.delta > 0 ? "+" : ""}{p.lastChange.delta}
-                    </span>{" "}
-                    {p.lastChange.description}
-                    <span className="text-muted"> · {formatLogDate(p.lastChange.date)}</span>
-                  </div>
-                )}
               </div>
             );
           })}

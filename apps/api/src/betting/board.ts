@@ -501,8 +501,19 @@ export async function generateBoard(
 /**
  * Zápis lístku. UPSERT na UNIQUE(match_id, market, selection) — souběžné běhy
  * tak nemůžou vyrobit dvě sady kurzů na týž zápas.
+ *
+ * Po zápisu se z kola smaže všechno, co nový přepočet nevypsal. UPSERT sám
+ * jen přepisuje, takže tip, který přestal dávat smysl, by na lístku zůstal
+ * se starým kurzem. Přesně tak 22. 9. 2026 v Prachaticích zůstalo „víc než
+ * 2,5 gólu" za 1,83, když ho nový model s šancí přes 90 % už nevypsal.
+ * Stejně tak visel střelec, který vypadl z šestice.
+ *
+ * Maže se jen po úspěšném zápisu všech dávek. Když zápis spadne, lístek
+ * zůstane starý, ale celý. Prázdný lístek by byl horší než zastaralý.
+ * Úklid se týká jen nesehraných zápasů kola, kurzy odehraných zápasů
+ * potřebuje hlídač kurzů (calibration.ts).
  */
-async function writeOdds(db: D1Database, rows: OddsRow[], gameDate: string): Promise<void> {
+export async function writeOdds(db: D1Database, rows: OddsRow[], gameDate: string): Promise<void> {
   if (rows.length === 0) return;
 
   const stmt = db.prepare(
@@ -519,13 +530,33 @@ async function writeOdds(db: D1Database, rows: OddsRow[], gameDate: string): Pro
 
   // D1 zvládne dávku pohodlně; sedm zápasů dá kolem sta řádků.
   const CHUNK = 60;
+  let selhalo = false;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const davka = rows.slice(i, i + CHUNK).map((r) => stmt.bind(
       crypto.randomUUID(), r.leagueId, r.seasonNumber, r.calendarId, r.matchId,
       r.market, r.selection, r.oddsX100, r.probability, r.label, gameDate,
     ));
     await db.batch(davka).catch((e) => {
+      selhalo = true;
       logger.error({ module: M }, `zápis kurzů (dávka od ${i})`, e);
     });
   }
+
+  const calendarId = rows[0].calendarId;
+  if (selhalo) {
+    logger.warn({ module: M }, `kolo ${calendarId}: zápis neprošel celý, staré kurzy se nemažou`);
+    return;
+  }
+
+  const vypsane = rows.map((r) => `${r.matchId}|${r.market}|${r.selection}`);
+  const smazano = await db.prepare(
+    `DELETE FROM bet_odds
+      WHERE calendar_id = ?
+        AND match_id IN (SELECT id FROM matches WHERE calendar_id = ? AND status = 'scheduled')
+        AND (match_id || '|' || market || '|' || selection) NOT IN (SELECT value FROM json_each(?))`
+  ).bind(calendarId, calendarId, JSON.stringify(vypsane)).run()
+    .catch((e) => { logger.error({ module: M }, `úklid starých kurzů kola ${calendarId}`, e); return null; });
+
+  const pocet = smazano?.meta?.changes ?? 0;
+  if (pocet > 0) logger.info({ module: M }, `kolo ${calendarId}: z lístku zmizelo ${pocet} kurzů, které nový přepočet nevypsal`);
 }

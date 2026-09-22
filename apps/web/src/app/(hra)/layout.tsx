@@ -11,7 +11,7 @@ import { AnnouncementDialog } from "@/components/dashboard/announcement-dialog";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 
-const DETAIL_PREFIXES = ["/hrac/", "/tym/", "/zapas/", "/pohar/tym/", "/telefon/"];
+const DETAIL_PREFIXES = ["/hrac/", "/tym/", "/zapas/", "/pohar/tym/", "/telefon/", "/manazer/"];
 // Telefon má vlastní hlavičku („Telefon", kredit, tužka) a nad ní ještě
 // stavový řádek. Hlavička stránky nad tím dělala druhý nadpis Telefon a
 // na mobilu ukrajovala kus obrazovky, na které má být vidět seznam zpráv.

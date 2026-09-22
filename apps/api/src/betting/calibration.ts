@@ -25,6 +25,18 @@ const M = "betting-calibration";
 /** Kolik dní odehraných zápasů se prochází. */
 export const CALIBRATION_DAYS = 21;
 
+/**
+ * Herní datum, od kterého platí současný kurzový model. Starší kurzy se
+ * nehodnotí.
+ *
+ * Hlídač má říkat, jestli prodělává model, který běží TEĎ. Bez téhle hranice
+ * by po opravě ještě tři týdny každé ráno hlásil starou díru, dokud by
+ * zápasy se starými kurzy nevypadly z okna. Přesně to se stalo 22. 9. 2026.
+ *
+ * Při každé změně modelu, která mění kurzy, se posune na den nasazení.
+ */
+export const MODEL_SINCE = "2026-09-22";
+
 /** Pod tolik vyhodnocených tipů se trh neposuzuje, je to jen šum. */
 export const CALIBRATION_MIN_N = 50;
 
@@ -119,8 +131,9 @@ export async function loadGradedOffers(db: D1Database, days = CALIBRATION_DAYS):
        LEFT JOIN match_player_stats s
               ON o.market = 'scorer' AND s.match_id = o.match_id AND s.player_id = o.selection
       WHERE m.status = 'simulated' AND m.home_score IS NOT NULL
-        AND sc.scheduled_at >= ?`
-  ).bind(new Date(Date.now() - days * 86_400_000).toISOString()).all<{
+        AND sc.scheduled_at >= ?
+        AND o.game_date >= ?`
+  ).bind(new Date(Date.now() - days * 86_400_000).toISOString(), MODEL_SINCE).all<{
     league_id: string; league_name: string; market: string; selection: string; odds_x100: number;
     home_score: number; away_score: number; appeared: string | null; goals: number;
   }>();

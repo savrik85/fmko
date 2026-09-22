@@ -12,8 +12,8 @@ import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
 import { CoachEducationTab } from "@/components/manager/CoachEducationTab";
 import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
-import { isLightColor } from "@/lib/team-color";
-import { coachAttributeEffects, licenceCap } from "@okresni-masina/shared";
+import { isLightColor, bestTextOn } from "@/lib/team-color";
+import { coachAttributeEffects, licenceCap, LICENCE_LEVELS } from "@okresni-masina/shared";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
 
 type CoachTab = "prehled" | "kabina" | "treneri" | "vzdelani" | "historie";
@@ -28,11 +28,22 @@ const BACKSTORY_LABELS: Record<string, string> = {
 };
 
 function attrColor(value: number): string {
-  if (value >= 70) return "text-pitch-400 font-bold";
-  if (value >= 50) return "text-pitch-600";
-  if (value >= 30) return "text-ink";
-  if (value >= 15) return "text-gold-600";
-  return "text-card-red";
+  if (value >= 70) return "text-pitch-600 font-bold";
+  if (value >= 50) return "text-emerald-600 font-bold";
+  if (value >= 35) return "text-amber-600 font-bold";
+  return "text-card-red font-bold";
+}
+
+function attrBarColor(value: number): string {
+  if (value >= 70) return "#16a34a";
+  if (value >= 50) return "#10b981";
+  if (value >= 35) return "#f59e0b";
+  return "#ef4444";
+}
+
+function shortLicence(level: number): string {
+  const item = LICENCE_LEVELS.find((l) => l.level === level);
+  return item ? item.short : "bez";
 }
 
 export default function ManagerDetailPage() {
@@ -58,7 +69,6 @@ export default function ManagerDetailPage() {
 
   useEffect(() => {
     if (!teamId) return;
-    // Manager ID is the same as team ID for fetching (API uses team ID)
     Promise.all([
       apiFetch<ManagerProfile>(`/api/teams/${managerId}/manager`).catch((e) => { console.error("manager profile load:", e); return null; }),
       apiFetch<Team>(`/api/teams/${managerId}`).catch((e) => { console.error("manager team load:", e); return null; }),
@@ -83,80 +93,205 @@ export default function ManagerDetailPage() {
   if (!manager || !team) return <div className="page-container">Trenér nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";
-  const light = isLightColor(color);
-  const txt = light ? "text-gray-900" : "text-white";
-  const txtMuted = light ? "text-gray-600" : "text-white/80";
-  const txtLabel = light ? "text-gray-500" : "text-white/70";
-  const txtSoft = light ? "text-gray-400" : "text-white/40";
-  const boxBg = light ? "bg-black/5 hover:bg-black/10" : "bg-white/10 hover:bg-white/20";
+  const isDarkText = bestTextOn(color) === "dark";
+  const txt = isDarkText ? "text-gray-900" : "text-white";
+  const txtMuted = isDarkText ? "text-gray-800" : "text-white/80";
+  const txtSoft = isDarkText ? "text-gray-600" : "text-white/50";
+  const boxBg = isDarkText ? "bg-black/10 text-gray-900" : "bg-white/15 text-white";
+  const boxBgHover = isDarkText ? "hover:bg-black/15" : "hover:bg-white/25";
+  const boxLabel = isDarkText ? "text-gray-700 font-semibold" : "text-white/70";
 
   return (
     <>
-      {/* ═══ Manager header ═══ */}
-      <div className="hero-gradient px-5 sm:px-8 py-6" style={{ backgroundColor: color }}>
-        <div className="flex items-center gap-5 max-w-[1280px] mx-auto">
-          {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
-            <FaceAvatar faceConfig={manager.avatar} size={80} className="shrink-0 bg-white/10 rounded-xl" />
-          ) : (
-            <div className={`shrink-0 w-20 h-20 rounded-xl ${light ? "bg-black/5" : "bg-white/10"} flex items-center justify-center ${txt} font-heading font-bold text-3xl`}>
-              {manager.name[0]}
+      {/* ═══ Manager header — konzistentní se zbytkem aplikace (Hráč/Tým) ═══ */}
+      <div className="hero-gradient px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <div className="max-w-[1280px] mx-auto">
+          
+          {/* ─── Desktop ─── */}
+          <div className="hidden sm:flex items-center gap-4">
+            {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
+              <FaceAvatar faceConfig={manager.avatar} size={72} className={`shrink-0 ${boxBg} rounded-xl`} />
+            ) : (
+              <div className={`shrink-0 w-[72px] h-[72px] rounded-xl ${boxBg} flex items-center justify-center ${txt} font-heading font-bold text-2xl`}>
+                {manager.name[0]}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}>
+                {manager.name}
+              </h1>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {manager.backstory && (
+                  <span className={`${txtMuted} text-sm font-heading font-semibold`}>
+                    {BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}
+                  </span>
+                )}
+                <LicenceBadge level={manager.licenceLevel ?? 0} showNone />
+              </div>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                {manager.age && <span className={`${txtMuted} text-sm`}>{manager.age} let</span>}
+                {manager.birthplace && (
+                  <>
+                    <span className={txtSoft}>&middot;</span>
+                    <span className={`${txtMuted} text-sm`}>{manager.birthplace}</span>
+                  </>
+                )}
+                <span className={txtSoft}>&middot;</span>
+                <a href={`/tym/${team.id}`} className={`${txtMuted} text-sm hover:opacity-80 underline transition-colors flex items-center gap-1.5`}>
+                  <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                    initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+                  {team.name}
+                </a>
+              </div>
             </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <h1 className={`font-heading font-extrabold ${txt} text-xl sm:text-2xl leading-tight truncate`}>
-              {manager.name}
-            </h1>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              {manager.backstory && (
-                <span className={`${txtLabel} text-sm`}>{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</span>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
+                <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>
+                  {manager.reputation ?? 30}
+                </div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Reputace</div>
+              </div>
+
+              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
+                <div className={`font-heading font-extrabold text-xl leading-none ${txt}`}>
+                  {shortLicence(manager.licenceLevel ?? 0)}
+                </div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Licence</div>
+              </div>
+
+              {canEdit && (
+                <button onClick={() => setEditing(true)}
+                  className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
+                  <div className="text-xl leading-none">✏️</div>
+                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Upravit</div>
+                </button>
               )}
-              <LicenceBadge level={manager.licenceLevel ?? 0} showNone />
-            </div>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
-              {manager.age && <span className={`${txtMuted} text-sm`}>{manager.age} let</span>}
-              {manager.birthplace && (
-                <>
-                  <span className={txtSoft}>&middot;</span>
-                  <span className={`${txtMuted} text-sm`}>{manager.birthplace}</span>
-                </>
+
+              {managerId !== teamId && teamId && (team as any).user_id !== "ai" && (
+                <button onClick={async () => {
+                  if (!teamId) return;
+                  try {
+                    const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
+                      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+                    });
+                    if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
+                  } catch (e) {
+                    console.error("conversation-with:", e);
+                    showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
+                  }
+                }}
+                  className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
+                  <div className="text-xl leading-none">💬</div>
+                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Napsat</div>
+                </button>
               )}
-              <span className={txtSoft}>&middot;</span>
-              <a href={`/tym/${team.id}`} className={`${txtMuted} text-sm hover:opacity-80 underline ${light ? "decoration-gray-300" : "decoration-white/30"} transition-colors flex items-center gap-1.5`}>
-                <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                  initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
-                {team.name}
-              </a>
             </div>
           </div>
 
-          {/* Edit button for own profile */}
-          {canEdit && (
-            <button onClick={() => setEditing(true)}
-              className={`${boxBg} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
-              <div className="text-xl leading-none">{"✏️"}</div>
-              <div className={`${txtLabel} text-micro font-heading font-bold uppercase mt-1`}>Upravit</div>
-            </button>
-          )}
+          {/* ─── Mobil ─── */}
+          <div className="sm:hidden">
+            {/* Řádek 1: avatar + jméno/licence + akční tlačítka */}
+            <div className="flex items-center gap-3">
+              {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
+                <FaceAvatar faceConfig={manager.avatar} size={56} className={`shrink-0 ${boxBg} rounded-xl`} />
+              ) : (
+                <div className={`shrink-0 w-14 h-14 rounded-xl ${boxBg} flex items-center justify-center ${txt} font-heading font-bold text-xl`}>
+                  {manager.name[0]}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}>
+                  {manager.name}
+                </h1>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <LicenceBadge level={manager.licenceLevel ?? 0} showNone />
+                </div>
+              </div>
+              {canEdit && (
+                <button onClick={() => setEditing(true)}
+                  className={`w-9 h-9 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-base shrink-0`}
+                  title="Upravit profil">
+                  ✏️
+                </button>
+              )}
+              {managerId !== teamId && teamId && (team as any).user_id !== "ai" && (
+                <button onClick={async () => {
+                  if (!teamId) return;
+                  try {
+                    const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
+                      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+                    });
+                    if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
+                  } catch (e) {
+                    showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
+                  }
+                }}
+                  className={`w-9 h-9 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-base shrink-0`}
+                  title="Napsat trenérovi">
+                  💬
+                </button>
+              )}
+            </div>
 
-          {/* Message button for rival managers */}
-          {managerId !== teamId && teamId && (team as any).user_id !== "ai" && (
-            <button onClick={async () => {
-              if (!teamId) return;
-              try {
-                const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
-                  method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                });
-                if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
-              } catch (e) {
-                console.error("conversation-with:", e);
-                showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
-              }
-            }}
-              className={`${boxBg} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
-              <div className="text-xl leading-none">{"\u{1F4AC}"}</div>
-              <div className={`${txtLabel} text-micro font-heading font-bold uppercase mt-1`}>Napsat</div>
-            </button>
-          )}
+            {/* Řádek 2: pozadí, věk, bydliště, tým */}
+            <div className="flex items-center gap-2 mt-2 flex-wrap text-sm">
+              {manager.backstory && (
+                <span className={`${txtMuted} font-heading font-semibold`}>
+                  {BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}
+                </span>
+              )}
+              {manager.age && (
+                <>
+                  <span className={txtSoft}>&middot;</span>
+                  <span className={`${txtMuted}`}>{manager.age} let</span>
+                </>
+              )}
+              {manager.birthplace && (
+                <>
+                  <span className={txtSoft}>&middot;</span>
+                  <span className={`${txtMuted}`}>{manager.birthplace}</span>
+                </>
+              )}
+              <span className={txtSoft}>&middot;</span>
+              <a href={`/tym/${team.id}`} className={`${txtMuted} hover:opacity-80 underline flex items-center gap-1.5`}>
+                <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                  initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={16} />
+                <span className="truncate max-w-[170px]">{team.name}</span>
+              </a>
+            </div>
+
+            {/* Řádek 3: Staty na celou šířku (stejné jako v detailu hráče) */}
+            <div className="flex gap-1.5 mt-2">
+              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
+                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>
+                  {manager.reputation ?? 30}
+                </div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Reputace</div>
+              </div>
+              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
+                <div className={`font-heading font-extrabold text-sm leading-none ${txt}`}>
+                  {shortLicence(manager.licenceLevel ?? 0)}
+                </div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Licence</div>
+              </div>
+              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
+                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>
+                  {achievements ? `${achievements.earnedCount}/${achievements.totalCount}` : "—"}
+                </div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Úspěchy</div>
+              </div>
+              {hofRank && (
+                <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
+                  <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>
+                    #{hofRank.rank}
+                  </div>
+                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Síň slávy</div>
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -170,6 +305,7 @@ export default function ManagerDetailPage() {
         />
       )}
 
+      {/* ═══ Main container with tabs ═══ */}
       <div className="page-container space-y-5">
 
         <Tabs
@@ -187,61 +323,63 @@ export default function ManagerDetailPage() {
 
         {/* ═══ Přehled: vlastnosti, informace, bio ═══ */}
         {tab === "prehled" && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
 
-          {/* Vlastnosti a jejich dopad — čísla počítá stejný sdílený vzorec jako hra */}
-          <div className="card p-4 sm:p-5">
-            <SectionLabel>Trenérské vlastnosti a co dělají</SectionLabel>
-            <div>
-              {coachAttributeEffects({
-                coaching: manager.coaching ?? 40,
-                motivation: manager.motivation ?? 40,
-                tactics: manager.tactics ?? 40,
-                youthDevelopment: manager.youthDevelopment ?? 40,
-                discipline: manager.discipline ?? 40,
-                reputation: manager.reputation ?? 30,
-              }).map((fx) => (
-                <AttrRow key={fx.key} label={fx.label} value={fx.value} lines={fx.lines}
-                  max={fx.key === "reputation" ? 75 : 99}
-                  cap={fx.key === "reputation" ? undefined : licenceCap(manager.licenceLevel ?? 0)} />
-              ))}
-            </div>
-          </div>
-
-          {/* Info + Bio */}
-          <div className="space-y-5">
+            {/* Vlastnosti a jejich dopad — přehledný seznam ve standardním stylu aplikace */}
             <div className="card p-4 sm:p-5">
-              <SectionLabel>Informace</SectionLabel>
-              <div className="space-y-3">
-                <InfoRow label="Jméno" value={manager.name} />
-                {manager.age && <InfoRow label="Věk" value={`${manager.age} let`} />}
-                {manager.birthplace && <InfoRow label="Bydliště" value={manager.birthplace} />}
-                {manager.backstory && <InfoRow label="Pozadí" value={BACKSTORY_LABELS[manager.backstory] ?? manager.backstory} />}
-                {hofRank && (
-                  <InfoRow label="Síň slávy" value={
-                    <Link href="/sin-slavy" className="text-ink hover:text-pitch-500 transition-colors">
-                      {hofRank.rank}. <span className="text-muted font-normal text-xs">z {hofRank.total}</span>
-                    </Link>
-                  } />
-                )}
-                <InfoRow label="Tým" value={
-                  <a href={`/tym/${team.id}`} className="text-ink hover:underline flex items-center gap-1.5">
-                    <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                      initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={22} />
-                    {team.name}
-                  </a>
-                } />
+              <SectionLabel>Trenérské vlastnosti a co dělají</SectionLabel>
+              <div className="divide-y divide-gray-50">
+                {coachAttributeEffects({
+                  coaching: manager.coaching ?? 40,
+                  motivation: manager.motivation ?? 40,
+                  tactics: manager.tactics ?? 40,
+                  youthDevelopment: manager.youthDevelopment ?? 40,
+                  discipline: manager.discipline ?? 40,
+                  reputation: manager.reputation ?? 30,
+                }).map((fx) => (
+                  <AttrRow key={fx.key} label={fx.label} value={fx.value} lines={fx.lines}
+                    max={fx.key === "reputation" ? 75 : 99}
+                    cap={fx.key === "reputation" ? undefined : licenceCap(manager.licenceLevel ?? 0)} />
+                ))}
               </div>
             </div>
 
-            {manager.bio && (
+            {/* Info + Bio */}
+            <div className="space-y-5">
               <div className="card p-4 sm:p-5">
-                <SectionLabel>Bio</SectionLabel>
-                <p className="text-sm text-ink-light leading-relaxed">{manager.bio}</p>
+                <SectionLabel>Informace</SectionLabel>
+                <div className="space-y-0">
+                  <DetailRow label="Jméno" value={manager.name} />
+                  {manager.age && <DetailRow label="Věk" value={`${manager.age} let`} />}
+                  {manager.birthplace && <DetailRow label="Bydliště" value={manager.birthplace} />}
+                  {manager.backstory && <DetailRow label="Pozadí" value={BACKSTORY_LABELS[manager.backstory] ?? manager.backstory} />}
+                  <DetailRow label="Licence" value={<LicenceBadge level={manager.licenceLevel ?? 0} showNone />} />
+                  <DetailRow label="Reputace" value={<span className="tabular-nums">{manager.reputation ?? 30} / 75</span>} />
+                  {hofRank && (
+                    <DetailRow label="Síň slávy" value={
+                      <Link href="/sin-slavy" className="text-ink hover:text-pitch-500 transition-colors">
+                        {hofRank.rank}. <span className="text-muted font-normal text-xs">z {hofRank.total}</span>
+                      </Link>
+                    } />
+                  )}
+                  <DetailRow label="Tým" value={
+                    <a href={`/tym/${team.id}`} className="text-ink hover:underline flex items-center gap-1.5">
+                      <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
+                        initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+                      {team.name}
+                    </a>
+                  } />
+                </div>
               </div>
-            )}
+
+              {manager.bio && (
+                <div className="card p-4 sm:p-5">
+                  <SectionLabel>Bio</SectionLabel>
+                  <p className="text-sm text-ink-light leading-relaxed">{manager.bio}</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
         )}
 
         {/* ═══ Kabina: vztah vlastních hráčů k trenérovi ═══ */}
@@ -343,7 +481,6 @@ const TIER_COLORS: Record<string, { bg: string; border: string; text: string; la
 };
 
 function AchievementsSection({ data }: { data: AchievementsPayload }) {
-  const pct = data.totalCount > 0 ? (data.earnedCount / data.totalCount) * 100 : 0;
   const byTier: Record<string, AchievementItem[]> = { gold: [], silver: [], bronze: [] };
   for (const a of data.achievements) byTier[a.tier]?.push(a);
 
@@ -351,15 +488,12 @@ function AchievementsSection({ data }: { data: AchievementsPayload }) {
     <div className="card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3 mb-3">
         <SectionLabel>Úspěchy ({data.earnedCount}/{data.totalCount})</SectionLabel>
-        <div className="flex-1 max-w-[240px] bg-gray-100 rounded-full h-1.5 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-amber-300 to-amber-600 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-        </div>
       </div>
       {(["gold", "silver", "bronze"] as const).map((tier) => {
         const list = byTier[tier];
         if (!list || list.length === 0) return null;
         const tc = TIER_COLORS[tier];
-        const earned = list.filter((a) => a.earnedAt);
+        const earned = list.filter((a) => !!a.earnedAt);
         return (
           <div key={tier} className="mt-3">
             <div className="text-micro text-muted uppercase tracking-wide font-heading font-bold mb-1.5">{tc.label} ({earned.length}/{list.length})</div>
@@ -389,9 +523,7 @@ function AchievementsSection({ data }: { data: AchievementsPayload }) {
   );
 }
 
-/* ── Sub-components ── */
-
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-b-0">
       <span className="text-sm text-muted">{label}</span>
@@ -401,21 +533,27 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function AttrRow({ label, value, lines, max = 99, cap }: { label: string; value: number; lines: string[]; max?: number; cap?: number }) {
-  const barColor = value >= 70 ? "#22c55e" : value >= 50 ? "#6b7280" : value >= 30 ? "#d97706" : "#ef4444";
-  // Strop licence: dál vlastnost neroste, dokud si trenér neudělá vyšší licenci.
+  const barColor = attrBarColor(value);
   const showCap = cap !== undefined && cap < max;
   const atCap = showCap && value >= cap;
   return (
-    <div className="py-3 border-b border-gray-50 last:border-b-0">
+    <div className="py-2.5 first:pt-0 last:pb-0">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-base font-heading font-bold">{label}</span>
-        <span className={`text-base font-heading font-bold tabular-nums ${attrColor(value)}`}>
-          {value}
-          {atCap && <span className="text-sm text-muted font-normal"> · strop licence</span>}
-        </span>
+        <span className="text-sm sm:text-base font-heading font-bold text-ink">{label}</span>
+        <div className="flex items-center gap-1.5">
+          {atCap && (
+            <span className="text-micro font-heading font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+              strop licence
+            </span>
+          )}
+          <span className={`text-base sm:text-lg font-heading font-extrabold tabular-nums ${attrColor(value)}`}>
+            {value}
+          </span>
+          <span className="text-xs text-muted font-normal">/{max}</span>
+        </div>
       </div>
       <div className="relative h-2 rounded-full bg-gray-100 overflow-hidden mb-1.5">
-        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: barColor }} />
+        <div className="h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: barColor }} />
         {showCap && (
           <div className="absolute top-0 bottom-0 w-0.5 bg-ink/60" style={{ left: `${(cap / max) * 100}%` }}
             title={`Strop licence: ${cap}`} />
@@ -423,7 +561,10 @@ function AttrRow({ label, value, lines, max = 99, cap }: { label: string; value:
       </div>
       <ul className="space-y-0.5">
         {lines.map((l) => (
-          <li key={l} className="text-sm text-ink-light leading-snug">{l}</li>
+          <li key={l} className="text-xs sm:text-sm text-ink-light leading-snug flex items-start gap-1.5">
+            <span className="text-pitch-500 font-bold leading-none mt-1 text-micro">•</span>
+            <span>{l}</span>
+          </li>
         ))}
       </ul>
     </div>
