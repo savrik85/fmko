@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { formatCZK } from "@/lib/sponsor-owners";
+import { seasonsAccusative } from "@/lib/sponsor-format";
 import type {
   DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorsData,
 } from "@/lib/sponsor-page-types";
@@ -40,32 +41,55 @@ export default function SponsorsPage() {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [overview, setOverview] = useState<SponsorOverview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [history, setHistory] = useState<SponsorHistoryItem[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  // Poslední aktuální teamId — pozdní odpověď z předchozího týmu se po přepnutí zahodí.
+  const teamIdRef = useRef(teamId);
+  useEffect(() => { teamIdRef.current = teamId; }, [teamId]);
 
   // Přehled se načítá až při otevření záložky a po každé akci, která hýbe náklonností (hospoda).
   const loadOverview = async () => {
     if (!teamId) return;
+    const requestedTeamId = teamId;
     setOverviewError(null);
-    const o = await apiFetch<SponsorOverview>(`/api/teams/${teamId}/sponsor-overview`)
-      .catch((e) => { console.error("sponsor-overview:", e); setOverviewError((e as Error).message); return null; });
+    const o = await apiFetch<SponsorOverview>(`/api/teams/${requestedTeamId}/sponsor-overview`)
+      .catch((e) => {
+        console.error("sponsor-overview:", e);
+        if (teamIdRef.current === requestedTeamId) setOverviewError((e as Error).message);
+        return null;
+      });
+    if (teamIdRef.current !== requestedTeamId) return;
     setOverview(o);
   };
+
+  // Historie se načítá až při otevření záložky; výpověď smlouvy se v ní projeví při dalším otevření.
+  async function loadHistory() {
+    if (!teamId) return;
+    const requestedTeamId = teamId;
+    setHistoryError(null);
+    const h = await apiFetch<{ contracts: SponsorHistoryItem[] }>(`/api/teams/${requestedTeamId}/sponsor-history`)
+      .catch((e) => {
+        console.error("sponsor-history:", e);
+        if (teamIdRef.current === requestedTeamId) setHistoryError((e as Error).message);
+        return null;
+      });
+    if (teamIdRef.current !== requestedTeamId) return;
+    setHistory(h?.contracts ?? null);
+  }
+
+  // Přepnutí týmu — staré přehledy a historie zmizí, dokud se nenačtou znovu pro nový tým.
+  useEffect(() => {
+    setOverview(null);
+    setOverviewError(null);
+    setHistory(null);
+    setHistoryError(null);
+  }, [teamId]);
 
   useEffect(() => {
     if (tab === "popularity") void loadOverview();
     if (tab === "history") void loadHistory();
   }, [tab, teamId]);
-
-  const [history, setHistory] = useState<SponsorHistoryItem[] | null>(null);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-
-  // Historie se načítá až při otevření záložky; výpověď smlouvy se v ní projeví při dalším otevření.
-  async function loadHistory() {
-    if (!teamId) return;
-    setHistoryError(null);
-    const h = await apiFetch<{ contracts: SponsorHistoryItem[] }>(`/api/teams/${teamId}/sponsor-history`)
-      .catch((e) => { console.error("sponsor-history:", e); setHistoryError((e as Error).message); return null; });
-    setHistory(h?.contracts ?? null);
-  }
 
   const refresh = async () => {
     if (!teamId) return;
@@ -113,8 +137,8 @@ export default function SponsorsPage() {
     const description = isMain
       ? `Název týmu se změní na sponzorský. Změna hlavního sponzora je možná max 1x za sezónu.`
       : isBanner
-      ? `Reklamní banner kolem hřiště na ${offer.seasons} ${offer.seasons === 1 ? "sezónu" : "sezóny"}`
-      : `Smlouva na sponzora stadionu na ${offer.seasons} ${offer.seasons === 1 ? "sezónu" : "sezóny"}`;
+      ? `Reklamní banner kolem hřiště na ${seasonsAccusative(offer.seasons)}`
+      : `Smlouva na sponzora stadionu na ${seasonsAccusative(offer.seasons)}`;
     const ok = await confirm({
       title: `Podepsat smlouvu ${offer.sponsorName}?`,
       description,
@@ -189,11 +213,11 @@ export default function SponsorsPage() {
     const r = contract.renewal;
     const ok = await confirm({
       title: `Prodloužit smlouvu s ${contract.sponsorName}?`,
-      description: `Nová smlouva na ${r.seasons} sezóny za podmínek podle aktuální reputace. Beze změny názvu klubu a bez sankce.`,
+      description: `Nová smlouva na ${seasonsAccusative(r.seasons)} za podmínek podle aktuální reputace. Beze změny názvu klubu a bez sankce.`,
       details: [
         { label: "Nově týdně", value: `+${formatCZK(Math.round(r.monthlyAmount / 4.3))}`, color: "text-pitch-500" },
         ...(r.winBonus > 0 ? [{ label: "Za výhru", value: `+${formatCZK(r.winBonus)}`, color: "text-pitch-400" }] : []),
-        { label: "Délka", value: `${r.seasons} sezóny` },
+        { label: "Délka", value: seasonsAccusative(r.seasons) },
       ],
       confirmLabel: "Prodloužit smlouvu",
     });
@@ -320,7 +344,7 @@ export default function SponsorsPage() {
       )}
       {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} mySponsorIds={mySponsorIdsOf(data)} />}
       {tab === "popularity" && <PopularityTab overview={overview} error={overviewError} />}
-      {tab === "history" && <HistoryTab items={history} error={historyError} />}
+      {tab === "history" && <HistoryTab items={history} error={historyError} mainContract={data.mainContract} />}
     </div>
   );
 }

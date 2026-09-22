@@ -528,12 +528,14 @@ teamsRouter.post("/", async (c) => {
       await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "delete AI manager on takeover", e));
       await c.env.DB.prepare("UPDATE managers SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
 
-      // Clean old AI equipment/stadium/conversations/messages (human gets fresh start)
+      // Clean old AI equipment/stadium/conversations/messages/sponsor relationships (human gets fresh start)
       const oldConvIds = await c.env.DB.prepare("SELECT id FROM conversations WHERE team_id = ?").bind(teamId).all().catch((e) => { logger.warn({ module: "teams" }, "load AI conversations on takeover", e); return { results: [] }; });
       for (const conv of oldConvIds.results) {
         await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
-      for (const t of ["equipment", "stadiums", "conversations", "sponsor_contracts", "transactions"]) {
+      // sponsor_favor_log před sponsor_team_favor — deník popisuje změny náklonnosti,
+      // AI historie majitelů firem se nemá dědit na nového lidského hráče.
+      for (const t of ["sponsor_favor_log", "sponsor_team_favor", "sponsor_invitations", "sponsor_pub_encounters", "equipment", "stadiums", "conversations", "sponsor_contracts", "transactions"]) {
         await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
 
