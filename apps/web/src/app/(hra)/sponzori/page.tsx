@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { sponsorTypeLabel } from "@/lib/sponsor-types";
+import { favorLabel, formatCZK, personalityLabel } from "@/lib/sponsor-owners";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
 
 interface ActiveContract {
@@ -54,18 +55,29 @@ interface SponsorsData {
   season: number;
 }
 
-function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
-
 /** Jméno sponzora jako odkaz na jeho stránku (sponzor mimo okresní seznam odkaz nemá). */
 function SponsorLink({ id, name, className }: { id: number | null | undefined; name: string; className?: string }) {
   if (!id) return <span className={className}>{name}</span>;
   return <Link href={`/sponzor/${id}`} className={`${className ?? ""} hover:text-pitch-600 hover:underline`}>{name}</Link>;
 }
 
+interface DistrictFirm {
+  sponsorId: number;
+  name: string;
+  type: string;
+  owner: { firstName: string; lastName: string; personality: string } | null;
+  favor: number;
+  budgetEstimate: { low: number; high: number };
+  mainHolder: { teamId: string; teamName: string } | null;
+  isMine: boolean;
+}
+interface PubEncounter { id: string; sponsorId: number; sponsorName: string; ownerName: string; personality: string; beerCost: number }
+
 export default function SponsorsPage() {
   const { teamId, setTeam: setTeamCtx } = useTeam();
   const [data, setData] = useState<SponsorsData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
+  const [firms, setFirms] = useState<{ firms: DistrictFirm[]; pub: PubEncounter | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [renameInput, setRenameInput] = useState("");
@@ -75,11 +87,23 @@ export default function SponsorsPage() {
 
   const refresh = async () => {
     if (!teamId) return;
-    const [s, t] = await Promise.all([
+    const [s, t, f] = await Promise.all([
       apiFetch<SponsorsData>(`/api/teams/${teamId}/sponsors`),
       apiFetch<Team>(`/api/teams/${teamId}`),
+      apiFetch<{ firms: DistrictFirm[]; pub: PubEncounter | null }>(`/api/teams/${teamId}/sponsor-owners`),
     ]);
-    setData(s); setTeam(t);
+    setData(s); setTeam(t); setFirms(f);
+  };
+
+  const handlePub = async (action: "beer" | "ignore") => {
+    if (!teamId || !firms?.pub || acting) return;
+    setActionError(null);
+    setActing(true);
+    await apiFetch(`/api/teams/${teamId}/sponsor-owners/pub/${firms.pub.id}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
+    }).catch((e) => { console.error("sponsor pub:", e); setActionError((e as Error).message); return null; });
+    await refresh();
+    setActing(false);
   };
 
   useEffect(() => {
@@ -272,6 +296,22 @@ export default function SponsorsPage() {
         <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">{actionError}</div>
       )}
 
+      {firms?.pub && (
+        <Card>
+          <CardBody>
+            <div className="text-sm">
+              🍺 V hospodě sedí <span className="font-heading font-bold text-base">{firms.pub.ownerName}</span>, majitel{" "}
+              <SponsorLink id={firms.pub.sponsorId} name={firms.pub.sponsorName} className="font-heading font-bold" />.
+              Pozvat ho na pivo stojí {formatCZK(firms.pub.beerCost)}.
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => handlePub("beer")} disabled={acting} className="btn btn-primary btn-sm">Pozvat na pivo</button>
+              <button onClick={() => handlePub("ignore")} disabled={acting} className="btn btn-ghost btn-sm">Nechat ho být</button>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       <p className="text-sm text-muted">
         Nabídky závisí na reputaci tvého klubu ({team.reputation}) — určuje jejich počet i částku.{" "}
         <Link href="/reputace" className="text-pitch-600 underline">Jak ji zvednout →</Link>
@@ -378,6 +418,43 @@ export default function SponsorsPage() {
           <Card><CardBody><p className="text-center text-muted py-3">Žádné nabídky bannerů.</p></CardBody></Card>
         )}
       </div>
+
+      {firms && firms.firms.length > 0 && (
+        <div>
+          <SectionLabel>{"\u{1F91D}"} Firmy v okrese</SectionLabel>
+          <p className="text-sm text-muted mb-2">
+            Vztah k majitelům si budujte dopředu: pozvěte je na zápas, potkejte je v hospodě. Kdo vás má rád, dá víc.
+          </p>
+          <div className="space-y-2">
+            {firms.firms.map((f) => (
+              <Card key={f.sponsorId}>
+                <CardBody>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <SponsorLink id={f.sponsorId} name={f.name} className="font-heading font-bold text-base" />
+                      <div className="text-sm text-muted">
+                        {sponsorTypeLabel(f.type)}
+                        {f.owner ? ` · ${f.owner.firstName} ${f.owner.lastName}, ${personalityLabel(f.owner.personality)}` : ""}
+                      </div>
+                      <div className="text-sm mt-1">
+                        {f.isMine
+                          ? "Váš hlavní sponzor"
+                          : f.mainHolder
+                            ? <>Hlavní sponzor klubu <Link href={`/tym/${f.mainHolder.teamId}`} className="underline">{f.mainHolder.teamName}</Link></>
+                            : `Volný, rozpočet zhruba ${formatCZK(f.budgetEstimate.low)} až ${formatCZK(f.budgetEstimate.high)} měsíčně`}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-heading font-bold tabular-nums">{f.favor}</div>
+                      <div className="text-sm text-muted">{favorLabel(f.favor)}</div>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
