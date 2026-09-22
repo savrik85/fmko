@@ -3,6 +3,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { generateSponsorOwner, isOwnerPersonality, OWNER_PERSONALITIES } from "./owners";
+import { SPONSOR_TYPES } from "./types";
 
 describe("generateSponsorOwner", () => {
   it("je deterministický pro stejné id", () => {
@@ -31,5 +32,16 @@ describe("generateSponsorOwner", () => {
     const seen = new Set<string>();
     for (let id = 1; id <= 200; id++) seen.add(generateSponsorOwner(id, id % 2 ? "pub" : "company").personality);
     expect([...seen].sort()).toEqual([...OWNER_PERSONALITIES].sort());
+  });
+
+  it("generuje platné majitele pro všechny kanonické obory", () => {
+    for (const sponsorType of SPONSOR_TYPES) {
+      const o = generateSponsorOwner(1, sponsorType);
+      expect(isOwnerPersonality(o.personality)).toBe(true);
+      expect(o.firstName).toBeTruthy();
+      expect(o.lastName).toBeTruthy();
+      expect(o.age).toBeGreaterThanOrEqual(32);
+      expect(o.age).toBeLessThanOrEqual(68);
+    }
   });
 });
