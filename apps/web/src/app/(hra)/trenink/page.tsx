@@ -707,7 +707,7 @@ export default function TrainingPage() {
             {/* ── Trenér na kurzu ── */}
             {result.coachAway && (
               <div className="card p-3 sm:p-4 border-l-4 border-amber-400 bg-amber-50 text-sm text-amber-900">
-                🎓 Trenér je na kurzu trenérské školy.{" "}
+                🎓 Při tomhle tréninku byl trenér na kurzu trenérské školy.{" "}
                 {result.coachAway.standInName
                   ? <>Trénink vedl asistent <strong>{result.coachAway.standInName}</strong>, hráči se zlepšovali pomaleji.</>
                   : <>Asistenta nemáš, trénink vedl někdo z výboru a hráči se zlepšovali pomaleji.</>}
