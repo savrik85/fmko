@@ -14,6 +14,7 @@ import { AdBoards } from "./AdBoards";
 import { Scoreboard } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
 import { HostujiciSektor, StandRoof, UltrasSector } from "./StadiumExtras";
+import { VipBox } from "./VipBox";
 import { Floodlights } from "./Floodlights";
 import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
@@ -456,6 +457,17 @@ export function Stadium3D({
 
           {/* Zastřešení tribun */}
           <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} weather={weather} />
+
+          {/* VIP lóže za hlavní tribunou (bez tribuny se nekreslí) */}
+          <VipBox
+            level={f.vip_box ?? 0}
+            standsLevel={f.stands ?? 0}
+            ultrasSide={SEKTOR_STRANY[ultrasSector]}
+            accentColor={accentColor}
+            teamColor={teamColor}
+            timeOfDay={timeOfDay}
+            reducedDetail={isMobile}
+          />
 
           {/* Sektor kotle (v tréninkový den bez pyrotechniky, spíkra a bubnu) */}
           <UltrasSector

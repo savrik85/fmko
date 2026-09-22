@@ -94,7 +94,6 @@ function ActiveStand({
 }: StandProps) {
   const dims = STAND_DIMS[Math.min(level, 3)];
   const finalSeatColor = seatColor ?? teamColor;
-  const finalAccent = accentColor ?? "#C9A84C";
   const finalPanelColor = standColor ?? teamColor;
 
   const isEW = side === "east" || side === "west";
@@ -171,17 +170,6 @@ function ActiveStand({
              Kreslí se jen tam, kde kotel opravdu stojí; jinde by to byla lež. */}
       {cageLevel > 0 && side === ultrasSide && (
         <Klec level={cageLevel} length={length} depth={dims.depth} height={dims.height} />
-      )}
-
-      {/* 4. VIP skybox a novinářská lávka (L3). Střecha je samostatné zařízení. */}
-      {level >= 3 && (
-        <VIPBox
-          length={length}
-          height={dims.height}
-          depth={dims.depth}
-          accentColor={finalAccent}
-          teamColor={teamColor}
-        />
       )}
 
       {/* 5. Tunel pro nástup hráčů v přízemí (L3 uprostřed) */}
@@ -801,63 +789,6 @@ function Spectators({
         <boxGeometry args={[seatSize * 0.38, 0.08, 0.12]} />
         <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
       </instancedMesh>
-    </group>
-  );
-}
-
-/** Prosklené VIP skyboxy pro L3 tribunu */
-function VIPBox({
-  length,
-  height,
-  depth,
-  accentColor,
-  teamColor,
-}: {
-  length: number;
-  height: number;
-  depth: number;
-  accentColor: string;
-  teamColor: string;
-}) {
-  const boxW = length * 0.45;
-  const boxH = 1.4;
-  const boxD = depth * 0.45;
-  const boxY = height * 0.72;
-  const boxZ = depth * 0.75;
-
-  return (
-    <group position={[0, boxY, boxZ]}>
-      {/* Rám VIP boxu */}
-      <mesh position={[0, boxH / 2, 0]} castShadow>
-        <boxGeometry args={[boxW, boxH, boxD]} />
-        <meshStandardMaterial color="#111827" metalness={0.8} roughness={0.3} />
-      </mesh>
-
-      {/* Čelní panoramatické tónované sklo */}
-      <mesh position={[0, boxH / 2, -boxD / 2 - 0.01]}>
-        <planeGeometry args={[boxW * 0.92, boxH * 0.75]} />
-        <meshStandardMaterial
-          color="#60A5FA"
-          emissive="#93C5FD"
-          emissiveIntensity={0.35}
-          metalness={0.9}
-          roughness={0.1}
-          transparent
-          opacity={0.85}
-        />
-      </mesh>
-
-      {/* Zlatý / klubový VIP lem */}
-      <mesh position={[0, boxH + 0.05, -boxD / 2]} castShadow>
-        <boxGeometry args={[boxW + 0.2, 0.1, 0.1]} />
-        <meshStandardMaterial color={accentColor} emissive={accentColor} emissiveIntensity={0.3} metalness={0.6} />
-      </mesh>
-
-      {/* Nápis VIP LOUNGE */}
-      <mesh position={[0, boxH * 0.88, -boxD / 2 - 0.02]}>
-        <planeGeometry args={[boxW * 0.35, 0.2]} />
-        <meshStandardMaterial color={accentColor} emissive={accentColor} emissiveIntensity={0.6} toneMapped={false} />
-      </mesh>
     </group>
   );
 }
