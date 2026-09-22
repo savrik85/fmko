@@ -7,6 +7,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { COACH_CHAT_MAX_MORALE, COACH_CHAT_MAX_RELATION } from "../lib/coach-relation";
 import { seedFromString } from "../lib/seed";
 import { getOccupationByName, smenaProPovolani } from "../generators/occupations";
 import { domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji } from "./chat-kontext";
@@ -275,6 +276,11 @@ export interface ReplyResult {
   body: string;
   /** Pokud true, AI usoudila že téma je probrané a další výměna nedává smysl — handler spustí resolution. */
   conversationComplete: boolean;
+  /**
+   * Jen u rozhovoru, který začal trenér a který touhle odpovědí skončil: jak hovor
+   * pohnul vztahem k trenérovi a morálkou. Vyhodnocuje se ve stejném volání modelu.
+   */
+  effect?: { relationshipDelta: number; moraleDelta: number; summary: string };
 }
 
 export async function generateReply(
@@ -474,18 +480,47 @@ export async function generateCoachInitiatedReply(
       ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — rozluč se. Pole `conversation_complete` MUSÍ být true."
       : "conversation_complete dej true, když je téma vyčerpané (trenér se jen zeptal a ty jsi odpověděl). False jen když máš na co konkrétního navázat.",
     "",
+    "Když dáš conversation_complete = true, zhodnoť i dopad z tvého pohledu. Hodnoť JEN POSLEDNÍ zprávu trenéra (a to, co jsi na ni odpověděl). Starší repliky v historii se už započítaly dřív, nezapočítávej je znovu:",
+    `- relationship_delta (-${COACH_CHAT_MAX_RELATION}..+${COACH_CHAT_MAX_RELATION}): jak se změnil tvůj vztah k trenérovi. Omluva, pochvala, zájem o tebe, pozvání na pivo, splněný slib → kladně. Urážka, výhrůžka, výsměch, přehlížení → záporně. Obyčejný pozdrav nebo pár slov o ničem → 0.`,
+    `- morale_delta (-${COACH_CHAT_MAX_MORALE}..+${COACH_CHAT_MAX_MORALE}): jak ti rozhovor zvedl nebo zkazil náladu.`,
+    "- summary: jedna krátká věta česky ve TŘETÍ osobě o tom, co trenér v poslední zprávě udělal, bez čísel (např. „Trenér se omluvil a pozval ho na pivo“, „Trenér ho seřval za výkon“, „Trenér jen pozdravil“).",
+    "Při conversation_complete = false dej relationship_delta a morale_delta 0.",
+    "",
     "Vrať POUZE JSON (žádný markdown):",
-    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true|false>}`,
+    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true|false>, "relationship_delta": <číslo>, "morale_delta": <číslo>, "summary": "<věta>"}`,
   ].filter(Boolean).join("\n");
 
-  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 0.95 });
-  const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown }>(raw);
+  const raw = await callModel(env, prompt, { json: true, maxTokens: 320, temperature: 0.95 });
+  const parsed = tryParseJson<{
+    body?: unknown; conversation_complete?: unknown;
+    relationship_delta?: unknown; morale_delta?: unknown; summary?: unknown;
+  }>(raw);
   if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
     throw new GeminiUnavailableError("Coach-initiated reply JSON parse failed");
   }
+  const complete = parsed.conversation_complete === true || isFinalTurn;
   return {
     body: trimSms(parsed.body),
-    conversationComplete: parsed.conversation_complete === true || isFinalTurn,
+    conversationComplete: complete,
+    effect: complete ? coachChatEffect(parsed) : undefined,
+  };
+}
+
+/** Dopad rozhovoru od trenéra z odpovědi modelu, oříznutý na povolené meze. */
+export function coachChatEffect(parsed: { relationship_delta?: unknown; morale_delta?: unknown; summary?: unknown }): {
+  relationshipDelta: number; moraleDelta: number; summary: string;
+} {
+  const num = (v: unknown, lim: number) => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? Math.max(-lim, Math.min(lim, Math.round(n))) || 0 : 0;
+  };
+  const summary = typeof parsed.summary === "string" && parsed.summary.trim()
+    ? parsed.summary.trim().replace(/\s+/g, " ").slice(0, 140)
+    : "Popovídali si";
+  return {
+    relationshipDelta: num(parsed.relationship_delta, COACH_CHAT_MAX_RELATION),
+    moraleDelta: num(parsed.morale_delta, COACH_CHAT_MAX_MORALE),
+    summary,
   };
 }
 

@@ -11,6 +11,8 @@
  */
 
 import { logger } from "../lib/logger";
+import { coachChatAlreadyCounted, coachRelationStmts } from "../lib/coach-relation";
+import { getTeamGameDate } from "../community/manager-relations";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { nazevSituace } from "../incidents/situace";
 import { temaZeStavu } from "../incidents/tema";
@@ -133,6 +135,11 @@ export async function startCoachThread(
       }
       : temaVeStavu;
 
+    // Rozhovor skončil hned touhle odpovědí: dopad na vztah a morálku se vyhodnotil
+    // ve stejném volání modelu. Dřív se v tomhle případě nezapočítalo nic, protože
+    // vyhodnocení (resolution) běželo jen při zavření vlákna, které se neotevřelo.
+    const dopad = await dopadRozhovoru(db, opts.teamId, opts.playerId, pokracuje ? undefined : reply.effect);
+
     await db.batch([
       db.prepare(
         `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read)
@@ -149,6 +156,7 @@ export async function startCoachThread(
         pokracuje ? 1 : 0, state ? JSON.stringify(state) : null, now,
         reply.body.slice(0, 100), now, opts.convId,
       ),
+      ...dopad,
     ]);
 
     return true;
@@ -160,6 +168,45 @@ export async function startCoachThread(
     logger.error({ module: M }, `konverzace s hráčem ${opts.playerId}`, e);
     return false;
   }
+}
+
+/**
+ * Příkazy, které promítnou dopad rozhovoru od trenéra: vztah (s důvodem do Kabiny)
+ * a morálku. Zlepšení nejvýš jednou za herní den na hráče, zhoršení vždy.
+ */
+export async function dopadRozhovoru(
+  db: D1Database,
+  teamId: string,
+  playerId: string,
+  effect: { relationshipDelta: number; moraleDelta: number; summary: string } | undefined,
+): Promise<D1PreparedStatement[]> {
+  if (!effect || (effect.relationshipDelta === 0 && effect.moraleDelta === 0)) return [];
+  const den = (await getTeamGameDate(db, teamId)).slice(0, 10);
+  let vztah = effect.relationshipDelta;
+  let moralka = effect.moraleDelta;
+  if ((vztah > 0 || moralka > 0) && await coachChatAlreadyCounted(db, playerId, den)) {
+    logger.info({ module: M }, `rozhovor s ${playerId} dnes (${den}) už vztah zlepšil, další zlepšení přeskočeno`);
+    vztah = Math.min(0, vztah);
+    moralka = Math.min(0, moralka);
+  }
+  if (vztah === 0 && moralka === 0) return [];
+  const stmts: D1PreparedStatement[] = [];
+  if (moralka !== 0) {
+    stmts.push(db.prepare(
+      `UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.morale',
+         MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.morale'), 50) + ?)))
+       WHERE id = ?`,
+    ).bind(moralka, playerId));
+  }
+  // Záznam s nulovým vztahem nevznikne, takže dnešní strop spotřebuje jen skutečné zlepšení vztahu.
+  stmts.push(...coachRelationStmts(db, {
+    playerId,
+    delta: vztah,
+    source: "sms_coach",
+    description: `Rozhovor v telefonu: ${effect.summary}`,
+    gameDate: den,
+  }));
+  return stmts;
 }
 
 /**

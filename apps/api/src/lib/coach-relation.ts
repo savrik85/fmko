@@ -11,6 +11,8 @@ import { logger } from "./logger";
 
 export type CoachRelationSource =
   | "sms_thread"
+  // Rozhovor, který začal trenér (strop jednou za herní den, viz coachChatAlreadyCounted).
+  | "sms_coach"
   | "sms_ignored"
   | "transfer_rejected"
   | "interview"
@@ -149,4 +151,27 @@ export async function initNewcomerCoachRelation(db: D1Database, teamId: string, 
   } catch (e) {
     logger.warn({ module: "coach-relation" }, `newcomer coach relation ${playerId} → ${teamId}`, e);
   }
+}
+
+/** Rozhovor, který začne trenér, hne vztahem nejvýš o tolik (a morálkou o tolik). */
+export const COACH_CHAT_MAX_RELATION = 6;
+export const COACH_CHAT_MAX_MORALE = 3;
+
+/**
+ * Zlepšil už dnes rozhovor, který trenér začal, vztah s tímhle hráčem?
+ *
+ * Pojistka proti farmení: hezké SMS se nesmí dát sypat donekonečna za body vztahu.
+ * Zlepšení z rozhovoru se počítá nejvýš jednou za herní den; kredit na telefonu sám
+ * nestačí. Zhoršení (urážka, výsměch) se nestropuje, platí vždy.
+ */
+export async function coachChatAlreadyCounted(db: D1Database, playerId: string, gameDay: string): Promise<boolean> {
+  const row = await db.prepare(
+    "SELECT 1 FROM coach_relation_log WHERE player_id = ? AND source = 'sms_coach' AND delta > 0 AND substr(game_date, 1, 10) = ? LIMIT 1",
+  ).bind(playerId, gameDay.slice(0, 10)).first()
+    .catch((e) => {
+      logger.warn({ module: "coach-relation" }, `coach chat cap ${playerId}`, e);
+      // Když se to nedá zjistit, radši nezapočítat než dovolit farmení.
+      return { counted: 1 };
+    });
+  return !!row;
 }

@@ -725,13 +725,14 @@ async function applyResolutionAndClose(
        WHERE id = ?`,
     ).bind(resolution.morale_delta, resolution.condition_delta, playerId),
 
-    // Vztah k trenérovi i s důvodem pro Kabinu
-    ...coachRelationStmts(db, {
+    // Vztah k trenérovi i s důvodem pro Kabinu. Rozhovor od trenéra má menší rozsah
+    // a strop jednou za herní den (viz `dopadRozhovoru`), vlákno od hráče jede jako dřív.
+    ...(jeOdTrenera ? [] : coachRelationStmts(db, {
       playerId,
       delta: resolution.relationship_delta,
       source: "sms_thread",
       description: `Rozhovor v telefonu: ${resolution.summary}`,
-    }),
+    })),
 
     // Uzavření konverzace. Bez systémové hlášky zůstává v přehledu poslední
     // replika hráče, což je i tak to, co si trenér přečte.
@@ -743,6 +744,18 @@ async function applyResolutionAndClose(
       now, hlasitUkonceni ? 2 : 1, convId,
     ),
   ];
+
+  if (jeOdTrenera) {
+    const { dopadRozhovoru } = await import("./coach-initiated");
+    const { COACH_CHAT_MAX_RELATION } = await import("../lib/coach-relation");
+    const lim = COACH_CHAT_MAX_RELATION;
+    stmts.push(...await dopadRozhovoru(db, teamId, playerId, {
+      relationshipDelta: Math.max(-lim, Math.min(lim, Math.round(resolution.relationship_delta))) || 0,
+      // Morálka vlákna jde výš (UPDATE nahoře), sem jen vztah, ať se nepočítá dvakrát.
+      moraleDelta: 0,
+      summary: resolution.summary,
+    }));
+  }
 
   if (hlasitUkonceni) {
     stmts.splice(1, 0, db.prepare(
