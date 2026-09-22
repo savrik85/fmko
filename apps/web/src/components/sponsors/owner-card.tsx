@@ -56,8 +56,10 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
       `/api/teams/${teamId}/sponsor-owners/${sponsorId}/invite`,
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId: match.matchId }) },
     ).catch((e) => { console.error("sponsor invite:", e); setError((e as Error).message); return null; });
-    if (res) setMessage(res.status === "accepted" ? `${name} pozvání přijal.` : `${name} odmítl: „${res.rejectReason ?? ""}“`);
-    onChanged();
+    if (res) {
+      setMessage(res.status === "accepted" ? `${name} pozvání přijal.` : `${name} odmítl: „${res.rejectReason ?? ""}“`);
+      onChanged();
+    }
     setActing(false);
   };
 
@@ -68,7 +70,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
         <div className="flex items-start gap-4">
           <FaceAvatar faceConfig={owner.faceConfig} size={72} className="shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="text-xs text-muted font-heading uppercase tracking-wide">Majitel</div>
+            <div className="text-sm text-muted font-heading uppercase tracking-wide">Majitel</div>
             <div className="font-heading font-bold text-base">{name}, {owner.age} let</div>
             <div className="text-sm text-muted">{personalityLabel(owner.personality)}. {personalityHint(owner.personality)}</div>
           </div>

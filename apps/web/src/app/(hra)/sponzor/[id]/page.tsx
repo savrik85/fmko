@@ -73,7 +73,7 @@ export default function SponsorDetailPage() {
     <div className="page-container space-y-5">
       <Card>
         <CardBody>
-          <div className="text-xs text-muted font-heading uppercase tracking-wide">Sponzor · okres {data.district}</div>
+          <div className="text-sm text-muted font-heading uppercase tracking-wide">Sponzor · okres {data.district}</div>
           <div className="font-heading font-bold text-2xl">{data.name}</div>
           <div className="text-sm text-muted">{sponsorTypeLabel(data.type)}</div>
         </CardBody>
