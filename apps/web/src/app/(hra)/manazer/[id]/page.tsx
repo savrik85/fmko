@@ -110,7 +110,7 @@ export default function ManagerDetailPage() {
               {manager.backstory && (
                 <span className={`${txtLabel} text-sm`}>{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</span>
               )}
-              <LicenceBadge level={manager.licenceLevel ?? 0} showNone={isOwn} />
+              <LicenceBadge level={manager.licenceLevel ?? 0} showNone />
             </div>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               {manager.age && <span className={`${txtMuted} text-sm`}>{manager.age} let</span>}
