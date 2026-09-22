@@ -87,5 +87,5 @@ export async function applySponsorFavorDelta(
 ): Promise<void> {
   if (delta === 0) return;
   await favorDeltaStmt(db, sponsorId, teamId, delta).run();
-  logger.info({ module: "sponsors", sponsorId, teamId }, `náklonnost ${delta > 0 ? "+" : ""}${delta}: ${reason}`);
+  logger.info({ module: "sponsors", teamId }, `sponzor ${sponsorId}: náklonnost ${delta > 0 ? "+" : ""}${delta}: ${reason}`);
 }
