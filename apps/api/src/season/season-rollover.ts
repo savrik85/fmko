@@ -88,6 +88,11 @@ export async function rolloverAllLeagues(
     ).all<{ team_id: string; sponsor_name: string }>()
       .catch((e) => { logger.warn({ module: "season-rollover" }, "load expiring sponsors", e); return { results: [] as Array<{ team_id: string; sponsor_name: string }> }; });
 
+    // Hlavní sponzor je exkluzivní — kdo má u končícího sponzora přednost, se určí před expirací.
+    const { assignMainPriorities } = await import("../sponsors/exclusivity");
+    const priorityLosses = await assignMainPriorities(db, newNum)
+      .catch((e) => { logger.error({ module: "season-rollover" }, "přednost hlavních sponzorů", e); return []; });
+
     await db.prepare("UPDATE sponsor_contracts SET seasons_remaining = seasons_remaining - 1 WHERE status = 'active'").run();
     await db.prepare("UPDATE sponsor_contracts SET status = 'expired' WHERE status = 'active' AND seasons_remaining <= 0").run();
 
@@ -99,13 +104,18 @@ export async function rolloverAllLeagues(
       jmena.push(row.sponsor_name);
       podleTymu.set(row.team_id, jmena);
     }
+    const prehlednuti = new Map(priorityLosses.map((l) => [l.teamId, l]));
     const { sendSystemSMS } = await import("../lib/sms");
     for (const [teamId, jmena] of podleTymu) {
       const kdo = jmena.length === 1
         ? `Smlouva s ${jmena[0]} vypršela`
         : `${smlouvyVyprsely(jmena.length)}: ${jmena.join(", ")}`;
+      const ztrata = prehlednuti.get(teamId);
+      const dovetek = ztrata
+        ? ` ${ztrata.sponsorName} dal přednost klubu ${ztrata.winnerTeamName}, u nás už pokračovat nebude.`
+        : "";
       await sendSystemSMS(db, teamId, "Sportovní ředitel", "Sportovní ředitel",
-        `📋 ${kdo} s koncem sezóny. Mrkni na Sponzory, čekají tam nové nabídky.`,
+        `📋 ${kdo} s koncem sezóny.${dovetek} Mrkni na Sponzory, čekají tam nové nabídky.`,
       );
     }
     logger.info({ module: "season-rollover" }, `sponzorské smlouvy: -1 sezóna, ${expiring.results.length} expirací u lidských týmů`);

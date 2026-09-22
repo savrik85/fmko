@@ -9,6 +9,7 @@ import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/
 interface ActiveContract {
   id: string;
   category: "main" | "stadium" | "banner";
+  sponsorId: number | null;
   sponsorName: string;
   sponsorType: string;
   monthlyAmount: number;
@@ -19,11 +20,14 @@ interface ActiveContract {
   isNamingRights: boolean;
   signedAt: string;
   renewal?: { monthlyAmount: number; winBonus: number; seasons: number; earlyTerminationFee: number } | null;
+  /** Proč hlavního sponzora nejde prodloužit/obnovit (je hlavním jinde nebo dal přednost jinému klubu). */
+  blockedReason?: string | null;
 }
 
 type SponsorCategory = "main" | "stadium" | "banner";
 
 interface SponsorOffer {
+  sponsorId: number;
   sponsorName: string;
   sponsorType: string;
   monthlyAmount: number;
@@ -51,6 +55,12 @@ interface SponsorsData {
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
+/** Jméno sponzora jako odkaz na jeho stránku (sponzor mimo okresní seznam odkaz nemá). */
+function SponsorLink({ id, name, className }: { id: number | null | undefined; name: string; className?: string }) {
+  if (!id) return <span className={className}>{name}</span>;
+  return <Link href={`/sponzor/${id}`} className={`${className ?? ""} hover:text-pitch-600 hover:underline`}>{name}</Link>;
+}
+
 export default function SponsorsPage() {
   const { teamId, setTeam: setTeamCtx } = useTeam();
   const [data, setData] = useState<SponsorsData | null>(null);
@@ -59,6 +69,7 @@ export default function SponsorsPage() {
   const [acting, setActing] = useState(false);
   const [renameInput, setRenameInput] = useState("");
   const [showRename, setShowRename] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   const refresh = async () => {
@@ -99,11 +110,12 @@ export default function SponsorsPage() {
       confirmLabel: "Podepsat",
     });
     if (!ok) return;
+    setActionError(null);
     setActing(true);
     const res = await apiFetch<{ ok: boolean; newTeamName?: string }>(`/api/teams/${teamId}/sponsors/sign`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...offer, category }),
-    }).catch((e) => { console.error("sponsors/sign:", e); return null; });
+    }).catch((e) => { console.error("sponsors/sign:", e); setActionError((e as Error).message); return null; });
     if (res?.newTeamName && teamId) {
       setTeamCtx(teamId, res.newTeamName);
     }
@@ -141,11 +153,12 @@ export default function SponsorsPage() {
       variant: "danger",
     });
     if (!ok) return;
+    setActionError(null);
     setActing(true);
     const res = await apiFetch<{ ok: boolean; newTeamName?: string }>(`/api/teams/${teamId}/sponsors/terminate`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ category, contractId }),
-    }).catch((e) => { console.error("sponsors/terminate:", e); return null; });
+    }).catch((e) => { console.error("sponsors/terminate:", e); setActionError((e as Error).message); return null; });
     if (res?.newTeamName && teamId) {
       setTeamCtx(teamId, res.newTeamName);
     }
@@ -173,11 +186,12 @@ export default function SponsorsPage() {
       confirmLabel: "Prodloužit smlouvu",
     });
     if (!ok) return;
+    setActionError(null);
     setActing(true);
     await apiFetch(`/api/teams/${teamId}/sponsors/renew`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contractId: contract.id }),
-    }).catch((e) => { console.error("sponsors/renew:", e); return null; });
+    }).catch((e) => { console.error("sponsors/renew:", e); setActionError((e as Error).message); return null; });
     await refresh();
     setActing(false);
   };
@@ -193,6 +207,7 @@ export default function SponsorsPage() {
       confirmLabel: "Přejmenovat",
     });
     if (!ok) return;
+    setActionError(null);
     setActing(true);
     const res = await apiFetch<{ ok: boolean; newName?: string }>(`/api/teams/${teamId}/rename`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -252,6 +267,10 @@ export default function SponsorsPage() {
         </CardBody>
       </Card>
 
+      {actionError && (
+        <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">{actionError}</div>
+      )}
+
       <p className="text-sm text-muted">
         Nabídky závisí na reputaci tvého klubu ({team.reputation}) — určuje jejich počet i částku.{" "}
         <Link href="/reputace" className="text-pitch-600 underline">Jak ji zvednout →</Link>
@@ -288,6 +307,16 @@ export default function SponsorsPage() {
         ) : (
           <>
             {data.mainExpired?.renewal && <ExpiredRenewCard contract={data.mainExpired} onRenew={() => handleRenew("main")} acting={acting} />}
+            {data.mainExpired?.blockedReason && (
+              <Card>
+                <CardBody>
+                  <div className="font-heading font-bold text-base">
+                    <SponsorLink id={data.mainExpired.sponsorId} name={data.mainExpired.sponsorName} />
+                  </div>
+                  <div className="text-sm text-muted">Smlouva vypršela a obnovit ji nejde: {data.mainExpired.blockedReason}.</div>
+                </CardBody>
+              </Card>
+            )}
             <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} />
           </>
         )}
@@ -362,7 +391,7 @@ function ExpiredRenewCard({ contract, onRenew, acting }: { contract: ActiveContr
       <CardBody>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-0">
-            <div className="font-heading font-bold text-base">{contract.sponsorName}</div>
+            <div className="font-heading font-bold text-base"><SponsorLink id={contract.sponsorId} name={contract.sponsorName} /></div>
             <div className="text-sm text-muted">Smlouva vypršela s koncem sezóny — sponzor je připraven jednat o nové.</div>
           </div>
           <button onClick={onRenew} disabled={acting}
@@ -385,7 +414,7 @@ function ContractCard({ contract, category, onTerminate, onRenew, acting }: {
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-pitch-500/10 flex items-center justify-center text-2xl shrink-0">{icon}</div>
           <div className="flex-1">
-            <div className="font-heading font-bold text-lg">{contract.sponsorName}</div>
+            <div className="font-heading font-bold text-lg"><SponsorLink id={contract.sponsorId} name={contract.sponsorName} /></div>
             <div className="text-sm text-muted">{contract.sponsorType}</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
               <div>
@@ -417,7 +446,11 @@ function ContractCard({ contract, category, onTerminate, onRenew, acting }: {
             </button>
           )}
           {!contract.renewal && onRenew && (
-            <span className="text-sm text-muted">Prodloužit půjde v poslední sezóně smlouvy</span>
+            <span className="text-sm text-muted">
+              {contract.blockedReason
+                ? `Smlouva skončí s koncem sezóny: ${contract.blockedReason}.`
+                : "Prodloužit půjde v poslední sezóně smlouvy"}
+            </span>
           )}
           <button onClick={onTerminate} disabled={acting}
             className="text-sm text-card-red hover:text-red-700 font-heading font-bold transition-colors">
@@ -458,7 +491,7 @@ function OffersList({ offers, category, onSign, acting, current, signDisabled }:
               <div className="flex items-start gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-heading font-bold text-base">{offer.sponsorName}</span>
+                    <SponsorLink id={offer.sponsorId} name={offer.sponsorName} className="font-heading font-bold text-base" />
                     <span className="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">{offer.sponsorType}</span>
                   </div>
                   <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-sm">

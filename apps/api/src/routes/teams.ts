@@ -129,6 +129,7 @@ teamsRouter.post("/", async (c) => {
     badgePattern?: string;
     stadiumName?: string;
     sponsor?: {
+      sponsorId?: number;
       name: string;
       type: string;
       seasonBonus: number;
@@ -207,6 +208,20 @@ teamsRouter.post("/", async (c) => {
   const budget = (village.population as number) > 5000 ? 80000
     : (village.population as number) > 1000 ? 40000 : 20000;
 
+  // Hlavní sponzor je exkluzivní — mezitím ho mohl podepsat jiný klub.
+  if (body.sponsor?.sponsorId) {
+    const sp = await c.env.DB.prepare("SELECT id FROM district_sponsors WHERE id = ? AND district = ?")
+      .bind(body.sponsor.sponsorId, village.district).first<{ id: number }>();
+    if (!sp) return c.json({ error: "Neplatný sponzor pro tento okres" }, 400);
+    const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+      .first<{ number: number }>();
+    if (season) {
+      const { mainSponsorBlock } = await import("../sponsors/exclusivity");
+      const block = await mainSponsorBlock(c.env.DB, sp.id, teamId, season.number);
+      if (block) return c.json({ error: `${block.reason}. Vrať se o krok zpět a vyber jiného sponzora.` }, 409);
+    }
+  }
+
   step = "insert-team";
   await c.env.DB.prepare(
     "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, jersey_pattern, badge_pattern, stadium_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -224,14 +239,19 @@ teamsRouter.post("/", async (c) => {
     const baseMonthly = Math.round(body.sponsor.seasonBonus / 10);
     const monthlyAmount = body.sponsor.isNamingRights ? Math.max(3000, baseMonthly * 5) : Math.max(1000, baseMonthly * 3);
     const winBonus = Math.round(monthlyAmount * 0.15);
-    await c.env.DB.prepare(
+    const { MAIN_SPONSOR_FREE_SQL } = await import("../sponsors/exclusivity");
+    const sponsorId = body.sponsor.sponsorId ?? null;
+    const ins = await c.env.DB.prepare(
       `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, win_bonus,
-        seasons_total, seasons_remaining, early_termination_fee, is_naming_rights, category)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        seasons_total, seasons_remaining, early_termination_fee, is_naming_rights, category, sponsor_id)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE ? IS NULL OR ${MAIN_SPONSOR_FREE_SQL}`
     ).bind(uuid(), teamId, body.sponsor.name, body.sponsor.type, monthlyAmount, winBonus,
       body.sponsor.seasons, body.sponsor.seasons, body.sponsor.terminationFee,
-      body.sponsor.isNamingRights ? 1 : 0, "main",
-    ).run().catch((e) => logger.warn({ module: "teams" }, "insert sponsor contract", e));
+      body.sponsor.isNamingRights ? 1 : 0, "main", sponsorId,
+      sponsorId, sponsorId, teamId,
+    ).run().catch((e) => { logger.warn({ module: "teams" }, "insert sponsor contract", e); return null; });
+    if (ins && !ins.meta.changes) logger.warn({ module: "teams", teamId, sponsorId }, "sponzora mezitím podepsal jiný klub, smlouva nevznikla");
   }
 
   step = "generate-squad";

@@ -7,6 +7,7 @@ import type { VillageSelection } from "@/app/onboarding/page";
 type NamingChoice = "classic" | "sponsor" | "custom";
 
 interface SponsorOffer {
+  sponsorId?: number;
   name: string;
   teamName: string;
   seasonBonus: number;
@@ -31,6 +32,7 @@ interface Props {
     teamName: string;
     stadiumName: string;
     sponsor?: {
+      sponsorId?: number;
       name: string;
       type: string;
       seasonBonus: number;
@@ -85,6 +87,7 @@ export function StepClubName({ village, initialTeamName, onBack, onSubmit }: Pro
       teamName: displayName,
       stadiumName: displayStadium,
       sponsor: s ? {
+        sponsorId: s.sponsorId,
         name: s.name,
         type: s.type,
         seasonBonus: s.seasonBonus,

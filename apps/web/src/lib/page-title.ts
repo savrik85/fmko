@@ -59,6 +59,7 @@ const PAGE_TITLES: Record<string, string> = {
 const PREFIX_TITLES: Array<[string, string]> = [
   ["/hrac/", "Profil hráče"],
   ["/tym/", "Profil týmu"],
+  ["/sponzor/", "Sponzor"],
   ["/zapas/", "Výsledek zápasu"],
   ["/telefon/", "Konverzace"],
   ["/manazer/", "Profil trenéra"],

@@ -293,9 +293,18 @@ villagesRouter.get("/:id/sponsors", async (c) => {
     .bind(c.req.param("id")).first<{ district: string; name: string; size: string }>();
   if (!village) return c.json({ error: "Village not found" }, 404);
 
-  const sponsorRows = await c.env.DB.prepare(
-    "SELECT name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max FROM district_sponsors WHERE district = ? ORDER BY RANDOM() LIMIT 5"
+  // Hlavní sponzor je exkluzivní — nový klub nedostane sponzora, který je hlavním jinde.
+  const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+    .first<{ number: number }>().catch((e) => { logger.warn({ module: "villages" }, "active season", e); return null; });
+  const { blockedMainSponsorIds } = await import("../sponsors/exclusivity");
+  const blocked = season
+    ? await blockedMainSponsorIds(c.env.DB, village.district, "", season.number)
+        .catch((e) => { logger.error({ module: "villages" }, "blocked main sponsors", e); return null; })
+    : new Set<number>();
+  const sponsorRowsAll = blocked === null ? { results: [] } : await c.env.DB.prepare(
+    "SELECT id, name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max FROM district_sponsors WHERE district = ? ORDER BY RANDOM()"
   ).bind(village.district).all().catch((e) => { logger.warn({ module: "villages" }, "query", e); return { results: [] }; });
+  const sponsorRows = { results: sponsorRowsAll.results.filter((s) => !blocked?.has(s.id as number)).slice(0, 5) };
 
   const catMod = village.size === "mesto" ? 1.5 : village.size === "mestys" ? 1.2 : village.size === "obec" ? 1.0 : 0.7;
 
@@ -312,6 +321,7 @@ villagesRouter.get("/:id/sponsors", async (c) => {
     }
     cleanName = cleanName.trim();
     return {
+      sponsorId: s.id as number | undefined,
       name: cleanName,
       type: s.type as string,
       teamName: `FK ${cleanName} ${village.name}`,
@@ -342,6 +352,7 @@ villagesRouter.get("/:id/sponsors", async (c) => {
       const seasons = 1 + Math.floor(Math.random() * 3);
       const terminationFee = Math.round(bonus * seasons * 0.5);
       offers.push({
+        sponsorId: undefined,
         name: `${type} ${surname}`,
         type: type.toLowerCase(),
         teamName: `FK ${type} ${surname} ${village.name}`,

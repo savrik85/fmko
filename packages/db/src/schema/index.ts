@@ -6,7 +6,7 @@ export { relationships } from "./relationships";
 export { leagues } from "./leagues";
 export { leagueStandings } from "./league_standings";
 export { matches } from "./matches";
-export { sponsors } from "./sponsors";
+export { sponsors, sponsorContracts } from "./sponsors";
 export { events } from "./events";
 export {
   teamFanbase,
