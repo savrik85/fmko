@@ -123,7 +123,7 @@ export function Tabs<T extends string>({
             aria-selected={isActive}
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(t.key)}
-            className={`shrink-0 grow basis-auto whitespace-nowrap min-h-11 px-3 rounded-control text-sm font-heading font-bold transition-colors ${
+            className={`shrink-0 grow basis-auto whitespace-nowrap min-h-11 px-2.5 sm:px-3.5 rounded-control text-xs sm:text-sm font-heading font-bold transition-colors ${
               isActive ? "bg-surface-2 text-pitch-600 shadow-xs" : "text-muted hover:text-ink"
             }`}
           >
