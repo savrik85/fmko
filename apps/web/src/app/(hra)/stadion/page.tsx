@@ -117,6 +117,15 @@ interface StadiumData {
   pitchCondition: number;
   pitchType: string;
   facilities: Record<string, number>;
+  /** Co VIP lóže právě dává a bere (z API, počítá se ze stejné škály jako zápas). */
+  vipBox?: {
+    level: number;
+    seatsLost: number;
+    matchCost: number;
+    sponsorFavorBonus: number;
+    sponsorAcceptancePct: number;
+    villageFavorBonus: number;
+  };
   /** Úroveň vyhřívání trávníku (0–3) z vybavení — vyhřívaná plocha nezasněží. */
   pitchHeating?: number;
   /** Úroveň sekačky (0–3) z vybavení. */
@@ -1136,6 +1145,15 @@ export default function StadiumPage() {
                   ))}
                 </div>
               </div>
+
+              {key === "vip_box" && level > 0 && stadium.vipBox && (
+                <div className="text-sm text-muted leading-snug mb-2">
+                  Teď: o {stadium.vipBox.seatsLost} míst méně pro platící diváky, provoz{" "}
+                  <span className="tabular-nums">{formatCZK(stadium.vipBox.matchCost)}</span> za domácí zápas.
+                  Pozvaný majitel přijme o {stadium.vipBox.sponsorAcceptancePct} % častěji a po zápase přidá
+                  +{stadium.vipBox.sponsorFavorBonus} náklonnosti, každý zastupitel v lóži +{stadium.vipBox.villageFavorBonus} přízně.
+                </div>
+              )}
 
               {/* Upgrade info + action */}
               {upgrade && !upgrade.locked && (

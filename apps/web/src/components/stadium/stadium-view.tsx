@@ -33,6 +33,7 @@ const FACILITY_CONFIG: Record<string, { icon: string; label: string }> = {
   entrance_gate: { icon: "\u{1F3AB}", label: "Vstupní brána" },
   cage: { icon: "\u{26D3}\u{FE0F}", label: "Klec nad kotlem" },
   security: { icon: "\u{1F9BA}", label: "Pořadatelská služba" },
+  vip_box: { icon: "\u{1F942}", label: "VIP lóže" },
 };
 
 export function StadiumView({
@@ -54,7 +55,7 @@ export function StadiumView({
   // Small building chips (bottom row)
   const bottomFacilities = ["changing_rooms", "showers", "refreshments"].filter((k) => f[k] > 0);
   // Icon chips (top row)
-  const topChips = ["lighting", "fence", "entrance_gate"].filter((k) => f[k] > 0);
+  const topChips = ["lighting", "fence", "entrance_gate", "vip_box"].filter((k) => f[k] > 0);
 
   // Parking dimensions
   const parkW = f.parking > 0 ? 80 + f.parking * 40 : 0;

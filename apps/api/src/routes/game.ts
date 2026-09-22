@@ -1664,6 +1664,18 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   // engine (match-runner) i pohár — zobrazené číslo musí sedět s limitem v zápase.
   const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
   const effectiveCapacity = ((stadium.capacity as number) ?? 200) + calculateFacilityEffects(facilities).capacityBonus;
+
+  // Co lóže právě dává a bere. Stránka stadionu to vypíše u karty lóže, aby
+  // hráč po nákupu nejvyšší úrovně (kdy nabídka upgradu zmizí) věděl, co má.
+  const vipFx = calculateFacilityEffects(facilities);
+  const vipBox = {
+    level: facilities.vip_box ?? 0,
+    seatsLost: vipFx.vipBoxCapacityLoss,
+    matchCost: vipFx.vipBoxMatchCost,
+    sponsorFavorBonus: vipFx.vipBoxSponsorFavorBonus,
+    sponsorAcceptancePct: Math.round(vipFx.vipBoxSponsorAcceptanceBonus * 100),
+    villageFavorBonus: vipFx.vipBoxVillageFavorBonus,
+  };
   const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);
 
   const careEquip = await c.env.DB.prepare("SELECT pitch_heating, pitch_irrigation, mower FROM equipment WHERE team_id = ?")
@@ -1724,6 +1736,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     pitchMoisture: (stadium.pitch_moisture as number) ?? 50,
     pitchCare,
     facilities,
+    vipBox,
     customization,
     visualUpgrades,
     upgrades: getUpgradeOptions(
