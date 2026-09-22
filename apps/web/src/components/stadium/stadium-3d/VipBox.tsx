@@ -5,6 +5,14 @@ import { PITCH, STAND_DIMS, type TimeOfDay } from "./constants";
 const STAND_GAP = 2.5;
 /** Odstup lóže od zad tribuny, ať se nepotká se zadními sloupky střechy. */
 const BACK_OFFSET = 1.2;
+/**
+ * Lávka je rozdělená na dvě větve kolem prostředního zadního sloupku střechy
+ * (StandRoof, x = 0, poloměr 0,09 m). Šířka jedné větve a její odsazení od středu;
+ * mezera kolem x = 0 (2 * (BRIDGE_X − BRIDGE_W / 2) = 0,8 m) je bezpečně širší
+ * než průměr sloupku + 0,2 m rezervy (0,18 + 0,2 = 0,38 m).
+ */
+const BRIDGE_W = 1.0;
+const BRIDGE_X = 0.9;
 
 type Side = "north" | "south" | "east" | "west";
 
@@ -78,11 +86,13 @@ function ActiveVipBox({ level, standsLevel, ultrasSide, accentColor, teamColor, 
         </mesh>
       ))}
 
-      {/* Lávka ze zad tribuny do lóže */}
-      <mesh position={[0, baseY - 0.06, dims.depth + BACK_OFFSET / 2]} receiveShadow>
-        <boxGeometry args={[Math.min(rowW, 3), 0.12, BACK_OFFSET]} />
-        <meshStandardMaterial color="#6B7280" roughness={0.8} />
-      </mesh>
+      {/* Lávka ze zad tribuny do lóže — dvě větve kolem prostředního sloupku střechy */}
+      {[-BRIDGE_X, BRIDGE_X].map((x) => (
+        <mesh key={`bridge-${x}`} position={[x, baseY - 0.06, dims.depth + BACK_OFFSET / 2]} receiveShadow>
+          <boxGeometry args={[BRIDGE_W, 0.12, BACK_OFFSET]} />
+          <meshStandardMaterial color="#6B7280" roughness={0.8} />
+        </mesh>
+      ))}
 
       {/* Podlaha a zadní stěna celé řady */}
       <mesh position={[0, baseY + 0.08, z]} castShadow receiveShadow>
