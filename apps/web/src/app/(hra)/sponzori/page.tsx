@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
+import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
 
 interface ActiveContract {
@@ -415,7 +416,7 @@ function ContractCard({ contract, category, onTerminate, onRenew, acting }: {
           <div className="w-12 h-12 rounded-xl bg-pitch-500/10 flex items-center justify-center text-2xl shrink-0">{icon}</div>
           <div className="flex-1">
             <div className="font-heading font-bold text-lg"><SponsorLink id={contract.sponsorId} name={contract.sponsorName} /></div>
-            <div className="text-sm text-muted">{contract.sponsorType}</div>
+            <div className="text-sm text-muted">{sponsorTypeLabel(contract.sponsorType)}</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
               <div>
                 <div className="text-pitch-500 font-heading font-bold tabular-nums">+{formatCZK(Math.round(contract.monthlyAmount / 4.3))}</div>
@@ -492,7 +493,7 @@ function OffersList({ offers, category, onSign, acting, current, signDisabled }:
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <SponsorLink id={offer.sponsorId} name={offer.sponsorName} className="font-heading font-bold text-base" />
-                    <span className="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">{offer.sponsorType}</span>
+                    <span className="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">{sponsorTypeLabel(offer.sponsorType)}</span>
                   </div>
                   <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-sm">
                     <span className="text-pitch-500 font-heading font-bold">+{formatCZK(offerWeekly)}/týd</span>

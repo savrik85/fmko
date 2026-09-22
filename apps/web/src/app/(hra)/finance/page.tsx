@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
+import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -421,7 +422,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
                       <span className="text-base">{SPONSOR_ICONS[s.type] ?? "💰"}</span>
                       <div>
                         <div className="text-sm font-heading font-bold">{s.name}</div>
-                        <div className="text-micro text-muted">Typ: {s.type}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
+                        <div className="text-micro text-muted">Obor: {sponsorTypeLabel(s.type)}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
                       </div>
                     </div>
                     <div className="text-right">

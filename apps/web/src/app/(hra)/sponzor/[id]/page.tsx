@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Card, CardBody, Spinner, SectionLabel, ErrorBox } from "@/components/ui";
 
 interface SponsorContractRow {
@@ -68,7 +69,7 @@ export default function SponsorDetailPage() {
         <CardBody>
           <div className="text-xs text-muted font-heading uppercase tracking-wide">Sponzor · okres {data.district}</div>
           <div className="font-heading font-bold text-2xl">{data.name}</div>
-          <div className="text-sm text-muted">{data.type}</div>
+          <div className="text-sm text-muted">{sponsorTypeLabel(data.type)}</div>
         </CardBody>
       </Card>
 
@@ -89,7 +90,7 @@ export default function SponsorDetailPage() {
             ) : (
               <div className="text-base text-muted">Zatím nikde. Hledá klub, se kterým by šel do názvu.</div>
             )}
-            <p className="text-sm text-muted mt-2">Hlavním sponzorem může být vždy jen jednoho klubu.</p>
+            <p className="text-sm text-muted mt-2">Hlavním sponzorem může být vždy jen u jednoho klubu.</p>
           </CardBody>
         </Card>
       </div>

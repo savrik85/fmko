@@ -345,6 +345,9 @@ villagesRouter.get("/:id/sponsors", async (c) => {
       : ["Novák", "Dvořák", "Svoboda", "Černý", "Kovář"];
 
     const genericTypes = ["Autoservis", "Řeznictví", "Potraviny", "Stavby", "Pila"];
+    const GENERIC_TYPE_KEYS: Record<string, string> = {
+      Autoservis: "car_service", Řeznictví: "butcher", Potraviny: "grocery", Stavby: "construction", Pila: "woodwork",
+    };
     for (let i = 0; i < 3; i++) {
       const surname = surnames[Math.floor(Math.random() * surnames.length)];
       const type = genericTypes[i % genericTypes.length];
@@ -354,7 +357,7 @@ villagesRouter.get("/:id/sponsors", async (c) => {
       offers.push({
         sponsorId: undefined,
         name: `${type} ${surname}`,
-        type: type.toLowerCase(),
+        type: GENERIC_TYPE_KEYS[type] ?? "company",
         teamName: `FK ${type} ${surname} ${village.name}`,
         seasonBonus: bonus,
         seasons,

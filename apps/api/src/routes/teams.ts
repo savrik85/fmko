@@ -208,11 +208,18 @@ teamsRouter.post("/", async (c) => {
   const budget = (village.population as number) > 5000 ? 80000
     : (village.population as number) > 1000 ? 40000 : 20000;
 
+  if (body.sponsor) {
+    const { isSponsorType } = await import("../sponsors/types");
+    if (!isSponsorType(body.sponsor.type)) body.sponsor.type = "company";
+  }
+
   // Hlavní sponzor je exkluzivní — mezitím ho mohl podepsat jiný klub.
   if (body.sponsor?.sponsorId) {
-    const sp = await c.env.DB.prepare("SELECT id FROM district_sponsors WHERE id = ? AND district = ?")
-      .bind(body.sponsor.sponsorId, village.district).first<{ id: number }>();
+    const sp = await c.env.DB.prepare("SELECT id, type FROM district_sponsors WHERE id = ? AND district = ?")
+      .bind(body.sponsor.sponsorId, village.district).first<{ id: number; type: string }>();
     if (!sp) return c.json({ error: "Neplatný sponzor pro tento okres" }, 400);
+    // Obor bere server ze sponzora, ne od klienta.
+    body.sponsor.type = sp.type;
     const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
       .first<{ number: number }>();
     if (season) {

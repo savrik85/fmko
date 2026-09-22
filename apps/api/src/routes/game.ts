@@ -2612,9 +2612,9 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   ).bind(teamId).first<{ reputation: number; size: string; district: string }>()
     .catch((e) => { logger.warn({ module: "game" }, "sponsor econ lookup", e); return null; });
   if (!econ) return c.json({ error: "Tým nenalezen" }, 404);
-  const spBounds = await c.env.DB.prepare("SELECT id, name, monthly_max, win_bonus_max FROM district_sponsors WHERE district = ?")
-    .bind(econ.district).all<{ id: number; name: string; monthly_max: number; win_bonus_max: number }>()
-    .catch((e) => { logger.warn({ module: "game" }, "sponsor bounds lookup", e); return { results: [] as { id: number; name: string; monthly_max: number; win_bonus_max: number }[] }; });
+  const spBounds = await c.env.DB.prepare("SELECT id, name, type, monthly_max, win_bonus_max FROM district_sponsors WHERE district = ?")
+    .bind(econ.district).all<{ id: number; name: string; type: string; monthly_max: number; win_bonus_max: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "sponsor bounds lookup", e); return { results: [] as { id: number; name: string; type: string; monthly_max: number; win_bonus_max: number }[] }; });
   const cleanSp = (nm: string) => nm.replace(/\s*s\.r\.o\.?\s*/gi, "").trim();
   const baseName = category === "stadium" ? body.sponsorName.replace(/\s+Arena$/i, "").trim() : body.sponsorName;
   const spRow = category === "stadium"
@@ -2656,7 +2656,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
       seasons_total, seasons_remaining, early_termination_fee, is_naming_rights, category, sponsor_id)
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE ? != 'main' OR ${MAIN_SPONSOR_FREE_SQL}`
-  ).bind(id, teamId, body.sponsorName, body.sponsorType, body.monthlyAmount, body.winBonus,
+  ).bind(id, teamId, body.sponsorName, spRow.type, body.monthlyAmount, body.winBonus,
     body.seasons, body.seasons, validatedTerminationFee, body.isNamingRights ? 1 : 0, category, spRow.id,
     category, spRow.id, teamId,
   ).run();
@@ -8843,8 +8843,10 @@ gameRouter.post("/admin/seed-data/:table", async (c) => {
   if (table === "district_sponsors") {
     const { district, name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max } = body;
     if (!district || !name) return c.json({ error: "Missing fields" }, 400);
+    const { isSponsorType, SPONSOR_TYPES } = await import("../sponsors/types");
+    if (!isSponsorType(type)) return c.json({ error: `Neplatný obor sponzora, povolené: ${SPONSOR_TYPES.join(", ")}` }, 400);
     await c.env.DB.prepare("INSERT INTO district_sponsors (district, name, type, monthly_min, monthly_max, win_bonus_min, win_bonus_max) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .bind(district, name, type ?? "obecné", monthly_min ?? 500, monthly_max ?? 1500, win_bonus_min ?? 100, win_bonus_max ?? 300).run();
+      .bind(district, name, type, monthly_min ?? 500, monthly_max ?? 1500, win_bonus_min ?? 100, win_bonus_max ?? 300).run();
     return c.json({ ok: true });
   }
   if (table === "commentary_templates") {
@@ -8882,6 +8884,10 @@ gameRouter.put("/admin/seed-data/:table/:id", async (c) => {
 
   const body = await c.req.json<Record<string, unknown>>();
   const idCol = table === "district_surnames" ? "rowid" : "id";
+  if (table === "district_sponsors" && "type" in body) {
+    const { isSponsorType, SPONSOR_TYPES } = await import("../sponsors/types");
+    if (!isSponsorType(body.type)) return c.json({ error: `Neplatný obor sponzora, povolené: ${SPONSOR_TYPES.join(", ")}` }, 400);
+  }
 
   // Build SET clause from body keys (only allowed columns)
   const allowedCols: Record<string, string[]> = {
