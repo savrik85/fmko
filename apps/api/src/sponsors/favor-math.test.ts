@@ -3,8 +3,8 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  clampFavor, invitationAcceptance, invitationAcceptedDelta, invitationGiftCost,
-  postMatchFavorDelta, pubBeerCost, riotFavorDelta, vipBoxAcceptanceBonus, vipBoxFavorBonus,
+  clampFavor, FAVOR_REASONS, invitationAcceptance, invitationAcceptedDelta, invitationGiftCost,
+  postMatchFavorDelta, postMatchFavorReason, pubBeerCost, riotFavorDelta, vipBoxAcceptanceBonus, vipBoxFavorBonus,
 } from "./favor-math";
 
 describe("favor-math", () => {
@@ -70,5 +70,17 @@ describe("favor-math", () => {
     expect(bez).toBeCloseTo(0.4, 5);
     expect(s).toBeCloseTo(0.55, 5);
     expect(invitationAcceptance({ favor: 100, personality: "patriot", recentLosses: 0, noise: 0.1, vipBoxLevel: 3 })).toBe(0.95);
+  });
+});
+
+describe("důvody změn náklonnosti", () => {
+  it("po zápase podle výsledku a se skóre", () => {
+    expect(postMatchFavorReason(3, 1)).toBe("viděl výhru 3:1");
+    expect(postMatchFavorReason(1, 1)).toBe("viděl remízu 1:1");
+    expect(postMatchFavorReason(0, 2)).toBe("viděl prohru 0:2");
+  });
+
+  it("žádný důvod neobsahuje dlouhou pomlčku", () => {
+    for (const r of Object.values(FAVOR_REASONS)) expect(r).not.toContain("—");
   });
 });

@@ -72,8 +72,11 @@ export async function getFavor(db: D1Database, sponsorId: number, teamId: string
   return row?.favor ?? DEFAULT_FAVOR;
 }
 
-/** Příkaz pro cizí batch: přičte deltu k náklonnosti (založí řádek z výchozí hodnoty), ořez 0–100. */
-export function favorDeltaStmt(db: D1Database, sponsorId: number, teamId: string, delta: number): D1PreparedStatement {
+/**
+ * Přičte deltu k náklonnosti (založí řádek z výchozí hodnoty), ořez 0–100.
+ * Záměrně neexportované: změna bez zápisu do deníku nesmí vzniknout. Zvenku jen `favorDeltaStmts`.
+ */
+function favorDeltaStmt(db: D1Database, sponsorId: number, teamId: string, delta: number): D1PreparedStatement {
   return db.prepare(
     `INSERT INTO sponsor_team_favor (sponsor_id, team_id, favor, updated_at)
      VALUES (?, ?, MAX(0, MIN(100, ? + ?)), datetime('now'))
@@ -82,10 +85,37 @@ export function favorDeltaStmt(db: D1Database, sponsorId: number, teamId: string
   ).bind(sponsorId, teamId, DEFAULT_FAVOR, delta, delta);
 }
 
+/**
+ * Zápis do deníku náklonnosti. Musí v batchi běžet PŘED změnou samotnou: skutečnou změnu
+ * (po ořezu 0–100) počítá z dosavadní hodnoty. Nulová skutečná změna se nezapíše.
+ * Herní datum bere z klubu, bez něj aktuální čas v ISO (jako teams.game_date).
+ */
+export function favorLogStmt(
+  db: D1Database, sponsorId: number, teamId: string, delta: number, reason: string,
+): D1PreparedStatement {
+  return db.prepare(
+    `INSERT INTO sponsor_favor_log (sponsor_id, team_id, delta, reason, game_date)
+     SELECT ?1, ?2, d.actual, ?4,
+            COALESCE((SELECT game_date FROM teams WHERE id = ?2), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+     FROM (
+       SELECT MAX(0, MIN(100, cur.v + ?3)) - cur.v AS actual
+       FROM (SELECT COALESCE((SELECT favor FROM sponsor_team_favor WHERE sponsor_id = ?1 AND team_id = ?2), ?5) AS v) cur
+     ) d
+     WHERE d.actual != 0`,
+  ).bind(sponsorId, teamId, delta, reason, DEFAULT_FAVOR);
+}
+
+/** Změna náklonnosti pro cizí batch: [zápis do deníku, změna]. Pořadí se nesmí prohodit. */
+export function favorDeltaStmts(
+  db: D1Database, sponsorId: number, teamId: string, delta: number, reason: string,
+): D1PreparedStatement[] {
+  return [favorLogStmt(db, sponsorId, teamId, delta, reason), favorDeltaStmt(db, sponsorId, teamId, delta)];
+}
+
 export async function applySponsorFavorDelta(
   db: D1Database, sponsorId: number, teamId: string, delta: number, reason: string,
 ): Promise<void> {
   if (delta === 0) return;
-  await favorDeltaStmt(db, sponsorId, teamId, delta).run();
+  await db.batch(favorDeltaStmts(db, sponsorId, teamId, delta, reason));
   logger.info({ module: "sponsors", teamId }, `sponzor ${sponsorId}: náklonnost ${delta > 0 ? "+" : ""}${delta}: ${reason}`);
 }

@@ -69,3 +69,19 @@ export function riotFavorDelta(personality: OwnerPersonality): number {
 export function pubBeerCost(personality: OwnerPersonality): number {
   return personality === "fan" || personality === "patriot" ? 300 : 400;
 }
+
+/** Důvody změn náklonnosti, jak je hráč uvidí v záložce Oblíbenost. */
+export const FAVOR_REASONS = {
+  invitationAccepted: "přijal pozvání na zápas",
+  pubBeer: "pivo v hospodě",
+  riot: "výtržnost fanoušků",
+  seasonPartnership: "sezóna spolupráce s hlavním sponzorem",
+} as const;
+
+/** Důvod změny po zápase, na kterém majitel seděl: výsledek a skóre z pohledu domácích. */
+export function postMatchFavorReason(ourGoals: number, theirGoals: number): string {
+  const score = `${ourGoals}:${theirGoals}`;
+  if (ourGoals > theirGoals) return `viděl výhru ${score}`;
+  if (ourGoals === theirGoals) return `viděl remízu ${score}`;
+  return `viděl prohru ${score}`;
+}

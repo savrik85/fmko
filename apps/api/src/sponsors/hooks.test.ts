@@ -8,7 +8,8 @@ import { settleSponsorInvitations } from "./hooks";
 const POZVANKA = { sql: /FROM sponsor_invitations si/, all: [{ id: "i1", sponsor_id: 7, personality: "businessman" }] };
 
 function zapsanaDelta(db: FalesnaD1): unknown {
-  return db.dotazy.find((d) => /INSERT INTO sponsor_team_favor/.test(d.sql))?.params[3];
+  // Zápis do sponsor_team_favor teď jede v dávce (spolu s logem do deníku), ne samostatně.
+  return [...db.dotazy, ...db.davky.flat()].find((d) => /INSERT INTO sponsor_team_favor/.test(d.sql))?.params[3];
 }
 
 describe("settleSponsorInvitations", () => {

@@ -6,8 +6,11 @@ import { createRng } from "../generators/rng";
 import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { hashSeed } from "../villages/officials-generator";
-import { favorDeltaStmt } from "./favor";
-import { DEFAULT_FAVOR, postMatchFavorDelta, riotFavorDelta, SEASON_PARTNERSHIP_FAVOR, vipBoxFavorBonus } from "./favor-math";
+import { favorDeltaStmts } from "./favor";
+import {
+  DEFAULT_FAVOR, FAVOR_REASONS, postMatchFavorDelta, postMatchFavorReason, riotFavorDelta, SEASON_PARTNERSHIP_FAVOR,
+  vipBoxFavorBonus,
+} from "./favor-math";
 import { isOwnerPersonality, type OwnerPersonality } from "./owners";
 
 /**
@@ -33,6 +36,8 @@ export async function settleSponsorInvitations(
   // Majitel pozvaný na domácí zápas sedí v lóži, pokud ji klub má. Výsledek
   // mu pohne náklonností jako dřív, lóže k tomu přidá pevný bonus.
   const vipBonus = vipBoxFavorBonus(vipBoxLevel);
+  const baseReason = postMatchFavorReason(homeScore, awayScore);
+  const reason = vipBonus > 0 ? `${baseReason}, VIP lóže` : baseReason;
   let claimed = 0;
   for (const r of rows.results) {
     const claim = await db.prepare(
@@ -41,32 +46,65 @@ export async function settleSponsorInvitations(
     if ((claim.meta?.changes ?? 0) !== 1) continue;
     claimed++;
     const p: OwnerPersonality = isOwnerPersonality(r.personality) ? r.personality : "businessman";
-    await favorDeltaStmt(db, r.sponsor_id, homeTeamId, postMatchFavorDelta(p, homeScore, awayScore) + vipBonus).run();
+    await db.batch(favorDeltaStmts(
+      db, r.sponsor_id, homeTeamId, postMatchFavorDelta(p, homeScore, awayScore) + vipBonus, reason,
+    ));
   }
   logger.info({ module: "sponsors", matchId }, `majitelé na tribuně: ${claimed}, bonus lóže ${vipBonus}`);
 }
 
-/** Výtržnost fanoušků: náklonnost klesne u všech majitelů, se kterými má klub vztah. */
+/**
+ * Výtržnost fanoušků: náklonnost klesne u všech majitelů, se kterými má klub vztah.
+ * Deník se plní hromadně (INSERT … SELECT) ve stejném batchi a před UPDATE, aby viděl hodnoty před změnou.
+ */
 export async function applyRiotFavorPenalty(db: D1Database, teamId: string): Promise<void> {
-  await db.prepare(
-    `UPDATE sponsor_team_favor SET
-       favor = MAX(0, favor + CASE
-         WHEN (SELECT personality FROM sponsor_owners so WHERE so.sponsor_id = sponsor_team_favor.sponsor_id) = 'cautious' THEN ?
-         ELSE ? END),
-       updated_at = datetime('now')
-     WHERE team_id = ?`,
-  ).bind(riotFavorDelta("cautious"), riotFavorDelta("fan"), teamId).run();
+  const cautious = riotFavorDelta("cautious");
+  const other = riotFavorDelta("fan");
+  const delta = `CASE WHEN (SELECT personality FROM sponsor_owners so WHERE so.sponsor_id = f.sponsor_id) = 'cautious' THEN ?1 ELSE ?2 END`;
+  await db.batch([
+    db.prepare(
+      `INSERT INTO sponsor_favor_log (sponsor_id, team_id, delta, reason, game_date)
+       SELECT f.sponsor_id, f.team_id, MAX(0, f.favor + ${delta}) - f.favor, ?4,
+              COALESCE((SELECT game_date FROM teams WHERE id = ?3), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+       FROM sponsor_team_favor f
+       WHERE f.team_id = ?3 AND MAX(0, f.favor + ${delta}) - f.favor != 0`,
+    ).bind(cautious, other, teamId, FAVOR_REASONS.riot),
+    db.prepare(
+      `UPDATE sponsor_team_favor SET
+         favor = MAX(0, favor + CASE
+           WHEN (SELECT personality FROM sponsor_owners so WHERE so.sponsor_id = sponsor_team_favor.sponsor_id) = 'cautious' THEN ?
+           ELSE ? END),
+         updated_at = datetime('now')
+       WHERE team_id = ?`,
+    ).bind(cautious, other, teamId),
+  ]);
 }
 
-/** Rollover: sezóna spolupráce s hlavním sponzorem +5 náklonnosti. Vrací počet smluv. */
+/**
+ * Rollover: sezóna spolupráce s hlavním sponzorem +5 náklonnosti. Vrací počet smluv.
+ * Deník hromadně ve stejném batchi a před upsertem (skutečná změna z hodnoty před ní).
+ */
 export async function rewardSeasonPartnerships(db: D1Database): Promise<number> {
-  const res = await db.prepare(
-    `INSERT INTO sponsor_team_favor (sponsor_id, team_id, favor, updated_at)
-     SELECT sponsor_id, team_id, MIN(100, ? + ?), datetime('now') FROM sponsor_contracts
-     WHERE status = 'active' AND category = 'main' AND sponsor_id IS NOT NULL
-     ON CONFLICT(sponsor_id, team_id) DO UPDATE SET favor = MIN(100, favor + ?), updated_at = datetime('now')`,
-  ).bind(DEFAULT_FAVOR, SEASON_PARTNERSHIP_FAVOR, SEASON_PARTNERSHIP_FAVOR).run();
-  return res.meta.changes ?? 0;
+  const [, upsert] = await db.batch([
+    db.prepare(
+      `INSERT INTO sponsor_favor_log (sponsor_id, team_id, delta, reason, game_date)
+       SELECT sc.sponsor_id, sc.team_id,
+              MIN(100, COALESCE(f.favor, ?1) + ?2) - COALESCE(f.favor, ?1), ?3,
+              COALESCE(t.game_date, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+       FROM sponsor_contracts sc
+       JOIN teams t ON t.id = sc.team_id
+       LEFT JOIN sponsor_team_favor f ON f.sponsor_id = sc.sponsor_id AND f.team_id = sc.team_id
+       WHERE sc.status = 'active' AND sc.category = 'main' AND sc.sponsor_id IS NOT NULL
+         AND MIN(100, COALESCE(f.favor, ?1) + ?2) - COALESCE(f.favor, ?1) != 0`,
+    ).bind(DEFAULT_FAVOR, SEASON_PARTNERSHIP_FAVOR, FAVOR_REASONS.seasonPartnership),
+    db.prepare(
+      `INSERT INTO sponsor_team_favor (sponsor_id, team_id, favor, updated_at)
+       SELECT sponsor_id, team_id, MIN(100, ? + ?), datetime('now') FROM sponsor_contracts
+       WHERE status = 'active' AND category = 'main' AND sponsor_id IS NOT NULL
+       ON CONFLICT(sponsor_id, team_id) DO UPDATE SET favor = MIN(100, favor + ?), updated_at = datetime('now')`,
+    ).bind(DEFAULT_FAVOR, SEASON_PARTNERSHIP_FAVOR, SEASON_PARTNERSHIP_FAVOR),
+  ]);
+  return upsert.meta.changes ?? 0;
 }
 
 /**

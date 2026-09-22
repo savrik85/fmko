@@ -9,7 +9,7 @@ import { logger } from "../lib/logger";
 import { isGameExpired } from "../lib/game-time";
 import { budgetEstimateRange, sponsorBudgetB } from "../sponsors/budget";
 import {
-  DEFAULT_FAVOR, invitationAcceptance, invitationAcceptedDelta, invitationGiftCost, PUB_BEER_FAVOR, pubBeerCost,
+  DEFAULT_FAVOR, FAVOR_REASONS, invitationAcceptance, invitationAcceptedDelta, invitationGiftCost, PUB_BEER_FAVOR, pubBeerCost,
 } from "../sponsors/favor-math";
 import {
   applySponsorFavorDelta, ensureSponsorOwner, ensureSponsorOwners, getFavor, getFavorsForTeam,
@@ -256,7 +256,7 @@ sponsorsRouter.post("/teams/:teamId/sponsor-owners/:sponsorId/invite", async (c)
   await recordTransaction(db, teamId, "event", -giftCost, `Pozvání ${owner.firstName} ${owner.lastName} na zápas`,
     budget.game_date ?? new Date().toISOString());
   if (accepted) {
-    await applySponsorFavorDelta(db, sponsorId, teamId, invitationAcceptedDelta(owner.personality), "přijal pozvání na zápas");
+    await applySponsorFavorDelta(db, sponsorId, teamId, invitationAcceptedDelta(owner.personality), FAVOR_REASONS.invitationAccepted);
   }
 
   return c.json({
@@ -296,6 +296,6 @@ sponsorsRouter.post("/teams/:teamId/sponsor-owners/pub/:encId", async (c) => {
   const gd = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
   const { recordTransaction } = await import("../season/finance-processor");
   await recordTransaction(db, teamId, "event", -cost, `Pivo s ${owner.firstName} ${owner.lastName}`, gd?.game_date ?? new Date().toISOString());
-  await applySponsorFavorDelta(db, enc.sponsor_id, teamId, PUB_BEER_FAVOR, "pivo v hospodě");
+  await applySponsorFavorDelta(db, enc.sponsor_id, teamId, PUB_BEER_FAVOR, FAVOR_REASONS.pubBeer);
   return c.json({ ok: true, favor: await getFavor(db, enc.sponsor_id, teamId) });
 });
