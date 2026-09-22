@@ -4,18 +4,20 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { formatCZK } from "@/lib/sponsor-owners";
-import type { DistrictFirm, PubEncounter, SponsorCategory, SponsorOffer, SponsorsData } from "@/lib/sponsor-page-types";
+import type { DistrictFirm, PubEncounter, SponsorCategory, SponsorOffer, SponsorOverview, SponsorsData } from "@/lib/sponsor-page-types";
 import { Card, CardBody, Spinner, Tabs, useConfirm, useTabParam } from "@/components/ui";
 import { ContractsTab } from "@/components/sponsors/contracts-tab";
 import { FirmsTab } from "@/components/sponsors/firms-tab";
+import { PopularityTab } from "@/components/sponsors/popularity-tab";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { mySponsorIdsOf } from "@/lib/sponsor-firms";
 
-const SPONSOR_TABS = ["contracts", "firms"] as const;
+const SPONSOR_TABS = ["contracts", "firms", "popularity"] as const;
 type SponsorTab = (typeof SPONSOR_TABS)[number];
 const TAB_LABELS: Record<SponsorTab, string> = {
   contracts: "Smlouvy",
   firms: "Firmy v okrese",
+  popularity: "Oblíbenost",
 };
 /** Klíč v localStorage: poslední otevřená záložka (jen pohodlí v tomhle prohlížeči). */
 const TAB_STORAGE_KEY = "sponzori-tab";
@@ -32,6 +34,21 @@ export default function SponsorsPage() {
   const [showRename, setShowRename] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const [overview, setOverview] = useState<SponsorOverview | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+
+  // Přehled se načítá až při otevření záložky a po každé akci, která hýbe náklonností (hospoda).
+  const loadOverview = async () => {
+    if (!teamId) return;
+    setOverviewError(null);
+    const o = await apiFetch<SponsorOverview>(`/api/teams/${teamId}/sponsor-overview`)
+      .catch((e) => { console.error("sponsor-overview:", e); setOverviewError((e as Error).message); return null; });
+    setOverview(o);
+  };
+
+  useEffect(() => {
+    if (tab === "popularity") void loadOverview();
+  }, [tab, teamId]);
 
   const refresh = async () => {
     if (!teamId) return;
@@ -53,6 +70,7 @@ export default function SponsorsPage() {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
     }).catch((e) => { console.error("sponsor pub:", e); setActionError((e as Error).message); return null; });
     await refresh();
+    if (tab === "popularity") await loadOverview();
     setActing(false);
   };
 
@@ -284,6 +302,7 @@ export default function SponsorsPage() {
         />
       )}
       {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} mySponsorIds={mySponsorIdsOf(data)} />}
+      {tab === "popularity" && <PopularityTab overview={overview} error={overviewError} />}
     </div>
   );
 }

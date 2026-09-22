@@ -66,3 +66,28 @@ export interface PubEncounter {
   personality: string;
   beerCost: number;
 }
+
+/** Pásma náklonnosti; hranice drží API (apps/api/src/sponsors/overview.ts) i favorLabel. */
+export type FavorBand = "loves" | "friendly" | "neutral" | "cold" | "hostile";
+
+export interface FirmFavorItem { sponsorId: number; name: string; ownerName: string | null; favor: number }
+
+export interface FavorChange {
+  sponsorId: number;
+  sponsorName: string;
+  ownerName: string | null;
+  delta: number;
+  reason: string;
+  gameDate: string;
+}
+
+export interface SponsorOverview {
+  avgFavor: number | null;
+  rank: number | null;
+  clubsInDistrict: number;
+  firmsCount: number;
+  bands: Record<FavorBand, number>;
+  top: FirmFavorItem[];
+  coldest: FirmFavorItem[];
+  recentChanges: FavorChange[];
+}

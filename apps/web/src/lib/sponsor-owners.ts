@@ -1,4 +1,6 @@
 /** Majitelé firem: české popisky povah a náklonnosti. Klíče drží API (apps/api/src/sponsors/owners.ts). */
+import type { FavorBand } from "./sponsor-page-types";
+
 const PERSONALITY_LABELS: Record<string, string> = {
   patriot: "Patriot",
   businessman: "Obchodník",
@@ -28,6 +30,17 @@ export function favorLabel(f: number): string {
   if (f >= 20) return "Chladný";
   return "Nemá vás rád";
 }
+
+/** Pásma od nejlepšího; popisky shodné s favorLabel. */
+export const FAVOR_BAND_ORDER: readonly FavorBand[] = ["loves", "friendly", "neutral", "cold", "hostile"];
+
+export const FAVOR_BAND_LABELS: Record<FavorBand, string> = {
+  loves: "Fandí vám",
+  friendly: "Příznivý",
+  neutral: "Neutrální",
+  cold: "Chladný",
+  hostile: "Nemá vás rád",
+};
 
 export function formatCZK(v: number): string {
   return v.toLocaleString("cs") + " Kč";
