@@ -88,6 +88,11 @@ export async function rolloverAllLeagues(
     ).all<{ team_id: string; sponsor_name: string }>()
       .catch((e) => { logger.warn({ module: "season-rollover" }, "load expiring sponsors", e); return { results: [] as Array<{ team_id: string; sponsor_name: string }> }; });
 
+    // Sezóna spolupráce s hlavním sponzorem zvedne náklonnost jeho majitele (+5).
+    const { rewardSeasonPartnerships } = await import("../sponsors/hooks");
+    await rewardSeasonPartnerships(db)
+      .catch((e) => { logger.error({ module: "season-rollover" }, "náklonnost za sezónu spolupráce", e); });
+
     // Hlavní sponzor je exkluzivní — kdo má u končícího sponzora přednost, se určí před expirací.
     const { assignMainPriorities } = await import("../sponsors/exclusivity");
     const priorityLosses = await assignMainPriorities(db, newNum)

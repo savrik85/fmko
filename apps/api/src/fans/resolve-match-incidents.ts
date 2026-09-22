@@ -208,6 +208,13 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
     .run()
     .catch((e) => { logger.warn({ module: M }, `zápis snapshotu k zápasu ${opts.matchId}`, e); });
 
+  // Výtržnost domácích fanoušků odradí majitele firem, se kterými má klub vztah.
+  if (snapshoty.length > 0) {
+    const { applyRiotFavorPenalty } = await import("../sponsors/hooks");
+    await applyRiotFavorPenalty(db, opts.homeTeamId)
+      .catch((e) => { logger.warn({ module: M }, "náklonnost sponzorů po výtržnosti", e); });
+  }
+
   // ── Rivalita mezi tábory ──
   // Přiloží se i bez průšvihu: potkat se u plotu stačí, aby si to pamatovali.
   // Rvačka váží nejvíc, ostatní výtržnost při jejich zápase míň.

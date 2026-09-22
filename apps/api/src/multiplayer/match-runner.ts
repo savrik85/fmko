@@ -727,6 +727,14 @@ export async function runScheduledMatches(
                 });
             }
 
+            // Majitelé firem na tribuně: výsledek jim pohne náklonností ke klubu.
+            try {
+                const { settleSponsorInvitations } = await import("../sponsors/hooks");
+                await settleSponsorInvitations(db, matchId, homeTeamId, result.homeScore, result.awayScore);
+            } catch (e) {
+                logger.warn({module: "match-runner"}, "settle sponsor invitations", e);
+            }
+
             // Load commentary templates from DB + generate (okresově dle domácího = dějiště)
             await loadCommentaryFromDB(db);
             const commDistrict = (await db.prepare("SELECT v.district FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?").bind(homeTeamId).first<{ district: string | null }>()

@@ -162,6 +162,11 @@ export async function executeDailyTick(
     if (expiredPub > 0) {
       logger.info({ module: "daily-tick" }, `${expiredPub} pub encounters vypršelo`);
     }
+    const { expireSponsorPubEncounters, generateSponsorPubEncounters } = await import("../sponsors/hooks");
+    const expiredSponsorPub = await expireSponsorPubEncounters(env.DB, effectiveDate.toISOString());
+    if (expiredSponsorPub > 0) {
+      logger.info({ module: "daily-tick" }, `${expiredSponsorPub} setkání s majiteli firem vypršelo`);
+    }
     if (dayOfWeek === 1) {
       const { generated, skipped } = await generateWeeklyBrigades(env.DB, effectiveDate.toISOString());
       logger.info({ module: "daily-tick" }, `brigády: ${generated} nových, ${skipped} obcí přeskočeno`);
@@ -176,6 +181,10 @@ export async function executeDailyTick(
       const pubRes = await generatePubEncounters(env.DB, effectiveDate.toISOString());
       if (pubRes.generated > 0) {
         logger.info({ module: "daily-tick" }, `pub encounters: ${pubRes.generated} nových`);
+      }
+      const sponsorPub = await generateSponsorPubEncounters(env.DB, effectiveDate.toISOString());
+      if (sponsorPub > 0) {
+        logger.info({ module: "daily-tick" }, `setkání s majiteli firem: ${sponsorPub} nových`);
       }
       // Volby: každý zastupitel s prošlým mandátem → šance na výměnu
       const elRes = await processElections(env.DB, effectiveDate.toISOString());
