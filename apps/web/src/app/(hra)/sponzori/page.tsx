@@ -9,6 +9,7 @@ import { Card, CardBody, Spinner, Tabs, useConfirm, useTabParam } from "@/compon
 import { ContractsTab } from "@/components/sponsors/contracts-tab";
 import { FirmsTab } from "@/components/sponsors/firms-tab";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
+import { mySponsorIdsOf } from "@/lib/sponsor-firms";
 
 const SPONSOR_TABS = ["contracts", "firms"] as const;
 type SponsorTab = (typeof SPONSOR_TABS)[number];
@@ -282,7 +283,7 @@ export default function SponsorsPage() {
           onRenew={handleRenew}
         />
       )}
-      {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} />}
+      {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} mySponsorIds={mySponsorIdsOf(data)} />}
     </div>
   );
 }
