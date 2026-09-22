@@ -1942,15 +1942,30 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   if (upgrade.locked) return c.json({ error: upgrade.lockReason ?? "Zamčeno" }, 400);
   if (team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
-  // Deduct cost + apply upgrade. Do popisu jde český název zařízení, ne klíč sloupce —
-  // v historii transakcí to čte hráč, ne databáze.
-  const { FACILITY_LABELS } = await import("../stadium/stadium-generator");
-  await recordTransaction(c.env.DB, teamId, "stadium_upgrade", -upgrade.cost,
-    `Vylepšení stadionu: ${FACILITY_LABELS[body.facility] ?? body.facility}`, new Date().toISOString());
+  // Atomický zámek proti dvojímu odeslání: podmíněný UPDATE sedne, jen když sloupec
+  // ještě drží currentLevel. `body.facility` je tu bezpečné interpolovat — `upgrade`
+  // výš se najde jen pro klíč, který skutečně vyšel z FACILITY_LABELS (whitelist).
+  // Dřív se nejdřív strhly peníze a teprve pak zapsala úroveň (dvě oddělené
+  // operace): dvojklik/dvojitý submit tak stihl zaúčtovat cenu dvakrát a zapsat
+  // level jen jednou. Teď zámek prohraje druhý běh BEZ účtování.
+  const claim = await c.env.DB.prepare(
+    `UPDATE stadiums SET ${body.facility} = ? WHERE team_id = ? AND ${body.facility} = ?`
+  ).bind(upgrade.nextLevel, teamId, upgrade.currentLevel).run();
+  if ((claim.meta?.changes ?? 0) !== 1) {
+    return c.json({ error: "Stavba už probíhá, načti stránku znovu" }, 409);
+  }
 
-  await c.env.DB.prepare(
-    `UPDATE stadiums SET ${body.facility} = ? WHERE team_id = ?`
-  ).bind(upgrade.nextLevel, teamId).run();
+  // Teprve po úspěšném zámku strhnout peníze. Do popisu jde český název zařízení,
+  // ne klíč sloupce — v historii transakcí to čte hráč, ne databáze.
+  const { FACILITY_LABELS } = await import("../stadium/stadium-generator");
+  try {
+    await recordTransaction(c.env.DB, teamId, "stadium_upgrade", -upgrade.cost,
+      `Vylepšení stadionu: ${FACILITY_LABELS[body.facility] ?? body.facility}`, new Date().toISOString());
+  } catch (e) {
+    // Level je už zapsaný (zámek prošel) — klub by jinak dostal upgrade zadarmo
+    // a nikdo by se to nedozvěděl. Nesmí to zmizet v prázdném catchi.
+    logger.error({ module: "game", teamId }, `stadium upgrade ${body.facility}: level zapsán, ale strhnutí ${upgrade.cost} Kč selhalo`, e);
+  }
 
   // Kotel si všimne, když dostane lepší sektor. Ostatní vybavení ho nezajímá.
   if (body.facility === "ultras_stand") {
