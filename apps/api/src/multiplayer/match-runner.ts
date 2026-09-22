@@ -732,7 +732,7 @@ export async function runScheduledMatches(
                 const { settleSponsorInvitations } = await import("../sponsors/hooks");
                 await settleSponsorInvitations(db, matchId, homeTeamId, result.homeScore, result.awayScore);
             } catch (e) {
-                logger.warn({module: "match-runner"}, "settle sponsor invitations", e);
+                logger.warn({module: "match-runner", matchId}, "settle sponsor invitations", e);
             }
 
             // Load commentary templates from DB + generate (okresově dle domácího = dějiště)

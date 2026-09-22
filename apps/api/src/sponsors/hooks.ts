@@ -7,10 +7,17 @@ import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { hashSeed } from "../villages/officials-generator";
 import { favorDeltaStmt } from "./favor";
-import { DEFAULT_FAVOR, postMatchFavorDelta, SEASON_PARTNERSHIP_FAVOR } from "./favor-math";
+import { DEFAULT_FAVOR, postMatchFavorDelta, riotFavorDelta, SEASON_PARTNERSHIP_FAVOR } from "./favor-math";
 import { isOwnerPersonality, type OwnerPersonality } from "./owners";
 
-/** Majitelé, kteří přijali pozvání na tenhle zápas: označit jako přítomné a promítnout výsledek. */
+/**
+ * Majitelé, kteří přijali pozvání na tenhle zápas: označit jako přítomné a promítnout výsledek.
+ *
+ * Nárok na každou pozvánku bere podmíněný UPDATE (`WHERE status = 'accepted'`) samostatně,
+ * teprve pak se počítá náklonnost — souběžné dvojí odehrání téhož zápasu tak strhne dopad
+ * jen jednou (druhý běh najde `changes === 0` a řádek přeskočí). Stejný princip jako claim
+ * v `fans/resolve-match-incidents.ts`.
+ */
 export async function settleSponsorInvitations(
   db: D1Database, matchId: string, homeTeamId: string, homeScore: number, awayScore: number,
 ): Promise<void> {
@@ -20,14 +27,17 @@ export async function settleSponsorInvitations(
      WHERE si.match_id = ? AND si.team_id = ? AND si.status = 'accepted'`,
   ).bind(matchId, homeTeamId).all<{ id: string; sponsor_id: number; personality: string | null }>();
   if (rows.results.length === 0) return;
-  const stmts: D1PreparedStatement[] = [];
+  let claimed = 0;
   for (const r of rows.results) {
+    const claim = await db.prepare(
+      "UPDATE sponsor_invitations SET status = 'attended' WHERE id = ? AND status = 'accepted'",
+    ).bind(r.id).run();
+    if ((claim.meta?.changes ?? 0) !== 1) continue;
+    claimed++;
     const p: OwnerPersonality = isOwnerPersonality(r.personality) ? r.personality : "businessman";
-    stmts.push(db.prepare("UPDATE sponsor_invitations SET status = 'attended' WHERE id = ? AND status = 'accepted'").bind(r.id));
-    stmts.push(favorDeltaStmt(db, r.sponsor_id, homeTeamId, postMatchFavorDelta(p, homeScore, awayScore)));
+    await favorDeltaStmt(db, r.sponsor_id, homeTeamId, postMatchFavorDelta(p, homeScore, awayScore)).run();
   }
-  await db.batch(stmts);
-  logger.info({ module: "sponsors", matchId }, `majitelé na tribuně: ${rows.results.length}`);
+  logger.info({ module: "sponsors", matchId }, `majitelé na tribuně: ${claimed}`);
 }
 
 /** Výtržnost fanoušků: náklonnost klesne u všech majitelů, se kterými má klub vztah. */
@@ -35,11 +45,11 @@ export async function applyRiotFavorPenalty(db: D1Database, teamId: string): Pro
   await db.prepare(
     `UPDATE sponsor_team_favor SET
        favor = MAX(0, favor + CASE
-         WHEN (SELECT personality FROM sponsor_owners so WHERE so.sponsor_id = sponsor_team_favor.sponsor_id) = 'cautious' THEN -4
-         ELSE -2 END),
+         WHEN (SELECT personality FROM sponsor_owners so WHERE so.sponsor_id = sponsor_team_favor.sponsor_id) = 'cautious' THEN ?
+         ELSE ? END),
        updated_at = datetime('now')
      WHERE team_id = ?`,
-  ).bind(teamId).run();
+  ).bind(riotFavorDelta("cautious"), riotFavorDelta("fan"), teamId).run();
 }
 
 /** Rollover: sezóna spolupráce s hlavním sponzorem +5 náklonnosti. Vrací počet smluv. */
@@ -86,7 +96,7 @@ export async function generateSponsorPubEncounters(db: D1Database, gameDate: str
       ).bind(crypto.randomUUID(), sponsorId, t.team_id, expiresAt, gameDate).run();
       generated++;
     } catch (e) {
-      logger.warn({ module: "sponsors", teamId: t.team_id }, "insert sponsor pub encounter", e);
+      logger.warn({ module: "sponsors", teamId: t.team_id }, `insert sponsor pub encounter sponsor=${sponsorId}`, e);
     }
   }
   return generated;

@@ -212,7 +212,7 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
   if (snapshoty.length > 0) {
     const { applyRiotFavorPenalty } = await import("../sponsors/hooks");
     await applyRiotFavorPenalty(db, opts.homeTeamId)
-      .catch((e) => { logger.warn({ module: M }, "náklonnost sponzorů po výtržnosti", e); });
+      .catch((e) => { logger.warn({ module: M, teamId: opts.homeTeamId }, "náklonnost sponzorů po výtržnosti", e); });
   }
 
   // ── Rivalita mezi tábory ──
