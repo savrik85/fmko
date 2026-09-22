@@ -87,12 +87,14 @@ export default function SponsorsPage() {
 
   const refresh = async () => {
     if (!teamId) return;
-    const [s, t, f] = await Promise.all([
+    const [s, t] = await Promise.all([
       apiFetch<SponsorsData>(`/api/teams/${teamId}/sponsors`),
       apiFetch<Team>(`/api/teams/${teamId}`),
-      apiFetch<{ firms: DistrictFirm[]; pub: PubEncounter | null }>(`/api/teams/${teamId}/sponsor-owners`),
     ]);
-    setData(s); setTeam(t); setFirms(f);
+    setData(s); setTeam(t);
+    const f = await apiFetch<{ firms: DistrictFirm[]; pub: PubEncounter | null }>(`/api/teams/${teamId}/sponsor-owners`)
+      .catch((e) => { console.error("sponsor-owners:", e); return null; });
+    setFirms(f);
   };
 
   const handlePub = async (action: "beer" | "ignore") => {
