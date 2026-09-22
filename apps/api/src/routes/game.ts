@@ -2536,46 +2536,6 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   });
 });
 
-// GET /api/sponsors/:sponsorId — sponzor jako entita: kde sponzoruje teď a s kým spolupracoval dřív
-gameRouter.get("/sponsors/:sponsorId", async (c) => {
-  const sponsorId = Number(c.req.param("sponsorId"));
-  if (!Number.isInteger(sponsorId)) return c.json({ error: "Neplatný sponzor" }, 400);
-
-  const sponsor = await c.env.DB.prepare(
-    `SELECT ds.id, ds.name, ds.type, ds.district, ds.priority_season, ds.priority_team_id, t.name AS priority_team_name
-     FROM district_sponsors ds LEFT JOIN teams t ON t.id = ds.priority_team_id WHERE ds.id = ?`,
-  ).bind(sponsorId).first<{ id: number; name: string; type: string; district: string; priority_season: number | null; priority_team_id: string | null; priority_team_name: string | null }>();
-  if (!sponsor) return c.json({ error: "Sponzor nenalezen" }, 404);
-
-  const [contracts, season] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT sc.team_id, t.name AS team_name, sc.category, sc.status, sc.seasons_total, sc.seasons_remaining, sc.signed_at
-       FROM sponsor_contracts sc JOIN teams t ON t.id = sc.team_id
-       WHERE sc.sponsor_id = ? ORDER BY sc.signed_at DESC LIMIT 100`,
-    ).bind(sponsorId).all<{ team_id: string; team_name: string; category: string; status: string; seasons_total: number; seasons_remaining: number; signed_at: string }>(),
-    c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>(),
-  ]);
-
-  const mapRow = (r: (typeof contracts.results)[number]) => ({
-    teamId: r.team_id, teamName: r.team_name, category: r.category, status: r.status,
-    seasonsTotal: r.seasons_total, seasonsRemaining: r.seasons_remaining, signedAt: r.signed_at,
-  });
-  const active = contracts.results.filter((r) => r.status === "active");
-  const priorityActive = sponsor.priority_team_id && sponsor.priority_season === season?.number
-    && !active.some((r) => r.category === "main");
-
-  return c.json({
-    id: sponsor.id,
-    name: sponsor.name,
-    type: sponsor.type,
-    district: sponsor.district,
-    mainClub: active.filter((r) => r.category === "main").map(mapRow)[0] ?? null,
-    priorityClub: priorityActive ? { teamId: sponsor.priority_team_id, teamName: sponsor.priority_team_name } : null,
-    activeContracts: active.map(mapRow),
-    history: contracts.results.filter((r) => r.status !== "active").map(mapRow),
-  });
-});
-
 // POST /api/teams/:id/sponsors/sign — sign a new sponsor contract
 gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   const teamId = c.req.param("teamId");
