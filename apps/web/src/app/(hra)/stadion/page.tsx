@@ -1150,8 +1150,8 @@ export default function StadiumPage() {
                 <div className="text-sm text-muted leading-snug mb-2">
                   Teď: o {stadium.vipBox.seatsLost} míst méně pro platící diváky, provoz{" "}
                   <span className="tabular-nums">{formatCZK(stadium.vipBox.matchCost)}</span> za domácí zápas.
-                  Pozvaný majitel přijme o {stadium.vipBox.sponsorAcceptancePct} % častěji a po zápase přidá
-                  +{stadium.vipBox.sponsorFavorBonus} náklonnosti, každý zastupitel v lóži +{stadium.vipBox.villageFavorBonus} přízně.
+                  Šance, že pozvaný majitel pozvání přijme, +{stadium.vipBox.sponsorAcceptancePct} procentních bodů;
+                  po zápase přidá +{stadium.vipBox.sponsorFavorBonus} náklonnosti, každý zastupitel v lóži +{stadium.vipBox.villageFavorBonus} přízně.
                 </div>
               )}
 

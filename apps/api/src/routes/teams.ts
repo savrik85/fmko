@@ -3235,8 +3235,9 @@ teamsRouter.get("/:id/fanbase", async (c) => {
   }
 
   // Tabulka je `stadiums` (dřívější překlep `stadium` → dotaz vždy spadl do .catch
-  // a kapacita byla věčných 200). Efektivní kapacita = základ + bonus tribun,
-  // stejně jako v match-runneru.
+  // a kapacita byla věčných 200). Efektivní kapacita = základ + bonus tribun
+  // − míst, které bere VIP lóže (0, pokud jsou tribuny zbořené), stejně jako
+  // v match-runneru.
   const stadiumRow = await c.env.DB.prepare(
     "SELECT capacity, stands, vip_box FROM stadiums WHERE team_id = ?",
   )
