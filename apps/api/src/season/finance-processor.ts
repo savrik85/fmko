@@ -604,6 +604,14 @@ export async function processMatchDayFinances(
         await recordTransaction(db, teamId, "match_expense", -facilityFx.securityMatchCost,
           `Pořadatelská služba`, gameDate, matchId);
       }
+
+      // VIP lóže: raut a obsluha pro pozvané hosty. Platí se za každý domácí
+      // soutěžní zápas, i když lóže zůstane prázdná, personál je objednaný
+      // dopředu. Stejně jako pořadatelé jde přes `match_expense`, strhne se i v mínusu.
+      if (facilityFx.vipBoxMatchCost > 0) {
+        await recordTransaction(db, teamId, "match_expense", -facilityFx.vipBoxMatchCost,
+          `VIP lóže (raut a obsluha)`, gameDate, matchId);
+      }
     }
   }
 
