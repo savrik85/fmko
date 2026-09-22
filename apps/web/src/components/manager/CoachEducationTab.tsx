@@ -192,32 +192,48 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
         </div>
         <div className="mt-4">
           {data.ladder.map((l) => {
-            const next = l.level === data.licence.level + 1;
+            // Zvýrazněná je vždycky licence, kterou trenér MÁ. Další krok a ceny
+            // se ukazují jen na vlastním profilu, cizího trenéra zajímá jen jeho licence.
+            const current = l.level === data.licence.level;
+            const next = isOwn && l.level === data.licence.level + 1;
+            const below = l.level < data.licence.level;
             return (
-              <div key={l.level} className={`flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 ${next ? "bg-pitch-50/60 -mx-2 px-2 rounded-soft" : ""}`}>
-                <span className="shrink-0 w-6 text-center text-base">{l.reached ? "✅" : next ? "➡️" : "🔒"}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-base font-heading font-bold">{l.label}</div>
+              <div key={l.level} className={`flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 ${
+                current ? "bg-pitch-50 border border-pitch-300 -mx-2 px-2 rounded-soft" : ""
+              }`}>
+                <span className={`shrink-0 w-6 text-center text-base ${below ? "opacity-50" : ""}`}>
+                  {current ? "🎓" : below ? "✅" : "🔒"}
+                </span>
+                <div className={`flex-1 min-w-0 ${below ? "opacity-60" : ""}`}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-base font-heading font-bold">{l.label}</span>
+                    {current && (
+                      <span className="text-sm font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-500 text-white">
+                        {isOwn ? "Tvoje licence" : "Aktuální licence"}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-sm text-muted">
                     Strop vlastností {l.cap}
                     {l.minReputation > 0 && ` · reputace aspoň ${l.minReputation}`}
                     {l.level >= 2 && " · otevírá pokročilé kurzy"}
                   </div>
+                  {next && (
+                    <div className="text-sm text-ink-light mt-0.5">
+                      Další krok: licenční kurz za {czk(l.price)}, {days(l.days)}
+                    </div>
+                  )}
                 </div>
-                {l.level > 0 && !l.reached && (
-                  <div className="shrink-0 text-right text-sm text-muted tabular-nums">
-                    <div>{czk(l.price)}</div>
-                    <div>{days(l.days)}</div>
-                  </div>
-                )}
               </div>
             );
           })}
         </div>
-        <p className="text-sm text-muted mt-3">
-          Licence taky přidá respekt: noví hráči začínají s lepším vztahem k tobě, hráči ochotněji přestoupí
-          a špičkoví zaměstnanci jdou jen pod trenéra s papíry. Soutěž si může odhlasovat minimální licenci.
-        </p>
+        {isOwn && (
+          <p className="text-sm text-muted mt-3">
+            Licence taky přidá respekt: noví hráči začínají s lepším vztahem k tobě, hráči ochotněji přestoupí
+            a špičkoví zaměstnanci jdou jen pod trenéra s papíry. Soutěž si může odhlasovat minimální licenci.
+          </p>
+        )}
       </div>
 
       {/* ═══ Běžící kurz ═══ */}
