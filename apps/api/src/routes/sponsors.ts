@@ -14,6 +14,7 @@ import {
 import {
   applySponsorFavorDelta, ensureSponsorOwner, ensureSponsorOwners, getFavor, getFavorsForTeam,
 } from "../sponsors/favor";
+import { averageFavor, countBands, pickExtremes, rankAmongClubs, seasonAtDate, type FirmFavor } from "../sponsors/overview";
 import type { OwnerPersonality } from "../sponsors/owners";
 
 export const sponsorsRouter = new Hono<{ Bindings: Bindings }>();
@@ -179,6 +180,112 @@ sponsorsRouter.get("/teams/:teamId/sponsor-owners", async (c) => {
   }
 
   return c.json({ firms, pub });
+});
+
+/**
+ * Průměrná náklonnost všech firem okresu ke každému seniorskému klubu okresu (jen lidské, bez U21,
+ * bez smazaných — stejný filtr jako generateSponsorPubEncounters v sponsors/hooks.ts).
+ * Chybějící řádek náklonnosti = výchozí hodnota (?2); ?3 = počet firem v okrese (> 0).
+ */
+const CLUB_AVERAGES_SQL = `
+  SELECT t.id AS team_id,
+         (COALESCE(SUM(f.favor), 0) + ?2 * (?3 - COUNT(f.sponsor_id))) * 1.0 / ?3 AS avg_favor
+  FROM teams t
+  JOIN villages v ON v.id = t.village_id
+  LEFT JOIN sponsor_team_favor f ON f.team_id = t.id
+    AND f.sponsor_id IN (SELECT id FROM district_sponsors WHERE district = ?1)
+  WHERE v.district = ?1 AND t.user_id != 'ai' AND COALESCE(t.team_type, 'senior') != 'u21' AND t.name NOT LIKE 'DELETED-%'
+  GROUP BY t.id`;
+
+interface FavorLogRow { sponsor_id: number; sponsor_name: string; delta: number; reason: string; game_date: string }
+
+// GET /api/teams/:teamId/sponsor-overview — oblíbenost klubu u firem v okrese.
+// Veřejné jako ostatní GET; o ostatních klubech vrací jen počet a naše pořadí.
+sponsorsRouter.get("/teams/:teamId/sponsor-overview", async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.param("teamId");
+  const team = await loadTeam(db, teamId);
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  const sponsors = await db.prepare("SELECT id, name FROM district_sponsors WHERE district = ?")
+    .bind(team.district).all<{ id: number; name: string }>();
+  const ids = sponsors.results.map((s) => s.id);
+
+  const [owners, favorMap, clubs, log] = await Promise.all([
+    ensureSponsorOwners(db, ids),
+    getFavorsForTeam(db, teamId),
+    ids.length === 0
+      ? Promise.resolve({ results: [] as Array<{ team_id: string; avg_favor: number }> })
+      : db.prepare(CLUB_AVERAGES_SQL).bind(team.district, DEFAULT_FAVOR, ids.length)
+        .all<{ team_id: string; avg_favor: number }>(),
+    db.prepare(
+      `SELECT l.sponsor_id, ds.name AS sponsor_name, l.delta, l.reason, l.game_date
+       FROM sponsor_favor_log l JOIN district_sponsors ds ON ds.id = l.sponsor_id
+       WHERE l.team_id = ? ORDER BY l.id DESC LIMIT 20`,
+    ).bind(teamId).all<FavorLogRow>(),
+  ]);
+
+  const ownerName = (sponsorId: number): string | null => {
+    const o = owners.get(sponsorId);
+    return o ? `${o.firstName} ${o.lastName}` : null;
+  };
+  const firms: FirmFavor[] = sponsors.results.map((s) => ({
+    sponsorId: s.id, name: s.name, ownerName: ownerName(s.id), favor: favorMap.get(s.id) ?? DEFAULT_FAVOR,
+  }));
+  const favors = firms.map((f) => f.favor);
+  const place = rankAmongClubs(clubs.results.map((r) => ({ teamId: r.team_id, avgFavor: r.avg_favor })), teamId);
+  const { top, coldest } = pickExtremes(firms);
+
+  return c.json({
+    avgFavor: averageFavor(favors),
+    rank: place?.rank ?? null,
+    clubsInDistrict: place?.clubsInDistrict ?? clubs.results.length,
+    firmsCount: firms.length,
+    bands: countBands(favors),
+    top,
+    coldest,
+    recentChanges: log.results.map((r) => ({
+      sponsorId: r.sponsor_id, sponsorName: r.sponsor_name, ownerName: ownerName(r.sponsor_id),
+      delta: r.delta, reason: r.reason, gameDate: r.game_date,
+    })),
+  });
+});
+
+interface HistoryRow {
+  id: string; sponsor_id: number | null; sponsor_name: string; category: string | null;
+  status: "expired" | "terminated"; seasons_total: number; monthly_amount: number; signed_at: string;
+}
+
+// GET /api/teams/:teamId/sponsor-history — skončené smlouvy klubu.
+// Celkové výdělky se nevrací: sponsor_income se v transakcích zapisuje za všechny smlouvy dohromady.
+sponsorsRouter.get("/teams/:teamId/sponsor-history", async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.param("teamId");
+  const team = await loadTeam(db, teamId);
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+
+  const [rows, seasons] = await Promise.all([
+    db.prepare(
+      `SELECT id, sponsor_id, sponsor_name, category, status, seasons_total, monthly_amount, signed_at
+       FROM sponsor_contracts WHERE team_id = ? AND status IN ('expired','terminated')
+       ORDER BY signed_at DESC LIMIT 50`,
+    ).bind(teamId).all<HistoryRow>(),
+    db.prepare("SELECT number, created_at FROM seasons ORDER BY number").all<{ number: number; created_at: string }>(),
+  ]);
+  const seasonList = seasons.results.map((s) => ({ number: s.number, createdAt: s.created_at }));
+
+  return c.json({
+    contracts: rows.results.map((r) => ({
+      id: r.id,
+      sponsorId: r.sponsor_id,
+      sponsorName: r.sponsor_name,
+      category: r.category === "stadium" || r.category === "banner" ? r.category : "main",
+      status: r.status,
+      seasonsTotal: r.seasons_total,
+      monthlyAmount: r.monthly_amount,
+      signedSeason: seasonAtDate(seasonList, r.signed_at),
+    })),
+  });
 });
 
 // POST /api/teams/:teamId/sponsor-owners/:sponsorId/invite — pozvat majitele na domácí zápas
