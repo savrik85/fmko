@@ -51,6 +51,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/aplikace": "Nainstaluj",
   "/pozvat": "Pozvi kamaráda",
   "/redakce": "Redakce",
+  "/trener": "Profil trenéra",
   "/trener/skripta": "Skripta",
   "/trener/test": "Závěrečný test",
 };

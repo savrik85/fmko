@@ -35,6 +35,7 @@ const BASE_SECTIONS: Section[] = [
   {
     title: "Klub",
     items: [
+      { href: "/trener", icon: "🧑‍💼", label: "Profil trenéra", color: "#2D5F2D" },
       { href: "/muj-klub", icon: "🏛️", label: "Klub", color: "#153615" },
       { href: "/obec", icon: "🏘️", label: "Obec", color: "#3D6B5C" },
       { href: "/reputace", icon: "⭐", label: "Reputace", color: "#B8860B" },
