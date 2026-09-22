@@ -233,8 +233,8 @@ export default {
         log("info", "ai player chats tick starting");
         const { applyAiPlayerThreads, expireStaleAiThreads } = await import("./messaging/ai-player-spawn");
         const spawnRes = await applyAiPlayerThreads(env.DB, env);
-        const expireRes = await expireStaleAiThreads(env.DB);
-        log("info", `ai player chats: ${spawnRes.spawned} spawned, ${spawnRes.skipped} skipped, ${expireRes.offended} offended, ${expireRes.safetyClosed} safety closed`);
+        const expireRes = await expireStaleAiThreads(env.DB, env);
+        log("info", `ai player chats: ${spawnRes.spawned} spawned, ${spawnRes.skipped} skipped, ${expireRes.offended} offended, ${expireRes.coachClosed} coach chats closed, ${expireRes.safetyClosed} safety closed`);
       } catch (e: any) {
         log("error", "ai player chats tick failed", e);
       }

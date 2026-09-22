@@ -20,6 +20,7 @@ import {
   generateReply,
   evaluateResolution,
   GeminiUnavailableError,
+  type ChatEnv,
   type ThreadMessage,
   type TeamContext,
 } from "./ai-player-chat";
@@ -884,9 +885,13 @@ async function closeThread(
  * Plus safety net: cokoli starší 14 dní = force close.
  * Volá se z daily-tick.
  */
-export async function expireStaleAiThreads(db: D1Database): Promise<{ offended: number; safetyClosed: number }> {
+export async function expireStaleAiThreads(
+  db: D1Database,
+  env?: ChatEnv,
+): Promise<{ offended: number; safetyClosed: number; coachClosed: number }> {
   let offended = 0;
   let safetyClosed = 0;
+  let coachClosed = 0;
 
   // 1. Stale "awaiting coach" threads → urazit hráče
   const stale = await db.prepare(
@@ -901,7 +906,12 @@ export async function expireStaleAiThreads(db: D1Database): Promise<{ offended: 
     const state = parseState(conv.ai_thread_state);
     if (!state) continue;
 
-    if (state.awaiting === "coach") {
+    if (state.awaiting === "coach" && state.scenario_id === "coach_initiated") {
+      // Rozhovor začal trenér a pak přestal psát: to není ignorování hráče, jen konec
+      // hovoru. Žádná urážka, vyhodnotí se, co v rozhovoru padlo.
+      await closeCoachThreadQuietly(db, env, conv, state);
+      coachClosed++;
+    } else if (state.awaiting === "coach") {
       // Hráč se urazí
       await offendPlayer(db, conv, state);
       offended++;
@@ -912,10 +922,70 @@ export async function expireStaleAiThreads(db: D1Database): Promise<{ offended: 
     }
   }
 
-  if (offended > 0 || safetyClosed > 0) {
-    logger.info({ module: "ai-player-spawn" }, `stale check: ${offended} offended players, ${safetyClosed} safety-closed`);
+  if (offended > 0 || safetyClosed > 0 || coachClosed > 0) {
+    logger.info({ module: "ai-player-spawn" }, `stale check: ${offended} offended players, ${safetyClosed} safety-closed, ${coachClosed} coach chats closed`);
   }
-  return { offended, safetyClosed };
+  return { offended, safetyClosed, coachClosed };
+}
+
+/**
+ * Zavře rozhovor, který začal trenér a na který už nenapsal. Dopad se vyhodnotí jen ze
+ * zpráv tohohle rozhovoru a projde stejnými mezemi i denní pojistkou jako rozhovor,
+ * který skončil sám (`dopadRozhovoru`). Bez AI se zavře neutrálně.
+ */
+async function closeCoachThreadQuietly(
+  db: D1Database,
+  env: ChatEnv | undefined,
+  conv: ConvRow,
+  state: AiThreadStateData,
+): Promise<void> {
+  const neutral: NonNullable<AiThreadStateData["resolution"]> = {
+    morale_delta: 0, condition_delta: 0, relationship_delta: 0,
+    summary: "Rozhovor utichl.", tone: "neutral",
+  };
+  let resolution = neutral;
+  let playerId: string | null = null;
+  try {
+    const playerRow = await db.prepare(
+      "SELECT id, first_name, last_name, age, position, team_id, loan_from_team_id, personality, life_context, coach_relationship, is_celebrity FROM players WHERE id = ?",
+    ).bind(state.player_id).first<Record<string, unknown>>();
+    const scenario = getScenarioById("coach_initiated");
+    if (playerRow && scenario && env) {
+      playerId = playerRow.id as string;
+      // Jen zprávy tohohle rozhovoru: starší už se vyhodnotily jinde.
+      const rows = await db.prepare(
+        `SELECT sender_type, body FROM messages
+          WHERE conversation_id = ? AND sender_type IN ('player','user') AND sent_at >= ?
+          ORDER BY sent_at ASC LIMIT 12`,
+      ).bind(conv.id, state.initiated_at ?? "1970-01-01").all<{ sender_type: string; body: string }>();
+      const history: ThreadMessage[] = rows.results.map((m) => ({
+        sender: m.sender_type === "player" ? "player" : "coach", body: m.body,
+      }));
+      if (history.length > 0) {
+        resolution = { ...(await evaluateResolution(env, loadPlayerSnapshot(playerRow), history, scenario)) };
+      }
+    }
+  } catch (e) {
+    logger.warn({ module: "ai-player-spawn" }, `vyhodnocení utichlého rozhovoru ${conv.id}, zavírám neutrálně`, e);
+    resolution = neutral;
+  }
+
+  const { dopadRozhovoru } = await import("./coach-initiated");
+  const { COACH_CHAT_MAX_RELATION, COACH_CHAT_MAX_MORALE } = await import("../lib/coach-relation");
+  const clampTo = (v: number, lim: number) => Math.max(-lim, Math.min(lim, Math.round(v))) || 0;
+  const dopad = playerId
+    ? await dopadRozhovoru(db, conv.team_id, playerId, {
+      relationshipDelta: clampTo(resolution.relationship_delta, COACH_CHAT_MAX_RELATION),
+      moraleDelta: clampTo(resolution.morale_delta, COACH_CHAT_MAX_MORALE),
+      summary: resolution.summary,
+    })
+    : [];
+
+  await db.batch([
+    db.prepare("UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0 WHERE id = ?")
+      .bind(JSON.stringify({ ...state, awaiting: "done", resolution }), conv.id),
+    ...dopad,
+  ]).catch((e) => logger.error({ module: "ai-player-spawn" }, `zavření utichlého rozhovoru ${conv.id}`, e));
 }
 
 async function offendPlayer(
