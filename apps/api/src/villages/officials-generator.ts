@@ -22,7 +22,7 @@ export interface GeneratedOfficial {
   preferences: Record<string, number>;
 }
 
-const MALE_FIRST_NAMES = [
+export const MALE_FIRST_NAMES = [
   // Top česká jména (50+)
   "Jan", "Petr", "Martin", "Tomáš", "Josef", "Miroslav", "Karel", "Pavel",
   "Jiří", "Zdeněk", "Jaroslav", "Stanislav", "Milan", "Vladimír", "František",
@@ -54,7 +54,7 @@ const FEMALE_FIRST_NAMES = [
   "Květa", "Květoslava", "Vendula", "Vlasta", "Slavěna", "Soňa", "Ema",
 ];
 
-const LAST_NAMES_M = [
+export const LAST_NAMES_M = [
   "Novák", "Svoboda", "Novotný", "Dvořák", "Černý", "Procházka", "Kučera",
   "Veselý", "Horák", "Němec", "Pokorný", "Pospíšil", "Hájek", "Jelínek",
   "Král", "Růžička", "Beneš", "Fiala", "Sedláček", "Doležal", "Zeman",
@@ -129,7 +129,7 @@ const PERSONA_PER_ROLE: Record<OfficialRole, Personality[]> = {
 };
 
 /** Stable string-to-32bit hash (cyrb53). */
-function hashSeed(input: string): number {
+export function hashSeed(input: string): number {
   let h1 = 0xdeadbeef ^ 0;
   let h2 = 0x41c6ce57 ^ 0;
   for (let i = 0; i < input.length; i++) {
@@ -142,7 +142,7 @@ function hashSeed(input: string): number {
   return (h2 >>> 0) ^ (h1 >>> 0);
 }
 
-function generateOfficialFace(rng: Rng, isFemale: boolean): Record<string, unknown> {
+export function generateOfficialFace(rng: Rng, isFemale: boolean): Record<string, unknown> {
   const pick = <T,>(arr: T[]): T => arr[rng.int(0, arr.length - 1)];
   const r01 = () => rng.int(0, 100) / 100;
 
