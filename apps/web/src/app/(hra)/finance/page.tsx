@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { sponsorTypeLabel } from "@/lib/sponsor-types";
+import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -67,10 +67,6 @@ type FlowSide = "income" | "expenses";
 // ────────────────────────────────────────────────────────────────────────────
 // Konstanty a formátování
 // ────────────────────────────────────────────────────────────────────────────
-
-const SPONSOR_ICONS: Record<string, string> = {
-  obchod: "🛒", remeslo: "🔧", hospoda: "🍺", firma: "🏗", obec: "🏛",
-};
 
 const TXN_ICONS: Record<string, string> = {
   wage: "💸", sponsor_income: "💰", match_income: "🏟", match_expense: "⚽",
@@ -419,7 +415,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
                 {data.sponsors.map((s, i) => (
                   <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-base">{SPONSOR_ICONS[s.type] ?? "💰"}</span>
+                      <span className="text-base">{sponsorTypeIcon(s.type)}</span>
                       <div>
                         <div className="text-sm font-heading font-bold">{s.name}</div>
                         <div className="text-micro text-muted">Obor: {sponsorTypeLabel(s.type)}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
