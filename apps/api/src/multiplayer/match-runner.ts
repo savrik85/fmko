@@ -822,17 +822,19 @@ export async function runScheduledMatches(
             // výše continue a nesahá na favor z výsledku, který se vůbec neuložil.
             try {
                 const { settleSponsorInvitations } = await import("../sponsors/hooks");
-                await settleSponsorInvitations(db, matchId, homeTeamId, result.homeScore, result.awayScore, facilities.vip_box ?? 0);
+                // Efektivní úroveň: 0, pokud klub nemá tribuny (výtržnosti je uměly zbořit
+                // i pod stojící lóží) — viz facilityEffects.vipBoxEffectiveLevel výše.
+                await settleSponsorInvitations(db, matchId, homeTeamId, result.homeScore, result.awayScore, facilityEffects.vipBoxEffectiveLevel);
             } catch (e) {
                 logger.warn({module: "match-runner", matchId}, "settle sponsor invitations", e);
             }
 
             // Zastupitelé obce ve VIP lóži. Až za zámkem zápasu: pozvánky jsou už
             // `attended` (přepnuté před simulací) a sem dojde jen jeden běh.
-            if ((facilities.vip_box ?? 0) > 0 && officialCount > 0) {
+            if (facilityEffects.vipBoxEffectiveLevel > 0 && officialCount > 0) {
                 try {
                     const { applyVipBoxVillageFavor } = await import("../villages/vip-box-favor");
-                    await applyVipBoxVillageFavor(db, matchId, homeTeamId, facilities.vip_box ?? 0);
+                    await applyVipBoxVillageFavor(db, matchId, homeTeamId, facilityEffects.vipBoxEffectiveLevel);
                 } catch (e) {
                     logger.warn({module: "match-runner", matchId}, "VIP lóže: přízeň zastupitelů", e);
                 }

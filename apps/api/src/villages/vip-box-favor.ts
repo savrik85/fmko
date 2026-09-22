@@ -15,7 +15,10 @@ export async function applyVipBoxVillageFavor(
   vipBoxLevel: number,
   now: string = new Date().toISOString(),
 ): Promise<number> {
-  const bonus = calculateFacilityEffects({ vip_box: vipBoxLevel }).vipBoxVillageFavorBonus;
+  // vipBoxLevel sem přichází už jako efektivní úroveň z match-runneru (0, pokud
+  // klub nemá tribuny) — stands: 1 tu jen zabrání, aby calculateFacilityEffects
+  // level znovu nevynulovalo kvůli chybějícím tribunám ve vstupu.
+  const bonus = calculateFacilityEffects({ vip_box: vipBoxLevel, stands: 1 }).vipBoxVillageFavorBonus;
   if (bonus <= 0) return 0;
 
   const rows = await db.prepare(

@@ -16,24 +16,37 @@ describe("VIP lóže v katalogu", () => {
     const kap = (vip: number) => calculateFacilityEffects({ stands: 3, vip_box: vip }).capacityBonus;
     expect([0, 1, 2, 3].map(kap)).toEqual([500, 470, 440, 400]);
     expect(calculateFacilityEffects({ stands: 1, vip_box: 1 }).capacityBonus).toBe(60);
-    expect(calculateFacilityEffects({ vip_box: 3 }).vipBoxCapacityLoss).toBe(100);
+    expect(calculateFacilityEffects({ stands: 3, vip_box: 3 }).vipBoxCapacityLoss).toBe(100);
   });
 
   it("stojí 1 500 / 3 000 / 5 000 Kč za domácí zápas", () => {
-    expect([0, 1, 2, 3].map((l) => calculateFacilityEffects({ vip_box: l }).vipBoxMatchCost))
+    expect([0, 1, 2, 3].map((l) => calculateFacilityEffects({ stands: 3, vip_box: l }).vipBoxMatchCost))
       .toEqual([0, 1500, 3000, 5000]);
   });
 
   it("bonusy pro majitele a zastupitele rostou s úrovní", () => {
-    const fx = (l: number) => calculateFacilityEffects({ vip_box: l });
+    const fx = (l: number) => calculateFacilityEffects({ stands: 3, vip_box: l });
     expect([0, 1, 2, 3].map((l) => fx(l).vipBoxSponsorFavorBonus)).toEqual([0, 1, 2, 3]);
     expect([0, 1, 2, 3].map((l) => fx(l).vipBoxSponsorAcceptanceBonus)).toEqual([0, 0.05, 0.1, 0.15]);
     expect([0, 1, 2, 3].map((l) => fx(l).vipBoxVillageFavorBonus)).toEqual([0, 1, 2, 3]);
   });
 
   it("nesmyslná úroveň se ořízne na 0–3", () => {
-    expect(calculateFacilityEffects({ vip_box: 9 }).vipBoxMatchCost).toBe(5000);
-    expect(calculateFacilityEffects({ vip_box: -2 }).vipBoxMatchCost).toBe(0);
+    expect(calculateFacilityEffects({ stands: 3, vip_box: 9 }).vipBoxMatchCost).toBe(5000);
+    expect(calculateFacilityEffects({ stands: 3, vip_box: -2 }).vipBoxMatchCost).toBe(0);
+  });
+
+  it("bez tribun (výtržnosti je umí zbořit pod stojící lóží) je lóže efektivně vypnutá", () => {
+    // ROZBITNE v stadium-damage.ts umí sundat stands na 0, i když vip_box v DB
+    // zůstane > 0 — v 3D lóže zmizí (chybí podstavec), ale bez tohohle by dál
+    // brala místa, stála peníze a dávala bonusy. Viz calculateFacilityEffects.
+    const fx = calculateFacilityEffects({ stands: 0, vip_box: 3 });
+    expect(fx.vipBoxMatchCost).toBe(0);
+    expect(fx.vipBoxCapacityLoss).toBe(0);
+    expect(fx.vipBoxSponsorFavorBonus).toBe(0);
+    expect(fx.vipBoxSponsorAcceptanceBonus).toBe(0);
+    expect(fx.vipBoxVillageFavorBonus).toBe(0);
+    expect(fx.vipBoxEffectiveLevel).toBe(0);
   });
 
   it("bez tribuny je zamčená, s tribunou ne", () => {

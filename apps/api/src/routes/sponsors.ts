@@ -226,13 +226,16 @@ sponsorsRouter.post("/teams/:teamId/sponsor-owners/:sponsorId/invite", async (c)
   }).length;
 
   // Lóže dělá z pozvání zážitek. Když se úroveň nenačte, zve se jako bez lóže.
-  const vipRow = await db.prepare("SELECT vip_box FROM stadiums WHERE team_id = ?")
-    .bind(teamId).first<{ vip_box: number | null }>()
+  // Bez tribun (stands < 1) je efektivní úroveň 0, i kdyby v DB zůstal vip_box > 0
+  // po tom, co výtržnosti tribuny zbořily pod stojící lóží (viz calculateFacilityEffects).
+  const vipRow = await db.prepare("SELECT vip_box, stands FROM stadiums WHERE team_id = ?")
+    .bind(teamId).first<{ vip_box: number | null; stands: number | null }>()
     .catch((e) => { logger.warn({ module: "sponsors", teamId }, "load vip box for invite", e); return null; });
+  const vipBoxEffectiveLevel = (vipRow?.stands ?? 0) >= 1 ? (vipRow?.vip_box ?? 0) : 0;
 
   const probability = invitationAcceptance({
     favor, personality: owner.personality, recentLosses, noise: (Math.random() - 0.5) * 0.2,
-    vipBoxLevel: vipRow?.vip_box ?? 0,
+    vipBoxLevel: vipBoxEffectiveLevel,
   });
   const accepted = Math.random() < probability;
   const reasons = REJECT_REASONS[owner.personality];

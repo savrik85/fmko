@@ -481,6 +481,15 @@ export interface StadiumFacilityEffects {
   vipBoxSponsorFavorBonus: number;      // VIP lóže: + náklonnost pozvaného majitele po zápase
   vipBoxSponsorAcceptanceBonus: number; // VIP lóže: + šance (0–1), že majitel pozvání přijme
   vipBoxVillageFavorBonus: number;      // VIP lóže: + přízeň každého zastupitele, který zápas prosedí
+  /**
+   * Skutečná úroveň VIP lóže, jak ji používají VŠECHNY efekty výše — 0, pokud
+   * tribuny nejsou postavené (stands < 1), i kdyby v DB zůstal vip_box > 0.
+   * Tribuny umí zbourat výtržnosti (ROZBITNE v stadium-damage.ts) a lóži tam
+   * nechat viset bez podstavce; v 3D pak zmizí (VipBox.tsx), ale bez tohohle
+   * pole by dál brala místa, stála peníze a dávala bonusy. Kdokoli mimo tento
+   * soubor potřebuje úroveň lóže, čte odsud, ne syrové facilities.vip_box.
+   */
+  vipBoxEffectiveLevel: number;
 }
 
 export function calculateFacilityEffects(facilities: Record<string, number>): StadiumFacilityEffects {
@@ -497,7 +506,11 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   const eg = facilities.entrance_gate ?? 0;
   const se = facilities.security ?? 0;
   const ca = facilities.cage ?? 0;
-  const vb = Math.max(0, Math.min(3, Math.round(facilities.vip_box ?? 0)));
+  const vbRaw = Math.max(0, Math.min(3, Math.round(facilities.vip_box ?? 0)));
+  // Lóže bez tribun pod sebou nefunguje — nedá se ani postavit (getUpgradeOptions),
+  // ale výtržnosti tribuny zboří pod stojící lóží, a ta by pak dál brala místa,
+  // stála peníze a dávala bonusy, aniž by v 3D vůbec byla vidět.
+  const vb = st >= 1 ? vbRaw : 0;
 
   return {
     homeMoraleBonus: SKALY.changing_rooms.morale[cr] ?? 0,
@@ -531,6 +544,7 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     vipBoxSponsorFavorBonus: SKALY.vip_box.sponsorFavor[vb],
     vipBoxSponsorAcceptanceBonus: SKALY.vip_box.sponsorAcceptance[vb],
     vipBoxVillageFavorBonus: SKALY.vip_box.villageFavor[vb],
+    vipBoxEffectiveLevel: vb,
   };
 }
 
