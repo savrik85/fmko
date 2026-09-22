@@ -135,6 +135,7 @@ const FACILITY_LABELS: Record<string, string> = {
   entrance_gate: "Brána",
   security: "Pořadatelé",
   cage: "Klec",
+  vip_box: "Lóže",
 };
 
 export function StadiumRadarWidget({ data }: WidgetProps) {

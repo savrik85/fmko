@@ -438,7 +438,7 @@ async function nactiKontext(db: D1Database, opts: ResolveOpts): Promise<Kontext>
   const stadion = await db
     .prepare(
       `SELECT changing_rooms, showers, refreshments, lighting, stands, parking, fence,
-              roof, ultras_stand, toilets, entrance_gate, security, cage
+              roof, ultras_stand, toilets, entrance_gate, security, cage, vip_box
        FROM stadiums WHERE team_id = ?`,
     )
     .bind(opts.homeTeamId)

@@ -153,6 +153,7 @@ const FACILITY_ICONS: Record<string, string> = {
   entrance_gate: "🎟️",
   security: "🦺",
   cage: "⛓️",
+  vip_box: "🥂",
 };
 
 const FACILITY_LABELS: Record<string, string> = {
@@ -169,6 +170,7 @@ const FACILITY_LABELS: Record<string, string> = {
   entrance_gate: "Vstupní brána",
   security: "Pořadatelská služba",
   cage: "Klec nad kotlem",
+  vip_box: "VIP lóže",
 };
 
 const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
@@ -188,6 +190,7 @@ const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   // Třetí úroveň neexistuje, proto se poslední popis opakuje: výš než plexi
   // do stropu už se jít nedá.
   cage: ["Mezi kotlem a hřištěm nic není", "Mříž mezi kotlem a hřištěm", "Plexi až do výšky, na trávník se nedostane nic", "Plexi až do výšky, na trávník se nedostane nic"],
+  vip_box: ["Hosté sedí mezi diváky", "Prosklená kabina pro pár hostů", "Tři kabiny s rautem a obsluhou", "Celá řada lóží pod markýzou"],
 };
 
 const LEVEL_LABELS = ["Žádné", "Základní", "Dobré", "Vynikající"];

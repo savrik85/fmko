@@ -1575,6 +1575,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     entrance_gate: stadium.entrance_gate as number ?? 0,
     security: stadium.security as number ?? 0,
     cage: stadium.cage as number ?? 0,
+    vip_box: stadium.vip_box as number ?? 0,
   };
 
   // Batch: team info + match count + active season
@@ -1912,6 +1913,7 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     entrance_gate: stadium.entrance_gate as number ?? 0,
     security: stadium.security as number ?? 0,
     cage: stadium.cage as number ?? 0,
+    vip_box: stadium.vip_box as number ?? 0,
   };
 
   const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);

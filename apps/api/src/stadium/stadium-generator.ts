@@ -108,6 +108,7 @@ export const FACILITY_LABELS: Record<string, string> = {
   entrance_gate: "Vstupní brána",
   security: "Pořadatelská služba",
   cage: "Klec nad kotlem",
+  vip_box: "VIP lóže",
 };
 
 // Stadium = dlouhodobá investice přes více sezón
@@ -127,6 +128,8 @@ export const UPGRADE_COSTS: Record<string, number[]> = {
   entrance_gate: [0, 12000, 45000, 120000],
   security: [0, 14000, 45000, 115000],
   cage: [0, 26000, 70000, 0],
+  // Zhruba jako tribuny: lóže je stavba na tribuně, ne kus vybavení.
+  vip_box: [0, 55000, 170000, 450000],
 };
 
 /**
@@ -182,6 +185,20 @@ export const SKALY = {
     /** O kolik se ztlumí hlas sektoru kotle. */
     tlumeniHlasu: [0, 0.1, 0.2, 0.2],
   },
+  /**
+   * VIP lóže na hlavní tribuně. Zabírá místa platícím divákům a každý domácí
+   * soutěžní zápas stojí raut a obsluhu. Vrací se přes lidi, které klub na
+   * zápas pozve: majitele firem (náklonnost, šance, že pozvání přijmou) a
+   * zastupitele obce (přízeň). `sponsorAcceptance` je podíl, 0,05 = 5 p. b.
+   * Čte to `calculateFacilityEffects` i `sponsors/favor-math.ts`.
+   */
+  vip_box: {
+    seatsLost: [0, 30, 60, 100],
+    matchCost: [0, 1500, 3000, 5000],
+    sponsorFavor: [0, 1, 2, 3],
+    sponsorAcceptance: [0, 0.05, 0.1, 0.15],
+    villageFavor: [0, 1, 2, 3],
+  },
 } as const;
 
 /**
@@ -219,6 +236,7 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   entrance_gate: ["", "Rychlejší odbavení u vstupu", "Dva turnikety", "Elektronické turnikety"],
   security: ["", "Dva hasiči s páskou přes rameno", "Parta v reflexních vestách a s vysílačkou", "Agentura z okresu, kamera nad kotlem a velitel"],
   cage: ["", "Mříž mezi kotlem a hřištěm", "Plexi až do výšky, na trávník se nedostane nic", ""],
+  vip_box: ["", "Prosklená kabina pro pár hostů", "Tři kabiny s rautem a obsluhou", "Celá řada lóží pod markýzou"],
 };
 
 /**
@@ -286,6 +304,17 @@ export function popisPrirustku(key: string, from: number, to: number): string {
       const casti = [`−${pct(rozdil(SKALY.cage.vniknutiHazeni))} riziko vniknutí a házení`];
       casti.push(`kotel naštvanější o ${SKALY.cage.heatZaZapas[to]} za domácí zápas`);
       casti.push(`hlas kotle tlumený o ${pct(SKALY.cage.tlumeniHlasu[to])}`);
+      return casti.join(", ");
+    }
+    case "vip_box": {
+      // Ztráta míst jde PRVNÍ: hráč má vidět, co lóže bere, dřív než co dává.
+      const v = SKALY.vip_box;
+      const casti = [`−${rozdil(v.seatsLost)} míst pro platící diváky`];
+      casti.push(`+${rozdil(v.sponsorFavor)} náklonnost pozvaného majitele po zápase`);
+      casti.push(`+${pct(rozdil(v.sponsorAcceptance))} šance, že majitel pozvání přijme`);
+      casti.push(`+${rozdil(v.villageFavor)} přízeň každého zastupitele na tribuně`);
+      // Bez znaménka, ať to regex testů nesebere místo ztráty míst.
+      casti.push(`provoz ${v.matchCost[to]} Kč za domácí zápas`);
       return casti.join(", ");
     }
     default:
@@ -388,6 +417,12 @@ export function getUpgradeOptions(
       lockDetail.prerequisite = "Nejdřív postav aspoň provizorní oplocení";
     }
 
+    // Lóže sedí na hlavní tribuně. Bez tribuny ji není kam postavit.
+    if (key === "vip_box" && (stadium.stands ?? 0) < 1) {
+      locked = true;
+      lockDetail.prerequisite = "Nejdřív postav aspoň základní tribuny";
+    }
+
     // Obec spolufinancuje jen tyhle cíle (viz INVESTMENT_TEMPLATES) — u ostatních
     // nesmíme slibovat, že se zámek dá obejít.
     const villageCanFund = VILLAGE_FUNDABLE.has(key);
@@ -441,6 +476,11 @@ export interface StadiumFacilityEffects {
   securitySeverityDrop: number;   // pořadatelská služba: šance, že incident stlačí o stupeň (0.0-1.0)
   securityMatchCost: number;      // pořadatelská služba: Kč za domácí soutěžní zápas
   sectorSeparation: number;       // oplocení: o kolik klesne riziko střetu s hostujícím kotlem
+  vipBoxCapacityLoss: number;           // VIP lóže: kolik míst pro platící diváky zabere
+  vipBoxMatchCost: number;              // VIP lóže: Kč za domácí soutěžní zápas (raut, obsluha)
+  vipBoxSponsorFavorBonus: number;      // VIP lóže: + náklonnost pozvaného majitele po zápase
+  vipBoxSponsorAcceptanceBonus: number; // VIP lóže: + šance (0–1), že majitel pozvání přijme
+  vipBoxVillageFavorBonus: number;      // VIP lóže: + přízeň každého zastupitele, který zápas prosedí
 }
 
 export function calculateFacilityEffects(facilities: Record<string, number>): StadiumFacilityEffects {
@@ -457,6 +497,7 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   const eg = facilities.entrance_gate ?? 0;
   const se = facilities.security ?? 0;
   const ca = facilities.cage ?? 0;
+  const vb = Math.max(0, Math.min(3, Math.round(facilities.vip_box ?? 0)));
 
   return {
     homeMoraleBonus: SKALY.changing_rooms.morale[cr] ?? 0,
@@ -467,8 +508,10 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     attendanceBonus: (SKALY.lighting.attendance[li] ?? 0)
       + (SKALY.parking.attendance[pa] ?? 0)
       + (SKALY.entrance_gate.attendance[eg] ?? 0),
-    // Jediné, co dělá rozdíl v kapacitě — základ má každý klub stejný.
-    capacityBonus: STANDS_CAPACITY[st] ?? 0,
+    // Kapacitu mění tribuny (přidávají) a VIP lóže (bere místa platícím).
+    // Základ má každý klub stejný. Lóže odečtená tady platí všude, kde se
+    // kapacita čte: zápas, pohár, stránka stadionu i rubrika kotle.
+    capacityBonus: (STANDS_CAPACITY[st] ?? 0) - SKALY.vip_box.seatsLost[vb],
     ticketPriceBonus: SKALY.fence.price[fe] ?? 0,
     fencePayingRatio: SKALY.fence.paying[fe] ?? 0.3,
     weatherAttendanceShield: SKALY.roof.shield[ro] ?? 0,
@@ -483,6 +526,11 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     securitySeverityDrop: SKALY.security.zavaznost[se] ?? 0,
     securityMatchCost: SKALY.security.naklad[se] ?? 0,
     sectorSeparation: SKALY.fence.oddeleni[fe] ?? 0,
+    vipBoxCapacityLoss: SKALY.vip_box.seatsLost[vb],
+    vipBoxMatchCost: SKALY.vip_box.matchCost[vb],
+    vipBoxSponsorFavorBonus: SKALY.vip_box.sponsorFavor[vb],
+    vipBoxSponsorAcceptanceBonus: SKALY.vip_box.sponsorAcceptance[vb],
+    vipBoxVillageFavorBonus: SKALY.vip_box.villageFavor[vb],
   };
 }
 
