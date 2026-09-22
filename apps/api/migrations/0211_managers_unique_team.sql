@@ -16,10 +16,20 @@ DELETE FROM managers
  WHERE user_id = 'ai'
    AND team_id IN (SELECT team_id FROM managers WHERE user_id != 'ai' AND team_id IS NOT NULL);
 
--- 2) Zbylé duplicity (dva AI nebo dva lidští): nechat poslední zapsaný řádek.
+-- 2) Dva lidští trenéři u jednoho klubu (prod 2026-09: klub 3ea0fa20): nechat toho,
+--    jehož účet klub vlastní.
+DELETE FROM managers
+ WHERE team_id IS NOT NULL
+   AND user_id != (SELECT t.user_id FROM teams t WHERE t.id = managers.team_id)
+   AND EXISTS (
+     SELECT 1 FROM managers m2 JOIN teams t2 ON t2.id = m2.team_id
+      WHERE m2.team_id = managers.team_id AND m2.user_id = t2.user_id
+   );
+
+-- 3) Zbylé duplicity (dva AI nebo nikdo neodpovídá majiteli): nechat poslední zapsaný řádek.
 DELETE FROM managers
  WHERE team_id IS NOT NULL
    AND rowid NOT IN (SELECT MAX(rowid) FROM managers WHERE team_id IS NOT NULL GROUP BY team_id);
 
--- 3) Pojistka do budoucna.
+-- 4) Pojistka do budoucna.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_managers_team_unique ON managers(team_id) WHERE team_id IS NOT NULL;
