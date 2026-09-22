@@ -2,14 +2,16 @@
  * Skripta „Mládež" (vlastnost Práce s mládeží): kategorie a pravidla mládeže FAČR,
  * přístup k dětem a rodičům, dlouhodobý rozvoj a specializace.
  *
- * Fakta ověřena proti zdrojům: Metodický pokyn Právního oddělení FAČR č. 1/2024
- * (kategorie, 1. leden, future hráči, start za muže), pravidla fotbalu malých forem
- * FAČR pro 2025/2026 (4+1, 5+1, míče, branky, pokutový kop) a 2024/2025 (tabulky
- * přípravek), metodická příručka FAČR pro mini přípravku (2023), Visek a kol. 2015
- * (FUN MAPS), Positive Coaching Alliance (poměr 5 : 1), LTAD 2.1 Sport for Life
- * (etapy, citlivá období, pozdní specializace, poměry trénink : soutěž),
+ * Fakta ověřena proti zdrojům: Soutěžní řád FAČR s účinností od 1. 7. 2026, § 36 a § 37
+ * (kategorie podle věku dovršeného v roce začátku ročníku, future hráči, dívky
+ * v chlapeckých družstvech, start mladšího dorostu za muže), výkladové stanovisko FAČR
+ * k nastupování pro 2025/2026, pravidla fotbalu malých forem FAČR (2023, platná dál;
+ * 4+1, 5+1, 7+1, 8+1, míče, hřiště, pokutový kop ze 7 m, tabulky přípravek), metodická
+ * příručka FAČR pro mini přípravku (2023), Visek a kol. 2015 (FUN MAPS, vítězství
+ * 48. z 81), Positive Coaching Alliance (poměr 5 : 1), LTAD 2.1 Sport for Life
+ * (etapy, citlivá období, pozdní specializace fotbalu, poměry trénink : soutěž),
  * Ford a kol. 2011 (kritika LTAD), Barnsley a kol. 1985 a Helsen a kol. 2005
- * (relativní věk), Cumming a kol. 2017 (bio-banding), AAP 2016 (specializace).
+ * (relativní věk), Cumming a kol. 2018 (bio-banding), AAP 2016 (specializace).
  */
 import type { CategoryContent } from "./types";
 
@@ -20,21 +22,21 @@ export const MLADEZ: CategoryContent = {
       category: "mladez",
       difficulty: 1,
       title: "Věkové kategorie mládeže",
-      body: `Mládežnický fotbal se podle soutěžního řádu FAČR dělí na tři velké kategorie a každá má mladší a starší část. Označení **U** pochází z anglického under, tedy „do“: hráči U11 jsou hráči do 11 let.
-- **přípravka**: mladší přípravka (U9 a mladší), starší přípravka (U10 a U11),
+      body: `Mládežnický fotbal se podle soutěžního řádu FAČR dělí na tři velké kategorie a každá má mladší a starší část. Označení **U** pochází z anglického under, tedy „do“: U11 znamená zhruba do 11 let.
+- **přípravka**: mladší přípravka (U8 a U9, hrát smějí i mladší děti od pěti let), starší přípravka (U10 a U11),
 - **žáci**: mladší žáci (U12 a U13), starší žáci (U14 a U15),
 - **dorost**: mladší dorost (U16 a U17), starší dorost (U18 a U19).
 
-Pro zařazení hráče do kategorie je rozhodující jeho **věk k 1. lednu** kalendářního roku, ve kterém soutěžní ročník začal. Kdo začne ročník v nějaké kategorii, smí ho v ní také **dohrát**, i když během ročníku dovrší věk vyšší kategorie. Proto třeba nejstarší dorostenci smějí jaro dohrát v dorostu, přestože jim už je osmnáct.
+Do kategorie patří hráč vždy na **celý soutěžní ročník**. Rozhoduje, **kolik let dovrší v kalendářním roce, ve kterém ročník začíná**. Kdo během ročníku oslaví narozeniny, které by ho posunuly výš, ročník ve své kategorii **dohraje** a výš přejde až od dalšího. Proto třeba nejstarší dorostenci hrají dorost celý ročník, i když někteří na jaře oslaví devatenáctiny.
 
-Zvláštní výjimkou jsou takzvaní **future hráči**. Jde o hráče o **ročník starší**, kteří ještě nejsou tak biologicky vyspělí, aby mohli pohodlně hrát ve vyšší kategorii. Nastoupit mohou jen za těchto podmínek:
-- povolí to rozpis soutěže řídícího orgánu, tedy okresního, krajského nebo pražského svazu,
+Zvláštní výjimkou jsou takzvaní **future hráči**. Jde o hráče o **ročník starší**, kteří ještě nejsou tak biologicky vyspělí, aby mohli hrát ve vyšší kategorii. Nastoupit mohou jen za těchto podmínek:
+- povolí to rozpis soutěže řídícího orgánu, tedy okresního, krajského nebo pražského svazu, a to nejvýš do kategorie starších žáků,
 - v jednom utkání nastoupí **nejvýš dva**,
-- klub předloží jejich seznam před začátkem soutěže.
+- klub předloží jejich seznam ke schválení před prvním utkáním ročníku.
 
-Dívky smějí nastupovat i za chlapecká družstva mládeže. Až do starších žáků mohou být o rok starší než kluci, v soutěžích starších žáků řízených okresním, krajským nebo pražským svazem dokonce o dva roky.
+Dívky smějí nastupovat i za chlapecká družstva mládeže. Až do mladšího dorostu mohou být o rok starší než kluci, v přípravkách a žácích v soutěžích řízených okresním, krajským nebo pražským svazem dokonce o dva roky.
 
-Na vesnici, kde se na jeden dorost skládají tři obce, se vyplatí znát tahle pravidla nazpaměť. Neoprávněný start hráče končí kontumací a vyhraný zápas je rázem prohraný u zeleného stolu.`,
+Na vesnici, kde se na jeden dorost skládají tři obce, se vyplatí znát tahle pravidla nazpaměť. Za neoprávněný start hráče hrozí kontumace a vyhraný zápas je rázem prohraný u zeleného stolu.`,
     },
     {
       id: "mladez-male-formy",
@@ -43,11 +45,11 @@ Na vesnici, kde se na jeden dorost skládají tři obce, se vyplatí znát tahle
       title: "Malé formy fotbalu v přípravkách",
       body: `Děti v přípravce nehrají na velkém hřišti jedenáct na jedenáct. FAČR pro ně vydává **pravidla fotbalu malých forem**: méně hráčů, menší hřiště, menší branky i míč. Každé dítě je tak častěji u míče, víc kličkuje, střílí a rozhoduje se, místo aby půl zápasu stálo v rohu a trhalo sedmikrásky.
 
-Podle pravidel pro ročník 2025/2026:
-- **mladší přípravka** hraje **4+1**, tedy čtyři hráči v poli a brankář (nejméně 3+1), s míčem **velikosti 3** na branky **5 × 2 m**,
-- **starší přípravka** hraje **5+1** (nejméně 4+1) na hřišti zhruba **43–45 × 28–30 m**, s míčem **velikosti 4**, také na branky 5 × 2 m.
+Podle současných pravidel:
+- **mladší přípravka** hraje **4+1**, tedy čtyři hráči v poli a brankář, s míčem **velikosti 3** na hřišti zhruba **35–37 × 24–26 m**,
+- **starší přípravka** hraje **5+1** na hřišti zhruba **43–45 × 28–30 m**, s míčem **velikosti 4** a na branky 5 × 2 m.
 
-Pro mladší žáky existují pravidla malých forem pro hru **7+1**. Na velké hřiště a plný počet hráčů se přechází až později.
+Pro mladší žáky existují pravidla malých forem pro hru **7+1** a **8+1**. Na velké hřiště a plný počet hráčů se přechází až později.
 
 Ve starší přípravce se například **pokutový kop kope ze 7 metrů** a volné kopy z vlastní poloviny jsou nepřímé a musí se rozehrát přihrávkou. Brankář při kopu od branky rozehrává míč nohou ze země. **Střídá se opakovaně** a bez přerušení hry, takže nikdo nemusí vysedávat celý zápas na lavičce a každé dítě si zahraje.
 
@@ -60,7 +62,7 @@ Tatínkům na plotě to ovšem nebrání vést si vlastní tabulku v hlavě. Ty 
       category: "mladez",
       difficulty: 1,
       title: "Hra a radost jako základ",
-      body: `Proč děti chodí na fotbal? Protože je to baví. Americká výzkumnice **Amanda Visek** se s kolegy ptala mladých fotbalistů, jejich rodičů a trenérů, co dělá sport zábavným. Studie z roku 2015 sestavila **81 faktorů zábavy**. Na špici skončily **fér hra**, **snaha a nasazení** a **pozitivní trenér**. **Vítězství** skončilo až zhruba na **40. místě**.
+      body: `Proč děti chodí na fotbal? Protože je to baví. Americká výzkumnice **Amanda Visek** se s kolegy ptala mladých fotbalistů, jejich rodičů a trenérů, co dělá sport zábavným. Studie z roku 2015 sestavila **81 faktorů zábavy** a seskupila je do 11 oblastí. Nejvýš hodnocené oblasti byly **fér hra**, **snaha a nasazení** a **pozitivní trenér**. **Vítězství** skončilo mezi 81 faktory až na **48. místě**.
 
 Podobně to vidí FAČR. Jeho metodická příručka pro nejmenší říká, že cílem není naučit děti hned hrát fotbal. Cílem je naučit je **všestranný pohyb**, **cit pro míč**, chování v kolektivu, **samostatné rozhodování** a motivovat je ke sportu. Příručka to shrnuje přáním, aby děti měly fotbal rády ne měsíc nebo rok, ale **celý život**.
 
@@ -70,7 +72,7 @@ Co to znamená v praxi:
 - netlač na výsledek; úspěch je i odebraný míč, povedená klička nebo snaha,
 - ke každému dítěti přistupuj **individuálně**, protože každé dozrává jinak. Kdo dnes nestačí, může být za pár let nejlepší.
 
-Americká akademie pediatrů navíc upozorňuje na význam **volné hry**, tedy hraní pro radost s volnými pravidly, jako je kopaná na návsi nebo nohejbal za stodolou. Podle ní je taková hra důležitá pro normální vývoj i pro pozdější sportovní úspěch.
+Americká akademie pediatrů navíc upozorňuje na význam **volné hry**, tedy neorganizovaných her pro radost, které si děti řídí samy, jako je kopaná na návsi nebo nohejbal za stodolou. Podle ní děti, které takhle hrají, od organizovaného sportu méně často odcházejí.
 
 Trenér přípravky tedy není vrchní velitel lavičky. Je to průvodce, který hlídá hlavně jedno: aby se děti těšily na další trénink.`,
     },
@@ -132,7 +134,7 @@ Co s tím:
 - hodnoť výkon s ohledem na datum narození a vývoj, ne jen podle toho, kdo je dnes nejsilnější,
 - s výběrem talentů **nespěchej**,
 - zkus **bio-banding**, tedy rozdělení hráčů podle **biologické zralosti** místo data narození; zkoušely ho akademie anglické Premier League,
-- v soutěžích okresních, krajských a pražského svazu lze se souhlasem svazu nasadit až dva **future hráče** o ročník starší, kteří jsou biologicky pozadu.
+- v soutěžích okresních, krajských a pražského svazu lze v mládeži do starších žáků se souhlasem svazu nasadit až dva **future hráče** o ročník starší, kteří jsou biologicky pozadu.
 
 Prosincový drobeček z přípravky může být za deset let nejlepší hráč okresu. Pokud ho ovšem mezitím neodradíš lavičkou.`,
     },
@@ -156,7 +158,7 @@ První tři etapy tvoří základ **pohybové gramotnosti**, tedy motivace, sebe
 
 Model doporučuje i poměr tréninku a soutěžení: v etapě Učíme se trénovat **70 : 30**, v etapě Trénujeme, abychom trénovali 60 : 40. Děti mají víc trénovat a hrát, než jezdit po turnajích o poháry.
 
-Fotbal model řadí mezi sporty s **pozdní specializací**. Příliš brzká specializace podle něj vede k jednostranné přípravě, chybějícím pohybovým základům, **zraněním z přetížení**, **vyhoření** a brzkému konci kariéry.
+Verze modelu z roku 2016 (LTAD 2.1) řadí fotbal mezi sporty s **pozdní specializací**, ke kterým je ale dobré se dostat brzy. Příliš brzká specializace podle něj vede k jednostranné přípravě, chybějícím pohybovým základům, **zraněním z přetížení**, **vyhoření** a brzkému konci kariéry.
 
 Model má i kritiky. **Ford a kolegové (2011)** mu vytkli, že je **obecný, ne individuální**, a že pro řadu jeho tvrzení **chybí dostatek důkazů**. Doporučují brát ho jako rozpracované dílo, které se má dál ověřovat. Pro trenéra je LTAD dobrá mapa, jen s ní nechoď po šumavském lese se zavřenýma očima.`,
     },
@@ -179,7 +181,7 @@ Praktická doporučení AAP:
 - za rok dohromady aspoň **3 měsíce pauzy** od svého sportu, po měsíčních blocích; aktivní může dítě být dál v jiných sportech,
 - jedna z citovaných studií zjistila vyšší riziko přetížení u dětí, které měly **víc hodin organizovaného sportu týdně, než kolik jim je let**.
 
-Pak přijde chvíle, kdy se z dorostence stává chlap. Podle soutěžního řádu FAČR smí hráč nastoupit za **muže** od kalendářního roku, kdy věkově patří do **mladšího dorostu**, tedy od roku, ve kterém dovrší **15 let**. Že smí, ale neznamená, že musí. Přechod k dospělým je skok: soupeři jsou silnější, tempo jiné a v kabině platí jiné zvyky.
+Pak přijde chvíle, kdy se z dorostence stává chlap. Podle soutěžního řádu FAČR smí hráč nastoupit za **muže** od soutěžního ročníku, ve kterém věkově patří do **mladšího dorostu**, tedy od ročníku začínajícího v roce, kdy dovrší **15 let**. Že smí, ale neznamená, že musí. Přechod k dospělým je skok: soupeři jsou silnější, tempo jiné a v kabině platí jiné zvyky.
 
 Pomáhá:
 - dávat mladým minuty **postupně**, třeba závěrečné čtvrthodinky,
@@ -209,13 +211,13 @@ Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a j
       lessonId: "mladez-kategorie",
       text: "Co je rozhodující pro zařazení hráče do věkové kategorie mládeže?",
       options: [
-        "Jeho věk k 1. lednu kalendářního roku, ve kterém soutěžní ročník začal",
+        "Kolik let dovrší v kalendářním roce, ve kterém soutěžní ročník začíná",
         "Jeho výška a váha při vstupní prohlídce",
         "Jeho věk v den prvního zápasu sezóny",
         "Rozhodnutí předsedy oddílu",
       ],
       correct: 0,
-      explain: "Podle soutěžního řádu rozhoduje věk k 1. lednu roku, ve kterém ročník začal.",
+      explain: "Podle soutěžního řádu rozhoduje, kolik let hráč dovrší v kalendářním roce, ve kterém ročník začíná; v kategorii pak zůstává celý ročník.",
     },
     {
       id: "mladez-kategorie-3",
@@ -241,7 +243,7 @@ Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a j
         "Musí hrát výhradně za muže",
       ],
       correct: 1,
-      explain: "Kdo ročník v kategorii začal, smí ho v ní i dohrát.",
+      explain: "Do kategorie patří hráč na celý ročník; kdo během něj dovrší věk vyšší kategorie, dohraje ho ve své a výš přejde až od dalšího.",
     },
 
     // Malé formy fotbalu v přípravkách
@@ -256,7 +258,7 @@ Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a j
         "Dva v poli a žádný brankář",
       ],
       correct: 0,
-      explain: "Mladší přípravka hraje 4+1, nejméně 3+1. Viz lekce: Malé formy fotbalu v přípravkách.",
+      explain: "Mladší přípravka hraje 4+1, tedy čtyři hráči v poli a brankář. Viz lekce: Malé formy fotbalu v přípravkách.",
     },
     {
       id: "mladez-male-formy-2",
@@ -305,17 +307,17 @@ Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a j
       text: "Kde skončilo vítězství mezi 81 faktory zábavy ve výzkumu Amandy Visek?",
       options: [
         "Na prvním místě",
-        "Zhruba na 40. místě",
+        "Až na 48. místě",
         "Na posledním, 81. místě",
         "V seznamu se vůbec neobjevilo",
       ],
       correct: 1,
-      explain: "Vítězství skončilo až zhruba na 40. místě z 81. Viz lekce: Hra a radost jako základ.",
+      explain: "Vítězství skončilo až na 48. místě z 81. Viz lekce: Hra a radost jako základ.",
     },
     {
       id: "mladez-radost-2",
       lessonId: "mladez-radost",
-      text: "Které faktory byly podle výzkumu Amandy Visek pro zábavu nejdůležitější?",
+      text: "Které oblasti zábavy byly podle výzkumu Amandy Visek nejvýš hodnocené?",
       options: [
         "Vítězství, pohár a medaile",
         "Nové kopačky a drahý dres",
@@ -323,7 +325,7 @@ Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a j
         "Dlouhé běhání kolem hřiště",
       ],
       correct: 2,
-      explain: "Na špici skončily fér hra, snaha a nasazení a pozitivní trenér.",
+      explain: "Nejvýš hodnocené oblasti zábavy byly fér hra, snaha a nasazení a pozitivní trenér.",
     },
     {
       id: "mladez-radost-3",
@@ -531,7 +533,7 @@ Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a j
     {
       id: "mladez-ltad-2",
       lessonId: "mladez-ltad",
-      text: "Jak model LTAD řadí fotbal?",
+      text: "Jak model LTAD ve verzi 2.1 řadí fotbal?",
       options: [
         "Mezi sporty s pozdní specializací",
         "Mezi sporty s ranou specializací, podobně jako gymnastiku",
@@ -613,13 +615,13 @@ Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a j
       lessonId: "mladez-specializace",
       text: "Od kdy smí hráč podle soutěžního řádu FAČR nastoupit za muže?",
       options: [
-        "Od kalendářního roku, ve kterém dovrší 15 let, kdy věkově patří do mladšího dorostu",
+        "Od ročníku, ve kterém věkově patří do mladšího dorostu, tedy od ročníku začínajícího v roce, kdy dovrší 15 let",
         "Až od 21 let",
         "Od 12 let, pokud souhlasí trenér",
         "Nikdy dřív, než dohraje starší dorost",
       ],
       correct: 0,
-      explain: "Za muže mohou nastupovat hráči, kteří věkově odpovídají mladšímu dorostu, tedy od roku, kdy dovrší 15 let.",
+      explain: "Za muže smějí nastupovat hráči kategorie mladšího dorostu, tedy od ročníku začínajícího v roce, kdy dovrší 15 let.",
     },
   ],
 };

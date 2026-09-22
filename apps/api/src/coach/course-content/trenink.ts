@@ -26,7 +26,7 @@ Osvědčené pořadí vypadá takto:
 - potom **dynamické protahování**, tedy protahování v pohybu: kroužení v kyčlích, výpady, přednožování a zanožování za chůze,
 - nakonec činnost s míčem a postupné zvyšování tempa až k rychlým krátkým úsekům.
 
-**Statické protahování** znamená podržet sval v natažené poloze bez pohybu. Souhrnný přehled studií (Behm a kol., 2016) ukázal, že statické protahování těsně před výkonem výkon mírně snižuje, a to výrazněji, když jednu svalovou skupinu držíš **60 sekund a déle**. Dynamické protahování naopak výkon mírně zlepšovalo. Proto do rozcvičky patří hlavně protahování v pohybu.
+**Statické protahování** znamená podržet sval v natažené poloze bez pohybu. Souhrnný přehled studií (Behm a kol., 2016) ukázal, že statické protahování těsně před výkonem výkon mírně snižuje, a to výrazněji, když jednu svalovou skupinu držíš **60 sekund a déle**. Dynamické protahování naopak výkon mírně zlepšovalo. Když po statickém protažení ještě následovala dynamická činnost, jasný vliv na výkon se neprojevil. Proto do rozcvičky patří hlavně protahování v pohybu.
 
 Také příručka k programu FIFA 11+ uvádí, že strečinková cvičení do rozcvičky nepatří, ale dají se zařadit **na konec tréninku**. Statické protahování tedy nezatracuj, jen ho přesuň tam, kde neubírá z výbušnosti: po tréninku nebo do samostatné jednotky na pohyblivost.
 
@@ -160,7 +160,7 @@ Program má **tři části a 15 cviků**, dohromady asi **20 minut**:
 
 Doporučení zní: před **každým tréninkem, aspoň dvakrát týdně**, a před zápasem zkrácená verze z částí 1 a 3. Účinek se podle příručky dostaví zhruba po **10 až 12 týdnech**. Program je určen hráčům přibližně **od 14 let**; u mladších se některé cviky vynechávají nebo upravují.
 
-Klíčem je **správná technika**: noha v jedné linii, **koleno nad špičkou**, měkké dopady. Koleno nesmí uhýbat dovnitř. Studie v British Medical Journal z roku 2008 ukázala, že mládežnické týmy s touto rozcvičkou měly méně zranění než týmy s obvyklým rozcvičením.
+Klíčem je **správná technika**: noha v jedné linii, **koleno nad špičkou**, měkké dopady. Koleno nesmí uhýbat dovnitř. Studie v British Medical Journal z roku 2008 ukázala, že dívčí mládežnické týmy s touto rozcvičkou měly méně zranění než týmy s obvyklým rozcvičením.
 
 Jedním z cviků části 2 je **severský (nordický) hamstring**: hráč klečí, spoluhráč mu drží kotníky a on se pomalu spouští dopředu. Souhrnná analýza (van Dyk a kol., 2019) zjistila, že programy s tímto cvikem snižují počet zranění zadních stehenních svalů **zhruba na polovinu**. Dvacet minut před tréninkem je levnější než šest týdnů s obvazem.`,
     },

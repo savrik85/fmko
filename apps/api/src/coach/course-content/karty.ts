@@ -190,7 +190,7 @@ Vyloučený funkcionář musí opustit technickou zónu i okolí hřiště. Klob
       title: "Kapitán, respekt a dočasné vyloučení",
       body: `Podle pravidel **kapitán nemá žádné zvláštní postavení ani výsady**, ale nese **určitou míru odpovědnosti za chování svého týmu**. Český výklad pravidel k tomu dodává, že během hry se na rozhodčího smí obracet jen kapitán, a to slušně, stručně a jen ve věcech hry. Kdo z toho udělá hádku, riskuje žlutou.
 
-IFAB, tedy rada, která pravidla fotbalu schvaluje, šla ještě dál a zavedla protokol **„Jen kapitán“**. Po sporném momentu smí za rozhodčím jen kapitán, ostatní hráči mají zůstat nejméně **4 m** od něj. Hráč, který do této zóny vtrhne, by měl dostat **žlutou za nesouhlas**. Když je kapitánem brankář, tým rozhodčímu oznámí hráče z pole, který chodí místo něj. Pro všechny soutěže má být protokol povinný od **1. července 2027**.
+IFAB, rada, která pravidla schvaluje, vydala zásady **„Jen kapitán“**. Po sporném momentu smí za rozhodčím jen jeden hráč z týmu, obvykle kapitán. Kdo sudího obstoupí, i když nesmí, riskuje žlutou. Když je kapitánem brankář, tým rozhodčímu předem oznámí hráče, který chodí místo něj. V mládeži, u veteránů, hráčů s postižením a na nejnižších amatérských úrovních může rozhodčí navíc gestem vyhlásit **zónu jen pro kapitána**: ostatní hráči musí zůstat nejméně **4 m** od něj a kdo do zóny vtrhne, měl by dostat **žlutou za nesouhlas**. Povinné budou zásady pro všechny soutěže, které začnou **1. července 2027** nebo později.
 
 **Dočasné vyloučení** je trest, kdy hráč za napomínaný přestupek odejde na nějakou dobu z hřiště. Pravidla ho dovolují jen v soutěžích **mládeže, veteránů, hráčů s postižením a na nejnižších amatérských úrovních**, se souhlasem svazu a jen tam, kde to **řád soutěže** umožňuje. Platí pro něj:
 - rozhodčí ukáže **žlutou** a pak **oběma pažemi** ukáže do místa pro dočasně vyloučené, obvykle do technické zóny,
@@ -199,7 +199,7 @@ IFAB, tedy rada, která pravidla fotbalu schvaluje, šla ještě dál a zavedla 
 - hráč čeká v technické zóně a vrací se od postranní čáry se souhlasem rozhodčího, když je míč mimo hru,
 - soutěž může takto trestat všechny napomínané přestupky (**systém A**), nebo jen vybrané (**systém B**), třeba nesouhlas nebo simulování.
 
-Respekt ke hře a k sudímu se tedy vyplácí. Kdo si deset minut odsedí kvůli protestům, má dost času přemýšlet, jestli mu to stálo za to.`,
+Respekt k sudímu se vyplácí. Kdo si deset minut odsedí kvůli protestům, má čas přemýšlet, jestli to stálo za to.`,
     },
   ],
 
@@ -326,7 +326,7 @@ Respekt ke hře a k sudímu se tedy vyplácí. Kdo si deset minut odsedí kvůli
       options: [
         "Nic, žluté se sčítají až do dalšího zápasu",
         "Je vyloučen",
-        "Musí na deset minut mimo hřiště",
+        "Hraje dál, jen zaplatí pokutu do klubové pokladny",
         "Žlutou místo něj dostane kapitán",
       ],
       correct: 1,
@@ -371,7 +371,7 @@ Respekt ke hře a k sudímu se tedy vyplácí. Kdo si deset minut odsedí kvůli
     {
       id: "karty-vyhoda-3",
       lessonId: "karty-vyhoda",
-      text: "Obránce zastaví slibně se rozvíjející útok faulem a rozhodčí nechá výhodu. Dostane obránce žlutou?",
+      text: "Obránce zastaví slibně se rozvíjející útok držením za dres a rozhodčí nechá výhodu. Dostane obránce žlutou?",
       options: [
         "Ano, vždycky",
         "Ano, a k tomu červenou",
@@ -474,7 +474,7 @@ Respekt ke hře a k sudímu se tedy vyplácí. Kdo si deset minut odsedí kvůli
     {
       id: "karty-dogso-3",
       lessonId: "karty-dogso",
-      text: "Obránce ve vlastním pokutovém území zastaví slibně se rozvíjející útok (ne zjevnou šanci) faulem, při kterém se snažil hrát míč. Rozhodčí nařídí penaltu. Dostane obránce kartu?",
+      text: "Obránce ve vlastním pokutovém území zastaví slibně se rozvíjející útok (ne zjevnou šanci) nedbalým faulem, při kterém se snažil hrát míč. Rozhodčí nařídí penaltu. Dostane obránce kartu?",
       options: [
         "Ne, karta v tomto případě není",
         "Ano, žlutou",
@@ -559,10 +559,10 @@ Respekt ke hře a k sudímu se tedy vyplácí. Kdo si deset minut odsedí kvůli
     {
       id: "karty-respekt-2",
       lessonId: "karty-respekt",
-      text: "Jak daleko od rozhodčího mají podle protokolu „Jen kapitán“ zůstat ostatní hráči?",
+      text: "Rozhodčí na nejnižší amatérské úrovni vyhlásí zónu jen pro kapitána. Jak daleko od něj musí zůstat ostatní hráči?",
       options: ["Nejméně 1 m", "Nejméně 9,15 m", "Nejméně 4 m", "Nejméně 11 m"],
       correct: 2,
-      explain: "Za rozhodčím smí jen kapitán, ostatní hráči mají zůstat nejméně 4 m od něj. Kdo do zóny vtrhne, riskuje žlutou za nesouhlas.",
+      explain: "Zóna jen pro kapitána sahá 4 m kolem rozhodčího, ostatní hráči musí zůstat venku. Kdo do ní vtrhne, měl by dostat žlutou za nesouhlas.",
     },
     {
       id: "karty-respekt-3",

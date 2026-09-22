@@ -389,7 +389,7 @@ export async function startCourse(
   }
 
   await sendSystemSMS(db, teamId, SCHOOL,
-    `Vítej na kurzu „${offer.title}". Skripta máš na profilu trenéra v záložce Vzdělání. `
+    `Vítej na kurzu „${offer.title}“. Skripta máš na profilu trenéra v záložce Vzdělání. `
     + `Kurz trvá ${offer.days} dní a trenér zatím chybí na tréninku. Pak tě čeká test: `
     + `${offer.exam.questions} otázek, ${offer.exam.timeLimitMin} minut, projdeš s ${offer.exam.passScore} správnými.`,
   ).catch((e) => logger.warn({ module: M }, `uvítací SMS kurzu ${id}`, e));
@@ -621,16 +621,16 @@ async function finalizeAttempt(db: D1Database, course: CourseRow, attempt: Attem
   if (passed) {
     await grantReward(db, course, score, attempt.total, gameDate);
     await sendSystemSMS(db, course.team_id, SCHOOL,
-      `Gratulujeme, test „${title}" jsi dal na ${score} z ${attempt.total}. ${rewardText(course)}.`)
+      `Gratulujeme, test „${title}“ jsi dal na ${score} z ${attempt.total}. ${rewardText(course)}.`)
       .catch((e) => logger.warn({ module: M }, `SMS úspěchu ${course.id}`, e));
   } else if (status === "retake_available") {
     await sendSystemSMS(db, course.team_id, SCHOOL,
-      `Test „${title}" nevyšel (${score} z ${attempt.total}, potřeba ${attempt.pass_score}). `
+      `Test „${title}“ nevyšel (${score} z ${attempt.total}, potřeba ${attempt.pass_score}). `
       + `Máš jeden opravný termín za ${course.retake_price.toLocaleString("cs")} Kč, přihlásit se můžeš do ${COURSE_RULES.examWindowDays} dní.`)
       .catch((e) => logger.warn({ module: M }, `SMS neúspěchu ${course.id}`, e));
   } else {
     await sendSystemSMS(db, course.team_id, SCHOOL,
-      `Ani opravný termín „${title}" nevyšel (${score} z ${attempt.total}). Kurz propadá. Zkusit to můžeš znovu od začátku.`)
+      `Ani opravný termín „${title}“ nevyšel (${score} z ${attempt.total}). Kurz propadá. Zkusit to můžeš znovu od začátku.`)
       .catch((e) => logger.warn({ module: M }, `SMS propadnutí ${course.id}`, e));
   }
   logger.info({ module: M }, `test ${course.id} pokus ${attempt.attempt_no}: ${score}/${attempt.total} → ${status}`);
@@ -704,7 +704,7 @@ export async function tickCoachCourses(db: D1Database, teamId: string, env?: Pus
     ).bind(COURSE_RULES.examWindowDays, gameDate, course.id).run();
     const rules = examRulesFor(course.kind);
     await sendSystemSMS(db, teamId, SCHOOL,
-      `Kurz „${title}" skončil a trenér je zpátky na tréninku. Teď tě čeká závěrečný test: `
+      `Kurz „${title}“ skončil a trenér je zpátky na tréninku. Teď tě čeká závěrečný test: `
       + `${rules.questions} otázek, ${rules.timeLimitMin} minut bez pauzy, potřeba ${rules.passScore} správně. `
       + `Na test máš ${COURSE_RULES.examWindowDays} dní.`, { type: "coach_course", courseId: course.id })
       .catch((e) => logger.warn({ module: M }, `SMS konce kurzu ${course.id}`, e));
@@ -745,7 +745,7 @@ export async function tickCoachCourses(db: D1Database, teamId: string, env?: Pus
         WHERE id = ? AND status = 'exam_ready'`,
     ).bind(COURSE_RULES.examWindowDays, course.id).run();
     await sendSystemSMS(db, teamId, SCHOOL,
-      `Na test „${title}" jsi nepřišel, počítá se jako nesplněný. Zbývá opravný termín za ${course.retake_price.toLocaleString("cs")} Kč.`)
+      `Na test „${title}“ jsi nepřišel, počítá se jako nesplněný. Zbývá opravný termín za ${course.retake_price.toLocaleString("cs")} Kč.`)
       .catch((e) => logger.warn({ module: M }, `SMS zmeškaného testu ${course.id}`, e));
     return;
   }
@@ -754,7 +754,7 @@ export async function tickCoachCourses(db: D1Database, teamId: string, env?: Pus
       WHERE id = ? AND status IN ('exam_ready','retake_available')`,
   ).bind(gameDate, course.id).run();
   await sendSystemSMS(db, teamId, SCHOOL,
-    `Kurz „${title}" propadl, na test ani opravný termín už nedošlo. Peníze se nevrací.`)
+    `Kurz „${title}“ propadl, na test ani opravný termín už nedošlo. Peníze se nevrací.`)
     .catch((e) => logger.warn({ module: M }, `SMS propadnutí kurzu ${course.id}`, e));
 }
 

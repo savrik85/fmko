@@ -236,6 +236,9 @@ function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
     return () => clearInterval(t);
   }, []);
 
+  // Nová otázka vždy od začátku — jinak by ji po přechodu z úvodu překryla lišta s časem.
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [index]);
+
   useEffect(() => {
     if (remaining <= 0) void submit();
   }, [remaining, submit]);

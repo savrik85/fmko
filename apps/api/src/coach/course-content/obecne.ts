@@ -2,10 +2,12 @@
  * Licenční skripta (kategorie `obecne`): Licence C, UEFA B, UEFA A a UEFA Pro.
  *
  * Fakta ověřena (září 2026) u zdrojů:
- * - Pravidla fotbalu IFAB, aktuální vydání: theifab.com/laws/latest (pravidla 1, 2, 3, 4, 7, 8, 9, 10,
- *   11, 12, 15, 16, 17 a zásady „Only the captain“),
- * - FAČR: fotbal.cz (změny pravidel 2025/26, struktura trenérských licencí, historie svazu),
- * - UEFA: uefa.com (historie, trenérské licence), UEFA Coaching Convention 2020,
+ * - Pravidla fotbalu IFAB, vydání 2026/27 platné od 1. 7. 2026: theifab.com/laws/latest (pravidla 1, 2,
+ *   3, 4, 7, 8, 9, 10, 11, 12, 15, 16, 17 a zásady „Only the captain“, povinné od 1. 7. 2027),
+ * - FAČR: fotbal.cz (struktura trenérských licencí, Leader certifikát, historie svazu),
+ *   Řád trenérů FAČR s účinností od 1. 3. 2025 (§ 3, 4, 7: ÚTV, GTM, systém licencí),
+ * - UEFA: uefa.com (historie, sídla, trenérské licence), UEFA Coaching Convention 2020 (čl. 16 až 18,
+ *   24, 30, 32), osnova UEFA C diploma 2020 (modul Care and welfare),
  *   UEFA Club Licensing and Financial Sustainability Regulations 2025 (čl. 47, hlavní trenér),
  * - FIFA: inside.fifa.com (založení 1904), IFAB: theifab.com/background a /organisation,
  * - první pomoc: nzip.cz (155 / 112), Resuscitation Council UK 2025 (KPR), NHS (PRICE),
@@ -37,7 +39,7 @@ Hrací plocha musí být obdélníková. Dvě delší čáry jsou **postranní**
 
 **Branka** má vnitřní vzdálenost tyčí 7,32 m a spodní hrana břevna je 2,44 m nad zemí. Tyče a břevno musí být bílé. Pravidlo navíc výslovně říká, že branky **včetně přenosných** musí být pevně zajištěné k zemi. Převržená branka umí ošklivě zranit.
 
-Povrch je buď celý přírodní, nebo, pokud to dovolí pravidla soutěže, celý umělý. Umělý povrch musí být zelený, takže modrý koberec z hospody neprojde.`,
+Povrch je buď celý přírodní, nebo, pokud to dovolí pravidla soutěže, celý umělý, případně hybridní, tedy přírodní tráva zpevněná umělým materiálem. Umělý povrch musí být zelený, takže modrý koberec z hospody neprojde.`,
     },
     {
       id: "obecne-c-hraci",
@@ -56,7 +58,7 @@ Utkání hrají dvě družstva, každé nejvýše s **jedenácti hráči**, z ni
 - až když vystřídaný hráč opustil hrací plochu,
 - po signálu rozhodčího.
 
-Vystřídaný hráč už do hry nezasáhne. Výjimkou je **opakované střídání**, které pravidla dovolují jen v mládeži, u veteránů, ve fotbale hráčů s postižením a v rekreačním fotbale, a to se souhlasem národního svazu. Místo s brankářem si může vyměnit kterýkoli hráč, pokud o tom rozhodčí ví předem a výměna proběhne při přerušení hry.
+Vystřídaný hráč už do hry nezasáhne. Výjimkou je **opakované střídání**, které pravidla dovolují jen v mládeži, u veteránů, ve fotbale hráčů s postižením a v rekreačním fotbale, a to se souhlasem národního svazu, konfederace nebo FIFA. Místo s brankářem si může vyměnit kterýkoli hráč, pokud o tom rozhodčí ví předem a výměna proběhne při přerušení hry.
 
 Povinná **výstroj** je dres s rukávy, trenýrky, stulpny, **chrániče holení** a obuv. Chrániče musí být zakryté stulpnami a za jejich velikost a vhodnost odpovídá sám hráč. Brankář nosí barvy, které se liší od ostatních hráčů i rozhodčích. **Šperky** jsou zakázané včetně gumiček a koženého náramku a přelepit je páskou nestačí. Snubní prsten tedy jde do tašky, i když to doma nebudou rádi.
 
@@ -113,7 +115,7 @@ Z kopu od branky, z vhazování ani z rohového kopu se hráč, který míč př
       difficulty: 2,
       licence: 2,
       title: "Bezpečný trénink",
-      body: `Lektor kurzu UEFA B rád opakuje, že nejlepší trénink je ten, ze kterého všichni odejdou po svých. Už osnova diplomu UEFA C, nejnižšího stupně UEFA, klade důraz na **ochranu dětí**, **základy první pomoci** a zdravý životní styl. Na béčku se čeká, že bezpečnost má trenér v krvi.
+      body: `Lektor kurzu UEFA B rád opakuje, že nejlepší trénink je ten, ze kterého všichni odejdou po svých. Už osnova diplomu UEFA C, nejnižšího stupně UEFA, má modul **péče o hráče**, ve kterém trenér musí znát zásady **ochrany dětí** a **základy první pomoci**. Na béčku se čeká, že bezpečnost má trenér v krvi.
 
 **Před tréninkem** trenér projde hřiště. Díry po krtcích, kameny nebo střepy po sobotní zábavě se řeší dřív, než na ně někdo šlápne. Pravidlo 1 výslovně požaduje, aby branky **včetně přenosných byly pevně zajištěné k zemi**. Na tréninku to platí dvojnásob, protože se na branky věší děti i dospělí a převržená branka dokáže vážně zranit.
 
@@ -320,9 +322,9 @@ Hospoda po zápase kabinu stmeluje, ale vážný spor se u třetího piva nevyř
 
 **FIFA** vznikla **21. května 1904 v Paříži**, v zadní místnosti domu v ulici Saint-Honoré. Zakladateli bylo sedm zemí: Belgie, Dánsko, Francie, Nizozemsko, Španělsko, Švédsko a Švýcarsko. Prvním předsedou byl Francouz Robert Guérin. Dnes má FIFA přes dvě stě členských svazů a sídlí v Curychu.
 
-**UEFA** byla založena **15. června 1954 v Basileji**. Je jednou ze šesti **konfederací**, které řídí fotbal na kontinentech, vedle AFC (Asie), CAF (Afrika), Concacaf (Severní a Střední Amerika a Karibik), CONMEBOL (Jižní Amerika) a OFC (Oceánie). Brzy spustila Pohár mistrů evropských zemí (1955) a mistrovství Evropy reprezentací (od roku 1958). Od roku 1999 sídlí ve švýcarském **Nyonu**, předtím byla téměř čtyřicet let v Bernu.
+**UEFA** byla založena **15. června 1954 v Basileji**. Je jednou ze šesti **konfederací**, které řídí fotbal na kontinentech, vedle AFC (Asie), CAF (Afrika), Concacaf (Severní a Střední Amerika a Karibik), CONMEBOL (Jižní Amerika) a OFC (Oceánie). Brzy spustila Pohár mistrů evropských zemí (1955) a mistrovství Evropy reprezentací (od roku 1958). Dnes sídlí ve švýcarském **Nyonu** u Ženevského jezera, předtím působila v Paříži a pak přes třicet let v Bernu.
 
-Doma nás řídí **FAČR**. Jejím předchůdcem je **Český svaz footballový**, založený v sobotu **19. října 1901** v pražské restauraci U Zlaté váhy. Sešlo se tehdy sedmnáct klubů a kroužků a prvním předsedou se stal medik Karel Freja. Po rozdělení Československa vznikl Českomoravský fotbalový svaz, který se v roce **2011** přeměnil na Fotbalovou asociaci České republiky.
+Doma nás řídí **FAČR**. Jejím předchůdcem je **Český svaz footballový**, založený v sobotu **19. října 1901** v pražské restauraci U Zlaté váhy. Sešlo se tehdy sedmnáct klubů a kroužků a prvním předsedou se stal medik Karel Freja. Po rozdělení Československa řídil český fotbal Českomoravský fotbalový svaz, který v roce **2011** přijal dnešní název Fotbalová asociace České republiky.
 
 Až bude okresní svaz zase měnit rozpis, vzpomeňte si, že i IFAB potřebuje šest hlasů z osmi.`,
     },
@@ -343,11 +345,11 @@ Hlavní stupně a minimální rozsah výuky:
 
 Vedle nich existují specializace, například trenér mládeže, trenér brankářů nebo futsal. Licenční předpisy UEFA pro kluby v evropských pohárech chtějí po hlavním trenérovi platnou licenci **UEFA Pro**, pokud je jeho svaz signatářem konvence i na stupni Pro, jinak stačí UEFA A.
 
-Postup má pravidla. Na B potřebujete platnou licenci C a aspoň šest měsíců praxe, na A platnou B a rok praxe po jejím získání v jedenáctkovém fotbale. Na Pro platnou A a rok praxe jako hlavní trenér elitní mládeže nebo dospělých amatérů, případně jako asistent v profesionálním fotbale.
+Postup má pravidla. Na B potřebujete platnou licenci C a aspoň šest měsíců praxe, na A platnou B a rok praxe po jejím získání v jedenáctkovém fotbale. Na Pro platnou A a rok praxe po jejím získání jako hlavní trenér elitní mládeže nebo dospělých amatérů, případně jako asistent v profesionálním fotbale.
 
 Licence UEFA platí **tři kalendářní roky**. K prodloužení je potřeba nejméně **15 hodin dalšího vzdělávání** během tří let. Komu licence propadne, ztrácí právo trénovat.
 
-V Česku řídí vzdělávání **Úsek trenérů a vzdělávání FAČR**. Cesta začíná online kurzem **Leader certifikát**, který není licencí, ale je minimem pro řízení utkání na okresní úrovni, když nemůže být přítomen trenér s licencí FAČR C. První skutečnou licencí je **FAČR C**, bez hlavičky UEFA. Následuje **UEFA C**, nejnižší licence uznávaná v členských zemích UEFA, pak UEFA B, UEFA A a UEFA Pro. Motto kurzu Pro zní prostě: Úspěch.
+V Česku řídí vzdělávání **Úsek trenérů a vzdělávání FAČR**. Cesta začíná online kurzem **Leader certifikát**, který není licencí, ale je minimem pro řízení utkání na okresní úrovni, když nemůže být přítomen trenér s licencí FAČR C. První skutečnou licencí je **FAČR C**, bez hlavičky UEFA. Následuje **UEFA C**, nejnižší licence uznávaná v členských zemích UEFA, pak UEFA B, UEFA A a UEFA Pro.
 
 Kurzy FAČR C, UEFA C a UEFA B pořádá FAČR na úrovni krajů a okresů, takže sokolovna s lektorem z kraje není výmysl.`,
     },
@@ -622,15 +624,15 @@ Psychologie na okrese neznamená gauč a terapeuta. Znamená vědět, koho před
     {
       id: "obecne-b-bezpecnost-2",
       lessonId: "obecne-b-bezpecnost",
-      text: "Na co podle lekce klade důraz už osnova diplomu UEFA C?",
+      text: "Co musí trenér znát už v modulu péče o hráče v osnově diplomu UEFA C?",
       options: [
-        "Na ochranu dětí, základy první pomoci a zdravý životní styl",
-        "Na taktiku presinku a analýzu videa",
-        "Na práci s médii",
-        "Na financování klubu",
+        "Zásady ochrany dětí a základy první pomoci",
+        "Taktiku presinku a analýzu videa",
+        "Práci s médii",
+        "Financování klubu",
       ],
       correct: 0,
-      explain: "Už nejnižší diplom UEFA C má v osnově ochranu dětí, základy první pomoci a zdravý životní styl.",
+      explain: "Už nejnižší diplom UEFA C má modul péče o hráče, ve kterém trenér musí znát zásady ochrany dětí a základy první pomoci.",
     },
     {
       id: "obecne-b-bezpecnost-3",
@@ -868,7 +870,7 @@ Psychologie na okrese neznamená gauč a terapeuta. Znamená vědět, koho před
     {
       id: "obecne-a-analyza-3",
       lessonId: "obecne-a-analyza",
-      text: "Kolik témat má mít rozbor zápasu s hráči?",
+      text: "Kolik témat má mít podle lekce rozbor zápasu s hráči?",
       options: ["Dvě tři klíčová sdělení", "Co nejvíc, aby nic nechybělo", "Přesně deset", "Žádné, stačí pustit celý zápas"],
       correct: 0,
       explain: "Rozbor má mít málo témat, dvě tři klíčová sdělení, a vždy říct, co se s nimi udělá v tréninku.",
@@ -1117,7 +1119,7 @@ Psychologie na okrese neznamená gauč a terapeuta. Znamená vědět, koho před
       text: "Kde dnes sídlí UEFA?",
       options: ["V Curychu", "V Bernu", "V Paříži", "V Nyonu"],
       correct: 3,
-      explain: "UEFA sídlí od roku 1999 ve švýcarském Nyonu, předtím byla téměř čtyřicet let v Bernu.",
+      explain: "UEFA dnes sídlí ve švýcarském Nyonu, předtím působila v Paříži a přes třicet let v Bernu.",
     },
     {
       id: "obecne-pro-instituce-5",
@@ -1130,7 +1132,7 @@ Psychologie na okrese neznamená gauč a terapeuta. Znamená vědět, koho před
         "V roce 2011 v Praze",
       ],
       correct: 1,
-      explain: "ČSF vznikl v sobotu 19. října 1901 v restauraci U Zlaté váhy. V roce 2011 se ČMFS přeměnil na FAČR.",
+      explain: "ČSF vznikl v sobotu 19. října 1901 v restauraci U Zlaté váhy. V roce 2011 přijal ČMFS dnešní název FAČR.",
     },
 
     // ─── obecne-pro-licence ─────────────────────────────────────────────────
@@ -1197,7 +1199,7 @@ Psychologie na okrese neznamená gauč a terapeuta. Znamená vědět, koho před
     {
       id: "obecne-pro-media-2",
       lessonId: "obecne-pro-media",
-      text: "Co si má trenér připravit před rozhovorem?",
+      text: "Co si má trenér podle lekce připravit před rozhovorem?",
       options: [
         "Seznam výtek na rozhodčího",
         "Nic, nejlepší je improvizace",
@@ -1223,9 +1225,9 @@ Psychologie na okrese neznamená gauč a terapeuta. Znamená vědět, koho před
     {
       id: "obecne-pro-media-4",
       lessonId: "obecne-pro-media",
-      text: "Co platí o informacích řečených „mimo záznam“?",
+      text: "Co podle lekce platí o větách řečených novináři „mimo záznam“?",
       options: [
-        "Novinář je nikdy nesmí použít",
+        "Nikdy nevyjdou, takže se tak dá říct cokoli",
         "Platí jako oficiální prohlášení klubu",
         "Nikdy není jisté, že nevyjdou",
         "Vycházejí jen v zahraničním tisku",
