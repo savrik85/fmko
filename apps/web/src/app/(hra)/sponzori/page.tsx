@@ -305,7 +305,7 @@ export default function SponsorsPage() {
             </CardBody>
           </Card>
         ) : (
-          <>
+          <div className="space-y-3">
             {data.mainExpired?.renewal && <ExpiredRenewCard contract={data.mainExpired} onRenew={() => handleRenew("main")} acting={acting} />}
             {data.mainExpired?.blockedReason && (
               <Card>
@@ -318,7 +318,7 @@ export default function SponsorsPage() {
               </Card>
             )}
             <OffersList offers={data.mainOffers} category="main" onSign={handleSign} acting={acting} />
-          </>
+          </div>
         )}
       </div>
 
@@ -338,10 +338,10 @@ export default function SponsorsPage() {
             )}
           </>
         ) : (
-          <>
+          <div className="space-y-3">
             {data.stadiumExpired?.renewal && <ExpiredRenewCard contract={data.stadiumExpired} onRenew={() => handleRenew("stadium")} acting={acting} />}
             <OffersList offers={data.stadiumOffers} category="stadium" onSign={handleSign} acting={acting} />
-          </>
+          </div>
         )}
       </div>
 
