@@ -226,7 +226,9 @@ export async function terminateContractBySponsor(db: D1Database, contract: Contr
     oldName = team?.name ?? "";
     const village = team?.village_name ?? "";
     newName = `SK ${village}`.trim();
-    if (category === "main") {
+    if (!village) {
+      logger.warn({ module: M, teamId }, `výpověď smlouvy ${contract.id}: klub bez obce, název se nevrací`);
+    } else if (category === "main") {
       await db.batch([
         db.prepare("UPDATE teams SET name = ? WHERE id = ?").bind(newName, teamId),
         db.prepare("UPDATE cup_teams SET name = ? WHERE team_id = ?").bind(newName, teamId),
