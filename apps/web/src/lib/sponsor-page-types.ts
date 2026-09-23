@@ -39,8 +39,9 @@ export interface SponsorsData {
   bannerContracts: ActiveContract[];
   stadiumName: string | null;
   teamName: string;
-  mainOffers: SponsorOffer[];
-  stadiumOffers: SponsorOffer[];
+  /** Pevné nabídky hlavního sponzora a stadionu API už neposílá (jednání s majitelem, UI v Tasku 8). */
+  mainOffers?: SponsorOffer[];
+  stadiumOffers?: SponsorOffer[];
   bannerOffers: SponsorOffer[];
   maxBanners: number;
   canChangeMainSponsor: boolean;

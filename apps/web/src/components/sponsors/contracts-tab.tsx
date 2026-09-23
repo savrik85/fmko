@@ -35,7 +35,7 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
           <div className="space-y-3">
             <ContractCard contract={data.mainContract} favor={favorOf(data.mainContract)} acting={acting}
               onTerminate={() => onTerminate("main")} onRenew={() => onRenew("main")} />
-            {data.mainOffers.length > 0 && (
+            {(data.mainOffers ?? []).length > 0 && (
               <div>
                 <div className="text-sm text-muted font-heading font-bold mb-2">Konkurenční nabídky: porovnej, jestli se vyplatí ukončit</div>
                 {!data.canChangeMainSponsor && (
@@ -43,7 +43,7 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
                     Limit změny hlavního sponzora 1× za sezónu už je vyčerpaný. Smlouvu můžeš ukončit, novou ale podepíšeš až příští sezónu.
                   </div>
                 )}
-                <OffersList offers={data.mainOffers} category="main" onSign={onSign} acting={acting}
+                <OffersList offers={(data.mainOffers ?? [])} category="main" onSign={onSign} acting={acting}
                   current={data.mainContract} signDisabled={!data.canChangeMainSponsor} />
               </div>
             )}
@@ -69,7 +69,7 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
                 </CardBody>
               </Card>
             )}
-            <OffersList offers={data.mainOffers} category="main" onSign={onSign} acting={acting} />
+            <OffersList offers={(data.mainOffers ?? [])} category="main" onSign={onSign} acting={acting} />
           </div>
         )}
       </section>
@@ -81,10 +81,10 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
           <div className="space-y-3">
             <ContractCard contract={data.stadiumContract} favor={favorOf(data.stadiumContract)} acting={acting}
               onTerminate={() => onTerminate("stadium")} onRenew={() => onRenew("stadium")} />
-            {data.stadiumOffers.length > 0 && (
+            {(data.stadiumOffers ?? []).length > 0 && (
               <div>
                 <div className="text-sm text-muted font-heading font-bold mb-2">Konkurenční nabídky: porovnej, jestli se vyplatí ukončit</div>
-                <OffersList offers={data.stadiumOffers} category="stadium" onSign={onSign} acting={acting} current={data.stadiumContract} />
+                <OffersList offers={(data.stadiumOffers ?? [])} category="stadium" onSign={onSign} acting={acting} current={data.stadiumContract} />
               </div>
             )}
           </div>
@@ -93,7 +93,7 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
             {data.stadiumExpired?.renewal && (
               <ExpiredRenewCard contract={data.stadiumExpired} favor={favorOf(data.stadiumExpired)} onRenew={() => onRenew("stadium")} acting={acting} />
             )}
-            <OffersList offers={data.stadiumOffers} category="stadium" onSign={onSign} acting={acting} />
+            <OffersList offers={(data.stadiumOffers ?? [])} category="stadium" onSign={onSign} acting={acting} />
           </div>
         )}
       </section>

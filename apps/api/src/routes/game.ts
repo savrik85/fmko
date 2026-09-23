@@ -2440,58 +2440,9 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     requirement?: string;
   };
 
-  // Generate main sponsor offers — vždy, abys mohl porovnat se současnou smlouvou.
-  // Z poolu vynech aktuálního sponzora (nehodí smysl ho nabízet znovu).
-  // Hlavní sponzor je exkluzivní — vynech ty, co jsou hlavní jinde nebo letos jednají přednostně s jiným klubem.
-  const mainCurrentName = mainContract?.sponsor_name as string | undefined;
-  const { blockedMainSponsorIds, mainSponsorBlock } = await import("../sponsors/exclusivity");
-  const blockedMain = await blockedMainSponsorIds(c.env.DB, team.district, teamId, seedSeason)
-    .catch((e) => { logger.error({ module: "game", teamId }, "blocked main sponsors", e); return null; });
-  if (!blockedMain) return c.json({ error: "Nepodařilo se načíst sponzory" }, 500);
-  const mainPoolFiltered = shuffledSponsors.filter((s) => s.name !== mainCurrentName && !blockedMain.has(s.id as number));
-  const mainOffers: Offer[] = [];
-  {
-    const offerCount = team.reputation >= 60 ? 5 : team.reputation >= 40 ? 4 : 3;
-    // Vždy zahrnout 2 největší sponzory okresu — ať jsou velké ryby (Madeta, Budvar…) vidět
-    const bigFish = [...mainPoolFiltered].sort((a, b) => (b.monthly_max as number) - (a.monthly_max as number)).slice(0, 2);
-    const pool = [...bigFish, ...mainPoolFiltered.filter((s) => !bigFish.includes(s))].slice(0, offerCount * 2);
-    for (let i = 0; i < Math.min(offerCount, pool.length); i++) {
-      const s = pool[i];
-      const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 3);
-      const winB = Math.round(rng.int(s.win_bonus_min as number, s.win_bonus_max as number) * repMod * 2);
-      const seasons = rng.int(1, 3);
-      const terminationFee = Math.round(monthly * seasons * 2);
-      let requirement: string | undefined;
-      if (monthly > 2000) requirement = `Reputace ${Math.round(30 + monthly / 100)}+`;
-      mainOffers.push({
-        sponsorId: s.id as number, sponsorName: s.name as string, sponsorType: s.type as string,
-        monthlyAmount: monthly, winBonus: winB, seasons, earlyTerminationFee: terminationFee, requirement,
-      });
-    }
-    mainOffers.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
-  }
-
-  // Stadium naming offers — taky vždy, aby šlo porovnat.
-  const stadiumCurrentBase = (stadiumContract?.sponsor_name as string | undefined)?.replace(/\s+Arena$/i, "").trim();
-  const stadiumPoolFiltered = shuffledSponsors.filter((s) =>
-    !stadiumCurrentBase || (s.name as string).replace(/\s*s\.r\.o\.?\s*/gi, "").trim() !== stadiumCurrentBase
-  );
-  const stadiumOffers: Offer[] = [];
-  {
-    const pool = stadiumPoolFiltered.slice(stadiumPoolFiltered.length > 4 ? 2 : 0);
-    for (let i = 0; i < Math.min(3, pool.length); i++) {
-      const s = pool[i];
-      const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 1.5);
-      const seasons = rng.int(1, 3);
-      const terminationFee = Math.round(monthly * seasons * 2);
-      const cleanName = (s.name as string).replace(/\s*s\.r\.o\.?\s*/gi, "").trim();
-      stadiumOffers.push({
-        sponsorId: s.id as number, sponsorName: `${cleanName} Arena`, sponsorType: s.type as string,
-        monthlyAmount: monthly, winBonus: 0, seasons, earlyTerminationFee: terminationFee,
-      });
-    }
-    stadiumOffers.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
-  }
+  // Hlavní sponzor a název stadionu se vyjednávají s majitelem firmy (routes/sponsors.ts,
+  // sponsors/negotiation*.ts). Pevné nabídky zůstaly jen u bannerů.
+  const { mainSponsorBlock } = await import("../sponsors/exclusivity");
 
   // Banner offers — vždy 12 možných, malé částky, bez naming/win bonus
   const MAX_BANNERS = 6;
@@ -2520,49 +2471,56 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 
   const changedThisSeason = (teamFull?.last_main_sponsor_change_season ?? 0) >= seasonNum;
 
-  // Nabídka prodloužení pro každou aktivní smlouvu — nové podmínky dle aktuální reputace
-  // Prodloužit jde jen smlouvu v poslední sezóně (nebo vypršelou) — jinak šlo klikáním
-  // donekonečna resetovat délku smlouvy a přepočítávat částky podle aktuální reputace.
+  // Bannery se prodlužují za pevné podmínky podle aktuální reputace. Prodloužit jde jen smlouvu
+  // v poslední sezóně (nebo vypršelou), jinak šlo klikáním resetovat délku a částky.
   type SpRow = { name: string; monthly_min: number; monthly_max: number; win_bonus_min: number; win_bonus_max: number };
   const renewalFor = (row: Record<string, unknown> | undefined | null) => row && isRenewable(row)
     ? computeRenewalTerms(teamId, seedSeason, row as { sponsor_name: string; category: string | null; monthly_amount: number; win_bonus: number },
         team.reputation, team.size, sponsorRows.results as unknown as SpRow[], seedFromString)
     : null;
 
-  // Nedávno vypršelá smlouva (main/stadium) — nabídnout obnovu se stejným sponzorem
-  const lastExpiredFor = async (cat: "main" | "stadium") => {
-    const row = await c.env.DB.prepare(
-      "SELECT * FROM sponsor_contracts WHERE team_id = ? AND status = 'expired' AND COALESCE(category, 'main') = ? ORDER BY signed_at DESC LIMIT 1"
-    ).bind(teamId, cat).first<Record<string, unknown>>()
-      .catch((e) => { logger.warn({ module: "game", teamId }, "fetch expired contract", e); return null; });
-    return row ? { ...mapContract(row), renewal: renewalFor(row) } : null;
+  // Hlavní sponzor a stadion: prodloužení je jednání se stejnou firmou. `renewable` říká, jestli
+  // na něj už je čas; u hlavního sponzora ho zablokuje exkluzivita (hlavní jinde, přednost jiného klubu).
+  const withRenewable = async (row: Record<string, unknown> | null | undefined, cat: "main" | "stadium") => {
+    if (!row) return null;
+    const base = { ...mapContract(row), renewal: null, renewable: isRenewable(row), blockedReason: null as string | null };
+    if (cat === "main" && base.renewable && base.sponsorId) {
+      const block = await mainSponsorBlock(c.env.DB, base.sponsorId, teamId, seedSeason);
+      if (block) return { ...base, renewable: false, blockedReason: block.reason };
+    }
+    return base;
   };
-  const mainExpiredBase = mainContract ? null : await lastExpiredFor("main");
-  const stadiumExpired = stadiumContract ? null : await lastExpiredFor("stadium");
 
-  // Hlavního sponzora nejde prodloužit/obnovit, když je hlavním jinde nebo dal přednost jinému klubu.
-  const withMainBlock = async <T extends { sponsorId: number | null; renewal: unknown }>(contract: T | null) => {
-    if (!contract?.sponsorId || !contract.renewal) return contract ? { ...contract, blockedReason: null as string | null } : null;
-    const block = await mainSponsorBlock(c.env.DB, contract.sponsorId, teamId, seedSeason);
-    return block ? { ...contract, renewal: null, blockedReason: block.reason } : { ...contract, blockedReason: null as string | null };
-  };
-  const mainActive = mainContract ? { ...mapContract(mainContract), renewal: renewalFor(mainContract) } : null;
-  const [mainContractOut, mainExpired] = await Promise.all([withMainBlock(mainActive), withMainBlock(mainExpiredBase)]);
+  // Nedávno vypršelá smlouva (main/stadium): obnovit jde jednáním se stejnou firmou.
+  const lastExpiredFor = (cat: "main" | "stadium") => c.env.DB.prepare(
+    "SELECT * FROM sponsor_contracts WHERE team_id = ? AND status = 'expired' AND COALESCE(category, 'main') = ? ORDER BY signed_at DESC LIMIT 1"
+  ).bind(teamId, cat).first<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "game", teamId }, "fetch expired contract", e); return null; });
+
+  const [mainContractOut, mainExpired, stadiumContractOut, stadiumExpired] = await Promise.all([
+    withRenewable(mainContract, "main"),
+    mainContract ? null : lastExpiredFor("main").then((r) => withRenewable(r, "main")),
+    withRenewable(stadiumContract, "stadium"),
+    stadiumContract ? null : lastExpiredFor("stadium").then((r) => withRenewable(r, "stadium")),
+  ]);
+
+  const { listTeamNegotiations } = await import("../sponsors/negotiation-db");
+  const negotiations = await listTeamNegotiations(c.env.DB, teamId)
+    .catch((e) => { logger.warn({ module: "game", teamId }, "fetch sponsor negotiations", e); return []; });
 
   return c.json({
     mainContract: mainContractOut,
-    stadiumContract: stadiumContract ? { ...mapContract(stadiumContract), renewal: renewalFor(stadiumContract) } : null,
+    stadiumContract: stadiumContractOut,
     mainExpired,
     stadiumExpired,
     bannerContracts: bannerContracts.map((r) => ({ ...mapContract(r), renewal: renewalFor(r) })),
     stadiumName: team.stadium_name,
     teamName: teamFull?.name ?? "",
-    mainOffers,
-    stadiumOffers,
     bannerOffers: bannerContracts.length >= MAX_BANNERS ? [] : bannerOffers,
     maxBanners: MAX_BANNERS,
     canChangeMainSponsor: !changedThisSeason,
     season: seasonNum,
+    negotiations,
   });
 });
 
@@ -2578,6 +2536,12 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   }>();
 
   const category = body.category || "main";
+  // Hlavní sponzor a název stadionu se podepisují po jednání s majitelem firmy
+  // (POST /teams/:teamId/sponsors/negotiations/:id/accept). Tady už jen bannery.
+  // Přetypování záměrně: zúžení `category` na "banner" by rozbilo zbylá porovnání níž (TS2367).
+  if ((category as string) !== "banner") {
+    return c.json({ error: "Hlavního sponzora a název stadionu teď vyjednáváš s majitelem firmy na stránce sponzora" }, 400);
+  }
   const MAX_BANNERS = 6;
 
   // Check no active contract in this category (banner: max 8 současně)
@@ -2623,21 +2587,6 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   // earlyTerminationFee se NEbere od klienta — dopočítej serverově dle skutečných hodnot.
   const validatedTerminationFee = Math.round(body.monthlyAmount * body.seasons * (category === "banner" ? 1.5 : 2));
 
-  // Season limit for main sponsor
-  if (category === "main") {
-    const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
-      .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for sponsor signing", e); return null; });
-    const sn = mustSeason(season?.number);
-    const team = await c.env.DB.prepare("SELECT last_main_sponsor_change_season FROM teams WHERE id = ?")
-      .bind(teamId).first<{ last_main_sponsor_change_season: number | null }>().catch((e) => { logger.warn({ module: "game" }, "fetch sponsor change limit", e); return null; });
-    if ((team?.last_main_sponsor_change_season ?? 0) >= sn) {
-      return c.json({ error: "Hlavního sponzora lze změnit pouze jednou za sezónu" }, 400);
-    }
-    const { mainSponsorBlock } = await import("../sponsors/exclusivity");
-    const block = await mainSponsorBlock(c.env.DB, spRow.id, teamId, sn);
-    if (block) return c.json({ error: block.reason }, 409);
-  }
-
   // Hlavní sponzor: vložit jen pokud ho mezitím nepodepsal jiný klub (atomicky v jednom příkazu).
   const { MAIN_SPONSOR_FREE_SQL } = await import("../sponsors/exclusivity");
   const id = crypto.randomUUID();
@@ -2651,77 +2600,6 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
     category, spRow.id, teamId,
   ).run();
   if (!ins.meta.changes) return c.json({ error: `${body.sponsorName} právě podepsal s jiným klubem` }, 409);
-
-  if (category === "main") {
-    // Update team name to sponsor name + village
-    const teamInfo = await c.env.DB.prepare("SELECT name, village_id FROM teams WHERE id = ?")
-      .bind(teamId).first<{ name: string; village_id: string }>();
-    const village = await c.env.DB.prepare("SELECT name FROM villages WHERE id = ?")
-      .bind(teamInfo!.village_id).first<{ name: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch village for sponsor rename", e); return null; });
-    const oldName = teamInfo!.name;
-    const newName = `FK ${body.sponsorName} ${village?.name ?? ""}`.trim();
-    const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
-      .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for sponsor rename", e); return null; });
-    // Přejmenování podle sponzora fanoušky nepotěší (-3).
-    await c.env.DB.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ? WHERE id = ?")
-      .bind(newName, mustSeason(season?.number), teamId).run();
-    {
-      const { applyReputationDelta } = await import("../lib/reputation");
-      await applyReputationDelta(
-        c.env.DB, teamId, -3, "sponsor", "Přejmenování klubu podle sponzora",
-        { referenceId: `sponsor-rename-${teamId}-s${mustSeason(season?.number)}` },
-      );
-      // Pamětníci to nesou nejhůř — jméno klubu neslo tři generace.
-      const { recordClubEvent } = await import("../fans/club-events");
-      await recordClubEvent(c.env.DB, {
-        teamId, kind: "prejmenovani_klubu", severity: 1,
-        payload: { co: `Teď jsme ${newName}` },
-        referenceId: `fan-rename-${teamId}-s${mustSeason(season?.number)}`,
-      });
-    }
-
-    // Přejmenování promítnout i do poháru a do U21 týmu klubu (jinak drží starý název).
-    await c.env.DB.prepare("UPDATE cup_teams SET name = ? WHERE team_id = ?")
-      .bind(newName, teamId).run().catch((e) => logger.warn({ module: "game" }, "rename cup_teams on sponsor change", e));
-    await c.env.DB.prepare("UPDATE teams SET name = ? WHERE parent_team_id = ? AND team_type = 'u21'")
-      .bind(`${newName} U21`, teamId).run().catch((e) => logger.warn({ module: "game" }, "rename U21 on sponsor change", e));
-
-    // News for entire league
-    await c.env.DB.prepare(
-      "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-    ).bind(crypto.randomUUID(), teamId,
-      `${oldName} mění název na ${newName}`,
-      `Klub ${oldName} podepsal sponzorskou smlouvu s ${body.sponsorName} a mění svůj název na ${newName}. Fanoušci nejsou nadšení (-3 reputace).`,
-    ).run().catch((e) => logger.warn({ module: "game" }, "insert sponsor rename news", e));
-
-    // Majitel nové hlavní firmy se ozve SMS (jen lidský klub, limity hlídá fronta).
-    try {
-      const { enqueueMainSponsorSms } = await import("../sponsors/owner-sms-triggers");
-      await enqueueMainSponsorSms(c.env.DB, teamId, Number(spRow.id), "main_new", `main-new:${id}`, { deliverNow: true });
-    } catch (e) {
-      logger.warn({ module: "game" }, "SMS od nového hlavního sponzora", e);
-    }
-
-    return c.json({ ok: true, contractId: id, newTeamName: newName, reputationPenalty: 3 });
-  }
-
-  // Stadium sponsor
-  if (category === "stadium") {
-    const stary = await c.env.DB.prepare("SELECT stadium_name FROM teams WHERE id = ?")
-      .bind(teamId).first<{ stadium_name: string | null }>()
-      .catch((e) => { logger.warn({ module: "game" }, "starý název stadionu", e); return null; });
-    await c.env.DB.prepare("UPDATE teams SET stadium_name = ? WHERE id = ?")
-      .bind(body.sponsorName, teamId).run();
-    // Druh „prejmenovani_stadionu" byl v katalogu reakcí od začátku, ale nikdo ho
-    // nezapisoval — fanoušci se o přejmenování vlastního hřiště nedozvěděli.
-    // Pamětníkům vadí nejvíc: chodí na Sportovní areál, ne na Truhlářství.
-    const { recordClubEvent } = await import("../fans/club-events");
-    await recordClubEvent(c.env.DB, {
-      teamId, kind: "prejmenovani_stadionu", severity: 1,
-      payload: { co: `${stary?.stadium_name ?? "Hřiště"} je teď ${body.sponsorName}` },
-      referenceId: `fan-stadion-${id}`,
-    });
-  }
 
   return c.json({ ok: true, contractId: id });
 });
@@ -2738,6 +2616,10 @@ gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
     "SELECT * FROM sponsor_contracts WHERE id = ? AND team_id = ? AND status IN ('active', 'expired')"
   ).bind(body.contractId, teamId).first<Record<string, unknown>>();
   if (!contract) return c.json({ error: "Smlouva nenalezena" }, 404);
+  // Hlavního sponzora a stadion prodlužuje jednání s majitelem firmy, pevné podmínky mají jen bannery.
+  if (((contract.category as string) || "main") !== "banner") {
+    return c.json({ error: "Hlavního sponzora a název stadionu prodloužíš jednáním s majitelem firmy" }, 400);
+  }
   if (!isRenewable(contract)) {
     return c.json({ error: "Smlouvu lze prodloužit až v její poslední sezóně" }, 400);
   }
@@ -2803,7 +2685,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   const category = body.category || "main";
 
   const allActiveT = await c.env.DB.prepare(
-    "SELECT id, early_termination_fee, seasons_remaining, category, sponsor_id FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
+    "SELECT id, sponsor_name, early_termination_fee, seasons_total, seasons_remaining, category, sponsor_id, signing_bonus, paid_construction, negotiation_id FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch contracts for termination", e); return { results: [] }; });
 
   // Pro banner — vyžaduje contractId (může jich být víc)
@@ -2812,23 +2694,42 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
     : allActiveT.results.find((r) => (r.category || "main") === category);
   const contract = contractRow ? {
     id: contractRow.id as string,
+    sponsor_name: contractRow.sponsor_name as string,
     early_termination_fee: contractRow.early_termination_fee as number,
+    seasons_total: contractRow.seasons_total as number,
     seasons_remaining: contractRow.seasons_remaining as number,
+    signing_bonus: (contractRow.signing_bonus as number | null) ?? 0,
+    paid_construction: (contractRow.paid_construction as string | null) ?? null,
+    negotiation_id: (contractRow.negotiation_id as string | null) ?? null,
   } : null;
 
   if (!contract) return c.json({ error: "Žádná aktivní smlouva" }, 400);
 
   // Calculate pro-rated fee
   const fee = Math.round(contract.early_termination_fee * (contract.seasons_remaining / 3));
+  // Smlouva z jednání: jednorázová plnění sponzora (příspěvek za podpis, stavba, vybavení,
+  // zaplacená pokuta, vyplacené termínové bonusy) jsou záloha, klub vrací nesplacenou část.
+  const { contractClawback } = await import("../sponsors/signing");
+  const clawback = await contractClawback(c.env.DB, contract);
 
-  const team = await c.env.DB.prepare("SELECT budget, village_id FROM teams WHERE id = ?")
-    .bind(teamId).first<{ budget: number; village_id: string }>();
-  if (!team || team.budget < fee) return c.json({ error: `Nedostatek peněz (sankce ${fee} Kč)` }, 400);
+  const team = await c.env.DB.prepare("SELECT budget, village_id, game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ budget: number; village_id: string; game_date: string | null }>();
+  if (!team || team.budget < fee + clawback) {
+    return c.json({ error: clawback > 0
+      ? `Nedostatek peněz (sankce ${fee} Kč a vrácení zálohy ${clawback} Kč)`
+      : `Nedostatek peněz (sankce ${fee} Kč)` }, 400);
+  }
 
-  // Deduct fee + terminate
+  // Nejdřív ukončit (podmíněně, dvojklik nesmí strhnout sankci dvakrát), pak strhnout peníze.
+  const ended = await c.env.DB.prepare("UPDATE sponsor_contracts SET status = 'terminated' WHERE id = ? AND status = 'active'")
+    .bind(contract.id).run();
+  if ((ended.meta?.changes ?? 0) !== 1) return c.json({ error: "Smlouva už je ukončená, načti stránku znovu" }, 409);
   await recordTransaction(c.env.DB, teamId, "sponsor_termination", -fee,
     `Ukončení sponzorské smlouvy (sankce)`, new Date().toISOString());
-  await c.env.DB.prepare("UPDATE sponsor_contracts SET status = 'terminated' WHERE id = ?").bind(contract.id).run();
+  if (clawback > 0) {
+    await recordTransaction(c.env.DB, teamId, "sponsor_termination", -clawback,
+      `Vrácení nesplacené zálohy: ${contract.sponsor_name}`, team.game_date ?? new Date().toISOString(), `sponsor-clawback-${contract.id}`);
+  }
 
   // Majitel firmy, se kterou klub ukončil hlavní smlouvu, se ozve SMS.
   const terminatedSponsorId = (contractRow?.sponsor_id as number | null | undefined) ?? null;
@@ -2866,7 +2767,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
       `Klub ${oldName} ukončil sponzorskou smlouvu a vrací se k názvu ${defaultName}. Fanoušci zmatení (-2 reputace).`,
     ).run().catch((e) => logger.warn({ module: "game" }, "insert termination rename news", e));
 
-    return c.json({ ok: true, fee, newTeamName: defaultName, reputationPenalty: 2 });
+    return c.json({ ok: true, fee, clawback, newTeamName: defaultName, reputationPenalty: 2 });
   }
 
   if (category === "stadium") {
@@ -2877,7 +2778,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   }
 
   // Banner — žádné rename ani penalty na reputaci
-  return c.json({ ok: true, fee });
+  return c.json({ ok: true, fee, clawback });
 });
 
 // POST /api/teams/:id/rename — custom rename (after sponsor termination, once per season)

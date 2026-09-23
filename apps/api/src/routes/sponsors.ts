@@ -24,6 +24,7 @@ import { ownerResponse, type ResponseKind } from "../sponsors/negotiation-texts"
 import { averageFavor, countBands, pickExtremes, rankAmongClubs, seasonAtDate, type FirmFavor } from "../sponsors/overview";
 import type { OwnerPersonality } from "../sponsors/owners";
 import { validateProposal } from "../sponsors/proposal";
+import { signNegotiation } from "../sponsors/signing";
 
 export const sponsorsRouter = new Hono<{ Bindings: Bindings }>();
 sponsorsRouter.use("/teams/:teamId/sponsor-owners/*", requireTeamOwnership);
@@ -549,4 +550,12 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
   const fresh = await loadNegotiationState(db, teamId, st.neg.id);
   if ("error" in fresh) return c.json({ error: fresh.error }, fresh.status);
   return c.json(negotiationView(fresh));
+});
+
+// POST /api/teams/:teamId/sponsors/negotiations/:negotiationId/accept: podpis přijatého návrhu
+// nebo protinabídky. Tělo se nečte: podepisují se podmínky uložené v jednání.
+sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/accept", async (c) => {
+  const res = await signNegotiation(c.env.DB, c.req.param("teamId"), c.req.param("negotiationId"));
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json(res);
 });
