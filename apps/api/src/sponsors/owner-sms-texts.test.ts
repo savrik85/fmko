@@ -55,6 +55,21 @@ describe("OWNER_SMS_TEXTS", () => {
   it("je deterministický podle klíče", () => {
     expect(renderOwnerSms("riot", "cautious", {}, "riot:m1", [])).toBe(renderOwnerSms("riot", "cautious", {}, "riot:m1", []));
   });
+
+  it("zpráva o sérii proher bez počtu proher nevznikne", () => {
+    expect(renderOwnerSms("losing_streak", "fan", {}, "k", [])).toBeNull();
+  });
+
+  it("série proher se vyrenderuje pro 3 i 5 proher u každé povahy", () => {
+    for (const p of OWNER_PERSONALITIES) {
+      for (const serie of [3, 5]) {
+        const out = renderOwnerSms("losing_streak", p, { serie }, `serie|${p}|${serie}`, []);
+        expect(out, `${p}/${serie}`).not.toBeNull();
+        expect(out).not.toMatch(/[{}]/);
+        expect(out).not.toContain("—");
+      }
+    }
+  });
 });
 
 describe("proherTvar", () => {
@@ -80,14 +95,42 @@ describe("replyOptions", () => {
 });
 
 describe("ownerReplyBack", () => {
-  it("má odpověď pro každou povahu a směr", () => {
+  it("má odpověď pro každou povahu, náladu příležitosti a směr", () => {
+    for (const p of OWNER_PERSONALITIES) {
+      for (const o of OWNER_SMS_OCCASIONS) {
+        for (const d of [3, 0, -3]) {
+          const t = ownerReplyBack(p, o, d, `k|${p}|${o}|${d}`);
+          expect(t.length).toBeGreaterThan(0);
+          expect(t).not.toContain("—");
+        }
+      }
+      expect(OWNER_REPLY_BACK[p].positive.up.length).toBeGreaterThanOrEqual(3);
+      expect(OWNER_REPLY_BACK[p].positive.down.length).toBeGreaterThanOrEqual(3);
+      expect(OWNER_REPLY_BACK[p].negative.up.length).toBeGreaterThanOrEqual(3);
+      expect(OWNER_REPLY_BACK[p].negative.down.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("kladná příležitost nikdy nevrátí větu ze záporného poolu", () => {
+    const positiveOccasions = ["match_eve", "after_win", "main_new", "season_thanks"] as const;
+    for (const p of OWNER_PERSONALITIES) {
+      const negativePool = [...OWNER_REPLY_BACK[p].negative.up, ...OWNER_REPLY_BACK[p].negative.down];
+      for (const o of positiveOccasions) {
+        for (const d of [3, 0, -3]) {
+          const t = ownerReplyBack(p, o, d, `pos|${p}|${o}|${d}`);
+          expect(negativePool, `${p}/${o}/${d}`).not.toContain(t);
+        }
+      }
+    }
+  });
+
+  it("konec smlouvy nezní jako pokračování spolupráce", () => {
     for (const p of OWNER_PERSONALITIES) {
       for (const d of [3, 0, -3]) {
-        const t = ownerReplyBack(p, d, `k|${p}|${d}`);
-        expect(t.length).toBeGreaterThan(0);
-        expect(t).not.toContain("—");
+        const t = ownerReplyBack(p, "main_lost", d, `main_lost|${p}|${d}`);
+        expect(t).not.toContain("Jdeme dál");
+        expect(t).not.toMatch(/budeme pokračovat/i);
       }
-      expect(OWNER_REPLY_BACK[p].up.length).toBeGreaterThanOrEqual(3);
     }
   });
 });

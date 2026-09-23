@@ -86,12 +86,12 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
   },
   after_loss: {
     fan: [
-      "{skore}. Bolí to jak kopačka do holeně. Co se to tam dneska dělo?",
+      "{skore}. Bolí to jak kopanec do holeně. Co se to tam dneska dělo?",
       "Prohra {skore}, to jsem teda nečekal. Řekni mi, že příště to bude jinak.",
       "{skore}... Cestou domů jsem nepromluvil ani slovo. Co na to kabina?",
     ],
     patriot: [
-      "{skore} doma, to zamrzí. Lidi od nás chtějí vidět bojovat. Co s tím?",
+      "{skore} doma, to zamrzí. Lidi od nás chtějí vidět, že se bojuje. Co s tím?",
       "Prohra {skore} před vlastníma lidma. Na návsi se o tom už mluví.",
       "{skore}. Domácí hřiště má bejt pevnost. Co se pokazilo?",
     ],
@@ -114,18 +114,18 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
     ],
     patriot: [
       "{serie} v řadě. Obec si nezaslouží koukat se na klub s lítostí.",
-      "Lidi se mě ptají, co se děje. {serie} v řadě tu dlouho nebylo.",
+      "Lidi se mě ptají, co se děje. {serie} v řadě, to tu dlouho nebylo.",
       "{serie} za sebou. Klub je srdce vesnice, tak ať zase bije.",
     ],
     businessman: [
       "{serie} v řadě. Jméno mé firmy je na klubu vidět. Chci slyšet plán.",
       "Už {serie} za sebou. Začínám přemýšlet, jestli jsem vsadil dobře.",
-      "{serie} v řadě se v kanceláři špatně vysvětluje. Co s tím uděláte?",
+      "{serie} v řadě, to se v kanceláři špatně vysvětluje. Co s tím uděláte?",
     ],
     cautious: [
       "{serie} v řadě. Dělám si starosti. Je v kabině všechno v pořádku?",
       "Už {serie} za sebou. Nerad bych, aby se to táhlo dál. Co plánujete?",
-      "{serie} v řadě mě znepokojuje. Můžete mě uklidnit?",
+      "{serie} v řadě, to mě znepokojuje. Můžete mě uklidnit?",
     ],
   },
   riot: {
@@ -147,7 +147,7 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
     cautious: [
       "Po té výtržnosti nevím, jestli je bezpečné tam chodit. Co s tím uděláte?",
       "Tohle mě vyděsilo. Nechci, aby moje firma byla spojená s násilím.",
-      "Výtržnosti jsou přesně to, čeho jsem se bál. Jak to chcete zajistit?",
+      "Výtržnosti jsou přesně to, čeho jsem se bál. Jak zajistíte, aby se to neopakovalo?",
     ],
   },
   main_lost: {
@@ -185,19 +185,19 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
     ],
     businessman: [
       "Smlouva je podepsaná. Těším se na spolupráci a na viditelnost.",
-      "Vítejte v partnerství. Očekávám slušnou reprezentaci značky.",
+      "Těším se na partnerství. Očekávám slušnou reprezentaci značky.",
       "Tak jsme partneři. Dobré výsledky pomůžou nám oběma.",
     ],
     cautious: [
       "Podepsáno. Snad jsem udělal dobře. Věřím, že klub bude v klidu.",
-      "Tak jsme spolu. Doufám, že to bude spolupráce bez nepříjemných překvapení.",
+      "Tak jsme partneři. Doufám, že to bude spolupráce bez nepříjemných překvapení.",
       "Jsem rád za dohodu. Hlavně ať je kolem klubu klid a pořádek.",
     ],
   },
   season_thanks: {
     fan: [
       "Jaká sezóna! Každej zápas stál za to. Díky za všechno.",
-      "Tuhle sezónu budu vyprávět vnoučatům. Díky moc.",
+      "O téhle sezóně budu vyprávět vnoučatům. Díky moc.",
       "Sezóna jak z pohádky. Už se nemůžu dočkat další.",
     ],
     patriot: [
@@ -213,7 +213,7 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
     cautious: [
       "Klidná a povedená sezóna. Přesně tak to mám rád. Děkuji.",
       "Žádné velké průšvihy a slušné výsledky. Děkuji za sezónu.",
-      "Jsem spokojený. Děkuji, že to celou sezónu drželo pohromadě.",
+      "Jsem spokojený. Děkuji, že tým celou sezónu držel pohromadě.",
     ],
   },
   season_complaint: {
@@ -256,20 +256,23 @@ export function proherTvar(n: number): string {
 }
 
 function fill(t: string, vars: OwnerSmsVars): string {
-  return t.replace(/\{skore\}/g, vars.skore ?? "").replace(/\{serie\}/g, proherTvar(vars.serie ?? 3));
+  const serie = vars.serie === undefined ? "" : proherTvar(vars.serie);
+  return t.replace(/\{skore\}/g, vars.skore ?? "").replace(/\{serie\}/g, serie);
 }
 
 /**
  * Text SMS. Deterministicky podle `seedKey` (reference spouštěče), s vynecháním
  * textů, které klub nedávno dostal (`recent` = vyrenderovaná těla). `null` = majitel
- * s touhle povahou k téhle příležitosti nepíše, nebo chybí proměnná šablony.
+ * s touhle povahou k téhle příležitosti nepíše, nebo chybí proměnná šablony (chybějící
+ * `{skore}` i `{serie}` — nikdy se nedoplňuje výchozí hodnota).
  */
 export function renderOwnerSms(
   occasion: OwnerSmsOccasion, personality: OwnerPersonality, vars: OwnerSmsVars, seedKey: string, recent: readonly string[],
 ): string | null {
   const pool = OWNER_SMS_TEXTS[occasion][personality];
   if (!pool || pool.length === 0) return null;
-  if (pool.some((t) => t.includes("{skore}")) && !vars.skore) return null;
+  if (pool.some((t) => t.includes("{skore}")) && vars.skore === undefined) return null;
+  if (pool.some((t) => t.includes("{serie}")) && vars.serie === undefined) return null;
   const rendered = pool.map((t) => fill(t, vars));
   const fresh = rendered.filter((t) => !recent.includes(t));
   return createRng(seedFromString(seedKey)).pick(fresh.length > 0 ? fresh : rendered);
@@ -327,31 +330,75 @@ export function replyOptions(occasion: OwnerSmsOccasion): ReplyOption[] {
   return REPLY_TONES.map((id) => ({ id, label: TONE_LABELS[id], text: REPLY_OPTION_TEXTS[kind][id] }));
 }
 
-export const OWNER_REPLY_BACK: Record<OwnerPersonality, Record<"up" | "flat" | "down", readonly string[]>> = {
+type ReplyMood = "positive" | "negative";
+
+/**
+ * Nálada příležitosti z pohledu majitele — určuje, ze kterého poolu `OWNER_REPLY_BACK`
+ * se vybírá. Odvozeno z `OCCASION_REPLY_KIND`, aby obě mapy nemohly rozjet (a aby
+ * `main_lost`, vedený tam jako „farewell", spadl vždy pod „negative" — konec smlouvy
+ * nesmí sáhnout do poolu s pokračovacími frázemi typu „Jdeme dál").
+ */
+function occasionReplyMood(occasion: OwnerSmsOccasion): ReplyMood {
+  return OCCASION_REPLY_KIND[occasion] === "positive" ? "positive" : "negative";
+}
+
+/**
+ * Odpověď majitele na trenérovu reakci, podle povahy, nálady příležitosti (dobrá
+ * zpráva × špatná zpráva/rozchod) a směru, kam se pohnula náklonnost (`up`/`down`).
+ * Texty v poolu „negative" musí fungovat i jako rozloučení po `main_lost` — nikde
+ * nepředpokládají pokračující spolupráci.
+ */
+export const OWNER_REPLY_BACK: Record<OwnerPersonality, Record<ReplyMood, Record<"up" | "down", readonly string[]>>> = {
   fan: {
-    up: ["To rád slyším! Jdeme dál.", "Paráda, na vás je spoleh.", "Díky, hned je mi líp."],
-    flat: ["Dobře.", "Hm, tak jo.", "Beru."],
-    down: ["Tak to mě mrzí. Čekal jsem víc.", "Aha. Tak nic.", "To jsem slyšet nechtěl."],
+    positive: {
+      up: ["To rád slyším! Jdeme dál.", "Paráda, na vás je spoleh.", "Díky, hned je mi líp."],
+      down: ["To jsem po takové zprávě nečekal.", "Tak to mě zamrzelo, čekal jsem víc nadšení.", "Aha. Tak nic."],
+    },
+    negative: {
+      up: ["Díky, aspoň to mi udělalo radost.", "To se cení, že jste to takhle vzali.", "Jsem rád, že jste to takhle vysvětlili."],
+      down: ["To mě mrzí.", "Aha, tak to je smutné.", "To jsem slyšet nechtěl."],
+    },
   },
   patriot: {
-    up: ["Díky. Pro obec je to důležitý.", "Tak to je řeč. Držím palce.", "To rád slyším, vesnice to ocení."],
-    flat: ["Dobře, uvidíme.", "Beru na vědomí.", "Tak jo."],
-    down: ["Takhle se o klub nestará. Zapamatuju si to.", "To mě zklamalo.", "Škoda. Čekal jsem víc zájmu."],
+    positive: {
+      up: ["Díky. Pro obec je to důležitý.", "Tak to je řeč. Držím palce.", "To rád slyším, vesnice to ocení."],
+      down: ["To mě zamrzelo. Čekal jsem víc vděku.", "Škoda, myslel jsem, že se z toho budete radovat víc.", "Aha, tak dobře."],
+    },
+    negative: {
+      up: ["Vážím si, že jste to řekl na rovinu.", "Dobře, že to takhle berete.", "To rád slyším, i v týhle situaci."],
+      down: ["Takhle se o klub nepečuje. Zapamatuju si to.", "To mě zklamalo.", "Škoda. Čekal jsem víc ohledu."],
+    },
   },
   businessman: {
-    up: ["Výborně, to je jasná řeč.", "Děkuji, tohle potřebuji vědět.", "Dobře, s tím se dá pracovat."],
-    flat: ["Rozumím.", "Beru na vědomí.", "Dobře."],
-    down: ["To mi nestačí.", "S takovým přístupem těžko budeme pokračovat.", "Poznamenám si to."],
+    positive: {
+      up: ["Výborně, to je jasná řeč.", "Děkuji, tohle potřebuji vědět.", "Dobře, s tím se dá pracovat."],
+      down: ["To jsem nečekal. Doufal jsem ve vděčnější tón.", "Rozumím, i když jsem čekal víc.", "Beru na vědomí."],
+    },
+    negative: {
+      up: ["Dobře, to beru jako rozumnou reakci.", "Oceňuji tu přímost.", "Rozumím, díky za vysvětlení."],
+      down: ["To mi nestačí.", "Takový přístup nepomáhá.", "Poznamenám si to."],
+    },
   },
   cautious: {
-    up: ["Děkuji, to mě uklidnilo.", "Jsem rád, že to berete vážně.", "Dobře, věřím vám."],
-    flat: ["Dobře. Uvidíme.", "Rozumím.", "Snad to tak bude."],
-    down: ["To mě moc neuklidnilo.", "Tak to mám ještě větší obavy.", "Hm. Budu opatrnější."],
+    positive: {
+      up: ["Děkuji, to mě potěšilo.", "Jsem rád, že šlo všechno hladce.", "Dobře, přesně tak to má být."],
+      down: ["To mě znejistělo, čekal jsem klidnější odpověď.", "Hm, tak dobře.", "Nejsem si teď jistý, jak to mám brát."],
+    },
+    negative: {
+      up: ["Děkuji, to mě aspoň trochu uklidnilo.", "Jsem rád, že to berete vážně.", "Dobře, věřím vám."],
+      down: ["To mě moc neuklidnilo.", "Tak to mám ještě větší obavy.", "Hm. Budu opatrnější."],
+    },
   },
 };
 
-/** Co majitel odepíše na trenérovu odpověď, podle toho, kam se náklonnost pohnula. */
-export function ownerReplyBack(personality: OwnerPersonality, favorDelta: number, seedKey: string): string {
-  const mood = favorDelta > 0 ? "up" : favorDelta < 0 ? "down" : "flat";
-  return createRng(seedFromString(seedKey)).pick(OWNER_REPLY_BACK[personality][mood]);
+/**
+ * Co majitel odepíše na trenérovu odpověď: podle povahy, nálady příležitosti (`occasion`)
+ * a toho, kam se pohnula náklonnost (`favorDelta`). Nezáporná delta = `up`, záporná = `down`.
+ */
+export function ownerReplyBack(
+  personality: OwnerPersonality, occasion: OwnerSmsOccasion, favorDelta: number, seedKey: string,
+): string {
+  const mood = occasionReplyMood(occasion);
+  const direction = favorDelta >= 0 ? "up" : "down";
+  return createRng(seedFromString(seedKey)).pick(OWNER_REPLY_BACK[personality][mood][direction]);
 }
