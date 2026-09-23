@@ -20,6 +20,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Náklonnost majitele si budeš budovat. Pozvi ho na domácí zápas, potkej ho v hospodě, odpovídej mu na esemesky. Kdo tě má rád, dá víc a jeho odhad je přesnější. Kdo tě nemusí, jedná tvrdě.",
       "Majitelé ti píšou. Ozvou se po výhře i po sérii proher, po výtržnostech na tribuně, když měníš sponzora nebo na konci sezóny. Na esemesku jde odpovědět a odpověď hýbe vztahem.",
       "Hlavní sponzor může být vždycky jen u jednoho klubu v lize. Když firma už někomu dělá jméno, musíš počkat, až jí tam smlouva skončí. Na konci sezóny dostane přednost klub s nejvyšší reputací.",
+      "Přejdi na nový systém hned. Kdo má ještě smlouvu z doby před vyjednáváním, vymění ji za novou zdarma: žádná výpovědní pokuta a žádná ztráta reputace za přejmenování. Stačí si na stránce firmy otevřít jednání. Liga pak nebude plná klubů se stejným jménem a ty si vybereš sponzora, který ti sedí.",
+      "Do okresů přibyly další místní firmy, na Prachaticku třeba Greenwatt, FORPSI, Bachl, Rotadent nebo Dřevostroj. Hlavního sponzora má z čeho vybrat každý klub.",
       "O hlavního sponzora i o název stadionu se vyjednává. Majitel přijde s vlastní nabídkou: kolik dá měsíčně, kolik za podpis a co od tebe chce slíbit. Můžeš ji rovnou podepsat, nebo si říct o víc.",
       "Chtít můžeš měsíční podporu, bonus za výhru, jednorázový příspěvek za podpis, stavbu nebo vylepšení stadionu, nové vybavení, nebo ať za tebe zaplatí výpovědní pokutu u současného sponzora.",
       "Na oplátku slibuješ. Umístění v tabulce, postup v poháru, trenéra s licencí, modernizaci stadionu, logo na rukávu dresu, exkluzivitu oboru, návštěvu na domácích zápasech, mladé hráče v sestavě, reputaci nebo klid na tribunách. Čím víc slíbíš, tím víc dostaneš.",
