@@ -1,0 +1,225 @@
+/**
+ * Jednání se sponzorem na webu: tvar API (apps/api/src/sponsors/negotiation-db.ts, NegotiationView)
+ * a náhled odhadu ochoty a ceny požadavků pro formulář. Náhled jen radí, rozhoduje server.
+ */
+
+export type PromiseKind =
+  | "league_position" | "promotion" | "no_relegation" | "cup_round" | "coach_licence" | "stadium_upgrade"
+  | "jersey_logo" | "sector_exclusivity" | "attendance" | "youth" | "reputation" | "no_riots";
+
+export interface PromiseParams {
+  position?: number; round?: number; level?: number; facility?: string; sector?: string;
+  attendance?: number; count?: number; reputation?: number;
+}
+export interface PromiseSpec { kind: PromiseKind; params: PromiseParams }
+
+export interface Demands {
+  monthly: number;
+  winBonus: number;
+  signingBonus: number;
+  goalBonuses: Partial<Record<PromiseKind, number>>;
+  construction: string | null;
+  equipment: string | null;
+  payCurrentFee: boolean;
+}
+export interface Proposal { seasons: number; promises: PromiseSpec[]; demands: Demands }
+
+export interface Range { low: number; high: number }
+export interface PromiseOption {
+  kind: PromiseKind; params: PromiseParams; label: string; seasonal: boolean; value: Range; penalty: Range;
+  /** Jde k tomuhle slibu sjednat bonus za splnění (server: GOAL_BONUS_KINDS)? Bez toho vstup nenabízet. */
+  goalBonus: boolean;
+  chance: number;
+}
+export interface GiftOption { key: string; label: string; level: number; cost: number }
+
+export type ResponseKind = "accept" | "counter_money" | "counter_wish" | "reject" | "insulted" | "walked_away";
+export interface NegotiationRound {
+  proposal: Proposal;
+  response: { kind: ResponseKind; text: string; counter?: Proposal; wish?: PromiseKind; gameDate: string };
+}
+export interface PromiseRowView {
+  kind: PromiseKind; params: PromiseParams; label: string; season: number | null; deadlineGameDate: string | null;
+  reward: number; penalty: number;
+}
+export type NegotiationStatus = "open" | "accepted" | "walked_away" | "expired" | "signed";
+
+export interface NegotiationView {
+  id: string;
+  sponsorId: number;
+  sponsorName: string;
+  sponsorType: string;
+  category: "main" | "stadium";
+  status: NegotiationStatus;
+  isRenewal: boolean;
+  owner: { firstName: string; lastName: string; personality: string; faceConfig: Record<string, unknown> };
+  favor: number;
+  wishes: PromiseKind[];
+  patience: number;
+  expiresGameDate: string;
+  cooldownUntil: string | null;
+  estimate: { base: Range; cap: Range; cautiousSeasonBonus: number };
+  winBonusFactor: number;
+  monthsPerSeason: number;
+  catalog: PromiseOption[];
+  construction: GiftOption[];
+  equipment: GiftOption[];
+  current: null | { sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean };
+  rounds: NegotiationRound[];
+  pending: null | {
+    proposal: Proposal; promises: PromiseRowView[]; terminationFee: number; constructionCost: number;
+    equipmentCost: number; currentFee: number; renamesClub: boolean;
+  };
+  season: number;
+}
+
+/** Dostupnost jednání z GET /api/sponsors/:id (myTeam.negotiation). */
+export interface NegotiationAvailability { canOpen: boolean; reason: string | null; isRenewal: boolean; openId: string | null }
+
+export const PROMISE_ORDER: readonly PromiseKind[] = [
+  "league_position", "promotion", "no_relegation", "cup_round", "coach_licence", "stadium_upgrade",
+  "jersey_logo", "sector_exclusivity", "attendance", "youth", "reputation", "no_riots",
+];
+
+export const PROMISE_LABELS: Record<PromiseKind, string> = {
+  league_position: "Umístění v lize",
+  promotion: "Postup",
+  no_relegation: "Nesestup",
+  cup_round: "Pohár",
+  coach_licence: "Trenérská licence",
+  stadium_upgrade: "Modernizace stadionu",
+  jersey_logo: "Logo na rukávu",
+  sector_exclusivity: "Exkluzivita oboru",
+  attendance: "Návštěva",
+  youth: "Mladí hráči",
+  reputation: "Reputace",
+  no_riots: "Klid na tribunách",
+};
+
+/** Kdy slib platí (shodně s promise-kinds.ts na API). */
+export const PROMISE_TIMING: Record<PromiseKind, string> = {
+  league_position: "každou sezónu od příští",
+  promotion: "každou sezónu od příští",
+  no_relegation: "každou sezónu od příští",
+  cup_round: "každou sezónu od příští",
+  coach_licence: "do 16 týdnů",
+  stadium_upgrade: "do 16 týdnů",
+  jersey_logo: "do 16 týdnů",
+  sector_exclusivity: "po celou smlouvu",
+  attendance: "každou sezónu od příští",
+  youth: "každou sezónu od příští",
+  reputation: "každou sezónu od příští",
+  no_riots: "každou sezónu od příští",
+};
+
+export const RESPONSE_LABELS: Record<ResponseKind, string> = {
+  accept: "Přijal",
+  counter_money: "Protinabídka",
+  counter_wish: "Protinabídka za slib",
+  reject: "Odmítl",
+  insulted: "Odmítl a urazil se",
+  walked_away: "Odešel od jednání",
+};
+
+/** Klíč parametrů slibu. Parametry vždy kopírujeme z katalogu serveru, pořadí klíčů tedy sedí. */
+export function optionKey(params: PromiseParams): string {
+  return JSON.stringify(params);
+}
+
+export function findOption(view: NegotiationView, spec: PromiseSpec): PromiseOption | undefined {
+  const key = optionKey(spec.params);
+  return view.catalog.find((o) => o.kind === spec.kind && optionKey(o.params) === key);
+}
+
+/** Odhad ochoty s vybranými sliby: rozmezí se sčítá lineárně (každá položka má stejnou šířku). */
+export function estimateRange(view: NegotiationView, promises: PromiseSpec[], seasons: number): Range {
+  let low = view.estimate.base.low;
+  let high = view.estimate.base.high;
+  for (const p of promises) {
+    const o = findOption(view, p);
+    if (o) { low += o.value.low; high += o.value.high; }
+  }
+  const mult = 1 + view.estimate.cautiousSeasonBonus * (seasons - 1);
+  return {
+    low: Math.min(view.estimate.cap.low, Math.round(low * mult)),
+    high: Math.min(view.estimate.cap.high, Math.round(high * mult)),
+  };
+}
+
+/** Kolik návrh sponzora stojí měsíčně, stejný vzorec jako costBreakdown na API. */
+export function previewCost(view: NegotiationView, p: Proposal): number {
+  const m = p.seasons * view.monthsPerSeason;
+  const d = p.demands;
+  let cost = d.monthly + d.winBonus * view.winBonusFactor + d.signingBonus / m;
+  for (const spec of p.promises) {
+    const g = d.goalBonuses[spec.kind] ?? 0;
+    const o = findOption(view, spec);
+    if (g > 0 && o) cost += (g * o.chance * (o.seasonal ? Math.max(0, p.seasons - 1) : 1)) / m;
+  }
+  if (d.construction) cost += (view.construction.find((x) => x.key === d.construction)?.cost ?? 0) / m;
+  if (d.equipment) cost += (view.equipment.find((x) => x.key === d.equipment)?.cost ?? 0) / m;
+  if (d.payCurrentFee && view.current && !view.current.sameSponsor) cost += view.current.terminationFee / m;
+  return Math.round(cost);
+}
+
+export function emptyProposal(view: NegotiationView): Proposal {
+  return {
+    seasons: 2,
+    promises: [],
+    demands: {
+      monthly: Math.max(100, Math.round(view.estimate.base.low / 100) * 100),
+      winBonus: 0, signingBonus: 0, goalBonuses: {}, construction: null, equipment: null, payCurrentFee: false,
+    },
+  };
+}
+
+/** Sezónní sliby u smlouvy na 1 sezónu nejdou: při zkrácení je z návrhu vyhodíme i s bonusy. */
+export function withSeasons(view: NegotiationView, p: Proposal, seasons: number): Proposal {
+  if (seasons >= 2) return { ...p, seasons };
+  const keep = p.promises.filter((s) => !findOption(view, s)?.seasonal);
+  const kinds = new Set(keep.map((s) => s.kind));
+  const goalBonuses = Object.fromEntries(Object.entries(p.demands.goalBonuses).filter(([k]) => kinds.has(k as PromiseKind)));
+  return { ...p, seasons, promises: keep, demands: { ...p.demands, goalBonuses } };
+}
+
+export function categoryLabel(c: "main" | "stadium"): string {
+  return c === "main" ? "Hlavní sponzor" : "Název stadionu";
+}
+
+/**
+ * Pravidlo o měsíční polovině (server: MIN_MONTHLY_SHARE v apps/api/src/sponsors/negotiation.ts):
+ * aspoň tolik z měsíčního ekvivalentu smlouvy musí chodit jako měsíční podpora, jinak server návrh
+ * odmítne ("Aspoň polovina podpory musí chodit měsíčně."). Zrcadlí se tu jen pro náhled v UI.
+ */
+const MIN_MONTHLY_SHARE = 0.5;
+const EPS = 1e-6;
+
+/**
+ * Jednorázové položky návrhu (podpis, stavba, vybavení, doplacená stará pokuta, bonusy za termínové
+ * sliby) PLUS bonusy za sezónní sliby × počet sezón smlouvy, zrcadlí bonusAwareOneTime v
+ * apps/api/src/sponsors/negotiation.ts. Vstup pro minMonthlyFor.
+ */
+export function bonusAwareOneTime(view: NegotiationView, p: Proposal): number {
+  const d = p.demands;
+  let total = d.signingBonus;
+  if (d.construction) total += view.construction.find((x) => x.key === d.construction)?.cost ?? 0;
+  if (d.equipment) total += view.equipment.find((x) => x.key === d.equipment)?.cost ?? 0;
+  if (d.payCurrentFee && view.current && !view.current.sameSponsor) total += view.current.terminationFee;
+  for (const spec of p.promises) {
+    const bonus = d.goalBonuses[spec.kind] ?? 0;
+    if (bonus <= 0) continue;
+    const o = findOption(view, spec);
+    if (!o) continue;
+    total += o.seasonal ? bonus * p.seasons : bonus;
+  }
+  return total;
+}
+
+/**
+ * Nejnižší celá měsíční podpora, se kterou platí pravidlo o měsíční polovině, zrcadlí minMonthlyFor
+ * v apps/api/src/sponsors/negotiation.ts (vstup: bonusAwareOneTime, měsíce = sezóny × monthsPerSeason).
+ */
+export function minMonthlyFor(oneTime: number, months: number): number {
+  const need = (MIN_MONTHLY_SHARE / (1 - MIN_MONTHLY_SHARE)) * (oneTime / Math.max(EPS, months));
+  return Math.max(1, Math.ceil(need - EPS));
+}

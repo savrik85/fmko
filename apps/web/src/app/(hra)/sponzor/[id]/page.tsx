@@ -8,6 +8,7 @@ import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Card, CardBody, Spinner, SectionLabel, ErrorBox } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { OwnerCard, type OwnerInfo, type MyTeamInfo } from "@/components/sponsors/owner-card";
+import { NegotiationEntry } from "@/components/sponsors/negotiation-entry";
 
 interface SponsorContractRow {
   teamId: string;
@@ -81,6 +82,10 @@ export default function SponsorDetailPage() {
 
       {data.owner && (
         <OwnerCard sponsorId={data.id} teamId={teamId} owner={data.owner} myTeam={data.myTeam} onChanged={load} />
+      )}
+
+      {teamId && data.myTeam?.negotiation && (
+        <NegotiationEntry sponsorId={data.id} teamId={teamId} availability={data.myTeam.negotiation} />
       )}
 
       <div>

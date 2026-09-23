@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { formatCZK } from "@/lib/sponsor-owners";
@@ -29,6 +30,7 @@ const TAB_STORAGE_KEY = "sponzori-tab";
 
 export default function SponsorsPage() {
   const { teamId, setTeam: setTeamCtx } = useTeam();
+  const router = useRouter();
   const [tab, setTab] = useTabParam(SPONSOR_TABS, "tab", TAB_STORAGE_KEY);
   const [data, setData] = useState<SponsorsData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
@@ -209,6 +211,11 @@ export default function SponsorsPage() {
       : category === "stadium"
       ? (data?.stadiumContract ?? data?.stadiumExpired)
       : data?.bannerContracts.find((c) => c.id === contractId);
+    // Hlavní sponzor a stadion: prodloužení je jednání s majitelem firmy.
+    if (category !== "banner") {
+      if (contract?.sponsorId) router.push(`/sponzor/${contract.sponsorId}`);
+      return;
+    }
     if (!contract?.renewal) return;
     const r = contract.renewal;
     const ok = await confirm({

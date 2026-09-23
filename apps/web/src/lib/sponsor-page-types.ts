@@ -18,6 +18,8 @@ export interface ActiveContract {
   renewal?: { monthlyAmount: number; winBonus: number; seasons: number; earlyTerminationFee: number } | null;
   /** Proč hlavního sponzora nejde prodloužit/obnovit (je hlavním jinde nebo dal přednost jinému klubu). */
   blockedReason?: string | null;
+  /** Hlavní sponzor a stadion: dá se už jednat o prodloužení (poslední sezóna nebo vypršelá smlouva). */
+  renewable?: boolean;
 }
 
 export interface SponsorOffer {
@@ -39,13 +41,12 @@ export interface SponsorsData {
   bannerContracts: ActiveContract[];
   stadiumName: string | null;
   teamName: string;
-  /** Pevné nabídky hlavního sponzora a stadionu API už neposílá (jednání s majitelem, UI v Tasku 8). */
-  mainOffers?: SponsorOffer[];
-  stadiumOffers?: SponsorOffer[];
   bannerOffers: SponsorOffer[];
   maxBanners: number;
   canChangeMainSponsor: boolean;
   season: number;
+  /** Běžící jednání s firmami (otevřená nebo přijatá, čekající na podpis). */
+  negotiations: Array<{ id: string; sponsorId: number; sponsorName: string; category: "main" | "stadium"; status: "open" | "accepted"; expiresGameDate: string }>;
 }
 
 export interface DistrictFirm {

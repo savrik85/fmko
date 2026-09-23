@@ -25,6 +25,11 @@ export interface MyTeamInfo {
     invitation: null | { status: "accepted" | "declined" | "attended"; rejectReason: string | null };
     slotTakenBy: string | null;
   };
+  /** Jestli jde s firmou jednat o hlavního sponzora a o název stadionu (null = neznámo). */
+  negotiation?: null | {
+    main: import("@/lib/sponsor-negotiation").NegotiationAvailability;
+    stadium: import("@/lib/sponsor-negotiation").NegotiationAvailability;
+  };
 }
 
 export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
