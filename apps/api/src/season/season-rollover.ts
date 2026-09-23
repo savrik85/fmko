@@ -149,11 +149,12 @@ export async function rolloverAllLeagues(
   try {
     const { closeOwnerSmsForRollover } = await import("../sponsors/owner-sms");
     const { enqueueMainSponsorSms, enqueueSeasonEndSms } = await import("../sponsors/owner-sms-triggers");
-    await closeOwnerSmsForRollover(db);
     // Jednání se sponzory mají lhůty ve staré herní ose, uzavřou se stejně jako vlákna SMS.
+    // Běží první, aby je nezablokovala chyba v úklidu SMS.
     const { closeNegotiationsForRollover } = await import("../sponsors/negotiation-db");
     await closeNegotiationsForRollover(db)
       .catch((e) => { logger.error({ module: "season-rollover" }, "uzavření jednání se sponzory", e); });
+    await closeOwnerSmsForRollover(db);
     const day = startIso.slice(0, 10);
     const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day, expiringMain);
     for (const m of expiringMain) {
