@@ -13,7 +13,7 @@ export function NegotiationEntry({ sponsorId, teamId, availability }: {
   availability: { main: NegotiationAvailability; stadium: NegotiationAvailability };
 }) {
   const router = useRouter();
-  const [acting, setActing] = useState(false);
+  const [acting, setActing] = useState<"main" | "stadium" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const go = async (category: "main" | "stadium") => {
@@ -23,13 +23,13 @@ export function NegotiationEntry({ sponsorId, teamId, availability }: {
       router.push(`/sponzor/${sponsorId}/jednani?id=${a.openId}`);
       return;
     }
-    setActing(true);
+    setActing(category);
     setError(null);
     const v = await apiFetch<{ id: string }>(`/api/teams/${teamId}/sponsors/${sponsorId}/negotiations`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category }),
     }).catch((e) => { console.error("otevření jednání:", e); setError((e as Error).message); return null; });
-    setActing(false);
-    if (v) router.push(`/sponzor/${sponsorId}/jednani?id=${v.id}`);
+    if (!v) { setActing(null); return; }
+    router.push(`/sponzor/${sponsorId}/jednani?id=${v.id}`);
   };
 
   return (
@@ -44,8 +44,8 @@ export function NegotiationEntry({ sponsorId, teamId, availability }: {
               : a.isRenewal ? `Jednat o prodloužení: ${categoryLabel(cat).toLowerCase()}` : `Jednat: ${categoryLabel(cat).toLowerCase()}`;
             return (
               <div key={cat}>
-                <button type="button" onClick={() => go(cat)} disabled={acting || !a.canOpen} className="btn btn-primary w-full min-h-11">
-                  {label}
+                <button type="button" onClick={() => go(cat)} disabled={acting !== null || !a.canOpen} className="btn btn-primary w-full min-h-11">
+                  {acting === cat ? "Majitel chystá návrh smlouvy…" : label}
                 </button>
                 {!a.canOpen && a.reason && <div className="text-sm text-muted mt-1">{a.reason}.</div>}
               </div>

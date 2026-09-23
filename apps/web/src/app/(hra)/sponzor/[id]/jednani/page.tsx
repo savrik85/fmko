@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
@@ -9,7 +9,8 @@ import { ErrorBox, SectionLabel, Spinner, useConfirm } from "@/components/ui";
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import {
-  estimateRange, initialDraft, previewCost, proposalsEqual, withSeasons, type NegotiationView, type PromiseKind, type Proposal,
+  estimateRange, initialDraft, previewCost, proposalsEqual, RESPONSE_LABELS, withSeasons,
+  type NegotiationRound, type NegotiationView, type PromiseKind, type Proposal,
 } from "@/lib/sponsor-negotiation";
 import { NegotiationHeader } from "@/components/sponsors/negotiation/negotiation-header";
 import { PromisePicker } from "@/components/sponsors/negotiation/promise-picker";
@@ -22,6 +23,23 @@ const CLOSED_TEXT: Record<string, string> = {
   expired: "Jednání vypršelo. Nové otevřeš na stránce sponzora.",
   signed: "Smlouva je podepsaná.",
 };
+
+function attempts(n: number): string {
+  return n === 1 ? "1 pokus" : n >= 2 && n <= 4 ? `${n} pokusy` : `${n} pokusů`;
+}
+
+/** Co majitel právě odpověděl, česky a s dopadem, aby hráč u tlačítek viděl výsledek svého návrhu. */
+function replyNote(round: NegotiationRound, patience: number): string {
+  switch (round.response.kind) {
+    case "accept": return "Návrh přijal. Můžeš podepsat.";
+    case "counter_money":
+    case "counter_wish": return "Poslal protinabídku, máš ji ve formuláři. Podepiš ji, nebo ji uprav a navrhni znovu.";
+    case "reject": return `Návrh odmítl. Trpělivost: ${attempts(patience)} na odmítnutí.`;
+    case "insulted": return `Návrh ho urazil, náklonnost klesla o 3. Trpělivost: ${attempts(patience)} na odmítnutí.`;
+    case "walked_away": return "Od jednání odešel.";
+    default: return "";
+  }
+}
 
 /** Strop kol jednání, shodně s MAX_NEGOTIATION_ROUNDS v apps/api/src/routes/sponsors.ts. */
 const MAX_ROUNDS = 30;
@@ -36,6 +54,9 @@ export default function NegotiationPage() {
   const [draft, setDraft] = useState<Proposal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  // Odpověď majitele na poslední návrh v této návštěvě stránky; ukazuje se u tlačítek.
+  const [reply, setReply] = useState<NegotiationRound | null>(null);
+  const replyRef = useRef<HTMLDivElement | null>(null);
   const { confirm, dialog } = useConfirm();
 
   useEffect(() => {
@@ -70,10 +91,15 @@ export default function NegotiationPage() {
     });
     if (v) {
       setView(v);
-      // Majitel na návrh odpověděl protinabídkou (nebo ji rovnou přijal): formulář přepsat na
-      // podmínky k podpisu, ať se draft hned shoduje a je rovnou co podepsat, stejně jako odkaz
-      // "Vrátit nabídku majitele do formuláře".
-      if (v.pending) setDraft(withSeasons(v, v.pending.proposal, v.pending.proposal.seasons));
+      const last = v.rounds[v.rounds.length - 1] ?? null;
+      setReply(last);
+      // Formulář přepsat jen protinabídkou majitele. Při odmítnutí zůstává, co hráč vyplnil,
+      // ať může návrh upravit, a ne začínat znovu od staré nabídky.
+      const kind = last?.response.kind;
+      if ((kind === "counter_money" || kind === "counter_wish") && last?.response.counter) {
+        setDraft(withSeasons(v, last.response.counter, last.response.counter.seasons));
+      }
+      requestAnimationFrame(() => replyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
     }
     setActing(false);
   };
@@ -175,10 +201,25 @@ export default function NegotiationPage() {
 
       {agreesWithPending && <SigningSummary view={view} />}
 
+      {reply && (
+        <div ref={replyRef} className="card px-4 py-3 space-y-1">
+          <div className="text-sm font-heading font-bold text-gold-600">Odpověď majitele: {RESPONSE_LABELS[reply.response.kind]}</div>
+          <div className="text-base"><span className="font-heading font-bold">{ownerName}:</span> „{reply.response.text}“</div>
+          <div className="text-sm">{replyNote(reply, view.patience)}</div>
+        </div>
+      )}
+
       {error && <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">{error}</div>}
 
       {/* Odesílací tlačítka vždy na konci stránky, bez částek. */}
       <div className="flex flex-col gap-2">
+        {open && !agreesWithPending && (
+          <p className="text-sm">
+            Tvůj návrh ho stojí <span className={`font-heading font-bold ${cost > estimate.high ? "text-card-red" : cost <= estimate.low ? "text-pitch-600" : "text-gold-600"}`}>{formatCZK(cost)}</span> měsíčně,
+            ochota je zhruba {formatCZK(estimate.low)} až {formatCZK(estimate.high)}.
+            {cost > estimate.high * 1.5 ? " Takový návrh ho nejspíš urazí." : cost > estimate.high ? " Nejspíš ho odmítne." : ""}
+          </p>
+        )}
         {open && !agreesWithPending && pendingProposal && (
           <p className="text-sm text-muted">Změnil jsi podmínky. Pošli je majiteli jako návrh, podepsat půjde, až se shodnete.</p>
         )}
@@ -187,7 +228,7 @@ export default function NegotiationPage() {
         )}
         {open && !agreesWithPending && (
           <button type="button" onClick={propose} disabled={acting || atRoundLimit} className="btn btn-primary w-full min-h-11">
-            Navrhnout
+            {acting ? "Majitel čte návrh…" : "Navrhnout"}
           </button>
         )}
         <Link href={`/sponzor/${view.sponsorId}`} className="text-center text-sm text-muted min-h-11 leading-[2.75rem]">Zpět na sponzora</Link>
