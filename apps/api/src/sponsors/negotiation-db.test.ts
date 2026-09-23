@@ -139,7 +139,7 @@ describe("openNegotiation", () => {
     // (souběžný požadavek mezitím jednání založil) a openNegotiation se zeptá znovu (2. dotaz) —
     // FalesnaD1 nerozlišuje pořadí volání stejného SQL, proto počítáme volání ručně.
     let calls = 0;
-    const puvodni = db.pravidlo.bind(db);
+    const original = db.pravidlo.bind(db);
     db.pravidlo = (sql: string): Pravidlo | undefined => {
       if (NO_ACTIVE_NEGOTIATION.test(sql)) {
         calls += 1;
@@ -147,7 +147,7 @@ describe("openNegotiation", () => {
           ? { sql: NO_ACTIVE_NEGOTIATION, first: null }
           : { sql: NO_ACTIVE_NEGOTIATION, first: { ...ROW, id: EXISTING_ID, sponsor_id: 7, category: "stadium" as const } };
       }
-      return puvodni(sql);
+      return original(sql);
     };
     const res = await openNegotiation(jakoD1(db), "t1", 7, "stadium");
     expect(res).toEqual({ ok: true, id: EXISTING_ID });

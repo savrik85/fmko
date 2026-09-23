@@ -481,6 +481,8 @@ sponsorsRouter.get("/teams/:teamId/sponsors/negotiations/:negotiationId", async 
   return c.json(negotiationView(st));
 });
 
+const MAX_NEGOTIATION_ROUNDS = 30;
+
 // POST /api/teams/:teamId/sponsors/negotiations/:negotiationId/propose: návrh klubu, odpověď majitele.
 // Klient posílá jen návrh; cenu, ochotu i protinabídku počítá server z vlastního kontextu.
 sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose", async (c) => {
@@ -491,6 +493,10 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
   if (st.neg.status !== "open") {
     const e = STATUS_ERRORS[st.neg.status];
     return c.json({ error: e.error }, e.status);
+  }
+  // Protinabídky trpělivost neberou, strop kol drží JSON kol v rozumné velikosti.
+  if (st.neg.rounds.length >= MAX_NEGOTIATION_ROUNDS) {
+    return c.json({ error: "Majitel už o tom nechce dál mluvit, přijmi jeho poslední nabídku, nebo to nech být" }, 409);
   }
   const raw = await c.req.json<unknown>()
     .catch((e) => { logger.warn({ module: "sponsors", teamId }, "parse negotiation proposal", e); return null; });
@@ -535,7 +541,8 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
 
   // Nabídka nad 1,5 × ochoty majitele urazí (spec: náklonnost −3), zapisuje se do deníku.
   if (outcome.kind === "reject" && outcome.insulted) {
-    await applySponsorFavorDelta(db, st.sponsor.id, teamId, INSULT_FAVOR, FAVOR_REASONS.negotiationInsult);
+    await applySponsorFavorDelta(db, st.sponsor.id, teamId, INSULT_FAVOR, FAVOR_REASONS.negotiationInsult)
+      .catch((e) => { logger.error({ module: "sponsors", teamId }, `urážka při jednání ${st.neg.id} se nezapsala do náklonnosti`, e); });
   }
   logger.info({ module: "sponsors", teamId }, `jednání ${st.neg.id}: kolo ${st.neg.rounds.length + 1}, ${kind}, trpělivost ${patience}`);
 
