@@ -42,6 +42,14 @@ sponsor_contracts + signing_bonus INTEGER, paid_construction TEXT, breaches_seas
 | Těsně vedle | Není porušení (nezvedá `breaches_season`). SMS jako u porušení (`promise_broken`). |
 | Pořadí v rolloveru | Krok 4a: sezónní sliby → posun termínů → vynulování `breaches_season`. Výpověď sponzorem proběhne dřív než obyčejné vypršení, takže vypovězená smlouva nedostane SMS `main_lost` ani +5 za sezónu spolupráce. |
 
+## Předávka z etapy 2 (závazné, finální review 2026-09-23)
+
+- Odchod sponzora vrací nesplacenou zálohu: `terminateContractBySponsor` volá `loadAdvanceContract` + `contractClawback` + `loadTeamSeasonProgress` ze `apps/api/src/sponsors/signing.ts` (ověřit skutečné názvy a signatury; `recordTransaction` podle skutečné signatury v `lib`).
+- `paid_construction` je JSON `{ items, startOffsetMonths }` nebo starší pole; číst jen přes `parseAdvance`.
+- Bonusy termínových slibů se do vratky počítají jako `reward` řádků `sponsor_promises` se `status = 'fulfilled'` a druhem z `DEADLINE_KINDS`: `fulfilled` nastavit přesně při výplatě, `reward` pak neměnit.
+- Sliby smluv, které už nejsou `active` (nahrazené prodloužením = `expired`, přechod/výpověď = `terminated`), nevyhodnocovat: při vyhodnocení je přeskočit a uzavřít.
+- Délku smlouvy v měsících brát z efektivní délky etapy 2 (`m_eff`, podepsáno v průběhu sezóny), ne z `seasons × MONTHS_PER_SEASON`.
+
 ## Global Constraints
 
 - Větev `testing`. V úlohách 1 až 7 se nepushuje. Na `main` a na `prales-db-prod` nic bez výslovného souhlasu uživatele.
@@ -1486,8 +1494,10 @@ export async function applyContractOutcomes(
 /**
  * Sponzor vypoví smlouvu za nesplněné sliby. Nárok přes status = 'active'. Návrat názvu
  * jako při ukončení klubem (SK <obec> / Sportovní areál <obec>), reputace −5, zpráva do
- * ligy, zpráva sportovního ředitele. Výpovědní pokutu klub neplatí; zaplacenou stavbu
- * ani podpisový příspěvek sponzor zpět nechce. `false` = smlouvu už ukončil někdo jiný.
+ * ligy, zpráva sportovního ředitele. Výpovědní pokutu klub neplatí, ale vrací nesplacenou
+ * část zálohy (příspěvek za podpis, zaplacená stavba a vybavení, zaplacená pokuta, vyplacené
+ * bonusy termínových slibů) přes `contractClawback` ze `signing.ts` (ruling etapy 2, Task 4:
+ * odchod sponzora vrací zálohu stejně jako výpověď klubem). `false` = smlouvu už ukončil někdo jiný.
  */
 export async function terminateContractBySponsor(db: D1Database, contract: ContractRow, ctx: ResolveContext): Promise<boolean> {
   const claim = await db.prepare(
@@ -1496,6 +1506,18 @@ export async function terminateContractBySponsor(db: D1Database, contract: Contr
   if (claim.results.length !== 1) return false;
 
   const teamId = contract.team_id;
+  // Vratka zálohy: stejný výpočet jako výpověď klubem (routes/game.ts terminate).
+  try {
+    const advance = await loadAdvanceContract(db, contract.id);
+    const progress = await loadTeamSeasonProgress(db, teamId);
+    const clawback = advance ? await contractClawback(db, advance, progress) : 0;
+    if (clawback > 0) {
+      await recordTransaction(db, teamId, "sponsor_termination", -clawback,
+        `Vrácení zálohy: ${contract.sponsor_name}`, ctx.gameDate);
+    }
+  } catch (e) {
+    logger.error({ module: M, teamId }, `vratka zálohy po výpovědi smlouvy ${contract.id}`, e);
+  }
   const category = contract.category === "stadium" || contract.category === "banner" ? contract.category : "main";
   const team = await db.prepare(
     "SELECT t.name, v.name AS village_name FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
