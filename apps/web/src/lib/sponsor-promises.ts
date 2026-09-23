@@ -28,6 +28,28 @@ export function promiseTermText(p: SponsorPromiseView): string {
   return "po celou dobu smlouvy";
 }
 
+export interface PromiseMoneyPart { kind: "bonus" | "penalty"; amount: number }
+
+/**
+ * Peníze u slibu pro kartu smlouvy. Zrcadlí promiseConsequence (apps/api/src/sponsors/promise-eval.ts,
+ * ř. 199–210): čekající slib ukazuje sázku (obě nenulové části), vyřízený jen skutečný výsledek —
+ * splněno jen bonus, těsně vedle polovina pokuty (zaokrouhleno stejně jako na serveru), porušeno
+ * celá pokuta. `reward`/`penalty` už jsou od serveru celá čísla, tady se jen vybírá a dělí.
+ */
+export function promiseMoneyParts(p: SponsorPromiseView): PromiseMoneyPart[] {
+  if (p.status === "fulfilled") return p.reward > 0 ? [{ kind: "bonus", amount: p.reward }] : [];
+  if (p.status === "partial") {
+    const half = Math.round(p.penalty / 2);
+    return half > 0 ? [{ kind: "penalty", amount: half }] : [];
+  }
+  if (p.status === "broken") return p.penalty > 0 ? [{ kind: "penalty", amount: p.penalty }] : [];
+  // pending: obě strany sázky, nenulové části.
+  const parts: PromiseMoneyPart[] = [];
+  if (p.reward > 0) parts.push({ kind: "bonus", amount: p.reward });
+  if (p.penalty > 0) parts.push({ kind: "penalty", amount: p.penalty });
+  return parts;
+}
+
 export function groupPromisesByContract(list: readonly SponsorPromiseView[]): Map<string, SponsorPromiseView[]> {
   const out = new Map<string, SponsorPromiseView[]>();
   for (const p of list) {

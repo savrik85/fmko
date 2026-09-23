@@ -338,9 +338,15 @@ export function promiseFavorReason(outcome: PromiseOutcome, label: string): stri
   return `porušený slib: ${label}`;
 }
 
-/** Proč nejde podepsat nebo prodloužit banner stejného oboru. */
-export function sectorBlockMessage(sponsorName: string): string {
-  return `Smlouva s ${sponsorName} slibuje, že u hřiště nebude reklama jiné firmy ze stejného oboru. Tenhle banner teď podepsat nejde.`;
+/**
+ * Proč nejde podepsat nebo prodloužit banner stejného oboru. `action` volí sloveso druhé věty
+ * (sign/renew), aby zpráva u prodloužení neříkala „podepsat". Jméno firmy je přístavek za
+ * „Firma", ne po předložce „s" — u libovolného názvu (skloňovat by šlo jen ručně napsaná
+ * jména) tak zůstává gramaticky správně v 1. pádě.
+ */
+export function sectorBlockMessage(sponsorName: string, action: "sign" | "renew" = "sign"): string {
+  const verb = action === "renew" ? "prodloužit" : "podepsat";
+  return `Firma ${sponsorName} má u klubu exkluzivitu oboru, banner jiné firmy ze stejného oboru teď ${verb} nejde.`;
 }
 
 export type PromiseSmsOccasion = "promise_kept" | "promise_broken" | "sponsor_terminates";

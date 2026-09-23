@@ -350,13 +350,15 @@ export async function listTeamPromises(db: D1Database, teamId: string): Promise<
   }
 
   // Rukáv smí nést jen jednoho sponzora najednou (placeSleeveLogo): tlačítko se ukáže, jen
-  // když ho drží tenhle sponzor, nebo nikdo — jinak by klik skončil 409.
+  // když ho drží tenhle sponzor, nebo nikdo. Konflikt jen když ho drží smlouva kategorie
+  // "stadium" — jiná kategorie stejného sponzora (třeba banner) rukáv legitimně nedrží.
   let sleeveHolder: number | null = null;
   if (rows.results.some((r) => r.kind === "jersey_logo" && r.status === "pending")) {
     const sleeve = await db.prepare(
       `SELECT t.sleeve_sponsor_id AS id FROM teams t
        WHERE t.id = ? AND t.sleeve_sponsor_id IS NOT NULL
-         AND EXISTS (SELECT 1 FROM sponsor_contracts sc WHERE sc.team_id = t.id AND sc.sponsor_id = t.sleeve_sponsor_id AND sc.status = 'active')`,
+         AND EXISTS (SELECT 1 FROM sponsor_contracts sc WHERE sc.team_id = t.id AND sc.sponsor_id = t.sleeve_sponsor_id
+                       AND sc.status = 'active' AND sc.category = 'stadium')`,
     ).bind(teamId).first<{ id: number | null }>();
     sleeveHolder = sleeve?.id ?? null;
   }
@@ -391,8 +393,8 @@ export type SleeveLogoResult =
 /**
  * Logo sponzora stadionu na rukáv dresu. Slib se hned vyhodnotí, splní se ještě v tomtéž
  * požadavku. Logo smí na rukáv jen smlouva kategorie „stadium" (hlavní ani banner ne) a
- * rukáv smí nést vždycky jen jednoho sponzora — dokud aktivní smlouva jiné firmy logo drží,
- * novou tam vložit nejde (nejdřív by musela ta stará smlouva skončit).
+ * rukáv smí nést vždycky jen jednoho sponzora — dokud aktivní smlouva JINÉ firmy s kategorií
+ * "stadium" logo drží, novou tam vložit nejde (nejdřív by musela ta stará smlouva skončit).
  */
 export async function placeSleeveLogo(db: D1Database, teamId: string, promiseId: string, todayIso: string): Promise<SleeveLogoResult> {
   const row = await db.prepare(
@@ -412,7 +414,8 @@ export async function placeSleeveLogo(db: D1Database, teamId: string, promiseId:
   const conflict = await db.prepare(
     `SELECT 1 FROM teams t
      WHERE t.id = ? AND t.sleeve_sponsor_id IS NOT NULL AND t.sleeve_sponsor_id != ?
-       AND EXISTS (SELECT 1 FROM sponsor_contracts sc WHERE sc.team_id = t.id AND sc.sponsor_id = t.sleeve_sponsor_id AND sc.status = 'active')`,
+       AND EXISTS (SELECT 1 FROM sponsor_contracts sc WHERE sc.team_id = t.id AND sc.sponsor_id = t.sleeve_sponsor_id
+                     AND sc.status = 'active' AND sc.category = 'stadium')`,
   ).bind(teamId, row.sponsor_id).first();
   if (conflict) return { ok: false, error: "Rukáv už nese logo jiného sponzora", code: 409 };
 

@@ -218,9 +218,21 @@ describe("popisky", () => {
     expect(promiseTransactionText("partial", "Pivovar Lhota", "x")).toContain("polovina pokuty");
     expect(promiseTransactionText("broken", "Pivovar Lhota", "x")).toContain("pokuta za porušený slib");
     expect(promiseFavorReason("broken", "postupové místo")).toBe("porušený slib: postupové místo");
-    for (const t of [promiseTransactionText("partial", "A", "b"), promiseFavorReason("partial", "b"), sectorBlockMessage("Pivovar Lhota")]) {
+    for (const t of [
+      promiseTransactionText("partial", "A", "b"), promiseFavorReason("partial", "b"),
+      sectorBlockMessage("Pivovar Lhota"), sectorBlockMessage("Pivovar Lhota", "renew"),
+    ]) {
       expect(t).not.toContain("—");
     }
+  });
+
+  it("blok oboru: podepsat vs. prodloužit, firma jako přístavek (1. pád, ne po předložce)", () => {
+    expect(sectorBlockMessage("Pivovar Lhota")).toBe(
+      "Firma Pivovar Lhota má u klubu exkluzivitu oboru, banner jiné firmy ze stejného oboru teď podepsat nejde.",
+    );
+    expect(sectorBlockMessage("Pivovar Lhota", "renew")).toBe(
+      "Firma Pivovar Lhota má u klubu exkluzivitu oboru, banner jiné firmy ze stejného oboru teď prodloužit nejde.",
+    );
   });
 });
 

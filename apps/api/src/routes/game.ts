@@ -2463,6 +2463,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 
   // Obor chráněný slibem exkluzivity se v nabídkách bannerů neukazuje.
   const { exclusiveSectors } = await import("../sponsors/promise-runs");
+  const { sectorBlockMessage } = await import("../sponsors/promise-eval");
   const exclusive = await exclusiveSectors(c.env.DB, teamId)
     .catch((e) => { logger.warn({ module: "game", teamId }, "exkluzivita oboru pro nabídky bannerů", e); return new Map<string, string>(); });
   const allowedBannerOffers = bannerOffers.filter((o) => !exclusive.has(o.sponsorType));
@@ -2484,6 +2485,17 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     ? computeRenewalTerms(teamId, seedSeason, row as { sponsor_name: string; category: string | null; monthly_amount: number; win_bonus: number },
         team.reputation, team.size, sponsorRows.results as unknown as SpRow[], seedFromString)
     : null;
+
+  // Banner v oboru chráněném slibem exkluzivity: prodloužení by stejně jako podpis skončilo 409,
+  // GET to ukáže dopředu (stejně jako blockedReason u hlavního sponzora/stadionu níž) — ale jen
+  // v okně, kdy by se jinak prodloužení nabízelo, aby text nebyl matoucí dřív.
+  const bannerRenewal = (row: Record<string, unknown>) => {
+    if (!isRenewable(row)) return { renewal: null };
+    const holder = exclusive.get(row.sponsor_type as string);
+    return holder
+      ? { renewal: null, renewable: false, blockedReason: sectorBlockMessage(holder, "renew") }
+      : { renewal: renewalFor(row) };
+  };
 
   // Hlavní sponzor a stadion: prodloužení je jednání se stejnou firmou. `renewable` říká, jestli
   // na něj už je čas; u hlavního sponzora ho zablokuje exkluzivita (hlavní jinde, přednost jiného klubu).
@@ -2536,7 +2548,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     stadiumContract: stadiumContractOut,
     mainExpired,
     stadiumExpired,
-    bannerContracts: bannerContracts.map((r) => ({ ...mapContract(r), renewal: renewalFor(r) })),
+    bannerContracts: bannerContracts.map((r) => ({ ...mapContract(r), ...bannerRenewal(r) })),
     stadiumName: team.stadium_name,
     teamName: teamFull?.name ?? "",
     bannerOffers: bannerContracts.length >= MAX_BANNERS ? [] : allowedBannerOffers,
@@ -2604,7 +2616,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
     const { exclusiveSectors } = await import("../sponsors/promise-runs");
     const { sectorBlockMessage } = await import("../sponsors/promise-eval");
     const holder = (await exclusiveSectors(c.env.DB, teamId)).get(spRow.type);
-    if (holder) return c.json({ error: sectorBlockMessage(holder) }, 409);
+    if (holder) return c.json({ error: sectorBlockMessage(holder, "sign") }, 409);
   }
   const repMod = econ.reputation / 50;
   const sizeMod = econ.size === "mesto" ? 1.3 : econ.size === "mestys" ? 1.1 : econ.size === "obec" ? 1.0 : 0.8;
@@ -2701,7 +2713,7 @@ gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
     const { exclusiveSectors } = await import("../sponsors/promise-runs");
     const { sectorBlockMessage } = await import("../sponsors/promise-eval");
     const holder = (await exclusiveSectors(c.env.DB, teamId)).get(contract.sponsor_type as string);
-    if (holder) return c.json({ error: sectorBlockMessage(holder) }, 409);
+    if (holder) return c.json({ error: sectorBlockMessage(holder, "renew") }, 409);
   }
 
   // Podmínka na původní stav — dva souběžné požadavky (dvojklik) neprodlouží dvakrát.

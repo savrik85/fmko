@@ -578,10 +578,17 @@ sponsorsRouter.get("/teams/:teamId/sponsor-promises", async (c) => {
 sponsorsRouter.post("/teams/:teamId/sponsor-promises/:promiseId/sleeve-logo", requireTeamOwnership, async (c) => {
   const db = c.env.DB;
   const teamId = c.req.param("teamId");
-  const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  // Herní datum týmu; když chybí (nemělo by u existujícího týmu nastat), spadni na herní datum
+  // libovolného jiného týmu (stejný vzorec jako jinde v kódu, např. routes/competition.ts), nikdy
+  // na reálný čas — herní čas se od reálného posouvá (game_clock.offset_days).
+  const team = await db.prepare(
+    "SELECT game_date, (SELECT MAX(game_date) FROM teams WHERE game_date IS NOT NULL) AS any_game_date FROM teams WHERE id = ?",
+  ).bind(teamId).first<{ game_date: string | null; any_game_date: string | null }>();
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+  const gameDate = team.game_date ?? team.any_game_date;
+  if (!gameDate) return c.json({ error: "Herní datum není známé, zkus to znovu" }, 409);
   const { placeSleeveLogo } = await import("../sponsors/promise-runs");
-  const res = await placeSleeveLogo(db, teamId, c.req.param("promiseId"), team.game_date ?? new Date().toISOString());
+  const res = await placeSleeveLogo(db, teamId, c.req.param("promiseId"), gameDate);
   if (!res.ok) return c.json({ error: res.error }, res.code);
   try {
     const { deliverOwnerSmsForTeam } = await import("../sponsors/owner-sms");

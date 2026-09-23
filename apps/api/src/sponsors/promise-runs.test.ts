@@ -226,6 +226,8 @@ describe("listTeamPromises", () => {
     expect(list).toHaveLength(2);
     expect(list[0]).toMatchObject({ id: "p1", label: "skončit do 3. místa", status: "partial", actualText: "4. místo", canPlaceSleeveLogo: false });
     expect(list[1]).toMatchObject({ id: "p2", contractId: "c2", deadline: "2026-10-05", canPlaceSleeveLogo: true });
+    const sleeveQuery = db.dotazy.find((d) => /SELECT t\.sleeve_sponsor_id/.test(d.sql));
+    expect(sleeveQuery?.sql).toContain("sc.category = 'stadium'");
   });
 
   it("rukáv drží jiný aktivní sponzor: tlačítko se schová, i když je slib pending", async () => {
@@ -281,6 +283,9 @@ describe("placeSleeveLogo", () => {
       .toEqual({ ok: false, error: "Rukáv už nese logo jiného sponzora", code: 409 });
     const check = db.dotazy.find((d) => /FROM teams t/.test(d.sql));
     expect(check?.params).toEqual(["t1", 7]);
+    // Konflikt jen když ho drží smlouva kategorie "stadium" (jiná kategorie stejného sponzora
+    // rukáv legitimně nedrží).
+    expect(check?.sql).toContain("sc.category = 'stadium'");
   });
 
   it("čekající slib loga: logo na rukáv a hned vyhodnotit", async () => {
