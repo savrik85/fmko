@@ -166,6 +166,8 @@ export async function activeSeason(db: D1Database): Promise<number> {
 export interface ContractRow {
   id: string; sponsor_id: number | null; sponsor_name: string; monthly_amount: number; win_bonus: number;
   seasons_remaining: number; early_termination_fee: number; status: "active" | "expired";
+  /** null = legacy smlouva z dřívějších pevných nabídek (bez jednání): přechod od ní je zdarma. */
+  negotiation_id: string | null;
 }
 
 /**
@@ -228,7 +230,7 @@ export async function lastRenewableExpired<T extends Record<string, unknown> = R
 export async function categoryContracts(db: D1Database, teamId: string, category: NegotiationCategory): Promise<CategoryContracts> {
   const [active, lastExpired] = await Promise.all([
     db.prepare(
-      `SELECT id, sponsor_id, sponsor_name, monthly_amount, win_bonus, seasons_remaining, early_termination_fee, status
+      `SELECT id, sponsor_id, sponsor_name, monthly_amount, win_bonus, seasons_remaining, early_termination_fee, status, negotiation_id
        FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND COALESCE(category, 'main') = ?
        ORDER BY signed_at DESC LIMIT 1`,
     ).bind(teamId, category).first<ContractRow>(),
@@ -407,6 +409,9 @@ export async function buildNegotiationContext(db: D1Database, i: {
   ]);
   const matchesPlayed = played?.cnt ?? 0;
   const other = contracts.active && contracts.active.sponsor_id !== sponsor.id ? contracts.active : null;
+  // Legacy smlouva (bez jednání) nemá výpovědní pokutu při přechodu: motivuje kluby přejít na nový
+  // systém sponzorů. Bez toho by "ať zaplatí sponzor" demand (payCurrentFee) stálo ochotu za nic.
+  const currentTerminationFee = other && other.negotiation_id !== null ? prorataTerminationFee(other) : 0;
   return {
     category: i.category, personality: i.personality, wishes: i.wishes, budgetB: i.budgetB, season: i.season,
     leagueTeams: league.teams, expectedPosition: league.expected,
@@ -419,7 +424,7 @@ export async function buildNegotiationContext(db: D1Database, i: {
     sleeveHeldBySponsor: sleeve,
     facilities: facilityOptions(stadium, team.reputation, matchesPlayed, i.season),
     equipment: equipmentGiftOptions(equip, team.reputation, matchesPlayed, i.season),
-    currentTerminationFee: other ? prorataTerminationFee(other) : 0,
+    currentTerminationFee,
     seasonProgressMonths: progress,
   };
 }
@@ -626,15 +631,18 @@ export interface NegotiationView {
    * `clawback` = nesplacená záloha současné smlouvy, kterou klub při podpisu vrací (i při prodloužení).
    * `forfeitPenalty` = pokuty za sliby současné smlouvy, které při přechodu k jiné firmě propadnou
    * (aktuální sezóna a termínové); u prodloužení 0, sliby přejdou na novou smlouvu.
+   * `terminationFee` je 0 u legacy smlouvy (bez jednání, `isLegacy`): přechod od ní je zdarma.
    */
   current: null | {
     sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean;
-    clawback: number; forfeitPenalty: number;
+    clawback: number; forfeitPenalty: number; isLegacy: boolean;
   };
   rounds: NegotiationRound[];
   pending: null | {
     proposal: Proposal; promises: PromiseRowView[]; terminationFee: number; constructionCost: number; equipmentCost: number;
     currentFee: number; renamesClub: boolean;
+    /** Skutečná ztráta reputace za přejmenování klubu (0 = žádná, i u renamesClub — legacy přechod je zdarma). */
+    reputationPenalty: number;
   };
   season: number;
 }
@@ -650,6 +658,10 @@ export function negotiationView(
   const terms = pendingTerms(neg);
   const summary = terms ? signingSummary(terms, ctx, teamGameDate(st.team)) : null;
   const current = st.contracts.active;
+  const sameSponsor = current ? current.sponsor_id === sponsor.id : false;
+  // Přechod od legacy smlouvy (bez jednání) k jiné firmě je zdarma: bez výpovědní pokuty a bez
+  // ztráty reputace za přejmenování klubu (signFromState v signing.ts počítá stejně).
+  const legacySwitch = current !== null && !sameSponsor && current.negotiation_id === null;
   return {
     id: neg.id,
     sponsorId: sponsor.id,
@@ -679,9 +691,11 @@ export function negotiationView(
     equipment: equipmentOptions(ctx),
     current: current ? {
       sponsorName: current.sponsor_name, monthlyAmount: current.monthly_amount, winBonus: current.win_bonus,
-      seasonsRemaining: current.seasons_remaining, terminationFee: prorataTerminationFee(current),
-      sameSponsor: current.sponsor_id === sponsor.id, clawback: extra.currentClawback,
+      seasonsRemaining: current.seasons_remaining,
+      terminationFee: current.negotiation_id === null ? 0 : prorataTerminationFee(current),
+      sameSponsor, clawback: extra.currentClawback,
       forfeitPenalty: extra.currentForfeitPenalty ?? 0,
+      isLegacy: current.negotiation_id === null,
     } : null,
     rounds: neg.rounds,
     pending: summary ? {
@@ -695,6 +709,7 @@ export function negotiationView(
       equipmentCost: summary.equipmentCost,
       currentFee: summary.currentFee,
       renamesClub: neg.category === "main" && !st.isRenewal,
+      reputationPenalty: neg.category === "main" && !st.isRenewal ? (legacySwitch ? 0 : 3) : 0,
     } : null,
     season: st.season,
   };

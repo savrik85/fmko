@@ -59,8 +59,11 @@ export function NegotiationHeader({ view, estimate, cost }: { view: NegotiationV
               <span className="font-heading font-bold text-ink">{formatCZK(view.current.monthlyAmount)}</span> měsíčně
               {view.current.winBonus > 0 ? `, ${formatCZK(view.current.winBonus)} za výhru` : ""}, {remainingSeasonsText(view.current.seasonsRemaining).toLowerCase()}.
             </div>
-            {!view.current.sameSponsor && (
+            {!view.current.sameSponsor && view.current.terminationFee > 0 && (
               <div className="text-card-red">Přechod znamená výpovědní pokutu {formatCZK(view.current.terminationFee)}.</div>
+            )}
+            {!view.current.sameSponsor && view.current.isLegacy && (
+              <div className="text-pitch-600">Přechod ze staré smlouvy je zdarma: žádná výpovědní pokuta ani ztráta reputace.</div>
             )}
           </div>
         )}

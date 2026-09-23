@@ -108,19 +108,21 @@ export default function NegotiationPage() {
     if (!teamId || !view?.pending || acting) return;
     const p = view.pending;
     const d = p.proposal.demands;
+    const legacySwitch = !!(view.current && !view.current.sameSponsor && view.current.isLegacy);
     const ok = await confirm({
       title: `Podepsat smlouvu s ${view.sponsorName}?`,
-      description: `Smlouva na ${seasonsAccusative(p.proposal.seasons)}. Slibů: ${p.promises.length}. Nesplněné sliby stojí pokutu, dvě porušení v sezóně a sponzor smlouvu vypoví.`,
+      description: `Smlouva na ${seasonsAccusative(p.proposal.seasons)}. Slibů: ${p.promises.length}. Nesplněné sliby stojí pokutu, dvě porušení v sezóně a sponzor smlouvu vypoví.`
+        + (legacySwitch ? " Přechod ze staré smlouvy je zdarma: žádná výpovědní pokuta ani ztráta reputace." : ""),
       details: [
         { label: "Měsíčně", value: `+${formatCZK(d.monthly)}`, color: "text-pitch-500" },
         ...(d.signingBonus > 0 ? [{ label: "Za podpis", value: `+${formatCZK(d.signingBonus)}`, color: "text-pitch-500" }] : []),
-        ...(view.current && !view.current.sameSponsor && p.currentFee === 0
+        ...(view.current && !view.current.sameSponsor && p.currentFee === 0 && view.current.terminationFee > 0
           ? [{ label: "Výpovědní pokuta", value: `-${formatCZK(view.current.terminationFee)}`, color: "text-card-red" }] : []),
         ...(view.current && view.current.clawback > 0
           ? [{ label: "Vrácení zálohy", value: `-${formatCZK(view.current.clawback)}`, color: "text-card-red" }] : []),
         ...(view.current && !view.current.sameSponsor && (view.current.forfeitPenalty ?? 0) > 0
           ? [{ label: "Propadlé sliby", value: `pokuta ${formatCZK(view.current.forfeitPenalty ?? 0)}`, color: "text-card-red" }] : []),
-        ...(p.renamesClub ? [{ label: "Dopad na reputaci", value: "-3 reputace", color: "text-card-red" }] : []),
+        ...(p.renamesClub && p.reputationPenalty > 0 ? [{ label: "Dopad na reputaci", value: "-3 reputace", color: "text-card-red" }] : []),
       ],
       confirmLabel: "Podepsat",
     });

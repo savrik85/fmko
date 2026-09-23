@@ -74,15 +74,16 @@ export interface NegotiationView {
   /**
    * `clawback`: nesplacená záloha současné smlouvy, kterou klub při podpisu vrací (i při prodloužení).
    * `forfeitPenalty`: pokuty za sliby současné smlouvy, které při přechodu k jiné firmě propadnou (u prodloužení 0).
+   * `terminationFee` je 0 u legacy smlouvy (`isLegacy`, bez jednání): přechod od ní je zdarma.
    */
   current: null | {
     sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean;
-    clawback: number; forfeitPenalty?: number;
+    clawback: number; forfeitPenalty?: number; isLegacy: boolean;
   };
   rounds: NegotiationRound[];
   pending: null | {
     proposal: Proposal; promises: PromiseRowView[]; terminationFee: number; constructionCost: number;
-    equipmentCost: number; currentFee: number; renamesClub: boolean;
+    equipmentCost: number; currentFee: number; renamesClub: boolean; reputationPenalty: number;
   };
   season: number;
 }

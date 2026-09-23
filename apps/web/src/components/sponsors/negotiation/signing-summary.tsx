@@ -22,8 +22,11 @@ export function SigningSummary({ view }: { view: NegotiationView }) {
           {d.construction && <div>Sponzor zaplatí stavbu za {formatCZK(p.constructionCost)}</div>}
           {d.equipment && <div>Sponzor koupí vybavení za {formatCZK(p.equipmentCost)}</div>}
           {p.currentFee > 0 && <div>Sponzor zaplatí výpovědní pokutu {formatCZK(p.currentFee)}</div>}
-          {view.current && !view.current.sameSponsor && p.currentFee === 0 && (
+          {view.current && !view.current.sameSponsor && p.currentFee === 0 && view.current.terminationFee > 0 && (
             <div className="text-card-red">Výpovědní pokutu {formatCZK(view.current.terminationFee)} u {view.current.sponsorName} platí klub.</div>
+          )}
+          {view.current && !view.current.sameSponsor && view.current.isLegacy && (
+            <div className="text-pitch-600">Přechod ze staré smlouvy je zdarma: žádná výpovědní pokuta ani ztráta reputace.</div>
           )}
           {view.current && view.current.clawback > 0 && (
             <div className="text-card-red">
@@ -36,7 +39,8 @@ export function SigningSummary({ view }: { view: NegotiationView }) {
             </div>
           )}
           <div className="text-muted">Výpovědní pokuta nové smlouvy {formatCZK(p.terminationFee)}.</div>
-          {p.renamesClub && <div className="text-gold-600">Klub ponese jméno sponzora, -3 reputace.</div>}
+          {p.renamesClub && p.reputationPenalty > 0 && <div className="text-gold-600">Klub ponese jméno sponzora, -3 reputace.</div>}
+          {p.renamesClub && p.reputationPenalty === 0 && <div className="text-muted">Klub ponese jméno sponzora.</div>}
           {p.promises.length > 0 && (
             <ul className="pt-2 border-t border-line-soft space-y-1.5">
               {p.promises.map((r, i) => (

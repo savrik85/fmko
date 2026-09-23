@@ -234,7 +234,7 @@ describe("contractBlock", () => {
   const NO_CONTRACTS: CategoryContracts = { active: null, lastExpired: null };
   const activeContract = (over: Partial<ContractRow>): ContractRow => ({
     id: "c1", sponsor_id: SPONSOR.id, sponsor_name: SPONSOR.name, monthly_amount: 1000, win_bonus: 0,
-    seasons_remaining: 2, early_termination_fee: 100, status: "active", ...over,
+    seasons_remaining: 2, early_termination_fee: 100, status: "active", negotiation_id: "n0", ...over,
   });
 
   it("cizí okres blokuje bez ohledu na smlouvy nebo kategorii, bez dotazu do DB", async () => {

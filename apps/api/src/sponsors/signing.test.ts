@@ -209,7 +209,7 @@ describe("signFromState", () => {
     expect(money(d)).toEqual([offer.demands.signingBonus]);
   });
 
-  const OLD = { id: "c-old", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 2, early_termination_fee: 18000, status: "active" as const };
+  const OLD = { id: "c-old", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 2, early_termination_fee: 18000, status: "active" as const, negotiation_id: "n0" };
   const OLD_ADVANCE: Pravidlo = {
     sql: /SELECT id, seasons_total, seasons_remaining, signing_bonus, paid_construction, negotiation_id FROM sponsor_contracts/,
     first: { id: "c-old", seasons_total: 3, seasons_remaining: 2, signing_bonus: 9000, paid_construction: JSON.stringify({ items: [], startOffsetMonths: 0 }), negotiation_id: "n0" },
@@ -238,9 +238,40 @@ describe("signFromState", () => {
     const st = switchState();
     // Stará smlouva na 3 sezóny, zbývají 2, půlka sezóny: uplynulo 1,5 z 3 sezón, vrací se 9000 / 2.
     const view = await viewWithClawback(jakoD1(d), { ...st, ctx: { ...st.ctx, seasonProgressMonths: MPS / 2 } });
-    expect(view.current).toMatchObject({ sponsorName: "Pila", clawback: 4500, sameSponsor: false });
+    expect(view.current).toMatchObject({ sponsorName: "Pila", clawback: 4500, sameSponsor: false, isLegacy: false });
     expect(view.contractMonths).toHaveLength(3);
     view.contractMonths.forEach((m, i) => expect(m).toBeCloseTo((i + 1) * MPS - MPS / 2, 9));
+  });
+
+  const OLD_LEGACY = { ...OLD, negotiation_id: null };
+  const OLD_LEGACY_ADVANCE: Pravidlo = {
+    sql: OLD_ADVANCE.sql,
+    first: { id: "c-old", seasons_total: 3, seasons_remaining: 2, signing_bonus: 9000, paid_construction: JSON.stringify({ items: [], startOffsetMonths: 0 }), negotiation_id: null },
+  };
+
+  it("přechod od legacy smlouvy (bez jednání): žádná výpovědní pokuta, žádná záloha, žádná ztráta reputace", async () => {
+    const d = db([OLD_LEGACY_ADVANCE]);
+    // payCurrentFee: server validateProposal ho u legacy (currentTerminationFee 0) rovnou odmítne —
+    // nic k zaplacení není, přesně požadavek "hide/disable it when the current contract is legacy".
+    const st = state(
+      { ctx: { ...FULL_CTX, category: "main", currentTerminationFee: 0 }, contracts: { active: OLD_LEGACY, lastExpired: null } },
+      { category: "main" },
+      TERMS,
+    );
+    const res = await signFromState(jakoD1(d), st);
+    expect(res).toMatchObject({ ok: true, reputationPenalty: 0 });
+    // Jen podpisový příspěvek, žádná pokuta zaplacená sponzorem, žádná strhnutá pokuta, žádná vratka.
+    expect(money(d)).toEqual([12000]);
+    expect(JSON.parse(insertOf(d).params[12] as string).items).toEqual([]);
+    // Přejmenování klubu proběhne, jen bez pokuty za reputaci.
+    expect(res.ok && res.newTeamName).toBeTruthy();
+  });
+
+  it("pohled na jednání: legacy smlouva má výpovědní pokutu 0 a příznak isLegacy", async () => {
+    const d = db([OLD_LEGACY_ADVANCE]);
+    const st = state({ ctx: { ...FULL_CTX, currentTerminationFee: 0 }, contracts: { active: OLD_LEGACY, lastExpired: null } }, {}, TERMS);
+    const view = await viewWithClawback(jakoD1(d), st);
+    expect(view.current).toMatchObject({ sponsorName: "Pila", terminationFee: 0, isLegacy: true, sameSponsor: false, clawback: 0 });
   });
 
   it("stará smlouva mezitím skončila (výpověď, rollover): záloha bez zaplacené pokuty", async () => {
@@ -265,7 +296,7 @@ describe("signFromState", () => {
     };
     const renewTerms: Proposal = { ...TERMS, seasons: 2, demands: { ...TERMS.demands, signingBonus: 8000 } };
     const d2 = db([{ sql: OLD_ADVANCE.sql, first: signed }]);
-    const active = { id: signed.id, sponsor_id: 7, sponsor_name: "Truhlářství Novák Arena", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const };
+    const active = { id: signed.id, sponsor_id: 7, sponsor_name: "Truhlářství Novák Arena", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const, negotiation_id: "n1" };
     const renewal = await signFromState(jakoD1(d2), state({ ctx: quarter, isRenewal: true, contracts: { active, lastExpired: null } }, { id: "n2" }, renewTerms));
     expect(renewal.ok).toBe(true);
     expect(money(d2)).toEqual([8000, -12000]);
@@ -312,7 +343,7 @@ describe("signFromState", () => {
   });
 
   it("prodloužení hlavního sponzora: zápis hlídá exkluzivitu, klub se nepřejmenuje", async () => {
-    const active = { id: "c-main", sponsor_id: 7, sponsor_name: "Truhlářství Novák s.r.o.", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const };
+    const active = { id: "c-main", sponsor_id: 7, sponsor_name: "Truhlářství Novák s.r.o.", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const, negotiation_id: "n0" };
     const d = db();
     const res = await signFromState(jakoD1(d), state({
       ctx: { ...FULL_CTX, category: "main" }, isRenewal: true, contracts: { active, lastExpired: null },
@@ -400,7 +431,7 @@ describe("vratka zálohy", () => {
 });
 
 describe("sliby staré smlouvy při podpisu (prodloužení a přechod)", () => {
-  const OLD = { id: "c-old", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 18000, status: "active" as const };
+  const OLD = { id: "c-old", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 18000, status: "active" as const, negotiation_id: "n0" };
   const FORFEIT_SELECT = /FROM sponsor_promises p WHERE p\.contract_id = \?/;
   const FORFEIT_ROWS: Pravidlo = { sql: FORFEIT_SELECT, all: [
     { id: "pr-season", contract_id: "c-old", sponsor_id: 3, kind: "reputation", params: '{"reputation":60}', season: 3, penalty: 5000 },
