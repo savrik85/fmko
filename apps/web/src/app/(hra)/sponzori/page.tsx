@@ -235,7 +235,7 @@ export default function SponsorsPage() {
     if (!contract?.renewal) return;
     const r = contract.renewal;
     const ok = await confirm({
-      title: `Prodloužit smlouvu s ${contract.sponsorName}?`,
+      title: `Prodloužit smlouvu s firmou ${contract.sponsorName}?`,
       description: `Nová smlouva na ${seasonsAccusative(r.seasons)} za podmínek podle aktuální reputace. Beze změny názvu klubu a bez sankce.`,
       details: [
         { label: "Nově týdně", value: `+${formatCZK(Math.round(r.monthlyAmount / 4.3))}`, color: "text-pitch-500" },

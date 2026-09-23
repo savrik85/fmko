@@ -121,7 +121,7 @@ export default function NegotiationPage() {
     const d = p.proposal.demands;
     const legacySwitch = !!(view.current && !view.current.sameSponsor && view.current.isLegacy);
     const ok = await confirm({
-      title: `Podepsat smlouvu s ${view.sponsorName}?`,
+      title: `Podepsat smlouvu s firmou ${view.sponsorName}?`,
       description: `Smlouva na ${seasonsAccusative(p.proposal.seasons)}. Slibů: ${p.promises.length}. Nesplněné sliby stojí pokutu, dvě porušení v sezóně a sponzor smlouvu vypoví.`
         + (legacySwitch ? " Přechod ze staré smlouvy je zdarma: žádná výpovědní pokuta ani ztráta reputace." : ""),
       details: [

@@ -146,7 +146,7 @@ describe("signFromState", () => {
   it("souběžný podpis v kategorii vyhrál: 409 s jeho jménem, jednání se vrátí, žádné peníze", async () => {
     const d = db([{ sql: INSERT_CONTRACT, changes: 0 }, { sql: /^SELECT sponsor_name FROM sponsor_contracts/, first: { sponsor_name: "Pila Arena" } }]);
     const res = await signFromState(jakoD1(d), state());
-    expect(res).toEqual({ ok: false, error: "Mezitím jsi podepsal smlouvu s Pila Arena, načti stránku znovu", status: 409 });
+    expect(res).toEqual({ ok: false, error: "Mezitím jsi podepsal smlouvu s firmou Pila Arena, načti stránku znovu", status: 409 });
     expect(d.dotazy.some((q) => /SET status = \? WHERE id = \? AND status = 'signed'/.test(q.sql) && q.params[0] === "accepted")).toBe(true);
   });
 

@@ -228,8 +228,8 @@ export async function applyMainSponsorRename(
   await db.prepare("UPDATE teams SET name = ? WHERE parent_team_id = ? AND team_type = 'u21'").bind(`${newName} U21`, teamId).run()
     .catch((e) => logger.warn({ module: "sponsors", teamId }, "rename U21 on sponsor change", e));
   const newsBody = opts.freeSwitch
-    ? `Klub ${oldName} podepsal sponzorskou smlouvu s ${sponsorName} a mění svůj název na ${newName}. Přechod ze staré smlouvy byl zdarma, reputaci to nestálo.`
-    : `Klub ${oldName} podepsal sponzorskou smlouvu s ${sponsorName} a mění svůj název na ${newName}. Fanoušci nejsou nadšení (-3 reputace).`;
+    ? `Klub ${oldName} podepsal sponzorskou smlouvu s firmou ${sponsorName} a mění svůj název na ${newName}. Přechod ze staré smlouvy byl zdarma, reputaci to nestálo.`
+    : `Klub ${oldName} podepsal sponzorskou smlouvu s firmou ${sponsorName} a mění svůj název na ${newName}. Fanoušci nejsou nadšení (-3 reputace).`;
   await db.prepare(
     "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
   ).bind(crypto.randomUUID(), teamId, `${oldName} mění název na ${newName}`, newsBody)
@@ -478,7 +478,7 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
       `SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND COALESCE(category, 'main') = ? AND id != ? LIMIT 1`,
     ).bind(teamId, neg.category, replaced?.id ?? "").first<{ sponsor_name: string }>()
       .catch((e) => { logger.warn({ module: "sponsors", teamId }, "zjištění souběžně podepsané smlouvy", e); return null; });
-    if (other) return { ok: false, error: `Mezitím jsi podepsal smlouvu s ${other.sponsor_name}, načti stránku znovu`, status: 409 };
+    if (other) return { ok: false, error: `Mezitím jsi podepsal smlouvu s firmou ${other.sponsor_name}, načti stránku znovu`, status: 409 };
     return { ok: false, error: `${sponsor.name} právě podepsal s jiným klubem`, status: 409 };
   }
   const oldEnded = changed(oldIdx);
