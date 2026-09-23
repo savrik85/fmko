@@ -312,16 +312,20 @@ export async function resetSeasonBreaches(db: D1Database): Promise<void> {
   await db.prepare("UPDATE sponsor_contracts SET breaches_season = 0 WHERE breaches_season != 0").run();
 }
 
-/** Obory chráněné slibem exkluzivity u aktivních smluv klubu: obor → firma. */
+/**
+ * Obory chráněné slibem exkluzivity u aktivních smluv klubu: obor → jméno FIRMY (district_sponsors),
+ * ne název smlouvy (sc.sponsor_name) — u stadionu je to naming-rights jméno jako „Pivnice Na Roháčku
+ * Arena", které do zprávy o blokovaném oboru nepatří (sectorBlockMessage/sectorBlockReason, GET sponsors).
+ */
 export async function exclusiveSectors(db: D1Database, teamId: string): Promise<Map<string, string>> {
   const rows = await db.prepare(
-    `SELECT ds.type, sc.sponsor_name
+    `SELECT ds.type, ds.name
      FROM sponsor_promises p
      JOIN sponsor_contracts sc ON sc.id = p.contract_id
      JOIN district_sponsors ds ON ds.id = p.sponsor_id
      WHERE p.team_id = ? AND p.kind = 'sector_exclusivity' AND p.status = 'pending' AND sc.status = 'active'`,
-  ).bind(teamId).all<{ type: string; sponsor_name: string }>();
-  return new Map(rows.results.map((r) => [r.type, r.sponsor_name]));
+  ).bind(teamId).all<{ type: string; name: string }>();
+  return new Map(rows.results.map((r) => [r.type, r.name]));
 }
 
 export interface PromiseView {

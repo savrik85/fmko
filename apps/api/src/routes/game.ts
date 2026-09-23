@@ -2390,6 +2390,10 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     "SELECT * FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch active sponsor contracts", e); return { results: [] }; });
 
+  // Poměrná výpovědní pokuta, stejný vzorec jako POST /sponsors/terminate — karta smlouvy musí
+  // ukazovat přesně tu částku, kterou by výpověď teď strhla, ne nominální earlyTerminationFee
+  // celé smlouvy (ta se zmenšuje s ubývajícími sezónami).
+  const { prorataTerminationFee } = await import("../sponsors/negotiation-db");
   const mapContract = (row: Record<string, unknown>) => ({
     id: row.id as string,
     category: (row.category as string) || "main",
@@ -2401,6 +2405,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     seasonsTotal: row.seasons_total as number,
     seasonsRemaining: row.seasons_remaining as number,
     earlyTerminationFee: row.early_termination_fee as number,
+    terminationFee: prorataTerminationFee(row as unknown as Parameters<typeof prorataTerminationFee>[0]),
     isNamingRights: row.is_naming_rights === 1,
     signedAt: row.signed_at as string,
   });
@@ -2447,8 +2452,17 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   // Banner offers — vždy 12 možných, malé částky, bez naming/win bonus
   const MAX_BANNERS = 6;
   const bannerOffers: Offer[] = [];
-  const usedNames = new Set<string>(bannerContracts.map((c) => c.sponsor_name as string));
-  const bannerPool = shuffledSponsors.filter((s) => !usedNames.has(s.name as string));
+  // Firma, která už klubu dělá hlavního sponzora, sponzora stadionu nebo jiný banner, se v
+  // nabídkách bannerů znovu nenabízí (párovaní přes sponsor_id, bez něj záložně přes jméno).
+  const activeSponsorIds = new Set<number>();
+  const activeSponsorNamesFallback = new Set<string>();
+  for (const activeRow of activeRows.results) {
+    const sid = (activeRow.sponsor_id as number | null) ?? null;
+    if (sid != null) activeSponsorIds.add(sid);
+    else activeSponsorNamesFallback.add(activeRow.sponsor_name as string);
+  }
+  const bannerPool = shuffledSponsors.filter((s) =>
+    !activeSponsorIds.has(s.id as number) && !activeSponsorNamesFallback.has(s.name as string));
   for (let i = 0; i < Math.min(12, bannerPool.length); i++) {
     const s = bannerPool[i];
     const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 0.8);
@@ -2589,7 +2603,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
 
   // Check no active contract in this category (banner: max 8 současně)
   const allActive = await c.env.DB.prepare(
-    "SELECT id, category FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
+    "SELECT id, category, sponsor_id, sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch active contracts for signing", e); return { results: [] }; });
 
   if (category === "banner") {
@@ -2618,6 +2632,14 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
     ? spBounds.results.find((r) => cleanSp(r.name) === baseName)
     : spBounds.results.find((r) => r.name === body.sponsorName);
   if (!spRow) return c.json({ error: "Neplatný sponzor pro tento okres" }, 400);
+  // Firma, která klubu už dělá hlavního sponzora, sponzora stadionu nebo jiný banner, se znovu
+  // podepsat nedá (párování přes sponsor_id, bez něj záložně přes jméno) — GET /sponsors ji ze
+  // stejného důvodu z nabídek bannerů vynechá (bannerPool výš).
+  const alreadySponsors = allActive.results.some((r) => {
+    const sid = (r.sponsor_id as number | null) ?? null;
+    return sid != null ? sid === spRow.id : r.sponsor_name === body.sponsorName;
+  });
+  if (alreadySponsors) return c.json({ error: `${body.sponsorName} už tvůj klub sponzoruje, další smlouvu s ní podepsat nejde` }, 409);
   // Slib „exkluzivita oboru" u hlavního sponzora nebo stadionu: banner stejného oboru nejde.
   // Není to porušení slibu, podpis se prostě zakáže s vysvětlením.
   if (category === "banner") {
@@ -2762,8 +2784,9 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
 
   if (!contract) return c.json({ error: "Žádná aktivní smlouva" }, 400);
 
-  // Calculate pro-rated fee
-  const fee = Math.round(contract.early_termination_fee * (contract.seasons_remaining / 3));
+  // Poměrná výpovědní pokuta, stejný vzorec jako karta smlouvy na GET /sponsors (mapContract).
+  const { prorataTerminationFee } = await import("../sponsors/negotiation-db");
+  const fee = prorataTerminationFee(contract as unknown as Parameters<typeof prorataTerminationFee>[0]);
   // Smlouva z jednání: jednorázová plnění sponzora (příspěvek za podpis, stavba, vybavení,
   // zaplacená pokuta, vyplacené termínové bonusy) jsou záloha, klub vrací nesplacenou část.
   const { contractClawback, loadTeamSeasonProgress } = await import("../sponsors/signing");

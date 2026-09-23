@@ -491,15 +491,33 @@ describe("sliby staré smlouvy při podpisu (prodloužení a přechod)", () => {
     const move = q[moveIdx];
     expect(move.sql).toContain("status = 'pending'");
     expect(move.sql).toContain("kind != 'sector_exclusivity'");
+    // Jen termínové (season IS NULL) a sezónní do aktuální sezóny (3): pozdější sezóny už
+    // pokrývají vlastní čerstvé sliby nové smlouvy (buildPromiseRows od season + 1).
+    expect(move.sql).toContain("season IS NULL OR season <= ?");
     // Nová smlouva, stará smlouva a hlídání: nová existuje a stará je pořád aktivní.
     const newId = insertOf(d).params[0];
-    expect(move.params).toEqual([newId, "c-old", newId, "c-old"]);
+    expect(move.params).toEqual([newId, "c-old", 3, newId, "c-old"]);
     expect(move.sql).toContain("status = 'active'");
     // Přesun před koncem staré smlouvy (jinak by hlídání „stará aktivní" neprošlo).
     expect(moveIdx).toBeLessThan(q.findIndex((x) => END_OLD.test(x.sql)));
     // Prodloužení nic nepropadá.
     expect(d.pocet(FORFEIT_SELECT)).toBe(0);
     expect(d.pocet(FORFEIT_CLAIM)).toBe(0);
+  });
+
+  it("prodloužení: hlídání sezóny sleduje SKUTEČNOU aktuální sezónu jednání, ne konstantu", async () => {
+    // Stará smlouva měla mít čekající sliby pro sezónu 5 (=aktuální, přesune se) a 6 (budoucí,
+    // tu už pokrývá vlastní čerstvý slib nové smlouvy od buildPromiseRows) — ten pozdější zůstane
+    // viset na staré (teď 'expired') smlouvě a promise-runs.ts ho (správně) už nikdy nevyhodnotí,
+    // protože vybírá jen sliby smluv se status = 'active'.
+    const d = db([FORFEIT_ROWS]);
+    const active = { ...OLD, sponsor_id: 7, sponsor_name: "Truhlářství Novák Arena" };
+    const res = await signFromState(jakoD1(d), state({ isRenewal: true, contracts: { active, lastExpired: null }, season: 5 }));
+    expect(res.ok).toBe(true);
+    const move = batchQueries(d).find((x) => MOVE.test(x.sql))!;
+    // Vzorec hlídání odpovídá popisu: NULL (termín) nebo season <= aktuální sezóna jednání (5).
+    expect(move.sql).toMatch(/AND \(season IS NULL OR season <= \?\) AND/);
+    expect(move.params[2]).toBe(5);
   });
 
   it("přechod k jiné firmě: sliby aktuální sezóny a termínové propadnou s plnou pokutou, bez porušení", async () => {

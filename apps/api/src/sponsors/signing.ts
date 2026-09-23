@@ -439,14 +439,21 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   // Sliby staré smlouvy (jen dokud je pořád aktivní, stejně jako platby za ni). Neaktivní smlouvu
   // už nikdo nevyhodnotí, takže by prodloužení nebo přechod sliby poslední sezóny obešly.
   // Prodloužení: čekající sliby (kromě exkluzivity oboru, tu má každá smlouva vlastní) přejdou
-  // na novou smlouvu a vyhodnotí se normálně. Přechod k jiné firmě: sliby aktuální sezóny
-  // a termínové sliby propadnou s plnou pokutou, bez počítání porušení (promise-forfeit.ts).
+  // na novou smlouvu a vyhodnotí se normálně — ale jen ty, které nová smlouva ještě nemá vlastní:
+  // termínové (season IS NULL) a sezónní do aktuální sezóny včetně. Sezónní sliby nové smlouvy
+  // (buildPromiseRows) totiž začínají až sezónou season + 1 (viz negotiation.ts), takže sliby staré
+  // smlouvy pro pozdější sezóny by se přesunem zdvojily. Zůstanou na staré (teď 'expired') smlouvě
+  // a nikdy se nevyhodnotí (PENDING_SELECT v promise-runs.ts bere jen sc.status = 'active') — což je
+  // v pořádku, novou smlouvu na tytéž budoucí sezóny už pokrývají její vlastní čerstvé sliby.
+  // Přechod k jiné firmě: sliby aktuální sezóny a termínové sliby propadnou s plnou pokutou,
+  // bez počítání porušení (promise-forfeit.ts).
   let movedIdx: number | null = null;
   if (replaced && oldActive && st.isRenewal) {
     stmts.push(db.prepare(
       `UPDATE sponsor_promises SET contract_id = ?
-       WHERE contract_id = ? AND status = 'pending' AND kind != 'sector_exclusivity' AND ${oldActive.sql}`,
-    ).bind(contractId, replaced.id, ...oldActive.params));
+       WHERE contract_id = ? AND status = 'pending' AND kind != 'sector_exclusivity'
+         AND (season IS NULL OR season <= ?) AND ${oldActive.sql}`,
+    ).bind(contractId, replaced.id, season, ...oldActive.params));
     movedIdx = stmts.length - 1;
   }
   if (old && oldActive && forfeit && forfeit.rows.length > 0) {

@@ -74,6 +74,24 @@ describe("pendingTerms", () => {
     const n = { ...parseNegotiation(ROW), status: "walked_away" as const, rounds: [round("counter_money", PROPOSAL), round("walked_away")] };
     expect(pendingTerms(n)).toBeNull();
   });
+  it("po přijetí klub navrhne víc, majitel to odmítne: platí dřívější PŘIJATÝ návrh klubu, ne úvodní nabídku majitele (offer 6900 → accept 7800 → reject 11500 → pending 7800)", () => {
+    const offer6900 = { ...PROPOSAL, demands: { ...PROPOSAL.demands, monthly: 6900 } };
+    const accepted7800 = { ...PROPOSAL, demands: { ...PROPOSAL.demands, monthly: 7800 } };
+    const rejected11500 = { ...PROPOSAL, demands: { ...PROPOSAL.demands, monthly: 11500 } };
+    const n = {
+      ...parseNegotiation(ROW),
+      status: "open" as const,
+      rounds: [
+        { proposal: offer6900, response: { kind: "offer" as const, text: "x", gameDate: "2026-09-24T00:00:00.000Z", counter: offer6900 } },
+        { proposal: accepted7800, response: { kind: "accept" as const, text: "x", gameDate: "2026-09-24T00:00:00.000Z", progressMonths: 2 } },
+        { proposal: rejected11500, response: { kind: "reject" as const, text: "x", gameDate: "2026-09-24T00:00:00.000Z" } },
+      ],
+    };
+    // Klub po přijetí navrhl 11500, majitel odmítl (jednání zůstává 'open'): stůl se vrací
+    // k dřívějším přijatým podmínkám klubu (7800), ne k úvodní nabídce majitele (6900).
+    expect(pendingTerms(n)).toEqual(accepted7800);
+    expect(pendingTermsProgress(n)).toBe(2);
+  });
 });
 
 describe("pendingTermsProgress", () => {

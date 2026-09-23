@@ -229,8 +229,9 @@ describe("shiftPromiseDeadlinesForRollover", () => {
 });
 
 describe("exclusiveSectors", () => {
-  it("obor → firma, která exkluzivitu drží", async () => {
-    const db = new FalesnaD1([{ sql: /p\.kind = 'sector_exclusivity'/, all: [{ type: "brewery", sponsor_name: "Pivovar Lhota" }] }]);
+  it("obor → jméno firmy (district_sponsors), ne naming-rights název smlouvy stadionu", async () => {
+    // sc.sponsor_name je naming-rights jméno stadionu ("... Arena"), ds.name je firma samotná.
+    const db = new FalesnaD1([{ sql: /p\.kind = 'sector_exclusivity'/, all: [{ type: "brewery", name: "Pivovar Lhota" }] }]);
     expect(await exclusiveSectors(jakoD1(db), "t1")).toEqual(new Map([["brewery", "Pivovar Lhota"]]));
   });
 });

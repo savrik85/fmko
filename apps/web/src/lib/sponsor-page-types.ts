@@ -13,6 +13,8 @@ export interface ActiveContract {
   seasonsTotal: number;
   seasonsRemaining: number;
   earlyTerminationFee: number;
+  /** Výpovědní pokuta TEĎ (poměrná podle zbývajících sezón) — přesně to, co strhne POST /sponsors/terminate. */
+  terminationFee: number;
   isNamingRights: boolean;
   signedAt: string;
   renewal?: { monthlyAmount: number; winBonus: number; seasons: number; earlyTerminationFee: number } | null;

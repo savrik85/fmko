@@ -134,7 +134,7 @@ function ContractCard({ contract, favor, onTerminate, onRenew, acting, promises,
           <span className="text-pitch-500 font-heading font-bold">+{formatCZK(weeklyAmount(contract.monthlyAmount))}/týd</span>
           {contract.winBonus > 0 && <span className="text-pitch-400">+{formatCZK(contract.winBonus)} za výhru</span>}
           <span className="text-muted">zbývá {contract.seasonsRemaining} z {contract.seasonsTotal} {seasonsGenitive(contract.seasonsTotal)}</span>
-          <span className="text-card-red">sankce {formatCZK(contract.earlyTerminationFee)}</span>
+          <span className="text-card-red">výpovědní pokuta {formatCZK(contract.terminationFee)}</span>
         </div>
         {favor != null && <FavorLine favor={favor} />}
         <ContractPromises promises={promises} acting={acting} onSleeveLogo={onSleeveLogo} />
@@ -180,8 +180,8 @@ function OffersList({ offers, category, onSign, acting, current, signDisabled }:
   if (offers.length === 0) {
     return <Card><CardBody><p className="text-center text-sm text-muted py-3">Žádné nabídky. Zvyš reputaci pro lepší sponzory.</p></CardBody></Card>;
   }
-  // Sankce za ukončení aktuální smlouvy (poměrná podle zbývajících sezón), stejný vzorec jako handleTerminate na stránce.
-  const currentTerminationFee = current ? Math.round(current.earlyTerminationFee * (current.seasonsRemaining / 3)) : 0;
+  // Výpovědní pokuta za ukončení aktuální smlouvy TEĎ: terminationFee počítá API stejným vzorcem jako POST /sponsors/terminate.
+  const currentTerminationFee = current?.terminationFee ?? 0;
   const currentWeekly = current ? weeklyAmount(current.monthlyAmount) : 0;
   return (
     <div className="space-y-2">
@@ -208,7 +208,7 @@ function OffersList({ offers, category, onSign, acting, current, signDisabled }:
                 <span className="text-pitch-500 font-heading font-bold">+{formatCZK(offerWeekly)}/týd</span>
                 {offer.winBonus > 0 && <span className="text-pitch-400">+{formatCZK(offer.winBonus)} za výhru</span>}
                 <span className="text-muted">na {seasonsAccusative(offer.seasons)}</span>
-                <span className="text-card-red">sankce {formatCZK(offer.earlyTerminationFee)}</span>
+                <span className="text-card-red">výpovědní pokuta {formatCZK(offer.earlyTerminationFee)}</span>
               </div>
               {(category === "main" || offer.requirement) && (
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gold-600">
@@ -222,7 +222,7 @@ function OffersList({ offers, category, onSign, acting, current, signDisabled }:
                   <span className={weeklyDelta > 0 ? "text-pitch-500 font-heading font-bold" : weeklyDelta < 0 ? "text-card-red font-heading font-bold" : "text-muted"}>
                     {weeklyDelta > 0 ? "+" : ""}{formatCZK(weeklyDelta)}/týd
                   </span>
-                  <span className="text-muted">. Sankce za ukončení: <span className="text-card-red font-bold">{formatCZK(currentTerminationFee)}</span>.</span>
+                  <span className="text-muted">. Výpovědní pokuta za ukončení: <span className="text-card-red font-bold">{formatCZK(currentTerminationFee)}</span>.</span>
                   {payback && (
                     <span className="text-muted"> Návratnost změny: <span className="font-bold">{payback} {payback === 1 ? "týden" : payback < 5 ? "týdny" : "týdnů"}</span>.</span>
                   )}

@@ -537,9 +537,11 @@ export async function loadNegotiationState(db: D1Database, teamId: string, negot
 /**
  * Kolo, jehož podmínky se dají podepsat. Přijatý stav má na stole vždycky jen poslední kolo
  * (klub po přijetí dál nenavrhuje). Otevřené jednání ale nabídku majitele nezahazuje odmítnutím:
- * hledá se zpětně od posledního kola, první kolo s jeho nabídkou nebo protinabídkou pořád platí,
- * dokud klub nenavrhne něco jiného (a majitel na to odpoví). Jiný stav (odešel, vypršelo,
- * podepsáno) nemá co podepsat.
+ * hledá se zpětně od posledního kola nejnovější kolo, které platí — buď přijetí (klubův návrh,
+ * který majitel odsouhlasil), nebo majitelova nabídka/protinabídka. Odmítnutí a urážka mezi tím
+ * nic neruší, jen se přeskočí: dřívější přijetí (třeba z doby, než klub navrhl víc a majitel to
+ * odmítl) pořád platí, dokud ho klub nepřebije novým návrhem, který majitel taky přijme. Jiný stav
+ * (odešel, vypršelo, podepsáno) nemá co podepsat.
  */
 function pendingRound(neg: Negotiation): NegotiationRound | null {
   if (neg.status === "accepted") {
@@ -549,6 +551,7 @@ function pendingRound(neg: Negotiation): NegotiationRound | null {
   if (neg.status !== "open") return null;
   for (let i = neg.rounds.length - 1; i >= 0; i--) {
     const r = neg.rounds[i];
+    if (r.response.kind === "accept") return r;
     if (OWNER_OFFER_KINDS.has(r.response.kind) && r.response.counter) return r;
   }
   return null;

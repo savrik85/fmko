@@ -142,7 +142,7 @@ export default function SponsorsPage() {
     const details = [
       { label: "Týdenní příjem", value: `+${formatCZK(Math.round(offer.monthlyAmount / 4.3))}`, color: "text-pitch-500" },
       ...(offer.winBonus > 0 ? [{ label: "Bonus za výhru", value: `+${formatCZK(offer.winBonus)}`, color: "text-pitch-400" }] : []),
-      { label: "Sankce za zrušení", value: `-${formatCZK(offer.earlyTerminationFee)}`, color: "text-card-red" },
+      { label: "Výpovědní pokuta", value: `-${formatCZK(offer.earlyTerminationFee)}`, color: "text-card-red" },
     ];
     if (isMain) {
       details.push({ label: "Změna názvu", value: "Ano (název se změní)", color: "text-gold-600" });
@@ -181,11 +181,12 @@ export default function SponsorsPage() {
       ? data?.stadiumContract
       : data?.bannerContracts.find((c) => c.id === contractId);
     if (!contract) return;
-    const fee = Math.round(contract.earlyTerminationFee * (contract.seasonsRemaining / 3));
+    // terminationFee: API ho počítá stejným vzorcem jako POST /sponsors/terminate (prorataTerminationFee).
+    const fee = contract.terminationFee;
     const isMain = category === "main";
 
     const details = [
-      { label: "Sankce", value: `-${formatCZK(fee)}`, color: "text-card-red" },
+      { label: "Výpovědní pokuta", value: `-${formatCZK(fee)}`, color: "text-card-red" },
     ];
     const clawback = contract.clawback ?? 0;
     if (clawback > 0) details.push({ label: "Vrácení zálohy", value: `-${formatCZK(clawback)}`, color: "text-card-red" });
