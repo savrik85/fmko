@@ -131,7 +131,6 @@ export default function OnboardingPage() {
           jerseyPattern: jerseyPattern || undefined,
           badgePattern: badgePattern || undefined,
           stadiumName: state.stadiumName || undefined,
-          sponsor: state.sponsor || undefined,
         }),
       });
 
@@ -208,7 +207,7 @@ export default function OnboardingPage() {
           />
         )}
 
-        {/* Step 3: Club name + sponsor */}
+        {/* Step 3: Club name */}
         {step === 3 && state.village && (
           <StepClubName
             village={state.village}
@@ -219,7 +218,6 @@ export default function OnboardingPage() {
                 ...s,
                 teamName: data.teamName,
                 stadiumName: data.stadiumName,
-                sponsor: data.sponsor,
               }));
               setStep(4);
             }}

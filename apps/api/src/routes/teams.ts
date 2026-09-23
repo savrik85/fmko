@@ -128,15 +128,8 @@ teamsRouter.post("/", async (c) => {
     jerseyPattern?: string;
     badgePattern?: string;
     stadiumName?: string;
-    sponsor?: {
-      sponsorId?: number;
-      name: string;
-      type: string;
-      seasonBonus: number;
-      seasons: number;
-      terminationFee: number;
-      isNamingRights: boolean;
-    };
+    /** Starší klient ještě posílá sponzora z výběru při zakládání; ignoruje se. */
+    sponsor?: unknown;
   }>();
 
   if (!body.villageId || !body.name) {
@@ -208,27 +201,6 @@ teamsRouter.post("/", async (c) => {
   const budget = (village.population as number) > 5000 ? 80000
     : (village.population as number) > 1000 ? 40000 : 20000;
 
-  if (body.sponsor) {
-    const { isSponsorType } = await import("../sponsors/types");
-    if (!isSponsorType(body.sponsor.type)) body.sponsor.type = "company";
-  }
-
-  // Hlavní sponzor je exkluzivní — mezitím ho mohl podepsat jiný klub.
-  if (body.sponsor?.sponsorId) {
-    const sp = await c.env.DB.prepare("SELECT id, type FROM district_sponsors WHERE id = ? AND district = ?")
-      .bind(body.sponsor.sponsorId, village.district).first<{ id: number; type: string }>();
-    if (!sp) return c.json({ error: "Neplatný sponzor pro tento okres" }, 400);
-    // Obor bere server ze sponzora, ne od klienta.
-    body.sponsor.type = sp.type;
-    const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
-      .first<{ number: number }>();
-    if (season) {
-      const { mainSponsorBlock } = await import("../sponsors/exclusivity");
-      const block = await mainSponsorBlock(c.env.DB, sp.id, teamId, season.number);
-      if (block) return c.json({ error: `${block.reason}. Vrať se o krok zpět a vyber jiného sponzora.` }, 409);
-    }
-  }
-
   step = "insert-team";
   await c.env.DB.prepare(
     "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, jersey_pattern, badge_pattern, stadium_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -236,30 +208,9 @@ teamsRouter.post("/", async (c) => {
     body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFFFFF", budget,
     body.jerseyPattern ?? "solid", body.badgePattern ?? "shield", body.stadiumName ?? null).run();
 
-  // Create sponsor contract if selected during onboarding (naming rights = main sponsor)
-  if (body.sponsor) {
-    const { seasonBonus, seasons, terminationFee } = body.sponsor;
-    if (!seasonBonus || seasonBonus <= 0 || !seasons || seasons <= 0 || terminationFee == null || terminationFee < 0) {
-      return c.json({ error: "Neplatné hodnoty sponzorské smlouvy" }, 400);
-    }
-    // Naming rights sponzor (jméno v názvu klubu/stadionu) by měl dávat více
-    const baseMonthly = Math.round(body.sponsor.seasonBonus / 10);
-    const monthlyAmount = body.sponsor.isNamingRights ? Math.max(3000, baseMonthly * 5) : Math.max(1000, baseMonthly * 3);
-    const winBonus = Math.round(monthlyAmount * 0.15);
-    const { MAIN_SPONSOR_FREE_SQL } = await import("../sponsors/exclusivity");
-    const sponsorId = body.sponsor.sponsorId ?? null;
-    const ins = await c.env.DB.prepare(
-      `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, win_bonus,
-        seasons_total, seasons_remaining, early_termination_fee, is_naming_rights, category, sponsor_id)
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-       WHERE ? IS NULL OR ${MAIN_SPONSOR_FREE_SQL}`
-    ).bind(uuid(), teamId, body.sponsor.name, body.sponsor.type, monthlyAmount, winBonus,
-      body.sponsor.seasons, body.sponsor.seasons, body.sponsor.terminationFee,
-      body.sponsor.isNamingRights ? 1 : 0, "main", sponsorId,
-      sponsorId, sponsorId, teamId,
-    ).run().catch((e) => { logger.warn({ module: "teams" }, "insert sponsor contract", e); return null; });
-    if (ins && !ins.meta.changes) logger.warn({ module: "teams", teamId, sponsorId }, "sponzora mezitím podepsal jiný klub, smlouva nevznikla");
-  }
+  // Sponzora při zakládání klubu už nevybíráme: hlavního sponzora i stadion si klub vyjedná ve hře
+  // (stránka Sponzoři). Starší klient může pole `sponsor` ještě poslat, ignoruje se.
+  if (body.sponsor) logger.warn({ module: "teams", teamId }, "zakládání klubu poslalo sponzora, ignoruje se");
 
   step = "generate-squad";
   const rng = createRng(cryptoSeed());
