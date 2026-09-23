@@ -283,6 +283,17 @@ describe("complaintFor", () => {
   it("nic k reklamaci: holý návrh bez peněz, slibů ani přání", () => {
     expect(complaintFor(prop(), CTX)).toBeNull();
   });
+
+  it("vůči poslední dohodě vytkne nejvíc zvednutou položku, ne nejdražší", () => {
+    const agreed = prop({ monthly: 1700, signingBonus: 1600 }, 2);
+    const p = prop({ monthly: 1700, signingBonus: 9000 }, 2);
+    expect(complaintFor(p, CTX, agreed)).toEqual({ key: "signingBonus", text: `Nejvíc mi vadí příspěvek za podpis ${kc(9000)}.` });
+  });
+
+  it("nic nezvednuto oproti dohodě: nejdražší položka", () => {
+    const agreed = prop({ monthly: 9000 }, 2);
+    expect(complaintFor(prop({ monthly: 9000 }, 2), CTX, agreed)?.key).toBe("monthly");
+  });
 });
 
 describe("buildPromiseRows", () => {

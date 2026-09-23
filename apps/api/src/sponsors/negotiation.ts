@@ -535,7 +535,7 @@ function costComplaintText(item: CostItem, proposal: Proposal, ctx: NegotiationC
  * teď, viz defaultPromise, a v návrhu chybí), jinak nejdražší položka požadavků (costBreakdown,
  * měsíční ekvivalent). Deterministické, žádné RNG. Pro accept/offer se nepoužívá.
  */
-export function complaintFor(proposal: Proposal, ctx: NegotiationContext): Complaint | null {
+export function complaintFor(proposal: Proposal, ctx: NegotiationContext, previous?: Proposal | null): Complaint | null {
   const promised = new Set(proposal.promises.map((p) => p.kind));
   for (const wish of ctx.wishes) {
     if (promised.has(wish)) continue;
@@ -544,6 +544,18 @@ export function complaintFor(proposal: Proposal, ctx: NegotiationContext): Compl
   }
   const items = costBreakdown(proposal, ctx).filter((i) => i.amount > 0);
   if (items.length === 0) return null;
+  // Majitel vytkne položku, kterou klub oproti poslední dohodě (jeho nabídce nebo přijatému
+  // návrhu) zvedl nejvíc. Když nic nezvedl nebo dohoda není, nejdražší položku návrhu.
+  if (previous) {
+    const before = new Map(costBreakdown(previous, ctx).map((i) => [i.key, i.monthly]));
+    const raised = items
+      .map((i) => ({ item: i, diff: i.monthly - (before.get(i.key) ?? 0) }))
+      .filter((x) => x.diff > 0.5);
+    if (raised.length > 0) {
+      const top = raised.reduce((a, b) => (b.diff > a.diff ? b : a)).item;
+      return { key: top.key, text: costComplaintText(top, proposal, ctx) };
+    }
+  }
   const biggest = items.reduce((a, b) => (b.monthly > a.monthly ? b : a));
   return { key: biggest.key, text: costComplaintText(biggest, proposal, ctx) };
 }

@@ -19,7 +19,7 @@ import {
 import { afterReject, complaintFor, COOLDOWN_DAYS, evaluateRound, INSULT_FAVOR, wishComplaint } from "../sponsors/negotiation";
 import {
   closeNegotiation, loadNegotiationSponsor, loadNegotiationState, loadNegotiationTeam, negotiationAvailability, openNegotiation,
-  saveRound, teamGameDate, type NegotiationRound, type NegotiationStatus,
+  pendingTerms, saveRound, teamGameDate, type NegotiationRound, type NegotiationStatus,
 } from "../sponsors/negotiation-db";
 import { ownerResponse, type ResponseKind } from "../sponsors/negotiation-texts";
 import { averageFavor, countBands, pickExtremes, rankAmongClubs, seasonAtDate, type FirmFavor } from "../sponsors/overview";
@@ -532,11 +532,11 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
   const wish = outcome.kind === "counter_wish" ? outcome.wish : undefined;
   const counter = outcome.kind === "counter_money" || outcome.kind === "counter_wish" ? outcome.counter : undefined;
   // Co majiteli konkrétně vadí: u protinabídky za přání je to rovnou ten chybějící slib
-  // (stejný jako `wish`), jinak nejdražší položka odmítnutého/přetíženého návrhu (complaintFor).
+  // (stejný jako `wish`), jinak položka nejvíc zvednutá oproti poslední dohodě (complaintFor).
   // Nikdy pro accept.
   const complaint = outcome.kind === "counter_wish"
     ? wishComplaint(outcome.wish).text
-    : outcome.kind !== "accept" ? complaintFor(valid.proposal, st.ctx)?.text : undefined;
+    : outcome.kind !== "accept" ? complaintFor(valid.proposal, st.ctx, pendingTerms(st.neg))?.text : undefined;
   const round: NegotiationRound = {
     proposal: valid.proposal,
     response: {
