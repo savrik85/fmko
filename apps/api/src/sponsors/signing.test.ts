@@ -50,7 +50,7 @@ const MPS = MONTHS_PER_SEASON;
 const FULL_CTX: NegotiationContext = {
   category: "stadium", personality: "fan", wishes: [], budgetB: 10000, season: 3, leagueTeams: 14,
   expectedPosition: 7, cupTotalRounds: 7, lastAvgAttendance: 200, reputation: 50, licenceLevel: 1,
-  sponsorType: "pub", sectorBannerActive: false,
+  sponsorType: "pub", sectorBannerActive: false, sleeveHeldBySponsor: false,
   facilities: [{ facility: "vip_box", currentLevel: 1, locked: false, costs: [0, 55000, 170000, 450000] }],
   equipment: [{ category: "balls", currentLevel: 0, nextLevel: 1, cost: 6000, locked: false }],
   currentTerminationFee: 0, seasonProgressMonths: 0,

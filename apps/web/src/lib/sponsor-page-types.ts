@@ -108,3 +108,23 @@ export interface SponsorHistoryItem {
   /** Sezóna podpisu odvozená z data podpisu; null, když sezóny chybí. */
   signedSeason: number | null;
 }
+
+/** Stav slibu sponzorovi (etapa 3). Tvar drží API: apps/api/src/sponsors/promise-runs.ts (PromiseView). */
+export type SponsorPromiseStatus = "pending" | "fulfilled" | "partial" | "broken";
+
+export interface SponsorPromiseView {
+  id: string;
+  contractId: string;
+  sponsorId: number;
+  kind: string;
+  /** Česky, v 1. pádě (např. „umístění do 3. místa"). */
+  label: string;
+  season: number | null;
+  deadline: string | null;
+  status: SponsorPromiseStatus;
+  reward: number;
+  penalty: number;
+  /** Naměřená skutečnost česky („4. místo"), jen u vyhodnocených. */
+  actualText: string | null;
+  canPlaceSleeveLogo: boolean;
+}

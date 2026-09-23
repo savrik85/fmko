@@ -63,6 +63,8 @@ export interface NegotiationContext {
   sponsorType: string;
   /** Klub má aktivní banner stejného oboru, exkluzivitu oboru nejde slíbit. */
   sectorBannerActive: boolean;
+  /** Rukáv dresu už nese logo tohohle sponzora (aktivní smlouva), slib loga by nic nepřidal. */
+  sleeveHeldBySponsor: boolean;
   facilities: FacilityOption[];
   equipment: EquipmentOption[];
   /** Poměrná výpovědní pokuta u JINÉHO současného sponzora v kategorii (0 = není co platit). */
@@ -386,8 +388,10 @@ export function defaultPromise(kind: PromiseKind, ctx: NegotiationContext, propo
     case "promotion":
     case "no_relegation":
     case "no_riots":
-    case "jersey_logo":
       return spec({});
+    case "jersey_logo":
+      // Rukáv už jeho logo nese, další slib by nic nepřidal (bonus zadarmo při prodloužení).
+      return ctx.sleeveHeldBySponsor ? null : spec({});
     case "cup_round":
       // Pohár aspoň 2 kola (validátor); bez poháru nebo jen 1 kolo nejde nabídnout nic platného.
       return ctx.cupTotalRounds < 2 ? null : spec({ round: Math.min(ctx.cupTotalRounds, 3) });

@@ -365,12 +365,26 @@ function equipmentGiftOptions(equip: Record<string, unknown> | null, reputation:
     .map((u) => ({ category: u.category, currentLevel: u.currentLevel, nextLevel: u.nextLevel, cost: u.cost, locked: u.locked === true }));
 }
 
+/**
+ * Rukáv dresu už nese logo tohohle sponzora (aktivní smlouva). Sdílí ji openNegotiation
+ * (přání majitele) a buildNegotiationContext (katalog a validace) — logo slíbit znovu za
+ * prodloužení by dalo bonus zadarmo.
+ */
+async function sleeveHeldBySponsor(db: D1Database, teamId: string, sponsorId: number): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 AS x FROM teams t
+     WHERE t.id = ? AND t.sleeve_sponsor_id = ?
+       AND EXISTS (SELECT 1 FROM sponsor_contracts sc WHERE sc.team_id = t.id AND sc.sponsor_id = t.sleeve_sponsor_id AND sc.status = 'active')`,
+  ).bind(teamId, sponsorId).first<{ x: number }>();
+  return row !== null;
+}
+
 export async function buildNegotiationContext(db: D1Database, i: {
   team: NegotiationTeam; sponsor: NegotiationSponsor; category: NegotiationCategory; season: number;
   personality: OwnerPersonality; wishes: PromiseKind[]; budgetB: number;
 }): Promise<NegotiationContext> {
   const { team, sponsor } = i;
-  const [league, cup, attendance, manager, stadium, equip, played, banner, contracts, progress] = await Promise.all([
+  const [league, cup, attendance, manager, stadium, equip, played, banner, contracts, progress, sleeve] = await Promise.all([
     leagueStrength(db, team.league_id, team.id),
     db.prepare("SELECT total_rounds FROM cup_competitions WHERE season_number = ? ORDER BY rowid DESC LIMIT 1")
       .bind(i.season).first<{ total_rounds: number }>(),
@@ -385,6 +399,7 @@ export async function buildNegotiationContext(db: D1Database, i: {
       .bind(team.id, sponsor.type).first<{ x: number }>(),
     categoryContracts(db, team.id, i.category),
     loadTeamSeasonProgress(db, team.id),
+    i.category === "stadium" ? sleeveHeldBySponsor(db, team.id, sponsor.id) : Promise.resolve(false),
   ]);
   const matchesPlayed = played?.cnt ?? 0;
   const other = contracts.active && contracts.active.sponsor_id !== sponsor.id ? contracts.active : null;
@@ -397,6 +412,7 @@ export async function buildNegotiationContext(db: D1Database, i: {
     licenceLevel: manager?.licence_level ?? 0,
     sponsorType: sponsor.type,
     sectorBannerActive: banner !== null,
+    sleeveHeldBySponsor: sleeve,
     facilities: facilityOptions(stadium, team.reputation, matchesPlayed, i.season),
     equipment: equipmentGiftOptions(equip, team.reputation, matchesPlayed, i.season),
     currentTerminationFee: other ? prorataTerminationFee(other) : 0,
@@ -423,7 +439,8 @@ export async function openNegotiation(
   if (!owner) return { ok: false, error: "Majitel nenalezen", status: 404 };
   const favor = await getFavor(db, sponsorId, teamId);
   const budgetB = sponsorBudgetB({ monthlyMax: sponsor.monthly_max, reputation: team.reputation, villageSize: team.size, category, favor });
-  const wishes = ownerWishes({ sponsorId, teamId, season, personality: owner.personality, sponsorType: sponsor.type, category });
+  const sleeve = category === "stadium" ? await sleeveHeldBySponsor(db, teamId, sponsorId) : false;
+  const wishes = ownerWishes({ sponsorId, teamId, season, personality: owner.personality, sponsorType: sponsor.type, category, sleeveHeldBySponsor: sleeve });
   const id = crypto.randomUUID();
   // Jedno běžící jednání na klub, firmu a kategorii: podmíněný INSERT ustojí i dvojklik.
   const ins = await db.prepare(

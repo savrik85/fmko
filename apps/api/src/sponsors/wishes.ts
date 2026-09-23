@@ -39,9 +39,12 @@ export function kindAllowedForCategory(kind: PromiseKind, category: "main" | "st
 export function ownerWishes(i: {
   sponsorId: number; teamId: string; season: number; personality: OwnerPersonality; sponsorType: string;
   category: "main" | "stadium";
+  /** Rukáv dresu už nese logo tohohle sponzora (aktivní smlouva): logo mu za přání nabízet nejde. */
+  sleeveHeldBySponsor?: boolean;
 }): PromiseKind[] {
   const rng = createRng(hashSeed(`sponsor-wishes|${i.sponsorId}|${i.teamId}|${i.season}|${i.category}`));
-  const pool = PERSONALITY_WISHES[i.personality].filter((k) => kindAllowedForCategory(k, i.category));
+  const pool = PERSONALITY_WISHES[i.personality]
+    .filter((k) => kindAllowedForCategory(k, i.category) && (k !== "jersey_logo" || !i.sleeveHeldBySponsor));
   const shuffled = [...pool];
   for (let j = shuffled.length - 1; j > 0; j--) {
     const k = Math.floor(rng.random() * (j + 1));

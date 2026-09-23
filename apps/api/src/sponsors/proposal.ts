@@ -59,7 +59,10 @@ function sanitizePromise(raw: unknown, ctx: NegotiationContext, seasons: number)
     case "promotion":
     case "no_relegation":
     case "no_riots":
+      return spec({});
     case "jersey_logo":
+      // Rukáv už jeho logo nese (prodloužení), slib by dal bonus za nic.
+      if (ctx.sleeveHeldBySponsor) return "Sponzor logo na rukávu dresu už má, slib by nic nepřidal.";
       return spec({});
     case "cup_round": {
       const round = int(p.round);
@@ -239,7 +242,7 @@ function candidates(ctx: NegotiationContext): PromiseSpec[] {
       if ((f.costs[level] ?? 0) > 0) out.push({ kind: "stadium_upgrade", params: { facility: f.facility, level } });
     }
   }
-  if (ctx.category === "stadium") out.push({ kind: "jersey_logo", params: {} });
+  if (ctx.category === "stadium" && !ctx.sleeveHeldBySponsor) out.push({ kind: "jersey_logo", params: {} });
   if (!ctx.sectorBannerActive) out.push({ kind: "sector_exclusivity", params: { sector: ctx.sponsorType } });
   // Zaokrouhleno NAHORU a ohlídáno proti minimu validátoru (attendanceCatalogValue, sdílí ho
   // i protinávrh majitele v defaultPromise).

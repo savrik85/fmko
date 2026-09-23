@@ -10,7 +10,7 @@ import { constructionOptions, promiseCatalog, validateProposal } from "./proposa
 const CTX: NegotiationContext = {
   category: "main", personality: "fan", wishes: ["league_position"], budgetB: 10000, season: 3, leagueTeams: 14,
   expectedPosition: 7, cupTotalRounds: 7, lastAvgAttendance: 200, reputation: 50, licenceLevel: 1,
-  sponsorType: "pub", sectorBannerActive: false,
+  sponsorType: "pub", sectorBannerActive: false, sleeveHeldBySponsor: false,
   facilities: [
     { facility: "stands", currentLevel: 1, locked: false, costs: [0, 55000, 170000, 450000] },
     { facility: "roof", currentLevel: 0, locked: true, costs: [0, 30000, 90000, 230000] },
@@ -83,6 +83,16 @@ describe("validateProposal", () => {
     expect(ok({ seasons: 2, promises: [{ kind: "jersey_logo", params: {} }], demands }).ok).toBe(false);
     expect(ok({ seasons: 2, promises: [], demands: { ...demands, payCurrentFee: true } }).ok).toBe(false);
   });
+  it("logo na rukávu nejde slíbit, když ho sponzor stadionu na rukávu už má (prodloužení)", () => {
+    const stadiumCtx: NegotiationContext = { ...CTX, category: "stadium", sleeveHeldBySponsor: true };
+    const r = validateProposal({ seasons: 2, promises: [{ kind: "jersey_logo", params: {} }], demands }, stadiumCtx);
+    expect(r).toEqual({ ok: false, error: "Sponzor logo na rukávu dresu už má, slib by nic nepřidal." });
+    // Volný rukáv (jiný nebo žádný sponzor): slib projde jako dřív.
+    expect(validateProposal(
+      { seasons: 2, promises: [{ kind: "jersey_logo", params: {} }], demands },
+      { ...CTX, category: "stadium", sleeveHeldBySponsor: false },
+    ).ok).toBe(true);
+  });
   it("sponzor stadionu nedává bonus za výhru", () => {
     const r = validateProposal({ seasons: 2, promises: [], demands: { ...demands, winBonus: 500 } }, { ...CTX, category: "stadium" });
     expect(r.ok).toBe(false);
@@ -125,6 +135,10 @@ describe("promiseCatalog", () => {
     expect(cat.some((o) => o.kind === "jersey_logo")).toBe(false);
     expect(cat.some((o) => o.kind === "stadium_upgrade" && o.params.facility === "roof")).toBe(false);
     expect(cat.filter((o) => o.kind === "stadium_upgrade").map((o) => o.params.level)).toEqual([2, 3]);
+  });
+  it("logo na rukávu u sponzora stadionu: v katalogu, dokud ho rukáv nenese", () => {
+    expect(promiseCatalog({ ...CTX, category: "stadium", sleeveHeldBySponsor: false }, 50).some((o) => o.kind === "jersey_logo")).toBe(true);
+    expect(promiseCatalog({ ...CTX, category: "stadium", sleeveHeldBySponsor: true }, 50).some((o) => o.kind === "jersey_logo")).toBe(false);
   });
   it("stavba zaplacená sponzorem: jen odemčená, o úroveň", () => {
     expect(constructionOptions(CTX)).toEqual([{ key: "stands", label: "Tribuny", level: 2, cost: 170000 }]);

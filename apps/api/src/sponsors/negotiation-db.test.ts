@@ -145,6 +145,22 @@ describe("openNegotiation", () => {
     expect(ins.sql).toContain("WHERE NOT EXISTS");
   });
 
+  it("rukáv už nese logo tohohle sponzora: mezi přání majitele logo nedá (R: Task 5→7)", async () => {
+    const db = new FalesnaD1(baseRules([
+      { sql: /^INSERT INTO sponsor_negotiations/, changes: 1 },
+      { sql: /SELECT 1 AS x FROM teams t\s+WHERE t\.id = \? AND t\.sleeve_sponsor_id = \?/, first: { x: 1 } },
+    ]));
+    const res = await openNegotiation(jakoD1(db), "t1", 7, "stadium");
+    expect(res.ok).toBe(true);
+    const ins = db.dotazy.find((d) => /INSERT INTO sponsor_negotiations/.test(d.sql))!;
+    const wishes: string[] = JSON.parse(ins.params[4] as string);
+    // PERSONALITY_WISHES.businessman bez jersey_logo má jen 2 kandidáty (attendance,
+    // sector_exclusivity), oba se vezmou — bez ohledu na pořadí ze zamíchání.
+    expect([...wishes].sort()).toEqual(["attendance", "sector_exclusivity"]);
+    const sleeveCheck = db.dotazy.find((d) => /sleeve_sponsor_id = \?/.test(d.sql));
+    expect(sleeveCheck?.params).toEqual(["t1", 7]);
+  });
+
   it("dvojklik: INSERT prohraje podmínku, vrátí id mezitím vzniklého jednání", async () => {
     const EXISTING_ID = "existing-neg-id";
     const db = new FalesnaD1(baseRules([{ sql: /^INSERT INTO sponsor_negotiations/, changes: 0 }]));

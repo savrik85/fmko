@@ -210,19 +210,46 @@ describe("exclusiveSectors", () => {
 });
 
 describe("listTeamPromises", () => {
-  it("popisek, skutečnost a možnost dát logo na rukáv", async () => {
-    const db = new FalesnaD1([{ sql: /FROM sponsor_promises p JOIN sponsor_contracts sc/, all: [
-      { id: "p1", contract_id: "c1", sponsor_id: 7, kind: "league_position", params: '{"position":3}', season: 5,
-        deadline_game_date: null, status: "partial", reward: 0, penalty: 8000, actual_value: 4 },
-      { id: "p2", contract_id: "c2", sponsor_id: 9, kind: "jersey_logo", params: "{}", season: null,
-        deadline_game_date: "2026-10-05", status: "pending", reward: 2000, penalty: 3000, actual_value: null },
-      { id: "p3", contract_id: "c2", sponsor_id: 9, kind: "neznamy", params: "{}", season: null,
-        deadline_game_date: null, status: "pending", reward: 0, penalty: 0, actual_value: null },
-    ] }]);
+  it("popisek, skutečnost a možnost dát logo na rukáv (rukáv volný)", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM sponsor_promises p JOIN sponsor_contracts sc/, all: [
+        { id: "p1", contract_id: "c1", sponsor_id: 7, kind: "league_position", params: '{"position":3}', season: 5,
+          deadline_game_date: null, status: "partial", reward: 0, penalty: 8000, actual_value: 4 },
+        { id: "p2", contract_id: "c2", sponsor_id: 9, kind: "jersey_logo", params: "{}", season: null,
+          deadline_game_date: "2026-10-05", status: "pending", reward: 2000, penalty: 3000, actual_value: null },
+        { id: "p3", contract_id: "c2", sponsor_id: 9, kind: "neznamy", params: "{}", season: null,
+          deadline_game_date: null, status: "pending", reward: 0, penalty: 0, actual_value: null },
+      ] },
+      { sql: /SELECT t\.sleeve_sponsor_id/, first: null },
+    ]);
     const list = await listTeamPromises(jakoD1(db), "t1");
     expect(list).toHaveLength(2);
     expect(list[0]).toMatchObject({ id: "p1", label: "skončit do 3. místa", status: "partial", actualText: "4. místo", canPlaceSleeveLogo: false });
     expect(list[1]).toMatchObject({ id: "p2", contractId: "c2", deadline: "2026-10-05", canPlaceSleeveLogo: true });
+  });
+
+  it("rukáv drží jiný aktivní sponzor: tlačítko se schová, i když je slib pending", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM sponsor_promises p JOIN sponsor_contracts sc/, all: [
+        { id: "p2", contract_id: "c2", sponsor_id: 9, kind: "jersey_logo", params: "{}", season: null,
+          deadline_game_date: "2026-10-05", status: "pending", reward: 2000, penalty: 3000, actual_value: null },
+      ] },
+      { sql: /SELECT t\.sleeve_sponsor_id/, first: { id: 11 } },
+    ]);
+    const list = await listTeamPromises(jakoD1(db), "t1");
+    expect(list[0]).toMatchObject({ id: "p2", canPlaceSleeveLogo: false });
+  });
+
+  it("rukáv drží stejný sponzor jako slib: tlačítko zůstane", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM sponsor_promises p JOIN sponsor_contracts sc/, all: [
+        { id: "p2", contract_id: "c2", sponsor_id: 9, kind: "jersey_logo", params: "{}", season: null,
+          deadline_game_date: "2026-10-05", status: "pending", reward: 2000, penalty: 3000, actual_value: null },
+      ] },
+      { sql: /SELECT t\.sleeve_sponsor_id/, first: { id: 9 } },
+    ]);
+    const list = await listTeamPromises(jakoD1(db), "t1");
+    expect(list[0]).toMatchObject({ id: "p2", canPlaceSleeveLogo: true });
   });
 });
 
@@ -237,6 +264,12 @@ describe("placeSleeveLogo", () => {
     const db = new FalesnaD1([{ sql: /SELECT p\.id, p\.kind, p\.status/, first: { id: "p1", kind: "jersey_logo", status: "pending", sponsor_id: 7, contract_status: "active", category: "main" } }]);
     expect(await placeSleeveLogo(jakoD1(db), "t1", "p1", "2026-09-23T16:00:00.000Z"))
       .toEqual({ ok: false, error: "Logo na rukáv patří sponzorovi stadionu", code: 400 });
+  });
+
+  it("stav před kategorií: už vyřízený slib je 409, i u smlouvy bez kategorie stadion", async () => {
+    const db = new FalesnaD1([{ sql: /SELECT p\.id, p\.kind, p\.status/, first: { id: "p1", kind: "jersey_logo", status: "fulfilled", sponsor_id: 7, contract_status: "active", category: "main" } }]);
+    expect(await placeSleeveLogo(jakoD1(db), "t1", "p1", "2026-09-23T16:00:00.000Z"))
+      .toEqual({ ok: false, error: "Slib už je vyřízený", code: 409 });
   });
 
   it("rukáv už nese logo jiné aktivní smlouvy: odmítne", async () => {

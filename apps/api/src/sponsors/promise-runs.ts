@@ -349,6 +349,18 @@ export async function listTeamPromises(db: D1Database, teamId: string): Promise<
     for (const c of cups.results) cupRounds.set(c.season_number, c.total_rounds);
   }
 
+  // Rukáv smí nést jen jednoho sponzora najednou (placeSleeveLogo): tlačítko se ukáže, jen
+  // když ho drží tenhle sponzor, nebo nikdo — jinak by klik skončil 409.
+  let sleeveHolder: number | null = null;
+  if (rows.results.some((r) => r.kind === "jersey_logo" && r.status === "pending")) {
+    const sleeve = await db.prepare(
+      `SELECT t.sleeve_sponsor_id AS id FROM teams t
+       WHERE t.id = ? AND t.sleeve_sponsor_id IS NOT NULL
+         AND EXISTS (SELECT 1 FROM sponsor_contracts sc WHERE sc.team_id = t.id AND sc.sponsor_id = t.sleeve_sponsor_id AND sc.status = 'active')`,
+    ).bind(teamId).first<{ id: number | null }>();
+    sleeveHolder = sleeve?.id ?? null;
+  }
+
   const out: PromiseView[] = [];
   for (const r of rows.results) {
     if (!isPromiseKind(r.kind)) continue;
@@ -366,7 +378,7 @@ export async function listTeamPromises(db: D1Database, teamId: string): Promise<
       reward: r.reward ?? 0,
       penalty: r.penalty ?? 0,
       actualText: promiseActualText(r.kind, r.actual_value, rounds),
-      canPlaceSleeveLogo: r.kind === "jersey_logo" && status === "pending",
+      canPlaceSleeveLogo: r.kind === "jersey_logo" && status === "pending" && (sleeveHolder === null || sleeveHolder === r.sponsor_id),
     });
   }
   return out;
@@ -392,8 +404,10 @@ export async function placeSleeveLogo(db: D1Database, teamId: string, promiseId:
   }>();
   if (!row) return { ok: false, error: "Slib nenalezen", code: 404 };
   if (row.kind !== "jersey_logo") return { ok: false, error: "Tenhle slib se logem na rukávu neplní", code: 400 };
-  if (row.category !== "stadium") return { ok: false, error: "Logo na rukáv patří sponzorovi stadionu", code: 400 };
+  // Stav před kategorií: už vyřízený slib je 409, i kdyby (nemožnou shodou) patřil ke smlouvě
+  // jiné kategorie — klient tak vždycky pozná „už se nedá nic dělat" dřív než „na tohle to nejde".
   if (row.status !== "pending" || row.contract_status !== "active") return { ok: false, error: "Slib už je vyřízený", code: 409 };
+  if (row.category !== "stadium") return { ok: false, error: "Logo na rukáv patří sponzorovi stadionu", code: 400 };
 
   const conflict = await db.prepare(
     `SELECT 1 FROM teams t

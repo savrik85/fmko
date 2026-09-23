@@ -7,7 +7,7 @@ import { apiFetch, type Team } from "@/lib/api";
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative, remainingSeasonsText } from "@/lib/sponsor-format";
 import type {
-  DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorsData,
+  DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorPromiseView, SponsorsData,
 } from "@/lib/sponsor-page-types";
 import { Card, CardBody, Spinner, Tabs, useConfirm, useTabParam } from "@/components/ui";
 import { ContractsTab } from "@/components/sponsors/contracts-tab";
@@ -16,6 +16,7 @@ import { PopularityTab } from "@/components/sponsors/popularity-tab";
 import { HistoryTab } from "@/components/sponsors/history-tab";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { mySponsorIdsOf } from "@/lib/sponsor-firms";
+import { groupPromisesByContract } from "@/lib/sponsor-promises";
 
 const SPONSOR_TABS = ["contracts", "firms", "popularity", "history"] as const;
 type SponsorTab = (typeof SPONSOR_TABS)[number];
@@ -45,6 +46,7 @@ export default function SponsorsPage() {
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [history, setHistory] = useState<SponsorHistoryItem[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [promises, setPromises] = useState<SponsorPromiseView[]>([]);
 
   // Poslední aktuální teamId — pozdní odpověď z předchozího týmu se po přepnutí zahodí.
   const teamIdRef = useRef(teamId);
@@ -103,6 +105,9 @@ export default function SponsorsPage() {
     const f = await apiFetch<{ firms: DistrictFirm[]; pub: PubEncounter | null }>(`/api/teams/${teamId}/sponsor-owners`)
       .catch((e) => { console.error("sponsor-owners:", e); return null; });
     setFirms(f);
+    const pr = await apiFetch<{ promises: SponsorPromiseView[] }>(`/api/teams/${teamId}/sponsor-promises`)
+      .catch((e) => { console.error("sponsor-promises:", e); return null; });
+    setPromises(pr?.promises ?? []);
   };
 
   const handlePub = async (action: "beer" | "ignore") => {
@@ -241,6 +246,22 @@ export default function SponsorsPage() {
     setActing(false);
   };
 
+  const handleSleeveLogo = async (promiseId: string) => {
+    if (!teamId || acting) return;
+    const ok = await confirm({
+      title: "Dát logo sponzora na rukáv?",
+      description: "Logo sponzora stadionu bude na rukávu dresu po celou dobu smlouvy. Slib se tím splní.",
+      confirmLabel: "Dát logo na rukáv",
+    });
+    if (!ok) return;
+    setActionError(null);
+    setActing(true);
+    await apiFetch(`/api/teams/${teamId}/sponsor-promises/${promiseId}/sleeve-logo`, { method: "POST" })
+      .catch((e) => { console.error("sponsor-promises/sleeve-logo:", e); setActionError((e as Error).message); return null; });
+    await refresh();
+    setActing(false);
+  };
+
   const handleRename = async () => {
     if (!teamId || acting || !renameInput.trim()) return;
     const ok = await confirm({
@@ -272,6 +293,7 @@ export default function SponsorsPage() {
 
   const hasMainSponsor = !!data.mainContract;
   const favors = new Map<number, number>((firms?.firms ?? []).map((f) => [f.sponsorId, f.favor]));
+  const promisesByContract = groupPromisesByContract(promises);
 
   return (
     <div className="page-container space-y-5">
@@ -349,6 +371,8 @@ export default function SponsorsPage() {
           onSign={handleSign}
           onTerminate={handleTerminate}
           onRenew={handleRenew}
+          promisesByContract={promisesByContract}
+          onSleeveLogo={handleSleeveLogo}
         />
       )}
       {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} mySponsorIds={mySponsorIdsOf(data)} />}

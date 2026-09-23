@@ -44,6 +44,23 @@ describe("ownerWishes", () => {
     expect(kindAllowedForCategory("jersey_logo", "stadium")).toBe(true);
     expect(kindAllowedForCategory("jersey_logo", "main")).toBe(false);
   });
+
+  it("logo na rukávu, když ho rukáv už nese: businessman ho mezi přání nedá", () => {
+    let sawJerseyLogo = false;
+    for (let id = 1; id <= 30; id++) {
+      const w = ownerWishes({
+        ...base, sponsorId: id, personality: "businessman", sponsorType: "company", category: "stadium",
+        sleeveHeldBySponsor: true,
+      });
+      if (w.includes("jersey_logo")) sawJerseyLogo = true;
+    }
+    expect(sawJerseyLogo).toBe(false);
+    // Volný rukáv: logo mezi přáními businessmana u sponzora stadionu občas je.
+    const withoutSleeve = Array.from({ length: 30 }, (_, i) => ownerWishes({
+      ...base, sponsorId: i + 1, personality: "businessman", sponsorType: "company", category: "stadium",
+    }));
+    expect(withoutSleeve.some((w) => w.includes("jersey_logo"))).toBe(true);
+  });
 });
 
 describe("promiseInterest", () => {

@@ -561,3 +561,33 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/accept"
   if (!res.ok) return c.json({ error: res.error }, res.status);
   return c.json(res);
 });
+
+// GET /api/teams/:teamId/sponsor-promises — sliby u aktivních smluv klubu (etapa 3).
+// Na rozdíl od sponsor-history jen pro vlastníka: pokuty a bonusy jiného klubu nejsou veřejné (R11).
+sponsorsRouter.get("/teams/:teamId/sponsor-promises", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await assertTeamOwner(c, teamId);
+  if (denied) return c.json({ error: denied.error }, denied.status);
+  const { listTeamPromises } = await import("../sponsors/promise-runs");
+  const promises = await listTeamPromises(c.env.DB, teamId);
+  return c.json({ promises });
+});
+
+// POST /api/teams/:teamId/sponsor-promises/:promiseId/sleeve-logo — logo sponzora stadionu na rukáv
+// dresu (slib jersey_logo). Slib se vyhodnotí hned, SMS majitele se zkusí doručit ještě teď.
+sponsorsRouter.post("/teams/:teamId/sponsor-promises/:promiseId/sleeve-logo", requireTeamOwnership, async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.param("teamId");
+  const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+  const { placeSleeveLogo } = await import("../sponsors/promise-runs");
+  const res = await placeSleeveLogo(db, teamId, c.req.param("promiseId"), team.game_date ?? new Date().toISOString());
+  if (!res.ok) return c.json({ error: res.error }, res.code);
+  try {
+    const { deliverOwnerSmsForTeam } = await import("../sponsors/owner-sms");
+    await deliverOwnerSmsForTeam(db, teamId);
+  } catch (e) {
+    logger.warn({ module: "sponsors", teamId }, "SMS majitele po logu na rukávu", e);
+  }
+  return c.json({ ok: true, status: res.status });
+});

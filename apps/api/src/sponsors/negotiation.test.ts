@@ -14,7 +14,7 @@ import { GOAL_BONUS_KINDS, type PromiseSpec } from "./promise-kinds";
 const CTX: NegotiationContext = {
   category: "main", personality: "fan", wishes: [], budgetB: 10000, season: 3, leagueTeams: 14,
   expectedPosition: 7, cupTotalRounds: 7, lastAvgAttendance: 200, reputation: 50, licenceLevel: 1,
-  sponsorType: "pub", sectorBannerActive: false,
+  sponsorType: "pub", sectorBannerActive: false, sleeveHeldBySponsor: false,
   facilities: [
     { facility: "stands", currentLevel: 1, locked: false, costs: [0, 55000, 170000, 450000] },
     { facility: "toilets", currentLevel: 0, locked: false, costs: [0, 12000, 40000, 100000] },
@@ -150,6 +150,11 @@ describe("defaultPromise", () => {
   it("pohár s méně než 2 koly nejde nabídnout", () => {
     const ctx = { ...CTX, cupTotalRounds: 1 };
     expect(defaultPromise("cup_round", ctx, prop({}, 2))).toBeNull();
+  });
+  it("logo na rukávu: majitel ho za přání nenabídne, když ho rukáv už nese", () => {
+    const ctx = { ...CTX, category: "stadium" as const, sleeveHeldBySponsor: true };
+    expect(defaultPromise("jersey_logo", ctx, prop({}, 2))).toBeNull();
+    expect(defaultPromise("jersey_logo", { ...ctx, sleeveHeldBySponsor: false }, prop({}, 2))).toEqual({ kind: "jersey_logo", params: {} });
   });
 });
 

@@ -4,12 +4,13 @@ import Link from "next/link";
 import { Card, CardBody, SectionLabel } from "@/components/ui";
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative, weeklyAmount, seasonsGenitive } from "@/lib/sponsor-format";
-import type { ActiveContract, SponsorCategory, SponsorOffer, SponsorsData } from "@/lib/sponsor-page-types";
+import type { ActiveContract, SponsorCategory, SponsorOffer, SponsorPromiseView, SponsorsData } from "@/lib/sponsor-page-types";
 import { sponsorTypeLabel } from "@/lib/sponsor-types";
+import { ContractPromises } from "./contract-promises";
 import { FavorLine } from "./favor-badge";
 import { SponsorLink } from "./sponsor-link";
 
-export function ContractsTab({ data, reputation, favors, acting, onSign, onTerminate, onRenew }: {
+export function ContractsTab({ data, reputation, favors, acting, onSign, onTerminate, onRenew, promisesByContract, onSleeveLogo }: {
   data: SponsorsData;
   reputation: number;
   /** sponsorId → náklonnost majitele k nám (firmy z okresu). */
@@ -18,8 +19,12 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
   onSign: (offer: SponsorOffer, category: SponsorCategory) => void;
   onTerminate: (category: SponsorCategory, contractId?: string) => void;
   onRenew: (category: SponsorCategory, contractId?: string) => void;
+  /** contractId → sliby u té smlouvy (GET /sponsor-promises). */
+  promisesByContract: Map<string, SponsorPromiseView[]>;
+  onSleeveLogo: (promiseId: string) => void;
 }) {
   const favorOf = (c: ActiveContract): number | null => (c.sponsorId != null ? favors.get(c.sponsorId) ?? null : null);
+  const promisesOf = (c: ActiveContract): SponsorPromiseView[] => promisesByContract.get(c.id) ?? [];
 
   return (
     <div className="space-y-5">
@@ -41,6 +46,7 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
             <div className="space-y-3">
               {active && (
                 <ContractCard contract={active} favor={favorOf(active)} acting={acting}
+                  promises={promisesOf(active)} onSleeveLogo={onSleeveLogo}
                   onTerminate={() => onTerminate(cat)} onRenew={() => onRenew(cat)} />
               )}
               {!active && expired && (
@@ -92,6 +98,7 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
           <div className="space-y-2 mb-3">
             {data.bannerContracts.map((c) => (
               <ContractCard key={c.id} contract={c} favor={favorOf(c)} acting={acting}
+                promises={promisesOf(c)} onSleeveLogo={onSleeveLogo}
                 onTerminate={() => onTerminate("banner", c.id)} onRenew={() => onRenew("banner", c.id)} />
             ))}
           </div>
@@ -112,8 +119,9 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
 }
 
 /** Aktivní smlouva: částky v jednom řádku, náklonnost majitele, prodloužení a výpověď. */
-function ContractCard({ contract, favor, onTerminate, onRenew, acting }: {
+function ContractCard({ contract, favor, onTerminate, onRenew, acting, promises, onSleeveLogo }: {
   contract: ActiveContract; favor: number | null; onTerminate: () => void; onRenew: () => void; acting: boolean;
+  promises: SponsorPromiseView[]; onSleeveLogo: (promiseId: string) => void;
 }) {
   return (
     <Card>
@@ -129,6 +137,7 @@ function ContractCard({ contract, favor, onTerminate, onRenew, acting }: {
           <span className="text-card-red">sankce {formatCZK(contract.earlyTerminationFee)}</span>
         </div>
         {favor != null && <FavorLine favor={favor} />}
+        <ContractPromises promises={promises} acting={acting} onSleeveLogo={onSleeveLogo} />
         {contract.renewal ? (
           <div className="text-sm text-muted">
             Prodloužení: <span className="text-pitch-500 font-heading font-bold">+{formatCZK(weeklyAmount(contract.renewal.monthlyAmount))}/týd</span>{" "}
