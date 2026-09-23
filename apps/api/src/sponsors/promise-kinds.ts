@@ -52,6 +52,16 @@ export const CLUB_CONTROLLED_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKi
   "coach_licence", "stadium_upgrade", "jersey_logo", "sector_exclusivity", "youth", "no_riots",
 ]);
 
+/**
+ * Sliby, ke kterým jde sjednat bonus za splnění. Návštěva, reputace a exkluzivita oboru bonus
+ * nemají: u návštěvy a reputace by si klub cíl snadno „dotlačil", exkluzivita je jen zákaz.
+ * Čte i klient (katalog slibů), aby bonus u ostatních vůbec nenabízel.
+ */
+export const GOAL_BONUS_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>([
+  "league_position", "promotion", "no_relegation", "cup_round", "coach_licence", "stadium_upgrade",
+  "jersey_logo", "youth", "no_riots",
+]);
+
 /** „Výsledky nad nesestup": opatrnému majiteli jsou jedno. */
 export const RESULT_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["league_position", "promotion", "cup_round"]);
 

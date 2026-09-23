@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { NegotiationContext } from "./negotiation";
+import { GOAL_BONUS_KINDS } from "./promise-kinds";
 import { constructionOptions, promiseCatalog, validateProposal } from "./proposal";
 
 const CTX: NegotiationContext = {
@@ -141,5 +142,42 @@ describe("promiseCatalog", () => {
     const att = promiseCatalog(ctx205, 50).filter((o) => o.kind === "attendance");
     expect(att.length).toBeGreaterThan(0);
     expect(att.every((o) => (o.params.attendance ?? 0) >= min)).toBe(true);
+  });
+});
+
+describe("bonus za splnění (kolo 5)", () => {
+  const base = { ...demands, monthly: 9000 };
+  it("u návštěvy, reputace a exkluzivity oboru bonus sjednat nejde", () => {
+    const cases = [
+      { kind: "attendance", params: { attendance: 220 } },
+      { kind: "reputation", params: { reputation: 55 } },
+      { kind: "sector_exclusivity", params: {} },
+    ];
+    for (const c of cases) {
+      const r = ok({ seasons: 2, promises: [c], demands: { ...base, goalBonuses: { [c.kind]: 1000 } } });
+      expect(r).toEqual({ ok: false, error: "Za tenhle slib bonus za splnění sjednat nejde." });
+      // Nulový bonus nevadí (klient může poslat všechny klíče).
+      expect(ok({ seasons: 2, promises: [c], demands: { ...base, goalBonuses: { [c.kind]: 0 } } }).ok).toBe(true);
+    }
+  });
+  it("u povolených druhů bonus projde", () => {
+    const r = ok({ seasons: 2, promises: [{ kind: "youth", params: { count: 2 } }], demands: { ...base, goalBonuses: { youth: 1000 } } });
+    expect(r.ok).toBe(true);
+  });
+  it("případ z review: 1 sezóna, licence +1, měsíčně 1 Kč a bonus 27 900 → pravidlo o polovině", () => {
+    const promises = [{ kind: "coach_licence", params: { level: 2 } }];
+    const r = ok({ seasons: 1, promises, demands: { ...demands, monthly: 1, goalBonuses: { coach_licence: 27900 } } });
+    expect(r).toEqual({ ok: false, error: "Aspoň polovina podpory musí chodit měsíčně." });
+    expect(ok({ seasons: 1, promises, demands: { ...demands, monthly: 7499, goalBonuses: { coach_licence: 27900 } } }).ok).toBe(true);
+  });
+  it("katalog nabízí bonus jen u povolených druhů", () => {
+    const cat = promiseCatalog(CTX, 50);
+    expect(cat.every((o) => o.goalBonus === GOAL_BONUS_KINDS.has(o.kind))).toBe(true);
+    for (const kind of ["attendance", "reputation", "sector_exclusivity"]) {
+      const opts = cat.filter((o) => o.kind === kind);
+      expect(opts.length).toBeGreaterThan(0);
+      expect(opts.every((o) => !o.goalBonus)).toBe(true);
+    }
+    expect(cat.filter((o) => o.kind === "coach_licence").every((o) => o.goalBonus)).toBe(true);
   });
 });

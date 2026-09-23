@@ -14,7 +14,7 @@ import {
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import {
-  EQUIPMENT_GIFTS, isPromiseKind, LEAGUE_FINISH_KINDS, SEASONAL_KINDS,
+  EQUIPMENT_GIFTS, GOAL_BONUS_KINDS, isPromiseKind, LEAGUE_FINISH_KINDS, SEASONAL_KINDS,
   type PromiseKind, type PromiseParams, type PromiseSpec,
 } from "./promise-kinds";
 import { kindAllowedForCategory } from "./wishes";
@@ -134,6 +134,7 @@ export function validateProposal(raw: unknown, ctx: NegotiationContext): Result 
     if (!isPromiseKind(k) || !seen.has(k)) return fail("Bonus za splnění jde jen ke slíbenému cíli");
     const g = money(v, 3 * b);
     if (g === null) return fail("Neplatný bonus za splnění");
+    if (g > 0 && !GOAL_BONUS_KINDS.has(k)) return fail("Za tenhle slib bonus za splnění sjednat nejde.");
     if (g > 0) goalBonuses[k] = g;
   }
 
@@ -199,7 +200,9 @@ export interface PromiseOption {
   value: Range;
   /** Pokuta za nesplnění (za každou sezónu u sezónních), jako rozmezí. */
   penalty: Range;
-  /** Šance, kterou sponzor slibu dává (pro náhled ceny bonusu za splnění). */
+  /** Jde k tomuhle slibu sjednat bonus za splnění (GOAL_BONUS_KINDS)? */
+  goalBonus: boolean;
+  /** Šance, kterou sponzor slibu dává (pro náhled ceny bonusu za splnění, má smysl jen s goalBonus). */
   chance: number;
 }
 
@@ -262,6 +265,7 @@ export function promiseCatalog(ctx: NegotiationContext, favor: number): PromiseO
       seasonal: SEASONAL_KINDS.has(spec.kind),
       value: budgetEstimateRange(share * ctx.budgetB, favor),
       penalty: budgetEstimateRange(promisePenalty(share, ctx.budgetB, MONTHS_PER_SEASON, 1), favor),
+      goalBonus: GOAL_BONUS_KINDS.has(spec.kind),
       chance: Math.round(promiseChance(spec, ctx) * 100) / 100,
     };
   });

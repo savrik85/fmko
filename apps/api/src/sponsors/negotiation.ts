@@ -218,7 +218,20 @@ export function requestCost(proposal: Proposal, ctx: NegotiationContext): number
   return costBreakdown(proposal, ctx).reduce((s, i) => s + i.monthly, 0);
 }
 
-/** Jednorázové položky návrhu v Kč: podpisový příspěvek, stavba, vybavení a doplacená pokuta podle ceníku. */
+/**
+ * Součet bonusů za splnění u termínových slibů (licence, stavba, dres). Klub si je splní sám
+ * a sponzor bonus vyplatí hned po splnění, takže jsou to fakticky jednorázové platby.
+ */
+export function deadlineGoalBonusTotal(proposal: Proposal): number {
+  return proposal.promises
+    .filter((p) => DEADLINE_KINDS.has(p.kind))
+    .reduce((s, p) => s + (proposal.demands.goalBonuses[p.kind] ?? 0), 0);
+}
+
+/**
+ * Jednorázové položky návrhu v Kč: podpisový příspěvek, stavba, vybavení, doplacená pokuta podle ceníku
+ * a bonusy za splnění termínových slibů (deadlineGoalBonusTotal).
+ */
 export function proposalOneTimeTotal(proposal: Proposal, ctx: NegotiationContext): number {
   const d = proposal.demands;
   return oneTimeTotal({
@@ -226,6 +239,7 @@ export function proposalOneTimeTotal(proposal: Proposal, ctx: NegotiationContext
     construction: d.construction ? constructionCost(ctx, d.construction) : 0,
     equipment: d.equipment ? equipmentCost(ctx, d.equipment) : 0,
     paidFee: d.payCurrentFee ? ctx.currentTerminationFee : 0,
+    deadlineGoalBonuses: deadlineGoalBonusTotal(proposal),
   });
 }
 
@@ -378,13 +392,20 @@ export function earlyTerminationFee(i: { monthly: number; seasons: number }): nu
   return Math.round(i.monthly * i.seasons * 2);
 }
 
-/** Součet jednorázových položek smlouvy: podpisový příspěvek, stavba, vybavení, doplacená stará pokuta. */
-export function oneTimeTotal(demands: { signingBonus: number; construction: number; equipment: number; paidFee: number }): number {
-  return demands.signingBonus + demands.construction + demands.equipment + demands.paidFee;
+/**
+ * Součet jednorázových položek smlouvy: podpisový příspěvek, stavba, vybavení, doplacená stará pokuta
+ * a bonusy za splnění termínových slibů. Pro pravidlo o měsíční polovině jdou do součtu všechny
+ * sjednané termínové bonusy; pro vratku (advanceClawback) jen ty, které sponzor už VYPLATIL.
+ */
+export function oneTimeTotal(demands: {
+  signingBonus: number; construction: number; equipment: number; paidFee: number; deadlineGoalBonuses?: number;
+}): number {
+  return demands.signingBonus + demands.construction + demands.equipment + demands.paidFee + (demands.deadlineGoalBonuses ?? 0);
 }
 
 /**
- * Vratka jednorázových položek (záloha na celou smlouvu, ne měsíční závazek) při JAKÉMKOLI
+ * Vratka jednorázových položek (záloha na celou smlouvu, ne měsíční závazek, včetně už vyplacených
+ * bonusů za splnění termínových slibů, viz oneTimeTotal) při JAKÉMKOLI
  * předčasném konci smlouvy — ať vypoví klub, nebo sponzor kvůli nesplněným slibům. Klesá lineárně
  * s odehranými měsíci, na konci smlouvy je nulová. Na rozdíl od earlyTerminationFee se NEDĚLÍ
  * třemi (spec, live terminate route) — jednorázová platba se totiž nevztahuje ke zbývajícím
