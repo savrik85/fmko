@@ -195,13 +195,6 @@ export function allowedSeasonsOf(view: NegotiationView): number[] {
   return view.allowedSeasons && view.allowedSeasons.length > 0 ? view.allowedSeasons : [1, 2, 3];
 }
 
-/** Poslední nabídka nebo protinabídka majitele, kterou jde podepsat (jednání otevřené), jinak null. */
-export function latestOwnerOffer(view: NegotiationView): Proposal | null {
-  if (view.status !== "open") return null;
-  const last = view.rounds[view.rounds.length - 1];
-  return last && OWNER_OFFER_KINDS.includes(last.response.kind) && last.response.counter ? last.response.counter : null;
-}
-
 /** Klíč množiny slibů pro porovnání bez ohledu na pořadí (server je ukládá v pořadí, v jakém přišly). */
 function promiseSetKey(promises: PromiseSpec[]): string {
   return promises.map((p) => `${p.kind}:${optionKey(p.params)}`).sort().join("|");
@@ -239,13 +232,14 @@ export function proposalsEqual(a: Proposal, b: Proposal): boolean {
 }
 
 /**
- * Výchozí formulář: poslední nabídka majitele, když je na stole, jinak prázdný návrh.
- * Bez withSeasons: nabídka je hotový návrh spočítaný serverem (totéž jako pending.proposal),
- * pozdější posun allowedSeasons (konec sezóny) by jí jinak zvedl počet sezón a rozbil shodu
- * s pending.proposal (server podepisuje uložené podmínky s postupem sezóny z chvíle, kdy vznikly).
+ * Výchozí formulář: podmínky k podpisu (pending.proposal), když jsou na stole — otevřené jednání
+ * s nabídkou majitele, i přijaté (view.status "accepted") — jinak prázdný návrh. Bez withSeasons:
+ * pending.proposal je hotový návrh spočítaný serverem, pozdější posun allowedSeasons (konec sezóny)
+ * by mu jinak zvedl počet sezón a rozbil shodu s pending.proposal (server podepisuje uložené
+ * podmínky s postupem sezóny z chvíle, kdy vznikly).
  */
 export function initialDraft(view: NegotiationView): Proposal {
-  return latestOwnerOffer(view) ?? emptyProposal(view);
+  return view.pending?.proposal ?? emptyProposal(view);
 }
 
 export function emptyProposal(view: NegotiationView): Proposal {

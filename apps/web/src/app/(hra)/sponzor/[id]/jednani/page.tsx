@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { ErrorBox, SectionLabel, Sheet, Spinner, useConfirm } from "@/components/ui";
-import { FaceAvatar } from "@/components/players/face-avatar";
+import { ErrorBox, SectionLabel, Spinner, useConfirm } from "@/components/ui";
 import { formatCZK } from "@/lib/sponsor-owners";
 import { formatGameDay, seasonsAccusative } from "@/lib/sponsor-format";
 import {
@@ -18,6 +17,7 @@ import { PromisePicker } from "@/components/sponsors/negotiation/promise-picker"
 import { DemandsForm } from "@/components/sponsors/negotiation/demands-form";
 import { RoundsHistory } from "@/components/sponsors/negotiation/rounds-history";
 import { SigningSummary } from "@/components/sponsors/negotiation/signing-summary";
+import { OwnerReplyDialog } from "@/components/sponsors/negotiation/owner-reply-dialog";
 
 const CLOSED_TEXT: Record<string, string> = {
   walked_away: "Majitel od jednání odešel. Chvíli s vámi jednat nebude.",
@@ -152,6 +152,22 @@ export default function NegotiationPage() {
     if (res?.ok) router.push("/sponzori");
   };
 
+  const closeNegotiation = async () => {
+    if (!teamId || !view || acting) return;
+    const ok = await confirm({
+      title: `Ukončit jednání s firmou ${view.sponsorName}?`,
+      description: "Nic se nepodepíše, majitel to nebere zle a jednat můžete znovu kdykoli.",
+      confirmLabel: "Ukončit jednání",
+    });
+    if (!ok) return;
+    setActing(true);
+    setError(null);
+    const res = await apiFetch<NegotiationView>(`/api/teams/${teamId}/sponsors/negotiations/${view.id}/close`, { method: "POST" })
+      .catch((e) => { console.error("ukončení jednání se sponzorem:", e); setError((e as Error).message); return null; });
+    setActing(false);
+    if (res) router.push(`/sponzor/${sponsorId}`);
+  };
+
   if (negId === null) {
     return (
       <div className="page-container space-y-3">
@@ -174,14 +190,16 @@ export default function NegotiationPage() {
 
   const estimate = estimateRange(view, draft.promises, draft.seasons);
   const cost = previewCost(view, draft);
-  const open = view.status === "open";
+  // Přijaté jednání (accepted) se dá formulářem přepsat úplně stejně jako otevřené: nový návrh
+  // nahradí přijaté podmínky (API to teď povoluje, viz routes/sponsors.ts propose).
+  const negotiable = view.status === "open" || view.status === "accepted";
   const atRoundLimit = view.rounds.length >= MAX_ROUNDS;
   const ownerName = `${view.owner.firstName} ${view.owner.lastName}`;
   const pendingProposal = view.pending?.proposal ?? null;
   // Server podepisuje pendingTerms, ne rozpracovaný formulář (accept ignoruje draft), takže
   // Podepsat smí jít zobrazit, jen když se draft s podmínkami k podpisu shoduje. Mimo otevřené
-  // jednání (stav accepted) se formulář needituje, tam stačí že podmínky k podpisu existují.
-  const agreesWithPending = pendingProposal !== null && (!open || proposalsEqual(draft, pendingProposal));
+  // ani přijaté jednání pending vždycky null, podmínka na negotiable proto navíc netřeba.
+  const agreesWithPending = pendingProposal !== null && proposalsEqual(draft, pendingProposal);
 
   return (
     <div className="page-container space-y-5">
@@ -189,14 +207,14 @@ export default function NegotiationPage() {
       <NegotiationHeader view={view} estimate={estimate} cost={cost} />
       <RoundsHistory
         rounds={view.rounds} ownerName={ownerName}
-        onUseCounter={open ? (p) => setDraft(withSeasons(view, p, p.seasons)) : undefined}
+        onUseCounter={negotiable ? (p) => setDraft(withSeasons(view, p, p.seasons)) : undefined}
       />
 
       {CLOSED_TEXT[view.status] && (
         <div className="text-sm bg-surface-2 rounded-soft px-3 py-2">{CLOSED_TEXT[view.status]}</div>
       )}
 
-      {open && (
+      {negotiable && (
         <>
           <section>
             <SectionLabel>Sliby klubu</SectionLabel>
@@ -223,52 +241,19 @@ export default function NegotiationPage() {
 
       {agreesWithPending && <SigningSummary view={view} />}
 
-      <Sheet open={replyOpen && reply !== null} onClose={() => setReplyOpen(false)} title="Odpověď majitele">
-        {reply && (
-          <div className="space-y-4 p-1">
-            <div className="flex items-center gap-3">
-              <FaceAvatar faceConfig={view.owner.faceConfig} size={56} className="shrink-0" />
-              <div className="min-w-0">
-                <div className="text-sm text-muted">Odpověď majitele</div>
-                <div className="font-heading font-bold text-base">{ownerName}</div>
-              </div>
-            </div>
-            <div className={`text-base font-heading font-bold ${reply.response.kind === "accept" ? "text-pitch-600" : reply.response.kind === "counter_money" || reply.response.kind === "counter_wish" ? "text-gold-600" : "text-card-red"}`}>
-              {RESPONSE_LABELS[reply.response.kind]}
-            </div>
-            <div className="text-base">„{reply.response.text}“</div>
-            <div className="text-sm">{replyNote(reply, view.patience, view.cooldownUntil, view.pending !== null)}</div>
-            {reply.response.counter && (reply.response.kind === "counter_money" || reply.response.kind === "counter_wish") && (
-              <div className="text-sm bg-surface-2 rounded-soft px-3 py-2">
-                Protinabídka: {formatCZK(reply.response.counter.demands.monthly)} měsíčně na {seasonsAccusative(reply.response.counter.seasons)}
-                {reply.response.counter.demands.signingBonus > 0 ? `, ${formatCZK(reply.response.counter.demands.signingBonus)} za podpis` : ""}
-              </div>
-            )}
-            <div className="flex flex-col gap-2">
-              {view.pending && (reply.response.kind === "accept" || reply.response.kind === "counter_money" || reply.response.kind === "counter_wish") && (
-                <button type="button" onClick={() => { setReplyOpen(false); void sign(); }} className="btn btn-primary w-full min-h-11">Podepsat smlouvu</button>
-              )}
-              {view.pending && (reply.response.kind === "reject" || reply.response.kind === "insulted") && (
-                <button
-                  type="button"
-                  onClick={() => { setDraft(view.pending!.proposal); setReplyOpen(false); }}
-                  className="btn btn-primary w-full min-h-11"
-                >
-                  Vrátit se k jeho nabídce
-                </button>
-              )}
-              {view.status === "open" && (
-                <button type="button" onClick={() => setReplyOpen(false)} className="btn btn-secondary w-full min-h-11">
-                  {reply.response.kind === "accept" ? "Zavřít" : "Upravit návrh"}
-                </button>
-              )}
-              {view.status !== "open" && (
-                <Link href={`/sponzor/${view.sponsorId}`} className="btn btn-secondary w-full min-h-11 text-center">Zpět na sponzora</Link>
-              )}
-            </div>
-          </div>
-        )}
-      </Sheet>
+      <OwnerReplyDialog
+        open={replyOpen && reply !== null}
+        onClose={() => setReplyOpen(false)}
+        round={reply}
+        ownerName={ownerName}
+        faceConfig={view.owner.faceConfig}
+        note={reply ? replyNote(reply, view.patience, view.cooldownUntil, view.pending !== null) : ""}
+        hasPending={view.pending !== null}
+        sponsorId={view.sponsorId}
+        onEdit={() => setReplyOpen(false)}
+        onSign={() => { setReplyOpen(false); void sign(); }}
+        onUseCounter={() => { if (view.pending) setDraft(view.pending.proposal); setReplyOpen(false); }}
+      />
 
       {reply && (
         <div ref={replyRef} className="card px-4 py-3 space-y-1">
@@ -282,25 +267,30 @@ export default function NegotiationPage() {
 
       {/* Odesílací tlačítka vždy na konci stránky, bez částek. */}
       <div className="flex flex-col gap-2">
-        {open && !agreesWithPending && (
+        {negotiable && !agreesWithPending && (
           <p className="text-sm">
             Tvůj návrh ho stojí <span className={`font-heading font-bold ${cost > estimate.high ? "text-card-red" : cost <= estimate.low ? "text-pitch-600" : "text-gold-600"}`}>{formatCZK(cost)}</span> měsíčně,
             ochota je zhruba {formatCZK(estimate.low)} až {formatCZK(estimate.high)}.
             {cost > estimate.high * 1.5 ? " Takový návrh ho nejspíš urazí." : cost > estimate.high ? " Nejspíš ho odmítne." : ""}
           </p>
         )}
-        {open && !agreesWithPending && pendingProposal && (
+        {negotiable && !agreesWithPending && pendingProposal && (
           <p className="text-sm text-muted">Změnil jsi podmínky. Pošli je majiteli jako návrh, podepsat půjde, až se shodnete.</p>
         )}
         {agreesWithPending && (
           <button type="button" onClick={sign} disabled={acting} className="btn btn-primary w-full min-h-11">Podepsat smlouvu</button>
         )}
-        {open && !agreesWithPending && (
+        {negotiable && !agreesWithPending && (
           <button type="button" onClick={propose} disabled={acting || atRoundLimit} className="btn btn-primary w-full min-h-11">
             {acting ? "Majitel čte návrh…" : "Navrhnout"}
           </button>
         )}
         <Link href={`/sponzor/${view.sponsorId}`} className="text-center text-sm text-muted min-h-11 leading-[2.75rem]">Zpět na sponzora</Link>
+        {negotiable && (
+          <button type="button" onClick={closeNegotiation} disabled={acting} className="btn btn-secondary w-full min-h-11">
+            Ukončit jednání
+          </button>
+        )}
       </div>
     </div>
   );

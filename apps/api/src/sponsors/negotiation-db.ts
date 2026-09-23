@@ -570,15 +570,31 @@ export function pendingTermsProgress(neg: Negotiation): number | null {
   return typeof p === "number" && Number.isFinite(p) ? Math.min(MONTHS_PER_SEASON, Math.max(0, p)) : null;
 }
 
-/** Zapíše kolo jen tehdy, když se od načtení nic nezměnilo (dvojklik nespálí trpělivost dvakrát). */
+/**
+ * Zapíše kolo jen tehdy, když se od načtení nic nezměnilo (dvojklik nespálí trpělivost dvakrát).
+ * Zámek ověřuje NAČTENÝ stav (`neg.status`), ne natvrdo 'open': návrh jde poslat i do jednání
+ * ve stavu 'accepted' (nový návrh nahradí přijaté podmínky), stejně jako do otevřeného.
+ */
 export async function saveRound(
   db: D1Database, neg: Negotiation, round: NegotiationRound,
   next: { status: NegotiationStatus; patience: number; cooldownUntil: string | null },
 ): Promise<boolean> {
   const rounds = JSON.stringify([...neg.rounds, round]);
   const res = await db.prepare(
-    "UPDATE sponsor_negotiations SET rounds = ?, status = ?, patience = ?, cooldown_until = ? WHERE id = ? AND status = 'open' AND rounds = ?",
-  ).bind(rounds, next.status, next.patience, next.cooldownUntil, neg.id, neg.roundsRaw).run();
+    "UPDATE sponsor_negotiations SET rounds = ?, status = ?, patience = ?, cooldown_until = ? WHERE id = ? AND status = ? AND rounds = ?",
+  ).bind(rounds, next.status, next.patience, next.cooldownUntil, neg.id, neg.status, neg.roundsRaw).run();
+  return (res.meta?.changes ?? 0) === 1;
+}
+
+/**
+ * Klub jednání dobrovolně ukončí (tlačítko „Ukončit jednání"): bez pokuty na náklonnost a bez
+ * cooldownu, majitel to nebere zle a jednat jde znovu kdykoli. Jde jen ze stavu 'open' nebo
+ * 'accepted', podmíněný UPDATE ustojí i dvojklik (druhý zápis prohraje podmínku).
+ */
+export async function closeNegotiation(db: D1Database, teamId: string, negotiationId: string): Promise<boolean> {
+  const res = await db.prepare(
+    "UPDATE sponsor_negotiations SET status = 'expired', cooldown_until = NULL WHERE id = ? AND team_id = ? AND status IN ('open','accepted')",
+  ).bind(negotiationId, teamId).run();
   return (res.meta?.changes ?? 0) === 1;
 }
 

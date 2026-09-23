@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1, type Pravidlo } from "../incidents/testovaci-d1";
 import {
-  categoryContracts, closeNegotiationsForRollover, contractBlock, EXPIRED_RENEWAL_FACTS_SQL, expiredCountsAsRenewal, isRenewalOf, cooldownUntil, findActiveNegotiation, openNegotiation, parseNegotiation,
+  categoryContracts, closeNegotiation, closeNegotiationsForRollover, contractBlock, EXPIRED_RENEWAL_FACTS_SQL, expiredCountsAsRenewal, isRenewalOf, cooldownUntil, findActiveNegotiation, openNegotiation, parseNegotiation,
   pendingTerms, pendingTermsProgress, saveRound, type CategoryContracts, type ContractRow, type NegotiationRound, type NegotiationSponsor,
   type NegotiationTeam,
 } from "./negotiation-db";
@@ -103,15 +103,49 @@ describe("saveRound", () => {
     const ok = await saveRound(jakoD1(db), parseNegotiation(ROW), round("reject"), { status: "open", patience: 2, cooldownUntil: null });
     expect(ok).toBe(true);
     const q = db.dotazy.find((d) => /UPDATE sponsor_negotiations SET rounds/.test(d.sql))!;
-    expect(q.sql).toContain("status = 'open' AND rounds = ?");
+    expect(q.sql).toContain("status = ? AND rounds = ?");
     expect(q.params[1]).toBe("open");
     expect(q.params[2]).toBe(2);
     expect(q.params[4]).toBe("n1");
-    expect(q.params[5]).toBe("[]");
+    expect(q.params[5]).toBe("open");
+    expect(q.params[6]).toBe("[]");
   });
   it("souběžný návrh prohraje zámek", async () => {
     const db = new FalesnaD1([{ sql: /UPDATE sponsor_negotiations SET rounds/, changes: 0 }]);
     expect(await saveRound(jakoD1(db), parseNegotiation(ROW), round("reject"), { status: "open", patience: 2, cooldownUntil: null })).toBe(false);
+  });
+  it("z přijatého jednání (accepted) zapisuje s podmínkou na stav accepted, ne natvrdo open", async () => {
+    const db = new FalesnaD1([{ sql: /UPDATE sponsor_negotiations SET rounds/, changes: 1 }]);
+    const accepted = { ...parseNegotiation(ROW), status: "accepted" as const };
+    // Nový návrh z 'accepted' se vrací do 'open' (odmítnutí/protinabídka), přesně jako z 'open'.
+    const ok = await saveRound(jakoD1(db), accepted, round("reject"), { status: "open", patience: 2, cooldownUntil: null });
+    expect(ok).toBe(true);
+    const q = db.dotazy.find((d) => /UPDATE sponsor_negotiations SET rounds/.test(d.sql))!;
+    expect(q.sql).toContain("status = ? AND rounds = ?");
+    expect(q.sql).not.toContain("status = 'open'");
+    // Bind pořadí: rounds, next.status, patience, cooldownUntil, id, NAČTENÝ stav (zámek), roundsRaw.
+    expect(q.params[1]).toBe("open");
+    expect(q.params[5]).toBe("accepted");
+    expect(q.params[6]).toBe("[]");
+  });
+});
+
+describe("closeNegotiation", () => {
+  it("z open nebo accepted uzavře jednání bez cooldownu", async () => {
+    const db = new FalesnaD1([{ sql: /UPDATE sponsor_negotiations SET status = 'expired'/, changes: 1 }]);
+    const ok = await closeNegotiation(jakoD1(db), "t1", "n1");
+    expect(ok).toBe(true);
+    const q = db.dotazy.find((d) => /UPDATE sponsor_negotiations SET status = 'expired'/.test(d.sql))!;
+    expect(q.sql).toContain("cooldown_until = NULL");
+    expect(q.sql).toContain("status IN ('open','accepted')");
+    expect(q.params).toEqual(["n1", "t1"]);
+    // Dobrovolné ukončení nesahá na náklonnost ani deník: jediný dotaz, žádná dávka.
+    expect(db.dotazy).toHaveLength(1);
+    expect(db.davky).toHaveLength(0);
+  });
+  it("na už uzavřené jednání (podmínka neplatí) vrátí false", async () => {
+    const db = new FalesnaD1([{ sql: /UPDATE sponsor_negotiations SET status = 'expired'/, changes: 0 }]);
+    expect(await closeNegotiation(jakoD1(db), "t1", "n1")).toBe(false);
   });
 });
 

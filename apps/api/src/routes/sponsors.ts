@@ -18,7 +18,7 @@ import {
 } from "../sponsors/favor";
 import { afterReject, COOLDOWN_DAYS, evaluateRound, INSULT_FAVOR } from "../sponsors/negotiation";
 import {
-  loadNegotiationSponsor, loadNegotiationState, loadNegotiationTeam, negotiationAvailability, openNegotiation,
+  closeNegotiation, loadNegotiationSponsor, loadNegotiationState, loadNegotiationTeam, negotiationAvailability, openNegotiation,
   saveRound, teamGameDate, type NegotiationRound, type NegotiationStatus,
 } from "../sponsors/negotiation-db";
 import { ownerResponse, type ResponseKind } from "../sponsors/negotiation-texts";
@@ -492,7 +492,10 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
   const teamId = c.req.param("teamId");
   const st = await loadNegotiationState(db, teamId, c.req.param("negotiationId"));
   if ("error" in st) return c.json({ error: st.error }, st.status);
-  if (st.neg.status !== "open") {
+  // Návrh jde poslat i do jednání ve stavu 'accepted': nový návrh nahradí přijaté podmínky
+  // (další kolo pak počítá stejně jako z 'open' — přijetí zůstává 'accepted', protinabídka
+  // nebo odmítnutí se vrací do 'open', dojití trpělivosti na 'walked_away').
+  if (st.neg.status !== "open" && st.neg.status !== "accepted") {
     const e = STATUS_ERRORS[st.neg.status];
     return c.json({ error: e.error }, e.status);
   }
@@ -557,6 +560,27 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
   logger.info({ module: "sponsors", teamId }, `jednání ${st.neg.id}: kolo ${st.neg.rounds.length + 1}, ${kind}, trpělivost ${patience}`);
 
   const fresh = await loadNegotiationState(db, teamId, st.neg.id);
+  if ("error" in fresh) return c.json({ error: fresh.error }, fresh.status);
+  return c.json(await viewWithClawback(db, fresh));
+});
+
+// POST /api/teams/:teamId/sponsors/negotiations/:negotiationId/close: klub jednání dobrovolně
+// ukončí (tlačítko „Ukončit jednání"). Bez pokuty na náklonnost a bez cooldownu — na rozdíl od
+// odchodu majitele (walked_away) tohle je krok klubu, majitel to nebere zle.
+sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/close", async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.param("teamId");
+  const negotiationId = c.req.param("negotiationId");
+  const st = await loadNegotiationState(db, teamId, negotiationId);
+  if ("error" in st) return c.json({ error: st.error }, st.status);
+  if (st.neg.status !== "open" && st.neg.status !== "accepted") {
+    return c.json({ error: "Jednání už je uzavřené" }, 409);
+  }
+  const closed = await closeNegotiation(db, teamId, negotiationId);
+  if (!closed) return c.json({ error: "Jednání už je uzavřené" }, 409);
+  logger.info({ module: "sponsors", teamId }, `jednání ${negotiationId}: klub jednání dobrovolně ukončil`);
+
+  const fresh = await loadNegotiationState(db, teamId, negotiationId);
   if ("error" in fresh) return c.json({ error: fresh.error }, fresh.status);
   return c.json(await viewWithClawback(db, fresh));
 });
