@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1, type Pravidlo } from "../incidents/testovaci-d1";
 import {
-  closeNegotiationsForRollover, contractBlock, cooldownUntil, findActiveNegotiation, openNegotiation, parseNegotiation,
+  categoryContracts, closeNegotiationsForRollover, contractBlock, EXPIRED_RENEWAL_FACTS_SQL, expiredCountsAsRenewal, isRenewalOf, cooldownUntil, findActiveNegotiation, openNegotiation, parseNegotiation,
   pendingTerms, saveRound, type CategoryContracts, type ContractRow, type NegotiationRound, type NegotiationSponsor,
   type NegotiationTeam,
 } from "./negotiation-db";
@@ -216,5 +216,47 @@ describe("contractBlock", () => {
     ]);
     const reason = await contractBlock(jakoD1(db), TEAM, SPONSOR, "main", 5, NO_CONTRACTS);
     expect(reason).toBe(`${SPONSOR.name} je hlavním sponzorem klubu Soupeř`);
+  });
+});
+
+describe("prodloužení vypršelé smlouvy (isRenewalOf přes categoryContracts)", () => {
+  const EXPIRED = {
+    id: "x1", sponsor_id: 7, sponsor_name: "Firma", monthly_amount: 1000, win_bonus: 0, seasons_remaining: 0,
+    early_termination_fee: 100, status: "expired", negotiation_id: "n0", signed_before_window: 0, signed_since: 0,
+  };
+  // Bez aktivní smlouvy (FalesnaD1 bez shody vrací null), jen vypršelá.
+  const dbWith = (expired: Record<string, unknown> | null) => new FalesnaD1([{ sql: /sc\.status = 'expired'/, first: expired }]);
+
+  it("vypršela při posledním rolloveru a od té doby se nic nepodepsalo: prodloužení", async () => {
+    const d = dbWith(EXPIRED);
+    const c = await categoryContracts(jakoD1(d), "t1", "main");
+    expect(c.lastExpired?.id).toBe("x1");
+    expect(isRenewalOf(c, 7)).toBe(true);
+    expect(isRenewalOf(c, 8)).toBe(false);
+    const q = d.dotazy.find((x) => /sc\.status = 'expired'/.test(x.sql))!;
+    expect(q.sql).toContain(EXPIRED_RENEWAL_FACTS_SQL);
+    expect(q.params).toEqual(["t1", "main"]);
+  });
+
+  it("po ní klub podepsal jinou firmu (a hned ji vypověděl): staré firmě se neprodlužuje", async () => {
+    const c = await categoryContracts(jakoD1(dbWith({ ...EXPIRED, signed_since: 1 })), "t1", "main");
+    expect(c.lastExpired).toBeNull();
+    expect(isRenewalOf(c, 7)).toBe(false);
+  });
+
+  it("vypršela o sezónu dřív než při posledním rolloveru: není prodloužení", async () => {
+    const c = await categoryContracts(jakoD1(dbWith({ ...EXPIRED, signed_before_window: 1 })), "t1", "main");
+    expect(isRenewalOf(c, 7)).toBe(false);
+  });
+
+  it("předaná prodloužením (zbývala jí sezóna), ne rolloverem: není prodloužení", () => {
+    expect(expiredCountsAsRenewal({ seasons_remaining: 1, negotiation_id: "n0", signed_before_window: 0, signed_since: 0 })).toBe(false);
+    expect(expiredCountsAsRenewal({ seasons_remaining: 0, negotiation_id: null, signed_before_window: 0, signed_since: 0 })).toBe(true);
+  });
+
+  it("okno vypršení i počet podepsaných potom se počítají v SQL nad sc", () => {
+    expect(EXPIRED_RENEWAL_FACTS_SQL).toMatch(/s\.number = \(SELECT MAX\(number\) FROM seasons WHERE status = 'active'\) - sc\.seasons_total/);
+    expect(EXPIRED_RENEWAL_FACTS_SQL).toMatch(/datetime\(sc\.signed_at\) < datetime\(s\.created_at\)/);
+    expect(EXPIRED_RENEWAL_FACTS_SQL).toMatch(/o\.id != sc\.id AND datetime\(o\.signed_at\) >= datetime\(sc\.signed_at\)/);
   });
 });

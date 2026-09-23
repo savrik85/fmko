@@ -84,6 +84,8 @@ export default function NegotiationPage() {
         ...(d.signingBonus > 0 ? [{ label: "Za podpis", value: `+${formatCZK(d.signingBonus)}`, color: "text-pitch-500" }] : []),
         ...(view.current && !view.current.sameSponsor && p.currentFee === 0
           ? [{ label: "Výpovědní pokuta", value: `-${formatCZK(view.current.terminationFee)}`, color: "text-card-red" }] : []),
+        ...(view.current && view.current.clawback > 0
+          ? [{ label: "Vrácení zálohy", value: `-${formatCZK(view.current.clawback)}`, color: "text-card-red" }] : []),
         ...(p.renamesClub ? [{ label: "Dopad na reputaci", value: "-3 reputace", color: "text-card-red" }] : []),
       ],
       confirmLabel: "Podepsat",

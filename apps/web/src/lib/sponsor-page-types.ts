@@ -20,6 +20,8 @@ export interface ActiveContract {
   blockedReason?: string | null;
   /** Hlavní sponzor a stadion: dá se už jednat o prodloužení (poslední sezóna nebo vypršelá smlouva). */
   renewable?: boolean;
+  /** Smlouva z jednání: nesplacená záloha (příspěvek za podpis, dary), kterou klub při výpovědi vrací. */
+  clawback?: number;
 }
 
 export interface SponsorOffer {

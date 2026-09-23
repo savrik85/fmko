@@ -28,11 +28,12 @@ import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import { MONTHS_PER_SEASON } from "./ambition";
 import { MAIN_SPONSOR_FREE_SQL } from "./exclusivity";
 import {
-  advanceClawback, buildPromiseRows, constructionCost, contractMonths, earlyTerminationFee, equipmentCost, oneTimeTotal,
+  advanceClawback, buildPromiseRows, constructionCost, earlyTerminationFee, effectiveContractMonths, equipmentCost, oneTimeTotal,
   type NegotiationContext, type Proposal,
 } from "./negotiation";
 import {
-  contractBlock, loadNegotiationState, pendingTerms, prorataTerminationFee, teamGameDate, type Fail, type NegotiationState,
+  contractBlock, loadNegotiationState, negotiationView, pendingTerms, prorataTerminationFee, teamGameDate, type Fail,
+  type NegotiationState, type NegotiationView,
 } from "./negotiation-db";
 import { DEADLINE_KINDS } from "./promise-kinds";
 import { validateProposal } from "./proposal";
@@ -106,52 +107,18 @@ export function advanceItemsTotals(items: readonly AdvanceItem[]): { constructio
   return out;
 }
 
-export interface SeasonBounds { start: string; end: string }
-
-/** Kolik měsíců aktuální sezóny k hernímu datu uplynulo (0 až MONTHS_PER_SEASON). */
-export function seasonProgressMonths(bounds: SeasonBounds | null, gameDate: string): number {
-  if (!bounds) return 0;
-  const start = Date.parse(bounds.start);
-  const end = Date.parse(bounds.end);
-  const now = Date.parse(gameDate);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(now) || end <= start) return 0;
-  return Math.min(1, Math.max(0, (now - start) / (end - start))) * MONTHS_PER_SEASON;
-}
-
-/** Předsezóna před prvním kolem, stejně jako season-weather.ts (seasonBounds). */
-const PRESEASON_DAYS = 7;
-
-/**
- * Postup sezóny klubu v měsících. Hranice sezóny drží `teams.season_start/season_end` (plní je
- * rollover); čerstvě naseedovaný svět je nemá, pak se odvodí z kalendáře ligy (jako auth.ts).
- */
-export async function loadTeamSeasonProgress(db: D1Database, teamId: string): Promise<number> {
-  const team = await db.prepare("SELECT game_date, season_start, season_end, league_id FROM teams WHERE id = ?")
-    .bind(teamId).first<{ game_date: string | null; season_start: string | null; season_end: string | null; league_id: string | null }>();
-  if (!team) return 0;
-  const gameDate = teamGameDate(team);
-  if (team.season_start && team.season_end) return seasonProgressMonths({ start: team.season_start, end: team.season_end }, gameDate);
-  if (!team.league_id) return 0;
-  const cal = await db.prepare(
-    `SELECT MIN(scheduled_at) AS first, MAX(scheduled_at) AS last FROM season_calendar
-     WHERE league_id = ? AND season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)`,
-  ).bind(team.league_id, team.league_id).first<{ first: string | null; last: string | null }>();
-  const first = cal?.first ? Date.parse(cal.first) : NaN;
-  if (!Number.isFinite(first) || !cal?.last) {
-    logger.warn({ module: "sponsors", teamId }, "hranice sezóny pro zálohu sponzora chybí, počítá se začátek sezóny");
-    return 0;
-  }
-  return seasonProgressMonths({ start: new Date(first - PRESEASON_DAYS * 86400000).toISOString(), end: cal.last }, gameDate);
-}
+// Postup sezóny žije v negotiation-db.ts (potřebuje ho už kontext jednání), tady re-export pro volající.
+export { loadTeamSeasonProgress, seasonProgressMonths, type SeasonBounds } from "./negotiation-db";
 
 /**
  * Nesplacená část zálohy. Smlouva běží od podpisu (startOffsetMonths do sezóny podpisu) do konce
- * poslední sezóny; uplynulo (odehrané sezóny) − offset + postup aktuální sezóny.
+ * poslední sezóny; uplynulo (odehrané sezóny) − offset + postup aktuální sezóny. Délka je stejná
+ * jako ta, na kterou jednání jednorázové položky rozpočítalo (effectiveContractMonths).
  */
 export function clawbackAmount(i: {
   oneTimeTotal: number; seasonsTotal: number; seasonsRemaining: number; startOffsetMonths: number; progressMonths: number;
 }): number {
-  const length = Math.max(0, i.seasonsTotal * MONTHS_PER_SEASON - i.startOffsetMonths);
+  const length = effectiveContractMonths(i.seasonsTotal, i.startOffsetMonths);
   const elapsed = (i.seasonsTotal - i.seasonsRemaining) * MONTHS_PER_SEASON - i.startOffsetMonths + i.progressMonths;
   return advanceClawback({ oneTimeTotal: i.oneTimeTotal, contractMonths: length, monthsElapsed: Math.min(length, Math.max(0, elapsed)) });
 }
@@ -194,6 +161,19 @@ async function loadAdvanceContract(db: D1Database, contractId: string): Promise<
   return db.prepare(
     "SELECT id, seasons_total, seasons_remaining, signing_bonus, paid_construction, negotiation_id FROM sponsor_contracts WHERE id = ?",
   ).bind(contractId).first<AdvanceContract>();
+}
+
+/** Vratka zálohy současné smlouvy v kategorii jednání (0 bez smlouvy nebo u smlouvy bez jednání). */
+async function currentContractClawback(db: D1Database, st: NegotiationState): Promise<number> {
+  const current = st.contracts.active;
+  if (!current) return 0;
+  const adv = await loadAdvanceContract(db, current.id);
+  return adv ? contractClawback(db, adv, st.ctx.seasonProgressMonths) : 0;
+}
+
+/** Pohled na jednání pro klienta i s vratkou zálohy současné smlouvy, kterou klub při podpisu zaplatí. */
+export async function viewWithClawback(db: D1Database, st: NegotiationState): Promise<NegotiationView> {
+  return negotiationView(st, { currentClawback: await currentContractClawback(db, st) });
 }
 
 /** Nový hlavní sponzor: klub nese jeho jméno, −3 reputace, pohár, U21 a zpráva do ligy. */
@@ -250,6 +230,15 @@ export async function applyStadiumRename(db: D1Database, teamId: string, stadium
 
 
 interface Guard { sql: string; params: unknown[] }
+
+/**
+ * Podmínka INSERTu nové smlouvy: klub (?1) nemá v kategorii (?2) jinou aktivní smlouvu než tu,
+ * kterou podpis nahrazuje (?3, '' když žádnou). Dva souběžné podpisy v téže kategorii (dvě
+ * jednání s různými firmami) by jinak oba vložily aktivní smlouvu; dávky D1 běží jedna po druhé,
+ * takže druhá už první smlouvu uvidí.
+ */
+export const OTHER_ACTIVE_IN_CATEGORY_FREE_SQL =
+  `NOT EXISTS (SELECT 1 FROM sponsor_contracts y WHERE y.team_id = ? AND y.status = 'active' AND COALESCE(y.category, 'main') = ? AND y.id != ?)`;
 
 /** Totéž co recordTransaction, ale jako příkazy do dávky a jen když platí `guard`. */
 function moneyStatements(
@@ -309,15 +298,15 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   const proposal = valid.proposal;
   const d = proposal.demands;
   const gameDate = teamGameDate(team);
-  const progress = await loadTeamSeasonProgress(db, teamId);
+  // Postup sezóny z kontextu: tím samým číslem jednání rozpočítalo zálohu (effectiveContractMonths).
+  const progress = ctx.seasonProgressMonths;
   // Nahrazovaná smlouva v kategorii. Přechod k jiné firmě: výpověď s poměrnou pokutou. Prodloužení:
   // stará smlouva vyprší. V obou případech klub vrací nesplacenou zálohu staré smlouvy (jinak by šlo
   // prodloužením hned po podpisu brát příspěvek za podpis znovu a znovu).
   const replaced = st.contracts.active;
   const old = replaced && !st.isRenewal ? replaced : null;
   const switchFee = old ? prorataTerminationFee(old) : 0;
-  const replacedAdvance = replaced ? await loadAdvanceContract(db, replaced.id) : null;
-  const clawback = replacedAdvance ? await contractClawback(db, replacedAdvance, progress) : 0;
+  const clawback = await currentContractClawback(db, st);
   const feePaidBySponsor = d.payCurrentFee ? switchFee : 0;
   if (team.budget + d.signingBonus + feePaidBySponsor < switchFee + clawback) {
     const kc = (n: number) => `${Math.round(n).toLocaleString("cs-CZ")} Kč`;
@@ -352,12 +341,13 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
       `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, win_bonus, seasons_total,
          seasons_remaining, early_termination_fee, is_naming_rights, category, sponsor_id, signing_bonus, paid_construction, negotiation_id)
        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?
-       WHERE ? != 'main' OR ${MAIN_SPONSOR_FREE_SQL}`,
+       WHERE (? != 'main' OR ${MAIN_SPONSOR_FREE_SQL}) AND ${OTHER_ACTIVE_IN_CATEGORY_FREE_SQL}`,
     ).bind(
       contractId, teamId, contractName, sponsor.type, d.monthly, d.winBonus, proposal.seasons, proposal.seasons,
       earlyTerminationFee({ monthly: d.monthly, seasons: proposal.seasons }), neg.category, sponsor.id, d.signingBonus,
       advance([...construction, ...(feeItem ? [feeItem] : [])]), neg.id,
       neg.category, sponsor.id, teamId,
+      teamId, neg.category, replaced?.id ?? "",
     ),
   ];
   // Peníze: nejdřív příjmy, potom výdaje. Za starou smlouvu jen dokud je pořád aktivní.
@@ -420,6 +410,11 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   const changed = (i: number | null) => i !== null && (results[i]?.meta?.changes ?? 0) === 1;
   if (!changed(0)) {
     await releaseClaim();
+    const other = await db.prepare(
+      `SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND COALESCE(category, 'main') = ? AND id != ? LIMIT 1`,
+    ).bind(teamId, neg.category, replaced?.id ?? "").first<{ sponsor_name: string }>()
+      .catch((e) => { logger.warn({ module: "sponsors", teamId }, "zjištění souběžně podepsané smlouvy", e); return null; });
+    if (other) return { ok: false, error: `Mezitím jsi podepsal smlouvu s ${other.sponsor_name}, načti stránku znovu`, status: 409 };
     return { ok: false, error: `${sponsor.name} právě podepsal s jiným klubem`, status: 409 };
   }
   const oldEnded = changed(oldIdx);

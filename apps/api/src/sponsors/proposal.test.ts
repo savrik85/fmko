@@ -15,7 +15,7 @@ const CTX: NegotiationContext = {
     { facility: "roof", currentLevel: 0, locked: true, costs: [0, 30000, 90000, 230000] },
   ],
   equipment: [{ category: "balls", currentLevel: 1, nextLevel: 2, cost: 8000, locked: false }],
-  currentTerminationFee: 0,
+  currentTerminationFee: 0, seasonProgressMonths: 0,
 };
 
 const ok = (raw: unknown) => validateProposal(raw, CTX);

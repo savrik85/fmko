@@ -24,6 +24,11 @@ export function SigningSummary({ view }: { view: NegotiationView }) {
           {view.current && !view.current.sameSponsor && p.currentFee === 0 && (
             <div className="text-card-red">Výpovědní pokutu {formatCZK(view.current.terminationFee)} u {view.current.sponsorName} platí klub.</div>
           )}
+          {view.current && view.current.clawback > 0 && (
+            <div className="text-card-red">
+              Klub vrací nesplacenou zálohu ze současné smlouvy {formatCZK(view.current.clawback)} (část příspěvku za podpis a darů).
+            </div>
+          )}
           <div className="text-muted">Výpovědní pokuta nové smlouvy {formatCZK(p.terminationFee)}.</div>
           {p.renamesClub && <div className="text-gold-600">Klub ponese jméno sponzora, -3 reputace.</div>}
           {p.promises.length > 0 && (

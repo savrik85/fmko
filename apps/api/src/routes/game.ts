@@ -2481,9 +2481,26 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 
   // Hlavní sponzor a stadion: prodloužení je jednání se stejnou firmou. `renewable` říká, jestli
   // na něj už je čas; u hlavního sponzora ho zablokuje exkluzivita (hlavní jinde, přednost jiného klubu).
+  // Smlouva z jednání: kolik zálohy by klub při výpovědi vracel (ukazuje se v dialogu výpovědi).
+  const { contractClawback, loadTeamSeasonProgress } = await import("../sponsors/signing");
+  const progress = activeRows.results.some((r) => r.negotiation_id)
+    ? await loadTeamSeasonProgress(c.env.DB, teamId)
+      .catch((e) => { logger.warn({ module: "game", teamId }, "postup sezóny pro vratku zálohy", e); return 0; })
+    : 0;
+  const clawbackOf = async (row: Record<string, unknown>): Promise<number> => {
+    if (row.status !== "active" || !row.negotiation_id) return 0;
+    return contractClawback(c.env.DB, {
+      id: row.id as string, seasons_total: row.seasons_total as number, seasons_remaining: row.seasons_remaining as number,
+      signing_bonus: (row.signing_bonus as number | null) ?? 0, paid_construction: (row.paid_construction as string | null) ?? null,
+      negotiation_id: row.negotiation_id as string,
+    }, progress).catch((e) => { logger.warn({ module: "game", teamId }, `vratka zálohy smlouvy ${row.id as string}`, e); return 0; });
+  };
+
   const withRenewable = async (row: Record<string, unknown> | null | undefined, cat: "main" | "stadium") => {
     if (!row) return null;
-    const base = { ...mapContract(row), renewal: null, renewable: isRenewable(row), blockedReason: null as string | null };
+    const base = {
+      ...mapContract(row), renewal: null, renewable: isRenewable(row), blockedReason: null as string | null, clawback: await clawbackOf(row),
+    };
     if (cat === "main" && base.renewable && base.sponsorId) {
       const block = await mainSponsorBlock(c.env.DB, base.sponsorId, teamId, seedSeason);
       if (block) return { ...base, renewable: false, blockedReason: block.reason };
@@ -2491,10 +2508,10 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     return base;
   };
 
-  // Nedávno vypršelá smlouva (main/stadium): obnovit jde jednáním se stejnou firmou.
-  const lastExpiredFor = (cat: "main" | "stadium") => c.env.DB.prepare(
-    "SELECT * FROM sponsor_contracts WHERE team_id = ? AND status = 'expired' AND COALESCE(category, 'main') = ? ORDER BY signed_at DESC LIMIT 1"
-  ).bind(teamId, cat).first<Record<string, unknown>>()
+  // Vypršelá smlouva (main/stadium), jejíž obnova je prodloužení (vypršela při posledním rolloveru
+  // a v kategorii se od té doby nic nepodepsalo): obnovit jde jednáním se stejnou firmou.
+  const { lastRenewableExpired } = await import("../sponsors/negotiation-db");
+  const lastExpiredFor = (cat: "main" | "stadium") => lastRenewableExpired(c.env.DB, teamId, cat)
     .catch((e) => { logger.warn({ module: "game", teamId }, "fetch expired contract", e); return null; });
 
   const [mainContractOut, mainExpired, stadiumContractOut, stadiumExpired] = await Promise.all([
@@ -2715,9 +2732,10 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   const team = await c.env.DB.prepare("SELECT budget, village_id, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ budget: number; village_id: string; game_date: string | null }>();
   if (!team || team.budget < fee + clawback) {
+    const kc = (n: number) => `${Math.round(n).toLocaleString("cs-CZ")} Kč`;
     return c.json({ error: clawback > 0
-      ? `Nedostatek peněz (sankce ${fee} Kč a vrácení zálohy ${clawback} Kč)`
-      : `Nedostatek peněz (sankce ${fee} Kč)` }, 400);
+      ? `Nedostatek peněz (sankce ${kc(fee)} a vrácení zálohy ${kc(clawback)})`
+      : `Nedostatek peněz (sankce ${kc(fee)})` }, 400);
   }
 
   // Nejdřív ukončit (podmíněně, dvojklik nesmí strhnout sankci dvakrát), pak strhnout peníze.

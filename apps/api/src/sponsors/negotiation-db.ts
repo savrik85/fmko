@@ -14,7 +14,8 @@ import { budgetEstimateRange, sponsorBudgetB } from "./budget";
 import { mainSponsorBlock } from "./exclusivity";
 import { ensureSponsorOwner, getFavor, type SponsorOwner } from "./favor";
 import {
-  BASE_WILLINGNESS, CAUTIOUS_SEASON_BONUS, initialPatience, NEGOTIATION_DAYS, signingSummary, WILLINGNESS_CAP, winBonusFactor,
+  BASE_WILLINGNESS, CAUTIOUS_SEASON_BONUS, effectiveContractMonths, initialPatience, MAX_SEASONS, MIN_SEASONS, NEGOTIATION_DAYS,
+  signingSummary, WILLINGNESS_CAP, winBonusFactor,
   type EquipmentOption, type FacilityOption, type NegotiationCategory, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import type { ResponseKind } from "./negotiation-texts";
@@ -107,6 +108,44 @@ export function teamGameDate(team: { game_date: string | null }): string {
   return team.game_date ?? new Date().toISOString();
 }
 
+export interface SeasonBounds { start: string; end: string }
+
+/** Kolik měsíců aktuální sezóny k hernímu datu uplynulo (0 až MONTHS_PER_SEASON). */
+export function seasonProgressMonths(bounds: SeasonBounds | null, gameDate: string): number {
+  if (!bounds) return 0;
+  const start = Date.parse(bounds.start);
+  const end = Date.parse(bounds.end);
+  const now = Date.parse(gameDate);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(now) || end <= start) return 0;
+  return Math.min(1, Math.max(0, (now - start) / (end - start))) * MONTHS_PER_SEASON;
+}
+
+/** Předsezóna před prvním kolem, stejně jako season-weather.ts (seasonBounds). */
+const PRESEASON_DAYS = 7;
+
+/**
+ * Postup sezóny klubu v měsících. Hranice sezóny drží `teams.season_start/season_end` (plní je
+ * rollover); čerstvě naseedovaný svět je nemá, pak se odvodí z kalendáře ligy (jako auth.ts).
+ */
+export async function loadTeamSeasonProgress(db: D1Database, teamId: string): Promise<number> {
+  const team = await db.prepare("SELECT game_date, season_start, season_end, league_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string | null; season_start: string | null; season_end: string | null; league_id: string | null }>();
+  if (!team) return 0;
+  const gameDate = teamGameDate(team);
+  if (team.season_start && team.season_end) return seasonProgressMonths({ start: team.season_start, end: team.season_end }, gameDate);
+  if (!team.league_id) return 0;
+  const cal = await db.prepare(
+    `SELECT MIN(scheduled_at) AS first, MAX(scheduled_at) AS last FROM season_calendar
+     WHERE league_id = ? AND season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)`,
+  ).bind(team.league_id, team.league_id).first<{ first: string | null; last: string | null }>();
+  const first = cal?.first ? Date.parse(cal.first) : NaN;
+  if (!Number.isFinite(first) || !cal?.last) {
+    logger.warn({ module: "sponsors", teamId }, "hranice sezóny pro zálohu sponzora chybí, počítá se začátek sezóny");
+    return 0;
+  }
+  return seasonProgressMonths({ start: new Date(first - PRESEASON_DAYS * 86400000).toISOString(), end: cal.last }, gameDate);
+}
+
 export async function activeSeason(db: D1Database): Promise<number> {
   const row = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
     .first<{ number: number }>();
@@ -118,21 +157,76 @@ export interface ContractRow {
   seasons_remaining: number; early_termination_fee: number; status: "active" | "expired";
 }
 
+/**
+ * `lastExpired` je jen smlouva, jejíž obnova se počítá jako prodloužení (renewableExpiry), jinak null.
+ * Aktivní smlouva v kategorii je vždycky `active`.
+ */
 export interface CategoryContracts { active: ContractRow | null; lastExpired: ContractRow | null }
 
+/** Fakta o naposledy vypršelé smlouvě, ze kterých se pozná, jestli jde o prodloužení (EXPIRED_RENEWAL_FACTS_SQL). */
+export interface ExpiredRenewalFacts {
+  seasons_remaining: number;
+  negotiation_id: string | null;
+  /** 1 = smlouva z jednání podepsaná dřív, než začala sezóna, po které podle délky měla vypršet. */
+  signed_before_window: number;
+  /** Kolik smluv v kategorii klub podepsal ve stejnou chvíli nebo po ní. */
+  signed_since: number;
+}
+
+/**
+ * Sloupce ExpiredRenewalFacts k řádku `sc` ze sponsor_contracts.
+ *  - `signed_before_window`: smlouva podepsaná v sezóně S na T sezón vyprší při rolloveru do
+ *    sezóny S + T. Vypršela při POSLEDNÍM rolloveru, jen když byla podepsaná nejdřív v sezóně
+ *    aktuální − T (začátek sezóny = seasons.created_at, zakládá ho rollover).
+ *  - `signed_since`: jiné smlouvy v kategorii podepsané po ní (i ukončené), třeba nová firma,
+ *    kterou klub hned zase vypověděl.
+ */
+export const EXPIRED_RENEWAL_FACTS_SQL = `
+  CASE WHEN sc.negotiation_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM seasons s
+    WHERE s.number = (SELECT MAX(number) FROM seasons WHERE status = 'active') - sc.seasons_total
+      AND datetime(sc.signed_at) < datetime(s.created_at)
+  ) THEN 1 ELSE 0 END AS signed_before_window,
+  (SELECT COUNT(*) FROM sponsor_contracts o
+    WHERE o.team_id = sc.team_id AND COALESCE(o.category, 'main') = COALESCE(sc.category, 'main')
+      AND o.id != sc.id AND datetime(o.signed_at) >= datetime(sc.signed_at)) AS signed_since`;
+
+/**
+ * Obnova vypršelé smlouvy je prodloužení, jen když smlouva vypršela sama při posledním rolloveru
+ * (ne předáním při prodloužení, ne o sezóny dřív) a v kategorii se od té doby nic nepodepsalo.
+ * Jinak by šlo podepsat nového sponzora, vypovědět ho a pak se starou firmou „prodlužovat" bez
+ * limitu změny hlavního sponzora a bez přejmenování. Smlouvy z dřívějších pevných nabídek (bez
+ * jednání) se prodlužovaly na místě bez nového signed_at, u nich se sezóna vypršení neověřuje.
+ */
+export function expiredCountsAsRenewal(f: ExpiredRenewalFacts): boolean {
+  return f.seasons_remaining <= 0 && Number(f.signed_before_window) === 0 && Number(f.signed_since) === 0;
+}
+
+/** Naposledy vypršelá smlouva v kategorii, jen když se její obnova počítá jako prodloužení (celý řádek). */
+export async function lastRenewableExpired<T extends Record<string, unknown> = Record<string, unknown>>(
+  db: D1Database, teamId: string, category: NegotiationCategory,
+): Promise<T | null> {
+  const row = await db.prepare(
+    `SELECT sc.*, ${EXPIRED_RENEWAL_FACTS_SQL}
+     FROM sponsor_contracts sc WHERE sc.team_id = ? AND sc.status = 'expired' AND COALESCE(sc.category, 'main') = ?
+     ORDER BY sc.signed_at DESC LIMIT 1`,
+  ).bind(teamId, category).first<T & ExpiredRenewalFacts>();
+  return row && expiredCountsAsRenewal(row) ? row : null;
+}
+
 export async function categoryContracts(db: D1Database, teamId: string, category: NegotiationCategory): Promise<CategoryContracts> {
-  const sql = (status: "active" | "expired") =>
-    `SELECT id, sponsor_id, sponsor_name, monthly_amount, win_bonus, seasons_remaining, early_termination_fee, status
-     FROM sponsor_contracts WHERE team_id = ? AND status = '${status}' AND COALESCE(category, 'main') = ?
-     ORDER BY signed_at DESC LIMIT 1`;
   const [active, lastExpired] = await Promise.all([
-    db.prepare(sql("active")).bind(teamId, category).first<ContractRow>(),
-    db.prepare(sql("expired")).bind(teamId, category).first<ContractRow>(),
+    db.prepare(
+      `SELECT id, sponsor_id, sponsor_name, monthly_amount, win_bonus, seasons_remaining, early_termination_fee, status
+       FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND COALESCE(category, 'main') = ?
+       ORDER BY signed_at DESC LIMIT 1`,
+    ).bind(teamId, category).first<ContractRow>(),
+    lastRenewableExpired<ContractRow & Record<string, unknown>>(db, teamId, category),
   ]);
   return { active: active ?? null, lastExpired: lastExpired ?? null };
 }
 
-/** Prodloužení = jednání se stejnou firmou, jaká má aktivní (jinak naposledy vypršelou) smlouvu v kategorii. */
+/** Prodloužení = jednání se stejnou firmou, jaká má aktivní (jinak naposledy vypršelou, viz expiredCountsAsRenewal) smlouvu v kategorii. */
 export function isRenewalOf(c: CategoryContracts, sponsorId: number): boolean {
   return c.active ? c.active.sponsor_id === sponsorId : c.lastExpired?.sponsor_id === sponsorId;
 }
@@ -269,7 +363,7 @@ export async function buildNegotiationContext(db: D1Database, i: {
   personality: OwnerPersonality; wishes: PromiseKind[]; budgetB: number;
 }): Promise<NegotiationContext> {
   const { team, sponsor } = i;
-  const [league, cup, attendance, manager, stadium, equip, played, banner, contracts] = await Promise.all([
+  const [league, cup, attendance, manager, stadium, equip, played, banner, contracts, progress] = await Promise.all([
     leagueStrength(db, team.league_id, team.id),
     db.prepare("SELECT total_rounds FROM cup_competitions WHERE season_number = ? ORDER BY rowid DESC LIMIT 1")
       .bind(i.season).first<{ total_rounds: number }>(),
@@ -283,6 +377,7 @@ export async function buildNegotiationContext(db: D1Database, i: {
     db.prepare("SELECT 1 AS x FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND category = 'banner' AND sponsor_type = ? LIMIT 1")
       .bind(team.id, sponsor.type).first<{ x: number }>(),
     categoryContracts(db, team.id, i.category),
+    loadTeamSeasonProgress(db, team.id),
   ]);
   const matchesPlayed = played?.cnt ?? 0;
   const other = contracts.active && contracts.active.sponsor_id !== sponsor.id ? contracts.active : null;
@@ -298,6 +393,7 @@ export async function buildNegotiationContext(db: D1Database, i: {
     facilities: facilityOptions(stadium, team.reputation, matchesPlayed, i.season),
     equipment: equipmentGiftOptions(equip, team.reputation, matchesPlayed, i.season),
     currentTerminationFee: other ? prorataTerminationFee(other) : 0,
+    seasonProgressMonths: progress,
   };
 }
 
@@ -446,10 +542,20 @@ export interface NegotiationView {
   estimate: { base: Range; cap: Range; cautiousSeasonBonus: number };
   winBonusFactor: number;
   monthsPerSeason: number;
+  /**
+   * Skutečná délka smlouvy v měsících podle počtu sezón (index 0 = 1 sezóna): od dneška do konce
+   * poslední sezóny (effectiveContractMonths). Náhled na webu s ní rozpočítává jednorázové položky
+   * a pravidlo o měsíční polovině stejně jako server.
+   */
+  contractMonths: number[];
   catalog: PromiseOption[];
   construction: GiftOption[];
   equipment: GiftOption[];
-  current: null | { sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean };
+  /** `clawback` = nesplacená záloha současné smlouvy, kterou klub při podpisu vrací (i při prodloužení). */
+  current: null | {
+    sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean;
+    clawback: number;
+  };
   rounds: NegotiationRound[];
   pending: null | {
     proposal: Proposal; promises: PromiseRowView[]; terminationFee: number; constructionCost: number; equipmentCost: number;
@@ -458,7 +564,8 @@ export interface NegotiationView {
   season: number;
 }
 
-export function negotiationView(st: NegotiationState): NegotiationView {
+/** `currentClawback`: vratka zálohy současné smlouvy (contractClawback v signing.ts, viewWithClawback). */
+export function negotiationView(st: NegotiationState, extra: { currentClawback: number } = { currentClawback: 0 }): NegotiationView {
   const { neg, ctx, favor, owner, sponsor } = st;
   const terms = pendingTerms(neg);
   const summary = terms ? signingSummary(terms, ctx, teamGameDate(st.team)) : null;
@@ -484,13 +591,15 @@ export function negotiationView(st: NegotiationState): NegotiationView {
     },
     winBonusFactor: Math.round(winBonusFactor(ctx) * 1000) / 1000,
     monthsPerSeason: MONTHS_PER_SEASON,
+    // Nezaokrouhleně: web s tím počítá minMonthlyFor, musí vyjít na korunu stejně jako na serveru.
+    contractMonths: Array.from({ length: MAX_SEASONS - MIN_SEASONS + 1 }, (_, i) => effectiveContractMonths(MIN_SEASONS + i, ctx.seasonProgressMonths)),
     catalog: promiseCatalog(ctx, favor),
     construction: constructionOptions(ctx),
     equipment: equipmentOptions(ctx),
     current: current ? {
       sponsorName: current.sponsor_name, monthlyAmount: current.monthly_amount, winBonus: current.win_bonus,
       seasonsRemaining: current.seasons_remaining, terminationFee: prorataTerminationFee(current),
-      sameSponsor: current.sponsor_id === sponsor.id,
+      sameSponsor: current.sponsor_id === sponsor.id, clawback: extra.currentClawback,
     } : null,
     rounds: neg.rounds,
     pending: summary ? {

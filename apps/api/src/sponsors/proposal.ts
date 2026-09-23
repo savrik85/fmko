@@ -10,7 +10,8 @@ import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import { MONTHS_PER_SEASON, RELEGATION_SPOTS } from "./ambition";
 import { budgetEstimateRange } from "./budget";
 import {
-  MAX_PROMISES, MAX_SEASONS, meetsMonthlyShare, MIN_SEASONS, promiseChance, promisePenalty, promiseValueShare,
+  attendanceCatalogValue, MAX_ATTENDANCE, MAX_PROMISES, MAX_SEASONS, meetsMonthlyShare, MIN_SEASONS, minAttendance, promiseChance,
+  promisePenalty, promiseValueShare,
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import {
@@ -79,8 +80,8 @@ function sanitizePromise(raw: unknown, ctx: NegotiationContext, seasons: number)
     case "attendance": {
       const attendance = int(p.attendance);
       // Aspoň 0,9 × loňský průměr, jinak by šlo slíbit i pokles.
-      const min = Math.max(1, Math.round(ctx.lastAvgAttendance * 0.9));
-      return attendance !== null && attendance >= min && attendance <= 5000 ? spec({ attendance }) : "Neplatná návštěva";
+      const min = minAttendance(ctx.lastAvgAttendance);
+      return attendance !== null && attendance >= min && attendance <= MAX_ATTENDANCE ? spec({ attendance }) : "Neplatná návštěva";
     }
     case "youth": {
       const count = int(p.count);
@@ -225,13 +226,11 @@ function candidates(ctx: NegotiationContext): PromiseSpec[] {
   }
   if (ctx.category === "stadium") out.push({ kind: "jersey_logo", params: {} });
   if (!ctx.sectorBannerActive) out.push({ kind: "sector_exclusivity", params: { sector: ctx.sponsorType } });
-  const avg = Math.max(10, ctx.lastAvgAttendance);
-  // Zaokrouhleno NAHORU (Math.ceil) a ohlídáno proti skutečnému minimu validátoru (sanitizePromise),
-  // jinak by kulaté hodnoty katalogu mohly kvůli jinému zaokrouhlení padnout pod 0,9 × loňský průměr.
-  const attendanceFloor = Math.max(10, Math.round(ctx.lastAvgAttendance * 0.9));
+  // Zaokrouhleno NAHORU a ohlídáno proti minimu validátoru (attendanceCatalogValue, sdílí ho
+  // i protinávrh majitele v defaultPromise).
   const seenAttendance = new Set<number>();
   for (const mult of [0.9, 1, 1.1, 1.25, 1.5]) {
-    const attendance = Math.max(attendanceFloor, Math.ceil((avg * mult) / 10) * 10);
+    const attendance = attendanceCatalogValue(ctx.lastAvgAttendance, mult);
     if (seenAttendance.has(attendance)) continue;
     seenAttendance.add(attendance);
     out.push({ kind: "attendance", params: { attendance } });

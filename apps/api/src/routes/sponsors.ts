@@ -17,14 +17,14 @@ import {
 } from "../sponsors/favor";
 import { afterReject, COOLDOWN_DAYS, evaluateRound, INSULT_FAVOR } from "../sponsors/negotiation";
 import {
-  loadNegotiationSponsor, loadNegotiationState, loadNegotiationTeam, negotiationAvailability, negotiationView, openNegotiation,
+  loadNegotiationSponsor, loadNegotiationState, loadNegotiationTeam, negotiationAvailability, openNegotiation,
   saveRound, teamGameDate, type NegotiationRound, type NegotiationStatus,
 } from "../sponsors/negotiation-db";
 import { ownerResponse, type ResponseKind } from "../sponsors/negotiation-texts";
 import { averageFavor, countBands, pickExtremes, rankAmongClubs, seasonAtDate, type FirmFavor } from "../sponsors/overview";
 import type { OwnerPersonality } from "../sponsors/owners";
 import { validateProposal } from "../sponsors/proposal";
-import { signNegotiation } from "../sponsors/signing";
+import { signNegotiation, viewWithClawback } from "../sponsors/signing";
 
 export const sponsorsRouter = new Hono<{ Bindings: Bindings }>();
 sponsorsRouter.use("/teams/:teamId/sponsor-owners/*", requireTeamOwnership);
@@ -469,7 +469,7 @@ sponsorsRouter.post("/teams/:teamId/sponsors/:sponsorId/negotiations", async (c)
   if (!opened.ok) return c.json({ error: opened.error }, opened.status);
   const st = await loadNegotiationState(db, teamId, opened.id);
   if ("error" in st) return c.json({ error: st.error }, st.status);
-  return c.json(negotiationView(st));
+  return c.json(await viewWithClawback(db, st));
 });
 
 // GET /api/teams/:teamId/sponsors/negotiations/:negotiationId: stav jednání (jen vlastník klubu)
@@ -479,7 +479,7 @@ sponsorsRouter.get("/teams/:teamId/sponsors/negotiations/:negotiationId", async 
   if (denied) return c.json({ error: denied.error }, denied.status);
   const st = await loadNegotiationState(c.env.DB, teamId, c.req.param("negotiationId"));
   if ("error" in st) return c.json({ error: st.error }, st.status);
-  return c.json(negotiationView(st));
+  return c.json(await viewWithClawback(c.env.DB, st));
 });
 
 const MAX_NEGOTIATION_ROUNDS = 30;
@@ -549,7 +549,7 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
 
   const fresh = await loadNegotiationState(db, teamId, st.neg.id);
   if ("error" in fresh) return c.json({ error: fresh.error }, fresh.status);
-  return c.json(negotiationView(fresh));
+  return c.json(await viewWithClawback(db, fresh));
 });
 
 // POST /api/teams/:teamId/sponsors/negotiations/:negotiationId/accept: podpis přijatého návrhu

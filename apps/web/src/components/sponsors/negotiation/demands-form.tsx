@@ -3,7 +3,7 @@
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import {
-  bonusAwareOneTime, findOption, minMonthlyFor, PROMISE_LABELS, type Demands, type NegotiationView, type Proposal,
+  bonusAwareOneTime, contractMonthsOf, findOption, minMonthlyFor, PROMISE_LABELS, type Demands, type NegotiationView, type Proposal,
 } from "@/lib/sponsor-negotiation";
 
 function MoneyInput({ label, hint, value, onChange }: { label: string; hint?: string; value: number; onChange: (v: number) => void }) {
@@ -29,7 +29,7 @@ export function DemandsForm({ view, proposal, onChange }: {
   // Pravidlo o měsíční polovině (server: meetsMonthlyShare) počítá se všemi jednorázovými
   // položkami a bonusy za splnění (bonusAwareOneTime): ukázat hned u darů, ať je jasné,
   // proč server návrh odmítne, když je měsíční podpora moc nízká.
-  const months = view.monthsPerSeason * proposal.seasons;
+  const months = contractMonthsOf(view, proposal.seasons);
   const oneTime = bonusAwareOneTime(view, proposal);
   const minMonthly = minMonthlyFor(oneTime, months);
 

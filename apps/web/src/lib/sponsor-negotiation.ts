@@ -61,10 +61,16 @@ export interface NegotiationView {
   estimate: { base: Range; cap: Range; cautiousSeasonBonus: number };
   winBonusFactor: number;
   monthsPerSeason: number;
+  /** Skutečná délka smlouvy v měsících od dneška do konce poslední sezóny, index 0 = 1 sezóna (server: effectiveContractMonths). */
+  contractMonths: number[];
   catalog: PromiseOption[];
   construction: GiftOption[];
   equipment: GiftOption[];
-  current: null | { sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean };
+  /** `clawback`: nesplacená záloha současné smlouvy, kterou klub při podpisu vrací (i při prodloužení). */
+  current: null | {
+    sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean;
+    clawback: number;
+  };
   rounds: NegotiationRound[];
   pending: null | {
     proposal: Proposal; promises: PromiseRowView[]; terminationFee: number; constructionCost: number;
@@ -146,9 +152,17 @@ export function estimateRange(view: NegotiationView, promises: PromiseSpec[], se
   };
 }
 
+/**
+ * Skutečná délka smlouvy v měsících (od dneška do konce poslední sezóny), přesně to číslo, se kterým
+ * počítá server. Smlouva podepsaná pozdě v sezóně je o uplynulou část sezóny kratší.
+ */
+export function contractMonthsOf(view: NegotiationView, seasons: number): number {
+  return view.contractMonths[seasons - 1] ?? Math.max(1, seasons * view.monthsPerSeason);
+}
+
 /** Kolik návrh sponzora stojí měsíčně, stejný vzorec jako costBreakdown na API. */
 export function previewCost(view: NegotiationView, p: Proposal): number {
-  const m = p.seasons * view.monthsPerSeason;
+  const m = contractMonthsOf(view, p.seasons);
   const d = p.demands;
   let cost = d.monthly + d.winBonus * view.winBonusFactor + d.signingBonus / m;
   for (const spec of p.promises) {
@@ -217,7 +231,7 @@ export function bonusAwareOneTime(view: NegotiationView, p: Proposal): number {
 
 /**
  * Nejnižší celá měsíční podpora, se kterou platí pravidlo o měsíční polovině, zrcadlí minMonthlyFor
- * v apps/api/src/sponsors/negotiation.ts (vstup: bonusAwareOneTime, měsíce = sezóny × monthsPerSeason).
+ * v apps/api/src/sponsors/negotiation.ts (vstup: bonusAwareOneTime, měsíce = contractMonthsOf).
  */
 export function minMonthlyFor(oneTime: number, months: number): number {
   const need = (MIN_MONTHLY_SHARE / (1 - MIN_MONTHLY_SHARE)) * (oneTime / Math.max(EPS, months));

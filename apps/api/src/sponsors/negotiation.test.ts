@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
   advanceClawback, afterReject, bonusAwareOneTime, buildPromiseRows, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
-  evaluateRound, initialPatience, meetsMonthlyShare, minMonthlyFor, oneTimeTotal, proposalOneTimeTotal, promiseChance, promisePenalty,
+  effectiveContractMonths, evaluateRound, initialPatience, meetsMonthlyShare, minMonthlyFor, oneTimeTotal, proposalOneTimeTotal, promiseChance, promisePenalty,
   promiseRowCount, promiseValueShare, reduceToWillingness, requestCost, seasonalGoalBonusTotal, willingness,
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
@@ -20,7 +20,7 @@ const CTX: NegotiationContext = {
     { facility: "toilets", currentLevel: 0, locked: false, costs: [0, 12000, 40000, 100000] },
   ],
   equipment: [{ category: "balls", currentLevel: 1, nextLevel: 2, cost: 8000, locked: false }],
-  currentTerminationFee: 7442,
+  currentTerminationFee: 7442, seasonProgressMonths: 0,
 };
 
 function prop(demands: Partial<Demands> = {}, seasons = 2, promises: PromiseSpec[] = []): Proposal {
@@ -469,5 +469,77 @@ describe("sezónní bonusy za splnění v pravidle o měsíční polovině (nov�
       }
     }
     expect(counters).toBeGreaterThan(0);
+  });
+});
+
+describe("skutečná délka smlouvy (podpis pozdě v sezóně)", () => {
+  const MPS = MONTHS_PER_SEASON;
+  const late = { ...CTX, seasonProgressMonths: MPS - 0.1 };
+
+  it("od podpisu do konce poslední sezóny, aspoň 1 měsíc", () => {
+    expect(effectiveContractMonths(2, 0)).toBeCloseTo(2 * MPS, 9);
+    expect(effectiveContractMonths(2, MPS / 2)).toBeCloseTo(1.5 * MPS, 9);
+    expect(effectiveContractMonths(1, MPS)).toBe(1);
+  });
+
+  it("příspěvek za podpis se rozpočítá na zbytek sezóny, ne na celou sezónu", () => {
+    const p = prop({ monthly: 3000, signingBonus: 6000 }, 1);
+    expect(requestCost(p, CTX)).toBeCloseTo(3000 + 6000 / MPS, 6);
+    expect(requestCost(p, late)).toBeCloseTo(3000 + 6000 / 1, 6);
+  });
+
+  it("pozdní podpis na 1 sezónu s velkým příspěvkem už se nevyplatí: na začátku sezóny projde, na konci ne", () => {
+    // O = 0,7 × B = 7000. Polovina měsíčně, druhá polovina jako příspěvek za podpis za celou sezónu.
+    const o = willingness(prop({ monthly: 1 }, 1), CTX);
+    const monthly = Math.floor(o / 2);
+    const signingBonus = Math.floor((o / 2) * MPS);
+    const p = prop({ monthly, signingBonus }, 1);
+    expect(evaluateRound(p, CTX).kind).toBe("accept");
+    expect(meetsMonthlyShare(p, CTX)).toBe(true);
+    // Na konci sezóny by klub dostal skoro celý příspěvek a smlouva by při rolloveru hned vypršela.
+    expect(meetsMonthlyShare(p, late)).toBe(false);
+    expect(evaluateRound(p, late).kind).toBe("reject");
+  });
+
+  it("co klub pozdním podpisem dostane, je nejvýš ochota × skutečné měsíce (žádný zisk navíc)", () => {
+    for (const progress of [0, MPS / 2, MPS - 0.5, MPS]) {
+      const ctx = { ...CTX, seasonProgressMonths: progress };
+      const m = effectiveContractMonths(1, progress);
+      const o = willingness(prop({ monthly: 1 }, 1), ctx);
+      // Nejvyšší příspěvek, který majitel ještě přijme při polovině měsíčně.
+      const monthly = Math.max(1, Math.floor(o / 2));
+      const signingBonus = Math.floor((o - monthly) * m);
+      const p = prop({ monthly, signingBonus }, 1);
+      expect(evaluateRound(p, ctx).kind).toBe("accept");
+      expect(monthly * m + signingBonus).toBeLessThanOrEqual(o * m + 1e-6);
+    }
+    // Na začátku sezóny smlouva vynese řádově víc než podpis na jejím konci.
+    const early = willingness(prop({ monthly: 1 }, 1), CTX) * effectiveContractMonths(1, 0);
+    const lateMax = willingness(prop({ monthly: 1 }, 1), late) * effectiveContractMonths(1, MPS - 0.1);
+    expect(lateMax).toBeLessThan(early / 3);
+  });
+
+  it("pokuta za slib se počítá ze skutečné délky smlouvy", () => {
+    const p: Proposal = { seasons: 2, promises: [{ kind: "coach_licence", params: { level: 2 } }], demands: prop({ monthly: 5000 }, 2).demands };
+    const full = buildPromiseRows(p, CTX, "2026-09-23T00:00:00.000Z")[0].penalty;
+    const half = buildPromiseRows(p, { ...CTX, seasonProgressMonths: MPS }, "2026-09-23T00:00:00.000Z")[0].penalty;
+    expect(Math.abs(half - full / 2)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("protinávrh návštěvy je položka katalogu", () => {
+  it("defaultPromise attendance = hodnota „průměr“ z katalogu (zaokrouhlení nahoru)", async () => {
+    const { promiseCatalog } = await import("./proposal");
+    for (const lastAvgAttendance of [5, 95, 123, 200, 207, 1234, 4999]) {
+      const ctx = { ...CTX, lastAvgAttendance };
+      const def = defaultPromise("attendance", ctx, prop({ monthly: 5000 }, 2));
+      expect(def).not.toBeNull();
+      const catalog = promiseCatalog(ctx, 50).filter((o) => o.kind === "attendance").map((o) => o.params.attendance);
+      expect(catalog).toContain(def!.params.attendance);
+    }
+  });
+
+  it("nad strop 5000 protinávrh návštěvy nedává", () => {
+    expect(defaultPromise("attendance", { ...CTX, lastAvgAttendance: 5001 }, prop({ monthly: 5000 }, 2))).toBeNull();
   });
 });

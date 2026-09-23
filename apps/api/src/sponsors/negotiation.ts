@@ -67,6 +67,11 @@ export interface NegotiationContext {
   equipment: EquipmentOption[];
   /** Poměrná výpovědní pokuta u JINÉHO současného sponzora v kategorii (0 = není co platit). */
   currentTerminationFee: number;
+  /**
+   * Kolik měsíců aktuální sezóny už uplynulo (0 až MONTHS_PER_SEASON, loadTeamSeasonProgress).
+   * Smlouva běží od podpisu do konce poslední sezóny, tahle část sezóny podpisu do ní nepatří.
+   */
+  seasonProgressMonths: number;
 }
 
 export interface Demands {
@@ -96,8 +101,24 @@ export function afterReject(patience: number): { patience: number; walkedAway: b
   return { patience: next, walkedAway: next === 0 };
 }
 
+/** Nominální délka smlouvy v měsících (celé sezóny, bez ohledu na den podpisu). */
 export function contractMonths(seasons: number): number {
   return seasons * MONTHS_PER_SEASON;
+}
+
+/**
+ * Skutečná délka smlouvy v měsících: od podpisu do konce poslední sezóny. Rollover ubírá sezónu
+ * smlouvy na konci KAŽDÉ sezóny, i té, ve které se podepsalo, takže smlouva podepsaná pozdě
+ * v sezóně běží o uplynulou část kratší. Aspoň 1 měsíc (podpis v poslední den sezóny).
+ * Stejná délka jako v clawbackAmount (signing.ts): seasons × MONTHS_PER_SEASON − startOffsetMonths.
+ */
+export function effectiveContractMonths(seasons: number, progressMonths: number): number {
+  return Math.max(1, seasons * MONTHS_PER_SEASON - Math.max(0, progressMonths));
+}
+
+/** Skutečná délka návrhu v měsících podle postupu sezóny v kontextu. */
+export function proposalMonths(proposal: Proposal, ctx: NegotiationContext): number {
+  return effectiveContractMonths(proposal.seasons, ctx.seasonProgressMonths);
 }
 
 function facilityOf(ctx: NegotiationContext, facility: string | undefined): FacilityOption | null {
@@ -194,9 +215,13 @@ export interface CostItem {
   reducible: boolean;
 }
 
-/** Cena požadavků pro sponzora jako měsíční ekvivalent za dobu smlouvy (spec, tabulka požadavků). */
+/**
+ * Cena požadavků pro sponzora jako měsíční ekvivalent za dobu smlouvy (spec, tabulka požadavků).
+ * Jednorázové položky se rozpočítají na skutečnou délku smlouvy (proposalMonths), ne na celé
+ * sezóny: jinak by podpis na konci sezóny s velkým příspěvkem za podpis byl opakovatelný zisk.
+ */
 export function costBreakdown(proposal: Proposal, ctx: NegotiationContext): CostItem[] {
-  const m = contractMonths(proposal.seasons);
+  const m = proposalMonths(proposal, ctx);
   const d = proposal.demands;
   const item = (key: CostKey, amount: number, perUnit: number, reducible: boolean): CostItem =>
     ({ key, amount, perUnit, monthly: amount * perUnit, reducible });
@@ -277,9 +302,12 @@ export function minMonthlyFor(oneTime: number, months: number): number {
   return Math.max(1, Math.ceil(need - EPS));
 }
 
-/** Platí pravidlo, že aspoň polovina podpory chodí měsíčně? Počítá se ze všech bonusů za splnění (bonusAwareOneTime). */
+/**
+ * Platí pravidlo, že aspoň polovina podpory chodí měsíčně? Počítá se ze všech bonusů za splnění
+ * (bonusAwareOneTime) a skutečné délky smlouvy (proposalMonths).
+ */
 export function meetsMonthlyShare(proposal: Proposal, ctx: NegotiationContext): boolean {
-  const m = contractMonths(proposal.seasons);
+  const m = proposalMonths(proposal, ctx);
   const d = proposal.demands;
   return d.monthly + EPS >= MIN_MONTHLY_SHARE * (d.monthly + bonusAwareOneTime(proposal, ctx) / m);
 }
@@ -300,7 +328,7 @@ function withAmount(d: Demands, key: CostKey, value: number): void {
 export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext, target: number): Proposal | null {
   let excess = requestCost(proposal, ctx) - target;
   const demands: Demands = { ...proposal.demands, goalBonuses: { ...proposal.demands.goalBonuses } };
-  const m = contractMonths(proposal.seasons);
+  const m = proposalMonths(proposal, ctx);
   const items = costBreakdown(proposal, ctx)
     .filter((i) => i.reducible && i.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly);
@@ -356,12 +384,10 @@ export function defaultPromise(kind: PromiseKind, ctx: NegotiationContext, propo
     }
     case "sector_exclusivity": return ctx.sectorBannerActive ? null : spec({ sector: ctx.sponsorType });
     case "attendance": {
-      // Dolní mez i strop podle validátoru (proposal.ts): aspoň 0,9 × loňský průměr, max 5000.
-      const min = Math.max(1, Math.round(ctx.lastAvgAttendance * 0.9));
-      if (min > 5000) return null;
-      // Stejná hodnota jako položka „průměr" v katalogu (proposal.ts), aby ji klient našel.
-      const target = Math.max(min, Math.round(Math.max(10, ctx.lastAvgAttendance) / 10) * 10);
-      return spec({ attendance: Math.min(5000, target) });
+      // Přesně položka „průměr" z katalogu (proposal.ts, stejné zaokrouhlení nahoru), aby ji klient
+      // našel. Strop 5000 podle validátoru, nad ním slib nabídnout nejde.
+      const target = attendanceCatalogValue(ctx.lastAvgAttendance, 1);
+      return target > MAX_ATTENDANCE ? null : spec({ attendance: target });
     }
     case "youth": return spec({ count: 2 });
     case "reputation": {
@@ -370,6 +396,25 @@ export function defaultPromise(kind: PromiseKind, ctx: NegotiationContext, propo
       return target > 100 ? null : spec({ reputation: target });
     }
   }
+}
+
+/** Nejvyšší návštěva, kterou jde slíbit (validátor v proposal.ts). */
+export const MAX_ATTENDANCE = 5000;
+
+/** Nejnižší slibovaná návštěva: 0,9 × loňský průměr (validátor v proposal.ts). */
+export function minAttendance(lastAvgAttendance: number): number {
+  return Math.max(1, Math.round(lastAvgAttendance * 0.9));
+}
+
+/**
+ * Hodnota návštěvy v katalogu slibů pro násobek loňského průměru: zaokrouhleno NAHORU na desítky
+ * a nikdy pod dolní mez validátoru. Sdílí ji katalog (proposal.ts) i protinávrh majitele
+ * (defaultPromise), aby protinávrh vždycky ukazoval na položku katalogu.
+ */
+export function attendanceCatalogValue(lastAvgAttendance: number, mult: number): number {
+  const avg = Math.max(10, lastAvgAttendance);
+  const floor = Math.max(10, minAttendance(lastAvgAttendance));
+  return Math.max(floor, Math.ceil((avg * mult) / 10) * 10);
 }
 
 export type RoundOutcome =
@@ -404,7 +449,7 @@ export function evaluateRound(proposal: Proposal, ctx: NegotiationContext): Roun
 
 /**
  * Pokuta za nesplněný slib, na jeden řádek: share × B × seasonMultiplier × měsíce CELÉ smlouvy
- * / počet řádků (pevně při podpisu). `seasonMultiplier` musí být STEJNÝ jako ten, kterým
+ * (skutečná délka od podpisu, proposalMonths) / počet řádků (pevně při podpisu). `seasonMultiplier` musí být STEJNÝ jako ten, kterým
  * willingness() násobí přínos slibu do ochoty (kolo 3 review) — jinak by u opatrného majitele
  * na víc sezón součet pokut nedosáhl skutečné hodnoty, kterou slib do ochoty přidal.
  */
@@ -412,7 +457,10 @@ export function promisePenalty(valueShare: number, budgetB: number, months: numb
   return Math.round((valueShare * budgetB * seasonMult * months) / Math.max(1, rows));
 }
 
-/** Výpovědní pokuta nové smlouvy: jen z měsíční podpory, stejný vzorec jako u dřívějších pevných nabídek. */
+/**
+ * Výpovědní pokuta nové smlouvy: jen z měsíční podpory, stejný vzorec jako u dřívějších pevných nabídek.
+ * Na měsících smlouvy nezávisí (sezóny, při výpovědi se krátí podle zbývajících sezón).
+ */
 export function earlyTerminationFee(i: { monthly: number; seasons: number }): number {
   return Math.round(i.monthly * i.seasons * 2);
 }
@@ -457,7 +505,7 @@ export interface PromiseRow {
 /** Řádky sponsor_promises pro podpis: sezónní za každou sezónu od příští, termínové s termínem. */
 export function buildPromiseRows(proposal: Proposal, ctx: NegotiationContext, signGameDate: string): PromiseRow[] {
   const rows: PromiseRow[] = [];
-  const months = contractMonths(proposal.seasons);
+  const months = proposalMonths(proposal, ctx);
   const seasonMult = seasonMultiplier(ctx.personality, proposal.seasons);
   for (const p of proposal.promises) {
     // Pokuta z NEzaokrouhleného podílu (jinak by u velkého B zaokrouhlení podílu na 4 místa
