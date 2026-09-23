@@ -46,6 +46,9 @@ export const DEADLINE_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["c
 /** „Výsledky nad nesestup": opatrnému majiteli jsou jedno. */
 export const RESULT_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["league_position", "promotion", "cup_round"]);
 
+/** Stejný cíl v lize: umístění, postup a nesestup se navzájem vylučují, klub smí slíbit jen jeden. */
+export const LEAGUE_FINISH_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["league_position", "promotion", "no_relegation"]);
+
 /** Základ hodnoty slibu jako podíl rozpočtu B. Licence a stavba se násobí počtem stupňů (negotiation.ts). */
 export const PROMISE_BASE_SHARE: Record<PromiseKind, number> = {
   league_position: 0.15,

@@ -6,12 +6,12 @@ import { MAX_LICENCE } from "@okresni-masina/shared";
 import { gameExpiry } from "../lib/game-time";
 import {
   attendanceAmbition, cupRoundAmbition, expectedWinsPerSeason, leaguePositionAmbition, MONTHS_PER_SEASON,
-  noRelegationAmbition, promotionAmbition, sponsorChance, TERM_PROMISE_CHANCE,
+  noRelegationAmbition, promotionAmbition, sponsorChance,
 } from "./ambition";
 import { clampFavor } from "./favor-math";
 import type { OwnerPersonality } from "./owners";
 import {
-  BIG_FACILITIES, DEADLINE_KINDS, PROMISE_BASE_SHARE, PROMISE_DEADLINE_DAYS, SEASONAL_KINDS,
+  BIG_FACILITIES, DEADLINE_KINDS, LEAGUE_FINISH_KINDS, PROMISE_BASE_SHARE, PROMISE_DEADLINE_DAYS, SEASONAL_KINDS,
   type PromiseKind, type PromiseParams, type PromiseSpec,
 } from "./promise-kinds";
 import { kindAllowedForCategory, promiseInterest } from "./wishes";
@@ -28,6 +28,10 @@ export const NEGOTIATION_DAYS = 7;
 export const MIN_SEASONS = 1;
 export const MAX_SEASONS = 3;
 export const CAUTIOUS_SEASON_BONUS = 0.05;
+/** Nejvíc slibů v jednom návrhu (validateProposal i protinabídka za přání). */
+export const MAX_PROMISES = 8;
+/** Ambice na podlaze (≤ 0,3, clamp v ambition.ts) = slib je fakticky jistý, nemá dávat hodnotu ani šanci pod jistotu. */
+const FLOOR_AMBITION = 0.3;
 /** Tolerance porovnání cen v Kč (plovoucí čárka). */
 const EPS = 1e-6;
 
@@ -114,8 +118,15 @@ export function promiseBaseShare(p: PromiseSpec, ctx: NegotiationContext): numbe
   return PROMISE_BASE_SHARE[p.kind];
 }
 
+/** Sezónní slib s ambicí na podlaze je fakticky jistý (skoro se stane sám) — nedává klubu žádnou hodnotu. */
+function isFloorAmbition(kind: PromiseKind, ambition: number): boolean {
+  return SEASONAL_KINDS.has(kind) && ambition <= FLOOR_AMBITION + EPS;
+}
+
 export function promiseValueShare(p: PromiseSpec, ctx: NegotiationContext): number {
-  return promiseBaseShare(p, ctx) * promiseInterest(p.kind, ctx.personality, ctx.wishes) * promiseAmbition(p, ctx);
+  const ambition = promiseAmbition(p, ctx);
+  if (isFloorAmbition(p.kind, ambition)) return 0;
+  return promiseBaseShare(p, ctx) * promiseInterest(p.kind, ctx.personality, ctx.wishes) * ambition;
 }
 
 /** Opatrný majitel ocení dlouhou smlouvu: +5 % za každou sezónu nad jednu. */
@@ -130,8 +141,15 @@ export function willingness(proposal: Proposal, ctx: NegotiationContext): number
   return Math.min(raw, WILLINGNESS_CAP * ctx.budgetB);
 }
 
+/**
+ * Šance, kterou sponzor slibu dává (pro cenu bonusu za splnění). Nesezónní sliby (licence,
+ * stavba, dres, exkluzivita oboru) řeší klub sám, tam sponzor riskuje 0 — šance 1,0.
+ * U sezónního slibu s ambicí na podlaze je výsledek prakticky jistý, taky 1,0.
+ */
 export function promiseChance(p: PromiseSpec, ctx: NegotiationContext): number {
-  return SEASONAL_KINDS.has(p.kind) ? sponsorChance(promiseAmbition(p, ctx)) : TERM_PROMISE_CHANCE;
+  if (!SEASONAL_KINDS.has(p.kind)) return 1.0;
+  const ambition = promiseAmbition(p, ctx);
+  return ambition <= FLOOR_AMBITION + EPS ? 1.0 : sponsorChance(ambition);
 }
 
 /** Kolik řádků sponsor_promises slib založí: sezónní jeden za každou sezónu od příští. */
@@ -211,8 +229,10 @@ export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext,
     .sort((a, b) => b.monthly - a.monthly);
   for (const it of items) {
     if (excess <= EPS) break;
+    // Měsíční podpora nikdy neklesne na 0 (byla by to smlouva bez skutečného peněžního závazku).
+    const floor = it.key === "monthly" ? 1 : 0;
     // EPS: plovoucí čárka (0,7 × B = 6999,9999…) nesmí přidat stovku navíc.
-    const cut = Math.min(it.amount, Math.ceil((excess / it.perUnit - EPS) / 100) * 100);
+    const cut = Math.min(it.amount - floor, Math.ceil((excess / it.perUnit - EPS) / 100) * 100);
     const next = it.amount - cut;
     withAmount(demands, it.key, next);
     excess -= cut * it.perUnit;
@@ -245,10 +265,20 @@ export function defaultPromise(kind: PromiseKind, ctx: NegotiationContext, propo
       return f ? spec({ facility: f.facility, level: f.currentLevel + 1 }) : null;
     }
     case "sector_exclusivity": return ctx.sectorBannerActive ? null : spec({ sector: ctx.sponsorType });
-    // Stejná hodnota jako položka „průměr" v katalogu (proposal.ts), aby ji klient našel.
-    case "attendance": return spec({ attendance: Math.max(10, Math.round(Math.max(10, ctx.lastAvgAttendance) / 10) * 10) });
+    case "attendance": {
+      // Dolní mez i strop podle validátoru (proposal.ts): aspoň 0,9 × loňský průměr, max 5000.
+      const min = Math.max(1, Math.round(ctx.lastAvgAttendance * 0.9));
+      if (min > 5000) return null;
+      // Stejná hodnota jako položka „průměr" v katalogu (proposal.ts), aby ji klient našel.
+      const target = Math.max(min, Math.round(Math.max(10, ctx.lastAvgAttendance) / 10) * 10);
+      return spec({ attendance: Math.min(5000, target) });
+    }
     case "youth": return spec({ count: 2 });
-    case "reputation": return spec({ reputation: ctx.reputation });
+    case "reputation": {
+      // Dolní mez podle validátoru: aspoň current + 3, nesmí přes 100.
+      const target = ctx.reputation + 3;
+      return target > 100 ? null : spec({ reputation: target });
+    }
   }
 }
 
@@ -265,8 +295,12 @@ export function evaluateRound(proposal: Proposal, ctx: NegotiationContext): Roun
   if (cost <= o + EPS) return { kind: "accept" };
   if (cost <= COUNTER_BAND * o + EPS) {
     const promised = new Set(proposal.promises.map((p) => p.kind));
+    const hasLeagueFinish = proposal.promises.some((p) => LEAGUE_FINISH_KINDS.has(p.kind));
     for (const wish of ctx.wishes) {
+      // Duplicitní druh, plný počet slibů nebo kolize s pravidlem „jeden cíl v lize" (1d) — přeskočit.
       if (promised.has(wish)) continue;
+      if (proposal.promises.length >= MAX_PROMISES) continue;
+      if (LEAGUE_FINISH_KINDS.has(wish) && hasLeagueFinish) continue;
       const extra = defaultPromise(wish, ctx, proposal);
       if (!extra) continue;
       const withWish: Proposal = { ...proposal, promises: [...proposal.promises, extra] };
@@ -283,9 +317,17 @@ export function promisePenalty(valueShare: number, budgetB: number): number {
   return Math.round(valueShare * budgetB * MONTHS_PER_SEASON);
 }
 
-/** Výpovědní pokuta nové smlouvy, stejný vzorec jako u dřívějších pevných nabídek. */
-export function earlyTerminationFee(monthly: number, seasons: number): number {
-  return Math.round(monthly * seasons * 2);
+/**
+ * Výpovědní pokuta nové smlouvy: měsíční ekvivalent celé dohody (podpora + podpisový příspěvek,
+ * stavba, vybavení a doplacená stará pokuta rozpočítané na měsíce) × sezóny × 2. Bez toho by
+ * šlo obejít pokutu tak, že se peníze schovají do jednorázového podpisového příspěvku nebo daru.
+ */
+export function earlyTerminationFee(i: {
+  monthly: number; signingBonus: number; construction: number; equipment: number; paidFee: number; seasons: number;
+}): number {
+  const m = contractMonths(i.seasons);
+  const equivalentMonthly = i.monthly + (i.signingBonus + i.construction + i.equipment + i.paidFee) / m;
+  return Math.round(equivalentMonthly * i.seasons * 2);
 }
 
 export interface PromiseRow {
@@ -331,12 +373,18 @@ export interface SigningSummary {
 /** Shrnutí před podpisem: všechny sliby s pokutou a odměnou, platby a výpovědní pokuta nové smlouvy. */
 export function signingSummary(proposal: Proposal, ctx: NegotiationContext, signGameDate: string): SigningSummary {
   const d = proposal.demands;
+  const constructionAmount = d.construction ? constructionCost(ctx, d.construction) : 0;
+  const equipmentAmount = d.equipment ? equipmentCost(ctx, d.equipment) : 0;
+  const currentFeeAmount = d.payCurrentFee ? ctx.currentTerminationFee : 0;
   return {
     proposal,
     rows: buildPromiseRows(proposal, ctx, signGameDate),
-    terminationFee: earlyTerminationFee(d.monthly, proposal.seasons),
-    constructionCost: d.construction ? constructionCost(ctx, d.construction) : 0,
-    equipmentCost: d.equipment ? equipmentCost(ctx, d.equipment) : 0,
-    currentFee: d.payCurrentFee ? ctx.currentTerminationFee : 0,
+    terminationFee: earlyTerminationFee({
+      monthly: d.monthly, signingBonus: d.signingBonus, construction: constructionAmount,
+      equipment: equipmentAmount, paidFee: currentFeeAmount, seasons: proposal.seasons,
+    }),
+    constructionCost: constructionAmount,
+    equipmentCost: equipmentAmount,
+    currentFee: currentFeeAmount,
   };
 }

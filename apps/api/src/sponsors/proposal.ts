@@ -7,17 +7,19 @@ import { licenceLabel, MAX_LICENCE } from "@okresni-masina/shared";
 import { roundName } from "../cup/cup";
 import { CATEGORY_LABELS } from "../equipment/equipment-generator";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
+import { RELEGATION_SPOTS } from "./ambition";
 import { budgetEstimateRange } from "./budget";
 import {
-  MAX_SEASONS, MIN_SEASONS, promiseChance, promisePenalty, promiseValueShare,
+  MAX_PROMISES, MAX_SEASONS, MIN_SEASONS, promiseChance, promisePenalty, promiseValueShare,
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import {
-  EQUIPMENT_GIFTS, isPromiseKind, SEASONAL_KINDS, type PromiseKind, type PromiseParams, type PromiseSpec,
+  EQUIPMENT_GIFTS, isPromiseKind, LEAGUE_FINISH_KINDS, SEASONAL_KINDS,
+  type PromiseKind, type PromiseParams, type PromiseSpec,
 } from "./promise-kinds";
 import { kindAllowedForCategory } from "./wishes";
 
-export const MAX_PROMISES = 8;
+export { MAX_PROMISES };
 
 type Result = { ok: true; proposal: Proposal } | { ok: false; error: string };
 const fail = (error: string): Result => ({ ok: false, error });
@@ -42,13 +44,15 @@ function sanitizePromise(raw: unknown, ctx: NegotiationContext, seasons: number)
   if (!isPromiseKind(r.kind)) return "Neznámý druh slibu";
   const kind: PromiseKind = r.kind;
   const p = r.params ?? {};
-  if (!kindAllowedForCategory(kind, ctx.category)) return "Logo na rukávu jde slíbit jen sponzorovi stadionu";
+  if (!kindAllowedForCategory(kind, ctx.category)) return "Tenhle slib u téhle smlouvy nabídnout nejde.";
   if (SEASONAL_KINDS.has(kind) && seasons < 2) return "Sezónní sliby platí až od příští sezóny, smlouva musí být aspoň na 2 sezóny";
   const spec = (params: PromiseParams): PromiseSpec => ({ kind, params });
   switch (kind) {
     case "league_position": {
       const position = int(p.position);
-      return position !== null && position >= 1 && position <= ctx.leagueTeams ? spec({ position }) : "Neplatné místo v tabulce";
+      // Bez posledních (sestupových) míst, ta by slíbil kdokoli.
+      const max = ctx.leagueTeams - RELEGATION_SPOTS;
+      return position !== null && position >= 1 && position <= max ? spec({ position }) : "Neplatné místo v tabulce";
     }
     case "promotion":
     case "no_relegation":
@@ -74,16 +78,20 @@ function sanitizePromise(raw: unknown, ctx: NegotiationContext, seasons: number)
       return spec({ sector: ctx.sponsorType });
     case "attendance": {
       const attendance = int(p.attendance);
-      const min = Math.max(1, Math.round(ctx.lastAvgAttendance * 0.5));
+      // Aspoň 0,9 × loňský průměr, jinak by šlo slíbit i pokles.
+      const min = Math.max(1, Math.round(ctx.lastAvgAttendance * 0.9));
       return attendance !== null && attendance >= min && attendance <= 5000 ? spec({ attendance }) : "Neplatná návštěva";
     }
     case "youth": {
       const count = int(p.count);
-      return count !== null && count >= 1 && count <= 4 ? spec({ count }) : "Neplatný počet mladých hráčů";
+      // Jeden hráč do 21 let bývá v sestavě i tak, slib musí něco přidat.
+      return count !== null && count >= 2 && count <= 4 ? spec({ count }) : "Neplatný počet mladých hráčů";
     }
     case "reputation": {
       const reputation = int(p.reputation);
-      return reputation !== null && reputation >= 1 && reputation <= 100 ? spec({ reputation }) : "Neplatná reputace";
+      // Aspoň o 3 nad současnou, jinak by slib nic neznamenal.
+      const min = ctx.reputation + 3;
+      return reputation !== null && reputation >= min && reputation <= 100 ? spec({ reputation }) : "Neplatná reputace";
     }
   }
 }
@@ -103,6 +111,10 @@ export function validateProposal(raw: unknown, ctx: NegotiationContext): Result 
     if (seen.has(p.kind)) return fail("Každý druh slibu jde dát jen jednou");
     seen.add(p.kind);
     promises.push(p);
+  }
+  // Umístění, postup a nesestup jsou v lize jeden a týž cíl, dohromady by šlo za jeden výsledek brát dvakrát.
+  if (promises.filter((p) => LEAGUE_FINISH_KINDS.has(p.kind)).length > 1) {
+    return fail("Umístění, postup a nesestup se navzájem vylučují, vyber jen jeden.");
   }
 
   if (!r.demands || typeof r.demands !== "object") return fail("Chybí požadavky");
@@ -192,7 +204,10 @@ export interface GiftOption { key: string; label: string; level: number; cost: n
 
 function candidates(ctx: NegotiationContext): PromiseSpec[] {
   const out: PromiseSpec[] = [];
-  for (let position = 1; position <= ctx.leagueTeams; position++) out.push({ kind: "league_position", params: { position } });
+  // Bez sestupových míst, ta by nešla slíbit (validateProposal).
+  for (let position = 1; position <= ctx.leagueTeams - RELEGATION_SPOTS; position++) {
+    out.push({ kind: "league_position", params: { position } });
+  }
   out.push({ kind: "promotion", params: {} }, { kind: "no_relegation", params: {} });
   for (let round = 2; round <= ctx.cupTotalRounds; round++) out.push({ kind: "cup_round", params: { round } });
   for (let level = ctx.licenceLevel + 1; level <= MAX_LICENCE; level++) out.push({ kind: "coach_licence", params: { level } });
@@ -212,10 +227,15 @@ function candidates(ctx: NegotiationContext): PromiseSpec[] {
     seenAttendance.add(attendance);
     out.push({ kind: "attendance", params: { attendance } });
   }
-  for (let count = 1; count <= 4; count++) out.push({ kind: "youth", params: { count } });
-  for (const plus of [0, 5, 10, 15]) {
+  // Jeden hráč do 21 let bývá v sestavě i tak, katalog nabízí až od dvou (validateProposal).
+  for (let count = 2; count <= 4; count++) out.push({ kind: "youth", params: { count } });
+  const minReputation = ctx.reputation + 3;
+  const seenReputation = new Set<number>();
+  for (const plus of [3, 5, 10, 15]) {
     const reputation = Math.min(100, ctx.reputation + plus);
-    if (plus === 0 || reputation > ctx.reputation) out.push({ kind: "reputation", params: { reputation } });
+    if (reputation < minReputation || seenReputation.has(reputation)) continue;
+    seenReputation.add(reputation);
+    out.push({ kind: "reputation", params: { reputation } });
   }
   out.push({ kind: "no_riots", params: {} });
   return out;

@@ -71,13 +71,32 @@ describe("validateProposal", () => {
     expect(ok({ seasons: 2, promises: [{ kind: "coach_licence", params: { level: 5 } }], demands }).ok).toBe(false);
     expect(ok({ seasons: 2, promises: [{ kind: "coach_licence", params: { level: 1 } }], demands }).ok).toBe(false);
   });
+  it("poslední (sestupové) místo v tabulce neprojde, bezpečné ano", () => {
+    // leagueTeams 14, RELEGATION_SPOTS 2 → nejnižší slíbitelné místo je 12.
+    expect(ok({ seasons: 2, promises: [{ kind: "league_position", params: { position: 14 } }], demands }).ok).toBe(false);
+    expect(ok({ seasons: 2, promises: [{ kind: "league_position", params: { position: 13 } }], demands }).ok).toBe(false);
+    expect(ok({ seasons: 2, promises: [{ kind: "league_position", params: { position: 12 } }], demands }).ok).toBe(true);
+  });
+  it("reputace jen o 1 vyšší než současná neprojde, o 3 ano", () => {
+    // ctx.reputation 50 → nejnižší slíbitelná je 53.
+    expect(ok({ seasons: 2, promises: [{ kind: "reputation", params: { reputation: 51 } }], demands }).ok).toBe(false);
+    expect(ok({ seasons: 2, promises: [{ kind: "reputation", params: { reputation: 53 } }], demands }).ok).toBe(true);
+  });
+  it("umístění, postup a nesestup dohromady neprojdou", () => {
+    const r = ok({
+      seasons: 2,
+      promises: [{ kind: "league_position", params: { position: 7 } }, { kind: "promotion", params: {} }],
+      demands,
+    });
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe("promiseCatalog", () => {
   const cat = promiseCatalog(CTX, 50);
-  it("umístění pro všechna místa ligy, přání má vyšší hodnotu", () => {
+  it("umístění pro všechna slíbitelná místa ligy (bez sestupových), přání má vyšší hodnotu", () => {
     const lp = cat.filter((o) => o.kind === "league_position");
-    expect(lp).toHaveLength(14);
+    expect(lp).toHaveLength(12);
     const seventh = lp.find((o) => o.params.position === 7)!;
     expect(seventh.value).toEqual({ low: 1856, high: 2644 });
     expect(seventh.seasonal).toBe(true);
@@ -89,5 +108,14 @@ describe("promiseCatalog", () => {
   });
   it("stavba zaplacená sponzorem: jen odemčená, o úroveň", () => {
     expect(constructionOptions(CTX)).toEqual([{ key: "stands", label: "Tribuny", level: 2, cost: 170000 }]);
+  });
+  it("katalog reputace nabízí jen hodnoty aspoň o 3 vyšší", () => {
+    const rep = cat.filter((o) => o.kind === "reputation");
+    expect(rep.every((o) => (o.params.reputation ?? 0) >= CTX.reputation + 3)).toBe(true);
+  });
+  it("sliby, které řeší klub (licence, stavba, exkluzivita), mají v katalogu šanci 1,0", () => {
+    const clubControlled = cat.filter((o) => o.kind === "coach_licence" || o.kind === "stadium_upgrade" || o.kind === "sector_exclusivity");
+    expect(clubControlled.length).toBeGreaterThan(0);
+    expect(clubControlled.every((o) => o.chance === 1)).toBe(true);
   });
 });

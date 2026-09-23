@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
-  afterReject, buildPromiseRows, earlyTerminationFee, evaluateRound, initialPatience, promiseValueShare,
+  afterReject, buildPromiseRows, contractMonths, earlyTerminationFee, evaluateRound, initialPatience, promiseValueShare,
   reduceToWillingness, requestCost, willingness, type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import type { PromiseSpec } from "./promise-kinds";
@@ -63,6 +63,10 @@ describe("willingness", () => {
     expect(promiseValueShare({ kind: "stadium_upgrade", params: { facility: "stands", level: 3 } }, CTX)).toBeCloseTo(0.20, 9);
     expect(promiseValueShare({ kind: "stadium_upgrade", params: { facility: "toilets", level: 1 } }, CTX)).toBeCloseTo(0.05, 9);
   });
+  it("slib s ambicí na podlaze (≤ 0,3) nedává žádnou hodnotu", () => {
+    // Umístění 12 (nejhorší slíbitelné, leagueTeams 14 − RELEGATION_SPOTS 2) proti očekávanému 7. je skoro jisté.
+    expect(promiseValueShare({ kind: "league_position", params: { position: 12 } }, CTX)).toBe(0);
+  });
 });
 
 describe("requestCost", () => {
@@ -80,6 +84,10 @@ describe("requestCost", () => {
   it("bonus za splnění: G × šance × počet sezón se slibem / měsíce", () => {
     const p = prop({ goalBonuses: { league_position: 2000 } }, 3, [{ kind: "league_position", params: { position: 7 } }]);
     expect(requestCost(p, CTX)).toBeCloseTo(179.17, 1);
+  });
+  it("bonus za splnění u slibu, který řeší klub (licence): šance 1,0, ne 0,7", () => {
+    const p = prop({ goalBonuses: { coach_licence: 2000 } }, 2, [{ kind: "coach_licence", params: { level: 2 } }]);
+    expect(requestCost(p, CTX)).toBeCloseTo(268.75, 2);
   });
   it("stavba, vybavení a pokuta podle ceníku, rozpočítané", () => {
     expect(requestCost(prop({ construction: "toilets" }, 1), CTX)).toBeCloseTo(3225, 6);
@@ -127,6 +135,18 @@ describe("evaluateRound", () => {
   it("stavbu ani pokutu sponzor neubírá", () => {
     expect(reduceToWillingness(prop({ construction: "toilets" }, 1), CTX, 3000)).toBeNull();
   });
+  it("měsíční podpora nikdy neklesne pod 1", () => {
+    expect(reduceToWillingness(prop({ monthly: 5 }), CTX, 1)?.demands.monthly).toBe(1);
+    expect(reduceToWillingness(prop({ monthly: 5 }), CTX, 0)).toBeNull();
+  });
+  it("protinabídka za přání přeskočí kolizi se stejným cílem v lize (pravidlo 1d)", () => {
+    const ctx = { ...CTX, wishes: ["promotion" as const] };
+    // Umístění už slíbené, přání „postup" je stejný cíl v lize — nejde přidat, zbývá sleva.
+    const already = prop({ monthly: 9000 }, 2, [{ kind: "league_position", params: { position: 7 } }]);
+    const r = evaluateRound(already, ctx);
+    expect(r.kind).toBe("counter_money");
+    if (r.kind === "counter_money") expect(r.counter.demands.monthly).toBe(8500);
+  });
 });
 
 describe("buildPromiseRows", () => {
@@ -156,7 +176,15 @@ describe("buildPromiseRows", () => {
 });
 
 describe("earlyTerminationFee", () => {
-  it("měsíčně × sezóny × 2 jako dřív", () => {
-    expect(earlyTerminationFee(5000, 2)).toBe(20000);
+  it("jen měsíční podpora: × sezóny × 2 jako dřív", () => {
+    expect(earlyTerminationFee({ monthly: 5000, signingBonus: 0, construction: 0, equipment: 0, paidFee: 0, seasons: 2 })).toBe(20000);
+  });
+  it("zahrne podpisový příspěvek, stavbu, vybavení a starou pokutu, rozpočítané na měsíce", () => {
+    const seasons = 2;
+    const m = contractMonths(seasons);
+    const fee = earlyTerminationFee({ monthly: 5000, signingBonus: 7442, construction: 170000, equipment: 8000, paidFee: 7442, seasons });
+    const expected = Math.round((5000 + (7442 + 170000 + 8000 + 7442) / m) * seasons * 2);
+    expect(fee).toBe(expected);
+    expect(fee).toBe(123675);
   });
 });
