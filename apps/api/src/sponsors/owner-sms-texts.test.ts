@@ -134,3 +134,32 @@ describe("ownerReplyBack", () => {
     }
   });
 });
+
+describe("oslovení trenéra", () => {
+  // Složený minulý čas ve 2. osobě potřebuje pomocné sloveso „jsi"/„jste" u příčestí na
+  // -l/-la/-li/-ly (v obou pořadích: „udělal jsi" i „jsi udělal"). Bez pomocného slovesa jde
+  // buď o 3. osobu (netýká se trenéra), nebo o přítomný/budoucí čas, který je v pořádku —
+  // regex proto necílí na každé „jste"/„jsi" (to by chytalo i běžné „Jste v pořádku?"), ale
+  // jen na dvojici pomocné sloveso + příčestí vedle sebe.
+  const pastAddressRegex = /\b(?:jste|jsi)\s+\S*l[aiy]?\b|\b\S*l[aiy]?\s+(?:jste|jsi)\b/i;
+
+  it("žádná věta v OWNER_SMS_TEXTS neosloví trenéra v minulém čase", () => {
+    for (const o of OWNER_SMS_OCCASIONS) {
+      for (const p of OWNER_PERSONALITIES) {
+        for (const t of OWNER_SMS_TEXTS[o][p] ?? []) {
+          expect(t).not.toMatch(pastAddressRegex);
+        }
+      }
+    }
+  });
+
+  it("žádná věta v OWNER_REPLY_BACK neosloví trenéra v minulém čase", () => {
+    for (const p of OWNER_PERSONALITIES) {
+      for (const mood of ["positive", "negative"] as const) {
+        for (const t of [...OWNER_REPLY_BACK[p][mood].up, ...OWNER_REPLY_BACK[p][mood].down]) {
+          expect(t).not.toMatch(pastAddressRegex);
+        }
+      }
+    }
+  });
+});

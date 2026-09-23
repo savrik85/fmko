@@ -351,11 +351,11 @@ function occasionReplyMood(occasion: OwnerSmsOccasion): ReplyMood {
 export const OWNER_REPLY_BACK: Record<OwnerPersonality, Record<ReplyMood, Record<"up" | "down", readonly string[]>>> = {
   fan: {
     positive: {
-      up: ["To rád slyším! Jdeme dál.", "Paráda, na vás je spoleh.", "Díky, hned je mi líp."],
+      up: ["To rád slyším! Jdeme dál.", "Paráda, na tebe je spoleh.", "Díky, hned je mi líp."],
       down: ["To jsem po takové zprávě nečekal.", "Tak to mě zamrzelo, čekal jsem víc nadšení.", "Aha. Tak nic."],
     },
     negative: {
-      up: ["Díky, aspoň to mi udělalo radost.", "To se cení, že jste to takhle vzali.", "Jsem rád, že jste to takhle vysvětlili."],
+      up: ["Díky, aspoň to mi udělalo radost.", "To se cení, že to bereš takhle.", "Jsem rád, že to takhle vysvětluješ."],
       down: ["To mě mrzí.", "Aha, tak to je smutné.", "To jsem slyšet nechtěl."],
     },
   },
@@ -365,7 +365,7 @@ export const OWNER_REPLY_BACK: Record<OwnerPersonality, Record<ReplyMood, Record
       down: ["To mě zamrzelo. Čekal jsem víc vděku.", "Škoda, myslel jsem, že se z toho budete radovat víc.", "Aha, tak dobře."],
     },
     negative: {
-      up: ["Vážím si, že jste to řekl na rovinu.", "Dobře, že to takhle berete.", "To rád slyším, i v týhle situaci."],
+      up: ["Vážím si, že to říkáš na rovinu.", "Dobře, že to takhle berete.", "To rád slyším, i v týhle situaci."],
       down: ["Takhle se o klub nepečuje. Zapamatuju si to.", "To mě zklamalo.", "Škoda. Čekal jsem víc ohledu."],
     },
   },
