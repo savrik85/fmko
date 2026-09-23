@@ -79,6 +79,7 @@ export const FAVOR_REASONS = {
   smsReply: "odpověď na SMS",
   smsDismissed: "odbytá SMS",
   smsIgnored: "bez odpovědi na SMS",
+  negotiationInsult: "urazil se nabídkou při jednání",
 } as const;
 
 /** Důvod změny po zápase, na kterém majitel seděl: výsledek a skóre z pohledu domácích. */

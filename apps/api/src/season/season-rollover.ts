@@ -134,7 +134,7 @@ export async function rolloverAllLeagues(
         ? ` ${ztrata.sponsorName} dal přednost klubu ${ztrata.winnerTeamName}, u nás už pokračovat nebude.`
         : "";
       await sendSystemSMS(db, teamId, "Sportovní ředitel", "Sportovní ředitel",
-        `📋 ${kdo} s koncem sezóny.${dovetek} Mrkni na Sponzory, čekají tam nové nabídky.`,
+        `📋 ${kdo} s koncem sezóny.${dovetek} Mrkni na Sponzory, s firmami z okresu teď jednáš o nové smlouvě.`,
       );
     }
     logger.info({ module: "season-rollover" }, `sponzorské smlouvy: -1 sezóna, ${expiring.results.length} expirací u lidských týmů`);
@@ -150,6 +150,10 @@ export async function rolloverAllLeagues(
     const { closeOwnerSmsForRollover } = await import("../sponsors/owner-sms");
     const { enqueueMainSponsorSms, enqueueSeasonEndSms } = await import("../sponsors/owner-sms-triggers");
     await closeOwnerSmsForRollover(db);
+    // Jednání se sponzory mají lhůty ve staré herní ose, uzavřou se stejně jako vlákna SMS.
+    const { closeNegotiationsForRollover } = await import("../sponsors/negotiation-db");
+    await closeNegotiationsForRollover(db)
+      .catch((e) => { logger.error({ module: "season-rollover" }, "uzavření jednání se sponzory", e); });
     const day = startIso.slice(0, 10);
     const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day, expiringMain);
     for (const m of expiringMain) {
