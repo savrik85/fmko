@@ -3,7 +3,6 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { PITCH } from "./constants";
 
 /** LED panel s jemně pulzujícím glow (emissiveIntensity „dýchá") — živý displej. */
 function PulsingLedPanel({ position, width, height, texture }: { position: [number, number, number]; width: number; height: number; texture: THREE.Texture }) {
@@ -26,12 +25,11 @@ interface ScoreboardProps {
   homeName?: string;
   awayName?: string;
   /**
-   * VIP lóže na tribuně L3 (VipBox.tsx) stojí na východě ve světě x ≈ 35,6–38,0
-   * a na výchozí pozici (x=36) by se stožáry tabule propíchly kabinami lóže.
-   * Stadium3D tenhle prop nastaví, když je lóže vystavěná na východní straně
-   * a tribuny mají úroveň 3 (viz vipBoxSide v VipBox.tsx) — tabule se posune dál ven.
+   * Minimální výška spodku panelu. VIP galerie na východní tribuně (VipBox.tsx)
+   * vyčnívá nad stříšku; Stadium3D sem pošle výšku její siluety při pohledu ze
+   * středu hřiště (vipGallerySightlineY) a tabule se na delších sloupech zvedne nad ni.
    */
-  pushedOut?: boolean;
+  minPanelBottom?: number;
 }
 
 /**
@@ -40,36 +38,34 @@ interface ScoreboardProps {
  * L2: monochromatický LED — orange digitální písmo na černém
  * L3: full-color LED — barevný panel s týmovými barvami
  */
-export function Scoreboard({ level, homeScore = 0, awayScore = 0, homeName = "DOMÁCÍ", awayName = "HOSTÉ", pushedOut = false }: ScoreboardProps) {
+export function Scoreboard({ level, homeScore = 0, awayScore = 0, homeName = "DOMÁCÍ", awayName = "HOSTÉ", minPanelBottom = 0 }: ScoreboardProps) {
   if (level <= 0) return null;
-  if (level === 1) return <WoodenScoreboard homeScore={homeScore} awayScore={awayScore} pushedOut={pushedOut} />;
-  if (level === 2) return <LedMonoScoreboard homeScore={homeScore} awayScore={awayScore} homeName={homeName} awayName={awayName} pushedOut={pushedOut} />;
-  return <FullLedScoreboard homeScore={homeScore} awayScore={awayScore} homeName={homeName} awayName={awayName} pushedOut={pushedOut} />;
+  if (level === 1) return <WoodenScoreboard homeScore={homeScore} awayScore={awayScore} minPanelBottom={minPanelBottom} />;
+  if (level === 2) return <LedMonoScoreboard homeScore={homeScore} awayScore={awayScore} homeName={homeName} awayName={awayName} minPanelBottom={minPanelBottom} />;
+  return <FullLedScoreboard homeScore={homeScore} awayScore={awayScore} homeName={homeName} awayName={awayName} minPanelBottom={minPanelBottom} />;
 }
 
 // Pozice u poloviny hřiště, na východní straně, na vysokých sloupech
-// (přesahuje východní tribunu a je viditelný z default kamery [55,45,55])
-// Výchozí x=36 je za tribunou do úrovně L2 (max zadní hrana ~33). Na L3 tribuně
-// s VIP lóží na východě ale stožáry zasahují do kabin lóže (x ≈ 35,6–38,0) —
-// tam `pushedOut` posune tabuli na x=42, pořád bezpečně uvnitř plotu
-// (fence halfW=50 s postavenými tribunami; v okolí x≈42, z≈0 nic jiného nestojí —
-// floodlights jsou v rozích (x=26, z=34), budovy a parkoviště u z=±45, ultras
-// sektory a hostující sektor u x=0/22, dugouts a ad boardy u x≈20).
-const SCOREBOARD_X_DEFAULT = 36;
-const SCOREBOARD_X_PUSHED_OUT = 42;
+// (přesahuje východní tribunu a je viditelný z default kamery [55,45,55]).
+// x=36 je za zadní hranou tribuny (L3 končí na 34,5) i za galerií VIP lóže
+// (nejdál x ≈ 34,8, viz VipBox.tsx). Galerie ale vyčnívá nad stříšku a z hřiště
+// by tabuli zakryla — proto `minPanelBottom`: tabule se zvedne na delších
+// sloupech tak, aby spodek panelu byl nad siluetou galerie.
+export const SCOREBOARD_X = 36;
 const SCOREBOARD_Z = 0;      // střed hřiště
 const SCOREBOARD_ROT_Y = -Math.PI / 2;   // čelem k pitche (k -X)
 
-function scoreboardX(pushedOut: boolean): number {
-  return pushedOut ? SCOREBOARD_X_PUSHED_OUT : SCOREBOARD_X_DEFAULT;
+/** O kolik prodloužit sloupy, aby spodek panelu (při výchozí výšce `bottom`) byl aspoň `minBottom`. */
+function liftFor(bottom: number, minBottom: number): number {
+  return Math.max(0, minBottom - bottom);
 }
 
 // L1: dřevěná tabule na vysokých sloupech (přečnívá tribunu)
-function WoodenScoreboard({ homeScore, awayScore, pushedOut }: { homeScore: number; awayScore: number; pushedOut: boolean }) {
+function WoodenScoreboard({ homeScore, awayScore, minPanelBottom }: { homeScore: number; awayScore: number; minPanelBottom: number }) {
   const texture = useMemo(() => makeWoodenTexture(homeScore, awayScore), [homeScore, awayScore]);
-  const poleH = 8;
+  const poleH = 8 + liftFor(8, minPanelBottom);
   return (
-    <group position={[scoreboardX(pushedOut), 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
+    <group position={[SCOREBOARD_X, 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
       {/* 2 dřevěné sloupky */}
       <mesh position={[-1.4, poleH / 2, 0]} castShadow>
         <boxGeometry args={[0.22, poleH, 0.22]} />
@@ -93,11 +89,11 @@ function WoodenScoreboard({ homeScore, awayScore, pushedOut }: { homeScore: numb
 }
 
 // L2: LED monochromatický - oranžové číslice na černém
-function LedMonoScoreboard({ homeScore, awayScore, homeName, awayName, pushedOut }: { homeScore: number; awayScore: number; homeName: string; awayName: string; pushedOut: boolean }) {
+function LedMonoScoreboard({ homeScore, awayScore, homeName, awayName, minPanelBottom }: { homeScore: number; awayScore: number; homeName: string; awayName: string; minPanelBottom: number }) {
   const texture = useMemo(() => makeLedTexture(homeScore, awayScore, homeName, awayName, "#F5A623"), [homeScore, awayScore, homeName, awayName]);
-  const poleH = 9;
+  const poleH = 9 + liftFor(9, minPanelBottom);
   return (
-    <group position={[scoreboardX(pushedOut), 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
+    <group position={[SCOREBOARD_X, 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
       <mesh position={[-2.8, poleH / 2, 0]} castShadow>
         <boxGeometry args={[0.25, poleH, 0.25]} />
         <meshStandardMaterial color="#374151" />
@@ -116,11 +112,11 @@ function LedMonoScoreboard({ homeScore, awayScore, homeName, awayName, pushedOut
 }
 
 // L3: full-color LED scoreboard
-function FullLedScoreboard({ homeScore, awayScore, homeName, awayName, pushedOut }: { homeScore: number; awayScore: number; homeName: string; awayName: string; pushedOut: boolean }) {
+function FullLedScoreboard({ homeScore, awayScore, homeName, awayName, minPanelBottom }: { homeScore: number; awayScore: number; homeName: string; awayName: string; minPanelBottom: number }) {
   const texture = useMemo(() => makeFullLedTexture(homeScore, awayScore, homeName, awayName), [homeScore, awayScore, homeName, awayName]);
-  const poleH = 10;
+  const poleH = 10 + liftFor(10, minPanelBottom);
   return (
-    <group position={[scoreboardX(pushedOut), 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
+    <group position={[SCOREBOARD_X, 0, SCOREBOARD_Z]} rotation={[0, SCOREBOARD_ROT_Y, 0]}>
       <mesh position={[-3.6, poleH / 2, 0]} castShadow>
         <boxGeometry args={[0.3, poleH, 0.3]} />
         <meshStandardMaterial color="#374151" />
