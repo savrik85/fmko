@@ -63,12 +63,17 @@ export async function enqueueMatchEveSms(db: D1Database, today: string): Promise
 
 /** Série proher: jednou za sérii (reference = první prohra série). */
 export async function enqueueLosingStreakSms(db: D1Database, teamId: string, today: string): Promise<boolean> {
+  // LIMIT musí pokrýt i dlouhé série: s příliš úzkým oknem by se „první prohra série"
+  // (reference SMS) při každém dalším zápase posunula, protože nejstarší prohra série by
+  // vypadla z okna dřív, než série skončí, a SMS by se pak posílala pořád dokola s novou
+  // referencí. 60 zápasů je bezpečná rezerva nad jakoukoli reálnou sérii proher.
+  // Přátelák (league_id IS NULL) se do série nepočítá.
   const recent = await db.prepare(
     `SELECT id, CASE
               WHEN (home_team_id = ?1 AND home_score > away_score) OR (away_team_id = ?1 AND away_score > home_score) THEN 'W'
               WHEN home_score = away_score THEN 'D' ELSE 'L' END AS res
-     FROM matches WHERE (home_team_id = ?1 OR away_team_id = ?1) AND status = 'simulated'
-     ORDER BY simulated_at DESC LIMIT 10`,
+     FROM matches WHERE (home_team_id = ?1 OR away_team_id = ?1) AND status = 'simulated' AND league_id IS NOT NULL
+     ORDER BY simulated_at DESC LIMIT 60`,
   ).bind(teamId).all<{ id: string | number; res: "W" | "D" | "L" }>();
   const n = leadingLosses(recent.results.map((r) => r.res));
   if (n < LOSING_STREAK_MIN) return false;
@@ -107,8 +112,20 @@ export async function enqueueMainSponsorSms(
   return queued;
 }
 
-/** Konec sezóny: poděkování, nebo stížnost podle bodů na zápas ve staré sezóně. */
-export async function enqueueSeasonEndSms(db: D1Database, oldSeasonNumber: number, day: string): Promise<number> {
+/** Konec sezóny: poděkování, nebo stížnost podle bodů na zápas ve staré sezóně.
+ * `expiredMainSponsors` = majitelé, jejichž hlavní smlouva s klubem právě skončila
+ * (rozloučení `main_lost` jde zvlášť) — ti se nesmí vybrat i na verdikt sezóny, jinak
+ * by ho spolkl jejich vlastní odchodový cooldown a klub by verdikt nikdy nedostal. */
+export async function enqueueSeasonEndSms(
+  db: D1Database, oldSeasonNumber: number, day: string,
+  expiredMainSponsors: readonly { team_id: string; sponsor_id: number }[] = [],
+): Promise<number> {
+  const excludedByTeam = new Map<string, Set<number>>();
+  for (const m of expiredMainSponsors) {
+    const set = excludedByTeam.get(m.team_id) ?? new Set<number>();
+    set.add(m.sponsor_id);
+    excludedByTeam.set(m.team_id, set);
+  }
   const rows = await db.prepare(
     `SELECT t.id AS team_id,
             SUM(CASE WHEN (m.home_team_id = t.id AND m.home_score > m.away_score)
@@ -126,7 +143,10 @@ export async function enqueueSeasonEndSms(db: D1Database, oldSeasonNumber: numbe
     try {
       const verdict = seasonVerdict(r.wins, r.draws, r.played);
       if (!verdict) continue;
-      const owner = pickRelationshipOwner(await loadRelationshipOwners(db, r.team_id));
+      const excluded = excludedByTeam.get(r.team_id);
+      const owners = await loadRelationshipOwners(db, r.team_id);
+      const pool = excluded ? owners.filter((o) => !excluded.has(o.sponsorId)) : owners;
+      const owner = pickRelationshipOwner(pool);
       if (!owner) continue;
       const ok = await enqueueOwnerSms(db, {
         sponsorId: owner.sponsorId, teamId: r.team_id, occasion: verdict,

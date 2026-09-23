@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
-import { deliverOwnerSmsForTeam, expireOwnerSmsReplies, handleOwnerSmsReply } from "./owner-sms";
+import { closeOwnerSmsForRollover, deliverOwnerSmsForTeam, expireOwnerSmsReplies, handleOwnerSmsReply } from "./owner-sms";
 import { OWNER_REPLY_BACK } from "./owner-sms-texts";
 
 const STAV = JSON.stringify({ kind: "sponsor_owner", smsId: "s1", sponsorId: 7, awaiting: "coach" });
@@ -115,5 +115,24 @@ describe("deliverOwnerSmsForTeam", () => {
     expect(msg?.params[2]).toBe("so-7");
     expect(String(msg?.params[5])).toContain("\"type\":\"sponsor_owner\"");
     expect(String(msg?.params[5])).toContain("\"id\":\"dismissive\"");
+  });
+});
+
+describe("closeOwnerSmsForRollover", () => {
+  it("dropne pending frontu, ale nechá season:/main-expired: referenci (rerun rolloveru o ně nesmí přijít)", async () => {
+    const db = new FalesnaD1();
+    await closeOwnerSmsForRollover(jakoD1(db));
+    const davka = db.davky[0];
+    const dropSql = davka.find((d) => /status = 'pending'/.test(d.sql) && /'dropped'/.test(d.sql));
+    expect(dropSql?.sql).toContain("reference_id NOT LIKE 'season:%'");
+    expect(dropSql?.sql).toContain("reference_id NOT LIKE 'main-expired:%'");
+  });
+
+  it("vynuluje sent_day u historických (nepending) řádků, aby staré datum ze staré sezóny neblokovalo cooldown po resetu herního času", async () => {
+    const db = new FalesnaD1();
+    await closeOwnerSmsForRollover(jakoD1(db));
+    const davka = db.davky[0];
+    const sentDaySql = davka.find((d) => /SET sent_day = NULL/.test(d.sql));
+    expect(sentDaySql?.sql).toContain("status != 'pending'");
   });
 });

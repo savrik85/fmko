@@ -101,7 +101,10 @@ export async function rolloverAllLeagues(
     const priorityLosses = await assignMainPriorities(db, newNum)
       .catch((e) => { logger.error({ module: "season-rollover" }, "přednost hlavních sponzorů", e); return []; });
 
-    expiringMain = (await db.prepare(
+    // Kandidáti na rozloučení se zjistí PŘED oběma UPDATE, ale do `expiringMain` (co skutečně
+    // spustí SMS „main_lost" v kroku 4b-sms) se přiřadí až PO obou — jinak by pád mezi
+    // decrementem a expirací nechal SMS odejít i za smlouvu, která ve skutečnosti nevypršela.
+    const expiringMainCandidates = (await db.prepare(
       `SELECT sc.team_id, sc.sponsor_id FROM sponsor_contracts sc JOIN teams t ON t.id = sc.team_id
        WHERE sc.status = 'active' AND sc.seasons_remaining <= 1 AND COALESCE(sc.category, 'main') = 'main'
          AND sc.sponsor_id IS NOT NULL AND t.user_id != 'ai'`,
@@ -110,6 +113,7 @@ export async function rolloverAllLeagues(
 
     await db.prepare("UPDATE sponsor_contracts SET seasons_remaining = seasons_remaining - 1 WHERE status = 'active'").run();
     await db.prepare("UPDATE sponsor_contracts SET status = 'expired' WHERE status = 'active' AND seasons_remaining <= 0").run();
+    expiringMain = expiringMainCandidates;
 
     // Jedna zpráva na klub, ne na smlouvu. Klub se sedmi sponzory dostal sedm SMS
     // během dvou sekund a všechny říkaly totéž — jdi na Sponzory.
@@ -147,7 +151,7 @@ export async function rolloverAllLeagues(
     const { enqueueMainSponsorSms, enqueueSeasonEndSms } = await import("../sponsors/owner-sms-triggers");
     await closeOwnerSmsForRollover(db);
     const day = startIso.slice(0, 10);
-    const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day);
+    const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day, expiringMain);
     for (const m of expiringMain) {
       await enqueueMainSponsorSms(db, m.team_id, m.sponsor_id, "main_lost",
         `main-expired:${m.team_id}:${m.sponsor_id}:s${oldSeasonNumber}`, { day });

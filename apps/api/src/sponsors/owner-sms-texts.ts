@@ -348,57 +348,66 @@ function occasionReplyMood(occasion: OwnerSmsOccasion): ReplyMood {
  * Texty v poolu „negative" musí fungovat i jako rozloučení po `main_lost` — nikde
  * nepředpokládají pokračující spolupráci.
  */
-export const OWNER_REPLY_BACK: Record<OwnerPersonality, Record<ReplyMood, Record<"up" | "down", readonly string[]>>> = {
+export const OWNER_REPLY_BACK: Record<OwnerPersonality, Record<ReplyMood, Record<"up" | "down" | "neutral", readonly string[]>>> = {
   fan: {
     positive: {
       up: ["To rád slyším! Jdeme dál.", "Paráda, na tebe je spoleh.", "Díky, hned je mi líp."],
       down: ["To jsem po takové zprávě nečekal.", "Tak to mě zamrzelo, čekal jsem víc nadšení.", "Aha. Tak nic."],
+      neutral: ["Dobře, beru na vědomí.", "Fajn, díky za zprávu."],
     },
     negative: {
       up: ["Díky, aspoň to mi udělalo radost.", "To se cení, že to bereš takhle.", "Jsem rád, že to takhle vysvětluješ."],
       down: ["To mě mrzí.", "Aha, tak to je smutné.", "To jsem slyšet nechtěl."],
+      neutral: ["No dobře, uvidíme, jak to dopadne.", "Tak jo, budu sledovat, co se bude dít."],
     },
   },
   patriot: {
     positive: {
       up: ["Díky. Pro obec je to důležitý.", "Tak to je řeč. Držím palce.", "To rád slyším, vesnice to ocení."],
       down: ["To mě zamrzelo. Čekal jsem víc vděku.", "Škoda, myslel jsem, že se z toho budeš radovat víc.", "Aha, tak dobře."],
+      neutral: ["Dobře, uvidíme, co na to řekne vesnice.", "Beru na vědomí, sledujeme to dál."],
     },
     negative: {
       up: ["Vážím si, že to říkáš na rovinu.", "Dobře, že to takhle bereš.", "To rád slyším, i v týhle situaci."],
       down: ["Takhle se o klub nepečuje. Zapamatuju si to.", "To mě zklamalo.", "Škoda. Čekal jsem víc ohledu."],
+      neutral: ["Dobře, budeme sledovat, jak to půjde dál.", "Beru na vědomí, uvidíme příště."],
     },
   },
   businessman: {
     positive: {
       up: ["Výborně, to je jasná řeč.", "Děkuji, tohle potřebuji vědět.", "Dobře, s tím se dá pracovat."],
       down: ["To jsem nečekal. Doufal jsem ve vděčnější tón.", "Rozumím, i když jsem čekal víc.", "Beru na vědomí."],
+      neutral: ["Rozumím, děkuji za informaci.", "Dobře, beru na vědomí."],
     },
     negative: {
       up: ["Dobře, to beru jako rozumnou reakci.", "Oceňuji tu přímost.", "Rozumím, díky za vysvětlení."],
       down: ["To mi nestačí.", "Takový přístup nepomáhá.", "Poznamenám si to."],
+      neutral: ["Rozumím, počkám, jak se to vyvine.", "Beru na vědomí, budu sledovat další vývoj."],
     },
   },
   cautious: {
     positive: {
       up: ["Děkuji, to mě potěšilo.", "Jsem rád, že šlo všechno hladce.", "Dobře, přesně tak to má být."],
       down: ["To mě znejistělo, čekal jsem klidnější odpověď.", "Hm, tak dobře.", "Nejsem si teď jistý, jak to mám brát."],
+      neutral: ["Dobře, děkuji za odpověď.", "Rozumím, budu sledovat, jak to půjde dál."],
     },
     negative: {
       up: ["Děkuji, to mě aspoň trochu uklidnilo.", "Jsem rád, že to berete vážně.", "Dobře, věřím vám."],
       down: ["To mě moc neuklidnilo.", "Tak to mám ještě větší obavy.", "Hm. Budu opatrnější."],
+      neutral: ["Dobře, budu to sledovat.", "Rozumím, uvidíme, jak se to bude vyvíjet."],
     },
   },
 };
 
 /**
  * Co majitel odepíše na trenérovu odpověď: podle povahy, nálady příležitosti (`occasion`)
- * a toho, kam se pohnula náklonnost (`favorDelta`). Nezáporná delta = `up`, záporná = `down`.
+ * a toho, kam se pohnula náklonnost (`favorDelta`). Kladná delta = `up`, záporná = `down`,
+ * nulová (např. věcná odpověď fanouškovi/patriotovi/opatrnému, viz REPLY_FAVOR) = `neutral`.
  */
 export function ownerReplyBack(
   personality: OwnerPersonality, occasion: OwnerSmsOccasion, favorDelta: number, seedKey: string,
 ): string {
   const mood = occasionReplyMood(occasion);
-  const direction = favorDelta >= 0 ? "up" : "down";
+  const direction = favorDelta > 0 ? "up" : favorDelta < 0 ? "down" : "neutral";
   return createRng(seedFromString(seedKey)).pick(OWNER_REPLY_BACK[personality][mood][direction]);
 }

@@ -391,7 +391,10 @@ export default function ConversationPage() {
           </div>
         )}
         {ownerSponsorId ? (
-          <SponsorLink id={ownerSponsorId} name={conv?.title ?? "..."} className="font-heading font-bold text-sm truncate" />
+          <SponsorLink
+            id={ownerSponsorId} name={conv?.title ?? "..."} className="font-heading font-bold text-sm truncate"
+            hoverClassName="hover:text-white hover:underline"
+          />
         ) : (
           <span className="font-heading font-bold text-sm truncate">{conv?.title ?? "..."}</span>
         )}

@@ -108,13 +108,26 @@ describe("ownerReplyBack", () => {
       expect(OWNER_REPLY_BACK[p].positive.down.length).toBeGreaterThanOrEqual(3);
       expect(OWNER_REPLY_BACK[p].negative.up.length).toBeGreaterThanOrEqual(3);
       expect(OWNER_REPLY_BACK[p].negative.down.length).toBeGreaterThanOrEqual(3);
+      expect(OWNER_REPLY_BACK[p].positive.neutral.length).toBeGreaterThanOrEqual(2);
+      expect(OWNER_REPLY_BACK[p].negative.neutral.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("nulová delta (věcná odpověď bez pohybu náklonnosti) vybere z neutrálního poolu, ne z 'up'", () => {
+    for (const p of OWNER_PERSONALITIES) {
+      for (const mood of ["positive", "negative"] as const) {
+        const occasion = mood === "positive" ? "after_win" : "after_loss";
+        const t = ownerReplyBack(p, occasion, 0, `neutral|${p}|${occasion}`);
+        expect(OWNER_REPLY_BACK[p][mood].neutral, `${p}/${mood}`).toContain(t);
+        expect(OWNER_REPLY_BACK[p][mood].up, `${p}/${mood}`).not.toContain(t);
+      }
     }
   });
 
   it("kladná příležitost nikdy nevrátí větu ze záporného poolu", () => {
     const positiveOccasions = ["match_eve", "after_win", "main_new", "season_thanks"] as const;
     for (const p of OWNER_PERSONALITIES) {
-      const negativePool = [...OWNER_REPLY_BACK[p].negative.up, ...OWNER_REPLY_BACK[p].negative.down];
+      const negativePool = [...OWNER_REPLY_BACK[p].negative.up, ...OWNER_REPLY_BACK[p].negative.down, ...OWNER_REPLY_BACK[p].negative.neutral];
       for (const o of positiveOccasions) {
         for (const d of [3, 0, -3]) {
           const t = ownerReplyBack(p, o, d, `pos|${p}|${o}|${d}`);
@@ -156,8 +169,9 @@ describe("oslovení trenéra", () => {
   it("žádná věta v OWNER_REPLY_BACK neosloví trenéra v minulém čase", () => {
     for (const p of OWNER_PERSONALITIES) {
       for (const mood of ["positive", "negative"] as const) {
-        for (const t of [...OWNER_REPLY_BACK[p][mood].up, ...OWNER_REPLY_BACK[p][mood].down]) {
+        for (const t of [...OWNER_REPLY_BACK[p][mood].up, ...OWNER_REPLY_BACK[p][mood].down, ...OWNER_REPLY_BACK[p][mood].neutral]) {
           expect(t).not.toMatch(pastAddressRegex);
+          expect(t).not.toContain("—");
         }
       }
     }

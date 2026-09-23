@@ -259,7 +259,7 @@ export async function handleOwnerSmsReply(
         // "season_complaint" (concern/negative) je zvolená záměrně: přehnaně veselá
         // odpověď majitele na neznámou, třeba nepříjemnou situaci, je horší než opatrná
         // odpověď na dobrou zprávu.
-        logger.warn({ module: M }, `SMS ${state.smsId} majitele ${state.sponsorId}: RETURNING nevrátilo occasion, používám opatrnou náladu`);
+        logger.warn({ module: M, teamId: conv.team_id }, `SMS ${state.smsId} majitele ${state.sponsorId}: RETURNING nevrátilo occasion, používám opatrnou náladu`);
         occasion = "season_complaint";
       }
       const back = ownerReplyBack(personality, occasion, delta, `owner-reply|${state.smsId}`);
@@ -325,11 +325,24 @@ export async function expireOwnerSmsReplies(db: D1Database, today: string): Prom
 /**
  * Rollover vrací herní čas na reálné datum: lhůty ze staré osy by nikdy nevypršely.
  * Otevřená vlákna se proto tiše zavřou a fronta se vyprázdní, bez postihu.
+ *
+ * Výjimka je fronta samotného rolloveru (`season:` a `main-expired:` reference) — tu sem
+ * zapisuje `rolloverAllLeagues` ještě PŘED doručením a při restartu spadlého rolloveru by
+ * druhý běh smazal SMS, které první běh teprve zařadil a denní tick je ještě nestihl poslat.
+ *
+ * `sent_day` u historických (nepending) řádků se zároveň vynuluje: `deliverOwnerSmsForTeam`
+ * ho porovnává s ABS() proti novému hernímu datu, takže staré datum ze staré osy by mohlo
+ * náhodou padnout do cooldownu/denního limitu nového dne. Řádky bez `sent_day` do těchto
+ * kontrol nevstupují vůbec — jednodušší než tahat novou „poslední rollover" značku.
  */
 export async function closeOwnerSmsForRollover(db: D1Database): Promise<void> {
   await db.batch([
     db.prepare("UPDATE sponsor_owner_sms SET status = 'closed' WHERE status = 'awaiting'"),
-    db.prepare("UPDATE sponsor_owner_sms SET status = 'dropped' WHERE status = 'pending'"),
+    db.prepare(
+      `UPDATE sponsor_owner_sms SET status = 'dropped' WHERE status = 'pending'
+         AND reference_id NOT LIKE 'season:%' AND reference_id NOT LIKE 'main-expired:%'`,
+    ),
+    db.prepare("UPDATE sponsor_owner_sms SET sent_day = NULL WHERE status != 'pending' AND sent_day IS NOT NULL"),
     db.prepare(
       `UPDATE conversations SET ai_thread_active = 0, ai_thread_state = NULL
        WHERE ai_thread_active = 1 AND participant_id LIKE 'so-%'`,
