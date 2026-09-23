@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
 import { deliverOwnerSmsForTeam, expireOwnerSmsReplies, handleOwnerSmsReply } from "./owner-sms";
+import { OWNER_REPLY_BACK } from "./owner-sms-texts";
 
 const STAV = JSON.stringify({ kind: "sponsor_owner", smsId: "s1", sponsorId: 7, awaiting: "coach" });
 const MAJITEL = {
@@ -17,11 +18,15 @@ function logDeniku(db: FalesnaD1) {
   return db.davky.flat().filter((d) => /INSERT INTO sponsor_favor_log/.test(d.sql));
 }
 
+function zpravaMajitele(db: FalesnaD1) {
+  return db.davky.flat().find((d) => /INSERT INTO messages/.test(d.sql));
+}
+
 describe("handleOwnerSmsReply", () => {
-  it("vlídná odpověď fanouškovi: +3 s důvodem do deníku a zavřené vlákno", async () => {
+  it("vlídná odpověď fanouškovi na SMS 'riot': +3 s důvodem do deníku, odpověď ze záporné nálady", async () => {
     const db = new FalesnaD1([
       { sql: /SELECT team_id, ai_thread_state FROM conversations/, first: { team_id: "t1", ai_thread_state: STAV } },
-      { sql: /UPDATE sponsor_owner_sms SET status = 'replied'/, changes: 1 },
+      { sql: /UPDATE sponsor_owner_sms SET status = 'replied'/, all: [{ occasion: "riot" }] },
       MAJITEL,
     ]);
     expect(await handleOwnerSmsReply(jakoD1(db), "c1", "Díky moc", "warm")).toBe(true);
@@ -30,22 +35,26 @@ describe("handleOwnerSmsReply", () => {
     expect(log[0].params.slice(0, 4)).toEqual([7, "t1", 3, "odpověď na SMS"]);
     expect(db.pocet(/ai_thread_active = 0, ai_thread_state = NULL/)).toBe(1);
     expect(db.pocet(/INSERT INTO messages/)).toBe(1);
+    // "riot" je záporná nálada (OCCASION_REPLY_KIND.riot = "trouble"), delta +3 = směr "up".
+    expect(OWNER_REPLY_BACK.fan.negative.up).toContain(zpravaMajitele(db)?.params[4]);
   });
 
-  it("odpověď vlastními slovy se klasifikuje lexikálně", async () => {
+  it("odpověď vlastními slovy se klasifikuje lexikálně, odpověď z kladné nálady", async () => {
     const db = new FalesnaD1([
       { sql: /SELECT team_id, ai_thread_state FROM conversations/, first: { team_id: "t1", ai_thread_state: STAV } },
-      { sql: /UPDATE sponsor_owner_sms SET status = 'replied'/, changes: 1 },
+      { sql: /UPDATE sponsor_owner_sms SET status = 'replied'/, all: [{ occasion: "after_win" }] },
       MAJITEL,
     ]);
     await handleOwnerSmsReply(jakoD1(db), "c1", "Konec debaty, rozhoduju já.", null);
     expect(logDeniku(db)[0].params.slice(2, 4)).toEqual([-4, "odbytá SMS"]);
+    // "after_win" je kladná nálada, delta -4 = směr "down".
+    expect(OWNER_REPLY_BACK.fan.positive.down).toContain(zpravaMajitele(db)?.params[4]);
   });
 
   it("SMS už je vyřízená: náklonnost se nepohne", async () => {
     const db = new FalesnaD1([
       { sql: /SELECT team_id, ai_thread_state FROM conversations/, first: { team_id: "t1", ai_thread_state: STAV } },
-      { sql: /UPDATE sponsor_owner_sms SET status = 'replied'/, changes: 0 },
+      { sql: /UPDATE sponsor_owner_sms SET status = 'replied'/, all: [] },
       MAJITEL,
     ]);
     expect(await handleOwnerSmsReply(jakoD1(db), "c1", "Díky", "warm")).toBe(true);

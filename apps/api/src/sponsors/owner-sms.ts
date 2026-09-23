@@ -143,37 +143,57 @@ export async function deliverOwnerSmsForTeam(db: D1Database, teamId: string, tod
   const drop = () => db.prepare("UPDATE sponsor_owner_sms SET status = 'dropped', sent_day = NULL, reply_by = NULL WHERE id = ?")
     .bind(pick.id).run();
 
-  const owner = await ensureSponsorOwner(db, pick.sponsorId);
-  const firm = await db.prepare("SELECT name FROM district_sponsors WHERE id = ?")
-    .bind(pick.sponsorId).first<{ name: string }>();
-  const recent = await db.prepare(
-    "SELECT body FROM sponsor_owner_sms WHERE team_id = ? AND body IS NOT NULL ORDER BY sent_day DESC, created_at DESC LIMIT 6",
-  ).bind(teamId).all<{ body: string }>();
-  const text = owner
-    ? renderOwnerSms(pick.occasion, owner.personality, parseVars(row.vars), `owner-sms|${row.reference_id}`, recent.results.map((r) => r.body))
-    : null;
-  if (!owner || !text) {
-    await drop();
+  // Od tady je SMS nárokovaná (status = 'awaiting', reply_by nastaveno). Jakákoli chyba dál
+  // by ji nechala viset v 'awaiting' bez odeslané zprávy — expireOwnerSmsReplies by pak
+  // trenéra penalizoval za mlčení na SMS, kterou nikdy nedostal. Proto celý zbytek v
+  // try/catch: chyba = zahodit řádek (status 'dropped'), bez postihu.
+  try {
+    const owner = await ensureSponsorOwner(db, pick.sponsorId);
+    const firm = await db.prepare("SELECT name FROM district_sponsors WHERE id = ?")
+      .bind(pick.sponsorId).first<{ name: string }>();
+    const recent = await db.prepare(
+      "SELECT body FROM sponsor_owner_sms WHERE team_id = ? AND body IS NOT NULL ORDER BY sent_day DESC, created_at DESC LIMIT 6",
+    ).bind(teamId).all<{ body: string }>();
+    const text = owner
+      ? renderOwnerSms(pick.occasion, owner.personality, parseVars(row.vars), `owner-sms|${row.reference_id}`, recent.results.map((r) => r.body))
+      : null;
+    if (!owner || !text) {
+      await drop();
+      return false;
+    }
+
+    // Předchozí nezodpovězená SMS téhož majitele (den před zápasem) tímhle končí, bez postihu.
+    await db.prepare(
+      "UPDATE sponsor_owner_sms SET status = 'closed' WHERE team_id = ? AND sponsor_id = ? AND status = 'awaiting' AND id != ?",
+    ).bind(teamId, pick.sponsorId, pick.id).run();
+
+    const name = `${owner.firstName} ${owner.lastName}`;
+    const convId = await sendOwnerSMS(db, teamId, {
+      sponsorId: pick.sponsorId, name, firmName: firm?.name ?? null, avatar: JSON.stringify(owner.faceConfig),
+    }, text, { smsId: pick.id, options: replyOptions(pick.occasion) });
+    if (!convId) {
+      await drop();
+      return false;
+    }
+    // Zpráva už fyzicky dorazila trenérovi (sendOwnerSMS uspěl, konverzace má ai_thread_state
+    // s tímhle smsId). Když tenhle poslední zápis přesto selže, řádek radši zahodíme, než ho
+    // nechat 'awaiting' bez conversation_id/body: pozdější odpověď trenéra pak v
+    // handleOwnerSmsReply nenajde status = 'awaiting' (bude 'dropped'), nárok na ni selže a
+    // větev „vlákno přežilo svou SMS" vlákno jen tiše zavře — bez postihu, i bez odpovědi
+    // majitele na reakci trenéra.
+    await db.prepare("UPDATE sponsor_owner_sms SET body = ?, conversation_id = ? WHERE id = ?")
+      .bind(text, convId, pick.id).run();
+    logger.info({ module: M, teamId }, `SMS od majitele ${pick.sponsorId}: ${pick.occasion}`);
+    return true;
+  } catch (e) {
+    logger.error({ module: M, teamId }, `doručení SMS majitele ${pick.sponsorId} (sms ${pick.id})`, e);
+    try {
+      await drop();
+    } catch (e2) {
+      logger.error({ module: M, teamId }, `zahození SMS ${pick.id} po chybě doručení`, e2);
+    }
     return false;
   }
-
-  // Předchozí nezodpovězená SMS téhož majitele (den před zápasem) tímhle končí, bez postihu.
-  await db.prepare(
-    "UPDATE sponsor_owner_sms SET status = 'closed' WHERE team_id = ? AND sponsor_id = ? AND status = 'awaiting' AND id != ?",
-  ).bind(teamId, pick.sponsorId, pick.id).run();
-
-  const name = `${owner.firstName} ${owner.lastName}`;
-  const convId = await sendOwnerSMS(db, teamId, {
-    sponsorId: pick.sponsorId, name, firmName: firm?.name ?? null, avatar: JSON.stringify(owner.faceConfig),
-  }, text, { smsId: pick.id, options: replyOptions(pick.occasion) });
-  if (!convId) {
-    await drop();
-    return false;
-  }
-  await db.prepare("UPDATE sponsor_owner_sms SET body = ?, conversation_id = ? WHERE id = ?")
-    .bind(text, convId, pick.id).run();
-  logger.info({ module: M, teamId }, `SMS od majitele ${pick.sponsorId}: ${pick.occasion}`);
-  return true;
 }
 
 interface OwnerThreadState {
@@ -206,44 +226,62 @@ export async function handleOwnerSmsReply(
     if (state.kind !== "sponsor_owner" || !state.smsId || typeof state.sponsorId !== "number") return false;
 
     const tone: ReplyTone = isReplyTone(optionId) ? optionId : classifyFreeReply(text);
-    // Nárok na SMS: dvě rychlé odpovědi za sebou nesmí dopad zdvojit. RETURNING occasion
-    // ušetří druhý dotaz — nese ji ten samý nárokovaný řádek.
+    // Nárok na SMS: dvě rychlé odpovědi za sebou nesmí dopad zdvojit. `.all()`, ne `.run()` —
+    // workerd D1 posílá pro run() resultsFormat 'NONE', takže by se řádky z RETURNING v
+    // produkci ztratily (stejný vzor jako situace-db.ts). RETURNING occasion ušetří druhý dotaz.
     const claim = await db.prepare(
       `UPDATE sponsor_owner_sms SET status = 'replied', reply_tone = ?
        WHERE id = ? AND status = 'awaiting' AND team_id = ?
        RETURNING occasion`,
-    ).bind(tone, state.smsId, conv.team_id).run<{ occasion: string }>();
-    if ((claim.meta?.changes ?? 0) !== 1) {
-      // Vlákno přežilo svou SMS (vypršela nebo ji nahradila novější): jen ho zavřít.
+    ).bind(tone, state.smsId, conv.team_id).all<{ occasion: string }>();
+    if (claim.results.length !== 1) {
+      // Vlákno přežilo svou SMS (vypršela, nahradila ji novější, nebo ji deliverOwnerSmsForTeam
+      // zahodil po chybě doručení): jen ho zavřít, bez dopadu na náklonnost.
       await db.prepare(
         "UPDATE conversations SET ai_thread_active = 0, ai_thread_state = NULL WHERE id = ? AND json_extract(ai_thread_state, '$.smsId') = ?",
       ).bind(convId, state.smsId).run();
       return true;
     }
 
-    const owner = await ensureSponsorOwner(db, state.sponsorId);
-    const personality: OwnerPersonality = owner?.personality ?? "businessman";
-    const delta = replyFavorDelta(personality, tone);
-    // Obranný fallback: RETURNING vrací occasion nárokovaného řádku, chybět nemá.
-    const occasionRaw = claim.results?.[0]?.occasion;
-    const occasion: OwnerSmsOccasion = isOwnerSmsOccasion(occasionRaw) ? occasionRaw : "after_win";
-    const back = ownerReplyBack(personality, occasion, delta, `owner-reply|${state.smsId}`);
-    const senderName = owner ? `${owner.firstName} ${owner.lastName}` : "Majitel firmy";
-    const reason = tone === "dismissive" ? FAVOR_REASONS.smsDismissed : FAVOR_REASONS.smsReply;
+    // SMS je od tady nárokovaná (status = 'replied'): vlákno trenérovi patřilo, i kdyby dál
+    // cokoli selhalo. Proto zbytek v try/catch, který vrací true a jen loguje chybu — routa
+    // to nesmí brát jako „cizí vlákno" a zkoušet to znovu jako jinou odpověď.
+    try {
+      const owner = await ensureSponsorOwner(db, state.sponsorId);
+      const personality: OwnerPersonality = owner?.personality ?? "businessman";
+      const delta = replyFavorDelta(personality, tone);
+      const occasionRaw = claim.results[0].occasion;
+      let occasion: OwnerSmsOccasion;
+      if (isOwnerSmsOccasion(occasionRaw)) {
+        occasion = occasionRaw;
+      } else {
+        // Nemělo by nastat (sloupec `occasion` je NOT NULL) — obranná větev. Nálada
+        // "season_complaint" (concern/negative) je zvolená záměrně: přehnaně veselá
+        // odpověď majitele na neznámou, třeba nepříjemnou situaci, je horší než opatrná
+        // odpověď na dobrou zprávu.
+        logger.warn({ module: M }, `SMS ${state.smsId} majitele ${state.sponsorId}: RETURNING nevrátilo occasion, používám opatrnou náladu`);
+        occasion = "season_complaint";
+      }
+      const back = ownerReplyBack(personality, occasion, delta, `owner-reply|${state.smsId}`);
+      const senderName = owner ? `${owner.firstName} ${owner.lastName}` : "Majitel firmy";
+      const reason = tone === "dismissive" ? FAVOR_REASONS.smsDismissed : FAVOR_REASONS.smsReply;
 
-    await db.batch([
-      ...(delta !== 0 ? favorDeltaStmts(db, state.sponsorId, conv.team_id, delta, reason) : []),
-      db.prepare(
-        `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at)
-         VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
-      ).bind(crypto.randomUUID(), convId, `so-${state.sponsorId}`, senderName, back),
-      db.prepare(
-        `UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?,
-           last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'), ai_thread_active = 0, ai_thread_state = NULL
-         WHERE id = ?`,
-      ).bind(back.slice(0, 100), convId),
-    ]);
-    logger.info({ module: M, teamId: conv.team_id }, `odpověď majiteli ${state.sponsorId}: ${tone}, náklonnost ${delta}`);
+      await db.batch([
+        ...(delta !== 0 ? favorDeltaStmts(db, state.sponsorId, conv.team_id, delta, reason) : []),
+        db.prepare(
+          `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at)
+           VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
+        ).bind(crypto.randomUUID(), convId, `so-${state.sponsorId}`, senderName, back),
+        db.prepare(
+          `UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?,
+             last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'), ai_thread_active = 0, ai_thread_state = NULL
+           WHERE id = ?`,
+        ).bind(back.slice(0, 100), convId),
+      ]);
+      logger.info({ module: M, teamId: conv.team_id }, `odpověď majiteli ${state.sponsorId}: ${tone}, náklonnost ${delta}`);
+    } catch (e) {
+      logger.error({ module: M, teamId: conv.team_id }, `zápis odpovědi majiteli ${state.sponsorId} (sms ${state.smsId})`, e);
+    }
     return true;
   } catch (e) {
     logger.warn({ module: M }, `odpověď majiteli v konverzaci ${convId}`, e);
