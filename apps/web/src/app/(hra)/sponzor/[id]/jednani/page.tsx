@@ -8,7 +8,7 @@ import { useTeam } from "@/context/team-context";
 import { ErrorBox, SectionLabel, Sheet, Spinner, useConfirm } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { formatCZK } from "@/lib/sponsor-owners";
-import { seasonsAccusative } from "@/lib/sponsor-format";
+import { formatGameDay, seasonsAccusative } from "@/lib/sponsor-format";
 import {
   estimateRange, initialDraft, previewCost, proposalsEqual, RESPONSE_LABELS, withSeasons,
   type NegotiationRound, type NegotiationView, type PromiseKind, type Proposal,
@@ -29,15 +29,23 @@ function attempts(n: number): string {
   return n === 1 ? "1 pokus" : n >= 2 && n <= 4 ? `${n} pokusy` : `${n} pokusů`;
 }
 
-/** Co majitel právě odpověděl, česky a s dopadem, aby hráč u tlačítek viděl výsledek svého návrhu. */
-function replyNote(round: NegotiationRound, patience: number): string {
+/**
+ * Co majitel právě odpověděl, česky a s dopadem, aby hráč u tlačítek viděl výsledek svého návrhu.
+ * `hasPending`: jednání pořád nabízí něco k podpisu (majitelova poslední nabídka přežívá odmítnutí).
+ */
+function replyNote(round: NegotiationRound, patience: number, cooldownUntil: string | null, hasPending: boolean): string {
+  const stillStanding = hasPending ? " Jeho poslední nabídka pořád platí, můžeš ji podepsat nebo navrhnout znovu." : "";
   switch (round.response.kind) {
     case "accept": return "Návrh přijal. Můžeš podepsat.";
     case "counter_money":
     case "counter_wish": return "Poslal protinabídku, máš ji ve formuláři. Podepiš ji, nebo ji uprav a navrhni znovu.";
-    case "reject": return `Návrh odmítl. Trpělivost: ${attempts(patience)} na odmítnutí.`;
-    case "insulted": return `Návrh ho urazil, náklonnost klesla o 3. Trpělivost: ${attempts(patience)} na odmítnutí.`;
-    case "walked_away": return "Od jednání odešel.";
+    case "reject": return `Návrh odmítl. Trpělivost: ${attempts(patience)} na odmítnutí.${stillStanding}`;
+    case "insulted": return `Návrh ho urazil, náklonnost klesla o 3. Trpělivost: ${attempts(patience)} na odmítnutí.${stillStanding}`;
+    case "walked_away": {
+      const favorText = round.response.insulted ? "náklonnost klesla o 5 (a o 3 za urážku)" : "náklonnost klesla o 5";
+      const cooldownText = cooldownUntil ? ` Do ${formatGameDay(cooldownUntil)} s vámi jednat nechce.` : "";
+      return `Od jednání odešel, ${favorText}.${cooldownText}`;
+    }
     default: return "";
   }
 }
@@ -229,7 +237,7 @@ export default function NegotiationPage() {
               {RESPONSE_LABELS[reply.response.kind]}
             </div>
             <div className="text-base">„{reply.response.text}“</div>
-            <div className="text-sm">{replyNote(reply, view.patience)}</div>
+            <div className="text-sm">{replyNote(reply, view.patience, view.cooldownUntil, view.pending !== null)}</div>
             {reply.response.counter && (reply.response.kind === "counter_money" || reply.response.kind === "counter_wish") && (
               <div className="text-sm bg-surface-2 rounded-soft px-3 py-2">
                 Protinabídka: {formatCZK(reply.response.counter.demands.monthly)} měsíčně na {seasonsAccusative(reply.response.counter.seasons)}
@@ -239,6 +247,15 @@ export default function NegotiationPage() {
             <div className="flex flex-col gap-2">
               {view.pending && (reply.response.kind === "accept" || reply.response.kind === "counter_money" || reply.response.kind === "counter_wish") && (
                 <button type="button" onClick={() => { setReplyOpen(false); void sign(); }} className="btn btn-primary w-full min-h-11">Podepsat smlouvu</button>
+              )}
+              {view.pending && (reply.response.kind === "reject" || reply.response.kind === "insulted") && (
+                <button
+                  type="button"
+                  onClick={() => { setDraft(view.pending!.proposal); setReplyOpen(false); }}
+                  className="btn btn-primary w-full min-h-11"
+                >
+                  Vrátit se k jeho nabídce
+                </button>
               )}
               {view.status === "open" && (
                 <button type="button" onClick={() => setReplyOpen(false)} className="btn btn-secondary w-full min-h-11">
@@ -257,7 +274,7 @@ export default function NegotiationPage() {
         <div ref={replyRef} className="card px-4 py-3 space-y-1">
           <div className="text-sm font-heading font-bold text-gold-600">Odpověď majitele: {RESPONSE_LABELS[reply.response.kind]}</div>
           <div className="text-base"><span className="font-heading font-bold">{ownerName}:</span> „{reply.response.text}“</div>
-          <div className="text-sm">{replyNote(reply, view.patience)}</div>
+          <div className="text-sm">{replyNote(reply, view.patience, view.cooldownUntil, view.pending !== null)}</div>
         </div>
       )}
 

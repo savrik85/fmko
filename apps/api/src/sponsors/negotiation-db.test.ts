@@ -57,6 +57,23 @@ describe("pendingTerms", () => {
     const n = { ...parseNegotiation(ROW), rounds: [round("reject")] };
     expect(pendingTerms(n)).toBeNull();
   });
+  it("po odmítnutí zůstává na stole poslední protinabídka majitele (hledá se zpětně)", () => {
+    const counter = { ...PROPOSAL, demands: { ...PROPOSAL.demands, monthly: 4500 } };
+    const n = { ...parseNegotiation(ROW), rounds: [round("counter_money", counter), round("reject")] };
+    expect(pendingTerms(n)).toEqual(counter);
+  });
+  it("i po urážce (insulted) zůstává v nabídce jeho úvodní nabídka", () => {
+    const n = { ...parseNegotiation(ROW), rounds: [round("offer", PROPOSAL), round("insulted")] };
+    expect(pendingTerms(n)).toEqual(PROPOSAL);
+  });
+  it("bez dřívější nabídky majitele (samá odmítnutí) pořád nic k podpisu", () => {
+    const n = { ...parseNegotiation(ROW), rounds: [round("reject"), round("reject")] };
+    expect(pendingTerms(n)).toBeNull();
+  });
+  it("stav mimo open/accepted nemá co podepsat, i kdyby předtím nabídka byla", () => {
+    const n = { ...parseNegotiation(ROW), status: "walked_away" as const, rounds: [round("counter_money", PROPOSAL), round("walked_away")] };
+    expect(pendingTerms(n)).toBeNull();
+  });
 });
 
 describe("pendingTermsProgress", () => {
@@ -69,6 +86,14 @@ describe("pendingTermsProgress", () => {
   it("starší kolo bez postupu nebo nic k podpisu: null", () => {
     expect(pendingTermsProgress({ ...parseNegotiation(ROW), status: "accepted", rounds: [round("accept")] })).toBeNull();
     expect(pendingTermsProgress({ ...parseNegotiation(ROW), rounds: [withProgress(round("reject"), 1)] })).toBeNull();
+  });
+  it("po odmítnutí čte postup z kola nabídky, ne z posledního (odmítnutého) kola", () => {
+    const counter = { ...PROPOSAL, demands: { ...PROPOSAL.demands, monthly: 4500 } };
+    const n = {
+      ...parseNegotiation(ROW),
+      rounds: [withProgress(round("counter_money", counter), 1.5), withProgress(round("reject"), 2.9)],
+    };
+    expect(pendingTermsProgress(n)).toBe(1.5);
   });
 });
 

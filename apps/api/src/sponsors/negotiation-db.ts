@@ -44,6 +44,8 @@ export interface RoundResponse {
    * neprošel. Starší kola ho nemají, pak se ověřuje s čerstvým postupem.
    */
   progressMonths?: number;
+  /** Kolo odmítnutí bylo zároveň urážkou (nad 1,5 × ochoty). U "walked_away" pak platí obě pokuty náklonnosti (−3 i −5). */
+  insulted?: boolean;
 }
 
 /** Odpovědi, ve kterých majitel sám dává podmínky k podpisu (response.counter). */
@@ -532,15 +534,31 @@ export async function loadNegotiationState(db: D1Database, teamId: string, negot
   return { neg, team, sponsor, owner, favor, season, ctx, isRenewal: isRenewalOf(contracts, sponsor.id), contracts };
 }
 
-/** Co se podepíše: přijatý návrh klubu, nebo poslední protinabídka (i úvodní nabídka) majitele. */
-export function pendingTerms(neg: Negotiation): Proposal | null {
-  const last = neg.rounds[neg.rounds.length - 1];
-  if (!last) return null;
-  if (neg.status === "accepted" && last.response.kind === "accept") return last.proposal;
-  if (neg.status === "open" && OWNER_OFFER_KINDS.has(last.response.kind) && last.response.counter) {
-    return last.response.counter;
+/**
+ * Kolo, jehož podmínky se dají podepsat. Přijatý stav má na stole vždycky jen poslední kolo
+ * (klub po přijetí dál nenavrhuje). Otevřené jednání ale nabídku majitele nezahazuje odmítnutím:
+ * hledá se zpětně od posledního kola, první kolo s jeho nabídkou nebo protinabídkou pořád platí,
+ * dokud klub nenavrhne něco jiného (a majitel na to odpoví). Jiný stav (odešel, vypršelo,
+ * podepsáno) nemá co podepsat.
+ */
+function pendingRound(neg: Negotiation): NegotiationRound | null {
+  if (neg.status === "accepted") {
+    const last = neg.rounds[neg.rounds.length - 1];
+    return last && last.response.kind === "accept" ? last : null;
+  }
+  if (neg.status !== "open") return null;
+  for (let i = neg.rounds.length - 1; i >= 0; i--) {
+    const r = neg.rounds[i];
+    if (OWNER_OFFER_KINDS.has(r.response.kind) && r.response.counter) return r;
   }
   return null;
+}
+
+/** Co se podepíše: přijatý návrh klubu, nebo poslední platná protinabídka (i úvodní nabídka) majitele. */
+export function pendingTerms(neg: Negotiation): Proposal | null {
+  const r = pendingRound(neg);
+  if (!r) return null;
+  return r.response.kind === "accept" ? r.proposal : (r.response.counter ?? null);
 }
 
 /**
@@ -548,8 +566,7 @@ export function pendingTerms(neg: Negotiation): Proposal | null {
  * null = kolo ho neuložilo (starší jednání), podpis pak ověřuje s čerstvým postupem.
  */
 export function pendingTermsProgress(neg: Negotiation): number | null {
-  if (!pendingTerms(neg)) return null;
-  const p = neg.rounds[neg.rounds.length - 1]?.response.progressMonths;
+  const p = pendingRound(neg)?.response.progressMonths;
   return typeof p === "number" && Number.isFinite(p) ? Math.min(MONTHS_PER_SEASON, Math.max(0, p)) : null;
 }
 
@@ -662,6 +679,9 @@ export function negotiationView(
   // Přechod od legacy smlouvy (bez jednání) k jiné firmě je zdarma: bez výpovědní pokuty a bez
   // ztráty reputace za přejmenování klubu (signFromState v signing.ts počítá stejně).
   const legacySwitch = current !== null && !sameSponsor && current.negotiation_id === null;
+  // Žádnou aktivní smlouvu v kategorii klub nemá (první hlavní sponzor vůbec): přejmenování je
+  // taky zdarma, přejmenovat se nemá čemu (signFromState počítá stejně).
+  const freeRename = legacySwitch || current === null;
   return {
     id: neg.id,
     sponsorId: sponsor.id,
@@ -709,7 +729,7 @@ export function negotiationView(
       equipmentCost: summary.equipmentCost,
       currentFee: summary.currentFee,
       renamesClub: neg.category === "main" && !st.isRenewal,
-      reputationPenalty: neg.category === "main" && !st.isRenewal ? (legacySwitch ? 0 : 3) : 0,
+      reputationPenalty: neg.category === "main" && !st.isRenewal ? (freeRename ? 0 : 3) : 0,
     } : null,
     season: st.season,
   };

@@ -11,6 +11,7 @@ import { gameExpiry, isGameExpired } from "../lib/game-time";
 import { budgetEstimateRange, sponsorBudgetB } from "../sponsors/budget";
 import {
   DEFAULT_FAVOR, FAVOR_REASONS, invitationAcceptance, invitationAcceptedDelta, invitationGiftCost, PUB_BEER_FAVOR, pubBeerCost,
+  WALKED_AWAY_FAVOR,
 } from "../sponsors/favor-math";
 import {
   applySponsorFavorDelta, ensureSponsorOwner, ensureSponsorOwners, getFavor, getFavorsForTeam,
@@ -537,6 +538,7 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
       ...(outcome.kind !== "reject" ? { progressMonths: st.ctx.seasonProgressMonths } : {}),
       ...(counter ? { counter } : {}),
       ...(wish ? { wish } : {}),
+      ...(outcome.kind === "reject" && outcome.insulted ? { insulted: true } : {}),
     },
   };
   const saved = await saveRound(db, st.neg, round, { status, patience, cooldownUntil: cooldown });
@@ -546,6 +548,11 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
   if (outcome.kind === "reject" && outcome.insulted) {
     await applySponsorFavorDelta(db, st.sponsor.id, teamId, INSULT_FAVOR, FAVOR_REASONS.negotiationInsult)
       .catch((e) => { logger.error({ module: "sponsors", teamId }, `urážka při jednání ${st.neg.id} se nezapsala do náklonnosti`, e); });
+  }
+  // Trpělivost došla, majitel odchází bez dohody (spec: náklonnost −5, navíc k urážce, když se sešly obě).
+  if (status === "walked_away") {
+    await applySponsorFavorDelta(db, st.sponsor.id, teamId, WALKED_AWAY_FAVOR, FAVOR_REASONS.walkedAway)
+      .catch((e) => { logger.error({ module: "sponsors", teamId }, `odchod od jednání ${st.neg.id} se nezapsal do náklonnosti`, e); });
   }
   logger.info({ module: "sponsors", teamId }, `jednání ${st.neg.id}: kolo ${st.neg.rounds.length + 1}, ${kind}, trpělivost ${patience}`);
 

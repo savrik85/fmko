@@ -338,6 +338,10 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   // Legacy smlouva (bez jednání, z dřívějších pevných nabídek) nemá výpovědní pokutu ani zálohu:
   // přechod na nový systém sponzorů je zdarma, ať kluby motivuje přejít (negotiationView počítá stejně).
   const legacySwitch = old !== null && old.negotiation_id === null;
+  // Žádnou aktivní smlouvu v kategorii klub nemá (první hlavní sponzor vůbec): přejmenování nikoho
+  // nenahrazuje, penalizovat fanoušky za první jméno klubu se sponzorem nedává smysl (negotiationView počítá stejně).
+  const noReplacedContract = replaced === null;
+  const freeRename = legacySwitch || noReplacedContract;
   const switchFee = old && !legacySwitch ? prorataTerminationFee(old) : 0;
   const clawback = await currentContractClawback(db, st);
   // Přechod k jiné firmě: sliby aktuální sezóny a termínové sliby staré smlouvy propadnou s plnou pokutou.
@@ -507,8 +511,8 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   let newTeamName: string | null = null;
   let reputationPenalty = 0;
   if (neg.category === "main" && !st.isRenewal) {
-    newTeamName = (await applyMainSponsorRename(db, teamId, sponsor.name, season, { freeSwitch: legacySwitch })).newName;
-    reputationPenalty = legacySwitch ? 0 : 3;
+    newTeamName = (await applyMainSponsorRename(db, teamId, sponsor.name, season, { freeSwitch: freeRename })).newName;
+    reputationPenalty = freeRename ? 0 : 3;
   }
   if (neg.category === "stadium" && !st.isRenewal) await applyStadiumRename(db, teamId, contractName, contractId);
 

@@ -39,7 +39,11 @@ export const OWNER_OFFER_KINDS: readonly ResponseKind[] = ["offer", "counter_mon
 export interface NegotiationRound {
   /** U úvodní nabídky majitele (kind "offer") totéž co counter, klub nic nenavrhl. */
   proposal: Proposal;
-  response: { kind: ResponseKind; text: string; counter?: Proposal; wish?: PromiseKind; gameDate: string };
+  response: {
+    kind: ResponseKind; text: string; counter?: Proposal; wish?: PromiseKind; gameDate: string;
+    /** Kolo odmítnutí bylo zároveň urážkou. U "walked_away" pak platí obě pokuty náklonnosti (−3 i −5). */
+    insulted?: boolean;
+  };
 }
 export interface PromiseRowView {
   kind: PromiseKind; params: PromiseParams; label: string; season: number | null; deadlineGameDate: string | null;
@@ -234,10 +238,14 @@ export function proposalsEqual(a: Proposal, b: Proposal): boolean {
   );
 }
 
-/** Výchozí formulář: poslední nabídka majitele, když je na stole, jinak prázdný návrh. */
+/**
+ * Výchozí formulář: poslední nabídka majitele, když je na stole, jinak prázdný návrh.
+ * Bez withSeasons: nabídka je hotový návrh spočítaný serverem (totéž jako pending.proposal),
+ * pozdější posun allowedSeasons (konec sezóny) by jí jinak zvedl počet sezón a rozbil shodu
+ * s pending.proposal (server podepisuje uložené podmínky s postupem sezóny z chvíle, kdy vznikly).
+ */
 export function initialDraft(view: NegotiationView): Proposal {
-  const offer = latestOwnerOffer(view);
-  return offer ? withSeasons(view, offer, offer.seasons) : emptyProposal(view);
+  return latestOwnerOffer(view) ?? emptyProposal(view);
 }
 
 export function emptyProposal(view: NegotiationView): Proposal {

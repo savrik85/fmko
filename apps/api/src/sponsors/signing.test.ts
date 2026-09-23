@@ -342,6 +342,43 @@ describe("signFromState", () => {
     });
   });
 
+  it("první hlavní sponzor vůbec (žádná dosavadní smlouva): přejmenování bez ztráty reputace", async () => {
+    const d = db();
+    const st = state(
+      { ctx: { ...FULL_CTX, category: "main" }, contracts: { active: null, lastExpired: null } },
+      { category: "main" },
+      TERMS,
+    );
+    const res = await signFromState(jakoD1(d), st);
+    expect(res).toMatchObject({ ok: true, reputationPenalty: 0 });
+    expect(res.ok && res.newTeamName).toBeTruthy();
+    // applyReputationDelta (rename penalty) se vůbec nezavolal.
+    expect(d.dotazy.some((q) => /reputation_log/.test(q.sql))).toBe(false);
+  });
+
+  it("pohled na jednání: první hlavní sponzor vůbec nemá v náhledu pokutu za přejmenování", async () => {
+    const d = db();
+    const st = state({ ctx: { ...FULL_CTX, category: "main" }, contracts: { active: null, lastExpired: null } }, { category: "main" }, TERMS);
+    const view = await viewWithClawback(jakoD1(d), st);
+    expect(view.current).toBeNull();
+    expect(view.pending).toMatchObject({ renamesClub: true, reputationPenalty: 0 });
+  });
+
+  it("podepíše majitelovu nabídku i po mezitímním odmítnutí klubu (pendingTerms hledá zpětně)", async () => {
+    const counter: Proposal = { ...TERMS, demands: { ...TERMS.demands, monthly: 5500, signingBonus: 8000 } };
+    const rounds: NegotiationRound[] = [
+      { proposal: TERMS, response: { kind: "counter_money", text: "Tolik ne.", counter, gameDate: "2026-09-24T00:00:00.000Z" } },
+      { proposal: { ...TERMS, demands: { ...TERMS.demands, monthly: 100 } }, response: { kind: "reject", text: "To ne.", gameDate: "2026-09-25T00:00:00.000Z" } },
+    ];
+    const d = db();
+    const res = await signFromState(jakoD1(d), state({}, { status: "open", rounds, roundsRaw: JSON.stringify(rounds) }));
+    expect(res.ok).toBe(true);
+    const claim = d.dotazy.find((q) => CLAIM.test(q.sql))!;
+    expect(claim.params).toEqual(["n1", "t1", "open", JSON.stringify(rounds)]);
+    expect(insertOf(d).params[4]).toBe(5500);
+    expect(money(d)).toEqual([8000]);
+  });
+
   it("prodloužení hlavního sponzora: zápis hlídá exkluzivitu, klub se nepřejmenuje", async () => {
     const active = { id: "c-main", sponsor_id: 7, sponsor_name: "Truhlářství Novák s.r.o.", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const, negotiation_id: "n0" };
     const d = db();

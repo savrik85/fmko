@@ -8,6 +8,8 @@ import { SKALY } from "../stadium/stadium-generator";
 export const DEFAULT_FAVOR = 40;
 export const SEASON_PARTNERSHIP_FAVOR = 5;
 export const PUB_BEER_FAVOR = 2;
+/** Odchod majitele od jednání bez dohody (negotiation.ts, afterReject): navíc k urážce, obojí platí zároveň. */
+export const WALKED_AWAY_FAVOR = -5;
 
 export function clampFavor(v: number): number {
   return Math.max(0, Math.min(100, Math.round(v)));
@@ -80,6 +82,7 @@ export const FAVOR_REASONS = {
   smsDismissed: "odbytá SMS",
   smsIgnored: "bez odpovědi na SMS",
   negotiationInsult: "urazil se nabídkou při jednání",
+  walkedAway: "odešel od jednání bez dohody",
 } as const;
 
 /** Důvod změny po zápase, na kterém majitel seděl: výsledek a skóre z pohledu domácích. */
