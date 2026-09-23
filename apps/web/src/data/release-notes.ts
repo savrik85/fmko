@@ -12,6 +12,25 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-09-23",
+    emoji: "🤝",
+    title: "Sponzoři mají majitele a o smlouvě se vyjednává",
+    items: [
+      "Každá firma v okrese má svého majitele. Je to člověk s povahou: obchodník počítá každou korunu, opatrný se bojí rizika, patriot fandí místnímu klubu a fanoušek jde hlavně po fotbale. Na stránce firmy uvidíš, kdo to je, co by rád slyšel a jak tě má rád.",
+      "Náklonnost majitele si budeš budovat. Pozvi ho na domácí zápas, potkej ho v hospodě, odpovídej mu na esemesky. Kdo tě má rád, dá víc a jeho odhad je přesnější. Kdo tě nemusí, jedná tvrdě.",
+      "Majitelé ti píšou. Ozvou se po výhře i po sérii proher, po výtržnostech na tribuně, když měníš sponzora nebo na konci sezóny. Na esemesku jde odpovědět a odpověď hýbe vztahem.",
+      "Hlavní sponzor může být vždycky jen u jednoho klubu v lize. Když firma už někomu dělá jméno, musíš počkat, až jí tam smlouva skončí. Na konci sezóny dostane přednost klub s nejvyšší reputací.",
+      "O hlavního sponzora i o název stadionu se vyjednává. Majitel přijde s vlastní nabídkou: kolik dá měsíčně, kolik za podpis a co od tebe chce slíbit. Můžeš ji rovnou podepsat, nebo si říct o víc.",
+      "Chtít můžeš měsíční podporu, bonus za výhru, jednorázový příspěvek za podpis, stavbu nebo vylepšení stadionu, nové vybavení, nebo ať za tebe zaplatí výpovědní pokutu u současného sponzora.",
+      "Na oplátku slibuješ. Umístění v tabulce, postup v poháru, trenéra s licencí, modernizaci stadionu, logo na rukávu dresu, exkluzivitu oboru, návštěvu na domácích zápasech, mladé hráče v sestavě, reputaci nebo klid na tribunách. Čím víc slíbíš, tím víc dostaneš.",
+      "Majitel má trpělivost. Na přehnaný návrh pošle protinabídku, odmítne, nebo se urazí a pak s tebou chvíli nemluví. Přímo u tlačítka vidíš, kolik ho tvůj návrh stojí a jestli je to ještě v jeho možnostech.",
+      "Sliby se plní. Sezónní se vyhodnotí na konci sezóny, ty s termínem průběžně. Splněný slib přinese bonus a majitel má radost. Těsně vedle stojí polovinu pokuty. Porušený stojí celou pokutu a po druhém porušení v sezóně sponzor smlouvu vypoví.",
+      "Příspěvek za podpis a zaplacená stavba jsou záloha. Když smlouvu ukončíš dřív, nesplacenou část vracíš. Než výpověď potvrdíš, uvidíš přesně, co tě bude stát.",
+      "Na stadionu jde postavit VIP lóži ve třech úrovních. Ubere pár míst obyčejným divákům a každý domácí zápas něco stojí, ale sponzoři i obec ji ocení a někteří si ji rovnou vyžádají. Uvidíš ji i ve 3D.",
+      "Stránka Sponzoři má záložky. Smlouvy se sliby a jejich stavem, Firmy v okrese, Oblíbenost s deníkem toho, čím sis u koho polepšil nebo pohoršil, a Historie spoluprací.",
+    ],
+  },
+  {
     date: "2026-09-22",
     emoji: "🎓",
     title: "Profil trenéra, licence a trenérská škola s opravdovým testem",
