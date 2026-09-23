@@ -587,10 +587,14 @@ export interface NegotiationView {
   catalog: PromiseOption[];
   construction: GiftOption[];
   equipment: GiftOption[];
-  /** `clawback` = nesplacená záloha současné smlouvy, kterou klub při podpisu vrací (i při prodloužení). */
+  /**
+   * `clawback` = nesplacená záloha současné smlouvy, kterou klub při podpisu vrací (i při prodloužení).
+   * `forfeitPenalty` = pokuty za sliby současné smlouvy, které při přechodu k jiné firmě propadnou
+   * (aktuální sezóna a termínové); u prodloužení 0, sliby přejdou na novou smlouvu.
+   */
   current: null | {
     sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean;
-    clawback: number;
+    clawback: number; forfeitPenalty: number;
   };
   rounds: NegotiationRound[];
   pending: null | {
@@ -600,8 +604,13 @@ export interface NegotiationView {
   season: number;
 }
 
-/** `currentClawback`: vratka zálohy současné smlouvy (contractClawback v signing.ts, viewWithClawback). */
-export function negotiationView(st: NegotiationState, extra: { currentClawback: number } = { currentClawback: 0 }): NegotiationView {
+/**
+ * `currentClawback`: vratka zálohy současné smlouvy (contractClawback v signing.ts, viewWithClawback),
+ * `currentForfeitPenalty`: pokuty za propadlé sliby současné smlouvy (promise-forfeit.ts).
+ */
+export function negotiationView(
+  st: NegotiationState, extra: { currentClawback: number; currentForfeitPenalty?: number } = { currentClawback: 0 },
+): NegotiationView {
   const { neg, ctx, favor, owner, sponsor } = st;
   const terms = pendingTerms(neg);
   const summary = terms ? signingSummary(terms, ctx, teamGameDate(st.team)) : null;
@@ -637,6 +646,7 @@ export function negotiationView(st: NegotiationState, extra: { currentClawback: 
       sponsorName: current.sponsor_name, monthlyAmount: current.monthly_amount, winBonus: current.win_bonus,
       seasonsRemaining: current.seasons_remaining, terminationFee: prorataTerminationFee(current),
       sameSponsor: current.sponsor_id === sponsor.id, clawback: extra.currentClawback,
+      forfeitPenalty: extra.currentForfeitPenalty ?? 0,
     } : null,
     rounds: neg.rounds,
     pending: summary ? {

@@ -7,7 +7,9 @@
  * - routy: exkluzivita oboru, výpis slibů klubu, logo na rukávu.
  *
  * Vyhodnocují se jen sliby aktivních smluv (nahrazené, vypršelé a vypovězené zůstávají čekat,
- * resolvePromise je stejně nenárokuje).
+ * resolvePromise je stejně nenárokuje). Když smlouvu ukončí klub, sliby se o konec smlouvy
+ * nepřipraví: prodloužení je přesune na novou smlouvu, přechod k jiné firmě a výpověď nechají
+ * sliby aktuální sezóny a termínové propadnout (signing.ts, promise-forfeit.ts).
  */
 import { logger } from "../lib/logger";
 import { DEFAULT_CUP_ROUNDS, MONTHS_PER_SEASON } from "./ambition";
@@ -135,8 +137,13 @@ export async function evaluateDeadlinePromises(
                          AND sc.sponsor_id = teams.sleeve_sponsor_id AND sc.status = 'active')`,
   ).bind(teamFilter).run();
 
+  // Po posledním hracím dni sezóny (před rolloverem) termínové sliby smluv, které rolloverem končí,
+  // rozhoduje krok 4a rolloveru k poslednímu dni sezóny (Ruling 7), ne tick: jinak by termín, který
+  // v okně mezi koncem sezóny a rolloverem uplyne, tick odbyl jako porušení.
+  const afterSeason = await isAfterLastSeasonDay(db, today);
+  const endingFilter = afterSeason ? " AND sc.seasons_remaining > 1" : "";
   const rows = await db.prepare(
-    `${PENDING_SELECT} AND p.kind IN (${sqlList(DEADLINE_KINDS)}) AND (?1 IS NULL OR p.team_id = ?1)
+    `${PENDING_SELECT} AND p.kind IN (${sqlList(DEADLINE_KINDS)}) AND (?1 IS NULL OR p.team_id = ?1)${endingFilter}
      ORDER BY p.team_id, p.contract_id, p.id`,
   ).bind(teamFilter).all<PendingJoinRow>();
 
@@ -156,6 +163,15 @@ export async function evaluateDeadlinePromises(
   return result;
 }
 
+/** `true` = den `today` (YYYY-MM-DD) je po posledním hracím dni aktuální sezóny. */
+async function isAfterLastSeasonDay(db: D1Database, today: string): Promise<boolean> {
+  const season = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+    .first<{ number: number }>();
+  if (!season) return false;
+  const last = await lastSeasonDay(db, season.number);
+  return last !== null && today > last;
+}
+
 /** Poslední herní den sezóny podle kalendáře senior lig (stará časová osa). */
 async function lastSeasonDay(db: D1Database, season: number): Promise<string | null> {
   const row = await db.prepare(
@@ -167,7 +183,7 @@ async function lastSeasonDay(db: D1Database, season: number): Promise<string | n
 }
 
 /** Počet kol poháru sezóny pro popisky slibů (jako etapa 2 v negotiation-db.ts). */
-async function cupTotalRoundsOf(db: D1Database, season: number): Promise<number> {
+export async function cupTotalRoundsOf(db: D1Database, season: number): Promise<number> {
   const row = await db.prepare(
     "SELECT total_rounds FROM cup_competitions WHERE season_number = ? ORDER BY rowid DESC LIMIT 1",
   ).bind(season).first<{ total_rounds: number | null }>();

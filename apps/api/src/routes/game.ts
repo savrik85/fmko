@@ -2463,7 +2463,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
 
   // Obor chráněný slibem exkluzivity se v nabídkách bannerů neukazuje.
   const { exclusiveSectors } = await import("../sponsors/promise-runs");
-  const { sectorBlockMessage } = await import("../sponsors/promise-eval");
+  const { sectorBlockReason } = await import("../sponsors/promise-eval");
   const exclusive = await exclusiveSectors(c.env.DB, teamId)
     .catch((e) => { logger.warn({ module: "game", teamId }, "exkluzivita oboru pro nabídky bannerů", e); return new Map<string, string>(); });
   const allowedBannerOffers = bannerOffers.filter((o) => !exclusive.has(o.sponsorType));
@@ -2493,7 +2493,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     if (!isRenewable(row)) return { renewal: null };
     const holder = exclusive.get(row.sponsor_type as string);
     return holder
-      ? { renewal: null, renewable: false, blockedReason: sectorBlockMessage(holder, "renew") }
+      ? { renewal: null, renewable: false, blockedReason: sectorBlockReason(holder, "renew") }
       : { renewal: renewalFor(row) };
   };
 
@@ -2514,10 +2514,18 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     }, progress).catch((e) => { logger.warn({ module: "game", teamId }, `vratka zálohy smlouvy ${row.id as string}`, e); return 0; });
   };
 
+  // Pokuty za sliby, které by výpověď aktivní smlouvy nechala propadnout (dialog výpovědi je ukazuje dopředu).
+  const { forfeitPenaltiesByContract } = await import("../sponsors/promise-forfeit");
+  const forfeitByContract = await forfeitPenaltiesByContract(c.env.DB, teamId, seasonNum)
+    .catch((e) => { logger.warn({ module: "game", teamId }, "pokuty za propadlé sliby", e); return new Map<string, number>(); });
+  const forfeitOf = (row: Record<string, unknown>): number =>
+    row.status === "active" ? forfeitByContract.get(row.id as string) ?? 0 : 0;
+
   const withRenewable = async (row: Record<string, unknown> | null | undefined, cat: "main" | "stadium") => {
     if (!row) return null;
     const base = {
       ...mapContract(row), renewal: null, renewable: isRenewable(row), blockedReason: null as string | null, clawback: await clawbackOf(row),
+      forfeitPenalty: forfeitOf(row),
     };
     if (cat === "main" && base.renewable && base.sponsorId) {
       const block = await mainSponsorBlock(c.env.DB, base.sponsorId, teamId, seedSeason);
@@ -2548,7 +2556,7 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     stadiumContract: stadiumContractOut,
     mainExpired,
     stadiumExpired,
-    bannerContracts: bannerContracts.map((r) => ({ ...mapContract(r), ...bannerRenewal(r) })),
+    bannerContracts: bannerContracts.map((r) => ({ ...mapContract(r), ...bannerRenewal(r), forfeitPenalty: forfeitOf(r) })),
     stadiumName: team.stadium_name,
     teamName: teamFull?.name ?? "",
     bannerOffers: bannerContracts.length >= MAX_BANNERS ? [] : allowedBannerOffers,
@@ -2761,20 +2769,33 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   const { contractClawback, loadTeamSeasonProgress } = await import("../sponsors/signing");
   const clawback = await contractClawback(c.env.DB, contract, await loadTeamSeasonProgress(c.env.DB, teamId));
 
+  // Sliby aktuální sezóny a termínové sliby propadnou s plnou pokutou: neaktivní smlouvu už nikdo
+  // nevyhodnotí, výpověď v poslední sezóně by je jinak obešla (promise-forfeit.ts).
+  const { activeSeason } = await import("../sponsors/negotiation-db");
+  const { prepareForfeit, terminateWithForfeit } = await import("../sponsors/promise-forfeit");
+  const forfeit = await prepareForfeit(c.env.DB, contract.id, await activeSeason(c.env.DB));
+
   const team = await c.env.DB.prepare("SELECT budget, village_id, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ budget: number; village_id: string; game_date: string | null }>();
-  if (!team || team.budget < fee + clawback) {
+  if (!team || team.budget < fee + clawback + forfeit.total) {
     const kc = (n: number) => `${Math.round(n).toLocaleString("cs-CZ")} Kč`;
-    return c.json({ error: clawback > 0
-      ? `Nedostatek peněz (sankce ${kc(fee)} a vrácení zálohy ${kc(clawback)})`
-      : `Nedostatek peněz (sankce ${kc(fee)})` }, 400);
+    const parts = [`sankce ${kc(fee)}`];
+    if (clawback > 0) parts.push(`vrácení zálohy ${kc(clawback)}`);
+    if (forfeit.total > 0) parts.push(`pokuty za propadlé sliby ${kc(forfeit.total)}`);
+    const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} a ${parts[parts.length - 1]}` : parts[0];
+    return c.json({ error: `Nedostatek peněz (${list})` }, 400);
   }
 
   // Nejdřív ukončit (podmíněně, dvojklik nesmí strhnout sankci dvakrát), pak strhnout peníze.
-  const ended = await c.env.DB.prepare("UPDATE sponsor_contracts SET status = 'terminated' WHERE id = ? AND status = 'active'")
-    .bind(contract.id).run();
-  if ((ended.meta?.changes ?? 0) !== 1) return c.json({ error: "Smlouva už je ukončená, načti stránku znovu" }, 409);
+  // Propadlé sliby jdou ve stejné dávce jako konec smlouvy.
   const termDate = team.game_date ?? new Date().toISOString();
+  const ended = await terminateWithForfeit(c.env.DB, {
+    teamId, contractId: contract.id, sponsorName: contract.sponsor_name, forfeit, gameDate: termDate,
+  });
+  if (!ended) return c.json({ error: "Smlouva už je ukončená, načti stránku znovu" }, 409);
+  if (forfeit.rows.length > 0) {
+    logger.info({ module: "game", teamId }, `výpověď smlouvy ${contract.id}: propadlé sliby ${forfeit.rows.length} za ${forfeit.total}`);
+  }
   await recordTransaction(c.env.DB, teamId, "sponsor_termination", -fee,
     `Ukončení sponzorské smlouvy (sankce)`, termDate);
   if (clawback > 0) {
@@ -2818,7 +2839,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
       `Klub ${oldName} ukončil sponzorskou smlouvu a vrací se k názvu ${defaultName}. Fanoušci zmatení (-2 reputace).`,
     ).run().catch((e) => logger.warn({ module: "game" }, "insert termination rename news", e));
 
-    return c.json({ ok: true, fee, clawback, newTeamName: defaultName, reputationPenalty: 2 });
+    return c.json({ ok: true, fee, clawback, forfeitPenalty: forfeit.total, newTeamName: defaultName, reputationPenalty: 2 });
   }
 
   if (category === "stadium") {
@@ -2829,7 +2850,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   }
 
   // Banner — žádné rename ani penalty na reputaci
-  return c.json({ ok: true, fee, clawback });
+  return c.json({ ok: true, fee, clawback, forfeitPenalty: forfeit.total });
 });
 
 // POST /api/teams/:id/rename — custom rename (after sponsor termination, once per season)

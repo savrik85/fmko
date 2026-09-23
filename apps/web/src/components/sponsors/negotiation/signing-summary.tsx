@@ -29,6 +29,11 @@ export function SigningSummary({ view }: { view: NegotiationView }) {
               Klub vrací nesplacenou zálohu ze současné smlouvy {formatCZK(view.current.clawback)} (část příspěvku za podpis a darů).
             </div>
           )}
+          {view.current && !view.current.sameSponsor && (view.current.forfeitPenalty ?? 0) > 0 && (
+            <div className="text-card-red">
+              Propadlé sliby: pokuta {formatCZK(view.current.forfeitPenalty ?? 0)} (sliby této sezóny a sliby s termínem u {view.current.sponsorName}).
+            </div>
+          )}
           <div className="text-muted">Výpovědní pokuta nové smlouvy {formatCZK(p.terminationFee)}.</div>
           {p.renamesClub && <div className="text-gold-600">Klub ponese jméno sponzora, -3 reputace.</div>}
           {p.promises.length > 0 && (

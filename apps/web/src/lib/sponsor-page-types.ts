@@ -22,6 +22,8 @@ export interface ActiveContract {
   renewable?: boolean;
   /** Smlouva z jednání: nesplacená záloha (příspěvek za podpis, dary), kterou klub při výpovědi vrací. */
   clawback?: number;
+  /** Pokuty za sliby (aktuální sezóna a termínové), které při výpovědi klubem propadnou. */
+  forfeitPenalty?: number;
 }
 
 export interface SponsorOffer {

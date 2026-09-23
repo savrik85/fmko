@@ -86,7 +86,7 @@ function labelOf(e: PromiseEvaluation, ctx: ResolveContext): string {
 }
 
 /** Podmínka „slib nárokoval právě tenhle běh" (značka v resolved_at). */
-function claimGuard(promiseId: string, token: string): Guard {
+export function claimGuard(promiseId: string, token: string): Guard {
   return { sql: "EXISTS (SELECT 1 FROM sponsor_promises WHERE id = ? AND resolved_at = ?)", params: [promiseId, token] };
 }
 

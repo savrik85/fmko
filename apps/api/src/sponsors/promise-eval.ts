@@ -345,8 +345,17 @@ export function promiseFavorReason(outcome: PromiseOutcome, label: string): stri
  * jména) tak zůstává gramaticky správně v 1. pádě.
  */
 export function sectorBlockMessage(sponsorName: string, action: "sign" | "renew" = "sign"): string {
+  const clause = sectorBlockReason(sponsorName, action);
+  return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
+}
+
+/**
+ * Totéž jako sectorBlockMessage, ale jako klauzule bez velkého písmena a bez tečky: karta smlouvy
+ * ji vkládá za dvojtečku a tečku přidává sama (`blockedReason`).
+ */
+export function sectorBlockReason(sponsorName: string, action: "sign" | "renew" = "sign"): string {
   const verb = action === "renew" ? "prodloužit" : "podepsat";
-  return `Firma ${sponsorName} má u klubu exkluzivitu oboru, banner jiné firmy ze stejného oboru teď ${verb} nejde.`;
+  return `firma ${sponsorName} má u klubu exkluzivitu oboru, banner jiné firmy ze stejného oboru teď ${verb} nejde`;
 }
 
 export type PromiseSmsOccasion = "promise_kept" | "promise_broken" | "sponsor_terminates";
@@ -419,13 +428,21 @@ export interface CupEntryRow {
   is_winner: number;
 }
 
-/** Nejvyšší odehrané kolo poháru. `null` = pohár se nehrál, 0 = klub v něm nebyl. */
+/**
+ * Nejvyšší odehrané kolo poháru. `null` = pohár se nehrál, nebo ještě běží a klub v něm pořád
+ * je (výsledek ještě není známý, slib se nevyhodnotí). 0 = klub v poháru nebyl.
+ */
 export function cupRoundReached(r: CupEntryRow | null): number | null {
   if (!r) return null;
   if (!r.cup_team_id) return 0;
   if (r.eliminated_round !== null) return r.eliminated_round;
   if (r.is_winner === 1 || r.status === "finished") return r.total_rounds;
-  return r.current_round;
+  return null;
+}
+
+/** Pohár ještě běží a klub v něm pořád je: kam až došel, zatím nejde říct. */
+export function cupStillRunning(r: CupEntryRow | null): boolean {
+  return !!r && !!r.cup_team_id && r.eliminated_round === null && r.is_winner !== 1 && r.status !== "finished";
 }
 
 export function averagePerMatch(total: number, matches: number): number | null {

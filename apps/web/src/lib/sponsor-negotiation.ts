@@ -68,10 +68,13 @@ export interface NegotiationView {
   catalog: PromiseOption[];
   construction: GiftOption[];
   equipment: GiftOption[];
-  /** `clawback`: nesplacená záloha současné smlouvy, kterou klub při podpisu vrací (i při prodloužení). */
+  /**
+   * `clawback`: nesplacená záloha současné smlouvy, kterou klub při podpisu vrací (i při prodloužení).
+   * `forfeitPenalty`: pokuty za sliby současné smlouvy, které při přechodu k jiné firmě propadnou (u prodloužení 0).
+   */
   current: null | {
     sponsorName: string; monthlyAmount: number; winBonus: number; seasonsRemaining: number; terminationFee: number; sameSponsor: boolean;
-    clawback: number;
+    clawback: number; forfeitPenalty?: number;
   };
   rounds: NegotiationRound[];
   pending: null | {

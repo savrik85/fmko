@@ -4,9 +4,9 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  averagePerMatch, cupRoundReached, evaluateDeadlinePromise, evaluateSeasonalPromise, parsePromiseParams,
+  averagePerMatch, cupRoundReached, cupStillRunning, evaluateDeadlinePromise, evaluateSeasonalPromise, parsePromiseParams,
   positionFromStandings, PROMISE_KINDS, promiseActualText, promiseConsequence, promiseFavorReason, promiseLabel,
-  promiseSmsPlan, promiseTransactionText, rankTable, sectorBlockMessage, sponsorTerminates,
+  promiseSmsPlan, promiseTransactionText, rankTable, sectorBlockMessage, sectorBlockReason, sponsorTerminates,
   type DeadlineState, type PromiseParams, type SeasonStats,
 } from "./promise-eval";
 
@@ -234,6 +234,12 @@ describe("popisky", () => {
       "Firma Pivovar Lhota má u klubu exkluzivitu oboru, banner jiné firmy ze stejného oboru teď prodloužit nejde.",
     );
   });
+
+  it("důvod blokace pro kartu: klauzule bez tečky (karta za dvojtečku tečku přidává sama)", () => {
+    const reason = sectorBlockReason("Pivovar Lhota", "renew");
+    expect(reason).toBe("firma Pivovar Lhota má u klubu exkluzivitu oboru, banner jiné firmy ze stejného oboru teď prodloužit nejde");
+    expect(`Smlouva skončí s koncem sezóny: ${reason}.`).not.toContain("..");
+  });
 });
 
 describe("pomocné výpočty", () => {
@@ -267,7 +273,12 @@ describe("pomocné výpočty", () => {
     expect(cupRoundReached({ ...base, cup_team_id: null })).toBe(0);
     expect(cupRoundReached({ ...base, eliminated_round: 2 })).toBe(2);
     expect(cupRoundReached({ ...base, is_winner: 1 })).toBe(6);
-    expect(cupRoundReached({ ...base, status: "active", current_round: 4 })).toBe(4);
+    // Pohár ještě běží a klub nevypadl: výsledek není známý, slib se nevyhodnotí.
+    expect(cupRoundReached({ ...base, status: "active", current_round: 4 })).toBeNull();
+    expect(cupRoundReached({ ...base, status: "active", current_round: 4, eliminated_round: 3 })).toBe(3);
+    expect(cupStillRunning({ ...base, status: "active", current_round: 4 })).toBe(true);
+    expect(cupStillRunning({ ...base, status: "active", eliminated_round: 3 })).toBe(false);
+    expect(cupStillRunning(base)).toBe(false);
   });
 
   it("průměr na zápas", () => {

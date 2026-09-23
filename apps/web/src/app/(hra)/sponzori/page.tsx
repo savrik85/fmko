@@ -182,6 +182,8 @@ export default function SponsorsPage() {
     ];
     const clawback = contract.clawback ?? 0;
     if (clawback > 0) details.push({ label: "Vrácení zálohy", value: `-${formatCZK(clawback)}`, color: "text-card-red" });
+    const forfeitPenalty = contract.forfeitPenalty ?? 0;
+    if (forfeitPenalty > 0) details.push({ label: "Propadlé sliby", value: `pokuta ${formatCZK(forfeitPenalty)}`, color: "text-card-red" });
     let description = `${remainingSeasonsText(contract.seasonsRemaining)} ze smlouvy s ${contract.sponsorName}.`;
     if (isMain) {
       details.push({ label: "Dopad na reputaci", value: "-2 reputace", color: "text-card-red" });

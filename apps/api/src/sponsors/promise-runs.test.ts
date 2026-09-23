@@ -183,6 +183,32 @@ describe("evaluateDeadlinePromises", () => {
   });
 });
 
+describe("evaluateDeadlinePromises po konci sezóny", () => {
+  const rules = (lastDay: string | null): Pravidlo[] => [
+    { sql: /SELECT number FROM seasons WHERE status = 'active'/, first: { number: 5 } },
+    { sql: /MAX\(substr\(sc\.scheduled_at/, first: { d: lastDay } },
+  ];
+  const select = (db: FalesnaD1) => db.dotazy.find((d) => /FROM sponsor_promises p JOIN sponsor_contracts sc/.test(d.sql))!;
+
+  it("po posledním hracím dni přeskočí smlouvy, které rolloverem končí (rozhodne rollover)", async () => {
+    const db = new FalesnaD1(rules("2026-11-20"));
+    await evaluateDeadlinePromises(jakoD1(db), "2026-11-21T16:00:00.000Z");
+    expect(select(db).sql).toContain("AND sc.seasons_remaining > 1");
+    expect(db.dotazy.find((d) => /MAX\(substr\(sc\.scheduled_at/.test(d.sql))?.params).toEqual([5]);
+  });
+
+  it("během sezóny (i v poslední den) vyhodnocuje všechny aktivní smlouvy", async () => {
+    for (const today of ["2026-11-20T16:00:00.000Z", "2026-10-01T16:00:00.000Z"]) {
+      const db = new FalesnaD1(rules("2026-11-20"));
+      await evaluateDeadlinePromises(jakoD1(db), today);
+      expect(select(db).sql).not.toContain("seasons_remaining > 1");
+    }
+    const noCalendar = new FalesnaD1(rules(null));
+    await evaluateDeadlinePromises(jakoD1(noCalendar), "2026-11-21T16:00:00.000Z");
+    expect(select(noCalendar).sql).not.toContain("seasons_remaining > 1");
+  });
+});
+
 describe("shiftPromiseDeadlinesForRollover", () => {
   it("posune čekající termíny o skok herního času, jednou za rollover", async () => {
     const db = new FalesnaD1([{ sql: /MAX\(substr\(sc\.scheduled_at/, first: { d: "2026-11-20" } }]);

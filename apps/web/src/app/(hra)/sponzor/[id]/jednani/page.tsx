@@ -86,6 +86,8 @@ export default function NegotiationPage() {
           ? [{ label: "Výpovědní pokuta", value: `-${formatCZK(view.current.terminationFee)}`, color: "text-card-red" }] : []),
         ...(view.current && view.current.clawback > 0
           ? [{ label: "Vrácení zálohy", value: `-${formatCZK(view.current.clawback)}`, color: "text-card-red" }] : []),
+        ...(view.current && !view.current.sameSponsor && (view.current.forfeitPenalty ?? 0) > 0
+          ? [{ label: "Propadlé sliby", value: `pokuta ${formatCZK(view.current.forfeitPenalty ?? 0)}`, color: "text-card-red" }] : []),
         ...(p.renamesClub ? [{ label: "Dopad na reputaci", value: "-3 reputace", color: "text-card-red" }] : []),
       ],
       confirmLabel: "Podepsat",

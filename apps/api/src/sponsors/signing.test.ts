@@ -380,3 +380,95 @@ describe("vratka zálohy", () => {
     expect(d.dotazy).toHaveLength(0);
   });
 });
+
+describe("sliby staré smlouvy při podpisu (prodloužení a přechod)", () => {
+  const OLD = { id: "c-old", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 18000, status: "active" as const };
+  const FORFEIT_SELECT = /FROM sponsor_promises p WHERE p\.contract_id = \?/;
+  const FORFEIT_ROWS: Pravidlo = { sql: FORFEIT_SELECT, all: [
+    { id: "pr-season", contract_id: "c-old", sponsor_id: 3, kind: "reputation", params: '{"reputation":60}', season: 3, penalty: 5000 },
+    { id: "pr-deadline", contract_id: "c-old", sponsor_id: 3, kind: "coach_licence", params: '{"level":2}', season: null, penalty: 2000 },
+  ] };
+  const FORFEIT_CLAIM = /^UPDATE sponsor_promises SET status = 'broken', resolved_at = \?/;
+  const MOVE = /^UPDATE sponsor_promises SET contract_id = \?/;
+  const switchSt = (budget = 100000) => state({
+    team: { ...state().team, budget }, contracts: { active: OLD, lastExpired: null },
+  });
+
+  it("prodloužení: čekající sliby (kromě exkluzivity oboru) přejdou na novou smlouvu, nic nepropadá", async () => {
+    const d = db([FORFEIT_ROWS]);
+    const active = { ...OLD, sponsor_id: 7, sponsor_name: "Truhlářství Novák Arena" };
+    const res = await signFromState(jakoD1(d), state({ isRenewal: true, contracts: { active, lastExpired: null } }));
+    expect(res.ok).toBe(true);
+    const q = batchQueries(d);
+    const moveIdx = q.findIndex((x) => MOVE.test(x.sql));
+    expect(moveIdx).toBeGreaterThan(-1);
+    const move = q[moveIdx];
+    expect(move.sql).toContain("status = 'pending'");
+    expect(move.sql).toContain("kind != 'sector_exclusivity'");
+    // Nová smlouva, stará smlouva a hlídání: nová existuje a stará je pořád aktivní.
+    const newId = insertOf(d).params[0];
+    expect(move.params).toEqual([newId, "c-old", newId, "c-old"]);
+    expect(move.sql).toContain("status = 'active'");
+    // Přesun před koncem staré smlouvy (jinak by hlídání „stará aktivní" neprošlo).
+    expect(moveIdx).toBeLessThan(q.findIndex((x) => END_OLD.test(x.sql)));
+    // Prodloužení nic nepropadá.
+    expect(d.pocet(FORFEIT_SELECT)).toBe(0);
+    expect(d.pocet(FORFEIT_CLAIM)).toBe(0);
+  });
+
+  it("přechod k jiné firmě: sliby aktuální sezóny a termínové propadnou s plnou pokutou, bez porušení", async () => {
+    const d = db([FORFEIT_ROWS]);
+    const res = await signFromState(jakoD1(d), switchSt());
+    expect(res.ok).toBe(true);
+    // Výběr: aktuální sezóna (3) a termínové druhy.
+    const sel = d.dotazy.find((x) => FORFEIT_SELECT.test(x.sql))!;
+    expect(sel.params).toEqual(["c-old", 3]);
+    expect(sel.sql).toContain("p.season = ?");
+    expect(sel.sql).toContain("'coach_licence', 'stadium_upgrade', 'jersey_logo'");
+    const q = batchQueries(d);
+    const claims = q.filter((x) => FORFEIT_CLAIM.test(x.sql));
+    expect(claims.map((c) => c.params[1])).toEqual(["pr-season", "pr-deadline"]);
+    // Nárok jen dokud je stará smlouva aktivní a nová existuje.
+    const newId = insertOf(d).params[0];
+    for (const c of claims) {
+      expect(c.sql).toContain("status = 'pending'");
+      expect(c.params.slice(2)).toEqual([newId, "c-old"]);
+    }
+    // Plná pokuta, transakce s referencí promise:<id>, podmíněná značkou nároku.
+    expect(money(d)).toEqual([12000, -6000, -5000, -2000]);
+    const tx = q.filter((x) => /INSERT INTO transactions/.test(x.sql) && String(x.params[6]).startsWith("promise:"));
+    expect(tx.map((x) => [x.params[2], x.params[6]])).toEqual([["sponsor_penalty", "promise:pr-season"], ["sponsor_penalty", "promise:pr-deadline"]]);
+    expect(tx.every((x) => x.sql.includes("resolved_at = ?"))).toBe(true);
+    // Náklonnost −8 s důvodem porušeného slibu, počítadlo porušení se nemění.
+    const favorLog = q.filter((x) => /INSERT INTO sponsor_favor_log/.test(x.sql));
+    expect(favorLog).toHaveLength(2);
+    expect(favorLog[0].params.slice(0, 3)).toEqual([3, "t1", -8]);
+    expect(String(favorLog[0].params[3])).toMatch(/^porušený slib: /);
+    expect(d.pocet(/breaches_season/)).toBe(0);
+    // Sliby propadají před koncem staré smlouvy.
+    const lastClaim = q.map((x) => FORFEIT_CLAIM.test(x.sql)).lastIndexOf(true);
+    expect(lastClaim).toBeLessThan(q.findIndex((x) => END_OLD.test(x.sql)));
+    // Značka nároku se na konci přepíše na herní datum.
+    expect(q.filter((x) => /^UPDATE sponsor_promises SET resolved_at = \? WHERE id = \? AND resolved_at = \?/.test(x.sql))).toHaveLength(2);
+  });
+
+  it("přechod: na pokuty za propadlé sliby musí být peníze", async () => {
+    // pokuta 18000 × 1/3 = 6000 + propadlé sliby 7000 = 13000; příspěvek za podpis 12000
+    expect((await signFromState(jakoD1(db([FORFEIT_ROWS])), switchSt(1500))).ok).toBe(true);
+    // 500 + 12000 < 13000 → neprojde a řekne proč (bez slibů by na pokutu 6000 stačilo)
+    const d = db([FORFEIT_ROWS]);
+    const res = await signFromState(jakoD1(d), switchSt(500));
+    expect(res).toMatchObject({ ok: false, status: 400 });
+    expect((res as { error: string }).error).toContain("pokuty za propadlé sliby");
+    expect((res as { error: string }).error).toContain("13");
+    expect(d.pocet(CLAIM)).toBe(0);
+  });
+
+  it("pohled na jednání: pokuta za propadlé sliby jen u přechodu, u prodloužení 0", async () => {
+    const view = await viewWithClawback(jakoD1(db([FORFEIT_ROWS])), switchSt());
+    expect(view.current).toMatchObject({ sponsorName: "Pila", forfeitPenalty: 7000 });
+    const active = { ...OLD, sponsor_id: 7 };
+    const renewal = await viewWithClawback(jakoD1(db([FORFEIT_ROWS])), state({ isRenewal: true, contracts: { active, lastExpired: null } }));
+    expect(renewal.current).toMatchObject({ sameSponsor: true, forfeitPenalty: 0 });
+  });
+});

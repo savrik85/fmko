@@ -3,9 +3,10 @@
  * pohár, návštěva, mladí v sestavě, reputace, výtržnosti) a v jakém stavu je teď
  * (licence trenéra, stadion, logo na rukávu).
  */
+import { logger } from "../lib/logger";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import {
-  averagePerMatch, cupRoundReached, positionFromStandings, rankTable,
+  averagePerMatch, cupRoundReached, cupStillRunning, positionFromStandings, rankTable,
   type CupEntryRow, type DeadlineState, type MatchResultRow, type SeasonStats,
 } from "./promise-eval";
 
@@ -84,6 +85,9 @@ export async function loadSeasonStats(
     db.prepare("SELECT reputation FROM teams WHERE id = ?").bind(teamId).first<{ reputation: number }>(),
     db.prepare(RIOTS_SQL).bind(teamId, season).first<{ n: number }>(),
   ]);
+  if (cupStillRunning(cup)) {
+    logger.warn({ module: "sponsor-promises", teamId }, `pohár sezóny ${season} ještě běží a klub v něm je, slib pohárového kola se nevyhodnotí`);
+  }
   return {
     position: position?.position ?? null,
     teamsInLeague: position?.teams ?? null,

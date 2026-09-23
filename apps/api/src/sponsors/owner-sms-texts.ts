@@ -308,7 +308,7 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
       "Končíme. Na tomhle jsme si plácli: {slib}. Víc k tomu nemám.",
     ],
     businessman: [
-      "Smlouvu tímto vypovídám. Nesplněno: {slib}. Nesplacenou zálohu si podle smlouvy nechám vrátit.",
+      "Smlouvu tímto vypovídám. Nesplněno: {slib}. Vyrovnání proběhne přesně podle smlouvy.",
       "Spolupráce končí. Dohoda nebyla dodržena: {slib}. Obchod je obchod.",
       "Vypovídám smlouvu. Nesplněno: {slib}. Za těchto podmínek pokračovat nemohu.",
     ],

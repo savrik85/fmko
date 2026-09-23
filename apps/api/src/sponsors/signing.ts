@@ -171,9 +171,24 @@ async function currentContractClawback(db: D1Database, st: NegotiationState): Pr
   return adv ? contractClawback(db, adv, st.ctx.seasonProgressMonths) : 0;
 }
 
-/** Pohled na jednání pro klienta i s vratkou zálohy současné smlouvy, kterou klub při podpisu zaplatí. */
+/**
+ * Pokuta za sliby současné smlouvy, které při přechodu k jiné firmě propadnou (promise-forfeit.ts).
+ * Prodloužení sliby nepropadá (přesouvají se na novou smlouvu), proto 0.
+ */
+async function currentContractForfeit(db: D1Database, st: NegotiationState) {
+  const current = st.contracts.active;
+  if (!current || st.isRenewal) return null;
+  const { prepareForfeit } = await import("./promise-forfeit");
+  return prepareForfeit(db, current.id, st.season);
+}
+
+/**
+ * Pohled na jednání pro klienta i s vratkou zálohy současné smlouvy a pokutou za propadlé sliby,
+ * které klub při podpisu zaplatí.
+ */
 export async function viewWithClawback(db: D1Database, st: NegotiationState): Promise<NegotiationView> {
-  return negotiationView(st, { currentClawback: await currentContractClawback(db, st) });
+  const [clawback, forfeit] = await Promise.all([currentContractClawback(db, st), currentContractForfeit(db, st)]);
+  return negotiationView(st, { currentClawback: clawback, currentForfeitPenalty: forfeit?.total ?? 0 });
 }
 
 /** Nový hlavní sponzor: klub nese jeho jméno, −3 reputace, pohár, U21 a zpráva do ligy. */
@@ -315,11 +330,19 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   const old = replaced && !st.isRenewal ? replaced : null;
   const switchFee = old ? prorataTerminationFee(old) : 0;
   const clawback = await currentContractClawback(db, st);
+  // Přechod k jiné firmě: sliby aktuální sezóny a termínové sliby staré smlouvy propadnou s plnou pokutou.
+  const forfeit = await currentContractForfeit(db, st);
+  const forfeitTotal = forfeit?.total ?? 0;
   const feePaidBySponsor = d.payCurrentFee ? switchFee : 0;
-  if (team.budget + d.signingBonus + feePaidBySponsor < switchFee + clawback) {
+  if (team.budget + d.signingBonus + feePaidBySponsor < switchFee + clawback + forfeitTotal) {
     const kc = (n: number) => `${Math.round(n).toLocaleString("cs-CZ")} Kč`;
-    const what = clawback > 0 ? `výpovědní pokutu a vrácení zálohy (${kc(switchFee + clawback)})` : `výpovědní pokutu ${kc(switchFee)}`;
-    return { ok: false, error: `Na ${what} u ${replaced?.sponsor_name ?? "současného sponzora"} nemáš peníze`, status: 400 };
+    const parts = [
+      ...(switchFee > 0 || (clawback === 0 && forfeitTotal === 0) ? ["výpovědní pokutu"] : []),
+      ...(clawback > 0 ? ["vrácení zálohy"] : []),
+      ...(forfeitTotal > 0 ? ["pokuty za propadlé sliby"] : []),
+    ];
+    const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} a ${parts[parts.length - 1]}` : parts[0];
+    return { ok: false, error: `Na ${list} (${kc(switchFee + clawback + forfeitTotal)}) u ${replaced?.sponsor_name ?? "současného sponzora"} nemáš peníze`, status: 400 };
   }
 
   // Zámek: podepsat jde jen jednou a jen to, co klient viděl (stav ani kola se nezměnily).
@@ -399,7 +422,26 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
     `UPDATE sponsor_negotiations SET status = 'expired'
      WHERE team_id = ? AND category = ? AND status IN ('open','accepted') AND id != ? AND ${newExists.sql}`,
   ).bind(teamId, neg.category, neg.id, ...newExists.params));
-  // Stará smlouva končí až po platbách (ty se ptají, jestli je pořád aktivní).
+  // Sliby staré smlouvy (jen dokud je pořád aktivní, stejně jako platby za ni). Neaktivní smlouvu
+  // už nikdo nevyhodnotí, takže by prodloužení nebo přechod sliby poslední sezóny obešly.
+  // Prodloužení: čekající sliby (kromě exkluzivity oboru, tu má každá smlouva vlastní) přejdou
+  // na novou smlouvu a vyhodnotí se normálně. Přechod k jiné firmě: sliby aktuální sezóny
+  // a termínové sliby propadnou s plnou pokutou, bez počítání porušení (promise-forfeit.ts).
+  let movedIdx: number | null = null;
+  if (replaced && oldActive && st.isRenewal) {
+    stmts.push(db.prepare(
+      `UPDATE sponsor_promises SET contract_id = ?
+       WHERE contract_id = ? AND status = 'pending' AND kind != 'sector_exclusivity' AND ${oldActive.sql}`,
+    ).bind(contractId, replaced.id, ...oldActive.params));
+    movedIdx = stmts.length - 1;
+  }
+  if (old && oldActive && forfeit && forfeit.rows.length > 0) {
+    const { forfeitStatements } = await import("./promise-forfeit");
+    stmts.push(...forfeitStatements(db, {
+      teamId, sponsorName: old.sponsor_name, rows: forfeit.rows, gameDate, guard: oldActive, cupTotalRounds: forfeit.cupTotalRounds,
+    }));
+  }
+  // Stará smlouva končí až po platbách a slibech (ty se ptají, jestli je pořád aktivní).
   let oldIdx: number | null = null;
   if (replaced && oldActive) {
     stmts.push(db.prepare(`UPDATE sponsor_contracts SET status = ? WHERE id = ? AND status = 'active' AND ${newExists.sql}`)
@@ -471,7 +513,10 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
     }
   }
 
+  const moved = movedIdx !== null ? (results[movedIdx]?.meta?.changes ?? 0) : 0;
   logger.info({ module: "sponsors", teamId },
-    `podpis z jednání ${neg.id}: smlouva ${contractId}, ${neg.category}, ${proposal.seasons} sez., ${d.monthly} Kč/měs, slibů ${rows.length}${st.isRenewal ? ", prodloužení" : ""}${oldEnded && clawback > 0 ? `, vratka zálohy ${clawback}` : ""}`);
+    `podpis z jednání ${neg.id}: smlouva ${contractId}, ${neg.category}, ${proposal.seasons} sez., ${d.monthly} Kč/měs, slibů ${rows.length}`
+    + `${st.isRenewal ? `, prodloužení (přesunuto slibů ${moved})` : ""}${oldEnded && clawback > 0 ? `, vratka zálohy ${clawback}` : ""}`
+    + `${oldEnded && forfeitTotal > 0 ? `, propadlé sliby ${forfeit?.rows.length ?? 0} za ${forfeitTotal}` : ""}`);
   return { ok: true, contractId, newTeamName, reputationPenalty };
 }
