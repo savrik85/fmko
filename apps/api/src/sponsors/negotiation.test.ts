@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
   advanceClawback, afterReject, buildPromiseRows, contractMonths, defaultPromise, earlyTerminationFee, evaluateRound,
-  initialPatience, oneTimeTotal, promiseChance, promisePenalty, promiseRowCount, promiseValueShare, reduceToWillingness,
+  initialPatience, meetsMonthlyShare, minMonthlyFor, oneTimeTotal, promiseChance, promisePenalty, promiseRowCount, promiseValueShare, reduceToWillingness,
   requestCost, willingness, type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import type { PromiseSpec } from "./promise-kinds";
@@ -105,9 +105,34 @@ describe("promiseChance", () => {
     // Umístění 12 (podlaha ambice, viz test výš) → šance přesně 1,0, ne extra větev.
     expect(promiseChance({ kind: "league_position", params: { position: 12 } }, CTX)).toBeCloseTo(1.0, 9);
   });
-  it("nesezónní (řeší klub sám) je vždy 1,0", () => {
+  it("sliby v rukou klubu (i sezónní mladí a výtržnosti) mají vždy 1,0", () => {
     expect(promiseChance({ kind: "coach_licence", params: { level: 2 } }, CTX)).toBe(1.0);
     expect(promiseChance({ kind: "sector_exclusivity", params: { sector: "pub" } }, CTX)).toBe(1.0);
+    expect(promiseChance({ kind: "youth", params: { count: 2 } }, CTX)).toBe(1.0);
+    expect(promiseChance({ kind: "no_riots", params: {} }, CTX)).toBe(1.0);
+  });
+  it("bonus za splnění u mladých: klub nevybere víc než O × měsíce (B 10 000, fanoušek, 3 sezóny, G 30 000)", () => {
+    const seasons = 3;
+    const m = contractMonths(seasons);
+    const youth: PromiseSpec[] = [{ kind: "youth", params: { count: 2 } }];
+    const rows = promiseRowCount("youth", seasons);
+    const G = 30000;
+    const o = willingness(prop({}, seasons, youth), CTX);
+    expect(o).toBeCloseTo(7500, 6);
+    // Nejvyšší měsíční podpora, kterou sponzor s tímhle bonusem přijme.
+    const monthly = Math.floor(o - (G * rows) / m + 1e-6);
+    const accepted = prop({ monthly, goalBonuses: { youth: G } }, seasons, youth);
+    expect(evaluateRound(accepted, CTX)).toEqual({ kind: "accept" });
+    // Slib si klub splní sám, takže dostane měsíčně × měsíce + G za každou sezónu se slibem.
+    expect(monthly * m + G * rows).toBeLessThanOrEqual(o * m + 1);
+    expect(evaluateRound({ ...accepted, demands: { ...accepted.demands, monthly: monthly + 1 } }, CTX).kind).not.toBe("accept");
+    // Ani protinabídka nepustí klub nad O × měsíce.
+    const r = evaluateRound(prop({ monthly: monthly + 100, goalBonuses: { youth: G } }, seasons, youth), CTX);
+    expect(r.kind).toBe("counter_money");
+    if (r.kind === "counter_money") {
+      const d = r.counter.demands;
+      expect(d.monthly * m + (d.goalBonuses.youth ?? 0) * rows).toBeLessThanOrEqual(o * m + 1);
+    }
   });
 });
 
@@ -160,6 +185,44 @@ describe("evaluateRound", () => {
   });
   it("stavbu ani pokutu sponzor neubírá", () => {
     expect(reduceToWillingness(prop({ construction: "toilets" }, 1), CTX, 3000)).toBeNull();
+  });
+  it("sleva nestáhne měsíční podporu pod polovinu podpory, ubere radši z podpisu", () => {
+    const m = contractMonths(2);
+    // Stará sleva by vzala 1200 z měsíční (2900 < 30 000 / 7,44 = 4031) a porušila pravidlo.
+    const r = reduceToWillingness(prop({ monthly: 4100, signingBonus: 30000 }), CTX, 7000)!;
+    expect(r).not.toBeNull();
+    expect(r.demands.monthly).toBe(minMonthlyFor(30000, m));
+    expect(r.demands.signingBonus).toBe(22000);
+    expect(meetsMonthlyShare(r, CTX)).toBe(true);
+    expect(requestCost(r, CTX)).toBeLessThanOrEqual(7000 + 1e-6);
+  });
+  it("když se podpis ubere celý, druhý průchod ubere zbytek z měsíční", () => {
+    const r = reduceToWillingness(prop({ monthly: 4100, signingBonus: 30000 }), CTX, 3000)!;
+    expect(r.demands).toMatchObject({ monthly: 2932, signingBonus: 0 });
+    expect(meetsMonthlyShare(r, CTX)).toBe(true);
+  });
+  it("protinabídka nikdy neporuší pravidlo o měsíční polovině", () => {
+    const ctxs: NegotiationContext[] = [CTX, { ...CTX, wishes: ["league_position"] }, { ...CTX, personality: "cautious" }];
+    let counters = 0;
+    for (const ctx of ctxs) {
+      for (const seasons of [1, 2, 3]) {
+        for (const monthly of [1, 500, 2000, 3500, 5000, 6500, 8000]) {
+          for (const signingBonus of [0, 5000, 20000, 40000, 60000]) {
+            for (const extra of [{}, { construction: "toilets" }, { equipment: "balls" }, { payCurrentFee: true }, { winBonus: 300 }]) {
+              const p = prop({ monthly, signingBonus, ...extra }, seasons);
+              if (!meetsMonthlyShare(p, ctx)) continue;
+              const r = evaluateRound(p, ctx);
+              if (r.kind === "counter_money" || r.kind === "counter_wish") {
+                counters++;
+                expect(meetsMonthlyShare(r.counter, ctx)).toBe(true);
+                expect(requestCost(r.counter, ctx)).toBeLessThanOrEqual(willingness(r.counter, ctx) + 1e-6);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(counters).toBeGreaterThan(20);
   });
   it("měsíční podpora nikdy neklesne pod 1", () => {
     expect(reduceToWillingness(prop({ monthly: 5 }), CTX, 1)?.demands.monthly).toBe(1);
@@ -230,6 +293,19 @@ describe("promisePenalty", () => {
       {
         ctx: { ...CTX, personality: "cautious" as const }, seasons: 3,
         promises: [{ kind: "reputation", params: { reputation: 60 } }, { kind: "coach_licence", params: { level: 2 } }],
+      },
+      // Velký rozpočet B 100 000: podíl návštěvy 0,077625 by se zaokrouhlený na 0,0776 propadl
+      // o ~28 Kč pod hodnotu slibu (kolo 4), pokuta proto jde z nezaokrouhleného podílu.
+      {
+        ctx: { ...CTX, budgetB: 100000 }, seasons: 3,
+        promises: [
+          { kind: "attendance", params: { attendance: 207 } }, { kind: "league_position", params: { position: 5 } },
+          { kind: "coach_licence", params: { level: 2 } }, { kind: "youth", params: { count: 3 } },
+        ],
+      },
+      {
+        ctx: { ...CTX, budgetB: 100000, personality: "cautious" as const }, seasons: 3,
+        promises: [{ kind: "attendance", params: { attendance: 207 } }, { kind: "reputation", params: { reputation: 57 } }],
       },
     ];
     for (const c of cases) {

@@ -11,7 +11,7 @@ import {
 import { clampFavor } from "./favor-math";
 import type { OwnerPersonality } from "./owners";
 import {
-  BIG_FACILITIES, DEADLINE_KINDS, LEAGUE_FINISH_KINDS, PROMISE_BASE_SHARE, PROMISE_DEADLINE_DAYS, SEASONAL_KINDS,
+  BIG_FACILITIES, CLUB_CONTROLLED_KINDS, DEADLINE_KINDS, LEAGUE_FINISH_KINDS, PROMISE_BASE_SHARE, PROMISE_DEADLINE_DAYS, SEASONAL_KINDS,
   type PromiseKind, type PromiseParams, type PromiseSpec,
 } from "./promise-kinds";
 import { kindAllowedForCategory, promiseInterest } from "./wishes";
@@ -30,6 +30,12 @@ export const MAX_SEASONS = 3;
 export const CAUTIOUS_SEASON_BONUS = 0.05;
 /** Nejvíc slibů v jednom návrhu (validateProposal i protinabídka za přání). */
 export const MAX_PROMISES = 8;
+/**
+ * Aspoň tolik z měsíčního ekvivalentu smlouvy (měsíčně + jednorázové položky / měsíce) musí chodit
+ * jako měsíční podpora. Jinak by klub dal všechno do podpisového příspěvku, měsíčně 1 Kč,
+ * a výpovědní pokuta (počítá se jen z měsíční podpory) by byla směšná.
+ */
+export const MIN_MONTHLY_SHARE = 0.5;
 /** Ambice na podlaze (≤ 0,3, clamp v ambition.ts) = slib je fakticky jistý, nemá dávat hodnotu ani šanci pod jistotu. */
 const FLOOR_AMBITION = 0.3;
 /** Tolerance porovnání cen v Kč (plovoucí čárka). */
@@ -142,13 +148,14 @@ export function willingness(proposal: Proposal, ctx: NegotiationContext): number
 }
 
 /**
- * Šance, kterou sponzor slibu dává (pro cenu bonusu za splnění). Nesezónní sliby (licence,
- * stavba, dres, exkluzivita oboru) řeší klub sám, tam sponzor riskuje 0 — šance 1,0.
- * U sezónního slibu klesá spojitě s ambicí (1,15 − 0,5 × ambice, mezi 0,1 a 1,0) — na podlaze
- * ambice (0,3) vychází přesně 1,0, u nejtěžších slibů (ambice 2) klesá až k 0,1.
+ * Šance, kterou sponzor slibu dává (pro cenu bonusu za splnění). Sliby v rukou klubu
+ * (CLUB_CONTROLLED_KINDS: licence, stavba, dres, exkluzivita oboru, mladí v sestavě, žádné
+ * výtržnosti) si klub splní sám, sponzor s bonusem počítá celým (šance 1,0).
+ * U ostatních (výsledky, pohár, návštěva, reputace) klesá spojitě s ambicí (1,15 − 0,5 × ambice,
+ * mezi 0,1 a 1,0): na podlaze ambice (0,3) vychází přesně 1,0, u nejtěžších slibů (ambice 2) 0,1.
  */
 export function promiseChance(p: PromiseSpec, ctx: NegotiationContext): number {
-  if (!SEASONAL_KINDS.has(p.kind)) return 1.0;
+  if (CLUB_CONTROLLED_KINDS.has(p.kind)) return 1.0;
   const ambition = promiseAmbition(p, ctx);
   return Math.max(0.1, Math.min(1.0, 1.15 - 0.5 * ambition));
 }
@@ -211,6 +218,33 @@ export function requestCost(proposal: Proposal, ctx: NegotiationContext): number
   return costBreakdown(proposal, ctx).reduce((s, i) => s + i.monthly, 0);
 }
 
+/** Jednorázové položky návrhu v Kč: podpisový příspěvek, stavba, vybavení a doplacená pokuta podle ceníku. */
+export function proposalOneTimeTotal(proposal: Proposal, ctx: NegotiationContext): number {
+  const d = proposal.demands;
+  return oneTimeTotal({
+    signingBonus: d.signingBonus,
+    construction: d.construction ? constructionCost(ctx, d.construction) : 0,
+    equipment: d.equipment ? equipmentCost(ctx, d.equipment) : 0,
+    paidFee: d.payCurrentFee ? ctx.currentTerminationFee : 0,
+  });
+}
+
+/**
+ * Nejnižší celá měsíční podpora, se kterou platí monthly ≥ MIN_MONTHLY_SHARE × (monthly + jednorázové / měsíce).
+ * Aspoň 1 Kč (smlouva bez měsíčního závazku nejde).
+ */
+export function minMonthlyFor(oneTime: number, months: number): number {
+  const need = (MIN_MONTHLY_SHARE / (1 - MIN_MONTHLY_SHARE)) * (oneTime / Math.max(EPS, months));
+  return Math.max(1, Math.ceil(need - EPS));
+}
+
+/** Platí pravidlo, že aspoň polovina podpory chodí měsíčně? */
+export function meetsMonthlyShare(proposal: Proposal, ctx: NegotiationContext): boolean {
+  const m = contractMonths(proposal.seasons);
+  const d = proposal.demands;
+  return d.monthly + EPS >= MIN_MONTHLY_SHARE * (d.monthly + proposalOneTimeTotal(proposal, ctx) / m);
+}
+
 function withAmount(d: Demands, key: CostKey, value: number): void {
   if (key === "monthly") d.monthly = value;
   else if (key === "winBonus") d.winBonus = value;
@@ -220,26 +254,36 @@ function withAmount(d: Demands, key: CostKey, value: number): void {
 
 /**
  * Protinabídka „sleva": ubírá peněžní položky od nejdražší (po celých stovkách dolů),
- * dokud cena nesedne na O. Stavbu, vybavení a pokutu neubírá. null = nejde to.
+ * dokud cena nesedne na O. Stavbu, vybavení a pokutu neubírá. Měsíční podpora neklesne pod
+ * minMonthlyFor (aspoň polovina podpory měsíčně, MIN_MONTHLY_SHARE); když ji to zastaví a jednorázové
+ * položky se pak ubraly, druhý průchod ubere z měsíční podpory zbytek. null = nejde to.
  */
 export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext, target: number): Proposal | null {
   let excess = requestCost(proposal, ctx) - target;
   const demands: Demands = { ...proposal.demands, goalBonuses: { ...proposal.demands.goalBonuses } };
+  const m = contractMonths(proposal.seasons);
   const items = costBreakdown(proposal, ctx)
     .filter((i) => i.reducible && i.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly);
-  for (const it of items) {
-    if (excess <= EPS) break;
-    // Měsíční podpora nikdy neklesne na 0 (byla by to smlouva bez skutečného peněžního závazku).
-    const floor = it.key === "monthly" ? 1 : 0;
-    // EPS: plovoucí čárka (0,7 × B = 6999,9999…) nesmí přidat stovku navíc.
-    const cut = Math.min(it.amount - floor, Math.ceil((excess / it.perUnit - EPS) / 100) * 100);
-    const next = it.amount - cut;
-    withAmount(demands, it.key, next);
-    excess -= cut * it.perUnit;
+  const amounts = new Map<CostKey, number>(items.map((i) => [i.key, i.amount]));
+  for (let pass = 0; pass < 2 && excess > EPS; pass++) {
+    for (const it of items) {
+      if (excess <= EPS) break;
+      const amount = amounts.get(it.key) ?? 0;
+      // Měsíční podpora nikdy neklesne na 0 ani pod polovinu podpory (jednorázové položky podle aktuálního stavu).
+      const floor = it.key === "monthly" ? minMonthlyFor(proposalOneTimeTotal({ ...proposal, demands }, ctx), m) : 0;
+      if (amount <= floor) continue;
+      // EPS: plovoucí čárka (0,7 × B = 6999,9999…) nesmí přidat stovku navíc.
+      const cut = Math.min(amount - floor, Math.ceil((excess / it.perUnit - EPS) / 100) * 100);
+      amounts.set(it.key, amount - cut);
+      withAmount(demands, it.key, amount - cut);
+      excess -= cut * it.perUnit;
+    }
   }
   if (excess > EPS) return null;
-  return { ...proposal, demands };
+  const reduced = { ...proposal, demands };
+  // Pojistka: protinabídka nikdy neporuší pravidlo o měsíční polovině (třeba když ho nesplňoval už vstup).
+  return meetsMonthlyShare(reduced, ctx) ? reduced : null;
 }
 
 /**
@@ -368,12 +412,15 @@ export function buildPromiseRows(proposal: Proposal, ctx: NegotiationContext, si
   const months = contractMonths(proposal.seasons);
   const seasonMult = seasonMultiplier(ctx.personality, proposal.seasons);
   for (const p of proposal.promises) {
-    const valueShare = Math.round(promiseValueShare(p, ctx) * 10000) / 10000;
+    // Pokuta z NEzaokrouhleného podílu (jinak by u velkého B zaokrouhlení podílu na 4 místa
+    // stáhlo součet pokut pod hodnotu, kterou slib do ochoty přidal). Zaokrouhlený jen uložený value_share.
+    const rawShare = promiseValueShare(p, ctx);
+    const valueShare = Math.round(rawShare * 10000) / 10000;
     const rowCount = promiseRowCount(p.kind, proposal.seasons);
     const base = {
       kind: p.kind, params: p.params, valueShare,
       reward: proposal.demands.goalBonuses[p.kind] ?? 0,
-      penalty: promisePenalty(valueShare, ctx.budgetB, months, rowCount, seasonMult),
+      penalty: promisePenalty(rawShare, ctx.budgetB, months, rowCount, seasonMult),
     };
     if (SEASONAL_KINDS.has(p.kind)) {
       for (let s = ctx.season + 1; s < ctx.season + proposal.seasons; s++) rows.push({ ...base, season: s, deadlineGameDate: null });

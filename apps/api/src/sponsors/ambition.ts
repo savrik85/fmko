@@ -52,7 +52,10 @@ export function attendanceAmbition(target: number, lastAvg: number): number {
   return clamp(target / Math.max(1, lastAvg), 0.67, 1.33);
 }
 
-/** Jak moc sponzor věří, že klub sezónní slib splní (pro cenu bonusu za splnění). */
+/**
+ * Starší odhad šance sezónního slibu podle ambice. Pro cenu bonusu za splnění se NEPOUŽÍVÁ,
+ * tu počítá promiseChance() v negotiation.ts (spojitě 1,15 − 0,5 × ambice, sliby v rukou klubu 1,0).
+ */
 export function sponsorChance(ambition: number): number {
   return clamp(0.9 - 0.4 * ambition, 0.1, 0.9);
 }

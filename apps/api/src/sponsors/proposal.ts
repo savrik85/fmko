@@ -10,7 +10,7 @@ import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import { MONTHS_PER_SEASON, RELEGATION_SPOTS } from "./ambition";
 import { budgetEstimateRange } from "./budget";
 import {
-  MAX_PROMISES, MAX_SEASONS, MIN_SEASONS, promiseChance, promisePenalty, promiseValueShare,
+  MAX_PROMISES, MAX_SEASONS, meetsMonthlyShare, MIN_SEASONS, promiseChance, promisePenalty, promiseValueShare,
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import {
@@ -159,7 +159,10 @@ export function validateProposal(raw: unknown, ctx: NegotiationContext): Result 
   if (payCurrentFee && ctx.currentTerminationFee <= 0) return fail("Není žádná výpovědní pokuta, kterou by šlo zaplatit");
 
   const demands: Demands = { monthly, winBonus, signingBonus, goalBonuses, construction, equipment, payCurrentFee };
-  return { ok: true, proposal: { seasons, promises, demands } };
+  const proposal: Proposal = { seasons, promises, demands };
+  // Jinak by šlo dát všechno do podpisového příspěvku a měsíčně 1 Kč, výpovědní pokuta by pak nic neznamenala.
+  if (!meetsMonthlyShare(proposal, ctx)) return fail("Aspoň polovina podpory musí chodit měsíčně.");
+  return { ok: true, proposal };
 }
 
 function hracu(n: number): string {

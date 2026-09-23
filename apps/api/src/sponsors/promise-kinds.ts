@@ -43,6 +43,15 @@ export const SEASONAL_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>([
 /** Termínové sliby platí hned a mají termín splnění. */
 export const DEADLINE_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["coach_licence", "stadium_upgrade", "jersey_logo"]);
 
+/**
+ * Sliby, jejichž splnění má klub plně v rukou (licence, stavba, dres, exkluzivita oboru, mladí
+ * v sestavě, žádné výtržnosti). Sponzor u nich počítá, že bonus za splnění vyplatí vždy (šance 1,0),
+ * jinak by si klub přes bonus za splnění vzal víc, než kolik sponzor chce dát.
+ */
+export const CLUB_CONTROLLED_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>([
+  "coach_licence", "stadium_upgrade", "jersey_logo", "sector_exclusivity", "youth", "no_riots",
+]);
+
 /** „Výsledky nad nesestup": opatrnému majiteli jsou jedno. */
 export const RESULT_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["league_position", "promotion", "cup_round"]);
 

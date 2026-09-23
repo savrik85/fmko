@@ -50,7 +50,17 @@ describe("validateProposal", () => {
   });
   it("zamčená stavba neprojde, odemčená ano", () => {
     expect(ok({ seasons: 2, promises: [], demands: { ...demands, construction: "roof" } }).ok).toBe(false);
-    expect(ok({ seasons: 2, promises: [], demands: { ...demands, construction: "stands" } }).ok).toBe(true);
+    // Tribuny za 170 000 na 2 sezóny = 22 844 Kč měsíčně, měsíční podpora musí být aspoň tolik.
+    expect(ok({ seasons: 2, promises: [], demands: { ...demands, monthly: 23000, construction: "stands" } }).ok).toBe(true);
+  });
+  it("aspoň polovina podpory musí chodit měsíčně (monthly = 1 a velký podpisový příspěvek neprojde)", () => {
+    const err = { ok: false, error: "Aspoň polovina podpory musí chodit měsíčně." };
+    expect(ok({ seasons: 2, promises: [], demands: { ...demands, monthly: 1, signingBonus: 100000 } })).toEqual(err);
+    // Stavba se počítá taky: 170 000 / 7,44 měsíce = 22 844 Kč, 6000 měsíčně je málo.
+    expect(ok({ seasons: 2, promises: [], demands: { ...demands, construction: "stands" } })).toEqual(err);
+    // Hrana: 2 sezóny = 7,4419 měsíce, podpis 44 651 → potřeba 6000 měsíčně, projde; o 100 víc už ne.
+    expect(ok({ seasons: 2, promises: [], demands: { ...demands, signingBonus: 44651 } }).ok).toBe(true);
+    expect(ok({ seasons: 2, promises: [], demands: { ...demands, signingBonus: 44751 } })).toEqual(err);
   });
   it("stavbu nejde zaplatit i slíbit", () => {
     const r = ok({
