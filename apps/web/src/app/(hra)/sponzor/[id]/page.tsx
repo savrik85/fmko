@@ -54,16 +54,19 @@ function TeamLink({ id, name }: { id: string; name: string }) {
 
 export default function SponsorDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { teamId } = useTeam();
+  const { teamId, isLoading } = useTeam();
   const [data, setData] = useState<SponsorDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
+    // Dokud se nenačte přihlášení, nevíme, jestli hráč má klub. Dřív se stránka vykreslila bez
+    // klubu a tlačítka „Jednat" pak doskočila, takže první kliknutí trefilo něco jiného.
+    if (isLoading) return;
     apiFetch<SponsorDetail>(`/api/sponsors/${id}${teamId ? `?teamId=${teamId}` : ""}`)
       .then(setData)
       .catch((e) => { console.error("sponsor detail:", e); setError((e as Error).message); });
   };
-  useEffect(load, [id, teamId]);
+  useEffect(load, [id, teamId, isLoading]);
 
   if (error) return <div className="page-container"><ErrorBox message={error} /></div>;
   if (!data) return <div className="flex justify-center py-12"><Spinner /></div>;
