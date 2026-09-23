@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
   advanceClawback, afterReject, buildPromiseRows, contractMonths, defaultPromise, earlyTerminationFee, evaluateRound,
-  initialPatience, oneTimeTotal, promiseChance, promisePenalty, promiseValueShare, reduceToWillingness, requestCost,
-  willingness, type Demands, type NegotiationContext, type Proposal,
+  initialPatience, oneTimeTotal, promiseChance, promisePenalty, promiseRowCount, promiseValueShare, reduceToWillingness,
+  requestCost, willingness, type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import type { PromiseSpec } from "./promise-kinds";
 
@@ -204,9 +204,11 @@ describe("buildPromiseRows", () => {
 });
 
 describe("promisePenalty", () => {
-  it("na řádek: round(share × B × měsíce CELÉ smlouvy / počet řádků)", () => {
-    expect(promisePenalty(0.15, 10000, contractMonths(3), 2)).toBe(8372);
+  it("na řádek: round(share × B × seasonMultiplier × měsíce CELÉ smlouvy / počet řádků)", () => {
+    expect(promisePenalty(0.15, 10000, contractMonths(3), 2)).toBe(8372); // seasonMult výchozí 1 (fan)
     expect(promisePenalty(0.05, 10000, contractMonths(3), 1)).toBe(5581);
+    // Opatrný na 3 sezóny: seasonMultiplier("cautious", 3) = 1,10 (viz seasonMultiplier()).
+    expect(promisePenalty(0.05, 10000, contractMonths(3), 1, 1.10)).toBe(6140);
   });
   it("rozbít všechny sliby nikdy nevyplatí víc, než kolik navíc přinesly (součet pokut ≥ extra ochota × měsíce)", () => {
     const signDate = "2026-09-23T10:00:00.000Z";
@@ -220,14 +222,24 @@ describe("promisePenalty", () => {
         ctx: { ...CTX, personality: "patriot" as const }, seasons: 3,
         promises: [{ kind: "reputation", params: { reputation: 60 } }, { kind: "coach_licence", params: { level: 2 } }],
       },
+      // Opatrný, 2 a 3 sezóny — kolo 2 tu penalty nedosahovala extra × měsíce (chyběl seasonMultiplier), kolo 3 to opravilo.
+      {
+        ctx: { ...CTX, personality: "cautious" as const }, seasons: 2,
+        promises: [{ kind: "reputation", params: { reputation: 60 } }, { kind: "coach_licence", params: { level: 2 } }],
+      },
+      {
+        ctx: { ...CTX, personality: "cautious" as const }, seasons: 3,
+        promises: [{ kind: "reputation", params: { reputation: 60 } }, { kind: "coach_licence", params: { level: 2 } }],
+      },
     ];
     for (const c of cases) {
       const withPromises = prop({}, c.seasons, c.promises);
       const without = prop({}, c.seasons, []);
       const extra = (willingness(withPromises, c.ctx) - willingness(without, c.ctx)) * contractMonths(c.seasons);
       const totalPenalty = buildPromiseRows(withPromises, c.ctx, signDate).reduce((s, r) => s + r.penalty, 0);
-      // Tolerance jen na zaokrouhlení jednotlivých řádků (round), ne na systémovou odchylku.
-      expect(totalPenalty).toBeGreaterThanOrEqual(extra - 2);
+      // Tolerance: ≤ 1 Kč zaokrouhlení na řádek (kolo 3 ruling), ne systémová odchylka.
+      const totalRows = c.promises.reduce((s, p) => s + promiseRowCount(p.kind, c.seasons), 0);
+      expect(totalPenalty).toBeGreaterThanOrEqual(extra - totalRows);
     }
   });
 });

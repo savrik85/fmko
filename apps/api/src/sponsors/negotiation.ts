@@ -320,12 +320,13 @@ export function evaluateRound(proposal: Proposal, ctx: NegotiationContext): Roun
 }
 
 /**
- * Pokuta za nesplněný slib, na jeden řádek: share × B × měsíce CELÉ smlouvy / počet řádků
- * (pevně při podpisu). Rozpočítáno tak, aby součet pokut přes všechny řádky jednoho slibu
- * odpovídal celé hodnotě, kterou slib přinesl do ochoty — nevyplatí se slíbit a nesplnit.
+ * Pokuta za nesplněný slib, na jeden řádek: share × B × seasonMultiplier × měsíce CELÉ smlouvy
+ * / počet řádků (pevně při podpisu). `seasonMultiplier` musí být STEJNÝ jako ten, kterým
+ * willingness() násobí přínos slibu do ochoty (kolo 3 review) — jinak by u opatrného majitele
+ * na víc sezón součet pokut nedosáhl skutečné hodnoty, kterou slib do ochoty přidal.
  */
-export function promisePenalty(valueShare: number, budgetB: number, months: number, rows: number): number {
-  return Math.round((valueShare * budgetB * months) / Math.max(1, rows));
+export function promisePenalty(valueShare: number, budgetB: number, months: number, rows: number, seasonMult = 1): number {
+  return Math.round((valueShare * budgetB * seasonMult * months) / Math.max(1, rows));
 }
 
 /** Výpovědní pokuta nové smlouvy: jen z měsíční podpory, stejný vzorec jako u dřívějších pevných nabídek. */
@@ -365,13 +366,14 @@ export interface PromiseRow {
 export function buildPromiseRows(proposal: Proposal, ctx: NegotiationContext, signGameDate: string): PromiseRow[] {
   const rows: PromiseRow[] = [];
   const months = contractMonths(proposal.seasons);
+  const seasonMult = seasonMultiplier(ctx.personality, proposal.seasons);
   for (const p of proposal.promises) {
     const valueShare = Math.round(promiseValueShare(p, ctx) * 10000) / 10000;
     const rowCount = promiseRowCount(p.kind, proposal.seasons);
     const base = {
       kind: p.kind, params: p.params, valueShare,
       reward: proposal.demands.goalBonuses[p.kind] ?? 0,
-      penalty: promisePenalty(valueShare, ctx.budgetB, months, rowCount),
+      penalty: promisePenalty(valueShare, ctx.budgetB, months, rowCount, seasonMult),
     };
     if (SEASONAL_KINDS.has(p.kind)) {
       for (let s = ctx.season + 1; s < ctx.season + proposal.seasons; s++) rows.push({ ...base, season: s, deadlineGameDate: null });
