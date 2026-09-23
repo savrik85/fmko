@@ -20,7 +20,7 @@ export function NegotiationHeader({ view, estimate, cost }: { view: NegotiationV
       <CardBody className="space-y-3">
         <div className="flex items-start gap-4">
           <FaceAvatar faceConfig={view.owner.faceConfig} size={64} className="shrink-0" />
-          <div className="min-w-0">
+          <div className="flex-1 min-w-0 break-words">
             <div className="text-sm text-muted font-heading uppercase tracking-wide">
               {categoryLabel(view.category)}{view.isRenewal ? " · prodloužení" : ""}
             </div>

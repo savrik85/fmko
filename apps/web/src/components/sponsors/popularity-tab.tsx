@@ -21,7 +21,7 @@ function FirmList({ firms, empty }: { firms: FirmFavorItem[]; empty: string }) {
     <div className="divide-y divide-line-soft">
       {firms.map((f) => (
         <div key={f.sponsorId} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0">
-          <div className="min-w-0">
+          <div className="min-w-0 break-words">
             <SponsorLink id={f.sponsorId} name={f.name} className="font-heading font-bold text-base" />
             {f.ownerName && <div className="text-sm text-muted">{f.ownerName}</div>}
           </div>
@@ -70,7 +70,7 @@ export function PopularityTab({ overview, error }: { overview: SponsorOverview |
               const pct = Math.round((n / overview.firmsCount) * 100);
               return (
                 <div key={band}>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between gap-2 text-sm">
                     <span>{FAVOR_BAND_LABELS[band]}</span>
                     <span className="font-heading font-bold tabular-nums">{n}</span>
                   </div>
@@ -114,7 +114,7 @@ export function PopularityTab({ overview, error }: { overview: SponsorOverview |
               <div className="divide-y divide-line-soft">
                 {overview.recentChanges.map((ch, i) => (
                   <div key={`${ch.sponsorId}-${ch.gameDate}-${i}`} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0">
-                    <div className="min-w-0">
+                    <div className="min-w-0 break-words">
                       <SponsorLink id={ch.sponsorId} name={ch.sponsorName} className="font-heading font-bold text-base" />
                       <div className="text-sm text-muted">
                         {formatGameDay(ch.gameDate)}

@@ -47,7 +47,7 @@ const MAX_ROUNDS = 30;
 export default function NegotiationPage() {
   const { id: sponsorId } = useParams<{ id: string }>();
   const router = useRouter();
-  const { teamId, setTeam } = useTeam();
+  const { teamId, isLoading: authLoading, setTeam } = useTeam();
   // undefined = ještě nečteno z adresy, null = adresa id nemá.
   const [negId, setNegId] = useState<string | null | undefined>(undefined);
   const [view, setView] = useState<NegotiationView | null>(null);
@@ -146,6 +146,15 @@ export default function NegotiationPage() {
       <div className="page-container space-y-3">
         <ErrorBox message="Jednání nenalezeno." />
         <Link href={`/sponzor/${sponsorId}`} className="text-pitch-600 underline text-base">Zpět na sponzora</Link>
+      </div>
+    );
+  }
+  // Bez klubu (po načtení přihlášení) by se jinak donekonečna točil spinner.
+  if (!authLoading && !teamId) {
+    return (
+      <div className="page-container space-y-3">
+        <ErrorBox message="Jednat se sponzorem může jen klub. Nejdřív si ho založ." />
+        <Link href={`/sponzor/${sponsorId}`} className="inline-block min-h-11 leading-[2.75rem] text-pitch-600 underline text-base">Zpět na sponzora</Link>
       </div>
     );
   }

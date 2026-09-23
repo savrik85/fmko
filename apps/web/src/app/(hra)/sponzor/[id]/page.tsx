@@ -49,7 +49,7 @@ function sezony(n: number): string {
 }
 
 function TeamLink({ id, name }: { id: string; name: string }) {
-  return <Link href={`/tym/${id}`} className="font-heading font-bold text-base hover:text-pitch-600 hover:underline">{name}</Link>;
+  return <Link href={`/tym/${id}`} className="min-w-0 break-words font-heading font-bold text-base hover:text-pitch-600 hover:underline">{name}</Link>;
 }
 
 export default function SponsorDetailPage() {
@@ -78,7 +78,7 @@ export default function SponsorDetailPage() {
       <Card>
         <CardBody>
           <div className="text-sm text-muted font-heading uppercase tracking-wide">Sponzor · okres {data.district}</div>
-          <div className="font-heading font-bold text-2xl">{data.name}</div>
+          <div className="font-heading font-bold text-2xl break-words">{data.name}</div>
           <div className="text-sm text-muted">{sponsorTypeLabel(data.type)}</div>
         </CardBody>
       </Card>

@@ -45,7 +45,9 @@ export function NegotiationEntry({ sponsorId, teamId, availability }: {
             return (
               <div key={cat}>
                 <button type="button" onClick={() => go(cat)} disabled={acting !== null || !a.canOpen} className="btn btn-primary w-full min-h-11">
-                  {acting === cat ? "Majitel chystá návrh smlouvy…" : label}
+                  {/* .btn má nowrap mimo vrstvy Tailwindu (utilita na tlačítku by nezabrala), dlouhý popisek
+                      by na 375px vytekl z karty; zalomí se až na vnořeném spanu. */}
+                  <span className="whitespace-normal text-center px-3 py-2">{acting === cat ? "Majitel chystá návrh smlouvy…" : label}</span>
                 </button>
                 {!a.canOpen && a.reason && <div className="text-sm text-muted mt-1">{a.reason}.</div>}
               </div>

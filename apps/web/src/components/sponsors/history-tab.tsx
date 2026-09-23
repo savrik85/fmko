@@ -39,13 +39,13 @@ export function HistoryTab({ items, error, mainContract }: { items: SponsorHisto
               {mains.map((m) => (
                 <div key={m.id} className="flex items-baseline gap-3">
                   <span className="w-28 shrink-0 text-sm text-muted tabular-nums">od sezóny {m.signedSeason}</span>
-                  <SponsorLink id={m.sponsorId} name={m.sponsorName} className="font-heading font-bold text-base min-w-0" />
+                  <SponsorLink id={m.sponsorId} name={m.sponsorName} className="font-heading font-bold text-base min-w-0 break-words" />
                 </div>
               ))}
               {mainContract && (
                 <div className="flex items-baseline gap-3">
                   <span className="w-28 shrink-0 text-sm text-pitch-500 font-heading font-bold tabular-nums">současný</span>
-                  <SponsorLink id={mainContract.sponsorId} name={mainContract.sponsorName} className="font-heading font-bold text-base min-w-0" />
+                  <SponsorLink id={mainContract.sponsorId} name={mainContract.sponsorName} className="font-heading font-bold text-base min-w-0 break-words" />
                 </div>
               )}
             </CardBody>
@@ -63,7 +63,7 @@ export function HistoryTab({ items, error, mainContract }: { items: SponsorHisto
               <Card key={i.id}>
                 <CardBody>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="min-w-0 break-words">
                       <SponsorLink id={i.sponsorId} name={i.sponsorName} className="font-heading font-bold text-base" />
                       <div className="text-sm text-muted">
                         {CATEGORY_LABELS[i.category]}

@@ -9,7 +9,7 @@ import { seasonsAccusative, remainingSeasonsText } from "@/lib/sponsor-format";
 import type {
   DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorPromiseView, SponsorsData,
 } from "@/lib/sponsor-page-types";
-import { Card, CardBody, Spinner, Tabs, useConfirm, useTabParam } from "@/components/ui";
+import { Card, CardBody, ErrorBox, Spinner, Tabs, useConfirm, useTabParam } from "@/components/ui";
 import { ContractsTab } from "@/components/sponsors/contracts-tab";
 import { FirmsTab } from "@/components/sponsors/firms-tab";
 import { PopularityTab } from "@/components/sponsors/popularity-tab";
@@ -30,13 +30,14 @@ const TAB_LABELS: Record<SponsorTab, string> = {
 const TAB_STORAGE_KEY = "sponzori-tab";
 
 export default function SponsorsPage() {
-  const { teamId, setTeam: setTeamCtx } = useTeam();
+  const { teamId, isLoading: authLoading, setTeam: setTeamCtx } = useTeam();
   const router = useRouter();
   const [tab, setTab] = useTabParam(SPONSOR_TABS, "tab", TAB_STORAGE_KEY);
   const [data, setData] = useState<SponsorsData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [firms, setFirms] = useState<{ firms: DistrictFirm[]; pub: PubEncounter | null } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [renameInput, setRenameInput] = useState("");
   const [showRename, setShowRename] = useState(false);
@@ -122,11 +123,17 @@ export default function SponsorsPage() {
     setActing(false);
   };
 
+  // Dokud se nenačte přihlášení, teamId ještě není. Dřív se v tu chvíli načítání „dokončilo"
+  // naprázdno a stránka ukázala „Data nenalezena", než klub vůbec dorazil.
   useEffect(() => {
+    if (authLoading) return;
+    if (!teamId) { setLoading(false); return; }
+    setLoading(true);
+    setLoadError(null);
     refresh()
-      .catch((e) => { console.error("sponzori refresh:", e); })
+      .catch((e) => { console.error("sponzori refresh:", e); setLoadError((e as Error).message); })
       .finally(() => setLoading(false));
-  }, [teamId]);
+  }, [teamId, authLoading]);
 
   const handleSign = async (offer: SponsorOffer, category: SponsorCategory) => {
     if (!teamId || acting) return;
@@ -290,8 +297,10 @@ export default function SponsorsPage() {
     setActing(false);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
-  if (!data || !team) return <div className="page-container">Data nenalezena.</div>;
+  if (authLoading || loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loadError) return <div className="page-container"><ErrorBox message={`Sponzory se nepodařilo načíst: ${loadError}`} /></div>;
+  if (!teamId) return <div className="page-container text-base text-muted">Sponzory uvidíš, až budeš mít klub.</div>;
+  if (!data || !team) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
   const hasMainSponsor = !!data.mainContract;
   const favors = new Map<number, number>((firms?.firms ?? []).map((f) => [f.sponsorId, f.favor]));
@@ -304,31 +313,32 @@ export default function SponsorsPage() {
       {/* Název klubu + přejmenování */}
       <Card>
         <CardBody>
-          <div className="flex items-center justify-between gap-3">
+          {/* Na mobilu pod sebou (dlouhý název se jinak lámal po slovech), vedle sebe až od sm:. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="min-w-0">
               <div className="text-sm text-muted font-heading uppercase mb-1">Název klubu</div>
-              <div className="font-heading font-bold text-xl">{data.teamName}</div>
+              <div className="font-heading font-bold text-xl break-words">{data.teamName}</div>
             </div>
             {!hasMainSponsor && data.canChangeMainSponsor && !showRename && (
-              <button onClick={() => setShowRename(true)} className="min-h-11 text-sm text-pitch-500 font-heading font-bold hover:text-pitch-600 transition-colors">
+              <button onClick={() => setShowRename(true)} className="self-start sm:self-auto shrink-0 min-h-11 text-sm text-pitch-500 font-heading font-bold hover:text-pitch-600 transition-colors">
                 Přejmenovat
               </button>
             )}
             {!data.canChangeMainSponsor && (
-              <span className="text-sm text-muted bg-surface px-2 py-1 rounded-full shrink-0">Změna 1× za sezónu vyčerpána</span>
+              <span className="self-start sm:self-auto text-sm text-muted bg-surface px-2 py-1 rounded-full sm:shrink-0">Změna 1× za sezónu vyčerpána</span>
             )}
           </div>
           {showRename && (
-            <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
+            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
               <input
                 type="text" value={renameInput} onChange={(e) => setRenameInput(e.target.value)}
                 placeholder="Nový název klubu..." maxLength={50}
-                className="input flex-1 min-w-0"
+                className="input basis-full sm:basis-0 sm:flex-1 min-w-0"
               />
               <button onClick={handleRename} disabled={acting || !renameInput.trim()}
-                className="btn btn-primary btn-sm">Uložit</button>
+                className="btn btn-primary btn-sm min-h-11">Uložit</button>
               <button onClick={() => { setShowRename(false); setRenameInput(""); }}
-                className="btn btn-ghost btn-sm">Zrušit</button>
+                className="btn btn-ghost btn-sm min-h-11">Zrušit</button>
             </div>
           )}
           {showRename && (
@@ -349,9 +359,9 @@ export default function SponsorsPage() {
               <SponsorLink id={firms.pub.sponsorId} name={firms.pub.sponsorName} className="font-heading font-bold text-base" />.
               Pozvat ho na pivo stojí {formatCZK(firms.pub.beerCost)}.
             </div>
-            <div className="flex gap-2 mt-3">
-              <button onClick={() => handlePub("beer")} disabled={acting} className="btn btn-primary btn-sm">Pozvat na pivo</button>
-              <button onClick={() => handlePub("ignore")} disabled={acting} className="btn btn-ghost btn-sm">Nechat ho být</button>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button onClick={() => handlePub("beer")} disabled={acting} className="btn btn-primary btn-sm min-h-11">Pozvat na pivo</button>
+              <button onClick={() => handlePub("ignore")} disabled={acting} className="btn btn-ghost btn-sm min-h-11">Nechat ho být</button>
             </div>
           </CardBody>
         </Card>
@@ -361,6 +371,7 @@ export default function SponsorsPage() {
         value={tab}
         onChange={setTab}
         ariaLabel="Sponzoři"
+        layout="grid"
         items={SPONSOR_TABS.map((key) => ({ key, label: TAB_LABELS[key] }))}
       />
 
@@ -377,7 +388,7 @@ export default function SponsorsPage() {
           onSleeveLogo={handleSleeveLogo}
         />
       )}
-      {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} mySponsorIds={mySponsorIdsOf(data)} />}
+      {tab === "firms" && <FirmsTab firms={firms?.firms ?? null} mySponsorIds={mySponsorIdsOf(data)} stadiumSponsorId={data.stadiumContract?.sponsorId ?? null} />}
       {tab === "popularity" && <PopularityTab overview={overview} error={overviewError} />}
       {tab === "history" && <HistoryTab items={history} error={historyError} mainContract={data.mainContract} />}
     </div>

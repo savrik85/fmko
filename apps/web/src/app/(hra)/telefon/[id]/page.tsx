@@ -617,7 +617,7 @@ export default function ConversationPage() {
                 onClick={() => handleOwnerOption(o)}
                 disabled={sending}
                 title={o.label}
-                className="w-full text-left text-sm bg-blue-50 border border-blue-200 text-blue-700 rounded-2xl px-3 py-2 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                className="w-full min-h-11 text-left text-sm bg-blue-50 border border-blue-200 text-blue-700 rounded-2xl px-3 py-2 hover:bg-blue-100 transition-colors disabled:opacity-50"
               >
                 {o.text}
               </button>

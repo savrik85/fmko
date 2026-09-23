@@ -10,13 +10,17 @@ import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { FavorBadge } from "./favor-badge";
 import { SponsorLink } from "./sponsor-link";
 
-/** Firma z okresu: obor, majitel, čí je hlavním sponzorem (nebo odhad rozpočtu), náklonnost k nám. */
-export function FirmCard({ firm: f }: { firm: DistrictFirm }) {
+/**
+ * Firma z okresu: obor, majitel, čí je hlavním sponzorem (nebo odhad rozpočtu), náklonnost k nám.
+ * `isOurStadiumSponsor`: firma je náš sponzor stadionu. Hlavním sponzorem nikoho není, ale „Volný"
+ * by klamalo, s klubem už smlouvu má.
+ */
+export function FirmCard({ firm: f, isOurStadiumSponsor = false }: { firm: DistrictFirm; isOurStadiumSponsor?: boolean }) {
   return (
     <Card>
       <CardBody>
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 break-words">
             <SponsorLink id={f.sponsorId} name={f.name} className="font-heading font-bold text-base" />
             <div className="text-sm text-muted">
               {sponsorTypeLabel(f.type)}
@@ -27,7 +31,9 @@ export function FirmCard({ firm: f }: { firm: DistrictFirm }) {
                 ? "Váš hlavní sponzor"
                 : f.mainHolder
                   ? <>Hlavní sponzor klubu <Link href={`/tym/${f.mainHolder.teamId}`} className="underline text-base">{f.mainHolder.teamName}</Link></>
-                  : `Volný, rozpočet zhruba ${formatCZK(f.budgetEstimate.low)} až ${formatCZK(f.budgetEstimate.high)} měsíčně`}
+                  : isOurStadiumSponsor
+                    ? "Váš sponzor stadionu"
+                    : `Volný, rozpočet zhruba ${formatCZK(f.budgetEstimate.low)} až ${formatCZK(f.budgetEstimate.high)} měsíčně`}
             </div>
             {!f.isMine && !f.mainHolder && (
               <Link href={`/sponzor/${f.sponsorId}`} className="inline-block min-h-11 leading-[2.75rem] text-sm text-pitch-600 font-heading font-bold">
@@ -57,7 +63,12 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
-export function FirmsTab({ firms, mySponsorIds }: { firms: DistrictFirm[] | null; mySponsorIds: ReadonlySet<number> }) {
+export function FirmsTab({ firms, mySponsorIds, stadiumSponsorId = null }: {
+  firms: DistrictFirm[] | null;
+  mySponsorIds: ReadonlySet<number>;
+  /** sponsorId našeho sponzora stadionu (null = žádný). */
+  stadiumSponsorId?: number | null;
+}) {
   const [filter, setFilter] = useState<FirmFilter>("all");
   const [sort, setSort] = useState<FirmSort>("favor");
 
@@ -76,7 +87,7 @@ export function FirmsTab({ firms, mySponsorIds }: { firms: DistrictFirm[] | null
         Vztah k majitelům si budujte dopředu: pozvěte je na zápas, potkejte je v hospodě. Kdo vás má rád, dá víc.
       </p>
 
-      <div className="flex gap-1.5 overflow-x-auto no-scrollbar" role="group" aria-label="Filtr firem">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtr firem">
         {FIRM_FILTERS.map(({ key, label }) => (
           <Chip key={key} active={filter === key} onClick={() => setFilter(key)}>
             {label} ({filterFirms(firms, key, mySponsorIds).length})
@@ -84,7 +95,7 @@ export function FirmsTab({ firms, mySponsorIds }: { firms: DistrictFirm[] | null
         ))}
       </div>
 
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar" role="group" aria-label="Řazení firem">
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Řazení firem">
         <span className="shrink-0 text-sm text-muted mr-1">Řadit:</span>
         {FIRM_SORTS.map(({ key, label }) => (
           <Chip key={key} active={sort === key} onClick={() => setSort(key)}>{label}</Chip>
@@ -95,7 +106,7 @@ export function FirmsTab({ firms, mySponsorIds }: { firms: DistrictFirm[] | null
         <Card><CardBody><p className="text-center text-sm text-muted py-3">V tomhle výběru žádná firma není.</p></CardBody></Card>
       ) : (
         <div className="space-y-2">
-          {shown.map((f) => <FirmCard key={f.sponsorId} firm={f} />)}
+          {shown.map((f) => <FirmCard key={f.sponsorId} firm={f} isOurStadiumSponsor={f.sponsorId === stadiumSponsorId} />)}
         </div>
       )}
     </div>

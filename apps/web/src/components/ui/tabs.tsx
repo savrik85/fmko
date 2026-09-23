@@ -114,12 +114,19 @@ export function Tabs<T extends string>({
   onChange,
   className = "",
   ariaLabel = "Záložky",
+  layout = "scroll",
 }: {
   items: ReadonlyArray<TabItem<T>>;
   value: T;
   onChange: (value: T) => void;
   className?: string;
   ariaLabel?: string;
+  /**
+   * "scroll" (výchozí): jedna řada, při nedostatku místa se scrolluje do strany.
+   * "grid": na mobilu mřížka 2 sloupce, od sm: jedna řada. Pro 3 až 4 záložky s delšími
+   * popisky, kde by se na 375px poslední záložka schovala za kraj.
+   */
+  layout?: "scroll" | "grid";
 }) {
   const onKeyDown = (e: React.KeyboardEvent) => {
     const i = items.findIndex((t) => t.key === value);
@@ -134,6 +141,14 @@ export function Tabs<T extends string>({
     onChange(items[next].key);
   };
 
+  const isGrid = layout === "grid";
+  const listClass = isGrid
+    ? "grid grid-cols-2 gap-1 bg-surface rounded-card p-1 sm:flex"
+    : "flex gap-1 bg-surface rounded-card p-1 overflow-x-auto no-scrollbar [overscroll-behavior-x:contain]";
+  const itemClass = isGrid
+    ? "min-w-0 sm:grow sm:basis-auto min-h-11 px-2 sm:px-3.5 rounded-control text-sm font-heading font-bold leading-tight transition-colors"
+    : "shrink-0 grow basis-auto whitespace-nowrap min-h-11 px-2.5 sm:px-3.5 rounded-control text-xs sm:text-sm font-heading font-bold transition-colors";
+
   return (
     <div className={`relative ${className}`}>
       <div
@@ -144,7 +159,7 @@ export function Tabs<T extends string>({
            na úzkém okně desktopu ale vykresloval šedý pruh přes celou šířku
            pod záložkami. Že je kam scrollovat, říká uříznutý poslední popisek
            a přechod u pravého kraje. */
-        className="flex gap-1 bg-surface rounded-card p-1 overflow-x-auto no-scrollbar [overscroll-behavior-x:contain]"
+        className={listClass}
       >
       {items.map((t) => {
         const isActive = t.key === value;
@@ -156,7 +171,7 @@ export function Tabs<T extends string>({
             aria-selected={isActive}
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(t.key)}
-            className={`shrink-0 grow basis-auto whitespace-nowrap min-h-11 px-2.5 sm:px-3.5 rounded-control text-xs sm:text-sm font-heading font-bold transition-colors ${
+            className={`${itemClass} ${
               isActive ? "bg-surface-2 text-pitch-600 shadow-xs" : "text-muted hover:text-ink"
             }`}
           >
@@ -176,10 +191,12 @@ export function Tabs<T extends string>({
         );
       })}
       </div>
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1 right-1 w-6 rounded-r-card bg-gradient-to-l from-surface to-transparent"
-      />
+      {!isGrid && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-1 right-1 w-6 rounded-r-card bg-gradient-to-l from-surface to-transparent"
+        />
+      )}
     </div>
   );
 }

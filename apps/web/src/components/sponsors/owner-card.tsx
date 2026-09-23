@@ -76,7 +76,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
           <FaceAvatar faceConfig={owner.faceConfig} size={72} className="shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-sm text-muted font-heading uppercase tracking-wide">Majitel</div>
-            <div className="font-heading font-bold text-base">{name}, {owner.age} let</div>
+            <div className="font-heading font-bold text-base break-words">{name}, {owner.age} let</div>
             <div className="text-sm text-muted">{personalityLabel(owner.personality)}. {personalityHint(owner.personality)}</div>
           </div>
         </div>
@@ -84,7 +84,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
         {myTeam && (
           <div className="mt-4 space-y-3">
             <div>
-              <div className="flex justify-between text-sm">
+              <div className="flex flex-wrap justify-between gap-x-2 text-sm">
                 <span className="text-muted">Náklonnost k vašemu klubu</span>
                 <span className="font-heading font-bold">{favorLabel(myTeam.favor)} ({myTeam.favor})</span>
               </div>
@@ -113,7 +113,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
                 ) : match.slotTakenBy ? (
                   <div className="text-sm text-muted mt-1">Ten den už jde na zápas klubu {match.slotTakenBy}.</div>
                 ) : (
-                  <button onClick={invite} disabled={acting} className="btn btn-primary btn-sm mt-2">Pozvat na zápas</button>
+                  <button onClick={invite} disabled={acting} className="btn btn-primary btn-sm min-h-11 mt-2">Pozvat na zápas</button>
                 )}
               </div>
             ) : (

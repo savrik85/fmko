@@ -1169,7 +1169,7 @@ export default function StadiumPage() {
                   <button
                     onClick={() => handleUpgrade(upgrade.facility, upgrade.label, upgrade.cost, upgrade.effect)}
                     disabled={!canUpgrade || !!acting}
-                    className="btn btn-primary btn-sm w-full sm:w-auto"
+                    className="btn btn-primary btn-sm min-h-11 w-full sm:w-auto"
                   >
                     {acting === key ? "…" : "Koupit"}
                   </button>

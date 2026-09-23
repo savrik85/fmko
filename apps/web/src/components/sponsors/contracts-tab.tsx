@@ -69,11 +69,11 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
               {running.map((n) => (
                 <Card key={n.id}>
                   <CardBody className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="min-w-0 break-words">
                       <SponsorLink id={n.sponsorId} name={n.sponsorName} className="font-heading font-bold text-base" />
                       <div className="text-sm text-muted">{n.status === "accepted" ? "Souhlasí, čeká na podpis" : "Jednání běží"}</div>
                     </div>
-                    <Link href={`/sponzor/${n.sponsorId}/jednani?id=${n.id}`} className="shrink-0 btn btn-primary btn-sm">Pokračovat</Link>
+                    <Link href={`/sponzor/${n.sponsorId}/jednani?id=${n.id}`} className="shrink-0 btn btn-primary btn-sm min-h-11">Pokračovat</Link>
                   </CardBody>
                 </Card>
               ))}
@@ -126,7 +126,7 @@ function ContractCard({ contract, favor, onTerminate, onRenew, acting, promises,
   return (
     <Card>
       <CardBody className="space-y-2">
-        <div className="min-w-0">
+        <div className="min-w-0 break-words">
           <SponsorLink id={contract.sponsorId} name={contract.sponsorName} className="font-heading font-bold text-base" />
           <div className="text-sm text-muted">{sponsorTypeLabel(contract.sponsorType)}</div>
         </div>
@@ -194,13 +194,13 @@ function OffersList({ offers, category, onSign, acting, current, signDisabled }:
           <Card key={`${offer.sponsorId}-${i}`}>
             <CardBody className="space-y-1.5">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+                <div className="min-w-0 break-words">
                   <SponsorLink id={offer.sponsorId} name={offer.sponsorName} className="font-heading font-bold text-base" />
                   <div className="text-sm text-muted">{sponsorTypeLabel(offer.sponsorType)}</div>
                 </div>
                 <button onClick={() => onSign(offer, category)} disabled={acting || signDisabled}
                   title={signDisabled ? "Limit změny pro tuto sezónu vyčerpán" : undefined}
-                  className="shrink-0 btn btn-primary btn-sm">
+                  className="shrink-0 btn btn-primary btn-sm min-h-11">
                   Podepsat
                 </button>
               </div>
