@@ -321,7 +321,7 @@ describe("promiseSmsPlan", () => {
 describe("popisky", () => {
   const SAMPLE: Record<string, PromiseParams> = {
     league_position: { position: 3 }, cup_round: { round: 4 }, coach_licence: { level: 2 },
-    stadium_upgrade: { facility: "vip_box", level: 2 }, attendance: { attendance: 400 }, youth: { youth: 2 },
+    stadium_upgrade: { facility: "vip_box", level: 2 }, attendance: { attendance: 400 }, youth: { count: 2 },
     reputation: { reputation: 70 },
   };
 
