@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
+import { SponsorLink } from "@/components/sponsors/sponsor-link";
 interface Message {
   id: string;
   body: string;
@@ -60,6 +61,8 @@ interface ConvDetailResponse {
   /** Proč se psát nedá — formuluje server, zná kontext odesílatele. */
   replyHint?: string;
   replyHintHref?: string;
+  /** Text odkazu k nápovědě, formuluje server. */
+  replyHintLabel?: string;
   aiThreadActive: boolean;
   aiThreadState: AiThreadState | null;
   participantId?: string | null;
@@ -106,6 +109,22 @@ function isGroupChatId(id: string): boolean {
   return id === "global" || id.startsWith("league:");
 }
 
+/** Hotová odpověď na SMS od majitele firmy (`messages.metadata.options`). */
+interface OwnerOption {
+  id: string;
+  label: string;
+  text: string;
+}
+
+function ownerOptionsOf(msg: Message | undefined): OwnerOption[] {
+  const meta = msg?.metadata;
+  if (!meta || meta.type !== "sponsor_owner" || !Array.isArray(meta.options)) return [];
+  return (meta.options as unknown[]).filter((o): o is OwnerOption => {
+    const x = o as Partial<OwnerOption> | null;
+    return !!x && typeof x.id === "string" && typeof x.label === "string" && typeof x.text === "string";
+  });
+}
+
 export default function ConversationPage() {
   const params = useParams();
   const router = useRouter();
@@ -133,7 +152,7 @@ export default function ConversationPage() {
   // Skupinové chaty vlastní detail endpoint nemají — tam se píše vždycky.
   const [canReply, setCanReply] = useState(true);
   const [channel, setChannel] = useState<"sms" | "imessage" | null>("imessage");
-  const [replyHint, setReplyHint] = useState<{ text: string; href?: string } | null>(null);
+  const [replyHint, setReplyHint] = useState<{ text: string; href?: string; label?: string } | null>(null);
   const [creditError, setCreditError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -168,7 +187,7 @@ export default function ConversationPage() {
         if (res.conversation) setConv(res.conversation);
         setCanReply(res.canReply !== false);
         setChannel(res.channel ?? null);
-        setReplyHint(res.replyHint ? { text: res.replyHint, href: res.replyHintHref } : null);
+        setReplyHint(res.replyHint ? { text: res.replyHint, href: res.replyHintHref, label: res.replyHintLabel } : null);
         return {
           msgs: res.messages,
           ai: { active: res.aiThreadActive, state: res.aiThreadState },
@@ -251,6 +270,10 @@ export default function ConversationPage() {
   const jeImessage = isGroup || channel === "imessage";
   const mojeBublina = jeImessage ? "bg-blue-500 text-white" : "bg-pitch-500 text-white";
   const lzePsat = isGroup || canReply;
+  // Tlačítka jen pod poslední zprávou, dokud majitel čeká odpověď.
+  const nabidkaOdpovedi = !isGroup && aiThreadActive && canReply ? ownerOptionsOf(messages[messages.length - 1]) : [];
+  // Majitel firmy — jméno v hlavičce vede na jeho stránku (`participantId` = `so-{sponsorId}`).
+  const ownerSponsorId = participantId?.startsWith("so-") ? Number(participantId.slice(3)) : null;
 
   useEffect(() => {
     if (!teamId) return;
@@ -311,6 +334,31 @@ export default function ConversationPage() {
     setUnrestBusy(false);
   };
 
+  const handleOwnerOption = async (opt: OwnerOption) => {
+    if (!teamId || sending) return;
+    setSending(true);
+    setCreditError(null);
+    try {
+      await apiFetch(messagesUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: opt.text, optionId: opt.id }),
+      });
+      // Odpověď majitele vložil server hned, stačí načíst detail znovu.
+      const fresh = await apiFetch<ConvDetailResponse>(messagesUrl);
+      setMessages(fresh.messages);
+      setAiThreadActive(fresh.aiThreadActive);
+      setAiThreadState(fresh.aiThreadState);
+      setCanReply(fresh.canReply !== false);
+      setChannel(fresh.channel ?? null);
+      setReplyHint(fresh.replyHint ? { text: fresh.replyHint, href: fresh.replyHintHref, label: fresh.replyHintLabel } : null);
+    } catch (e) {
+      console.error("odpověď majiteli firmy:", e);
+      setCreditError("Odpověď se nepodařilo odeslat.");
+    }
+    setSending(false);
+  };
+
   const grouped: Array<{ date: string; messages: Message[] }> = [];
   for (const msg of messages) {
     const date = formatDate(msg.sentAt);
@@ -342,7 +390,11 @@ export default function ConversationPage() {
             {conv?.title?.[0] ?? "?"}
           </div>
         )}
-        <span className="font-heading font-bold text-sm truncate">{conv?.title ?? "..."}</span>
+        {ownerSponsorId ? (
+          <SponsorLink id={ownerSponsorId} name={conv?.title ?? "..."} className="font-heading font-bold text-sm truncate" />
+        ) : (
+          <span className="font-heading font-bold text-sm truncate">{conv?.title ?? "..."}</span>
+        )}
         {/* Kredit je hned pod hlavičkou u vstupního pole, kde je i cena zprávy —
             druhá pilulka nahoře z lišty dělala změť. */}
         {credit && (
@@ -545,7 +597,7 @@ export default function ConversationPage() {
           </p>
           {replyHint?.href && (
             <Link href={replyHint.href} className="text-sm text-blue-600 font-medium mt-1 inline-block">
-              Otevřít Fanoušky
+              {replyHint.label ?? "Otevřít"}
             </Link>
           )}
           {credit && (
@@ -554,6 +606,21 @@ export default function ConversationPage() {
         </div>
       ) : (
       <div className="bg-white border-t border-gray-100 px-3 py-2 shrink-0">
+        {nabidkaOdpovedi.length > 0 && (
+          <div className="flex flex-col gap-1.5 mb-2">
+            {nabidkaOdpovedi.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => handleOwnerOption(o)}
+                disabled={sending}
+                title={o.label}
+                className="w-full text-left text-sm bg-blue-50 border border-blue-200 text-blue-700 rounded-2xl px-3 py-2 hover:bg-blue-100 transition-colors disabled:opacity-50"
+              >
+                {o.text}
+              </button>
+            ))}
+          </div>
+        )}
         {creditError && (
           <p className="text-sm text-card-red mb-1.5 px-1">{creditError}</p>
         )}
