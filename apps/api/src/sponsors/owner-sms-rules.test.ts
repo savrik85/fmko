@@ -93,3 +93,14 @@ describe("drobnosti", () => {
     expect(dayDiff("2026-09-18", TODAY)).toBe(5);
   });
 });
+
+describe("priority slibů sponzorům", () => {
+  it("porušený slib předběhne splněný", () => {
+    expect(pickDeliverable([p("a", 1, "promise_kept"), p("b", 1, "promise_broken")], [], TODAY)?.id).toBe("b");
+  });
+
+  it("výpověď předběhne porušený slib i skandál, výtržnost má pořád přednost", () => {
+    expect(pickDeliverable([p("a", 1, "promise_broken"), p("b", 2, "sponsor_terminates"), p("c", 3, "scandal")], [], TODAY)?.id).toBe("b");
+    expect(pickDeliverable([p("a", 1, "sponsor_terminates"), p("b", 2, "riot")], [], TODAY)?.id).toBe("b");
+  });
+});

@@ -135,4 +135,12 @@ describe("closeOwnerSmsForRollover", () => {
     const sentDaySql = davka.find((d) => /SET sent_day = NULL/.test(d.sql));
     expect(sentDaySql?.sql).toContain("status != 'pending'");
   });
+
+  it("nechá ve frontě i SMS o slibech a výpovědi, které rollover zařadil před úklidem", async () => {
+    const db = new FalesnaD1();
+    await closeOwnerSmsForRollover(jakoD1(db));
+    const dropSql = db.davky[0].find((d) => /status = 'pending'/.test(d.sql) && /'dropped'/.test(d.sql));
+    expect(dropSql?.sql).toContain("reference_id NOT LIKE 'promise:%'");
+    expect(dropSql?.sql).toContain("reference_id NOT LIKE 'sponsor-quit:%'");
+  });
 });

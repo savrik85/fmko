@@ -17,6 +17,7 @@ import type { OwnerPersonality } from "./owners";
 export const OWNER_SMS_OCCASIONS = [
   "match_eve", "after_win", "after_loss", "losing_streak", "riot",
   "main_lost", "main_new", "season_thanks", "season_complaint", "scandal",
+  "promise_kept", "promise_broken", "sponsor_terminates",
 ] as const;
 export type OwnerSmsOccasion = (typeof OWNER_SMS_OCCASIONS)[number];
 
@@ -31,10 +32,14 @@ export function isReplyTone(v: unknown): v is ReplyTone {
   return typeof v === "string" && (REPLY_TONES as readonly string[]).includes(v);
 }
 
-/** Proměnné šablon: `{skore}` z pohledu domácích („2:1"), `{serie}` = počet proher v řadě. */
+/**
+ * Proměnné šablon: `{skore}` z pohledu domácích („2:1"), `{serie}` = počet proher v řadě,
+ * `{slib}` = popisek slibu v 1. pádě (`promiseLabel`), v šablonách vždy za dvojtečkou.
+ */
 export interface OwnerSmsVars {
   skore?: string;
   serie?: number;
+  slib?: string;
 }
 
 type Pools = Partial<Record<OwnerPersonality, readonly string[]>>;
@@ -247,6 +252,72 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
       "Tohle je přesně to, čeho se bojím. Vysvětlíte mi to?",
     ],
   },
+  promise_kept: {
+    fan: [
+      "Slib platí: {slib}. Takhle se dělá fotbal, klobouk dolů!",
+      "Dohoda dodržená: {slib}. Kvůli tomuhle to celé dělám, díky!",
+      "Splněno: {slib}. Na příští zápas nesu na tribunu ještě větší vlajku.",
+    ],
+    patriot: [
+      "Slovo platí: {slib}. Takhle se chová poctivej klub.",
+      "Dohoda dodržená: {slib}. Celá vesnice to ocení.",
+      "Splněno: {slib}. Na tohle jsem hrdej, díky.",
+    ],
+    businessman: [
+      "Slib splněn: {slib}. Spolupráce se vyplácí, děkuji.",
+      "Potvrzuji splnění: {slib}. Přesně tak má partnerství fungovat.",
+      "Dohoda dodržena: {slib}. S takovým partnerem se dobře obchoduje.",
+    ],
+    cautious: [
+      "Splněno: {slib}. Ulevilo se mi, děkuji za spolehlivost.",
+      "Dohoda dodržena: {slib}. Jsem rád, že se na vás dá spolehnout.",
+      "Slib platí: {slib}. Přesně takovou jistotu jsem potřeboval.",
+    ],
+  },
+  promise_broken: {
+    fan: [
+      "Slib neplatí: {slib}. Fandím dál, ale tohle mě mrzí. Co se stalo?",
+      "Dohoda nevyšla: {slib}. Čekal jsem víc, řekni mi, co bude dál.",
+      "Tohle bolí. Slib zněl jasně: {slib}. Podle smlouvy přijde pokuta.",
+    ],
+    patriot: [
+      "Slib zněl jasně: {slib}. Nevyšlo to a vesnice se ptá proč.",
+      "Dohoda nevyšla: {slib}. Slovo se má držet, to přece víš.",
+      "Na tomhle jsme si plácli: {slib}. A nevyšlo to. Jak to napravíš?",
+    ],
+    businessman: [
+      "Slib nesplněn: {slib}. Smlouva počítá s pokutou, ta půjde z vašeho účtu.",
+      "Dohoda nebyla dodržena: {slib}. Očekávám vysvětlení.",
+      "Nesplněno: {slib}. Takhle si partnerství nepředstavuji.",
+    ],
+    cautious: [
+      "Slib nevyšel: {slib}. Dělá mi to starosti. Co bude dál?",
+      "Dohoda nebyla dodržena: {slib}. Potřebuji vědět, že se to nebude opakovat.",
+      "Nesplněno: {slib}. Nejsem si teď jistý, jestli jsem udělal dobře.",
+    ],
+  },
+  sponsor_terminates: {
+    fan: [
+      "Mrzí mě to, ale končím. Slib zněl jasně: {slib}. Fandit budu dál, platit už ne.",
+      "Dost. Dohoda nevyšla: {slib}. Smlouvu vypovídám, srdce mi to trhá.",
+      "Končím se sponzorstvím. Zase to nevyšlo: {slib}. Na tribunu chodit budu.",
+    ],
+    patriot: [
+      "Slovo se nedrží, tak končím. Slib zněl: {slib}. Obci přeju jen dobré.",
+      "Smlouvu vypovídám. Dohoda nevyšla: {slib}. Takhle se se sponzorem nejedná.",
+      "Končíme. Na tomhle jsme si plácli: {slib}. Víc k tomu nemám.",
+    ],
+    businessman: [
+      "Smlouvu tímto vypovídám. Nesplněno: {slib}. Nesplacenou zálohu si podle smlouvy nechám vrátit.",
+      "Spolupráce končí. Dohoda nebyla dodržena: {slib}. Obchod je obchod.",
+      "Vypovídám smlouvu. Nesplněno: {slib}. Za těchto podmínek pokračovat nemohu.",
+    ],
+    cautious: [
+      "Musím smlouvu vypovědět. Nesplněno: {slib}. Nerad to dělám, ale riziko je moc velké.",
+      "Končím. Dohoda nebyla dodržena: {slib}. Potřebuji partnera, na kterého je spoleh.",
+      "Smlouvu vypovídám. Slib nevyšel: {slib}. Přeji klubu klid a pořádek.",
+    ],
+  },
 };
 
 /** „3 prohry" / „5 proher". Šablona počet neohýbá, jinak vzniká „5 prohry". */
@@ -257,14 +328,14 @@ export function proherTvar(n: number): string {
 
 function fill(t: string, vars: OwnerSmsVars): string {
   const serie = vars.serie === undefined ? "" : proherTvar(vars.serie);
-  return t.replace(/\{skore\}/g, vars.skore ?? "").replace(/\{serie\}/g, serie);
+  return t.replace(/\{skore\}/g, vars.skore ?? "").replace(/\{serie\}/g, serie).replace(/\{slib\}/g, vars.slib ?? "");
 }
 
 /**
  * Text SMS. Deterministicky podle `seedKey` (reference spouštěče), s vynecháním
  * textů, které klub nedávno dostal (`recent` = vyrenderovaná těla). `null` = majitel
  * s touhle povahou k téhle příležitosti nepíše, nebo chybí proměnná šablony (chybějící
- * `{skore}` i `{serie}` — nikdy se nedoplňuje výchozí hodnota).
+ * `{skore}`, `{serie}` i `{slib}` — nikdy se nedoplňuje výchozí hodnota).
  */
 export function renderOwnerSms(
   occasion: OwnerSmsOccasion, personality: OwnerPersonality, vars: OwnerSmsVars, seedKey: string, recent: readonly string[],
@@ -273,6 +344,7 @@ export function renderOwnerSms(
   if (!pool || pool.length === 0) return null;
   if (pool.some((t) => t.includes("{skore}")) && vars.skore === undefined) return null;
   if (pool.some((t) => t.includes("{serie}")) && vars.serie === undefined) return null;
+  if (pool.some((t) => t.includes("{slib}")) && vars.slib === undefined) return null;
   const rendered = pool.map((t) => fill(t, vars));
   const fresh = rendered.filter((t) => !recent.includes(t));
   return createRng(seedFromString(seedKey)).pick(fresh.length > 0 ? fresh : rendered);
@@ -291,6 +363,9 @@ const OCCASION_REPLY_KIND: Record<OwnerSmsOccasion, ReplyKind> = {
   riot: "trouble",
   scandal: "trouble",
   main_lost: "farewell",
+  promise_kept: "positive",
+  promise_broken: "concern",
+  sponsor_terminates: "farewell",
 };
 
 const REPLY_OPTION_TEXTS: Record<ReplyKind, Record<ReplyTone, string>> = {

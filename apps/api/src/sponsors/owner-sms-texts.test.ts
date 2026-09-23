@@ -8,7 +8,7 @@ import {
   OWNER_REPLY_BACK, OWNER_SMS_OCCASIONS, OWNER_SMS_TEXTS, ownerReplyBack, proherTvar, renderOwnerSms, replyOptions,
 } from "./owner-sms-texts";
 
-const VARS = { skore: "2:1", serie: 4 };
+const VARS = { skore: "2:1", serie: 4, slib: "umístění do 3. místa" };
 
 describe("OWNER_SMS_TEXTS", () => {
   it("každá příležitost má pro každou povahu aspoň tři věty (skandál jen opatrný)", () => {
@@ -29,7 +29,7 @@ describe("OWNER_SMS_TEXTS", () => {
       for (const p of OWNER_PERSONALITIES) {
         for (const t of OWNER_SMS_TEXTS[o][p] ?? []) {
           const out = renderOwnerSms(o, p, VARS, `test|${t}`, (OWNER_SMS_TEXTS[o][p] ?? []).filter((x) => x !== t)
-            .map((x) => x.replace("{skore}", "2:1").replace("{serie}", "4 prohry")));
+            .map((x) => x.replace("{skore}", "2:1").replace("{serie}", "4 prohry").replace("{slib}", "umístění do 3. místa")));
           expect(out, `${o}/${p}`).not.toBeNull();
           expect(out).not.toMatch(/[{}]/);
           expect(out).not.toContain("—");
@@ -65,6 +65,23 @@ describe("OWNER_SMS_TEXTS", () => {
       for (const serie of [3, 5]) {
         const out = renderOwnerSms("losing_streak", p, { serie }, `serie|${p}|${serie}`, []);
         expect(out, `${p}/${serie}`).not.toBeNull();
+        expect(out).not.toMatch(/[{}]/);
+        expect(out).not.toContain("—");
+      }
+    }
+  });
+
+  it("SMS o slibu bez popisku slibu nevznikne", () => {
+    for (const o of ["promise_kept", "promise_broken", "sponsor_terminates"] as const) {
+      expect(renderOwnerSms(o, "fan", {}, "k", [])).toBeNull();
+    }
+  });
+
+  it("SMS o slibu obsahuje popisek u každé povahy a nikde nezůstane značka", () => {
+    for (const o of ["promise_kept", "promise_broken", "sponsor_terminates"] as const) {
+      for (const p of OWNER_PERSONALITIES) {
+        const out = renderOwnerSms(o, p, { slib: "postupové místo" }, `slib|${o}|${p}`, []);
+        expect(out, `${o}/${p}`).toContain("postupové místo");
         expect(out).not.toMatch(/[{}]/);
         expect(out).not.toContain("—");
       }

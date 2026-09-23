@@ -25,15 +25,18 @@ export interface OccasionRule {
 
 export const OCCASION_RULES: Record<OwnerSmsOccasion, OccasionRule> = {
   riot: { expectsReply: true, priority: 1, deliverDays: 2 },
-  scandal: { expectsReply: true, priority: 2, deliverDays: 3 },
-  main_lost: { expectsReply: true, priority: 3, deliverDays: 3 },
-  after_loss: { expectsReply: true, priority: 4, deliverDays: 1 },
-  after_win: { expectsReply: false, priority: 5, deliverDays: 1 },
-  losing_streak: { expectsReply: true, priority: 6, deliverDays: 2 },
-  match_eve: { expectsReply: false, priority: 7, deliverDays: 0 },
-  main_new: { expectsReply: false, priority: 8, deliverDays: 3 },
-  season_complaint: { expectsReply: true, priority: 9, deliverDays: 3 },
-  season_thanks: { expectsReply: false, priority: 10, deliverDays: 3 },
+  sponsor_terminates: { expectsReply: false, priority: 2, deliverDays: 3 },
+  scandal: { expectsReply: true, priority: 3, deliverDays: 3 },
+  promise_broken: { expectsReply: true, priority: 4, deliverDays: 3 },
+  main_lost: { expectsReply: true, priority: 5, deliverDays: 3 },
+  after_loss: { expectsReply: true, priority: 6, deliverDays: 1 },
+  after_win: { expectsReply: false, priority: 7, deliverDays: 1 },
+  losing_streak: { expectsReply: true, priority: 8, deliverDays: 2 },
+  match_eve: { expectsReply: false, priority: 9, deliverDays: 0 },
+  promise_kept: { expectsReply: false, priority: 10, deliverDays: 3 },
+  main_new: { expectsReply: false, priority: 11, deliverDays: 3 },
+  season_complaint: { expectsReply: true, priority: 12, deliverDays: 3 },
+  season_thanks: { expectsReply: false, priority: 13, deliverDays: 3 },
 };
 
 /** Není správná odpověď pro všechny: podnikateli sedí věcnost, fanouškovi srdce. */

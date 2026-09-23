@@ -326,9 +326,10 @@ export async function expireOwnerSmsReplies(db: D1Database, today: string): Prom
  * Rollover vrací herní čas na reálné datum: lhůty ze staré osy by nikdy nevypršely.
  * Otevřená vlákna se proto tiše zavřou a fronta se vyprázdní, bez postihu.
  *
- * Výjimka je fronta samotného rolloveru (`season:` a `main-expired:` reference) — tu sem
- * zapisuje `rolloverAllLeagues` ještě PŘED doručením a při restartu spadlého rolloveru by
- * druhý běh smazal SMS, které první běh teprve zařadil a denní tick je ještě nestihl poslat.
+ * Výjimka je fronta samotného rolloveru (`season:`, `main-expired:`, a sliby sponzorům
+ * `promise:` a `sponsor-quit:`, které rollover vyhodnotí v kroku 4a) — tu sem zapisuje
+ * `rolloverAllLeagues` ještě PŘED doručením a při restartu spadlého rolloveru by druhý běh
+ * smazal SMS, které první běh teprve zařadil a denní tick je ještě nestihl poslat.
  *
  * `sent_day` u historických (nepending) řádků se zároveň vynuluje: `deliverOwnerSmsForTeam`
  * ho porovnává s ABS() proti novému hernímu datu, takže staré datum ze staré osy by mohlo
@@ -340,7 +341,8 @@ export async function closeOwnerSmsForRollover(db: D1Database): Promise<void> {
     db.prepare("UPDATE sponsor_owner_sms SET status = 'closed' WHERE status = 'awaiting'"),
     db.prepare(
       `UPDATE sponsor_owner_sms SET status = 'dropped' WHERE status = 'pending'
-         AND reference_id NOT LIKE 'season:%' AND reference_id NOT LIKE 'main-expired:%'`,
+         AND reference_id NOT LIKE 'season:%' AND reference_id NOT LIKE 'main-expired:%'
+         AND reference_id NOT LIKE 'promise:%' AND reference_id NOT LIKE 'sponsor-quit:%'`,
     ),
     db.prepare("UPDATE sponsor_owner_sms SET sent_day = NULL WHERE status != 'pending' AND sent_day IS NOT NULL"),
     db.prepare(
