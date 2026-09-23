@@ -21,7 +21,7 @@ import { OwnerReplyDialog } from "@/components/sponsors/negotiation/owner-reply-
 
 const CLOSED_TEXT: Record<string, string> = {
   walked_away: "Majitel od jednání odešel. Chvíli s vámi jednat nebude.",
-  expired: "Jednání vypršelo. Nové otevřeš na stránce sponzora.",
+  expired: "Jednání skončilo: vypršela lhůta, ukončil jsi ho, nebo jsi mezitím podepsal smlouvu s jinou firmou. Nové otevřeš na stránce sponzora.",
   signed: "Smlouva je podepsaná.",
 };
 
