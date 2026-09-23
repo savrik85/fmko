@@ -6,7 +6,7 @@ import { MAX_LICENCE } from "@okresni-masina/shared";
 import { gameExpiry } from "../lib/game-time";
 import {
   attendanceAmbition, cupRoundAmbition, expectedWinsPerSeason, leaguePositionAmbition, MONTHS_PER_SEASON,
-  noRelegationAmbition, promotionAmbition, sponsorChance,
+  noRelegationAmbition, promotionAmbition, RELEGATION_SPOTS,
 } from "./ambition";
 import { clampFavor } from "./favor-math";
 import type { OwnerPersonality } from "./owners";
@@ -144,12 +144,13 @@ export function willingness(proposal: Proposal, ctx: NegotiationContext): number
 /**
  * Šance, kterou sponzor slibu dává (pro cenu bonusu za splnění). Nesezónní sliby (licence,
  * stavba, dres, exkluzivita oboru) řeší klub sám, tam sponzor riskuje 0 — šance 1,0.
- * U sezónního slibu s ambicí na podlaze je výsledek prakticky jistý, taky 1,0.
+ * U sezónního slibu klesá spojitě s ambicí (1,15 − 0,5 × ambice, mezi 0,1 a 1,0) — na podlaze
+ * ambice (0,3) vychází přesně 1,0, u nejtěžších slibů (ambice 2) klesá až k 0,1.
  */
 export function promiseChance(p: PromiseSpec, ctx: NegotiationContext): number {
   if (!SEASONAL_KINDS.has(p.kind)) return 1.0;
   const ambition = promiseAmbition(p, ctx);
-  return ambition <= FLOOR_AMBITION + EPS ? 1.0 : sponsorChance(ambition);
+  return Math.max(0.1, Math.min(1.0, 1.15 - 0.5 * ambition));
 }
 
 /** Kolik řádků sponsor_promises slib založí: sezónní jeden za každou sezónu od příští. */
@@ -250,13 +251,19 @@ export function defaultPromise(kind: PromiseKind, ctx: NegotiationContext, propo
   if (!kindAllowedForCategory(kind, ctx.category)) return null;
   const spec = (params: PromiseParams): PromiseSpec => ({ kind, params });
   switch (kind) {
-    case "league_position": return spec({ position: Math.max(1, ctx.expectedPosition) });
+    case "league_position": {
+      // Nikdy sestupovou příčku (validátor), i kdyby byl klub v ohrožení sestupu.
+      const max = ctx.leagueTeams - RELEGATION_SPOTS;
+      return spec({ position: Math.max(1, Math.min(ctx.expectedPosition, max)) });
+    }
     case "promotion":
     case "no_relegation":
     case "no_riots":
     case "jersey_logo":
       return spec({});
-    case "cup_round": return spec({ round: Math.min(ctx.cupTotalRounds, 3) });
+    case "cup_round":
+      // Pohár aspoň 2 kola (validátor); bez poháru nebo jen 1 kolo nejde nabídnout nic platného.
+      return ctx.cupTotalRounds < 2 ? null : spec({ round: Math.min(ctx.cupTotalRounds, 3) });
     case "coach_licence": return ctx.licenceLevel >= MAX_LICENCE ? null : spec({ level: ctx.licenceLevel + 1 });
     case "stadium_upgrade": {
       const f = ctx.facilities
@@ -312,22 +319,36 @@ export function evaluateRound(proposal: Proposal, ctx: NegotiationContext): Roun
   return { kind: "reject", insulted: cost > INSULT_BAND * o };
 }
 
-/** Pokuta za nesplněný slib: value_share × B × měsíce sezóny (pevně při podpisu). */
-export function promisePenalty(valueShare: number, budgetB: number): number {
-  return Math.round(valueShare * budgetB * MONTHS_PER_SEASON);
+/**
+ * Pokuta za nesplněný slib, na jeden řádek: share × B × měsíce CELÉ smlouvy / počet řádků
+ * (pevně při podpisu). Rozpočítáno tak, aby součet pokut přes všechny řádky jednoho slibu
+ * odpovídal celé hodnotě, kterou slib přinesl do ochoty — nevyplatí se slíbit a nesplnit.
+ */
+export function promisePenalty(valueShare: number, budgetB: number, months: number, rows: number): number {
+  return Math.round((valueShare * budgetB * months) / Math.max(1, rows));
+}
+
+/** Výpovědní pokuta nové smlouvy: jen z měsíční podpory, stejný vzorec jako u dřívějších pevných nabídek. */
+export function earlyTerminationFee(i: { monthly: number; seasons: number }): number {
+  return Math.round(i.monthly * i.seasons * 2);
+}
+
+/** Součet jednorázových položek smlouvy: podpisový příspěvek, stavba, vybavení, doplacená stará pokuta. */
+export function oneTimeTotal(demands: { signingBonus: number; construction: number; equipment: number; paidFee: number }): number {
+  return demands.signingBonus + demands.construction + demands.equipment + demands.paidFee;
 }
 
 /**
- * Výpovědní pokuta nové smlouvy: měsíční ekvivalent celé dohody (podpora + podpisový příspěvek,
- * stavba, vybavení a doplacená stará pokuta rozpočítané na měsíce) × sezóny × 2. Bez toho by
- * šlo obejít pokutu tak, že se peníze schovají do jednorázového podpisového příspěvku nebo daru.
+ * Vratka jednorázových položek (záloha na celou smlouvu, ne měsíční závazek) při JAKÉMKOLI
+ * předčasném konci smlouvy — ať vypoví klub, nebo sponzor kvůli nesplněným slibům. Klesá lineárně
+ * s odehranými měsíci, na konci smlouvy je nulová. Na rozdíl od earlyTerminationFee se NEDĚLÍ
+ * třemi (spec, live terminate route) — jednorázová platba se totiž nevztahuje ke zbývajícím
+ * sezónám, ale k poměru odehraných a celkových měsíců smlouvy.
  */
-export function earlyTerminationFee(i: {
-  monthly: number; signingBonus: number; construction: number; equipment: number; paidFee: number; seasons: number;
-}): number {
-  const m = contractMonths(i.seasons);
-  const equivalentMonthly = i.monthly + (i.signingBonus + i.construction + i.equipment + i.paidFee) / m;
-  return Math.round(equivalentMonthly * i.seasons * 2);
+export function advanceClawback(i: { oneTimeTotal: number; contractMonths: number; monthsElapsed: number }): number {
+  if (i.contractMonths <= 0) return 0;
+  const remaining = Math.max(0, i.contractMonths - i.monthsElapsed);
+  return Math.round((i.oneTimeTotal * remaining) / i.contractMonths);
 }
 
 export interface PromiseRow {
@@ -343,12 +364,14 @@ export interface PromiseRow {
 /** Řádky sponsor_promises pro podpis: sezónní za každou sezónu od příští, termínové s termínem. */
 export function buildPromiseRows(proposal: Proposal, ctx: NegotiationContext, signGameDate: string): PromiseRow[] {
   const rows: PromiseRow[] = [];
+  const months = contractMonths(proposal.seasons);
   for (const p of proposal.promises) {
     const valueShare = Math.round(promiseValueShare(p, ctx) * 10000) / 10000;
+    const rowCount = promiseRowCount(p.kind, proposal.seasons);
     const base = {
       kind: p.kind, params: p.params, valueShare,
       reward: proposal.demands.goalBonuses[p.kind] ?? 0,
-      penalty: promisePenalty(valueShare, ctx.budgetB),
+      penalty: promisePenalty(valueShare, ctx.budgetB, months, rowCount),
     };
     if (SEASONAL_KINDS.has(p.kind)) {
       for (let s = ctx.season + 1; s < ctx.season + proposal.seasons; s++) rows.push({ ...base, season: s, deadlineGameDate: null });
@@ -370,7 +393,11 @@ export interface SigningSummary {
   currentFee: number;
 }
 
-/** Shrnutí před podpisem: všechny sliby s pokutou a odměnou, platby a výpovědní pokuta nové smlouvy. */
+/**
+ * Shrnutí před podpisem: všechny sliby s pokutou a odměnou, platby a výpovědní pokuta nové
+ * smlouvy. Vratka jednorázových položek (advanceClawback) se počítá až při skutečném předčasném
+ * konci (Task 7 / etapa 3), tady jen `oneTimeTotal(demands)` dá jejich součet pro zobrazení.
+ */
 export function signingSummary(proposal: Proposal, ctx: NegotiationContext, signGameDate: string): SigningSummary {
   const d = proposal.demands;
   const constructionAmount = d.construction ? constructionCost(ctx, d.construction) : 0;
@@ -379,10 +406,7 @@ export function signingSummary(proposal: Proposal, ctx: NegotiationContext, sign
   return {
     proposal,
     rows: buildPromiseRows(proposal, ctx, signGameDate),
-    terminationFee: earlyTerminationFee({
-      monthly: d.monthly, signingBonus: d.signingBonus, construction: constructionAmount,
-      equipment: equipmentAmount, paidFee: currentFeeAmount, seasons: proposal.seasons,
-    }),
+    terminationFee: earlyTerminationFee({ monthly: d.monthly, seasons: proposal.seasons }),
     constructionCost: constructionAmount,
     equipmentCost: equipmentAmount,
     currentFee: currentFeeAmount,

@@ -7,7 +7,7 @@ import { licenceLabel, MAX_LICENCE } from "@okresni-masina/shared";
 import { roundName } from "../cup/cup";
 import { CATEGORY_LABELS } from "../equipment/equipment-generator";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
-import { RELEGATION_SPOTS } from "./ambition";
+import { MONTHS_PER_SEASON, RELEGATION_SPOTS } from "./ambition";
 import { budgetEstimateRange } from "./budget";
 import {
   MAX_PROMISES, MAX_SEASONS, MIN_SEASONS, promiseChance, promisePenalty, promiseValueShare,
@@ -220,9 +220,12 @@ function candidates(ctx: NegotiationContext): PromiseSpec[] {
   if (ctx.category === "stadium") out.push({ kind: "jersey_logo", params: {} });
   if (!ctx.sectorBannerActive) out.push({ kind: "sector_exclusivity", params: { sector: ctx.sponsorType } });
   const avg = Math.max(10, ctx.lastAvgAttendance);
+  // Zaokrouhleno NAHORU (Math.ceil) a ohlídáno proti skutečnému minimu validátoru (sanitizePromise),
+  // jinak by kulaté hodnoty katalogu mohly kvůli jinému zaokrouhlení padnout pod 0,9 × loňský průměr.
+  const attendanceFloor = Math.max(10, Math.round(ctx.lastAvgAttendance * 0.9));
   const seenAttendance = new Set<number>();
   for (const mult of [0.9, 1, 1.1, 1.25, 1.5]) {
-    const attendance = Math.max(10, Math.round((avg * mult) / 10) * 10);
+    const attendance = Math.max(attendanceFloor, Math.ceil((avg * mult) / 10) * 10);
     if (seenAttendance.has(attendance)) continue;
     seenAttendance.add(attendance);
     out.push({ kind: "attendance", params: { attendance } });
@@ -241,7 +244,11 @@ function candidates(ctx: NegotiationContext): PromiseSpec[] {
   return out;
 }
 
-/** Všechny sliby, které klub může dát, s rozmezím přínosu a pokuty. */
+/**
+ * Všechny sliby, které klub může dát, s rozmezím přínosu a pokuty. V okamžiku katalogu klub ještě
+ * nevybral délku smlouvy (ta patří do samotného návrhu, ne katalogu), takže pokuta je orientační
+ * „na jednu sezónu" (skutečná pokuta na řádek se počítá v buildPromiseRows z celé délky smlouvy).
+ */
 export function promiseCatalog(ctx: NegotiationContext, favor: number): PromiseOption[] {
   return candidates(ctx).map((spec) => {
     const share = promiseValueShare(spec, ctx);
@@ -251,7 +258,7 @@ export function promiseCatalog(ctx: NegotiationContext, favor: number): PromiseO
       label: promiseLabel(spec, ctx),
       seasonal: SEASONAL_KINDS.has(spec.kind),
       value: budgetEstimateRange(share * ctx.budgetB, favor),
-      penalty: budgetEstimateRange(promisePenalty(share, ctx.budgetB), favor),
+      penalty: budgetEstimateRange(promisePenalty(share, ctx.budgetB, MONTHS_PER_SEASON, 1), favor),
       chance: Math.round(promiseChance(spec, ctx) * 100) / 100,
     };
   });

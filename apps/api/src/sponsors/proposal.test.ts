@@ -118,4 +118,18 @@ describe("promiseCatalog", () => {
     expect(clubControlled.length).toBeGreaterThan(0);
     expect(clubControlled.every((o) => o.chance === 1)).toBe(true);
   });
+  it("sezónní šance v katalogu jde podle spojitého vzorce (1,15 − 0,5 × ambice)", () => {
+    // Umístění 7 proti očekávanému 7. → ambice 1 → šance 0,65 (dřív 0,5 přes sponsorChance).
+    const seventh = cat.find((o) => o.kind === "league_position" && o.params.position === 7)!;
+    expect(seventh.chance).toBeCloseTo(0.65, 2);
+  });
+  it("katalog návštěvy nikdy nespadne pod minimum validátoru, i na zaokrouhlovací hraně", () => {
+    // 205 × 0,9 = 184,5 → validátor kulatě na 185. Se starým Math.round na krok 10 by katalog
+    // nabídl 180 (pod minimem); Math.ceil zaručí aspoň 190.
+    const ctx205: NegotiationContext = { ...CTX, lastAvgAttendance: 205 };
+    const min = Math.max(10, Math.round(ctx205.lastAvgAttendance * 0.9));
+    const att = promiseCatalog(ctx205, 50).filter((o) => o.kind === "attendance");
+    expect(att.length).toBeGreaterThan(0);
+    expect(att.every((o) => (o.params.attendance ?? 0) >= min)).toBe(true);
+  });
 });

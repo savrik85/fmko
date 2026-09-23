@@ -4,8 +4,9 @@
 import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
-  afterReject, buildPromiseRows, contractMonths, earlyTerminationFee, evaluateRound, initialPatience, promiseValueShare,
-  reduceToWillingness, requestCost, willingness, type Demands, type NegotiationContext, type Proposal,
+  advanceClawback, afterReject, buildPromiseRows, contractMonths, defaultPromise, earlyTerminationFee, evaluateRound,
+  initialPatience, oneTimeTotal, promiseChance, promisePenalty, promiseValueShare, reduceToWillingness, requestCost,
+  willingness, type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import type { PromiseSpec } from "./promise-kinds";
 
@@ -82,8 +83,9 @@ describe("requestCost", () => {
     expect(expected).toBeCloseTo(1357.19, 1);
   });
   it("bonus za splnění: G × šance × počet sezón se slibem / měsíce", () => {
+    // ambice 1 (cíl = očekávané místo) → šance = 1,15 − 0,5 × 1 = 0,65 (spojitý vzorec).
     const p = prop({ goalBonuses: { league_position: 2000 } }, 3, [{ kind: "league_position", params: { position: 7 } }]);
-    expect(requestCost(p, CTX)).toBeCloseTo(179.17, 1);
+    expect(requestCost(p, CTX)).toBeCloseTo(232.92, 2);
   });
   it("bonus za splnění u slibu, který řeší klub (licence): šance 1,0, ne 0,7", () => {
     const p = prop({ goalBonuses: { coach_licence: 2000 } }, 2, [{ kind: "coach_licence", params: { level: 2 } }]);
@@ -93,6 +95,30 @@ describe("requestCost", () => {
     expect(requestCost(prop({ construction: "toilets" }, 1), CTX)).toBeCloseTo(3225, 6);
     expect(requestCost(prop({ equipment: "balls" }, 1), CTX)).toBeCloseTo(8000 / MONTHS_PER_SEASON, 6);
     expect(requestCost(prop({ payCurrentFee: true }), CTX)).toBeCloseTo(1000, 0);
+  });
+});
+
+describe("promiseChance", () => {
+  it("sezónní: spojitě 1,15 − 0,5 × ambice, na podlaze (0,3) přesně 1,0", () => {
+    // Umístění 7 proti očekávanému 7. → ambice 1 → šance 0,65.
+    expect(promiseChance({ kind: "league_position", params: { position: 7 } }, CTX)).toBeCloseTo(0.65, 9);
+    // Umístění 12 (podlaha ambice, viz test výš) → šance přesně 1,0, ne extra větev.
+    expect(promiseChance({ kind: "league_position", params: { position: 12 } }, CTX)).toBeCloseTo(1.0, 9);
+  });
+  it("nesezónní (řeší klub sám) je vždy 1,0", () => {
+    expect(promiseChance({ kind: "coach_licence", params: { level: 2 } }, CTX)).toBe(1.0);
+    expect(promiseChance({ kind: "sector_exclusivity", params: { sector: "pub" } }, CTX)).toBe(1.0);
+  });
+});
+
+describe("defaultPromise", () => {
+  it("umístění: min(očekávané místo, poslední bezpečné místo), nikdy sestupová příčka", () => {
+    const ctx = { ...CTX, expectedPosition: 14 };
+    expect(defaultPromise("league_position", ctx, prop({}, 2))).toEqual({ kind: "league_position", params: { position: 12 } });
+  });
+  it("pohár s méně než 2 koly nejde nabídnout", () => {
+    const ctx = { ...CTX, cupTotalRounds: 1 };
+    expect(defaultPromise("cup_round", ctx, prop({}, 2))).toBeNull();
   });
 });
 
@@ -159,13 +185,15 @@ describe("buildPromiseRows", () => {
   const rows = buildPromiseRows(p, CTX, signDate);
 
   it("sezónní slib: řádek pro každou sezónu od příští", () => {
+    // penalty na řádek = round(share × B × měsíce CELÉ smlouvy / počet řádků) = round(0,15×10000×11,1628.../2) = 8372.
     const lp = rows.filter((r) => r.kind === "league_position");
     expect(lp.map((r) => r.season)).toEqual([4, 5]);
-    expect(lp[0]).toMatchObject({ reward: 2000, penalty: 5581, deadlineGameDate: null, valueShare: 0.15 });
+    expect(lp[0]).toMatchObject({ reward: 2000, penalty: 8372, deadlineGameDate: null, valueShare: 0.15 });
   });
   it("termínový slib: jeden řádek s termínem 112 herních dní", () => {
+    // penalty = round(0,05×10000×11,1628.../1) = 5581.
     const lic = rows.find((r) => r.kind === "coach_licence");
-    expect(lic).toMatchObject({ season: null, deadlineGameDate: "2027-01-13T10:00:00.000Z", penalty: 1860, reward: 0 });
+    expect(lic).toMatchObject({ season: null, deadlineGameDate: "2027-01-13T10:00:00.000Z", penalty: 5581, reward: 0 });
   });
   it("exkluzivita oboru: bez sezóny i termínu", () => {
     expect(rows.find((r) => r.kind === "sector_exclusivity")).toMatchObject({ season: null, deadlineGameDate: null });
@@ -175,16 +203,69 @@ describe("buildPromiseRows", () => {
   });
 });
 
-describe("earlyTerminationFee", () => {
-  it("jen měsíční podpora: × sezóny × 2 jako dřív", () => {
-    expect(earlyTerminationFee({ monthly: 5000, signingBonus: 0, construction: 0, equipment: 0, paidFee: 0, seasons: 2 })).toBe(20000);
+describe("promisePenalty", () => {
+  it("na řádek: round(share × B × měsíce CELÉ smlouvy / počet řádků)", () => {
+    expect(promisePenalty(0.15, 10000, contractMonths(3), 2)).toBe(8372);
+    expect(promisePenalty(0.05, 10000, contractMonths(3), 1)).toBe(5581);
   });
-  it("zahrne podpisový příspěvek, stavbu, vybavení a starou pokutu, rozpočítané na měsíce", () => {
+  it("rozbít všechny sliby nikdy nevyplatí víc, než kolik navíc přinesly (součet pokut ≥ extra ochota × měsíce)", () => {
+    const signDate = "2026-09-23T10:00:00.000Z";
+    const cases: Array<{ ctx: NegotiationContext; seasons: number; promises: PromiseSpec[] }> = [
+      {
+        ctx: CTX, seasons: 3,
+        promises: [{ kind: "league_position", params: { position: 7 } }, { kind: "coach_licence", params: { level: 2 } }],
+      },
+      { ctx: { ...CTX, wishes: ["league_position" as const] }, seasons: 2, promises: [{ kind: "league_position", params: { position: 7 } }] },
+      {
+        ctx: { ...CTX, personality: "patriot" as const }, seasons: 3,
+        promises: [{ kind: "reputation", params: { reputation: 60 } }, { kind: "coach_licence", params: { level: 2 } }],
+      },
+    ];
+    for (const c of cases) {
+      const withPromises = prop({}, c.seasons, c.promises);
+      const without = prop({}, c.seasons, []);
+      const extra = (willingness(withPromises, c.ctx) - willingness(without, c.ctx)) * contractMonths(c.seasons);
+      const totalPenalty = buildPromiseRows(withPromises, c.ctx, signDate).reduce((s, r) => s + r.penalty, 0);
+      // Tolerance jen na zaokrouhlení jednotlivých řádků (round), ne na systémovou odchylku.
+      expect(totalPenalty).toBeGreaterThanOrEqual(extra - 2);
+    }
+  });
+});
+
+describe("earlyTerminationFee", () => {
+  it("měsíčně × sezóny × 2, stejně jako u dřívějších pevných nabídek", () => {
+    expect(earlyTerminationFee({ monthly: 5000, seasons: 2 })).toBe(20000);
+  });
+});
+
+describe("oneTimeTotal", () => {
+  it("sečte jednorázové položky smlouvy", () => {
+    expect(oneTimeTotal({ signingBonus: 1000, construction: 2000, equipment: 500, paidFee: 300 })).toBe(3800);
+  });
+});
+
+describe("advanceClawback", () => {
+  it("hned po podpisu: vrací celou částku", () => {
+    const m = contractMonths(2);
+    expect(advanceClawback({ oneTimeTotal: 90000, contractMonths: m, monthsElapsed: 0 })).toBe(90000);
+  });
+  it("v polovině smlouvy: polovinu", () => {
+    const m = contractMonths(2);
+    expect(advanceClawback({ oneTimeTotal: 90000, contractMonths: m, monthsElapsed: m / 2 })).toBe(45000);
+  });
+  it("na konci smlouvy: nic", () => {
+    const m = contractMonths(2);
+    expect(advanceClawback({ oneTimeTotal: 90000, contractMonths: m, monthsElapsed: m })).toBe(0);
+  });
+  it("nahustit podpisový příspěvek a hned vypovědět klubu nic nevydělá", () => {
+    const monthly = 5000;
     const seasons = 2;
+    const signingBonus = 50000;
     const m = contractMonths(seasons);
-    const fee = earlyTerminationFee({ monthly: 5000, signingBonus: 7442, construction: 170000, equipment: 8000, paidFee: 7442, seasons });
-    const expected = Math.round((5000 + (7442 + 170000 + 8000 + 7442) / m) * seasons * 2);
-    expect(fee).toBe(expected);
-    expect(fee).toBe(123675);
+    const total = oneTimeTotal({ signingBonus, construction: 0, equipment: 0, paidFee: 0 });
+    const clawback = advanceClawback({ oneTimeTotal: total, contractMonths: m, monthsElapsed: 0 });
+    const fee = earlyTerminationFee({ monthly, seasons });
+    // S přijaté − vratka − pokuta ≤ 0: klub na tom nemůže vydělat.
+    expect(signingBonus - clawback - fee).toBeLessThanOrEqual(0);
   });
 });
