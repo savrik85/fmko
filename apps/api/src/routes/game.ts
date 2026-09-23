@@ -2709,8 +2709,8 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   const fee = Math.round(contract.early_termination_fee * (contract.seasons_remaining / 3));
   // Smlouva z jednání: jednorázová plnění sponzora (příspěvek za podpis, stavba, vybavení,
   // zaplacená pokuta, vyplacené termínové bonusy) jsou záloha, klub vrací nesplacenou část.
-  const { contractClawback } = await import("../sponsors/signing");
-  const clawback = await contractClawback(c.env.DB, contract);
+  const { contractClawback, loadTeamSeasonProgress } = await import("../sponsors/signing");
+  const clawback = await contractClawback(c.env.DB, contract, await loadTeamSeasonProgress(c.env.DB, teamId));
 
   const team = await c.env.DB.prepare("SELECT budget, village_id, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ budget: number; village_id: string; game_date: string | null }>();
@@ -2724,11 +2724,12 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   const ended = await c.env.DB.prepare("UPDATE sponsor_contracts SET status = 'terminated' WHERE id = ? AND status = 'active'")
     .bind(contract.id).run();
   if ((ended.meta?.changes ?? 0) !== 1) return c.json({ error: "Smlouva už je ukončená, načti stránku znovu" }, 409);
+  const termDate = team.game_date ?? new Date().toISOString();
   await recordTransaction(c.env.DB, teamId, "sponsor_termination", -fee,
-    `Ukončení sponzorské smlouvy (sankce)`, new Date().toISOString());
+    `Ukončení sponzorské smlouvy (sankce)`, termDate);
   if (clawback > 0) {
     await recordTransaction(c.env.DB, teamId, "sponsor_termination", -clawback,
-      `Vrácení nesplacené zálohy: ${contract.sponsor_name}`, team.game_date ?? new Date().toISOString(), `sponsor-clawback-${contract.id}`);
+      `Vrácení nesplacené zálohy: ${contract.sponsor_name}`, termDate, `sponsor-clawback-${contract.id}`);
   }
 
   // Majitel firmy, se kterou klub ukončil hlavní smlouvu, se ozve SMS.

@@ -3,12 +3,14 @@
  * zámek proti dvojímu podpisu, nová kontrola podmínek a vratka zálohy při výpovědi.
  */
 import { describe, expect, it } from "vitest";
-import { FalesnaD1, jakoD1, type Pravidlo } from "../incidents/testovaci-d1";
+import { FalesnaD1, jakoD1, type Pravidlo, type ZaznamDotazu } from "../incidents/testovaci-d1";
 import { MONTHS_PER_SEASON } from "./ambition";
 import type { NegotiationContext, Proposal } from "./negotiation";
 import type { NegotiationRound, NegotiationState } from "./negotiation-db";
+import { MAIN_SPONSOR_FREE_SQL } from "./exclusivity";
 import {
-  advanceItemsTotals, contractClawback, paidConstructionItems, signFromState, stadiumSponsorName, type AdvanceContract,
+  advanceItemsTotals, clawbackAmount, contractClawback, paidConstructionItems, parseAdvance, seasonProgressMonths, signFromState,
+  stadiumSponsorName, type AdvanceContract,
 } from "./signing";
 
 const CTX = {
@@ -41,6 +43,8 @@ describe("stadiumSponsorName", () => {
 
 // ── Podpis nad falešnou D1 ──
 
+const MPS = MONTHS_PER_SEASON;
+
 const FULL_CTX: NegotiationContext = {
   category: "stadium", personality: "fan", wishes: [], budgetB: 10000, season: 3, leagueTeams: 14,
   expectedPosition: 7, cupTotalRounds: 7, lastAvgAttendance: 200, reputation: 50, licenceLevel: 1,
@@ -55,8 +59,10 @@ const TERMS: Proposal = {
   demands: { monthly: 6000, winBonus: 0, signingBonus: 12000, goalBonuses: {}, construction: null, equipment: null, payCurrentFee: false },
 };
 
-function state(over: Partial<NegotiationState> = {}, negOver: Partial<NegotiationState["neg"]> = {}): NegotiationState {
-  const rounds: NegotiationRound[] = [{ proposal: TERMS, response: { kind: "accept", text: "Beru.", gameDate: "2026-09-24T00:00:00.000Z" } }];
+const accepted = (p: Proposal): NegotiationRound[] => [{ proposal: p, response: { kind: "accept", text: "Beru.", gameDate: "2026-09-24T00:00:00.000Z" } }];
+
+function state(over: Partial<NegotiationState> = {}, negOver: Partial<NegotiationState["neg"]> = {}, terms: Proposal = TERMS): NegotiationState {
+  const rounds = accepted(terms);
   return {
     neg: {
       id: "n1", teamId: "t1", sponsorId: 7, category: "stadium", wishes: [], budgetB: 10000, patience: 3,
@@ -81,22 +87,35 @@ function state(over: Partial<NegotiationState> = {}, negOver: Partial<Negotiatio
 const CLAIM = /^UPDATE sponsor_negotiations SET status = 'signed'/;
 const INSERT_CONTRACT = /INSERT INTO sponsor_contracts/;
 const MONEY = /UPDATE teams SET budget = budget \+/;
+const END_OLD = /^UPDATE sponsor_contracts SET status = \? WHERE id = \? AND status = 'active'/;
+const NEW_GUARD = "EXISTS (SELECT 1 FROM sponsor_contracts WHERE id = ?)";
+/** Herní datum přesně v půlce sezóny: postup = půl sezóny v měsících. */
+const HALF = { game_date: "2026-10-01T00:00:00.000Z", season_start: "2026-09-01T00:00:00.000Z", season_end: "2026-10-31T00:00:00.000Z", league_id: "l1" };
+const START = { ...HALF, game_date: HALF.season_start };
 
-function db(extra: Pravidlo[] = []): FalesnaD1 {
-  return new FalesnaD1([...extra, { sql: MONEY, first: { budget: 1 } }]);
+function db(extra: Pravidlo[] = [], season = START): FalesnaD1 {
+  return new FalesnaD1([...extra, { sql: /SELECT game_date, season_start, season_end, league_id FROM teams/, first: season }]);
 }
+const batchQueries = (d: FalesnaD1): ZaznamDotazu[] => d.davky.flat();
+const money = (d: FalesnaD1): unknown[] => batchQueries(d).filter((q) => MONEY.test(q.sql)).map((q) => q.params[0]);
+const insertOf = (d: FalesnaD1): ZaznamDotazu => batchQueries(d).find((q) => INSERT_CONTRACT.test(q.sql))!;
 
 describe("signFromState", () => {
   it("podepíše přijatý návrh: smlouva s výpovědní pokutou a zálohou, příspěvek za podpis, název stadionu", async () => {
-    const d = db();
+    const d = db([], HALF);
     const res = await signFromState(jakoD1(d), state());
     expect(res).toMatchObject({ ok: true, newTeamName: null, reputationPenalty: 0 });
-    const ins = d.dotazy.find((q) => INSERT_CONTRACT.test(q.sql))!;
+    const ins = insertOf(d);
     // monthly × sezóny × 2
     expect(ins.params[8]).toBe(6000 * 2 * 2);
     expect(ins.params[2]).toBe("Truhlářství Novák Arena");
     expect(ins.params[11]).toBe(12000);
-    expect(d.pocet(MONEY)).toBe(1);
+    expect(JSON.parse(ins.params[12] as string)).toEqual({ items: [], startOffsetMonths: MPS / 2 });
+    expect(money(d)).toEqual([12000]);
+    expect(batchQueries(d).filter((q) => /INSERT INTO transactions/.test(q.sql))).toHaveLength(1);
+    // Všechno v jedné dávce, peníze jen se smlouvou.
+    expect(d.davky).toHaveLength(1);
+    expect(batchQueries(d).filter((q) => MONEY.test(q.sql)).every((q) => q.sql.includes(NEW_GUARD))).toBe(true);
     expect(d.dotazy.some((q) => /UPDATE teams SET stadium_name/.test(q.sql) && q.params[0] === "Truhlářství Novák Arena")).toBe(true);
   });
 
@@ -104,16 +123,21 @@ describe("signFromState", () => {
     const d = db([{ sql: CLAIM, changes: 0 }]);
     const res = await signFromState(jakoD1(d), state());
     expect(res).toMatchObject({ ok: false, status: 409 });
-    expect(d.pocet(INSERT_CONTRACT)).toBe(0);
-    expect(d.pocet(MONEY)).toBe(0);
+    expect(d.davky).toHaveLength(0);
   });
 
-  it("firma mezitím podepsala jinde: jednání se vrátí do původního stavu, bez peněz", async () => {
+  it("firma mezitím podepsala jinde: jednání se vrátí do původního stavu", async () => {
     const d = db([{ sql: INSERT_CONTRACT, changes: 0 }]);
     const res = await signFromState(jakoD1(d), state());
     expect(res).toMatchObject({ ok: false, status: 409 });
     expect(d.dotazy.some((q) => /SET status = \? WHERE id = \? AND status = 'signed'/.test(q.sql) && q.params[0] === "accepted")).toBe(true);
-    expect(d.pocet(MONEY)).toBe(0);
+  });
+
+  it("pád dávky: jednání se vrátí a chyba letí dál", async () => {
+    const d = db();
+    d.batch = async () => { throw new Error("D1 down"); };
+    await expect(signFromState(jakoD1(d), state())).rejects.toThrow("D1 down");
+    expect(d.dotazy.some((q) => /AND status = 'signed'/.test(q.sql) && q.params[0] === "accepted")).toBe(true);
   });
 
   it("znovu ověří contractBlock: firma z jiného okresu, 409 bez zámku", async () => {
@@ -126,10 +150,9 @@ describe("signFromState", () => {
 
   it("znovu ověří podmínky: stavba, kterou už mezitím klub postavil, podepsat nejde", async () => {
     const withBuild: Proposal = { ...TERMS, demands: { ...TERMS.demands, construction: "vip_box" } };
-    const rounds: NegotiationRound[] = [{ proposal: withBuild, response: { kind: "accept", text: "Beru.", gameDate: "2026-09-24T00:00:00.000Z" } }];
     const ctx = { ...FULL_CTX, facilities: [{ facility: "vip_box", currentLevel: 3, locked: true, costs: [0, 55000, 170000, 450000] }] };
     const d = db();
-    const res = await signFromState(jakoD1(d), state({ ctx }, { rounds, roundsRaw: JSON.stringify(rounds) }));
+    const res = await signFromState(jakoD1(d), state({ ctx }, {}, withBuild));
     expect(res).toMatchObject({ ok: false, status: 409 });
     expect(d.pocet(CLAIM)).toBe(0);
   });
@@ -139,54 +162,142 @@ describe("signFromState", () => {
     expect(await signFromState(jakoD1(db()), state({}, { status: "signed" }))).toMatchObject({ ok: false, status: 409 });
   });
 
-  it("přechod od jiné firmy: pokutu zaplatí nový sponzor a stará záloha se vrací", async () => {
-    const terms: Proposal = { ...TERMS, demands: { ...TERMS.demands, payCurrentFee: true } };
-    const rounds: NegotiationRound[] = [{ proposal: terms, response: { kind: "accept", text: "Beru.", gameDate: "2026-09-24T00:00:00.000Z" } }];
-    const old = { id: "c-old", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 2, early_termination_fee: 18000, status: "active" as const };
-    const d = db([{
-      sql: /SELECT id, seasons_total, seasons_remaining, signing_bonus, paid_construction, negotiation_id FROM sponsor_contracts/,
-      first: { id: "c-old", seasons_total: 3, seasons_remaining: 2, signing_bonus: 9000, paid_construction: null, negotiation_id: "n0" },
-    }]);
-    const res = await signFromState(jakoD1(d), state({
-      ctx: { ...FULL_CTX, currentTerminationFee: 12000 },
-      contracts: { active: old, lastExpired: null },
-    }, { rounds, roundsRaw: JSON.stringify(rounds) }));
+  it("protinabídka majitele se podepisuje ze stavu open", async () => {
+    const counter: Proposal = { ...TERMS, demands: { ...TERMS.demands, monthly: 5500, signingBonus: 8000 } };
+    const rounds: NegotiationRound[] = [{ proposal: TERMS, response: { kind: "counter_money", text: "Tolik ne.", counter, gameDate: "2026-09-24T00:00:00.000Z" } }];
+    const d = db();
+    const res = await signFromState(jakoD1(d), state({}, { status: "open", rounds, roundsRaw: JSON.stringify(rounds) }));
     expect(res.ok).toBe(true);
-    const money = d.dotazy.filter((q) => MONEY.test(q.sql)).map((q) => q.params[0]);
+    const claim = d.dotazy.find((q) => CLAIM.test(q.sql))!;
+    expect(claim.params).toEqual(["n1", "t1", "open", JSON.stringify(rounds)]);
+    expect(insertOf(d).params[4]).toBe(5500);
+    expect(money(d)).toEqual([8000]);
+  });
+
+  const OLD = { id: "c-old", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 2, early_termination_fee: 18000, status: "active" as const };
+  const OLD_ADVANCE: Pravidlo = {
+    sql: /SELECT id, seasons_total, seasons_remaining, signing_bonus, paid_construction, negotiation_id FROM sponsor_contracts/,
+    first: { id: "c-old", seasons_total: 3, seasons_remaining: 2, signing_bonus: 9000, paid_construction: JSON.stringify({ items: [], startOffsetMonths: 0 }), negotiation_id: "n0" },
+  };
+  const switchState = () => state({ ctx: { ...FULL_CTX, currentTerminationFee: 12000 }, contracts: { active: OLD, lastExpired: null } }, {},
+    { ...TERMS, demands: { ...TERMS.demands, payCurrentFee: true } });
+
+  it("přechod od jiné firmy: pokutu zaplatí nový sponzor, stará záloha se vrací, stará smlouva končí až po platbách", async () => {
+    const d = db([OLD_ADVANCE]);
+    const res = await signFromState(jakoD1(d), switchState());
+    expect(res.ok).toBe(true);
     // zaplacená pokuta +12000, příspěvek +12000, pokuta −12000, vratka 9000 × 2/3 = −6000
-    expect(money).toEqual([12000, 12000, -12000, -6000]);
-    const ins = d.dotazy.find((q) => INSERT_CONTRACT.test(q.sql))!;
-    expect(JSON.parse(ins.params[12] as string)).toEqual([{ kind: "current_fee", key: "c-old", level: 0, cost: 12000 }]);
+    expect(money(d)).toEqual([12000, 12000, -12000, -6000]);
+    expect(JSON.parse(insertOf(d).params[12] as string).items).toEqual([{ kind: "current_fee", key: "c-old", level: 0, cost: 12000 }]);
+    const q = batchQueries(d);
+    const endIdx = q.findIndex((x) => END_OLD.test(x.sql));
+    expect(endIdx).toBe(q.length - 1);
+    expect(q[endIdx].params.slice(0, 2)).toEqual(["terminated", "c-old"]);
+    // Platby za starou smlouvu jen dokud je aktivní.
+    const oldMoney = q.filter((x) => MONEY.test(x.sql) && x.params[0] !== 12000 || (MONEY.test(x.sql) && x.params.includes("c-old")));
+    expect(oldMoney.every((x) => x.params.includes("c-old") && /status = 'active'/.test(x.sql))).toBe(true);
+  });
+
+  it("stará smlouva mezitím skončila (výpověď, rollover): záloha bez zaplacené pokuty", async () => {
+    const d = db([OLD_ADVANCE, { sql: END_OLD, changes: 0 }]);
+    const res = await signFromState(jakoD1(d), switchState());
+    expect(res.ok).toBe(true);
+    const fix = d.dotazy.find((x) => /^UPDATE sponsor_contracts SET paid_construction/.test(x.sql))!;
+    expect(JSON.parse(fix.params[0] as string).items).toEqual([]);
+  });
+
+  it("prodloužení hned po podpisu: klub si ve výsledku nechá jen novou zálohu", async () => {
+    const one: Proposal = { ...TERMS, seasons: 1 };
+    const d1 = db([], HALF);
+    const first = await signFromState(jakoD1(d1), state({}, {}, one));
+    expect(first.ok).toBe(true);
+    const ins = insertOf(d1);
+    const signed = {
+      id: ins.params[0] as string, seasons_total: 1, seasons_remaining: 1, signing_bonus: ins.params[11] as number,
+      paid_construction: ins.params[12] as string, negotiation_id: "n1",
+    };
+    const renewTerms: Proposal = { ...TERMS, seasons: 2, demands: { ...TERMS.demands, signingBonus: 8000 } };
+    const d2 = db([{ sql: OLD_ADVANCE.sql, first: signed }], HALF);
+    const active = { id: signed.id, sponsor_id: 7, sponsor_name: "Truhlářství Novák Arena", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const };
+    const renewal = await signFromState(jakoD1(d2), state({ isRenewal: true, contracts: { active, lastExpired: null } }, { id: "n2" }, renewTerms));
+    expect(renewal.ok).toBe(true);
+    expect(money(d2)).toEqual([8000, -12000]);
+    const net = [...money(d1), ...money(d2)].reduce((s: number, v) => s + (v as number), 0);
+    expect(net).toBe(8000);
+    const end = batchQueries(d2).find((x) => END_OLD.test(x.sql))!;
+    expect(end.params.slice(0, 2)).toEqual(["expired", signed.id]);
+  });
+
+  it("prodloužení hlavního sponzora: zápis hlídá exkluzivitu, klub se nepřejmenuje", async () => {
+    const active = { id: "c-main", sponsor_id: 7, sponsor_name: "Truhlářství Novák s.r.o.", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const };
+    const d = db();
+    const res = await signFromState(jakoD1(d), state({
+      ctx: { ...FULL_CTX, category: "main" }, isRenewal: true, contracts: { active, lastExpired: null },
+    }, { category: "main" }));
+    expect(res).toMatchObject({ ok: true, newTeamName: null, reputationPenalty: 0 });
+    const ins = insertOf(d);
+    expect(ins.sql).toContain(MAIN_SPONSOR_FREE_SQL);
+    expect(ins.params.slice(-3)).toEqual(["main", 7, "t1"]);
+    expect(ins.params[2]).toBe("Truhlářství Novák s.r.o.");
+    expect(d.dotazy.some((q) => /UPDATE teams SET name/.test(q.sql))).toBe(false);
   });
 });
 
 describe("vratka zálohy", () => {
   const base: AdvanceContract = {
     id: "c1", seasons_total: 2, seasons_remaining: 1, signing_bonus: 12000,
-    paid_construction: JSON.stringify([{ kind: "stadium", key: "vip_box", level: 2, cost: 170000 }, { kind: "current_fee", key: "c0", level: 0, cost: 4000 }]),
+    paid_construction: JSON.stringify({
+      items: [{ kind: "stadium", key: "vip_box", level: 2, cost: 170000 }, { kind: "current_fee", key: "c0", level: 0, cost: 4000 }],
+      startOffsetMonths: 0,
+    }),
     negotiation_id: "n1",
   };
 
-  it("součty podle druhu", () => {
-    expect(advanceItemsTotals(base.paid_construction, "c1")).toEqual({ construction: 170000, equipment: 0, paidFee: 4000 });
-    expect(advanceItemsTotals("nesmysl", "c1")).toEqual({ construction: 0, equipment: 0, paidFee: 0 });
+  it("součty podle druhu, starý tvar pole i nesmysl", () => {
+    expect(advanceItemsTotals(parseAdvance(base.paid_construction, "c1").items)).toEqual({ construction: 170000, equipment: 0, paidFee: 4000 });
+    expect(parseAdvance(JSON.stringify([{ kind: "equipment", key: "balls", level: 1, cost: 6000 }]), "c1").items).toHaveLength(1);
+    expect(parseAdvance("nesmysl", "c1")).toEqual({ items: [], startOffsetMonths: 0 });
   });
 
-  it("po jedné ze dvou sezón vrací klub polovinu, včetně vyplacených termínových bonusů", async () => {
+  it("postup sezóny v měsících", () => {
+    expect(seasonProgressMonths({ start: HALF.season_start, end: HALF.season_end }, HALF.game_date)).toBeCloseTo(MPS / 2, 6);
+    expect(seasonProgressMonths({ start: HALF.season_start, end: HALF.season_end }, "2026-08-01T00:00:00.000Z")).toBe(0);
+    expect(seasonProgressMonths({ start: HALF.season_start, end: HALF.season_end }, "2027-01-01T00:00:00.000Z")).toBe(MPS);
+    expect(seasonProgressMonths(null, HALF.game_date)).toBe(0);
+  });
+
+  it("podpis těsně před rolloverem: po rolloveru je skoro celá záloha nesplacená", () => {
+    const offset = MPS * 0.98;
+    const r = clawbackAmount({ oneTimeTotal: 10000, seasonsTotal: 2, seasonsRemaining: 1, startOffsetMonths: offset, progressMonths: 0 });
+    // smlouva trvá 2 × MPS − offset, uplynulo MPS − offset = 0,02 MPS
+    expect(r).toBe(Math.round((10000 * MPS) / (2 * MPS - offset)));
+    expect(r).toBeGreaterThan(9800);
+  });
+
+  it("výpověď pozdě v sezóně podpisu: vrací se jen zbytek od podpisu", () => {
+    const offset = MPS * 0.2;
+    const progress = MPS * 0.9;
+    const r = clawbackAmount({ oneTimeTotal: 10000, seasonsTotal: 1, seasonsRemaining: 1, startOffsetMonths: offset, progressMonths: progress });
+    const length = MPS - offset;
+    expect(r).toBe(Math.round((10000 * (length - (progress - offset))) / length));
+    expect(r).toBe(1250);
+  });
+
+  it("na konci smlouvy nic, před podpisem (hodiny zpět) celá záloha", () => {
+    expect(clawbackAmount({ oneTimeTotal: 10000, seasonsTotal: 2, seasonsRemaining: 1, startOffsetMonths: 1, progressMonths: MPS })).toBe(0);
+    expect(clawbackAmount({ oneTimeTotal: 10000, seasonsTotal: 2, seasonsRemaining: 2, startOffsetMonths: 1, progressMonths: 0 })).toBe(10000);
+  });
+
+  it("po jedné ze dvou sezón (podpis na startu) vrací klub polovinu, včetně vyplacených termínových bonusů", async () => {
     const d = new FalesnaD1([{ sql: /FROM sponsor_promises/, first: { total: 2000 } }]);
-    expect(await contractClawback(jakoD1(d), base)).toBe(Math.round(((12000 + 170000 + 4000 + 2000) * MONTHS_PER_SEASON) / (2 * MONTHS_PER_SEASON)));
+    expect(await contractClawback(jakoD1(d), base, 0)).toBe(Math.round((12000 + 170000 + 4000 + 2000) / 2));
     const q = d.dotazy.find((x) => /FROM sponsor_promises/.test(x.sql))!;
     expect(q.params).toEqual(["c1", "coach_licence", "stadium_upgrade", "jersey_logo"]);
   });
 
   it("smlouva bez jednání nic nevrací", async () => {
     const d = new FalesnaD1();
-    expect(await contractClawback(jakoD1(d), { ...base, negotiation_id: null })).toBe(0);
+    expect(await contractClawback(jakoD1(d), { ...base, negotiation_id: null }, 0)).toBe(0);
     expect(d.dotazy).toHaveLength(0);
-  });
-
-  it("smlouva podepsaná letos vrací všechno", async () => {
-    const d = new FalesnaD1([{ sql: /FROM sponsor_promises/, first: { total: 0 } }]);
-    expect(await contractClawback(jakoD1(d), { ...base, seasons_remaining: 2, paid_construction: null })).toBe(12000);
   });
 });
