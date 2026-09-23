@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { formatCZK } from "@/lib/sponsor-owners";
-import { seasonsAccusative } from "@/lib/sponsor-format";
+import { seasonsAccusative, remainingSeasonsText } from "@/lib/sponsor-format";
 import type {
   DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorsData,
 } from "@/lib/sponsor-page-types";
@@ -173,7 +173,7 @@ export default function SponsorsPage() {
     const details = [
       { label: "Sankce", value: `-${formatCZK(fee)}`, color: "text-card-red" },
     ];
-    let description = `Zbývá ${contract.seasonsRemaining} sezón ze smlouvy s ${contract.sponsorName}.`;
+    let description = `${remainingSeasonsText(contract.seasonsRemaining)} ze smlouvy s ${contract.sponsorName}.`;
     if (isMain) {
       details.push({ label: "Dopad na reputaci", value: "-2 reputace", color: "text-card-red" });
       if (!data?.canChangeMainSponsor) {

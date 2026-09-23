@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Card, CardBody, SectionLabel } from "@/components/ui";
 import { formatCZK } from "@/lib/sponsor-owners";
-import { seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
+import { seasonsAccusative, weeklyAmount, seasonsGenitive } from "@/lib/sponsor-format";
 import type { ActiveContract, SponsorCategory, SponsorOffer, SponsorsData } from "@/lib/sponsor-page-types";
 import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { FavorLine } from "./favor-badge";
@@ -138,7 +138,7 @@ function ContractCard({ contract, favor, onTerminate, onRenew, acting }: {
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums">
           <span className="text-pitch-500 font-heading font-bold">+{formatCZK(weeklyAmount(contract.monthlyAmount))}/týd</span>
           {contract.winBonus > 0 && <span className="text-pitch-400">+{formatCZK(contract.winBonus)} za výhru</span>}
-          <span className="text-muted">zbývá {contract.seasonsRemaining} z {contract.seasonsTotal} sezón</span>
+          <span className="text-muted">zbývá {contract.seasonsRemaining} z {contract.seasonsTotal} {seasonsGenitive(contract.seasonsTotal)}</span>
           <span className="text-card-red">sankce {formatCZK(contract.earlyTerminationFee)}</span>
         </div>
         {favor != null && <FavorLine favor={favor} />}

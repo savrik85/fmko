@@ -10,6 +10,23 @@ export function seasonsAccusative(n: number): string {
   return `${n} ${n === 1 ? "sezónu" : n >= 2 && n <= 4 ? "sezóny" : "sezón"}`;
 }
 
+/** „1 sezóna“, „3 sezóny“, „5 sezón“ (1. pád, nominativ). */
+export function seasonsNominative(n: number): string {
+  return `${n} ${n === 1 ? "sezóna" : n >= 2 && n <= 4 ? "sezóny" : "sezón"}`;
+}
+
+/** Zbývající sezóny se správnou shodou: „Zbývá 1 sezóna“, „Zbývají 2 sezóny“, „Zbývá 5 sezón“. */
+export function remainingSeasonsText(n: number): string {
+  const sezonsForm = n === 1 ? "sezóna" : n >= 2 && n <= 4 ? "sezóny" : "sezón";
+  const verb = n >= 2 && n <= 4 ? "Zbývají" : "Zbývá";
+  return `${verb} ${n} ${sezonsForm}`;
+}
+
+/** Sezóny v genitivu po předložce „z“ (2. pád): „z 1 sezóny“, „z 2 sezón“, „z 5 sezón“. */
+export function seasonsGenitive(n: number): string {
+  return n === 1 ? "sezóny" : "sezón";
+}
+
 /** Změna se znaménkem; mínus je obyčejný spojovník, nikdy dlouhá pomlčka. */
 export function formatFavorDelta(delta: number): string {
   return delta > 0 ? `+${delta}` : String(delta);
