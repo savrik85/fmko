@@ -106,3 +106,59 @@ export async function sendLeaderSMS(
     return null;
   }
 }
+
+/**
+ * Pošle zprávu OD MAJITELE FIRMY (sponzora) a otevře vlákno pro odpověď.
+ *
+ * Stejný princip jako `sendLeaderSMS`: konverzace klíčovaná `participant_id`
+ * (`so-{sponsorId}`), avatar z obličeje majitele, odpověď zpracuje
+ * `handleOwnerSmsReply` bez modelu (iMessage, zdarma). Nabídka odpovědí jde do
+ * `messages.metadata`, telefon z ní dělá tlačítka.
+ */
+export async function sendOwnerSMS(
+  db: D1Database,
+  teamId: string,
+  owner: { sponsorId: number; name: string; firmName: string | null; avatar: string },
+  body: string,
+  opts: { smsId: string; options: Array<{ id: string; label: string; text: string }> },
+): Promise<string | null> {
+  const participantId = `so-${owner.sponsorId}`;
+  const title = owner.firmName ? `${owner.name} (${owner.firmName})` : owner.name;
+  try {
+    let convId = await db
+      .prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND participant_id = ?")
+      .bind(teamId, participantId).first<{ id: string }>().then((r) => r?.id);
+
+    if (!convId) {
+      convId = crypto.randomUUID();
+      await db.prepare(
+        `INSERT INTO conversations
+          (id, team_id, type, title, participant_id, participant_avatar, pinned, unread_count,
+           last_message_text, last_message_at, created_at)
+         VALUES (?, ?, 'system', ?, ?, ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
+      ).bind(convId, teamId, title, participantId, owner.avatar).run();
+    }
+
+    await db.prepare(
+      `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at)
+       VALUES (?, ?, 'system', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
+    ).bind(crypto.randomUUID(), convId, participantId, owner.name, body,
+      JSON.stringify({ type: "sponsor_owner", smsId: opts.smsId, options: opts.options })).run();
+
+    await db.prepare(
+      `UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, title = ?,
+         last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         ai_thread_active = 1, ai_thread_state = ?
+       WHERE id = ?`,
+    ).bind(
+      body.slice(0, 100), title,
+      JSON.stringify({ kind: "sponsor_owner", smsId: opts.smsId, sponsorId: owner.sponsorId, awaiting: "coach" }),
+      convId,
+    ).run();
+
+    return convId;
+  } catch (e) {
+    logger.warn({ module: "system-sms", teamId }, `SMS od majitele firmy ${owner.sponsorId}`, e);
+    return null;
+  }
+}
