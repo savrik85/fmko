@@ -127,12 +127,16 @@ export function validateProposal(raw: unknown, ctx: NegotiationContext): Result 
   if (!r.demands || typeof r.demands !== "object") return fail("Chybí požadavky");
   const d = r.demands as Record<string, unknown>;
   const b = ctx.budgetB;
+  const kc = (n: number) => `${Math.floor(n).toLocaleString("cs-CZ")} Kč`;
   const monthly = money(d.monthly, 3 * b);
-  if (monthly === null || monthly <= 0) return fail("Měsíční podpora musí být kladná a v rozumné výši");
+  if (monthly === null || monthly <= 0) {
+    return fail(`Měsíční podpora musí být kladná a nejvýš ${kc(3 * b)}, víc firma nemá.`);
+  }
   const winBonus = money(d.winBonus, b);
-  if (winBonus === null || (ctx.category === "stadium" && winBonus > 0)) return fail("Neplatný bonus za výhru");
+  if (ctx.category === "stadium" && (winBonus ?? 0) > 0) return fail("Bonus za výhru dává jen hlavní sponzor.");
+  if (winBonus === null) return fail(`Bonus za výhru může být nejvýš ${kc(b)}.`);
   const signingBonus = money(d.signingBonus, 12 * b);
-  if (signingBonus === null) return fail("Neplatný příspěvek za podpis");
+  if (signingBonus === null) return fail(`Příspěvek za podpis může být nejvýš ${kc(12 * b)}, víc firma nemá.`);
 
   const goalBonuses: Partial<Record<PromiseKind, number>> = {};
   const rawGoals = d.goalBonuses ?? {};
