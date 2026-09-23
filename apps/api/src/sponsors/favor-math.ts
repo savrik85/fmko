@@ -76,6 +76,9 @@ export const FAVOR_REASONS = {
   pubBeer: "pivo v hospodě",
   riot: "výtržnost fanoušků",
   seasonPartnership: "sezóna spolupráce s hlavním sponzorem",
+  smsReply: "odpověď na SMS",
+  smsDismissed: "odbytá SMS",
+  smsIgnored: "bez odpovědi na SMS",
 } as const;
 
 /** Důvod změny po zápase, na kterém majitel seděl: výsledek a skóre z pohledu domácích. */
