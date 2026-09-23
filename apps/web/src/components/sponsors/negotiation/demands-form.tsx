@@ -3,7 +3,7 @@
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import {
-  allowedSeasonsOf, bonusAwareOneTime, contractMonthsOf, findOption, minMonthlyFor, PROMISE_LABELS, type Demands, type NegotiationView, type Proposal,
+  allowedSeasonsOf, findOption, PROMISE_LABELS, proposalOneTimeTotal, type Demands, type NegotiationView, type Proposal,
 } from "@/lib/sponsor-negotiation";
 
 function MoneyInput({ label, hint, value, onChange }: { label: string; hint?: string; value: number; onChange: (v: number) => void }) {
@@ -26,12 +26,7 @@ export function DemandsForm({ view, proposal, onChange }: {
   const d = proposal.demands;
   const set = (patch: Partial<Demands>) => onChange({ ...proposal, demands: { ...d, ...patch } });
   const switching = view.current && !view.current.sameSponsor && view.current.terminationFee > 0;
-  // Pravidlo o měsíční polovině (server: meetsMonthlyShare) počítá se všemi jednorázovými
-  // položkami a bonusy za splnění (bonusAwareOneTime): ukázat hned u darů, ať je jasné,
-  // proč server návrh odmítne, když je měsíční podpora moc nízká.
-  const months = contractMonthsOf(view, proposal.seasons);
-  const oneTime = bonusAwareOneTime(view, proposal);
-  const minMonthly = minMonthlyFor(oneTime, months);
+  const oneTime = proposalOneTimeTotal(view, proposal);
   const allowedSeasons = allowedSeasonsOf(view);
 
   return (
@@ -100,7 +95,7 @@ export function DemandsForm({ view, proposal, onChange }: {
 
       {oneTime > 0 && (
         <p className="text-sm text-muted">
-          Podpis, dary a bonusy za splnění jsou jednorázové. Aby platilo pravidlo o měsíční podpoře, musí být měsíčně aspoň {formatCZK(minMonthly)}.
+          Jednorázové peníze jsou záloha, při předčasném konci smlouvy se nesplacená část vrací.
         </p>
       )}
 

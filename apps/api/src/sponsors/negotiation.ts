@@ -30,13 +30,6 @@ export const MAX_SEASONS = 3;
 export const CAUTIOUS_SEASON_BONUS = 0.05;
 /** Nejvíc slibů v jednom návrhu (validateProposal i protinabídka za přání). */
 export const MAX_PROMISES = 8;
-/**
- * Aspoň tolik z měsíčního ekvivalentu smlouvy (měsíčně + jednorázové položky a všechny bonusy za
- * splnění, i sezónní / měsíce) musí chodit jako měsíční podpora. Jinak by klub dal všechno do
- * podpisového příspěvku nebo velkých bonusů za splnění, měsíčně 1 Kč, a výpovědní pokuta
- * (počítá se jen z měsíční podpory) by byla směšná.
- */
-export const MIN_MONTHLY_SHARE = 0.5;
 /** Ambice na podlaze (≤ 0,3, clamp v ambition.ts) = slib je fakticky jistý, nemá dávat hodnotu ani šanci pod jistotu. */
 const FLOOR_AMBITION = 0.3;
 /** Tolerance porovnání cen v Kč (plovoucí čárka). */
@@ -274,9 +267,8 @@ export function deadlineGoalBonusTotal(proposal: Proposal): number {
 
 /**
  * Jednorázové položky návrhu v Kč: podpisový příspěvek, stavba, vybavení, doplacená pokuta podle ceníku
- * a bonusy za splnění termínových slibů (deadlineGoalBonusTotal). Pro pravidlo o měsíční polovině
- * (MIN_MONTHLY_SHARE) se nepoužívá samotné, ale přes bonusAwareOneTime (přidává i sezónní bonusy).
- * Pro vratku zálohy (advanceClawback) je tohle přesně to, co se počítá (oneTimeTotal v signing.ts).
+ * a bonusy za splnění termínových slibů (deadlineGoalBonusTotal). Pro vratku zálohy (advanceClawback)
+ * je tohle přesně to, co se počítá (oneTimeTotal v signing.ts).
  */
 export function proposalOneTimeTotal(proposal: Proposal, ctx: NegotiationContext): number {
   const d = proposal.demands;
@@ -289,47 +281,6 @@ export function proposalOneTimeTotal(proposal: Proposal, ctx: NegotiationContext
   });
 }
 
-/**
- * Součet bonusů za splnění u SEZÓNNÍCH slibů (umístění, postup, nesestup, pohár, mladí, žádné
- * výtržnosti). Na rozdíl od termínových se může za dobu smlouvy vyplatit vícekrát — jednou za
- * každou sezónu smlouvy —, takže se pro pravidlo o měsíční polovině počítá celý potenciál:
- * bonus × počet sezón smlouvy (proposal.seasons).
- */
-export function seasonalGoalBonusTotal(proposal: Proposal): number {
-  return proposal.promises
-    .filter((p) => SEASONAL_KINDS.has(p.kind))
-    .reduce((s, p) => s + (proposal.demands.goalBonuses[p.kind] ?? 0) * proposal.seasons, 0);
-}
-
-/**
- * Vstup pro pravidlo o měsíční polovině (MIN_MONTHLY_SHARE): jednorázové položky
- * (proposalOneTimeTotal) rozšířené o sezónní bonusy za splnění (seasonalGoalBonusTotal). Sezónní
- * bonus je opakovaná platba po splnění, ne záloha na celou smlouvu — proto se počítá jen sem,
- * NE do vratky (advanceClawback / oneTimeTotal v signing.ts zůstává beze změny).
- */
-export function bonusAwareOneTime(proposal: Proposal, ctx: NegotiationContext): number {
-  return proposalOneTimeTotal(proposal, ctx) + seasonalGoalBonusTotal(proposal);
-}
-
-/**
- * Nejnižší celá měsíční podpora, se kterou platí monthly ≥ MIN_MONTHLY_SHARE × (monthly + jednorázové / měsíce).
- * Aspoň 1 Kč (smlouva bez měsíčního závazku nejde).
- */
-export function minMonthlyFor(oneTime: number, months: number): number {
-  const need = (MIN_MONTHLY_SHARE / (1 - MIN_MONTHLY_SHARE)) * (oneTime / Math.max(EPS, months));
-  return Math.max(1, Math.ceil(need - EPS));
-}
-
-/**
- * Platí pravidlo, že aspoň polovina podpory chodí měsíčně? Počítá se ze všech bonusů za splnění
- * (bonusAwareOneTime) a skutečné délky smlouvy (proposalMonths).
- */
-export function meetsMonthlyShare(proposal: Proposal, ctx: NegotiationContext): boolean {
-  const m = proposalMonths(proposal, ctx);
-  const d = proposal.demands;
-  return d.monthly + EPS >= MIN_MONTHLY_SHARE * (d.monthly + bonusAwareOneTime(proposal, ctx) / m);
-}
-
 function withAmount(d: Demands, key: CostKey, value: number): void {
   if (key === "monthly") d.monthly = value;
   else if (key === "winBonus") d.winBonus = value;
@@ -339,14 +290,13 @@ function withAmount(d: Demands, key: CostKey, value: number): void {
 
 /**
  * Protinabídka „sleva": ubírá peněžní položky od nejdražší (po celých stovkách dolů),
- * dokud cena nesedne na O. Stavbu, vybavení a pokutu neubírá. Měsíční podpora neklesne pod
- * minMonthlyFor (aspoň polovina podpory měsíčně, MIN_MONTHLY_SHARE); když ji to zastaví a jednorázové
- * položky se pak ubraly, druhý průchod ubere z měsíční podpory zbytek. null = nejde to.
+ * dokud cena nesedne na O. Stavbu, vybavení a pokutu neubírá. Měsíční podpora neklesne pod 1 Kč
+ * (smlouva bez měsíčního závazku nejde); když ji to zastaví a jednorázové položky se pak ubraly,
+ * druhý průchod ubere z měsíční podpory zbytek. null = nejde to.
  */
 export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext, target: number): Proposal | null {
   let excess = requestCost(proposal, ctx) - target;
   const demands: Demands = { ...proposal.demands, goalBonuses: { ...proposal.demands.goalBonuses } };
-  const m = proposalMonths(proposal, ctx);
   const items = costBreakdown(proposal, ctx)
     .filter((i) => i.reducible && i.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly);
@@ -355,8 +305,8 @@ export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext,
     for (const it of items) {
       if (excess <= EPS) break;
       const amount = amounts.get(it.key) ?? 0;
-      // Měsíční podpora nikdy neklesne na 0 ani pod polovinu podpory (jednorázové i sezónní bonusy podle aktuálního stavu).
-      const floor = it.key === "monthly" ? minMonthlyFor(bonusAwareOneTime({ ...proposal, demands }, ctx), m) : 0;
+      // Měsíční podpora nikdy neklesne pod 1 Kč (smlouva bez měsíčního závazku nejde).
+      const floor = it.key === "monthly" ? 1 : 0;
       if (amount <= floor) continue;
       // EPS: plovoucí čárka (0,7 × B = 6999,9999…) nesmí přidat stovku navíc.
       const cut = Math.min(amount - floor, Math.ceil((excess / it.perUnit - EPS) / 100) * 100);
@@ -366,9 +316,7 @@ export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext,
     }
   }
   if (excess > EPS) return null;
-  const reduced = { ...proposal, demands };
-  // Pojistka: protinabídka nikdy neporuší pravidlo o měsíční polovině (třeba když ho nesplňoval už vstup).
-  return meetsMonthlyShare(reduced, ctx) ? reduced : null;
+  return { ...proposal, demands };
 }
 
 /**
@@ -471,8 +419,8 @@ function floorHundreds(v: number): number {
  * jeho přání jako sliby (defaultPromise, jen platné a něco nesoucí, max MAX_PROMISES, jeden cíl
  * v lize) a peníze za podíl ochoty podle povahy (OPENING_OFFER_SHARE). Z toho asi
  * OPENING_SIGNING_SHARE celé hodnoty smlouvy jde jako příspěvek za podpis, zbytek měsíčně, obojí
- * dolů na stovky. Bez bonusů za výhru a za splnění. Cena ≤ ochota a pravidlo o měsíční polovině
- * platí vždy (jinak nabídka spadne na samotnou měsíční podporu). Deterministická (bez RNG).
+ * dolů na stovky. Bez bonusů za výhru a za splnění. Cena ≤ ochota platí vždy (jinak nabídka
+ * spadne na samotnou měsíční podporu). Deterministická (bez RNG).
  */
 export function openingOffer(ctx: NegotiationContext, personality: OwnerPersonality = ctx.personality): Proposal {
   const allowed = allowedContractSeasons(ctx.seasonProgressMonths);
@@ -500,8 +448,8 @@ export function openingOffer(ctx: NegotiationContext, personality: OwnerPersonal
   const signingBonus = floorHundreds(target * m * OPENING_SIGNING_SHARE[personality]);
   const monthly = Math.max(1, floorHundreds(target - signingBonus / m));
   const offer: Proposal = { ...proposal, demands: { ...base.demands, monthly, signingBonus } };
-  if (requestCost(offer, ctx) <= o + EPS && meetsMonthlyShare(offer, ctx)) return offer;
-  // Pojistka (drobný rozpočet, zaokrouhlení): jen měsíční podpora, ta obě pravidla splní vždy.
+  if (requestCost(offer, ctx) <= o + EPS) return offer;
+  // Pojistka (drobný rozpočet, zaokrouhlení): jen měsíční podpora, ta cenu pod ochotu splní vždy.
   return { ...proposal, demands: { ...base.demands, monthly: Math.max(1, floorHundreds(target)) } };
 }
 
@@ -557,10 +505,8 @@ export function earlyTerminationFee(i: { monthly: number; seasons: number }): nu
 
 /**
  * Součet jednorázových položek smlouvy: podpisový příspěvek, stavba, vybavení, doplacená stará pokuta
- * a bonusy za splnění termínových slibů. Pro pravidlo o měsíční polovině (bonusAwareOneTime) jdou
- * do součtu všechny sjednané termínové bonusy PLUS sezónní bonusy (seasonalGoalBonusTotal, mimo
- * tuhle funkci); pro vratku (advanceClawback) jen ty termínové, které sponzor už VYPLATIL —
- * sezónní bonusy jsou opakovaná platba po splnění, ne záloha, do vratky nepatří.
+ * a bonusy za splnění termínových slibů, které sponzor už VYPLATIL. Sezónní bonusy jsou opakovaná
+ * platba po splnění, ne záloha na celou smlouvu, proto do vratky (advanceClawback) nepatří.
  */
 export function oneTimeTotal(demands: {
   signingBonus: number; construction: number; equipment: number; paidFee: number; deadlineGoalBonuses?: number;

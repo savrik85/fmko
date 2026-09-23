@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { MONTHS_PER_SEASON } from "./ambition";
-import { contractMonths, minMonthlyFor, type NegotiationContext } from "./negotiation";
+import { evaluateRound, requestCost, willingness, type NegotiationContext } from "./negotiation";
 import { GOAL_BONUS_KINDS, LEAGUE_MOVEMENT_ENABLED, NOT_OFFERABLE_ERROR, OFFERABLE_KINDS } from "./promise-kinds";
 import { constructionOptions, promiseCatalog, validateProposal } from "./proposal";
 
@@ -60,17 +60,17 @@ describe("validateProposal", () => {
   });
   it("zamčená stavba neprojde, odemčená ano", () => {
     expect(ok({ seasons: 2, promises: [], demands: { ...demands, construction: "roof" } }).ok).toBe(false);
-    // Tribuny za 170 000 na 2 sezóny = 22 844 Kč měsíčně, měsíční podpora musí být aspoň tolik.
-    expect(ok({ seasons: 2, promises: [], demands: { ...demands, monthly: 23000, construction: "stands" } }).ok).toBe(true);
+    expect(ok({ seasons: 2, promises: [], demands: { ...demands, construction: "stands" } }).ok).toBe(true);
   });
-  it("aspoň polovina podpory musí chodit měsíčně (monthly = 1 a velký podpisový příspěvek neprojde)", () => {
-    const err = { ok: false, error: "Aspoň polovina podpory musí chodit měsíčně." };
-    expect(ok({ seasons: 2, promises: [], demands: { ...demands, monthly: 1, signingBonus: 100000 } })).toEqual(err);
-    // Stavba se počítá taky: 170 000 / 7,44 měsíce = 22 844 Kč, 6000 měsíčně je málo.
-    expect(ok({ seasons: 2, promises: [], demands: { ...demands, construction: "stands" } })).toEqual(err);
-    // Hrana: 2 sezóny = 7,4419 měsíce, podpis 44 651 → potřeba 6000 měsíčně, projde; o 100 víc už ne.
-    expect(ok({ seasons: 2, promises: [], demands: { ...demands, signingBonus: 44651 } }).ok).toBe(true);
-    expect(ok({ seasons: 2, promises: [], demands: { ...demands, signingBonus: 44751 } })).toEqual(err);
+  it("malá měsíční podpora s velkým podpisovým příspěvkem v rámci stropů je platná (pravidlo o měsíční polovině zrušeno); majitel ji vyhodnotí podle ceny vs. ochotu jako jindy", () => {
+    const raw = { seasons: 2, promises: [], demands: { ...demands, monthly: 1, signingBonus: 20000 } };
+    const r = validateProposal(raw, CTX);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const cost = requestCost(r.proposal, CTX);
+    const o = willingness(r.proposal, CTX);
+    expect(cost).toBeLessThanOrEqual(o + 1e-6);
+    expect(evaluateRound(r.proposal, CTX)).toEqual({ kind: "accept" });
   });
   it("stavbu nejde zaplatit i slíbit", () => {
     const r = ok({
@@ -192,23 +192,14 @@ describe("bonus za splnění (kolo 5)", () => {
     const r = ok({ seasons: 2, promises: [{ kind: "youth", params: { count: 2 } }], demands: { ...base, goalBonuses: { youth: 1000 } } });
     expect(r.ok).toBe(true);
   });
-  it("případ z review: 1 sezóna, licence +1, měsíčně 1 Kč a bonus 27 900 → pravidlo o polovině", () => {
+  it("licence +1, měsíčně 1 Kč a velký bonus za splnění: platí, žádný spodní práh na měsíční podporu", () => {
     const promises = [{ kind: "coach_licence", params: { level: 2 } }];
-    const r = ok({ seasons: 1, promises, demands: { ...demands, monthly: 1, goalBonuses: { coach_licence: 27900 } } });
-    expect(r).toEqual({ ok: false, error: "Aspoň polovina podpory musí chodit měsíčně." });
-    expect(ok({ seasons: 1, promises, demands: { ...demands, monthly: 7499, goalBonuses: { coach_licence: 27900 } } }).ok).toBe(true);
+    expect(ok({ seasons: 1, promises, demands: { ...demands, monthly: 1, goalBonuses: { coach_licence: 27900 } } }).ok).toBe(true);
   });
-  it("ruling: sezónní bonusy (youth + no_riots) se do pravidla o polovině počítají taky, seasons × bonus", () => {
+  it("sezónní bonusy (youth + no_riots) i s malou měsíční podporou projdou", () => {
     const promises = [{ kind: "youth", params: { count: 2 } }, { kind: "no_riots", params: {} }];
     const goalBonuses = { youth: 20000, no_riots: 20000 };
-    const err = { ok: false, error: "Aspoň polovina podpory musí chodit měsíčně." };
-    // 3 sezóny, měsíčně 1 Kč, velké sezónní bonusy za splnění — dřív by prošlo (sezónní bonus se
-    // do jednorázových položek nepočítal), teď musí spadnout na pravidlo o polovině.
-    expect(ok({ seasons: 3, promises, demands: { ...demands, monthly: 1, goalBonuses } })).toEqual(err);
-    // Hranice: (20000 + 20000) × 3 sezóny = 120 000 Kč potenciálu, rozpočítané na měsíce smlouvy.
-    const need = minMonthlyFor((20000 + 20000) * 3, contractMonths(3));
-    expect(ok({ seasons: 3, promises, demands: { ...demands, monthly: need, goalBonuses } }).ok).toBe(true);
-    expect(ok({ seasons: 3, promises, demands: { ...demands, monthly: need - 1, goalBonuses } })).toEqual(err);
+    expect(ok({ seasons: 3, promises, demands: { ...demands, monthly: 1, goalBonuses } }).ok).toBe(true);
   });
   it("katalog nabízí bonus jen u povolených druhů", () => {
     const cat = promiseCatalog(CTX, 50);

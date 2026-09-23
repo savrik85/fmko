@@ -8,7 +8,7 @@ import { MONTHS_PER_SEASON } from "./ambition";
 import type { NegotiationContext, Proposal } from "./negotiation";
 import type { NegotiationRound, NegotiationState } from "./negotiation-db";
 import { MAIN_SPONSOR_FREE_SQL } from "./exclusivity";
-import { effectiveContractMonths, minMonthlyFor, openingOffer } from "./negotiation";
+import { effectiveContractMonths, openingOffer } from "./negotiation";
 import {
   OTHER_ACTIVE_IN_CATEGORY_FREE_SQL, viewWithClawback,
   advanceItemsTotals, clawbackAmount, contractClawback, paidConstructionItems, parseAdvance, seasonProgressMonths, signFromState,
@@ -275,11 +275,11 @@ describe("signFromState", () => {
     expect(end.params.slice(0, 2)).toEqual(["expired", signed.id]);
   });
 
-  describe("podmínky přijaté na hraně pravidla o měsíční polovině", () => {
-    // Postup při přijetí: smlouva na 2 sezóny má přesně 5 měsíců, 60 000 za podpis = 12 000 měsíčně na hraně.
-    const P0 = 2 * MPS - 5;
+  describe("podmínky přijaté na hraně nejkratší délky smlouvy", () => {
+    // 1 sezóna jde podepsat, jen dokud do konce sezóny zbývá aspoň měsíc (minContractSeasons).
+    const P0 = MPS - 1;
     const ONE_DAY = MPS / 112;
-    const floorTerms: Proposal = { ...TERMS, demands: { ...TERMS.demands, signingBonus: 60000, monthly: minMonthlyFor(60000, 5) } };
+    const floorTerms: Proposal = { ...TERMS, seasons: 1 };
     const acceptedAt = (progressMonths?: number): NegotiationRound[] => [{
       proposal: floorTerms,
       response: { kind: "accept", text: "Beru.", gameDate: "2026-09-24T00:00:00.000Z", ...(progressMonths !== undefined ? { progressMonths } : {}) },

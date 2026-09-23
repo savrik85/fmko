@@ -4,9 +4,9 @@
 import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
-  advanceClawback, afterReject, allowedContractSeasons, minContractSeasons, bonusAwareOneTime, buildPromiseRows, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
-  effectiveContractMonths, evaluateRound, initialPatience, openingOffer, OPENING_OFFER_SHARE, meetsMonthlyShare, minMonthlyFor, oneTimeTotal, proposalOneTimeTotal, promiseChance, promisePenalty,
-  promiseRowCount, promiseValueShare, reduceToWillingness, requestCost, seasonalGoalBonusTotal, willingness,
+  advanceClawback, afterReject, allowedContractSeasons, minContractSeasons, buildPromiseRows, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
+  effectiveContractMonths, evaluateRound, initialPatience, openingOffer, OPENING_OFFER_SHARE, oneTimeTotal, proposalOneTimeTotal, promiseChance, promisePenalty,
+  promiseRowCount, promiseValueShare, reduceToWillingness, requestCost, willingness,
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import { GOAL_BONUS_KINDS, type PromiseSpec } from "./promise-kinds";
@@ -123,9 +123,6 @@ describe("promiseChance", () => {
     const m = contractMonths(seasons);
     const youth: PromiseSpec[] = [{ kind: "youth", params: { count: 2 } }];
     const rows = promiseRowCount("youth", seasons);
-    // G 15 000: dřív tu bylo 30 000, ale to už teď nejde — bez měsíční podpory dost vysoké na to,
-    // aby splnila pravidlo o polovině (bonusAwareOneTime počítá i sezónní bonusy), by tenhle návrh
-    // vůbec neprošel validateProposal a k evaluateRound by se nedostal.
     const G = 15000;
     const o = willingness(prop({}, seasons, youth), CTX);
     expect(o).toBeCloseTo(7500, 6);
@@ -133,17 +130,15 @@ describe("promiseChance", () => {
     const monthly = Math.floor(o - (G * rows) / m + 1e-6);
     const accepted = prop({ monthly, goalBonuses: { youth: G } }, seasons, youth);
     expect(evaluateRound(accepted, CTX)).toEqual({ kind: "accept" });
-    expect(meetsMonthlyShare(accepted, CTX)).toBe(true);
     // Slib si klub splní sám, takže dostane měsíčně × měsíce + G za každou sezónu se slibem.
     expect(monthly * m + G * rows).toBeLessThanOrEqual(o * m + 1);
     expect(evaluateRound({ ...accepted, demands: { ...accepted.demands, monthly: monthly + 1 } }, CTX).kind).not.toBe("accept");
-    // Ani protinabídka nepustí klub nad O × měsíce, ani neporuší pravidlo o polovině.
+    // Ani protinabídka nepustí klub nad O × měsíce.
     const r = evaluateRound(prop({ monthly: monthly + 100, goalBonuses: { youth: G } }, seasons, youth), CTX);
     expect(r.kind).toBe("counter_money");
     if (r.kind === "counter_money") {
       const d = r.counter.demands;
       expect(d.monthly * m + (d.goalBonuses.youth ?? 0) * rows).toBeLessThanOrEqual(o * m + 1);
-      expect(meetsMonthlyShare(r.counter, CTX)).toBe(true);
     }
   });
 });
@@ -219,22 +214,13 @@ describe("evaluateRound", () => {
   it("stavbu ani pokutu sponzor neubírá", () => {
     expect(reduceToWillingness(prop({ construction: "toilets" }, 1), CTX, 3000)).toBeNull();
   });
-  it("sleva nestáhne měsíční podporu pod polovinu podpory, ubere radši z podpisu", () => {
-    const m = contractMonths(2);
-    // Stará sleva by vzala 1200 z měsíční (2900 < 30 000 / 7,44 = 4031) a porušila pravidlo.
-    const r = reduceToWillingness(prop({ monthly: 4100, signingBonus: 30000 }), CTX, 7000)!;
+  it("když se jedna položka vynuluje, druhý průchod pokračuje v ubírání z další", () => {
+    const r = reduceToWillingness(prop({ monthly: 1000, signingBonus: 60000 }), CTX, 100)!;
     expect(r).not.toBeNull();
-    expect(r.demands.monthly).toBe(minMonthlyFor(30000, m));
-    expect(r.demands.signingBonus).toBe(22000);
-    expect(meetsMonthlyShare(r, CTX)).toBe(true);
-    expect(requestCost(r, CTX)).toBeLessThanOrEqual(7000 + 1e-6);
+    expect(r.demands).toMatchObject({ monthly: 100, signingBonus: 0 });
+    expect(requestCost(r, CTX)).toBeLessThanOrEqual(100 + 1e-6);
   });
-  it("když se podpis ubere celý, druhý průchod ubere zbytek z měsíční", () => {
-    const r = reduceToWillingness(prop({ monthly: 4100, signingBonus: 30000 }), CTX, 3000)!;
-    expect(r.demands).toMatchObject({ monthly: 2932, signingBonus: 0 });
-    expect(meetsMonthlyShare(r, CTX)).toBe(true);
-  });
-  it("protinabídka nikdy neporuší pravidlo o měsíční polovině", () => {
+  it("protinabídka vždy sedí na cenu ≤ ochota, i po opakovaném ubírání přes různé kombinace položek", () => {
     const ctxs: NegotiationContext[] = [CTX, { ...CTX, wishes: ["league_position"] }, { ...CTX, personality: "cautious" }];
     let counters = 0;
     for (const ctx of ctxs) {
@@ -243,11 +229,9 @@ describe("evaluateRound", () => {
           for (const signingBonus of [0, 5000, 20000, 40000, 60000]) {
             for (const extra of [{}, { construction: "toilets" }, { equipment: "balls" }, { payCurrentFee: true }, { winBonus: 300 }]) {
               const p = prop({ monthly, signingBonus, ...extra }, seasons);
-              if (!meetsMonthlyShare(p, ctx)) continue;
               const r = evaluateRound(p, ctx);
               if (r.kind === "counter_money" || r.kind === "counter_wish") {
                 counters++;
-                expect(meetsMonthlyShare(r.counter, ctx)).toBe(true);
                 expect(requestCost(r.counter, ctx)).toBeLessThanOrEqual(willingness(r.counter, ctx) + 1e-6);
               }
             }
@@ -396,25 +380,17 @@ describe("bonus za splnění termínového slibu = jednorázová platba (kolo 5)
   const licence: PromiseSpec[] = [{ kind: "coach_licence", params: { level: 2 } }];
   const m1 = contractMonths(1);
 
-  it("počítá se do jednorázových položek (proposalOneTimeTotal), sezónní bonus tam ne — ten jde přes bonusAwareOneTime", () => {
+  it("bonus za termínový slib se počítá do jednorázových položek (proposalOneTimeTotal), sezónní bonus ne", () => {
     const p = prop({ monthly: 5000, signingBonus: 1000, goalBonuses: { coach_licence: 27900 } }, 1, licence);
     expect(deadlineGoalBonusTotal(p)).toBe(27900);
     expect(proposalOneTimeTotal(p, CTX)).toBe(28900);
     const seasonal = prop({ monthly: 5000, goalBonuses: { league_position: 2000 } }, 2, [{ kind: "league_position", params: { position: 7 } }]);
     expect(proposalOneTimeTotal(seasonal, CTX)).toBe(0);
-    // Dřív (do zavedení bonusAwareOneTime) sezónní bonus do pravidla o polovině vůbec nevstupoval —
-    // od téhle změny se počítá seasons × bonus (může se vyplatit každou sezónu smlouvy).
-    expect(seasonalGoalBonusTotal(seasonal)).toBe(4000);
-    expect(bonusAwareOneTime(seasonal, CTX)).toBe(4000);
   });
 
-  it("případ z review: B 10 000, fanoušek, 1 sezóna, licence +1, měsíčně 1 Kč a bonus 27 900 neprojde pravidlem o polovině", () => {
+  it("malá měsíční podpora s velkým bonusem za splnění je teď platná (pravidlo o polovině zrušeno)", () => {
     const p = prop({ monthly: 1, goalBonuses: { coach_licence: 27900 } }, 1, licence);
-    expect(meetsMonthlyShare(p, CTX)).toBe(false);
-    // 27 900 / (16 / 4,3) = 7498,125 → nejnižší měsíční 7499.
-    expect(minMonthlyFor(27900, m1)).toBe(7499);
-    expect(meetsMonthlyShare(prop({ monthly: 7499, goalBonuses: { coach_licence: 27900 } }, 1, licence), CTX)).toBe(true);
-    expect(meetsMonthlyShare(prop({ monthly: 7498, goalBonuses: { coach_licence: 27900 } }, 1, licence), CTX)).toBe(false);
+    expect(evaluateRound(p, CTX).kind).not.toBe("reject");
   });
 
   it("vratka zahrnuje už vyplacený bonus za splnění", () => {
@@ -427,13 +403,12 @@ describe("bonus za splnění termínového slibu = jednorázová platba (kolo 5)
     expect(27900 - advanceClawback({ oneTimeTotal: total, contractMonths: m1, monthsElapsed: 0 }) - fee).toBeLessThanOrEqual(0);
   });
 
-  it("sleva ubere bonus i měsíční podporu a výsledek drží polovinu měsíčně", () => {
+  it("sleva ubere bonus i měsíční podporu, cena zůstane ≤ ochota", () => {
     const p = prop({ monthly: 9000, goalBonuses: { coach_licence: 27900 } }, 1, licence);
     const o = willingness(p, CTX);
     const r = reduceToWillingness(p, CTX, o);
     expect(r).not.toBeNull();
     expect(requestCost(r!, CTX)).toBeLessThanOrEqual(o + 1e-6);
-    expect(meetsMonthlyShare(r!, CTX)).toBe(true);
   });
 
   it("protinabídky nikdy nepřidají bonus ke slibu, u kterého bonus nejde", () => {
@@ -449,7 +424,6 @@ describe("bonus za splnění termínového slibu = jednorázová platba (kolo 5)
           counters++;
           const keys = Object.entries(r.counter.demands.goalBonuses).filter(([, v]) => (v ?? 0) > 0).map(([k]) => k);
           expect(keys.every((k) => GOAL_BONUS_KINDS.has(k as never))).toBe(true);
-          expect(meetsMonthlyShare(r.counter, ctx)).toBe(true);
         }
       }
     }
@@ -457,27 +431,15 @@ describe("bonus za splnění termínového slibu = jednorázová platba (kolo 5)
   });
 });
 
-describe("sezónní bonusy za splnění v pravidle o měsíční polovině (nová ruling)", () => {
+describe("sezónní bonusy za splnění (bez pravidla o měsíční polovině)", () => {
   const seasonalPromises: PromiseSpec[] = [{ kind: "youth", params: { count: 2 } }, { kind: "no_riots", params: {} }];
 
-  it("3 sezóny, youth + no_riots, měsíčně 1 Kč a velké bonusy neprojdou pravidlem o polovině", () => {
+  it("3 sezóny, youth + no_riots, měsíčně 1 Kč a velké bonusy jsou teď v pořádku", () => {
     const p = prop({ monthly: 1, goalBonuses: { youth: 20000, no_riots: 20000 } }, 3, seasonalPromises);
-    // seasons × (youth + no_riots) = 3 × 40 000 = 120 000, žádné jednorázové položky navíc.
-    expect(seasonalGoalBonusTotal(p)).toBe(120000);
-    expect(bonusAwareOneTime(p, CTX)).toBe(120000);
-    expect(meetsMonthlyShare(p, CTX)).toBe(false);
+    expect(evaluateRound(p, CTX).kind).not.toBe("reject");
   });
 
-  it("stejný případ s dost vysokou měsíční podporou projde", () => {
-    const m3 = contractMonths(3);
-    const need = minMonthlyFor(120000, m3);
-    const enough = prop({ monthly: need, goalBonuses: { youth: 20000, no_riots: 20000 } }, 3, seasonalPromises);
-    expect(meetsMonthlyShare(enough, CTX)).toBe(true);
-    const tooLittle = prop({ monthly: need - 1, goalBonuses: { youth: 20000, no_riots: 20000 } }, 3, seasonalPromises);
-    expect(meetsMonthlyShare(tooLittle, CTX)).toBe(false);
-  });
-
-  it("protinabídka majitele nikdy neporuší pravidlo o polovině ani se sezónními bonusy za splnění", () => {
+  it("protinabídka majitele se sezónními bonusy za splnění pořád drží cenu ≤ ochota", () => {
     const ctxs: NegotiationContext[] = [CTX, { ...CTX, wishes: ["youth", "no_riots"] }, { ...CTX, personality: "cautious" }];
     let counters = 0;
     for (const ctx of ctxs) {
@@ -486,11 +448,10 @@ describe("sezónní bonusy za splnění v pravidle o měsíční polovině (nov�
           for (const goal of [0, 8000, 20000]) {
             const goalBonuses = goal ? { youth: goal, no_riots: goal } : {};
             const p = prop({ monthly, goalBonuses }, seasons, seasonalPromises);
-            if (!meetsMonthlyShare(p, ctx)) continue;
             const r = evaluateRound(p, ctx);
             if (r.kind === "counter_money" || r.kind === "counter_wish") {
               counters++;
-              expect(meetsMonthlyShare(r.counter, ctx)).toBe(true);
+              expect(requestCost(r.counter, ctx)).toBeLessThanOrEqual(willingness(r.counter, ctx) + 1e-6);
             }
           }
         }
@@ -523,9 +484,7 @@ describe("skutečná délka smlouvy (podpis pozdě v sezóně)", () => {
     const signingBonus = Math.floor((o / 2) * MPS);
     const p = prop({ monthly, signingBonus }, 1);
     expect(evaluateRound(p, CTX).kind).toBe("accept");
-    expect(meetsMonthlyShare(p, CTX)).toBe(true);
-    // Na konci sezóny by klub dostal skoro celý příspěvek a smlouva by při rolloveru hned vypršela.
-    expect(meetsMonthlyShare(p, late)).toBe(false);
+    // Na konci sezóny by klub dostal skoro celý příspěvek za mnohem kratší smlouvu.
     expect(evaluateRound(p, late).kind).toBe("reject");
   });
 
@@ -575,14 +534,13 @@ describe("protinávrh návštěvy je položka katalogu", () => {
 describe("openingOffer", () => {
   const WISH_CTX: NegotiationContext = { ...CTX, category: "stadium", personality: "businessman", wishes: ["attendance", "jersey_logo", "sector_exclusivity"] };
 
-  it("je platný návrh: validace projde, cena ≤ ochota, polovina měsíčně, jen měsíční podpora", () => {
+  it("je platný návrh: validace projde, cena ≤ ochota", () => {
     for (const personality of ["businessman", "cautious", "patriot", "fan"] as const) {
       const ctx = { ...WISH_CTX, personality };
       const offer = openingOffer(ctx);
       const valid = validateProposal(offer, ctx);
       expect(valid.ok).toBe(true);
       expect(requestCost(offer, ctx)).toBeLessThanOrEqual(willingness(offer, ctx) + 1e-6);
-      expect(meetsMonthlyShare(offer, ctx)).toBe(true);
       expect(offer.demands).toMatchObject({ winBonus: 0, goalBonuses: {}, construction: null, equipment: null, payCurrentFee: false });
       expect(offer.demands.signingBonus).toBeGreaterThan(0);
       expect(offer.demands.monthly % 100).toBe(0);
@@ -646,7 +604,6 @@ describe("openingOffer", () => {
       const total = offer.demands.monthly * m + offer.demands.signingBonus;
       expect(offer.demands.signingBonus / total).toBeGreaterThan(share - 0.02);
       expect(offer.demands.signingBonus / total).toBeLessThan(share + 0.02);
-      expect(meetsMonthlyShare(offer, c)).toBe(true);
       expect(requestCost(offer, c)).toBeLessThanOrEqual(willingness(offer, c) + 1e-6);
     }
   });

@@ -40,8 +40,8 @@ export interface RoundResponse {
   /**
    * Postup sezóny (seasonProgressMonths), se kterým majitel návrh přijal nebo protinabídku
    * spočítal. Podpis podle něj ověřuje cenu: skutečná délka smlouvy se s každým herním dnem
-   * zkracuje a návrh přijatý na hraně pravidla o měsíční polovině by o den později neprošel.
-   * Starší kola ho nemají, pak se ověřuje s čerstvým postupem.
+   * zkracuje a návrh přijatý na hraně cenových podmínek (validateProposal) by o den později
+   * neprošel. Starší kola ho nemají, pak se ověřuje s čerstvým postupem.
    */
   progressMonths?: number;
 }
@@ -614,7 +614,7 @@ export interface NegotiationView {
   /**
    * Skutečná délka smlouvy v měsících podle počtu sezón (index 0 = 1 sezóna): od dneška do konce
    * poslední sezóny (effectiveContractMonths). Náhled na webu s ní rozpočítává jednorázové položky
-   * a pravidlo o měsíční polovině stejně jako server.
+   * stejně jako server.
    */
   contractMonths: number[];
   /** Délky smlouvy v sezónách, které jde teď podepsat (na konci sezóny bez 1 sezóny, minContractSeasons). */
@@ -671,7 +671,7 @@ export function negotiationView(
     },
     winBonusFactor: Math.round(winBonusFactor(ctx) * 1000) / 1000,
     monthsPerSeason: MONTHS_PER_SEASON,
-    // Nezaokrouhleně: web s tím počítá minMonthlyFor, musí vyjít na korunu stejně jako na serveru.
+    // Nezaokrouhleně: web s tím počítá previewCost, musí vyjít na korunu stejně jako na serveru.
     contractMonths: Array.from({ length: MAX_SEASONS - MIN_SEASONS + 1 }, (_, i) => effectiveContractMonths(MIN_SEASONS + i, ctx.seasonProgressMonths)),
     allowedSeasons: allowedContractSeasons(ctx.seasonProgressMonths),
     catalog: promiseCatalog(ctx, favor),

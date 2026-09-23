@@ -10,7 +10,7 @@ import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import { MONTHS_PER_SEASON, RELEGATION_SPOTS } from "./ambition";
 import { budgetEstimateRange } from "./budget";
 import {
-  attendanceCatalogValue, MAX_ATTENDANCE, MAX_PROMISES, MAX_SEASONS, meetsMonthlyShare, MIN_SEASONS, minAttendance, minContractSeasons,
+  attendanceCatalogValue, MAX_ATTENDANCE, MAX_PROMISES, MAX_SEASONS, MIN_SEASONS, minAttendance, minContractSeasons,
   promiseChance,
   promisePenalty, promiseValueShare,
   type Demands, type NegotiationContext, type Proposal,
@@ -172,8 +172,6 @@ export function validateProposal(raw: unknown, ctx: NegotiationContext): Result 
 
   const demands: Demands = { monthly, winBonus, signingBonus, goalBonuses, construction, equipment, payCurrentFee };
   const proposal: Proposal = { seasons, promises, demands };
-  // Jinak by šlo dát všechno do podpisového příspěvku a měsíčně 1 Kč, výpovědní pokuta by pak nic neznamenala.
-  if (!meetsMonthlyShare(proposal, ctx)) return fail("Aspoň polovina podpory musí chodit měsíčně.");
   return { ok: true, proposal };
 }
 

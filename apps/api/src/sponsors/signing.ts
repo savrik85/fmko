@@ -304,7 +304,7 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   if (!terms) return { ok: false, error: "Majitel zatím nic nepřijal", status: 409 };
 
   // Stav klubu se od návrhu mohl změnit (postavená tribuna, nový banner, licence): znovu ověřit.
-  // Cena (pravidlo o měsíční polovině, nejkratší délka) ale s postupem sezóny z kola, ve kterém
+  // Cena (rozpočet na jednorázové položky, nejkratší délka) ale s postupem sezóny z kola, ve kterém
   // majitel podmínky přijal: skutečná délka smlouvy se každým herním dnem zkracuje a podmínky
   // přijaté na hraně by o den později neprošly, jednání ve stavu 'accepted' by pak viselo do
   // vypršení. Jednání se při rolloveru zavírají, uložený postup je vždycky z téže sezóny.

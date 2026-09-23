@@ -270,19 +270,12 @@ export function categoryLabel(c: "main" | "stadium"): string {
 }
 
 /**
- * Pravidlo o měsíční polovině (server: MIN_MONTHLY_SHARE v apps/api/src/sponsors/negotiation.ts):
- * aspoň tolik z měsíčního ekvivalentu smlouvy musí chodit jako měsíční podpora, jinak server návrh
- * odmítne ("Aspoň polovina podpory musí chodit měsíčně."). Zrcadlí se tu jen pro náhled v UI.
+ * Jednorázové peníze návrhu v Kč (podpis, stavba, vybavení, doplacená stará pokuta, bonusy za
+ * splnění): jsou to záloha na celou smlouvu, při předčasném konci se nesplacená část vrací
+ * (server: advanceClawback v apps/api/src/sponsors/negotiation.ts). Bonusy za sezónní sliby
+ * (opakovaná platba po splnění) se do zálohy nepočítají.
  */
-const MIN_MONTHLY_SHARE = 0.5;
-const EPS = 1e-6;
-
-/**
- * Jednorázové položky návrhu (podpis, stavba, vybavení, doplacená stará pokuta, bonusy za termínové
- * sliby) PLUS bonusy za sezónní sliby × počet sezón smlouvy, zrcadlí bonusAwareOneTime v
- * apps/api/src/sponsors/negotiation.ts. Vstup pro minMonthlyFor.
- */
-export function bonusAwareOneTime(view: NegotiationView, p: Proposal): number {
+export function proposalOneTimeTotal(view: NegotiationView, p: Proposal): number {
   const d = p.demands;
   let total = d.signingBonus;
   if (d.construction) total += view.construction.find((x) => x.key === d.construction)?.cost ?? 0;
@@ -290,19 +283,8 @@ export function bonusAwareOneTime(view: NegotiationView, p: Proposal): number {
   if (d.payCurrentFee && view.current && !view.current.sameSponsor) total += view.current.terminationFee;
   for (const spec of p.promises) {
     const bonus = d.goalBonuses[spec.kind] ?? 0;
-    if (bonus <= 0) continue;
-    const o = findOption(view, spec);
-    if (!o) continue;
-    total += o.seasonal ? bonus * p.seasons : bonus;
+    if (bonus <= 0 || findOption(view, spec)?.seasonal) continue;
+    total += bonus;
   }
   return total;
-}
-
-/**
- * Nejnižší celá měsíční podpora, se kterou platí pravidlo o měsíční polovině, zrcadlí minMonthlyFor
- * v apps/api/src/sponsors/negotiation.ts (vstup: bonusAwareOneTime, měsíce = contractMonthsOf).
- */
-export function minMonthlyFor(oneTime: number, months: number): number {
-  const need = (MIN_MONTHLY_SHARE / (1 - MIN_MONTHLY_SHARE)) * (oneTime / Math.max(EPS, months));
-  return Math.max(1, Math.ceil(need - EPS));
 }
