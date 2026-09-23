@@ -2694,6 +2694,14 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
       `Klub ${oldName} podepsal sponzorskou smlouvu s ${body.sponsorName} a mění svůj název na ${newName}. Fanoušci nejsou nadšení (-3 reputace).`,
     ).run().catch((e) => logger.warn({ module: "game" }, "insert sponsor rename news", e));
 
+    // Majitel nové hlavní firmy se ozve SMS (jen lidský klub, limity hlídá fronta).
+    try {
+      const { enqueueMainSponsorSms } = await import("../sponsors/owner-sms-triggers");
+      await enqueueMainSponsorSms(c.env.DB, teamId, Number(spRow.id), "main_new", `main-new:${id}`, { deliverNow: true });
+    } catch (e) {
+      logger.warn({ module: "game" }, "SMS od nového hlavního sponzora", e);
+    }
+
     return c.json({ ok: true, contractId: id, newTeamName: newName, reputationPenalty: 3 });
   }
 
@@ -2795,7 +2803,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   const category = body.category || "main";
 
   const allActiveT = await c.env.DB.prepare(
-    "SELECT id, early_termination_fee, seasons_remaining, category FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
+    "SELECT id, early_termination_fee, seasons_remaining, category, sponsor_id FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch contracts for termination", e); return { results: [] }; });
 
   // Pro banner — vyžaduje contractId (může jich být víc)
@@ -2821,6 +2829,17 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   await recordTransaction(c.env.DB, teamId, "sponsor_termination", -fee,
     `Ukončení sponzorské smlouvy (sankce)`, new Date().toISOString());
   await c.env.DB.prepare("UPDATE sponsor_contracts SET status = 'terminated' WHERE id = ?").bind(contract.id).run();
+
+  // Majitel firmy, se kterou klub ukončil hlavní smlouvu, se ozve SMS.
+  const terminatedSponsorId = (contractRow?.sponsor_id as number | null | undefined) ?? null;
+  if (category === "main" && terminatedSponsorId !== null) {
+    try {
+      const { enqueueMainSponsorSms } = await import("../sponsors/owner-sms-triggers");
+      await enqueueMainSponsorSms(c.env.DB, teamId, terminatedSponsorId, "main_lost", `main-lost:${contract.id}`, { deliverNow: true });
+    } catch (e) {
+      logger.warn({ module: "game" }, "SMS od odcházejícího hlavního sponzora", e);
+    }
+  }
 
   const village = await c.env.DB.prepare("SELECT name FROM villages WHERE id = ?")
     .bind(team.village_id).first<{ name: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch village for termination", e); return null; });

@@ -77,6 +77,9 @@ export async function rolloverAllLeagues(
     .bind(oldSeasonNumber).run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "finish old season", e));
 
+  // Hlavní smlouvy, které teď vyprší: jejich majitelé se v kroku 4b-sms rozloučí.
+  let expiringMain: Array<{ team_id: string; sponsor_id: number }> = [];
+
   // 4b. Sponzorské smlouvy: nová sezóna = o sezónu méně platnosti; na nule smlouva vyprší.
   //     Nabídky se generují per sezóna (seed obsahuje číslo sezóny) a škálují s reputací,
   //     takže expirovaný tým si hned může podepsat novou za aktualizovaných podmínek.
@@ -97,6 +100,13 @@ export async function rolloverAllLeagues(
     const { assignMainPriorities } = await import("../sponsors/exclusivity");
     const priorityLosses = await assignMainPriorities(db, newNum)
       .catch((e) => { logger.error({ module: "season-rollover" }, "přednost hlavních sponzorů", e); return []; });
+
+    expiringMain = (await db.prepare(
+      `SELECT sc.team_id, sc.sponsor_id FROM sponsor_contracts sc JOIN teams t ON t.id = sc.team_id
+       WHERE sc.status = 'active' AND sc.seasons_remaining <= 1 AND COALESCE(sc.category, 'main') = 'main'
+         AND sc.sponsor_id IS NOT NULL AND t.user_id != 'ai'`,
+    ).all<{ team_id: string; sponsor_id: number }>()
+      .catch((e) => { logger.warn({ module: "season-rollover" }, "vypršelé hlavní smlouvy pro SMS", e); return { results: [] as Array<{ team_id: string; sponsor_id: number }> }; })).results;
 
     await db.prepare("UPDATE sponsor_contracts SET seasons_remaining = seasons_remaining - 1 WHERE status = 'active'").run();
     await db.prepare("UPDATE sponsor_contracts SET status = 'expired' WHERE status = 'active' AND seasons_remaining <= 0").run();
@@ -126,6 +136,25 @@ export async function rolloverAllLeagues(
     logger.info({ module: "season-rollover" }, `sponzorské smlouvy: -1 sezóna, ${expiring.results.length} expirací u lidských týmů`);
   } catch (e) {
     logger.error({ module: "season-rollover" }, "sponsor contracts rollover", e);
+  }
+
+  // 4b-sms. SMS od majitelů firem. Herní čas se právě vrátil na reálné datum, lhůty
+  // ze staré osy by nikdy nevypršely, proto se otevřená vlákna nejdřív tiše zavřou.
+  // Pak poděkování nebo stížnost za sezónu a rozloučení majitelů vypršelých hlavních
+  // smluv. Doručí je denní tick (nejvýš jedna SMS denně na klub).
+  try {
+    const { closeOwnerSmsForRollover } = await import("../sponsors/owner-sms");
+    const { enqueueMainSponsorSms, enqueueSeasonEndSms } = await import("../sponsors/owner-sms-triggers");
+    await closeOwnerSmsForRollover(db);
+    const day = startIso.slice(0, 10);
+    const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day);
+    for (const m of expiringMain) {
+      await enqueueMainSponsorSms(db, m.team_id, m.sponsor_id, "main_lost",
+        `main-expired:${m.team_id}:${m.sponsor_id}:s${oldSeasonNumber}`, { day });
+    }
+    logger.info({ module: "season-rollover" }, `SMS majitelů: ${seasonSms} ke konci sezóny, ${expiringMain.length} rozloučení`);
+  } catch (e) {
+    logger.error({ module: "season-rollover" }, "SMS od majitelů firem", e);
   }
 
   // 4c. Samospráva soutěží — sazebník na novou sezónu z odhlasovaných návrhů,

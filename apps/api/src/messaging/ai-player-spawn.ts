@@ -291,6 +291,7 @@ export async function applyAiPlayerThreads(
        AND (t.last_ai_player_thread_at IS NULL OR t.last_ai_player_thread_at < datetime('now', ?))
        AND NOT EXISTS (
          SELECT 1 FROM conversations c WHERE c.team_id = t.id AND c.ai_thread_active = 1
+           AND COALESCE(c.participant_id, '') NOT LIKE 'so-%'
        )`,
   ).bind(`-${COOLDOWN_DAYS} days`).all<{ id: string }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "candidate teams query", e); return { results: [] }; });
@@ -905,6 +906,8 @@ export async function expireStaleAiThreads(
   for (const conv of stale.results) {
     const state = parseState(conv.ai_thread_state);
     if (!state) continue;
+    // Vlákno majitele firmy si hlídá vlastní lhůtu v herním čase (sponsors/owner-sms.ts).
+    if ((state as { kind?: string }).kind === "sponsor_owner") continue;
 
     if (state.awaiting === "coach" && state.scenario_id === "coach_initiated") {
       // Rozhovor začal trenér a pak přestal psát: to není ignorování hráče, jen konec

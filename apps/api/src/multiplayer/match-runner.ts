@@ -970,6 +970,17 @@ export async function runScheduledMatches(
                 logger.warn({module: "match-runner"}, "vyhodnocení výtržností", e);
             }
 
+            // SMS od majitelů firem (po zápase, po výtržnosti). Až za oběma háčky výše,
+            // aby se z fronty vybrala ta nejdůležitější, a až za zámkem zápasu (continue výše).
+            if (homeIsHuman) {
+                try {
+                    const {deliverOwnerSmsForTeam} = await import("../sponsors/owner-sms");
+                    await deliverOwnerSmsForTeam(db, homeTeamId);
+                } catch (e) {
+                    logger.warn({module: "match-runner", matchId}, "SMS od majitelů firem", e);
+                }
+            }
+
             // Player stats update
             const season = await db.prepare(
                 "SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"

@@ -213,6 +213,10 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
     const { applyRiotFavorPenalty } = await import("../sponsors/hooks");
     await applyRiotFavorPenalty(db, opts.homeTeamId)
       .catch((e) => { logger.warn({ module: M, teamId: opts.homeTeamId }, "náklonnost sponzorů po výtržnosti", e); });
+    // Majitel, se kterým má klub vztah, se ozve SMS (přednost má opatrný). Doručí match-runner.
+    const { enqueueRiotSms } = await import("../sponsors/owner-sms-triggers");
+    await enqueueRiotSms(db, opts.homeTeamId, opts.matchId)
+      .catch((e) => { logger.warn({ module: M, teamId: opts.homeTeamId }, "SMS majitele po výtržnosti", e); });
   }
 
   // ── Rivalita mezi tábory ──

@@ -205,6 +205,18 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "setkání s majiteli firem selhalo", e);
   }
 
+  // ── SMS od majitelů firem (vlastní try: chyba nesmí shodit zbytek ticku) ──
+  // effectiveDate, ne teams.game_date: posun herního data v teams přijde až níž v ticku.
+  try {
+    const { runOwnerSmsDaily } = await import("../sponsors/owner-sms-triggers");
+    const r = await runOwnerSmsDaily(env.DB, effectiveDate.toISOString());
+    if (r.expired + r.eve + r.queued + r.delivered > 0) {
+      logger.info({ module: "daily-tick" }, `SMS majitelů: ${r.delivered} doručeno, ${r.eve + r.queued} zařazeno, ${r.expired} vypršelo`);
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "SMS od majitelů firem selhaly", e);
+  }
+
   // ── Training (Mon-Fri, if plan is set) ──
   // U21 týmy zdědí training_type/approach/sessions od parent A-týmu — manažer nastaví trénink
   // pro klub jednou a aplikuje se na obě squady.

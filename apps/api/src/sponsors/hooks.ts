@@ -39,18 +39,29 @@ export async function settleSponsorInvitations(
   const baseReason = postMatchFavorReason(homeScore, awayScore);
   const reason = vipBonus > 0 ? `${baseReason}, VIP lóže` : baseReason;
   let claimed = 0;
+  const claimedIds: number[] = [];
   for (const r of rows.results) {
     const claim = await db.prepare(
       "UPDATE sponsor_invitations SET status = 'attended' WHERE id = ? AND status = 'accepted'",
     ).bind(r.id).run();
     if ((claim.meta?.changes ?? 0) !== 1) continue;
     claimed++;
+    claimedIds.push(r.sponsor_id);
     const p: OwnerPersonality = isOwnerPersonality(r.personality) ? r.personality : "businessman";
     await db.batch(favorDeltaStmts(
       db, r.sponsor_id, homeTeamId, postMatchFavorDelta(p, homeScore, awayScore) + vipBonus, reason,
     ));
   }
   logger.info({ module: "sponsors", matchId }, `majitelé na tribuně: ${claimed}, bonus lóže ${vipBonus}`);
+
+  // SMS od majitele po výhře nebo prohře, kterou viděl. Jen zařazení do fronty,
+  // doručí match-runner. Chyba nesmí shodit vyhodnocení náklonnosti.
+  try {
+    const { enqueueAfterMatchSms } = await import("./owner-sms-triggers");
+    await enqueueAfterMatchSms(db, matchId, homeTeamId, homeScore, awayScore, claimedIds);
+  } catch (e) {
+    logger.warn({ module: "sponsors", matchId }, "SMS majitelů po zápase", e);
+  }
 }
 
 /**

@@ -535,7 +535,7 @@ teamsRouter.post("/", async (c) => {
       }
       // sponsor_favor_log před sponsor_team_favor — deník popisuje změny náklonnosti,
       // AI historie majitelů firem se nemá dědit na nového lidského hráče.
-      for (const t of ["sponsor_favor_log", "sponsor_team_favor", "sponsor_invitations", "sponsor_pub_encounters", "equipment", "stadiums", "conversations", "sponsor_contracts", "transactions"]) {
+      for (const t of ["sponsor_owner_sms", "sponsor_favor_log", "sponsor_team_favor", "sponsor_invitations", "sponsor_pub_encounters", "equipment", "stadiums", "conversations", "sponsor_contracts", "transactions"]) {
         await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
 
