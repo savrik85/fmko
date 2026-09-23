@@ -362,10 +362,10 @@ export const OWNER_REPLY_BACK: Record<OwnerPersonality, Record<ReplyMood, Record
   patriot: {
     positive: {
       up: ["Díky. Pro obec je to důležitý.", "Tak to je řeč. Držím palce.", "To rád slyším, vesnice to ocení."],
-      down: ["To mě zamrzelo. Čekal jsem víc vděku.", "Škoda, myslel jsem, že se z toho budete radovat víc.", "Aha, tak dobře."],
+      down: ["To mě zamrzelo. Čekal jsem víc vděku.", "Škoda, myslel jsem, že se z toho budeš radovat víc.", "Aha, tak dobře."],
     },
     negative: {
-      up: ["Vážím si, že to říkáš na rovinu.", "Dobře, že to takhle berete.", "To rád slyším, i v týhle situaci."],
+      up: ["Vážím si, že to říkáš na rovinu.", "Dobře, že to takhle bereš.", "To rád slyším, i v týhle situaci."],
       down: ["Takhle se o klub nepečuje. Zapamatuju si to.", "To mě zklamalo.", "Škoda. Čekal jsem víc ohledu."],
     },
   },
