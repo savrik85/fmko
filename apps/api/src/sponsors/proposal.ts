@@ -173,14 +173,21 @@ function hracu(n: number): string {
   return n === 1 ? "hráč" : n <= 4 ? "hráči" : "hráčů";
 }
 
-/** Popisek konkrétního slibu pro hráče, bez dlouhé pomlčky. */
-export function promiseLabel(s: PromiseSpec, ctx: NegotiationContext): string {
-  const p = s.params;
-  switch (s.kind) {
+/**
+ * Popisek slibu podle druhu a parametrů, bez kontextu jednání. Jediný zdroj pravdy pro znění
+ * (hráč tohle vidí při podpisu); promise-eval.ts (etapa 3) na tuhle funkci deleguje, aby se
+ * výsledky a SMS nezobrazovaly jiným zněním, než jaké klub podepsal.
+ *
+ * Pohárové kolo je výjimka: pojmenování („čtvrtfinále" apod.) potřebuje celkový počet kol
+ * poháru, který volající dodá jako `cupRoundLabel` — tady spočítaný z ctx.cupTotalRounds
+ * (promiseLabel níž), v promise-eval.ts (bez DB) jen jako „do N. kola".
+ */
+export function promiseLabelByKind(kind: PromiseKind, p: PromiseParams, cupRoundLabel: string): string {
+  switch (kind) {
     case "league_position": return `skončit do ${p.position}. místa`;
     case "promotion": return "postup, 1. nebo 2. místo";
     case "no_relegation": return "nesestoupit";
-    case "cup_round": return `v poháru aspoň ${roundName(p.round ?? 2, ctx.cupTotalRounds).toLowerCase()}`;
+    case "cup_round": return `v poháru aspoň ${cupRoundLabel}`;
     case "coach_licence": return `trenér s licencí ${licenceLabel(p.level ?? 1)}`;
     case "stadium_upgrade": return `${FACILITY_LABELS[p.facility ?? ""] ?? p.facility} na úroveň ${p.level}`;
     case "jersey_logo": return "logo na rukávu dresu";
@@ -190,6 +197,11 @@ export function promiseLabel(s: PromiseSpec, ctx: NegotiationContext): string {
     case "reputation": return `reputace aspoň ${p.reputation} na konci sezóny`;
     case "no_riots": return "žádná výtržnost fanoušků";
   }
+}
+
+/** Popisek konkrétního slibu pro hráče, bez dlouhé pomlčky. */
+export function promiseLabel(s: PromiseSpec, ctx: NegotiationContext): string {
+  return promiseLabelByKind(s.kind, s.params, roundName(s.params.round ?? 2, ctx.cupTotalRounds).toLowerCase());
 }
 
 export interface Range { low: number; high: number }
