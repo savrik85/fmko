@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { ErrorBox, SectionLabel, Spinner, useConfirm } from "@/components/ui";
+import { ErrorBox, SectionLabel, Sheet, Spinner, useConfirm } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import {
@@ -57,6 +58,8 @@ export default function NegotiationPage() {
   // Odpověď majitele na poslední návrh v této návštěvě stránky; ukazuje se u tlačítek.
   const [reply, setReply] = useState<NegotiationRound | null>(null);
   const replyRef = useRef<HTMLDivElement | null>(null);
+  // Dialog s odpovědí hned po návrhu (jako u přestupů), ať hráč nemusí hledat, co majitel řekl.
+  const [replyOpen, setReplyOpen] = useState(false);
   const { confirm, dialog } = useConfirm();
 
   useEffect(() => {
@@ -99,7 +102,7 @@ export default function NegotiationPage() {
       if ((kind === "counter_money" || kind === "counter_wish") && last?.response.counter) {
         setDraft(withSeasons(v, last.response.counter, last.response.counter.seasons));
       }
-      requestAnimationFrame(() => replyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+      setReplyOpen(true);
     }
     setActing(false);
   };
@@ -211,6 +214,44 @@ export default function NegotiationPage() {
       )}
 
       {agreesWithPending && <SigningSummary view={view} />}
+
+      <Sheet open={replyOpen && reply !== null} onClose={() => setReplyOpen(false)} title="Odpověď majitele">
+        {reply && (
+          <div className="space-y-4 p-1">
+            <div className="flex items-center gap-3">
+              <FaceAvatar faceConfig={view.owner.faceConfig} size={56} className="shrink-0" />
+              <div className="min-w-0">
+                <div className="text-sm text-muted">Odpověď majitele</div>
+                <div className="font-heading font-bold text-base">{ownerName}</div>
+              </div>
+            </div>
+            <div className={`text-base font-heading font-bold ${reply.response.kind === "accept" ? "text-pitch-600" : reply.response.kind === "counter_money" || reply.response.kind === "counter_wish" ? "text-gold-600" : "text-card-red"}`}>
+              {RESPONSE_LABELS[reply.response.kind]}
+            </div>
+            <div className="text-base">„{reply.response.text}“</div>
+            <div className="text-sm">{replyNote(reply, view.patience)}</div>
+            {reply.response.counter && (reply.response.kind === "counter_money" || reply.response.kind === "counter_wish") && (
+              <div className="text-sm bg-surface-2 rounded-soft px-3 py-2">
+                Protinabídka: {formatCZK(reply.response.counter.demands.monthly)} měsíčně na {seasonsAccusative(reply.response.counter.seasons)}
+                {reply.response.counter.demands.signingBonus > 0 ? `, ${formatCZK(reply.response.counter.demands.signingBonus)} za podpis` : ""}
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              {view.pending && (reply.response.kind === "accept" || reply.response.kind === "counter_money" || reply.response.kind === "counter_wish") && (
+                <button type="button" onClick={() => { setReplyOpen(false); void sign(); }} className="btn btn-primary w-full min-h-11">Podepsat smlouvu</button>
+              )}
+              {view.status === "open" && (
+                <button type="button" onClick={() => setReplyOpen(false)} className="btn btn-secondary w-full min-h-11">
+                  {reply.response.kind === "accept" ? "Zavřít" : "Upravit návrh"}
+                </button>
+              )}
+              {view.status !== "open" && (
+                <Link href={`/sponzor/${view.sponsorId}`} className="btn btn-secondary w-full min-h-11 text-center">Zpět na sponzora</Link>
+              )}
+            </div>
+          </div>
+        )}
+      </Sheet>
 
       {reply && (
         <div ref={replyRef} className="card px-4 py-3 space-y-1">
