@@ -1,6 +1,6 @@
 # Guardrails & Pravidla projektu fmko
 
-## 🚨 ZÁKLADNÍ PRAVIDLA G障碍 (PŘÍSNĚ ZÁVAZNÁ)
+## 🚨 ZÁKLADNÍ PRAVIDLA (PŘÍSNĚ ZÁVAZNÁ)
 
 1. **NIKDY neprovádět push / merge / deploy na větev `main` bez předchozího výslovného souhlasu uživatele.**
    - Výslovný souhlas = uživatel přímo napsal „nasaď na main“, „dej na main“, „mergni do main“ nebo obdobný jednoznačný příkaz.

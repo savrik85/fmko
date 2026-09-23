@@ -25,7 +25,7 @@ Správný postup:
   2. git push origin testing
   3. Ověřit deploy + testovat
   4. Čekat na souhlas uživatele
-  5. Pak git checkout main && git merge testing
+  5. Pak /ship-prod: cherry-pick schválených commitů ve worktree (NE merge testingu)
 
 Pokud je push oprávněný, POŽÁDEJ UŽIVATELE O POTVRZENÍ a dočasně obejdi hook.
 EOF

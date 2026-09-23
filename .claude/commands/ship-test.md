@@ -23,8 +23,6 @@ Provedeš tento workflow pro nasazení na testing environment:
 
    Detail:
    - ...
-
-   Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
    EOF
    )"
    ```

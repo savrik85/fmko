@@ -29,15 +29,21 @@ description: Deploy testing branch to production (requires explicit user approva
 
 ## Execute
 
+Na produkci jdou jen schválené commity. Testing obsahuje i práci, která na prod nemá,
+takže `git merge testing` nepoužívat. V repu může pracovat jiná session, proto se
+nedělá ani checkout main v hlavním stromu.
+
 ```bash
-git checkout main
-git merge testing --no-edit
-git push origin main
+W=<scratchpad>/main-deploy
+git fetch origin && git worktree add "$W" main
+cd "$W" && git pull --ff-only origin main && git cherry-pick <schválené commity>
+# ověřit: soubory těch commitů shodné s testing, tsc + vitest (symlink node_modules z repa)
+git push origin HEAD:main
+unlink "$W/node_modules"; git worktree remove "$W"   # symlinky NEJDŘÍV odpojit
 ```
 
-**Hook `block-main-push.sh` tohle zablokuje.** Pokud je to oprávněné (explicitní souhlas + všechny prerekvizity), dočasně povolit:
-- Buď obejít hook (user action)
-- Nebo říct uživateli: "Hook blokuje push. Je oprávněné obejít ho?"
+Co chybí na main, zjistit obsahem: `git diff --stat origin/main origin/testing`
+(`git log main..testing` ukáže i už cherry-picknuté commity).
 
 ## Po pushi
 

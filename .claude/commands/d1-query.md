@@ -70,18 +70,11 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
 
 Heredoc `<< 'EOF'` (s quotes) zachová `$` bez interpretace.
 
-## Výstup parse v Pythonu
+## Spouštění
 
-Pro čitelný výstup z `--json`:
-
-```bash
-npx wrangler d1 execute prales-db-test --remote --json --command 'SELECT * FROM x LIMIT 5' 2>&1 | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-for r in d[0]['results']:
-    print(r)
-" 2>/dev/null
-```
+Wrangler spouštěj holý, bez `cd … &&` a bez roury: klasifikátor auto módu obalený
+příkaz blokuje. Výstup `--json` je čitelný sám; když je potřeba ho zpracovat,
+nejdřív ho ulož (`--json > soubor`) a zpracuj zvlášť.
 
 ## Databáze — nezapomenout
 

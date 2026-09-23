@@ -5,7 +5,7 @@
 
 ---
 
-## 🚨 TVRDÁ PRAVIDLA — PORUŠENÍ = ROZKOPANÉ KOULE
+## 🚨 Tvrdá pravidla (hlídají je i hooky)
 
 1. **NIKDY push/merge/deploy na `main` bez výslovného souhlasu.**
    - Výslovný souhlas = uživatel napsal "nasad na main", "dej na prod", "mergni", nebo podobné.
@@ -45,7 +45,7 @@
 6. Verify API: curl k ověření endpointu
 7. Verify FE: MCP browser — login, navigace, screenshot
 8. ✋ STOP — čekat na "nasad na main"
-9. git checkout main && git merge testing --no-edit && git push origin main
+9. Cherry-pick schválených commitů ve worktree + `git push origin HEAD:main` (postup v `/ship-prod`; merge testingu by vzal i neschválené commity)
 10. Verify prod deploy (sleep + gh run)
 ```
 

@@ -61,7 +61,7 @@ Napiš stručný report:
 ✅ GET /api/... → 200, správný formát
 
 ### Frontend
-✅ /dashboard/xxx → render OK (screenshot)
+✅ /<upravená stránka> → render OK (screenshot)
 ✅ Happy path: login → click → save → success message
 ✅ Error path: invalid input → error shown
 
