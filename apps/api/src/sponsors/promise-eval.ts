@@ -7,10 +7,12 @@
  * do 3 bodů pod cílem. Stojí polovinu pokuty a nepočítá se jako porušení.
  *
  * Druhy slibů, jejich `params` a klasifikace (sezónní/termínové) jsou definované v
- * promise-kinds.ts (etapa 2) — tady se jen znovu vyvážejí, aby existoval jediný zdroj pravdy.
+ * promise-kinds.ts (etapa 2), tady se jen znovu vyvážejí, aby existoval jediný zdroj pravdy.
  */
 import { licenceLabel } from "@okresni-masina/shared";
+import { roundName } from "../cup/cup";
 import { logger } from "../lib/logger";
+import { DEFAULT_CUP_ROUNDS, PROMOTION_SPOTS, RELEGATION_SPOTS } from "./ambition";
 import { promiseLabelByKind } from "./proposal";
 import { DEADLINE_KINDS, isPromiseKind, PROMISE_KINDS, SEASONAL_KINDS, type PromiseKind, type PromiseParams as NegotiationPromiseParams } from "./promise-kinds";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
@@ -29,10 +31,11 @@ export function isPromiseStatus(v: unknown): v is PromiseStatus {
 
 /**
  * Postupová a sestupová místa. Hra postupy zatím nemá (league/promotion.ts,
- * calculatePromotions je nezapojené), slib se ale měří stejnými zónami: dva nahoře, dva dole.
+ * calculatePromotions je nezapojené), slib se ale měří stejnými zónami jako ambition.ts:
+ * PROMOTION_SPOTS a RELEGATION_SPOTS, žádná vlastní čísla.
  */
-export const PROMOTION_PLACES = 2;
-export const RELEGATION_PLACES = 2;
+export const PROMOTION_PLACES = PROMOTION_SPOTS;
+export const RELEGATION_PLACES = RELEGATION_SPOTS;
 export const FAVOR_FULFILLED = 5;
 export const FAVOR_PARTIAL = -3;
 export const FAVOR_BROKEN = -8;
@@ -250,18 +253,52 @@ function toNegotiationParams(p: PromiseParams): NegotiationPromiseParams {
 }
 
 /**
- * Popisek slibu v 1. pádě — deleguje na proposal.ts (promiseLabelByKind), jediný zdroj pravdy:
- * hráč přesně tohle znění viděl při podpisu. Pohárové kolo je výjimka — bez DB nejde znát
- * ctx.cupTotalRounds, takže se místo pojmenování („čtvrtfinále") použije prosté „do N. kola".
+ * Který parametr popisek daného druhu potřebuje (chybí-li, vrátí se obecný popisek místo
+ * konkrétní hodnoty, aby na obrazovce nikdy nenaskočilo „undefined"). Sliby bez parametrů
+ * (promotion, no_relegation, jersey_logo, sector_exclusivity, no_riots) nic nepotřebují.
  */
-export function promiseLabel(kind: PromiseKind, params: PromiseParams): string {
+function hasRequiredParams(kind: PromiseKind, params: PromiseParams): boolean {
+  switch (kind) {
+    case "league_position": return num(params, "position") !== null;
+    case "cup_round": return num(params, "round") !== null;
+    case "coach_licence": return num(params, "level") !== null;
+    case "stadium_upgrade": return typeof params.facility === "string" && params.facility in FACILITY_LABELS && num(params, "level") !== null;
+    case "attendance": return num(params, "attendance") !== null;
+    case "youth": return num(params, "count") !== null;
+    case "reputation": return num(params, "reputation") !== null;
+    default: return true;
+  }
+}
+
+const GENERIC_LABEL: Partial<Record<PromiseKind, string>> = {
+  league_position: "umístění v tabulce",
+  cup_round: "postup v poháru",
+  coach_licence: "licence pro trenéra",
+  stadium_upgrade: "modernizace stadionu",
+  attendance: "průměrná domácí návštěva",
+  youth: "mladí hráči v sestavě",
+  reputation: "reputace klubu",
+};
+
+/**
+ * Popisek slibu v 1. pádě, deleguje na proposal.ts (promiseLabelByKind), jediný zdroj pravdy:
+ * hráč přesně tohle znění viděl při podpisu. Pohárové kolo pojmenuje stejně jako proposal.ts
+ * (roundName podle `cupTotalRounds`, výchozí DEFAULT_CUP_ROUNDS, když volající aktuální počet
+ * kol soutěže nezná). Chybí-li povinný parametr, vrátí obecný popisek (GENERIC_LABEL), nikdy
+ * text s „undefined".
+ */
+export function promiseLabel(kind: PromiseKind, params: PromiseParams, cupTotalRounds: number = DEFAULT_CUP_ROUNDS): string {
+  if (!hasRequiredParams(kind, params)) return GENERIC_LABEL[kind] ?? "sponzorský slib";
   const round = num(params, "round");
-  const cupRoundLabel = round !== null ? `do ${round}. kola` : "další kolo";
+  const cupRoundLabel = round !== null ? roundName(round, cupTotalRounds).toLowerCase() : "další kolo";
   return promiseLabelByKind(kind, toNegotiationParams(params), cupRoundLabel);
 }
 
-/** Naměřená skutečnost česky pro obrazovku. `null` = nic k ukázání. */
-export function promiseActualText(kind: PromiseKind, actual: number | null): string | null {
+/**
+ * Naměřená skutečnost česky pro obrazovku. `null` = nic k ukázání. Pohárové kolo pojmenuje
+ * stejně jako promiseLabel (roundName podle `cupTotalRounds`, výchozí DEFAULT_CUP_ROUNDS).
+ */
+export function promiseActualText(kind: PromiseKind, actual: number | null, cupTotalRounds: number = DEFAULT_CUP_ROUNDS): string | null {
   if (actual === null) return null;
   switch (kind) {
     case "league_position":
@@ -269,7 +306,7 @@ export function promiseActualText(kind: PromiseKind, actual: number | null): str
     case "no_relegation":
       return `${actual}. místo`;
     case "cup_round":
-      return actual === 0 ? "klub v poháru nehrál" : `${actual}. kolo`;
+      return actual === 0 ? "klub v poháru nehrál" : roundName(actual, cupTotalRounds).toLowerCase();
     case "attendance":
       return `${actual} ${spectatorsForm(actual)} v průměru`;
     case "youth":

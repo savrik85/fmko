@@ -175,12 +175,13 @@ function hracu(n: number): string {
 
 /**
  * Popisek slibu podle druhu a parametrů, bez kontextu jednání. Jediný zdroj pravdy pro znění
- * (hráč tohle vidí při podpisu); promise-eval.ts (etapa 3) na tuhle funkci deleguje, aby se
+ * (hráč tohle vidí při podpisu), promise-eval.ts (etapa 3) na tuhle funkci deleguje, aby se
  * výsledky a SMS nezobrazovaly jiným zněním, než jaké klub podepsal.
  *
- * Pohárové kolo je výjimka: pojmenování („čtvrtfinále" apod.) potřebuje celkový počet kol
- * poháru, který volající dodá jako `cupRoundLabel` — tady spočítaný z ctx.cupTotalRounds
- * (promiseLabel níž), v promise-eval.ts (bez DB) jen jako „do N. kola".
+ * Pohárové kolo potřebuje pojmenování („čtvrtfinále" apod.) podle celkového počtu kol poháru,
+ * které volající dodá jako hotový text `cupRoundLabel` (roundName(round, cupTotalRounds));
+ * tady spočítaný z ctx.cupTotalRounds (promiseLabel níž), v promise-eval.ts z parametru
+ * cupTotalRounds s výchozí hodnotou DEFAULT_CUP_ROUNDS, když volající aktuální počet kol nezná.
  */
 export function promiseLabelByKind(kind: PromiseKind, p: PromiseParams, cupRoundLabel: string): string {
   switch (kind) {

@@ -163,8 +163,7 @@ describe("popisky", () => {
   });
 
   // Stejné znění, jaké hráč viděl při podpisu (proposal.ts promiseLabelByKind, jediný zdroj
-  // pravdy). Pohárové kolo tam potřebuje cupTotalRounds pro pojmenování („čtvrtfinále"), které
-  // tahle čistá funkce bez DB nemá — proto tu není testované na konkrétní znění.
+  // pravdy). Pohárové kolo má vlastní describe blok níž (potřebuje cupTotalRounds).
   it("konkrétní tvary", () => {
     expect(promiseLabel("league_position", { position: 3 })).toBe("skončit do 3. místa");
     expect(promiseLabel("coach_licence", { level: 2 })).toBe("trenér s licencí UEFA B");
@@ -172,14 +171,35 @@ describe("popisky", () => {
     expect(promiseLabel("youth", { count: 1 })).toBe("průměrně 1 hráč do 21 let v sestavě");
     expect(promiseLabel("youth", { count: 2 })).toBe("průměrně 2 hráči do 21 let v sestavě");
     expect(promiseLabel("youth", { count: 5 })).toBe("průměrně 5 hráčů do 21 let v sestavě");
-    expect(promiseLabel("youth", { count: 1.5 })).toBe("průměrně 1.5 hráči do 21 let v sestavě");
+    // count je vždycky celé číslo 2 až 4 (validateProposal), zlomek se u tohohle slibu v datech
+    // nevyskytne, proto se netestuje.
     expect(promiseLabel("attendance", { attendance: 400 })).toBe("průměrně aspoň 400 diváků doma");
+  });
+
+  // roundName potřebuje celkový počet kol soutěže (proposal.ts:204), tady jako volitelný
+  // parametr cupTotalRounds. Testováno na kolech 2, 3 a total−2 s total 7 (DEFAULT_CUP_ROUNDS),
+  // aby to pokrylo předkolo, obyčejné číslované kolo i pojmenované kolo (čtvrtfinále).
+  it("pohárové kolo: stejné pojmenování jako při podpisu (roundName)", () => {
+    expect(promiseLabel("cup_round", { round: 2 }, 7)).toBe("v poháru aspoň 2. předkolo");
+    expect(promiseLabel("cup_round", { round: 3 }, 7)).toBe("v poháru aspoň 1. kolo");
+    expect(promiseLabel("cup_round", { round: 5 }, 7)).toBe("v poháru aspoň čtvrtfinále");
+    // Bez třetího argumentu použije výchozí DEFAULT_CUP_ROUNDS, což je 7.
+    expect(promiseLabel("cup_round", { round: 5 })).toBe("v poháru aspoň čtvrtfinále");
+
+    expect(promiseActualText("cup_round", 0, 7)).toBe("klub v poháru nehrál");
+    expect(promiseActualText("cup_round", 2, 7)).toBe("2. předkolo");
+    expect(promiseActualText("cup_round", 3, 7)).toBe("1. kolo");
+    expect(promiseActualText("cup_round", 5, 7)).toBe("čtvrtfinále");
+  });
+
+  it("chybějící povinný parametr: obecný popisek, nikdy „undefined\"", () => {
+    const label = promiseLabel("league_position", {});
+    expect(label).not.toContain("undefined");
+    expect(label).toBe("umístění v tabulce");
   });
 
   it("skutečnost česky", () => {
     expect(promiseActualText("league_position", 4)).toBe("4. místo");
-    expect(promiseActualText("cup_round", 0)).toBe("klub v poháru nehrál");
-    expect(promiseActualText("cup_round", 3)).toBe("3. kolo");
     expect(promiseActualText("no_riots", 0)).toBe("bez výtržností");
     expect(promiseActualText("no_riots", 1)).toBe("1 výtržnost");
     expect(promiseActualText("no_riots", 3)).toBe("3 výtržnosti");
