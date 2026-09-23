@@ -152,6 +152,8 @@ function odpovidatLze(
   channel: "sms" | "imessage" | null;
   replyHint?: string;
   replyHintHref?: string;
+  /** Text odkazu k nápovědě. Dřív byl na frontendu natvrdo „Otevřít Fanoušky". */
+  replyHintLabel?: string;
 } {
   if (type === "player" || type === "squad_group") return { canReply: true, channel: "sms" };
   if (type === "manager") return { canReply: true, channel: "imessage" };
@@ -165,6 +167,18 @@ function odpovidatLze(
       channel: null,
       replyHint: "Tahle výměna skončila. Domluvit se s partou můžeš na stránce Fanoušci.",
       replyHintHref: "/fanousci",
+      replyHintLabel: "Otevřít Fanoušky",
+    };
+  }
+
+  // Majitel firmy píše sám, když se něco stane. Mimo jeho SMS se s ním jedná na Sponzorech.
+  if (opts.participantId?.startsWith("so-")) {
+    return {
+      canReply: false,
+      channel: null,
+      replyHint: "Tahle výměna skončila. Majitele můžeš pozvat na zápas na stránce Sponzoři.",
+      replyHintHref: "/sponzori",
+      replyHintLabel: "Otevřít Sponzory",
     };
   }
   return {
@@ -312,7 +326,8 @@ messagingRouter.post("/teams/:teamId/player-conversation/:playerId", async (c) =
 messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   const teamId = c.req.param("teamId");
   const convId = c.req.param("convId");
-  const body = await c.req.json<{ body: string }>();
+  // `optionId` = tlačítko hotové odpovědi (SMS od majitele firmy). Tón z něj bere jen server.
+  const body = await c.req.json<{ body: string; optionId?: string }>();
 
   if (!body.body?.trim()) return c.json({ error: "Empty message" }, 400);
 
@@ -465,6 +480,11 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
     await handleFanLeaderReply(c.env.DB, convId, body.body.trim())
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď vůdci fanoušků", e));
+    // Majitel firmy: stejné sloupce, `kind = "sponsor_owner"`, bez modelu. Cizí vlákno obě
+    // funkce poznají a vrátí false, pořadí proto nevadí.
+    const { handleOwnerSmsReply } = await import("../sponsors/owner-sms");
+    await handleOwnerSmsReply(c.env.DB, convId, body.body.trim(), typeof body.optionId === "string" ? body.optionId : null)
+      .catch((e) => logger.warn({ module: "messaging" }, "odpověď majiteli firmy", e));
   }
 
   if (conv?.type === "manager" && conv.participant_id) {
