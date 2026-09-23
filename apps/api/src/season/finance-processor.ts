@@ -28,6 +28,9 @@ export type TransactionType =
   | "pitch_upgrade"
   | "classified_ad"
   | "sponsor_termination"
+  // Sponzor při podpisu vyjednané smlouvy: podpisový příspěvek a zaplacená výpovědní
+  // pokuta u předchozího sponzora. Příjem, ne nákup, proto NENÍ v PURCHASE_TYPES.
+  | "sponsor_signing"
   | "season_reward"
   | "event"
   | "transfer_fee"
