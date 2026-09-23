@@ -265,13 +265,13 @@ describe("placeSleeveLogo", () => {
 });
 
 describe("evaluateSeasonPromises: skipDeadlineKinds", () => {
-  it("retry rolloveru s posunutými termíny vynechá termínové sliby končících smluv v dotazu", async () => {
+  it("retry rolloveru s posunutými termíny končící smlouvy vůbec neuzavírá (termíny ani exkluzivitu)", async () => {
     const db = new FalesnaD1([{ sql: /FROM sponsor_promises p JOIN sponsor_contracts sc/, all: [] }]);
     await evaluateSeasonPromises(jakoD1(db), 5, {
       gameDate: "2026-09-23T16:00:00.000Z", day: "2026-09-23", agedSinceSeason: true, atRollover: true, skipDeadlineKinds: true,
     });
     const sel = db.dotazy.find((d) => /FROM sponsor_promises p JOIN sponsor_contracts sc/.test(d.sql));
-    expect(sel?.sql).toContain("p.kind = 'sector_exclusivity' AND sc.seasons_remaining <= 1");
+    expect(sel?.sql).not.toContain("sector_exclusivity");
     expect(sel?.sql).not.toContain("coach_licence");
   });
 });

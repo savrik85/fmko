@@ -189,19 +189,20 @@ async function cupTotalRoundsOf(db: D1Database, season: number): Promise<number>
  * končící smlouvy se neuzavírají a vratka počítá se skutečným postupem sezóny.
  *
  * `skipDeadlineKinds: true`: opakovaný pokus o rollover, kterému už jednou proběhl
- * `shiftPromiseDeadlinesForRollover` (marker v season_end_progress existuje) — termíny
- * končících smluv jsou pak přesunuté na novou časovou osu a `lastSeasonDay` by je vyhodnotil
- * podle špatného dne. Termínové sliby končících smluv se proto přeskočí, doženou je pak
- * (na nové časové ose) denní tick. Bez vlivu na `atRollover: false`.
+ * `shiftPromiseDeadlinesForRollover` (marker v season_end_progress existuje). Termíny jsou
+ * pak na nové časové ose a seasons_remaining mohl být už snížený, takže se končící smlouvy
+ * (termínové sliby i exkluzivita oboru) v tomto běhu vůbec neuzavírají. Jejich sliby zůstanou
+ * pending: pokud smlouva mezitím vypršela, nikdo je už nevyhodnotí (neaktivní smlouvy se
+ * přeskakují), jinak je dožene denní tick nebo další rollover. Bez vlivu na `atRollover: false`.
  */
 export async function evaluateSeasonPromises(
   db: D1Database, season: number,
   ctx: { gameDate: string; day: string; agedSinceSeason: boolean; atRollover: boolean; skipDeadlineKinds?: boolean },
 ): Promise<RunResult> {
   const result = emptyResult();
-  const endingContracts = ctx.atRollover
+  const endingContracts = ctx.atRollover && !ctx.skipDeadlineKinds
     ? `OR (p.kind = 'sector_exclusivity' AND sc.seasons_remaining <= 1)`
-      + (ctx.skipDeadlineKinds ? "" : ` OR (p.kind IN (${sqlList(DEADLINE_KINDS)}) AND sc.seasons_remaining <= 1)`)
+      + ` OR (p.kind IN (${sqlList(DEADLINE_KINDS)}) AND sc.seasons_remaining <= 1)`
     : "";
   const rows = await db.prepare(
     `${PENDING_SELECT}

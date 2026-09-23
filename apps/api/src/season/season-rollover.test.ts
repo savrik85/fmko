@@ -35,10 +35,11 @@ describe("rolloverSponsorPromises (krok 4a)", () => {
     // Bez markeru (první pokus) se vyhodnocují i termínové sliby končících smluv.
     const sel = db.dotazy[selectIdx];
     expect(sel.sql).toContain("p.kind IN (");
+    expect(sel.sql).toContain("coach_licence");
     expect(sel.sql).toContain("sector_exclusivity");
   });
 
-  it("opakovaný pokus (marker posunu termínů existuje): termínové sliby končících smluv se přeskočí", async () => {
+  it("opakovaný pokus (marker posunu termínů existuje): končící smlouvy se neuzavírají", async () => {
     const db = new FalesnaD1([
       HAS_MARKER,
       { sql: /FROM sponsor_promises p JOIN sponsor_contracts sc/, all: [] },
@@ -46,7 +47,7 @@ describe("rolloverSponsorPromises (krok 4a)", () => {
     ]);
     await rolloverSponsorPromises(jakoD1(db), 5, "2026-09-23T16:00:00.000Z");
     const sel = db.dotazy.find((d) => /FROM sponsor_promises p JOIN sponsor_contracts sc/.test(d.sql));
-    expect(sel?.sql).toContain("sector_exclusivity");
+    expect(sel?.sql).not.toContain("sector_exclusivity");
     expect(sel?.sql).not.toContain("coach_licence");
   });
 
