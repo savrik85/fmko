@@ -6,7 +6,7 @@
 import { createRng } from "../generators/rng";
 import { hashSeed } from "../villages/officials-generator";
 import type { OwnerPersonality } from "./owners";
-import { RESULT_KINDS, type PromiseKind } from "./promise-kinds";
+import { isOfferableKind, RESULT_KINDS, type PromiseKind } from "./promise-kinds";
 import type { SponsorType } from "./types";
 
 export const PERSONALITY_WISHES: Record<OwnerPersonality, readonly PromiseKind[]> = {
@@ -16,7 +16,10 @@ export const PERSONALITY_WISHES: Record<OwnerPersonality, readonly PromiseKind[]
   cautious: ["no_relegation", "reputation", "no_riots"],
 };
 
-/** Obor přidá jedno přání: hospody návštěvu, stavaři modernizaci, IT výsledky. */
+/**
+ * Obor přidá jedno přání: hospody návštěvu, stavaři modernizaci, IT výsledky.
+ * Přání, která teď nabídnout nejde (postup, nesestup, isOfferableKind), ownerWishes vynechá.
+ */
 export const SECTOR_WISH: Partial<Record<SponsorType, PromiseKind>> = {
   brewery: "attendance",
   pub: "attendance",
@@ -44,7 +47,7 @@ export function ownerWishes(i: {
 }): PromiseKind[] {
   const rng = createRng(hashSeed(`sponsor-wishes|${i.sponsorId}|${i.teamId}|${i.season}|${i.category}`));
   const pool = PERSONALITY_WISHES[i.personality]
-    .filter((k) => kindAllowedForCategory(k, i.category) && (k !== "jersey_logo" || !i.sleeveHeldBySponsor));
+    .filter((k) => isOfferableKind(k) && kindAllowedForCategory(k, i.category) && (k !== "jersey_logo" || !i.sleeveHeldBySponsor));
   const shuffled = [...pool];
   for (let j = shuffled.length - 1; j > 0; j--) {
     const k = Math.floor(rng.random() * (j + 1));
@@ -52,7 +55,7 @@ export function ownerWishes(i: {
   }
   const out = shuffled.slice(0, 2);
   const sector = SECTOR_WISH[i.sponsorType as SponsorType];
-  if (sector && kindAllowedForCategory(sector, i.category) && !out.includes(sector)) out.push(sector);
+  if (sector && isOfferableKind(sector) && kindAllowedForCategory(sector, i.category) && !out.includes(sector)) out.push(sector);
   return out;
 }
 

@@ -16,7 +16,7 @@ import {
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import {
-  EQUIPMENT_GIFTS, GOAL_BONUS_KINDS, isPromiseKind, LEAGUE_FINISH_KINDS, SEASONAL_KINDS,
+  EQUIPMENT_GIFTS, GOAL_BONUS_KINDS, isOfferableKind, isPromiseKind, LEAGUE_FINISH_KINDS, NOT_OFFERABLE_ERROR, SEASONAL_KINDS,
   type PromiseKind, type PromiseParams, type PromiseSpec,
 } from "./promise-kinds";
 import { kindAllowedForCategory } from "./wishes";
@@ -45,6 +45,7 @@ function sanitizePromise(raw: unknown, ctx: NegotiationContext, seasons: number)
   const r = raw as { kind?: unknown; params?: Record<string, unknown> };
   if (!isPromiseKind(r.kind)) return "Neznámý druh slibu";
   const kind: PromiseKind = r.kind;
+  if (!isOfferableKind(kind)) return NOT_OFFERABLE_ERROR;
   const p = r.params ?? {};
   if (!kindAllowedForCategory(kind, ctx.category)) return "Tenhle slib u téhle smlouvy nabídnout nejde.";
   if (SEASONAL_KINDS.has(kind) && seasons < 2) return "Sezónní sliby platí až od příští sezóny, smlouva musí být aspoň na 2 sezóny";
@@ -233,7 +234,8 @@ function candidates(ctx: NegotiationContext): PromiseSpec[] {
   for (let position = 1; position <= ctx.leagueTeams - RELEGATION_SPOTS; position++) {
     out.push({ kind: "league_position", params: { position } });
   }
-  out.push({ kind: "promotion", params: {} }, { kind: "no_relegation", params: {} });
+  if (isOfferableKind("promotion")) out.push({ kind: "promotion", params: {} });
+  if (isOfferableKind("no_relegation")) out.push({ kind: "no_relegation", params: {} });
   for (let round = 2; round <= ctx.cupTotalRounds; round++) out.push({ kind: "cup_round", params: { round } });
   for (let level = ctx.licenceLevel + 1; level <= MAX_LICENCE; level++) out.push({ kind: "coach_licence", params: { level } });
   for (const f of ctx.facilities) {

@@ -45,6 +45,14 @@ describe("pendingTerms", () => {
     const n = { ...parseNegotiation(ROW), rounds: [round("counter_money", counter)] };
     expect(pendingTerms(n)).toEqual(counter);
   });
+  it("úvodní nabídka majitele (offer) se podepisuje jako protinabídka", () => {
+    const n = { ...parseNegotiation(ROW), rounds: [round("offer", PROPOSAL)] };
+    expect(pendingTerms(n)).toEqual(PROPOSAL);
+    expect(pendingTerms({ ...n, status: "accepted" as const })).toBeNull();
+  });
+  it("starší jednání bez úvodní nabídky: nic k podpisu, dokud klub nenavrhne", () => {
+    expect(pendingTerms(parseNegotiation(ROW))).toBeNull();
+  });
   it("po odmítnutí není co podepsat", () => {
     const n = { ...parseNegotiation(ROW), rounds: [round("reject")] };
     expect(pendingTerms(n)).toBeNull();
@@ -143,6 +151,39 @@ describe("openNegotiation", () => {
     if (res.ok) expect(typeof res.id).toBe("string");
     const ins = db.dotazy.find((d) => /INSERT INTO sponsor_negotiations/.test(d.sql))!;
     expect(ins.sql).toContain("WHERE NOT EXISTS");
+  });
+
+  it("úvodní nabídka majitele: jedno kolo \"offer\" v INSERTu, platné a k podpisu", async () => {
+    const db = new FalesnaD1(baseRules([{ sql: /^INSERT INTO sponsor_negotiations/, changes: 1 }]));
+    const res = await openNegotiation(jakoD1(db), "t1", 7, "stadium");
+    expect(res.ok).toBe(true);
+    const ins = db.dotazy.find((d) => /INSERT INTO sponsor_negotiations/.test(d.sql))!;
+    expect(ins.sql).toMatch(/expires_game_date, rounds\)/);
+    const rounds: NegotiationRound[] = JSON.parse(ins.params[8] as string);
+    expect(rounds).toHaveLength(1);
+    const r = rounds[0];
+    expect(r.response.kind).toBe("offer");
+    expect(r.response.counter).toEqual(r.proposal);
+    expect(r.response.progressMonths).toBe(0);
+    expect(r.response.text).not.toContain("—");
+    expect(r.proposal.demands.monthly).toBeGreaterThan(0);
+    expect(r.proposal.demands.signingBonus).toBeGreaterThan(0);
+    // Majitel je obchodník: jeho přání (návštěva, logo na rukávu, exkluzivita oboru) jsou v nabídce jako sliby.
+    expect(r.proposal.promises.length).toBeGreaterThan(0);
+    // Trpělivost se nemění: 2 + náklonnost 50 / 25.
+    expect(ins.params[6]).toBe(4);
+    const n = { ...parseNegotiation({ ...ROW, rounds: ins.params[8] as string }) };
+    expect(pendingTerms(n)).toEqual(r.proposal);
+    expect(pendingTermsProgress(n)).toBe(0);
+  });
+
+  it("běžící jednání (dvojklik): vrátí jeho id a druhou nabídku nezapíše", async () => {
+    const db = new FalesnaD1(baseRules([]));
+    db.pravidla.unshift({ sql: NO_ACTIVE_NEGOTIATION, first: { ...ROW, id: "running", sponsor_id: 7, category: "stadium" as const } });
+    const res = await openNegotiation(jakoD1(db), "t1", 7, "stadium");
+    expect(res).toEqual({ ok: true, id: "running" });
+    expect(db.pocet(/INSERT INTO sponsor_negotiations/)).toBe(0);
+    expect(db.pocet(/UPDATE sponsor_negotiations SET rounds/)).toBe(0);
   });
 
   it("rukáv už nese logo tohohle sponzora: mezi přání majitele logo nedá (R: Task 5→7)", async () => {

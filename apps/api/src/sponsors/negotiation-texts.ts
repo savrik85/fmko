@@ -5,7 +5,7 @@
 import type { OwnerPersonality } from "./owners";
 import type { PromiseKind } from "./promise-kinds";
 
-export const RESPONSE_KINDS = ["accept", "counter_money", "counter_wish", "reject", "insulted", "walked_away"] as const;
+export const RESPONSE_KINDS = ["offer", "accept", "counter_money", "counter_wish", "reject", "insulted", "walked_away"] as const;
 export type ResponseKind = (typeof RESPONSE_KINDS)[number];
 
 /** Přání ve 4. pádě pro větu „slib mi …" / „přidejte …". */
@@ -26,6 +26,7 @@ export const WISH_ACCUSATIVE: Record<PromiseKind, string> = {
 
 const TEXTS: Record<OwnerPersonality, Record<ResponseKind, readonly string[]>> = {
   patriot: {
+    offer: ["Pro naše kluky jsem si něco připravil. Koukni na to.", "Tady je, co ti můžu dát. Myslím, že je to férové."],
     accept: ["Plácneme si. Pro naše kluky rád.", "Beru. Ať je to vidět na hřišti i v hospodě."],
     counter_money: ["Tolik ti dát nemůžu. Takhle to jde, co ty na to?", "Trochu jsem to přitáhl, víc firma neunese."],
     counter_wish: ["Dám ti, co chceš, když mi slíbíš {wish}.", "Tvůj návrh beru, jen přidej {wish}. To je pro mě srdcovka."],
@@ -34,6 +35,7 @@ const TEXTS: Record<OwnerPersonality, Record<ResponseKind, readonly string[]>> =
     walked_away: ["Dost. Teď se mi chvíli neozývej.", "Nechme toho, za pár týdnů možná."],
   },
   businessman: {
+    offer: ["Připravil jsem vám návrh smlouvy. Prostudujte si ho.", "Tohle je moje nabídka. O podrobnostech se dá mluvit."],
     accept: ["Dohodnuto. Připravím smlouvu.", "Čísla sedí, jdeme do toho."],
     counter_money: ["Tohle je můj strop. Upravil jsem to, podívejte se.", "V téhle podobě to neprojde. Posílám upravenou verzi."],
     counter_wish: ["Návrh přijmu, pokud k němu přidáte {wish}.", "Za {wish} vám to podepíšu tak, jak to je."],
@@ -42,6 +44,7 @@ const TEXTS: Record<OwnerPersonality, Record<ResponseKind, readonly string[]>> =
     walked_away: ["Myslím, že jsme skončili. Ozvěte se za pár týdnů.", "Tady se neshodneme. Odložíme to."],
   },
   fan: {
+    offer: ["Už jsem to měl nachystané! Tady je, co ti dám.", "Na tohle jsem se těšil. Mrkni, co jsem vymyslel."],
     accept: ["Jasně, beru! Ať to lítá.", "Plácnem si, na tohle jsem čekal."],
     counter_money: ["Tolik ne. Takhle to dám.", "Kousek jsem ubral, víc to nejde."],
     counter_wish: ["Beru, ale slib mi {wish}. Chci vidět výsledky.", "Dám ti to celé, když přidáš {wish}."],
@@ -50,6 +53,7 @@ const TEXTS: Record<OwnerPersonality, Record<ResponseKind, readonly string[]>> =
     walked_away: ["Mám toho dost. Ozvi se za pár týdnů.", "Končím. Za čas uvidíme."],
   },
   cautious: {
+    offer: ["Dovolil jsem si připravit návrh. Snad vám bude vyhovovat.", "Tohle je, co vám mohu nabídnout. Podmínky jsem volil opatrně."],
     accept: ["Dobře. S tímhle můžu v klidu spát.", "Souhlasím, podmínky jsou rozumné."],
     counter_money: ["Tolik riskovat nechci. Navrhuji tohle.", "Takhle je to pro mě přijatelné."],
     counter_wish: ["Přijmu to, když mi zaručíte {wish}.", "Potřebuji jistotu. Přidejte {wish} a podepíšu."],

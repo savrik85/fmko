@@ -9,7 +9,7 @@ import { ErrorBox, SectionLabel, Spinner, useConfirm } from "@/components/ui";
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import {
-  emptyProposal, estimateRange, previewCost, withSeasons, type NegotiationView, type PromiseKind, type Proposal,
+  estimateRange, initialDraft, previewCost, withSeasons, type NegotiationView, type PromiseKind, type Proposal,
 } from "@/lib/sponsor-negotiation";
 import { NegotiationHeader } from "@/components/sponsors/negotiation/negotiation-header";
 import { PromisePicker } from "@/components/sponsors/negotiation/promise-picker";
@@ -45,7 +45,7 @@ export default function NegotiationPage() {
   const load = () => {
     if (!teamId || !negId) return Promise.resolve();
     return apiFetch<NegotiationView>(`/api/teams/${teamId}/sponsors/negotiations/${negId}`)
-      .then((v) => { setView(v); setDraft((d) => (d ? withSeasons(v, d, d.seasons) : emptyProposal(v))); })
+      .then((v) => { setView(v); setDraft((d) => (d ? withSeasons(v, d, d.seasons) : initialDraft(v))); })
       .catch((e) => { console.error("jednání se sponzorem:", e); setError((e as Error).message); });
   };
 

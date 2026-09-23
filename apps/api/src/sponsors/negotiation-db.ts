@@ -15,14 +15,14 @@ import { mainSponsorBlock } from "./exclusivity";
 import { ensureSponsorOwner, getFavor, type SponsorOwner } from "./favor";
 import {
   allowedContractSeasons, BASE_WILLINGNESS, CAUTIOUS_SEASON_BONUS, effectiveContractMonths, initialPatience, MAX_SEASONS, MIN_SEASONS, NEGOTIATION_DAYS,
-  signingSummary, WILLINGNESS_CAP, winBonusFactor,
+  openingOffer, signingSummary, WILLINGNESS_CAP, winBonusFactor,
   type EquipmentOption, type FacilityOption, type NegotiationCategory, type NegotiationContext, type Proposal,
 } from "./negotiation";
-import type { ResponseKind } from "./negotiation-texts";
+import { ownerResponse, type ResponseKind } from "./negotiation-texts";
 import type { OwnerPersonality } from "./owners";
 import { EQUIPMENT_GIFTS, isPromiseKind, type PromiseKind, type PromiseParams } from "./promise-kinds";
 import {
-  constructionOptions, equipmentOptions, promiseCatalog, promiseLabel, type GiftOption, type PromiseOption, type Range,
+  constructionOptions, equipmentOptions, promiseCatalog, promiseLabel, validateProposal, type GiftOption, type PromiseOption, type Range,
 } from "./proposal";
 import { ownerWishes } from "./wishes";
 
@@ -46,7 +46,11 @@ export interface RoundResponse {
   progressMonths?: number;
 }
 
+/** Odpovědi, ve kterých majitel sám dává podmínky k podpisu (response.counter). */
+const OWNER_OFFER_KINDS: ReadonlySet<ResponseKind> = new Set<ResponseKind>(["offer", "counter_money", "counter_wish"]);
+
 export interface NegotiationRound {
+  /** U úvodní nabídky majitele (kind "offer") stejný návrh jako counter, klub nic nenavrhl. */
   proposal: Proposal;
   response: RoundResponse;
 }
@@ -441,15 +445,18 @@ export async function openNegotiation(
   const budgetB = sponsorBudgetB({ monthlyMax: sponsor.monthly_max, reputation: team.reputation, villageSize: team.size, category, favor });
   const sleeve = category === "stadium" ? await sleeveHeldBySponsor(db, teamId, sponsorId) : false;
   const wishes = ownerWishes({ sponsorId, teamId, season, personality: owner.personality, sponsorType: sponsor.type, category, sleeveHeldBySponsor: sleeve });
+  const ctx = await buildNegotiationContext(db, { team, sponsor, category, season, personality: owner.personality, wishes, budgetB });
+  const rounds = openingRounds(ctx, owner.personality, teamGameDate(team), teamId);
   const id = crypto.randomUUID();
-  // Jedno běžící jednání na klub, firmu a kategorii: podmíněný INSERT ustojí i dvojklik.
+  // Jedno běžící jednání na klub, firmu a kategorii: podmíněný INSERT ustojí i dvojklik
+  // (úvodní nabídka je součástí téhož INSERTu, druhá tedy nevznikne).
   const ins = await db.prepare(
-    `INSERT INTO sponsor_negotiations (id, team_id, sponsor_id, category, wishes, budget_b, patience, expires_game_date)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?
+    `INSERT INTO sponsor_negotiations (id, team_id, sponsor_id, category, wishes, budget_b, patience, expires_game_date, rounds)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE NOT EXISTS (SELECT 1 FROM sponsor_negotiations WHERE team_id = ? AND sponsor_id = ? AND category = ? AND status IN ('open','accepted'))`,
   ).bind(
     id, teamId, sponsorId, category, JSON.stringify(wishes), budgetB, initialPatience(favor),
-    gameExpiry(teamGameDate(team), NEGOTIATION_DAYS), teamId, sponsorId, category,
+    gameExpiry(teamGameDate(team), NEGOTIATION_DAYS), JSON.stringify(rounds), teamId, sponsorId, category,
   ).run();
   if ((ins.meta?.changes ?? 0) !== 1) {
     const again = await findActiveNegotiation(db, teamId, sponsorId, category, teamGameDate(team));
@@ -458,6 +465,34 @@ export async function openNegotiation(
   }
   logger.info({ module: "sponsors", teamId }, `jednání ${id}: sponzor ${sponsorId}, ${category}, B=${budgetB}, přání ${wishes.join(",")}`);
   return { ok: true, id };
+}
+
+/**
+ * První kolo jednání: úvodní nabídka majitele (openingOffer). Uloží se jako protinabídka
+ * (counter + progressMonths), takže ji klub může rovnou podepsat. Když by neprošla validací
+ * (nemělo by nastat), zkusí se bez slibů; když ani tak, jednání začne bez ní a klub navrhuje sám.
+ */
+export function openingRounds(ctx: NegotiationContext, personality: OwnerPersonality, gameDate: string, teamId: string): NegotiationRound[] {
+  let valid = validateProposal(openingOffer(ctx, personality), ctx);
+  if (!valid.ok) {
+    // Nějaký slib z přání neprošel: majitel nabídne aspoň samotné peníze.
+    logger.warn({ module: "sponsors", teamId }, `úvodní nabídka majitele neprošla validací: ${valid.error}, zkouší se bez slibů`);
+    valid = validateProposal(openingOffer({ ...ctx, wishes: [] }, personality), ctx);
+  }
+  if (!valid.ok) {
+    logger.warn({ module: "sponsors", teamId }, `úvodní nabídka majitele ani bez slibů neprošla validací: ${valid.error}`);
+    return [];
+  }
+  return [{
+    proposal: valid.proposal,
+    response: {
+      kind: "offer",
+      text: ownerResponse(personality, "offer", 0),
+      counter: valid.proposal,
+      gameDate,
+      progressMonths: ctx.seasonProgressMonths,
+    },
+  }];
 }
 
 export interface NegotiationState {
@@ -492,12 +527,12 @@ export async function loadNegotiationState(db: D1Database, teamId: string, negot
   return { neg, team, sponsor, owner, favor, season, ctx, isRenewal: isRenewalOf(contracts, sponsor.id), contracts };
 }
 
-/** Co se podepíše: přijatý návrh klubu, nebo poslední protinabídka majitele. */
+/** Co se podepíše: přijatý návrh klubu, nebo poslední protinabídka (i úvodní nabídka) majitele. */
 export function pendingTerms(neg: Negotiation): Proposal | null {
   const last = neg.rounds[neg.rounds.length - 1];
   if (!last) return null;
   if (neg.status === "accepted" && last.response.kind === "accept") return last.proposal;
-  if (neg.status === "open" && (last.response.kind === "counter_money" || last.response.kind === "counter_wish") && last.response.counter) {
+  if (neg.status === "open" && OWNER_OFFER_KINDS.has(last.response.kind) && last.response.counter) {
     return last.response.counter;
   }
   return null;

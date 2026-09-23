@@ -5,11 +5,12 @@ import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
   advanceClawback, afterReject, allowedContractSeasons, minContractSeasons, bonusAwareOneTime, buildPromiseRows, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
-  effectiveContractMonths, evaluateRound, initialPatience, meetsMonthlyShare, minMonthlyFor, oneTimeTotal, proposalOneTimeTotal, promiseChance, promisePenalty,
+  effectiveContractMonths, evaluateRound, initialPatience, openingOffer, OPENING_OFFER_SHARE, meetsMonthlyShare, minMonthlyFor, oneTimeTotal, proposalOneTimeTotal, promiseChance, promisePenalty,
   promiseRowCount, promiseValueShare, reduceToWillingness, requestCost, seasonalGoalBonusTotal, willingness,
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
 import { GOAL_BONUS_KINDS, type PromiseSpec } from "./promise-kinds";
+import { validateProposal } from "./proposal";
 
 const CTX: NegotiationContext = {
   category: "main", personality: "fan", wishes: [], budgetB: 10000, season: 3, leagueTeams: 14,
@@ -56,8 +57,13 @@ describe("willingness", () => {
     expect(willingness(prop({}, 2, [{ kind: "league_position", params: { position: 7 } }]), ctx)).toBeCloseTo(8137.5, 6);
   });
   it("strop 1,5 × B", () => {
-    const ctx: NegotiationContext = { ...CTX, expectedPosition: 14, wishes: ["promotion", "league_position"] };
-    const p = prop({}, 2, [{ kind: "promotion", params: {} }, { kind: "league_position", params: { position: 1 } }]);
+    const ctx: NegotiationContext = { ...CTX, expectedPosition: 14, wishes: ["league_position"] };
+    // 0,7 + umístění 0,45 + tribuny 0,2 + licence 0,1 + exkluzivita 0,05 + mladí 0,05 = 1,55 > 1,5.
+    const p = prop({}, 2, [
+      { kind: "league_position", params: { position: 1 } }, { kind: "stadium_upgrade", params: { facility: "stands", level: 3 } },
+      { kind: "coach_licence", params: { level: 3 } }, { kind: "sector_exclusivity", params: { sector: "pub" } },
+      { kind: "youth", params: { count: 2 } },
+    ]);
     expect(willingness(p, ctx)).toBe(15000);
   });
   it("licence a stavba podle počtu stupňů", () => {
@@ -255,9 +261,10 @@ describe("evaluateRound", () => {
     expect(reduceToWillingness(prop({ monthly: 5 }), CTX, 1)?.demands.monthly).toBe(1);
     expect(reduceToWillingness(prop({ monthly: 5 }), CTX, 0)).toBeNull();
   });
-  it("protinabídka za přání přeskočí kolizi se stejným cílem v lize (pravidlo 1d)", () => {
-    const ctx = { ...CTX, wishes: ["promotion" as const] };
-    // Umístění už slíbené, přání „postup" je stejný cíl v lize — nejde přidat, zbývá sleva.
+  it("protinabídka za přání nenabídne postup (postupy se teď nehrají), zbývá sleva", () => {
+    const ctx = { ...CTX, wishes: ["promotion" as const, "no_relegation" as const] };
+    expect(defaultPromise("promotion", ctx, prop({}, 2))).toBeNull();
+    expect(defaultPromise("no_relegation", ctx, prop({}, 2))).toBeNull();
     const already = prop({ monthly: 9000 }, 2, [{ kind: "league_position", params: { position: 7 } }]);
     const r = evaluateRound(already, ctx);
     expect(r.kind).toBe("counter_money");
@@ -562,5 +569,107 @@ describe("protinávrh návštěvy je položka katalogu", () => {
 
   it("nad strop 5000 protinávrh návštěvy nedává", () => {
     expect(defaultPromise("attendance", { ...CTX, lastAvgAttendance: 5001 }, prop({ monthly: 5000 }, 2))).toBeNull();
+  });
+});
+
+describe("openingOffer", () => {
+  const WISH_CTX: NegotiationContext = { ...CTX, category: "stadium", personality: "businessman", wishes: ["attendance", "jersey_logo", "sector_exclusivity"] };
+
+  it("je platný návrh: validace projde, cena ≤ ochota, polovina měsíčně, jen měsíční podpora", () => {
+    for (const personality of ["businessman", "cautious", "patriot", "fan"] as const) {
+      const ctx = { ...WISH_CTX, personality };
+      const offer = openingOffer(ctx);
+      const valid = validateProposal(offer, ctx);
+      expect(valid.ok).toBe(true);
+      expect(requestCost(offer, ctx)).toBeLessThanOrEqual(willingness(offer, ctx) + 1e-6);
+      expect(meetsMonthlyShare(offer, ctx)).toBe(true);
+      expect(offer.demands).toMatchObject({ winBonus: 0, goalBonuses: {}, construction: null, equipment: null, payCurrentFee: false });
+      expect(offer.demands.signingBonus).toBeGreaterThan(0);
+      expect(offer.demands.monthly % 100).toBe(0);
+      expect(offer.demands.signingBonus % 100).toBe(0);
+      expect(evaluateRound(offer, ctx).kind).toBe("accept");
+    }
+  });
+
+  it("sliby podle přání majitele s výchozími parametry", () => {
+    const offer = openingOffer(WISH_CTX);
+    expect(offer.seasons).toBe(2);
+    expect(offer.promises).toEqual([
+      { kind: "attendance", params: { attendance: 200 } },
+      { kind: "jersey_logo", params: {} },
+      { kind: "sector_exclusivity", params: { sector: "pub" } },
+    ]);
+  });
+
+  it("podíl ochoty podle povahy: obchodník nabídne méně než fanoušek", () => {
+    const businessman = openingOffer(WISH_CTX, "businessman");
+    const fan = openingOffer(WISH_CTX, "fan");
+    const o = willingness(businessman, WISH_CTX);
+    // Cena nabídky (měsíčně + příspěvek rozpočítaný na měsíce) sedí těsně pod podílem ochoty.
+    const cost = requestCost(businessman, WISH_CTX);
+    expect(cost).toBeLessThanOrEqual(o * OPENING_OFFER_SHARE.businessman + 1e-6);
+    expect(cost).toBeGreaterThan(o * OPENING_OFFER_SHARE.businessman - 200);
+    expect(requestCost(businessman, WISH_CTX)).toBeLessThan(requestCost(fan, WISH_CTX));
+    expect(businessman.demands.monthly).toBeLessThan(fan.demands.monthly);
+  });
+
+  it("vynechá sliby, které teď nejdou: logo už na rukávu, exkluzivita s bannerem oboru", () => {
+    const ctx: NegotiationContext = { ...WISH_CTX, sleeveHeldBySponsor: true, sectorBannerActive: true };
+    const offer = openingOffer(ctx);
+    expect(offer.promises.map((p) => p.kind)).toEqual(["attendance"]);
+    expect(validateProposal(offer, ctx).ok).toBe(true);
+  });
+
+  it("postup ani nesestup do nabídky nedá (postupy se teď nehrají), i když je má mezi přáními", () => {
+    const ctx: NegotiationContext = { ...CTX, wishes: ["promotion", "league_position", "no_relegation", "cup_round"] };
+    const offer = openingOffer(ctx);
+    expect(offer.promises.map((p) => p.kind)).toEqual(["league_position", "cup_round"]);
+    expect(validateProposal(offer, ctx).ok).toBe(true);
+  });
+
+  it("na konci sezóny (1 sezóna nejde) nabídne nejkratší povolenou délku, sezónní sliby drží", () => {
+    const late: NegotiationContext = { ...CTX, wishes: ["youth"], seasonProgressMonths: MONTHS_PER_SEASON - 0.5 };
+    expect(allowedContractSeasons(late.seasonProgressMonths)).toEqual([2, 3]);
+    expect(openingOffer(late).seasons).toBe(2);
+    expect(validateProposal(openingOffer(late), late).ok).toBe(true);
+  });
+
+  it("příspěvek za podpis: asi 20 % hodnoty smlouvy u fanouška, 15 % u obchodníka, zbytek měsíčně", () => {
+    // Realistický klub: B 8 000, uprostřed tabulky, měsíc po začátku sezóny.
+    const ctx: NegotiationContext = { ...CTX, budgetB: 8000, wishes: ["league_position", "cup_round"], seasonProgressMonths: 1 };
+    const m = effectiveContractMonths(2, 1);
+    for (const [personality, share] of [["fan", 0.2], ["businessman", 0.15]] as const) {
+      const offer = openingOffer({ ...ctx, personality });
+      const c = { ...ctx, personality };
+      expect(validateProposal(offer, c).ok).toBe(true);
+      expect(offer.demands.signingBonus).toBeGreaterThan(0);
+      const total = offer.demands.monthly * m + offer.demands.signingBonus;
+      expect(offer.demands.signingBonus / total).toBeGreaterThan(share - 0.02);
+      expect(offer.demands.signingBonus / total).toBeLessThan(share + 0.02);
+      expect(meetsMonthlyShare(offer, c)).toBe(true);
+      expect(requestCost(offer, c)).toBeLessThanOrEqual(willingness(offer, c) + 1e-6);
+    }
+  });
+
+  it("drobný rozpočet: nabídka pořád platná", () => {
+    const tiny: NegotiationContext = { ...CTX, budgetB: 50 };
+    const offer = openingOffer(tiny);
+    expect(validateProposal(offer, tiny).ok).toBe(true);
+    expect(requestCost(offer, tiny)).toBeLessThanOrEqual(willingness(offer, tiny) + 1e-6);
+  });
+
+  it("deterministická", () => {
+    expect(openingOffer(WISH_CTX)).toEqual(openingOffer(WISH_CTX));
+  });
+
+  it("po úvodní nabídce kolo funguje dál: dražší návrh dostane protinabídku, stejný přijme", () => {
+    const offer = openingOffer(WISH_CTX);
+    const o = willingness(offer, WISH_CTX);
+    const cost = requestCost(offer, WISH_CTX);
+    const withMonthly = (monthly: number): Proposal => ({ ...offer, demands: { ...offer.demands, monthly } });
+    const r = evaluateRound(withMonthly(offer.demands.monthly + Math.floor(o * 1.1 - cost)), WISH_CTX);
+    expect(r.kind === "counter_money" || r.kind === "counter_wish").toBe(true);
+    if (r.kind === "counter_money" || r.kind === "counter_wish") expect(validateProposal(r.counter, WISH_CTX).ok).toBe(true);
+    expect(evaluateRound(withMonthly(offer.demands.monthly + Math.floor(o - cost)), WISH_CTX).kind).toBe("accept");
   });
 });

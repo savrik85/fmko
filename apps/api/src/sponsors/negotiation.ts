@@ -11,7 +11,7 @@ import {
 import { clampFavor } from "./favor-math";
 import type { OwnerPersonality } from "./owners";
 import {
-  BIG_FACILITIES, CLUB_CONTROLLED_KINDS, DEADLINE_KINDS, LEAGUE_FINISH_KINDS, PROMISE_BASE_SHARE, PROMISE_DEADLINE_DAYS, SEASONAL_KINDS,
+  BIG_FACILITIES, CLUB_CONTROLLED_KINDS, DEADLINE_KINDS, isOfferableKind, LEAGUE_FINISH_KINDS, PROMISE_BASE_SHARE, PROMISE_DEADLINE_DAYS, SEASONAL_KINDS,
   type PromiseKind, type PromiseParams, type PromiseSpec,
 } from "./promise-kinds";
 import { kindAllowedForCategory, promiseInterest } from "./wishes";
@@ -377,6 +377,8 @@ export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext,
  */
 export function defaultPromise(kind: PromiseKind, ctx: NegotiationContext, proposal: Proposal): PromiseSpec | null {
   if (SEASONAL_KINDS.has(kind) && proposal.seasons < 2) return null;
+  // Postup a nesestup se teď nehrají (starší jednání je můžou mít mezi přáními).
+  if (!isOfferableKind(kind)) return null;
   if (!kindAllowedForCategory(kind, ctx.category)) return null;
   const spec = (params: PromiseParams): PromiseSpec => ({ kind, params });
   switch (kind) {
@@ -435,6 +437,72 @@ export function attendanceCatalogValue(lastAvgAttendance: number, mult: number):
   const avg = Math.max(10, lastAvgAttendance);
   const floor = Math.max(10, minAttendance(lastAvgAttendance));
   return Math.max(floor, Math.ceil((avg * mult) / 10) * 10);
+}
+
+/**
+ * Kolik z ochoty majitel nabídne v úvodní nabídce: obchodník si nechává nejvíc rezervy,
+ * fanoušek nejmíň. Zbytek do ochoty si klub může dojednat v dalších kolech.
+ */
+export const OPENING_OFFER_SHARE: Record<OwnerPersonality, number> = {
+  businessman: 0.75,
+  cautious: 0.8,
+  patriot: 0.85,
+  fan: 0.9,
+};
+
+/**
+ * Jaký díl úvodní nabídky (měsíční ekvivalent × skutečné měsíce smlouvy) majitel dá hned jako
+ * příspěvek za podpis. Obchodník a opatrný drží peníze radši v měsících.
+ */
+export const OPENING_SIGNING_SHARE: Record<OwnerPersonality, number> = {
+  businessman: 0.15,
+  cautious: 0.15,
+  patriot: 0.2,
+  fan: 0.2,
+};
+
+/** Dolů na stovky (EPS kvůli plovoucí čárce), pod stovku dolů na koruny. */
+function floorHundreds(v: number): number {
+  return v >= 100 ? Math.floor(v / 100 + EPS) * 100 : Math.max(0, Math.floor(v + EPS));
+}
+
+/**
+ * Úvodní nabídka majitele při otevření jednání: délka 2 sezóny (jinak nejkratší povolená),
+ * jeho přání jako sliby (defaultPromise, jen platné a něco nesoucí, max MAX_PROMISES, jeden cíl
+ * v lize) a peníze za podíl ochoty podle povahy (OPENING_OFFER_SHARE). Z toho asi
+ * OPENING_SIGNING_SHARE celé hodnoty smlouvy jde jako příspěvek za podpis, zbytek měsíčně, obojí
+ * dolů na stovky. Bez bonusů za výhru a za splnění. Cena ≤ ochota a pravidlo o měsíční polovině
+ * platí vždy (jinak nabídka spadne na samotnou měsíční podporu). Deterministická (bez RNG).
+ */
+export function openingOffer(ctx: NegotiationContext, personality: OwnerPersonality = ctx.personality): Proposal {
+  const allowed = allowedContractSeasons(ctx.seasonProgressMonths);
+  const seasons = allowed.includes(2) ? 2 : allowed[0];
+  const base: Proposal = {
+    seasons, promises: [],
+    demands: { monthly: 0, winBonus: 0, signingBonus: 0, goalBonuses: {}, construction: null, equipment: null, payCurrentFee: false },
+  };
+  const promises: PromiseSpec[] = [];
+  for (const wish of ctx.wishes) {
+    if (promises.length >= MAX_PROMISES) break;
+    if (promises.some((p) => p.kind === wish)) continue;
+    if (LEAGUE_FINISH_KINDS.has(wish) && promises.some((p) => LEAGUE_FINISH_KINDS.has(p.kind))) continue;
+    // Liga bez nesestupového místa (nemělo by nastat): umístění by validátor nepustil.
+    if (wish === "league_position" && ctx.leagueTeams - RELEGATION_SPOTS < 1) continue;
+    const spec = defaultPromise(wish, ctx, base);
+    // Slib s nulovou hodnotou (ambice na podlaze) by klub jen zavazoval a sponzorovi nic nepřidal.
+    if (!spec || promiseValueShare(spec, ctx) <= 0) continue;
+    promises.push(spec);
+  }
+  const proposal: Proposal = { ...base, promises };
+  const o = willingness(proposal, ctx);
+  const target = o * OPENING_OFFER_SHARE[personality];
+  const m = proposalMonths(proposal, ctx);
+  const signingBonus = floorHundreds(target * m * OPENING_SIGNING_SHARE[personality]);
+  const monthly = Math.max(1, floorHundreds(target - signingBonus / m));
+  const offer: Proposal = { ...proposal, demands: { ...base.demands, monthly, signingBonus } };
+  if (requestCost(offer, ctx) <= o + EPS && meetsMonthlyShare(offer, ctx)) return offer;
+  // Pojistka (drobný rozpočet, zaokrouhlení): jen měsíční podpora, ta obě pravidla splní vždy.
+  return { ...proposal, demands: { ...base.demands, monthly: Math.max(1, floorHundreds(target)) } };
 }
 
 export type RoundOutcome =

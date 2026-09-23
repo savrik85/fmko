@@ -63,6 +63,22 @@ describe("ownerWishes", () => {
   });
 });
 
+describe("ownerWishes bez postupů", () => {
+  it("postup ani nesestup majitel nikdy nechce (postupy se teď nehrají)", () => {
+    for (let id = 1; id <= 60; id++) {
+      for (const personality of ["fan", "cautious", "patriot", "businessman"] as const) {
+        for (const sponsorType of ["it", "shop", "construction", "pub"]) {
+          for (const category of ["main", "stadium"] as const) {
+            const w = ownerWishes({ ...base, sponsorId: id, personality, sponsorType, category });
+            expect(w).not.toContain("promotion");
+            expect(w).not.toContain("no_relegation");
+          }
+        }
+      }
+    }
+  });
+});
+
 describe("promiseInterest", () => {
   it("přání = 1,5", () => {
     expect(promiseInterest("youth", "patriot", ["youth", "no_riots"])).toBe(1.5);

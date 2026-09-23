@@ -8,7 +8,7 @@ import { MONTHS_PER_SEASON } from "./ambition";
 import type { NegotiationContext, Proposal } from "./negotiation";
 import type { NegotiationRound, NegotiationState } from "./negotiation-db";
 import { MAIN_SPONSOR_FREE_SQL } from "./exclusivity";
-import { effectiveContractMonths, minMonthlyFor } from "./negotiation";
+import { effectiveContractMonths, minMonthlyFor, openingOffer } from "./negotiation";
 import {
   OTHER_ACTIVE_IN_CATEGORY_FREE_SQL, viewWithClawback,
   advanceItemsTotals, clawbackAmount, contractClawback, paidConstructionItems, parseAdvance, seasonProgressMonths, signFromState,
@@ -189,6 +189,24 @@ describe("signFromState", () => {
     expect(claim.params).toEqual(["n1", "t1", "open", JSON.stringify(rounds)]);
     expect(insertOf(d).params[4]).toBe(5500);
     expect(money(d)).toEqual([8000]);
+  });
+
+  it("úvodní nabídka majitele se podepisuje hned ze stavu open", async () => {
+    const ctx: NegotiationContext = { ...FULL_CTX, wishes: ["youth", "no_riots"], seasonProgressMonths: 1 };
+    const offer = openingOffer(ctx);
+    expect(offer.promises.map((p) => p.kind)).toEqual(["youth", "no_riots"]);
+    const rounds: NegotiationRound[] = [{
+      proposal: offer,
+      response: { kind: "offer", text: "Tady je, co ti dám.", counter: offer, gameDate: "2026-09-24T00:00:00.000Z", progressMonths: 1 },
+    }];
+    const d = db();
+    const res = await signFromState(jakoD1(d), state({ ctx }, { status: "open", rounds, roundsRaw: JSON.stringify(rounds) }));
+    expect(res.ok).toBe(true);
+    const claim = d.dotazy.find((q) => CLAIM.test(q.sql))!;
+    expect(claim.params).toEqual(["n1", "t1", "open", JSON.stringify(rounds)]);
+    expect(insertOf(d).params[4]).toBe(offer.demands.monthly);
+    expect(offer.demands.signingBonus).toBeGreaterThan(0);
+    expect(money(d)).toEqual([offer.demands.signingBonus]);
   });
 
   const OLD = { id: "c-old", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 2, early_termination_fee: 18000, status: "active" as const };

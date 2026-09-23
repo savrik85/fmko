@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { MONTHS_PER_SEASON } from "./ambition";
 import { contractMonths, minMonthlyFor, type NegotiationContext } from "./negotiation";
-import { GOAL_BONUS_KINDS } from "./promise-kinds";
+import { GOAL_BONUS_KINDS, LEAGUE_MOVEMENT_ENABLED, NOT_OFFERABLE_ERROR, OFFERABLE_KINDS } from "./promise-kinds";
 import { constructionOptions, promiseCatalog, validateProposal } from "./proposal";
 
 const CTX: NegotiationContext = {
@@ -112,13 +112,12 @@ describe("validateProposal", () => {
     expect(ok({ seasons: 2, promises: [{ kind: "reputation", params: { reputation: 51 } }], demands }).ok).toBe(false);
     expect(ok({ seasons: 2, promises: [{ kind: "reputation", params: { reputation: 53 } }], demands }).ok).toBe(true);
   });
-  it("umístění, postup a nesestup dohromady neprojdou", () => {
-    const r = ok({
-      seasons: 2,
-      promises: [{ kind: "league_position", params: { position: 7 } }, { kind: "promotion", params: {} }],
-      demands,
-    });
-    expect(r.ok).toBe(false);
+  it("postup ani nesestup slíbit nejde, postupy a sestupy se teď nehrají", () => {
+    for (const kind of ["promotion", "no_relegation"] as const) {
+      const r = ok({ seasons: 2, promises: [{ kind, params: {} }], demands });
+      expect(r).toEqual({ ok: false, error: NOT_OFFERABLE_ERROR });
+    }
+    expect(ok({ seasons: 2, promises: [{ kind: "league_position", params: { position: 7 } }], demands }).ok).toBe(true);
   });
 });
 
@@ -130,6 +129,12 @@ describe("promiseCatalog", () => {
     const seventh = lp.find((o) => o.params.position === 7)!;
     expect(seventh.value).toEqual({ low: 1856, high: 2644 });
     expect(seventh.seasonal).toBe(true);
+  });
+  it("bez postupu a nesestupu, dokud se postupy nehrají", () => {
+    expect(LEAGUE_MOVEMENT_ENABLED).toBe(false);
+    expect(OFFERABLE_KINDS).not.toContain("promotion");
+    expect(OFFERABLE_KINDS).not.toContain("no_relegation");
+    expect(cat.some((o) => o.kind === "promotion" || o.kind === "no_relegation")).toBe(false);
   });
   it("bez loga na rukávu u hlavního sponzora, bez zamčené stavby", () => {
     expect(cat.some((o) => o.kind === "jersey_logo")).toBe(false);

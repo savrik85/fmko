@@ -13,34 +13,44 @@ function summary(p: Proposal): string {
   return parts.join(", ");
 }
 
-/** Kola jednání od nejnovějšího: co klub navrhl a co majitel odpověděl. */
+/**
+ * Kola jednání od nejnovějšího: co klub navrhl a co majitel odpověděl. Úvodní nabídka majitele
+ * (kind "offer") není návrh klubu, ukazuje se bez něj a do číslování kol se nepočítá.
+ */
 export function RoundsHistory({ rounds, ownerName, onUseCounter }: {
   rounds: NegotiationRound[]; ownerName: string; onUseCounter?: (p: Proposal) => void;
 }) {
   if (rounds.length === 0) return null;
-  const ordered = [...rounds].reverse();
+  let clubRound = 0;
+  const numbered = rounds.map((r) => ({ r, no: r.response.kind === "offer" ? null : ++clubRound }));
+  const ordered = [...numbered].reverse();
   return (
     <Card>
       <CardBody className="space-y-3">
-        {ordered.map((r, i) => (
-          <div key={rounds.length - i} className={i > 0 ? "pt-3 border-t border-line-soft" : ""}>
-            <div className="text-sm text-muted">Kolo {rounds.length - i}: {summary(r.proposal)}</div>
-            <div className="text-base mt-1">
-              <span className="font-heading font-bold">{ownerName}:</span> „{r.response.text}“
-            </div>
-            <div className="text-sm font-heading font-bold text-gold-600">{RESPONSE_LABELS[r.response.kind]}</div>
-            {r.response.counter && (
-              <div className="text-sm mt-1">
-                Protinabídka: {summary(r.response.counter)}
-                {i === 0 && onUseCounter && (
-                  <button type="button" onClick={() => onUseCounter(r.response.counter!)} className="block min-h-11 text-sm text-pitch-600 font-heading font-bold">
-                    Upravit protinabídku a navrhnout znovu
-                  </button>
-                )}
+        {ordered.map(({ r, no }, i) => {
+          const isOffer = r.response.kind === "offer";
+          return (
+            <div key={rounds.length - i} className={i > 0 ? "pt-3 border-t border-line-soft" : ""}>
+              {isOffer
+                ? <div className="text-sm font-heading font-bold text-gold-600">{RESPONSE_LABELS.offer}</div>
+                : <div className="text-sm text-muted">Kolo {no}: {summary(r.proposal)}</div>}
+              <div className="text-base mt-1">
+                <span className="font-heading font-bold">{ownerName}:</span> „{r.response.text}“
               </div>
-            )}
-          </div>
-        ))}
+              {!isOffer && <div className="text-sm font-heading font-bold text-gold-600">{RESPONSE_LABELS[r.response.kind]}</div>}
+              {r.response.counter && (
+                <div className="text-sm mt-1">
+                  {isOffer ? "Nabídka" : "Protinabídka"}: {summary(r.response.counter)}
+                  {i === 0 && onUseCounter && (
+                    <button type="button" onClick={() => onUseCounter(r.response.counter!)} className="block min-h-11 text-sm text-pitch-600 font-heading font-bold">
+                      {isOffer ? "Vrátit nabídku majitele do formuláře" : "Upravit protinabídku a navrhnout znovu"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </CardBody>
     </Card>
   );

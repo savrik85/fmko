@@ -10,9 +10,10 @@ export function SigningSummary({ view }: { view: NegotiationView }) {
   const p = view.pending;
   if (!p) return null;
   const d = p.proposal.demands;
+  const lastKind = view.rounds[view.rounds.length - 1]?.response.kind;
   return (
     <section>
-      <SectionLabel>{view.status === "accepted" ? "Majitel souhlasí" : "Protinabídka k podpisu"}</SectionLabel>
+      <SectionLabel>{view.status === "accepted" ? "Majitel souhlasí" : lastKind === "offer" ? "Nabídka majitele k podpisu" : "Protinabídka k podpisu"}</SectionLabel>
       <Card>
         <CardBody className="space-y-2 text-sm">
           <div>Měsíčně <span className="font-heading font-bold text-pitch-600">{formatCZK(d.monthly)}</span> na {seasonsAccusative(p.proposal.seasons)}</div>

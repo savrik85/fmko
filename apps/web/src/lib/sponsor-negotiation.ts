@@ -33,8 +33,11 @@ export interface PromiseOption {
 }
 export interface GiftOption { key: string; label: string; level: number; cost: number }
 
-export type ResponseKind = "accept" | "counter_money" | "counter_wish" | "reject" | "insulted" | "walked_away";
+export type ResponseKind = "offer" | "accept" | "counter_money" | "counter_wish" | "reject" | "insulted" | "walked_away";
+/** Odpovědi, ve kterých majitel sám dává podmínky (response.counter): úvodní nabídka a protinabídky. */
+export const OWNER_OFFER_KINDS: readonly ResponseKind[] = ["offer", "counter_money", "counter_wish"];
 export interface NegotiationRound {
+  /** U úvodní nabídky majitele (kind "offer") totéž co counter, klub nic nenavrhl. */
   proposal: Proposal;
   response: { kind: ResponseKind; text: string; counter?: Proposal; wish?: PromiseKind; gameDate: string };
 }
@@ -124,6 +127,7 @@ export const PROMISE_TIMING: Record<PromiseKind, string> = {
 };
 
 export const RESPONSE_LABELS: Record<ResponseKind, string> = {
+  offer: "Úvodní nabídka majitele",
   accept: "Přijal",
   counter_money: "Protinabídka",
   counter_wish: "Protinabídka za slib",
@@ -184,6 +188,19 @@ export function previewCost(view: NegotiationView, p: Proposal): number {
 /** Délky smlouvy, které jde teď podepsat (starší API je neposílá, pak 1 až 3 sezóny). */
 export function allowedSeasonsOf(view: NegotiationView): number[] {
   return view.allowedSeasons && view.allowedSeasons.length > 0 ? view.allowedSeasons : [1, 2, 3];
+}
+
+/** Poslední nabídka nebo protinabídka majitele, kterou jde podepsat (jednání otevřené), jinak null. */
+export function latestOwnerOffer(view: NegotiationView): Proposal | null {
+  if (view.status !== "open") return null;
+  const last = view.rounds[view.rounds.length - 1];
+  return last && OWNER_OFFER_KINDS.includes(last.response.kind) && last.response.counter ? last.response.counter : null;
+}
+
+/** Výchozí formulář: poslední nabídka majitele, když je na stole, jinak prázdný návrh. */
+export function initialDraft(view: NegotiationView): Proposal {
+  const offer = latestOwnerOffer(view);
+  return offer ? withSeasons(view, offer, offer.seasons) : emptyProposal(view);
 }
 
 export function emptyProposal(view: NegotiationView): Proposal {
