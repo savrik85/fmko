@@ -116,6 +116,22 @@ export function effectiveContractMonths(seasons: number, progressMonths: number)
   return Math.max(1, seasons * MONTHS_PER_SEASON - Math.max(0, progressMonths));
 }
 
+/**
+ * Nejkratší smlouva, kterou jde k danému postupu sezóny podepsat. Na konci sezóny (do jejího konce
+ * zbývá méně než měsíc) by smlouva na 1 sezónu trvala jen pár dní, ale díky podlaze 1 měsíce
+ * v effectiveContractMonths by nesla podpisový příspěvek jako za celý měsíc. Klub by ji pak každou
+ * sezónu „prodlužoval" pro nový příspěvek. Proto je tehdy nejkratší smlouva na 2 sezóny.
+ */
+export function minContractSeasons(progressMonths: number): number {
+  return MIN_SEASONS * MONTHS_PER_SEASON - Math.max(0, progressMonths) < 1 ? MIN_SEASONS + 1 : MIN_SEASONS;
+}
+
+/** Délky smlouvy (v sezónách), které jde k danému postupu sezóny podepsat. */
+export function allowedContractSeasons(progressMonths: number): number[] {
+  const min = minContractSeasons(progressMonths);
+  return Array.from({ length: MAX_SEASONS - min + 1 }, (_, i) => min + i);
+}
+
 /** Skutečná délka návrhu v měsících podle postupu sezóny v kontextu. */
 export function proposalMonths(proposal: Proposal, ctx: NegotiationContext): number {
   return effectiveContractMonths(proposal.seasons, ctx.seasonProgressMonths);
@@ -428,7 +444,9 @@ export function evaluateRound(proposal: Proposal, ctx: NegotiationContext): Roun
   const cost = requestCost(proposal, ctx);
   const o = willingness(proposal, ctx);
   if (cost <= o + EPS) return { kind: "accept" };
-  if (cost <= COUNTER_BAND * o + EPS) {
+  // Na konci sezóny majitel smlouvu na 1 sezónu nenabídne (minContractSeasons); validateProposal
+  // ji sem ani nepustí, tohle je pojistka, aby protinabídka nikdy neměla zakázanou délku.
+  if (cost <= COUNTER_BAND * o + EPS && proposal.seasons >= minContractSeasons(ctx.seasonProgressMonths)) {
     const promised = new Set(proposal.promises.map((p) => p.kind));
     const hasLeagueFinish = proposal.promises.some((p) => LEAGUE_FINISH_KINDS.has(p.kind));
     for (const wish of ctx.wishes) {

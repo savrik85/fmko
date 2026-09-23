@@ -14,7 +14,7 @@ import { budgetEstimateRange, sponsorBudgetB } from "./budget";
 import { mainSponsorBlock } from "./exclusivity";
 import { ensureSponsorOwner, getFavor, type SponsorOwner } from "./favor";
 import {
-  BASE_WILLINGNESS, CAUTIOUS_SEASON_BONUS, effectiveContractMonths, initialPatience, MAX_SEASONS, MIN_SEASONS, NEGOTIATION_DAYS,
+  allowedContractSeasons, BASE_WILLINGNESS, CAUTIOUS_SEASON_BONUS, effectiveContractMonths, initialPatience, MAX_SEASONS, MIN_SEASONS, NEGOTIATION_DAYS,
   signingSummary, WILLINGNESS_CAP, winBonusFactor,
   type EquipmentOption, type FacilityOption, type NegotiationCategory, type NegotiationContext, type Proposal,
 } from "./negotiation";
@@ -37,6 +37,13 @@ export interface RoundResponse {
   counter?: Proposal;
   wish?: PromiseKind;
   gameDate: string;
+  /**
+   * Postup sezóny (seasonProgressMonths), se kterým majitel návrh přijal nebo protinabídku
+   * spočítal. Podpis podle něj ověřuje cenu: skutečná délka smlouvy se s každým herním dnem
+   * zkracuje a návrh přijatý na hraně pravidla o měsíční polovině by o den později neprošel.
+   * Starší kola ho nemají, pak se ověřuje s čerstvým postupem.
+   */
+  progressMonths?: number;
 }
 
 export interface NegotiationRound {
@@ -479,6 +486,16 @@ export function pendingTerms(neg: Negotiation): Proposal | null {
   return null;
 }
 
+/**
+ * Postup sezóny, se kterým majitel podmínky k podpisu (pendingTerms) přijal nebo navrhl.
+ * null = kolo ho neuložilo (starší jednání), podpis pak ověřuje s čerstvým postupem.
+ */
+export function pendingTermsProgress(neg: Negotiation): number | null {
+  if (!pendingTerms(neg)) return null;
+  const p = neg.rounds[neg.rounds.length - 1]?.response.progressMonths;
+  return typeof p === "number" && Number.isFinite(p) ? Math.min(MONTHS_PER_SEASON, Math.max(0, p)) : null;
+}
+
 /** Zapíše kolo jen tehdy, když se od načtení nic nezměnilo (dvojklik nespálí trpělivost dvakrát). */
 export async function saveRound(
   db: D1Database, neg: Negotiation, round: NegotiationRound,
@@ -548,6 +565,8 @@ export interface NegotiationView {
    * a pravidlo o měsíční polovině stejně jako server.
    */
   contractMonths: number[];
+  /** Délky smlouvy v sezónách, které jde teď podepsat (na konci sezóny bez 1 sezóny, minContractSeasons). */
+  allowedSeasons: number[];
   catalog: PromiseOption[];
   construction: GiftOption[];
   equipment: GiftOption[];
@@ -593,6 +612,7 @@ export function negotiationView(st: NegotiationState, extra: { currentClawback: 
     monthsPerSeason: MONTHS_PER_SEASON,
     // Nezaokrouhleně: web s tím počítá minMonthlyFor, musí vyjít na korunu stejně jako na serveru.
     contractMonths: Array.from({ length: MAX_SEASONS - MIN_SEASONS + 1 }, (_, i) => effectiveContractMonths(MIN_SEASONS + i, ctx.seasonProgressMonths)),
+    allowedSeasons: allowedContractSeasons(ctx.seasonProgressMonths),
     catalog: promiseCatalog(ctx, favor),
     construction: constructionOptions(ctx),
     equipment: equipmentOptions(ctx),

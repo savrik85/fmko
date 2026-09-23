@@ -45,7 +45,7 @@ export default function NegotiationPage() {
   const load = () => {
     if (!teamId || !negId) return Promise.resolve();
     return apiFetch<NegotiationView>(`/api/teams/${teamId}/sponsors/negotiations/${negId}`)
-      .then((v) => { setView(v); setDraft((d) => d ?? emptyProposal(v)); })
+      .then((v) => { setView(v); setDraft((d) => (d ? withSeasons(v, d, d.seasons) : emptyProposal(v))); })
       .catch((e) => { console.error("jednání se sponzorem:", e); setError((e as Error).message); });
   };
 
@@ -128,7 +128,7 @@ export default function NegotiationPage() {
       <NegotiationHeader view={view} estimate={estimate} cost={cost} />
       <RoundsHistory
         rounds={view.rounds} ownerName={ownerName}
-        onUseCounter={open ? (p) => setDraft(p) : undefined}
+        onUseCounter={open ? (p) => setDraft(withSeasons(view, p, p.seasons)) : undefined}
       />
 
       {CLOSED_TEXT[view.status] && (

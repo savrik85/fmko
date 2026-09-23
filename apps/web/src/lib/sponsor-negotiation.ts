@@ -63,6 +63,8 @@ export interface NegotiationView {
   monthsPerSeason: number;
   /** Skutečná délka smlouvy v měsících od dneška do konce poslední sezóny, index 0 = 1 sezóna (server: effectiveContractMonths). */
   contractMonths: number[];
+  /** Délky smlouvy v sezónách, které jde teď podepsat. Na konci sezóny chybí 1 sezóna (server: allowedContractSeasons). */
+  allowedSeasons?: number[];
   catalog: PromiseOption[];
   construction: GiftOption[];
   equipment: GiftOption[];
@@ -176,9 +178,15 @@ export function previewCost(view: NegotiationView, p: Proposal): number {
   return Math.round(cost);
 }
 
+/** Délky smlouvy, které jde teď podepsat (starší API je neposílá, pak 1 až 3 sezóny). */
+export function allowedSeasonsOf(view: NegotiationView): number[] {
+  return view.allowedSeasons && view.allowedSeasons.length > 0 ? view.allowedSeasons : [1, 2, 3];
+}
+
 export function emptyProposal(view: NegotiationView): Proposal {
+  const allowed = allowedSeasonsOf(view);
   return {
-    seasons: 2,
+    seasons: allowed.includes(2) ? 2 : allowed[0],
     promises: [],
     demands: {
       monthly: Math.max(100, Math.round(view.estimate.base.low / 100) * 100),
@@ -187,8 +195,13 @@ export function emptyProposal(view: NegotiationView): Proposal {
   };
 }
 
-/** Sezónní sliby u smlouvy na 1 sezónu nejdou: při zkrácení je z návrhu vyhodíme i s bonusy. */
-export function withSeasons(view: NegotiationView, p: Proposal, seasons: number): Proposal {
+/**
+ * Sezónní sliby u smlouvy na 1 sezónu nejdou: při zkrácení je z návrhu vyhodíme i s bonusy.
+ * Délka, kterou teď podepsat nejde (1 sezóna na konci sezóny), se posune na nejkratší povolenou.
+ */
+export function withSeasons(view: NegotiationView, p: Proposal, requested: number): Proposal {
+  const allowed = allowedSeasonsOf(view);
+  const seasons = allowed.includes(requested) ? requested : allowed.find((n) => n > requested) ?? allowed[allowed.length - 1];
   if (seasons >= 2) return { ...p, seasons };
   const keep = p.promises.filter((s) => !findOption(view, s)?.seasonal);
   const kinds = new Set(keep.map((s) => s.kind));

@@ -32,7 +32,7 @@ import {
   type NegotiationContext, type Proposal,
 } from "./negotiation";
 import {
-  contractBlock, loadNegotiationState, negotiationView, pendingTerms, prorataTerminationFee, teamGameDate, type Fail,
+  contractBlock, loadNegotiationState, negotiationView, pendingTerms, pendingTermsProgress, prorataTerminationFee, teamGameDate, type Fail,
   type NegotiationState, type NegotiationView,
 } from "./negotiation-db";
 import { DEADLINE_KINDS } from "./promise-kinds";
@@ -288,7 +288,13 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   if (!terms) return { ok: false, error: "Majitel zatím nic nepřijal", status: 409 };
 
   // Stav klubu se od návrhu mohl změnit (postavená tribuna, nový banner, licence): znovu ověřit.
-  const valid = validateProposal(terms, ctx);
+  // Cena (pravidlo o měsíční polovině, nejkratší délka) ale s postupem sezóny z kola, ve kterém
+  // majitel podmínky přijal: skutečná délka smlouvy se každým herním dnem zkracuje a podmínky
+  // přijaté na hraně by o den později neprošly, jednání ve stavu 'accepted' by pak viselo do
+  // vypršení. Jednání se při rolloveru zavírají, uložený postup je vždycky z téže sezóny.
+  const acceptedProgress = pendingTermsProgress(neg);
+  const priceCtx: NegotiationContext = acceptedProgress === null ? ctx : { ...ctx, seasonProgressMonths: acceptedProgress };
+  const valid = validateProposal(terms, priceCtx);
   if (!valid.ok) return { ok: false, error: `Tyhle podmínky už podepsat nejde: ${valid.error}`, status: 409 };
   // Otevřené jednání negotiationAvailability znovu neověřuje: okres, okno prodloužení,
   // změna hlavního sponzora jednou za sezónu a exkluzivita se proto kontrolují až tady.
@@ -298,7 +304,8 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   const proposal = valid.proposal;
   const d = proposal.demands;
   const gameDate = teamGameDate(team);
-  // Postup sezóny z kontextu: tím samým číslem jednání rozpočítalo zálohu (effectiveContractMonths).
+  // Skutečný postup sezóny v den podpisu: smlouva běží od dneška, vratka zálohy (clawbackAmount)
+  // i pokuty slibů (buildPromiseRows s čerstvým ctx) se počítají ze skutečné délky smlouvy.
   const progress = ctx.seasonProgressMonths;
   // Nahrazovaná smlouva v kategorii. Přechod k jiné firmě: výpověď s poměrnou pokutou. Prodloužení:
   // stará smlouva vyprší. V obou případech klub vrací nesplacenou zálohu staré smlouvy (jinak by šlo

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1, type Pravidlo } from "../incidents/testovaci-d1";
 import {
   categoryContracts, closeNegotiationsForRollover, contractBlock, EXPIRED_RENEWAL_FACTS_SQL, expiredCountsAsRenewal, isRenewalOf, cooldownUntil, findActiveNegotiation, openNegotiation, parseNegotiation,
-  pendingTerms, saveRound, type CategoryContracts, type ContractRow, type NegotiationRound, type NegotiationSponsor,
+  pendingTerms, pendingTermsProgress, saveRound, type CategoryContracts, type ContractRow, type NegotiationRound, type NegotiationSponsor,
   type NegotiationTeam,
 } from "./negotiation-db";
 import type { Proposal } from "./negotiation";
@@ -48,6 +48,19 @@ describe("pendingTerms", () => {
   it("po odmítnutí není co podepsat", () => {
     const n = { ...parseNegotiation(ROW), rounds: [round("reject")] };
     expect(pendingTerms(n)).toBeNull();
+  });
+});
+
+describe("pendingTermsProgress", () => {
+  const withProgress = (r: NegotiationRound, progressMonths: number): NegotiationRound => ({ ...r, response: { ...r.response, progressMonths } });
+  it("vrátí postup sezóny z kola, ve kterém majitel podmínky přijal nebo navrhl", () => {
+    expect(pendingTermsProgress({ ...parseNegotiation(ROW), status: "accepted", rounds: [withProgress(round("accept"), 2.5)] })).toBe(2.5);
+    const counter = { ...PROPOSAL, demands: { ...PROPOSAL.demands, monthly: 4500 } };
+    expect(pendingTermsProgress({ ...parseNegotiation(ROW), rounds: [withProgress(round("counter_money", counter), 1.25)] })).toBe(1.25);
+  });
+  it("starší kolo bez postupu nebo nic k podpisu: null", () => {
+    expect(pendingTermsProgress({ ...parseNegotiation(ROW), status: "accepted", rounds: [round("accept")] })).toBeNull();
+    expect(pendingTermsProgress({ ...parseNegotiation(ROW), rounds: [withProgress(round("reject"), 1)] })).toBeNull();
   });
 });
 

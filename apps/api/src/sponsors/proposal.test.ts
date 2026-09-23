@@ -2,6 +2,7 @@
  * Validace návrhu (anti-podvrh) a katalog slibů pro klienta.
  */
 import { describe, expect, it } from "vitest";
+import { MONTHS_PER_SEASON } from "./ambition";
 import { contractMonths, minMonthlyFor, type NegotiationContext } from "./negotiation";
 import { GOAL_BONUS_KINDS } from "./promise-kinds";
 import { constructionOptions, promiseCatalog, validateProposal } from "./proposal";
@@ -30,6 +31,14 @@ describe("validateProposal", () => {
   it("délka 1 až 3 sezóny", () => {
     expect(ok({ seasons: 4, promises: [], demands }).ok).toBe(false);
     expect(ok({ seasons: 1.5, promises: [], demands }).ok).toBe(false);
+  });
+  it("na konci sezóny (zbývá méně než měsíc) smlouva na 1 sezónu neprojde, na 2 ano", () => {
+    const end: NegotiationContext = { ...CTX, seasonProgressMonths: MONTHS_PER_SEASON - 0.5 };
+    expect(validateProposal({ seasons: 1, promises: [], demands }, end))
+      .toEqual({ ok: false, error: "Na konci sezóny jde smlouva podepsat nejméně na 2 sezóny." });
+    expect(validateProposal({ seasons: 2, promises: [], demands }, end).ok).toBe(true);
+    // Přesně měsíc před koncem ještě jde.
+    expect(validateProposal({ seasons: 1, promises: [], demands }, { ...CTX, seasonProgressMonths: MONTHS_PER_SEASON - 1 }).ok).toBe(true);
   });
   it("sezónní slib u smlouvy na 1 sezónu neprojde", () => {
     const r = ok({ seasons: 1, promises: [{ kind: "no_riots", params: {} }], demands });

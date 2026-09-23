@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
-  advanceClawback, afterReject, bonusAwareOneTime, buildPromiseRows, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
+  advanceClawback, afterReject, allowedContractSeasons, minContractSeasons, bonusAwareOneTime, buildPromiseRows, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
   effectiveContractMonths, evaluateRound, initialPatience, meetsMonthlyShare, minMonthlyFor, oneTimeTotal, proposalOneTimeTotal, promiseChance, promisePenalty,
   promiseRowCount, promiseValueShare, reduceToWillingness, requestCost, seasonalGoalBonusTotal, willingness,
   type Demands, type NegotiationContext, type Proposal,
@@ -184,6 +184,22 @@ describe("evaluateRound", () => {
   it("sezónní přání u smlouvy na 1 sezónu nejde, zbývá sleva", () => {
     const ctx = { ...CTX, wishes: ["league_position" as const] };
     expect(evaluateRound(prop({ monthly: 7500 }, 1), ctx).kind).toBe("counter_money");
+  });
+  it("na konci sezóny protinabídka nikdy nezní na 1 sezónu", () => {
+    const end: NegotiationContext = { ...CTX, seasonProgressMonths: MONTHS_PER_SEASON - 0.2, wishes: ["league_position"] };
+    // Ve stejném pásmu by jinak přišla sleva (viz test výše), s 1 sezónou na konci sezóny už ne.
+    const r = evaluateRound(prop({ monthly: 7500 }, 1), end);
+    expect(r.kind).toBe("reject");
+    const two = evaluateRound(prop({ monthly: 7500 }, 2), end);
+    expect(two.kind === "counter_money" || two.kind === "counter_wish").toBe(true);
+    if (two.kind === "counter_money" || two.kind === "counter_wish") expect(two.counter.seasons).toBe(2);
+  });
+  it("nejkratší délka smlouvy podle postupu sezóny", () => {
+    expect(minContractSeasons(0)).toBe(1);
+    expect(minContractSeasons(MONTHS_PER_SEASON - 1)).toBe(1);
+    expect(minContractSeasons(MONTHS_PER_SEASON - 0.99)).toBe(2);
+    expect(allowedContractSeasons(0)).toEqual([1, 2, 3]);
+    expect(allowedContractSeasons(MONTHS_PER_SEASON)).toEqual([2, 3]);
   });
   it("nad 115 % odmítne, nad 150 % se urazí", () => {
     expect(evaluateRound(prop({ monthly: 9000 }), CTX)).toEqual({ kind: "reject", insulted: false });

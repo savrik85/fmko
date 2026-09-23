@@ -8,7 +8,7 @@ import { MONTHS_PER_SEASON } from "./ambition";
 import type { NegotiationContext, Proposal } from "./negotiation";
 import type { NegotiationRound, NegotiationState } from "./negotiation-db";
 import { MAIN_SPONSOR_FREE_SQL } from "./exclusivity";
-import { effectiveContractMonths } from "./negotiation";
+import { effectiveContractMonths, minMonthlyFor } from "./negotiation";
 import {
   OTHER_ACTIVE_IN_CATEGORY_FREE_SQL, viewWithClawback,
   advanceItemsTotals, clawbackAmount, contractClawback, paidConstructionItems, parseAdvance, seasonProgressMonths, signFromState,
@@ -255,6 +255,42 @@ describe("signFromState", () => {
     expect(net).toBe(8000);
     const end = batchQueries(d2).find((x) => END_OLD.test(x.sql))!;
     expect(end.params.slice(0, 2)).toEqual(["expired", signed.id]);
+  });
+
+  describe("podmínky přijaté na hraně pravidla o měsíční polovině", () => {
+    // Postup při přijetí: smlouva na 2 sezóny má přesně 5 měsíců, 60 000 za podpis = 12 000 měsíčně na hraně.
+    const P0 = 2 * MPS - 5;
+    const ONE_DAY = MPS / 112;
+    const floorTerms: Proposal = { ...TERMS, demands: { ...TERMS.demands, signingBonus: 60000, monthly: minMonthlyFor(60000, 5) } };
+    const acceptedAt = (progressMonths?: number): NegotiationRound[] => [{
+      proposal: floorTerms,
+      response: { kind: "accept", text: "Beru.", gameDate: "2026-09-24T00:00:00.000Z", ...(progressMonths !== undefined ? { progressMonths } : {}) },
+    }];
+    const later = { ...FULL_CTX, seasonProgressMonths: P0 + ONE_DAY };
+
+    it("o herní den později se podepíše: cena se ověřuje s postupem z kola, záloha začíná dnes", async () => {
+      const rounds = acceptedAt(P0);
+      const d = db();
+      const res = await signFromState(jakoD1(d), state({ ctx: later }, { rounds, roundsRaw: JSON.stringify(rounds) }, floorTerms));
+      expect(res).toMatchObject({ ok: true });
+      expect(JSON.parse(insertOf(d).params[12] as string).startOffsetMonths).toBeCloseTo(P0 + ONE_DAY, 9);
+    });
+
+    it("starší kolo bez uloženého postupu se ověřuje s čerstvým postupem", async () => {
+      const rounds = acceptedAt();
+      const d = db();
+      const res = await signFromState(jakoD1(d), state({ ctx: later }, { rounds, roundsRaw: JSON.stringify(rounds) }, floorTerms));
+      expect(res).toMatchObject({ ok: false, status: 409 });
+      expect(d.davky).toHaveLength(0);
+    });
+
+    it("stavební kontroly zůstávají čerstvé: zamčená stavba neprojde ani s uloženým postupem", async () => {
+      const build: Proposal = { ...floorTerms, demands: { ...floorTerms.demands, construction: "vip_box" } };
+      const rounds: NegotiationRound[] = [{ proposal: build, response: { kind: "accept", text: "Beru.", gameDate: "2026-09-24T00:00:00.000Z", progressMonths: P0 } }];
+      const ctx = { ...later, facilities: [{ facility: "vip_box", currentLevel: 3, locked: true, costs: [0, 55000, 170000, 450000] }] };
+      const res = await signFromState(jakoD1(db()), state({ ctx }, { rounds, roundsRaw: JSON.stringify(rounds) }, build));
+      expect(res).toMatchObject({ ok: false, status: 409 });
+    });
   });
 
   it("prodloužení hlavního sponzora: zápis hlídá exkluzivitu, klub se nepřejmenuje", async () => {

@@ -3,7 +3,7 @@
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import {
-  bonusAwareOneTime, contractMonthsOf, findOption, minMonthlyFor, PROMISE_LABELS, type Demands, type NegotiationView, type Proposal,
+  allowedSeasonsOf, bonusAwareOneTime, contractMonthsOf, findOption, minMonthlyFor, PROMISE_LABELS, type Demands, type NegotiationView, type Proposal,
 } from "@/lib/sponsor-negotiation";
 
 function MoneyInput({ label, hint, value, onChange }: { label: string; hint?: string; value: number; onChange: (v: number) => void }) {
@@ -32,6 +32,7 @@ export function DemandsForm({ view, proposal, onChange }: {
   const months = contractMonthsOf(view, proposal.seasons);
   const oneTime = bonusAwareOneTime(view, proposal);
   const minMonthly = minMonthlyFor(oneTime, months);
+  const allowedSeasons = allowedSeasonsOf(view);
 
   return (
     <div className="space-y-4">
@@ -106,7 +107,7 @@ export function DemandsForm({ view, proposal, onChange }: {
       <div>
         <div className="text-sm font-heading font-bold mb-1">Délka smlouvy</div>
         <div className="flex gap-1.5" role="group" aria-label="Délka smlouvy">
-          {[1, 2, 3].map((n) => (
+          {allowedSeasons.map((n) => (
             <button
               key={n} type="button" aria-pressed={proposal.seasons === n}
               onClick={() => onChange({ ...proposal, seasons: n })}
@@ -116,6 +117,9 @@ export function DemandsForm({ view, proposal, onChange }: {
             </button>
           ))}
         </div>
+        {!allowedSeasons.includes(1) && (
+          <p className="text-sm text-muted mt-1">Do konce sezóny zbývá méně než měsíc, smlouvu jde podepsat nejméně na 2 sezóny.</p>
+        )}
       </div>
     </div>
   );

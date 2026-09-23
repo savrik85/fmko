@@ -10,7 +10,8 @@ import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import { MONTHS_PER_SEASON, RELEGATION_SPOTS } from "./ambition";
 import { budgetEstimateRange } from "./budget";
 import {
-  attendanceCatalogValue, MAX_ATTENDANCE, MAX_PROMISES, MAX_SEASONS, meetsMonthlyShare, MIN_SEASONS, minAttendance, promiseChance,
+  attendanceCatalogValue, MAX_ATTENDANCE, MAX_PROMISES, MAX_SEASONS, meetsMonthlyShare, MIN_SEASONS, minAttendance, minContractSeasons,
+  promiseChance,
   promisePenalty, promiseValueShare,
   type Demands, type NegotiationContext, type Proposal,
 } from "./negotiation";
@@ -102,6 +103,7 @@ export function validateProposal(raw: unknown, ctx: NegotiationContext): Result 
   const r = raw as { seasons?: unknown; promises?: unknown; demands?: unknown };
   const seasons = int(r.seasons);
   if (seasons === null || seasons < MIN_SEASONS || seasons > MAX_SEASONS) return fail("Délka smlouvy musí být 1 až 3 sezóny");
+  if (seasons < minContractSeasons(ctx.seasonProgressMonths)) return fail("Na konci sezóny jde smlouva podepsat nejméně na 2 sezóny.");
   if (!Array.isArray(r.promises) || r.promises.length > MAX_PROMISES) return fail("Neplatné sliby");
 
   const promises: PromiseSpec[] = [];

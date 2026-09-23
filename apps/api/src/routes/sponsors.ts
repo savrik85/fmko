@@ -533,6 +533,8 @@ sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose
       kind,
       text: ownerResponse(st.owner.personality, kind, st.neg.rounds.length, wish),
       gameDate,
+      // Postup sezóny, se kterým majitel přijal nebo spočítal protinabídku: podpis podle něj ověřuje cenu.
+      ...(outcome.kind !== "reject" ? { progressMonths: st.ctx.seasonProgressMonths } : {}),
       ...(counter ? { counter } : {}),
       ...(wish ? { wish } : {}),
     },
