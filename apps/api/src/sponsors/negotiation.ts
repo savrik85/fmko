@@ -3,12 +3,15 @@
  * a řádky slibů pro podpis. Čisté funkce bez DB. Rozpočet B počítá budget.ts (sponsorBudgetB).
  */
 import { MAX_LICENCE } from "@okresni-masina/shared";
+import { CATEGORY_LABELS } from "../equipment/equipment-generator";
 import { gameExpiry } from "../lib/game-time";
+import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import {
   attendanceAmbition, cupRoundAmbition, expectedWinsPerSeason, leaguePositionAmbition, MONTHS_PER_SEASON,
   noRelegationAmbition, promotionAmbition, RELEGATION_SPOTS,
 } from "./ambition";
 import { clampFavor } from "./favor-math";
+import { WISH_ACCUSATIVE } from "./negotiation-texts";
 import type { OwnerPersonality } from "./owners";
 import {
   BIG_FACILITIES, CLUB_CONTROLLED_KINDS, DEADLINE_KINDS, isOfferableKind, LEAGUE_FINISH_KINDS, PROMISE_BASE_SHARE, PROMISE_DEADLINE_DAYS, SEASONAL_KINDS,
@@ -483,6 +486,66 @@ export function evaluateRound(proposal: Proposal, ctx: NegotiationContext): Roun
     if (reduced) return { kind: "counter_money", counter: reduced };
   }
   return { kind: "reject", insulted: cost > INSULT_BAND * o };
+}
+
+export interface Complaint {
+  key: CostKey | `wish:${PromiseKind}`;
+  text: string;
+}
+
+/** Text stížnosti na konkrétní chybějící přání. Sdílí ho complaintFor i counter_wish v routes/sponsors.ts (stejný slib). */
+export function wishComplaint(wish: PromiseKind): Complaint {
+  return { key: `wish:${wish}`, text: `Chybí mi slib: ${WISH_ACCUSATIVE[wish]}.` };
+}
+
+/** Dolů na celé Kč, tisíce oddělené mezerou (cs-CZ). */
+function kc(n: number): string {
+  return `${Math.floor(n).toLocaleString("cs-CZ")} Kč`;
+}
+
+function costComplaintText(item: CostItem, proposal: Proposal, ctx: NegotiationContext): string {
+  switch (item.key) {
+    case "monthly": return `Měsíčně ${kc(item.amount)} je nad moje možnosti.`;
+    case "winBonus": return `Bonus za výhru ${kc(item.amount)} je moc.`;
+    case "signingBonus": return `Nejvíc mi vadí příspěvek za podpis ${kc(item.amount)}.`;
+    case "construction": {
+      const facility = proposal.demands.construction ?? "";
+      const level = (facilityOf(ctx, facility)?.currentLevel ?? 0) + 1;
+      return `Stavba (${FACILITY_LABELS[facility] ?? facility}) na úroveň ${level} za ${kc(item.amount)} je moc.`;
+    }
+    case "equipment": {
+      const category = proposal.demands.equipment ?? "";
+      return `Vybavení (${CATEGORY_LABELS[category] ?? category}) za ${kc(item.amount)} je moc.`;
+    }
+    case "currentFee": {
+      const pronoun = ctx.personality === "patriot" || ctx.personality === "fan" ? "za tebe" : "za vás";
+      return `Zaplatit výpovědní pokutu ${kc(item.amount)} ${pronoun} nechci.`;
+    }
+    default: {
+      // `goal:${PromiseKind}`: bonus za splnění konkrétního slibu.
+      const kind = item.key.slice(5) as PromiseKind;
+      return `Bonus za splnění (${WISH_ACCUSATIVE[kind]}) ${kc(item.amount)} je moc.`;
+    }
+  }
+}
+
+/**
+ * Co majiteli na návrhu konkrétně vadí, když ho odmítne, urazí se, odejde nebo pošle
+ * protinabídku (routes/sponsors.ts, response.complaint). Nejdřív chybějící přání (jde nabídnout
+ * teď, viz defaultPromise, a v návrhu chybí), jinak nejdražší položka požadavků (costBreakdown,
+ * měsíční ekvivalent). Deterministické, žádné RNG. Pro accept/offer se nepoužívá.
+ */
+export function complaintFor(proposal: Proposal, ctx: NegotiationContext): Complaint | null {
+  const promised = new Set(proposal.promises.map((p) => p.kind));
+  for (const wish of ctx.wishes) {
+    if (promised.has(wish)) continue;
+    if (!defaultPromise(wish, ctx, proposal)) continue;
+    return wishComplaint(wish);
+  }
+  const items = costBreakdown(proposal, ctx).filter((i) => i.amount > 0);
+  if (items.length === 0) return null;
+  const biggest = items.reduce((a, b) => (b.monthly > a.monthly ? b : a));
+  return { key: biggest.key, text: costComplaintText(biggest, proposal, ctx) };
 }
 
 /**

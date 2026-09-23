@@ -74,6 +74,11 @@ export function OwnerReplyDialog({
             </div>
           </div>
           <div className="mt-3 bg-surface rounded-xl p-3 text-base">„{round.response.text}“</div>
+          {round.response.complaint && (
+            <p className="text-sm text-ink-light mt-2">
+              <span className="font-heading font-bold text-ink">Co mu vadí:</span> {round.response.complaint}
+            </p>
+          )}
           <p className="text-sm text-ink-light mt-3">{note}</p>
           {counter && (
             <div className="mt-3 bg-surface rounded-xl p-3 space-y-1.5">

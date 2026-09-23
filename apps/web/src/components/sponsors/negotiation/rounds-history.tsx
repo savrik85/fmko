@@ -37,6 +37,11 @@ export function RoundsHistory({ rounds, ownerName, onUseCounter }: {
               <div className="text-base mt-1">
                 <span className="font-heading font-bold">{ownerName}:</span> „{r.response.text}“
               </div>
+              {r.response.complaint && (
+                <div className="text-sm text-ink-light mt-1">
+                  <span className="font-heading font-bold text-ink">Co mu vadí:</span> {r.response.complaint}
+                </div>
+              )}
               {!isOffer && <div className="text-sm font-heading font-bold text-gold-600">{RESPONSE_LABELS[r.response.kind]}</div>}
               {r.response.counter && (
                 <div className="text-sm mt-1">

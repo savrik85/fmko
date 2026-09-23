@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
-  advanceClawback, afterReject, allowedContractSeasons, minContractSeasons, buildPromiseRows, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
+  advanceClawback, afterReject, allowedContractSeasons, minContractSeasons, buildPromiseRows, complaintFor, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
   effectiveContractMonths, evaluateRound, initialPatience, openingOffer, OPENING_OFFER_SHARE, oneTimeTotal, proposalOneTimeTotal, promiseChance, promisePenalty,
   promiseRowCount, promiseValueShare, reduceToWillingness, requestCost, willingness,
   type Demands, type NegotiationContext, type Proposal,
@@ -253,6 +253,35 @@ describe("evaluateRound", () => {
     const r = evaluateRound(already, ctx);
     expect(r.kind).toBe("counter_money");
     if (r.kind === "counter_money") expect(r.counter.demands.monthly).toBe(8500);
+  });
+});
+
+describe("complaintFor", () => {
+  const kc = (n: number) => `${n.toLocaleString("cs-CZ")} Kč`;
+
+  it("chybějící přání má přednost před cenou", () => {
+    const ctx = { ...CTX, wishes: ["no_riots" as const] };
+    const p = prop({ monthly: 5000 }, 2);
+    expect(complaintFor(p, ctx)).toEqual({ key: "wish:no_riots", text: "Chybí mi slib: klid na tribunách." });
+  });
+
+  it("bez chybějícího přání: nejdražší položka je podpisový příspěvek", () => {
+    const p = prop({ monthly: 100, signingBonus: 700000 }, 2);
+    expect(complaintFor(p, CTX)).toEqual({ key: "signingBonus", text: `Nejvíc mi vadí příspěvek za podpis ${kc(700000)}.` });
+  });
+
+  it("nejdražší položka je měsíční podpora", () => {
+    const p = prop({ monthly: 9000, winBonus: 100, signingBonus: 1000 }, 2);
+    expect(complaintFor(p, CTX)).toEqual({ key: "monthly", text: `Měsíčně ${kc(9000)} je nad moje možnosti.` });
+  });
+
+  it("nejdražší položka je stavba", () => {
+    const p = prop({ monthly: 100, construction: "stands" }, 2);
+    expect(complaintFor(p, CTX)).toEqual({ key: "construction", text: `Stavba (Tribuny) na úroveň 2 za ${kc(170000)} je moc.` });
+  });
+
+  it("nic k reklamaci: holý návrh bez peněz, slibů ani přání", () => {
+    expect(complaintFor(prop(), CTX)).toBeNull();
   });
 });
 

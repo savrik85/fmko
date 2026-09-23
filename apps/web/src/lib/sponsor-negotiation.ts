@@ -43,6 +43,8 @@ export interface NegotiationRound {
     kind: ResponseKind; text: string; counter?: Proposal; wish?: PromiseKind; gameDate: string;
     /** Kolo odmítnutí bylo zároveň urážkou. U "walked_away" pak platí obě pokuty náklonnosti (−3 i −5). */
     insulted?: boolean;
+    /** Co majiteli konkrétně vadí (reject, insulted, walked_away, counter_money, counter_wish). Ne u accept/offer. */
+    complaint?: string;
   };
 }
 export interface PromiseRowView {
