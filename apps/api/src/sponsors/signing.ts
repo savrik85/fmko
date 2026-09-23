@@ -157,7 +157,7 @@ export async function contractClawback(db: D1Database, c: AdvanceContract, progr
   });
 }
 
-async function loadAdvanceContract(db: D1Database, contractId: string): Promise<AdvanceContract | null> {
+export async function loadAdvanceContract(db: D1Database, contractId: string): Promise<AdvanceContract | null> {
   return db.prepare(
     "SELECT id, seasons_total, seasons_remaining, signing_bonus, paid_construction, negotiation_id FROM sponsor_contracts WHERE id = ?",
   ).bind(contractId).first<AdvanceContract>();
@@ -229,7 +229,8 @@ export async function applyStadiumRename(db: D1Database, teamId: string, stadium
 }
 
 
-interface Guard { sql: string; params: unknown[] }
+/** Podmínka příkazu v dávce: výraz s pozičními `?` a jeho hodnoty. */
+export interface Guard { sql: string; params: unknown[] }
 
 /**
  * Podmínka INSERTu nové smlouvy: klub (?1) nemá v kategorii (?2) jinou aktivní smlouvu než tu,
@@ -241,7 +242,7 @@ export const OTHER_ACTIVE_IN_CATEGORY_FREE_SQL =
   `NOT EXISTS (SELECT 1 FROM sponsor_contracts y WHERE y.team_id = ? AND y.status = 'active' AND COALESCE(y.category, 'main') = ? AND y.id != ?)`;
 
 /** Totéž co recordTransaction, ale jako příkazy do dávky a jen když platí `guard`. */
-function moneyStatements(
+export function moneyStatements(
   db: D1Database, teamId: string, type: TransactionType, amount: number, description: string, gameDate: string,
   referenceId: string, guard: Guard,
 ): D1PreparedStatement[] {

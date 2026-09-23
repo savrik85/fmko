@@ -93,6 +93,10 @@ export type TransactionType =
   | "bet_win"
   | "bet_refund"
   | "bet_confiscated"
+  // Sliby sponzorům (etapa 3): bonus za splněný slib a pokuta za nesplněný.
+  // Pokuta ZÁMĚRNĚ není v PURCHASE_TYPES, strhne se i při záporném rozpočtu jako disciplinary_fine.
+  | "sponsor_bonus"
+  | "sponsor_penalty"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */

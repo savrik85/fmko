@@ -88,6 +88,7 @@ const TXN_ICONS: Record<string, string> = {
   raffle_income: "🎟", youth_academy: "🧒", equipment_purchase: "🛒", equipment_sale: "🏷",
   equipment_pawn: "💍", competition_fee: "🏛", competition_deposit: "🏛",
   competition_grant: "🏛", bet_confiscated: "🚫",
+  sponsor_bonus: "🎯", sponsor_penalty: "⚠️",
   // Historické typy z ručních zásahů — kód je už negeneruje, ale v účetnictví klubů leží.
   admin_correction: "🛠", bonus: "🎁", transfer_correction: "↩",
   other: "📋",
@@ -121,6 +122,7 @@ const TXN_LABELS: Record<string, string> = {
   equipment_pawn: "Výkup v zastavárně", competition_fee: "Poplatek soutěži",
   competition_deposit: "Kauce za návrh", competition_grant: "Dotace ze soutěže",
   bet_confiscated: "Zabavená výhra ze sázky",
+  sponsor_bonus: "Bonus od sponzora", sponsor_penalty: "Pokuta od sponzora",
   admin_correction: "Oprava vedení soutěže", bonus: "Mimořádná prémie",
   transfer_correction: "Oprava přestupu",
   other: "Ostatní",

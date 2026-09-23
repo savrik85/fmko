@@ -76,7 +76,16 @@ export async function getFavor(db: D1Database, sponsorId: number, teamId: string
  * Přičte deltu k náklonnosti (založí řádek z výchozí hodnoty), ořez 0–100.
  * Záměrně neexportované: změna bez zápisu do deníku nesmí vzniknout. Zvenku jen `favorDeltaStmts`.
  */
-function favorDeltaStmt(db: D1Database, sponsorId: number, teamId: string, delta: number): D1PreparedStatement {
+function favorDeltaStmt(db: D1Database, sponsorId: number, teamId: string, delta: number, guard?: FavorGuard): D1PreparedStatement {
+  if (guard) {
+    // INSERT … SELECT … WHERE: u upsertu musí SELECT mít WHERE, jinak SQLite nerozliší ON CONFLICT.
+    return db.prepare(
+      `INSERT INTO sponsor_team_favor (sponsor_id, team_id, favor, updated_at)
+       SELECT ?, ?, MAX(0, MIN(100, ? + ?)), datetime('now') WHERE ${guard.sql}
+       ON CONFLICT(sponsor_id, team_id) DO UPDATE SET
+         favor = MAX(0, MIN(100, favor + ?)), updated_at = datetime('now')`,
+    ).bind(sponsorId, teamId, DEFAULT_FAVOR, delta, ...guard.params, delta);
+  }
   return db.prepare(
     `INSERT INTO sponsor_team_favor (sponsor_id, team_id, favor, updated_at)
      VALUES (?, ?, MAX(0, MIN(100, ? + ?)), datetime('now'))
@@ -86,12 +95,27 @@ function favorDeltaStmt(db: D1Database, sponsorId: number, teamId: string, delta
 }
 
 /**
+ * Podmínka pro cizí batch: změna náklonnosti i zápis do deníku proběhnou jen, když platí.
+ * `sql` je výraz s pozičními `?`, `params` jeho hodnoty (vzor Guard v signing.ts).
+ */
+export interface FavorGuard { sql: string; params: unknown[] }
+
+/**
+ * Poziční `?` přečísluje na `?N` od `start`. Dotaz s číslovanými parametry (`?1`…`?5`)
+ * a za nimi holými `?` SQLite nemusí svázat správně, proto se podmínka číslují výslovně.
+ */
+function numberedPlaceholders(sql: string, start: number): string {
+  let n = start;
+  return sql.replace(/\?(?!\d)/g, () => `?${n++}`);
+}
+
+/**
  * Zápis do deníku náklonnosti. Musí v batchi běžet PŘED změnou samotnou: skutečnou změnu
  * (po ořezu 0–100) počítá z dosavadní hodnoty. Nulová skutečná změna se nezapíše.
  * Herní datum bere z klubu, bez něj aktuální čas v ISO (jako teams.game_date).
  */
 export function favorLogStmt(
-  db: D1Database, sponsorId: number, teamId: string, delta: number, reason: string,
+  db: D1Database, sponsorId: number, teamId: string, delta: number, reason: string, guard?: FavorGuard,
 ): D1PreparedStatement {
   return db.prepare(
     `INSERT INTO sponsor_favor_log (sponsor_id, team_id, delta, reason, game_date)
@@ -101,15 +125,18 @@ export function favorLogStmt(
        SELECT MAX(0, MIN(100, cur.v + ?3)) - cur.v AS actual
        FROM (SELECT COALESCE((SELECT favor FROM sponsor_team_favor WHERE sponsor_id = ?1 AND team_id = ?2), ?5) AS v) cur
      ) d
-     WHERE d.actual != 0`,
-  ).bind(sponsorId, teamId, delta, reason, DEFAULT_FAVOR);
+     WHERE d.actual != 0${guard ? ` AND ${numberedPlaceholders(guard.sql, 6)}` : ""}`,
+  ).bind(sponsorId, teamId, delta, reason, DEFAULT_FAVOR, ...(guard?.params ?? []));
 }
 
-/** Změna náklonnosti pro cizí batch: [zápis do deníku, změna]. Pořadí se nesmí prohodit. */
+/**
+ * Změna náklonnosti pro cizí batch: [zápis do deníku, změna]. Pořadí se nesmí prohodit.
+ * `guard`: obojí jen, když platí podmínka (např. nárok na slib proběhl právě v tomhle batchi).
+ */
 export function favorDeltaStmts(
-  db: D1Database, sponsorId: number, teamId: string, delta: number, reason: string,
+  db: D1Database, sponsorId: number, teamId: string, delta: number, reason: string, guard?: FavorGuard,
 ): D1PreparedStatement[] {
-  return [favorLogStmt(db, sponsorId, teamId, delta, reason), favorDeltaStmt(db, sponsorId, teamId, delta)];
+  return [favorLogStmt(db, sponsorId, teamId, delta, reason, guard), favorDeltaStmt(db, sponsorId, teamId, delta, guard)];
 }
 
 export async function applySponsorFavorDelta(
