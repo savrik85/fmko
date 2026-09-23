@@ -9,7 +9,7 @@ import { ErrorBox, SectionLabel, Spinner, useConfirm } from "@/components/ui";
 import { formatCZK } from "@/lib/sponsor-owners";
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import {
-  estimateRange, initialDraft, previewCost, withSeasons, type NegotiationView, type PromiseKind, type Proposal,
+  estimateRange, initialDraft, previewCost, proposalsEqual, withSeasons, type NegotiationView, type PromiseKind, type Proposal,
 } from "@/lib/sponsor-negotiation";
 import { NegotiationHeader } from "@/components/sponsors/negotiation/negotiation-header";
 import { PromisePicker } from "@/components/sponsors/negotiation/promise-picker";
@@ -68,7 +68,13 @@ export default function NegotiationPage() {
       await reloadIfExpired(e);
       return null;
     });
-    if (v) setView(v);
+    if (v) {
+      setView(v);
+      // Majitel na návrh odpověděl protinabídkou (nebo ji rovnou přijal): formulář přepsat na
+      // podmínky k podpisu, ať se draft hned shoduje a je rovnou co podepsat, stejně jako odkaz
+      // "Vrátit nabídku majitele do formuláře".
+      if (v.pending) setDraft(withSeasons(v, v.pending.proposal, v.pending.proposal.seasons));
+    }
     setActing(false);
   };
 
@@ -123,6 +129,11 @@ export default function NegotiationPage() {
   const open = view.status === "open";
   const atRoundLimit = view.rounds.length >= MAX_ROUNDS;
   const ownerName = `${view.owner.firstName} ${view.owner.lastName}`;
+  const pendingProposal = view.pending?.proposal ?? null;
+  // Server podepisuje pendingTerms, ne rozpracovaný formulář (accept ignoruje draft), takže
+  // Podepsat smí jít zobrazit, jen když se draft s podmínkami k podpisu shoduje. Mimo otevřené
+  // jednání (stav accepted) se formulář needituje, tam stačí že podmínky k podpisu existují.
+  const agreesWithPending = pendingProposal !== null && (!open || proposalsEqual(draft, pendingProposal));
 
   return (
     <div className="page-container space-y-5">
@@ -162,17 +173,20 @@ export default function NegotiationPage() {
         </>
       )}
 
-      <SigningSummary view={view} />
+      {agreesWithPending && <SigningSummary view={view} />}
 
       {error && <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">{error}</div>}
 
       {/* Odesílací tlačítka vždy na konci stránky, bez částek. */}
       <div className="flex flex-col gap-2">
-        {view.pending && (
+        {open && !agreesWithPending && pendingProposal && (
+          <p className="text-sm text-muted">Změnil jsi podmínky. Pošli je majiteli jako návrh, podepsat půjde, až se shodnete.</p>
+        )}
+        {agreesWithPending && (
           <button type="button" onClick={sign} disabled={acting} className="btn btn-primary w-full min-h-11">Podepsat smlouvu</button>
         )}
-        {open && (
-          <button type="button" onClick={propose} disabled={acting || atRoundLimit} className={`btn ${view.pending ? "btn-ghost" : "btn-primary"} w-full min-h-11`}>
+        {open && !agreesWithPending && (
+          <button type="button" onClick={propose} disabled={acting || atRoundLimit} className="btn btn-primary w-full min-h-11">
             Navrhnout
           </button>
         )}

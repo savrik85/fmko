@@ -197,6 +197,42 @@ export function latestOwnerOffer(view: NegotiationView): Proposal | null {
   return last && OWNER_OFFER_KINDS.includes(last.response.kind) && last.response.counter ? last.response.counter : null;
 }
 
+/** Klíč množiny slibů pro porovnání bez ohledu na pořadí (server je ukládá v pořadí, v jakém přišly). */
+function promiseSetKey(promises: PromiseSpec[]): string {
+  return promises.map((p) => `${p.kind}:${optionKey(p.params)}`).sort().join("|");
+}
+
+/** Klíč bonusů za splnění bez nulových položek (server je taky zahazuje), pro porovnání bez ohledu na pořadí klíčů. */
+function goalBonusesKey(goalBonuses: Partial<Record<PromiseKind, number>>): string {
+  return Object.entries(goalBonuses)
+    .filter(([, v]) => (v ?? 0) !== 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}:${v}`)
+    .join("|");
+}
+
+/**
+ * Shoduje se návrh s podmínkami k podpisu (pending.proposal)? Endpoint /accept podepisuje
+ * pendingTerms na serveru, ne rozpracovaný formulář, proto tlačítko Podepsat smí jít zobrazit
+ * jen tehdy, když se draft s podmínkami k podpisu shoduje – jinak by hráč podepsal něco jiného,
+ * než co vidí ve formuláři.
+ */
+export function proposalsEqual(a: Proposal, b: Proposal): boolean {
+  if (a.seasons !== b.seasons) return false;
+  if (promiseSetKey(a.promises) !== promiseSetKey(b.promises)) return false;
+  const da = a.demands;
+  const db = b.demands;
+  return (
+    da.monthly === db.monthly
+    && da.winBonus === db.winBonus
+    && da.signingBonus === db.signingBonus
+    && da.construction === db.construction
+    && da.equipment === db.equipment
+    && da.payCurrentFee === db.payCurrentFee
+    && goalBonusesKey(da.goalBonuses) === goalBonusesKey(db.goalBonuses)
+  );
+}
+
 /** Výchozí formulář: poslední nabídka majitele, když je na stole, jinak prázdný návrh. */
 export function initialDraft(view: NegotiationView): Proposal {
   const offer = latestOwnerOffer(view);

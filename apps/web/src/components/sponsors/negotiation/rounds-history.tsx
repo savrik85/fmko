@@ -43,7 +43,7 @@ export function RoundsHistory({ rounds, ownerName, onUseCounter }: {
                   {isOffer ? "Nabídka" : "Protinabídka"}: {summary(r.response.counter)}
                   {i === 0 && onUseCounter && (
                     <button type="button" onClick={() => onUseCounter(r.response.counter!)} className="block min-h-11 text-sm text-pitch-600 font-heading font-bold">
-                      {isOffer ? "Vrátit nabídku majitele do formuláře" : "Upravit protinabídku a navrhnout znovu"}
+                      Vrátit nabídku majitele do formuláře
                     </button>
                   )}
                 </div>
