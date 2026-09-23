@@ -2,7 +2,7 @@
  * Validace návrhu (anti-podvrh) a katalog slibů pro klienta.
  */
 import { describe, expect, it } from "vitest";
-import type { NegotiationContext } from "./negotiation";
+import { contractMonths, minMonthlyFor, type NegotiationContext } from "./negotiation";
 import { GOAL_BONUS_KINDS } from "./promise-kinds";
 import { constructionOptions, promiseCatalog, validateProposal } from "./proposal";
 
@@ -169,6 +169,18 @@ describe("bonus za splnění (kolo 5)", () => {
     const r = ok({ seasons: 1, promises, demands: { ...demands, monthly: 1, goalBonuses: { coach_licence: 27900 } } });
     expect(r).toEqual({ ok: false, error: "Aspoň polovina podpory musí chodit měsíčně." });
     expect(ok({ seasons: 1, promises, demands: { ...demands, monthly: 7499, goalBonuses: { coach_licence: 27900 } } }).ok).toBe(true);
+  });
+  it("ruling: sezónní bonusy (youth + no_riots) se do pravidla o polovině počítají taky, seasons × bonus", () => {
+    const promises = [{ kind: "youth", params: { count: 2 } }, { kind: "no_riots", params: {} }];
+    const goalBonuses = { youth: 20000, no_riots: 20000 };
+    const err = { ok: false, error: "Aspoň polovina podpory musí chodit měsíčně." };
+    // 3 sezóny, měsíčně 1 Kč, velké sezónní bonusy za splnění — dřív by prošlo (sezónní bonus se
+    // do jednorázových položek nepočítal), teď musí spadnout na pravidlo o polovině.
+    expect(ok({ seasons: 3, promises, demands: { ...demands, monthly: 1, goalBonuses } })).toEqual(err);
+    // Hranice: (20000 + 20000) × 3 sezóny = 120 000 Kč potenciálu, rozpočítané na měsíce smlouvy.
+    const need = minMonthlyFor((20000 + 20000) * 3, contractMonths(3));
+    expect(ok({ seasons: 3, promises, demands: { ...demands, monthly: need, goalBonuses } }).ok).toBe(true);
+    expect(ok({ seasons: 3, promises, demands: { ...demands, monthly: need - 1, goalBonuses } })).toEqual(err);
   });
   it("katalog nabízí bonus jen u povolených druhů", () => {
     const cat = promiseCatalog(CTX, 50);
