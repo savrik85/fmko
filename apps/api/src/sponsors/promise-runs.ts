@@ -187,15 +187,21 @@ async function cupTotalRoundsOf(db: D1Database, season: number): Promise<number>
  *
  * `atRollover: false` (ruční admin běh během sezóny): jen sezónní sliby nad dosavadními daty,
  * končící smlouvy se neuzavírají a vratka počítá se skutečným postupem sezóny.
+ *
+ * `skipDeadlineKinds: true`: opakovaný pokus o rollover, kterému už jednou proběhl
+ * `shiftPromiseDeadlinesForRollover` (marker v season_end_progress existuje) — termíny
+ * končících smluv jsou pak přesunuté na novou časovou osu a `lastSeasonDay` by je vyhodnotil
+ * podle špatného dne. Termínové sliby končících smluv se proto přeskočí, doženou je pak
+ * (na nové časové ose) denní tick. Bez vlivu na `atRollover: false`.
  */
 export async function evaluateSeasonPromises(
   db: D1Database, season: number,
-  ctx: { gameDate: string; day: string; agedSinceSeason: boolean; atRollover: boolean },
+  ctx: { gameDate: string; day: string; agedSinceSeason: boolean; atRollover: boolean; skipDeadlineKinds?: boolean },
 ): Promise<RunResult> {
   const result = emptyResult();
   const endingContracts = ctx.atRollover
-    ? `OR (p.kind = 'sector_exclusivity' AND sc.seasons_remaining <= 1)
-            OR (p.kind IN (${sqlList(DEADLINE_KINDS)}) AND sc.seasons_remaining <= 1)`
+    ? `OR (p.kind = 'sector_exclusivity' AND sc.seasons_remaining <= 1)`
+      + (ctx.skipDeadlineKinds ? "" : ` OR (p.kind IN (${sqlList(DEADLINE_KINDS)}) AND sc.seasons_remaining <= 1)`)
     : "";
   const rows = await db.prepare(
     `${PENDING_SELECT}
@@ -269,6 +275,19 @@ export async function shiftPromiseDeadlinesForRollover(db: D1Database, oldSeason
     ).bind(SHIFT_MARKER, oldSeason),
   ]);
   return (res[0]?.meta?.changes ?? 0) > 0;
+}
+
+/**
+ * `true` = termíny staré sezóny `oldSeason` už `shiftPromiseDeadlinesForRollover` posunul
+ * (marker v `season_end_progress` existuje). Rollover si tím před opakovaným pokusem ověří,
+ * jestli má `evaluateSeasonPromises` přeskočit termínové sliby končících smluv
+ * (`skipDeadlineKinds`) — jinak by je vyhodnotil podle dne, který už neplatí.
+ */
+export async function deadlinesAlreadyShifted(db: D1Database, oldSeason: number): Promise<boolean> {
+  const row = await db.prepare(
+    "SELECT 1 FROM season_end_progress WHERE league_id = ? AND season_number = ? AND phase = 'deadline_shift'",
+  ).bind(SHIFT_MARKER, oldSeason).first();
+  return row !== null;
 }
 
 /** Nová sezóna = nové počítání porušení. Běží v rolloveru AŽ po vyhodnocení sezónních slibů. */
@@ -356,16 +375,31 @@ export type SleeveLogoResult =
   | { ok: true; status: PromiseStatus }
   | { ok: false; error: string; code: 400 | 404 | 409 };
 
-/** Logo sponzora stadionu na rukáv dresu. Slib se hned vyhodnotí, splní se ještě v tomtéž požadavku. */
+/**
+ * Logo sponzora stadionu na rukáv dresu. Slib se hned vyhodnotí, splní se ještě v tomtéž
+ * požadavku. Logo smí na rukáv jen smlouva kategorie „stadium" (hlavní ani banner ne) a
+ * rukáv smí nést vždycky jen jednoho sponzora — dokud aktivní smlouva jiné firmy logo drží,
+ * novou tam vložit nejde (nejdřív by musela ta stará smlouva skončit).
+ */
 export async function placeSleeveLogo(db: D1Database, teamId: string, promiseId: string, todayIso: string): Promise<SleeveLogoResult> {
   const row = await db.prepare(
-    `SELECT p.id, p.kind, p.status, p.sponsor_id, sc.status AS contract_status
+    `SELECT p.id, p.kind, p.status, p.sponsor_id, sc.status AS contract_status, sc.category
      FROM sponsor_promises p JOIN sponsor_contracts sc ON sc.id = p.contract_id
      WHERE p.id = ? AND p.team_id = ?`,
-  ).bind(promiseId, teamId).first<{ id: string; kind: string; status: string; sponsor_id: number; contract_status: string }>();
+  ).bind(promiseId, teamId).first<{
+    id: string; kind: string; status: string; sponsor_id: number; contract_status: string; category: string | null;
+  }>();
   if (!row) return { ok: false, error: "Slib nenalezen", code: 404 };
   if (row.kind !== "jersey_logo") return { ok: false, error: "Tenhle slib se logem na rukávu neplní", code: 400 };
+  if (row.category !== "stadium") return { ok: false, error: "Logo na rukáv patří sponzorovi stadionu", code: 400 };
   if (row.status !== "pending" || row.contract_status !== "active") return { ok: false, error: "Slib už je vyřízený", code: 409 };
+
+  const conflict = await db.prepare(
+    `SELECT 1 FROM teams t
+     WHERE t.id = ? AND t.sleeve_sponsor_id IS NOT NULL AND t.sleeve_sponsor_id != ?
+       AND EXISTS (SELECT 1 FROM sponsor_contracts sc WHERE sc.team_id = t.id AND sc.sponsor_id = t.sleeve_sponsor_id AND sc.status = 'active')`,
+  ).bind(teamId, row.sponsor_id).first();
+  if (conflict) return { ok: false, error: "Rukáv už nese logo jiného sponzora", code: 409 };
 
   await db.prepare("UPDATE teams SET sleeve_sponsor_id = ? WHERE id = ?").bind(row.sponsor_id, teamId).run();
   await evaluateDeadlinePromises(db, todayIso, { teamId });

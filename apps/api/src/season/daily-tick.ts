@@ -205,6 +205,18 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "setkání s majiteli firem selhalo", e);
   }
 
+  // ── Sliby sponzorům s termínem: licence, stavba, logo (vlastní try: chyba nesmí shodit tick) ──
+  // Před SMS majitelů, aby zpráva o splněném nebo porušeném slibu mohla odejít ještě dnes.
+  try {
+    const { evaluateDeadlinePromises } = await import("../sponsors/promise-runs");
+    const r = await evaluateDeadlinePromises(env.DB, effectiveDate.toISOString());
+    if (r.resolved + r.skipped > 0) {
+      logger.info({ module: "daily-tick" }, `sliby sponzorům: ${r.resolved} vyhodnoceno, ${r.skipped} nejde vyhodnotit, ${r.terminated} výpovědí`);
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "sliby sponzorům s termínem selhaly", e);
+  }
+
   // ── SMS od majitelů firem (vlastní try: chyba nesmí shodit zbytek ticku) ──
   // effectiveDate, ne teams.game_date: posun herního data v teams přijde až níž v ticku.
   try {

@@ -24,6 +24,53 @@ export function smlouvyVyprsely(pocet: number): string {
   return `${pocet} sponzorských smluv vypršelo`;
 }
 
+/**
+ * Krok 4a rolloveru: sezónní sliby sponzorům (etapa 3), posun termínů na novou časovou osu
+ * a vynulování počítadla porušení pro novou sezónu. Vlastní exportovaná funkce kvůli
+ * testovatelnosti a jasnému pořadí — volá se AŽ po synchronizaci s reálným kalendářem
+ * (`startIso` už nese nové herní datum, krok 2/3) a PŘED krokem 4b (expirace smluv): smlouvy,
+ * které teď vyprší, jsou ještě aktivní, takže se jim sezónní sliby i exkluzivita oboru
+ * vyhodnotí, a výpověď sponzorem (za nesplněné sliby) má přednost před obyčejným vypršením.
+ *
+ * Retry bezpečné: když předchozí pokus o rollover termíny staré sezóny už posunul
+ * (`shiftPromiseDeadlinesForRollover` nechal marker), vyhodnocení termínové sliby končících
+ * smluv přeskočí (`skipDeadlineKinds`) — jinak by je posoudilo podle dne, který na nové
+ * časové ose už neplatí. Každá část ve vlastním try, chyba nesmí shodit zbytek rolloveru.
+ *
+ * Vrací firmy, které v běhu smlouvu vypověděly (per tým + sponzor) — volající je vyřadí ze
+ * sezónních SMS majitelů (`enqueueSeasonEndSms`) stejně jako vypršelé hlavní smlouvy.
+ */
+export async function rolloverSponsorPromises(
+  db: D1Database, oldSeasonNumber: number, startIso: string,
+): Promise<Array<{ team_id: string; sponsor_id: number }>> {
+  const promiseDay = startIso.slice(0, 10);
+  let terminatedSponsors: Array<{ team_id: string; sponsor_id: number }> = [];
+  try {
+    const { deadlinesAlreadyShifted, evaluateSeasonPromises } = await import("../sponsors/promise-runs");
+    const skipDeadlineKinds = await deadlinesAlreadyShifted(db, oldSeasonNumber);
+    const r = await evaluateSeasonPromises(db, oldSeasonNumber, {
+      gameDate: startIso, day: promiseDay, agedSinceSeason: true, atRollover: true, skipDeadlineKinds,
+    });
+    terminatedSponsors = r.terminatedSponsors.map((t) => ({ team_id: t.teamId, sponsor_id: t.sponsorId }));
+    logger.info({ module: "season-rollover" }, `sliby sponzorům: ${r.resolved} vyhodnoceno, ${r.skipped} nejde vyhodnotit, ${r.terminated} výpovědí`);
+  } catch (e) {
+    logger.error({ module: "season-rollover" }, "vyhodnocení sezónních slibů sponzorům", e);
+  }
+  try {
+    const { shiftPromiseDeadlinesForRollover } = await import("../sponsors/promise-runs");
+    await shiftPromiseDeadlinesForRollover(db, oldSeasonNumber, promiseDay);
+  } catch (e) {
+    logger.error({ module: "season-rollover" }, "posun termínů slibů sponzorům", e);
+  }
+  try {
+    const { resetSeasonBreaches } = await import("../sponsors/promise-runs");
+    await resetSeasonBreaches(db);
+  } catch (e) {
+    logger.error({ module: "season-rollover" }, "vynulování porušení slibů za sezónu", e);
+  }
+  return terminatedSponsors;
+}
+
 export async function rolloverAllLeagues(
   db: D1Database,
   oldSeasonNumber: number,
@@ -76,6 +123,9 @@ export async function rolloverAllLeagues(
   await db.prepare("UPDATE seasons SET status = 'finished' WHERE number = ? AND status = 'active'")
     .bind(oldSeasonNumber).run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "finish old season", e));
+
+  // 4a. Sliby sponzorům (etapa 3), posun termínů a vynulování porušení za sezónu.
+  const promiseTerminatedSponsors = await rolloverSponsorPromises(db, oldSeasonNumber, startIso);
 
   // Hlavní smlouvy, které teď vyprší: jejich majitelé se v kroku 4b-sms rozloučí.
   let expiringMain: Array<{ team_id: string; sponsor_id: number }> = [];
@@ -156,7 +206,9 @@ export async function rolloverAllLeagues(
       .catch((e) => { logger.error({ module: "season-rollover" }, "uzavření jednání se sponzory", e); });
     await closeOwnerSmsForRollover(db);
     const day = startIso.slice(0, 10);
-    const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day, expiringMain);
+    // Sponzoři, kteří smlouvu vypověděli za nesplněné sliby (4a), se s verdiktem sezóny
+    // nesmí míchat stejně jako vypršelé hlavní smlouvy — vlastní SMS o výpovědi šla dřív.
+    const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day, [...expiringMain, ...promiseTerminatedSponsors]);
     for (const m of expiringMain) {
       await enqueueMainSponsorSms(db, m.team_id, m.sponsor_id, "main_lost",
         `main-expired:${m.team_id}:${m.sponsor_id}:s${oldSeasonNumber}`, { day });

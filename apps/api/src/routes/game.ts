@@ -8520,6 +8520,43 @@ gameRouter.post("/admin/run-daily-tick", async (c) => {
   }
 });
 
+// POST /api/admin/sponsor-promises/evaluate — ruční vyhodnocení slibů sponzorům (testování).
+// ?scope=deadline → termínové sliby k hernímu dni (jako denní tick, bez KV zámku ticku),
+// ?scope=season&season=N → sezónní sliby sezóny N nad dosavadními daty, MIMO rollover
+//   (atRollover: false — končící smlouvy se neuzavírají). POZOR: vyřízení je NATRVALO, stejný
+//   nárok jako v ticku nebo rolloveru, jen nad rozehranou sezónou — ne náhled.
+// Obojí je idempotentní: vyřízený slib se podruhé nenárokuje.
+gameRouter.post("/admin/sponsor-promises/evaluate", async (c) => {
+  const scope = c.req.query("scope");
+  const row = await c.env.DB.prepare(
+    "SELECT game_date FROM teams WHERE user_id != 'ai' AND game_date IS NOT NULL ORDER BY game_date DESC LIMIT 1",
+  ).first<{ game_date: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "herní datum pro vyhodnocení slibů", e); return null; });
+  const gameDate = row?.game_date ?? new Date().toISOString();
+  const { evaluateDeadlinePromises, evaluateSeasonPromises } = await import("../sponsors/promise-runs");
+  try {
+    if (scope === "deadline") {
+      return c.json({ ok: true, gameDate, ...(await evaluateDeadlinePromises(c.env.DB, gameDate)) });
+    }
+    if (scope === "season") {
+      const season = Number(c.req.query("season"));
+      if (!Number.isInteger(season) || season < 1) return c.json({ error: "Chybí číslo sezóny" }, 400);
+      const r = await evaluateSeasonPromises(c.env.DB, season, {
+        gameDate, day: gameDate.slice(0, 10), agedSinceSeason: false, atRollover: false,
+      });
+      return c.json({
+        ok: true, gameDate,
+        note: "Sezónní sliby se vyřizují natrvalo nad dosavadními daty, i mimo rollover.",
+        ...r,
+      });
+    }
+    return c.json({ error: "Parametr scope musí být deadline nebo season" }, 400);
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "ruční vyhodnocení slibů sponzorům", e);
+    return c.json({ error: "Vyhodnocení selhalo" }, 500);
+  }
+});
+
 // POST /api/admin/run-transfer-tick — ruční spuštění transfer pressure ticku
 // (expirace nabídek, CPU nabídky, truc). Testing env nemá crony — jediná cesta, jak ho tam spustit.
 gameRouter.post("/admin/run-transfer-tick", async (c) => {

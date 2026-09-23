@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1, type Pravidlo } from "../incidents/testovaci-d1";
 import { loadDeadlineState, loadSeasonStats } from "./promise-data";
 import {
-  evaluateDeadlinePromises, evaluateSeasonPromises, exclusiveSectors, listTeamPromises, placeSleeveLogo,
-  shiftPromiseDeadlinesForRollover,
+  deadlinesAlreadyShifted, evaluateDeadlinePromises, evaluateSeasonPromises, exclusiveSectors, listTeamPromises,
+  placeSleeveLogo, shiftPromiseDeadlinesForRollover,
 } from "./promise-runs";
 
 /** Jednotlivé dotazy i dotazy z dávek (nárok na slib jde v dávce resolvePromise). */
@@ -228,14 +228,31 @@ describe("listTeamPromises", () => {
 
 describe("placeSleeveLogo", () => {
   it("jiný druh slibu odmítne", async () => {
-    const db = new FalesnaD1([{ sql: /SELECT p\.id, p\.kind, p\.status/, first: { id: "p1", kind: "reputation", status: "pending", sponsor_id: 7, contract_status: "active" } }]);
+    const db = new FalesnaD1([{ sql: /SELECT p\.id, p\.kind, p\.status/, first: { id: "p1", kind: "reputation", status: "pending", sponsor_id: 7, contract_status: "active", category: "main" } }]);
     expect(await placeSleeveLogo(jakoD1(db), "t1", "p1", "2026-09-23T16:00:00.000Z"))
       .toEqual({ ok: false, error: "Tenhle slib se logem na rukávu neplní", code: 400 });
   });
 
+  it("smlouva bez kategorie stadion odmítne, i když jde o slib loga", async () => {
+    const db = new FalesnaD1([{ sql: /SELECT p\.id, p\.kind, p\.status/, first: { id: "p1", kind: "jersey_logo", status: "pending", sponsor_id: 7, contract_status: "active", category: "main" } }]);
+    expect(await placeSleeveLogo(jakoD1(db), "t1", "p1", "2026-09-23T16:00:00.000Z"))
+      .toEqual({ ok: false, error: "Logo na rukáv patří sponzorovi stadionu", code: 400 });
+  });
+
+  it("rukáv už nese logo jiné aktivní smlouvy: odmítne", async () => {
+    const db = new FalesnaD1([
+      { sql: /SELECT p\.id, p\.kind, p\.status/, first: { id: "p1", kind: "jersey_logo", status: "pending", sponsor_id: 7, contract_status: "active", category: "stadium" } },
+      { sql: /FROM teams t/, first: { exists: 1 } },
+    ]);
+    expect(await placeSleeveLogo(jakoD1(db), "t1", "p1", "2026-09-23T16:00:00.000Z"))
+      .toEqual({ ok: false, error: "Rukáv už nese logo jiného sponzora", code: 409 });
+    const check = db.dotazy.find((d) => /FROM teams t/.test(d.sql));
+    expect(check?.params).toEqual(["t1", 7]);
+  });
+
   it("čekající slib loga: logo na rukáv a hned vyhodnotit", async () => {
     const db = new FalesnaD1([
-      { sql: /SELECT p\.id, p\.kind, p\.status/, first: { id: "p1", kind: "jersey_logo", status: "pending", sponsor_id: 7, contract_status: "active" } },
+      { sql: /SELECT p\.id, p\.kind, p\.status/, first: { id: "p1", kind: "jersey_logo", status: "pending", sponsor_id: 7, contract_status: "active", category: "stadium" } },
       { sql: /SELECT status FROM sponsor_promises/, first: { status: "fulfilled" } },
     ]);
     const res = await placeSleeveLogo(jakoD1(db), "t1", "p1", "2026-09-23T16:00:00.000Z");
@@ -244,5 +261,30 @@ describe("placeSleeveLogo", () => {
     // Vyhodnocení termínových slibů jen pro tenhle klub (ne kontrolní SELECT slibu výše).
     const sel = db.dotazy.find((d) => /WHERE p\.status = 'pending' AND sc\.status = 'active'/.test(d.sql));
     expect(sel?.params).toEqual(["t1"]);
+  });
+});
+
+describe("evaluateSeasonPromises: skipDeadlineKinds", () => {
+  it("retry rolloveru s posunutými termíny vynechá termínové sliby končících smluv v dotazu", async () => {
+    const db = new FalesnaD1([{ sql: /FROM sponsor_promises p JOIN sponsor_contracts sc/, all: [] }]);
+    await evaluateSeasonPromises(jakoD1(db), 5, {
+      gameDate: "2026-09-23T16:00:00.000Z", day: "2026-09-23", agedSinceSeason: true, atRollover: true, skipDeadlineKinds: true,
+    });
+    const sel = db.dotazy.find((d) => /FROM sponsor_promises p JOIN sponsor_contracts sc/.test(d.sql));
+    expect(sel?.sql).toContain("p.kind = 'sector_exclusivity' AND sc.seasons_remaining <= 1");
+    expect(sel?.sql).not.toContain("coach_licence");
+  });
+});
+
+describe("deadlinesAlreadyShifted", () => {
+  it("true, když marker posunu termínů pro danou sezónu existuje", async () => {
+    const db = new FalesnaD1([{ sql: /FROM season_end_progress WHERE league_id = \? AND season_number = \? AND phase = 'deadline_shift'/, first: { exists: 1 } }]);
+    expect(await deadlinesAlreadyShifted(jakoD1(db), 5)).toBe(true);
+    expect(db.dotazy[0]?.params).toEqual(["__sponsor_promises__", 5]);
+  });
+
+  it("false, když marker chybí", async () => {
+    const db = new FalesnaD1([{ sql: /FROM season_end_progress WHERE league_id = \? AND season_number = \? AND phase = 'deadline_shift'/, first: null }]);
+    expect(await deadlinesAlreadyShifted(jakoD1(db), 5)).toBe(false);
   });
 });
