@@ -320,7 +320,8 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   const clawback = replacedAdvance ? await contractClawback(db, replacedAdvance, progress) : 0;
   const feePaidBySponsor = d.payCurrentFee ? switchFee : 0;
   if (team.budget + d.signingBonus + feePaidBySponsor < switchFee + clawback) {
-    const what = clawback > 0 ? `výpovědní pokutu a vrácení zálohy (${switchFee + clawback} Kč)` : `výpovědní pokutu ${switchFee} Kč`;
+    const kc = (n: number) => `${Math.round(n).toLocaleString("cs-CZ")} Kč`;
+    const what = clawback > 0 ? `výpovědní pokutu a vrácení zálohy (${kc(switchFee + clawback)})` : `výpovědní pokutu ${kc(switchFee)}`;
     return { ok: false, error: `Na ${what} u ${replaced?.sponsor_name ?? "současného sponzora"} nemáš peníze`, status: 400 };
   }
 
