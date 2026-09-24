@@ -15,6 +15,8 @@ export interface ActiveContract {
   earlyTerminationFee: number;
   /** Výpovědní pokuta TEĎ (poměrná podle zbývajících sezón) — přesně to, co strhne POST /sponsors/terminate. */
   terminationFee: number;
+  /** Smlouva z doby před vyjednáváním: přechod na nového sponzora je zdarma. */
+  isLegacy?: boolean;
   isNamingRights: boolean;
   signedAt: string;
   renewal?: { monthlyAmount: number; winBonus: number; seasons: number; earlyTerminationFee: number } | null;

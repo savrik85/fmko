@@ -2406,6 +2406,8 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     seasonsRemaining: row.seasons_remaining as number,
     earlyTerminationFee: row.early_termination_fee as number,
     terminationFee: prorataTerminationFee(row as unknown as Parameters<typeof prorataTerminationFee>[0]),
+    // Smlouva z doby před vyjednáváním: přechod na nového sponzora přes jednání je zdarma.
+    isLegacy: !row.negotiation_id,
     isNamingRights: row.is_naming_rights === 1,
     signedAt: row.signed_at as string,
   });

@@ -134,8 +134,13 @@ function ContractCard({ contract, favor, onTerminate, onRenew, acting, promises,
           <span className="text-pitch-500 font-heading font-bold">+{formatCZK(weeklyAmount(contract.monthlyAmount))}/týd</span>
           {contract.winBonus > 0 && <span className="text-pitch-400">+{formatCZK(contract.winBonus)} za výhru</span>}
           <span className="text-muted">zbývá {contract.seasonsRemaining} z {contract.seasonsTotal} {seasonsGenitive(contract.seasonsTotal)}</span>
-          <span className="text-card-red">výpovědní pokuta {formatCZK(contract.terminationFee)}</span>
+          {!(contract.isLegacy && contract.category !== "banner") && (
+            <span className="text-card-red">výpovědní pokuta {formatCZK(contract.terminationFee)}</span>
+          )}
         </div>
+        {contract.isLegacy && contract.category !== "banner" && (
+          <div className="text-sm text-pitch-600">Přechod na nového sponzora přes jednání je zdarma, bez pokuty i bez ztráty reputace.</div>
+        )}
         {favor != null && <FavorLine favor={favor} />}
         <ContractPromises promises={promises} acting={acting} onSleeveLogo={onSleeveLogo} />
         {contract.renewal ? (
