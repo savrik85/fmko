@@ -2661,7 +2661,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
   const validatedTerminationFee = Math.round(body.monthlyAmount * body.seasons * (category === "banner" ? 1.5 : 2));
 
   // Hlavní sponzor: vložit jen pokud ho mezitím nepodepsal jiný klub (atomicky v jednom příkazu).
-  const { MAIN_SPONSOR_FREE_SQL } = await import("../sponsors/exclusivity");
+  const { MAIN_SPONSOR_FREE_SQL, mainSponsorFreeParams } = await import("../sponsors/exclusivity");
   const id = crypto.randomUUID();
   const ins = await c.env.DB.prepare(
     `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, win_bonus,
@@ -2670,7 +2670,7 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
      WHERE ? != 'main' OR ${MAIN_SPONSOR_FREE_SQL}`
   ).bind(id, teamId, body.sponsorName, spRow.type, body.monthlyAmount, body.winBonus,
     body.seasons, body.seasons, validatedTerminationFee, body.isNamingRights ? 1 : 0, category, spRow.id,
-    category, spRow.id, teamId,
+    category, ...mainSponsorFreeParams(spRow.id, teamId),
   ).run();
   if (!ins.meta.changes) return c.json({ error: `${body.sponsorName} právě podepsal s jiným klubem` }, 409);
 
@@ -2732,7 +2732,7 @@ gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
   );
 
   // Hlavní sponzor je exkluzivní — neprodloužit, když je hlavním jinde nebo dal přednost jinému klubu.
-  const { mainSponsorBlock, MAIN_SPONSOR_FREE_SQL } = await import("../sponsors/exclusivity");
+  const { mainSponsorBlock, MAIN_SPONSOR_FREE_SQL, mainSponsorFreeParams } = await import("../sponsors/exclusivity");
   const sponsorId = (contract.sponsor_id as number | null) ?? null;
   const isMain = ((contract.category as string) || "main") === "main" && sponsorId !== null;
   if (isMain) {
@@ -2751,7 +2751,7 @@ gameRouter.post("/teams/:teamId/sponsors/renew", async (c) => {
     `UPDATE sponsor_contracts SET status = 'active', monthly_amount = ?, win_bonus = ?, seasons_total = ?, seasons_remaining = ?, early_termination_fee = ?
      WHERE id = ? AND status = ? AND seasons_remaining = ? AND (? = 0 OR ${MAIN_SPONSOR_FREE_SQL})`
   ).bind(terms.monthlyAmount, terms.winBonus, terms.seasons, terms.seasons, terms.earlyTerminationFee,
-    body.contractId, contract.status, contract.seasons_remaining, isMain ? 1 : 0, sponsorId, teamId).run();
+    body.contractId, contract.status, contract.seasons_remaining, isMain ? 1 : 0, ...mainSponsorFreeParams(sponsorId, teamId)).run();
   if (!upd.meta.changes) return c.json({ error: "Smlouvu se nepodařilo prodloužit, načti stránku znovu" }, 409);
 
   return c.json({ ok: true, renewed: terms });

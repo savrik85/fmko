@@ -26,7 +26,7 @@ import { CATEGORIES } from "../equipment/equipment-generator";
 import type { TransactionType } from "../season/finance-processor";
 import { FACILITY_LABELS } from "../stadium/stadium-generator";
 import { MONTHS_PER_SEASON } from "./ambition";
-import { MAIN_SPONSOR_FREE_SQL } from "./exclusivity";
+import { MAIN_SPONSOR_FREE_SQL, mainSponsorFreeParams } from "./exclusivity";
 import {
   advanceClawback, buildPromiseRows, constructionCost, earlyTerminationFee, effectiveContractMonths, equipmentCost, oneTimeTotal,
   type NegotiationContext, type Proposal,
@@ -391,7 +391,7 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
       contractId, teamId, contractName, sponsor.type, d.monthly, d.winBonus, proposal.seasons, proposal.seasons,
       earlyTerminationFee({ monthly: d.monthly, seasons: proposal.seasons }), neg.category, sponsor.id, d.signingBonus,
       advance([...construction, ...(feeItem ? [feeItem] : [])]), neg.id,
-      neg.category, sponsor.id, teamId,
+      neg.category, ...mainSponsorFreeParams(sponsor.id, teamId),
       teamId, neg.category, replaced?.id ?? "",
     ),
   ];

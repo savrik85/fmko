@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1, type Pravidlo } from "../incidents/testovaci-d1";
 import {
-  categoryContracts, closeNegotiation, closeNegotiationsForRollover, contractBlock, EXPIRED_RENEWAL_FACTS_SQL, expiredCountsAsRenewal, isRenewalOf, cooldownUntil, findActiveNegotiation, openNegotiation, parseNegotiation,
+  categoryContracts, closeNegotiation, negotiationAvailability, closeNegotiationsForRollover, contractBlock, EXPIRED_RENEWAL_FACTS_SQL, expiredCountsAsRenewal, isRenewalOf, cooldownUntil, findActiveNegotiation, openNegotiation, parseNegotiation,
   pendingTerms, pendingTermsProgress, saveRound, type CategoryContracts, type ContractRow, type NegotiationRound, type NegotiationSponsor,
   type NegotiationTeam,
 } from "./negotiation-db";
@@ -405,5 +405,65 @@ describe("prodloužení vypršelé smlouvy (isRenewalOf přes categoryContracts)
     expect(EXPIRED_RENEWAL_FACTS_SQL).toMatch(/s\.number = \(SELECT MAX\(number\) FROM seasons WHERE status = 'active'\) - sc\.seasons_total/);
     expect(EXPIRED_RENEWAL_FACTS_SQL).toMatch(/datetime\(sc\.signed_at\) < datetime\(s\.created_at\)/);
     expect(EXPIRED_RENEWAL_FACTS_SQL).toMatch(/o\.id != sc\.id AND datetime\(o\.signed_at\) >= datetime\(sc\.signed_at\)/);
+  });
+});
+
+describe("sdílená firma z doby před exkluzivitou (kdo se dohodne první)", () => {
+  const TEAM: NegotiationTeam = {
+    id: "t1", name: "FK Löffler Spůle", reputation: 60, budget: 100000, league_id: "l1",
+    game_date: "2026-09-23T00:00:00.000Z", last_main_sponsor_change_season: 5, district: "okres1", size: "mesto",
+  };
+  const SPONSOR: NegotiationSponsor = { id: 7, name: "Löffler", type: "potraviny", district: "okres1", monthly_max: 5000 };
+  // Vlastní sdílená smlouva klubu: končí letos, nevznikla jednáním (migrace 0215).
+  const OWN_SHARED: ContractRow = {
+    id: "c1", sponsor_id: 7, sponsor_name: "Löffler", monthly_amount: 1000, win_bonus: 0,
+    seasons_remaining: 1, early_termination_fee: 100, status: "active", negotiation_id: null,
+  };
+  const OWN_QUERY = /SELECT id FROM sponsor_contracts WHERE sponsor_id = \? AND team_id = \?/;
+  const HOLDER = /sc\.sponsor_id = \? AND sc\.status = 'active' AND sc\.category = 'main'/;
+  const EXEMPT = /sc\.team_id != \? AND NOT \(sc\.seasons_remaining <= 1 AND sc\.negotiation_id IS NULL\)/;
+  const OTHER_SHARED = { team_id: "t2", name: "FK Löffler Hradčany", sponsor_name: "Löffler", negotiation_id: null };
+  const OTHER_SIGNED = { ...OTHER_SHARED, negotiation_id: "n9" };
+  /**
+   * Falešná D1 napodobí SQL: dotaz s výjimkou pro sdílený zbytek vrátí jen smlouvu jiného klubu,
+   * která zbytkem není (`signedByOther`), dotaz bez výjimky vrátí jakoukoli.
+   */
+  const dbFor = (o: { own: boolean; signedByOther: boolean }) => new FalesnaD1([
+    { sql: /FROM sponsor_contracts WHERE team_id = \? AND status = 'active' AND COALESCE\(category, 'main'\) = \?/, first: o.own ? OWN_SHARED : null },
+    { sql: OWN_QUERY, first: o.own ? { id: "c1" } : null },
+    { sql: EXEMPT, first: o.signedByOther ? OTHER_SIGNED : null },
+    { sql: HOLDER, first: o.signedByOther ? OTHER_SIGNED : OTHER_SHARED },
+  ]);
+
+  it("klub, který firmu sdílí: jednat o prodloužení jde, limit změny sponzora ho nebrzdí", async () => {
+    const d = dbFor({ own: true, signedByOther: false });
+    const a = await negotiationAvailability(jakoD1(d), TEAM, SPONSOR, "main", 5);
+    expect(a).toEqual({ canOpen: true, reason: null, isRenewal: true, openId: null });
+    const holderQ = d.dotazy.find((q) => HOLDER.test(q.sql))!;
+    expect(holderQ.sql).toMatch(EXEMPT);
+    expect(holderQ.params).toEqual([7, "t1"]);
+  });
+
+  it("stejný klub i v contractBlock (znovu při podpisu): bez blokace", async () => {
+    const d = dbFor({ own: true, signedByOther: false });
+    expect(await contractBlock(jakoD1(d), TEAM, SPONSOR, "main", 5, { active: OWN_SHARED, lastExpired: null })).toBeNull();
+  });
+
+  it("druhý klub podepsal dřív: sdílený klub je blokovaný s vysvětlením", async () => {
+    const d = dbFor({ own: true, signedByOther: true });
+    const a = await negotiationAvailability(jakoD1(d), TEAM, SPONSOR, "main", 5);
+    expect(a.canOpen).toBe(false);
+    expect(a.reason).toBe("Löffler už podepsal smlouvu s klubem FK Löffler Hradčany od příští sezóny");
+    expect(a.reason).not.toContain("—");
+  });
+
+  it("klub, který firmu nesdílí: blokovaný jako dřív, výjimka se na něj nevztahuje", async () => {
+    const team = { ...TEAM, last_main_sponsor_change_season: null };
+    const d = dbFor({ own: false, signedByOther: false });
+    const a = await negotiationAvailability(jakoD1(d), team, SPONSOR, "main", 5);
+    expect(a.canOpen).toBe(false);
+    expect(a.isRenewal).toBe(false);
+    expect(a.reason).toBe("Löffler je hlavním sponzorem klubu FK Löffler Hradčany");
+    expect(d.dotazy.find((q) => HOLDER.test(q.sql))!.sql).not.toMatch(EXEMPT);
   });
 });

@@ -388,7 +388,7 @@ describe("signFromState", () => {
     expect(res).toMatchObject({ ok: true, newTeamName: null, reputationPenalty: 0 });
     const ins = insertOf(d);
     expect(ins.sql).toContain(MAIN_SPONSOR_FREE_SQL);
-    expect(ins.params.slice(-6, -3)).toEqual(["main", 7, "t1"]);
+    expect(ins.params.slice(-7, -3)).toEqual(["main", 7, "t1", "t1"]);
     // Jiná aktivní smlouva v kategorii než ta prodlužovaná zápis zastaví.
     expect(ins.sql).toContain(OTHER_ACTIVE_IN_CATEGORY_FREE_SQL);
     expect(ins.params.slice(-3)).toEqual(["t1", "main", "c-main"]);
@@ -574,5 +574,41 @@ describe("sliby staré smlouvy při podpisu (prodloužení a přechod)", () => {
     const active = { ...OLD, sponsor_id: 7 };
     const renewal = await viewWithClawback(jakoD1(db([FORFEIT_ROWS])), state({ isRenewal: true, contracts: { active, lastExpired: null } }));
     expect(renewal.current).toMatchObject({ sameSponsor: true, forfeitPenalty: 0 });
+  });
+});
+
+describe("sdílená firma: souběžné podpisy dvou klubů (MAIN_SPONSOR_FREE_SQL)", () => {
+  it("sdílený zbytek jiného klubu nevadí jen tomu, kdo firmu sdílí; nová smlouva z jednání už ano", () => {
+    // Výjimka platí jen pro smlouvu, která končí letos a nevznikla jednáním. První podpis vytvoří
+    // smlouvu s negotiation_id, takže druhý klub výjimku ztratí a jeho INSERT neprojde.
+    expect(MAIN_SPONSOR_FREE_SQL).toContain("x.team_id != ? AND NOT ((x.seasons_remaining <= 1 AND x.negotiation_id IS NULL)");
+    expect(MAIN_SPONSOR_FREE_SQL).toContain("own.sponsor_id = x.sponsor_id AND own.team_id = ? AND own.status = 'active' AND own.category = 'main'");
+    expect(MAIN_SPONSOR_FREE_SQL.split("?")).toHaveLength(4);
+  });
+
+  it("prodloužení sdílené firmy: INSERT dostane sponzora a klub pro výjimku, bez přejmenování a limitu změny", async () => {
+    const shared = { id: "c-shared", sponsor_id: 7, sponsor_name: "Löffler", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const, negotiation_id: null };
+    const d = db();
+    const st = state({
+      ctx: { ...FULL_CTX, category: "main" }, isRenewal: true, contracts: { active: shared, lastExpired: null },
+      sponsor: { id: 7, name: "Löffler", type: "pub", district: "Prachatice", monthly_max: 3000 },
+      team: { ...state().team, last_main_sponsor_change_season: 3 },
+    }, { category: "main" });
+    const res = await signFromState(jakoD1(d), st);
+    expect(res).toMatchObject({ ok: true, newTeamName: null, reputationPenalty: 0 });
+    const ins = insertOf(d);
+    expect(ins.params.slice(-7, -3)).toEqual(["main", 7, "t1", "t1"]);
+    // Stará sdílená smlouva vyprší (prodloužení), nevypovídá se.
+    const end = batchQueries(d).find((q) => END_OLD.test(q.sql))!;
+    expect(end.params.slice(0, 2)).toEqual(["expired", "c-shared"]);
+  });
+
+  it("druhý klub už firmu podepsal: INSERT neprojde a podpis vrátí 409", async () => {
+    const shared = { id: "c-shared", sponsor_id: 7, sponsor_name: "Löffler", monthly_amount: 6000, win_bonus: 0, seasons_remaining: 1, early_termination_fee: 12000, status: "active" as const, negotiation_id: null };
+    const d = db([{ sql: INSERT_CONTRACT, changes: 0 }]);
+    const res = await signFromState(jakoD1(d), state({
+      ctx: { ...FULL_CTX, category: "main" }, isRenewal: true, contracts: { active: shared, lastExpired: null },
+    }, { category: "main" }));
+    expect(res).toMatchObject({ ok: false, status: 409 });
   });
 });
