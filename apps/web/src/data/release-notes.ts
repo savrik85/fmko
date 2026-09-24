@@ -14,13 +14,9 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-09-24",
     emoji: "🧾",
-    title: "Pro ty, kdo pořád koukají na tu pokutu",
+    title: "Pro méně chápavé",
     items: [
-      "Ano, opravdu. Přechod ze staré smlouvy na nového sponzora je zdarma. Žádná výpovědní pokuta, žádná ztráta reputace. Psali jsme to včera a píšeme to znovu, tentokrát pomaleji.",
-      "Aby to nikoho už nemátlo, u starých smluv teď místo výpovědní pokuty svítí zeleně, že přechod je zdarma. Pokutu platí jen ten, kdo smlouvu vypoví a nového sponzora si nevyjedná.",
-      "Postup pro jistotu ještě jednou: Sponzoři, Firmy v okrese, vybrat firmu, Jednat o smlouvě, podepsat. Hotovo. Nic dalšího se nemačká.",
-      "Hlavního sponzora můžete v téhle sezóně změnit znovu, i když už jste ho letos jednou měnili. Kdo sdílel sponzora s jiným klubem, může s ním jednat o prodloužení a firmu získá ten, kdo podepíše první.",
-      "V Praze přibylo osm dalších firem, třeba Seznam, ČEZ, O2 nebo Zásilkovna, ať si má každý z čeho vybrat.",
+      "Přechod ze staré smlouvy na nového sponzora je zdarma. U starých smluv už proto žádnou pokutu neuvidíte.",
     ],
   },
   {
