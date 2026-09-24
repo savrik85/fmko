@@ -14,7 +14,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-09-24",
     emoji: "🧾",
-    title: "Pro méně chápavé",
+    title: "Pro upřesnění",
     items: [
       "Přechod ze staré smlouvy na nového sponzora je zdarma. U starých smluv už proto žádnou pokutu neuvidíte.",
     ],
