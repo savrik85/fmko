@@ -21,8 +21,8 @@ import { kindAllowedForCategory, promiseInterest } from "./wishes";
 
 export type NegotiationCategory = "main" | "stadium";
 
-export const BASE_WILLINGNESS = 0.7;
-export const WILLINGNESS_CAP = 1.5;
+export const BASE_WILLINGNESS = 1.1;
+export const WILLINGNESS_CAP = 2.0;
 export const COUNTER_BAND = 1.15;
 export const INSULT_BAND = 1.5;
 export const INSULT_FAVOR = -3;
@@ -176,7 +176,7 @@ export function seasonMultiplier(personality: OwnerPersonality, seasons: number)
   return personality === "cautious" ? 1 + CAUTIOUS_SEASON_BONUS * (seasons - 1) : 1;
 }
 
-/** Ochota O (měsíčně): 0,7 × B + hodnota slibů, strop 1,5 × B. */
+/** Ochota O (měsíčně): 1,1 × B + hodnota slibů, strop 2,0 × B. */
 export function willingness(proposal: Proposal, ctx: NegotiationContext): number {
   const promised = proposal.promises.reduce((s, p) => s + promiseValueShare(p, ctx), 0);
   const raw = (BASE_WILLINGNESS + promised) * ctx.budgetB * seasonMultiplier(ctx.personality, proposal.seasons);
@@ -311,7 +311,7 @@ export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext,
       // Měsíční podpora nikdy neklesne pod 1 Kč (smlouva bez měsíčního závazku nejde).
       const floor = it.key === "monthly" ? 1 : 0;
       if (amount <= floor) continue;
-      // EPS: plovoucí čárka (0,7 × B = 6999,9999…) nesmí přidat stovku navíc.
+      // EPS: plovoucí čárka (1,1 × B = 10999,9999…) nesmí přidat stovku navíc.
       const cut = Math.min(amount - floor, Math.ceil((excess / it.perUnit - EPS) / 100) * 100);
       amounts.set(it.key, amount - cut);
       withAmount(demands, it.key, amount - cut);
@@ -395,10 +395,10 @@ export function attendanceCatalogValue(lastAvgAttendance: number, mult: number):
  * fanoušek nejmíň. Zbytek do ochoty si klub může dojednat v dalších kolech.
  */
 export const OPENING_OFFER_SHARE: Record<OwnerPersonality, number> = {
-  businessman: 0.75,
-  cautious: 0.8,
-  patriot: 0.85,
-  fan: 0.9,
+  businessman: 0.9,
+  cautious: 0.93,
+  patriot: 0.96,
+  fan: 1.0,
 };
 
 /**

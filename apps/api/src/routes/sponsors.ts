@@ -16,7 +16,9 @@ import {
 import {
   applySponsorFavorDelta, ensureSponsorOwner, ensureSponsorOwners, getFavor, getFavorsForTeam,
 } from "../sponsors/favor";
-import { afterReject, complaintFor, COOLDOWN_DAYS, evaluateRound, INSULT_FAVOR, wishComplaint } from "../sponsors/negotiation";
+import {
+  afterReject, BASE_WILLINGNESS, complaintFor, COOLDOWN_DAYS, evaluateRound, INSULT_FAVOR, WILLINGNESS_CAP, wishComplaint,
+} from "../sponsors/negotiation";
 import {
   closeNegotiation, loadNegotiationSponsor, loadNegotiationState, loadNegotiationTeam, negotiationAvailability, openNegotiation,
   pendingTerms, saveRound, teamGameDate, type NegotiationRound, type NegotiationStatus,
@@ -157,7 +159,11 @@ sponsorsRouter.get("/sponsors/:sponsorId", async (c) => {
         ]);
         negotiation = { main, stadium };
       }
-      myTeam = { favor, budgetEstimate: budgetEstimateRange(b, favor), nextHomeMatch: next, negotiation };
+      myTeam = {
+        favor,
+        budgetEstimate: { base: budgetEstimateRange(BASE_WILLINGNESS * b, favor), cap: budgetEstimateRange(WILLINGNESS_CAP * b, favor) },
+        nextHomeMatch: next, negotiation,
+      };
     }
   }
 
@@ -202,7 +208,7 @@ sponsorsRouter.get("/teams/:teamId/sponsor-owners", async (c) => {
       sponsorId: s.id, name: s.name, type: s.type,
       owner: owner ? { firstName: owner.firstName, lastName: owner.lastName, personality: owner.personality } : null,
       favor,
-      budgetEstimate: budgetEstimateRange(b, favor),
+      budgetEstimate: { base: budgetEstimateRange(BASE_WILLINGNESS * b, favor), cap: budgetEstimateRange(WILLINGNESS_CAP * b, favor) },
       mainHolder: s.holder_id ? { teamId: s.holder_id, teamName: s.holder_name ?? "" } : null,
       isMine: s.holder_id === teamId,
     };

@@ -16,7 +16,8 @@ export interface OwnerInfo {
 
 export interface MyTeamInfo {
   favor: number;
-  budgetEstimate: { low: number; high: number };
+  /** `base` = odhad bez slibů (BASE_WILLINGNESS × B), `cap` = strop se sliby (WILLINGNESS_CAP × B). */
+  budgetEstimate: { base: { low: number; high: number }; cap: { low: number; high: number } };
   nextHomeMatch: null | {
     matchId: string;
     scheduledAt: string;
@@ -93,8 +94,8 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
               </div>
             </div>
             <div className="text-sm text-muted">
-              Jako hlavní sponzor by dal zhruba {formatCZK(myTeam.budgetEstimate.low)} až {formatCZK(myTeam.budgetEstimate.high)} měsíčně.
-              Čím lepší vztah, tím přesnější odhad.
+              Jako hlavní sponzor by dal bez slibů zhruba {formatCZK(myTeam.budgetEstimate.base.low)} až {formatCZK(myTeam.budgetEstimate.base.high)},
+              se sliby až {formatCZK(myTeam.budgetEstimate.cap.high)} měsíčně. Čím lepší vztah, tím přesnější odhad.
             </div>
 
             {match ? (
