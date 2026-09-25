@@ -12,6 +12,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-09-25",
+    emoji: "💰",
+    title: "Sponzoři přidávají",
+    items: [
+      "Majitelé firem teď v jednání nabízejí víc, aby se přechod ze staré smlouvy opravdu vyplatil.",
+      "Kdo už novou smlouvu podepsal, nepřijde zkrátka: podporu jsme mu zpětně navýšili stejně, jako by jednal až dnes.",
+    ],
+  },
+  {
     date: "2026-09-24",
     emoji: "🧾",
     title: "Pro upřesnění",
