@@ -33,7 +33,7 @@ export function FirmCard({ firm: f, isOurStadiumSponsor = false }: { firm: Distr
                   ? <>Hlavní sponzor klubu <Link href={`/tym/${f.mainHolder.teamId}`} className="underline text-base">{f.mainHolder.teamName}</Link></>
                   : isOurStadiumSponsor
                     ? "Váš sponzor stadionu"
-                    : `Volný, rozpočet zhruba ${formatCZK(f.budgetEstimate.low)} až ${formatCZK(f.budgetEstimate.high)} měsíčně`}
+                    : `Volný, bez slibů zhruba ${formatCZK(f.budgetEstimate.base.low)} až ${formatCZK(f.budgetEstimate.base.high)}, se sliby až ${formatCZK(f.budgetEstimate.cap.high)} měsíčně`}
             </div>
             {!f.isMine && !f.mainHolder && (
               <Link href={`/sponzor/${f.sponsorId}`} className="inline-block min-h-11 leading-[2.75rem] text-sm text-pitch-600 font-heading font-bold">

@@ -57,13 +57,16 @@ export interface SponsorsData {
   negotiations: Array<{ id: string; sponsorId: number; sponsorName: string; category: "main" | "stadium"; status: "open" | "accepted"; expiresGameDate: string }>;
 }
 
+export interface Range { low: number; high: number }
+
 export interface DistrictFirm {
   sponsorId: number;
   name: string;
   type: string;
   owner: { firstName: string; lastName: string; personality: string } | null;
   favor: number;
-  budgetEstimate: { low: number; high: number };
+  /** `base` = odhad bez slibů (BASE_WILLINGNESS × B), `cap` = strop se sliby (WILLINGNESS_CAP × B). */
+  budgetEstimate: { base: Range; cap: Range };
   mainHolder: { teamId: string; teamName: string } | null;
   isMine: boolean;
 }

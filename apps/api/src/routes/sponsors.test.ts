@@ -22,7 +22,7 @@ const TEAM_ROW = {
 };
 const SPONSOR_ROW = { id: 7, name: "Firma", type: "potraviny", district: "okres1", monthly_max: 5000 };
 const OWNER_ROW = { sponsor_id: 7, first_name: "Jan", last_name: "Novák", age: 45, face_config: "{}", personality: "businessman" };
-// budget_b 10000, businessman (seasonMultiplier 1): ochota = min(0.7×10000, 1.5×10000) = 7000.
+// budget_b 10000, businessman (seasonMultiplier 1): ochota = min(1,1×10000, 2,0×10000) = 11000.
 const NEG_ROW = {
   id: "n1", team_id: "t1", sponsor_id: 7, category: "main" as const, wishes: "[]", budget_b: 10000,
   patience: 3, rounds: "[]", status: "accepted" as const, expires_game_date: "2026-09-30T00:00:00.000Z",
@@ -46,12 +46,12 @@ function baseRules(negRow: Record<string, unknown>, extra: Pravidlo[] = []): Pra
 
 const AUTH = { Authorization: "Bearer tok" };
 
-// Willingness (o) = 7000 (viz NEG_ROW): 5000 je pod ní (přijme), 7500 je nad ní, ale pod 1,15×o (protinabídka).
+// Willingness (o) = 11000 (viz NEG_ROW): 5000 je pod ní (přijme), 12000 je nad ní, ale pod 1,15×o (protinabídka).
 const acceptProposal = {
   seasons: 2, promises: [],
   demands: { monthly: 5000, winBonus: 0, signingBonus: 0, goalBonuses: {}, construction: null, equipment: null, payCurrentFee: false },
 };
-const counterProposal = { ...acceptProposal, demands: { ...acceptProposal.demands, monthly: 7500 } };
+const counterProposal = { ...acceptProposal, demands: { ...acceptProposal.demands, monthly: 12000 } };
 
 describe("POST .../negotiations/:id/propose z jednání ve stavu accepted", () => {
   it("přijatý návrh (accept): dřív blokováno (409), teď povolené, zámek drží 'accepted'", async () => {

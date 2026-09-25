@@ -42,6 +42,6 @@ export function sortFirms(firms: DistrictFirm[], sort: FirmSort): DistrictFirm[]
   const byName = (a: DistrictFirm, b: DistrictFirm) => a.name.localeCompare(b.name, "cs");
   const copy = [...firms];
   if (sort === "favor") return copy.sort((a, b) => b.favor - a.favor || byName(a, b));
-  if (sort === "budget") return copy.sort((a, b) => b.budgetEstimate.high - a.budgetEstimate.high || byName(a, b));
+  if (sort === "budget") return copy.sort((a, b) => b.budgetEstimate.cap.high - a.budgetEstimate.cap.high || byName(a, b));
   return copy.sort((a, b) => sponsorTypeLabel(a.type).localeCompare(sponsorTypeLabel(b.type), "cs") || byName(a, b));
 }
