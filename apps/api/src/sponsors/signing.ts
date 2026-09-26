@@ -348,7 +348,9 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   const forfeit = await currentContractForfeit(db, st);
   const forfeitTotal = forfeit?.total ?? 0;
   const feePaidBySponsor = d.payCurrentFee ? switchFee : 0;
-  if (team.budget + d.signingBonus + feePaidBySponsor < switchFee + clawback + forfeitTotal) {
+  // Kontrola jen když přechod něco stojí: klub v minusu smí podepsat přechod zdarma (legacy, první sponzor).
+  const switchCost = switchFee + clawback + forfeitTotal;
+  if (switchCost > 0 && team.budget + d.signingBonus + feePaidBySponsor < switchCost) {
     const kc = (n: number) => `${Math.round(n).toLocaleString("cs-CZ")} Kč`;
     const parts = [
       ...(switchFee > 0 || (clawback === 0 && forfeitTotal === 0) ? ["výpovědní pokutu"] : []),
@@ -356,7 +358,7 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
       ...(forfeitTotal > 0 ? ["pokuty za propadlé sliby"] : []),
     ];
     const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} a ${parts[parts.length - 1]}` : parts[0];
-    return { ok: false, error: `Na ${list} (${kc(switchFee + clawback + forfeitTotal)}) u ${replaced?.sponsor_name ?? "současného sponzora"} nemáš peníze`, status: 400 };
+    return { ok: false, error: `Na ${list} (${kc(switchCost)}) u ${replaced?.sponsor_name ?? "současného sponzora"} nemáš peníze`, status: 400 };
   }
 
   // Zámek: podepsat jde jen jednou a jen to, co klient viděl (stav ani kola se nezměnily).

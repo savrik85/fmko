@@ -102,6 +102,18 @@ const money = (d: FalesnaD1): unknown[] => batchQueries(d).filter((q) => MONEY.t
 const insertOf = (d: FalesnaD1): ZaznamDotazu => batchQueries(d).find((q) => INSERT_CONTRACT.test(q.sql))!;
 
 describe("signFromState", () => {
+  it("klub v minusu podepíše přechod ze staré smlouvy (bez pokuty), nic po něm nechceme", async () => {
+    const legacy = { id: "c-legacy", sponsor_id: 3, sponsor_name: "Pila", monthly_amount: 3000, win_bonus: 0, seasons_remaining: 2, early_termination_fee: 18000, status: "active" as const, negotiation_id: null };
+    const d = db();
+    const res = await signFromState(jakoD1(d), state({ team: { ...state().team, budget: -143148 }, contracts: { active: legacy, lastExpired: null } }));
+    expect(res.ok).toBe(true);
+  });
+
+  it("klub v minusu bez staré smlouvy (první sponzor) podepíše", async () => {
+    const res = await signFromState(jakoD1(db()), state({ team: { ...state().team, budget: -143148 } }));
+    expect(res.ok).toBe(true);
+  });
+
   it("podepíše přijatý návrh: smlouva s výpovědní pokutou a zálohou, příspěvek za podpis, název stadionu", async () => {
     const d = db();
     const res = await signFromState(jakoD1(d), state({ ctx: { ...FULL_CTX, seasonProgressMonths: MPS / 2 } }));
