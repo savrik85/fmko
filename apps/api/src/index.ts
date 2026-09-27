@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { registrationRouter } from "./routes/registration";
 import { authRouter } from "./routes/auth";
 import { villagesRouter } from "./routes/villages";
 import { teamsRouter } from "./routes/teams";
@@ -92,6 +93,7 @@ app.get("/", (c) => c.json({ name: "Prales API", version: "0.2.0" }));
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.route("/auth", authRouter);
+app.route("/api/registration", registrationRouter);
 app.route("/api/villages", villagesRouter);
 app.route("/api/teams", teamsRouter);
 app.route("/api", matchesRouter);

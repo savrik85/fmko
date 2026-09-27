@@ -131,6 +131,8 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
  */
 export function initPostHog(): typeof posthog | null {
   if (typeof window === "undefined") return null;
+  // Aktivační URL může obsahovat jednorázový přihlašovací token.
+  if (window.location.pathname === "/registrace/aktivace") return null;
   if (isInitialized) return posthog;
 
   if (!POSTHOG_KEY) {

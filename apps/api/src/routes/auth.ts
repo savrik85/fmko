@@ -96,8 +96,6 @@ import { logger } from "../lib/logger";
 
 const authRouter = new Hono<{ Bindings: Bindings }>();
 
-function uuid(): string { return crypto.randomUUID(); }
-
 function validatePassword(pw: string): string | null {
   if (pw.length < 8) return "Heslo musí mít alespoň 8 znaků";
   if (!/[a-z]/.test(pw)) return "Heslo musí obsahovat malé písmeno";
@@ -106,39 +104,10 @@ function validatePassword(pw: string): string | null {
   return null;
 }
 
-// POST /auth/register
-authRouter.post("/register", async (c) => {
-  const body = await c.req.json<{ email: string; password: string }>();
-
-  if (!body.email || !body.password) {
-    return c.json({ error: "Vyplň email a heslo" }, 400);
-  }
-  const pwErr = validatePassword(body.password);
-  if (pwErr) return c.json({ error: pwErr }, 400);
-
-  // Check if email exists
-  const existing = await c.env.DB.prepare(
-    "SELECT id FROM users WHERE email = ?"
-  ).bind(body.email.toLowerCase()).first();
-
-  if (existing) {
-    return c.json({ error: "Tento email je už registrovaný" }, 409);
-  }
-
-  const userId = uuid();
-  const passwordHash = await hashPassword(body.password);
-
-  await c.env.DB.prepare(
-    "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)"
-  ).bind(userId, body.email.toLowerCase(), passwordHash).run();
-
-  const token = await createSession(c.env.SESSION_KV, userId, body.email.toLowerCase(), null);
-
-  return c.json({
-    token,
-    user: { id: userId, email: body.email.toLowerCase(), teamId: null },
-  }, 201);
-});
+// Registrace účtu je dostupná pouze přes jednorázový aktivační odkaz po přípravě okresu.
+authRouter.post("/register", (c) => c.json({
+  error: "Nejprve zaregistruj svůj okres. Účet si aktivuješ odkazem, který dostaneš po přípravě dat.",
+}, 403));
 
 // POST /auth/login
 authRouter.post("/login", async (c) => {
