@@ -39,7 +39,9 @@ export function LightingAndAtmosphere({
           scene.fog = null;
         };
       } else if (weather === "rain") {
-        scene.fog = new THREE.Fog("#6B7C91", 130, 360);
+        // Závoj deště: vzdálené tribuny a kopce šednou. Od 130 m to uvnitř areálu
+        // nebylo vidět vůbec a déšť pak vypadal jako pár čar na jasném dni.
+        scene.fog = new THREE.Fog("#7A8898", 30, 230);
       } else if (weather === "snow") {
         scene.fog = new THREE.Fog("#CBD5E1", 120, 340);
       } else if (weather === "cloudy") {
@@ -47,13 +49,13 @@ export function LightingAndAtmosphere({
       }
     } else if (timeOfDay === "sunset") {
       if (weather === "rain") {
-        scene.fog = new THREE.Fog("#4A3343", 90, 280);
+        scene.fog = new THREE.Fog("#4A3343", 30, 210);
       } else {
         scene.fog = new THREE.Fog("#D97757", 180, 500);
       }
     } else {
       // night
-      scene.fog = new THREE.Fog(weather === "rain" ? "#0A101D" : "#0A1324", 160, 420);
+      scene.fog = weather === "rain" ? new THREE.Fog("#0A101D", 35, 240) : new THREE.Fog("#0A1324", 160, 420);
     }
 
     return () => {
