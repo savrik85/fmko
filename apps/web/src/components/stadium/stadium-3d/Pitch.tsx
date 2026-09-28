@@ -4,7 +4,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useWind } from "./wind";
 import * as THREE from "three";
-import { PITCH, pitchColor, type WeatherType, PITCH_SURFACE_Y } from "./constants";
+import { PITCH, pitchColor, type WeatherType, type TimeOfDay, PITCH_SURFACE_Y } from "./constants";
+import { GrassBlades } from "./GrassBlades";
 import { generatePitchSurface, generateSnowPitchSurface, type MowingPattern } from "./grassTexture";
 import { generateNetTexture, type NetPattern, type NetStyle } from "./materialTextures";
 
@@ -32,6 +33,9 @@ interface PitchProps {
    * úklid zaplatil.
    */
   snowCleared?: boolean;
+  /** Stébla trávy u nízkých kamer (jen počítač — na mobilu by stála moc výkonu). */
+  grassBlades?: boolean;
+  timeOfDay?: TimeOfDay;
 }
 
 /**
@@ -186,6 +190,8 @@ export function Pitch({
   pitchIrrigation = 0,
   pitchMoisture = 50,
   snowCleared = false,
+  grassBlades = false,
+  timeOfDay = "day",
 }: PitchProps) {
   // Vyhřívání roztaví sníh na hrací ploše — okolí, střídačky ani terén ale
   // zasněžené zůstanou, takže je zelený obdélník uprostřed bílého areálu vidět.
@@ -332,6 +338,11 @@ export function Pitch({
 
       {/* Rohové praporky */}
       <CornerFlags />
+
+      {/* Stébla u nízkých kamer — na sněhu ne (leží pod ním) */}
+      {grassBlades && !isSnow && (
+        <GrassBlades color={finalGrassColor} timeOfDay={timeOfDay} artificial={pitchType === "artificial"} />
+      )}
 
       {/* Shrnutý sníh v hromadách podél postranních čar */}
       {isCleared && <SnowPiles />}
