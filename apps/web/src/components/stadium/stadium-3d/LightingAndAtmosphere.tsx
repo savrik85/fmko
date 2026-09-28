@@ -43,7 +43,7 @@ export function LightingAndAtmosphere({
         // nebylo vidět vůbec a déšť pak vypadal jako pár čar na jasném dni.
         scene.fog = new THREE.Fog("#7A8898", 30, 230);
       } else if (weather === "snow") {
-        scene.fog = new THREE.Fog("#CBD5E1", 120, 340);
+        scene.fog = new THREE.Fog("#D5DCE4", 45, 260);
       } else if (weather === "cloudy") {
         scene.fog = new THREE.Fog("#94A3B8", 140, 380);
       }
