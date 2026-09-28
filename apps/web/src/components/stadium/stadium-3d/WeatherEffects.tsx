@@ -33,7 +33,7 @@ export function WeatherEffects({
 
       {/* ❄️ Sněžení */}
       {weather === "snow" && (
-        <SnowParticles count={isMobile ? 800 : 2200} />
+        <SnowParticles count={isMobile ? 4500 : 12000} />
       )}
 
       {/* 💨 Větrné poryvy a zvířené částice */}
@@ -207,57 +207,108 @@ function RainGroundSplashes({ count }: { count: number }) {
   );
 }
 
-/** ❄️ Vznášející se a vířící sněhové vločky */
-function SnowParticles({ count }: { count: number }) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
+/**
+ * ❄️ Sněžení: měkké kulaté vločky kolem kamery, počítané ve shaderu.
+ *
+ * Dřív to byly ostré bílé osmistěny po celém areálu, ze kterých u kamery zbylo pár
+ * teček. Teď je to billboard s rozmazaným okrajem v kvádru, který jede s kamerou;
+ * vločky padají pomalu a pohupují se, každá jinak.
+ */
+const SNOW_BOX = { x: 40, y: 24, z: 40 };
 
-  const flakes = useMemo(() => {
-    return Array.from({ length: count }, () => ({
-      x: (Math.random() - 0.5) * 110,
-      y: Math.random() * 48,
-      z: (Math.random() - 0.5) * 125,
-      fallSpeed: 1.8 + Math.random() * 2.2,
-      swaySpeed: 1.2 + Math.random() * 1.8,
-      swayAmp: 0.35 + Math.random() * 0.5,
-      rotSpeed: (Math.random() - 0.5) * 2.5,
-      scale: 0.5 + Math.random() * 0.7,
-      seed: Math.random() * 100,
-    }));
+function SnowParticles({ count }: { count: number }) {
+  const { camera } = useThree();
+
+  const geometry = useMemo(() => {
+    const quad = new THREE.InstancedBufferGeometry();
+    quad.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3),
+    );
+    quad.setIndex([0, 1, 2, 0, 2, 3]);
+    const offsets = new Float32Array(count * 3);
+    const params = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      offsets[i * 3] = Math.random() * SNOW_BOX.x;
+      offsets[i * 3 + 1] = Math.random() * SNOW_BOX.y;
+      offsets[i * 3 + 2] = Math.random() * SNOW_BOX.z;
+      params[i * 4] = 0.9 + Math.random() * 1.1; // rychlost pádu m/s
+      params[i * 4 + 1] = 0.06 + Math.random() * 0.09; // velikost vločky m
+      params[i * 4 + 2] = Math.random() * Math.PI * 2; // fáze pohupování
+      params[i * 4 + 3] = 0.6 + Math.random() * 0.9; // rychlost pohupování
+    }
+    quad.setAttribute("aOffset", new THREE.InstancedBufferAttribute(offsets, 3));
+    quad.setAttribute("aParams", new THREE.InstancedBufferAttribute(params, 4));
+    quad.instanceCount = count;
+    quad.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+    return quad;
   }, [count]);
 
-  useFrame((state, delta) => {
-    if (!meshRef.current) return;
-    const mesh = meshRef.current;
-    const t = state.clock.getElapsedTime();
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        fog: false,
+        uniforms: {
+          uTime: { value: 0 },
+          uCenter: { value: new THREE.Vector3() },
+          uBox: { value: new THREE.Vector3(SNOW_BOX.x, SNOW_BOX.y, SNOW_BOX.z) },
+          uDrift: { value: new THREE.Vector2(0.35, 0.15) },
+        },
+        vertexShader: /* glsl */ `
+          attribute vec3 aOffset;
+          attribute vec4 aParams;
+          uniform float uTime;
+          uniform vec3 uCenter;
+          uniform vec3 uBox;
+          uniform vec2 uDrift;
+          varying vec2 vUv;
+          varying float vFade;
+          void main() {
+            float t = uTime;
+            vec3 local = aOffset + vec3(uDrift.x * t, -aParams.x * t, uDrift.y * t);
+            // Pohupování ze strany na stranu, každá vločka ve vlastním rytmu.
+            local.x += sin(t * aParams.w + aParams.z) * 0.6;
+            local.z += cos(t * aParams.w * 0.8 + aParams.z) * 0.45;
+            vec3 origin = uCenter - uBox * 0.5;
+            vec3 p = origin + mod(local - origin, uBox);
+            p.y = max(p.y, 0.05);
+            // Billboard: čtverec se rozloží až v prostoru kamery, vždy čelem k ní.
+            vec4 view = viewMatrix * vec4(p, 1.0);
+            float d = -view.z;
+            // Na dálku drží vločka aspoň pár pixelů, jinak by zmizela.
+            float size = max(aParams.y, d * 0.0025);
+            view.xy += position.xy * size;
+            vUv = position.xy + 0.5;
+            vFade = smoothstep(0.6, 2.0, d) * (1.0 - smoothstep(14.0, 22.0, d));
+            gl_Position = projectionMatrix * view;
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          varying vec2 vUv;
+          varying float vFade;
+          void main() {
+            float r = length(vUv - 0.5) * 2.0;
+            float a = (1.0 - smoothstep(0.35, 1.0, r)) * 0.85 * vFade;
+            if (a < 0.01) discard;
+            gl_FragColor = vec4(vec3(1.0), a);
+          }
+        `,
+      }),
+    [],
+  );
 
-    for (let i = 0; i < count; i++) {
-      const f = flakes[i];
-      f.y -= f.fallSpeed * delta;
-      const curX = f.x + Math.sin(t * f.swaySpeed + f.seed) * f.swayAmp;
-      const curZ = f.z + Math.cos(t * f.swaySpeed * 0.8 + f.seed) * f.swayAmp;
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => material.dispose(), [material]);
 
-      if (f.y < 0.1) {
-        f.y = 48 + Math.random() * 16;
-        f.x = (Math.random() - 0.5) * 110;
-        f.z = (Math.random() - 0.5) * 125;
-      }
-
-      dummy.position.set(curX, f.y, curZ);
-      dummy.rotation.set(t * f.rotSpeed, t * f.rotSpeed * 0.5, 0);
-      dummy.scale.set(f.scale, f.scale, f.scale);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
-    }
-    mesh.instanceMatrix.needsUpdate = true;
+  useFrame((_, delta) => {
+    material.uniforms.uTime.value += Math.min(delta, 0.05);
+    const c = camera.position;
+    material.uniforms.uCenter.value.set(c.x, Math.max(SNOW_BOX.y * 0.5 - 1, c.y), c.z);
   });
 
-  return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-      <octahedronGeometry args={[0.07, 0]} />
-      <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} />
-    </instancedMesh>
-  );
+  return <mesh geometry={geometry} material={material} frustumCulled={false} />;
 }
 
 /** 💨 Zvířené linie větru a poletující tráva */
