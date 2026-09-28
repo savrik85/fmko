@@ -614,7 +614,7 @@ export async function runScheduledMatches(
                 ...(awayIncidentMods?.moraleDelta ?? []),
             ]);
 
-            // Pozvaní zastupitelé domácího týmu zvyšují homeAdvantage a attendance
+            // Pozvaní zastupitelé domácího týmu zvyšují návštěvu, do hry nesahají (viz homeAdvantage níž)
             const acceptedOfficials = await db.prepare(
                 `SELECT COUNT(*) as cnt
                  FROM village_invitations
@@ -626,10 +626,14 @@ export async function runScheduledMatches(
                 return null;
             });
             const officialCount = acceptedOfficials?.cnt ?? 0;
-            // Domácí výhoda: základ + pozvaní zastupitelé + sektor kotle (atmosféra)
-            // + fanoušci (tvrdé jádro, vyprodáno/prázdno z haInfo). Strop zvednut na 0.15.
+            // Domácí výhoda: základ + sektor kotle (atmosféra) + fanoušci (tvrdé jádro,
+            // vyprodáno/prázdno z haInfo). Strop 0.15.
+            // Zastupitelé sem do 2026-09-28 přidávali +0,015 za hlavu (až +6 bodů držení míče).
+            // Obec má 4 zastupitele bez ohledu na počet týmů a každý přijme jen jeden tým
+            // za den, takže tým z obce s více kluby o výhodu přicházel. Politik v hledišti
+            // navíc nemá co dělat s tím, kdo má míč.
             const fanbaseAdvantage = Math.max(-0.01, Math.min(0.03, (haInfo.total + (groupFx?.noiseBonus ?? 0)) * 0.01));
-            const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + officialCount * 0.015 + ultrasAdvantage + fanbaseAdvantage));
+            const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + ultrasAdvantage + fanbaseAdvantage));
             // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál
             const crowdBoost = 1 + (homeEquipment?.crowdMod ?? 0);
             const attendanceWithOfficials = Math.min(
