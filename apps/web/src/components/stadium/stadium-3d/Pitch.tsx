@@ -26,6 +26,12 @@ interface PitchProps {
    * klesá. Řídí kaluže i vyschnutí — bez ní by týden veder skončil, jakmile se zatáhne.
    */
   pitchMoisture?: number;
+  /**
+   * Objednaný úklid sněhu: hřiště je ohrnuté (rozbředlé, čáry vidět) a sníh leží
+   * v hromadách u postranních čar. Bez toho byl trávník bílý, i když si manažer
+   * úklid zaplatil.
+   */
+  snowCleared?: boolean;
 }
 
 /**
@@ -179,12 +185,16 @@ export function Pitch({
   pitchHeating = 0,
   pitchIrrigation = 0,
   pitchMoisture = 50,
+  snowCleared = false,
 }: PitchProps) {
   // Vyhřívání roztaví sníh na hrací ploše — okolí, střídačky ani terén ale
   // zasněžené zůstanou, takže je zelený obdélník uprostřed bílého areálu vidět.
   // Umělka sníh drží vždy: topné kabely se pod ni nedávají.
   const heatingWorks = pitchHeating > 0 && pitchType !== "artificial";
-  const isSnow = weather === "snow" && !heatingWorks;
+  const snowFalling = weather === "snow" && !heatingWorks;
+  // Ohrnuté hřiště se kreslí jako tráva (rozbředlá), ne jako sněhová pokrývka.
+  const isCleared = snowFalling && snowCleared;
+  const isSnow = snowFalling && !snowCleared;
   const hasLines = condition >= 20;
   const hasCenter = condition >= 40;
   const hasFull = condition >= 65;
@@ -219,8 +229,10 @@ export function Pitch({
       : "#566B30";
     // Sláma, do které vyprahlá tráva přechází.
     // Vyschlá TRÁVA, ne písek — olivová se žlutým nádechem.
-    return dryness > 0 ? mixHex(healthy, "#9C9A52", dryness) : healthy;
-  }, [pitchType, condition, dryness]);
+    const base = dryness > 0 ? mixHex(healthy, "#9C9A52", dryness) : healthy;
+    // Po ohrnutí zůstane rozbředlý podklad: tráva prosvítá šedobílou kaší.
+    return isCleared ? mixHex(base, "#C9D1CF", 0.42) : base;
+  }, [pitchType, condition, dryness, isCleared]);
 
   // Voda stojí jen na rozmoklém přírodním či hybridním trávníku. V dešti se kaluže
   // objeví dřív a jsou výraznější, za sucha vyschnou. Sníh je překryje, umělka odvodní.
@@ -321,6 +333,9 @@ export function Pitch({
       {/* Rohové praporky */}
       <CornerFlags />
 
+      {/* Shrnutý sníh v hromadách podél postranních čar */}
+      {isCleared && <SnowPiles />}
+
       {/* Zápasový fotbalový míč na středu */}
       {hasCenter && <MatchBall />}
 
@@ -356,6 +371,41 @@ function cornerArcRotation(x: number, z: number): number {
 }
 
 /** Rohové praporky ve 4 rozích hřiště */
+/** Hromady shrnutého sněhu kolem hřiště, každá trochu jiná. */
+function SnowPiles() {
+  const piles = useMemo(() => {
+    const out: Array<{ x: number; z: number; sx: number; sy: number; sz: number; ry: number }> = [];
+    let seed = 4242;
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const pile = (x: number, z: number) =>
+      out.push({ x, z, sx: 1.2 + rnd() * 0.7, sy: 0.45 + rnd() * 0.3, sz: 0.9 + rnd() * 0.5, ry: rnd() * Math.PI });
+    // Podél postranních čar jen v mezerách mezi reklamními tabulemi (ty stojí u z = ±6, ±18),
+    // jinak by hromady zmizely za nimi.
+    for (const side of [-1, 1]) {
+      for (const z of [-24, -12, 0, 12, 24]) pile(side * (HALF_W + 0.9 + rnd() * 0.3), z + (rnd() - 0.5) * 1.5);
+    }
+    // Za brankovými čarami vedle branek.
+    for (const end of [-1, 1]) {
+      for (const x of [-14, -8, 8, 14]) pile(x + (rnd() - 0.5) * 1.5, end * (HALF_D + 1.1 + rnd() * 0.3));
+    }
+    return out;
+  }, []);
+  return (
+    <group>
+      {piles.map((p, i) => (
+        <mesh key={i} position={[p.x, 0, p.z]} rotation={[0, p.ry, 0]} scale={[p.sx, p.sy, p.sz]} castShadow receiveShadow>
+          <sphereGeometry args={[1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          {/* Shrnutý sníh je ušpiněný — čistě bílý v bílém okolí zanikal. */}
+          <meshStandardMaterial color="#CDD5DE" roughness={0.95} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function CornerFlags() {
   const wind = useWind();
   const flagRefs = useRef<Array<THREE.Group | null>>([]);
