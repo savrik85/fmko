@@ -119,7 +119,9 @@ function ActiveStandRoof({
 }: StandRoofProps) {
   const isSnow = weather === "snow";
   const dims = STAND_DIMS[Math.min(standsLevel, 3)];
-  const color = roofColor ?? (isSnow ? "#F1F5F9" : "#9A9DA4"); // světlejší plech nebo bílý sníh
+  // Sníh nepřebarvuje plech (vlastní barva klubu měla přednost a sníh pak nebyl vidět),
+  // leží na něm jako samostatná vrstva.
+  const color = roofColor ?? "#9A9DA4";
   const roofTexture = useMemo(() => generateCorrugatedTexture(color, 8, 2), [color]);
   const overhang = 0.5 + roofLevel * 0.35; // přesah nad hřiště roste s levelem
 
@@ -153,6 +155,14 @@ function ActiveStandRoof({
             metalness={0.35}
           />
         </mesh>
+        {isSnow && (
+          <group position={[0, roofY, roofZ]} rotation={[-0.32, 0, 0]}>
+            <mesh position={[0, 0.07 + 0.06, 0.08]} castShadow receiveShadow>
+              <boxGeometry args={[(alongLen + 1) * 0.97, 0.1, roofDepth * 0.86]} />
+              <meshStandardMaterial color="#F4F7FB" roughness={0.95} />
+            </mesh>
+          </group>
+        )}
         {/* Přední okapový lem — rámuje střechu, ať nepůsobí jako plovoucí plát */}
         <mesh position={[0, frontY, frontZ]} rotation={[-0.32, 0, 0]} castShadow>
           <boxGeometry args={[alongLen + 1.1, 0.2, 0.14]} />

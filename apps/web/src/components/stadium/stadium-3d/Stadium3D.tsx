@@ -476,6 +476,7 @@ export function Stadium3D({
             teamColor={teamColor}
             timeOfDay={timeOfDay}
             reducedDetail={isMobile}
+            isSnow={weather === "snow"}
           />
 
           {/* Sektor kotle (v tréninkový den bez pyrotechniky, spíkra a bubnu) */}
