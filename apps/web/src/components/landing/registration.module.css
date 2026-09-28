@@ -20,7 +20,7 @@
 .note { background: #e6ebd9; border-left: 3px solid #658441; padding: 16px 18px; font-size: .9rem; line-height: 1.7; }
 .small { font-size: .875rem; line-height: 1.65; color: #5c665c; }
 .small a { text-decoration: underline; }
-.submit { display: flex; align-items: center; justify-content: center; width: 100%; padding: 16px 20px; background: #d5f478 !important; color: #14271e !important; border: 1px solid #b2d261; border-radius: 3px; font-size: 1rem; font-weight: 600; text-align: center; min-height: 54px; }
+.submit { display: flex; align-items: center; justify-content: flex-start; width: 100%; padding: 16px 20px; background: #d5f478 !important; color: #14271e !important; border: 1px solid #b2d261; border-radius: 3px; font-size: 1rem; font-weight: 600; text-align: left; min-height: 54px; }
 .submit:hover { background: #e1ff92 !important; }
 .submit:disabled { opacity: .5; }
 .page a:focus-visible,.page button:focus-visible,.page select:focus-visible { outline: 3px solid #7c9f3f; outline-offset: 4px; }
