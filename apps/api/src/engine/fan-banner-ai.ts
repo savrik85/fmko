@@ -165,6 +165,12 @@ export function slovaSponzoru(nazvyKlubu: readonly string[], obce: readonly stri
 }
 
 /**
+ * Začátky přísloví, po kterých model sahal („Kdo jinému jámu kopá, Madeta
+ * Volary!“, „Kam čert nemůže, tam nastrčí…“). Na plachtu nepatří.
+ */
+const PRISLOVI = /(?<!\p{L})(kdo jinému|kam čert|kdo se bojí|jak se do lesa|bez práce|lepší vrabec|tak dlouho se chodí|kdo nic nedělá|ranní ptáče|co se v mládí)(?!\p{L})/iu;
+
+/**
  * Co navíc hlídá plachta oproti chorálu. Vrací důvod zamítnutí, nebo null.
  *
  * Model přes zákazy v zadání psal na plachty sponzory, počty výher a děkovačky
@@ -172,6 +178,9 @@ export function slovaSponzoru(nazvyKlubu: readonly string[], obce: readonly stri
  */
 export function vadaPlachty(text: string, sponzori: readonly string[]): string | null {
   if (/\d/.test(text)) return "obsahuje číslo";
+  // Zkratka klubu patří do zápisu o utkání, ne na plachtu („FK HVĚZDA VIMPERK“).
+  if (/(?<!\p{L})(fk|sk|tj|afk|sfk|fc|mfk)(?!\p{L})/iu.test(text)) return "zkratka klubu";
+  if (PRISLOVI.test(text)) return "přísloví";
   if (/(?<!\p{L})(d[ií]ky|děkuj\p{L}*|dekuj\p{L}*)(?!\p{L})/iu.test(text)) return "děkuje";
   const t = bezDiakritiky(text);
   for (const s of sponzori) {

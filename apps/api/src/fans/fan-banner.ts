@@ -106,7 +106,19 @@ export async function prepoctiTransparent(
   // téhle podmínky by se heslo měnilo KAŽDÝ DEN, každý den by o tom přišel
   // příspěvek na Tribunu a každý den by to stálo volání modelu. Plachta se
   // přepisuje, když se změní důvod, ne když se přetočí kalendář.
-  if (stadion.ultras_text && stadion.ultras_text_duvod === sablona.duvod) return null;
+  // Výjimka: plachta, která dnešní kontrolou neprojde (sponzor, číslo, děkování),
+  // se přepíše i beze změny důvodu. Tak zmizí staré patvary z doby před
+  // přepsáním zadání a nemusí se kvůli tomu sahat do dat.
+  // Sponzory všech klubů v lize, ne jen vlastního a rivala: model psal na plachtu
+  // i cizí („HODOUCH JE NÁŠ! MADETA PATŘÍ JEMU!“ ve Vimperku).
+  const liga = await klubyLigy(db, teamId);
+  const sponzori = slovaSponzoru(
+    [klub, ...(rivalove[0] ? [rivalove[0].name] : []), ...liga.map((k) => k.nazev)],
+    [...obce.values(), ...liga.map((k) => k.obec)],
+  );
+  const staraVada = stadion.ultras_text ? vadaPlachty(stadion.ultras_text, sponzori) : null;
+  if (stadion.ultras_text && stadion.ultras_text_duvod === sablona.duvod && !staraVada) return null;
+  if (staraVada) logger.info({ module: M, teamId }, `stará plachta „${stadion.ultras_text}" jde dolů (${staraVada})`);
 
   const okres = (await db.prepare(
     "SELECT v.district FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
@@ -116,7 +128,7 @@ export async function prepoctiTransparent(
     ...sablona,
     text: await napisTransparent(env, {
       ton: sablona.tone, stav, obec, okres, zaloha: sablona.text,
-      sponzori: slovaSponzoru([klub, ...(rivalove[0] ? [rivalove[0].name] : [])], [...obce.values()]),
+      sponzori,
       seed: seedFromString(`plachta|${teamId}|${sablona.tone}`),
     }),
   };
@@ -233,6 +245,16 @@ async function napisTransparent(
     logger.warn({ module: M }, "generování hesla selhalo, beru šablonu", e);
     return opts.zaloha;
   }
+}
+
+/** Názvy a obce klubů ze stejné ligy. */
+async function klubyLigy(db: D1Database, teamId: string): Promise<Array<{ nazev: string; obec: string }>> {
+  const rows = await db.prepare(
+    `SELECT t.name AS nazev, v.name AS obec FROM teams t JOIN villages v ON v.id = t.village_id
+      WHERE t.league_id = (SELECT league_id FROM teams WHERE id = ?)`,
+  ).bind(teamId).all<{ nazev: string; obec: string }>()
+    .catch((e) => { logger.warn({ module: M }, "kluby ligy pro transparent", e); return { results: [] as never[] }; });
+  return rows.results;
 }
 
 /** Obce klubů podle id. Kluby bez obce ve výsledku chybí. */
