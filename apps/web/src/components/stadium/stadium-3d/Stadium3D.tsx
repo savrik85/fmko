@@ -24,6 +24,7 @@ import { LightingAndAtmosphere } from "./LightingAndAtmosphere";
 import { WeatherEffects } from "./WeatherEffects";
 import { CameraController } from "./CameraController";
 import { PostFX } from "./PostFX";
+import { PerformanceMonitor } from "@react-three/drei";
 import { WindContext, windStrength } from "./wind";
 import { BakedShadows } from "./BakedShadows";
 import {
@@ -305,6 +306,22 @@ export function Stadium3D({
   };
   const fxActive = fxEnabled && !isMobile;
 
+  // ── Úspora baterie ──
+  // Plátno mimo obrazovku (odscrollované) se nekreslí; dřív se animovalo dál, i když
+  // ho nikdo neviděl. Když FPS klesá, sníží se rozlišení, když se zlepší, zase vrátí.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.01 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const maxDpr = isMobile ? 1.25 : 1.75;
+  const [dpr, setDpr] = useState(maxDpr);
+  useEffect(() => setDpr(maxDpr), [maxDpr]);
+
   // ── Fotka stadionu ke sdílení ──
   const captureRef = useRef<(() => HTMLCanvasElement) | null>(null);
   const handlePhoto = async () => {
@@ -358,7 +375,7 @@ export function Stadium3D({
   const viewpoints = useMemo(() => getViewpoints(f.stands ?? 0, f.roof ?? 0), [f.stands, f.roof]);
 
   return (
-    <div className="relative w-full h-full select-none">
+    <div ref={rootRef} className="relative w-full h-full select-none">
       {/* Decentní úvodní indikátor načítání 3D scény */}
       {!isSceneReady && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#141b26] text-white transition-opacity duration-300 pointer-events-none select-none">
@@ -393,8 +410,8 @@ export function Stadium3D({
         // (trávník vs. okolní dlažba) perou o pořadí a prosvítají skrz sebe.
         // Kamera je díky minDistance=15 vždy dost daleko, takže near=1 nic neořízne.
         camera={{ position: [55, 45, 55], fov: 35, near: 1, far: 400 }}
-        frameloop="always"
-        dpr={isMobile ? [1, 1.25] : [1, 1.75]}
+        frameloop={inView ? "always" : "never"}
+        dpr={[1, dpr]}
         onCreated={() => {
           setTimeout(() => setIsSceneReady(true), 120);
         }}
@@ -408,6 +425,10 @@ export function Stadium3D({
       >
         <WindContext.Provider value={windStrength(weather)}>
         <CaptureBridge captureRef={captureRef} />
+        <PerformanceMonitor
+          onDecline={() => setDpr(1)}
+          onIncline={() => setDpr(maxDpr)}
+        />
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
 
