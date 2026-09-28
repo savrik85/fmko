@@ -476,6 +476,8 @@ export function Stadium3D({
             pitchIrrigation={pitchIrrigation}
             pitchMoisture={pitchMoisture}
             snowCleared={snowClearingOrdered}
+            grassBlades={!isMobile}
+            timeOfDay={timeOfDay}
           />
 
           {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}
