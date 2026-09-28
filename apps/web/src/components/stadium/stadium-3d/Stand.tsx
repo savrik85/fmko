@@ -26,6 +26,8 @@ interface StandProps {
   ultrasSide?: "north" | "south" | "east" | "west";
   /** Klec nad kotlem 0–2. Kreslí se jen u tribuny, kde kotel opravdu stojí. */
   cageLevel?: number;
+  /** Sněží: na stupních leží sníh, v tréninkový den i na prázdných sedačkách. */
+  isSnow?: boolean;
 }
 
 const STAND_GAP = 2.5;
@@ -58,6 +60,7 @@ export function Stand({
   attendanceRatio = 0.75,
   ultrasSide = "south",
   cageLevel = 0,
+  isSnow = false,
 }: StandProps) {
   if (level <= 0) return null;
   return (
@@ -74,6 +77,7 @@ export function Stand({
       attendanceRatio={attendanceRatio}
       ultrasSide={ultrasSide}
       cageLevel={cageLevel}
+      isSnow={isSnow}
     />
   );
 }
@@ -91,6 +95,7 @@ function ActiveStand({
   attendanceRatio = 0.75,
   ultrasSide = "south",
   cageLevel = 0,
+  isSnow = false,
 }: StandProps) {
   const dims = STAND_DIMS[Math.min(level, 3)];
   const finalSeatColor = seatColor ?? teamColor;
@@ -133,6 +138,7 @@ function ActiveStand({
         seatRise={seatRise}
         woodTexture={woodTexture}
         concreteTexture={concreteTexture}
+        isSnow={isSnow}
       />
 
       {/* 2. Sedačky (lavičky pro L1/L2, tvarované pro L3) */}
@@ -146,6 +152,7 @@ function ActiveStand({
         length={length}
         teamColor={finalSeatColor}
         woodTexture={seatWoodTexture}
+        snowOnSeats={isSnow && mode === "training_day"}
       />
 
       {/* 3. Diváci na tribuně (jen v zápasový den, škálovaní dle návštěvnosti) */}
@@ -204,6 +211,7 @@ function StepBase({
   seatRise,
   woodTexture,
   concreteTexture,
+  isSnow = false,
 }: {
   level: number;
   length: number;
@@ -212,6 +220,7 @@ function StepBase({
   seatRise: number;
   woodTexture: any;
   concreteTexture: any;
+  isSnow?: boolean;
 }) {
   if (rows === 0) return null;
   const isWood = level <= 2;
@@ -233,6 +242,14 @@ function StepBase({
                 roughness={isWood ? 0.85 : 0.95}
               />
             </mesh>
+
+            {/* Sníh na nášlapu — hrana schodu (a žlutý pruh) zůstane vidět */}
+            {isSnow && (
+              <mesh position={[0, seatRise / 2 + 0.02, seatDepth * 0.1]} receiveShadow>
+                <boxGeometry args={[length * 0.99, 0.04, seatDepth * 0.72]} />
+                <meshStandardMaterial color="#F4F7FB" roughness={0.95} />
+              </mesh>
+            )}
 
             {/* Žlutý bezpečnostní pruh na hraně schodu (L2 a L3) */}
             {level >= 2 && (
@@ -296,6 +313,7 @@ function Seats({
   length,
   teamColor,
   woodTexture,
+  snowOnSeats = false,
 }: {
   level: number;
   rows: number;
@@ -306,9 +324,12 @@ function Seats({
   length: number;
   teamColor: string;
   woodTexture: any;
+  /** Prázdné sedačky ve sněhu mají na sobě čepici sněhu. */
+  snowOnSeats?: boolean;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const backRef = useRef<THREE.InstancedMesh>(null);
+  const snowRef = useRef<THREE.InstancedMesh>(null);
   const total = rows * columns;
   const matrix = useMemo(() => new THREE.Matrix4(), []);
 
@@ -325,10 +346,14 @@ function Seats({
           matrix.makeScale(0, 0, 0);
           ref.current.setMatrixAt(i, matrix);
           if (backRef.current) backRef.current.setMatrixAt(i, matrix);
+          if (snowRef.current) snowRef.current.setMatrixAt(i, matrix);
         } else {
           const x = -length / 2 + stepX * c + stepX / 2;
           matrix.makeTranslation(x, y, z);
           ref.current.setMatrixAt(i, matrix);
+          if (snowRef.current) {
+            snowRef.current.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, y + 0.07, z));
+          }
 
           if (backRef.current && level >= 3) {
             const backMatrix = new THREE.Matrix4().makeTranslation(x, y + 0.22, z + seatSize * 0.25);
@@ -340,13 +365,23 @@ function Seats({
     }
     ref.current.instanceMatrix.needsUpdate = true;
     if (backRef.current) backRef.current.instanceMatrix.needsUpdate = true;
-  }, [level, rows, columns, seatDepth, seatRise, length, matrix, total, seatSize]);
+    if (snowRef.current) snowRef.current.instanceMatrix.needsUpdate = true;
+  }, [level, rows, columns, seatDepth, seatRise, length, matrix, total, seatSize, snowOnSeats]);
+
+  const seatSnow = snowOnSeats ? (
+    <instancedMesh ref={snowRef} args={[undefined, undefined, total]}>
+      <boxGeometry args={[seatSize * 0.8, 0.06, seatSize * 0.5]} />
+      <meshStandardMaterial color="#F4F7FB" roughness={0.95} />
+    </instancedMesh>
+  ) : null;
 
   if (total === 0) return null;
 
   if (level <= 2) {
     // Dřevěné lavičkové latě
     return (
+      <group>
+      {seatSnow}
       <instancedMesh ref={ref} args={[undefined, undefined, total]} castShadow>
         <boxGeometry args={[seatSize * 0.9, 0.08, seatSize * 0.55]} />
         <meshStandardMaterial
@@ -356,12 +391,14 @@ function Seats({
           roughness={0.8}
         />
       </instancedMesh>
+      </group>
     );
   }
 
   // Moderní plastová sklápěcí sedadla s opěradlem
   return (
     <group>
+      {seatSnow}
       {/* Sedák */}
       <instancedMesh ref={ref} args={[undefined, undefined, total]} castShadow>
         <boxGeometry args={[seatSize * 0.78, 0.08, seatSize * 0.55]} />

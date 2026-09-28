@@ -417,6 +417,7 @@ export function Stadium3D({
             mode={mode}
             ultrasSide={SEKTOR_STRANY[ultrasSector]}
             cageLevel={f.cage ?? 0}
+            isSnow={weather === "snow"}
             attendanceRatio={zaplneniStrany("north")}
           />
           <Stand
@@ -431,6 +432,7 @@ export function Stadium3D({
             mode={mode}
             ultrasSide={SEKTOR_STRANY[ultrasSector]}
             cageLevel={f.cage ?? 0}
+            isSnow={weather === "snow"}
             attendanceRatio={zaplneniStrany("south")}
           />
           {(f.stands ?? 0) >= 2 && (
@@ -446,6 +448,7 @@ export function Stadium3D({
               mode={mode}
               ultrasSide={SEKTOR_STRANY[ultrasSector]}
               cageLevel={f.cage ?? 0}
+              isSnow={weather === "snow"}
               attendanceRatio={zaplneniStrany("east")}
             />
           )}
@@ -462,6 +465,7 @@ export function Stadium3D({
               mode={mode}
               ultrasSide={SEKTOR_STRANY[ultrasSector]}
               cageLevel={f.cage ?? 0}
+              isSnow={weather === "snow"}
               attendanceRatio={zaplneniStrany("west")}
             />
           )}
