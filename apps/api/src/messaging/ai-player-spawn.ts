@@ -95,6 +95,26 @@ export async function nactiSituaceTymu(db: D1Database, teamId: string): Promise<
   return new Map(situaceRows.results.map((r) => [r.id, r.kind]));
 }
 
+/**
+ * Sloupec `injury` pro `loadPlayerSnapshot`: nejdelší běžící zranění nebo volno
+ * hráče jako JSON, NULL = fit. Dotaz musí mít tabulku hráčů pod aliasem `p`.
+ */
+export const INJURY_COLUMN = `(SELECT json_object('d', i.description, 'n', i.days_remaining, 'v', i.osobni_volno, 'f', i.is_fake)
+    FROM injuries i WHERE i.player_id = p.id AND i.days_remaining > 0
+    ORDER BY i.days_remaining DESC LIMIT 1) AS injury`;
+
+function parseInjury(raw: unknown): PlayerSnapshot["injury"] {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  try {
+    const j = JSON.parse(raw as string) as { d?: string; n?: number; v?: number; f?: number };
+    return { description: String(j.d ?? ""), daysLeft: Number(j.n ?? 0), volno: j.v === 1, fake: j.f === 1 };
+  } catch (e) {
+    logger.warn({ module: "ai-player-spawn" }, "nečitelné zranění hráče", e);
+    return undefined;
+  }
+}
+
 export function loadPlayerSnapshot(
   row: Record<string, unknown>,
   matchCtx?: { lastOutcome: "win" | "loss" | "draw" | null; teamStreak: number },
@@ -126,7 +146,7 @@ export function loadPlayerSnapshot(
     isCelebrity: !!(row.is_celebrity as number),
     transferUnrest: lifeContext.transferUnrest?.level ?? 0,
     occupation: lifeContext.occupation,
-    injuredUntil: row.injured_until as string | null,
+    injury: parseInjury(row.injury),
     // Kontext posledního zápasu — hráč, který nenastoupil, má last_minutes NULL.
     lastMatchOutcome: matchCtx?.lastOutcome ?? null,
     playedLastMatch: row.last_minutes != null && (row.last_minutes as number) > 0,
@@ -366,7 +386,8 @@ async function spawnForTeam(
             COALESCE(stats.recent_rating_avg, 6.5) as recent_rating_avg,
             last.minutes_played AS last_minutes, last.goals AS last_goals,
             last.assists AS last_assists, last.yellow_cards AS last_yellow,
-            last.red_cards AS last_red, last.rating AS last_rating
+            last.red_cards AS last_red, last.rating AS last_rating,
+            ${INJURY_COLUMN}
      FROM players p
      LEFT JOIN (
        SELECT mps.player_id, SUM(mps.minutes_played) as recent_minutes, AVG(mps.rating) as recent_rating_avg
@@ -558,7 +579,9 @@ async function handleAiPlayerReplyInner(
 
   // Načti hráče (recent stats nejsou pro reply potřeba)
   const playerRow = await db.prepare(
-    "SELECT id, first_name, last_name, age, position, team_id, loan_from_team_id, personality, life_context, coach_relationship, is_celebrity FROM players WHERE id = ?",
+    `SELECT p.id, p.first_name, p.last_name, p.age, p.position, p.team_id, p.loan_from_team_id, p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
+            ${INJURY_COLUMN}
+       FROM players p WHERE p.id = ?`,
   ).bind(state.player_id).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load player for reply", e); return null; });
 
@@ -950,7 +973,9 @@ async function closeCoachThreadQuietly(
   let playerId: string | null = null;
   try {
     const playerRow = await db.prepare(
-      "SELECT id, first_name, last_name, age, position, team_id, loan_from_team_id, personality, life_context, coach_relationship, is_celebrity FROM players WHERE id = ?",
+      `SELECT p.id, p.first_name, p.last_name, p.age, p.position, p.team_id, p.loan_from_team_id, p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
+            ${INJURY_COLUMN}
+       FROM players p WHERE p.id = ?`,
     ).bind(state.player_id).first<Record<string, unknown>>();
     const scenario = getScenarioById("coach_initiated");
     if (playerRow && scenario && env) {

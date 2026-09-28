@@ -1,7 +1,7 @@
 /**
  * Hráči, kteří se nevešli ani na lavičku.
  *
- * Po ligovém nebo pohárovém zápase lidského týmu klesne morálka každému zdravému hráči,
+ * Po ligovém nebo pohárovém zápase lidského týmu (ne U21, tam sestavu skládá automat) klesne morálka každému zdravému hráči,
  * který na zápas nejel. Nejvýš jeden z nich (ten nejnaštvanější) napíše trenérovi SMS.
  * Omluvení, zranění a suspendovaní se nezlobí, o zápas nepřišli kvůli trenérovi.
  *
@@ -251,12 +251,15 @@ export async function reactToLeftOut(
 ): Promise<void> {
   // Motivace trenéra (rezerva hraje pod trenérem áčka) tlumí zklamání i trucování.
   const team = await db.prepare(
-    `SELECT t.user_id, t.game_date, m.motivation FROM teams t
+    `SELECT t.user_id, t.game_date, t.team_type, m.motivation FROM teams t
        LEFT JOIN managers m ON m.team_id = COALESCE(t.parent_team_id, t.id)
       WHERE t.id = ?`,
   ).bind(teamId)
-    .first<{ user_id: string | null; game_date: string | null; motivation: number | null }>();
+    .first<{ user_id: string | null; game_date: string | null; team_type: string | null; motivation: number | null }>();
   if (!team || team.user_id === "ai") return;
+  // Sestavu U21 skládá vždy automat (copyOrCreateLineup), trenér do ní nesahá.
+  // Vyčítat mu, že hráče nevzal, by nedávalo smysl.
+  if (team.team_type === "u21") return;
   const coachMotivation = team.motivation ?? 40;
   const gameDay = (team.game_date ?? new Date().toISOString()).slice(0, 10);
 
