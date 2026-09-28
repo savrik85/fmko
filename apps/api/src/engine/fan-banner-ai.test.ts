@@ -5,7 +5,7 @@
  * co je na plachtě jiné: kratší strop a vlastní zadání podle tónu.
  */
 import { describe, it, expect } from "vitest";
-import { promptTransparentu, ZADANI_TONU, STAVBA_TRANSPARENTU } from "./fan-banner-ai";
+import { promptTransparentu, slovaSponzoru, vadaPlachty, ZADANI_TONU, STAVBA_TRANSPARENTU } from "./fan-banner-ai";
 import { MAX_DELKA_TRANSPARENTU } from "./fan-banner";
 import { zkontrolujChoral } from "./fan-chant-inspirace";
 
@@ -14,7 +14,7 @@ describe("zadání pro plachtu", () => {
     const p = promptTransparentu({
       ton: "proti_treneru",
       fakta: ["Trenér se jmenuje Klement Testovič a chceme, aby skončil."],
-      klub: "FK Duplex Břevnov",
+      obec: "Břevnov",
       okres: "Praha",
       maxDelka: MAX_DELKA_TRANSPARENTU,
       povinneSlovo: "Testovič",
@@ -28,7 +28,7 @@ describe("zadání pro plachtu", () => {
 
   it("bez okresu a bez povinného slova to nespadne", () => {
     const p = promptTransparentu({
-      ton: "podpora", fakta: ["Fandíme svému týmu."], klub: "Sokol",
+      ton: "podpora", fakta: ["Fandíme svému týmu."], obec: "Dvory",
       maxDelka: MAX_DELKA_TRANSPARENTU,
     });
     expect(p).not.toContain("undefined");
@@ -60,5 +60,30 @@ describe("kontrola hesla používá kratší strop", () => {
       .toBe(false);
     expect(zkontrolujChoral("BRANÍK NIKDY", { tema: "rival", maxDelka: MAX_DELKA_TRANSPARENTU }).ok)
       .toBe(true);
+  });
+});
+
+describe("plachta bez sponzora, čísel a děkování", () => {
+  it("sponzor je zbytek názvu klubu po odečtení obce", () => {
+    expect(slovaSponzoru(["FK Rohlík Podolí", "FK Madeta Volary"], ["Podolí", "Volary"])).toEqual(["Rohlík", "Madeta"]);
+    expect(slovaSponzoru(["Sokol Kobylisy", "SK Břevnov"], ["Kobylisy", "Břevnov"])).toEqual([]);
+  });
+
+  it("zahodí skutečné patvary z produkce", () => {
+    const sponzori = ["Rohlík", "Jitona", "Madeta"];
+    expect(vadaPlachty("DIKY JUN! ROHLIK MA 5 VYHER!", sponzori)).not.toBeNull();
+    expect(vadaPlachty("Jitono, ty jsi naše, ne cizí!", sponzori)).toBe("sponzor Jitona");
+    expect(vadaPlachty("Kdo jinému jámu kopá, Madeta Volary!", sponzori)).toBe("sponzor Madeta");
+    expect(vadaPlachty("DÍKY, TRENÉŘE ŘEPKO!", sponzori)).toBe("děkuje");
+  });
+
+  it("obyčejné choreo projde", () => {
+    expect(vadaPlachty("ČKYNĚ NAVŽDY", ["Forpsi"])).toBeNull();
+    expect(vadaPlachty("V DEŠTI I V BLÁTĚ", ["Rohlík"])).toBeNull();
+  });
+
+  it("zadání nese obec, ne název klubu", () => {
+    const p = promptTransparentu({ ton: "podpora", fakta: ["x"], obec: "Čkyně", maxDelka: MAX_DELKA_TRANSPARENTU });
+    expect(p).toContain("z obce Čkyně");
   });
 });
