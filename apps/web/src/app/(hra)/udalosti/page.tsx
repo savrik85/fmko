@@ -147,6 +147,15 @@ function effectColor(type: string, value: number): string {
   return "text-ink";
 }
 
+/** Tóny odpovědí — klíče musí sedět s ANSWER_TONES v apps/api/src/news/answer-tone.ts. */
+const TONY_ODPOVEDI: Array<{ key: string; label: string }> = [
+  { key: "normalni", label: "Normálně" },
+  { key: "nadsazka", label: "S nadsázkou" },
+  { key: "ironie", label: "Ironicky" },
+  { key: "nastvane", label: "Naštvaně" },
+  { key: "pokorne", label: "Pokorně" },
+];
+
 export default function EventsPage() {
   const { teamId } = useTeam();
   const [events, setEvents] = useState<SeasonalEvent[]>([]);
@@ -156,6 +165,7 @@ export default function EventsPage() {
   const [appliedEffects, setAppliedEffects] = useState<Record<string, EventEffect[]>>({});
   const [interviews, setInterviews] = useState<CoachInterview[]>([]);
   const [interviewAnswers, setInterviewAnswers] = useState<Record<string, string[]>>({});
+  const [interviewTones, setInterviewTones] = useState<Record<string, string[]>>({});
   const [interviewSubmitting, setInterviewSubmitting] = useState<string | null>(null);
   const [interviewDone, setInterviewDone] = useState<string | null>(null);
   // Skutečné dopady pozápasové odpovědi — hráč má vidět, co si koupil.
@@ -180,6 +190,14 @@ export default function EventsPage() {
     });
   };
 
+  const handleInterviewTone = (interviewId: string, idx: number, tone: string) => {
+    setInterviewTones((prev) => {
+      const next = [...(prev[interviewId] ?? [])];
+      next[idx] = tone;
+      return { ...prev, [interviewId]: next };
+    });
+  };
+
   const handleInterviewSubmit = async (interview: CoachInterview) => {
     if (!teamId || interviewSubmitting) return;
     const answers = interviewAnswers[interview.id] ?? [];
@@ -191,7 +209,10 @@ export default function EventsPage() {
       apiFetch<{ effects?: AppliedEffects | null }>(`/api/teams/${teamId}/coach-interviews/${interview.id}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({
+          answers,
+          tones: interview.questions.map((_, i) => interviewTones[interview.id]?.[i] ?? "normalni"),
+        }),
       }).then((r) => { vysledek.effects = r?.effects ?? null; }),
       "Odeslání odpovědí se nezdařilo");
     if (ok) {
@@ -354,12 +375,38 @@ export default function EventsPage() {
                           placeholder="Vaše odpověď..."
                           className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 resize-none"
                         />
-                        <div className="text-right text-xs text-muted mt-0.5">{(answers[i] ?? "").length}/500</div>
+                        <div className="flex items-start justify-between gap-2 mt-1">
+                          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tón odpovědi">
+                            {TONY_ODPOVEDI.map((t) => {
+                              const vybrany = (interviewTones[iv.id]?.[i] ?? "normalni") === t.key;
+                              return (
+                                <button
+                                  key={t.key}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={vybrany}
+                                  onClick={() => handleInterviewTone(iv.id, i, t.key)}
+                                  className={`rounded-full border px-2.5 py-0.5 text-sm transition-colors ${
+                                    vybrany
+                                      ? "bg-ink text-white border-ink"
+                                      : "bg-white border-line text-ink-light hover:border-line-strong"
+                                  }`}
+                                >
+                                  {t.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="text-xs text-muted mt-1 shrink-0 tabular-nums">{(answers[i] ?? "").length}/500</div>
+                        </div>
                       </div>
                     ))}
                   </div>
+                  <p className="text-sm text-ink-light mt-3">
+                    Tón u odpovědi říká redaktorovi, jak ji myslíš. Ironii pak nevezme doslova.
+                  </p>
                   {jePo && ctx?.refereeName && (
-                    <p className="text-xs text-ink-light mt-3">
+                    <p className="text-xs text-ink-light mt-1">
                       Co tady řekneš o rozhodčím, si {ctx.refereeName} zapamatuje do příštího vzájemného zápasu.
                     </p>
                   )}

@@ -8,6 +8,7 @@
 import { logger } from "../lib/logger";
 import { calculateStandings } from "../stats/standings";
 import { VILLAGE_FLAVOR } from "./ai-reporter";
+import { toneLine, tonePromptRule, type AnswerTone } from "./answer-tone";
 
 interface MatchContext {
   teamName: string;
@@ -323,10 +324,15 @@ export async function generateInterviewArticle(
   teamName: string,
   opponentName: string,
   pokynyRedaktora?: string,
+  tones: AnswerTone[] = [],
 ): Promise<{ headline: string; body: string; reakce?: { posun: number; duvod: string } } | null> {
   const qaPairs = qa
-    .map((pair, i) => `Otázka ${i + 1}: ${pair.q}\nOdpověď: ${pair.a}`)
+    .map((pair, i) => {
+      const ton = toneLine(tones[i]);
+      return `Otázka ${i + 1}: ${pair.q}\n${ton ? `${ton}\n` : ""}Odpověď: ${pair.a}`;
+    })
     .join("\n\n");
+  const tonPravidlo = tonePromptRule(tones);
 
   const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje, regionálního plátku, který žije vesnickým fotbalem."} Dostal jsi přepis rozhovoru s trenérem
 ${managerName} z týmu ${teamName} před zápasem s ${opponentName}. Sestav z toho novinový článek.
@@ -352,7 +358,7 @@ PRAVIDLA:
 - Od druhého řádku = body článku
 - ÚPLNĚ POSLEDNÍ řádek (a jen ten) = "VZTAH: <číslo -25 až 25> | <důvod, max 8 slov>". Není součástí článku — hodnotíš v něm SÁM ZA SEBE, jak na tebe trenér svými odpověďmi zapůsobil: vstřícnost, ochota, respekt k tobě = plus; arogance, odbytí, urážky novinářů = mínus; nijak zvlášť = číslo blízko nule
 
-PŘEPIS ROZHOVORU:
+${tonPravidlo ? `${tonPravidlo}\n\n` : ""}PŘEPIS ROZHOVORU:
 ${qaPairs}`;
 
   const text = await callGemini(apiKey, prompt, 1024);

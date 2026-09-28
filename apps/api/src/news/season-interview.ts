@@ -11,6 +11,7 @@
 
 import { calculateStandings, type StandingEntry } from "../stats/standings";
 import { callGemini } from "./gemini-helper";
+import { toneLine, tonePromptRule, type AnswerTone } from "./answer-tone";
 import { logger } from "../lib/logger";
 
 function wrapCalendarId(seasonNumber: number): string {
@@ -59,8 +60,13 @@ export async function generateSeasonInterviewArticle(
   managerName: string,
   teamName: string,
   seasonNumber: number,
+  tones: AnswerTone[] = [],
 ): Promise<{ headline: string; body: string } | null> {
-  const qaPairs = qa.map((p, i) => `Otázka ${i + 1}: ${p.q}\nOdpověď: ${p.a}`).join("\n\n");
+  const qaPairs = qa.map((p, i) => {
+    const ton = toneLine(tones[i]);
+    return `Otázka ${i + 1}: ${p.q}\n${ton ? `${ton}\n` : ""}Odpověď: ${p.a}`;
+  }).join("\n\n");
+  const tonPravidlo = tonePromptRule(tones);
   const prompt = `Jsi redaktor Okresního zpravodaje. Dostal jsi přepis ohlédnutí trenéra ${managerName} (${teamName}) za ${seasonNumber}. sezónou. Sestav novinový článek — bilanci sezóny.
 
 PRAVIDLA:
@@ -74,7 +80,7 @@ PRAVIDLA:
 - Čeština, bez markdown
 - PRVNÍ řádek = titulek (max 80 znaků, bez prefixu). Od druhého řádku = tělo
 
-PŘEPIS:
+${tonPravidlo ? `${tonPravidlo}\n\n` : ""}PŘEPIS:
 ${qaPairs}`;
 
   const text = await callGemini(apiKey, prompt, { maxOutputTokens: 1024, temperature: 0.85, module: "season-interview" });

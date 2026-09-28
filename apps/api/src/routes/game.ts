@@ -7827,7 +7827,7 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   });
   if (!interview) return c.json({ error: "Rozhovor nenalezen nebo již zpracován" }, 404);
 
-  const body = await c.req.json<{ answers: string[] }>().catch((e) => { logger.warn({ module: "game.ts" }, "parse interview answer body", e); return null; });
+  const body = await c.req.json<{ answers: string[]; tones?: string[] }>().catch((e) => { logger.warn({ module: "game.ts" }, "parse interview answer body", e); return null; });
   if (!body?.answers?.length) return c.json({ error: "Chybí odpovědi" }, 400);
 
   const questions: string[] = (() => {
@@ -7840,11 +7840,14 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
 
   // Sanitize answers — max 500 chars each
   const answers = body.answers.map((a) => String(a).slice(0, 500).trim());
+  // Tón ke každé odpovědi volí trenér, chybějící = normální. Ukládá se, aby ho znal i retry.
+  const { normalizeTones, lexiconWithTone } = await import("../news/answer-tone");
+  const tones = normalizeTones(body.tones, answers.length);
 
   // KROK 1: Okamžitě ulož odpovědi před Gemini — odpovědi se neztratí při selhání generování
   await c.env.DB.prepare(
-    "UPDATE coach_interviews SET status = 'answered', answers = ? WHERE id = ?"
-  ).bind(JSON.stringify(answers), interviewId)
+    "UPDATE coach_interviews SET status = 'answered', answers = ?, answer_tones = ? WHERE id = ?"
+  ).bind(JSON.stringify(answers), JSON.stringify(tones), interviewId)
     .run()
     .catch((e) => { logger.warn({ module: "game.ts" }, "save interview answers", e); });
 
@@ -7865,7 +7868,10 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     if (!ctx) return c.json({ ok: true, articlePending: true });
 
     const refIdx = topics.findIndex((t) => t.key === "rozhodci");
-    const lexicon = classifyRefereeStance(refIdx >= 0 ? answers[refIdx] : null);
+    const lexicon = lexiconWithTone(
+      classifyRefereeStance(refIdx >= 0 ? answers[refIdx] : null),
+      refIdx >= 0 ? tones[refIdx] : undefined,
+    );
 
     const mgr = await c.env.DB.prepare(
       "SELECT m.name AS manager_name, m.avatar AS manager_avatar, t.name AS team_name, t.league_id FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ?"
@@ -7881,7 +7887,7 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     const apiKey = (c.env as any).GEMINI_API_KEY as string | undefined;
     const generated = apiKey
       ? await generatePostMatchArticle(apiKey, ctx, questions, answers,
-          redaktorPM ? pokyny(redaktorPM, sentPM) : "")
+          redaktorPM ? pokyny(redaktorPM, sentPM) : "", tones)
           .catch((e) => { logger.warn({ module: "game.ts" }, "pozápasový článek", e); return null; })
       : null;
 
@@ -7924,7 +7930,7 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
         managerAvatar: (() => { try { return mgr.manager_avatar ? JSON.parse(mgr.manager_avatar) : null; } catch { return null; } })(),
         teamName: mgr.team_name,
         article: generated.article,
-        qa: questions.map((q, i) => ({ q, a: answers[i] ?? "" })),
+        qa: questions.map((q, i) => ({ q, a: answers[i] ?? "", tone: tones[i] })),
         vztah: vztahPM,
         // ID kvůli proklikům ve Zpravodaji — jméno trenéra i sudího je odkaz.
         teamId,
@@ -7972,7 +7978,7 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     : "soupeř";
 
   // KROK 3: Generuj článek přes Gemini — pokud selže, odpovědi jsou bezpečně uloženy a daily-tick je zretryuje
-  const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "" }));
+  const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "", tone: tones[i] }));
   // Season-wrap rozhovor (match_calendar_id = 'season-{n}-wrap') → sezónní bilanční článek, ne pregame
   const isSeasonWrap = String(interview.match_calendar_id ?? "").includes("-wrap");
   let article: { headline: string; body: string; reakce?: { posun: number; duvod: string } } | null;
@@ -7984,13 +7990,13 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     const seasonNumber = Math.max(1, Math.round(Number(interview.game_week ?? 100) / 100));
     const { generateSeasonInterviewArticle } = await import("../news/season-interview");
     article = await generateSeasonInterviewArticle(
-      (c.env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, seasonNumber,
+      (c.env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, seasonNumber, tones,
     );
   } else {
     const { generateInterviewArticle } = await import("../news/interview-generator");
     article = await generateInterviewArticle(
       (c.env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, opponentName,
-      redaktor ? pokynyProRedaktora(redaktor, vztahKeKlubu) : undefined,
+      redaktor ? pokynyProRedaktora(redaktor, vztahKeKlubu) : undefined, tones,
     );
   }
 
