@@ -11,6 +11,7 @@ import { generateHeightWeight } from "../generators/physicals";
 import { getDistrictDataFromDB } from "../data/districts";
 import { generatePlayerFace } from "../routes/teams";
 import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
+import { overallRatingFromFlat } from "../skills/generator";
 import { zapisNaTrh } from "./market-log";
 
 
@@ -70,20 +71,30 @@ export async function generateFreeAgentsForDistrict(
       // Dřív `age * 2` — dvacetiletý dostal 40 místo 12–24, třicetiletý 60.
       experience: Math.min(100, Math.max(1, (player.age - 16) * rng.int(3, 6))),
     };
-    const posWeights: Record<string, Record<string, number>> = {
-      GK: { goalkeeping: 4, strength: 2, stamina: 1 },
-      DEF: { defense: 3, heading: 2, strength: 2, speed: 1, stamina: 2, passing: 1 },
-      MID: { passing: 3, technique: 2, stamina: 3, speed: 1, shooting: 1, vision: 2 },
-      FWD: { shooting: 3, speed: 3, technique: 2, heading: 1, stamina: 1 },
+    // Stropy a talent MUSÍ vzniknout tady. Bez nich podpis dosadí za stropy ploché
+    // dovednosti, takže hráč nemá kam růst — a `hidden_talent` spadne na DEFAULT 0.
+    const skillsMax = stropyZDovednosti(rng, skills as Record<string, number>, player.age);
+    const hiddenTalent = talentPodleVeku(rng, player.age);
+
+    const physical = {
+      stamina: player.stamina,
+      strength: player.strength,
+      injuryProneness: player.injuryProneness ?? 50,
+      ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"),
+      preferredFoot: player.preferredFoot,
+      preferredSide: player.preferredSide,
     };
-    const w = posWeights[pos] ?? posWeights.MID;
-    let wSum = 0, wTotal = 0;
-    for (const [k, wt] of Object.entries(w)) {
-      wSum += ((skills as Record<string, number>)[k] ?? 30) * wt;
-      wTotal += wt;
-    }
-    const rawRating = wTotal > 0 ? wSum / wTotal : 30;
-    const overallRating = Number.isFinite(rawRating) ? Math.round(rawRating) : 30;
+
+    // Hodnocení TÝMŽ vzorcem jako zbytek hry — stejná oprava jako u inzerátů AI klubů
+    // (`virtual-teams.ts`). Trh si dřív počítal vlastní vážený průměr; brankáři z něj
+    // vycházeli nejhůř, protože se počítalo jen chytání, síla a výdrž, zatímco hra
+    // počítá i obranu, rychlost, hlavičky, techniku, přihrávku a zkušenost. Naměřeno
+    // na produkci: brankář v nabídce +12, podepsaní brankáři +18 oproti skutečnosti.
+    // Manažer koupil číslo, které mu první noční trénink srazil, a platil podle něj mzdu.
+    const overallRating = overallRatingFromFlat(pos, skills as Record<string, number>, physical, hiddenTalent, skillsMax)
+      // null = málo vyplněných atributů; po `skills` výš nemá nastat, ale hráč bez
+      // hodnocení by rozbil mzdu i cenu, tak ať radši spadne na průměr dovedností.
+      ?? Math.round(Object.values(skills).reduce((a, b) => a + b, 0) / Object.keys(skills).length);
     const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
 
     // Pick a random village for residence
@@ -94,11 +105,6 @@ export async function generateFreeAgentsForDistrict(
     const expiresAt = new Date(gameDate);
     expiresAt.setDate(expiresAt.getDate() + rng.int(5, 7));
 
-    // Stropy a talent MUSÍ vzniknout tady. Bez nich podpis dosadí za stropy ploché
-    // dovednosti, takže hráč nemá kam růst — a `hidden_talent` spadne na DEFAULT 0.
-    const skillsMax = stropyZDovednosti(rng, skills as Record<string, number>, player.age);
-    const hiddenTalent = talentPodleVeku(rng, player.age);
-
     const id = crypto.randomUUID();
     await db.prepare(
       `INSERT INTO free_agents (id, district, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, nationality, weekly_wage, source, village_id, expires_at, skills_max, hidden_talent)
@@ -106,7 +112,7 @@ export async function generateFreeAgentsForDistrict(
     ).bind(
       id, district, player.firstName, player.lastName, player.age, pos, overallRating,
       JSON.stringify(skills),
-      JSON.stringify({ stamina: player.stamina, strength: player.strength, injuryProneness: player.injuryProneness ?? 50, ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"), preferredFoot: player.preferredFoot, preferredSide: player.preferredSide }),
+      JSON.stringify(physical),
       JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper, leadership: player.leadership ?? 30, workRate: player.workRate ?? 50, aggression: player.aggression ?? 40, consistency: player.consistency ?? 50, clutch: player.clutch ?? 50 }),
       JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
       JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),

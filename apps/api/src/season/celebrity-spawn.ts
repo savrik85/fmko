@@ -16,6 +16,7 @@ import {
   type CelebrityTier,
 } from "../generators/player";
 import { generatePlayerFace } from "../routes/teams";
+import { overallRatingFromFlat } from "../skills/generator";
 
 
 interface SpawnResult {
@@ -71,24 +72,33 @@ export async function spawnCelebrity(
     "SELECT id FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 1"
   ).bind(leagueInfo.district).first<{ id: string }>().catch((e) => { logger.warn({ module: "celebrity-spawn" }, "pick village", e); return null; });
 
-  // Calculate overall rating
-  const skillKeys = ["speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping"] as const;
-  const posWeights: Record<string, Record<string, number>> = {
-    GK: { speed: 0.05, technique: 0.05, shooting: 0.02, passing: 0.08, heading: 0.05, defense: 0.15, goalkeeping: 0.60 },
-    DEF: { speed: 0.12, technique: 0.10, shooting: 0.05, passing: 0.12, heading: 0.18, defense: 0.35, goalkeeping: 0.08 },
-    MID: { speed: 0.12, technique: 0.20, shooting: 0.12, passing: 0.25, heading: 0.08, defense: 0.15, goalkeeping: 0.08 },
-    FWD: { speed: 0.18, technique: 0.18, shooting: 0.28, passing: 0.12, heading: 0.15, defense: 0.05, goalkeeping: 0.04 },
-  };
-  const w = posWeights[celeb.position] ?? posWeights.MID;
-  const overallRating = Math.round(skillKeys.reduce((sum, k) => sum + (celeb[k] ?? 0) * (w[k] ?? 0.14), 0));
-
-  const skills = JSON.stringify({
+  const skillsObj: Record<string, number> = {
     speed: celeb.speed, technique: celeb.technique, shooting: celeb.shooting,
     passing: celeb.passing, heading: celeb.heading, defense: celeb.defense,
     goalkeeping: celeb.goalkeeping, stamina: celeb.stamina, strength: celeb.strength,
     creativity: Math.round((celeb.technique + celeb.passing) / 2),
     setPieces: rng.int(30, 70),
-  });
+    // Přehled a zkušenost mají ve sdílených vahách svou váhu. Bez nich by se celebritě
+    // hodnocení po podpisu hnulo — a slavný borec zkušenost rozhodně má.
+    vision: Math.round((celeb.technique + celeb.passing) / 2),
+    experience: Math.min(100, Math.max(1, (celeb.age - 16) * rng.int(4, 7))),
+  };
+  const physicalObj = {
+    stamina: celeb.stamina, strength: celeb.strength,
+    injuryProneness: celeb.injuryProneness,
+    height: rng.int(170, 195), weight: rng.int(70, 95),
+    preferredFoot: celeb.preferredFoot, preferredSide: celeb.preferredSide,
+  };
+
+  // Hodnocení TÝMŽ vzorcem jako zbytek hry. Vlastní procentní váhy tady počítaly jen ze
+  // sedmi dovedností a brankáři z nich dávaly 60 % na chytání — hra počítá i výdrž, sílu,
+  // přehled, kreativitu, standardky a zkušenost. Číslo v nabídce pak neodpovídalo tomu,
+  // co manažer po podpisu dostal, a mzda i cena se počítají právě z něj.
+  const overallRating = overallRatingFromFlat(
+    celeb.position, skillsObj, physicalObj, celeb.hiddenTalent ?? 0, celeb.skillsMax as Record<string, unknown> | undefined,
+  ) ?? Math.round(Object.values(skillsObj).reduce((a, b) => a + b, 0) / Object.keys(skillsObj).length);
+
+  const skills = JSON.stringify(skillsObj);
   const personality = JSON.stringify({
     discipline: celeb.discipline, patriotism: celeb.patriotism,
     alcohol: celeb.alcohol, temper: celeb.temper,
@@ -104,12 +114,7 @@ export async function spawnCelebrity(
     morale: celeb.morale,
     celebrityTransportCost: celeb.transportCost,
   });
-  const physical = JSON.stringify({
-    stamina: celeb.stamina, strength: celeb.strength,
-    injuryProneness: celeb.injuryProneness,
-    height: rng.int(170, 195), weight: rng.int(70, 95),
-    preferredFoot: celeb.preferredFoot, preferredSide: celeb.preferredSide,
-  });
+  const physical = JSON.stringify(physicalObj);
 
   const faId = crypto.randomUUID();
   const expiresAt = new Date();
