@@ -172,6 +172,8 @@ function ActiveStandRoof({
           <boxGeometry args={[alongLen + 1.1, 0.2, 0.14]} />
           <meshStandardMaterial color="#3A3D42" metalness={0.4} roughness={0.5} />
         </mesh>
+        {/* Rampouchy pod okapem */}
+        {isSnow && <Icicles length={alongLen + 1} y={frontY - 0.1} z={frontZ} />}
         {/* Zadní sloupky (3 — krajní + prostřední pro širší rozpon) */}
         {[-alongLen * 0.4, 0, alongLen * 0.4].map((x, i) => (
           <mesh key={i} position={[x, postH / 2, backZ]} castShadow>
@@ -190,6 +192,34 @@ function ActiveStandRoof({
       {standsLevel >= 2 && <group position={[ewDistance, 0, 0]} rotation={[0, Math.PI / 2, 0]}><Canopy alongLen={PITCH.depth} /></group>}
       {standsLevel >= 2 && <group position={[-ewDistance, 0, 0]} rotation={[0, -Math.PI / 2, 0]}><Canopy alongLen={PITCH.depth} /></group>}
     </group>
+  );
+}
+
+/**
+ * Rampouchy visící z okapu — různě dlouhé kužely špičkou dolů, jeden instancovaný mesh.
+ */
+function Icicles({ length, y, z }: { length: number; y: number; z: number }) {
+  const count = Math.floor(length / 0.42);
+  const setup = (mesh: THREE.InstancedMesh | null) => {
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+    let seed = 99;
+    for (let i = 0; i < count; i++) {
+      seed = (seed * 16807) % 2147483647;
+      const r = seed / 2147483647;
+      const h = 0.12 + r * 0.45;
+      const x = -length / 2 + (i + 0.5) * (length / count) + (r - 0.5) * 0.15;
+      m.compose(new THREE.Vector3(x, y - h / 2, z), q, new THREE.Vector3(1, h, 1));
+      mesh.setMatrixAt(i, m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  };
+  return (
+    <instancedMesh ref={setup} args={[undefined, undefined, count]}>
+      <coneGeometry args={[0.035, 1, 5]} />
+      <meshStandardMaterial color="#E0F2FE" roughness={0.15} metalness={0.1} transparent opacity={0.85} />
+    </instancedMesh>
   );
 }
 
