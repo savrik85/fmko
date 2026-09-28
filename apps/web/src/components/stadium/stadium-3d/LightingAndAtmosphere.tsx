@@ -24,7 +24,8 @@ export function LightingAndAtmosphere({
   isMobile = false,
   enhanced = false,
 }: LightingAndAtmosphereProps) {
-  const shadowMapSize = isMobile ? 512 : 1024;
+  // 2048 + užší oblast (±55 m) = zhruba 2,8× ostřejší stíny než dřív (1024 na ±65 m).
+  const shadowMapSize = isMobile ? 512 : 2048;
   const { scene } = useThree();
   const skyParams = useMemo(() => getSkyParams(timeOfDay, weather), [timeOfDay, weather]);
   const amb = enhanced ? (timeOfDay === "night" ? 0.9 : timeOfDay === "sunset" ? 0.8 : 0.75) : 1;
@@ -101,10 +102,10 @@ export function LightingAndAtmosphere({
                 shadow-mapSize-height={shadowMapSize}
                 shadow-camera-near={0.5}
                 shadow-camera-far={200}
-                shadow-camera-left={-65}
-                shadow-camera-right={65}
-                shadow-camera-top={65}
-                shadow-camera-bottom={-65}
+                shadow-camera-left={-55}
+                shadow-camera-right={55}
+                shadow-camera-top={55}
+                shadow-camera-bottom={-55}
                 shadow-bias={-0.0003}
               />
               {/* Přisvětlení ze stínové strany, stejný idiom jako u zataženo — bez něj
@@ -125,10 +126,10 @@ export function LightingAndAtmosphere({
                 shadow-mapSize-height={shadowMapSize}
                 shadow-camera-near={0.5}
                 shadow-camera-far={200}
-                shadow-camera-left={-65}
-                shadow-camera-right={65}
-                shadow-camera-top={65}
-                shadow-camera-bottom={-65}
+                shadow-camera-left={-55}
+                shadow-camera-right={55}
+                shadow-camera-top={55}
+                shadow-camera-bottom={-55}
                 shadow-bias={-0.0003}
               />
               <hemisphereLight args={["#CBD5E1", "#3E5C32", 0.4]} />
@@ -146,10 +147,10 @@ export function LightingAndAtmosphere({
                 shadow-mapSize-height={shadowMapSize}
                 shadow-camera-near={0.5}
                 shadow-camera-far={200}
-                shadow-camera-left={-65}
-                shadow-camera-right={65}
-                shadow-camera-top={65}
-                shadow-camera-bottom={-65}
+                shadow-camera-left={-55}
+                shadow-camera-right={55}
+                shadow-camera-top={55}
+                shadow-camera-bottom={-55}
                 shadow-bias={-0.0003}
               />
               <directionalLight position={[-35, 25, -30]} intensity={0.35} color="#CBD5E1" />
@@ -168,10 +169,10 @@ export function LightingAndAtmosphere({
                 shadow-mapSize-height={shadowMapSize}
                 shadow-camera-near={0.5}
                 shadow-camera-far={200}
-                shadow-camera-left={-65}
-                shadow-camera-right={65}
-                shadow-camera-top={65}
-                shadow-camera-bottom={-65}
+                shadow-camera-left={-55}
+                shadow-camera-right={55}
+                shadow-camera-top={55}
+                shadow-camera-bottom={-55}
                 shadow-bias={-0.0003}
               />
               <directionalLight position={[-35, 25, -30]} intensity={0.4} color="#D2E4F8" />
@@ -198,10 +199,10 @@ export function LightingAndAtmosphere({
             shadow-mapSize-height={shadowMapSize}
             shadow-camera-near={0.5}
             shadow-camera-far={200}
-            shadow-camera-left={-65}
-            shadow-camera-right={65}
-            shadow-camera-top={65}
-            shadow-camera-bottom={-65}
+            shadow-camera-left={-55}
+            shadow-camera-right={55}
+            shadow-camera-top={55}
+            shadow-camera-bottom={-55}
             shadow-bias={-0.0003}
           />
           <directionalLight position={[-40, 18, 40]} intensity={0.4} color="#9D76A8" />
@@ -222,10 +223,10 @@ export function LightingAndAtmosphere({
             shadow-mapSize-height={shadowMapSize / 2}
             shadow-camera-near={0.5}
             shadow-camera-far={200}
-            shadow-camera-left={-65}
-            shadow-camera-right={65}
-            shadow-camera-top={65}
-            shadow-camera-bottom={-65}
+            shadow-camera-left={-55}
+            shadow-camera-right={55}
+            shadow-camera-top={55}
+            shadow-camera-bottom={-55}
           />
           <hemisphereLight args={["#1A2C4A", "#0E180B", 0.2]} />
         </group>
