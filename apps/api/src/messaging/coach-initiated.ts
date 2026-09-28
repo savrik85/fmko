@@ -20,7 +20,7 @@ import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
   generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError,
 } from "./ai-player-chat";
-import { loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, pockejNezDopise } from "./ai-player-spawn";
+import { INJURY_COLUMN, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, pockejNezDopise } from "./ai-player-spawn";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 const M = "coach-initiated";
@@ -43,7 +43,8 @@ const MAX_VYMEN = 30;
 const PLAYER_SELECT = `
   SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.age, p.position,
          p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
-         0 AS recent_minutes, 6.5 AS recent_rating_avg
+         0 AS recent_minutes, 6.5 AS recent_rating_avg,
+         ${INJURY_COLUMN}
   FROM players p`;
 
 /**

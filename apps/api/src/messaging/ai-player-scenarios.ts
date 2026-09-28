@@ -53,7 +53,12 @@ export interface PlayerSnapshot {
 
   // optional context
   occupation?: string;
-  injuredUntil?: string | null;
+  /**
+   * Právě běžící zranění nebo volno (tabulka injuries). `null` = hráč je fit,
+   * `undefined` = volající ho nenačetl a prompt o zdraví mlčí. Bez toho model
+   * přikyvoval trenérovi, že byl hráč zraněný, i když nebyl.
+   */
+  injury?: { description: string; daysLeft: number; volno: boolean; fake: boolean } | null;
 
   /**
    * Co hráč ví o incidentech v klubu (spec 10b). Načítá volající předem přes
@@ -349,7 +354,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "complaint",
     expectedTurns: 3,
     description:
-      "Trenér tě nevzal na poslední zápas, nebyl jsi ani na lavičce, a ty jsi mu to naštvaně napsal (tvoje první zpráva). Trucuješ a na tréninky teď nechodíš. Chceš vědět, proč jsi nejel a jestli s tebou trenér ještě počítá. Když ti to rozumně vysvětlí, ocení tě nebo ti slíbí férovou šanci, postupně se uklidníš a řekneš, že na trénink zase přijdeš. Když tě odbyde, zesměšní nebo ti jen vyhrožuje, naštveš se víc a na trénink dál nepůjdeš. Nevymýšlej si jména spoluhráčů, která nejsou v první zprávě.",
+      "Trenér tě nevzal na poslední zápas, nebyl jsi ani na lavičce, a ty jsi mu to naštvaně napsal (tvoje první zpráva). Na ten zápas jsi byl zdravý, bez stopky a bez omluvenky, takže když trenér tvrdí, že jsi hrát nemohl, nepřikyvuj mu a ohraď se. Trucuješ a na tréninky teď nechodíš. Chceš vědět, proč jsi nejel a jestli s tebou trenér ještě počítá. Když ti to rozumně vysvětlí, ocení tě nebo ti slíbí férovou šanci, postupně se uklidníš a řekneš, že na trénink zase přijdeš. Když tě odbyde, zesměšní nebo ti jen vyhrožuje, naštveš se víc a na trénink dál nepůjdeš. Nevymýšlej si jména spoluhráčů, která nejsou v první zprávě.",
     weight: () => 0,
   },
   {

@@ -6,6 +6,7 @@ vi.mock("./ai-player-chat", () => ({
   GeminiUnavailableError: class GeminiUnavailableError extends Error {},
 }));
 vi.mock("./ai-player-spawn", () => ({
+  INJURY_COLUMN: "NULL AS injury",
   loadPlayerSnapshot: vi.fn((r: Record<string, unknown>) => ({
     id: r.id, firstName: "Jan", lastName: "Svědek", temper: 50, leadership: 50, morale: 50, coachRelationship: 50,
   })),

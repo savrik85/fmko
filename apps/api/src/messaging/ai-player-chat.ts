@@ -97,6 +97,24 @@ function buildLastMatchFacts(p: PlayerSnapshot): string {
  * `kdy` je normálně teď. Jde předat kvůli testům a kvůli tomu, aby dvě volání
  * v jednom zpracování nespadla každé do jiné hodiny.
  */
+/**
+ * Fakt o zdraví hráče pro prompt. Bez něj model ochotně přikyvoval trenérovi
+ * („byl jsi zraněný" → „jo, to je fakt, zapomněl jsem"), i když hráč zraněný nebyl.
+ * Prázdný řetězec = zdraví nenačtené, prompt o něm mlčí.
+ */
+export function popisZdravi(player: PlayerSnapshot): string {
+  const inj = player.injury;
+  if (inj === undefined) return "";
+  if (inj === null) {
+    return "Zdraví: jsi fit, nejsi zraněný ani nemáš volno. Když trenér tvrdí, že jsi byl zraněný, nepřikyvuj mu a oprav ho.";
+  }
+  const popis = inj.description ? ` (${inj.description})` : "";
+  const dny = `ještě ${inj.daysLeft} ${inj.daysLeft === 1 ? "den" : inj.daysLeft < 5 ? "dny" : "dní"}`;
+  if (inj.volno) return `Zdraví: máš od trenéra osobní volno${popis}, ${dny}.`;
+  if (inj.fake) return `Zdraví: trenérovi hlásíš zranění${popis}, ${dny}. Ve skutečnosti ti nic není, ale nepřiznáš to.`;
+  return `Zdraví: jsi zraněný${popis}, ${dny} nemůžeš hrát.`;
+}
+
 export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy: Date = new Date()): string {
   const positionLabel: Record<string, string> = {
     GK: "brankář",
@@ -131,6 +149,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     `Jsi ${player.firstName} ${player.lastName}, ${player.age}letý ${positionStr} amatérského týmu ${team.teamName}${village} v české vesnické soutěži.`,
     `Tvoje povaha: ${buildPersonalityHints(player)}.`,
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
+    popisZdravi(player),
     domacnostSeSituaci(player.age, player.zivotniSituace?.kind),
     popisSituace(cas, player.occupation, vymluva),
     // Kdo je na druhé straně, musí být jasné TADY, ne až mezi fakty o klubu.
@@ -395,6 +414,7 @@ export async function evaluateResolution(
     `Vyhodnoť, jak konverzace dopadla pro hráče ${player.firstName} ${player.lastName} (${player.age} let, ${player.position}).`,
     `Scénář: ${scenario.description}`,
     `Aktuální stav hráče: morale ${player.morale}/100, kondice ${player.condition}/100, vztah s trenérem ${player.coachRelationship}/100.`,
+    popisZdravi(player),
     `Povaha: ${buildPersonalityHints(player)}.`,
     "",
     "KONVERZACE:",

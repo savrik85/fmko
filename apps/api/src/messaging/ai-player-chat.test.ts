@@ -15,7 +15,7 @@ vi.mock("../lib/ai-provider", () => ({
 
 import { BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, type RadekZnalosti } from "../incidents/znalosti";
 import { generateText } from "../lib/ai-provider";
-import { ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution } from "./ai-player-chat";
+import { ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, popisZdravi } from "./ai-player-chat";
 import { getScenarioById } from "./ai-player-scenarios";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
@@ -175,5 +175,30 @@ describe("životní situace v chatu (spec 17d)", () => {
     const p = buildSystemPrompt(hrac({ age: 32, zivotniSituace: { kind: "rozvod", label: "Rozvod" } }), tym, kdy(2, 18));
     expect(p).toContain("kabin");
     expect(p).not.toContain("Doma máš ženu");
+  });
+});
+
+describe("popisZdravi", () => {
+  it("nenačtené zdraví prompt nezmiňuje", () => {
+    expect(popisZdravi(hrac())).toBe("");
+  });
+
+  it("fit hráč nepřikyvuje, že byl zraněný", () => {
+    expect(popisZdravi(hrac({ injury: null }))).toContain("nepřikyvuj");
+  });
+
+  it("zraněný hráč ví, co mu je a jak dlouho", () => {
+    const text = popisZdravi(hrac({ injury: { description: "křeče", daysLeft: 3, volno: false, fake: false } }));
+    expect(text).toContain("jsi zraněný (křeče), ještě 3 dny");
+  });
+
+  it("volno a simulant se od zranění liší", () => {
+    expect(popisZdravi(hrac({ injury: { description: "", daysLeft: 1, volno: true, fake: false } }))).toContain("osobní volno, ještě 1 den");
+    expect(popisZdravi(hrac({ injury: { description: "záda", daysLeft: 7, volno: false, fake: true } }))).toContain("nepřiznáš");
+  });
+
+  it("věta o zdraví je v promptu", () => {
+    const prompt = buildSystemPrompt(hrac({ injury: null }), { teamName: "Spůle" } as Parameters<typeof buildSystemPrompt>[1]);
+    expect(prompt).toContain("Zdraví: jsi fit");
   });
 });
