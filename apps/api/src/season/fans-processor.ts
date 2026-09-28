@@ -54,6 +54,41 @@ export interface MatchSatisfactionInput {
   paSystemBonus?: number;
   /** Stav trávníku 0–100. Jen doma — vlastní hřiště fanoušci vidí každé kolo. */
   pitchCondition?: number | null;
+  /** Usměvavá obsluha občerstvení. Jen doma a jen u vlastního prodeje. */
+  staffBonus?: number;
+  /** Sociálky a pořadatelská služba. Jen doma. */
+  facilityBonus?: number;
+  /**
+   * Reputace vlastního klubu — z ní se bere, co fanoušci od zápasu čekají.
+   * Chybí-li, použije se uložené `fans.expected_performance`.
+   */
+  teamReputation?: number;
+}
+
+/**
+ * Strop za zázemí stadionu v jednom zápase.
+ *
+ * Ozvučení, sociálky, obsluha a kvalitní občerstvení dřív přičítaly body po KAŽDÉM
+ * domácím zápase, klidně +10 i po prohře. Postavené vybavení tak spokojenost
+ * pumpovalo pořád dokola a lidské kluby skončily na stovce. Zázemí je standard,
+ * na který si fanoušci zvyknou — potěší, ale výsledek nepřebije.
+ */
+export const AMENITY_BONUS_CAP = 3;
+
+/** Klidová spokojenost, ke které se fanoušci mezi zápasy vracejí (viz denní tick). */
+export function satisfactionRest(loyalty: number): number {
+  return Math.round(45 + Math.max(0, Math.min(100, loyalty)) * 0.15);
+}
+
+/** Totéž pro SQL nad tabulkou `fans`. Musí se shodovat s `satisfactionRest`. */
+export const SATISFACTION_REST_SQL = "CAST(ROUND(45 + MAX(0, MIN(100, loyalty)) * 0.15) AS INTEGER)";
+
+/** Posun spokojenosti o jeden herní den ke klidu. Zrcadlí SQL v denním ticku. */
+export function driftSatisfaction(satisfaction: number, loyalty: number): number {
+  const rest = satisfactionRest(loyalty);
+  if (satisfaction === rest) return satisfaction;
+  const step = Math.max(1, Math.round(Math.abs(satisfaction - rest) * 0.08));
+  return satisfaction > rest ? Math.max(rest, satisfaction - step) : Math.min(rest, satisfaction + step);
 }
 
 export interface MatchSatisfactionResult {
@@ -83,8 +118,10 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
     reasons.push("Prohra -5");
   }
 
-  // 2. Očekávání vs realita (opponentReputation vs fans.expected_performance)
-  const expDiff = input.opponentReputation - input.fans.expected_performance;
+  // 2. Očekávání vs realita. Fanoušci měří soupeře vlastním klubem: silný klub
+  //    výhrou nad slabším nic nezíská, prohra s ním bolí navíc.
+  const expected = input.teamReputation ?? input.fans.expected_performance;
+  const expDiff = input.opponentReputation - expected;
   if (input.result === "win" && expDiff > 10) {
     const bonus = Math.round(expDiff / 10);
     delta += bonus;
@@ -109,9 +146,20 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
   }
 
   // 4. Ozvučení a hlasatel — hymna před derby, sestavy nahlas, dechovka o poločase
+  // Kladné body za zázemí se sčítají zvlášť a na konci se useknou stropem.
+  let zazemi = 0;
+  const zazemiCo: string[] = [];
   if ((input.paSystemBonus ?? 0) > 0) {
-    delta += input.paSystemBonus as number;
-    reasons.push(`Ozvučení a hlasatel +${input.paSystemBonus}`);
+    zazemi += input.paSystemBonus as number;
+    zazemiCo.push("ozvučení");
+  }
+  if ((input.facilityBonus ?? 0) > 0) {
+    zazemi += input.facilityBonus as number;
+    zazemiCo.push("sociálky");
+  }
+  if (input.concessionMode === "self" && (input.staffBonus ?? 0) > 0) {
+    zazemi += input.staffBonus as number;
+    zazemiCo.push("obsluha");
   }
 
   // 5. Občerstvení — jen self mode má dopad na satisfaction
@@ -127,8 +175,8 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
 
       // Kvalitní a férové ceny = +1
       if (p.qualityLevel >= 2 && priceRatio <= 1.8) {
-        delta += 1;
-        reasons.push(`Kvalitní ${label} +1`);
+        zazemi += 1;
+        zazemiCo.push(label);
       }
       // Nízká kvalita a přepálená cena = -2
       if (p.qualityLevel <= 1 && priceRatio > 2.0) {
@@ -167,9 +215,15 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
       delta -= 2;
       reasons.push("Zanedbaný trávník -2");
     } else if (pc >= 90) {
-      delta += 1;
-      reasons.push("Trávník jak koberec +1");
+      zazemi += 1;
+      zazemiCo.push("trávník jak koberec");
     }
+  }
+
+  if (zazemi > 0) {
+    const body = Math.min(AMENITY_BONUS_CAP, zazemi);
+    delta += body;
+    reasons.push(`Zázemí +${body} (${zazemiCo.join(", ")})`);
   }
 
   return { delta: clamp(delta, -15, 15), reasons };

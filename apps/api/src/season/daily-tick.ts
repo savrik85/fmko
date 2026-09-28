@@ -1108,13 +1108,22 @@ export async function executeDailyTick(
   }
   events.push({ type: "morale", description: "Morálka se stabilizuje" });
 
-  // Fans satisfaction drift toward loyalty (1 bod denně)
+  // Spokojenost se mezi zápasy vrací ke klidovému stavu kolem 55. Dřív mířila
+  // k loajalitě, jenže ta sleduje reputaci (u lidských klubů 80–95) a klub, kde
+  // se nic nedělo, tak sám skončil na „nadšení". Loajalita posouvá klid jen
+  // o pár bodů: věrné publikum je v klidu o něco vlídnější (45 + loajalita × 0,15).
+  // Krok je 8 % vzdálenosti, aspoň bod — výkyv po sérii výher vyprchá za pár týdnů.
+  const { SATISFACTION_REST_SQL } = await import("./fans-processor");
   await env.DB.prepare(
     `UPDATE fans SET satisfaction = CASE
-       WHEN satisfaction > loyalty + 1 THEN satisfaction - 1
-       WHEN satisfaction < loyalty - 1 THEN satisfaction + 1
+       WHEN satisfaction > ${SATISFACTION_REST_SQL}
+         THEN MAX(${SATISFACTION_REST_SQL}, satisfaction - MAX(1, CAST(ROUND((satisfaction - ${SATISFACTION_REST_SQL}) * 0.08) AS INTEGER)))
+       WHEN satisfaction < ${SATISFACTION_REST_SQL}
+         THEN MIN(${SATISFACTION_REST_SQL}, satisfaction + MAX(1, CAST(ROUND((${SATISFACTION_REST_SQL} - satisfaction) * 0.08) AS INTEGER)))
        ELSE satisfaction
-     END, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
+     END,
+     expected_performance = COALESCE((SELECT reputation FROM teams WHERE teams.id = fans.team_id), expected_performance),
+     updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "fans satisfaction drift", e));
 
   // Loajalita míří k rovnovážné hladině = reputace týmu POSUNUTÁ o vliv trenéra (1 bod denně).
