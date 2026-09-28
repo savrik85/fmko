@@ -150,6 +150,8 @@ interface VipBoxProps {
   teamColor: string;
   timeOfDay: TimeOfDay;
   reducedDetail?: boolean;
+  /** Ve sněhu leží na stropě galerie bílá vrstva. */
+  isSnow?: boolean;
 }
 
 export function VipBox(props: VipBoxProps) {
@@ -157,7 +159,7 @@ export function VipBox(props: VipBoxProps) {
   return <ActiveVipBox {...props} />;
 }
 
-function ActiveVipBox({ level, standsLevel, roofLevel, ultrasSide, accentColor, teamColor, timeOfDay, reducedDetail = false }: VipBoxProps) {
+function ActiveVipBox({ level, standsLevel, roofLevel, ultrasSide, accentColor, teamColor, timeOfDay, reducedDetail = false, isSnow = false }: VipBoxProps) {
   const side = vipBoxSide(standsLevel, ultrasSide);
   const isEW = side === "east" || side === "west";
   const standLength = isEW ? PITCH.depth : PITCH.width;
@@ -226,6 +228,12 @@ function ActiveVipBox({ level, standsLevel, roofLevel, ultrasSide, accentColor, 
         <boxGeometry args={[rowW + 0.3, 0.12, CABIN_D + 0.1]} />
         <meshStandardMaterial color="#111827" metalness={0.6} roughness={0.35} />
       </mesh>
+      {isSnow && (
+        <mesh position={[0, floorTop + CABIN_H + 0.05, zCenter]} castShadow receiveShadow>
+          <boxGeometry args={[(rowW + 0.3) * 0.96, 0.1, (CABIN_D + 0.1) * 0.86]} />
+          <meshStandardMaterial color="#F4F7FB" roughness={0.95} />
+        </mesh>
+      )}
 
       {/* Kabiny: sklo do hřiště, příčky mezi kabinami */}
       {Array.from({ length: cabins }).map((_, i) => {

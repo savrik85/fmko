@@ -84,6 +84,7 @@ function Outhouse({ roofColor }: { roofColor?: string | null }) {
           metalness={0.4}
         />
       </mesh>
+      <RoofSnow position={[0, h + 0.1, 0.05]} rotation={[0.2, 0, 0]} w={w + 0.3} d={d + 0.3} base={0.04} />
 
       {/* Dveře se srdíčkem */}
       <mesh position={[0, h * 0.48, d / 2 + 0.01]}>
@@ -166,6 +167,7 @@ function ModernToilets({ roofColor, timeOfDay = "day" }: { roofColor?: string | 
         <boxGeometry args={[w + 0.3, 0.16, d + 0.3]} />
         <meshStandardMaterial color={roofColor ?? "#334155"} roughness={0.4} />
       </mesh>
+      <RoofSnow position={[0, h + 0.08, 0]} w={w + 0.3} d={d + 0.3} base={0.08} />
       {/* Prosklené světlíky */}
       <mesh position={[0, h * 0.75, d / 2 + 0.01]}>
         <planeGeometry args={[w * 0.8, 0.4]} />
@@ -313,6 +315,7 @@ function ModernChangingComplex({ roofColor, timeOfDay = "day" }: { roofColor?: s
         <boxGeometry args={[w + 0.4, 0.2, d + 0.4]} />
         <meshStandardMaterial color={roofColor ?? "#1E293B"} roughness={0.4} />
       </mesh>
+      <RoofSnow position={[0, h + 0.1, 0]} w={w + 0.4} d={d + 0.4} base={0.1} />
 
       {/* Solární panely na střeše */}
       {[-3, 0, 3].map((x, i) => (
@@ -391,6 +394,7 @@ function Kiosk({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; ti
           roughness={0.6}
         />
       </mesh>
+      <RoofSnow position={[0, h + 0.15, 0.1]} rotation={[0.12, 0, 0]} w={w + 0.5} d={d + 0.6} base={0.05} />
 
       {/* Výdejní okno s výklopnou okenicí */}
       <mesh position={[0, h * 0.52, d / 2 + 0.01]}>
@@ -504,6 +508,7 @@ function ModernRestaurant({ roofColor, timeOfDay = "day" }: { roofColor?: string
         <boxGeometry args={[w + 0.4, 0.2, d + 0.4]} />
         <meshStandardMaterial color={roofColor ?? "#0F172A"} />
       </mesh>
+      <RoofSnow position={[0, h + 0.1, 0]} w={w + 0.4} d={d + 0.4} base={0.1} />
 
       {/* Panoramatická prosklená fasáda s neonovým leskem */}
       <mesh position={[0, h * 0.55, d / 2 + 0.01]}>
@@ -613,6 +618,7 @@ function ModernShowerHouse({ roofColor, timeOfDay = "day" }: { roofColor?: strin
         <boxGeometry args={[w + 0.4, 0.2, d + 0.4]} />
         <meshStandardMaterial color={roofColor ?? "#1E293B"} />
       </mesh>
+      <RoofSnow position={[0, h + 0.1, 0]} w={w + 0.4} d={d + 0.4} base={0.1} />
       {/* Wellness modré sklo */}
       <mesh position={[0, h * 0.6, d / 2 + 0.01]}>
         <planeGeometry args={[w * 0.7, 1.2]} />
@@ -681,6 +687,37 @@ function SaddleRoof({
         />
       </mesh>
       {isSnow && <SaddleSnowCap w={w} d={d} baseY={baseY} roofHeight={roofHeight} />}
+    </group>
+  );
+}
+
+/**
+ * Sněhová vrstva na ploché nebo pultové střeše. Dostane stejnou polohu a náklon
+ * jako střecha; `base` je polovina tloušťky střechy. Je o kus menší, aby na hraně
+ * zůstala vidět barva střechy.
+ */
+function RoofSnow({
+  position,
+  rotation = [0, 0, 0],
+  w,
+  d,
+  base,
+}: {
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  w: number;
+  d: number;
+  base: number;
+}) {
+  const isSnow = useContext(SnowContext);
+  if (!isSnow) return null;
+  const t = 0.1;
+  return (
+    <group position={position} rotation={rotation}>
+      <mesh position={[0, base + t / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w * 0.93, t, d * 0.9]} />
+        <meshStandardMaterial color={SNOW_COLOR} roughness={0.95} />
+      </mesh>
     </group>
   );
 }
