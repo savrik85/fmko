@@ -683,6 +683,10 @@ export async function processMatchDayFinances(
     const { nactiFormuKlubu } = await import("../lib/forma-klubu");
     const formaTymu = await nactiFormuKlubu(db, teamId);
 
+    const ownRep = await db.prepare("SELECT reputation FROM teams WHERE id = ?")
+      .bind(teamId).first<{ reputation: number }>()
+      .catch((e) => { logger.warn({ module: "finance-processor" }, "reputace klubu pro očekávání fanoušků", e); return null; });
+
     const homePitchCondition = isHome
       ? (await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
           .bind(teamId).first<{ pitch_condition: number }>()
@@ -702,19 +706,11 @@ export async function processMatchDayFinances(
       paSystemBonus: isHome ? matchEquipmentFx?.fanSatisfactionMod ?? 0 : 0,
       // Trávník hodnotí fanoušci jen ten svůj. Za stav soupeřova hřiště klub nemůže.
       pitchCondition: isHome ? homePitchCondition : null,
+      // Obsluha a sociálky hodnotí fanoušci jen doma. Spadají pod společný strop zázemí.
+      staffBonus: isHome ? staffFx.concessionSatBonus : 0,
+      facilityBonus: isHome ? facilityFx.matchSatisfactionBonus : 0,
+      teamReputation: ownRep?.reputation ?? undefined,
     });
-
-    // Obsluha občerstvení: usměvavá obsluha zvedá spokojenost (jen doma, self mode)
-    if (isHome && fansCtx.concessionMode === "self" && staffFx.concessionSatBonus > 0) {
-      satCalc.delta = Math.max(-15, Math.min(15, satCalc.delta + staffFx.concessionSatBonus));
-      satCalc.reasons.push(`Usměvavá obsluha +${staffFx.concessionSatBonus}`);
-    }
-
-    // Sociálky: čisté záchodky zvedají spokojenost fanoušků (jen doma)
-    if (isHome && facilityFx.matchSatisfactionBonus > 0) {
-      satCalc.delta = Math.max(-15, Math.min(15, satCalc.delta + facilityFx.matchSatisfactionBonus));
-      satCalc.reasons.push(`Čisté sociálky +${facilityFx.matchSatisfactionBonus}`);
-    }
 
     // Načíst jméno soupeře pro archivaci v historii
     const opponentRow = await db.prepare(
