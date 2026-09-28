@@ -88,7 +88,7 @@ export function InvitePageClient({ team, manager, position }: Props) {
               {`Zalo\u017E si t\u00FDm v okresu ${team.district} a utkej se o titul.`}
             </p>
 
-            <Link href="/registrace" className="btn btn-primary-dark btn-xl w-full text-base font-bold">
+            <Link href={`/registrace?okres=${encodeURIComponent(team.district)}`} className="btn btn-primary-dark btn-xl w-full text-base font-bold">
               {`P\u0159ijmout v\u00FDzvu \u2192`}
             </Link>
             <p className="text-white/15 text-xs mt-2.5">

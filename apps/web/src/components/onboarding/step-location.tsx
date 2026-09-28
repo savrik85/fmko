@@ -34,26 +34,39 @@ function getSizeBadge(size: string): { label: string; bg: string; text: string }
 
 interface Props {
   onSelect: (village: VillageSelection) => void;
+  allowedDistricts: string[];
 }
 
-export function StepLocation({ onSelect }: Props) {
+export function StepLocation({ onSelect, allowedDistricts }: Props) {
   const [villages, setVillages] = useState<Village[]>([]);
   const [stats, setStats] = useState<Stats>({ villageCounts: {}, districtCounts: {}, regionCounts: {} });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [step, setStep] = useState<Step>("region");
   const [selectedRegion, setSelectedRegion] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setLoadError(false);
     Promise.all([
       apiFetch<Village[]>("/api/villages"),
       apiFetch<Stats>("/api/villages/stats").catch(() => ({ villageCounts: {}, districtCounts: {}, regionCounts: {}, fullDistricts: [] })),
     ]).then(([v, s]) => {
-      setVillages(v);
+      if (cancelled) return;
+      const available = v.filter(village => allowedDistricts.includes(village.district));
+      setVillages(available);
+      if (allowedDistricts.length === 1) {
+        setSelectedDistrict(allowedDistricts[0]);
+        setSelectedRegion(available[0]?.region ?? "");
+        setStep("village");
+      }
       setStats(s);
       setLoading(false);
-    });
-  }, []);
+    }).catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [allowedDistricts, attempt]);
 
   const fullDistrictsSet = useMemo(() => new Set(stats.fullDistricts ?? []), [stats]);
 
@@ -104,7 +117,7 @@ export function StepLocation({ onSelect }: Props) {
   }
 
   function handleDistrict(district: string) {
-    if (fullDistrictsSet.has(district)) return; // Blocked — full league
+    if (fullDistrictsSet.has(district)) return; // Blocked because the league is full.
     setSelectedDistrict(district);
     setStep("village");
   }
@@ -124,20 +137,19 @@ export function StepLocation({ onSelect }: Props) {
         <p className="text-muted mt-1">{breadcrumb}</p>
       </div>
 
-      {step !== "region" && (
+      {step !== "region" && allowedDistricts.length !== 1 && (
         <button onClick={handleBack} className="btn btn-ghost btn-sm mb-4 -ml-2 self-start">
           &#8592; Zpět
         </button>
       )}
 
-      {loading ? (
+      {loadError ? <div role="alert"><p>Obce se nepodařilo načíst.</p><button className="btn btn-primary mt-3" onClick={() => setAttempt(v => v + 1)}>Zkusit znovu</button></div> : loading ? (
         <div className="flex-1 flex items-center justify-center py-20"><Spinner /></div>
       ) : step === "region" ? (
         /* ═══ Region selection ═══ */
         <>
         <div className="bg-pitch-50 border border-pitch-200 rounded-xl px-4 py-3 mb-4 text-sm text-pitch-800 leading-relaxed">
-          <span className="font-bold">{"🌱 První testovací sezóna."}</span>{" "}
-          {"Pro nejlepší zážitek zvol"} <span className="font-bold">{"Jihočeský kraj → Prachatice"}</span> {"— tento okres má nejvíc personalizovaných dat."}
+          Vybíráš jen z okresů s připravenými daty a otevřenou registrací týmů.
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {regions.map((r) => (
@@ -162,8 +174,7 @@ export function StepLocation({ onSelect }: Props) {
         /* ═══ District selection ═══ */
         <>
         <div className="bg-pitch-50 border border-pitch-200 rounded-xl px-4 py-3 mb-4 text-sm text-pitch-800 leading-relaxed">
-          <span className="font-bold">{"🌱 První testovací sezóna!"}</span>{" "}
-          {"Pro nejlepší zážitek doporučuju okres"} <span className="font-bold">{"Prachatice"}</span> {"— má personalizovaná data (reálná příjmení, místní názvy). Ostatní okresy fungují také, ale s obecnějšími daty. Pokud chceš personalizaci pro svůj okres, dej vědět!"}
+          Tyhle okresy už jsou připravené. Vyber si soutěž pro svůj klub.
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {districts.map((d) => (

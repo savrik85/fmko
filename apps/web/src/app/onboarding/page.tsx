@@ -70,7 +70,7 @@ function restoreOnboarding(): { step: number; state: OnboardingState } {
     return { step: 5, state: parsed };
   }
 
-  // Validate step has required data — if not, fall back to the highest valid step
+  // Validate step has required data. If not, fall back to the highest valid step.
   const requestedStep = Number(savedStep) || 1;
   let validStep = 1;
   if (parsed.village) validStep = 2;
@@ -87,6 +87,30 @@ export default function OnboardingPage() {
   const [error, setError] = useState("");
   const { token, isLoading, teamId, setTeam } = useTeam();
   const router = useRouter();
+
+  const [access, setAccess] = useState<{ district: string | null; name: string; districts: string[] } | null>(null);
+  const [accessError, setAccessError] = useState("");
+  const [accessAttempt, setAccessAttempt] = useState(0);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    setAccessError("");
+    apiFetch<{ district: string | null; name: string; districts: string[] }>("/api/registration/access")
+      .then(data => {
+        if (cancelled) return;
+        setAccess(data);
+        setState(previous => {
+          if (previous.createdTeamId) return previous;
+          if (previous.village && !data.districts.includes(previous.village.district)) {
+            setStep(1);
+            return { ...EMPTY_STATE, managerName: data.name };
+          }
+          return { ...previous, managerName: previous.managerName || data.name };
+        });
+      })
+      .catch(() => { if (!cancelled) setAccessError("Připravenost okresu teď nejde ověřit. Zkus to znovu."); });
+    return () => { cancelled = true; };
+  }, [token, accessAttempt]);
 
   // Redirect to register if not authenticated
   useEffect(() => {
@@ -109,7 +133,7 @@ export default function OnboardingPage() {
   }, [step, state]);
 
   async function handleCreateTeam(teamName: string, primary: string, secondary: string, jerseyPattern?: string, badgePattern?: string) {
-    if (!state.village || creating) return;
+    if (!state.village || creating || !access?.districts.includes(state.village.district)) return;
     setCreating(true);
     setError("");
 
@@ -137,7 +161,7 @@ export default function OnboardingPage() {
       const players = await apiFetch<Player[]>(`/api/teams/${result.id}/players`);
       setTeam(result.id, result.name);
 
-      // Clear onboarding persistence — done
+      // Clear onboarding persistence after completion.
       sessionStorage.removeItem("onboarding_step");
       sessionStorage.removeItem("onboarding_state");
 
@@ -162,6 +186,15 @@ export default function OnboardingPage() {
     }
   }
 
+  if (!access || (access.districts.length === 0 && !state.createdTeamId)) {
+    return <main className="min-h-dvh bg-paper flex items-center justify-center p-6"><div className="card p-8 max-w-lg text-center">
+      <h1 className="text-h1 mb-4">{access ? "Tvůj okres se chystá na výkop" : "Ověřujeme tvůj okres"}</h1>
+      <p className="mb-5">{accessError || (access ? "Týmy odemkneme po dokončení místních dat a založení prvního klubu zakladatelem ligy. Zatím dej dohromady partu kamarádů." : "Načítáme připravené okresy pro založení týmu.")}</p>
+      {!access && !accessError ? <Spinner /> : <button className="btn btn-primary" onClick={() => setAccessAttempt(v => v + 1)}>Znovu ověřit stav</button>}
+      <a href="/" className="block mt-6 underline">Zpátky do Pralesa</a>
+    </div></main>;
+  }
+
   return (
     <main className="min-h-dvh flex flex-col bg-paper">
       {/* Header with progress */}
@@ -178,6 +211,7 @@ export default function OnboardingPage() {
         {/* Step 1: Location */}
         {step === 1 && (
           <StepLocation
+            allowedDistricts={access.districts}
             onSelect={(village) => {
               setState((s) => ({
                 ...s,
@@ -193,7 +227,7 @@ export default function OnboardingPage() {
         {step === 2 && state.village && (
           <StepManager
             villageName={state.village.name}
-            initialName=""
+            initialName={state.managerName}
             onBack={() => setStep(1)}
             onSubmit={(name, backstory, avatar) => {
               setState((s) => ({

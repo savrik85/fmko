@@ -1,129 +1,65 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useTeam } from "@/context/team-context";
+import { REGISTRATION_DISTRICTS, type RegistrationDistrict } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
 import { Button, Input, ErrorBox } from "@/components/ui";
-
-function checkPassword(pw: string): string[] {
-  const errors: string[] = [];
-  if (pw.length < 8) errors.push("min. 8 znaků");
-  if (!/[a-z]/.test(pw)) errors.push("malé písmeno");
-  if (!/[A-Z]/.test(pw)) errors.push("velké písmeno");
-  if (!/[0-9]/.test(pw)) errors.push("číslo");
-  return errors;
-}
+import styles from "@/components/landing/registration.module.css";
 
 export default function RegisterPage() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [password2, setPassword2] = useState("");
+  const [district, setDistrict] = useState("");
+  const [districts, setDistricts] = useState<RegistrationDistrict[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useTeam();
-  const router = useRouter();
+  const [submitted, setSubmitted] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const status = districts.find(d => d.name === district)?.status;
 
-  const pwErrors = password ? checkPassword(password) : [];
-  const pwMatch = password2 && password !== password2;
+  function loadDistricts() {
+    setLoadError(false);
+    apiFetch<RegistrationDistrict[]>("/api/registration/districts").then(setDistricts).catch(() => setLoadError(true));
+  }
+  useEffect(() => {
+    loadDistricts();
+    const requested = new URLSearchParams(window.location.search).get("okres");
+    if (requested && (REGISTRATION_DISTRICTS as readonly string[]).includes(requested)) setDistrict(requested);
+  }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (pwErrors.length > 0) { setError("Heslo nesplňuje požadavky"); return; }
-    if (password !== password2) { setError("Hesla se neshodují"); return; }
-    setLoading(true);
-    setError("");
+    if (loading) return;
+    setLoading(true); setError("");
     try {
-      const result = await apiFetch<{
-        token: string;
-        user: { id: string; email: string; displayName: string; teamId: string | null };
-      }>("/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      login(result.token, { id: result.user.id, email: result.user.email, teamId: null, teamName: null });
-      sessionStorage.removeItem("onboarding_step");
-      sessionStorage.removeItem("onboarding_state");
-      router.push("/onboarding");
-    } catch (err) {
-      setError((err as Error).message);
-      setLoading(false);
-    }
+      await apiFetch("/api/registration/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, district }) });
+      setSubmitted(true);
+    } catch (err) { setError((err as Error).message === "Network error" ? "Registraci se nepodařilo odeslat. Zkontroluj připojení a zkus to znovu." : (err as Error).message); }
+    finally { setLoading(false); }
   }
 
-  return (
-    <main className="min-h-dvh bg-auth relative overflow-hidden flex items-center justify-center p-4">
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[50%] -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-pitch-400/[0.08]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-gold-500/[0.04]" />
-      </div>
-
-      <div className="w-full max-w-[400px] relative z-10">
-        <div className="text-center mb-10 animate-slide-up">
-          <h1 className="text-display text-white">PRALES</h1>
-          <p className="text-label text-white/25 mt-3">Fotbalový manažer z českého okresu</p>
-        </div>
-
-        <div className="card-dark p-8 animate-slide-up" style={{ animationDelay: "80ms" }}>
-          <h2 className="text-h2 text-white mb-1">Vytvoř si účet</h2>
-          <p className="text-white/40 text-sm mb-8">Za minutu budeš mít svůj tým</p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* autoComplete="new-password" u obou polí — správce hesel pak nabídne
-                vygenerování a uložení. Bez toho nemá co vyplnit ani při přihlášení. */}
-            <Input variant="dark" label="Email" type="email" name="email"
-              autoComplete="email" inputMode="email" spellCheck={false} autoCapitalize="none"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)} placeholder="tvuj@email.cz" required />
-
-            <div>
-              <Input variant="dark" label="Heslo" type="password" name="new-password"
-                autoComplete="new-password" value={password}
-                onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 znaků, velké, malé, číslo" required />
-              {password && pwErrors.length > 0 && (
-                <div className="flex gap-2 mt-1.5 flex-wrap">
-                  {["min. 8 znaků", "malé písmeno", "velké písmeno", "číslo"].map((req) => {
-                    const ok = !pwErrors.includes(req);
-                    return (
-                      <span key={req} className={`text-micro px-1.5 py-0.5 rounded-full font-heading font-bold ${ok ? "bg-pitch-500/20 text-pitch-300" : "bg-white/5 text-white/30"}`}>
-                        {ok ? "✓" : "○"} {req}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <Input variant="dark" label="Heslo znovu" type="password" name="new-password-confirm"
-                autoComplete="new-password" value={password2}
-                onChange={(e) => setPassword2(e.target.value)} placeholder="Zopakuj heslo" required />
-              {pwMatch && (
-                <p className="text-card-red text-xs mt-1">Hesla se neshodují</p>
-              )}
-            </div>
-
-            <ErrorBox message={error} variant="dark" />
-
-            <Button variant="primary-dark" size="lg" type="submit"
-              disabled={loading || pwErrors.length > 0 || password !== password2 || !password2}
-              className="w-full">
-              {loading ? "Registruji..." : "Založit účet a začít hrát"}
-            </Button>
+  return <main className={styles.page}>
+    <header className={styles.header}><Link className={styles.logo} href="/">PRALES.</Link><Link href="/prihlaseni">Už mám účet →</Link></header>
+    <div className={styles.layout}>
+      <section className={styles.intro}><p className={styles.eyebrow}>PRVNÍ KROK DO VAŠÍ LIGY</p><h1>Každý okres<br />potřebuje<br /><em>svého předsedu.</em></h1><p>Začni u vás doma. Pozvi kamarády z hospody, práce nebo kabiny a veď první období ligy, která bude patřit vašemu okresu.</p><ol><li><strong>Ty vybereš okres.</strong><span>Jméno a e-mail. Nic dalšího teď nepotřebujeme.</span></li><li><strong>My do 24 hodin připravíme data.</strong><span>Místní jména, obce, sponzory a atmosféru, aby to bylo opravdu vaše.</span></li><li><strong>Ty začneš jako předseda.</strong><span>Po aktivaci založíš klub, pozveš kamarády a na první období povedeš celou soutěž.</span></li></ol><Link href="/" className={styles.back}>Zpátky na hřiště</Link></section>
+      <section className={styles.card} aria-labelledby="registration-title">
+        {submitted ? <div role="status" className={styles.success}>
+          <span className={styles.check} aria-hidden="true">✓</span><p className={styles.eyebrow}>ŽÁDOST JE U NÁS</p><h2 id="registration-title">{district} jde do hry.</h2><p>Žádost jsme přijali. Na <strong>{email.trim()}</strong> dostaneš do 24 hodin další postup a aktivační odkaz.</p><div className={styles.note}>Týmy se odemknou po přípravě okresu. Zatím dej vědět kamarádům, že se chystá vaše liga.</div><p className={styles.small}>Pokud se neozveme, zkontroluj spam nebo napiš na <a href="mailto:admin@prales.fun">admin@prales.fun</a>.</p><Link href="/" className={styles.submit}>Zpět do Pralesa →</Link>
+        </div> : <>
+          <p className={styles.eyebrow}>JEN TŘI ÚDAJE A JSME VE HŘE</p><h2 id="registration-title">{status === "ready" ? "Přidej se do okresu" : "Rozjeď svůj okres"}</h2><p className={styles.description}>Heslo a vlastní tým vyřešíš až po přípravě dat.</p>
+          <form onSubmit={submit} className={styles.form}>
+            <Input label="Tvoje jméno" name="name" autoComplete="name" placeholder="Jak ti máme říkat?" value={name} minLength={2} maxLength={80} onChange={e => setName(e.target.value)} required />
+            <Input label="E-mail" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="tvuj@email.cz" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} required />
+            <div><label htmlFor="district" className="input-label">Váš okres</label><select id="district" name="district" className="input" value={district} onChange={e => setDistrict(e.target.value)} required aria-describedby="district-help"><option value="" disabled>Vyber okres</option>{REGISTRATION_DISTRICTS.map(name => <option key={name} value={name}>{name}{districts.find(d => d.name === name)?.status === "ready" ? " · připravený" : districts.find(d => d.name === name)?.status === "preparing" ? " · v přípravě" : ""}</option>)}</select></div>
+            <div id="district-help" className={styles.note}>{status === "ready" ? "Tento okres už je připravený. Připojíš se jako manažer k existující lize. První předsednický mandát už patří jejímu zakladateli." : status === "preparing" ? "Tenhle okres už má svého zakladatele a připravuje se. Přidej se k němu jako manažer. Ozveme se po dokončení dat." : "Založením nové ligy se staneš jejím prvním předsedou na první období. Do 24 hodin připravíme data pro váš okres a pošleme ti aktivační odkaz."}</div>
+            {loadError && <p role="alert" className={styles.small}>Stav okresů teď nejde načíst. <button type="button" onClick={loadDistricts} className="underline">Zkusit znovu</button></p>}
+            <ErrorBox message={error} />
+            <Button type="submit" size="lg" disabled={loading || !district || !name.trim() || districts.length === 0} className={styles.submit}>{loading ? "Odesílám žádost…" : status === "available" ? "Založit vlastní ligu ↗" : "Odeslat registraci ↗"}</Button>
+            <p className={styles.small}>E-mail použijeme pro vyřízení registrace a přístup do hry. Odesláním žádosti se ještě nezakládá tým.</p>
           </form>
-        </div>
-
-        <div className="divider-dark my-8" />
-
-        <p className="text-center text-sm text-white/30 animate-slide-up" style={{ animationDelay: "200ms" }}>
-          Už máš účet?{" "}
-          <Link href="/prihlaseni" className="text-pitch-300 font-semibold hover:text-white transition-colors">
-            Přihlásit se
-          </Link>
-        </p>
-      </div>
-    </main>
-  );
+        </>}
+      </section>
+    </div>
+  </main>;
 }

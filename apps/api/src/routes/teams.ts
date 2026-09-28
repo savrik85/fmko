@@ -1,3 +1,4 @@
+import { districtAccess, appointFounder } from "../registration/district-access";
 /**
  * Sprint 1: Teams API — raw SQL on D1.
  * POST /api/teams — vytvoří tým + generuje kádr
@@ -172,8 +173,12 @@ teamsRouter.post("/", async (c) => {
   if (existingTeam) {
     const existingName = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(existingTeam.id).first<{ name: string }>();
     logger.info({ module: "teams" }, `returning existing team: ${existingTeam.id} (${existingName?.name})`);
+    await appointFounder(c.env.DB, userId, existingTeam.id);
     return c.json({ id: existingTeam.id, name: existingName?.name ?? "", existing: true }, 200);
   }
+
+  const accessError = await districtAccess(c.env.DB, village.district as string, userId);
+  if (accessError) return c.json({ error: accessError }, 403);
 
   // Check if league in this district is full (no AI slots left)
   // Must happen BEFORE creating team to avoid orphan rows + FK issues
@@ -648,6 +653,8 @@ teamsRouter.post("/", async (c) => {
       await backfillYesterdayPubSession(c.env.DB, teamId, gameDateStr);
     } catch (e) { logger.warn({ module: "teams" }, "pub backfill (join)", e); }
 
+    await appointFounder(c.env.DB, userId, teamId);
+
     // Update KV session so teamId is no longer null (fixes post-onboarding auth)
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.slice(7);
@@ -911,6 +918,8 @@ teamsRouter.post("/", async (c) => {
     const { backfillYesterdayPubSession } = await import("../season/pub");
     await backfillYesterdayPubSession(c.env.DB, teamId, new Date().toISOString().slice(0, 10));
   } catch (e) { logger.warn({ module: "teams" }, "pub backfill (create)", e); }
+
+  await appointFounder(c.env.DB, userId, teamId);
 
   // Update KV session so teamId is no longer null (fixes post-onboarding auth)
   if (authHeader?.startsWith("Bearer ")) {
