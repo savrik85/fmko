@@ -38,7 +38,7 @@ export function WeatherEffects({
 
       {/* 💨 Větrné poryvy a zvířené částice */}
       {weather === "wind" && (
-        <WindStreaks count={isMobile ? 180 : 450} />
+        <WindStreaks count={isMobile ? 60 : 150} />
       )}
 
       {/* ☁️ Nízké zatažené mraky pro deštivé a zamračené počasí */}
@@ -333,7 +333,7 @@ function WindStreaks({ count }: { count: number }) {
       bob: 0.4 + Math.random() * 1.2,
       phase: Math.random() * Math.PI * 2,
       spin: 3 + Math.random() * 7,
-      size: 1.8 + Math.random() * 1.4,
+      size: 1.4 + Math.random() * 1.0,
     }));
   }, [count]);
 
