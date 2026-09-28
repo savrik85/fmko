@@ -103,7 +103,7 @@ function Outhouse({ roofColor }: { roofColor?: string | null }) {
 /** L2 Zděné toalety */
 function BrickToilets({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 3.2, h = 2.4, d = 2.4;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const brickTex = useMemo(() => generateBrickTexture("#A3493A", "#D1CCC2", 2, 2), []);
   const roofTex = useMemo(() => generateRoofTileTexture(roofColor ?? "#8B3A2B", 3, 2), [roofColor]);
 
@@ -148,7 +148,7 @@ function BrickToilets({ roofColor, timeOfDay = "day" }: { roofColor?: string | n
 /** L3 Moderní toalety s keramickým/kompozitním obkladem */
 function ModernToilets({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 4.2, h = 2.8, d = 3.0;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const concreteTex = useMemo(() => generateConcreteTexture("#E2E8F0", 2, 2), []);
 
   return (
@@ -191,7 +191,7 @@ function ChangingRooms({ level, roofColor, timeOfDay = "day" }: { level: number;
 /** L1 Dřevěná klubovna / unimo buňka */
 function BasicChangingRooms({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 7.0, h = 2.8, d = 4.5;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const woodTex = useMemo(() => generateWoodTexture("#784C28", 3, 2), []);
   const roofTex = useMemo(() => generateCorrugatedTexture(roofColor ?? "#374151", 4, 2), [roofColor]);
 
@@ -242,7 +242,7 @@ function BasicChangingRooms({ roofColor, timeOfDay = "day" }: { roofColor?: stri
 /** L2 Zděná klubovna TJ Sokol / Slavoj */
 function SolidChangingRooms({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 9.0, h = 3.6, d = 5.5;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const brickTex = useMemo(() => generateBrickTexture("#9A4032", "#CDC8BF", 4, 3), []);
   const roofTex = useMemo(() => generateRoofTileTexture(roofColor ?? "#7F2A1E", 5, 3), [roofColor]);
 
@@ -294,7 +294,7 @@ function SolidChangingRooms({ roofColor, timeOfDay = "day" }: { roofColor?: stri
 /** L3 Moderní 2-patrové tréninkové a klubové centrum */
 function ModernChangingComplex({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 11.0, h = 5.2, d = 6.5;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const concreteTex = useMemo(() => generateConcreteTexture("#F1F5F9", 4, 3), []);
 
   return (
@@ -368,7 +368,7 @@ function Refreshments({ level, roofColor, timeOfDay = "day" }: { level: number; 
 /** L1 Dřevěný kiosk "U Klobásy" */
 function Kiosk({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 4.0, h = 2.6, d = 3.2;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const woodTex = useMemo(() => generateWoodTexture("#92592B", 2, 2), []);
   const roofTex = useMemo(() => generateCorrugatedTexture(roofColor ?? "#B91C1C", 3, 2), [roofColor]);
 
@@ -427,7 +427,7 @@ function Kiosk({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; ti
 function PubBuilding({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 6.5, h = 3.6, d = 5.2;
   const roofH = 1.8;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const isSunset = timeOfDay === "sunset";
   const glow = isNight ? 1.8 : isSunset ? 0.9 : 0.2;
   const windowColor = isNight || isSunset ? "#FFD060" : "#9BC4E2";
@@ -488,7 +488,7 @@ function PubBuilding({ roofColor, timeOfDay = "day" }: { roofColor?: string | nu
 /** L3 Moderní Sports Bar & Restaurant s výhledem na hřiště */
 function ModernRestaurant({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 9.5, h = 4.8, d = 6.5;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const concreteTex = useMemo(() => generateConcreteTexture("#1E293B", 3, 3), []);
 
   return (
@@ -600,7 +600,7 @@ function SolidShowerHouse({ roofColor, timeOfDay = "day" }: { roofColor?: string
 
 function ModernShowerHouse({ roofColor, timeOfDay = "day" }: { roofColor?: string | null; timeOfDay?: TimeOfDay }) {
   const w = 6.0, h = 3.4, d = 4.5;
-  const isNight = timeOfDay === "night";
+  const isNight = timeOfDay !== "day"; // okna svítí od západu slunce
   const concreteTex = useMemo(() => generateConcreteTexture("#F8FAFC", 3, 2), []);
 
   return (

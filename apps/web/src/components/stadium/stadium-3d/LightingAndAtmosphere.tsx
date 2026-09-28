@@ -185,9 +185,13 @@ export function LightingAndAtmosphere({
       {timeOfDay === "sunset" && (
         <group>
           <ambientLight intensity={(weather === "rain" ? 0.32 : 0.45) * amb} color="#FCE5CE" />
+          {/* Skoro stejný směr jako kotouč slunce na obloze (SkyDome, sunDir [50, 10, -35]):
+              nízké slunce = dlouhé stíny tribun a budov. Dřív svítilo z 20°. Úplně
+              na 10° to nejde: šikmé světlo dá trávníku polovinu a areál vypadal jako v noci,
+              proto 13° a silnější světlo. */}
           <directionalLight
-            position={[50, 22, -35]}
-            intensity={weather === "rain" ? 0.9 : 1.6}
+            position={[50, 14, -35]}
+            intensity={weather === "rain" ? 1.4 : 2.6}
             color="#FFA756"
             castShadow={!isMobile}
             shadow-mapSize-width={shadowMapSize}
