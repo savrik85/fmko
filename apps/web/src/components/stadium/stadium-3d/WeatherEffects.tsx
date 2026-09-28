@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import type { WeatherType, TimeOfDay } from "./constants";
 
 interface WeatherEffectsProps {
@@ -25,8 +25,8 @@ export function WeatherEffects({
       {/* 🌧️ Déšť + bouřka */}
       {weather === "rain" && (
         <>
-          <RainParticles count={isMobile ? 700 : 1800} />
-          <RainGroundSplashes count={isMobile ? 40 : 100} />
+          <RainParticles count={isMobile ? 3000 : 7000} />
+          <RainGroundSplashes count={isMobile ? 150 : 400} />
           <LightningFlash />
         </>
       )}
@@ -49,93 +49,116 @@ export function WeatherEffects({
   );
 }
 
-/** 🌧️ Částice deště s reálným náklonem, variabilní rychlostí a plynulým pádem */
+/**
+ * 🌧️ Déšť jako protažené průsvitné pruhy, které počítá grafická karta.
+ *
+ * Dřív to byly 1px čáry rozházené po celém areálu (125 × 140 × 55 m): na hustém displeji
+ * skoro zmizely a u kamery skoro nepršelo. Teď kapky padají v kvádru, který jede
+ * s kamerou, takže je hustě tam, kam se hráč dívá, a pruh má šířku v metrech.
+ * Pohyb je čistě ve shaderu (čas + modulo), procesor každý snímek nic nepřepočítává.
+ */
+const RAIN_BOX = { x: 44, y: 26, z: 44 };
+
 function RainParticles({ count }: { count: number }) {
-  const lineCount = count;
-  const { positions, speeds, lengths } = useMemo(() => {
-    const pos = new Float32Array(lineCount * 6);
-    const spd = new Float32Array(lineCount);
-    const lenArr = new Float32Array(lineCount);
+  const meshRef = useRef<THREE.Mesh>(null);
+  const { camera } = useThree();
 
-    for (let i = 0; i < lineCount; i++) {
-      const idx = i * 6;
-      const x = (Math.random() - 0.5) * 125;
-      const y = Math.random() * 55; // Rovnoměrně rozprostřeno po celé výšce
-      const z = (Math.random() - 0.5) * 140;
-      const len = 0.75 + Math.random() * 0.65;
-      const speed = 46 + Math.random() * 32; // Různé rychlosti kapek 46..78 m/s zabraňují shlukování do vln
-
-      spd[i] = speed;
-      lenArr[i] = len;
-
-      const slantX = len * 0.16;
-      const slantZ = len * 0.09;
-
-      pos[idx] = x;
-      pos[idx + 1] = y;
-      pos[idx + 2] = z;
-      pos[idx + 3] = x + slantX;
-      pos[idx + 4] = y - len;
-      pos[idx + 5] = z + slantZ;
+  const geometry = useMemo(() => {
+    // Jeden čtyřúhelník na kapku; rohy se v shaderu natáhnou podél směru pádu.
+    const quad = new THREE.InstancedBufferGeometry();
+    quad.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute([-0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0], 3),
+    );
+    quad.setIndex([0, 1, 2, 0, 2, 3]);
+    const offsets = new Float32Array(count * 3);
+    const params = new Float32Array(count * 2);
+    for (let i = 0; i < count; i++) {
+      offsets[i * 3] = Math.random() * RAIN_BOX.x;
+      offsets[i * 3 + 1] = Math.random() * RAIN_BOX.y;
+      offsets[i * 3 + 2] = Math.random() * RAIN_BOX.z;
+      params[i * 2] = 17 + Math.random() * 7; // rychlost pádu m/s
+      params[i * 2 + 1] = 0.4 + Math.random() * 0.4; // délka pruhu m
     }
-    return { positions: pos, speeds: spd, lengths: lenArr };
-  }, [lineCount]);
+    quad.setAttribute("aOffset", new THREE.InstancedBufferAttribute(offsets, 3));
+    quad.setAttribute("aParams", new THREE.InstancedBufferAttribute(params, 2));
+    quad.instanceCount = count;
+    // Kapky se skládají kolem kamery, statická bounding sphere by je ořezala.
+    quad.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+    return quad;
+  }, [count]);
 
-  const geoRef = useRef<THREE.BufferGeometry>(null);
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        fog: false,
+        uniforms: {
+          uTime: { value: 0 },
+          uCenter: { value: new THREE.Vector3() },
+          uBox: { value: new THREE.Vector3(RAIN_BOX.x, RAIN_BOX.y, RAIN_BOX.z) },
+          uWind: { value: new THREE.Vector2(0.22, 0.1) },
+          uColor: { value: new THREE.Color("#D6DEE8") },
+        },
+        vertexShader: /* glsl */ `
+          attribute vec3 aOffset;
+          attribute vec2 aParams;
+          uniform float uTime;
+          uniform vec3 uCenter;
+          uniform vec3 uBox;
+          uniform vec2 uWind;
+          varying float vAlong;
+          varying float vFade;
+          void main() {
+            vec3 fall = normalize(vec3(uWind.x, -1.0, uWind.y));
+            // Poloha v kvádru kolem kamery; modulo drží kapky v kvádru i při pohybu kamery.
+            vec3 local = aOffset + fall * aParams.x * uTime;
+            vec3 origin = uCenter - uBox * 0.5;
+            vec3 p = origin + mod(local - origin, uBox);
+            // Pod trávníkem neprší.
+            p.y = max(p.y, 0.05);
+            vec3 toCam = normalize(cameraPosition - p);
+            // Pořadí v součinu určuje, kam míří líc čtyřúhelníku. Obráceně (fall × toCam)
+            // byla každá kapka ke kameře zády a materiál s FrontSide ji zahodil.
+            vec3 side = normalize(cross(toCam, fall));
+            float len = aParams.y;
+            float d = length(cameraPosition - p);
+            // Šířka roste se vzdáleností, ať má pruh na obrazovce pořád zhruba 1 px.
+            float width = max(0.008, d * 0.0016);
+            vec3 world = p + side * position.x * width - fall * position.y * len;
+            vAlong = position.y;
+            // Blízko se nezobrazí (přes objektiv), daleko se rozplynou.
+            vFade = smoothstep(0.8, 2.5, d) * (1.0 - smoothstep(16.0, 26.0, d));
+            gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          uniform vec3 uColor;
+          varying float vAlong;
+          varying float vFade;
+          void main() {
+            // Čelo kapky výraznější, ocas do ztracena.
+            float a = (1.0 - vAlong) * 0.38 * vFade;
+            if (a < 0.01) discard;
+            gl_FragColor = vec4(uColor, a);
+          }
+        `,
+      }),
+    [],
+  );
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => material.dispose(), [material]);
 
   useFrame((_, delta) => {
-    if (!geoRef.current) return;
-    const dt = Math.min(delta, 0.05); // Ochrana proti skokům při přepnutí tabu
-    const posAttr = geoRef.current.attributes.position;
-    const arr = posAttr.array as Float32Array;
-
-    for (let i = 0; i < lineCount; i++) {
-      const idx = i * 6;
-      const v = speeds[i] * dt;
-      const sx = v * 0.16;
-      const sz = v * 0.09;
-
-      arr[idx] += sx;
-      arr[idx + 1] -= v;
-      arr[idx + 2] += sz;
-      arr[idx + 3] += sx;
-      arr[idx + 4] -= v;
-      arr[idx + 5] += sz;
-
-      // Plynulý respawn napříč širokým pásem oblačnosti
-      if (arr[idx + 4] < 0) {
-        const x = (Math.random() - 0.5) * 125;
-        const y = 48 + Math.random() * 18;
-        const z = (Math.random() - 0.5) * 140;
-        const len = lengths[i];
-
-        arr[idx] = x;
-        arr[idx + 1] = y;
-        arr[idx + 2] = z;
-        arr[idx + 3] = x + len * 0.16;
-        arr[idx + 4] = y - len;
-        arr[idx + 5] = z + len * 0.09;
-      }
-    }
-    posAttr.needsUpdate = true;
+    material.uniforms.uTime.value += Math.min(delta, 0.05);
+    // Kvádr jede s kamerou, ale spodek nikdy nejde pod zem.
+    const c = camera.position;
+    material.uniforms.uCenter.value.set(c.x, Math.max(RAIN_BOX.y * 0.5 - 1, c.y), c.z);
   });
 
-  return (
-    <lineSegments>
-      <bufferGeometry ref={geoRef}>
-        <bufferAttribute
-          attach="attributes-position"
-          args={[positions, 3]}
-        />
-      </bufferGeometry>
-      <lineBasicMaterial
-        color="#CBD5E1"
-        transparent
-        opacity={0.45}
-        depthWrite={false}
-      />
-    </lineSegments>
-  );
+  return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} />;
 }
 
 /** 💦 Dopadové kapky a stříkance na hřišti */
@@ -166,7 +189,7 @@ function RainGroundSplashes({ count }: { count: number }) {
         s.z = (Math.random() - 0.5) * 75;
       }
 
-      const curScale = (s.time) * 0.45;
+      const curScale = (s.time) * 0.3;
       dummy.position.set(s.x, 0.04, s.z);
       dummy.rotation.x = -Math.PI / 2;
       dummy.scale.set(curScale, curScale, curScale);
@@ -287,29 +310,40 @@ function WindStreaks({ count }: { count: number }) {
   );
 }
 
-/** ⚡ Náhodné záblesky blesků při dešti */
+/**
+ * ⚡ Náhodné záblesky blesků při dešti.
+ *
+ * Světla jsou ve scéně pořád a blesk jen zvedne jejich intenzitu. Dřív se při každém
+ * záblesku přidávala nová světla a odebírala, a to překompiluje všechny materiály:
+ * obraz se při každém blesku zasekl.
+ */
 function LightningFlash() {
-  const [flash, setFlash] = useState(false);
+  const ambRef = useRef<THREE.AmbientLight>(null);
+  const dirRef = useRef<THREE.DirectionalLight>(null);
   const nextFlashTime = useRef(4 + Math.random() * 6);
+  const flashAge = useRef(-1);
 
   useFrame((_, delta) => {
     nextFlashTime.current -= delta;
     if (nextFlashTime.current <= 0) {
-      setFlash(true);
-      // Dvojitý blesk
-      setTimeout(() => setFlash(false), 80);
-      setTimeout(() => setFlash(true), 140);
-      setTimeout(() => setFlash(false), 240);
+      flashAge.current = 0;
       nextFlashTime.current = 6 + Math.random() * 10;
     }
+    let k = 0;
+    if (flashAge.current >= 0) {
+      const a = flashAge.current;
+      // Dvojitý blesk: 0–80 ms, pauza, 140–240 ms.
+      k = a < 0.08 ? 1 : a < 0.14 ? 0 : a < 0.24 ? 0.8 : 0;
+      flashAge.current = a < 0.3 ? a + delta : -1;
+    }
+    if (ambRef.current) ambRef.current.intensity = 1.8 * k;
+    if (dirRef.current) dirRef.current.intensity = 3.2 * k;
   });
-
-  if (!flash) return null;
 
   return (
     <group>
-      <ambientLight intensity={1.8} color="#E0F2FE" />
-      <directionalLight position={[10, 50, 10]} intensity={3.2} color="#F0F9FF" />
+      <ambientLight ref={ambRef} intensity={0} color="#E0F2FE" />
+      <directionalLight ref={dirRef} position={[10, 50, 10]} intensity={0} color="#F0F9FF" />
     </group>
   );
 }

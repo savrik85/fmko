@@ -238,6 +238,9 @@ export function Pitch({
     [puddleStrength, condition],
   );
 
+  // Mokrá tráva je tmavší a leskne se. Barvu tlumí texturní tón materiálu, ne nová
+  // textura, takže přepnutí počasí nic nepřegeneruje.
+  const isWet = isRain && !isSnow;
   const grassSurface = useMemo(() => {
     if (isSnow) return generateSnowPitchSurface(hasStripes, mowingPattern);
     return generatePitchSurface(finalGrassColor, pitchType, hasStripes, mowingPattern);
@@ -258,7 +261,9 @@ export function Pitch({
           map={grassSurface.map}
           bumpMap={grassSurface.bumpMap}
           bumpScale={pitchType === "artificial" ? 0.025 : pitchType === "hybrid" ? 0.045 : 0.06}
-          roughness={pitchType === "artificial" ? 0.82 : 0.94}
+          color={isWet ? "#B8C4B8" : "#FFFFFF"}
+          roughness={isWet ? 0.55 : pitchType === "artificial" ? 0.82 : 0.94}
+          metalness={isWet ? 0.08 : 0}
         />
       </mesh>
 
