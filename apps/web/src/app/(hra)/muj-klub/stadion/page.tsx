@@ -74,7 +74,8 @@ export default function StadionPage() {
     Promise.all([
       apiFetch<ClubStadium>(`/api/teams/${teamId}/club`),
       apiFetch<StadiumFullData>(`/api/teams/${teamId}/stadium`).catch((e) => { console.error("stadium full:", e); return null; }),
-      apiFetch<{ active: Array<{ sponsor_name: string }> }>(`/api/game/teams/${teamId}/sponsors`).catch((e) => { console.error("sponsors:", e); return null; }),
+      // gameRouter je připojený pod /api, ne /api/game — dřív tu byla špatná adresa a pokaždé 404.
+      apiFetch<{ bannerContracts: Array<{ sponsorName: string }> }>(`/api/teams/${teamId}/sponsors`).catch((e) => { console.error("sponsors:", e); return null; }),
     ]).then(([club, full, sponsors]) => {
       setName(club.stadium.name ?? "");
       setNickname(club.stadium.nickname ?? "");
@@ -91,8 +92,9 @@ export default function StadionPage() {
         pattern: club.badge.pattern ?? "shield",
         initials: club.badge.customInitials || club.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase(),
       });
-      if (sponsors?.active) {
-        setActiveSponsors(sponsors.active.map((s) => s.sponsor_name).filter(Boolean));
+      // Stejně jako /stadion: na reklamní tabule kolem hřiště jen aktivní bannerové smlouvy.
+      if (sponsors?.bannerContracts) {
+        setActiveSponsors(sponsors.bannerContracts.map((s) => s.sponsorName).filter(Boolean));
       }
       setLoading(false);
     }).catch((e) => { console.error("load stadion:", e); setLoading(false); });
