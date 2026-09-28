@@ -7,21 +7,50 @@ import { stropyZDovednosti } from "../skills/stropy-z-dovednosti";
 import { doplnZbyleDovednosti } from "./virtual-teams";
 
 /**
- * Inzerát AI klubu musí hodnotit hráče TÝMŽ vzorcem jako zbytek hry.
+ * Každý generátor hráčů musí hodnotit TÝMŽ vzorcem jako zbytek hry.
  *
- * Dřív si počítal vlastní vážený průměr ze sedmi dovedností, zatímco hra počítá
- * z dvanácti atributů. Manažer koupil číslo, které mu první noční přepočet srazil —
+ * Inzerát AI klubu si dřív počítal vlastní vážený průměr ze sedmi dovedností, zatímco hra
+ * počítá z dvanácti atributů. Manažer koupil číslo, které mu první noční přepočet srazil —
  * naměřeno na produkci u 75 hráčů: inzerát v průměru o 3,35 bodu vyšší, u 54 z nich
  * nadhodnocený, nejvíc o 20. Cena z toho čísla vychází, takže se přeplácelo.
+ *
+ * Táž chyba pak zůstala v trhu s volnými hráči a v celebritách (2026-09-28). Trh počítal
+ * brankáře jen z chytání, síly a výdrže: na produkci byl brankář v nabídce o 12 bodů vedle
+ * a dva podepsaní brankáři o 18. Proto hlídka kontroluje VŠECHNY generátory, ne jeden.
  */
 
-const ZDROJ = fileURLToPath(new URL("./virtual-teams.ts", import.meta.url));
+const ZDROJE = ["./virtual-teams.ts", "./free-agent-pool.ts", "../season/celebrity-spawn.ts"];
 
 describe("hodnocení v inzerátu sedí s hodnocením ve hře", () => {
-  it("generátor nemá vlastní tabulku vah", () => {
-    const kod = readFileSync(ZDROJ, "utf8");
+  it.each(ZDROJE)("generátor %s nemá vlastní tabulku vah", (soubor) => {
+    const kod = readFileSync(fileURLToPath(new URL(soubor, import.meta.url)), "utf8");
     expect(kod, "posWeights = druhá pravda o tom, jak silný hráč je").not.toMatch(/posWeights\s*[:=]/);
     expect(kod, "hodnocení musí počítat sdílená funkce").toMatch(/overallRatingFromFlat\(/);
+  });
+
+  it("vlastní váhy trhu podceňovaly všechno kromě chytání", () => {
+    // Stejný princip jako test níž: přepočítá PŮVODNÍ tabulku trhu a ukáže, o kolik
+    // vedle byla. Brankář je nejhorší případ, protože se počítaly jen tři atributy.
+    const STARE_VAHY_TRHU: Record<string, number> = { goalkeeping: 4, strength: 2, stamina: 1 };
+    const rozdily: number[] = [];
+    for (let seed = 0; seed < 60; seed++) {
+      const rng = createRng(seed * 13 + 1);
+      const vek = rng.int(19, 35);
+      const skills: Record<string, number> = {
+        speed: rng.int(20, 60), technique: rng.int(15, 50), shooting: rng.int(10, 40),
+        passing: rng.int(20, 55), heading: rng.int(15, 50), defense: rng.int(30, 75),
+        goalkeeping: rng.int(45, 95), stamina: rng.int(30, 80), strength: rng.int(30, 80),
+        vision: rng.int(15, 50), creativity: rng.int(15, 55), setPieces: rng.int(10, 50),
+        experience: Math.min(100, Math.max(1, (vek - 16) * rng.int(3, 6))),
+      };
+      const physical = { stamina: skills.stamina, strength: skills.strength };
+      const caps = stropyZDovednosti(rng, skills, vek);
+      let s = 0, t = 0;
+      for (const [k, w] of Object.entries(STARE_VAHY_TRHU)) { s += skills[k] * w; t += w; }
+      rozdily.push(Math.round(s / t) - (overallRatingFromFlat("GK", skills, physical, 0, caps) ?? 0));
+    }
+    const prumer = rozdily.reduce((a, b) => a + b, 0) / rozdily.length;
+    expect(prumer, `starý vzorec trhu byl u brankářů v průměru o ${prumer.toFixed(2)} mimo`).toBeGreaterThan(5);
   });
 
   it("starý vzorec se od hry vážně rozcházel, proto ta hlídka výš", () => {
