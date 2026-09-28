@@ -25,6 +25,7 @@ import { WeatherEffects } from "./WeatherEffects";
 import { CameraController } from "./CameraController";
 import { PostFX } from "./PostFX";
 import { WindContext, windStrength } from "./wind";
+import { BakedShadows } from "./BakedShadows";
 import {
   getStadiumLayout,
   getViewpoints,
@@ -317,7 +318,9 @@ export function Stadium3D({
 
       {/* 3D Canvas scéna */}
       <Canvas
-        shadows={!isMobile}
+        // Stínové mapy musí být zapnuté i na mobilu kvůli jednorázovému výpočtu stínů
+        // (BakedShadows). Světla na mobilu stín v reálném čase nevrhají, takže to nic nestojí.
+        shadows
         // near/far určují hloubkovou přesnost. Výchozí 0.1/2000 je poměr 20 000 —
         // na mobilním 16bitovém depth bufferu se pak plochy pár tisícin od sebe
         // (trávník vs. okolní dlažba) perou o pořadí a prosvítají skrz sebe.
@@ -339,6 +342,9 @@ export function Stadium3D({
         <WindContext.Provider value={windStrength(weather)}>
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
+
+        {/* Mobil: stíny spočítané jednou (v reálném čase jsou vypnuté kvůli výkonu) */}
+        {isMobile && isSceneReady && <BakedShadows timeOfDay={timeOfDay} weather={weather} />}
 
         {/* 3D efekty počasí (déšť, sníh, vítr, blesky, mraky) */}
         <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />
