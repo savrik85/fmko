@@ -117,7 +117,7 @@ export function StepLocation({ onSelect, allowedDistricts }: Props) {
   }
 
   function handleDistrict(district: string) {
-    if (fullDistrictsSet.has(district)) return; // Blocked — full league
+    if (fullDistrictsSet.has(district)) return; // Blocked because the league is full.
     setSelectedDistrict(district);
     setStep("village");
   }

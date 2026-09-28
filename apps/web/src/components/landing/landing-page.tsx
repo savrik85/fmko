@@ -22,7 +22,7 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
 
   return <main className={styles.site}>
     <header className={styles.nav}>
-      <Link href="/" className={styles.logo} aria-label="Prales — úvod">PRA<span>L</span>ES<span className={styles.logoDot}>.</span></Link>
+      <Link href="/" className={styles.logo} aria-label="Prales. Úvod">PRA<span>L</span>ES<span className={styles.logoDot}>.</span></Link>
       <nav aria-label="Hlavní navigace"><a href="#hra">O hře</a><a href="#jak-to-funguje">Jak začít</a><Link href="/prihlaseni">Přihlásit se <span aria-hidden="true">↗</span></Link></nav>
     </header>
 
@@ -60,7 +60,7 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
 
     <section className={styles.faq}><h2>Ještě než pískneme začátek.</h2>{[
       ["Musíme být celá parta hned od začátku?", "Nemusíte. Ligu můžeš rozjet ty a kamarády pozvat postupně. Volné kluby v soutěži vedou počítačoví manažeři. S vlastní partou ale mají derby úplně jiný náboj."],
-      ["Co přesně znamenají data pro náš okres?", "Skutečné obce a místní názvy, příjmení, sponzoři a další reálie, které dávají hře místní atmosféru. Nejde o kopii soupisek skutečných klubů — hráči a jejich příběhy vznikají ve hře."],
+      ["Co přesně znamenají data pro náš okres?", "Skutečné obce a místní názvy, příjmení, sponzoři a další reálie, které dávají hře místní atmosféru. Nejde o kopii soupisek skutečných klubů. Hráči a jejich příběhy vznikají ve hře."],
       ["Kdy si můžeme založit týmy?", "Až dokončíme přípravu vašeho okresu. Do 24 hodin od registrace připravíme personalizovaná data a pošleme další postup. Pak se pro daný okres otevře registrace týmů."],
       ["Můj okres už ve hře je. Co dál?", "V registraci uvidíš, které okresy už mají otevřenou ligu. Do připraveného okresu se můžeš připojit jako manažer. Předsedou existující ligy se tím automaticky nestáváš."],
     ].map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}</section>

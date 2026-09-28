@@ -44,7 +44,7 @@ export default function ActivationPage() {
     {loading && !info && <p role="status">Ověřuji aktivační odkaz…</p>}
     {info && <><p className={styles.description}>Okres <strong>{info.district}</strong> je připravený. {info.isFounder ? "Po založení klubu získáš první předsednický mandát a můžeš pozvat kamarády." : "Aktivuj účet a připoj svůj klub do okresní ligy."}</p><form onSubmit={submit} className={styles.form}>
       <Input label="E-mail" autoComplete="username" value={info.email} readOnly />
-      <Input label="Heslo" type="password" name="new-password" autoComplete="new-password" minLength={8} maxLength={128} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{8,128}" title="8–128 znaků, malé i velké písmeno a číslo" aria-describedby="password-help" value={password} onChange={e => setPassword(e.target.value)} required />
+      <Input label="Heslo" type="password" name="new-password" autoComplete="new-password" minLength={8} maxLength={128} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{8,128}" title="8 až 128 znaků, malé i velké písmeno a číslo" aria-describedby="password-help" value={password} onChange={e => setPassword(e.target.value)} required />
       <p id="password-help" className={styles.small}>Alespoň 8 znaků, malé i velké písmeno a číslo.</p>
       <Input label="Heslo znovu" type="password" name="new-password-confirm" autoComplete="new-password" maxLength={128} value={confirm} onChange={e => setConfirm(e.target.value)} required />
       <Button type="submit" disabled={loading} className={styles.submit}>{loading ? "Aktivuji účet…" : "Aktivovat účet a založit tým →"}</Button>

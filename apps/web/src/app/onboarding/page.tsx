@@ -70,7 +70,7 @@ function restoreOnboarding(): { step: number; state: OnboardingState } {
     return { step: 5, state: parsed };
   }
 
-  // Validate step has required data — if not, fall back to the highest valid step
+  // Validate step has required data. If not, fall back to the highest valid step.
   const requestedStep = Number(savedStep) || 1;
   let validStep = 1;
   if (parsed.village) validStep = 2;
@@ -161,7 +161,7 @@ export default function OnboardingPage() {
       const players = await apiFetch<Player[]>(`/api/teams/${result.id}/players`);
       setTeam(result.id, result.name);
 
-      // Clear onboarding persistence — done
+      // Clear onboarding persistence after completion.
       sessionStorage.removeItem("onboarding_step");
       sessionStorage.removeItem("onboarding_state");
 
