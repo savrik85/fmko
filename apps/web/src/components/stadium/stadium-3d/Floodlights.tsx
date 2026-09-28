@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import type { TimeOfDay } from "./constants";
+import type { TimeOfDay, WeatherType } from "./constants";
 
 interface FloodlightsProps {
   timeOfDay: TimeOfDay;
+  /** V dešti a sněhu je paprsek výraznější — světlo prosvítá kapkami a vločkami. */
+  weather?: WeatherType;
   level: number;
   standsLevel?: number;
   isMobile?: boolean;
@@ -61,12 +63,13 @@ const LEVEL_CONFIG: Record<FloodlightLevel, FloodlightConfig> = {
   },
 };
 
-export function Floodlights({ timeOfDay, level, standsLevel = 0, isMobile = false }: FloodlightsProps) {
+export function Floodlights({ timeOfDay, weather = "sunny", level, standsLevel = 0, isMobile = false }: FloodlightsProps) {
   const normalizedLevel = Math.max(0, Math.min(3, Math.floor(level)));
   if (normalizedLevel <= 0) return null;
   return (
     <ActiveFloodlights
       timeOfDay={timeOfDay}
+      weather={weather}
       level={normalizedLevel}
       standsLevel={standsLevel}
       isMobile={isMobile}
@@ -74,7 +77,10 @@ export function Floodlights({ timeOfDay, level, standsLevel = 0, isMobile = fals
   );
 }
 
-function ActiveFloodlights({ timeOfDay, level, standsLevel = 0, isMobile = false }: FloodlightsProps) {
+function ActiveFloodlights({ timeOfDay, weather = "sunny", level, standsLevel = 0, isMobile = false }: FloodlightsProps) {
+  // Jak moc je paprsek vidět: v čistém vzduchu jen náznak, v dešti a sněhu výrazný.
+  const beamStrength =
+    weather === "rain" ? 0.2 : weather === "snow" ? 0.17 : weather === "cloudy" ? 0.09 : 0.06;
   const normalizedLevel = Math.max(1, Math.min(3, Math.floor(level)));
   const floodlightLevel = normalizedLevel as FloodlightLevel;
   const config = LEVEL_CONFIG[floodlightLevel];
@@ -111,6 +117,7 @@ function ActiveFloodlights({ timeOfDay, level, standsLevel = 0, isMobile = false
             lightsActive={lightsActive}
             isNight={isNight}
             isMobile={isMobile}
+            beamStrength={beamStrength}
           />
         );
       })}
@@ -136,7 +143,9 @@ function FloodlightTower({
   lightsActive,
   isNight,
   isMobile,
+  beamStrength,
 }: {
+  beamStrength: number;
   level: FloodlightLevel;
   config: FloodlightConfig;
   position: [number, number];
@@ -250,22 +259,69 @@ function FloodlightTower({
         />
       )}
 
-      {/* Stylizovaný jemný paprsek světelného kuželu */}
-      {isNight && !isMobile && (
+      {/* Světelný kužel: u reflektoru jasný, k zemi slábne, okraje měkké.
+          Dřív měl průhlednost kolem 1–2 %, takže nebyl vidět vůbec. */}
+      {isNight && (
         <mesh position={beam.midpoint} quaternion={beam.quaternion}>
-          <coneGeometry args={[config.beamRadius, beam.length, 16, 1, true]} />
-          <meshBasicMaterial
-            color={config.lightColor}
-            opacity={0.012 + level * 0.004}
-            transparent
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-          />
+          <coneGeometry args={[config.beamRadius, beam.length, 24, 1, true]} />
+          <BeamMaterial color={config.lightColor} length={beam.length} strength={beamStrength * (0.8 + level * 0.12)} />
         </mesh>
       )}
     </group>
   );
+}
+
+/**
+ * Materiál paprsku. Kužel má vrchol u reflektoru (lokální +Y) a základnu na trávníku.
+ * Jas slábne s délkou a k okrajům kuželu (čelem ke kameře je paprsek „hustší“),
+ * sčítá se se scénou, takže nikdy nic nezakryje.
+ */
+function BeamMaterial({ color, length, strength }: { color: string; length: number; strength: number }) {
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+        uniforms: {
+          uColor: { value: new THREE.Color(color) },
+          uLength: { value: length },
+          uStrength: { value: strength },
+        },
+        vertexShader: /* glsl */ `
+          uniform float uLength;
+          varying float vAlong;
+          varying float vEdge;
+          void main() {
+            vAlong = clamp(0.5 - position.y / uLength, 0.0, 1.0); // 0 u reflektoru, 1 u země
+            vec4 world = modelMatrix * vec4(position, 1.0);
+            vec3 n = normalize(mat3(modelMatrix) * normal);
+            vec3 v = normalize(cameraPosition - world.xyz);
+            vEdge = abs(dot(n, v));
+            gl_Position = projectionMatrix * viewMatrix * world;
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          uniform vec3 uColor;
+          uniform float uStrength;
+          varying float vAlong;
+          varying float vEdge;
+          void main() {
+            float falloff = pow(1.0 - vAlong, 1.6);
+            float soft = pow(vEdge, 1.8);
+            gl_FragColor = vec4(uColor * uStrength * falloff * soft, 1.0);
+          }
+        `,
+      }),
+    // Barva a délka se u věže nemění; síla se přepisuje níže bez nové kompilace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [color, length],
+  );
+  material.uniforms.uStrength.value = strength;
+  useEffect(() => () => material.dispose(), [material]);
+  return <primitive object={material} attach="material" />;
 }
 
 function SimplePole({ height }: { height: number }) {
