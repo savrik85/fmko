@@ -370,7 +370,7 @@ export function Stadium3D({
           />
 
           {/* Osvětlovací stožáry v rozích hřiště */}
-          <Floodlights level={f.lighting ?? 0} standsLevel={f.stands ?? 0} timeOfDay={timeOfDay} isMobile={isMobile} />
+          <Floodlights level={f.lighting ?? 0} standsLevel={f.stands ?? 0} timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} />
 
           {/* Střídačky u postranní čáry */}
           <Dugouts teamColor={teamColor} secondaryColor={secondaryColor} weather={weather} />
