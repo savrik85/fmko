@@ -73,8 +73,13 @@ describe("plachta bez sponzora, čísel a děkování", () => {
     const sponzori = ["Rohlík", "Jitona", "Madeta"];
     expect(vadaPlachty("DIKY JUN! ROHLIK MA 5 VYHER!", sponzori)).not.toBeNull();
     expect(vadaPlachty("Jitono, ty jsi naše, ne cizí!", sponzori)).toBe("sponzor Jitona");
-    expect(vadaPlachty("Kdo jinému jámu kopá, Madeta Volary!", sponzori)).toBe("sponzor Madeta");
+    expect(vadaPlachty("Kdo jinému jámu kopá, Madeta Volary!", sponzori)).toBe("přísloví");
     expect(vadaPlachty("DÍKY, TRENÉŘE ŘEPKO!", sponzori)).toBe("děkuje");
+  });
+
+  it("zkratka klubu a přísloví neprojdou", () => {
+    expect(vadaPlachty("FK HVĚZDA VIMPERK. TADY JE DOMA!", [])).toBe("zkratka klubu");
+    expect(vadaPlachty("Kam čert nemůže, tam nastrčí čkyňského!", [])).toBe("přísloví");
   });
 
   it("obyčejné choreo projde", () => {
