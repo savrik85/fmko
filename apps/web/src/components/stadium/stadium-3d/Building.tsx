@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import * as THREE from "three";
 import { type TimeOfDay, type WeatherType } from "./constants";
 import {
@@ -10,6 +10,15 @@ import {
   generateRoofTileTexture,
   generateCorrugatedTexture,
 } from "./materialTextures";
+
+/**
+ * Sněží? Střechy si to čtou z kontextu a položí na sebe sněhovou čepici.
+ * Dřív sníh celou střechu přebarvil na bílou, jenže vlastní barva střechy klubu
+ * měla přednost, a kdo si ji nastavil, neviděl sníh nikdy.
+ */
+const SnowContext = createContext(false);
+
+const SNOW_COLOR = "#F4F7FB";
 
 export interface BuildingProps {
   kind: "refreshments" | "changing_rooms" | "showers" | "toilets";
@@ -24,15 +33,17 @@ export function Building({ kind, level, position, roofColorOverride, timeOfDay =
   if (level <= 0) return null;
   const lvl = Math.min(level, 3);
   const rotationY = position[1] > 0 ? Math.PI : 0;
-  const effectiveRoofColor = roofColorOverride ?? (weather === "snow" ? "#F1F5F9" : null);
+  const effectiveRoofColor = roofColorOverride ?? null;
 
   return (
+    <SnowContext.Provider value={weather === "snow"}>
     <group position={[position[0], 0, position[1]]} rotation={[0, rotationY, 0]}>
       {kind === "refreshments" && <Refreshments level={lvl} roofColor={effectiveRoofColor} timeOfDay={timeOfDay} />}
       {kind === "changing_rooms" && <ChangingRooms level={lvl} roofColor={effectiveRoofColor} timeOfDay={timeOfDay} />}
       {kind === "showers" && <Showers level={lvl} roofColor={effectiveRoofColor} timeOfDay={timeOfDay} />}
       {kind === "toilets" && <Toilets level={lvl} roofColor={effectiveRoofColor} timeOfDay={timeOfDay} />}
     </group>
+    </SnowContext.Provider>
   );
 }
 
@@ -651,20 +662,65 @@ function SaddleRoof({
     });
   }, [w, d, roofHeight]);
 
+  const isSnow = useContext(SnowContext);
+
   return (
-    <mesh
-      geometry={geom}
-      position={[0, baseY, -d / 2]}
-      castShadow
-      receiveShadow
-    >
-      <meshStandardMaterial
-        map={roofTex?.map}
-        bumpMap={roofTex?.bumpMap}
-        bumpScale={0.1}
-        color={roofTex ? undefined : color}
-        roughness={0.7}
-      />
-    </mesh>
+    <group>
+      <mesh
+        geometry={geom}
+        position={[0, baseY, -d / 2]}
+        castShadow
+        receiveShadow
+      >
+        <meshStandardMaterial
+          map={roofTex?.map}
+          bumpMap={roofTex?.bumpMap}
+          bumpScale={0.1}
+          color={roofTex ? undefined : color}
+          roughness={0.7}
+        />
+      </mesh>
+      {isSnow && <SaddleSnowCap w={w} d={d} baseY={baseY} roofHeight={roofHeight} />}
+    </group>
+  );
+}
+
+/**
+ * Sněhová vrstva na sedlové střeše: deska na každém svahu a zaoblený hřeben.
+ * U okapu nechává pruh střechy volný, aby byla vidět barva klubu jako u skutečného
+ * zasněženého plechu nebo tašek.
+ */
+function SaddleSnowCap({ w, d, baseY, roofHeight }: { w: number; d: number; baseY: number; roofHeight: number }) {
+  const half = w / 2;
+  const slope = Math.hypot(half, roofHeight);
+  const angle = Math.atan2(roofHeight, half);
+  const thick = 0.12;
+  const capLen = slope * 0.9;
+  // Střed desky: posunutý k hřebeni (u okapu zůstane 10 % svahu) a nad tašky.
+  const along = slope * 0.55;
+  const nx = roofHeight / slope;
+  const ny = half / slope;
+  const cx = half - (half / slope) * along; // vzdálenost od středu k desce
+  const cy = (roofHeight / slope) * along;
+  const lift = thick / 2 + 0.02;
+
+  return (
+    <group position={[0, baseY, 0]}>
+      {/* Levý svah */}
+      <mesh position={[-cx - nx * lift, cy + ny * lift, 0]} rotation={[0, 0, angle]} castShadow receiveShadow>
+        <boxGeometry args={[capLen, thick, d * 0.97]} />
+        <meshStandardMaterial color={SNOW_COLOR} roughness={0.95} />
+      </mesh>
+      {/* Pravý svah */}
+      <mesh position={[cx + nx * lift, cy + ny * lift, 0]} rotation={[0, 0, -angle]} castShadow receiveShadow>
+        <boxGeometry args={[capLen, thick, d * 0.97]} />
+        <meshStandardMaterial color={SNOW_COLOR} roughness={0.95} />
+      </mesh>
+      {/* Hřeben — zaoblený val, ať desky nenavazují ostrou hranou */}
+      <mesh position={[0, roofHeight + 0.04, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.13, 0.13, d * 0.97, 10]} />
+        <meshStandardMaterial color={SNOW_COLOR} roughness={0.95} />
+      </mesh>
+    </group>
   );
 }

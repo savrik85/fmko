@@ -51,17 +51,19 @@ export function EntranceGate({
   teamColor,
   secondaryColor = "#ffffff",
   stadiumName = "STADION",
+  weather = "sunny",
 }: EntranceGateProps) {
   const lvl = Math.max(0, Math.min(3, Math.floor(level)));
+  const snow = weather === "snow";
 
   if (lvl === 0) {
     return <Level0Gate position={position} stadiumName={stadiumName} />;
   }
   if (lvl === 1) {
-    return <Level1Gate position={position} teamColor={teamColor} stadiumName={stadiumName} />;
+    return <Level1Gate position={position} teamColor={teamColor} stadiumName={stadiumName} snow={snow} />;
   }
   if (lvl === 2) {
-    return <Level2Gate position={position} teamColor={teamColor} secondaryColor={secondaryColor} stadiumName={stadiumName} />;
+    return <Level2Gate position={position} teamColor={teamColor} secondaryColor={secondaryColor} stadiumName={stadiumName} snow={snow} />;
   }
   return (
     <Level3Gate
@@ -69,7 +71,24 @@ export function EntranceGate({
       teamColor={teamColor}
       secondaryColor={secondaryColor}
       stadiumName={stadiumName}
+      snow={snow}
     />
+  );
+}
+
+const SNOW_COLOR = "#F4F7FB";
+
+/**
+ * Sněhová vrstva na vodorovné nebo šikmé ploše. Vkládá se do skupiny se stejnou
+ * polohou a náklonem jako střecha; `base` je polovina tloušťky střechy.
+ * Je o kus menší než střecha, aby na hraně zůstala vidět její barva.
+ */
+function SnowTop({ w, d, base, t = 0.1 }: { w: number; d: number; base: number; t?: number }) {
+  return (
+    <mesh position={[0, base + t / 2, 0]} castShadow receiveShadow>
+      <boxGeometry args={[w * 0.94, t, d * 0.9]} />
+      <meshStandardMaterial color={SNOW_COLOR} roughness={0.95} />
+    </mesh>
   );
 }
 
@@ -226,10 +245,12 @@ function Level1Gate({
   position,
   teamColor,
   stadiumName,
+  snow = false,
 }: {
   position: [number, number, number];
   teamColor: string;
   stadiumName?: string | null;
+  snow?: boolean;
 }) {
   const woodTex = useMemo(() => generateWoodTexture("#78350F", 2, 2), []);
   const signTex = useSignTexture(stadiumName || "STADION", teamColor, "#FFFFFF");
@@ -252,6 +273,11 @@ function Level1Gate({
           <boxGeometry args={[2.5, 0.14, 2.3]} />
           <meshStandardMaterial color="#451A03" roughness={0.6} />
         </mesh>
+        {snow && (
+          <group position={[0, 2.7, 0]} rotation={[0.2, 0, 0]}>
+            <SnowTop w={2.5} d={2.3} base={0.07} />
+          </group>
+        )}
         {/* Výdejní okénko (čelní strana) */}
         <mesh position={[0, 1.3, -1.02]} rotation={[0, Math.PI, 0]}>
           <planeGeometry args={[0.85, 0.75]} />
@@ -285,6 +311,13 @@ function Level1Gate({
             <boxGeometry args={[3.8, 0.75, 0.12]} />
             <meshStandardMaterial color="#78350F" roughness={0.7} />
           </mesh>
+          {/* Na úzkém oblouku leží jen proužek sněhu */}
+          {snow && (
+            <mesh position={[0, 0.375 + 0.04, 0]}>
+              <boxGeometry args={[3.7, 0.08, 0.16]} />
+              <meshStandardMaterial color={SNOW_COLOR} roughness={0.95} />
+            </mesh>
+          )}
           {signTex && (
             <mesh position={[0, 0, -0.07]} rotation={[0, Math.PI, 0]}>
               <planeGeometry args={[3.6, 0.65]} />
@@ -344,11 +377,13 @@ function Level2Gate({
   teamColor,
   secondaryColor,
   stadiumName,
+  snow = false,
 }: {
   position: [number, number, number];
   teamColor: string;
   secondaryColor: string;
   stadiumName?: string | null;
+  snow?: boolean;
 }) {
   const brickTex = useMemo(() => generateBrickTexture("#991B1B", "#D1D5DB", 3, 2), []);
   const tileTex = useMemo(() => generateRoofTileTexture("#7C2D12", 3, 3), []);
@@ -377,6 +412,11 @@ function Level2Gate({
             color="#7C2D12"
           />
         </mesh>
+        {snow && (
+          <group position={[0, 3.5, 0]} rotation={[0.4, 0, 0]}>
+            <SnowTop w={2.7} d={3.0} base={0.08} />
+          </group>
+        )}
         {/* Prodejní okénko čelem k příchodu */}
         <group position={[0, 1.4, -1.32]}>
           <mesh rotation={[0, Math.PI, 0]}>
@@ -397,6 +437,11 @@ function Level2Gate({
           <boxGeometry args={[4.0, 0.16, 2.4]} />
           <meshStandardMaterial color="#334155" metalness={0.7} roughness={0.3} />
         </mesh>
+        {snow && (
+          <group position={[0, 3.0, 0]}>
+            <SnowTop w={4.0} d={2.4} base={0.08} />
+          </group>
+        )}
         {/* Podpěrné ocelové sloupy */}
         {[-1.8, 1.8].flatMap((x) =>
           [-1.0, 1.0].map((z, j) => (
@@ -489,11 +534,13 @@ function Level3Gate({
   teamColor,
   secondaryColor,
   stadiumName,
+  snow = false,
 }: {
   position: [number, number, number];
   teamColor: string;
   secondaryColor: string;
   stadiumName?: string | null;
+  snow?: boolean;
 }) {
   const concreteTex = useMemo(() => generateConcreteTexture("#E2E8F0", 2, 4), []);
   const signTex = useSignTexture(stadiumName || "STADION", teamColor, "#FFFFFF");
@@ -530,6 +577,11 @@ function Level3Gate({
         <boxGeometry args={[10.0, 1.2, 1.6]} />
         <meshStandardMaterial color="#F1F5F9" metalness={0.4} roughness={0.3} />
       </mesh>
+      {snow && (
+        <group position={[0, 4.8, 0]}>
+          <SnowTop w={10.0} d={1.6} base={0.6} t={0.14} />
+        </group>
+      )}
       {/* Barevná dekorační linka na mostovce */}
       <mesh position={[0, 4.25, 0]}>
         <boxGeometry args={[10.02, 0.12, 1.62]} />
@@ -650,6 +702,11 @@ function Level3Gate({
           <boxGeometry args={[2.3, 0.15, 2.3]} />
           <meshStandardMaterial color={teamColor} />
         </mesh>
+        {snow && (
+          <group position={[0, 3.25, 0]}>
+            <SnowTop w={2.3} d={2.3} base={0.075} />
+          </group>
+        )}
       </group>
     </group>
   );
