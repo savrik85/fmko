@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Pitch } from "./Pitch";
 import { Stand } from "./Stand";
 import { Building } from "./Building";
@@ -39,6 +39,24 @@ import {
   type StadiumMode,
   type AttendanceLevel,
 } from "./constants";
+
+/**
+ * Most z Canvasu ven: vykreslí aktuální snímek a vrátí plátno. Bez `preserveDrawingBuffer`
+ * je obraz po zobrazení smazaný, proto se před čtením vykreslí znovu.
+ */
+function CaptureBridge({ captureRef }: { captureRef: React.MutableRefObject<(() => HTMLCanvasElement) | null> }) {
+  const { gl, scene, camera } = useThree();
+  useEffect(() => {
+    captureRef.current = () => {
+      gl.render(scene, camera);
+      return gl.domElement;
+    };
+    return () => {
+      captureRef.current = null;
+    };
+  }, [gl, scene, camera, captureRef]);
+  return null;
+}
 
 /** Klíč v localStorage pro přepínač vylepšené grafiky (AO, záře, obloha s prostředím). */
 const FX_STORAGE_KEY = "stadium-fx-enabled";
@@ -287,6 +305,55 @@ export function Stadium3D({
   };
   const fxActive = fxEnabled && !isMobile;
 
+  // ── Fotka stadionu ke sdílení ──
+  const captureRef = useRef<(() => HTMLCanvasElement) | null>(null);
+  const handlePhoto = async () => {
+    const capture = captureRef.current;
+    if (!capture) return;
+    try {
+      const src = capture();
+      const out = document.createElement("canvas");
+      out.width = src.width;
+      out.height = src.height;
+      const ctx = out.getContext("2d");
+      if (!ctx) throw new Error("2D kontext není k dispozici");
+      ctx.drawImage(src, 0, 0);
+      // Decentní popisek dole: název stadionu a hry.
+      const pad = Math.round(out.height * 0.03);
+      const size = Math.max(14, Math.round(out.height * 0.035));
+      ctx.font = `700 ${size}px system-ui, sans-serif`;
+      const label = `${stadiumName || "Náš stadion"} · Prales`;
+      const w = ctx.measureText(label).width + pad * 1.4;
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(pad, out.height - pad - size * 1.7, w, size * 1.7);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, pad * 1.7, out.height - pad - size * 0.85);
+
+      const blob = await new Promise<Blob | null>((res) => out.toBlob(res, "image/png"));
+      if (!blob) throw new Error("obrázek se nepodařilo vytvořit");
+      const file = new File([blob], "stadion.png", { type: "image/png" });
+      const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+      if (isMobile && nav.canShare?.({ files: [file] })) {
+        await nav.share({ files: [file], title: stadiumName || "Stadion" });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "stadion.png";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      setStatusToast("📸 Fotka stadionu je hotová");
+    } catch (e) {
+      // Zavřený sdílecí dialog není chyba.
+      if ((e as Error)?.name === "AbortError") return;
+      console.error("Fotka stadionu selhala:", e);
+      setStatusToast("📸 Fotku se nepodařilo uložit");
+    }
+    setTimeout(() => setStatusToast(null), 1400);
+  };
+
   // Pohledy kamery podle úrovně tribun a střechy (statické souřadnice končily ve střeše tribuny)
   const viewpoints = useMemo(() => getViewpoints(f.stands ?? 0, f.roof ?? 0), [f.stands, f.roof]);
 
@@ -340,6 +407,7 @@ export function Stadium3D({
         }}
       >
         <WindContext.Provider value={windStrength(weather)}>
+        <CaptureBridge captureRef={captureRef} />
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
 
@@ -736,6 +804,15 @@ export function Stadium3D({
                     );
                   })}
                 </div>
+
+                <div className="w-px h-4 bg-white/20 shrink-0" />
+                <button
+                  onClick={handlePhoto}
+                  className="p-1.5 rounded-lg text-xs transition-all shrink-0 text-white/70 hover:text-white hover:bg-white/10"
+                  title="Vyfotit stadion (uložit nebo sdílet obrázek)"
+                >
+                  📸
+                </button>
 
                 {/* 4. Vylepšená grafika (jen desktop) */}
                 {!isMobile && (
