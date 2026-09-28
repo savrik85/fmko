@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useWind } from "./wind";
 import * as THREE from "three";
 import { PITCH, pitchColor, type WeatherType, PITCH_SURFACE_Y } from "./constants";
 import { generatePitchSurface, generateSnowPitchSurface, type MowingPattern } from "./grassTexture";
@@ -355,6 +357,20 @@ function cornerArcRotation(x: number, z: number): number {
 
 /** Rohové praporky ve 4 rozích hřiště */
 function CornerFlags() {
+  const wind = useWind();
+  const flagRefs = useRef<Array<THREE.Group | null>>([]);
+  // Praporek se natáčí po větru (+X) a třepotá; za bezvětří jen líně visí.
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    flagRefs.current.forEach((g, i) => {
+      if (!g) return;
+      const flutter = Math.sin(t * (3 + wind * 9) + i * 1.7) * (0.08 + wind * 0.25);
+      g.rotation.y = flutter;
+      // Bez větru vlaječka splývá k žerdi, ve větru se napne do vodorovné polohy.
+      g.scale.x = 0.55 + wind * 0.45 + Math.sin(t * (5 + wind * 8) + i) * 0.04 * wind;
+    });
+  });
+
   const corners: Array<[number, number]> = [
     [-HALF_W, -HALF_D],
     [HALF_W, -HALF_D],
@@ -371,15 +387,17 @@ function CornerFlags() {
             <cylinderGeometry args={[0.025, 0.025, 1.5, 6]} />
             <meshStandardMaterial color="#FFFFFF" metalness={0.2} roughness={0.5} />
           </mesh>
-          {/* Žluto-červená vlaječka */}
-          <mesh position={[0.18, 1.35, 0]} castShadow>
-            <planeGeometry args={[0.36, 0.26]} />
-            <meshStandardMaterial color="#EF4444" side={THREE.DoubleSide} roughness={0.7} />
-          </mesh>
-          <mesh position={[0.09, 1.41, 0.001]}>
-            <planeGeometry args={[0.18, 0.13]} />
-            <meshStandardMaterial color="#FACC15" side={THREE.DoubleSide} roughness={0.7} />
-          </mesh>
+          {/* Žluto-červená vlaječka — skupina se otáčí kolem žerdi (x = 0) */}
+          <group ref={(g) => { flagRefs.current[i] = g; }}>
+            <mesh position={[0.18, 1.35, 0]} castShadow>
+              <planeGeometry args={[0.36, 0.26]} />
+              <meshStandardMaterial color="#EF4444" side={THREE.DoubleSide} roughness={0.7} />
+            </mesh>
+            <mesh position={[0.09, 1.41, 0.001]}>
+              <planeGeometry args={[0.18, 0.13]} />
+              <meshStandardMaterial color="#FACC15" side={THREE.DoubleSide} roughness={0.7} />
+            </mesh>
+          </group>
           {/* Rohový čtvrtkruh — střed leží PŘESNĚ na rohu a výseč míří dovnitř hřiště.
               Dřív byl posunutý o půl metru dovnitř a výseč měl ve všech čtyřech rozích
               stejnou, takže ve třech z nich trčel ven do výběhové zóny. */}

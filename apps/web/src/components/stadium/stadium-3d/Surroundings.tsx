@@ -2,6 +2,8 @@
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
+import { useWind } from "./wind";
 import { GROUND_SIZE, GROUND_COLOR, TREE_POSITIONS, ROAD, type TimeOfDay, type WeatherType } from "./constants";
 import { generateAsphaltSurface, generateTerrainSurface, generateSnowTerrainSurface } from "./grassTexture";
 
@@ -156,6 +158,37 @@ function Trees({ reduce = false, isSnow = false }: { reduce?: boolean; isSnow?: 
   const broadRef = useRef<THREE.InstancedMesh>(null);
   const matrix = useMemo(() => new THREE.Matrix4(), []);
   const color = useMemo(() => new THREE.Color(), []);
+  const wind = useWind();
+  const crownBase = useRef<Array<{
+    mesh: React.RefObject<THREE.InstancedMesh | null>;
+    local: THREE.Matrix4;
+    x: number;
+    y: number;
+    z: number;
+    phase: number;
+  }>>([]);
+  const tilt = useMemo(() => new THREE.Matrix4(), []);
+
+  // Koruny se kývají po větru (+X): náklon kolem paty kmene, poryvy v různé fázi.
+  useFrame(({ clock }) => {
+    const base = crownBase.current;
+    if (base.length === 0) return;
+    const t = clock.elapsedTime;
+    const touched = new Set<THREE.InstancedMesh>();
+    base.forEach((c, i) => {
+      const mesh = c.mesh.current;
+      if (!mesh) return;
+      const gust = 0.5 + 0.5 * Math.sin(t * 0.7 + c.phase * 0.5);
+      const sway = wind * (0.03 + 0.05 * gust) + Math.sin(t * (1.2 + wind * 1.6) + c.phase) * (0.01 + wind * 0.035);
+      tilt.makeRotationZ(-sway);
+      matrix.multiplyMatrices(tilt, c.local);
+      // Náklon kolem paty: koruna se posune po větru úměrně své výšce.
+      matrix.setPosition(c.x + Math.sin(sway) * c.y, c.y * Math.cos(sway), c.z);
+      mesh.setMatrixAt(i, matrix);
+      touched.add(mesh);
+    });
+    touched.forEach((m) => { m.instanceMatrix.needsUpdate = true; });
+  });
   // Světlejší zeleně: tmavé odstíny s flat shadingem četly jako černé siluety.
   // (Stromy byly ve skutečnosti černé kvůli `vertexColors` bez atributu barvy — viz materiály níže.)
   const crownColors = useMemo(
@@ -218,6 +251,17 @@ function Trees({ reduce = false, isSnow = false }: { reduce?: boolean; isSnow?: 
       }
     });
     trunkRef.current.instanceMatrix.needsUpdate = true;
+    // Výchozí matice korun pro kývání ve větru (useFrame níže je jen natáčí).
+    crownBase.current = trees.map((t) => {
+      const m = new THREE.Matrix4();
+      rot.makeRotationY(t.yaw);
+      const ref = t.kind === "round" ? roundRef : t.kind === "broad" ? broadRef : coneRef;
+      if (t.kind === "round") m.makeScale(t.scale, t.scale * 0.95, t.scale).multiply(rot);
+      else if (t.kind === "broad") m.makeScale(t.scale * 1.25, t.scale * 0.85, t.scale * 1.25).multiply(rot);
+      else m.makeScale(t.scale, t.scale, t.scale).multiply(rot);
+      const y = (2.4 + (t.kind === "round" ? 1.1 : t.kind === "broad" ? 1.3 : 1.5)) * t.scale;
+      return { mesh: ref, local: m, x: t.x, y, z: t.z, phase: (t.x * 0.37 + t.z * 0.21) % (Math.PI * 2) };
+    });
     [coneRef, roundRef, broadRef].forEach((r) => {
       if (!r.current) return;
       r.current.instanceMatrix.needsUpdate = true;

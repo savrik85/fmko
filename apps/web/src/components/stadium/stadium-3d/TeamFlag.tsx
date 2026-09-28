@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
+import { useWind } from "./wind";
 import { drawBadgeOnCanvas, type BadgePattern } from "@/components/ui/badge-preview";
 
 interface TeamFlagProps {
@@ -109,9 +110,11 @@ export function TeamFlag({ size, primaryColor, badgePrimary, badgeSecondary, pat
   // Animace vlnění — synchronizovaná wave pro oba meshes
   const flagRefFront = useRef<THREE.Mesh>(null);
   const flagRefBack = useRef<THREE.Mesh>(null);
+  const wind = useWind();
   useFrame(({ clock }) => {
-    const t = clock.elapsedTime * 2.5;
-    const amp = flagW * 0.11;            // amplituda škáluje s velikostí vlajky
+    // Ve větru vlaje rychleji a víc, za bezvětří se jen líně vlní.
+    const t = clock.elapsedTime * (1.5 + wind * 3.5);
+    const amp = flagW * (0.05 + wind * 0.13); // amplituda škáluje s velikostí vlajky
     const updateMesh = (m: THREE.Mesh | null) => {
       if (!m) return;
       const geom = m.geometry as THREE.PlaneGeometry;
