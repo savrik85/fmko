@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { PITCH, STAND_DIMS, type WeatherType, type StadiumMode } from "./constants";
 import { generateCorrugatedTexture } from "./materialTextures";
+import { useWind } from "./wind";
 
 const STAND_GAP = 2.5;
 
@@ -45,17 +46,19 @@ function useBannerTexture(text: string | null | undefined, bg: string, fg: strin
 /** Plachta kotle jako látka — jemné billowing v hloubce (dole rozvlněnější). */
 function ClothBanner({ width, height, y, z, color, map }: { width: number; height: number; y: number; z: number; color: string; map?: THREE.Texture | null }) {
   const ref = useRef<THREE.Mesh>(null);
+  const wind = useWind();
   useFrame(({ clock }) => {
     const m = ref.current;
     if (!m) return;
-    const t = clock.elapsedTime * 1.5;
+    const t = clock.elapsedTime * (1.0 + wind * 1.8);
+    const k = 0.6 + wind * 1.4;
     const geom = m.geometry as THREE.PlaneGeometry;
     const p = geom.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i);
       const yv = p.getY(i);
       const amp = 0.05 + (0.5 - (yv / height + 0.5)) * 0.045; // dole víc
-      p.setZ(i, (Math.sin(x * 0.5 + t) + Math.sin(x * 0.22 + t * 0.6)) * amp);
+      p.setZ(i, (Math.sin(x * 0.5 + t) + Math.sin(x * 0.22 + t * 0.6)) * amp * k);
     }
     p.needsUpdate = true;
     geom.computeVertexNormals();
@@ -73,16 +76,17 @@ function ClothBanner({ width, height, y, z, color, map }: { width: number; heigh
 function WavingPennant({ color, y, phase }: { color: string; y: number; phase: number }) {
   const ref = useRef<THREE.Mesh>(null);
   const W = 1.0, H = 0.7;
+  const wind = useWind();
   useFrame(({ clock }) => {
     const m = ref.current;
     if (!m) return;
-    const t = clock.elapsedTime * 3 + phase;
+    const t = clock.elapsedTime * (2 + wind * 3) + phase;
     const geom = m.geometry as THREE.PlaneGeometry;
     const p = geom.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i);
       const d = (x + W / 2) / W;           // 0 u žerdi, 1 na volném konci
-      p.setZ(i, Math.sin(t + d * 6) * 0.16 * d);
+      p.setZ(i, Math.sin(t + d * 6) * (0.08 + wind * 0.18) * d);
     }
     p.needsUpdate = true;
     geom.computeVertexNormals();

@@ -24,6 +24,7 @@ import { LightingAndAtmosphere } from "./LightingAndAtmosphere";
 import { WeatherEffects } from "./WeatherEffects";
 import { CameraController } from "./CameraController";
 import { PostFX } from "./PostFX";
+import { WindContext, windStrength } from "./wind";
 import {
   getStadiumLayout,
   getViewpoints,
@@ -335,6 +336,7 @@ export function Stadium3D({
           toneMappingExposure: timeOfDay === "night" ? 1.15 : timeOfDay === "sunset" ? 1.05 : 0.95,
         }}
       >
+        <WindContext.Provider value={windStrength(weather)}>
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
 
@@ -578,6 +580,7 @@ export function Stadium3D({
             />
           )}
         </Suspense>
+        </WindContext.Provider>
       </Canvas>
 
       {/* ═══ Interaktivní ovládací lišty na ploše 3D scény ═══ */}

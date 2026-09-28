@@ -38,7 +38,7 @@ export function WeatherEffects({
 
       {/* 💨 Větrné poryvy a zvířené částice */}
       {weather === "wind" && (
-        <WindStreaks count={isMobile ? 25 : 60} />
+        <WindStreaks count={isMobile ? 180 : 450} />
       )}
 
       {/* ☁️ Nízké zatažené mraky pro deštivé a zamračené počasí */}
@@ -311,42 +311,64 @@ function SnowParticles({ count }: { count: number }) {
   return <mesh geometry={geometry} material={material} frustumCulled={false} />;
 }
 
-/** 💨 Zvířené linie větru a poletující tráva */
+/**
+ * 💨 Poletující listí a stébla trávy ve větru.
+ *
+ * Dřív tu létaly bílé kvádry, ve kterých nikdo vítr nepoznal. Teď jde přes areál
+ * listí v podzimních barvách: nese ho vítr ve směru +X, v poryvech zrychlí,
+ * poskakuje nahoru a dolů a přetáčí se.
+ */
+const LEAF_COLORS = ["#A16207", "#CA8A04", "#B45309", "#92400E", "#65A30D", "#C2410C"];
+
 function WindStreaks({ count }: { count: number }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
-  const streaks = useMemo(() => {
+  const leaves = useMemo(() => {
     return Array.from({ length: count }, () => ({
-      x: -45 - Math.random() * 30,
-      y: 0.8 + Math.random() * 8,
-      z: (Math.random() - 0.5) * 65,
-      speed: 28 + Math.random() * 22,
-      scaleX: 1.5 + Math.random() * 3.0,
-      scaleY: 0.03 + Math.random() * 0.03,
-      isLeaf: Math.random() > 0.6,
+      x: -60 + Math.random() * 120,
+      y: 0.3 + Math.random() * 7,
+      z: (Math.random() - 0.5) * 80,
+      speed: 5 + Math.random() * 7,
+      bob: 0.4 + Math.random() * 1.2,
+      phase: Math.random() * Math.PI * 2,
+      spin: 3 + Math.random() * 7,
+      size: 1.8 + Math.random() * 1.4,
     }));
   }, [count]);
 
-  useFrame((state, delta) => {
-    if (!meshRef.current) return;
+  useEffect(() => {
     const mesh = meshRef.current;
+    if (!mesh) return;
+    const c = new THREE.Color();
+    for (let i = 0; i < count; i++) {
+      c.set(LEAF_COLORS[i % LEAF_COLORS.length]);
+      mesh.setColorAt(i, c);
+    }
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    (mesh.material as THREE.Material).needsUpdate = true;
+  }, [count]);
+
+  useFrame((state, delta) => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const dt = Math.min(delta, 0.05);
     const t = state.clock.getElapsedTime();
+    // Poryv: celé listí občas zrychlí a vznese se.
+    const gust = 0.7 + 0.5 * Math.max(0, Math.sin(t * 0.45)) + 0.2 * Math.sin(t * 1.3);
 
     for (let i = 0; i < count; i++) {
-      const s = streaks[i];
-      s.x += s.speed * delta;
-      const curY = s.y + Math.sin(t * 4 + i) * 0.3;
-
-      if (s.x > 45) {
-        s.x = -45 - Math.random() * 15;
-        s.y = 0.8 + Math.random() * 8;
-        s.z = (Math.random() - 0.5) * 65;
+      const l = leaves[i];
+      l.x += l.speed * gust * dt;
+      if (l.x > 60) {
+        l.x = -60 - Math.random() * 10;
+        l.y = 0.3 + Math.random() * 7;
+        l.z = (Math.random() - 0.5) * 80;
       }
-
-      dummy.position.set(s.x, curY, s.z);
-      dummy.rotation.set(0, 0, Math.sin(t * 3 + i) * 0.1);
-      dummy.scale.set(s.scaleX, s.scaleY, 0.08);
+      const y = Math.max(0.08, l.y + Math.sin(t * l.bob + l.phase) * 0.9 * gust);
+      dummy.position.set(l.x, y, l.z + Math.sin(t * 0.8 + l.phase) * 0.6);
+      dummy.rotation.set(t * l.spin * 0.7 + l.phase, t * l.spin * 0.4, t * l.spin + l.phase);
+      dummy.scale.setScalar(l.size);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
     }
@@ -354,9 +376,9 @@ function WindStreaks({ count }: { count: number }) {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshBasicMaterial color="#E2E8F0" transparent opacity={0.35} depthWrite={false} />
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
+      <planeGeometry args={[0.14, 0.09]} />
+      <meshStandardMaterial side={THREE.DoubleSide} roughness={0.8} />
     </instancedMesh>
   );
 }
