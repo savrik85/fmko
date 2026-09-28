@@ -27,6 +27,7 @@ import {
 } from "./post-match-context";
 import { loadPreMatchStatement } from "./ai-prematch-statement";
 import { archetypeLabel } from "../engine/referee";
+import { toneLine, tonePromptRule, type AnswerTone } from "./answer-tone";
 
 const M = "post-match-interview";
 
@@ -412,8 +413,13 @@ export async function generatePostMatchArticle(
   questions: string[],
   answers: string[],
   reporterHint: string,
+  tones: AnswerTone[] = [],
 ): Promise<PostMatchArticle | null> {
-  const qa = questions.map((q, i) => `OTÁZKA: ${q}\n<<<DATA id="odpoved-${i}">>>\n${sanitizeForPrompt(answers[i] ?? "", 500)}\n<<<KONEC id="odpoved-${i}">>>`).join("\n\n");
+  const qa = questions.map((q, i) => {
+    const ton = toneLine(tones[i]);
+    return `OTÁZKA: ${q}\n${ton ? `${ton}\n` : ""}<<<DATA id="odpoved-${i}">>>\n${sanitizeForPrompt(answers[i] ?? "", 500)}\n<<<KONEC id="odpoved-${i}">>>`;
+  }).join("\n\n");
+  const tonPravidlo = tonePromptRule(tones);
 
   const prompt = `Jsi redaktor okresního fotbalového zpravodaje. ${reporterHint}
 
@@ -426,7 +432,7 @@ ${ctx.refereeName ? `Rozhodčí: ${ctx.refereeName}.` : ""}
 ${ctx.incident ? `Sporná situace v ${ctx.incident.minute}. minutě: ${ctx.incident.text}` : "V zápase nebyla žádná sporná situace."}
 
 ${qa}
-
+${tonPravidlo ? `\n${tonPravidlo}\n` : ""}
 Napiš z toho článek do zpravodaje a vrať JSON:
 {
   "headline": "max 80 znaků",
@@ -436,7 +442,8 @@ Napiš z toho článek do zpravodaje a vrať JSON:
   "vztahRedaktor": { "posun": 0, "duvod": "max 8 slov" }
 }
 
-Klasifikuj POSTOJ trenéra k rozhodčímu VÝHRADNĚ podle toho, co skutečně napsal:
+Klasifikuj POSTOJ trenéra k rozhodčímu VÝHRADNĚ podle toho, co skutečně napsal (a jak to podle TÓNU myslel —
+ironická pochvala sudího je kritika):
 - "kritika" = zpochybnil verdikt, sudího, jeho výkon nebo férovost
 - "obhajoba" = vzal ho v ochranu, přiznal, že chyba se stane, nebo ho pochválil
 - "neutral" = rozhodčího neřešil nebo odpověděl vyhýbavě
