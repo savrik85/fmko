@@ -3,7 +3,7 @@
 .logo { font-family: var(--font-heading); font-size: 2.2rem; font-weight: 700; letter-spacing: -.06em; }
 .layout { display: grid; grid-template-columns: 1fr 1fr; max-width: 1250px; gap: 9%; padding: 70px 5% 90px; margin: auto; align-items: start; }
 .eyebrow { font-size: .8rem; font-weight: 600; letter-spacing: .1em; margin-bottom: 18px; }
-.intro h1 { font-family: var(--font-heading); font-weight: 700; font-size: clamp(3.5rem,6vw,5.5rem); line-height: .98; letter-spacing: -.02em; }
+.intro h1 { max-width: 100%; font-family: var(--font-heading); font-weight: 700; font-size: clamp(3.5rem,6vw,5.5rem); line-height: .98; letter-spacing: -.02em; overflow-wrap: break-word; }
 .intro em { font-style: normal; color: #d5f478; }
 .intro>p:not(.eyebrow) { color: #c0d0c5; line-height: 1.7; margin: 26px 0; }
 .intro ol { list-style: none; padding: 0; counter-reset: step; margin: 35px 0; }
@@ -30,5 +30,5 @@
 .check { align-self: flex-start; background: #d5f478; border-radius: 50%; padding: 8px 19px; font-size: 2rem; }
 .activation { max-width: 540px; margin: auto; padding: 55px 20px 80px; }
 .activation .card { padding: 30px; }
-@media(max-width: 800px) { .layout { grid-template-columns: 1fr; max-width: 620px; padding: 40px 6% 60px; gap: 35px; } .intro h1 { font-size: 3.6rem; } .intro h1 br { display: none; } .intro ol { margin-bottom: 10px; } }
+@media(max-width: 800px) { .layout { grid-template-columns: 1fr; max-width: 620px; padding: 40px 6% 60px; gap: 35px; } .intro h1 { font-size: 3.6rem; } .intro ol { margin-bottom: 10px; } }
 @media(max-width: 430px) { .card { padding: 26px 22px; } .intro h1 { font-size: 3rem; } .header { padding: 22px 6%; } }
