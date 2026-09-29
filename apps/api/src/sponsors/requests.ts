@@ -43,8 +43,8 @@ export const SPEND_DAYS = 30;
 export const REPEAT_DAYS = 14;
 /** Pod touhle náklonností majitel nedá nic. */
 export const MIN_FAVOR = 30;
-/** Cizí majitel (bez smlouvy s klubem) dá jen od téhle náklonnosti. */
-export const STRANGER_MIN_FAVOR = 60;
+/** Cizí majitel (bez smlouvy s klubem) dá jen od téhle náklonnosti, tedy když klubu „fandí". */
+export const STRANGER_MIN_FAVOR = 80;
 
 export const REFUSED_FAVOR = -2;
 export const TOO_SOON_FAVOR = -4;

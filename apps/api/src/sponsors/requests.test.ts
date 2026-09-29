@@ -50,6 +50,9 @@ describe("requestBlock", () => {
     expect(requestBlock({ ...ok, lastRequestDaysAgo: REPEAT_DAYS })).toBeNull();
     expect(requestBlock({ ...ok, favor: MIN_FAVOR - 1 })).toBe("dislike");
     expect(requestBlock({ ...ok, relation: "none", favor: 50 })).toBe("stranger");
+    // Bez smlouvy jen klub, kterému fandí (80+): „příznivý" (75) nestačí.
+    expect(requestBlock({ ...ok, relation: "none", favor: 75 })).toBe("stranger");
+    expect(requestBlock({ ...ok, relation: "none", favor: 80 })).toBeNull();
   });
 });
 
