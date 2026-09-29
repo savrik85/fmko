@@ -180,7 +180,10 @@ export async function getRunningSeason(db: D1Database, seasonNumber: number): Pr
     `SELECT MIN(sc.scheduled_at) AS first, MAX(sc.scheduled_at) AS last
        FROM season_calendar sc JOIN leagues l ON l.id = sc.league_id
       WHERE COALESCE(l.league_type, 'senior') = 'senior' AND sc.season_number = ?
-        AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id)`,
+        AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id)
+        -- Novou sezónu spouští jen ligy, které se hrají (konec sezóny čeká na ně, viz end-season).
+        AND EXISTS (SELECT 1 FROM matches m JOIN season_calendar c2 ON c2.id = m.calendar_id
+          WHERE c2.league_id = l.id AND c2.season_number = sc.season_number AND m.status = 'simulated')`,
   ).bind(seasonNumber).first<{ first: string | null; last: string | null }>();
 
   return {
