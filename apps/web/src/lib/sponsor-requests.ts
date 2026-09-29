@@ -30,7 +30,7 @@ export function blockText(info: RequestInfo): string | null {
       ? `Nedávno jsi ho prosil. Znovu to zkus od ${dayMonth(info.nextAskDay)}, dřív by ho to naštvalo.`
       : "Nedávno jsi ho prosil. Dřívější prosba by ho naštvala.";
     case "dislike": return "Nemá tě v lásce. Než ho poprosíš o peníze, zlepši vztah.";
-    case "stranger": return "Nejsi jeho klub a moc se neznáte. Bez smlouvy dá jen tomu, koho má hodně rád.";
+    case "stranger": return "Nemáte spolu smlouvu. Bez ní dá jen klubu, kterému fandí.";
     default: return null;
   }
 }
