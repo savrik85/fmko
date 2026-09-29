@@ -132,7 +132,7 @@ export function requestCheckText(kept: boolean, vars: RequestTextVars, seedKey: 
   return pick(kept ? KEPT : BROKEN, vars, seedKey);
 }
 
-export type AskKind = "purpose" | "amount" | "both" | "which" | "tiny";
+export type AskKind = "purpose" | "amount" | "both" | "tiny";
 
 const ASK: Record<AskKind, readonly string[]> = {
   purpose: [
@@ -146,10 +146,6 @@ const ASK: Record<AskKind, readonly string[]> = {
   both: [
     "Kolik a na co by to bylo? Trenér, přestup, vybavení, stadion, nebo mládež?",
     "Povídejte. Kolik potřebujete a na co?",
-  ],
-  which: [
-    "Jedno po druhém. Na co z toho hlavně?",
-    "To je toho moc najednou. Na co přesně?",
   ],
   tiny: [
     "Kvůli pár stovkám mi nepište. Kolik opravdu potřebujete?",
