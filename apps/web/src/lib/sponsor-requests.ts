@@ -1,4 +1,4 @@
-/** Prosba o příspěvek u majitele firmy: typy odpovědí API a texty pro UI. */
+/** Prosba o příspěvek u majitele firmy (přes SMS): přehled pro kartu majitele. */
 
 export type RequestPurpose = "coach" | "transfer" | "equipment" | "stadium" | "youth";
 export type RequestRefusal = "broken" | "too_soon" | "dislike" | "stranger" | "exhausted";
@@ -14,15 +14,6 @@ export interface RequestInfo {
   obligations: Array<{ id: string; purpose: RequestPurpose; label: string; granted: number; required: number; spent: number; checkDay: string }>;
   history: Array<{ purpose: RequestPurpose; label: string; asked: number; granted: number; status: string; day: string }>;
   minAsk: number;
-}
-
-export interface RequestResult {
-  kind: "granted" | "partial" | "refused";
-  amount: number;
-  refusal: RequestRefusal | null;
-  reply: string;
-  checkDay: string | null;
-  favorDelta: number;
 }
 
 /** Herní den YYYY-MM-DD jako „11. 12.". */
@@ -50,10 +41,4 @@ export const REQUEST_STATUS_LABELS: Record<string, string> = {
   kept: "dodrženo",
   broken: "nedodrženo",
   lapsed: "propadlo",
-};
-
-export const RESULT_LABELS: Record<RequestResult["kind"], string> = {
-  granted: "Dal všechno",
-  partial: "Dal část",
-  refused: "Odmítl",
 };

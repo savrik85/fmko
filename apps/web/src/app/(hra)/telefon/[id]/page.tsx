@@ -9,7 +9,6 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
-import { RequestDialog } from "@/components/sponsors/request-dialog";
 interface Message {
   id: string;
   body: string;
@@ -152,7 +151,6 @@ export default function ConversationPage() {
   const [credit, setCredit] = useState<{ zbyva: number; cenaSms: number; zprav: number } | null>(null);
   // Skupinové chaty vlastní detail endpoint nemají — tam se píše vždycky.
   const [canReply, setCanReply] = useState(true);
-  const [requestOpen, setRequestOpen] = useState(false);
   const [channel, setChannel] = useState<"sms" | "imessage" | null>("imessage");
   const [replyHint, setReplyHint] = useState<{ text: string; href?: string; label?: string } | null>(null);
   const [creditError, setCreditError] = useState<string | null>(null);
@@ -596,29 +594,6 @@ export default function ConversationPage() {
         </div>
       )}
 
-      {/* Majitel firmy: prosba o příspěvek jde odsud i ze stránky firmy. */}
-      {ownerSponsorId && teamId && (
-        <div className="bg-white border-t border-gray-100 px-3 pt-2 shrink-0">
-          <button
-            onClick={() => setRequestOpen(true)}
-            className="w-full min-h-11 text-sm font-heading font-bold bg-pitch-50 border border-pitch-200 text-pitch-600 rounded-2xl px-3 py-2 hover:bg-pitch-100 transition-colors"
-          >
-            Požádat o příspěvek
-          </button>
-          <RequestDialog
-            open={requestOpen}
-            onClose={() => setRequestOpen(false)}
-            teamId={teamId}
-            sponsorId={ownerSponsorId}
-            onDone={() => {
-              apiFetch<ConvDetailResponse>(messagesUrl)
-                .then((fresh) => setMessages(fresh.messages))
-                .catch((e) => console.error("zprávy po prosbě o příspěvek:", e));
-            }}
-          />
-        </div>
-      )}
-
       {/* Do jednosměrného oznámení se nepíše — vstupní pole by slibovalo odpověď,
           která nikdy nepřijde. Místo něj se rovnou řekne proč. */}
       {!lzePsat ? (
@@ -681,6 +656,7 @@ export default function ConversationPage() {
             placeholder={
               cekaSeNaHrace ? "Hráč píše…"
                 : nemaNaSms ? "Došel kredit"
+                  : ownerSponsorId ? "Třeba: 20 000 na přestup"
                   : jeImessage ? "iMessage"
                     : "SMS"
             }

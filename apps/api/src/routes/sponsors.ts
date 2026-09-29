@@ -194,18 +194,24 @@ sponsorsRouter.get("/teams/:teamId/sponsor-owners/:sponsorId/request", async (c)
   return c.json(info);
 });
 
-// POST /api/teams/:teamId/sponsor-owners/:sponsorId/request — { purpose, amount, note }
-sponsorsRouter.post("/teams/:teamId/sponsor-owners/:sponsorId/request", async (c) => {
+// POST /api/teams/:teamId/sponsor-owners/:sponsorId/conversation — otevře (založí) SMS s majitelem firmy
+sponsorsRouter.post("/teams/:teamId/sponsor-owners/:sponsorId/conversation", async (c) => {
+  const db = c.env.DB;
   const teamId = c.req.param("teamId");
   const sponsorId = Number(c.req.param("sponsorId"));
   if (!Number.isInteger(sponsorId)) return c.json({ error: "Neplatný sponzor" }, 400);
-  const body = await c.req.json<{ purpose?: unknown; amount?: unknown; note?: unknown }>()
-    .catch((e) => { logger.warn({ module: "sponsors" }, "parse request body", e); return null; });
-  if (!body) return c.json({ error: "Neplatný požadavek" }, 400);
-  const { submitRequest } = await import("../sponsors/requests-db");
-  const res = await submitRequest(c.env.DB, teamId, sponsorId, { purpose: body.purpose, amount: body.amount, note: body.note });
-  if ("error" in res) return c.json({ error: res.error }, res.status);
-  return c.json(res);
+  const [team, sponsor, owner] = await Promise.all([
+    loadTeam(db, teamId),
+    db.prepare("SELECT id, name, district FROM district_sponsors WHERE id = ?").bind(sponsorId).first<{ id: number; name: string; district: string }>(),
+    ensureSponsorOwner(db, sponsorId),
+  ]);
+  if (!team || !sponsor || !owner) return c.json({ error: "Firma nenalezena" }, 404);
+  if (team.district !== sponsor.district) return c.json({ error: "Firma není z tvého okresu" }, 400);
+  const { ownerConversationId } = await import("../messaging/system-sms");
+  const conversationId = await ownerConversationId(db, teamId, {
+    sponsorId, name: `${owner.firstName} ${owner.lastName}`, firmName: sponsor.name, avatar: JSON.stringify(owner.faceConfig),
+  });
+  return c.json({ conversationId });
 });
 
 // GET /api/teams/:teamId/sponsor-owners — firmy v okrese klubu a aktuální setkání v hospodě

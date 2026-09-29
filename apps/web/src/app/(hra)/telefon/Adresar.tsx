@@ -17,6 +17,7 @@ export interface ContactsData {
   skupiny: { id: string; title: string; podtitul: string; channel: "sms" | "imessage" }[];
   hraci: { playerId: string; name: string; position: string; avatar: Record<string, unknown> | null }[];
   manazeri: { teamId: string; name: string; teamName: string; avatar: Record<string, unknown> | null }[];
+  majitele?: { sponsorId: number; name: string; firmName: string; avatar: Record<string, unknown> | null }[];
 }
 
 const POSICE: Record<string, string> = {
@@ -172,6 +173,23 @@ export function Adresar({ teamId, onZavrit, onOtevrit }: {
                     channel="imessage"
                     busy={busy}
                     onClick={() => otevrit(`/api/teams/${teamId}/conversation-with/${m.teamId}`)}
+                  />
+                ))}
+              </Sekce>
+            )}
+
+            {(data.majitele?.length ?? 0) > 0 && (
+              <Sekce nadpis={`Majitelé firem · ${data.majitele!.length}`}>
+                {data.majitele!.map((o) => (
+                  <Radek
+                    key={o.sponsorId}
+                    avatar={o.avatar}
+                    iniciály={iniciályZ(o.name)}
+                    name={o.name}
+                    podtitul={o.firmName}
+                    channel="imessage"
+                    busy={busy}
+                    onClick={() => otevrit(`/api/teams/${teamId}/sponsor-owners/${o.sponsorId}/conversation`)}
                   />
                 ))}
               </Sekce>

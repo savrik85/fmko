@@ -171,16 +171,9 @@ function odpovidatLze(
     };
   }
 
-  // Majitel firmy píše sám, když se něco stane. Mimo jeho SMS se s ním jedná na Sponzorech.
-  if (opts.participantId?.startsWith("so-")) {
-    return {
-      canReply: false,
-      channel: null,
-      replyHint: "Tahle výměna skončila. Majitele můžeš pozvat na zápas na stránce Sponzoři.",
-      replyHintHref: "/sponzori",
-      replyHintLabel: "Otevřít Sponzory",
-    };
-  }
+  // Majiteli firmy se dá napsat kdykoli (prosba o příspěvek, odpověď na jeho SMS). Odpovídá
+  // deterministická logika bez modelu, proto zdarma.
+  if (opts.participantId?.startsWith("so-")) return { canReply: true, channel: "imessage" };
   return {
     canReply: false,
     channel: null,
@@ -345,7 +338,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
   // Stejné pravidlo jako u čtení — kdyby platilo jen na frontendu, obešel by
   // ho kdokoli přímým voláním API a psal by do zdi.
-  const pravidlo = odpovidatLze(conv?.type ?? "", conv?.ai_thread_active === 1);
+  const pravidlo = odpovidatLze(conv?.type ?? "", conv?.ai_thread_active === 1, { participantId: conv?.participant_id });
   if (!pravidlo.canReply) {
     return c.json({ error: "Do téhle konverzace se odpovídat nedá, je to jen oznámení." }, 400);
   }
@@ -476,7 +469,20 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
   // Vůdce fanouškovské party čeká na odpověď. Používá stejné sloupce jako AI
   // thready hráčů, jen s vlastním `kind` — a vyhodnocuje se bez modelu.
-  if (conv?.type === "system" && conv.ai_thread_active === 1) {
+  // Majitel firmy: SMS o peníze vyřídí prosba o příspěvek (sponsors/requests-db.ts), jinak
+  // jde o odpověď na jeho vlastní SMS níž.
+  let ownerHandled = false;
+  // Tlačítko hotové odpovědi (optionId) je vždy odpověď na jeho SMS, ne prosba.
+  if (conv?.type === "system" && conv.participant_id?.startsWith("so-") && typeof body.optionId !== "string") {
+    const sponsorId = Number(conv.participant_id.slice(3));
+    if (Number.isInteger(sponsorId)) {
+      const { handleOwnerText } = await import("../sponsors/requests-db");
+      ownerHandled = await handleOwnerText(c.env.DB, teamId, convId, sponsorId, body.body.trim(), conv.ai_thread_active === 1)
+        .catch((e) => { logger.warn({ module: "messaging" }, "SMS majiteli firmy", e); return false; });
+    }
+  }
+
+  if (conv?.type === "system" && conv.ai_thread_active === 1 && !ownerHandled) {
     const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
     await handleFanLeaderReply(c.env.DB, convId, body.body.trim())
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď vůdci fanoušků", e));
@@ -630,7 +636,23 @@ messagingRouter.get("/teams/:teamId/contacts", async (c) => {
     }>().catch((e) => { logger.warn({ module: "messaging" }, "soupeři do adresáře", e); return { results: [] } })
     : { results: [] };
 
+  // Majitelé firem z okresu klubu: SMS jim jde napsat kdykoli (prosba o příspěvek).
+  const majitele = await (async () => {
+    const firmy = await db.prepare(
+      `SELECT ds.id, ds.name FROM district_sponsors ds
+       WHERE ds.district = (SELECT v.district FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?)
+       ORDER BY ds.name`,
+    ).bind(teamId).all<{ id: number; name: string }>();
+    const { ensureSponsorOwners } = await import("../sponsors/favor");
+    const owners = await ensureSponsorOwners(db, firmy.results.map((f) => f.id));
+    return firmy.results.flatMap((f) => {
+      const o = owners.get(f.id);
+      return o ? [{ sponsorId: f.id, name: `${o.firstName} ${o.lastName}`, firmName: f.name, avatar: o.faceConfig }] : [];
+    });
+  })().catch((e) => { logger.warn({ module: "messaging" }, "majitelé firem do adresáře", e); return []; });
+
   return c.json({
+    majitele,
     skupiny: [
       ...(kabina ? [{ id: kabina.id, title: "Kabina", podtitul: "Celý tým", channel: "sms" as const }] : []),
       ...skupiny.map((g) => ({

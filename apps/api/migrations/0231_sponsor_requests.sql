@@ -1,9 +1,10 @@
--- Prosba o příspěvek u majitele firmy (sponsors/requests.ts): peníze na účel, kontrola po 30 dnech.
+-- Prosba o příspěvek u majitele firmy přes SMS (sponsors/requests.ts): peníze na účel, kontrola po 30 dnech.
 CREATE TABLE IF NOT EXISTS sponsor_requests (
   id TEXT PRIMARY KEY,
   team_id TEXT NOT NULL REFERENCES teams(id),
   sponsor_id INTEGER NOT NULL REFERENCES district_sponsors(id),
-  purpose TEXT NOT NULL CHECK (purpose IN ('coach', 'transfer', 'equipment', 'stadium', 'youth')),
+  -- NULL jen u prosby, kterou majitel odmítl předem (blok), tam na účelu nezáleží
+  purpose TEXT CHECK (purpose IS NULL OR purpose IN ('coach', 'transfer', 'equipment', 'stadium', 'youth')),
   asked INTEGER NOT NULL,
   granted INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL CHECK (status IN ('refused', 'granted', 'kept', 'broken', 'lapsed')),

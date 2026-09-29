@@ -36,13 +36,6 @@ function pick(pool: readonly string[], vars: RequestTextVars, seedKey: string): 
   return fill(createRng(seedFromString(seedKey)).pick([...pool]), vars);
 }
 
-/** Zpráva trenéra majiteli. Vlastní poznámka trenéra jde za ni. */
-export function coachRequestText(vars: RequestTextVars, note: string | null): string {
-  const base = fill("Dobrý den, chtěl bych vás poprosit o příspěvek {castka} na {ucel}.", vars);
-  const extra = note?.trim();
-  return extra ? `${base} ${extra}` : base;
-}
-
 const GRANTED: Record<OwnerPersonality, readonly string[]> = {
   fan: [
     "Na {ucel}? To se nemusíte ptát dvakrát. {castka} vám pošlu ještě dnes. Ať je to vidět na hřišti!",
@@ -137,4 +130,52 @@ const BROKEN: readonly string[] = [
 
 export function requestCheckText(kept: boolean, vars: RequestTextVars, seedKey: string): string {
   return pick(kept ? KEPT : BROKEN, vars, seedKey);
+}
+
+export type AskKind = "purpose" | "amount" | "both" | "which" | "tiny";
+
+const ASK: Record<AskKind, readonly string[]> = {
+  purpose: [
+    "A na co by to bylo? Na trenéra, přestup, vybavení, stadion, nebo mládež?",
+    "Na co to potřebujete? Trenér, přestup, vybavení, stadion, nebo mládež?",
+  ],
+  amount: [
+    "Na {ucel}, rozumím. A kolik byste potřeboval?",
+    "Dobře, na {ucel}. O jakou částku jde?",
+  ],
+  both: [
+    "Kolik a na co by to bylo? Trenér, přestup, vybavení, stadion, nebo mládež?",
+    "Povídejte. Kolik potřebujete a na co?",
+  ],
+  which: [
+    "Jedno po druhém. Na co z toho hlavně?",
+    "To je toho moc najednou. Na co přesně?",
+  ],
+  tiny: [
+    "Kvůli pár stovkám mi nepište. Kolik opravdu potřebujete?",
+    "To je tak málo, že to nestojí za řeč. Kolik doopravdy?",
+  ],
+};
+
+/** Majitel se doptává na chybějící částku nebo účel. Nic nestojí. */
+export function askText(kind: AskKind, purpose: RequestPurpose | null, seedKey: string): string {
+  return pick(ASK[kind], { ucel: purpose ?? undefined }, seedKey);
+}
+
+const SMALL_TALK: readonly string[] = [
+  "Rád vás slyším. Kdybyste něco potřeboval, napište kolik a na co.",
+  "Díky za zprávu. Jestli jde o peníze, napište mi kolik a na co.",
+];
+
+export function ownerSmallTalk(seedKey: string): string {
+  return pick(SMALL_TALK, {}, seedKey);
+}
+
+const ALREADY: readonly string[] = [
+  "Dneska jsme to už probrali. Ozvěte se jindy.",
+  "Pro dnešek stačilo. Ozvěte se jindy.",
+];
+
+export function ownerAlreadyAnswered(seedKey: string): string {
+  return pick(ALREADY, {}, seedKey);
 }
