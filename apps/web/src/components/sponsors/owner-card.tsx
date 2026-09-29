@@ -99,7 +99,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
               se sliby až {formatCZK(myTeam.budgetEstimate.cap.high)} měsíčně. Čím lepší vztah, tím přesnější odhad.
             </div>
 
-            {teamId && <RequestSection teamId={teamId} sponsorId={sponsorId} onChanged={onChanged} />}
+            {teamId && <RequestSection teamId={teamId} sponsorId={sponsorId} />}
 
             {match ? (
               <div className="pt-3 border-t border-gray-100">

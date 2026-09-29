@@ -110,7 +110,7 @@ export async function sendLeaderSMS(
 export interface OwnerIdentity { sponsorId: number; name: string; firmName: string | null; avatar: string }
 
 /** Konverzace s majitelem firmy (`participant_id = so-{sponsorId}`); založí ji, když chybí. */
-async function ownerConversationId(db: D1Database, teamId: string, owner: OwnerIdentity): Promise<string> {
+export async function ownerConversationId(db: D1Database, teamId: string, owner: OwnerIdentity): Promise<string> {
   const participantId = `so-${owner.sponsorId}`;
   const title = owner.firmName ? `${owner.name} (${owner.firmName})` : owner.name;
   const existing = await db
@@ -185,7 +185,7 @@ export async function postOwnerMessages(
   db: D1Database,
   teamId: string,
   owner: OwnerIdentity,
-  messages: Array<{ from: "coach" | "owner"; body: string }>,
+  messages: Array<{ from: "coach" | "owner"; body: string; meta?: Record<string, unknown> }>,
   opts: { coachName: string; unread: boolean },
 ): Promise<string | null> {
   if (messages.length === 0) return null;
@@ -201,7 +201,7 @@ export async function postOwnerMessages(
         `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at)
          VALUES (?, ?, 'system', ?, ?, ?, ?, ?)`,
       ).bind(crypto.randomUUID(), convId, `so-${owner.sponsorId}`, owner.name, m.body,
-        JSON.stringify({ type: "sponsor_owner_note" }), messageTime(start + i * 1000)));
+        JSON.stringify(m.meta ?? { type: "sponsor_owner_note" }), messageTime(start + i * 1000)));
     const last = messages[messages.length - 1];
     const unreadAdd = opts.unread ? messages.filter((m) => m.from === "owner").length : 0;
     stmts.push(db.prepare(

@@ -3,7 +3,8 @@ import {
   decideRequest, exhaustedBelow, MIN_FAVOR, REFUSED_FAVOR, REPEAT_DAYS, requestBlock, requestCap, requestFavorDelta,
   STRANGER_MIN_FAVOR, TOO_SOON_FAVOR, REQUEST_PURPOSES,
 } from "./requests";
-import { coachRequestText, requestCheckText, requestReplyText } from "./request-texts";
+import { askText, ownerAlreadyAnswered, ownerSmallTalk, requestCheckText, requestReplyText } from "./request-texts";
+import { parseAmount, parseRequestText, normalize } from "./request-parse";
 import type { OwnerPersonality } from "./owners";
 
 const BASE = { monthlyB: 40000, favor: 60, relation: "main" as const, personality: "fan" as const, purpose: "equipment" as const };
@@ -97,8 +98,49 @@ describe("texty prosby", () => {
       expect(requestCheckText(kept, { castka: 5000, ucel: "stadium" }, "y")).not.toMatch(/[—{}]/);
     }
   });
-  it("zpráva trenéra nese částku, účel a poznámku", () => {
-    expect(coachRequestText({ castka: 15000, ucel: "transfer" }, "Chceme útočníka.").replace(/\s/g, " "))
-      .toBe("Dobrý den, chtěl bych vás poprosit o příspěvek 15 000 Kč na přestup. Chceme útočníka.");
+  it("doptávání a ostatní odpovědi bez značek a dlouhých pomlček", () => {
+    for (const kind of ["purpose", "amount", "both", "which", "tiny"] as const) {
+      for (let i = 0; i < 6; i++) {
+        const t = askText(kind, "stadium", `a${i}`);
+        expect(t).not.toMatch(/[—{}]/);
+        if (kind === "amount") expect(t).toContain("stadion");
+      }
+    }
+    expect(ownerSmallTalk("x")).not.toMatch(/[—{}]/);
+    expect(ownerAlreadyAnswered("x")).not.toMatch(/[—{}]/);
+  });
+});
+
+describe("prosba z SMS", () => {
+  const amount = (t: string) => parseAmount(normalize(t));
+  it("částky v běžných zápisech", () => {
+    expect(amount("potřeboval bych 20 000 Kč")).toBe(20000);
+    expect(amount("20.000")).toBe(20000);
+    expect(amount("20000")).toBe(20000);
+    expect(amount("dejte 20 tisíc")).toBe(20000);
+    expect(amount("aspoň 15 tis.")).toBe(15000);
+    expect(amount("tak 20k")).toBe(20000);
+    expect(amount("1,5 milionu")).toBe(1500000);
+    expect(amount("500 Kč")).toBe(500);
+  });
+  it("holé malé číslo není částka (termíny, počty)", () => {
+    expect(amount("do 30 dnů")).toBeNull();
+    expect(amount("máme 11 hráčů")).toBeNull();
+  });
+  it("účel podle klíčových slov, bez diakritiky i s ní", () => {
+    expect(parseRequestText("Potřeboval bych 20 000 na přestup útočníka").purpose).toBe("transfer");
+    expect(parseRequestText("na nove dresy a mice").purpose).toBe("equipment");
+    expect(parseRequestText("kurz pro trenéra").purpose).toBe("coach");
+    expect(parseRequestText("oprava tribuny").purpose).toBe("stadium");
+    expect(parseRequestText("na dorost").purpose).toBe("youth");
+  });
+  it("víc účelů najednou = nejasné, majitel se doptá", () => {
+    const p = parseRequestText("na dresy a na stadion");
+    expect(p.purpose).toBeNull();
+    expect(p.purposes.sort()).toEqual(["equipment", "stadium"]);
+  });
+  it("záměr: peníze bez účelu i částky se poznají, pozdrav ne", () => {
+    expect(parseRequestText("Nemohl byste nás podpořit?").intent).toBe(true);
+    expect(parseRequestText("Dobrý den, jak se máte?").intent).toBe(false);
   });
 });

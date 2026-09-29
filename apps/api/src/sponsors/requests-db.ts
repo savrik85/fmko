@@ -13,7 +13,8 @@ import { ensureSponsorOwner, favorDeltaStmts, getFavor, type SponsorOwner } from
 import { FAVOR_REASONS } from "./favor-math";
 import { activeSeason, loadNegotiationSponsor, loadNegotiationTeam, type NegotiationSponsor, type NegotiationTeam } from "./negotiation-db";
 import { addDays, dayDiff } from "./owner-sms-rules";
-import { coachRequestText, requestCheckText, requestReplyText } from "./request-texts";
+import { askText, ownerAlreadyAnswered, ownerSmallTalk, requestCheckText, requestReplyText } from "./request-texts";
+import { parseRequestText } from "./request-parse";
 import {
   BROKEN_FAVOR, decideRequest, exhaustedBelow, isRequestPurpose, MAX_ASK, MIN_ASK, PURPOSE_LABELS, PURPOSE_SPEND_TYPES, REPEAT_DAYS,
   REQUEST_PURPOSES, REQUEST_WINDOW_DAYS, requestBlock, requestCap, requestFavorDelta, SPEND_DAYS,
@@ -208,20 +209,19 @@ function ownerIdentity(owner: SponsorOwner, firmName: string): OwnerIdentity {
   return { sponsorId: owner.sponsorId, name: `${owner.firstName} ${owner.lastName}`, firmName, avatar: JSON.stringify(owner.faceConfig) };
 }
 
-export async function submitRequest(
-  db: D1Database, teamId: string, sponsorId: number, input: { purpose: unknown; amount: unknown; note: unknown },
+/**
+ * Zapíše prosbu a odpověď majitele. Zprávu trenéra už uložila routa telefonu, sem jde jen
+ * odpověď. `purpose` je null jen u prosby, kterou majitel odmítá předem (blok), tam na účelu nezáleží.
+ */
+async function runRequest(
+  db: D1Database, ctx: RequestContext, purpose: RequestPurpose | null, asked: number, note: string,
 ): Promise<RequestResult | Fail> {
-  if (!isRequestPurpose(input.purpose)) return { error: "Vyber, na co peníze chceš", status: 400 };
-  const asked = typeof input.amount === "number" ? Math.round(input.amount) : NaN;
-  if (!Number.isFinite(asked) || asked < MIN_ASK || asked > MAX_ASK) {
-    return { error: `Částka musí být od ${MIN_ASK.toLocaleString("cs-CZ")} do ${MAX_ASK.toLocaleString("cs-CZ")} Kč`, status: 400 };
-  }
-  const note = typeof input.note === "string" ? input.note.trim().slice(0, 300) : "";
-  const purpose = input.purpose;
-
-  const ctx = await loadRequestContext(db, teamId, sponsorId);
-  if ("error" in ctx) return ctx;
-  const decision = decideRequest({ asked, cap: capOf(ctx, purpose), given: ctx.given, block: blockOf(ctx) });
+  const teamId = ctx.team.id;
+  const sponsorId = ctx.sponsor.id;
+  const block = blockOf(ctx);
+  const decision: RequestDecision = block || !purpose
+    ? { kind: "refused", refusal: block ?? "dislike" }
+    : decideRequest({ asked, cap: capOf(ctx, purpose), given: ctx.given, block: null });
   const granted = decision.kind === "refused" ? 0 : decision.amount;
   const refusal = decision.kind === "refused" ? decision.refusal : null;
   const checkDay = granted > 0 ? addDays(ctx.day, SPEND_DAYS) : null;
@@ -229,7 +229,7 @@ export async function submitRequest(
   const id = crypto.randomUUID();
   const gameDate = ctx.team.game_date ?? new Date().toISOString();
 
-  // Jedna prosba u majitele za herní den: druhé kliknutí nic nezapíše.
+  // Jedna prosba u majitele za herní den: druhá zpráva nic nezapíše ani nestrhne.
   const insert = db.prepare(
     `INSERT INTO sponsor_requests (id, team_id, sponsor_id, purpose, asked, granted, status, refusal, note, request_day, check_day, season)
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
@@ -240,7 +240,7 @@ export async function submitRequest(
   );
   const guard = { sql: "EXISTS (SELECT 1 FROM sponsor_requests WHERE id = ?)", params: [id] };
   const stmts: D1PreparedStatement[] = [insert];
-  if (granted > 0) {
+  if (granted > 0 && purpose) {
     stmts.push(
       db.prepare(`UPDATE teams SET budget = budget + ? WHERE id = ? AND ${guard.sql}`).bind(granted, teamId, ...guard.params),
       db.prepare(
@@ -259,15 +259,89 @@ export async function submitRequest(
   const results = await db.batch(stmts);
   if ((results[0]?.meta?.changes ?? 0) !== 1) return { error: "Dnes už jsi ho o peníze prosil", status: 409 };
 
-  const vars = { castka: decision.kind === "refused" ? asked : decision.amount, ucel: purpose, termin: checkDay ?? undefined, kdy: ctx.retryDay ?? undefined };
+  const vars = { castka: decision.kind === "refused" ? asked : decision.amount, ucel: purpose ?? undefined, termin: checkDay ?? undefined, kdy: ctx.retryDay ?? undefined };
   const reply = requestReplyText(decision.kind, ctx.owner.personality, vars, refusal, `request|${id}`);
-  await postOwnerMessages(db, teamId, ownerIdentity(ctx.owner, ctx.sponsor.name), [
-    { from: "coach", body: coachRequestText({ castka: asked, ucel: purpose }, note) },
-    { from: "owner", body: reply },
-  ], { coachName: ctx.team.name, unread: false });
-  logger.info({ module: M, teamId }, `prosba u firmy ${sponsorId}: ${purpose} ${asked} → ${decision.kind} ${granted}`);
-
+  await postOwnerMessages(db, teamId, ownerIdentity(ctx.owner, ctx.sponsor.name), [{ from: "owner", body: reply }],
+    { coachName: ctx.team.name, unread: false });
+  logger.info({ module: M, teamId }, `prosba u firmy ${sponsorId}: ${purpose ?? "-"} ${asked} → ${decision.kind} ${granted}`);
   return { kind: decision.kind, amount: granted, refusal, reply, checkDay, favorDelta };
+}
+
+/** Doptání majitele: čeho se týká, zůstane v metadatech zprávy pro další SMS trenéra. */
+const ASK_META = "sponsor_owner_ask";
+
+/**
+ * SMS trenéra majiteli firmy (zpráva už je uložená). Když jde o peníze, vyřídí prosbu:
+ * chybí-li částka nebo účel, majitel se doptá a další SMS se s tím spojí.
+ * Vrací false, když zpráva o peníze není a majitel na ni čeká jako na odpověď na svou SMS
+ * (pak ji má zpracovat handleOwnerSmsReply).
+ */
+export async function handleOwnerText(
+  db: D1Database, teamId: string, convId: string, sponsorId: number, text: string, threadActive: boolean,
+): Promise<boolean> {
+  // Poslední zpráva majitele za 24 h: když se doptával, nese rozpracovanou prosbu.
+  const prev = await db.prepare(
+    `SELECT metadata FROM messages WHERE conversation_id = ? AND sender_type = 'system'
+       AND sent_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')
+     ORDER BY sent_at DESC LIMIT 1`,
+  ).bind(convId).first<{ metadata: string | null }>();
+  let pending: { purpose: RequestPurpose | null; amount: number | null } | null = null;
+  if (prev?.metadata) {
+    try {
+      const m = JSON.parse(prev.metadata) as { type?: string; purpose?: unknown; amount?: unknown };
+      if (m.type === ASK_META) {
+        pending = { purpose: isRequestPurpose(m.purpose) ? m.purpose : null, amount: typeof m.amount === "number" ? m.amount : null };
+      }
+    } catch (e) {
+      logger.warn({ module: M, teamId }, `nečitelná metadata zprávy majitele ${sponsorId}`, e);
+    }
+  }
+
+  const parsed = parseRequestText(text);
+  if (!parsed.intent && !pending) {
+    if (threadActive) return false;
+    const ctx = await loadRequestContext(db, teamId, sponsorId);
+    if ("error" in ctx) return true;
+    await postOwnerMessages(db, teamId, ownerIdentity(ctx.owner, ctx.sponsor.name), [{ from: "owner", body: ownerSmallTalk(`talk|${convId}|${text}`) }],
+      { coachName: ctx.team.name, unread: false });
+    return true;
+  }
+
+  const ctx = await loadRequestContext(db, teamId, sponsorId);
+  if ("error" in ctx) {
+    logger.warn({ module: M, teamId }, `prosba u firmy ${sponsorId}: ${ctx.error}`);
+    return true;
+  }
+  const owner = ownerIdentity(ctx.owner, ctx.sponsor.name);
+  const say = (body: string, meta?: Record<string, unknown>) =>
+    postOwnerMessages(db, teamId, owner, [{ from: "owner", body, meta }], { coachName: ctx.team.name, unread: false });
+
+  const purpose = parsed.purpose ?? (parsed.purposes.length === 0 ? pending?.purpose ?? null : null);
+  const amount = parsed.amount ?? pending?.amount ?? null;
+  const note = text.trim().slice(0, 300);
+
+  // Kdo peníze letos nedá (porušená prosba, otravování, nechuť, cizí), odmítne hned, bez doptávání.
+  if (blockOf(ctx)) {
+    const res = await runRequest(db, ctx, purpose, amount ?? 0, note);
+    if ("error" in res) await say(ownerAlreadyAnswered(`dup|${convId}|${ctx.day}`));
+    return true;
+  }
+  const seed = `ask|${convId}|${text}`;
+  if (parsed.purposes.length > 1 && !purpose) {
+    await say(askText("which", null, seed), { type: ASK_META, purpose: null, amount });
+    return true;
+  }
+  if (!purpose) {
+    await say(askText(amount ? "purpose" : "both", null, seed), { type: ASK_META, purpose: null, amount });
+    return true;
+  }
+  if (amount === null || amount < MIN_ASK) {
+    await say(askText(amount === null ? "amount" : "tiny", purpose, seed), { type: ASK_META, purpose, amount: null });
+    return true;
+  }
+  const res = await runRequest(db, ctx, purpose, Math.min(amount, MAX_ASK), note);
+  if ("error" in res) await say(ownerAlreadyAnswered(`dup|${convId}|${ctx.day}`));
+  return true;
 }
 
 /**

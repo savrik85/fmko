@@ -16,7 +16,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     emoji: "🤲",
     title: "Prosba o příspěvek",
     items: [
-      "Majitele firmy můžeš poprosit o peníze na trenéra, přestup, vybavení, stadion nebo mládež. Tlačítko najdeš na stránce firmy i v telefonu.",
+      "Majitelům firem z okresu můžeš napsat SMS a poprosit o peníze na trenéra, přestup, vybavení, stadion nebo mládež. Stačí třeba „potřeboval bych 20 000 na přestup“. Najdeš je v adresáři telefonu.",
       "Kolik dá, záleží na tom, jak tě má rád, jestli s ním máš smlouvu a co ti už nedávno dal. Na kartě vidíš odhad.",
       "Ptát se nemusí vyplatit. Když odmítne, naštve ho to. Když ho otravuješ moc často, naštve ho to víc.",
       "Peníze přijdou hned, ale do 30 dní je musíš utratit na to, co jsi slíbil. Jinak se naštve pořádně a letos už nedá ani korunu.",
