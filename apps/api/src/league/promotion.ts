@@ -35,23 +35,20 @@ const LEVEL_ORDER: LeagueLevel[] = [
 ];
 
 const LEVEL_NAMES: Record<LeagueLevel, string> = {
-  okresni_soutez: "Okresní soutěž",
-  okresni_prebor: "Okresní přebor",
-  ib_trida: "I.B třída",
-  ia_trida: "I.A třída",
-  krajsky_prebor: "Krajský přebor",
+  okresni_soutez: "III. třídy",
+  okresni_prebor: "okresního přeboru",
+  ib_trida: "I.B třídy",
+  ia_trida: "I.A třídy",
+  krajsky_prebor: "krajského přeboru",
 };
 
 /**
  * Determine promotions and relegations at end of season.
  *
- * TODO: ZATÍM NEZAPOJENO. Hra postupy ani sestupy nemá — existuje jediná úroveň
- * soutěže (okresní přebor) a konec sezóny řeší `applySeasonRewards`, který to
- * říká explicitně ("BEZ postupů/sestupů"). Tenhle modul i `getPromotionEffects`
- * drží připravený design pro chvíli, kdy víc úrovní přibude.
- *
- * Pozor při zapojování: reputaci za postup/sestup je potřeba pouštět přes
- * `applyReputationDelta` (lib/reputation.ts), ať se zapíše i důvod do auditu.
+ * Zapojeno v rolloveru přes `applyDistrictPromotions` (league/district-promotion.ts):
+ * v okrese s přeborem i III. třídou se bere sestup z přeboru a postup z III. třídy,
+ * výsledky mířící na úroveň, kterou okres nemá (postup z přeboru do I.B třídy),
+ * volající zahodí. Reputace za postup/sestup jde přes `applyReputationDelta`.
  */
 export function calculatePromotions(
   standings: StandingEntry[],

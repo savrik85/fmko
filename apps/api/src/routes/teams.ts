@@ -21,6 +21,7 @@ import { generateSeasonCalendar } from "../season/calendar";
 import { pickOccupation } from "../generators/occupations";
 import { totalRounds, generateSchedule } from "../league/schedule";
 import { generateLeague } from "../league/league-generator";
+import { resolveDistrictSlot, getRunningSeason, LEAGUE_FULL_MESSAGE } from "../league/district-leagues";
 import { applyManagerModifiers } from "../generators/manager-effects";
 import { generateManagerAttributes } from "../generators/manager-generator";
 import { initTeamConversations } from "./messaging";
@@ -180,26 +181,17 @@ teamsRouter.post("/", async (c) => {
   const accessError = await districtAccess(c.env.DB, village.district as string, userId);
   if (accessError) return c.json({ error: accessError }, 403);
 
-  // Check if league in this district is full (no AI slots left)
-  // Must happen BEFORE creating team to avoid orphan rows + FK issues
+  // Je v okrese pro nový klub místo? Pravidlo (přebor → III. třída → plno) drží
+  // league/district-leagues.ts. Musí proběhnout PŘED vložením týmu, jinak by zbyly
+  // osiřelé řádky a FK problémy.
   const districtForCheck = village.district as string;
   const activeSeasonForCheck = await c.env.DB.prepare(
     "SELECT id FROM seasons WHERE status = 'active' LIMIT 1"
   ).first<{ id: string }>();
   if (activeSeasonForCheck) {
-    const leagueForCheck = await c.env.DB.prepare(
-      "SELECT id FROM leagues WHERE district = ? AND season_id = ? AND status = 'active' LIMIT 1"
-    ).bind(districtForCheck, activeSeasonForCheck.id).first<{ id: string }>();
-    if (leagueForCheck) {
-      const aiCountRow = await c.env.DB.prepare(
-        "SELECT COUNT(*) as cnt FROM teams WHERE league_id = ? AND user_id = 'ai'"
-      ).bind(leagueForCheck.id).first<{ cnt: number }>();
-      if ((aiCountRow?.cnt ?? 0) === 0) {
-        return c.json({
-          error: "league_full",
-          message: "Liga v tomto okrese je plná. Připravujeme nižší soutěž, kam se brzy budete moci zaregistrovat.",
-        }, 409);
-      }
+    const slotForCheck = await resolveDistrictSlot(c.env.DB, districtForCheck, activeSeasonForCheck.id, body.villageId);
+    if (slotForCheck.kind === "full") {
+      return c.json({ error: "league_full", message: slotForCheck.message }, 409);
     }
   }
 
@@ -427,12 +419,18 @@ teamsRouter.post("/", async (c) => {
     ).bind(uuid(), pid, teamId, season.id).run().catch((e) => logger.warn({ module: "teams" }, "insert initial contract", e));
   }
 
-  // Check if a league already exists in this district for current season
-  const existingLeague = await c.env.DB.prepare(
-    "SELECT id, name FROM leagues WHERE district = ? AND season_id = ? AND status = 'active' LIMIT 1"
-  ).bind(district, season.id).first<{ id: string; name: string }>();
-
-  if (existingLeague) {
+  // Kam se klub zařadí: převzetí AI týmu v nejvyšší lize, která ho má, nebo nová liga.
+  const slot = await resolveDistrictSlot(c.env.DB, district, season.id, body.villageId);
+  if (slot.kind === "full") {
+    // Závod dvou zakládání: kontrola nahoře prošla, mezitím místo zabral někdo jiný.
+    logger.error({ module: "teams" }, `league_full race condition for team ${teamId}`);
+    return c.json({ error: "league_full", message: slot.message }, 409);
+  }
+  // Sezóna už běží (některá liga odehrála zápas)? Nová liga pak čeká v přípravném
+  // období bez rozpisu, ten jí vytvoří rollover spolu s ostatními.
+  const runningSeason = await getRunningSeason(c.env.DB, season.number);
+  if (slot.kind === "join") {
+    const existingLeague = { id: slot.league.id, name: slot.league.name };
     // ── JOIN existing league: replace a random AI team ──
     const aiTeam = await c.env.DB.prepare(
       "SELECT id FROM teams WHERE league_id = ? AND user_id = 'ai' ORDER BY RANDOM() LIMIT 1"
@@ -546,13 +544,9 @@ teamsRouter.post("/", async (c) => {
         await c.env.DB.prepare("DELETE FROM teams WHERE id = ? AND id != ?").bind(oldId, teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
     } else {
-      // Safety net — should never reach here because we checked league fullness at the top.
-      // But if it does (race condition), fail safely.
+      // Safety net — AI tým zmizel mezi výběrem ligy a převzetím (souběžné zakládání).
       logger.error({ module: "teams" }, `league_full race condition for team ${teamId}`);
-      return c.json({
-        error: "league_full",
-        message: "Liga v tomto okrese je plná. Připravujeme nižší soutěž, kam se brzy budete moci zaregistrovat.",
-      }, 409);
+      return c.json({ error: "league_full", message: LEAGUE_FULL_MESSAGE }, 409);
     }
 
     // Sync game_date from existing league teams
@@ -567,7 +561,11 @@ teamsRouter.post("/", async (c) => {
       "SELECT COUNT(*) as cnt FROM matches WHERE league_id = ?"
     ).bind(existingLeague.id).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "teams" }, "count league matches", e); return { cnt: 0 }; });
 
-    if (!matchCount || matchCount.cnt === 0) {
+    if ((!matchCount || matchCount.cnt === 0) && runningSeason) {
+      // Přípravné období: liga čeká na rollover, jen se srovná herní čas s běžící sezónou.
+      await c.env.DB.prepare("UPDATE teams SET game_date = ?, season_start = ?, season_end = ? WHERE league_id = ?")
+        .bind(runningSeason.gameDate, runningSeason.seasonStart, runningSeason.seasonEnd, existingLeague.id).run();
+    } else if (!matchCount || matchCount.cnt === 0) {
       const leagueTeamIds = await c.env.DB.prepare(
         "SELECT id FROM teams WHERE league_id = ? ORDER BY name"
       ).bind(existingLeague.id).all().catch((e) => { logger.warn({ module: "teams" }, "fetch league teams for schedule", e); return { results: [] }; });
@@ -675,17 +673,24 @@ teamsRouter.post("/", async (c) => {
   // Ensure AI user exists (required for FK on AI team inserts)
   await c.env.DB.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('ai', 'ai@system', 'none')").run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
   const leagueId = uuid();
-  const LEAGUE_NAMES: Record<string, string> = { 'Praha': 'Přebor Prahy' };
-  const leagueName = LEAGUE_NAMES[district] ?? `Okresní přebor ${district}`;
+  const leagueLevel = slot.level;
+  const leagueName = slot.name;
 
   await c.env.DB.prepare(
-    "INSERT INTO leagues (id, season_id, district, name, level, status) VALUES (?, ?, ?, ?, 'okresni_prebor', 'active')"
-  ).bind(leagueId, season.id, district, leagueName).run();
+    "INSERT INTO leagues (id, season_id, district, name, level, status) VALUES (?, ?, ?, ?, ?, 'active')"
+  ).bind(leagueId, season.id, district, leagueName, leagueLevel).run();
 
   // Get all villages in same district for AI teams
-  const districtVillages = await c.env.DB.prepare(
+  // III. třída bere jen obce, které nepoužívá žádný senior tým (přebor si svoje drží).
+  const allDistrictVillages = await c.env.DB.prepare(
     "SELECT id as code, name, district, region as region_code, population, size as category FROM villages WHERE district = ? AND id != ?"
   ).bind(district, body.villageId).all();
+  const freeVillageIds = slot.villageIds ? new Set(slot.villageIds) : null;
+  const districtVillages = {
+    results: freeVillageIds
+      ? allDistrictVillages.results.filter((v) => freeVillageIds.has(v.code as string))
+      : allDistrictVillages.results,
+  };
 
   const playerVillage = {
     name: village.name as string,
@@ -711,6 +716,8 @@ teamsRouter.post("/", async (c) => {
     surnameData.surnames,
     { male: firstnameData.male },
     district,
+    undefined,
+    leagueName,
   );
 
   // Set league on player team
@@ -815,7 +822,13 @@ teamsRouter.post("/", async (c) => {
   const teamIds = leagueTeamIds.results.map((r) => r.id as string);
 
   step = "create-schedule";
-  if (teamIds.length >= 2) {
+  if (runningSeason) {
+    // Přípravné období: sezóna ostatních lig už běží, nová liga rozpis nedostane.
+    // Týmy dostanou sdílený herní čas běžící sezóny a rozpis jim vytvoří rollover.
+    await c.env.DB.prepare("UPDATE teams SET game_date = ?, season_start = ?, season_end = ? WHERE league_id = ?")
+      .bind(runningSeason.gameDate, runningSeason.seasonStart, runningSeason.seasonEnd, leagueId).run();
+    logger.info({ module: "teams" }, `liga ${leagueName} založena v přípravném období, rozpis vytvoří rollover`);
+  } else if (teamIds.length >= 2) {
     const schedule = generateSchedule(rng, teamIds.length);
     const calendar = generateSeasonCalendar(leagueId, season.number, new Date());
 
@@ -849,8 +862,11 @@ teamsRouter.post("/", async (c) => {
       await c.env.DB.prepare("UPDATE teams SET game_date = ? WHERE league_id = ?")
         .bind(firstMatch.toISOString(), leagueId).run();
     }
+  }
 
-    // Vytvoř U21 ligu + týmy + mirror rozpis (idempotentní)
+  // Vytvoř U21 ligu + týmy + mirror rozpis (idempotentní). V přípravném období
+  // vznikne liga i týmy bez zápasů, rozpis dorostu vytvoří rollover (krok 7).
+  if (teamIds.length >= 2) {
     try {
       const { backfillU21ForLeague } = await import("../league/u21-generator");
       const result = await backfillU21ForLeague(c.env.DB, leagueId, rng);
@@ -933,7 +949,8 @@ teamsRouter.post("/", async (c) => {
     village: village.name,
     playersCount: squad.length,
     leagueId,
-    leagueName: leagueSetup.name,
+    leagueName,
+    preseason: !!runningSeason,
   }, 201);
   } catch (e: any) {
     logger.error({ module: "teams", step }, "team creation failed", e);

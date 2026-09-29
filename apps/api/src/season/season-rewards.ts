@@ -1,7 +1,9 @@
 /**
  * Finanční odměny a změna reputace na konci sezóny — dle konečného pořadí.
  *
- * BEZ postupů/sestupů. 1. místo = největší odměna + nárůst reputace,
+ * Postupy a sestupy tu nejsou, řeší je rollover (league/district-promotion.ts) mezi
+ * okresním přeborem a III. třídou. Odměny zná i úroveň okresni_soutez (koeficient 0,85).
+ * 1. místo = největší odměna + nárůst reputace,
  * poslední = malá odměna + mírný pokles reputace.
  *
  * Idempotence: každá odměna má reference_id `season-{n}-rwd-{teamId}`;

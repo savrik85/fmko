@@ -56,6 +56,7 @@ const RUBRIKA: Record<string, string> = {
   post_match_interview: "Po zápase",
   season_opener: "Otevírák sezóny",
   season_wrap: "Ohlédnutí za sezónou",
+  league_movement: "Postupy a sestupy",
 };
 
 /** Vodorovný ukazatel povahové osy 0–100. */

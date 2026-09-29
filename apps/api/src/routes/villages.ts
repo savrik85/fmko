@@ -69,13 +69,11 @@ villagesRouter.get("/stats", async (c) => {
     regionCounts[r.region as string] = r.cnt as number;
   }
 
-  // Find districts where the active league has 0 AI slots left (= full)
-  const fullLeagueRows = await c.env.DB.prepare(
-    `SELECT l.district FROM leagues l
-     WHERE l.status = 'active'
-     AND (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id AND t.user_id = 'ai') = 0`
-  ).all().catch((e) => { logger.warn({ module: "villages" }, "fetch full leagues", e); return { results: [] }; });
-  const fullDistricts: string[] = (fullLeagueRows.results as Array<{ district: string }>).map((r) => r.district);
+  // Okresy, kam se nový klub nevejde: přebor i III. třída bez AI týmů, nebo na
+  // III. třídu nezbývá dost volných obcí. Pravidlo drží league/district-leagues.ts.
+  const { listFullDistricts } = await import("../league/district-leagues");
+  const fullDistricts: string[] = await listFullDistricts(c.env.DB)
+    .catch((e) => { logger.warn({ module: "villages" }, "fetch full districts", e); return [] as string[]; });
 
   return c.json({ villageCounts, districtCounts, regionCounts, fullDistricts });
 });

@@ -6,6 +6,7 @@
 import type { Rng } from "../generators/rng";
 import { generateAITeams, type AITeam } from "./ai-teams";
 import { generateSchedule, totalRounds, type ScheduledMatch } from "./schedule";
+import { districtLeagueName } from "./district-leagues";
 
 export interface LeagueSetup {
   name: string;
@@ -46,6 +47,8 @@ export function generateLeague(
   firstnameData: { male: Record<string, Record<string, number>> },
   district: string,
   season: string = "2024/2025",
+  /** Jméno ligy od volajícího (III. třída). Bez něj okresní přebor. */
+  leagueNameOverride?: string,
 ): LeagueSetup {
   // League size: 12-16 teams depending on available villages
   const targetSize = Math.min(14, Math.max(12, districtVillages.length + 1));
@@ -92,9 +95,8 @@ export function generateLeague(
   const schedule = generateSchedule(rng, actualSize);
   const rounds = totalRounds(actualSize);
 
-  // League name — Praha has its own naming convention
-  const LEAGUE_NAMES: Record<string, string> = { 'Praha': 'Přebor Prahy' };
-  const leagueName = LEAGUE_NAMES[district] ?? `Okresní přebor ${district}`;
+  // Jméno ligy — pravidla (Praha, III. třída) drží district-leagues.ts
+  const leagueName = leagueNameOverride ?? districtLeagueName(district, "okresni_prebor");
 
   return {
     name: leagueName,

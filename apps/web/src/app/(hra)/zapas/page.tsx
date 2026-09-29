@@ -20,6 +20,7 @@ import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/s
 import { LineupPreview, type CardRisk } from "@/components/LineupPreview";
 import { useOpenOnDesktop } from "@/components/ui";
 import { splitBench } from "@/lib/bench";
+import { PreseasonNotice } from "@/components/team/preseason-notice";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 
@@ -488,7 +489,7 @@ function MatchPage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!nextMatch) return (
-    <div className="page-container"><div className="card p-8 text-center">
+    <div className="page-container space-y-4"><PreseasonNotice /><div className="card p-8 text-center">
       <p className="font-heading font-bold text-xl mb-2">Žádný naplánovaný zápas</p>
       <Link href="/liga?tab=rozpis" className="btn btn-primary">Zobrazit rozpis</Link>
     </div></div>

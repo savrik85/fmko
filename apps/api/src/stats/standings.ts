@@ -23,6 +23,8 @@ export interface StandingEntry {
 export async function calculateStandings(
   db: D1Database,
   leagueId: string,
+  /** Konkrétní sezóna. Bez ní se bere nejvyšší sezóna v kalendáři ligy. */
+  seasonNumber?: number,
 ): Promise<StandingEntry[]> {
   // Get all teams in league
   const teamsResult = await db.prepare(
@@ -40,13 +42,20 @@ export async function calculateStandings(
   // league_id se reusuje napříč sezónami, takže bez filtru na season_number
   // by se do tabulky počítaly i staré odehrané sezóny. JOIN na season_calendar
   // zároveň implicitně vyžaduje calendar_id IS NOT NULL.
-  const matches = await db.prepare(
-    `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score
-     FROM matches m
-     JOIN season_calendar sc ON sc.id = m.calendar_id
-     WHERE m.league_id = ? AND m.status = 'simulated'
-       AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)`
-  ).bind(leagueId, leagueId).all();
+  const matches = seasonNumber != null
+    ? await db.prepare(
+      `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score
+       FROM matches m
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+       WHERE m.league_id = ? AND m.status = 'simulated' AND sc.season_number = ?`
+    ).bind(leagueId, seasonNumber).all()
+    : await db.prepare(
+      `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score
+       FROM matches m
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+       WHERE m.league_id = ? AND m.status = 'simulated'
+         AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)`
+    ).bind(leagueId, leagueId).all();
 
   for (const m of matches.results) {
     const hid = m.home_team_id as string;
