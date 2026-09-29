@@ -6,7 +6,10 @@ import type { RequestPurpose } from "./requests";
 
 export interface ParsedRequest {
   amount: number | null;
-  /** Poznaný účel; null = žádný nebo víc různých (viz `purposes`). */
+  /**
+   * Poznaný účel; při víc účelech ten zmíněný naposled. V „složil jsem zkoušku z tréninku
+   * mládeže a chci na Licenci C" popisuje mládež minulost, žádá se o licenci.
+   */
   purpose: RequestPurpose | null;
   purposes: RequestPurpose[];
   /** Jde vůbec o peníze? (částka, účel nebo slova jako příspěvek, peníze) */
@@ -50,11 +53,17 @@ export function parseAmount(norm: string): number | null {
 
 export function parseRequestText(text: string): ParsedRequest {
   const norm = normalize(text);
-  const purposes = (Object.keys(PURPOSE_PATTERNS) as RequestPurpose[]).filter((p) => PURPOSE_PATTERNS[p].test(norm));
+  const lastAt = new Map<RequestPurpose, number>();
+  for (const p of Object.keys(PURPOSE_PATTERNS) as RequestPurpose[]) {
+    const re = new RegExp(PURPOSE_PATTERNS[p].source, "g");
+    for (const m of norm.matchAll(re)) lastAt.set(p, m.index ?? 0);
+  }
+  const purposes = [...lastAt.keys()];
+  const latest = [...lastAt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   const amount = parseAmount(norm);
   return {
     amount,
-    purpose: purposes.length === 1 ? purposes[0] : null,
+    purpose: latest,
     purposes,
     intent: amount !== null || purposes.length > 0 || MONEY_WORDS.test(norm),
   };

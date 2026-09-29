@@ -469,28 +469,34 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
   // Vůdce fanouškovské party čeká na odpověď. Používá stejné sloupce jako AI
   // thready hráčů, jen s vlastním `kind` — a vyhodnocuje se bez modelu.
-  // Majitel firmy: SMS o peníze vyřídí prosba o příspěvek (sponsors/requests-db.ts), jinak
-  // jde o odpověď na jeho vlastní SMS níž.
-  let ownerHandled = false;
+  // Majitel firmy odpovídá jako hráč: za pár sekund, mezitím „píše…" (sponsors/owner-typing.ts).
+  // SMS o peníze vyřídí prosba o příspěvek (requests-db.ts), jinak jde o odpověď na jeho SMS.
   // Tlačítko hotové odpovědi (optionId) je vždy odpověď na jeho SMS, ne prosba.
-  if (conv?.type === "system" && conv.participant_id?.startsWith("so-") && typeof body.optionId !== "string") {
-    const sponsorId = Number(conv.participant_id.slice(3));
-    if (Number.isInteger(sponsorId)) {
-      const { handleOwnerText } = await import("../sponsors/requests-db");
-      ownerHandled = await handleOwnerText(c.env.DB, teamId, convId, sponsorId, body.body.trim(), conv.ai_thread_active === 1)
-        .catch((e) => { logger.warn({ module: "messaging" }, "SMS majiteli firmy", e); return false; });
+  const ownerSponsorId = conv?.type === "system" && conv.participant_id?.startsWith("so-")
+    ? Number(conv.participant_id.slice(3)) : null;
+  if (ownerSponsorId !== null && Number.isInteger(ownerSponsorId)) {
+    const text = body.body.trim();
+    const optionId = typeof body.optionId === "string" ? body.optionId : null;
+    const { claimOwnerTyping, replyAfterTyping } = await import("../sponsors/owner-typing");
+    const claimed = await claimOwnerTyping(c.env.DB, convId)
+      .catch((e) => { logger.warn({ module: "messaging" }, "majitel firmy píše", e); return false; });
+    if (claimed) {
+      c.executionCtx.waitUntil(replyAfterTyping(c.env.DB, convId, text, async (threadActive) => {
+        let handled = false;
+        if (optionId === null) {
+          const { handleOwnerText } = await import("../sponsors/requests-db");
+          handled = await handleOwnerText(c.env.DB, teamId, convId, ownerSponsorId, text, threadActive);
+        }
+        if (!handled && threadActive) {
+          const { handleOwnerSmsReply } = await import("../sponsors/owner-sms");
+          await handleOwnerSmsReply(c.env.DB, convId, text, optionId);
+        }
+      }).catch((e) => logger.warn({ module: "messaging" }, "odpověď majitele firmy", e)));
     }
-  }
-
-  if (conv?.type === "system" && conv.ai_thread_active === 1 && !ownerHandled) {
+  } else if (conv?.type === "system" && conv.ai_thread_active === 1) {
     const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
     await handleFanLeaderReply(c.env.DB, convId, body.body.trim())
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď vůdci fanoušků", e));
-    // Majitel firmy: stejné sloupce, `kind = "sponsor_owner"`, bez modelu. Cizí vlákno obě
-    // funkce poznají a vrátí false, pořadí proto nevadí.
-    const { handleOwnerSmsReply } = await import("../sponsors/owner-sms");
-    await handleOwnerSmsReply(c.env.DB, convId, body.body.trim(), typeof body.optionId === "string" ? body.optionId : null)
-      .catch((e) => logger.warn({ module: "messaging" }, "odpověď majiteli firmy", e));
   }
 
   if (conv?.type === "manager" && conv.participant_id) {

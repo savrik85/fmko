@@ -272,7 +272,7 @@ export default function ConversationPage() {
   const lzePsat = isGroup || canReply;
   // Tlačítka jen dokud majitel čeká odpověď.
   // Hledá se zpětně: za čekající SMS mohla přibýt výměna o příspěvek (bez tlačítek).
-  const nabidkaOdpovedi = !isGroup && aiThreadActive && canReply
+  const nabidkaOdpovedi = !isGroup && aiThreadActive && canReply && !cekaSeNaHrace
     ? (messages.slice().reverse().map(ownerOptionsOf).find((o) => o.length > 0) ?? [])
     : [];
   // Majitel firmy — jméno v hlavičce vede na jeho stránku (`participantId` = `so-{sponsorId}`).
@@ -654,7 +654,7 @@ export default function ConversationPage() {
             onChange={(e) => setNewMsg(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
             placeholder={
-              cekaSeNaHrace ? "Hráč píše…"
+              cekaSeNaHrace ? (ownerSponsorId ? "Píše…" : "Hráč píše…")
                 : nemaNaSms ? "Došel kredit"
                   : ownerSponsorId ? "Třeba: 20 000 na přestup"
                   : jeImessage ? "iMessage"

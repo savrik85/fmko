@@ -316,7 +316,7 @@ export async function handleOwnerText(
   const say = (body: string, meta?: Record<string, unknown>) =>
     postOwnerMessages(db, teamId, owner, [{ from: "owner", body, meta }], { coachName: ctx.team.name, unread: false });
 
-  const purpose = parsed.purpose ?? (parsed.purposes.length === 0 ? pending?.purpose ?? null : null);
+  const purpose = parsed.purpose ?? pending?.purpose ?? null;
   const amount = parsed.amount ?? pending?.amount ?? null;
   const note = text.trim().slice(0, 300);
 
@@ -327,10 +327,6 @@ export async function handleOwnerText(
     return true;
   }
   const seed = `ask|${convId}|${text}`;
-  if (parsed.purposes.length > 1 && !purpose) {
-    await say(askText("which", null, seed), { type: ASK_META, purpose: null, amount });
-    return true;
-  }
   if (!purpose) {
     await say(askText(amount ? "purpose" : "both", null, seed), { type: ASK_META, purpose: null, amount });
     return true;

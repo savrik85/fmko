@@ -5,6 +5,7 @@ import {
 } from "./requests";
 import { askText, ownerAlreadyAnswered, ownerSmallTalk, requestCheckText, requestReplyText } from "./request-texts";
 import { parseAmount, parseRequestText, normalize } from "./request-parse";
+import { ownerReplyDelayMs } from "./owner-typing";
 import type { OwnerPersonality } from "./owners";
 
 const BASE = { monthlyB: 40000, favor: 60, relation: "main" as const, personality: "fan" as const, purpose: "equipment" as const };
@@ -102,7 +103,7 @@ describe("texty prosby", () => {
     }
   });
   it("doptávání a ostatní odpovědi bez značek a dlouhých pomlček", () => {
-    for (const kind of ["purpose", "amount", "both", "which", "tiny"] as const) {
+    for (const kind of ["purpose", "amount", "both", "tiny"] as const) {
       for (let i = 0; i < 6; i++) {
         const t = askText(kind, "stadium", `a${i}`);
         expect(t).not.toMatch(/[—{}]/);
@@ -137,13 +138,28 @@ describe("prosba z SMS", () => {
     expect(parseRequestText("oprava tribuny").purpose).toBe("stadium");
     expect(parseRequestText("na dorost").purpose).toBe("youth");
   });
-  it("víc účelů najednou = nejasné, majitel se doptá", () => {
+  it("víc účelů v jedné zprávě: platí ten zmíněný naposled", () => {
     const p = parseRequestText("na dresy a na stadion");
-    expect(p.purpose).toBeNull();
+    expect(p.purpose).toBe("stadium");
     expect(p.purposes.sort()).toEqual(["equipment", "stadium"]);
+  });
+  it("skutečná zpráva z produkce: mládež je minulost, žádá se o licenci", () => {
+    const p = parseRequestText("Dobrý den, dnes jsem úspěšně složil zkoušku z tréninku mládeže, chci sebe a celý klub nadále posouvat a potřeboval bych proto ve studiu pokračovat a chci se zapsat an Licenci C, ale nemáme aktuálně dostatek prostředků. Nemohl byste prosím něco uvolnit?");
+    expect(p.purpose).toBe("coach");
+    expect(p.intent).toBe(true);
+    expect(p.amount).toBeNull();
+    expect(parseRequestText("Na Licenci jsem psal").purpose).toBe("coach");
   });
   it("záměr: peníze bez účelu i částky se poznají, pozdrav ne", () => {
     expect(parseRequestText("Nemohl byste nás podpořit?").intent).toBe(true);
     expect(parseRequestText("Dobrý den, jak se máte?").intent).toBe(false);
+  });
+});
+
+describe("prodleva odpovědi majitele", () => {
+  it("jako u hráčů: 2,5 až 14 s, delší zpráva trvá déle", () => {
+    expect(ownerReplyDelayMs("ok", 0)).toBeGreaterThanOrEqual(2500);
+    expect(ownerReplyDelayMs("x".repeat(2000), 1)).toBeLessThanOrEqual(14000);
+    expect(ownerReplyDelayMs("x".repeat(200), 0.5)).toBeGreaterThan(ownerReplyDelayMs("x", 0.5));
   });
 });
