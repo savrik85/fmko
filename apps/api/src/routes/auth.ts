@@ -181,6 +181,7 @@ authRouter.post("/login", async (c) => {
       nextMatch: teamId && team?.league_id
         ? await getNextMatch(c.env.DB, teamId, team.league_id as string, team.game_date as string | null)
         : null,
+      preseason: team?.league_id ? await loadPreseason(c.env.DB, team.league_id as string) : null,
     },
   });
 });
@@ -256,8 +257,16 @@ authRouter.get("/me", async (c) => {
     nextMatch: team?.id && team?.league_id
       ? await getNextMatch(c.env.DB, team.id as string, team.league_id as string, team.game_date as string | null)
       : null,
+    preseason: team?.league_id ? await loadPreseason(c.env.DB, team.league_id as string) : null,
   });
 });
+
+/** Liga v přípravném období (bez zápasů, ostatní ligy hrají). Chyba nesmí shodit /me. */
+async function loadPreseason(db: D1Database, leagueId: string) {
+  const { getLeaguePreseason } = await import("../league/district-leagues");
+  return getLeaguePreseason(db, leagueId)
+    .catch((e) => { logger.warn({ module: "auth" }, "přípravné období ligy", e); return null; });
+}
 
 // POST /auth/change-password — change own password
 authRouter.post("/change-password", async (c) => {

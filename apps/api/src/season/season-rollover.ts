@@ -5,7 +5,9 @@
  * sdílený `game_date` napříč všemi ligami (sezóna je globální, ne per-liga).
  * Staré zápasy/kalendář zůstávají (historie); season-aware standings je ignoruje.
  *
- * Mirror logiky z bootstrap-league (game.ts), BEZ tvorby AI týmů.
+ * Mirror logiky z bootstrap-league (game.ts), BEZ tvorby AI týmů. Před rozpisem proběhne
+ * postup a sestup mezi okresním přeborem a III. třídou (`league/district-promotion.ts`).
+ * Rozpis dostane i liga založená v přípravném období (bez zápasů staré sezóny).
  * U21 má vlastní lifecycle v `u21-lifecycle.ts` — volá se odsud pod markerem `u21_aging`.
  */
 
@@ -107,6 +109,17 @@ export async function rolloverAllLeagues(
       WHERE status = 'pending' AND expires_at > ?`
   ).bind(gameExpiry(startIso, 7), gameExpiry(startIso, 2), startIso).run()
     .catch((e) => logger.warn({ module: "season-rollover" }, "přerazítkování expirace rozhovorů", e));
+
+  // 2b. Postup a sestup mezi okresním přeborem a III. třídou (2 ↔ 2), vč. U21 rezerv.
+  //     MUSÍ být před krokem 3: tabulky se počítají za starou sezónu a týmy mají sedět
+  //     v nové lize dřív, než jí vznikne rozpis. Idempotentní přes marker per okres.
+  try {
+    const { applyDistrictPromotions } = await import("../league/district-promotion");
+    const moves = await applyDistrictPromotions(db, oldSeasonNumber, startIso);
+    if (moves.length > 0) logger.info({ module: "season-rollover" }, `postupy a sestupy: ${moves.length} okresů`);
+  } catch (e) {
+    logger.error({ module: "season-rollover" }, "postupy a sestupy selhaly", e);
+  }
 
   // 3. Roll každou senior ligu se SDÍLENÝM startem
   const leagues = await db.prepare("SELECT id FROM leagues WHERE league_type = 'senior'").all<{ id: string }>()

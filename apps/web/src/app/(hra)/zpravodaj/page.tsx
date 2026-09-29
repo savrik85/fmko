@@ -946,6 +946,7 @@ function rubrikaProTyp(type: string): string {
     case "round_summary": return "🏆 Hráč a trenér kola";
     case "season_opener": return "🎺 Otevírák sezóny";
     case "season_wrap": return "📜 Ohlédnutí za sezónou";
+    case "league_movement": return "Postupy a sestupy";
     case "ai_report": return "Komentář kola";
     case "match": return "Zápasová zpráva";
     case "standing": return "Tabulka";

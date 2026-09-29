@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner } from "@/components/ui";
+import { PreseasonNotice } from "@/components/team/preseason-notice";
 
 interface UpcomingEvent {
   type: "match" | "training" | "seasonal";
@@ -75,6 +76,7 @@ export default function CalendarPage() {
 
   return (
     <div className="page-container space-y-4">
+      <PreseasonNotice />
 
       {/* Season progress — compact */}
       <div className="card px-4 py-3">

@@ -27,6 +27,7 @@ export type ReputationSource =
   | "decay"             // útlum za dlouhou nečinnost
   | "press"             // jak o klubu píše okresní zpravodaj
   | "incident"          // klubový incident (útěk s penězi apod.)
+  | "promotion"         // postup / sestup mezi okresními soutěžemi
   | "admin";
 
 /**

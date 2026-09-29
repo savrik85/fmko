@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
 import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { PreseasonNotice } from "@/components/team/preseason-notice";
 
 interface ScheduleMatch {
   id: string;
@@ -165,6 +166,7 @@ export default function SchedulePage() {
       {confirmDialog}
       <PageHeader compact name={leagueName || "Rozpis zápasů"} detail={`${played.length} odehráno · ${upcoming.length} zbývá`}>{null}</PageHeader>
     <div className="page-container space-y-5">
+      <PreseasonNotice />
 
       {/* Tabs */}
       <Tabs

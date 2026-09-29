@@ -7,6 +7,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { PreseasonNotice } from "@/components/team/preseason-notice";
 
 // ═══ Types ═══
 
@@ -281,6 +282,7 @@ function LigaPage() {
     <>
     <PageHeader compact name={displayName} detail={ctx.district ? `Okres ${ctx.district}` : undefined} badge={null}>{null}</PageHeader>
     <div className="page-container space-y-5">
+      {!isOtherLeague && <PreseasonNotice />}
 
       {/* Přepínače — liga + sezóna na jednom řádku */}
       {/* Dva sloupce: na 375 px se popisek + select vedle sebe nevesly

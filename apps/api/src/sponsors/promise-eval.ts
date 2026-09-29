@@ -30,8 +30,8 @@ export function isPromiseStatus(v: unknown): v is PromiseStatus {
 }
 
 /**
- * Postupová a sestupová místa. Hra postupy zatím nemá (league/promotion.ts,
- * calculatePromotions je nezapojené), slib se ale měří stejnými zónami jako ambition.ts:
+ * Postupová a sestupová místa. Skutečný postup a sestup (2 ↔ 2) probíhá jen v okresech
+ * s přeborem i III. třídou (league/district-promotion.ts), slib se ale měří stejnými zónami jako ambition.ts:
  * PROMOTION_SPOTS a RELEGATION_SPOTS, žádná vlastní čísla.
  */
 export const PROMOTION_PLACES = PROMOTION_SPOTS;
