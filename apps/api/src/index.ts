@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { registrationRouter } from "./routes/registration";
+import { publicLandingRouter } from "./routes/public-landing";
 import { authRouter } from "./routes/auth";
 import { villagesRouter } from "./routes/villages";
 import { teamsRouter } from "./routes/teams";
@@ -94,6 +95,7 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.route("/auth", authRouter);
 app.route("/api/registration", registrationRouter);
+app.route("/api/public", publicLandingRouter);
 app.route("/api/villages", villagesRouter);
 app.route("/api/teams", teamsRouter);
 app.route("/api", matchesRouter);
