@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { RegistrationDistrict } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import styles from "./landing.module.css";
@@ -12,6 +11,7 @@ type LandingData = {
   stats: { matches: number; players: number; villages: number; districts: number };
   results: Array<{ home: string; away: string; homeScore: number; awayScore: number; league: string; at: string }>;
   headlines: Array<{ headline: string; league: string; type: string }>;
+  districts: Array<{ name: string; villages: number; managers: number; founderFree: boolean }>;
 };
 
 const HEADLINE_LABEL: Record<string, string> = {
@@ -50,13 +50,12 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
   const { teamId, isLoading } = useTeam();
   const router = useRouter();
   const [data, setData] = useState<LandingData | null>(null);
-  const [districts, setDistricts] = useState<RegistrationDistrict[]>([]);
   useEffect(() => { if (redirectPlayers && !isLoading && teamId) router.replace("/prehled"); }, [redirectPlayers, teamId, isLoading, router]);
   useEffect(() => {
     apiFetch<LandingData>("/api/public/landing").then(setData).catch((e) => console.warn("Data ze hry pro úvod se nenačetla:", e));
-    apiFetch<RegistrationDistrict[]>("/api/registration/districts").then(setDistricts).catch((e) => console.warn("Okresy pro úvod se nenačetly:", e));
   }, []);
-  const ready = districts.filter((d) => d.status === "ready");
+  const freeDistricts = data?.districts.filter((d) => d.founderFree) ?? [];
+  const playedDistricts = data?.districts.filter((d) => !d.founderFree) ?? [];
 
   return <main className={styles.site}>
     <header className={styles.nav}>
@@ -115,9 +114,24 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
 
     <section id="okresy" className={styles.steps} aria-labelledby="districts-title">
       <div className={styles.sectionTop}><p className={styles.eyebrow}>KDE SE UŽ HRAJE</p><h2 id="districts-title">Vyber svůj okres.</h2></div>
-      {ready.length > 0 && <ul className={styles.districtList}>{ready.map((d) => <li key={d.name}>
-        <Link href={`/registrace?okres=${encodeURIComponent(d.name)}`}><strong>{d.name}</strong><span>{d.founderFree ? "Zaber jako první a veď ligu" : "Hraj hned"} ↗</span></Link>
-      </li>)}</ul>}
+      {freeDistricts.length > 0 && <div className={styles.freeDistricts}>{freeDistricts.map((d) => (
+        <Link key={d.name} href={`/registrace?okres=${encodeURIComponent(d.name)}`} className={styles.freeCard}>
+          <span className={styles.freeTag}>Volný okres</span>
+          <strong>{d.name}</strong>
+          <span className={styles.freeMeta}>{d.villages} obcí s fotbalovým klubem · zatím bez manažerů</span>
+          <span className={styles.freeCta}>Zaber jako první a veď ligu <span aria-hidden="true">↗</span></span>
+        </Link>
+      ))}</div>}
+      {playedDistricts.length > 0 && <div className={styles.playedBlock}>
+        <p className={styles.playedTitle}>Už se hraje</p>
+        <ul className={styles.playedList}>{playedDistricts.map((d) => <li key={d.name}>
+          <Link href={`/registrace?okres=${encodeURIComponent(d.name)}`}>
+            <strong>{d.name}</strong>
+            <span className={styles.playedMeta}>{d.managers >= 5 ? `${d.managers} manažerů` : "Volná místa v lize"} · {d.villages} obcí</span>
+            <span className={styles.playedCta}>Přidat se <span aria-hidden="true">→</span></span>
+          </Link>
+        </li>)}</ul>
+      </div>}
       <div className={styles.localNote}><strong>Váš okres tu není?</strong><p>Pošli žádost. Připravíme skutečné obce, místní příjmení a firmy z vašeho okolí a ozveme se, jakmile bude okres připravený. Kdo žádost pošle první, povede tamní ligu jako předseda. <Link href="/registrace" className={styles.inlineLink}>Poslat žádost</Link></p></div>
     </section>
 

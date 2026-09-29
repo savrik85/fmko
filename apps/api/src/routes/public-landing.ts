@@ -9,7 +9,7 @@ import { logger } from "../lib/logger";
  */
 export const publicLandingRouter = new Hono<{ Bindings: Bindings }>();
 
-const CACHE_KEY = "public-landing:v1";
+const CACHE_KEY = "public-landing:v2";
 const CACHE_TTL_S = 600;
 /** Rubriky psané o vymyšlených hráčích a klubech, ne o lidech za klávesnicí. */
 const SAFE_NEWS_TYPES = ["ai_report", "player_interview", "ultras_report", "season_wrap", "celebrity_arrival", "legend_farewell"];
@@ -18,6 +18,7 @@ export interface LandingData {
   stats: { matches: number; players: number; villages: number; districts: number };
   results: Array<{ home: string; away: string; homeScore: number; awayScore: number; league: string; at: string }>;
   headlines: Array<{ headline: string; league: string; type: string }>;
+  districts: Array<{ name: string; villages: number; managers: number; founderFree: boolean }>;
 }
 
 /** Slova ze jmen manažerů (4+ znaky), podle kterých se vyřadí titulek. */
@@ -73,8 +74,18 @@ async function loadLandingData(db: D1Database): Promise<LandingData> {
     return true;
   }).slice(0, 4);
 
+  const districts = await db.prepare(`SELECT d.district AS name,
+        (SELECT COUNT(*) FROM villages v WHERE v.district = d.district) AS villages,
+        (SELECT COUNT(DISTINCT t.user_id) FROM teams t JOIN villages v ON v.id = t.village_id
+          WHERE v.district = d.district AND t.user_id <> 'ai' AND COALESCE(t.team_type, 'senior') <> 'u21') AS managers,
+        d.founder_request_id IS NULL AND d.founder_team_id IS NULL AS founderFree
+      FROM district_registrations d WHERE d.status = 'ready' ORDER BY d.district`)
+    .all<{ name: string; villages: number; managers: number; founderFree: number }>();
+
   return {
     stats: stats ?? { matches: 0, players: 0, villages: 0, districts: 0 },
+    // Volný = bez zakladatele i bez lidských klubů; první hráč v něm povede ligu.
+    districts: districts.results.map((d) => ({ ...d, founderFree: Boolean(d.founderFree) && d.managers === 0 })),
     results: results.results,
     headlines,
   };
