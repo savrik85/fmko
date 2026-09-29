@@ -14,6 +14,7 @@ import { FAVOR_REASONS } from "./favor-math";
 import { activeSeason, loadNegotiationSponsor, loadNegotiationTeam, type NegotiationSponsor, type NegotiationTeam } from "./negotiation-db";
 import { addDays, dayDiff } from "./owner-sms-rules";
 import { askText, ownerAlreadyAnswered, ownerSmallTalk, requestCheckText, requestReplyText } from "./request-texts";
+import { dayMonth, extractMoneyAsk, kc, writeOwnerReply, type OwnerChatEnv, type OwnerChatFacts } from "./owner-chat";
 import { parseRequestText } from "./request-parse";
 import {
   BROKEN_FAVOR, decideRequest, exhaustedBelow, isRequestPurpose, MAX_ASK, MIN_ASK, PURPOSE_LABELS, PURPOSE_SPEND_TYPES, REPEAT_DAYS,
@@ -210,12 +211,12 @@ function ownerIdentity(owner: SponsorOwner, firmName: string): OwnerIdentity {
 }
 
 /**
- * Zapíše prosbu a odpověď majitele. Zprávu trenéra už uložila routa telefonu, sem jde jen
- * odpověď. `purpose` je null jen u prosby, kterou majitel odmítá předem (blok), tam na účelu nezáleží.
+ * Zapíše prosbu (peníze, transakce, náklonnost) a vrátí rozhodnutí. Odpověď majitele píše
+ * volající. `purpose` je null jen u prosby, kterou majitel odmítá předem (blok).
  */
 async function runRequest(
   db: D1Database, ctx: RequestContext, purpose: RequestPurpose | null, asked: number, note: string,
-): Promise<RequestResult | Fail> {
+): Promise<(RequestResult & { id: string; asked: number; purpose: RequestPurpose | null }) | Fail> {
   const teamId = ctx.team.id;
   const sponsorId = ctx.sponsor.id;
   const block = blockOf(ctx);
@@ -261,23 +262,59 @@ async function runRequest(
 
   const vars = { castka: decision.kind === "refused" ? asked : decision.amount, ucel: purpose ?? undefined, termin: checkDay ?? undefined, kdy: ctx.retryDay ?? undefined };
   const reply = requestReplyText(decision.kind, ctx.owner.personality, vars, refusal, `request|${id}`);
-  await postOwnerMessages(db, teamId, ownerIdentity(ctx.owner, ctx.sponsor.name), [{ from: "owner", body: reply }],
-    { coachName: ctx.team.name, unread: false });
   logger.info({ module: M, teamId }, `prosba u firmy ${sponsorId}: ${purpose ?? "-"} ${asked} → ${decision.kind} ${granted}`);
-  return { kind: decision.kind, amount: granted, refusal, reply, checkDay, favorDelta };
+  return { id, asked, purpose, kind: decision.kind, amount: granted, refusal, reply, checkDay, favorDelta };
 }
 
 /** Doptání majitele: čeho se týká, zůstane v metadatech zprávy pro další SMS trenéra. */
 const ASK_META = "sponsor_owner_ask";
 
+/** Co má model v odpovědi sdělit podle rozhodnutí hry, a co v ní musí přesně být. */
+function decisionInstruction(
+  ctx: RequestContext, r: { kind: RequestResult["kind"]; amount: number; refusal: RequestRefusal | null; checkDay: string | null; asked: number; purpose: RequestPurpose | null },
+): { text: string; amounts: number[]; days: string[] } {
+  const label = r.purpose ? PURPOSE_LABELS[r.purpose] : "";
+  if (r.kind === "granted" && r.checkDay) {
+    return {
+      text: `Vyhovíš mu: pošleš mu ${kc(r.amount)} na ${label}. Řekni tu částku. Připomeň, že do ${dayMonth(r.checkDay)} chceš vidět, že peníze šly opravdu na ${label}, jinak se naštveš.`,
+      amounts: [r.amount], days: [r.checkDay],
+    };
+  }
+  if (r.kind === "partial" && r.checkDay) {
+    return {
+      text: `Chtěl ${kc(r.asked)}, tolik mu nedáš. Pošleš mu jen ${kc(r.amount)} na ${label}, víc teď ne. Řekni tu částku. Připomeň, že do ${dayMonth(r.checkDay)} chceš vidět, že peníze šly opravdu na ${label}.`,
+      amounts: [r.amount], days: [r.checkDay],
+    };
+  }
+  switch (r.refusal) {
+    case "broken": return { text: "Odmítni. Minule tvoje peníze utratil za něco jiného, než slíbil, a letos už mu nedáš nic.", amounts: [], days: [] };
+    case "too_soon": return { text: "Odmítni. O peníze tě žádal před pár dny a otravuje tě to, ať se ozve za nějaký čas.", amounts: [], days: [] };
+    case "dislike": return { text: "Odmítni. S jeho klubem teď nemáš dobrý vztah a peníze mu nedáš.", amounts: [], days: [] };
+    case "stranger": return { text: "Odmítni zdvořile. Nejsi sponzor jeho klubu a nefandíš mu natolik, abys mu dával peníze.", amounts: [], days: [] };
+    case "exhausted": return ctx.retryDay
+      ? { text: `Odmítni. Poslední dobou jsi mu dal dost. Zkusit to může po ${dayMonth(ctx.retryDay)}.`, amounts: [], days: [ctx.retryDay] }
+      : { text: "Odmítni. Na tohle teď peníze nemáš.", amounts: [], days: [] };
+    default: return { text: "Odmítni.", amounts: [], days: [] };
+  }
+}
+
+const ASK_INSTRUCTION: Record<"purpose" | "amount" | "both" | "tiny", (label: string) => string> = {
+  purpose: () => "Zatím nevíš, na co peníze chce. Zeptej se, jestli na trenéra, přestup, vybavení, stadion, nebo mládež. Nic neslibuj.",
+  amount: (label) => `Chce peníze na ${label}, ale neřekl kolik. Zeptej se na částku. Nic neslibuj.`,
+  both: () => "Chce peníze, ale neřekl kolik ani na co. Zeptej se na obojí. Nic neslibuj.",
+  tiny: () => "Částka je tak malá, že to nestojí za řeč. Zeptej se, kolik opravdu potřebuje. Nic neslibuj.",
+};
+
 /**
- * SMS trenéra majiteli firmy (zpráva už je uložená). Když jde o peníze, vyřídí prosbu:
- * chybí-li částka nebo účel, majitel se doptá a další SMS se s tím spojí.
- * Vrací false, když zpráva o peníze není a majitel na ni čeká jako na odpověď na svou SMS
- * (pak ji má zpracovat handleOwnerSmsReply).
+ * SMS trenéra majiteli firmy (zpráva už je uložená). Model vyčte, jestli jde o peníze, hra
+ * rozhodne a model napíše odpověď v povaze majitele (bez modelu připravená věta).
+ * Vrací false, když zpráva o peníze není a majitel čeká odpověď na svou SMS (pak ji má
+ * zpracovat handleOwnerSmsReply).
  */
 export async function handleOwnerText(
-  db: D1Database, teamId: string, convId: string, sponsorId: number, text: string, threadActive: boolean,
+  db: D1Database, env: OwnerChatEnv, teamId: string, convId: string, sponsorId: number, text: string, threadActive: boolean,
+  /** Před odesláním odpovědi dočká prodlevu „píše…" (owner-typing.ts). */
+  pace: () => Promise<void> = async () => {},
 ): Promise<boolean> {
   // Poslední zpráva majitele za 24 h: když se doptával, nese rozpracovanou prosbu.
   const prev = await db.prepare(
@@ -297,47 +334,95 @@ export async function handleOwnerText(
     }
   }
 
-  const parsed = parseRequestText(text);
-  if (!parsed.intent && !pending) {
-    if (threadActive) return false;
-    const ctx = await loadRequestContext(db, teamId, sponsorId);
-    if ("error" in ctx) return true;
-    await postOwnerMessages(db, teamId, ownerIdentity(ctx.owner, ctx.sponsor.name), [{ from: "owner", body: ownerSmallTalk(`talk|${convId}|${text}`) }],
-      { coachName: ctx.team.name, unread: false });
-    return true;
-  }
-
   const ctx = await loadRequestContext(db, teamId, sponsorId);
   if ("error" in ctx) {
-    logger.warn({ module: M, teamId }, `prosba u firmy ${sponsorId}: ${ctx.error}`);
+    logger.warn({ module: M, teamId }, `SMS majiteli ${sponsorId}: ${ctx.error}`);
     return true;
   }
+  const facts = await chatFacts(db, ctx, convId, text);
   const owner = ownerIdentity(ctx.owner, ctx.sponsor.name);
-  const say = (body: string, meta?: Record<string, unknown>) =>
-    postOwnerMessages(db, teamId, owner, [{ from: "owner", body, meta }], { coachName: ctx.team.name, unread: false });
+  const say = async (body: string, meta?: Record<string, unknown>) => {
+    await pace();
+    await postOwnerMessages(db, teamId, owner, [{ from: "owner", body, meta }], { coachName: ctx.team.name, unread: false });
+  };
+  const allowed = [ctx.given];
 
-  const purpose = parsed.purpose ?? pending?.purpose ?? null;
-  const amount = parsed.amount ?? pending?.amount ?? null;
+  // Model s kontextem rozhovoru, bez něj slova ze zprávy.
+  const parsed = parseRequestText(text);
+  const ai = await extractMoneyAsk(env, facts).catch((e) => {
+    logger.warn({ module: M, teamId }, `vyčtení prosby u majitele ${sponsorId}`, e);
+    return null;
+  });
+  const ask = ai ?? { wantsMoney: parsed.intent, purpose: parsed.purpose, amount: parsed.amount };
+  const wants = ask.wantsMoney || (!!pending && (ask.amount !== null || ask.purpose !== null));
+
+  if (!wants) {
+    if (threadActive) return false;
+    const body = await writeOwnerReply(env, facts,
+      "Trenér ti píše, ale o peníze nežádá. Odpověz přirozeně na to, co napsal. O penězích nic neslibuj.", { allowed })
+      ?? ownerSmallTalk(`talk|${convId}|${text}`);
+    await say(body);
+    return true;
+  }
+
+  const purpose = ask.purpose ?? pending?.purpose ?? null;
+  const amount = ask.amount ?? pending?.amount ?? null;
   const note = text.trim().slice(0, 300);
+  const seed = `ask|${convId}|${text}`;
+
+  const decide = async (p: RequestPurpose | null, a: number) => {
+    const res = await runRequest(db, ctx, p, a, note);
+    if ("error" in res) {
+      const body = await writeOwnerReply(env, facts, "Odmítni to dnes řešit, o penězích jste se dnes už bavili. Ať se ozve jindy.", { allowed })
+        ?? ownerAlreadyAnswered(`dup|${convId}|${ctx.day}`);
+      await say(body);
+      return;
+    }
+    const ins = decisionInstruction(ctx, res);
+    const body = await writeOwnerReply(env, facts, ins.text, { amounts: ins.amounts, days: ins.days, allowed: [...allowed, res.asked] })
+      ?? res.reply;
+    await say(body);
+  };
 
   // Kdo peníze letos nedá (porušená prosba, otravování, nechuť, cizí), odmítne hned, bez doptávání.
   if (blockOf(ctx)) {
-    const res = await runRequest(db, ctx, purpose, amount ?? 0, note);
-    if ("error" in res) await say(ownerAlreadyAnswered(`dup|${convId}|${ctx.day}`));
+    await decide(purpose, amount ?? 0);
     return true;
   }
-  const seed = `ask|${convId}|${text}`;
-  if (!purpose) {
-    await say(askText(amount ? "purpose" : "both", null, seed), { type: ASK_META, purpose: null, amount });
+  if (!purpose || amount === null || amount < MIN_ASK) {
+    const kind = !purpose ? (amount ? "purpose" : "both") : amount === null ? "amount" : "tiny";
+    const body = await writeOwnerReply(env, facts, ASK_INSTRUCTION[kind](purpose ? PURPOSE_LABELS[purpose] : ""), { allowed: [...allowed, ...(amount ? [amount] : [])] })
+      ?? askText(kind, purpose, seed);
+    await say(body, { type: ASK_META, purpose, amount: kind === "tiny" ? null : amount });
     return true;
   }
-  if (amount === null || amount < MIN_ASK) {
-    await say(askText(amount === null ? "amount" : "tiny", purpose, seed), { type: ASK_META, purpose, amount: null });
-    return true;
-  }
-  const res = await runRequest(db, ctx, purpose, Math.min(amount, MAX_ASK), note);
-  if ("error" in res) await say(ownerAlreadyAnswered(`dup|${convId}|${ctx.day}`));
+  await decide(purpose, Math.min(amount, MAX_ASK));
   return true;
+}
+
+/** Podklady pro model: majitel, vztah a rozhovor (posledních 10 zpráv bez té nové). */
+async function chatFacts(db: D1Database, ctx: RequestContext, convId: string, text: string): Promise<OwnerChatFacts> {
+  const rows = await db.prepare(
+    "SELECT sender_type, body FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 11",
+  ).bind(convId).all<{ sender_type: string; body: string }>();
+  const history = rows.results.slice(1).reverse()
+    .map((m) => ({ from: m.sender_type === "user" ? "coach" as const : "owner" as const, body: m.body }));
+  return {
+    ownerName: `${ctx.owner.firstName} ${ctx.owner.lastName}`, age: ctx.owner.age, personality: ctx.owner.personality,
+    firmName: ctx.sponsor.name, teamName: ctx.team.name, favor: ctx.favor, relation: ctx.relation, given: ctx.given,
+    history, coachText: text,
+  };
+}
+
+/** Odpověď na SMS majitele (tón a náklonnost řeší handleOwnerSmsReply) napsaná modelem. */
+export async function writeSmsReplyBack(
+  db: D1Database, env: OwnerChatEnv, teamId: string, convId: string, sponsorId: number, text: string, delta: number,
+): Promise<string | null> {
+  const ctx = await loadRequestContext(db, teamId, sponsorId);
+  if ("error" in ctx) return null;
+  const facts = await chatFacts(db, ctx, convId, text);
+  const mood = delta > 0 ? "Jeho odpověď tě potěšila." : delta < 0 ? "Jeho odpověď tě zamrzela, odbyl tě." : "Jeho odpověď bereš na vědomí.";
+  return writeOwnerReply(env, facts, `Reaguj na jeho odpověď na tvou poslední SMS. ${mood} O penězích nic neslibuj.`, { allowed: [ctx.given] });
 }
 
 /**

@@ -6,6 +6,7 @@ import {
 import { askText, ownerAlreadyAnswered, ownerSmallTalk, requestCheckText, requestReplyText } from "./request-texts";
 import { parseAmount, parseRequestText, normalize } from "./request-parse";
 import { ownerReplyDelayMs } from "./owner-typing";
+import { checkOwnerReply } from "./owner-chat";
 import type { OwnerPersonality } from "./owners";
 
 const BASE = { monthlyB: 40000, favor: 60, relation: "main" as const, personality: "fan" as const, purpose: "equipment" as const };
@@ -161,5 +162,22 @@ describe("prodleva odpovědi majitele", () => {
     expect(ownerReplyDelayMs("ok", 0)).toBeGreaterThanOrEqual(2500);
     expect(ownerReplyDelayMs("x".repeat(2000), 1)).toBeLessThanOrEqual(14000);
     expect(ownerReplyDelayMs("x".repeat(200), 0.5)).toBeGreaterThan(ownerReplyDelayMs("x", 0.5));
+  });
+});
+
+describe("kontrola odpovědi majitele od modelu", () => {
+  it("projde, když říká přesně částku a termín", () => {
+    expect(checkOwnerReply("„Dobře, 15 000 Kč na kurz vám pošlu. Do 29. 10. chci vidět, že to šlo tam.“", { amounts: [15000], days: ["2026-10-29"] }))
+      .toBe("Dobře, 15 000 Kč na kurz vám pošlu. Do 29. 10. chci vidět, že to šlo tam.");
+    expect(checkOwnerReply("Pošlu 15.000, utraťte to do 29.10.", { amounts: [15000], days: ["2026-10-29"] })).not.toBeNull();
+  });
+  it("neprojde bez částky, bez termínu nebo s vymyšlenou částkou", () => {
+    expect(checkOwnerReply("Dobře, něco vám pošlu. Do 29. 10.", { amounts: [15000], days: ["2026-10-29"] })).toBeNull();
+    expect(checkOwnerReply("Pošlu 15 000 Kč.", { amounts: [15000], days: ["2026-10-29"] })).toBeNull();
+    expect(checkOwnerReply("Pošlu 15 000 Kč, příště klidně 50 000. Do 29. 10.", { amounts: [15000], days: ["2026-10-29"] })).toBeNull();
+    expect(checkOwnerReply("Nemám na to, ale dejte vědět.", { allowed: [72600] })).toBe("Nemám na to, ale dejte vědět.");
+  });
+  it("dlouhou pomlčku nahradí čárkou", () => {
+    expect(checkOwnerReply("Dobře — uvidíme.")).toBe("Dobře, uvidíme.");
   });
 });

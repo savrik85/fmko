@@ -172,8 +172,8 @@ function odpovidatLze(
   }
 
   // Majiteli firmy se dá napsat kdykoli (prosba o příspěvek, odpověď na jeho SMS). Odpovídá
-  // deterministická logika bez modelu, proto zdarma.
-  if (opts.participantId?.startsWith("so-")) return { canReply: true, channel: "imessage" };
+  // model jako hráč (sponsors/owner-chat.ts), proto placená SMS.
+  if (opts.participantId?.startsWith("so-")) return { canReply: true, channel: "sms" };
   return {
     canReply: false,
     channel: null,
@@ -481,15 +481,22 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const claimed = await claimOwnerTyping(c.env.DB, convId)
       .catch((e) => { logger.warn({ module: "messaging" }, "majitel firmy píše", e); return false; });
     if (claimed) {
-      c.executionCtx.waitUntil(replyAfterTyping(c.env.DB, convId, text, async (threadActive) => {
+      c.executionCtx.waitUntil(replyAfterTyping(c.env.DB, convId, text, async (threadActive, pace, release) => {
         let handled = false;
         if (optionId === null) {
           const { handleOwnerText } = await import("../sponsors/requests-db");
-          handled = await handleOwnerText(c.env.DB, teamId, convId, ownerSponsorId, text, threadActive);
+          handled = await handleOwnerText(c.env.DB, c.env, teamId, convId, ownerSponsorId, text, threadActive, pace);
         }
         if (!handled && threadActive) {
+          // handleOwnerSmsReply čte čekající SMS ze stavu vlákna, proto ho nejdřív vrátit.
+          await release();
           const { handleOwnerSmsReply } = await import("../sponsors/owner-sms");
-          await handleOwnerSmsReply(c.env.DB, convId, text, optionId);
+          const { writeSmsReplyBack } = await import("../sponsors/requests-db");
+          await handleOwnerSmsReply(c.env.DB, convId, text, optionId, async (delta) => {
+            const written = await writeSmsReplyBack(c.env.DB, c.env, teamId, convId, ownerSponsorId, text, delta);
+            await pace();
+            return written;
+          });
         }
       }).catch((e) => logger.warn({ module: "messaging" }, "odpověď majitele firmy", e)));
     }

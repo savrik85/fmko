@@ -187,7 +187,7 @@ export function Adresar({ teamId, onZavrit, onOtevrit }: {
                     iniciály={iniciályZ(o.name)}
                     name={o.name}
                     podtitul={o.firmName}
-                    channel="imessage"
+                    channel="sms"
                     busy={busy}
                     onClick={() => otevrit(`/api/teams/${teamId}/sponsor-owners/${o.sponsorId}/conversation`)}
                   />
