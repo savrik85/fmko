@@ -2,7 +2,7 @@
  * Dvě okresní soutěže nad sebou na skutečné D1 (Miniflare, všechny migrace):
  * zakládání III. třídy, přípravné období, postup a sestup 2 ↔ 2 a konec sezóny.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { Hono } from "hono";
@@ -29,6 +29,7 @@ async function freshDb(): Promise<void> {
     d1Databases: ["DB"],
     kvNamespaces: ["SESSION_KV", "CACHE_KV"],
   });
+  instances.push(mf);
   db = await mf.getD1Database("DB");
   env = { DB: db, SESSION_KV: await mf.getKVNamespace("SESSION_KV"), CACHE_KV: await mf.getKVNamespace("CACHE_KV") } as unknown as Bindings;
   const dir = new URL("../../migrations/", import.meta.url);
@@ -40,9 +41,12 @@ async function freshDb(): Promise<void> {
     .bind(DISTRICT).run();
 }
 
-afterEach(async () => {
-  await mf?.dispose();
-  mf = null;
+// Založení týmu pouští práci na pozadí, která doběhne až po odpovědi. Kdyby se instance
+// rušila po každém testu, tahle práce by narazila na zrušenou D1 a v zatíženém CI shodila
+// další test. Instance se proto ruší až na konci souboru.
+const instances: Miniflare[] = [];
+afterAll(async () => {
+  for (const instance of instances) await instance.dispose();
 });
 
 /** Obce okresu v pevném pořadí, ať test ví, kdo z které obce hraje. */
