@@ -209,6 +209,8 @@ interface OwnerThreadState {
  */
 export async function handleOwnerSmsReply(
   db: D1Database, convId: string, text: string, optionId: string | null,
+  /** Odpověď majitele napsaná modelem; null nebo chyba = připravená věta. */
+  writeReply?: (delta: number) => Promise<string | null>,
 ): Promise<boolean> {
   try {
     const conv = await db
@@ -262,7 +264,10 @@ export async function handleOwnerSmsReply(
         logger.warn({ module: M, teamId: conv.team_id }, `SMS ${state.smsId} majitele ${state.sponsorId}: RETURNING nevrátilo occasion, používám opatrnou náladu`);
         occasion = "season_complaint";
       }
-      const back = ownerReplyBack(personality, occasion, delta, `owner-reply|${state.smsId}`);
+      const written = writeReply
+        ? await writeReply(delta).catch((e) => { logger.warn({ module: M }, `odpověď majitele modelem (sms ${state.smsId})`, e); return null; })
+        : null;
+      const back = written ?? ownerReplyBack(personality, occasion, delta, `owner-reply|${state.smsId}`);
       const senderName = owner ? `${owner.firstName} ${owner.lastName}` : "Majitel firmy";
       const reason = tone === "dismissive" ? FAVOR_REASONS.smsDismissed : FAVOR_REASONS.smsReply;
 

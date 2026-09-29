@@ -53,16 +53,38 @@ export async function releaseOwnerTyping(db: D1Database, convId: string): Promis
   return row?.ai_thread_active === 1;
 }
 
-/** Počká, až majitel „dopíše", a pak spustí odpověď. Chyba se jen zaloguje, stav se vrátí vždy. */
+/** Čekal majitel na odpověď na svou SMS, než začal psát? (původní stav uložený v psaní) */
+async function prevActive(db: D1Database, convId: string): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT CASE WHEN json_extract(ai_thread_state, '$.kind') = ? THEN json_extract(ai_thread_state, '$.prevActive')
+                 ELSE ai_thread_active END AS active
+     FROM conversations WHERE id = ?`,
+  ).bind(TYPING_KIND, convId).first<{ active: number | null }>();
+  return row?.active === 1;
+}
+
+/**
+ * Odpověď majitele jako u hráčů: `reply` smí rovnou volat model, `pace()` před odesláním
+ * dočká zbytek prodlevy (generování se do ní započítá). `release()` vrátí vláknu původní
+ * stav; zavolá se vždy, nejpozději na konci.
+ */
 export async function replyAfterTyping(
-  db: D1Database, convId: string, text: string, reply: (threadActive: boolean) => Promise<void>,
+  db: D1Database, convId: string, text: string,
+  reply: (threadActive: boolean, pace: () => Promise<void>, release: () => Promise<void>) => Promise<void>,
 ): Promise<void> {
-  await new Promise((r) => setTimeout(r, ownerReplyDelayMs(text)));
-  let active = false;
+  const start = Date.now();
+  const delay = ownerReplyDelayMs(text);
+  const pace = async () => {
+    const rest = delay - (Date.now() - start);
+    if (rest > 0) await new Promise((r) => setTimeout(r, rest));
+  };
+  const release = async () => {
+    await releaseOwnerTyping(db, convId)
+      .catch((e) => logger.warn({ module: "owner-typing" }, `návrat stavu vlákna ${convId}`, e));
+  };
   try {
-    active = await releaseOwnerTyping(db, convId);
-  } catch (e) {
-    logger.warn({ module: "owner-typing" }, `návrat stavu vlákna ${convId}`, e);
+    await reply(await prevActive(db, convId), pace, release);
+  } finally {
+    await release();
   }
-  await reply(active);
 }
