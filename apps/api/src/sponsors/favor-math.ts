@@ -83,6 +83,9 @@ export const FAVOR_REASONS = {
   smsIgnored: "bez odpovědi na SMS",
   negotiationInsult: "urazil se nabídkou při jednání",
   walkedAway: "odešel od jednání bez dohody",
+  requestRefused: "odmítl prosbu o příspěvek",
+  requestTooSoon: "otravoval jsi ho s penězi",
+  requestBroken: "peníze z prosby nešly na slíbený účel",
 } as const;
 
 /** Důvod změny po zápase, na kterém majitel seděl: výsledek a skóre z pohledu domácích. */
