@@ -66,7 +66,7 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
     <section className={styles.hero} aria-labelledby="hero-title">
       <div className={styles.heroCopy}>
         <p className={styles.eyebrow}><span /> FOTBALOVÝ MANAŽER PRO CELOU KABINU</p>
-        <h1 id="hero-title">MYSLÍŠ, ŽE BYS TO<br />VEDL LÍP NEŽ<br /><em>VÁŠ TRENÉR?</em></h1>
+        <h1 id="hero-title">VEDL BYS TO<br />LÍP NEŽ<br /><em>VÁŠ TRENÉR?</em></h1>
         <p className={styles.lead}>Založ s klukama z kabiny vlastní okresní ligu. Každý vede svůj klub ze skutečné obce vašeho okresu a o tom, kdo fotbalu rozumí nejvíc, rozhodne tabulka.</p>
         <div className={styles.actions}><Link href="/registrace" className={styles.primary}>Založit ligu pro kabinu <span aria-hidden="true">↗</span></Link><a href="#hra" className={styles.textLink}>Jak to vypadá ↓</a></div>
         <p className={styles.micro}>Zdarma · v prohlížeči na mobilu, nic se neinstaluje · pár minut denně</p>
