@@ -99,8 +99,8 @@ const REFUSED: Record<RequestRefusal, readonly string[]> = {
     "Proč zrovna já? Nemáme spolu ani smlouvu. Zkuste to u svého sponzora.",
   ],
   exhausted: [
-    "Poslední dobou jsem vám dal dost. Zkuste to po {kdy}.",
-    "Teď už ne, toho bylo poslední dobou hodně. Ozvěte se po {kdy}.",
+    "Poslední dobou jsem vám dal dost. Zkuste to po {kdy} a uvidíme.",
+    "Teď už ne, toho bylo poslední dobou hodně. Ozvěte se po {kdy}, pak se uvidí.",
   ],
 };
 

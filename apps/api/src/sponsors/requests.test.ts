@@ -90,6 +90,7 @@ describe("texty prosby", () => {
     for (const refusal of ["broken", "too_soon", "dislike", "stranger", "exhausted"] as const) {
       const t = requestReplyText("refused", "fan", { castka: 5000, ucel: "youth", kdy: "2026-11-02" }, refusal, "x");
       expect(t).not.toMatch(/[—{}]/);
+      expect(t).not.toMatch(/\.\./);
     }
     expect(requestReplyText("refused", "fan", { kdy: "2026-11-02" }, "exhausted", "x")).toContain("2. 11.");
     for (const kept of [true, false]) {
