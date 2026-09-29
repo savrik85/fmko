@@ -223,7 +223,7 @@ describe("okamžitá registrace do připraveného okresu", () => {
     expect((await db.prepare("SELECT COUNT(*) AS count FROM league_requests").first())?.count).toBe(1);
   });
   it("migrace otevře Strakonice, Písek a Český Krumlov", async () => {
-    await sql(readFileSync(new URL("../../migrations/0231_open_south_districts.sql", import.meta.url), "utf8"));
+    await sql(readFileSync(new URL("../../migrations/0232_open_south_districts.sql", import.meta.url), "utf8"));
     const rows = (await db.prepare("SELECT district, status FROM district_registrations WHERE district IN ('Strakonice','Písek','Český Krumlov') ORDER BY district").all()).results;
     expect(rows).toEqual([{ district: "Písek", status: "ready" }, { district: "Strakonice", status: "ready" }, { district: "Český Krumlov", status: "ready" }]);
   });
