@@ -11,6 +11,8 @@ const NEARBY_VILLAGES: Record<string, string[]> = {
   Prachatice: ["Lhenice", "Netolice", "Husinec", "Vlachovo Březí", "Čkyně", "Stachy", "Volary", "Zbytiny", "Záblatí", "Šumavské Hoštice", "Nebahovy", "Kratušín", "Vitějovice", "Dub", "Žernovice"],
   "České Budějovice": ["Hluboká", "Rudolfov", "Litvínovice", "Srubec", "Včelná", "Borek", "Homole", "Roudné", "Staré Hodějovice", "Úsilné", "Vidov", "Adamov", "Dubné", "Libníč"],
   "Český Krumlov": ["Větřní", "Kaplice", "Přísečná", "Holubov", "Chvalšiny", "Frymburk", "Horní Planá", "Vyšší Brod", "Rožmberk", "Brloh"],
+  Strakonice: ["Radomyšl", "Cehnice", "Štěkeň", "Droužetice", "Mutěnice", "Nebřehovice", "Pracejovice", "Slaník", "Řepice", "Dunovice", "Kraselov", "Doubravice", "Nihošovice", "Libětice"],
+  Písek: ["Putim", "Kestřany", "Hradiště", "Semice", "Kluky", "Záhoří", "Čížová", "Vráž", "Oslov", "Skály", "Dobev", "Ražice", "Heřmaň", "Albrechtice nad Vltavou"],
   Benešov: ["Vlašim", "Votice", "Týnec nad Sázavou", "Čerčany", "Neveklov", "Sázava", "Bystřice", "Divišov", "Postupice", "Jankov"],
   Pelhřimov: ["Humpolec", "Pacov", "Kamenice nad Lipou", "Počátky", "Červená Řečice", "Žirovnice", "Lukavec", "Senožaty", "Černovice"],
   Zlín: ["Otrokovice", "Vizovice", "Napajedla", "Fryšták", "Slušovice", "Luhačovice", "Malenovice", "Lípa", "Tečovice", "Sazovice"],
