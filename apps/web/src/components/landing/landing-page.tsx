@@ -113,7 +113,7 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
     <section className={styles.friends}><div><p className={styles.eyebrow}>CELÁ KABINA, JEDNA LIGA</p><h2>V kabině jste experti.<br /><em>Tak to ukažte v lize.</em></h2><p>Každý z party vede vlastní klub, všichni hrajete stejnou soutěž. Derby má dohru v kabině, na tréninku i v hospodě. Volná místa v lize zatím obsadí počítačové kluby, kamarády můžeš zvát postupně.</p><Link href="/registrace" className={styles.primary}>Zakládám ligu pro naši partu ↗</Link></div><aside><span className={styles.number}>KDO ZALOŽÍ PRVNÍ</span><h3>Zakladatel.<br />Manažer.<br /><em>Předseda.</em></h3><p>Kdo v prázdném okrese založí klub jako první, povede ligu jako předseda na první období. Rozhoduje o pravidlech soutěže a zve ostatní kluby z okolí.</p><p className={styles.micro}>Další vedení ligy určují herní pravidla a volby.</p></aside></section>
 
     <section id="okresy" className={styles.steps} aria-labelledby="districts-title">
-      <div className={styles.sectionTop}><p className={styles.eyebrow}>KDE SE UŽ HRAJE</p><h2 id="districts-title">Vyber svůj okres.</h2></div>
+      <div className={styles.sectionTop}><p className={styles.eyebrow}>OKRESY VE HŘE</p><h2 id="districts-title">Vyber svůj okres.</h2></div>
       {freeDistricts.length > 0 && <div className={styles.freeDistricts}>{freeDistricts.map((d) => (
         <Link key={d.name} href={`/registrace?okres=${encodeURIComponent(d.name)}`} className={styles.freeCard}>
           <span className={styles.freeTag}>Volný okres</span>
