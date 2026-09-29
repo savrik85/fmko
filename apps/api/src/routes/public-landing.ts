@@ -44,15 +44,19 @@ async function loadLandingData(db: D1Database): Promise<LandingData> {
       (SELECT COUNT(*) FROM district_registrations WHERE status = 'ready') AS districts`)
     .first<LandingData["stats"]>();
 
-  const results = await db.prepare(`SELECT h.name AS home, a.name AS away, m.home_score AS homeScore, m.away_score AS awayScore,
-        l.name AS league, sc.scheduled_at AS at
+  // Jen ligy, kde hrají lidé (aspoň tři kluby), a nejvýš dva zápasy z každé, ať je vidět víc soutěží.
+  const results = await db.prepare(`SELECT home, away, homeScore, awayScore, league, at FROM (
+      SELECT h.name AS home, a.name AS away, m.home_score AS homeScore, m.away_score AS awayScore,
+        l.name AS league, sc.scheduled_at AS at,
+        ROW_NUMBER() OVER (PARTITION BY l.id ORDER BY sc.scheduled_at DESC, m.id) AS rn
       FROM matches m
       JOIN season_calendar sc ON sc.id = m.calendar_id
       JOIN leagues l ON l.id = m.league_id AND l.league_type = 'senior'
       JOIN teams h ON h.id = m.home_team_id JOIN teams a ON a.id = m.away_team_id
-      WHERE m.status = 'simulated'
-      ORDER BY sc.scheduled_at DESC LIMIT 6`)
-    .all<LandingData["results"][number]>();
+      WHERE m.status = 'simulated' AND sc.scheduled_at <= ?
+        AND (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id AND t.user_id <> 'ai') >= 3
+    ) WHERE rn <= 2 ORDER BY at DESC LIMIT 6`)
+    .bind(new Date().toISOString()).all<LandingData["results"][number]>();
 
   const managers = await db.prepare("SELECT display_name FROM users WHERE display_name IS NOT NULL")
     .all<{ display_name: string | null }>();
