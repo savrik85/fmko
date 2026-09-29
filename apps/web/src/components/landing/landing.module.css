@@ -71,6 +71,7 @@
 .finalCta h2 { font-size: clamp(3.5rem,7vw,6rem); margin-bottom: 35px; }
 .finalCta>p:last-child { color: #b4c7ba; font-size: .875rem; margin-top: 20px; }
 .footer { padding: 30px 5%; display: flex; justify-content: space-between; align-items: center; gap: 24px; font-size: .875rem; }
+.strip span { letter-spacing: .02em; }
 .stripNum { display: block; font-family: var(--font-heading); font-size: 2.2rem; line-height: 1; margin-bottom: 4px; }
 .showcase,.live { padding: 100px 7%; max-width: 1500px; margin: auto; scroll-margin-top: 24px; }
 .showcaseGrid { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 7%; align-items: start; }
