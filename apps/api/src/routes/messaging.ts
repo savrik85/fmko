@@ -157,6 +157,10 @@ function odpovidatLze(
 } {
   if (type === "player" || type === "squad_group") return { canReply: true, channel: "sms" };
   if (type === "manager") return { canReply: true, channel: "imessage" };
+  // Majiteli firmy se dá napsat kdykoli (prosba o příspěvek, odpověď na jeho SMS). Odpovídá
+  // model jako hráč (sponsors/owner-chat.ts), proto placená SMS. Musí být před pravidlem
+  // otevřeného vlákna: během „píše…" a při čekající SMS majitele je vlákno otevřené taky.
+  if (opts.participantId?.startsWith("so-")) return { canReply: true, channel: "sms" };
   // Vůdce fanoušků čeká na odpověď jen dokud vlákno běží; pak už se nemá kdo ozvat.
   if (type === "system" && threadActive) return { canReply: true, channel: "imessage" };
 
@@ -171,9 +175,6 @@ function odpovidatLze(
     };
   }
 
-  // Majiteli firmy se dá napsat kdykoli (prosba o příspěvek, odpověď na jeho SMS). Odpovídá
-  // model jako hráč (sponsors/owner-chat.ts), proto placená SMS.
-  if (opts.participantId?.startsWith("so-")) return { canReply: true, channel: "sms" };
   return {
     canReply: false,
     channel: null,
