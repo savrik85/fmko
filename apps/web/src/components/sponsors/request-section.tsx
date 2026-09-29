@@ -34,7 +34,7 @@ export function RequestSection({ teamId, sponsorId, onChanged }: { teamId: strin
         return (
           <div key={o.id} className="bg-surface rounded-xl p-3">
             <div className="text-sm">
-              Dal {formatCZK(o.granted)} na {o.label}. Utrať to do <span className="font-heading font-bold">{dayMonth(o.checkDay)}</span>.
+              Dal {formatCZK(o.granted)} na {o.label}. Do <span className="font-heading font-bold">{dayMonth(o.checkDay)}</span> je musíš utratit.
             </div>
             <div className="text-sm text-muted mt-0.5">Utraceno {formatCZK(o.spent)} z {formatCZK(o.required)}</div>
             <div className="h-2 rounded-full bg-gray-100 mt-1 overflow-hidden">
