@@ -217,6 +217,17 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "sliby sponzorům s termínem selhaly", e);
   }
 
+  // ── Prosby o příspěvek: po 30 dnech kontrola, jestli peníze šly na slíbený účel ──
+  try {
+    const { evaluateSponsorRequests } = await import("../sponsors/requests-db");
+    const r = await evaluateSponsorRequests(env.DB, effectiveDate.toISOString());
+    if (r.kept + r.broken + r.lapsed > 0) {
+      logger.info({ module: "daily-tick" }, `prosby sponzorům: ${r.kept} dodrženo, ${r.broken} porušeno, ${r.lapsed} propadlo`);
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "prosby sponzorům selhaly", e);
+  }
+
   // ── SMS od majitelů firem (vlastní try: chyba nesmí shodit zbytek ticku) ──
   // effectiveDate, ne teams.game_date: posun herního data v teams přijde až níž v ticku.
   try {

@@ -31,6 +31,8 @@ export type TransactionType =
   // Sponzor při podpisu vyjednané smlouvy: podpisový příspěvek a zaplacená výpovědní
   // pokuta u předchozího sponzora. Příjem, ne nákup, proto NENÍ v PURCHASE_TYPES.
   | "sponsor_signing"
+  // Prosba o příspěvek u majitele firmy (sponsors/requests.ts). Příjem, ne nákup.
+  | "sponsor_request"
   | "season_reward"
   | "event"
   | "transfer_fee"

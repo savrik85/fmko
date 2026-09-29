@@ -9,6 +9,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
+import { RequestDialog } from "@/components/sponsors/request-dialog";
 interface Message {
   id: string;
   body: string;
@@ -151,6 +152,7 @@ export default function ConversationPage() {
   const [credit, setCredit] = useState<{ zbyva: number; cenaSms: number; zprav: number } | null>(null);
   // Skupinové chaty vlastní detail endpoint nemají — tam se píše vždycky.
   const [canReply, setCanReply] = useState(true);
+  const [requestOpen, setRequestOpen] = useState(false);
   const [channel, setChannel] = useState<"sms" | "imessage" | null>("imessage");
   const [replyHint, setReplyHint] = useState<{ text: string; href?: string; label?: string } | null>(null);
   const [creditError, setCreditError] = useState<string | null>(null);
@@ -270,8 +272,11 @@ export default function ConversationPage() {
   const jeImessage = isGroup || channel === "imessage";
   const mojeBublina = jeImessage ? "bg-blue-500 text-white" : "bg-pitch-500 text-white";
   const lzePsat = isGroup || canReply;
-  // Tlačítka jen pod poslední zprávou, dokud majitel čeká odpověď.
-  const nabidkaOdpovedi = !isGroup && aiThreadActive && canReply ? ownerOptionsOf(messages[messages.length - 1]) : [];
+  // Tlačítka jen dokud majitel čeká odpověď.
+  // Hledá se zpětně: za čekající SMS mohla přibýt výměna o příspěvek (bez tlačítek).
+  const nabidkaOdpovedi = !isGroup && aiThreadActive && canReply
+    ? (messages.slice().reverse().map(ownerOptionsOf).find((o) => o.length > 0) ?? [])
+    : [];
   // Majitel firmy — jméno v hlavičce vede na jeho stránku (`participantId` = `so-{sponsorId}`).
   const ownerSponsorId = participantId?.startsWith("so-") ? Number(participantId.slice(3)) : null;
 
@@ -588,6 +593,29 @@ export default function ConversationPage() {
           {aiThreadState.resolution?.summary && (
             <div className="mt-0.5 text-sm opacity-80">{aiThreadState.resolution.summary}</div>
           )}
+        </div>
+      )}
+
+      {/* Majitel firmy: prosba o příspěvek jde odsud i ze stránky firmy. */}
+      {ownerSponsorId && teamId && (
+        <div className="bg-white border-t border-gray-100 px-3 pt-2 shrink-0">
+          <button
+            onClick={() => setRequestOpen(true)}
+            className="w-full min-h-11 text-sm font-heading font-bold bg-pitch-50 border border-pitch-200 text-pitch-600 rounded-2xl px-3 py-2 hover:bg-pitch-100 transition-colors"
+          >
+            Požádat o příspěvek
+          </button>
+          <RequestDialog
+            open={requestOpen}
+            onClose={() => setRequestOpen(false)}
+            teamId={teamId}
+            sponsorId={ownerSponsorId}
+            onDone={() => {
+              apiFetch<ConvDetailResponse>(messagesUrl)
+                .then((fresh) => setMessages(fresh.messages))
+                .catch((e) => console.error("zprávy po prosbě o příspěvek:", e));
+            }}
+          />
         </div>
       )}
 

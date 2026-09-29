@@ -181,6 +181,33 @@ sponsorsRouter.get("/sponsors/:sponsorId", async (c) => {
   });
 });
 
+// GET /api/teams/:teamId/sponsor-owners/:sponsorId/request — prosba o příspěvek: odhady, závazky, historie
+sponsorsRouter.get("/teams/:teamId/sponsor-owners/:sponsorId/request", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await assertTeamOwner(c, teamId);
+  if (denied) return c.json({ error: denied.error }, denied.status);
+  const sponsorId = Number(c.req.param("sponsorId"));
+  if (!Number.isInteger(sponsorId)) return c.json({ error: "Neplatný sponzor" }, 400);
+  const { requestInfo } = await import("../sponsors/requests-db");
+  const info = await requestInfo(c.env.DB, teamId, sponsorId);
+  if ("error" in info) return c.json({ error: info.error }, info.status);
+  return c.json(info);
+});
+
+// POST /api/teams/:teamId/sponsor-owners/:sponsorId/request — { purpose, amount, note }
+sponsorsRouter.post("/teams/:teamId/sponsor-owners/:sponsorId/request", async (c) => {
+  const teamId = c.req.param("teamId");
+  const sponsorId = Number(c.req.param("sponsorId"));
+  if (!Number.isInteger(sponsorId)) return c.json({ error: "Neplatný sponzor" }, 400);
+  const body = await c.req.json<{ purpose?: unknown; amount?: unknown; note?: unknown }>()
+    .catch((e) => { logger.warn({ module: "sponsors" }, "parse request body", e); return null; });
+  if (!body) return c.json({ error: "Neplatný požadavek" }, 400);
+  const { submitRequest } = await import("../sponsors/requests-db");
+  const res = await submitRequest(c.env.DB, teamId, sponsorId, { purpose: body.purpose, amount: body.amount, note: body.note });
+  if ("error" in res) return c.json({ error: res.error }, res.status);
+  return c.json(res);
+});
+
 // GET /api/teams/:teamId/sponsor-owners — firmy v okrese klubu a aktuální setkání v hospodě
 sponsorsRouter.get("/teams/:teamId/sponsor-owners", async (c) => {
   const db = c.env.DB;

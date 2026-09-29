@@ -107,6 +107,26 @@ export async function sendLeaderSMS(
   }
 }
 
+export interface OwnerIdentity { sponsorId: number; name: string; firmName: string | null; avatar: string }
+
+/** Konverzace s majitelem firmy (`participant_id = so-{sponsorId}`); založí ji, když chybí. */
+async function ownerConversationId(db: D1Database, teamId: string, owner: OwnerIdentity): Promise<string> {
+  const participantId = `so-${owner.sponsorId}`;
+  const title = owner.firmName ? `${owner.name} (${owner.firmName})` : owner.name;
+  const existing = await db
+    .prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND participant_id = ?")
+    .bind(teamId, participantId).first<{ id: string }>().then((r) => r?.id);
+  if (existing) return existing;
+  const convId = crypto.randomUUID();
+  await db.prepare(
+    `INSERT INTO conversations
+      (id, team_id, type, title, participant_id, participant_avatar, pinned, unread_count,
+       last_message_text, last_message_at, created_at)
+     VALUES (?, ?, 'system', ?, ?, ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
+  ).bind(convId, teamId, title, participantId, owner.avatar).run();
+  return convId;
+}
+
 /**
  * Pošle zprávu OD MAJITELE FIRMY (sponzora) a otevře vlákno pro odpověď.
  *
@@ -118,26 +138,14 @@ export async function sendLeaderSMS(
 export async function sendOwnerSMS(
   db: D1Database,
   teamId: string,
-  owner: { sponsorId: number; name: string; firmName: string | null; avatar: string },
+  owner: OwnerIdentity,
   body: string,
   opts: { smsId: string; options: Array<{ id: string; label: string; text: string }> },
 ): Promise<string | null> {
   const participantId = `so-${owner.sponsorId}`;
   const title = owner.firmName ? `${owner.name} (${owner.firmName})` : owner.name;
   try {
-    let convId = await db
-      .prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND participant_id = ?")
-      .bind(teamId, participantId).first<{ id: string }>().then((r) => r?.id);
-
-    if (!convId) {
-      convId = crypto.randomUUID();
-      await db.prepare(
-        `INSERT INTO conversations
-          (id, team_id, type, title, participant_id, participant_avatar, pinned, unread_count,
-           last_message_text, last_message_at, created_at)
-         VALUES (?, ?, 'system', ?, ?, ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
-      ).bind(convId, teamId, title, participantId, owner.avatar).run();
-    }
+    const convId = await ownerConversationId(db, teamId, owner);
 
     await db.prepare(
       `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at)
@@ -159,6 +167,50 @@ export async function sendOwnerSMS(
     return convId;
   } catch (e) {
     logger.warn({ module: "system-sms", teamId }, `SMS od majitele firmy ${owner.sponsorId}`, e);
+    return null;
+  }
+}
+
+/** Čas zprávy ve formátu, jaký používá strftime v ostatních zápisech (řazení podle sent_at je textové). */
+function messageTime(ms: number): string {
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/**
+ * Zprávy ve vlákně s majitelem firmy BEZ čekání na odpověď (prosba o příspěvek a její
+ * vyhodnocení). Rozepsané vlákno čekající SMS (ai_thread_state) nechává být, aby o
+ * nabídku odpovědí nepřišla. `coach` = zpráva trenéra, `owner` = odpověď majitele.
+ */
+export async function postOwnerMessages(
+  db: D1Database,
+  teamId: string,
+  owner: OwnerIdentity,
+  messages: Array<{ from: "coach" | "owner"; body: string }>,
+  opts: { coachName: string; unread: boolean },
+): Promise<string | null> {
+  if (messages.length === 0) return null;
+  try {
+    const convId = await ownerConversationId(db, teamId, owner);
+    const start = Date.now();
+    const stmts = messages.map((m, i) => m.from === "coach"
+      ? db.prepare(
+        `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read)
+         VALUES (?, ?, 'user', ?, ?, ?, ?, 1)`,
+      ).bind(crypto.randomUUID(), convId, teamId, opts.coachName, m.body, messageTime(start + i * 1000))
+      : db.prepare(
+        `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at)
+         VALUES (?, ?, 'system', ?, ?, ?, ?, ?)`,
+      ).bind(crypto.randomUUID(), convId, `so-${owner.sponsorId}`, owner.name, m.body,
+        JSON.stringify({ type: "sponsor_owner_note" }), messageTime(start + i * 1000)));
+    const last = messages[messages.length - 1];
+    const unreadAdd = opts.unread ? messages.filter((m) => m.from === "owner").length : 0;
+    stmts.push(db.prepare(
+      "UPDATE conversations SET unread_count = unread_count + ?, last_message_text = ?, last_message_at = ? WHERE id = ?",
+    ).bind(unreadAdd, last.body.slice(0, 100), messageTime(start + (messages.length - 1) * 1000), convId));
+    await db.batch(stmts);
+    return convId;
+  } catch (e) {
+    logger.warn({ module: "system-sms", teamId }, `zprávy s majitelem firmy ${owner.sponsorId}`, e);
     return null;
   }
 }

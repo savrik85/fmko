@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Card, CardBody, useConfirm } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { favorLabel, formatCZK, personalityHint, personalityLabel } from "@/lib/sponsor-owners";
+import { RequestSection } from "./request-section";
 
 export interface OwnerInfo {
   firstName: string;
@@ -97,6 +98,8 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
               Jako hlavní sponzor by dal bez slibů zhruba {formatCZK(myTeam.budgetEstimate.base.low)} až {formatCZK(myTeam.budgetEstimate.base.high)},
               se sliby až {formatCZK(myTeam.budgetEstimate.cap.high)} měsíčně. Čím lepší vztah, tím přesnější odhad.
             </div>
+
+            {teamId && <RequestSection teamId={teamId} sponsorId={sponsorId} onChanged={onChanged} />}
 
             {match ? (
               <div className="pt-3 border-t border-gray-100">
