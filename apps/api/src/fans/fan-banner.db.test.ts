@@ -57,6 +57,12 @@ describe("přepočet plachty", () => {
     expect((await plachta())!.ultras_text).not.toMatch(/rohl/i);
   });
 
+  it("plachta od modelu mimo katalog jde dolů", async () => {
+    await db.prepare("UPDATE stadiums SET ultras_text = 'PODOLÍ JE NAŠE KRVOU, SRDCEM, DUŠÍ' WHERE team_id = 't1'").run();
+    expect(await prepoctiTransparent(db, "t1", [kotel], "2026-09-28")).not.toBeNull();
+    expect((await plachta())!.ultras_text).not.toMatch(/krvou/i);
+  });
+
   it("stará plachta s číslem jde dolů", async () => {
     await db.prepare("UPDATE stadiums SET ultras_text = 'PODOLÍ MÁ 5 VÝHER' WHERE team_id = 't1'").run();
     expect(await prepoctiTransparent(db, "t1", [kotel], "2026-09-28")).not.toBeNull();

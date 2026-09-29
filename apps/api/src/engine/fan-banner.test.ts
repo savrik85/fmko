@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  vyberTransparent, prvniCoSeVejde, prijmeni, pouzitelneJmeno, MAX_DELKA_TRANSPARENTU,
+  vyberTransparent, mozneTransparenty, prvniCoSeVejde, prijmeni, pouzitelneJmeno, MAX_DELKA_TRANSPARENTU,
   type StavProTransparent,
 } from "./fan-banner";
 
@@ -175,5 +175,44 @@ describe("jméno, které se nedá vyvěsit", () => {
   it("se skutečným jménem se jméno vyvěsí dál", () => {
     const t = vyberTransparent(stav({ kampanProtiTreneru: true, trener: "Klement Testovič" }), 0.1);
     expect(t.text).toContain("TESTOVIČ");
+  });
+});
+
+describe("katalog s obcí", () => {
+  const klid: StavProTransparent = {
+    naladaKotle: 60, heatKotle: 10, kampanProtiTreneru: false, kampanProtiHraci: null,
+    oblibenec: null, trener: null, rival: null, serie: 0, golyPoslednich5: 6, taktika: null,
+    kind: "kotel", obec: "Čkyně",
+  };
+
+  it("nabídne heslo s obcí v prvním pádě", () => {
+    const vse = mozneTransparenty(klid);
+    expect(vse).toContain("ČKYNĚ, TO JSME MY");
+    expect(vse).toContain("ČKYNĚ = DOMOV");
+  });
+
+  it("bez obce zůstanou obecná hesla", () => {
+    const vse = mozneTransparenty({ ...klid, obec: null });
+    expect(vse.some((t) => t.includes("ČKYNĚ"))).toBe(false);
+    expect(vse).toContain("TADY JSME DOMA");
+  });
+
+  it("v žádné situaci heslo nepřeteče, není prázdné a nemá dlouhou pomlčku", () => {
+    const dlouha = "Vlachovo Březí nad Blanicí";
+    const situace: Array<Partial<StavProTransparent>> = [
+      {}, { obec: dlouha }, { kampanProtiTreneru: true, trener: "Karel Klement" },
+      { kampanProtiTreneru: true, trener: "A A" }, { kampanProtiHraci: "Josef Vlček" },
+      { rival: { nazev: dlouha, heat: 90 } }, { heatKotle: 70, golyPoslednich5: 0 },
+      { heatKotle: 70, golyPoslednich5: 9 }, { serie: -4 }, { serie: 5, trener: "Karel Klement" },
+      { oblibenec: "Adam Kolář", naladaKotle: 80 },
+      ...["long_ball", "defensive", "possession", "pressing", "offensive"].map((taktika) => ({ taktika, naladaKotle: 60, golyPoslednich5: 3 })),
+    ];
+    for (const over of situace) {
+      for (const t of mozneTransparenty({ ...klid, ...over })) {
+        expect(t.length).toBeGreaterThan(0);
+        expect(t.length).toBeLessThanOrEqual(MAX_DELKA_TRANSPARENTU);
+        expect(t).not.toContain("—");
+      }
+    }
   });
 });

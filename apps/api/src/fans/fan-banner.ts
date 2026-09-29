@@ -3,19 +3,15 @@
  *
  * Posbírá stav, který o partách stejně víme (nálada, kampaně, rivalita,
  * miláček, série, střelba, taktika), a nechá `engine/fan-banner.ts` vybrat
- * heslo. Přepočítává se v denním ticku, ne při zobrazení: nápis na plachtě se
+ * heslo z ručně psaného katalogu. Model hesla psal dřív, ale skládal slova
+ * bez smyslu a s patvary („SPŮLE JE NAŠE KRVOU, SRDCEM, DUŠÍ“). Přepočítává se v denním ticku, ne při zobrazení: nápis na plachtě se
  * nemá měnit pokaždé, když někdo otevře stránku stadionu.
  */
 
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
 import { logger } from "../lib/logger";
-import {
-  vyberTransparent, prijmeni, MAX_DELKA_TRANSPARENTU, type StavProTransparent,
-} from "../engine/fan-banner";
-import { promptTransparentu, slovaSponzoru, vadaPlachty, vzorecPlachty, type BannerTon } from "../engine/fan-banner-ai";
-import { zkontrolujChoral } from "../engine/fan-chant-inspirace";
-import type { Bindings } from "../index";
+import { mozneTransparenty, vyberTransparent, type StavProTransparent } from "../engine/fan-banner";
 import { rivaloveKlubu } from "./fan-rivalries";
 import type { FanGroupRow } from "./fan-group-generator";
 import type { FanGroupKind } from "../engine/fan-groups";
@@ -33,11 +29,6 @@ export async function prepoctiTransparent(
   teamId: string,
   groups: readonly FanGroupRow[],
   gameDate: string,
-  /**
-   * Když je k dispozici, heslo napíše model. Šablona zůstává zálohou pro
-   * případ, že je generování vypnuté nebo vrátí patvar.
-   */
-  env?: Pick<Bindings, "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL">,
 ): Promise<{ text: string; duvod: string } | null> {
   const stadion = await db
     .prepare("SELECT ultras_text, ultras_text_duvod, ultras_stand FROM stadiums WHERE team_id = ?")
@@ -73,13 +64,8 @@ export async function prepoctiTransparent(
       .catch((e) => { logger.warn({ module: M }, "taktika pro transparent", e); return null; }),
   ]);
 
-  // Obce vlastního klubu i rivala. Na plachtě se klub jmenuje podle obce: celý
-  // název nese sponzora a model ho pak vyvěšoval („Jitono, ty jsi naše!“).
+  // Na plachtě se klub i rival jmenují podle obce. Celý název nese sponzora.
   const obce = await obceKlubu(db, [teamId, ...(rivalove[0] ? [rivalove[0].teamId] : [])]);
-  const klub = (await db.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId)
-    .first<{ name: string }>()
-    .catch((e) => { logger.warn({ module: M }, "název klubu pro transparent", e); return null; }))?.name ?? "";
-  const obec = obce.get(teamId) ?? klub;
   const rivalObec = rivalove[0] ? (obce.get(rivalove[0].teamId) ?? rivalove[0].name) : null;
 
   const protiHraci = kampane.results.find((k) => k.kind === "hrac_ven");
@@ -95,6 +81,7 @@ export async function prepoctiTransparent(
     golyPoslednich5: forma.goly,
     taktika: taktika?.tactic ?? null,
     kind: parta.kind as FanGroupKind,
+    obec: obce.get(teamId) ?? null,
   };
 
   // Seed z herního dne, ne z času: nápis se smí měnit ze dne na den, ne mezi
@@ -102,36 +89,17 @@ export async function prepoctiTransparent(
   const rng = createRng(seedFromString(`banner|${teamId}|${gameDate.slice(0, 10)}`));
   const sablona = vyberTransparent(stav, rng.random());
 
-  // Plachta visí, dokud platí důvod. Model vrací pokaždé jiný text, takže bez
-  // téhle podmínky by se heslo měnilo KAŽDÝ DEN, každý den by o tom přišel
-  // příspěvek na Tribunu a každý den by to stálo volání modelu. Plachta se
-  // přepisuje, když se změní důvod, ne když se přetočí kalendář.
-  // Výjimka: plachta, která dnešní kontrolou neprojde (sponzor, číslo, děkování),
-  // se přepíše i beze změny důvodu. Tak zmizí staré patvary z doby před
-  // přepsáním zadání a nemusí se kvůli tomu sahat do dat.
-  // Sponzory všech klubů v lize, ne jen vlastního a rivala: model psal na plachtu
-  // i cizí („HODOUCH JE NÁŠ! MADETA PATŘÍ JEMU!“ ve Vimperku).
-  const liga = await klubyLigy(db, teamId);
-  const sponzori = slovaSponzoru(
-    [klub, ...(rivalove[0] ? [rivalove[0].name] : []), ...liga.map((k) => k.nazev)],
-    [...obce.values(), ...liga.map((k) => k.obec)],
-  );
-  const staraVada = stadion.ultras_text ? vadaPlachty(stadion.ultras_text, sponzori) : null;
-  if (stadion.ultras_text && stadion.ultras_text_duvod === sablona.duvod && !staraVada) return null;
-  if (staraVada) logger.info({ module: M, teamId }, `stará plachta „${stadion.ultras_text}" jde dolů (${staraVada})`);
-
-  const okres = (await db.prepare(
-    "SELECT v.district FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
-  ).bind(teamId).first<{ district: string | null }>()
-    .catch((e) => { logger.warn({ module: M }, "okres pro transparent", e); return null; }))?.district ?? null;
-  const t = {
-    ...sablona,
-    text: await napisTransparent(env, {
-      ton: sablona.tone, stav, obec, okres, zaloha: sablona.text,
-      sponzori,
-      seed: seedFromString(`plachta|${teamId}|${sablona.tone}`),
-    }),
-  };
+  // Plachta visí, dokud platí důvod. Heslo se losuje každý den znovu, takže bez
+  // téhle podmínky by se měnilo KAŽDÝ DEN a každý den by o tom přišel příspěvek
+  // na Tribunu. Plachta se přepisuje, když se změní důvod, ne když se přetočí
+  // kalendář. Výjimka: text, který katalog pro dnešní stav vůbec nezná (hesla
+  // od modelu z dřívějška), jde dolů i beze změny důvodu.
+  const zKatalogu = !!stadion.ultras_text && mozneTransparenty(stav).includes(stadion.ultras_text);
+  if (stadion.ultras_text && stadion.ultras_text_duvod === sablona.duvod && zKatalogu) return null;
+  if (stadion.ultras_text && !zKatalogu) {
+    logger.info({ module: M, teamId }, `plachta „${stadion.ultras_text}" není z katalogu, jde dolů`);
+  }
+  const t = sablona;
 
   await db
     .prepare("UPDATE stadiums SET ultras_text = ?, ultras_text_duvod = ? WHERE team_id = ?")
@@ -181,82 +149,6 @@ export async function formaKlubu(db: D1Database, teamId: string): Promise<{ seri
   return { serie, goly, zapasu: rows.results.length };
 }
 
-/**
- * Heslo na plachtu od modelu.
- *
- * Proč model a ne jen šablona: šablona je vázaná na podmínku, takže je vždycky
- * pravdivá, ale dva kluby ve stejné situaci vyvěsí doslova totéž. Plachta je
- * přitom to první, co je na stadionu vidět.
- *
- * Fakta si model nedomýšlí, dostane hotové věty ze stavu part. Když vrátí
- * cokoli podezřelého, vrací se šablona, takže na plachtě nikdy nevisí patvar.
- */
-async function napisTransparent(
-  env: Pick<Bindings, "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL"> | undefined,
-  opts: {
-    ton: BannerTon; stav: StavProTransparent; obec: string; okres: string | null; zaloha: string;
-    /** Slova z názvů klubů, která nejsou obec. Na plachtě být nesmí. */
-    sponzori: string[];
-    /** Určuje, kterou stavbu plachty dostane tenhle klub. */
-    seed: number;
-  },
-): Promise<string> {
-  if (!env) return opts.zaloha;
-  try {
-    const { aiContextFromEnv, generateText } = await import("../lib/ai-provider");
-    const ctx = await aiContextFromEnv(env);
-    if (ctx.provider === "off") return opts.zaloha;
-
-    const fakta = faktaProTon(opts.ton, opts.stav);
-    if (fakta.length === 0) return opts.zaloha;
-    const povinne = povinneSlovoTonu(opts.ton, opts.stav);
-
-    const raw = await generateText(
-      ctx,
-      promptTransparentu({
-        ton: opts.ton, fakta, obec: opts.obec, okres: opts.okres,
-        maxDelka: MAX_DELKA_TRANSPARENTU, povinneSlovo: povinne,
-        vzorec: vzorecPlachty(opts.seed),
-      }),
-      { maxTokens: 100, temperature: 1.0, module: M },
-    );
-
-    const jmena = [opts.stav.oblibenec, opts.stav.trener, opts.stav.kampanProtiHraci]
-      .filter(Boolean) as string[];
-    const kontrola = zkontrolujChoral(raw, {
-      jmena,
-      musiObsahovat: povinne,
-      maxDelka: MAX_DELKA_TRANSPARENTU,
-      // Heslo proti soupeři nesmí soupeři fandit, stejná past jako u chorálů.
-      tema: opts.ton === "proti_soupefi" ? "rival" : undefined,
-      nazvyVPrvnimPade: [opts.obec, ...(opts.stav.rival ? [opts.stav.rival.nazev] : [])],
-    });
-    if (!kontrola.ok) {
-      logger.info({ module: M }, `heslo od modelu zahozeno (${kontrola.duvod}), beru šablonu`);
-      return opts.zaloha;
-    }
-    const vada = vadaPlachty(kontrola.text, opts.sponzori);
-    if (vada) {
-      logger.info({ module: M }, `heslo od modelu zahozeno (${vada}), beru šablonu`);
-      return opts.zaloha;
-    }
-    return kontrola.text;
-  } catch (e) {
-    logger.warn({ module: M }, "generování hesla selhalo, beru šablonu", e);
-    return opts.zaloha;
-  }
-}
-
-/** Názvy a obce klubů ze stejné ligy. */
-async function klubyLigy(db: D1Database, teamId: string): Promise<Array<{ nazev: string; obec: string }>> {
-  const rows = await db.prepare(
-    `SELECT t.name AS nazev, v.name AS obec FROM teams t JOIN villages v ON v.id = t.village_id
-      WHERE t.league_id = (SELECT league_id FROM teams WHERE id = ?)`,
-  ).bind(teamId).all<{ nazev: string; obec: string }>()
-    .catch((e) => { logger.warn({ module: M }, "kluby ligy pro transparent", e); return { results: [] as never[] }; });
-  return rows.results;
-}
-
 /** Obce klubů podle id. Kluby bez obce ve výsledku chybí. */
 async function obceKlubu(db: D1Database, teamIds: string[]): Promise<Map<string, string>> {
   const rows = await db.prepare(
@@ -265,46 +157,4 @@ async function obceKlubu(db: D1Database, teamIds: string[]): Promise<Map<string,
   ).bind(...teamIds).all<{ id: string; name: string }>()
     .catch((e) => { logger.warn({ module: M }, "obce klubů pro transparent", e); return { results: [] as never[] }; });
   return new Map(rows.results.map((r) => [r.id, r.name]));
-}
-
-/** Slovo, bez kterého heslo na dané téma nedává smysl. */
-function povinneSlovoTonu(ton: BannerTon, s: StavProTransparent): string | null {
-  switch (ton) {
-    case "proti_soupefi": return s.rival?.nazev ?? null;
-    case "proti_treneru":
-    case "pro_trenera": return s.trener ? prijmeni(s.trener) : null;
-    case "proti_hraci": return s.kampanProtiHraci ? prijmeni(s.kampanProtiHraci) : null;
-    default: return null;
-  }
-}
-
-/** Hotová fakta k tónu. Model nesmí nic domýšlet, dostane jen tohle. */
-function faktaProTon(ton: BannerTon, s: StavProTransparent): string[] {
-  switch (ton) {
-    case "proti_soupefi":
-      return s.rival ? [`Rival je obec ${s.rival.nazev}. Je to mezi námi dlouhodobě vyhrocené.`] : [];
-    case "proti_treneru":
-      return s.trener ? [`Trenér se jmenuje ${s.trener} a chceme, aby skončil.`] : [];
-    case "pro_trenera":
-      return s.trener
-        ? [`Trenér se jmenuje ${s.trener}.`, "Tým pod ním vyhrává jeden zápas za druhým."]
-        : [];
-    case "proti_hraci":
-      return s.kampanProtiHraci ? [`Hráč ${s.kampanProtiHraci} má podle nás v týmu skončit.`] : [];
-    case "vytka":
-      return [
-        s.heatKotle >= 60 ? "Jsme naštvaní na vedení klubu." : "Nálada v kotli je mizerná.",
-        "Pořád je to náš klub a chodíme dál.",
-      ];
-    case "podpora":
-    default: {
-      // Schválně BEZ jména miláčka. Když ho model dostal, začal na hráče
-      // mluvit („Vojtěchu Bartoši, buď už konečně doma!“), což je u plachty
-      // o identitě klubu nesmysl. Na hráče má kotel chorál, ne plachtu.
-      const f = ["Chodíme na fotbal za každého počasí a jsme odsud."];
-      // Bez počtu: s číslem ve faktech ho model psal na plachtu („5 VÝHER!“).
-      if (s.serie > 0) f.push("Tým teď vyhrává.");
-      return f;
-    }
-  }
 }
