@@ -1,10 +1,11 @@
 /** Jediné pravidlo pro otevření okresu, používané onboardingem i zápisem týmu. */
 export async function districtAccess(db: D1Database, district: string, userId?: string): Promise<string | null> {
   const registration = await db.prepare(
-    `SELECT d.status, d.founder_request_id, d.founder_team_id, r.user_id AS founder_user_id
+    `SELECT d.status, d.founder_request_id, d.founder_team_id, r.user_id AS founder_user_id,
+       r.status AS founder_status, r.activated_at AS founder_activated_at
      FROM district_registrations d LEFT JOIN league_requests r ON r.id = d.founder_request_id
      WHERE d.district = ?`
-  ).bind(district).first<{ status: string; founder_request_id: string | null; founder_team_id: string | null; founder_user_id: string | null }>();
+  ).bind(district).first<{ status: string; founder_request_id: string | null; founder_team_id: string | null; founder_user_id: string | null; founder_status: string | null; founder_activated_at: string | null }>();
   if (registration?.status !== "ready") return "Pro tento okres právě připravujeme data. Registraci týmů otevřeme po dokončení přípravy.";
   if (userId) {
     const user = await db.prepare("SELECT registration_district FROM users WHERE id = ?")
@@ -12,7 +13,8 @@ export async function districtAccess(db: D1Database, district: string, userId?: 
     if (!user) return "Účet nebyl nalezen.";
     if (user.registration_district && user.registration_district !== district) return "Svůj tým můžeš založit pouze ve vybraném okrese.";
   }
-  if (registration.founder_request_id && !registration.founder_team_id && registration.founder_user_id !== userId) {
+  if (registration.founder_request_id && !registration.founder_team_id && registration.founder_user_id !== userId
+    && founderStillHasHeadStart(registration.founder_status, registration.founder_activated_at)) {
     return "Okres už je připravený. Nejprve svůj klub založí zakladatel ligy, pak se připojí ostatní manažeři.";
   }
   return null;
@@ -45,4 +47,17 @@ export async function appointFounder(db: D1Database, userId: string, teamId: str
       AND status = 'open' AND EXISTS (SELECT 1 FROM competition_officials WHERE id = ? AND team_id = ?)`)
       .bind(teamId, founder.game_date, founder.league_id, founder.season_number, mandateId, teamId),
   ]);
+}
+
+/** Jak dlouho má aktivovaný zakladatel okres jen pro sebe, než založí klub. */
+export const FOUNDER_HEAD_START_MS = 2 * 3600000;
+
+/**
+ * Zakladatel s platným aktivačním odkazem drží okres, dokud klub nezaloží. Po okamžité registraci
+ * má náskok jen dvě hodiny: kdo klub nedokončí, nesmí zablokovat okres ostatním navždy.
+ */
+function founderStillHasHeadStart(status: string | null, activatedAt: string | null, now = Date.now()): boolean {
+  if (status !== "activated") return true;
+  if (!activatedAt) return false;
+  return now - Date.parse(activatedAt) < FOUNDER_HEAD_START_MS;
 }

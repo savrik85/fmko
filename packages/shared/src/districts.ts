@@ -82,4 +82,6 @@ export const REGISTRATION_DISTRICTS = [
 export interface RegistrationDistrict {
   name: string;
   status: "available" | "preparing" | "ready";
+  /** Připravený okres bez zakladatele a bez lidských klubů: první hráč v něm povede ligu. */
+  founderFree: boolean;
 }

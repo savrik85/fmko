@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTeam } from "@/context/team-context";
 import { REGISTRATION_DISTRICTS, type RegistrationDistrict } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
 import { Button, Input, ErrorBox } from "@/components/ui";
@@ -16,7 +18,13 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const status = districts.find(d => d.name === district)?.status;
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const { login } = useTeam();
+  const router = useRouter();
+  const selected = districts.find(d => d.name === district);
+  const status = selected?.status;
+  const instant = status === "ready";
 
   function loadDistricts() {
     setLoadError(false);
@@ -31,12 +39,23 @@ export default function RegisterPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
+    if (instant && password !== confirm) { setError("Hesla se neshodují."); return; }
     setLoading(true); setError("");
     try {
+      if (instant) {
+        const result = await apiFetch<{ token: string; user: { id: string; email: string; teamId: null; teamName: null } }>("/api/registration/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, password, district }) });
+        sessionStorage.removeItem("onboarding_step"); sessionStorage.removeItem("onboarding_state");
+        login(result.token, result.user); router.replace("/onboarding");
+        return;
+      }
       await apiFetch("/api/registration/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, district }) });
       setSubmitted(true);
-    } catch (err) { setError((err as Error).message === "Network error" ? "Registraci se nepodařilo odeslat. Zkontroluj připojení a zkus to znovu." : (err as Error).message); }
-    finally { setLoading(false); }
+    } catch (err) {
+      const message = (err as Error).message;
+      if (message === "district_not_ready") { loadDistricts(); setError("Tenhle okres se ještě připravuje. Odešli žádost a ozveme se."); }
+      else setError(message === "Network error" ? "Registraci se nepodařilo odeslat. Zkontroluj připojení a zkus to znovu." : message);
+    }
+    setLoading(false);
   }
 
   return <main className={styles.page}>
@@ -47,16 +66,21 @@ export default function RegisterPage() {
         {submitted ? <div role="status" className={styles.success}>
           <span className={styles.check} aria-hidden="true">✓</span><p className={styles.eyebrow}>ŽÁDOST JE U NÁS</p><h2 id="registration-title">{district} jde do hry.</h2><p>Žádost jsme přijali. Na <strong>{email.trim()}</strong> dostaneš do 24 hodin další postup a aktivační odkaz.</p><div className={styles.note}>Týmy se odemknou po přípravě okresu. Zatím dej vědět kamarádům, že se chystá vaše liga.</div><p className={styles.small}>Pokud se neozveme, zkontroluj spam nebo napiš na <a href="mailto:admin@prales.fun">admin@prales.fun</a>.</p><Link href="/" className={styles.submit}>Zpět do Pralesa →</Link>
         </div> : <>
-          <p className={styles.eyebrow}>JEN TŘI ÚDAJE A JSME VE HŘE</p><h2 id="registration-title">{status === "ready" ? "Přidej se do okresu" : "Rozjeď svůj okres"}</h2><p className={styles.description}>Heslo a vlastní tým vyřešíš až po přípravě dat.</p>
+          <p className={styles.eyebrow}>JEN TŘI ÚDAJE A JSME VE HŘE</p><h2 id="registration-title">{selected?.founderFree ? "Založ ligu jako první" : instant ? "Přidej se do okresu" : "Rozjeď svůj okres"}</h2><p className={styles.description}>{instant ? "Okres je připravený. Po registraci rovnou zakládáš klub." : "Heslo a vlastní tým vyřešíš až po přípravě dat."}</p>
           <form onSubmit={submit} className={styles.form}>
             <Input label="Tvoje jméno" name="name" autoComplete="name" placeholder="Jak ti máme říkat?" value={name} minLength={2} maxLength={80} onChange={e => setName(e.target.value)} required />
             <Input label="E-mail" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="tvuj@email.cz" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} required />
-            <div><label htmlFor="district" className="input-label">Váš okres</label><select id="district" name="district" className="input" value={district} onChange={e => setDistrict(e.target.value)} required aria-describedby="district-help"><option value="" disabled>Vyber okres</option>{REGISTRATION_DISTRICTS.map(name => <option key={name} value={name}>{name}{districts.find(d => d.name === name)?.status === "ready" ? " · připravený" : districts.find(d => d.name === name)?.status === "preparing" ? " · v přípravě" : ""}</option>)}</select></div>
-            <div id="district-help" className={styles.note}>{status === "ready" ? "Tento okres už je připravený. Připojíš se jako manažer k existující lize. První předsednický mandát už patří jejímu zakladateli." : status === "preparing" ? "Tenhle okres už má svého zakladatele a připravuje se. Přidej se k němu jako manažer. Ozveme se po dokončení dat." : "Založením nové ligy se staneš jejím prvním předsedou na první období. Do 24 hodin připravíme data pro váš okres a pošleme ti aktivační odkaz."}</div>
+            <div><label htmlFor="district" className="input-label">Váš okres</label><select id="district" name="district" className="input" value={district} onChange={e => setDistrict(e.target.value)} required aria-describedby="district-help"><option value="" disabled>Vyber okres</option>{REGISTRATION_DISTRICTS.map(name => <option key={name} value={name}>{name}{districts.find(d => d.name === name)?.status === "ready" ? " · hraj hned" : districts.find(d => d.name === name)?.status === "preparing" ? " · v přípravě" : ""}</option>)}</select></div>
+            <div id="district-help" className={styles.note}>{selected?.founderFree ? "Okres je připravený a zatím v něm nikdo nehraje. Kdo založí klub první, povede ligu jako její předseda na první období." : status === "ready" ? "Okres je připravený. Připojíš se jako manažer a klub založíš hned po registraci." : status === "preparing" ? "Tenhle okres už má svého zakladatele a připravuje se. Přidej se k němu jako manažer. Ozveme se po dokončení dat." : "Založením nové ligy se staneš jejím prvním předsedou na první období. Do 24 hodin připravíme data pro váš okres a pošleme ti aktivační odkaz."}</div>
+            {instant && <>
+              <Input label="Heslo" type="password" name="new-password" autoComplete="new-password" minLength={8} maxLength={128} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{8,128}" title="8 až 128 znaků, malé i velké písmeno a číslo" aria-describedby="password-help" value={password} onChange={e => setPassword(e.target.value)} required />
+              <p id="password-help" className={styles.small}>Alespoň 8 znaků, malé i velké písmeno a číslo.</p>
+              <Input label="Heslo znovu" type="password" name="new-password-confirm" autoComplete="new-password" maxLength={128} value={confirm} onChange={e => setConfirm(e.target.value)} required />
+            </>}
             {loadError && <p role="alert" className={styles.small}>Stav okresů teď nejde načíst. <button type="button" onClick={loadDistricts} className="underline">Zkusit znovu</button></p>}
             <ErrorBox message={error} />
-            <Button type="submit" size="lg" disabled={loading || !district || !name.trim() || districts.length === 0} className={styles.submit}>{loading ? "Odesílám žádost…" : status === "available" ? "Založit vlastní ligu ↗" : "Odeslat registraci ↗"}</Button>
-            <p className={styles.small}>E-mail použijeme pro vyřízení registrace a přístup do hry. Odesláním žádosti se ještě nezakládá tým.</p>
+            <Button type="submit" size="lg" disabled={loading || !district || !name.trim() || districts.length === 0} className={styles.submit}>{loading ? (instant ? "Zakládám účet…" : "Odesílám žádost…") : instant ? "Registrovat a založit klub ↗" : status === "available" ? "Založit vlastní ligu ↗" : "Odeslat registraci ↗"}</Button>
+            <p className={styles.small}>{instant ? "E-mail slouží k přihlášení do hry." : "E-mail použijeme pro vyřízení registrace a přístup do hry. Odesláním žádosti se ještě nezakládá tým."}</p>
           </form>
         </>}
       </section>

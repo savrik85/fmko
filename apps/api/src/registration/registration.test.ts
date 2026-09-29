@@ -76,11 +76,11 @@ beforeEach(async () => {
 describe("registrace okresu", () => {
   it("nabízí všech 77 okresů včetně těch bez herních dat a zachová rozehrané okresy", async () => {
     const res = await call("/api/registration/districts");
-    const data = await res.json() as Array<{ name: string; status: string }>;
+    const data = await res.json() as Array<{ name: string; status: string; founderFree: boolean }>;
     expect(data).toHaveLength(77);
-    expect(data).toContainEqual({ name: "Praha-východ", status: "available" });
-    expect(data).toContainEqual({ name: "Kladno", status: "ready" });
-    expect(data).toContainEqual({ name: "Prachatice", status: "ready" });
+    expect(data).toContainEqual({ name: "Praha-východ", status: "available", founderFree: false });
+    expect(data).toContainEqual({ name: "Kladno", status: "ready", founderFree: false });
+    expect(data).toContainEqual({ name: "Prachatice", status: "ready", founderFree: true });
   });
   it("uloží tři údaje bez založení účtu či přihlášení a zarezervuje zakladatele", async () => {
     const id = await request();
@@ -165,5 +165,66 @@ describe("registrace okresu", () => {
     expect(info?.founder_request_id).toBeNull();
     await appointFounder(db, member.user.id, "any-team");
     expect((await db.prepare("SELECT COUNT(*) AS count FROM competition_officials").first())?.count).toBe(0);
+  });
+});
+
+describe("okamžitá registrace do připraveného okresu", () => {
+  const join = (email: string, district = "Beroun", password = "BezpecneHeslo1") =>
+    call("/api/registration/join", { name: "Jan Hráč", email, password, district });
+  async function openBeroun() { await sql("INSERT INTO district_registrations (district, status, ready_at) VALUES ('Beroun','ready','2026-09-29T00:00:00Z')"); }
+
+  it("nepřipravený okres pošle na žádost a nic nezaloží", async () => {
+    const res = await join("a@example.test");
+    expect(res.status).toBe(409);
+    expect((await res.json() as { error: string }).error).toBe("district_not_ready");
+    expect(await db.prepare("SELECT 1 FROM users WHERE email='a@example.test'").first()).toBeNull();
+  });
+  it("založí účet se session a prvního hráče prázdného okresu udělá zakladatelem", async () => {
+    await openBeroun();
+    const res = await join("first@example.test");
+    expect(res.status).toBe(201);
+    const body = await res.json() as { token: string; user: { id: string } };
+    expect((await getSession(env.SESSION_KV, body.token))?.userId).toBe(body.user.id);
+    const user = await db.prepare("SELECT password_hash, registration_district FROM users WHERE id = ?").bind(body.user.id).first<{ password_hash: string; registration_district: string }>();
+    expect(user?.registration_district).toBe("Beroun");
+    expect(await verifyPassword("BezpecneHeslo1", user!.password_hash)).toBe(true);
+    const founder = await db.prepare("SELECT r.user_id FROM district_registrations d JOIN league_requests r ON r.id = d.founder_request_id WHERE d.district='Beroun'").first();
+    expect(founder?.user_id).toBe(body.user.id);
+    expect(await districtAccess(db, "Beroun", body.user.id)).toBeNull();
+    expect(await districtAccess(db, "Beroun", "member")).toContain("Nejprve");
+    expect((await join("second@example.test")).status).toBe(201);
+    expect((await db.prepare("SELECT r.email FROM district_registrations d JOIN league_requests r ON r.id = d.founder_request_id WHERE d.district='Beroun'").first())?.email).toBe("first@example.test");
+  });
+  it("zakladatel, který klub nezaloží, blokuje okres jen dvě hodiny", async () => {
+    await openBeroun();
+    expect((await join("first@example.test")).status).toBe(201);
+    await sql("UPDATE league_requests SET activated_at = '2000-01-01T00:00:00Z'");
+    expect(await districtAccess(db, "Beroun", "member")).toBeNull();
+  });
+  it("rozehraný okres zakladatele nedostane", async () => {
+    await openBeroun();
+    await sql("INSERT INTO teams (id,user_id,village_id,name) VALUES ('human-team','someone','beroun-village','SK Beroun')");
+    expect((await join("late@example.test")).status).toBe(201);
+    expect((await db.prepare("SELECT founder_request_id FROM district_registrations WHERE district='Beroun'").first())?.founder_request_id).toBeNull();
+  });
+  it("odmítne slabé heslo, existující účet i žádost vedenou pro jiný okres", async () => {
+    await openBeroun();
+    expect((await join("weak@example.test", "Beroun", "heslo")).status).toBe(400);
+    expect((await join("member@example.test")).status).toBe(409);
+    await request("other@example.test", "Benešov");
+    expect((await join("other@example.test")).status).toBe(409);
+  });
+  it("dřívější žádost se stejným e-mailem převezme i s rezervací zakladatele", async () => {
+    const id = await request("early@example.test");
+    await sql("UPDATE district_registrations SET status = 'ready' WHERE district = 'Beroun'");
+    const res = await join("early@example.test");
+    expect(res.status).toBe(201);
+    expect(await db.prepare("SELECT status, user_id IS NOT NULL AS has_user FROM league_requests WHERE id = ?").bind(id).first()).toEqual({ status: "activated", has_user: 1 });
+    expect((await db.prepare("SELECT COUNT(*) AS count FROM league_requests").first())?.count).toBe(1);
+  });
+  it("migrace otevře Strakonice, Písek a Český Krumlov", async () => {
+    await sql(readFileSync(new URL("../../migrations/0231_open_south_districts.sql", import.meta.url), "utf8"));
+    const rows = (await db.prepare("SELECT district, status FROM district_registrations WHERE district IN ('Strakonice','Písek','Český Krumlov') ORDER BY district").all()).results;
+    expect(rows).toEqual([{ district: "Písek", status: "ready" }, { district: "Strakonice", status: "ready" }, { district: "Český Krumlov", status: "ready" }]);
   });
 });
