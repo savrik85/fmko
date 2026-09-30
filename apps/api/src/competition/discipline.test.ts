@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectEvidence, DEFAULT_EVIDENCE_LIMITS } from "./discipline";
+import { canFine, collectEvidence, DEFAULT_EVIDENCE_LIMITS } from "./discipline";
 
 /**
  * Atrapa D1, která odpovídá podle toho, na co se dotaz ptá. Sbírání důkazů dělá
@@ -59,5 +59,53 @@ describe("důkazy pro disciplinárku", () => {
     expect(await collectEvidence(db, "t1", limity({ pitchThreshold: 30 }))).toEqual([]);
     const out = await collectEvidence(db, "t1", limity({ pitchThreshold: 50 }));
     expect(out.find((e) => e.kind === "pitch")?.detail).toContain("40");
+  });
+});
+
+/**
+ * Atrapa pro canFine: `issued` = pokuty do stropu, `sameKind` = platné pokuty
+ * téhož skutku. Dotaz na týž skutek se pozná podle `kind = ?`.
+ */
+const dbProStrop = (o: { issued?: number; open?: number; sameKind?: number }) => ({
+  prepare: (sql: string) => ({
+    bind: () => ({
+      first: async () => {
+        if (sql.includes("competition_proposals")) return { n: o.open ?? 0 };
+        if (sql.includes("kind = ?")) return { n: o.sameKind ?? 0 };
+        return { n: o.issued ?? 0 };
+      },
+    }),
+  }),
+}) as unknown as D1Database;
+
+describe("smí se podat návrh na pokutu", () => {
+  it("nesportovní chování jde vytknout znovu za jiný incident", async () => {
+    // Dřív platilo jednou za sezónu: klub s pokutou za plachtu na jednom zápase
+    // byl nedotknutelný i za úplně jiný zápas.
+    const r = await canFine(dbProStrop({ issued: 1, sameKind: 1 }), "l", "t", 2, "other");
+    expect(r.ok).toBe(true);
+  });
+
+  it("strop dvou pokut za sezónu platí i pro nesportovní chování", async () => {
+    const r = await canFine(dbProStrop({ issued: 2 }), "l", "t", 2, "other");
+    expect(r.ok).toBe(false);
+  });
+
+  it("manipulace se sázkami zůstává jednou za sezónu", async () => {
+    const r = await canFine(dbProStrop({ sameKind: 1 }), "l", "t", 2, "bet_manipulation");
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain("jen jednou za sezónu");
+  });
+
+  it("do stropu jednou za sezónu se nepočítají zrušené pokuty", async () => {
+    let sql = "";
+    const db = {
+      prepare: (s: string) => {
+        if (s.includes("kind = ?")) sql = s;
+        return { bind: () => ({ first: async () => ({ n: 0 }) }) };
+      },
+    } as unknown as D1Database;
+    await canFine(db, "l", "t", 2, "bet_manipulation");
+    expect(sql).toContain("status IN ('issued','appealed','paid')");
   });
 });

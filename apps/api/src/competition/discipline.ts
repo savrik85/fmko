@@ -6,8 +6,9 @@
  * jestli se něco stalo, nebo se jen někdo nudil. Důkaz vidí všichni při hlasování.
  *
  * Jediná výjimka je volná položka „nesportovní chování": nemá důkaz, a proto má
- * tvrdší podmínky — dvoutřetinovou většinu, jednou za sezónu na klub, a kdo ji
- * podá neúspěšně, přijde o kauci.
+ * tvrdší podmínky — dvoutřetinovou většinu, a kdo ji podá neúspěšně, přijde
+ * o kauci. Jde podat opakovaně (každý incident je jiný), strop dvou pokut za
+ * sezónu ale platí i pro ni.
  */
 
 import { logger } from "../lib/logger";
@@ -41,6 +42,13 @@ export interface Offence {
   majority: number;
   /** Bez důkazu = tvrdší podmínky. */
   freeText?: boolean;
+  /**
+   * Jen jedna platná pokuta za sezónu na klub. Nesportovní chování to NEMÁ: je to
+   * sběrná kolonka pro různé incidenty z různých zápasů a jeden vyřízený skutek
+   * nesmí krýt všechny další. Brzdí ho dvoutřetinová většina, kauce, jeden návrh
+   * na programu a strop dvou pokut za sezónu.
+   */
+  oncePerSeason?: boolean;
 }
 
 export const OFFENCES: Record<string, Offence> = {
@@ -76,6 +84,9 @@ export const OFFENCES: Record<string, Offence> = {
     evidenceLabel: "bez strojového důkazu, navrhovatel doloží sám",
     majority: QUALIFIED_MAJORITY,
     freeText: true,
+    // Do stropu dvou pokut se nepočítá, takže jinou brzdu proti opakovanému
+    // obviňování nemá.
+    oncePerSeason: true,
   },
   fan_violence: {
     kind: "fan_violence",
@@ -306,13 +317,13 @@ export async function canFine(
     return { ok: false, reason: "Na tenhle klub už jeden návrh na pokutu na programu je." };
   }
 
-  if (offence.freeText) {
-    // Strop se počítá pro KAŽDÝ volný skutek zvlášť. Dřív tu bylo natvrdo
-    // kind = 'other', takže by manipulace se sázkami sdílela počítadlo
-    // s nesportovním chováním a jedno by blokovalo druhé.
+  if (offence.oncePerSeason) {
+    // Zrušená pokuta (vyhrané odvolání) se nepočítá — jinak by klub, kterému
+    // soutěž křivdila, byl za odměnu na zbytek sezóny nedotknutelný.
     const used = await db.prepare(
       `SELECT COUNT(*) AS n FROM competition_sanctions
-        WHERE league_id = ? AND team_id = ? AND season_number = ? AND kind = ?`
+        WHERE league_id = ? AND team_id = ? AND season_number = ? AND kind = ?
+          AND status IN ('issued','appealed','paid')`
     ).bind(leagueId, targetTeamId, seasonNumber, kind).first<{ n: number }>()
       .catch((e) => { logger.warn({ module: M }, `volné pokuty (${kind})`, e); return null; });
     if ((used?.n ?? 0) > 0) {
@@ -408,7 +419,7 @@ async function afterSanction(
       WHERE league_id = ? AND team_id = ? AND season_number = ?
         AND issued_by IN ('vote','chair')`
   ).bind(leagueId, teamId, seasonNumber).first<{ n: number }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "počet pokut pro kredit u sudích", e); return null; });
   if ((count?.n ?? 0) < MAX_FINES_PER_TEAM) return;
 
   await db.prepare(
