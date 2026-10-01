@@ -229,8 +229,10 @@ async function absenceSituace(db: D1Database, incidentId: string, teamId: string
        JOIN teams a ON a.id = m.away_team_id
       WHERE (m.home_team_id = ?1 OR m.away_team_id = ?1)
         AND substr(sc.scheduled_at, 1, 10) BETWEEN ?2 AND ?3
+        -- Neodehraná kola starých sezón v kalendáři visí pořád, nepatří sem.
+        AND sc.season_number = (SELECT season_number FROM club_incidents WHERE id = ?4)
       ORDER BY sc.scheduled_at`,
-  ).bind(teamId, abs.od_dne, abs.do_dne).all<{ matchId: string; den: string; souper: string }>()
+  ).bind(teamId, abs.od_dne, abs.do_dne, incidentId).all<{ matchId: string; den: string; souper: string }>()
     .catch((e) => { logger.warn({ module: M }, `zápasy v absenci ${incidentId}`, e); return { results: [] as Array<{ matchId: string; den: string; souper: string }> }; });
   return { od: abs.od_dne, do: abs.do_dne, zapasy: zapasy.results };
 }

@@ -40,15 +40,18 @@ async function nactiHrace(db: D1Database, teamId: string, playerId: string): Pro
     .catch((e) => { logger.warn({ module: M }, `hráč situace ${playerId}`, e); return null; });
 }
 
-/** Dny soutěžních zápasů klubu, na které může incidentní absence dopadnout. */
+/**
+ * Dny soutěžních zápasů klubu, na které může incidentní absence dopadnout. Jen letošní
+ * sezóna: v kalendáři visí neodehraná kola starých sezón se stavem `scheduled`.
+ */
 async function dnyZapasuTymu(db: D1Database, stav: StavKlubu): Promise<string[]> {
   const od = denPlus(stav.den, MIN_OHLASENI_ABSENCE_DNI);
   const doDne = denPlus(stav.den, MIN_OHLASENI_ABSENCE_DNI + ABSENCE_HLEDAT_ZAPAS_DNI);
   const res = await db.prepare(
     `SELECT DISTINCT substr(sc.scheduled_at, 1, 10) AS den FROM season_calendar sc
-      WHERE sc.status = 'scheduled' AND substr(sc.scheduled_at, 1, 10) BETWEEN ?1 AND ?2
+      WHERE sc.status = 'scheduled' AND sc.season_number = ?4 AND substr(sc.scheduled_at, 1, 10) BETWEEN ?1 AND ?2
         AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id AND (m.home_team_id = ?3 OR m.away_team_id = ?3))`,
-  ).bind(od, doDne, stav.teamId).all<{ den: string }>()
+  ).bind(od, doDne, stav.teamId, stav.seasonNumber).all<{ den: string }>()
     .catch((e) => { logger.warn({ module: M }, `zápasy klubu pro absenci ${stav.teamId}`, e); return { results: [] as Array<{ den: string }> }; });
   return res.results.map((r) => r.den);
 }
