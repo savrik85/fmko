@@ -25,7 +25,7 @@ import {
   ODMITNUTA_ZALOHA_MORALKA, ODMITNUTA_ZALOHA_VZTAH, SANCE_DLUHU_PO_ZTRATE_PRACE,
   ZALOHA_MAX_KC, ZALOHA_MIN_KC, ZALOHA_MORALKA, ZALOHA_TYDNU, ZALOHA_VZTAH,
 } from "./nastaveni";
-import { naCooldownu, nazevSituace, SITUACE_PODLE_KIND } from "./situace";
+import { ABSENCE_HLEDAT_ZAPAS_DNI, naCooldownu, nazevSituace, oknoAbsence, SITUACE_PODLE_KIND } from "./situace";
 import { text, type KlicTextu } from "./texty";
 import type { NavrhIncidentu, StavKlubu } from "./typy";
 
@@ -38,6 +38,19 @@ async function nactiHrace(db: D1Database, teamId: string, playerId: string): Pro
     "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE id = ? AND team_id = ? AND (status IS NULL OR status = 'active')",
   ).bind(playerId, teamId).first<RadekHrace>()
     .catch((e) => { logger.warn({ module: M }, `hráč situace ${playerId}`, e); return null; });
+}
+
+/** Dny soutěžních zápasů klubu, na které může incidentní absence dopadnout. */
+async function dnyZapasuTymu(db: D1Database, stav: StavKlubu): Promise<string[]> {
+  const od = denPlus(stav.den, MIN_OHLASENI_ABSENCE_DNI);
+  const doDne = denPlus(stav.den, MIN_OHLASENI_ABSENCE_DNI + ABSENCE_HLEDAT_ZAPAS_DNI);
+  const res = await db.prepare(
+    `SELECT DISTINCT substr(sc.scheduled_at, 1, 10) AS den FROM season_calendar sc
+      WHERE sc.status = 'scheduled' AND substr(sc.scheduled_at, 1, 10) BETWEEN ?1 AND ?2
+        AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id AND (m.home_team_id = ?3 OR m.away_team_id = ?3))`,
+  ).bind(od, doDne, stav.teamId).all<{ den: string }>()
+    .catch((e) => { logger.warn({ module: M }, `zápasy klubu pro absenci ${stav.teamId}`, e); return { results: [] as Array<{ den: string }> }; });
+  return res.results.map((r) => r.den);
 }
 
 const ref = (h: RadekHrace) => ({ id: h.id, firstName: h.first_name, lastName: h.last_name, nickname: h.nickname, avatar: h.avatar });
@@ -67,22 +80,38 @@ export async function zalozSituaci(env: Bindings, stav: StavKlubu, navrh: NavrhI
   const subjectId = navrh.subjectPlayerId;
   if (!def || !subjectId) return null;
 
-  const zapsany = await zapisIncident(db, stav, navrh, id);
+  const rng = createRng(seedFromString(`situace|${id}`));
+
+  // Absence se posadí na zápas dřív, než se incident zapíše: když zápas padne až za
+  // koncem situace, musí se `ends_on` prodloužit, jinak by stránka incidentu hlásila
+  // „skončilo", zatímco hráč pořád chybí.
+  let okno: ReturnType<typeof oknoAbsence> = null;
+  let navrhZapis = navrh;
+  if (def.absence) {
+    // Ohlášeno aspoň dva dny dopředu, ať SMS den předem i simulace vidí totéž (spec 17a).
+    const za = def.absence.dni(rng);
+    const delka = Math.max(1, def.absence.delka(rng));
+    const posun = rng.int(0, delka - 1);
+    okno = oknoAbsence({ den: stav.den, zapasy: await dnyZapasuTymu(db, stav), za, delka, posun });
+    if (!okno) {
+      logger.info({ module: M }, `situace ${id}: v dosahu není zápas, absence se nezakládá`);
+    } else {
+      const doKonce = Math.round((Date.parse(`${okno.do}T12:00:00.000Z`) - Date.parse(`${stav.den}T12:00:00.000Z`)) / 86_400_000);
+      if ((navrh.dniTrvani ?? 0) < doKonce) navrhZapis = { ...navrh, dniTrvani: doKonce };
+    }
+  }
+
+  const zapsany = await zapisIncident(db, stav, navrhZapis, id);
   if (!zapsany) return null;
 
-  const rng = createRng(seedFromString(`situace|${id}`));
   const hrac = await nactiHrace(db, stav.teamId, subjectId);
 
   const davka: D1PreparedStatement[] = [];
   if (def.moralka !== 0) davka.push(...posunHrace(db, stav.teamId, subjectId, { morale: def.moralka }));
-  if (def.absence) {
-    // Ohlášeno aspoň dva dny dopředu, ať SMS den předem i simulace vidí totéž (spec 17a).
-    const za = Math.max(MIN_OHLASENI_ABSENCE_DNI, def.absence.dni(rng));
-    const od = denPlus(stav.den, za);
-    const doDne = denPlus(od, Math.max(1, def.absence.delka(rng)) - 1);
+  if (def.absence && okno) {
     const p = prikazAbsence(db, {
       incidentId: id, teamId: stav.teamId, playerId: subjectId, druh: def.absence.druh,
-      od, do: doDne, zapasu: null, ohlaseno: stav.den, sms: text(rng, `absence_${def.absence.druh}` as KlicTextu),
+      od: okno.od, do: okno.do, zapasu: null, ohlaseno: stav.den, sms: text(rng, `absence_${def.absence.druh}` as KlicTextu),
     });
     if (p) davka.push(p);
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng, type Rng } from "../generators/rng";
 import { MAX_AKTIVNICH_SITUACI } from "./nastaveni";
-import { KATALOG_SITUACI, nazevSituace, vylosujSituaci } from "./situace";
+import { KATALOG_SITUACI, nazevSituace, oknoAbsence, vylosujSituaci } from "./situace";
 import { hrac, stavKlubu } from "./testovaci-stav";
 import type { HracKlubu } from "./typy";
 
@@ -83,5 +83,46 @@ describe("los situace", () => {
     proSeedy((rng) => {
       expect(vylosujSituaci(stavKlubu({ kadr: [ZRALY], odehranychZapasu: 10, posledniVyskyt: vsechnyNaCooldownu }), rng)).toBeNull();
     }, 60);
+  });
+});
+
+describe("absence posazená na zápas", () => {
+  // Kravčenko (Spůle): ohlášeno 29. 9., zápasy 1. 10. a 5. 10. Dřív padla absence
+  // na 2.–3. 10., mezi zápasy, a hráč „v nemocnici" normálně nastoupil.
+  const ZAPASY = ["2026-10-01", "2026-10-05", "2026-10-08"];
+
+  it("absence vždycky pokryje zápas", () => {
+    for (let za = 2; za <= 6; za++) {
+      for (let delka = 1; delka <= 4; delka++) {
+        for (let posun = 0; posun < delka; posun++) {
+          const o = oknoAbsence({ den: "2026-09-29", zapasy: ZAPASY, za, delka, posun });
+          expect(o).not.toBeNull();
+          expect(o!.od <= o!.zapas && o!.do >= o!.zapas).toBe(true);
+          expect(o!.od >= "2026-10-01").toBe(true); // aspoň dva dny po ohlášení
+        }
+      }
+    }
+  });
+
+  it("bere první zápas v den chtěného začátku nebo po něm", () => {
+    const o = oknoAbsence({ den: "2026-09-29", zapasy: ZAPASY, za: 3, delka: 2, posun: 0 });
+    expect(o).toEqual({ od: "2026-10-05", do: "2026-10-06", zapas: "2026-10-05" });
+  });
+
+  it("posun přesune začátek před zápas, ne před lhůtu ohlášení", () => {
+    expect(oknoAbsence({ den: "2026-09-29", zapasy: ZAPASY, za: 6, delka: 3, posun: 2 }))
+      .toEqual({ od: "2026-10-03", do: "2026-10-05", zapas: "2026-10-05" });
+    expect(oknoAbsence({ den: "2026-09-29", zapasy: ZAPASY, za: 2, delka: 3, posun: 2 }))
+      .toEqual({ od: "2026-10-01", do: "2026-10-03", zapas: "2026-10-01" });
+  });
+
+  it("když po chtěném dni už zápas není, vezme nejbližší možný", () => {
+    const o = oknoAbsence({ den: "2026-09-29", zapasy: ["2026-10-01"], za: 5, delka: 2, posun: 0 });
+    expect(o?.zapas).toBe("2026-10-01");
+  });
+
+  it("zápas dřív než za dva dny se nepočítá a bez zápasu absence není", () => {
+    expect(oknoAbsence({ den: "2026-09-29", zapasy: ["2026-09-30"], za: 2, delka: 2, posun: 0 })).toBeNull();
+    expect(oknoAbsence({ den: "2026-09-29", zapasy: [], za: 2, delka: 2, posun: 0 })).toBeNull();
   });
 });

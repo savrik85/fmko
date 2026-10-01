@@ -6,8 +6,9 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { denPlus } from "./absence-hracu";
 import {
-  COOLDOWN_SITUACE_DNI, MAX_AKTIVNICH_SITUACI, MIN_ODEHRANYCH_ZAPASU, SANCE_SITUACE_ZA_DEN,
+  COOLDOWN_SITUACE_DNI, MAX_AKTIVNICH_SITUACI, MIN_ODEHRANYCH_ZAPASU, MIN_OHLASENI_ABSENCE_DNI, SANCE_SITUACE_ZA_DEN,
 } from "./nastaveni";
 import { text } from "./texty";
 import type { HracKlubu, NavrhIncidentu, StavKlubu } from "./typy";
@@ -95,6 +96,34 @@ export const KATALOG_SITUACI: DefiniceSituace[] = [
 ];
 
 export const SITUACE_PODLE_KIND = new Map(KATALOG_SITUACI.map((d) => [d.kind, d]));
+
+/** Jak daleko dopředu se hledá zápas, který absence zasáhne. */
+export const ABSENCE_HLEDAT_ZAPAS_DNI = 14;
+
+/**
+ * Okno incidentní absence posazené na zápas. Dřív se `od` počítalo jen od data vzniku,
+ * takže absence klidně padla mezi dva zápasy: hráč „ležel v nemocnici", a přesto
+ * normálně nastoupil (Kravčenko, Spůle 2026-09-29). Teď absence vždycky pokryje
+ * zápas: první v den `den + za` nebo později, jinak ten nejbližší možný.
+ *
+ * `posun` (0 až `delka - 1`) určuje, kolikátý den absence na zápas připadne, ať
+ * nezačíná pokaždé přesně v den zápasu. `null` = v dosahu není žádný zápas,
+ * absence by nic neznamenala a nezakládá se.
+ */
+export function oknoAbsence(opts: {
+  den: string; zapasy: readonly string[]; za: number; delka: number; posun: number;
+}): { od: string; do: string; zapas: string } | null {
+  const nejdriv = denPlus(opts.den, MIN_OHLASENI_ABSENCE_DNI);
+  const chtene = denPlus(opts.den, Math.max(MIN_OHLASENI_ABSENCE_DNI, opts.za));
+  const mozne = [...opts.zapasy].map((z) => z.slice(0, 10)).filter((z) => z >= nejdriv).sort();
+  const zapas = mozne.find((z) => z >= chtene) ?? mozne[0];
+  if (!zapas) return null;
+  const delka = Math.max(1, opts.delka);
+  const posun = Math.min(Math.max(0, opts.posun), delka - 1);
+  const posunute = denPlus(zapas, -posun);
+  const od = posunute < nejdriv ? nejdriv : posunute;
+  return { od, do: denPlus(od, delka - 1), zapas };
+}
 
 export function nazevSituace(kind: string): string {
   return SITUACE_PODLE_KIND.get(kind)?.label ?? "Životní situace";

@@ -34,7 +34,11 @@ export interface DetailIncidentuData {
   obvineni: Array<{ playerId: string; jmeno: string; den: string; vysledek: VysledekObvineni }>;
   policie: { vysledekOn: string | null; vysledek: number | null };
   hrozi: { promluvil: boolean } | null;
-  situace: { kind: string; endsOn: string | null; zaloha: "pujceno" | "odmitnuto" | null; castka: number | null } | null;
+  situace: {
+    kind: string; endsOn: string | null; zaloha: "pujceno" | "odmitnuto" | null; castka: number | null;
+    /** Kdy hráč doopravdy chybí. `null` = situace ho ze zápasů nevyřazuje. */
+    absence: { od: string; do: string; zapasy: Array<{ matchId: string; den: string; souper: string }> } | null;
+  } | null;
   akce: { obvinit: boolean; policie: boolean; zeptat: boolean; promluvit: boolean; zaloha: boolean; tresty: AkceTrestu[] };
   zbyvaObvineni: number;
   kadr: Array<{ playerId: string; jmeno: string }>;

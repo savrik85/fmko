@@ -182,7 +182,10 @@ incidentsRouter.get("/teams/:teamId/incidents/:id", async (c) => {
 
   const zalohaStav = nactiZalohu(row.resolution_data);
   const situace = row.category === "zivotni"
-    ? { kind: row.kind, endsOn: row.ends_on ?? null, zaloha: zalohaStav.zaloha, castka: zalohaStav.celkem }
+    ? {
+      kind: row.kind, endsOn: row.ends_on ?? null, zaloha: zalohaStav.zaloha, castka: zalohaStav.celkem,
+      absence: await absenceSituace(db, incidentId, teamId),
+    }
     : null;
 
   return c.json({
@@ -203,6 +206,34 @@ incidentsRouter.get("/teams/:teamId/incidents/:id", async (c) => {
     castky,
   });
 });
+
+/**
+ * Kdy hráč kvůli situaci doopravdy chybí a které zápasy vynechá. Samotné `ends_on`
+ * to neřekne: situace trvá déle než absence a manažer z „potrvá do" nepoznal,
+ * jestli mu hráč v nejbližším zápase nastoupí.
+ */
+async function absenceSituace(db: D1Database, incidentId: string, teamId: string): Promise<{
+  od: string; do: string; zapasy: Array<{ matchId: string; den: string; souper: string }>;
+} | null> {
+  const abs = await db.prepare(
+    "SELECT od_dne, do_dne FROM club_incident_absences WHERE incident_id = ? AND team_id = ? AND od_dne IS NOT NULL ORDER BY od_dne LIMIT 1",
+  ).bind(incidentId, teamId).first<{ od_dne: string; do_dne: string }>()
+    .catch((e) => { logger.warn({ module: M }, `absence situace ${incidentId}`, e); return null; });
+  if (!abs) return null;
+  const zapasy = await db.prepare(
+    `SELECT m.id AS matchId, substr(sc.scheduled_at, 1, 10) AS den,
+            CASE WHEN m.home_team_id = ?1 THEN a.name ELSE h.name END AS souper
+       FROM matches m
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+       JOIN teams h ON h.id = m.home_team_id
+       JOIN teams a ON a.id = m.away_team_id
+      WHERE (m.home_team_id = ?1 OR m.away_team_id = ?1)
+        AND substr(sc.scheduled_at, 1, 10) BETWEEN ?2 AND ?3
+      ORDER BY sc.scheduled_at`,
+  ).bind(teamId, abs.od_dne, abs.do_dne).all<{ matchId: string; den: string; souper: string }>()
+    .catch((e) => { logger.warn({ module: M }, `zápasy v absenci ${incidentId}`, e); return { results: [] as Array<{ matchId: string; den: string; souper: string }> }; });
+  return { od: abs.od_dne, do: abs.do_dne, zapasy: zapasy.results };
+}
 
 /** Stav zálohy z `resolution_data` situace `dluhy` (spec 7c). Neplatný JSON se bere jako „zatím nerozhodnuto". */
 function nactiZalohu(resolutionData: string | null): { zaloha: "pujceno" | "odmitnuto" | null; celkem: number | null } {
