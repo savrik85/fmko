@@ -34,7 +34,7 @@ function AbsenceSituace({ kind, absence }: { kind: string; absence: NonNullable<
           {absence.zapasy.map((z, n) => (
             <span key={z.matchId}>
               {n > 0 && " a "}
-              s <Link href={`/zapas/${z.matchId}`} className="underline decoration-pitch-500/20 hover:text-pitch-500">{z.souper}</Link> ({datum(z.den)})
+              {datum(z.den)} s týmem <Link href={`/zapas/${z.matchId}`} className="underline decoration-pitch-500/20 hover:text-pitch-500">{z.souper}</Link>
             </span>
           ))}
           .
