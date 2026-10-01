@@ -275,10 +275,12 @@ export function vyberTransparent(s: StavProTransparent, roll: number): Transpare
   }
 
   // 7. Miláček kotle. Jméno a dovětek, jako vlajky pro hráče (Dulwich, Plzeň).
-  if (pouzitelneJmeno(s.oblibenec) && s.naladaKotle >= 55 && roll > 0.5) {
+  // Jen občas: miláčka má skoro každý kotel a při polovičním losu viselo
+  // jméno hráče na půlce stadionů v okrese.
+  if (pouzitelneJmeno(s.oblibenec) && s.naladaKotle >= 55 && roll > 0.8) {
     const p = velke(s.oblibenec!);
     return {
-      text: prvniCoSeVejde([roll > 0.75 ? `${p}. NÁŠ KLUK.` : `${p}: JEDEN Z NÁS`, "JEDEN Z NÁS"]),
+      text: prvniCoSeVejde([roll > 0.9 ? `${p}. NÁŠ KLUK.` : `${p}: JEDEN Z NÁS`, "JEDEN Z NÁS"]),
       duvod: `${s.oblibenec} je miláček kotle.`,
       tone: "podpora",
     };
