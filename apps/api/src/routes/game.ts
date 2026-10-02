@@ -5105,6 +5105,8 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
 });
 
 // Sign free agent
+const FREE_AGENT_SIGNING_FEE = 500;
+
 gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const teamId = c.req.param("teamId");
   const faId = c.req.param("faId");
@@ -5127,6 +5129,14 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   const squadCount = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM players WHERE team_id = ?")
     .bind(teamId).first<{ cnt: number }>();
   if ((squadCount?.cnt ?? 0) >= 30) return c.json({ error: "Kádr je plný (max. 30 hráčů)" }, 400);
+
+  // Peníze na registraci se kontrolují PŘED rozhodnutím hráče. Dřív se nekontrolovaly vůbec:
+  // hráč rozhodl, a když odmítl, zapsal se klub do `rejected_by` a hráč mu zmizel z trhu,
+  // přestože manažer na podpis ani neměl. Když kývnul, rozpočet spadl do mínusu.
+  const budget = Number(team.budget) || 0;
+  if (budget < FREE_AGENT_SIGNING_FEE) {
+    return c.json({ error: `Na registraci hráče nemáš dost peněz. Stojí ${FREE_AGENT_SIGNING_FEE.toLocaleString("cs")} Kč, máš ${budget.toLocaleString("cs")} Kč.` }, 400);
+  }
 
   const personality = (() => { try { return JSON.parse(fa.personality as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent personality", e); return {}; } })();
 
@@ -5208,7 +5218,7 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
   }
 
   const gameDate = (team.game_date as string) ?? new Date().toISOString();
-  await recordTransaction(c.env.DB, teamId, "signing_fee", -500, `Registrace: ${fa.first_name} ${fa.last_name}`, gameDate);
+  await recordTransaction(c.env.DB, teamId, "signing_fee", -FREE_AGENT_SIGNING_FEE, `Registrace: ${fa.first_name} ${fa.last_name}`, gameDate);
 
   const { createTransferNews } = await import("../transfers/transfer-news");
   if (isCelebrity) {
