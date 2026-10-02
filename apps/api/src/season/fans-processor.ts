@@ -462,27 +462,13 @@ export async function loadFansContext(
     | "self"
     | "external";
 
-  const productsResult = await db
-    .prepare(
-      "SELECT product_key, quality_level, sell_price, stock_quantity FROM concession_products WHERE team_id = ?",
-    )
-    .bind(teamId)
-    .all<{
-      product_key: string;
-      quality_level: number;
-      sell_price: number;
-      stock_quantity: number;
-    }>()
-    .catch((e) => {
-      logger.warn({ module: "fans-processor" }, "load products", e);
-      return { results: [] };
-    });
-
-  const products: ConcessionProductRow[] = productsResult.results.map((r) => ({
-    key: r.product_key as ProductKey,
-    qualityLevel: r.quality_level,
-    sellPrice: r.sell_price,
-    stockQuantity: r.stock_quantity,
+  // Prodává se jen sklad zvolené kvality — ostatní kvality leží ve skladu (concession-stock.ts)
+  const { loadConcessionStock, sellableStock } = await import("./concession-stock");
+  const products: ConcessionProductRow[] = (await loadConcessionStock(db, teamId)).map((r) => ({
+    key: r.key,
+    qualityLevel: r.qualityLevel,
+    sellPrice: r.sellPrice,
+    stockQuantity: sellableStock(r),
   }));
 
   return { fans: fansRow, concessionMode, products };

@@ -61,6 +61,8 @@ interface ProductTier {
   label: string;
   wholesalePrice: number;
   defaultSellPrice: number;
+  /** Kusů téhle kvality na skladě. */
+  stock: number;
 }
 
 interface ConcessionProduct {
@@ -448,9 +450,9 @@ export default function FansPage() {
     if (!product) return;
     const targetTier = product.tiers[toLevel];
     const ok = await confirm({
-      title: `Změnit kvalitu na ${targetTier.label}?`,
-      description: `Nákup za ${targetTier.wholesalePrice} Kč/ks. Doporučená prodejní cena: ${targetTier.defaultSellPrice} Kč.`,
-      confirmLabel: "Změnit kvalitu",
+      title: `Prodávat ${targetTier.label}?`,
+      description: `Na skladě ${targetTier.stock} ks. Nákup za ${targetTier.wholesalePrice} Kč/ks, doporučená prodejní cena ${targetTier.defaultSellPrice} Kč. Ostatní kvality zůstanou na skladě.`,
+      confirmLabel: "Prodávat",
     });
     if (!ok) return;
     setActing("quality-" + key);
@@ -1456,10 +1458,16 @@ export default function FansPage() {
                         >
                           <div className="text-xs font-heading font-bold leading-tight truncate">{tier.label}</div>
                           <div className={`text-micro tabular-nums mt-0.5 ${isActive ? "text-white/80" : "text-muted"}`}>{tier.wholesalePrice} Kč/ks</div>
+                          <div className={`text-xs font-heading font-bold tabular-nums mt-0.5 ${isActive ? "text-white" : tier.stock > 0 ? "text-ink" : "text-muted"}`}>
+                            {tier.stock} ks
+                          </div>
                         </button>
                       );
                     })}
                   </div>
+                  <p className="text-xs text-muted -mt-1.5 mb-3">
+                    Prodává se jen vybraná kvalita, ostatní zůstávají na skladě. Nákup jde do vybrané.
+                  </p>
 
                   {/* Sell price */}
                   <div className="flex items-center gap-2 sm:gap-3 pt-3 border-t border-gray-100">
@@ -1492,7 +1500,7 @@ export default function FansPage() {
                   <div className="flex items-center gap-2 sm:gap-3 mt-2">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-heading font-bold text-ink leading-tight">Doplnit sklad</div>
-                      <div className="text-xs text-muted">{currentTier.wholesalePrice} Kč/ks</div>
+                      <div className="text-xs text-muted truncate">{currentTier.label}, {currentTier.wholesalePrice} Kč/ks</div>
                     </div>
                     <input
                       type="number"
