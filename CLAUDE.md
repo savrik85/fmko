@@ -24,7 +24,8 @@
 
 4. **NIKDY write operace na `prales-db-prod` bez souhlasu.**
    - Testovací DB: `prales-db-test`
-   - Hook `block-prod-d1-write.sh` blokuje UPDATE/DELETE/INSERT/DROP/ALTER.
+   - Hook `block-prod-d1-write.sh` blokuje UPDATE/DELETE/INSERT/REPLACE/DROP/TRUNCATE i ALTER kromě `ADD COLUMN`.
+   - Přidávací migrace (`ALTER TABLE ... ADD COLUMN`, `CREATE TABLE/INDEX`) pouští, i přes `--file` (kontroluje obsah souboru). Záloha před nimi dál povinná.
 
 5. **NIKDY "zdá se že to funguje".**
    - Backend změna → curl test API endpointu + ověření výstupu
