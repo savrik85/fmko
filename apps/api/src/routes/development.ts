@@ -412,16 +412,18 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
   const odmitnuto = await overSiVlastnictvi(c, teamId);
   if (odmitnuto) return odmitnuto;
 
-  const { YOUTH_LABELS, YOUTH_POPISY, YOUTH_POCET_POKUSU, ocekavanyPocetOdchovancu, sanceJednohoPokusu, youthMonthlyCost } = await import("../season/youth");
+  const { YOUTH_LABELS, YOUTH_POPISY, YOUTH_POCET_POKUSU, ocekavanyPocetOdchovancu, sanceJednohoPokusu, youthMonthlyCost, paidYouthLevel } = await import("../season/youth");
 
   const team = await c.env.DB.prepare(
-    `SELECT t.youth_investment, v.population FROM teams t
+    `SELECT t.youth_investment, t.youth_paid_base, t.youth_paid_weeks, v.population FROM teams t
        JOIN villages v ON v.id = t.village_id WHERE t.id = ?`,
-  ).bind(teamId).first<{ youth_investment: string | null; population: number }>();
+  ).bind(teamId).first<{ youth_investment: string | null; youth_paid_base: number | null; youth_paid_weeks: number | null; population: number }>();
 
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
-  // Větší obec = víc kluků = vyšší šance. Týž vzorec, jaký používá tryGraduateYouth.
+  // Ročník se řídí tím, co klub za sezónu zaplatil, ne nastavením v den konce sezóny
+  const paidWeeks = team.youth_paid_weeks ?? 0;
+  const paidLevel = paidYouthLevel(team.youth_paid_base ?? 0, paidWeeks);
 
   // Sezónní náklad se počítá ze SKUTEČNÉ délky sezóny. Dřív tu bylo natvrdo ×26 podle počtu
   // kol, jenže kol není 26 týdnů — ročník trvá 14 až 24 týdnů podle rozpisu, takže to číslo
@@ -467,6 +469,9 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
     /** Bez U21 týmu nemá odchovanec kam jít — na to musí manažer vidět dřív, než začne platit. */
     maU21Tym: !!maU21,
     urovne,
+    /** Úroveň, na kterou má klub letos zaplaceno; podle ní vyroste ročník. Null = zatím žádná uzávěrka. */
+    paidLevel: paidWeeks > 0 ? { key: paidLevel, label: YOUTH_LABELS[paidLevel] } : null,
+    paidWeeks,
   });
 });
 

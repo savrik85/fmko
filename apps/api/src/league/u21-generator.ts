@@ -10,7 +10,7 @@
 import type { Rng } from "../generators/rng";
 import { FIRSTNAMES } from "../data/czech-names";
 import { generatePlayer, type VillageInfo } from "../generators/player";
-import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
+import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating, flattenGeneratedSkills } from "../skills/generator";
 import { generateDescription } from "../generators/description-generator";
 import { pickOccupation } from "../generators/occupations";
 import { generatePlayerFace } from "../routes/teams";
@@ -203,9 +203,7 @@ export async function vygenerujDorostence(
       }
     }
 
-    const skills = isGK
-      ? { speed: gkSkills!.speed.current, technique: gkSkills!.technique.current, shooting: gkSkills!.technique.current, passing: gkSkills!.passing.current, heading: gkSkills!.heading.current, defense: gkSkills!.defense.current, goalkeeping: gkSkills!.goalkeeping.current, creativity: gkSkills!.creativity.current, setPieces: gkSkills!.technique.current, stamina: gkSkills!.strength.current, strength: gkSkills!.strength.current, vision: gkSkills!.defense.current, experience: gkSkills!.experience.current }
-      : { speed: fieldSkills!.speed.current, technique: fieldSkills!.technique.current, shooting: fieldSkills!.shooting.current, passing: fieldSkills!.passing.current, heading: fieldSkills!.heading.current, defense: fieldSkills!.defense.current, goalkeeping: 1, creativity: fieldSkills!.creativity.current, setPieces: fieldSkills!.setPieces.current, stamina: fieldSkills!.stamina.current, strength: fieldSkills!.strength.current, vision: fieldSkills!.vision.current, experience: fieldSkills!.experience.current };
+    const skills = flattenGeneratedSkills(isGK ? gkSkills! : fieldSkills!, isGK);
 
     const height = (position === "GK" ? 185 : position === "DEF" ? 180 : position === "FWD" ? 178 : 176) + rng.int(-8, 8);
     const baseWeight = base.bodyType === "obese" ? 92 : base.bodyType === "stocky" ? 82 : base.bodyType === "thin" ? 65 : base.bodyType === "athletic" ? 72 : 74;

@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger";
 import type { Weather } from "../engine/types";
 import { recordCompetitionEntry } from "../competition/ledger";
-import { youthMonthlyCost, YOUTH_LABELS, type YouthInvestment } from "./youth";
+import { youthMonthlyCost, youthWeeklyBaseCost, YOUTH_LABELS, type YouthInvestment } from "./youth";
 import type { CompetitionRules } from "../competition/defaults";
 /**
  * Centrální finanční procesor — jediný způsob jak měnit rozpočet týmu.
@@ -272,6 +272,11 @@ export async function processWeeklyFinances(
         `Mládežnická akademie (${YOUTH_LABELS[investice]})`, gameDate);
     }
   }
+  // Počítadlo pro ročník odchovanců: týden se započítá vždy, i bez platby, aby přepnutí
+  // na velkorysou těsně před koncem sezóny nevydalo za celý rok (paidYouthLevel).
+  await db.prepare("UPDATE teams SET youth_paid_base = youth_paid_base + ?, youth_paid_weeks = youth_paid_weeks + 1 WHERE id = ?")
+    .bind(youthWeeklyBaseCost(investice), teamId).run()
+    .catch((e) => logger.warn({ module: "finance-processor", teamId }, "youth paid counters", e));
 
   // ── PŘÍJMY ──
 

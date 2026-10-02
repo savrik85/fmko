@@ -10,24 +10,13 @@
  */
 
 import { createRng, cryptoSeed } from "../generators/rng";
-import { tryGraduateYouth, YOUTH_POCET_POKUSU, type YouthInvestment } from "./youth";
+import { tryGraduateYouth, generateAcademyGraduateSkills, paidYouthLevel, YOUTH_POCET_POKUSU, type YouthInvestment } from "./youth";
 import { generatePlayerFace } from "../routes/teams";
-import { generateHiddenTalent, generateFieldSkills, generateGKSkills } from "../skills/generator";
 import { getDistrictDataFromDB } from "../data/districts";
 import { FIRSTNAMES } from "../data/czech-names";
 import { logger } from "../lib/logger";
 
 const M = "academy";
-
-/**
- * Odchovanec je z vlastní vesnice, takže má vyšší strop než náhodný cizí kluk —
- * klub ho vede od žáků. Bonus se přičítá k vygenerovanému potenciálu.
- */
-const BONUS_STROPU: Record<Exclude<YouthInvestment, "none">, number> = {
-  minimal: 0,
-  medium: 5,
-  high: 12,
-};
 
 export interface AcademyResult {
   teamId: string;
@@ -38,25 +27,39 @@ export interface AcademyResult {
 }
 
 /**
- * Vychová klubu celý ročník odchovanců — kolik kluků to zkusí, určuje výše investice
+ * Úroveň, podle které se vychová ročník: co klub za sezónu skutečně zaplatil
+ * (`paidYouthLevel`), ne co má nastavené v den konce sezóny.
+ *
+ * Bez jediné týdenní uzávěrky (počítadla přibyla s migrací 0233 a nulují se po každém
+ * ročníku) žádná historie není, takže platí aktuální nastavení.
+ */
+export async function resolveAcademyLevel(db: D1Database, teamId: string): Promise<YouthInvestment> {
+  const team = await db.prepare("SELECT youth_investment, youth_paid_base, youth_paid_weeks FROM teams WHERE id = ?")
+    .bind(teamId).first<{ youth_investment: string | null; youth_paid_base: number | null; youth_paid_weeks: number | null }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "load investment for class", e); return null; });
+  if (!team) return "none";
+
+  const weeks = team.youth_paid_weeks ?? 0;
+  if (weeks <= 0) return (team.youth_investment ?? "none") as YouthInvestment;
+  return paidYouthLevel(team.youth_paid_base ?? 0, weeks);
+}
+
+/**
+ * Vychová klubu celý ročník odchovanců — kolik kluků to zkusí, určuje zaplacená úroveň
  * (`YOUTH_POCET_POKUSU`). Vrací jen ty, kterým to vyšlo; prázdné pole znamená, že klub
- * do mládeže nesype nebo že z ročníku nic nevyrostlo.
+ * do mládeže nesypal nebo že z ročníku nic nevyrostlo.
  */
 export async function graduateAcademyClass(
   db: D1Database,
   teamId: string,
   seasonId: string | null,
 ): Promise<AcademyResult[]> {
-  const team = await db.prepare("SELECT youth_investment FROM teams WHERE id = ?")
-    .bind(teamId).first<{ youth_investment: string | null }>()
-    .catch((e) => { logger.warn({ module: M, teamId }, "load investment for class", e); return null; });
-
-  const investment = (team?.youth_investment ?? "none") as YouthInvestment;
+  const investment = await resolveAcademyLevel(db, teamId);
   const pokusu = YOUTH_POCET_POKUSU[investment] ?? 0;
 
   const odchovanci: AcademyResult[] = [];
   for (let i = 0; i < pokusu; i++) {
-    const res = await graduateAcademyPlayer(db, teamId, seasonId)
+    const res = await graduateAcademyPlayer(db, teamId, seasonId, investment)
       .catch((e) => { logger.warn({ module: M, teamId }, `academy attempt ${i + 1}`, e); return null; });
     if (res) odchovanci.push(res);
   }
@@ -68,23 +71,23 @@ export async function graduateAcademyClass(
 }
 
 /**
- * Zkusí vychovat jednoho odchovance. Vrací null, když klub do mládeže nesype
+ * Zkusí vychovat jednoho odchovance na dané úrovni. Vrací null, když klub do mládeže nesypal
  * nebo když ten konkrétní kluk neprorazil.
  */
 export async function graduateAcademyPlayer(
   db: D1Database,
   teamId: string,
   seasonId: string | null,
+  investment: YouthInvestment,
 ): Promise<AcademyResult | null> {
   const team = await db.prepare(
-    `SELECT t.id, t.youth_investment, v.district, v.population, v.size
+    `SELECT t.id, v.district, v.population, v.size
        FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?`,
-  ).bind(teamId).first<{ id: string; youth_investment: string | null; district: string; population: number; size: string }>()
+  ).bind(teamId).first<{ id: string; district: string; population: number; size: string }>()
     .catch((e) => { logger.warn({ module: M, teamId }, "load team for academy", e); return null; });
 
   if (!team) return null;
 
-  const investment = (team.youth_investment ?? "none") as YouthInvestment;
   if (investment === "none") return null;
 
   // Odchovanec jde do dorostu; bez U21 týmu není kam ho dát
@@ -122,33 +125,15 @@ export async function graduateAcademyPlayer(
   const isGK = position === "GK";
   const villageSize = team.size ?? "village";
 
-  // Potenciál se generuje stejným generátorem jako u ostatních hráčů — odchovanec
-  // není podřadný. Investice do akademie zvedá strop, ne současné hodnoty: kluk je
-  // pořád šestnáctiletý, jen se s ním líp pracovalo.
-  const fieldSkills = !isGK ? generateFieldSkills(rng, position as "DEF" | "MID" | "FWD", villageSize, p.age) : null;
-  const gkSkills = isGK ? generateGKSkills(rng, villageSize, p.age) : null;
-  const bonus = BONUS_STROPU[investment as Exclude<YouthInvestment, "none">] ?? 0;
-  const dovednosti = (isGK ? gkSkills : fieldSkills) as unknown as Record<string, { current: number; maxPotential: number }>;
-  if (bonus > 0) {
-    for (const d of Object.values(dovednosti)) d.maxPotential = Math.min(100, d.maxPotential + bonus);
-  }
+  // Dovednosti, strop i talent se generují stejně jako u běžného dorostence a investice k nim
+  // přidává bonus (YOUTH_BONUS). Dřív tu byl vlastní rozsah 3–16, takže odchovanec z placené
+  // akademie vycházel slabší než dorostenec, kterého klub dostal zadarmo.
+  const { skills, skillsMax, hiddenTalent } = generateAcademyGraduateSkills(
+    rng, investment as Exclude<YouthInvestment, "none">, position, villageSize, p.age,
+  );
 
-  // Vychovanec klubu má i vyšší talent — právě proto se do akademie vyplatí sypat
-  const hiddenTalent = Math.min(100, generateHiddenTalent(rng, villageSize) + (investment === "high" ? rng.int(10, 25) : investment === "medium" ? rng.int(5, 15) : 0));
-
-  // Současné hodnoty bere z tryGraduateYouth (SKILL_RANGE podle investice) — jsou nízké
-  // schválně, kluk teprve začíná.
-  const skills = {
-    speed: p.speed, technique: p.technique, shooting: p.shooting, passing: p.passing,
-    heading: p.heading, defense: p.defense, goalkeeping: isGK ? rng.int(10, 30) : 1,
-    // Kreativita a standardky nejsou součástí GeneratedPlayer — u šestnáctiletého kluka
-    // stejně začínají skoro na nule a vytrénuje si je až v dorostu.
-    creativity: rng.int(3, 20), setPieces: rng.int(3, 20),
-    stamina: p.stamina, strength: p.strength, vision: rng.int(3, 20),
-    experience: Math.max(0, (p.age - 16) * rng.int(2, 4)),
-  };
   const physical = {
-    stamina: p.stamina, strength: p.strength, injuryProneness: p.injuryProneness ?? 50,
+    stamina: skills.stamina, strength: skills.strength, injuryProneness: p.injuryProneness ?? 50,
     height: (isGK ? 183 : 176) + rng.int(-8, 8),
     weight: 68 + rng.int(-5, 8),
     preferredFoot: p.preferredFoot, preferredSide: p.preferredSide,
@@ -175,7 +160,7 @@ export async function graduateAcademyPlayer(
     JSON.stringify({ occupation: p.occupation ?? "student", condition: 100, morale: 60 }),
     JSON.stringify(generatePlayerFace({ age: p.age, bodyType: p.bodyType ?? "normal", ethnicity: p.ethnicity })),
     graduate.description,
-    JSON.stringify(dovednosti), hiddenTalent, skills.experience,
+    JSON.stringify(skillsMax), hiddenTalent, skills.experience,
     Math.round(5 + rating * 2), p.nationality ?? "CZ",
   ).run();
 

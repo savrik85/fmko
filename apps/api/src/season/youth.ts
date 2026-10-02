@@ -5,6 +5,8 @@
 import type { Rng } from "../generators/rng";
 import type { GeneratedPlayer, VillageInfo } from "../generators/player";
 import { generatePlayer } from "../generators/player";
+import type { FieldSkills, GoalkeeperSkills } from "../skills/types";
+import { generateFieldSkills, generateGKSkills, generateHiddenTalent, flattenGeneratedSkills } from "../skills/generator";
 
 export type YouthInvestment = "none" | "minimal" | "medium" | "high";
 
@@ -46,7 +48,7 @@ export const YOUTH_LABELS: Record<YouthInvestment, string> = {
 export const YOUTH_POPISY: Record<YouthInvestment, string> = {
   none: "Do mládeže nesypeš nic. Žádní odchovanci.",
   minimal: "Pár míčů a kužely pro žáky. Občas z toho někdo vyroste.",
-  medium: "Trenér žáků má na benzín a klub platí halu. Odchovanci chodí pravidelněji a jsou lepší.",
+  medium: "Trenér žáků má na benzín a klub platí halu. Odchovanci chodí pravidelněji, jsou dál a mají vyšší strop.",
   high: "Vlastní mládežnický program. Nejvyšší šance na odchovance a nejvyšší strop, kam může dorůst.",
 };
 
@@ -105,18 +107,100 @@ export function sanceJednohoPokusu(investment: YouthInvestment): number {
   return Math.min(YOUTH_SANCE_STROP, YOUTH_SANCE[investment]);
 }
 
-const SKILL_RANGE: Record<YouthInvestment, [number, number]> = {
-  none: [0, 0], // No graduates
-  minimal: [3, 8],
-  medium: [5, 12],
-  high: [8, 16],
+/**
+ * Co investice odchovanci přidá proti běžnému dorostenci (body na stupnici 0–100).
+ *
+ * Dřív se současné dovednosti odchovance losovaly z pevného rozsahu 3–8 / 5–12 / 8–16, zatímco
+ * běžný dorostenec, kterého klub dostane zadarmo, vycházel z generátoru kolem 24. Simulace na
+ * 3 000 hráčích: odchovanec z velkorysé akademie měl hodnocení 16, dorostenec 24. Klub tak
+ * platil za horší kluky. Teď se odchovanec generuje stejně jako dorostenec a investice k tomu
+ * přidává: `current` = o kolik je dál už dnes, `cap` = kam až může dorůst, `talent` = jak
+ * rychle tam dojde.
+ *
+ * `gemChance` je šance na klenot: talent 70–95 a strop posunutý o dalších 10–20. Hvězda
+ * (strop hodnocení 75+, úroveň nejlepších hráčů okresu) má být odměna, ne standard. Simulace
+ * pro velkorysou akademii: osada ~1 hvězda za 6 sezón, obec za 4, městys za 2; solidní
+ * akademie v osadě ~1 za 30 sezón, symbolická prakticky nikdy.
+ */
+export const YOUTH_BONUS: Record<Exclude<YouthInvestment, "none">, { current: number; cap: number; talent: [number, number]; gemChance: number }> = {
+  minimal: { current: 1, cap: 6, talent: [0, 5], gemChance: 0.03 },
+  medium: { current: 3, cap: 10, talent: [5, 15], gemChance: 0.06 },
+  high: { current: 5, cap: 14, talent: [10, 25], gemChance: 0.10 },
 };
+
+/** Talent a posun stropu klenotu — stejné pásmo jako „kluk, co vesnici přeroste" v U21 generátoru. */
+const GEM_TALENT: [number, number] = [70, 95];
+const GEM_EXTRA_CAP: [number, number] = [10, 20];
+
+export interface AcademyGraduateSkills {
+  /** Ploché hodnoty do `players.skills`. */
+  skills: Record<string, number>;
+  /** Hodnoty se stropy do `players.skills_max` — current sedí se `skills`. */
+  skillsMax: FieldSkills | GoalkeeperSkills;
+  hiddenTalent: number;
+}
+
+/**
+ * Dovednosti odchovance: stejný generátor jako u dorostence z U21 generátoru, k tomu bonus
+ * podle investice. Současná hodnota nikdy nepřeleze strop.
+ */
+export function generateAcademyGraduateSkills(
+  rng: Rng,
+  investment: Exclude<YouthInvestment, "none">,
+  position: "GK" | "DEF" | "MID" | "FWD",
+  villageSize: string,
+  age: number,
+): AcademyGraduateSkills {
+  const isGK = position === "GK";
+  const skillsMax = isGK
+    ? generateGKSkills(rng, villageSize, age)
+    : generateFieldSkills(rng, position, villageSize, age);
+  const bonus = YOUTH_BONUS[investment];
+  const isGem = rng.random() < bonus.gemChance;
+  const capBonus = bonus.cap + (isGem ? rng.int(GEM_EXTRA_CAP[0], GEM_EXTRA_CAP[1]) : 0);
+
+  for (const [key, value] of Object.entries(skillsMax as unknown as Record<string, { current: number; maxPotential: number }>)) {
+    // Zkušenost dávají odehrané minuty, ne akademie
+    if (key === "experience") continue;
+    value.maxPotential = Math.min(100, value.maxPotential + capBonus);
+    value.current = Math.min(value.maxPotential, value.current + bonus.current);
+  }
+
+  const hiddenTalent = isGem
+    ? rng.int(GEM_TALENT[0], GEM_TALENT[1])
+    : Math.min(100, generateHiddenTalent(rng, villageSize) + rng.int(bonus.talent[0], bonus.talent[1]));
+
+  return { skills: flattenGeneratedSkills(skillsMax, isGK), skillsMax, hiddenTalent };
+}
 
 /**
  * Monthly cost of youth academy.
  */
 export function youthMonthlyCost(investment: YouthInvestment): number {
   return INVESTMENT_COST[investment];
+}
+
+/** Základní týdenní cena úrovně (bez vlivu zaměstnanců) — v téhle měně se počítá zaplacená úroveň. */
+export function youthWeeklyBaseCost(investment: YouthInvestment): number {
+  return Math.round(INVESTMENT_COST[investment] / 4.3);
+}
+
+/** Kolik z týdenní ceny musí klub v průměru zaplatit, aby mu ročník dostal danou úroveň. */
+const PAID_LEVEL_THRESHOLD = 0.9;
+
+/**
+ * Úroveň, kterou si klub za sezónu skutečně zaplatil.
+ *
+ * Ročník se dřív řídil nastavením v den konce sezóny, takže stačilo přepnout na velkorysou
+ * týden před koncem a celý rok neplatit. A naopak: kdo platil celý rok a na konci akademii
+ * zrušil, nedostal nic. Teď rozhoduje průměrná týdenní platba za sezónu (`paidBase` / `weeks`):
+ * nejvyšší úroveň, jejíž týdenní cenu klub v průměru zaplatil aspoň z 90 %.
+ */
+export function paidYouthLevel(paidBase: number, weeks: number): YouthInvestment {
+  if (weeks <= 0 || paidBase <= 0) return "none";
+  const averageWeekly = paidBase / weeks;
+  const levels: YouthInvestment[] = ["high", "medium", "minimal"];
+  return levels.find((level) => averageWeekly >= youthWeeklyBaseCost(level) * PAID_LEVEL_THRESHOLD) ?? "none";
 }
 
 /**
@@ -146,14 +230,8 @@ export function tryGraduateYouth(
   const player = generatePlayer(rng, villageInfo, position, surnameData, firstnameData);
   player.age = age;
 
-  // Override attributes based on investment quality
-  const [minSkill, maxSkill] = SKILL_RANGE[config.investment];
-  const attrs: Array<keyof GeneratedPlayer> = [
-    "speed", "technique", "shooting", "passing", "heading", "defense",
-  ];
-  for (const attr of attrs) {
-    (player as unknown as Record<string, number>)[attr] = rng.int(minSkill, maxSkill);
-  }
+  // Dovednosti se tu nenastavují — skutečné hodnoty skládá generateAcademyGraduateSkills(),
+  // tady se vybírá jen kluk (jméno, věk, pozice, povaha).
 
   // Youth academy players have higher patriotism
   player.patriotism = Math.min(20, player.patriotism + rng.int(3, 6));

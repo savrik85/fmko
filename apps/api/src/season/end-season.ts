@@ -240,7 +240,8 @@ async function runWrapPhase(
         const processedSet = new Set(processed);
 
         const teamsRes = await db.prepare(
-          "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai' AND parent_team_id IS NULL AND youth_investment != 'none'",
+          // I klub, který akademii před koncem zrušil: ročník se řídí tím, co za sezónu zaplatil
+          "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai' AND parent_team_id IS NULL AND (youth_investment != 'none' OR youth_paid_base > 0)",
         ).bind(leagueId).all<{ id: string }>()
           .catch((e) => { logger.warn({ module: "end-season" }, "load teams for academy", e); return { results: [] as { id: string }[] }; });
 
@@ -258,9 +259,19 @@ async function runWrapPhase(
           const odchovanci = await graduateAcademyClass(db, tid, seasonRow?.id ?? null)
             .catch((e) => { logger.warn({ module: "end-season", teamId: tid }, "academy graduation", e); return []; });
           if (odchovanci.length > 0) await notifyAcademyGraduates(db, tid, odchovanci);
+          // Nová sezóna počítá platby od nuly
+          await db.prepare("UPDATE teams SET youth_paid_base = 0, youth_paid_weeks = 0 WHERE id = ?").bind(tid).run()
+            .catch((e) => logger.warn({ module: "end-season", teamId: tid }, "reset youth paid counters", e));
         }
 
         const done = processedSet.size >= teamsRes.results.length;
+        if (done) {
+          // Kdo za sezónu nezaplatil nic, do fáze nevstoupil — jeho týdny by se jinak přenesly
+          // do další sezóny a zředily průměr, až akademii zapne
+          await db.prepare("UPDATE teams SET youth_paid_base = 0, youth_paid_weeks = 0 WHERE league_id = ? AND youth_paid_base = 0 AND youth_paid_weeks > 0")
+            .bind(leagueId).run()
+            .catch((e) => logger.warn({ module: "end-season", leagueId }, "reset unpaid youth counters", e));
+        }
         await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending", JSON.stringify([...processedSet]));
         return done ? "done" : "in_progress";
       }

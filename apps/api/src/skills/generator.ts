@@ -44,6 +44,34 @@ function applyAgeCurve(skill: SkillValue, age: number): SkillValue {
 }
 
 /**
+ * Převede vygenerované dovednosti ({current, maxPotential}) na ploché hodnoty, jaké se ukládají
+ * do `players.skills`. Brankář nemá střelbu, standardky, přehled ani výdrž — ty se mu skládají
+ * z příbuzných dovedností, aby měl vyplněné všechny klíče jako hráč v poli.
+ */
+export function flattenGeneratedSkills(
+  skills: FieldSkills | GoalkeeperSkills,
+  isGK: boolean,
+): Record<string, number> {
+  if (isGK) {
+    const gk = skills as GoalkeeperSkills;
+    return {
+      speed: gk.speed.current, technique: gk.technique.current, shooting: gk.technique.current,
+      passing: gk.passing.current, heading: gk.heading.current, defense: gk.defense.current,
+      goalkeeping: gk.goalkeeping.current, creativity: gk.creativity.current, setPieces: gk.technique.current,
+      stamina: gk.strength.current, strength: gk.strength.current, vision: gk.defense.current,
+      experience: gk.experience.current,
+    };
+  }
+  const f = skills as FieldSkills;
+  return {
+    speed: f.speed.current, technique: f.technique.current, shooting: f.shooting.current,
+    passing: f.passing.current, heading: f.heading.current, defense: f.defense.current, goalkeeping: 1,
+    creativity: f.creativity.current, setPieces: f.setPieces.current, stamina: f.stamina.current,
+    strength: f.strength.current, vision: f.vision.current, experience: f.experience.current,
+  };
+}
+
+/**
  * Generate field player skills.
  */
 export function generateFieldSkills(
