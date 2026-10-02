@@ -537,10 +537,13 @@ export async function processMatchDayFinances(
       soldProducts = sale.products;
 
       // Persist stock decrements + zaznamenat příjem
+      // Odečítá se jen ze skladu prodávané kvality
+      const { stockColumn } = await import("./concession-stock");
       for (const p of sale.products) {
-        if (p.sold > 0) {
+        const column = stockColumn(p.qualityLevel);
+        if (p.sold > 0 && column) {
           await db.prepare(
-            "UPDATE concession_products SET stock_quantity = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND product_key = ?",
+            `UPDATE concession_products SET ${column} = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND product_key = ?`,
           ).bind(p.stockLeft, teamId, p.key).run().catch((e) => logger.warn({ module: "finance" }, "concession stock update", e));
         }
       }

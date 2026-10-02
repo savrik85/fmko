@@ -9434,16 +9434,8 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
   const refreshmentsLevel = stadium?.refreshments ?? 0;
   const canSwitchToSelf = refreshmentsLevel >= 1;
 
-  const productsResult = await c.env.DB.prepare(
-    "SELECT product_key, quality_level, sell_price, stock_quantity FROM concession_products WHERE team_id = ?",
-  ).bind(teamId).all<{
-    product_key: string;
-    quality_level: number;
-    sell_price: number;
-    stock_quantity: number;
-  }>().catch((e) => { logger.warn({ module: "game" }, "load concession products", e); return { results: [] }; });
-
-  const productsByKey = new Map(productsResult.results.map((r) => [r.product_key, r]));
+  const { loadConcessionStock, sellableStock } = await import("../season/concession-stock");
+  const productsByKey = new Map((await loadConcessionStock(c.env.DB, teamId)).map((r) => [r.key as string, r]));
 
   // Team reputation pro external income preview
   const teamRow = await c.env.DB.prepare("SELECT reputation FROM teams WHERE id = ?")
@@ -9458,14 +9450,17 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
       key,
       label: catalog.label,
       baseDemandRate: catalog.baseDemandRate,
-      qualityLevel: row?.quality_level ?? 1,
-      sellPrice: row?.sell_price ?? catalog.tiers[1].defaultSellPrice,
-      stockQuantity: row?.stock_quantity ?? 0,
+      qualityLevel: row?.qualityLevel ?? 1,
+      sellPrice: row?.sellPrice ?? catalog.tiers[1].defaultSellPrice,
+      /** Sklad zvolené kvality — jen ten se v zápase prodává. */
+      stockQuantity: row ? sellableStock(row) : 0,
       tiers: catalog.tiers.map((t, i) => ({
         level: i,
         label: t.label,
         wholesalePrice: t.wholesalePrice,
         defaultSellPrice: t.defaultSellPrice,
+        /** Kolik kusů téhle kvality je na skladě. */
+        stock: row?.stockByTier[i] ?? 0,
       })),
     };
   });
@@ -9601,16 +9596,16 @@ gameRouter.post("/teams/:teamId/concession/restock", async (c) => {
   const quantity = Math.max(0, Math.min(10000, Math.round(body.quantity ?? 0)));
   if (quantity <= 0) return c.json({ error: "Množství musí být kladné" }, 400);
 
-  const product = await c.env.DB.prepare(
-    "SELECT quality_level, stock_quantity FROM concession_products WHERE team_id = ? AND product_key = ?",
-  ).bind(teamId, body.productKey).first<{ quality_level: number; stock_quantity: number }>().catch((e) => {
-    logger.warn({ module: "game" }, "load restock product", e);
-    return null;
-  });
+  // Nákup jde do skladu zvolené kvality; každá kvalita má vlastní sklad (concession-stock.ts).
+  // Starý společný sklad se převede při načtení, ať se nový nákup nesečte s nerozděleným.
+  const { loadConcessionStock, stockColumn } = await import("../season/concession-stock");
+  const product = (await loadConcessionStock(c.env.DB, teamId)).find((r) => r.key === body.productKey);
   if (!product) return c.json({ error: "Produkt nenalezen" }, 404);
 
-  const tier = catalog.tiers[product.quality_level];
-  if (!tier || tier.wholesalePrice === 0) {
+  const level = product.qualityLevel;
+  const tier = catalog.tiers[level];
+  const column = stockColumn(level);
+  if (!tier || tier.wholesalePrice === 0 || !column) {
     return c.json({ error: "Tento produkt se nenabízí (L0)" }, 400);
   }
   const totalCost = tier.wholesalePrice * quantity;
@@ -9621,15 +9616,16 @@ gameRouter.post("/teams/:teamId/concession/restock", async (c) => {
   if (team.budget < totalCost) return c.json({ error: "Nedostatek peněz" }, 400);
 
   const gameDate = new Date().toISOString();
+  // Formát „Nákup <produkt> (N ks × P Kč)" čte převod starého skladu — neměnit
   await recordTransaction(
     c.env.DB, teamId, "concession_wholesale", -totalCost,
     `Nákup ${catalog.label} (${quantity} ks × ${tier.wholesalePrice} Kč)`, gameDate,
   );
 
-  const newStock = product.stock_quantity + quantity;
+  const newStock = product.stockByTier[level] + quantity;
   await c.env.DB.prepare(
-    "UPDATE concession_products SET stock_quantity = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND product_key = ?",
-  ).bind(newStock, teamId, body.productKey).run().catch((e) => logger.warn({ module: "game" }, "update stock after restock", e));
+    `UPDATE concession_products SET ${column} = ${column} + ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ? AND product_key = ?`,
+  ).bind(quantity, teamId, body.productKey).run().catch((e) => logger.warn({ module: "game" }, "update stock after restock", e));
 
   return c.json({ ok: true, newStock, totalCost });
 });
