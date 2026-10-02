@@ -29,6 +29,13 @@ interface AkademieData {
   tydnuVSezone: number;
   maU21Tym: boolean;
   urovne: Uroven[];
+  /** Na co má klub letos zaplaceno — podle toho vyroste ročník. Null = sezóna ještě nemá týdenní uzávěrku. */
+  paidLevel: { key: Uroven["klic"]; label: string } | null;
+  paidWeeks: number;
+}
+
+function weeksText(weeks: number): string {
+  return weeks === 1 ? "1 týden" : weeks < 5 ? `${weeks} týdny` : `${weeks} týdnů`;
 }
 
 /**
@@ -102,9 +109,18 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         <h2 className="font-heading font-bold text-base">Mládežnická akademie</h2>
         <p className="text-sm text-muted mt-1">
           Kolik klub sype do práce s žáky. Platí se každý týden, odchovanec přijde
-          na konci sezóny rovnou do dorostu.
+          na konci sezóny rovnou do dorostu. Ročník se řídí tím, co jsi za celou sezónu
+          opravdu zaplatil, ne tím, co máš nastavené v posledním týdnu.
         </p>
       </div>
+
+      {data.paidLevel && (
+        <p className="text-sm">
+          Letos zaplaceno ({weeksText(data.paidWeeks)}) na úrovni{" "}
+          <strong className="font-heading text-ink">{data.paidLevel.label}</strong>
+          {data.paidLevel.key === "none" ? ", z akademie by teď nevyrostl nikdo." : ". Podle ní vyroste letošní ročník."}
+        </p>
+      )}
 
       {!data.maU21Tym && (
         <div className="card border-l-4 border-gold-500 bg-gold-50 p-3 text-sm">
