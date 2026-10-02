@@ -1500,7 +1500,7 @@ export default function FansPage() {
                   <div className="flex items-center gap-2 sm:gap-3 mt-2">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-heading font-bold text-ink leading-tight">Doplnit sklad</div>
-                      <div className="text-xs text-muted truncate">{currentTier.label}, {currentTier.wholesalePrice} Kč/ks</div>
+                      <div className="text-xs text-muted truncate">{currentTier.wholesalePrice} Kč/ks, {currentTier.label}</div>
                     </div>
                     <input
                       type="number"
