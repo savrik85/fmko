@@ -169,6 +169,13 @@ export default function PlayerDetailPage() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
+  // Z trhu „Vyjednat podmínky": otevřít formulář nabídky s cenou z inzerátu (?nabidka=56400).
+  const [prefillOffer, setPrefillOffer] = useState<number | null>(null);
+  useEffect(() => {
+    const v = Number(new URLSearchParams(window.location.search).get("nabidka"));
+    if (Number.isInteger(v) && v > 0) setPrefillOffer(v);
+  }, []);
+
   const switchTab = (t: ProfileTab) => {
     setActiveTab(t);
     if (typeof window !== "undefined") window.history.replaceState(null, "", `#${t}`);
@@ -323,6 +330,14 @@ export default function PlayerDetailPage() {
   const jsemKmenovyKlub = !!player?.loan?.isParentClub;
   const isForeignHumanPlayer = !isOwnPlayer && !jsemKmenovyKlub && playerTeam && playerTeam.user_id !== "ai";
   const canSendOffer = isForeignHumanPlayer || isLoanedToUs;
+
+  useEffect(() => {
+    if (!prefillOffer || !canSendOffer) return;
+    setOfferType("transfer");
+    setOfferAmount(prefillOffer);
+    setOfferOpen(true);
+    setPrefillOffer(null);
+  }, [prefillOffer, canSendOffer]);
 
   async function sendOffer() {
     if (!teamId || !player || offerSending) return;
