@@ -1,5 +1,6 @@
 "use client";
 
+import { marketValue } from "@okresni-masina/shared";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -2698,7 +2699,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                           setPriceDialog({
                             title: `Vystavit ${p.first_name} ${p.last_name} na trh`,
                             description: `${p.position}, ${p.age} let, rating ${p.overall_rating}`,
-                            defaultPrice: Math.round((p.overall_rating ?? 50) * 50),
+                            defaultPrice: marketValue(p.overall_rating ?? 50, p.age ?? 27, p.position),
                             onConfirm: async (price: number) => {
                               const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
                                 method: "POST", headers: { "Content-Type": "application/json" },

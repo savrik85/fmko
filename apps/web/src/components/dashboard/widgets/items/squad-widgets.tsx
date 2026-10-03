@@ -2,6 +2,7 @@
 
 /** Widgety o kádru — stav, složení, dovednosti, kondice, hodnota, mzdy, zranění. */
 
+import { marketValue } from "@okresni-masina/shared";
 import type { Player } from "@/lib/api";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import {
@@ -21,16 +22,6 @@ const POSITIONS = [
 
 const avg = (nums: number[]) => (nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0);
 const playerName = (p: Player) => `${p.first_name} ${p.last_name}`;
-
-/**
- * Odhad tržní hodnoty hráče. Zrcadlí `estimateMarketValue`
- * z apps/api/src/season/economy.ts — API ho žádným endpointem nevystavuje.
- */
-function marketValue(rating: number, age: number): number {
-  const base = 400 * Math.exp(0.058 * rating);
-  const ageMod = age <= 19 ? 1.35 : age <= 22 ? 1.25 : age <= 26 ? 1.1 : age <= 29 ? 1.0 : age <= 32 ? 0.75 : age <= 35 ? 0.55 : 0.4;
-  return Math.round(base * ageMod);
-}
 
 // ── Stav kádru ──────────────────────────────────────────────────────────────
 
@@ -238,7 +229,7 @@ export function SquadValueWidget({ data, height }: WidgetProps) {
   if (players.length === 0) return <ChartEmpty>Kádr je prázdný.</ChartEmpty>;
 
   const valued = players
-    .map((p) => ({ p, value: marketValue(p.overall_rating, p.age) }))
+    .map((p) => ({ p, value: marketValue(p.overall_rating, p.age, p.position) }))
     .sort((a, b) => b.value - a.value);
   const total = valued.reduce((s, x) => s + x.value, 0);
 

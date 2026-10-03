@@ -127,3 +127,4 @@ export {
   PLAN_TACTIC_LABELS,
   PLAN_HARDNESS_LABELS,
 } from "./match-plan";
+export { marketValue, marketValueAgeFactor, MARKET_VALUE_MIN, MARKET_VALUE_MAX } from "./market-value";

@@ -39,6 +39,7 @@ export interface InterestInputs {
   recentMinutes: number; // odehrané minuty za posledních 30 dní
   age: number;
   overallRating: number; // pro odhad tržní hodnoty (faktor peněz)
+  position?: string | null; // tržní hodnota brankáře je nižší
   currentTeamStrength: number; // AVG(overall_rating) kádru prodávajícího
   offerTeamStrength: number;   // AVG kádru kupujícího / rating virtuálního klubu
   offerAmount: number;
@@ -64,12 +65,14 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
   const strengthDiff = clamp((input.offerTeamStrength - input.currentTeamStrength) * 1.3, -20, 30);
   add(strengthDiff >= 0 ? "Lepší klub" : "Slabší klub", strengthDiff);
 
-  // Peníze — na vesnici hlavní motiv, výrazný přeplatek táhne nejvíc.
-  const marketValue = estimateMarketValue(input.overallRating, input.age);
-  if (input.offerAmount >= marketValue * 1.6) add("Balík peněz", 22);
-  else if (input.offerAmount >= marketValue * 1.35) add("Lákavé peníze", 15);
-  else if (input.offerAmount >= marketValue * 1.1) add("Slušné peníze", 8);
-  else if (input.offerAmount > 0 && input.offerAmount <= marketValue * 0.7) add("Urážlivě málo", -6);
+  // Peníze — na vesnici hlavní motiv, výrazný přeplatek táhne nejvíc. Tržní hodnota je
+  // skutečná cena z trhu (sdílený vzorec), takže už nabídka za tržní cenu je „slušná".
+  // Prahy dřív stály na 1,1 / 1,35 / 1,6× hodnoty, která byla 2–4× pod skutečným trhem.
+  const marketValue = estimateMarketValue(input.overallRating, input.age, input.position);
+  if (input.offerAmount >= marketValue * 1.25) add("Balík peněz", 22);
+  else if (input.offerAmount >= marketValue * 1.12) add("Lákavé peníze", 15);
+  else if (input.offerAmount >= marketValue * 0.95) add("Slušné peníze", 8);
+  else if (input.offerAmount > 0 && input.offerAmount <= marketValue * 0.5) add("Urážlivě málo", -6);
 
   // Spokojenost brzdí — jen opravdu spokojený a spřízněný hráč zůstane
   add("Morálka", (50 - input.morale) * 0.4);
@@ -104,7 +107,7 @@ export async function loadInterestInputs(
   offer: { fromTeamId: string; offerAmount: number; virtualRating?: number | null },
 ): Promise<InterestInputs | null> {
   const player = await db.prepare(
-    `SELECT p.team_id, p.age, p.overall_rating, p.coach_relationship, p.personality, p.life_context,
+    `SELECT p.team_id, p.age, p.position, p.overall_rating, p.coach_relationship, p.personality, p.life_context,
             COALESCE(stats.recent_minutes, 0) as recent_minutes
      FROM players p
      LEFT JOIN (
@@ -152,6 +155,7 @@ export async function loadInterestInputs(
     recentMinutes: (player.recent_minutes as number) ?? 0,
     age: (player.age as number) ?? 25,
     overallRating: (player.overall_rating as number) ?? 40,
+    position: (player.position as string) ?? null,
     currentTeamStrength,
     offerTeamStrength,
     offerAmount: offer.offerAmount,
