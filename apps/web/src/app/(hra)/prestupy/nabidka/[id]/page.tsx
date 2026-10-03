@@ -358,8 +358,8 @@ export default function OfferDetailPage() {
         <MessageDialog
           title={role === "buyer" ? "Stáhnout nabídku?" : "Ukončit jednání?"}
           description={role === "buyer"
-            ? "Nabídka bude zrušena. Krátká zpráva protistraně (volitelné)."
-            : "Jednání bude ukončeno. Krátká zpráva protistraně (volitelné)."}
+            ? "Nabídka bude zrušena."
+            : "Jednání bude ukončeno."}
           confirmLabel={role === "buyer" ? "Stáhnout" : "Ukončit"}
           confirmColor="red"
           onCancel={() => setWithdrawDialog(false)}

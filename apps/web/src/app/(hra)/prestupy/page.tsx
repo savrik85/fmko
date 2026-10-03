@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { nationalityFlag } from "@/lib/nationality";
-import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, Button } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
@@ -680,7 +680,7 @@ export default function TransfersPage() {
   const [overview, setOverview] = useState<TransfersOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   // Player offers (organické nabídky)
   const [playerOffers, setPlayerOffers] = useState<PlayerOffer[]>([]);
@@ -696,6 +696,7 @@ export default function TransfersPage() {
   // Co klub za své hráče sám splácí a komu slíbil procenta. U příchozí nabídky se z toho
   // počítá, kolik se z ceny hned strhne (doplacení splátek + procenta).
   const [owedByPlayer, setOwedByPlayer] = useState<Record<string, { remaining: number; pct: number; to: string }>>({});
+  const [watchCount, setWatchCount] = useState(0);
   const [outgoing, setOutgoing] = useState<TransferOffer[]>([]);
   const [incomingBids, setIncomingBids] = useState<Array<{ id: string; listing_id: string; amount: number; counter_amount: number | null; status: string; on_turn: boolean; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; buyer_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
   const [outgoingBids, setOutgoingBids] = useState<Array<{ id: string; listing_id: string; amount: number; counter_amount: number | null; status: string; on_turn: boolean; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; seller_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
@@ -766,6 +767,9 @@ export default function TransfersPage() {
       apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("Failed to load players:", e); return []; }),
       apiFetch<PlayerOffer[]>(`/api/teams/${teamId}/player-offers`).catch((e) => { console.error("Failed to load player offers:", e); return []; }),
     ]);
+    apiFetch<{ players: unknown[] }>(`/api/teams/${teamId}/watchlist`)
+      .then((w) => setWatchCount(w.players?.length ?? 0))
+      .catch((e) => console.error("Failed to load watchlist count:", e));
     apiFetch<{ paying: Array<{ playerId: string; remaining: number; otherTeamName: string }>; sellOnOwed: Array<{ playerId: string; pct: number; otherTeamName: string }> }>(`/api/teams/${teamId}/obligations`)
       .then((ob) => {
         const map: Record<string, { remaining: number; pct: number; to: string }> = {};
@@ -1002,7 +1006,7 @@ export default function TransfersPage() {
             { key: "hledani", label: "Hledání", count: null },
             { key: "na-prodej", label: "Na prodej", count: listings.length || null },
             { key: "volni", label: "Volní", count: freeAgents.length || null },
-            { key: "sledovani", label: "Sledovaní", count: null },
+            { key: "sledovani", label: "Sledovaní", count: watchCount || null },
           ]}
         />
       )}
@@ -1421,7 +1425,7 @@ export default function TransfersPage() {
 
       {/* ═══ Hledat / Sledovaní ═══ */}
       {tab === "hledat" && hledatSub === "sledovani" && teamId && (
-        <WatchlistTab teamId={teamId} color={primaryColor || "#2D5F2D"}
+        <WatchlistTab teamId={teamId} onCount={setWatchCount} color={primaryColor || "#2D5F2D"}
           onColorText={bestTextOn(primaryColor || "#2D5F2D") === "light" ? "text-white border border-transparent" : "text-gray-900 border border-gray-300"}
           ratingColor={readableOnLight(primaryColor || "#2D5F2D")} />
       )}
@@ -2858,9 +2862,9 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
         {choice && (() => {
           const listed = myListings.find((l) => l.playerId === choice.id);
           return (
-            <div className="p-5 space-y-3">
+            <div className="px-5 pt-3 sm:pt-5 space-y-3" style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 0px))" }}>
               <h3 className="font-heading font-bold text-lg">{choice.first_name} {choice.last_name}</h3>
-              <p className="text-sm text-muted">Tržní cena {formatCZK(playerValue(choice))}</p>
+              <p className="text-sm text-ink-light">Tržní cena {formatCZK(playerValue(choice))}</p>
               {listed ? (
                 <div className="rounded-xl bg-gold-50 border border-gold-300/60 p-3 text-sm flex items-center gap-3">
                   <span className="flex-1">Už je na trhu za <span className="font-heading font-bold">{formatCZK(listed.askingPrice)}</span>.</span>
@@ -2873,17 +2877,17 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                 </div>
               ) : (
                 <button onClick={() => listForSale(choice)}
-                  className="w-full text-left rounded-xl border border-gray-200 hover:border-gold-500 hover:bg-gold-50 p-3 transition-colors">
+                  className="w-full text-left rounded-xl bg-white border border-gray-200 hover:border-gold-500 hover:bg-gold-50 p-3 transition-colors">
                   <div className="font-heading font-bold">Prodat za přestupní částku</div>
                   <div className="text-sm text-muted">Vystavíš ho s cenou, ostatní kluby ti pošlou nabídky.</div>
                 </button>
               )}
               <button onClick={() => release(choice)}
-                className="w-full text-left rounded-xl border border-gray-200 hover:border-card-red hover:bg-red-50 p-3 transition-colors">
+                className="w-full text-left rounded-xl bg-white border border-gray-200 hover:border-card-red hover:bg-red-50 p-3 transition-colors">
                 <div className="font-heading font-bold text-card-red">Propustit zadarmo</div>
                 <div className="text-sm text-muted">Odejde hned mezi volné hráče, nic za něj nedostaneš.</div>
               </button>
-              <button onClick={() => setChoice(null)} className="w-full py-2.5 text-sm font-heading font-bold text-muted hover:bg-gray-50 rounded-xl">
+              <button onClick={() => setChoice(null)} className="w-full py-3 rounded-xl text-sm font-heading font-bold text-muted bg-black/5 hover:bg-black/10 transition-colors">
                 Zrušit
               </button>
             </div>
@@ -2899,55 +2903,34 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
   onConfirm: (price: number) => Promise<void> | void; onClose: () => void;
 }) {
   const [price, setPrice] = useState<number | null>(defaultPrice);
-  const [loading, setLoading] = useState(false);
 
   return (
-    // Kliknutí vedle dialog nezavírá — rozepsaná cena by se ztratila. Zavírá jen Zrušit.
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl w-[90vw] max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="p-5">
-          <h3 className="font-heading font-bold text-lg">{title}</h3>
-          <p className="text-sm text-muted mt-1">{description}</p>
-
-          <div className="mt-4">
-            <label className="text-xs text-muted font-heading uppercase">Požadovaná cena (Kč)</label>
-            <MoneyInput
-              value={price}
-              onChange={setPrice}
-              autoFocus
-              className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
-            />
-            <div className="flex justify-center gap-2 mt-2">
-              {/* Násobky výchozí ceny (tržní hodnota / požadovaná cena), stejně jako na detailu hráče.
-                  Pevné částky 1k–10k neseděly k tržním cenám v desítkách tisíc. */}
-              {[0.5, 1, 1.5, 2].map((mul) => {
-                const v = Math.round((defaultPrice * mul) / 100) * 100;
-                return (
-                  <button key={mul} onClick={() => setPrice(v)}
-                    className={`px-2 py-1 rounded text-xs font-heading font-bold transition-colors ${price === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
-                    {mul.toLocaleString("cs-CZ")}×
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-        <div className="flex border-t border-gray-100">
-          <button onClick={onClose}
-            className="flex-1 py-3.5 text-sm font-heading font-bold text-muted hover:bg-gray-50 transition-colors">
-            Zrušit
-          </button>
-          <button disabled={loading || !price} onClick={async () => {
-              if (!price) return;
-              setLoading(true);
-              try { await onConfirm(price); } catch (e) { console.error("PriceDialog confirm error:", e); }
-              setLoading(false);
-            }}
-            className="flex-1 py-3.5 text-sm font-heading font-bold text-pitch-500 hover:bg-pitch-50 transition-colors border-l border-gray-100 disabled:opacity-50">
-            {loading ? "Zpracovávám..." : "Potvrdit"}
-          </button>
-        </div>
+    <SheetDialog open title={title} description={description} confirmDisabled={!price}
+      onCancel={onClose}
+      onConfirm={async () => {
+        if (!price) return;
+        try { await onConfirm(price); } catch (e) { console.error("PriceDialog confirm error:", e); }
+      }}>
+      <label className="text-sm text-muted font-heading uppercase">Požadovaná cena (Kč)</label>
+      <MoneyInput
+        value={price}
+        onChange={setPrice}
+        autoFocus
+        className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
+      />
+      <div className="flex justify-center gap-2 mt-2">
+        {/* Násobky výchozí ceny (tržní hodnota / požadovaná cena), stejně jako na detailu hráče.
+            Pevné částky 1k–10k neseděly k tržním cenám v desítkách tisíc. */}
+        {[0.5, 1, 1.5, 2].map((mul) => {
+          const v = Math.round((defaultPrice * mul) / 100) * 100;
+          return (
+            <button key={mul} type="button" onClick={() => setPrice(v)}
+              className={`px-2.5 py-1 rounded text-sm font-heading font-bold transition-colors ${price === v ? "bg-pitch-500 text-white" : "bg-black/5 text-muted hover:bg-black/10"}`}>
+              {mul.toLocaleString("cs-CZ")}×
+            </button>
+          );
+        })}
       </div>
-    </div>
+    </SheetDialog>
   );
 }

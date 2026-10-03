@@ -21,5 +21,6 @@ export { ErrorDialogProvider } from "./error-dialog";
 export { PageHeader, HeaderStat } from "../dashboard/page-header";
 export { Tabs, useTabParam, type TabItem } from "./tabs";
 export { Sheet } from "./sheet";
+export { SheetDialog } from "./sheet-dialog";
 export { StickyActions } from "./sticky-actions";
 export { IconButton } from "./icon-button";

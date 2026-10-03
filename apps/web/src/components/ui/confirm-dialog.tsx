@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SheetDialog } from "./sheet-dialog";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -100,8 +101,11 @@ export function ConfirmDialog({
   );
 }
 
-/** Hook for easy confirm dialog usage */
-export function useConfirm() {
+/**
+ * Hook for easy confirm dialog usage.
+ * `sheet: true` = potvrzení jako plachta zespodu (Přestupy mají všechny dialogy jako plachty).
+ */
+export function useConfirm(options: { sheet?: boolean } = {}) {
   const [state, setState] = useState<{
     isOpen: boolean;
     title: string;
@@ -123,6 +127,34 @@ export function useConfirm() {
       setState({ ...opts, isOpen: true, resolve });
     });
   };
+
+  const close = (confirmed: boolean) => { state.resolve?.(confirmed); setState((s) => ({ ...s, isOpen: false })); };
+
+  if (options.sheet) {
+    const dialog = (
+      <SheetDialog
+        open={state.isOpen}
+        title={state.title}
+        description={state.description}
+        confirmLabel={state.confirmLabel}
+        variant={state.variant === "danger" ? "danger" : "default"}
+        onConfirm={() => close(true)}
+        onCancel={() => close(false)}
+      >
+        {state.details && state.details.length > 0 && (
+          <div className="bg-white/60 rounded-xl p-3 space-y-1.5">
+            {state.details.map((d, i) => (
+              <div key={i} className="flex items-center justify-between text-sm">
+                <span className="text-muted">{d.label}</span>
+                <span className={`font-heading font-bold ${d.color ?? "text-ink"}`}>{d.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </SheetDialog>
+    );
+    return { confirm, dialog };
+  }
 
   const dialog = (
     <ConfirmDialog
