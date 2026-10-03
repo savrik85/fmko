@@ -693,13 +693,14 @@ export default function PlayerDetailPage() {
 
         {/* Transfer offer inline below hero — same banner bg */}
         {offerSent && (
-          <div className="max-w-[1280px] mx-auto mt-3 px-5 sm:px-8">
+          <div className="max-w-[1280px] mx-auto mt-3">
             <div className="text-white/80 text-sm font-heading font-bold">Nabídka odeslána</div>
           </div>
         )}
         {offerOpen && (
-          <div className="max-w-[1280px] mx-auto mt-2 px-5 sm:px-8 pb-2">
-            <div className={`${light ? "bg-black/10" : "bg-white/10"} backdrop-blur rounded-xl p-4 space-y-3`}>
+          // Bez vlastního bočního okraje: hlavička už má px-3, formulář je stejně široký jako tlačítka nad ním.
+          <div className="max-w-[1280px] mx-auto mt-2 pb-2">
+            <div className={`${light ? "bg-black/10" : "bg-white/10"} backdrop-blur rounded-xl p-3 sm:p-4 space-y-3`}>
               {isLoanedToUs && (
                 <div className={`${light ? "text-gray-700" : "text-white/80"} text-xs font-heading`}>
                   Nabídka půjde původnímu klubu. Pokud bude akceptována, hráč u nás zůstane natrvalo.
@@ -742,7 +743,7 @@ export default function PlayerDetailPage() {
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
                 <div className="flex-1 min-w-0">
                   <label className={`${light ? "text-gray-500" : "text-white/60"} text-xs font-heading uppercase mb-1 block`}>
                     {offerType === "loan" ? "Poplatek za hostování (Kč)" : "Nabízená částka (Kč)"}
