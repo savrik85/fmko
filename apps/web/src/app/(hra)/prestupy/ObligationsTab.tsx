@@ -10,6 +10,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel } from "@/components/ui";
+import { CPU_CLUB_ID } from "@okresni-masina/shared";
+
+/** Klub jako odkaz; cizí klub z trhu stránku nemá. */
+function ClubName({ id, name }: { id: string; name: string }) {
+  if (id === CPU_CLUB_ID) return <span>{name}</span>;
+  return <Link href={`/tym/${id}`} className="hover:text-pitch-500 underline decoration-pitch-500/20">{name}</Link>;
+}
 
 export interface Deal {
   id: string; playerId: string; playerName: string; otherTeamId: string; otherTeamName: string;
@@ -37,7 +44,7 @@ export function DealCard({ deal, side }: { deal: Deal; side: "paying" | "receivi
         </Link>
         <span className="text-sm text-muted">
           {side === "paying" ? "od " : "do "}
-          <Link href={`/tym/${deal.otherTeamId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20">{deal.otherTeamName}</Link>
+          <ClubName id={deal.otherTeamId} name={deal.otherTeamName} />
         </span>
         <span className="ml-auto font-heading font-bold tabular-nums">{kc(deal.totalAmount)}</span>
       </div>

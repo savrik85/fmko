@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { SectionLabel } from "@/components/ui";
+import { CPU_CLUB_ID } from "@okresni-masina/shared";
 
 interface Deal {
   otherTeamId: string; otherTeamName: string; totalAmount: number; remaining: number;
@@ -21,6 +22,7 @@ interface PlayerObligations { paying: Deal | null; receiving: Deal | null; sellO
 const kc = (v: number) => `${v.toLocaleString("cs-CZ")} Kč`;
 
 function Team({ id, name }: { id: string; name: string }) {
+  if (id === CPU_CLUB_ID) return <span className="font-heading font-bold">{name}</span>;
   return <Link href={`/tym/${id}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">{name}</Link>;
 }
 

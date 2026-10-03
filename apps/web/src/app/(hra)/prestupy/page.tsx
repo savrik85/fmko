@@ -14,7 +14,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
 import { WatchlistTab } from "./WatchlistTab";
 import { ObligationsTab } from "./ObligationsTab";
-import { termsNote } from "@/components/transfers/transfer-terms";
+import { termsNote, TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
 import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 
@@ -709,7 +709,13 @@ export default function TransfersPage() {
   // Squad
   const [players, setPlayers] = useState<Player[]>([]);
   // Price dialog
-  const [priceDialog, setPriceDialog] = useState<{ title: string; description: string; defaultPrice: number; onConfirm: (price: number) => void; negotiate?: (price: number) => void } | null>(null);
+  const [priceDialog, setPriceDialog] = useState<{
+    title: string; description: string; defaultPrice: number;
+    onConfirm: (price: number, terms: TermsValue) => void;
+    negotiate?: (price: number) => void;
+    /** Nákup z trhu: jak se platí (null = jen cena, třeba vystavení vlastního hráče). */
+    payment?: { allowSellOn: boolean } | null;
+  } | null>(null);
   // Player reveal
   const [revealPlayer, setRevealPlayer] = useState<Player | null>(null);
 
@@ -1868,19 +1874,20 @@ export default function TransfersPage() {
                               title: `Nabídnout za ${l.playerName}`,
                               description: `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
                               defaultPrice: l.askingPrice,
-                              // Cizí klub prodává jen za hotové; s lidským klubem jde vyjednat cokoli.
+                              // Splátky jdou u obou; procenta a výměna jen s lidským klubem.
+                              payment: { allowSellOn: !(l as any).isAiListing },
                               negotiate: (l as any).isAiListing ? undefined : (price) => {
                                 setPriceDialog(null);
                                 router.push(`/hrac/${l.playerId}?nabidka=${price}`);
                               },
-                              onConfirm: async (price) => {
+                              onConfirm: async (price, terms) => {
                                 if (!teamId) return;
                                 let res: { ok: boolean; autoAccepted?: boolean; rejected?: boolean; explanation?: string; player?: Player; error?: string; offerId?: string; alreadyExists?: boolean } | null = null;
                                 let errorMsg: string | null = null;
                                 try {
                                   res = await apiFetch(`/api/teams/${teamId}/market/${l.id}/bid`, {
                                     method: "POST", headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ amount: price }),
+                                    body: JSON.stringify({ amount: price, ...terms }),
                                   });
                                 } catch (e: any) {
                                   errorMsg = e?.message ?? String(e);
@@ -2906,20 +2913,22 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
   );
 }
 
-function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, negotiate }: {
+function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, negotiate, payment }: {
   title: string; description: string; defaultPrice: number;
-  onConfirm: (price: number) => Promise<void> | void; onClose: () => void;
-  /** Inzerát lidského klubu: plná nabídka v profilu hráče (splátky, procenta, výměna, zpráva). */
+  onConfirm: (price: number, terms: TermsValue) => Promise<void> | void; onClose: () => void;
+  /** Inzerát lidského klubu: plná nabídka v profilu hráče (výměna hráče, zpráva klubu). */
   negotiate?: (price: number) => void;
+  payment?: { allowSellOn: boolean } | null;
 }) {
   const [price, setPrice] = useState<number | null>(defaultPrice);
+  const [terms, setTerms] = useState<TermsValue>(PLAIN_TERMS);
 
   return (
     <SheetDialog open title={title} description={description} confirmDisabled={!price}
       onCancel={onClose}
       onConfirm={async () => {
         if (!price) return;
-        try { await onConfirm(price); } catch (e) { console.error("PriceDialog confirm error:", e); }
+        try { await onConfirm(price, terms); } catch (e) { console.error("PriceDialog confirm error:", e); }
       }}>
       <label className="text-sm text-muted font-heading uppercase">Požadovaná cena (Kč)</label>
       <MoneyInput
@@ -2941,11 +2950,16 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, neg
           );
         })}
       </div>
+      {payment && (
+        <div className="mt-4">
+          <TransferTermsFields amount={price} value={terms} onChange={setTerms} allowSellOn={payment.allowSellOn} />
+        </div>
+      )}
       {negotiate && (
         <button type="button" onClick={() => negotiate(price ?? defaultPrice)}
           className="w-full mt-4 text-left rounded-xl bg-white border border-gray-200 hover:border-pitch-500 hover:bg-pitch-50 p-3 transition-colors">
-          <div className="font-heading font-bold">Vyjednat podmínky →</div>
-          <div className="text-sm text-muted">Na splátky, procenta z příštího přestupu, hráč na výměnu, zpráva klubu.</div>
+          <div className="font-heading font-bold">Nabídka s výměnou nebo zprávou →</div>
+          <div className="text-sm text-muted">Otevře plnou nabídku v profilu hráče: hráč na výměnu, zpráva klubu, splátky i procenta.</div>
         </button>
       )}
     </SheetDialog>

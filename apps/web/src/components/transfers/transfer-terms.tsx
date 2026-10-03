@@ -38,11 +38,13 @@ const styles = {
   },
 } as const;
 
-export function TransferTermsFields({ amount, value, onChange, variant = "card" }: {
+export function TransferTermsFields({ amount, value, onChange, variant = "card", allowSellOn = true }: {
   amount: number | null;
   value: TermsValue;
   onChange: (value: TermsValue) => void;
   variant?: TermsVariant;
+  /** Cizí klub z trhu hráče zpátky neprodá, procenta u něj nedávají smysl. */
+  allowSellOn?: boolean;
 }) {
   const s = styles[variant];
   const onInstallments = value.installments > 0;
@@ -99,7 +101,7 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card" 
         </>
       )}
 
-      <label className="block">
+      {allowSellOn && <label className="block">
         <span className={`flex justify-between text-sm ${s.label}`}>
           <span className="font-heading uppercase">Procenta z příštího přestupu</span>
           <span className={`font-heading font-bold tabular-nums ${s.text}`}>{value.sellOnPct > 0 ? `${value.sellOnPct} %` : "bez procent"}</span>
@@ -108,7 +110,7 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card" 
           onChange={(e) => onChange({ ...value, sellOnPct: Number(e.target.value) })}
           className={`w-full mt-1 ${s.accent}`} />
         <span className={`block text-sm mt-0.5 ${s.sub}`}>Až kupující hráče prodá dál, prodávající dostane tolik procent z ceny.</span>
-      </label>
+      </label>}
 
       {total > 0 && <TermsBreakdown terms={{ amount: total, ...value }} variant={variant} />}
     </div>

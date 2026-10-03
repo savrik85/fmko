@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS transfer_installments (
   player_name TEXT NOT NULL,
   buyer_team_id TEXT NOT NULL,
   seller_team_id TEXT NOT NULL,
+  -- Jméno cizího klubu z trhu (seller_team_id = 'cpu'), u lidských klubů NULL.
+  seller_name TEXT,
   total_amount INTEGER NOT NULL,
   upfront_amount INTEGER NOT NULL,
   installment_amount INTEGER NOT NULL,
