@@ -7,7 +7,7 @@
  * dvakrát.
  */
 
-import { sellOnShare } from "@okresni-masina/shared";
+import { sellOnShare, CPU_CLUB_ID } from "@okresni-masina/shared";
 import { recordTransaction } from "../season/finance-processor";
 import { logger } from "../lib/logger";
 
@@ -56,7 +56,10 @@ export async function processTransferInstallments(db: D1Database, buyerClubTeamI
     const desc = `Splátka za ${d.player_name} ${n}/${d.installments_total}`;
     const ref = `inst-${d.id}-${n}`;
     await recordTransaction(db, buyerClubTeamId, "transfer_installment", -pay, desc, gameDate, ref);
-    await recordTransaction(db, d.seller_team_id, "transfer_installment_income", pay, desc, gameDate, ref);
+    // Cizí klub z trhu není ve hře, jeho podíl jen odchází.
+    if (d.seller_team_id !== CPU_CLUB_ID) {
+      await recordTransaction(db, d.seller_team_id, "transfer_installment_income", pay, desc, gameDate, ref);
+    }
     paid++;
   }
   return paid;
@@ -86,7 +89,9 @@ export async function settleOnResale(
       const desc = `Doplacení splátek za ${deal.player_name} při dalším prodeji`;
       const ref = `inst-settle-${deal.id}`;
       await recordTransaction(db, args.ownerClubTeamId, "transfer_installment_settlement", -deal.remaining, desc, args.gameDate, ref);
-      await recordTransaction(db, deal.seller_team_id, "transfer_installment_settlement_income", deal.remaining, desc, args.gameDate, ref);
+      if (deal.seller_team_id !== CPU_CLUB_ID) {
+        await recordTransaction(db, deal.seller_team_id, "transfer_installment_settlement_income", deal.remaining, desc, args.gameDate, ref);
+      }
       out.settled = deal.remaining;
     }
   }

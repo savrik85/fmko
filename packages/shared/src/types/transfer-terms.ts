@@ -9,6 +9,8 @@ export const INSTALLMENTS_MIN = 2;
 export const INSTALLMENTS_MAX = 20;
 export const SELL_ON_PCT_MAX = 50;
 export const SELL_ON_PCT_STEP = 5;
+/** `seller_team_id` dohody, když se splácí cizímu klubu z trhu: peníze odcházejí mimo hru. */
+export const CPU_CLUB_ID = "cpu";
 /** Kolik splátkových přestupů může mít kupující najednou rozjetých. */
 export const MAX_ACTIVE_INSTALLMENT_DEALS = 3;
 

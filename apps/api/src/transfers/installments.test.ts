@@ -27,6 +27,16 @@ describe("pondělní splátky", () => {
     expect(tx[0][5]).toBe("Splátka za Jan Novák 2/4");
   });
 
+  it("u cizího klubu z trhu se splátka strhne jen kupujícímu", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM transfer_installments WHERE buyer_team_id = \? AND status = 'active'/, all: [deal({ seller_team_id: "cpu" })] },
+      { sql: /UPDATE transfer_installments SET installments_paid/, changes: 1 },
+      { sql: /UPDATE teams SET budget = budget \+ \?/, first: { budget: 100 } },
+    ]);
+    expect(await processTransferInstallments(jakoD1(db), "B", "2026-10-12")).toBe(1);
+    expect(transactions(db).map((p) => [p[1], p[2], p[3]])).toEqual([["B", "transfer_installment", -10_500]]);
+  });
+
   it("splátku, kterou mezitím zabral jiný běh, nestrhne podruhé", async () => {
     const db = new FalesnaD1([
       { sql: /FROM transfer_installments WHERE buyer_team_id/, all: [deal()] },
@@ -90,6 +100,16 @@ describe("prodej hráče dál", () => {
       ["B", "sell_on_fee", -9_000],
       ["S", "sell_on_income", 9_000],
     ]);
+  });
+
+  it("dluh u cizího klubu se při prodeji doplatí jen z kupujícího", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM transfer_installments\s+WHERE player_id = \? AND buyer_team_id = \? AND status = 'active'/, first: { id: "d1", seller_team_id: "cpu", player_name: "X", remaining: 5_000 } },
+      { sql: /UPDATE transfer_installments SET status = 'settled'/, changes: 1 },
+      { sql: /UPDATE teams SET budget = budget \+ \?/, first: { budget: 1 } },
+    ]);
+    expect((await settleOnResale(jakoD1(db), { playerId: "p", ownerClubTeamId: "B", saleAmount: 9_000, saleOfferId: "o", gameDate: "d" })).settled).toBe(5_000);
+    expect(transactions(db).map((p) => [p[1], p[2], p[3]])).toEqual([["B", "transfer_installment_settlement", -5_000]]);
   });
 
   it("bez dohody a doložky nedělá nic", async () => {

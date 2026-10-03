@@ -64,7 +64,7 @@ async function deals(db: D1Database, side: "buyer" | "seller", teamId: string, p
   const mine = side === "buyer" ? "d.buyer_team_id" : "d.seller_team_id";
   const other = side === "buyer" ? "d.seller_team_id" : "d.buyer_team_id";
   const rows = await db.prepare(
-    `SELECT ${DEAL_COLUMNS}, ${other} AS other_team_id, o.name AS other_team_name
+    `SELECT ${DEAL_COLUMNS}, ${other} AS other_team_id, COALESCE(o.name, d.seller_name) AS other_team_name
        FROM transfer_installments d
        JOIN teams buyer ON buyer.id = d.buyer_team_id
        LEFT JOIN teams o ON o.id = ${other}
