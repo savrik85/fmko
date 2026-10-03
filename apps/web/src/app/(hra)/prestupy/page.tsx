@@ -709,7 +709,7 @@ export default function TransfersPage() {
   // Squad
   const [players, setPlayers] = useState<Player[]>([]);
   // Price dialog
-  const [priceDialog, setPriceDialog] = useState<{ title: string; description: string; defaultPrice: number; onConfirm: (price: number) => void } | null>(null);
+  const [priceDialog, setPriceDialog] = useState<{ title: string; description: string; defaultPrice: number; onConfirm: (price: number) => void; negotiate?: (price: number) => void } | null>(null);
   // Player reveal
   const [revealPlayer, setRevealPlayer] = useState<Player | null>(null);
 
@@ -1868,6 +1868,11 @@ export default function TransfersPage() {
                               title: `Nabídnout za ${l.playerName}`,
                               description: `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
                               defaultPrice: l.askingPrice,
+                              // Cizí klub prodává jen za hotové; s lidským klubem jde vyjednat cokoli.
+                              negotiate: (l as any).isAiListing ? undefined : (price) => {
+                                setPriceDialog(null);
+                                router.push(`/hrac/${l.playerId}?nabidka=${price}`);
+                              },
                               onConfirm: async (price) => {
                                 if (!teamId) return;
                                 let res: { ok: boolean; autoAccepted?: boolean; rejected?: boolean; explanation?: string; player?: Player; error?: string; offerId?: string; alreadyExists?: boolean } | null = null;
@@ -2901,9 +2906,11 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
   );
 }
 
-function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
+function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, negotiate }: {
   title: string; description: string; defaultPrice: number;
   onConfirm: (price: number) => Promise<void> | void; onClose: () => void;
+  /** Inzerát lidského klubu: plná nabídka v profilu hráče (splátky, procenta, výměna, zpráva). */
+  negotiate?: (price: number) => void;
 }) {
   const [price, setPrice] = useState<number | null>(defaultPrice);
 
@@ -2934,6 +2941,13 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
           );
         })}
       </div>
+      {negotiate && (
+        <button type="button" onClick={() => negotiate(price ?? defaultPrice)}
+          className="w-full mt-4 text-left rounded-xl bg-white border border-gray-200 hover:border-pitch-500 hover:bg-pitch-50 p-3 transition-colors">
+          <div className="font-heading font-bold">Vyjednat podmínky →</div>
+          <div className="text-sm text-muted">Na splátky, procenta z příštího přestupu, hráč na výměnu, zpráva klubu.</div>
+        </button>
+      )}
     </SheetDialog>
   );
 }

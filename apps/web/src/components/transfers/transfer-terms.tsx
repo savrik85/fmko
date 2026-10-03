@@ -48,6 +48,7 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card" 
   const onInstallments = value.installments > 0;
   const total = amount ?? 0;
   const upfront = Math.round((total * value.upfrontPct) / 100);
+  const plan = transferSchedule({ amount: total, ...value });
 
   return (
     <div className="space-y-3">
@@ -79,12 +80,22 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card" 
           <label className="block">
             <span className={`flex justify-between text-sm ${s.label}`}>
               <span className="font-heading uppercase">Počet týdenních splátek</span>
-              <span className={`font-heading font-bold tabular-nums ${s.text}`}>{value.installments}×</span>
+              <span className={`font-heading font-bold tabular-nums ${s.text}`}>
+                {value.installments}×{total > 0 ? ` po ${kc(plan.installmentAmount)}` : ""}
+              </span>
             </span>
             <input type="range" min={INSTALLMENTS_MIN} max={INSTALLMENTS_MAX} step={1} value={value.installments}
               onChange={(e) => onChange({ ...value, installments: Number(e.target.value) })}
               className={`w-full mt-1 ${s.accent}`} />
           </label>
+          {total > 0 && (
+            <div className={`rounded-xl px-3 py-2 text-sm tabular-nums ${s.box}`}>
+              <span className={s.sub}>Celkem </span>
+              <span className={`font-heading font-bold ${s.text}`}>{kc(total)}</span>
+              <span className={s.sub}> = {kc(plan.upfront)} hned + {plan.installments}× {kc(plan.installmentAmount)}</span>
+              <span className={`block ${s.sub}`}>Poslední splátka za {plan.installments} {plan.installments < 5 ? "týdny" : "týdnů"}.</span>
+            </div>
+          )}
         </>
       )}
 
