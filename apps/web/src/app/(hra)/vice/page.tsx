@@ -44,7 +44,6 @@ const BASE_SECTIONS: Section[] = [
       { href: "/trenink", icon: "🏋️", label: "Tréninky", color: "#3D7A3D" },
       { href: "/zamestnanci", icon: "👔", label: "Zaměstnanci", color: "#4E6B7B" },
       { href: "/prestupy", icon: "🤝", label: "Přestupy", color: "#4A8A4A" },
-      { href: "/sledovani", icon: "⭐", label: "Sledovaní", color: "#B8860B" },
       { href: "/sazky", icon: "🎫", label: "Sázková kancelář", color: "#7A2E2E" },
       { href: "/finance", icon: "💰", label: "Finance", color: "#6B8E23" },
       { href: "/sponzori", icon: "💼", label: "Sponzoři", color: "#8B7355" },

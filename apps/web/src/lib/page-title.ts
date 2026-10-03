@@ -15,7 +15,6 @@ const PAGE_TITLES: Record<string, string> = {
   "/trenink": "Tréninky",
   "/zamestnanci": "Zaměstnanci",
   "/prestupy": "Přestupy",
-  "/sledovani": "Sledovaní hráči",
   "/sazky": "Sázková kancelář",
   "/finance": "Finance",
   "/sponzori": "Sponzoři",

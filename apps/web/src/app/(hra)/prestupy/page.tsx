@@ -11,13 +11,16 @@ import { nationalityFlag } from "@/lib/nationality";
 import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, Button } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { isLightColor } from "@/lib/team-color";
+import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
+import { WatchlistTab } from "./WatchlistTab";
 import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
 import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 
-type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "squad";
+type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "sledovani" | "squad";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["overview", "search", "free_agents", "market", "offers", "squad"] as const;
+const TAB_KEYS = ["overview", "search", "free_agents", "market", "offers", "sledovani", "squad"] as const;
+// Trh má podzáložky; `free_agents` zůstává v TAB_KEYS kvůli starým odkazům (?tab=free_agents).
+const MARKET_SUBTABS = ["za-castku", "volni"] as const;
 
 interface TransfersOverview {
   stats: {
@@ -636,6 +639,11 @@ export default function TransfersPage() {
   const { teamId, primaryColor, gameDate } = useTeam();
   const router = useRouter();
   const [tab, setTab] = useTabParam(TAB_KEYS);
+  const [marketSub, setMarketSub] = useTabParam(MARKET_SUBTABS, "trh");
+  // Stará adresa ?tab=free_agents (Volní byla samostatná záložka) → Trh / Volní hráči.
+  useEffect(() => {
+    if (tab === "free_agents") { setTab("market"); setMarketSub("volni"); }
+  }, [tab, setTab, setMarketSub]);
   const [overview, setOverview] = useState<TransfersOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -892,9 +900,9 @@ export default function TransfersPage() {
   const tabs: [Tab, string, number][] = [
     ["overview", "Přehled", 0],
     ["search", "Hledání", 0],
-    ["free_agents", "Volní", 0],
     ["market", "Trh", listings.length],
     ["offers", "Nabídky", unseenOffers],
+    ["sledovani", "Sledovaní", 0],
     ["squad", "Můj tým", players.filter((p) => (p as any).status === "quit").length],
   ];
 
@@ -1345,7 +1353,26 @@ export default function TransfersPage() {
       )}
 
       {/* ═══ TAB: Volní hráči ═══ */}
-      {tab === "free_agents" && (
+      {tab === "market" && (
+        <Tabs
+          value={marketSub}
+          onChange={setMarketSub}
+          ariaLabel="Trh"
+          items={[
+            { key: "za-castku", label: "Za přestupní částku", count: listings.length || null },
+            { key: "volni", label: "Volní hráči", count: null },
+          ]}
+        />
+      )}
+
+      {/* ═══ TAB: Sledovaní ═══ */}
+      {tab === "sledovani" && teamId && (
+        <WatchlistTab teamId={teamId} color={primaryColor || "#2D5F2D"}
+          onColorText={bestTextOn(primaryColor || "#2D5F2D") === "light" ? "text-white border border-transparent" : "text-gray-900 border border-gray-300"}
+          ratingColor={readableOnLight(primaryColor || "#2D5F2D")} />
+      )}
+
+      {tab === "market" && marketSub === "volni" && (
         <div className="space-y-3">
           {/* Počet nalezených a přepínač filtrů na jednom řádku. Filtrovat
               bylo přes celou šířku a bralo 60 px hned pod záložkami, přestože
@@ -1709,8 +1736,8 @@ export default function TransfersPage() {
         </div>
       )}
 
-      {/* ═══ TAB: Trh ═══ */}
-      {tab === "market" && (
+      {/* ═══ TAB: Trh / Za přestupní částku ═══ */}
+      {tab === "market" && marketSub === "za-castku" && (
         <div className="space-y-5">
           <div>
             <SectionLabel>Na trhu ({listings.length})</SectionLabel>

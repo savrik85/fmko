@@ -27,7 +27,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/trenink", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
   { href: "/zamestnanci", label: "Zaměstnanci", icon: "\u{1F454}", group: "club" },
   { href: "/prestupy", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
-  { href: "/sledovani", label: "Sledovaní", icon: "\u{2B50}", group: "club" },
   { href: "/sazky", label: "Sázky", icon: "\u{1F3AB}", group: "club" },
   { href: "/finance", label: "Finance", icon: "\u{1F4B0}", group: "club" },
   { href: "/sponzori", label: "Sponzoři", icon: "\u{1F4BC}", group: "club" },

@@ -60,7 +60,9 @@ const OLD_TO_NEW_PATHS: [string, string][] = [
   ["/dashboard/transfers", "/prestupy"],
   ["/dashboard/transfers/offer/:id", "/prestupy/nabidka/:id"],
   ["/dashboard/u21", "/u21"],
-  ["/dashboard/watchlist", "/sledovani"],
+  ["/dashboard/watchlist", "/prestupy?tab=sledovani"],
+  // Sledovaní jsou od 2026-10 záložka Přestupů, samostatná stránka zmizela.
+  ["/sledovani", "/prestupy?tab=sledovani"],
   ["/dashboard/zamestnanci", "/zamestnanci"],
   ["/login", "/prihlaseni"],
   ["/register", "/registrace"],
