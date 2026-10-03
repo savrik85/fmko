@@ -46,10 +46,7 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
     featureArea = "tym_a_trenink";
   } else if (pathname.startsWith("/hrac")) {
     featureArea = "detail_hrace";
-  } else if (
-    pathname.startsWith("/prestupy") ||
-    pathname.startsWith("/sledovani")
-  ) {
+  } else if (pathname.startsWith("/prestupy")) {
     featureArea = "prestupy_a_trh";
   } else if (pathname.startsWith("/vybaveni")) {
     featureArea = "vybaveni_a_bazar";
