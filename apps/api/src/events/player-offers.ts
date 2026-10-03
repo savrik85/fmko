@@ -32,7 +32,7 @@ const SOURCES = [
       "V dorostu vyrostl zajímavý hráč, dal bych mu šanci v mužích.",
       "Jeden z mladých je připravený na přechod do mužského fotbalu.",
     ],
-    ageRange: [16, 20] as [number, number],
+    ageRange: [16, 19] as [number, number],
   },
   {
     source: "friend" as const,
@@ -59,13 +59,18 @@ const SOURCES = [
 /** Zdroj nabídky — kdo hráče přivedl. */
 export type OfferSource = (typeof SOURCES)[number]["source"];
 
+/** Věk, pro který platí cíl „4–12 bodů pod průměrem áčka". Mladší kluk vyjde slabší podle věkové křivky. */
+const YOUTH_TARGET_AGE = 20;
+
 /**
- * Kluk z dorostu má vyjít 4–12 bodů pod průměrem áčka: použitelný náhradník s prostorem
- * růst. Nikdy ale hůř, než jak ho dá generátor obci bez posunu.
+ * Posun úrovně kluka z nabídky dorostu: dvacetiletý by vyšel 4–12 bodů pod průměrem áčka,
+ * mladší podle věkové křivky méně (šestnáctiletý ~78 % toho, co by měl ve dvaceti). Nikdy
+ * ale hůř, než jak ho dá generátor obci bez posunu. Posun zvedá jen dnešní úroveň, strop
+ * zůstává podle obce (`keepLevelCaps`), jinak by kluk ze SMS předčil placenou akademii.
  */
-export function youthOfferShift(level: string, position: "GK" | "DEF" | "MID" | "FWD", age: number, squadAverage: number | null | undefined, rng: Rng): number {
+export function youthOfferShift(level: string, position: "GK" | "DEF" | "MID" | "FWD", squadAverage: number | null | undefined, rng: Rng): number {
   if (!squadAverage) return 0;
-  return Math.max(0, shiftForRating(level, position, age, Math.round(squadAverage) - rng.int(4, 12)));
+  return Math.max(0, shiftForRating(level, position, YOUTH_TARGET_AGE, Math.round(squadAverage) - rng.int(4, 12)));
 }
 
 /**
@@ -114,7 +119,8 @@ export async function generatePlayerOffer(
     : null;
   const created = createPlayer(rng, {
     position: pos, village: villageInfo, names: { surnameData, firstnameData }, age, level,
-    shift: isYouth ? youthOfferShift(level, pos, age, squadAverage, rng) : MARKET_SHIFT,
+    shift: isYouth ? youthOfferShift(level, pos, squadAverage, rng) : MARKET_SHIFT,
+    keepLevelCaps: isYouth,
   });
   const player = created.identity;
   const { skills, skillsMax, physical, hiddenTalent, rating: overallRating } = created;

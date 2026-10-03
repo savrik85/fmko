@@ -71,6 +71,15 @@ export function flattenGeneratedSkills(
   };
 }
 
+/** Kolik prostoru nad dnešní hodnotou hráči podle věku ještě zbývá. */
+export function prostorPodleVeku(vek: number): { min: number; max: number } {
+  if (vek <= 21) return { min: 12, max: 28 };
+  if (vek <= 25) return { min: 8, max: 20 };
+  if (vek <= 29) return { min: 4, max: 12 };
+  if (vek <= 33) return { min: 2, max: 7 };
+  return { min: 0, max: 3 };
+}
+
 /**
  * Rozsahy úrovně posunuté o `shift` bodů. Kladný posun = lepší hráči (trh, celebrity),
  * záporný = slabší (AI kluby). Průměry i stropy se posouvají stejně, aby kladný posun
@@ -301,6 +310,12 @@ export interface PlayerSkillsOptions {
   hiddenTalent?: number;
   /** Strop výš o tolik bodů na každé dovednosti. */
   capBonus?: number;
+  /**
+   * Posun zvedne jen dnešní úroveň, ne potenciál: strop zůstane jako u hráče z dané obce
+   * bez posunu, jen nikdy pod dnešní hodnotou + prostorem podle věku (`prostorPodleVeku`).
+   * Kluk z nabídky dorostu je tak hned použitelný, ale hvězdou se stane hlavně klenot.
+   */
+  keepLevelCaps?: boolean;
 }
 
 export interface PlayerSkills {
@@ -394,6 +409,17 @@ export function generatePlayerSkills(rng: Rng, opts: PlayerSkillsOptions): Playe
     ? generateGKSkills(rng, level, skillAge, shift)
     : generateFieldSkills(rng, position, level, skillAge, shift);
   const values = generated as unknown as Record<string, SkillValue>;
+  if (opts.keepLevelCaps && shift > 0) {
+    const levelCaps = (isGK
+      ? generateGKSkills(rng, level, skillAge, 0)
+      : generateFieldSkills(rng, position, level, skillAge, 0)) as unknown as Record<string, SkillValue>;
+    const room = prostorPodleVeku(age);
+    for (const [key, value] of Object.entries(values)) {
+      if (key === "experience") continue;
+      const minimum = value.current + rng.int(room.min, room.max);
+      value.maxPotential = Math.min(100, Math.max(levelCaps[key]?.maxPotential ?? 0, minimum));
+    }
+  }
   // Zkušenost se počítá ze skutečného věku, i když dovednosti jsou z vrcholu kariéry.
   if (skillAge !== age) {
     values.experience = { current: Math.min(100, Math.max(0, (age - 16) * rng.int(3, 6))), maxPotential: 100 };
