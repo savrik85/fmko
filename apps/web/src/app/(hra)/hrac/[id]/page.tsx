@@ -907,8 +907,15 @@ export default function PlayerDetailPage() {
             {isOwnPlayer && player.weekly_wage != null && (
               <DetailRow label="Mzda" value={`${player.weekly_wage.toLocaleString("cs")} Kč/týd`} />
             )}
-            {/* U každého hráče, i cizího: stejný vzorec jako nabídky a inzeráty cizích klubů. */}
-            <DetailRow label="Tržní cena" value={`${marketValue(player.overall_rating ?? 0, player.age ?? 27, player.position).toLocaleString("cs")} Kč`} />
+            {/* U každého hráče: stejný vzorec jako nabídky a inzeráty cizích klubů. U cizího jen
+                odhad zaokrouhlený na tisíce, stejně jako vidíš jeho dovednosti jen přibližně. */}
+            {(() => {
+              const value = marketValue(player.overall_rating ?? 0, player.age ?? 27, player.position);
+              const shown = isOwnPlayer
+                ? `${value.toLocaleString("cs")} Kč`
+                : `cca ${Math.max(1000, Math.round(value / 1000) * 1000).toLocaleString("cs")} Kč`;
+              return <DetailRow label="Tržní cena" value={shown} />;
+            })()}
             <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />
             <DetailRow label="Váha" value={player.physical?.weight ? `${player.physical.weight} kg` : "—"} />
             <DetailRow label="Noha" value={footLabel(player.physical?.preferredFoot)} />
