@@ -2763,12 +2763,17 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
               autoFocus
             />
             <div className="flex justify-center gap-2 mt-2">
-              {[1000, 2500, 5000, 10000].map((v) => (
-                <button key={v} onClick={() => setPrice(v)}
-                  className={`px-2 py-1 rounded text-xs font-heading font-bold transition-colors ${price === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
-                  {(v / 1000)}k
-                </button>
-              ))}
+              {/* Násobky výchozí ceny (tržní hodnota / požadovaná cena), stejně jako na detailu hráče.
+                  Pevné částky 1k–10k neseděly k tržním cenám v desítkách tisíc. */}
+              {[0.5, 1, 1.5, 2].map((mul) => {
+                const v = Math.round((defaultPrice * mul) / 100) * 100;
+                return (
+                  <button key={mul} onClick={() => setPrice(v)}
+                    className={`px-2 py-1 rounded text-xs font-heading font-bold transition-colors ${price === v ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}>
+                    {mul.toLocaleString("cs-CZ")}×
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
