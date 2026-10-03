@@ -437,7 +437,7 @@ export function WatchlistWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <MoreLink href="/prestupy?tab=sledovani">Celý watchlist →</MoreLink>
+      <MoreLink href="/prestupy?tab=hledat&hledat=sledovani">Celý watchlist →</MoreLink>
     </div>
   );
 }

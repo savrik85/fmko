@@ -40,7 +40,7 @@ export function PlayerObligationsCard({ teamId, playerId }: { teamId: string; pl
     <div className="card p-4 sm:p-5">
       <div className="flex items-baseline justify-between gap-2">
         <SectionLabel>Smluvní závazky</SectionLabel>
-        <Link href="/prestupy?tab=zavazky" className="text-sm text-muted hover:text-pitch-500 underline decoration-pitch-500/20">Všechny závazky</Link>
+        <Link href="/prestupy?tab=squad&tym=zavazky" className="text-sm text-muted hover:text-pitch-500 underline decoration-pitch-500/20">Všechny závazky</Link>
       </div>
       <ul className="space-y-2 text-sm">
         {paying && (

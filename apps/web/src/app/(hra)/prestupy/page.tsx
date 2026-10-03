@@ -18,11 +18,15 @@ import { termsNote } from "@/components/transfers/transfer-terms";
 import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
 import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 
-type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "zavazky" | "sledovani" | "squad";
+// Na telefonu se 7 záložek nevešlo, proto 4 hlavní a pod nimi podzáložky:
+// Hledat = všechno, kde vybírám cizí hráče; Můj tým = vlastní kádr a peníze za přestupy.
+type Tab = "overview" | "hledat" | "offers" | "squad" | LegacyTab;
+// Staré adresy (?tab=search, market, free_agents, sledovani, zavazky) se přesměrují na podzáložku.
+type LegacyTab = "search" | "free_agents" | "market" | "sledovani" | "zavazky";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["overview", "search", "free_agents", "market", "offers", "zavazky", "sledovani", "squad"] as const;
-// Trh má podzáložky; `free_agents` zůstává v TAB_KEYS kvůli starým odkazům (?tab=free_agents).
-const MARKET_SUBTABS = ["za-castku", "volni"] as const;
+const TAB_KEYS = ["overview", "hledat", "offers", "squad", "search", "free_agents", "market", "sledovani", "zavazky"] as const;
+const HLEDAT_SUBTABS = ["hledani", "na-prodej", "volni", "sledovani"] as const;
+const SQUAD_SUBTABS = ["hraci", "zavazky"] as const;
 
 interface TransfersOverview {
   stats: {
@@ -656,11 +660,23 @@ export default function TransfersPage() {
   const { teamId, primaryColor, gameDate } = useTeam();
   const router = useRouter();
   const [tab, setTab] = useTabParam(TAB_KEYS);
-  const [marketSub, setMarketSub] = useTabParam(MARKET_SUBTABS, "trh");
-  // Stará adresa ?tab=free_agents (Volní byla samostatná záložka) → Trh / Volní hráči.
+  const [hledatSub, setHledatSub] = useTabParam(HLEDAT_SUBTABS, "hledat");
+  const [squadSub, setSquadSub] = useTabParam(SQUAD_SUBTABS, "tym");
+  // Staré adresy z doby, kdy bylo 7 samostatných záložek (odkazy v notifikacích, záložky v prohlížeči).
   useEffect(() => {
-    if (tab === "free_agents") { setTab("market"); setMarketSub("volni"); }
-  }, [tab, setTab, setMarketSub]);
+    const legacy: Partial<Record<Tab, () => void>> = {
+      search: () => { setTab("hledat"); setHledatSub("hledani"); },
+      market: () => {
+        const trh = new URLSearchParams(window.location.search).get("trh");
+        setTab("hledat"); setHledatSub(trh === "volni" ? "volni" : "na-prodej");
+      },
+      free_agents: () => { setTab("hledat"); setHledatSub("volni"); },
+      sledovani: () => { setTab("hledat"); setHledatSub("sledovani"); },
+      zavazky: () => { setTab("squad"); setSquadSub("zavazky"); },
+    };
+    legacy[tab]?.();
+  }, [tab, setTab, setHledatSub, setSquadSub]);
+  const isSearch = tab === "hledat" && hledatSub === "hledani";
   const [overview, setOverview] = useState<TransfersOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -869,9 +885,9 @@ export default function TransfersPage() {
   // Seznam hráčů se dřív načítal jen při kliknutí na záložku. Kdo se vrátil
   // zpět z profilu hráče, přistál na ?tab=search a zůstal navěky na spinneru.
   useEffect(() => {
-    if (tab === "search" && teamId && !searchLoaded) loadSearch();
+    if (isSearch && teamId && !searchLoaded) loadSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, teamId, searchLoaded]);
+  }, [isSearch, teamId, searchLoaded]);
 
   // Uložit filtry, ať přežijí odchod na profil a návrat
   useEffect(() => {
@@ -914,14 +930,12 @@ export default function TransfersPage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
 
+  const quitCount = players.filter((p) => (p as any).status === "quit").length;
   const tabs: [Tab, string, number][] = [
     ["overview", "Přehled", 0],
-    ["search", "Hledání", 0],
-    ["market", "Trh", listings.length],
+    ["hledat", "Hledat", 0],
     ["offers", "Nabídky", unseenOffers],
-    ["zavazky", "Závazky", 0],
-    ["sledovani", "Sledovaní", 0],
-    ["squad", "Můj tým", players.filter((p) => (p as any).status === "quit").length],
+    ["squad", "Můj tým", quitCount],
   ];
 
   return (
@@ -964,10 +978,34 @@ export default function TransfersPage() {
       {/* Tab bar */}
       <Tabs
         value={tab}
-        onChange={(k) => { setTab(k); if (k === "search") loadSearch(); }}
+        onChange={setTab}
         ariaLabel="Přestupy"
         items={tabs.map(([key, label, count]) => ({ key, label, count: count || null }))}
       />
+      {tab === "hledat" && (
+        <Tabs
+          value={hledatSub}
+          onChange={setHledatSub}
+          ariaLabel="Hledat hráče"
+          items={[
+            { key: "hledani", label: "Hledání", count: null },
+            { key: "na-prodej", label: "Na prodej", count: listings.length || null },
+            { key: "volni", label: "Volní", count: null },
+            { key: "sledovani", label: "Sledovaní", count: null },
+          ]}
+        />
+      )}
+      {tab === "squad" && (
+        <Tabs
+          value={squadSub}
+          onChange={setSquadSub}
+          ariaLabel="Můj tým"
+          items={[
+            { key: "hraci", label: "Hráči", count: quitCount || null },
+            { key: "zavazky", label: "Závazky", count: null },
+          ]}
+        />
+      )}
 
       {/* ═══ TAB: Přehled ═══ */}
       {tab === "overview" && (
@@ -1159,7 +1197,7 @@ export default function TransfersPage() {
       )}
 
       {/* ═══ TAB: Hledání ═══ */}
-      {tab === "search" && (
+      {isSearch && (
         <div className="space-y-3">
           {!searchLoaded && <div className="flex justify-center py-8"><Spinner /></div>}
           {searchLoaded && (
@@ -1370,27 +1408,14 @@ export default function TransfersPage() {
         </div>
       )}
 
-      {/* ═══ TAB: Volní hráči ═══ */}
-      {tab === "market" && (
-        <Tabs
-          value={marketSub}
-          onChange={setMarketSub}
-          ariaLabel="Trh"
-          items={[
-            { key: "za-castku", label: "Za přestupní částku", count: listings.length || null },
-            { key: "volni", label: "Volní hráči", count: null },
-          ]}
-        />
-      )}
-
-      {/* ═══ TAB: Sledovaní ═══ */}
-      {tab === "sledovani" && teamId && (
+      {/* ═══ Hledat / Sledovaní ═══ */}
+      {tab === "hledat" && hledatSub === "sledovani" && teamId && (
         <WatchlistTab teamId={teamId} color={primaryColor || "#2D5F2D"}
           onColorText={bestTextOn(primaryColor || "#2D5F2D") === "light" ? "text-white border border-transparent" : "text-gray-900 border border-gray-300"}
           ratingColor={readableOnLight(primaryColor || "#2D5F2D")} />
       )}
 
-      {tab === "market" && marketSub === "volni" && (
+      {tab === "hledat" && hledatSub === "volni" && (
         <div className="space-y-3">
           {/* Počet nalezených a přepínač filtrů na jednom řádku. Filtrovat
               bylo přes celou šířku a bralo 60 px hned pod záložkami, přestože
@@ -1755,7 +1780,7 @@ export default function TransfersPage() {
       )}
 
       {/* ═══ TAB: Trh / Za přestupní částku ═══ */}
-      {tab === "market" && marketSub === "za-castku" && (
+      {tab === "hledat" && hledatSub === "na-prodej" && (
         <div className="space-y-5">
           <div>
             <SectionLabel>Na trhu ({listings.length})</SectionLabel>
@@ -2541,7 +2566,7 @@ export default function TransfersPage() {
       )}
 
       {/* ═══ TAB: Závazky — splátky, procenta z přestupu, hostování ═══ */}
-      {tab === "zavazky" && teamId && (
+      {tab === "squad" && squadSub === "zavazky" && teamId && (
         <ObligationsTab
           teamId={teamId}
           loans={loanedOut.length > 0 || loanedIn.length > 0 ? (
@@ -2629,8 +2654,8 @@ export default function TransfersPage() {
         />
       )}
 
-      {/* ═══ TAB: Můj tým ═══ */}
-      {tab === "squad" && (
+      {/* ═══ TAB: Můj tým / Hráči ═══ */}
+      {tab === "squad" && squadSub === "hraci" && (
         <SquadTransferTable
           players={players}
           myListings={myListings}
