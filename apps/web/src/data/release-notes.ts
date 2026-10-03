@@ -18,7 +18,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     items: [
       "Každý hráč má tržní cenu. Počítá se ze skutečných přestupů mezi kluby podle hodnocení, věku a pozice: mladí jsou dražší, veteráni a brankáři levnější.",
       "Tržní cena nezohledňuje talent. Ten zná jen trenér hráčova klubu, takže talentovaného kluka můžeš na trhu sehnat levněji, než kolik doopravdy stojí.",
-      "Najdeš ji v profilu každého hráče, vlastního i cizího. V Přestupech na záložce Můj tým ji máš u celého kádru a pod tabulkou i jeho celkovou hodnotu. Když hráče vystavuješ na trh, cena se ti rovnou předvyplní.",
+      "Najdeš ji v profilu každého hráče. U cizích hráčů je to jen odhad, stejně jako jejich dovednosti. V Přestupech na záložce Můj tým ji máš u celého kádru a pod tabulkou i jeho celkovou hodnotu. Když hráče vystavuješ na trh, cena se ti rovnou předvyplní.",
       "Podle tržní ceny se řídí i cizí kluby. Jejich nabídky na tvé hráče i ceny hráčů, které dávají na trh, odpovídají tomu, za kolik se hráči opravdu prodávají.",
     ],
   },
