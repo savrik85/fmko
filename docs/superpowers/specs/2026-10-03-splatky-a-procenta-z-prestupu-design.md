@@ -25,8 +25,8 @@ Každá nabídka na trvalý přestup mezi lidskými kluby má čtyři podmínky:
 | Podmínka | Rozsah | Výchozí |
 |---|---|---|
 | Cena celkem | 1 až 10 000 000 Kč (`MAX_TRANSFER_AMOUNT`) | – |
-| Záloha | 20–100 % ceny; 100 % = jednorázově | 100 % |
-| Počet týdenních splátek | 0 (jednorázově) nebo 2–10 | 0 |
+| Záloha | 10–100 % ceny; 100 % = jednorázově | 100 % |
+| Počet týdenních splátek | 0 (jednorázově) nebo 2–20 | 0 |
 | Procenta z příštího přestupu | 0–50 %, po 5 % | 0 % |
 
 - Záloha < 100 % vyžaduje počet splátek 2–10 a naopak.

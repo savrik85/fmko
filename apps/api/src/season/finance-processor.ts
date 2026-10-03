@@ -49,6 +49,14 @@ export type TransactionType =
   | "bus_subsidy"
   | "cash_loan_disbursement"
   | "cash_loan_repayment"
+  // Přestup na splátky a procenta z příštího přestupu (transfers/installments.ts).
+  // ZÁMĚRNĚ nejsou v PURCHASE_TYPES: splátka se strhne i do minusu, prodávající dostane vždy.
+  | "transfer_installment"
+  | "transfer_installment_income"
+  | "transfer_installment_settlement"
+  | "transfer_installment_settlement_income"
+  | "sell_on_fee"
+  | "sell_on_income"
   | "village_brigade"
   | "manager_social"
   | "manager_bet_win"
@@ -348,7 +356,12 @@ export async function processWeeklyFinances(
     }
   }
 
-  // 9. Trenér → loajalita se tady NEDĚLÁ. Jednorázový ±1 v pondělí druhý den smazal denní
+  // 9. Splátky přestupů: jedna splátka každé aktivní dohody, i do minusu.
+  const { processTransferInstallments } = await import("../transfers/installments");
+  await processTransferInstallments(db, teamId, gameDate)
+    .catch((e) => logger.error({ module: "finance" }, `transfer installments for team ${teamId}`, e));
+
+  // 10. Trenér → loajalita se tady NEDĚLÁ. Jednorázový ±1 v pondělí druhý den smazal denní
   //    drift v daily-ticku (loajalita se táhne k reputaci týmu rychlostí 1 bod/den), takže
   //    to byl no-op. Trenér místo toho posouvá CÍL toho driftu — viz daily-tick.ts
   //    a MANAGER_FANS_BANDS.loyaltyOffset v packages/shared.

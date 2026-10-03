@@ -18,7 +18,7 @@ import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
-import { MAX_TRANSFER_AMOUNT } from "@okresni-masina/shared";
+import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
 
 /**
  * Povrchy areálu, které má klub ZAPLACENÉ.
@@ -82,6 +82,15 @@ async function requireOwnedTeamRead(
     "SELECT id FROM teams WHERE id = ? AND user_id = ?",
   ).bind(teamId, session.userId).first();
   return ownTeam ? null : c.json({ error: "Přístup odepřen" }, 403);
+}
+
+/** Nejvýš MAX_ACTIVE_INSTALLMENT_DEALS rozjetých splátkových přestupů na kupujícího. */
+async function installmentLimitError(db: D1Database, buyerClubTeamId: string): Promise<string | null> {
+  const active = await db.prepare("SELECT COUNT(*) AS n FROM transfer_installments WHERE buyer_team_id = ? AND status = 'active'")
+    .bind(buyerClubTeamId).first<{ n: number }>();
+  return (active?.n ?? 0) >= MAX_ACTIVE_INSTALLMENT_DEALS
+    ? `Na splátky můžeš mít najednou nejvýš ${MAX_ACTIVE_INSTALLMENT_DEALS} hráče. Nejdřív nějaký dosplať.`
+    : null;
 }
 
 /** Send a system SMS to a team's phone (find-or-create conversation by role title). */
@@ -6126,7 +6135,7 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const teamId = c.req.param("teamId");
   const buyerClubTeamId = await resolveClubTeamId(c.env.DB, teamId);
   if (!buyerClubTeamId) return c.json({ error: "Kupující tým nenalezen" }, 404);
-  const body = await c.req.json<{ playerId: string; amount: number; message?: string; offerType?: "transfer" | "loan"; loanDuration?: number; offeredPlayerId?: string | null; targetSquad?: "senior" | "u21" }>();
+  const body = await c.req.json<{ playerId: string; amount: number; message?: string; offerType?: "transfer" | "loan"; loanDuration?: number; offeredPlayerId?: string | null; targetSquad?: "senior" | "u21"; upfrontPct?: number; installments?: number; sellOnPct?: number }>();
   const targetSquad: "senior" | "u21" = body.targetSquad === "u21" ? "u21" : "senior";
   const player = await c.env.DB.prepare("SELECT p.*, t.user_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ?").bind(body.playerId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
@@ -6165,9 +6174,26 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
     return c.json({ error: "Nabídka musí být kladné celé číslo (0 povolena jen pro hostování)" }, 400);
   }
   if (body.amount > MAX_TRANSFER_AMOUNT) return c.json({ error: `Částka může být nejvýš ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.` }, 400);
-  if (body.amount > 0) {
+
+  // Podmínky: záloha, týdenní splátky, procenta z příštího přestupu (jen trvalý přestup).
+  const terms: TransferTerms = { amount: body.amount, upfrontPct: body.upfrontPct ?? 100, installments: body.installments ?? 0, sellOnPct: body.sellOnPct ?? 0 };
+  const plainTerms = terms.upfrontPct === 100 && terms.installments === 0 && terms.sellOnPct === 0;
+  if (offerType === "loan" && !plainTerms) return c.json({ error: "Splátky a procenta jdou jen u trvalého přestupu" }, 400);
+  const termsError = transferTermsError(terms);
+  if (termsError) return c.json({ error: termsError }, 400);
+  if (terms.installments > 0) {
+    const limitError = await installmentLimitError(c.env.DB, buyerClubTeamId);
+    if (limitError) return c.json({ error: limitError }, 400);
+  }
+  // Kupující potřebuje peníze jen na zálohu (u jednorázové platby je záloha celá cena).
+  const payNow = transferSchedule(terms).upfront;
+  if (payNow > 0) {
     const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(buyerClubTeamId).first<{ budget: number }>();
-    if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+    if (!team || team.budget < payNow) {
+      return c.json({ error: terms.installments > 0
+        ? `Nedostatek peněz na zálohu. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, záloha je ${payNow.toLocaleString("cs")} Kč.`
+        : `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+    }
   }
 
   if (offerType === "loan" && (!loanDuration || loanDuration < 7 || loanDuration > 180)) {
@@ -6222,12 +6248,12 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id, target_squad, player_interest) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, buyerClubTeamId, offeredPlayerId, targetSquad, interest?.level ?? null).run();
+  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id, target_squad, player_interest, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, buyerClubTeamId, offeredPlayerId, targetSquad, interest?.level ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct).run();
 
-  // Log initial offer event
-  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'offer', ?, ?)")
-    .bind(crypto.randomUUID(), id, buyerClubTeamId, body.amount, body.message ?? null).run()
+  // Log initial offer event (s podmínkami, ať historie vyjednávání ukáže, co se měnilo)
+  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, 'offer', ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), id, buyerClubTeamId, body.amount, body.message ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct).run()
     .catch((e) => logger.warn({ module: "game" }, "insert offer event", e));
 
   // SMS to the owner team about the incoming offer
@@ -6253,7 +6279,7 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else {
     await sendPhoneSMS(c.env.DB, komuDorucit, "Sportovní ředitel", "Sportovní ředitel",
-      `📩 Přišla nabídka na ${pName} od ${buyerTeam?.name ?? "neznámého klubu"} za ${body.amount.toLocaleString("cs")} Kč. Podívejte se na to v přestupech.`
+      `📩 Přišla nabídka na ${pName} od ${buyerTeam?.name ?? "neznámého klubu"}: ${formatTermsSummary(terms)}. Podívejte se na to v přestupech.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
 
@@ -6263,7 +6289,7 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
     const offerLabel = offerType === "loan" ? "hostování" : "přestup";
     await createNotification(c.env.DB, komuDorucit, "transfer",
       `💰 Nová nabídka za ${pName}`,
-      `${buyerTeam?.name ?? "Neznámý klub"} nabízí ${offerLabel} za ${body.amount.toLocaleString("cs-CZ")} Kč.`,
+      `${buyerTeam?.name ?? "Neznámý klub"} nabízí ${offerLabel}: ${offerType === "loan" ? `${body.amount.toLocaleString("cs-CZ")} Kč` : formatTermsSummary(terms)}.`,
       `/prestupy/nabidka/${id}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "new offer notification", e); }
 
@@ -6692,6 +6718,9 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   // ?? přeskakuje jen null/undefined, ne 0 — proto explicitní kontrola.
   const amount = (offer.counter_amount != null ? (offer.counter_amount as number) : (offer.offer_amount as number));
   if (amount < 0) return c.json({ error: "Neplatná částka přestupu" }, 400);
+  // Podmínky posledního návrhu: záloha + týdenní splátky, procenta z příštího přestupu.
+  const terms = termsFromRow(offer as { upfront_pct?: number | null; installments?: number | null; sell_on_pct?: number | null }, amount);
+  const schedule = transferSchedule(terms);
   const buyerTeamId = scope.buyerClubTeamId;
   const sellerTeamId = scope.sellerClubTeamId;
   const playerId = offer.player_id as string;
@@ -6837,6 +6866,11 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       .bind(crypto.randomUUID(), sellerTeamId, amount, vSeller.budget + amount, `Prodej: ${soldName} → ${virtualName}`, vGameDate)
       .run().catch((e) => logger.warn({ module: "game" }, "log virtual sale transaction", e));
 
+    // Prodej cizímu klubu: zbytek splátek a procenta z ceny jdou hned, stejně jako u lidského kupce.
+    const { settleOnResale } = await import("../transfers/installments");
+    await settleOnResale(c.env.DB, { playerId, ownerClubTeamId: sellerTeamId, saleAmount: amount, saleOfferId: offerId, gameDate: vGameDate })
+      .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při prodeji cizímu klubu", e));
+
     // Event log — jen za lidskou stranu (transfer_offer_events.team_id má FK na teams).
     await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'accept', ?, ?)")
       .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, amount, acceptMessage).run()
@@ -6897,11 +6931,18 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     amount, isLoan: offerType === "loan",
   });
   const adminFee = levies.adminFee;
-  const requiredBudget = offerType === "loan" ? amount : amount + adminFee;
+  // Při splátkách kupující hned platí jen zálohu (+ celý mezikrajský poplatek).
+  const payNow = offerType === "loan" ? amount : schedule.upfront;
+  const requiredBudget = offerType === "loan" ? amount : payNow + adminFee;
   if (buyer.budget < requiredBudget) {
+    const what = terms.installments > 0 ? `záloha ${payNow.toLocaleString("cs")} Kč` : `cena ${amount.toLocaleString("cs")} Kč`;
     return c.json({ error: adminFee > 0
-      ? `Kupující nemá dostatek prostředků (cena ${amount.toLocaleString("cs")} Kč + administrační poplatek ${adminFee.toLocaleString("cs")} Kč)`
-      : "Kupující nemá dostatek prostředků" }, 400);
+      ? `Kupující nemá dostatek prostředků (${what} + administrační poplatek ${adminFee.toLocaleString("cs")} Kč)`
+      : terms.installments > 0 ? `Kupující nemá dostatek prostředků na zálohu (${payNow.toLocaleString("cs")} Kč)` : "Kupující nemá dostatek prostředků" }, 400);
+  }
+  if (offerType !== "loan" && terms.installments > 0) {
+    const limitError = await installmentLimitError(c.env.DB, buyerTeamId);
+    if (limitError) return c.json({ error: limitError }, 400);
   }
   if (!(await claimOffer())) return c.json({ error: "Nabídku mezitím vyřešil někdo jiný" }, 409);
 
@@ -6986,7 +7027,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     }).catch((e) => logger.warn({ module: "game" }, "create loan news", e));
   } else {
     // Trvalý přestup — atomický budget check + odečtení (včetně cross-league admin fee).
-    const totalCost = amount + adminFee;
+    // Při splátkách se hned strhne jen záloha, zbytek chodí každé pondělí (transfers/installments.ts).
+    const totalCost = payNow + adminFee;
     const transferDeductResult = await c.env.DB.prepare(
       "UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?"
     ).bind(totalCost, buyerTeamId, totalCost).run();
@@ -7055,7 +7097,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 
     const buyerBalanceAfter = buyer.budget - totalCost;
     const transferCore = [
-      c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, sellerTeamId),
+      c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(payNow, sellerTeamId),
       c.env.DB.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
       c.env.DB.prepare(
         `UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
@@ -7064,10 +7106,25 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'").bind(playerId),
       c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id IN (SELECT id FROM transfer_listings WHERE player_id = ?) AND status = 'pending'").bind(playerId),
       c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), buyerTeamId, -amount, buyerBalanceAfter + adminFee, `Přestup: ${offerPlayerName}`, gameDate),
+        .bind(crypto.randomUUID(), buyerTeamId, -payNow, buyerBalanceAfter + adminFee,
+          terms.installments > 0 ? `Přestup: ${offerPlayerName} (záloha ${terms.upfrontPct} %, zbytek ${terms.installments}× týdně)` : `Přestup: ${offerPlayerName}`, gameDate),
       c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), sellerTeamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${offerPlayerName}`, gameDate),
+        .bind(crypto.randomUUID(), sellerTeamId, payNow, (seller?.budget ?? 0) + payNow,
+          terms.installments > 0 ? `Prodej: ${offerPlayerName} (záloha, zbytek ${terms.installments}× týdně)` : `Prodej: ${offerPlayerName}`, gameDate),
     ];
+    if (terms.installments > 0) {
+      transferCore.push(c.env.DB.prepare(
+        `INSERT INTO transfer_installments (id, offer_id, player_id, player_name, buyer_team_id, seller_team_id, total_amount, upfront_amount,
+           installment_amount, installments_total, remaining, created_game_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(crypto.randomUUID(), offerId, playerId, offerPlayerName, buyerTeamId, sellerTeamId, amount, schedule.upfront,
+        schedule.installmentAmount, schedule.installments, schedule.remainingAfterUpfront, gameDate));
+    }
+    if (terms.sellOnPct > 0) {
+      transferCore.push(c.env.DB.prepare(
+        "INSERT INTO sell_on_clauses (id, offer_id, player_id, player_name, beneficiary_team_id, owner_team_id, pct) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), offerId, playerId, offerPlayerName, sellerTeamId, buyerTeamId, terms.sellOnPct));
+    }
     if (adminFee > 0) {
       transferCore.push(c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_admin_fee', ?, ?, ?, ?)")
         .bind(crypto.randomUUID(), buyerTeamId, -adminFee, buyerBalanceAfter, `Administrační poplatek za meziligový přestup (${levies.adminFeePct} %)`, gameDate));
@@ -7076,7 +7133,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       // Odvod platí prodávající z utržené částky — kupujícího se netýká.
       transferCore.push(c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(levies.levy, sellerTeamId));
       transferCore.push(c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'competition_fee', ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), sellerTeamId, -levies.levy, (seller?.budget ?? 0) + amount - levies.levy,
+        .bind(crypto.randomUUID(), sellerTeamId, -levies.levy, (seller?.budget ?? 0) + payNow - levies.levy,
           `Odvod z přestupu uvnitř soutěže (${levies.levyPct} %)`, gameDate));
     }
 
@@ -7153,6 +7210,11 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       buyerTeamId, sellerTeamId, offerId, gameDate,
     }).catch((e) => logger.warn({ module: "game" }, "zápis poplatků z přestupu do pokladny", e));
 
+    // Prodávající hráče sám splácel nebo slíbil procenta: zbytek dluhu a procenta z ceny jdou hned.
+    const { settleOnResale } = await import("../transfers/installments");
+    await settleOnResale(c.env.DB, { playerId, ownerClubTeamId: sellerTeamId, saleAmount: amount, saleOfferId: offerId, gameDate })
+      .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při dalším prodeji", e));
+
     const { createTransferNews } = await import("../transfers/transfer-news");
     await createTransferNews(c.env.DB, seller?.league_id ?? "", null, "transfer_completed", {
       playerName: offerPlayerName, playerAge: player?.age as number,
@@ -7165,8 +7227,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   }
 
   // Event log
-  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'accept', ?, ?)")
-    .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, amount, acceptMessage).run()
+  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, 'accept', ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, amount, acceptMessage, terms.upfrontPct, terms.installments, terms.sellOnPct).run()
     .catch((e) => logger.warn({ module: "game" }, "insert accept event", e));
 
   // Update commute + reset squad number
@@ -7286,7 +7348,7 @@ gameRouter.post("/teams/:teamId/players/:playerId/unrest-talk", async (c) => {
 gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
-  const body = await c.req.json<{ amount: number; message?: string }>();
+  const body = await c.req.json<{ amount: number; message?: string; upfrontPct?: number; installments?: number; sellOnPct?: number }>();
   if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
     return c.json({ error: "Protinabídka musí být kladné celé číslo" }, 400);
   }
@@ -7294,8 +7356,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
 
   // Counter smí ten, kdo JE na tahu.
   const offer = await c.env.DB.prepare(
-    "SELECT player_id, from_team_id, to_team_id, status, last_action_by, expires_at FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')"
-  ).bind(offerId).first<{ player_id: string; from_team_id: string; to_team_id: string; status: string; last_action_by: string | null; expires_at: string }>();
+    "SELECT player_id, from_team_id, to_team_id, status, last_action_by, expires_at, offer_type, upfront_pct, installments, sell_on_pct FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')"
+  ).bind(offerId).first<{ player_id: string; from_team_id: string; to_team_id: string; status: string; last_action_by: string | null; expires_at: string; offer_type: string | null; upfront_pct: number | null; installments: number | null; sell_on_pct: number | null }>();
   if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
   const scope = await resolveOfferClubScope(c.env.DB, teamId, offer);
   if (!scope?.role) return c.json({ error: "Nabídka nenalezena" }, 404);
@@ -7307,22 +7369,42 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
     return c.json({ error: "Nabídka vypršela" }, 410);
   }
 
-  // Pokud counter posílá kupující (from_team_id), ověř že má na to peníze
+  // Podmínky protinávrhu: co strana neposlala, zůstává z aktuálního návrhu (starší klienti posílají jen částku).
+  const current = termsFromRow(offer, body.amount);
+  const terms: TransferTerms = {
+    amount: body.amount,
+    upfrontPct: body.upfrontPct ?? current.upfrontPct,
+    installments: body.installments ?? current.installments,
+    sellOnPct: body.sellOnPct ?? current.sellOnPct,
+  };
+  const plainTerms = terms.upfrontPct === 100 && terms.installments === 0 && terms.sellOnPct === 0;
+  if ((offer.offer_type ?? "transfer") === "loan" && !plainTerms) return c.json({ error: "Splátky a procenta jdou jen u trvalého přestupu" }, 400);
+  const termsError = transferTermsError(terms);
+  if (termsError) return c.json({ error: termsError }, 400);
+  if (terms.installments > 0 && (offer.installments ?? 0) === 0) {
+    const limitError = await installmentLimitError(c.env.DB, scope.buyerClubTeamId);
+    if (limitError) return c.json({ error: limitError }, 400);
+  }
+
+  // Pokud counter posílá kupující (from_team_id), ověř že má peníze na to, co platí hned
   if (scope.role === "buyer") {
+    const payNow = transferSchedule(terms).upfront;
     const buyer = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(scope.buyerClubTeamId).first<{ budget: number }>();
-    if (!buyer || buyer.budget < body.amount) {
-      return c.json({ error: `Nedostatek peněz. Máte ${(buyer?.budget ?? 0).toLocaleString("cs")} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
+    if (!buyer || buyer.budget < payNow) {
+      return c.json({ error: terms.installments > 0
+        ? `Nedostatek peněz na zálohu. Máte ${(buyer?.budget ?? 0).toLocaleString("cs")} Kč, záloha je ${payNow.toLocaleString("cs")} Kč.`
+        : `Nedostatek peněz. Máte ${(buyer?.budget ?? 0).toLocaleString("cs")} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
     }
   }
 
   const countered = await c.env.DB.prepare(
-    `UPDATE transfer_offers SET status = 'countered', counter_amount = ?, last_action_by = ?
+    `UPDATE transfer_offers SET status = 'countered', counter_amount = ?, upfront_pct = ?, installments = ?, sell_on_pct = ?, last_action_by = ?
      WHERE id = ? AND status = ? AND last_action_by IS ?`
-  ).bind(body.amount, scope.actorClubTeamId, offerId, offer.status, offer.last_action_by).run();
+  ).bind(body.amount, terms.upfrontPct, terms.installments, terms.sellOnPct, scope.actorClubTeamId, offerId, offer.status, offer.last_action_by).run();
   if (countered.meta.changes === 0) return c.json({ error: "Nabídku mezitím vyřešil někdo jiný" }, 409);
 
-  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'counter', ?, ?)")
-    .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, body.amount, body.message ?? null).run()
+  await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, 'counter', ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, body.amount, body.message ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct).run()
     .catch((e) => logger.warn({ module: "game" }, "insert counter event", e));
 
   const otherTeamId = scope.role === "buyer" ? scope.sellerClubTeamId : scope.buyerClubTeamId;
@@ -7333,14 +7415,14 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
     .catch((e) => { logger.warn({ module: "game" }, "fetch counter team", e); return null; });
   const pName = player ? `${player.first_name} ${player.last_name}` : "hráče";
   await sendPhoneSMS(c.env.DB, otherTeamId, "Sportovní ředitel", "Sportovní ředitel",
-    `💰 ${counterTeam?.name ?? "Klub"} poslal protinabídku na ${pName}: ${body.amount.toLocaleString("cs")} Kč.`
+    `💰 ${counterTeam?.name ?? "Klub"} poslal protinabídku na ${pName}: ${formatTermsSummary(terms)}.`
   ).catch((e) => logger.warn({ module: "game" }, "SMS counter notif", e));
   try {
     const { createNotification } = await import("../community/notifications");
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
     await createNotification(c.env.DB, otherTeamId, "transfer",
       `🔄 Protinabídka za ${pName}`,
-      `${counterTeam?.name ?? "Klub"} poslal protinabídku ${body.amount.toLocaleString("cs-CZ")} Kč${body.message ? `: „${body.message}"` : "."}`,
+      `${counterTeam?.name ?? "Klub"} poslal protinabídku ${formatTermsSummary(terms)}${body.message ? `: „${body.message}"` : "."}`,
       `/prestupy/nabidka/${offerId}`, pushEnv);
   } catch (e) { logger.warn({ module: "game" }, "counter offer notification", e); }
 
