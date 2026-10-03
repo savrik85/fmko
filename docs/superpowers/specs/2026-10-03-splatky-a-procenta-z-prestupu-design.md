@@ -121,7 +121,17 @@ Kde to je:
    nárok já (hráč, u koho je, kolik %).
 4. **Hostování** — moji hráči jinde a cizí hráči u mě: komu / od koho, do kdy, poplatek.
 
-**Sledovaní:** obsah dnešní stránky `/sledovani` beze změny funkce přejde do záložky Přestupů.
+**Sledovaní:** obsah dnešní stránky `/sledovani` přejde do záložky Přestupů a místo kartiček
+bude normální tabulka, stejná jako kádr cizího týmu (`tym/[id]/ForeignSquad.tsx` se zobecní
+na sdílenou tabulku hráčů):
+
+- Počítač: řaditelná tabulka. Sloupce pozice, hráč, klub (odkaz), věk, hodnocení, dovednosti
+  (Rch Tch Stř Při Hlv Obr Brn), forma (zápasy · góly · asistence · průměrná známka za poslední
+  zápasy), tržní cena (cca), stav (zranění), sledován od, odebrat.
+- Mobil: seznam bez sloupců navíc: jméno, klub, věk, cca cena, hodnocení, čtyři klíčové
+  dovednosti pozice s popiskem, forma jedním řádkem, zranění, tlačítko odebrat. Nad seznamem
+  filtr pozic a výběr řazení.
+- Data dává dnešní `GET /teams/:id/watchlist` (klub, dovednosti, zranění, forma, datum).
 Samostatná stránka zmizí z menu (postranní panel, Více). Adresa `/sledovani` i stará
 `/dashboard/watchlist` trvale přesměrují rovnou na `/prestupy?tab=sledovani` (bez řetězení
 přesměrování, kvůli next-on-pages). Odkaz „Celý watchlist" na nástěnce povede tamtéž.
