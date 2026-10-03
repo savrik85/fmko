@@ -271,42 +271,31 @@ export async function ensureBigClubSquads(db: D1Database, cupId: string, maxClub
   if (!clubs.results.length) return 0;
 
   const { generateSquad } = await import("../generators/player");
+  const { createPlayer } = await import("../generators/create-player");
   const { cryptoSeed } = await import("../generators/rng");
   const { FIRSTNAMES } = await import("../data/czech-names");
   const SURNAMES: Record<string, number> = { "Novák": 10, "Svoboda": 8, "Dvořák": 7, "Černý": 6, "Procházka": 5, "Kučera": 5, "Veselý": 4, "Horák": 4, "Němec": 3, "Marek": 3, "Pospíšil": 3, "Pokorný": 2, "Hájek": 2, "Král": 2, "Jelínek": 2 };
-  const CORE = ["speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping", "stamina", "strength"];
 
   let done = 0;
   for (const club of clubs.results) {
     const rng = createRng(cryptoSeed());
-    const village = { region_code: "Praha", category: "mesto", population: 100000, district: "Praha", lat: 50.08, lng: 14.42, name: club.name } as unknown as Parameters<typeof generateSquad>[1];
-    const surnameData = { surnames: SURNAMES, female_forms: {} } as unknown as Parameters<typeof generateSquad>[2];
-    const firstnameData = { male: FIRSTNAMES, female: {} } as unknown as Parameters<typeof generateSquad>[3];
+    const village = { region_code: "Praha", category: "mesto", population: 100000, district: "Praha" } as const;
+    const surnameData = { surnames: SURNAMES, female_forms: {} };
+    const firstnameData = { male: FIRSTNAMES, female: {} };
     const squad = generateSquad(rng, village, surnameData, firstnameData, 18);
-
-    const overallOf = (p: Record<string, number>) => Math.round(CORE.reduce((s, k) => s + (p[k] ?? 40), 0) / CORE.length);
-    const avg = squad.reduce((s, p) => s + overallOf(p as unknown as Record<string, number>), 0) / Math.max(1, squad.length);
-    const shift = club.strength - avg; // posun na sílu klubu
-
-    // Podlaha atributů: pro velkokluby (síla 42-70) drží původních 15/20, ale u předkolových
-    // amatérů (síla 4-10) by je vytáhla na trojnásobek. Los je dělá záměrně slabé, aby lidé
-    // předkola skoro jistě prošli — proto podlahu srazíme na jejich vlastní sílu.
-    const skFloor = Math.min(15, Math.max(4, club.strength));
-    const ovFloor = Math.min(20, Math.max(5, club.strength));
 
     const stmts: D1PreparedStatement[] = [];
     for (const p of squad) {
-      const pr = p as unknown as Record<string, number>;
-      const sk = (k: string) => Math.max(skFloor, Math.min(95, Math.round((pr[k] ?? 40) + shift)));
-      const skills = { speed: sk("speed"), technique: sk("technique"), shooting: sk("shooting"), passing: sk("passing"), heading: sk("heading"), defense: sk("defense"), goalkeeping: sk("goalkeeping"), vision: sk("technique"), creativity: sk("passing"), setPieces: rng.int(20, 70) };
-      const physical = { stamina: sk("stamina"), strength: sk("strength"), injuryProneness: pr.injuryProneness ?? 50, height: rng.int(172, 191), weight: rng.int(68, 88), preferredFoot: "right", preferredSide: "center" };
-      const personality = { discipline: pr.discipline ?? 50, patriotism: pr.patriotism ?? 50, alcohol: pr.alcohol ?? 30, temper: pr.temper ?? 40, leadership: pr.leadership ?? 40, workRate: pr.workRate ?? 55, aggression: pr.aggression ?? 45, consistency: pr.consistency ?? 55, clutch: pr.clutch ?? 50 };
-      const overall = Math.max(ovFloor, Math.min(90, overallOf(pr) + Math.round(shift)));
-      const pp = p as unknown as { firstName: string; lastName: string; position: string; age?: number };
+      // Dovednosti ze společného generátoru: hráč vyjde kolem síly klubu (± 6). Předkoloví
+      // amatéři (síla 4–10) tak zůstanou záměrně slabí, velkokluby (42–70) silné.
+      const created = createPlayer(rng, {
+        identity: p, position: p.position as "GK" | "DEF" | "MID" | "FWD", level: "village",
+        targetRating: Math.max(1, club.strength + rng.int(-6, 6)),
+      });
       stmts.push(db.prepare(
         "INSERT INTO cup_club_players (id, cup_team_id, first_name, last_name, position, overall_rating, age, skills, physical, personality, condition, morale, avatar, suspended_matches) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?)"
-      ).bind(crypto.randomUUID(), club.id, pp.firstName, pp.lastName, pp.position, overall, pp.age ?? 26,
-        JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
+      ).bind(crypto.randomUUID(), club.id, p.firstName, p.lastName, p.position, created.rating, p.age,
+        JSON.stringify(created.skills), JSON.stringify(created.physical), JSON.stringify(created.personality),
         rng.int(78, 100), rng.int(45, 78), rng.random() < 0.05 ? rng.int(1, 2) : 0)); // různá kondice/morálka, občas trest
     }
     for (let i = 0; i < stmts.length; i += 40) await db.batch(stmts.slice(i, i + 40)).catch((e) => logger.warn({ module: M }, "insert cup squad", e));

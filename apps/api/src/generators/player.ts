@@ -7,6 +7,7 @@ import type {
 import type { PreferredFoot, PreferredSide } from "../skills/types";
 import { pickOccupation } from "./occupations";
 import { pickForeignName, type Ethnicity } from "../data/nationalities";
+import { generatePlayerSkills, overallRatingFromFlat, type PlayerSkills } from "../skills/generator";
 
 // Seed data types
 interface SurnameData {
@@ -26,20 +27,15 @@ export interface VillageInfo {
   district?: string;
 }
 
-export interface GeneratedPlayer {
+/**
+ * Identita nového hráče: jméno, věk, vzhled, povaha, povolání. Dovednosti tu ZÁMĚRNĚ nejsou —
+ * počítá je jen `generatePlayerSkills` (skills/generator.ts), viz `createPlayer`.
+ */
+export interface PlayerIdentity {
   firstName: string;
   lastName: string;
   age: number;
   position: PlayerPosition;
-  speed: number;
-  technique: number;
-  shooting: number;
-  passing: number;
-  heading: number;
-  defense: number;
-  goalkeeping: number;
-  stamina: number;
-  strength: number;
   injuryProneness: number;
   discipline: number;
   patriotism: number;
@@ -62,14 +58,18 @@ export interface GeneratedPlayer {
   clutch: number;
 }
 
-// Průměrná kvalita hráčů dle kategorie obce (0-100 škála)
-// Malý rozdíl — okresní fotbal, i malá vesnice má šanci
-const QUALITY_BY_CATEGORY: Record<string, number> = {
-  vesnice: 37,  // hamlet → sem, blízko obci
-  obec: 39,     // village
-  mestys: 41,
-  mesto: 44,    // město má výhodu ale ne drtivou
-};
+/** Hráč v paměti i s plochými dovednostmi (trénink, stárnutí). */
+export interface GeneratedPlayer extends PlayerIdentity {
+  speed: number;
+  technique: number;
+  shooting: number;
+  passing: number;
+  heading: number;
+  defense: number;
+  goalkeeping: number;
+  stamina: number;
+  strength: number;
+}
 
 const POSITIONS: PlayerPosition[] = ["GK", "DEF", "MID", "FWD"];
 
@@ -125,64 +125,6 @@ function ageToDecade(age: number): string {
 }
 
 /**
- * Generate football attributes with position bias and age curve (0-100 škála).
- */
-function generateAttributes(
-  rng: Rng,
-  position: PlayerPosition,
-  age: number,
-  qualityBase: number,
-): Record<string, number> {
-  // Age curve: peak at 27, decline after 32
-  let ageMod = 0;
-  if (age < 20) ageMod = -10;
-  else if (age < 24) ageMod = -5;
-  else if (age <= 30) ageMod = 0;
-  else if (age <= 34) ageMod = -5;
-  else if (age <= 38) ageMod = -10;
-  else ageMod = -20;
-
-  const base = qualityBase + ageMod;
-
-  function attr(posBonus: number): number {
-    const val = base + posBonus + rng.int(-15, 15);
-    return Math.max(1, Math.min(100, val));
-  }
-
-  // Position-specific biases (0-100 škála)
-  const biases: Record<PlayerPosition, Record<string, number>> = {
-    GK: {
-      speed: -10, technique: -10, shooting: -20, passing: -10,
-      heading: -10, defense: 5, goalkeeping: 30,
-    },
-    DEF: {
-      speed: 0, technique: -5, shooting: -10, passing: 0,
-      heading: 10, defense: 15, goalkeeping: -30,
-    },
-    MID: {
-      speed: 0, technique: 10, shooting: 0, passing: 15,
-      heading: 0, defense: 0, goalkeeping: -30,
-    },
-    FWD: {
-      speed: 10, technique: 5, shooting: 15, passing: 0,
-      heading: 5, defense: -10, goalkeeping: -30,
-    },
-  };
-
-  const b = biases[position];
-
-  return {
-    speed: attr(b.speed),
-    technique: attr(b.technique),
-    shooting: attr(b.shooting),
-    passing: attr(b.passing),
-    heading: attr(b.heading),
-    defense: attr(b.defense),
-    goalkeeping: attr(b.goalkeeping),
-  };
-}
-
-/**
  * Generate a single player.
  */
 export function generatePlayer(
@@ -191,13 +133,16 @@ export function generatePlayer(
   position: PlayerPosition,
   surnameData: SurnameData,
   firstnameData: FirstnameData,
-): GeneratedPlayer {
-  // Age: mostly 18–38, some outliers
-  const age = rng.int(0, 100) < 5
+  opts?: { age?: number },
+): PlayerIdentity {
+  // Věk se musí znát PŘED jménem, vzhledem a povoláním — volající, který ho dřív přepsal
+  // až potom, měl dvacetiletého kluka s prošedivělými vlasy a povoláním důchodce.
+  // Jinak: většinou 18–38, občas veterán nebo mladík.
+  const age = opts?.age ?? (rng.int(0, 100) < 5
     ? rng.int(39, 52) // Occasional old-timer
     : rng.int(0, 100) < 10
       ? rng.int(16, 18) // Young talent
-      : rng.int(19, 37);
+      : rng.int(19, 37));
 
   const decade = ageToDecade(age);
   let firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1980s"]);
@@ -213,15 +158,6 @@ export function generatePlayer(
     ethnicity = foreign.ethnicity;
   }
 
-  let qualityBase = QUALITY_BY_CATEGORY[village.category] + rng.int(-2, 2);
-  // Wonderkid: 2% šance na výjimečný talent (+15-25 quality boost)
-  const isWonderkid = age <= 21 && rng.random() < 0.02;
-  if (isWonderkid) qualityBase += rng.int(15, 25);
-  // Exceptional player: 1% šance na nadprůměrného hráče (+8-15)
-  const isExceptional = !isWonderkid && rng.random() < 0.01;
-  if (isExceptional) qualityBase += rng.int(8, 15);
-  const attrs = generateAttributes(rng, position, age, qualityBase);
-
   // Body type correlates with age and position
   const bodyWeights: Record<BodyType, number> = {
     thin: position === "FWD" ? 20 : 10,
@@ -232,11 +168,6 @@ export function generatePlayer(
   };
   const bodyType = rng.weighted(bodyWeights) as BodyType;
 
-  // Physical attributes (0-100 škála)
-  const stamina = Math.max(1, Math.min(100,
-    qualityBase + (age < 30 ? 10 : age < 35 ? 0 : -15) + rng.int(-15, 15)));
-  const strength = Math.max(1, Math.min(100,
-    qualityBase + (bodyType === "athletic" ? 10 : bodyType === "stocky" ? 5 : 0) + rng.int(-10, 10)));
   const injuryProneness = rng.int(5, 100);
 
   // Personality (0-100 škála)
@@ -343,15 +274,6 @@ export function generatePlayer(
     lastName,
     age,
     position,
-    speed: attrs.speed,
-    technique: attrs.technique,
-    shooting: attrs.shooting,
-    passing: attrs.passing,
-    heading: attrs.heading,
-    defense: attrs.defense,
-    goalkeeping: attrs.goalkeeping,
-    stamina,
-    strength,
     injuryProneness,
     discipline,
     patriotism,
@@ -383,7 +305,7 @@ export function generateSquad(
   surnameData: SurnameData,
   firstnameData: FirstnameData,
   squadSize?: number,
-): GeneratedPlayer[] {
+): PlayerIdentity[] {
   const size = squadSize ?? (village.category === "vesnice" ? 18 : village.category === "obec" ? 20 : 22);
 
   // Build position list
@@ -449,14 +371,52 @@ const TIER_CONFIG: Record<CelebrityTier, {
 
 export { TIER_CONFIG };
 
-interface CelebrityResult extends GeneratedPlayer {
+interface CelebrityResult extends PlayerIdentity {
   celebrityType: CelebrityType;
   celebrityTier?: CelebrityTier;
   transportCost: number;
   nickname: string | null;
   tierLabel: string;
-  hiddenTalent?: number;
-  skillsMax?: Record<string, number>;
+  /** Dovednosti, strop, talent a hodnocení — ze stejného generátoru jako každý jiný hráč. */
+  generated: PlayerSkills;
+}
+
+/** Celebrity jsou profíci z vyšších soutěží, takže se generují na úrovni velkého města. */
+const CELEBRITY_LEVEL = "city";
+
+/**
+ * Úprava dovedností po generování (rysy postavy) — hodnocení se pak přepočítá TÍMŽ vzorcem
+ * a `skills_max` se srovná, aby strop nikdy neležel pod dnešní hodnotou.
+ */
+function adjustCelebritySkills(
+  generated: PlayerSkills,
+  position: PlayerPosition,
+  changes: Record<string, number>,
+): PlayerSkills {
+  const skills = { ...generated.skills, ...changes };
+  const skillsMax = { ...generated.skillsMax };
+  for (const [key, value] of Object.entries(changes)) {
+    const cap = skillsMax[key];
+    skillsMax[key] = { current: value, maxPotential: Math.max(value, cap?.maxPotential ?? value) };
+  }
+  const rating = overallRatingFromFlat(position, skills, { stamina: skills.stamina, strength: skills.strength }, generated.hiddenTalent) ?? generated.rating;
+  return { ...generated, skills, skillsMax, rating: Math.max(1, rating) };
+}
+
+function celebrityAvatar(rng: Rng, bodyTypes: BodyType[], age: number): AvatarConfig {
+  let hairStyle = rng.pick(HAIR_STYLES);
+  if (age > 40 && rng.random() < 0.5) hairStyle = "bald";
+  else if (age > 36 && rng.random() < 0.4) hairStyle = "receding";
+  let hairColor = rng.pick(HAIR_COLORS);
+  if (age > 44) hairColor = rng.random() < 0.6 ? "gray" : "white";
+  return {
+    bodyType: rng.pick(bodyTypes),
+    head: rng.int(1, 6), eyes: rng.int(1, 8), nose: rng.int(1, 6),
+    mouth: rng.int(1, 5), ears: rng.int(1, 4),
+    hair: hairStyle, hairColor,
+    skinTone: rng.weighted({ light: 0.45, medium_light: 0.40, medium: 0.12, medium_dark: 0.02, dark: 0.01 }),
+    facialHair: rng.pick(FACIAL_HAIR), glasses: rng.pick(GLASSES), accessories: [],
+  };
 }
 
 export function generateCelebrityLegend(
@@ -471,41 +431,22 @@ export function generateCelebrityLegend(
   const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1980s"]);
   const lastName = rng.pick(CELEBRITY_SURNAMES);
   const nickname = rng.random() < 0.6 ? rng.pick(CELEBRITY_NICKNAMES[tier]) : null;
+  const avatarConfig = celebrityAvatar(rng, ["athletic", "normal", "stocky"], age);
 
-  const qualityBase = rng.int(cfg.overallMin, cfg.overallMax);
-  const attrs = generateAttributes(rng, position, Math.min(age, 32), qualityBase); // use peak-age for skill gen
-
-  let hairStyle = rng.pick(HAIR_STYLES);
-  if (age > 40 && rng.random() < 0.5) hairStyle = "bald";
-  else if (age > 36 && rng.random() < 0.4) hairStyle = "receding";
-  let hairColor = rng.pick(HAIR_COLORS);
-  if (age > 44) hairColor = rng.random() < 0.6 ? "gray" : "white";
-
-  const avatarConfig: AvatarConfig = {
-    bodyType: rng.pick(["athletic", "normal", "stocky"] as BodyType[]),
-    head: rng.int(1, 6), eyes: rng.int(1, 8), nose: rng.int(1, 6),
-    mouth: rng.int(1, 5), ears: rng.int(1, 4),
-    hair: hairStyle, hairColor,
-    skinTone: rng.weighted({ light: 0.45, medium_light: 0.40, medium: 0.12, medium_dark: 0.02, dark: 0.01 }),
-    facialHair: rng.pick(FACIAL_HAIR), glasses: rng.pick(GLASSES), accessories: [],
-  };
-
-  // Age penalty for physical attributes — old pros lose speed but keep technique/shooting/defense
+  // Technika zůstává z vrcholu kariéry (věková křivka jako ve 32), ale nohy a plíce už ne:
+  // rychlost klesá s věkem a výdrž je nízká — legenda hraje hlavou, ne během.
+  const base = generatePlayerSkills(rng, {
+    position: position as "DEF" | "MID" | "FWD", age, level: CELEBRITY_LEVEL,
+    targetRating: rng.int(cfg.overallMin, cfg.overallMax), skillAge: Math.min(age, 32),
+  });
   const agePenalty = Math.max(0, (age - 32) * 3); // 35→9, 40→24, 45→39
-  const speedPenalized = Math.max(10, attrs.speed - agePenalty - rng.int(0, 10));
-  const headingBoosted = Math.min(100, attrs.heading + rng.int(5, 15)); // experience = better heading
+  const generated = adjustCelebritySkills(base, position, {
+    speed: Math.max(10, base.skills.speed - agePenalty - rng.int(0, 10)),
+    stamina: Math.min(base.skills.stamina, rng.int(20, 35)),
+  });
 
   return {
     firstName, lastName, age, position,
-    speed: speedPenalized,
-    technique: Math.min(95, attrs.technique + rng.int(0, 10)), // pros have great technique
-    shooting: Math.min(95, attrs.shooting),
-    passing: Math.min(95, attrs.passing + rng.int(0, 10)),
-    heading: Math.min(95, headingBoosted),
-    defense: Math.min(95, attrs.defense),
-    goalkeeping: attrs.goalkeeping,
-    stamina: Math.max(15, rng.int(20, 35)),
-    strength: Math.max(20, rng.int(30, 55)),
     injuryProneness: rng.int(30, 70),
     discipline: rng.int(cfg.disciplineMin, cfg.disciplineMax),
     patriotism: rng.int(0, 15),
@@ -528,6 +469,7 @@ export function generateCelebrityLegend(
     transportCost: cfg.transportCost,
     nickname,
     tierLabel: cfg.tierLabel,
+    generated,
   };
 }
 
@@ -540,26 +482,17 @@ export function generateFallenStar(
   const decade = ageToDecade(age);
   const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1990s"]);
   const lastName = rng.pick(CELEBRITY_SURNAMES);
+  const avatarConfig = celebrityAvatar(rng, ["normal", "stocky"], age);
 
-  const qualityBase = rng.int(40, 55);
-  const attrs = generateAttributes(rng, position, age, qualityBase);
-
-  const avatarConfig: AvatarConfig = {
-    bodyType: rng.pick(["normal", "stocky"] as BodyType[]),
-    head: rng.int(1, 6), eyes: rng.int(1, 8), nose: rng.int(1, 6),
-    mouth: rng.int(1, 5), ears: rng.int(1, 4),
-    hair: rng.pick(HAIR_STYLES), hairColor: rng.pick(HAIR_COLORS),
-    skinTone: rng.weighted({ light: 0.45, medium_light: 0.40, medium: 0.12, medium_dark: 0.02, dark: 0.01 }),
-    facialHair: rng.pick(FACIAL_HAIR), glasses: rng.pick(GLASSES), accessories: [],
-  };
+  // Zkrachovalý talent: dnes průměr, ale talent a strop z první ligy — kdo ho dá do kupy,
+  // dostane hráče, jakého okres nemá.
+  const generated = generatePlayerSkills(rng, {
+    position: position as "MID" | "FWD", age, level: CELEBRITY_LEVEL,
+    targetRating: rng.int(40, 55), hiddenTalent: rng.int(70, 90), capBonus: rng.int(20, 35),
+  });
 
   return {
     firstName, lastName, age, position,
-    speed: attrs.speed, technique: attrs.technique, shooting: attrs.shooting,
-    passing: attrs.passing, heading: attrs.heading, defense: attrs.defense,
-    goalkeeping: attrs.goalkeeping,
-    stamina: rng.int(30, 50),
-    strength: rng.int(40, 65),
     injuryProneness: rng.int(20, 55),
     discipline: rng.int(5, 20),
     patriotism: rng.int(5, 30),
@@ -581,11 +514,7 @@ export function generateFallenStar(
     transportCost: 300,
     nickname: null,
     tierLabel: "zkrachovalý talent z 1. ligy",
-    hiddenTalent: rng.int(70, 90),
-    skillsMax: {
-      speed: rng.int(65, 85), technique: rng.int(65, 85), shooting: rng.int(65, 85),
-      passing: rng.int(65, 85), heading: rng.int(55, 75), defense: rng.int(50, 70),
-    },
+    generated,
   };
 }
 
@@ -598,26 +527,16 @@ export function generateGlassMan(
   const decade = ageToDecade(age);
   const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1990s"]);
   const lastName = rng.pick(CELEBRITY_SURNAMES);
+  const avatarConfig = celebrityAvatar(rng, ["thin", "athletic", "normal"], age);
 
-  const qualityBase = rng.int(55, 70);
-  const attrs = generateAttributes(rng, position, age, qualityBase);
-
-  const avatarConfig: AvatarConfig = {
-    bodyType: rng.pick(["thin", "athletic", "normal"] as BodyType[]),
-    head: rng.int(1, 6), eyes: rng.int(1, 8), nose: rng.int(1, 6),
-    mouth: rng.int(1, 5), ears: rng.int(1, 4),
-    hair: rng.pick(HAIR_STYLES), hairColor: rng.pick(HAIR_COLORS),
-    skinTone: rng.weighted({ light: 0.45, medium_light: 0.40, medium: 0.12, medium_dark: 0.02, dark: 0.01 }),
-    facialHair: rng.pick(FACIAL_HAIR), glasses: rng.pick(GLASSES), accessories: [],
-  };
+  // Skleněný muž: kvalita profíka, ale věčně zraněný (injuryProneness 85–100).
+  const generated = generatePlayerSkills(rng, {
+    position: position as "DEF" | "MID" | "FWD", age, level: CELEBRITY_LEVEL,
+    targetRating: rng.int(55, 70),
+  });
 
   return {
     firstName, lastName, age, position,
-    speed: attrs.speed, technique: attrs.technique, shooting: attrs.shooting,
-    passing: attrs.passing, heading: attrs.heading, defense: attrs.defense,
-    goalkeeping: attrs.goalkeeping,
-    stamina: rng.int(25, 40),
-    strength: rng.int(35, 55),
     injuryProneness: rng.int(85, 100),
     discipline: rng.int(40, 70),
     patriotism: rng.int(15, 45),
@@ -639,5 +558,6 @@ export function generateGlassMan(
     transportCost: 500,
     nickname: null,
     tierLabel: "věčně zraněný profík",
+    generated,
   };
 }

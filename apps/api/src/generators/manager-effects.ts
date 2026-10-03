@@ -1,5 +1,5 @@
 import type { Rng } from "./rng";
-import type { GeneratedPlayer } from "./player";
+import type { PlayerIdentity } from "./player";
 import { DRINKING_BUDDY_ALCOHOL, type GeneratedRelationship } from "./relationships";
 import type { ManagerBackstory } from "@okresni-masina/shared";
 
@@ -14,7 +14,7 @@ interface ManagerModifiers {
  * Volat po generateSquad() a před uložením do DB.
  */
 export function applyManagerModifiers(
-  squad: GeneratedPlayer[],
+  squad: PlayerIdentity[],
   backstory: ManagerBackstory,
   rng: Rng,
 ): ManagerModifiers {

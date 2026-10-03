@@ -5,11 +5,10 @@
 
 import type { Rng } from "../generators/rng";
 import { FIRSTNAMES } from "../data/czech-names";
-import { generatePlayer, type VillageInfo } from "../generators/player";
-import { generateHeightWeight } from "../generators/physicals";
+import type { VillageInfo } from "../generators/player";
 import { getDistrictDataFromDB } from "../data/districts";
-import { generatePlayerFace } from "../routes/teams";
-import { overallRatingFromFlat } from "../skills/generator";
+import { createPlayer, levelFromCategory, MARKET_SHIFT } from "../generators/create-player";
+import { shiftForRating } from "../skills/generator";
 import { logger } from "../lib/logger";
 
 const SOURCES = [
@@ -60,6 +59,14 @@ const SOURCES = [
 /** Zdroj nabídky — kdo hráče přivedl. */
 export type OfferSource = (typeof SOURCES)[number]["source"];
 
+/**
+ * Kluk z dorostu má vyjít 4–12 bodů pod průměrem áčka: použitelný náhradník s prostorem
+ * růst. Nikdy ale hůř, než jak ho dá generátor obci bez posunu.
+ */
+export function youthOfferShift(level: string, position: "GK" | "DEF" | "MID" | "FWD", age: number, squadAverage: number | null | undefined, rng: Rng): number {
+  if (!squadAverage) return 0;
+  return Math.max(0, shiftForRating(level, position, age, Math.round(squadAverage) - rng.int(4, 12)));
+}
 
 /**
  * Generate a player offer for a team. Returns null if conditions not met.
@@ -77,7 +84,8 @@ export async function generatePlayerOffer(
 ): Promise<{ offerId: string; source: string; senderName: string; senderTitle: string; message: string; playerName: string } | null> {
   // Check pending offers — max 2 at a time
   const pending = await db.prepare("SELECT COUNT(*) as cnt FROM player_offers WHERE team_id = ? AND status = 'pending'")
-    .bind(teamId).first<{ cnt: number }>().catch(() => ({ cnt: 0 }));
+    .bind(teamId).first<{ cnt: number }>()
+    .catch((e) => { logger.warn({ module: "player-offers", teamId }, "count pending offers", e); return { cnt: 0 }; });
   if ((pending?.cnt ?? 0) >= 2) return null;
 
   // Pick source type
@@ -94,56 +102,26 @@ export async function generatePlayerOffer(
   // Brankáři vzácně (~4 %) — trh i nabídky nemají být zaplavené gólmany
   const pos = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof positions[number];
 
-  const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
-
-  // Override age for source-specific ranges
   const age = rng.int(ageRange[0], ageRange[1]);
   const isYouth = sourceType.source === "youth";
-  // Youth players are local kids — higher patriotism
-  if (isYouth) player.patriotism = Math.min(20, (player.patriotism ?? 10) + rng.int(3, 6));
+  const level = levelFromCategory(villageInfo.category);
 
-  // Dovednosti. MUSÍ jich být kompletní sada — dřív se generovalo jen 9 z 13 a hráčům
-  // z nabídek pak v profilu svítily nuly u přehledu, kreativity a standardek, protože
-  // je nikdo nikdy nedoplnil. Zkušenost chyběla taky.
-  const fb = () => isYouth ? rng.int(3, 30) : rng.int(15, 45);
-  const skills = {
-    speed: isYouth ? rng.int(3, 30) : (player.speed ?? fb()),
-    technique: isYouth ? rng.int(3, 30) : (player.technique ?? fb()),
-    shooting: isYouth ? rng.int(3, 28) : (player.shooting ?? fb()),
-    passing: isYouth ? rng.int(3, 28) : (player.passing ?? fb()),
-    heading: isYouth ? rng.int(2, 25) : (player.heading ?? fb()),
-    defense: isYouth ? rng.int(3, 28) : (player.defense ?? fb()),
-    goalkeeping: isYouth ? (pos === "GK" ? rng.int(10, 35) : 0) : (player.goalkeeping ?? (pos === "GK" ? rng.int(30, 60) : 0)),
-    stamina: isYouth ? rng.int(15, 45) : (player.stamina ?? fb()),
-    strength: isYouth ? rng.int(5, 25) : (player.strength ?? fb()),
-    vision: isYouth ? rng.int(3, 30) : fb(),
-    creativity: isYouth ? rng.int(3, 28) : fb(),
-    setPieces: isYouth ? rng.int(2, 26) : fb(),
-    // Zkušenost roste s věkem stejně jako v hlavním generátoru (skills/generator.ts)
-    experience: Math.min(100, Math.max(0, (age - 16) * rng.int(3, 6))),
-  };
-
-  // Výdrž a síla se ukládají do skills i do physical — MUSÍ tam být stejné číslo.
-  // Dřív se do physical psaly hodnoty z generátoru a do skills jiné náhodné, takže
-  // hodnocení počítalo s jednou a zápasový engine s druhou (u dorostenců rozdíl i 37 bodů).
-  const physical = {
-    stamina: skills.stamina,
-    strength: skills.strength,
-    injuryProneness: player.injuryProneness ?? 50,
-    ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"),
-    preferredFoot: player.preferredFoot,
-    preferredSide: player.preferredSide,
-  };
-
-  // Skrytý talent. Dorostenec má velký prostor, dospělý z hospody menší — ale ne nulový:
-  // natvrdo zapsaná nula dělala z každého tipu od kamaráda, hospodského i starosty hráče,
-  // který se prakticky nemůže zlepšit (talent zrychluje růst a určuje strop při přijetí).
-  const hiddenTalent = isYouth ? rng.int(20, 65) : rng.int(0, 25);
-
-  // Hodnocení počítá TÁŽ funkce jako zbytek hry (včetně bonusu za skrytý talent).
-  // Vlastní zjednodušený vzorec tu dřív dával jiné číslo, než jaké hráči vyšlo hned
-  // po prvním tréninku — v UI to vypadalo, že mu rating bez důvodu skočil.
-  const overallRating = overallRatingFromFlat(pos, skills, physical, hiddenTalent) ?? 30;
+  // Kluk z dorostu se srovná s áčkem, dospělý zvenku má tržní posun (viz MARKET_SHIFT).
+  const squadAverage = isYouth
+    ? (await db.prepare("SELECT AVG(overall_rating) AS avg FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')")
+        .bind(teamId).first<{ avg: number | null }>()
+        .catch((e) => { logger.warn({ module: "player-offers", teamId }, "load squad average for youth offer", e); return null; }))?.avg
+    : null;
+  const created = createPlayer(rng, {
+    position: pos, village: villageInfo, names: { surnameData, firstnameData }, age, level,
+    shift: isYouth ? youthOfferShift(level, pos, age, squadAverage, rng) : MARKET_SHIFT,
+  });
+  const player = created.identity;
+  const { skills, skillsMax, physical, hiddenTalent, rating: overallRating } = created;
+  // Místní kluk z dorostu drží s klubem víc než přespolní.
+  const personality = isYouth
+    ? { ...created.personality, patriotism: Math.min(100, created.personality.patriotism + rng.int(10, 20)) }
+    : created.personality;
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
 
   const expiresAt = new Date(gameDate);
@@ -159,15 +137,15 @@ export async function generatePlayerOffer(
     JSON.stringify(skills),
     JSON.stringify(physical),
     JSON.stringify({
-      discipline: player.discipline, patriotism: player.patriotism,
-      alcohol: player.alcohol, temper: player.temper,
+      ...personality,
       // Talent se ukládá vždy — přijetí nabídky ho z personality čte a propisuje
-      // do sloupce hidden_talent i do stropu rozvoje (skills_max).
+      // do sloupce hidden_talent.
       hiddenTalent,
     }),
-    JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
-    JSON.stringify(generatePlayerFace({ age: player.age ?? age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
-    weeklyWage, expiresAt.toISOString(), player.nationality ?? "CZ",
+    // Strop rozvoje ze společného generátoru; přijetí nabídky ho odsud přenese do skills_max.
+    JSON.stringify({ ...created.lifeContext, morale: 50, skillsMax }),
+    JSON.stringify(created.avatar),
+    weeklyWage, expiresAt.toISOString(), created.nationality,
   ).run();
 
   logger.info({ module: "player-offers", teamId }, `new offer: ${player.firstName} ${player.lastName} (${pos}, ${overallRating}) from ${sourceType.source}`);

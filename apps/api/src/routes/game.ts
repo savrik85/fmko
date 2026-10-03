@@ -1331,9 +1331,12 @@ gameRouter.get("/teams/:teamId/transfers", async (c) => {
   const weekSeed = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
   const rng = createRng(weekSeed + teamId.charCodeAt(0));
 
+  // `team.size` je velikost z DB (hamlet…city), ne kategorie — dřív se předávala syrová
+  // a generátor z ní nenašel kvalitu, takže dovednosti vyšly NaN.
+  const { categoryFromVillageSize } = await import("../generators/create-player");
   const villageInfo = {
     region_code: team.region_code as string,
-    category: team.size as "vesnice" | "obec" | "mestys" | "mesto",
+    category: categoryFromVillageSize(team.size as string),
     population: team.population as number,
   };
 
@@ -7536,19 +7539,25 @@ gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
   // zobrazený badge "✨ Talent" byl fikce (dřívější bug: INSERT ho zahazoval → default 0).
   const offerPersonality = (() => { try { return JSON.parse((offer.personality as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse offer personality", e); return {}; } })();
   const hiddenTalent = Math.max(0, Math.round(offerPersonality.hiddenTalent ?? 0));
-  // Strop rozvoje (skills_max): talentovaný mladík má velký prostor růstu, netalentovaný malý.
+  // Strop rozvoje (skills_max) dodal při vzniku nabídky společný generátor a leží
+  // v `life_context.skillsMax`. Starší nabídky (před sjednocením generátorů) ho nemají,
+  // pro ty zůstává dřívější dopočet z talentu.
+  const offerLifeContext = (() => { try { return JSON.parse((offer.life_context as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse offer life_context", e); return {}; } })();
+  const { skillsMax: generatedSkillsMax, ...lifeContextWithoutCaps } = offerLifeContext as { skillsMax?: Record<string, { current: number; maxPotential: number }> } & Record<string, unknown>;
   const offerSkills = (() => { try { return JSON.parse((offer.skills as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse offer skills", e); return {}; } })();
-  const headroom = 10 + Math.round(hiddenTalent * 0.6); // talent 0 → +10, talent 65 → +49
-  const skillsMax: Record<string, { current: number; maxPotential: number }> = {};
-  for (const [attr, val] of Object.entries(offerSkills)) {
-    if (typeof val !== "number") continue;
-    skillsMax[attr] = { current: val, maxPotential: Math.min(100, val + headroom) };
+  const skillsMax: Record<string, { current: number; maxPotential: number }> = generatedSkillsMax ?? {};
+  if (!generatedSkillsMax) {
+    const headroom = 10 + Math.round(hiddenTalent * 0.6); // talent 0 → +10, talent 65 → +49
+    for (const [attr, val] of Object.entries(offerSkills)) {
+      if (typeof val !== "number") continue;
+      skillsMax[attr] = { current: val, maxPotential: Math.min(100, val + headroom) };
+    }
   }
   await c.env.DB.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, hidden_talent, skills_max)
      VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
   ).bind(playerId, teamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
-    offer.skills, offer.physical, offer.personality, offer.life_context, offer.avatar, offer.weekly_wage,
+    offer.skills, offer.physical, offer.personality, JSON.stringify(lifeContextWithoutCaps), offer.avatar, offer.weekly_wage,
     (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax)).run();
 
   // Set residence

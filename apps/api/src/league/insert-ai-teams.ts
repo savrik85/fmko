@@ -6,10 +6,8 @@
 import type { Rng } from "../generators/rng";
 import type { LeagueSetup } from "./league-generator";
 import type { GeneratedPlayer } from "../generators/player";
-import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating } from "../skills/generator";
+import { createPlayer, levelFromVillageSize, aiTeamShift } from "../generators/create-player";
 import { generateDescription } from "../generators/description-generator";
-import { pickOccupation } from "../generators/occupations";
-import { generatePlayerFace } from "../routes/teams";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
 
@@ -54,36 +52,20 @@ export async function insertAITeamsIntoDB(
         const apId = crypto.randomUUID();
         aiPlayerIds.push(apId);
         const apNickname = (ap as GeneratedPlayer & { nickname?: string | null }).nickname ?? "";
-        const isGK = ap.position === "GK";
-        const apFieldSkills = !isGK ? generateFieldSkills(rng, ap.position as "DEF" | "MID" | "FWD", villageSize, ap.age, true) : null;
-        const apGkSkills = isGK ? generateGKSkills(rng, villageSize, ap.age, true) : null;
-        const apHiddenTalent = generateHiddenTalent(rng, villageSize);
-
-        const apSkills = isGK
-          ? { speed: apGkSkills!.speed.current, technique: apGkSkills!.technique.current, shooting: apGkSkills!.technique.current, passing: apGkSkills!.passing.current, heading: apGkSkills!.heading.current, defense: apGkSkills!.defense.current, goalkeeping: apGkSkills!.goalkeeping.current, creativity: apGkSkills!.creativity.current, setPieces: apGkSkills!.technique.current, stamina: apGkSkills!.strength.current, strength: apGkSkills!.strength.current, vision: apGkSkills!.defense.current, experience: apGkSkills!.experience.current }
-          : { speed: apFieldSkills!.speed.current, technique: apFieldSkills!.technique.current, shooting: apFieldSkills!.shooting.current, passing: apFieldSkills!.passing.current, heading: apFieldSkills!.heading.current, defense: apFieldSkills!.defense.current, goalkeeping: 1, creativity: apFieldSkills!.creativity.current, setPieces: apFieldSkills!.setPieces.current, stamina: apFieldSkills!.stamina.current, strength: apFieldSkills!.strength.current, vision: apFieldSkills!.vision.current, experience: apFieldSkills!.experience.current };
-
-        const apHeight = (ap.position === "GK" ? 185 : ap.position === "DEF" ? 180 : ap.position === "FWD" ? 178 : 176) + rng.int(-8, 8);
-        const apBaseWeight = ap.bodyType === "obese" ? 100 : ap.bodyType === "stocky" ? 88 : ap.bodyType === "thin" ? 68 : ap.bodyType === "athletic" ? 78 : 80;
-        const apWeight = apBaseWeight + rng.int(-5, 8);
-
-        const apPhysical = {
-          stamina: isGK ? apGkSkills!.strength.current : apFieldSkills!.stamina.current,
-          strength: isGK ? apGkSkills!.strength.current : apFieldSkills!.strength.current,
-          injuryProneness: rng.int(10, 80), height: apHeight, weight: apWeight,
-          preferredFoot: ap.preferredFoot, preferredSide: ap.preferredSide,
-        };
-        const apPersonality = {
-          discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 85), temper: rng.int(10, 80),
-          leadership: ap.leadership, workRate: ap.workRate, aggression: ap.aggression,
-          consistency: ap.consistency, clutch: ap.clutch,
-        };
-        const apOcc = pickOccupation(rng, villageSize, ap.age, district);
-        const apLifeContext = { occupation: apOcc.name, condition: 100, morale: 50 + rng.int(-15, 15) };
-        const apRating = calculateOverallRating(ap.position, isGK ? apGkSkills! : apFieldSkills!, apHiddenTalent);
+        // Úroveň podle obce TOHOTO AI klubu (dřív se brala obec lidského hráče) a slabší o AI posun.
+        const apCreated = createPlayer(rng, {
+          identity: ap, position: ap.position as "GK" | "DEF" | "MID" | "FWD",
+          level: levelFromVillageSize((aiVillage?.category as string | undefined) ?? villageSize),
+          shift: aiTeamShift(rng),
+        });
+        const apSkills = apCreated.skills;
+        const apPhysical = apCreated.physical;
+        const apPersonality = apCreated.personality;
+        const apLifeContext = apCreated.lifeContext;
+        const apRating = apCreated.rating;
         const apDescription = generateDescription(rng, {
           firstName: ap.firstName, lastName: ap.lastName, nickname: apNickname,
-          age: ap.age, position: ap.position, occupation: apOcc.name,
+          age: ap.age, position: ap.position, occupation: apLifeContext.occupation,
           bodyType: ap.bodyType, alcohol: apPersonality.alcohol, discipline: apPersonality.discipline,
           speed: apSkills.speed, shooting: apSkills.shooting, technique: apSkills.technique,
           patriotism: apPersonality.patriotism,
@@ -93,9 +75,9 @@ export async function insertAITeamsIntoDB(
           db.prepare("INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(apId, aiTeamId, ap.firstName, ap.lastName, apNickname, ap.age, ap.position, apRating,
               JSON.stringify(apSkills), JSON.stringify(apPhysical), JSON.stringify(apPersonality),
-              JSON.stringify(apLifeContext), JSON.stringify(generatePlayerFace(ap)), apDescription,
-              JSON.stringify(isGK ? apGkSkills : apFieldSkills), apHiddenTalent,
-              isGK ? apGkSkills!.experience.current : apFieldSkills!.experience.current,
+              JSON.stringify(apLifeContext), JSON.stringify(apCreated.avatar), apDescription,
+              JSON.stringify(apCreated.skillsMax), apCreated.hiddenTalent,
+              apCreated.experience,
               Math.round(10 + apRating * 4), ap.nationality ?? "CZ")
         );
 
