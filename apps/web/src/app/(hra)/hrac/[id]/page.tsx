@@ -44,11 +44,14 @@ function conditionLabel(condition: number): { text: string; color: string } {
 }
 
 /**
- * „11. 8. 2026" — u odchodu z klubu má rok smysl, historie sahá přes sezóny.
+ * „11. 8. 2026" — u příchodu a odchodu z klubu má rok smysl, historie sahá přes sezóny.
  * Nečitelnou hodnotu radši vrátíme, jak přišla, než abychom ukázali „Invalid Date".
  */
 function formatLeaveDate(iso: string): string {
-  const d = new Date(iso);
+  // SQLite `datetime('now')` ukládá „2026-10-03 18:00:00" (UTC, s mezerou) — Safari takový
+  // tvar nepřečte, proto ho převedeme na ISO.
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(iso) ? `${iso.replace(" ", "T")}Z` : iso;
+  const d = new Date(normalized);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("cs", { day: "numeric", month: "numeric", year: "numeric" });
 }
@@ -1007,10 +1010,18 @@ export default function PlayerDetailPage() {
                   <div className="min-w-0 flex-1">
                     <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
                     <div className="text-micro text-muted">
+                      {/* Datum příchodu i odchodu: kdy přesně ke změně klubu došlo. */}
                       {c.isActive ? (
-                        <span>Od sezóny {c.seasonNumber} &middot; <span className="text-pitch-500 font-bold">Aktivní</span></span>
+                        <span>
+                          Sezóna {c.seasonNumber}{c.joinedAt ? ` · přišel ${formatLeaveDate(c.joinedAt)}` : ""}
+                          {" "}&middot; <span className="text-pitch-500 font-bold">Aktivní</span>
+                        </span>
                       ) : (
-                        <span>Sezóna {c.seasonNumber}{c.leftAt ? `, odešel ${formatLeaveDate(c.leftAt)}` : ""}</span>
+                        <span>
+                          Sezóna {c.seasonNumber}
+                          {c.joinedAt ? ` · přišel ${formatLeaveDate(c.joinedAt)}` : ""}
+                          {c.leftAt ? ` · odešel ${formatLeaveDate(c.leftAt)}` : ""}
+                        </span>
                       )}
                     </div>
                   </div>
