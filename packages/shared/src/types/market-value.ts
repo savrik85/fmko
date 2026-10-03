@@ -41,3 +41,11 @@ export function marketValue(overallRating: number, age: number, position?: strin
  * Bez stropu ležely v DB nabídky na 1,25·10²⁶ Kč — `Number.isInteger` je propustil.
  */
 export const MAX_TRANSFER_AMOUNT = 10_000_000;
+
+/**
+ * Tržní cena cizího hráče jako odhad: zaokrouhlená na tisíce, stejně jako jeho dovednosti
+ * vidí cizí klub jen zaokrouhlené na pětky. Nabídky a inzeráty počítají s přesnou hodnotou.
+ */
+export function marketValueEstimate(value: number): number {
+  return Math.max(1000, Math.round(value / 1000) * 1000);
+}

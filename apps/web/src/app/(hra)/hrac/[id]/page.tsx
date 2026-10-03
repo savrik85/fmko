@@ -11,7 +11,7 @@ import { usePotencial, PotentialBox, PotentialBadge } from "@/components/players
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
-import { attributeImportance, coachRelationBand, marketValue, type AttrImportance } from "@okresni-masina/shared";
+import { attributeImportance, coachRelationBand, marketValue, marketValueEstimate, type AttrImportance } from "@okresni-masina/shared";
 import { MoneyInput } from "@/components/ui/money-input";
 import { formatLogDate } from "@/components/manager/CoachKabinaTab";
 
@@ -913,7 +913,7 @@ export default function PlayerDetailPage() {
               const value = marketValue(player.overall_rating ?? 0, player.age ?? 27, player.position);
               const shown = isOwnPlayer
                 ? `${value.toLocaleString("cs")} Kč`
-                : `cca ${Math.max(1000, Math.round(value / 1000) * 1000).toLocaleString("cs")} Kč`;
+                : `cca ${marketValueEstimate(value).toLocaleString("cs")} Kč`;
               return <DetailRow label="Tržní cena" value={shown} />;
             })()}
             <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />

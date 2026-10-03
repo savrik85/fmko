@@ -8,6 +8,7 @@ import { Spinner, SectionLabel, BadgePreview, PositionBadge, JerseyPreview } fro
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PreMatchCard } from "@/components/relations/RelationSection";
+import { ForeignSquad } from "./ForeignSquad";
 import { isLightColor, readableOnLight, bestTextOn } from "@/lib/team-color";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -326,6 +327,11 @@ export default function TeamPage() {
 
     <div className="page-container space-y-5">
 
+      {/* ═══ Kádr cizího týmu — hned nahoře, kvůli přestupům i přípravě na zápas ═══ */}
+      {!isOwnTeam && (
+        <ForeignSquad players={players} color={color} onColorText={onColorText} ratingColor={ratingColor} />
+      )}
+
       {/* ═══ Top row: Info + Manager + Form ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Info */}
@@ -531,7 +537,8 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* ═══ Squad ═══ */}
+      {/* ═══ Squad (vlastní tým; cizí má ForeignSquad nahoře) ═══ */}
+      {isOwnTeam && (
       <div className="card p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4">
           <SectionLabel>Kádr ({players.length})</SectionLabel>
@@ -613,8 +620,8 @@ export default function TeamPage() {
           </div>
         )}
 
-        {/* Card list — always for foreign team, mobile for own team */}
-        <div className={`flex flex-col gap-2 ${isOwnTeam ? "md:hidden" : ""}`}>
+        {/* Card list — mobile for own team */}
+        <div className="flex flex-col gap-2 md:hidden">
           {sorted.map((p) => {
             // Position-specific key skills, rounded to nearest 5
             const pos = p.position;
@@ -678,6 +685,7 @@ export default function TeamPage() {
           })}
         </div>
       </div>
+      )}
 
     </div>
     </>
