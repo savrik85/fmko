@@ -12,6 +12,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-04",
+    emoji: "🔁",
+    title: "Nové Přestupy a víc možností při vyjednávání",
+    items: [
+      "Stránka Přestupy má nový vzhled. Nahoře jsou jen čtyři záložky: Přehled, Hledat, Nabídky a Můj tým. Pod Hledat najdeš hledání hráčů, hráče na prodej, volné hráče i sledované, pod Můj tým své hráče a jejich závazky. Na mobilu se všechno vejde.",
+      "Hráče ze svého kádru pošleš pryč jedním tlačítkem Na trh. Až potom se rozhodneš, jestli ho prodáš, nebo propustíš.",
+      "Přestup jde zaplatit na splátky: záloha od 10 % a pak 2 až 20 týdenních splátek, které se strhávají každé pondělí. Kolik zaplatíš hned, kolik týdně a kolik celkem, vidíš rovnou při nastavování. Splátky dohromady nesmí být vyšší než týdenní příjmy klubu.",
+      "Prodávající si může říct o procenta z příštího přestupu, až 50 %. Když hráče prodáš dál, procenta dostane jeho bývalý klub a zbytek splátek se mu doplatí hned z ceny.",
+      "Splátky i procenta nastavíš v nabídce, v protinávrhu i při nákupu z trhu. Co splácíš, co ti splácejí a komu dlužíš procenta, najdeš v Přestupech pod Můj tým, Závazky.",
+    ],
+  },
+  {
     date: "2026-10-03",
     emoji: "💸",
     title: "Tržní cena hráčů",
