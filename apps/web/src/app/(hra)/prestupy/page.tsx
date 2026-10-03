@@ -990,7 +990,7 @@ export default function TransfersPage() {
           items={[
             { key: "hledani", label: "Hledání", count: null },
             { key: "na-prodej", label: "Na prodej", count: listings.length || null },
-            { key: "volni", label: "Volní", count: null },
+            { key: "volni", label: "Volní", count: freeAgents.length || null },
             { key: "sledovani", label: "Sledovaní", count: null },
           ]}
         />
