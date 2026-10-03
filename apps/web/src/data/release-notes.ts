@@ -12,6 +12,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-03",
+    emoji: "💸",
+    title: "Tržní cena hráčů",
+    items: [
+      "Každý hráč má tržní cenu. Počítá se ze skutečných přestupů mezi kluby podle hodnocení, věku a pozice: mladí jsou dražší, veteráni a brankáři levnější.",
+      "Najdeš ji v Přestupech na záložce Můj tým u každého svého hráče a pod tabulkou i hodnotu celého kádru. Když hráče vystavuješ na trh, cena se ti rovnou předvyplní.",
+      "Podle tržní ceny se řídí i cizí kluby. Jejich nabídky na tvé hráče i ceny hráčů, které dávají na trh, odpovídají tomu, za kolik se hráči opravdu prodávají.",
+    ],
+  },
+  {
     date: "2026-09-29",
     emoji: "🤲",
     title: "Prosba o příspěvek",
