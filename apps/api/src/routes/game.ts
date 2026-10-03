@@ -5738,6 +5738,9 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   // Peníze, limit dohod i dohoda patří klubu (áčku). Z adresy může přijít i ID dorostu
   // téhož majitele — bez tohohle by se dohoda vedla na U21 a pondělní splátky by ji minuly.
   const buyerClubTeamId = await resolveClubTeamId(c.env.DB, teamId) ?? teamId;
+  // Z trhu nakupuje klub. Přes ID dorostu by šel koupit kdokoli rovnou do U21 (bez kontroly
+  // věku) a obejít „hráč vás už odmítl", protože odmítnutí se váže na tým v adrese.
+  if (buyerClubTeamId !== teamId) return c.json({ error: "Na trhu nakupuje klub, ne dorost." }, 400);
 
   // Platba: jednorázově nebo záloha + týdenní splátky. Procenta z příštího přestupu jen
   // u lidského klubu — cizí klub z trhu hráče zpátky neprodá a nic by mu nepřišlo.
@@ -5849,14 +5852,34 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
         aiData.fromTeam ?? "Cizí klub", body.amount, schedule.upfront, schedule.installmentAmount, schedule.installments,
         schedule.remainingAfterUpfront, gameDate));
     }
-    await c.env.DB.batch(createPlayer);
-
-    // Deduct budget (recordTransaction handles both budget update + logging)
-    const { recordTransaction } = await import("../season/finance-processor");
-    await recordTransaction(c.env.DB, buyerClubTeamId, "transfer_fee", -schedule.upfront,
-      terms.installments > 0
-        ? `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam} (záloha ${terms.upfrontPct} %, zbytek ${terms.installments}× týdně)`
-        : `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam}`, gameDate);
+    // Souběžné nákupy: inzerát se nejdřív zabere (stejného hráče nejde koupit dvakrát) a záloha
+    // se strhne jen při dostatku peněz, obojí atomicky. Teprve pak vznikne hráč a dohoda.
+    const claimed = await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ? AND status = 'active'")
+      .bind(listingId).run();
+    if ((claimed.meta?.changes ?? 0) === 0) return c.json({ error: "Hráče mezitím koupil někdo jiný." }, 409);
+    const reopenListing = () => c.env.DB.prepare("UPDATE transfer_listings SET status = 'active' WHERE id = ? AND status = 'sold'")
+      .bind(listingId).run().catch((e) => logger.error({ module: "game" }, "vrácení inzerátu po nezdařeném nákupu", e));
+    const paid = await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ? RETURNING budget")
+      .bind(schedule.upfront, buyerClubTeamId, schedule.upfront).first<{ budget: number }>();
+    if (!paid) {
+      await reopenListing();
+      return c.json({ error: terms.installments > 0 ? "Nedostatek peněz na zálohu." : "Nedostatek peněz." }, 400);
+    }
+    try {
+      await c.env.DB.batch(createPlayer);
+    } catch (e) {
+      logger.error({ module: "game" }, "zápis hráče z trhu", e);
+      await c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(schedule.upfront, buyerClubTeamId).run()
+        .catch((e2) => logger.error({ module: "game" }, "vrácení zálohy po nezdařeném nákupu", e2));
+      await reopenListing();
+      return c.json({ error: "Nákup se nepodařilo dokončit, peníze jsou zpátky." }, 500);
+    }
+    await c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), buyerClubTeamId, -schedule.upfront, paid.budget,
+        terms.installments > 0
+          ? `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam} (záloha ${terms.upfrontPct} %, zbytek ${terms.installments}× týdně)`
+          : `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam}`, gameDate)
+      .run().catch((e) => logger.warn({ module: "game" }, "zápis transakce nákupu z trhu", e));
 
     // Residence + commute
     const { generateResidence } = await import("../generators/residence");
@@ -5879,9 +5902,6 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for AI transfer", e); return null; });
     await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
       .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "unknown", body.amount).run().catch((e) => logger.warn({ module: "game" }, "AI transfer contract", e));
-
-    // Mark listing sold
-    await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ?").bind(listingId).run();
 
     // News
     const teamRow = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string }>();
@@ -6861,6 +6881,13 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const isBuyoutAccept = !!currentPlayer.loan_from_team_id
     && currentPlayer.loan_owner_club_team_id === sellerTeamId
     && currentPlayer.current_club_team_id === buyerTeamId;
+  // Odkup z hostování: poplatek za běžící hostování je součást ceny. Jinak by šlo hráče s doložkou
+  // půjčit za skutečnou cenu, odkoupit za 1 Kč a procenta by se počítala z 1 Kč.
+  const activeLoanFee = isBuyoutAccept
+    ? (await c.env.DB.prepare("SELECT fee FROM player_contracts WHERE player_id = ? AND join_type = 'loan' AND is_active = 1 LIMIT 1")
+        .bind(playerId).first<{ fee: number | null }>()
+        .catch((e) => { logger.warn({ module: "game" }, "poplatek za hostování pro procenta", e); return null; }))?.fee ?? 0
+    : 0;
   const sellerRosterTeamId = isBuyoutAccept
     ? currentPlayer.loan_from_team_id!
     : currentPlayer.current_club_team_id === sellerTeamId && !currentPlayer.loan_from_team_id
@@ -7310,7 +7337,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 
     // Prodávající hráče sám splácel nebo slíbil procenta: zbytek dluhu a procenta z ceny jdou hned.
     const { settleOnResale } = await import("../transfers/installments");
-    await settleOnResale(c.env.DB, { playerId, ownerClubTeamId: sellerTeamId, saleAmount: saleValueForSellOn, saleOfferId: offerId, gameDate })
+    await settleOnResale(c.env.DB, { playerId, ownerClubTeamId: sellerTeamId, saleAmount: saleValueForSellOn + activeLoanFee, saleOfferId: offerId, gameDate })
       .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při dalším prodeji", e));
 
     const { createTransferNews } = await import("../transfers/transfer-news");

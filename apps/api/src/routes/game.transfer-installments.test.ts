@@ -238,6 +238,9 @@ beforeAll(async () => {
       league_id TEXT NOT NULL,
       status TEXT NOT NULL,
       expires_at TEXT NOT NULL,
+      is_ai_listing INTEGER NOT NULL DEFAULT 0,
+      ai_player_data TEXT,
+      rejected_by TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -569,6 +572,30 @@ describe("přestup na splátky a procenta z příštího přestupu", () => {
 });
 
 describe("doložku o procentech nejde obejít", () => {
+  it("z trhu nakupuje jen klub, ne přes ID dorostu", async () => {
+    await db.prepare(`INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, status, expires_at, is_ai_listing, ai_player_data)
+      VALUES ('ai-listing', 'ai-x', 'cpu', 5000, 'league-a', 'active', ?, 1, '{"firstName":"Cizí","lastName":"Hráč","age":30,"position":"MID","overallRating":40}')`).bind(FUTURE).run();
+    const r = await callRoute("/teams/buyer-u21/market/ai-listing/bid", { method: "POST", token: "buyer-token", body: { amount: 5_000 } });
+    expect(r.status).toBe(400);
+    expect((await readJson(r)).error).toBe("Na trhu nakupuje klub, ne dorost.");
+    expect((await db.prepare("SELECT status FROM transfer_listings WHERE id = 'ai-listing'").first<{ status: string }>())!.status).toBe("active");
+  });
+
+  it("odkup z hostování počítá procenta i z poplatku za hostování", async () => {
+    // Prodávající má hvězdu s doložkou 20 % pro třetí klub a půjčil ji kupujícímu za 40 000 Kč.
+    await db.batch([
+      db.prepare("UPDATE players SET team_id = 'buyer-a', loan_from_team_id = 'seller-a', loan_until = ? WHERE id = 'star'").bind(FUTURE),
+      db.prepare("UPDATE player_contracts SET is_active = 0 WHERE player_id = 'star'"),
+      db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES ('loan-star', 'star', 'buyer-a', 'season', 'loan', 40000, 1)"),
+      db.prepare("INSERT INTO sell_on_clauses (id, offer_id, player_id, player_name, beneficiary_team_id, owner_team_id, pct) VALUES ('cl-star', 'o-old', 'star', 'Petr Hvězda', 'third-a', 'seller-a', 20)"),
+    ]);
+    const offer = await makeOffer({ amount: 1 });
+    expect(offer.status).toBe(200);
+    expect((await callRoute(`/teams/seller-a/offers/${offer.id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
+    const clause = await db.prepare("SELECT status, paid_amount FROM sell_on_clauses WHERE id = 'cl-star'").first<{ status: string; paid_amount: number }>();
+    expect(clause).toEqual({ status: "paid", paid_amount: Math.round((1 + 40_000) * 0.2) });
+  });
+
   async function buyWithSellOn() {
     const { id } = await makeOffer({ amount: 60_000, upfrontPct: 30, installments: 4, sellOnPct: 10 });
     expect((await callRoute(`/teams/seller-a/offers/${id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
