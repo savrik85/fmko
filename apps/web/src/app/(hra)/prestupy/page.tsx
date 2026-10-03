@@ -1004,8 +1004,8 @@ export default function TransfersPage() {
           ariaLabel="Hledat hráče"
           dense
           items={[
-            { key: "hledani", label: "Hledání", count: null },
-            { key: "na-prodej", label: "Na trhu", count: listings.length || null },
+            { key: "hledani", label: "Hledat", count: null },
+            { key: "na-prodej", label: "Prodej", count: listings.length || null },
             { key: "volni", label: "Volní", count: freeAgents.length || null },
             { key: "sledovani", label: "Sledovaní", count: watchCount || null },
           ]}
