@@ -51,6 +51,45 @@ Každá nabídka na trvalý přestup mezi lidskými kluby má čtyři podmínky:
 - SMS a upozornění o nabídce, protinávrhu a přijetí uvádějí podmínky.
 - Seznam přestupů pro vedení soutěže (`competition/integrity.ts`) ukazuje i splátky a procenta.
 
+## Přehlednost (všechno vidět na první pohled)
+
+Kdekoli se obchod ukazuje, je rozepsaný celý. Žádné číslo se nedopočítává v hlavě.
+
+**Rozpis obchodu** (stejný blok všude, kde je místo):
+
+```
+Cena celkem            45 000 Kč
+Záloha (30 %)          13 500 Kč   zaplaceno při podpisu
+Splátky                3× 10 500 Kč   každé pondělí
+Procenta z dalšího prodeje   15 %
+Mezikrajský poplatek    9 000 Kč   (jen kupující, při podpisu)
+```
+
+U probíhající dohody navíc:
+
+```
+Zaplaceno              24 000 Kč z 45 000 Kč   (záloha + 1 ze 3 splátek)
+Zbývá                  21 000 Kč   2 splátky po 10 500 Kč
+Další splátka          pondělí 12. 10.
+```
+
+Kde to je:
+
+- **Formulář nabídky:** při vyplňování se rozpis počítá živě (co zaplatíš hned, kolik a kolikrát
+  každé pondělí, cena celkem, poplatek).
+- **Dialog protinávrhu:** stejný živý rozpis.
+- **Detail nabídky:** rozpis aktuálního návrhu. Historie vyjednávání u každého kroku ukazuje
+  podmínky i to, co se proti předchozímu změnilo.
+- **Seznam nabídek:** jeden řádek souhrnu, např. „45 000 Kč · záloha 13 500 + 3× 10 500 · 15 %".
+- **Finance → Splátky přestupů:** každá dohoda zvlášť, pro kupujícího „splácím" a pro
+  prodávajícího „chodí mi". U každé: hráč, druhý klub, rozpis, průběh (zaplaceno / zbývá,
+  ukazatel 1 ze 3) a další splátka. Nahoře součet: kolik tento týden zaplatím a dostanu
+  a kolik ještě celkem dlužím a kolik mi dluží.
+- **Detail hráče** (kupující i prodávající klub): řádek „Splácí se: zbývá 2× 10 500 Kč klubu X"
+  a „15 % z dalšího prodeje pro klub X", aby bylo před dalším prodejem jasné, co z ceny odejde.
+- **Transakce ve Financích:** každá splátka má popisek s hráčem a pořadím („Splátka za Novák 2/3").
+- **Výhled rozpočtu:** budoucí splátky jako výdaj kupujícího a příjem prodávajícího.
+
 ## Kontroly
 
 - **Peníze při nabídce, protinávrhu kupujícího a přijetí:** kupující musí mít na zálohu
