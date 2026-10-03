@@ -4,6 +4,8 @@ import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PositionBadge } from "@/components/ui";
 import { InterestBadge, type PlayerInterest } from "./InterestBadge";
+import type { TransferTerms } from "@okresni-masina/shared";
+import { TermsBreakdown } from "@/components/transfers/transfer-terms";
 
 export interface PlayerSummary {
   id: string;
@@ -38,7 +40,7 @@ function positionSkills(pos: string, skills: Record<string, number>): Array<[str
 
 export function PlayerHero({
   player, offeredPlayer, currentAmount, offerType, loanDuration,
-  crossLeague, adminFee, message, playerInterest,
+  crossLeague, adminFee, terms, sellerName, message, playerInterest,
 }: {
   player: PlayerSummary;
   offeredPlayer: PlayerSummary | null;
@@ -47,6 +49,8 @@ export function PlayerHero({
   loanDuration: number | null;
   crossLeague: boolean;
   adminFee: number;
+  terms: TransferTerms;
+  sellerName?: string;
   message: string | null;
   playerInterest?: PlayerInterest | null;
 }) {
@@ -114,9 +118,13 @@ export function PlayerHero({
         <div className="font-heading font-[900] text-3xl tabular-nums text-pitch-500 mt-1">
           {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : "Zdarma"}
         </div>
-        {crossLeague && adminFee > 0 && (
-          <div className="text-xs text-muted mt-1 tabular-nums">
-            + admin poplatek {adminFee.toLocaleString("cs")} Kč (20 %)
+        {offerType === "transfer" && (terms.installments > 0 || terms.sellOnPct > 0) ? (
+          <div className="mt-2 w-[280px] max-w-full text-left">
+            <TermsBreakdown terms={terms} adminFee={crossLeague ? adminFee : 0} sellOnFor={sellerName} />
+          </div>
+        ) : crossLeague && adminFee > 0 && (
+          <div className="text-sm text-muted mt-1 tabular-nums">
+            + administrační poplatek {adminFee.toLocaleString("cs")} Kč
           </div>
         )}
         {message && (

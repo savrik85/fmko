@@ -13,6 +13,8 @@ import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
 import { attributeImportance, coachRelationBand, marketValue, marketValueEstimate, type AttrImportance } from "@okresni-masina/shared";
 import { MoneyInput } from "@/components/ui/money-input";
+import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
+import { PlayerObligationsCard } from "@/components/transfers/player-obligations";
 import { formatLogDate } from "@/components/manager/CoachKabinaTab";
 
 import type { BadgePattern } from "@/components/ui";
@@ -124,6 +126,7 @@ export default function PlayerDetailPage() {
   const [loanDuration, setLoanDuration] = useState("30");
   const [targetSquad, setTargetSquad] = useState<"senior" | "u21">("senior");
   const [offeredPlayerId, setOfferedPlayerId] = useState<string | null>(null);
+  const [offerTerms, setOfferTerms] = useState<TermsValue>(PLAIN_TERMS);
   const [myListing, setMyListing] = useState<{ listingId: string; askingPrice: number } | null>(null);
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -337,6 +340,7 @@ export default function PlayerDetailPage() {
         ...(offerType === "loan" ? { loanDuration: parseInt(loanDuration, 10) } : {}),
         ...(offerType === "transfer" && offeredPlayerId ? { offeredPlayerId } : {}),
         ...(offerType === "transfer" && targetSquad === "u21" ? { targetSquad: "u21" } : {}),
+        ...(offerType === "transfer" ? offerTerms : {}),
       }),
     }), "Odeslání nabídky se nezdařilo");
     if (ok) {
@@ -762,14 +766,12 @@ export default function PlayerDetailPage() {
                     className={`w-full rounded-soft px-3 py-2 text-sm focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
                   />
                 </div>
-                <button
-                  onClick={sendOffer}
-                  disabled={offerSending || (!offerAmount && offerType !== "loan")}
-                  className="bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 text-white font-heading font-bold text-sm px-5 py-2 rounded-soft transition-colors shrink-0"
-                >
-                  {offerSending ? "Odesílám..." : offerType === "loan" ? "Nabídnout hostování" : "Odeslat nabídku"}
-                </button>
               </div>
+
+              {/* Záloha + týdenní splátky a procenta z příštího přestupu — jen trvalý přestup */}
+              {offerType === "transfer" && (
+                <TransferTermsFields amount={offerAmount} value={offerTerms} onChange={setOfferTerms} variant={light ? "light" : "dark"} />
+              )}
 
               {/* Hráč na výměnu — jen u trvalého přestupu; nabízím SVÉ hráče */}
               {offerType === "transfer" && !isLoanedToUs && mySquad.length > 0 && (
@@ -804,6 +806,14 @@ export default function PlayerDetailPage() {
                   </div>
                 </div>
               )}
+
+              <button
+                onClick={sendOffer}
+                disabled={offerSending || (!offerAmount && offerType !== "loan")}
+                className="w-full sm:w-auto bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 text-white font-heading font-bold text-sm px-5 py-2.5 rounded-soft transition-colors"
+              >
+                {offerSending ? "Odesílám..." : offerType === "loan" ? "Nabídnout hostování" : "Odeslat nabídku"}
+              </button>
             </div>
           </div>
         )}
@@ -976,6 +986,10 @@ export default function PlayerDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Splátky a procenta z přestupu. Server vrací jen závazky mého klubu, u cizího hráče
+          tak karta vyskočí jen tehdy, když mi za něj někdo splácí nebo mám procenta. */}
+      {teamId && <PlayerObligationsCard teamId={teamId} playerId={playerId} />}
 
       {/* Podrobný rozpad potenciálu po dovednostech — patří dolů, ne do hlavičky */}
       {isOwnPlayer && teamId && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { clientOnly } from "@/components/client-only";
+import { termsNote } from "@/components/transfers/transfer-terms";
 
 const FaceAvatar = clientOnly(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
@@ -15,6 +16,9 @@ export interface OfferEvent {
   amount: number | null;
   message: string | null;
   created_at: string;
+  upfront_pct?: number | null;
+  installments?: number | null;
+  sell_on_pct?: number | null;
 }
 
 export interface TimelineManager {
@@ -107,6 +111,11 @@ export function OfferTimeline({
                   {e.amount > 0 ? `${e.amount.toLocaleString("cs")} Kč` : "zdarma"}
                 </div>
               )}
+              {e.amount != null && e.amount > 0 && (e.installments || e.sell_on_pct) ? (
+                <div className="text-sm text-muted tabular-nums mt-0.5">
+                  {termsNote({ amount: e.amount, upfrontPct: e.upfront_pct ?? 100, installments: e.installments ?? 0, sellOnPct: e.sell_on_pct ?? 0 })}
+                </div>
+              ) : null}
               {e.message && (
                 <div className="text-sm italic text-ink mt-1.5 whitespace-pre-wrap break-words">&ldquo;{e.message}&rdquo;</div>
               )}

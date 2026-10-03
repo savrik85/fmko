@@ -1,6 +1,6 @@
 "use client";
 
-import { marketValue } from "@okresni-masina/shared";
+import { marketValue, formatTermsSummary, termsFromRow } from "@okresni-masina/shared";
 import { MoneyInput } from "@/components/ui/money-input";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
@@ -13,12 +13,14 @@ import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
 import { WatchlistTab } from "./WatchlistTab";
+import { ObligationsTab } from "./ObligationsTab";
+import { termsNote } from "@/components/transfers/transfer-terms";
 import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
 import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 
-type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "sledovani" | "squad";
+type Tab = "overview" | "search" | "free_agents" | "market" | "offers" | "zavazky" | "sledovani" | "squad";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["overview", "search", "free_agents", "market", "offers", "sledovani", "squad"] as const;
+const TAB_KEYS = ["overview", "search", "free_agents", "market", "offers", "zavazky", "sledovani", "squad"] as const;
 // Trh má podzáložky; `free_agents` zůstává v TAB_KEYS kvůli starým odkazům (?tab=free_agents).
 const MARKET_SUBTABS = ["za-castku", "volni"] as const;
 
@@ -533,6 +535,8 @@ interface TransferOffer {
   first_name: string; last_name: string; age: number; position: string; overall_rating: number;
   from_team_name?: string; to_team_name?: string; expires_at: string;
   offer_type?: "transfer" | "loan"; loan_duration?: number | null;
+  /** Záloha, týdenní splátky a procenta z příštího přestupu (null u starých nabídek). */
+  upfront_pct?: number | null; installments?: number | null; sell_on_pct?: number | null;
   avatar?: Record<string, unknown>;
   on_turn?: boolean; // true = já jsem na tahu (druhá strana čeká)
   offered_player_id?: string | null;
@@ -542,6 +546,13 @@ interface TransferOffer {
   is_virtual?: number; // 1 = nabídka od virtuálního (počítačového) klubu
   player_interest?: number | null; // 0-3 zájem hráče o přestup
 }
+
+/** „záloha 18 000 Kč + 4× 10 500 Kč týdně · 10 % z příštího přestupu"; prázdné u jednorázové platby. */
+function offerTermsNote(o: TransferOffer): string {
+  if (o.offer_type === "loan") return "";
+  return termsNote(termsFromRow(o, o.counter_amount ?? o.offer_amount));
+}
+const hasTerms = (o: TransferOffer) => offerTermsNote(o) !== "";
 
 type FASortKey = "rating" | "wage" | "age" | "distance";
 
@@ -902,6 +913,7 @@ export default function TransfersPage() {
     ["search", "Hledání", 0],
     ["market", "Trh", listings.length],
     ["offers", "Nabídky", unseenOffers],
+    ["zavazky", "Závazky", 0],
     ["sledovani", "Sledovaní", 0],
     ["squad", "Můj tým", players.filter((p) => (p as any).status === "quit").length],
   ];
@@ -2000,10 +2012,11 @@ export default function TransfersPage() {
                       </Link>
                     );
 
+                    const podminky = offerTermsNote(o);
                     const hlavni = radek(
                       o.id, `${o.first_name} ${o.last_name}`, o.position as string, hAvatar,
                       o.my_role === "buyer", amount,
-                      jeVymena && swapName ? `za ${swapName}` : null,
+                      [jeVymena && swapName ? `za ${swapName}` : null, podminky || null].filter(Boolean).join(" · ") || null,
                     );
                     if (!jeVymena) return [hlavni];
 
@@ -2165,6 +2178,7 @@ export default function TransfersPage() {
                             <span className="font-heading font-bold text-pitch-500">{formatCZK(o.counter_amount ?? o.offer_amount)}</span>
                           )}
                         </div>
+                        {hasTerms(o) && <div className="text-sm text-muted tabular-nums">{offerTermsNote(o)}</div>}
                         {o.offered_player_id && (
                           <div className="mt-1 inline-flex items-center gap-1.5 bg-gold-50 border border-gold-300/60 rounded-full px-2.5 py-0.5 text-xs">
                             <span>⇄</span>
@@ -2199,16 +2213,19 @@ export default function TransfersPage() {
                           const amount = o.counter_amount ?? o.offer_amount;
                           const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
                           const adminFee = Number((o as any).admin_fee ?? 0);
+                          const podminky = o.offer_type === "loan" ? formatCZK(amount) : formatTermsSummary(termsFromRow(o, amount));
                           const desc = adminFee > 0
-                            ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup, kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)}`
-                            : `Za ${o.first_name} ${o.last_name}`;
-                          const ok = await confirm({ title: `Přijmout ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
+                            ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)}`
+                            : `Za ${o.first_name} ${o.last_name}: ${podminky}`;
+                          const ok = await confirm({ title: "Přijmout nabídku?", description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
                         }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
                         {!o.is_virtual && <button onClick={() => {
+                          // U trvalého přestupu se v protinávrhu dají měnit i splátky a procenta — to umí jednání.
+                          if (o.offer_type !== "loan") { router.push(`/prestupy/nabidka/${o.id}?akce=protinabidka`); return; }
                           const currentAmount = o.counter_amount ?? o.offer_amount;
                           setPriceDialog({
                             title: `Protinabídka za ${o.first_name} ${o.last_name}`,
@@ -2284,6 +2301,7 @@ export default function TransfersPage() {
                             <>Nabídka: <span className="font-heading font-bold text-ink">{formatCZK(o.offer_amount)}</span></>
                           )}
                           {o.counter_amount && <span className="text-gold-600 ml-2">Protinabídka: {formatCZK(o.counter_amount)}</span>}
+                          {hasTerms(o) && <span className="block tabular-nums">{offerTermsNote(o)}</span>}
                           {(() => {
                             // Poplatek počítá server — zná sazbu, kterou si soutěž odhlasovala,
                             // i výjimku pro mládež (přesun mezi áčkem a rezervou se neplatí).
@@ -2310,16 +2328,18 @@ export default function TransfersPage() {
                             const amount = o.counter_amount ?? o.offer_amount;
                             const isCrossLeague = myLeagueId && (o as any).to_league_id && (o as any).to_league_id !== myLeagueId;
                             const adminFee = Number((o as any).admin_fee ?? 0);
+                            const podminky = o.offer_type === "loan" ? formatCZK(amount) : formatTermsSummary(termsFromRow(o, amount));
                             const desc = adminFee > 0
-                              ? `Za ${o.first_name} ${o.last_name}\n\nMeziligový přestup, zaplatíš navíc administrační poplatek ${formatCZK(adminFee)}`
-                              : `Za ${o.first_name} ${o.last_name}`;
-                            const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(amount)}?`, description: desc, confirmLabel: "Přijmout" });
+                              ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, zaplatíš navíc administrační poplatek ${formatCZK(adminFee)}`
+                              : `Za ${o.first_name} ${o.last_name}: ${podminky}`;
+                            const ok = await confirm({ title: "Přijmout protinabídku?", description: desc, confirmLabel: "Přijmout" });
                             if (!ok || !teamId) return;
                             if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí protinabídky se nezdařilo")) await refresh();
                           }} className="inline-flex items-center justify-center py-1.5 px-4 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                             Přijmout
                           </button>
                           <button onClick={() => {
+                            if (o.offer_type !== "loan") { router.push(`/prestupy/nabidka/${o.id}?akce=protinabidka`); return; }
                             const currentAmount = o.counter_amount ?? o.offer_amount;
                             setPriceDialog({
                               title: `Protinabídka za ${o.first_name} ${o.last_name}`,
@@ -2506,91 +2526,101 @@ export default function TransfersPage() {
             </div>
           )}
 
-          {/* Loaned out players */}
-          {loanedOut.length > 0 && (
-            <div>
-              <SectionLabel>Na hostování (odchozí)</SectionLabel>
-              <div className="space-y-2">
-                {loanedOut.map((p) => (
-                  <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
-                    <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                      {p.first_name} {p.last_name}
-                    </Link>
-                    <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                    <span className="text-sm text-muted">→ {p.loan_team_name}</span>
-                    <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
-                      {p.days_left > 0 ? `zpět za ${p.days_left} ${dnySlovem(p.days_left)}` : "vrací se"}
-                      {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
-                    </span>
-                    {/* Povolat zpět jde jen u hostování zdarma — u placeného si klub dobu zaplatil. */}
-                    {p.loan_fee === 0 ? (
-                      <button
-                        onClick={async () => {
-                          const ok = await confirm({
-                            title: "Povolat hráče zpět?",
-                            description: `${p.first_name} ${p.last_name} se ihned vrátí z ${p.loan_team_name} do tvého kádru.`,
-                            confirmLabel: "Povolat zpět",
-                          });
-                          if (!ok || !teamId) return;
-                          if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/recall`, { method: "POST" }), "Povolání hráče zpět se nezdařilo")) await refresh();
-                        }}
-                        className="shrink-0 py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors"
-                      >
-                        Povolat zpět
-                      </button>
-                    ) : (
-                      <span className="shrink-0 text-sm text-muted">
-                        placené ({p.loan_fee.toLocaleString("cs")} Kč)
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Loaned in players */}
-          {loanedIn.length > 0 && (
-            <div>
-              <SectionLabel>Na hostování (příchozí)</SectionLabel>
-              <div className="space-y-2">
-                {loanedIn.map((p) => (
-                  <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
-                    <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                      {p.first_name} {p.last_name}
-                    </Link>
-                    <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                    <span className="text-sm text-muted">z {p.owner_team_name}</span>
-                    <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
-                      {p.days_left > 0 ? `končí za ${p.days_left} ${dnySlovem(p.days_left)}` : "končí dnes"}
-                      {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
-                    </span>
-                    <button
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: "Ukončit hostování?",
-                          description: `${p.first_name} ${p.last_name} se ihned vrátí do ${p.owner_team_name}.`,
-                          confirmLabel: "Ukončit",
-                        });
-                        if (!ok || !teamId) return;
-                        if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" }), "Ukončení hostování se nezdařilo")) await refresh();
-                      }}
-                      className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
-                    >
-                      Ukončit
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && loanedOut.length === 0 && loanedIn.length === 0 && (
-            <div className="card p-6 text-center text-muted">Žádné aktivní nabídky ani hostování.</div>
+          {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && (
+            <div className="card p-6 text-center text-muted">Žádné aktivní nabídky. Hostování a splátky najdeš v záložce Závazky.</div>
           )}
 
           </>}
         </div>
+      )}
+
+      {/* ═══ TAB: Závazky — splátky, procenta z přestupu, hostování ═══ */}
+      {tab === "zavazky" && teamId && (
+        <ObligationsTab
+          teamId={teamId}
+          loans={loanedOut.length > 0 || loanedIn.length > 0 ? (
+            <>
+      {/* Loaned out players */}
+      {loanedOut.length > 0 && (
+        <div>
+          <SectionLabel>Na hostování (odchozí)</SectionLabel>
+          <div className="space-y-2">
+            {loanedOut.map((p) => (
+              <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
+                <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                  {p.first_name} {p.last_name}
+                </Link>
+                <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                <span className="text-sm text-muted">→ {p.loan_team_name}</span>
+                <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
+                  {p.days_left > 0 ? `zpět za ${p.days_left} ${dnySlovem(p.days_left)}` : "vrací se"}
+                  {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
+                </span>
+                {/* Povolat zpět jde jen u hostování zdarma — u placeného si klub dobu zaplatil. */}
+                {p.loan_fee === 0 ? (
+                  <button
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: "Povolat hráče zpět?",
+                        description: `${p.first_name} ${p.last_name} se ihned vrátí z ${p.loan_team_name} do tvého kádru.`,
+                        confirmLabel: "Povolat zpět",
+                      });
+                      if (!ok || !teamId) return;
+                      if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/recall`, { method: "POST" }), "Povolání hráče zpět se nezdařilo")) await refresh();
+                    }}
+                    className="shrink-0 py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors"
+                  >
+                    Povolat zpět
+                  </button>
+                ) : (
+                  <span className="shrink-0 text-sm text-muted">
+                    placené ({p.loan_fee.toLocaleString("cs")} Kč)
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Loaned in players */}
+      {loanedIn.length > 0 && (
+        <div>
+          <SectionLabel>Na hostování (příchozí)</SectionLabel>
+          <div className="space-y-2">
+            {loanedIn.map((p) => (
+              <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
+                <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                  {p.first_name} {p.last_name}
+                </Link>
+                <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                <span className="text-sm text-muted">z {p.owner_team_name}</span>
+                <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
+                  {p.days_left > 0 ? `končí za ${p.days_left} ${dnySlovem(p.days_left)}` : "končí dnes"}
+                  {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
+                </span>
+                <button
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: "Ukončit hostování?",
+                      description: `${p.first_name} ${p.last_name} se ihned vrátí do ${p.owner_team_name}.`,
+                      confirmLabel: "Ukončit",
+                    });
+                    if (!ok || !teamId) return;
+                    if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" }), "Ukončení hostování se nezdařilo")) await refresh();
+                  }}
+                  className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
+                >
+                  Ukončit
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+            </>
+          ) : null}
+        />
       )}
 
       {/* ═══ TAB: Můj tým ═══ */}
