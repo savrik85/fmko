@@ -85,8 +85,16 @@ Kde to je:
   prodávajícího „chodí mi". U každé: hráč, druhý klub, rozpis, průběh (zaplaceno / zbývá,
   ukazatel 1 ze 3) a další splátka. Nahoře součet: kolik tento týden zaplatím a dostanu
   a kolik ještě celkem dlužím a kolik mi dluží.
-- **Detail hráče** (kupující i prodávající klub): řádek „Splácí se: zbývá 2× 10 500 Kč klubu X"
-  a „15 % z dalšího prodeje pro klub X", aby bylo před dalším prodejem jasné, co z ceny odejde.
+- **Profil vlastního hráče → karta „Smluvní závazky"** (jen když nějaké jsou):
+  - splátky: komu, rozpis, zaplaceno / zbývá, další splátka;
+  - procenta z dalšího prodeje: komu a kolik %;
+  - věta, co se stane při prodeji: „Při prodeji se z ceny hned doplatí zbývajících 21 000 Kč
+    klubu X a 15 % z ceny dostane klub Y."
+- **Prodej vlastního hráče** (dialog vystavení na trh, detail příchozí nabídky, rychlé přijetí):
+  rozpis „Cena 60 000 · doplacení splátek −21 000 · 15 % pro klub Y −9 000 · **zůstane ti 30 000**",
+  aby bylo před prodejem jasné, co z ceny odejde.
+- **Profil hráče, kterého jsi prodal** (teď u jiného klubu): „Dluží vám za něj 21 000 Kč
+  (2× 10 500)" a „Máte 15 % z jeho dalšího prodeje".
 - **Transakce ve Financích:** každá splátka má popisek s hráčem a pořadím („Splátka za Novák 2/3").
 - **Výhled rozpočtu:** budoucí splátky jako výdaj kupujícího a příjem prodávajícího.
 
