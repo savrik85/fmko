@@ -101,7 +101,8 @@ async function installmentBudgetError(db: D1Database, buyerClubTeamId: string, e
   if (weekly <= income.total) return null;
   return buyerIsMe
     ? `Splátky by byly ${weekly.toLocaleString("cs")} Kč týdně, klub vydělá ${income.total.toLocaleString("cs")} Kč. Zvyš zálohu nebo počet splátek.`
-    : `Kupující by splácel ${weekly.toLocaleString("cs")} Kč týdně a vydělá ${income.total.toLocaleString("cs")} Kč. Navrhni vyšší zálohu nebo víc splátek.`;
+    // Protistraně bez čísel: kolik kupující vydělá, je jeho věc.
+    : "Kupující by takové splátky neutáhl. Navrhni vyšší zálohu nebo víc splátek.";
 }
 
 /** Send a system SMS to a team's phone (find-or-create conversation by role title). */
@@ -678,6 +679,9 @@ gameRouter.get("/teams/:teamId/training-stats", async (c) => {
 // GET /api/teams/:id/budget — rozpočet s kompletním přehledem
 gameRouter.get("/teams/:teamId/budget", async (c) => {
   const teamId = c.req.param("teamId");
+  // GET middleware nehlídá vlastníka — rozpočet (mzdy, sponzoři, splátky přestupů) je jen pro vlastní klub.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
   const { mapVillageSize, countRemainingMatchDays, PLACENY_HRAC_SQL } = await import("../season/finance-processor");
 
   // Batch: team info + wages + sponsors + top wages in single round-trip

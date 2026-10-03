@@ -509,7 +509,9 @@ describe("přestup na splátky a procenta z příštího přestupu", () => {
     // 25 000 při záloze 30 % a 4 splátkách = 4 375 Kč týdně, kupující vydělá 3 489
     const r = await callRoute(`/teams/seller-a/offers/${id}/counter`, { method: "POST", token: "seller-token", body: { amount: 25_000, upfrontPct: 30, installments: 4 } });
     expect(r.status).toBe(400);
-    expect(String((await readJson(r)).error).replace(/\u00a0/g, " ")).toMatch(/^Kupující by splácel 4 375 Kč týdně a vydělá 3 489 Kč/);
+    const err = String((await readJson(r)).error);
+    expect(err).toBe("Kupující by takové splátky neutáhl. Navrhni vyšší zálohu nebo víc splátek.");
+    expect(err).not.toMatch(/\d/); // žádná čísla o příjmech kupujícího
   });
 
   it("limit 3 rozjetých splátkových přestupů", async () => {
