@@ -7763,6 +7763,20 @@ gameRouter.post("/admin/generate-player-offer/:teamId", async (c) => {
 // `?dryRun=1` jen spočítá, koho by se to týkalo. `?source=` umí i jiný zdroj (pub, friend,
 // recommendation), výchozí je dorost. `?source=random` nechá losovat zdroj zvlášť pro každý
 // tým — každý manažer pak dostane jiného odesílatele (starosta / dorost / hospodský / kapitán).
+// POST /api/admin/transfer-installments/run?teamId=…&gameDate=YYYY-MM-DD — pondělní splátky přestupů
+// jednoho klubu hned (náhrada za spadlé pondělní zpracování, test). Za herní den nejvýš jedna
+// splátka dohody, takže opakované volání se stejným datem nic nestrhne.
+gameRouter.post("/admin/transfer-installments/run", async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "Chybí teamId" }, 400);
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
+  const gameDate = c.req.query("gameDate") ?? team.game_date ?? new Date().toISOString().slice(0, 10);
+  const { processTransferInstallments } = await import("../transfers/installments");
+  const paid = await processTransferInstallments(c.env.DB, teamId, gameDate);
+  return c.json({ ok: true, teamId, gameDate, paid });
+});
+
 gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
   const dryRun = c.req.query("dryRun") === "1";
   const sourceParam = c.req.query("source") ?? "youth";
