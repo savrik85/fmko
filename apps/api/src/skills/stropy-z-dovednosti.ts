@@ -10,16 +10,9 @@
  */
 
 import type { Rng } from "../generators/rng";
-import { generateHiddenTalent } from "./generator";
+import { generateHiddenTalent, prostorPodleVeku } from "./generator";
 
-/** Kolik prostoru nad dnešní hodnotou hráči podle věku ještě zbývá. */
-export function prostorPodleVeku(vek: number): { min: number; max: number } {
-  if (vek <= 21) return { min: 12, max: 28 };
-  if (vek <= 25) return { min: 8, max: 20 };
-  if (vek <= 29) return { min: 4, max: 12 };
-  if (vek <= 33) return { min: 2, max: 7 };
-  return { min: 0, max: 3 };
-}
+export { prostorPodleVeku };
 
 export interface StropDovednosti { current: number; maxPotential: number }
 
