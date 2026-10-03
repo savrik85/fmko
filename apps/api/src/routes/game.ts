@@ -78,6 +78,32 @@ async function installmentLimitError(db: D1Database, buyerClubTeamId: string): P
     : null;
 }
 
+/**
+ * Strop splátek: všechny týdenní splátky kupujícího dohromady nesmí přesáhnout jeho pravidelné
+ * týdenní příjmy (stejné číslo jako „Příjmy / týd" ve Financích). `extraWeekly` = nová dohoda.
+ */
+/** Nejvyšší týdenní splátka dohody (poslední doplácí zaokrouhlení). */
+function weeklyInstallment(t: TransferTerms): number {
+  if (t.installments <= 0) return 0;
+  const s = transferSchedule(t);
+  return Math.max(s.installmentAmount, s.lastInstallment);
+}
+
+async function installmentBudgetError(db: D1Database, buyerClubTeamId: string, extraWeekly: number, buyerIsMe = true): Promise<string | null> {
+  if (extraWeekly <= 0) return null;
+  const { weeklyIncomeOf } = await import("../season/weekly-income");
+  const [income, running] = await Promise.all([
+    weeklyIncomeOf(db, buyerClubTeamId),
+    db.prepare("SELECT COALESCE(SUM(installment_amount), 0) AS weekly FROM transfer_installments WHERE buyer_team_id = ? AND status = 'active'")
+      .bind(buyerClubTeamId).first<{ weekly: number }>(),
+  ]);
+  const weekly = (running?.weekly ?? 0) + extraWeekly;
+  if (weekly <= income.total) return null;
+  return buyerIsMe
+    ? `Splátky by byly ${weekly.toLocaleString("cs")} Kč týdně, klub vydělá ${income.total.toLocaleString("cs")} Kč. Zvyš zálohu nebo počet splátek.`
+    : `Kupující by splácel ${weekly.toLocaleString("cs")} Kč týdně a vydělá ${income.total.toLocaleString("cs")} Kč. Navrhni vyšší zálohu nebo víc splátek.`;
+}
+
 /** Send a system SMS to a team's phone (find-or-create conversation by role title). */
 async function sendPhoneSMS(db: D1Database, teamId: string, senderName: string, roleTitle: string, body: string) {
   let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
@@ -692,21 +718,15 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   const reputation = (team.reputation as number) ?? 50;
   const WEEKS_PER_SEASON = 16;
 
-  // All amounts calculated as WEEKLY (= per 7 game days) — zrcadlí processWeeklyFinances
-  // Income sources (weekly)
-  const weeklySponsorIncome = Math.round(sponsors.reduce((sum, s) => sum + s.monthlyAmount, 0) / 4.3) * 2;
-  const weeklyBaseSponsor = Math.round((reputation * 100) / 4.3);
-  // Dotace od obce: stejný vzorec jako finance-processor — měsíční základ × přízeň obce (0.5–1.5×)
-  const monthlySubsidyBase: Record<string, number> = { vesnice: 6000, obec: 10000, mestys: 15000, mesto: 25000 };
-  const favorRow = await c.env.DB.prepare(
-    "SELECT favor FROM village_team_favor WHERE team_id = ? AND official_id IS NULL"
-  ).bind(teamId).first<{ favor: number }>().catch((e) => { logger.warn({ module: "game" }, "load favor for budget", e); return null; });
-  const villageFavor = favorRow?.favor ?? 50;
-  const favorMultiplier = 0.5 + villageFavor / 100;
-  const weeklySubsidy = Math.round(((monthlySubsidyBase[category] ?? 8000) * favorMultiplier) / 4.3);
-  const weeklyContributions = Math.round((playerCount * 100) / 4.3); // členské příspěvky (100 Kč/hráč/měs)
-
-  const weeklyIncome = weeklySponsorIncome + weeklyBaseSponsor + weeklySubsidy + weeklyContributions;
+  // All amounts calculated as WEEKLY (= per 7 game days) — zrcadlí processWeeklyFinances.
+  // Příjmy počítá jedna funkce i pro strop splátek přestupů, ať se čísla nerozejdou.
+  const { weeklyIncomeOf } = await import("../season/weekly-income");
+  const income = await weeklyIncomeOf(c.env.DB, teamId);
+  const weeklySponsorIncome = income.sponsors;
+  const weeklyBaseSponsor = income.baseSponsor;
+  const weeklySubsidy = income.subsidy;
+  const weeklyContributions = income.contributions;
+  const weeklyIncome = income.total;
 
   // Expense sources (weekly)
   const maintenanceCosts: Record<string, number> = { vesnice: 115, obec: 230, mestys: 465, mesto: 700 };
@@ -5724,7 +5744,8 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   const termsError = transferTermsError(terms);
   if (termsError) return c.json({ error: termsError }, 400);
   if (terms.installments > 0) {
-    const limitError = await installmentLimitError(c.env.DB, buyerClubTeamId);
+    const limitError = await installmentLimitError(c.env.DB, buyerClubTeamId)
+      ?? await installmentBudgetError(c.env.DB, buyerClubTeamId, weeklyInstallment(terms));
     if (limitError) return c.json({ error: limitError }, 400);
   }
   const schedule = transferSchedule(terms);
@@ -6243,7 +6264,8 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const termsError = transferTermsError(terms);
   if (termsError) return c.json({ error: termsError }, 400);
   if (terms.installments > 0) {
-    const limitError = await installmentLimitError(c.env.DB, buyerClubTeamId);
+    const limitError = await installmentLimitError(c.env.DB, buyerClubTeamId)
+      ?? await installmentBudgetError(c.env.DB, buyerClubTeamId, weeklyInstallment(terms));
     if (limitError) return c.json({ error: limitError }, 400);
   }
   // Kupující potřebuje peníze jen na zálohu (u jednorázové platby je záloha celá cena).
@@ -7012,7 +7034,8 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       : terms.installments > 0 ? `Kupující nemá dostatek prostředků na zálohu (${payNow.toLocaleString("cs")} Kč)` : "Kupující nemá dostatek prostředků" }, 400);
   }
   if (offerType !== "loan" && terms.installments > 0) {
-    const limitError = await installmentLimitError(c.env.DB, buyerTeamId);
+    const limitError = await installmentLimitError(c.env.DB, buyerTeamId)
+      ?? await installmentBudgetError(c.env.DB, buyerTeamId, weeklyInstallment(terms), scope.role === "buyer");
     if (limitError) return c.json({ error: limitError }, 400);
   }
   if (!(await claimOffer())) return c.json({ error: "Nabídku mezitím vyřešil někdo jiný" }, 409);
@@ -7455,6 +7478,11 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   if (terms.installments > 0 && (offer.installments ?? 0) === 0) {
     const limitError = await installmentLimitError(c.env.DB, scope.buyerClubTeamId);
     if (limitError) return c.json({ error: limitError }, 400);
+  }
+  // Strop splátek podle příjmů kupujícího: protinávrh, který by kupující neutáhl, nejde poslat.
+  if (terms.installments > 0) {
+    const budgetError = await installmentBudgetError(c.env.DB, scope.buyerClubTeamId, weeklyInstallment(terms), scope.role === "buyer");
+    if (budgetError) return c.json({ error: budgetError }, 400);
   }
 
   // Pokud counter posílá kupující (from_team_id), ověř že má peníze na to, co platí hned
