@@ -161,9 +161,12 @@ Kde to je:
 - `removePlayer`: propadnutí doložky při odchodu bez peněz.
 - Pondělní finance: splátky.
 - Výhled rozpočtu (`/budget` forecast): splátky jako výdaj kupujícího a příjem prodávajícího.
+- API pro zobrazení: závazky klubu (Finance → Splátky přestupů) a závazky hráče (profil hráče,
+  prodejní dialogy, čistý výnos prodeje). Cizímu klubu se závazky hráče neukazují, jen stranám
+  obchodu.
 - Web: formulář nabídky (detail hráče), dialog protinávrhu (detail nabídky i seznam), detail
-  nabídky, historie vyjednávání, seznam nabídek, Finance (sekce „Splátky přestupů", popisky
-  transakcí, výhled).
+  nabídky, historie vyjednávání, seznam nabídek, profil hráče (karta „Smluvní závazky"),
+  čistý výnos v prodejních dialozích, Finance (sekce „Splátky přestupů", popisky transakcí, výhled).
 
 ## Mimo rozsah
 
