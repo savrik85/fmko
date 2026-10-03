@@ -2,26 +2,36 @@
 
 import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { useState } from "react";
+import { formatTermsSummary, type TransferTerms } from "@okresni-masina/shared";
+import { TransferTermsFields, type TermsValue } from "@/components/transfers/transfer-terms";
 
 type DialogKind = "accept" | "counter" | "reject" | null;
 
 export function ActionBar({
   onAccept, onCounter, onReject,
-  currentAmount, defaultCounter,
-  canAfford, waiting, role, hideCounter, rejectWarning,
+  currentAmount, defaultCounter, terms, termsNegotiable, adminFee, payNow,
+  canAfford, waiting, role, hideCounter, rejectWarning, initialDialog = null,
 }: {
   onAccept: (message: string) => Promise<void>;
-  onCounter: (amount: number, message: string) => Promise<void>;
+  onCounter: (amount: number, message: string, terms: TermsValue | null) => Promise<void>;
   onReject: (message: string) => Promise<void>;
   currentAmount: number;
   defaultCounter: number;
+  /** Podmínky posledního návrhu. */
+  terms: TransferTerms;
+  /** U trvalého přestupu mezi lidmi jde v protinávrhu měnit i splátky a procenta. */
+  termsNegotiable: boolean;
+  adminFee: number;
+  /** Kolik kupující zaplatí při přijetí hned. */
+  payNow: number;
   canAfford: boolean;
   waiting: boolean;
   role: "buyer" | "seller";
   hideCounter?: boolean; // virtuální klub o ceně nejedná
   rejectWarning?: string | null; // varování, když hráč o přestup stojí
+  initialDialog?: DialogKind;
 }) {
-  const [dialog, setDialog] = useState<DialogKind>(null);
+  const [dialog, setDialog] = useState<DialogKind>(initialDialog);
 
   if (waiting) {
     return (
@@ -44,7 +54,7 @@ export function ActionBar({
             onClick={() => setDialog("accept")}
             className="flex-1 sm:flex-none min-w-[140px] px-4 py-2.5 rounded-soft font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Přijmout {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : "zdarma"}
+            Přijmout
           </button>
           {!hideCounter && (
           <button
@@ -61,17 +71,22 @@ export function ActionBar({
             Odmítnout
           </button>
         </div>
+        <div className="text-center text-sm text-muted tabular-nums">
+          {role === "buyer"
+            ? `Přijetím zaplatíš hned ${payNow.toLocaleString("cs")} Kč${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`
+            : `Kupující při přijetí pošle hned ${(payNow - adminFee).toLocaleString("cs")} Kč${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`}
+        </div>
         {role === "buyer" && !canAfford && (
-          <div className="text-center text-xs text-red-600 italic">
-            Nemáš dostatek prostředků na přijetí této nabídky
+          <div className="text-center text-sm text-red-600 italic">
+            {terms.installments > 0 ? "Nemáš dost peněz ani na zálohu" : "Nemáš dostatek prostředků na přijetí této nabídky"}
           </div>
         )}
       </div>
 
       {dialog === "accept" && (
         <MessageDialog
-          title={`Přijmout ${currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : "zdarma"}?`}
-          description="Krátká zpráva protistraně (volitelné)"
+          title="Přijmout nabídku?"
+          description={`${currentAmount > 0 ? formatTermsSummary(terms) : "Zdarma"}. Krátká zpráva protistraně (volitelné).`}
           confirmLabel="Přijmout"
           confirmColor="pitch"
           onCancel={() => setDialog(null)}
@@ -91,8 +106,9 @@ export function ActionBar({
       {dialog === "counter" && (
         <CounterDialog
           initial={defaultCounter}
+          initialTerms={termsNegotiable ? { upfrontPct: terms.upfrontPct, installments: terms.installments, sellOnPct: terms.sellOnPct } : null}
           onCancel={() => setDialog(null)}
-          onConfirm={async (amount, msg) => { await onCounter(amount, msg); setDialog(null); }}
+          onConfirm={async (amount, msg, t) => { await onCounter(amount, msg, t); setDialog(null); }}
         />
       )}
     </>
@@ -150,12 +166,15 @@ function MessageDialog({ title, description, confirmLabel, confirmColor, onCance
   );
 }
 
-function CounterDialog({ initial, onCancel, onConfirm }: {
+function CounterDialog({ initial, initialTerms, onCancel, onConfirm }: {
   initial: number;
+  /** null = podmínky se nevyjednávají (hostování). */
+  initialTerms: TermsValue | null;
   onCancel: () => void;
-  onConfirm: (amount: number, message: string) => Promise<void>;
+  onConfirm: (amount: number, message: string, terms: TermsValue | null) => Promise<void>;
 }) {
   const [v, setV] = useState<number | null>(initial);
+  const [terms, setTerms] = useState<TermsValue | null>(initialTerms);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -163,8 +182,8 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
     // Kliknutí vedle dialog nezavírá — rozepsaná částka nebo zpráva by se ztratila. Zavírá jen Zrušit.
     <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="p-5">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="p-5 overflow-y-auto">
           <h3 className="font-heading font-bold text-lg">Protinabídka</h3>
           <div className="mt-4">
             <label className="text-xs text-muted font-heading uppercase">Nová částka (Kč)</label>
@@ -188,6 +207,11 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
               ))}
             </div>
           </div>
+          {terms && (
+            <div className="mt-4">
+              <TransferTermsFields amount={v} value={terms} onChange={setTerms} />
+            </div>
+          )}
           <div className="mt-3">
             <label className="text-xs text-muted font-heading uppercase">Zpráva (volitelné)</label>
             <textarea
@@ -210,7 +234,7 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
             onClick={async () => {
               if (!v) return;
               setLoading(true);
-              try { await onConfirm(v, msg.trim()); } finally { setLoading(false); }
+              try { await onConfirm(v, msg.trim(), terms); } finally { setLoading(false); }
             }}
             className="flex-1 py-3.5 text-sm font-heading font-bold text-gold-600 hover:bg-gold-50 transition-colors disabled:opacity-50"
           >

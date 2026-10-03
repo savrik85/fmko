@@ -14,6 +14,8 @@ import { MessageDialog } from "./components/MessageDialog";
 import { type PlayerInterest } from "./components/InterestBadge";
 import { markSingleOfferSeen } from "@/lib/seen-offers";
 import { triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
+import type { TransferTerms } from "@okresni-masina/shared";
+import type { TermsValue } from "@/components/transfers/transfer-terms";
 
 interface OfferDetail {
   offer: {
@@ -35,6 +37,9 @@ interface OfferDetail {
     offered_player_id: string | null;
     is_virtual?: boolean;
     player_interest?: number | null;
+    upfront_pct?: number | null;
+    installments?: number | null;
+    sell_on_pct?: number | null;
   };
   role: "buyer" | "seller";
   on_turn: boolean;
@@ -49,6 +54,10 @@ interface OfferDetail {
   crossLeague: boolean;
   adminFee: number;
   playerInterest?: PlayerInterest | null;
+  /** Podmínky posledního návrhu (záloha, splátky, procenta). Starší API je nevrací. */
+  terms?: TransferTerms;
+  /** Kolik kupující zaplatí při přijetí hned (záloha + administrační poplatek). */
+  payNow?: number;
 }
 
 const statusLabel: Record<OfferDetail["offer"]["status"], string> = {
@@ -62,6 +71,12 @@ const statusLabel: Record<OfferDetail["offer"]["status"], string> = {
 
 export default function OfferDetailPage() {
   const params = useParams<{ id: string }>();
+  // Ze seznamu nabídek: „Protinabídka" u přestupu otevře rovnou dialog tady (umí i splátky a procenta).
+  // Adresa se čte až v prohlížeči, stejně jako u useTabParam (stránka se staticky exportuje).
+  const [openCounter, setOpenCounter] = useState(false);
+  useEffect(() => {
+    setOpenCounter(new URLSearchParams(window.location.search).get("akce") === "protinabidka");
+  }, []);
   const { teamId } = useTeam();
   const [data, setData] = useState<OfferDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,14 +127,19 @@ export default function OfferDetailPage() {
   }
 
   const { offer, role, on_turn, player, offeredPlayer, fromTeam, toTeam, fromManager, toManager, events, currentAmount, crossLeague, adminFee, playerInterest } = data;
+  const terms: TransferTerms = data.terms ?? { amount: currentAmount, upfrontPct: 100, installments: 0, sellOnPct: 0 };
+  const payNow = data.payNow ?? currentAmount + adminFee;
+  // Splátky a procenta se vyjednávají jen u trvalého přestupu mezi lidmi.
+  const termsNegotiable = offer.offer_type === "transfer" && !offer.is_virtual;
   const rejectWarning = role === "seller" && (playerInterest?.level ?? 0) >= 2
     ? `⚠️ ${player?.first_name ?? "Hráč"} o přestup stojí — odmítnutí mu srazí náladu.`
     : null;
   const isActive = offer.status === "pending" || offer.status === "countered";
   const myTeam = role === "buyer" ? fromTeam : toTeam;
   const myBudget = myTeam?.budget ?? null;
+  // Na splátky stačí mít na zálohu, zbytek se strhává každé pondělí.
   const canAfford = role === "buyer"
-    ? myBudget != null && myBudget >= currentAmount + adminFee
+    ? myBudget != null && myBudget >= payNow
     : true;
 
   const playerName = player ? `${player.first_name} ${player.last_name}` : "hráče";
@@ -134,11 +154,11 @@ export default function OfferDetailPage() {
     }
   };
 
-  const counter = async (amount: number, message: string) => {
+  const counter = async (amount: number, message: string, counterTerms: TermsValue | null) => {
     if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/counter`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, message: message || undefined }),
+      body: JSON.stringify({ amount, message: message || undefined, ...(counterTerms ?? {}) }),
     }), "Protinabídka se nezdařila")) {
       await refresh();
     }
@@ -194,6 +214,8 @@ export default function OfferDetailPage() {
                 loanDuration={offer.loan_duration}
                 crossLeague={crossLeague}
                 adminFee={adminFee}
+                terms={terms}
+                sellerName={toTeam?.name}
                 message={offer.message}
                 playerInterest={playerInterest}
               />
@@ -238,6 +260,8 @@ export default function OfferDetailPage() {
               loanDuration={offer.loan_duration}
               crossLeague={crossLeague}
               adminFee={adminFee}
+              terms={terms}
+              sellerName={toTeam?.name}
               message={offer.message}
               playerInterest={playerInterest}
             />
@@ -289,7 +313,12 @@ export default function OfferDetailPage() {
             waiting={!on_turn}
             currentAmount={currentAmount}
             defaultCounter={defaultCounterAmount}
+            terms={terms}
+            termsNegotiable={termsNegotiable}
+            adminFee={adminFee}
+            payNow={payNow}
             canAfford={canAfford}
+            initialDialog={openCounter && !offer.is_virtual ? "counter" : null}
             hideCounter={!!offer.is_virtual}
             rejectWarning={rejectWarning}
             onAccept={accept}
