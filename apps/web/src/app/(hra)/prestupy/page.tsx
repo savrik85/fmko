@@ -2307,7 +2307,7 @@ export default function TransfersPage() {
                         </>)}
                         <button onClick={async () => {
                           if (!teamId) return;
-                          const ok = await confirm({ title: "Ukončit jednání?", description: `Jednání o ${o.first_name} ${o.last_name} bude zrušeno.`, confirmLabel: "Ukončit" });
+                          const ok = await confirm({ title: "Ukončit jednání?", description: `Jednání o ${o.first_name} ${o.last_name} bude zrušeno.`, confirmLabel: "Ukončit", variant: "danger" });
                           if (!ok) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}`, { method: "DELETE" }), "Ukončení jednání se nezdařilo")) await refresh();
                         }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
@@ -2658,6 +2658,7 @@ export default function TransfersPage() {
                       title: "Ukončit hostování?",
                       description: `${p.first_name} ${p.last_name} se ihned vrátí do ${p.owner_team_name}.`,
                       confirmLabel: "Ukončit",
+                      variant: "danger",
                     });
                     if (!ok || !teamId) return;
                     if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" }), "Ukončení hostování se nezdařilo")) await refresh();
@@ -2770,6 +2771,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
       title: `Propustit ${p.first_name} ${p.last_name}?`,
       description: "Hráč odejde zadarmo a stane se volným hráčem. Tuto akci nelze vrátit.",
       confirmLabel: "Propustit",
+      variant: "danger",
     });
     if (!ok) return;
     if (await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }), "Propuštění hráče se nezdařilo")) await refresh();
