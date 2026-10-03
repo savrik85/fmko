@@ -107,6 +107,7 @@ Kde to je:
 | Hledání | beze změny |
 | **Trh** | podzáložky **Za přestupní částku** (dnešní Trh) a **Volní hráči** (dnešní Volní) |
 | Nabídky | beze změny, jen bez sekcí hostování (přesunou se do Závazků) |
+| **Sledovaní** (nová) | dnešní stránka Sledování (sledovaní hráči), přesunutá sem |
 | Můj tým | beze změny |
 | **Závazky** (nová) | všechny smluvní závazky klubu na jednom místě |
 
@@ -119,6 +120,11 @@ Kde to je:
 3. **Procenta z dalšího prodeje** — co musím odvést já (hráč, komu, kolik %) a na co mám
    nárok já (hráč, u koho je, kolik %).
 4. **Hostování** — moji hráči jinde a cizí hráči u mě: komu / od koho, do kdy, poplatek.
+
+**Sledovaní:** obsah dnešní stránky `/sledovani` beze změny funkce přejde do záložky Přestupů.
+Samostatná stránka zmizí z menu (postranní panel, Více). Adresa `/sledovani` i stará
+`/dashboard/watchlist` trvale přesměrují rovnou na `/prestupy?tab=sledovani` (bez řetězení
+přesměrování, kvůli next-on-pages). Odkaz „Celý watchlist" na nástěnce povede tamtéž.
 
 Finance si nechají jen součet splátek v přehledu, popisky transakcí a výhled rozpočtu,
 s odkazem „Podrobně v Přestupy → Závazky". Sekce „Splátky přestupů" ve Financích tím odpadá.
