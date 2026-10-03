@@ -115,6 +115,7 @@ export function Tabs<T extends string>({
   className = "",
   ariaLabel = "Záložky",
   layout = "scroll",
+  dense = false,
 }: {
   items: ReadonlyArray<TabItem<T>>;
   value: T;
@@ -127,6 +128,8 @@ export function Tabs<T extends string>({
    * popisky, kde by se na 375px poslední záložka schovala za kraj.
    */
   layout?: "scroll" | "grid";
+  /** Užší okraje na mobilu: podzáložky se čtyřmi popisky a odznaky se vejdou do 375 px bez posouvání. */
+  dense?: boolean;
 }) {
   const onKeyDown = (e: React.KeyboardEvent) => {
     const i = items.findIndex((t) => t.key === value);
@@ -147,7 +150,7 @@ export function Tabs<T extends string>({
     : "flex gap-1 bg-surface rounded-card p-1 overflow-x-auto no-scrollbar [overscroll-behavior-x:contain]";
   const itemClass = isGrid
     ? "min-w-0 sm:grow sm:basis-auto min-h-11 px-2 sm:px-3.5 rounded-control text-sm font-heading font-bold leading-tight transition-colors"
-    : "shrink-0 grow basis-auto whitespace-nowrap min-h-11 px-2.5 sm:px-3.5 rounded-control text-xs sm:text-sm font-heading font-bold transition-colors";
+    : `shrink-0 grow basis-auto whitespace-nowrap min-h-11 ${dense ? "px-1.5" : "px-2.5"} sm:px-3.5 rounded-control text-xs sm:text-sm font-heading font-bold transition-colors`;
 
   return (
     <div className={`relative ${className}`}>
@@ -180,7 +183,7 @@ export function Tabs<T extends string>({
             {t.count != null && (
               // Odznak, ne šedé číslo vedle popisku — jinak si ho nikdo nevšimne.
               <span
-                className={`ml-1.5 inline-flex items-center justify-center min-w-5 px-1.5 py-0.5 rounded-full tabular-nums text-xs font-bold align-middle ${
+                className={`${dense ? "ml-1" : "ml-1.5"} inline-flex items-center justify-center min-w-5 px-1.5 py-0.5 rounded-full tabular-nums text-xs font-bold align-middle ${
                   isActive ? "bg-pitch-500 text-white" : "bg-card-red text-white"
                 }`}
               >

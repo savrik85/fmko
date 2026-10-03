@@ -1002,9 +1002,10 @@ export default function TransfersPage() {
           value={hledatSub}
           onChange={setHledatSub}
           ariaLabel="Hledat hráče"
+          dense
           items={[
             { key: "hledani", label: "Hledání", count: null },
-            { key: "na-prodej", label: "Na prodej", count: listings.length || null },
+            { key: "na-prodej", label: "Na trhu", count: listings.length || null },
             { key: "volni", label: "Volní", count: freeAgents.length || null },
             { key: "sledovani", label: "Sledovaní", count: watchCount || null },
           ]}
