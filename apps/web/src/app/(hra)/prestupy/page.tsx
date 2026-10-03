@@ -2722,6 +2722,36 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("rating");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  // Jedno tlačítko „Na trh" (dvě se na mobilu nevešla); prodat nebo propustit se volí až v plachtě.
+  const [choice, setChoice] = useState<Player | null>(null);
+
+  const listForSale = (p: Player) => {
+    setChoice(null);
+    setPriceDialog({
+      title: `Vystavit ${p.first_name} ${p.last_name} na trh`,
+      description: `${p.position}, ${p.age} let, rating ${p.overall_rating}`,
+      defaultPrice: marketValue(p.overall_rating ?? 50, p.age ?? 27, p.position),
+      onConfirm: async (price: number) => {
+        const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ askingPrice: price }),
+        }), "Vystavení na trh se nezdařilo");
+        setPriceDialog(null);
+        if (ok) await refresh();
+      },
+    });
+  };
+
+  const release = async (p: Player) => {
+    setChoice(null);
+    const ok = await confirm({
+      title: `Propustit ${p.first_name} ${p.last_name}?`,
+      description: "Hráč odejde zadarmo a stane se volným hráčem. Tuto akci nelze vrátit.",
+      confirmLabel: "Propustit",
+    });
+    if (!ok) return;
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }), "Propuštění hráče se nezdařilo")) await refresh();
+  };
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -2790,38 +2820,10 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                     {isListed && <span className="text-xs font-heading font-bold text-gold-600 bg-gold-50 px-1.5 py-0.5 rounded">Na trhu</span>}
                   </td>
                   <td className="py-2 px-2 pr-4 text-right">
-                    <div className="flex gap-1.5 justify-end">
-                      {!isListed && (
-                        <button onClick={() => {
-                          setPriceDialog({
-                            title: `Vystavit ${p.first_name} ${p.last_name} na trh`,
-                            description: `${p.position}, ${p.age} let, rating ${p.overall_rating}`,
-                            defaultPrice: marketValue(p.overall_rating ?? 50, p.age ?? 27, p.position),
-                            onConfirm: async (price: number) => {
-                              const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
-                                method: "POST", headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ askingPrice: price }),
-                              }), "Vystavení na trh se nezdařilo");
-                              setPriceDialog(null);
-                              if (ok) await refresh();
-                            },
-                          });
-                        }} className="py-1 px-2.5 rounded text-xs font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors">
-                          Na trh
-                        </button>
-                      )}
-                      <button onClick={async () => {
-                        const ok = await confirm({
-                          title: `Uvolnit ${p.first_name} ${p.last_name}?`,
-                          description: "Hráč bude propuštěn a stane se volným hráčem. Tuto akci nelze vrátit.",
-                          confirmLabel: "Uvolnit",
-                        });
-                        if (!ok) return;
-                        if (await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }), "Uvolnění hráče se nezdařilo")) await refresh();
-                      }} className="py-1 px-2.5 rounded text-xs font-heading font-bold bg-card-red text-white hover:bg-red-600 transition-colors">
-                        Uvolnit
-                      </button>
-                    </div>
+                    <button onClick={() => setChoice(p)}
+                      className="py-1.5 px-3 rounded text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors whitespace-nowrap">
+                      Na trh
+                    </button>
                   </td>
                 </tr>
               );
@@ -2833,6 +2835,43 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
         Hodnota kádru <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(players.reduce((sum, p) => sum + playerValue(p), 0))}</span>
         {" "}· tržní cena podle hodnocení, věku a pozice ze skutečných přestupů
       </p>
+
+      <Sheet open={!!choice} onClose={() => setChoice(null)} title="Na trh" maxWidth="420px">
+        {choice && (() => {
+          const listed = myListings.find((l) => l.playerId === choice.id);
+          return (
+            <div className="p-5 space-y-3">
+              <h3 className="font-heading font-bold text-lg">{choice.first_name} {choice.last_name}</h3>
+              <p className="text-sm text-muted">Tržní cena {formatCZK(playerValue(choice))}</p>
+              {listed ? (
+                <div className="rounded-xl bg-gold-50 border border-gold-300/60 p-3 text-sm flex items-center gap-3">
+                  <span className="flex-1">Už je na trhu za <span className="font-heading font-bold">{formatCZK(listed.askingPrice)}</span>.</span>
+                  <button onClick={async () => {
+                    setChoice(null);
+                    if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${listed.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
+                  }} className="shrink-0 py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-white border border-gray-200 text-muted hover:bg-gray-50">
+                    Stáhnout z trhu
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => listForSale(choice)}
+                  className="w-full text-left rounded-xl border border-gray-200 hover:border-gold-500 hover:bg-gold-50 p-3 transition-colors">
+                  <div className="font-heading font-bold">Prodat za přestupní částku</div>
+                  <div className="text-sm text-muted">Vystavíš ho s cenou, ostatní kluby ti pošlou nabídky.</div>
+                </button>
+              )}
+              <button onClick={() => release(choice)}
+                className="w-full text-left rounded-xl border border-gray-200 hover:border-card-red hover:bg-red-50 p-3 transition-colors">
+                <div className="font-heading font-bold text-card-red">Propustit zadarmo</div>
+                <div className="text-sm text-muted">Odejde hned mezi volné hráče, nic za něj nedostaneš.</div>
+              </button>
+              <button onClick={() => setChoice(null)} className="w-full py-2.5 text-sm font-heading font-bold text-muted hover:bg-gray-50 rounded-xl">
+                Zrušit
+              </button>
+            </div>
+          );
+        })()}
+      </Sheet>
     </div>
   );
 }
