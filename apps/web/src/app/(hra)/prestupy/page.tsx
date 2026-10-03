@@ -1,6 +1,6 @@
 "use client";
 
-import { marketValue, formatTermsSummary, termsFromRow } from "@okresni-masina/shared";
+import { marketValue, formatTermsSummary, termsFromRow, sellOnShare } from "@okresni-masina/shared";
 import { MoneyInput } from "@/components/ui/money-input";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
@@ -693,6 +693,9 @@ export default function TransfersPage() {
   const [myListings, setMyListings] = useState<MyListing[]>([]);
   // Offers
   const [incoming, setIncoming] = useState<TransferOffer[]>([]);
+  // Co klub za své hráče sám splácí a komu slíbil procenta. U příchozí nabídky se z toho
+  // počítá, kolik se z ceny hned strhne (doplacení splátek + procenta).
+  const [owedByPlayer, setOwedByPlayer] = useState<Record<string, { remaining: number; pct: number; to: string }>>({});
   const [outgoing, setOutgoing] = useState<TransferOffer[]>([]);
   const [incomingBids, setIncomingBids] = useState<Array<{ id: string; listing_id: string; amount: number; counter_amount: number | null; status: string; on_turn: boolean; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; buyer_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
   const [outgoingBids, setOutgoingBids] = useState<Array<{ id: string; listing_id: string; amount: number; counter_amount: number | null; status: string; on_turn: boolean; asking_price: number; first_name: string; last_name: string; position: string; age: number; overall_rating: number; seller_team_name: string; player_id: string; player_avatar?: Record<string, unknown> | string | null }>>([]);
@@ -763,6 +766,14 @@ export default function TransfersPage() {
       apiFetch<Player[]>(`/api/teams/${teamId}/players`).catch((e) => { console.error("Failed to load players:", e); return []; }),
       apiFetch<PlayerOffer[]>(`/api/teams/${teamId}/player-offers`).catch((e) => { console.error("Failed to load player offers:", e); return []; }),
     ]);
+    apiFetch<{ paying: Array<{ playerId: string; remaining: number; otherTeamName: string }>; sellOnOwed: Array<{ playerId: string; pct: number; otherTeamName: string }> }>(`/api/teams/${teamId}/obligations`)
+      .then((ob) => {
+        const map: Record<string, { remaining: number; pct: number; to: string }> = {};
+        for (const d of ob.paying) map[d.playerId] = { remaining: d.remaining, pct: 0, to: d.otherTeamName };
+        for (const c of ob.sellOnOwed) map[c.playerId] = { ...(map[c.playerId] ?? { remaining: 0, to: c.otherTeamName }), pct: c.pct };
+        setOwedByPlayer(map);
+      })
+      .catch((e) => console.error("Failed to load obligations:", e));
     setFreeAgents(fa.freeAgents);
     setListings(market.listings);
     setMyListings(market.myListings);
@@ -2210,6 +2221,11 @@ export default function TransfersPage() {
                           )}
                         </div>
                         {hasTerms(o) && <div className="text-sm text-muted tabular-nums">{offerTermsNote(o)}</div>}
+                        {o.offer_type !== "loan" && owedByPlayer[o.player_id] && (() => {
+                          const ow = owedByPlayer[o.player_id];
+                          const cut = ow.remaining + sellOnShare(o.counter_amount ?? o.offer_amount, ow.pct);
+                          return <div className="text-sm text-gold-600 tabular-nums">Z ceny se ti hned strhne {formatCZK(cut)} ({[ow.remaining > 0 ? "doplacení splátek" : null, ow.pct > 0 ? `${ow.pct} %` : null].filter(Boolean).join(" a ")} pro {ow.to})</div>;
+                        })()}
                         {o.offered_player_id && (
                           <div className="mt-1 inline-flex items-center gap-1.5 bg-gold-50 border border-gold-300/60 rounded-full px-2.5 py-0.5 text-xs">
                             <span>⇄</span>
@@ -2245,9 +2261,11 @@ export default function TransfersPage() {
                           const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
                           const adminFee = Number((o as any).admin_fee ?? 0);
                           const podminky = o.offer_type === "loan" ? formatCZK(amount) : formatTermsSummary(termsFromRow(o, amount));
-                          const desc = adminFee > 0
+                          const ow = o.offer_type !== "loan" ? owedByPlayer[o.player_id] : undefined;
+                          const srazka = ow ? `\n\nZ ceny se ti hned strhne ${formatCZK(ow.remaining + sellOnShare(amount, ow.pct))} (doplacení splátek a procenta pro ${ow.to}).` : "";
+                          const desc = (adminFee > 0
                             ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)}`
-                            : `Za ${o.first_name} ${o.last_name}: ${podminky}`;
+                            : `Za ${o.first_name} ${o.last_name}: ${podminky}`) + srazka;
                           const ok = await confirm({ title: "Přijmout nabídku?", description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
                           if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();

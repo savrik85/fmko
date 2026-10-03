@@ -14,7 +14,7 @@ import { MessageDialog } from "./components/MessageDialog";
 import { type PlayerInterest } from "./components/InterestBadge";
 import { markSingleOfferSeen } from "@/lib/seen-offers";
 import { triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
-import type { TransferTerms } from "@okresni-masina/shared";
+import { sellOnShare, type TransferTerms } from "@okresni-masina/shared";
 import type { TermsValue } from "@/components/transfers/transfer-terms";
 
 interface OfferDetail {
@@ -74,6 +74,8 @@ export default function OfferDetailPage() {
   // Ze seznamu nabídek: „Protinabídka" u přestupu otevře rovnou dialog tady (umí i splátky a procenta).
   // Adresa se čte až v prohlížeči, stejně jako u useTabParam (stránka se staticky exportuje).
   const [openCounter, setOpenCounter] = useState(false);
+  // Prodávající hráče sám splácí nebo slíbil procenta: z ceny se mu hned strhne zbytek dluhu a procenta.
+  const [owed, setOwed] = useState<{ remaining: number; to: string; pct: number; pctTo: string } | null>(null);
   useEffect(() => {
     setOpenCounter(new URLSearchParams(window.location.search).get("akce") === "protinabidka");
   }, []);
@@ -105,6 +107,18 @@ export default function OfferDetailPage() {
     setLoading(true);
     refresh();
   }, [refresh]);
+
+  const sellerPlayerId = data?.role === "seller" && data.offer.offer_type === "transfer" ? data.offer.player_id : null;
+  useEffect(() => {
+    if (!teamId || !sellerPlayerId) return;
+    apiFetch<{ paying: { remaining: number; otherTeamName: string } | null; sellOnOwed: { pct: number; otherTeamName: string } | null }>(
+      `/api/teams/${teamId}/players/${sellerPlayerId}/obligations`,
+    ).then((r) => setOwed(r.paying || r.sellOnOwed ? {
+      remaining: r.paying?.remaining ?? 0, to: r.paying?.otherTeamName ?? "",
+      pct: r.sellOnOwed?.pct ?? 0, pctTo: r.sellOnOwed?.otherTeamName ?? "",
+    } : null))
+      .catch((e) => console.error("load player obligations for sale:", e));
+  }, [teamId, sellerPlayerId]);
 
   if (loading && !data) {
     return (
@@ -319,6 +333,11 @@ export default function OfferDetailPage() {
             payNow={payNow}
             canAfford={canAfford}
             initialDialog={openCounter && !offer.is_virtual ? "counter" : null}
+            saleDeductions={role === "seller" && owed ? {
+              settle: owed.remaining, settleTo: owed.to,
+              sellOnPct: owed.pct, sellOnTo: owed.pctTo, sellOn: sellOnShare(currentAmount, owed.pct),
+              withSwap: !!offeredPlayer,
+            } : null}
             hideCounter={!!offer.is_virtual}
             rejectWarning={rejectWarning}
             onAccept={accept}
