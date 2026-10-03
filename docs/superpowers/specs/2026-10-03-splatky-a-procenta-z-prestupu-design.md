@@ -81,10 +81,7 @@ Kde to je:
 - **Detail nabídky:** rozpis aktuálního návrhu. Historie vyjednávání u každého kroku ukazuje
   podmínky i to, co se proti předchozímu změnilo.
 - **Seznam nabídek:** jeden řádek souhrnu, např. „45 000 Kč · záloha 13 500 + 3× 10 500 · 15 %".
-- **Finance → Splátky přestupů:** každá dohoda zvlášť, pro kupujícího „splácím" a pro
-  prodávajícího „chodí mi". U každé: hráč, druhý klub, rozpis, průběh (zaplaceno / zbývá,
-  ukazatel 1 ze 3) a další splátka. Nahoře součet: kolik tento týden zaplatím a dostanu
-  a kolik ještě celkem dlužím a kolik mi dluží.
+- **Přestupy → Závazky:** každá dohoda zvlášť (viz „Přestupy: nové uspořádání záložek").
 - **Profil vlastního hráče → karta „Smluvní závazky"** (jen když nějaké jsou):
   - splátky: komu, rozpis, zaplaceno / zbývá, další splátka;
   - procenta z dalšího prodeje: komu a kolik %;
@@ -101,6 +98,30 @@ Kde to je:
   splátka se tam nikdy neukazuje místo ceny. `player_contracts.fee` = celková cena.
 - **Transakce ve Financích:** každá splátka má popisek s hráčem a pořadím („Splátka za Novák 2/3").
 - **Výhled rozpočtu:** budoucí splátky jako výdaj kupujícího a příjem prodávajícího.
+
+## Přestupy: nové uspořádání záložek
+
+| Záložka | Obsah |
+|---|---|
+| Přehled | beze změny |
+| Hledání | beze změny |
+| **Trh** | podzáložky **Za přestupní částku** (dnešní Trh) a **Volní hráči** (dnešní Volní) |
+| Nabídky | beze změny, jen bez sekcí hostování (přesunou se do Závazků) |
+| Můj tým | beze změny |
+| **Závazky** (nová) | všechny smluvní závazky klubu na jednom místě |
+
+**Závazky** mají čtyři části (prázdná část se neukazuje, když není nic, je tam jedna věta):
+
+1. **Splácím** — hráči, které kupuji na splátky: rozpis obchodu, zaplaceno / zbývá, ukazatel
+   (1 ze 3), další splátka. Nahoře součet: tento týden zaplatím, celkem ještě dlužím.
+2. **Dluží mi** — hráči, za které mi chodí splátky: totéž z pohledu prodávajícího. Součet:
+   tento týden dostanu, celkem mi ještě dluží.
+3. **Procenta z dalšího prodeje** — co musím odvést já (hráč, komu, kolik %) a na co mám
+   nárok já (hráč, u koho je, kolik %).
+4. **Hostování** — moji hráči jinde a cizí hráči u mě: komu / od koho, do kdy, poplatek.
+
+Finance si nechají jen součet splátek v přehledu, popisky transakcí a výhled rozpočtu,
+s odkazem „Podrobně v Přestupy → Závazky". Sekce „Splátky přestupů" ve Financích tím odpadá.
 
 ## Kontroly
 
@@ -170,7 +191,8 @@ Kde to je:
   obchodu.
 - Web: formulář nabídky (detail hráče), dialog protinávrhu (detail nabídky i seznam), detail
   nabídky, historie vyjednávání, seznam nabídek, profil hráče (karta „Smluvní závazky"),
-  čistý výnos v prodejních dialozích, Finance (sekce „Splátky přestupů", popisky transakcí, výhled).
+  čistý výnos v prodejních dialozích, Přestupy (záložka Závazky, Trh s podzáložkami),
+  Finance (součet splátek, popisky transakcí, výhled).
 
 ## Mimo rozsah
 
