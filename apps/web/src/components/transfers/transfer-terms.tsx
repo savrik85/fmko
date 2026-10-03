@@ -6,9 +6,10 @@
  * v jednání, aby obě strany viděly totéž: kolik se platí hned, kolik týdně a kolik celkem.
  */
 
+import { useEffect } from "react";
 import {
-  UPFRONT_PCT_MIN, INSTALLMENTS_MIN, INSTALLMENTS_MAX, SELL_ON_PCT_MAX, SELL_ON_PCT_STEP,
-  transferSchedule, type TransferTerms,
+  UPFRONT_PCT_MIN, INSTALLMENTS_MIN, INSTALLMENTS_MAX, SELL_ON_PCT_MAX, SELL_ON_PCT_STEP, INSTALLMENT_MIN_AMOUNT,
+  maxInstallmentsFor, minAmountForInstallments, transferSchedule, type TransferTerms,
 } from "@okresni-masina/shared";
 
 export type TermsValue = Omit<TransferTerms, "amount">;
@@ -49,8 +50,43 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card",
   const s = styles[variant];
   const onInstallments = value.installments > 0;
   const total = amount ?? 0;
+  const hasAmount = total > 0;
   const upfront = Math.round((total * value.upfrontPct) / 100);
   const plan = transferSchedule({ amount: total, ...value });
+  // Počet splátek je omezený tak, aby splátka neklesla pod minimum (shodně se serverem).
+  const maxN = hasAmount ? maxInstallmentsFor(total, value.upfrontPct) : 0;
+  const installmentsPossible = hasAmount && maxInstallmentsFor(total, UPFRONT_PCT_MIN) > 0;
+
+  // Cena nebo záloha se změnila a nastavených splátek je víc, než kolik cena unese: srovnat.
+  // Když na splátky při téhle ceně vůbec nejde, vrátit jednorázovou platbu.
+  useEffect(() => {
+    if (!onInstallments || !hasAmount) return;
+    if (maxN === 0) {
+      if (installmentsPossible) onChange({ ...value, upfrontPct: UPFRONT_PCT_MIN, installments: maxInstallmentsFor(total, UPFRONT_PCT_MIN) });
+      else onChange({ ...value, upfrontPct: 100, installments: 0 });
+    } else if (value.installments > maxN) {
+      onChange({ ...value, installments: maxN });
+    }
+  }, [onInstallments, hasAmount, maxN, installmentsPossible, total, value, onChange]);
+
+  const startInstallments = () => {
+    const up = DEFAULT_INSTALLMENT_TERMS.upfrontPct;
+    const max = maxInstallmentsFor(total, up) || maxInstallmentsFor(total, UPFRONT_PCT_MIN);
+    onChange({
+      ...value,
+      upfrontPct: maxInstallmentsFor(total, up) ? up : UPFRONT_PCT_MIN,
+      installments: Math.min(DEFAULT_INSTALLMENT_TERMS.installments, max),
+    });
+  };
+
+  if (!hasAmount) {
+    return (
+      <div className={`rounded-xl px-3 py-2.5 text-sm ${s.box}`}>
+        <span className={`font-heading font-bold ${s.text}`}>Nejdřív zadej cenu.</span>{" "}
+        <span className={s.sub}>Pak tu nastavíš, jestli se platí najednou, nebo na splátky{allowSellOn ? ", a procenta z příštího přestupu" : ""}.</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -61,19 +97,24 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card",
             className={`px-4 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${!onInstallments ? s.chipOn : s.chip}`}>
             Jednorázově
           </button>
-          <button type="button" onClick={() => onChange({ ...value, ...DEFAULT_INSTALLMENT_TERMS })}
-            className={`px-4 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${onInstallments ? s.chipOn : s.chip}`}>
+          <button type="button" onClick={startInstallments} disabled={!installmentsPossible}
+            className={`px-4 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors disabled:opacity-40 ${onInstallments ? s.chipOn : s.chip}`}>
             Na splátky
           </button>
         </div>
+        {!installmentsPossible && (
+          <div className={`text-sm mt-1 ${s.sub}`}>
+            Na splátky jde až od ceny {kc(minAmountForInstallments(UPFRONT_PCT_MIN))}, splátka musí být aspoň {kc(INSTALLMENT_MIN_AMOUNT)}.
+          </div>
+        )}
       </div>
 
-      {onInstallments && (
+      {onInstallments && maxN > 0 && (
         <>
           <label className="block">
             <span className={`flex justify-between text-sm ${s.label}`}>
               <span className="font-heading uppercase">Záloha</span>
-              <span className={`font-heading font-bold tabular-nums ${s.text}`}>{value.upfrontPct} %{total > 0 ? ` · ${kc(upfront)}` : ""}</span>
+              <span className={`font-heading font-bold tabular-nums ${s.text}`}>{value.upfrontPct} % · {kc(upfront)}</span>
             </span>
             <input type="range" min={UPFRONT_PCT_MIN} max={90} step={5} value={value.upfrontPct}
               onChange={(e) => onChange({ ...value, upfrontPct: Number(e.target.value) })}
@@ -83,21 +124,25 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card",
             <span className={`flex justify-between text-sm ${s.label}`}>
               <span className="font-heading uppercase">Počet týdenních splátek</span>
               <span className={`font-heading font-bold tabular-nums ${s.text}`}>
-                {value.installments}×{total > 0 ? ` po ${kc(plan.installmentAmount)}` : ""}
+                {value.installments}× po {kc(plan.installmentAmount)}
               </span>
             </span>
-            <input type="range" min={INSTALLMENTS_MIN} max={INSTALLMENTS_MAX} step={1} value={value.installments}
+            <input type="range" min={INSTALLMENTS_MIN} max={Math.max(INSTALLMENTS_MIN, maxN)} step={1} value={value.installments}
+              disabled={maxN <= INSTALLMENTS_MIN}
               onChange={(e) => onChange({ ...value, installments: Number(e.target.value) })}
               className={`w-full mt-1 ${s.accent}`} />
+            {maxN < INSTALLMENTS_MAX && (
+              <span className={`block text-sm mt-0.5 ${s.sub}`}>
+                Při téhle ceně nejvýš {maxN} splátek, splátka musí být aspoň {kc(INSTALLMENT_MIN_AMOUNT)}.
+              </span>
+            )}
           </label>
-          {total > 0 && (
-            <div className={`rounded-xl px-3 py-2 text-sm tabular-nums ${s.box}`}>
-              <span className={s.sub}>Celkem </span>
-              <span className={`font-heading font-bold ${s.text}`}>{kc(total)}</span>
-              <span className={s.sub}> = {kc(plan.upfront)} hned + {plan.installments}× {kc(plan.installmentAmount)}</span>
-              <span className={`block ${s.sub}`}>Poslední splátka za {plan.installments} {plan.installments < 5 ? "týdny" : "týdnů"}.</span>
-            </div>
-          )}
+          <div className={`rounded-xl px-3 py-2 text-sm tabular-nums ${s.box}`}>
+            <span className={s.sub}>Celkem </span>
+            <span className={`font-heading font-bold ${s.text}`}>{kc(total)}</span>
+            <span className={s.sub}> = {kc(plan.upfront)} hned + {plan.installments}× {kc(plan.installmentAmount)}</span>
+            <span className={`block ${s.sub}`}>Poslední splátka za {plan.installments} {plan.installments < 5 ? "týdny" : "týdnů"}.</span>
+          </div>
         </>
       )}
 
@@ -112,7 +157,7 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card",
         <span className={`block text-sm mt-0.5 ${s.sub}`}>Až kupující hráče prodá dál, prodávající dostane tolik procent z ceny.</span>
       </label>}
 
-      {total > 0 && <TermsBreakdown terms={{ amount: total, ...value }} variant={variant} />}
+      <TermsBreakdown terms={{ amount: total, ...value }} variant={variant} />
     </div>
   );
 }

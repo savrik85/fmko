@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { transferTermsError, transferSchedule, sellOnShare, formatTermsSummary, termsFromRow } from "./transfer-terms";
+import { transferTermsError, transferSchedule, sellOnShare, formatTermsSummary, termsFromRow, maxInstallmentsFor, minAmountForInstallments } from "./transfer-terms";
 
 const nb = (s: string) => s.replace(/ /g, " ");
 
@@ -27,6 +27,17 @@ describe("podmínky přestupu", () => {
     [{ amount: 1000, upfrontPct: 100, installments: 0, sellOnPct: 12 }],
   ])("neplatné podmínky odmítne: %j", (t) => {
     expect(transferTermsError(t)).not.toBeNull();
+  });
+
+  it("splátka nesmí klesnout pod 500 Kč", () => {
+    expect(transferTermsError({ amount: 2, upfrontPct: 30, installments: 11, sellOnPct: 0 })).toMatch(/^Na splátky jde až od ceny 1.500 Kč\.$/);
+    expect(transferTermsError({ amount: 7_300, upfrontPct: 30, installments: 10, sellOnPct: 0 })).toBeNull(); // 511 Kč
+    expect(transferTermsError({ amount: 7_300, upfrontPct: 30, installments: 11, sellOnPct: 0 }))
+      .toBe("Splátka musí být aspoň 500 Kč. Při téhle ceně a záloze jde nejvýš 10 splátek.");
+    expect(maxInstallmentsFor(60_000, 30)).toBe(20);
+    expect(maxInstallmentsFor(1_400, 30)).toBe(0);
+    expect(minAmountForInstallments(30)).toBe(1_500);
+    expect(maxInstallmentsFor(minAmountForInstallments(30), 30)).toBe(2);
   });
 
   it("procenta z prodeje zaokrouhlí na koruny", () => {
