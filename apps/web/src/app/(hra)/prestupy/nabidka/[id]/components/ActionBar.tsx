@@ -10,7 +10,7 @@ type DialogKind = "accept" | "counter" | "reject" | null;
 export function ActionBar({
   onAccept, onCounter, onReject,
   currentAmount, defaultCounter, terms, termsNegotiable, adminFee, payNow,
-  canAfford, waiting, role, hideCounter, rejectWarning, initialDialog = null,
+  canAfford, waiting, role, hideCounter, rejectWarning, initialDialog = null, saleDeductions = null,
 }: {
   onAccept: (message: string) => Promise<void>;
   onCounter: (amount: number, message: string, terms: TermsValue | null) => Promise<void>;
@@ -30,6 +30,8 @@ export function ActionBar({
   hideCounter?: boolean; // virtuální klub o ceně nejedná
   rejectWarning?: string | null; // varování, když hráč o přestup stojí
   initialDialog?: DialogKind;
+  /** Prodávající za hráče sám splácí nebo slíbil procenta: co se mu z ceny hned strhne. */
+  saleDeductions?: { settle: number; settleTo: string; sellOnPct: number; sellOnTo: string; sellOn: number; withSwap: boolean } | null;
 }) {
   const [dialog, setDialog] = useState<DialogKind>(initialDialog);
 
@@ -76,6 +78,24 @@ export function ActionBar({
             ? `Přijetím zaplatíš hned ${payNow.toLocaleString("cs")} Kč${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`
             : `Kupující při přijetí pošle hned ${(payNow - adminFee).toLocaleString("cs")} Kč${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`}
         </div>
+        {saleDeductions && (
+          <div className="mx-auto w-full max-w-sm rounded-xl bg-gold-50 border border-gold-300/60 px-3 py-2 text-sm tabular-nums">
+            <div className="font-heading font-bold mb-1">Z ceny se ti hned strhne</div>
+            {saleDeductions.settle > 0 && (
+              <div className="flex justify-between gap-3"><span>Doplacení splátek pro {saleDeductions.settleTo}</span><span className="font-heading font-bold">{saleDeductions.settle.toLocaleString("cs")} Kč</span></div>
+            )}
+            {saleDeductions.sellOnPct > 0 && (
+              <div className="flex justify-between gap-3"><span>{saleDeductions.sellOnPct} % pro {saleDeductions.sellOnTo}</span><span className="font-heading font-bold">{saleDeductions.sellOn.toLocaleString("cs")} Kč{saleDeductions.withSwap ? " a víc" : ""}</span></div>
+            )}
+            <div className="flex justify-between gap-3 border-t border-gold-300/60 mt-1 pt-1">
+              <span>Zůstane ti z ceny</span>
+              <span className="font-heading font-bold">{(currentAmount - saleDeductions.settle - saleDeductions.sellOn).toLocaleString("cs")} Kč</span>
+            </div>
+            {saleDeductions.withSwap && (
+              <div className="text-muted mt-1">U výměny se procenta počítají i z tržní ceny hráče, kterého dostaneš.</div>
+            )}
+          </div>
+        )}
         {role === "buyer" && !canAfford && (
           <div className="text-center text-sm text-red-600 italic">
             {terms.installments > 0 ? "Nemáš dost peněz ani na zálohu" : "Nemáš dostatek prostředků na přijetí této nabídky"}
