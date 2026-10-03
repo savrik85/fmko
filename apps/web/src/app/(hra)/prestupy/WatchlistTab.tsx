@@ -27,13 +27,19 @@ export interface WatchedPlayer {
   recentStats: { matches: number; goals: number; assists: number; avgRating: number };
 }
 
-export function WatchlistTab({ teamId, color, onColorText, ratingColor }: {
+export function WatchlistTab({ teamId, onCount, color, onColorText, ratingColor }: {
   teamId: string;
+  /** Počet sledovaných pro odznak v podzáložce. */
+  onCount?: (count: number) => void;
   color: string;
   onColorText: string;
   ratingColor: string;
 }) {
   const [players, setPlayers] = useState<WatchedPlayer[] | null>(null);
+
+  useEffect(() => {
+    if (players) onCount?.(players.length);
+  }, [players, onCount]);
 
   useEffect(() => {
     apiFetch<{ players: WatchedPlayer[] }>(`/api/teams/${teamId}/watchlist`)

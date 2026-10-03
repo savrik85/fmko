@@ -4,6 +4,8 @@ import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { useState } from "react";
 import { formatTermsSummary, type TransferTerms } from "@okresni-masina/shared";
 import { TransferTermsFields, type TermsValue } from "@/components/transfers/transfer-terms";
+import { SheetDialog } from "@/components/ui";
+import { MessageDialog } from "./MessageDialog";
 
 type DialogKind = "accept" | "counter" | "reject" | null;
 
@@ -106,7 +108,7 @@ export function ActionBar({
       {dialog === "accept" && (
         <MessageDialog
           title="Přijmout nabídku?"
-          description={`${currentAmount > 0 ? formatTermsSummary(terms) : "Zdarma"}. Krátká zpráva protistraně (volitelné).`}
+          description={currentAmount > 0 ? formatTermsSummary(terms) : "Zdarma"}
           confirmLabel="Přijmout"
           confirmColor="pitch"
           onCancel={() => setDialog(null)}
@@ -116,7 +118,7 @@ export function ActionBar({
       {dialog === "reject" && (
         <MessageDialog
           title="Odmítnout nabídku?"
-          description={rejectWarning ? `${rejectWarning} Krátká zpráva protistraně (volitelné).` : "Krátká zpráva protistraně (volitelné)"}
+          description={rejectWarning ?? ""}
           confirmLabel="Odmítnout"
           confirmColor="red"
           onCancel={() => setDialog(null)}
@@ -135,57 +137,6 @@ export function ActionBar({
   );
 }
 
-function MessageDialog({ title, description, confirmLabel, confirmColor, onCancel, onConfirm }: {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  confirmColor: "pitch" | "red" | "gold";
-  onCancel: () => void;
-  onConfirm: (message: string) => Promise<void>;
-}) {
-  const [msg, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);
-  const colorCls = confirmColor === "red"
-    ? "text-card-red hover:bg-red-50"
-    : confirmColor === "gold"
-      ? "text-gold-600 hover:bg-gold-50"
-      : "text-pitch-500 hover:bg-pitch-50";
-
-  return (
-    // Kliknutí vedle dialog nezavírá — rozepsaná částka nebo zpráva by se ztratila. Zavírá jen Zrušit.
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="p-5">
-          <h3 className="font-heading font-bold text-lg">{title}</h3>
-          <p className="text-sm text-muted mt-1">{description}</p>
-          <textarea
-            value={msg}
-            onChange={(e) => setMsg(e.target.value.slice(0, 200))}
-            rows={3}
-            placeholder="např. Máme zájem, ale za tuto cenu..."
-            className="w-full mt-3 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500 resize-none"
-          />
-          <div className="text-xs text-muted text-right mt-1 tabular-nums">{msg.length}/200</div>
-        </div>
-        <div className="flex border-t border-gray-100">
-          <button onClick={onCancel} disabled={loading} className="flex-1 py-3.5 text-sm font-heading font-bold text-muted hover:bg-gray-50 transition-colors">
-            Zrušit
-          </button>
-          <div className="w-px bg-gray-100" />
-          <button
-            disabled={loading}
-            onClick={async () => { setLoading(true); try { await onConfirm(msg.trim()); } finally { setLoading(false); } }}
-            className={`flex-1 py-3.5 text-sm font-heading font-bold transition-colors disabled:opacity-50 ${colorCls}`}
-          >
-            {loading ? "..." : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function CounterDialog({ initial, initialTerms, onCancel, onConfirm }: {
   initial: number;
   /** null = podmínky se nevyjednávají (hostování). */
@@ -196,72 +147,48 @@ function CounterDialog({ initial, initialTerms, onCancel, onConfirm }: {
   const [v, setV] = useState<number | null>(initial);
   const [terms, setTerms] = useState<TermsValue | null>(initialTerms);
   const [msg, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);
 
   return (
-    // Kliknutí vedle dialog nezavírá — rozepsaná částka nebo zpráva by se ztratila. Zavírá jen Zrušit.
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="p-5 overflow-y-auto">
-          <h3 className="font-heading font-bold text-lg">Protinabídka</h3>
-          <div className="mt-4">
-            <label className="text-xs text-muted font-heading uppercase">Nová částka (Kč)</label>
-            <MoneyInput
-              value={v}
-              onChange={setV}
-              autoFocus
-              className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
-            />
-            <div className="flex justify-center gap-2 mt-2">
-              {[0.8, 1, 1.2, 1.5].map((mul) => Math.round((initial * mul) / 100) * 100).map((preset, i) => (
-                <button
-                  key={i}
-                  onClick={() => setV(preset)}
-                  className={`px-2.5 py-1 rounded text-xs font-heading font-bold tabular-nums transition-colors ${
-                    v === preset ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
-                  }`}
-                >
-                  {formatAmount(preset)}
-                </button>
-              ))}
-            </div>
-          </div>
-          {terms && (
-            <div className="mt-4">
-              <TransferTermsFields amount={v} value={terms} onChange={setTerms} />
-            </div>
-          )}
-          <div className="mt-3">
-            <label className="text-xs text-muted font-heading uppercase">Zpráva (volitelné)</label>
-            <textarea
-              value={msg}
-              onChange={(e) => setMsg(e.target.value.slice(0, 200))}
-              rows={2}
-              placeholder="např. Klub přistupuje vstřícně..."
-              className="w-full mt-1 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/30 focus:border-gold-500 resize-none"
-            />
-            <div className="text-xs text-muted text-right mt-0.5 tabular-nums">{msg.length}/200</div>
-          </div>
-        </div>
-        <div className="flex border-t border-gray-100">
-          <button onClick={onCancel} disabled={loading} className="flex-1 py-3.5 text-sm font-heading font-bold text-muted hover:bg-gray-50 transition-colors">
-            Zrušit
-          </button>
-          <div className="w-px bg-gray-100" />
+    <SheetDialog open title="Protinabídka" confirmLabel="Poslat" variant="gold" confirmDisabled={!v}
+      onCancel={onCancel}
+      onConfirm={async () => { if (v) await onConfirm(v, msg.trim(), terms); }}>
+      <label className="text-sm text-muted font-heading uppercase">Nová částka (Kč)</label>
+      <MoneyInput
+        value={v}
+        onChange={setV}
+        autoFocus
+        className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
+      />
+      <div className="flex justify-center gap-2 mt-2">
+        {[0.8, 1, 1.2, 1.5].map((mul) => Math.round((initial * mul) / 100) * 100).map((preset, i) => (
           <button
-            disabled={loading || !v}
-            onClick={async () => {
-              if (!v) return;
-              setLoading(true);
-              try { await onConfirm(v, msg.trim(), terms); } finally { setLoading(false); }
-            }}
-            className="flex-1 py-3.5 text-sm font-heading font-bold text-gold-600 hover:bg-gold-50 transition-colors disabled:opacity-50"
+            key={i}
+            type="button"
+            onClick={() => setV(preset)}
+            className={`px-2.5 py-1 rounded text-sm font-heading font-bold tabular-nums transition-colors ${
+              v === preset ? "bg-pitch-500 text-white" : "bg-black/5 text-muted hover:bg-black/10"
+            }`}
           >
-            {loading ? "Posílám..." : "Poslat"}
+            {formatAmount(preset)}
           </button>
-        </div>
+        ))}
       </div>
-    </div>
+      {terms && (
+        <div className="mt-4">
+          <TransferTermsFields amount={v} value={terms} onChange={setTerms} />
+        </div>
+      )}
+      <div className="mt-3">
+        <label className="text-sm text-muted font-heading uppercase">Zpráva (volitelné)</label>
+        <textarea
+          value={msg}
+          onChange={(e) => setMsg(e.target.value.slice(0, 200))}
+          rows={2}
+          placeholder="např. Klub přistupuje vstřícně..."
+          className="w-full mt-1 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/30 focus:border-gold-500 resize-none"
+        />
+        <div className="text-sm text-muted text-right mt-0.5 tabular-nums">{msg.length}/200</div>
+      </div>
+    </SheetDialog>
   );
 }
