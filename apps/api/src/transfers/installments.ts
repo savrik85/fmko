@@ -19,18 +19,27 @@ interface ActiveDeal {
   installments_total: number;
   installments_paid: number;
   remaining: number;
+  created_game_date: string | null;
+  last_paid_game_date: string | null;
 }
 
-/** Pondělní splátky: kupujícímu se strhne jedna splátka každé aktivní dohody. Vrací počet zaplacených. */
+/**
+ * Pondělní splátky: kupujícímu se strhne jedna splátka každé aktivní dohody. Vrací počet zaplacených.
+ * Za jeden herní den nejvýš jedna splátka dohody: když týden zpracovaly dva běhy (incident
+ * 2026-09-21 u zápasů), druhý by jinak strhl hned i další splátku. Dohoda uzavřená týž den
+ * se platí až příští pondělí, záloha za tenhle týden už odešla.
+ */
 export async function processTransferInstallments(db: D1Database, buyerClubTeamId: string, gameDate: string): Promise<number> {
   const deals = await db.prepare(
-    `SELECT id, seller_team_id, player_name, installment_amount, installments_total, installments_paid, remaining
+    `SELECT id, seller_team_id, player_name, installment_amount, installments_total, installments_paid, remaining,
+            created_game_date, last_paid_game_date
        FROM transfer_installments WHERE buyer_team_id = ? AND status = 'active'`,
   ).bind(buyerClubTeamId).all<ActiveDeal>()
     .catch((e) => { logger.warn({ module: "installments" }, "load active deals", e); return { results: [] as ActiveDeal[] }; });
 
   let paid = 0;
   for (const d of deals.results) {
+    if (d.last_paid_game_date === gameDate || d.created_game_date === gameDate) continue;
     const n = d.installments_paid + 1;
     const isLast = n >= d.installments_total;
     const pay = isLast ? d.remaining : Math.min(d.remaining, d.installment_amount);
@@ -38,9 +47,9 @@ export async function processTransferInstallments(db: D1Database, buyerClubTeamI
     const left = d.remaining - pay;
 
     const claim = await db.prepare(
-      `UPDATE transfer_installments SET installments_paid = ?, remaining = ?, status = ?, closed_at = ?
-        WHERE id = ? AND installments_paid = ? AND status = 'active'`,
-    ).bind(n, left, left <= 0 ? "paid" : "active", left <= 0 ? new Date().toISOString() : null, d.id, d.installments_paid).run()
+      `UPDATE transfer_installments SET installments_paid = ?, remaining = ?, status = ?, closed_at = ?, last_paid_game_date = ?
+        WHERE id = ? AND installments_paid = ? AND status = 'active' AND COALESCE(last_paid_game_date, '') != ?`,
+    ).bind(n, left, left <= 0 ? "paid" : "active", left <= 0 ? new Date().toISOString() : null, gameDate, d.id, d.installments_paid, gameDate).run()
       .catch((e) => { logger.error({ module: "installments" }, `claim installment ${d.id}`, e); return null; });
     if (!claim || (claim.meta?.changes ?? 0) === 0) continue;
 

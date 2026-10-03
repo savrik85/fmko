@@ -187,7 +187,7 @@ beforeAll(async () => {
       buyer_team_id TEXT NOT NULL, seller_team_id TEXT NOT NULL, total_amount INTEGER NOT NULL,
       upfront_amount INTEGER NOT NULL, installment_amount INTEGER NOT NULL, installments_total INTEGER NOT NULL,
       installments_paid INTEGER NOT NULL DEFAULT 0, remaining INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'active', created_game_date TEXT,
+      status TEXT NOT NULL DEFAULT 'active', created_game_date TEXT, last_paid_game_date TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), closed_at TEXT
     );
 

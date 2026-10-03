@@ -3,6 +3,7 @@
  */
 
 import { createMiddleware } from "hono/factory";
+import type { Context } from "hono";
 import type { Bindings } from "../index";
 import { getSession, getTokenFromRequest, type Session } from "./session";
 
@@ -72,3 +73,20 @@ export const requireAdmin = createMiddleware<{ Bindings: Bindings }>(async (c, n
   c.set("session" as never, session as never);
   return next();
 });
+/**
+ * Citlivé GETy (nabídky, závazky) musí ověřit vlastnictví explicitně — obecný
+ * `requireTeamOwnership` GET propouští. Vrací odpověď s chybou, nebo null.
+ */
+export async function requireOwnedTeamRead(
+  c: Context<{ Bindings: Bindings }>,
+  teamId: string,
+): Promise<Response | null> {
+  const token = getTokenFromRequest(c);
+  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
+  const session = await getSession(c.env.SESSION_KV, token);
+  if (!session) return c.json({ error: "Neplatná session" }, 401);
+  const ownTeam = await c.env.DB.prepare(
+    "SELECT id FROM teams WHERE id = ? AND user_id = ?",
+  ).bind(teamId, session.userId).first();
+  return ownTeam ? null : c.json({ error: "Přístup odepřen" }, 403);
+}

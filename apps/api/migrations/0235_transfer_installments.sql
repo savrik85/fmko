@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS transfer_installments (
   remaining INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paid','settled')),
   created_game_date TEXT,
+  -- Herní den poslední splátky: dva běhy téhož pondělí nesmí strhnout dvě splátky.
+  last_paid_game_date TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   closed_at TEXT
 );

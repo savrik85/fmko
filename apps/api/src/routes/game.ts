@@ -14,11 +14,11 @@ import { validateBench, parseStoredBench, benchColumn } from "../lib/lineup-benc
 import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
 import { mustSeason } from "../lib/season";
 import { getSession, getTokenFromRequest } from "../auth/session";
-import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
+import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
-import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
+import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, marketValue, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
 
 /**
  * Povrchy areálu, které má klub ZAPLACENÉ.
@@ -68,21 +68,6 @@ gameRouter.use("/admin/*", requireAdmin);
 gameRouter.use("/game/*", requireAdmin);
 gameRouter.use("/leagues/:leagueId/generate-schedule", requireAdmin);
 // ────────────────────────────────────────────────────────────────────────────
-
-/** Citlivé GETy nabídek musí ověřit vlastnictví explicitně; obecný middleware GET propouští. */
-async function requireOwnedTeamRead(
-  c: Context<{ Bindings: Bindings }>,
-  teamId: string,
-): Promise<Response | null> {
-  const token = getTokenFromRequest(c);
-  if (!token) return c.json({ error: "Nepřihlášen" }, 401);
-  const session = await getSession(c.env.SESSION_KV, token);
-  if (!session) return c.json({ error: "Neplatná session" }, 401);
-  const ownTeam = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE id = ? AND user_id = ?",
-  ).bind(teamId, session.userId).first();
-  return ownTeam ? null : c.json({ error: "Přístup odepřen" }, 403);
-}
 
 /** Nejvýš MAX_ACTIVE_INSTALLMENT_DEALS rozjetých splátkových přestupů na kupujícího. */
 async function installmentLimitError(db: D1Database, buyerClubTeamId: string): Promise<string | null> {
@@ -4990,6 +4975,15 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   if (player.loan_from_team_id) {
     return c.json({ error: "Hostující hráč nemůže být propuštěn, patří jinému klubu" }, 400);
   }
+  // Propuštěním by procenta z příštího přestupu propadla a klub by si hráče mohl hned
+  // podepsat zpátky jako volného a prodat ho bez nich. Hráče s doložkou jde jen prodat.
+  const sellOnClause = await c.env.DB.prepare(
+    `SELECT c.pct, t.name AS beneficiary_name FROM sell_on_clauses c LEFT JOIN teams t ON t.id = c.beneficiary_team_id
+      WHERE c.player_id = ? AND c.status = 'active' LIMIT 1`,
+  ).bind(playerId).first<{ pct: number; beneficiary_name: string | null }>();
+  if (sellOnClause) {
+    return c.json({ error: `${player.first_name} ${player.last_name} má doložku: ${sellOnClause.pct} % z příštího přestupu pro ${sellOnClause.beneficiary_name ?? "bývalý klub"}. Propustit ho nejde, můžeš ho prodat.` }, 400);
+  }
 
   // Idempotency: zamezit duplicitám při double-click
   const existingFa = await c.env.DB.prepare(
@@ -5951,6 +5945,13 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
       .bind(crypto.randomUUID(), sellerTeamId, amount, (seller?.budget ?? 0) + amount, `Prodej: ${playerName}`, gameDate),
   ]).catch((e) => logger.warn({ module: "game" }, "log bid-accept transactions", e));
 
+  // Stejně jako u nabídek: zbytek splátek za hráče a procenta z příštího přestupu jdou hned.
+  // Dohody a doložky se vedou na klub (áčko), inzerát může patřit dorostu.
+  const sellerClubTeamId = await resolveClubTeamId(c.env.DB, sellerTeamId) ?? sellerTeamId;
+  const { settleOnResale } = await import("../transfers/installments");
+  await settleOnResale(c.env.DB, { playerId, ownerClubTeamId: sellerClubTeamId, saleAmount: amount, saleOfferId: bidId, gameDate })
+    .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při přijetí bidu", e));
+
   await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
 
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
@@ -6622,7 +6623,8 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
 
   const events = await c.env.DB.prepare(
     `SELECT e.id, e.event_type, COALESCE(t.parent_team_id, e.team_id) AS team_id,
-            e.amount, e.message, e.created_at, COALESCE(parent.name, t.name) AS team_name
+            e.amount, e.message, e.created_at, COALESCE(parent.name, t.name) AS team_name,
+            e.upfront_pct, e.installments, e.sell_on_pct
      FROM transfer_offer_events e
      JOIN teams t ON e.team_id = t.id
      LEFT JOIN teams parent ON parent.id = t.parent_team_id
@@ -6680,6 +6682,9 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
       offered_player_id: offer.offered_player_id,
       player_interest: offer.player_interest ?? null,
       is_virtual: isVirtualOffer,
+      upfront_pct: offer.upfront_pct ?? 100,
+      installments: offer.installments ?? 0,
+      sell_on_pct: offer.sell_on_pct ?? 0,
     },
     role,
     on_turn: onTurn,
@@ -6691,6 +6696,9 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     toManager,
     events: events.results,
     currentAmount,
+    // Podmínky aktuálního návrhu a co kupující platí hned (záloha + poplatek).
+    terms: termsFromRow(offer as { upfront_pct?: number | null; installments?: number | null; sell_on_pct?: number | null }, currentAmount),
+    payNow: (offer.offer_type === "loan" ? currentAmount : transferSchedule(termsFromRow(offer as { upfront_pct?: number | null; installments?: number | null; sell_on_pct?: number | null }, currentAmount)).upfront) + adminFee,
     crossLeague,
     adminFee,
     playerInterest,
@@ -6730,12 +6738,15 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const swapPlayerId = (offer.offered_player_id as string | null) ?? null;
   // Jméno vyměněného hráče se čte teď, dokud ještě sedí na původní soupisce —
   // po dokončení výměny už je jinde a do zprávy by se dohledávalo hůř.
-  const swapPlayerName = swapPlayerId
-    ? await c.env.DB.prepare("SELECT first_name, last_name FROM players WHERE id = ?")
-        .bind(swapPlayerId).first<{ first_name: string; last_name: string }>()
-        .then((r) => (r ? `${r.first_name} ${r.last_name}` : null))
+  const swapPlayerRow = swapPlayerId
+    ? await c.env.DB.prepare("SELECT first_name, last_name, overall_rating, age, position FROM players WHERE id = ?")
+        .bind(swapPlayerId).first<{ first_name: string; last_name: string; overall_rating: number; age: number; position: string }>()
         .catch((e) => { logger.warn({ module: "game" }, "jméno vyměněného hráče", e); return null; })
     : null;
+  const swapPlayerName = swapPlayerRow ? `${swapPlayerRow.first_name} ${swapPlayerRow.last_name}` : null;
+  // Procenta z příštího přestupu se u výměny počítají z doplatku i z tržní ceny hráče, který
+  // jde opačně. Jinak by šlo doložku obejít prodejem za hráče a symbolický doplatek.
+  const saleValueForSellOn = amount + (swapPlayerRow ? marketValue(swapPlayerRow.overall_rating, swapPlayerRow.age, swapPlayerRow.position) : 0);
   const targetSquad = ((offer.target_squad as string) ?? "senior") === "u21" ? "u21" : "senior";
 
   // Nabídka odkazuje na konkrétní soupisku, finance ale patří mateřskému klubu.
@@ -7212,7 +7223,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 
     // Prodávající hráče sám splácel nebo slíbil procenta: zbytek dluhu a procenta z ceny jdou hned.
     const { settleOnResale } = await import("../transfers/installments");
-    await settleOnResale(c.env.DB, { playerId, ownerClubTeamId: sellerTeamId, saleAmount: amount, saleOfferId: offerId, gameDate })
+    await settleOnResale(c.env.DB, { playerId, ownerClubTeamId: sellerTeamId, saleAmount: saleValueForSellOn, saleOfferId: offerId, gameDate })
       .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při dalším prodeji", e));
 
     const { createTransferNews } = await import("../transfers/transfer-news");
