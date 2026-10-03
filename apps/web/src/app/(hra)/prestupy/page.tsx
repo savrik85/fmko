@@ -1774,7 +1774,7 @@ export default function TransfersPage() {
                             return null;
                           });
                           if (errMessage) {
-                            await confirm({ title: "Chyba", description: errMessage, confirmLabel: "OK" });
+                            showError("Podpis se nezdařil", errMessage);
                           } else if (res) {
                             if (res.success && res.player) {
                               setRevealPlayer(res.player);
@@ -1894,7 +1894,7 @@ export default function TransfersPage() {
                                 }
                                 setPriceDialog(null);
                                 if (errorMsg) {
-                                  await confirm({ title: "Chyba", description: errorMsg });
+                                  showError("Nabídka se nezdařila", errorMsg);
                                 } else if (res?.rejected) {
                                   await confirm({ title: "Odmítl přestup", description: res.explanation ?? "Hráč nemá zájem." });
                                 } else if (res?.autoAccepted && res?.player) {
