@@ -36,6 +36,30 @@ describe("pondělní splátky", () => {
     expect(db.pocet(/INSERT INTO transactions/)).toBe(0);
   });
 
+  it("druhý běh téhož pondělí ani dohoda uzavřená ten den nic nestrhnou", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM transfer_installments WHERE buyer_team_id/, all: [
+        deal({ last_paid_game_date: "2026-10-12" }),
+        deal({ id: "d2", created_game_date: "2026-10-12" }),
+      ] },
+    ]);
+    expect(await processTransferInstallments(jakoD1(db), "B", "2026-10-12")).toBe(0);
+    expect(db.pocet(/UPDATE transfer_installments/)).toBe(0);
+    expect(db.pocet(/INSERT INTO transactions/)).toBe(0);
+  });
+
+  it("splátku zabírá jen řádek, který ten den ještě neplatil", async () => {
+    const db = new FalesnaD1([
+      { sql: /FROM transfer_installments WHERE buyer_team_id/, all: [deal({ last_paid_game_date: "2026-10-05" })] },
+      { sql: /UPDATE transfer_installments SET installments_paid/, changes: 1 },
+      { sql: /UPDATE teams SET budget = budget \+ \?/, first: { budget: 0 } },
+    ]);
+    await processTransferInstallments(jakoD1(db), "B", "2026-10-12");
+    const upd = db.dotazy.find((d) => /UPDATE transfer_installments SET installments_paid/.test(d.sql))!;
+    expect(upd.sql).toMatch(/COALESCE\(last_paid_game_date, ''\) != \?/);
+    expect(upd.params).toEqual([2, 21_000, "active", null, "2026-10-12", "d1", 1, "2026-10-12"]);
+  });
+
   it("poslední splátka doplatí přesný zbytek a dohodu uzavře", async () => {
     const db = new FalesnaD1([
       { sql: /FROM transfer_installments WHERE buyer_team_id/, all: [deal({ installments_paid: 3, remaining: 10_501 })] },

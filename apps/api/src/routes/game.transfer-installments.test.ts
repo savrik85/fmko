@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Miniflare } from "miniflare";
 import type { Bindings } from "../index";
+import { marketValue } from "@okresni-masina/shared";
 
 const sideEffects = vi.hoisted(() => ({
   attachNewcomerRelations: vi.fn(async () => 0),
@@ -42,6 +43,7 @@ vi.mock("../transfers/player-interest", () => ({
 }));
 
 import { gameRouter } from "./game";
+import { obligationsRouter } from "./obligations";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -211,7 +213,7 @@ beforeAll(async () => {
       buyer_team_id TEXT NOT NULL, seller_team_id TEXT NOT NULL, total_amount INTEGER NOT NULL,
       upfront_amount INTEGER NOT NULL, installment_amount INTEGER NOT NULL, installments_total INTEGER NOT NULL,
       installments_paid INTEGER NOT NULL DEFAULT 0, remaining INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'active', created_game_date TEXT,
+      status TEXT NOT NULL DEFAULT 'active', created_game_date TEXT, last_paid_game_date TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), closed_at TEXT
     );
 
@@ -535,5 +537,80 @@ describe("přestup na splátky a procenta z příštího přestupu", () => {
     expect(after["seller-a"] - before["seller-a"]).toBe(42_000 + 8_000);
     expect((await db.prepare("SELECT status FROM transfer_installments").first<{ status: string }>())!.status).toBe("settled");
     expect(await db.prepare("SELECT status, paid_amount FROM sell_on_clauses WHERE owner_team_id = 'buyer-a'").first()).toEqual({ status: "paid", paid_amount: 8_000 });
+  });
+});
+
+describe("doložku o procentech nejde obejít", () => {
+  async function buyWithSellOn() {
+    const { id } = await makeOffer({ amount: 60_000, upfrontPct: 30, installments: 4, sellOnPct: 10 });
+    expect((await callRoute(`/teams/seller-a/offers/${id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
+  }
+
+  it("hráče s doložkou nejde propustit (podepsal by se zpátky jako volný bez ní)", async () => {
+    await buyWithSellOn();
+    const r = await callRoute("/teams/buyer-a/players/star/release", { method: "POST", token: "buyer-token" });
+    expect(r.status).toBe(400);
+    expect((await readJson(r)).error).toContain("10 % z příštího přestupu pro Prodávající");
+    expect((await db.prepare("SELECT team_id FROM players WHERE id = 'star'").first<{ team_id: string }>())!.team_id).toBe("buyer-a");
+    expect((await db.prepare("SELECT status FROM sell_on_clauses").first<{ status: string }>())!.status).toBe("active");
+  });
+
+  it("u výměny se procenta počítají z doplatku i z tržní ceny hráče, který jde opačně", async () => {
+    await buyWithSellOn();
+    await db.prepare(`INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating,
+      skills, physical, personality, life_context, avatar, weekly_wage, squad_number, residence, commute_km)
+      VALUES ('swap', 'third-a', 'Karel', 'Výměna', 24, 'MID', 40, '{}', '{}', '{}', '{"condition":100}', '{}', 200, 11, 'Testov', 0)`).run();
+    const offer = await makeOffer({ amount: 1_000, offeredPlayerId: "swap" }, "third-token", "third-a");
+    expect(offer.status).toBe(200);
+    expect((await callRoute(`/teams/buyer-a/offers/${offer.id}/accept`, { method: "POST", token: "buyer-token", body: {} })).status).toBe(200);
+    const paid = (await db.prepare("SELECT paid_amount FROM sell_on_clauses WHERE owner_team_id = 'buyer-a'").first<{ paid_amount: number }>())!.paid_amount;
+    expect(paid).toBe(Math.round((1_000 + marketValue(40, 24, "MID")) * 0.1));
+    expect(paid).toBeGreaterThan(100);
+  });
+
+  it("starý přijatý bid z inzerátu doplatí splátky a procenta jako nabídka", async () => {
+    await buyWithSellOn();
+    await db.batch([
+      db.prepare("INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, status, expires_at) VALUES ('listing', 'star', 'buyer-a', 70000, 'league-a', 'active', ?)").bind(FUTURE),
+      db.prepare("INSERT INTO transfer_bids (id, listing_id, team_id, amount, last_action_by, status) VALUES ('bid', 'listing', 'third-a', 70000, 'third-a', 'pending')"),
+    ]);
+    const before = await budgets();
+    const r = await callRoute("/teams/buyer-a/bids/bid/accept", { method: "POST", token: "buyer-token" });
+    expect(r.status).toBe(200);
+    const after = await budgets();
+    expect(after["seller-a"] - before["seller-a"]).toBe(42_000 + 7_000);
+    expect((await db.prepare("SELECT status FROM transfer_installments").first<{ status: string }>())!.status).toBe("settled");
+    expect((await db.prepare("SELECT status FROM sell_on_clauses").first<{ status: string }>())!.status).toBe("paid");
+  });
+});
+
+async function getObligations(path: string, token: string) {
+  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  const { ctx } = executionContext();
+  const r = await obligationsRouter.fetch(new Request(`http://test.local${path}`, { headers }), env, ctx);
+  return { status: r.status, json: r.status === 200 ? await r.json() as Record<string, any> : null };
+}
+
+describe("závazky klubu a hráče", () => {
+  it("kupující vidí, co splácí, prodávající, co mu chodí; cizí klub nic", async () => {
+    const { id } = await makeOffer({ amount: 60_000, upfrontPct: 30, installments: 4, sellOnPct: 10 });
+    expect((await callRoute(`/teams/seller-a/offers/${id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
+
+    const buyer = await getObligations("/teams/buyer-a/obligations", "buyer-token");
+    expect(buyer.status).toBe(200);
+    expect(buyer.json!.paying[0]).toMatchObject({ playerName: "Petr Hvězda", remaining: 42_000, nextPayment: 10_500, installmentsTotal: 4, otherTeamName: "Prodávající" });
+    expect(buyer.json!.paying[0].nextDue).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(buyer.json!.sellOnOwed[0]).toMatchObject({ pct: 10, otherTeamName: "Prodávající" });
+    expect(buyer.json!.totals).toEqual({ payThisWeek: 10_500, receiveThisWeek: 0, owedTotal: 42_000, receivableTotal: 0 });
+
+    const seller = await getObligations("/teams/seller-a/obligations", "seller-token");
+    expect(seller.json!.receiving[0]).toMatchObject({ remaining: 42_000, otherTeamName: "Kupující" });
+    expect(seller.json!.sellOnClaims[0]).toMatchObject({ pct: 10 });
+
+    expect((await getObligations("/teams/buyer-a/obligations", "third-token")).status).toBe(403);
+    const third = await getObligations("/teams/third-a/players/star/obligations", "third-token");
+    expect(third.json).toEqual({ paying: null, receiving: null, sellOnOwed: null, sellOnClaim: null });
+    const mine = await getObligations("/teams/buyer-a/players/star/obligations", "buyer-token");
+    expect(mine.json!.paying).toMatchObject({ remaining: 42_000 });
   });
 });
