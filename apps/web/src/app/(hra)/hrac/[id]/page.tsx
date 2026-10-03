@@ -907,6 +907,8 @@ export default function PlayerDetailPage() {
             {isOwnPlayer && player.weekly_wage != null && (
               <DetailRow label="Mzda" value={`${player.weekly_wage.toLocaleString("cs")} Kč/týd`} />
             )}
+            {/* U každého hráče, i cizího: stejný vzorec jako nabídky a inzeráty cizích klubů. */}
+            <DetailRow label="Tržní cena" value={`${marketValue(player.overall_rating ?? 0, player.age ?? 27, player.position).toLocaleString("cs")} Kč`} />
             <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />
             <DetailRow label="Váha" value={player.physical?.weight ? `${player.physical.weight} kg` : "—"} />
             <DetailRow label="Noha" value={footLabel(player.physical?.preferredFoot)} />
