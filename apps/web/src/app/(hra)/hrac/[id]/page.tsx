@@ -1728,7 +1728,8 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
   const [price, setPrice] = useState<number | null>(defaultPrice);
 
   return (
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    // Kliknutí vedle dialog nezavírá — rozepsaná cena by se ztratila. Zavírá jen Zrušit.
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-5">
           <h3 className="font-heading font-bold text-lg">Nabídnout na trh</h3>
