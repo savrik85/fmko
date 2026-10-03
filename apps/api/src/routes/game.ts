@@ -5711,6 +5711,10 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     .bind(listingId).first<{ is_ai_listing: number; ai_player_data: string; asking_price: number; rejected_by: string }>();
   if (!listing) return c.json({ error: "Listing nenalezen" }, 404);
 
+  // Peníze, limit dohod i dohoda patří klubu (áčku). Z adresy může přijít i ID dorostu
+  // téhož majitele — bez tohohle by se dohoda vedla na U21 a pondělní splátky by ji minuly.
+  const buyerClubTeamId = await resolveClubTeamId(c.env.DB, teamId) ?? teamId;
+
   // Platba: jednorázově nebo záloha + týdenní splátky. Procenta z příštího přestupu jen
   // u lidského klubu — cizí klub z trhu hráče zpátky neprodá a nic by mu nepřišlo.
   const terms: TransferTerms = {
@@ -5720,11 +5724,11 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   const termsError = transferTermsError(terms);
   if (termsError) return c.json({ error: termsError }, 400);
   if (terms.installments > 0) {
-    const limitError = await installmentLimitError(c.env.DB, teamId);
+    const limitError = await installmentLimitError(c.env.DB, buyerClubTeamId);
     if (limitError) return c.json({ error: limitError }, 400);
   }
   const schedule = transferSchedule(terms);
-  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(buyerClubTeamId).first<{ budget: number }>();
   if (!team || team.budget < schedule.upfront) {
     return c.json({ error: terms.installments > 0
       ? `Nedostatek peněz na zálohu. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, záloha je ${schedule.upfront.toLocaleString("cs")} Kč.`
@@ -5799,30 +5803,35 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     );
     const hiddenTalent = aiData.hiddenTalent ?? talentPodleVeku(rngStropy, aiData.age ?? 25);
 
-    await c.env.DB.prepare(
-      `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, skills_max, hidden_talent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
-    ).bind(playerId, teamId, aiData.firstName, aiData.lastName, aiData.age, aiData.position, aiData.overallRating,
-      skills, physical, personality, lifeContext, avatar, weeklyWage,
-      (aiData as { nationality?: string }).nationality ?? "CZ", skillsMax, hiddenTalent).run();
+    const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(buyerClubTeamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; }))?.game_date ?? new Date().toISOString();
 
-    // Deduct budget (recordTransaction handles both budget update + logging)
-    const { recordTransaction } = await import("../season/finance-processor");
-    const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; }))?.game_date ?? new Date().toISOString();
-    await recordTransaction(c.env.DB, teamId, "transfer_fee", -schedule.upfront,
-      terms.installments > 0
-        ? `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam} (záloha ${terms.upfrontPct} %, zbytek ${terms.installments}× týdně)`
-        : `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam}`, gameDate);
+    // Hráč a splátková dohoda vznikají jedním batchem: buď obojí, nebo nic. Kdyby se
+    // dohoda nezapsala, měl by kupující hráče jen za zálohu.
+    const createPlayer = [
+      c.env.DB.prepare(
+        `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, skills_max, hidden_talent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
+      ).bind(playerId, teamId, aiData.firstName, aiData.lastName, aiData.age, aiData.position, aiData.overallRating,
+        skills, physical, personality, lifeContext, avatar, weeklyWage,
+        (aiData as { nationality?: string }).nationality ?? "CZ", skillsMax, hiddenTalent),
+    ];
     if (terms.installments > 0) {
-      await c.env.DB.prepare(
+      createPlayer.push(c.env.DB.prepare(
         `INSERT INTO transfer_installments (id, offer_id, player_id, player_name, buyer_team_id, seller_team_id, seller_name, total_amount,
            upfront_amount, installment_amount, installments_total, remaining, created_game_date)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(crypto.randomUUID(), listingId, playerId, `${aiData.firstName} ${aiData.lastName}`, teamId, CPU_CLUB_ID,
+      ).bind(crypto.randomUUID(), listingId, playerId, `${aiData.firstName} ${aiData.lastName}`, buyerClubTeamId, CPU_CLUB_ID,
         aiData.fromTeam ?? "Cizí klub", body.amount, schedule.upfront, schedule.installmentAmount, schedule.installments,
-        schedule.remainingAfterUpfront, gameDate).run()
-        .catch((e) => logger.error({ module: "game" }, "splátková dohoda s cizím klubem", e));
+        schedule.remainingAfterUpfront, gameDate));
     }
+    await c.env.DB.batch(createPlayer);
+
+    // Deduct budget (recordTransaction handles both budget update + logging)
+    const { recordTransaction } = await import("../season/finance-processor");
+    await recordTransaction(c.env.DB, buyerClubTeamId, "transfer_fee", -schedule.upfront,
+      terms.installments > 0
+        ? `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam} (záloha ${terms.upfrontPct} %, zbytek ${terms.installments}× týdně)`
+        : `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam}`, gameDate);
 
     // Residence + commute
     const { generateResidence } = await import("../generators/residence");
@@ -5884,20 +5893,20 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
      LEFT JOIN teams ts ON tl.team_id = ts.id
      LEFT JOIN teams tb ON tb.id = ?
      WHERE tl.id = ?`
-  ).bind(teamId, listingId).first<{ seller_team_id: string; player_id: string; first_name: string; last_name: string; seller_name: string; buyer_name: string }>()
+  ).bind(buyerClubTeamId, listingId).first<{ seller_team_id: string; player_id: string; first_name: string; last_name: string; seller_name: string; buyer_name: string }>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch listing for offer", e); return null; });
 
   if (!listingInfo || !listingInfo.player_id) {
     return c.json({ error: "Inzerát nenalezen nebo nemá hráče" }, 404);
   }
-  if (listingInfo.seller_team_id === teamId) {
+  if (listingInfo.seller_team_id === teamId || await resolveClubTeamId(c.env.DB, listingInfo.seller_team_id) === buyerClubTeamId) {
     return c.json({ error: "Nemůžeš nabízet na vlastního hráče" }, 400);
   }
 
   // Idempotence — pokud uz existuje aktivni offer od tohoto tymu na tohoto hrace, vratit ho
   const existing = await c.env.DB.prepare(
     "SELECT id FROM transfer_offers WHERE player_id = ? AND from_team_id = ? AND status IN ('pending','countered') LIMIT 1"
-  ).bind(listingInfo.player_id, teamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer from market", e); return null; });
+  ).bind(listingInfo.player_id, buyerClubTeamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer from market", e); return null; });
   if (existing) {
     return c.json({ ok: true, offerId: existing.id, alreadyExists: true });
   }
@@ -5907,12 +5916,12 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   const offerId = crypto.randomUUID();
   await c.env.DB.prepare(
     "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, expires_at, offer_type, last_action_by, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, ?, ?, ?, 'transfer', ?, ?, ?, ?)"
-  ).bind(offerId, listingInfo.player_id, teamId, listingInfo.seller_team_id, body.amount, expiresAt.toISOString(), teamId,
+  ).bind(offerId, listingInfo.player_id, buyerClubTeamId, listingInfo.seller_team_id, body.amount, expiresAt.toISOString(), buyerClubTeamId,
     terms.upfrontPct, terms.installments, terms.sellOnPct).run();
 
   await c.env.DB.prepare(
     "INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, 'offer', ?, ?, ?, ?)"
-  ).bind(crypto.randomUUID(), offerId, teamId, body.amount, terms.upfrontPct, terms.installments, terms.sellOnPct).run()
+  ).bind(crypto.randomUUID(), offerId, buyerClubTeamId, body.amount, terms.upfrontPct, terms.installments, terms.sellOnPct).run()
     .catch((e) => logger.warn({ module: "game" }, "insert market->offer event", e));
 
   // Notifikace + SMS prodavajicimu
