@@ -95,6 +95,10 @@ Kde to je:
   aby bylo před prodejem jasné, co z ceny odejde.
 - **Profil hráče, kterého jsi prodal** (teď u jiného klubu): „Dluží vám za něj 21 000 Kč
   (2× 10 500)" a „Máte 15 % z jeho dalšího prodeje".
+- **Přehledy přestupů** (Přestupy → Přehled a Historie, zprávy o přestupu, historie klubů
+  v profilu hráče, seznam pro vedení soutěže): vždy **celková cena** obchodu, jako u obyčejného
+  přestupu, s krátkou poznámkou „na splátky" nebo „+ 15 % z dalšího prodeje". Záloha ani jedna
+  splátka se tam nikdy neukazuje místo ceny. `player_contracts.fee` = celková cena.
 - **Transakce ve Financích:** každá splátka má popisek s hráčem a pořadím („Splátka za Novák 2/3").
 - **Výhled rozpočtu:** budoucí splátky jako výdaj kupujícího a příjem prodávajícího.
 
