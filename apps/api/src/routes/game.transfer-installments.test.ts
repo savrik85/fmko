@@ -77,8 +77,12 @@ beforeAll(async () => {
       name TEXT NOT NULL,
       district TEXT NOT NULL,
       lat REAL NOT NULL,
-      lng REAL NOT NULL
+      lng REAL NOT NULL,
+      size TEXT NOT NULL DEFAULT 'village'
     );
+
+    CREATE TABLE sponsor_contracts (id TEXT PRIMARY KEY, team_id TEXT NOT NULL, monthly_amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'active');
+    CREATE TABLE village_team_favor (team_id TEXT NOT NULL, official_id TEXT, favor INTEGER NOT NULL DEFAULT 50);
 
     CREATE TABLE leagues (
       id TEXT PRIMARY KEY,
@@ -326,6 +330,7 @@ beforeEach(async () => {
 
   await executeStatements(`
     DELETE FROM messages;
+    DELETE FROM sponsor_contracts;
     DELETE FROM transfer_installments;
     DELETE FROM sell_on_clauses;
     DELETE FROM conversations;
@@ -347,6 +352,8 @@ beforeEach(async () => {
 
   await db.batch([
     db.prepare("INSERT INTO villages (id, name, district, lat, lng) VALUES ('village', 'Testov', 'Test', 49.0, 14.0)"),
+    // Sponzor 100 000 Kč měsíčně = ~46 500 Kč týdně: splátky v testech se vejdou pod strop příjmů.
+    db.prepare("INSERT INTO sponsor_contracts (id, team_id, monthly_amount) VALUES ('sp-buyer', 'buyer-a', 100000), ('sp-third', 'third-a', 100000), ('sp-seller', 'seller-a', 100000)"),
     db.prepare("INSERT INTO leagues (id, district, league_type) VALUES ('league-a', 'Test', 'senior')"),
     db.prepare("INSERT INTO leagues (id, district, league_type) VALUES ('league-u21', 'Test U21', 'u21')"),
     db.prepare("INSERT INTO seasons (id, number, status) VALUES ('season', 1, 'active')"),
@@ -484,6 +491,25 @@ describe("přestup na splátky a procenta z příštího přestupu", () => {
     expect(c2.status).toBe(200);
     expect(await db.prepare("SELECT counter_amount, upfront_pct, installments, sell_on_pct FROM transfer_offers WHERE id = ?").bind(id).first())
       .toEqual({ counter_amount: 55_000, upfront_pct: 50, installments: 2, sell_on_pct: 20 });
+  });
+
+  it("splátky nad týdenní příjmy klubu neprojdou (nabídka i protinávrh prodávajícího)", async () => {
+    await db.prepare("DELETE FROM sponsor_contracts WHERE team_id = 'buyer-a'").run();
+    // bez sponzora má kupující 3 489 Kč týdně (místní podpora 1 163 + dotace obce 2 326), splátka by byla 10 500
+    const r = await makeOffer({ amount: 60_000, upfrontPct: 30, installments: 4 });
+    expect(r.status).toBe(400);
+    expect(String(r.json.error).replace(/\u00a0/g, " ")).toMatch(/^Splátky by byly 10 500 Kč týdně, klub vydělá 3 489 Kč/);
+    // rozložené do 20 splátek (2 100 Kč týdně) už projde
+    expect((await makeOffer({ amount: 60_000, upfrontPct: 30, installments: 20 })).status).toBe(200);
+  });
+
+  it("protinávrh prodávajícího se splátkami, které kupující neutáhne, nejde poslat", async () => {
+    const { id } = await makeOffer({ amount: 25_000 });
+    await db.prepare("DELETE FROM sponsor_contracts WHERE team_id = 'buyer-a'").run();
+    // 25 000 při záloze 30 % a 4 splátkách = 4 375 Kč týdně, kupující vydělá 3 489
+    const r = await callRoute(`/teams/seller-a/offers/${id}/counter`, { method: "POST", token: "seller-token", body: { amount: 25_000, upfrontPct: 30, installments: 4 } });
+    expect(r.status).toBe(400);
+    expect(String((await readJson(r)).error).replace(/\u00a0/g, " ")).toMatch(/^Kupující by splácel 4 375 Kč týdně a vydělá 3 489 Kč/);
   });
 
   it("limit 3 rozjetých splátkových přestupů", async () => {
