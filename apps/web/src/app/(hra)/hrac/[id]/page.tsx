@@ -11,7 +11,7 @@ import { usePotencial, PotentialBox, PotentialBadge } from "@/components/players
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
-import { attributeImportance, coachRelationBand, type AttrImportance } from "@okresni-masina/shared";
+import { attributeImportance, coachRelationBand, marketValue, type AttrImportance } from "@okresni-masina/shared";
 import { formatLogDate } from "@/components/manager/CoachKabinaTab";
 
 import type { BadgePattern } from "@/components/ui";
@@ -1722,7 +1722,8 @@ export default function PlayerDetailPage() {
 function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
   player: Player; onClose: () => void; onConfirm: (price: number) => void; loading: boolean;
 }) {
-  const defaultPrice = Math.round((player.overall_rating ?? 50) * 50);
+  // Výchozí cena = tržní hodnota (stejný vzorec jako nabídky a inzeráty cizích klubů).
+  const defaultPrice = marketValue(player.overall_rating ?? 50, player.age ?? 27, player.position);
   const [price, setPrice] = useState(defaultPrice);
 
   return (

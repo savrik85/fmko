@@ -140,11 +140,11 @@ export async function listinaPrestupu(
   const rows = await db.prepare(
     `SELECT o.id, o.offer_amount, o.counter_amount, o.offer_type, o.resolved_at,
             o.offered_player_id,
-            p.first_name, p.last_name, p.id AS player_id, p.overall_rating, p.age,
+            p.first_name, p.last_name, p.id AS player_id, p.overall_rating, p.age, p.position,
             sp.first_name AS sw_first, sp.last_name AS sw_last,
-            sp.overall_rating AS sw_rating, sp.age AS sw_age,
+            sp.overall_rating AS sw_rating, sp.age AS sw_age, sp.position AS sw_position,
             sdp.first_name AS swd_first, sdp.last_name AS swd_last,
-            sdp.overall_rating AS swd_rating, sdp.age AS swd_age,
+            sdp.overall_rating AS swd_rating, sdp.age AS swd_age, sdp.position AS swd_position,
             fromT.name AS z_klubu, fromT.user_id AS z_user, fromT.id AS z_id,
             toT.name AS do_klubu, toT.user_id AS do_user, toT.id AS do_id
        FROM transfer_offers o
@@ -175,7 +175,7 @@ export async function listinaPrestupu(
     // Hodnota se v databázi nedrží, počítá se z ratingu a věku — stejnou
     // funkcí, jakou používá přestupový trh při posuzování nabídek.
     const hodnota = r.overall_rating
-      ? estimateMarketValue(r.overall_rating as number, (r.age as number) ?? 26)
+      ? estimateMarketValue(r.overall_rating as number, (r.age as number) ?? 26, r.position as string | null)
       : 0;
 
     // Výměna: druhý hráč šel opačným směrem jako protihodnota. Bez něj by
@@ -186,7 +186,8 @@ export async function listinaPrestupu(
     const swRating = (r.sw_rating ?? r.swd_rating) as number | null;
     const swAge = (r.swd_age ?? r.sw_age) as number | null;
     const jeVymena = !!r.offered_player_id;
-    const protihodnota = swRating ? estimateMarketValue(swRating, swAge ?? 26) : 0;
+    const swPosition = (r.swd_position ?? r.sw_position) as string | null;
+    const protihodnota = swRating ? estimateMarketValue(swRating, swAge ?? 26, swPosition) : 0;
     const swJmeno = swFirst ? `${swFirst} ${swLast}` : jeVymena ? "hráč už v databázi není" : null;
 
     const priznaky: string[] = [];

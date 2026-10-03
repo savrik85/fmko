@@ -73,21 +73,23 @@ const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 // ASKING PRICE CALCULATION
 // ═══════════════════════════════════════════════
 
-function calcAskingPrice(rating: number, rng: Rng): number {
-  if (rating >= 60) return rng.int(8000, 15000);
-  if (rating >= 50) return rng.int(5000, 8000);
-  if (rating >= 40) return rng.int(3000, 5000);
-  return rng.int(1500, 3000);
+/**
+ * Požadovaná cena inzerátu cizího klubu: tržní hodnota (sdílený vzorec nafitovaný na
+ * skutečných přestupech, viz `marketValue`) ± 10 %. Dřív pevná pásma podle hodnocení
+ * bez věku a pozice (50–59 → 5–8 tisíc), zatímco hráči mezi sebou platili 20–45 tisíc.
+ */
+function calcAskingPrice(rating: number, age: number, position: string, rng: Rng): number {
+  const value = estimateMarketValue(rating, age, position);
+  return Math.round((value * rng.int(90, 110) / 100) / 100) * 100;
 }
 
 /**
- * Cena CPU nabídky: ~1,5× tržní hodnoty hráče (1,40–1,65) — má být lákavá,
- * aby odmítnutí bolelo. Tržní hodnota zohledňuje rating i věk (estimateMarketValue).
+ * Cena CPU nabídky: tržní hodnota až o čtvrtinu výš. Cizí klub kupuje za tržní cenu
+ * a hráče, kterého chce, si trochu připlatí.
  */
-function calcOfferPrice(rating: number, age: number, rng: Rng): number {
-  const marketValue = estimateMarketValue(rating, age);
-  const premium = rng.int(155, 190) / 100; // lákavý přeplatek — většina nabídek nad 1,6× trhu
-  return Math.round((marketValue * premium) / 100) * 100;
+function calcOfferPrice(rating: number, age: number, position: string, rng: Rng): number {
+  const value = estimateMarketValue(rating, age, position);
+  return Math.round((value * rng.int(100, 125) / 100) / 100) * 100;
 }
 
 // ═══════════════════════════════════════════════
@@ -140,7 +142,7 @@ export async function generateAiListings(
   const player = created.identity;
   const { skills: adjustedSkills, skillsMax: skillCaps, hiddenTalent, physical, rating: overallRating } = created;
 
-  const askingPrice = calcAskingPrice(overallRating, rng);
+  const askingPrice = calcAskingPrice(overallRating, age, position, rng);
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
   const avatar = created.avatar;
 
@@ -321,14 +323,14 @@ async function maybeOfferForTeam(
   };
 
   let target = rng.pick(candidates);
-  let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, rng);
+  let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, target.position as string, rng);
   let interest = await computeInterestForOffer(db, target.id as string, {
     fromTeamId: "virtual_ai", offerAmount: offerPrice, virtualRating: virtualTeam.rating,
   }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest", e); return null; });
 
   if (interest && interest.level === 0 && candidates.length > 1) {
     const other = rng.pick(candidates.filter((p) => p.id !== target.id));
-    const otherPrice = calcOfferPrice(other.overall_rating as number, (other.age as number) ?? 25, rng);
+    const otherPrice = calcOfferPrice(other.overall_rating as number, (other.age as number) ?? 25, other.position as string, rng);
     const otherInterest = await computeInterestForOffer(db, other.id as string, {
       fromTeamId: "virtual_ai", offerAmount: otherPrice, virtualRating: virtualTeam.rating,
     }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest #2", e); return null; });

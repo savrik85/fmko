@@ -4,6 +4,7 @@
 
 import type { Rng } from "../generators/rng";
 import { getDistrictDataFromDB, resolveSponsorName } from "../data/districts";
+import { marketValue } from "@okresni-masina/shared";
 
 export interface Sponsor {
   name: string;
@@ -271,20 +272,11 @@ export function calculatePlayerWage(overallRating: number): number {
 }
 
 /**
- * Odhad tržní hodnoty hráče (Kč) — exponenciála podle ratingu s výrazným
- * věkovým modifikátorem (věk je klíčový: talent má příplatek, veterán strmou slevu).
- * Kalibrace: 21 let / 64 OVR → ~20,5k; 27 let / 60 OVR → ~13k; 34 let / 40 OVR → ~2,2k.
+ * Tržní hodnota hráče (Kč). Vzorec je sdílený s webem (`marketValue` v @okresni-masina/shared)
+ * a je nafitovaný na skutečných přestupech v Prachaticích — hodnocení a věk v den prodeje.
  */
-export function estimateMarketValue(overallRating: number, age: number): number {
-  const base = 400 * Math.exp(0.058 * overallRating);
-  const ageMod = age <= 19 ? 1.35
-    : age <= 22 ? 1.25
-    : age <= 26 ? 1.1
-    : age <= 29 ? 1.0
-    : age <= 32 ? 0.75
-    : age <= 35 ? 0.55
-    : 0.4;
-  return Math.max(500, Math.round((base * ageMod) / 100) * 100);
+export function estimateMarketValue(overallRating: number, age: number, position?: string | null): number {
+  return marketValue(overallRating, age, position);
 }
 
 /**
