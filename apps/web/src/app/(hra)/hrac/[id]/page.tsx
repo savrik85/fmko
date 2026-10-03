@@ -1060,7 +1060,11 @@ export default function PlayerDetailPage() {
                     {c.fee > 0 ? ` · doplatek ${c.fee.toLocaleString("cs")} Kč` : ""}
                   </div>
                 ) : c.fee > 0 ? (
-                  <div className="text-micro text-muted mt-1 ml-[42px]">Přestupní částka: {c.fee.toLocaleString("cs")} Kč</div>
+                  <div className="text-sm text-muted mt-1 ml-[42px]">
+                    Přestupní částka: {c.fee.toLocaleString("cs")} Kč
+                    {c.installments ? ` · na splátky (${c.installments}× týdně)` : ""}
+                    {c.sellOnPct ? ` · ${c.sellOnPct} % z dalšího prodeje pro předchozí klub` : ""}
+                  </div>
                 ) : null}
               </div>
             ))}

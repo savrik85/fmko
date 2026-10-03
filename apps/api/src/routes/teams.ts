@@ -3043,7 +3043,15 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
             LEFT JOIN departed_players mdp ON mdp.id = o2.player_id
            WHERE o2.status = 'accepted' AND o2.offered_player_id = pc.player_id
              AND o2.to_team_id = pc.team_id LIMIT 1)
-       ) END as swap_partner`;
+       ) END as swap_partner,
+       CASE WHEN pc.join_type = 'transfer' THEN
+         (SELECT o.installments FROM transfer_offers o
+           WHERE o.status = 'accepted' AND o.player_id = pc.player_id AND o.from_team_id = pc.team_id
+           ORDER BY o.resolved_at DESC LIMIT 1) END as installments,
+       CASE WHEN pc.join_type = 'transfer' THEN
+         (SELECT o.sell_on_pct FROM transfer_offers o
+           WHERE o.status = 'accepted' AND o.player_id = pc.player_id AND o.from_team_id = pc.team_id
+           ORDER BY o.resolved_at DESC LIMIT 1) END as sell_on_pct`;
 
   const contracts = await c.env.DB.prepare(
     `SELECT pc.*, t.name as team_name, t.primary_color as team_color,
@@ -3114,6 +3122,9 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
       leaveType: row.leave_type,
       fee: row.fee,
       swapPartner: (row.swap_partner as string | null) ?? null,
+      // Cena (fee) je celková; tady jen, jestli se platila na splátky a s procenty.
+      installments: (row.installments as number | null) ?? 0,
+      sellOnPct: (row.sell_on_pct as number | null) ?? 0,
       isActive: row.is_active === 1,
     })),
   });

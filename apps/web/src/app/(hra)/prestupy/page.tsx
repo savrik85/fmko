@@ -37,7 +37,7 @@ interface TransfersOverview {
   topSellers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; earned: number; count: number }>;
   topBuyers: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; spent: number; count: number }>;
   mostActive: Array<{ teamId: string; teamName: string; badge?: TeamBadge | null; in: number; out: number; total: number }>;
-  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string; isSwap?: boolean; toVirtual?: boolean; loanEnded?: boolean }>;
+  recent: Array<{ playerId: string; playerName: string; playerAvatar?: Record<string, unknown>; age?: number; position?: string; fromTeamId: string | null; fromTeam: string | null; fromTeamBadge?: TeamBadge | null; toTeamId: string; toTeam: string; toTeamBadge?: TeamBadge; fee: number; date: string; isCrossLeague: boolean; joinType?: string; isSwap?: boolean; installments?: number; sellOnPct?: number; toVirtual?: boolean; loanEnded?: boolean }>;
   speculations?: Array<{
     playerId: string;
     playerName: string;
@@ -377,6 +377,12 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
             ) : "—"}
           </span>
         </div>
+        {/* Cena je celková; jen připomenout, že se splácí a že prodávající má procenta. */}
+        {(t.installments || t.sellOnPct) ? (
+          <div className="text-sm text-muted text-right">
+            {[t.installments ? `na splátky (${t.installments}× týdně)` : null, t.sellOnPct ? `+ ${t.sellOnPct} % z dalšího prodeje` : null].filter(Boolean).join(" · ")}
+          </div>
+        ) : null}
         <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
           {/* U hostování „odkud" znamená kmenový klub, ne pool volných hráčů. */}
           {!t.fromTeam ? (
