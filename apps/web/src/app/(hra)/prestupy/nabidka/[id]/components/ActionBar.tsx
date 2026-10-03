@@ -1,5 +1,6 @@
 "use client";
 
+import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { useState } from "react";
 
 type DialogKind = "accept" | "counter" | "reject" | null;
@@ -153,7 +154,7 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
   onCancel: () => void;
   onConfirm: (amount: number, message: string) => Promise<void>;
 }) {
-  const [v, setV] = useState(initial);
+  const [v, setV] = useState<number | null>(initial);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -165,22 +166,14 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
           <h3 className="font-heading font-bold text-lg">Protinabídka</h3>
           <div className="mt-4">
             <label className="text-xs text-muted font-heading uppercase">Nová částka (Kč)</label>
-            <input
-              type="number"
+            <MoneyInput
               value={v}
-              onChange={(e) => setV(Math.max(0, parseInt(e.target.value) || 0))}
-              min={0}
-              step={500}
+              onChange={setV}
               autoFocus
               className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
             />
             <div className="flex justify-center gap-2 mt-2">
-              {[
-                Math.round(initial * 0.8),
-                initial,
-                Math.round(initial * 1.2),
-                Math.round(initial * 1.5),
-              ].map((preset, i) => (
+              {[0.8, 1, 1.2, 1.5].map((mul) => Math.round((initial * mul) / 100) * 100).map((preset, i) => (
                 <button
                   key={i}
                   onClick={() => setV(preset)}
@@ -188,7 +181,7 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
                     v === preset ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
                   }`}
                 >
-                  {preset >= 1000 ? `${Math.round(preset / 1000)}k` : preset}
+                  {formatAmount(preset)}
                 </button>
               ))}
             </div>
@@ -211,8 +204,9 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
           </button>
           <div className="w-px bg-gray-100" />
           <button
-            disabled={loading || v <= 0}
+            disabled={loading || !v}
             onClick={async () => {
+              if (!v) return;
               setLoading(true);
               try { await onConfirm(v, msg.trim()); } finally { setLoading(false); }
             }}

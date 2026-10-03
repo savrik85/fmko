@@ -18,6 +18,7 @@ import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
+import { MAX_TRANSFER_AMOUNT } from "@okresni-masina/shared";
 
 /**
  * Povrchy areálu, které má klub ZAPLACENÉ.
@@ -5286,6 +5287,9 @@ gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
   const body = await c.req.json<{ askingPrice: number }>();
+  if (!Number.isInteger(body.askingPrice) || body.askingPrice <= 0 || body.askingPrice > MAX_TRANSFER_AMOUNT) {
+    return c.json({ error: `Cena musí být celé číslo od 1 do ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.` }, 400);
+  }
 
   // Dorostenec patří U21 týmu, ale frontend sem posílá ID A-týmu — klub je jeden a manažer
   // ho ovládá odtamtud. Bez druhé podmínky hráče nenajdeme a manažer dostane „Hráč nenalezen",
@@ -5677,6 +5681,7 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
     return c.json({ error: "Nabídka musí být kladné celé číslo" }, 400);
   }
+  if (body.amount > MAX_TRANSFER_AMOUNT) return c.json({ error: `Částka může být nejvýš ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.` }, 400);
 
   const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
   if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
@@ -6034,6 +6039,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/counter", async (c) => {
   if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
     return c.json({ error: "Protinabídka musí být kladné celé číslo" }, 400);
   }
+  if (body.amount > MAX_TRANSFER_AMOUNT) return c.json({ error: `Částka může být nejvýš ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.` }, 400);
 
   const bid = await c.env.DB.prepare(
     `SELECT tb.*, tl.team_id as seller_team_id, tl.player_id, p.first_name, p.last_name,
@@ -6158,6 +6164,7 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   if (!Number.isInteger(body.amount) || body.amount < 0 || (offerType !== "loan" && body.amount === 0)) {
     return c.json({ error: "Nabídka musí být kladné celé číslo (0 povolena jen pro hostování)" }, 400);
   }
+  if (body.amount > MAX_TRANSFER_AMOUNT) return c.json({ error: `Částka může být nejvýš ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.` }, 400);
   if (body.amount > 0) {
     const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(buyerClubTeamId).first<{ budget: number }>();
     if (!team || team.budget < body.amount) return c.json({ error: `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.` }, 400);
@@ -7283,6 +7290,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
     return c.json({ error: "Protinabídka musí být kladné celé číslo" }, 400);
   }
+  if (body.amount > MAX_TRANSFER_AMOUNT) return c.json({ error: `Částka může být nejvýš ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.` }, 400);
 
   // Counter smí ten, kdo JE na tahu.
   const offer = await c.env.DB.prepare(

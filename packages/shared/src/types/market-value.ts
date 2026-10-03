@@ -35,3 +35,9 @@ export function marketValue(overallRating: number, age: number, position?: strin
     * (position ? POSITION_FACTOR[position] ?? 1 : 1);
   return Math.min(MARKET_VALUE_MAX, Math.max(MARKET_VALUE_MIN, Math.round(value / 100) * 100));
 }
+
+/**
+ * Nejvyšší částka, kterou jde v přestupu zadat (nabídka, protinávrh, přihoz, inzerát).
+ * Bez stropu ležely v DB nabídky na 1,25·10²⁶ Kč — `Number.isInteger` je propustil.
+ */
+export const MAX_TRANSFER_AMOUNT = 10_000_000;

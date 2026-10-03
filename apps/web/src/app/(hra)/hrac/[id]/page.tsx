@@ -12,6 +12,7 @@ import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useC
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
 import { attributeImportance, coachRelationBand, marketValue, type AttrImportance } from "@okresni-masina/shared";
+import { MoneyInput } from "@/components/ui/money-input";
 import { formatLogDate } from "@/components/manager/CoachKabinaTab";
 
 import type { BadgePattern } from "@/components/ui";
@@ -112,7 +113,7 @@ export default function PlayerDetailPage() {
   const [contracts, setContracts] = useState<PlayerContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [offerOpen, setOfferOpen] = useState(false);
-  const [offerAmount, setOfferAmount] = useState("");
+  const [offerAmount, setOfferAmount] = useState<number | null>(null);
   const [offerMessage, setOfferMessage] = useState("");
   const [offerSending, setOfferSending] = useState(false);
   const [offerSent, setOfferSent] = useState(false);
@@ -319,7 +320,7 @@ export default function PlayerDetailPage() {
 
   async function sendOffer() {
     if (!teamId || !player || offerSending) return;
-    const amount = parseInt(offerAmount.replace(/\s/g, "") || "0", 10);
+    const amount = offerAmount ?? 0;
     if (offerType === "transfer" && (!amount || amount <= 0)) return;
     setOfferSending(true);
     const ok = await apiAction(apiFetch(`/api/teams/${teamId}/offers`, {
@@ -724,12 +725,10 @@ export default function PlayerDetailPage() {
                   <label className={`${light ? "text-gray-500" : "text-white/60"} text-xs font-heading uppercase mb-1 block`}>
                     {offerType === "loan" ? "Poplatek za hostování (Kč)" : "Nabízená částka (Kč)"}
                   </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
+                  <MoneyInput
                     value={offerAmount}
-                    onChange={(e) => setOfferAmount(e.target.value.replace(/[^\d]/g, ""))}
-                    placeholder={offerType === "loan" ? "0 = zdarma" : "např. 50000"}
+                    onChange={setOfferAmount}
+                    placeholder={offerType === "loan" ? "0 = zdarma" : "např. 50 000"}
                     className={`w-full rounded-soft px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
                   />
                 </div>
@@ -1724,7 +1723,7 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
 }) {
   // Výchozí cena = tržní hodnota (stejný vzorec jako nabídky a inzeráty cizích klubů).
   const defaultPrice = marketValue(player.overall_rating ?? 50, player.age ?? 27, player.position);
-  const [price, setPrice] = useState(defaultPrice);
+  const [price, setPrice] = useState<number | null>(defaultPrice);
 
   return (
     <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -1737,11 +1736,9 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
 
           <div className="mt-4">
             <label className="text-xs text-muted font-heading uppercase tracking-wide block mb-1.5">Požadovaná cena (Kč)</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={price.toLocaleString("cs")}
-              onChange={(e) => setPrice(parseInt(e.target.value.replace(/\D/g, "") || "0", 10))}
+            <MoneyInput
+              value={price}
+              onChange={setPrice}
               className="w-full px-3 py-2 rounded-soft border border-gray-200 font-heading font-bold text-lg tabular-nums focus:outline-none focus:border-pitch-500"
             />
             <div className="flex gap-2 mt-2">
@@ -1766,8 +1763,8 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
               Zrušit
             </button>
             <button
-              onClick={() => onConfirm(price)}
-              disabled={loading || price <= 0}
+              onClick={() => { if (price) onConfirm(price); }}
+              disabled={loading || !price}
               className="flex-1 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
             >
               {loading ? "Ukládám..." : "Nabídnout"}

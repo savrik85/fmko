@@ -1,6 +1,7 @@
 "use client";
 
 import { marketValue } from "@okresni-masina/shared";
+import { MoneyInput } from "@/components/ui/money-input";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -2752,7 +2753,7 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
   title: string; description: string; defaultPrice: number;
   onConfirm: (price: number) => Promise<void> | void; onClose: () => void;
 }) {
-  const [price, setPrice] = useState(defaultPrice);
+  const [price, setPrice] = useState<number | null>(defaultPrice);
   const [loading, setLoading] = useState(false);
 
   return (
@@ -2764,15 +2765,11 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
 
           <div className="mt-4">
             <label className="text-xs text-muted font-heading uppercase">Požadovaná cena (Kč)</label>
-            <input
-              type="number"
+            <MoneyInput
               value={price}
-              onChange={(e) => setPrice(Math.min(100_000_000, Math.max(0, parseInt(e.target.value) || 0)))}
-              className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
-              min={0}
-              max={100_000_000}
-              step={500}
+              onChange={setPrice}
               autoFocus
+              className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
             />
             <div className="flex justify-center gap-2 mt-2">
               {/* Násobky výchozí ceny (tržní hodnota / požadovaná cena), stejně jako na detailu hráče.
@@ -2794,7 +2791,8 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose }: {
             className="flex-1 py-3.5 text-sm font-heading font-bold text-muted hover:bg-gray-50 transition-colors">
             Zrušit
           </button>
-          <button disabled={loading} onClick={async () => {
+          <button disabled={loading || !price} onClick={async () => {
+              if (!price) return;
               setLoading(true);
               try { await onConfirm(price); } catch (e) { console.error("PriceDialog confirm error:", e); }
               setLoading(false);
