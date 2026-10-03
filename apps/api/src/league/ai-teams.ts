@@ -4,7 +4,7 @@
 
 import type { Rng } from "../generators/rng";
 import type { VillageInfo } from "../generators/player";
-import { generateSquad, type GeneratedPlayer } from "../generators/player";
+import { generateSquad, type PlayerIdentity } from "../generators/player";
 import { generateNickname } from "../generators/nickname";
 import { generateRelationships, type GeneratedRelationship } from "../generators/relationships";
 
@@ -23,7 +23,7 @@ export interface AITeam {
   primaryColor: string;
   secondaryColor: string;
   tactic: (typeof TACTIC_PROFILES)[number];
-  squad: GeneratedPlayer[];
+  squad: PlayerIdentity[];
   relationships: GeneratedRelationship[];
 }
 
@@ -93,7 +93,7 @@ export function generateAITeams(
     // Assign nicknames
     const usedNicknames = new Set<string>();
     for (const player of squad) {
-      (player as GeneratedPlayer & { nickname?: string | null }).nickname =
+      (player as PlayerIdentity & { nickname?: string | null }).nickname =
         generateNickname(rng, player, usedNicknames);
     }
 

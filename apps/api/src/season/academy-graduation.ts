@@ -10,8 +10,8 @@
  */
 
 import { createRng, cryptoSeed } from "../generators/rng";
-import { tryGraduateYouth, generateAcademyGraduateSkills, paidYouthLevel, YOUTH_POCET_POKUSU, type YouthInvestment } from "./youth";
-import { generatePlayerFace } from "../routes/teams";
+import { tryGraduateYouth, paidYouthLevel, YOUTH_BONUS, YOUTH_POCET_POKUSU, type YouthInvestment } from "./youth";
+import { createPlayer, levelFromVillageSize, categoryFromVillageSize } from "../generators/create-player";
 import { getDistrictDataFromDB } from "../data/districts";
 import { FIRSTNAMES } from "../data/czech-names";
 import { logger } from "../lib/logger";
@@ -100,12 +100,9 @@ export async function graduateAcademyPlayer(
   }
 
   const rng = createRng(cryptoSeed());
-  const sizeMap: Record<string, "vesnice" | "obec" | "mestys" | "mesto"> = {
-    hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto",
-  };
   const villageInfo = {
     region_code: team.district,
-    category: sizeMap[team.size] ?? "obec",
+    category: categoryFromVillageSize(team.size),
     population: team.population ?? 500,
     district: team.district,
   };
@@ -122,31 +119,15 @@ export async function graduateAcademyPlayer(
 
   const p = graduate.player;
   const position = p.position as "GK" | "DEF" | "MID" | "FWD";
-  const isGK = position === "GK";
-  const villageSize = team.size ?? "village";
 
-  // Dovednosti, strop i talent se generují stejně jako u běžného dorostence a investice k nim
-  // přidává bonus (YOUTH_BONUS). Dřív tu byl vlastní rozsah 3–16, takže odchovanec z placené
-  // akademie vycházel slabší než dorostenec, kterého klub dostal zadarmo.
-  const { skills, skillsMax, hiddenTalent } = generateAcademyGraduateSkills(
-    rng, investment as Exclude<YouthInvestment, "none">, position, villageSize, p.age,
-  );
-
-  const physical = {
-    stamina: skills.stamina, strength: skills.strength, injuryProneness: p.injuryProneness ?? 50,
-    height: (isGK ? 183 : 176) + rng.int(-8, 8),
-    weight: 68 + rng.int(-5, 8),
-    preferredFoot: p.preferredFoot, preferredSide: p.preferredSide,
-  };
-  const personality = {
-    discipline: p.discipline, patriotism: p.patriotism, alcohol: p.alcohol, temper: p.temper,
-    leadership: Math.max(5, (p.leadership ?? 30) - 15),
-    workRate: p.workRate, aggression: p.aggression,
-    consistency: Math.max(5, (p.consistency ?? 50) - 10), clutch: p.clutch,
-  };
-
-  const { overallRatingFromFlat } = await import("../skills/generator");
-  const rating = overallRatingFromFlat(position, skills, physical, hiddenTalent) ?? 15;
+  // Dovednosti, strop, talent, fyzička i povaha ze společného generátoru jako u každého
+  // jiného hráče; investice k tomu přidává bonus akademie (YOUTH_BONUS).
+  const created = createPlayer(rng, {
+    identity: p, position, level: levelFromVillageSize(team.size),
+    academy: YOUTH_BONUS[investment as Exclude<YouthInvestment, "none">],
+  });
+  const { skills, skillsMax, hiddenTalent, physical, personality } = created;
+  const rating = created.rating;
   const playerId = crypto.randomUUID();
 
   await db.prepare(
@@ -157,11 +138,11 @@ export async function graduateAcademyPlayer(
   ).bind(
     playerId, u21.id, p.firstName, p.lastName, p.age, position, Math.max(1, rating),
     JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
-    JSON.stringify({ occupation: p.occupation ?? "student", condition: 100, morale: 60 }),
-    JSON.stringify(generatePlayerFace({ age: p.age, bodyType: p.bodyType ?? "normal", ethnicity: p.ethnicity })),
+    JSON.stringify({ ...created.lifeContext, morale: 60 }),
+    JSON.stringify(created.avatar),
     graduate.description,
     JSON.stringify(skillsMax), hiddenTalent, skills.experience,
-    Math.round(5 + rating * 2), p.nationality ?? "CZ",
+    Math.round(5 + rating * 2), created.nationality,
   ).run();
 
   if (seasonId) {

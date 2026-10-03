@@ -16,6 +16,7 @@
 import { logger } from "../lib/logger";
 import { createRng, cryptoSeed, type Rng } from "../generators/rng";
 import type { VillageInfo } from "../generators/player";
+import { levelFromVillageSize } from "../generators/create-player";
 import type { Position } from "../league/u21-generator";
 
 const M = "u21-lifecycle";
@@ -135,7 +136,7 @@ export async function dorostovyCyklus(
     // Nový ročník je vždycky šestnáctiletý — to je smysl doplňování. Kdyby přicházeli
     // rovnou dvacetiletí, pyramida se nenarovná a jen se posune problém o rok dál.
     vysledek.prislo = await vygenerujDorostence(
-      db, u21TeamId, posty, village, velikostObce(village), rng,
+      db, u21TeamId, posty, village, levelFromVillageSize(village.size), rng,
       surnameData, firstnameData, seasonId, 16, 16,
     );
   } catch (e) {
@@ -195,12 +196,6 @@ async function nactiObec(db: D1Database, clubId: string): Promise<(VillageInfo &
     district: r.district,
     size: r.size ?? "village",
   };
-}
-
-function velikostObce(village: VillageInfo): string {
-  return village.category === "vesnice" ? "hamlet"
-    : village.category === "obec" ? "village"
-    : village.category === "mestys" ? "town" : "small_city";
 }
 
 /**
@@ -351,7 +346,7 @@ export async function pregenerujDorost(
     // Celá věková škála 16–21, ne jen šestnáctiletí — přegenerování má nahradit celý
     // dorost, takže pyramida musí vzniknout rovnou celá.
     vysledek.vytvoreno = await vygenerujDorostence(
-      db, u21TeamId, vyberChybejiciPosty(maPost, chybi), village, velikostObce(village),
+      db, u21TeamId, vyberChybejiciPosty(maPost, chybi), village, levelFromVillageSize(village.size),
       createRng(cryptoSeed()), surnameData, firstnameData, seasonId, 16, 21,
     );
   } catch (e) {

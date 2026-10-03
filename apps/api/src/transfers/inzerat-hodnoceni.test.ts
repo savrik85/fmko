@@ -4,7 +4,21 @@ import { fileURLToPath } from "node:url";
 import { createRng } from "../generators/rng";
 import { overallRatingFromFlat } from "../skills/generator";
 import { stropyZDovednosti } from "../skills/stropy-z-dovednosti";
-import { doplnZbyleDovednosti } from "./virtual-teams";
+
+/** Dřívější doplnění dovedností inzerátu (`doplnZbyleDovednosti`) — jen pro historický přepočet níž. */
+function doplnZbyleDovednosti(
+  skills: Record<string, number>,
+  vstup: { stamina: number; strength: number; age: number; sum: (min: number, max: number) => number },
+): Record<string, number> {
+  const kolem = (zaklad: number, rozptyl = 8) => Math.max(1, Math.min(95, Math.round(zaklad) + vstup.sum(-rozptyl, rozptyl)));
+  skills.vision = kolem(skills.technique ?? 40);
+  skills.creativity = kolem(skills.passing ?? 40);
+  skills.setPieces = kolem(((skills.technique ?? 40) + (skills.shooting ?? 40)) / 2);
+  skills.stamina = vstup.stamina;
+  skills.strength = vstup.strength;
+  skills.experience = Math.max(1, Math.min(95, Math.round((vstup.age - 15) * 3.5) + vstup.sum(-5, 5)));
+  return skills;
+}
 
 /**
  * Každý generátor hráčů musí hodnotit TÝMŽ vzorcem jako zbytek hry.
@@ -25,7 +39,8 @@ describe("hodnocení v inzerátu sedí s hodnocením ve hře", () => {
   it.each(ZDROJE)("generátor %s nemá vlastní tabulku vah", (soubor) => {
     const kod = readFileSync(fileURLToPath(new URL(soubor, import.meta.url)), "utf8");
     expect(kod, "posWeights = druhá pravda o tom, jak silný hráč je").not.toMatch(/posWeights\s*[:=]/);
-    expect(kod, "hodnocení musí počítat sdílená funkce").toMatch(/overallRatingFromFlat\(/);
+    // Hodnocení počítá společný generátor (createPlayer → generatePlayerSkills → overallRatingFromFlat).
+    expect(kod, "hráč musí vzniknout přes společný generátor").toMatch(/createPlayer\(|generate(?:FallenStar|GlassMan|CelebrityLegend)\(/);
   });
 
   it("vlastní váhy trhu podceňovaly všechno kromě chytání", () => {

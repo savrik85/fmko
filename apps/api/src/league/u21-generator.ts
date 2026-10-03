@@ -9,11 +9,9 @@
 
 import type { Rng } from "../generators/rng";
 import { FIRSTNAMES } from "../data/czech-names";
-import { generatePlayer, type VillageInfo } from "../generators/player";
-import { generateFieldSkills, generateGKSkills, generateHiddenTalent, calculateOverallRating, flattenGeneratedSkills } from "../skills/generator";
+import type { VillageInfo } from "../generators/player";
+import { createPlayer, levelFromCategory, levelFromVillageSize } from "../generators/create-player";
 import { generateDescription } from "../generators/description-generator";
-import { pickOccupation } from "../generators/occupations";
-import { generatePlayerFace } from "../routes/teams";
 import { getDistrictDataFromDB } from "../data/districts";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
@@ -122,6 +120,7 @@ export async function backfillU21ForLeague(
       surnameData,
       firstnameData,
       seasonId,
+      levelFromVillageSize(villageRow?.size),
     );
     teamsCreated++;
     playersCreated += created.playerCount;
@@ -178,55 +177,17 @@ export async function vygenerujDorostence(
   const contractStmts: D1PreparedStatement[] = [];
 
   for (const position of positions) {
-    const base = generatePlayer(rng, village, position, surnameData, firstnameData);
-    // Forcovat věk 16-21 (override náhodný věk z generatePlayer)
-    const age = rng.int(vekOd, vekDo);
-
-    const isGK = position === "GK";
-    // Bez AI penalizace. Dorostenec je vlastní odchovanec, ne výplň soupeřovy lavičky —
-    // s `isAi = true` mu generátor strhával 6–12 bodů z průměrů a 4–8 ze stropů, takže
-    // mladík vycházel z akademie s nižším POTENCIÁLEM než dospělý v áčku. Věkovou slabost
-    // řeší `applyAgeCurve` (do 20 let 0,7× současné hodnoty), strop se snižovat nemá.
-    const fieldSkills = !isGK ? generateFieldSkills(rng, position as "DEF" | "MID" | "FWD", villageSize, age) : null;
-    const gkSkills = isGK ? generateGKSkills(rng, villageSize, age) : null;
-
-    // Občas se v dorostu urodí kluk, co vesnici přeroste. Vzácně (~7 %) dostane výrazný
-    // talent a strop posunutý nahoro — takový hráč vypadá zpočátku stejně nevýrazně jako
-    // ostatní (současné hodnoty se nemění), ale trénink ho vytáhne mnohem výš.
-    let hiddenTalent = generateHiddenTalent(rng, villageSize);
-    if (rng.random() < 0.07) {
-      hiddenTalent = rng.int(70, 95);
-      const bonusStropu = rng.int(12, 25);
-      const dovednosti = (isGK ? gkSkills : fieldSkills) as unknown as Record<string, { current: number; maxPotential: number }>;
-      for (const dovednost of Object.values(dovednosti)) {
-        dovednost.maxPotential = Math.min(100, dovednost.maxPotential + bonusStropu);
-      }
-    }
-
-    const skills = flattenGeneratedSkills(isGK ? gkSkills! : fieldSkills!, isGK);
-
-    const height = (position === "GK" ? 185 : position === "DEF" ? 180 : position === "FWD" ? 178 : 176) + rng.int(-8, 8);
-    const baseWeight = base.bodyType === "obese" ? 92 : base.bodyType === "stocky" ? 82 : base.bodyType === "thin" ? 65 : base.bodyType === "athletic" ? 72 : 74;
-    const weight = baseWeight + rng.int(-4, 6);
-
-    const physical = {
-      stamina: isGK ? gkSkills!.strength.current : fieldSkills!.stamina.current,
-      strength: isGK ? gkSkills!.strength.current : fieldSkills!.strength.current,
-      injuryProneness: rng.int(10, 60), height, weight,
-      preferredFoot: base.preferredFoot, preferredSide: base.preferredSide,
-    };
-    const personality = {
-      discipline: rng.int(10, 90), patriotism: rng.int(20, 90), alcohol: rng.int(5, 60), temper: rng.int(10, 80),
-      leadership: Math.max(5, base.leadership - 15), // mladí mají nižší vůdcovství
-      workRate: base.workRate, aggression: base.aggression,
-      consistency: Math.max(5, base.consistency - 10), clutch: base.clutch,
-    };
-    const occ = pickOccupation(rng, villageSize, age, village.district);
-    const lifeContext = { occupation: occ.name, condition: 100, morale: 50 + rng.int(-10, 10) };
-    const rating = calculateOverallRating(position, isGK ? gkSkills! : fieldSkills!, hiddenTalent);
+    // Dovednosti, strop, talent (i 7% šance na klenot), fyzička a povaha ze společného
+    // generátoru (createPlayer) — stejně jako u každého jiného hráče ve hře.
+    const created = createPlayer(rng, {
+      position, village, names: { surnameData, firstnameData },
+      age: rng.int(vekOd, vekDo), level: villageSize,
+    });
+    const base = created.identity;
+    const { age, skills, personality, lifeContext, physical, hiddenTalent, rating } = created;
     const description = generateDescription(rng, {
       firstName: base.firstName, lastName: base.lastName, nickname: "",
-      age, position, occupation: occ.name,
+      age, position, occupation: lifeContext.occupation,
       bodyType: base.bodyType, alcohol: personality.alcohol, discipline: personality.discipline,
       speed: skills.speed, shooting: skills.shooting, technique: skills.technique,
       patriotism: personality.patriotism,
@@ -240,12 +201,12 @@ export async function vygenerujDorostence(
         playerId, teamId, base.firstName, base.lastName, "", age, position, rating,
         JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
         JSON.stringify(lifeContext),
-        JSON.stringify(generatePlayerFace({ age, bodyType: base.bodyType, ethnicity: base.ethnicity })),
+        JSON.stringify(created.avatar),
         description,
-        JSON.stringify(isGK ? gkSkills : fieldSkills), hiddenTalent,
-        isGK ? gkSkills!.experience.current : fieldSkills!.experience.current,
+        JSON.stringify(created.skillsMax), hiddenTalent,
+        created.experience,
         Math.round(5 + rating * 2), // U21 nižší mzdy
-        base.nationality ?? "CZ",
+        created.nationality,
       )
     );
 
@@ -279,6 +240,7 @@ export async function createU21TeamAndSquad(
   surnameData: { surnames: Record<string, number>; female_forms: Record<string, string> },
   firstnameData: { male: Record<string, Record<string, number>>; female: Record<string, Record<string, number>> },
   seasonId: string,
+  level?: string,
 ): Promise<{ teamId: string; playerCount: number }> {
   const u21TeamId = crypto.randomUUID();
 
@@ -321,9 +283,8 @@ export async function createU21TeamAndSquad(
   }
   rng.shuffle(positions);
 
-  const villageSize = village.category === "vesnice" ? "hamlet"
-    : village.category === "obec" ? "village"
-    : village.category === "mestys" ? "town" : "small_city";
+  // Skutečná velikost obce, když ji volající zná — z kategorie by se velké město ztratilo.
+  const villageSize = level ?? levelFromCategory(village.category);
 
   const pocet = await vygenerujDorostence(
     db, u21TeamId, positions, village, villageSize, rng, surnameData, firstnameData, seasonId,

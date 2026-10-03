@@ -7,7 +7,7 @@
 
 import type { Rng } from "../generators/rng";
 import type { GeneratedPlayer, VillageInfo } from "../generators/player";
-import { generatePlayer } from "../generators/player";
+import { createPlayer, toGeneratedPlayer, MARKET_SHIFT } from "../generators/create-player";
 
 export type TransferChannel = "free_agent" | "recommendation" | "departure" | "pub" | "scouting";
 
@@ -81,8 +81,10 @@ export function generateTransferOffers(
   if (rng.random() < 0.08 * repMod && squadSize < 30) {
     const positions = ["GK", "DEF", "MID", "FWD"] as const;
     const pos = rng.pick([...positions]);
-    const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
-    player.age = rng.int(20, 38);
+    const player = toGeneratedPlayer(createPlayer(rng, {
+      position: pos, village: villageInfo, names: { surnameData, firstnameData },
+      age: rng.int(20, 38), shift: MARKET_SHIFT,
+    }));
     offers.push({
       channel: "free_agent",
       player,
@@ -97,8 +99,10 @@ export function generateTransferOffers(
     const recommender = rng.pick(existingSquad);
     const positions = ["GK", "DEF", "MID", "FWD"] as const;
     const pos = rng.pick([...positions]);
-    const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
-    player.age = rng.int(18, 35);
+    const player = toGeneratedPlayer(createPlayer(rng, {
+      position: pos, village: villageInfo, names: { surnameData, firstnameData },
+      age: rng.int(18, 35), shift: MARKET_SHIFT,
+    }));
     // Recommendation = same surname possible (brother/cousin)
     if (rng.random() < 0.4) {
       player.lastName = recommender.lastName;
@@ -116,8 +120,10 @@ export function generateTransferOffers(
   if (rng.random() < 0.05) {
     const positions = ["DEF", "MID", "FWD"] as const;
     const pos = rng.pick([...positions]);
-    const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
-    player.age = rng.int(22, 42);
+    const player = toGeneratedPlayer(createPlayer(rng, {
+      position: pos, village: villageInfo, names: { surnameData, firstnameData },
+      age: rng.int(22, 42), shift: MARKET_SHIFT,
+    }));
     const pubCost = rng.int(0, 500); // Maybe a round of beers
     offers.push({
       channel: "pub",

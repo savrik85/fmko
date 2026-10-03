@@ -1,5 +1,8 @@
 import type { Rng } from "./rng";
-import type { GeneratedPlayer } from "./player";
+import type { GeneratedPlayer, PlayerIdentity } from "./player";
+
+/** Identita hráče; dovednosti jen když už jsou spočítané (registrace), AI kádry je nemají. */
+type NicknamePlayer = PlayerIdentity & Partial<Pick<GeneratedPlayer, "speed" | "technique" | "shooting" | "heading" | "defense" | "goalkeeping">>;
 
 /**
  * FMK-28: Pravidlový engine pro generování přezdívek.
@@ -123,15 +126,15 @@ const BODY_NICKNAMES: Record<string, string[]> = {
 };
 
 // 4. Přezdívky z fotbalových atributů
-function getSkillNicknames(player: GeneratedPlayer): string[] {
+function getSkillNicknames(player: NicknamePlayer): string[] {
   const nicks: string[] = [];
-  if (player.shooting >= 16) nicks.push("Dělo", "Kanón", "Bombarda");
-  if (player.speed >= 16) nicks.push("Blesk", "Sprinter", "Turbo", "Raketa");
-  if (player.speed <= 5) nicks.push("Šnek", "Šlapka", "Traktůrek");
-  if (player.technique >= 16) nicks.push("Maestro", "Mág", "Zlatá noha");
-  if (player.heading >= 16) nicks.push("Hlava", "Hlavička", "Žirafa");
-  if (player.defense >= 16) nicks.push("Zeď", "Beton", "Hráz");
-  if (player.goalkeeping >= 16) nicks.push("Pavouček", "Kočka", "Rukavice");
+  if ((player.shooting ?? 0) >= 16) nicks.push("Dělo", "Kanón", "Bombarda");
+  if ((player.speed ?? 0) >= 16) nicks.push("Blesk", "Sprinter", "Turbo", "Raketa");
+  if (player.speed !== undefined && player.speed <= 5) nicks.push("Šnek", "Šlapka", "Traktůrek");
+  if ((player.technique ?? 0) >= 16) nicks.push("Maestro", "Mág", "Zlatá noha");
+  if ((player.heading ?? 0) >= 16) nicks.push("Hlava", "Hlavička", "Žirafa");
+  if ((player.defense ?? 0) >= 16) nicks.push("Zeď", "Beton", "Hráz");
+  if ((player.goalkeeping ?? 0) >= 16) nicks.push("Pavouček", "Kočka", "Rukavice");
   if (player.alcohol >= 16) nicks.push("Pivko", "Bedrník", "Soudek");
   if (player.temper >= 16) nicks.push("Bouřka", "Dynamit", "Sopka");
   if (player.discipline <= 4) nicks.push("Divočák", "Rebel", "Anarchista");
@@ -149,7 +152,7 @@ interface NicknameSource {
  */
 export function generateNickname(
   rng: Rng,
-  player: GeneratedPlayer,
+  player: NicknamePlayer,
   existingNicknames: Set<string>,
 ): string | null {
   // ~20% chance of no nickname

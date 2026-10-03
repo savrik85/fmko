@@ -3,10 +3,9 @@
  */
 
 import type { Rng } from "../generators/rng";
-import type { GeneratedPlayer, VillageInfo } from "../generators/player";
+import type { PlayerIdentity, VillageInfo } from "../generators/player";
 import { generatePlayer } from "../generators/player";
-import type { FieldSkills, GoalkeeperSkills } from "../skills/types";
-import { generateFieldSkills, generateGKSkills, generateHiddenTalent, flattenGeneratedSkills } from "../skills/generator";
+import { generatePlayerSkills, type AcademyBonus } from "../skills/generator";
 
 export type YouthInvestment = "none" | "minimal" | "medium" | "high";
 
@@ -16,7 +15,7 @@ export interface YouthConfig {
 }
 
 export interface YouthGraduate {
-  player: GeneratedPlayer;
+  player: PlayerIdentity;
   description: string;
 }
 
@@ -122,27 +121,23 @@ export function sanceJednohoPokusu(investment: YouthInvestment): number {
  * pro velkorysou akademii: osada ~1 hvězda za 6 sezón, obec za 4, městys za 2; solidní
  * akademie v osadě ~1 za 30 sezón, symbolická prakticky nikdy.
  */
-export const YOUTH_BONUS: Record<Exclude<YouthInvestment, "none">, { current: number; cap: number; talent: [number, number]; gemChance: number }> = {
+export const YOUTH_BONUS: Record<Exclude<YouthInvestment, "none">, AcademyBonus> = {
   minimal: { current: 1, cap: 6, talent: [0, 5], gemChance: 0.03 },
   medium: { current: 3, cap: 10, talent: [5, 15], gemChance: 0.06 },
   high: { current: 5, cap: 14, talent: [10, 25], gemChance: 0.10 },
 };
 
-/** Talent a posun stropu klenotu — stejné pásmo jako „kluk, co vesnici přeroste" v U21 generátoru. */
-const GEM_TALENT: [number, number] = [70, 95];
-const GEM_EXTRA_CAP: [number, number] = [10, 20];
-
 export interface AcademyGraduateSkills {
   /** Ploché hodnoty do `players.skills`. */
   skills: Record<string, number>;
   /** Hodnoty se stropy do `players.skills_max` — current sedí se `skills`. */
-  skillsMax: FieldSkills | GoalkeeperSkills;
+  skillsMax: Record<string, { current: number; maxPotential: number }>;
   hiddenTalent: number;
 }
 
 /**
- * Dovednosti odchovance: stejný generátor jako u dorostence z U21 generátoru, k tomu bonus
- * podle investice. Současná hodnota nikdy nepřeleze strop.
+ * Dovednosti odchovance: společný generátor (`generatePlayerSkills`) jako u každého jiného
+ * hráče, k tomu bonus podle investice. Současná hodnota nikdy nepřeleze strop.
  */
 export function generateAcademyGraduateSkills(
   rng: Rng,
@@ -151,26 +146,10 @@ export function generateAcademyGraduateSkills(
   villageSize: string,
   age: number,
 ): AcademyGraduateSkills {
-  const isGK = position === "GK";
-  const skillsMax = isGK
-    ? generateGKSkills(rng, villageSize, age)
-    : generateFieldSkills(rng, position, villageSize, age);
-  const bonus = YOUTH_BONUS[investment];
-  const isGem = rng.random() < bonus.gemChance;
-  const capBonus = bonus.cap + (isGem ? rng.int(GEM_EXTRA_CAP[0], GEM_EXTRA_CAP[1]) : 0);
-
-  for (const [key, value] of Object.entries(skillsMax as unknown as Record<string, { current: number; maxPotential: number }>)) {
-    // Zkušenost dávají odehrané minuty, ne akademie
-    if (key === "experience") continue;
-    value.maxPotential = Math.min(100, value.maxPotential + capBonus);
-    value.current = Math.min(value.maxPotential, value.current + bonus.current);
-  }
-
-  const hiddenTalent = isGem
-    ? rng.int(GEM_TALENT[0], GEM_TALENT[1])
-    : Math.min(100, generateHiddenTalent(rng, villageSize) + rng.int(bonus.talent[0], bonus.talent[1]));
-
-  return { skills: flattenGeneratedSkills(skillsMax, isGK), skillsMax, hiddenTalent };
+  const { skills, skillsMax, hiddenTalent } = generatePlayerSkills(rng, {
+    position, age, level: villageSize, academy: YOUTH_BONUS[investment],
+  });
+  return { skills, skillsMax, hiddenTalent };
 }
 
 /**
@@ -227,14 +206,15 @@ export function tryGraduateYouth(
   const position = rng.pick([...positions]);
   const age = rng.int(16, 18);
 
-  const player = generatePlayer(rng, villageInfo, position, surnameData, firstnameData);
-  player.age = age;
+  // Věk jde do generátoru rovnou, ať jméno, vzhled i povolání sedí na šestnáctiletého.
+  const player = generatePlayer(rng, villageInfo, position, surnameData, firstnameData, { age });
 
-  // Dovednosti se tu nenastavují — skutečné hodnoty skládá generateAcademyGraduateSkills(),
-  // tady se vybírá jen kluk (jméno, věk, pozice, povaha).
+  // Dovednosti se tu nenastavují — skládá je společný generátor (createPlayer v
+  // academy-graduation.ts), tady se vybírá jen kluk (jméno, věk, pozice, povaha).
 
-  // Youth academy players have higher patriotism
-  player.patriotism = Math.min(20, player.patriotism + rng.int(3, 6));
+  // Odchovanec drží s klubem víc než přespolní. (Dřív `Math.min(20, …)` ze staré
+  // dvacetibodové stupnice — na stovkové srazilo patriotismus odchovance na 20.)
+  player.patriotism = Math.min(100, player.patriotism + rng.int(10, 20));
 
   const descriptions = [
     `${player.firstName} ${player.lastName} (${age}) dorostl z mládeže do áčka. Nadšený mladík!`,

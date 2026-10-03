@@ -16,7 +16,7 @@ import {
   type CelebrityTier,
 } from "../generators/player";
 import { generatePlayerFace } from "../routes/teams";
-import { overallRatingFromFlat } from "../skills/generator";
+import { generateHeightWeight } from "../generators/physicals";
 
 
 interface SpawnResult {
@@ -72,31 +72,14 @@ export async function spawnCelebrity(
     "SELECT id FROM villages WHERE district = ? ORDER BY RANDOM() LIMIT 1"
   ).bind(leagueInfo.district).first<{ id: string }>().catch((e) => { logger.warn({ module: "celebrity-spawn" }, "pick village", e); return null; });
 
-  const skillsObj: Record<string, number> = {
-    speed: celeb.speed, technique: celeb.technique, shooting: celeb.shooting,
-    passing: celeb.passing, heading: celeb.heading, defense: celeb.defense,
-    goalkeeping: celeb.goalkeeping, stamina: celeb.stamina, strength: celeb.strength,
-    creativity: Math.round((celeb.technique + celeb.passing) / 2),
-    setPieces: rng.int(30, 70),
-    // Přehled a zkušenost mají ve sdílených vahách svou váhu. Bez nich by se celebritě
-    // hodnocení po podpisu hnulo — a slavný borec zkušenost rozhodně má.
-    vision: Math.round((celeb.technique + celeb.passing) / 2),
-    experience: Math.min(100, Math.max(1, (celeb.age - 16) * rng.int(4, 7))),
-  };
+  // Dovednosti, strop, talent i hodnocení dodal společný generátor (generatePlayerSkills).
+  const { skills: skillsObj, skillsMax, hiddenTalent, rating: overallRating } = celeb.generated;
   const physicalObj = {
-    stamina: celeb.stamina, strength: celeb.strength,
+    stamina: skillsObj.stamina, strength: skillsObj.strength,
     injuryProneness: celeb.injuryProneness,
-    height: rng.int(170, 195), weight: rng.int(70, 95),
+    ...generateHeightWeight(rng, celeb.position, celeb.bodyType),
     preferredFoot: celeb.preferredFoot, preferredSide: celeb.preferredSide,
   };
-
-  // Hodnocení TÝMŽ vzorcem jako zbytek hry. Vlastní procentní váhy tady počítaly jen ze
-  // sedmi dovedností a brankáři z nich dávaly 60 % na chytání — hra počítá i výdrž, sílu,
-  // přehled, kreativitu, standardky a zkušenost. Číslo v nabídce pak neodpovídalo tomu,
-  // co manažer po podpisu dostal, a mzda i cena se počítají právě z něj.
-  const overallRating = overallRatingFromFlat(
-    celeb.position, skillsObj, physicalObj, celeb.hiddenTalent ?? 0, celeb.skillsMax as Record<string, unknown> | undefined,
-  ) ?? Math.round(Object.values(skillsObj).reduce((a, b) => a + b, 0) / Object.keys(skillsObj).length);
 
   const skills = JSON.stringify(skillsObj);
   const personality = JSON.stringify({
@@ -108,11 +91,13 @@ export async function spawnCelebrity(
     celebrityType: celeb.celebrityType,
     ...(celeb.celebrityTier ? { celebrityTier: celeb.celebrityTier } : {}),
   });
-  let lifeContext = JSON.stringify({
+  const lifeContext = JSON.stringify({
     occupation: celeb.occupation,
     condition: celeb.condition,
     morale: celeb.morale,
     celebrityTransportCost: celeb.transportCost,
+    // Podpis volného hráče čte stropy odsud (viz podpis v routes/game.ts).
+    skillsMax,
   });
   const physical = JSON.stringify(physicalObj);
 
@@ -127,16 +112,8 @@ export async function spawnCelebrity(
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400) + celeb.transportCost;
   const avatar = JSON.stringify(generatePlayerFace({ age: celeb.age, bodyType: celeb.bodyType }));
 
-  const hiddenTalent = celeb.hiddenTalent ?? 0;
   const nickname = celeb.nickname;
   const fullName = `${celeb.firstName} ${celeb.lastName}`;
-
-  // Store skillsMax in life_context if present (for fallen_star)
-  if (celeb.skillsMax) {
-    const lc = JSON.parse(lifeContext);
-    lc.skillsMax = celeb.skillsMax;
-    lifeContext = JSON.stringify(lc);
-  }
 
   await db.prepare(`
     INSERT INTO free_agents (id, first_name, last_name, nickname, age, position, overall_rating,
@@ -148,7 +125,7 @@ export async function spawnCelebrity(
     skills, personality, lifeContext, physical, avatar, weeklyWage, leagueInfo.district,
     villageRow?.id ?? null, expiresAt.toISOString(), hiddenTalent,
     // Stropy i do sloupce, ne jen do `life_context` — jedna věc na jednom místě.
-    JSON.stringify(celeb.skillsMax ?? {}),
+    JSON.stringify(skillsMax),
   ).run();
 
   // Celebrita je nové tělo, které hra vytvořila, ne recyklovaný propuštěnec.

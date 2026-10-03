@@ -1,5 +1,5 @@
 import type { Rng } from "./rng";
-import type { GeneratedPlayer, VillageInfo } from "./player";
+import type { PlayerIdentity, VillageInfo } from "./player";
 import type { RelationshipType } from "@okresni-masina/shared";
 
 export interface GeneratedRelationship {
@@ -28,7 +28,7 @@ const MAX_DRINKING_BUDDY_PAIRS = 2;
  */
 export function generateRelationships(
   rng: Rng,
-  squad: GeneratedPlayer[],
+  squad: PlayerIdentity[],
   village: VillageInfo,
 ): GeneratedRelationship[] {
   const relationships: GeneratedRelationship[] = [];
@@ -194,7 +194,7 @@ export function generateRelationships(
   return relationships;
 }
 
-/** Hráč tak, jak ho pro vazby potřebujeme — stačí pár polí, ne celý GeneratedPlayer. */
+/** Hráč tak, jak ho pro vazby potřebujeme — stačí pár polí, ne celá PlayerIdentity. */
 export interface RelationCandidate {
   id: string;
   lastName: string;

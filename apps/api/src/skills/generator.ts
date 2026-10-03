@@ -2,7 +2,7 @@
  * FMK-53: Generátor skillů pro nového hráče (0-100 stupnice).
  */
 
-import type { Rng } from "../generators/rng";
+import { createRng, type Rng } from "../generators/rng";
 import type { FieldSkills, GoalkeeperSkills, SkillValue, LeagueLevelRange } from "./types";
 import { SKILL_RANGES_BY_LEVEL } from "./types";
 // Váhy hodnocení žijí ve sdíleném balíku — používá je i web pro zvýraznění atributů v profilu.
@@ -72,6 +72,21 @@ export function flattenGeneratedSkills(
 }
 
 /**
+ * Rozsahy úrovně posunuté o `shift` bodů. Kladný posun = lepší hráči (trh, celebrity),
+ * záporný = slabší (AI kluby). Průměry i stropy se posouvají stejně, aby kladný posun
+ * nenarazil na strop a hráč opravdu vyšel o tolik lepší.
+ */
+function shiftedRange(villageSize: string, shift: number): LeagueLevelRange {
+  const base = SKILL_RANGES_BY_LEVEL[villageSize] ?? SKILL_RANGES_BY_LEVEL.village;
+  return {
+    avgMin: Math.max(1, base.avgMin + shift),
+    avgMax: Math.max(5, base.avgMax + shift),
+    capMin: Math.max(5, base.capMin + shift),
+    capMax: Math.max(10, base.capMax + shift),
+  };
+}
+
+/**
  * Generate field player skills.
  */
 export function generateFieldSkills(
@@ -79,17 +94,9 @@ export function generateFieldSkills(
   position: "DEF" | "MID" | "FWD",
   villageSize: string,
   age: number,
-  isAi?: boolean,
+  shift = 0,
 ): FieldSkills {
-  const base = SKILL_RANGES_BY_LEVEL[villageSize] ?? SKILL_RANGES_BY_LEVEL.village;
-  // AI teams are weaker: lower averages and caps
-  const penalty = isAi ? rng.int(6, 12) : 0;
-  const range: LeagueLevelRange = {
-    avgMin: Math.max(1, base.avgMin - penalty),
-    avgMax: Math.max(5, base.avgMax - penalty),
-    capMin: Math.max(5, base.capMin - Math.round(penalty * 0.7)),
-    capMax: Math.max(10, base.capMax - Math.round(penalty * 0.7)),
-  };
+  const range = shiftedRange(villageSize, shift);
 
   // Position-specific bonuses
   const bonuses: Record<string, Record<string, number>> = {
@@ -138,16 +145,9 @@ export function generateGKSkills(
   rng: Rng,
   villageSize: string,
   age: number,
-  isAi?: boolean,
+  shift = 0,
 ): GoalkeeperSkills {
-  const base = SKILL_RANGES_BY_LEVEL[villageSize] ?? SKILL_RANGES_BY_LEVEL.village;
-  const penalty = isAi ? rng.int(6, 12) : 0;
-  const range: LeagueLevelRange = {
-    avgMin: Math.max(1, base.avgMin - penalty),
-    avgMax: Math.max(5, base.avgMax - penalty),
-    capMin: Math.max(5, base.capMin - Math.round(penalty * 0.7)),
-    capMax: Math.max(10, base.capMax - Math.round(penalty * 0.7)),
-  };
+  const range = shiftedRange(villageSize, shift);
   const gkBonus = 5;
 
   // Bonusy odpovídají původním brankářským dovednostem, jen pod plochými názvy:
@@ -263,4 +263,167 @@ export function overallRatingFromFlat(
   // Stejně jako v calculateOverallRating: skrytý talent do hodnocení nepatří.
   void hiddenTalent;
   return Math.round(weightedSum / totalWeight);
+}
+
+// ═══════════════════════════════════════════════
+// JEDINÝ GENERÁTOR DOVEDNOSTÍ HRÁČE
+// ═══════════════════════════════════════════════
+
+export type PlayerPositionCode = "GK" | "DEF" | "MID" | "FWD";
+
+/** Šance na klenot u kluka do 21 let: talent 70–95 a strop o 12–25 výš. */
+export const GEM_CHANCE = 0.07;
+const GEM_TALENT: [number, number] = [70, 95];
+const GEM_EXTRA_CAP: [number, number] = [12, 25];
+
+/** Co k běžnému klukovi přidá placená akademie (viz `YOUTH_BONUS` v season/youth.ts). */
+export interface AcademyBonus {
+  current: number;
+  cap: number;
+  talent: [number, number];
+  gemChance: number;
+}
+
+export interface PlayerSkillsOptions {
+  position: PlayerPositionCode;
+  /** Skutečný věk hráče (zkušenost, talent, klenot). */
+  age: number;
+  /** Úroveň dovedností: hamlet | village | town | small_city | city. */
+  level: string;
+  /** Posun úrovně v bodech: AI kluby záporný, trh kladný. */
+  shift?: number;
+  /** Místo `shift`: hráč má v průměru vyjít na tohle hodnocení. */
+  targetRating?: number;
+  /** Věk pro věkovou křivku, když se liší od skutečného (legenda hraje na úrovni vrcholu kariéry). */
+  skillAge?: number;
+  academy?: AcademyBonus;
+  /** Pevný talent (zkrachovalý talent z ligy). */
+  hiddenTalent?: number;
+  /** Strop výš o tolik bodů na každé dovednosti. */
+  capBonus?: number;
+}
+
+export interface PlayerSkills {
+  /** Ploché hodnoty do `skills`. */
+  skills: Record<string, number>;
+  /** Hodnoty se stropy do `skills_max`; `current` sedí se `skills`. */
+  skillsMax: Record<string, SkillValue>;
+  hiddenTalent: number;
+  rating: number;
+  experience: number;
+}
+
+/**
+ * Skrytý talent podle úrovně a věku. Starší hráč ho z velké části už proměnil v dovednosti.
+ */
+export function talentForAge(rng: Rng, level: string, age: number): number {
+  const base = generateHiddenTalent(rng, level);
+  if (age <= 23) return base;
+  if (age <= 28) return Math.round(base * 0.7);
+  return Math.round(base * 0.4);
+}
+
+const ratingCurveCache = new Map<string, { base: number; slope: number }>();
+
+/**
+ * Průměrné hodnocení hráče daného věku na dané úrovni bez posunu (`base`) a o kolik ho
+ * zvedne jeden bod posunu (`slope`). Počítá se ze vzorku generátoru, protože do hodnocení
+ * vstupuje i zkušenost (roste s věkem, posun ji nemění) a věková křivka.
+ */
+function ratingCurve(level: string, position: PlayerPositionCode, age: number): { base: number; slope: number } {
+  const key = `${level}:${position}:${age}`;
+  const cached = ratingCurveCache.get(key);
+  if (cached) return cached;
+  const mean = (shift: number) => {
+    // Pevné semínko, aby stejný dotaz dal vždy stejné číslo.
+    const rng = createRng(20261003);
+    const samples = 200;
+    let sum = 0;
+    for (let i = 0; i < samples; i++) {
+      const generated = position === "GK" ? generateGKSkills(rng, level, age, shift) : generateFieldSkills(rng, position, level, age, shift);
+      const flat = flattenGeneratedSkills(generated, position === "GK");
+      sum += overallRatingFromFlat(position, flat, { stamina: flat.stamina, strength: flat.strength }, 0) ?? 0;
+    }
+    return sum / samples;
+  };
+  const base = mean(0);
+  const curve = { base, slope: Math.max(0.1, (mean(20) - base) / 20) };
+  ratingCurveCache.set(key, curve);
+  return curve;
+}
+
+/** Posun úrovně, se kterým hráč daného věku vyjde v průměru na `rating`. */
+export function shiftForRating(level: string, position: PlayerPositionCode, age: number, rating: number): number {
+  const { base, slope } = ratingCurve(level, position, age);
+  return Math.round((rating - base) / slope);
+}
+
+/**
+ * Brankářovy ploché dovednosti, které nemá vlastní (střelba, standardky, výdrž, přehled),
+ * dostanou strop dovednosti, ze které se skládají — stejně jako v `flattenGeneratedSkills`.
+ * Bez toho by je trénink zvedal bez omezení.
+ */
+function withGoalkeeperFlatCaps(values: Record<string, SkillValue>): Record<string, SkillValue> {
+  return {
+    ...values,
+    shooting: { ...values.technique },
+    setPieces: { ...values.technique },
+    stamina: { ...values.strength },
+    vision: { ...values.defense },
+  };
+}
+
+/**
+ * Dovednosti, strop, talent a hodnocení nového hráče. JEDINÉ místo, kde se tohle počítá.
+ *
+ * Hráči dřív vznikali na deseti místech a každé si dovednosti skládalo po svém: vlastní
+ * losování 3–30, vlastní vzorec v `generatePlayer`, vlastní stropy, šest různých pravidel
+ * pro talent. Kluk z nabídky dorostu tak vyšel s hodnocením 12, zatímco dorost klubu měl
+ * průměr 30. Místa, kde hráč vzniká, se teď liší jen parametry (věk, úroveň, posun, bonus
+ * akademie), ne výpočtem.
+ */
+export function generatePlayerSkills(rng: Rng, opts: PlayerSkillsOptions): PlayerSkills {
+  const { position, age, level } = opts;
+  const isGK = position === "GK";
+  const skillAge = opts.skillAge ?? age;
+  const shift = opts.targetRating !== undefined
+    ? shiftForRating(level, position, skillAge, opts.targetRating)
+    : (opts.shift ?? 0);
+
+  const generated = isGK
+    ? generateGKSkills(rng, level, skillAge, shift)
+    : generateFieldSkills(rng, position, level, skillAge, shift);
+  const values = generated as unknown as Record<string, SkillValue>;
+  // Zkušenost se počítá ze skutečného věku, i když dovednosti jsou z vrcholu kariéry.
+  if (skillAge !== age) {
+    values.experience = { current: Math.min(100, Math.max(0, (age - 16) * rng.int(3, 6))), maxPotential: 100 };
+  }
+
+  let hiddenTalent = talentForAge(rng, level, age);
+  let capBonus = opts.capBonus ?? 0;
+  let currentBonus = 0;
+  if (opts.academy) {
+    capBonus += opts.academy.cap;
+    currentBonus = opts.academy.current;
+    hiddenTalent = Math.min(100, hiddenTalent + rng.int(opts.academy.talent[0], opts.academy.talent[1]));
+  }
+  // Občas se urodí kluk, co vesnici přeroste: zpočátku vypadá stejně, ale trénink ho vytáhne výš.
+  const gemChance = opts.academy?.gemChance ?? (age <= 21 ? GEM_CHANCE : 0);
+  if (rng.random() < gemChance) {
+    hiddenTalent = rng.int(GEM_TALENT[0], GEM_TALENT[1]);
+    capBonus += rng.int(GEM_EXTRA_CAP[0], GEM_EXTRA_CAP[1]);
+  }
+  if (opts.hiddenTalent !== undefined) hiddenTalent = opts.hiddenTalent;
+
+  for (const [key, value] of Object.entries(values)) {
+    // Zkušenost dávají odehrané minuty, ne talent ani akademie
+    if (key === "experience") continue;
+    value.maxPotential = Math.min(100, value.maxPotential + capBonus);
+    value.current = Math.min(value.maxPotential, value.current + currentBonus);
+  }
+
+  const skills = flattenGeneratedSkills(generated, isGK);
+  const skillsMax = isGK ? withGoalkeeperFlatCaps(values) : { ...values };
+  const rating = overallRatingFromFlat(position, skills, { stamina: skills.stamina, strength: skills.strength }, hiddenTalent) ?? 1;
+  return { skills, skillsMax, hiddenTalent, rating: Math.max(1, rating), experience: skills.experience };
 }

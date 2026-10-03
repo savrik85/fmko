@@ -6,13 +6,11 @@
 
 import type { Rng } from "../generators/rng";
 import { FIRSTNAMES } from "../data/czech-names";
-import { generatePlayer, type VillageInfo } from "../generators/player";
-import { generateHeightWeight } from "../generators/physicals";
-import { generatePlayerFace } from "../routes/teams";
+import type { VillageInfo } from "../generators/player";
+import { createPlayer } from "../generators/create-player";
 import { estimateMarketValue } from "../season/economy";
 import { logger } from "../lib/logger";
-import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
-import { overallRatingFromFlat } from "../skills/generator";
+import { shiftForRating } from "../skills/generator";
 
 // ═══════════════════════════════════════════════
 // HARDCODED VIRTUAL TEAMS PER DISTRICT
@@ -122,7 +120,6 @@ export async function generateAiListings(
   // Brankáři vzácně (viz free-agent-pool) — trh nemá být zaplavený gólmany
   const position = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof POSITIONS[number];
   const age = rng.int(19, 35);
-  const qualityBase = team.rating + rng.int(-5, 5);
 
   // Get district surnames
   const { getDistrictDataFromDB } = await import("../data/districts");
@@ -130,63 +127,22 @@ export async function generateAiListings(
   const surnameData = { surnames: districtData.surnames, female_forms: {} as Record<string, string> };
   const firstnameData = { male: FIRSTNAMES, female: {} as Record<string, Record<string, number>> };
 
+  // Kvalita se ladí na sílu klubu: hráč v nejlepším věku vyjde o 0–8 bodů nad `team.rating`
+  // (inzeruje se hráč, kterého klub pustí, ale ne odpad), mladší a starší podle věkové křivky.
+  // Průměr inzerátů tak zůstává jako před sjednocením generátorů (produkce: 48,2).
+  // Dovednosti, strop, talent i hodnocení pak počítá společný generátor jako u každého hráče.
   const village: VillageInfo = { region_code: "CZ03", category: "mesto", population: 5000, district: team.district };
-  const player = generatePlayer(rng, village, position, surnameData, firstnameData);
-  // Kvalita se ladí na sílu klubu, ale VYCHÁZÍ SE Z VYGENEROVANÉHO HRÁČE.
-  //
-  // Dřív se tu zakládal prázdný objekt a přepisovalo se do něj sedm dovedností —
-  // zbylých šest (kreativita, standardky, přehled, výdrž, síla, zkušenost) se
-  // tím zahodilo. Hráč koupený z trhu je pak měl nulové, což není kosmetika:
-  // do zápasu se počítají jako nula, takže byl reálně slabší, než říkal rating.
-  // Rating se přitom počítal jen ze sedmi zbylých, takže vypadal v pořádku.
-  const adjustedSkills: Record<string, number> = {};
-  const skillKeys = ["speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping"] as const;
-  for (const k of skillKeys) {
-    adjustedSkills[k] = Math.max(1, Math.min(95, qualityBase + rng.int(-10, 10)));
-  }
-  // Position bonuses
-  if (position === "GK") { adjustedSkills.goalkeeping += 20; adjustedSkills.shooting -= 15; }
-  if (position === "DEF") { adjustedSkills.defense += 10; adjustedSkills.heading += 8; }
-  if (position === "MID") { adjustedSkills.passing += 10; adjustedSkills.technique += 8; }
-  if (position === "FWD") { adjustedSkills.shooting += 12; adjustedSkills.speed += 8; }
-  for (const k of skillKeys) adjustedSkills[k] = Math.max(1, Math.min(95, adjustedSkills[k]));
-
-  doplnZbyleDovednosti(adjustedSkills, {
-    stamina: player.stamina, strength: player.strength, age,
-    sum: (min, max) => rng.int(min, max),
+  const level = "village";
+  const created = createPlayer(rng, {
+    position, village, names: { surnameData, firstnameData }, age, level,
+    shift: shiftForRating(level, position, 27, team.rating + rng.int(0, 8)),
   });
-
-  // Stropy a talent MUSÍ do inzerátu. Bez nich vznikne po koupi hráč s prázdným
-  // `skills_max` a nulovým talentem — schéma to nevyhodí (má DEFAULT), jen se
-  // manažerovi ukáže prázdná karta Potenciálu u hráče, za kterého zaplatil.
-  const skillCaps = stropyZDovednosti(rng, adjustedSkills, age);
-  const hiddenTalent = talentPodleVeku(rng, age);
-  const physical = {
-    stamina: player.stamina,
-    strength: player.strength,
-    ...generateHeightWeight(rng, position, player.bodyType ?? "normal"),
-    preferredFoot: player.preferredFoot,
-  };
-
-  // Hodnocení TÝMŽ vzorcem jako zbytek hry.
-  //
-  // Dřív si inzerát počítal vlastní vážený průměr ze sedmi dovedností. Hra počítá
-  // z dvanácti atributů podle sdílených RATING_WEIGHTS, takže inzerát vůbec nezapočítal
-  // výdrž, sílu, přehled, kreativitu ani standardky — a ty bývají u generovaných hráčů
-  // nízké. Manažer koupil číslo, které mu první noční přepočet srazil.
-  //
-  // Naměřeno na produkci u všech 75 koupených hráčů: inzerát byl v průměru o 3,35 bodu
-  // vyšší, u 54 z nich nadhodnocený, nejvíc o 20. Cena přitom z toho čísla vychází,
-  // takže se za hráče přeplácelo. Nejhůř na tom byli brankáři — inzerát jim dával
-  // 60 % váhy na chytání, hra počítá i zbytek.
-  const overallRating = overallRatingFromFlat(position, adjustedSkills, physical, hiddenTalent, skillCaps)
-    // null = málo vyplněných atributů; po `doplnZbyleDovednosti` nemá nastat, ale hráč
-    // bez hodnocení by rozbil cenu i mzdu, tak ať radši spadne na průměr dovedností.
-    ?? Math.round(Object.values(adjustedSkills).reduce((a, b) => a + b, 0) / Object.keys(adjustedSkills).length);
+  const player = created.identity;
+  const { skills: adjustedSkills, skillsMax: skillCaps, hiddenTalent, physical, rating: overallRating } = created;
 
   const askingPrice = calcAskingPrice(overallRating, rng);
   const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
-  const avatar = generatePlayerFace({ age, bodyType: player.bodyType, ethnicity: player.ethnicity });
+  const avatar = created.avatar;
 
   const playerData = JSON.stringify({
     firstName: player.firstName,
@@ -196,10 +152,10 @@ export async function generateAiListings(
     overallRating,
     skills: adjustedSkills,
     physical,
-    personality: { discipline: player.discipline, workRate: player.workRate, leadership: player.leadership },
+    personality: created.personality,
     weeklyWage,
     avatar,
-    nationality: player.nationality ?? "CZ",
+    nationality: created.nationality,
     fromTeam: team.name,
     fromCity: team.city,
     fromDistrict: team.district,
@@ -304,40 +260,6 @@ export async function getVirtualTeamsForDistrict(db: D1Database, district: strin
 
 /** Šance na CPU nabídku per tým a den (~1 nabídka za 2 týdny, cooldowny to dál ředí). */
 const OFFER_CHANCE_PER_TEAM = 0.08;
-
-/** Kanonický seznam dovedností, který hra u hráče očekává. */
-export const VSECHNY_DOVEDNOSTI = [
-  "speed", "technique", "shooting", "passing", "heading", "defense", "goalkeeping",
-  "creativity", "setPieces", "vision", "stamina", "strength", "experience",
-] as const;
-
-/**
- * Doplní dovednosti, které se neladí na kvalitu klubu.
- *
- * Generátor dřív vyplňoval jen sedm dovedností a zbylých šest nechával prázdných.
- * Nebyla to kosmetika: do zápasu se počítají jako nula, takže hráč koupený z trhu
- * byl reálně slabší, než říkal jeho rating — a ten se počítá jen z těch sedmi,
- * takže vypadal v pořádku. Na produkci takhle vzniklo devět hráčů.
- *
- * Odvozuje z příbuzných hodnot stejně jako cup.ts a generátory kádrů.
- * Mění předaný objekt na místě.
- */
-export function doplnZbyleDovednosti(
-  skills: Record<string, number>,
-  vstup: { stamina: number; strength: number; age: number; sum: (min: number, max: number) => number },
-): Record<string, number> {
-  const kolem = (zaklad: number, rozptyl = 8) =>
-    Math.max(1, Math.min(95, Math.round(zaklad) + vstup.sum(-rozptyl, rozptyl)));
-
-  skills.vision = kolem(skills.technique ?? 40);
-  skills.creativity = kolem(skills.passing ?? 40);
-  skills.setPieces = kolem(((skills.technique ?? 40) + (skills.shooting ?? 40)) / 2);
-  skills.stamina = vstup.stamina;
-  skills.strength = vstup.strength;
-  // Zkušenost roste s věkem: v osmnácti skoro žádná, po třicítce vysoká.
-  skills.experience = Math.max(1, Math.min(95, Math.round((vstup.age - 15) * 3.5) + vstup.sum(-5, 5)));
-  return skills;
-}
 
 async function maybeOfferForTeam(
   db: D1Database,

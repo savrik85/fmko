@@ -6,12 +6,9 @@
 import { logger } from "../lib/logger";
 import { FIRSTNAMES } from "../data/czech-names";
 import type { Rng } from "../generators/rng";
-import { generatePlayer, type VillageInfo } from "../generators/player";
-import { generateHeightWeight } from "../generators/physicals";
+import type { VillageInfo } from "../generators/player";
+import { createPlayer, levelFromVillageSize, categoryFromVillageSize, MARKET_SHIFT } from "../generators/create-player";
 import { getDistrictDataFromDB } from "../data/districts";
-import { generatePlayerFace } from "../routes/teams";
-import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
-import { overallRatingFromFlat } from "../skills/generator";
 import { zapisNaTrh } from "./market-log";
 
 
@@ -42,10 +39,9 @@ export async function generateFreeAgentsForDistrict(
   ).bind(district).first<{ population: number; size: string }>()
     .catch((e) => { logger.warn({ module: "free-agent-pool" }, "district village info", e); return null; });
 
-  const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
   const villageInfo: VillageInfo = {
     region_code: district,
-    category: (sizeMap[(villageRow?.size as string)] ?? "obec") as VillageInfo["category"],
+    category: categoryFromVillageSize(villageRow?.size),
     population: (villageRow?.population as number) ?? 500,
     district,
   };
@@ -59,42 +55,12 @@ export async function generateFreeAgentsForDistrict(
   for (let i = 0; i < count; i++) {
     // Brankáři vzácně — na trhu jich má být málo (klub potřebuje jen 1–2 a nerad je pouští)
     const pos = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof POSITIONS[number];
-    const player = generatePlayer(rng, villageInfo, pos, surnameData, firstnameData);
-
-    // Build skills from generated player
-    const skills = {
-      speed: player.speed, technique: player.technique, shooting: player.shooting,
-      passing: player.passing, heading: player.heading, defense: player.defense,
-      goalkeeping: player.goalkeeping ?? 0, stamina: player.stamina, strength: player.strength,
-      vision: player.technique, creativity: player.passing, setPieces: rng.int(10, 50),
-      // Shodně s generátorem hráčů: zkušenost roste od 16 let, ne od narození.
-      // Dřív `age * 2` — dvacetiletý dostal 40 místo 12–24, třicetiletý 60.
-      experience: Math.min(100, Math.max(1, (player.age - 16) * rng.int(3, 6))),
-    };
-    // Stropy a talent MUSÍ vzniknout tady. Bez nich podpis dosadí za stropy ploché
-    // dovednosti, takže hráč nemá kam růst — a `hidden_talent` spadne na DEFAULT 0.
-    const skillsMax = stropyZDovednosti(rng, skills as Record<string, number>, player.age);
-    const hiddenTalent = talentPodleVeku(rng, player.age);
-
-    const physical = {
-      stamina: player.stamina,
-      strength: player.strength,
-      injuryProneness: player.injuryProneness ?? 50,
-      ...generateHeightWeight(rng, pos, player.bodyType ?? "normal"),
-      preferredFoot: player.preferredFoot,
-      preferredSide: player.preferredSide,
-    };
-
-    // Hodnocení TÝMŽ vzorcem jako zbytek hry — stejná oprava jako u inzerátů AI klubů
-    // (`virtual-teams.ts`). Trh si dřív počítal vlastní vážený průměr; brankáři z něj
-    // vycházeli nejhůř, protože se počítalo jen chytání, síla a výdrž, zatímco hra
-    // počítá i obranu, rychlost, hlavičky, techniku, přihrávku a zkušenost. Naměřeno
-    // na produkci: brankář v nabídce +12, podepsaní brankáři +18 oproti skutečnosti.
-    // Manažer koupil číslo, které mu první noční trénink srazil, a platil podle něj mzdu.
-    const overallRating = overallRatingFromFlat(pos, skills as Record<string, number>, physical, hiddenTalent, skillsMax)
-      // null = málo vyplněných atributů; po `skills` výš nemá nastat, ale hráč bez
-      // hodnocení by rozbil mzdu i cenu, tak ať radši spadne na průměr dovedností.
-      ?? Math.round(Object.values(skills).reduce((a, b) => a + b, 0) / Object.keys(skills).length);
+    const created = createPlayer(rng, {
+      position: pos, village: villageInfo, names: { surnameData, firstnameData },
+      level: levelFromVillageSize(villageRow?.size), shift: MARKET_SHIFT,
+    });
+    const player = created.identity;
+    const { skills, skillsMax, hiddenTalent, physical, rating: overallRating } = created;
     const weeklyWage = Math.round(10 + (overallRating / 100) * 400);
 
     // Pick a random village for residence
@@ -113,10 +79,10 @@ export async function generateFreeAgentsForDistrict(
       id, district, player.firstName, player.lastName, player.age, pos, overallRating,
       JSON.stringify(skills),
       JSON.stringify(physical),
-      JSON.stringify({ discipline: player.discipline, patriotism: player.patriotism, alcohol: player.alcohol, temper: player.temper, leadership: player.leadership ?? 30, workRate: player.workRate ?? 50, aggression: player.aggression ?? 40, consistency: player.consistency ?? 50, clutch: player.clutch ?? 50 }),
-      JSON.stringify({ occupation: player.occupation, condition: 100, morale: 50 }),
-      JSON.stringify(generatePlayerFace({ age: player.age, bodyType: player.bodyType ?? "normal", ethnicity: player.ethnicity })),
-      player.nationality ?? "CZ",
+      JSON.stringify(created.personality),
+      JSON.stringify({ ...created.lifeContext, morale: 50 }),
+      JSON.stringify(created.avatar),
+      created.nationality,
       weeklyWage, resVillage?.id ?? null, expiresAt.toISOString(),
       JSON.stringify(skillsMax), hiddenTalent,
     ).run();
