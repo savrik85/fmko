@@ -644,7 +644,15 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
          WHERE o.status = 'accepted' AND o.offered_player_id IS NOT NULL
            AND ((o.player_id = pc.player_id AND o.from_team_id = pc.team_id)
              OR (o.offered_player_id = pc.player_id AND o.to_team_id = pc.team_id))
-         LIMIT 1) as je_vymena
+         LIMIT 1) as je_vymena,
+       -- Podmínky z nabídky, která přestup uzavřela: cena v contracts je celková,
+       -- tady se jen dozvíme, jestli se platí na splátky a jestli jsou procenta.
+       (SELECT o.installments FROM transfer_offers o
+         WHERE o.status = 'accepted' AND o.player_id = pc.player_id AND o.from_team_id = pc.team_id
+         ORDER BY o.resolved_at DESC LIMIT 1) as splatky,
+       (SELECT o.sell_on_pct FROM transfer_offers o
+         WHERE o.status = 'accepted' AND o.player_id = pc.player_id AND o.from_team_id = pc.team_id
+         ORDER BY o.resolved_at DESC LIMIT 1) as procenta
      FROM player_contracts pc
      JOIN players p ON pc.player_id = p.id
      JOIN teams t_to ON pc.team_id = t_to.id
@@ -718,6 +726,8 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         // doplatek — jinak by výměna vypadala jako prodej za pár korun.
         joinType: r.join_type === "swap" ? "transfer" : ((r.join_type as string) ?? "transfer"),
         isSwap: (r.join_type === "swap" || r.join_type === "transfer") && !!r.je_vymena,
+        installments: (r.splatky as number | null) ?? 0,
+        sellOnPct: (r.procenta as number | null) ?? 0,
         toVirtual: false,
       };
     });
@@ -764,6 +774,8 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
       isCrossLeague: false,
       joinType: "transfer",
       isSwap: false,
+      installments: 0,
+      sellOnPct: 0,
       toVirtual: true,
     };
   });

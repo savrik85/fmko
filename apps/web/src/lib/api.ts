@@ -227,6 +227,10 @@ export interface PlayerContract {
   fee: number;
   /** Druhý hráč výměny — u ní je `fee` jen doplatek, ne cena. */
   swapPartner: string | null;
+  /** Přestup na splátky: počet týdenních splátek (0 = jednorázově). `fee` je i tak celková cena. */
+  installments?: number;
+  /** Procenta z dalšího prodeje pro předchozí klub. */
+  sellOnPct?: number;
   isActive: boolean;
 }
 

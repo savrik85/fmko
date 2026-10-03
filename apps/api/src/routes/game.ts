@@ -773,10 +773,26 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
     return installments * perMatchInstallment;
   };
 
+  // Splátky přestupů: každé pondělí jedna splátka každé aktivní dohody (kupující platí, prodávající dostává).
+  const instDeals = await c.env.DB.prepare(
+    `SELECT buyer_team_id, installment_amount, installments_total, installments_paid, remaining
+       FROM transfer_installments WHERE status = 'active' AND (buyer_team_id = ? OR seller_team_id = ?)`,
+  ).bind(teamId, teamId).all<{ buyer_team_id: string; installment_amount: number; installments_total: number; installments_paid: number; remaining: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load transfer installments for budget", e); return { results: [] as never[] }; });
+  const instAfterWeeks = (d: { installment_amount: number; installments_total: number; installments_paid: number; remaining: number }, weeks: number) => {
+    const left = d.installments_total - d.installments_paid;
+    const k = Math.min(weeks, left);
+    return k >= left ? d.remaining : k * d.installment_amount;
+  };
+  const transferInstallmentsAfterWeeks = (weeks: number) => instDeals.results.reduce(
+    (sum, d) => sum + (d.buyer_team_id === teamId ? -1 : 1) * instAfterWeeks(d, weeks), 0);
+  const nextTransferInstallmentsOut = instDeals.results.filter((d) => d.buyer_team_id === teamId).reduce((s2, d) => s2 + instAfterWeeks(d, 1), 0);
+  const nextTransferInstallmentsIn = instDeals.results.filter((d) => d.buyer_team_id !== teamId).reduce((s2, d) => s2 + instAfterWeeks(d, 1), 0);
+
   // Forecast series: 17 bodů (dnes + 16 týdnů)
   const forecastSeries = Array.from({ length: WEEKS_PER_SEASON + 1 }, (_, w) => ({
     week: w,
-    budget: (team.budget as number) + weeklyNet * w - loanDrainAfterWeeks(w),
+    budget: (team.budget as number) + weeklyNet * w - loanDrainAfterWeeks(w) + transferInstallmentsAfterWeeks(w),
   }));
 
   const in4Weeks = forecastSeries[4]?.budget ?? (team.budget as number);
@@ -792,7 +808,7 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
         (matchTimestamps[Math.min(matchTimestamps.length, installmentsRemaining) - 1] - now) / WEEK_MS
       )))
     : 0;
-  const effectiveWeeklyNet = weeklyNet - weeklyLoanRepayment;
+  const effectiveWeeklyNet = weeklyNet - weeklyLoanRepayment - nextTransferInstallmentsOut + nextTransferInstallmentsIn;
 
   return c.json({
     budget: team.budget,
@@ -809,12 +825,16 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
       income: {
         sponsors: weeklySponsorIncome, baseSponsor: weeklyBaseSponsor,
         subsidy: weeklySubsidy, playerContributions: weeklyContributions,
+        // Splátky za prodané hráče, které přijdou příští pondělí (v `total` nejsou, jako půjčka).
+        transferInstallments: nextTransferInstallmentsIn,
         total: weeklyIncome,
       },
       expenses: {
         wages: weeklyWages, staffWages: weeklyStaffWages, maintenance: weeklyMaintenance,
         equipment: weeklyEquipment, training: weeklyTraining,
         loanRepayment: weeklyLoanRepayment,
+        // Splátky za koupené hráče příští pondělí (v `total` nejsou, jako půjčka).
+        transferInstallments: nextTransferInstallmentsOut,
         total: weeklyExpenses,
       },
       net: weeklyNet,

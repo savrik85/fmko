@@ -31,8 +31,8 @@ interface BudgetData {
   playerCount: number;
   wageBill: { weekly: number; topPlayers: WagePlayer[] };
   weekly: {
-    income: { sponsors: number; baseSponsor: number; subsidy: number; playerContributions: number; total: number };
-    expenses: { wages: number; staffWages?: number; maintenance: number; equipment: number; training: number; loanRepayment: number; total: number };
+    income: { sponsors: number; baseSponsor: number; subsidy: number; playerContributions: number; transferInstallments?: number; total: number };
+    expenses: { wages: number; staffWages?: number; maintenance: number; equipment: number; training: number; loanRepayment: number; transferInstallments?: number; total: number };
     net: number;
     netWithLoan: number;
   };
@@ -284,10 +284,10 @@ function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
           castka („+7 275" / „Kč" na dva radky) ani popisek. Bilance je
           nejdulezitejsi, takze dostane cely druhy radek. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
-        <MetricCard label="Příjmy / týd" value={`+${formatCZK(data.weekly.income.total)}`} color="text-pitch-500" />
+        <MetricCard label="Příjmy / týd" value={`+${formatCZK(data.weekly.income.total + (data.weekly.income.transferInstallments ?? 0))}`} color="text-pitch-500" />
         <MetricCard
           label="Výdaje / týd"
-          value={`-${formatCZK(data.weekly.expenses.total + data.weekly.expenses.loanRepayment)}`}
+          value={`-${formatCZK(data.weekly.expenses.total + data.weekly.expenses.loanRepayment + (data.weekly.expenses.transferInstallments ?? 0))}`}
           color="text-card-red"
         />
         <MetricCard
@@ -347,6 +347,7 @@ function topIncomeItems(d: BudgetData) {
     { label: "Sponzoři", amount: d.weekly.income.sponsors + d.weekly.income.baseSponsor },
     { label: "Dotace obce", amount: d.weekly.income.subsidy },
     { label: "Členské příspěvky", amount: d.weekly.income.playerContributions },
+    { label: "Splátky za prodané hráče", amount: d.weekly.income.transferInstallments ?? 0 },
   ];
   return items.filter((i) => i.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 3);
 }
@@ -359,6 +360,7 @@ function topExpenseItems(d: BudgetData) {
     { label: "Tréninky", amount: d.weekly.expenses.training },
     { label: "Vybavení", amount: d.weekly.expenses.equipment },
     ...(d.weekly.expenses.loanRepayment > 0 ? [{ label: "Splátka půjčky (odhad/týd)", amount: d.weekly.expenses.loanRepayment }] : []),
+    { label: "Splátky za koupené hráče", amount: d.weekly.expenses.transferInstallments ?? 0 },
   ];
   return items.filter((i) => i.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 3);
 }
@@ -369,7 +371,8 @@ function topExpenseItems(d: BudgetData) {
 
 function FlowsTab({ data }: { data: BudgetData }) {
   const [side, setSide] = useState<FlowSide>("income");
-  const totalExpWithLoan = data.weekly.expenses.total + data.weekly.expenses.loanRepayment;
+  const totalExpWithLoan = data.weekly.expenses.total + data.weekly.expenses.loanRepayment + (data.weekly.expenses.transferInstallments ?? 0);
+  const totalIncome = data.weekly.income.total + (data.weekly.income.transferInstallments ?? 0);
   return (
     <div className="space-y-5">
       {/* Segmented control */}
@@ -397,13 +400,16 @@ function FlowsTab({ data }: { data: BudgetData }) {
           <div className="card p-4 sm:p-5">
             <div className="flex justify-between items-baseline mb-3">
               <SectionLabel>Struktura příjmů / týden</SectionLabel>
-              <span className="font-heading font-bold text-pitch-500 tabular-nums">+{formatCZK(data.weekly.income.total)}</span>
+              <span className="font-heading font-bold text-pitch-500 tabular-nums">+{formatCZK(totalIncome)}</span>
             </div>
             <div className="space-y-2.5">
-              <BarRow label="Sponzorské smlouvy" amount={data.weekly.income.sponsors} max={data.weekly.income.total} positive icon="💰" />
-              <BarRow label="Místní podpora (reputace)" amount={data.weekly.income.baseSponsor} max={data.weekly.income.total} positive icon="🏪" />
-              <BarRow label="Dotace od obce" amount={data.weekly.income.subsidy} max={data.weekly.income.total} positive icon="🏛" />
-              <BarRow label="Členské příspěvky" amount={data.weekly.income.playerContributions} max={data.weekly.income.total} positive icon="👥" />
+              <BarRow label="Sponzorské smlouvy" amount={data.weekly.income.sponsors} max={totalIncome} positive icon="💰" />
+              <BarRow label="Místní podpora (reputace)" amount={data.weekly.income.baseSponsor} max={totalIncome} positive icon="🏪" />
+              <BarRow label="Dotace od obce" amount={data.weekly.income.subsidy} max={totalIncome} positive icon="🏛" />
+              <BarRow label="Členské příspěvky" amount={data.weekly.income.playerContributions} max={totalIncome} positive icon="👥" />
+              {(data.weekly.income.transferInstallments ?? 0) > 0 && (
+                <BarRow label="Splátky za prodané hráče" amount={data.weekly.income.transferInstallments ?? 0} max={totalIncome} positive icon="🤝" />
+              )}
             </div>
           </div>
 
@@ -463,6 +469,9 @@ function FlowsTab({ data }: { data: BudgetData }) {
               <BarRow label="Vybavení" amount={data.weekly.expenses.equipment} max={totalExpWithLoan} icon="👟" />
               {data.weekly.expenses.loanRepayment > 0 && (
                 <BarRow label="Splátka půjčky (odhad)" amount={data.weekly.expenses.loanRepayment} max={totalExpWithLoan} icon="💳" />
+              )}
+              {(data.weekly.expenses.transferInstallments ?? 0) > 0 && (
+                <BarRow label="Splátky za koupené hráče" amount={data.weekly.expenses.transferInstallments ?? 0} max={totalExpWithLoan} icon="🤝" />
               )}
             </div>
           </div>
