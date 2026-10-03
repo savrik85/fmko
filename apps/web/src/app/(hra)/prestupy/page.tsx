@@ -2580,7 +2580,7 @@ export default function TransfersPage() {
   );
 }
 
-type SortKey = "name" | "position" | "age" | "rating" | "speed" | "technique" | "shooting" | "passing" | "defense" | "stamina" | "wage";
+type SortKey = "name" | "position" | "age" | "rating" | "speed" | "technique" | "shooting" | "passing" | "defense" | "stamina" | "wage" | "value";
 type SortDir = "asc" | "desc";
 
 const SORT_COLS: Array<{ key: SortKey; label: string; short: string }> = [
@@ -2595,7 +2595,11 @@ const SORT_COLS: Array<{ key: SortKey; label: string; short: string }> = [
   { key: "defense", label: "Obrana", short: "Obr" },
   { key: "stamina", label: "Výdrž", short: "Výd" },
   { key: "wage", label: "Mzda", short: "Mzda" },
+  { key: "value", label: "Tržní hodnota", short: "Hodnota" },
 ];
+
+/** Tržní hodnota hráče — stejný vzorec jako nabídky a inzeráty cizích klubů. */
+const playerValue = (p: Player) => marketValue(p.overall_rating ?? 0, p.age ?? 27, p.position);
 
 function attrCellColor(v: number): string {
   if (v >= 70) return "text-pitch-500 font-bold";
@@ -2618,6 +2622,7 @@ function getPlayerSortValue(p: Player, key: SortKey): string | number {
     case "defense": return s?.defense ?? 0;
     case "stamina": return s?.stamina ?? 0;
     case "wage": return p.weekly_wage ?? 0;
+    case "value": return playerValue(p);
   }
 }
 
@@ -2649,7 +2654,8 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
           <thead>
             <tr className="border-b border-gray-100">
               {SORT_COLS.map((col) => {
-                const hideMobile = ["speed", "technique", "shooting", "passing", "defense", "stamina", "wage"].includes(col.key);
+                // Na mobilu hodnota nemá vlastní sloupec, ukazuje se pod jménem hráče.
+                const hideMobile = ["speed", "technique", "shooting", "passing", "defense", "stamina", "wage", "value"].includes(col.key);
                 return (
                   <th key={col.key}
                     onClick={() => toggleSort(col.key)}
@@ -2677,6 +2683,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                     <Link href={`/hrac/${p.id}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
                       {p.first_name} {p.last_name}
                     </Link>
+                    <div className="sm:hidden text-sm text-muted tabular-nums whitespace-nowrap">{formatCZK(playerValue(p))}</div>
                   </td>
                   <td className="py-2 px-2 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
                   <td className="py-2 px-2 text-center tabular-nums text-muted">{p.age}</td>
@@ -2688,6 +2695,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                   <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.defense ?? 0)}`}>{s?.defense ?? "—"}</td>
                   <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.stamina ?? 0)}`}>{s?.stamina ?? "—"}</td>
                   <td className="py-2 px-2 text-center tabular-nums text-muted text-xs hidden sm:table-cell">{formatCZK(p.weekly_wage ?? 0)}</td>
+                  <td className="py-2 px-2 text-center tabular-nums font-heading font-bold hidden sm:table-cell whitespace-nowrap">{formatCZK(playerValue(p))}</td>
                   <td className="py-2 px-2 text-center hidden sm:table-cell">
                     {isQuit && <span className="text-xs font-heading font-bold text-card-red bg-red-50 px-1.5 py-0.5 rounded">Odmítá</span>}
                     {isListed && <span className="text-xs font-heading font-bold text-gold-600 bg-gold-50 px-1.5 py-0.5 rounded">Na trhu</span>}
@@ -2732,6 +2740,10 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
           </tbody>
         </table>
       </div>
+      <p className="text-sm text-muted mt-2 px-1">
+        Hodnota kádru <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(players.reduce((sum, p) => sum + playerValue(p), 0))}</span>
+        {" "}· tržní cena podle hodnocení, věku a pozice ze skutečných přestupů
+      </p>
     </div>
   );
 }
