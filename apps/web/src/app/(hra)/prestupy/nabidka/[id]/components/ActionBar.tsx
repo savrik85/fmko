@@ -116,7 +116,8 @@ function MessageDialog({ title, description, confirmLabel, confirmColor, onCance
       : "text-pitch-500 hover:bg-pitch-50";
 
   return (
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4" onClick={onCancel}>
+    // Kliknutí vedle dialog nezavírá — rozepsaná částka nebo zpráva by se ztratila. Zavírá jen Zrušit.
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-5">
@@ -159,7 +160,8 @@ function CounterDialog({ initial, onCancel, onConfirm }: {
   const [loading, setLoading] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4" onClick={onCancel}>
+    // Kliknutí vedle dialog nezavírá — rozepsaná částka nebo zpráva by se ztratila. Zavírá jen Zrušit.
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-5">
