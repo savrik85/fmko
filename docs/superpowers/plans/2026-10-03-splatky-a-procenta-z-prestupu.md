@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- Záloha 20–100 %, 100 % = jednorázově. Počet týdenních splátek 0 nebo 2–10. Procenta z příštího přestupu 0–50 % po 5 %.
-- Záloha pod 100 % jen se splátkami (2–10) a naopak.
+- Záloha 10–100 %, 100 % = jednorázově. Počet týdenních splátek 0 nebo 2–20. Procenta z příštího přestupu 0–50 % po 5 %.
+- Záloha pod 100 % jen se splátkami (2–20) a naopak.
 - Cena celkem 1 až `MAX_TRANSFER_AMOUNT` (10 000 000 Kč). Úroky žádné.
 - Nejvýš **3 aktivní splátkové přestupy** na kupujícího.
 - Kupující potřebuje peníze jen na zálohu + mezikrajský poplatek (z celé ceny).

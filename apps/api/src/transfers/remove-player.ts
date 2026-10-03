@@ -72,6 +72,13 @@ export async function removePlayer(
 
   const teamId = row.team_id as string;
 
+  // Odchod bez peněz (propuštění, konec kariéry, zmizení): procenta z příštího přestupu propadnou.
+  // Prodej (`transfer`) je vyplácí volající přes settleOnResale. Splátky běží dál v obou případech.
+  if (leaveType !== "transfer") {
+    const { lapseSellOnClauses } = await import("./installments");
+    await lapseSellOnClauses(db, playerId);
+  }
+
   // 1) Vyčistit reference (každá může selhat nezávisle, nekritické)
   await db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "withdraw listings", e));
   await db.prepare("UPDATE transfer_offers SET status = 'withdrawn' WHERE player_id = ? AND status IN ('pending','countered')").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "withdraw offers", e));

@@ -163,7 +163,10 @@ beforeAll(async () => {
       offered_player_id TEXT,
       target_squad TEXT NOT NULL DEFAULT 'senior',
       player_interest INTEGER,
-      virtual_team_data TEXT
+      virtual_team_data TEXT,
+      upfront_pct INTEGER NOT NULL DEFAULT 100,
+      installments INTEGER NOT NULL DEFAULT 0,
+      sell_on_pct INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE transfer_offer_events (
@@ -173,7 +176,26 @@ beforeAll(async () => {
       event_type TEXT NOT NULL,
       amount INTEGER,
       message TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      upfront_pct INTEGER,
+      installments INTEGER,
+      sell_on_pct INTEGER
+    );
+
+    CREATE TABLE transfer_installments (
+      id TEXT PRIMARY KEY, offer_id TEXT NOT NULL, player_id TEXT NOT NULL, player_name TEXT NOT NULL,
+      buyer_team_id TEXT NOT NULL, seller_team_id TEXT NOT NULL, total_amount INTEGER NOT NULL,
+      upfront_amount INTEGER NOT NULL, installment_amount INTEGER NOT NULL, installments_total INTEGER NOT NULL,
+      installments_paid INTEGER NOT NULL DEFAULT 0, remaining INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active', created_game_date TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), closed_at TEXT
+    );
+
+    CREATE TABLE sell_on_clauses (
+      id TEXT PRIMARY KEY, offer_id TEXT NOT NULL, player_id TEXT NOT NULL, player_name TEXT NOT NULL,
+      beneficiary_team_id TEXT NOT NULL, owner_team_id TEXT NOT NULL, pct INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active', paid_amount INTEGER, paid_offer_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), resolved_at TEXT
     );
 
     CREATE TABLE player_contracts (
