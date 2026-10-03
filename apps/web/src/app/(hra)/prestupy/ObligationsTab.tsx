@@ -94,12 +94,12 @@ export function ObligationsTab({ teamId, loans }: { teamId: string; loans: React
         <div className="card p-4 grid grid-cols-2 gap-3 text-sm tabular-nums">
           <div>
             <div className="text-muted">Příští pondělí zaplatím</div>
-            <div className="font-heading font-bold text-lg text-card-red">{kc(totals.payThisWeek)}</div>
+            <div className={`font-heading font-bold text-lg ${totals.payThisWeek > 0 ? "text-card-red" : "text-ink"}`}>{kc(totals.payThisWeek)}</div>
             <div className="text-muted">celkem dlužím {kc(totals.owedTotal)}</div>
           </div>
           <div className="text-right">
             <div className="text-muted">Příští pondělí dostanu</div>
-            <div className="font-heading font-bold text-lg text-pitch-600">{kc(totals.receiveThisWeek)}</div>
+            <div className={`font-heading font-bold text-lg ${totals.receiveThisWeek > 0 ? "text-pitch-600" : "text-ink"}`}>{kc(totals.receiveThisWeek)}</div>
             <div className="text-muted">celkem mi dluží {kc(totals.receivableTotal)}</div>
           </div>
           <div className="col-span-2 text-muted">Splátky se strhávají každé pondělí, i když je klub v minusu.</div>
