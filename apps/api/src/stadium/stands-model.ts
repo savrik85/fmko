@@ -48,12 +48,12 @@ export function hasStandSides(f: Record<string, unknown>): boolean {
   return STAND_SIDES.some((s) => s in f);
 }
 
-export function readStandLevels(f: Record<string, unknown>): StandLevels {
+export function readStandLevels(f: Record<string, unknown> | null | undefined): StandLevels {
   return {
-    stand_main: clampLevel(f.stand_main),
-    stand_opposite: clampLevel(f.stand_opposite),
-    stand_goal_west: clampLevel(f.stand_goal_west),
-    stand_goal_east: clampLevel(f.stand_goal_east),
+    stand_main: clampLevel(f?.stand_main),
+    stand_opposite: clampLevel(f?.stand_opposite),
+    stand_goal_west: clampLevel(f?.stand_goal_west),
+    stand_goal_east: clampLevel(f?.stand_goal_east),
   };
 }
 

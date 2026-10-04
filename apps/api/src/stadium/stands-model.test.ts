@@ -25,6 +25,11 @@ describe("kapacita tribun po stranách", () => {
     expect(l).toEqual({ stand_main: 3, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 2 });
   });
 
+  it("chybějící řádek stadionu je čtyři nuly", () => {
+    expect(readStandLevels(null)).toEqual(legacyStandsToSides(0));
+    expect(readStandLevels(undefined)).toEqual(legacyStandsToSides(0));
+  });
+
   it("hasStandSides pozná, že volající sloupce stran nepředal", () => {
     expect(hasStandSides({ stands: 2 })).toBe(false);
     expect(hasStandSides({ stand_main: 0 })).toBe(true);
