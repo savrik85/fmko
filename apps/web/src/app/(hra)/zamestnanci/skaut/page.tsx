@@ -13,18 +13,21 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { ScoutReportSheet, daysLeft, type ScoutReport } from "@/components/scouting/ScoutReportSheet";
 import { ratingText } from "@/components/scouting/WillingnessBadge";
 import {
-  SCOUT_POSITION_LABELS, SCOUT_POSITIONS, SCOUT_REPORT_STATUS_LABELS, SCOUT_YOUTH_AGE_MAX, type ScoutPosition,
+  SCOUT_POSITION_LABELS, SCOUT_POSITIONS, SCOUT_REPORT_STATUS_LABELS, SCOUT_YOUTH_AGE_MAX,
+  SCOUT_LEAGUE_WEEKLY_COST, type ScoutPosition, type ScoutAssignmentType,
 } from "@okresni-masina/shared";
 
 interface Assignment {
   id: string;
   staff_id?: string | null;
-  assignment_type?: "area" | "player" | "match";
+  assignment_type?: ScoutAssignmentType;
   target_player_id?: string | null;
   target_team_id?: string | null;
   target_match_id?: string | null;
+  target_league_id?: string | null;
   targetPlayerName?: string | null;
   targetTeamName?: string | null;
+  targetLeagueName?: string | null;
   result_data?: string | null;
   position: ScoutPosition | null;
   /** Posty, které skaut hledá; null = kdokoli. */
@@ -58,6 +61,10 @@ interface ScoutData {
   assignment: Assignment | null;
   scouts?: ScoutItem[];
   opponents?: OpponentItem[];
+  leagues?: {
+    senior: { id: string; name: string } | null;
+    u21: { id: string; name: string } | null;
+  };
   maxScouts?: number;
   coachLicence?: number;
   lastAssignment: (Assignment & { status: string; end_reason: string | null }) | null;
@@ -113,10 +120,10 @@ export default function ScoutPage() {
   const [openReport, setOpenReport] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
   const [selectedScoutId, setSelectedScoutId] = useState<string | null>(null);
-  const [missionTab, setMissionTab] = useState<"area" | "match">("area");
+  const [missionTab, setMissionTab] = useState<"u21_league" | "league" | "area" | "match">("u21_league");
   const [targetTeamId, setTargetTeamId] = useState<string>("");
 
-  // Formulář úkolu - oblastní hledání
+  // Formulář úkolu - hledání
   // Prázdný výběr = kdokoli.
   const [positions, setPositions] = useState<ScoutPosition[]>([]);
   const togglePosition = (p: ScoutPosition) =>
@@ -134,12 +141,15 @@ export default function ScoutPage() {
       if (res.opponents && res.opponents.length > 0 && !targetTeamId) {
         setTargetTeamId(res.opponents[0].id);
       }
+      if (!res.leagues?.u21 && missionTab === "u21_league") {
+        setMissionTab(res.leagues?.senior ? "league" : "area");
+      }
     } catch (e) {
       console.error("Načtení skauta selhalo:", e);
     } finally {
       setLoading(false);
     }
-  }, [teamId, targetTeamId]);
+  }, [teamId, targetTeamId, missionTab]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -163,6 +173,42 @@ export default function ScoutPage() {
 
   const tier = data.options.radiusTiers.find((t) => t.km === radius) ?? data.options.radiusTiers[0];
   const youth = ageMax <= SCOUT_YOUTH_AGE_MAX;
+
+  const startLeague = async (type: "u21_league" | "league") => {
+    if (!currentScout) return;
+    const leagueObj = type === "u21_league" ? data.leagues?.u21 : data.leagues?.senior;
+    if (!leagueObj) return;
+
+    const leagueName = leagueObj.name;
+    const isU21 = type === "u21_league";
+    const totalCost = SCOUT_LEAGUE_WEEKLY_COST * weeks;
+
+    const ok = await confirm({
+      title: isU21 ? "Vyslat skauta na U21 ligu?" : "Vyslat skauta na naši ligu?",
+      description: `${currentScout.name} bude objíždět zápasy soutěže ${leagueName} a hledat ${isU21 ? "mladé talenty soupeřů" : "vytipované hráče"}.`,
+      details: [
+        { label: "Soutěž", value: leagueName, color: "text-ink font-bold" },
+        { label: "Délka mise", value: `${weeks} ${plural(weeks, "týden", "týdny", "týdnů")}`, color: "text-ink" },
+        { label: "Cestovné", value: `${kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden`, color: "text-card-red" },
+        { label: "Celkem za misi", value: kc(totalCost), color: "text-ink font-bold" },
+        { label: "Hlášení", value: "Každé pondělí (nejvýš 1 hlášení)", color: "text-pitch-600 font-bold" },
+      ],
+      confirmLabel: `Vyslat skauta na ${weeks} ${plural(weeks, "týden", "týdny", "týdnů")}`,
+    });
+    if (!ok) return;
+
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/scout/assignment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        staffId: currentScout.id,
+        assignmentType: type,
+        targetLeagueId: leagueObj.id,
+        positions,
+        weeks,
+      }),
+    }), "Úkol se nepodařilo zadat")) await load();
+  };
 
   const startArea = async () => {
     if (!currentScout) return;
@@ -256,6 +302,10 @@ export default function ScoutPage() {
                       statusLabel = `Hráč: ${s.assignment.targetPlayerName ?? "v terénu"}`;
                     } else if (s.assignment.assignment_type === "match") {
                       statusLabel = `Soupeř: ${s.assignment.targetTeamName ?? "rozbor"}`;
+                    } else if (s.assignment.assignment_type === "u21_league") {
+                      statusLabel = `U21 liga (${s.assignment.weeks_worked}/${s.assignment.weeks_total} týd)`;
+                    } else if (s.assignment.assignment_type === "league") {
+                      statusLabel = `Naše liga (${s.assignment.weeks_worked}/${s.assignment.weeks_total} týd)`;
                     } else {
                       statusLabel = `Oblast (${s.assignment.weeks_worked}/${s.assignment.weeks_total} týd)`;
                     }
@@ -305,7 +355,51 @@ export default function ScoutPage() {
 
       {currentScout && a && (
         <div className="card p-4 space-y-3">
-          {a.assignment_type === "player" ? (
+          {a.assignment_type === "u21_league" || a.assignment_type === "league" ? (
+            <>
+              <div className="flex items-center justify-between">
+                <SectionLabel>
+                  {a.assignment_type === "u21_league" ? "Na úkolu: Skautování U21 ligy" : "Na úkolu: Skautování naší ligy"}
+                </SectionLabel>
+                <span className="text-xs bg-pitch-50 text-pitch-700 font-heading font-bold px-2 py-0.5 rounded">
+                  {a.assignment_type === "u21_league" ? "🌟 U21 liga" : "🏆 Naše liga"}
+                </span>
+              </div>
+              <div className="text-base font-heading font-bold">
+                Soutěž: {a.targetLeagueName ?? (a.assignment_type === "u21_league" ? "Dorostenecká U21 liga" : "Ligová soutěž")}
+              </div>
+              <div className="text-sm">
+                <span className="text-muted">Hledá: </span>
+                <span className="font-heading font-bold">
+                  {a.positions && a.positions.length > 0 ? a.positions.map((p) => SCOUT_POSITION_LABELS[p]).join(", ") : "Všechny posty"}
+                </span>
+                {a.assignment_type === "u21_league" && <span className="text-muted"> (dorostenci 16–21 let)</span>}
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-white/70 border border-gray-100 p-2">
+                  <div className="font-heading font-bold text-lg tabular-nums">{a.weeks_worked}/{a.weeks_total}</div>
+                  <div className="text-sm text-muted">týdnů</div>
+                </div>
+                <div className="rounded-xl bg-white/70 border border-gray-100 p-2">
+                  <div className="font-heading font-bold text-lg tabular-nums">{a.clubs_visited}</div>
+                  <div className="text-sm text-muted">týmů shlédnuto</div>
+                </div>
+                <div className="rounded-xl bg-white/70 border border-gray-100 p-2">
+                  <div className="font-heading font-bold text-lg tabular-nums">{a.reports_sent}</div>
+                  <div className="text-sm text-muted">hlášení</div>
+                </div>
+              </div>
+              <div className="text-sm text-muted">
+                {a.assignment_type === "u21_league"
+                  ? "Skaut jezdí na zápasy U21 ligy a v pondělí pošle zprávu o největším talentu soupeřů včetně odhadu jeho stropu a ceny."
+                  : "Skaut jezdí na ligové zápasy soupeřů a v pondělí pošle zprávu o vybraném hráči včetně odhadu formy a ceny."}
+                {" "}Cestovné {kc(a.weekly_cost || SCOUT_LEAGUE_WEEKLY_COST)} týdně se strhává v pondělí.
+              </div>
+              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+                Ukončit úkol
+              </button>
+            </>
+          ) : a.assignment_type === "player" ? (
             <>
               <div className="flex items-center justify-between">
                 <SectionLabel>Na úkolu: Sledování hráče</SectionLabel>
@@ -388,25 +482,36 @@ export default function ScoutPage() {
           <div className="flex flex-wrap gap-2 border-b border-gray-100 pb-3">
             <button
               type="button"
-              onClick={() => { setMissionTab("area"); setAgeMin(18); setAgeMax(32); }}
+              onClick={() => { setMissionTab("u21_league"); setPositions([]); }}
               className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
-                missionTab === "area" && ageMax > 21
+                missionTab === "u21_league"
                   ? "bg-pitch-500 text-white shadow-xs"
                   : "bg-surface text-muted hover:text-ink"
               }`}
             >
-              🌍 Oblastní hledání
+              🌟 U21 liga {data.leagues?.u21 ? `(${data.leagues.u21.name})` : ""}
             </button>
             <button
               type="button"
-              onClick={() => { setMissionTab("area"); setAgeMin(16); setAgeMax(21); }}
+              onClick={() => { setMissionTab("league"); setPositions([]); }}
               className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
-                missionTab === "area" && ageMax <= 21
+                missionTab === "league"
                   ? "bg-pitch-500 text-white shadow-xs"
                   : "bg-surface text-muted hover:text-ink"
               }`}
             >
-              🌟 Talenty U21
+              🏆 Naše liga {data.leagues?.senior ? `(${data.leagues.senior.name})` : ""}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMissionTab("area"); setAgeMin(18); setAgeMax(32); }}
+              className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
+                missionTab === "area"
+                  ? "bg-pitch-500 text-white shadow-xs"
+                  : "bg-surface text-muted hover:text-ink"
+              }`}
+            >
+              🌍 Okolní vesnice
             </button>
             <button
               type="button"
@@ -420,6 +525,152 @@ export default function ScoutPage() {
               ⚽ Sledování soupeře
             </button>
           </div>
+
+          {missionTab === "u21_league" && (
+            <div className="space-y-4">
+              {data.leagues?.u21 ? (
+                <>
+                  <div className="p-3.5 rounded-xl bg-pitch-50 border border-pitch-200/80 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase font-heading font-bold text-pitch-700">Dorostenecká soutěž</span>
+                      <span className="text-xs bg-pitch-500 text-white font-heading font-bold px-2 py-0.5 rounded">Reální mladíci</span>
+                    </div>
+                    <div className="font-heading font-bold text-base text-ink">
+                      {data.leagues.u21.name}
+                    </div>
+                    <p className="text-sm text-pitch-900">
+                      Skaut objíždí zápasy a tréninky soupeřů v naší dorostenecké U21 lize. Sleduje reálné mladé hráče do 21 let a hodnotí jejich <strong>strop a potenciál růstu</strong>. V pondělí pošle zprávu o největším talentu s odhadem ceny a ochoty jednat o přestupu.
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
+                    <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů nebo nechat všechny.</div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Všechny posty</button>
+                      {SCOUT_POSITIONS.map((p) => (
+                        <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
+                          {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho sledovat soutěž</div>
+                    <div className="flex flex-wrap gap-2">
+                      {data.options.weeks.map((w) => (
+                        <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>
+                          {plural(w, "týden", "týdny", "týdnů")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-white/70 border border-gray-100 p-3 space-y-1.5 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted">Cestovné za týden:</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
+                      <span className="text-muted">Celkem za {weeks} {plural(weeks, "týden", "týdny", "týdnů")}:</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
+                    </div>
+                    <div className="text-xs text-muted pt-1">
+                      Cestovné se strhává postupně každé pondělí ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) při odeslání hlášení.
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => startLeague("u21_league")}
+                    className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors shadow-xs"
+                  >
+                    Vyslat skauta na U21 ligu ({kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
+                  </button>
+                </>
+              ) : (
+                <div className="p-4 rounded-xl bg-surface text-center space-y-2">
+                  <div className="font-heading font-bold text-base">Klub zatím nehraje žádnou U21 soutěž</div>
+                  <p className="text-sm text-muted">
+                    Pro skautování U21 ligy potřebuje klub zařazení dorosteneckého týmu do ligové soutěže. Zkus zatím hledání v okolních vesnicích nebo naši seniorskou ligu.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {missionTab === "league" && (
+            <div className="space-y-4">
+              {data.leagues?.senior ? (
+                <>
+                  <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase font-heading font-bold text-amber-800">Soutěž dospělých</span>
+                      <span className="text-xs bg-amber-600 text-white font-heading font-bold px-2 py-0.5 rounded">Ligoví soupeři</span>
+                    </div>
+                    <div className="font-heading font-bold text-base text-ink">
+                      {data.leagues.senior.name}
+                    </div>
+                    <p className="text-sm text-amber-950">
+                      Skaut objíždí zápasy naší soutěže a sleduje hráče v kádrech soupeřů. Vytipuje nejlepší posily, odhadne jejich kvalitu, formu, pořizovací cenu a ochotu přestoupit.
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
+                    <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů nebo nechat všechny.</div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Všechny posty</button>
+                      {SCOUT_POSITIONS.map((p) => (
+                        <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
+                          {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho sledovat soutěž</div>
+                    <div className="flex flex-wrap gap-2">
+                      {data.options.weeks.map((w) => (
+                        <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>
+                          {plural(w, "týden", "týdny", "týdnů")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-white/70 border border-gray-100 p-3 space-y-1.5 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted">Cestovné za týden:</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
+                      <span className="text-muted">Celkem za {weeks} {plural(weeks, "týden", "týdny", "týdnů")}:</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
+                    </div>
+                    <div className="text-xs text-muted pt-1">
+                      Cestovné se strhává postupně každé pondělí ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) při odeslání hlášení.
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => startLeague("league")}
+                    className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors shadow-xs"
+                  >
+                    Vyslat skauta na naši ligu ({kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
+                  </button>
+                </>
+              ) : (
+                <div className="p-4 rounded-xl bg-surface text-center space-y-2">
+                  <div className="font-heading font-bold text-base">Klub nemá přiřazenou ligovou soutěž</div>
+                  <p className="text-sm text-muted">
+                    Zkus zatím oblastní hledání v okolních vesnicích.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {missionTab === "area" && (
             <div className="space-y-4">

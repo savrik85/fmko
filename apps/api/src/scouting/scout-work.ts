@@ -9,7 +9,7 @@
 
 import {
   SCOUT_AGE_MAX, SCOUT_AGE_MIN, SCOUT_POSITIONS, SCOUT_WEEKS_OPTIONS, isYouthScoutTask,
-  scoutWeeklyCost, willingnessFromChance,
+  scoutWeeklyCost, willingnessFromChance, SCOUT_LEAGUE_WEEKLY_COST, SCOUT_POSITION_LABELS,
 } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { createRng, cryptoSeed, type Rng } from "../generators/rng";
@@ -29,7 +29,7 @@ import {
 } from "./candidates";
 import { blurredAskHint, blurredWillingness, potentialRange, rangeMid, ratingRange, type Range } from "./fog";
 import { clubValuation } from "./youth-growth";
-import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms } from "./report-text";
+import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms, type ReportSubject } from "./report-text";
 
 /** Hlášení platí deset dní (odhad, spec). */
 export const SCOUT_REPORT_TTL_DAYS = 10;
@@ -55,10 +55,11 @@ export interface AssignmentRow {
   id: string;
   team_id: string;
   staff_id: string;
-  assignment_type?: "area" | "player" | "match";
+  assignment_type?: "area" | "player" | "match" | "u21_league" | "league";
   target_player_id?: string | null;
   target_team_id?: string | null;
   target_match_id?: string | null;
+  target_league_id?: string | null;
   result_data?: string | null;
   position: string | null;
   /** JSON pole postů (víc postů najednou); NULL = podle starého `position`, případně kdokoli. */
@@ -237,6 +238,67 @@ export async function createMatchScoutAssignment(db: D1Database, input: {
     await recordTransaction(db, input.teamId, "scout_travel", -cost, `Cestovné skauta: zápasový rozbor soupeře ${opp.name}`, input.gameDate, id);
   } catch (e) {
     logger.warn({ module: "scouting" }, "zadání zápasového úkolu", e);
+    return fail(409, "Skaut už na jednom úkolu je.");
+  }
+  return { ok: true, id };
+}
+
+export async function createLeagueScoutAssignment(db: D1Database, input: {
+  teamId: string;
+  staffId?: string;
+  assignmentType: "u21_league" | "league";
+  targetLeagueId?: string;
+  positions?: readonly unknown[] | null;
+  weeks: number;
+  gameDate: string;
+}): Promise<{ ok: true; id: string } | Fail> {
+  const scout = await loadTeamScout(db, input.teamId, input.staffId);
+  if (!scout) return fail(400, "Nemáš skauta. Najmi ho v Zaměstnancích.");
+  const active = await loadActiveAssignment(db, input.teamId, scout.id);
+  if (active) return fail(409, "Tento skaut už na jednom úkolu je. Nejdřív ho ukonči.");
+
+  let targetLeagueId = input.targetLeagueId;
+  if (!targetLeagueId) {
+    if (input.assignmentType === "u21_league") {
+      const u21Team = await db.prepare("SELECT league_id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'")
+        .bind(input.teamId).first<{ league_id: string }>();
+      targetLeagueId = u21Team?.league_id;
+    } else {
+      const seniorTeam = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
+        .bind(input.teamId).first<{ league_id: string }>();
+      targetLeagueId = seniorTeam?.league_id;
+    }
+  }
+  if (!targetLeagueId) {
+    return fail(404, input.assignmentType === "u21_league" ? "Tvůj klub nemá U21 tým ani U21 ligu." : "Liga nenalezena.");
+  }
+
+  const league = await db.prepare("SELECT id, name FROM leagues WHERE id = ?")
+    .bind(targetLeagueId).first<{ id: string; name: string }>();
+  if (!league) return fail(404, "Soutěž nenalezena.");
+
+  const positions = normalizePositions(input.positions);
+  if (positions === false) return fail(400, "Neznámý post.");
+
+  const weeklyCost = SCOUT_LEAGUE_WEEKLY_COST;
+  if (!(SCOUT_WEEKS_OPTIONS as readonly number[]).includes(input.weeks as any)) return fail(400, "Neznámá délka úkolu.");
+
+  const ageMin = input.assignmentType === "u21_league" ? 16 : 18;
+  const ageMax = input.assignmentType === "u21_league" ? 21 : 36;
+
+  const id = crypto.randomUUID();
+  try {
+    await db.prepare(
+      `INSERT INTO scout_assignments
+        (id, team_id, staff_id, assignment_type, target_league_id, position, positions, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`
+    ).bind(
+      id, input.teamId, scout.id, input.assignmentType, targetLeagueId,
+      positions?.length === 1 ? positions[0] : null, positions ? JSON.stringify(positions) : null,
+      ageMin, ageMax, weeklyCost, input.weeks, input.gameDate,
+    ).run();
+  } catch (e) {
+    logger.warn({ module: "scouting" }, "zadání ligového úkolu", e);
     return fail(409, "Skaut už na jednom úkolu je.");
   }
   return { ok: true, id };
@@ -542,10 +604,20 @@ async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, r
     result.skippedNoMoney++;
     await sendScoutSms(db, a.team_id, sender, `⛽ Na cestovné (${a.weekly_cost.toLocaleString("cs-CZ")} Kč) v klubu nejsou peníze. Tenhle týden zůstávám doma.`);
   } else {
-    await recordTransaction(db, a.team_id, "scout_travel", -a.weekly_cost, `Cestovné skauta (okruh ${a.radius_km} km)`, gameDate, a.id);
+    const travelDesc = a.assignment_type === "u21_league"
+      ? "Cestovné skauta (U21 liga)"
+      : a.assignment_type === "league"
+        ? "Cestovné skauta (A-tým liga)"
+        : `Cestovné skauta (okruh ${a.radius_km} km)`;
+    await recordTransaction(db, a.team_id, "scout_travel", -a.weekly_cost, travelDesc, gameDate, a.id);
     worked = true;
     if (a.revisit_report_id && await revisit(db, a, eff, sender)) {
       result.revisits++;
+    } else if (a.assignment_type === "u21_league" || a.assignment_type === "league") {
+      const found = await searchLeague(db, a, eff, sender, rng, gameDate);
+      visited = found.visited;
+      reported = found.reported ? 1 : 0;
+      result.reports += reported;
     } else {
       const found = await search(db, a, eff, sender, rng, gameDate);
       visited = found.visited;
@@ -598,6 +670,198 @@ async function revisit(db: D1Database, a: AssignmentRow, eff: number, sender: st
     potentialLo: pr?.lo ?? null, potentialHi: pr?.hi ?? null, youth: isYouthScoutTask(r.age),
   }), r.id);
   return true;
+}
+
+async function searchLeague(
+  db: D1Database, a: AssignmentRow, eff: number, sender: string, rng: Rng, gameDate: string,
+): Promise<{ visited: number; reported: boolean }> {
+  const isU21 = a.assignment_type === "u21_league";
+  let targetLeagueId = a.target_league_id;
+  if (!targetLeagueId) {
+    if (isU21) {
+      const u21Team = await db.prepare("SELECT league_id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'")
+        .bind(a.team_id).first<{ league_id: string }>();
+      targetLeagueId = u21Team?.league_id;
+    } else {
+      const seniorTeam = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
+        .bind(a.team_id).first<{ league_id: string }>();
+      targetLeagueId = seniorTeam?.league_id;
+    }
+  }
+  if (!targetLeagueId) return { visited: 0, reported: false };
+
+  const oppTeams = await db.prepare(
+    `SELECT t.id, t.name, v.name as city, v.district, v.population, v.id as village_id
+     FROM teams t
+     LEFT JOIN villages v ON t.village_id = v.id
+     WHERE t.league_id = ? AND t.id != ? AND (t.parent_team_id IS NULL OR t.parent_team_id != ?)`,
+  ).bind(targetLeagueId, a.team_id, a.team_id).all<{
+    id: string; name: string; city: string | null; district: string | null; population: number | null; village_id: string | null;
+  }>();
+
+  const teamRows = oppTeams.results ?? [];
+  if (teamRows.length === 0) {
+    await sendScoutSms(db, a.team_id, sender, "V soutěži jsem nenašel žádné soupeře k analýze.");
+    return { visited: 0, reported: false };
+  }
+
+  const visitCount = Math.min(teamRows.length, Math.max(1, Math.round(2 * (1 + eff / 20))));
+  const visitedTeams = rng.shuffle([...teamRows]).slice(0, visitCount);
+
+  const teamIds = visitedTeams.map((t) => t.id);
+  const placeholders = teamIds.map(() => "?").join(",");
+  const positions = assignmentPositions(a);
+
+  let query = `SELECT p.id, p.team_id, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.hidden_talent,
+                      p.personality, p.physical, p.face_config, p.skills_max, p.skills,
+                      t.name as club_name, v.name as club_city, v.district, v.id as village_id
+               FROM players p
+               JOIN teams t ON p.team_id = t.id
+               LEFT JOIN villages v ON t.village_id = v.id
+               WHERE p.team_id IN (${placeholders})
+                 AND (p.status IS NULL OR p.status = 'active')`;
+  const binds: (string | number)[] = [...teamIds];
+
+  if (positions && positions.length > 0) {
+    const posPlaceholders = positions.map(() => "?").join(",");
+    query += ` AND p.position IN (${posPlaceholders})`;
+    binds.push(...positions);
+  }
+  if (isU21) {
+    query += " AND p.age <= 21";
+  }
+
+  const pRows = await db.prepare(query).bind(...binds).all<{
+    id: string; team_id: string; first_name: string; last_name: string; age: number; position: string;
+    overall_rating: number; hidden_talent: number | null; personality: string | null; physical: string | null;
+    face_config: string | null; skills_max: string | null; skills: string | null; club_name: string; club_city: string | null;
+    district: string | null; village_id: string | null;
+  }>();
+
+  if (!pRows.results || pRows.results.length === 0) {
+    await sendScoutSms(db, a.team_id, sender, emptyWeekSms(rng, visitedTeams.map((t) => t.name)));
+    return { visited: visitedTeams.length, reported: false };
+  }
+
+  const activeReports = await db.prepare(
+    "SELECT player_data FROM scout_reports WHERE team_id = ? AND status IN ('active','negotiating')",
+  ).bind(a.team_id).all<{ player_data: string }>();
+  const reportedIds = new Set<string>();
+  for (const rep of activeReports.results ?? []) {
+    try {
+      const parsed = JSON.parse(rep.player_data) as { id?: string };
+      if (parsed?.id) reportedIds.add(parsed.id);
+    } catch { /* ignore */ }
+  }
+
+  const pool = pRows.results.filter((p) => !reportedIds.has(p.id));
+  const candidates = pool.length > 0 ? pool : pRows.results;
+
+  const scored = candidates.map((p) => {
+    let skillCaps: Record<string, { current: number; maxPotential: number }> = {};
+    try {
+      if (p.skills_max) {
+        const raw = JSON.parse(p.skills_max) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(raw)) {
+          if (typeof v === "object" && v !== null && "maxPotential" in v) {
+            const casted = v as { current?: number; maxPotential?: number };
+            skillCaps[k] = { current: Number(casted.current ?? 0), maxPotential: Number(casted.maxPotential ?? 0) };
+          } else if (typeof v === "number") {
+            skillCaps[k] = { current: v, maxPotential: v };
+          }
+        }
+      }
+    } catch {}
+
+    let faceConfig: Record<string, unknown> | undefined = undefined;
+    try { if (p.face_config) faceConfig = JSON.parse(p.face_config); } catch {}
+
+    let parsedSkills: Record<string, number> = {};
+    try { if (p.skills) parsedSkills = JSON.parse(p.skills); } catch {}
+
+    let parsedPersonality: Record<string, number> = {};
+    try { if (p.personality) parsedPersonality = JSON.parse(p.personality); } catch {}
+
+    let parsedPhysical: Record<string, unknown> = {};
+    try { if (p.physical) parsedPhysical = JSON.parse(p.physical); } catch {}
+
+    const rr = ratingRange(p.overall_rating, eff, 1, p.id);
+    const pr = isU21 || p.age <= POTENTIAL_MAX_AGE
+      ? potentialRange({ age: p.age, rating: p.overall_rating, position: p.position, talent: p.hidden_talent ?? 0, skillsMax: skillCaps }, eff, 1, p.id)
+      : null;
+    const estimate = isU21 && pr ? rangeMid(pr) : rangeMid(rr);
+
+    return {
+      row: p,
+      parsedSkills,
+      parsedPersonality,
+      parsedPhysical,
+      skillCaps,
+      faceConfig,
+      ratingRange: rr,
+      potential: pr,
+      estimate,
+    };
+  });
+
+  scored.sort((x, y) => y.estimate - x.estimate);
+  const best = scored[0];
+  if (!best) {
+    await sendScoutSms(db, a.team_id, sender, emptyWeekSms(rng, visitedTeams.map((t) => t.name)));
+    return { visited: visitedTeams.length, reported: false };
+  }
+
+  const reportId = crypto.randomUUID();
+  const playerPayload: VirtualPlayerData = {
+    firstName: best.row.first_name,
+    lastName: best.row.last_name,
+    age: best.row.age,
+    position: best.row.position,
+    overallRating: best.row.overall_rating,
+    skills: best.parsedSkills,
+    physical: best.parsedPhysical,
+    personality: best.parsedPersonality,
+    hiddenTalent: best.row.hidden_talent ?? 0,
+    avatar: best.faceConfig,
+    skillCaps: best.skillCaps,
+    fromTeam: best.row.club_name,
+    fromCity: best.row.club_city ?? undefined,
+    fromDistrict: best.row.district ?? undefined,
+  };
+
+  const expiresAt = new Date(Date.now() + 28 * 86_400_000).toISOString();
+  const askVal = isU21 ? 15000 : 35000;
+  const willingness = willingnessFromChance(Math.round(40 + rng.random() * 40));
+  const subject: ReportSubject = {
+    position: best.row.position,
+    age: best.row.age,
+    skills: best.parsedSkills,
+    personality: best.parsedPersonality,
+    distanceKm: 15,
+  };
+
+  await db.prepare(
+    `INSERT INTO scout_reports
+      (id, team_id, assignment_id, source, village_id, club_name, club_city, district, distance_km,
+       player_data, first_name, last_name, age, position, rating_lo, rating_hi, potential_lo, potential_hi,
+       visits, club_rank, club_mean, ask_hint, pros, cons, willingness, status, expires_at, created_game_date)
+     VALUES (?, ?, ?, 'village_club', ?, ?, ?, ?, 15, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 8, ?, ?, ?, ?, ?, 'active', ?, ?)`
+  ).bind(
+    reportId, a.team_id, a.id, best.row.village_id, best.row.club_name, best.row.club_city, best.row.district,
+    JSON.stringify(playerPayload), best.row.first_name, best.row.last_name, best.row.age, best.row.position,
+    best.ratingRange.lo, best.ratingRange.hi, best.potential?.lo ?? null, best.potential?.hi ?? null,
+    best.row.overall_rating, askVal, JSON.stringify(reportPros(subject)), JSON.stringify(reportCons(subject)),
+    willingness, expiresAt, gameDate.slice(0, 10),
+  ).run();
+
+  const leagueLabel = isU21 ? "dorostenecké U21 lize" : "naší lize";
+  const posLabel = SCOUT_POSITION_LABELS[best.row.position as keyof typeof SCOUT_POSITION_LABELS] ?? best.row.position;
+  const smsBody = isU21 && best.potential
+    ? `V ${leagueLabel} jsem na zápase týmu ${best.row.club_name} sledoval talent: ${best.row.first_name} ${best.row.last_name} (${posLabel}, ${best.row.age} let). Strop vidím na ${best.potential.lo}–${best.potential.hi}. Hlášení je připraveno.`
+    : `V ${leagueLabel} jsem na zápase týmu ${best.row.club_name} sledoval hráče: ${best.row.first_name} ${best.row.last_name} (${posLabel}, ${best.row.age} let). Hodnocení odhaduji na ${best.ratingRange.lo}–${best.ratingRange.hi}. Hlášení je připraveno.`;
+
+  await sendScoutSms(db, a.team_id, sender, smsBody, reportId);
+  return { visited: visitedTeams.length, reported: true };
 }
 
 async function search(db: D1Database, a: AssignmentRow, eff: number, sender: string, rng: Rng, gameDate: string): Promise<{ visited: number; reported: boolean }> {

@@ -96,11 +96,15 @@ export function maxScoutsForLicence(licenceLevel: number): number {
   return 2;
 }
 
-export type ScoutAssignmentType = "area" | "player" | "match";
+export type ScoutAssignmentType = "area" | "player" | "match" | "u21_league" | "league";
+
+export const SCOUT_LEAGUE_WEEKLY_COST = 500;
 
 export const SCOUT_ASSIGNMENT_TYPE_LABELS: Record<ScoutAssignmentType, string> = {
   area: "Oblastní hledání",
   player: "Sledování hráče",
   match: "Skauting soupeře",
+  u21_league: "Skautování U21 ligy",
+  league: "Skautování naší ligy",
 };
 

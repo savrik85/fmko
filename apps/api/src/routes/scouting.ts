@@ -13,9 +13,9 @@ import {
   maxScoutsForLicence, willingnessFromChance,
 } from "@okresni-masina/shared";
 import {
-  assignmentPositions, cancelScoutAssignment, createMatchScoutAssignment, createPlayerScoutAssignment,
-  createScoutAssignment, loadActiveAssignment, loadActiveAssignments, loadTeamScout, loadTeamScouts,
-  maintainScoutReports, requestRevisit, runScoutWork, scoutEffectiveness,
+  assignmentPositions, cancelScoutAssignment, createLeagueScoutAssignment, createMatchScoutAssignment,
+  createPlayerScoutAssignment, createScoutAssignment, loadActiveAssignment, loadActiveAssignments,
+  loadTeamScout, loadTeamScouts, maintainScoutReports, requestRevisit, runScoutWork, scoutEffectiveness,
 } from "../scouting/scout-work";
 import { estimateWillingness, startAiNegotiation } from "../transfers/ai-negotiation";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
@@ -103,9 +103,10 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
   const coachLicence = coachRow?.licence_level ?? 0;
   const maxScouts = maxScoutsForLicence(coachLicence);
 
-  // Načíst jména cílů (hráči / týmy) pro aktivní úkoly
+  // Načíst jména cílů (hráči / týmy / ligy) pro aktivní úkoly
   const targetPlayerIds = assignments.map((a) => a.target_player_id).filter(Boolean) as string[];
   const targetTeamIds = assignments.map((a) => a.target_team_id).filter(Boolean) as string[];
+  const targetLeagueIds = assignments.map((a) => a.target_league_id).filter(Boolean) as string[];
 
   const playerNames = new Map<string, string>();
   if (targetPlayerIds.length > 0) {
@@ -129,11 +130,23 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
     }
   }
 
+  const leagueNames = new Map<string, string>();
+  if (targetLeagueIds.length > 0) {
+    const placeholders = targetLeagueIds.map(() => "?").join(",");
+    const lRows = await db.prepare(`SELECT id, name FROM leagues WHERE id IN (${placeholders})`)
+      .bind(...targetLeagueIds).all<{ id: string; name: string }>()
+      .catch((e) => { logger.warn({ module: "scouting" }, "load league names for assignments", e); return { results: [] }; });
+    for (const l of lRows.results ?? []) {
+      leagueNames.set(l.id, l.name);
+    }
+  }
+
   const enrichAssignment = (a: typeof assignments[0]) => ({
     ...a,
     positions: assignmentPositions(a),
     targetPlayerName: a.target_player_id ? playerNames.get(a.target_player_id) ?? null : null,
     targetTeamName: a.target_team_id ? teamNames.get(a.target_team_id) ?? null : null,
+    targetLeagueName: a.target_league_id ? leagueNames.get(a.target_league_id) ?? null : null,
   });
 
   const scoutList = allScouts.map((s) => {
@@ -167,6 +180,17 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
   ).bind(teamId, teamId).all<{ id: string; name: string; city: string | null }>()
     .catch((e) => { logger.warn({ module: "scouting" }, "load league opponents", e); return { results: [] }; });
 
+  // Načíst ligy klubu (senior a U21)
+  const seniorLeague = await db.prepare(
+    `SELECT l.id, l.name, l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.id = ?`
+  ).bind(teamId).first<{ id: string; name: string; district: string }>()
+    .catch((e) => { logger.warn({ module: "scouting" }, "load senior league", e); return null; });
+
+  const u21League = await db.prepare(
+    `SELECT l.id, l.name, l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.parent_team_id = ? AND t.team_type = 'u21'`
+  ).bind(teamId).first<{ id: string; name: string; district: string }>()
+    .catch((e) => { logger.warn({ module: "scouting" }, "load u21 league", e); return null; });
+
   return c.json({
     scouts: scoutList,
     maxScouts,
@@ -174,6 +198,10 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
     scout: scout ? { id: scout.id, name: `${scout.first_name} ${scout.last_name}`, eff: Math.round(scoutEffectiveness(scout) * 10) / 10 } : null,
     assignment: assignment ? enrichAssignment(assignment) : null,
     opponents: leagueOpponents.results ?? [],
+    leagues: {
+      senior: seniorLeague ? { id: seniorLeague.id, name: seniorLeague.name } : null,
+      u21: u21League ? { id: u21League.id, name: u21League.name } : null,
+    },
     lastAssignment: last,
     options: {
       radiusTiers: SCOUT_RADIUS_TIERS, weeks: SCOUT_WEEKS_OPTIONS, ageMin: SCOUT_AGE_MIN, ageMax: SCOUT_AGE_MAX,
@@ -190,11 +218,12 @@ scoutingRouter.post("/teams/:teamId/scout/assignment", async (c) => {
   if (typeof clubId !== "string") return clubId;
   const body = (await c.req.json().catch(() => ({}))) as {
     staffId?: string;
-    type?: "area" | "player" | "match";
-    assignmentType?: "area" | "player" | "match";
+    type?: "area" | "player" | "match" | "u21_league" | "league";
+    assignmentType?: "area" | "player" | "match" | "u21_league" | "league";
     targetPlayerId?: string;
     targetTeamId?: string;
     targetMatchId?: string;
+    targetLeagueId?: string;
     positions?: unknown[] | null;
     position?: string | null;
     ageMin?: number;
@@ -222,8 +251,18 @@ scoutingRouter.post("/teams/:teamId/scout/assignment", async (c) => {
     return c.json({ ok: true, id: res.id });
   }
 
-  // Default: plošné hledání v okruhu
   const positions = Array.isArray(body.positions) ? body.positions : body.position ? [body.position] : null;
+
+  if (type === "u21_league" || type === "league") {
+    const res = await createLeagueScoutAssignment(c.env.DB, {
+      teamId: clubId, staffId: body.staffId, assignmentType: type, targetLeagueId: body.targetLeagueId,
+      positions, weeks: Number(body.weeks ?? 4), gameDate,
+    });
+    if (!res.ok) return c.json({ error: res.error }, res.status);
+    return c.json({ ok: true, id: res.id });
+  }
+
+  // Default: plošné hledání v okruhu
   const res = await createScoutAssignment(c.env.DB, {
     teamId: clubId, staffId: body.staffId, positions, ageMin: Number(body.ageMin), ageMax: Number(body.ageMax),
     radiusKm: Number(body.radiusKm), weeks: Number(body.weeks), gameDate,
