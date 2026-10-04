@@ -40,6 +40,15 @@ export const SCOUT_SNAP_UP_DAILY_CHANCE = 0.03;
 const TARGET_SD = 3.1;
 /** Nejvýš tolik hráčů z jednoho kádru odpovídá úkolu. */
 const MAX_MATCHES_PER_CLUB = 4;
+/**
+ * Klub mimo hru není silnější než průměr ligy kupujícího + 2 body. Vzorec podle velikosti
+ * obce je nafitovaný na jižní Čechy, kde vychází Písek 48,7 a Strakonice 47,2 proti průměru
+ * Prachatic 47,4. Pražské městské části mají desítky tisíc obyvatel a bez stropu by kluby
+ * mimo hru byly o deset bodů nad pražskou ligou (průměr 39). Strop je odhad, ne data.
+ */
+const CLUB_MEAN_OVER_LEAGUE = 2;
+/** Názor na potenciál dává skaut jen u mladých; u dospělých by model růstu sliboval nesmysly. */
+const POTENTIAL_MAX_AGE = 21;
 
 export interface AssignmentRow {
   id: string;
@@ -176,6 +185,24 @@ async function lineupBar(db: D1Database, teamId: string): Promise<number> {
   return min?.r ?? 0;
 }
 
+/** Průměr základní jedenáctky (laťka pro mladé: musí mít na to dotáhnout se do ní). */
+async function lineupAverage(db: D1Database, teamId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT AVG(overall_rating) AS avg FROM (SELECT overall_rating FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')
+       ORDER BY overall_rating DESC LIMIT 11)`,
+  ).bind(teamId).first<{ avg: number | null }>();
+  return Math.round(row?.avg ?? 0);
+}
+
+/** Průměr dospělých hráčů ligy kupujícího (strop síly klubů mimo hru). */
+async function leagueAverage(db: D1Database, teamId: string): Promise<number | null> {
+  const row = await db.prepare(
+    `SELECT AVG(p.overall_rating) AS avg FROM players p JOIN teams t ON t.id = p.team_id
+      WHERE t.league_id = (SELECT league_id FROM teams WHERE id = ?)`,
+  ).bind(teamId).first<{ avg: number | null }>();
+  return row?.avg ?? null;
+}
+
 interface Candidate {
   id: string;
   source: "village_club" | "free_agent";
@@ -286,9 +313,11 @@ async function revisit(db: D1Database, a: AssignmentRow, eff: number, sender: st
   }
   const visits = r.visits + 1;
   const rr = ratingRange(player.overallRating, eff, visits, r.id);
-  const pr = potentialRange({
-    age: r.age, rating: player.overallRating, position: r.position, talent: player.hiddenTalent ?? 0, skillsMax: player.skillCaps ?? {},
-  }, eff, visits, r.id);
+  const pr = r.age <= POTENTIAL_MAX_AGE
+    ? potentialRange({
+      age: r.age, rating: player.overallRating, position: r.position, talent: player.hiddenTalent ?? 0, skillsMax: player.skillCaps ?? {},
+    }, eff, visits, r.id)
+    : null;
   const extended = new Date(Math.max(new Date(r.expires_at).getTime(), Date.now() + REVISIT_EXTEND_DAYS * 86_400_000)).toISOString();
   await db.prepare(
     "UPDATE scout_reports SET visits = ?, rating_lo = ?, rating_hi = ?, potential_lo = ?, potential_hi = ?, expires_at = ? WHERE id = ?",
@@ -313,13 +342,17 @@ async function search(db: D1Database, a: AssignmentRow, eff: number, sender: str
 
   const candidates: Candidate[] = [];
   const names = new Map<string, Awaited<ReturnType<typeof namesFor>>>();
+  const league = await leagueAverage(db, a.team_id);
+  const meanCap = league != null ? league + CLUB_MEAN_OVER_LEAGUE : Number.POSITIVE_INFINITY;
   for (const v of visited) {
     if (!names.has(v.district)) names.set(v.district, await namesFor(db, v.district));
-    candidates.push(...villageCandidates(rng, v, a, eff, names.get(v.district)!));
+    candidates.push(...villageCandidates(rng, v, a, eff, names.get(v.district)!, meanCap));
   }
   candidates.push(...await freeAgentCandidates(db, a, home, eff, rng));
 
-  const bar = await lineupBar(db, a.team_id);
+  // Dospělý musí mít aspoň na jedenáctého nejlepšího v kádru, mladý na průměr sestavy:
+  // jeho odhad je potenciál a model růstu je spíš optimistický.
+  const bar = youth ? await lineupAverage(db, a.team_id) : await lineupBar(db, a.team_id);
   const best = candidates
     .filter((c) => c.estimate >= bar)
     .sort((x, y) => y.estimate - x.estimate)[0];
@@ -342,9 +375,9 @@ async function namesFor(db: D1Database, district: string) {
 }
 
 function villageCandidates(
-  rng: Rng, v: VillageInRange, a: AssignmentRow, eff: number, names: Awaited<ReturnType<typeof namesFor>>,
+  rng: Rng, v: VillageInRange, a: AssignmentRow, eff: number, names: Awaited<ReturnType<typeof namesFor>>, meanCap: number,
 ): Candidate[] {
-  const mean = clubMeanFor(v.population);
+  const mean = Math.min(clubMeanFor(v.population), meanCap);
   const expected = expectedMatches(a.position, a.age_min, a.age_max);
   const count = Math.min(MAX_MATCHES_PER_CLUB, Math.floor(expected) + (rng.random() < expected - Math.floor(expected) ? 1 : 0));
   const youth = isYouthScoutTask(a.age_max);
@@ -380,7 +413,9 @@ function villageCandidates(
 
 function withEstimate(c: Omit<Candidate, "ratingRange" | "potential" | "estimate">, eff: number, youth: boolean): Candidate {
   const rr = ratingRange(c.rating, eff, 1, c.id);
-  const pr = potentialRange({ age: c.player.age, rating: c.rating, position: c.player.position, talent: c.talent, skillsMax: c.skillsMax }, eff, 1, c.id);
+  const pr = c.player.age <= POTENTIAL_MAX_AGE
+    ? potentialRange({ age: c.player.age, rating: c.rating, position: c.player.position, talent: c.talent, skillsMax: c.skillsMax }, eff, 1, c.id)
+    : null;
   const estimate = youth && pr ? rangeMid(pr) : rangeMid(rr);
   return { ...c, ratingRange: rr, potential: pr, estimate };
 }
