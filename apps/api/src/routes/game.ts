@@ -1969,10 +1969,8 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   // Dřív se nejdřív strhly peníze a teprve pak zapsala úroveň (dvě oddělené
   // operace): dvojklik/dvojitý submit tak stihl zaúčtovat cenu dvakrát a zapsat
   // level jen jednou. Teď zámek prohraje druhý běh BEZ účtování.
-  const claim = await c.env.DB.prepare(
-    `UPDATE stadiums SET ${body.facility} = ? WHERE team_id = ? AND ${body.facility} = ?`
-  ).bind(upgrade.nextLevel, teamId, upgrade.currentLevel).run();
-  if ((claim.meta?.changes ?? 0) !== 1) {
+  const { claimStadiumUpgrade } = await import("../stadium/upgrade-claim");
+  if (!(await claimStadiumUpgrade(c.env.DB, teamId, body.facility, upgrade.currentLevel, upgrade.nextLevel))) {
     return c.json({ error: "Stavba už probíhá, načti stránku znovu" }, 409);
   }
 
