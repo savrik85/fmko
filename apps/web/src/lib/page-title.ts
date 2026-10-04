@@ -14,6 +14,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/pratelaky": "Přáteláky",
   "/trenink": "Tréninky",
   "/zamestnanci": "Zaměstnanci",
+  "/zamestnanci/skaut": "Skaut",
   "/prestupy": "Přestupy",
   "/sazky": "Sázková kancelář",
   "/finance": "Finance",
@@ -66,6 +67,7 @@ const PREFIX_TITLES: Array<[string, string]> = [
   ["/redakce/", "Redakce"],
   ["/pohar/tym/", "Tým v poháru"],
   ["/prestupy/nabidka/", "Nabídka"],
+  ["/prestupy/jednani/", "Jednání o přestupu"],
 ];
 
 export function pageTitleFor(pathname: string): string {

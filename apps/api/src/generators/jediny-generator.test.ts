@@ -38,8 +38,9 @@ describe("jediný generátor hráčů", () => {
 
   it("každé místo, kde vzniká hráč, jde přes createPlayer nebo generatePlayerSkills", () => {
     // Tabulky s novými hráči. `remove-player.ts` vrací do volných hráčů existujícího hráče
-    // (nic negeneruje), podpisy a přestupy kopírují už vygenerovaného.
-    const VYJIMKY = new Set(["transfers/remove-player.ts", "routes/game.ts"]);
+    // (nic negeneruje), podpisy a přestupy kopírují už vygenerovaného. `virtual-purchase.ts`
+    // zapisuje hráče z inzerátu nebo hlášení skauta, který vznikl přes createPlayer dřív.
+    const VYJIMKY = new Set(["transfers/remove-player.ts", "routes/game.ts", "transfers/virtual-purchase.ts"]);
     const vznikHrace = /INSERT INTO (?:players|free_agents|player_offers|cup_club_players)\b/;
     const bezGeneratoru = VSECHNY
       .filter((f) => vznikHrace.test(f.kod) && !VYJIMKY.has(f.path))

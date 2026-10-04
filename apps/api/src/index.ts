@@ -19,6 +19,8 @@ import u21Router from "./routes/u21";
 import developmentRouter from "./routes/development";
 import { obligationsRouter } from "./routes/obligations";
 import { staffRouter } from "./routes/staff";
+import { negotiationsRouter } from "./routes/negotiations";
+import { scoutingRouter } from "./routes/scouting";
 import { coachRouter } from "./routes/coach";
 import { equipmentMarketRouter } from "./routes/equipment-market";
 import { refereesRouter } from "./routes/referees";
@@ -113,6 +115,8 @@ app.route("/api", u21Router);
 app.route("/api", developmentRouter);
 app.route("/api", obligationsRouter);
 app.route("/api", staffRouter);
+app.route("/api", negotiationsRouter);
+app.route("/api", scoutingRouter);
 app.route("/api", coachRouter);
 app.route("/api", equipmentMarketRouter);
 app.route("/api", refereesRouter);
@@ -143,6 +147,21 @@ export default {
     const aiSwitch = await applyAiProvider(env);
     env = aiSwitch.env;
     if (aiSwitch.provider !== "gemini") log("info", `AI poskytovatel: ${aiSwitch.provider}`);
+
+    // ── ODPOVĚDI CIZÍCH KLUBŮ: při každém cronu doručí odpovědi, jejichž čas nastal ──
+    // Klub odpovídá s prodlevou 1–4 hodiny; kdo jednání zrovna nemá otevřené, dostane SMS
+    // a push nejpozději s dalším cronem. Lhůty jednání se kontrolují tamtéž.
+    if (cron !== "20 16 * * *") {
+      try {
+        const { revealDueAiReplies, expireAiNegotiations } = await import("./transfers/ai-negotiation");
+        const pushEnv = { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT };
+        const delivered = await revealDueAiReplies(env.DB, pushEnv, { limit: 200 });
+        const expired = await expireAiNegotiations(env.DB, pushEnv);
+        if (delivered > 0 || expired > 0) log("info", `jednání s cizími kluby: doručeno ${delivered}, vypršelo ${expired}`);
+      } catch (e: any) {
+        log("error", "odpovědi cizích klubů selhaly", e);
+      }
+    }
 
     // ── DAILY TICK: 4:00 CET (3:00 UTC) — posouvá dny, tréninky, zprávy ──
     // Manuální trigger (!cron) spustí denní tick + zápasový tick

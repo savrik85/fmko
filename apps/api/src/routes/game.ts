@@ -69,41 +69,8 @@ gameRouter.use("/game/*", requireAdmin);
 gameRouter.use("/leagues/:leagueId/generate-schedule", requireAdmin);
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Nejvýš MAX_ACTIVE_INSTALLMENT_DEALS rozjetých splátkových přestupů na kupujícího. */
-async function installmentLimitError(db: D1Database, buyerClubTeamId: string): Promise<string | null> {
-  const active = await db.prepare("SELECT COUNT(*) AS n FROM transfer_installments WHERE buyer_team_id = ? AND status = 'active'")
-    .bind(buyerClubTeamId).first<{ n: number }>();
-  return (active?.n ?? 0) >= MAX_ACTIVE_INSTALLMENT_DEALS
-    ? `Na splátky můžeš mít najednou nejvýš ${MAX_ACTIVE_INSTALLMENT_DEALS} hráče. Nejdřív nějaký dosplať.`
-    : null;
-}
-
-/**
- * Strop splátek: všechny týdenní splátky kupujícího dohromady nesmí přesáhnout jeho pravidelné
- * týdenní příjmy (stejné číslo jako „Příjmy / týd" ve Financích). `extraWeekly` = nová dohoda.
- */
-/** Nejvyšší týdenní splátka dohody (poslední doplácí zaokrouhlení). */
-function weeklyInstallment(t: TransferTerms): number {
-  if (t.installments <= 0) return 0;
-  const s = transferSchedule(t);
-  return Math.max(s.installmentAmount, s.lastInstallment);
-}
-
-async function installmentBudgetError(db: D1Database, buyerClubTeamId: string, extraWeekly: number, buyerIsMe = true): Promise<string | null> {
-  if (extraWeekly <= 0) return null;
-  const { weeklyIncomeOf } = await import("../season/weekly-income");
-  const [income, running] = await Promise.all([
-    weeklyIncomeOf(db, buyerClubTeamId),
-    db.prepare("SELECT COALESCE(SUM(installment_amount), 0) AS weekly FROM transfer_installments WHERE buyer_team_id = ? AND status = 'active'")
-      .bind(buyerClubTeamId).first<{ weekly: number }>(),
-  ]);
-  const weekly = (running?.weekly ?? 0) + extraWeekly;
-  if (weekly <= income.total) return null;
-  return buyerIsMe
-    ? `Splátky by byly ${weekly.toLocaleString("cs")} Kč týdně, klub vydělá ${income.total.toLocaleString("cs")} Kč. Zvyš zálohu nebo počet splátek.`
-    // Protistraně bez čísel: kolik kupující vydělá, je jeho věc.
-    : "Kupující by takové splátky neutáhl. Navrhni vyšší zálohu nebo víc splátek.";
-}
+// Strop počtu a výše splátek sdílí jednání o přestupu mezi lidmi i s cizími kluby.
+import { installmentLimitError, installmentBudgetError, weeklyInstallment } from "../transfers/installments";
 
 /** Send a system SMS to a team's phone (find-or-create conversation by role title). */
 async function sendPhoneSMS(db: D1Database, teamId: string, senderName: string, roleTitle: string, body: string) {
@@ -5207,6 +5174,9 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
     currentRejected.push(teamId);
     await c.env.DB.prepare("UPDATE free_agents SET rejected_by = ? WHERE id = ?")
       .bind(JSON.stringify(currentRejected), faId).run().catch((e) => logger.warn({ module: "game" }, "update rejected_by", e));
+    // Hlášení skauta o tomhle hráči: odmítl.
+    await c.env.DB.prepare("UPDATE scout_reports SET status = 'refused', resolved_at = ? WHERE free_agent_id = ? AND team_id = ? AND status = 'active'")
+      .bind(new Date().toISOString(), faId, teamId).run().catch((e) => logger.warn({ module: "game" }, "hlášení skauta po odmítnutí", e));
     return c.json({ success: false, decision });
   }
 
@@ -5325,6 +5295,11 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
     lifeContext: JSON.parse((newPlayer.life_context as string) ?? "{}"),
     avatar: JSON.parse((newPlayer.avatar as string) ?? "{}"),
   } : null;
+
+  // Hlášení skautů o tomhle hráči: u kupce podepsal, ostatním ho sebral jiný klub.
+  await c.env.DB.prepare(
+    "UPDATE scout_reports SET status = CASE WHEN team_id = ? THEN 'signed' ELSE 'gone' END, resolved_at = ? WHERE free_agent_id = ? AND status = 'active'",
+  ).bind(teamId, new Date().toISOString(), faId).run().catch((e) => logger.warn({ module: "game" }, "hlášení skautů po podpisu", e));
 
   return c.json({ success: true, decision, playerId, player: playerData });
 });
@@ -5679,6 +5654,18 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
     }
   }
 
+  // Rozjednané inzeráty cizích klubů: místo „Nabídnout" se v UI ukáže odkaz na jednání.
+  const aiListingIds = listings.results.filter((l) => l.is_ai_listing).map((l) => l.id as string);
+  const myNegotiations: Record<string, { id: string; status: string }> = {};
+  if (aiListingIds.length > 0) {
+    const negs = await c.env.DB.prepare(
+      `SELECT id, listing_id, status FROM ai_negotiations
+       WHERE team_id = ? AND status IN ('open','agreed') AND listing_id IN (${aiListingIds.map(() => "?").join(",")})`,
+    ).bind(teamId, ...aiListingIds).all<{ id: string; listing_id: string; status: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "jednání k inzerátům", e); return { results: [] as { id: string; listing_id: string; status: string }[] }; });
+    for (const n of negs.results) myNegotiations[n.listing_id] = { id: n.id, status: n.status };
+  }
+
   return c.json({
     listings: listings.results.map((l) => {
       const isAi = !!(l.is_ai_listing as number);
@@ -5692,6 +5679,8 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
           avatar: ai.avatar ?? {},
           skills: ai.skills ? Object.fromEntries(Object.entries(ai.skills).map(([k, v]) => [k, typeof v === "number" ? blur(v as number) : v])) : {},
           myBidAmount: myBids[l.id as string] ?? null,
+          myNegotiationId: myNegotiations[l.id as string]?.id ?? null,
+          myNegotiationStatus: myNegotiations[l.id as string]?.status ?? null,
         };
       }
       const activeOffer = myOffersByPlayer[l.player_id as string] ?? null;
@@ -5764,168 +5753,14 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   }
 
   if (listing.is_ai_listing) {
-    // AI listing — check price, then player agency decision, then transfer
-    if (body.amount < listing.asking_price) {
-      return c.json({ error: `Nabídka je příliš nízká. Požadovaná cena: ${listing.asking_price.toLocaleString("cs")} Kč.` }, 400);
-    }
-    const aiData = JSON.parse(listing.ai_player_data);
-
-    // Cooldown check — same pattern as free agents rejected_by
-    const rejectedByStr = listing.rejected_by as string ?? "[]";
-    const rejectedBy: string[] = (() => { try { return JSON.parse(rejectedByStr); } catch { return []; } })();
-    if (rejectedBy.includes(teamId)) {
-      return c.json({ ok: false, rejected: true, explanation: "Hráč vás už jednou odmítl. Momentálně nemá zájem." });
-    }
-
-    // Player agency decision — will the player agree to move here?
-    const teamInfo = await c.env.DB.prepare(
-      "SELECT t.reputation, v.lat, v.lng, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
-    ).bind(teamId).first<{ reputation: number; lat: number; lng: number; district: string }>();
-    const squadCount = await c.env.DB.prepare("SELECT COUNT(*) as cnt FROM players WHERE team_id = ?")
-      .bind(teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "count squad for AI bid", e); return { cnt: 15 }; });
-
-    // Get approximate coordinates for the AI team's city from village table
-    const aiVillage = await c.env.DB.prepare(
-      "SELECT lat, lng FROM villages WHERE name = ? OR name LIKE ? LIMIT 1"
-    ).bind(aiData.fromCity ?? "", `${aiData.fromCity ?? ""}%`).first<{ lat: number; lng: number }>()
-      .catch((e) => { logger.warn({ module: "game" }, "fetch AI city coords", e); return null; });
-
-    if (teamInfo) {
-      const { evaluateSigningChance } = await import("../transfers/player-agency");
-      const { loadCoachStandings } = await import("../transfers/player-interest");
-      const coach = (await loadCoachStandings(c.env.DB, [teamId])).get(teamId) ?? null;
-      const agencyRng = createRng(cryptoSeed());
-      // AI players have patriotism to their home district — cross-district transfer is harder
-      const pers = { ...(aiData.personality ?? {}), patriotism: 65 };
-      const decision = evaluateSigningChance(
-        { weekly_wage: aiData.weeklyWage ?? 200, personality: pers, district: aiData.fromDistrict ?? null },
-        { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize: squadCount?.cnt ?? 15, district: teamInfo.district, coach },
-        aiVillage, aiData.weeklyWage ?? 200,
-        agencyRng,
-      );
-      if (!decision.accepted) {
-        // Save rejection — same pattern as free agents rejected_by
-        rejectedBy.push(teamId);
-        await c.env.DB.prepare("UPDATE transfer_listings SET rejected_by = ? WHERE id = ?")
-          .bind(JSON.stringify(rejectedBy), listingId).run()
-          .catch((e) => logger.warn({ module: "game" }, "save AI rejection", e));
-        return c.json({ ok: false, rejected: true, explanation: decision.explanation, factors: decision.factors });
-      }
-    }
-
-    const playerId = crypto.randomUUID();
-    const skills = JSON.stringify(aiData.skills ?? {});
-    const physical = JSON.stringify(aiData.physical ?? {});
-    const personality = JSON.stringify(aiData.personality ?? {});
-    const lifeContext = JSON.stringify({ occupation: "Fotbalista", condition: 80, morale: 55 });
-    const avatar = JSON.stringify(aiData.avatar ?? {});
-    const weeklyWage = aiData.weeklyWage ?? Math.round(10 + ((aiData.overallRating ?? 40) / 100) * 400);
-
-    // Stropy a talent MUSÍ do zápisu. Sloupce mají v schématu DEFAULT '{}' a DEFAULT 0,
-    // takže když chyběly, nic nespadlo — hráč jen tiše vznikl bez potenciálu a manažer
-    // koupil kocoura v pytli. Starší inzeráty je v `ai_player_data` nemají, proto se
-    // pro ně dopočítají tady.
-    const rngStropy = createRng(cryptoSeed());
-    const skillsMax = JSON.stringify(
-      aiData.skillCaps ?? stropyZDovednosti(rngStropy, aiData.skills ?? {}, aiData.age ?? 25),
-    );
-    const hiddenTalent = aiData.hiddenTalent ?? talentPodleVeku(rngStropy, aiData.age ?? 25);
-
-    const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(buyerClubTeamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; }))?.game_date ?? new Date().toISOString();
-
-    // Hráč a splátková dohoda vznikají jedním batchem: buď obojí, nebo nic. Kdyby se
-    // dohoda nezapsala, měl by kupující hráče jen za zálohu.
-    const createPlayer = [
-      c.env.DB.prepare(
-        `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, skills_max, hidden_talent)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
-      ).bind(playerId, teamId, aiData.firstName, aiData.lastName, aiData.age, aiData.position, aiData.overallRating,
-        skills, physical, personality, lifeContext, avatar, weeklyWage,
-        (aiData as { nationality?: string }).nationality ?? "CZ", skillsMax, hiddenTalent),
-    ];
-    if (terms.installments > 0) {
-      createPlayer.push(c.env.DB.prepare(
-        `INSERT INTO transfer_installments (id, offer_id, player_id, player_name, buyer_team_id, seller_team_id, seller_name, total_amount,
-           upfront_amount, installment_amount, installments_total, remaining, created_game_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(crypto.randomUUID(), listingId, playerId, `${aiData.firstName} ${aiData.lastName}`, buyerClubTeamId, CPU_CLUB_ID,
-        aiData.fromTeam ?? "Cizí klub", body.amount, schedule.upfront, schedule.installmentAmount, schedule.installments,
-        schedule.remainingAfterUpfront, gameDate));
-    }
-    // Souběžné nákupy: inzerát se nejdřív zabere (stejného hráče nejde koupit dvakrát) a záloha
-    // se strhne jen při dostatku peněz, obojí atomicky. Teprve pak vznikne hráč a dohoda.
-    const claimed = await c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ? AND status = 'active'")
-      .bind(listingId).run();
-    if ((claimed.meta?.changes ?? 0) === 0) return c.json({ error: "Hráče mezitím koupil někdo jiný." }, 409);
-    const reopenListing = () => c.env.DB.prepare("UPDATE transfer_listings SET status = 'active' WHERE id = ? AND status = 'sold'")
-      .bind(listingId).run().catch((e) => logger.error({ module: "game" }, "vrácení inzerátu po nezdařeném nákupu", e));
-    const paid = await c.env.DB.prepare("UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ? RETURNING budget")
-      .bind(schedule.upfront, buyerClubTeamId, schedule.upfront).first<{ budget: number }>();
-    if (!paid) {
-      await reopenListing();
-      return c.json({ error: terms.installments > 0 ? "Nedostatek peněz na zálohu." : "Nedostatek peněz." }, 400);
-    }
-    try {
-      await c.env.DB.batch(createPlayer);
-    } catch (e) {
-      logger.error({ module: "game" }, "zápis hráče z trhu", e);
-      await c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(schedule.upfront, buyerClubTeamId).run()
-        .catch((e2) => logger.error({ module: "game" }, "vrácení zálohy po nezdařeném nákupu", e2));
-      await reopenListing();
-      return c.json({ error: "Nákup se nepodařilo dokončit, peníze jsou zpátky." }, 500);
-    }
-    await c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), buyerClubTeamId, -schedule.upfront, paid.budget,
-        terms.installments > 0
-          ? `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam} (záloha ${terms.upfrontPct} %, zbytek ${terms.installments}× týdně)`
-          : `Přestup: ${aiData.firstName} ${aiData.lastName} z ${aiData.fromTeam}`, gameDate)
-      .run().catch((e) => logger.warn({ module: "game" }, "zápis transakce nákupu z trhu", e));
-
-    // Residence + commute
-    const { generateResidence } = await import("../generators/residence");
-    const teamVillage = await c.env.DB.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
-      .bind(teamId).first<{ name: string; size: string; district: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch village for AI transfer", e); return null; });
-    if (teamVillage) {
-      const resRng = createRng(cryptoSeed());
-      const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
-      await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
-        .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "set residence AI transfer", e));
-    }
-
-    // Vazby na nové spoluhráče (až po bydlišti — sousedství se odvozuje z něj)
-    const { attachNewcomerRelations } = await import("../transfers/attach-relations");
-    await attachNewcomerRelations(c.env.DB, teamId, playerId);
-    const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
-    await initNewcomerCoachRelation(c.env.DB, teamId, playerId);
-
-    // Contract
-    const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for AI transfer", e); return null; });
-    await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
-      .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "unknown", body.amount).run().catch((e) => logger.warn({ module: "game" }, "AI transfer contract", e));
-
-    // News
-    const teamRow = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string }>();
-    if (teamRow) {
-      const { createTransferNews } = await import("../transfers/transfer-news");
-      await createTransferNews(c.env.DB, teamRow.league_id, teamId, "transfer_completed", {
-        playerName: `${aiData.firstName} ${aiData.lastName}`, playerAge: aiData.age,
-        playerPosition: aiData.position, teamName: teamRow.name, toTeamName: teamRow.name, fromTeamName: aiData.fromTeam ?? "Neznámý tým",
-        fee: body.amount, isCrossDistrict: true,
-      }).catch((e) => logger.warn({ module: "game" }, "AI transfer news", e));
-    }
-
-    // Return new player for reveal card
-    const newPlayer = await c.env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch new AI transfer player", e); return null; });
-    const playerData = newPlayer ? {
-      ...newPlayer,
-      skills: JSON.parse((newPlayer.skills as string) ?? "{}"),
-      physical: JSON.parse((newPlayer.physical as string) ?? "{}"),
-      personality: JSON.parse((newPlayer.personality as string) ?? "{}"),
-      lifeContext: JSON.parse((newPlayer.life_context as string) ?? "{}"),
-      avatar: JSON.parse((newPlayer.avatar as string) ?? "{}"),
-    } : null;
-
-    return c.json({ ok: true, autoAccepted: true, playerId, player: playerData });
+    // Cizí klub: cena se vyjednává (spec 2026-10-04). Klub odpoví s prodlevou souhlasem,
+    // protinávrhem nebo konec jednání; teprve po dohodě se rozhoduje hráč a platí se.
+    const { startAiNegotiation } = await import("../transfers/ai-negotiation");
+    const res = await startAiNegotiation(c.env.DB, {
+      buyerClubTeamId, source: "listing", sourceId: listingId, terms,
+    });
+    if (!res.ok) return c.json({ error: res.error }, res.status);
+    return c.json({ ok: true, negotiationId: res.negotiationId, existing: res.existing ?? false });
   }
 
   // Normal (human) listing — vytvor transfer_offer (sjednoceny flow s primymi nabidkami).

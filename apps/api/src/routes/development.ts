@@ -51,13 +51,8 @@ const NAZVY_ATRIBUTU: Record<string, string> = {
   experience: "Zkušenost",
 };
 
-/**
- * Jak přesně klub odhaduje strop. Bez skauta ±18 bodů (prakticky "nevíme"),
- * špičkový skaut ±4 (skoro jistota).
- */
-function rozptylOdhadu(kvalitaSkauta: number): number {
-  return Math.round(18 - Math.max(0, Math.min(1, kvalitaSkauta)) * 14);
-}
+// Přesnost odhadu a stabilní posun sdílí s hlášeními skauta o cizích hráčích.
+import { estimateSpread as rozptylOdhadu, stableOffset as stabilniPosun } from "../lib/scout-estimate";
 
 // Skrytý talent říká, jak RYCHLE se hráč učí — ne kam až dojde. To určuje strop.
 //
@@ -198,19 +193,6 @@ function realneDosazitelnaHodnota(vek: number, soucasna: number, strop: number, 
     if (hodnota >= strop) return strop;
   }
   return Math.min(strop, Math.round(hodnota));
-}
-
-/**
- * Stabilní pseudonáhoda z textu — aby se odhad stropu neměnil při každém načtení stránky.
- * Manažer nesmí odhad "vyrolovat" opakovaným refreshem.
- */
-function stabilniPosun(seed: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return ((h >>> 0) / 4294967296) * 2 - 1; // -1..1
 }
 
 // GET /api/teams/:teamId/players/:playerId/development

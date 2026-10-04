@@ -14,6 +14,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
 import { WatchlistTab } from "./WatchlistTab";
 import { ObligationsTab } from "./ObligationsTab";
+import { AiNegotiationsList } from "@/components/transfers/AiNegotiationsList";
 import { termsNote, TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
 import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
@@ -1856,7 +1857,14 @@ export default function TransfersPage() {
                           );
                         })()}
                       </div>
-                      {l.myActiveOfferId ? (
+                      {(l as any).myNegotiationId ? (
+                        <Link
+                          href={`/prestupy/jednani/${(l as any).myNegotiationId}`}
+                          className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors"
+                        >
+                          Jednáš o něm →
+                        </Link>
+                      ) : l.myActiveOfferId ? (
                         <Link
                           href={`/prestupy/nabidka/${l.myActiveOfferId}`}
                           className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors"
@@ -1872,7 +1880,9 @@ export default function TransfersPage() {
                           onClick={() => {
                             setPriceDialog({
                               title: `Nabídnout za ${l.playerName}`,
-                              description: `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
+                              description: (l as any).isAiListing
+                                ? `Požadovaná cena: ${formatCZK(l.askingPrice)}. Klub odpoví do pár hodin a o ceně se dá jednat.`
+                                : `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
                               defaultPrice: l.askingPrice,
                               // Splátky jdou u obou; procenta a výměna jen s lidským klubem.
                               payment: { allowSellOn: !(l as any).isAiListing },
@@ -1882,7 +1892,7 @@ export default function TransfersPage() {
                               },
                               onConfirm: async (price, terms) => {
                                 if (!teamId) return;
-                                let res: { ok: boolean; autoAccepted?: boolean; rejected?: boolean; explanation?: string; player?: Player; error?: string; offerId?: string; alreadyExists?: boolean } | null = null;
+                                let res: { ok: boolean; rejected?: boolean; explanation?: string; error?: string; offerId?: string; negotiationId?: string; alreadyExists?: boolean } | null = null;
                                 let errorMsg: string | null = null;
                                 try {
                                   res = await apiFetch(`/api/teams/${teamId}/market/${l.id}/bid`, {
@@ -1897,8 +1907,10 @@ export default function TransfersPage() {
                                   showError("Nabídka se nezdařila", errorMsg);
                                 } else if (res?.rejected) {
                                   await confirm({ title: "Odmítl přestup", description: res.explanation ?? "Hráč nemá zájem." });
-                                } else if (res?.autoAccepted && res?.player) {
-                                  setRevealPlayer(res.player);
+                                } else if (res?.negotiationId) {
+                                  // Cizí klub: cena se vyjednává, otevři jednání
+                                  router.push(`/prestupy/jednani/${res.negotiationId}`);
+                                  return;
                                 } else if (res?.offerId) {
                                   // Lidsky listing -> vytvorena nabidka, otevri jednani
                                   router.push(`/prestupy/nabidka/${res.offerId}`);
@@ -2008,6 +2020,7 @@ export default function TransfersPage() {
             </button>
           </div>
 
+          {offersView === "history" && <AiNegotiationsList teamId={teamId} view="closed" />}
           {offersView === "history" && (
             <div>
               <SectionLabel>Historie přestupů</SectionLabel>
@@ -2333,6 +2346,8 @@ export default function TransfersPage() {
               </div>
             </div>
           )}
+
+          <AiNegotiationsList teamId={teamId} view="active" />
 
           {outgoing.length > 0 && (
             <div>
