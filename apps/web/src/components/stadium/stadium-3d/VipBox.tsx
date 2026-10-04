@@ -2,7 +2,7 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { PITCH, STAND_DIMS, STAND_GAP, type TimeOfDay } from "./constants";
-import { vipBoxSideFor, type SideLevels } from "./stand-levels";
+import { canopyPlan, vipBoxSideFor, type RoofTier, type SceneSide, type SideLevels } from "./stand-levels";
 
 type Side = "north" | "south" | "east" | "west";
 
@@ -44,43 +44,39 @@ const NO_ROOF_CLEARANCE = 2.3;
 /** Podpěry za zadní stěnou tribuny (stěna sahá do depth + 0,075). */
 const SUPPORT_Z = 0.17;
 const SUPPORT_T = 0.16;
-/** Sklon a tloušťka stříšky — stejné hodnoty jako StandRoof ve StadiumExtras.tsx. */
-const ROOF_TILT = 0.32;
+/** Tloušťka stříšky, stejná hodnota jako StandRoof ve StadiumExtras.tsx. */
 const ROOF_T = 0.14;
 
 // Na které tribuně lóže stojí, určuje `vipBoxSideFor` (stand-levels.ts): hlavní je
 // východní podélná tribuna od L2, jinak sever za brankou; kde stojí kotel, tam ne.
 
 /** Rozměry galerie v lokálních souřadnicích tribuny. */
-function galleryLayout(level: number, standsLevel: number, roofLevel: number, standLength: number) {
+function galleryLayout(level: number, standsLevel: number, roofLevel: number, standLength: number, tier?: RoofTier) {
   const lv = Math.min(Math.max(level, 0), 3);
   const dims = STAND_DIMS[Math.min(Math.max(standsLevel, 0), 3)];
 
   let floorBottom: number;
   if (roofLevel > 0) {
-    // Stejný výpočet jako ActiveStandRoof: nejvyšší bod stříšky je horní hrana zadního okraje.
-    const clearance = standsLevel === 1 ? 2.6 : 1.1;
-    const overhang = 0.5 + roofLevel * 0.35;
-    const roofDepth = dims.depth * 0.7 + overhang;
-    const roofY = dims.height + clearance;
-    const roofBackTop =
-      roofY + Math.sin(ROOF_TILT) * (roofDepth / 2) + Math.cos(ROOF_TILT) * (ROOF_T / 2);
-    floorBottom = roofBackTop + ROOF_GAP;
+    // Střecha je jediná (canopyPlan), vodorovná; galerie leží nad její horní hranou, i nad zvednutou střechou patra.
+    const { roofY } = canopyPlan(dims.depth, dims.height, roofLevel, tier);
+    floorBottom = roofY + ROOF_T / 2 + ROOF_GAP;
   } else {
-    floorBottom = dims.height + NO_ROOF_CLEARANCE;
+    floorBottom = Math.max(dims.height + NO_ROOF_CLEARANCE, tier ? tier.top + 1.2 : 0);
   }
+  // Se zvednutým patrem leží zadní okraj tribuny dál, galerie musí stát až za ním.
+  const zEnd = tier ? Math.max(dims.depth, tier.end) : dims.depth;
 
   const cabins = CABINS[lv];
   // L3: řada přes 75 % délky tribuny, kabiny se roztáhnou; nižší úrovně mají pevnou šířku.
   const cabinW = lv >= 3 ? (standLength * 0.75) / cabins : CABIN_W;
   const rowW = cabinW * cabins;
   const fasciaH = lv >= 3 ? 1.0 : lv === 2 ? 0.85 : 0.75;
-  const zBack = dims.depth + BACK_OVERHANG;
+  const zBack = zEnd + BACK_OVERHANG;
   const zCenter = zBack - CABIN_D / 2;
   const floorTop = floorBottom + FLOOR_T;
   // Nejvyšší bod: lem nad sklem, na L3 ještě markýza.
   const topY = floorTop + CABIN_H + fasciaH + (lv >= 3 ? 0.45 : 0);
-  return { lv, dims, cabins, cabinW, rowW, fasciaH, zBack, zCenter, floorBottom, floorTop, topY };
+  return { lv, dims, cabins, cabinW, rowW, fasciaH, zBack, zCenter, zEnd, floorBottom, floorTop, topY };
 }
 
 /**
@@ -89,9 +85,9 @@ function galleryLayout(level: number, standsLevel: number, roofLevel: number, st
  * Tabule skóre za východní tribunou musí mít spodek nad touto výškou, jinak ji
  * galerie z hřiště zakryje.
  */
-export function vipGallerySightlineY(level: number, standsLevel: number, roofLevel: number, atDistance: number): number {
+export function vipGallerySightlineY(level: number, standsLevel: number, roofLevel: number, atDistance: number, tier?: RoofTier): number {
   if (level <= 0 || standsLevel <= 0) return 0;
-  const g = galleryLayout(level, standsLevel, roofLevel, PITCH.depth);
+  const g = galleryLayout(level, standsLevel, roofLevel, PITCH.depth, tier);
   const eyeY = 1.7;
   const standBase = PITCH.width / 2 + STAND_GAP + g.dims.depth / 2;
   const frontDist = standBase + g.zCenter - CABIN_D / 2;
@@ -138,6 +134,10 @@ interface VipBoxProps {
   level: number;
   /** Úrovně tribun po světových stranách, lóže sedí na té, kterou vybere `vipBoxSideFor`. */
   sideLevels: SideLevels;
+  /** Strany nahrazené točenou tribunou nebo valem: lóže na nich nestojí. */
+  replaced?: ReadonlySet<SceneSide>;
+  /** Patra nad tribunami; střecha i galerie se podle nich zvedají. */
+  roofTier?: Partial<Record<SceneSide, RoofTier>>;
   roofLevel: number;
   ultrasSide: Side;
   accentColor: string;
@@ -150,15 +150,15 @@ interface VipBoxProps {
 
 export function VipBox(props: VipBoxProps) {
   if (props.level <= 0) return null;
-  const side = vipBoxSideFor(props.sideLevels, props.ultrasSide);
+  const side = vipBoxSideFor(props.sideLevels, props.ultrasSide, props.replaced);
   if (!side) return null;
-  return <ActiveVipBox {...props} side={side} standsLevel={props.sideLevels[side]} />;
+  return <ActiveVipBox {...props} side={side} standsLevel={props.sideLevels[side]} tier={props.roofTier?.[side]} />;
 }
 
-function ActiveVipBox({ level, standsLevel, side, roofLevel, accentColor, teamColor, timeOfDay, reducedDetail = false, isSnow = false }: Omit<VipBoxProps, "sideLevels" | "ultrasSide"> & { side: Side; standsLevel: number }) {
+function ActiveVipBox({ level, standsLevel, side, tier, roofLevel, accentColor, teamColor, timeOfDay, reducedDetail = false, isSnow = false }: Omit<VipBoxProps, "sideLevels" | "ultrasSide" | "replaced" | "roofTier"> & { side: Side; standsLevel: number; tier?: RoofTier }) {
   const isEW = side === "east" || side === "west";
   const standLength = isEW ? PITCH.depth : PITCH.width;
-  const g = galleryLayout(level, standsLevel, roofLevel, standLength);
+  const g = galleryLayout(level, standsLevel, roofLevel, standLength, tier);
   const signTex = useVipSignTexture(accentColor);
 
   // Stejné umístění skupiny jako Stand: lokální +Z míří od hřiště dozadu.
@@ -180,7 +180,7 @@ function ActiveVipBox({ level, standsLevel, side, roofLevel, accentColor, teamCo
   const supportXs = lv >= 3 && !reducedDetail
     ? [-edgeX, -rowW / 4, rowW / 4, edgeX]
     : [-edgeX, edgeX];
-  const supportZ = depth + SUPPORT_Z;
+  const supportZ = g.zEnd + SUPPORT_Z;
   const signH = fasciaH * 0.8;
   const signW = signH * (512 / 192);
   const fasciaY = floorTop + CABIN_H - 0.05 + fasciaH / 2;

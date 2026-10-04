@@ -45,11 +45,12 @@ export function getSideLevels(f: StandFacilities): SideLevels {
  * brankou na severu. Kde stojí kotel, tam lóže není, a bez tribuny se nekreslí.
  * Se starým modelem dává stejné strany jako dřív.
  */
-export function vipBoxSideFor(levels: SideLevels, ultrasSide: SceneSide): SceneSide | null {
+export function vipBoxSideFor(levels: SideLevels, ultrasSide: SceneSide, replaced?: ReadonlySet<SceneSide>): SceneSide | null {
   const order: SceneSide[] = levels.east >= 2
     ? ["east", "west", "north", "south"]
     : ["north", "south", "east", "west"];
-  return order.find((s) => levels[s] >= 1 && s !== ultrasSide) ?? null;
+  // Strana nahrazená točenou tribunou nebo valem má jiný tvar, lóže na ni nepatří.
+  return order.find((s) => levels[s] >= 1 && s !== ultrasSide && !replaced?.has(s)) ?? null;
 }
 
 const SIDE_SLOT_OF: Record<string, SceneSide> = {
