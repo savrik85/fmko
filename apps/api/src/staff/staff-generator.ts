@@ -233,10 +233,10 @@ export function generateStaffCandidate(
 }
 
 // Cíl volných kandidátů škáluje s počtem lidských týmů v okrese (sdílený trh — víc týmů = víc lidí).
-const POOL_PER_TEAM = 5;   // kandidátů na lidský tým v okrese
-const POOL_MIN = 24;       // minimum i pro malý okres
+const POOL_PER_TEAM = 8;   // kandidátů na lidský tým v okrese
+const POOL_MIN = 30;       // minimum i pro malý okres
 const POOL_MAX = 200;      // strop
-const LISTED_WEEKS = 3;    // za jak dlouho kandidát z poolu zmizí
+const LISTED_WEEKS = 4;    // za jak dlouho kandidát z poolu zmizí
 
 function poolTargetFor(humanTeams: number): number {
   return Math.max(POOL_MIN, Math.min(POOL_MAX, humanTeams * POOL_PER_TEAM));
@@ -245,6 +245,9 @@ function poolTargetFor(humanTeams: number): number {
 /**
  * Údržba poolu zaměstnanců: expirace starých, doplnění nových — per okres s lidským týmem.
  * Voláno z pondělního bloku daily-ticku. Vrací počet nově vygenerovaných.
+ *
+ * Garantuje minimální kvótu skautů (1,5 skauta na lidský tým), aby si každý klub
+ * mohl najmout až dva skauty bez vyčerpání trhu.
  */
 export async function maintainStaffPool(db: D1Database, rng: Rng, gameDate: Date): Promise<number> {
   // 1. Expirace volných kandidátů (najatí nemají listed_until)
@@ -252,9 +255,9 @@ export async function maintainStaffPool(db: D1Database, rng: Rng, gameDate: Date
     .bind(gameDate.toISOString()).run()
     .catch((e) => logger.warn({ module: "staff-pool" }, "expire", e));
 
-  // 2. Okresy s lidským týmem + počet lidských týmů (pro škálování cíle)
+  // 2. Okresy s lidským týmem + počet lidských týmů (áček)
   const districts = await db.prepare(
-    "SELECT v.district, COUNT(*) as teams FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai' GROUP BY v.district"
+    "SELECT v.district, COUNT(DISTINCT t.id) as teams FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL GROUP BY v.district"
   ).all<{ district: string; teams: number }>()
     .catch((e) => { logger.warn({ module: "staff-pool" }, "districts", e); return { results: [] as { district: string; teams: number }[] }; });
 
@@ -263,22 +266,40 @@ export async function maintainStaffPool(db: D1Database, rng: Rng, gameDate: Date
 
   for (const row of districts.results) {
     const district = row.district;
-    const target = poolTargetFor(row.teams ?? 1);
+    const humanTeams = row.teams ?? 1;
+    const target = poolTargetFor(humanTeams);
 
     const poolCount = await db.prepare(
       "SELECT COUNT(*) as cnt FROM staff_members WHERE district = ? AND team_id IS NULL"
     ).bind(district).first<{ cnt: number }>()
       .catch((e) => { logger.warn({ module: "staff-pool" }, "count", e); return { cnt: 0 }; });
 
-    const missing = target - (poolCount?.cnt ?? 0);
-    if (missing <= 0) continue;
+    // Kvóta skautů: aspoň 1.5 volného skauta na lidský tým (min 5)
+    const minScoutsTarget = Math.max(5, Math.round(humanTeams * 1.5));
+    const scoutCount = await db.prepare(
+      "SELECT COUNT(*) as cnt FROM staff_members WHERE district = ? AND team_id IS NULL AND profession = 'skaut'"
+    ).bind(district).first<{ cnt: number }>()
+      .catch((e) => { logger.warn({ module: "staff-pool" }, "scout count", e); return { cnt: 0 }; });
 
-    // Doplnit postupně (nárazově ne celý pool), ale svižně — nahradit najaté + růst k cíli.
-    const count = Math.min(missing, rng.int(4, 10));
+    let missingScouts = Math.max(0, minScoutsTarget - (scoutCount?.cnt ?? 0));
+    const poolMissing = Math.max(0, target - (poolCount?.cnt ?? 0));
+
+    // Pokud chybí celkový pool nebo skauti, doplňujeme
+    if (poolMissing <= 0 && missingScouts <= 0) continue;
+
+    const count = Math.max(
+      poolMissing > 0 ? Math.min(poolMissing, rng.int(4, 10)) : 0,
+      Math.min(missingScouts, 10),
+    );
+    if (count <= 0) continue;
+
     const districtData = await getDistrictDataFromDB(db, district);
 
     for (let i = 0; i < count; i++) {
-      const c = generateStaffCandidate(rng, districtData.surnames);
+      const forceScout = missingScouts > 0;
+      if (forceScout) missingScouts--;
+
+      const c = generateStaffCandidate(rng, districtData.surnames, forceScout ? "skaut" : undefined);
       await db.prepare(
         `INSERT INTO staff_members
           (id, district, team_id, role, profession, first_name, last_name, gender, age,
