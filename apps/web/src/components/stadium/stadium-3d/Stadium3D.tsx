@@ -14,7 +14,8 @@ import { AdBoards } from "./AdBoards";
 import { Scoreboard, SCOREBOARD_X } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
 import { HostujiciSektor, StandRoof, UltrasSector } from "./StadiumExtras";
-import { VipBox, vipBoxSide, vipGallerySightlineY } from "./VipBox";
+import { VipBox, vipGallerySightlineY } from "./VipBox";
+import { getSideLevels, vipBoxSideFor } from "./stand-levels";
 import { Floodlights } from "./Floodlights";
 import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
@@ -182,11 +183,12 @@ export function Stadium3D({
   const SEKTOR_STRANY = { kotel: "south", za_branou: "north", hlavni: "east" } as const;
   // VIP galerie na východní tribuně vyčnívá nad stříšku a z hřiště by zakryla tabuli
   // skóre stojící za ní (x = 36) — tabule se proto zvedne nad siluetu galerie.
+  // Úrovně tribun po stranách: každá strana má vlastní úroveň, nebo žádnou.
+  const sideLevels = getSideLevels(f);
   const scoreboardMinPanelBottom =
     (f.vip_box ?? 0) > 0 &&
-    (f.stands ?? 0) > 0 &&
-    vipBoxSide(f.stands ?? 0, SEKTOR_STRANY[ultrasSector]) === "east"
-      ? vipGallerySightlineY(f.vip_box ?? 0, f.stands ?? 0, f.roof ?? 0, SCOREBOARD_X) + 0.3
+    vipBoxSideFor(sideLevels, SEKTOR_STRANY[ultrasSector]) === "east"
+      ? vipGallerySightlineY(f.vip_box ?? 0, sideLevels.east, f.roof ?? 0, SCOREBOARD_X) + 0.3
       : 0;
   const zaplneniStrany = (strana: "north" | "south" | "east" | "west"): number => {
     if (!sectorFill) return attendanceRatio;
@@ -504,7 +506,7 @@ export function Stadium3D({
           {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}
           <Stand
             side="north"
-            level={f.stands ?? 0}
+            level={sideLevels.north}
             teamColor={teamColor}
             secondaryColor={secondaryColor}
             standColor={standColor}
@@ -519,7 +521,7 @@ export function Stadium3D({
           />
           <Stand
             side="south"
-            level={f.stands ?? 0}
+            level={sideLevels.south}
             teamColor={teamColor}
             secondaryColor={secondaryColor}
             standColor={standColor}
@@ -532,10 +534,10 @@ export function Stadium3D({
             isSnow={weather === "snow"}
             attendanceRatio={zaplneniStrany("south")}
           />
-          {(f.stands ?? 0) >= 2 && (
+          {sideLevels.east >= 1 && (
             <Stand
               side="east"
-              level={f.stands}
+              level={sideLevels.east}
               teamColor={teamColor}
               secondaryColor={secondaryColor}
               standColor={standColor}
@@ -549,10 +551,10 @@ export function Stadium3D({
               attendanceRatio={zaplneniStrany("east")}
             />
           )}
-          {(f.stands ?? 0) >= 2 && (
+          {sideLevels.west >= 1 && (
             <Stand
               side="west"
-              level={f.stands}
+              level={sideLevels.west}
               teamColor={teamColor}
               secondaryColor={secondaryColor}
               standColor={standColor}
@@ -568,12 +570,12 @@ export function Stadium3D({
           )}
 
           {/* Zastřešení tribun */}
-          <StandRoof standsLevel={f.stands ?? 0} roofLevel={f.roof ?? 0} roofColor={roofColor} weather={weather} />
+          <StandRoof sideLevels={sideLevels} roofLevel={f.roof ?? 0} roofColor={roofColor} weather={weather} />
 
           {/* VIP lóže: prosklená galerie nad hlavní tribunou (bez tribuny se nekreslí) */}
           <VipBox
             level={f.vip_box ?? 0}
-            standsLevel={f.stands ?? 0}
+            sideLevels={sideLevels}
             roofLevel={f.roof ?? 0}
             ultrasSide={SEKTOR_STRANY[ultrasSector]}
             accentColor={accentColor}
