@@ -63,42 +63,34 @@ describe("migrace tribun po stranách", () => {
     }
   });
 
-  it("rozbitá tribuna klubu z L2: ostatní strany zůstanou, oprava hlavní vrátí celých 290 míst", async () => {
-    // Klub byl na L2, výtržníci srazili o úroveň, `stands` = 1.
+  it("klub sražený nezaplacenou škodou se převede podle současného stavu: kapacita se nezvedne", async () => {
+    // Klub byl na L2, výtržníci srazili o úroveň, `stands` = 1. Teď má 90 míst a tolik mu zůstane.
     await db.prepare("INSERT INTO stadiums VALUES ('s1','t1',1)").run();
     await db.prepare("INSERT INTO stadium_damage VALUES ('d1','t1','stands',1,59500,NULL)").run();
     await migrate();
-    const a = await sides("t1");
-    expect(a).toEqual({ stands: 2, stand_main: 1, stand_opposite: 2, stand_goal_west: 2, stand_goal_east: 2 });
+    expect(await sides("t1")).toEqual({ stands: 1, stand_main: 0, stand_opposite: 0, stand_goal_west: 1, stand_goal_east: 1 });
+    expect(standsCapacity(readStandLevels((await sides("t1"))!))).toBe(90);
     const dmg = await db.prepare("SELECT facility, repair_cost FROM stadium_damage WHERE id = 'd1'").first<{ facility: string; repair_cost: number }>();
-    expect(dmg?.facility).toBe("stand_main");
-    // Oprava jedné strany nesmí stát cenu opravy všech čtyř.
+    // Škoda už není na `stands` (to nejde opravit), míří na jednu stranu a oprava jedné strany je levnější.
+    expect(dmg?.facility).toBe("stand_goal_east");
     expect(dmg?.repair_cost).toBe(20800);
-    // Přesně to dělá `opravVybaveni`.
-    await db.prepare("UPDATE stadiums SET stand_main = MIN(3, stand_main + 1) WHERE team_id = 't1'").run();
+  });
+
+  it("klub z L2 sražený škodou na L1 po opravě zvedne jednu stranu, nic navíc", async () => {
+    await db.prepare("INSERT INTO stadiums VALUES ('s1','t1',2)").run();
+    await db.prepare("INSERT INTO stadium_damage VALUES ('d1','t1','stands',1,59500,NULL)").run();
+    await migrate();
+    expect(await sides("t1")).toEqual({ stands: 2, stand_main: 2, stand_opposite: 2, stand_goal_west: 2, stand_goal_east: 2 });
+    const dmg = await db.prepare("SELECT facility FROM stadium_damage WHERE id = 'd1'").first<{ facility: string }>();
+    expect(dmg?.facility).toBe("stand_main");
     expect(standsCapacity(readStandLevels((await sides("t1"))!))).toBe(290);
   });
 
-  it("rozbitá tribuna klubu z L1: oprava vrátí obě tribuny za brankou (90 míst), hlavní strana nevznikne", async () => {
-    // Klub byl na L1 (tribuny za brankou), škoda ho srazila na 0.
+  it("klub bez tribun s otevřenou škodou zůstane na nule", async () => {
     await db.prepare("INSERT INTO stadiums VALUES ('s1','t1',0)").run();
     await db.prepare("INSERT INTO stadium_damage VALUES ('d1','t1','stands',1,19300,NULL)").run();
     await migrate();
-    const a = await sides("t1");
-    expect(a).toEqual({ stands: 1, stand_main: 0, stand_opposite: 0, stand_goal_west: 1, stand_goal_east: 0 });
-    const dmg = await db.prepare("SELECT facility FROM stadium_damage WHERE id = 'd1'").first<{ facility: string }>();
-    expect(dmg?.facility).toBe("stand_goal_east");
-    await db.prepare("UPDATE stadiums SET stand_goal_east = MIN(3, stand_goal_east + 1) WHERE team_id = 't1'").run();
-    expect(standsCapacity(readStandLevels((await sides("t1"))!))).toBe(90);
-  });
-
-  it("dvě otevřené škody se sečtou a úroveň se nepřehoupne přes 3", async () => {
-    await db.prepare("INSERT INTO stadiums VALUES ('s1','t1',1)").run();
-    await db.prepare("INSERT INTO stadium_damage VALUES ('d1','t1','stands',1,59500,NULL),('d2','t1','stands',2,100000,NULL)").run();
-    await migrate();
-    const a = await sides("t1");
-    expect(a?.stand_opposite).toBe(3);
-    expect(a?.stand_main).toBe(0);
+    expect(await sides("t1")).toEqual({ stands: 0, stand_main: 0, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 0 });
   });
 
   it("už opravená škoda strany nezvedá a jiné zařízení se nepřepisuje", async () => {

@@ -8,22 +8,13 @@ ALTER TABLE stadiums ADD COLUMN stand_goal_east INTEGER NOT NULL DEFAULT 0;
 
 -- Převod zachová kapacitu i vzhled: dnešní L1 měla tribuny jen za brankami (90 míst), dlouhé strany
 -- dostaly tribunu až od L2. L1 tedy dostanou jen obě tribuny za brankou, L2 a L3 všechny čtyři strany.
--- Úroveň před škodou = `stands` + sražené úrovně z otevřených oprav; škoda se pak odečte níž.
+-- Převádí se podle SOUČASNÉHO `stands`, i když je klub sražený nezaplacenou škodou: kdo je teď na L1,
+-- zůstane na L1 a oprava mu vrátí jednu stranu (kapacita se převodem nezvedne a nikdo nedostane míst zdarma).
 UPDATE stadiums
-SET stand_goal_west = MIN(3, COALESCE(stands, 0) + (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL)),
-    stand_goal_east = MIN(3, COALESCE(stands, 0) + (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL)),
-    stand_main = CASE WHEN MIN(3, COALESCE(stands, 0) + (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL)) >= 2 THEN MIN(3, COALESCE(stands, 0) + (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL)) ELSE 0 END,
-    stand_opposite = CASE WHEN MIN(3, COALESCE(stands, 0) + (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL)) >= 2 THEN MIN(3, COALESCE(stands, 0) + (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL)) ELSE 0 END;
-
--- Škoda zasáhla jen hlavní tribunu (klub z L2 a výš), nebo tribunu za pravou brankou (klub z L1,
--- který hlavní tribunu nemá). Po opravě tak má klub zase původní kapacitu.
-UPDATE stadiums
-SET stand_main = MAX(0, stand_main - (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL))
-WHERE stand_main > 0 AND (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL) > 0;
-
-UPDATE stadiums
-SET stand_goal_east = MAX(0, stand_goal_east - (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL))
-WHERE stand_opposite = 0 AND (SELECT COALESCE(SUM(d.levels), 0) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL) > 0;
+SET stand_goal_west = MIN(3, COALESCE(stands, 0)),
+    stand_goal_east = MIN(3, COALESCE(stands, 0)),
+    stand_main = CASE WHEN COALESCE(stands, 0) >= 2 THEN MIN(3, stands) ELSE 0 END,
+    stand_opposite = CASE WHEN COALESCE(stands, 0) >= 2 THEN MIN(3, stands) ELSE 0 END;
 
 -- `stands` je maximum stran (trigger níž ho dál drží, tady ho srovnáme hned).
 UPDATE stadiums SET stands = MAX(stand_main, stand_opposite, stand_goal_west, stand_goal_east);
