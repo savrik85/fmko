@@ -3188,7 +3188,7 @@ teamsRouter.get("/:id/fanbase", async (c) => {
     });
   const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
   const capacity = (stadiumRow?.capacity ?? 200)
-    + calculateFacilityEffects({ ...readStandLevels(stadiumRow ?? {}), vip_box: stadiumRow?.vip_box ?? 0 }).capacityBonus;
+    + calculateFacilityEffects({ ...readStandLevels(stadiumRow), vip_box: stadiumRow?.vip_box ?? 0 }).capacityBonus;
 
   const satelliteRows = await c.env.DB.prepare(
     `SELECT bsf.village_id, v.name, v.population, v.lat, v.lng,
