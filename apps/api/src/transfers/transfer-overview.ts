@@ -5,7 +5,17 @@
  * řádek. Protistrana se hledá podle pořadí kontraktů téhož hráče (podle `created_at`, protože `joined_at`
  * bývá herní datum a `created_at` skutečný čas zápisu).
  */
+import { logger } from "../lib/logger";
+
 export type TransferKind = "transfer" | "swap" | "free_agent" | "released";
+
+export interface TeamBadge {
+  primary: string;
+  secondary: string;
+  pattern: string;
+  initials: string;
+  symbol: string | null;
+}
 
 export interface TransferOverviewRow {
   direction: "in" | "out";
@@ -14,11 +24,14 @@ export interface TransferOverviewRow {
   playerName: string;
   otherTeamId: string | null;
   otherTeamName: string | null;
+  otherTeamBadge: TeamBadge | null;
+  playerAvatar: Record<string, unknown> | null;
   fee: number;
   seasonNumber: number | null;
   date: string;
 }
 
+const PLAYER_AVATAR_SQL = `COALESCE(p.avatar, dp.avatar)`;
 const PLAYER_NAME_SQL = `COALESCE(p.first_name || ' ' || p.last_name, dp.first_name || ' ' || dp.last_name, 'Neznámý hráč')`;
 
 export async function loadTransferOverview(db: D1Database, teamId: string, limit = 50): Promise<TransferOverviewRow[]> {
@@ -28,7 +41,7 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
   const arrivals = await db
     .prepare(
       `SELECT pc.player_id, pc.join_type AS kind, pc.fee, pc.joined_at AS date, pc.created_at, s.number AS season_number,
-              ${PLAYER_NAME_SQL} AS player_name,
+              ${PLAYER_NAME_SQL} AS player_name, ${PLAYER_AVATAR_SQL} AS player_avatar,
               CASE WHEN pc.join_type IN ('transfer', 'swap') THEN
                 (SELECT prev.team_id FROM player_contracts prev
                   WHERE prev.player_id = pc.player_id AND prev.id != pc.id AND prev.created_at <= pc.created_at
@@ -41,13 +54,13 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
        ORDER BY pc.joined_at DESC LIMIT ?`,
     )
     .bind(teamId, cap)
-    .all<{ player_id: string; kind: string; fee: number | null; date: string; created_at: string; season_number: number | null; player_name: string; other_id: string | null }>();
+    .all<{ player_id: string; kind: string; fee: number | null; date: string; created_at: string; season_number: number | null; player_name: string; player_avatar: string | null; other_id: string | null }>();
 
   // Odchody: kontrakt, který skončil přestupem nebo propuštěním. Protistrana, cena i sezóna patří následujícímu kontraktu (u propuštění sezóna není známá).
   const departures = await db
     .prepare(
       `SELECT pc.player_id, pc.leave_type AS kind, pc.left_at AS date, pc.created_at,
-              ${PLAYER_NAME_SQL} AS player_name,
+              ${PLAYER_NAME_SQL} AS player_name, ${PLAYER_AVATAR_SQL} AS player_avatar,
               CASE WHEN pc.leave_type = 'transfer' THEN
                 (SELECT nx.team_id FROM player_contracts nx
                   WHERE nx.player_id = pc.player_id AND nx.id != pc.id AND nx.created_at >= pc.created_at AND nx.join_type IN ('transfer', 'swap')
@@ -67,17 +80,43 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
        ORDER BY pc.left_at DESC LIMIT ?`,
     )
     .bind(teamId, cap)
-    .all<{ player_id: string; kind: string; fee: number | null; date: string; created_at: string; season_number: number | null; player_name: string; other_id: string | null }>();
+    .all<{ player_id: string; kind: string; fee: number | null; date: string; created_at: string; season_number: number | null; player_name: string; player_avatar: string | null; other_id: string | null }>();
 
   const otherIds = [...new Set([...arrivals.results, ...departures.results].map((r) => r.other_id).filter((x): x is string => !!x))];
-  const names = new Map<string, string>();
+  const teams = new Map<string, { name: string; badge: TeamBadge }>();
   if (otherIds.length > 0) {
     const res = await db
-      .prepare(`SELECT id, name FROM teams WHERE id IN (${otherIds.map(() => "?").join(",")})`)
+      .prepare(
+        `SELECT id, name, primary_color, secondary_color, badge_primary_color, badge_secondary_color,
+                badge_pattern, badge_initials, badge_symbol
+         FROM teams WHERE id IN (${otherIds.map(() => "?").join(",")})`,
+      )
       .bind(...otherIds)
-      .all<{ id: string; name: string }>();
-    for (const t of res.results) names.set(t.id, t.name);
+      .all<{ id: string; name: string; primary_color: string | null; secondary_color: string | null; badge_primary_color: string | null; badge_secondary_color: string | null; badge_pattern: string | null; badge_initials: string | null; badge_symbol: string | null }>();
+    for (const t of res.results) {
+      teams.set(t.id, {
+        name: t.name,
+        badge: {
+          primary: t.badge_primary_color || t.primary_color || "#2D5F2D",
+          secondary: t.badge_secondary_color || t.secondary_color || "#FFFFFF",
+          pattern: t.badge_pattern || "shield",
+          initials: t.badge_initials || t.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase(),
+          symbol: t.badge_symbol ?? null,
+        },
+      });
+    }
   }
+
+  const parseAvatar = (raw: string | null): Record<string, unknown> | null => {
+    if (!raw) return null;
+    try {
+      const v = JSON.parse(raw);
+      return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+    } catch (e) {
+      logger.warn({ module: "transfer-overview" }, "neplatný avatar hráče", e);
+      return null;
+    }
+  };
 
   const rows: Array<TransferOverviewRow & { createdAt: string }> = [
     ...arrivals.results.map((r) => ({
@@ -86,7 +125,9 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
       playerId: r.player_id,
       playerName: r.player_name,
       otherTeamId: r.other_id,
-      otherTeamName: r.other_id ? names.get(r.other_id) ?? null : null,
+      otherTeamName: r.other_id ? teams.get(r.other_id)?.name ?? null : null,
+      otherTeamBadge: r.other_id ? teams.get(r.other_id)?.badge ?? null : null,
+      playerAvatar: parseAvatar(r.player_avatar),
       fee: r.fee ?? 0,
       seasonNumber: r.season_number,
       date: r.date,
@@ -98,7 +139,9 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
       playerId: r.player_id,
       playerName: r.player_name,
       otherTeamId: r.other_id,
-      otherTeamName: r.other_id ? names.get(r.other_id) ?? null : null,
+      otherTeamName: r.other_id ? teams.get(r.other_id)?.name ?? null : null,
+      otherTeamBadge: r.other_id ? teams.get(r.other_id)?.badge ?? null : null,
+      playerAvatar: parseAvatar(r.player_avatar),
       fee: r.fee ?? 0,
       seasonNumber: r.season_number,
       date: r.date,
