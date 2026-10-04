@@ -52,7 +52,10 @@ export function TeamSide({
       )}
       <div className={`flex flex-col gap-1 ${isRight ? "items-end" : "items-start"} min-w-0 w-full`}>
         {/* Stránka trenéra bere v URL ID TÝMU, ne trenéra — manager.id vedl na neexistující tým. */}
-        {manager ? (
+        {/* Předseda cizího klubu nemá v Pralese profil, jen jméno. */}
+        {manager && team.is_virtual ? (
+          <div className="font-heading font-bold text-base truncate max-w-full">{manager.name}</div>
+        ) : manager ? (
           <Link href={`/manazer/${team.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors truncate max-w-full">
             {manager.name}
           </Link>

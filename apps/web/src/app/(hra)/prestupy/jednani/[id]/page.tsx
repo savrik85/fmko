@@ -47,6 +47,8 @@ interface Detail {
   };
   myTeam: TeamSummary | null;
   manager: ManagerSummary | null;
+  /** Předseda cizího klubu (jméno a obličej, stále stejné pro daný klub). */
+  chairman?: { name: string; age: number; avatar: Record<string, unknown> } | null;
   events: Array<{ id: string; actor: "buyer" | "club" | "player"; event_type: OfferEvent["event_type"]; amount: number | null; upfront_pct: number | null; installments: number | null; message: string | null; created_at: string }>;
   payNow: number;
   canAfford: boolean;
@@ -117,6 +119,9 @@ export default function AiNegotiationPage() {
   }
 
   const { negotiation: n, player, myTeam, manager, events, payNow, canAfford, squadCount, squadCap } = data;
+  const chairman: ManagerSummary | null = data.chairman
+    ? { id: "club", name: data.chairman.name, avatar: data.chairman.avatar, coaching: 0, motivation: 0, tactics: 0, reputation: 0 }
+    : null;
   const playerName = `${player.firstName} ${player.lastName}`.trim() || n.playerName;
   const isOpen = n.status === "open" || n.status === "agreed";
   const squadFull = squadCount >= squadCap;
@@ -133,7 +138,7 @@ export default function AiNegotiationPage() {
     id: e.id,
     event_type: e.actor === "buyer" && e.event_type === "offer" && e.id !== firstBuyerOffer ? "counter" : e.event_type,
     team_id: e.actor === "buyer" ? (myTeam?.id ?? "me") : e.actor,
-    team_name: e.actor === "buyer" ? (myTeam?.name ?? "My") : e.actor === "club" ? n.clubName : playerName,
+    team_name: e.actor === "buyer" ? (myTeam?.name ?? "My") : e.actor === "club" ? (data.chairman?.name ?? n.clubName) : playerName,
     amount: e.amount, message: e.message, created_at: e.created_at,
     upfront_pct: e.upfront_pct, installments: e.installments, sell_on_pct: 0,
   }));
@@ -232,7 +237,7 @@ export default function AiNegotiationPage() {
 
         <div className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 mt-4">
           {myTeam && <TeamSide team={myTeam} manager={manager} label="Já (kupec)" alignment="left" />}
-          <TeamSide team={club} manager={null} label="Prodávající" alignment="right" />
+          <TeamSide team={club} manager={chairman} label="Předseda (prodává)" alignment="right" />
         </div>
       </div>
 
@@ -244,14 +249,14 @@ export default function AiNegotiationPage() {
           fromTeamId={myTeam?.id ?? "me"}
           toTeamId="club"
           fromManager={manager ? { avatar: manager.avatar, name: manager.name } : null}
-          toManager={null}
+          toManager={chairman ? { avatar: chairman.avatar, name: chairman.name } : null}
         />
       </div>
 
       <div className="card p-4 sm:p-6 space-y-3">
         {(n.waiting || typing) && (
           <div className="text-center py-3">
-            <div className="font-heading font-bold text-muted animate-pulse">✍️ Předseda {n.clubName} píše…</div>
+            <div className="font-heading font-bold text-muted animate-pulse">✍️ {data.chairman ? `${data.chairman.name} (${n.clubName})` : `Předseda ${n.clubName}`} píše…</div>
           </div>
         )}
 
