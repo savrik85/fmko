@@ -424,7 +424,6 @@ async function evaluatePlayerMission(
   const reportId = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + SCOUT_REPORT_TTL_DAYS * 86_400_000).toISOString();
   const pData: VirtualPlayerData = {
-    id: player.id,
     firstName: player.first_name,
     lastName: player.last_name,
     age: player.age,
@@ -434,6 +433,8 @@ async function evaluatePlayerMission(
     skills: player.skills ? JSON.parse(player.skills) : {},
     skillCaps: player.skills_max ? JSON.parse(player.skills_max) : {},
     avatar: player.avatar ? JSON.parse(player.avatar) : {},
+    physical: {},
+    personality: pers,
   };
 
   await db.prepare(
