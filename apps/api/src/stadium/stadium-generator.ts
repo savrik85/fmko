@@ -4,6 +4,10 @@
  */
 
 import type { Rng } from "../generators/rng";
+import {
+  STAND_SIDES, STAND_SIDE_LABELS, standSideCosts, standSideGain,
+  hasStandSides, readStandLevels, legacyStandsToSides, standsCapacity, standsMaxLevel,
+} from "./stands-model";
 
 export interface StadiumConfig {
   capacity: number;
@@ -100,6 +104,7 @@ export const FACILITY_LABELS: Record<string, string> = {
   refreshments: "Občerstvení",
   lighting: "Osvětlení",
   stands: "Tribuny",
+  ...STAND_SIDE_LABELS,
   roof: "Zastřešení tribun",
   ultras_stand: "Sektor kotle",
   toilets: "Sociálky",
@@ -131,6 +136,9 @@ export const UPGRADE_COSTS: Record<string, number[]> = {
   // Zhruba jako tribuny: lóže je stavba na tribuně, ne kus vybavení.
   vip_box: [0, 55000, 170000, 450000],
 };
+
+// Ceny jednotlivých stran: staré ceny tribun rozdělené podle přírůstku míst.
+for (const side of STAND_SIDES) UPGRADE_COSTS[side] = standSideCosts(side, UPGRADE_COSTS.stands);
 
 /**
  * Číselné škály zařízení — kumulativně za úroveň.
@@ -228,6 +236,10 @@ const UPGRADE_EFFECTS: Record<string, string[]> = {
   refreshments: ["", "Umožní vlastní provoz občerstvení", "Vyšší pronájem pro externí provozovatele", "Prémiové zázemí, bez výdajů za občerstvení po zápase"],
   lighting: ["", "2 základní osvětlovací stožáry", "4 stožáry", "Profesionální osvětlení"],
   stands: ["", "Kovová tribunka na pár řad", "Krytá tribuna se sedačkami", "Tribuna přes celou délku hřiště"],
+  stand_main: ["", "Pár řad lavic u hlavní strany", "Krytá hlavní tribuna se sedačkami", "Hlavní tribuna přes celou délku hřiště"],
+  stand_opposite: ["", "Lavičky na protější straně", "Menší tribunka naproti hlavní", "Plná tribuna na protější straně"],
+  stand_goal_west: ["", "Stání s ohrádkou za levou brankou", "Tribunka za levou brankou", "Velká tribuna za levou brankou"],
+  stand_goal_east: ["", "Stání s ohrádkou za pravou brankou", "Tribunka za pravou brankou", "Velká tribuna za pravou brankou"],
   roof: ["", "V ošklivém počasí odejde míň lidí", "Solidní zastřešení, počasí moc neřeší", "Kompletní střecha, na počasí kašlou"],
   ultras_stand: ["", "Hlasitější kotel", "Bubny a vlajky", "Peklo pro soupeře"],
   toilets: ["", "Kadibudky místo kopřiv", "Slušné záchodky", "Čisté sociálky s teplou vodou"],
@@ -268,6 +280,11 @@ export function popisPrirustku(key: string, from: number, to: number): string {
   switch (key) {
     case "stands":
       return `+${standsCapacityGain(from, to)} kapacita`;
+    case "stand_main":
+    case "stand_opposite":
+    case "stand_goal_west":
+    case "stand_goal_east":
+      return `+${standSideGain(key, from, to)} míst`;
     case "changing_rooms": {
       const casti = [`+${rozdil(SKALY.changing_rooms.morale)} morálka domácích`];
       const zraneni = rozdil(SKALY.changing_rooms.injury);
@@ -376,7 +393,12 @@ export function getUpgradeOptions(
   ignoreProgressLocks: boolean = false,
 ): UpgradeOption[] {
   const options: UpgradeOption[] = [];
+  // Je postavená aspoň jedna strana? Starší volání posílají jen `stands`.
+  const anyStand = hasStandSides(stadium)
+    ? standsMaxLevel(readStandLevels(stadium)) >= 1
+    : (stadium.stands ?? 0) >= 1;
   for (const [key, label] of Object.entries(FACILITY_LABELS)) {
+    if (key === "stands") continue; // odvozené maximum čtyř stran, staví se po stranách
     const current = stadium[key] ?? 0;
     if (current >= 3) continue;
     const next = current + 1;
@@ -406,7 +428,7 @@ export function getUpgradeOptions(
     }
 
     // Zastřešení tribun vyžaduje aspoň základní tribuny (co jinak zastřešit?).
-    if (key === "roof" && (stadium.stands ?? 0) < 1) {
+    if (key === "roof" && !anyStand) {
       locked = true;
       lockDetail.prerequisite = "Nejdřív postav aspoň základní tribuny";
     }
@@ -418,7 +440,7 @@ export function getUpgradeOptions(
     }
 
     // Lóže sedí na hlavní tribuně. Bez tribuny ji není kam postavit.
-    if (key === "vip_box" && (stadium.stands ?? 0) < 1) {
+    if (key === "vip_box" && !anyStand) {
       locked = true;
       lockDetail.prerequisite = "Nejdřív postav aspoň základní tribuny";
     }
@@ -497,7 +519,10 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
   const sh = facilities.showers ?? 0;
   const re = facilities.refreshments ?? 0;
   const li = facilities.lighting ?? 0;
-  const st = facilities.stands ?? 0;
+  const sides = hasStandSides(facilities)
+    ? readStandLevels(facilities)
+    : legacyStandsToSides(facilities.stands ?? 0);
+  const st = standsMaxLevel(sides);
   const pa = facilities.parking ?? 0;
   const fe = facilities.fence ?? 0;
   const ro = facilities.roof ?? 0;
@@ -524,7 +549,7 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     // Kapacitu mění tribuny (přidávají) a VIP lóže (bere místa platícím).
     // Základ má každý klub stejný. Lóže odečtená tady platí všude, kde se
     // kapacita čte: zápas, pohár, stránka stadionu i rubrika kotle.
-    capacityBonus: (STANDS_CAPACITY[st] ?? 0) - SKALY.vip_box.seatsLost[vb],
+    capacityBonus: standsCapacity(sides) - SKALY.vip_box.seatsLost[vb],
     ticketPriceBonus: SKALY.fence.price[fe] ?? 0,
     fencePayingRatio: SKALY.fence.paying[fe] ?? 0.3,
     weatherAttendanceShield: SKALY.roof.shield[ro] ?? 0,

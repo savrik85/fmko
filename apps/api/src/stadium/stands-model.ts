@@ -26,13 +26,14 @@ export const STAND_SIDE_LABELS: Record<StandSide, string> = {
 
 /**
  * Kapacita strany podle úrovně (index 0–3).
- * Součty po úrovních: 0, 30+20+20+20 = 90, 100+70+60+60 = 290, 170+110+110+110 = 500.
+ * Součty po úrovních: 0, 30+20+20+20 = 90, 100+60+65+65 = 290, 170+110+110+110 = 500.
+ * Přírůstky každé strany s úrovní neklesají (dražší stupeň nikdy nedá míň).
  */
 export const STAND_SIDE_CAPACITY: Record<StandSide, readonly number[]> = {
   stand_main: [0, 30, 100, 170],
-  stand_opposite: [0, 20, 70, 110],
-  stand_goal_west: [0, 20, 60, 110],
-  stand_goal_east: [0, 20, 60, 110],
+  stand_opposite: [0, 20, 60, 110],
+  stand_goal_west: [0, 20, 65, 110],
+  stand_goal_east: [0, 20, 65, 110],
 };
 
 function clampLevel(v: unknown): number {
