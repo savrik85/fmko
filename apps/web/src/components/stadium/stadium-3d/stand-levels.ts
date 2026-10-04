@@ -171,22 +171,34 @@ export function tierTop(spec: RaisedTierSpec): number {
   return spec.y0 + spec.rows * spec.rise;
 }
 
+export interface RoofTier {
+  /** Výška podlahy patra, jeho přední hrana (z) a nejvyšší bod nad zemí. */
+  y0: number;
+  z0: number;
+  top: number;
+  /** Zadní hrana patra (z): střecha musí končit až za ní. */
+  end: number;
+}
+
 /**
- * O kolik se má zvednout střecha nad tribunou, která má nahoře patro (aby ho nezasekla).
- * `heightOf(úroveň)` vrací výšku tribuny dané úrovně.
+ * Pro strany, které mají nahoře patro, vrací jeho polohu, aby střecha kryla celou tribunu:
+ * od přední řady dole až za zadní hranu patra, a ne jen jeho horní část.
+ * `dimsOf(úroveň)` vrací výšku a hloubku tribuny dané úrovně.
  */
-export function roofLifts(
+export function roofTiers(
   extensions: ReadonlyArray<{ slot: string; kind: string; level: number }>,
   sideLevels: SideLevels,
-  heightOf: (level: number) => number,
-): Partial<Record<SceneSide, number>> {
-  const out: Partial<Record<SceneSide, number>> = {};
+  dimsOf: (level: number) => { height: number; depth: number },
+): Partial<Record<SceneSide, RoofTier>> {
+  const out: Partial<Record<SceneSide, RoofTier>> = {};
   for (const e of extensions) {
     const side = SIDE_SLOT_OF[e.slot];
     if (!side || (e.kind !== "second_tier" && e.kind !== "double_stand" && e.kind !== "stilts")) continue;
-    const H = heightOf(Math.max(1, sideLevels[side]));
-    const spec = raisedTierSpec(e.kind, e.level, H, 0);
-    out[side] = Math.max(out[side] ?? 0, tierTop(spec) - H + 0.4);
+    const { height: H, depth: D } = dimsOf(Math.max(1, sideLevels[side]));
+    const spec = raisedTierSpec(e.kind, e.level, H, D);
+    const tier: RoofTier = { y0: spec.y0, z0: spec.z0, top: tierTop(spec), end: Math.max(D, spec.z0 + spec.rows * spec.rowDepth) };
+    const prev = out[side];
+    out[side] = !prev ? tier : { y0: Math.min(prev.y0, tier.y0), z0: Math.min(prev.z0, tier.z0), top: Math.max(prev.top, tier.top), end: Math.max(prev.end, tier.end) };
   }
   return out;
 }
