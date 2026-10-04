@@ -63,6 +63,7 @@ export async function mergeStaffMatchMods(
   teamId: string,
   mods: MatchMods | undefined,
   isHome: boolean,
+  opponentTeamId?: string,
 ): Promise<MatchMods> {
   const merged = mods ?? zeroMatchMods();
   const { calculateStaffEffects } = await import("../staff/staff-effects");
@@ -76,6 +77,21 @@ export async function mergeStaffMatchMods(
   merged.conditionDrainMod += fx.conditionDrainReduction;
   merged.injurySeverityMod += fx.injurySeverityReduction;
   if (isHome) merged.crowdMod += fx.crowdMod + fx.crowdAttendanceBonus; // šéf fanklubu jen doma
+
+  // Taktický bonus ze skautingu soupeře
+  if (opponentTeamId) {
+    const scouted = await db.prepare(
+      `SELECT id FROM scout_assignments
+       WHERE team_id = ? AND target_team_id = ? AND assignment_type = 'match' AND status = 'finished'
+         AND closed_at > datetime('now', '-14 days') LIMIT 1`,
+    ).bind(teamId, opponentTeamId).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: MODULE }, "check scouted opponent", e); return null; });
+    if (scouted) {
+      merged.techniqueMod += 2;
+      merged.moraleMod += 3;
+    }
+  }
+
   return merged;
 }
 
@@ -98,7 +114,12 @@ export async function mergeCoachMatchMods(db: D1Database, teamId: string, mods: 
 }
 
 /** Vybavení + zaměstnanci + trenér naráz — to, co potřebuje simulateMatch. */
-export async function loadMatchMods(db: D1Database, teamId: string, isHome: boolean): Promise<MatchMods> {
-  const mods = await mergeStaffMatchMods(db, teamId, await loadEquipmentMatchMods(db, teamId), isHome);
+export async function loadMatchMods(
+  db: D1Database,
+  teamId: string,
+  isHome: boolean,
+  opponentTeamId?: string,
+): Promise<MatchMods> {
+  const mods = await mergeStaffMatchMods(db, teamId, await loadEquipmentMatchMods(db, teamId), isHome, opponentTeamId);
   return mergeCoachMatchMods(db, teamId, mods);
 }

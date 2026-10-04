@@ -591,7 +591,8 @@ export async function runScheduledMatches(
             // Vybavení + zaměstnanci — sdílené s pohárem a přáteláky (equipment/match-mods.ts)
             const {loadMatchMods} = await import("../equipment/match-mods");
             let [homeEquipment, awayEquipment] = await Promise.all([
-                loadMatchMods(db, homeTeamId, true), loadMatchMods(db, awayTeamId, false),
+                loadMatchMods(db, homeTeamId, true, awayTeamId),
+                loadMatchMods(db, awayTeamId, false, homeTeamId),
             ]);
 
             // Add changing room injury reduction to home equipment

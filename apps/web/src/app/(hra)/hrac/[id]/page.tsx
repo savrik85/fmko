@@ -132,6 +132,10 @@ export default function PlayerDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [isWatched, setIsWatched] = useState(false);
   const [watchLoading, setWatchLoading] = useState(false);
+  const [scoutDialogOpen, setScoutDialogOpen] = useState(false);
+  const [scoutsData, setScoutsData] = useState<Array<{ id: string; name: string; eff: number; assignment: any | null }>>([]);
+  const [scoutLoading, setScoutLoading] = useState(false);
+  const [scoutSent, setScoutSent] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [coachLog, setCoachLog] = useState<CoachRelationLogItem[]>([]);
   const [profileExtras, setProfileExtras] = useState<{
@@ -312,6 +316,46 @@ export default function PlayerDetailPage() {
     const success = await apiAction(apiFetch(`/api/teams/${teamId}/players/${playerId}/release`, { method: "POST" }), "Propuštění hráče se nezdařilo");
     if (success) router.push("/kadr");
     else setActionLoading(false);
+  };
+
+  const openScoutDialog = async () => {
+    if (!teamId) return;
+    setScoutLoading(true);
+    try {
+      const res = await apiFetch<{
+        scouts?: Array<{ id: string; name: string; eff: number; assignment: any | null }>;
+        scout?: { id: string; name: string; eff: number };
+        assignment?: any;
+      }>(`/api/teams/${teamId}/scout`);
+      const list = res.scouts && res.scouts.length > 0
+        ? res.scouts
+        : (res.scout ? [{ ...res.scout, assignment: res.assignment ?? null }] : []);
+      setScoutsData(list);
+      setScoutDialogOpen(true);
+    } catch (e) {
+      console.error("load scouts error:", e);
+    } finally {
+      setScoutLoading(false);
+    }
+  };
+
+  const handleSendScout = async (staffId: string) => {
+    if (!teamId || !player) return;
+    setActionLoading(true);
+    const ok = await apiAction(apiFetch(`/api/teams/${teamId}/scout/assignment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        staffId,
+        assignmentType: "player",
+        targetPlayerId: player.id,
+      }),
+    }), "Vyslání skauta se nezdařilo");
+    if (ok) {
+      setScoutSent(true);
+      setScoutDialogOpen(false);
+    }
+    setActionLoading(false);
   };
 
   const currentIndex = allPlayers.findIndex((p) => p.id === playerId);
@@ -641,6 +685,16 @@ export default function PlayerDetailPage() {
                   <button onClick={toggleWatch} disabled={watchLoading}
                     className={`${btnBase} disabled:opacity-50 ${isWatched ? btnWatched : btnNeutral}`}>
                     {isWatched ? "★ Sleduji" : "☆ Sledovat"}
+                  </button>
+                )}
+                {/* Poslat skauta — for any non-own player */}
+                {!isOwnPlayer && !jsemKmenovyKlub && (
+                  <button
+                    onClick={openScoutDialog}
+                    disabled={scoutLoading}
+                    className={`${btnBase} disabled:opacity-50 ${scoutSent ? btnWatched : btnNeutral}`}
+                  >
+                    {scoutSent ? "✓ Skaut vyslán" : "🕵️ Poslat skauta"}
                   </button>
                 )}
                 {/* Napsat vlastnímu hráči. Dřív se tlačítko ukázalo jen u toho,
@@ -1768,6 +1822,15 @@ export default function PlayerDetailPage() {
         loading={actionLoading}
       />
     )}
+    {scoutDialogOpen && player && (
+      <ScoutPlayerDialog
+        player={player}
+        scouts={scoutsData}
+        onClose={() => setScoutDialogOpen(false)}
+        onConfirm={handleSendScout}
+        loading={actionLoading}
+      />
+    )}
     </>
   );
 }
@@ -1824,6 +1887,130 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
             >
               {loading ? "Ukládám..." : "Nabídnout"}
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScoutPlayerDialog({
+  player,
+  scouts,
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  player: Player;
+  scouts: Array<{ id: string; name: string; eff: number; assignment: any | null }>;
+  onClose: () => void;
+  onConfirm: (staffId: string) => void;
+  loading: boolean;
+}) {
+  const availableScouts = scouts.filter((s) => !s.assignment);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>(
+    availableScouts[0]?.id ?? scouts[0]?.id ?? ""
+  );
+
+  return (
+    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="p-5 space-y-4">
+          <div>
+            <h3 className="font-heading font-bold text-lg text-ink">Poslat skauta na hráče</h3>
+            <p className="text-sm text-muted mt-0.5">
+              {player.first_name} {player.last_name} · {player.position}, {player.age} let
+            </p>
+          </div>
+
+          <div className="text-xs text-muted bg-surface rounded-xl p-3 space-y-1.5">
+            <div className="font-heading font-bold text-ink">Co skaut zjistí:</div>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li>Přesný rating bez mlhy</li>
+              <li>Skrytý talent a potenciál růstu</li>
+              <li>Povahové rysy (alkohol, nervy, přístup)</li>
+            </ul>
+            <div className="text-pitch-700 font-heading font-bold pt-1">
+              Doba sledování: 2 dny · Cena: 500 Kč
+            </div>
+          </div>
+
+          {scouts.length === 0 ? (
+            <div className="text-center py-3 space-y-2">
+              <p className="text-sm text-muted">V klubu zatím nemáš žádného skauta.</p>
+              <Link
+                href="/zamestnanci?tab=market"
+                className="btn btn-primary btn-sm inline-block"
+                onClick={onClose}
+              >
+                Najmout skauta →
+              </Link>
+            </div>
+          ) : availableScouts.length === 0 ? (
+            <div className="text-center py-3 space-y-2">
+              <p className="text-sm text-muted">
+                Všichni tvoji skauti ({scouts.length}) jsou právě na jiné misi.
+              </p>
+              <Link
+                href="/zamestnanci/skaut"
+                className="btn btn-secondary btn-sm inline-block"
+                onClick={onClose}
+              >
+                Spravovat skauty →
+              </Link>
+            </div>
+          ) : (
+            <div>
+              <label className="text-xs text-muted font-heading uppercase tracking-wide block mb-1.5">
+                Vyber skauta
+              </label>
+              <div className="space-y-1.5">
+                {availableScouts.map((s) => (
+                  <label
+                    key={s.id}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all ${
+                      selectedStaffId === s.id
+                        ? "border-pitch-500 bg-pitch-50/50 shadow-xs"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="scoutSelection"
+                        checked={selectedStaffId === s.id}
+                        onChange={() => setSelectedStaffId(s.id)}
+                        className="text-pitch-500 focus:ring-pitch-500"
+                      />
+                      <span className="font-heading font-bold text-sm text-ink">{s.name}</span>
+                    </div>
+                    <span className="text-xs text-muted font-heading">
+                      efektivita <strong className="text-pitch-700">{s.eff}/20</strong>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 rounded-soft text-sm font-heading font-bold bg-gray-100 hover:bg-gray-200 text-ink"
+            >
+              Zrušit
+            </button>
+            {availableScouts.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { if (selectedStaffId) onConfirm(selectedStaffId); }}
+                disabled={loading || !selectedStaffId}
+                className="flex-1 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
+              >
+                {loading ? "Vysílám..." : "Vyslat (500 Kč)"}
+              </button>
+            )}
           </div>
         </div>
       </div>

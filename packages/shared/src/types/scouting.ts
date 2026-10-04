@@ -84,3 +84,23 @@ export function willingnessFromChance(probability: number): 0 | 1 | 2 | 3 {
   if (probability >= 30) return 1;
   return 0;
 }
+
+/**
+ * Maximální počet skautů, které klub může zaměstnávat, podle licence hlavního trenéra.
+ * Základ = 2 skauti (i bez licence), UEFA B = 3, UEFA A = 4, UEFA Pro = 5.
+ */
+export function maxScoutsForLicence(licenceLevel: number): number {
+  if (licenceLevel >= 4) return 5;
+  if (licenceLevel >= 3) return 4;
+  if (licenceLevel >= 2) return 3;
+  return 2;
+}
+
+export type ScoutAssignmentType = "area" | "player" | "match";
+
+export const SCOUT_ASSIGNMENT_TYPE_LABELS: Record<ScoutAssignmentType, string> = {
+  area: "Oblastní hledání",
+  player: "Sledování hráče",
+  match: "Skauting soupeře",
+};
+

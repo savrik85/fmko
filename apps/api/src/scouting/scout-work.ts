@@ -55,6 +55,11 @@ export interface AssignmentRow {
   id: string;
   team_id: string;
   staff_id: string;
+  assignment_type?: "area" | "player" | "match";
+  target_player_id?: string | null;
+  target_team_id?: string | null;
+  target_match_id?: string | null;
+  result_data?: string | null;
   position: string | null;
   /** JSON pole postů (víc postů najednou); NULL = podle starého `position`, případně kdokoli. */
   positions: string | null;
@@ -86,14 +91,37 @@ export function scoutEffectiveness(s: { judgement: number; communication: number
   return (2 * (s.judgement ?? 5) + (s.communication ?? 5)) / 3;
 }
 
-export async function loadTeamScout(db: D1Database, teamId: string): Promise<ScoutRow | null> {
-  return db.prepare(
-    "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE team_id = ? AND role = 'skaut' LIMIT 1",
-  ).bind(teamId).first<ScoutRow>();
+export async function loadTeamScouts(db: D1Database, teamId: string): Promise<ScoutRow[]> {
+  const res = await db.prepare(
+    "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE team_id = ? AND role = 'skaut' ORDER BY hired_at ASC",
+  ).bind(teamId).all<ScoutRow>().catch((e) => { logger.warn({ module: "scouting" }, "load scouts", e); return { results: [] as ScoutRow[] }; });
+  return res.results;
 }
 
-export async function loadActiveAssignment(db: D1Database, teamId: string): Promise<AssignmentRow | null> {
-  return db.prepare("SELECT * FROM scout_assignments WHERE team_id = ? AND status = 'active' LIMIT 1").bind(teamId).first<AssignmentRow>();
+export async function loadTeamScout(db: D1Database, teamId: string, staffId?: string): Promise<ScoutRow | null> {
+  if (staffId) {
+    return db.prepare(
+      "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE team_id = ? AND role = 'skaut' AND id = ? LIMIT 1",
+    ).bind(teamId, staffId).first<ScoutRow>().catch((e) => { logger.warn({ module: "scouting" }, "load scout by id", e); return null; });
+  }
+  return db.prepare(
+    "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE team_id = ? AND role = 'skaut' ORDER BY hired_at ASC LIMIT 1",
+  ).bind(teamId).first<ScoutRow>().catch((e) => { logger.warn({ module: "scouting" }, "load scout", e); return null; });
+}
+
+export async function loadActiveAssignments(db: D1Database, teamId: string): Promise<AssignmentRow[]> {
+  const res = await db.prepare("SELECT * FROM scout_assignments WHERE team_id = ? AND status = 'active'")
+    .bind(teamId).all<AssignmentRow>().catch((e) => { logger.warn({ module: "scouting" }, "load active assignments", e); return { results: [] as AssignmentRow[] }; });
+  return res.results;
+}
+
+export async function loadActiveAssignment(db: D1Database, teamId: string, staffId?: string): Promise<AssignmentRow | null> {
+  if (staffId) {
+    return db.prepare("SELECT * FROM scout_assignments WHERE team_id = ? AND staff_id = ? AND status = 'active' LIMIT 1")
+      .bind(teamId, staffId).first<AssignmentRow>().catch((e) => { logger.warn({ module: "scouting" }, "load active assignment for staff", e); return null; });
+  }
+  return db.prepare("SELECT * FROM scout_assignments WHERE team_id = ? AND status = 'active' LIMIT 1")
+    .bind(teamId).first<AssignmentRow>().catch((e) => { logger.warn({ module: "scouting" }, "load active assignment", e); return null; });
 }
 
 // ─── Zadání a zrušení úkolu ─────────────────────────────────────────────────
@@ -124,10 +152,12 @@ export function assignmentPositions(a: Pick<AssignmentRow, "position" | "positio
 }
 
 export async function createScoutAssignment(db: D1Database, input: {
-  teamId: string; positions: readonly unknown[] | null; ageMin: number; ageMax: number; radiusKm: number; weeks: number; gameDate: string;
+  teamId: string; staffId?: string; positions: readonly unknown[] | null; ageMin: number; ageMax: number; radiusKm: number; weeks: number; gameDate: string;
 }): Promise<{ ok: true; id: string } | Fail> {
-  const scout = await loadTeamScout(db, input.teamId);
+  const scout = await loadTeamScout(db, input.teamId, input.staffId);
   if (!scout) return fail(400, "Nemáš skauta. Najmi ho v Zaměstnancích.");
+  const active = await loadActiveAssignment(db, input.teamId, scout.id);
+  if (active) return fail(409, "Tento skaut už na jednom úkolu je. Nejdřív ho ukonči.");
   const positions = normalizePositions(input.positions);
   if (positions === false) return fail(400, "Neznámý post.");
   const weeklyCost = scoutWeeklyCost(input.radiusKm);
@@ -140,8 +170,8 @@ export async function createScoutAssignment(db: D1Database, input: {
   const id = crypto.randomUUID();
   try {
     await db.prepare(
-      `INSERT INTO scout_assignments (id, team_id, staff_id, position, positions, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO scout_assignments (id, team_id, staff_id, assignment_type, position, positions, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
+       VALUES (?, ?, ?, 'area', ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(id, input.teamId, scout.id, positions?.length === 1 ? positions[0] : null, positions ? JSON.stringify(positions) : null,
       input.ageMin, input.ageMax, input.radiusKm, weeklyCost, input.weeks, input.gameDate).run();
   } catch (e) {
@@ -151,12 +181,73 @@ export async function createScoutAssignment(db: D1Database, input: {
   return { ok: true, id };
 }
 
-export async function cancelScoutAssignment(db: D1Database, teamId: string, reason: string): Promise<boolean> {
-  const res = await db.prepare(
-    `UPDATE scout_assignments SET status = 'cancelled', end_reason = ?, revisit_report_id = NULL,
-       closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
-     WHERE team_id = ? AND status = 'active'`,
-  ).bind(reason, teamId).run();
+export async function createPlayerScoutAssignment(db: D1Database, input: {
+  teamId: string; staffId?: string; targetPlayerId: string; gameDate: string;
+}): Promise<{ ok: true; id: string } | Fail> {
+  const scout = await loadTeamScout(db, input.teamId, input.staffId);
+  if (!scout) return fail(400, "Nemáš skauta. Najmi ho v Zaměstnancích.");
+  const active = await loadActiveAssignment(db, input.teamId, scout.id);
+  if (active) return fail(409, "Tento skaut už na jednom úkolu je. Nejdřív ho ukonči.");
+
+  const player = await db.prepare("SELECT id, first_name, last_name, team_id FROM players WHERE id = ?")
+    .bind(input.targetPlayerId).first<{ id: string; first_name: string; last_name: string; team_id: string | null }>();
+  if (!player) return fail(404, "Hráč nenalezen.");
+  if (player.team_id === input.teamId) return fail(400, "Nemůžeš skautovat vlastního hráče.");
+
+  const cost = 500;
+  const budget = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(input.teamId).first<{ budget: number }>();
+  if (!budget || budget.budget < cost) return fail(400, "V pokladně není dost peněz na cestovné (500 Kč).");
+
+  const id = crypto.randomUUID();
+  try {
+    await db.prepare(
+      `INSERT INTO scout_assignments (id, team_id, staff_id, assignment_type, target_player_id, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
+       VALUES (?, ?, ?, 'player', ?, 0, 99, 0, ?, 1, ?)`,
+    ).bind(id, input.teamId, scout.id, player.id, cost, input.gameDate).run();
+    await recordTransaction(db, input.teamId, "scout_travel", -cost, `Cestovné skauta: sledování hráče ${player.first_name} ${player.last_name}`, input.gameDate, id);
+  } catch (e) {
+    logger.warn({ module: "scouting" }, "zadání hráčského úkolu", e);
+    return fail(409, "Skaut už na jednom úkolu je.");
+  }
+  return { ok: true, id };
+}
+
+export async function createMatchScoutAssignment(db: D1Database, input: {
+  teamId: string; staffId?: string; targetTeamId: string; targetMatchId?: string | null; gameDate: string;
+}): Promise<{ ok: true; id: string } | Fail> {
+  const scout = await loadTeamScout(db, input.teamId, input.staffId);
+  if (!scout) return fail(400, "Nemáš skauta. Najmi ho v Zaměstnancích.");
+  const active = await loadActiveAssignment(db, input.teamId, scout.id);
+  if (active) return fail(409, "Tento skaut už na jednom úkolu je. Nejdřív ho ukonči.");
+
+  if (input.targetTeamId === input.teamId) return fail(400, "Nemůžeš skautovat vlastní tým.");
+  const opp = await db.prepare("SELECT id, name FROM teams WHERE id = ?").bind(input.targetTeamId).first<{ id: string; name: string }>();
+  if (!opp) return fail(404, "Soupeř nenalezen.");
+
+  const cost = 500;
+  const budget = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(input.teamId).first<{ budget: number }>();
+  if (!budget || budget.budget < cost) return fail(400, "V pokladně není dost peněz na cestovné (500 Kč).");
+
+  const id = crypto.randomUUID();
+  try {
+    await db.prepare(
+      `INSERT INTO scout_assignments (id, team_id, staff_id, assignment_type, target_team_id, target_match_id, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
+       VALUES (?, ?, ?, 'match', ?, ?, 0, 99, 0, ?, 1, ?)`,
+    ).bind(id, input.teamId, scout.id, opp.id, input.targetMatchId ?? null, cost, input.gameDate).run();
+    await recordTransaction(db, input.teamId, "scout_travel", -cost, `Cestovné skauta: zápasový rozbor soupeře ${opp.name}`, input.gameDate, id);
+  } catch (e) {
+    logger.warn({ module: "scouting" }, "zadání zápasového úkolu", e);
+    return fail(409, "Skaut už na jednom úkolu je.");
+  }
+  return { ok: true, id };
+}
+
+export async function cancelScoutAssignment(db: D1Database, teamId: string, reason: string, staffId?: string): Promise<boolean> {
+  const query = staffId
+    ? "UPDATE scout_assignments SET status = 'cancelled', end_reason = ?, revisit_report_id = NULL, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE team_id = ? AND staff_id = ? AND status = 'active'"
+    : "UPDATE scout_assignments SET status = 'cancelled', end_reason = ?, revisit_report_id = NULL, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE team_id = ? AND status = 'active'";
+  const binds = staffId ? [reason, teamId, staffId] : [reason, teamId];
+  const res = await db.prepare(query).bind(...binds).run();
   return (res.meta?.changes ?? 0) > 0;
 }
 
@@ -282,15 +373,163 @@ export async function runScoutWork(env: Pick<Bindings, "DB">, opts: { gameDate: 
   return result;
 }
 
+async function evaluatePlayerMission(
+  db: D1Database,
+  a: AssignmentRow,
+  scout: ScoutRow,
+  gameDate: string,
+  sender: string,
+): Promise<void> {
+  const player = await db.prepare(
+    `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.hidden_talent,
+            p.skills, p.physical, p.skills_max, p.personality, p.avatar, p.village_id, v.district, t.name as club_name
+     FROM players p
+     LEFT JOIN villages v ON p.village_id = v.id
+     LEFT JOIN teams t ON p.team_id = t.id
+     WHERE p.id = ?`,
+  ).bind(a.target_player_id).first<{
+    id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number;
+    hidden_talent: number | null; skills: string | null; physical: string | null; skills_max: string | null;
+    personality: string | null; avatar: string | null; village_id: string | null; district: string | null; club_name: string | null;
+  }>();
+
+  if (!player) {
+    await db.prepare("UPDATE scout_assignments SET status = 'cancelled', end_reason = 'player_gone', closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?").bind(a.id).run();
+    return;
+  }
+
+  const eff = scoutEffectiveness(scout);
+  const rr = ratingRange(player.overall_rating, eff, 2, a.id);
+  const pr = player.age <= POTENTIAL_MAX_AGE
+    ? potentialRange({
+        age: player.age,
+        rating: player.overall_rating,
+        position: player.position,
+        talent: player.hidden_talent ?? 0,
+        skillsMax: player.skills_max ? JSON.parse(player.skills_max) : {},
+      }, eff, 2, a.id)
+    : null;
+
+  let pers: Record<string, number> = {};
+  try { pers = player.personality ? JSON.parse(player.personality) : {}; } catch { /* ignore */ }
+  const pros: string[] = [];
+  const cons: string[] = [];
+  if ((pers.workRate ?? 50) >= 65) pros.push("Dříč na tréninku, nevypustí souboj.");
+  if ((pers.loyalty ?? 50) >= 65) pros.push("Loajální srdcař, drží partu.");
+  if ((pers.alcohol ?? 0) >= 60) cons.push("V pátek rád zajde na pivo, bývá to znát.");
+  if ((pers.temper ?? 50) >= 70) cons.push("Horká hlava, hrozí zbytečné karty.");
+  if (pros.length === 0) pros.push("Spolehlivý fotbalista pro týmovou souhru.");
+  if (cons.length === 0) cons.push("Žádné výrazné slabiny v přístupu.");
+
+  const reportId = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + SCOUT_REPORT_TTL_DAYS * 86_400_000).toISOString();
+  const pData: VirtualPlayerData = {
+    id: player.id,
+    firstName: player.first_name,
+    lastName: player.last_name,
+    age: player.age,
+    position: player.position,
+    overallRating: player.overall_rating,
+    hiddenTalent: player.hidden_talent ?? 0,
+    skills: player.skills ? JSON.parse(player.skills) : {},
+    skillCaps: player.skills_max ? JSON.parse(player.skills_max) : {},
+    avatar: player.avatar ? JSON.parse(player.avatar) : {},
+  };
+
+  await db.prepare(
+    `INSERT INTO scout_reports (id, team_id, assignment_id, source, village_id, club_name, district, distance_km,
+       player_data, first_name, last_name, age, position, rating_lo, rating_hi, potential_lo, potential_hi, visits,
+       pros, cons, willingness, status, expires_at, created_game_date)
+     VALUES (?, ?, ?, 'village_club', ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, ?, ?, 2, 'active', ?, ?)`,
+  ).bind(
+    reportId, a.team_id, a.id, player.village_id, player.club_name ?? "Cizí klub", player.district ?? "Okres",
+    JSON.stringify(pData), player.first_name, player.last_name, player.age, player.position,
+    rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, JSON.stringify(pros), JSON.stringify(cons), expiresAt, gameDate,
+  ).run();
+
+  await db.prepare(
+    `UPDATE scout_assignments SET status = 'finished', end_reason = 'done', reports_sent = 1, weeks_worked = 1,
+       closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+  ).bind(a.id).run();
+
+  await sendScoutSms(db, a.team_id, sender,
+    `🔍 Viděl jsem ${player.first_name} ${player.last_name} (${player.position}) v akci. Odhad hodnocení ${rr.lo}–${rr.hi}. Hlášení máš na stole.`,
+    reportId,
+  );
+}
+
+async function evaluateMatchMission(
+  db: D1Database,
+  a: AssignmentRow,
+  scout: ScoutRow,
+  gameDate: string,
+  sender: string,
+): Promise<void> {
+  const opp = await db.prepare("SELECT id, name, formation FROM teams WHERE id = ?").bind(a.target_team_id).first<{
+    id: string; name: string; formation: string | null;
+  }>();
+  if (!opp) {
+    await db.prepare("UPDATE scout_assignments SET status = 'cancelled', end_reason = 'team_gone', closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?").bind(a.id).run();
+    return;
+  }
+
+  const topPlayer = await db.prepare(
+    "SELECT first_name, last_name, position, overall_rating FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 1",
+  ).bind(opp.id).first<{ first_name: string; last_name: string; position: string; overall_rating: number }>();
+
+  const weakPlayer = await db.prepare(
+    `SELECT first_name, last_name, position, overall_rating FROM players
+     WHERE team_id = ? AND (status IS NULL OR status = 'active')
+     ORDER BY overall_rating ASC LIMIT 1`,
+  ).bind(opp.id).first<{ first_name: string; last_name: string; position: string; overall_rating: number }>();
+
+  const formation = opp.formation ?? "4-4-2";
+  const keyDesc = topPlayer ? `${topPlayer.first_name} ${topPlayer.last_name} (${topPlayer.position}, rating ${topPlayer.overall_rating})` : "vyrovnaný kádr";
+  const weakDesc = weakPlayer ? `${weakPlayer.first_name} ${weakPlayer.last_name} (${weakPlayer.position})` : "bez výrazné díry";
+
+  const resultData = JSON.stringify({
+    opponentId: opp.id,
+    opponentName: opp.name,
+    formation,
+    keyPlayer: keyDesc,
+    weakPlayer: weakDesc,
+    tacticalBonus: 2,
+  });
+
+  await db.prepare(
+    `UPDATE scout_assignments SET status = 'finished', end_reason = 'done', reports_sent = 1, weeks_worked = 1,
+       result_data = ?, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+  ).bind(resultData, a.id).run();
+
+  await sendScoutSms(db, a.team_id, sender,
+    `📋 Taktický rozbor soupeře ${opp.name} je hotový. Hrají ${formation}, nejvíc si hlídejte ${keyDesc}. Naše taktická příprava má navrch.`,
+  );
+}
+
 async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, result: ScoutWorkResult): Promise<void> {
   const scout = await db.prepare(
     "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE id = ? AND team_id = ? AND role = 'skaut'",
   ).bind(a.staff_id, a.team_id).first<ScoutRow>();
   if (!scout) {
-    await cancelScoutAssignment(db, a.team_id, "scout_left");
+    await cancelScoutAssignment(db, a.team_id, "scout_left", a.staff_id);
     return;
   }
   const sender = `${scout.first_name} ${scout.last_name}`;
+
+  if (a.assignment_type === "player" && a.target_player_id) {
+    await evaluatePlayerMission(db, a, scout, gameDate, sender);
+    result.reports++;
+    result.finished++;
+    return;
+  }
+
+  if (a.assignment_type === "match" && a.target_team_id) {
+    await evaluateMatchMission(db, a, scout, gameDate, sender);
+    result.reports++;
+    result.finished++;
+    return;
+  }
+
   const eff = scoutEffectiveness(scout);
   const rng = createRng(cryptoSeed());
 
