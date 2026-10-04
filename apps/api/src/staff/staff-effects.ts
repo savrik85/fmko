@@ -152,8 +152,8 @@ export function calculateStaffEffects(rows: StaffEffectRow[]): StaffEffects {
 
 /** Scout: násobitel šance zahlédnout hráče soupeře. Vrací 1 pokud tým nemá skauta. */
 export function scoutChanceMultiplier(rows: StaffEffectRow[]): number {
-  const scout = rows.find((r) => r.role === "skaut");
-  if (!scout) return 1;
-  const eff = rowEffectiveness(scout, "skaut");
-  return 1 + (eff / 20) * 1.0;
+  const scouts = rows.filter((r) => r.role === "skaut");
+  if (scouts.length === 0) return 1;
+  const bestEff = Math.max(...scouts.map((s) => rowEffectiveness(s, "skaut")));
+  return 1 + (bestEff / 20) * 1.0;
 }

@@ -293,11 +293,15 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
      */
     // Skaut na úkolu posílá hlášení z úkolu, pasivní tip z vlastního okresu ten týden nedělá.
     const scouts = await db.prepare(
-      `SELECT sm.team_id, v.district, sm.judgement, sm.communication
+      `SELECT sm.id, sm.team_id, v.district, sm.judgement, sm.communication
        FROM staff_members sm JOIN teams t ON sm.team_id = t.id JOIN villages v ON t.village_id = v.id
        WHERE sm.role = 'skaut' AND sm.team_id IS NOT NULL
-         AND NOT EXISTS (SELECT 1 FROM scout_assignments sa WHERE sa.team_id = sm.team_id AND sa.status = 'active')`
-    ).all<{ team_id: string; district: string; judgement: number; communication: number }>()
+         AND NOT EXISTS (
+           SELECT 1 FROM scout_assignments sa
+           WHERE (sa.staff_id = sm.id OR (sa.staff_id IS NULL AND sa.team_id = sm.team_id))
+             AND sa.status = 'active'
+         )`
+    ).all<{ id: string; team_id: string; district: string; judgement: number; communication: number }>()
       .catch((e) => { logger.warn({ module: "staff-tick" }, "load scouts", e); return { results: [] as never[] }; });
 
     for (const s of scouts.results) {
