@@ -16,7 +16,7 @@ import * as THREE from "three";
 import { PITCH, STAND_DIMS, STAND_GAP, type StadiumMode } from "./constants";
 import { StandBlock } from "./Stand";
 import { generateCorrugatedTexture } from "./materialTextures";
-import { raisedTierSpec, type SceneSide, type SideLevels } from "./stand-levels";
+import { canopyPlan, raisedTierSpec, type SceneSide, type SideLevels } from "./stand-levels";
 
 export interface ExtensionInstance {
   slot: string;
@@ -301,22 +301,19 @@ function CornerBowl({ a, b, rows, depth, height, c }: { a: number; b: number; ro
 }
 
 /** Šikmá plechová střecha nad zadní částí tribuny, stejná jako `StandRoof` nad rovnou tribunou. */
-function RoofSlab({ alongLen, D, H, c, lift = 0 }: { alongLen: number; D: number; H: number; c: Common; lift?: number }) {
+function RoofSlab({ alongLen, D, H, c }: { alongLen: number; D: number; H: number; c: Common }) {
   const tex = useMemo(() => generateCorrugatedTexture(c.roofColor, 8, 2), [c.roofColor]);
-  const overhang = 0.5 + c.roofLevel * 0.35;
-  const clearance = D <= 4 ? 2.6 : 1.1;
-  const roofDepth = D * 0.7 + overhang;
-  const roofZ = D * 0.45;
-  const roofY = H + lift + clearance;
-  const postH = roofY + 0.2;
+  // Stejné pravidlo výšky a sklonu jako u střechy nad rovnou tribunou (canopyPlan).
+  const { tilt, roofY, roofZ, roofDepth, backZ } = canopyPlan(D, H, c.roofLevel);
+  const postH = roofY + (backZ - roofZ) * Math.tan(tilt) - 0.1;
   return (
     <group>
-      <mesh position={[0, roofY, roofZ]} rotation={[-0.32, 0, 0]} castShadow>
+      <mesh position={[0, roofY, roofZ]} rotation={[-tilt, 0, 0]} castShadow>
         <boxGeometry args={[alongLen + 0.4, 0.14, roofDepth]} />
         <meshStandardMaterial map={tex.map} bumpMap={tex.bumpMap} bumpScale={0.12} roughness={0.5} metalness={0.35} />
       </mesh>
       {[-alongLen * 0.4, 0, alongLen * 0.4].map((x, i) => (
-        <Box key={i} size={[0.18, postH, 0.18]} position={[x, postH / 2, D + overhang * 0.5]} color="#4A4D54" metal={0.5} />
+        <Box key={i} size={[0.18, postH, 0.18]} position={[x, postH / 2, backZ]} color="#4A4D54" metal={0.5} />
       ))}
     </group>
   );
@@ -339,7 +336,7 @@ function RoundRoof({ depth, height, hw, c }: { depth: number; height: number; hw
     shape.closePath();
     return extrudeFlat(shape, 0.14);
   }, [r1, r2, hw]);
-  const roofY = height + 1.4;
+  const roofY = height + 2.6;
   const rp = ROUND_RIN + depth + 0.2;
   const half = Math.asin(Math.min(0.99, hw / rp));
   return (
@@ -371,7 +368,7 @@ function CornerRoof({ a, b, depth, height, c }: { a: number; b: number; depth: n
     shape.closePath();
     return extrudeFlat(shape, 0.14);
   }, [a, b, depth, overhang]);
-  const roofY = height + 1.4;
+  const roofY = height + 2.6;
   return (
     <group>
       <mesh geometry={geometry} position={[0, roofY, 0]} castShadow>
