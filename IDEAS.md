@@ -571,6 +571,30 @@ lze brát:
 
 ---
 
+# J. Úkoly pro zaměstnance (navazuje na skauta, 2026-10-04)
+
+Skaut dostal úkol (koho, kde, jak dlouho) a posílá hlášení. Stejný vzor „zadám úkol, zaplatím,
+dostanu výsledek" by sedl i dalším rolím. Každý je samostatný vývoj s vlastním návrhem a čísly z dat.
+
+## #26 — Psycholog: sezení s hráčem ⭐
+Manažer pošle psychologa za konkrétním hráčem, který chce odejít nebo má mizernou morálku.
+Navazuje na nespokojenost hráčů a odchody (unrest). Stojí peníze a čas, výsledek závisí na kvalitě
+psychologa a povaze hráče, nemusí vyjít.
+
+## #27 — Lékař: preventivní prohlídka ⭐
+Před důležitým zápasem (derby, pohár) nechá lékař prohlédnout vybrané hráče. Na pár dní sníží
+riziko zranění, ale něco stojí a hráč může prohlídku vynechat (disciplína).
+
+## #28 — Trenér mládeže: nábor v okolí ⭐
+Jako skaut, jen pro dorost: objíždí obce a školy v okruhu a přivede jednoho kluka do U21.
+Občas je mezi nimi klenot. Navazuje na akademii a odchovance.
+
+## #29 — Šéf fanklubu: akce pro fanoušky
+Autobus na venkovní zápas, choreo na derby. Navazuje na party fanoušků a jejich spokojenost,
+stojí peníze a organizační čas.
+
+---
+
 # Co schválně NEDOPORUČUJU
 
 - **Generic "achievement system"** — Hall of Fame stačí. Specifické streaky napojené na lore (ne "vyhraj 10 zápasů") jsou lepší.
