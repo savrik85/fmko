@@ -154,6 +154,10 @@ const FACILITY_ICONS: Record<string, string> = {
   refreshments: "🍺",
   lighting: "💡",
   stands: "🏟",
+  stand_main: "🏟",
+  stand_opposite: "🏟",
+  stand_goal_west: "🏟",
+  stand_goal_east: "🏟",
   roof: "☂️",
   ultras_stand: "🥁",
   toilets: "🚻",
@@ -171,6 +175,10 @@ const FACILITY_LABELS: Record<string, string> = {
   refreshments: "Občerstvení",
   lighting: "Osvětlení",
   stands: "Tribuny",
+  stand_main: "Hlavní tribuna",
+  stand_opposite: "Protější tribuna",
+  stand_goal_west: "Tribuna za levou brankou",
+  stand_goal_east: "Tribuna za pravou brankou",
   roof: "Zastřešení tribun",
   ultras_stand: "Sektor kotle",
   toilets: "Sociálky",
@@ -188,6 +196,10 @@ const FACILITY_DESCRIPTIONS: Record<string, string[]> = {
   refreshments: ["Žádné", "Dřevěný kiosek", "Zděná klubová hospůdka", "Moderní restaurace s terasou"],
   lighting: ["Žádné", "Dva základní stožáry", "Čtyři stožáry s osvětlením hřiště", "Plné profesionální osvětlení"],
   stands: ["Diváci stojí kolem hřiště", "Pár laviček", "Dřevěná tribuna", "Betonová tribuna se sedačkami"],
+  stand_main: ["Zatím žádná", "Pár řad lavic", "Krytá tribuna se sedačkami", "Tribuna přes celou délku hřiště"],
+  stand_opposite: ["Zatím žádná", "Lavičky naproti hlavní", "Menší tribunka", "Plná tribuna naproti hlavní"],
+  stand_goal_west: ["Zatím žádná", "Stání s ohrádkou", "Tribunka za brankou", "Velká tribuna za brankou"],
+  stand_goal_east: ["Zatím žádná", "Stání s ohrádkou", "Tribunka za brankou", "Velká tribuna za brankou"],
   roof: ["Bez střechy, v dešti se to vylidní", "Plachta nad lavičkami", "Plechová stříška nad tribunou", "Kompletní zastřešení tribun"],
   ultras_stand: ["Bez kotle", "Pár bubeníků za brankou", "Vlajkový sektor s bubny", "Peklo, chorály slyšet do vedlejší vsi"],
   toilets: ["Kopřivy za střídačkou", "Kadibudka", "Zděné záchodky", "Čisté sociálky s teplou vodou"],
@@ -1126,7 +1138,7 @@ export default function StadiumPage() {
       {/* ═══ Zázemí ═══ */}
       <SectionLabel>Zázemí</SectionLabel>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {Object.entries(stadium.facilities).map(([key, level]) => {
+        {Object.entries(stadium.facilities).filter(([key]) => key !== "stands").map(([key, level]) => {
           const upgrade = stadium.upgrades.find((u) => u.facility === key);
           const canUpgrade = upgrade && !upgrade.locked && team.budget >= upgrade.cost;
 
