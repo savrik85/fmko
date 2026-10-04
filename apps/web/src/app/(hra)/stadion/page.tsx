@@ -436,6 +436,8 @@ export default function StadiumPage() {
   /** Přístavba, na kterou se hráč dívá v náhledu (průhledná ve 3D, nic se nestaví). */
   const [extPreview, setExtPreview] = useState<{ item: ExtensionInstance; option: ExtOptionData; slotLabel: string } | null>(null);
   const [extError, setExtError] = useState<string | null>(null);
+  /** Rozbalené místo pro přístavbu (vždy jen jedno, ať je přehled čitelný). */
+  const [openSlot, setOpenSlot] = useState<string | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -566,6 +568,7 @@ export default function StadiumPage() {
   const showExtPreview = (slot: ExtSlotData, option: ExtOptionData) => {
     setExtError(null);
     setExtPreview({ item: { slot: slot.slot, kind: option.kind, level: option.level }, option, slotLabel: slot.label });
+    setOpenSlot(slot.slot);
     // Náhled je vidět jen ve 3D areálu, takže se na něj přepne a stránka odroluje nahoru.
     switchView("3d");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1247,50 +1250,69 @@ export default function StadiumPage() {
             Do každého místa jde postavit jedna přístavba a pak ji vylepšovat. Než ji postavíš, podívej se na ni v náhledu ve 3D areálu.
           </p>
           {extError && <div className="text-sm text-card-red font-heading font-bold">{extError}</div>}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {stadium.standExtensions.slots.map((slot) => {
+              const open = openSlot === slot.slot;
+              const available = slot.options.filter((o) => !o.locked).length;
+              const summary = slot.built
+                ? `${slot.built.label}, úroveň ${slot.built.level} z 3`
+                : "Zatím tu nic nestojí";
+              const hint = slot.options.length === 0
+                ? "Maximální úroveň"
+                : slot.built
+                  ? "Lze vylepšit"
+                  : `${available} z ${slot.options.length} možností k postavení`;
               return (
-                <div key={slot.slot} className="rounded-xl border border-gray-300 p-4 space-y-3">
-                  <div>
-                    <div className="font-heading font-bold text-base">{slot.label}</div>
-                    <div className="text-sm text-muted leading-snug">
-                      {slot.built
-                        ? `${slot.built.label}, úroveň ${slot.built.level} z 3`
-                        : "Zatím tu nic nestojí"}
+                <div key={slot.slot} className="rounded-xl border border-gray-300 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setOpenSlot(open ? null : slot.slot)}
+                    aria-expanded={open}
+                    className="w-full flex items-center justify-between gap-3 p-4 text-left min-h-11"
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-heading font-bold text-base">{slot.label}</span>
+                      <span className="block text-sm text-muted leading-snug">{summary}</span>
+                      <span className="block text-sm text-pitch-600 leading-snug">{hint}</span>
+                    </span>
+                    <span className="text-xl shrink-0" aria-hidden>{open ? "▾" : "▸"}</span>
+                  </button>
+                  {open && (
+                    <div className="p-4 pt-0 space-y-3">
+                      {slot.built && slot.options.length === 0 && (
+                        <div className="text-sm text-pitch-600 font-heading font-bold">Maximální úroveň</div>
+                      )}
+                      {slot.options.map((o) => {
+                        const previewing = extPreview?.item.slot === slot.slot && extPreview.item.kind === o.kind;
+                        return (
+                          <div key={o.kind} className={`rounded-lg p-3 space-y-2 ${previewing ? "bg-pitch-50 border border-pitch-400" : "bg-gray-50"}`}>
+                            <div className="font-heading font-bold text-base">
+                              {o.label} <span className="text-muted font-normal">· úroveň {o.level}</span>
+                            </div>
+                            <div className="text-sm text-muted leading-snug">{o.description}</div>
+                            <div className="text-sm">
+                              <span className="font-heading font-bold tabular-nums">+{o.capacityGain} míst</span>{" "}
+                              <span className="text-muted">·</span>{" "}
+                              <span className="font-heading font-bold tabular-nums">{formatCZK(o.cost)}</span>
+                            </div>
+                            {o.locked && <LockDetail detail={o.lockDetail} fallback={o.lockReason} />}
+                            <div className="flex flex-wrap gap-2">
+                              <button onClick={() => showExtPreview(slot, o)} className="btn btn-sm min-h-11 flex-1 sm:flex-none">
+                                Náhled ve 3D
+                              </button>
+                              <button
+                                onClick={() => handleBuildExtension(slot, o)}
+                                disabled={o.locked || team.budget < o.cost || !!acting}
+                                className="btn btn-primary btn-sm min-h-11 flex-1 sm:flex-none"
+                              >
+                                {acting === `ext-${slot.slot}` ? "…" : slot.built ? "Vylepšit" : "Postavit"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                  {slot.built && slot.options.length === 0 && (
-                    <div className="text-sm text-pitch-600 font-heading font-bold">Maximální úroveň</div>
                   )}
-                  {slot.options.map((o) => {
-                    const previewing = extPreview?.item.slot === slot.slot && extPreview.item.kind === o.kind;
-                    return (
-                      <div key={o.kind} className={`rounded-lg p-3 space-y-2 ${previewing ? "bg-pitch-50 border border-pitch-400" : "bg-gray-50"}`}>
-                        <div className="font-heading font-bold text-base">
-                          {o.label} <span className="text-muted font-normal">· úroveň {o.level}</span>
-                        </div>
-                        <div className="text-sm text-muted leading-snug">{o.description}</div>
-                        <div className="text-sm">
-                          <span className="font-heading font-bold tabular-nums">+{o.capacityGain} míst</span>{" "}
-                          <span className="text-muted">·</span>{" "}
-                          <span className="font-heading font-bold tabular-nums">{formatCZK(o.cost)}</span>
-                        </div>
-                        {o.locked && <LockDetail detail={o.lockDetail} fallback={o.lockReason} />}
-                        <div className="flex flex-wrap gap-2">
-                          <button onClick={() => showExtPreview(slot, o)} className="btn btn-sm min-h-11 flex-1 sm:flex-none">
-                            Náhled ve 3D
-                          </button>
-                          <button
-                            onClick={() => handleBuildExtension(slot, o)}
-                            disabled={o.locked || team.budget < o.cost || !!acting}
-                            className="btn btn-primary btn-sm min-h-11 flex-1 sm:flex-none"
-                          >
-                            {acting === `ext-${slot.slot}` ? "…" : slot.built ? "Vylepšit" : "Postavit"}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               );
             })}
