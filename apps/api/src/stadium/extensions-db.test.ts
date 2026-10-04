@@ -125,3 +125,13 @@ describe("souběh obchází vylučování a selhání přepočtu kapacity", () =
   });
 });
 
+
+describe("nahrazení mobilní tribunky nesmí obejít vylučování", () => {
+  it("křídlo, které by kolidovalo s valem za brankou, se vrátí zpět na mobilní tribunku", async () => {
+    expect(await buildExtension(db, "t1", "ext_goal_east", "terrace", 0)).toBe(true);
+    // Mobilní tribunka v rohu u téhle tribuny stála dřív, než přišel val; křídlo na ni nesmí navázat.
+    await db.prepare("INSERT INTO stadium_extensions (team_id, slot, kind, level) VALUES ('t1','corner_main_goal_east','mobile',1)").run();
+    expect(await replaceMobileExtension(db, "t1", "corner_main_goal_east", "wing", 1)).toBe(false);
+    expect((await loadExtensions(db, "t1")).find((r) => r.slot === "corner_main_goal_east")).toEqual({ slot: "corner_main_goal_east", kind: "mobile", level: 1 });
+  });
+});
