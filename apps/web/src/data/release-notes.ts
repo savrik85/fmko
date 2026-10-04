@@ -18,7 +18,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     items: [
       "Skautovi zadáš úkol v Zaměstnancích pod Skaut, Úkol a hlášení. Vybereš post, věk, kam až má jezdit (15, 30 nebo 50 km od tvé obce) a na kolik týdnů. Cestovné platíš každé pondělí a čím dál jezdí, tím víc stojí.",
       "Skaut objíždí kluby z obcí v okolí, které v žádné lize ve hře nehrají, a hledá i volné hráče z jiných okresů. Každé pondělí ti napíše SMS, koho viděl, nejvýš jednoho hráče za týden. Když nikoho nenajde, napíše ti i to.",
-      "V hlášení je hodnocení jen jako odhad, třeba 48 až 60. Čím lepší skaut a čím víckrát hráče uvidí, tím přesnější odhad. U kluků do 21 let řekne, kam to můžou dotáhnout. Najdeš tam i silné a slabé stránky, jestli by k tobě šel rád a kolik si za něj klub asi řekne.",
+      "V hlášení je hodnocení jen jako odhad, třeba 48 až 60. Čím lepší skaut a čím víckrát hráče uvidí, tím přesněji odhadne hodnocení, cenu i to, jestli by k tobě hráč šel. U kluků do 21 let řekne, kam to můžou dotáhnout. Najdeš tam i silné a slabé stránky, ochotu přejít a kolik si za něj klub asi řekne.",
       "Hlášení platí 10 dní. Mezitím hráče může sebrat jiný klub, takže moc neotálej.",
       "O ceně se s cizím klubem jedná naživo, u hráčů od skauta i u hráčů, které cizí kluby nabízejí na trhu. Pošleš nabídku a předseda klubu hned odpoví: buď souhlasí, nebo chce víc. Klub, který hráče sám prodává, je vstřícnější než ten, kterému ho chceš vyfouknout, a svého nejlepšího hráče pouští hodně nerad.",
       "Klub zná svého kluka. Talentovaného mladíka nepustí za cenu podle dnešní formy, ale podle toho, kým bude za sezónu.",

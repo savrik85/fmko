@@ -18,6 +18,7 @@ import {
 } from "../scouting/scout-work";
 import { estimateWillingness, startAiNegotiation } from "../transfers/ai-negotiation";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
+import { blurredWillingness } from "../scouting/fog";
 
 export const scoutingRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -150,7 +151,9 @@ scoutingRouter.get("/teams/:teamId/scout/reports/:id", async (c) => {
     try {
       const chance = await estimateWillingness(c.env.DB, teamId, JSON.parse(r.player_data) as VirtualPlayerData, r.district, coords, r.club_mean);
       if (chance != null) {
-        const level = willingnessFromChance(chance);
+        // Ochotu vidíš očima skauta: slabší se může o stupeň splést.
+        const scout = await loadTeamScout(c.env.DB, teamId);
+        const level = blurredWillingness(willingnessFromChance(chance), scout ? scoutEffectiveness(scout) : 0, r.visits, r.id);
         view.willingness = { level, label: SCOUT_WILLINGNESS_LABELS[level] };
       }
     } catch (e) {

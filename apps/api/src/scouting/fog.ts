@@ -68,3 +68,33 @@ export function potentialRange(
   // Pod dnešní výkon nikdo nespadne, i kdyby skaut odhadoval sebehůř.
   return { lo: Math.max(range.lo, Math.min(player.rating, range.hi)), hi: range.hi };
 }
+
+/**
+ * Jak moc se skaut může plést (0–1): stejný základ jako šířka rozmezí hodnocení, tedy
+ * (18 − 14·kvalita) / 18, a každá další návštěva chybu zmenší (÷ √návštěv).
+ * Mizerný skaut (5) ~0,8, průměrný (13,5) ~0,47, špičkový (20) ~0,22.
+ */
+export function scoutError(eff: number, visits: number): number {
+  return (18 - scoutQuality(eff) * 14) / 18 / Math.sqrt(Math.max(1, visits));
+}
+
+/**
+ * Nejvyšší chyba odhadu ceny při chybě skauta 1: ±40 %. Odhad, ne data — u mizerného
+ * skauta vyjde zhruba ±32 %, u špičkového ±9 %.
+ */
+export const ASK_HINT_MAX_ERROR = 0.4;
+
+/** Kolik si podle skauta klub řekne: skutečný první požadavek zkreslený podle skauta, na tisíce. */
+export function blurredAskHint(ask: number, eff: number, visits: number, seed: string): number {
+  const off = stableOffset(`${seed}:ask`) * ASK_HINT_MAX_ERROR * scoutError(eff, visits);
+  return Math.max(1000, Math.round((ask * (1 + off)) / 1000) * 1000);
+}
+
+/**
+ * Ochota hráče, jak ji vidí skaut (0–3). Mizerný skaut se splete až o stupeň, špičkový
+ * prakticky ne. Posun ±1,5 stupně při chybě 1 je odhad.
+ */
+export function blurredWillingness(level: number, eff: number, visits: number, seed: string): 0 | 1 | 2 | 3 {
+  const shift = Math.round(stableOffset(`${seed}:will`) * 1.5 * scoutError(eff, visits));
+  return Math.max(0, Math.min(3, level + shift)) as 0 | 1 | 2 | 3;
+}
