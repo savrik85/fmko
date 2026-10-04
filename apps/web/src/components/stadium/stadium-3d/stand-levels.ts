@@ -247,3 +247,12 @@ export function canopyPlan(D: number, H: number, roofLevel: number, tier?: RoofT
   }
   return { tilt, roofY: Math.max(...need), roofZ, roofDepth, backZ };
 }
+
+/** Postavené přístavby z odpovědi `/stadium` ve tvaru, který bere 3D scéna. */
+export function builtExtensionsOf(
+  standExtensions: { slots: ReadonlyArray<{ slot: string; built?: { kind: string; level: number } | null }> } | undefined,
+): { slot: string; kind: string; level: number }[] {
+  return (standExtensions?.slots ?? [])
+    .filter((x) => x.built)
+    .map((x) => ({ slot: x.slot, kind: x.built!.kind, level: x.built!.level }));
+}

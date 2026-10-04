@@ -10,6 +10,7 @@ import { Spinner, BadgePreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { WEATHER_OPTIONS, type WeatherType } from "@/components/stadium/stadium-3d/constants";
 
+import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
 const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
 );
@@ -50,6 +51,7 @@ interface MatchInfo {
 
 interface StadiumFacilities {
   facilities: Record<string, number>;
+  standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
   customization?: Record<string, unknown>;
 }
 
@@ -103,7 +105,7 @@ export default function MatchDayPage() {
         // Načteme zázemí stadionu domácího týmu pro 3D scénu
         if (homeTeamId) {
           try {
-            const stRes = await apiFetch<{ facilities: Record<string, number>; customization?: Record<string, unknown> }>(
+            const stRes = await apiFetch<StadiumFacilities>(
               `/api/teams/${homeTeamId}/stadium`,
             );
             if (stRes?.facilities) {
@@ -180,6 +182,7 @@ export default function MatchDayPage() {
           pitchCondition={match.pitch_condition}
           pitchType={match.pitch_type}
           facilities={stadiumData?.facilities ?? { stands: 1, fence: 1, entrance_gate: 1 }}
+          standExtensions={builtExtensionsOf(stadiumData?.standExtensions)}
           teamColor={hc}
           secondaryColor={match.home_secondary}
           badgePattern={match.home_badge}
