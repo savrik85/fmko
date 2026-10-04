@@ -28,7 +28,7 @@ import {
   villageClubName, type VillageInRange, CLUB_AGE_MAX, CLUB_AGE_MIN,
 } from "./candidates";
 import { potentialRange, rangeMid, ratingRange, type Range } from "./fog";
-import { emptyWeekSms, reportCons, reportPros, reportSms, revisitSms } from "./report-text";
+import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms } from "./report-text";
 
 /** Hlášení platí deset dní (odhad, spec). */
 export const SCOUT_REPORT_TTL_DAYS = 10;
@@ -296,8 +296,7 @@ async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, r
   ).bind(weeksWorked, visited, reported, worked ? 1 : 0, finished ? 1 : 0, finished ? 1 : 0, finished ? 1 : 0, a.id).run();
   if (finished) {
     result.finished++;
-    await sendScoutSms(db, a.team_id, sender,
-      `🏁 Úkol je hotový. Objel jsem ${a.clubs_visited + visited} klubů a poslal ${a.reports_sent + reported} hlášení. Dej vědět, kam dál.`);
+    await sendScoutSms(db, a.team_id, sender, finishedSms(a.clubs_visited + visited, a.reports_sent + reported));
   }
 }
 

@@ -7,7 +7,7 @@ import { createRng } from "../generators/rng";
 import {
   clubMeanFor, clubRankOf, expectedMatches, pickClubsToVisit, villageClubName, villagesInRadius, type VillageRow,
 } from "./candidates";
-import { emptyWeekSms, reportCons, reportPros, reportSms, revisitSms } from "./report-text";
+import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms } from "./report-text";
 
 // Skutečné souřadnice: Prachatice, Husinec (~6 km), Strakonice (~26 km), Písek (~45 km).
 const PRACHATICE = { id: "pt", lat: 49.0128, lng: 13.9975 };
@@ -78,6 +78,12 @@ describe("texty hlášení", () => {
     skills: { shooting: 55, speed: 52, technique: 40, heading: 30, strength: 45 },
     personality: { leadership: 75, discipline: 20, alcohol: 80, temper: 50, workRate: 50 },
   };
+
+  it("počet klubů se skloňuje", () => {
+    expect(finishedSms(1, 0)).toContain("Objel jsem 1 klub ");
+    expect(finishedSms(4, 1)).toContain("Objel jsem 4 kluby ");
+    expect(finishedSms(8, 2)).toContain("Objel jsem 8 klubů ");
+  });
 
   it("plusy a minusy vycházejí z dovedností a povahy", () => {
     const pros = reportPros(subject);
