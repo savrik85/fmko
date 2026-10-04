@@ -48,8 +48,8 @@ const VARIANTS: Variant[] = [
   { name: "Věže a mosty", note: "Hlavní tribuna s věží, rohy propojené mosty, protější s lávkou.", sl: [3, 2, 2, 2],
     ext: `${C("ext_main", "tower", 3)},${C("ext_opposite", "footbridge", 3)},${all("bridge", 2)}` },
   { name: "Rohové klíny", note: "Rovné tribuny, v rozích přímé klíny místo mezer.", sl: [3, 3, 3, 3], ext: all("corner", 3) },
-  { name: "Minimální", note: "Čtyři nejmenší tribunky a mobilní kousky, nejlevnější začátek.", sl: [1, 1, 1, 1],
-    ext: `${C("ext_main", "mobile", 1)},${C("ext_opposite", "mobile", 1)},${C("ext_goal_west", "mobile", 1)},${C("ext_goal_east", "mobile", 1)}` },
+  { name: "Minimální", note: "Čtyři nejmenší tribunky a mobilní kousky v rozích, nejlevnější začátek.", sl: [1, 1, 1, 1],
+    ext: all("mobile", 1) },
   { name: "Prodloužené boky", note: "Dlouhé strany prodloužené k rohům, brankoviště s valem.", sl: [3, 3, 2, 2],
     ext: `${C("ext_main", "length", 3)},${C("ext_opposite", "length", 3)},${C("ext_goal_west", "terrace", 3)},${C("ext_goal_east", "terrace", 3)}` },
 ];

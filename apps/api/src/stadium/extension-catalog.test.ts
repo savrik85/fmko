@@ -61,7 +61,12 @@ describe("pravidla odemykání", () => {
     const s = slotsOf(legacyStandsToSides(0));
     expect(option(s, "ext_goal_east", "terrace").locked).toBe(false);
     expect(option(s, "ext_main", "footbridge").locked).toBe(false);
-    expect(option(s, "ext_main", "mobile").locked).toBe(false);
+    // Mobilní tribunka patří jen do rohu (na straně u tribuny by koukala mimo hřiště nebo bránila výhledu).
+    expect(allowedKinds("ext_main")).not.toContain("mobile");
+    for (const slot of EXT_SLOTS) {
+      if (EXT_SLOT_DEFS[slot].type === "side") expect(allowedKinds(slot), slot).not.toContain("mobile");
+    }
+    expect(option(s, "corner_main_goal_east", "mobile").locked).toBe(false);
     expect(option(s, "ext_main", "length").locked).toBe(true);
     expect(option(s, "corner_main_goal_east", "corner").locked).toBe(true);
   });

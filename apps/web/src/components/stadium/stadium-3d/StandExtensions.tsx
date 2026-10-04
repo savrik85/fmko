@@ -506,16 +506,6 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
         </>
       );
     }
-    case "mobile": {
-      // Mobilní tribunka stojí vedle tribuny na jejím konci, ne před ní (neberou si výhled).
-      const w = 6 + 3 * l;
-      const rows = 1 + l;
-      return (
-        <group position={[length / 2 + w / 2 + 1, 0, 0]}>
-          <Block length={w} rows={rows} depth={rows * 1.1} height={rows * 0.55} level={1} standColor={METAL} panel={false} c={c} />
-        </group>
-      );
-    }
     default:
       return null;
   }
