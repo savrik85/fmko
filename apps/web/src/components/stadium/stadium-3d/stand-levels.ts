@@ -216,13 +216,14 @@ export interface CanopyPlan {
  * Poloha a sklon střechy nad tribunou hloubky D a výšky H (lokálně: z = 0 přední hrana tribuny).
  *
  * Jediné pravidlo pro všechny střechy: deska je všude aspoň 2,4 m nad nejvyšším divákem pod ní,
- * takže nebrání ve výhledu, a je jen mírně skloněná (0,14 rad, nad patrem 0,1). Dřív klesala
+ * takže nebrání ve výhledu, a je vodorovná, aby na sebe sousední střechy navazovaly. Dřív klesala
  * dopředu jako štít (0,32 rad) a v nízké výšce se divákům pletla do výhledu.
  * Nad tribunou s patrem kryje celou tribunu a leží nad nejvyšší řadou patra.
  */
 export function canopyPlan(D: number, H: number, roofLevel: number, tier?: RoofTier): CanopyPlan {
   const overhang = 0.5 + roofLevel * 0.35;
-  const tilt = tier ? 0.1 : 0.14;
+  // Vodorovná: sousední střechy (rovná tribuna, roh, točená) na sebe pak navazují ve stejné výšce.
+  const tilt = 0;
   const slope = Math.tan(tilt);
   let roofDepth = D * 0.7 + overhang;
   let roofZ = D * 0.45;
