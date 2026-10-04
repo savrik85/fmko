@@ -388,7 +388,12 @@ export function Stadium3D({
   };
 
   // Pohledy kamery podle úrovně tribun a střechy (statické souřadnice končily ve střeše tribuny)
-  const viewpoints = useMemo(() => getViewpoints(f.stands ?? 0, f.roof ?? 0), [f.stands, f.roof]);
+  // Kamera „Hlavní tribuna" stojí na východní straně, takže se řídí její úrovní (max stran by ji dalo do prázdna).
+  const viewpoints = useMemo(() => {
+    const lv = getSideLevels(f);
+    const camLevel = lv.east >= 1 ? lv.east : Math.min(1, Math.max(lv.north, lv.south));
+    return getViewpoints(camLevel, f.roof ?? 0);
+  }, [f.stand_main, f.stand_opposite, f.stand_goal_west, f.stand_goal_east, f.stands, f.roof]);
 
   return (
     <div ref={rootRef} className="relative w-full h-full select-none">
@@ -481,7 +486,7 @@ export function Stadium3D({
           />
 
           {/* Osvětlovací stožáry v rozích hřiště */}
-          <Floodlights level={f.lighting ?? 0} standsLevel={f.stands ?? 0} timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} />
+          <Floodlights level={f.lighting ?? 0} standsLevel={f.stands ?? 0} cornerStands={(standExtensions ?? []).some((e) => e.slot.startsWith("corner_")) || (extensionPreview?.slot.startsWith("corner_") ?? false)} timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} />
 
           {/* Střídačky u postranní čáry */}
           <Dugouts teamColor={teamColor} secondaryColor={secondaryColor} weather={weather} />
