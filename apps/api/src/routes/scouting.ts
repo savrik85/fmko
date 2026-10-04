@@ -13,7 +13,7 @@ import {
   willingnessFromChance,
 } from "@okresni-masina/shared";
 import {
-  cancelScoutAssignment, createScoutAssignment, loadActiveAssignment, loadTeamScout, maintainScoutReports, requestRevisit,
+  assignmentPositions, cancelScoutAssignment, createScoutAssignment, loadActiveAssignment, loadTeamScout, maintainScoutReports, requestRevisit,
   runScoutWork, scoutEffectiveness,
 } from "../scouting/scout-work";
 import { estimateWillingness, startAiNegotiation } from "../transfers/ai-negotiation";
@@ -101,7 +101,7 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
 
   return c.json({
     scout: scout ? { id: scout.id, name: `${scout.first_name} ${scout.last_name}`, eff: Math.round(scoutEffectiveness(scout) * 10) / 10 } : null,
-    assignment,
+    assignment: assignment ? { ...assignment, positions: assignmentPositions(assignment) } : null,
     lastAssignment: last,
     options: {
       radiusTiers: SCOUT_RADIUS_TIERS, weeks: SCOUT_WEEKS_OPTIONS, ageMin: SCOUT_AGE_MIN, ageMax: SCOUT_AGE_MAX,
@@ -116,9 +116,11 @@ scoutingRouter.post("/teams/:teamId/scout/assignment", async (c) => {
   const teamId = c.req.param("teamId");
   const clubId = await club(c, teamId);
   if (typeof clubId !== "string") return clubId;
-  const body = await c.req.json<{ position?: string | null; ageMin?: number; ageMax?: number; radiusKm?: number; weeks?: number }>();
+  const body = await c.req.json<{ positions?: unknown[] | null; position?: string | null; ageMin?: number; ageMax?: number; radiusKm?: number; weeks?: number }>();
+  // `positions` = víc postů najednou; starší klient posílá jeden `position`.
+  const positions = Array.isArray(body.positions) ? body.positions : body.position ? [body.position] : null;
   const res = await createScoutAssignment(c.env.DB, {
-    teamId: clubId, position: body.position ?? null, ageMin: Number(body.ageMin), ageMax: Number(body.ageMax),
+    teamId: clubId, positions, ageMin: Number(body.ageMin), ageMax: Number(body.ageMax),
     radiusKm: Number(body.radiusKm), weeks: Number(body.weeks), gameDate: await gameDateOf(c.env.DB, clubId),
   });
   if (!res.ok) return c.json({ error: res.error }, res.status);

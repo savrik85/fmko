@@ -56,6 +56,8 @@ export interface AssignmentRow {
   team_id: string;
   staff_id: string;
   position: string | null;
+  /** JSON pole postů (víc postů najednou); NULL = podle starého `position`, případně kdokoli. */
+  positions: string | null;
   age_min: number;
   age_max: number;
   radius_km: number;
@@ -96,12 +98,38 @@ export async function loadActiveAssignment(db: D1Database, teamId: string): Prom
 
 // ─── Zadání a zrušení úkolu ─────────────────────────────────────────────────
 
+/**
+ * Posty úkolu jako seznam. Prázdný seznam nebo všechny čtyři = kdokoli (null).
+ * Neznámý post = chyba (vrací `false`).
+ */
+export function normalizePositions(input: readonly unknown[] | null | undefined): string[] | null | false {
+  if (!input || input.length === 0) return null;
+  const uniq = [...new Set(input)];
+  if (uniq.some((p) => typeof p !== "string" || !(SCOUT_POSITIONS as readonly string[]).includes(p))) return false;
+  if (uniq.length >= SCOUT_POSITIONS.length) return null;
+  return SCOUT_POSITIONS.filter((p) => uniq.includes(p));
+}
+
+/** Posty, které skaut na úkolu hledá; null = kdokoli. Starší úkoly mají jen jeden `position`. */
+export function assignmentPositions(a: Pick<AssignmentRow, "position" | "positions">): string[] | null {
+  if (a.positions) {
+    try {
+      const list = JSON.parse(a.positions) as string[];
+      return list.length > 0 ? list : null;
+    } catch (e) {
+      logger.warn({ module: "scouting" }, "parse positions úkolu", e);
+    }
+  }
+  return a.position ? [a.position] : null;
+}
+
 export async function createScoutAssignment(db: D1Database, input: {
-  teamId: string; position: string | null; ageMin: number; ageMax: number; radiusKm: number; weeks: number; gameDate: string;
+  teamId: string; positions: readonly unknown[] | null; ageMin: number; ageMax: number; radiusKm: number; weeks: number; gameDate: string;
 }): Promise<{ ok: true; id: string } | Fail> {
   const scout = await loadTeamScout(db, input.teamId);
   if (!scout) return fail(400, "Nemáš skauta. Najmi ho v Zaměstnancích.");
-  if (input.position !== null && !(SCOUT_POSITIONS as readonly string[]).includes(input.position)) return fail(400, "Neznámý post.");
+  const positions = normalizePositions(input.positions);
+  if (positions === false) return fail(400, "Neznámý post.");
   const weeklyCost = scoutWeeklyCost(input.radiusKm);
   if (weeklyCost === null) return fail(400, "Neznámý okruh.");
   if (!(SCOUT_WEEKS_OPTIONS as readonly number[]).includes(input.weeks)) return fail(400, "Neznámá délka úkolu.");
@@ -112,9 +140,10 @@ export async function createScoutAssignment(db: D1Database, input: {
   const id = crypto.randomUUID();
   try {
     await db.prepare(
-      `INSERT INTO scout_assignments (id, team_id, staff_id, position, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, input.teamId, scout.id, input.position, input.ageMin, input.ageMax, input.radiusKm, weeklyCost, input.weeks, input.gameDate).run();
+      `INSERT INTO scout_assignments (id, team_id, staff_id, position, positions, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(id, input.teamId, scout.id, positions?.length === 1 ? positions[0] : null, positions ? JSON.stringify(positions) : null,
+      input.ageMin, input.ageMax, input.radiusKm, weeklyCost, input.weeks, input.gameDate).run();
   } catch (e) {
     logger.warn({ module: "scouting" }, "zadání úkolu", e);
     return fail(409, "Skaut už na jednom úkolu je. Nejdřív ho ukonči.");
@@ -380,12 +409,15 @@ function villageCandidates(
   rng: Rng, v: VillageInRange, a: AssignmentRow, eff: number, names: Awaited<ReturnType<typeof namesFor>>, meanCap: number,
 ): Candidate[] {
   const mean = Math.min(clubMeanFor(v.population), meanCap);
-  const expected = expectedMatches(a.position, a.age_min, a.age_max);
+  const positions = assignmentPositions(a);
+  const expected = expectedMatches(positions, a.age_min, a.age_max);
   const count = Math.min(MAX_MATCHES_PER_CLUB, Math.floor(expected) + (rng.random() < expected - Math.floor(expected) ? 1 : 0));
   const youth = isYouthScoutTask(a.age_max);
   const out: Candidate[] = [];
   for (let i = 0; i < count; i++) {
-    const position = (a.position ?? rng.weighted({ GK: 2, DEF: 6, MID: 6, FWD: 4 })) as "GK" | "DEF" | "MID" | "FWD";
+    // Post losovaný podle toho, kolik hráčů na něm v kádru je (2 brankáři, 6 obránců, 6 záložníků, 4 útočníci).
+    const weights: Record<string, number> = { GK: 2, DEF: 6, MID: 6, FWD: 4 };
+    const position = rng.weighted(positions ? Object.fromEntries(positions.map((p) => [p, weights[p] ?? 0])) : weights) as "GK" | "DEF" | "MID" | "FWD";
     const age = rng.int(Math.max(CLUB_AGE_MIN, a.age_min), Math.min(CLUB_AGE_MAX, a.age_max));
     const target = mean + normal(rng) * TARGET_SD;
     const created = createPlayer(rng, {
@@ -434,6 +466,7 @@ async function freeAgentCandidates(
   db: D1Database, a: AssignmentRow, home: { id: string; lat: number; lng: number; district: string }, eff: number, rng: Rng,
 ): Promise<Candidate[]> {
   const box = boundingBox(home.lat, home.lng, a.radius_km);
+  const faPositions = assignmentPositions(a);
   const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(a.team_id).first<{ game_date: string | null }>();
   const rows = await db.prepare(
     `SELECT fa.id, fa.district, fa.first_name, fa.last_name, fa.age, fa.position, fa.overall_rating, fa.skills, fa.physical,
@@ -441,12 +474,12 @@ async function freeAgentCandidates(
             v.id AS v_id, v.name AS v_name, v.lat, v.lng
        FROM free_agents fa JOIN villages v ON v.id = fa.village_id
       WHERE fa.district != ? AND fa.expires_at > ? AND COALESCE(fa.is_celebrity, 0) = 0
-        AND fa.age BETWEEN ? AND ? ${a.position ? "AND fa.position = ?" : ""}
+        AND fa.age BETWEEN ? AND ? ${faPositions ? `AND fa.position IN (${faPositions.map(() => "?").join(",")})` : ""}
         AND v.lat BETWEEN ? AND ? AND v.lng BETWEEN ? AND ?
         AND NOT EXISTS (SELECT 1 FROM scout_reports sr WHERE sr.free_agent_id = fa.id AND sr.team_id = ?)`,
   ).bind(
     home.district, team?.game_date ?? new Date().toISOString(), a.age_min, a.age_max,
-    ...(a.position ? [a.position] : []), box.minLat, box.maxLat, box.minLng, box.maxLng, a.team_id,
+    ...(faPositions ?? []), box.minLat, box.maxLat, box.minLng, box.maxLng, a.team_id,
   ).all<FreeAgentRow>()
     .catch((e) => { logger.warn({ module: "scouting" }, "volní hráči v okruhu", e); return { results: [] as FreeAgentRow[] }; });
 

@@ -55,9 +55,11 @@ describe("kluby mimo hru", () => {
 
   it("počet hráčů odpovídajících úkolu", () => {
     expect(expectedMatches(null, 17, 35)).toBeCloseTo(18, 5);
-    expect(expectedMatches("GK", 17, 35)).toBeCloseTo(2, 5);
-    expect(expectedMatches("DEF", 17, 21)).toBeCloseTo(18 * (6 / 18) * (5 / 19), 5);
-    expect(expectedMatches("MID", 40, 45)).toBe(0);
+    expect(expectedMatches(["GK"], 17, 35)).toBeCloseTo(2, 5);
+    expect(expectedMatches(["DEF"], 17, 21)).toBeCloseTo(18 * (6 / 18) * (5 / 19), 5);
+    expect(expectedMatches(["MID"], 40, 45)).toBe(0);
+    // Víc postů: obránci a záložníci = 12 z 18
+    expect(expectedMatches(["DEF", "MID"], 17, 35)).toBeCloseTo(12, 5);
   });
 
   it("pořadí v kádru: výrazně lepší hráč než průměr bývá nejlepší, slabší ne", () => {

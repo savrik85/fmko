@@ -19,6 +19,8 @@ import {
 interface Assignment {
   id: string;
   position: ScoutPosition | null;
+  /** Posty, které skaut hledá; null = kdokoli. */
+  positions: ScoutPosition[] | null;
   age_min: number;
   age_max: number;
   radius_km: number;
@@ -87,7 +89,10 @@ export default function ScoutPage() {
   const [showPast, setShowPast] = useState(false);
 
   // Formulář úkolu
-  const [position, setPosition] = useState<ScoutPosition | null>(null);
+  // Prázdný výběr = kdokoli.
+  const [positions, setPositions] = useState<ScoutPosition[]>([]);
+  const togglePosition = (p: ScoutPosition) =>
+    setPositions((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
   const [ageMin, setAgeMin] = useState(18);
   const [ageMax, setAgeMax] = useState(30);
   const [radius, setRadius] = useState(30);
@@ -120,7 +125,7 @@ export default function ScoutPage() {
   const start = async () => {
     if (await apiAction(apiFetch(`/api/teams/${teamId}/scout/assignment`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ position, ageMin, ageMax, radiusKm: radius, weeks }),
+      body: JSON.stringify({ positions, ageMin, ageMax, radiusKm: radius, weeks }),
     }), "Úkol se nepodařilo zadat")) await load();
   };
 
@@ -160,7 +165,9 @@ export default function ScoutPage() {
         <div className="card p-4 space-y-3">
           <SectionLabel>Na úkolu</SectionLabel>
           <div className="text-base">
-            <span className="font-heading font-bold">{a.position ? SCOUT_POSITION_LABELS[a.position] : "Kdokoli"}</span>
+            <span className="font-heading font-bold">
+              {a.positions && a.positions.length > 0 ? a.positions.map((p) => SCOUT_POSITION_LABELS[p]).join(", ") : "Kdokoli"}
+            </span>
             , {a.age_min}–{a.age_max} let, okruh {a.radius_km} km
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -196,10 +203,13 @@ export default function ScoutPage() {
 
           <div>
             <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
+            <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů.</div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className={chip(position === null)} onClick={() => setPosition(null)}>Kdokoli</button>
+              <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Kdokoli</button>
               {SCOUT_POSITIONS.map((p) => (
-                <button key={p} type="button" className={chip(position === p)} onClick={() => setPosition(p)}>{SCOUT_POSITION_LABELS[p]}</button>
+                <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
+                  {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
+                </button>
               ))}
             </div>
           </div>
