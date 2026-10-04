@@ -36,6 +36,8 @@ export function evaluateSigningChance(
   agentVillage: { lat: number; lng: number } | null,
   offeredWage: number,
   rng: Rng,
+  /** Faktory navíc, které zná jen volající (např. síla klubu u hráče z hlášení skauta). */
+  extraFactors: AgencyFactor[] = [],
 ): AgencyDecision {
   const factors: AgencyFactor[] = [];
 
@@ -177,6 +179,11 @@ export function evaluateSigningChance(
       value: crossPenalty,
       detail: patriotism >= 70 ? "Lokální patriot, nechce pryč z regionu" : "Nechce se stěhovat do jiného okresu",
     });
+  }
+
+  for (const f of extraFactors) {
+    total += f.value;
+    factors.push(f);
   }
 
   // 7. Náhoda (-10 až +10)

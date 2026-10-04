@@ -231,8 +231,26 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
     logger.error({ module: "staff-tick" }, "staff pool failed", e);
   }
 
+  // ── Hlášení skautů: prošlá a ta, která sebral jiný klub (denně) ──
+  try {
+    const { maintainScoutReports } = await import("../scouting/scout-work");
+    const pushEnv = { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT };
+    await maintainScoutReports(db, pushEnv, now);
+  } catch (e) {
+    logger.error({ module: "staff-tick" }, "údržba hlášení skautů", e);
+  }
+
   // ── Týdenní (pondělí): kurzy + skautův tip ──
   if (dayOfWeek === 1) {
+    // Skauti na úkolech: objedou kluby v okruhu a pošlou hlášení (scouting/scout-work.ts).
+    try {
+      const { runScoutWork } = await import("../scouting/scout-work");
+      const sw = await runScoutWork(env, { gameDate: effectiveDate.toISOString() });
+      result.scoutTips += sw.reports;
+    } catch (e) {
+      logger.error({ module: "staff-tick" }, "práce skautů na úkolech", e);
+    }
+
     // Odpočet týdnů běžících kurzů
     await db.prepare(
       "UPDATE staff_members SET course_weeks_remaining = course_weeks_remaining - 1 WHERE team_id IS NOT NULL AND course_weeks_remaining > 0"
@@ -273,10 +291,12 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
      * jedině tehdy, když by hráč v týmu k něčemu byl — a když v okrese nikdo
      * takový není, skaut MLČÍ.
      */
+    // Skaut na úkolu posílá hlášení z úkolu, pasivní tip z vlastního okresu ten týden nedělá.
     const scouts = await db.prepare(
       `SELECT sm.team_id, v.district, sm.judgement, sm.communication
        FROM staff_members sm JOIN teams t ON sm.team_id = t.id JOIN villages v ON t.village_id = v.id
-       WHERE sm.role = 'skaut' AND sm.team_id IS NOT NULL`
+       WHERE sm.role = 'skaut' AND sm.team_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM scout_assignments sa WHERE sa.team_id = sm.team_id AND sa.status = 'active')`
     ).all<{ team_id: string; district: string; judgement: number; communication: number }>()
       .catch((e) => { logger.warn({ module: "staff-tick" }, "load scouts", e); return { results: [] as never[] }; });
 

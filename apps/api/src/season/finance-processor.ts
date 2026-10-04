@@ -63,6 +63,9 @@ export type TransactionType =
   | "manager_bet_loss"
   | "cup_prize"
   | "staff_wage"
+  // Cestovné skauta na úkolu (scouting/scout-work.ts). Běžný provoz jako mzdy, ne nákup:
+  // skaut, který nemá na benzín, ten týden prostě nejede.
+  | "scout_travel"
   | "staff_signing"
   | "course_fee"
   // Trenérská škola: kurz vlastnosti nebo licence, opravný termín testu. Dobrovolný nákup.

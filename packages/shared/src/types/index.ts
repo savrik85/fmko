@@ -129,3 +129,4 @@ export {
 } from "./match-plan";
 export { marketValue, marketValueAgeFactor, marketValueEstimate, MARKET_VALUE_MIN, MARKET_VALUE_MAX, MAX_TRANSFER_AMOUNT } from "./market-value";
 export * from "./transfer-terms";
+export * from "./scouting";

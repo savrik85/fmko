@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
 import { Spinner, Tabs, useTabParam } from "@/components/ui";
@@ -403,6 +404,12 @@ export default function ZamestnanciPage() {
                           <AttrGrid m={m} role={role} activeCourse={m.courseAttribute} />
 
                           <div className="text-xs text-muted">{def.effectDesc}</div>
+
+                          {role === "skaut" && (
+                            <Link href="/zamestnanci/skaut" className="btn btn-primary btn-sm self-start inline-block">
+                              Úkol a hlášení →
+                            </Link>
+                          )}
 
                           {/* Kurz */}
                           {m.courseAttribute ? (

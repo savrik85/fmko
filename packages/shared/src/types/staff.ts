@@ -149,7 +149,7 @@ export const ROLE_DEFS: Record<StaffRole, StaffRoleDef> = {
     primary: "judgement",
     secondary: "communication",
     group: "scouting",
-    effectDesc: "Vyšší šance zahlédnout hráče soupeře + týdenní tip na talent.",
+    effectDesc: "Jezdí po okolí hledat hráče podle tvého zadání a posílá hlášení. Bez úkolu dá v pondělí tip z okresu. Čím lepší, tím přesněji odhadne potenciál.",
   },
   obsluha: {
     label: "Obsluha občerstvení",

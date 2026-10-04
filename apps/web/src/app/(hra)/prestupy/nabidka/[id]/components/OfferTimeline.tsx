@@ -10,7 +10,8 @@ const FaceAvatar = clientOnly(
 
 export interface OfferEvent {
   id: string;
-  event_type: "offer" | "counter" | "accept" | "reject" | "withdraw" | "expire";
+  // agree / break_off / sign / refuse: jednání s cizím klubem (souhlas klubu, konec jednání, hráč podepsal / odmítl)
+  event_type: "offer" | "counter" | "accept" | "reject" | "withdraw" | "expire" | "agree" | "break_off" | "sign" | "refuse";
   team_id: string;
   team_name: string;
   amount: number | null;
@@ -33,6 +34,10 @@ const icons: Record<OfferEvent["event_type"], string> = {
   reject: "❌",
   withdraw: "↩️",
   expire: "⌛",
+  agree: "🤝",
+  break_off: "🚪",
+  sign: "✍️",
+  refuse: "🙅",
 };
 
 const labels: Record<OfferEvent["event_type"], string> = {
@@ -42,6 +47,10 @@ const labels: Record<OfferEvent["event_type"], string> = {
   reject: "zamítnuto",
   withdraw: "nabídka stažena",
   expire: "vypršelo",
+  agree: "klub souhlasí",
+  break_off: "konec jednání",
+  sign: "podepsal",
+  refuse: "hráč odmítl",
 };
 
 function formatRelative(iso: string): string {

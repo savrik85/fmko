@@ -510,6 +510,24 @@ export default function ConversationPage() {
                               Otevřít rozhovor
                             </Link>
                           )}
+                          {/* Odpověď cizího klubu na nabídku vede na jednání. */}
+                          {msg.metadata?.type === "ai_negotiation" && typeof msg.metadata.negotiationId === "string" && (
+                            <Link
+                              href={`/prestupy/jednani/${encodeURIComponent(msg.metadata.negotiationId)}`}
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                            >
+                              Otevřít jednání
+                            </Link>
+                          )}
+                          {/* Hlášení skauta vede na detail hlášení. */}
+                          {msg.metadata?.type === "scout_report" && typeof msg.metadata.reportId === "string" && (
+                            <Link
+                              href={`/zamestnanci/skaut?hlaseni=${encodeURIComponent(msg.metadata.reportId)}`}
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                            >
+                              Otevřít hlášení
+                            </Link>
+                          )}
                           {/* SMS o incidentu (Kustod, policie, hráč) vede na detail incidentu. */}
                           {msg.metadata?.type === "incident" && typeof msg.metadata.incidentId === "string" && (
                             <Link

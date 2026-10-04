@@ -237,9 +237,20 @@ staffRouter.post("/teams/:teamId/staff/:staffId/fire", async (c) => {
   ).bind(listedUntil, staffId, teamId).run()
     .catch((e) => { logger.error({ module: "staff" }, "fire failed", e); return null; });
   if (!res || (res.meta?.changes ?? 0) === 0) return c.json({ error: "Zaměstnanec nenalezen" }, 404);
+  await endScoutTask(c.env.DB, teamId, staffId);
 
   return c.json({ ok: true });
 });
+
+/** Odchod skauta (propuštění nebo jiná role) ukončí jeho úkol. Hlášení zůstanou, dokud platí. */
+async function endScoutTask(db: D1Database, teamId: string, staffId: string): Promise<void> {
+  await db.prepare(
+    `UPDATE scout_assignments SET status = 'cancelled', end_reason = 'scout_left', revisit_report_id = NULL,
+       closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+     WHERE team_id = ? AND staff_id = ? AND status = 'active'`,
+  ).bind(teamId, staffId).run()
+    .catch((e) => logger.warn({ module: "staff" }, "ukončení úkolu skauta", e));
+}
 
 /** POST /teams/:teamId/staff/:staffId/reassign { role } — přesun na jiný volný slot. */
 staffRouter.post("/teams/:teamId/staff/:staffId/reassign", async (c) => {
@@ -263,6 +274,7 @@ staffRouter.post("/teams/:teamId/staff/:staffId/reassign", async (c) => {
   await c.env.DB.prepare("UPDATE staff_members SET role = ? WHERE id = ? AND team_id = ?")
     .bind(role, staffId, teamId).run()
     .catch((e) => { logger.error({ module: "staff" }, "reassign failed", e); throw e; });
+  if (cur.role === "skaut") await endScoutTask(c.env.DB, teamId, staffId);
   return c.json({ ok: true });
 });
 

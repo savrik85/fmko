@@ -7,7 +7,7 @@
  * dvakrát.
  */
 
-import { sellOnShare, CPU_CLUB_ID } from "@okresni-masina/shared";
+import { sellOnShare, CPU_CLUB_ID, MAX_ACTIVE_INSTALLMENT_DEALS, transferSchedule, type TransferTerms } from "@okresni-masina/shared";
 import { recordTransaction } from "../season/finance-processor";
 import { logger } from "../lib/logger";
 
@@ -124,3 +124,40 @@ export async function lapseSellOnClauses(db: D1Database, playerId: string): Prom
     .bind(new Date().toISOString(), playerId).run()
     .catch((e) => logger.warn({ module: "installments" }, "lapse sell-on clauses", e));
 }
+
+/** Nejvýš MAX_ACTIVE_INSTALLMENT_DEALS rozjetých splátkových přestupů na kupujícího. */
+export async function installmentLimitError(db: D1Database, buyerClubTeamId: string): Promise<string | null> {
+  const active = await db.prepare("SELECT COUNT(*) AS n FROM transfer_installments WHERE buyer_team_id = ? AND status = 'active'")
+    .bind(buyerClubTeamId).first<{ n: number }>();
+  return (active?.n ?? 0) >= MAX_ACTIVE_INSTALLMENT_DEALS
+    ? `Na splátky můžeš mít najednou nejvýš ${MAX_ACTIVE_INSTALLMENT_DEALS} hráče. Nejdřív nějaký dosplať.`
+    : null;
+}
+
+/** Nejvyšší týdenní splátka dohody (poslední doplácí zaokrouhlení). */
+export function weeklyInstallment(t: TransferTerms): number {
+  if (t.installments <= 0) return 0;
+  const s = transferSchedule(t);
+  return Math.max(s.installmentAmount, s.lastInstallment);
+}
+
+/**
+ * Strop splátek: všechny týdenní splátky kupujícího dohromady nesmí přesáhnout jeho pravidelné
+ * týdenní příjmy (stejné číslo jako „Příjmy / týd" ve Financích). `extraWeekly` = nová dohoda.
+ */
+export async function installmentBudgetError(db: D1Database, buyerClubTeamId: string, extraWeekly: number, buyerIsMe = true): Promise<string | null> {
+  if (extraWeekly <= 0) return null;
+  const { weeklyIncomeOf } = await import("../season/weekly-income");
+  const [income, running] = await Promise.all([
+    weeklyIncomeOf(db, buyerClubTeamId),
+    db.prepare("SELECT COALESCE(SUM(installment_amount), 0) AS weekly FROM transfer_installments WHERE buyer_team_id = ? AND status = 'active'")
+      .bind(buyerClubTeamId).first<{ weekly: number }>(),
+  ]);
+  const weekly = (running?.weekly ?? 0) + extraWeekly;
+  if (weekly <= income.total) return null;
+  return buyerIsMe
+    ? `Splátky by byly ${weekly.toLocaleString("cs")} Kč týdně, klub vydělá ${income.total.toLocaleString("cs")} Kč. Zvyš zálohu nebo počet splátek.`
+    // Protistraně bez čísel: kolik kupující vydělá, je jeho věc.
+    : "Kupující by takové splátky neutáhl. Navrhni vyšší zálohu nebo víc splátek.";
+}
+
