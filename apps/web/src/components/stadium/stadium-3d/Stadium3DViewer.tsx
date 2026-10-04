@@ -8,6 +8,9 @@ import type { WeatherType, StadiumMode } from "./constants";
 interface Stadium3DViewerProps {
   open: boolean;
   onClose: () => void;
+  /** Přístavby tribun a náhled zvažované přístavby — putují beze změny do Stadium3D. */
+  standExtensions?: import("./StandExtensions").ExtensionInstance[];
+  extensionPreview?: import("./StandExtensions").ExtensionInstance | null;
   pitchCondition: number;
   pitchType: string;
   facilities: Record<string, number>;

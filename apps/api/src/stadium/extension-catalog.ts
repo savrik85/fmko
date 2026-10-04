@@ -178,7 +178,7 @@ export interface ExtSlotState {
   type: "side" | "corner";
   label: string;
   sides: StandSide[];
-  built: { kind: ExtKind; level: number } | null;
+  built: { kind: ExtKind; label: string; level: number } | null;
   options: ExtOption[];
 }
 
@@ -250,7 +250,9 @@ export function getExtensionSlots(
   return EXT_SLOTS.map((slot) => {
     const def = EXT_SLOT_DEFS[slot];
     const row = built.find((b) => b.slot === slot && (EXT_KINDS as readonly string[]).includes(b.kind));
-    const current = row ? { kind: row.kind as ExtKind, level: Math.max(1, Math.min(3, row.level)) } : null;
+    const current = row
+      ? { kind: row.kind as ExtKind, label: EXT_KIND_LABELS[row.kind as ExtKind], level: Math.max(1, Math.min(3, row.level)) }
+      : null;
     let options: ExtOption[];
     if (!current) {
       options = ALLOWED[slot].map((k) => buildOption(k, slot, 1, 0, sides, ctx));
