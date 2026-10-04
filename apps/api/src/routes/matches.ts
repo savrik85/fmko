@@ -8,7 +8,7 @@ import { requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
-import { STAND_COLUMNS, readStandLevels, type StandSide } from "../stadium/stands-model";
+import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -131,9 +131,9 @@ matchesRouter.get("/teams/:teamId/match-preview/:matchId", async (c) => {
   // Stadium of home team (where the match is played) — efektivní kapacita včetně tribun
   const stadium = await c.env.DB.prepare(
     `SELECT capacity, ${STAND_COLUMNS}, vip_box, pitch_condition, pitch_type, pitch_moisture FROM stadiums WHERE team_id = ?`
-  ).bind(homeId).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string; pitch_moisture: number } & Partial<Record<StandSide, number | null>>>().catch((e) => { logger.warn({ module: "matches" }, "fetch stadium for preview", e); return null; });
+  ).bind(homeId).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string; pitch_moisture: number } & Partial<Record<StandSide | "stand_ext_capacity", number | null>>>().catch((e) => { logger.warn({ module: "matches" }, "fetch stadium for preview", e); return null; });
   const { calculateFacilityEffects: calcFxPreview } = await import("../stadium/stadium-generator");
-  const previewCapacity = stadium ? stadium.capacity + calcFxPreview({ ...readStandLevels(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus : 0;
+  const previewCapacity = stadium ? stadium.capacity + calcFxPreview({ ...standFacilities(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus : 0;
 
   // Weather forecast
   const { forecastForMatch } = await import("../season/season-weather");

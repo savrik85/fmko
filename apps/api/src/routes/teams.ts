@@ -30,7 +30,7 @@ import { FIRSTNAMES } from "../data/czech-names";
 import { deriveLicenceLevel, type ManagerBackstory } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { updateSessionTeamId } from "../auth/session";
-import { STAND_COLUMNS, readStandLevels, type StandSide } from "../stadium/stands-model";
+import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -917,12 +917,12 @@ teamsRouter.get("/:id", async (c) => {
 
   const stadium = await c.env.DB.prepare(
     `SELECT capacity, ${STAND_COLUMNS}, vip_box, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1`
-  ).bind(c.req.param("id")).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string } & Partial<Record<StandSide, number | null>>>().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
+  ).bind(c.req.param("id")).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string } & Partial<Record<StandSide | "stand_ext_capacity", number | null>>>().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
   const { calculateFacilityEffects: calcFxTeam } = await import("../stadium/stadium-generator");
 
   return c.json({
     ...team,
-    stadium: stadium ? { name: team.stadium_name, capacity: stadium.capacity + calcFxTeam({ ...readStandLevels(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus, pitchCondition: stadium.pitch_condition, pitchType: stadium.pitch_type } : null,
+    stadium: stadium ? { name: team.stadium_name, capacity: stadium.capacity + calcFxTeam({ ...standFacilities(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus, pitchCondition: stadium.pitch_condition, pitchType: stadium.pitch_type } : null,
   });
 });
 
@@ -1433,10 +1433,10 @@ teamsRouter.get("/:id/club", async (c) => {
 
   const stadium = await c.env.DB.prepare(
     `SELECT capacity, ${STAND_COLUMNS}, vip_box, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1`
-  ).bind(teamId).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string } & Partial<Record<StandSide, number | null>>>()
+  ).bind(teamId).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string } & Partial<Record<StandSide | "stand_ext_capacity", number | null>>>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch stadium for /club", e); return null; });
   const { calculateFacilityEffects: calcFxClub } = await import("../stadium/stadium-generator");
-  const clubCapacity = stadium ? stadium.capacity + calcFxClub({ ...readStandLevels(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus : null;
+  const clubCapacity = stadium ? stadium.capacity + calcFxClub({ ...standFacilities(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus : null;
 
   // Hlavní sponzor — spravuje se přes /sponzori, ne v /klub/dres
   const mainSponsor = await c.env.DB.prepare(
@@ -3181,14 +3181,14 @@ teamsRouter.get("/:id/fanbase", async (c) => {
     `SELECT capacity, ${STAND_COLUMNS}, vip_box FROM stadiums WHERE team_id = ?`,
   )
     .bind(teamId)
-    .first<{ capacity: number; vip_box: number | null } & Partial<Record<StandSide, number | null>>>()
+    .first<{ capacity: number; vip_box: number | null } & Partial<Record<StandSide | "stand_ext_capacity", number | null>>>()
     .catch((e) => {
       logger.warn({ module: "teams" }, "load stadium capacity", e);
       return null;
     });
   const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
   const capacity = (stadiumRow?.capacity ?? 200)
-    + calculateFacilityEffects({ ...readStandLevels(stadiumRow), vip_box: stadiumRow?.vip_box ?? 0 }).capacityBonus;
+    + calculateFacilityEffects({ ...standFacilities(stadiumRow), vip_box: stadiumRow?.vip_box ?? 0 }).capacityBonus;
 
   const satelliteRows = await c.env.DB.prepare(
     `SELECT bsf.village_id, v.name, v.population, v.lat, v.lng,

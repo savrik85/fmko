@@ -332,3 +332,25 @@ describe("tribuny po stranách v generátoru", () => {
     expect(o.find((x) => x.facility === "roof")!.locked).toBe(false);
   });
 });
+
+describe("kapacita přístaveb tribun", () => {
+  it("přístavby se přičtou k tribunám", () => {
+    const fx = calculateFacilityEffects({
+      stand_main: 2, stand_opposite: 2, stand_goal_west: 2, stand_goal_east: 2, stand_ext_capacity: 130,
+    });
+    expect(fx.capacityBonus).toBe(290 + 130);
+  });
+
+  it("bez sloupce přístaveb se nic nepřičítá", () => {
+    expect(calculateFacilityEffects({ stand_main: 3, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 0 }).capacityBonus).toBe(170);
+  });
+
+  it("záporná nebo nečíselná hodnota se bere jako nula", () => {
+    expect(calculateFacilityEffects({ stands: 0, stand_ext_capacity: -50 }).capacityBonus).toBe(0);
+  });
+
+  it("přístavba sama o sobě lóži neodemyká (ta chce postavenou tribunu)", () => {
+    const fx = calculateFacilityEffects({ stand_ext_capacity: 40, vip_box: 2 });
+    expect(fx.vipBoxEffectiveLevel).toBe(0);
+  });
+});

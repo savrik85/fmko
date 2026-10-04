@@ -15,7 +15,7 @@ const zdroj = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 describe("VIP lóže je zapojená", () => {
   for (const soubor of ["routes/matches.ts", "routes/teams.ts"]) {
     it(`${soubor}: každý výpočet kapacity z tribun zná i lóži`, () => {
-      const volani = [...zdroj(soubor).matchAll(/\(\{\s*(?:stands:|\.\.\.readStandLevels)[^}]*\}\)/g)].map((m) => m[0]);
+      const volani = [...zdroj(soubor).matchAll(/\(\{\s*(?:stands:|\.\.\.(?:readStandLevels|standFacilities))[^}]*\}\)/g)].map((m) => m[0]);
       expect(volani.length).toBeGreaterThan(0);
       expect(volani.filter((v) => !v.includes("vip_box"))).toEqual([]);
     });

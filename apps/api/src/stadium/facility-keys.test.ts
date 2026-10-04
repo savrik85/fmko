@@ -30,6 +30,9 @@ const MISTA = [
  */
 const ULTRAS = "src/news/ultras-report.ts";
 
+/** Sloupce `stadiums`, které se čtou s úrovněmi zařízení, ale zařízení nejsou. */
+const ODVOZENE_SLOUPCE = ["stand_ext_capacity"];
+
 /**
  * Frontend má vlastní mapy popisků a ikon: stránka stadionu je samostatná
  * aplikace a katalog z API si netahá. Chybějící klíč tam není tichý, je
@@ -117,7 +120,8 @@ describe("klíče zařízení jsou všude, kde se čtou", () => {
     expect(pouzite.length).toBeGreaterThan(0);
     for (const k of pouzite) {
       expect(s, `${k} je v FACILITY_KEYS, ale chybí v SELECTu`).toContain(`s.${k}`);
-      expect(klice, `${k} není známé zařízení`).toContain(k);
+      // Odvozené sloupce stadionu nejsou zařízení (nemají popisek ani úrovně), ale čtou se stejně.
+      if (!ODVOZENE_SLOUPCE.includes(k)) expect(klice, `${k} není známé zařízení`).toContain(k);
     }
   });
 });

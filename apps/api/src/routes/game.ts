@@ -1594,6 +1594,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     stand_opposite: stadium.stand_opposite as number ?? 0,
     stand_goal_west: stadium.stand_goal_west as number ?? 0,
     stand_goal_east: stadium.stand_goal_east as number ?? 0,
+    stand_ext_capacity: stadium.stand_ext_capacity as number ?? 0,
     roof: stadium.roof as number ?? 0,
     ultras_stand: stadium.ultras_stand as number ?? 0,
     toilets: stadium.toilets as number ?? 0,
@@ -1773,6 +1774,25 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
       mustSeason(currentSeason?.number),
       ignoreProgressLocks,
     ),
+    standExtensions: await (async () => {
+      const { loadExtensions } = await import("../stadium/extensions-db");
+      const { getExtensionSlots } = await import("../stadium/extension-catalog");
+      const { readStandLevels } = await import("../stadium/stands-model");
+      // Tabulka přístaveb vzniká migrací 0240; bez ní se jen nic nenabídne, stadion se načte dál.
+      const rows = await loadExtensions(c.env.DB, teamId).catch((e) => {
+        logger.warn({ module: "game", teamId }, "načtení přístaveb tribun", e);
+        return [];
+      });
+      return {
+        capacity: (stadium.stand_ext_capacity as number) ?? 0,
+        slots: getExtensionSlots(readStandLevels(stadium), rows, {
+          reputation: teamInfo?.reputation ?? 0,
+          matchesPlayed: matchCount?.cnt ?? 0,
+          season: mustSeason(currentSeason?.number),
+          ignoreProgressLocks,
+        }),
+      };
+    })(),
     pitchActions,
     pitchUpgrades,
     // Sektory: kde stojí kotel a co je zavřené. 3D scéna podle toho nechá
@@ -1949,6 +1969,7 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     stand_opposite: stadium.stand_opposite as number ?? 0,
     stand_goal_west: stadium.stand_goal_west as number ?? 0,
     stand_goal_east: stadium.stand_goal_east as number ?? 0,
+    stand_ext_capacity: stadium.stand_ext_capacity as number ?? 0,
     roof: stadium.roof as number ?? 0,
     ultras_stand: stadium.ultras_stand as number ?? 0,
     toilets: stadium.toilets as number ?? 0,
@@ -2013,6 +2034,57 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   // nepřičítalo nic — tři různé kapacity podle cesty upgradu.
 
   return c.json({ ok: true, cost: upgrade.cost, newLevel: upgrade.nextLevel });
+});
+
+// POST /api/teams/:id/stadium/extension — postaví přístavbu tribuny do místa, nebo ji vylepší
+gameRouter.post("/teams/:teamId/stadium/extension", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ slot?: string; kind?: string }>();
+  const { EXT_SLOTS, allowedKinds, getExtensionSlots } = await import("../stadium/extension-catalog");
+  const { loadExtensions, buildExtension } = await import("../stadium/extensions-db");
+  const { readStandLevels } = await import("../stadium/stands-model");
+
+  if (!body.slot || !(EXT_SLOTS as readonly string[]).includes(body.slot)) return c.json({ error: "Neznámé místo pro přístavbu" }, 400);
+  if (!body.kind || !allowedKinds(body.slot).includes(body.kind as never)) return c.json({ error: "Tuhle přístavbu sem nejde postavit" }, 400);
+
+  const stadium = await c.env.DB.prepare("SELECT * FROM stadiums WHERE team_id = ?").bind(teamId).first<Record<string, unknown>>();
+  if (!stadium) return c.json({ error: "Stadium not found" }, 404);
+  const team = await c.env.DB.prepare("SELECT budget, reputation FROM teams WHERE id = ?")
+    .bind(teamId).first<{ budget: number; reputation: number }>();
+  if (!team) return c.json({ error: "Team not found" }, 404);
+
+  const matchCount = await c.env.DB.prepare(
+    "SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'"
+  ).bind(teamId, teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "count matches for extension", e); return null; });
+  const seasonRow = await c.env.DB.prepare(
+    "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
+  ).first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for extension", e); return null; });
+
+  const rows = await loadExtensions(c.env.DB, teamId);
+  const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url, c.req.header("origin"));
+  const slotState = getExtensionSlots(readStandLevels(stadium), rows, {
+    reputation: team.reputation,
+    matchesPlayed: matchCount?.cnt ?? 0,
+    season: mustSeason(seasonRow?.number),
+    ignoreProgressLocks,
+  }).find((s) => s.slot === body.slot);
+  const option = slotState?.options.find((o) => o.kind === body.kind);
+  if (!slotState || !option) return c.json({ error: "Tuhle přístavbu sem nejde postavit ani vylepšit" }, 400);
+  if (option.locked) return c.json({ error: option.lockReason ?? "Zamčeno" }, 400);
+  if (team.budget < option.cost) return c.json({ error: "Nedostatek peněz" }, 400);
+
+  // Zámek proti dvojímu odeslání: kdo prohraje, nezapíše nic a peníze se nestrhnou.
+  if (!(await buildExtension(c.env.DB, teamId, body.slot, body.kind, slotState.built?.level ?? 0))) {
+    return c.json({ error: "Stavba už probíhá, načti stránku znovu" }, 409);
+  }
+  try {
+    await recordTransaction(c.env.DB, teamId, "stadium_upgrade", -option.cost,
+      `Přístavba tribuny: ${option.label}, úroveň ${option.level}`, new Date().toISOString());
+  } catch (e) {
+    // Přístavba už stojí. Bez záznamu by klub dostal stavbu zadarmo a nikdo by se to nedozvěděl.
+    logger.error({ module: "game", teamId }, `přístavba ${body.slot}/${body.kind}: zapsána, ale strhnutí ${option.cost} Kč selhalo`, e);
+  }
+  return c.json({ ok: true, cost: option.cost, level: option.level, capacityGain: option.capacityGain });
 });
 
 // PATCH /api/teams/:id/stadium/customize — set color (zdarma)

@@ -514,6 +514,12 @@ export interface StadiumFacilityEffects {
   vipBoxEffectiveLevel: number;
 }
 
+/** Kapacita přístaveb tribun z řádku stadionu; záporné a nečíselné hodnoty jsou nula. */
+function extCapacityOf(facilities: Record<string, number>): number {
+  const v = facilities.stand_ext_capacity;
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0;
+}
+
 export function calculateFacilityEffects(facilities: Record<string, number>): StadiumFacilityEffects {
   const cr = facilities.changing_rooms ?? 0;
   const sh = facilities.showers ?? 0;
@@ -549,7 +555,8 @@ export function calculateFacilityEffects(facilities: Record<string, number>): St
     // Kapacitu mění tribuny (přidávají) a VIP lóže (bere místa platícím).
     // Základ má každý klub stejný. Lóže odečtená tady platí všude, kde se
     // kapacita čte: zápas, pohár, stránka stadionu i rubrika kotle.
-    capacityBonus: standsCapacity(sides) - SKALY.vip_box.seatsLost[vb],
+    // Přístavby tribun drží součet kapacity ve sloupci `stand_ext_capacity` (extensions-db.ts).
+    capacityBonus: standsCapacity(sides) + extCapacityOf(facilities) - SKALY.vip_box.seatsLost[vb],
     ticketPriceBonus: SKALY.fence.price[fe] ?? 0,
     fencePayingRatio: SKALY.fence.paying[fe] ?? 0.3,
     weatherAttendanceShield: SKALY.roof.shield[ro] ?? 0,

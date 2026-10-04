@@ -16,7 +16,7 @@ export const STAND_SIDES = [
 ] as const;
 export type StandSide = (typeof STAND_SIDES)[number];
 /** Sloupce stran do SQL SELECTu. */
-export const STAND_COLUMNS = STAND_SIDES.join(", ");
+export const STAND_COLUMNS = `${STAND_SIDES.join(", ")}, stand_ext_capacity`;
 export type StandLevels = Record<StandSide, number>;
 
 export const STAND_SIDE_LABELS: Record<StandSide, string> = {
@@ -55,6 +55,17 @@ export function readStandLevels(f: Record<string, unknown> | null | undefined): 
     stand_goal_west: clampLevel(f?.stand_goal_west),
     stand_goal_east: clampLevel(f?.stand_goal_east),
   };
+}
+
+/**
+ * Tribuny z řádku `stadiums` ve tvaru, který bere `calculateFacilityEffects`:
+ * úrovně čtyř stran a kapacita přístaveb. Chybějící řádek je prázdný stadion.
+ */
+export function standFacilities(
+  f: Record<string, unknown> | null | undefined,
+): StandLevels & { stand_ext_capacity: number } {
+  const ext = f?.stand_ext_capacity;
+  return { ...readStandLevels(f), stand_ext_capacity: typeof ext === "number" && Number.isFinite(ext) ? Math.max(0, Math.round(ext)) : 0 };
 }
 
 /** Starý model: jedna úroveň platí pro všechny čtyři strany. */

@@ -38,7 +38,7 @@ interface HomeMatch {
   secondaryColor: string;
 }
 
-const FACILITY_KEYS = ["changing_rooms", "showers", "refreshments", "stands", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east", "parking", "fence", "roof", "ultras_stand", "toilets", "security", "cage", "vip_box"];
+const FACILITY_KEYS = ["changing_rooms", "showers", "refreshments", "stands", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east", "stand_ext_capacity", "parking", "fence", "roof", "ultras_stand", "toilets", "security", "cage", "vip_box"];
 
 function isLightHex(hex: string): boolean {
   const c = hex.replace("#", "");
@@ -163,7 +163,7 @@ export async function generateUltrasReport(
       `SELECT m.home_team_id, m.home_score, m.away_score, m.attendance, m.weather,
               t1.name AS home_name, t2.name AS away_name,
               t1.primary_color AS home_primary, t1.secondary_color AS home_secondary,
-              s.capacity, s.changing_rooms, s.showers, s.refreshments, s.stands, s.stand_main, s.stand_opposite, s.stand_goal_west, s.stand_goal_east, s.parking, s.fence, s.roof, s.ultras_stand, s.toilets, s.security, s.cage, s.vip_box,
+              s.capacity, s.changing_rooms, s.showers, s.refreshments, s.stands, s.stand_main, s.stand_opposite, s.stand_goal_west, s.stand_goal_east, s.stand_ext_capacity, s.parking, s.fence, s.roof, s.ultras_stand, s.toilets, s.security, s.cage, s.vip_box,
               s.ultras_text, s.ultras_banner_color, s.ultras_text_color,
               m.fan_incidents
        FROM matches m
