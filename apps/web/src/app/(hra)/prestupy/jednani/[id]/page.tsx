@@ -125,9 +125,11 @@ export default function AiNegotiationPage() {
     budget: null, reputation: null, is_virtual: true, city: n.clubCity,
   };
 
+  // První návrh kupujícího je úvodní nabídka, každý další jeho protinávrh.
+  const firstBuyerOffer = events.find((e) => e.actor === "buyer" && e.event_type === "offer")?.id;
   const timeline: OfferEvent[] = events.map((e) => ({
     id: e.id,
-    event_type: e.event_type,
+    event_type: e.actor === "buyer" && e.event_type === "offer" && e.id !== firstBuyerOffer ? "counter" : e.event_type,
     team_id: e.actor === "buyer" ? (myTeam?.id ?? "me") : e.actor,
     team_name: e.actor === "buyer" ? (myTeam?.name ?? "My") : e.actor === "club" ? n.clubName : playerName,
     amount: e.amount, message: e.message, created_at: e.created_at,
@@ -136,7 +138,7 @@ export default function AiNegotiationPage() {
 
   const sign = async () => {
     const ok = await confirm({
-      title: `Podepsat ${playerName}?`,
+      title: `Podpis: ${playerName}`,
       description: `${formatTermsSummary(n.terms)}. Teď se rozhodne hráč. Když odmítne, nic neplatíš.`,
       confirmLabel: "Podepsat",
     });
@@ -147,6 +149,8 @@ export default function AiNegotiationPage() {
       "Podpis se nezdařil",
     );
     const r = out.res;
+    // Stránka se obnoví hned, výsledek se ukáže až nad aktuálním stavem.
+    await refresh();
     if (done && r) {
       if (r.signed) {
         await confirm({ title: `${playerName} podepsal!`, description: "Hráč je v kádru. Najdeš ho v sestavě.", confirmLabel: "Paráda" });
@@ -154,7 +158,6 @@ export default function AiNegotiationPage() {
         await confirm({ title: `${playerName} odmítl`, description: r.explanation, confirmLabel: "Škoda" });
       }
     }
-    await refresh();
   };
 
   const withdraw = async () => {
