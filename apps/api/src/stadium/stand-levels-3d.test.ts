@@ -87,3 +87,23 @@ describe("replacedSides (točená tribuna a val nahrazují rovnou tribunu, nesto
     expect(replacedSides([], { slot: "ext_goal_east", kind: "terrace" }).has("north")).toBe(true);
   });
 });
+
+describe("joinedEnds u rohové tribuny (zahnutá i klín navazují na obě sousední tribuny)", () => {
+  it("roh severovýchod spojí konec tribuny na severu (vpravo) a na východě (vlevo)", () => {
+    const e = [{ slot: "corner_main_goal_east", kind: "curved_corner" }];
+    expect(joinedEnds("north", e)).toEqual({ left: false, right: true });
+    expect(joinedEnds("east", e)).toEqual({ left: true, right: false });
+    expect(joinedEnds("south", e)).toEqual({ left: false, right: false });
+    expect(joinedEnds("west", e)).toEqual({ left: false, right: false });
+  });
+
+  it("roh jihozápad spojí jih (vpravo, jih je otočený) a západ (vlevo)", () => {
+    const e = [{ slot: "corner_opposite_goal_west", kind: "corner" }];
+    expect(joinedEnds("south", e)).toEqual({ left: false, right: true });
+    expect(joinedEnds("west", e)).toEqual({ left: true, right: false });
+  });
+
+  it("most a mobilní kus v rohu konce tribun nespojují", () => {
+    expect(joinedEnds("north", [{ slot: "corner_main_goal_east", kind: "bridge" }])).toEqual({ left: false, right: false });
+  });
+});

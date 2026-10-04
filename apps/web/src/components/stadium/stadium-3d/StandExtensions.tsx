@@ -88,48 +88,26 @@ function Flag({ color, height }: { color: string; height: number }) {
   );
 }
 
-/** Výseč mezikruží vycentrovaná na lokální +Z, střed oblouku je v počátku. */
-function Sector({ rIn, rOut, angle, height, color }: { rIn: number; rOut: number; angle: number; height: number; color: string }) {
-  const geometry = useMemo(() => {
-    const shape = new THREE.Shape();
-    shape.absarc(0, 0, rOut, -angle / 2, angle / 2, false);
-    shape.absarc(0, 0, rIn, angle / 2, -angle / 2, true);
-    shape.closePath();
-    const g = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 20 });
-    g.rotateX(-Math.PI / 2);
-    return g;
-  }, [rIn, rOut, angle, height]);
-  return (
-    <mesh geometry={geometry} rotation={[0, -Math.PI / 2, 0]} castShadow receiveShadow>
-      <meshStandardMaterial color={color} roughness={0.92} />
-    </mesh>
-  );
+/** Poloměr vnitřního okraje točené tribuny (m): velký, aby byl oblouk mělký. */
+const ROUND_RIN = 70;
+
+/** Vzdálenost, o kterou se vnitřní okraj točené tribuny na koncích přiblíží k hřišti. */
+export function roundStandSag(hw: number): number {
+  return ROUND_RIN - Math.sqrt(ROUND_RIN * ROUND_RIN - hw * hw);
+}
+
+function extrudeFlat(shape: THREE.Shape, height: number) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 24 });
+  g.rotateX(-Math.PI / 2);
+  return g;
 }
 
 const hash = (i: number) => ((Math.imul(i + 1, 2654435761) >>> 0) % 10007) / 10007;
 
-/**
- * Oblouková tribuna: betonové stupně po kruzích, sedačky a diváci rozmístění po oblouku
- * čelem ke středu. Střed oblouku je v počátku, oblouk se rozbíhá kolem lokálního +Z.
- */
-function ArcStand({ rIn, rows, angle, rowW = 1.5, rise = 0.55, c }: {
-  rIn: number; rows: number; angle: number; rowW?: number; rise?: number; c: Common;
-}) {
+/** Stupně, sedačky a diváci rozmístění po bodech `seats` (poloha a natočení čelem ke středu). */
+function SeatsAndCrowd({ seats, c }: { seats: Array<{ x: number; y: number; z: number; th: number }>; c: Common }) {
   const seatRef = useRef<THREE.InstancedMesh>(null);
   const crowdRef = useRef<THREE.InstancedMesh>(null);
-  const seats = useMemo(() => {
-    const out: Array<{ x: number; y: number; z: number; th: number }> = [];
-    for (let i = 0; i < rows; i++) {
-      const r = rIn + (i + 0.5) * rowW;
-      const n = Math.max(2, Math.floor((r * angle) / 0.85));
-      for (let k = 0; k < n; k++) {
-        const th = -angle / 2 + ((k + 0.5) * angle) / n;
-        out.push({ x: r * Math.sin(th), y: (i + 1) * rise + 0.06, z: r * Math.cos(th), th });
-      }
-    }
-    return out;
-  }, [rIn, rows, angle, rowW, rise]);
-
   useLayoutEffect(() => {
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -154,12 +132,8 @@ function ArcStand({ rIn, rows, angle, rowW = 1.5, rise = 0.55, c }: {
       if (crowdRef.current.instanceColor) crowdRef.current.instanceColor.needsUpdate = true;
     }
   }, [seats, c.mode, c.attendanceRatio, c.teamColor, c.secondaryColor]);
-
   return (
-    <group>
-      {Array.from({ length: rows }).map((_, i) => (
-        <Sector key={i} rIn={rIn + i * rowW} rOut={rIn + (i + 1) * rowW} angle={angle} height={(i + 1) * rise} color={c.standColor} />
-      ))}
+    <>
       <instancedMesh ref={seatRef} args={[undefined, undefined, seats.length]} castShadow>
         <boxGeometry args={[0.55, 0.08, 0.45]} />
         <meshStandardMaterial color={c.seatColor} roughness={0.5} />
@@ -168,6 +142,111 @@ function ArcStand({ rIn, rows, angle, rowW = 1.5, rise = 0.55, c }: {
         <boxGeometry args={[0.36, 0.7, 0.3]} />
         <meshStandardMaterial roughness={0.8} />
       </instancedMesh>
+    </>
+  );
+}
+
+/**
+ * Točená tribuna: oblouk se středem na straně hřiště, stupně stoupají od hřiště. Konce jsou
+ * řezané rovinami x = ±hw (stejně jako rovná tribuna za brankou), takže přesně navazují na rohy.
+ * Lokálně z = 0 je vnitřní okraj uprostřed, stupně stoupají do +z.
+ */
+function RoundStand({ rows, depth, height, hw, c }: { rows: number; depth: number; height: number; hw: number; c: Common }) {
+  const rowW = depth / rows;
+  const rise = height / rows;
+  const geoms = useMemo(() => {
+    return Array.from({ length: rows }).map((_, i) => {
+      const rIn = ROUND_RIN + i * rowW;
+      const rOut = rIn + rowW;
+      const aIn = Math.asin(Math.min(0.99, hw / rIn));
+      const aOut = Math.asin(Math.min(0.99, hw / rOut));
+      // Tvar v rovině XY (y = -z po otočení): vnější oblouk, příčka, vnitřní oblouk zpět.
+      const shape = new THREE.Shape();
+      shape.moveTo(rOut * Math.sin(-aOut), -rOut * Math.cos(aOut));
+      shape.absarc(0, 0, rOut, -Math.PI / 2 - aOut, -Math.PI / 2 + aOut, false);
+      shape.lineTo(rIn * Math.sin(aIn), -rIn * Math.cos(aIn));
+      shape.absarc(0, 0, rIn, -Math.PI / 2 + aIn, -Math.PI / 2 - aIn, true);
+      shape.closePath();
+      return extrudeFlat(shape, (i + 1) * rise);
+    });
+  }, [rows, rowW, rise, hw]);
+  const seats = useMemo(() => {
+    const out: Array<{ x: number; y: number; z: number; th: number }> = [];
+    for (let i = 0; i < rows; i++) {
+      const r = ROUND_RIN + (i + 0.5) * rowW;
+      const half = Math.asin(Math.min(0.99, hw / r));
+      const n = Math.max(2, Math.floor((2 * hw) / 0.85));
+      for (let k = 0; k < n; k++) {
+        const th = -half + ((k + 0.5) * 2 * half) / n;
+        out.push({ x: r * Math.sin(th), y: (i + 1) * rise + 0.06, z: r * Math.cos(th) - ROUND_RIN, th });
+      }
+    }
+    return out;
+  }, [rows, rowW, rise, hw]);
+  return (
+    <group>
+      {/* Střed oblouku je ROUND_RIN před tribunou, na straně hřiště (z = -ROUND_RIN). */}
+      <group position={[0, 0, -ROUND_RIN]}>
+        {geoms.map((g, i) => (
+          <mesh key={i} geometry={g} castShadow receiveShadow>
+            <meshStandardMaterial color={c.standColor} roughness={0.92} />
+          </mesh>
+        ))}
+      </group>
+      <SeatsAndCrowd seats={seats} c={c} />
+    </group>
+  );
+}
+
+/**
+ * Zahnutá rohová tribuna: čtvrtina elipsy se středem v rohu hřiště, jejíž vnitřní okraj vede přesně
+ * z předního rohu konce tribuny za brankou (v bodě 0, b) do předního rohu konce tribuny na dlouhé
+ * straně (v bodě a, 0). Koncové plochy leží v rovinách tribun, takže navazuje bez mezery a překryvu.
+ * Lokální osy: u po jedné, v po druhé straně rohu (do kvadrantu +u, +v).
+ */
+function CornerBowl({ a, b, rows, depth, height, c }: { a: number; b: number; rows: number; depth: number; height: number; c: Common }) {
+  const rowW = depth / rows;
+  const rise = height / rows;
+  const geoms = useMemo(() => {
+    return Array.from({ length: rows }).map((_, i) => {
+      const aIn = a + i * rowW;
+      const bIn = b + i * rowW;
+      const aOut = aIn + rowW;
+      const bOut = bIn + rowW;
+      // y = -v, protože se po otočení kolem X změní na +z.
+      const shape = new THREE.Shape();
+      shape.moveTo(aOut, 0);
+      shape.absellipse(0, 0, aOut, bOut, 0, -Math.PI / 2, true, 0);
+      shape.lineTo(0, -bIn);
+      shape.absellipse(0, 0, aIn, bIn, -Math.PI / 2, 0, false, 0);
+      shape.closePath();
+      return extrudeFlat(shape, (i + 1) * rise);
+    });
+  }, [a, b, rows, rowW, rise]);
+  const seats = useMemo(() => {
+    const out: Array<{ x: number; y: number; z: number; th: number }> = [];
+    for (let i = 0; i < rows; i++) {
+      const am = a + (i + 0.5) * rowW;
+      const bm = b + (i + 0.5) * rowW;
+      const n = Math.max(2, Math.floor(((am + bm) / 2) * (Math.PI / 2) / 0.85));
+      for (let k = 0; k < n; k++) {
+        const phi = ((k + 0.5) * (Math.PI / 2)) / n;
+        // Vnější normála elipsy; sedačka míří opačně, tedy ke středu. th = úhel od +z k +x.
+        const nu = Math.cos(phi) / am;
+        const nv = Math.sin(phi) / bm;
+        out.push({ x: am * Math.cos(phi), y: (i + 1) * rise + 0.06, z: bm * Math.sin(phi), th: Math.atan2(nu, nv) });
+      }
+    }
+    return out;
+  }, [a, b, rows, rowW, rise]);
+  return (
+    <group>
+      {geoms.map((g, i) => (
+        <mesh key={i} geometry={g} castShadow receiveShadow>
+          <meshStandardMaterial color={c.standColor} roughness={0.92} />
+        </mesh>
+      ))}
+      <SeatsAndCrowd seats={seats} c={c} />
     </group>
   );
 }
@@ -270,17 +349,14 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
     }
     case "round_stand": {
       // Točená tribuna je oblouková podoba tribuny za brankou (rovná tribuna na té straně se
-      // nekreslí). Stupně stoupají od hřiště stejně jako u rovné tribuny, vyšší úroveň přidá řady.
+      // nekreslí). Je stejně široká jako rovná, vyšší úroveň přidá řady a hloubku.
       const bd = dimsOf(Math.max(1, standLevel));
       const rows = Math.max(3, bd.rows) + l;
-      const depth = bd.depth + 0.4 * l;
-      const rIn = 70;
-      const hw = Math.min(length * 0.46, 18);
-      const angle = 2 * Math.asin(Math.min(0.95, hw / (rIn + depth)));
       return (
-        <group position={[0, 0, -rIn]}>
-          <ArcStand rIn={rIn} rows={rows} angle={angle} rowW={depth / rows} rise={(bd.height * (1 + 0.1 * l)) / rows} c={c} />
-        </group>
+        <RoundStand
+          rows={rows} depth={bd.depth + 0.4 * l} height={bd.height * (1 + 0.1 * l)}
+          hw={Math.min(length / 2, 20)} c={c}
+        />
       );
     }
     case "mobile": {
@@ -305,7 +381,7 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
  * na dlouhé straně (P_e). Zahnutá tribuna je čtvrtkruh se středem v rohu hřiště, jehož poloměr
  * sedí na oba body, rohová tribuna je přímý klín mezi nimi, most spojuje obě tribuny nad mezerou.
  */
-function CornerKind({ kind, level, sx, sz, sideLevels, c }: { kind: string; level: number; sx: number; sz: number; sideLevels: SideLevels; c: Common }) {
+function CornerKind({ kind, level, sx, sz, sideLevels, rounds, c }: { kind: string; level: number; sx: number; sz: number; sideLevels: SideLevels; rounds: Set<SceneSide>; c: Common }) {
   const l = lv(level);
   const ex = PITCH.width / 2;
   const ez = PITCH.depth / 2;
@@ -330,10 +406,22 @@ function CornerKind({ kind, level, sx, sz, sideLevels, c }: { kind: string; leve
       );
     }
     case "curved_corner": {
-      const rows = 2 * l;
+      // Čtvrtina elipsy od předního rohu konce tribuny za brankou k přednímu rohu konce tribuny na
+      // dlouhé straně. Je stejně vysoká a hluboká jako sousední tribuny, takže na ně přesně navazuje.
+      const bdN = dimsOf(Math.max(1, sideLevels[goalSide]));
+      const bdE = dimsOf(Math.max(1, sideLevels[longSide]));
+      const sag = rounds.has(goalSide) ? roundStandSag(Math.min(ex, 20)) : 0;
+      const frontGoal = Math.max(1, STAND_GAP + bdN.depth / 2 - sag);
+      const frontLong = STAND_GAP + bdE.depth / 2;
+      const ry = sx > 0 ? (sz > 0 ? 0 : Math.PI / 2) : sz < 0 ? Math.PI : -Math.PI / 2;
+      const swap = Math.abs(ry) === Math.PI / 2;
       return (
-        <group position={[sx * ex, 0, sz * ez]} rotation={[0, diag, 0]}>
-          <ArcStand rIn={(rN + rE) / 2} rows={rows} angle={Math.PI / 2} rowW={1.2} rise={0.55} c={c} />
+        <group position={[sx * ex, 0, sz * ez]} rotation={[0, ry, 0]}>
+          <CornerBowl
+            a={swap ? frontGoal : frontLong} b={swap ? frontLong : frontGoal}
+            rows={Math.max(3, Math.round((bdN.rows + bdE.rows) / 2))}
+            depth={(bdN.depth + bdE.depth) / 2} height={(bdN.height + bdE.height) / 2} c={c}
+          />
         </group>
       );
     }
@@ -415,7 +503,7 @@ function GhostWrap({ ghost, accent, children }: { ghost: boolean; accent: string
   return <group ref={ref}>{children}</group>;
 }
 
-function One({ item, sideLevels, c }: { item: ExtensionInstance; sideLevels: SideLevels; c: Common }) {
+function One({ item, sideLevels, rounds, c }: { item: ExtensionInstance; sideLevels: SideLevels; rounds: Set<SceneSide>; c: Common }) {
   const side = SIDE_SLOT[item.slot];
   if (side) {
     const standLevel = sideLevels[side];
@@ -428,7 +516,7 @@ function One({ item, sideLevels, c }: { item: ExtensionInstance; sideLevels: Sid
   }
   const corner = CORNER_SLOT[item.slot];
   if (corner) {
-    return <CornerKind kind={item.kind} level={item.level} sx={corner[0]} sz={corner[1]} sideLevels={sideLevels} c={c} />;
+    return <CornerKind kind={item.kind} level={item.level} sx={corner[0]} sz={corner[1]} sideLevels={sideLevels} rounds={rounds} c={c} />;
   }
   return null;
 }
@@ -456,14 +544,20 @@ export function StandExtensions({
   const c: Common = { standColor, seatColor, accentColor, teamColor, secondaryColor, mode, attendanceRatio, reducedDetail, isSnow };
   // Náhled nahrazuje stávající přístavbu ve stejném místě (vylepšení se ukáže na nové úrovni).
   const shown = extensions.filter((e) => !preview || e.slot !== preview.slot);
+  // Strany, kde je místo rovné tribuny točená (rohy na ně musí navázat).
+  const rounds = new Set<SceneSide>();
+  for (const e of [...shown, ...(preview ? [preview] : [])]) {
+    const side = SIDE_SLOT[e.slot];
+    if (side && e.kind === "round_stand") rounds.add(side);
+  }
   return (
     <group>
       {shown.map((e) => (
-        <One key={`${e.slot}-${e.kind}-${e.level}`} item={e} sideLevels={sideLevels} c={c} />
+        <One key={`${e.slot}-${e.kind}-${e.level}`} item={e} sideLevels={sideLevels} rounds={rounds} c={c} />
       ))}
       {preview && (
         <GhostWrap key={`preview-${preview.slot}-${preview.kind}-${preview.level}`} ghost accent={accentColor}>
-          <One item={preview} sideLevels={sideLevels} c={c} />
+          <One item={preview} sideLevels={sideLevels} rounds={rounds} c={c} />
         </GhostWrap>
       )}
     </group>
