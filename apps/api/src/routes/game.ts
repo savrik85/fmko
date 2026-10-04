@@ -48,8 +48,18 @@ function vlastnenePovrchy(raw: string | null, polozene: string | null): string[]
 const gameRouter = new Hono<{ Bindings: Bindings }>();
 
 /** Explicitní KV přepínač pro ruční testování stadionových levelů, pouze na localhostu. */
-async function ignoreStadiumProgressLocks(cache: KVNamespace, teamId: string, requestUrl: string): Promise<boolean> {
-  const hostname = new URL(requestUrl).hostname;
+async function ignoreStadiumProgressLocks(cache: KVNamespace, teamId: string, requestUrl: string, origin?: string | null): Promise<boolean> {
+  // `wrangler dev` posílá Worker pod hostem produkční route, takže podle URL se localhost nepozná.
+  // Proto se bere i hlavička Origin (stránka na localhostu). Samotný host nestačí: přepínač musí
+  // být navíc zapnutý klíčem v KV, který na produkci nikdo nenastaví.
+  let hostname = new URL(requestUrl).hostname;
+  if (origin) {
+    try {
+      hostname = new URL(origin).hostname;
+    } catch (error) {
+      logger.warn({ module: "game" }, "neplatná hlavička Origin u odemykání stadionu", error);
+    }
+  }
   if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "[::1]") return false;
 
   try {
@@ -1693,7 +1703,7 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     sponsorAcceptancePct: Math.round(vipFx.vipBoxSponsorAcceptanceBonus * 100),
     villageFavorBonus: vipFx.vipBoxVillageFavorBonus,
   };
-  const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);
+  const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url, c.req.header("origin"));
 
   const careEquip = await c.env.DB.prepare("SELECT pitch_heating, pitch_irrigation, mower FROM equipment WHERE team_id = ?")
     .bind(teamId).first<{ pitch_heating: number; pitch_irrigation: number; mower: number }>()
@@ -1950,7 +1960,7 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
     vip_box: stadium.vip_box as number ?? 0,
   };
 
-  const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url);
+  const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url, c.req.header("origin"));
   const upgrades = getUpgradeOptions(
     facilities,
     team.reputation,

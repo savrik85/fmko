@@ -2,6 +2,7 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { PITCH, STAND_DIMS, STAND_GAP, type TimeOfDay } from "./constants";
+import { vipBoxSideFor, type SideLevels } from "./stand-levels";
 
 type Side = "north" | "south" | "east" | "west";
 
@@ -47,16 +48,8 @@ const SUPPORT_T = 0.16;
 const ROOF_TILT = 0.32;
 const ROOF_T = 0.14;
 
-/**
- * Na které tribuně lóže stojí. Hlavní je východní podélná tribuna, ta ale
- * existuje až od tribun L2; do té doby lóže sedí na severu za brankou.
- * Kde stojí kotel, tam lóže nepatří, proto se přesune naproti.
- */
-export function vipBoxSide(standsLevel: number, ultrasSide: Side): Side {
-  const preferred: Side = standsLevel >= 2 ? "east" : "north";
-  if (preferred !== ultrasSide) return preferred;
-  return preferred === "east" ? "west" : "south";
-}
+// Na které tribuně lóže stojí, určuje `vipBoxSideFor` (stand-levels.ts): hlavní je
+// východní podélná tribuna od L2, jinak sever za brankou; kde stojí kotel, tam ne.
 
 /** Rozměry galerie v lokálních souřadnicích tribuny. */
 function galleryLayout(level: number, standsLevel: number, roofLevel: number, standLength: number) {
@@ -143,7 +136,8 @@ function useVipSignTexture(bg: string): THREE.CanvasTexture | null {
 
 interface VipBoxProps {
   level: number;
-  standsLevel: number;
+  /** Úrovně tribun po světových stranách, lóže sedí na té, kterou vybere `vipBoxSideFor`. */
+  sideLevels: SideLevels;
   roofLevel: number;
   ultrasSide: Side;
   accentColor: string;
@@ -155,12 +149,13 @@ interface VipBoxProps {
 }
 
 export function VipBox(props: VipBoxProps) {
-  if (props.level <= 0 || props.standsLevel <= 0) return null;
-  return <ActiveVipBox {...props} />;
+  if (props.level <= 0) return null;
+  const side = vipBoxSideFor(props.sideLevels, props.ultrasSide);
+  if (!side) return null;
+  return <ActiveVipBox {...props} side={side} standsLevel={props.sideLevels[side]} />;
 }
 
-function ActiveVipBox({ level, standsLevel, roofLevel, ultrasSide, accentColor, teamColor, timeOfDay, reducedDetail = false, isSnow = false }: VipBoxProps) {
-  const side = vipBoxSide(standsLevel, ultrasSide);
+function ActiveVipBox({ level, standsLevel, side, roofLevel, accentColor, teamColor, timeOfDay, reducedDetail = false, isSnow = false }: Omit<VipBoxProps, "sideLevels" | "ultrasSide"> & { side: Side; standsLevel: number }) {
   const isEW = side === "east" || side === "west";
   const standLength = isEW ? PITCH.depth : PITCH.width;
   const g = galleryLayout(level, standsLevel, roofLevel, standLength);
