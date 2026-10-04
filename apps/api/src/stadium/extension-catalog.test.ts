@@ -118,4 +118,25 @@ describe("pravidla odemykání", () => {
     expect(EXT_SLOT_DEFS.ext_main.sides).toEqual(["stand_main"]);
     expect(requirementOf("corner").min).toBe(1);
   });
+
+  it("prodloužená strana a její rohy se vylučují (prodloužení by zasáhlo do rohu)", () => {
+    const sides = legacyStandsToSides(3);
+    // Prodloužená hlavní strana zamkne oba její rohy, ostatní rohy zůstanou volné.
+    const withLength = slotsOf(sides, [{ slot: "ext_main", kind: "length", level: 1 }]);
+    for (const slot of ["corner_main_goal_east", "corner_main_goal_west"]) {
+      for (const o of withLength.find((x) => x.slot === slot)!.options) {
+        expect(o.locked, `${slot}/${o.kind}`).toBe(true);
+        expect(o.lockReason).toContain("prodlou");
+      }
+    }
+    expect(option(withLength, "corner_opposite_goal_east", "corner").locked).toBe(false);
+    // A naopak: kdo má v rohu přístavbu, nemůže prodloužit tu stranu.
+    const withCorner = slotsOf(sides, [{ slot: "corner_main_goal_east", kind: "curved_corner", level: 1 }]);
+    expect(option(withCorner, "ext_main", "length").locked).toBe(true);
+    expect(option(withCorner, "ext_main", "length").lockReason).toContain("roh");
+    expect(option(withCorner, "ext_opposite", "length").locked).toBe(false);
+    // Jiné druhy na prodloužené straně rohy nezamykají.
+    const second = slotsOf(sides, [{ slot: "ext_main", kind: "second_tier", level: 1 }]);
+    expect(option(second, "corner_main_goal_east", "corner").locked).toBe(false);
+  });
 });

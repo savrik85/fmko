@@ -190,6 +190,29 @@ export interface ExtContext {
   ignoreProgressLocks: boolean;
 }
 
+/**
+ * Prodloužení strany a přístavba v jejím rohu se vylučují: prodloužení by zasáhlo do rohu, kam
+ * rohová přístavba patří, a obě by se překrývaly. Vrací důvod zámku, nebo undefined.
+ */
+function cornerConflict(
+  kind: ExtKind,
+  slot: ExtSlot,
+  built: ReadonlyArray<{ slot: string; kind: string; level: number }>,
+): string | undefined {
+  const def = EXT_SLOT_DEFS[slot];
+  if (def.type === "corner") {
+    // Roh: některá z jeho tribun je prodloužená.
+    const lengthened = built.some((b) => b.kind === "length" && EXT_SLOT_DEFS[b.slot as ExtSlot]?.sides.some((s) => def.sides.includes(s)));
+    return lengthened ? "Sousední tribuna je prodloužená až do rohu, na rohovou přístavbu tu není místo" : undefined;
+  }
+  if (kind === "length") {
+    // Prodloužení: v některém rohu té strany už něco stojí.
+    const taken = built.some((b) => EXT_SLOT_DEFS[b.slot as ExtSlot]?.type === "corner" && EXT_SLOT_DEFS[b.slot as ExtSlot].sides.some((s) => def.sides.includes(s)));
+    return taken ? "V rohu u této tribuny už stojí přístavba, prodloužení by do ní zasáhlo" : undefined;
+  }
+  return undefined;
+}
+
 function buildOption(
   kind: ExtKind,
   slot: ExtSlot,
@@ -197,11 +220,13 @@ function buildOption(
   fromLevel: number,
   sides: StandLevels,
   ctx: ExtContext,
+  built: ReadonlyArray<{ slot: string; kind: string; level: number }>,
 ): ExtOption {
   const def = EXT_SLOT_DEFS[slot];
   const req = REQUIREMENT[kind];
   const detail: LockDetail = {};
 
+  const conflict = cornerConflict(kind, slot, built);
   const levels = def.sides.map((s) => sides[s] ?? 0);
   const ok = req.mode === "all" ? levels.every((v) => v >= req.min) : levels.some((v) => v >= req.min);
   if (!ok) {
@@ -210,6 +235,8 @@ function buildOption(
       ? `Aspoň jedna sousední tribuna musí mít úroveň ${req.min}+ (${names})`
       : `Tribuna na úrovni ${req.min}+ (${names})`;
   }
+
+  if (conflict) detail.prerequisite = detail.prerequisite ? `${detail.prerequisite}. ${conflict}` : conflict;
 
   const unlock = ctx.ignoreProgressLocks ? {} : (STADIUM_UNLOCK[level] ?? {});
   if (unlock.reputation && ctx.reputation < unlock.reputation) {
@@ -255,11 +282,11 @@ export function getExtensionSlots(
       : null;
     let options: ExtOption[];
     if (!current) {
-      options = ALLOWED[slot].map((k) => buildOption(k, slot, 1, 0, sides, ctx));
+      options = ALLOWED[slot].map((k) => buildOption(k, slot, 1, 0, sides, ctx, built));
     } else if (current.level >= 3) {
       options = [];
     } else {
-      options = [buildOption(current.kind, slot, current.level + 1, current.level, sides, ctx)];
+      options = [buildOption(current.kind, slot, current.level + 1, current.level, sides, ctx, built)];
     }
     return { slot, type: def.type, label: def.label, sides: def.sides, built: current, options };
   });
