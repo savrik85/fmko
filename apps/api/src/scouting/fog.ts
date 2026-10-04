@@ -11,8 +11,7 @@
 
 import { stableOffset } from "../lib/scout-estimate";
 import { teoretickyStropHrace } from "../skills/vyhled-hrace";
-import { realneDosazitelnyStrop, tempoPodleVeku } from "../skills/verdikt";
-import { youthTrainingTempo } from "./youth-growth";
+import { POTENTIAL_HORIZON_SEASONS, projectRating } from "./youth-growth";
 
 export interface Range { lo: number; hi: number }
 
@@ -60,10 +59,9 @@ export function potentialRange(
 ): Range | null {
   const theoretical = teoretickyStropHrace(player.position, player.skillsMax, player.talent);
   if (theoretical === null) return null;
-  const ceiling = Math.max(player.rating, Math.min(100, theoretical));
-  // Mladí rostou naměřeným tempem podle talentu (youth-growth.ts), starší podle věku.
-  const tempo = player.age <= 21 ? youthTrainingTempo(player.talent) : tempoPodleVeku(player.age);
-  const reachable = realneDosazitelnyStrop(player.age, player.rating, ceiling, player.talent, tempo);
+  // Do 21 let naměřené tempo podle talentu a dospívání tak, jak ho hra opravdu dělá,
+  // pak tempo podle věku (youth-growth.ts). Nikdy přes strop dovedností.
+  const reachable = projectRating(player, POTENTIAL_HORIZON_SEASONS);
   const range = rangeAround(reachable, ratingHalfWidth(eff, visits), `${seed}:potential`, 1, 100);
   // Pod dnešní výkon nikdo nespadne, i kdyby skaut odhadoval sebehůř.
   return { lo: Math.max(range.lo, Math.min(player.rating, range.hi)), hi: range.hi };
