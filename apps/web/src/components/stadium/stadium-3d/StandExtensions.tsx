@@ -174,7 +174,7 @@ function ArcStand({ rIn, rows, angle, rowW = 1.5, rise = 0.55, c }: {
 
 function Block(props: {
   length: number; rows: number; depth: number; height: number; level?: number; c: Common;
-  standColor?: string; seatColor?: string; panel?: boolean;
+  standColor?: string; seatColor?: string; panel?: boolean; walls?: { left: boolean; right: boolean };
 }) {
   const { c } = props;
   return (
@@ -182,7 +182,7 @@ function Block(props: {
       length={props.length} rows={props.rows} depth={props.depth} height={props.height} level={props.level ?? 2}
       standColor={props.standColor ?? c.standColor} seatColor={props.seatColor ?? c.seatColor}
       teamColor={c.teamColor} secondaryColor={c.secondaryColor} attendanceRatio={c.attendanceRatio}
-      mode={c.mode} reducedDetail={c.reducedDetail} isSnow={c.isSnow} panel={props.panel}
+      mode={c.mode} reducedDetail={c.reducedDetail} isSnow={c.isSnow} panel={props.panel} walls={props.walls}
     />
   );
 }
@@ -212,8 +212,6 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
   const D = sd.depth;
   const H = sd.height;
   const style = lv(standLevel);
-  // Volné místo před tribunou (k plotu u hřiště), kam se vejdou nízké přístavby čelem k hřišti.
-  const avail = Math.max(2, STAND_GAP + D / 2 - 1.2);
   switch (kind) {
     case "length": {
       const w = 6 + 3 * l;
@@ -221,7 +219,10 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
         <>
           {[-1, 1].map((s) => (
             <group key={s} position={[s * (length / 2 + w / 2), 0, 0]}>
-              <Block length={w} rows={sd.rows} depth={D} height={H} level={style} c={c} />
+              <Block
+                length={w} rows={sd.rows} depth={D} height={H} level={style} c={c}
+                walls={s < 0 ? { left: true, right: false } : { left: false, right: true }}
+              />
             </group>
           ))}
         </>
@@ -232,7 +233,7 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
     case "double_stand":
       return <RaisedTier width={length * 0.94} rows={4 + l} rowDepth={1.2} rise={0.5} y0={H + 2.6} z0={D * 0.3} style={3} c={c} glass />;
     case "stilts":
-      return <RaisedTier width={length * (0.5 + 0.1 * l)} rows={2 + l} rowDepth={1.5} rise={0.5} y0={3.4} z0={D + 0.3} style={2} c={c} />;
+      return <RaisedTier width={length * (0.5 + 0.1 * l)} rows={2 + l} rowDepth={1.5} rise={0.5} y0={Math.max(3.4, H + 0.8)} z0={D + 0.3} style={2} c={c} />;
     case "tower": {
       const th = H + 7 + 2 * l;
       return (
@@ -257,37 +258,38 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
       );
     }
     case "terrace": {
-      // Travnatý val s diváky PŘED tribunou, mezi ní a hřištěm: stoupá k tribuně a je nižší než ona.
-      const rows = 2 + l;
-      const rowDepth = Math.min(1.7, avail / rows);
-      const depth = rows * rowDepth;
+      // Val stojí na místě tribuny za brankou (tribuna na té straně se nekreslí): travnatý svah
+      // stejné výšky a hloubky s diváky na stání. Před tribunou ani za ní by někomu bral výhled.
+      const bd = dimsOf(Math.max(1, standLevel));
       return (
-        <group position={[0, 0, -depth - 0.5]}>
-          <Block length={length * 0.9} rows={rows} depth={depth} height={rows * 0.5} level={1} standColor={EARTH} seatColor={EARTH} panel={false} c={c} />
-        </group>
+        <Block
+          length={length * 0.92} rows={Math.max(3, bd.rows)} depth={bd.depth} height={bd.height * 0.9}
+          level={1} standColor={EARTH} seatColor={EARTH} panel={false} c={c}
+        />
       );
     }
     case "round_stand": {
-      // Oblouk PŘED tribunou, čelem k hřišti. Vnější okraj se téměř dotýká přední hrany tribuny,
-      // střed oblouku leží na straně hřiště a oblouk je tak mělký, že nezasáhne do hřiště.
-      const rows = 2 + l;
-      const rowW = Math.min(1.0, avail / rows);
-      const rOut = 70;
-      const hw = Math.min(length * 0.36, 14);
-      const angle = 2 * Math.asin(Math.min(0.95, hw / rOut));
+      // Točená tribuna je oblouková podoba tribuny za brankou (rovná tribuna na té straně se
+      // nekreslí). Stupně stoupají od hřiště stejně jako u rovné tribuny, vyšší úroveň přidá řady.
+      const bd = dimsOf(Math.max(1, standLevel));
+      const rows = Math.max(3, bd.rows) + l;
+      const depth = bd.depth + 0.4 * l;
+      const rIn = 70;
+      const hw = Math.min(length * 0.46, 18);
+      const angle = 2 * Math.asin(Math.min(0.95, hw / (rIn + depth)));
       return (
-        <group position={[0, 0, -0.6 - rOut]}>
-          <ArcStand rIn={rOut - rows * rowW} rows={rows} angle={angle} rowW={rowW} rise={0.5} c={c} />
+        <group position={[0, 0, -rIn]}>
+          <ArcStand rIn={rIn} rows={rows} angle={angle} rowW={depth / rows} rise={(bd.height * (1 + 0.1 * l)) / rows} c={c} />
         </group>
       );
     }
     case "mobile": {
+      // Mobilní tribunka stojí vedle tribuny na jejím konci, ne před ní (neberou si výhled).
       const w = 6 + 3 * l;
       const rows = 1 + l;
-      const rowDepth = Math.min(1.1, avail / rows);
       return (
-        <group position={[0, 0, -rows * rowDepth - 0.5]}>
-          <Block length={w} rows={rows} depth={rows * rowDepth} height={rows * 0.55} level={1} standColor={METAL} panel={false} c={c} />
+        <group position={[length / 2 + w / 2 + 1, 0, 0]}>
+          <Block length={w} rows={rows} depth={rows * 1.1} height={rows * 0.55} level={1} standColor={METAL} panel={false} c={c} />
         </group>
       );
     }
@@ -323,7 +325,7 @@ function CornerKind({ kind, level, sx, sz, sideLevels, c }: { kind: string; leve
       const rows = 2 * l;
       return (
         <group position={[mid[0], 0, mid[1]]} rotation={[0, diag, 0]}>
-          <Block length={gapLen + 0.4} rows={rows} depth={rows * 1.2} height={rows * 0.55} level={2} c={c} />
+          <Block length={gapLen + 0.4} rows={rows} depth={rows * 1.2} height={rows * 0.55} level={2} c={c} walls={{ left: false, right: false }} />
         </group>
       );
     }
@@ -345,7 +347,10 @@ function CornerKind({ kind, level, sx, sz, sideLevels, c }: { kind: string; leve
           position={[sx * (ex + w / 2), 0, sz * (ez + STAND_GAP + sd.depth / 2)]}
           rotation={[0, sz > 0 ? 0 : Math.PI, 0]}
         >
-          <Block length={w} rows={sd.rows} depth={sd.depth} height={sd.height} level={lv(goalLevel >= 1 ? goalLevel : 2)} c={c} />
+          <Block
+            length={w} rows={sd.rows} depth={sd.depth} height={sd.height} level={lv(goalLevel >= 1 ? goalLevel : 2)} c={c}
+            walls={(sz > 0 ? sx : -sx) > 0 ? { left: false, right: true } : { left: true, right: false }}
+          />
         </group>
       );
     }

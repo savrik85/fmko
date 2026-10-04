@@ -15,7 +15,7 @@ import { Scoreboard, SCOREBOARD_X } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
 import { HostujiciSektor, StandRoof, UltrasSector } from "./StadiumExtras";
 import { VipBox, vipGallerySightlineY } from "./VipBox";
-import { getSideLevels, vipBoxSideFor } from "./stand-levels";
+import { getSideLevels, joinedEnds, replacedSides, vipBoxSideFor } from "./stand-levels";
 import { StandExtensions, type ExtensionInstance } from "./StandExtensions";
 import { Floodlights } from "./Floodlights";
 import { EntranceGate } from "./EntranceGate";
@@ -192,6 +192,8 @@ export function Stadium3D({
   // skóre stojící za ní (x = 36) — tabule se proto zvedne nad siluetu galerie.
   // Úrovně tribun po stranách: každá strana má vlastní úroveň, nebo žádnou.
   const sideLevels = getSideLevels(f);
+  // Točená tribuna a val jsou tvar tribuny za brankou, ne další tribuna před ní: nahradí ji.
+  const replaced = replacedSides(standExtensions ?? [], extensionPreview ?? null);
   const scoreboardMinPanelBottom =
     (f.vip_box ?? 0) > 0 &&
     vipBoxSideFor(sideLevels, SEKTOR_STRANY[ultrasSector]) === "east"
@@ -513,7 +515,8 @@ export function Stadium3D({
           {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}
           <Stand
             side="north"
-            level={sideLevels.north}
+            level={replaced.has("north") ? 0 : sideLevels.north}
+            joinedEnds={joinedEnds("north", standExtensions ?? [])}
             teamColor={teamColor}
             secondaryColor={secondaryColor}
             standColor={standColor}
@@ -528,7 +531,8 @@ export function Stadium3D({
           />
           <Stand
             side="south"
-            level={sideLevels.south}
+            level={replaced.has("south") ? 0 : sideLevels.south}
+            joinedEnds={joinedEnds("south", standExtensions ?? [])}
             teamColor={teamColor}
             secondaryColor={secondaryColor}
             standColor={standColor}
@@ -541,10 +545,11 @@ export function Stadium3D({
             isSnow={weather === "snow"}
             attendanceRatio={zaplneniStrany("south")}
           />
-          {sideLevels.east >= 1 && (
+          {sideLevels.east >= 1 && !replaced.has("east") && (
             <Stand
               side="east"
               level={sideLevels.east}
+              joinedEnds={joinedEnds("east", standExtensions ?? [])}
               teamColor={teamColor}
               secondaryColor={secondaryColor}
               standColor={standColor}
@@ -558,10 +563,11 @@ export function Stadium3D({
               attendanceRatio={zaplneniStrany("east")}
             />
           )}
-          {sideLevels.west >= 1 && (
+          {sideLevels.west >= 1 && !replaced.has("west") && (
             <Stand
               side="west"
               level={sideLevels.west}
+              joinedEnds={joinedEnds("west", standExtensions ?? [])}
               teamColor={teamColor}
               secondaryColor={secondaryColor}
               standColor={standColor}
