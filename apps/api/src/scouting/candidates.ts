@@ -98,9 +98,9 @@ export function pickClubsToVisit(rng: Rng, villages: VillageInRange[], count: nu
   return picked;
 }
 
-/** Kolik hráčů z kádru klubu odpovídá úkolu (post a věk). Očekávaná hodnota, zaokrouhlí volající. */
-export function expectedMatches(position: string | null, ageMin: number, ageMax: number): number {
-  const posShare = position ? POSITION_SHARE[position] ?? 0 : 1;
+/** Kolik hráčů z kádru klubu odpovídá úkolu (posty a věk). Očekávaná hodnota, zaokrouhlí volající. */
+export function expectedMatches(positions: readonly string[] | null, ageMin: number, ageMax: number): number {
+  const posShare = positions ? positions.reduce((sum, p) => sum + (POSITION_SHARE[p] ?? 0), 0) : 1;
   const lo = Math.max(CLUB_AGE_MIN, ageMin);
   const hi = Math.min(CLUB_AGE_MAX, ageMax);
   const ageShare = hi >= lo ? (hi - lo + 1) / (CLUB_AGE_MAX - CLUB_AGE_MIN + 1) : 0;
