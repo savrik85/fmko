@@ -200,4 +200,10 @@ describe("pravidla odemykání", () => {
     const options = slots.find((x) => x.slot === "corner_main_goal_east")!.options;
     expect(options.find((o) => o.kind === "corner")!.locked).toBe(true);
   });
+
+  it("úroveň 3 přístaveb je o polovinu dražší než cena za místo odvozená z tribun, úrovně 1 a 2 ne", () => {
+    // Základ: 611 / 850 / 2143 Kč za místo, násobek druhu; ×1,5 jen na úrovni 3.
+    expect(extCost("terrace", 1)).toBe(Math.round((40 * 611 * 0.55) / 100) * 100);
+    expect(extCost("double_stand", 3)).toBe(Math.round((80 * 2143 * 1.7 * 1.5) / 100) * 100);
+  });
 });

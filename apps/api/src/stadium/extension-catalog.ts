@@ -78,6 +78,9 @@ const PRICE_MULT: Record<ExtKind, number> = {
  */
 const BASE_PRICE_PER_SEAT = [0, 611, 850, 2143] as const;
 
+/** Úroveň 3 je o polovinu dražší než odvozená cena; úrovně 1 a 2 zůstávají férové ke starým cenám. */
+export const LEVEL3_PRICE_FACTOR = 1.5;
+
 export function extCapacity(kind: string, level: number): number {
   const t = CAPACITY[kind as ExtKind];
   if (!t || !Number.isInteger(level) || level < 1 || level > 3) return 0;
@@ -89,7 +92,8 @@ export function extCost(kind: string, level: number): number {
   const t = CAPACITY[kind as ExtKind];
   if (!t || !Number.isInteger(level) || level < 1 || level > 3) return 0;
   const seats = t[level] - t[level - 1];
-  return Math.round((seats * BASE_PRICE_PER_SEAT[level] * PRICE_MULT[kind as ExtKind]) / 100) * 100;
+  const factor = level === 3 ? LEVEL3_PRICE_FACTOR : 1;
+  return Math.round((seats * BASE_PRICE_PER_SEAT[level] * PRICE_MULT[kind as ExtKind] * factor) / 100) * 100;
 }
 
 /** Celková kapacita postavených přístaveb. Neznámé druhy se přeskočí. */

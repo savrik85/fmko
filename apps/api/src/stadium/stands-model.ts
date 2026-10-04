@@ -109,7 +109,8 @@ export function standSideCosts(side: StandSide, legacyCosts: readonly number[]):
   const out = [0];
   for (let l = 1; l <= 3; l++) {
     const share = (STAND_SIDE_CAPACITY[side][l] - STAND_SIDE_CAPACITY[side][l - 1]) / (totalAt(l) - totalAt(l - 1));
-    out.push(Math.round(((legacyCosts[l] ?? 0) * share) / 100) * 100);
+    const factor = l === 3 ? 1.5 : 1; // úroveň 3 je o polovinu dražší, 1 a 2 beze změny
+    out.push(Math.round(((legacyCosts[l] ?? 0) * factor * share) / 100) * 100);
   }
   return out;
 }

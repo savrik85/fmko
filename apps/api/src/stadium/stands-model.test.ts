@@ -37,11 +37,13 @@ describe("kapacita tribun po stranách", () => {
 });
 
 describe("ceny a přírůstky po stranách", () => {
-  it("součet cen čtyř stran za jednu úroveň se od staré ceny liší nejvýš o zaokrouhlení", () => {
-    for (const next of [1, 2, 3]) {
+  it("úrovně 1 a 2 stojí dohromady jako dřív (zaokrouhlení), úroveň 3 je o polovinu dražší", () => {
+    for (const next of [1, 2]) {
       const sum = STAND_SIDES.reduce((s, side) => s + standSideCosts(side, LEGACY_COST)[next], 0);
-      expect(Math.abs(sum - LEGACY_COST[next])).toBeLessThanOrEqual(400);
+      expect(Math.abs(sum - LEGACY_COST[next]), `L${next}`).toBeLessThanOrEqual(400);
     }
+    const l3 = STAND_SIDES.reduce((s, side) => s + standSideCosts(side, LEGACY_COST)[3], 0);
+    expect(Math.abs(l3 - LEGACY_COST[3] * 1.5)).toBeLessThanOrEqual(400);
   });
 
   it("přírůstek mezi úrovněmi sedí na tabulku", () => {
@@ -73,5 +75,28 @@ describe("převod dnešní úrovně na strany zachová vzhled i kapacitu", () =>
       const inc = [c[1] - c[0], c[2] - c[1], c[3] - c[2]];
       expect(inc, side).toEqual([...inc].sort((a, b) => a - b));
     }
+  });
+});
+
+describe("cesta na kapacitu dnešní L2 nesmí být výrazně dražší než za starých cen", () => {
+  const sideCost = (side: (typeof STAND_SIDES)[number], from: number, to: number) => {
+    const c = standSideCosts(side, LEGACY_COST);
+    let sum = 0;
+    for (let l = from + 1; l <= to; l++) sum += c[l];
+    return sum;
+  };
+  const pathCost = (from: ReturnType<typeof legacyStandsToSides>, to: ReturnType<typeof legacyStandsToSides>) =>
+    STAND_SIDES.reduce((s, side) => s + sideCost(side, from[side], to[side]), 0);
+
+  it("od nuly na všechny strany L2 stojí 55 000 + 170 000 jako dřív", () => {
+    const cost = pathCost(legacyStandsToSides(0), legacyStandsToSides(2));
+    expect(Math.abs(cost - 225000)).toBeLessThanOrEqual(600);
+    expect(standsCapacity(legacyStandsToSides(2))).toBe(290);
+  });
+
+  it("klub po převodu z dnešní L1 doplatí na kapacitu L2 nejvýš o 10 % víc než dřív (170 000)", () => {
+    const cost = pathCost(legacyStandsToSides(1), legacyStandsToSides(2));
+    expect(cost).toBeLessThanOrEqual(170000 * 1.1);
+    expect(cost).toBeGreaterThanOrEqual(170000 * 0.95);
   });
 });
