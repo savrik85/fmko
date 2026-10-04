@@ -324,7 +324,7 @@ describe("tribuny po stranách v generátoru", () => {
     for (const s of STAND_SIDES) expect(keys).toContain(s);
     const main = o.find((x) => x.facility === "stand_main")!;
     expect(main.nextLevel).toBe(3);
-    expect(main.effect).toContain("+70 míst");
+    expect(main.effect).toContain(`+${STAND_SIDE_CAPACITY.stand_main[3] - STAND_SIDE_CAPACITY.stand_main[2]} míst`);
   });
 
   it("střecha se odemkne, když stojí aspoň jedna strana", () => {
@@ -342,7 +342,7 @@ describe("kapacita přístaveb tribun", () => {
   });
 
   it("bez sloupce přístaveb se nic nepřičítá", () => {
-    expect(calculateFacilityEffects({ stand_main: 3, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 0 }).capacityBonus).toBe(170);
+    expect(calculateFacilityEffects({ stand_main: 3, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 0 }).capacityBonus).toBe(STAND_SIDE_CAPACITY.stand_main[3]);
   });
 
   it("záporná nebo nečíselná hodnota se bere jako nula", () => {
