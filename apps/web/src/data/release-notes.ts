@@ -13,6 +13,19 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-10-04",
+    emoji: "🏟️",
+    title: "Tribuny po stranách a přístavby",
+    items: [
+      "Každá ze čtyř tribun (hlavní, protější a obě za brankami) má vlastní úroveň 0 až 3. Stavíš a vylepšuješ je zvlášť na stránce Stadion v sekci Tribuny a přístavby. Stávající kluby zůstaly beze změny: kdo měl úroveň 1, má tribuny za brankami, kdo měl 2 nebo 3, má všechny čtyři strany.",
+      "Ke každé straně a do rohů hřiště můžeš postavit přístavbu: prodloužení, druhé patro, dvojitou tribunu, piloty, věž, lávku, val, točenou tribunu, rohovou tribunu, zahnutý roh, křídlo nebo most. Každá má vlastní tvar, kapacitu a tři úrovně. Mobilní tribunku postavíš jen do rohu a později ji nahradíš jinou přístavbou.",
+      "Některé přístavby se spolu nesnesou. Točená tribuna a val nahrazují tribunu za brankou, prodloužení se nedá s rohem a křídlo nejde vedle točené tribuny nebo valu. Nabídka ti u zamčené přístavby napíše proč.",
+      "Před stavbou si přístavbu prohlédneš ve 3D jako průhledný náhled, s kapacitou před a po a s cenou. Nic se nestrhne, dokud nepotvrdíš stavbu.",
+      "Přístavby a nové tribuny jsou vidět ve 3D i na stránce Můj klub, u cizích klubů a v zápasovém dni. Střechy na sebe navazují a lóže stojí nad střechou i nad patrem.",
+      "Ceny úrovní 1 a 2 zůstaly. Úroveň 3 tribun i přístaveb je o polovinu dražší. Kdo přechází ze starých tribun za brankami na kapacitu dnešní úrovně 2 (290 míst), zaplatí zhruba 182 000 Kč, dřív to bylo 170 000 Kč.",
+    ],
+  },
+  {
+    date: "2026-10-04",
     emoji: "🔍",
     title: "Skaut na cestách a vyjednávání s cizími kluby",
     items: [
