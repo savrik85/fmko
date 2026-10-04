@@ -28,13 +28,14 @@ export type KapacitaSektoru = Record<FanSector, number>;
  */
 export function kapacitaSektoru(
   capacity: number,
-  facilities: { ultras_stand?: number; stands?: number },
+  facilities: { ultras_stand?: number; stands?: number; stand_main?: number },
 ): KapacitaSektoru {
   const celkem = Math.max(0, Math.round(capacity));
   if (celkem === 0) return { kotel: 0, hlavni: 0, za_branou: 0 };
 
   const ul = Math.max(0, Math.min(3, Math.round(facilities.ultras_stand ?? 0)));
-  const st = Math.max(0, Math.min(3, Math.round(facilities.stands ?? 0)));
+  // Podíl hlavní tribuny dává hlavní strana; bez údaje o stranách (staré volání) platí `stands`.
+  const st = Math.max(0, Math.min(3, Math.round(facilities.stand_main ?? facilities.stands ?? 0)));
 
   const kotel = Math.round(celkem * PODIL_KOTEL[ul]);
   const hlavni = Math.round(celkem * PODIL_HLAVNI[st]);
@@ -57,7 +58,7 @@ export function kapacitaSektoru(
  */
 export function dostupnaKapacita(
   capacity: number,
-  facilities: { ultras_stand?: number; stands?: number },
+  facilities: { ultras_stand?: number; stands?: number; stand_main?: number },
   zavrene: readonly FanSector[],
 ): { kapacita: number; zavrenoMist: number; rozpad: KapacitaSektoru } {
   const rozpad = kapacitaSektoru(capacity, facilities);
@@ -74,7 +75,7 @@ export function dostupnaKapacita(
 export function zaplneniSektoru(
   attendance: number,
   capacity: number,
-  facilities: { ultras_stand?: number; stands?: number },
+  facilities: { ultras_stand?: number; stands?: number; stand_main?: number },
   zavrene: readonly FanSector[],
 ): Record<FanSector, number> {
   const rozpad = kapacitaSektoru(capacity, facilities);

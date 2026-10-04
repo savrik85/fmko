@@ -17,6 +17,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { effectiveStandLevel, readStandLevels } from "../stadium/stands-model";
 import { ALLY_RESPECT_THRESHOLD } from "../community/manager-relations";
 import { rivalitaHorka } from "../engine/fan-groups";
 import type { FanGroupKind } from "../engine/fan-groups";
@@ -180,7 +181,7 @@ export function zijeRivalitu(kind: string): boolean {
 export async function nactiProstredi(db: D1Database, teamId: string): Promise<StavProstredi | null> {
   const s = await db
     .prepare(
-      `SELECT toilets, roof, stands, parking, ultras_stand, refreshments, pitch_condition
+      `SELECT toilets, roof, stands, stand_main, stand_opposite, stand_goal_west, stand_goal_east, parking, ultras_stand, refreshments, pitch_condition
        FROM stadiums WHERE team_id = ?`,
     )
     .bind(teamId)
@@ -197,7 +198,9 @@ export async function nactiProstredi(db: D1Database, teamId: string): Promise<St
   const { CONCESSION_CATALOG } = await import("../season/concession-catalog");
   return {
     facilities: {
-      toilets: s.toilets ?? 0, roof: s.roof ?? 0, stands: s.stands ?? 0,
+      toilets: s.toilets ?? 0, roof: s.roof ?? 0,
+      // Úroveň podle kapacity stran, ne maximum stran (jedna levná strana by dala plnou úroveň).
+      stands: effectiveStandLevel(readStandLevels(s)),
       parking: s.parking ?? 0, ultras_stand: s.ultras_stand ?? 0,
       refreshments: s.refreshments ?? 0,
     },

@@ -36,23 +36,30 @@ beforeEach(async () => {
 });
 
 describe("raiseAllStandSides (obecní rozšíření tribun)", () => {
-  it("zvedne každou stranu o jednu úroveň a odvozené stands s ní", async () => {
-    await db.prepare("UPDATE stadiums SET stand_main = 0, stand_opposite = 1, stand_goal_west = 2, stand_goal_east = 0 WHERE team_id = 't1'").run();
+  const sides = () => db.prepare("SELECT stands, stand_main, stand_opposite, stand_goal_west, stand_goal_east FROM stadiums WHERE team_id = 't1'").first();
+
+  it("klub bez tribun dostane tribuny za brankami (L1 jako dřív)", async () => {
     await raiseAllStandSides(db, "t1");
-    const r = await db.prepare("SELECT stands, stand_main, stand_opposite, stand_goal_west, stand_goal_east FROM stadiums WHERE team_id = 't1'").first();
-    expect(r).toEqual({ stands: 3, stand_main: 1, stand_opposite: 2, stand_goal_west: 3, stand_goal_east: 1 });
+    expect(await sides()).toEqual({ stands: 1, stand_main: 0, stand_opposite: 0, stand_goal_west: 1, stand_goal_east: 1 });
+  });
+
+  it("převedený klub z L1 dostane všechny čtyři strany na L2 (290 míst jako dřív)", async () => {
+    await db.prepare("UPDATE stadiums SET stand_goal_west = 1, stand_goal_east = 1 WHERE team_id = 't1'").run();
+    await raiseAllStandSides(db, "t1");
+    expect(await sides()).toEqual({ stands: 2, stand_main: 2, stand_opposite: 2, stand_goal_west: 2, stand_goal_east: 2 });
+  });
+
+  it("nikdy nesníží stranu, která je už výš", async () => {
+    await db.prepare("UPDATE stadiums SET stand_main = 3, stand_goal_west = 1, stand_goal_east = 1 WHERE team_id = 't1'").run();
+    await raiseAllStandSides(db, "t1");
+    const r = await sides() as Record<string, number>;
+    expect(r.stand_main).toBe(3);
+    expect(r.stand_goal_west).toBe(2);
   });
 
   it("strop je úroveň 3", async () => {
-    await db.prepare("UPDATE stadiums SET stand_main = 3, stand_opposite = 3, stand_goal_west = 3, stand_goal_east = 2 WHERE team_id = 't1'").run();
+    await db.prepare("UPDATE stadiums SET stand_main = 3, stand_opposite = 3, stand_goal_west = 3, stand_goal_east = 3 WHERE team_id = 't1'").run();
     await raiseAllStandSides(db, "t1");
-    const r = await db.prepare("SELECT stand_main, stand_goal_east FROM stadiums WHERE team_id = 't1'").first();
-    expect(r).toEqual({ stand_main: 3, stand_goal_east: 3 });
-  });
-
-  it("klub bez tribun dostane čtyři tribuny L1, tedy +90 míst za 45 000 Kč podílu", async () => {
-    await raiseAllStandSides(db, "t1");
-    const r = await db.prepare("SELECT stands, stand_main, stand_opposite, stand_goal_west, stand_goal_east FROM stadiums WHERE team_id = 't1'").first();
-    expect(r).toEqual({ stands: 1, stand_main: 1, stand_opposite: 1, stand_goal_west: 1, stand_goal_east: 1 });
+    expect(await sides()).toEqual({ stands: 3, stand_main: 3, stand_opposite: 3, stand_goal_west: 3, stand_goal_east: 3 });
   });
 });

@@ -89,3 +89,12 @@ describe("zaplnění sektorů pro 3D scénu", () => {
     for (const v of Object.values(z)) expect(v).toBe(0);
   });
 });
+
+describe("podíl hlavní tribuny podle hlavní strany", () => {
+  it("bez hlavní tribuny (stand_main 0) nedostane hlavní sektor víc, i když jiná strana je na L3", () => {
+    const stary = kapacitaSektoru(400, { stands: 3 });
+    const nova = kapacitaSektoru(400, { stands: 3, stand_main: 0 });
+    expect(nova.hlavni).toBeLessThan(stary.hlavni);
+    expect(nova.hlavni + nova.kotel + nova.za_branou).toBe(400);
+  });
+});

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   STAND_SIDES, STAND_SIDE_CAPACITY, hasStandSides, readStandLevels,
-  legacyStandsToSides, standsCapacity, standsMaxLevel, standSideGain, standSideCosts,
+  legacyStandsToSides, standsCapacity, standsMaxLevel, standSideGain, standSideCosts, effectiveStandLevel,
 } from "./stands-model";
 
 const LEGACY_CAP = [0, 90, 290, 500];
@@ -100,3 +100,15 @@ describe("cesta na kapacitu dnešní L2 nesmí být výrazně dražší než za 
     expect(cost).toBeGreaterThanOrEqual(170000 * 0.95);
   });
 });
+
+describe("effectiveStandLevel (starý jednočíselný pohled podle kapacity)", () => {
+  it("převedené stadiony vycházejí na svou původní úroveň", () => {
+    for (const l of [0, 1, 2, 3]) expect(effectiveStandLevel(legacyStandsToSides(l))).toBe(l);
+  });
+
+  it("jedna levná strana nezvedne úroveň, jen kapacita rozhoduje", () => {
+    expect(effectiveStandLevel({ stand_main: 0, stand_opposite: 3, stand_goal_west: 0, stand_goal_east: 0 })).toBe(0);
+    expect(effectiveStandLevel({ stand_main: 0, stand_opposite: 0, stand_goal_west: 2, stand_goal_east: 1 })).toBe(1);
+  });
+});
+

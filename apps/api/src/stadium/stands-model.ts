@@ -91,6 +91,19 @@ export function standsMaxLevel(levels: StandLevels): number {
   return Math.max(...STAND_SIDES.map((s) => clampLevel(levels[s])));
 }
 
+/**
+ * Starý jednočíselný pohled na tribuny: nejvyšší úroveň, jejíž převedená sestava (`legacyStandsToSides`)
+ * nemá víc míst než skutečná. Jedna levná strana tak nezvedne úroveň jako maximum stran.
+ */
+export function effectiveStandLevel(levels: StandLevels): number {
+  const capacity = standsCapacity(levels);
+  let level = 0;
+  for (let l = 1; l <= 3; l++) {
+    if (standsCapacity(legacyStandsToSides(l)) <= capacity) level = l;
+  }
+  return level;
+}
+
 /** O kolik míst strana přibude přechodem mezi úrovněmi. */
 export function standSideGain(side: StandSide, from: number, to: number): number {
   const cap = STAND_SIDE_CAPACITY[side];
