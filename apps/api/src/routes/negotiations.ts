@@ -14,6 +14,7 @@ import {
 } from "../transfers/ai-negotiation";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { blurredWillingness } from "../scouting/fog";
+import { clubChairman } from "../transfers/club-chairman";
 import { loadTeamScout, scoutEffectiveness } from "../scouting/scout-work";
 import { transferSchedule, willingnessFromChance, SCOUT_WILLINGNESS_LABELS, type TransferTerms } from "@okresni-masina/shared";
 
@@ -182,6 +183,7 @@ negotiationsRouter.get("/teams/:teamId/negotiations/:id", async (c) => {
       budget: team.budget, reputation: team.reputation,
     } : null,
     manager: manager ? { ...manager, avatar: parse(manager.avatar as string | null, {}) } : null,
+    chairman: clubChairman(row.club_name),
     events: events.results,
     payNow,
     canAfford: ((team?.budget as number | undefined) ?? 0) >= payNow,
