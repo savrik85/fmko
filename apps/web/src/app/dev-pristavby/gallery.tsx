@@ -12,6 +12,7 @@ import { OrbitControls } from "@react-three/drei";
 import { useSearchParams } from "next/navigation";
 import { Stand } from "@/components/stadium/stadium-3d/Stand";
 import { StandExtensions } from "@/components/stadium/stadium-3d/StandExtensions";
+import { Stadium3D } from "@/components/stadium/stadium-3d/Stadium3D";
 import { getSideLevels, joinedEnds, replacedSides } from "@/components/stadium/stadium-3d/stand-levels";
 
 interface Variant {
@@ -55,19 +56,25 @@ const VARIANTS: Variant[] = [
 
 const num = (s: string | null, d: number[]) => (s ? s.split(",").map(Number) : d);
 
-function Index({ game }: { game: boolean }) {
+function Index({ game, real }: { game: boolean; real: boolean }) {
   return (
     <div style={{ padding: 24, fontFamily: "system-ui, sans-serif", maxWidth: 760, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, fontWeight: 700 }}>Varianty přístaveb tribun</h1>
       <p style={{ color: "#555", margin: "8px 0 16px" }}>
-        Klikni na variantu, uvnitř přepínáš šipkami. Barvy:{" "}
-        <a href={`?${game ? "" : "game=1"}`} style={{ textDecoration: "underline" }}>{game ? "přepnout na šedý beton" : "přepnout na barvy klubu (jako ve hře)"}</a>
+        Klikni na variantu, uvnitř přepínáš šipkami. Zobrazení:{" "}
+        <a href={`?${real ? "" : "real=1"}`} style={{ textDecoration: "underline" }}>{real ? "přepnout na rychlou galerii" : "přepnout na skutečnou herní scénu"}</a>
+        {!real && (
+          <>
+            {" "}| Barvy:{" "}
+            <a href={`?${game ? "" : "game=1"}`} style={{ textDecoration: "underline" }}>{game ? "šedý beton" : "barvy klubu"}</a>
+          </>
+        )}
       </p>
       <ol style={{ display: "grid", gap: 8, paddingLeft: 0, listStyle: "none" }}>
         {VARIANTS.map((v, i) => (
           <li key={v.name}>
             <a
-              href={`?v=${i}${game ? "&game=1" : ""}`}
+              href={`?v=${i}${real ? "&real=1" : game ? "&game=1" : ""}`}
               style={{ display: "block", padding: 12, border: "1px solid #ccd", borderRadius: 10, background: "#fff", textDecoration: "none", color: "#111" }}
             >
               <b style={{ fontSize: 17 }}>{i + 1}. {v.name}</b>
@@ -85,7 +92,8 @@ export function Gallery() {
   const game = !!q.get("game");
   const vIndex = q.get("v") !== null ? Number(q.get("v")) : null;
   const variant = vIndex !== null ? VARIANTS[vIndex] : undefined;
-  if (!q.get("ext") && !variant) return <Index game={game} />;
+  const real = !!q.get("real");
+  if (!q.get("ext") && !variant) return <Index game={game} real={real} />;
 
   const ext = (variant ? variant.ext : q.get("ext") ?? "").split(",").filter(Boolean).map((e) => {
     const [slot, kind, level] = e.split(":");
@@ -95,6 +103,39 @@ export function Gallery() {
   const preview = pv.length === 3 ? { slot: pv[0], kind: pv[1], level: Number(pv[2]) } : null;
   const [m, o, gw, ge] = variant ? variant.sl : num(q.get("sl"), [3, 3, 3, 3]);
   const sideLevels = getSideLevels({ stand_main: m, stand_opposite: o, stand_goal_west: gw, stand_goal_east: ge });
+  if (real && variant && vIndex !== null) {
+    const facilities: Record<string, number> = {
+      stand_main: m, stand_opposite: o, stand_goal_west: gw, stand_goal_east: ge, stands: Math.max(m, o, gw, ge),
+      lighting: 2, fence: 2, parking: 1, entrance_gate: 1, refreshments: 1, changing_rooms: 2, showers: 1, toilets: 1,
+    };
+    const navBtn: React.CSSProperties = { padding: "10px 16px", background: "#fff", border: "1px solid #ccd", borderRadius: 8, fontWeight: 700, textDecoration: "none", color: "#111", fontSize: 16 };
+    const p = (vIndex + VARIANTS.length - 1) % VARIANTS.length;
+    const n = (vIndex + 1) % VARIANTS.length;
+    return (
+      <div style={{ position: "fixed", inset: 0 }}>
+        <Stadium3D
+          key={vIndex}
+          pitchCondition={90}
+          pitchType="natural"
+          facilities={facilities}
+          standExtensions={ext}
+          teamColor="#2563eb"
+          secondaryColor="#ffffff"
+          stadiumName="Sportovní areál (náhled variant)"
+          initialWeather="sunny"
+          initialMode="match_day"
+          showControls
+        />
+        <div style={{ position: "fixed", top: 12, left: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontFamily: "system-ui, sans-serif", zIndex: 50 }}>
+          <a href="?real=1" style={navBtn}>Přehled</a>
+          <a href={`?v=${p}&real=1`} style={navBtn}>‹</a>
+          <a href={`?v=${n}&real=1`} style={navBtn}>›</a>
+          <span style={{ ...navBtn, border: "none" }}>{vIndex + 1}/{VARIANTS.length} {variant.name}</span>
+          <a href={`?v=${vIndex}`} style={navBtn}>Rychlá galerie</a>
+        </div>
+      </div>
+    );
+  }
   const cam = (variant?.cam ?? num(q.get("cam"), [78, 62, 78])) as [number, number, number];
   const at = (variant?.at ?? num(q.get("at"), [0, 0, 0])) as [number, number, number];
   const replaced = replacedSides(ext, preview);
