@@ -16,6 +16,7 @@
 import { marketValue } from "@okresni-masina/shared";
 import { bodyDospivani, DOSPIVANI_DO_VEKU } from "../season/dospivani";
 import { teoretickyStropHrace } from "../skills/vyhled-hrace";
+import { tempoPodleVeku } from "../skills/verdikt";
 
 /** Naměřené tempo tréninku mladých (body hodnocení za sezónu) podle skrytého talentu. */
 export function youthTrainingTempo(talent: number): number {
@@ -33,18 +34,28 @@ export interface YouthSubject {
   skillsMax: Record<string, { maxPotential?: number }>;
 }
 
-/** Hodnocení za `seasons` sezón: trénink naměřeným tempem + dospívání, nikdy přes strop dovedností. */
+/**
+ * Hodnocení za `seasons` sezón, nikdy přes strop dovedností.
+ *
+ * Trénink: do 21 let naměřené tempo podle talentu, pak odhad podle věku (`tempoPodleVeku`).
+ * Dospívání: hra na konci sezóny NEJDŘÍV přidá rok a teprve pak dospějí hráči, kterým je
+ * nově nejvýš 21 (season-departures.ts, season-rollover.ts). Dvacetiletý tak dospěje ještě
+ * jednou, jednadvacetiletý už ne.
+ */
 export function projectRating(p: YouthSubject, seasons: number): number {
   const ceiling = teoretickyStropHrace(p.position, p.skillsMax, p.talent) ?? 100;
   let rating = p.rating;
   for (let i = 0; i < seasons; i++) {
     const age = p.age + i;
-    rating += youthTrainingTempo(p.talent);
-    if (age <= DOSPIVANI_DO_VEKU) rating += bodyDospivani(age, p.talent);
+    rating += age <= DOSPIVANI_DO_VEKU ? youthTrainingTempo(p.talent) : tempoPodleVeku(age);
+    if (age + 1 <= DOSPIVANI_DO_VEKU) rating += bodyDospivani(age + 1, p.talent);
     if (rating >= ceiling) return Math.max(p.rating, ceiling);
   }
   return Math.round(rating);
 }
+
+/** Jak daleko dopředu skaut odhaduje, kam to hráč dotáhne (stejně jako výhled vlastních hráčů). */
+export const POTENTIAL_HORIZON_SEASONS = 8;
 
 /**
  * Klub zná svého kluka: mladíka do 21 let nepustí za cenu podle dnešního hodnocení, ale za
