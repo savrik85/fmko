@@ -594,7 +594,7 @@ export default function StadiumPage() {
         ? `${slot.label}: mobilní tribunka se rozebere a místo obsadí ${option.label.toLowerCase()} (${option.capacityGain >= 0 ? "+" : ""}${option.capacityGain} míst)`
         : `${slot.label}: +${option.capacityGain} míst`,
       details: [{ label: "Cena", value: `-${formatCZK(option.cost)}`, color: "text-card-red" }],
-      confirmLabel: `${option.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit"} za ${formatCZK(option.cost)}`,
+      confirmLabel: option.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit",
     });
     if (!ok) return;
     setActing(`ext-${slot.slot}`);
@@ -1318,7 +1318,7 @@ export default function StadiumPage() {
               const open = openSlot === slotId;
               const extSummary = slot.built ? `${slot.built.label} ${slot.built.level}/3` : "bez přístavby";
               const hint = upgrade
-                ? `Tribuna jde vylepšit na ${upgrade.nextLevel}`
+                ? (upgrade.locked ? `Vylepšení na ${upgrade.nextLevel} je zatím zamčené` : `Tribuna jde vylepšit na ${upgrade.nextLevel}`)
                 : slot.options.length > 0 ? "Tribuna je na maximu, přístavbu lze postavit" : "Vše na maximu";
               return (
                 <div key={slotId} className="rounded-xl border border-gray-300 overflow-hidden">

@@ -39,7 +39,7 @@ export const EXT_KIND_DESCRIPTIONS: Record<ExtKind, string> = {
   footbridge: "Úzký dřevěný pruh u plotu, málo míst, ale levně",
   terrace: "Stupňovitý val ze zeminy za brankou, levné stání",
   round_stand: "Půlkruh za brankou s nejlepším pohledem na hřiště",
-  mobile: "Skládací kovové dílce, postaví se kamkoli, ale je jich málo",
+  mobile: "Skládací kovové dílce do rohu, míst je málo a později ji lze nahradit jinou přístavbou",
   corner: "Malá tribuna v rohu mezi dvěma stranami",
   curved_corner: "Oblouk kolem rohu, spojí sousední tribuny",
   wing: "Křídlo kolmo na tribunu, vznikne tvar L",
