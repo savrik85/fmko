@@ -64,6 +64,8 @@ AppYours ~196 tis./týden, 816 tis. na účtu; data, transakce 6. 9.–3. 10.). 
 | Cestovné | 100 Kč za km okruhu za týden → 1 500 / 3 000 / 5 000 | **odhad**, ukotvený cenou fanbusu 1 200–3 500 (fanbase-config.ts:52-75) |
 | Platnost hlášení / denní šance, že ho sebere jiný | 10 dní / 3 % | **odhad** |
 | Prodleva odpovědi klubu | žádná, jednání je živé | rozhodnutí uživatele 2026-10-04 |
+| Odhad ceny „klub si řekne asi“ | skutečný první požadavek ± 40 % × chyba skauta ((18 − 14·kvalita)/18/√návštěv) | **odhad** |
+| Ochota přejít, jak ji vidí skaut | skutečný stupeň ± round(1,5 × chyba skauta), nejvýš o 1 | **odhad** |
 | Cena mladíka do 21 let u klubu, který ho vychoval | tržní cena hráče, kterým bude za 1 sezónu (trénink + dospívání) | tempo **data** (prod 2026-10-04: talent <30 2,58 / 30–49 3,11 / 50–69 4,28 / 70+ 5,87 bodu za 120 dní), dospívání z kódu, horizont 1 sezóny **odhad** |
 
 **AI prodejce.** Skrytá rezervační cena R = tržní cena × M × e^N(0; 0,25), šum je **odhad**.

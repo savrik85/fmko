@@ -27,7 +27,7 @@ import {
   boundingBox, clubMeanFor, clubRankOf, expectedMatches, loadVillagesInRadius, normal, pickClubsToVisit,
   villageClubName, type VillageInRange, CLUB_AGE_MAX, CLUB_AGE_MIN,
 } from "./candidates";
-import { potentialRange, rangeMid, ratingRange, type Range } from "./fog";
+import { blurredAskHint, blurredWillingness, potentialRange, rangeMid, ratingRange, type Range } from "./fog";
 import { clubValuation } from "./youth-growth";
 import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms } from "./report-text";
 
@@ -303,8 +303,8 @@ async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, r
 
 async function revisit(db: D1Database, a: AssignmentRow, eff: number, sender: string): Promise<boolean> {
   const r = await db.prepare(
-    "SELECT id, player_data, visits, age, position, expires_at FROM scout_reports WHERE id = ? AND team_id = ? AND status IN ('active','negotiating')",
-  ).bind(a.revisit_report_id, a.team_id).first<{ id: string; player_data: string; visits: number; age: number; position: string; expires_at: string }>();
+    "SELECT id, player_data, visits, age, position, expires_at, source, club_rank FROM scout_reports WHERE id = ? AND team_id = ? AND status IN ('active','negotiating')",
+  ).bind(a.revisit_report_id, a.team_id).first<{ id: string; player_data: string; visits: number; age: number; position: string; expires_at: string; source: string; club_rank: number | null }>();
   if (!r) return false;
   let player: VirtualPlayerData;
   try { player = JSON.parse(r.player_data) as VirtualPlayerData; } catch (e) {
@@ -319,9 +319,11 @@ async function revisit(db: D1Database, a: AssignmentRow, eff: number, sender: st
     }, eff, visits, r.id)
     : null;
   const extended = new Date(Math.max(new Date(r.expires_at).getTime(), Date.now() + REVISIT_EXTEND_DAYS * 86_400_000)).toISOString();
+  // Další návštěva zpřesní i odhad ceny.
+  const askHint = r.source === "village_club" ? blurredAskHint(openingAsk(player, r.club_rank, a.team_id, r.id), eff, visits, r.id) : null;
   await db.prepare(
-    "UPDATE scout_reports SET visits = ?, rating_lo = ?, rating_hi = ?, potential_lo = ?, potential_hi = ?, expires_at = ? WHERE id = ?",
-  ).bind(visits, rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, extended, r.id).run();
+    "UPDATE scout_reports SET visits = ?, rating_lo = ?, rating_hi = ?, potential_lo = ?, potential_hi = ?, expires_at = ?, ask_hint = COALESCE(?, ask_hint) WHERE id = ?",
+  ).bind(visits, rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, extended, askHint, r.id).run();
   await sendScoutSms(db, a.team_id, sender, revisitSms({
     name: `${player.firstName} ${player.lastName}`, ratingLo: rr.lo, ratingHi: rr.hi,
     potentialLo: pr?.lo ?? null, potentialHi: pr?.hi ?? null, youth: isYouthScoutTask(r.age),
@@ -361,7 +363,7 @@ async function search(db: D1Database, a: AssignmentRow, eff: number, sender: str
     await sendScoutSms(db, a.team_id, sender, emptyWeekSms(rng, visited.map((v) => v.name)));
     return { visited: visited.length, reported: false };
   }
-  await createReport(db, a, best, sender, rng, youth, gameDate);
+  await createReport(db, a, best, sender, rng, youth, gameDate, eff);
   return { visited: visited.length, reported: true };
 }
 
@@ -475,15 +477,21 @@ async function freeAgentCandidates(
   return out.length > 0 ? [out[rng.int(0, out.length - 1)]] : [];
 }
 
-async function createReport(db: D1Database, a: AssignmentRow, c: Candidate, sender: string, rng: Rng, youth: boolean, gameDate: string): Promise<void> {
+/**
+ * První požadavek klubu (stejný výpočet jako na začátku jednání, stejný seed), aby se skautův
+ * odhad ceny vztahoval ke skutečné ceně klubu.
+ */
+export function openingAsk(p: VirtualPlayerData, clubRank: number | null, teamId: string, reportId: string): number {
+  return initAiSellerState({
+    stance: "poached", clubRank: clubRank ?? 12,
+    marketValue: clubValuation({ age: p.age, rating: p.overallRating, position: p.position, talent: p.hiddenTalent ?? 0, skillsMax: p.skillCaps ?? {} }),
+    seed: stableSeed(`${reportId}:${teamId}`),
+  }).ask;
+}
+
+async function createReport(db: D1Database, a: AssignmentRow, c: Candidate, sender: string, rng: Rng, youth: boolean, gameDate: string, eff: number): Promise<void> {
   const p = c.player;
-  const askHint = c.source === "village_club"
-    ? Math.round(initAiSellerState({
-      stance: "poached", clubRank: c.clubRank ?? 12,
-      marketValue: clubValuation({ age: p.age, rating: p.overallRating, position: p.position, talent: p.hiddenTalent ?? 0, skillsMax: p.skillCaps ?? {} }),
-      seed: stableSeed(`${c.id}:${a.team_id}`),
-    }).ask / 1000) * 1000
-    : null;
+  const askHint = c.source === "village_club" ? blurredAskHint(openingAsk(p, c.clubRank, a.team_id, c.id), eff, 1, c.id) : null;
   const chance = await estimateWillingness(db, a.team_id, p, c.village?.district ?? null,
     c.village ? { lat: c.village.lat, lng: c.village.lng } : null, c.clubMean)
     .catch((e) => { logger.warn({ module: "scouting" }, "odhad ochoty do hlášení", e); return null; });
@@ -500,7 +508,7 @@ async function createReport(db: D1Database, a: AssignmentRow, c: Candidate, send
     c.distanceKm, c.freeAgentId, JSON.stringify(p), p.firstName, p.lastName, p.age, p.position,
     c.ratingRange.lo, c.ratingRange.hi, c.potential?.lo ?? null, c.potential?.hi ?? null,
     c.clubRank, c.clubMean, askHint, JSON.stringify(reportPros(subject)), JSON.stringify(reportCons(subject)),
-    chance != null ? willingnessFromChance(chance) : null, expiresAt, gameDate.slice(0, 10),
+    chance != null ? blurredWillingness(willingnessFromChance(chance), eff, 1, c.id) : null, expiresAt, gameDate.slice(0, 10),
   ).run();
 
   await sendScoutSms(db, a.team_id, sender, reportSms(rng, {

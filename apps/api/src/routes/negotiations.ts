@@ -13,6 +13,8 @@ import {
   signAiNegotiation, termsOf, withdrawAiNegotiation, SQUAD_CAP, type AiNegotiationRow, type PushEnv,
 } from "../transfers/ai-negotiation";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
+import { blurredWillingness } from "../scouting/fog";
+import { loadTeamScout, scoutEffectiveness } from "../scouting/scout-work";
 import { transferSchedule, willingnessFromChance, SCOUT_WILLINGNESS_LABELS, type TransferTerms } from "@okresni-masina/shared";
 
 export const negotiationsRouter = new Hono<{ Bindings: Bindings }>();
@@ -107,9 +109,9 @@ negotiationsRouter.get("/teams/:teamId/negotiations/:id", async (c) => {
 
   const report = row.scout_report_id
     ? await c.env.DB.prepare(
-      `SELECT sr.potential_lo, sr.potential_hi, sr.distance_km, sr.club_mean, sr.district, v.lat, v.lng
+      `SELECT sr.potential_lo, sr.potential_hi, sr.distance_km, sr.club_mean, sr.district, sr.visits, v.lat, v.lng
          FROM scout_reports sr LEFT JOIN villages v ON v.id = sr.village_id WHERE sr.id = ?`,
-    ).bind(row.scout_report_id).first<{ potential_lo: number | null; potential_hi: number | null; distance_km: number; club_mean: number | null; district: string | null; lat: number | null; lng: number | null }>()
+    ).bind(row.scout_report_id).first<{ potential_lo: number | null; potential_hi: number | null; distance_km: number; club_mean: number | null; district: string | null; visits: number; lat: number | null; lng: number | null }>()
     : null;
   const data = parse<Partial<VirtualPlayerData>>(row.listing_data ?? row.report_data, {});
 
@@ -140,7 +142,9 @@ negotiationsRouter.get("/teams/:teamId/negotiations/:id", async (c) => {
       report?.club_mean ?? null, row.listing_id ? 65 : undefined)
       .catch((e) => { logger.warn({ module: "negotiations" }, "odhad ochoty", e); return null; });
     if (chance != null) {
-      const level = willingnessFromChance(chance);
+      // Ochotu vidíš očima skauta: slabší (nebo žádný) se může o stupeň splést.
+      const scout = await loadTeamScout(c.env.DB, teamId);
+      const level = blurredWillingness(willingnessFromChance(chance), scout ? scoutEffectiveness(scout) : 0, report?.visits ?? 1, row.player_key);
       willingness = { level, label: SCOUT_WILLINGNESS_LABELS[level] };
     }
   }
