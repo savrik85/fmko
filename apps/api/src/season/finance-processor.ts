@@ -449,7 +449,7 @@ export async function processMatchDayFinances(
     .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "finance" }, "query stadium", e); return null; });
   const facilities: Record<string, number> = {};
   if (stadiumRow) {
-    for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "parking", "fence", "roof", "ultras_stand", "toilets", "entrance_gate", "security", "cage", "vip_box"]) {
+    for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east", "parking", "fence", "roof", "ultras_stand", "toilets", "entrance_gate", "security", "cage", "vip_box"]) {
       facilities[key] = (stadiumRow[key] as number) ?? 0;
     }
   }

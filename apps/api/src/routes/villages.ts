@@ -1160,8 +1160,29 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
     inv.target_facility || inv.type;
 
   // Aplikovat upgrade na stadion (pokud target_facility je stadium key)
-  const stadiumFacilities = ["showers", "stands", "parking", "changing_rooms", "refreshments", "fence"];
-  if (inv.target_facility && stadiumFacilities.includes(inv.target_facility)) {
+  const stadiumFacilities = ["showers", "parking", "changing_rooms", "refreshments", "fence"];
+  if (inv.target_facility === "stands") {
+    // Tribuny se staví po stranách: obec dostaví nejnižší stranu pod L3
+    // (při shodě první v pořadí hlavní, protější, branky).
+    const { STAND_SIDES, STAND_COLUMNS } = await import("../stadium/stands-model");
+    const row = await c.env.DB.prepare(
+      `SELECT ${STAND_COLUMNS} FROM stadiums WHERE team_id = ?`,
+    ).bind(teamRowAuth.id).first<Record<string, number>>().catch((e) => {
+      logger.warn({ module: "villages" }, "read stands for investment", e);
+      return null;
+    });
+    const target = row
+      ? [...STAND_SIDES].filter((side) => (row[side] ?? 0) < 3)
+        .sort((a, b) => (row[a] ?? 0) - (row[b] ?? 0))[0]
+      : undefined;
+    if (target) {
+      await c.env.DB.prepare(
+        `UPDATE stadiums SET ${target} = MIN(3, COALESCE(${target}, 0) + 1) WHERE team_id = ?`,
+      ).bind(teamRowAuth.id).run().catch((e) => {
+        logger.warn({ module: "villages" }, `upgrade ${target}`, e);
+      });
+    }
+  } else if (inv.target_facility && stadiumFacilities.includes(inv.target_facility)) {
     await c.env.DB.prepare(
       `UPDATE stadiums SET ${inv.target_facility} = MIN(3, COALESCE(${inv.target_facility}, 0) + 1)
        WHERE team_id = ?`

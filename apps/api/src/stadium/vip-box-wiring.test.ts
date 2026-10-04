@@ -1,7 +1,7 @@
 /**
  * Lóže musí dorazit všude, kde se kapacita počítá jen z tribun.
  *
- * `calculateFacilityEffects({ stands })` bez lóže by klubu s lóží ukázal v náhledu
+ * `calculateFacilityEffects({ stands })` (dnes `{ ...readStandLevels(řádek) }`) bez lóže by klubu s lóží ukázal v náhledu
  * zápasu a v profilu víc míst, než kolik jich v zápase opravdu je. Stejný vzor
  * jako `facility-keys.test.ts`: test čte zdroják, protože jde o tichou chybu.
  */
@@ -15,7 +15,7 @@ const zdroj = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 describe("VIP lóže je zapojená", () => {
   for (const soubor of ["routes/matches.ts", "routes/teams.ts"]) {
     it(`${soubor}: každý výpočet kapacity z tribun zná i lóži`, () => {
-      const volani = [...zdroj(soubor).matchAll(/\(\{\s*stands:[^}]*\}\)/g)].map((m) => m[0]);
+      const volani = [...zdroj(soubor).matchAll(/\(\{\s*(?:stands:|\.\.\.readStandLevels)[^}]*\}\)/g)].map((m) => m[0]);
       expect(volani.length).toBeGreaterThan(0);
       expect(volani.filter((v) => !v.includes("vip_box"))).toEqual([]);
     });
