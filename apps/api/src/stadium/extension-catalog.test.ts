@@ -139,4 +139,25 @@ describe("pravidla odemykání", () => {
     const second = slotsOf(sides, [{ slot: "ext_main", kind: "second_tier", level: 1 }]);
     expect(option(second, "corner_main_goal_east", "corner").locked).toBe(false);
   });
+
+  it("boční křídlo se vylučuje s točenou tribunou a valem na straně za brankou, kam navazuje", () => {
+    const sides = legacyStandsToSides(3);
+    // Točená tribuna za levou brankou zamkne křídla v obou jejích rozích.
+    const withRound = slotsOf(sides, [{ slot: "ext_goal_west", kind: "round_stand", level: 1 }]);
+    for (const slot of ["corner_main_goal_west", "corner_opposite_goal_west"]) {
+      const wing = option(withRound, slot, "wing");
+      expect(wing.locked, slot).toBe(true);
+      expect(wing.lockReason).toContain("křídl");
+    }
+    expect(option(withRound, "corner_main_goal_east", "wing").locked).toBe(false);
+    // Jiné druhy v témže rohu točená tribuna nezamyká.
+    expect(option(withRound, "corner_main_goal_west", "curved_corner").locked).toBe(false);
+    // A naopak: kdo má v rohu křídlo, nemůže na té straně postavit točenou tribunu ani val.
+    const withWing = slotsOf(sides, [{ slot: "corner_main_goal_west", kind: "wing", level: 1 }]);
+    expect(option(withWing, "ext_goal_west", "round_stand").locked).toBe(true);
+    expect(option(withWing, "ext_goal_west", "terrace").locked).toBe(true);
+    expect(option(withWing, "ext_goal_east", "round_stand").locked).toBe(false);
+    // Druhé patro na straně za brankou křídlu nevadí.
+    expect(option(withWing, "ext_goal_west", "second_tier").locked).toBe(false);
+  });
 });

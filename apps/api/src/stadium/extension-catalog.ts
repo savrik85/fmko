@@ -200,15 +200,27 @@ function cornerConflict(
   built: ReadonlyArray<{ slot: string; kind: string; level: number }>,
 ): string | undefined {
   const def = EXT_SLOT_DEFS[slot];
+  const defOf = (b: { slot: string }) => EXT_SLOT_DEFS[b.slot as ExtSlot];
+  const touches = (b: { slot: string }) => !!defOf(b)?.sides.some((s) => def.sides.includes(s));
+  // Křídlo je rovný blok navazující na ROVNOU tribunu za brankou. Točená tribuna a val tu rovnou
+  // tribunu nahrazují jiným tvarem, takže křídlo by k ní nenavazovalo (ohýbá se k hřišti).
+  const SHAPED_GOAL = ["round_stand", "terrace"];
   if (def.type === "corner") {
+    if (kind === "wing" && built.some((b) => SHAPED_GOAL.includes(b.kind) && defOf(b)?.type === "side" && touches(b))) {
+      return "Za brankou stojí točená tribuna nebo val, boční křídlo by na ně nenavazovalo";
+    }
     // Roh: některá z jeho tribun je prodloužená.
-    const lengthened = built.some((b) => b.kind === "length" && EXT_SLOT_DEFS[b.slot as ExtSlot]?.sides.some((s) => def.sides.includes(s)));
-    return lengthened ? "Sousední tribuna je prodloužená až do rohu, na rohovou přístavbu tu není místo" : undefined;
+    if (built.some((b) => b.kind === "length" && touches(b))) {
+      return "Sousední tribuna je prodloužená až do rohu, na rohovou přístavbu tu není místo";
+    }
+    return undefined;
   }
-  if (kind === "length") {
+  if (SHAPED_GOAL.includes(kind) && built.some((b) => b.kind === "wing" && defOf(b)?.type === "corner" && touches(b))) {
+    return "V rohu u této tribuny stojí boční křídlo, které na točenou tribunu nebo val nenavazuje";
+  }
+  if (kind === "length" && built.some((b) => defOf(b)?.type === "corner" && touches(b))) {
     // Prodloužení: v některém rohu té strany už něco stojí.
-    const taken = built.some((b) => EXT_SLOT_DEFS[b.slot as ExtSlot]?.type === "corner" && EXT_SLOT_DEFS[b.slot as ExtSlot].sides.some((s) => def.sides.includes(s)));
-    return taken ? "V rohu u této tribuny už stojí přístavba, prodloužení by do ní zasáhlo" : undefined;
+    return "V rohu u této tribuny už stojí přístavba, prodloužení by do ní zasáhlo";
   }
   return undefined;
 }

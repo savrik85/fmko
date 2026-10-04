@@ -105,23 +105,26 @@ export function Gallery() {
   const [m, o, gw, ge] = variant ? variant.sl : num(q.get("sl"), [3, 3, 3, 3]);
   const sideLevels = getSideLevels({ stand_main: m, stand_opposite: o, stand_goal_west: gw, stand_goal_east: ge });
   const roofParam = Math.max(0, Math.min(3, Number(q.get("roof") ?? 0)));
-  if (real && variant && vIndex !== null) {
+  if (real && (variant || ext.length > 0)) {
     const facilities: Record<string, number> = {
       stand_main: m, stand_opposite: o, stand_goal_west: gw, stand_goal_east: ge, stands: Math.max(m, o, gw, ge),
       lighting: 2, fence: 2, parking: 1, entrance_gate: 1, refreshments: 1, changing_rooms: 2, showers: 1, toilets: 1,
       roof: roofParam,
     };
     const navBtn: React.CSSProperties = { padding: "10px 16px", background: "#fff", border: "1px solid #ccd", borderRadius: 8, fontWeight: 700, textDecoration: "none", color: "#111", fontSize: 16 };
-    const p = (vIndex + VARIANTS.length - 1) % VARIANTS.length;
-    const n = (vIndex + 1) % VARIANTS.length;
+    const vi = vIndex ?? 0;
+    const p = (vi + VARIANTS.length - 1) % VARIANTS.length;
+    const n = (vi + 1) % VARIANTS.length;
     return (
       <div style={{ position: "fixed", inset: 0 }}>
         <Stadium3D
-          key={`${vIndex}-${roofParam}`}
+          key={`${vIndex}-${roofParam}-${q.get("vp") ?? ""}`}
+          initialViewpoint={(q.get("vp") as never) ?? "overview"}
           pitchCondition={90}
           pitchType="natural"
           facilities={facilities}
           standExtensions={ext}
+          extensionPreview={preview}
           teamColor="#2563eb"
           secondaryColor="#ffffff"
           stadiumName="Sportovní areál (náhled variant)"
@@ -133,9 +136,13 @@ export function Gallery() {
           <a href={`?real=1&roof=${roofParam}`} style={navBtn}>Přehled</a>
           <a href={`?v=${p}&real=1&roof=${roofParam}`} style={navBtn}>‹</a>
           <a href={`?v=${n}&real=1&roof=${roofParam}`} style={navBtn}>›</a>
-          <span style={{ ...navBtn, border: "none" }}>{vIndex + 1}/{VARIANTS.length} {variant.name}</span>
-          <a href={`?v=${vIndex}&real=1&roof=${roofParam === 0 ? 2 : 0}`} style={navBtn}>{roofParam === 0 ? "Se střechou" : "Bez střechy"}</a>
-          <a href={`?v=${vIndex}`} style={navBtn}>Rychlá galerie</a>
+          <span style={{ ...navBtn, border: "none" }}>{variant ? `${vi + 1}/${VARIANTS.length} ${variant.name}` : "Ruční sestava"}</span>
+          {variant && (
+            <>
+              <a href={`?v=${vi}&real=1&roof=${roofParam === 0 ? 2 : 0}`} style={navBtn}>{roofParam === 0 ? "Se střechou" : "Bez střechy"}</a>
+              <a href={`?v=${vi}`} style={navBtn}>Rychlá galerie</a>
+            </>
+          )}
         </div>
       </div>
     );
