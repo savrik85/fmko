@@ -538,9 +538,6 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* ═══ Přehled přestupů (vlastní i cizí tým) ═══ */}
-      <TransferOverview teamId={teamId} />
-
       {/* ═══ Squad (vlastní tým; cizí má ForeignSquad nahoře) ═══ */}
       {isOwnTeam && (
       <div className="card p-4 sm:p-5">
@@ -691,6 +688,9 @@ export default function TeamPage() {
       </div>
       )}
 
+
+      {/* ═══ Přehled přestupů (vlastní i cizí tým) ═══ */}
+      <TransferOverview teamId={teamId} />
     </div>
     </>
   );
