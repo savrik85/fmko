@@ -165,4 +165,39 @@ describe("pravidla odemykání", () => {
     // Druhé patro na straně za brankou křídlu nevadí.
     expect(option(withWing, "ext_goal_west", "second_tier").locked).toBe(false);
   });
+
+  it("mobilní tribunka je dočasná: místo jde obsadit jinou přístavbou (nahrazení), cena je cena nové", () => {
+    const sides = legacyStandsToSides(3);
+    const slots = slotsOf(sides, [{ slot: "corner_main_goal_east", kind: "mobile", level: 2 }]);
+    const options = slots.find((x) => x.slot === "corner_main_goal_east")!.options;
+    // Vylepšení mobilní tribunky zůstává a nahrazuje se nic.
+    const upgrade = options.find((o) => o.kind === "mobile")!;
+    expect(upgrade.replaces).toBeFalsy();
+    expect(upgrade.level).toBe(3);
+    // Ostatní druhy z rohu jsou nabídnuté jako nahrazení na úrovni 1.
+    for (const k of ["corner", "curved_corner", "wing", "bridge"]) {
+      const o = options.find((x) => x.kind === k)!;
+      expect(o, k).toBeDefined();
+      expect(o.replaces).toBe(true);
+      expect(o.level).toBe(1);
+      expect(o.cost).toBe(extCost(k as never, 1));
+      // Přírůstek je rozdíl proti rozebrané mobilní tribunce (může být záporný).
+      expect(o.capacityGain).toBe(extCapacity(k, 1) - extCapacity("mobile", 2));
+    }
+  });
+
+  it("jiné než mobilní přístavby se nenahrazují, jen vylepšují", () => {
+    const sides = legacyStandsToSides(3);
+    const slots = slotsOf(sides, [{ slot: "corner_main_goal_east", kind: "corner", level: 1 }]);
+    const options = slots.find((x) => x.slot === "corner_main_goal_east")!.options;
+    expect(options.map((o) => o.kind)).toEqual(["corner"]);
+    expect(options[0].replaces).toBeFalsy();
+  });
+
+  it("nahrazení respektuje pravidla nové přístavby (rohová tribuna chce obě tribuny)", () => {
+    const sides = { ...legacyStandsToSides(0), stand_main: 1 };
+    const slots = slotsOf(sides, [{ slot: "corner_main_goal_east", kind: "mobile", level: 1 }]);
+    const options = slots.find((x) => x.slot === "corner_main_goal_east")!.options;
+    expect(options.find((o) => o.kind === "corner")!.locked).toBe(true);
+  });
 });

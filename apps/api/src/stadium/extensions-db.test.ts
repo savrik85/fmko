@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildExtension, loadExtensions } from "./extensions-db";
+import { buildExtension, loadExtensions, replaceMobileExtension } from "./extensions-db";
 import { extCapacity } from "./extension-catalog";
 
 let miniflare: Miniflare;
@@ -67,5 +67,33 @@ describe("buildExtension", () => {
     await buildExtension(db, "t1", "ext_main", "length", 0);
     await buildExtension(db, "t1", "corner_main_goal_east", "curved_corner", 0);
     expect(await capacityOf()).toBe(extCapacity("length", 1) + extCapacity("curved_corner", 1));
+  });
+});
+
+describe("replaceMobileExtension", () => {
+  it("mobilní tribunku nahradí jinou přístavbou na úrovni 1 a kapacita se přepočítá", async () => {
+    await buildExtension(db, "t1", "corner_main_goal_east", "mobile", 0);
+    await buildExtension(db, "t1", "corner_main_goal_east", "mobile", 1);
+    expect(await replaceMobileExtension(db, "t1", "corner_main_goal_east", "curved_corner", 2)).toBe(true);
+    expect(await loadExtensions(db, "t1")).toEqual([{ slot: "corner_main_goal_east", kind: "curved_corner", level: 1 }]);
+    expect(await capacityOf()).toBe(extCapacity("curved_corner", 1));
+  });
+
+  it("dvojí nahrazení: druhé prohraje a nic se nezmění", async () => {
+    await buildExtension(db, "t1", "corner_main_goal_east", "mobile", 0);
+    expect(await replaceMobileExtension(db, "t1", "corner_main_goal_east", "corner", 1)).toBe(true);
+    expect(await replaceMobileExtension(db, "t1", "corner_main_goal_east", "wing", 1)).toBe(false);
+    expect(await loadExtensions(db, "t1")).toEqual([{ slot: "corner_main_goal_east", kind: "corner", level: 1 }]);
+  });
+
+  it("nahradit jde jen mobilní tribunku, jiný druh zůstane", async () => {
+    await buildExtension(db, "t1", "corner_main_goal_east", "corner", 0);
+    expect(await replaceMobileExtension(db, "t1", "corner_main_goal_east", "wing", 1)).toBe(false);
+    expect((await loadExtensions(db, "t1"))[0].kind).toBe("corner");
+  });
+
+  it("nahrazení špatné úrovně neprojde", async () => {
+    await buildExtension(db, "t1", "corner_main_goal_east", "mobile", 0);
+    expect(await replaceMobileExtension(db, "t1", "corner_main_goal_east", "corner", 3)).toBe(false);
   });
 });

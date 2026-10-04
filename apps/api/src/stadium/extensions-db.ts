@@ -52,3 +52,24 @@ export async function buildExtension(
   await refreshExtensionCapacity(db, teamId);
   return true;
 }
+
+/**
+ * Nahradí mobilní tribunku v místě jinou přístavbou na úrovni 1. Atomicky: UPDATE sedne jen když
+ * v místě pořád stojí mobilní tribunka dané úrovně, takže dvojí odeslání nebo souběžná stavba
+ * neprojde. Kdo zámek prohraje, nezapíše nic a volající nesmí strhnout peníze.
+ */
+export async function replaceMobileExtension(
+  db: D1Database,
+  teamId: string,
+  slot: string,
+  newKind: string,
+  currentLevel: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare("UPDATE stadium_extensions SET kind = ?, level = 1 WHERE team_id = ? AND slot = ? AND kind = 'mobile' AND level = ?")
+    .bind(newKind, teamId, slot, currentLevel)
+    .run();
+  if ((res.meta?.changes ?? 0) < 1) return false;
+  await refreshExtensionCapacity(db, teamId);
+  return true;
+}

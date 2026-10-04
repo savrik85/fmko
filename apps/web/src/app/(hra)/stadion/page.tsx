@@ -52,6 +52,8 @@ interface ExtOptionData {
   locked: boolean;
   lockReason?: string;
   lockDetail?: LockDetailData;
+  /** Nová přístavba nahradí mobilní tribunku v místě (ta se rozebere). */
+  replaces?: boolean;
 }
 
 interface ExtSlotData {
@@ -585,10 +587,14 @@ export default function StadiumPage() {
   const handleBuildExtension = async (slot: ExtSlotData, option: ExtOptionData) => {
     if (!teamId || acting) return;
     const ok = await confirm({
-      title: `${slot.built ? "Vylepšit" : "Postavit"} ${option.label}?`,
-      description: `${slot.label}: +${option.capacityGain} míst`,
+      title: option.replaces
+        ? `Nahradit mobilní tribunku: ${option.label}?`
+        : `${slot.built ? "Vylepšit" : "Postavit"} ${option.label}?`,
+      description: option.replaces
+        ? `${slot.label}: mobilní tribunka se rozebere a místo obsadí ${option.label.toLowerCase()} (${option.capacityGain >= 0 ? "+" : ""}${option.capacityGain} míst)`
+        : `${slot.label}: +${option.capacityGain} míst`,
       details: [{ label: "Cena", value: `-${formatCZK(option.cost)}`, color: "text-card-red" }],
-      confirmLabel: `${slot.built ? "Vylepšit" : "Postavit"} za ${formatCZK(option.cost)}`,
+      confirmLabel: `${option.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit"} za ${formatCZK(option.cost)}`,
     });
     if (!ok) return;
     setActing(`ext-${slot.slot}`);
@@ -621,8 +627,11 @@ export default function StadiumPage() {
               {o.label} <span className="text-muted font-normal">· úroveň {o.level}</span>
             </div>
             <div className="text-sm text-muted leading-snug">{o.description}</div>
+            {o.replaces && (
+              <div className="text-sm text-pitch-600 leading-snug">Nahradí mobilní tribunku, ta se rozebere.</div>
+            )}
             <div className="text-sm">
-              <span className="font-heading font-bold tabular-nums">+{o.capacityGain} míst</span>{" "}
+              <span className="font-heading font-bold tabular-nums">{o.capacityGain >= 0 ? "+" : ""}{o.capacityGain} míst</span>{" "}
               <span className="text-muted">·</span>{" "}
               <span className="font-heading font-bold tabular-nums">{formatCZK(o.cost)}</span>
             </div>
@@ -636,7 +645,7 @@ export default function StadiumPage() {
                 disabled={o.locked || (team?.budget ?? 0) < o.cost || !!acting}
                 className="btn btn-primary btn-sm min-h-11 flex-1 sm:flex-none"
               >
-                {acting === `ext-${slot.slot}` ? "…" : slot.built ? "Vylepšit" : "Postavit"}
+                {acting === `ext-${slot.slot}` ? "…" : o.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit"}
               </button>
             </div>
           </div>
@@ -750,7 +759,7 @@ export default function StadiumPage() {
                   <span className="font-heading font-bold tabular-nums">{stadium.capacity}</span>
                   {" → "}
                   <span className="font-heading font-bold tabular-nums">{stadium.capacity + extPreview.option.capacityGain}</span>
-                  {" "}(+{extPreview.option.capacityGain} míst), cena{" "}
+                  {" "}({extPreview.option.capacityGain >= 0 ? "+" : ""}{extPreview.option.capacityGain} míst), cena{" "}
                   <span className="font-heading font-bold tabular-nums">{formatCZK(extPreview.option.cost)}</span>.
                   Ve scéně je přístavba průhledná.
                 </div>
@@ -764,7 +773,7 @@ export default function StadiumPage() {
                         disabled={!canBuild}
                         className="btn btn-primary btn-sm min-h-11"
                       >
-                        {slot.built ? "Vylepšit" : "Postavit"}
+                        {extPreview.option.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit"}
                       </button>
                     ) : null;
                   })()}
