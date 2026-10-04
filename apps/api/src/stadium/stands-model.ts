@@ -28,14 +28,18 @@ export const STAND_SIDE_LABELS: Record<StandSide, string> = {
 
 /**
  * Kapacita strany podle úrovně (index 0–3).
- * Součty po úrovních: 0, 30+20+20+20 = 90, 100+60+65+65 = 290, 170+110+110+110 = 500.
+ *
+ * Součty tak, aby převod dnešních klubů nezměnil kapacitu ani vzhled (viz `legacyStandsToSides`):
+ *   dnešní L1 = jen obě tribuny za brankami: 45 + 45 = 90,
+ *   dnešní L2 = všechny čtyři strany na L2: 60 + 40 + 95 + 95 = 290,
+ *   dnešní L3 = všechny čtyři strany na L3: 120 + 80 + 150 + 150 = 500.
  * Přírůstky každé strany s úrovní neklesají (dražší stupeň nikdy nedá míň).
  */
 export const STAND_SIDE_CAPACITY: Record<StandSide, readonly number[]> = {
-  stand_main: [0, 30, 100, 170],
-  stand_opposite: [0, 20, 60, 110],
-  stand_goal_west: [0, 20, 65, 110],
-  stand_goal_east: [0, 20, 65, 110],
+  stand_main: [0, 15, 60, 120],
+  stand_opposite: [0, 10, 40, 80],
+  stand_goal_west: [0, 45, 95, 150],
+  stand_goal_east: [0, 45, 95, 150],
 };
 
 function clampLevel(v: unknown): number {
@@ -68,10 +72,15 @@ export function standFacilities(
   return { ...readStandLevels(f), stand_ext_capacity: typeof ext === "number" && Number.isFinite(ext) ? Math.max(0, Math.round(ext)) : 0 };
 }
 
-/** Starý model: jedna úroveň platí pro všechny čtyři strany. */
+/**
+ * Starý model: jedna úroveň `stands`. Tak ji kreslila 3D scéna i počítala kapacita: L1 měla tribuny
+ * jen za brankami, na dlouhých stranách stála tribuna až od L2. Převod proto dává L1 jen oběma
+ * tribunám za brankou a L2 a L3 všem čtyřem stranám, aby se kluby po převodu nezměnily.
+ */
 export function legacyStandsToSides(level: number): StandLevels {
   const l = clampLevel(level);
-  return { stand_main: l, stand_opposite: l, stand_goal_west: l, stand_goal_east: l };
+  const long = l >= 2 ? l : 0;
+  return { stand_main: long, stand_opposite: long, stand_goal_west: l, stand_goal_east: l };
 }
 
 export function standsCapacity(levels: StandLevels): number {

@@ -58,3 +58,20 @@ describe("ceny a přírůstky po stranách", () => {
     }
   });
 });
+
+describe("převod dnešní úrovně na strany zachová vzhled i kapacitu", () => {
+  it("L1 má tribuny jen za brankami, L2 a L3 na všech čtyřech stranách (jako dosud ve 3D)", () => {
+    expect(legacyStandsToSides(0)).toEqual({ stand_main: 0, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 0 });
+    expect(legacyStandsToSides(1)).toEqual({ stand_main: 0, stand_opposite: 0, stand_goal_west: 1, stand_goal_east: 1 });
+    expect(legacyStandsToSides(2)).toEqual({ stand_main: 2, stand_opposite: 2, stand_goal_west: 2, stand_goal_east: 2 });
+    expect(legacyStandsToSides(3)).toEqual({ stand_main: 3, stand_opposite: 3, stand_goal_west: 3, stand_goal_east: 3 });
+  });
+
+  it("přírůstek každé strany s úrovní neklesá (dražší stupeň nedá míň)", () => {
+    for (const side of STAND_SIDES) {
+      const c = STAND_SIDE_CAPACITY[side];
+      const inc = [c[1] - c[0], c[2] - c[1], c[3] - c[2]];
+      expect(inc, side).toEqual([...inc].sort((a, b) => a - b));
+    }
+  });
+});
