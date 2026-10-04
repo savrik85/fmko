@@ -296,36 +296,53 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
   }
 }
 
-/** Rohové přístavby: umístění ve světě podle rohu (sx, sz), lokální +Z míří po úhlopříčce ven. */
+/**
+ * Rohové přístavby vyplňují mezeru mezi konci dvou sousedních tribun.
+ *
+ * Mezera je mezi předním rohem konce tribuny za brankou (P_n) a předním rohem konce tribuny
+ * na dlouhé straně (P_e). Zahnutá tribuna je čtvrtkruh se středem v rohu hřiště, jehož poloměr
+ * sedí na oba body, rohová tribuna je přímý klín mezi nimi, most spojuje obě tribuny nad mezerou.
+ */
 function CornerKind({ kind, level, sx, sz, sideLevels, c }: { kind: string; level: number; sx: number; sz: number; sideLevels: SideLevels; c: Common }) {
   const l = lv(level);
   const ex = PITCH.width / 2;
   const ez = PITCH.depth / 2;
   const diag = Math.atan2(sx, sz);
   const goalSide: SceneSide = sz > 0 ? "north" : "south";
-  const goalLevel = sideLevels[goalSide];
+  const longSide: SceneSide = sx > 0 ? "east" : "west";
+  const dn = dimsOf(Math.max(1, sideLevels[goalSide])).depth;
+  const de = dimsOf(Math.max(1, sideLevels[longSide])).depth;
+  const rN = STAND_GAP + dn / 2;
+  const rE = STAND_GAP + de / 2;
+  const pn: [number, number] = [sx * ex, sz * (ez + rN)];
+  const pe: [number, number] = [sx * (ex + rE), sz * ez];
+  const mid: [number, number] = [(pn[0] + pe[0]) / 2, (pn[1] + pe[1]) / 2];
+  const gapLen = Math.hypot(pn[0] - pe[0], pn[1] - pe[1]);
   switch (kind) {
-    case "corner":
+    case "corner": {
+      const rows = 2 * l;
       return (
-        <group position={[sx * (ex + STAND_GAP + 1.5), 0, sz * (ez + STAND_GAP + 1.5)]} rotation={[0, diag, 0]}>
-          <Block length={6 + 2 * l} rows={2 + l} depth={(2 + l) * 1.6} height={(2 + l) * 0.6} level={2} c={c} />
+        <group position={[mid[0], 0, mid[1]]} rotation={[0, diag, 0]}>
+          <Block length={gapLen + 0.4} rows={rows} depth={rows * 1.2} height={rows * 0.55} level={2} c={c} />
         </group>
       );
+    }
     case "curved_corner": {
-      const rows = 2 + l;
+      const rows = 2 * l;
       return (
-        <group position={[sx * (ex + 1), 0, sz * (ez + 1)]} rotation={[0, diag, 0]}>
-          <ArcStand rIn={6} rows={rows} angle={Math.PI / 2} rowW={1.3} rise={0.6} c={c} />
+        <group position={[sx * ex, 0, sz * ez]} rotation={[0, diag, 0]}>
+          <ArcStand rIn={(rN + rE) / 2} rows={rows} angle={Math.PI / 2} rowW={1.2} rise={0.55} c={c} />
         </group>
       );
     }
     case "wing": {
-      // Pokračování tribuny za brankou kolem rohu: stejná výška i hloubka jako sousední tribuna.
+      // Pokračování tribuny za brankou kolem rohu: stejná výška i hloubka jako ona.
+      const goalLevel = sideLevels[goalSide];
       const sd = dimsOf(goalLevel >= 1 ? goalLevel : 2);
       const w = 8 + l * 3;
       return (
         <group
-          position={[sx * (ex + w / 2 + 0.3), 0, sz * (ez + STAND_GAP + sd.depth / 2)]}
+          position={[sx * (ex + w / 2), 0, sz * (ez + STAND_GAP + sd.depth / 2)]}
           rotation={[0, sz > 0 ? 0 : Math.PI, 0]}
         >
           <Block length={w} rows={sd.rows} depth={sd.depth} height={sd.height} level={lv(goalLevel >= 1 ? goalLevel : 2)} c={c} />
@@ -333,9 +350,9 @@ function CornerKind({ kind, level, sx, sz, sideLevels, c }: { kind: string; leve
       );
     }
     case "bridge": {
-      const len = 8 + l * 2;
+      const len = gapLen + 2 + l;
       return (
-        <group position={[sx * (ex + 5), 0, sz * (ez + 5)]} rotation={[0, diag, 0]}>
+        <group position={[mid[0], 0, mid[1]]} rotation={[0, diag, 0]}>
           <Posts xs={[-len / 2 + 0.4, len / 2 - 0.4]} zs={[-0.9, 0.9]} height={3} color={CONCRETE} />
           <Box size={[len, 0.4, 2.8]} position={[0, 3.2, 0]} color={CONCRETE} />
           <Box size={[len, 0.9, 0.08]} position={[0, 3.85, 1.35]} color="#BFE3F2" rough={0.15} />
@@ -343,12 +360,14 @@ function CornerKind({ kind, level, sx, sz, sideLevels, c }: { kind: string; leve
         </group>
       );
     }
-    case "mobile":
+    case "mobile": {
+      const rows = 1 + l;
       return (
-        <group position={[sx * (ex + STAND_GAP + 2), 0, sz * (ez + STAND_GAP + 2)]} rotation={[0, diag, 0]}>
-          <Block length={4 + l * 1.5} rows={1 + l} depth={(1 + l) * 1.1} height={(1 + l) * 0.55} level={1} standColor={METAL} panel={false} c={c} />
+        <group position={[mid[0], 0, mid[1]]} rotation={[0, diag, 0]}>
+          <Block length={gapLen} rows={rows} depth={rows * 1.1} height={rows * 0.55} level={1} standColor={METAL} panel={false} c={c} />
         </group>
       );
+    }
     default:
       return null;
   }
