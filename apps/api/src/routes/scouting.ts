@@ -188,7 +188,7 @@ scoutingRouter.post("/teams/:teamId/scout/assignment", async (c) => {
   const teamId = c.req.param("teamId");
   const clubId = await club(c, teamId);
   if (typeof clubId !== "string") return clubId;
-  const body = await c.req.json<{
+  const body = (await c.req.json().catch(() => ({}))) as {
     staffId?: string;
     type?: "area" | "player" | "match";
     assignmentType?: "area" | "player" | "match";
@@ -201,7 +201,7 @@ scoutingRouter.post("/teams/:teamId/scout/assignment", async (c) => {
     ageMax?: number;
     radiusKm?: number;
     weeks?: number;
-  }>().catch(() => ({}));
+  };
 
   const gameDate = await gameDateOf(c.env.DB, clubId);
   const type = body.type ?? body.assignmentType ?? "area";
