@@ -5,7 +5,8 @@
  * (druhý pokus do stejného místa neprojde), vylepšení podmíněným UPDATEm na očekávanou
  * úroveň a druh. Kdo zámek prohraje, nezapíše nic a volající nesmí strhnout peníze.
  */
-import { extensionsCapacity } from "./extension-catalog";
+import { cornerConflict, extensionsCapacity, type ExtKind, type ExtSlot } from "./extension-catalog";
+import { logger } from "../lib/logger";
 
 export interface ExtensionRow {
   slot: string;
@@ -49,8 +50,29 @@ export async function buildExtension(
       .bind(currentLevel + 1, teamId, slot, kind, currentLevel)
       .run();
   if ((res.meta?.changes ?? 0) < 1) return false;
-  await refreshExtensionCapacity(db, teamId);
+  if (currentLevel === 0 && !(await keepIfCompatible(db, teamId, slot, kind))) return false;
+  await refreshCapacitySafely(db, teamId);
   return true;
+}
+
+/**
+ * Vylučování se ověřuje ve volající trase před zápisem, souběžný požadavek ho ale může obejít.
+ * Proto se po zápisu zkontroluje znovu a kolidující přístavba se vrátí zpět.
+ */
+async function keepIfCompatible(db: D1Database, teamId: string, slot: string, kind: string): Promise<boolean> {
+  const others = (await loadExtensions(db, teamId)).filter((r) => r.slot !== slot);
+  if (!cornerConflict(kind as ExtKind, slot as ExtSlot, others)) return true;
+  await db.prepare("DELETE FROM stadium_extensions WHERE team_id = ? AND slot = ? AND kind = ? AND level = 1").bind(teamId, slot, kind).run();
+  return false;
+}
+
+/** Stavba už platí; selhání přepočtu kapacity ji nesmí zrušit ani zabránit strhnutí peněz. */
+async function refreshCapacitySafely(db: D1Database, teamId: string): Promise<void> {
+  try {
+    await refreshExtensionCapacity(db, teamId);
+  } catch (e) {
+    logger.error({ module: "stadium", teamId }, "přepočet kapacity přístaveb selhal", e);
+  }
 }
 
 /**
@@ -70,6 +92,6 @@ export async function replaceMobileExtension(
     .bind(newKind, teamId, slot, currentLevel)
     .run();
   if ((res.meta?.changes ?? 0) < 1) return false;
-  await refreshExtensionCapacity(db, teamId);
+  await refreshCapacitySafely(db, teamId);
   return true;
 }

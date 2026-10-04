@@ -97,3 +97,31 @@ describe("replaceMobileExtension", () => {
     expect(await replaceMobileExtension(db, "t1", "corner_main_goal_east", "corner", 3)).toBe(false);
   });
 });
+
+describe("souběh obchází vylučování a selhání přepočtu kapacity", () => {
+  it("přístavba, která by kolidovala s už postavenou, se zahodí (druhý požadavek prohrál souběh)", async () => {
+    expect(await buildExtension(db, "t1", "ext_main", "length", 0)).toBe(true);
+    // Volající ověřil stav před postavením prodloužení, takže rohová přístavba k němu dorazí až teď.
+    expect(await buildExtension(db, "t1", "corner_main_goal_east", "corner", 0)).toBe(false);
+    expect(await loadExtensions(db, "t1")).toEqual([{ slot: "ext_main", kind: "length", level: 1 }]);
+    expect(await capacityOf()).toBe(extCapacity("length", 1));
+  });
+
+  it("selže-li přepočet kapacity, stavba i tak platí (volající strhne peníze)", async () => {
+    const broken = new Proxy(db, {
+      get(target, prop) {
+        if (prop === "prepare") {
+          return (sql: string) => {
+            if (sql.startsWith("UPDATE stadiums")) throw new Error("D1 nedostupná");
+            return target.prepare(sql);
+          };
+        }
+        const v = (target as unknown as Record<string | symbol, unknown>)[prop];
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    }) as D1Database;
+    expect(await buildExtension(broken, "t1", "ext_main", "length", 0)).toBe(true);
+    expect(await loadExtensions(db, "t1")).toEqual([{ slot: "ext_main", kind: "length", level: 1 }]);
+  });
+});
+

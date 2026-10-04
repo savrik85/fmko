@@ -202,7 +202,7 @@ export interface ExtContext {
  * Prodloužení strany a přístavba v jejím rohu se vylučují: prodloužení by zasáhlo do rohu, kam
  * rohová přístavba patří, a obě by se překrývaly. Vrací důvod zámku, nebo undefined.
  */
-function cornerConflict(
+export function cornerConflict(
   kind: ExtKind,
   slot: ExtSlot,
   built: ReadonlyArray<{ slot: string; kind: string; level: number }>,
