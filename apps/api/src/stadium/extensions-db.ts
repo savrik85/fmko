@@ -92,6 +92,15 @@ export async function replaceMobileExtension(
     .bind(newKind, teamId, slot, currentLevel)
     .run();
   if ((res.meta?.changes ?? 0) < 1) return false;
+  // Stejná kontrola vylučování jako při stavbě; kolidující náhrada se vrátí na mobilní tribunku.
+  const others = (await loadExtensions(db, teamId)).filter((r) => r.slot !== slot);
+  if (cornerConflict(newKind as ExtKind, slot as ExtSlot, others)) {
+    await db
+      .prepare("UPDATE stadium_extensions SET kind = 'mobile', level = ? WHERE team_id = ? AND slot = ? AND kind = ? AND level = 1")
+      .bind(currentLevel, teamId, slot, newKind)
+      .run();
+    return false;
+  }
   await refreshCapacitySafely(db, teamId);
   return true;
 }
