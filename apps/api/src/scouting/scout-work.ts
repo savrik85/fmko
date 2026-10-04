@@ -8,7 +8,7 @@
  */
 
 import {
-  SCOUT_AGE_MAX, SCOUT_AGE_MIN, SCOUT_POSITIONS, SCOUT_WEEKS_OPTIONS, isYouthScoutTask, marketValue,
+  SCOUT_AGE_MAX, SCOUT_AGE_MIN, SCOUT_POSITIONS, SCOUT_WEEKS_OPTIONS, isYouthScoutTask,
   scoutWeeklyCost, willingnessFromChance,
 } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
@@ -28,6 +28,7 @@ import {
   villageClubName, type VillageInRange, CLUB_AGE_MAX, CLUB_AGE_MIN,
 } from "./candidates";
 import { potentialRange, rangeMid, ratingRange, type Range } from "./fog";
+import { clubValuation } from "./youth-growth";
 import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms } from "./report-text";
 
 /** Hlášení platí deset dní (odhad, spec). */
@@ -478,7 +479,8 @@ async function createReport(db: D1Database, a: AssignmentRow, c: Candidate, send
   const p = c.player;
   const askHint = c.source === "village_club"
     ? Math.round(initAiSellerState({
-      stance: "poached", marketValue: marketValue(p.overallRating, p.age, p.position), clubRank: c.clubRank ?? 12,
+      stance: "poached", clubRank: c.clubRank ?? 12,
+      marketValue: clubValuation({ age: p.age, rating: p.overallRating, position: p.position, talent: p.hiddenTalent ?? 0, skillsMax: p.skillCaps ?? {} }),
       seed: stableSeed(`${c.id}:${a.team_id}`),
     }).ask / 1000) * 1000
     : null;

@@ -2,9 +2,9 @@
  * Jednání s cizím klubem o přestupu (spec 2026-10-04).
  *
  * Kupující pošle návrh (cena, záloha, splátky), klub odpoví souhlasem, protinávrhem nebo
- * jednání ukončí. Odpověď se spočítá hned při tahu kupujícího (obnovením stránky se tedy
- * nedá přehodit), ale „dorazí" až za 1–4 hodiny: do té doby leží v `pending_reply`.
- * Odhalí ji `revealDueAiReplies`, buď při čtení jednání, nebo při každém cronu.
+ * jednání ukončí. Jednání je živé: odpověď se spočítá a doručí hned při tahu kupujícího
+ * (`deliverNow`). Mezikrok přes `pending_reply` zůstává kvůli atomicitě a kvůli jednáním,
+ * která čekala na odpověď ještě z doby s prodlevou; ty doručí `revealDueAiReplies` při cronu.
  *
  * Když klub souhlasí, kupující podepíše. Teprve tehdy se rozhoduje hráč (dojíždění,
  * síla klubu, plný kádr) a teprve tehdy se platí.
@@ -18,12 +18,13 @@ import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { stableSeed } from "../lib/scout-estimate";
 import {
-  AI_SELLER, aiReplyDueAt, decideAiSellerReply, initAiSellerState,
+  AI_SELLER, decideAiSellerReply, initAiSellerState,
   type AiReplyTone, type AiSellerState,
 } from "./ai-seller";
 import { aiReplyText } from "./ai-seller-texts";
 import { installmentBudgetError, installmentLimitError, weeklyInstallment } from "./installments";
 import { purchaseVirtualPlayer, type VirtualPlayerData } from "./virtual-purchase";
+import { clubValuation } from "../scouting/youth-growth";
 
 /** Nejvíc hráčů v kádru; víc klub z trhu nekoupí (stejně jako u volných hráčů). */
 export const SQUAD_CAP = 30;
@@ -137,6 +138,20 @@ async function loadSource(db: D1Database, source: "listing" | "scout_report", id
   };
 }
 
+/**
+ * Z jaké ceny klub vychází. Klub z hlášení skauta zná svého kluka a mladíka ocení podle toho,
+ * kým bude za sezónu (`clubValuation`); inzerát vychází z tržní ceny jako dřív.
+ */
+function sellerValuation(src: NegotiationSource): number {
+  const p = src.player;
+  if (src.source === "scout_report") {
+    return clubValuation({
+      age: p.age, rating: p.overallRating, position: p.position, talent: p.hiddenTalent ?? 0, skillsMax: p.skillCaps ?? {},
+    });
+  }
+  return marketValue(p.overallRating, p.age, p.position);
+}
+
 /** Kontroly návrhu kupujícího: podmínky, strop splátek, peníze na zálohu. */
 async function termsProblem(db: D1Database, buyerClubTeamId: string, terms: TransferTerms): Promise<string | null> {
   if (!Number.isInteger(terms.amount) || terms.amount <= 0) return "Nabídka musí být kladné celé číslo.";
@@ -168,10 +183,13 @@ function plannedReply(state: AiSellerState, terms: TransferTerms, now: Date): { 
   const round = decision.nextState.round;
   const rng = createRng(state.seed + round * 104_729);
   const message = aiReplyText(rng, decision.tone, decision.counterTerms?.amount);
-  return {
-    reply: { ...decision, message },
-    dueAt: aiReplyDueAt(now, state.seed + round * 31),
-  };
+  return { reply: { ...decision, message }, dueAt: now };
+}
+
+/** Živé jednání: odpověď klubu se doručí hned, bez SMS (kupující ji vidí na stránce). */
+async function deliverNow(db: D1Database, negotiationId: string): Promise<void> {
+  await revealDueAiReplies(db, undefined, { negotiationId, force: true, notify: false })
+    .catch((e) => logger.error({ module: "ai-negotiation" }, "okamžitá odpověď klubu", e));
 }
 
 // ─── Zahájení a tahy kupujícího ─────────────────────────────────────────────
@@ -222,7 +240,7 @@ export async function startAiNegotiation(db: D1Database, input: {
   // nedá „přerolovat" stažením a novým začátkem. Každý další pokus stojí trpělivost.
   const state = initAiSellerState({
     stance: src.stance,
-    marketValue: marketValue(src.player.overallRating, src.player.age, src.player.position),
+    marketValue: sellerValuation(src),
     askingPrice: src.askingPrice,
     clubRank: src.clubRank,
     seed: stableSeed(`${playerKey}:${buyer}`),
@@ -266,6 +284,7 @@ export async function startAiNegotiation(db: D1Database, input: {
     }
     return fail(409, "Jednání se nepodařilo zahájit. Možná už o hráče jednáš.");
   }
+  await deliverNow(db, id);
   return { ok: true, negotiationId: id };
 }
 
@@ -306,6 +325,7 @@ export async function counterAiNegotiation(db: D1Database, input: {
      VALUES (?, ?, 'buyer', 'offer', ?, ?, ?, ?)`,
   ).bind(crypto.randomUUID(), row.id, terms.amount, terms.upfrontPct, terms.installments, now.toISOString()).run()
     .catch((e) => logger.warn({ module: "ai-negotiation" }, "událost návrhu", e));
+  await deliverNow(db, row.id);
   return { ok: true };
 }
 
@@ -414,6 +434,8 @@ export async function expireNegotiation(db: D1Database, env: PushEnv | undefined
  */
 export async function revealDueAiReplies(db: D1Database, env: PushEnv | undefined, opts: {
   negotiationId?: string; teamId?: string; force?: boolean; now?: Date; limit?: number;
+  /** false = bez SMS a push (živé jednání, kupující odpověď vidí na stránce). */
+  notify?: boolean;
 } = {}): Promise<number> {
   const now = opts.now ?? new Date();
   const where = ["pending_reply IS NOT NULL", "status = 'open'"];
@@ -471,6 +493,7 @@ export async function revealDueAiReplies(db: D1Database, env: PushEnv | undefine
           .catch((e) => logger.warn({ module: "ai-negotiation" }, "hlášení po konci jednání", e));
       }
 
+      if (opts.notify === false) continue;
       const head = reply.kind === "agree" ? "🤝" : reply.kind === "counter" ? "🔄" : "🚪";
       const what = reply.kind === "counter" && reply.counterTerms ? ` Chtějí ${formatTermsSummary(reply.counterTerms)}.` : "";
       await notifyBuyer(db, env, row.team_id, row.id, `${head} ${row.club_name}: ${row.player_name}`,

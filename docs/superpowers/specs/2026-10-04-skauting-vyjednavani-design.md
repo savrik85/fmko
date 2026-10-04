@@ -38,8 +38,8 @@ bohatý klub nesmí nakoupit spoustu hráčů výrazně nad úrovní soutěže.
    „Podívej se na něj znovu“ zúží rozmezí, stojí cestovné a týden práce skauta.
 4. **Vyjednávání** z hlášení („Začít jednat“) nebo z inzerátu na trhu („Nabídnout“) vede na
    stávající detail nabídky `/prestupy/nabidka/[id]`. Částka, záloha a splátky, bez procent
-   z dalšího přestupu (cizí klub je nebere). Klub odpoví **s prodlevou 1–4 hodiny** (v noci
-   až ráno): souhlasí, protinávrh, odmítne, nebo jednání ukončí. Časová osa ukazuje tahy obou
+   z dalšího přestupu (cizí klub je nebere). Jednání je **živé** (změna 2026-10-04 na přání
+   uživatele, původně prodleva 1–4 h): klub odpoví hned souhlasem, protinávrhem, nebo jednání ukončí. Časová osa ukazuje tahy obou
    stran. Klub smlouvá nahoru, opora je dražší, urážlivá nabídka ubere trpělivost.
 5. **Klub souhlasí → „Podepsat“.** Teprve pak se rozhodne hráč (ochota dojíždět, síla klubu,
    plný kádr). Peníze se strhnou atomicky až při podpisu. Odmítnutí hráče = žádné peníze, konec.
@@ -63,7 +63,8 @@ AppYours ~196 tis./týden, 816 tis. na účtu; data, transakce 6. 9.–3. 10.). 
 | Mlha hodnocení | ±max(2, round((18 − 14·eff/20)/√návštěv)) | `rozptylOdhadu` development.ts:58 + statistické √n |
 | Cestovné | 100 Kč za km okruhu za týden → 1 500 / 3 000 / 5 000 | **odhad**, ukotvený cenou fanbusu 1 200–3 500 (fanbase-config.ts:52-75) |
 | Platnost hlášení / denní šance, že ho sebere jiný | 10 dní / 3 % | **odhad** |
-| Prodleva odpovědi klubu | 1–4 h, noc až ráno | **odhad** (vzor realistické prodlevy postav) |
+| Prodleva odpovědi klubu | žádná, jednání je živé | rozhodnutí uživatele 2026-10-04 |
+| Cena mladíka do 21 let u klubu, který ho vychoval | tržní cena hráče, kterým bude za 1 sezónu (trénink + dospívání) | tempo **data** (prod 2026-10-04: talent <30 2,58 / 30–49 3,11 / 50–69 4,28 / 70+ 5,87 bodu za 120 dní), dospívání z kódu, horizont 1 sezóny **odhad** |
 
 **AI prodejce.** Skrytá rezervační cena R = tržní cena × M × e^N(0; 0,25), šum je **odhad**.
 

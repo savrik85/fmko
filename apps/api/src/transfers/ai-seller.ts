@@ -204,28 +204,3 @@ export function decideAiSellerReply(state: AiSellerState, terms: TransferTerms):
       : noProgress ? "repeat" : gap < AI_SELLER.closeGap ? "fair" : "firm";
   return { kind: "counter", tone, counterTerms: termsForValue(ask, terms), nextState: { ...base, ask, patience } };
 }
-
-/** Pražská hodina a minuta daného okamžiku. */
-function pragueClock(at: Date): { hour: number; minute: number } {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Prague", hour: "numeric", minute: "numeric", hour12: false,
-  }).formatToParts(at);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "12") % 24;
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  return { hour, minute };
-}
-
-/**
- * Kdy odpověď klubu dorazí: za 1–4 hodiny. Předseda vesnického klubu v noci nepíše,
- * odpověď, která by padla mezi 22:00 a 7:00, přijde ráno mezi sedmou a půl devátou.
- */
-export function aiReplyDueAt(now: Date, seed: number): Date {
-  const rng = createRng(seed);
-  const due = new Date(now.getTime() + rng.int(60, 240) * 60_000);
-  const { hour, minute } = pragueClock(due);
-  let waitMinutes = 0;
-  if (hour >= 22) waitMinutes = (24 - hour + 7) * 60 - minute;
-  else if (hour < 7) waitMinutes = (7 - hour) * 60 - minute;
-  if (waitMinutes > 0) waitMinutes += rng.int(0, 90);
-  return new Date(due.getTime() + waitMinutes * 60_000);
-}

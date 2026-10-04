@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  AI_SELLER, aiReplyDueAt, decideAiSellerReply, effectiveBidValue, initAiSellerState, rankMultiplier,
+  AI_SELLER, decideAiSellerReply, effectiveBidValue, initAiSellerState, rankMultiplier,
   termsForValue, type AiSellerState,
 } from "./ai-seller";
 import { transferTermsError, type TransferTerms } from "@okresni-masina/shared";
@@ -187,28 +187,5 @@ describe("odpověď klubu", () => {
     const a = decideAiSellerReply(poached({ seed: 5 }), cash(21_000));
     const b = decideAiSellerReply(poached({ seed: 5 }), cash(21_000));
     expect(a).toEqual(b);
-  });
-});
-
-describe("kdy odpověď dorazí", () => {
-  it("odpoledne za 1–4 hodiny", () => {
-    // 10:00 UTC = 12:00 v Praze (léto)
-    const now = new Date("2026-07-15T10:00:00Z");
-    for (let seed = 1; seed < 100; seed++) {
-      const due = aiReplyDueAt(now, seed).getTime() - now.getTime();
-      expect(due).toBeGreaterThanOrEqual(60 * 60_000);
-      expect(due).toBeLessThanOrEqual(240 * 60_000);
-    }
-  });
-
-  it("v noci až ráno mezi sedmou a půl devátou pražského času", () => {
-    // 21:00 UTC = 23:00 v Praze (léto)
-    const now = new Date("2026-07-15T21:00:00Z");
-    for (let seed = 1; seed < 100; seed++) {
-      const due = aiReplyDueAt(now, seed);
-      const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", hour: "numeric", hour12: false }).format(due));
-      expect(hour).toBeGreaterThanOrEqual(7);
-      expect(hour).toBeLessThanOrEqual(8);
-    }
   });
 });
