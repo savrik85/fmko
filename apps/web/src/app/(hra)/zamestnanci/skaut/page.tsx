@@ -47,6 +47,11 @@ interface ScoutData {
 
 const kc = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
+/** České tvary počtu: 1 klub, 2–4 kluby, 5+ klubů. */
+function plural(n: number, one: string, few: string, many: string): string {
+  return `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
+}
+
 function ReportRow({ r, onOpen }: { r: ScoutReport; onOpen: () => void }) {
   const live = r.status === "active" || r.status === "negotiating";
   return (
@@ -184,7 +189,7 @@ export default function ScoutPage() {
         <div className="card p-4 space-y-4">
           <SectionLabel>Nový úkol</SectionLabel>
           {data.lastAssignment?.status === "finished" && (
-            <div className="text-sm text-muted">Poslední úkol je hotový: {data.lastAssignment.clubs_visited} klubů, {data.lastAssignment.reports_sent} hlášení.</div>
+            <div className="text-sm text-muted">Poslední úkol je hotový: {plural(data.lastAssignment.clubs_visited, "klub", "kluby", "klubů")}, {data.lastAssignment.reports_sent} hlášení.</div>
           )}
 
           <div>
@@ -232,7 +237,7 @@ export default function ScoutPage() {
             <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho</div>
             <div className="flex flex-wrap gap-2">
               {data.options.weeks.map((w) => (
-                <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>{w} týdny</button>
+                <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>{plural(w, "týden", "týdny", "týdnů")}</button>
               ))}
             </div>
           </div>
