@@ -6,7 +6,7 @@
  * Logika leží ve webu a nezná React, aby šla otestovat tady.
  */
 import { describe, it, expect } from "vitest";
-import { getSideLevels, joinedEnds, replacedSides, vipBoxSideFor } from "../../../web/src/components/stadium/stadium-3d/stand-levels";
+import { getSideLevels, joinedEnds, raisedTierSpec, replacedSides, roofLifts, tierTop, vipBoxSideFor } from "../../../web/src/components/stadium/stadium-3d/stand-levels";
 
 describe("getSideLevels", () => {
   it("strany tribun míří na světové strany", () => {
@@ -105,5 +105,31 @@ describe("joinedEnds u rohové tribuny (zahnutá i klín navazují na obě souse
 
   it("most a mobilní kus v rohu konce tribun nespojují", () => {
     expect(joinedEnds("north", [{ slot: "corner_main_goal_east", kind: "bridge" }])).toEqual({ left: false, right: false });
+  });
+});
+
+describe("horní patra a zvednutí střechy", () => {
+  it("patro leží nad tribunou, piloty nad její zadní hranou", () => {
+    for (const kind of ["second_tier", "double_stand", "stilts"] as const) {
+      const spec = raisedTierSpec(kind, 2, 6, 8);
+      expect(spec.y0, kind).toBeGreaterThan(6);
+      expect(tierTop(spec), kind).toBeGreaterThan(spec.y0);
+    }
+  });
+
+  it("vyšší úroveň přidá řady a tedy výšku", () => {
+    expect(tierTop(raisedTierSpec("second_tier", 3, 6, 8))).toBeGreaterThan(tierTop(raisedTierSpec("second_tier", 1, 6, 8)));
+  });
+
+  it("střecha se zvedne jen na straně s patrem a o výšku patra nad tribunou", () => {
+    const sideLevels = { east: 3, west: 3, north: 3, south: 3 };
+    const lifts = roofLifts([{ slot: "ext_main", kind: "double_stand", level: 2 }, { slot: "ext_opposite", kind: "footbridge", level: 3 }], sideLevels, () => 6);
+    expect(lifts.east).toBeGreaterThan(2);
+    expect(lifts.west).toBeUndefined();
+    expect(lifts.north).toBeUndefined();
+  });
+
+  it("bez přístaveb se nezvedá nic", () => {
+    expect(roofLifts([], { east: 2, west: 2, north: 2, south: 2 }, () => 3.5)).toEqual({});
   });
 });

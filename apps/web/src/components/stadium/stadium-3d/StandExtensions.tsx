@@ -15,7 +15,8 @@ import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { PITCH, STAND_DIMS, STAND_GAP, type StadiumMode } from "./constants";
 import { StandBlock } from "./Stand";
-import type { SceneSide, SideLevels } from "./stand-levels";
+import { generateCorrugatedTexture } from "./materialTextures";
+import { raisedTierSpec, type SceneSide, type SideLevels } from "./stand-levels";
 
 export interface ExtensionInstance {
   slot: string;
@@ -33,6 +34,9 @@ interface Common {
   attendanceRatio: number;
   reducedDetail: boolean;
   isSnow: boolean;
+  /** Zastřešení tribun (0–3) a barva plechu; 0 = bez střechy. */
+  roofLevel: number;
+  roofColor: string;
 }
 
 const CONCRETE = "#9CA3AF";
@@ -296,6 +300,90 @@ function CornerBowl({ a, b, rows, depth, height, c }: { a: number; b: number; ro
   );
 }
 
+/** Šikmá plechová střecha nad zadní částí tribuny, stejná jako `StandRoof` nad rovnou tribunou. */
+function RoofSlab({ alongLen, D, H, c, lift = 0 }: { alongLen: number; D: number; H: number; c: Common; lift?: number }) {
+  const tex = useMemo(() => generateCorrugatedTexture(c.roofColor, 8, 2), [c.roofColor]);
+  const overhang = 0.5 + c.roofLevel * 0.35;
+  const clearance = D <= 4 ? 2.6 : 1.1;
+  const roofDepth = D * 0.7 + overhang;
+  const roofZ = D * 0.45;
+  const roofY = H + lift + clearance;
+  const postH = roofY + 0.2;
+  return (
+    <group>
+      <mesh position={[0, roofY, roofZ]} rotation={[-0.32, 0, 0]} castShadow>
+        <boxGeometry args={[alongLen + 0.4, 0.14, roofDepth]} />
+        <meshStandardMaterial map={tex.map} bumpMap={tex.bumpMap} bumpScale={0.12} roughness={0.5} metalness={0.35} />
+      </mesh>
+      {[-alongLen * 0.4, 0, alongLen * 0.4].map((x, i) => (
+        <Box key={i} size={[0.18, postH, 0.18]} position={[x, postH / 2, D + overhang * 0.5]} color="#4A4D54" metal={0.5} />
+      ))}
+    </group>
+  );
+}
+
+/** Plochá střecha nad obloukovou tribunou (mezikruží řezané rovinami x = ±hw), na sloupcích vzadu. */
+function RoundRoof({ depth, height, hw, c }: { depth: number; height: number; hw: number; c: Common }) {
+  const tex = useMemo(() => generateCorrugatedTexture(c.roofColor, 8, 2), [c.roofColor]);
+  const overhang = 0.5 + c.roofLevel * 0.35;
+  const r1 = ROUND_RIN + depth * 0.3;
+  const r2 = ROUND_RIN + depth + overhang;
+  const geometry = useMemo(() => {
+    const aIn = Math.asin(Math.min(0.99, hw / r1));
+    const aOut = Math.asin(Math.min(0.99, hw / r2));
+    const shape = new THREE.Shape();
+    shape.moveTo(r2 * Math.sin(-aOut), -r2 * Math.cos(aOut));
+    shape.absarc(0, 0, r2, -Math.PI / 2 - aOut, -Math.PI / 2 + aOut, false);
+    shape.lineTo(r1 * Math.sin(aIn), -r1 * Math.cos(aIn));
+    shape.absarc(0, 0, r1, -Math.PI / 2 + aIn, -Math.PI / 2 - aIn, true);
+    shape.closePath();
+    return extrudeFlat(shape, 0.14);
+  }, [r1, r2, hw]);
+  const roofY = height + 1.4;
+  const rp = ROUND_RIN + depth + 0.2;
+  const half = Math.asin(Math.min(0.99, hw / rp));
+  return (
+    <group position={[0, 0, -ROUND_RIN]}>
+      <mesh geometry={geometry} position={[0, roofY, 0]} castShadow>
+        <meshStandardMaterial map={tex.map} bumpMap={tex.bumpMap} bumpScale={0.12} roughness={0.5} metalness={0.35} />
+      </mesh>
+      {[-0.85, -0.4, 0, 0.4, 0.85].map((f) => (
+        <Box key={f} size={[0.18, roofY + 0.2, 0.18]} position={[rp * Math.sin(half * f), (roofY + 0.2) / 2, rp * Math.cos(half * f)]} color="#4A4D54" metal={0.5} />
+      ))}
+    </group>
+  );
+}
+
+/** Plochá střecha nad zahnutou rohovou tribunou (mezielipsa), sloupky na vnějším okraji. */
+function CornerRoof({ a, b, depth, height, c }: { a: number; b: number; depth: number; height: number; c: Common }) {
+  const tex = useMemo(() => generateCorrugatedTexture(c.roofColor, 8, 2), [c.roofColor]);
+  const overhang = 0.5 + c.roofLevel * 0.35;
+  const geometry = useMemo(() => {
+    const aIn = a + depth * 0.3;
+    const bIn = b + depth * 0.3;
+    const aOut = a + depth + overhang;
+    const bOut = b + depth + overhang;
+    const shape = new THREE.Shape();
+    shape.moveTo(aOut, 0);
+    shape.absellipse(0, 0, aOut, bOut, 0, -Math.PI / 2, true, 0);
+    shape.lineTo(0, -bIn);
+    shape.absellipse(0, 0, aIn, bIn, -Math.PI / 2, 0, false, 0);
+    shape.closePath();
+    return extrudeFlat(shape, 0.14);
+  }, [a, b, depth, overhang]);
+  const roofY = height + 1.4;
+  return (
+    <group>
+      <mesh geometry={geometry} position={[0, roofY, 0]} castShadow>
+        <meshStandardMaterial map={tex.map} bumpMap={tex.bumpMap} bumpScale={0.12} roughness={0.5} metalness={0.35} />
+      </mesh>
+      {[0.1, 0.5, 0.8, 1.1, 1.47].map((phi) => (
+        <Box key={phi} size={[0.18, roofY + 0.2, 0.18]} position={[(a + depth + 0.2) * Math.cos(phi), (roofY + 0.2) / 2, (b + depth + 0.2) * Math.sin(phi)]} color="#4A4D54" metal={0.5} />
+      ))}
+    </group>
+  );
+}
+
 function Block(props: {
   length: number; rows: number; depth: number; height: number; level?: number; c: Common;
   standColor?: string; seatColor?: string; panel?: boolean; walls?: { left: boolean; right: boolean };
@@ -312,9 +400,8 @@ function Block(props: {
 }
 
 /** Horní patro na sloupech: betonová deska, stupně se sedačkami a diváky nahoře. */
-function RaisedTier({ width, rows, rowDepth, rise, y0, z0, style, c, glass = false }: {
-  width: number; rows: number; rowDepth: number; rise: number; y0: number; z0: number; style: number; c: Common; glass?: boolean;
-}) {
+function RaisedTier({ width, spec, c }: { width: number; spec: ReturnType<typeof raisedTierSpec>; c: Common }) {
+  const { rows, rowDepth, rise, y0, z0, style, glass } = spec;
   const depth = rows * rowDepth;
   const xs = [-width / 2 + 0.7, -width / 6, width / 6, width / 2 - 0.7];
   return (
@@ -347,17 +434,18 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
                 length={w} rows={sd.rows} depth={D} height={H} level={style} c={c}
                 walls={s < 0 ? { left: true, right: false } : { left: false, right: true }}
               />
+              {c.roofLevel > 0 && <RoofSlab alongLen={w} D={D} H={H} c={c} />}
             </group>
           ))}
         </>
       );
     }
     case "second_tier":
-      return <RaisedTier width={length * (0.5 + 0.15 * l)} rows={3 + l} rowDepth={1.2} rise={0.45} y0={H + 1.8} z0={D * 0.45} style={3} c={c} />;
     case "double_stand":
-      return <RaisedTier width={length * 0.94} rows={4 + l} rowDepth={1.2} rise={0.5} y0={H + 2.6} z0={D * 0.3} style={3} c={c} glass />;
-    case "stilts":
-      return <RaisedTier width={length * (0.5 + 0.1 * l)} rows={2 + l} rowDepth={1.5} rise={0.5} y0={Math.max(3.4, H + 0.8)} z0={D + 0.3} style={2} c={c} />;
+    case "stilts": {
+      const spec = raisedTierSpec(kind, l, H, D);
+      return <RaisedTier width={length * spec.widthFactor} spec={spec} c={c} />;
+    }
     case "tower": {
       const th = H + 7 + 2 * l;
       return (
@@ -397,11 +485,14 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
       // nekreslí). Je stejně široká jako rovná, vyšší úroveň přidá řady a hloubku.
       const bd = dimsOf(Math.max(1, standLevel));
       const rows = Math.max(3, bd.rows) + l;
+      const depth = bd.depth + 0.4 * l;
+      const height = bd.height * (1 + 0.1 * l);
+      const hw = Math.min(length / 2, 20);
       return (
-        <RoundStand
-          rows={rows} depth={bd.depth + 0.4 * l} height={bd.height * (1 + 0.1 * l)}
-          hw={Math.min(length / 2, 20)} c={c}
-        />
+        <>
+          <RoundStand rows={rows} depth={depth} height={height} hw={hw} c={c} />
+          {c.roofLevel > 0 && <RoundRoof depth={depth} height={height} hw={hw} c={c} />}
+        </>
       );
     }
     case "mobile": {
@@ -447,6 +538,7 @@ function CornerKind({ kind, level, sx, sz, sideLevels, rounds, c }: { kind: stri
       return (
         <group position={[mid[0], 0, mid[1]]} rotation={[0, diag, 0]}>
           <Block length={gapLen + 0.4} rows={rows} depth={rows * 1.2} height={rows * 0.55} level={2} c={c} walls={{ left: false, right: false }} />
+          {c.roofLevel > 0 && <RoofSlab alongLen={gapLen + 0.4} D={rows * 1.2} H={rows * 0.55} c={c} />}
         </group>
       );
     }
@@ -467,6 +559,12 @@ function CornerKind({ kind, level, sx, sz, sideLevels, rounds, c }: { kind: stri
             rows={Math.max(3, Math.round((bdN.rows + bdE.rows) / 2))}
             depth={(bdN.depth + bdE.depth) / 2} height={(bdN.height + bdE.height) / 2} c={c}
           />
+          {c.roofLevel > 0 && (
+            <CornerRoof
+              a={swap ? frontGoal : frontLong} b={swap ? frontLong : frontGoal}
+              depth={(bdN.depth + bdE.depth) / 2} height={(bdN.height + bdE.height) / 2} c={c}
+            />
+          )}
         </group>
       );
     }
@@ -484,6 +582,7 @@ function CornerKind({ kind, level, sx, sz, sideLevels, rounds, c }: { kind: stri
             length={w} rows={sd.rows} depth={sd.depth} height={sd.height} level={lv(goalLevel >= 1 ? goalLevel : 2)} c={c}
             walls={(sz > 0 ? sx : -sx) > 0 ? { left: false, right: true } : { left: true, right: false }}
           />
+          {c.roofLevel > 0 && <RoofSlab alongLen={w} D={sd.depth} H={sd.height} c={c} />}
         </group>
       );
     }
@@ -580,13 +679,20 @@ interface StandExtensionsProps {
   attendanceRatio?: number;
   reducedDetail?: boolean;
   isSnow?: boolean;
+  /** Úroveň zastřešení tribun (0–3) a vlastní barva střechy; přístavby se zastřeší stejně jako tribuny. */
+  roofLevel?: number;
+  roofColor?: string | null;
 }
 
 export function StandExtensions({
   extensions, preview, sideLevels, standColor, seatColor, accentColor, teamColor,
   secondaryColor = "#FFFFFF", mode = "match_day", attendanceRatio = 0.6, reducedDetail = false, isSnow = false,
+  roofLevel = 0, roofColor = null,
 }: StandExtensionsProps) {
-  const c: Common = { standColor, seatColor, accentColor, teamColor, secondaryColor, mode, attendanceRatio, reducedDetail, isSnow };
+  const c: Common = {
+    standColor, seatColor, accentColor, teamColor, secondaryColor, mode, attendanceRatio, reducedDetail, isSnow,
+    roofLevel, roofColor: roofColor ?? "#9A9DA4",
+  };
   // Náhled nahrazuje stávající přístavbu ve stejném místě (vylepšení se ukáže na nové úrovni).
   const shown = extensions.filter((e) => !preview || e.slot !== preview.slot);
   // Strany, kde je místo rovné tribuny točená (rohy na ně musí navázat).
