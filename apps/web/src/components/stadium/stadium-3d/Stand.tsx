@@ -28,6 +28,8 @@ interface StandProps {
   cageLevel?: number;
   /** Sněží: na stupních leží sníh, v tréninkový den i na prázdných sedačkách. */
   isSnow?: boolean;
+  /** Konce tribuny navazující na přístavbu (lokální x): tam se nekreslí koncová stěna. */
+  joinedEnds?: { left: boolean; right: boolean };
 }
 
 const STAND_GAP = 2.5;
@@ -61,6 +63,7 @@ export function Stand({
   ultrasSide = "south",
   cageLevel = 0,
   isSnow = false,
+  joinedEnds,
 }: StandProps) {
   if (level <= 0) return null;
   return (
@@ -78,6 +81,7 @@ export function Stand({
       ultrasSide={ultrasSide}
       cageLevel={cageLevel}
       isSnow={isSnow}
+      joinedEnds={joinedEnds}
     />
   );
 }
@@ -96,6 +100,7 @@ function ActiveStand({
   ultrasSide = "south",
   cageLevel = 0,
   isSnow = false,
+  joinedEnds,
 }: StandProps) {
   const dims = STAND_DIMS[Math.min(level, 3)];
   const finalSeatColor = seatColor ?? teamColor;
@@ -139,6 +144,7 @@ function ActiveStand({
         woodTexture={woodTexture}
         concreteTexture={concreteTexture}
         isSnow={isSnow}
+        walls={{ left: !joinedEnds?.left, right: !joinedEnds?.right }}
       />
 
       {/* 2. Sedačky (lavičky pro L1/L2, tvarované pro L3) */}
@@ -212,6 +218,7 @@ function StepBase({
   woodTexture,
   concreteTexture,
   isSnow = false,
+  walls = { left: true, right: true },
 }: {
   level: number;
   length: number;
@@ -221,6 +228,8 @@ function StepBase({
   woodTexture: any;
   concreteTexture: any;
   isSnow?: boolean;
+  /** Koncové stěny tribuny; tam, kde navazuje přístavba, se nekreslí. */
+  walls?: { left: boolean; right: boolean };
 }) {
   if (rows === 0) return null;
   const isWood = level <= 2;
@@ -280,7 +289,7 @@ function StepBase({
             />
           </mesh>
           {/* Boční štíty */}
-          {[-length / 2, length / 2].map((bx, i) => (
+          {[-length / 2, length / 2].filter((bx) => (bx < 0 ? walls.left : walls.right)).map((bx, i) => (
             <mesh
               key={i}
               position={[bx, (rows * seatRise) / 2, (rows * seatDepth) / 2]}
@@ -952,6 +961,8 @@ interface StandBlockProps {
   isSnow?: boolean;
   /** Čelní panel a zábradlí. */
   panel?: boolean;
+  /** Koncové stěny kusu (vlevo a vpravo v lokálním x); tam, kde navazuje další kus, se nekreslí. */
+  walls?: { left: boolean; right: boolean };
 }
 
 /**
@@ -962,6 +973,7 @@ interface StandBlockProps {
 export function StandBlock({
   length, rows, depth, height, level = 2, standColor, seatColor, teamColor, secondaryColor = "#FFFFFF",
   attendanceRatio = 0.6, mode = "match_day", reducedDetail = false, isSnow = false, panel = true,
+  walls = { left: true, right: true },
 }: StandBlockProps) {
   const seatDepth = depth / Math.max(rows, 1);
   const seatRise = height / Math.max(rows, 1);
@@ -974,7 +986,7 @@ export function StandBlock({
     <group>
       <StepBase
         level={level} length={length} rows={rows} seatDepth={seatDepth} seatRise={seatRise}
-        woodTexture={woodTexture} concreteTexture={concreteTexture} isSnow={isSnow}
+        woodTexture={woodTexture} concreteTexture={concreteTexture} isSnow={isSnow} walls={walls}
       />
       <Seats
         level={level} rows={rows} columns={columns} seatSize={seatSize} seatDepth={seatDepth} seatRise={seatRise}

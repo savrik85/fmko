@@ -51,3 +51,69 @@ export function vipBoxSideFor(levels: SideLevels, ultrasSide: SceneSide): SceneS
     : ["north", "south", "east", "west"];
   return order.find((s) => levels[s] >= 1 && s !== ultrasSide) ?? null;
 }
+
+const SIDE_SLOT_OF: Record<string, SceneSide> = {
+  ext_main: "east",
+  ext_opposite: "west",
+  ext_goal_west: "south",
+  ext_goal_east: "north",
+};
+
+/** Znaménko X a Z rohu: východ je +X, sever je +Z. */
+const CORNER_SIGNS: Record<string, [number, number]> = {
+  corner_main_goal_east: [1, 1],
+  corner_main_goal_west: [1, -1],
+  corner_opposite_goal_east: [-1, 1],
+  corner_opposite_goal_west: [-1, -1],
+};
+
+/**
+ * Které konce tribuny (v jejím lokálním x) navazují na přístavbu. Tam se nesmí kreslit
+ * koncová stěna, jinak by uprostřed spojeného celku zůstala přepážka.
+ * Prodloužení spojí oba konce, křídlo v rohu konec tribuny za brankou na straně rohu
+ * (tribuna na severu má lokální +X ve světě +X, na jihu je otočená, tedy -X).
+ */
+export function joinedEnds(
+  side: SceneSide,
+  extensions: ReadonlyArray<{ slot: string; kind: string }>,
+): { left: boolean; right: boolean } {
+  const out = { left: false, right: false };
+  for (const e of extensions) {
+    if (e.kind === "length" && SIDE_SLOT_OF[e.slot] === side) {
+      out.left = true;
+      out.right = true;
+    }
+    if (e.kind === "wing") {
+      const corner = CORNER_SIGNS[e.slot];
+      if (!corner) continue;
+      const [sx, sz] = corner;
+      const goalSide: SceneSide = sz > 0 ? "north" : "south";
+      if (goalSide !== side) continue;
+      const localSign = side === "north" ? sx : -sx;
+      if (localSign > 0) out.right = true;
+      else out.left = true;
+    }
+  }
+  return out;
+}
+
+/**
+ * Strany, jejichž rovnou tribunu nahradí tvar přístavby. Točená tribuna a travnatý val nejsou
+ * další tribuna před nebo za původní (kdo by seděl vzadu, neviděl by přes ni), ale jiná podoba
+ * tribuny za brankou, takže se rovná tribuna na té straně nekreslí. Platí i pro náhled.
+ */
+export function replacedSides(
+  extensions: ReadonlyArray<{ slot: string; kind: string }>,
+  preview?: { slot: string; kind: string } | null,
+): Set<SceneSide> {
+  const out = new Set<SceneSide>();
+  const considered = [
+    ...extensions.filter((e) => !preview || e.slot !== preview.slot),
+    ...(preview ? [preview] : []),
+  ];
+  for (const e of considered) {
+    const side = SIDE_SLOT_OF[e.slot];
+    if (side && (e.kind === "round_stand" || e.kind === "terrace")) out.add(side);
+  }
+  return out;
+}
