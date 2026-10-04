@@ -323,6 +323,7 @@ function Seats({
   teamColor,
   woodTexture,
   snowOnSeats = false,
+  castShadows = true,
 }: {
   level: number;
   rows: number;
@@ -335,6 +336,8 @@ function Seats({
   woodTexture: any;
   /** Prázdné sedačky ve sněhu mají na sobě čepici sněhu. */
   snowOnSeats?: boolean;
+  /** Vržené stíny; u velkých davů v přístavbách se vypínají kvůli výkonu. */
+  castShadows?: boolean;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const backRef = useRef<THREE.InstancedMesh>(null);
@@ -391,7 +394,7 @@ function Seats({
     return (
       <group>
       {seatSnow}
-      <instancedMesh ref={ref} args={[undefined, undefined, total]} castShadow>
+      <instancedMesh ref={ref} args={[undefined, undefined, total]} castShadow={castShadows}>
         <boxGeometry args={[seatSize * 0.9, 0.08, seatSize * 0.55]} />
         <meshStandardMaterial
           map={woodTexture.map}
@@ -409,12 +412,12 @@ function Seats({
     <group>
       {seatSnow}
       {/* Sedák */}
-      <instancedMesh ref={ref} args={[undefined, undefined, total]} castShadow>
+      <instancedMesh ref={ref} args={[undefined, undefined, total]} castShadow={castShadows}>
         <boxGeometry args={[seatSize * 0.78, 0.08, seatSize * 0.55]} />
         <meshStandardMaterial color={teamColor} roughness={0.35} metalness={0.15} />
       </instancedMesh>
       {/* Opěradlo */}
-      <instancedMesh ref={backRef} args={[undefined, undefined, total]} castShadow>
+      <instancedMesh ref={backRef} args={[undefined, undefined, total]} castShadow={castShadows}>
         <boxGeometry args={[seatSize * 0.78, 0.35, 0.08]} />
         <meshStandardMaterial color={teamColor} roughness={0.35} metalness={0.15} />
       </instancedMesh>
@@ -436,6 +439,7 @@ function Spectators({
   isUltrasSector = false,
   waveSlot = 0,
   reducedDetail = false,
+  castShadows = true,
 }: {
   rows: number;
   columns: number;
@@ -450,6 +454,7 @@ function Spectators({
   /** Pořadí tribuny v oběhu mexické vlny (0–3). */
   waveSlot?: number;
   reducedDetail?: boolean;
+  castShadows?: boolean;
 }) {
   const torsoRef = useRef<THREE.InstancedMesh>(null);
   const pantsRef = useRef<THREE.InstancedMesh>(null);
@@ -801,37 +806,37 @@ function Spectators({
   return (
     <group>
       {/* Nohy sedících diváků */}
-      <instancedMesh ref={pantsRef} args={[undefined, undefined, filled.length]} castShadow>
+      <instancedMesh ref={pantsRef} args={[undefined, undefined, filled.length]} castShadow={castShadows}>
         <boxGeometry args={[seatSize * 0.44, 0.32, seatSize * 0.48]} />
         <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
       </instancedMesh>
 
       {/* Trup / bundy / dresy */}
-      <instancedMesh ref={torsoRef} args={[undefined, undefined, filled.length]} castShadow>
+      <instancedMesh ref={torsoRef} args={[undefined, undefined, filled.length]} castShadow={castShadows}>
         <boxGeometry args={[seatSize * 0.48, TORSO_H, seatSize * 0.36]} />
         <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
       </instancedMesh>
 
       {/* Hlavy s rozličnými světlými tóny pleti */}
-      <instancedMesh ref={headRef} args={[undefined, undefined, filled.length]} castShadow>
+      <instancedMesh ref={headRef} args={[undefined, undefined, filled.length]} castShadow={castShadows}>
         <boxGeometry args={[seatSize * 0.27, HEAD_H, seatSize * 0.27]} />
         <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#332222" emissiveIntensity={0.25} />
       </instancedMesh>
 
       {/* Čepice a kulichy */}
-      <instancedMesh ref={hatRef} args={[undefined, undefined, filled.length]} castShadow>
+      <instancedMesh ref={hatRef} args={[undefined, undefined, filled.length]} castShadow={castShadows}>
         <boxGeometry args={[seatSize * 0.29, 0.1, seatSize * 0.31]} />
         <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
       </instancedMesh>
 
       {/* Pivo v kelímku */}
-      <instancedMesh ref={beerRef} args={[undefined, undefined, filled.length]} castShadow>
+      <instancedMesh ref={beerRef} args={[undefined, undefined, filled.length]} castShadow={castShadows}>
         <cylinderGeometry args={[0.045, 0.035, 0.13, 6]} />
         <meshStandardMaterial color="#FBBF24" roughness={0.2} transparent opacity={0.92} />
       </instancedMesh>
 
       {/* Klubové šály */}
-      <instancedMesh ref={scarfRef} args={[undefined, undefined, filled.length]} castShadow>
+      <instancedMesh ref={scarfRef} args={[undefined, undefined, filled.length]} castShadow={castShadows}>
         <boxGeometry args={[seatSize * 0.38, 0.08, 0.12]} />
         <meshStandardMaterial roughness={0.25} metalness={0.05} emissive="#262626" emissiveIntensity={0.2} />
       </instancedMesh>
@@ -991,12 +996,13 @@ export function StandBlock({
       <Seats
         level={level} rows={rows} columns={columns} seatSize={seatSize} seatDepth={seatDepth} seatRise={seatRise}
         length={length} teamColor={seatColor} woodTexture={seatWoodTexture} snowOnSeats={isSnow && mode === "training_day"}
+        castShadows={false}
       />
       {mode !== "training_day" && (
         <Spectators
           rows={rows} columns={columns} seatSize={seatSize} seatDepth={seatDepth} seatRise={seatRise} length={length}
           attendanceRatio={attendanceRatio} teamColor={teamColor} secondaryColor={secondaryColor}
-          isUltrasSector={false} waveSlot={0} reducedDetail={reducedDetail}
+          isUltrasSector={false} waveSlot={0} reducedDetail={reducedDetail} castShadows={false}
         />
       )}
       {panel && level >= 2 && (

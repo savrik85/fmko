@@ -171,23 +171,23 @@ function SeatsAndCrowd({ seats, c }: { seats: Array<{ x: number; y: number; z: n
   const n = seats.length;
   return (
     <>
-      <instancedMesh ref={seatRef} args={[undefined, undefined, n]} castShadow>
+      <instancedMesh ref={seatRef} args={[undefined, undefined, n]}>
         <boxGeometry args={[0.55, 0.08, 0.45]} />
         <meshStandardMaterial color={c.seatColor} roughness={0.5} />
       </instancedMesh>
-      <instancedMesh ref={pantsRef} args={[undefined, undefined, n]} castShadow>
+      <instancedMesh ref={pantsRef} args={[undefined, undefined, n]}>
         <boxGeometry args={[0.31, 0.32, 0.34]} />
         <meshStandardMaterial roughness={0.9} />
       </instancedMesh>
-      <instancedMesh ref={torsoRef} args={[undefined, undefined, n]} castShadow>
+      <instancedMesh ref={torsoRef} args={[undefined, undefined, n]}>
         <boxGeometry args={[0.34, 0.46, 0.25]} />
         <meshStandardMaterial roughness={0.85} />
       </instancedMesh>
-      <instancedMesh ref={headRef} args={[undefined, undefined, n]} castShadow>
+      <instancedMesh ref={headRef} args={[undefined, undefined, n]}>
         <boxGeometry args={[0.19, 0.26, 0.19]} />
         <meshStandardMaterial roughness={0.7} />
       </instancedMesh>
-      <instancedMesh ref={hatRef} args={[undefined, undefined, n]} castShadow>
+      <instancedMesh ref={hatRef} args={[undefined, undefined, n]}>
         <boxGeometry args={[0.2, 0.1, 0.22]} />
         <meshStandardMaterial roughness={0.8} />
       </instancedMesh>
