@@ -6,7 +6,7 @@
  * Logika leží ve webu a nezná React, aby šla otestovat tady.
  */
 import { describe, it, expect } from "vitest";
-import { getSideLevels, joinedEnds, raisedTierSpec, replacedSides, roofLifts, tierTop, vipBoxSideFor } from "../../../web/src/components/stadium/stadium-3d/stand-levels";
+import { getSideLevels, joinedEnds, raisedTierSpec, replacedSides, roofTiers, tierTop, vipBoxSideFor } from "../../../web/src/components/stadium/stadium-3d/stand-levels";
 
 describe("getSideLevels", () => {
   it("strany tribun míří na světové strany", () => {
@@ -121,15 +121,22 @@ describe("horní patra a zvednutí střechy", () => {
     expect(tierTop(raisedTierSpec("second_tier", 3, 6, 8))).toBeGreaterThan(tierTop(raisedTierSpec("second_tier", 1, 6, 8)));
   });
 
-  it("střecha se zvedne jen na straně s patrem a o výšku patra nad tribunou", () => {
+  it("střecha nad patrem kryje tribunu od přední řady po zadní hranu patra", () => {
     const sideLevels = { east: 3, west: 3, north: 3, south: 3 };
-    const lifts = roofLifts([{ slot: "ext_main", kind: "double_stand", level: 2 }, { slot: "ext_opposite", kind: "footbridge", level: 3 }], sideLevels, () => 6);
-    expect(lifts.east).toBeGreaterThan(2);
-    expect(lifts.west).toBeUndefined();
-    expect(lifts.north).toBeUndefined();
+    const dims = () => ({ height: 6, depth: 8 });
+    const t = roofTiers([{ slot: "ext_main", kind: "double_stand", level: 2 }, { slot: "ext_opposite", kind: "footbridge", level: 3 }], sideLevels, dims);
+    const east = t.east!;
+    expect(east).toBeDefined();
+    // Konec krytí je za patrem (aspoň za jeho přední hranou i za zadní hranou tribuny).
+    expect(east.end).toBeGreaterThan(east.z0);
+    expect(east.end).toBeGreaterThanOrEqual(8);
+    // Střecha musí být nad nejvyšší řadou patra.
+    expect(east.top).toBeGreaterThan(east.y0);
+    expect(t.west).toBeUndefined();
+    expect(t.north).toBeUndefined();
   });
 
   it("bez přístaveb se nezvedá nic", () => {
-    expect(roofLifts([], { east: 2, west: 2, north: 2, south: 2 }, () => 3.5)).toEqual({});
+    expect(roofTiers([], { east: 2, west: 2, north: 2, south: 2 }, () => ({ height: 3.5, depth: 6 }))).toEqual({});
   });
 });
