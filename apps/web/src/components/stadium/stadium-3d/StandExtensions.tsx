@@ -319,12 +319,18 @@ function RoofSlab({ alongLen, D, H, c }: { alongLen: number; D: number; H: numbe
   );
 }
 
-/** Plochá střecha nad obloukovou tribunou (mezikruží řezané rovinami x = ±hw), na sloupcích vzadu. */
+/**
+ * Plochá střecha nad obloukovou tribunou (mezikruží řezané rovinami x = ±hw). Rozsah od přední hrany
+ * tribuny i výška jsou stejné jako u střechy nad rovnou tribunou (canopyPlan), takže na ni i na rohovou
+ * střechu navazuje bez mezery a schodu.
+ */
 function RoundRoof({ depth, height, hw, c }: { depth: number; height: number; hw: number; c: Common }) {
   const tex = useMemo(() => generateCorrugatedTexture(c.roofColor, 8, 2), [c.roofColor]);
-  const overhang = 0.5 + c.roofLevel * 0.35;
-  const r1 = ROUND_RIN + depth * 0.3;
-  const r2 = ROUND_RIN + depth + overhang;
+  const plan = canopyPlan(depth, height, c.roofLevel);
+  const t1 = plan.roofZ - plan.roofDepth / 2;
+  const t2 = plan.roofZ + plan.roofDepth / 2;
+  const r1 = ROUND_RIN + t1;
+  const r2 = ROUND_RIN + t2;
   const geometry = useMemo(() => {
     const aIn = Math.asin(Math.min(0.99, hw / r1));
     const aOut = Math.asin(Math.min(0.99, hw / r2));
@@ -336,8 +342,8 @@ function RoundRoof({ depth, height, hw, c }: { depth: number; height: number; hw
     shape.closePath();
     return extrudeFlat(shape, 0.14);
   }, [r1, r2, hw]);
-  const roofY = height + 2.6;
-  const rp = ROUND_RIN + depth + 0.2;
+  const roofY = plan.roofY;
+  const rp = ROUND_RIN + plan.backZ;
   const half = Math.asin(Math.min(0.99, hw / rp));
   return (
     <group position={[0, 0, -ROUND_RIN]}>
@@ -345,21 +351,27 @@ function RoundRoof({ depth, height, hw, c }: { depth: number; height: number; hw
         <meshStandardMaterial map={tex.map} bumpMap={tex.bumpMap} bumpScale={0.12} roughness={0.5} metalness={0.35} />
       </mesh>
       {[-0.85, -0.4, 0, 0.4, 0.85].map((f) => (
-        <Box key={f} size={[0.18, roofY + 0.2, 0.18]} position={[rp * Math.sin(half * f), (roofY + 0.2) / 2, rp * Math.cos(half * f)]} color="#4A4D54" metal={0.5} />
+        <Box key={f} size={[0.18, roofY, 0.18]} position={[rp * Math.sin(half * f), roofY / 2, rp * Math.cos(half * f)]} color="#4A4D54" metal={0.5} />
       ))}
     </group>
   );
 }
 
-/** Plochá střecha nad zahnutou rohovou tribunou (mezielipsa), sloupky na vnějším okraji. */
+/**
+ * Plochá střecha nad zahnutou rohovou tribunou (mezielipsa). Rozsah od přední hrany tribun i výška
+ * jsou stejné jako u střechy nad rovnou tribunou (canopyPlan), a koncové plochy leží v rovinách
+ * tribun, takže střecha na střechy sousedních tribun přesně navazuje.
+ */
 function CornerRoof({ a, b, depth, height, c }: { a: number; b: number; depth: number; height: number; c: Common }) {
   const tex = useMemo(() => generateCorrugatedTexture(c.roofColor, 8, 2), [c.roofColor]);
-  const overhang = 0.5 + c.roofLevel * 0.35;
+  const plan = canopyPlan(depth, height, c.roofLevel);
+  const t1 = plan.roofZ - plan.roofDepth / 2;
+  const t2 = plan.roofZ + plan.roofDepth / 2;
   const geometry = useMemo(() => {
-    const aIn = a + depth * 0.3;
-    const bIn = b + depth * 0.3;
-    const aOut = a + depth + overhang;
-    const bOut = b + depth + overhang;
+    const aIn = a + t1;
+    const bIn = b + t1;
+    const aOut = a + t2;
+    const bOut = b + t2;
     const shape = new THREE.Shape();
     shape.moveTo(aOut, 0);
     shape.absellipse(0, 0, aOut, bOut, 0, -Math.PI / 2, true, 0);
@@ -367,15 +379,15 @@ function CornerRoof({ a, b, depth, height, c }: { a: number; b: number; depth: n
     shape.absellipse(0, 0, aIn, bIn, -Math.PI / 2, 0, false, 0);
     shape.closePath();
     return extrudeFlat(shape, 0.14);
-  }, [a, b, depth, overhang]);
-  const roofY = height + 2.6;
+  }, [a, b, t1, t2]);
+  const roofY = plan.roofY;
   return (
     <group>
       <mesh geometry={geometry} position={[0, roofY, 0]} castShadow>
         <meshStandardMaterial map={tex.map} bumpMap={tex.bumpMap} bumpScale={0.12} roughness={0.5} metalness={0.35} />
       </mesh>
       {[0.1, 0.5, 0.8, 1.1, 1.47].map((phi) => (
-        <Box key={phi} size={[0.18, roofY + 0.2, 0.18]} position={[(a + depth + 0.2) * Math.cos(phi), (roofY + 0.2) / 2, (b + depth + 0.2) * Math.sin(phi)]} color="#4A4D54" metal={0.5} />
+        <Box key={phi} size={[0.18, roofY, 0.18]} position={[(a + plan.backZ) * Math.cos(phi), roofY / 2, (b + plan.backZ) * Math.sin(phi)]} color="#4A4D54" metal={0.5} />
       ))}
     </group>
   );
@@ -482,8 +494,9 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
       // nekreslí). Je stejně široká jako rovná, vyšší úroveň přidá řady a hloubku.
       const bd = dimsOf(Math.max(1, standLevel));
       const rows = Math.max(3, bd.rows) + l;
-      const depth = bd.depth + 0.4 * l;
-      const height = bd.height * (1 + 0.1 * l);
+      // Rozměry jako u rovné tribuny (vyšší úroveň přidá jen řady), aby střecha navazovala na rohy.
+      const depth = bd.depth;
+      const height = bd.height;
       const hw = Math.min(length / 2, 20);
       return (
         <>

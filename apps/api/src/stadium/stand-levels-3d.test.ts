@@ -177,3 +177,18 @@ describe("canopyPlan (střecha nad tribunou nesmí bránit ve výhledu)", () => 
     expect(canopyPlan(8, 6, 2).roofY).toBeGreaterThan(canopyPlan(4, 1.2, 2).roofY);
   });
 });
+
+describe("canopyPlan: souvislost střech", () => {
+  it("střecha je vodorovná, aby na sebe sousední střechy navazovaly ve stejné výšce", () => {
+    for (const [D, H] of [[4, 1.2], [6, 3.5], [8, 6]] as Array<[number, number]>) {
+      expect(canopyPlan(D, H, 2).tilt).toBe(0);
+    }
+  });
+
+  it("dvě tribuny stejné velikosti mají střechu ve stejné výšce a ve stejném rozsahu od přední hrany", () => {
+    const a = canopyPlan(8, 6, 2);
+    const b = canopyPlan(8, 6, 2);
+    expect(a.roofY).toBe(b.roofY);
+    expect(a.roofZ - a.roofDepth / 2).toBe(b.roofZ - b.roofDepth / 2);
+  });
+});
