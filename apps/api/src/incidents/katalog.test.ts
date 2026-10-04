@@ -127,12 +127,18 @@ describe("katalog: nikdy se nesáhne na věc, kterou klub nemá", () => {
   });
 
   it("vandal rozbije jen venkovní zařízení, které klub má", () => {
-    const s = stavKlubu({ stadion: { fence: 0, stands: 2, entrance_gate: 0, changing_rooms: 3, pitch_condition: 70 } });
+    const s = stavKlubu({ stadion: { fence: 0, stands: 2, stand_main: 2, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 0, entrance_gate: 0, changing_rooms: 3, pitch_condition: 70 } });
+    let rozbite = 0;
     proSeedy((rng) => {
       const n = def("vandal").vytvor(s, rng);
       const z = n?.ztraty[0];
-      if (z?.typ === "stadion") expect(z.zarizeni).toBe("stands");
+      if (z?.typ === "stadion") {
+        rozbite++;
+        // `stands` je odvozené maximum a rozbít se nedá, rozbíjí se konkrétní strana.
+        expect(z.zarizeni).toBe("stand_main");
+      }
     });
+    expect(rozbite).toBeGreaterThan(0);
   });
 });
 

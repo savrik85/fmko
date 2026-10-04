@@ -480,7 +480,9 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
     await releaseClaim();
     throw e;
   }
-  const changed = (i: number | null) => i !== null && (results[i]?.meta?.changes ?? 0) === 1;
+  // `>= 1`, ne `=== 1`: stavba strany tribuny spouští trigger a D1 jeho řádek počítá do `changes`.
+  // Zámek, který prohrál, hlásí 0.
+  const changed = (i: number | null) => i !== null && (results[i]?.meta?.changes ?? 0) >= 1;
   if (!changed(0)) {
     await releaseClaim();
     const other = await db.prepare(

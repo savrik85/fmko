@@ -450,6 +450,8 @@ export async function processMatchDayFinances(
   const facilities: Record<string, number> = {};
   if (stadiumRow) {
     for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east", "parking", "fence", "roof", "ultras_stand", "toilets", "entrance_gate", "security", "cage", "vip_box"]) {
+      // Strany tribun se čtou jen z DB, která už má migraci 0239. Bez sloupců platí starý výpočet z `stands`.
+      if (key.startsWith("stand_") && !(key in stadiumRow)) continue;
       facilities[key] = (stadiumRow[key] as number) ?? 0;
     }
   }

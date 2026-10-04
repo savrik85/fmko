@@ -100,7 +100,7 @@ export async function nactiStavKlubu(
   for (const [k, v] of Object.entries(vybaveniRow)) if (typeof v === "number") vybaveni[k] = v;
 
   const vysledky = await db.batch([
-    db.prepare("SELECT changing_rooms, showers, toilets, refreshments, fence, stands, entrance_gate, lighting, pitch_condition FROM stadiums WHERE team_id = ?").bind(teamId),
+    db.prepare("SELECT changing_rooms, showers, toilets, refreshments, fence, stand_main, stand_opposite, stand_goal_west, stand_goal_east, entrance_gate, lighting, pitch_condition FROM stadiums WHERE team_id = ?").bind(teamId),
     db.prepare(`SELECT ${SLOUPCE_HRACE} FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')`).bind(teamId),
     db.prepare(
       `SELECT m.id, m.home_team_id, m.home_score, m.away_score

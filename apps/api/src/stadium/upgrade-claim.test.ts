@@ -38,7 +38,7 @@ beforeEach(async () => {
   await db.prepare("DROP TABLE IF EXISTS stadium_damage").run();
   await db.prepare("DROP TABLE IF EXISTS stadiums").run();
   await db.prepare("CREATE TABLE stadiums (id TEXT PRIMARY KEY, team_id TEXT NOT NULL UNIQUE, stands INTEGER NOT NULL DEFAULT 0, fence INTEGER NOT NULL DEFAULT 0)").run();
-  await db.prepare("CREATE TABLE stadium_damage (id TEXT, facility TEXT, repaired_at TEXT)").run();
+  await db.prepare("CREATE TABLE stadium_damage (id TEXT PRIMARY KEY, team_id TEXT, facility TEXT, levels INTEGER, repair_cost INTEGER, repaired_at TEXT)").run();
   for (const st of migrationStatements()) await db.prepare(st).run();
   await db.prepare("INSERT INTO stadiums (id, team_id, stands) VALUES ('s1', 't1', 2)").run();
 });
@@ -67,5 +67,13 @@ describe("claimStadiumUpgrade", () => {
     expect(await claimStadiumUpgrade(db, "t1", "stand_opposite", 0, 1)).toBe(false);
     const row = await db.prepare("SELECT stand_opposite FROM stadiums WHERE team_id = 't1'").first<{ stand_opposite: number }>();
     expect(row?.stand_opposite).toBe(2);
+  });
+});
+
+describe("ostatní zámky stavby", () => {
+  it("podpis sponzora počítá řádek změněný triggerem (>= 1), ne přesně jeden", () => {
+    const zdroj = readFileSync(join(__dirname, "..", "sponsors", "signing.ts"), "utf8");
+    expect(zdroj).toMatch(/const changed = .*meta\?\.changes \?\? 0\) >= 1/);
+    expect(zdroj).not.toMatch(/meta\?\.changes \?\? 0\) === 1/);
   });
 });

@@ -14,6 +14,23 @@ SET stand_main = COALESCE(stands, 0),
     stand_goal_west = COALESCE(stands, 0),
     stand_goal_east = COALESCE(stands, 0);
 
+-- Klub s nezaplacenou opravou rozbité tribuny má `stands` už sražené. Škoda se
+-- bere jako zásah jen hlavní tribuny: ostatní strany se vrátí o sražené úrovně
+-- (nejvýš na 3), takže po opravě hlavní má klub zase původní kapacitu.
+UPDATE stadiums
+SET stand_opposite = MIN(3, stand_opposite + COALESCE((SELECT SUM(d.levels) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL), 0)),
+    stand_goal_west = MIN(3, stand_goal_west + COALESCE((SELECT SUM(d.levels) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL), 0)),
+    stand_goal_east = MIN(3, stand_goal_east + COALESCE((SELECT SUM(d.levels) FROM stadium_damage d WHERE d.team_id = stadiums.team_id AND d.facility = 'stands' AND d.repaired_at IS NULL), 0));
+
+-- `stands` je maximum stran (trigger níž ho dál drží, tady ho srovnáme hned).
+UPDATE stadiums SET stands = MAX(stand_main, stand_opposite, stand_goal_west, stand_goal_east);
+
+-- Oprava jedné strany stojí zhruba třetinu opravy celých tribun (hlavní strana
+-- je ~35 % přírůstku míst na každém stupni), zaokrouhleno na stovky.
+UPDATE stadium_damage
+SET repair_cost = MAX(500, CAST(ROUND(repair_cost * 0.35 / 100.0) AS INTEGER) * 100)
+WHERE facility = 'stands' AND repaired_at IS NULL;
+
 -- Nezaplacená oprava rozbité tribuny: `stands` už není zařízení, které jde opravit.
 UPDATE stadium_damage SET facility = 'stand_main'
 WHERE facility = 'stands' AND repaired_at IS NULL;
