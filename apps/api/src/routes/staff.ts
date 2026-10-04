@@ -222,11 +222,19 @@ staffRouter.post("/teams/:teamId/staff/:staffId/hire", async (c) => {
   const gameDate = await loadGameDate(c.env.DB, teamId);
 
   // Race-safe claim: jen pokud je pořád volný
+  let claimError: unknown = null;
   const claim = await c.env.DB.prepare(
     "UPDATE staff_members SET team_id = ?, role = ?, hired_at = ?, listed_until = NULL WHERE id = ? AND team_id IS NULL"
   ).bind(teamId, role, gameDate, staffId).run()
-    .catch((e) => { logger.error({ module: "staff" }, "hire claim failed", e); return null; });
-  if (!claim || (claim.meta?.changes ?? 0) === 0) {
+    .catch((e) => {
+      claimError = e;
+      logger.error({ module: "staff" }, "hire claim failed", e);
+      return null;
+    });
+  if (claimError || !claim) {
+    return c.json({ error: "Nábor se nezdařil kvůli systémové chybě. Zkus to prosím znovu." }, 500);
+  }
+  if ((claim.meta?.changes ?? 0) === 0) {
     return c.json({ error: "Někdo tě předběhl, kandidáta už najal jiný tým." }, 409);
   }
 
