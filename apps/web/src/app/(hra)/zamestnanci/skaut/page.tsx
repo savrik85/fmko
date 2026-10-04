@@ -339,7 +339,12 @@ export default function ScoutPage() {
             </>
           ) : (
             <>
-              <SectionLabel>Na úkolu: Oblastní hledání</SectionLabel>
+              <div className="flex items-center justify-between">
+                <SectionLabel>{a.age_max <= SCOUT_YOUTH_AGE_MAX ? "Na úkolu: Talenty U21" : "Na úkolu: Oblastní hledání"}</SectionLabel>
+                <span className="text-xs bg-pitch-50 text-pitch-700 font-heading font-bold px-2 py-0.5 rounded">
+                  {a.age_max <= SCOUT_YOUTH_AGE_MAX ? "🌟 Talenty U21" : "V terénu"}
+                </span>
+              </div>
               <div className="text-base">
                 <span className="font-heading font-bold">
                   {a.positions && a.positions.length > 0 ? a.positions.map((p) => SCOUT_POSITION_LABELS[p]).join(", ") : "Kdokoli"}
@@ -380,17 +385,28 @@ export default function ScoutPage() {
           </div>
 
           {/* Přepínač typu mise */}
-          <div className="flex gap-2 border-b border-gray-100 pb-3">
+          <div className="flex flex-wrap gap-2 border-b border-gray-100 pb-3">
             <button
               type="button"
-              onClick={() => setMissionTab("area")}
+              onClick={() => { setMissionTab("area"); setAgeMin(18); setAgeMax(32); }}
               className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
-                missionTab === "area"
+                missionTab === "area" && ageMax > 21
                   ? "bg-pitch-500 text-white shadow-xs"
                   : "bg-surface text-muted hover:text-ink"
               }`}
             >
               🌍 Oblastní hledání
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMissionTab("area"); setAgeMin(16); setAgeMax(21); }}
+              className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
+                missionTab === "area" && ageMax <= 21
+                  ? "bg-pitch-500 text-white shadow-xs"
+                  : "bg-surface text-muted hover:text-ink"
+              }`}
+            >
+              🌟 Talenty U21
             </button>
             <button
               type="button"
@@ -421,7 +437,33 @@ export default function ScoutPage() {
               </div>
 
               <div>
-                <div className="text-sm text-muted font-heading uppercase mb-1.5">Věk</div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="text-sm text-muted font-heading uppercase">Věk hráčů</div>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => { setAgeMin(16); setAgeMax(21); }}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-heading font-bold border transition-colors ${
+                        ageMax <= 21
+                          ? "bg-pitch-500 text-white border-pitch-500 shadow-xs"
+                          : "bg-white text-ink border-gray-200 hover:border-pitch-300"
+                      }`}
+                    >
+                      🌟 Jen talenty U21 (16–21)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAgeMin(16); setAgeMax(35); }}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-heading font-bold border transition-colors ${
+                        ageMin === 16 && ageMax === 35
+                          ? "bg-pitch-500 text-white border-pitch-500 shadow-xs"
+                          : "bg-white text-ink border-gray-200 hover:border-pitch-300"
+                      }`}
+                    >
+                      Všichni (16–35)
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
                   <select value={ageMin} onChange={(e) => { const v = Number(e.target.value); setAgeMin(v); if (v > ageMax) setAgeMax(v); }}
                     className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-base font-heading font-bold">
@@ -434,7 +476,14 @@ export default function ScoutPage() {
                   </select>
                   <span className="text-muted">let</span>
                 </div>
-                {youth && <div className="text-sm text-pitch-600 mt-1.5">Do {SCOUT_YOUTH_AGE_MAX} let skaut hledá podle toho, kam to kluci můžou dotáhnout, ne podle dnešní formy.</div>}
+                {youth ? (
+                  <div className="p-3 rounded-xl bg-pitch-50 border border-pitch-200/80 text-sm text-pitch-900 mt-2 flex items-start gap-2.5">
+                    <span className="text-lg leading-none">🌟</span>
+                    <div>
+                      <strong className="font-heading font-bold">Aktivní režim talentů U21:</strong> Skaut v terénu posuzuje mladé hráče podle toho, <em>kam to můžou dotáhnout</em> (podle stropu a potenciálu), ne podle dnešní formy dospělého fotbalu. V hlášení odhadne jejich strop.
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div>
@@ -466,7 +515,7 @@ export default function ScoutPage() {
               </div>
 
               <button onClick={startArea} className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-                Poslat skauta hledat talenty
+                {youth ? "Poslat skauta hledat talenty (U21)" : "Poslat skauta hledat hráče"}
               </button>
             </div>
           )}
