@@ -18,6 +18,7 @@ import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../aut
 import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
+import { suspensionSms, injurySms } from "../events/injury-sms";
 import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, marketValue, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
 
 /**
@@ -3993,7 +3994,9 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       injuryDays: injured ? (p.injury_days as number) : null,
       injuryType: injured ? (p.injury_type as string) : null,
       absenceReason: suspended ? "Stopka" : injured ? "Zranění" : (absenceInfo?.reason ?? null),
-      absenceSms: suspended ? `Mám stopku, ${p.suspended_matches} zápas(ů) nesmím hrát.` : injured ? `Jsem zraněný (${p.injury_type ?? "zranění"}), ještě ${p.injury_days} dní.` : (absenceInfo?.smsText ?? null),
+      absenceSms: suspended ? suspensionSms(p.suspended_matches as number)
+        : injured ? injurySms(p.id as string, p.injury_type as string | null, p.injury_days as number)
+        : (absenceInfo?.smsText ?? null),
       absenceEmoji: suspended ? "🟥" : injured ? "🩹" : (absenceInfo?.emoji ?? null),
       relationships: relMap[p.id as string] ?? [],
     };
