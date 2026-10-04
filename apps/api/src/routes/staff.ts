@@ -9,7 +9,7 @@ import { logger } from "../lib/logger";
 import { requireTeamOwnership } from "../auth/middleware";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
 import {
-  ROLE_DEFS, STAFF_ATTRIBUTE_LABELS, licenceLabel, staffRequiredLicence,
+  ROLE_DEFS, STAFF_ATTRIBUTE_LABELS, licenceLabel, staffRequiredLicence, maxScoutsForLicence,
   type StaffRole, type StaffAttributeKey, type LicenceLevel,
 } from "@okresni-masina/shared";
 import { calculateStaffEffects } from "../staff/staff-effects";
@@ -140,7 +140,10 @@ staffRouter.get("/teams/:teamId/staff", async (c) => {
     return { ...m, courses };
   });
 
-  return c.json({ staff, effects });
+  const coachLicence = await loadCoachLicence(c.env.DB, teamId);
+  const maxScouts = maxScoutsForLicence(coachLicence);
+
+  return c.json({ staff, effects, coachLicence, maxScouts });
 });
 
 /** GET /teams/:teamId/staff/market — volní kandidáti v okrese týmu. */
@@ -195,10 +198,22 @@ staffRouter.post("/teams/:teamId/staff/:staffId/hire", async (c) => {
   }
 
   // Slot obsazený?
-  const occupied = await c.env.DB.prepare("SELECT id FROM staff_members WHERE team_id = ? AND role = ?")
-    .bind(teamId, role).first<{ id: string }>()
-    .catch((e) => { logger.warn({ module: "staff" }, "hire check slot", e); return null; });
-  if (occupied) return c.json({ error: `Slot „${ROLE_DEFS[role].label}" je už obsazený. Nejdřív propusť současného.` }, 409);
+  if (role === "skaut") {
+    const coachLicence = await loadCoachLicence(c.env.DB, teamId);
+    const maxScouts = maxScoutsForLicence(coachLicence);
+    const scoutCountRow = await c.env.DB.prepare("SELECT COUNT(*) as count FROM staff_members WHERE team_id = ? AND role = 'skaut'")
+      .bind(teamId).first<{ count: number }>()
+      .catch((e) => { logger.warn({ module: "staff" }, "hire check scout slots", e); return null; });
+    const count = scoutCountRow?.count ?? 0;
+    if (count >= maxScouts) {
+      return c.json({ error: `Máš už plný počet skautů (${maxScouts}). Pro dalšího potřebuješ vyšší trenérskou licenci.` }, 409);
+    }
+  } else {
+    const occupied = await c.env.DB.prepare("SELECT id FROM staff_members WHERE team_id = ? AND role = ?")
+      .bind(teamId, role).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: "staff" }, "hire check slot", e); return null; });
+    if (occupied) return c.json({ error: `Slot „${ROLE_DEFS[role].label}" je už obsazený. Nejdřív propusť současného.` }, 409);
+  }
 
   // Rozpočet
   const allowed = await assertPurchaseAllowed(c.env.DB, teamId, cand.signing_fee);
@@ -266,10 +281,22 @@ staffRouter.post("/teams/:teamId/staff/:staffId/reassign", async (c) => {
   if (!cur) return c.json({ error: "Zaměstnanec nenalezen" }, 404);
   if (cur.role === role) return c.json({ ok: true }); // beze změny
 
-  const occupied = await c.env.DB.prepare("SELECT id FROM staff_members WHERE team_id = ? AND role = ?")
-    .bind(teamId, role).first<{ id: string }>()
-    .catch((e) => { logger.warn({ module: "staff" }, "reassign check slot", e); return null; });
-  if (occupied) return c.json({ error: `Slot „${ROLE_DEFS[role].label}" je obsazený.` }, 409);
+  if (role === "skaut") {
+    const coachLicence = await loadCoachLicence(c.env.DB, teamId);
+    const maxScouts = maxScoutsForLicence(coachLicence);
+    const scoutCountRow = await c.env.DB.prepare("SELECT COUNT(*) as count FROM staff_members WHERE team_id = ? AND role = 'skaut' AND id != ?")
+      .bind(teamId, staffId).first<{ count: number }>()
+      .catch((e) => { logger.warn({ module: "staff" }, "reassign check scout slots", e); return null; });
+    const count = scoutCountRow?.count ?? 0;
+    if (count >= maxScouts) {
+      return c.json({ error: `Máš už plný počet skautů (${maxScouts}). Pro dalšího potřebuješ vyšší trenérskou licenci.` }, 409);
+    }
+  } else {
+    const occupied = await c.env.DB.prepare("SELECT id FROM staff_members WHERE team_id = ? AND role = ? AND id != ?")
+      .bind(teamId, role, staffId).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: "staff" }, "reassign check slot", e); return null; });
+    if (occupied) return c.json({ error: `Slot „${ROLE_DEFS[role].label}" je obsazený.` }, 409);
+  }
 
   await c.env.DB.prepare("UPDATE staff_members SET role = ? WHERE id = ? AND team_id = ?")
     .bind(role, staffId, teamId).run()

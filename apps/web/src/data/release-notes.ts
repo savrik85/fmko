@@ -13,6 +13,17 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-10-04",
+    emoji: "🕵️",
+    title: "Více skautů a nové úkoly v terénu",
+    items: [
+      "V klubu můžeš mít nově víc skautů současně. Základem jsou 2 skauti i bez licence, s vyšší trenérskou licencí (UEFA B, UEFA A, UEFA Pro) jich odemkneš až 5. Každý skaut pracuje samostatně a plní svůj vlastní úkol.",
+      "Skauta pošleš na konkrétního cizího hráče přímo z jeho profilu tlačítkem Poslat skauta. Dva dny ho podrobně sleduje na tréninku i v zápasech, odhalí jeho přesný rating bez mlhy, skrytý talent i povahové rysy (vztah k alkoholu, horkou krev nebo přístup).",
+      "Skauta můžeš vyslat i na taktický rozbor příštího ligového soupeře. Analyzuje rozestavení, slabiny a klíčového hráče. Tvůj tým tím získá do vzájemného zápasu taktický bonus +2 k technice a +3 k morálce po dobu 14 dní.",
+      "Všechny své skauty a jejich úkoly spravuješ v Zaměstnancích pod Skautem. Mezi skauty se jednoduše přepínáš, vidíš, kdo kde zrovna jezdí a kdo má volno na další misi.",
+    ],
+  },
+  {
+    date: "2026-10-04",
     emoji: "🏟️",
     title: "Tribuny po stranách a přístavby",
     items: [
