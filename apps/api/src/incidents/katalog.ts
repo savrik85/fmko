@@ -50,7 +50,7 @@ export const PRENOSNE: readonly string[] = [
 ];
 
 /** Venkovní zařízení, na které dosáhne vandal. */
-const VENKOVNI_ZARIZENI = ["fence", "stands", "entrance_gate"] as const;
+const VENKOVNI_ZARIZENI = ["fence", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east", "entrance_gate"] as const;
 
 /** Co rozbije oslava v kabině (spec 4b): šatny, sprchy, sociálky. Stánek ne. */
 const KABINY = ["changing_rooms", "showers", "toilets"] as const;

@@ -149,7 +149,8 @@ export function StadiumRadarWidget({ data }: WidgetProps) {
   if (!stadium) return <ChartEmpty>O stadionu zatím nemáme data.</ChartEmpty>;
 
   const entries = Object.entries(stadium.facilities ?? {})
-    .filter(([key]) => FACILITY_LABELS[key])
+    // Strany tribun se v radaru nezobrazují zvlášť, stačí jedna osa „Tribuny" (nejvyšší strana).
+    .filter(([key]) => FACILITY_LABELS[key] && !key.startsWith("stand_"))
     .slice(0, 8);
 
   return (
