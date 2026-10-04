@@ -97,7 +97,7 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
 
   const signFreeAgent = async () => {
     if (!r?.freeAgentId) return;
-    const ok = await confirm({ title: `Podepsat ${name}?`, description: "Volný hráč, za přestup se neplatí. Rozhodne se hned.", confirmLabel: "Podepsat" });
+    const ok = await confirm({ title: `Podpis: ${name}`, description: "Volný hráč, za přestup se neplatí. Rozhodne se hned.", confirmLabel: "Podepsat" });
     if (!ok) return;
     const out: { res: { success: boolean; decision?: { explanation?: string } } | null } = { res: null };
     const done = await apiAction(
@@ -190,7 +190,7 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
             )}
 
             <div className="space-y-1.5 text-sm">
-              {r.willingness && (
+              {r.willingness && (active || r.status === "negotiating") && (
                 <div className="flex items-center gap-2 flex-wrap"><span className="text-muted">Ochota přejít:</span><WillingnessBadge level={r.willingness.level} /></div>
               )}
               {r.source === "village_club" && r.askHint != null && (

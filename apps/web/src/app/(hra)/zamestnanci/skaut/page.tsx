@@ -139,15 +139,15 @@ export default function ScoutPage() {
           <Link href="/zamestnanci?tab=market" className="btn btn-primary inline-block">Najmout skauta</Link>
         </div>
       ) : (
-        <div className="card p-4 flex items-center justify-between gap-3">
-          <div>
-            <div className="text-sm text-muted font-heading uppercase tracking-wider">Skaut</div>
-            <div className="font-heading font-bold text-lg">{data.scout.name}</div>
+        <div className="card p-4 space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm text-muted font-heading uppercase tracking-wider">Skaut</div>
+              <div className="font-heading font-bold text-lg truncate">{data.scout.name}</div>
+            </div>
+            <div className="font-heading font-bold text-xl tabular-nums shrink-0">{data.scout.eff}<span className="text-sm text-muted">/20</span></div>
           </div>
-          <div className="text-right">
-            <div className="font-heading font-bold text-xl tabular-nums">{data.scout.eff}<span className="text-sm text-muted">/20</span></div>
-            <div className="text-sm text-muted">čím víc, tím víc klubů objede a přesněji odhadne</div>
-          </div>
+          <div className="text-sm text-muted">Čím lepší skaut, tím víc klubů objede a tím přesněji hráče odhadne.</div>
         </div>
       )}
 
