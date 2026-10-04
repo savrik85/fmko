@@ -201,8 +201,8 @@ export function Stadium3D({
   const roofTier = roofTiers(standExtensions ?? [], sideLevels, (lvl) => STAND_DIMS[Math.max(1, Math.min(3, lvl))]);
   const scoreboardMinPanelBottom =
     (f.vip_box ?? 0) > 0 &&
-    vipBoxSideFor(sideLevels, SEKTOR_STRANY[ultrasSector]) === "east"
-      ? vipGallerySightlineY(f.vip_box ?? 0, sideLevels.east, f.roof ?? 0, SCOREBOARD_X) + 0.3
+    vipBoxSideFor(sideLevels, SEKTOR_STRANY[ultrasSector], replaced) === "east"
+      ? vipGallerySightlineY(f.vip_box ?? 0, sideLevels.east, f.roof ?? 0, SCOREBOARD_X, roofTier.east) + 0.3
       : 0;
   const zaplneniStrany = (strana: "north" | "south" | "east" | "west"): number => {
     if (!sectorFill) return attendanceRatio;
@@ -617,6 +617,8 @@ export function Stadium3D({
           <VipBox
             level={f.vip_box ?? 0}
             sideLevels={sideLevels}
+            replaced={replaced}
+            roofTier={roofTier}
             roofLevel={f.roof ?? 0}
             ultrasSide={SEKTOR_STRANY[ultrasSector]}
             accentColor={accentColor}
