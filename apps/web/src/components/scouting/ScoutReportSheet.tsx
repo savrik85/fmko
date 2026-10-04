@@ -137,7 +137,12 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
     <Sheet open onClose={onClose} title={name || "Hlášení skauta"}>
       <div className="px-5 pt-3 sm:pt-5 pb-5 space-y-4">
         {!data && !error && <div className="py-8 flex justify-center"><Spinner /></div>}
-        {error && <div className="text-red-600 font-heading font-bold text-center py-6">{error}</div>}
+        {error && (
+          <div className="text-center py-6 space-y-3">
+            <div className="text-red-600 font-heading font-bold">{error}</div>
+            <button onClick={onClose} className="w-full py-3 rounded-xl font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">Zavřít</button>
+          </div>
+        )}
         {r && (
           <>
             <div className="flex items-center gap-4">
@@ -239,6 +244,9 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
               {active && (
                 <button onClick={dismiss} className="text-sm text-muted hover:text-red-600 underline">Nezajímá mě</button>
               )}
+              <button onClick={onClose} className="w-full py-3 rounded-xl font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                Zavřít
+              </button>
             </div>
           </>
         )}
