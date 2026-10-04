@@ -56,7 +56,7 @@ const VARIANTS: Variant[] = [
 
 const num = (s: string | null, d: number[]) => (s ? s.split(",").map(Number) : d);
 
-function Index({ game, real }: { game: boolean; real: boolean }) {
+function Index({ game, real, roof }: { game: boolean; real: boolean; roof: number }) {
   return (
     <div style={{ padding: 24, fontFamily: "system-ui, sans-serif", maxWidth: 760, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, fontWeight: 700 }}>Varianty přístaveb tribun</h1>
@@ -74,7 +74,7 @@ function Index({ game, real }: { game: boolean; real: boolean }) {
         {VARIANTS.map((v, i) => (
           <li key={v.name}>
             <a
-              href={`?v=${i}${real ? "&real=1" : game ? "&game=1" : ""}`}
+              href={`?v=${i}${real ? `&real=1&roof=${roof}` : game ? "&game=1" : ""}`}
               style={{ display: "block", padding: 12, border: "1px solid #ccd", borderRadius: 10, background: "#fff", textDecoration: "none", color: "#111" }}
             >
               <b style={{ fontSize: 17 }}>{i + 1}. {v.name}</b>
@@ -93,7 +93,8 @@ export function Gallery() {
   const vIndex = q.get("v") !== null ? Number(q.get("v")) : null;
   const variant = vIndex !== null ? VARIANTS[vIndex] : undefined;
   const real = !!q.get("real");
-  if (!q.get("ext") && !variant) return <Index game={game} real={real} />;
+  const roofIdx = Math.max(0, Math.min(3, Number(q.get("roof") ?? 0)));
+  if (!q.get("ext") && !variant) return <Index game={game} real={real} roof={roofIdx} />;
 
   const ext = (variant ? variant.ext : q.get("ext") ?? "").split(",").filter(Boolean).map((e) => {
     const [slot, kind, level] = e.split(":");
@@ -103,10 +104,12 @@ export function Gallery() {
   const preview = pv.length === 3 ? { slot: pv[0], kind: pv[1], level: Number(pv[2]) } : null;
   const [m, o, gw, ge] = variant ? variant.sl : num(q.get("sl"), [3, 3, 3, 3]);
   const sideLevels = getSideLevels({ stand_main: m, stand_opposite: o, stand_goal_west: gw, stand_goal_east: ge });
+  const roofParam = Math.max(0, Math.min(3, Number(q.get("roof") ?? 0)));
   if (real && variant && vIndex !== null) {
     const facilities: Record<string, number> = {
       stand_main: m, stand_opposite: o, stand_goal_west: gw, stand_goal_east: ge, stands: Math.max(m, o, gw, ge),
       lighting: 2, fence: 2, parking: 1, entrance_gate: 1, refreshments: 1, changing_rooms: 2, showers: 1, toilets: 1,
+      roof: roofParam,
     };
     const navBtn: React.CSSProperties = { padding: "10px 16px", background: "#fff", border: "1px solid #ccd", borderRadius: 8, fontWeight: 700, textDecoration: "none", color: "#111", fontSize: 16 };
     const p = (vIndex + VARIANTS.length - 1) % VARIANTS.length;
@@ -114,7 +117,7 @@ export function Gallery() {
     return (
       <div style={{ position: "fixed", inset: 0 }}>
         <Stadium3D
-          key={vIndex}
+          key={`${vIndex}-${roofParam}`}
           pitchCondition={90}
           pitchType="natural"
           facilities={facilities}
@@ -127,10 +130,11 @@ export function Gallery() {
           showControls
         />
         <div style={{ position: "fixed", top: 12, left: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontFamily: "system-ui, sans-serif", zIndex: 50 }}>
-          <a href="?real=1" style={navBtn}>Přehled</a>
-          <a href={`?v=${p}&real=1`} style={navBtn}>‹</a>
-          <a href={`?v=${n}&real=1`} style={navBtn}>›</a>
+          <a href={`?real=1&roof=${roofParam}`} style={navBtn}>Přehled</a>
+          <a href={`?v=${p}&real=1&roof=${roofParam}`} style={navBtn}>‹</a>
+          <a href={`?v=${n}&real=1&roof=${roofParam}`} style={navBtn}>›</a>
           <span style={{ ...navBtn, border: "none" }}>{vIndex + 1}/{VARIANTS.length} {variant.name}</span>
+          <a href={`?v=${vIndex}&real=1&roof=${roofParam === 0 ? 2 : 0}`} style={navBtn}>{roofParam === 0 ? "Se střechou" : "Bez střechy"}</a>
           <a href={`?v=${vIndex}`} style={navBtn}>Rychlá galerie</a>
         </div>
       </div>

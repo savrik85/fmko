@@ -131,3 +131,62 @@ export function replacedSides(
   }
   return out;
 }
+
+export type RaisedTierKind = "second_tier" | "double_stand" | "stilts";
+
+export interface RaisedTierSpec {
+  /** Šířka jako podíl délky strany. */
+  widthFactor: number;
+  rows: number;
+  rowDepth: number;
+  rise: number;
+  /** Výška podlahy patra nad zemí a vzdálenost jeho přední hrany od přední hrany tribuny. */
+  y0: number;
+  z0: number;
+  /** Styl sedadel (3 = beton a plastová sedadla, 2 = dřevo). */
+  style: number;
+  glass: boolean;
+}
+
+/**
+ * Rozměry horního patra podle druhu a úrovně přístavby, pro tribunu výšky H a hloubky D.
+ * Jediné místo, ze kterého čerpá vykreslení patra i zvednutí střechy nad ním.
+ * Druhé patro a dvojitá tribuna leží nad tribunou, piloty za její zadní hranou VÝŠ než tribuna,
+ * aby diváci na nich viděli přes ni.
+ */
+export function raisedTierSpec(kind: RaisedTierKind, level: number, H: number, D: number): RaisedTierSpec {
+  const l = Math.max(1, Math.min(3, Math.round(level)));
+  switch (kind) {
+    case "second_tier":
+      return { widthFactor: 0.5 + 0.15 * l, rows: 3 + l, rowDepth: 1.2, rise: 0.45, y0: H + 1.8, z0: D * 0.45, style: 3, glass: false };
+    case "double_stand":
+      return { widthFactor: 0.94, rows: 4 + l, rowDepth: 1.2, rise: 0.5, y0: H + 2.6, z0: D * 0.3, style: 3, glass: true };
+    case "stilts":
+      return { widthFactor: 0.5 + 0.1 * l, rows: 2 + l, rowDepth: 1.5, rise: 0.5, y0: Math.max(3.4, H + 0.8), z0: D + 0.3, style: 2, glass: false };
+  }
+}
+
+/** Výška nejvyšší řady patra nad zemí. */
+export function tierTop(spec: RaisedTierSpec): number {
+  return spec.y0 + spec.rows * spec.rise;
+}
+
+/**
+ * O kolik se má zvednout střecha nad tribunou, která má nahoře patro (aby ho nezasekla).
+ * `heightOf(úroveň)` vrací výšku tribuny dané úrovně.
+ */
+export function roofLifts(
+  extensions: ReadonlyArray<{ slot: string; kind: string; level: number }>,
+  sideLevels: SideLevels,
+  heightOf: (level: number) => number,
+): Partial<Record<SceneSide, number>> {
+  const out: Partial<Record<SceneSide, number>> = {};
+  for (const e of extensions) {
+    const side = SIDE_SLOT_OF[e.slot];
+    if (!side || (e.kind !== "second_tier" && e.kind !== "double_stand" && e.kind !== "stilts")) continue;
+    const H = heightOf(Math.max(1, sideLevels[side]));
+    const spec = raisedTierSpec(e.kind, e.level, H, 0);
+    out[side] = Math.max(out[side] ?? 0, tierTop(spec) - H + 0.4);
+  }
+  return out;
+}

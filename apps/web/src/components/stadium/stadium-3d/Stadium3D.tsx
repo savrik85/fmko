@@ -15,7 +15,7 @@ import { Scoreboard, SCOREBOARD_X } from "./Scoreboard";
 import { TeamFlag } from "./TeamFlag";
 import { HostujiciSektor, StandRoof, UltrasSector } from "./StadiumExtras";
 import { VipBox, vipGallerySightlineY } from "./VipBox";
-import { getSideLevels, joinedEnds, replacedSides, vipBoxSideFor } from "./stand-levels";
+import { getSideLevels, joinedEnds, replacedSides, roofLifts, vipBoxSideFor } from "./stand-levels";
 import { StandExtensions, type ExtensionInstance } from "./StandExtensions";
 import { Floodlights } from "./Floodlights";
 import { EntranceGate } from "./EntranceGate";
@@ -32,6 +32,7 @@ import { BakedShadows } from "./BakedShadows";
 import {
   getStadiumLayout,
   getViewpoints,
+  STAND_DIMS,
   VIEWPOINTS,
   WEATHER_OPTIONS,
   STADIUM_MODES,
@@ -194,6 +195,10 @@ export function Stadium3D({
   const sideLevels = getSideLevels(f);
   // Točená tribuna a val jsou tvar tribuny za brankou, ne další tribuna před ní: nahradí ji.
   const replaced = replacedSides(standExtensions ?? [], extensionPreview ?? null);
+  // Střecha jde nad rovné tribuny: nahrazené strany (točená, val) ji dostanou přímo od přístavby a
+  // strany s patrem mají střechu zvednutou nad ním.
+  const roofSideLevels = { ...sideLevels, ...Object.fromEntries([...replaced].map((side) => [side, 0])) } as typeof sideLevels;
+  const roofLift = roofLifts(standExtensions ?? [], sideLevels, (lvl) => STAND_DIMS[Math.max(1, Math.min(3, lvl))].height);
   const scoreboardMinPanelBottom =
     (f.vip_box ?? 0) > 0 &&
     vipBoxSideFor(sideLevels, SEKTOR_STRANY[ultrasSector]) === "east"
@@ -596,10 +601,12 @@ export function Stadium3D({
             attendanceRatio={attendanceRatio}
             reducedDetail={isMobile}
             isSnow={weather === "snow"}
+            roofLevel={f.roof ?? 0}
+            roofColor={roofColor}
           />
 
           {/* Zastřešení tribun */}
-          <StandRoof sideLevels={sideLevels} roofLevel={f.roof ?? 0} roofColor={roofColor} weather={weather} />
+          <StandRoof sideLevels={roofSideLevels} sideLift={roofLift} roofLevel={f.roof ?? 0} roofColor={roofColor} weather={weather} />
 
           {/* VIP lóže: prosklená galerie nad hlavní tribunou (bez tribuny se nekreslí) */}
           <VipBox

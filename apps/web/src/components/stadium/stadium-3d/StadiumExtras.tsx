@@ -3,7 +3,7 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { PITCH, STAND_DIMS, type WeatherType, type StadiumMode } from "./constants";
-import type { SideLevels } from "./stand-levels";
+import type { SceneSide, SideLevels } from "./stand-levels";
 import { generateCorrugatedTexture } from "./materialTextures";
 import { useWind } from "./wind";
 
@@ -107,6 +107,8 @@ function WavingPennant({ color, y, phase }: { color: string; y: number; phase: n
 interface StandRoofProps {
   /** Úroveň tribuny na každé straně; střecha se staví nad každou tribunou zvlášť. */
   sideLevels: SideLevels;
+  /** O kolik se střecha nad danou stranou zvedne (tribuna má nahoře patro). */
+  sideLift?: Partial<Record<SceneSide, number>>;
   roofLevel: number;
   roofColor?: string | null;
   weather?: WeatherType;
@@ -120,6 +122,7 @@ export function StandRoof(props: StandRoofProps) {
 
 function ActiveStandRoof({
   sideLevels,
+  sideLift = {},
   roofLevel,
   roofColor,
   weather,
@@ -139,12 +142,12 @@ function ActiveStandRoof({
   // Stříška v LOKÁLNÍCH souřadnicích tribuny: kryje zadní 2/3 sedaček,
   // klesá od zadku (výš) k hřišti (níž) — jako reálná krytá tribuna.
   // U nízké tribuny (L1) zvednout stříšku výš, ať na ni neplácne — jako krytá tribuna na sloupech.
-  const Canopy = ({ alongLen, level }: { alongLen: number; level: number }) => {
+  const Canopy = ({ alongLen, level, lift = 0 }: { alongLen: number; level: number; lift?: number }) => {
     const dims = STAND_DIMS[Math.min(level, 3)];
     const clearance = level === 1 ? 2.6 : 1.1;
     const roofDepth = dims.depth * 0.7 + overhang;
     const roofZ = dims.depth * 0.45;               // těžiště nad zadní částí sedaček
-    const roofY = dims.height + clearance;          // jasně nad sedačkami
+    const roofY = dims.height + lift + clearance;   // jasně nad sedačkami (a nad patrem, je-li)
     const backZ = dims.depth + overhang * 0.5;      // zadní podpěry
     const postH = roofY + 0.2;
     // Přední lem střechy (okap) — přibližná pozice předního okraje nakloněné desky
@@ -191,10 +194,10 @@ function ActiveStandRoof({
 
   return (
     <group>
-      {sideLevels.north >= 1 && <group position={[0, 0, distanceFor(sideLevels.north, true)]} rotation={[0, 0, 0]}><Canopy alongLen={PITCH.width} level={sideLevels.north} /></group>}
-      {sideLevels.south >= 1 && <group position={[0, 0, -distanceFor(sideLevels.south, true)]} rotation={[0, Math.PI, 0]}><Canopy alongLen={PITCH.width} level={sideLevels.south} /></group>}
-      {sideLevels.east >= 1 && <group position={[distanceFor(sideLevels.east, false), 0, 0]} rotation={[0, Math.PI / 2, 0]}><Canopy alongLen={PITCH.depth} level={sideLevels.east} /></group>}
-      {sideLevels.west >= 1 && <group position={[-distanceFor(sideLevels.west, false), 0, 0]} rotation={[0, -Math.PI / 2, 0]}><Canopy alongLen={PITCH.depth} level={sideLevels.west} /></group>}
+      {sideLevels.north >= 1 && <group position={[0, 0, distanceFor(sideLevels.north, true)]} rotation={[0, 0, 0]}><Canopy alongLen={PITCH.width} level={sideLevels.north} lift={sideLift.north} /></group>}
+      {sideLevels.south >= 1 && <group position={[0, 0, -distanceFor(sideLevels.south, true)]} rotation={[0, Math.PI, 0]}><Canopy alongLen={PITCH.width} level={sideLevels.south} lift={sideLift.south} /></group>}
+      {sideLevels.east >= 1 && <group position={[distanceFor(sideLevels.east, false), 0, 0]} rotation={[0, Math.PI / 2, 0]}><Canopy alongLen={PITCH.depth} level={sideLevels.east} lift={sideLift.east} /></group>}
+      {sideLevels.west >= 1 && <group position={[-distanceFor(sideLevels.west, false), 0, 0]} rotation={[0, -Math.PI / 2, 0]}><Canopy alongLen={PITCH.depth} level={sideLevels.west} lift={sideLift.west} /></group>}
     </group>
   );
 }
