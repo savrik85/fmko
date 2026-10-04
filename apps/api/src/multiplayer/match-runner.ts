@@ -494,7 +494,7 @@ export async function runScheduledMatches(
             const { dostupnaKapacita } = await import("../stadium/sektory");
             const sektory = dostupnaKapacita(
                 stadiumCapacity,
-                { ultras_stand: facilities.ultras_stand, stands: facilities.stands },
+                { ultras_stand: facilities.ultras_stand, stands: facilities.stands, stand_main: facilities.stand_main },
                 groupFx?.closedSectors ?? [],
             );
             if (sektory.zavrenoMist > 0) {
