@@ -25,8 +25,10 @@ export function Gallery() {
   const sideLevels = getSideLevels({ stand_main: m, stand_opposite: o, stand_goal_west: gw, stand_goal_east: ge });
   const cam = num(q.get("cam"), [60, 40, 60]) as [number, number, number];
   const at = num(q.get("at"), [0, 0, 0]) as [number, number, number];
+  // ?game=1 = barvy jako ve hře (tribuny v barvě klubu), jinak šedý beton pro přehlednost.
+  const standColor = q.get("game") ? "#2563eb" : "#9CA3AF";
   const common = {
-    teamColor: "#2563eb", secondaryColor: "#ffffff", standColor: "#9CA3AF", seatColor: "#2563eb", accentColor: "#C9A84C",
+    teamColor: "#2563eb", secondaryColor: "#ffffff", standColor, seatColor: "#2563eb", accentColor: "#C9A84C",
     mode: "match_day" as const, attendanceRatio: 0.6, reducedDetail: true, cageLevel: 0, ultrasSide: "south" as const,
   };
   return (
@@ -49,7 +51,7 @@ export function Gallery() {
           extensions={ext}
           preview={preview}
           sideLevels={sideLevels}
-          standColor="#9CA3AF"
+          standColor={standColor}
           seatColor="#2563eb"
           accentColor="#C9A84C"
           teamColor="#2563eb"
