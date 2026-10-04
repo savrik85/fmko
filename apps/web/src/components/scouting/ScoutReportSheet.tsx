@@ -290,7 +290,7 @@ function OfferSheet({ askHint, canU21, onCancel, onConfirm }: {
         </label>
       )}
       <p className="text-sm text-muted mt-3">
-        Klub odpoví do pár hodin. Svého nejlepšího hráče pouští nerad a urážlivá nabídka mu bere trpělivost.
+        Předseda klubu odpoví hned. Svého nejlepšího hráče pouští nerad, talentovaného kluka si cení podle toho, kým bude, a urážlivá nabídka mu bere trpělivost.
       </p>
     </SheetDialog>
   );

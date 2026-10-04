@@ -1881,7 +1881,7 @@ export default function TransfersPage() {
                             setPriceDialog({
                               title: `Nabídnout za ${l.playerName}`,
                               description: (l as any).isAiListing
-                                ? `Požadovaná cena: ${formatCZK(l.askingPrice)}. Klub odpoví do pár hodin a o ceně se dá jednat.`
+                                ? `Požadovaná cena: ${formatCZK(l.askingPrice)}. O ceně se s klubem dá jednat, předseda odpoví hned.`
                                 : `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
                               defaultPrice: l.askingPrice,
                               // Splátky jdou u obou; procenta a výměna jen s lidským klubem.

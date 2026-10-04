@@ -79,6 +79,8 @@ export default function AiNegotiationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [counterOpen, setCounterOpen] = useState(false);
+  // Živé jednání: odpověď klubu je hned hotová, jen ji chvilku „píše".
+  const [typing, setTyping] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!teamId || !params.id) return;
@@ -174,7 +176,10 @@ export default function AiNegotiationPage() {
       body: JSON.stringify({ amount: terms.amount, upfrontPct: terms.upfrontPct, installments: terms.installments }),
     }), "Návrh se nepodařilo poslat")) {
       setCounterOpen(false);
+      setTyping(true);
+      await new Promise((r) => setTimeout(r, 1500));
       await refresh();
+      setTyping(false);
     }
   };
 
@@ -244,14 +249,13 @@ export default function AiNegotiationPage() {
       </div>
 
       <div className="card p-4 sm:p-6 space-y-3">
-        {n.waiting && (
-          <div className="text-center py-2">
-            <div className="font-heading font-bold text-muted">⏳ {n.clubName} si to rozmýšlí</div>
-            <div className="text-sm text-muted mt-1">Odpověď přijde do pár hodin, dáme ti vědět SMS. V noci předseda nepíše.</div>
+        {(n.waiting || typing) && (
+          <div className="text-center py-3">
+            <div className="font-heading font-bold text-muted animate-pulse">✍️ Předseda {n.clubName} píše…</div>
           </div>
         )}
 
-        {isOpen && !n.waiting && (
+        {isOpen && !n.waiting && !typing && (
           <>
             <div className="text-center">
               <div className="text-sm text-muted font-heading uppercase tracking-wider">
