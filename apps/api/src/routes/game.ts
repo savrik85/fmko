@@ -1298,7 +1298,7 @@ gameRouter.get("/teams/:teamId/transfers", async (c) => {
   const teamId = c.req.param("teamId");
 
   const team = await c.env.DB.prepare(
-    "SELECT t.*, v.name as village_name, v.size, v.population, v.region as region_code FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
+    "SELECT t.*, v.name as village_name, v.size, v.population, v.region as region_code, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
   ).bind(teamId).first<Record<string, unknown>>();
   if (!team) return c.json({ error: "Team not found" }, 404);
 
@@ -1346,9 +1346,12 @@ gameRouter.get("/teams/:teamId/transfers", async (c) => {
     population: team.population as number,
   };
 
-  // We need surname/firstname data for player generation — use minimal fallback
-  const surnameData = { surnames: { "Novák": 10, "Dvořák": 8, "Svoboda": 7, "Černý": 6, "Procházka": 5, "Kučera": 5, "Veselý": 4, "Horák": 4, "Němec": 3, "Marek": 3 }, female_forms: {} };
-  const firstnameData = { male: { "0-100": { "Jan": 10, "Petr": 8, "Martin": 7, "Tomáš": 6, "David": 5, "Jakub": 5, "Ondřej": 4, "Filip": 4, "Adam": 3, "Lukáš": 3 } }, female: {} };
+  // Jména jako všude jinde: příjmení z okresu, křestní podle skutečných četností v ČR.
+  const { FIRSTNAMES } = await import("../data/czech-names");
+  const { getDistrictDataFromDB } = await import("../data/districts/index");
+  const districtData = await getDistrictDataFromDB(c.env.DB, team.district as string);
+  const surnameData = { surnames: districtData.surnames, female_forms: {} as Record<string, string> };
+  const firstnameData = { male: FIRSTNAMES, female: {} as Record<string, Record<string, number>> };
 
   const offers = generateTransferOffers(rng, villageInfo, team.reputation as number, squad.length, surnameData, firstnameData, squad);
   const risks = checkDepartureRisks(rng, squad);
@@ -3332,16 +3335,10 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
 
   // Generate AI teams
   const { generateAITeams } = await import("../league/ai-teams");
-  const firstnameData = {
-    male: {
-      "1960s": { "Jiří": 0.08, "Jan": 0.07, "Petr": 0.06, "Josef": 0.06, "Jaroslav": 0.05, "Milan": 0.05, "Zdeněk": 0.04 },
-      "1970s": { "Petr": 0.08, "Jan": 0.07, "Martin": 0.06, "Jiří": 0.06, "Pavel": 0.05, "Tomáš": 0.04, "Roman": 0.03 },
-      "1980s": { "Jan": 0.08, "Martin": 0.07, "Tomáš": 0.06, "Pavel": 0.05, "Michal": 0.05, "David": 0.05, "Lukáš": 0.04 },
-      "1990s": { "Jan": 0.09, "Tomáš": 0.07, "Jakub": 0.06, "David": 0.06, "Lukáš": 0.05, "Ondřej": 0.05, "Filip": 0.04 },
-      "2000s": { "Jakub": 0.08, "Jan": 0.07, "Adam": 0.06, "Matěj": 0.06, "Ondřej": 0.05, "Filip": 0.05, "Vojtěch": 0.04 },
-      "2010s": { "Jakub": 0.07, "Jan": 0.07, "Adam": 0.06, "Vojtěch": 0.05, "Filip": 0.05, "Tomáš": 0.05, "Šimon": 0.04 },
-    },
-  };
+  // Jména AI hráčů podle skutečných četností v ČR (data/czech-names.ts), ne vlastní
+  // seznam se sedmi jmény na desetiletí.
+  const { FIRSTNAMES } = await import("../data/czech-names");
+  const firstnameData = { male: FIRSTNAMES };
 
   const aiTeams = generateAITeams(rng, availableVillages, targetAI, districtData.surnames, firstnameData, usedNames);
 
