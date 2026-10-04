@@ -196,3 +196,19 @@ describe("životní situace v omluvenkách (spec 17a)", () => {
     expect(venkuSDodavkou).toBe(doma);
   });
 });
+
+describe("výmluvy se v jednom zápase neopakují", () => {
+  // Nespolehlivý kádr: skoro každý se omluví, takže by se výmluvy z menších
+  // zásobníků (osobní v den zápasu, zdraví) bez hlídání opakovaly.
+  const NESPOLEHLIVI: PlayerForAbsence[] = SQUAD.map((p) => ({ ...p, discipline: 0, patriotism: 0, morale: 0, alcohol: 80 }));
+
+  it("v jednom losu nemají dva hráči stejnou SMS", () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      for (const timing of ["day_before", "match_day"] as const) {
+        const texty = generateAbsences(createRng(seed), NESPOLEHLIVI, { timing, district: "Prachatice" }).map((a) => a.smsText);
+        expect(new Set(texty).size, `seed ${seed} ${timing}: ${texty.join(" | ")}`).toBe(texty.length);
+      }
+    }
+  });
+
+});
