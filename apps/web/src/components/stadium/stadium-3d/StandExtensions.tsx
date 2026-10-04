@@ -524,34 +524,30 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
 /**
  * Rohová tribuna (klín): rovné stupně v lichoběžníku mezi koncovými plochami obou sousedních tribun.
  * Vnitřní hrana vede z předního rohu konce tribuny za brankou (0, b) do předního rohu konce tribuny na
- * dlouhé straně (a, 0), koncové plochy leží v rovinách tribun (osy u a v), takže navazuje bez mezer.
+ * dlouhé straně (a, 0), vnější z (a + depth, 0) do (0, b + depth), tedy přesně k zadním stěnám obou
+ * tribun. Koncové plochy leží v rovinách tribun (osy u a v), takže navazuje bez mezer a nevyčnívá.
  * Lokální osy jako u `CornerBowl`.
  */
 function CornerWedge({ a, b, rows, depth, height, c }: { a: number; b: number; rows: number; depth: number; height: number; c: Common }) {
-  // Posun vnější hrany o vzdálenost d kolmo na úhlopříčku odpovídá násobku k = d * |(1/a, 1/b)|.
-  const kPerMeter = Math.hypot(1 / a, 1 / b);
-  const rowD = depth / rows;
+  const dd = depth / rows;
   const rise = height / rows;
   const geoms = useMemo(() => {
     return Array.from({ length: rows }).map((_, i) => {
-      const k0 = 1 + i * rowD * kPerMeter;
-      const k1 = 1 + (i + 1) * rowD * kPerMeter;
-      // y = -v (po otočení kolem X se změní na +z).
+      // Řada i leží mezi hranami s úseky a + i·dd (osa u) a b + i·dd (osa v). y = -v po otočení kolem X.
       const shape = new THREE.Shape();
-      shape.moveTo(a * k0, 0);
-      shape.lineTo(a * k1, 0);
-      shape.lineTo(0, -b * k1);
-      shape.lineTo(0, -b * k0);
+      shape.moveTo(a + i * dd, 0);
+      shape.lineTo(a + (i + 1) * dd, 0);
+      shape.lineTo(0, -(b + (i + 1) * dd));
+      shape.lineTo(0, -(b + i * dd));
       shape.closePath();
       return extrudeFlat(shape, (i + 1) * rise);
     });
-  }, [a, b, rows, rowD, rise, kPerMeter]);
+  }, [a, b, rows, dd, rise]);
   const seats = useMemo(() => {
     const out: Array<{ x: number; y: number; z: number; th: number }> = [];
     for (let i = 0; i < rows; i++) {
-      const km = 1 + (i + 0.5) * rowD * kPerMeter;
-      const am = a * km;
-      const bm = b * km;
+      const am = a + (i + 0.5) * dd;
+      const bm = b + (i + 0.5) * dd;
       const n = Math.max(2, Math.floor(Math.hypot(am, bm) / 0.85));
       const th = Math.atan2(1 / am, 1 / bm);
       for (let j = 0; j < n; j++) {
@@ -560,7 +556,7 @@ function CornerWedge({ a, b, rows, depth, height, c }: { a: number; b: number; r
       }
     }
     return out;
-  }, [a, b, rows, rowD, rise, kPerMeter]);
+  }, [a, b, rows, dd, rise]);
   return (
     <group>
       {geoms.map((g, i) => (
@@ -573,29 +569,29 @@ function CornerWedge({ a, b, rows, depth, height, c }: { a: number; b: number; r
   );
 }
 
-/** Plochá střecha nad rohovým klínem: lichoběžník ve stejné výšce a rozsahu jako střecha rovné tribuny. */
+/** Plochá střecha nad rohovým klínem: lichoběžník ve stejné výšce a rozsahu od přední hrany jako střecha rovné tribuny. */
 function WedgeRoof({ a, b, depth, height, c }: { a: number; b: number; depth: number; height: number; c: Common }) {
   const tex = useMemo(() => generateCorrugatedTexture(c.roofColor, 8, 2), [c.roofColor]);
   const plan = canopyPlan(depth, height, c.roofLevel);
-  const kPerMeter = Math.hypot(1 / a, 1 / b);
-  const k0 = 1 + (plan.roofZ - plan.roofDepth / 2) * kPerMeter;
-  const k1 = 1 + (plan.roofZ + plan.roofDepth / 2) * kPerMeter;
+  const t1 = plan.roofZ - plan.roofDepth / 2;
+  const t2 = plan.roofZ + plan.roofDepth / 2;
   const geometry = useMemo(() => {
     const shape = new THREE.Shape();
-    shape.moveTo(a * k0, 0);
-    shape.lineTo(a * k1, 0);
-    shape.lineTo(0, -b * k1);
-    shape.lineTo(0, -b * k0);
+    shape.moveTo(a + t1, 0);
+    shape.lineTo(a + t2, 0);
+    shape.lineTo(0, -(b + t2));
+    shape.lineTo(0, -(b + t1));
     shape.closePath();
     return extrudeFlat(shape, 0.14);
-  }, [a, b, k0, k1]);
+  }, [a, b, t1, t2]);
+  const roofY = plan.roofY;
   return (
     <group>
-      <mesh geometry={geometry} position={[0, plan.roofY, 0]} castShadow>
+      <mesh geometry={geometry} position={[0, roofY, 0]} castShadow>
         <meshStandardMaterial map={tex.map} bumpMap={tex.bumpMap} bumpScale={0.12} roughness={0.5} metalness={0.35} />
       </mesh>
       {[0.12, 0.5, 0.88].map((t) => (
-        <Box key={t} size={[0.18, plan.roofY, 0.18]} position={[a * k1 * t, plan.roofY / 2, b * k1 * (1 - t)]} color="#4A4D54" metal={0.5} />
+        <Box key={t} size={[0.18, roofY, 0.18]} position={[(a + plan.backZ) * t, roofY / 2, (b + plan.backZ) * (1 - t)]} color="#4A4D54" metal={0.5} />
       ))}
     </group>
   );
