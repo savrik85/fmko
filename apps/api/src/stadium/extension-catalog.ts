@@ -122,11 +122,13 @@ export const EXT_SLOT_DEFS: Record<ExtSlot, ExtSlotDef> = {
   corner_opposite_goal_west: { type: "corner", label: "Roh: protější tribuna a za levou brankou", sides: ["stand_opposite", "stand_goal_west"] },
 };
 
+// Mobilní tribunka je jen v rozích: tam se dívá na hřiště. Na straně u tribuny by koukala mimo hřiště
+// (za koncem tribuny) nebo by stála před tribunou a brala výhled.
 const ALLOWED: Record<ExtSlot, readonly ExtKind[]> = {
-  ext_main: ["length", "second_tier", "double_stand", "stilts", "tower", "footbridge", "mobile"],
-  ext_opposite: ["length", "second_tier", "double_stand", "footbridge", "mobile"],
-  ext_goal_west: ["second_tier", "terrace", "round_stand", "mobile"],
-  ext_goal_east: ["second_tier", "terrace", "round_stand", "mobile"],
+  ext_main: ["length", "second_tier", "double_stand", "stilts", "tower", "footbridge"],
+  ext_opposite: ["length", "second_tier", "double_stand", "footbridge"],
+  ext_goal_west: ["second_tier", "terrace", "round_stand"],
+  ext_goal_east: ["second_tier", "terrace", "round_stand"],
   corner_main_goal_east: ["corner", "curved_corner", "wing", "bridge", "mobile"],
   corner_main_goal_west: ["corner", "curved_corner", "wing", "bridge", "mobile"],
   corner_opposite_goal_east: ["corner", "curved_corner", "wing", "bridge", "mobile"],
