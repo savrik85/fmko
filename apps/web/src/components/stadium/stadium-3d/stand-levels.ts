@@ -202,3 +202,47 @@ export function roofTiers(
   }
   return out;
 }
+
+export interface CanopyPlan {
+  /** Sklon desky (rad); deska stoupá dozadu. */
+  tilt: number;
+  roofY: number;
+  roofZ: number;
+  roofDepth: number;
+  backZ: number;
+}
+
+/**
+ * Poloha a sklon střechy nad tribunou hloubky D a výšky H (lokálně: z = 0 přední hrana tribuny).
+ *
+ * Jediné pravidlo pro všechny střechy: deska je všude aspoň 2,4 m nad nejvyšším divákem pod ní,
+ * takže nebrání ve výhledu, a je jen mírně skloněná (0,14 rad, nad patrem 0,1). Dřív klesala
+ * dopředu jako štít (0,32 rad) a v nízké výšce se divákům pletla do výhledu.
+ * Nad tribunou s patrem kryje celou tribunu a leží nad nejvyšší řadou patra.
+ */
+export function canopyPlan(D: number, H: number, roofLevel: number, tier?: RoofTier): CanopyPlan {
+  const overhang = 0.5 + roofLevel * 0.35;
+  const tilt = tier ? 0.1 : 0.14;
+  const slope = Math.tan(tilt);
+  let roofDepth = D * 0.7 + overhang;
+  let roofZ = D * 0.45;
+  let backZ = D + overhang * 0.5;
+  if (tier) {
+    const frontEdge = -overhang;
+    const backEdge = tier.end + 0.4;
+    roofDepth = backEdge - frontEdge;
+    roofZ = (frontEdge + backEdge) / 2;
+    backZ = backEdge;
+  }
+  const zBack = roofZ + roofDepth / 2;
+  const zFront = roofZ - roofDepth / 2;
+  const standH = (z: number) => H * Math.max(0, Math.min(1, z / D));
+  const need = [
+    standH(zBack) + 2.4 - (zBack - roofZ) * slope,
+    standH(zFront) + 2.4 + (roofZ - zFront) * slope,
+  ];
+  if (tier) {
+    need.push(tier.top + 2.2 + (roofZ - tier.z0) * slope, tier.y0 + 3.2 + (roofZ - tier.z0) * slope);
+  }
+  return { tilt, roofY: Math.max(...need), roofZ, roofDepth, backZ };
+}

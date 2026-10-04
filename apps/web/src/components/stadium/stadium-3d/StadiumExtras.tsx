@@ -3,7 +3,7 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { PITCH, STAND_DIMS, type WeatherType, type StadiumMode } from "./constants";
-import type { RoofTier, SceneSide, SideLevels } from "./stand-levels";
+import { canopyPlan, type RoofTier, type SceneSide, type SideLevels } from "./stand-levels";
 import { generateCorrugatedTexture } from "./materialTextures";
 import { useWind } from "./wind";
 
@@ -144,35 +144,18 @@ function ActiveStandRoof({
   // U nízké tribuny (L1) zvednout stříšku výš, ať na ni neplácne — jako krytá tribuna na sloupech.
   const Canopy = ({ alongLen, level, tier }: { alongLen: number; level: number; tier?: RoofTier }) => {
     const dims = STAND_DIMS[Math.min(level, 3)];
-    const clearance = level === 1 ? 2.6 : 1.1;
-    const slope = Math.tan(0.32);
-    let roofDepth = dims.depth * 0.7 + overhang;
-    let roofZ = dims.depth * 0.45;                  // těžiště nad zadní částí sedaček
-    let roofY = dims.height + clearance;            // jasně nad sedačkami
-    let backZ = dims.depth + overhang * 0.5;        // zadní podpěry
-    if (tier) {
-      // Tribuna s patrem: střecha začíná před přední řadou a končí za zadní hranou patra, aby kryla
-      // dolní i horní diváky. Deska se zvedá dozadu, proto se výška počítá tak, aby byla nad
-      // patrem, nad jeho zadní řadou i nad zadní hranou dolní tribuny.
-      const frontEdge = -overhang;
-      const backEdge = tier.end + 0.4;
-      roofDepth = backEdge - frontEdge;
-      roofZ = (frontEdge + backEdge) / 2;
-      roofY = Math.max(
-        tier.y0 + 2.4 - (tier.z0 - roofZ) * slope,
-        tier.top + 1.8 - (tier.end - roofZ) * slope,
-        dims.height + 2.2 - (dims.depth - roofZ) * slope,
-      );
-      backZ = backEdge;
-    }
-    const postH = tier ? roofY + (backZ - roofZ) * slope - 0.1 : roofY + 0.2;
+    // Poloha a sklon podle jediného pravidla pro všechny střechy (viz canopyPlan): všude aspoň
+    // 2,4 m nad nejvyšším divákem a jen mírně skloněná, aby deska nebránila ve výhledu.
+    const { tilt, roofY, roofZ, roofDepth, backZ } = canopyPlan(dims.depth, dims.height, roofLevel, tier);
+    const slope = Math.tan(tilt);
+    const postH = roofY + (backZ - roofZ) * slope - 0.1;
     // Přední lem střechy (okap) — přibližná pozice předního okraje nakloněné desky
-    const frontY = roofY - Math.sin(0.32) * roofDepth / 2;
-    const frontZ = roofZ - Math.cos(0.32) * roofDepth / 2;
+    const frontY = roofY - Math.sin(tilt) * roofDepth / 2;
+    const frontZ = roofZ - Math.cos(tilt) * roofDepth / 2;
     return (
       <group>
         {/* Nakloněná plocha stříšky */}
-        <mesh position={[0, roofY, roofZ]} rotation={[-0.32, 0, 0]} castShadow>
+        <mesh position={[0, roofY, roofZ]} rotation={[-tilt, 0, 0]} castShadow>
           <boxGeometry args={[alongLen + 1, 0.14, roofDepth]} />
           <meshStandardMaterial
             map={roofTexture.map}
@@ -183,7 +166,7 @@ function ActiveStandRoof({
           />
         </mesh>
         {isSnow && (
-          <group position={[0, roofY, roofZ]} rotation={[-0.32, 0, 0]}>
+          <group position={[0, roofY, roofZ]} rotation={[-tilt, 0, 0]}>
             <mesh position={[0, 0.07 + 0.06, 0.08]} castShadow receiveShadow>
               <boxGeometry args={[(alongLen + 1) * 0.97, 0.1, roofDepth * 0.86]} />
               <meshStandardMaterial color="#F4F7FB" roughness={0.95} />
@@ -191,7 +174,7 @@ function ActiveStandRoof({
           </group>
         )}
         {/* Přední okapový lem — rámuje střechu, ať nepůsobí jako plovoucí plát */}
-        <mesh position={[0, frontY, frontZ]} rotation={[-0.32, 0, 0]} castShadow>
+        <mesh position={[0, frontY, frontZ]} rotation={[-tilt, 0, 0]} castShadow>
           <boxGeometry args={[alongLen + 1.1, 0.2, 0.14]} />
           <meshStandardMaterial color="#3A3D42" metalness={0.4} roughness={0.5} />
         </mesh>

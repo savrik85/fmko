@@ -6,7 +6,7 @@
  * Logika leží ve webu a nezná React, aby šla otestovat tady.
  */
 import { describe, it, expect } from "vitest";
-import { getSideLevels, joinedEnds, raisedTierSpec, replacedSides, roofTiers, tierTop, vipBoxSideFor } from "../../../web/src/components/stadium/stadium-3d/stand-levels";
+import { getSideLevels, joinedEnds, canopyPlan, raisedTierSpec, replacedSides, roofTiers, tierTop, vipBoxSideFor } from "../../../web/src/components/stadium/stadium-3d/stand-levels";
 
 describe("getSideLevels", () => {
   it("strany tribun míří na světové strany", () => {
@@ -138,5 +138,42 @@ describe("horní patra a zvednutí střechy", () => {
 
   it("bez přístaveb se nezvedá nic", () => {
     expect(roofTiers([], { east: 2, west: 2, north: 2, south: 2 }, () => ({ height: 3.5, depth: 6 }))).toEqual({});
+  });
+});
+
+describe("canopyPlan (střecha nad tribunou nesmí bránit ve výhledu)", () => {
+  const DIMS: Array<[number, number]> = [[4, 1.2], [6, 3.5], [8, 6]];
+  const surface = (p: ReturnType<typeof canopyPlan>, z: number) => p.roofY + (z - p.roofZ) * Math.tan(p.tilt);
+  const standH = (z: number, D: number, H: number) => H * Math.max(0, Math.min(1, z / D));
+
+  it("střecha je všude aspoň 2,2 m nad nejvyšším divákem pod ní a není příliš skloněná", () => {
+    for (const [D, H] of DIMS) {
+      for (const roofLevel of [1, 2, 3]) {
+        const p = canopyPlan(D, H, roofLevel);
+        expect(p.tilt, `D${D}`).toBeLessThanOrEqual(0.15);
+        const z0 = p.roofZ - p.roofDepth / 2;
+        const z1 = p.roofZ + p.roofDepth / 2;
+        for (let i = 0; i <= 20; i++) {
+          const z = z0 + ((z1 - z0) * i) / 20;
+          expect(surface(p, z), `D${D} H${H} z${z.toFixed(1)}`).toBeGreaterThanOrEqual(standH(z, D, H) + 2.2 - 1e-6);
+        }
+      }
+    }
+  });
+
+  it("nad tribunou s patrem je střecha celá nad nejvyšší řadou patra a krytí sahá za jeho zadní hranu", () => {
+    const tierSpec = raisedTierSpec("double_stand", 3, 6, 8);
+    const tier = { y0: tierSpec.y0, z0: tierSpec.z0, top: tierTop(tierSpec), end: Math.max(8, tierSpec.z0 + tierSpec.rows * tierSpec.rowDepth) };
+    const p = canopyPlan(8, 6, 2, tier);
+    expect(p.tilt).toBeLessThanOrEqual(0.12);
+    expect(p.roofZ + p.roofDepth / 2).toBeGreaterThanOrEqual(tier.end);
+    for (let i = 0; i <= 10; i++) {
+      const z = tier.z0 + ((tier.end - tier.z0) * i) / 10;
+      expect(surface(p, z)).toBeGreaterThanOrEqual(tier.top + 2.0);
+    }
+  });
+
+  it("vyšší tribuna má vyšší střechu", () => {
+    expect(canopyPlan(8, 6, 2).roofY).toBeGreaterThan(canopyPlan(4, 1.2, 2).roofY);
   });
 });
