@@ -70,7 +70,7 @@ const CORNER_SIGNS: Record<string, [number, number]> = {
 /**
  * Které konce tribuny (v jejím lokálním x) navazují na přístavbu. Tam se nesmí kreslit
  * koncová stěna, jinak by uprostřed spojeného celku zůstala přepážka.
- * Prodloužení spojí oba konce, křídlo v rohu konec tribuny za brankou na straně rohu
+ * Prodloužení spojí oba konce, rohová tribuna oba sousední konce, křídlo v rohu konec tribuny za brankou na straně rohu
  * (tribuna na severu má lokální +X ve světě +X, na jihu je otočená, tedy -X).
  */
 export function joinedEnds(
@@ -82,6 +82,20 @@ export function joinedEnds(
     if (e.kind === "length" && SIDE_SLOT_OF[e.slot] === side) {
       out.left = true;
       out.right = true;
+    }
+    if (e.kind === "curved_corner" || e.kind === "corner") {
+      // Rohová tribuna navazuje na obě sousední tribuny: na tu za brankou i na tu na dlouhé straně.
+      // Východní tribuna má lokální +X ve světě -Z, západní +Z (obě jsou otočené o 90 stupňů).
+      const corner = CORNER_SIGNS[e.slot];
+      if (!corner) continue;
+      const [sx, sz] = corner;
+      const goalSide: SceneSide = sz > 0 ? "north" : "south";
+      const longSide: SceneSide = sx > 0 ? "east" : "west";
+      let localSign = 0;
+      if (side === goalSide) localSign = side === "north" ? sx : -sx;
+      else if (side === longSide) localSign = side === "east" ? -sz : sz;
+      if (localSign > 0) out.right = true;
+      else if (localSign < 0) out.left = true;
     }
     if (e.kind === "wing") {
       const corner = CORNER_SIGNS[e.slot];
