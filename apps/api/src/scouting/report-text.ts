@@ -108,3 +108,14 @@ export function revisitSms(r: { name: string; ratingLo: number; ratingHi: number
   const youth = r.youth && r.potentialLo != null && r.potentialHi != null ? ` Strop vidím na ${range(r.potentialLo, r.potentialHi)}.` : "";
   return `👀 Znovu jsem viděl hrát: ${r.name}. Teď odhaduju ${range(r.ratingLo, r.ratingHi)}.${youth}`;
 }
+
+/** „1 klub", „3 kluby", „5 klubů". */
+function clubsWord(n: number): string {
+  if (n === 1) return "1 klub";
+  if (n >= 2 && n <= 4) return `${n} kluby`;
+  return `${n} klubů`;
+}
+
+export function finishedSms(clubs: number, reports: number): string {
+  return `🏁 Úkol je hotový. Objel jsem ${clubsWord(clubs)} a poslal ${reports} hlášení. Dej vědět, kam dál.`;
+}
