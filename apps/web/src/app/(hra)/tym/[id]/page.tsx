@@ -9,6 +9,7 @@ import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PreMatchCard } from "@/components/relations/RelationSection";
 import { ForeignSquad } from "./ForeignSquad";
+import { TransferOverview } from "./TransferOverview";
 import { isLightColor, readableOnLight, bestTextOn } from "@/lib/team-color";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -536,6 +537,9 @@ export default function TeamPage() {
           )}
         </div>
       )}
+
+      {/* ═══ Přehled přestupů (vlastní i cizí tým) ═══ */}
+      <TransferOverview teamId={teamId} />
 
       {/* ═══ Squad (vlastní tým; cizí má ForeignSquad nahoře) ═══ */}
       {isOwnTeam && (
