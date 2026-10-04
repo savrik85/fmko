@@ -880,11 +880,21 @@ export function pickProfessionalExcuse(
   rng: Rng,
   occ: Occupation,
   weather?: Weather,
+  /** Výmluvy, které už v tomhle losu padly — přeskočí se na další, losuje se stejně jednou. */
+  used?: ReadonlySet<string>,
 ): string {
   const fits = (e: ProfExcuse) => !e.weather || weather === undefined || e.weather.includes(weather);
   const applicable = occ.excuses.filter(fits);
   const pool = applicable.length > 0 ? applicable : occ.excuses.filter((e) => !e.weather);
-  return rng.pick(pool.length > 0 ? pool : occ.excuses).text;
+  const list = pool.length > 0 ? pool : occ.excuses;
+  const start = Math.floor(rng.random() * list.length);
+  if (used) {
+    for (let k = 0; k < list.length; k++) {
+      const candidate = list[(start + k) % list.length];
+      if (!used.has(candidate.text)) return candidate.text;
+    }
+  }
+  return list[start].text;
 }
 
 /**
