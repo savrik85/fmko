@@ -46,6 +46,7 @@ interface Assignment {
 interface ScoutItem {
   id: string;
   name: string;
+  avatar?: Record<string, unknown>;
   eff: number;
   assignment: Assignment | null;
 }
@@ -84,6 +85,13 @@ const kc = (v: number) => `${v.toLocaleString("cs")} Kč`;
 /** České tvary počtu: 1 klub, 2–4 kluby, 5+ klubů. */
 function plural(n: number, one: string, few: string, many: string): string {
   return `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
+}
+
+/** Obličej skauta; bez avataru šedý kruh, ať se nic nerozjede. */
+function ScoutFace({ avatar, size }: { avatar?: Record<string, unknown>; size: number }) {
+  return avatar && Object.keys(avatar).length > 2
+    ? <FaceAvatar faceConfig={avatar} size={size} className="rounded-full shrink-0 bg-white" />
+    : <div className="rounded-full bg-gray-100 shrink-0" style={{ width: size, height: size }} />;
 }
 
 function ReportRow({ r, onOpen }: { r: ScoutReport; onOpen: () => void }) {
@@ -321,7 +329,8 @@ export default function ScoutPage() {
                           : "border-gray-100 bg-white hover:border-gray-200"
                       }`}
                     >
-                      <div className="min-w-0">
+                      <ScoutFace avatar={s.avatar} size={40} />
+                      <div className="min-w-0 flex-1 ml-2.5">
                         <div className="font-heading font-bold text-base truncate">{s.name}</div>
                         <div className={`text-xs font-heading ${hasAsgn ? "text-pitch-600 font-bold" : "text-muted"}`}>
                           {hasAsgn ? "● " : "○ "}{statusLabel}
@@ -341,7 +350,8 @@ export default function ScoutPage() {
           {scoutsList.length === 1 && currentScout && (
             <div className="card p-4 space-y-1">
               <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
+                <ScoutFace avatar={currentScout.avatar} size={52} />
+                <div className="min-w-0 flex-1">
                   <div className="text-sm text-muted font-heading uppercase tracking-wider">Skaut</div>
                   <div className="font-heading font-bold text-lg truncate">{currentScout.name}</div>
                 </div>

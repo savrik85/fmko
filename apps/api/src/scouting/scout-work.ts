@@ -82,7 +82,7 @@ export interface AssignmentRow {
 }
 
 interface ScoutRow {
-  id: string; first_name: string; last_name: string; judgement: number; communication: number;
+  id: string; first_name: string; last_name: string; judgement: number; communication: number; avatar?: string | null;
 }
 
 type Fail = { ok: false; status: 400 | 404 | 409; error: string };
@@ -94,7 +94,7 @@ export function scoutEffectiveness(s: { judgement: number; communication: number
 
 export async function loadTeamScouts(db: D1Database, teamId: string): Promise<ScoutRow[]> {
   const res = await db.prepare(
-    "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE team_id = ? AND role = 'skaut' ORDER BY hired_at ASC",
+    "SELECT id, first_name, last_name, judgement, communication, avatar FROM staff_members WHERE team_id = ? AND role = 'skaut' ORDER BY hired_at ASC",
   ).bind(teamId).all<ScoutRow>().catch((e) => { logger.warn({ module: "scouting" }, "load scouts", e); return { results: [] as ScoutRow[] }; });
   return res.results;
 }
@@ -102,11 +102,11 @@ export async function loadTeamScouts(db: D1Database, teamId: string): Promise<Sc
 export async function loadTeamScout(db: D1Database, teamId: string, staffId?: string): Promise<ScoutRow | null> {
   if (staffId) {
     return db.prepare(
-      "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE team_id = ? AND role = 'skaut' AND id = ? LIMIT 1",
+      "SELECT id, first_name, last_name, judgement, communication, avatar FROM staff_members WHERE team_id = ? AND role = 'skaut' AND id = ? LIMIT 1",
     ).bind(teamId, staffId).first<ScoutRow>().catch((e) => { logger.warn({ module: "scouting" }, "load scout by id", e); return null; });
   }
   return db.prepare(
-    "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE team_id = ? AND role = 'skaut' ORDER BY hired_at ASC LIMIT 1",
+    "SELECT id, first_name, last_name, judgement, communication, avatar FROM staff_members WHERE team_id = ? AND role = 'skaut' ORDER BY hired_at ASC LIMIT 1",
   ).bind(teamId).first<ScoutRow>().catch((e) => { logger.warn({ module: "scouting" }, "load scout", e); return null; });
 }
 
@@ -571,7 +571,7 @@ async function evaluateMatchMission(
 
 async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, result: ScoutWorkResult): Promise<void> {
   const scout = await db.prepare(
-    "SELECT id, first_name, last_name, judgement, communication FROM staff_members WHERE id = ? AND team_id = ? AND role = 'skaut'",
+    "SELECT id, first_name, last_name, judgement, communication, avatar FROM staff_members WHERE id = ? AND team_id = ? AND role = 'skaut'",
   ).bind(a.staff_id, a.team_id).first<ScoutRow>();
   if (!scout) {
     await cancelScoutAssignment(db, a.team_id, "scout_left", a.staff_id);

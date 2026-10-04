@@ -21,6 +21,12 @@ import { estimateWillingness, startAiNegotiation } from "../transfers/ai-negotia
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { blurredWillingness } from "../scouting/fog";
 
+/** Avatar zaměstnance je v DB JSON text; neplatný se bere jako bez obličeje. */
+function parseAvatar(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try { return JSON.parse(raw) as Record<string, unknown>; } catch (e) { logger.warn({ module: "scouting" }, "parse scout avatar", e); return {}; }
+}
+
 export const scoutingRouter = new Hono<{ Bindings: Bindings }>();
 
 scoutingRouter.use("/teams/:teamId/*", requireTeamOwnership);
@@ -154,6 +160,7 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
     return {
       id: s.id,
       name: `${s.first_name} ${s.last_name}`,
+      avatar: parseAvatar(s.avatar),
       eff: Math.round(scoutEffectiveness(s) * 10) / 10,
       judgement: s.judgement,
       communication: s.communication,
@@ -195,7 +202,7 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
     scouts: scoutList,
     maxScouts,
     coachLicence,
-    scout: scout ? { id: scout.id, name: `${scout.first_name} ${scout.last_name}`, eff: Math.round(scoutEffectiveness(scout) * 10) / 10 } : null,
+    scout: scout ? { id: scout.id, name: `${scout.first_name} ${scout.last_name}`, avatar: parseAvatar(scout.avatar), eff: Math.round(scoutEffectiveness(scout) * 10) / 10 } : null,
     assignment: assignment ? enrichAssignment(assignment) : null,
     opponents: leagueOpponents.results ?? [],
     leagues: {
