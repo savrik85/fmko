@@ -64,7 +64,7 @@ describe("buildExtension", () => {
   });
 
   it("kapacita je součet všech míst", async () => {
-    await buildExtension(db, "t1", "ext_main", "length", 0);
+    await buildExtension(db, "t1", "ext_opposite", "length", 0);
     await buildExtension(db, "t1", "corner_main_goal_east", "curved_corner", 0);
     expect(await capacityOf()).toBe(extCapacity("length", 1) + extCapacity("curved_corner", 1));
   });
