@@ -3,14 +3,18 @@
 /**
  * Přístavby tribun ve 3D: 13 tvarů a jejich průhledný náhled před stavbou.
  *
+ * Kusy se stavějí ze stejných součástí jako skutečné tribuny (`StandBlock`: stupně s texturou,
+ * sedačky, diváci), aby vypadaly jako jejich pokračování, ne jako cizí těleso.
+ *
  * Souřadnice scény: hřiště je 40 (X) × 60 (Z). Sever a jih stojí ZA BRANKAMI, východ a západ
  * jsou na dlouhých stranách. Postranní přístavba sedí v lokálním rámci tribuny (stejném jako
- * `Stand`): lokální +Z míří od hřiště dozadu, z = 0 je přední hrana tribuny, x běží podél strany.
- * Rohové přístavby mají vlastní rámec v rohu hřiště s lokálním +Z po úhlopříčce ven.
+ * `Stand`): lokální +Z míří od hřiště dozadu, z = 0 je přední hrana tribuny, x běží podél strany,
+ * zadní hrana tribuny je v z = hloubka (STAND_DIMS). Rohy mají vlastní umístění ve světě.
  */
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
-import { PITCH, STAND_DIMS, STAND_GAP } from "./constants";
+import { PITCH, STAND_DIMS, STAND_GAP, type StadiumMode } from "./constants";
+import { StandBlock } from "./Stand";
 import type { SceneSide, SideLevels } from "./stand-levels";
 
 export interface ExtensionInstance {
@@ -19,20 +23,22 @@ export interface ExtensionInstance {
   level: number;
 }
 
-interface Palette {
-  stand: string;
-  seat: string;
-  accent: string;
-  team: string;
-  /** Průhledný náhled před stavbou. */
-  ghost: boolean;
+interface Common {
+  standColor: string;
+  seatColor: string;
+  accentColor: string;
+  teamColor: string;
+  secondaryColor: string;
+  mode: StadiumMode;
+  attendanceRatio: number;
+  reducedDetail: boolean;
+  isSnow: boolean;
 }
 
-const WOOD = "#8B6F47";
 const CONCRETE = "#9CA3AF";
 const METAL = "#7C838C";
+const WOOD = "#8B6F47";
 const EARTH = "#6B8E4E";
-const SOIL = "#6F5B3E";
 
 const SIDE_SLOT: Record<string, SceneSide> = {
   ext_main: "east",
@@ -49,155 +55,190 @@ const CORNER_SLOT: Record<string, [number, number]> = {
   corner_opposite_goal_west: [-1, -1],
 };
 
-function Mat({ color, p, rough = 0.85, metal = 0 }: { color: string; p: Palette; rough?: number; metal?: number }) {
-  return (
-    <meshStandardMaterial
-      color={color}
-      roughness={rough}
-      metalness={metal}
-      transparent={p.ghost}
-      opacity={p.ghost ? 0.5 : 1}
-      emissive={p.ghost ? p.accent : "#000000"}
-      emissiveIntensity={p.ghost ? 0.45 : 0}
-      depthWrite={!p.ghost}
-    />
-  );
-}
+const lv = (level: number) => Math.max(1, Math.min(3, level));
+const dimsOf = (level: number) => STAND_DIMS[lv(level)];
 
-function Box({ size, position, color, p, rough, metal }: {
-  size: [number, number, number]; position: [number, number, number]; color: string; p: Palette; rough?: number; metal?: number;
+function Box({ size, position, color, rough = 0.85, metal = 0 }: {
+  size: [number, number, number]; position: [number, number, number]; color: string; rough?: number; metal?: number;
 }) {
   return (
-    <mesh position={position} castShadow={!p.ghost} receiveShadow={!p.ghost}>
+    <mesh position={position} castShadow receiveShadow>
       <boxGeometry args={size} />
-      <Mat color={color} p={p} rough={rough} metal={metal} />
+      <meshStandardMaterial color={color} roughness={rough} metalness={metal} />
     </mesh>
   );
 }
 
-/** Stupňovitý blok od země: řada i má výšku (i + 1) × rise a leží o i × depth dál od přední hrany. */
-function Steps({ width, rows, depth, rise, color, p, x = 0, y0 = 0, z0 = 0 }: {
-  width: number; rows: number; depth: number; rise: number; color: string; p: Palette; x?: number; y0?: number; z0?: number;
-}) {
-  return (
-    <group position={[x, y0, z0]}>
-      {Array.from({ length: rows }).map((_, i) => (
-        <Box key={i} size={[width, (i + 1) * rise, depth]} position={[0, ((i + 1) * rise) / 2, i * depth + depth / 2]} color={color} p={p} />
-      ))}
-    </group>
-  );
-}
-
-/** Výseč mezikruží (oblouk tribuny). Oblouk je vycentrovaný na lokální +Z. */
-function Sector({ rIn, rOut, angle, height, color, p, y0 = 0 }: {
-  rIn: number; rOut: number; angle: number; height: number; color: string; p: Palette; y0?: number;
-}) {
-  const geometry = useMemo(() => {
-    const shape = new THREE.Shape();
-    shape.absarc(0, 0, rOut, -angle / 2, angle / 2, false);
-    shape.absarc(0, 0, rIn, angle / 2, -angle / 2, true);
-    shape.closePath();
-    const g = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 18 });
-    g.rotateX(-Math.PI / 2);
-    return g;
-  }, [rIn, rOut, angle, height]);
-  return (
-    <mesh geometry={geometry} position={[0, y0, 0]} rotation={[0, -Math.PI / 2, 0]} castShadow={!p.ghost} receiveShadow={!p.ghost}>
-      <Mat color={color} p={p} rough={0.9} />
-    </mesh>
-  );
-}
-
-/** Oblouk ze stupňů: každý další pás je o kousek výš. */
-function Bowl({ rIn, rows, angle, rowW, rise, color, p }: {
-  rIn: number; rows: number; angle: number; rowW: number; rise: number; color: string; p: Palette;
-}) {
-  return (
-    <group>
-      {Array.from({ length: rows }).map((_, i) => (
-        <Sector key={i} rIn={rIn + i * rowW} rOut={rIn + (i + 1) * rowW} angle={angle} height={(i + 1) * rise} color={color} p={p} />
-      ))}
-    </group>
-  );
-}
-
-function Flag({ color, height, p }: { color: string; height: number; p: Palette }) {
-  return (
-    <group>
-      <Box size={[0.12, height, 0.12]} position={[0, height / 2, 0]} color="#D4D4D8" p={p} metal={0.5} />
-      <Box size={[1.8, 1.0, 0.05]} position={[0.95, height - 0.7, 0]} color={color} p={p} />
-    </group>
-  );
-}
-
-function Posts({ xs, zs, height, p, color = METAL }: { xs: number[]; zs: number[]; height: number; p: Palette; color?: string }) {
+function Posts({ xs, zs, height, color = METAL }: { xs: number[]; zs: number[]; height: number; color?: string }) {
   return (
     <>
       {xs.flatMap((x) =>
-        zs.map((z) => <Box key={`${x}-${z}`} size={[0.35, height, 0.35]} position={[x, height / 2, z]} color={color} p={p} metal={0.4} />),
+        zs.map((z) => <Box key={`${x}-${z}`} size={[0.4, height, 0.4]} position={[x, height / 2, z]} color={color} metal={0.3} />),
       )}
     </>
   );
 }
 
-const lv = (level: number) => Math.max(1, Math.min(3, level));
+function Flag({ color, height }: { color: string; height: number }) {
+  return (
+    <group>
+      <Box size={[0.14, height, 0.14]} position={[0, height / 2, 0]} color="#D4D4D8" metal={0.5} />
+      <Box size={[2.0, 1.1, 0.06]} position={[1.05, height - 0.75, 0]} color={color} />
+    </group>
+  );
+}
 
-/** Postranní přístavby v rámci tribuny (z = 0 přední hrana, x podél strany). */
-function SideKind({ kind, level, length, standLevel, p }: { kind: string; level: number; length: number; standLevel: number; p: Palette }) {
+/** Výseč mezikruží vycentrovaná na lokální +Z, střed oblouku je v počátku. */
+function Sector({ rIn, rOut, angle, height, color }: { rIn: number; rOut: number; angle: number; height: number; color: string }) {
+  const geometry = useMemo(() => {
+    const shape = new THREE.Shape();
+    shape.absarc(0, 0, rOut, -angle / 2, angle / 2, false);
+    shape.absarc(0, 0, rIn, angle / 2, -angle / 2, true);
+    shape.closePath();
+    const g = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, curveSegments: 20 });
+    g.rotateX(-Math.PI / 2);
+    return g;
+  }, [rIn, rOut, angle, height]);
+  return (
+    <mesh geometry={geometry} rotation={[0, -Math.PI / 2, 0]} castShadow receiveShadow>
+      <meshStandardMaterial color={color} roughness={0.92} />
+    </mesh>
+  );
+}
+
+const hash = (i: number) => ((Math.imul(i + 1, 2654435761) >>> 0) % 10007) / 10007;
+
+/**
+ * Oblouková tribuna: betonové stupně po kruzích, sedačky a diváci rozmístění po oblouku
+ * čelem ke středu. Střed oblouku je v počátku, oblouk se rozbíhá kolem lokálního +Z.
+ */
+function ArcStand({ rIn, rows, angle, rowW = 1.5, rise = 0.55, c }: {
+  rIn: number; rows: number; angle: number; rowW?: number; rise?: number; c: Common;
+}) {
+  const seatRef = useRef<THREE.InstancedMesh>(null);
+  const crowdRef = useRef<THREE.InstancedMesh>(null);
+  const seats = useMemo(() => {
+    const out: Array<{ x: number; y: number; z: number; th: number }> = [];
+    for (let i = 0; i < rows; i++) {
+      const r = rIn + (i + 0.5) * rowW;
+      const n = Math.max(2, Math.floor((r * angle) / 0.85));
+      for (let k = 0; k < n; k++) {
+        const th = -angle / 2 + ((k + 0.5) * angle) / n;
+        out.push({ x: r * Math.sin(th), y: (i + 1) * rise + 0.06, z: r * Math.cos(th), th });
+      }
+    }
+    return out;
+  }, [rIn, rows, angle, rowW, rise]);
+
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const one = new THREE.Vector3(1, 1, 1);
+    const zero = new THREE.Vector3(0, 0, 0);
+    const col = new THREE.Color();
+    seats.forEach((s, i) => {
+      e.set(0, s.th, 0);
+      q.setFromEuler(e);
+      m.compose(new THREE.Vector3(s.x, s.y, s.z), q, one);
+      seatRef.current?.setMatrixAt(i, m);
+      const show = c.mode !== "training_day" && hash(i) < c.attendanceRatio;
+      m.compose(new THREE.Vector3(s.x, s.y + 0.45, s.z), q, show ? one : zero);
+      crowdRef.current?.setMatrixAt(i, m);
+      col.set(hash(i + 977) < 0.6 ? c.teamColor : c.secondaryColor);
+      crowdRef.current?.setColorAt(i, col);
+    });
+    if (seatRef.current) seatRef.current.instanceMatrix.needsUpdate = true;
+    if (crowdRef.current) {
+      crowdRef.current.instanceMatrix.needsUpdate = true;
+      if (crowdRef.current.instanceColor) crowdRef.current.instanceColor.needsUpdate = true;
+    }
+  }, [seats, c.mode, c.attendanceRatio, c.teamColor, c.secondaryColor]);
+
+  return (
+    <group>
+      {Array.from({ length: rows }).map((_, i) => (
+        <Sector key={i} rIn={rIn + i * rowW} rOut={rIn + (i + 1) * rowW} angle={angle} height={(i + 1) * rise} color={c.standColor} />
+      ))}
+      <instancedMesh ref={seatRef} args={[undefined, undefined, seats.length]} castShadow>
+        <boxGeometry args={[0.55, 0.08, 0.45]} />
+        <meshStandardMaterial color={c.seatColor} roughness={0.5} />
+      </instancedMesh>
+      <instancedMesh ref={crowdRef} args={[undefined, undefined, seats.length]} castShadow>
+        <boxGeometry args={[0.36, 0.7, 0.3]} />
+        <meshStandardMaterial roughness={0.8} />
+      </instancedMesh>
+    </group>
+  );
+}
+
+function Block(props: {
+  length: number; rows: number; depth: number; height: number; level?: number; c: Common;
+  standColor?: string; seatColor?: string; panel?: boolean;
+}) {
+  const { c } = props;
+  return (
+    <StandBlock
+      length={props.length} rows={props.rows} depth={props.depth} height={props.height} level={props.level ?? 2}
+      standColor={props.standColor ?? c.standColor} seatColor={props.seatColor ?? c.seatColor}
+      teamColor={c.teamColor} secondaryColor={c.secondaryColor} attendanceRatio={c.attendanceRatio}
+      mode={c.mode} reducedDetail={c.reducedDetail} isSnow={c.isSnow} panel={props.panel}
+    />
+  );
+}
+
+/** Horní patro na sloupech: betonová deska, stupně se sedačkami a diváky nahoře. */
+function RaisedTier({ width, rows, rowDepth, rise, y0, z0, style, c, glass = false }: {
+  width: number; rows: number; rowDepth: number; rise: number; y0: number; z0: number; style: number; c: Common; glass?: boolean;
+}) {
+  const depth = rows * rowDepth;
+  const xs = [-width / 2 + 0.7, -width / 6, width / 6, width / 2 - 0.7];
+  return (
+    <group>
+      <Posts xs={xs} zs={[z0 + 0.8, z0 + depth - 0.8]} height={y0 - 0.2} color={CONCRETE} />
+      <Box size={[width, 0.4, depth + 0.4]} position={[0, y0 - 0.2, z0 + depth / 2]} color={CONCRETE} />
+      <group position={[0, y0, z0]}>
+        <Block length={width} rows={rows} depth={depth} height={rows * rise} level={style} c={c} />
+      </group>
+      {glass && <Box size={[width, 1.0, 0.07]} position={[0, y0 + 0.5, z0 - 0.15]} color="#BFE3F2" rough={0.15} />}
+    </group>
+  );
+}
+
+/** Postranní přístavby v rámci tribuny (z = 0 přední hrana, zadní hrana tribuny v z = D). */
+function SideKind({ kind, level, length, standLevel, c }: { kind: string; level: number; length: number; standLevel: number; c: Common }) {
   const l = lv(level);
-  const D = STAND_DIMS[Math.max(1, Math.min(3, standLevel))].depth;
-  const H = STAND_DIMS[Math.max(1, Math.min(3, standLevel))].height;
+  const sd = dimsOf(standLevel);
+  const D = sd.depth;
+  const H = sd.height;
+  const style = lv(standLevel);
   switch (kind) {
     case "length": {
-      const w = 4 + l * 3;
-      const rows = STAND_DIMS[Math.max(1, Math.min(3, standLevel))].rows || 3;
-      const rise = H / Math.max(1, rows);
+      const w = 6 + 3 * l;
       return (
         <>
           {[-1, 1].map((s) => (
-            <Steps key={s} x={s * (length / 2 + w / 2)} width={w} rows={rows} depth={D / rows} rise={rise} color={p.stand} p={p} />
+            <group key={s} position={[s * (length / 2 + w / 2), 0, 0]}>
+              <Block length={w} rows={sd.rows} depth={D} height={H} level={style} c={c} />
+            </group>
           ))}
         </>
       );
     }
-    case "second_tier": {
-      const w = length * (0.5 + 0.15 * l);
-      const rows = 2 + l;
-      return (
-        <>
-          <Posts xs={[-w / 2 + 0.5, 0, w / 2 - 0.5]} zs={[D * 0.7, D + 1]} height={H + 1.4} p={p} />
-          <Steps width={w} rows={rows} depth={1.3} rise={0.5} color={p.seat} p={p} y0={H + 1.4} z0={D * 0.55} />
-        </>
-      );
-    }
-    case "double_stand": {
-      const rows = 3 + l;
-      return (
-        <>
-          <Posts xs={[-length * 0.45, -length * 0.15, length * 0.15, length * 0.45]} zs={[D * 0.5, D + 1.4]} height={H + 2.2} p={p} />
-          <Steps width={length * 0.96} rows={rows} depth={1.4} rise={0.55} color={p.seat} p={p} y0={H + 2.2} z0={D * 0.4} />
-          <Box size={[length * 0.96, 0.9, 0.08]} position={[0, H + 2.2 + 0.45, D * 0.4 - 0.1]} color="#BFE3F2" p={p} rough={0.15} />
-        </>
-      );
-    }
-    case "stilts": {
-      const w = length * (0.5 + 0.1 * l);
-      const rows = 2 + l;
-      return (
-        <>
-          <Posts xs={[-w / 2 + 0.6, -w / 6, w / 6, w / 2 - 0.6]} zs={[D + 1, D + 4, D + 6.5]} height={2.6} p={p} color={WOOD} />
-          <Steps width={w} rows={rows} depth={1.7} rise={0.55} color={p.stand} p={p} y0={2.6} z0={D + 0.4} />
-        </>
-      );
-    }
+    case "second_tier":
+      return <RaisedTier width={length * (0.5 + 0.15 * l)} rows={3 + l} rowDepth={1.2} rise={0.45} y0={H + 1.8} z0={D * 0.45} style={3} c={c} />;
+    case "double_stand":
+      return <RaisedTier width={length * 0.94} rows={4 + l} rowDepth={1.2} rise={0.5} y0={H + 2.6} z0={D * 0.3} style={3} c={c} glass />;
+    case "stilts":
+      return <RaisedTier width={length * (0.5 + 0.1 * l)} rows={2 + l} rowDepth={1.5} rise={0.5} y0={3.4} z0={D + 0.3} style={2} c={c} />;
     case "tower": {
-      const th = H + 6 + 2 * l;
+      const th = H + 7 + 2 * l;
       return (
-        <group position={[0, 0, D * 0.8]}>
-          <Box size={[3.2, th, 3.2]} position={[0, th / 2, 0]} color={p.stand} p={p} />
-          <Box size={[3.8, 0.4, 3.8]} position={[0, th + 0.2, 0]} color={p.accent} p={p} />
-          <group position={[0, th + 0.4, 0]}>
-            <Flag color={p.team} height={3 + l} p={p} />
+        <group position={[0, 0, D * 0.85]}>
+          <Box size={[3.4, th, 3.4]} position={[0, th / 2, 0]} color={CONCRETE} />
+          <Box size={[4.0, 0.5, 4.0]} position={[0, th + 0.25, 0]} color={c.accentColor} />
+          <group position={[0, th + 0.5, 0]}>
+            <Flag color={c.teamColor} height={3.5 + l} />
           </group>
         </group>
       );
@@ -205,37 +246,41 @@ function SideKind({ kind, level, length, standLevel, p }: { kind: string; level:
     case "footbridge": {
       const w = length * (0.5 + 0.12 * l);
       return (
-        <group position={[0, 0, -1.6]}>
-          <Box size={[w, 0.2, 1.5]} position={[0, 0.9, 0]} color={WOOD} p={p} />
-          <Posts xs={[-w / 2 + 0.3, -w / 6, w / 6, w / 2 - 0.3]} zs={[-0.6, 0.6]} height={0.9} p={p} color={WOOD} />
-          <Box size={[w, 0.08, 0.08]} position={[0, 1.7, 0.7]} color={WOOD} p={p} />
+        <group position={[0, 0, -1.8]}>
+          <Box size={[w, 0.18, 1.6]} position={[0, 0.8, 0]} color={WOOD} />
+          <Posts xs={[-w / 2 + 0.3, -w / 6, w / 6, w / 2 - 0.3]} zs={[-0.6, 0.6]} height={0.8} color={WOOD} />
+          <Box size={[w, 0.08, 0.08]} position={[0, 1.7, 0.75]} color={WOOD} />
+          <Box size={[w, 0.08, 0.08]} position={[0, 1.2, 0.75]} color={WOOD} />
         </group>
       );
     }
     case "terrace": {
-      const rows = 2 + l;
+      // Travnatý val s diváky za tribunou: stoupá dozadu a výš než lavičky, aby byl vidět.
+      const rows = 3 + l;
       return (
-        <>
-          <Steps width={length * 0.92} rows={rows} depth={2.2} rise={0.7} color={SOIL} p={p} z0={0} />
-          <Box size={[length * 0.92, 0.12, rows * 2.2]} position={[0, rows * 0.7 * 0.6, (rows * 2.2) / 2]} color={EARTH} p={p} />
-        </>
+        <group position={[0, 0, D + 0.2]}>
+          <Block length={length * 0.9} rows={rows} depth={rows * 1.8} height={rows * 0.8} level={1} standColor={EARTH} seatColor={EARTH} panel={false} c={c} />
+        </group>
       );
     }
     case "round_stand": {
+      // Mělký oblouk těsně za tribunou: prostřední pás přiléhá k zadní hraně, konce nezasahují dovnitř.
       const rows = 2 + l;
-      const rIn = 24 + l * 2;
+      const rIn = 46;
+      const halfWidth = Math.min(length * 0.42, 17);
+      const angle = 2 * Math.asin(Math.min(0.95, halfWidth / (rIn + (rows * 1.5) / 2)));
       return (
-        <group position={[0, 0, D - rIn + 1.2]}>
-          <Bowl rIn={rIn} rows={rows} angle={1.5} rowW={1.5} rise={0.55} color={p.seat} p={p} />
+        <group position={[0, 0, D + 0.4 - rIn]}>
+          <ArcStand rIn={rIn} rows={rows} angle={angle} c={c} />
         </group>
       );
     }
     case "mobile": {
-      const w = 6 + l * 3;
+      const w = 6 + 3 * l;
+      const rows = 1 + l;
       return (
-        <group position={[0, 0, D * 0.2]}>
-          <Posts xs={[-w / 2, w / 2]} zs={[0.4, 2 + l]} height={0.8 + l * 0.5} p={p} />
-          <Steps width={w} rows={1 + l} depth={1.1} rise={0.55} color={METAL} p={p} />
+        <group position={[0, 0, D + 0.3]}>
+          <Block length={w} rows={rows} depth={rows * 1.1} height={rows * 0.55} level={1} standColor={METAL} panel={false} c={c} />
         </group>
       );
     }
@@ -244,55 +289,66 @@ function SideKind({ kind, level, length, standLevel, p }: { kind: string; level:
   }
 }
 
-/** Rohové přístavby v rámci rohu (z = po úhlopříčce ven od rohu hřiště). */
-function CornerKind({ kind, level, p }: { kind: string; level: number; p: Palette }) {
+/** Rohové přístavby: umístění ve světě podle rohu (sx, sz), lokální +Z míří po úhlopříčce ven. */
+function CornerKind({ kind, level, sx, sz, sideLevels, c }: { kind: string; level: number; sx: number; sz: number; sideLevels: SideLevels; c: Common }) {
   const l = lv(level);
+  const ex = PITCH.width / 2;
+  const ez = PITCH.depth / 2;
+  const diag = Math.atan2(sx, sz);
+  const goalSide: SceneSide = sz > 0 ? "north" : "south";
+  const goalLevel = sideLevels[goalSide];
   switch (kind) {
-    case "corner": {
-      const rows = 1 + l;
-      return <Steps width={5 + l * 1.5} rows={rows} depth={1.6} rise={0.6} color={p.stand} p={p} z0={3} />;
-    }
-    case "curved_corner": {
+    case "corner":
       return (
-        <group position={[0, 0, -1]}>
-          <Bowl rIn={9} rows={2 + l} angle={Math.PI / 2} rowW={1.3} rise={0.6} color={p.seat} p={p} />
+        <group position={[sx * (ex + STAND_GAP + 1.5), 0, sz * (ez + STAND_GAP + 1.5)]} rotation={[0, diag, 0]}>
+          <Block length={6 + 2 * l} rows={2 + l} depth={(2 + l) * 1.6} height={(2 + l) * 0.6} level={2} c={c} />
+        </group>
+      );
+    case "curved_corner": {
+      const rows = 2 + l;
+      return (
+        <group position={[sx * (ex + 1), 0, sz * (ez + 1)]} rotation={[0, diag, 0]}>
+          <ArcStand rIn={6} rows={rows} angle={Math.PI / 2} rowW={1.3} rise={0.6} c={c} />
         </group>
       );
     }
     case "wing": {
-      const rows = 2 + l;
+      // Pokračování tribuny za brankou kolem rohu: stejná výška i hloubka jako sousední tribuna.
+      const sd = dimsOf(goalLevel >= 1 ? goalLevel : 2);
+      const w = 8 + l * 3;
       return (
-        <group position={[0, 0, 2]}>
-          <Steps width={7 + l * 3} rows={rows} depth={1.5} rise={0.7} color={p.stand} p={p} x={2 + l} />
-          <Box size={[0.3, rows * 0.7, 3 + l]} position={[-1.6, (rows * 0.7) / 2, (3 + l) / 2]} color={p.accent} p={p} />
+        <group
+          position={[sx * (ex + w / 2 + 0.3), 0, sz * (ez + STAND_GAP + sd.depth / 2)]}
+          rotation={[0, sz > 0 ? 0 : Math.PI, 0]}
+        >
+          <Block length={w} rows={sd.rows} depth={sd.depth} height={sd.height} level={lv(goalLevel >= 1 ? goalLevel : 2)} c={c} />
         </group>
       );
     }
     case "bridge": {
       const len = 8 + l * 2;
       return (
-        <group position={[0, 0, 4]}>
-          <Posts xs={[-len / 2, len / 2]} zs={[-1, 1]} height={3} p={p} color={CONCRETE} />
-          <Box size={[len, 0.35, 2.6]} position={[0, 3.2, 0]} color={CONCRETE} p={p} />
-          <Steps width={len - 1} rows={1 + l} depth={0.9} rise={0.4} color={p.seat} p={p} y0={3.35} z0={-0.9} />
+        <group position={[sx * (ex + 5), 0, sz * (ez + 5)]} rotation={[0, diag, 0]}>
+          <Posts xs={[-len / 2 + 0.4, len / 2 - 0.4]} zs={[-0.9, 0.9]} height={3} color={CONCRETE} />
+          <Box size={[len, 0.4, 2.8]} position={[0, 3.2, 0]} color={CONCRETE} />
+          <Box size={[len, 0.9, 0.08]} position={[0, 3.85, 1.35]} color="#BFE3F2" rough={0.15} />
+          <Box size={[len, 0.9, 0.08]} position={[0, 3.85, -1.35]} color="#BFE3F2" rough={0.15} />
         </group>
       );
     }
-    case "mobile": {
+    case "mobile":
       return (
-        <group position={[0, 0, 3]}>
-          <Posts xs={[-2, 2]} zs={[0.4, 2]} height={0.6 + l * 0.5} p={p} />
-          <Steps width={4 + l * 1.5} rows={1 + l} depth={1} rise={0.5} color={METAL} p={p} />
+        <group position={[sx * (ex + STAND_GAP + 2), 0, sz * (ez + STAND_GAP + 2)]} rotation={[0, diag, 0]}>
+          <Block length={4 + l * 1.5} rows={1 + l} depth={(1 + l) * 1.1} height={(1 + l) * 0.55} level={1} standColor={METAL} panel={false} c={c} />
         </group>
       );
-    }
     default:
       return null;
   }
 }
 
 function sideFrame(side: SceneSide, standLevel: number) {
-  const D = STAND_DIMS[Math.max(1, Math.min(3, standLevel))].depth;
+  const D = dimsOf(standLevel).depth;
   const isEW = side === "east" || side === "west";
   const dist = (isEW ? PITCH.width : PITCH.depth) / 2 + STAND_GAP + D / 2;
   const length = isEW ? PITCH.depth : PITCH.width;
@@ -302,26 +358,46 @@ function sideFrame(side: SceneSide, standLevel: number) {
   return { position, rotY, length };
 }
 
-function One({ item, sideLevels, palette }: { item: ExtensionInstance; sideLevels: SideLevels; palette: Palette }) {
+/** Zprůhlední všechny materiály uvnitř (náhled před stavbou) a obarví je akcentem. */
+function GhostWrap({ ghost, accent, children }: { ghost: boolean; accent: string; children: ReactNode }) {
+  const ref = useRef<THREE.Group>(null);
+  useLayoutEffect(() => {
+    if (!ghost || !ref.current) return;
+    ref.current.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = false;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mt of mats) {
+        const m = mt as THREE.MeshStandardMaterial;
+        m.transparent = true;
+        m.opacity = 0.5;
+        m.depthWrite = false;
+        if (m.emissive) {
+          m.emissive = new THREE.Color(accent);
+          m.emissiveIntensity = 0.45;
+        }
+        m.needsUpdate = true;
+      }
+    });
+  });
+  return <group ref={ref}>{children}</group>;
+}
+
+function One({ item, sideLevels, c }: { item: ExtensionInstance; sideLevels: SideLevels; c: Common }) {
   const side = SIDE_SLOT[item.slot];
   if (side) {
     const standLevel = sideLevels[side];
     const { position, rotY, length } = sideFrame(side, standLevel);
     return (
       <group position={position} rotation={[0, rotY, 0]}>
-        <SideKind kind={item.kind} level={item.level} length={length} standLevel={standLevel} p={palette} />
+        <SideKind kind={item.kind} level={item.level} length={length} standLevel={standLevel} c={c} />
       </group>
     );
   }
   const corner = CORNER_SLOT[item.slot];
   if (corner) {
-    const [sx, sz] = corner;
-    const position: [number, number, number] = [sx * (PITCH.width / 2 + STAND_GAP + 1), 0, sz * (PITCH.depth / 2 + STAND_GAP + 1)];
-    return (
-      <group position={position} rotation={[0, Math.atan2(sx, sz), 0]}>
-        <CornerKind kind={item.kind} level={item.level} p={palette} />
-      </group>
-    );
+    return <CornerKind kind={item.kind} level={item.level} sx={corner[0]} sz={corner[1]} sideLevels={sideLevels} c={c} />;
   }
   return null;
 }
@@ -335,19 +411,30 @@ interface StandExtensionsProps {
   seatColor: string;
   accentColor: string;
   teamColor: string;
+  secondaryColor?: string;
+  mode?: StadiumMode;
+  attendanceRatio?: number;
+  reducedDetail?: boolean;
+  isSnow?: boolean;
 }
 
-export function StandExtensions({ extensions, preview, sideLevels, standColor, seatColor, accentColor, teamColor }: StandExtensionsProps) {
-  const solid: Palette = { stand: standColor, seat: seatColor, accent: accentColor, team: teamColor, ghost: false };
-  const ghost: Palette = { ...solid, ghost: true };
+export function StandExtensions({
+  extensions, preview, sideLevels, standColor, seatColor, accentColor, teamColor,
+  secondaryColor = "#FFFFFF", mode = "match_day", attendanceRatio = 0.6, reducedDetail = false, isSnow = false,
+}: StandExtensionsProps) {
+  const c: Common = { standColor, seatColor, accentColor, teamColor, secondaryColor, mode, attendanceRatio, reducedDetail, isSnow };
   // Náhled nahrazuje stávající přístavbu ve stejném místě (vylepšení se ukáže na nové úrovni).
   const shown = extensions.filter((e) => !preview || e.slot !== preview.slot);
   return (
     <group>
       {shown.map((e) => (
-        <One key={e.slot} item={e} sideLevels={sideLevels} palette={solid} />
+        <One key={`${e.slot}-${e.kind}-${e.level}`} item={e} sideLevels={sideLevels} c={c} />
       ))}
-      {preview && <One key={`preview-${preview.slot}`} item={preview} sideLevels={sideLevels} palette={ghost} />}
+      {preview && (
+        <GhostWrap key={`preview-${preview.slot}-${preview.kind}-${preview.level}`} ghost accent={accentColor}>
+          <One item={preview} sideLevels={sideLevels} c={c} />
+        </GhostWrap>
+      )}
     </group>
   );
 }

@@ -585,6 +585,11 @@ export function Stadium3D({
             seatColor={seatColor}
             accentColor={accentColor}
             teamColor={teamColor}
+            secondaryColor={secondaryColor}
+            mode={mode}
+            attendanceRatio={attendanceRatio}
+            reducedDetail={isMobile}
+            isSnow={weather === "snow"}
           />
 
           {/* Zastřešení tribun */}
