@@ -212,6 +212,8 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
   const D = sd.depth;
   const H = sd.height;
   const style = lv(standLevel);
+  // Volné místo před tribunou (k plotu u hřiště), kam se vejdou nízké přístavby čelem k hřišti.
+  const avail = Math.max(2, STAND_GAP + D / 2 - 1.2);
   switch (kind) {
     case "length": {
       const w = 6 + 3 * l;
@@ -255,32 +257,37 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
       );
     }
     case "terrace": {
-      // Travnatý val s diváky za tribunou: stoupá dozadu a výš než lavičky, aby byl vidět.
-      const rows = 3 + l;
+      // Travnatý val s diváky PŘED tribunou, mezi ní a hřištěm: stoupá k tribuně a je nižší než ona.
+      const rows = 2 + l;
+      const rowDepth = Math.min(1.7, avail / rows);
+      const depth = rows * rowDepth;
       return (
-        <group position={[0, 0, D + 0.2]}>
-          <Block length={length * 0.9} rows={rows} depth={rows * 1.8} height={rows * 0.8} level={1} standColor={EARTH} seatColor={EARTH} panel={false} c={c} />
+        <group position={[0, 0, -depth - 0.5]}>
+          <Block length={length * 0.9} rows={rows} depth={depth} height={rows * 0.5} level={1} standColor={EARTH} seatColor={EARTH} panel={false} c={c} />
         </group>
       );
     }
     case "round_stand": {
-      // Mělký oblouk těsně za tribunou: prostřední pás přiléhá k zadní hraně, konce nezasahují dovnitř.
+      // Oblouk PŘED tribunou, čelem k hřišti. Vnější okraj se téměř dotýká přední hrany tribuny,
+      // střed oblouku leží na straně hřiště a oblouk je tak mělký, že nezasáhne do hřiště.
       const rows = 2 + l;
-      const rIn = 46;
-      const halfWidth = Math.min(length * 0.42, 17);
-      const angle = 2 * Math.asin(Math.min(0.95, halfWidth / (rIn + (rows * 1.5) / 2)));
+      const rowW = Math.min(1.0, avail / rows);
+      const rOut = 70;
+      const hw = Math.min(length * 0.36, 14);
+      const angle = 2 * Math.asin(Math.min(0.95, hw / rOut));
       return (
-        <group position={[0, 0, D + 0.4 - rIn]}>
-          <ArcStand rIn={rIn} rows={rows} angle={angle} c={c} />
+        <group position={[0, 0, -0.6 - rOut]}>
+          <ArcStand rIn={rOut - rows * rowW} rows={rows} angle={angle} rowW={rowW} rise={0.5} c={c} />
         </group>
       );
     }
     case "mobile": {
       const w = 6 + 3 * l;
       const rows = 1 + l;
+      const rowDepth = Math.min(1.1, avail / rows);
       return (
-        <group position={[0, 0, D + 0.3]}>
-          <Block length={w} rows={rows} depth={rows * 1.1} height={rows * 0.55} level={1} standColor={METAL} panel={false} c={c} />
+        <group position={[0, 0, -rows * rowDepth - 0.5]}>
+          <Block length={w} rows={rows} depth={rows * rowDepth} height={rows * 0.55} level={1} standColor={METAL} panel={false} c={c} />
         </group>
       );
     }
