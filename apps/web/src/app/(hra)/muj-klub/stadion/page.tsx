@@ -8,6 +8,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, SectionLabel, StickyActions } from "@/components/ui";
 
+import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
 const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
   <div className="h-full flex items-center justify-center text-white/60 text-sm bg-[#1a2030]">
@@ -21,6 +22,7 @@ interface StadiumFullData {
   pitchCondition: number;
   pitchType: string;
   facilities: Record<string, number>;
+  standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
   customization: {
     fenceColor: string | null;
     standColor: string | null;
@@ -146,6 +148,7 @@ export default function StadionPage() {
               pitchCondition={stadiumFull.pitchCondition}
               pitchType={stadiumFull.pitchType}
               facilities={stadiumFull.facilities}
+              standExtensions={builtExtensionsOf(stadiumFull.standExtensions)}
               teamColor={teamClub.primary}
               secondaryColor={teamClub.secondary}
               badgePattern={teamClub.pattern}

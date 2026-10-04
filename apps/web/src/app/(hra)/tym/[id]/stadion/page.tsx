@@ -7,6 +7,7 @@ import { apiFetch, type Team } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 
+import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
 const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
   <div className="h-full flex items-center justify-center text-muted text-sm">
@@ -32,6 +33,7 @@ interface Customization {
 }
 
 interface StadiumData {
+  standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
   /** Počasí nad areálem právě teď, stejný zdroj jako na vlastním Stadionu. */
   currentWeather?: string | null;
   currentTemperature?: number | null;
@@ -148,6 +150,7 @@ export default function VisitStadiumPage() {
         pitchCondition={stadium.pitchCondition}
         pitchType={stadium.pitchType}
         facilities={stadium.facilities}
+        standExtensions={builtExtensionsOf(stadium.standExtensions)}
         pitchHeating={stadium.pitchHeating ?? 0}
         pitchIrrigation={stadium.pitchIrrigation ?? 0}
         mowerLevel={stadium.mowerLevel ?? 2}
@@ -174,6 +177,7 @@ export default function VisitStadiumPage() {
               pitchCondition={stadium.pitchCondition}
               pitchType={stadium.pitchType}
               facilities={stadium.facilities}
+        standExtensions={builtExtensionsOf(stadium.standExtensions)}
               pitchHeating={stadium.pitchHeating ?? 0}
               pitchIrrigation={stadium.pitchIrrigation ?? 0}
               mowerLevel={stadium.mowerLevel ?? 2}
