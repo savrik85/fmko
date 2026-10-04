@@ -30,6 +30,7 @@ import { FIRSTNAMES } from "../data/czech-names";
 import { deriveLicenceLevel, type ManagerBackstory } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { updateSessionTeamId } from "../auth/session";
+import { STAND_COLUMNS, readStandLevels, type StandSide } from "../stadium/stands-model";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -915,13 +916,13 @@ teamsRouter.get("/:id", async (c) => {
   // team.* už obsahuje badge_primary_color, badge_secondary_color, badge_initials, badge_symbol
 
   const stadium = await c.env.DB.prepare(
-    "SELECT capacity, stands, vip_box, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
-  ).bind(c.req.param("id")).first<{ capacity: number; stands: number | null; vip_box: number | null; pitch_condition: number; pitch_type: string }>().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
+    `SELECT capacity, ${STAND_COLUMNS}, vip_box, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1`
+  ).bind(c.req.param("id")).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string } & Partial<Record<StandSide, number | null>>>().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
   const { calculateFacilityEffects: calcFxTeam } = await import("../stadium/stadium-generator");
 
   return c.json({
     ...team,
-    stadium: stadium ? { name: team.stadium_name, capacity: stadium.capacity + calcFxTeam({ stands: stadium.stands ?? 0, vip_box: stadium.vip_box ?? 0 }).capacityBonus, pitchCondition: stadium.pitch_condition, pitchType: stadium.pitch_type } : null,
+    stadium: stadium ? { name: team.stadium_name, capacity: stadium.capacity + calcFxTeam({ ...readStandLevels(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus, pitchCondition: stadium.pitch_condition, pitchType: stadium.pitch_type } : null,
   });
 });
 
@@ -1431,11 +1432,11 @@ teamsRouter.get("/:id/club", async (c) => {
   if (!team) return c.json({ error: "Team not found" }, 404);
 
   const stadium = await c.env.DB.prepare(
-    "SELECT capacity, stands, vip_box, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1"
-  ).bind(teamId).first<{ capacity: number; stands: number | null; vip_box: number | null; pitch_condition: number; pitch_type: string }>()
+    `SELECT capacity, ${STAND_COLUMNS}, vip_box, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1`
+  ).bind(teamId).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string } & Partial<Record<StandSide, number | null>>>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch stadium for /club", e); return null; });
   const { calculateFacilityEffects: calcFxClub } = await import("../stadium/stadium-generator");
-  const clubCapacity = stadium ? stadium.capacity + calcFxClub({ stands: stadium.stands ?? 0, vip_box: stadium.vip_box ?? 0 }).capacityBonus : null;
+  const clubCapacity = stadium ? stadium.capacity + calcFxClub({ ...readStandLevels(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus : null;
 
   // Hlavní sponzor — spravuje se přes /sponzori, ne v /klub/dres
   const mainSponsor = await c.env.DB.prepare(
@@ -3177,17 +3178,17 @@ teamsRouter.get("/:id/fanbase", async (c) => {
   // − míst, které bere VIP lóže (0, pokud jsou tribuny zbořené), stejně jako
   // v match-runneru.
   const stadiumRow = await c.env.DB.prepare(
-    "SELECT capacity, stands, vip_box FROM stadiums WHERE team_id = ?",
+    `SELECT capacity, ${STAND_COLUMNS}, vip_box FROM stadiums WHERE team_id = ?`,
   )
     .bind(teamId)
-    .first<{ capacity: number; stands: number | null; vip_box: number | null }>()
+    .first<{ capacity: number; vip_box: number | null } & Partial<Record<StandSide, number | null>>>()
     .catch((e) => {
       logger.warn({ module: "teams" }, "load stadium capacity", e);
       return null;
     });
   const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
   const capacity = (stadiumRow?.capacity ?? 200)
-    + calculateFacilityEffects({ stands: stadiumRow?.stands ?? 0, vip_box: stadiumRow?.vip_box ?? 0 }).capacityBonus;
+    + calculateFacilityEffects({ ...readStandLevels(stadiumRow ?? {}), vip_box: stadiumRow?.vip_box ?? 0 }).capacityBonus;
 
   const satelliteRows = await c.env.DB.prepare(
     `SELECT bsf.village_id, v.name, v.population, v.lat, v.lng,

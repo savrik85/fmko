@@ -22,7 +22,8 @@ const M = "stadium-damage";
  * se divák nedostane. Pořadatelská služba taky ne — to jsou lidi, ne věc.
  */
 export const ROZBITNE = [
-  "toilets", "stands", "fence", "roof", "ultras_stand", "refreshments", "entrance_gate",
+  "toilets", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east",
+  "fence", "roof", "ultras_stand", "refreshments", "entrance_gate",
 ] as const;
 export type RozbitnyPrvek = (typeof ROZBITNE)[number];
 

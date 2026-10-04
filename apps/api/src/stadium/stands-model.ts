@@ -15,6 +15,8 @@ export const STAND_SIDES = [
   "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east",
 ] as const;
 export type StandSide = (typeof STAND_SIDES)[number];
+/** Sloupce stran do SQL SELECTu. */
+export const STAND_COLUMNS = STAND_SIDES.join(", ");
 export type StandLevels = Record<StandSide, number>;
 
 export const STAND_SIDE_LABELS: Record<StandSide, string> = {
