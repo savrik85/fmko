@@ -19,7 +19,7 @@ export const SCOUT_CLUB_SQUAD = 18;
 /** Kolik hráčů z kádru hraje na jednotlivých postech. */
 const POSITION_SHARE: Record<string, number> = { GK: 2 / 18, DEF: 6 / 18, MID: 6 / 18, FWD: 4 / 18 };
 /** Věk hráčů v kádru klubu mimo hru (rovnoměrně). */
-export const CLUB_AGE_MIN = 17;
+export const CLUB_AGE_MIN = 16;
 export const CLUB_AGE_MAX = 35;
 
 export interface VillageRow {

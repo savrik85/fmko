@@ -18,7 +18,7 @@ export type ScoutRadiusKm = typeof SCOUT_RADIUS_TIERS[number]["km"];
 /** Jak dlouho skaut na úkolu jezdí (počet pracovních pondělí). */
 export const SCOUT_WEEKS_OPTIONS = [2, 4, 8] as const;
 
-export const SCOUT_AGE_MIN = 17;
+export const SCOUT_AGE_MIN = 16;
 export const SCOUT_AGE_MAX = 36;
 /**
  * Úkol jen na hráče do tohoto věku = režim mladých: skaut je hlásí podle odhadu potenciálu,
