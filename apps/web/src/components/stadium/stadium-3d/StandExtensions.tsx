@@ -456,13 +456,14 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
       return <RaisedTier width={length * spec.widthFactor} spec={spec} c={c} />;
     }
     case "tower": {
-      const th = H + 7 + 2 * l;
+      // Štíhlá věž za tribunou, jen o kus vyšší než ona, s vlajkou. Nestojí mezi diváky.
+      const th = H + 3.5 + 1.5 * l;
       return (
-        <group position={[0, 0, D * 0.85]}>
-          <Box size={[3.4, th, 3.4]} position={[0, th / 2, 0]} color={CONCRETE} />
-          <Box size={[4.0, 0.5, 4.0]} position={[0, th + 0.25, 0]} color={c.accentColor} />
-          <group position={[0, th + 0.5, 0]}>
-            <Flag color={c.teamColor} height={3.5 + l} />
+        <group position={[0, 0, D + 1.4]}>
+          <Box size={[2.6, th, 2.6]} position={[0, th / 2, 0]} color={c.standColor} />
+          <Box size={[3.1, 0.4, 3.1]} position={[0, th + 0.2, 0]} color={c.accentColor} />
+          <group position={[0, th + 0.4, 0]}>
+            <Flag color={c.teamColor} height={2.5 + 0.5 * l} />
           </group>
         </group>
       );
@@ -521,6 +522,86 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
 }
 
 /**
+ * Rohová tribuna (klín): rovné stupně v lichoběžníku mezi koncovými plochami obou sousedních tribun.
+ * Vnitřní hrana vede z předního rohu konce tribuny za brankou (0, b) do předního rohu konce tribuny na
+ * dlouhé straně (a, 0), koncové plochy leží v rovinách tribun (osy u a v), takže navazuje bez mezer.
+ * Lokální osy jako u `CornerBowl`.
+ */
+function CornerWedge({ a, b, rows, depth, height, c }: { a: number; b: number; rows: number; depth: number; height: number; c: Common }) {
+  // Posun vnější hrany o vzdálenost d kolmo na úhlopříčku odpovídá násobku k = d * |(1/a, 1/b)|.
+  const kPerMeter = Math.hypot(1 / a, 1 / b);
+  const rowD = depth / rows;
+  const rise = height / rows;
+  const geoms = useMemo(() => {
+    return Array.from({ length: rows }).map((_, i) => {
+      const k0 = 1 + i * rowD * kPerMeter;
+      const k1 = 1 + (i + 1) * rowD * kPerMeter;
+      // y = -v (po otočení kolem X se změní na +z).
+      const shape = new THREE.Shape();
+      shape.moveTo(a * k0, 0);
+      shape.lineTo(a * k1, 0);
+      shape.lineTo(0, -b * k1);
+      shape.lineTo(0, -b * k0);
+      shape.closePath();
+      return extrudeFlat(shape, (i + 1) * rise);
+    });
+  }, [a, b, rows, rowD, rise, kPerMeter]);
+  const seats = useMemo(() => {
+    const out: Array<{ x: number; y: number; z: number; th: number }> = [];
+    for (let i = 0; i < rows; i++) {
+      const km = 1 + (i + 0.5) * rowD * kPerMeter;
+      const am = a * km;
+      const bm = b * km;
+      const n = Math.max(2, Math.floor(Math.hypot(am, bm) / 0.85));
+      const th = Math.atan2(1 / am, 1 / bm);
+      for (let j = 0; j < n; j++) {
+        const t = (j + 0.5) / n;
+        out.push({ x: am * t, y: (i + 1) * rise + 0.06, z: bm * (1 - t), th });
+      }
+    }
+    return out;
+  }, [a, b, rows, rowD, rise, kPerMeter]);
+  return (
+    <group>
+      {geoms.map((g, i) => (
+        <mesh key={i} geometry={g} castShadow receiveShadow>
+          <meshStandardMaterial color={c.standColor} roughness={0.92} />
+        </mesh>
+      ))}
+      <SeatsAndCrowd seats={seats} c={c} />
+    </group>
+  );
+}
+
+/** Plochá střecha nad rohovým klínem: lichoběžník ve stejné výšce a rozsahu jako střecha rovné tribuny. */
+function WedgeRoof({ a, b, depth, height, c }: { a: number; b: number; depth: number; height: number; c: Common }) {
+  const tex = useMemo(() => generateCorrugatedTexture(c.roofColor, 8, 2), [c.roofColor]);
+  const plan = canopyPlan(depth, height, c.roofLevel);
+  const kPerMeter = Math.hypot(1 / a, 1 / b);
+  const k0 = 1 + (plan.roofZ - plan.roofDepth / 2) * kPerMeter;
+  const k1 = 1 + (plan.roofZ + plan.roofDepth / 2) * kPerMeter;
+  const geometry = useMemo(() => {
+    const shape = new THREE.Shape();
+    shape.moveTo(a * k0, 0);
+    shape.lineTo(a * k1, 0);
+    shape.lineTo(0, -b * k1);
+    shape.lineTo(0, -b * k0);
+    shape.closePath();
+    return extrudeFlat(shape, 0.14);
+  }, [a, b, k0, k1]);
+  return (
+    <group>
+      <mesh geometry={geometry} position={[0, plan.roofY, 0]} castShadow>
+        <meshStandardMaterial map={tex.map} bumpMap={tex.bumpMap} bumpScale={0.12} roughness={0.5} metalness={0.35} />
+      </mesh>
+      {[0.12, 0.5, 0.88].map((t) => (
+        <Box key={t} size={[0.18, plan.roofY, 0.18]} position={[a * k1 * t, plan.roofY / 2, b * k1 * (1 - t)]} color="#4A4D54" metal={0.5} />
+      ))}
+    </group>
+  );
+}
+
+/**
  * Rohové přístavby vyplňují mezeru mezi konci dvou sousedních tribun.
  *
  * Mezera je mezi předním rohem konce tribuny za brankou (P_n) a předním rohem konce tribuny
@@ -534,50 +615,39 @@ function CornerKind({ kind, level, sx, sz, sideLevels, rounds, c }: { kind: stri
   const diag = Math.atan2(sx, sz);
   const goalSide: SceneSide = sz > 0 ? "north" : "south";
   const longSide: SceneSide = sx > 0 ? "east" : "west";
-  const dn = dimsOf(Math.max(1, sideLevels[goalSide])).depth;
-  const de = dimsOf(Math.max(1, sideLevels[longSide])).depth;
-  const rN = STAND_GAP + dn / 2;
-  const rE = STAND_GAP + de / 2;
-  const pn: [number, number] = [sx * ex, sz * (ez + rN)];
-  const pe: [number, number] = [sx * (ex + rE), sz * ez];
+  const bdN = dimsOf(Math.max(1, sideLevels[goalSide]));
+  const bdE = dimsOf(Math.max(1, sideLevels[longSide]));
+  // Přední hrana tribuny za brankou: u točené tribuny je konec o kousek blíž k hřišti.
+  const sag = rounds.has(goalSide) ? roundStandSag(Math.min(ex, 20)) : 0;
+  const frontGoal = Math.max(1, STAND_GAP + bdN.depth / 2 - sag);
+  const frontLong = STAND_GAP + bdE.depth / 2;
+  const pn: [number, number] = [sx * ex, sz * (ez + frontGoal)];
+  const pe: [number, number] = [sx * (ex + frontLong), sz * ez];
+  // Rozměry a natočení společné pro zahnutou tribunu a klín (osy u, v v kvadrantu rohu).
+  const ry = sx > 0 ? (sz > 0 ? 0 : Math.PI / 2) : sz < 0 ? Math.PI : -Math.PI / 2;
+  const swap = Math.abs(ry) === Math.PI / 2;
+  const cornerA = swap ? frontGoal : frontLong;
+  const cornerB = swap ? frontLong : frontGoal;
+  const cornerRows = Math.max(3, Math.round((bdN.rows + bdE.rows) / 2));
+  const cornerDepth = (bdN.depth + bdE.depth) / 2;
+  const cornerHeight = (bdN.height + bdE.height) / 2;
   const mid: [number, number] = [(pn[0] + pe[0]) / 2, (pn[1] + pe[1]) / 2];
   const gapLen = Math.hypot(pn[0] - pe[0], pn[1] - pe[1]);
   switch (kind) {
-    case "corner": {
-      const rows = 2 * l;
-      return (
-        <group position={[mid[0], 0, mid[1]]} rotation={[0, diag, 0]}>
-          <Block length={gapLen + 0.4} rows={rows} depth={rows * 1.2} height={rows * 0.55} level={2} c={c} walls={{ left: false, right: false }} />
-          {c.roofLevel > 0 && <RoofSlab alongLen={gapLen + 0.4} D={rows * 1.2} H={rows * 0.55} c={c} />}
-        </group>
-      );
-    }
-    case "curved_corner": {
-      // Čtvrtina elipsy od předního rohu konce tribuny za brankou k přednímu rohu konce tribuny na
-      // dlouhé straně. Je stejně vysoká a hluboká jako sousední tribuny, takže na ně přesně navazuje.
-      const bdN = dimsOf(Math.max(1, sideLevels[goalSide]));
-      const bdE = dimsOf(Math.max(1, sideLevels[longSide]));
-      const sag = rounds.has(goalSide) ? roundStandSag(Math.min(ex, 20)) : 0;
-      const frontGoal = Math.max(1, STAND_GAP + bdN.depth / 2 - sag);
-      const frontLong = STAND_GAP + bdE.depth / 2;
-      const ry = sx > 0 ? (sz > 0 ? 0 : Math.PI / 2) : sz < 0 ? Math.PI : -Math.PI / 2;
-      const swap = Math.abs(ry) === Math.PI / 2;
+    case "corner":
       return (
         <group position={[sx * ex, 0, sz * ez]} rotation={[0, ry, 0]}>
-          <CornerBowl
-            a={swap ? frontGoal : frontLong} b={swap ? frontLong : frontGoal}
-            rows={Math.max(3, Math.round((bdN.rows + bdE.rows) / 2))}
-            depth={(bdN.depth + bdE.depth) / 2} height={(bdN.height + bdE.height) / 2} c={c}
-          />
-          {c.roofLevel > 0 && (
-            <CornerRoof
-              a={swap ? frontGoal : frontLong} b={swap ? frontLong : frontGoal}
-              depth={(bdN.depth + bdE.depth) / 2} height={(bdN.height + bdE.height) / 2} c={c}
-            />
-          )}
+          <CornerWedge a={cornerA} b={cornerB} rows={cornerRows} depth={cornerDepth} height={cornerHeight} c={c} />
+          {c.roofLevel > 0 && <WedgeRoof a={cornerA} b={cornerB} depth={cornerDepth} height={cornerHeight} c={c} />}
         </group>
       );
-    }
+    case "curved_corner":
+      return (
+        <group position={[sx * ex, 0, sz * ez]} rotation={[0, ry, 0]}>
+          <CornerBowl a={cornerA} b={cornerB} rows={cornerRows} depth={cornerDepth} height={cornerHeight} c={c} />
+          {c.roofLevel > 0 && <CornerRoof a={cornerA} b={cornerB} depth={cornerDepth} height={cornerHeight} c={c} />}
+        </group>
+      );
     case "wing": {
       // Pokračování tribuny za brankou kolem rohu: stejná výška i hloubka jako ona.
       const goalLevel = sideLevels[goalSide];
