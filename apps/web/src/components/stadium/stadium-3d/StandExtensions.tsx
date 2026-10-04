@@ -104,10 +104,23 @@ function extrudeFlat(shape: THREE.Shape, height: number) {
 
 const hash = (i: number) => ((Math.imul(i + 1, 2654435761) >>> 0) % 10007) / 10007;
 
-/** Stupně, sedačky a diváci rozmístění po bodech `seats` (poloha a natočení čelem ke středu). */
+const CROWD_SHIRTS = [
+  "#FFFFFF", "#F87171", "#60A5FA", "#34D399", "#FBBF24", "#FB923C", "#38BDF8", "#E2E8F0", "#F43F5E", "#FDE047", "#A78BFA", "#93C5FD",
+];
+const CROWD_PANTS = ["#3B82F6", "#60A5FA", "#94A3B8", "#CBD5E1", "#D6D3D1", "#475569", "#2563EB"];
+const CROWD_SKINS = ["#FFF1F2", "#FFE4E6", "#FED7AA", "#FDE68A", "#E5B887", "#D4A373"];
+
+/**
+ * Sedačky a diváci rozmístění po bodech `seats` (poloha a natočení čelem ke středu).
+ * Diváci mají stejné proporce a barvy jako na skutečných tribunách: kalhoty, tělo v pestrém oblečení
+ * (část v klubových barvách), hlava v odstínech pleti a čepice.
+ */
 function SeatsAndCrowd({ seats, c }: { seats: Array<{ x: number; y: number; z: number; th: number }>; c: Common }) {
   const seatRef = useRef<THREE.InstancedMesh>(null);
-  const crowdRef = useRef<THREE.InstancedMesh>(null);
+  const pantsRef = useRef<THREE.InstancedMesh>(null);
+  const torsoRef = useRef<THREE.InstancedMesh>(null);
+  const headRef = useRef<THREE.InstancedMesh>(null);
+  const hatRef = useRef<THREE.InstancedMesh>(null);
   useLayoutEffect(() => {
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -115,31 +128,63 @@ function SeatsAndCrowd({ seats, c }: { seats: Array<{ x: number; y: number; z: n
     const one = new THREE.Vector3(1, 1, 1);
     const zero = new THREE.Vector3(0, 0, 0);
     const col = new THREE.Color();
+    const pick = <T,>(list: T[], i: number, salt: number) => list[Math.floor(hash(i * 7 + salt) * list.length) % list.length];
     seats.forEach((s, i) => {
       e.set(0, s.th, 0);
       q.setFromEuler(e);
       m.compose(new THREE.Vector3(s.x, s.y, s.z), q, one);
       seatRef.current?.setMatrixAt(i, m);
+
       const show = c.mode !== "training_day" && hash(i) < c.attendanceRatio;
-      m.compose(new THREE.Vector3(s.x, s.y + 0.45, s.z), q, show ? one : zero);
-      crowdRef.current?.setMatrixAt(i, m);
-      col.set(hash(i + 977) < 0.6 ? c.teamColor : c.secondaryColor);
-      crowdRef.current?.setColorAt(i, col);
+      const sc = show ? one : zero;
+      const yb = s.y + 0.14;
+      const at = (dy: number) => new THREE.Vector3(s.x, yb + dy, s.z);
+      m.compose(at(-0.14), q, sc);
+      pantsRef.current?.setMatrixAt(i, m);
+      m.compose(at(0.23), q, sc);
+      torsoRef.current?.setMatrixAt(i, m);
+      m.compose(at(0.46 + 0.13), q, sc);
+      headRef.current?.setMatrixAt(i, m);
+      m.compose(at(0.46 + 0.26 + 0.04), q, show && hash(i * 3 + 5) < 0.7 ? one : zero);
+      hatRef.current?.setMatrixAt(i, m);
+
+      const roll = hash(i + 977);
+      col.set(roll < 0.28 ? c.teamColor : roll < 0.4 ? c.secondaryColor : pick(CROWD_SHIRTS, i, 1));
+      torsoRef.current?.setColorAt(i, col);
+      col.set(pick(CROWD_PANTS, i, 2));
+      pantsRef.current?.setColorAt(i, col);
+      col.set(pick(CROWD_SKINS, i, 3));
+      headRef.current?.setColorAt(i, col);
+      col.set(pick([c.teamColor, c.secondaryColor, "#FFFFFF", "#EF4444", "#3B82F6", "#F59E0B", "#10B981", "#FDE047"], i, 4));
+      hatRef.current?.setColorAt(i, col);
     });
-    if (seatRef.current) seatRef.current.instanceMatrix.needsUpdate = true;
-    if (crowdRef.current) {
-      crowdRef.current.instanceMatrix.needsUpdate = true;
-      if (crowdRef.current.instanceColor) crowdRef.current.instanceColor.needsUpdate = true;
+    for (const r of [seatRef, pantsRef, torsoRef, headRef, hatRef]) {
+      if (!r.current) continue;
+      r.current.instanceMatrix.needsUpdate = true;
+      if (r.current.instanceColor) r.current.instanceColor.needsUpdate = true;
     }
   }, [seats, c.mode, c.attendanceRatio, c.teamColor, c.secondaryColor]);
+  const n = seats.length;
   return (
     <>
-      <instancedMesh ref={seatRef} args={[undefined, undefined, seats.length]} castShadow>
+      <instancedMesh ref={seatRef} args={[undefined, undefined, n]} castShadow>
         <boxGeometry args={[0.55, 0.08, 0.45]} />
         <meshStandardMaterial color={c.seatColor} roughness={0.5} />
       </instancedMesh>
-      <instancedMesh ref={crowdRef} args={[undefined, undefined, seats.length]} castShadow>
-        <boxGeometry args={[0.36, 0.7, 0.3]} />
+      <instancedMesh ref={pantsRef} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.31, 0.32, 0.34]} />
+        <meshStandardMaterial roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh ref={torsoRef} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.34, 0.46, 0.25]} />
+        <meshStandardMaterial roughness={0.85} />
+      </instancedMesh>
+      <instancedMesh ref={headRef} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.19, 0.26, 0.19]} />
+        <meshStandardMaterial roughness={0.7} />
+      </instancedMesh>
+      <instancedMesh ref={hatRef} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.2, 0.1, 0.22]} />
         <meshStandardMaterial roughness={0.8} />
       </instancedMesh>
     </>
