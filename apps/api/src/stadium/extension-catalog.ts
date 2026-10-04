@@ -173,6 +173,8 @@ export interface ExtOption {
   locked: boolean;
   lockReason?: string;
   lockDetail?: LockDetail;
+  /** Mobilní tribunka je dočasná: nová přístavba ji v místě nahradí (rozebere se, platí se cena nové). */
+  replaces?: boolean;
 }
 
 export interface ExtSlotState {
@@ -297,6 +299,14 @@ export function getExtensionSlots(
     let options: ExtOption[];
     if (!current) {
       options = ALLOWED[slot].map((k) => buildOption(k, slot, 1, 0, sides, ctx, built));
+    } else if (current.kind === "mobile") {
+      // Mobilní tribunku jde vylepšit, nebo nahradit jinou přístavbou na úrovni 1. Přírůstek míst
+      // je rozdíl proti rozebrané mobilní tribunce (může být záporný).
+      const upgrade = current.level >= 3 ? [] : [buildOption("mobile", slot, current.level + 1, current.level, sides, ctx, built)];
+      const replacements = ALLOWED[slot]
+        .filter((k) => k !== "mobile")
+        .map((k) => ({ ...buildOption(k, slot, 1, 0, sides, ctx, built), replaces: true, capacityGain: extCapacity(k, 1) - extCapacity("mobile", current.level) }));
+      options = [...upgrade, ...replacements];
     } else if (current.level >= 3) {
       options = [];
     } else {
