@@ -30,6 +30,14 @@ const Stadium3DViewer = clientOnly(
 
 type ViewMode = "2d" | "3d";
 
+/** Čtyři strany tribun a místo pro jejich přístavbu. Pořadí je pořadí karet. */
+const STAND_SIDE_ROWS = [
+  { facility: "stand_main", slot: "ext_main" },
+  { facility: "stand_opposite", slot: "ext_opposite" },
+  { facility: "stand_goal_west", slot: "ext_goal_west" },
+  { facility: "stand_goal_east", slot: "ext_goal_east" },
+] as const;
+
 /** Přístavba tribuny: místo, druh a úroveň. Stejný tvar čte 3D scéna. */
 interface ExtensionInstance { slot: string; kind: string; level: number }
 
@@ -598,6 +606,44 @@ export default function StadiumPage() {
     await refresh();
     setActing(null);
   };
+
+  /** Nabídka přístavby v jednom místě: druhy s cenou, zámky a tlačítky Náhled a Postavit. */
+  const renderExtOptions = (slot: ExtSlotData) => (
+    <div className="space-y-3">
+      {slot.built && slot.options.length === 0 && (
+        <div className="text-sm text-pitch-600 font-heading font-bold">Přístavba je na maximální úrovni</div>
+      )}
+      {slot.options.map((o) => {
+        const previewing = extPreview?.item.slot === slot.slot && extPreview.item.kind === o.kind;
+        return (
+          <div key={o.kind} className={`rounded-lg p-3 space-y-2 ${previewing ? "bg-pitch-50 border border-pitch-400" : "bg-gray-50"}`}>
+            <div className="font-heading font-bold text-base">
+              {o.label} <span className="text-muted font-normal">· úroveň {o.level}</span>
+            </div>
+            <div className="text-sm text-muted leading-snug">{o.description}</div>
+            <div className="text-sm">
+              <span className="font-heading font-bold tabular-nums">+{o.capacityGain} míst</span>{" "}
+              <span className="text-muted">·</span>{" "}
+              <span className="font-heading font-bold tabular-nums">{formatCZK(o.cost)}</span>
+            </div>
+            {o.locked && <LockDetail detail={o.lockDetail} fallback={o.lockReason} />}
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => showExtPreview(slot, o)} className="btn btn-sm min-h-11 flex-1 sm:flex-none">
+                Náhled ve 3D
+              </button>
+              <button
+                onClick={() => handleBuildExtension(slot, o)}
+                disabled={o.locked || (team?.budget ?? 0) < o.cost || !!acting}
+                className="btn btn-primary btn-sm min-h-11 flex-1 sm:flex-none"
+              >
+                {acting === `ext-${slot.slot}` ? "…" : slot.built ? "Vylepšit" : "Postavit"}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!stadium || !team) return <div className="page-container">Stadion nenalezen.</div>;
@@ -1245,23 +1291,98 @@ export default function StadiumPage() {
 
       {/* ═══ Zázemí ═══ */}
       {stadium.standExtensions && (
-        <Sekce titul="Přístavby tribun" doplnek={`celkem +${stadium.standExtensions.capacity} míst`}>
+        <Sekce titul="Tribuny a přístavby" doplnek={`kapacita ${stadium.capacity} míst`}>
           <p className="text-sm text-muted leading-snug">
-            Do každého místa jde postavit jedna přístavba a pak ji vylepšovat. Než ji postavíš, podívej se na ni v náhledu ve 3D areálu.
+            Každá strana je jedna karta: vylepšení tribuny a její přístavba pohromadě. Rohy jsou pod nimi. Než přístavbu postavíš,
+            podívej se na ni v náhledu ve 3D areálu.
           </p>
           {extError && <div className="text-sm text-card-red font-heading font-bold">{extError}</div>}
+
+          <Podnadpis>Strany</Podnadpis>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {stadium.standExtensions.slots.map((slot) => {
+            {STAND_SIDE_ROWS.map(({ facility, slot: slotId }) => {
+              const slot = stadium.standExtensions!.slots.find((x) => x.slot === slotId);
+              if (!slot) return null;
+              const level = stadium.facilities[facility] ?? 0;
+              const upgrade = stadium.upgrades.find((u) => u.facility === facility);
+              const canUpgrade = !!upgrade && !upgrade.locked && team.budget >= upgrade.cost;
+              const open = openSlot === slotId;
+              const extSummary = slot.built ? `${slot.built.label} ${slot.built.level}/3` : "bez přístavby";
+              const hint = upgrade
+                ? `Tribuna jde vylepšit na ${upgrade.nextLevel}`
+                : slot.options.length > 0 ? "Tribuna je na maximu, přístavbu lze postavit" : "Vše na maximu";
+              return (
+                <div key={slotId} className="rounded-xl border border-gray-300 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setOpenSlot(open ? null : slotId)}
+                    aria-expanded={open}
+                    className="w-full flex items-center justify-between gap-3 p-4 text-left min-h-11"
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-heading font-bold text-base">
+                        {FACILITY_LABELS[facility] ?? facility}
+                      </span>
+                      <span className="block text-sm text-muted leading-snug">
+                        {level > 0 ? `Úroveň ${level} z 3` : "Zatím nestojí"} · {extSummary}
+                      </span>
+                      <span className="block text-sm text-pitch-600 leading-snug">{hint}</span>
+                    </span>
+                    <span className="text-xl shrink-0" aria-hidden>{open ? "▾" : "▸"}</span>
+                  </button>
+                  {open && (
+                    <div className="p-4 pt-0 space-y-4">
+                      <div className="space-y-2">
+                        <div className="font-heading font-bold text-base">Tribuna</div>
+                        <div className="text-sm text-muted leading-snug">
+                          {FACILITY_DESCRIPTIONS[facility]?.[level] ?? LEVEL_LABELS[level]}
+                        </div>
+                        {upgrade && !upgrade.locked && (
+                          <div className="rounded-lg bg-gray-50 p-3 space-y-2">
+                            <div className="text-sm">
+                              <span className="font-heading font-bold">Úroveň {upgrade.nextLevel}</span>{" "}
+                              <span className="text-muted">·</span>{" "}
+                              <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span>
+                            </div>
+                            <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
+                            <button
+                              onClick={() => handleUpgrade(upgrade.facility, upgrade.label, upgrade.cost, upgrade.effect)}
+                              disabled={!canUpgrade || !!acting}
+                              className="btn btn-primary btn-sm min-h-11 w-full sm:w-auto"
+                            >
+                              {acting === facility ? "…" : "Vylepšit tribunu"}
+                            </button>
+                          </div>
+                        )}
+                        {upgrade?.locked && (
+                          <LockDetail detail={upgrade.lockDetail} hint={upgrade.lockHint} fallback={upgrade.lockReason} />
+                        )}
+                        {!upgrade && level >= 3 && (
+                          <div className="text-sm text-pitch-600 font-heading font-bold">Tribuna je na maximální úrovni</div>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <div className="font-heading font-bold text-base">
+                          Přístavba <span className="text-muted font-normal">· {extSummary}</span>
+                        </div>
+                        {renderExtOptions(slot)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <Podnadpis>Rohy</Podnadpis>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {stadium.standExtensions.slots.filter((x) => x.type === "corner").map((slot) => {
               const open = openSlot === slot.slot;
               const available = slot.options.filter((o) => !o.locked).length;
-              const summary = slot.built
-                ? `${slot.built.label}, úroveň ${slot.built.level} z 3`
-                : "Zatím tu nic nestojí";
+              const summary = slot.built ? `${slot.built.label}, úroveň ${slot.built.level} z 3` : "Zatím tu nic nestojí";
               const hint = slot.options.length === 0
                 ? "Maximální úroveň"
-                : slot.built
-                  ? "Lze vylepšit"
-                  : `${available} z ${slot.options.length} možností k postavení`;
+                : slot.built ? "Lze vylepšit" : `${available} z ${slot.options.length} možností k postavení`;
               return (
                 <div key={slot.slot} className="rounded-xl border border-gray-300 overflow-hidden">
                   <button
@@ -1277,42 +1398,7 @@ export default function StadiumPage() {
                     </span>
                     <span className="text-xl shrink-0" aria-hidden>{open ? "▾" : "▸"}</span>
                   </button>
-                  {open && (
-                    <div className="p-4 pt-0 space-y-3">
-                      {slot.built && slot.options.length === 0 && (
-                        <div className="text-sm text-pitch-600 font-heading font-bold">Maximální úroveň</div>
-                      )}
-                      {slot.options.map((o) => {
-                        const previewing = extPreview?.item.slot === slot.slot && extPreview.item.kind === o.kind;
-                        return (
-                          <div key={o.kind} className={`rounded-lg p-3 space-y-2 ${previewing ? "bg-pitch-50 border border-pitch-400" : "bg-gray-50"}`}>
-                            <div className="font-heading font-bold text-base">
-                              {o.label} <span className="text-muted font-normal">· úroveň {o.level}</span>
-                            </div>
-                            <div className="text-sm text-muted leading-snug">{o.description}</div>
-                            <div className="text-sm">
-                              <span className="font-heading font-bold tabular-nums">+{o.capacityGain} míst</span>{" "}
-                              <span className="text-muted">·</span>{" "}
-                              <span className="font-heading font-bold tabular-nums">{formatCZK(o.cost)}</span>
-                            </div>
-                            {o.locked && <LockDetail detail={o.lockDetail} fallback={o.lockReason} />}
-                            <div className="flex flex-wrap gap-2">
-                              <button onClick={() => showExtPreview(slot, o)} className="btn btn-sm min-h-11 flex-1 sm:flex-none">
-                                Náhled ve 3D
-                              </button>
-                              <button
-                                onClick={() => handleBuildExtension(slot, o)}
-                                disabled={o.locked || team.budget < o.cost || !!acting}
-                                className="btn btn-primary btn-sm min-h-11 flex-1 sm:flex-none"
-                              >
-                                {acting === `ext-${slot.slot}` ? "…" : slot.built ? "Vylepšit" : "Postavit"}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {open && <div className="p-4 pt-0">{renderExtOptions(slot)}</div>}
                 </div>
               );
             })}
@@ -1322,7 +1408,7 @@ export default function StadiumPage() {
 
       <SectionLabel>Zázemí</SectionLabel>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {Object.entries(stadium.facilities).filter(([key]) => key !== "stands").map(([key, level]) => {
+        {Object.entries(stadium.facilities).filter(([key]) => key !== "stands" && !key.startsWith("stand_")).map(([key, level]) => {
           const upgrade = stadium.upgrades.find((u) => u.facility === key);
           const canUpgrade = upgrade && !upgrade.locked && team.budget >= upgrade.cost;
 

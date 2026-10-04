@@ -426,7 +426,7 @@ function RaisedTier({ width, spec, c }: { width: number; spec: ReturnType<typeof
 }
 
 /** Postranní přístavby v rámci tribuny (z = 0 přední hrana, zadní hrana tribuny v z = D). */
-function SideKind({ kind, level, length, standLevel, c }: { kind: string; level: number; length: number; standLevel: number; c: Common }) {
+function SideKind({ kind, level, length, standLevel, side, c }: { kind: string; level: number; length: number; standLevel: number; side: SceneSide; c: Common }) {
   const l = lv(level);
   const sd = dimsOf(standLevel);
   const D = sd.depth;
@@ -470,12 +470,26 @@ function SideKind({ kind, level, length, standLevel, c }: { kind: string; level:
     }
     case "footbridge": {
       const w = length * (0.5 + 0.12 * l);
+      // Na západní straně stojí střídačky (zhruba |x| < 12 podél strany): lávka tam vynechá úsek a vede
+      // jen po stranách od nich. Na východní straně vede souvisle.
+      const GAP = side === "west" ? 12.5 : 0;
+      const spans: Array<[number, number]> = GAP > 0
+        ? [[-w / 2, -GAP], [GAP, w / 2]].filter(([x0, x1]) => x1 - x0 > 1) as Array<[number, number]>
+        : [[-w / 2, w / 2]];
       return (
         <group position={[0, 0, -1.8]}>
-          <Box size={[w, 0.18, 1.6]} position={[0, 0.8, 0]} color={WOOD} />
-          <Posts xs={[-w / 2 + 0.3, -w / 6, w / 6, w / 2 - 0.3]} zs={[-0.6, 0.6]} height={0.8} color={WOOD} />
-          <Box size={[w, 0.08, 0.08]} position={[0, 1.7, 0.75]} color={WOOD} />
-          <Box size={[w, 0.08, 0.08]} position={[0, 1.2, 0.75]} color={WOOD} />
+          {spans.map(([x0, x1]) => {
+            const len = x1 - x0;
+            const cx = (x0 + x1) / 2;
+            return (
+              <group key={x0} position={[cx, 0, 0]}>
+                <Box size={[len, 0.18, 1.6]} position={[0, 0.8, 0]} color={WOOD} />
+                <Posts xs={[-len / 2 + 0.3, 0, len / 2 - 0.3]} zs={[-0.6, 0.6]} height={0.8} color={WOOD} />
+                <Box size={[len, 0.08, 0.08]} position={[0, 1.7, 0.75]} color={WOOD} />
+                <Box size={[len, 0.08, 0.08]} position={[0, 1.2, 0.75]} color={WOOD} />
+              </group>
+            );
+          })}
         </group>
       );
     }
@@ -720,7 +734,7 @@ function One({ item, sideLevels, rounds, c }: { item: ExtensionInstance; sideLev
     const { position, rotY, length } = sideFrame(side, standLevel);
     return (
       <group position={position} rotation={[0, rotY, 0]}>
-        <SideKind kind={item.kind} level={item.level} length={length} standLevel={standLevel} c={c} />
+        <SideKind kind={item.kind} level={item.level} length={length} standLevel={standLevel} side={side} c={c} />
       </group>
     );
   }
