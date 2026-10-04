@@ -593,6 +593,15 @@ Občas je mezi nimi klenot. Navazuje na akademii a odchovance.
 Autobus na venkovní zápas, choreo na derby. Navazuje na party fanoušků a jejich spokojenost,
 stojí peníze a organizační čas.
 
+# K. Stadion
+
+## #30 — Tribuny po jedné, každá jiná ⭐
+Přístavba tribun se předělá tak, aby se od 2. úrovně stadionu stavěla každá tribuna zvlášť
+(hlavní, protilehlá, za brankami), s vlastním vzhledem a kapacitou: kryté sezení, stání na valu,
+dřevěná tribunka, betonové stupně, zastřešená hlavní tribuna atd. Stadiony pak nebudou jednolité
+jako teď, každý klub bude mít svůj ráz podle toho, co a kde postavil. Navazuje na 3D stadion
+(vzhled tribun) a na návštěvnost a kapacitu (každá tribuna přidá svou kapacitu a cenu).
+
 ---
 
 # Co schválně NEDOPORUČUJU
