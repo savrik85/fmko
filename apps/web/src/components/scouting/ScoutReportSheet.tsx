@@ -163,11 +163,19 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
                 <div className="font-heading font-[900] text-2xl tabular-nums">{ratingText(r.ratingLo, r.ratingHi)}</div>
                 <div className="text-sm text-muted">{r.visits === 1 ? "viděl ho jednou" : `viděl ho ${r.visits}×`}</div>
               </div>
-              <div className="rounded-xl bg-white/70 border border-gray-100 p-3 text-center">
-                <div className="text-sm text-muted font-heading">Dotáhne to na</div>
-                <div className="font-heading font-[900] text-2xl tabular-nums">{r.potentialLo != null ? ratingText(r.potentialLo, r.potentialHi) : "?"}</div>
-                <div className="text-sm text-muted">názor skauta</div>
-              </div>
+              {r.potentialLo != null ? (
+                <div className="rounded-xl bg-white/70 border border-gray-100 p-3 text-center">
+                  <div className="text-sm text-muted font-heading">Dotáhne to na</div>
+                  <div className="font-heading font-[900] text-2xl tabular-nums">{ratingText(r.potentialLo, r.potentialHi)}</div>
+                  <div className="text-sm text-muted">názor skauta</div>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-white/70 border border-gray-100 p-3 text-center">
+                  <div className="text-sm text-muted font-heading">Dojíždění</div>
+                  <div className="font-heading font-[900] text-2xl tabular-nums">{r.distanceKm} km</div>
+                  <div className="text-sm text-muted">{r.distanceKm <= 15 ? "kousek" : r.distanceKm <= 30 ? "dá se to" : "daleko"}</div>
+                </div>
+              )}
             </div>
 
             {(r.pros.length > 0 || r.cons.length > 0) && (
