@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
-import { calculateFacilityEffects, generateStadium, getUpgradeOptions } from "./stadium-generator";
+import { calculateFacilityEffects, FACILITY_LABELS, generateStadium, getUpgradeOptions, UPGRADE_COSTS } from "./stadium-generator";
+import { STAND_SIDES, STAND_SIDE_CAPACITY } from "./stands-model";
 import type { StadiumFacilityEffects } from "./stadium-generator";
 
 function lightingUpgrade(currentLevel: number) {
@@ -174,20 +175,21 @@ describe("kapacita podle stadionu, ne podle adresy", () => {
  * „+190 kapacita" a dostal 100. Text se teď počítá z týchž čísel jako efekt.
  */
 describe("slib v nabídce upgradu sedí se skutečností", () => {
-  const nabidka = (stands: number) =>
-    getUpgradeOptions({ stands }, 100, 100, 10, true).find((o) => o.facility === "stands");
+  // Měří se hlavní tribuna, ostatní strany nejsou postavené.
+  const nabidka = (level: number) =>
+    getUpgradeOptions({ stand_main: level }, 100, 100, 10, true).find((o) => o.facility === "stand_main");
 
-  const kapacita = (stands: number) => calculateFacilityEffects({ stands }).capacityBonus;
+  const kapacita = (level: number) => calculateFacilityEffects({ stand_main: level }).capacityBonus;
 
   it.each([0, 1, 2])("z L%i na další úroveň přidá přesně to, co slibuje", (current) => {
     const slib = nabidka(current)!.effect;
     const skutecnost = kapacita(current + 1) - kapacita(current);
-    expect(slib).toContain(`+${skutecnost} kapacita`);
+    expect(slib).toContain(`+${skutecnost} míst`);
   });
 
   it("součet slíbených přírůstků dá celkový bonus L3", () => {
     const soucet = [0, 1, 2]
-      .map((l) => Number(nabidka(l)!.effect.match(/\+(\d+) kapacita/)![1]))
+      .map((l) => Number(nabidka(l)!.effect.match(/\+(\d+) míst/)![1]))
       .reduce((a, b) => a + b, 0);
     expect(soucet).toBe(kapacita(3));
   });
@@ -207,7 +209,10 @@ describe("slib v nabídce upgradu sedí se skutečností", () => {
  */
 describe("slib v nabídce sedí u všech zařízení", () => {
   const ZMERITELNE: Record<string, { hodnota: (e: StadiumFacilityEffects) => number; procenta?: boolean }> = {
-    stands: { hodnota: (e) => e.capacityBonus },
+    stand_main: { hodnota: (e) => e.capacityBonus },
+    stand_opposite: { hodnota: (e) => e.capacityBonus },
+    stand_goal_west: { hodnota: (e) => e.capacityBonus },
+    stand_goal_east: { hodnota: (e) => e.capacityBonus },
     changing_rooms: { hodnota: (e) => e.homeMoraleBonus },
     showers: { hodnota: (e) => e.conditionRegenBonus },
     lighting: { hodnota: (e) => e.attendanceBonus, procenta: true },
@@ -261,7 +266,10 @@ describe("dražší stupeň dá víc než levnější", () => {
     showers: (e) => e.conditionRegenBonus,
     toilets: (e) => e.matchSatisfactionBonus,
     ultras_stand: (e) => e.homeCrowdMoraleBonus,
-    stands: (e) => e.capacityBonus,
+    stand_main: (e) => e.capacityBonus,
+    stand_opposite: (e) => e.capacityBonus,
+    stand_goal_west: (e) => e.capacityBonus,
+    stand_goal_east: (e) => e.capacityBonus,
     security: (e) => e.securityRiskReduction,
   };
 
@@ -273,4 +281,54 @@ describe("dražší stupeň dá víc než levnější", () => {
       expect(new Set(prirustky).size).toBeGreaterThan(1);
     });
   }
+});
+
+describe("tribuny po stranách v generátoru", () => {
+  it("každá strana je zařízení s cenami", () => {
+    for (const s of STAND_SIDES) {
+      expect(FACILITY_LABELS[s]).toBeTruthy();
+      expect(UPGRADE_COSTS[s]).toHaveLength(4);
+    }
+  });
+
+  it("kapacita ze stran: čtyři strany L2 dají +290", () => {
+    const fx = calculateFacilityEffects({
+      stand_main: 2, stand_opposite: 2, stand_goal_west: 2, stand_goal_east: 2, stands: 2,
+    });
+    expect(fx.capacityBonus).toBe(290);
+  });
+
+  it("starý tvar (jen stands) funguje dál", () => {
+    expect(calculateFacilityEffects({ stands: 3 }).capacityBonus).toBe(500);
+  });
+
+  it("jedna postavená strana odemkne lóži a dá kapacitu jen té straně", () => {
+    const fx = calculateFacilityEffects({
+      stand_main: 3, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 0, vip_box: 1,
+    });
+    expect(fx.capacityBonus).toBe(STAND_SIDE_CAPACITY.stand_main[3] - fx.vipBoxCapacityLoss);
+    expect(fx.vipBoxEffectiveLevel).toBe(1);
+  });
+
+  it("bez jediné tribuny lóže nefunguje", () => {
+    const fx = calculateFacilityEffects({
+      stand_main: 0, stand_opposite: 0, stand_goal_west: 0, stand_goal_east: 0, vip_box: 2,
+    });
+    expect(fx.vipBoxEffectiveLevel).toBe(0);
+  });
+
+  it("nabídka upgradů obsahuje strany a ne odvozené `stands`", () => {
+    const o = getUpgradeOptions({ stand_main: 2, stand_opposite: 2, stand_goal_west: 2, stand_goal_east: 2, stands: 2 }, 100, 100, 5, true);
+    const keys = o.map((x) => x.facility);
+    expect(keys).not.toContain("stands");
+    for (const s of STAND_SIDES) expect(keys).toContain(s);
+    const main = o.find((x) => x.facility === "stand_main")!;
+    expect(main.nextLevel).toBe(3);
+    expect(main.effect).toContain("+70 míst");
+  });
+
+  it("střecha se odemkne, když stojí aspoň jedna strana", () => {
+    const o = getUpgradeOptions({ stand_goal_east: 1, stands: 1, roof: 0 }, 100, 100, 5, true);
+    expect(o.find((x) => x.facility === "roof")!.locked).toBe(false);
+  });
 });
