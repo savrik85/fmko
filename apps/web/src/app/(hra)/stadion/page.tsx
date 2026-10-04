@@ -30,6 +30,30 @@ const Stadium3DViewer = clientOnly(
 
 type ViewMode = "2d" | "3d";
 
+/** Přístavba tribuny: místo, druh a úroveň. Stejný tvar čte 3D scéna. */
+interface ExtensionInstance { slot: string; kind: string; level: number }
+
+interface ExtOptionData {
+  kind: string;
+  label: string;
+  description: string;
+  level: number;
+  cost: number;
+  capacityGain: number;
+  capacity: number;
+  locked: boolean;
+  lockReason?: string;
+  lockDetail?: LockDetailData;
+}
+
+interface ExtSlotData {
+  slot: string;
+  type: "side" | "corner";
+  label: string;
+  built: { kind: string; label: string; level: number } | null;
+  options: ExtOptionData[];
+}
+
 interface UpgradeOption {
   facility: string;
   label: string;
@@ -106,6 +130,8 @@ interface PitchCare {
 }
 
 interface StadiumData {
+  /** Přístavby tribun: místa, co v nich stojí a co se tam dá postavit. */
+  standExtensions?: { capacity: number; slots: ExtSlotData[] };
   /** Počasí nad areálem právě teď — počasí herního dne, ne zápasového. */
   currentWeather?: string | null;
   currentTemperature?: number | null;
@@ -407,6 +433,9 @@ export default function StadiumPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
   const [openPicker, setOpenPicker] = useState<keyof Customization | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  /** Přístavba, na kterou se hráč dívá v náhledu (průhledná ve 3D, nic se nestaví). */
+  const [extPreview, setExtPreview] = useState<{ item: ExtensionInstance; option: ExtOptionData; slotLabel: string } | null>(null);
+  const [extError, setExtError] = useState<string | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -530,6 +559,43 @@ export default function StadiumPage() {
     setActing(null);
   };
 
+  const builtExtensions: ExtensionInstance[] = (stadium?.standExtensions?.slots ?? [])
+    .filter((x) => x.built)
+    .map((x) => ({ slot: x.slot, kind: x.built!.kind, level: x.built!.level }));
+
+  const showExtPreview = (slot: ExtSlotData, option: ExtOptionData) => {
+    setExtError(null);
+    setExtPreview({ item: { slot: slot.slot, kind: option.kind, level: option.level }, option, slotLabel: slot.label });
+    // Náhled je vidět jen ve 3D areálu, takže se na něj přepne a stránka odroluje nahoru.
+    switchView("3d");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleBuildExtension = async (slot: ExtSlotData, option: ExtOptionData) => {
+    if (!teamId || acting) return;
+    const ok = await confirm({
+      title: `${slot.built ? "Vylepšit" : "Postavit"} ${option.label}?`,
+      description: `${slot.label}: +${option.capacityGain} míst`,
+      details: [{ label: "Cena", value: `-${formatCZK(option.cost)}`, color: "text-card-red" }],
+      confirmLabel: `${slot.built ? "Vylepšit" : "Postavit"} za ${formatCZK(option.cost)}`,
+    });
+    if (!ok) return;
+    setActing(`ext-${slot.slot}`);
+    setExtError(null);
+    try {
+      await apiFetch(`/api/teams/${teamId}/stadium/extension`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot: slot.slot, kind: option.kind }),
+      });
+      setExtPreview(null);
+    } catch (e) {
+      console.error("stadium extension failed:", e);
+      setExtError(e instanceof Error ? e.message : "Stavba se nepovedla");
+    }
+    await refresh();
+    setActing(null);
+  };
+
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
   if (!stadium || !team) return <div className="page-container">Stadion nenalezen.</div>;
 
@@ -540,6 +606,8 @@ export default function StadiumPage() {
       <Stadium3DViewer
         open={viewerOpen}
         onClose={() => setViewerOpen(false)}
+        standExtensions={builtExtensions}
+        extensionPreview={extPreview?.item ?? null}
         pitchCondition={stadium.pitchCondition}
         pitchType={stadium.pitchType}
         facilities={stadium.facilities}
@@ -592,6 +660,8 @@ export default function StadiumPage() {
             >
               {!viewerOpen && (
                 <Stadium3D
+                  standExtensions={builtExtensions}
+                  extensionPreview={extPreview?.item ?? null}
                   pitchCondition={stadium.pitchCondition}
                   pitchType={stadium.pitchType}
                   facilities={stadium.facilities}
@@ -621,6 +691,41 @@ export default function StadiumPage() {
                 dva prsty = otáčení
               </div>
             </div>
+            {extPreview && (
+              <div className="rounded-xl border border-pitch-400 bg-pitch-50 p-3 space-y-2">
+                <div className="font-heading font-bold text-base">
+                  Náhled: {extPreview.option.label}, úroveň {extPreview.option.level}
+                </div>
+                <div className="text-sm leading-snug">
+                  {extPreview.slotLabel}. Kapacita{" "}
+                  <span className="font-heading font-bold tabular-nums">{stadium.capacity}</span>
+                  {" → "}
+                  <span className="font-heading font-bold tabular-nums">{stadium.capacity + extPreview.option.capacityGain}</span>
+                  {" "}(+{extPreview.option.capacityGain} míst), cena{" "}
+                  <span className="font-heading font-bold tabular-nums">{formatCZK(extPreview.option.cost)}</span>.
+                  Ve scéně je přístavba průhledná.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(() => {
+                    const slot = stadium.standExtensions?.slots.find((x) => x.slot === extPreview.item.slot);
+                    const canBuild = !extPreview.option.locked && team.budget >= extPreview.option.cost && !acting;
+                    return slot ? (
+                      <button
+                        onClick={() => handleBuildExtension(slot, extPreview.option)}
+                        disabled={!canBuild}
+                        className="btn btn-primary btn-sm min-h-11"
+                      >
+                        {slot.built ? "Vylepšit" : "Postavit"}
+                      </button>
+                    ) : null;
+                  })()}
+                  <button onClick={() => setExtPreview(null)} className="btn btn-sm min-h-11">Zrušit náhled</button>
+                </div>
+                {extPreview.option.locked && (
+                  <LockDetail detail={extPreview.option.lockDetail} fallback={extPreview.option.lockReason} />
+                )}
+              </div>
+            )}
             {/* Kdo obsadí sektor hostů. Ve 3D je vidět jen v zápasovém režimu,
                 takže to musí být čitelné i takhle. */}
             {stadium.sektory?.hoste && (
@@ -1136,6 +1241,63 @@ export default function StadiumPage() {
       )}
 
       {/* ═══ Zázemí ═══ */}
+      {stadium.standExtensions && (
+        <Sekce titul="Přístavby tribun" doplnek={`celkem +${stadium.standExtensions.capacity} míst`}>
+          <p className="text-sm text-muted leading-snug">
+            Do každého místa jde postavit jedna přístavba a pak ji vylepšovat. Než ji postavíš, podívej se na ni v náhledu ve 3D areálu.
+          </p>
+          {extError && <div className="text-sm text-card-red font-heading font-bold">{extError}</div>}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {stadium.standExtensions.slots.map((slot) => {
+              return (
+                <div key={slot.slot} className="rounded-xl border border-gray-300 p-4 space-y-3">
+                  <div>
+                    <div className="font-heading font-bold text-base">{slot.label}</div>
+                    <div className="text-sm text-muted leading-snug">
+                      {slot.built
+                        ? `${slot.built.label}, úroveň ${slot.built.level} z 3`
+                        : "Zatím tu nic nestojí"}
+                    </div>
+                  </div>
+                  {slot.built && slot.options.length === 0 && (
+                    <div className="text-sm text-pitch-600 font-heading font-bold">Maximální úroveň</div>
+                  )}
+                  {slot.options.map((o) => {
+                    const previewing = extPreview?.item.slot === slot.slot && extPreview.item.kind === o.kind;
+                    return (
+                      <div key={o.kind} className={`rounded-lg p-3 space-y-2 ${previewing ? "bg-pitch-50 border border-pitch-400" : "bg-gray-50"}`}>
+                        <div className="font-heading font-bold text-base">
+                          {o.label} <span className="text-muted font-normal">· úroveň {o.level}</span>
+                        </div>
+                        <div className="text-sm text-muted leading-snug">{o.description}</div>
+                        <div className="text-sm">
+                          <span className="font-heading font-bold tabular-nums">+{o.capacityGain} míst</span>{" "}
+                          <span className="text-muted">·</span>{" "}
+                          <span className="font-heading font-bold tabular-nums">{formatCZK(o.cost)}</span>
+                        </div>
+                        {o.locked && <LockDetail detail={o.lockDetail} fallback={o.lockReason} />}
+                        <div className="flex flex-wrap gap-2">
+                          <button onClick={() => showExtPreview(slot, o)} className="btn btn-sm min-h-11 flex-1 sm:flex-none">
+                            Náhled ve 3D
+                          </button>
+                          <button
+                            onClick={() => handleBuildExtension(slot, o)}
+                            disabled={o.locked || team.budget < o.cost || !!acting}
+                            className="btn btn-primary btn-sm min-h-11 flex-1 sm:flex-none"
+                          >
+                            {acting === `ext-${slot.slot}` ? "…" : slot.built ? "Vylepšit" : "Postavit"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </Sekce>
+      )}
+
       <SectionLabel>Zázemí</SectionLabel>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {Object.entries(stadium.facilities).filter(([key]) => key !== "stands").map(([key, level]) => {

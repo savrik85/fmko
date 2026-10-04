@@ -16,6 +16,7 @@ import { TeamFlag } from "./TeamFlag";
 import { HostujiciSektor, StandRoof, UltrasSector } from "./StadiumExtras";
 import { VipBox, vipGallerySightlineY } from "./VipBox";
 import { getSideLevels, vipBoxSideFor } from "./stand-levels";
+import { StandExtensions, type ExtensionInstance } from "./StandExtensions";
 import { Floodlights } from "./Floodlights";
 import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
@@ -89,6 +90,10 @@ export interface LastMatchScore {
 }
 
 interface Stadium3DProps {
+  /** Postavené přístavby tribun (rohy, patra, křídla…) z odpovědi API. */
+  standExtensions?: ExtensionInstance[];
+  /** Přístavba, kterou hráč zvažuje: kreslí se průhledně přes stav areálu. */
+  extensionPreview?: ExtensionInstance | null;
   pitchCondition: number;
   pitchType: string;
   facilities: Record<string, number>;
@@ -139,6 +144,8 @@ interface Stadium3DProps {
 }
 
 export function Stadium3D({
+  standExtensions,
+  extensionPreview,
   pitchCondition,
   pitchType,
   facilities,
@@ -568,6 +575,17 @@ export function Stadium3D({
               attendanceRatio={zaplneniStrany("west")}
             />
           )}
+
+          {/* Přístavby tribun a průhledný náhled té, kterou hráč zvažuje */}
+          <StandExtensions
+            extensions={standExtensions ?? []}
+            preview={extensionPreview ?? null}
+            sideLevels={sideLevels}
+            standColor={standColor}
+            seatColor={seatColor}
+            accentColor={accentColor}
+            teamColor={teamColor}
+          />
 
           {/* Zastřešení tribun */}
           <StandRoof sideLevels={sideLevels} roofLevel={f.roof ?? 0} roofColor={roofColor} weather={weather} />
