@@ -3014,6 +3014,17 @@ teamsRouter.get("/:id/players/:playerId/condition-log", async (c) => {
   });
 });
 
+// GET /api/teams/:id/transfer-overview — přehled přestupů klubu (příchody a odchody)
+teamsRouter.get("/:id/transfer-overview", async (c) => {
+  const teamId = c.req.param("id");
+  const { loadTransferOverview } = await import("../transfers/transfer-overview");
+  const transfers = await loadTransferOverview(c.env.DB, teamId, 40).catch((e) => {
+    logger.warn({ module: "teams", teamId }, "přehled přestupů", e);
+    return [];
+  });
+  return c.json({ transfers });
+});
+
 // GET /api/teams/:id/players/:playerId/career-history — historie klubů hráče
 teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
   const playerId = c.req.param("playerId");
