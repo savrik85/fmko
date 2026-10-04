@@ -932,3 +932,73 @@ function Klec({ level, length, depth, height }: {
     </group>
   );
 }
+
+interface StandBlockProps {
+  /** Délka podél strany (m). */
+  length: number;
+  rows: number;
+  /** Celková hloubka a výška stupňů (m). */
+  depth: number;
+  height: number;
+  /** Styl: do L2 dřevěné lavice a dřevo, od L3 beton a plastová sedadla. */
+  level?: number;
+  standColor: string;
+  seatColor: string;
+  teamColor: string;
+  secondaryColor?: string;
+  attendanceRatio?: number;
+  mode?: StadiumMode;
+  reducedDetail?: boolean;
+  isSnow?: boolean;
+  /** Čelní panel a zábradlí. */
+  panel?: boolean;
+}
+
+/**
+ * Kus tribuny postavený ze stejných součástí jako `Stand` (stupně s texturou, sedačky, diváci).
+ * Používají ho přístavby, aby vypadaly jako pokračování tribuny, ne jako cizí těleso.
+ * Lokálně: x podél strany, z = 0 přední hrana, stupně stoupají do +z.
+ */
+export function StandBlock({
+  length, rows, depth, height, level = 2, standColor, seatColor, teamColor, secondaryColor = "#FFFFFF",
+  attendanceRatio = 0.6, mode = "match_day", reducedDetail = false, isSnow = false, panel = true,
+}: StandBlockProps) {
+  const seatDepth = depth / Math.max(rows, 1);
+  const seatRise = height / Math.max(rows, 1);
+  const columns = Math.max(1, Math.floor(length * (reducedDetail ? 0.7 : 1.2)));
+  const seatSize = 0.7;
+  const woodTexture = useMemo(() => generateWoodTexture(standColor, 4, 2), [standColor]);
+  const seatWoodTexture = useMemo(() => generateWoodTexture(seatColor, 6, 1), [seatColor]);
+  const concreteTexture = useMemo(() => generateConcreteTexture(standColor, 5, 3), [standColor]);
+  return (
+    <group>
+      <StepBase
+        level={level} length={length} rows={rows} seatDepth={seatDepth} seatRise={seatRise}
+        woodTexture={woodTexture} concreteTexture={concreteTexture} isSnow={isSnow}
+      />
+      <Seats
+        level={level} rows={rows} columns={columns} seatSize={seatSize} seatDepth={seatDepth} seatRise={seatRise}
+        length={length} teamColor={seatColor} woodTexture={seatWoodTexture} snowOnSeats={isSnow && mode === "training_day"}
+      />
+      {mode !== "training_day" && (
+        <Spectators
+          rows={rows} columns={columns} seatSize={seatSize} seatDepth={seatDepth} seatRise={seatRise} length={length}
+          attendanceRatio={attendanceRatio} teamColor={teamColor} secondaryColor={secondaryColor}
+          isUltrasSector={false} waveSlot={0} reducedDetail={reducedDetail}
+        />
+      )}
+      {panel && level >= 2 && (
+        <group position={[0, 0.45, -0.05]}>
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={[length, 0.85, 0.12]} />
+            <meshStandardMaterial color={standColor} roughness={0.5} metalness={0.2} />
+          </mesh>
+          <mesh position={[0, 0.45, 0]} castShadow>
+            <boxGeometry args={[length + 0.1, 0.06, 0.15]} />
+            <meshStandardMaterial color="#E5E7EB" metalness={0.7} roughness={0.3} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+}
