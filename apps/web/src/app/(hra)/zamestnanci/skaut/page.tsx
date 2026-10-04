@@ -181,7 +181,9 @@ export default function ScoutPage() {
             Jezdí každý týden a v pondělí ti napíše. Cestovné {kc(a.weekly_cost)} týdně se strhává v pondělí.
             {a.age_max <= SCOUT_YOUTH_AGE_MAX ? " Mladé hlásí podle toho, kam to můžou dotáhnout." : ""}
           </div>
-          <button onClick={stop} className="text-sm text-muted hover:text-red-600 underline">Ukončit úkol</button>
+          <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+            Ukončit úkol
+          </button>
         </div>
       )}
 
