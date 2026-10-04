@@ -108,6 +108,18 @@ curl na endpointy. FE: MCP browser na localhostu, mobil 375 px, všechny
 větve (nedostatek peněz, nesplněná podmínka, zrušení náhledu). Hráči
 nesmí zmizet místa ani peníze při převodu.
 
+## Rozhodnutí z implementace (aktuální stav, má přednost před textem výše)
+
+- **Převod:** dnešní úroveň 1 = tribuny jen za brankami (jako na produkci), úroveň 2 a 3 = všechny čtyři
+  strany. Kapacity stran: hlavní 0/15/60/120, protější 0/10/40/80, brankové 0/45/95/150.
+- **Vylučování:** prodloužení (`length`) se nesnese s rohovými přístavbami; křídlo (`wing`) se nesnese
+  s točenou tribunou a valem. Točená tribuna a val nahrazují tribunu za brankou.
+- **Mobilní tribunka:** jen v rozích a lze ji nahradit jinou přístavbou (`replaces`); kapacita se pak přepočítá.
+- **Ceny:** ceny stran = staré ceny tribun rozdělené podle přírůstku míst; přístavby = přírůstek míst ×
+  cena za místo (611/850/2143 Kč) × násobek druhu. **Úroveň 3 tribun i přístaveb je ×1,5**, úrovně 1 a 2 beze
+  změny. Cesta z převedené L1 na kapacitu starého L2 (290 míst) stojí 182 000 Kč (dřív 170 000 Kč).
+- **Zámky stavby:** D1 `meta.changes` počítá i řádky změněné triggerem, proto se kontroluje `>= 1`.
+
 ## Otevřené body
 
 - Přesné kapacity, ceny a odemykání jednotlivých přístaveb.
