@@ -10,6 +10,8 @@ interface FloodlightsProps {
   weather?: WeatherType;
   level: number;
   standsLevel?: number;
+  /** V některém rohu stojí rohová tribuna nebo přístavba; stožáry se odsunou za ni. */
+  cornerStands?: boolean;
   isMobile?: boolean;
 }
 
@@ -63,7 +65,7 @@ const LEVEL_CONFIG: Record<FloodlightLevel, FloodlightConfig> = {
   },
 };
 
-export function Floodlights({ timeOfDay, weather = "sunny", level, standsLevel = 0, isMobile = false }: FloodlightsProps) {
+export function Floodlights({ timeOfDay, weather = "sunny", level, standsLevel = 0, cornerStands = false, isMobile = false }: FloodlightsProps) {
   const normalizedLevel = Math.max(0, Math.min(3, Math.floor(level)));
   if (normalizedLevel <= 0) return null;
   return (
@@ -72,12 +74,13 @@ export function Floodlights({ timeOfDay, weather = "sunny", level, standsLevel =
       weather={weather}
       level={normalizedLevel}
       standsLevel={standsLevel}
+      cornerStands={cornerStands}
       isMobile={isMobile}
     />
   );
 }
 
-function ActiveFloodlights({ timeOfDay, weather = "sunny", level, standsLevel = 0, isMobile = false }: FloodlightsProps) {
+function ActiveFloodlights({ timeOfDay, weather = "sunny", level, standsLevel = 0, cornerStands = false, isMobile = false }: FloodlightsProps) {
   // Jak moc je paprsek vidět: v čistém vzduchu jen náznak, v dešti a sněhu výrazný.
   const beamStrength =
     weather === "rain" ? 0.2 : weather === "snow" ? 0.17 : weather === "cloudy" ? 0.09 : 0.06;
@@ -88,8 +91,9 @@ function ActiveFloodlights({ timeOfDay, weather = "sunny", level, standsLevel = 
   const lightsActive = isNight || timeOfDay === "sunset";
 
   // Stožáry v ikonických 4 rozích stadionu
-  const cornerX = standsLevel >= 1 ? 26 : 23.5;
-  const cornerZ = standsLevel >= 1 ? 34 : 32.5;
+  // Rohová tribuna zabírá roh do vzdálenosti ~14 m od jeho vrcholu, sloup stojí až za ní (v rámci plotu 80 x 90).
+  const cornerX = (standsLevel >= 1 ? 26 : 23.5) + (cornerStands ? 3.5 : 0);
+  const cornerZ = (standsLevel >= 1 ? 34 : 32.5) + (cornerStands ? 3 : 0);
 
   const positions: Array<[number, number]> = useMemo(() => (
     floodlightLevel === 1
