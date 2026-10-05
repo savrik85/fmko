@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import Link from "next/link";
 import type { TemplateProps } from "./types";
 import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/components/ui";
@@ -1009,7 +1010,13 @@ export function Retro2004Template({
           <div className="text-[10px] text-gray-500">
             Webmaster: Lojza z kabin · Poslední aktualizace: dnes v 14:22 hod. · Všechna práva vyhrazena.
           </div>
-        </footer>
+                <LeagueTeamLinks
+          standings={standings}
+          className="pt-2 space-y-1 border-t border-gray-400"
+          titleClassName="font-bold"
+          linkClassName="text-blue-700 underline hover:text-red-600"
+        />
+      </footer>
       </div>
     </div>
   );

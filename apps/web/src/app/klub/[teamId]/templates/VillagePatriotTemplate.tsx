@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import Link from "next/link";
 import type { TemplateProps } from "./types";
 import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/components/ui";
@@ -911,6 +912,12 @@ export function VillagePatriotTemplate({
         <div>
           Foceno a psáno s láskou k českému okresnímu fotbalu. Všechna práva vyhrazena.
         </div>
+              <LeagueTeamLinks
+          standings={standings}
+          className="pt-3 space-y-1 border-t border-[#b89a7a]/50"
+          titleClassName="font-bold uppercase tracking-wider"
+          linkClassName="hover:underline"
+        />
       </footer>
     </div>
   );

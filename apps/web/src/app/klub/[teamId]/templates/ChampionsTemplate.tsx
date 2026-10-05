@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import Link from "next/link";
 import type { TemplateProps } from "./types";
 import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/components/ui";
@@ -929,13 +930,19 @@ export function ChampionsTemplate({
       </main>
 
       {/* Champions Luxury Footer */}
-      <footer className="max-w-6xl mx-auto px-4 sm:px-8 mt-16 pt-8 border-t border-white/10 text-xs text-cyan-100/50 font-heading flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="max-w-6xl mx-auto px-4 sm:px-8 mt-16 pt-8 border-t border-white/10 text-xs text-cyan-100/50 font-heading flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-4">
         <div>
           Oficiální prezentace fotbalového klubu {team.name} · Šablona <strong>Champions Portál</strong>
         </div>
         <div>
           Běží na platformě Prales Champions Edition. Všechna práva vyhrazena.
         </div>
+              <LeagueTeamLinks
+          standings={standings}
+          className="w-full text-center space-y-2 pt-4 border-t border-white/10"
+          titleClassName="font-bold uppercase tracking-wider text-cyan-200/40"
+          linkClassName="hover:text-cyan-100 hover:underline"
+        />
       </footer>
     </div>
   );

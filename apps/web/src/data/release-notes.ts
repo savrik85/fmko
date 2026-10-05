@@ -12,6 +12,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-05",
+    emoji: "🌐",
+    title: "Veřejný klubový web: sdílej ho s kýmkoliv",
+    items: [
+      "Tvůj klub má vlastní klubový web a jeho adresa je veřejná. Otevře ji kdokoliv, i člověk, který na Pralesu vůbec nehraje. Pošli ji kamarádům, rodině, do hospody nebo na sociální sítě, nemusí se nikde registrovat ani přihlašovat. Adresu najdeš a můžeš sdílet v sekci Můj klub.",
+      "Web má pět stylů od nostalgického webu z roku 2004 až po moderní klubový portál.",
+      "Na webu je kompletní soupiska A-týmu a nově i přepínač na dorost U21, tabulka ligy s tvým klubem zvýrazněným, příští zápasy, odehrané zápasy se sestřihem klíčových momentů a přestupy s filtrem příchodů a odchodů.",
+      "Najdeš tam i klubové dresy (domácí a venkovní včetně trenek a štulpen), šálu a maskota. Ceny vstupného a bufetu na webu přesně odpovídají tomu, co máš nastavené ve hře.",
+      "V patičce webu jsou nově odkazy na klubové weby všech ostatních týmů z tvé ligy. Fanoušci si tak mohou proklikat celou soutěž.",
+    ],
+  },
+  {
     date: "2026-10-04",
     emoji: "🕵️",
     title: "Více skautů a nové úkoly v terénu",
