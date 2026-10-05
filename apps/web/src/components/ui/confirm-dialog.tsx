@@ -112,6 +112,7 @@ export function useConfirm(options: { sheet?: boolean } = {}) {
     description?: string;
     details?: Array<{ label: string; value: string; color?: string }>;
     confirmLabel?: string;
+    cancelLabel?: string;
     variant?: "default" | "danger";
     resolve?: (confirmed: boolean) => void;
   }>({ isOpen: false, title: "" });
@@ -121,6 +122,8 @@ export function useConfirm(options: { sheet?: boolean } = {}) {
     description?: string;
     details?: Array<{ label: string; value: string; color?: string }>;
     confirmLabel?: string;
+    /** Popisek tlačítka zpět, když by „Zrušit“ bylo matoucí (např. u rušení úkolu). */
+    cancelLabel?: string;
     variant?: "default" | "danger";
   }): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -137,6 +140,7 @@ export function useConfirm(options: { sheet?: boolean } = {}) {
         title={state.title}
         description={state.description}
         confirmLabel={state.confirmLabel}
+        cancelLabel={state.cancelLabel}
         variant={state.variant === "danger" ? "danger" : "default"}
         onConfirm={() => close(true)}
         onCancel={() => close(false)}
@@ -163,6 +167,7 @@ export function useConfirm(options: { sheet?: boolean } = {}) {
       description={state.description}
       details={state.details}
       confirmLabel={state.confirmLabel}
+      cancelLabel={state.cancelLabel}
       variant={state.variant}
       onConfirm={() => { state.resolve?.(true); setState((s) => ({ ...s, isOpen: false })); }}
       onCancel={() => { state.resolve?.(false); setState((s) => ({ ...s, isOpen: false })); }}

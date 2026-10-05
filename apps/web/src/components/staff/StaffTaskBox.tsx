@@ -149,6 +149,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
         ? `${name} už začal${member.gender === "f" ? "a" : ""} pracovat, peníze se nevrátí.`
         : `Zatím se nezačalo, ${czk(t.costPaid)} se vrátí do pokladny.`,
       confirmLabel: "Zrušit úkol",
+      cancelLabel: "Nechat běžet",
       variant: "danger",
     });
     if (!yes) return;
@@ -199,6 +200,14 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
       )}
 
       <Sheet open={open} onClose={close} title={def ? def.label : `Úkol: ${name}`}>
+        <div className="px-5 pt-3 sm:pt-5 pb-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-heading font-bold text-lg">{def ? def.label : "Zadat úkol"}</div>
+            <div className="text-sm text-muted">{name}</div>
+          </div>
+          <button type="button" onClick={close} aria-label="Zavřít" className="text-muted hover:text-ink text-xl leading-none px-1">✕</button>
+        </div>
         {!def ? (
           <div className="space-y-2">
             {types.map((t) => {
@@ -292,6 +301,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
             </div>
           </div>
         )}
+        </div>
       </Sheet>
       {dialog}
     </div>

@@ -200,6 +200,8 @@ export async function findNextLeagueMatch(db: D1Database, teamId: string, today:
         AND m.league_id IS NOT NULL AND m.status != 'simulated'
         AND sc.status = 'scheduled'
         AND substr(sc.scheduled_at, 1, 10) >= ?2
+        -- Jen aktuální sezóna ligy: neodehraná kola starých sezón (testovací data) se nepočítají.
+        AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id)
       ORDER BY sc.scheduled_at ASC LIMIT 1`,
   ).bind(teamId, today).first<{ id: string; home_team_id: string; scheduled_at: string; home_name: string; away_name: string }>()
     .catch((e) => { logger.warn({ module: MODULE }, `příští zápas ${teamId}`, e); return null; });
@@ -696,7 +698,7 @@ export async function runStaffTasks(db: D1Database, todayIso: string): Promise<S
             await sendStaffSystemMessage(db, task.team_id, `${staff.first_name} ${staff.last_name}`, ROLE_DEFS[staff.role as StaffRole]?.label ?? "Zaměstnanci",
               `Zápas, na který jsem se chystal${rod(staff, "", "a")}, se nehrál. Úkol jsem zrušil${rod(staff, "", "a")} a peníze jdou zpátky do pokladny.`);
           }
-        } else if (task.ends_game_date === today) {
+        } else if (task.ends_game_date === today && (task.task_type === "massage_prep" || task.task_type === "pitch_prep")) {
           await doMatchDayWork(db, task, staff, today);
           out.matchDayWork++;
         }
