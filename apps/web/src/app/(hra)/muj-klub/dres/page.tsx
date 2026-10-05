@@ -564,7 +564,7 @@ export default function DresPage() {
   return (
     <div className="page-container">
       <div className="mb-5">
-        <Link href="/muj-klub" className="text-sm text-muted hover:text-ink">← Zpět na Klub</Link>
+        <Link href="/muj-klub" className="text-sm text-muted hover:text-ink">← Zpět na Klubový web</Link>
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Dres a znak</h1>
         <p className="text-sm text-muted mt-0.5">Vlastní vzhled klubu — barvy, vzor dresu, znak a šála.</p>
       </div>
