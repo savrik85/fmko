@@ -220,6 +220,8 @@ export interface ClubWebsiteData {
     reputation: number;
     avatar: Record<string, unknown>;
     licence: string;
+    bio?: string | null;
+    birthplace?: string | null;
   } | null;
   staff: ClubWebsiteStaff[];
   roster: {

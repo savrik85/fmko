@@ -227,19 +227,21 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   // Mascot
   const mascotRow = await c.env.DB.prepare(
     "SELECT name, image_url, story FROM team_mascots WHERE team_id = ? AND is_selected = 1 LIMIT 1",
-  ).bind(teamId).first<{ name: string; image_url: string | null; story: string | null }>();
+  ).bind(teamId).first<{ name: string; image_url: string | null; story: string | null }>()
+    .catch((e) => { logger.warn({ module: "club-website" }, "fetch mascot", e); return null; });
 
   // 2. Website settings & increment
   const website = await ensureWebsiteRow(c.env.DB, teamId);
 
   // 3. Manager & Head coach
   const managerRow = await c.env.DB.prepare(
-    `SELECT m.id, m.name, m.age, m.reputation, m.avatar, m.coaching, m.tactics, m.motivation, m.discipline, m.licence
+    `SELECT m.id, m.name, m.age, m.reputation, m.avatar, m.coaching, m.tactics, m.motivation, m.discipline, m.licence_level, m.bio, m.birthplace
      FROM managers m JOIN teams t ON t.user_id = m.user_id WHERE t.id = ?`,
   ).bind(teamId).first<{
     id: string; name: string; age: number; reputation: number; avatar: string;
-    coaching: number; tactics: number; motivation: number; discipline: number; licence: string | null;
-  }>();
+    coaching: number; tactics: number; motivation: number; discipline: number; licence_level: number | null;
+    bio: string | null; birthplace: string | null;
+  }>().catch((e) => { logger.warn({ module: "club-website" }, "fetch manager", e); return null; });
 
   // 4. Staff members (trenérský štáb a personál)
   const staffRows = await c.env.DB.prepare(
@@ -591,7 +593,9 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
           return {};
         }
       })(),
-      licence: managerRow.licence ?? "D",
+      licence: managerRow.licence_level === 4 ? "PRO" : managerRow.licence_level === 3 ? "UEFA A" : managerRow.licence_level === 2 ? "UEFA B" : managerRow.licence_level === 1 ? "UEFA C" : "Bez licence",
+      bio: managerRow.bio,
+      birthplace: managerRow.birthplace,
     } : null,
     staff: staffMembers,
     roster: {
