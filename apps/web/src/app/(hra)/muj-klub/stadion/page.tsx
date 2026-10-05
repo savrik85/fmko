@@ -136,7 +136,7 @@ export default function StadionPage() {
   return (
     <div className="page-container">
       <div className="mb-5">
-        <Link href="/muj-klub" className="text-sm text-muted hover:text-ink">← Zpět na Klub</Link>
+        <Link href="/muj-klub" className="text-sm text-muted hover:text-ink">← Zpět na Klubový web</Link>
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Stadion</h1>
         <p className="text-sm text-muted mt-0.5">Název, přezdívka, tribuny a vesnická specialita stadionu.</p>
       </div>
