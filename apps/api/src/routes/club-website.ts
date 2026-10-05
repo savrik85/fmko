@@ -74,17 +74,21 @@ async function ensureWebsiteRow(db: D1Database, teamId: string) {
   db.prepare("UPDATE team_websites SET visitor_count = visitor_count + 1 WHERE team_id = ?")
     .bind(teamId)
     .run()
-    .catch(() => {});
+    .catch((e) => logger.warn({ module: "club-website" }, "increment visitor count", e));
 
   let unlockedTemplates: ClubWebsiteTemplate[] = ["retro_2004"];
   try {
     unlockedTemplates = JSON.parse(existing.unlocked_templates);
-  } catch {}
+  } catch (e) {
+    logger.warn({ module: "club-website" }, "parse unlocked templates", e);
+  }
 
   let unlockedAddons: ClubWebsiteAddon[] = [];
   try {
     unlockedAddons = JSON.parse(existing.unlocked_addons);
-  } catch {}
+  } catch (e) {
+    logger.warn({ module: "club-website" }, "parse unlocked addons", e);
+  }
 
   return {
     template: (existing.template || "retro_2004") as ClubWebsiteTemplate,
@@ -164,7 +168,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
             t.anthem_url, t.anthem_lyrics, t.anthem_title, t.anthem_style,
             t.stadium_nickname, t.stadium_built_year, t.stadium_specialita, t.stadium_tribuna_north, t.stadium_tribuna_south,
             t.team_nickname, t.club_motto, t.founding_year, t.founding_story, t.colors_meaning,
-            v.name as village_name, v.district, v.region, v.population, v.category as village_category
+            v.name as village_name, v.district, v.region, v.population, v.size as village_category
      FROM teams t 
      JOIN villages v ON t.village_id = v.id 
      WHERE t.id = ?`,
@@ -198,12 +202,12 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   const mainSponsor = await c.env.DB.prepare(
     "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND (category = 'main' OR category IS NULL) LIMIT 1",
   ).bind(teamId).first<{ sponsor_name: string }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: "club-website" }, "fetch main sponsor", e); return null; });
 
   const stadiumNamingSponsor = await c.env.DB.prepare(
     "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND category = 'stadium' LIMIT 1",
   ).bind(teamId).first<{ sponsor_name: string }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: "club-website" }, "fetch stadium sponsor", e); return null; });
 
   // Chants
   const zaklad = c.env.API_BASE_URL || new URL(c.req.url).origin;
@@ -214,7 +218,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
      ORDER BY (kind = 'domov') DESC, sila DESC LIMIT 5`,
   ).bind(teamId).all<{
     id: string; kind: string; text: string; duvod: string; sila: number; audio_vybrana: string | null;
-  }>().catch(() => ({ results: [] }));
+  }>().catch((e) => { logger.warn({ module: "club-website" }, "fetch chants", e); return { results: [] }; });
   const chants = (chantsRows.results ?? []).map((r) => ({
     id: r.id, kind: r.kind, text: r.text, duvod: r.duvod, sila: r.sila,
     url: `${zaklad}/api/choraly/${r.id}/audio?v=${r.audio_vybrana ?? "a"}`,
@@ -244,11 +248,15 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   ).bind(teamId).all<{
     id: string; role: string; profession: string; first_name: string; last_name: string;
     gender: string; age: number; avatar: string; description: string | null;
-  }>().catch(() => ({ results: [] }));
+  }>().catch((e) => { logger.warn({ module: "club-website" }, "fetch staff", e); return { results: [] }; });
 
   const staffMembers = (staffRows.results ?? []).map((s) => {
     let av = {};
-    try { av = typeof s.avatar === "string" ? JSON.parse(s.avatar) : s.avatar; } catch {}
+    try {
+      av = typeof s.avatar === "string" ? JSON.parse(s.avatar) : s.avatar;
+    } catch (e) {
+      logger.warn({ module: "club-website" }, "parse staff avatar", e);
+    }
     return {
       id: s.id,
       role: s.role,
@@ -280,11 +288,15 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     id: string; first_name: string; last_name: string; position: string; overall_rating: number;
     age: number; squad_number: number | null; avatar: string;
     appearances: number; goals: number; assists: number; clean_sheets: number; minutes_played: number;
-  }>().catch(() => ({ results: [] }));
+  }>().catch((e) => { logger.warn({ module: "club-website" }, "fetch players", e); return { results: [] }; });
 
   const aTeamPlayers = (playersRows.results ?? []).map((p) => {
     let av = {};
-    try { av = typeof p.avatar === "string" ? JSON.parse(p.avatar) : p.avatar; } catch {}
+    try {
+      av = typeof p.avatar === "string" ? JSON.parse(p.avatar) : p.avatar;
+    } catch (e) {
+      logger.warn({ module: "club-website" }, "parse player avatar", e);
+    }
     return {
       id: p.id,
       firstName: p.first_name,
@@ -307,7 +319,10 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   // 6. Reserve team (U21) if exists
   const u21Team = await c.env.DB.prepare(
     "SELECT id, name FROM teams WHERE parent_team_id = ? AND team_type = 'u21' LIMIT 1",
-  ).bind(teamId).first<{ id: string; name: string }>().catch(() => null);
+  ).bind(teamId).first<{ id: string; name: string }>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch u21 team", e);
+    return null;
+  });
 
   let u21Players: typeof aTeamPlayers = [];
   if (u21Team) {
@@ -322,11 +337,18 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
        LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id
        WHERE p.team_id = ?
        ORDER BY p.squad_number ASC`,
-    ).bind(u21Team.id).all<any>().catch(() => ({ results: [] }));
+    ).bind(u21Team.id).all<any>().catch((e) => {
+      logger.warn({ module: "club-website" }, "fetch u21 players", e);
+      return { results: [] };
+    });
 
     u21Players = (u21Rows.results ?? []).map((p: any) => {
       let av = {};
-      try { av = typeof p.avatar === "string" ? JSON.parse(p.avatar) : p.avatar; } catch {}
+      try {
+        av = typeof p.avatar === "string" ? JSON.parse(p.avatar) : p.avatar;
+      } catch (e) {
+        logger.warn({ module: "club-website" }, "parse u21 player avatar", e);
+      }
       return {
         id: p.id,
         firstName: p.first_name,
@@ -357,7 +379,10 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
      JOIN teams at ON m.away_team_id = at.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
      ORDER BY m.simulated_at DESC LIMIT 1`,
-  ).bind(teamId, teamId).first<any>().catch(() => null);
+  ).bind(teamId, teamId).first<any>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch last match", e);
+    return null;
+  });
 
   const nextMatch = await c.env.DB.prepare(
     `SELECT m.id, m.round, sc.scheduled_at,
@@ -369,7 +394,10 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
      JOIN teams at ON m.away_team_id = at.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'scheduled'
      ORDER BY sc.scheduled_at ASC LIMIT 1`,
-  ).bind(teamId, teamId).first<any>().catch(() => null);
+  ).bind(teamId, teamId).first<any>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch next match", e);
+    return null;
+  });
 
   // Check derby rivalry for next match
   let isRival = false;
@@ -377,14 +405,20 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     const oppId = nextMatch.home_id === teamId ? nextMatch.away_id : nextMatch.home_id;
     const rivalry = await c.env.DB.prepare(
       "SELECT 1 FROM fan_rivalries WHERE (team_a = ? AND team_b = ?) OR (team_a = ? AND team_b = ?) LIMIT 1",
-    ).bind(teamId, oppId, oppId, teamId).first().catch(() => null);
+    ).bind(teamId, oppId, oppId, teamId).first().catch((e) => {
+      logger.warn({ module: "club-website" }, "fetch fan rivalry", e);
+      return null;
+    });
     if (rivalry) isRival = true;
   }
 
   // 8. Concessions & Buffet
   const concessionRows = await c.env.DB.prepare(
     "SELECT product_key, quality_level, sell_price FROM concession_products WHERE team_id = ?",
-  ).bind(teamId).all<{ product_key: string; quality_level: number; sell_price: number }>().catch(() => ({ results: [] }));
+  ).bind(teamId).all<{ product_key: string; quality_level: number; sell_price: number }>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch concession products", e);
+    return { results: [] };
+  });
   
   const beerProd = (concessionRows.results ?? []).find((r) => r.product_key === "beer");
   const sausageProd = (concessionRows.results ?? []).find((r) => r.product_key === "sausage");
@@ -393,10 +427,17 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   // 9. Ticket prices
   const fansRow = await c.env.DB.prepare(
     "SELECT base_ticket_price FROM fans WHERE team_id = ? LIMIT 1",
-  ).bind(teamId).first<{ base_ticket_price: number }>().catch(() => null);
+  ).bind(teamId).first<{ base_ticket_price: number }>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch base ticket price", e);
+    return null;
+  });
 
   const defaultVillageTicketPrice =
-    team.village_category === "mesto" ? 50 : team.village_category === "mestys" ? 40 : team.village_category === "obec" ? 30 : 20;
+    team.village_category === "city" || team.village_category === "small_city"
+      ? 50
+      : team.village_category === "town"
+        ? 40
+        : 30;
   const adultTicketPrice = (fansRow?.base_ticket_price && fansRow.base_ticket_price > 0)
     ? fansRow.base_ticket_price
     : defaultVillageTicketPrice;
@@ -407,13 +448,24 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
      FROM coach_interviews
      WHERE team_id = ? AND status = 'answered'
      ORDER BY created_at DESC LIMIT 6`,
-  ).bind(teamId).all<{ id: string; game_week: number; questions: string; answers: string | null; created_at: string }>().catch(() => ({ results: [] }));
+  ).bind(teamId).all<{ id: string; game_week: number; questions: string; answers: string | null; created_at: string }>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch coach interviews", e);
+    return { results: [] };
+  });
 
   const interviews = (interviewRows.results ?? []).map((r) => {
     let q: string[] = [];
     let a: string[] = [];
-    try { q = JSON.parse(r.questions); } catch {}
-    try { a = r.answers ? JSON.parse(r.answers) : []; } catch {}
+    try {
+      q = JSON.parse(r.questions);
+    } catch (e) {
+      logger.warn({ module: "club-website" }, "parse interview questions", e);
+    }
+    try {
+      a = r.answers ? JSON.parse(r.answers) : [];
+    } catch (e) {
+      logger.warn({ module: "club-website" }, "parse interview answers", e);
+    }
     return {
       id: r.id,
       gameWeek: r.game_week,
@@ -426,11 +478,17 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   // 11. Recent News
   const newsRows = await c.env.DB.prepare(
     "SELECT id, type, headline, body, created_at FROM news WHERE team_id = ? ORDER BY created_at DESC LIMIT 4",
-  ).bind(teamId).all<{ id: string; type: string; headline: string; body: string; created_at: string }>().catch(() => ({ results: [] }));
+  ).bind(teamId).all<{ id: string; type: string; headline: string; body: string; created_at: string }>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch news", e);
+    return { results: [] };
+  });
 
   // 12. Transfers (Představovačky a rozlučky)
   const { loadTransferOverview } = await import("../transfers/transfer-overview");
-  const transferRows = await loadTransferOverview(c.env.DB, teamId, 8).catch(() => []);
+  const transferRows = await loadTransferOverview(c.env.DB, teamId, 8).catch((e) => {
+    logger.warn({ module: "club-website" }, "load transfer overview", e);
+    return [];
+  });
   const transfers = transferRows.map((t) => {
     const flavor = generateTransferFlavor(t, team.name, team.village_name);
     return {
@@ -525,7 +583,14 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
       name: managerRow.name,
       age: managerRow.age,
       reputation: managerRow.reputation,
-      avatar: (() => { try { return JSON.parse(managerRow.avatar); } catch { return {}; } })(),
+      avatar: (() => {
+        try {
+          return JSON.parse(managerRow.avatar);
+        } catch (e) {
+          logger.warn({ module: "club-website" }, "parse manager avatar", e);
+          return {};
+        }
+      })(),
       licence: managerRow.licence ?? "D",
     } : null,
     staff: staffMembers,
@@ -598,7 +663,10 @@ clubWebsiteRouter.post("/:id/website/buy-template", async (c) => {
   const auth = await checkTeamAuth(c, teamId);
   if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
 
-  const body = await c.req.json().catch(() => null) as { template?: ClubWebsiteTemplate } | null;
+  const body = (await c.req.json().catch((e) => {
+    logger.warn({ module: "club-website" }, "parse buy-template body", e);
+    return null;
+  })) as { template?: ClubWebsiteTemplate } | null;
   const templateId = body?.template;
   if (!templateId || !(templateId in CLUB_WEBSITE_TEMPLATES)) {
     return c.json({ error: "Neplatná šablona" }, 400);
@@ -650,7 +718,10 @@ clubWebsiteRouter.post("/:id/website/select-template", async (c) => {
   const auth = await checkTeamAuth(c, teamId);
   if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
 
-  const body = await c.req.json().catch(() => null) as { template?: ClubWebsiteTemplate } | null;
+  const body = (await c.req.json().catch((e) => {
+    logger.warn({ module: "club-website" }, "parse select-template body", e);
+    return null;
+  })) as { template?: ClubWebsiteTemplate } | null;
   const templateId = body?.template;
   if (!templateId || !(templateId in CLUB_WEBSITE_TEMPLATES)) {
     return c.json({ error: "Neplatná šablona" }, 400);
@@ -673,7 +744,10 @@ clubWebsiteRouter.post("/:id/website/buy-addon", async (c) => {
   const auth = await checkTeamAuth(c, teamId);
   if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
 
-  const body = await c.req.json().catch(() => null) as { addon?: ClubWebsiteAddon } | null;
+  const body = (await c.req.json().catch((e) => {
+    logger.warn({ module: "club-website" }, "parse buy-addon body", e);
+    return null;
+  })) as { addon?: ClubWebsiteAddon } | null;
   const addonId = body?.addon;
   if (!addonId || !(addonId in CLUB_WEBSITE_ADDONS)) {
     return c.json({ error: "Neplatný doplněk" }, 400);
@@ -717,7 +791,10 @@ clubWebsiteRouter.patch("/:id/website", async (c) => {
   const auth = await checkTeamAuth(c, teamId);
   if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
 
-  const body = await c.req.json().catch(() => null) as {
+  const body = (await c.req.json().catch((e) => {
+    logger.warn({ module: "club-website" }, "parse patch website body", e);
+    return null;
+  })) as {
     customSlug?: string | null;
     announcement?: string | null;
     sponsorBannerEnabled?: boolean;
@@ -778,7 +855,10 @@ clubWebsiteRouter.post("/:id/website/generate-transfer-story", async (c) => {
   const teamId = await resolveTeamId(c.env.DB, identifier);
   if (!teamId) return c.json({ error: "Klub nenalezen" }, 404);
 
-  const body = (await c.req.json().catch(() => null)) as {
+  const body = (await c.req.json().catch((e) => {
+    logger.warn({ module: "club-website" }, "parse generate-transfer-story body", e);
+    return null;
+  })) as {
     direction?: "in" | "out";
     playerName?: string;
     otherTeamName?: string;
