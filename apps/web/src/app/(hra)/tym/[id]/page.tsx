@@ -197,11 +197,11 @@ export default function TeamPage() {
                 href={`/klub/${teamId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Veřejný profil klubu"
+                title="Klubový web"
                 className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}
               >
-                <div className="text-xl leading-none">{"\u{1F4C4}"}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Profil</div>
+                <div className="text-xl leading-none">{"\u{1F310}"}</div>
+                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Web</div>
               </a>
               {!isOwnTeam && (team as any).user_id !== "ai" && (
                 <button onClick={async () => {
@@ -281,11 +281,11 @@ export default function TeamPage() {
                   href={`/klub/${teamId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="Veřejný profil klubu"
+                  title="Klubový web"
                   className={`${boxBg} ${boxBgHover} rounded-soft px-3 py-1.5 text-center transition-colors cursor-pointer`}
                 >
-                  <div className="text-base leading-none">{"\u{1F4C4}"}</div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Profil</div>
+                  <div className="text-base leading-none">{"\u{1F310}"}</div>
+                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Web</div>
                 </a>
                 {!isOwnTeam && (team as any).user_id !== "ai" && (
                   <button onClick={async () => {
