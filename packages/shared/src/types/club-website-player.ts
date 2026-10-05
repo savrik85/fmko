@@ -1,3 +1,5 @@
+import type { ClubWebsiteTemplate } from "./club-website";
+
 /** Veřejný profil hráče na klubovém webu. Jen to, co by o hráči napsal klubový web: žádné skryté atributy. */
 export interface ClubWebsitePlayerProfile {
   /** Klub, z jehož webu se profil otevřel (záhlaví, barvy, odkaz zpět). */
@@ -5,6 +7,8 @@ export interface ClubWebsitePlayerProfile {
     id: string;
     name: string;
     slug: string | null;
+    /** Šablona webu klubu: profil hráče vypadá stejně jako zbytek jeho webu. */
+    template: ClubWebsiteTemplate;
     primaryColor: string;
     secondaryColor: string;
   };

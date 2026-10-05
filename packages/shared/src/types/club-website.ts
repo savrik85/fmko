@@ -351,7 +351,7 @@ export interface ClubWebsiteData {
     seasonPassPrice?: number;
   };
   stadiumPhotos: ClubWebsiteStadiumPhotos;
-  /** Síň slávy (sezóny, trofeje, ocenění, pohár, střelci, achievementy); null když se nenačetla. */
+  /** Historie klubu (sezóny, trofeje, ocenění, pohár, střelci); null když se nenačetla. */
   history: ClubWebsiteHistory | null;
   interviews: Array<{
     id: string;
@@ -435,10 +435,6 @@ export interface ClubWebsiteHistory {
   cup: ClubWebsiteHistoryCupRun[];
   /** Nejlepší střelci klubu všech dob (liga i pohár, i hráči, kteří už odešli). Nejvýš 10. */
   topScorers: ClubWebsiteHistoryScorer[];
-  /** Získané achievementy (Kořaly), nejcennější první. */
-  achievements: ClubWebsiteHistoryAchievement[];
-  /** Kolik achievementů hra celkem nabízí (pro „získáno X z Y“). */
-  achievementsTotal: number;
 }
 
 export interface ClubWebsiteHistorySeason {
@@ -511,13 +507,5 @@ export interface ClubWebsiteHistoryScorer {
   stillAtClub: boolean;
 }
 
-export interface ClubWebsiteHistoryAchievement {
-  key: string;
-  icon: string;
-  title: string;
-  desc: string;
-  tier: "bronze" | "silver" | "gold";
-  earnedAt: string;
-}
 
 

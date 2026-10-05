@@ -20,9 +20,25 @@ import { ClubScarf } from "@/components/team/club-scarf";
 import { ManagerFace } from "../ManagerFace";
 import { TacticalPitch } from "../TacticalPitch";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
-import { PressCenter, hasPressCenterContent } from "../PressCenter";
-import { ClubHallOfFame } from "../ClubHallOfFame";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
+import {
+  AWARD_TITLES,
+  PRESS_NEWS_TYPES,
+  awardsBySeason,
+  cupMatchText,
+  cupResultText,
+  hasHistory,
+  hasPressContent,
+  historyIntro,
+  interviewCoach,
+  interviewHeadline,
+  interviewPairs,
+  pressInterviews,
+  pressNews,
+  trophyTitle,
+  type Interview,
+} from "./club-content";
+import type { ClubWebsiteHistoryAward, ClubWebsiteHistoryCupRun } from "@okresni-masina/shared";
 
 /**
  * Web je v barvách klubu: proměnné `--club-*` nastavuje obal stránky (`clubPaletteStyle`).
@@ -57,6 +73,14 @@ export function RegionalStandardTemplate({
   const [viewMode, setViewMode] = useState<"cards" | "pitch">("cards");
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
+  const [openInterviews, setOpenInterviews] = useState<Record<string, boolean>>({});
+
+  // Tiskové středisko a historie: jen data, vzhled dělá tahle šablona sama.
+  const showPress = hasPressContent(data);
+  const [latestInterview, ...olderInterviews] = pressInterviews(data);
+  const clubNews = pressNews(data);
+  const history = hasHistory(data.history) ? data.history : null;
+  const awardGroups = history ? awardsBySeason(history) : [];
 
   const primary = team.primaryColor || "#2D5F2D";
   const secondary = team.secondaryColor || "#ffffff";
@@ -171,8 +195,8 @@ export function RegionalStandardTemplate({
           <a href="#kadr" className="hover:text-[var(--club-accent-light)] shrink-0">👥 Soupiska</a>
           <a href="#prestupy" className="hover:text-[var(--club-accent-light)] shrink-0">📜 Přestupy ({transfers.length})</a>
           <a href="#identita" className="hover:text-[var(--club-accent-light)] shrink-0">👕 Dresy & Maskot</a>
-          {hasPressCenterContent(data) && <a href="#tisk" className="hover:text-[var(--club-accent-light)] shrink-0">🎙️ Tisk</a>}
-          {data.history && <a href="#historie" className="hover:text-[var(--club-accent-light)] shrink-0">🏆 Síň slávy</a>}
+          {showPress && <a href="#tisk" className="hover:text-[var(--club-accent-light)] shrink-0">🎙️ Tisk</a>}
+          {history && <a href="#historie" className="hover:text-[var(--club-accent-light)] shrink-0">🏆 Historie</a>}
           <a href="#stadion" className="hover:text-[var(--club-accent-light)] shrink-0">🏟️ Stadion & Areál</a>
           <a href="#bufet" className="hover:text-[var(--club-accent-light)] shrink-0">🍺 Občerstvení</a>
           {hasAudioModule && <a href="#audio" className="text-[var(--club-accent-light)] hover:underline shrink-0">🎵 Audio přehrávač</a>}
@@ -835,34 +859,313 @@ export function RegionalStandardTemplate({
           </div>
         </section>
 
-        {/* ═══ TISKOVÉ STŘEDISKO ═══ */}
-        {hasPressCenterContent(data) && (
-        <section id="tisk" className={ANCHOR_OFFSET}>
-          <div className="mb-6">
-            <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-ink)] mb-1">
-              Tiskové středisko
+        {/* ═══ SECTION: TISKOVÉ STŘEDISKO ═══ */}
+        {showPress && (
+          <section id="tisk" className={ANCHOR_OFFSET}>
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm">
+              <div className="mb-6 border-b border-slate-100 pb-3">
+                <div className="text-sm font-heading font-bold uppercase tracking-widest text-slate-500">
+                  Tiskové středisko
+                </div>
+                <h3 className="text-xl sm:text-2xl font-heading font-black text-slate-900">
+                  Rozhovory & Zprávy z klubu
+                </h3>
+              </div>
+
+              <div className="space-y-8">
+                {latestInterview && (
+                  <article className="p-4 sm:p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                      <span className="text-sm px-2.5 py-0.5 rounded-full font-heading font-black uppercase tracking-wider bg-[var(--club-tint)] text-[var(--club-ink)] border border-[var(--club-line)]">
+                        Rozhovor s trenérem
+                      </span>
+                      <span className="text-sm text-slate-500 font-medium">
+                        {formatDate(latestInterview.createdAt)}
+                      </span>
+                    </div>
+                    <h4 className="font-heading font-black text-lg sm:text-xl text-slate-900 mb-1 break-words">
+                      {interviewHeadline(latestInterview)}
+                    </h4>
+                    <div className="text-sm text-slate-600 mb-4 break-words">
+                      Odpovídá trenér{" "}
+                      <strong className="text-base font-bold text-slate-900">{interviewCoach(latestInterview, data)}</strong>
+                    </div>
+                    <InterviewText interview={latestInterview} />
+                  </article>
+                )}
+
+                {olderInterviews.length > 0 && (
+                  <div>
+                    <BlockTitle title="Starší rozhovory" note="Archiv" />
+                    <ul className="space-y-2">
+                      {olderInterviews.map((iv) => {
+                        const open = !!openInterviews[iv.id];
+                        const panelId = `rozhovor-${iv.id}`;
+                        return (
+                          <li key={iv.id} className="bg-slate-50 border border-slate-100 rounded-xl">
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              aria-controls={panelId}
+                              onClick={() => setOpenInterviews((s) => ({ ...s, [iv.id]: !s[iv.id] }))}
+                              className="w-full p-3 flex items-center justify-between gap-3 text-left text-sm"
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-sm font-bold text-slate-500">
+                                  {formatDate(iv.createdAt)}
+                                </span>
+                                <span className="block text-base font-bold text-slate-900 break-words">
+                                  {interviewHeadline(iv)}
+                                </span>
+                              </span>
+                              <span className="text-[var(--club-ink)] hover:underline font-heading font-bold text-sm shrink-0">
+                                {open ? "Skrýt" : "Číst rozhovor"}
+                              </span>
+                            </button>
+                            <div id={panelId} hidden={!open} className="px-3 pb-4 pt-1 border-t border-slate-100">
+                              <div className="text-sm text-slate-600 my-3 break-words">
+                                Odpovídá trenér{" "}
+                                <strong className="text-base font-bold text-slate-900">{interviewCoach(iv, data)}</strong>
+                              </div>
+                              <InterviewText interview={iv} />
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {clubNews.length > 0 && (
+                  <div>
+                    <BlockTitle title="Zprávy z klubu" />
+                    <div className="space-y-4">
+                      {clubNews.map((n) => (
+                        <article
+                          key={n.id}
+                          className="p-4 sm:p-5 bg-slate-50 border border-slate-200 rounded-2xl transition hover:border-slate-300"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                            <span className="text-sm px-2.5 py-0.5 rounded-full font-heading font-black uppercase tracking-wider bg-[var(--club-tint)] text-[var(--club-ink)] border border-[var(--club-line)]">
+                              {PRESS_NEWS_TYPES.get(n.type)}
+                            </span>
+                            <span className="text-sm text-slate-500 font-medium">
+                              {formatDate(n.created_at)}
+                            </span>
+                          </div>
+                          <h4 className="font-heading font-bold text-base text-slate-900 mb-1 break-words">
+                            {n.headline}
+                          </h4>
+                          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line break-words">
+                            {n.body}
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-            <h2 className="font-heading font-black text-2xl sm:text-3xl text-slate-900 break-words">Slovo trenéra a zprávy klubu</h2>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-6 shadow-sm">
-            <PressCenter data={data} tone="light" />
-          </div>
-        </section>
+          </section>
         )}
 
-        {/* ═══ SÍŇ SLÁVY ═══ */}
-        {data.history && (
-        <section id="historie" className={ANCHOR_OFFSET}>
-          <div className="mb-6">
-            <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-ink)] mb-1">
-              Historie klubu
+        {/* ═══ SECTION: HISTORIE KLUBU ═══ */}
+        {history && (
+          <section id="historie" className={ANCHOR_OFFSET}>
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm">
+              <div className="mb-6 border-b border-slate-100 pb-3">
+                <div className="text-sm font-heading font-bold uppercase tracking-widest text-slate-500">
+                  Kronika oddílu
+                </div>
+                <h3 className="text-xl sm:text-2xl font-heading font-black text-slate-900">
+                  Historie klubu
+                </h3>
+              </div>
+
+              <div className="space-y-8">
+                <p className="text-base text-slate-700 leading-relaxed break-words">
+                  {historyIntro(history, team.name)}
+                </p>
+
+                {history.trophies.length > 0 && (
+                  <div>
+                    <BlockTitle title="Úspěchy klubu" />
+                    <ul className="divide-y divide-slate-100">
+                      {history.trophies.map((tr) => (
+                        <li
+                          key={`${tr.seasonNumber}-${tr.kind}-${tr.competitionName}`}
+                          className="py-2.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5"
+                        >
+                          <span className="text-sm font-bold text-slate-500 w-24 shrink-0">{tr.seasonNumber}. sezóna</span>
+                          <span className="text-base font-bold text-slate-900 min-w-0 break-words">{trophyTitle(tr)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {history.seasons.length > 0 && (
+                  <div>
+                    <BlockTitle title="Umístění v soutěžích" />
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-heading font-bold text-sm uppercase tracking-wider">
+                            <th className="py-2.5 px-3 text-center whitespace-nowrap">Sezóna</th>
+                            <th className="py-2.5 px-3">Soutěž</th>
+                            <th className="py-2.5 px-3 text-center">Místo</th>
+                            <th className="py-2.5 px-2 text-center">Z</th>
+                            <th className="py-2.5 px-2 text-center">V</th>
+                            <th className="py-2.5 px-2 text-center">R</th>
+                            <th className="py-2.5 px-2 text-center">P</th>
+                            <th className="py-2.5 px-3 text-center">Skóre</th>
+                            <th className="py-2.5 px-3 text-center font-black">Body</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-sans">
+                          {history.seasons.map((s) => (
+                            <tr key={s.seasonNumber} className="transition hover:bg-slate-50/60 text-slate-700">
+                              <td className="py-2.5 px-3 text-center font-heading font-extrabold text-slate-500">
+                                {s.seasonNumber}.
+                              </td>
+                              <td className="py-2.5 px-3 font-medium min-w-[9rem]">{s.leagueName}</td>
+                              <td className="py-2.5 px-3 text-center font-heading font-extrabold text-slate-900 whitespace-nowrap">
+                                {s.position}.
+                              </td>
+                              <td className="py-2.5 px-2 text-center">{s.played ?? EMPTY}</td>
+                              <td className="py-2.5 px-2 text-center text-emerald-700 font-bold">{s.wins ?? EMPTY}</td>
+                              <td className="py-2.5 px-2 text-center text-slate-600">{s.draws ?? EMPTY}</td>
+                              <td className="py-2.5 px-2 text-center text-red-600 font-bold">{s.losses ?? EMPTY}</td>
+                              <td className="py-2.5 px-3 text-center font-mono whitespace-nowrap">
+                                {s.goalsFor !== null && s.goalsAgainst !== null ? `${s.goalsFor}:${s.goalsAgainst}` : EMPTY}
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-heading font-black text-slate-900 bg-slate-100/60">
+                                {s.points ?? EMPTY}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {(awardGroups.length > 0 || history.cup.length > 0) && (
+                  <div className={awardGroups.length > 0 && history.cup.length > 0 ? "grid grid-cols-1 md:grid-cols-2 gap-8" : ""}>
+                    {awardGroups.length > 0 && (
+                      <div>
+                        <BlockTitle title="Ocenění" />
+                        <div className="space-y-5">
+                          {awardGroups.map((group) => {
+                            const eleven = group.bestEleven.filter((a): a is ClubWebsiteHistoryAward & { name: string } => !!a.name);
+                            return (
+                              <div key={group.seasonNumber}>
+                                <div className="text-sm font-heading font-bold text-slate-500 break-words">
+                                  {group.seasonNumber}. sezóna · {group.leagueName}
+                                </div>
+                                <ul className="divide-y divide-slate-100">
+                                  {group.single.map((a, i) => (
+                                    <li key={`${a.kind}-${i}`} className="py-2.5">
+                                      <div className="text-sm font-heading font-bold uppercase text-[var(--club-ink)]">
+                                        {AWARD_TITLES[a.kind]}
+                                      </div>
+                                      <HistoryName
+                                        id={a.playerId}
+                                        name={a.name ?? (a.kind === "manager_of_season" ? "Trenér klubu" : "Jméno se nedochovalo")}
+                                        className="text-base font-bold text-slate-900 break-words"
+                                      />
+                                      {a.detail && (
+                                        <p className="text-sm text-slate-600 leading-relaxed break-words">{a.detail}</p>
+                                      )}
+                                    </li>
+                                  ))}
+                                  {eleven.length > 0 && (
+                                    <li className="py-2.5">
+                                      <div className="text-sm font-heading font-bold uppercase text-[var(--club-ink)]">
+                                        {AWARD_TITLES.best_eleven}
+                                      </div>
+                                      <div className="text-base text-slate-900 break-words">
+                                        {eleven.map((a, i) => (
+                                          <span key={`${a.playerId ?? a.name}-${i}`}>
+                                            {i > 0 && ", "}
+                                            <HistoryName id={a.playerId} name={a.name} className="font-bold" />
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </li>
+                                  )}
+                                </ul>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {history.cup.length > 0 && (
+                      <div>
+                        <BlockTitle title="Pohár" />
+                        <ul className="divide-y divide-slate-100">
+                          {history.cup.map((run) => (
+                            <li
+                              key={`${run.seasonNumber}-${run.cupName}`}
+                              className="py-2.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5"
+                            >
+                              <span className="text-sm font-bold text-slate-500 w-24 shrink-0">{run.seasonNumber}. sezóna</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-base font-bold text-slate-900 break-words">{run.cupName}</div>
+                                <div className="text-sm text-slate-600 break-words">
+                                  {cupResultText(run)}
+                                  <CupMatch run={run} />
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {history.topScorers.length > 0 && (
+                  <div>
+                    <BlockTitle title="Nejlepší střelci v historii klubu" note="Liga i pohár" />
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-heading font-bold text-sm uppercase tracking-wider">
+                            <th className="py-2.5 px-3 text-center w-10">#</th>
+                            <th className="py-2.5 px-3">Hráč</th>
+                            <th className="py-2.5 px-3 text-center font-black">Góly</th>
+                            <th className="py-2.5 px-3 text-center">Zápasy</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-sans">
+                          {history.topScorers.map((s, i) => (
+                            <tr key={`${s.playerId ?? s.name}-${i}`} className="transition hover:bg-slate-50/60 text-slate-700">
+                              <td className="py-2.5 px-3 text-center font-heading font-extrabold text-slate-500">
+                                {i + 1}.
+                              </td>
+                              <td className="py-2.5 px-3 min-w-[10rem]">
+                                <HistoryName id={s.playerId} name={s.name} className="text-base font-medium text-slate-900" />
+                                {!s.stillAtClub && (
+                                  <span className="text-sm text-slate-500 ml-1.5 whitespace-nowrap">(odešel)</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-heading font-black text-slate-900 bg-slate-100/60">
+                                {s.goals}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">{s.appearances}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-            <h2 className="font-heading font-black text-2xl sm:text-3xl text-slate-900 break-words">Síň slávy</h2>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-6 shadow-sm">
-            <ClubHallOfFame history={data.history} tone="light" />
-          </div>
-        </section>
+          </section>
         )}
 
         {/* ═══ STADION: FOTKY Z 3D MODELU AREÁLU ═══ */}
@@ -997,4 +1300,52 @@ export function RegionalStandardTemplate({
       </footer>
     </div>
   );
+}
+
+/** Mezititulek uvnitř sekce, stejný jako „Nedávno odehraná kola“. */
+function BlockTitle({ title, note }: { title: string; note?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 mb-3 border-b border-slate-100 pb-2">
+      <h4 className="font-heading font-extrabold text-sm uppercase tracking-wider text-slate-700 min-w-0 break-words">
+        {title}
+      </h4>
+      {note && <span className="text-sm text-slate-500 font-medium shrink-0">{note}</span>}
+    </div>
+  );
+}
+
+/** Otázka tučně, odpověď trenéra pod ní. */
+function InterviewText({ interview }: { interview: Interview }) {
+  return (
+    <dl className="space-y-4">
+      {interviewPairs(interview).map((pair, i) => (
+        <div key={i}>
+          <dt className="font-heading font-bold text-base text-slate-900 break-words">{pair.question}</dt>
+          <dd className="mt-1 text-base text-slate-700 leading-relaxed break-words">{pair.answer}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Hráč, který už ve hře není, nemá profil: jméno zůstane jen textem. */
+function HistoryName({ id, name, className }: { id: string | null; name: string; className: string }) {
+  return id ? <PlayerLink id={id} className={className}>{name}</PlayerLink> : <span className={className}>{name}</span>;
+}
+
+/** Rozhodující pohárový zápas za výsledkem; soupeř ze hry je odkaz na jeho web. */
+function CupMatch({ run }: { run: ClubWebsiteHistoryCupRun }) {
+  const text = cupMatchText(run);
+  const m = run.decidingMatch;
+  if (!text || !m) return null;
+  if (m.opponentTeamId && text.endsWith(m.opponentName)) {
+    return (
+      <>
+        {" · "}
+        {text.slice(0, text.length - m.opponentName.length)}
+        <TeamLink id={m.opponentTeamId} name={m.opponentName} className="font-bold text-slate-900" />
+      </>
+    );
+  }
+  return <>{` · ${text}`}</>;
 }

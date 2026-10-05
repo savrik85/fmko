@@ -1,6 +1,7 @@
 /**
  * Síň slávy klubu pro veřejný klubový web: minulé sezóny, trofeje, ocenění,
- * pohárová tažení, nejlepší střelci všech dob a achievementy.
+ * pohárová tažení a nejlepší střelci všech dob. Herní achievementy (Kořaly) na web klubu
+ * nepatří: jsou to mechaniky hry, ne úspěchy, které by klub psal do kroniky.
  *
  * Čte jen to, co hra archivuje (nic nedopočítává ani nevymýšlí):
  * - `league_history`   konečné tabulky + snímek ocenění se jmény (fáze archive konce sezóny)
@@ -9,7 +10,6 @@
  * - `cup_teams` / `cup_competitions` / `cup_matches`  kam klub v poháru došel
  * - `match_player_stats` + `departed_players`  střelci, i ti, co už ze hry odešli
  *   (`player_stats` se při odchodu hráče maže, proto se nepoužívá)
- * - `team_achievements` + katalog `ACHIEVEMENTS`
  *
  * `season_awards` se nečte: drží jen ID a hráče z nich nejde přiřadit klubu,
  * `league_history.awards` je jeho snímek i se jmény a týmem hráče.
@@ -17,7 +17,6 @@
 
 import type {
   ClubWebsiteHistory,
-  ClubWebsiteHistoryAchievement,
   ClubWebsiteHistoryAward,
   ClubWebsiteHistoryCupRun,
   ClubWebsiteHistoryScorer,
@@ -26,7 +25,6 @@ import type {
 } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { roundName } from "../cup/cup";
-import { ACHIEVEMENTS, getTeamAchievements } from "../services/achievements";
 
 const MODULE = { module: "club-website" };
 
@@ -236,7 +234,6 @@ const TROPHY_ORDER: Record<ClubWebsiteHistoryTrophy["kind"], number> = {
   league_third: 3,
 };
 
-const TIER_ORDER: Record<ClubWebsiteHistoryAchievement["tier"], number> = { gold: 0, silver: 1, bronze: 2 };
 
 function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -262,7 +259,7 @@ async function existingPlayerIds(db: D1Database, ids: string[]): Promise<Set<str
 // ── Hlavní funkce ────────────────────────────────────────────────────────────
 
 export async function loadClubHistory(db: D1Database, teamId: string): Promise<ClubWebsiteHistory> {
-  const [leagueRows, recapRows, trophyRow, cupRows, scorerRows, earned] = await Promise.all([
+  const [leagueRows, recapRows, trophyRow, cupRows, scorerRows] = await Promise.all([
     db.prepare(LEAGUE_HISTORY_SQL).bind(teamId).all<LeagueHistoryRow>()
       .catch((e) => {
         logger.warn(MODULE, "history: fetch league history", e);
@@ -287,11 +284,6 @@ export async function loadClubHistory(db: D1Database, teamId: string): Promise<C
       .catch((e) => {
         logger.warn(MODULE, "history: fetch top scorers", e);
         return { results: [] as ScorerRow[] };
-      }),
-    getTeamAchievements(db, teamId)
-      .catch((e) => {
-        logger.warn(MODULE, "history: fetch achievements", e);
-        return [] as Awaited<ReturnType<typeof getTeamAchievements>>;
       }),
   ]);
 
@@ -497,26 +489,11 @@ export async function loadClubHistory(db: D1Database, teamId: string): Promise<C
     stillAtClub: r.current_team_id === teamId,
   }));
 
-  // ── Achievementy ──
-  const achievements: ClubWebsiteHistoryAchievement[] = earned
-    .filter((a) => a.def !== null)
-    .map((a) => ({
-      key: a.key,
-      icon: a.def!.icon,
-      title: a.def!.title,
-      desc: a.def!.desc,
-      tier: a.def!.tier,
-      earnedAt: a.earnedAt,
-    }))
-    .sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier] || b.earnedAt.localeCompare(a.earnedAt));
-
   return {
     seasons,
     trophies,
     awards,
     cup,
     topScorers,
-    achievements,
-    achievementsTotal: ACHIEVEMENTS.length,
   };
 }

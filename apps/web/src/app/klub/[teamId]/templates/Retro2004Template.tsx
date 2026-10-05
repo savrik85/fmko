@@ -23,8 +23,23 @@ import { ManagerFace } from "../ManagerFace";
 import { TacticalPitch } from "../TacticalPitch";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
-import { PressCenter, hasPressCenterContent } from "../PressCenter";
-import { ClubHallOfFame } from "../ClubHallOfFame";
+import {
+  AWARD_TITLES,
+  PRESS_NEWS_TYPES,
+  awardsBySeason,
+  cupMatchText,
+  cupResultText,
+  hasHistory,
+  hasPressContent,
+  historyIntro,
+  interviewCoach,
+  interviewHeadline,
+  interviewPairs,
+  pressInterviews,
+  pressNews,
+  trophyTitle,
+  type Interview,
+} from "./club-content";
 
 /**
  * Web je v barvách klubu: proměnné `--club-*` nastavuje obal stránky (`clubPaletteStyle`).
@@ -44,6 +59,18 @@ const CLUB_TONES = {
   "--club-line": "color-mix(in srgb, var(--club-accent-light) 40%, white)",
 } as CSSProperties;
 
+/** Jméno z historie klubu: odkaz na profil, pokud hráč ve hře ještě je, jinak jen text. */
+function HistoryPlayerName({ id, name }: { id: string | null; name: string }) {
+  const className = "text-base font-bold text-[var(--club-ink)]";
+  return id ? (
+    <PlayerLink id={id} className={className}>
+      {name}
+    </PlayerLink>
+  ) : (
+    <span className={className}>{name}</span>
+  );
+}
+
 export function Retro2004Template({
   data,
   hasSponsorBanner,
@@ -60,6 +87,7 @@ export function Retro2004Template({
   const [viewMode, setViewMode] = useState<"table" | "pitch">("table");
   const [pollSelection, setPollSelection] = useState<PollChoice>("win");
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
+  const [openInterviews, setOpenInterviews] = useState<Record<string, boolean>>({});
   const fanPoll = useFanPoll(data);
 
   const primary = team.primaryColor || "#2D5F2D";
@@ -114,6 +142,44 @@ export function Retro2004Template({
     isHome ? team.name : <TeamLink id={opponent.id} name={opponent.name} />;
   const awaySide = (isHome: boolean, opponent: { id: string; name: string }) =>
     isHome ? <TeamLink id={opponent.id} name={opponent.name} /> : team.name;
+
+  // Tiskové středisko: nejnovější rozhovor celý jako článek, starší na rozkliknutí, pod nimi zprávy klubu.
+  const hasPress = hasPressContent(data);
+  const [latestInterview, ...olderInterviews] = pressInterviews(data);
+  const clubNews = pressNews(data);
+
+  const interviewByline = (iv: Interview) => {
+    const coach = interviewCoach(iv, data);
+    return (
+      <div className="text-gray-700 mb-2 break-words">
+        Odpovídá {coach === "Trenér" ? "trenér klubu" : <>trenér <strong>{coach}</strong></>}
+      </div>
+    );
+  };
+  const interviewText = (iv: Interview) => (
+    <div className="space-y-2.5 font-serif text-sm leading-relaxed text-gray-800">
+      {interviewPairs(iv).map((pair, i) => (
+        <div key={i}>
+          <p className="font-bold text-black break-words">{pair.question}</p>
+          <p className="break-words">{pair.answer}</p>
+        </div>
+      ))}
+    </div>
+  );
+
+  // Historie klubu: kronika je vždycky, archiv sezón, ocenění a pohárů jen když se něco dochovalo.
+  const history = hasHistory(data.history) ? data.history : null;
+  const hasSeasons = !!history && history.seasons.length > 0;
+  const foundingYear = team.identity.foundingYear;
+  const chronicle =
+    team.identity.foundingStory ||
+    (foundingYear
+      ? `Oddíl ${team.name} byl založen roku ${foundingYear}.${hasSeasons ? "" : " Další stránky kroniky se teprve píšou."}`
+      : hasSeasons
+        ? null
+        : `Kronika oddílu ${team.name} se teprve píše.`);
+  // Mezititulek uvnitř sekce, stejný jako u dresů v sekci „Klubová kultura“.
+  const subHeading = "font-bold text-sm uppercase text-[var(--club-ink)] mb-2 border-b border-gray-300 pb-1";
 
   const navLink =
     "px-2.5 py-1 bg-[#f5f5f0] border border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-[var(--club-tint)] shrink-0";
@@ -237,8 +303,7 @@ export function Retro2004Template({
               <ul className="p-2 space-y-1.5 text-blue-800 underline">
                 <li><a href="#zapas" className="hover:text-red-600">» Příští zápas</a></li>
                 <li><a href="#kadr" className="hover:text-red-600">» Hráčská soupiska</a></li>
-                {hasPressCenterContent(data) && <li><a href="#tisk" className="hover:text-red-600">» Tiskové středisko</a></li>}
-                {data.history && <li><a href="#historie" className="hover:text-red-600">» Síň slávy</a></li>}
+                {hasPress && <li><a href="#tisk" className="hover:text-red-600">» Tiskové středisko</a></li>}
                 <li><a href="#stadion" className="hover:text-red-600">» Fotky stadionu</a></li>
                 <li><a href="#bufet" className="hover:text-red-600">» Pivo a klobásy</a></li>
                 <li><a href="#realizak" className="hover:text-red-600">» Trenér a vedení</a></li>
@@ -985,25 +1050,97 @@ export function Retro2004Template({
             </section>
 
             {/* ═══ TISKOVÉ STŘEDISKO ═══ */}
-            {hasPressCenterContent(data) && (
+            {hasPress && (
               <section id="tisk" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-                <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase">
-                  Tiskové středisko: slovo trenéra a zprávy klubu
+                <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+                  <span>Tiskové středisko</span>
+                  <span className="text-[var(--club-on-bar)] text-sm font-mono">Rozhovory & zprávy klubu</span>
                 </div>
-                <div className="p-3">
-                  <PressCenter data={data} tone="light" />
-                </div>
-              </section>
-            )}
 
-            {/* ═══ SÍŇ SLÁVY ═══ */}
-            {data.history && (
-              <section id="historie" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-                <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase">
-                  Síň slávy oddílu
-                </div>
-                <div className="p-3">
-                  <ClubHallOfFame history={data.history} tone="light" />
+                <div className="p-3 space-y-5 text-sm">
+                  {latestInterview && (
+                    <div>
+                      <h4 className={subHeading}>Slovo trenéra</h4>
+                      <div className="space-y-3">
+                        <article className="p-3 border border-gray-300 bg-[#f9f9f6] text-sm">
+                          <div className="flex items-center justify-between gap-2 border-b border-gray-300 pb-1.5 mb-2 flex-wrap">
+                            <span className="font-mono font-bold text-sm px-1.5 py-0.5 bg-[var(--club-bar)] text-[var(--club-on-bar)]">
+                              [ ROZHOVOR ]
+                            </span>
+                            <span className="text-gray-600 text-sm">
+                              Datum: <strong>{formatDate(latestInterview.createdAt)}</strong>
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-base text-[var(--club-ink)] mb-1 break-words">
+                            {interviewHeadline(latestInterview)}
+                          </h4>
+                          {interviewByline(latestInterview)}
+                          {interviewText(latestInterview)}
+                        </article>
+
+                        {olderInterviews.length > 0 && (
+                          <div className="border border-gray-300 bg-white text-sm">
+                            <div className="bg-[#f0f0e8] px-2.5 py-1 font-bold text-gray-800 border-b border-gray-300">
+                              Starší rozhovory ({olderInterviews.length})
+                            </div>
+                            <ul className="divide-y divide-gray-200">
+                              {olderInterviews.map((iv) => {
+                                const open = !!openInterviews[iv.id];
+                                const panelId = `rozhovor-${iv.id}`;
+                                return (
+                                  <li key={iv.id}>
+                                    <button
+                                      type="button"
+                                      aria-expanded={open}
+                                      aria-controls={panelId}
+                                      onClick={() => setOpenInterviews((s) => ({ ...s, [iv.id]: !s[iv.id] }))}
+                                      className="w-full p-1.5 flex items-center justify-between gap-2 text-left hover:bg-[var(--club-tint)] cursor-pointer"
+                                    >
+                                      <span className="min-w-0 break-words font-bold text-blue-800 underline">
+                                        {interviewHeadline(iv)}
+                                      </span>
+                                      <span className="flex items-center gap-2 shrink-0 font-mono">
+                                        <span className="text-gray-500">{formatDate(iv.createdAt)}</span>
+                                        <span className="text-gray-700" aria-hidden="true">{open ? "[-]" : "[+]"}</span>
+                                      </span>
+                                    </button>
+                                    <div id={panelId} hidden={!open} className="px-2.5 pt-1 pb-3 border-t border-dashed border-gray-300">
+                                      {interviewByline(iv)}
+                                      {interviewText(iv)}
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {clubNews.length > 0 && (
+                    <div>
+                      <h4 className={subHeading}>Zprávy z klubu</h4>
+                      <div className="space-y-3">
+                        {clubNews.map((n) => (
+                          <article key={n.id} className="p-3 border border-gray-300 bg-[#f9f9f6] text-sm">
+                            <div className="flex items-center justify-between gap-2 border-b border-gray-300 pb-1.5 mb-2 flex-wrap">
+                              <span className="font-mono font-bold text-sm px-1.5 py-0.5 bg-[var(--club-bar)] text-[var(--club-on-bar)] uppercase">
+                                [ {PRESS_NEWS_TYPES.get(n.type)} ]
+                              </span>
+                              <span className="text-gray-600 text-sm">
+                                Datum: <strong>{formatDate(n.created_at)}</strong>
+                              </span>
+                            </div>
+                            <h4 className="font-bold text-base text-[var(--club-ink)] mb-1 break-words">{n.headline}</h4>
+                            <p className="text-gray-800 leading-relaxed font-serif text-sm whitespace-pre-line break-words">
+                              {n.body}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
             )}
@@ -1033,22 +1170,211 @@ export function Retro2004Template({
               </section>
             )}
 
-            {/* ═══ HISTORIE & KRONIKA ═══ */}
-            <section id="historie" className={`border border-gray-400 bg-white p-3.5 text-sm font-serif leading-relaxed ${ANCHOR_OFFSET}`}>
-              <div className="font-sans font-bold text-base text-[var(--club-accent-light)] border-b border-gray-300 pb-1 mb-2 break-words">
-                Z kroniky oddílu {team.name}
+            {/* ═══ HISTORIE KLUBU & KRONIKA ═══ */}
+            <section id="historie" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+                <span>Historie klubu</span>
+                <span className="text-[var(--club-on-bar)] text-sm font-mono">
+                  {foundingYear ? `Založeno roku ${foundingYear}` : "Kronika oddílu"}
+                </span>
               </div>
-              <p className="break-words">
-                {team.identity.foundingStory ||
-                  (team.identity.foundingYear
-                    ? `Oddíl ${team.name} byl založen roku ${team.identity.foundingYear}. Další stránky kroniky se teprve píšou.`
-                    : `Kronika oddílu ${team.name} se teprve píše.`)}
-              </p>
-              {team.identity.motto && (
-                <div className="mt-2 text-center font-bold text-gray-700 italic border-t border-gray-200 pt-1 break-words">
-                  Klubové heslo: „{team.identity.motto}“
+
+              <div className="p-3 space-y-5 text-sm">
+                {/* Kronika */}
+                <div>
+                  <h4 className={subHeading}>Z kroniky oddílu {team.name}</h4>
+                  <div className="space-y-2 font-serif leading-relaxed text-gray-900">
+                    {chronicle && <p className="break-words">{chronicle}</p>}
+                    {history && hasSeasons && <p className="break-words">{historyIntro(history, team.name)}</p>}
+                  </div>
+                  {team.identity.motto && (
+                    <div className="mt-2 text-center font-serif font-bold text-gray-700 italic border-t border-gray-200 pt-1 break-words">
+                      Klubové heslo: „{team.identity.motto}“
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Úspěchy klubu */}
+                {history && history.trophies.length > 0 && (
+                  <div>
+                    <h4 className={subHeading}>Úspěchy klubu</h4>
+                    <ul className="list-disc pl-5 space-y-0.5 font-serif text-gray-900">
+                      {history.trophies.map((t) => (
+                        <li key={`${t.seasonNumber}-${t.kind}-${t.competitionName}`} className="break-words">
+                          <strong>{trophyTitle(t)}</strong> ({t.seasonNumber}. sezóna)
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Umístění v soutěžích, stejná tabulka jako „Tabulka soutěže“ */}
+                {history && hasSeasons && (
+                  <div>
+                    <h4 className={subHeading}>Umístění v soutěžích</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-[#f0f0e8] border-b border-gray-400 text-gray-700 font-bold">
+                            <th className="py-1 px-1.5 text-center">Sezóna</th>
+                            <th className="py-1 px-2">Soutěž</th>
+                            <th className="py-1 px-1.5 text-center">Místo</th>
+                            <th className="py-1 px-1.5 text-center">Z</th>
+                            <th className="py-1 px-1.5 text-center">V</th>
+                            <th className="py-1 px-1.5 text-center">R</th>
+                            <th className="py-1 px-1.5 text-center">P</th>
+                            <th className="py-1 px-2 text-center">Skóre</th>
+                            <th className="py-1 px-2 text-center font-black">Body</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {history.seasons.map((s) => (
+                            <tr
+                              key={s.seasonNumber}
+                              className={`border-b border-gray-200 ${
+                                s.position === 1
+                                  ? "bg-[var(--club-tint-strong)] font-bold text-[var(--club-ink)] border-[var(--club-accent-light)]"
+                                  : "hover:bg-gray-50"
+                              }`}
+                            >
+                              <td className="py-1 px-1.5 text-center font-mono font-bold">{s.seasonNumber}.</td>
+                              <td className="py-1 px-2 min-w-[9rem]">{s.leagueName}</td>
+                              <td className="py-1 px-1.5 text-center font-mono font-bold whitespace-nowrap">
+                                {s.position}.{s.teams !== null ? ` z ${s.teams}` : ""}
+                              </td>
+                              <td className="py-1 px-1.5 text-center font-mono">{s.played ?? EMPTY}</td>
+                              <td className="py-1 px-1.5 text-center font-mono text-emerald-800">{s.wins ?? EMPTY}</td>
+                              <td className="py-1 px-1.5 text-center font-mono text-gray-600">{s.draws ?? EMPTY}</td>
+                              <td className="py-1 px-1.5 text-center font-mono text-red-800">{s.losses ?? EMPTY}</td>
+                              <td className="py-1 px-2 text-center font-mono text-gray-700 whitespace-nowrap">
+                                {s.goalsFor !== null && s.goalsAgainst !== null ? `${s.goalsFor}:${s.goalsAgainst}` : EMPTY}
+                              </td>
+                              <td className="py-1 px-2 text-center font-mono font-black text-black bg-black/5">{s.points ?? EMPTY}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ocenění po sezónách */}
+                {history && history.awards.length > 0 && (
+                  <div>
+                    <h4 className={subHeading}>Ocenění</h4>
+                    <div className="space-y-3">
+                      {awardsBySeason(history).map((group) => (
+                        <div key={group.seasonNumber}>
+                          <div className="font-bold text-gray-800 border-b border-gray-200 pb-0.5 mb-1 break-words">
+                            {group.seasonNumber}. sezóna{group.leagueName ? `, ${group.leagueName}` : ""}
+                          </div>
+                          <ul className="list-disc pl-5 space-y-1 text-gray-900">
+                            {group.single.map((a, i) => (
+                              <li key={`${a.kind}-${i}`} className="break-words">
+                                <span className="font-bold">{AWARD_TITLES[a.kind]}:</span>{" "}
+                                {a.name ? (
+                                  <HistoryPlayerName id={a.playerId} name={a.name} />
+                                ) : (
+                                  <span>{a.kind === "manager_of_season" ? "trenér klubu" : "jméno se nedochovalo"}</span>
+                                )}
+                                {a.detail && a.kind === "top_scorer" && <span className="text-gray-600">, {a.detail}</span>}
+                                {a.detail && a.kind !== "top_scorer" && (
+                                  <div className="font-serif text-gray-600 break-words">{a.detail}</div>
+                                )}
+                              </li>
+                            ))}
+                            {group.bestEleven.length > 0 && (
+                              <li className="break-words">
+                                <span className="font-bold">{AWARD_TITLES.best_eleven}:</span>{" "}
+                                {group.bestEleven.map((p, i) => (
+                                  <span key={`${p.playerId ?? p.name}-${i}`}>
+                                    {i > 0 && ", "}
+                                    <HistoryPlayerName id={p.playerId} name={p.name ?? "neznámý hráč"} />
+                                    {p.detail && <span className="text-gray-600"> ({p.detail.toLowerCase()})</span>}
+                                  </span>
+                                ))}
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pohár */}
+                {history && history.cup.length > 0 && (
+                  <div>
+                    <h4 className={subHeading}>Pohár</h4>
+                    <ul className="border border-gray-300 divide-y divide-gray-200">
+                      {history.cup.map((run) => {
+                        const m = run.decidingMatch;
+                        const matchText = cupMatchText(run);
+                        // Soupeř na konci věty je odkaz na jeho klubový web (velkokluby mimo hru ho nemají).
+                        const matchLead = m && matchText?.endsWith(m.opponentName) ? matchText.slice(0, -m.opponentName.length) : null;
+                        return (
+                          <li key={`${run.seasonNumber}-${run.cupName}`} className="p-1.5 hover:bg-[var(--club-tint)]">
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                              <span className="font-bold min-w-0 break-words">
+                                {run.cupName} <span className="font-normal text-gray-600">({run.seasonNumber}. sezóna)</span>
+                              </span>
+                              <span className={`font-bold ${run.status === "won" ? "text-[var(--club-ink)]" : "text-gray-700"}`}>
+                                {cupResultText(run)}
+                              </span>
+                            </div>
+                            {m && matchText && (
+                              <div className="text-gray-600 break-words">
+                                Rozhodující zápas:{" "}
+                                {matchLead !== null ? (
+                                  <>
+                                    {matchLead}
+                                    <TeamLink id={m.opponentTeamId} name={m.opponentName} className="font-bold text-gray-800" />
+                                  </>
+                                ) : (
+                                  matchText
+                                )}
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Nejlepší střelci, stejná tabulka jako „Tabulka soutěže“ */}
+                {history && history.topScorers.length > 0 && (
+                  <div>
+                    <h4 className={subHeading}>Nejlepší střelci v historii klubu</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-[#f0f0e8] border-b border-gray-400 text-gray-700 font-bold">
+                            <th className="py-1 px-1.5 text-center w-8">#</th>
+                            <th className="py-1 px-2">Hráč</th>
+                            <th className="py-1 px-2 text-center font-black">Góly</th>
+                            <th className="py-1 px-1.5 text-center">Zápasy</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {history.topScorers.map((s, i) => (
+                            <tr key={`${s.playerId ?? s.name}-${i}`} className="border-b border-gray-200 hover:bg-gray-50">
+                              <td className="py-1 px-1.5 text-center font-mono font-bold">{i + 1}.</td>
+                              <td className="py-1 px-2 min-w-[10rem]">
+                                <HistoryPlayerName id={s.playerId} name={s.name} />
+                                {!s.stillAtClub && <span className="text-sm text-gray-600 whitespace-nowrap"> (odešel)</span>}
+                              </td>
+                              <td className="py-1 px-2 text-center font-mono font-black text-black bg-black/5">{s.goals}</td>
+                              <td className="py-1 px-1.5 text-center font-mono">{s.appearances}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="text-gray-600 mt-1">Započteny jsou mistrovské i pohárové zápasy.</div>
+                  </div>
+                )}
+              </div>
             </section>
           </main>
         </div>

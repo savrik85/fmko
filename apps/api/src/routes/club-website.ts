@@ -1589,7 +1589,7 @@ clubWebsiteRouter.get("/:id/website/player/:playerId", async (c) => {
   const [club, website, player] = await Promise.all([
     db.prepare("SELECT id, name, primary_color, secondary_color FROM teams WHERE id = ?")
       .bind(clubId).first<{ id: string; name: string; primary_color: string; secondary_color: string }>(),
-    db.prepare("SELECT custom_slug FROM team_websites WHERE team_id = ?").bind(clubId).first<{ custom_slug: string | null }>()
+    db.prepare("SELECT custom_slug, template FROM team_websites WHERE team_id = ?").bind(clubId).first<{ custom_slug: string | null; template: string | null }>()
       .catch((e) => {
         logger.warn(MODULE, "player profile: website slug", e);
         return null;
@@ -1647,6 +1647,7 @@ clubWebsiteRouter.get("/:id/website/player/:playerId", async (c) => {
       id: club.id,
       name: club.name,
       slug: website?.custom_slug ?? null,
+      template: (website?.template || "retro_2004") as ClubWebsiteTemplate,
       primaryColor: club.primary_color,
       secondaryColor: club.secondary_color,
     },
