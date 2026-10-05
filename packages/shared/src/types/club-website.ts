@@ -135,6 +135,32 @@ export interface ClubWebsiteStaff {
   description: string | null;
 }
 
+export interface ClubWebsiteMatchHighlight {
+  minute: number;
+  type: string;
+  isHome: boolean;
+  playerName: string;
+  description: string;
+  detail?: string;
+  source?: string;
+}
+
+export interface ClubWebsiteMatchSummary {
+  id: string;
+  round: number;
+  isHome: boolean;
+  scoreHome: number;
+  scoreAway: number;
+  opponent: {
+    id: string;
+    name: string;
+    primaryColor: string;
+    badge: string;
+  };
+  date: string;
+  highlights?: ClubWebsiteMatchHighlight[];
+}
+
 export interface ClubWebsiteData {
   team: {
     id: string;
@@ -236,20 +262,8 @@ export interface ClubWebsiteData {
     u21Team: ClubWebsitePlayer[];
   };
   matches: {
-    lastMatch: {
-      id: string;
-      round: number;
-      isHome: boolean;
-      scoreHome: number;
-      scoreAway: number;
-      opponent: {
-        id: string;
-        name: string;
-        primaryColor: string;
-        badge: string;
-      };
-      date: string;
-    } | null;
+    lastMatch: ClubWebsiteMatchSummary | null;
+    recentMatches?: ClubWebsiteMatchSummary[];
     nextMatch: {
       id: string;
       round: number;
@@ -275,8 +289,9 @@ export interface ClubWebsiteData {
   };
   tickets: {
     adultPrice: number;
-    childPrice: number;
-    seasonPassPrice: number;
+    price?: number;
+    childPrice?: number;
+    seasonPassPrice?: number;
   };
   interviews: Array<{
     id: string;

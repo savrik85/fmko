@@ -9,6 +9,8 @@ import {
   slugifyTeamName,
   type ClubWebsiteTemplate,
   type ClubWebsiteAddon,
+  type ClubWebsiteMatchHighlight,
+  type ClubWebsiteMatchSummary,
 } from "@okresni-masina/shared";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
 
@@ -462,8 +464,54 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     });
   }
 
-  // 7. Matches: Last simulated match + Next scheduled match
-  const lastMatch = await c.env.DB.prepare(
+  // Helper to extract dramatic highlight moments from match events
+  function extractHighlights(rawEvents: unknown): ClubWebsiteMatchHighlight[] {
+    let events: any[] = [];
+    try {
+      events = typeof rawEvents === "string" ? JSON.parse(rawEvents) : ((rawEvents as any[]) || []);
+    } catch {
+      events = [];
+    }
+    if (!Array.isArray(events)) return [];
+
+    let keyMoments = events.filter((e) => {
+      if (e.type === "goal") return true;
+      if (e.type === "card" && (e.detail === "red" || e.detail === "yellow_red")) return true;
+      if (e.type === "penalty") return true;
+      if (e.type === "chance" && (
+        e.detail === "břevno" ||
+        e.detail === "tyč" ||
+        e.detail === "penalty_missed" ||
+        e.detail === "penalty_saved" ||
+        e.description?.toLowerCase().includes("břevno") ||
+        e.description?.toLowerCase().includes("tyč") ||
+        e.description?.toLowerCase().includes("gólová") ||
+        e.description?.toLowerCase().includes("tutovka")
+      )) return true;
+      return false;
+    });
+
+    if (keyMoments.length === 0) {
+      keyMoments = events
+        .filter((e) => e.type === "chance" || (e.type === "card" && e.detail === "yellow"))
+        .slice(0, 5);
+    }
+
+    return keyMoments
+      .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0))
+      .map((e) => ({
+        minute: e.minute ?? 0,
+        type: e.type,
+        isHome: e.teamId === 1,
+        playerName: e.playerName || "Hráč",
+        description: e.description || "",
+        detail: e.detail,
+        source: e.source,
+      }));
+  }
+
+  // 7. Matches: Last simulated match + Next scheduled match + recent matches for highlights
+  const recentMatchesRows = await c.env.DB.prepare(
     `SELECT m.id, m.round, m.home_score, m.away_score, m.events, m.simulated_at,
             ht.id as home_id, ht.name as home_name, ht.primary_color as home_primary, ht.badge_pattern as home_badge,
             at.id as away_id, at.name as away_name, at.primary_color as away_primary, at.badge_pattern as away_badge
@@ -471,11 +519,26 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
      JOIN teams ht ON m.home_team_id = ht.id
      JOIN teams at ON m.away_team_id = at.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
-     ORDER BY m.simulated_at DESC LIMIT 1`,
-  ).bind(teamId, teamId).first<any>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch last match", e);
-    return null;
+     ORDER BY m.simulated_at DESC LIMIT 3`,
+  ).bind(teamId, teamId).all<any>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch recent matches", e);
+    return { results: [] };
   });
+
+  const recentMatches: ClubWebsiteMatchSummary[] = (recentMatchesRows?.results || []).map((row: any) => ({
+    id: row.id,
+    round: row.round,
+    isHome: row.home_id === teamId,
+    scoreHome: row.home_score,
+    scoreAway: row.away_score,
+    opponent: row.home_id === teamId
+      ? { id: row.away_id, name: row.away_name, primaryColor: row.away_primary, badge: row.away_badge }
+      : { id: row.home_id, name: row.home_name, primaryColor: row.home_primary, badge: row.home_badge },
+    date: row.simulated_at,
+    highlights: extractHighlights(row.events),
+  }));
+
+  const lastMatch = recentMatches[0] || null;
 
   const nextMatch = await c.env.DB.prepare(
     `SELECT m.id, m.round, sc.scheduled_at,
@@ -694,17 +757,8 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
       u21Team: u21Players,
     },
     matches: {
-      lastMatch: lastMatch ? {
-        id: lastMatch.id,
-        round: lastMatch.round,
-        isHome: lastMatch.home_id === teamId,
-        scoreHome: lastMatch.home_score,
-        scoreAway: lastMatch.away_score,
-        opponent: lastMatch.home_id === teamId
-          ? { id: lastMatch.away_id, name: lastMatch.away_name, primaryColor: lastMatch.away_primary, badge: lastMatch.away_badge }
-          : { id: lastMatch.home_id, name: lastMatch.home_name, primaryColor: lastMatch.home_primary, badge: lastMatch.home_badge },
-        date: lastMatch.simulated_at,
-      } : null,
+      lastMatch,
+      recentMatches,
       nextMatch: nextMatch ? {
         id: nextMatch.id,
         round: nextMatch.round,
@@ -727,8 +781,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     },
     tickets: {
       adultPrice: adultTicketPrice,
-      childPrice: 0,
-      seasonPassPrice: Math.round(15 * adultTicketPrice * 0.8),
+      price: adultTicketPrice,
     },
     interviews,
     news: newsRows.results ?? [],

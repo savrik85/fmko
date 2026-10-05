@@ -48,7 +48,7 @@ export function TacticalPitch({ players, primaryColor, secondaryColor }: Tactica
             color: "#ffffff",
           }}
         >
-          {player.squadNumber ?? player.overallRating}
+          {player.squadNumber ? `#${player.squadNumber}` : "⚽"}
         </div>
 
         {/* Name pill */}
@@ -56,10 +56,9 @@ export function TacticalPitch({ players, primaryColor, secondaryColor }: Tactica
           {player.lastName}
         </div>
 
-        {/* Position & Rating tag */}
+        {/* Position tag */}
         <div className="text-[9px] font-heading text-white/80 flex items-center gap-1 mt-0.5">
           <span className="uppercase text-yellow-300 font-bold">{player.position || labelPos}</span>
-          <span className="text-white/60">({player.overallRating})</span>
         </div>
 
         {/* Hover detail tooltip */}
