@@ -19,7 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/zpravodaj", label: "Zpravodaj", icon: "\u{1F4F0}", group: "main" },
   { href: "/novinky", label: "Co je nového", icon: "✨", group: "main" },
   { href: "/trener", label: "Profil trenéra", icon: "\u{1F9D1}\u200D\u{1F4BC}", group: "club" },
-  { href: "/muj-klub", label: "Klub", icon: "\u{1F3DB}\uFE0F", group: "club" },
+  { href: "/muj-klub", label: "Klubový web", icon: "🌐", group: "club" },
   { href: "/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
   { href: "/reputace", label: "Reputace", icon: "\u2B50", group: "club" },
   { href: "/kadr", label: "Kádr", icon: "\u{1F465}", group: "club" },
