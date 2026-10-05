@@ -64,6 +64,7 @@ export async function mergeStaffMatchMods(
   mods: MatchMods | undefined,
   isHome: boolean,
   opponentTeamId?: string,
+  matchId?: string,
 ): Promise<MatchMods> {
   const merged = mods ?? zeroMatchMods();
   const { calculateStaffEffects } = await import("../staff/staff-effects");
@@ -90,6 +91,18 @@ export async function mergeStaffMatchMods(
       merged.techniqueMod += 2;
       merged.moraleMod += 3;
     }
+  }
+
+  // Zápasové úkoly zaměstnanců (staff/staff-tasks.ts): jen ligový zápas, na který byly zadané.
+  if (matchId) {
+    const { loadTaskMatchMods } = await import("../staff/staff-tasks");
+    const t = await loadTaskMatchMods(db, teamId, matchId, isHome);
+    merged.injurySeverityMod += t.injurySeverityMod;
+    merged.setPiecesMod = (merged.setPiecesMod ?? 0) + t.setPiecesMod;
+    merged.lateFatigueMod = (merged.lateFatigueMod ?? 0) + t.lateFatigueMod;
+    merged.conditionDrainMod += t.conditionDrainMod;
+    merged.crowdMod += t.crowdMod;
+    merged.moraleMod += t.moraleMod;
   }
 
   return merged;
@@ -119,7 +132,8 @@ export async function loadMatchMods(
   teamId: string,
   isHome: boolean,
   opponentTeamId?: string,
+  matchId?: string,
 ): Promise<MatchMods> {
-  const mods = await mergeStaffMatchMods(db, teamId, await loadEquipmentMatchMods(db, teamId), isHome, opponentTeamId);
+  const mods = await mergeStaffMatchMods(db, teamId, await loadEquipmentMatchMods(db, teamId), isHome, opponentTeamId, matchId);
   return mergeCoachMatchMods(db, teamId, mods);
 }

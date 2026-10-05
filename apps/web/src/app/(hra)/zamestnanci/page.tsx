@@ -7,6 +7,7 @@ import { apiFetch, apiAction } from "@/lib/api";
 import { Spinner, Tabs, useTabParam } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { StaffTaskBox, type StaffTasksData } from "@/components/staff/StaffTaskBox";
 import {
   ROLE_DEFS,
   STAFF_ROLE_ORDER,
@@ -48,6 +49,7 @@ interface StaffMember {
   coursePoints: number | null;
   courseWeeksRemaining: number | null;
   courses?: CourseQuote[] | null;
+  taskCooldownUntil?: string | null;
 }
 
 type Tab = "team" | "market";
@@ -198,13 +200,16 @@ export default function ZamestnanciPage() {
   const [maxScouts, setMaxScouts] = useState(2);
   const [pickRole, setPickRole] = useState<Record<string, StaffRole>>({});
   const [marketRoleFilter, setMarketRoleFilter] = useState<StaffRole | "all">("all");
+  const [tasksData, setTasksData] = useState<StaffTasksData | null>(null);
 
   const refresh = async () => {
     if (!teamId) return;
-    const [s, m] = await Promise.all([
+    const [s, m, t] = await Promise.all([
       apiFetch<{ staff: StaffMember[]; coachLicence?: number; maxScouts?: number }>(`/api/teams/${teamId}/staff`).catch((e) => { console.error("load staff:", e); return null; }),
       apiFetch<{ market: Array<StaffMember & { requiredLicence?: number }>; coachLicence?: number }>(`/api/teams/${teamId}/staff/market`).catch((e) => { console.error("load market:", e); return null; }),
+      apiFetch<StaffTasksData>(`/api/teams/${teamId}/staff/tasks`).catch((e) => { console.error("load staff tasks:", e); return null; }),
     ]);
+    if (t) setTasksData(t);
     if (s) {
       setHired(s.staff ?? []);
       if (typeof s.maxScouts === "number") setMaxScouts(s.maxScouts);
@@ -391,10 +396,17 @@ export default function ZamestnanciPage() {
 
         <div className="text-xs text-muted">{def.effectDesc}</div>
 
-        {role === "skaut" && (
+        {role === "skaut" ? (
           <Link href={`/zamestnanci/skaut?scoutId=${m.id}`} className="btn btn-primary btn-sm self-start inline-block">
             Úkol a hlášení →
           </Link>
+        ) : teamId && (
+          <StaffTaskBox
+            teamId={teamId}
+            member={{ id: m.id, role, firstName: m.firstName, lastName: m.lastName, gender: m.gender, taskCooldownUntil: m.taskCooldownUntil }}
+            data={tasksData}
+            onChanged={refresh}
+          />
         )}
 
         {/* Kurz */}
