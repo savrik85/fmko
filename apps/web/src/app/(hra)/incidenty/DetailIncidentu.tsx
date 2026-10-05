@@ -16,6 +16,34 @@ function Hrac({ playerId, jmeno }: { playerId: string; jmeno: string }) {
   return <Link href={`/hrac/${playerId}`} className={ODKAZ_HRACE}>{jmeno}</Link>;
 }
 
+const SITUACE_S_ABSENCI = new Set(["narozeni_ditete", "nemocny_rodic", "rozvod"]);
+
+/** Kdy hráč doopravdy chybí. Bez toho z „potrvá do" nešlo poznat, jestli v nejbližším zápase nastoupí. */
+function AbsenceSituace({ kind, absence }: { kind: string; absence: NonNullable<DetailIncidentuData["situace"]>["absence"] }) {
+  // Dluhy, ztráta práce a spol. hráče ze zápasu nevyřazují, působí přes omluvenky.
+  // „Nevynechá žádný zápas" by u nich nebyla pravda, tak se o absenci nemluví vůbec.
+  if (!absence) return SITUACE_S_ABSENCI.has(kind) ? <p className="text-sm mt-1">Žádný zápas kvůli tomu nevynechá.</p> : null;
+  const kdy = absence.od === absence.do ? datum(absence.od) : `${datum(absence.od)} až ${datum(absence.do)}`;
+  return (
+    <p className="text-sm mt-1">
+      Chybí {kdy}
+      {absence.zapasy.length === 0 && ", žádný zápas to nezasáhne."}
+      {absence.zapasy.length > 0 && (
+        <>
+          {", vynechá zápas "}
+          {absence.zapasy.map((z, n) => (
+            <span key={z.matchId}>
+              {n > 0 && " a "}
+              {datum(z.den)} s týmem <Link href={`/zapas/${z.matchId}`} className="underline decoration-pitch-500/20 hover:text-pitch-500">{z.souper}</Link>
+            </span>
+          ))}
+          .
+        </>
+      )}
+    </p>
+  );
+}
+
 export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: string; incidentId: string; onZmena: () => void }) {
   const [detail, setDetail] = useState<DetailIncidentuData | null>(null);
   const [chyba, setChyba] = useState<string | null>(null);
@@ -154,7 +182,8 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
         <div>
           <SectionLabel>Koho se to týká</SectionLabel>
           <p className="text-sm"><Hrac playerId={i.dotceny.playerId} jmeno={i.dotceny.jmeno} /></p>
-          {jeSituace && i.status === "probiha" && i.endsOn && <p className="text-sm text-muted mt-1">Potrvá do {datum(i.endsOn)}.</p>}
+          {jeSituace && i.status === "probiha" && i.endsOn && <p className="text-sm text-muted mt-1">Potrvá do {datum(i.endsOn)}</p>}
+          {jeSituace && i.status === "probiha" && <AbsenceSituace kind={i.kind} absence={detail.situace?.absence ?? null} />}
           {jeSituace && detail.situace?.zaloha === "pujceno" && detail.situace.castka != null && (
             <p className="text-sm text-muted mt-1">Zálohu jsi půjčil: {kc(detail.situace.castka)}, splácí se čtyři pondělky ze mzdy.</p>
           )}

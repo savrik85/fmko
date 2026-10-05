@@ -450,7 +450,11 @@ export function simulateTraining(
   commuteKms?: number[],
   equipmentMultiplier: number = 1.0,
   managerBonus: { coaching: number; discipline: number; youthDev: number } = { coaching: 40, discipline: 40, youthDev: 40 },
-  equipExtras: { attendanceBonus?: number; youthTrainingMod?: number; gkTrainingMul?: number } = {},
+  equipExtras: {
+    attendanceBonus?: number; youthTrainingMod?: number; gkTrainingMul?: number;
+    /** Individuální plán (úkol trenéra mládeže / brankářů) po indexech kádru. */
+    individualMul?: ReadonlyArray<number | undefined>;
+  } = {},
   /** Počasí tréninkového dne z `resolveWeatherForDate`. */
   weather?: Weather,
   /** Důvody incidentní absence po indexech kádru (`duvodyNaTrenink`). */
@@ -554,7 +558,8 @@ export function simulateTraining(
       const intensityMod = INTENSITY[plan.intensity ?? "normal"].growth;
       // Mentor pomáhá jen mladým — a sám ze sebe nic nemá
       const mentorBonus = player.age < 22 && playerIndex !== mentorIndex ? mentorMod : 1;
-      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * mentorBonus;
+      const individualMul = equipExtras.individualMul?.[playerIndex] ?? 1;
+      const improveChance = BASE_IMPROVE_CHANCE * intensityMod * equipmentMultiplier * diminishing * ageMod * coachMod * youthMod * gkMul * mentorBonus * individualMul;
       if (rng.random() < improveChance) {
         // Strop atributu = vygenerovaný potenciál (skills_max), ne paušálních 100.
         // Hráč, který je na svém stropu, se v daném atributu dál nezlepší.

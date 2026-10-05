@@ -130,3 +130,5 @@ export {
 export { marketValue, marketValueAgeFactor, marketValueEstimate, MARKET_VALUE_MIN, MARKET_VALUE_MAX, MAX_TRANSFER_AMOUNT } from "./market-value";
 export * from "./transfer-terms";
 export * from "./scouting";
+export * from "./staff-tasks";
+export * from "./club-website";

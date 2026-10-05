@@ -45,15 +45,37 @@ describe("založení situace", () => {
     expect(db.pocet(/UPDATE conversations SET ai_thread_active/)).toBe(1);
   });
 
-  it("narození dítěte založí incidentní absenci ohlášenou dopředu, rozvod stěhování", async () => {
-    const { db, env } = prostredi();
+  it("narození dítěte založí incidentní absenci ohlášenou dopředu a posazenou na zápas", async () => {
+    const { db, env } = prostredi([{ sql: /FROM season_calendar/, all: [{ den: "2026-09-21" }, { den: "2026-09-24" }] }]);
     const stav = stavKlubu({ gameDate: DNES, den: "2026-09-17", kadr: [SUBJEKT] });
     await zalozSituaci(env, stav, navrh({ kind: "narozeni_ditete", dniTrvani: 4, text: "Jan Svědek čeká narození dítěte." }));
     const abs = db.davky.flat().find((d) => /INSERT OR IGNORE INTO club_incident_absences/.test(d.sql));
     expect(abs?.params).toContain("porod");
-    // od_dne je aspoň dva dny po ohlášení (spec 17a)
+    // od_dne je aspoň dva dny po ohlášení (spec 17a) a absence pokryje některý zápas
     const od = String(abs?.params[5]);
+    const doDne = String(abs?.params[6]);
     expect(od >= "2026-09-19").toBe(true);
+    expect(["2026-09-21", "2026-09-24"].some((z) => od <= z && doDne >= z)).toBe(true);
+  });
+
+  it("zápas za koncem situace ji prodlouží, ať stránka nehlásí konec, když hráč chybí", async () => {
+    const { db, env } = prostredi([{ sql: /FROM season_calendar/, all: [{ den: "2026-09-28" }] }]);
+    const stav = stavKlubu({ gameDate: DNES, den: "2026-09-17", kadr: [SUBJEKT] });
+    await zalozSituaci(env, stav, navrh({ kind: "nemocny_rodic", dniTrvani: 4, text: "Jan Svědek tráví dny v nemocnici u rodiče." }));
+    const abs = db.davky.flat().find((d) => /INSERT OR IGNORE INTO club_incident_absences/.test(d.sql));
+    const doDne = String(abs?.params[6]);
+    expect(doDne >= "2026-09-28").toBe(true);
+    const inc = db.dotazy.find((d) => /INSERT OR IGNORE INTO club_incidents/.test(d.sql));
+    const endsOn = String(inc?.params[15]);
+    expect(endsOn.slice(0, 10)).toBe(doDne);
+  });
+
+  it("bez zápasu v dosahu se absence nezakládá", async () => {
+    const { db, env } = prostredi();
+    const stav = stavKlubu({ gameDate: DNES, den: "2026-09-17", kadr: [SUBJEKT] });
+    await zalozSituaci(env, stav, navrh({ kind: "rozvod", dniTrvani: 28, text: "Jan Svědek se rozvádí." }));
+    expect(db.pocet(/INSERT OR IGNORE INTO club_incident_absences/)).toBe(0);
+    expect(db.pocet(/INSERT OR IGNORE INTO club_incidents/)).toBe(1);
   });
 
   it("svatba dá kocovinu jen pijákům z kádru, ženich nepije za trest", async () => {

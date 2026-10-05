@@ -33,7 +33,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/kalendar": "Kalendář",
   "/hlasovani": "Sněm Pralesu",
   "/novinky": "Co je nového",
-  "/muj-klub": "Klub",
+  "/muj-klub": "Klubový web",
   "/muj-klub/dres": "Dres",
   "/muj-klub/stadion": "Stadion klubu",
   "/muj-klub/identita": "Identita klubu",

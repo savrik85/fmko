@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 
-export function ShareButton({ url, title, textClass, bgClass }: {
+export function ShareButton({
+  url,
+  title,
+  textClass,
+  bgClass,
+}: {
   url: string;
   title: string;
   textClass: string;
@@ -13,7 +18,11 @@ export function ShareButton({ url, title, textClass, bgClass }: {
   async function handleShare() {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
-        await navigator.share({ url, title });
+        await navigator.share({
+          url,
+          title: `${title} · Oficiální klubový web`,
+          text: `Mrkni na oficiální klubový web týmu ${title} na Pralesu! Sestavy, výsledky, stadion a vstupenky.`,
+        });
         return;
       } catch (e) {
         // User canceled or not supported — fallback to clipboard
@@ -34,10 +43,11 @@ export function ShareButton({ url, title, textClass, bgClass }: {
     <button
       type="button"
       onClick={handleShare}
-      className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-heading font-bold ${textClass} ${bgClass} backdrop-blur transition-all hover:scale-[1.02]`}
+      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-heading font-bold ${textClass} ${bgClass} backdrop-blur transition-all hover:scale-[1.02] shadow-sm active:scale-95`}
+      title="Sdílet klubový web na sociálních sítích nebo zkopírovat odkaz"
     >
-      <span>{"\u{1F517}"}</span>
-      {copied ? "Zkopírováno!" : "Sdílet"}
+      <span>🔗</span>
+      <span>{copied ? "Zkopírováno!" : "Sdílet web"}</span>
     </button>
   );
 }

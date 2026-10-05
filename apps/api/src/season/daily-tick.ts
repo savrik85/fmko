@@ -485,6 +485,10 @@ export async function executeDailyTick(
         // Životní situace (spec 17b): kdo je bez práce nebo se rozvádí, chodí radši na trénink; dluhy naopak berou čas.
         const druhy = await nactiDruhyHracu(env.DB, teamId, effectiveDate.toISOString());
         const situaceHracu = hraciIds.map((id) => druhy.get(id));
+        // Individuální plány (úkoly trenéra mládeže a trenéra brankářů, staff/staff-tasks.ts).
+        const { loadIndividualTrainingMuls } = await import("../staff/staff-tasks");
+        const planMuls = await loadIndividualTrainingMuls(env.DB, teamId);
+        const individualMul = hraciIds.map((id) => planMuls.get(id));
 
         const result = simulateTraining(rng, squad, {
           type: (todayTrainingType as any) ?? "conditioning",
@@ -493,7 +497,7 @@ export async function executeDailyTick(
           approach: (team.training_approach as any) ?? "balanced",
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
         }, commuteKms, equipMul, mgrBonus,
-          { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul },
+          { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul, individualMul },
           // Počasí tréninkového dne — týž zdroj jako předpověď a zápas.
           trainingWeather?.weather,
           incidentniDuvody,

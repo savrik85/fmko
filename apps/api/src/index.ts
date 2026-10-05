@@ -28,6 +28,7 @@ import { fansRouter } from "./routes/fans";
 import { incidentsRouter } from "./routes/incidents";
 import competitionRouter from "./routes/competition";
 import bettingRouter from "./routes/betting";
+import { clubWebsiteRouter } from "./routes/club-website";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -101,6 +102,7 @@ app.route("/api/registration", registrationRouter);
 app.route("/api/public", publicLandingRouter);
 app.route("/api/villages", villagesRouter);
 app.route("/api/teams", teamsRouter);
+app.route("/api/teams", clubWebsiteRouter);
 app.route("/api", matchesRouter);
 app.route("/api", leagueRouter);
 app.route("/api", sponsorsRouter);

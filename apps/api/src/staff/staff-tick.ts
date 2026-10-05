@@ -8,6 +8,7 @@
  *  - Lékař: zrychlené hojení zranění (+ detekce/mazání vyléčených)
  *  - Správce hřiště: údržba trávníku + vybavení
  *  - Psycholog: zvedá morálku týmu
+ *  - Úkoly zaměstnanců (staff-tasks.ts)
  *  - Údržba poolu volných zaměstnanců per okres
  * Týdně (pondělí, herní den):
  *  - Kurzy: odpočet týdnů + dokončení (přičtení bodů atributu)
@@ -24,6 +25,7 @@ import { createRng } from "../generators/rng";
 import { STAFF_ATTRIBUTE_LABELS, type StaffAttributeKey } from "@okresni-masina/shared";
 import { calculateStaffEffects, type StaffEffects } from "./staff-effects";
 import { maintainStaffPool } from "./staff-generator";
+import { sendStaffSystemMessage } from "./staff-messages";
 
 export interface StaffTickResult {
   date: string;
@@ -68,25 +70,6 @@ async function loadStaffEffectsByTeam(db: D1Database): Promise<Map<string, Staff
   }
   for (const [tid, rows] of byTeam) map.set(tid, calculateStaffEffects(rows));
   return map;
-}
-
-/** Systémová zpráva týmu (vzor roleSenders v index.ts). */
-async function sendStaffSystemMessage(
-  db: D1Database, teamId: string, senderName: string, convTitle: string, body: string,
-): Promise<void> {
-  let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = ?")
-    .bind(teamId, convTitle).first<{ id: string }>().then((r) => r?.id)
-    .catch((e) => { logger.warn({ module: "staff-tick" }, "msg find conversation", e); return null; });
-  if (!convId) {
-    convId = crypto.randomUUID();
-    await db.prepare("INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_text, last_message_at, created_at) VALUES (?, ?, 'system', ?, 0, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-      .bind(convId, teamId, convTitle).run().catch((e) => logger.warn({ module: "staff-tick" }, "msg create conversation", e));
-  }
-  await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at) VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-    .bind(crypto.randomUUID(), convId, senderName, body, JSON.stringify({ type: "staff" }))
-    .run().catch((e) => logger.warn({ module: "staff-tick" }, "msg insert", e));
-  await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-    .bind(body, convId).run().catch((e) => logger.warn({ module: "staff-tick" }, "msg update conversation", e));
 }
 
 /**
@@ -221,6 +204,15 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
       await sendStaffSystemMessage(db, h.team_id, "Lékař", "Lékař",
         `🩹 ${h.first_name} ${h.last_name} je zpět fit, zranění zaléčeno.`);
     }
+  }
+
+  // ── Úkoly zaměstnanců (denně): ranní práce v den zápasu, uzavření po zápase, dlouhé úkoly ──
+  try {
+    const { runStaffTasks } = await import("./staff-tasks");
+    const tr = await runStaffTasks(db, effectiveDate.toISOString());
+    logger.info({ module: "staff-tick" }, `úkoly: ráno=${tr.matchDayWork} uzavřeno=${tr.closed} zrušeno=${tr.expired} dny=${tr.weeklyDays} hotovo=${tr.finished}`);
+  } catch (e) {
+    logger.error({ module: "staff-tick" }, "úkoly zaměstnanců", e);
   }
 
   // ── Údržba poolu volných zaměstnanců (denně, per okres) ──

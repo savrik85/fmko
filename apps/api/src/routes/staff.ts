@@ -6,13 +6,16 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
-import { requireTeamOwnership } from "../auth/middleware";
+import { requireTeamOwnership, requireOwnedTeamRead } from "../auth/middleware";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
 import {
   ROLE_DEFS, STAFF_ATTRIBUTE_LABELS, licenceLabel, staffRequiredLicence, maxScoutsForLicence,
   type StaffRole, type StaffAttributeKey, type LicenceLevel,
 } from "@okresni-masina/shared";
 import { calculateStaffEffects } from "../staff/staff-effects";
+import {
+  endStaffTasksOnLeave, createStaffTask, cancelStaffTask, loadStaffTaskViews, findNextLeagueMatch, gameDay,
+} from "../staff/staff-tasks";
 
 export const staffRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -50,6 +53,7 @@ interface StaffRow {
   course_weeks_remaining: number | null;
   hired_at: string | null;
   listed_until: string | null;
+  task_cooldown_until: string | null;
 }
 
 function mapStaff(row: StaffRow) {
@@ -81,11 +85,12 @@ function mapStaff(row: StaffRow) {
     courseWeeksRemaining: row.course_weeks_remaining,
     hiredAt: row.hired_at,
     listedUntil: row.listed_until,
+    taskCooldownUntil: row.task_cooldown_until,
   };
 }
 
 const STAFF_COLS =
-  "id, district, team_id, role, profession, first_name, last_name, gender, age, coaching, medicine, maintenance, judgement, communication, work_rate, charm, weekly_wage, signing_fee, avatar, description, course_attribute, course_points, course_weeks_remaining, hired_at, listed_until";
+  "id, district, team_id, role, profession, first_name, last_name, gender, age, coaching, medicine, maintenance, judgement, communication, work_rate, charm, weekly_wage, signing_fee, avatar, description, course_attribute, course_points, course_weeks_remaining, hired_at, listed_until, task_cooldown_until";
 
 /** Jakou licenci trenéra kandidát chce — podle své nejsilnější vlastnosti. */
 function requiredLicence(row: StaffRow): LicenceLevel {
@@ -261,6 +266,7 @@ staffRouter.post("/teams/:teamId/staff/:staffId/fire", async (c) => {
     .catch((e) => { logger.error({ module: "staff" }, "fire failed", e); return null; });
   if (!res || (res.meta?.changes ?? 0) === 0) return c.json({ error: "Zaměstnanec nenalezen" }, 404);
   await endScoutTask(c.env.DB, teamId, staffId);
+  await endStaffTasksOnLeave(c.env.DB, teamId, staffId, gameDate);
 
   return c.json({ ok: true });
 });
@@ -310,6 +316,7 @@ staffRouter.post("/teams/:teamId/staff/:staffId/reassign", async (c) => {
     .bind(role, staffId, teamId).run()
     .catch((e) => { logger.error({ module: "staff" }, "reassign failed", e); throw e; });
   if (cur.role === "skaut") await endScoutTask(c.env.DB, teamId, staffId);
+  else await endStaffTasksOnLeave(c.env.DB, teamId, staffId, await loadGameDate(c.env.DB, teamId));
   return c.json({ ok: true });
 });
 
@@ -345,4 +352,77 @@ staffRouter.post("/teams/:teamId/staff/:staffId/course", async (c) => {
     `Kurz (${STAFF_ATTRIBUTE_LABELS[attribute as StaffAttributeKey] ?? attribute}) pro ${row.first_name} ${row.last_name}`, gameDate, staffId);
 
   return c.json({ ok: true, course: { attribute, ...quote } });
+});
+
+/**
+ * GET /teams/:teamId/staff/tasks — úkoly zaměstnanců (aktivní a nedávno skončené),
+ * nejbližší ligový zápas (na ten se chystají zápasové úkoly) a hráči klubu pro výběr.
+ */
+staffRouter.get("/teams/:teamId/staff/tasks", async (c) => {
+  const teamId = c.req.param("teamId");
+  // Morálka, nespokojenost a zranění hráčů jsou interní věc klubu: jen pro vlastníka.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const db = c.env.DB;
+  const gameDate = await loadGameDate(db, teamId);
+  const [tasks, nextMatch, players] = await Promise.all([
+    loadStaffTaskViews(db, teamId),
+    findNextLeagueMatch(db, teamId, gameDay(gameDate)),
+    db.prepare(
+      `SELECT p.id, p.first_name, p.last_name, p.age, p.position, t.team_type,
+              (SELECT MAX(i.days_remaining) FROM injuries i WHERE i.player_id = p.id AND i.days_remaining > 0 AND i.osobni_volno = 0) AS injury_days,
+              json_extract(p.life_context, '$.condition') AS cond,
+              json_extract(p.life_context, '$.morale') AS morale,
+              json_extract(p.life_context, '$.transferUnrest.level') AS unrest
+         FROM players p JOIN teams t ON t.id = p.team_id
+        WHERE t.id = ? OR t.parent_team_id = ?
+        ORDER BY t.parent_team_id IS NOT NULL, CASE p.position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 ELSE 3 END, p.last_name`,
+    ).bind(teamId, teamId).all<{
+      id: string; first_name: string; last_name: string; age: number; position: string; team_type: string | null;
+      injury_days: number | null; cond: number | null; morale: number | null; unrest: number | null;
+    }>()
+      .then((r) => r.results)
+      .catch((e) => { logger.warn({ module: "staff" }, "hráči pro úkoly", e); return []; }),
+  ]);
+  return c.json({
+    gameDate: gameDay(gameDate),
+    tasks,
+    nextMatch,
+    players: players.map((p) => ({
+      id: p.id,
+      name: `${p.first_name} ${p.last_name}`,
+      age: p.age,
+      position: p.position,
+      isU21: p.team_type === "u21",
+      injuryDays: p.injury_days,
+      condition: p.cond === null ? null : Math.round(p.cond),
+      morale: p.morale === null ? null : Math.round(p.morale),
+      unrest: p.unrest === null ? null : Math.round(p.unrest),
+    })),
+  });
+});
+
+/** POST /teams/:teamId/staff/:staffId/tasks { taskType, playerId?, playerIds?, durationDays? } — zadá úkol. */
+staffRouter.post("/teams/:teamId/staff/:staffId/tasks", async (c) => {
+  const teamId = c.req.param("teamId");
+  const staffId = c.req.param("staffId");
+  const body = await c.req.json<{ taskType?: string; playerId?: string; playerIds?: unknown; durationDays?: number }>()
+    .catch((e) => { logger.warn({ module: "staff" }, "task body", e); return null; });
+  if (!body?.taskType) return c.json({ error: "Chybí úkol." }, 400);
+  const gameDate = await loadGameDate(c.env.DB, teamId);
+  const r = await createStaffTask(c.env.DB, {
+    teamId, staffId, taskType: body.taskType, playerId: body.playerId ?? null, playerIds: body.playerIds,
+    durationDays: typeof body.durationDays === "number" ? body.durationDays : null, gameDate,
+  });
+  if (!r.ok) return c.json({ error: r.error }, r.status);
+  return c.json({ ok: true, id: r.id });
+});
+
+/** DELETE /teams/:teamId/staff/tasks/:taskId — zruší úkol (peníze zpět jen, dokud se nezačalo). */
+staffRouter.delete("/teams/:teamId/staff/tasks/:taskId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const gameDate = await loadGameDate(c.env.DB, teamId);
+  const r = await cancelStaffTask(c.env.DB, teamId, c.req.param("taskId"), gameDate);
+  if (!r.ok) return c.json({ error: r.error }, r.status);
+  return c.json({ ok: true, refunded: r.refunded });
 });

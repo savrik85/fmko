@@ -110,6 +110,8 @@ export type TransactionType =
   // Pokuta ZÁMĚRNĚ není v PURCHASE_TYPES, strhne se i při záporném rozpočtu jako disciplinary_fine.
   | "sponsor_bonus"
   | "sponsor_penalty"
+  // Úkoly zaměstnanců (staff/staff-tasks.ts): platba předem, při zrušení před začátkem vratka.
+  | "staff_task"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
@@ -148,7 +150,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "equipment_upgrade", "equipment_purchase", "stadium_upgrade", "stadium_visual",
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
-  "manager_social", "staff_signing", "course_fee", "coach_course", "coach_exam_retake", "fan_relations",
+  "manager_social", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
   "bet_stake", "bet_levy",
 ]);
 

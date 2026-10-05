@@ -58,6 +58,8 @@ export interface StaffMember {
   courseWeeksRemaining: number | null;
   hiredAt: string | null;
   listedUntil: string | null;
+  /** Po zápasovém úkolu si zaměstnanec oddechne, další úkol bere až od tohoto dne (YYYY-MM-DD). */
+  taskCooldownUntil?: string | null;
 }
 
 export interface StaffRoleDef {
