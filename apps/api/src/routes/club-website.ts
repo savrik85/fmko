@@ -285,11 +285,18 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
 
   // Stadium details
   const stadium = await c.env.DB.prepare(
-    `SELECT capacity, ${STAND_COLUMNS}, vip_box, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1`,
-  ).bind(teamId).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string } & Partial<Record<StandSide | "stand_ext_capacity", number | null>>>()
+    "SELECT * FROM stadiums WHERE team_id = ? LIMIT 1",
+  ).bind(teamId).first<any>()
     .catch((e) => { logger.warn({ module: "club-website" }, "fetch stadium", e); return null; });
   const { calculateFacilityEffects: calcFxClub } = await import("../stadium/stadium-generator");
   const clubCapacity = stadium ? stadium.capacity + calcFxClub({ ...standFacilities(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus : null;
+
+  const { loadExtensions } = await import("../stadium/extensions-db");
+  const extRows = await loadExtensions(c.env.DB, teamId).catch(() => []);
+
+  const bannerContracts = await c.env.DB.prepare(
+    "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND (category = 'banner' OR category = 'stadium') LIMIT 8",
+  ).bind(teamId).all<{ sponsor_name: string }>().catch(() => ({ results: [] }));
 
   // Main & Stadium Sponsor
   const mainSponsor = await c.env.DB.prepare(
@@ -688,14 +695,57 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
       stadium: {
         name: team.stadium_name,
         capacity: clubCapacity,
-        pitchCondition: stadium?.pitch_condition ?? null,
-        pitchType: stadium?.pitch_type ?? null,
+        pitchCondition: stadium?.pitch_condition ?? 75,
+        pitchType: stadium?.pitch_type ?? "natural",
         nickname: team.stadium_nickname,
         builtYear: team.stadium_built_year,
         specialita: team.stadium_specialita,
         tribunaNorth: team.stadium_tribuna_north,
         tribunaSouth: team.stadium_tribuna_south,
         namingSponsor: stadiumNamingSponsor?.sponsor_name ?? null,
+        facilities: stadium ? {
+          changing_rooms: stadium.changing_rooms ?? 0,
+          showers: stadium.showers ?? 0,
+          refreshments: stadium.refreshments ?? 0,
+          lighting: stadium.lighting ?? 0,
+          stands: stadium.stands ?? 0,
+          stand_main: stadium.stand_main ?? 0,
+          stand_opposite: stadium.stand_opposite ?? 0,
+          stand_goal_west: stadium.stand_goal_west ?? 0,
+          stand_goal_east: stadium.stand_goal_east ?? 0,
+          roof: stadium.roof ?? 0,
+          ultras_stand: stadium.ultras_stand ?? 0,
+          toilets: stadium.toilets ?? 0,
+          parking: stadium.parking ?? 0,
+          fence: stadium.fence ?? 0,
+          entrance_gate: stadium.entrance_gate ?? 0,
+          security: stadium.security ?? 0,
+          cage: stadium.cage ?? 0,
+          vip_box: stadium.vip_box ?? 0,
+        } : undefined,
+        customization: stadium ? {
+          fenceColor: stadium.fence_color ?? null,
+          standColor: stadium.stand_color ?? null,
+          seatColor: stadium.seat_color ?? null,
+          roofColor: stadium.roof_color ?? null,
+          accentColor: stadium.accent_color ?? null,
+          scoreboardLevel: stadium.scoreboard_level ?? 0,
+          flagSize: stadium.flag_size ?? 0,
+          ultrasText: stadium.ultras_text ?? null,
+          ultrasBannerColor: stadium.ultras_banner_color ?? null,
+          ultrasTextColor: stadium.ultras_text_color ?? null,
+          flagColor: stadium.flag_color ?? null,
+          mowingPattern: stadium.mowing_pattern ?? "stripes",
+          netPattern: stadium.net_pattern ?? "white",
+          netStyle: stadium.net_style ?? "loose",
+          surroundSurface: stadium.surround_surface ?? "grass",
+        } : undefined,
+        standExtensions: (extRows || []).map((e: any) => ({
+          slot: e.slot,
+          kind: e.kind,
+          level: e.level,
+        })),
+        sponsors: (bannerContracts.results || []).map((s: any) => s.sponsor_name).filter(Boolean),
       },
       jersey: {
         pattern: team.jersey_pattern,

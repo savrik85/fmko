@@ -193,6 +193,26 @@ export interface ClubWebsiteData {
       tribunaNorth: string | null;
       tribunaSouth: string | null;
       namingSponsor: string | null;
+      facilities?: Record<string, number>;
+      customization?: {
+        fenceColor?: string | null;
+        standColor?: string | null;
+        seatColor?: string | null;
+        roofColor?: string | null;
+        accentColor?: string | null;
+        scoreboardLevel?: number;
+        flagSize?: number;
+        ultrasText?: string | null;
+        ultrasBannerColor?: string | null;
+        ultrasTextColor?: string | null;
+        flagColor?: string | null;
+        mowingPattern?: string | null;
+        netPattern?: string | null;
+        netStyle?: string | null;
+        surroundSurface?: string | null;
+      };
+      standExtensions?: Array<{ slot: string; kind: string; level: number }>;
+      sponsors?: string[];
     };
     jersey: {
       pattern: string | null;

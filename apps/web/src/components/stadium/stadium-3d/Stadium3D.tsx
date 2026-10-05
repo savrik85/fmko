@@ -142,6 +142,8 @@ interface Stadium3DProps {
   showControls?: boolean;
   defaultControlsVisible?: boolean;
   reserveCloseButtonSpace?: boolean;
+  /** Callback vracející statickou fotografii (DataURL WebP) po vykreslení 3D scény */
+  onSnapshotReady?: (dataUrl: string) => void;
 }
 
 export function Stadium3D({
@@ -182,6 +184,7 @@ export function Stadium3D({
   showControls = true,
   defaultControlsVisible = false,
   reserveCloseButtonSpace = false,
+  onSnapshotReady,
 }: Stadium3DProps) {
   const f = facilities;
   const layout = getStadiumLayout(f.stands ?? 0);
@@ -386,6 +389,41 @@ export function Stadium3D({
     }
     setTimeout(() => setStatusToast(null), 1400);
   };
+
+  // Automatické vyfocení statického snímku z 3D modelu (např. pro klubový web)
+  useEffect(() => {
+    if (!isSceneReady || !onSnapshotReady) return;
+    const timer = setTimeout(() => {
+      const capture = captureRef.current;
+      if (!capture) return;
+      try {
+        const src = capture();
+        const out = document.createElement("canvas");
+        out.width = src.width;
+        out.height = src.height;
+        const ctx = out.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(src, 0, 0);
+          const pad = Math.round(out.height * 0.03);
+          const size = Math.max(14, Math.round(out.height * 0.035));
+          ctx.font = `700 ${size}px system-ui, sans-serif`;
+          const label = `${stadiumName || "Náš stadion"} · Prales`;
+          const w = ctx.measureText(label).width + pad * 1.4;
+          ctx.fillStyle = "rgba(0,0,0,0.55)";
+          ctx.fillRect(pad, out.height - pad - size * 1.7, w, size * 1.7);
+          ctx.fillStyle = "#FFFFFF";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, pad * 1.7, out.height - pad - size * 0.85);
+          onSnapshotReady(out.toDataURL("image/webp", 0.92));
+        } else {
+          onSnapshotReady(src.toDataURL("image/webp", 0.92));
+        }
+      } catch (e) {
+        console.warn("Auto snapshot failed:", e);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [isSceneReady, onSnapshotReady, viewpoint, stadiumName]);
 
   // Pohledy kamery podle úrovně tribun a střechy (statické souřadnice končily ve střeše tribuny)
   // Kamera „Hlavní tribuna" stojí na východní straně, takže se řídí její úrovní (max stran by ji dalo do prázdna).

@@ -13,6 +13,7 @@ import { ManagerFace } from "./ManagerFace";
 import { TicketModal } from "./TicketModal";
 import { TacticalPitch } from "./TacticalPitch";
 import { MatchHighlightsModal } from "./MatchHighlightsModal";
+import { StadiumPhotoCard } from "./StadiumPhotoCard";
 
 const PITCH_LABELS: Record<string, string> = {
   natural: "Přírodní tráva",
@@ -864,33 +865,12 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
           </div>
         </div>
 
-        {/* Hlavní velká fotografie areálu */}
-        <div className={`${cardBg} overflow-hidden mb-8 border-2 border-white/10 group shadow-2xl`}>
-          <div className="relative aspect-[21/9] sm:aspect-[2.5/1] min-h-[220px] w-full bg-slate-900 overflow-hidden">
-            <img
-              src="/images/stadion-areal.jpg"
-              alt={`Fotografie areálu ${team.stadium.name || "Fotbalový stadion"} v obci ${team.village.name}`}
-              className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
-              loading="eager"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-5 sm:p-8">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-heading font-black text-xs uppercase tracking-wider shadow">
-                  📸 Domácí areál {team.village.name}
-                </span>
-                <span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur text-white text-xs font-heading font-bold border border-white/20">
-                  Kapacita: {team.stadium.capacity ? team.stadium.capacity.toLocaleString("cs") : "400"} diváků
-                </span>
-              </div>
-              <h3 className="font-heading font-[900] text-2xl sm:text-4xl text-white drop-shadow-md">
-                {team.stadium.name || "Místní fotbalové hřiště"}
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-200 mt-1 max-w-2xl drop-shadow line-clamp-2 sm:line-clamp-none">
-                Domácí hrací plocha klubu {team.name} v malebném prostředí obce {team.village.name}. {formatPitchType(team.stadium.pitchType)} s klandrem pro diváky a poctivou fotbalovou atmosférou.
-              </p>
-            </div>
-          </div>
-        </div>
+        {/* Hlavní fotografie areálu vyrenderovaná ze 3D modelu stadionu */}
+        <StadiumPhotoCard
+          team={team}
+          cardBg={cardBg}
+          formatPitchType={formatPitchType}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Metadata Card */}
