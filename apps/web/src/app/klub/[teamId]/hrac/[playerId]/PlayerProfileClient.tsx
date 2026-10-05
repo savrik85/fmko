@@ -7,6 +7,7 @@ import { ManagerFace } from "../../ManagerFace";
 import { ShareButton } from "../../ShareButton";
 import {
   ClubBasePathContext,
+  TeamSlugsContext,
   TeamLink,
   clubPaletteStyle,
   contractJoinLabel,
@@ -350,6 +351,7 @@ export function PlayerProfileClient({ profile, siteUrl }: { profile: ClubWebsite
 
   return (
     <ClubBasePathContext.Provider value={clubPath}>
+      <TeamSlugsContext.Provider value={profile.teamSlugs ?? {}}>
       <div style={clubPaletteStyle(club.primaryColor, club.secondaryColor)}>
         <div className="bg-[#0b0f17] text-slate-300 border-b border-white/10 px-3 sm:px-6 py-2 text-sm flex items-center justify-between gap-2 sticky top-0 z-50 shadow-md min-h-[52px]">
           <Link
@@ -370,6 +372,7 @@ export function PlayerProfileClient({ profile, siteUrl }: { profile: ClubWebsite
           {skin.frame ? <div className={skin.frame}>{content}</div> : content}
         </div>
       </div>
+      </TeamSlugsContext.Provider>
     </ClubBasePathContext.Provider>
   );
 }

@@ -190,10 +190,9 @@ export default async function KlubPublicPage({
   const data = result.data;
   const { team, website, roster, staff, matches } = data;
 
-  // Stará nebo odhadnutá adresa (např. /klub/brevnov) přesměruje na hlavní, aby každý
-  // klub měl jedinou adresu a sdílené odkazy po přejmenování dál fungovaly.
-  // Odkazy přes ID necháváme, ty používá hra uvnitř.
-  if (website?.customSlug && identifier !== website.customSlug && identifier !== team.id) {
+  // Adresa s ID, stará nebo odhadnutá adresa (např. /klub/brevnov) přesměruje na hlavní,
+  // aby každý klub měl jedinou hezkou adresu a sdílené odkazy po přejmenování fungovaly.
+  if (website?.customSlug && identifier !== website.customSlug) {
     permanentRedirect(`/klub/${website.customSlug}`);
   }
 

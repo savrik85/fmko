@@ -202,6 +202,49 @@ async function slugTakenByOtherTeam(
 /** Kolik starých adres si klub pamatuje. Víc by šlo zneužít k zabírání adres přejmenováváním. */
 const MAX_SLUG_ALIASES = 3;
 
+/**
+ * Hezké adresy webů pro odkazy na jiné kluby (`/klub/fk-appyours-ckyne` místo ID).
+ * Vlastní adresa klubu má přednost; bez ní slug z názvu, ale jen když ho nemá jiný
+ * klub stejný (jinak by ho resolveTeamId neuměl rozlišit). Jinak zůstane ID.
+ */
+async function teamSlugMap(db: D1Database, ids: Array<string | null | undefined>): Promise<Record<string, string>> {
+  const unique = [...new Set(ids.filter((id): id is string => !!id))];
+  if (unique.length === 0) return {};
+  const rows: Array<{ id: string; name: string; custom_slug: string | null }> = [];
+  // D1 snese nejvýš 100 parametrů v dotazu
+  for (let i = 0; i < unique.length; i += 90) {
+    const chunk = unique.slice(i, i + 90);
+    const res = await db
+      .prepare(
+        `SELECT t.id, t.name, tw.custom_slug FROM teams t
+         LEFT JOIN team_websites tw ON tw.team_id = t.id
+         WHERE t.id IN (${chunk.map(() => "?").join(",")})`,
+      )
+      .bind(...chunk)
+      .all<{ id: string; name: string; custom_slug: string | null }>()
+      .catch((e) => {
+        logger.warn(MODULE, "team slug map", e);
+        return { results: [] as Array<{ id: string; name: string; custom_slug: string | null }> };
+      });
+    rows.push(...(res.results ?? []));
+  }
+  const seniors = await loadSeniorTeamSlugs(db);
+  const seniorIds = new Set(seniors.map((t) => t.id));
+  const slugCount = new Map<string, number>();
+  for (const t of seniors) slugCount.set(t.slug, (slugCount.get(t.slug) ?? 0) + 1);
+
+  const map: Record<string, string> = {};
+  for (const r of rows) {
+    if (r.custom_slug) {
+      map[r.id] = r.custom_slug;
+      continue;
+    }
+    const slug = slugifyTeamName(r.name);
+    if (slug && seniorIds.has(r.id) && slugCount.get(slug) === 1) map[r.id] = slug;
+  }
+  return map;
+}
+
 async function generateUniqueTeamSlug(db: D1Database, teamId: string, teamName: string): Promise<string> {
   const baseSlug = slugifyTeamName(teamName) || `tym-${teamId.slice(0, 8)}`;
   const seniorTeams = await loadSeniorTeamSlugs(db);
@@ -1041,7 +1084,17 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     };
   });
 
+  const teamSlugs = await teamSlugMap(db, [
+    teamId,
+    ...leagueStandings.map((s) => s.teamId),
+    ...upcomingMatches.map((m) => m.opponent.id as string),
+    ...recentMatches.map((m) => m.opponent.id),
+    ...transfers.map((t) => t.otherTeamId),
+    ...(history?.cup ?? []).map((r) => r.decidingMatch?.opponentTeamId),
+  ]);
+
   return c.json({
+    teamSlugs,
     team: {
       id: team.id,
       name: team.name,
@@ -1642,7 +1695,14 @@ clubWebsiteRouter.get("/:id/website/player/:playerId", async (c) => {
   ]);
 
   const released = player.status === "released";
+  const teamSlugs = await teamSlugMap(db, [
+    club.id,
+    player.team_id,
+    ...(seasonRows.results ?? []).map((r) => r.team_id),
+    ...(careerRows.results ?? []).map((r) => r.team_id),
+  ]);
   return c.json({
+    teamSlugs,
     club: {
       id: club.id,
       name: club.name,

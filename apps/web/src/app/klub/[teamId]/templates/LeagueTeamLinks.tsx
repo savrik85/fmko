@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ClubWebsiteData } from "@okresni-masina/shared";
+import { useTeamHref } from "./shared";
 
 type Standings = NonNullable<ClubWebsiteData["matches"]["standings"]>;
 
@@ -22,6 +23,7 @@ export function LeagueTeamLinks({
   linkClassName?: string;
   separator?: string;
 }) {
+  const teamHref = useTeamHref();
   const others = standings.filter((s) => !s.isCurrentTeam);
   if (others.length === 0) return null;
 
@@ -31,7 +33,7 @@ export function LeagueTeamLinks({
       <ul className="flex flex-wrap gap-x-3 gap-y-1 justify-center">
         {others.map((s, i) => (
           <li key={s.teamId}>
-            <Link href={`/klub/${s.teamId}`} className={linkClassName}>
+            <Link href={teamHref(s.teamId)} className={linkClassName}>
               {s.teamName}
             </Link>
             {separator && i < others.length - 1 ? (

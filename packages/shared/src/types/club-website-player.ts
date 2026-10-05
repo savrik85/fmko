@@ -2,6 +2,8 @@ import type { ClubWebsiteTemplate } from "./club-website";
 
 /** Veřejný profil hráče na klubovém webu. Jen to, co by o hráči napsal klubový web: žádné skryté atributy. */
 export interface ClubWebsitePlayerProfile {
+  /** Hezké adresy webů klubů v profilu (ID klubu → slug). */
+  teamSlugs: Record<string, string>;
   /** Klub, z jehož webu se profil otevřel (záhlaví, barvy, odkaz zpět). */
   club: {
     id: string;

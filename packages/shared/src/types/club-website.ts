@@ -166,6 +166,8 @@ export interface ClubWebsiteMatchSummary {
 }
 
 export interface ClubWebsiteData {
+  /** Hezké adresy webů klubů, na které stránka odkazuje (ID klubu → slug). Chybějící = odkaz přes ID. */
+  teamSlugs: Record<string, string>;
   team: {
     id: string;
     name: string;

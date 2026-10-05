@@ -19,7 +19,7 @@ import { RegionalStandardTemplate } from "./templates/RegionalStandardTemplate";
 import { ProfiLeagueTemplate } from "./templates/ProfiLeagueTemplate";
 import { ChampionsTemplate } from "./templates/ChampionsTemplate";
 import type { TemplateProps } from "./templates/types";
-import { ClubBasePathContext, clubPaletteStyle } from "./templates/shared";
+import { ClubBasePathContext, TeamSlugsContext, clubPaletteStyle } from "./templates/shared";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -206,7 +206,9 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
       </div>
 
       <ClubBasePathContext.Provider value={`/klub/${website.customSlug || team.id}`}>
-        <Template {...templateProps} />
+        <TeamSlugsContext.Provider value={data.teamSlugs ?? {}}>
+          <Template {...templateProps} />
+        </TeamSlugsContext.Provider>
       </ClubBasePathContext.Provider>
 
       {/* ═══ SPOLEČNÁ OKNA ═══ */}

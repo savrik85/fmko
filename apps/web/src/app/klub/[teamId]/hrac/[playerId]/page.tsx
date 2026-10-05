@@ -1,7 +1,7 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { ClubWebsitePlayerProfile } from "@okresni-masina/shared";
 import { PlayerProfileClient } from "./PlayerProfileClient";
 
@@ -85,6 +85,11 @@ export default async function PlayerProfilePage({
         </div>
       </main>
     );
+  }
+  // Adresa s ID klubu (nebo stará adresa) přesměruje na hezkou adresu webu klubu
+  const club = result.profile.club;
+  if (club.slug && decodeURIComponent(teamId) !== club.slug) {
+    permanentRedirect(`/klub/${club.slug}/hrac/${result.profile.player.id}`);
   }
   return <PlayerProfileClient profile={result.profile} siteUrl={SITE_URL} />;
 }

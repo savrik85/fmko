@@ -84,11 +84,21 @@ export function clubPartners(data: ClubWebsiteData): ClubPartners {
 
 // ── Odkazy ───────────────────────────────────────────────────────────────────
 
+/** Hezké adresy webů klubů (ID → slug) z API; odkaz bez slugu jde přes ID. */
+export const TeamSlugsContext = createContext<Record<string, string>>({});
+
+/** Adresa klubového webu týmu: `/klub/fk-appyours-ckyne`, ne `/klub/<id>`. */
+export function useTeamHref(): (id: string) => string {
+  const slugs = useContext(TeamSlugsContext);
+  return (id: string) => `/klub/${slugs[id] ?? id}`;
+}
+
 /** Odkaz na klubový web jiného týmu. Bez ID (např. pohárový soupeř mimo hru) zůstane text. */
 export function TeamLink({ id, name, className = "" }: { id?: string | null; name: string; className?: string }) {
+  const teamHref = useTeamHref();
   if (!id) return <span className={className}>{name}</span>;
   return (
-    <Link href={`/klub/${id}`} className={`hover:underline ${className}`}>
+    <Link href={teamHref(id)} className={`hover:underline ${className}`}>
       {name}
     </Link>
   );
