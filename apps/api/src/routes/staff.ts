@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
-import { requireTeamOwnership } from "../auth/middleware";
+import { requireTeamOwnership, requireOwnedTeamRead } from "../auth/middleware";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
 import {
   ROLE_DEFS, STAFF_ATTRIBUTE_LABELS, licenceLabel, staffRequiredLicence, maxScoutsForLicence,
@@ -360,6 +360,9 @@ staffRouter.post("/teams/:teamId/staff/:staffId/course", async (c) => {
  */
 staffRouter.get("/teams/:teamId/staff/tasks", async (c) => {
   const teamId = c.req.param("teamId");
+  // Morálka, nespokojenost a zranění hráčů jsou interní věc klubu: jen pro vlastníka.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
   const db = c.env.DB;
   const gameDate = await loadGameDate(db, teamId);
   const [tasks, nextMatch, players] = await Promise.all([

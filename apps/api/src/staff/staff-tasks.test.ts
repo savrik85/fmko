@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { STAFF_TASK_DEFS, STAFF_TASK_TYPES, staffTaskCost, staffTasksForRole, STAFF_ROLE_ORDER } from "@okresni-masina/shared";
-import { addDays, gameDay, individualTrainingMul, taskMatchMods } from "./staff-tasks";
+import { addDays, gameDay, individualTrainingMul, refundAmount, taskMatchMods } from "./staff-tasks";
 
 describe("úkoly zaměstnanců: katalog", () => {
   it("každá role kromě skauta má aspoň jeden úkol", () => {
@@ -61,5 +61,29 @@ describe("úkoly zaměstnanců: individuální plán a data", () => {
     expect(gameDay("2026-10-05T16:00:00.000Z")).toBe("2026-10-05");
     expect(addDays("2026-10-28", 7)).toBe("2026-11-04");
     expect(addDays("2026-10-05", -14)).toBe("2026-09-21");
+  });
+});
+
+describe("úkoly zaměstnanců: vratka", () => {
+  const weekly = { kind: "weekly" as const, cost_paid: 1000, starts_game_date: "2026-10-05", ends_game_date: "2026-10-19" };
+  const match = { kind: "match" as const, cost_paid: 300, starts_game_date: "2026-10-05", ends_game_date: "2026-10-08" };
+
+  it("nezačatý úkol vrací všechno", () => {
+    expect(refundAmount({ ...weekly, last_work_game_date: null }, false)).toBe(1000);
+    expect(refundAmount({ ...match, last_work_game_date: null }, false)).toBe(300);
+  });
+
+  it("zrušení manažerem po začátku nevrací nic", () => {
+    expect(refundAmount({ ...weekly, last_work_game_date: "2026-10-06" }, false)).toBe(0);
+  });
+
+  it("propuštění vrací jen neodpracované dny, ne celou cenu", () => {
+    expect(refundAmount({ ...weekly, last_work_game_date: "2026-10-18" }, true)).toBe(71);
+    expect(refundAmount({ ...weekly, last_work_game_date: "2026-10-12" }, true)).toBe(500);
+    expect(refundAmount({ ...weekly, last_work_game_date: "2026-10-19" }, true)).toBe(0);
+  });
+
+  it("zápasový úkol po ranní práci nevrací nic ani při propuštění", () => {
+    expect(refundAmount({ ...match, last_work_game_date: "2026-10-08" }, true)).toBe(0);
   });
 });

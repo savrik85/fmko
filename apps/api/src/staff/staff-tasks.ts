@@ -266,6 +266,12 @@ export async function createStaffTask(db: D1Database, input: CreateStaffTaskInpu
     const match = await findNextLeagueMatch(db, input.teamId, today);
     if (!match) return fail(400, "Klub teď nemá žádný ligový zápas, na který by se dalo chystat.");
     if (def.homeOnly && !match.isHome) return fail(400, `Tohle jde jen na domácí zápas. Příští zápas hraješ venku (${match.homeName} – ${match.awayName}).`);
+    const again = await db.prepare(
+      `SELECT id FROM staff_tasks WHERE team_id = ? AND task_type = ? AND target_match_id = ?
+         AND (status IN ('active', 'done') OR last_work_game_date IS NOT NULL) LIMIT 1`,
+    ).bind(input.teamId, type, match.id).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: MODULE }, "úkol na zápas už byl", e); return null; });
+    if (again) return fail(409, `Úkol „${def.label}“ na tenhle zápas už jednou byl.`);
     targetMatchId = match.id;
     endsDay = match.day;
     targetText = `${match.homeName} – ${match.awayName}`;
@@ -352,21 +358,49 @@ export async function createStaffTask(db: D1Database, input: CreateStaffTaskInpu
 
 // ─── Zrušení ───────────────────────────────────────────────────────────────
 
-/** Vrácení ceny a zrušení. `force` = vrací se i u rozjetého úkolu (propuštění, přeřazení). */
-async function cancelTask(db: D1Database, task: StaffTaskRow, reason: string, gameDate: string, force: boolean): Promise<boolean> {
-  const started = task.last_work_game_date !== null;
+/**
+ * Kolik se vrátí při zrušení.
+ *  - nezačatý úkol: všechno,
+ *  - `prorata` (propuštění, přeřazení, nehraný zápas): dlouhý úkol za neodpracované dny,
+ *    zápasový nic, pokud už ranní práce proběhla. Celá vratka u rozjetého úkolu by šla
+ *    zneužít: nechat lékaře dva týdny pracovat, přeřadit ho a vzít si peníze zpátky.
+ *  - zrušení manažerem po začátku: nic.
+ */
+export function refundAmount(task: Pick<StaffTaskRow, "kind" | "cost_paid" | "starts_game_date" | "ends_game_date" | "last_work_game_date">, prorata: boolean): number {
+  if (task.cost_paid <= 0) return 0;
+  if (task.last_work_game_date === null) return task.cost_paid;
+  if (!prorata || task.kind === "match") return 0;
+  const total = Math.max(1, daysBetween(task.starts_game_date, task.ends_game_date));
+  const left = Math.max(0, daysBetween(task.last_work_game_date, task.ends_game_date));
+  return Math.floor(task.cost_paid * left / total);
+}
+
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
+}
+
+/** Zrušení s vratkou podle `refundAmount`. */
+async function cancelTask(db: D1Database, task: StaffTaskRow, reason: string, gameDate: string, prorata: boolean): Promise<number | null> {
   const res = await db.prepare(
     `UPDATE staff_tasks SET status = 'cancelled', end_reason = ?, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
       WHERE id = ? AND status = 'active'`,
   ).bind(reason, task.id).run()
     .catch((e) => { logger.error({ module: MODULE }, `zrušení úkolu ${task.id}`, e); return null; });
-  if (!res || (res.meta?.changes ?? 0) === 0) return false;
-  if (task.cost_paid > 0 && (force || !started)) {
+  if (!res || (res.meta?.changes ?? 0) === 0) return null;
+  const refund = refundAmount(task, prorata);
+  if (refund > 0) {
     const def = isTaskType(task.task_type) ? STAFF_TASK_DEFS[task.task_type] : null;
-    await recordTransaction(db, task.team_id, "staff_task", task.cost_paid,
+    await recordTransaction(db, task.team_id, "staff_task", refund,
       `Vráceno za zrušený úkol: ${def?.label ?? task.task_type}`, gameDate, task.id);
   }
-  return true;
+  // Zápasový úkol zrušený po ranní práci: oddech platí stejně, jinak by šlo masáž
+  // nebo trávník na tentýž zápas zadat znovu.
+  if (task.kind === "match" && task.last_work_game_date !== null) {
+    await db.prepare("UPDATE staff_members SET task_cooldown_until = ? WHERE id = ?")
+      .bind(addDays(task.ends_game_date, STAFF_TASK_MATCH_COOLDOWN_DAYS), task.staff_id).run()
+      .catch((e) => logger.warn({ module: MODULE }, `oddech po zrušení ${task.id}`, e));
+  }
+  return refund;
 }
 
 /** Zrušení manažerem. Peníze se vrací jen, dokud zaměstnanec nezačal. */
@@ -382,10 +416,9 @@ export async function cancelStaffTask(db: D1Database, teamId: string, taskId: st
       .catch((e) => { logger.warn({ module: MODULE }, "stav zápasu úkolu", e); return null; });
     if (m && (m.status === "simulated" || m.round_status === "lineup_locked")) return fail(409, "Zápas se už hraje, úkol nejde zrušit.");
   }
-  const started = task.last_work_game_date !== null;
-  const ok = await cancelTask(db, task, "manager", gameDate, false);
-  if (!ok) return fail(409, "Úkol už skončil.");
-  return { ok: true, refunded: !started && task.cost_paid > 0 };
+  const refund = await cancelTask(db, task, "manager", gameDate, false);
+  if (refund === null) return fail(409, "Úkol už skončil.");
+  return { ok: true, refunded: refund > 0 };
 }
 
 /** Zaměstnanec odešel nebo dělá jinou roli: úkol končí a peníze se vrací celé. */
@@ -658,7 +691,7 @@ export async function runStaffTasks(db: D1Database, todayIso: string): Promise<S
           out.closed++;
         } else if (!m || addDays(task.ends_game_date, 2) < today) {
           // Zápas se nehrál (odložení, kontumace): úkol zrušit a peníze vrátit.
-          if (await cancelTask(db, task, "match_not_played", todayIso, true)) {
+          if (await cancelTask(db, task, "match_not_played", todayIso, true) !== null) {
             out.expired++;
             await sendStaffSystemMessage(db, task.team_id, `${staff.first_name} ${staff.last_name}`, ROLE_DEFS[staff.role as StaffRole]?.label ?? "Zaměstnanci",
               `Zápas, na který jsem se chystal${rod(staff, "", "a")}, se nehrál. Úkol jsem zrušil${rod(staff, "", "a")} a peníze jdou zpátky do pokladny.`);
