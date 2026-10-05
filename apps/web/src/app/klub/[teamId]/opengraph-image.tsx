@@ -25,10 +25,10 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
   let motto = "";
   let village = "";
   let district = "";
-  let leagueName = "Okresní přebor";
+  let leagueName = "Okresní soutěž";
   let stadiumName = "Místní hřiště";
-  let capacity = 350;
-  let playerCount = 18;
+  let capacity: number | null = null;
+  let playerCount: number | null = null;
   let primary = "#2D5F2D";
   let secondary = "#FFFFFF";
   let badgeInitials = "";
@@ -36,7 +36,7 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
   let foundingYear: number | null = null;
 
   try {
-    const r = await fetch(`${API}/api/teams/${teamId}/website`, { cache: "no-store" });
+    const r = await fetch(`${API}/api/teams/${encodeURIComponent(decodeURIComponent(teamId))}/website`, { cache: "no-store" });
     if (r.ok) {
       const data = await r.json();
       if (data?.team) {
@@ -52,12 +52,16 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
         badgeInitials = t.badge?.customInitials || initials(name);
         badgeSymbol = t.badge?.symbol || null;
         stadiumName = t.stadium?.name || stadiumName;
-        capacity = t.stadium?.capacity || capacity;
-        playerCount = data.roster?.aTeam?.length || playerCount;
+        capacity = t.stadium?.capacity || null;
+        playerCount = data.roster?.aTeam?.length || null;
+        leagueName = t.league?.name || leagueName;
       }
+    } else if (r.status !== 404) {
+      console.error("náhled klubu: API vrátilo chybu", teamId, r.status);
     }
-  } catch {
-    // fallback
+  } catch (e) {
+    // Bez dat se vykreslí obecný náhled, ale chybu chceme vidět v logu
+    console.error("náhled klubu: načtení dat selhalo", teamId, e);
   }
 
   if (!badgeInitials) {
@@ -332,7 +336,7 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
               }}
             >
               <span>🏟️</span>
-              <span>{stadiumName} ({capacity} míst)</span>
+              <span>{capacity ? `${stadiumName} (${capacity} míst)` : stadiumName}</span>
             </div>
 
             <div
@@ -350,7 +354,7 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
               }}
             >
               <span>👥</span>
-              <span>A-tým: {playerCount} hráčů</span>
+              <span>{playerCount ? `A-tým: ${playerCount} hráčů` : "A-tým"}</span>
             </div>
 
             <div

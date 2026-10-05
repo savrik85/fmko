@@ -29,14 +29,13 @@ export function MatchHighlightsModal({
     initialMatch?.id || matchesList[0]?.id || "",
   );
 
-  // Sync selected match if initialMatch changes
+  // Při každém otevření ukázat zápas, na který návštěvník klikl. Dřív se výběr
+  // synchronizoval jen při změně ID, takže po přepnutí v okně a znovuotevření
+  // stejného zápasu se okno otevřelo na jiném zápase.
+  const initialId = initialMatch?.id || matchesList[0]?.id || "";
   useEffect(() => {
-    if (initialMatch?.id) {
-      setSelectedMatchId(initialMatch.id);
-    } else if (matchesList[0]?.id) {
-      setSelectedMatchId(matchesList[0].id);
-    }
-  }, [initialMatch?.id]);
+    if (isOpen) setSelectedMatchId(initialId);
+  }, [isOpen, initialId]);
 
   // Handle ESC key to close modal
   useEffect(() => {
@@ -70,11 +69,11 @@ export function MatchHighlightsModal({
           }}
         >
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-600/90 text-white font-heading font-black text-[11px] sm:text-xs uppercase tracking-wider animate-pulse shadow">
-              <span>●</span>
-              <span>FK TV · ZÁZNAM UTKÁNÍ</span>
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-600/90 text-white font-heading font-black text-sm uppercase tracking-wide shadow">
+              <span aria-hidden="true">▶</span>
+              <span>Záznam utkání</span>
             </span>
-            <div className="text-xs sm:text-sm font-heading font-bold opacity-80 hidden sm:inline">
+            <div className="text-sm font-heading font-bold opacity-80 hidden sm:inline">
               {activeMatch?.round ? `${activeMatch.round}. kolo soutěže` : "Mistrovské utkání"}
             </div>
           </div>
@@ -83,7 +82,7 @@ export function MatchHighlightsModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 hover:text-white font-heading font-bold text-xs transition-colors flex items-center gap-1"
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 hover:text-white font-heading font-bold text-sm transition-colors flex items-center gap-1"
               aria-label="Zavřít přehrávač"
             >
               <span>✕</span>
@@ -94,8 +93,8 @@ export function MatchHighlightsModal({
 
         {/* Match selector if multiple matches are available */}
         {matchesList.length > 1 && (
-          <div className="px-4 sm:px-6 py-2.5 bg-black/40 border-b border-white/10 flex items-center gap-2 overflow-x-auto text-xs font-heading shrink-0 scrollbar-thin">
-            <span className="opacity-50 uppercase text-[10px] shrink-0 font-bold">
+          <div className="px-4 sm:px-6 py-2.5 bg-black/40 border-b border-white/10 flex items-center gap-2 overflow-x-auto text-sm font-heading shrink-0 scrollbar-thin">
+            <span className="opacity-60 shrink-0 font-bold">
               Vybrat zápas:
             </span>
             {matchesList.map((m) => {
@@ -113,7 +112,7 @@ export function MatchHighlightsModal({
                   }`}
                 >
                   <span>
-                    {m.round ? `${m.round}.kolo` : ""} {m.isHome ? "vs" : "@"} {opp}
+                    {m.round ? `${m.round}. kolo: ` : ""}{m.isHome ? "doma s" : "venku s"} {opp}
                   </span>
                   <span className="opacity-75">
                     ({m.scoreHome}:{m.scoreAway})
@@ -142,9 +141,9 @@ export function MatchHighlightsModal({
         </div>
 
         {/* Footer for mobile / PWA back safety */}
-        <div className="px-4 py-2.5 bg-black/50 border-t border-white/10 flex items-center justify-between text-xs font-heading opacity-80 shrink-0">
+        <div className="px-4 py-2.5 bg-black/50 border-t border-white/10 flex items-center justify-between text-sm font-heading opacity-80 shrink-0">
           <span className="truncate">
-            {teamName} · Oficiální klubový video archiv
+            {teamName} · Záznamy zápasů
           </span>
           <button
             type="button"

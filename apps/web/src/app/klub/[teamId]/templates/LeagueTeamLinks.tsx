@@ -4,7 +4,7 @@ import type { ClubWebsiteData } from "@okresni-masina/shared";
 type Standings = NonNullable<ClubWebsiteData["matches"]["standings"]>;
 
 /**
- * Odkazy na klubové weby ostatních týmů z ligy — do patičky všech šablon.
+ * Odkazy na klubové weby ostatních týmů z ligy, do patičky všech šablon.
  * Barvy se předávají přes className, aby seděly k designu šablony.
  */
 export function LeagueTeamLinks({

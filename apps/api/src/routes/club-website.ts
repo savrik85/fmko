@@ -2,19 +2,30 @@ import { Hono, type Context } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { getSession } from "../auth/session";
-import { recordTransaction } from "../season/finance-processor";
+import {
+  recordTransaction,
+  stadiumFacilityLevels,
+  matchTicketPrice,
+  getBaseTicketPrice,
+  mapVillageSize,
+} from "../season/finance-processor";
 import {
   CLUB_WEBSITE_TEMPLATES,
   CLUB_WEBSITE_ADDONS,
+  STADIUM_PHOTO_VIEWPOINTS,
   slugifyTeamName,
+  type ClubWebsiteStadiumRender,
+  type StadiumPhotoViewpoint,
   type ClubWebsiteTemplate,
   type ClubWebsiteAddon,
   type ClubWebsiteMatchHighlight,
   type ClubWebsiteMatchSummary,
 } from "@okresni-masina/shared";
-import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
+import { standFacilities } from "../stadium/stands-model";
 
 export const clubWebsiteRouter = new Hono<{ Bindings: Bindings }>();
+
+const MODULE = { module: "club-website" };
 
 function formatPlayerPositionCZ(pos: string): string {
   const p = (pos || "").toUpperCase();
@@ -67,107 +78,160 @@ function formatPlayerPositionCZ(pos: string): string {
   }
 }
 
-// Helper for generating unique team slug based on team name
-async function generateUniqueTeamSlug(db: D1Database, teamId: string, teamName: string): Promise<string> {
-  const baseSlug = slugifyTeamName(teamName) || `tym-${teamId.slice(0, 8)}`;
-  let candidate = baseSlug;
-  let counter = 1;
+// ── Adresy webu ──────────────────────────────────────────────────────────────
 
-  while (counter <= 50) {
-    const existing = await db
-      .prepare("SELECT team_id FROM team_websites WHERE custom_slug = ? AND team_id <> ?")
-      .bind(candidate, teamId)
-      .first<{ team_id: string }>()
-      .catch((e) => {
-        logger.warn({ module: "club-website" }, "check slug uniqueness", e);
-        return null;
-      });
+/** Nejkratší adresa, kterou smí mít klub nastavenou nebo podle které ho hledáme odhadem. */
+const MIN_FUZZY_SLUG = 4;
 
-    if (!existing) {
-      return candidate;
-    }
-
-    counter++;
-    candidate = `${baseSlug}-${counter}`;
-  }
-
-  return `${baseSlug}-${teamId.slice(0, 4)}`;
+interface TeamSlugRow {
+  id: string;
+  slug: string;
+  villageSlug: string;
 }
 
-// Helper to resolve teamId either from direct ID or from custom_slug / team name slug
+/** Seniorské týmy se slugem názvu a obce. U21 má vlastní web jen přes ID, nikdy přes odhad. */
+async function loadSeniorTeamSlugs(db: D1Database): Promise<TeamSlugRow[]> {
+  const rows = await db
+    .prepare(
+      `SELECT t.id, t.name, v.name AS village_name
+       FROM teams t LEFT JOIN villages v ON v.id = t.village_id
+       WHERE t.name IS NOT NULL AND (t.team_type IS NULL OR t.team_type <> 'u21')`,
+    )
+    .all<{ id: string; name: string; village_name: string | null }>()
+    .catch((e) => {
+      logger.warn(MODULE, "load senior team slugs", e);
+      return { results: [] as Array<{ id: string; name: string; village_name: string | null }> };
+    });
+  return (rows.results ?? []).map((r) => ({
+    id: r.id,
+    slug: slugifyTeamName(r.name),
+    villageSlug: r.village_name ? slugifyTeamName(r.village_name) : "",
+  }));
+}
+
+/** Vrátí jediný prvek, jinak null. Dvojznačná adresa nesmí otevřít náhodný klub. */
+function only<T>(items: T[]): T | null {
+  return items.length === 1 ? items[0] : null;
+}
+
+/**
+ * Najde klub podle adresy. Pořadí: ID, vlastní adresa, stará adresa, přesný název,
+ * název podle celých slov (aspoň 4 znaky, jen když sedí na jediný klub), obec (jen jediný klub).
+ * Neznámá nebo dvojznačná adresa vrátí null (404), nikdy cizí klub.
+ */
 async function resolveTeamId(db: D1Database, identifier: string): Promise<string | null> {
-  // 1. Direct team id check
   const direct = await db
     .prepare("SELECT id FROM teams WHERE id = ?")
     .bind(identifier)
     .first<{ id: string }>()
     .catch((e) => {
-      logger.warn({ module: "club-website" }, "resolveTeamId direct check", e);
+      logger.warn(MODULE, "resolveTeamId direct check", e);
       return null;
     });
   if (direct) return direct.id;
 
-  // 2. Custom slug check
+  const wanted = slugifyTeamName(identifier);
+  if (!wanted) return null;
+
   const bySlug = await db
     .prepare("SELECT team_id FROM team_websites WHERE custom_slug = ?")
-    .bind(identifier)
+    .bind(wanted)
     .first<{ team_id: string }>()
     .catch((e) => {
-      logger.warn({ module: "club-website" }, "resolveTeamId bySlug check", e);
+      logger.warn(MODULE, "resolveTeamId bySlug check", e);
       return null;
     });
   if (bySlug) return bySlug.team_id;
 
-  // 3. Fallback: match by slugified team name across teams
-  const allTeams = await db
-    .prepare("SELECT id, name FROM teams WHERE name IS NOT NULL")
-    .all<{ id: string; name: string }>()
+  const byAlias = await db
+    .prepare("SELECT team_id FROM team_website_slug_aliases WHERE slug = ?")
+    .bind(wanted)
+    .first<{ team_id: string }>()
     .catch((e) => {
-      logger.warn({ module: "club-website" }, "resolveTeamId all teams check", e);
-      return { results: [] };
-    });
-
-  const matching = (allTeams.results ?? []).find(
-    (t) => slugifyTeamName(t.name) === identifier,
-  );
-  if (matching) {
-    // Persist this slug in team_websites so future requests hit index directly
-    await ensureWebsiteRow(db, matching.id, identifier).catch((e) =>
-      logger.warn({ module: "club-website" }, "persist slug in resolveTeamId", e),
-    );
-    return matching.id;
-  }
-
-  // 4. Fallback: partial / substring match in slugified team name (e.g. "brevnov" -> "fk-rohlik-brevnov")
-  const partialMatching = (allTeams.results ?? []).find((t) => {
-    const s = slugifyTeamName(t.name);
-    return s.includes(identifier) || identifier.includes(s);
-  });
-  if (partialMatching) {
-    return partialMatching.id;
-  }
-
-  // 5. Fallback: match by village name
-  const villageTeam = await db
-    .prepare(
-      `SELECT t.id FROM teams t 
-       JOIN villages v ON v.id = t.village_id 
-       WHERE lower(v.name) = ? OR replace(lower(v.name), ' ', '-') = ? 
-       LIMIT 1`,
-    )
-    .bind(identifier.toLowerCase(), identifier.toLowerCase())
-    .first<{ id: string }>()
-    .catch((e) => {
-      logger.warn({ module: "club-website" }, "resolveTeamId village check", e);
+      logger.warn(MODULE, "resolveTeamId alias check", e);
       return null;
     });
-  if (villageTeam) return villageTeam.id;
+  if (byAlias) return byAlias.team_id;
+
+  const teams = await loadSeniorTeamSlugs(db);
+
+  const exact = only(teams.filter((t) => t.slug === wanted));
+  if (exact) return exact.id;
+
+  if (wanted.length >= MIN_FUZZY_SLUG) {
+    // Celá slova: "brevnov" najde "fk-rohlik-brevnov", ale "ab" nenajde "rapid-reporyje".
+    const byWords = only(teams.filter((t) => `-${t.slug}-`.includes(`-${wanted}-`)));
+    if (byWords) return byWords.id;
+
+    const byVillage = only(teams.filter((t) => t.villageSlug === wanted));
+    if (byVillage) return byVillage.id;
+  }
 
   return null;
 }
 
-// Ensure website row exists in team_websites (with default slug derived from team name)
-async function ensureWebsiteRow(db: D1Database, teamId: string, preferredSlug?: string) {
+/** Je adresa obsazená jiným klubem? Hlídá i názvy a staré adresy, aby si nikdo nepřivlastnil web soupeře. */
+async function slugTakenByOtherTeam(
+  db: D1Database,
+  slug: string,
+  teamId: string,
+  seniorTeams?: TeamSlugRow[],
+): Promise<boolean> {
+  const [website, alias, byId] = await Promise.all([
+    db.prepare("SELECT team_id FROM team_websites WHERE custom_slug = ? AND team_id <> ?")
+      .bind(slug, teamId).first<{ team_id: string }>(),
+    db.prepare("SELECT team_id FROM team_website_slug_aliases WHERE slug = ? AND team_id <> ?")
+      .bind(slug, teamId).first<{ team_id: string }>()
+      .catch((e) => {
+        logger.warn(MODULE, "check slug alias collision", e);
+        return null;
+      }),
+    db.prepare("SELECT id FROM teams WHERE id = ? AND id <> ?").bind(slug, teamId).first<{ id: string }>(),
+  ]);
+  if (website || alias || byId) return true;
+  const teams = seniorTeams ?? (await loadSeniorTeamSlugs(db));
+  return teams.some((t) => t.id !== teamId && t.slug === slug);
+}
+
+async function generateUniqueTeamSlug(db: D1Database, teamId: string, teamName: string): Promise<string> {
+  const baseSlug = slugifyTeamName(teamName) || `tym-${teamId.slice(0, 8)}`;
+  const seniorTeams = await loadSeniorTeamSlugs(db);
+  for (let counter = 1; counter <= 50; counter++) {
+    const candidate = counter === 1 ? baseSlug : `${baseSlug}-${counter}`;
+    const taken = await slugTakenByOtherTeam(db, candidate, teamId, seniorTeams).catch((e) => {
+      logger.warn(MODULE, "check slug uniqueness", e);
+      return true;
+    });
+    if (!taken) return candidate;
+  }
+  return `${baseSlug}-${teamId.slice(0, 4)}`;
+}
+
+interface WebsiteSettings {
+  template: ClubWebsiteTemplate;
+  unlockedTemplates: ClubWebsiteTemplate[];
+  unlockedAddons: ClubWebsiteAddon[];
+  customSlug: string;
+  announcement: string | null;
+  sponsorBannerEnabled: boolean;
+  visitorCount: number;
+  /** Uložené JSON řetězce, podle kterých nákup pozná, že mezitím nikdo nic nezměnil. */
+  rawUnlockedTemplates: string;
+  rawUnlockedAddons: string;
+}
+
+function parseJsonList<T>(raw: string, fallback: T[], what: string): T[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+  } catch (e) {
+    logger.warn(MODULE, `parse ${what}`, e);
+    return fallback;
+  }
+}
+
+/** Nastavení webu; řádek a výchozí adresu z názvu týmu založí při prvním čtení. */
+async function ensureWebsiteRow(db: D1Database, teamId: string): Promise<WebsiteSettings> {
   const existing = await db
     .prepare("SELECT * FROM team_websites WHERE team_id = ?")
     .bind(teamId)
@@ -182,459 +246,653 @@ async function ensureWebsiteRow(db: D1Database, teamId: string, preferredSlug?: 
       visitor_count: number;
     }>();
 
-  if (!existing) {
+  const teamName = async () => {
     const team = await db
       .prepare("SELECT name FROM teams WHERE id = ?")
       .bind(teamId)
       .first<{ name: string }>()
       .catch((e) => {
-        logger.warn({ module: "club-website" }, "lookup team name for slug", e);
+        logger.warn(MODULE, "lookup team name for slug", e);
         return null;
       });
+    return team?.name || `tym-${teamId.slice(0, 8)}`;
+  };
 
-    const defaultSlug = await generateUniqueTeamSlug(
-      db,
-      teamId,
-      preferredSlug || team?.name || `tym-${teamId.slice(0, 8)}`,
-    );
-
+  if (!existing) {
+    const defaultSlug = await generateUniqueTeamSlug(db, teamId, await teamName());
     await db
       .prepare(
-        `INSERT OR IGNORE INTO team_websites 
-         (team_id, template, unlocked_templates, unlocked_addons, custom_slug, announcement, sponsor_banner_enabled, visitor_count) 
-         VALUES (?, 'retro_2004', '["retro_2004"]', '[]', ?, NULL, 0, 1)`,
+        `INSERT OR IGNORE INTO team_websites
+         (team_id, template, unlocked_templates, unlocked_addons, custom_slug, announcement, sponsor_banner_enabled, visitor_count)
+         VALUES (?, 'retro_2004', '["retro_2004"]', '[]', ?, NULL, 0, 0)`,
       )
       .bind(teamId, defaultSlug)
       .run()
-      .catch((e) => logger.warn({ module: "club-website" }, "ensureWebsiteRow insert", e));
+      .catch((e) => logger.warn(MODULE, "ensureWebsiteRow insert", e));
 
     return {
-      template: "retro_2004" as ClubWebsiteTemplate,
-      unlockedTemplates: ["retro_2004"] as ClubWebsiteTemplate[],
-      unlockedAddons: [] as ClubWebsiteAddon[],
+      template: "retro_2004",
+      unlockedTemplates: ["retro_2004"],
+      unlockedAddons: [],
       customSlug: defaultSlug,
       announcement: null,
       sponsorBannerEnabled: false,
-      visitorCount: 1,
+      visitorCount: 0,
+      rawUnlockedTemplates: '["retro_2004"]',
+      rawUnlockedAddons: "[]",
     };
   }
 
-  // If existing row has NO custom_slug, generate and backfill it from team name
   let customSlug = existing.custom_slug;
   if (!customSlug) {
-    const team = await db
-      .prepare("SELECT name FROM teams WHERE id = ?")
-      .bind(teamId)
-      .first<{ name: string }>()
-      .catch((e) => {
-        logger.warn({ module: "club-website" }, "lookup team name for backfill slug", e);
-        return null;
-      });
-
-    customSlug = await generateUniqueTeamSlug(db, teamId, team?.name || `tym-${teamId.slice(0, 8)}`);
+    customSlug = await generateUniqueTeamSlug(db, teamId, await teamName());
     await db
       .prepare("UPDATE team_websites SET custom_slug = ? WHERE team_id = ?")
       .bind(customSlug, teamId)
       .run()
-      .catch((e) => logger.warn({ module: "club-website" }, "backfill custom_slug", e));
-  }
-
-  // Increment visitor count quietly
-  db.prepare("UPDATE team_websites SET visitor_count = visitor_count + 1 WHERE team_id = ?")
-    .bind(teamId)
-    .run()
-    .catch((e) => logger.warn({ module: "club-website" }, "increment visitor count", e));
-
-  let unlockedTemplates: ClubWebsiteTemplate[] = ["retro_2004"];
-  try {
-    unlockedTemplates = JSON.parse(existing.unlocked_templates);
-  } catch (e) {
-    logger.warn({ module: "club-website" }, "parse unlocked templates", e);
-  }
-
-  let unlockedAddons: ClubWebsiteAddon[] = [];
-  try {
-    unlockedAddons = JSON.parse(existing.unlocked_addons);
-  } catch (e) {
-    logger.warn({ module: "club-website" }, "parse unlocked addons", e);
+      .catch((e) => logger.warn(MODULE, "backfill custom_slug", e));
   }
 
   return {
     template: (existing.template || "retro_2004") as ClubWebsiteTemplate,
-    unlockedTemplates,
-    unlockedAddons,
+    unlockedTemplates: parseJsonList<ClubWebsiteTemplate>(existing.unlocked_templates, ["retro_2004"], "unlocked templates"),
+    unlockedAddons: parseJsonList<ClubWebsiteAddon>(existing.unlocked_addons, [], "unlocked addons"),
     customSlug,
     announcement: existing.announcement,
     sponsorBannerEnabled: existing.sponsor_banner_enabled === 1,
-    visitorCount: (existing.visitor_count || 0) + 1,
+    visitorCount: existing.visitor_count || 0,
+    rawUnlockedTemplates: existing.unlocked_templates,
+    rawUnlockedAddons: existing.unlocked_addons,
   };
 }
 
-// Helper pro generování vesnické fotbalové představovačky a rozlučky (kluby nikdy nezveřejňují částky)
+/** Veřejná část nastavení (bez interních JSON řetězců). */
+function publicWebsite(w: WebsiteSettings) {
+  return {
+    template: w.template,
+    unlockedTemplates: w.unlockedTemplates,
+    unlockedAddons: w.unlockedAddons,
+    customSlug: w.customSlug,
+    announcement: w.announcement,
+    sponsorBannerEnabled: w.sponsorBannerEnabled,
+    visitorCount: w.visitorCount,
+  };
+}
+
+// ── Přestupy: představovačky a rozlučky ─────────────────────────────────────
+// Jména jsou vždy v 1. pádě (přístavek „tým X“, „obec Y“), aby věta seděla pro
+// jakýkoli název. Kluby částky nezveřejňují, proto žádné číslo v textu.
+
+interface TransferFlavor {
+  headline: string;
+  story: string;
+  quote: string;
+}
+
+type FlavorContext = { p: string; team: string; village: string; other: string | null };
+
+const ARRIVAL_FREE: Array<(c: FlavorContext) => TransferFlavor> = [
+  ({ p, team, village }) => ({
+    headline: `Volný hráč ${p} posiluje tým ${team}`,
+    story: `Vedení klubu dotáhlo jednání s hráčem bez angažmá. ${p} podepsal a od příštího tréninku nastupuje s partou v obci ${village}.`,
+    quote: "Kluci v kabině mě vzali parádně a zápisné do týmové kasy už mám zaplacené. Po zápase se těším na jedno orosené.",
+  }),
+  ({ p, team }) => ({
+    headline: `${p} je naše nová posila`,
+    story: `Bez odstupného a bez dlouhého vyjednávání. ${p} hledal nové angažmá a v týmu ${team} ho našel. Trenér si od něj slibuje víc konkurence v kádru.`,
+    quote: "Chtěl jsem zase pořádně hrát. Tady je parta, která táhne za jeden provaz, a to mi stačí.",
+  }),
+  ({ p }) => ({
+    headline: `Podpis po tréninku: ${p} je náš`,
+    story: `Smlouva se podepisovala hned po tréninku na lavičce u kabin. ${p} přichází jako volný hráč a rovnou se zapojil do přípravy.`,
+    quote: "Předseda mi podal propisku a řekl, ať to podepíšu, než si to rozmyslím. Tak jsem podepsal.",
+  }),
+];
+
+const ARRIVAL_TRANSFER: Array<(c: FlavorContext) => TransferFlavor> = [
+  ({ p, team, other }) => ({
+    headline: `Nová posila: ${p} přichází ${other ? `z týmu ${other}` : "z jiného klubu"}`,
+    story: `Vedení klubu ${team} dotáhlo jednání o přestupu. ${p} se hned zapojil do tréninku. Výši odstupného se kluby dohodly nezveřejňovat.`,
+    quote: "Nabídka se nedala odmítnout. Je tu skvělá parta, výborný trávník a hlad po bodech.",
+  }),
+  ({ p, team, other }) => ({
+    headline: `${p} mění dres, nově hraje za ${team}`,
+    story: `Přestup je hotový. ${p} přichází ${other ? `z týmu ${other}` : "z jiného klubu"} a trenér s ním počítá už pro nejbližší zápas. O podmínkách přestupu kluby mlčí.`,
+    quote: "Dlouho jsem nepřemýšlel. Chci hrát, chci dávat góly a chci, aby fanoušci odcházeli spokojení.",
+  }),
+  ({ p, other }) => ({
+    headline: `Kabina se rozrůstá, přichází ${p}`,
+    story: `${p} přichází ${other ? `z týmu ${other}` : "z jiného klubu"}. Spoluhráči ho přivítali tradičně, rundou v hospodě po prvním tréninku. Částku za přestup klub nezveřejňuje.`,
+    quote: "Rundu jsem platil já, tak to tu chodí. Na hřišti to klukům vrátím.",
+  }),
+];
+
+const DEPARTURE_RELEASED: Array<(c: FlavorContext) => TransferFlavor> = [
+  ({ p, team, village }) => ({
+    headline: `${p} v klubu končí, smlouva byla rozvázána`,
+    story: `Po vzájemné dohodě končí ${p} v týmu ${team}. Za všechny odehrané zápasy a obětavost mu patří velké poděkování.`,
+    quote: `V obci ${village} jsem zažil krásné fotbalové roky. Klukům budu dál držet palce.`,
+  }),
+  ({ p, team }) => ({
+    headline: `Rozloučení: ${p} opouští kabinu`,
+    story: `${p} se rozloučil se spoluhráči a kabinu opouští. Vedení klubu ${team} mu přeje hodně štěstí, ať už bude pokračovat kdekoli.`,
+    quote: "Bylo to tu krásné. Dres si nechávám na památku a na zápasy se přijdu podívat.",
+  }),
+  ({ p, team }) => ({
+    headline: `Konec v týmu ${team}: ${p} odchází`,
+    story: `Klub a ${p} se dohodli na ukončení spolupráce. Odchází jako volný hráč a může si hledat nové angažmá.`,
+    quote: "Nikomu nic nevyčítám. Fotbal mě baví dál, tak uvidíme, kde budu kopat příště.",
+  }),
+];
+
+const DEPARTURE_TRANSFER: Array<(c: FlavorContext) => TransferFlavor> = [
+  ({ p, team, other }) => ({
+    headline: `Přestup je hotový: ${p} odchází ${other ? `do týmu ${other}` : "do jiného klubu"}`,
+    story: `Klub ${team} oznamuje přestup. Výše odstupného nebyla po dohodě obou klubů zveřejněna. Vedení i spoluhráči přejí hráči ${p} hodně štěstí.`,
+    quote: `Na roky v týmu ${team} nikdy nezapomenu. Děkuju fanouškům za podporu u zábradlí i v hospodě po zápase.`,
+  }),
+  ({ p, other }) => ({
+    headline: `${p} míří ${other ? `do týmu ${other}` : "do jiného klubu"}`,
+    story: `Odchod, který se dal čekat. ${p} dostal nabídku, která se neodmítá, a klub mu nebránil. O podmínkách přestupu se mlčí.`,
+    quote: "Bylo to těžké rozhodnutí. Kluci, díky za všechno a ať vám to tam lítá.",
+  }),
+  ({ p, other }) => ({
+    headline: `Sbohem a díky: ${p} odchází`,
+    story: `${p} odchází ${other ? `do týmu ${other}` : "do jiného klubu"}. V kabině po něm zůstane prázdné místo na lavici i v kolektivu. Klub mu děkuje za odvedenou práci.`,
+    quote: "Tenhle dres pro mě hodně znamenal. Až se potkáme na hřišti, šetřit vás nebudu.",
+  }),
+];
+
+/** Krátký stabilní hash, aby stejný přestup měl při každém načtení stejný text. */
+function stableHash(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 function generateTransferFlavor(
-  t: {
-    direction: "in" | "out";
-    kind: string;
-    fee: number | null;
-    playerName: string;
-    otherTeamName: string | null;
-  },
+  t: { direction: "in" | "out"; kind: string; playerId: string; date: string; playerName: string; otherTeamName: string | null },
   teamName: string,
   villageName: string,
-) {
-  const isArrival = t.direction === "in";
-  const otherClub = t.otherTeamName || (isArrival ? "předchozího působiště" : "nového klubu");
+  used: Map<unknown, Set<number>>,
+): TransferFlavor {
+  const pool =
+    t.direction === "in"
+      ? t.kind === "free_agent" || t.kind === "released" ? ARRIVAL_FREE : ARRIVAL_TRANSFER
+      : t.kind === "released" ? DEPARTURE_RELEASED : DEPARTURE_TRANSFER;
 
-  if (isArrival) {
-    let headline = `Nová posila: ${t.playerName} přichází do ${teamName}!`;
-    let story = "";
-    let quote = "";
+  // Stejná šablona dvakrát pod sebou působí jako robot: první volnou bereme podle hashe.
+  const taken = used.get(pool) ?? new Set<number>();
+  used.set(pool, taken);
+  let idx = stableHash(`${t.playerId}|${t.date}|${t.kind}`) % pool.length;
+  for (let i = 0; i < pool.length && taken.has(idx); i++) idx = (idx + 1) % pool.length;
+  taken.add(idx);
 
-    if (t.kind === "free_agent") {
-      headline = `Podpis volného hráče: ${t.playerName} posiluje ${teamName}!`;
-      story = `Klubové vedení dotáhlo jednání s volným hráčem. Do kabiny v ${villageName} přichází ${t.playerName} jako volný hráč bez angažmá. Trenér si od něj slibuje okamžité zkvalitnění herního projevu a novou energii do týmu.`;
-      quote = `„Kluci v kabině mě vzali parádně, zápisné do týmové kasy mám zaplacené a po zápase se těším na jedno orosené u klandru!“ — ${t.playerName}`;
-    } else {
-      headline = `Nová posila: ${t.playerName} přichází z ${otherClub}!`;
-      story = `Vedení klubu dotáhlo jednání o přestupu! Z celku ${otherClub} přichází ${t.playerName}. Oba kluby se po vzájemné dohodě rozhodly výši odstupného nezveřejňovat. Hráč se okamžitě zapojil do tréninkového procesu v ${villageName}.`;
-      quote = `„Nabídka ${teamName} se nedala odmítnout. Je tu skvělá parta, výborný pažit a hlad po bodech. Udělám všechno pro to, abychom potěšili naše fanoušky.“ — ${t.playerName}`;
-    }
+  return pool[idx]({ p: t.playerName, team: teamName, village: villageName, other: t.otherTeamName });
+}
 
-    return { headline, story, quote };
-  } else {
-    // Departure / Rozlučka
-    let headline = `Klubová rozlučka: ${t.playerName} opouští ${teamName}`;
-    let story = "";
-    let quote = "";
+// ── Zápasy ───────────────────────────────────────────────────────────────────
 
-    if (t.kind === "released") {
-      headline = `Rozvázání smlouvy: ${t.playerName} končí v dresu ${teamName}`;
-      story = `Po vzájemné dohodě obou stran došlo k ukončení působení ${t.playerName} v našem klubu. Za všechny odehrané zápasy, obětavost a bojovnost mu patří upřímné poděkování celého klubu.`;
-      quote = `„V ${villageName} jsem zažil krásné fotbalové roky a poznal skvělé lidi. Klukům budu i dál na dálku držet palce.“ — ${t.playerName}`;
-    } else {
-      headline = `Přestup zpečetěn: ${t.playerName} odchází do ${otherClub}`;
-      story = `Klub ${teamName} oznamuje přestup svého hráče. ${t.playerName} bude nově oblékat dres ${otherClub}. Výše odstupného nebyla po dohodě obou klubů zveřejněna. Vedení i spoluhráči mu přejí hodně štěstí v nové sportovní výzvě.`;
-      quote = `„Na roky v ${teamName} nikdy nezapomenu. Děkuju všem fanouškům za podporu u klandru i v hospodě po zápase.“ — ${t.playerName}`;
-    }
+function extractHighlights(rawEvents: unknown): ClubWebsiteMatchHighlight[] {
+  let events: any[] = [];
+  try {
+    events = typeof rawEvents === "string" ? JSON.parse(rawEvents) : ((rawEvents as any[]) || []);
+  } catch (e) {
+    logger.warn(MODULE, "parse match events for highlights", e);
+    events = [];
+  }
+  if (!Array.isArray(events)) return [];
 
-    return { headline, story, quote };
+  let keyMoments = events.filter((e) => {
+    if (e.type === "goal") return true;
+    if (e.type === "card" && (e.detail === "red" || e.detail === "yellow_red")) return true;
+    if (e.type === "penalty") return true;
+    if (e.type === "chance" && (
+      e.detail === "břevno" ||
+      e.detail === "tyč" ||
+      e.detail === "penalty_missed" ||
+      e.detail === "penalty_saved" ||
+      e.description?.toLowerCase().includes("břevno") ||
+      e.description?.toLowerCase().includes("tyč") ||
+      e.description?.toLowerCase().includes("gólová") ||
+      e.description?.toLowerCase().includes("tutovka")
+    )) return true;
+    return false;
+  });
+
+  if (keyMoments.length === 0) {
+    keyMoments = events
+      .filter((e) => e.type === "chance" || (e.type === "card" && e.detail === "yellow"))
+      .slice(0, 5);
+  }
+
+  return keyMoments
+    .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0))
+    .map((e) => ({
+      minute: e.minute ?? 0,
+      type: e.type,
+      isHome: e.teamId === 1,
+      playerName: e.playerName || "Hráč",
+      description: e.description || "",
+      detail: e.detail,
+      source: e.source,
+    }));
+}
+
+const PLAYERS_SQL = `SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.squad_number, p.avatar,
+        COALESCE(SUM(ps.appearances), 0) as appearances,
+        COALESCE(SUM(ps.goals), 0) as goals,
+        COALESCE(SUM(ps.assists), 0) as assists,
+        COALESCE(SUM(ps.clean_sheets), 0) as clean_sheets,
+        COALESCE(SUM(ps.minutes_played), 0) as minutes_played
+ FROM players p
+ LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id
+   AND ps.season_id = (
+     SELECT id FROM seasons
+     ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, number DESC
+     LIMIT 1
+   )
+ WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+ GROUP BY p.id
+ ORDER BY CASE p.position
+            WHEN 'GK' THEN 1
+            WHEN 'DEF' THEN 2 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 WHEN 'LWB' THEN 2 WHEN 'RWB' THEN 2
+            WHEN 'MID' THEN 3 WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 WHEN 'CDM' THEN 3 WHEN 'CAM' THEN 3 WHEN 'DM' THEN 3 WHEN 'AM' THEN 3
+            WHEN 'FWD' THEN 4 WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 WHEN 'LW' THEN 4 WHEN 'RW' THEN 4
+            ELSE 5 END,
+          CASE WHEN p.squad_number IS NULL OR p.squad_number = 0 THEN 999 ELSE p.squad_number END ASC,
+          p.overall_rating DESC`;
+
+interface PlayerRow {
+  id: string; first_name: string; last_name: string; position: string; overall_rating: number;
+  age: number; squad_number: number | null; avatar: string;
+  appearances: number; goals: number; assists: number; clean_sheets: number; minutes_played: number;
+}
+
+function parseAvatar(raw: unknown, what: string): Record<string, unknown> {
+  if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+  if (typeof raw !== "string" || !raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    logger.warn(MODULE, `parse ${what} avatar`, e);
+    return {};
   }
 }
 
-// GET /api/teams/:id/website — veřejná i interní data pro Klubový web
+function mapPlayer(p: PlayerRow) {
+  return {
+    id: p.id,
+    firstName: p.first_name,
+    lastName: p.last_name,
+    position: p.position,
+    positionName: formatPlayerPositionCZ(p.position),
+    overallRating: p.overall_rating,
+    age: p.age,
+    squadNumber: p.squad_number,
+    avatar: parseAvatar(p.avatar, "player"),
+    stats: {
+      appearances: p.appearances,
+      goals: p.goals,
+      assists: p.assists,
+      cleanSheets: p.clean_sheets,
+      minutesPlayed: p.minutes_played,
+    },
+  };
+}
+
+const UPCOMING_SQL = `SELECT m.id, m.round, sc.scheduled_at,
+        ht.id as home_id, ht.name as home_name, ht.stadium_name as home_stadium, ht.primary_color as home_primary, ht.badge_pattern as home_badge,
+        at.id as away_id, at.name as away_name, at.primary_color as away_primary, at.badge_pattern as away_badge
+ FROM matches m
+ LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
+ JOIN teams ht ON m.home_team_id = ht.id
+ JOIN teams at ON m.away_team_id = at.id
+ WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'scheduled'
+ ORDER BY (sc.scheduled_at IS NULL), sc.scheduled_at ASC, m.round ASC LIMIT 5`;
+
+type PollChoice = "win" | "draw" | "loss";
+
+async function loadPollVotes(db: D1Database, teamId: string, matchId: string) {
+  const votes: Record<PollChoice, number> = { win: 0, draw: 0, loss: 0 };
+  const rows = await db
+    .prepare("SELECT choice, COUNT(*) AS n FROM team_website_poll_votes WHERE team_id = ? AND match_id = ? GROUP BY choice")
+    .bind(teamId, matchId)
+    .all<{ choice: PollChoice; n: number }>()
+    .catch((e) => {
+      logger.warn(MODULE, "load poll votes", e);
+      return { results: [] as Array<{ choice: PollChoice; n: number }> };
+    });
+  for (const r of rows.results ?? []) {
+    if (r.choice in votes) votes[r.choice] = r.n;
+  }
+  return votes;
+}
+
+// ── Fotky stadionu z 3D modelu ───────────────────────────────────────────────
+
+/** Zvednout, když se 3D model stadionu viditelně změní: staré fotky pak všem klubům zneplatní. */
+const STADIUM_PHOTO_RENDERER = "2026-10-05";
+const STADIUM_PHOTO_MAX_BYTES = 3_000_000;
+
+function teamInitials(name: string): string {
+  return name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+}
+
+function stadiumFacilitiesOut(stadium: any): Record<string, number> | undefined {
+  if (!stadium) return undefined;
+  return {
+    changing_rooms: stadium.changing_rooms ?? 0,
+    showers: stadium.showers ?? 0,
+    refreshments: stadium.refreshments ?? 0,
+    lighting: stadium.lighting ?? 0,
+    stands: stadium.stands ?? 0,
+    stand_main: stadium.stand_main ?? 0,
+    stand_opposite: stadium.stand_opposite ?? 0,
+    stand_goal_west: stadium.stand_goal_west ?? 0,
+    stand_goal_east: stadium.stand_goal_east ?? 0,
+    roof: stadium.roof ?? 0,
+    ultras_stand: stadium.ultras_stand ?? 0,
+    toilets: stadium.toilets ?? 0,
+    parking: stadium.parking ?? 0,
+    fence: stadium.fence ?? 0,
+    entrance_gate: stadium.entrance_gate ?? 0,
+    security: stadium.security ?? 0,
+    cage: stadium.cage ?? 0,
+    vip_box: stadium.vip_box ?? 0,
+  };
+}
+
+function stadiumCustomizationOut(stadium: any): ClubWebsiteStadiumRender["customization"] | undefined {
+  if (!stadium) return undefined;
+  return {
+    fenceColor: stadium.fence_color ?? null,
+    standColor: stadium.stand_color ?? null,
+    seatColor: stadium.seat_color ?? null,
+    roofColor: stadium.roof_color ?? null,
+    accentColor: stadium.accent_color ?? null,
+    scoreboardLevel: stadium.scoreboard_level ?? 0,
+    flagSize: stadium.flag_size ?? 0,
+    ultrasText: stadium.ultras_text ?? null,
+    ultrasBannerColor: stadium.ultras_banner_color ?? null,
+    ultrasTextColor: stadium.ultras_text_color ?? null,
+    flagColor: stadium.flag_color ?? null,
+    mowingPattern: stadium.mowing_pattern ?? "stripes",
+    netPattern: stadium.net_pattern ?? "white",
+    netStyle: stadium.net_style ?? "loose",
+    surroundSurface: stadium.surround_surface ?? "grass",
+  };
+}
+
+interface StadiumRenderParts {
+  team: {
+    name: string; primary_color: string; secondary_color: string; badge_pattern: string | null;
+    badge_primary_color: string | null; badge_secondary_color: string | null; badge_initials: string | null;
+    badge_symbol: string | null; stadium_name: string | null;
+  };
+  stadium: any;
+  extensions: Array<{ slot: string; kind: string; level: number }>;
+  bannerSponsors: string[];
+}
+
+/**
+ * Vstup pro 3D model stadionu a jeho otisk. Klient fotí přesně z těchto dat, takže
+ * server i prohlížeč se shodnou, ke které podobě stadionu fotka patří. Stav trávníku
+ * je zaokrouhlený na desítky, jinak by fotky zastaraly po každém zápase.
+ */
+async function buildStadiumRender(parts: StadiumRenderParts): Promise<{ version: string; render: ClubWebsiteStadiumRender }> {
+  const { team, stadium } = parts;
+  const render: ClubWebsiteStadiumRender = {
+    pitchCondition: Math.round((stadium?.pitch_condition ?? 75) / 10) * 10,
+    pitchType: stadium?.pitch_type ?? "natural",
+    facilities: stadiumFacilitiesOut(stadium) ?? { changing_rooms: 1, stands: 1, stand_main: 1, fence: 1, entrance_gate: 1 },
+    standExtensions: parts.extensions.map((e) => ({ slot: e.slot, kind: e.kind, level: e.level })),
+    teamColor: team.primary_color || "#2D5F2D",
+    secondaryColor: team.secondary_color || "#FFFFFF",
+    badgePattern: team.badge_pattern || "shield",
+    badgeInitials: team.badge_initials || teamInitials(team.name),
+    badgeSymbol: team.badge_symbol,
+    badgePrimary: team.badge_primary_color || team.primary_color || "#2D5F2D",
+    badgeSecondary: team.badge_secondary_color || team.secondary_color || "#FFFFFF",
+    stadiumName: team.stadium_name || team.name,
+    sponsors: parts.bannerSponsors,
+    customization: stadiumCustomizationOut(stadium) ?? {},
+  };
+  const version = (await sha256Hex(`${STADIUM_PHOTO_RENDERER}|${JSON.stringify(render)}`)).slice(0, 16);
+  return { version, render };
+}
+
+function bannerSponsorNames(rows: Array<{ sponsor_name: string; category: string | null }>): string[] {
+  return rows
+    .filter((s) => s.category === "banner" || s.category === "stadium")
+    .map((s) => s.sponsor_name)
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+/** Totéž jako GET /website, jen pro ověření nahrávané fotky (bez ostatních dat webu). */
+async function loadStadiumRender(db: D1Database, teamId: string) {
+  const [team, stadium, extensions, sponsors] = await Promise.all([
+    db.prepare(
+      `SELECT name, primary_color, secondary_color, badge_pattern, badge_primary_color, badge_secondary_color,
+              badge_initials, badge_symbol, stadium_name
+       FROM teams WHERE id = ?`,
+    ).bind(teamId).first<StadiumRenderParts["team"]>(),
+    db.prepare("SELECT * FROM stadiums WHERE team_id = ? LIMIT 1").bind(teamId).first<any>(),
+    import("../stadium/extensions-db").then(({ loadExtensions }) => loadExtensions(db, teamId)),
+    db.prepare("SELECT sponsor_name, category FROM sponsor_contracts WHERE team_id = ? AND status = 'active'")
+      .bind(teamId).all<{ sponsor_name: string; category: string | null }>(),
+  ]);
+  if (!team) return null;
+  return buildStadiumRender({
+    team,
+    stadium,
+    extensions: (extensions || []) as Array<{ slot: string; kind: string; level: number }>,
+    bannerSponsors: bannerSponsorNames(sponsors.results ?? []),
+  });
+}
+
+function stadiumPhotoKey(teamId: string, viewpoint: string, version: string) {
+  return `stadium-photo/${teamId}/${viewpoint}-${version}`;
+}
+
+function isStadiumPhotoViewpoint(v: string): v is StadiumPhotoViewpoint {
+  return (STADIUM_PHOTO_VIEWPOINTS as readonly string[]).includes(v);
+}
+
+/** Pozná obrázek podle prvních bajtů (WebP, JPEG, PNG); hlavičce Content-Type nevěříme. */
+function sniffImageType(bytes: Uint8Array): string | null {
+  if (bytes.length > 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return "image/webp";
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  return null;
+}
+
+// GET /api/teams/:id/website — veřejná data pro Klubový web (jen čtení, návštěvy nepočítá)
 clubWebsiteRouter.get("/:id/website", async (c) => {
-  const identifier = c.req.param("id");
-  const teamId = await resolveTeamId(c.env.DB, identifier);
+  const db = c.env.DB;
+  const teamId = await resolveTeamId(db, c.req.param("id"));
   if (!teamId) return c.json({ error: "Klub nenalezen" }, 404);
 
-  // 1. Team & Club identity
-  const team = await c.env.DB.prepare(
+  const team = await db.prepare(
     `SELECT t.id, t.name, t.primary_color, t.secondary_color, t.badge_pattern, t.jersey_pattern, t.stadium_name,
-            t.away_primary_color, t.away_secondary_color, t.away_jersey_pattern, t.jersey_sponsor,
+            t.away_primary_color, t.away_secondary_color, t.away_jersey_pattern,
             t.home_shorts_color, t.home_socks_color, t.away_shorts_color, t.away_socks_color,
             t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol,
-            t.scarf_pattern, t.budget, t.league_id,
+            t.scarf_pattern, t.league_id,
             t.anthem_url, t.anthem_lyrics, t.anthem_title, t.anthem_style,
             t.stadium_nickname, t.stadium_built_year, t.stadium_specialita, t.stadium_tribuna_north, t.stadium_tribuna_south,
             t.team_nickname, t.club_motto, t.founding_year, t.founding_story, t.colors_meaning,
-            v.name as village_name, v.district, v.region, v.population, v.size as village_category
-     FROM teams t 
-     JOIN villages v ON t.village_id = v.id 
+            v.name as village_name, v.district, v.region, v.population, v.size as village_size
+     FROM teams t
+     JOIN villages v ON t.village_id = v.id
      WHERE t.id = ?`,
   ).bind(teamId).first<{
     id: string; name: string; primary_color: string; secondary_color: string;
     badge_pattern: string; jersey_pattern: string; stadium_name: string;
     away_primary_color: string | null; away_secondary_color: string | null; away_jersey_pattern: string | null;
-    jersey_sponsor: string | null; home_shorts_color: string | null; home_socks_color: string | null;
+    home_shorts_color: string | null; home_socks_color: string | null;
     away_shorts_color: string | null; away_socks_color: string | null;
     badge_primary_color: string | null; badge_secondary_color: string | null; badge_initials: string | null;
-    badge_symbol: string | null; scarf_pattern: string | null; budget: number; league_id: string;
+    badge_symbol: string | null; scarf_pattern: string | null; league_id: string | null;
     anthem_url: string | null; anthem_lyrics: string | null; anthem_title: string | null; anthem_style: string | null;
     stadium_nickname: string | null; stadium_built_year: number | null; stadium_specialita: string | null;
     stadium_tribuna_north: string | null; stadium_tribuna_south: string | null;
     team_nickname: string | null; club_motto: string | null; founding_year: number | null;
     founding_story: string | null; colors_meaning: string | null;
-    village_name: string; district: string; region: string; population: number; village_category: string;
+    village_name: string; district: string; region: string; population: number; village_size: string;
   }>();
-
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
-  // Stadium details
-  const stadium = await c.env.DB.prepare(
-    "SELECT * FROM stadiums WHERE team_id = ? LIMIT 1",
-  ).bind(teamId).first<any>()
-    .catch((e) => { logger.warn({ module: "club-website" }, "fetch stadium", e); return null; });
-  const { calculateFacilityEffects: calcFxClub } = await import("../stadium/stadium-generator");
-  const clubCapacity = stadium ? stadium.capacity + calcFxClub({ ...standFacilities(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus : null;
-
-  const { loadExtensions } = await import("../stadium/extensions-db");
-  const extRows = await loadExtensions(c.env.DB, teamId).catch(() => []);
-
-  const bannerContracts = await c.env.DB.prepare(
-    "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND (category = 'banner' OR category = 'stadium') LIMIT 8",
-  ).bind(teamId).all<{ sponsor_name: string }>().catch(() => ({ results: [] }));
-
-  // Main & Stadium Sponsor
-  const mainSponsor = await c.env.DB.prepare(
-    "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND (category = 'main' OR category IS NULL) LIMIT 1",
-  ).bind(teamId).first<{ sponsor_name: string }>()
-    .catch((e) => { logger.warn({ module: "club-website" }, "fetch main sponsor", e); return null; });
-
-  const stadiumNamingSponsor = await c.env.DB.prepare(
-    "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND category = 'stadium' LIMIT 1",
-  ).bind(teamId).first<{ sponsor_name: string }>()
-    .catch((e) => { logger.warn({ module: "club-website" }, "fetch stadium sponsor", e); return null; });
-
-  // Chants
   const zaklad = c.env.API_BASE_URL || new URL(c.req.url).origin;
-  const chantsRows = await c.env.DB.prepare(
-    `SELECT id, kind, text, duvod, sila, audio_vybrana
-     FROM fan_chants
-     WHERE team_id = ? AND status = 'zpiva' AND audio_a IS NOT NULL
-     ORDER BY (kind = 'domov') DESC, sila DESC LIMIT 5`,
-  ).bind(teamId).all<{
-    id: string; kind: string; text: string; duvod: string; sila: number; audio_vybrana: string | null;
-  }>().catch((e) => { logger.warn({ module: "club-website" }, "fetch chants", e); return { results: [] }; });
-  const chants = (chantsRows.results ?? []).map((r) => ({
-    id: r.id, kind: r.kind, text: r.text, duvod: r.duvod, sila: r.sila,
-    url: `${zaklad}/api/choraly/${r.id}/audio?v=${r.audio_vybrana ?? "a"}`,
-  }));
+  const warnEmpty = <T>(what: string) => (e: unknown) => {
+    logger.warn(MODULE, what, e);
+    return { results: [] as T[] };
+  };
+  const warnNull = (what: string) => (e: unknown) => {
+    logger.warn(MODULE, what, e);
+    return null;
+  };
 
-  // Mascot
-  const mascotRow = await c.env.DB.prepare(
-    "SELECT name, image_url, story FROM team_mascots WHERE team_id = ? AND is_selected = 1 LIMIT 1",
-  ).bind(teamId).first<{ name: string; image_url: string | null; story: string | null }>()
-    .catch((e) => { logger.warn({ module: "club-website" }, "fetch mascot", e); return null; });
-
-  // 2. Website settings & increment
-  const website = await ensureWebsiteRow(c.env.DB, teamId);
-
-  // 3. Manager & Head coach
-  const managerRow = await c.env.DB.prepare(
-    `SELECT m.id, m.name, m.age, m.reputation, m.avatar, m.coaching, m.tactics, m.motivation, m.discipline, m.licence_level, m.bio, m.birthplace
-     FROM managers m JOIN teams t ON t.user_id = m.user_id WHERE t.id = ?`,
-  ).bind(teamId).first<{
-    id: string; name: string; age: number; reputation: number; avatar: string;
-    coaching: number; tactics: number; motivation: number; discipline: number; licence_level: number | null;
-    bio: string | null; birthplace: string | null;
-  }>().catch((e) => { logger.warn({ module: "club-website" }, "fetch manager", e); return null; });
-
-  // 4. Staff members (trenérský štáb a personál)
-  const staffRows = await c.env.DB.prepare(
-    `SELECT id, role, profession, first_name, last_name, gender, age, avatar, description
-     FROM staff_members WHERE team_id = ? ORDER BY role ASC`,
-  ).bind(teamId).all<{
+  type SponsorRow = { sponsor_name: string; category: string | null };
+  type ChantRow = { id: string; kind: string; text: string; duvod: string; sila: number; audio_vybrana: string | null };
+  type StaffRow = {
     id: string; role: string; profession: string; first_name: string; last_name: string;
     gender: string; age: number; avatar: string; description: string | null;
-  }>().catch((e) => { logger.warn({ module: "club-website" }, "fetch staff", e); return { results: [] }; });
+  };
+  type ConcessionRow = { product_key: string; quality_level: number; sell_price: number };
+  type InterviewRow = { id: string; game_week: number; questions: string; answers: string | null; created_at: string };
+  type NewsRow = { id: string; type: string; headline: string; body: string; created_at: string };
 
-  const staffMembers = (staffRows.results ?? []).map((s) => {
-    let av = {};
-    try {
-      av = typeof s.avatar === "string" ? JSON.parse(s.avatar) : s.avatar;
-    } catch (e) {
-      logger.warn({ module: "club-website" }, "parse staff avatar", e);
-    }
-    return {
-      id: s.id,
-      role: s.role,
-      profession: s.profession,
-      firstName: s.first_name,
-      lastName: s.last_name,
-      gender: s.gender,
-      age: s.age,
-      avatar: av,
-      description: s.description,
-    };
-  });
+  // Všechno, co nezávisí na jiném dotazu, jde naráz. Dřív to bylo ~25 dotazů za sebou (1–2 s).
+  const [
+    stadium, extRows, sponsorRows, chantsRows, mascotRow, website, managerRow, staffRows, playersRows,
+    u21Team, recentRows, upcomingRows, concessionRows, fansRow, interviewRows, newsRows, transferRows, league,
+    storedPhotoRows,
+  ] = await Promise.all([
+    db.prepare("SELECT * FROM stadiums WHERE team_id = ? LIMIT 1").bind(teamId).first<any>().catch(warnNull("fetch stadium")),
+    import("../stadium/extensions-db")
+      .then(({ loadExtensions }) => loadExtensions(db, teamId))
+      .catch((e) => {
+        logger.warn(MODULE, "load stand extensions", e);
+        return [];
+      }),
+    db.prepare("SELECT sponsor_name, category FROM sponsor_contracts WHERE team_id = ? AND status = 'active'")
+      .bind(teamId).all<SponsorRow>().catch(warnEmpty<SponsorRow>("fetch sponsors")),
+    db.prepare(
+      `SELECT id, kind, text, duvod, sila, audio_vybrana
+       FROM fan_chants
+       WHERE team_id = ? AND status = 'zpiva' AND audio_a IS NOT NULL
+       ORDER BY (kind = 'domov') DESC, sila DESC LIMIT 5`,
+    ).bind(teamId).all<ChantRow>().catch(warnEmpty<ChantRow>("fetch chants")),
+    db.prepare("SELECT name, image_url, story FROM team_mascots WHERE team_id = ? AND is_selected = 1 LIMIT 1")
+      .bind(teamId).first<{ name: string; image_url: string | null; story: string | null }>()
+      .catch(warnNull("fetch mascot")),
+    ensureWebsiteRow(db, teamId),
+    db.prepare(
+      `SELECT m.name, m.age, m.reputation, m.avatar, m.licence_level, m.bio, m.birthplace
+       FROM managers m JOIN teams t ON t.user_id = m.user_id WHERE t.id = ?`,
+    ).bind(teamId).first<{
+      name: string; age: number; reputation: number; avatar: string;
+      licence_level: number | null; bio: string | null; birthplace: string | null;
+    }>().catch(warnNull("fetch manager")),
+    db.prepare(
+      `SELECT id, role, profession, first_name, last_name, gender, age, avatar, description
+       FROM staff_members WHERE team_id = ? ORDER BY role ASC`,
+    ).bind(teamId).all<StaffRow>().catch(warnEmpty<StaffRow>("fetch staff")),
+    db.prepare(PLAYERS_SQL).bind(teamId).all<PlayerRow>().catch(warnEmpty<PlayerRow>("fetch players")),
+    db.prepare("SELECT id, name FROM teams WHERE parent_team_id = ? AND team_type = 'u21' LIMIT 1")
+      .bind(teamId).first<{ id: string; name: string }>().catch(warnNull("fetch u21 team")),
+    db.prepare(
+      `SELECT m.id, m.round, m.home_score, m.away_score, m.events, m.simulated_at,
+              ht.id as home_id, ht.name as home_name, ht.primary_color as home_primary, ht.badge_pattern as home_badge,
+              at.id as away_id, at.name as away_name, at.primary_color as away_primary, at.badge_pattern as away_badge
+       FROM matches m
+       JOIN teams ht ON m.home_team_id = ht.id
+       JOIN teams at ON m.away_team_id = at.id
+       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
+       ORDER BY m.simulated_at DESC LIMIT 3`,
+    ).bind(teamId, teamId).all<any>().catch(warnEmpty<any>("fetch recent matches")),
+    db.prepare(UPCOMING_SQL).bind(teamId, teamId).all<any>().catch(warnEmpty<any>("fetch upcoming matches")),
+    db.prepare("SELECT product_key, quality_level, sell_price FROM concession_products WHERE team_id = ?")
+      .bind(teamId).all<ConcessionRow>().catch(warnEmpty<ConcessionRow>("fetch concession products")),
+    db.prepare("SELECT base_ticket_price, satisfaction FROM fans WHERE team_id = ? LIMIT 1")
+      .bind(teamId).first<{ base_ticket_price: number; satisfaction: number }>()
+      .catch(warnNull("fetch fans for ticket price")),
+    db.prepare(
+      `SELECT id, game_week, questions, answers, created_at
+       FROM coach_interviews
+       WHERE team_id = ? AND status = 'answered'
+       ORDER BY created_at DESC LIMIT 6`,
+    ).bind(teamId).all<InterviewRow>().catch(warnEmpty<InterviewRow>("fetch coach interviews")),
+    db.prepare("SELECT id, type, headline, body, created_at FROM news WHERE team_id = ? ORDER BY created_at DESC LIMIT 4")
+      .bind(teamId).all<NewsRow>().catch(warnEmpty<NewsRow>("fetch news")),
+    import("../transfers/transfer-overview")
+      .then(({ loadTransferOverview }) => loadTransferOverview(db, teamId, 8))
+      .catch((e) => {
+        logger.warn(MODULE, "load transfer overview", e);
+        return [];
+      }),
+    team.league_id
+      ? db.prepare("SELECT id, name FROM leagues WHERE id = ?").bind(team.league_id).first<{ id: string; name: string }>()
+        .catch(warnNull("fetch league"))
+      : Promise.resolve(null),
+    db.prepare("SELECT viewpoint, version FROM team_stadium_photos WHERE team_id = ?")
+      .bind(teamId).all<{ viewpoint: string; version: string }>()
+      .catch(warnEmpty<{ viewpoint: string; version: string }>("fetch stadium photos")),
+  ]);
 
-  // 5. Players (A-tým) — filtrováno na aktivní/poslední sezonu a s GROUP BY p.id proti duplicitám z více sezon
-  const playersRows = await c.env.DB.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.squad_number, p.avatar,
-            COALESCE(SUM(ps.appearances), 0) as appearances,
-            COALESCE(SUM(ps.goals), 0) as goals,
-            COALESCE(SUM(ps.assists), 0) as assists,
-            COALESCE(SUM(ps.clean_sheets), 0) as clean_sheets,
-            COALESCE(SUM(ps.minutes_played), 0) as minutes_played
-     FROM players p
-     LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id
-       AND ps.season_id = (
-         SELECT id FROM seasons 
-         ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, number DESC 
-         LIMIT 1
-       )
-     WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
-     GROUP BY p.id
-     ORDER BY CASE p.position 
-                WHEN 'GK' THEN 1 
-                WHEN 'DEF' THEN 2 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 WHEN 'LWB' THEN 2 WHEN 'RWB' THEN 2
-                WHEN 'MID' THEN 3 WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 WHEN 'CDM' THEN 3 WHEN 'CAM' THEN 3 WHEN 'DM' THEN 3 WHEN 'AM' THEN 3
-                WHEN 'FWD' THEN 4 WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 WHEN 'LW' THEN 4 WHEN 'RW' THEN 4 
-                ELSE 5 END, 
-              CASE WHEN p.squad_number IS NULL OR p.squad_number = 0 THEN 999 ELSE p.squad_number END ASC, 
-              p.overall_rating DESC`,
-  ).bind(teamId).all<{
-    id: string; first_name: string; last_name: string; position: string; overall_rating: number;
-    age: number; squad_number: number | null; avatar: string;
-    appearances: number; goals: number; assists: number; clean_sheets: number; minutes_played: number;
-  }>().catch((e) => { logger.warn({ module: "club-website" }, "fetch players", e); return { results: [] }; });
+  // ── Druhá vlna: dotazy, které potřebují výsledek první ──
+  const upcomingMatches = (upcomingRows.results ?? []).map((m: any) => ({
+    id: m.id as string,
+    round: m.round as number,
+    isHome: m.home_id === teamId,
+    stadiumName: (m.home_stadium || team.stadium_name) as string,
+    scheduledAt: m.scheduled_at as string | null,
+    opponent: m.home_id === teamId
+      ? { id: m.away_id, name: m.away_name, primaryColor: m.away_primary, badge: m.away_badge }
+      : { id: m.home_id, name: m.home_name, primaryColor: m.home_primary, badge: m.home_badge },
+  }));
+  const next = upcomingMatches[0] ?? null;
 
-  const aTeamPlayers = (playersRows.results ?? []).map((p) => {
-    let av = {};
-    try {
-      av = typeof p.avatar === "string" ? JSON.parse(p.avatar) : p.avatar;
-    } catch (e) {
-      logger.warn({ module: "club-website" }, "parse player avatar", e);
-    }
-    return {
-      id: p.id,
-      firstName: p.first_name,
-      lastName: p.last_name,
-      position: p.position,
-      positionName: formatPlayerPositionCZ(p.position),
-      overallRating: p.overall_rating,
-      age: p.age,
-      squadNumber: p.squad_number,
-      avatar: av,
-      stats: {
-        appearances: p.appearances,
-        goals: p.goals,
-        assists: p.assists,
-        cleanSheets: p.clean_sheets,
-        minutesPlayed: p.minutes_played,
-      },
-    };
-  });
+  const [u21Rows, cupRows, rivalry, standingsRaw, pollVotes] = await Promise.all([
+    u21Team
+      ? db.prepare(PLAYERS_SQL).bind(u21Team.id).all<PlayerRow>().catch(warnEmpty<PlayerRow>("fetch u21 players"))
+      : Promise.resolve({ results: [] as PlayerRow[] }),
+    (recentRows.results ?? []).length === 0
+      ? db.prepare(
+        `SELECT cm.id, cm.round, cm.home_score, cm.away_score, cm.events, cm.simulated_at,
+                hct.team_id as home_id, hct.name as home_name, hct.primary_color as home_primary,
+                act.team_id as away_id, act.name as away_name, act.primary_color as away_primary
+         FROM cup_matches cm
+         JOIN cup_teams hct ON cm.home_cup_team_id = hct.id
+         JOIN cup_teams act ON cm.away_cup_team_id = act.id
+         WHERE (hct.team_id = ? OR act.team_id = ?) AND cm.status = 'simulated'
+         ORDER BY cm.simulated_at DESC LIMIT 3`,
+      ).bind(teamId, teamId).all<any>().catch(warnEmpty<any>("fetch recent cup matches"))
+      : Promise.resolve({ results: [] as any[] }),
+    next
+      ? db.prepare("SELECT 1 FROM fan_rivalries WHERE (team_a = ? AND team_b = ?) OR (team_a = ? AND team_b = ?) LIMIT 1")
+        .bind(teamId, next.opponent.id, next.opponent.id, teamId).first()
+        .catch(warnNull("fetch fan rivalry"))
+      : Promise.resolve(null),
+    team.league_id
+      ? Promise.all([
+        import("../stats/standings").then(({ calculateStandings }) => calculateStandings(db, team.league_id as string)),
+        db.prepare("SELECT id, name FROM teams WHERE league_id = ?").bind(team.league_id).all<{ id: string; name: string }>(),
+      ]).catch((e) => {
+        logger.warn(MODULE, "fetch league standings", e);
+        return null;
+      })
+      : Promise.resolve(null),
+    next ? loadPollVotes(db, teamId, next.id) : Promise.resolve(null),
+  ]);
 
-  // 6. Reserve team (U21) if exists
-  const u21Team = await c.env.DB.prepare(
-    "SELECT id, name FROM teams WHERE parent_team_id = ? AND team_type = 'u21' LIMIT 1",
-  ).bind(teamId).first<{ id: string; name: string }>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch u21 team", e);
-    return null;
-  });
-
-  let u21Players: typeof aTeamPlayers = [];
-  if (u21Team) {
-    const u21Rows = await c.env.DB.prepare(
-      `SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.squad_number, p.avatar,
-              COALESCE(SUM(ps.appearances), 0) as appearances,
-              COALESCE(SUM(ps.goals), 0) as goals,
-              COALESCE(SUM(ps.assists), 0) as assists,
-              COALESCE(SUM(ps.clean_sheets), 0) as clean_sheets,
-              COALESCE(SUM(ps.minutes_played), 0) as minutes_played
-       FROM players p
-       LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id
-         AND ps.season_id = (
-           SELECT id FROM seasons 
-           ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, number DESC 
-           LIMIT 1
-         )
-       WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
-       GROUP BY p.id
-       ORDER BY CASE p.position 
-                  WHEN 'GK' THEN 1 
-                  WHEN 'DEF' THEN 2 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 WHEN 'LWB' THEN 2 WHEN 'RWB' THEN 2
-                  WHEN 'MID' THEN 3 WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 WHEN 'CDM' THEN 3 WHEN 'CAM' THEN 3 WHEN 'DM' THEN 3 WHEN 'AM' THEN 3
-                  WHEN 'FWD' THEN 4 WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 WHEN 'LW' THEN 4 WHEN 'RW' THEN 4 
-                  ELSE 5 END, 
-                CASE WHEN p.squad_number IS NULL OR p.squad_number = 0 THEN 999 ELSE p.squad_number END ASC, 
-                p.overall_rating DESC`,
-    ).bind(u21Team.id).all<any>().catch((e) => {
-      logger.warn({ module: "club-website" }, "fetch u21 players", e);
-      return { results: [] };
-    });
-
-    u21Players = (u21Rows.results ?? []).map((p: any) => {
-      let av = {};
-      try {
-        av = typeof p.avatar === "string" ? JSON.parse(p.avatar) : p.avatar;
-      } catch (e) {
-        logger.warn({ module: "club-website" }, "parse u21 player avatar", e);
-      }
-      return {
-        id: p.id,
-        firstName: p.first_name,
-        lastName: p.last_name,
-        position: p.position,
-        positionName: formatPlayerPositionCZ(p.position),
-        overallRating: p.overall_rating,
-        age: p.age,
-        squadNumber: p.squad_number,
-        avatar: av,
-        stats: {
-          appearances: p.appearances,
-          goals: p.goals,
-          assists: p.assists,
-          cleanSheets: p.clean_sheets,
-          minutesPlayed: p.minutes_played,
-        },
-      };
-    });
-  }
-
-  // Helper to extract dramatic highlight moments from match events
-  function extractHighlights(rawEvents: unknown): ClubWebsiteMatchHighlight[] {
-    let events: any[] = [];
-    try {
-      events = typeof rawEvents === "string" ? JSON.parse(rawEvents) : ((rawEvents as any[]) || []);
-    } catch {
-      events = [];
-    }
-    if (!Array.isArray(events)) return [];
-
-    let keyMoments = events.filter((e) => {
-      if (e.type === "goal") return true;
-      if (e.type === "card" && (e.detail === "red" || e.detail === "yellow_red")) return true;
-      if (e.type === "penalty") return true;
-      if (e.type === "chance" && (
-        e.detail === "břevno" ||
-        e.detail === "tyč" ||
-        e.detail === "penalty_missed" ||
-        e.detail === "penalty_saved" ||
-        e.description?.toLowerCase().includes("břevno") ||
-        e.description?.toLowerCase().includes("tyč") ||
-        e.description?.toLowerCase().includes("gólová") ||
-        e.description?.toLowerCase().includes("tutovka")
-      )) return true;
-      return false;
-    });
-
-    if (keyMoments.length === 0) {
-      keyMoments = events
-        .filter((e) => e.type === "chance" || (e.type === "card" && e.detail === "yellow"))
-        .slice(0, 5);
-    }
-
-    return keyMoments
-      .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0))
-      .map((e) => ({
-        minute: e.minute ?? 0,
-        type: e.type,
-        isHome: e.teamId === 1,
-        playerName: e.playerName || "Hráč",
-        description: e.description || "",
-        detail: e.detail,
-        source: e.source,
-      }));
-  }
-
-  // 7. Matches: Last simulated match + Next scheduled match + recent matches for highlights
-  const recentMatchesRows = await c.env.DB.prepare(
-    `SELECT m.id, m.round, m.home_score, m.away_score, m.events, m.simulated_at,
-            ht.id as home_id, ht.name as home_name, ht.primary_color as home_primary, ht.badge_pattern as home_badge,
-            at.id as away_id, at.name as away_name, at.primary_color as away_primary, at.badge_pattern as away_badge
-     FROM matches m
-     JOIN teams ht ON m.home_team_id = ht.id
-     JOIN teams at ON m.away_team_id = at.id
-     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
-     ORDER BY m.simulated_at DESC LIMIT 3`,
-  ).bind(teamId, teamId).all<any>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch recent matches", e);
-    return { results: [] };
-  });
-
-  const recentMatches: ClubWebsiteMatchSummary[] = (recentMatchesRows?.results || []).map((row: any) => ({
+  const recentMatches: ClubWebsiteMatchSummary[] = (recentRows.results ?? []).map((row: any) => ({
     id: row.id,
     round: row.round,
     isHome: row.home_id === teamId,
@@ -646,237 +904,108 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     date: row.simulated_at,
     highlights: extractHighlights(row.events),
   }));
-
-  // Fallback to cup matches if no league matches played yet
-  if (recentMatches.length === 0) {
-    const cupMatchesRows = await c.env.DB.prepare(
-      `SELECT cm.id, cm.round, cm.home_score, cm.away_score, cm.events, cm.simulated_at,
-              hct.team_id as home_id, hct.name as home_name, hct.primary_color as home_primary,
-              act.team_id as away_id, act.name as away_name, act.primary_color as away_primary
-       FROM cup_matches cm
-       JOIN cup_teams hct ON cm.home_cup_team_id = hct.id
-       JOIN cup_teams act ON cm.away_cup_team_id = act.id
-       WHERE (hct.team_id = ? OR act.team_id = ?) AND cm.status = 'simulated'
-       ORDER BY cm.simulated_at DESC LIMIT 3`,
-    ).bind(teamId, teamId).all<any>().catch((e) => {
-      logger.warn({ module: "club-website" }, "fetch recent cup matches", e);
-      return { results: [] };
+  // Pohárové zápasy jen jako záloha, dokud klub nemá žádný ligový
+  for (const row of cupRows.results ?? []) {
+    recentMatches.push({
+      id: row.id,
+      round: row.round,
+      isHome: row.home_id === teamId,
+      scoreHome: row.home_score,
+      scoreAway: row.away_score,
+      opponent: row.home_id === teamId
+        ? { id: row.away_id || "", name: row.away_name, primaryColor: row.away_primary || "#D94032", badge: "shield" }
+        : { id: row.home_id || "", name: row.home_name, primaryColor: row.home_primary || "#2D5F2D", badge: "shield" },
+      date: row.simulated_at,
+      highlights: extractHighlights(row.events),
     });
+  }
 
-    for (const row of cupMatchesRows?.results || []) {
-      recentMatches.push({
-        id: row.id,
-        round: row.round,
-        isHome: row.home_id === teamId,
-        scoreHome: row.home_score,
-        scoreAway: row.away_score,
-        opponent: row.home_id === teamId
-          ? { id: row.away_id || "", name: row.away_name, primaryColor: row.away_primary || "#D94032", badge: "shield" }
-          : { id: row.home_id || "", name: row.home_name, primaryColor: row.home_primary || "#2D5F2D", badge: "shield" },
-        date: row.simulated_at,
-        highlights: extractHighlights(row.events),
-      });
+  let leagueStandings: Array<{
+    pos: number; teamId: string; teamName: string; played: number; won: number; drawn: number; lost: number;
+    gf: number; ga: number; points: number; isCurrentTeam: boolean;
+  }> = [];
+  if (standingsRaw) {
+    const [st, leagueTeams] = standingsRaw;
+    const teamNameMap = new Map((leagueTeams.results || []).map((t) => [t.id, t.name]));
+    leagueStandings = st.map((s) => ({
+      pos: s.pos,
+      teamId: s.teamId,
+      teamName: teamNameMap.get(s.teamId) || "Neznámý tým",
+      played: s.played,
+      won: s.wins,
+      drawn: s.draws,
+      lost: s.losses,
+      gf: s.gf,
+      ga: s.ga,
+      points: s.points,
+      isCurrentTeam: s.teamId === teamId,
+    }));
+  }
+
+  // Sponzoři: generální partner na dresu, název stadionu, bannery kolem hřiště
+  const sponsors = sponsorRows.results ?? [];
+  const mainSponsor = sponsors.find((s) => s.category === "main" || s.category === null)?.sponsor_name ?? null;
+  const stadiumNamingSponsor = sponsors.find((s) => s.category === "stadium")?.sponsor_name ?? null;
+  const bannerSponsors = bannerSponsorNames(sponsors);
+
+  // Fotky stadionu: platí jen ty, které patří k aktuální podobě stadionu
+  const stadiumPhoto = await buildStadiumRender({
+    team,
+    stadium,
+    extensions: (extRows || []) as Array<{ slot: string; kind: string; level: number }>,
+    bannerSponsors,
+  });
+  const photos: Partial<Record<StadiumPhotoViewpoint, string>> = {};
+  for (const row of storedPhotoRows.results ?? []) {
+    if (row.version === stadiumPhoto.version && isStadiumPhotoViewpoint(row.viewpoint)) {
+      photos[row.viewpoint] = `${zaklad}/api/teams/${teamId}/website/stadium-photo/${row.viewpoint}?v=${row.version}`;
     }
   }
 
-  const lastMatch = recentMatches[0] || null;
+  // Bufet: kvalita 0 = produkt se neprodává, na webu ho nesmíme nabízet
+  const { CONCESSION_CATALOG } = await import("../season/concession-catalog");
+  const concession = (key: "beer" | "sausage" | "lemonade", fallbackName: string, fallbackPrice: number) => {
+    const row = (concessionRows.results ?? []).find((r) => r.product_key === key);
+    if (!row) return { name: fallbackName, price: fallbackPrice };
+    if (row.quality_level <= 0) return { name: null, price: null };
+    return { name: CONCESSION_CATALOG[key].tiers[row.quality_level]?.label ?? fallbackName, price: row.sell_price };
+  };
+  const beer = concession("beer", "Točené pivo 10°", 25);
+  const sausage = concession("sausage", "Klobása z udírny", 30);
+  const lemonade = concession("lemonade", "Točená malinovka", 15);
 
-  const nextMatch = await c.env.DB.prepare(
-    `SELECT m.id, m.round, sc.scheduled_at,
-            ht.id as home_id, ht.name as home_name, ht.stadium_name as home_stadium, ht.primary_color as home_primary, ht.badge_pattern as home_badge,
-            at.id as away_id, at.name as away_name, at.primary_color as away_primary, at.badge_pattern as away_badge
-     FROM matches m
-     LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
-     JOIN teams ht ON m.home_team_id = ht.id
-     JOIN teams at ON m.away_team_id = at.id
-     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'scheduled'
-     ORDER BY sc.scheduled_at ASC LIMIT 1`,
-  ).bind(teamId, teamId).first<any>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch next match", e);
-    return null;
+  // Vstupné: stejný výpočet jako tržby ze zápasu (finance-processor)
+  const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+  const facilityFx = calculateFacilityEffects(stadiumFacilityLevels(stadium));
+  const adultTicketPrice = matchTicketPrice({
+    userBasePrice: fansRow?.base_ticket_price ?? 0,
+    villageBasePrice: getBaseTicketPrice(mapVillageSize(team.village_size)),
+    ticketPriceBonus: facilityFx.ticketPriceBonus,
+    satisfaction: fansRow?.satisfaction ?? 50,
   });
+  const clubCapacity = stadium
+    ? stadium.capacity + calculateFacilityEffects({ ...standFacilities(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus
+    : null;
 
-  // Upcoming matches (next 5)
-  const upcomingMatchesRows = await c.env.DB.prepare(
-    `SELECT m.id, m.round, sc.scheduled_at,
-            ht.id as home_id, ht.name as home_name, ht.stadium_name as home_stadium, ht.primary_color as home_primary, ht.badge_pattern as home_badge,
-            at.id as away_id, at.name as away_name, at.primary_color as away_primary, at.badge_pattern as away_badge
-     FROM matches m
-     LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
-     JOIN teams ht ON m.home_team_id = ht.id
-     JOIN teams at ON m.away_team_id = at.id
-     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'scheduled'
-     ORDER BY sc.scheduled_at ASC LIMIT 5`,
-  ).bind(teamId, teamId).all<any>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch upcoming matches", e);
-    return { results: [] };
-  });
-
-  const upcomingMatches = (upcomingMatchesRows?.results || []).map((m: any) => ({
-    id: m.id,
-    round: m.round,
-    isHome: m.home_id === teamId,
-    stadiumName: m.home_stadium || team.stadium_name,
-    scheduledAt: m.scheduled_at,
-    opponent: m.home_id === teamId
-      ? { id: m.away_id, name: m.away_name, primaryColor: m.away_primary, badge: m.away_badge }
-      : { id: m.home_id, name: m.home_name, primaryColor: m.home_primary, badge: m.home_badge },
+  const interviews = (interviewRows.results ?? []).map((r) => ({
+    id: r.id,
+    gameWeek: r.game_week,
+    questions: parseJsonList<string>(r.questions, [], "interview questions"),
+    answers: r.answers ? parseJsonList<string>(r.answers, [], "interview answers") : [],
+    createdAt: r.created_at,
   }));
 
-  // League standings
-  let leagueStandings: Array<{
-    pos: number;
-    teamId: string;
-    teamName: string;
-    played: number;
-    won: number;
-    drawn: number;
-    lost: number;
-    gf: number;
-    ga: number;
-    points: number;
-    isCurrentTeam: boolean;
-  }> = [];
-
-  if (team.league_id) {
-    try {
-      const { calculateStandings } = await import("../stats/standings");
-      const st = await calculateStandings(c.env.DB, team.league_id);
-      const leagueTeamsResult = await c.env.DB.prepare(
-        "SELECT id, name FROM teams WHERE league_id = ?"
-      ).bind(team.league_id).all<{ id: string; name: string }>();
-      const teamNameMap = new Map((leagueTeamsResult.results || []).map((t) => [t.id, t.name]));
-
-      leagueStandings = st.map((s) => ({
-        pos: s.pos,
-        teamId: s.teamId,
-        teamName: teamNameMap.get(s.teamId) || "Neznámý tým",
-        played: s.played,
-        won: s.wins,
-        drawn: s.draws,
-        lost: s.losses,
-        gf: s.gf,
-        ga: s.ga,
-        points: s.points,
-        isCurrentTeam: s.teamId === teamId,
-      }));
-    } catch (e) {
-      logger.warn({ module: "club-website" }, "fetch league standings", e);
-    }
-  }
-
-  // Check derby rivalry for next match
-  let isRival = false;
-  if (nextMatch) {
-    const oppId = nextMatch.home_id === teamId ? nextMatch.away_id : nextMatch.home_id;
-    const rivalry = await c.env.DB.prepare(
-      "SELECT 1 FROM fan_rivalries WHERE (team_a = ? AND team_b = ?) OR (team_a = ? AND team_b = ?) LIMIT 1",
-    ).bind(teamId, oppId, oppId, teamId).first().catch((e) => {
-      logger.warn({ module: "club-website" }, "fetch fan rivalry", e);
-      return null;
-    });
-    if (rivalry) isRival = true;
-  }
-
-  // 8. Concessions & Buffet
-  const concessionRows = await c.env.DB.prepare(
-    "SELECT product_key, quality_level, sell_price FROM concession_products WHERE team_id = ?",
-  ).bind(teamId).all<{ product_key: string; quality_level: number; sell_price: number }>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch concession products", e);
-    return { results: [] };
-  });
-  
-  const beerProd = (concessionRows.results ?? []).find((r) => r.product_key === "beer");
-  const sausageProd = (concessionRows.results ?? []).find((r) => r.product_key === "sausage");
-  const limoProd = (concessionRows.results ?? []).find((r) => r.product_key === "lemonade");
-
-  const { CONCESSION_CATALOG } = await import("../season/concession-catalog");
-  const beerName = beerProd && CONCESSION_CATALOG.beer.tiers[beerProd.quality_level]?.label
-    ? CONCESSION_CATALOG.beer.tiers[beerProd.quality_level].label
-    : "Točené pivo 10°";
-  const sausageName = sausageProd && CONCESSION_CATALOG.sausage.tiers[sausageProd.quality_level]?.label
-    ? CONCESSION_CATALOG.sausage.tiers[sausageProd.quality_level].label
-    : "Klobása z udírny";
-  const lemonadeName = limoProd && CONCESSION_CATALOG.lemonade.tiers[limoProd.quality_level]?.label
-    ? CONCESSION_CATALOG.lemonade.tiers[limoProd.quality_level].label
-    : "Točená malinovka";
-
-  // 9. Ticket prices
-  const fansRow = await c.env.DB.prepare(
-    "SELECT base_ticket_price FROM fans WHERE team_id = ? LIMIT 1",
-  ).bind(teamId).first<{ base_ticket_price: number }>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch base ticket price", e);
-    return null;
-  });
-
-  const defaultVillageTicketPrice =
-    team.village_category === "city" || team.village_category === "small_city"
-      ? 50
-      : team.village_category === "town"
-        ? 40
-        : 30;
-  const adultTicketPrice = (fansRow?.base_ticket_price && fansRow.base_ticket_price > 0)
-    ? fansRow.base_ticket_price
-    : defaultVillageTicketPrice;
-
-  // 10. Coach interviews
-  const interviewRows = await c.env.DB.prepare(
-    `SELECT id, game_week, questions, answers, created_at
-     FROM coach_interviews
-     WHERE team_id = ? AND status = 'answered'
-     ORDER BY created_at DESC LIMIT 6`,
-  ).bind(teamId).all<{ id: string; game_week: number; questions: string; answers: string | null; created_at: string }>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch coach interviews", e);
-    return { results: [] };
-  });
-
-  const interviews = (interviewRows.results ?? []).map((r) => {
-    let q: string[] = [];
-    let a: string[] = [];
-    try {
-      q = JSON.parse(r.questions);
-    } catch (e) {
-      logger.warn({ module: "club-website" }, "parse interview questions", e);
-    }
-    try {
-      a = r.answers ? JSON.parse(r.answers) : [];
-    } catch (e) {
-      logger.warn({ module: "club-website" }, "parse interview answers", e);
-    }
+  const usedFlavors = new Map<unknown, Set<number>>();
+  const transfers = transferRows.map((t, i) => {
+    const flavor = generateTransferFlavor(t, team.name, team.village_name, usedFlavors);
     return {
-      id: r.id,
-      gameWeek: r.game_week,
-      questions: q,
-      answers: a,
-      createdAt: r.created_at,
-    };
-  });
-
-  // 11. Recent News
-  const newsRows = await c.env.DB.prepare(
-    "SELECT id, type, headline, body, created_at FROM news WHERE team_id = ? ORDER BY created_at DESC LIMIT 4",
-  ).bind(teamId).all<{ id: string; type: string; headline: string; body: string; created_at: string }>().catch((e) => {
-    logger.warn({ module: "club-website" }, "fetch news", e);
-    return { results: [] };
-  });
-
-  // 12. Transfers (Představovačky a rozlučky)
-  const { loadTransferOverview } = await import("../transfers/transfer-overview");
-  const transferRows = await loadTransferOverview(c.env.DB, teamId, 8).catch((e) => {
-    logger.warn({ module: "club-website" }, "load transfer overview", e);
-    return [];
-  });
-  const transfers = transferRows.map((t) => {
-    const flavor = generateTransferFlavor(t, team.name, team.village_name);
-    return {
-      id: `${t.playerId}-${t.date}`,
+      id: `${t.playerId}-${t.date}-${t.direction}-${i}`,
       direction: t.direction,
       kind: t.kind,
       playerId: t.playerId,
       playerName: t.playerName,
       otherTeamId: t.otherTeamId,
       otherTeamName: t.otherTeamName,
-      fee: t.fee,
       date: t.date,
       seasonNumber: t.seasonNumber,
       headline: flavor.headline,
@@ -916,50 +1045,15 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
         specialita: team.stadium_specialita,
         tribunaNorth: team.stadium_tribuna_north,
         tribunaSouth: team.stadium_tribuna_south,
-        namingSponsor: stadiumNamingSponsor?.sponsor_name ?? null,
-        facilities: stadium ? {
-          changing_rooms: stadium.changing_rooms ?? 0,
-          showers: stadium.showers ?? 0,
-          refreshments: stadium.refreshments ?? 0,
-          lighting: stadium.lighting ?? 0,
-          stands: stadium.stands ?? 0,
-          stand_main: stadium.stand_main ?? 0,
-          stand_opposite: stadium.stand_opposite ?? 0,
-          stand_goal_west: stadium.stand_goal_west ?? 0,
-          stand_goal_east: stadium.stand_goal_east ?? 0,
-          roof: stadium.roof ?? 0,
-          ultras_stand: stadium.ultras_stand ?? 0,
-          toilets: stadium.toilets ?? 0,
-          parking: stadium.parking ?? 0,
-          fence: stadium.fence ?? 0,
-          entrance_gate: stadium.entrance_gate ?? 0,
-          security: stadium.security ?? 0,
-          cage: stadium.cage ?? 0,
-          vip_box: stadium.vip_box ?? 0,
-        } : undefined,
-        customization: stadium ? {
-          fenceColor: stadium.fence_color ?? null,
-          standColor: stadium.stand_color ?? null,
-          seatColor: stadium.seat_color ?? null,
-          roofColor: stadium.roof_color ?? null,
-          accentColor: stadium.accent_color ?? null,
-          scoreboardLevel: stadium.scoreboard_level ?? 0,
-          flagSize: stadium.flag_size ?? 0,
-          ultrasText: stadium.ultras_text ?? null,
-          ultrasBannerColor: stadium.ultras_banner_color ?? null,
-          ultrasTextColor: stadium.ultras_text_color ?? null,
-          flagColor: stadium.flag_color ?? null,
-          mowingPattern: stadium.mowing_pattern ?? "stripes",
-          netPattern: stadium.net_pattern ?? "white",
-          netStyle: stadium.net_style ?? "loose",
-          surroundSurface: stadium.surround_surface ?? "grass",
-        } : undefined,
+        namingSponsor: stadiumNamingSponsor,
+        facilities: stadiumFacilitiesOut(stadium),
+        customization: stadiumCustomizationOut(stadium),
         standExtensions: (extRows || []).map((e: any) => ({
           slot: e.slot,
           kind: e.kind,
           level: e.level,
         })),
-        sponsors: (bannerContracts.results || []).map((s: any) => s.sponsor_name).filter(Boolean),
+        sponsors: bannerSponsors,
       },
       jersey: {
         pattern: team.jersey_pattern,
@@ -968,7 +1062,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
         awayPrimary: team.away_primary_color,
         awaySecondary: team.away_secondary_color,
         awayPattern: team.away_jersey_pattern,
-        sponsor: mainSponsor?.sponsor_name ?? null,
+        sponsor: mainSponsor,
         homeShortsColor: team.home_shorts_color,
         homeSocksColor: team.home_socks_color,
         awayShortsColor: team.away_shorts_color,
@@ -990,72 +1084,199 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
         title: team.anthem_title,
         style: team.anthem_style,
       },
-      chants,
+      chants: (chantsRows.results ?? []).map((r) => ({
+        id: r.id, kind: r.kind, text: r.text, duvod: r.duvod, sila: r.sila,
+        url: `${zaklad}/api/choraly/${r.id}/audio?v=${r.audio_vybrana ?? "a"}`,
+      })),
       mascot: {
         name: mascotRow?.name ?? null,
         imageUrl: mascotRow?.image_url ?? null,
         story: mascotRow?.story ?? null,
       },
-      budget: team.budget,
+      league: league ? { id: league.id, name: league.name } : null,
     },
-    website,
+    website: publicWebsite(website),
     manager: managerRow ? {
       name: managerRow.name,
       age: managerRow.age,
       reputation: managerRow.reputation,
-      avatar: (() => {
-        try {
-          return JSON.parse(managerRow.avatar);
-        } catch (e) {
-          logger.warn({ module: "club-website" }, "parse manager avatar", e);
-          return {};
-        }
-      })(),
+      avatar: parseAvatar(managerRow.avatar, "manager"),
       licence: managerRow.licence_level === 4 ? "PRO" : managerRow.licence_level === 3 ? "UEFA A" : managerRow.licence_level === 2 ? "UEFA B" : managerRow.licence_level === 1 ? "UEFA C" : "Bez licence",
       bio: managerRow.bio,
       birthplace: managerRow.birthplace,
     } : null,
-    staff: staffMembers,
+    staff: (staffRows.results ?? []).map((s) => ({
+      id: s.id,
+      role: s.role,
+      profession: s.profession,
+      firstName: s.first_name,
+      lastName: s.last_name,
+      gender: s.gender,
+      age: s.age,
+      avatar: parseAvatar(s.avatar, "staff"),
+      description: s.description,
+    })),
     roster: {
-      aTeam: aTeamPlayers,
-      u21Team: u21Players,
+      aTeam: (playersRows.results ?? []).map(mapPlayer),
+      u21Team: (u21Rows.results ?? []).map(mapPlayer),
     },
     matches: {
-      lastMatch,
+      lastMatch: recentMatches[0] ?? null,
       recentMatches,
       upcomingMatches,
       standings: leagueStandings,
-      nextMatch: nextMatch ? {
-        id: nextMatch.id,
-        round: nextMatch.round,
-        isHome: nextMatch.home_id === teamId,
-        stadiumName: nextMatch.home_stadium || team.stadium_name,
-        scheduledAt: nextMatch.scheduled_at,
-        isRival,
-        opponent: nextMatch.home_id === teamId
-          ? { id: nextMatch.away_id, name: nextMatch.away_name, primaryColor: nextMatch.away_primary, badge: nextMatch.away_badge }
-          : { id: nextMatch.home_id, name: nextMatch.home_name, primaryColor: nextMatch.home_primary, badge: nextMatch.home_badge },
-      } : null,
+      nextMatch: next ? { ...next, isRival: !!rivalry } : null,
     },
+    poll: next && pollVotes ? { matchId: next.id, votes: pollVotes } : null,
     concessions: {
-      beerPrice: beerProd?.sell_price ?? 25,
-      sausagePrice: sausageProd?.sell_price ?? 30,
-      lemonadePrice: limoProd?.sell_price ?? 15,
-      beerName,
-      sausageName,
-      lemonadeName,
+      beerPrice: beer.price,
+      sausagePrice: sausage.price,
+      lemonadePrice: lemonade.price,
+      beerName: beer.name,
+      sausageName: sausage.name,
+      lemonadeName: lemonade.name,
     },
     tickets: {
       adultPrice: adultTicketPrice,
       price: adultTicketPrice,
     },
+    stadiumPhotos: { version: stadiumPhoto.version, render: stadiumPhoto.render, photos },
     interviews,
     news: newsRows.results ?? [],
     transfers,
   });
 });
 
-// Helper auth check for management endpoints
+// PUT /api/teams/:id/website/stadium-photo/:viewpoint?version=… — fotka z 3D modelu, nahrává jen vlastník.
+// Prohlížeč vlastníka stadion vyfotí a návštěvníci pak dostanou hotový obrázek bez 3D výpočtu.
+clubWebsiteRouter.put("/:id/website/stadium-photo/:viewpoint", async (c) => {
+  const teamId = c.req.param("id");
+  const viewpoint = c.req.param("viewpoint");
+  const version = c.req.query("version") ?? "";
+  if (!isStadiumPhotoViewpoint(viewpoint)) return c.json({ error: "Neznámý úhel fotky" }, 400);
+
+  const auth = await checkTeamAuth(c, teamId);
+  if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
+
+  const current = await loadStadiumRender(c.env.DB, teamId);
+  if (!current) return c.json({ error: "Tým nenalezen" }, 404);
+  if (current.version !== version) {
+    return c.json({ error: "Stadion se mezitím změnil, fotka už neodpovídá" }, 409);
+  }
+
+  const body = new Uint8Array(await c.req.arrayBuffer());
+  if (body.byteLength < 1000 || body.byteLength > STADIUM_PHOTO_MAX_BYTES) {
+    return c.json({ error: "Fotka má nečekanou velikost" }, 400);
+  }
+  const contentType = sniffImageType(body);
+  if (!contentType) return c.json({ error: "Soubor není obrázek" }, 400);
+
+  const previous = await c.env.DB.prepare("SELECT version FROM team_stadium_photos WHERE team_id = ? AND viewpoint = ?")
+    .bind(teamId, viewpoint).first<{ version: string }>();
+
+  await c.env.SEED_DATA.put(stadiumPhotoKey(teamId, viewpoint, version), body, { httpMetadata: { contentType } });
+  await c.env.DB.prepare(
+    `INSERT INTO team_stadium_photos (team_id, viewpoint, version, content_type, created_at)
+     VALUES (?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(team_id, viewpoint) DO UPDATE SET version = excluded.version, content_type = excluded.content_type, created_at = excluded.created_at`,
+  ).bind(teamId, viewpoint, version, contentType).run();
+
+  if (previous && previous.version !== version) {
+    await c.env.SEED_DATA.delete(stadiumPhotoKey(teamId, viewpoint, previous.version))
+      .catch((e) => logger.warn(MODULE, "delete outdated stadium photo", e));
+  }
+
+  return c.json({
+    ok: true,
+    url: `${c.env.API_BASE_URL || new URL(c.req.url).origin}/api/teams/${teamId}/website/stadium-photo/${viewpoint}?v=${version}`,
+  });
+});
+
+// GET /api/teams/:id/website/stadium-photo/:viewpoint — veřejná fotka stadionu
+clubWebsiteRouter.get("/:id/website/stadium-photo/:viewpoint", async (c) => {
+  const teamId = c.req.param("id");
+  const viewpoint = c.req.param("viewpoint");
+  if (!isStadiumPhotoViewpoint(viewpoint)) return c.json({ error: "Neznámý úhel fotky" }, 400);
+
+  const row = await c.env.DB.prepare("SELECT version, content_type FROM team_stadium_photos WHERE team_id = ? AND viewpoint = ?")
+    .bind(teamId, viewpoint).first<{ version: string; content_type: string }>()
+    .catch((e) => {
+      logger.warn(MODULE, "lookup stadium photo", e);
+      return null;
+    });
+  if (!row) return c.json({ error: "Fotka zatím není" }, 404);
+
+  const obj = await c.env.SEED_DATA.get(stadiumPhotoKey(teamId, viewpoint, row.version));
+  if (!obj) return c.json({ error: "Fotka zatím není" }, 404);
+
+  // Adresa s ?v= ukazuje na konkrétní verzi, ta se už nikdy nezmění
+  const immutable = c.req.query("v") === row.version;
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": row.content_type || "image/webp",
+      "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "public, max-age=300",
+    },
+  });
+});
+
+// POST /api/teams/:id/website/visit — návštěva veřejného webu. Volá ji jen prohlížeč
+// návštěvníka (jednou za relaci), ne serverové vykreslení, náhledy ani administrace.
+clubWebsiteRouter.post("/:id/website/visit", async (c) => {
+  const teamId = await resolveTeamId(c.env.DB, c.req.param("id"));
+  if (!teamId) return c.json({ error: "Klub nenalezen" }, 404);
+  await ensureWebsiteRow(c.env.DB, teamId);
+  const row = await c.env.DB
+    .prepare("UPDATE team_websites SET visitor_count = visitor_count + 1 WHERE team_id = ? RETURNING visitor_count")
+    .bind(teamId)
+    .first<{ visitor_count: number }>()
+    .catch((e) => {
+      logger.warn(MODULE, "increment visitor count", e);
+      return null;
+    });
+  if (!row) return c.json({ error: "Návštěvu se nepodařilo započítat" }, 500);
+  return c.json({ ok: true, visitorCount: row.visitor_count });
+});
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// POST /api/teams/:id/website/poll — hlas v anketě k příštímu zápasu (jeden na návštěvníka)
+clubWebsiteRouter.post("/:id/website/poll", async (c) => {
+  const db = c.env.DB;
+  const teamId = await resolveTeamId(db, c.req.param("id"));
+  if (!teamId) return c.json({ error: "Klub nenalezen" }, 404);
+
+  const body = (await c.req.json().catch((e) => {
+    logger.warn(MODULE, "parse poll body", e);
+    return null;
+  })) as { matchId?: string; choice?: string } | null;
+  const choice = body?.choice;
+  if (!body?.matchId || (choice !== "win" && choice !== "draw" && choice !== "loss")) {
+    return c.json({ error: "Neplatný hlas" }, 400);
+  }
+
+  // Hlasovat jde jen o příštím zápase klubu, ne o libovolném ID
+  const next = await db.prepare(UPCOMING_SQL).bind(teamId, teamId).first<{ id: string }>();
+  if (!next || next.id !== body.matchId) {
+    return c.json({ error: "Anketa k tomuto zápasu už je uzavřená" }, 400);
+  }
+
+  const ip = c.req.header("cf-connecting-ip") ?? "nezname";
+  const ua = c.req.header("user-agent") ?? "";
+  const voter = await sha256Hex(`${ip}|${ua}|${teamId}|${next.id}`);
+  const res = await db
+    .prepare("INSERT OR IGNORE INTO team_website_poll_votes (team_id, match_id, voter, choice) VALUES (?, ?, ?, ?)")
+    .bind(teamId, next.id, voter, choice)
+    .run();
+
+  const votes = await loadPollVotes(db, teamId, next.id);
+  return c.json({ ok: true, alreadyVoted: (res.meta?.changes ?? 0) === 0, votes });
+});
+
+// ── Správa webu (jen vlastník) ───────────────────────────────────────────────
+
 async function checkTeamAuth(c: Context<{ Bindings: Bindings }>, teamId: string) {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return { error: "Nepřihlášen", status: 401 };
@@ -1071,6 +1292,53 @@ async function checkTeamAuth(c: Context<{ Bindings: Bindings }>, teamId: string)
   return { team, session };
 }
 
+/**
+ * Odemkne položku a strhne peníze. Odemčení jde jako první a podmíněně (porovná uložený
+ * seznam), takže dvojklik nebo dvě karty nezaplatí stejnou věc dvakrát. Když platba
+ * selže, odemčení se vrátí.
+ */
+async function purchaseUnlock(
+  db: D1Database,
+  opts: {
+    teamId: string;
+    column: "unlocked_templates" | "unlocked_addons";
+    rawBefore: string;
+    after: string[];
+    extraSet: string;
+    extraBinds: unknown[];
+    extraRevert: string;
+    extraRevertBinds: unknown[];
+    price: number;
+    description: string;
+    gameDate: string;
+  },
+): Promise<{ ok: true } | { ok: false; status: 400 | 409; error: string }> {
+  const claim = await db
+    .prepare(`UPDATE team_websites SET ${opts.column} = ?${opts.extraSet}, updated_at = datetime('now') WHERE team_id = ? AND ${opts.column} = ?`)
+    .bind(JSON.stringify(opts.after), ...opts.extraBinds, opts.teamId, opts.rawBefore)
+    .run();
+  if ((claim.meta?.changes ?? 0) !== 1) {
+    return { ok: false, status: 409, error: "Nákup se právě zpracovává. Obnov stránku a zkontroluj, jestli už proběhl." };
+  }
+
+  if (opts.price <= 0) return { ok: true };
+  try {
+    await recordTransaction(db, opts.teamId, "club_website", -opts.price, opts.description, opts.gameDate);
+    return { ok: true };
+  } catch (e) {
+    logger.warn(MODULE, "club website purchase payment failed, reverting unlock", e);
+    await db
+      .prepare(`UPDATE team_websites SET ${opts.column} = ?${opts.extraRevert} WHERE team_id = ?`)
+      .bind(opts.rawBefore, ...opts.extraRevertBinds, opts.teamId)
+      .run()
+      .catch((err) => logger.error(MODULE, "revert club website unlock after failed payment", err));
+    const msg = e instanceof Error && e.message.startsWith("BUDGET_BLOCKED")
+      ? "Klub má záporný rozpočet, nákupy jsou zablokované."
+      : "Platbu se nepodařilo provést.";
+    return { ok: false, status: 400, error: msg };
+  }
+}
+
 // POST /api/teams/:id/website/buy-template
 clubWebsiteRouter.post("/:id/website/buy-template", async (c) => {
   const teamId = c.req.param("id");
@@ -1078,7 +1346,7 @@ clubWebsiteRouter.post("/:id/website/buy-template", async (c) => {
   if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
 
   const body = (await c.req.json().catch((e) => {
-    logger.warn({ module: "club-website" }, "parse buy-template body", e);
+    logger.warn(MODULE, "parse buy-template body", e);
     return null;
   })) as { template?: ClubWebsiteTemplate } | null;
   const templateId = body?.template;
@@ -1090,33 +1358,30 @@ clubWebsiteRouter.post("/:id/website/buy-template", async (c) => {
   const web = await ensureWebsiteRow(c.env.DB, teamId);
 
   if (web.unlockedTemplates.includes(templateId)) {
-    // Already owned, just activate
     await c.env.DB.prepare("UPDATE team_websites SET template = ?, updated_at = datetime('now') WHERE team_id = ?")
       .bind(templateId, teamId).run();
     return c.json({ ok: true, activeTemplate: templateId, message: "Šablona aktivována" });
   }
 
-  // Check budget
   if (auth.team.budget < def.price) {
     return c.json({ error: `Nedostatek financí. Potřebuješ ${def.price.toLocaleString("cs")} Kč.` }, 400);
   }
 
-  // Deduct money if price > 0
-  if (def.price > 0) {
-    await recordTransaction(
-      c.env.DB,
-      teamId,
-      "equipment_upgrade",
-      -def.price,
-      `Koupě šablony webu: ${def.name}`,
-      auth.team.game_date || new Date().toISOString().slice(0, 10),
-    );
-  }
-
   const newUnlocked = [...web.unlockedTemplates, templateId];
-  await c.env.DB.prepare(
-    "UPDATE team_websites SET template = ?, unlocked_templates = ?, updated_at = datetime('now') WHERE team_id = ?",
-  ).bind(templateId, JSON.stringify(newUnlocked), teamId).run();
+  const result = await purchaseUnlock(c.env.DB, {
+    teamId,
+    column: "unlocked_templates",
+    rawBefore: web.rawUnlockedTemplates,
+    after: newUnlocked,
+    extraSet: ", template = ?",
+    extraBinds: [templateId],
+    extraRevert: ", template = ?",
+    extraRevertBinds: [web.template],
+    price: def.price,
+    description: `Koupě šablony webu: ${def.name}`,
+    gameDate: auth.team.game_date || new Date().toISOString().slice(0, 10),
+  });
+  if (!result.ok) return c.json({ error: result.error }, result.status);
 
   return c.json({
     ok: true,
@@ -1133,7 +1398,7 @@ clubWebsiteRouter.post("/:id/website/select-template", async (c) => {
   if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
 
   const body = (await c.req.json().catch((e) => {
-    logger.warn({ module: "club-website" }, "parse select-template body", e);
+    logger.warn(MODULE, "parse select-template body", e);
     return null;
   })) as { template?: ClubWebsiteTemplate } | null;
   const templateId = body?.template;
@@ -1159,7 +1424,7 @@ clubWebsiteRouter.post("/:id/website/buy-addon", async (c) => {
   if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
 
   const body = (await c.req.json().catch((e) => {
-    logger.warn({ module: "club-website" }, "parse buy-addon body", e);
+    logger.warn(MODULE, "parse buy-addon body", e);
     return null;
   })) as { addon?: ClubWebsiteAddon } | null;
   const addonId = body?.addon;
@@ -1168,6 +1433,9 @@ clubWebsiteRouter.post("/:id/website/buy-addon", async (c) => {
   }
 
   const def = CLUB_WEBSITE_ADDONS[addonId];
+  if (def.retired) {
+    return c.json({ error: "Tento doplněk se už neprodává, jeho obsah je na webu zdarma." }, 400);
+  }
   const web = await ensureWebsiteRow(c.env.DB, teamId);
 
   if (web.unlockedAddons.includes(addonId)) {
@@ -1178,25 +1446,22 @@ clubWebsiteRouter.post("/:id/website/buy-addon", async (c) => {
     return c.json({ error: `Nedostatek financí. Potřebuješ ${def.price.toLocaleString("cs")} Kč.` }, 400);
   }
 
-  await recordTransaction(
-    c.env.DB,
-    teamId,
-    "equipment_upgrade",
-    -def.price,
-    `Koupě doplňku webu: ${def.name}`,
-    auth.team.game_date || new Date().toISOString().slice(0, 10),
-  );
-
   const newAddons = [...web.unlockedAddons, addonId];
-  if (addonId === "sponsor_banner") {
-    await c.env.DB.prepare(
-      "UPDATE team_websites SET unlocked_addons = ?, sponsor_banner_enabled = 1, updated_at = datetime('now') WHERE team_id = ?",
-    ).bind(JSON.stringify(newAddons), teamId).run();
-  } else {
-    await c.env.DB.prepare(
-      "UPDATE team_websites SET unlocked_addons = ?, updated_at = datetime('now') WHERE team_id = ?",
-    ).bind(JSON.stringify(newAddons), teamId).run();
-  }
+  const isBanner = addonId === "sponsor_banner";
+  const result = await purchaseUnlock(c.env.DB, {
+    teamId,
+    column: "unlocked_addons",
+    rawBefore: web.rawUnlockedAddons,
+    after: newAddons,
+    extraSet: isBanner ? ", sponsor_banner_enabled = 1" : "",
+    extraBinds: [],
+    extraRevert: isBanner ? ", sponsor_banner_enabled = ?" : "",
+    extraRevertBinds: isBanner ? [web.sponsorBannerEnabled ? 1 : 0] : [],
+    price: def.price,
+    description: `Koupě doplňku webu: ${def.name}`,
+    gameDate: auth.team.game_date || new Date().toISOString().slice(0, 10),
+  });
+  if (!result.ok) return c.json({ error: result.error }, result.status);
 
   return c.json({
     ok: true,
@@ -1205,6 +1470,22 @@ clubWebsiteRouter.post("/:id/website/buy-addon", async (c) => {
   });
 });
 
+/** Uloží novou adresu a starou si zapamatuje, aby sdílené odkazy dál fungovaly. */
+async function changeSlug(db: D1Database, teamId: string, oldSlug: string | null, newSlug: string) {
+  if (oldSlug === newSlug) return;
+  await db.prepare("UPDATE team_websites SET custom_slug = ?, updated_at = datetime('now') WHERE team_id = ?")
+    .bind(newSlug, teamId).run();
+  // Když se klub vrací ke staré adrese, už to není alias, ale hlavní adresa
+  await db.prepare("DELETE FROM team_website_slug_aliases WHERE slug = ? AND team_id = ?")
+    .bind(newSlug, teamId).run()
+    .catch((e) => logger.warn(MODULE, "drop alias that became main slug", e));
+  if (oldSlug) {
+    await db.prepare("INSERT OR IGNORE INTO team_website_slug_aliases (slug, team_id) VALUES (?, ?)")
+      .bind(oldSlug, teamId).run()
+      .catch((e) => logger.warn(MODULE, "remember previous slug", e));
+  }
+}
+
 // PATCH /api/teams/:id/website
 clubWebsiteRouter.patch("/:id/website", async (c) => {
   const teamId = c.req.param("id");
@@ -1212,7 +1493,7 @@ clubWebsiteRouter.patch("/:id/website", async (c) => {
   if ("error" in auth) return c.json({ error: auth.error }, auth.status as any);
 
   const body = (await c.req.json().catch((e) => {
-    logger.warn({ module: "club-website" }, "parse patch website body", e);
+    logger.warn(MODULE, "parse patch website body", e);
     return null;
   })) as {
     customSlug?: string | null;
@@ -1223,40 +1504,32 @@ clubWebsiteRouter.patch("/:id/website", async (c) => {
   if (!body) return c.json({ error: "Neplatná data" }, 400);
   const web = await ensureWebsiteRow(c.env.DB, teamId);
 
-  // Slug update (defaultně z názvu týmu, možnost libovolné úpravy zdarma)
+  // Adresa: výchozí z názvu týmu, úprava zdarma. Stará adresa dál přesměruje na novou.
   if (body.customSlug !== undefined) {
     if (body.customSlug && body.customSlug.trim()) {
       const sanitized = slugifyTeamName(body.customSlug);
       if (sanitized.length < 3 || sanitized.length > 50) {
-        return c.json({ error: "Adresa musí mít 3 až 50 znaků (jen písmena bez diakritiky, čísla a pomlčky)." }, 400);
+        return c.json({ error: `Adresa musí mít 3 až 50 znaků (jen písmena bez diakritiky, čísla a pomlčky).` }, 400);
       }
-      // Check collision
-      const collision = await c.env.DB.prepare(
-        "SELECT team_id FROM team_websites WHERE custom_slug = ? AND team_id <> ?",
-      ).bind(sanitized, teamId).first();
-      if (collision) {
-        return c.json({ error: "Tato adresa je již obsazena jiným klubem." }, 400);
+      if (await slugTakenByOtherTeam(c.env.DB, sanitized, teamId)) {
+        return c.json({ error: "Tuhle adresu používá jiný klub (nebo odpovídá jeho názvu)." }, 400);
       }
-      await c.env.DB.prepare("UPDATE team_websites SET custom_slug = ? WHERE team_id = ?")
-        .bind(sanitized, teamId).run();
+      await changeSlug(c.env.DB, teamId, web.customSlug, sanitized);
     } else {
-      // Obnovit výchozí slug z názvu týmu
       const defaultSlug = await generateUniqueTeamSlug(c.env.DB, teamId, auth.team.name);
-      await c.env.DB.prepare("UPDATE team_websites SET custom_slug = ? WHERE team_id = ?")
-        .bind(defaultSlug, teamId).run();
+      await changeSlug(c.env.DB, teamId, web.customSlug, defaultSlug);
     }
   }
 
-  // Announcement update
   if (body.announcement !== undefined) {
     if (body.announcement && !web.unlockedAddons.includes("press_officer")) {
       return c.json({ error: "Pro zveřejnění oficiálního prohlášení musíš mít zakoupený modul Tiskový mluvčí." }, 400);
     }
+    const text = body.announcement?.trim();
     await c.env.DB.prepare("UPDATE team_websites SET announcement = ? WHERE team_id = ?")
-      .bind(body.announcement ? body.announcement.slice(0, 1000) : null, teamId).run();
+      .bind(text ? text.slice(0, 1000) : null, teamId).run();
   }
 
-  // Sponsor banner update
   if (body.sponsorBannerEnabled !== undefined) {
     if (body.sponsorBannerEnabled && !web.unlockedAddons.includes("sponsor_banner")) {
       return c.json({ error: "Pro aktivaci reklamní lišty musíš mít zakoupený modul Sponzorská lišta." }, 400);
@@ -1267,92 +1540,3 @@ clubWebsiteRouter.patch("/:id/website", async (c) => {
 
   return c.json({ ok: true, message: "Nastavení webu uloženo" });
 });
-
-// POST /api/teams/:id/website/generate-transfer-story — AI generování představení/rozlučky hráče
-clubWebsiteRouter.post("/:id/website/generate-transfer-story", async (c) => {
-  const identifier = c.req.param("id");
-  const teamId = await resolveTeamId(c.env.DB, identifier);
-  if (!teamId) return c.json({ error: "Klub nenalezen" }, 404);
-
-  const body = (await c.req.json().catch((e) => {
-    logger.warn({ module: "club-website" }, "parse generate-transfer-story body", e);
-    return null;
-  })) as {
-    direction?: "in" | "out";
-    playerName?: string;
-    otherTeamName?: string;
-    fee?: number;
-    kind?: string;
-  } | null;
-
-  if (!body?.playerName) return c.json({ error: "Chybí jméno hráče" }, 400);
-
-  const team = await c.env.DB.prepare(
-    "SELECT t.name, v.name as village_name FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
-  ).bind(teamId).first<{ name: string; village_name: string }>();
-
-  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
-
-  const isArrival = body.direction !== "out";
-  const fee = body.fee ?? 0;
-  const otherClub = body.otherTeamName || (isArrival ? "soupeře" : "nového klubu");
-
-  // Try Gemini AI generation if available
-  if (c.env.GEMINI_API_KEY) {
-    try {
-      const { callGemini } = await import("../news/gemini-helper");
-      const prompt = `Jsi vtipný vesnický sportovní zpravodaj okresního přeboru v Česku (ve stylu seriálu Okresní přebor a vesnického fotbalového folklóru).
-Napiš ${isArrival ? "PŘEDSTAVOVAČKU nové posily" : "ROZLUČKU s odcházejícím hráčem"} fotbalového klubu ${team.name} (obec ${team.village_name}).
-Hráč: ${body.playerName}
-${isArrival ? `Přichází z klubu: ${otherClub}` : `Odchází do klubu: ${otherClub}`}
-Druh: ${body.kind === "free_agent" ? "volný hráč bez angažmá" : "přestup mezi kluby"}
-
-PŘÍSNÉ PRAVIDLO: Kluby v oficiálních prohlášeních NIKDY nezveřejňují konkrétní přestupové částky ani finance! V textu ani v titulku nesmí být žádná čísla ani koruny. Místo toho můžeš zmínit, že se kluby dohodly výši odstupného nezveřejňovat, případně že hráč přichází jako volný hráč.
-
-Odpověz POUZE ve validním JSON formátu bez markdownu s těmito klíči:
-{
-  "headline": "Úderný novinový titulek (max 10 slov, bez částek)",
-  "story": "Krátký novinový článek (2-3 věty) s vesnickým fotbalovým koloritem (kabina, hospoda, traktor, pivo, klobása z udírny, fotbalový duch)",
-  "quote": "Vtipná citace hráče nebo předsedy u piva v uvozovkách"
-}`;
-
-      const aiText = await callGemini(c.env.GEMINI_API_KEY, prompt, { json: true, temperature: 0.8 });
-      if (aiText) {
-        const parsed = JSON.parse(aiText);
-        if (parsed.headline && parsed.story) {
-          return c.json({
-            ok: true,
-            headline: parsed.headline,
-            story: parsed.story,
-            quote: parsed.quote,
-            isAiGenerated: true,
-          });
-        }
-      }
-    } catch (e) {
-      logger.warn({ module: "club-website" }, "AI transfer story error", e);
-    }
-  }
-
-  // Fallback deterministic flavor
-  const flavor = generateTransferFlavor(
-    {
-      direction: isArrival ? "in" : "out",
-      kind: body.kind || "transfer",
-      fee: fee,
-      playerName: body.playerName,
-      otherTeamName: otherClub,
-    },
-    team.name,
-    team.village_name,
-  );
-
-  return c.json({
-    ok: true,
-    headline: flavor.headline,
-    story: flavor.story,
-    quote: flavor.quote,
-    isAiGenerated: false,
-  });
-});
-

@@ -6,10 +6,12 @@ export interface TemplateProps {
   unlockedAddons: string[];
   hasSponsorBanner: boolean;
   hasAudioModule: boolean;
-  hasStadiumGallery: boolean;
   hasPressOfficer: boolean;
   onOpenTickets: () => void;
   onOpenHighlights: (match?: ClubWebsiteMatchSummary | null) => void;
   onOpenLightbox: (photo: { src: string; title: string; desc: string }) => void;
-  onBackToGame: () => void;
+  /** Počet návštěv po započítání této návštěvy (prohlížeč ho dostane z POST /website/visit). */
+  visitorCount: number;
+  /** Dívá se vlastník klubu (jeho prohlížeč nahrává fotky stadionu z 3D modelu). */
+  isOwner: boolean;
 }

@@ -38,6 +38,8 @@ export interface AddonDefinition {
   name: string;
   price: number;
   description: string;
+  /** Už se neprodává (obsah je na webu pro všechny). Kdo ho koupil, tomu zůstává v seznamu. */
+  retired?: boolean;
 }
 
 export const CLUB_WEBSITE_TEMPLATES: Record<ClubWebsiteTemplate, TemplateDefinition> = {
@@ -66,7 +68,7 @@ export const CLUB_WEBSITE_TEMPLATES: Record<ClubWebsiteTemplate, TemplateDefinit
     id: "profi_league",
     name: "Profi Liga (Sparta styl)",
     price: 110000,
-    description: "Prémiový tmavý portál s klubovým podsvícením, velký zápasový odpočet a TV sekce.",
+    description: "Prémiový tmavý portál s klubovým podsvícením, odpočtem do výkopu a záznamy zápasů.",
     tier: 3,
   },
   champions: {
@@ -83,7 +85,7 @@ export const CLUB_WEBSITE_ADDONS: Record<ClubWebsiteAddon, AddonDefinition> = {
     id: "sponsor_banner",
     name: "Sponzorská reklamní lišta",
     price: 16000,
-    description: "Reklamní plocha na webu, která přináší týdenní pasivní příjem z návštěvnosti.",
+    description: "Lišta se skutečnými partnery klubu (sponzor na dresu, stadionu i bannerech) nahoře na webu.",
   },
   audio_module: {
     id: "audio_module",
@@ -96,6 +98,7 @@ export const CLUB_WEBSITE_ADDONS: Record<ClubWebsiteAddon, AddonDefinition> = {
     name: "Rozšířená fotogalerie areálu",
     price: 8000,
     description: "Prezentace fotek tribun, kotle, zázemí a klobásového stánku.",
+    retired: true,
   },
   press_officer: {
     id: "press_officer",
@@ -257,7 +260,7 @@ export interface ClubWebsiteData {
       imageUrl: string | null;
       story: string | null;
     };
-    budget: number;
+    league: { id: string; name: string } | null;
   };
   website: {
     template: ClubWebsiteTemplate;
@@ -326,20 +329,28 @@ export interface ClubWebsiteData {
       };
     } | null;
   };
+  /** null = klub tenhle produkt v bufetu nenabízí (kvalita 0), řádek se na webu nezobrazí. */
   concessions: {
-    beerPrice: number;
-    sausagePrice: number;
-    lemonadePrice: number;
-    beerName: string;
-    sausageName: string;
-    lemonadeName: string;
+    beerPrice: number | null;
+    sausagePrice: number | null;
+    lemonadePrice: number | null;
+    beerName: string | null;
+    sausageName: string | null;
+    lemonadeName: string | null;
   };
+  /** Anketa k příštímu zápasu; null, když klub žádný naplánovaný zápas nemá. */
+  poll: {
+    matchId: string;
+    votes: { win: number; draw: number; loss: number };
+  } | null;
   tickets: {
+    /** Skutečná cena lístku, jakou klub vybere u vstupu (stejný výpočet jako tržby ze zápasu). */
     adultPrice: number;
     price?: number;
     childPrice?: number;
     seasonPassPrice?: number;
   };
+  stadiumPhotos: ClubWebsiteStadiumPhotos;
   interviews: Array<{
     id: string;
     gameWeek: number;
@@ -357,6 +368,36 @@ export interface ClubWebsiteData {
   transfers: ClubWebsiteTransfer[];
 }
 
+/** Úhly, ze kterých se fotí 3D model stadionu pro klubový web. */
+export const STADIUM_PHOTO_VIEWPOINTS = ["overview", "main_stand", "behind_goal", "dugout"] as const;
+export type StadiumPhotoViewpoint = (typeof STADIUM_PHOTO_VIEWPOINTS)[number];
+
+/** Přesně to, co dostane 3D model stadionu při focení. Z těchto dat se počítá i `version`. */
+export interface ClubWebsiteStadiumRender {
+  pitchCondition: number;
+  pitchType: string;
+  facilities: Record<string, number>;
+  standExtensions: Array<{ slot: string; kind: string; level: number }>;
+  teamColor: string;
+  secondaryColor: string;
+  badgePattern: string;
+  badgeInitials: string;
+  badgeSymbol: string | null;
+  badgePrimary: string;
+  badgeSecondary: string;
+  stadiumName: string;
+  sponsors: string[];
+  customization: NonNullable<ClubWebsiteData["team"]["stadium"]["customization"]>;
+}
+
+export interface ClubWebsiteStadiumPhotos {
+  /** Otisk aktuální podoby stadionu; fotka z jiné verze se nepoužije. */
+  version: string;
+  render: ClubWebsiteStadiumRender;
+  /** Hotové fotky ze serveru pro aktuální verzi (chybějící úhel tu není). */
+  photos: Partial<Record<StadiumPhotoViewpoint, string>>;
+}
+
 export interface ClubWebsiteTransfer {
   id: string;
   direction: "in" | "out";
@@ -365,13 +406,12 @@ export interface ClubWebsiteTransfer {
   playerName: string;
   otherTeamId: string | null;
   otherTeamName: string | null;
-  fee: number;
   date: string;
   seasonNumber: number | null;
   headline: string;
   story: string;
+  /** Slova hráče bez uvozovek a bez podpisu; šablona je obalí do „ “. */
   quote?: string;
-  isAiGenerated?: boolean;
 }
 
 

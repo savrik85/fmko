@@ -12,9 +12,11 @@ interface CameraControllerProps {
   isMobile?: boolean;
   /** Pohledy spočítané pro aktuální tribuny (getViewpoints); default statické VIEWPOINTS. */
   viewpoints?: Record<CameraViewpoint, ViewpointDef>;
+  /** Režim focení: kamera skočí rovnou na pohled, bez plynulého dojezdu. */
+  instant?: boolean;
 }
 
-export function CameraController({ viewpoint, isMobile = false, viewpoints = VIEWPOINTS }: CameraControllerProps) {
+export function CameraController({ viewpoint, isMobile = false, viewpoints = VIEWPOINTS, instant = false }: CameraControllerProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const { camera } = useThree();
 
@@ -32,8 +34,24 @@ export function CameraController({ viewpoint, isMobile = false, viewpoints = VIE
       targetLookAt.current.set(...vp.target);
       targetFov.current = vp.fov;
       isTransitioning.current = true;
+      if (instant) {
+        camera.position.set(...vp.position);
+        const persCam = camera as THREE.PerspectiveCamera;
+        if (persCam.fov) {
+          persCam.fov = vp.fov;
+          persCam.updateProjectionMatrix();
+        }
+        const controls = controlsRef.current;
+        if (controls) {
+          controls.target.set(...vp.target);
+          controls.update();
+        } else {
+          camera.lookAt(...vp.target);
+        }
+        isTransitioning.current = false;
+      }
     }
-  }, [viewpoint, viewpoints]);
+  }, [viewpoint, viewpoints, instant, camera]);
 
   // Plynulý lerp kamery a kinematický oblet
   useFrame((state, delta) => {

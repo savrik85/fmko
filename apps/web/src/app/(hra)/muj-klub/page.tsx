@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, BadgePreview, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { StadiumPhotoCard } from "@/app/klub/[teamId]/StadiumPhotoCard";
 import {
   CLUB_WEBSITE_TEMPLATES,
   CLUB_WEBSITE_ADDONS,
@@ -87,7 +88,7 @@ function SectionCard({
         </span>
         <div className="flex-1 min-w-0">
           <h2 className="font-heading font-bold text-base text-ink leading-tight">{title}</h2>
-          {hint && <div className="text-xs text-muted mt-0.5">{hint}</div>}
+          {hint && <div className="text-sm text-muted mt-0.5">{hint}</div>}
         </div>
       </CardHeader>
       <CardBody className="flex-1 flex flex-col">{children}</CardBody>
@@ -106,11 +107,11 @@ function ActionTile({
 }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center py-4">
-      <div className="text-xs text-muted mb-3 max-w-[260px]">{children}</div>
+      <div className="text-sm text-muted mb-3 max-w-[260px]">{children}</div>
       {href ? (
         <Link
           href={href}
-          className="px-4 py-2 rounded-soft text-xs font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 transition-colors"
+          className="px-4 py-2 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 transition-colors"
         >
           {action}
         </Link>
@@ -118,7 +119,7 @@ function ActionTile({
         <button
           type="button"
           disabled
-          className="px-4 py-2 rounded-soft text-xs font-heading font-bold text-gray-400 bg-gray-100 cursor-not-allowed"
+          className="px-4 py-2 rounded-soft text-sm font-heading font-bold text-gray-400 bg-gray-100 cursor-not-allowed"
         >
           {action}
         </button>
@@ -167,11 +168,16 @@ export default function MujKlubPage() {
     loadData();
   }, [teamId]);
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     const slugOrId = websiteData?.website?.customSlug || teamId;
     const url = `${window.location.origin}/klub/${slugOrId}`;
-    navigator.clipboard.writeText(url);
-    setActionMessage("Odkaz na klubový web byl zkopírován do schránky!");
+    try {
+      await navigator.clipboard.writeText(url);
+      setActionMessage("Odkaz na klubový web byl zkopírován do schránky!");
+    } catch (e) {
+      console.error("kopírování odkazu na klubový web selhalo:", e);
+      setErrorMessage(`Odkaz se nepodařilo zkopírovat, zkopíruj si ho ručně: ${url}`);
+    }
     setTimeout(() => setActionMessage(null), 3000);
   };
 
@@ -288,7 +294,7 @@ export default function MujKlubPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-heading font-extrabold text-2xl text-ink">Klubový web</h1>
-            <span className="px-2 py-0.5 rounded-full text-xs font-heading font-bold bg-amber-100 text-amber-800">
+            <span className="px-2 py-0.5 rounded-full text-sm font-heading font-bold bg-amber-100 text-amber-800">
               Veřejný portál
             </span>
           </div>
@@ -378,29 +384,29 @@ export default function MujKlubPage() {
           {/* Status & Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="p-4">
-              <div className="text-xs uppercase font-heading font-bold text-muted">Aktivní šablona</div>
+              <div className="text-sm uppercase font-heading font-bold text-muted">Aktivní šablona</div>
               <div className="text-xl font-heading font-extrabold text-ink mt-1">
                 {CLUB_WEBSITE_TEMPLATES[activeTemplateId]?.name || "Okresní přebor 2004"}
               </div>
-              <div className="text-xs text-muted mt-0.5">
-                Tier {CLUB_WEBSITE_TEMPLATES[activeTemplateId]?.tier ?? 0}
+              <div className="text-sm text-muted mt-0.5">
+                Úroveň {CLUB_WEBSITE_TEMPLATES[activeTemplateId]?.tier ?? 0}
               </div>
             </Card>
 
             <Card className="p-4">
-              <div className="text-xs uppercase font-heading font-bold text-muted">Návštěvnost webu</div>
+              <div className="text-sm uppercase font-heading font-bold text-muted">Návštěvnost webu</div>
               <div className="text-xl font-heading font-extrabold text-pitch-600 mt-1 tabular-nums">
-                {website?.visitorCount || 1} zobrazení
+                {(website?.visitorCount ?? 0).toLocaleString("cs")}
               </div>
-              <div className="text-xs text-muted mt-0.5">Počítadlo zobrazení stránek</div>
+              <div className="text-sm text-muted mt-0.5">Návštěvy fanoušků, tvoje se nepočítají</div>
             </Card>
 
             <Card className="p-4">
-              <div className="text-xs uppercase font-heading font-bold text-muted">Veřejná adresa</div>
+              <div className="text-sm uppercase font-heading font-bold text-muted">Veřejná adresa</div>
               <div className="text-sm font-heading font-extrabold text-ink mt-1 truncate">
                 prales.fun/klub/{publicSlug}
               </div>
-              <div className="text-xs text-muted mt-0.5">
+              <div className="text-sm text-muted mt-0.5">
                 Oficiální adresa webu
               </div>
             </Card>
@@ -410,7 +416,7 @@ export default function MujKlubPage() {
           <Card className="p-6">
             <CardHeader className="px-0 pt-0">
               <h2 className="font-heading font-bold text-lg text-ink">Rychlé nastavení prezentace</h2>
-              <p className="text-xs text-muted mt-0.5">
+              <p className="text-sm text-muted mt-0.5">
                 Zde můžeš nastavit vlastní webovou adresu, oficiální prohlášení a reklamní lištu.
               </p>
             </CardHeader>
@@ -419,15 +425,15 @@ export default function MujKlubPage() {
               {/* Custom Slug */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label htmlFor="slug-input" className="text-xs font-heading font-bold text-ink uppercase">
+                  <label htmlFor="slug-input" className="text-sm font-heading font-bold text-ink uppercase">
                     Adresa webu (URL slug)
                   </label>
-                  <span className="text-xs text-muted font-heading">
+                  <span className="text-sm text-muted font-heading">
                     Výchozí z názvu klubu
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted font-mono bg-gray-100 px-3 py-2 rounded-soft border border-gray-200">
+                  <span className="text-sm text-muted font-mono bg-gray-100 px-3 py-2 rounded-soft border border-gray-200">
                     prales.fun/klub/
                   </span>
                   <input
@@ -436,23 +442,23 @@ export default function MujKlubPage() {
                     value={slugInput}
                     onChange={(e) => setSlugInput(e.target.value)}
                     placeholder="např. fk-rohlik-brevnov"
-                    className="flex-1 px-3 py-2 text-sm rounded-soft border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pitch-500 font-mono"
+                    className="flex-1 min-w-0 px-3 py-2 text-sm rounded-soft border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pitch-500 font-mono"
                   />
                 </div>
-                <p className="text-[11px] text-muted mt-1">
-                  Adresa se skládá z malých písmen a pomlček. Pokud pole smažeš a uložíš, obnoví se výchozí adresa z názvu klubu.
+                <p className="text-sm text-muted mt-1">
+                  Adresa se skládá z malých písmen a pomlček. Pokud pole smažeš a uložíš, obnoví se výchozí adresa z názvu klubu. Stará adresa dál přesměruje na novou, takže sdílené odkazy fungují.
                 </p>
               </div>
 
               {/* Announcement */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label htmlFor="announcement-input" className="text-xs font-heading font-bold text-ink uppercase">
+                  <label htmlFor="announcement-input" className="text-sm font-heading font-bold text-ink uppercase">
                     Oficiální prohlášení vedení klubu
                   </label>
                   {!unlockedAddons.includes("press_officer") && (
-                    <span className="text-xs text-amber-600 font-heading font-bold">
-                      Vyžaduje modul Tiskový mluvčí (12 000 Kč)
+                    <span className="text-sm text-amber-600 font-heading font-bold">
+                      Vyžaduje modul {CLUB_WEBSITE_ADDONS.press_officer.name} ({CLUB_WEBSITE_ADDONS.press_officer.price.toLocaleString("cs")} Kč)
                     </span>
                   )}
                 </div>
@@ -470,11 +476,11 @@ export default function MujKlubPage() {
               {/* Sponsor Banner Toggle */}
               <div className="flex items-center justify-between p-4 rounded-soft bg-gray-50 border border-gray-200">
                 <div>
-                  <div className="text-xs font-heading font-bold text-ink uppercase">
+                  <div className="text-sm font-heading font-bold text-ink uppercase">
                     Sponzorská reklamní lišta
                   </div>
-                  <div className="text-xs text-muted mt-0.5">
-                    Zobrazí na webu banner partnerů klubu a zvyšuje prestiž.
+                  <div className="text-sm text-muted mt-0.5">
+                    Zobrazí nahoře na webu skutečné partnery klubu (dres, stadion, bannery).
                   </div>
                 </div>
                 {unlockedAddons.includes("sponsor_banner") ? (
@@ -488,8 +494,8 @@ export default function MujKlubPage() {
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pitch-500"></div>
                   </label>
                 ) : (
-                  <span className="text-xs text-amber-600 font-heading font-bold">
-                    Vyžaduje modul Sponzorská lišta (16 000 Kč)
+                  <span className="text-sm text-amber-600 font-heading font-bold">
+                    Vyžaduje modul {CLUB_WEBSITE_ADDONS.sponsor_banner.name} ({CLUB_WEBSITE_ADDONS.sponsor_banner.price.toLocaleString("cs")} Kč)
                   </span>
                 )}
               </div>
@@ -517,7 +523,7 @@ export default function MujKlubPage() {
           <div>
             <div className="mb-4">
               <h2 className="font-heading font-extrabold text-xl text-ink">Designové šablony webu</h2>
-              <p className="text-xs text-muted mt-0.5">
+              <p className="text-sm text-muted mt-0.5">
                 Vyber si vzhled svého klubového webu od retro okresního stylu až po supermoderní portál.
               </p>
             </div>
@@ -540,23 +546,23 @@ export default function MujKlubPage() {
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-xs font-heading font-bold uppercase tracking-wider text-muted">
-                          Tier {tpl.tier}
+                        <span className="text-sm font-heading font-bold uppercase tracking-wider text-muted">
+                          Úroveň {tpl.tier}
                         </span>
                         {isActive && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-heading font-bold bg-pitch-500 text-white">
+                          <span className="px-2 py-0.5 rounded-full text-sm font-heading font-bold bg-pitch-500 text-white">
                             Aktivní
                           </span>
                         )}
                         {isOwned && !isActive && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-heading font-bold bg-gray-200 text-gray-700">
+                          <span className="px-2 py-0.5 rounded-full text-sm font-heading font-bold bg-gray-200 text-gray-700">
                             Zakoupeno
                           </span>
                         )}
                       </div>
 
                       <h3 className="font-heading font-extrabold text-lg text-ink">{tpl.name}</h3>
-                      <p className="text-xs text-muted mt-1 leading-relaxed">{tpl.description}</p>
+                      <p className="text-sm text-muted mt-1 leading-relaxed">{tpl.description}</p>
                     </div>
 
                     <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
@@ -568,7 +574,7 @@ export default function MujKlubPage() {
                         <button
                           type="button"
                           disabled
-                          className="px-4 py-1.5 rounded-soft text-xs font-heading font-bold text-gray-400 bg-gray-100 cursor-default"
+                          className="px-4 py-1.5 rounded-soft text-sm font-heading font-bold text-gray-400 bg-gray-100 cursor-default"
                         >
                           Vybráno
                         </button>
@@ -577,7 +583,7 @@ export default function MujKlubPage() {
                           type="button"
                           onClick={() => handleSelectTemplate(tplId)}
                           disabled={saving}
-                          className="px-4 py-1.5 rounded-soft text-xs font-heading font-bold text-pitch-700 bg-pitch-100 hover:bg-pitch-200 transition-colors"
+                          className="px-4 py-1.5 rounded-soft text-sm font-heading font-bold text-pitch-700 bg-pitch-100 hover:bg-pitch-200 transition-colors"
                         >
                           Aktivovat
                         </button>
@@ -586,7 +592,7 @@ export default function MujKlubPage() {
                           type="button"
                           onClick={() => handleBuyTemplate(tplId)}
                           disabled={saving || !canAfford}
-                          className={`px-4 py-1.5 rounded-soft text-xs font-heading font-bold text-white transition-colors ${
+                          className={`px-4 py-1.5 rounded-soft text-sm font-heading font-bold text-white transition-colors ${
                             canAfford ? "bg-pitch-500 hover:bg-pitch-600 shadow" : "bg-gray-300 cursor-not-allowed"
                           }`}
                         >
@@ -604,13 +610,16 @@ export default function MujKlubPage() {
           <div>
             <div className="mb-4">
               <h2 className="font-heading font-extrabold text-xl text-ink">Doplňky a moduly webu</h2>
-              <p className="text-xs text-muted mt-0.5">
+              <p className="text-sm text-muted mt-0.5">
                 Rozšiř možnosti své klubové prezentace o unikátní funkce.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(Object.keys(CLUB_WEBSITE_ADDONS) as ClubWebsiteAddon[]).map((addonId) => {
+              {(Object.keys(CLUB_WEBSITE_ADDONS) as ClubWebsiteAddon[])
+                // Vyřazený doplněk se už neprodává; kdo ho má, tomu zůstane v seznamu
+                .filter((addonId) => !CLUB_WEBSITE_ADDONS[addonId].retired || unlockedAddons.includes(addonId))
+                .map((addonId) => {
                 const add = CLUB_WEBSITE_ADDONS[addonId];
                 const isOwned = unlockedAddons.includes(addonId);
                 const canAfford = (budget ?? 0) >= add.price;
@@ -621,27 +630,27 @@ export default function MujKlubPage() {
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <h3 className="font-heading font-bold text-base text-ink">{add.name}</h3>
                         {isOwned ? (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-heading font-bold bg-emerald-100 text-emerald-800">
+                          <span className="px-2 py-0.5 rounded-full text-sm font-heading font-bold bg-emerald-100 text-emerald-800">
                             Aktivní
                           </span>
                         ) : (
-                          <span className="text-xs font-heading font-bold text-muted">
+                          <span className="text-sm font-heading font-bold text-muted">
                             {add.price.toLocaleString("cs")} Kč
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-muted mt-1 leading-relaxed">{add.description}</p>
+                      <p className="text-sm text-muted mt-1 leading-relaxed">{add.description}</p>
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
                       {isOwned ? (
-                        <span className="text-xs text-muted font-heading font-bold">Zakoupeno</span>
+                        <span className="text-sm text-muted font-heading font-bold">Zakoupeno</span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => handleBuyAddon(addonId)}
                           disabled={saving || !canAfford}
-                          className={`px-4 py-1.5 rounded-soft text-xs font-heading font-bold text-white transition-colors ${
+                          className={`px-4 py-1.5 rounded-soft text-sm font-heading font-bold text-white transition-colors ${
                             canAfford ? "bg-pitch-500 hover:bg-pitch-600 shadow" : "bg-gray-300 cursor-not-allowed"
                           }`}
                         >
@@ -666,13 +675,13 @@ export default function MujKlubPage() {
                 {clubData.identity.nickname && <div className="font-bold">📢 {clubData.identity.nickname}</div>}
                 {clubData.identity.motto && <div className="italic text-muted">&ldquo;{clubData.identity.motto}&rdquo;</div>}
                 {clubData.identity.foundingYear && (
-                  <div className="text-xs text-muted">Založeno {clubData.identity.foundingYear}</div>
+                  <div className="text-sm text-muted">Založeno {clubData.identity.foundingYear}</div>
                 )}
                 {clubData.identity.foundingStory && (
-                  <div className="text-xs text-ink/70 mt-2 line-clamp-3">{clubData.identity.foundingStory}</div>
+                  <div className="text-sm text-ink/70 mt-2 line-clamp-3">{clubData.identity.foundingStory}</div>
                 )}
                 {clubData.identity.colorsMeaning && (
-                  <div className="text-xs text-ink/70 mt-1">🎨 {clubData.identity.colorsMeaning}</div>
+                  <div className="text-sm text-ink/70 mt-1">🎨 {clubData.identity.colorsMeaning}</div>
                 )}
               </div>
               <ActionTile action={clubData.identity.nickname || clubData.identity.motto ? "Upravit identitu" : "Vyplnit identitu"} href="/muj-klub/identita">
@@ -684,45 +693,27 @@ export default function MujKlubPage() {
               <div className="text-sm text-ink/80 mb-3 space-y-1">
                 <div className="font-bold">
                   {clubData.stadium.name || "Bez názvu"}
-                  {clubData.stadium.nickname && <span className="text-muted font-normal"> — &ldquo;{clubData.stadium.nickname}&rdquo;</span>}
+                  {clubData.stadium.nickname && <span className="text-muted font-normal"> · „{clubData.stadium.nickname}“</span>}
                 </div>
-                <div className="text-muted text-xs flex flex-wrap gap-x-3">
+                <div className="text-muted text-sm flex flex-wrap gap-x-3">
                   {clubData.stadium.capacity != null && <span>Kapacita: <span className="tabular-nums text-ink/70">{clubData.stadium.capacity.toLocaleString("cs")}</span></span>}
                   {clubData.stadium.builtYear != null && <span>Postaveno: <span className="text-ink/70">{clubData.stadium.builtYear}</span></span>}
                 </div>
                 {(clubData.stadium.tribunaNorth || clubData.stadium.tribunaSouth) && (
-                  <div className="text-muted text-xs">
+                  <div className="text-muted text-sm">
                     Tribuny: <span className="text-ink/70">{[clubData.stadium.tribunaNorth, clubData.stadium.tribunaSouth].filter(Boolean).join(" · ")}</span>
                   </div>
                 )}
                 {clubData.stadium.specialita && (
-                  <div className="text-muted text-xs">U nás: <span className="text-ink/70">{clubData.stadium.specialita}</span></div>
+                  <div className="text-muted text-sm">U nás: <span className="text-ink/70">{clubData.stadium.specialita}</span></div>
                 )}
               </div>
 
-              <div className="my-3 space-y-2">
-                <div className="rounded-xl overflow-hidden border border-border bg-slate-100 aspect-[16/9] max-h-36 relative shadow-sm">
-                  <img src="/images/stadion-areal.jpg" alt="Areál stadionu" className="w-full h-full object-cover" />
-                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 text-xs text-white font-bold flex items-center justify-between">
-                    <span>🏟️ Fotodokumentace areálu</span>
-                    <span className="text-[10px] text-white/80 font-normal">4 fotografie</span>
-                  </div>
+              {websiteData && (
+                <div className="my-3">
+                  <StadiumPhotoCard data={websiteData} isOwner tone="light" showFacts={false} />
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <div className="rounded-lg overflow-hidden border border-border bg-slate-100 aspect-[4/3] relative">
-                    <img src="/images/stadion-tribuna.jpg" alt="Tribuna" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-[10px] text-center text-white font-medium truncate">Tribuna</div>
-                  </div>
-                  <div className="rounded-lg overflow-hidden border border-border bg-slate-100 aspect-[4/3] relative">
-                    <img src="/images/stadion-kiosek.jpg" alt="Kiosek" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-[10px] text-center text-white font-medium truncate">Kiosek</div>
-                  </div>
-                  <div className="rounded-lg overflow-hidden border border-border bg-slate-100 aspect-[4/3] relative">
-                    <img src="/images/stadion-kabiny.jpg" alt="Kabiny" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-[10px] text-center text-white font-medium truncate">Kabiny</div>
-                  </div>
-                </div>
-              </div>
+              )}
 
               <ActionTile action={clubData.stadium.name ? "Upravit stadion" : "Doplnit stadion"} href="/muj-klub/stadion">
                 Přezdívka stadionu, rok výstavby, názvy tribun a vesnická specialita.
@@ -761,7 +752,7 @@ export default function MujKlubPage() {
                 )}
               </div>
               {clubData.jersey.sponsor && (
-                <div className="text-center text-xs text-muted mb-2">Sponzor: <span className="font-bold text-ink">{clubData.jersey.sponsor}</span></div>
+                <div className="text-center text-sm text-muted mb-2">Sponzor: <span className="font-bold text-ink">{clubData.jersey.sponsor}</span></div>
               )}
               <ActionTile action="Upravit dres" href="/muj-klub/dres">
                 Vlastní vzor dresu (pruhy, šachovnice, gradient), hostující barvy a partner.
@@ -784,17 +775,17 @@ export default function MujKlubPage() {
                 )}
               </div>
               <div className="flex gap-2">
-                <Link href="/muj-klub/hymna" className="flex-1 px-3 py-2 rounded-soft text-xs font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
+                <Link href="/muj-klub/hymna" className="flex-1 px-3 py-2 rounded-soft text-sm font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
                   🎵 Hymna
                 </Link>
-                <Link href="/muj-klub/maskot" className="flex-1 px-3 py-2 rounded-soft text-xs font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
+                <Link href="/muj-klub/maskot" className="flex-1 px-3 py-2 rounded-soft text-sm font-heading font-bold text-center text-white bg-pitch-500 hover:bg-pitch-600 transition-colors">
                   🧸 Maskot
                 </Link>
               </div>
             </SectionCard>
 
             <SectionCard title="Ceník občerstvení" icon="🍺" hint="Ceny piva a klobásy v bufetu">
-              <div className="text-xs text-muted mb-3">
+              <div className="text-sm text-muted mb-3">
                 Nastavení nabídky a prodejních cen občerstvení u klandru. Ceny se automaticky promítají do klubového webu.
               </div>
               <ActionTile action="Přejít do bufetu" href="/fanousci?tab=concession">
@@ -803,7 +794,7 @@ export default function MujKlubPage() {
             </SectionCard>
 
             <SectionCard title="Vstupné na stadion" icon="🎟️" hint="Základní vstupné fanoušků">
-              <div className="text-xs text-muted mb-3">
+              <div className="text-sm text-muted mb-3">
                 Cena lístku pro domácí zápasy ovlivňuje návštěvnost i výnosy z pokladny.
               </div>
               <ActionTile action="Správa vstupného" href="/fanousci">
@@ -812,7 +803,7 @@ export default function MujKlubPage() {
             </SectionCard>
 
             <SectionCard title="Přestupy a posily" icon="🔄" hint="Příchody, odchody a jednání">
-              <div className="text-xs text-muted mb-3">
+              <div className="text-sm text-muted mb-3">
                 Sleduj přestupový trh, vyjednávej příchody posil a prodávej hráče. Všechny uskutečněné transfery se automaticky zobrazí na klubovém webu jako novinářské představovačky a rozlučky.
               </div>
               <ActionTile action="Přejít na přestupy" href="/prestupy">

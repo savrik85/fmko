@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { showError } from "@/lib/api";
 
 export function ShareButton({
   url,
@@ -14,6 +15,11 @@ export function ShareButton({
   bgClass: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
 
   async function handleShare() {
     if (typeof navigator !== "undefined" && navigator.share) {
@@ -25,17 +31,19 @@ export function ShareButton({
         });
         return;
       } catch (e) {
-        // User canceled or not supported — fallback to clipboard
-        console.warn("share canceled:", e);
+        // Zavřené sdílecí okno není chyba a nemá se tvářit jako „Zkopírováno"
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        console.warn("sdílení selhalo, zkouším schránku:", e);
       }
     }
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 2500);
     } catch (e) {
-      console.error("clipboard copy failed:", e);
-      alert("Zkopíruj URL ručně: " + url);
+      console.error("kopírování odkazu selhalo:", e);
+      showError("Odkaz se nepodařilo zkopírovat", `Zkopíruj si ho ručně: ${url}`);
     }
   }
 
@@ -43,11 +51,11 @@ export function ShareButton({
     <button
       type="button"
       onClick={handleShare}
-      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-heading font-bold ${textClass} ${bgClass} backdrop-blur transition-all hover:scale-[1.02] shadow-sm active:scale-95`}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-heading font-bold ${textClass} ${bgClass} backdrop-blur transition-all hover:scale-[1.02] shadow-sm active:scale-95`}
       title="Sdílet klubový web na sociálních sítích nebo zkopírovat odkaz"
     >
-      <span>🔗</span>
-      <span>{copied ? "Zkopírováno!" : "Sdílet web"}</span>
+      <span aria-hidden="true">🔗</span>
+      <span>{copied ? "Zkopírováno!" : "Sdílet"}</span>
     </button>
   );
 }

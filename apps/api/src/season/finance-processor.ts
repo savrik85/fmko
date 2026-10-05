@@ -24,6 +24,7 @@ export type TransactionType =
   | "equipment_pawn"       // výkup v zastavárně
   | "stadium_upgrade"
   | "stadium_visual"
+  | "club_website"         // šablony a doplňky klubového webu
   | "pitch_repair"
   | "pitch_upgrade"
   | "classified_ad"
@@ -144,10 +145,39 @@ export function mapVillageSize(dbSize: string): string {
   }
 }
 
+/** Úrovně zázemí ze sloupců stadionu, ze kterých se počítají efekty v zápase (calculateFacilityEffects). */
+export function stadiumFacilityLevels(stadiumRow: Record<string, unknown> | null): Record<string, number> {
+  const facilities: Record<string, number> = {};
+  if (!stadiumRow) return facilities;
+  for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east", "stand_ext_capacity", "parking", "fence", "roof", "ultras_stand", "toilets", "entrance_gate", "security", "cage", "vip_box"]) {
+    // Strany tribun se čtou jen z DB, která už má migraci 0239. Bez sloupců platí starý výpočet z `stands`.
+    if (key.startsWith("stand_") && !(key in stadiumRow)) continue;
+    facilities[key] = (stadiumRow[key] as number) ?? 0;
+  }
+  return facilities;
+}
+
+/**
+ * Cena lístku, kterou klub vybere u vstupu. Jediný výpočet pro tržby ze zápasu
+ * i pro ceník na klubovém webu, aby web neukazoval jinou cenu, než jakou fanoušek zaplatí.
+ * Vlastní cena manažera (> 0) má přednost před základní cenou obce; oplocení přidá
+ * bonus a spokojenost fanoušků násobí 0,7 (naštvaní) až 1,3 (nadšení).
+ */
+export function matchTicketPrice(opts: {
+  userBasePrice: number;
+  villageBasePrice: number;
+  ticketPriceBonus: number;
+  satisfaction: number;
+}): number {
+  const satisfactionTicketMul = 0.7 + (Math.max(0, Math.min(100, opts.satisfaction)) / 100) * 0.6;
+  const effectiveBase = opts.userBasePrice > 0 ? opts.userBasePrice : opts.villageBasePrice;
+  return Math.round(effectiveBase * (1 + opts.ticketPriceBonus) * satisfactionTicketMul);
+}
+
 /** Typy transakcí, které jsou diskrétním uživatelským nákupem — blokovány při záporném rozpočtu. */
 const PURCHASE_TYPES = new Set<TransactionType>([
   "transfer_fee", "signing_fee", "classified_ad",
-  "equipment_upgrade", "equipment_purchase", "stadium_upgrade", "stadium_visual",
+  "equipment_upgrade", "equipment_purchase", "stadium_upgrade", "stadium_visual", "club_website",
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
   "manager_social", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
@@ -449,14 +479,7 @@ export async function processMatchDayFinances(
   const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
   const stadiumRow = await db.prepare("SELECT * FROM stadiums WHERE team_id = ?")
     .bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "finance" }, "query stadium", e); return null; });
-  const facilities: Record<string, number> = {};
-  if (stadiumRow) {
-    for (const key of ["changing_rooms", "showers", "refreshments", "lighting", "stands", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east", "stand_ext_capacity", "parking", "fence", "roof", "ultras_stand", "toilets", "entrance_gate", "security", "cage", "vip_box"]) {
-      // Strany tribun se čtou jen z DB, která už má migraci 0239. Bez sloupců platí starý výpočet z `stands`.
-      if (key.startsWith("stand_") && !(key in stadiumRow)) continue;
-      facilities[key] = (stadiumRow[key] as number) ?? 0;
-    }
-  }
+  const facilities = stadiumFacilityLevels(stadiumRow);
   const facilityFx = calculateFacilityEffects(facilities);
 
   // Efekty vybavení pro tenhle zápas — potřebuje je tombola i ozvučení, tak jen jednou.
@@ -480,14 +503,13 @@ export async function processMatchDayFinances(
   await ensureFansRow(db, teamId);
   const fansCtx = await loadFansContext(db, teamId);
 
-  // Satisfaction multiplier pro ticket price: 0.7 (unhappy) -> 1.3 (nadšení)
   const satisfaction = fansCtx?.fans.satisfaction ?? 50;
-  const satisfactionTicketMul = 0.7 + (Math.max(0, Math.min(100, satisfaction)) / 100) * 0.6;
-
-  // Effective base price (user override wins if > 0)
-  const userBase = fansCtx?.fans.base_ticket_price ?? 0;
-  const effectiveBase = userBase > 0 ? userBase : baseTicketPrice;
-  const ticketPrice = Math.round(effectiveBase * (1 + facilityFx.ticketPriceBonus) * satisfactionTicketMul);
+  const ticketPrice = matchTicketPrice({
+    userBasePrice: fansCtx?.fans.base_ticket_price ?? 0,
+    villageBasePrice: baseTicketPrice,
+    ticketPriceBonus: facilityFx.ticketPriceBonus,
+    satisfaction,
+  });
 
   let soldProducts: Awaited<ReturnType<typeof computeSelfConcessionMatch>>["products"] = [];
 
