@@ -285,6 +285,32 @@ export interface ClubWebsiteData {
   matches: {
     lastMatch: ClubWebsiteMatchSummary | null;
     recentMatches?: ClubWebsiteMatchSummary[];
+    upcomingMatches?: Array<{
+      id: string;
+      round: number;
+      isHome: boolean;
+      stadiumName: string;
+      scheduledAt: string | null;
+      opponent: {
+        id: string;
+        name: string;
+        primaryColor: string;
+        badge: string;
+      };
+    }>;
+    standings?: Array<{
+      pos: number;
+      teamId: string;
+      teamName: string;
+      played: number;
+      won: number;
+      drawn: number;
+      lost: number;
+      gf: number;
+      ga: number;
+      points: number;
+      isCurrentTeam: boolean;
+    }>;
     nextMatch: {
       id: string;
       round: number;

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { TemplateProps } from "./types";
-import { BadgePreview } from "@/components/ui";
+import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { ClubScarf } from "@/components/team/club-scarf";
 import { ManagerFace } from "../ManagerFace";
 import { TacticalPitch } from "../TacticalPitch";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
@@ -21,21 +22,31 @@ export function ProfiLeagueTemplate({
   onOpenLightbox,
   onBackToGame,
 }: TemplateProps) {
-  const { team, website, manager, staff, roster, matches, concessions, tickets } = data;
+  const { team, website, manager, staff, roster, matches, concessions, tickets, transfers = [] } = data;
   const [activeRosterTab, setActiveRosterTab] = useState<"aTeam" | "u21Team">("aTeam");
   const [viewMode, setViewMode] = useState<"cards" | "pitch">("cards");
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
+  const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
 
   const primary = team.primaryColor || "#dc2626";
   const secondary = team.secondaryColor || "#ffffff";
   const badgePattern = (team.badge.pattern as BadgePattern) || "shield";
   const badgeIni = team.badge.customInitials || team.name.slice(0, 3).toUpperCase();
 
-  const currentRoster = activeRosterTab === "aTeam" ? roster.aTeam : roster.u21Team;
+  const currentRoster = activeRosterTab === "aTeam" ? roster.aTeam : (roster.u21Team || []);
   const hasU21 = roster.u21Team && roster.u21Team.length > 0;
 
   const nextMatch = matches.nextMatch;
   const lastMatch = matches.lastMatch;
+  const recentMatches = matches.recentMatches || [];
+  const upcomingMatches = matches.upcomingMatches || [];
+  const standings = matches.standings || [];
+
+  const filteredTransfers = transfers.filter((t) => {
+    if (transferFilter === "in") return t.direction === "in";
+    if (transferFilter === "out") return t.direction === "out";
+    return true;
+  });
 
   const filteredRoster = positionFilter === "all"
     ? currentRoster
@@ -103,7 +114,10 @@ export function ProfiLeagueTemplate({
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             <span>TV MATCHDAY</span>
           </a>
+          <a href="#tabulka" className="hover:text-white shrink-0">LIGOVÁ TABULKA</a>
           <a href="#kadr" className="hover:text-white shrink-0">SOUPISKA & STATS</a>
+          <a href="#prestupy" className="hover:text-white shrink-0">PŘESTUPY ({transfers.length})</a>
+          <a href="#identita" className="hover:text-white shrink-0">DRESY & IDENTITA</a>
           <a href="#video" className="hover:text-white shrink-0">KLÚBOVÁ TV</a>
           <a href="#stadion" className="hover:text-white shrink-0">STADION</a>
           <a href="#bufet" className="hover:text-white shrink-0">FAN ZÓNA & GASTRO</a>
@@ -245,6 +259,147 @@ export function ProfiLeagueTemplate({
                 </button>
               </div>
             )}
+
+            {/* Broadcast Fixtures & Results Ticker Grid */}
+            {(recentMatches.length > 0 || upcomingMatches.length > 0) && (
+              <div className="mt-8 pt-6 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Recent matches */}
+                {recentMatches.length > 0 && (
+                  <div className="bg-[#121826] border border-white/10 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
+                      <span className="font-heading font-black text-xs uppercase tracking-wider text-red-400 flex items-center gap-1.5">
+                        <span>⏪</span> ARCHIV ODEHRANÝCH KOL
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {recentMatches.slice(0, 4).map((m) => (
+                        <div
+                          key={m.id}
+                          className="p-2.5 bg-black/30 border border-white/5 rounded-xl flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="truncate">
+                            <span className="text-[10px] text-white/40 uppercase mr-1.5 font-mono">{m.round}.k</span>
+                            <span className="font-bold text-white">
+                              {m.isHome ? team.name : m.opponent.name} vs {m.isHome ? m.opponent.name : team.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-black px-2 py-0.5 bg-white/10 rounded text-amber-400 font-mono">
+                              {m.scoreHome}:{m.scoreAway}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => onOpenHighlights(m)}
+                              className="text-red-400 hover:text-red-300 font-bold text-[11px]"
+                            >
+                              Záznam
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Upcoming fixtures */}
+                {upcomingMatches.length > 0 && (
+                  <div className="bg-[#121826] border border-white/10 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
+                      <span className="font-heading font-black text-xs uppercase tracking-wider text-white/70 flex items-center gap-1.5">
+                        <span>⏩</span> PROGRAM BUDOUCÍCH UTKÁNÍ
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {upcomingMatches.slice(0, 4).map((um) => (
+                        <div
+                          key={um.id}
+                          className="p-2.5 bg-black/30 border border-white/5 rounded-xl flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="truncate">
+                            <span className="text-[10px] text-white/40 uppercase mr-1.5 font-mono">{um.round}.k</span>
+                            <span className="font-semibold text-white/90">
+                              {um.isHome ? "DOMA: " : "VENKU: "} <strong>{um.opponent.name}</strong>
+                            </span>
+                          </div>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase font-mono ${
+                            um.isHome ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-white/10 text-white/70"
+                          }`}>
+                            {um.isHome ? "DOMA" : "VENKU"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ═══ SECTION: LIGOVÁ TABULKA (BROADCAST STANDINGS) ═══ */}
+        <section id="tabulka" className="scroll-mt-20">
+          <div className="bg-[#0e1320] border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+            <div className="flex items-center justify-between mb-6 border-b border-white/10 pb-4 flex-wrap gap-2">
+              <div>
+                <div className="text-xs font-heading font-bold uppercase tracking-widest text-red-500">
+                  OFICIÁLNÍ POŘADÍ SOUTĚŽE
+                </div>
+                <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
+                  Ligová tabulka
+                </h3>
+              </div>
+              <span className="px-3 py-1 bg-red-600/20 text-red-400 border border-red-500/30 rounded-full text-xs font-heading font-black">
+                LIVE POŘADÍ
+              </span>
+            </div>
+
+            {standings.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-white/5 text-white/60 font-heading font-black text-[11px] uppercase tracking-wider border-b border-white/10">
+                      <th className="py-3 px-3 text-center w-12">POŘ.</th>
+                      <th className="py-3 px-3">KLUB</th>
+                      <th className="py-3 px-2 text-center">Z</th>
+                      <th className="py-3 px-2 text-center text-emerald-400">V</th>
+                      <th className="py-3 px-2 text-center text-slate-400">R</th>
+                      <th className="py-3 px-2 text-center text-red-400">P</th>
+                      <th className="py-3 px-3 text-center">SKÓRE</th>
+                      <th className="py-3 px-4 text-center font-black text-white">BODY</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-sans">
+                    {standings.map((row) => (
+                      <tr
+                        key={row.teamId}
+                        className={`transition ${
+                          row.isCurrentTeam
+                            ? "bg-red-600/25 font-bold text-white border-l-4 border-l-red-500 shadow-inner"
+                            : "hover:bg-white/5 text-white/80"
+                        }`}
+                      >
+                        <td className="py-3 px-3 text-center font-heading font-black text-white/50">
+                          {row.pos}.
+                        </td>
+                        <td className="py-3 px-3 font-semibold">
+                          {row.teamName} {row.isCurrentTeam && <span className="text-[10px] font-black text-red-400 ml-2 px-2 py-0.5 bg-red-600/30 border border-red-500/40 rounded">NÁŠ KLUB</span>}
+                        </td>
+                        <td className="py-3 px-2 text-center font-mono">{row.played}</td>
+                        <td className="py-3 px-2 text-center font-mono text-emerald-400 font-bold">{row.won}</td>
+                        <td className="py-3 px-2 text-center font-mono text-white/60">{row.drawn}</td>
+                        <td className="py-3 px-2 text-center font-mono text-red-400 font-bold">{row.lost}</td>
+                        <td className="py-3 px-3 text-center font-mono">{row.gf}:{row.ga}</td>
+                        <td className="py-3 px-4 text-center font-heading font-black text-amber-400 text-sm bg-black/40">{row.points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-10 text-center text-xs text-white/40 italic font-heading">
+                Pořadí v ligové tabulce bude k dispozici po odehrání úvodních mistrovských kol.
+              </div>
+            )}
           </div>
         </section>
 
@@ -260,7 +415,33 @@ export function ProfiLeagueTemplate({
               </h2>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* A-Team vs U21 Toggle */}
+              <div className="bg-[#121826] p-1 rounded-xl border border-white/10 flex gap-1 text-xs font-heading font-bold">
+                <button
+                  type="button"
+                  onClick={() => setActiveRosterTab("aTeam")}
+                  className={`px-3 py-1.5 rounded-lg transition ${
+                    activeRosterTab === "aTeam"
+                      ? "bg-red-600 text-white shadow"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  ⚽ A-TÝM ({roster.aTeam.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveRosterTab("u21Team")}
+                  className={`px-3 py-1.5 rounded-lg transition ${
+                    activeRosterTab === "u21Team"
+                      ? "bg-red-600 text-white shadow"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  🌱 DOROST / U21 ({roster.u21Team?.length || 0})
+                </button>
+              </div>
+
               <div className="bg-[#121826] p-1 rounded-xl border border-white/10 flex gap-1 text-xs font-heading font-bold">
                 <button
                   type="button"
@@ -377,6 +558,208 @@ export function ProfiLeagueTemplate({
               ))}
             </div>
           )}
+        </section>
+
+        {/* ═══ SECTION: PŘESTUPOVÁ CENTRÁLA (PROFI TRANSFERS) ═══ */}
+        <section id="prestupy" className="scroll-mt-20">
+          <div className="bg-[#0e1320] border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-6 border-b border-white/10 pb-4 flex-wrap gap-3">
+              <div>
+                <div className="text-xs font-heading font-bold uppercase tracking-widest text-red-500">
+                  PŘESTUPOVÝ TRH & TRANSFÉRY
+                </div>
+                <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
+                  Pohyby v kádru & Změny
+                </h3>
+              </div>
+
+              {/* Filters */}
+              <div className="flex items-center gap-1.5 text-xs font-heading font-bold">
+                {(["all", "in", "out"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setTransferFilter(tab)}
+                    className={`px-3 py-1.5 rounded-lg border transition ${
+                      transferFilter === tab
+                        ? "bg-red-600 text-white border-red-500 shadow"
+                        : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10"
+                    }`}
+                  >
+                    {tab === "all" ? `VŠECHNY (${transfers.length})` : tab === "in" ? "PŘÍCHODY" : "ODCHODY"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {filteredTransfers.length > 0 ? (
+              <div className="space-y-4">
+                {filteredTransfers.map((t) => {
+                  const isIn = t.direction === "in";
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-4 sm:p-5 bg-black/40 border border-white/10 rounded-2xl transition hover:border-white/20"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                        <span
+                          className={`text-[10px] px-2.5 py-0.5 rounded-full font-heading font-black uppercase tracking-wider ${
+                            isIn
+                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                          }`}
+                        >
+                          {isIn ? "🟢 PŘÍCHOD" : "🔴 ODCHOD"} · {t.kind === "free_agent" ? "VOLNÝ HRÁČ" : t.kind === "released" ? "UVOLNĚNÍ" : t.kind === "swap" ? "VÝMĚNA" : "PŘESTUP"}
+                        </span>
+                        <span className="text-xs text-white/50 font-medium">
+                          ČÁSTKA: <strong className="text-amber-400 font-mono">{t.fee > 0 ? `${t.fee.toLocaleString("cs-CZ")} Kč` : "BEZ ODSTUPNÉHO"}</strong>
+                        </span>
+                      </div>
+
+                      <h4 className="font-heading font-bold text-base text-white mb-1">
+                        {t.headline}
+                      </h4>
+                      <p className="text-sm text-white/70 leading-relaxed mb-3">
+                        {t.story}
+                      </p>
+
+                      {t.quote && (
+                        <div className="p-3 bg-white/5 border-l-4 border-red-600 rounded-r-xl text-xs italic text-white/80">
+                          <strong>Vyjádření klubu:</strong> &ldquo;{t.quote}&rdquo;
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-xs text-white/40 italic font-heading">
+                V tomto přestupovém období nejsou v systému žádné hlášené transakce.
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ═══ SECTION: KLUBOVÁ IDENTITA, DRESY & MASKOT ═══ */}
+        <section id="identita" className="scroll-mt-20">
+          <div className="bg-[#0e1320] border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+            <div className="border-b border-white/10 pb-4">
+              <div className="text-xs font-heading font-bold uppercase tracking-widest text-red-500">
+                KLUB SIGNATURE & VÝSTROJ
+              </div>
+              <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
+                Oficiální zápasová sada & Identita
+              </h3>
+            </div>
+
+            {/* Kits Showcase */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col items-center text-center">
+                <span className="text-xs uppercase tracking-wider font-heading font-black text-red-400 mb-3">
+                  DOMÁCÍ ZÁPASOVÁ SADA
+                </span>
+                <div className="flex items-center justify-center gap-4 py-2">
+                  <JerseyPreview
+                    primary={team.jersey?.homePrimary || primary}
+                    secondary={team.jersey?.homeSecondary || team.secondaryColor || "#ffffff"}
+                    pattern={team.jersey?.pattern || team.jerseyPattern}
+                    size={64}
+                  />
+                  <ShortsPreview
+                    color={team.jersey?.homeShortsColor || primary}
+                    trim={team.jersey?.homeSecondary || team.secondaryColor || "#ffffff"}
+                    size={48}
+                  />
+                  <SocksPreview
+                    color={team.jersey?.homeSocksColor || primary}
+                    trim={team.jersey?.homeSecondary || team.secondaryColor || "#ffffff"}
+                    size={48}
+                  />
+                </div>
+                <div className="text-xs text-white/50 mt-3 font-mono">
+                  Primární barva: <strong className="text-white">{primary}</strong>
+                </div>
+              </div>
+
+              <div className="bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col items-center text-center">
+                <span className="text-xs uppercase tracking-wider font-heading font-black text-red-400 mb-3">
+                  VENKOVNÍ ZÁLOŽNÍ SADA
+                </span>
+                <div className="flex items-center justify-center gap-4 py-2">
+                  <JerseyPreview
+                    primary={team.jersey?.awayPrimary || team.secondaryColor || "#ffffff"}
+                    secondary={team.jersey?.awaySecondary || primary}
+                    pattern={team.jersey?.awayPattern || team.jerseyPattern}
+                    size={64}
+                  />
+                  <ShortsPreview
+                    color={team.jersey?.awayShortsColor || team.secondaryColor || "#ffffff"}
+                    trim={team.jersey?.awaySecondary || primary}
+                    size={48}
+                  />
+                  <SocksPreview
+                    color={team.jersey?.awaySocksColor || team.secondaryColor || "#ffffff"}
+                    trim={team.jersey?.awaySecondary || primary}
+                    size={48}
+                  />
+                </div>
+                <div className="text-xs text-white/50 mt-3 font-mono">
+                  Sekundární barva: <strong className="text-white">{team.secondaryColor || "#ffffff"}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Scarf & Mascot */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-3 border-t border-white/10">
+              <div className="bg-black/40 border border-white/10 rounded-2xl p-5">
+                <h4 className="text-xs uppercase tracking-wider font-heading font-black text-white/80 mb-3">
+                  🧣 OFICIÁLNÍ FANKLUBOVÁ ŠÁLA
+                </h4>
+                <ClubScarf
+                  primary={team.badge.primary}
+                  secondary={team.badge.secondary}
+                  pattern={badgePattern}
+                  scarfPattern={(team.scarfPattern as any) || "classic"}
+                  initials={badgeIni}
+                  symbol={team.badge.symbol}
+                  className="h-16 w-full shadow-lg rounded-lg"
+                />
+              </div>
+
+              <div className="bg-black/40 border border-white/10 rounded-2xl p-5">
+                <h4 className="text-xs uppercase tracking-wider font-heading font-black text-white/80 mb-3">
+                  🦁 KLUB MASKOT
+                </h4>
+                {team.mascot?.name ? (
+                  <div className="flex items-center gap-4">
+                    {team.mascot.imageUrl ? (
+                      <img
+                        src={team.mascot.imageUrl}
+                        alt={team.mascot.name}
+                        className="w-16 h-16 rounded-xl border border-white/10 object-cover shrink-0 shadow"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-red-600/20 border border-red-500/30 rounded-xl flex items-center justify-center text-3xl shrink-0">
+                        🦁
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-heading font-black text-base text-white">{team.mascot.name}</div>
+                      {team.mascot.story && (
+                        <p className="text-xs text-white/60 italic mt-1 leading-snug">
+                          &ldquo;{team.mascot.story}&rdquo;
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-white/40 italic py-3 font-heading">
+                    Klub v současnosti nemá oficiálně zapsaného maskota.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* ═══ SECTION 3: STADION & AREÁL ═══ */}

@@ -671,6 +671,75 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     return null;
   });
 
+  // Upcoming matches (next 5)
+  const upcomingMatchesRows = await c.env.DB.prepare(
+    `SELECT m.id, m.round, sc.scheduled_at,
+            ht.id as home_id, ht.name as home_name, ht.stadium_name as home_stadium, ht.primary_color as home_primary, ht.badge_pattern as home_badge,
+            at.id as away_id, at.name as away_name, at.primary_color as away_primary, at.badge_pattern as away_badge
+     FROM matches m
+     LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
+     JOIN teams ht ON m.home_team_id = ht.id
+     JOIN teams at ON m.away_team_id = at.id
+     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'scheduled'
+     ORDER BY sc.scheduled_at ASC LIMIT 5`,
+  ).bind(teamId, teamId).all<any>().catch((e) => {
+    logger.warn({ module: "club-website" }, "fetch upcoming matches", e);
+    return { results: [] };
+  });
+
+  const upcomingMatches = (upcomingMatchesRows?.results || []).map((m: any) => ({
+    id: m.id,
+    round: m.round,
+    isHome: m.home_id === teamId,
+    stadiumName: m.home_stadium || team.stadium_name,
+    scheduledAt: m.scheduled_at,
+    opponent: m.home_id === teamId
+      ? { id: m.away_id, name: m.away_name, primaryColor: m.away_primary, badge: m.away_badge }
+      : { id: m.home_id, name: m.home_name, primaryColor: m.home_primary, badge: m.home_badge },
+  }));
+
+  // League standings
+  let leagueStandings: Array<{
+    pos: number;
+    teamId: string;
+    teamName: string;
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    gf: number;
+    ga: number;
+    points: number;
+    isCurrentTeam: boolean;
+  }> = [];
+
+  if (team.league_id) {
+    try {
+      const { calculateStandings } = await import("../stats/standings");
+      const st = await calculateStandings(c.env.DB, team.league_id);
+      const leagueTeamsResult = await c.env.DB.prepare(
+        "SELECT id, name FROM teams WHERE league_id = ?"
+      ).bind(team.league_id).all<{ id: string; name: string }>();
+      const teamNameMap = new Map((leagueTeamsResult.results || []).map((t) => [t.id, t.name]));
+
+      leagueStandings = st.map((s) => ({
+        pos: s.pos,
+        teamId: s.teamId,
+        teamName: teamNameMap.get(s.teamId) || "Neznámý tým",
+        played: s.played,
+        won: s.wins,
+        drawn: s.draws,
+        lost: s.losses,
+        gf: s.gf,
+        ga: s.ga,
+        points: s.points,
+        isCurrentTeam: s.teamId === teamId,
+      }));
+    } catch (e) {
+      logger.warn({ module: "club-website" }, "fetch league standings", e);
+    }
+  }
+
   // Check derby rivalry for next match
   let isRival = false;
   if (nextMatch) {
@@ -695,6 +764,17 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   const beerProd = (concessionRows.results ?? []).find((r) => r.product_key === "beer");
   const sausageProd = (concessionRows.results ?? []).find((r) => r.product_key === "sausage");
   const limoProd = (concessionRows.results ?? []).find((r) => r.product_key === "lemonade");
+
+  const { CONCESSION_CATALOG } = await import("../season/concession-catalog");
+  const beerName = beerProd && CONCESSION_CATALOG.beer.tiers[beerProd.quality_level]?.label
+    ? CONCESSION_CATALOG.beer.tiers[beerProd.quality_level].label
+    : "Točené pivo 10°";
+  const sausageName = sausageProd && CONCESSION_CATALOG.sausage.tiers[sausageProd.quality_level]?.label
+    ? CONCESSION_CATALOG.sausage.tiers[sausageProd.quality_level].label
+    : "Klobása z udírny";
+  const lemonadeName = limoProd && CONCESSION_CATALOG.lemonade.tiers[limoProd.quality_level]?.label
+    ? CONCESSION_CATALOG.lemonade.tiers[limoProd.quality_level].label
+    : "Točená malinovka";
 
   // 9. Ticket prices
   const fansRow = await c.env.DB.prepare(
@@ -918,6 +998,8 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     matches: {
       lastMatch,
       recentMatches,
+      upcomingMatches,
+      standings: leagueStandings,
       nextMatch: nextMatch ? {
         id: nextMatch.id,
         round: nextMatch.round,
@@ -934,9 +1016,9 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
       beerPrice: beerProd?.sell_price ?? 25,
       sausagePrice: sausageProd?.sell_price ?? 30,
       lemonadePrice: limoProd?.sell_price ?? 15,
-      beerName: "Měšťan 10°",
-      sausageName: "Kostelecká klobása z udírny",
-      lemonadeName: "Točená malinovka",
+      beerName,
+      sausageName,
+      lemonadeName,
     },
     tickets: {
       adultPrice: adultTicketPrice,
