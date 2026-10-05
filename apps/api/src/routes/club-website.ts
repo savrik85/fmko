@@ -1081,9 +1081,15 @@ clubWebsiteRouter.post("/:id/website/buy-addon", async (c) => {
   );
 
   const newAddons = [...web.unlockedAddons, addonId];
-  await c.env.DB.prepare(
-    "UPDATE team_websites SET unlocked_addons = ?, updated_at = datetime('now') WHERE team_id = ?",
-  ).bind(JSON.stringify(newAddons), teamId).run();
+  if (addonId === "sponsor_banner") {
+    await c.env.DB.prepare(
+      "UPDATE team_websites SET unlocked_addons = ?, sponsor_banner_enabled = 1, updated_at = datetime('now') WHERE team_id = ?",
+    ).bind(JSON.stringify(newAddons), teamId).run();
+  } else {
+    await c.env.DB.prepare(
+      "UPDATE team_websites SET unlocked_addons = ?, updated_at = datetime('now') WHERE team_id = ?",
+    ).bind(JSON.stringify(newAddons), teamId).run();
+  }
 
   return c.json({
     ok: true,

@@ -92,7 +92,7 @@ export function TacticalPitch({ players, primaryColor, secondaryColor }: Tactica
         </div>
 
         {/* Position tag */}
-        <div className="text-[9px] font-heading font-bold text-yellow-300 flex items-center gap-1 mt-0.5 uppercase tracking-wide">
+        <div className="text-[9px] font-heading font-semibold text-white/80 flex items-center gap-1 mt-0.5 uppercase tracking-wide">
           <span>{czPos}</span>
         </div>
 
@@ -100,7 +100,7 @@ export function TacticalPitch({ players, primaryColor, secondaryColor }: Tactica
         <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col bg-gray-900 border border-white/20 rounded-xl p-2.5 text-xs text-white shadow-2xl z-20 w-36 pointer-events-none">
           <div className="font-bold text-white border-b border-white/10 pb-1 mb-1">
             <div>{player.firstName} {player.lastName}</div>
-            <div className="text-[10px] text-amber-400 font-semibold">{czPos}</div>
+            <div className="text-[10px] text-slate-300 font-semibold">{czPos}</div>
           </div>
           <div className="flex justify-between text-white/70">
             <span>Zápasy:</span>
