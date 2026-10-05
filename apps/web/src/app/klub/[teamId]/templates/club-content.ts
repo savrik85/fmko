@@ -108,7 +108,7 @@ export function awardsBySeason(h: ClubWebsiteHistory) {
 export function cupResultText(run: ClubWebsiteHistoryCupRun): string {
   if (run.status === "won") return "Vítěz poháru";
   if (run.status === "running") return `Stále ve hře: ${run.reachedRoundName}`;
-  return `Konec v kole ${run.reachedRoundName}`;
+  return `Vypadl: ${run.reachedRoundName}`;
 }
 
 export function cupMatchText(run: ClubWebsiteHistoryCupRun): string | null {
