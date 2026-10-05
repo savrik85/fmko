@@ -132,3 +132,4 @@ export * from "./transfer-terms";
 export * from "./scouting";
 export * from "./staff-tasks";
 export * from "./club-website";
+export * from "./club-website-player";

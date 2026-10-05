@@ -11,6 +11,8 @@ import { ManagerFace } from "../ManagerFace";
 import { TacticalPitch } from "../TacticalPitch";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
+import { PressCenter, hasPressCenterContent } from "../PressCenter";
+import { ClubHallOfFame } from "../ClubHallOfFame";
 import {
   ANCHOR_OFFSET,
   EMPTY,
@@ -110,6 +112,8 @@ export function ChampionsTemplate({
     { href: "#tabulka", label: "Tabulka" },
     { href: "#kadr", label: "Kádr" },
     { href: "#prestupy", label: `Přestupy (${transfers.length})` },
+    ...(hasPressCenterContent(data) ? [{ href: "#tisk", label: "Tisk" }] : []),
+    ...(data.history ? [{ href: "#historie", label: "Síň slávy" }] : []),
     { href: "#identita", label: "Dresy" },
     { href: "#stadion", label: "Stadion" },
     { href: "#bufet", label: "Bufet" },
@@ -118,16 +122,16 @@ export function ChampionsTemplate({
 
   return (
     // overflow-x-clip (ne overflow-hidden): ořízne záři do stran, ale nerozbije lepící navigaci
-    <div className="min-h-screen bg-[#020510] text-white font-sans pb-20 selection:bg-cyan-500 selection:text-black relative overflow-x-clip">
+    <div className="min-h-screen bg-[#020510] text-white font-sans pb-20 selection:bg-[var(--club-accent-dark)] selection:text-[var(--club-on-accent-dark)] relative overflow-x-clip">
       {/* Záře v pozadí */}
-      <div className="absolute top-0 left-1/4 w-[600px] h-[600px] rounded-full bg-cyan-600/10 blur-[140px] pointer-events-none" />
-      <div className="absolute top-1/3 right-10 w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[130px] pointer-events-none" />
+      <div className="absolute top-0 left-1/4 w-[600px] h-[600px] rounded-full bg-[color-mix(in_srgb,var(--club-accent-dark)_12%,transparent)] blur-[140px] pointer-events-none" />
+      <div className="absolute top-1/3 right-10 w-[500px] h-[500px] rounded-full bg-[color-mix(in_srgb,var(--club-secondary)_8%,transparent)] blur-[130px] pointer-events-none" />
 
       {/* Hlavička klubu (nelepí, nahoře už je lišta z ClubWebsiteClient) */}
-      <header className="relative backdrop-blur-2xl bg-white/5 border-b border-cyan-500/20 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+      <header className="relative backdrop-blur-2xl bg-white/5 border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-            <div className="shrink-0 drop-shadow-[0_0_20px_rgba(6,182,212,0.4)]">
+            <div className="shrink-0 drop-shadow-[0_0_20px_color-mix(in_srgb,var(--club-accent-dark)_40%,transparent)]">
               <BadgePreview
                 primary={team.badge.primary}
                 secondary={team.badge.secondary}
@@ -139,10 +143,10 @@ export function ChampionsTemplate({
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-400/30 text-sm font-heading font-black tracking-wide break-words">
+                <span className="px-2 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] text-[color-mix(in_srgb,var(--club-accent-dark)_60%,#ffffff)] border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] text-sm font-heading font-black tracking-wide break-words">
                   {leagueName}
                 </span>
-                <span className="text-sm text-cyan-200/60 font-heading font-bold">
+                <span className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-heading font-bold">
                   {team.village.name}
                 </span>
               </div>
@@ -153,13 +157,13 @@ export function ChampionsTemplate({
           </div>
 
           <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3">
-            <span className="text-sm text-cyan-100/70 font-heading font-bold">
+            <span className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-heading font-bold">
               Vstupné {tickets.adultPrice} Kč
             </span>
             <button
               type="button"
               onClick={onOpenTickets}
-              className="px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-heading font-black text-sm uppercase tracking-wider shadow-[0_0_25px_rgba(6,182,212,0.5)] active:scale-95 transition"
+              className="px-4 sm:px-5 py-2.5 rounded-xl bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] hover:shadow-[0_0_35px_color-mix(in_srgb,var(--club-accent-dark)_70%,transparent)] font-heading font-black text-sm uppercase tracking-wider shadow-[0_0_25px_color-mix(in_srgb,var(--club-accent-dark)_50%,transparent)] active:scale-95 transition"
             >
               Vstupenky
             </button>
@@ -170,19 +174,19 @@ export function ChampionsTemplate({
       {/* Lepící navigace pod lištou z ClubWebsiteClient (výška cca 52 px) */}
       <nav
         aria-label="Sekce webu"
-        className="sticky top-[52px] z-40 border-b border-cyan-500/20 bg-[#030a1c]/90 backdrop-blur-xl"
+        className="sticky top-[52px] z-40 border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] bg-[#030a1c]/90 backdrop-blur-xl"
       >
-        <div className="max-w-6xl mx-auto px-4 sm:px-8 py-2.5 text-sm font-heading font-bold uppercase tracking-wide text-cyan-100/70 flex items-center gap-5 overflow-x-auto">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 py-2.5 text-sm font-heading font-bold uppercase tracking-wide text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] flex items-center gap-5 overflow-x-auto">
           {navItems.map((item) => (
             <a
               key={item.href}
               href={item.href}
               className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
                 item.highlight === "main"
-                  ? "text-cyan-400 hover:text-cyan-300"
+                  ? "text-[var(--club-accent-dark)] hover:text-white"
                   : item.highlight === "audio"
                     ? "text-amber-400 hover:text-amber-300"
-                    : "hover:text-cyan-300"
+                    : "hover:text-[var(--club-accent-dark)]"
               }`}
             >
               {item.highlight === "main" && <span>✨</span>}
@@ -194,7 +198,7 @@ export function ChampionsTemplate({
 
       {/* Sponzorská lišta: jen skuteční partneři ze smluv */}
       {hasSponsorBanner && partners.all.length > 0 && (
-        <div className="relative bg-gradient-to-r from-[#030d22] via-[#061838] to-[#030d22] border-b border-cyan-500/20 py-3 px-4 text-sm font-heading text-cyan-200">
+        <div className="relative bg-gradient-to-r from-[#030812] via-[color-mix(in_srgb,var(--club-bar)_16%,#030812)] to-[#030812] border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] py-3 px-4 text-sm font-heading text-[color-mix(in_srgb,var(--club-accent-dark)_30%,#ffffff)]">
           <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-center">
             <span className="font-black text-amber-400 uppercase tracking-wider flex items-center gap-1">
               <span>🏆</span>
@@ -221,10 +225,10 @@ export function ChampionsTemplate({
       <main className="relative max-w-6xl mx-auto px-4 sm:px-8 mt-8 space-y-12">
         {/* Prohlášení vedení: jen když ho klub opravdu napsal */}
         {announcement && (
-          <div className="backdrop-blur-xl bg-white/5 border border-cyan-500/30 p-5 sm:p-6 rounded-3xl shadow-[0_0_30px_rgba(6,182,212,0.15)] flex items-start gap-4">
-            <span className="text-3xl shrink-0 mt-0.5 text-cyan-400">💎</span>
+          <div className="backdrop-blur-xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] p-5 sm:p-6 rounded-3xl shadow-[0_0_30px_color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] flex items-start gap-4">
+            <span className="text-3xl shrink-0 mt-0.5 text-[var(--club-accent-dark)]">💎</span>
             <div className="min-w-0">
-              <div className="text-sm font-heading font-black uppercase tracking-wider text-cyan-400 mb-1">
+              <div className="text-sm font-heading font-black uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
                 Prohlášení vedení klubu{hasPressOfficer && " · tiskový mluvčí"}
               </div>
               <p className="text-white/90 text-base font-medium leading-relaxed whitespace-pre-line break-words">
@@ -236,11 +240,11 @@ export function ChampionsTemplate({
 
         {/* ═══ PŘEHLED: PŘÍŠTÍ ZÁPAS, FORMA, VÝSLEDKY ═══ */}
         <section id="zapas" className={ANCHOR_OFFSET}>
-          <div className="backdrop-blur-2xl bg-gradient-to-br from-[#07132c]/80 via-[#040c1d]/90 to-[#020612] border border-cyan-500/30 rounded-3xl p-4 sm:p-10 shadow-[0_0_50px_rgba(6,182,212,0.2)] relative overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-cyan-500/20">
+          <div className="backdrop-blur-2xl bg-gradient-to-br from-[color-mix(in_srgb,var(--club-bar)_10%,#040a18)] via-[#040c1d]/90 to-[#020612] border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] rounded-3xl p-4 sm:p-10 shadow-[0_0_50px_color-mix(in_srgb,var(--club-accent-dark)_20%,transparent)] relative overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)]">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 font-heading font-black text-sm uppercase tracking-wider flex items-center gap-1.5 border border-cyan-400/30">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="px-3 py-1 rounded-full bg-[color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] text-[color-mix(in_srgb,var(--club-accent-dark)_60%,#ffffff)] font-heading font-black text-sm uppercase tracking-wider flex items-center gap-1.5 border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)]">
+                  <span className="w-2 h-2 rounded-full bg-[var(--club-accent-dark)] animate-pulse" />
                   Příští zápas
                 </span>
                 {nextMatch && (
@@ -274,7 +278,7 @@ export function ChampionsTemplate({
                 <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-8 py-4">
                   {/* Domácí */}
                   <div className="flex flex-col items-center min-w-0">
-                    <div className="w-24 h-24 rounded-3xl bg-white/5 border border-cyan-500/30 p-2 shadow-[0_0_30px_rgba(6,182,212,0.25)] flex items-center justify-center mb-3">
+                    <div className="w-24 h-24 rounded-3xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] p-2 shadow-[0_0_30px_color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] flex items-center justify-center mb-3">
                       <BadgePreview
                         primary={nextMatch.isHome ? team.badge.primary : nextMatch.opponent.primaryColor || "#333"}
                         secondary={nextMatch.isHome ? team.badge.secondary : "#fff"}
@@ -290,17 +294,17 @@ export function ChampionsTemplate({
                         <TeamLink id={nextMatch.opponent.id} name={nextMatch.opponent.name} />
                       )}
                     </div>
-                    <div className="text-sm font-heading font-bold text-cyan-400 mt-1 uppercase">
+                    <div className="text-sm font-heading font-bold text-[var(--club-accent-dark)] mt-1 uppercase">
                       Domácí
                     </div>
                   </div>
 
                   {/* Termín a vstupenky */}
                   <div className="flex flex-col items-center text-center">
-                    <div className="px-6 py-2 rounded-2xl bg-cyan-950/40 border border-cyan-400/40 text-3xl sm:text-5xl font-heading font-black tracking-widest text-cyan-300 shadow-[0_0_25px_rgba(6,182,212,0.3)]">
+                    <div className="px-6 py-2 rounded-2xl bg-[color-mix(in_srgb,var(--club-accent-dark)_10%,transparent)] border border-[color-mix(in_srgb,var(--club-accent-dark)_40%,transparent)] text-3xl sm:text-5xl font-heading font-black tracking-widest text-[var(--club-accent-dark)] shadow-[0_0_25px_color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)]">
                       VS
                     </div>
-                    <div className="text-base font-heading font-bold text-cyan-200 mt-3">
+                    <div className="text-base font-heading font-bold text-[color-mix(in_srgb,var(--club-accent-dark)_30%,#ffffff)] mt-3">
                       {formatDateTime(nextMatch.scheduledAt)}
                     </div>
                     <div className="text-sm text-white/50 mt-1 break-words">
@@ -309,18 +313,18 @@ export function ChampionsTemplate({
                     <button
                       type="button"
                       onClick={onOpenTickets}
-                      className="mt-5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-black font-heading font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition"
+                      className="mt-5 px-6 py-2.5 rounded-xl bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] hover:shadow-[0_0_35px_color-mix(in_srgb,var(--club-accent-dark)_70%,transparent)] font-heading font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition"
                     >
                       Vstupenky
                     </button>
-                    <div className="text-sm text-cyan-100/70 mt-2">
+                    <div className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] mt-2">
                       Vstupné {tickets.adultPrice} Kč
                     </div>
                   </div>
 
                   {/* Hosté */}
                   <div className="flex flex-col items-center min-w-0">
-                    <div className="w-24 h-24 rounded-3xl bg-white/5 border border-cyan-500/30 p-2 shadow-[0_0_30px_rgba(6,182,212,0.25)] flex items-center justify-center mb-3">
+                    <div className="w-24 h-24 rounded-3xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] p-2 shadow-[0_0_30px_color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] flex items-center justify-center mb-3">
                       <BadgePreview
                         primary={!nextMatch.isHome ? team.badge.primary : nextMatch.opponent.primaryColor || "#333"}
                         secondary={!nextMatch.isHome ? team.badge.secondary : "#fff"}
@@ -336,7 +340,7 @@ export function ChampionsTemplate({
                         <TeamLink id={nextMatch.opponent.id} name={nextMatch.opponent.name} />
                       )}
                     </div>
-                    <div className="text-sm font-heading font-bold text-cyan-400 mt-1 uppercase">
+                    <div className="text-sm font-heading font-bold text-[var(--club-accent-dark)] mt-1 uppercase">
                       Hosté
                     </div>
                   </div>
@@ -345,7 +349,7 @@ export function ChampionsTemplate({
                 {/* Odpočet do výkopu (jen když je známý termín) */}
                 {countdown && !countdown.done && (
                   <div className="mt-4 mx-auto max-w-md" role="timer" aria-label="Odpočet do výkopu">
-                    <div className="text-sm font-heading font-bold uppercase tracking-wider text-cyan-200/60 text-center mb-2">
+                    <div className="text-sm font-heading font-bold uppercase tracking-wider text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] text-center mb-2">
                       Do výkopu zbývá
                     </div>
                     <div className="grid grid-cols-4 gap-2">
@@ -357,12 +361,12 @@ export function ChampionsTemplate({
                       ].map((part) => (
                         <div
                           key={part.label}
-                          className="bg-cyan-950/40 border border-cyan-500/30 rounded-xl py-2 text-center"
+                          className="bg-[color-mix(in_srgb,var(--club-accent-dark)_10%,transparent)] border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] rounded-xl py-2 text-center"
                         >
-                          <div className="font-heading font-black text-2xl sm:text-3xl text-cyan-200 tabular-nums">
+                          <div className="font-heading font-black text-2xl sm:text-3xl text-[var(--club-accent-dark)] tabular-nums">
                             {pad2(part.value)}
                           </div>
-                          <div className="text-sm text-cyan-100/60">{part.label}</div>
+                          <div className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)]">{part.label}</div>
                         </div>
                       ))}
                     </div>
@@ -377,10 +381,10 @@ export function ChampionsTemplate({
 
             {/* Poslední výsledek */}
             {lastMatch && (
-              <div className="mt-8 pt-4 border-t border-cyan-500/20 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm font-heading">
+              <div className="mt-8 pt-4 border-t border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] flex flex-col sm:flex-row items-center justify-between gap-3 text-sm font-heading">
                 <div className="text-white/60 text-center sm:text-left min-w-0 break-words">
                   Poslední výsledek ({lastMatch.round}. kolo):{" "}
-                  <strong className="text-cyan-300">
+                  <strong className="text-[var(--club-accent-dark)]">
                     {lastMatch.isHome ? team.name : <TeamLink id={lastMatch.opponent.id} name={lastMatch.opponent.name} />}{" "}
                     {lastMatch.scoreHome}:{lastMatch.scoreAway}{" "}
                     {lastMatch.isHome ? <TeamLink id={lastMatch.opponent.id} name={lastMatch.opponent.name} /> : team.name}
@@ -389,7 +393,7 @@ export function ChampionsTemplate({
                 <button
                   type="button"
                   onClick={() => onOpenHighlights(lastMatch)}
-                  className="shrink-0 px-4 py-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold text-sm border border-cyan-400/30 transition"
+                  className="shrink-0 px-4 py-2 rounded-lg bg-[color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] hover:bg-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] text-[color-mix(in_srgb,var(--club-accent-dark)_60%,#ffffff)] font-bold text-sm border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] transition"
                 >
                   ▶ Sestřih zápasu
                 </button>
@@ -398,20 +402,20 @@ export function ChampionsTemplate({
 
             {/* Odehraná kola a program dalších zápasů */}
             {(recentMatches.length > 0 || upcomingMatches.length > 0) && (
-              <div className="mt-8 pt-6 border-t border-cyan-500/20 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="mt-8 pt-6 border-t border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] grid grid-cols-1 md:grid-cols-2 gap-6">
                 {recentMatches.length > 0 && (
-                  <div className="bg-white/5 border border-cyan-500/20 rounded-2xl p-3 sm:p-4 backdrop-blur-md">
-                    <h3 className="mb-3 border-b border-white/10 pb-2 font-heading font-black text-sm uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+                  <div className="bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-2xl p-3 sm:p-4 backdrop-blur-md">
+                    <h3 className="mb-3 border-b border-white/10 pb-2 font-heading font-black text-sm uppercase tracking-wider text-[var(--club-accent-dark)] flex items-center gap-1.5">
                       <span>✨</span> Výsledky posledních kol
                     </h3>
                     <ul className="space-y-2">
                       {recentMatches.slice(0, 4).map((m) => (
                         <li
                           key={m.id}
-                          className="p-3 bg-black/40 border border-cyan-500/20 rounded-xl flex flex-wrap items-center justify-between gap-2 text-sm"
+                          className="p-3 bg-black/40 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-xl flex flex-wrap items-center justify-between gap-2 text-sm"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="text-cyan-400 font-mono">
+                            <div className="text-[var(--club-accent-dark)] font-mono">
                               {m.round}. kolo · {formatDate(m.date)}
                             </div>
                             <div className="font-bold text-white break-words">
@@ -421,13 +425,13 @@ export function ChampionsTemplate({
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-black px-2 py-0.5 bg-cyan-950/80 border border-cyan-500/40 rounded text-cyan-200 font-mono text-base">
+                            <span className="font-black px-2 py-0.5 bg-[color-mix(in_srgb,var(--club-accent-dark)_12%,transparent)] border border-[color-mix(in_srgb,var(--club-accent-dark)_40%,transparent)] rounded text-[color-mix(in_srgb,var(--club-accent-dark)_30%,#ffffff)] font-mono text-base">
                               {m.scoreHome}:{m.scoreAway}
                             </span>
                             <button
                               type="button"
                               onClick={() => onOpenHighlights(m)}
-                              className="px-2 py-1 rounded-lg text-cyan-400 hover:text-cyan-300 hover:bg-white/5 font-bold text-sm"
+                              className="px-2 py-1 rounded-lg text-[var(--club-accent-dark)] hover:text-white hover:bg-white/5 font-bold text-sm"
                             >
                               Sestřih
                             </button>
@@ -439,18 +443,18 @@ export function ChampionsTemplate({
                 )}
 
                 {upcomingMatches.length > 0 && (
-                  <div className="bg-white/5 border border-cyan-500/20 rounded-2xl p-3 sm:p-4 backdrop-blur-md">
-                    <h3 className="mb-3 border-b border-white/10 pb-2 font-heading font-black text-sm uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+                  <div className="bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-2xl p-3 sm:p-4 backdrop-blur-md">
+                    <h3 className="mb-3 border-b border-white/10 pb-2 font-heading font-black text-sm uppercase tracking-wider text-[var(--club-accent-dark)] flex items-center gap-1.5">
                       <span>🗓️</span> Program dalších zápasů
                     </h3>
                     <ul className="space-y-2">
                       {upcomingMatches.slice(0, 4).map((um) => (
                         <li
                           key={um.id}
-                          className="p-3 bg-black/40 border border-cyan-500/20 rounded-xl flex flex-wrap items-center justify-between gap-2 text-sm"
+                          className="p-3 bg-black/40 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-xl flex flex-wrap items-center justify-between gap-2 text-sm"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="text-cyan-400 font-mono">
+                            <div className="text-[var(--club-accent-dark)] font-mono">
                               {um.round}. kolo · {formatDate(um.scheduledAt)}
                             </div>
                             <div className="font-bold text-white/90 break-words">
@@ -458,7 +462,7 @@ export function ChampionsTemplate({
                             </div>
                           </div>
                           <span className={`shrink-0 text-sm font-black px-2 py-0.5 rounded-full uppercase ${
-                            um.isHome ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/30" : "bg-white/10 text-white/70"
+                            um.isHome ? "bg-[color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] text-[color-mix(in_srgb,var(--club-accent-dark)_60%,#ffffff)] border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)]" : "bg-white/10 text-white/70"
                           }`}>
                             {um.isHome ? "Doma" : "Venku"}
                           </span>
@@ -474,9 +478,9 @@ export function ChampionsTemplate({
 
         {/* ═══ TABULKA SOUTĚŽE ═══ */}
         <section id="tabulka" className={ANCHOR_OFFSET}>
-          <div className="bg-white/5 border border-cyan-500/20 rounded-3xl p-4 sm:p-8 shadow-2xl relative overflow-hidden backdrop-blur-xl">
-            <div className="mb-6 border-b border-cyan-500/20 pb-4">
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-cyan-400 break-words">
+          <div className="bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-3xl p-4 sm:p-8 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+            <div className="mb-6 border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] pb-4">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] break-words">
                 {leagueName}
               </div>
               <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
@@ -488,7 +492,7 @@ export function ChampionsTemplate({
               <div className="overflow-x-auto -mx-4 sm:mx-0">
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="bg-white/5 text-cyan-200/70 font-heading font-black text-sm uppercase tracking-wide border-b border-cyan-500/20">
+                    <tr className="bg-white/5 text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-heading font-black text-sm uppercase tracking-wide border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)]">
                       <th className="py-3 px-2 sm:px-3 text-center w-10">#</th>
                       <th className="py-3 px-2 sm:px-3">Klub</th>
                       <th className="py-3 px-2 text-center" title="Zápasy">Z</th>
@@ -505,11 +509,11 @@ export function ChampionsTemplate({
                         key={row.teamId}
                         className={`transition ${
                           row.isCurrentTeam
-                            ? "bg-cyan-500/20 font-bold text-white border-l-4 border-l-cyan-400 shadow-inner"
+                            ? "bg-[color-mix(in_srgb,var(--club-accent-dark)_18%,transparent)] font-bold text-white border-l-4 border-l-[var(--club-accent-dark)] shadow-inner"
                             : "hover:bg-white/5 text-white/80"
                         }`}
                       >
-                        <td className="py-3 px-2 sm:px-3 text-center font-heading font-black text-cyan-300/70">
+                        <td className="py-3 px-2 sm:px-3 text-center font-heading font-black text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)]">
                           {row.pos}.
                         </td>
                         <td className="py-3 px-2 sm:px-3 font-semibold text-base min-w-[9rem]">
@@ -521,14 +525,14 @@ export function ChampionsTemplate({
                         <td className="py-3 px-2 text-center font-mono text-white/60">{row.drawn}</td>
                         <td className="py-3 px-2 text-center font-mono text-red-400 font-bold">{row.lost}</td>
                         <td className="py-3 px-2 sm:px-3 text-center font-mono whitespace-nowrap">{row.gf}:{row.ga}</td>
-                        <td className="py-3 px-2 sm:px-4 text-center font-heading font-black text-cyan-300 text-base bg-black/40">{row.points}</td>
+                        <td className="py-3 px-2 sm:px-4 text-center font-heading font-black text-[var(--club-accent-dark)] text-base bg-black/40">{row.points}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <div className="py-10 text-center text-sm text-cyan-200/60 italic font-heading">
+              <div className="py-10 text-center text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] italic font-heading">
                 Tabulka bude k dispozici po odehrání prvních kol.
               </div>
             )}
@@ -539,7 +543,7 @@ export function ChampionsTemplate({
         <section id="kadr" className={ANCHOR_OFFSET}>
           <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-6">
             <div>
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-cyan-400 mb-1">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
                 Soupiska
               </div>
               <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight uppercase">
@@ -556,7 +560,7 @@ export function ChampionsTemplate({
                     onClick={() => setActiveRosterTab("aTeam")}
                     className={`px-3 py-1.5 rounded-lg transition ${
                       activeRosterTab === "aTeam"
-                        ? "bg-cyan-500 text-black font-black shadow"
+                        ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-black shadow"
                         : "text-white/60 hover:text-white"
                     }`}
                   >
@@ -567,7 +571,7 @@ export function ChampionsTemplate({
                     onClick={() => setActiveRosterTab("u21Team")}
                     className={`px-3 py-1.5 rounded-lg transition ${
                       activeRosterTab === "u21Team"
-                        ? "bg-cyan-500 text-black font-black shadow"
+                        ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-black shadow"
                         : "text-white/60 hover:text-white"
                     }`}
                   >
@@ -580,14 +584,14 @@ export function ChampionsTemplate({
                 <button
                   type="button"
                   onClick={() => setViewMode("cards")}
-                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "cards" ? "bg-cyan-500 text-black font-black shadow" : "text-white/60"}`}
+                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "cards" ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-black shadow" : "text-white/60"}`}
                 >
                   Karty
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("pitch")}
-                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "pitch" ? "bg-cyan-500 text-black font-black shadow" : "text-white/60"}`}
+                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "pitch" ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-black shadow" : "text-white/60"}`}
                 >
                   Na hřišti
                 </button>
@@ -607,7 +611,7 @@ export function ChampionsTemplate({
                     onClick={() => setPositionFilter(pos)}
                     className={`px-3 sm:px-4 py-1.5 rounded-lg uppercase tracking-wide transition ${
                       positionFilter === pos
-                        ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-black font-black shadow-lg"
+                        ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-black shadow-lg"
                         : "bg-white/5 text-white/70 hover:bg-white/10 border border-white/10"
                     }`}
                   >
@@ -619,7 +623,7 @@ export function ChampionsTemplate({
           )}
 
           {viewMode === "pitch" ? (
-            <div className="backdrop-blur-xl bg-white/5 border border-cyan-500/20 rounded-3xl p-4 sm:p-10 shadow-2xl">
+            <div className="backdrop-blur-xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-3xl p-4 sm:p-10 shadow-2xl">
               <TacticalPitch
                 players={currentRoster}
                 primaryColor={primary}
@@ -627,7 +631,7 @@ export function ChampionsTemplate({
               />
             </div>
           ) : filteredRoster.length === 0 ? (
-            <div className="py-8 text-center text-base text-cyan-100/60 font-heading">
+            <div className="py-8 text-center text-base text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-heading">
               Na tomhle postu teď klub nikoho nemá.
             </div>
           ) : (
@@ -635,19 +639,19 @@ export function ChampionsTemplate({
               {filteredRoster.map((player) => (
                 <article
                   key={player.id}
-                  className="backdrop-blur-xl bg-gradient-to-b from-white/10 via-white/5 to-[#050e20] border border-cyan-500/30 rounded-2xl p-4 shadow-[0_4px_25px_rgba(6,182,212,0.15)] relative overflow-hidden group hover:border-cyan-400 transition-colors flex flex-col justify-between"
+                  className="backdrop-blur-xl bg-gradient-to-b from-white/10 via-white/5 to-[#050e20] border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] rounded-2xl p-4 shadow-[0_4px_25px_color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] relative overflow-hidden group hover:border-[var(--club-accent-dark)] transition-colors flex flex-col justify-between"
                 >
                   {/* Jemný třpyt při najetí */}
-                  <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/0 via-cyan-500/5 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-[color-mix(in_srgb,var(--club-accent-dark)_6%,transparent)] to-[color-mix(in_srgb,var(--club-bar)_12%,transparent)] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
                   <div>
                     {/* Hodnocení, post a číslo */}
                     <div className="flex items-center justify-between gap-2 mb-3 relative z-10">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="shrink-0 px-2 py-0.5 rounded bg-cyan-400 text-black font-heading font-black text-sm shadow" title="Hodnocení hráče">
+                        <span className="shrink-0 px-2 py-0.5 rounded bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-heading font-black text-sm shadow" title="Hodnocení hráče">
                           {player.overallRating} ★
                         </span>
-                        <span className="text-sm font-heading font-extrabold uppercase tracking-wide text-cyan-300 truncate">
+                        <span className="text-sm font-heading font-extrabold uppercase tracking-wide text-[var(--club-accent-dark)] truncate">
                           {player.positionName || player.position}
                         </span>
                       </div>
@@ -658,7 +662,7 @@ export function ChampionsTemplate({
 
                     {/* Portrét a jméno */}
                     <div className="flex items-center gap-3 relative z-10">
-                      <div className="w-16 h-18 rounded-xl overflow-hidden bg-black/40 border border-cyan-500/30 shrink-0 flex items-center justify-center shadow-inner group-hover:border-cyan-400 transition-colors">
+                      <div className="w-16 h-18 rounded-xl overflow-hidden bg-black/40 border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] shrink-0 flex items-center justify-center shadow-inner group-hover:border-[var(--club-accent-dark)] transition-colors">
                         <ManagerFace faceConfig={player.avatar} size={58} />
                       </div>
 
@@ -671,7 +675,7 @@ export function ChampionsTemplate({
                             {player.firstName}
                           </span>
                         </PlayerLink>
-                        <div className="text-sm text-cyan-400/80 mt-1 font-heading font-bold">
+                        <div className="text-sm text-[var(--club-accent-dark)] mt-1 font-heading font-bold">
                           {player.age} let
                         </div>
                       </div>
@@ -681,15 +685,15 @@ export function ChampionsTemplate({
                   {/* Statistiky sezóny */}
                   <div className="mt-4 pt-3 border-t border-white/10 grid grid-cols-3 gap-1 text-center font-heading relative z-10">
                     <div className="bg-black/40 p-1.5 rounded-lg border border-white/5">
-                      <div className="text-sm text-cyan-200/60 font-bold">Zápasy</div>
+                      <div className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-bold">Zápasy</div>
                       <div className="font-black text-base text-white">{player.stats.appearances}</div>
                     </div>
                     <div className="bg-black/40 p-1.5 rounded-lg border border-white/5">
-                      <div className="text-sm text-cyan-200/60 font-bold">Góly</div>
-                      <div className="font-black text-base text-cyan-300">{player.stats.goals}</div>
+                      <div className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-bold">Góly</div>
+                      <div className="font-black text-base text-[var(--club-accent-dark)]">{player.stats.goals}</div>
                     </div>
                     <div className="bg-black/40 p-1.5 rounded-lg border border-white/5">
-                      <div className="text-sm text-cyan-200/60 font-bold">Minuty</div>
+                      <div className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-bold">Minuty</div>
                       <div className="font-black text-base text-white">{player.stats.minutesPlayed}&apos;</div>
                     </div>
                   </div>
@@ -701,10 +705,10 @@ export function ChampionsTemplate({
 
         {/* ═══ PŘESTUPY ═══ */}
         <section id="prestupy" className={ANCHOR_OFFSET}>
-          <div className="bg-white/5 border border-cyan-500/20 rounded-3xl p-4 sm:p-8 shadow-2xl backdrop-blur-xl">
-            <div className="flex items-center justify-between mb-6 border-b border-cyan-500/20 pb-4 flex-wrap gap-3">
+          <div className="bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-3xl p-4 sm:p-8 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center justify-between mb-6 border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] pb-4 flex-wrap gap-3">
               <div>
-                <div className="text-sm font-heading font-bold uppercase tracking-wider text-cyan-400">
+                <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)]">
                   Příchody a odchody
                 </div>
                 <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
@@ -720,7 +724,7 @@ export function ChampionsTemplate({
                     onClick={() => setTransferFilter(tab)}
                     className={`px-3 py-1.5 rounded-lg border transition ${
                       transferFilter === tab
-                        ? "bg-cyan-500 text-black font-black border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+                        ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-black border-[var(--club-accent-dark)] shadow-[0_0_15px_color-mix(in_srgb,var(--club-accent-dark)_40%,transparent)]"
                         : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10"
                     }`}
                   >
@@ -737,7 +741,7 @@ export function ChampionsTemplate({
                   return (
                     <article
                       key={t.id}
-                      className="p-4 sm:p-5 bg-black/40 border border-cyan-500/20 rounded-2xl transition hover:border-cyan-400/40"
+                      className="p-4 sm:p-5 bg-black/40 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-2xl transition hover:border-[color-mix(in_srgb,var(--club-accent-dark)_40%,transparent)]"
                     >
                       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                         <span
@@ -757,9 +761,9 @@ export function ChampionsTemplate({
                           {t.playerName}
                         </PlayerLink>
                         {t.otherTeamName && (
-                          <span className="text-cyan-100/60">
+                          <span className="text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)]">
                             {" · "}{isIn ? "Odkud" : "Kam"}:{" "}
-                            <TeamLink id={t.otherTeamId} name={t.otherTeamName} className="text-cyan-100/90" />
+                            <TeamLink id={t.otherTeamId} name={t.otherTeamName} className="text-[color-mix(in_srgb,var(--club-accent-dark)_30%,#ffffff)]" />
                           </span>
                         )}
                       </div>
@@ -767,12 +771,12 @@ export function ChampionsTemplate({
                       <h4 className="font-heading font-bold text-base text-white mb-1 break-words">
                         {t.headline}
                       </h4>
-                      <p className="text-sm text-cyan-100/70 leading-relaxed mb-3 break-words">
+                      <p className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] leading-relaxed mb-3 break-words">
                         {t.story}
                       </p>
 
                       {t.quote && (
-                        <div className="p-3 bg-white/5 border-l-4 border-cyan-400 rounded-r-xl text-sm italic text-cyan-100/90 break-words">
+                        <div className="p-3 bg-white/5 border-l-4 border-[var(--club-accent-dark)] rounded-r-xl text-sm italic text-[color-mix(in_srgb,var(--club-accent-dark)_30%,#ffffff)] break-words">
                           <strong>Slovo hráče:</strong> „{t.quote}“
                         </div>
                       )}
@@ -781,7 +785,7 @@ export function ChampionsTemplate({
                 })}
               </div>
             ) : (
-              <div className="py-8 text-center text-sm text-cyan-200/60 italic font-heading">
+              <div className="py-8 text-center text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] italic font-heading">
                 Zatím tu nejsou žádné přestupy.
               </div>
             )}
@@ -790,9 +794,9 @@ export function ChampionsTemplate({
 
         {/* ═══ DRESY, ŠÁLA A MASKOT ═══ */}
         <section id="identita" className={ANCHOR_OFFSET}>
-          <div className="bg-white/5 border border-cyan-500/20 rounded-3xl p-4 sm:p-8 shadow-2xl space-y-6 backdrop-blur-xl">
-            <div className="border-b border-cyan-500/20 pb-4">
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-cyan-400">
+          <div className="bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-3xl p-4 sm:p-8 shadow-2xl space-y-6 backdrop-blur-xl">
+            <div className="border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] pb-4">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)]">
                 Výstroj a identita
               </div>
               <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
@@ -801,8 +805,8 @@ export function ChampionsTemplate({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="bg-black/40 border border-cyan-500/20 rounded-2xl p-5 flex flex-col items-center text-center">
-                <span className="text-sm uppercase tracking-wide font-heading font-black text-cyan-300 mb-3">
+              <div className="bg-black/40 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-2xl p-5 flex flex-col items-center text-center">
+                <span className="text-sm uppercase tracking-wide font-heading font-black text-[var(--club-accent-dark)] mb-3">
                   Domácí dres
                 </span>
                 <div className="flex items-center justify-center gap-4 py-2">
@@ -828,8 +832,8 @@ export function ChampionsTemplate({
                 </div>
               </div>
 
-              <div className="bg-black/40 border border-cyan-500/20 rounded-2xl p-5 flex flex-col items-center text-center">
-                <span className="text-sm uppercase tracking-wide font-heading font-black text-cyan-300 mb-3">
+              <div className="bg-black/40 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-2xl p-5 flex flex-col items-center text-center">
+                <span className="text-sm uppercase tracking-wide font-heading font-black text-[var(--club-accent-dark)] mb-3">
                   Venkovní dres
                 </span>
                 <div className="flex items-center justify-center gap-4 py-2">
@@ -856,9 +860,9 @@ export function ChampionsTemplate({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-3 border-t border-cyan-500/20">
-              <div className="bg-black/40 border border-cyan-500/20 rounded-2xl p-5">
-                <h4 className="text-sm uppercase tracking-wide font-heading font-black text-cyan-200/80 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-3 border-t border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)]">
+              <div className="bg-black/40 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-2xl p-5">
+                <h4 className="text-sm uppercase tracking-wide font-heading font-black text-[color-mix(in_srgb,var(--club-accent-dark)_30%,#ffffff)] mb-3">
                   🧣 Klubová šála
                 </h4>
                 <ClubScarf
@@ -868,12 +872,12 @@ export function ChampionsTemplate({
                   scarfPattern={(team.scarfPattern as any) || "classic"}
                   initials={badgeIni}
                   symbol={team.badge.symbol}
-                  className="h-16 w-full shadow-[0_0_20px_rgba(6,182,212,0.3)] rounded-lg"
+                  className="h-16 w-full shadow-[0_0_20px_color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] rounded-lg"
                 />
               </div>
 
-              <div className="bg-black/40 border border-cyan-500/20 rounded-2xl p-5">
-                <h4 className="text-sm uppercase tracking-wide font-heading font-black text-cyan-200/80 mb-3">
+              <div className="bg-black/40 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-2xl p-5">
+                <h4 className="text-sm uppercase tracking-wide font-heading font-black text-[color-mix(in_srgb,var(--club-accent-dark)_30%,#ffffff)] mb-3">
                   🦁 Klubový maskot
                 </h4>
                 {team.mascot?.name ? (
@@ -882,24 +886,24 @@ export function ChampionsTemplate({
                       <img
                         src={team.mascot.imageUrl}
                         alt={team.mascot.name}
-                        className="w-16 h-16 rounded-xl border border-cyan-500/30 object-cover shrink-0 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                        className="w-16 h-16 rounded-xl border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] object-cover shrink-0 shadow-[0_0_15px_color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)]"
                       />
                     ) : (
-                      <div className="w-16 h-16 bg-cyan-500/20 border border-cyan-400/30 rounded-xl flex items-center justify-center text-3xl shrink-0">
+                      <div className="w-16 h-16 bg-[color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] border border-[color-mix(in_srgb,var(--club-accent-dark)_30%,transparent)] rounded-xl flex items-center justify-center text-3xl shrink-0">
                         🦁
                       </div>
                     )}
                     <div className="min-w-0">
                       <div className="font-heading font-black text-base text-white break-words">{team.mascot.name}</div>
                       {team.mascot.story && (
-                        <p className="text-sm text-cyan-100/70 italic mt-1 leading-snug break-words">
+                        <p className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] italic mt-1 leading-snug break-words">
                           {team.mascot.story}
                         </p>
                       )}
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-cyan-200/60 italic py-3 font-heading">
+                  <div className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] italic py-3 font-heading">
                     Klub zatím maskota nemá.
                   </div>
                 )}
@@ -908,26 +912,56 @@ export function ChampionsTemplate({
           </div>
         </section>
 
+        {/* ═══ TISKOVÉ STŘEDISKO ═══ */}
+        {hasPressCenterContent(data) && (
+          <section id="tisk" className={ANCHOR_OFFSET}>
+            <div className="mb-6">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
+                Tiskové středisko
+              </div>
+              <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight uppercase">Slovo trenéra a zprávy klubu</h2>
+            </div>
+            <div className="backdrop-blur-xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_20%,transparent)] rounded-3xl p-4 sm:p-6 shadow-xl">
+              <PressCenter data={data} tone="dark" />
+            </div>
+          </section>
+        )}
+
+        {/* ═══ SÍŇ SLÁVY ═══ */}
+        {data.history && (
+          <section id="historie" className={ANCHOR_OFFSET}>
+            <div className="mb-6">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
+                Historie klubu
+              </div>
+              <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight uppercase">Síň slávy</h2>
+            </div>
+            <div className="backdrop-blur-xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_20%,transparent)] rounded-3xl p-4 sm:p-6 shadow-xl">
+              <ClubHallOfFame history={data.history} tone="dark" />
+            </div>
+          </section>
+        )}
+
         {/* ═══ STADION ═══ */}
         <section id="stadion" className={ANCHOR_OFFSET}>
           <div className="mb-6">
-            <div className="text-sm font-heading font-bold uppercase tracking-wider text-cyan-400 mb-1">
+            <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
               Stadion
             </div>
             <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight uppercase break-words">
               {team.stadium.name || "Domácí hřiště"}
             </h2>
           </div>
-          <div className="backdrop-blur-xl bg-white/5 border border-cyan-500/20 rounded-3xl p-3 sm:p-6 shadow-xl">
+          <div className="backdrop-blur-xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_20%,transparent)] rounded-3xl p-3 sm:p-6 shadow-xl">
             <StadiumPhotoCard data={data} isOwner={isOwner} tone="dark" onOpenLightbox={onOpenLightbox} />
           </div>
         </section>
 
         {/* ═══ BUFET ═══ */}
         <section id="bufet" className={ANCHOR_OFFSET}>
-          <div className="backdrop-blur-xl bg-white/5 border border-cyan-500/20 rounded-3xl p-4 sm:p-8 shadow-xl">
+          <div className="backdrop-blur-xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-3xl p-4 sm:p-8 shadow-xl">
             <div className="mb-6">
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-cyan-400 mb-1">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
                 Bufet
               </div>
               <h2 className="font-heading font-black text-xl sm:text-2xl text-white uppercase">
@@ -947,14 +981,14 @@ export function ChampionsTemplate({
                       <div className="font-black text-base text-white break-words">{item.name || item.label}</div>
                       <div className="text-sm text-white/50">{item.label}</div>
                     </div>
-                    <div className="shrink-0 text-2xl font-black text-cyan-300 tabular-nums">
+                    <div className="shrink-0 text-2xl font-black text-[var(--club-accent-dark)] tabular-nums">
                       {item.price} Kč
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="py-6 text-center text-base text-cyan-100/60 font-heading">
+              <div className="py-6 text-center text-base text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-heading">
                 Bufet teď nic neprodává.
               </div>
             )}
@@ -964,9 +998,9 @@ export function ChampionsTemplate({
         {/* ═══ HYMNA A CHORÁLY ═══ */}
         {hasAudioModule && (
           <section id="audio" className={ANCHOR_OFFSET}>
-            <div className="backdrop-blur-xl bg-white/5 border border-cyan-500/20 rounded-3xl p-4 sm:p-8 shadow-xl">
+            <div className="backdrop-blur-xl bg-white/5 border border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] rounded-3xl p-4 sm:p-8 shadow-xl">
               <div className="mb-4">
-                <div className="text-sm font-heading font-bold uppercase tracking-wider text-cyan-400 mb-1">
+                <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
                   Klubové písně
                 </div>
                 <h2 className="font-heading font-black text-xl sm:text-2xl text-white uppercase">
@@ -983,7 +1017,7 @@ export function ChampionsTemplate({
         )}
       </main>
 
-      <footer className="relative max-w-6xl mx-auto px-4 sm:px-8 mt-16 pt-8 border-t border-white/10 text-sm text-cyan-100/60 font-heading flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-4 text-center sm:text-left">
+      <footer className="relative max-w-6xl mx-auto px-4 sm:px-8 mt-16 pt-8 border-t border-white/10 text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] font-heading flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-4 text-center sm:text-left">
         <div className="break-words">
           Oficiální web fotbalového klubu {team.name}
         </div>
@@ -993,8 +1027,8 @@ export function ChampionsTemplate({
         <LeagueTeamLinks
           standings={standings}
           className="w-full text-center space-y-2 pt-4 border-t border-white/10"
-          titleClassName="font-bold uppercase tracking-wide text-cyan-200/50"
-          linkClassName="hover:text-cyan-100 hover:underline"
+          titleClassName="font-bold uppercase tracking-wide text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)]"
+          linkClassName="hover:text-white hover:underline"
         />
       </footer>
     </div>

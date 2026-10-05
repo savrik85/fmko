@@ -908,11 +908,25 @@ teamsRouter.post("/", async (c) => {
 });
 
 // GET /api/teams/:id
+/** Finance klubu vidí jen jeho vlastník; cizí manažer by z nich vyčetl, kolik soupeř unese při přestupu. */
+const PRIVATE_TEAM_FIELDS = ["budget", "phone_credit", "phone_credit_date", "youth_paid_base", "youth_paid_weeks", "youth_investment"] as const;
+
 teamsRouter.get("/:id", async (c) => {
   const team = await c.env.DB.prepare(
     "SELECT t.*, v.name as village_name, v.population, v.size, v.district, v.region FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
-  ).bind(c.req.param("id")).first();
+  ).bind(c.req.param("id")).first<Record<string, unknown>>();
   if (!team) return c.json({ error: "Team not found" }, 404);
+
+  let isOwner = false;
+  const authHeader = c.req.header("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const { getSession } = await import("../auth/session");
+    const session = await getSession(c.env.SESSION_KV, authHeader.slice(7));
+    isOwner = !!session && String(session.userId) === String(team.user_id);
+  }
+  if (!isOwner) {
+    for (const field of PRIVATE_TEAM_FIELDS) delete team[field];
+  }
   // team.* už obsahuje badge_primary_color, badge_secondary_color, badge_initials, badge_symbol
 
   const stadium = await c.env.DB.prepare(

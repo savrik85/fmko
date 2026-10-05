@@ -7,8 +7,9 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { ClubWebsiteData } from "@okresni-masina/shared";
+import { bestTextOn, isNeutralExtreme, readableOnDark, readableOnLight } from "@/lib/team-color";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -18,16 +19,26 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
 const TZ = "Europe/Prague";
 
+/**
+ * D1 vrací časy ve dvou tvarech: ISO se „Z“ a SQLite `2026-10-05 16:13:07` bez pásma
+ * (datetime('now'), tedy UTC). Ten druhý by Safari nepřečetl a server s prohlížečem
+ * by ho vyložili různě, proto se převede na ISO v UTC.
+ */
+function parseDbDate(value: string): Date {
+  const sqlite = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/;
+  return new Date(sqlite.test(value) ? `${value.replace(" ", "T")}Z` : value);
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "termín upřesníme";
-  const d = new Date(iso);
+  const d = parseDbDate(iso);
   if (Number.isNaN(d.getTime())) return "termín upřesníme";
   return d.toLocaleDateString("cs-CZ", { timeZone: TZ, day: "numeric", month: "numeric", year: "numeric" });
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "termín upřesníme";
-  const d = new Date(iso);
+  const d = parseDbDate(iso);
   if (Number.isNaN(d.getTime())) return "termín upřesníme";
   const day = d.toLocaleDateString("cs-CZ", { timeZone: TZ, weekday: "long", day: "numeric", month: "numeric" });
   const time = d.toLocaleTimeString("cs-CZ", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
@@ -83,13 +94,49 @@ export function TeamLink({ id, name, className = "" }: { id?: string | null; nam
   );
 }
 
-/** Odkaz na profil hráče ve hře (nepřihlášeného návštěvníka hra pošle na přihlášení). */
+/** Adresa webu klubu, na kterém se návštěvník právě nachází (např. `/klub/fk-rohlik-brevnov`). */
+export const ClubBasePathContext = createContext<string | null>(null);
+
+/**
+ * Odkaz na veřejný profil hráče na webu klubu. Nikdy ne do hry: návštěvník ze sdíleného
+ * odkazu by skončil na přihlášení.
+ */
 export function PlayerLink({ id, children, className = "" }: { id: string; children: ReactNode; className?: string }) {
+  const base = useContext(ClubBasePathContext);
+  if (!base) return <span className={className}>{children}</span>;
   return (
-    <Link href={`/hrac/${id}`} className={`hover:underline ${className}`}>
+    <Link href={`${base}/hrac/${id}`} className={`hover:underline ${className}`}>
       {children}
     </Link>
   );
+}
+
+/** Jak hráč do klubu přišel / odešel, česky pro kariéru na profilu. */
+export function contractJoinLabel(type: string | null): string {
+  switch (type) {
+    case "transfer": return "přestup";
+    case "swap": return "výměna";
+    case "free_agent": return "volný hráč";
+    case "loan": return "hostování";
+    case "youth": return "z mládeže";
+    case "friend": return "na doporučení kamaráda";
+    case "recommendation": return "na doporučení";
+    case "pub": return "z hospody";
+    case "generated": return "zakládající hráč";
+    default: return "příchod";
+  }
+}
+
+export function contractLeaveLabel(type: string | null): string | null {
+  switch (type) {
+    case "transfer": return "přestup";
+    case "released": return "konec smlouvy";
+    case "quit": return "skončil s fotbalem v klubu";
+    case "loan_end":
+    case "loan_recalled":
+    case "loan_terminated": return "konec hostování";
+    default: return null;
+  }
 }
 
 // ── Odpočet do výkopu ────────────────────────────────────────────────────────
@@ -195,3 +242,38 @@ export const ANCHOR_OFFSET = "scroll-mt-24";
 
 /** Prázdná hodnota v tabulkách (bez dlouhé pomlčky). */
 export const EMPTY = "-";
+
+// ── Barvy klubu ──────────────────────────────────────────────────────────────
+
+/**
+ * Paleta webu z barev klubu jako CSS proměnné. Šablony ji používají přes
+ * `bg-[var(--club-bar)]`, `text-[var(--club-accent-light)]` apod., takže každý klub
+ * má web ve svých barvách a vzhled šablony zůstává.
+ *
+ * - `--club-primary` / `--club-secondary`: surové barvy (proužky, dresy, ozdoby)
+ * - `--club-bar` + `--club-on-bar`: plné pozadí lišt a hlaviček a čitelný text na něm.
+ *   Skoro bílá nebo skoro černá hlavní barva by lištu „odbarvila“, pak se vezme vedlejší.
+ * - `--club-accent-light`: akcent (text, rámečky, odkazy) na SVĚTLÉM pozadí, ztmavený na kontrast 4.5:1
+ * - `--club-accent-dark`: akcent na TMAVÉM pozadí, zesvětlený na kontrast 4.5:1
+ * - `--club-on-accent-dark`: text na tlačítku v barvě `--club-accent-dark`
+ */
+export function clubPaletteStyle(primary: string | null | undefined, secondary: string | null | undefined): CSSProperties {
+  const p = primary || "#2D5F2D";
+  const s = secondary || "#FFFFFF";
+  const bar = isNeutralExtreme(p) && !isNeutralExtreme(s) ? s : p;
+  // Akcent: hlavní barva, ledaže je skoro bílá/černá a vedlejší má víc barvy
+  const accent = isNeutralExtreme(p) && !isNeutralExtreme(s) ? s : p;
+  // Proti světlejšímu z tmavých povrchů (karty #121826, sklo v Champions), ne proti
+  // nejtmavšímu pozadí: tmavě modrý dres pak má kontrast 4.5:1 i na kartě.
+  const accentDark = readableOnDark(accent, "#1c2433");
+  return {
+    "--club-primary": p,
+    "--club-secondary": s,
+    "--club-bar": bar,
+    "--club-on-bar": bestTextOn(bar) === "light" ? "#FFFFFF" : "#111827",
+    "--club-accent-light": readableOnLight(accent),
+    "--club-accent-dark": accentDark,
+    "--club-on-accent-dark": bestTextOn(accentDark) === "light" ? "#FFFFFF" : "#111827",
+  } as CSSProperties;
+}
+

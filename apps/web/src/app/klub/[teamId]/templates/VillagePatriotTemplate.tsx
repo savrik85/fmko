@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import {
   ANCHOR_OFFSET,
@@ -20,6 +20,29 @@ import { ManagerFace } from "../ManagerFace";
 import { TacticalPitch } from "../TacticalPitch";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
+import { PressCenter, hasPressCenterContent } from "../PressCenter";
+import { ClubHallOfFame } from "../ClubHallOfFame";
+
+/**
+ * Web je v barvách klubu: proměnné `--club-*` nastavuje obal stránky (`clubPaletteStyle`).
+ * Dřevo, papír a tabule zůstávají jako materiál, klubovou barvu nesou stuhy, štítky,
+ * nadpisy a zvýraznění. Odvozené odstíny šablony:
+ * - `--club-ink`: `--club-accent-light` drží kontrast 4.5:1 jen proti čisté bílé, na béžovém
+ *   papíře proto drobný barevný text bere o čtvrtinu tmavší odstín.
+ * - `--club-tint`: průsvitné podbarvení, papír pod ním prosvítá.
+ * - `--club-frame`: rámeček karty, klubová barva namíchaná do béžové.
+ * - `--club-chalk`: „křída“ na dřevě a výčepní tabuli. `--club-accent-dark` je počítaný proti
+ *   #0b0f17 a na hnědém dřevě by u tmavých klubů spadl pod 4.5:1, proto je ještě zesvětlený.
+ * Odstíny jsou proměnné, ne třídy `bg-[color-mix(...)]`: Tailwind pro prohlížeče bez color-mix
+ * podstrčí plnou barvu akcentu a tmavý text by na ní zmizel. Neplatná proměnná místo toho
+ * nechá pozadí průhledné.
+ */
+const CLUB_TONES = {
+  "--club-ink": "color-mix(in srgb, var(--club-accent-light) 75%, black)",
+  "--club-tint": "color-mix(in srgb, var(--club-accent-light) 12%, transparent)",
+  "--club-frame": "color-mix(in srgb, var(--club-accent-light) 50%, #cbb092)",
+  "--club-chalk": "color-mix(in srgb, var(--club-accent-dark) 65%, white)",
+} as CSSProperties;
 
 export function VillagePatriotTemplate({
   data,
@@ -37,7 +60,7 @@ export function VillagePatriotTemplate({
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
 
-  const primary = team.primaryColor || "#3e2211";
+  const primary = team.primaryColor || "#2D5F2D";
   const badgePattern = (team.badge.pattern as BadgePattern) || "shield";
   const badgeIni = team.badge.customInitials || team.name.slice(0, 3).toUpperCase();
   const leagueName = team.league?.name ?? "Okresní soutěž";
@@ -93,9 +116,9 @@ export function VillagePatriotTemplate({
     isHome ? <TeamLink id={opponent.id} name={opponent.name} /> : team.name;
 
   return (
-    <div className="min-h-screen bg-[#f3ebe1] text-[#2c1b0e] font-sans pb-16">
+    <div className="min-h-screen bg-[#f3ebe1] text-[#2c1b0e] font-sans pb-16" style={CLUB_TONES}>
       {/* Wooden Signboard Header */}
-      <header className="bg-[#3b2010] text-[#ffebd4] border-b-8 border-[#221006] shadow-2xl relative">
+      <header className="bg-[#3b2010] text-[#ffebd4] border-b-8 border-[var(--club-primary)] shadow-2xl relative">
         <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-5 text-center sm:text-left min-w-0">
             {/* Wooden framed badge */}
@@ -115,7 +138,7 @@ export function VillagePatriotTemplate({
             </div>
 
             <div className="min-w-0">
-              <div className="text-sm uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5 justify-center sm:justify-start">
+              <div className="text-sm uppercase tracking-wider text-[var(--club-chalk)] font-bold flex items-center gap-1.5 justify-center sm:justify-start">
                 <span>🍺</span>
                 <span>Vesnický patriot · Krajská fotbalová tradice</span>
               </div>
@@ -132,7 +155,7 @@ export function VillagePatriotTemplate({
             <button
               type="button"
               onClick={onOpenTickets}
-              className="px-4 py-2 bg-[#b85d19] hover:bg-[#a04e12] text-white border-2 border-[#ffbe85] rounded-xl font-serif font-bold text-sm shadow-lg active:scale-95 transition"
+              className="px-4 py-2 bg-[var(--club-bar)] text-[var(--club-on-bar)] hover:brightness-95 border-2 border-[var(--club-secondary)] rounded-xl font-serif font-bold text-sm shadow-lg active:scale-95 transition"
             >
               🎟️ Vstupenky
             </button>
@@ -144,22 +167,24 @@ export function VillagePatriotTemplate({
 
         {/* Rustic Quick Nav Links */}
         <div className="bg-[#2a160b] border-t border-[#4a2b16] px-4 sm:px-8 py-2 text-sm text-[#eed8c5] font-serif font-bold flex items-center gap-5 overflow-x-auto">
-          <a href="#plakat" className="hover:text-amber-400 shrink-0">📌 Zápasový plakát</a>
-          <a href="#tabulka" className="hover:text-amber-400 shrink-0">📊 Tabulka soutěže</a>
-          {announcement && <a href="#nastenka" className="hover:text-amber-400 shrink-0">📋 Vývěska vedení</a>}
-          <a href="#kadr" className="hover:text-amber-400 shrink-0">🪪 Hráčské registračky</a>
-          <a href="#prestupy" className="hover:text-amber-400 shrink-0">📜 Změny v kádru ({transfers.length})</a>
-          <a href="#identita" className="hover:text-amber-400 shrink-0">👕 Dresy & Maskot</a>
-          <a href="#bufet" className="hover:text-amber-400 shrink-0">🍻 Výčepní tabule</a>
-          <a href="#stadion" className="hover:text-amber-400 shrink-0">🏟️ Areál & Udírna</a>
-          {hasAudioModule && <a href="#audio" className="text-amber-400 hover:underline shrink-0">📻 Gramofon & Hymna</a>}
+          <a href="#plakat" className="hover:text-[var(--club-chalk)] shrink-0">📌 Zápasový plakát</a>
+          <a href="#tabulka" className="hover:text-[var(--club-chalk)] shrink-0">📊 Tabulka soutěže</a>
+          {announcement && <a href="#nastenka" className="hover:text-[var(--club-chalk)] shrink-0">📋 Vývěska vedení</a>}
+          <a href="#kadr" className="hover:text-[var(--club-chalk)] shrink-0">🪪 Hráčské registračky</a>
+          <a href="#prestupy" className="hover:text-[var(--club-chalk)] shrink-0">📜 Změny v kádru ({transfers.length})</a>
+          <a href="#identita" className="hover:text-[var(--club-chalk)] shrink-0">👕 Dresy & Maskot</a>
+          <a href="#bufet" className="hover:text-[var(--club-chalk)] shrink-0">🍻 Výčepní tabule</a>
+          {hasPressCenterContent(data) && <a href="#tisk" className="hover:text-[var(--club-chalk)] shrink-0">🎙️ Slovo trenéra</a>}
+          {data.history && <a href="#historie" className="hover:text-[var(--club-chalk)] shrink-0">🏆 Síň slávy</a>}
+          <a href="#stadion" className="hover:text-[var(--club-chalk)] shrink-0">🏟️ Areál & Udírna</a>
+          {hasAudioModule && <a href="#audio" className="text-[var(--club-chalk)] hover:underline shrink-0">📻 Gramofon & Hymna</a>}
         </div>
       </header>
 
       {/* Sponsor Banner Addon */}
       {hasSponsorBanner && partners.all.length > 0 && (
         <div className="bg-[#e4d3bf] border-b-2 border-[#b89a7a] py-2 px-4 text-center text-sm font-serif text-[#3e2211] break-words">
-          <span className="font-bold text-[#8c3d0b]">⭐ PARTNEŘI NAŠÍ OBECNÍ KOPANÉ: </span>
+          <span className="font-bold text-[var(--club-ink)]">⭐ PARTNEŘI NAŠÍ OBECNÍ KOPANÉ: </span>
           {sponsorLines.map((s, i) => (
             <span key={s.label}>
               {i > 0 && " · "}
@@ -173,20 +198,20 @@ export function VillagePatriotTemplate({
       <main className="max-w-5xl mx-auto px-4 sm:px-8 mt-8 space-y-10">
         {/* ═══ SECTION 1: AUTHENTIC VILLAGE MATCHDAY POSTER (A4 Plakát na sloupu) ═══ */}
         <section id="plakat" className={ANCHOR_OFFSET}>
-          <div className="bg-[#fefcf8] border-4 border-[#2b170c] rounded-2xl p-6 sm:p-10 shadow-xl relative overflow-hidden">
+          <div className="bg-[#fefcf8] border-4 border-[var(--club-accent-light)] rounded-2xl p-6 sm:p-10 shadow-xl relative overflow-hidden">
             {/* Thumbtacks in corners */}
             <span className="absolute top-3 left-4 text-2xl drop-shadow">📌</span>
             <span className="absolute top-3 right-4 text-2xl drop-shadow">📌</span>
 
             <div className="text-center border-b-2 border-dashed border-[#b89a7a] pb-6">
-              <div className="inline-block px-3 py-1 bg-[#8c3d0b] text-white font-serif font-black text-sm uppercase tracking-wider rounded-md mb-2 shadow">
+              <div className="inline-block px-3 py-1 bg-[var(--club-bar)] text-[var(--club-on-bar)] border border-[var(--club-accent-light)] font-serif font-black text-sm uppercase tracking-wider rounded-md mb-2 shadow">
                 Pozvánka na fotbalové utkání
               </div>
-              <h2 className="text-2xl sm:text-5xl font-serif font-black tracking-tight text-[#2b170c] uppercase">
+              <h2 className="text-2xl sm:text-5xl font-serif font-black tracking-tight text-[var(--club-accent-light)] uppercase">
                 {nextMatch ? "Hraje se mistrák!" : "Mistrák se chystá"}
               </h2>
               {nextMatch && (
-                <div className="text-base sm:text-lg font-serif font-bold text-[#8c3d0b] mt-1">
+                <div className="text-base sm:text-lg font-serif font-bold text-[var(--club-ink)] mt-1">
                   Výkop: {formatDateTime(nextMatch.scheduledAt)}
                 </div>
               )}
@@ -200,7 +225,7 @@ export function VillagePatriotTemplate({
               <div className="py-8 grid grid-cols-1 sm:grid-cols-3 items-center gap-6 text-center">
                 {/* Home team */}
                 <div className="flex flex-col items-center min-w-0">
-                  <div className="w-20 h-20 bg-white border-2 border-[#3b2010] rounded-2xl p-2 shadow-md flex items-center justify-center mb-2">
+                  <div className="w-20 h-20 bg-white border-2 border-[var(--club-accent-light)] rounded-2xl p-2 shadow-md flex items-center justify-center mb-2">
                     <BadgePreview
                       primary={nextMatch.isHome ? team.badge.primary : nextMatch.opponent.primaryColor || "#333"}
                       secondary={nextMatch.isHome ? team.badge.secondary : "#fff"}
@@ -212,14 +237,14 @@ export function VillagePatriotTemplate({
                   <div className="font-serif font-black text-xl text-[#2b170c] break-words max-w-full">
                     {homeSide(nextMatch.isHome, nextMatch.opponent)}
                   </div>
-                  <div className="text-sm text-[#8c3d0b] font-bold mt-0.5">
+                  <div className="text-sm text-[var(--club-ink)] font-bold mt-0.5">
                     DOMÁCÍ TÝM
                   </div>
                 </div>
 
                 {/* VS and Date */}
                 <div className="flex flex-col items-center">
-                  <span className="text-3xl font-serif font-black text-[#8c3d0b]">VS</span>
+                  <span className="text-3xl font-serif font-black text-[var(--club-accent-light)]">VS</span>
                   <div className="mt-2 text-sm font-serif font-bold text-[#2b170c]">
                     {nextMatch.round ? `${nextMatch.round}. kolo soutěže` : "Mistrovské utkání"}
                   </div>
@@ -229,7 +254,7 @@ export function VillagePatriotTemplate({
                   <button
                     type="button"
                     onClick={onOpenTickets}
-                    className="mt-4 px-5 py-2 bg-[#8c3d0b] hover:bg-[#6e2e07] text-white font-serif font-bold text-sm uppercase rounded-xl shadow-md transition"
+                    className="mt-4 px-5 py-2 bg-[var(--club-bar)] text-[var(--club-on-bar)] hover:brightness-95 border border-[var(--club-accent-light)] font-serif font-bold text-sm uppercase rounded-xl shadow-md transition"
                   >
                     Vstupenky
                   </button>
@@ -237,7 +262,7 @@ export function VillagePatriotTemplate({
 
                 {/* Away team */}
                 <div className="flex flex-col items-center min-w-0">
-                  <div className="w-20 h-20 bg-white border-2 border-[#3b2010] rounded-2xl p-2 shadow-md flex items-center justify-center mb-2">
+                  <div className="w-20 h-20 bg-white border-2 border-[var(--club-accent-light)] rounded-2xl p-2 shadow-md flex items-center justify-center mb-2">
                     <BadgePreview
                       primary={!nextMatch.isHome ? team.badge.primary : nextMatch.opponent.primaryColor || "#333"}
                       secondary={!nextMatch.isHome ? team.badge.secondary : "#fff"}
@@ -249,7 +274,7 @@ export function VillagePatriotTemplate({
                   <div className="font-serif font-black text-xl text-[#2b170c] break-words max-w-full">
                     {awaySide(nextMatch.isHome, nextMatch.opponent)}
                   </div>
-                  <div className="text-sm text-[#8c3d0b] font-bold mt-0.5">
+                  <div className="text-sm text-[var(--club-ink)] font-bold mt-0.5">
                     HOSTÉ
                   </div>
                 </div>
@@ -279,7 +304,7 @@ export function VillagePatriotTemplate({
                 <button
                   type="button"
                   onClick={() => onOpenHighlights(lastMatch)}
-                  className="text-[#8c3d0b] underline hover:text-[#522204] font-bold shrink-0"
+                  className="text-[var(--club-ink)] underline hover:no-underline font-bold shrink-0"
                 >
                   Sestřih a zápis z utkání →
                 </button>
@@ -289,7 +314,7 @@ export function VillagePatriotTemplate({
             {/* Recent matches list if available */}
             {recentMatches.length > 0 && (
               <div className="mt-4 pt-3 border-t border-[#d4b07b]">
-                <div className="text-sm uppercase tracking-wider font-bold text-[#8c3d0b] mb-2 font-serif">
+                <div className="text-sm uppercase tracking-wider font-bold text-[var(--club-ink)] mb-2 font-serif">
                   Poslední odehraná kola
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm font-serif">
@@ -308,7 +333,7 @@ export function VillagePatriotTemplate({
                         <button
                           type="button"
                           onClick={() => onOpenHighlights(m)}
-                          className="text-[#8c3d0b] hover:underline font-bold text-sm"
+                          className="text-[var(--club-ink)] hover:underline font-bold text-sm"
                         >
                           Zápis
                         </button>
@@ -322,7 +347,7 @@ export function VillagePatriotTemplate({
             {/* Upcoming fixtures schedule if available */}
             {upcomingMatches.length > 0 && (
               <div className="mt-4 pt-3 border-t border-[#d4b07b]">
-                <div className="text-sm uppercase tracking-wider font-bold text-[#8c3d0b] mb-2 font-serif">
+                <div className="text-sm uppercase tracking-wider font-bold text-[var(--club-ink)] mb-2 font-serif">
                   Rozpis příštích kol
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm font-serif">
@@ -350,14 +375,14 @@ export function VillagePatriotTemplate({
 
         {/* ═══ SECTION: TABULKA SOUTĚŽE (WOODEN BULLETIN BOARD TABLE) ═══ */}
         <section id="tabulka" className={ANCHOR_OFFSET}>
-          <div className="bg-[#fffdfa] border-2 border-[#cbb092] rounded-3xl p-6 sm:p-8 shadow-md relative font-serif">
+          <div className="bg-[#fffdfa] border-2 border-[var(--club-frame)] rounded-3xl p-6 sm:p-8 shadow-md relative font-serif">
             <span className="absolute -top-3 left-8 text-2xl">📌</span>
             <div className="border-b-2 border-dashed border-[#d8be9f] pb-3 mb-4 flex items-center justify-between flex-wrap gap-2">
               <div className="min-w-0">
-                <div className="text-sm uppercase tracking-widest text-[#8c3d0b] font-bold">
+                <div className="text-sm uppercase tracking-widest text-[var(--club-ink)] font-bold">
                   Průběžná tabulka
                 </div>
-                <h3 className="text-xl sm:text-2xl font-black text-[#2b170c] break-words">
+                <h3 className="text-xl sm:text-2xl font-black text-[var(--club-accent-light)] break-words">
                   📊 {leagueName}
                 </h3>
               </div>
@@ -385,14 +410,14 @@ export function VillagePatriotTemplate({
                         key={row.teamId}
                         className={`border-b border-[#e8dccd] ${
                           row.isCurrentTeam
-                            ? "bg-[#faedd9] font-black text-[#8c3d0b] border-[#cbb092]"
+                            ? "bg-[var(--club-tint)] font-black text-[var(--club-ink)] border-[var(--club-accent-light)]"
                             : "hover:bg-[#f7f2eb]"
                         }`}
                       >
                         <td className="py-2 px-2 text-center font-bold">{row.pos}.</td>
                         <td className="py-2 px-3 min-w-[9rem]">
                           <TeamLink id={row.teamId} name={row.teamName} />{" "}
-                          {row.isCurrentTeam && <span className="text-sm text-[#8c3d0b] font-bold ml-1 whitespace-nowrap">📍 NÁŠ ODDÍL</span>}
+                          {row.isCurrentTeam && <span className="text-sm text-[var(--club-ink)] font-bold ml-1 whitespace-nowrap">📍 NÁŠ ODDÍL</span>}
                         </td>
                         <td className="py-2 px-2 text-center">{row.played}</td>
                         <td className="py-2 px-2 text-center text-emerald-800 font-bold">{row.won}</td>
@@ -416,15 +441,15 @@ export function VillagePatriotTemplate({
         {/* ═══ SECTION 2: VÝVĚSKA VEDENÍ (NOTICE BOARD ANNOUNCEMENT): jen skutečné prohlášení ═══ */}
         {announcement && (
           <section id="nastenka" className={ANCHOR_OFFSET}>
-            <div className="bg-[#fff9e6] border-2 border-[#d4b07b] rounded-2xl p-6 shadow-md relative">
+            <div className="bg-[#fff9e6] border-2 border-[var(--club-frame)] rounded-2xl p-6 shadow-md relative">
               <span className="absolute -top-3 left-6 text-2xl">📌</span>
-              <div className="text-sm font-serif font-bold uppercase tracking-wider text-[#8c3d0b] mb-1">
+              <div className="text-sm font-serif font-bold uppercase tracking-wider text-[var(--club-ink)] mb-1">
                 Zápis z vývěsky výboru oddílu {hasPressOfficer && "· Tiskový mluvčí"}
               </div>
               <p className="font-serif text-base italic leading-relaxed text-[#2c1b0e] break-words">
                 „{announcement}“
               </p>
-              <div className="text-right text-sm font-serif text-[#8c3d0b] font-bold mt-3">
+              <div className="text-right text-sm font-serif text-[var(--club-ink)] font-bold mt-3">
                 Výbor oddílu {team.name}
               </div>
             </div>
@@ -435,10 +460,10 @@ export function VillagePatriotTemplate({
         <section id="kadr" className={ANCHOR_OFFSET}>
           <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-6">
             <div>
-              <div className="text-sm font-serif font-bold uppercase tracking-widest text-[#8c3d0b] mb-1">
+              <div className="text-sm font-serif font-bold uppercase tracking-widest text-[var(--club-ink)] mb-1">
                 Registrační průkazy
               </div>
-              <h2 className="text-2xl sm:text-4xl font-serif font-black text-[#2b170c]">
+              <h2 className="text-2xl sm:text-4xl font-serif font-black text-[var(--club-accent-light)]">
                 Hráčské registračky FAČR
               </h2>
               <div className="text-sm text-[#704222] mt-0.5 font-serif">
@@ -454,7 +479,7 @@ export function VillagePatriotTemplate({
                   onClick={() => setActiveRosterTab("aTeam")}
                   className={`px-3 py-1.5 rounded-lg transition ${
                     activeRosterTab === "aTeam"
-                      ? "bg-[#3b2010] text-[#ffebd4] shadow"
+                      ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] shadow"
                       : "text-[#3b2010] hover:bg-[#cfbfab]"
                   }`}
                 >
@@ -465,7 +490,7 @@ export function VillagePatriotTemplate({
                   onClick={() => setActiveRosterTab("u21Team")}
                   className={`px-3 py-1.5 rounded-lg transition ${
                     activeRosterTab === "u21Team"
-                      ? "bg-[#3b2010] text-[#ffebd4] shadow"
+                      ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] shadow"
                       : "text-[#3b2010] hover:bg-[#cfbfab]"
                   }`}
                 >
@@ -478,14 +503,14 @@ export function VillagePatriotTemplate({
                 <button
                   type="button"
                   onClick={() => setViewMode("cards")}
-                  className={`px-3 py-1 rounded-lg ${viewMode === "cards" ? "bg-[#3b2010] text-[#ffebd4]" : "text-[#3b2010]"}`}
+                  className={`px-3 py-1 rounded-lg ${viewMode === "cards" ? "bg-[var(--club-bar)] text-[var(--club-on-bar)]" : "text-[#3b2010]"}`}
                 >
                   🪪 Průkazky
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("pitch")}
-                  className={`px-3 py-1 rounded-lg ${viewMode === "pitch" ? "bg-[#3b2010] text-[#ffebd4]" : "text-[#3b2010]"}`}
+                  className={`px-3 py-1 rounded-lg ${viewMode === "pitch" ? "bg-[var(--club-bar)] text-[var(--club-on-bar)]" : "text-[#3b2010]"}`}
                 >
                   ⚽ Na hřišti
                 </button>
@@ -504,7 +529,7 @@ export function VillagePatriotTemplate({
                   onClick={() => setPositionFilter(pos)}
                   className={`px-3 py-1.5 rounded-lg border transition ${
                     positionFilter === pos
-                      ? "bg-[#8c3d0b] text-white border-[#5e2704] shadow-sm"
+                      ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] border-[var(--club-accent-light)] shadow-sm"
                       : "bg-[#fbf7f0] text-[#3e2211] border-[#cbb399] hover:bg-[#ede1d1]"
                   }`}
                 >
@@ -515,7 +540,7 @@ export function VillagePatriotTemplate({
           </div>
 
           {viewMode === "pitch" ? (
-            <div className="bg-[#fbf7f0] border-2 border-[#b89a7a] rounded-2xl p-6 shadow-md">
+            <div className="bg-[#fbf7f0] border-2 border-[var(--club-frame)] rounded-2xl p-6 shadow-md">
               <TacticalPitch
                 players={currentRoster}
                 primaryColor={primary}
@@ -528,7 +553,7 @@ export function VillagePatriotTemplate({
               {filteredRoster.map((player) => (
                 <div
                   key={player.id}
-                  className="bg-[#fffdfa] border-2 border-[#8c5d38] rounded-xl p-4 shadow-md relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-transform"
+                  className="bg-[#fffdfa] border-2 border-[var(--club-accent-light)] rounded-xl p-4 shadow-md relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-transform"
                 >
                   {/* Fake Red Stamp Watermark */}
                   <div className="absolute right-2 bottom-8 text-[#d13a3a]/15 font-black text-xl uppercase font-serif rotate-[-18deg] pointer-events-none border-2 border-[#d13a3a]/15 p-1 rounded">
@@ -537,7 +562,7 @@ export function VillagePatriotTemplate({
 
                   <div>
                     {/* Header of Registration card */}
-                    <div className="flex items-center justify-between gap-2 border-b border-[#dfcfbd] pb-2 mb-3 text-sm font-serif font-bold text-[#8c3d0b] uppercase">
+                    <div className="flex items-center justify-between gap-2 border-b border-[#dfcfbd] pb-2 mb-3 text-sm font-serif font-bold text-[var(--club-ink)] uppercase">
                       <span className="min-w-0">Českomoravský fotbalový svaz</span>
                       <span className="shrink-0"># {player.squadNumber ?? EMPTY}</span>
                     </div>
@@ -550,7 +575,7 @@ export function VillagePatriotTemplate({
                       </div>
 
                       <div className="min-w-0 flex-1 font-serif">
-                        <div className="text-sm uppercase font-bold text-[#8c3d0b]">
+                        <div className="text-sm uppercase font-bold text-[var(--club-ink)]">
                           {player.positionName || player.position}
                         </div>
                         <PlayerLink id={player.id} className="block">
@@ -576,7 +601,7 @@ export function VillagePatriotTemplate({
                     </div>
                     <div className="bg-[#f5ede1] p-1 rounded border border-[#dfcfbd]">
                       <div className="text-sm text-[#704222] font-bold">GÓLY</div>
-                      <div className="font-black text-[#8c3d0b]">{player.stats.goals}</div>
+                      <div className="font-black text-[var(--club-ink)]">{player.stats.goals}</div>
                     </div>
                     <div className="bg-[#f5ede1] p-1 rounded border border-[#dfcfbd]">
                       <div className="text-sm text-[#704222] font-bold">MINUTY</div>
@@ -591,13 +616,13 @@ export function VillagePatriotTemplate({
 
         {/* ═══ SECTION: ZMĚNY V KÁDRU A PŘESTUPY (VILLAGE NOTICE) ═══ */}
         <section id="prestupy" className={ANCHOR_OFFSET}>
-          <div className="bg-[#fffdfa] border-2 border-[#b89a7a] rounded-3xl p-6 sm:p-8 shadow-md font-serif">
+          <div className="bg-[#fffdfa] border-2 border-[var(--club-frame)] rounded-3xl p-6 sm:p-8 shadow-md font-serif">
             <div className="border-b-2 border-dashed border-[#d8be9f] pb-3 mb-6 flex items-center justify-between flex-wrap gap-3">
               <div>
-                <div className="text-sm uppercase tracking-widest text-[#8c3d0b] font-bold">
+                <div className="text-sm uppercase tracking-widest text-[var(--club-ink)] font-bold">
                   Přestupový lístek FAČR
                 </div>
-                <h3 className="text-xl sm:text-3xl font-black text-[#2b170c]">
+                <h3 className="text-xl sm:text-3xl font-black text-[var(--club-accent-light)]">
                   📜 Pohyby v kádru & Přestupy
                 </h3>
               </div>
@@ -611,7 +636,7 @@ export function VillagePatriotTemplate({
                     onClick={() => setTransferFilter(tab)}
                     className={`px-3 py-1 rounded-lg border font-bold transition ${
                       transferFilter === tab
-                        ? "bg-[#8c3d0b] text-white border-[#5e2704] shadow-sm"
+                        ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] border-[var(--club-accent-light)] shadow-sm"
                         : "bg-[#f5ede1] text-[#3e2211] border-[#dfcfbd] hover:bg-[#ebd9c3]"
                     }`}
                   >
@@ -665,7 +690,7 @@ export function VillagePatriotTemplate({
                       </p>
 
                       {t.quote && (
-                        <div className="p-3 bg-[#fff8e7] border-l-4 border-[#8c3d0b] rounded-r-xl text-sm italic text-[#3e2211] break-words">
+                        <div className="p-3 bg-[var(--club-tint)] border-l-4 border-[var(--club-accent-light)] rounded-r-xl text-sm italic text-[#3e2211] break-words">
                           <strong>Slovo hráče:</strong> „{t.quote}“
                         </div>
                       )}
@@ -683,12 +708,12 @@ export function VillagePatriotTemplate({
 
         {/* ═══ SECTION: KLUBOVÁ IDENTITA, DRESY A MASKOT ═══ */}
         <section id="identita" className={`font-serif ${ANCHOR_OFFSET}`}>
-          <div className="bg-[#fffdfa] border-2 border-[#b89a7a] rounded-3xl p-6 sm:p-8 shadow-md space-y-6">
+          <div className="bg-[#fffdfa] border-2 border-[var(--club-frame)] rounded-3xl p-6 sm:p-8 shadow-md space-y-6">
             <div className="border-b-2 border-dashed border-[#d8be9f] pb-3">
-              <div className="text-sm uppercase tracking-widest text-[#8c3d0b] font-bold">
+              <div className="text-sm uppercase tracking-widest text-[var(--club-ink)] font-bold">
                 Klubové barvy a symboly
               </div>
-              <h3 className="text-xl sm:text-3xl font-black text-[#2b170c]">
+              <h3 className="text-xl sm:text-3xl font-black text-[var(--club-accent-light)]">
                 👕 Zápasová výstroj & Tradice oddílu
               </h3>
             </div>
@@ -696,7 +721,7 @@ export function VillagePatriotTemplate({
             {/* Dresy Domácí / Venkovní */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="bg-[#fbf7f0] border border-[#d8be9f] rounded-2xl p-5 flex flex-col items-center text-center">
-                <span className="text-sm uppercase tracking-wider font-bold text-[#8c3d0b] mb-3">
+                <span className="text-sm uppercase tracking-wider font-bold text-[var(--club-ink)] mb-3">
                   Domácí zápasová sada
                 </span>
                 <div className="flex items-center justify-center gap-4 py-2">
@@ -723,7 +748,7 @@ export function VillagePatriotTemplate({
               </div>
 
               <div className="bg-[#fbf7f0] border border-[#d8be9f] rounded-2xl p-5 flex flex-col items-center text-center">
-                <span className="text-sm uppercase tracking-wider font-bold text-[#8c3d0b] mb-3">
+                <span className="text-sm uppercase tracking-wider font-bold text-[var(--club-ink)] mb-3">
                   Venkovní záložní sada
                 </span>
                 <div className="flex items-center justify-center gap-4 py-2">
@@ -753,7 +778,7 @@ export function VillagePatriotTemplate({
             {/* Šála & Maskot */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 border-t border-[#d8be9f]">
               <div className="bg-[#fbf7f0] border border-[#d8be9f] rounded-2xl p-5">
-                <h4 className="text-sm uppercase tracking-wider font-bold text-[#8c3d0b] mb-3">
+                <h4 className="text-sm uppercase tracking-wider font-bold text-[var(--club-ink)] mb-3">
                   🧣 Pletená fanklubová šála
                 </h4>
                 <ClubScarf
@@ -768,7 +793,7 @@ export function VillagePatriotTemplate({
               </div>
 
               <div className="bg-[#fbf7f0] border border-[#d8be9f] rounded-2xl p-5">
-                <h4 className="text-sm uppercase tracking-wider font-bold text-[#8c3d0b] mb-3">
+                <h4 className="text-sm uppercase tracking-wider font-bold text-[var(--club-ink)] mb-3">
                   🦁 Patron & Maskot oddílu
                 </h4>
                 {team.mascot?.name ? (
@@ -780,7 +805,7 @@ export function VillagePatriotTemplate({
                         className="w-16 h-16 rounded-xl border border-[#b89a7a] object-cover shrink-0"
                       />
                     ) : (
-                      <div className="w-16 h-16 bg-amber-100 border border-amber-300 rounded-xl flex items-center justify-center text-3xl shrink-0">
+                      <div className="w-16 h-16 bg-[var(--club-tint)] border border-[var(--club-accent-light)] rounded-xl flex items-center justify-center text-3xl shrink-0">
                         🦁
                       </div>
                     )}
@@ -807,7 +832,7 @@ export function VillagePatriotTemplate({
         <section id="bufet" className={ANCHOR_OFFSET}>
           <div className="bg-[#242b24] text-[#f2efe9] border-8 border-[#52331c] rounded-3xl p-6 sm:p-10 shadow-2xl relative">
             <div className="text-center border-b-2 border-dashed border-[#445944] pb-4 mb-6">
-              <div className="text-sm uppercase tracking-widest text-[#ffd97d] font-serif font-bold">
+              <div className="text-sm uppercase tracking-widest text-[var(--club-chalk)] font-serif font-bold">
                 Místní hospoda & kiosek
               </div>
               <h2 className="text-2xl sm:text-4xl font-serif font-black text-[#ffffff]">
@@ -827,7 +852,7 @@ export function VillagePatriotTemplate({
                       <div className="text-lg font-bold text-white break-words">{item.name}</div>
                       <div className="text-sm text-[#a3b8a3]">{item.desc}</div>
                     </div>
-                    <div className="text-2xl sm:text-3xl font-black text-[#ffd97d] shrink-0">
+                    <div className="text-2xl sm:text-3xl font-black text-[var(--club-chalk)] shrink-0">
                       {item.price} Kč
                     </div>
                   </div>
@@ -837,17 +862,51 @@ export function VillagePatriotTemplate({
           </div>
         </section>
 
+        {/* ═══ TISKOVÉ STŘEDISKO ═══ */}
+        {hasPressCenterContent(data) && (
+        <section id="tisk" className={ANCHOR_OFFSET}>
+          <div className="mb-4">
+            <div className="text-sm font-serif font-bold uppercase tracking-widest text-[var(--club-ink)]">
+              Z kabiny a ze zpravodaje
+            </div>
+            <h2 className="text-2xl sm:text-4xl font-serif font-black text-[var(--club-accent-light)] break-words">
+              Slovo trenéra a zprávy klubu
+            </h2>
+          </div>
+          <div className="bg-[#fdf6e3] border-2 border-[var(--club-frame)] rounded-xl p-3 sm:p-5 shadow">
+            <PressCenter data={data} tone="light" />
+          </div>
+        </section>
+        )}
+
+        {/* ═══ SÍŇ SLÁVY ═══ */}
+        {data.history && (
+        <section id="historie" className={ANCHOR_OFFSET}>
+          <div className="mb-4">
+            <div className="text-sm font-serif font-bold uppercase tracking-widest text-[var(--club-ink)]">
+              Kronika oddílu
+            </div>
+            <h2 className="text-2xl sm:text-4xl font-serif font-black text-[var(--club-accent-light)] break-words">
+              Síň slávy
+            </h2>
+          </div>
+          <div className="bg-[#fdf6e3] border-2 border-[var(--club-frame)] rounded-xl p-3 sm:p-5 shadow">
+            <ClubHallOfFame history={data.history} tone="light" />
+          </div>
+        </section>
+        )}
+
         {/* ═══ STADION: FOTKY Z 3D MODELU AREÁLU ═══ */}
         <section id="stadion" className={ANCHOR_OFFSET}>
           <div className="mb-4">
-            <div className="text-sm font-serif font-bold uppercase tracking-widest text-[#8c3d0b]">
+            <div className="text-sm font-serif font-bold uppercase tracking-widest text-[var(--club-ink)]">
               Náš domovský areál
             </div>
-            <h2 className="text-2xl sm:text-4xl font-serif font-black text-[#2b170c] break-words">
+            <h2 className="text-2xl sm:text-4xl font-serif font-black text-[var(--club-accent-light)] break-words">
               {team.stadium.name || "Naše hřiště"}
             </h2>
           </div>
-          <div className="bg-[#fdf6e3] border-2 border-[#8c3d0b]/30 rounded-xl p-3 sm:p-5 shadow">
+          <div className="bg-[#fdf6e3] border-2 border-[var(--club-frame)] rounded-xl p-3 sm:p-5 shadow">
             <StadiumPhotoCard data={data} isOwner={isOwner} tone="light" onOpenLightbox={onOpenLightbox} />
           </div>
         </section>
@@ -855,12 +914,12 @@ export function VillagePatriotTemplate({
         {/* ═══ SECTION 6: KLUBOVÝ TRANZISTORÁK (AUDIO ADDON) ═══ */}
         {hasAudioModule && (
           <section id="audio" className={ANCHOR_OFFSET}>
-            <div className="bg-[#ebd9c3] border-4 border-[#8c5d38] rounded-2xl p-6 shadow-md">
-              <div className="text-sm font-serif font-bold uppercase tracking-widest text-[#8c3d0b] mb-1 flex items-center gap-1.5">
+            <div className="bg-[#ebd9c3] border-4 border-[var(--club-accent-light)] rounded-2xl p-6 shadow-md">
+              <div className="text-sm font-serif font-bold uppercase tracking-widest text-[var(--club-ink)] mb-1 flex items-center gap-1.5">
                 <span>📻</span>
                 <span>Klubový gramofon a rádio v kabině</span>
               </div>
-              <h2 className="text-xl sm:text-3xl font-serif font-black text-[#2b170c] mb-4 break-words">
+              <h2 className="text-xl sm:text-3xl font-serif font-black text-[var(--club-ink)] mb-4 break-words">
                 Hymna a chorály oddílu {team.name}
               </h2>
               <ClubAudioPlayer

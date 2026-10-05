@@ -145,6 +145,19 @@ export function mapVillageSize(dbSize: string): string {
   }
 }
 
+/**
+ * O kolik víc platí partneři z bannerů a stadionu, když je klub ukazuje na sponzorské
+ * liště klubového webu. Z prod dat (2026-10): bannery+stadion průměrně ~27 800 Kč/měs
+ * na lidský klub, tedy ~650 Kč/týden bonusu a lišta za 16 000 Kč se vrátí zhruba za 25 týdnů.
+ */
+export const WEBSITE_BANNER_BONUS = 0.05;
+
+/** Týdenní bonus za lištu: stejný přepočet jako běžné sponzorské příjmy (měsíc / 4,3 × 2 × ekonom). */
+export function websiteBannerWeeklyBonus(bannerMonthlyTotal: number, sponsorBonusMul: number): number {
+  if (bannerMonthlyTotal <= 0) return 0;
+  return Math.round((bannerMonthlyTotal / 4.3) * 2 * sponsorBonusMul * WEBSITE_BANNER_BONUS);
+}
+
 /** Úrovně zázemí ze sloupců stadionu, ze kterých se počítají efekty v zápase (calculateFacilityEffects). */
 export function stadiumFacilityLevels(stadiumRow: Record<string, unknown> | null): Record<string, number> {
   const facilities: Record<string, number> = {};
@@ -333,6 +346,21 @@ export async function processWeeklyFinances(
     const weeklyIncome = Math.round((sponsorResult.total / 4.3) * 2 * staffFx.sponsorBonusMul);
     await recordTransaction(db, teamId, "sponsor_income", weeklyIncome,
       `Sponzorské příjmy`, gameDate);
+  }
+
+  // 4b. Partneři na klubovém webu: se zapnutou sponzorskou lištou platí bannery a stadion víc
+  const websiteBanner = await db.prepare(
+    `SELECT COALESCE(SUM(sc.monthly_amount), 0) AS total
+     FROM sponsor_contracts sc
+     JOIN team_websites tw ON tw.team_id = sc.team_id
+     WHERE sc.team_id = ? AND sc.status = 'active' AND sc.category IN ('banner', 'stadium')
+       AND tw.sponsor_banner_enabled = 1 AND tw.unlocked_addons LIKE '%"sponsor_banner"%'`,
+  ).bind(teamId).first<{ total: number }>()
+    .catch((e) => { logger.warn({ module: "finance-processor", teamId }, "website sponsor banner bonus", e); return null; });
+  const websiteBannerBonus = websiteBannerWeeklyBonus(websiteBanner?.total ?? 0, staffFx.sponsorBonusMul);
+  if (websiteBannerBonus > 0) {
+    await recordTransaction(db, teamId, "sponsor_income", websiteBannerBonus,
+      `Partneři na klubovém webu (+${Math.round(WEBSITE_BANNER_BONUS * 100)} %)`, gameDate);
   }
 
   // 5. Base sponsorship income (dle reputace — místní podpora)

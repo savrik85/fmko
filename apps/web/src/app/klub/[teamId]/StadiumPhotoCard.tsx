@@ -30,7 +30,10 @@ const PITCH_LABELS: Record<string, string> = {
   artificial: "Umělá tráva",
 };
 
-/** Fotka se zmenší na rozumnou velikost pro web; Safari neumí WebP, tam jde JPEG. */
+/**
+ * Fotka se zmenší na rozumnou velikost a uloží jako JPEG. JPEG umí všechny prohlížeče
+ * i generátor náhledu odkazu (opengraph-image), který WebP nenačte.
+ */
 async function toUploadBlob(dataUrl: string): Promise<Blob> {
   const img = new Image();
   img.src = dataUrl;
@@ -43,11 +46,7 @@ async function toUploadBlob(dataUrl: string): Promise<Blob> {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2D kontext není k dispozici");
   ctx.drawImage(img, 0, 0, width, height);
-  const asType = (type: string, quality: number) =>
-    new Promise<Blob | null>((res) => canvas.toBlob(res, type, quality));
-  const webp = await asType("image/webp", 0.82);
-  if (webp && webp.type === "image/webp") return webp;
-  const jpeg = await asType("image/jpeg", 0.85);
+  const jpeg = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.86));
   if (!jpeg) throw new Error("fotku se nepodařilo převést");
   return jpeg;
 }
@@ -262,7 +261,9 @@ export function StadiumPhotoCard({ data, isOwner, tone = "dark", showFacts = tru
               }}
               title={VIEWPOINT_LABELS[vp].title}
               className={`shrink-0 w-28 sm:w-36 rounded-lg overflow-hidden border-2 text-left transition ${
-                active ? "border-emerald-500" : dark ? "border-white/10 hover:border-white/40" : "border-gray-300 hover:border-gray-500"
+                active
+                  ? dark ? "border-[var(--club-accent-dark)]" : "border-[var(--club-accent-light)]"
+                  : dark ? "border-white/10 hover:border-white/40" : "border-gray-300 hover:border-gray-500"
               }`}
             >
               <div className={`aspect-[16/9] ${dark ? "bg-slate-800" : "bg-gray-200"}`}>

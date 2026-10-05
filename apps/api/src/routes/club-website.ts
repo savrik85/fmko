@@ -584,7 +584,7 @@ async function loadPollVotes(db: D1Database, teamId: string, matchId: string) {
 // ── Fotky stadionu z 3D modelu ───────────────────────────────────────────────
 
 /** Zvednout, když se 3D model stadionu viditelně změní: staré fotky pak všem klubům zneplatní. */
-const STADIUM_PHOTO_RENDERER = "2026-10-05";
+const STADIUM_PHOTO_RENDERER = "2026-10-06";
 const STADIUM_PHOTO_MAX_BYTES = 3_000_000;
 
 function teamInitials(name: string): string {
@@ -774,14 +774,17 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     gender: string; age: number; avatar: string; description: string | null;
   };
   type ConcessionRow = { product_key: string; quality_level: number; sell_price: number };
-  type InterviewRow = { id: string; game_week: number; questions: string; answers: string | null; created_at: string };
+  type InterviewRow = {
+    id: string; game_week: number; kind: string | null; questions: string; answers: string | null;
+    created_at: string; manager_name: string | null;
+  };
   type NewsRow = { id: string; type: string; headline: string; body: string; created_at: string };
 
   // Všechno, co nezávisí na jiném dotazu, jde naráz. Dřív to bylo ~25 dotazů za sebou (1–2 s).
   const [
     stadium, extRows, sponsorRows, chantsRows, mascotRow, website, managerRow, staffRows, playersRows,
     u21Team, recentRows, upcomingRows, concessionRows, fansRow, interviewRows, newsRows, transferRows, league,
-    storedPhotoRows,
+    storedPhotoRows, history,
   ] = await Promise.all([
     db.prepare("SELECT * FROM stadiums WHERE team_id = ? LIMIT 1").bind(teamId).first<any>().catch(warnNull("fetch stadium")),
     import("../stadium/extensions-db")
@@ -833,12 +836,19 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
       .bind(teamId).first<{ base_ticket_price: number; satisfaction: number }>()
       .catch(warnNull("fetch fans for ticket price")),
     db.prepare(
-      `SELECT id, game_week, questions, answers, created_at
-       FROM coach_interviews
-       WHERE team_id = ? AND status = 'answered'
-       ORDER BY created_at DESC LIMIT 6`,
+      `SELECT ci.id, ci.game_week, ci.kind, ci.questions, ci.answers, ci.created_at, m.name AS manager_name
+       FROM coach_interviews ci
+       LEFT JOIN managers m ON m.id = ci.manager_id
+       WHERE ci.team_id = ? AND ci.status = 'answered'
+       ORDER BY ci.created_at DESC LIMIT 6`,
     ).bind(teamId).all<InterviewRow>().catch(warnEmpty<InterviewRow>("fetch coach interviews")),
-    db.prepare("SELECT id, type, headline, body, created_at FROM news WHERE team_id = ? ORDER BY created_at DESC LIMIT 4")
+    // Jen veřejné typy zpráv. Ostatní nesou surový JSON s interními poli (nálada, vztahy),
+    // ceny z přestupové listiny nebo výhry v sázkovce. Nový typ se na web dostane jen vědomě.
+    db.prepare(
+      `SELECT id, type, headline, body, created_at FROM news
+       WHERE team_id = ? AND type IN ('promotion', 'manager_arrival', 'manager_feud', 'legend_farewell')
+       ORDER BY created_at DESC LIMIT 4`,
+    )
       .bind(teamId).all<NewsRow>().catch(warnEmpty<NewsRow>("fetch news")),
     import("../transfers/transfer-overview")
       .then(({ loadTransferOverview }) => loadTransferOverview(db, teamId, 8))
@@ -853,6 +863,12 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     db.prepare("SELECT viewpoint, version FROM team_stadium_photos WHERE team_id = ?")
       .bind(teamId).all<{ viewpoint: string; version: string }>()
       .catch(warnEmpty<{ viewpoint: string; version: string }>("fetch stadium photos")),
+    import("./club-website-history")
+      .then(({ loadClubHistory }) => loadClubHistory(db, teamId))
+      .catch((e) => {
+        logger.warn(MODULE, "load club history", e);
+        return null;
+      }),
   ]);
 
   // ── Druhá vlna: dotazy, které potřebují výsledek první ──
@@ -999,6 +1015,8 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   const interviews = (interviewRows.results ?? []).map((r) => ({
     id: r.id,
     gameWeek: r.game_week,
+    kind: r.kind,
+    managerName: r.manager_name,
     questions: parseJsonList<string>(r.questions, [], "interview questions"),
     answers: r.answers ? parseJsonList<string>(r.answers, [], "interview answers") : [],
     createdAt: r.created_at,
@@ -1150,6 +1168,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
       price: adultTicketPrice,
     },
     stadiumPhotos: { version: stadiumPhoto.version, render: stadiumPhoto.render, photos },
+    history,
     interviews,
     news: newsRows.results ?? [],
     transfers,
@@ -1557,4 +1576,118 @@ clubWebsiteRouter.patch("/:id/website", async (c) => {
   }
 
   return c.json({ ok: true, message: "Nastavení webu uloženo" });
+});
+
+// GET /api/teams/:id/website/player/:playerId — veřejný profil hráče na klubovém webu.
+// Jen údaje, které by o hráči napsal klubový web: žádné dovednosti, talent, mzda ani bydliště.
+clubWebsiteRouter.get("/:id/website/player/:playerId", async (c) => {
+  const db = c.env.DB;
+  const clubId = await resolveTeamId(db, c.req.param("id"));
+  if (!clubId) return c.json({ error: "Klub nenalezen" }, 404);
+  const playerId = c.req.param("playerId");
+
+  const [club, website, player] = await Promise.all([
+    db.prepare("SELECT id, name, primary_color, secondary_color FROM teams WHERE id = ?")
+      .bind(clubId).first<{ id: string; name: string; primary_color: string; secondary_color: string }>(),
+    db.prepare("SELECT custom_slug FROM team_websites WHERE team_id = ?").bind(clubId).first<{ custom_slug: string | null }>()
+      .catch((e) => {
+        logger.warn(MODULE, "player profile: website slug", e);
+        return null;
+      }),
+    db.prepare(
+      `SELECT p.id, p.first_name, p.last_name, p.nickname, p.age, p.position, p.overall_rating, p.squad_number,
+              p.nationality, p.description, p.avatar, p.status, p.team_id, t.name AS team_name
+       FROM players p LEFT JOIN teams t ON t.id = p.team_id
+       WHERE p.id = ?`,
+    ).bind(playerId).first<{
+      id: string; first_name: string; last_name: string; nickname: string | null; age: number; position: string;
+      overall_rating: number; squad_number: number | null; nationality: string | null; description: string | null;
+      avatar: string; status: string | null; team_id: string | null; team_name: string | null;
+    }>(),
+  ]);
+  if (!club || !player) return c.json({ error: "Hráč nenalezen" }, 404);
+
+  const [seasonRows, careerRows] = await Promise.all([
+    db.prepare(
+      `SELECT s.number AS season_number, ps.team_id, t.name AS team_name,
+              ps.appearances, ps.goals, ps.assists, ps.yellow_cards, ps.red_cards, ps.man_of_match,
+              ps.minutes_played, ps.avg_rating, ps.clean_sheets
+       FROM player_stats ps
+       JOIN seasons s ON s.id = ps.season_id
+       LEFT JOIN teams t ON t.id = ps.team_id
+       WHERE ps.player_id = ?
+       ORDER BY s.number DESC, ps.appearances DESC
+       LIMIT 30`,
+    ).bind(playerId).all<{
+      season_number: number; team_id: string; team_name: string | null; appearances: number; goals: number;
+      assists: number; yellow_cards: number; red_cards: number; man_of_match: number; minutes_played: number;
+      avg_rating: number | null; clean_sheets: number;
+    }>().catch((e) => {
+      logger.warn(MODULE, "player profile: season stats", e);
+      return { results: [] as never[] };
+    }),
+    db.prepare(
+      `SELECT pc.team_id, t.name AS team_name, pc.joined_at, pc.left_at, pc.join_type, pc.leave_type
+       FROM player_contracts pc LEFT JOIN teams t ON t.id = pc.team_id
+       WHERE pc.player_id = ?
+       ORDER BY COALESCE(pc.joined_at, pc.created_at) DESC
+       LIMIT 20`,
+    ).bind(playerId).all<{
+      team_id: string; team_name: string | null; joined_at: string | null; left_at: string | null;
+      join_type: string | null; leave_type: string | null;
+    }>().catch((e) => {
+      logger.warn(MODULE, "player profile: career", e);
+      return { results: [] as never[] };
+    }),
+  ]);
+
+  const released = player.status === "released";
+  return c.json({
+    club: {
+      id: club.id,
+      name: club.name,
+      slug: website?.custom_slug ?? null,
+      primaryColor: club.primary_color,
+      secondaryColor: club.secondary_color,
+    },
+    player: {
+      id: player.id,
+      firstName: player.first_name,
+      lastName: player.last_name,
+      nickname: player.nickname || null,
+      age: player.age,
+      position: player.position,
+      positionName: formatPlayerPositionCZ(player.position),
+      overallRating: player.overall_rating,
+      squadNumber: player.squad_number,
+      nationality: player.nationality,
+      description: player.description,
+      avatar: parseAvatar(player.avatar, "player profile"),
+      status: player.status,
+    },
+    currentTeam: player.team_id && !released ? { id: player.team_id, name: player.team_name ?? "Neznámý klub" } : null,
+    playsForClub: player.team_id === club.id && !released,
+    seasons: (seasonRows.results ?? []).map((r) => ({
+      seasonNumber: r.season_number,
+      teamId: r.team_id,
+      teamName: r.team_name ?? "Neznámý klub",
+      appearances: r.appearances ?? 0,
+      goals: r.goals ?? 0,
+      assists: r.assists ?? 0,
+      yellowCards: r.yellow_cards ?? 0,
+      redCards: r.red_cards ?? 0,
+      manOfMatch: r.man_of_match ?? 0,
+      minutesPlayed: r.minutes_played ?? 0,
+      avgRating: r.avg_rating,
+      cleanSheets: r.clean_sheets ?? 0,
+    })),
+    career: (careerRows.results ?? []).map((r) => ({
+      teamId: r.team_id,
+      teamName: r.team_name ?? "Neznámý klub",
+      joinedAt: r.joined_at,
+      leftAt: r.left_at,
+      joinType: r.join_type,
+      leaveType: r.leave_type,
+    })),
+  });
 });

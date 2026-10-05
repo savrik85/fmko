@@ -480,7 +480,7 @@ export default function MujKlubPage() {
                     Sponzorská reklamní lišta
                   </div>
                   <div className="text-sm text-muted mt-0.5">
-                    Zobrazí nahoře na webu skutečné partnery klubu (dres, stadion, bannery).
+                    Zobrazí nahoře na webu skutečné partnery klubu. Dokud je zapnutá, partneři z bannerů a stadionu platí o 5 % víc.
                   </div>
                 </div>
                 {unlockedAddons.includes("sponsor_banner") ? (

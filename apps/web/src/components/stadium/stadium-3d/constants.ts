@@ -222,16 +222,24 @@ export function getViewpoints(standsLevel: number, roofLevel: number): Record<Ca
   const roofClearance = lvl === 1 ? 2.6 : 1.1; // stejné hodnoty jako StandRoof
   const eyeY = roofLevel > 0 && lvl > 0 ? dims.height + roofClearance + 2.2 : dims.height + 2.6;
 
+  // Se střechou kamera nesmí stát v zadní řadě: spodní třetinu záběru by zakryla přední
+  // hrana vlastní střechy (fotky „Z tribuny“ na klubovém webu). Visí proto jako televizní
+  // kamera kousek před hranou střechy (přesah podle canopyPlan + rezerva).
+  const roofed = roofLevel > 0 && lvl > 0;
+  const roofFront = 0.5 + roofLevel * 0.35 + 1;
+
   let mainStand: Pick<ViewpointDef, "position" | "target" | "fov">;
   if (lvl >= 2) {
     // Od L2 stojí boční tribuna (východ) — klasický televizní pohled od půlicí čáry,
     // se střídačkami naproti.
     const frontX = PITCH.width / 2 + STAND_GAP;
-    mainStand = { position: [frontX + dims.depth * 0.9, eyeY, 0], target: [0, 0.6, 0], fov: 46 };
+    const x = roofed ? frontX - roofFront : frontX + dims.depth * 0.9;
+    mainStand = { position: [x, eyeY, 0], target: [0, 0.6, 0], fov: 46 };
   } else if (lvl === 1) {
     // L1 má tribuny jen za brankami — z poslední řady, kousek stranou, aby síť
     // branky nezabírala půlku obrazu.
-    mainStand = { position: [8, eyeY, frontZ + dims.depth * 0.9], target: [0, 0.6, -4], fov: 46 };
+    const z = roofed ? frontZ - roofFront : frontZ + dims.depth * 0.9;
+    mainStand = { position: [8, eyeY, z], target: [0, 0.6, -4], fov: 46 };
   } else {
     // Bez tribuny: zvýšený pohled z místa, kde by stála.
     mainStand = { position: [8, 6.5, 36], target: [0, 0.6, -4], fov: 46 };

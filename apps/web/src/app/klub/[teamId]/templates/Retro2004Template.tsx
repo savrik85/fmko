@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import { ROLE_DEFS, type StaffRole } from "@okresni-masina/shared";
 import {
@@ -23,6 +23,26 @@ import { ManagerFace } from "../ManagerFace";
 import { TacticalPitch } from "../TacticalPitch";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
+import { PressCenter, hasPressCenterContent } from "../PressCenter";
+import { ClubHallOfFame } from "../ClubHallOfFame";
+
+/**
+ * Web je v barvách klubu: proměnné `--club-*` nastavuje obal stránky (`clubPaletteStyle`).
+ * Odvozené odstíny šablony:
+ * - `--club-ink`: `--club-accent-light` drží kontrast 4.5:1 jen proti čisté bílé, šablona má ale
+ *   šedavé a nažloutlé podklady, proto drobný barevný text bere o čtvrtinu tmavší odstín.
+ * - `--club-tint` / `--club-tint-strong`: světlé podbarvení (najetí myší, náš klub v tabulce).
+ * - `--club-line`: světlý rámeček.
+ * Odstíny jsou proměnné, ne třídy `bg-[color-mix(...)]`: Tailwind pro prohlížeče bez color-mix
+ * podstrčí plnou barvu akcentu a tmavý text by na ní zmizel. Neplatná proměnná místo toho
+ * nechá pozadí průhledné.
+ */
+const CLUB_TONES = {
+  "--club-ink": "color-mix(in srgb, var(--club-accent-light) 75%, black)",
+  "--club-tint": "color-mix(in srgb, var(--club-accent-light) 12%, white)",
+  "--club-tint-strong": "color-mix(in srgb, var(--club-accent-light) 20%, white)",
+  "--club-line": "color-mix(in srgb, var(--club-accent-light) 40%, white)",
+} as CSSProperties;
 
 export function Retro2004Template({
   data,
@@ -42,7 +62,7 @@ export function Retro2004Template({
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
   const fanPoll = useFanPoll(data);
 
-  const primary = team.primaryColor || "#002b66";
+  const primary = team.primaryColor || "#2D5F2D";
   const badgePattern = (team.badge.pattern as BadgePattern) || "shield";
   const badgeIni = team.badge.customInitials || team.name.slice(0, 3).toUpperCase();
   const leagueName = team.league?.name ?? "Okresní soutěž";
@@ -80,7 +100,7 @@ export function Retro2004Template({
   const beer = menu.find((item) => item.key === "beer");
 
   const pollOptions: Array<{ choice: PollChoice; label: string; bar: string }> = [
-    { choice: "win", label: "Vyhrajeme o parník", bar: "bg-blue-700" },
+    { choice: "win", label: "Vyhrajeme o parník", bar: "bg-[var(--club-accent-light)]" },
     { choice: "draw", label: "Bude to plichta", bar: "bg-yellow-600" },
     { choice: "loss", label: "Zařízne nás sudí", bar: "bg-red-600" },
   ];
@@ -96,16 +116,16 @@ export function Retro2004Template({
     isHome ? <TeamLink id={opponent.id} name={opponent.name} /> : team.name;
 
   const navLink =
-    "px-2.5 py-1 bg-[#f5f5f0] border border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-yellow-100 shrink-0";
+    "px-2.5 py-1 bg-[#f5f5f0] border border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-[var(--club-tint)] shrink-0";
 
   return (
-    <div className="min-h-screen bg-[#d8d6ce] text-[#111111] font-sans pb-16">
+    <div className="min-h-screen bg-[#d8d6ce] text-[#111111] font-sans pb-16" style={CLUB_TONES}>
       {/* 2004 Framed Boxed Container */}
       <div className="max-w-5xl mx-auto my-3 bg-white border-2 border-black shadow-[6px_6px_0px_rgba(0,0,0,0.5)]">
         {/* Retro Header Top Banner */}
-        <div className="bg-gradient-to-r from-[#001f4d] via-[#003882] to-[#001f4d] text-white p-3 sm:p-4 border-b-2 border-yellow-400 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] p-3 sm:p-4 border-b-4 border-[var(--club-secondary)] flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3 sm:gap-4 text-center sm:text-left min-w-0">
-            <div className="p-1 bg-white border border-yellow-400 shadow shrink-0">
+            <div className="p-1 bg-white border border-[var(--club-secondary)] shadow shrink-0">
               <BadgePreview
                 primary={team.badge.primary}
                 secondary={team.badge.secondary}
@@ -116,13 +136,13 @@ export function Retro2004Template({
               />
             </div>
             <div className="min-w-0">
-              <div className="text-sm tracking-wide text-yellow-300 font-mono uppercase">
+              <div className="text-sm tracking-wide text-[var(--club-on-bar)] font-mono uppercase">
                 *** Oficiální webové stránky ***
               </div>
               <h1 className="text-xl sm:text-3xl font-serif font-black tracking-tight drop-shadow-md break-words">
                 {team.name}
               </h1>
-              <div className="text-sm text-yellow-100 opacity-90 mt-0.5">
+              <div className="text-sm text-[var(--club-on-bar)] mt-0.5">
                 Obec {team.village.name} · Okres {team.village.district} {team.identity.foundingYear ? `· Založeno roku ${team.identity.foundingYear}` : ""}
               </div>
             </div>
@@ -132,19 +152,19 @@ export function Retro2004Template({
             <button
               type="button"
               onClick={onOpenTickets}
-              className="px-3 py-1.5 bg-[#ffcc00] hover:bg-yellow-400 text-black border-2 border-t-white border-l-white border-b-black border-r-black font-bold text-sm uppercase shadow active:translate-y-0.5"
+              className="px-3 py-1.5 bg-[var(--club-on-bar)] text-[var(--club-bar)] hover:opacity-90 border-2 border-t-white border-l-white border-b-black border-r-black font-bold text-sm uppercase shadow active:translate-y-0.5"
             >
               [ 🎟️ Vstupenky ]
             </button>
-            <span className="text-sm text-yellow-100">
+            <span className="text-sm text-[var(--club-on-bar)]">
               Vstupné {tickets.adultPrice} Kč, platí se u vstupu
             </span>
           </div>
         </div>
 
         {/* Retro 2004 Scrolling Marquee Ticker */}
-        <div className="bg-[#fff9d6] border-b border-gray-400 py-1 px-3 text-sm text-blue-900 font-mono font-bold flex items-center overflow-hidden">
-          <span className="shrink-0 bg-red-600 text-white px-1.5 mr-2 text-sm font-sans uppercase">Zpráva:</span>
+        <div className="bg-[var(--club-tint)] border-b border-gray-400 py-1 px-3 text-sm text-[var(--club-ink)] font-mono font-bold flex items-center overflow-hidden">
+          <span className="shrink-0 bg-[var(--club-bar)] text-[var(--club-on-bar)] px-1.5 mr-2 text-sm font-sans uppercase">Zpráva:</span>
           <div className="whitespace-nowrap overflow-x-auto min-w-0 text-sm">
             +++ VÍTÁME VÁS NA WEBU ODDÍLU {team.name.toUpperCase()} +++ PŘÍŠTÍ UTKÁNÍ:{" "}
             {nextMatch
@@ -158,7 +178,7 @@ export function Retro2004Template({
         {/* Sponsor Banner Addon (Retro Web 1.0 Edition) */}
         {hasSponsorBanner && partners.all.length > 0 && (
           <div className="bg-[#f0f0e0] border-b border-gray-400 py-1.5 px-3 text-center text-sm border-dashed border-t-0 font-serif break-words">
-            <span className="font-bold text-blue-900">SPONZOŘI KLUBU: </span>
+            <span className="font-bold text-[var(--club-ink)]">SPONZOŘI KLUBU: </span>
             {sponsorLines.map((s, i) => (
               <span key={s.label} className="font-sans">
                 {i > 0 && " · "}
@@ -173,13 +193,13 @@ export function Retro2004Template({
           <a href="#zapas" className={`${navLink} font-medium`}>
             Úvod & Zápasy
           </a>
-          <a href="#tabulka" className={`${navLink} font-bold text-emerald-800`}>
+          <a href="#tabulka" className={`${navLink} font-bold text-[var(--club-ink)]`}>
             Tabulka soutěže
           </a>
           <a href="#kadr" className={`${navLink} font-medium`}>
             Soupiska kádru
           </a>
-          <a href="#prestupy" className={`${navLink} font-bold text-blue-900`}>
+          <a href="#prestupy" className={`${navLink} font-bold text-[var(--club-ink)]`}>
             Přestupy ({transfers.length})
           </a>
           <a href="#identita" className={`${navLink} font-medium`}>
@@ -192,7 +212,7 @@ export function Retro2004Template({
             Klubový bufet
           </a>
           {hasAudioModule && (
-            <a href="#audio" className="px-2.5 py-1 bg-[#e2f0d9] border border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-green-100 shrink-0 font-bold text-green-900">
+            <a href="#audio" className="px-2.5 py-1 bg-[var(--club-tint)] border border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-[var(--club-tint-strong)] shrink-0 font-bold text-[var(--club-ink)]">
               🎵 Klubové audio
             </a>
           )}
@@ -210,13 +230,15 @@ export function Retro2004Template({
           <aside className="md:col-span-1 space-y-4 text-sm font-sans min-w-0">
             {/* Sidebar Box 1: Navigace */}
             <div className="border border-gray-400 bg-[#f9f9f6]">
-              <div className="bg-[#002b66] text-white px-2 py-1 font-bold text-sm uppercase flex items-center justify-between">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-2 py-1 font-bold text-sm uppercase flex items-center justify-between">
                 <span>Rychlé menu</span>
-                <span className="text-yellow-300">▼</span>
+                <span className="text-[var(--club-on-bar)]">▼</span>
               </div>
               <ul className="p-2 space-y-1.5 text-blue-800 underline">
                 <li><a href="#zapas" className="hover:text-red-600">» Příští zápas</a></li>
                 <li><a href="#kadr" className="hover:text-red-600">» Hráčská soupiska</a></li>
+                {hasPressCenterContent(data) && <li><a href="#tisk" className="hover:text-red-600">» Tiskové středisko</a></li>}
+                {data.history && <li><a href="#historie" className="hover:text-red-600">» Síň slávy</a></li>}
                 <li><a href="#stadion" className="hover:text-red-600">» Fotky stadionu</a></li>
                 <li><a href="#bufet" className="hover:text-red-600">» Pivo a klobásy</a></li>
                 <li><a href="#realizak" className="hover:text-red-600">» Trenér a vedení</a></li>
@@ -227,7 +249,7 @@ export function Retro2004Template({
             {/* Sidebar Box 2: Anketa k příštímu zápasu (skutečné hlasy z API) */}
             {fanPoll.poll && (
               <div className="border border-gray-400 bg-[#f9f9f6]">
-                <div className="bg-[#002b66] text-white px-2 py-1 font-bold text-sm uppercase">
+                <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-2 py-1 font-bold text-sm uppercase">
                   Anketa fanoušků
                 </div>
                 <div className="p-2.5">
@@ -276,7 +298,7 @@ export function Retro2004Template({
                         type="button"
                         onClick={() => void fanPoll.vote(pollSelection)}
                         disabled={fanPoll.busy}
-                        className="mt-2 w-full py-1 bg-[#ece9d8] hover:bg-yellow-100 border border-t-white border-l-white border-b-gray-600 border-r-gray-600 font-bold text-sm disabled:opacity-60 disabled:cursor-wait"
+                        className="mt-2 w-full py-1 bg-[#ece9d8] hover:bg-[var(--club-tint)] border border-t-white border-l-white border-b-gray-600 border-r-gray-600 font-bold text-sm disabled:opacity-60 disabled:cursor-wait"
                       >
                         {fanPoll.busy ? "[ Odesílám… ]" : "[ Odeslat hlas ]"}
                       </button>
@@ -308,7 +330,7 @@ export function Retro2004Template({
 
             {/* Sidebar Box 4: Občerstvení u klandru */}
             <div id="bufet" className={`border border-gray-400 bg-[#f9f9f6] ${ANCHOR_OFFSET}`}>
-              <div className="bg-[#002b66] text-white px-2 py-1 font-bold text-sm uppercase flex items-center justify-between">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-2 py-1 font-bold text-sm uppercase flex items-center justify-between">
                 <span>Vesnický bufet</span>
                 <span>🍺</span>
               </div>
@@ -365,16 +387,16 @@ export function Retro2004Template({
 
             {/* ═══ MATCH REPORT & NEXT MATCH (TELETEXT / EUROFOTBAL TABLE STYLE) ═══ */}
             <section id="zapas" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-              <div className="bg-[#002b66] text-white px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                 <span>Mistrovská utkání</span>
-                <span className="text-yellow-300 text-sm font-mono">{leagueName}</span>
+                <span className="text-[var(--club-on-bar)] text-sm font-mono">{leagueName}</span>
               </div>
 
               <div className="p-3 space-y-4">
                 {/* Next Match Card */}
                 {nextMatch ? (
                   <div className="border border-gray-300 bg-[#f7f7f4] p-3">
-                    <div className="text-sm font-bold uppercase text-blue-900 mb-1 border-b border-gray-300 pb-0.5">
+                    <div className="text-sm font-bold uppercase text-[var(--club-ink)] mb-1 border-b border-gray-300 pb-0.5">
                       Příští mistrovské utkání · {nextMatch.round ? `${nextMatch.round}. kolo` : "Zápas týdne"}
                     </div>
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-2">
@@ -394,7 +416,7 @@ export function Retro2004Template({
                         <button
                           type="button"
                           onClick={onOpenTickets}
-                          className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-black border border-black font-bold text-sm shadow active:translate-y-0.5"
+                          className="px-3 py-1 bg-[var(--club-bar)] text-[var(--club-on-bar)] hover:opacity-90 border border-black font-bold text-sm shadow active:translate-y-0.5"
                         >
                           Vstupenky
                         </button>
@@ -423,7 +445,7 @@ export function Retro2004Template({
                     </div>
                     <div className="flex items-center justify-between gap-2 text-sm">
                       <span className="font-bold min-w-0 break-words">{homeSide(lastMatch.isHome, lastMatch.opponent)}</span>
-                      <span className="bg-black text-yellow-300 font-mono px-2 py-0.5 font-bold text-base shrink-0">
+                      <span className="bg-black text-[var(--club-accent-dark)] font-mono px-2 py-0.5 font-bold text-base shrink-0">
                         {lastMatch.scoreHome} : {lastMatch.scoreAway}
                       </span>
                       <span className="font-bold min-w-0 break-words text-right">{awaySide(lastMatch.isHome, lastMatch.opponent)}</span>
@@ -449,8 +471,8 @@ export function Retro2004Template({
                         </thead>
                         <tbody>
                           {upcomingMatches.slice(0, 5).map((m) => (
-                            <tr key={m.id} className="border-b border-gray-100 hover:bg-[#fff9cc]">
-                              <td className="py-1 px-2 font-mono font-bold text-blue-900">{m.round}.</td>
+                            <tr key={m.id} className="border-b border-gray-100 hover:bg-[var(--club-tint)]">
+                              <td className="py-1 px-2 font-mono font-bold text-[var(--club-ink)]">{m.round}.</td>
                               <td className="py-1 px-2 font-bold min-w-[10rem]">
                                 {homeSide(m.isHome, m.opponent)} vs. {awaySide(m.isHome, m.opponent)}
                               </td>
@@ -478,7 +500,7 @@ export function Retro2004Template({
                       {recentMatches.slice(1, 5).map((rm) => (
                         <div
                           key={rm.id}
-                          className="p-1.5 flex items-center justify-between gap-2 hover:bg-[#fff9cc]"
+                          className="p-1.5 flex items-center justify-between gap-2 hover:bg-[var(--club-tint)]"
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="font-mono text-gray-500 shrink-0">{rm.round ? `${rm.round}. k.` : "Zápas"}</span>
@@ -487,7 +509,7 @@ export function Retro2004Template({
                             </span>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="bg-black text-yellow-300 font-mono font-bold px-1.5">
+                            <span className="bg-black text-[var(--club-accent-dark)] font-mono font-bold px-1.5">
                               {rm.scoreHome} : {rm.scoreAway}
                             </span>
                             <button
@@ -508,9 +530,9 @@ export function Retro2004Template({
 
             {/* ═══ TABULKA SOUTĚŽE (OFFICIAL LEAGUE TABLE) ═══ */}
             <section id="tabulka" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-              <div className="bg-[#002b66] text-white px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                 <span>Tabulka soutěže</span>
-                <span className="text-yellow-300 text-sm font-mono">Aktuální pořadí</span>
+                <span className="text-[var(--club-on-bar)] text-sm font-mono">Aktuální pořadí</span>
               </div>
               <div className="p-2 overflow-x-auto">
                 {standings.length > 0 ? (
@@ -533,14 +555,14 @@ export function Retro2004Template({
                           key={row.teamId}
                           className={`border-b border-gray-200 ${
                             row.isCurrentTeam
-                              ? "bg-[#fff9cc] font-bold text-blue-900 border-yellow-400"
+                              ? "bg-[var(--club-tint-strong)] font-bold text-[var(--club-ink)] border-[var(--club-accent-light)]"
                               : "hover:bg-gray-50"
                           }`}
                         >
                           <td className="py-1 px-1.5 text-center font-mono font-bold">{row.pos}.</td>
                           <td className="py-1 px-2 min-w-[9rem]">
                             <TeamLink id={row.teamId} name={row.teamName} />{" "}
-                            {row.isCurrentTeam && <span className="text-sm text-red-600 font-normal whitespace-nowrap">◀ NÁŠ KLUB</span>}
+                            {row.isCurrentTeam && <span className="text-sm text-[var(--club-ink)] font-normal whitespace-nowrap">◀ NÁŠ KLUB</span>}
                           </td>
                           <td className="py-1 px-1.5 text-center font-mono">{row.played}</td>
                           <td className="py-1 px-1.5 text-center font-mono text-emerald-800">{row.won}</td>
@@ -562,9 +584,9 @@ export function Retro2004Template({
 
             {/* ═══ SOUPISKA - THE LEGENDARY 2004 HTML TABLE! ═══ */}
             <section id="kadr" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-              <div className="bg-[#002b66] text-white px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                 <span>Hráčský kádr (Soupiska mužstva)</span>
-                <span className="text-yellow-300 text-sm font-mono">Počet hráčů: {currentRoster.length}</span>
+                <span className="text-[var(--club-on-bar)] text-sm font-mono">Počet hráčů: {currentRoster.length}</span>
               </div>
               <div className="bg-[#ece9d8] p-2 border-b border-gray-400 flex items-center justify-between gap-2 flex-wrap text-sm">
                 <div className="flex items-center gap-1.5 font-mono flex-wrap">
@@ -574,8 +596,8 @@ export function Retro2004Template({
                     onClick={() => setActiveRosterTab("aTeam")}
                     className={`px-3 py-1 border text-sm cursor-pointer ${
                       activeRosterTab === "aTeam"
-                        ? "bg-yellow-400 text-black font-bold border-black shadow"
-                        : "bg-[#f5f5f0] text-black border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-yellow-100"
+                        ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] font-bold border-black shadow"
+                        : "bg-[#f5f5f0] text-black border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-[var(--club-tint)]"
                     }`}
                   >
                     ⚽ A-MUŽSTVO ({roster.aTeam.length})
@@ -586,8 +608,8 @@ export function Retro2004Template({
                       onClick={() => setActiveRosterTab("u21Team")}
                       className={`px-3 py-1 border text-sm cursor-pointer ${
                         activeRosterTab === "u21Team"
-                          ? "bg-yellow-400 text-black font-bold border-black shadow"
-                          : "bg-[#f5f5f0] text-blue-900 font-bold border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-yellow-100"
+                          ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] font-bold border-black shadow"
+                          : "bg-[#f5f5f0] text-[var(--club-ink)] font-bold border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-[var(--club-tint)]"
                       }`}
                     >
                       🌱 U21 ({roster.u21Team.length} HRÁČŮ)
@@ -599,7 +621,7 @@ export function Retro2004Template({
                     type="button"
                     onClick={() => setViewMode("table")}
                     className={`px-2 py-0.5 border text-sm cursor-pointer ${
-                      viewMode === "table" ? "bg-blue-900 text-white font-bold" : "bg-gray-200"
+                      viewMode === "table" ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] font-bold" : "bg-gray-200"
                     }`}
                   >
                     Tabulka
@@ -608,7 +630,7 @@ export function Retro2004Template({
                     type="button"
                     onClick={() => setViewMode("pitch")}
                     className={`px-2 py-0.5 border text-sm cursor-pointer ${
-                      viewMode === "pitch" ? "bg-blue-900 text-white font-bold" : "bg-gray-200"
+                      viewMode === "pitch" ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] font-bold" : "bg-gray-200"
                     }`}
                   >
                     Taktika
@@ -629,7 +651,7 @@ export function Retro2004Template({
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm border-collapse font-sans">
                     <thead>
-                      <tr className="bg-[#002b66] text-yellow-300 border-b border-gray-400 text-sm uppercase">
+                      <tr className="bg-[var(--club-bar)] text-[var(--club-on-bar)] border-b border-gray-400 text-sm uppercase">
                         <th className="py-2 px-2 text-center w-8">Čís.</th>
                         <th className="py-2 px-2 w-10 text-center">Foto</th>
                         <th className="py-2 px-3">Jméno a příjmení</th>
@@ -647,7 +669,7 @@ export function Retro2004Template({
                         return (
                           <tr
                             key={player.id}
-                            className={`border-b border-gray-200 hover:bg-[#fff9cc] transition-colors ${
+                            className={`border-b border-gray-200 hover:bg-[var(--club-tint)] transition-colors ${
                               isEven ? "bg-white" : "bg-[#f5f5ee]"
                             }`}
                           >
@@ -660,7 +682,7 @@ export function Retro2004Template({
                               </div>
                             </td>
                             <td className="py-1.5 px-3 whitespace-nowrap">
-                              <PlayerLink id={player.id} className="text-base font-bold text-blue-900">
+                              <PlayerLink id={player.id} className="text-base font-bold text-[var(--club-ink)]">
                                 {player.firstName} {player.lastName}
                               </PlayerLink>
                             </td>
@@ -676,7 +698,7 @@ export function Retro2004Template({
                             <td className="py-1.5 px-2 text-center font-mono font-bold text-green-700">
                               {player.stats.goals}
                             </td>
-                            <td className="py-1.5 px-2 text-center font-mono font-bold text-blue-700">
+                            <td className="py-1.5 px-2 text-center font-mono font-bold text-[var(--club-ink)]">
                               {player.stats.assists}
                             </td>
                             <td className="py-1.5 px-2 text-right pr-3 font-mono text-gray-600">
@@ -693,9 +715,9 @@ export function Retro2004Template({
 
             {/* ═══ PŘESTUPY & ZMĚNY V KÁDRU (2004 WEB 1.0) ═══ */}
             <section id="prestupy" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-              <div className="bg-[#002b66] text-white px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                 <span>Pohyby v kádru (Přestupy & Hostování)</span>
-                <span className="text-yellow-300 text-sm font-mono">
+                <span className="text-[var(--club-on-bar)] text-sm font-mono">
                   [ Celkem záznamů: {transfers.length} ]
                 </span>
               </div>
@@ -709,7 +731,7 @@ export function Retro2004Template({
                     onClick={() => setTransferFilter("all")}
                     className={`px-2.5 py-0.5 border text-sm cursor-pointer ${
                       transferFilter === "all"
-                        ? "bg-yellow-400 text-black font-bold border-black shadow-inner"
+                        ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] font-bold border-black shadow-inner"
                         : "bg-[#f5f5f0] text-black border-t-white border-l-white border-b-gray-600 border-r-gray-600"
                     }`}
                   >
@@ -773,7 +795,7 @@ export function Retro2004Template({
                         {/* Hráč a protistrana */}
                         <div className="text-gray-700 mb-1 break-words">
                           Hráč:{" "}
-                          <PlayerLink id={t.playerId} className="text-base font-bold text-blue-900">
+                          <PlayerLink id={t.playerId} className="text-base font-bold text-[var(--club-ink)]">
                             {t.playerName}
                           </PlayerLink>
                           {t.otherTeamName && (
@@ -786,7 +808,7 @@ export function Retro2004Template({
                         </div>
 
                         {/* Headline */}
-                        <h4 className="font-bold text-base text-blue-900 mb-1 break-words">
+                        <h4 className="font-bold text-base text-[var(--club-ink)] mb-1 break-words">
                           {t.headline}
                         </h4>
 
@@ -797,7 +819,7 @@ export function Retro2004Template({
 
                         {/* Slovo hráče ve žlutém retro rámečku */}
                         {t.quote && (
-                          <div className="p-2 bg-[#fffde6] border border-yellow-400 border-l-4 border-l-yellow-600 text-gray-800 italic text-sm leading-snug break-words">
+                          <div className="p-2 bg-[var(--club-tint)] border border-[var(--club-line)] border-l-4 border-l-[var(--club-accent-light)] text-gray-800 italic text-sm leading-snug break-words">
                             <strong>Slovo hráče:</strong> „{t.quote}“
                           </div>
                         )}
@@ -814,15 +836,15 @@ export function Retro2004Template({
 
             {/* ═══ DRESY, MASKOT & IDENTITA ═══ */}
             <section id="identita" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-              <div className="bg-[#002b66] text-white px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                 <span>Klubová kultura, dresy & maskot</span>
-                <span className="text-yellow-300 text-sm font-mono">Tradice oddílu</span>
+                <span className="text-[var(--club-on-bar)] text-sm font-mono">Tradice oddílu</span>
               </div>
 
               <div className="p-4 space-y-4">
                 {/* Dresy */}
                 <div>
-                  <h4 className="font-bold text-sm uppercase text-blue-900 mb-2 border-b border-gray-300 pb-1">
+                  <h4 className="font-bold text-sm uppercase text-[var(--club-ink)] mb-2 border-b border-gray-300 pb-1">
                     👕 Oficiální zápasová sada dresů pro tuto sezónu
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -906,12 +928,12 @@ export function Retro2004Template({
                             className="w-16 h-16 rounded border border-gray-400 object-cover shrink-0"
                           />
                         ) : (
-                          <div className="w-16 h-16 bg-yellow-100 border border-yellow-400 rounded flex items-center justify-center text-3xl shrink-0">
+                          <div className="w-16 h-16 bg-[var(--club-tint)] border border-[var(--club-accent-light)] rounded flex items-center justify-center text-3xl shrink-0">
                             🦁
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="font-bold text-base text-blue-900 break-words">{team.mascot.name}</div>
+                          <div className="font-bold text-base text-[var(--club-ink)] break-words">{team.mascot.name}</div>
                           {team.mascot.story && (
                             <p className="text-sm text-gray-700 leading-snug mt-1 italic break-words">
                               „{team.mascot.story}“
@@ -931,7 +953,7 @@ export function Retro2004Template({
 
             {/* ═══ REALIZAČNÍ TÝM ═══ */}
             <section id="realizak" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-              <div className="bg-[#002b66] text-white px-3 py-1.5 font-bold text-sm uppercase">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase">
                 Vedení oddílu a realizační tým
               </div>
               <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -941,8 +963,8 @@ export function Retro2004Template({
                       <ManagerFace faceConfig={manager.avatar} size={48} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm text-red-700 font-bold uppercase">Hlavní trenér</div>
-                      <div className="font-bold text-base text-blue-900 break-words">{manager.name}</div>
+                      <div className="text-sm text-[var(--club-ink)] font-bold uppercase">Hlavní trenér</div>
+                      <div className="font-bold text-base text-[var(--club-ink)] break-words">{manager.name}</div>
                       <div className="text-gray-600 text-sm">Věk {manager.age} let · Licence {manager.licence}</div>
                     </div>
                   </div>
@@ -962,9 +984,33 @@ export function Retro2004Template({
               </div>
             </section>
 
+            {/* ═══ TISKOVÉ STŘEDISKO ═══ */}
+            {hasPressCenterContent(data) && (
+              <section id="tisk" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
+                <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase">
+                  Tiskové středisko: slovo trenéra a zprávy klubu
+                </div>
+                <div className="p-3">
+                  <PressCenter data={data} tone="light" />
+                </div>
+              </section>
+            )}
+
+            {/* ═══ SÍŇ SLÁVY ═══ */}
+            {data.history && (
+              <section id="historie" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
+                <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase">
+                  Síň slávy oddílu
+                </div>
+                <div className="p-3">
+                  <ClubHallOfFame history={data.history} tone="light" />
+                </div>
+              </section>
+            )}
+
             {/* ═══ STADION: FOTKY Z 3D MODELU AREÁLU ═══ */}
             <section id="stadion" className={`border border-gray-400 bg-white ${ANCHOR_OFFSET}`}>
-              <div className="bg-[#002b66] text-white px-3 py-1.5 font-bold text-sm uppercase flex items-center justify-between gap-2 flex-wrap">
+              <div className="bg-[var(--club-bar)] text-[var(--club-on-bar)] px-3 py-1.5 font-bold text-sm uppercase flex items-center justify-between gap-2 flex-wrap">
                 <span>Fotodokumentace areálu: {team.stadium.name || "naše hřiště"}</span>
               </div>
               <div className="p-3">
@@ -975,7 +1021,7 @@ export function Retro2004Template({
             {/* ═══ AUDIO MODUL (RETRO WINAMP / WMP STYLE) ═══ */}
             {hasAudioModule && (
               <section id="audio" className={`border border-gray-400 bg-[#e0ded8] p-3 shadow-inner ${ANCHOR_OFFSET}`}>
-                <div className="text-sm font-bold font-mono text-blue-900 mb-2 uppercase flex items-center gap-1.5">
+                <div className="text-sm font-bold font-mono text-[var(--club-ink)] mb-2 uppercase flex items-center gap-1.5">
                   <span>📻</span>
                   <span>Audio přehrávač oddílu</span>
                 </div>
@@ -989,7 +1035,7 @@ export function Retro2004Template({
 
             {/* ═══ HISTORIE & KRONIKA ═══ */}
             <section id="historie" className={`border border-gray-400 bg-white p-3.5 text-sm font-serif leading-relaxed ${ANCHOR_OFFSET}`}>
-              <div className="font-sans font-bold text-base text-[#002b66] border-b border-gray-300 pb-1 mb-2 break-words">
+              <div className="font-sans font-bold text-base text-[var(--club-accent-light)] border-b border-gray-300 pb-1 mb-2 break-words">
                 Z kroniky oddílu {team.name}
               </div>
               <p className="break-words">

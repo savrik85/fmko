@@ -87,3 +87,34 @@ export function readableOnLight(hex: string): string {
   }
   return toHex([rgb[0] * lo, rgb[1] * lo, rgb[2] * lo]);
 }
+
+/**
+ * Zesvětlí týmovou barvu (míchá k bílé), aby splnila kontrast 4.5:1 proti tmavému
+ * pozadí. Protějšek `readableOnLight` pro tmavé šablony: tmavě modrý dres by na
+ * černém pozadí zmizel. Barvy, které kontrast splňují, vrací beze změny.
+ */
+export function readableOnDark(hex: string, background = "#0b0f17"): string {
+  const rgb = parseHex(hex);
+  const bg = parseHex(background);
+  if (contrastRatio(rgb, bg) >= 4.5) return toHex(rgb);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2;
+    const mixed: [number, number, number] = [
+      rgb[0] + (255 - rgb[0]) * mid,
+      rgb[1] + (255 - rgb[1]) * mid,
+      rgb[2] + (255 - rgb[2]) * mid,
+    ];
+    if (contrastRatio(mixed, bg) >= 4.5) hi = mid;
+    else lo = mid;
+  }
+  return toHex([rgb[0] + (255 - rgb[0]) * hi, rgb[1] + (255 - rgb[1]) * hi, rgb[2] + (255 - rgb[2]) * hi]);
+}
+
+/** Je barva skoro bílá nebo skoro černá (na pozadí lišty by působila jako „bez barvy“)? */
+export function isNeutralExtreme(hex: string): boolean {
+  const l = relativeLuminance(parseHex(hex));
+  return l > 0.85 || l < 0.012;
+}
+

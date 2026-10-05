@@ -34,6 +34,10 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
   let badgeInitials = "";
   let badgeSymbol: string | null = null;
   let foundingYear: number | null = null;
+  // Fotka vlastního stadionu z 3D modelu (JPEG) jako pozadí náhledu; bez ní obecný náhled
+  let photoUrl: string | null = null;
+  // Poslední výsledek z pohledu klubu, např. „Výhra 3:1 s Horní Lhota“
+  let lastResult: string | null = null;
 
   try {
     const r = await fetch(`${API}/api/teams/${encodeURIComponent(decodeURIComponent(teamId))}/website`, { cache: "no-store" });
@@ -55,6 +59,14 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
         capacity = t.stadium?.capacity || null;
         playerCount = data.roster?.aTeam?.length || null;
         leagueName = t.league?.name || leagueName;
+        photoUrl = data.stadiumPhotos?.photos?.overview ?? null;
+        const lm = data.matches?.lastMatch;
+        if (lm?.opponent?.name) {
+          const ours = lm.isHome ? lm.scoreHome : lm.scoreAway;
+          const theirs = lm.isHome ? lm.scoreAway : lm.scoreHome;
+          const word = ours > theirs ? "Výhra" : ours === theirs ? "Remíza" : "Prohra";
+          lastResult = `${word} ${ours}:${theirs} s ${lm.opponent.name}`;
+        }
       }
     } else if (r.status !== 404) {
       console.error("náhled klubu: API vrátilo chybu", teamId, r.status);
@@ -87,6 +99,27 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
           position: "relative",
         }}
       >
+        {photoUrl && (
+          <img
+            src={photoUrl}
+            width={1200}
+            height={630}
+            style={{ position: "absolute", left: 0, top: 0, width: "1200px", height: "630px", objectFit: "cover" }}
+          />
+        )}
+        {photoUrl && (
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: "1200px",
+              height: "630px",
+              display: "flex",
+              background: "linear-gradient(90deg, rgba(4,8,5,0.92) 0%, rgba(4,8,5,0.78) 45%, rgba(4,8,5,0.35) 100%)",
+            }}
+          />
+        )}
         {/* Subtle decorative stadium pitch lines in background */}
         <div
           style={{
@@ -353,8 +386,8 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
                 color: "rgba(255,255,255,0.9)",
               }}
             >
-              <span>👥</span>
-              <span>{playerCount ? `A-tým: ${playerCount} hráčů` : "A-tým"}</span>
+              <span>{lastResult ? "⚽" : "👥"}</span>
+              <span>{lastResult ?? (playerCount ? `A-tým: ${playerCount} hráčů` : "A-tým")}</span>
             </div>
 
             <div

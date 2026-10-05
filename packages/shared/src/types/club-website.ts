@@ -85,7 +85,7 @@ export const CLUB_WEBSITE_ADDONS: Record<ClubWebsiteAddon, AddonDefinition> = {
     id: "sponsor_banner",
     name: "Sponzorská reklamní lišta",
     price: 16000,
-    description: "Lišta se skutečnými partnery klubu (sponzor na dresu, stadionu i bannerech) nahoře na webu.",
+    description: "Lišta se skutečnými partnery klubu nahoře na webu. Partneři z bannerů a stadionu za viditelnost platí o 5 % víc.",
   },
   audio_module: {
     id: "audio_module",
@@ -351,9 +351,15 @@ export interface ClubWebsiteData {
     seasonPassPrice?: number;
   };
   stadiumPhotos: ClubWebsiteStadiumPhotos;
+  /** Síň slávy (sezóny, trofeje, ocenění, pohár, střelci, achievementy); null když se nenačetla. */
+  history: ClubWebsiteHistory | null;
   interviews: Array<{
     id: string;
     gameWeek: number;
+    /** pre_match | post_match | season_wrap */
+    kind?: string | null;
+    /** Trenér, který rozhovor dal (nemusí být ten současný). */
+    managerName?: string | null;
     questions: string[];
     answers: string[];
     createdAt: string;
@@ -412,6 +418,106 @@ export interface ClubWebsiteTransfer {
   story: string;
   /** Slova hráče bez uvozovek a bez podpisu; šablona je obalí do „ “. */
   quote?: string;
+}
+
+/**
+ * Síň slávy klubu na veřejném webu. Jen to, co hra skutečně archivuje; co se nedochovalo,
+ * chybí (prázdné pole, `null`). Všechny seznamy jsou od nejnovější sezóny.
+ */
+export interface ClubWebsiteHistory {
+  /** Dohrané ligové sezóny (archiv `league_history`, u lidských týmů doplněný o recap sezóny). */
+  seasons: ClubWebsiteHistorySeason[];
+  /** Medailová umístění v lize (`teams.trophies`) a vítězství v poháru. */
+  trophies: ClubWebsiteHistoryTrophy[];
+  /** Ocenění sezóny pro hráče a trenéra klubu (snímek ocenění v `league_history.awards`). */
+  awards: ClubWebsiteHistoryAward[];
+  /** Pohárová tažení: kam klub v kterém ročníku došel. */
+  cup: ClubWebsiteHistoryCupRun[];
+  /** Nejlepší střelci klubu všech dob (liga i pohár, i hráči, kteří už odešli). Nejvýš 10. */
+  topScorers: ClubWebsiteHistoryScorer[];
+  /** Získané achievementy (Kořaly), nejcennější první. */
+  achievements: ClubWebsiteHistoryAchievement[];
+  /** Kolik achievementů hra celkem nabízí (pro „získáno X z Y“). */
+  achievementsTotal: number;
+}
+
+export interface ClubWebsiteHistorySeason {
+  seasonNumber: number;
+  /** Název soutěže tak, jak se jmenovala v té sezóně, pokud se dochoval; jinak dnešní název. */
+  leagueName: string;
+  position: number;
+  /** Počet týmů v lize; null = nedochovalo se. */
+  teams: number | null;
+  /** Bilance; null u sezón, kde se dochovalo jen umístění. */
+  points: number | null;
+  played: number | null;
+  wins: number | null;
+  draws: number | null;
+  losses: number | null;
+  goalsFor: number | null;
+  goalsAgainst: number | null;
+}
+
+export interface ClubWebsiteHistoryTrophy {
+  seasonNumber: number;
+  kind: "league_champion" | "league_runner_up" | "league_third" | "cup_winner";
+  /** Liga nebo pohár. */
+  competitionName: string;
+}
+
+export interface ClubWebsiteHistoryAward {
+  seasonNumber: number;
+  kind: "player_of_season" | "top_scorer" | "manager_of_season" | "discovery" | "best_eleven";
+  leagueName: string;
+  /** Odkaz na profil hráče; null = hráč už ve hře není (nebo jde o trenéra). */
+  playerId: string | null;
+  /** Jméno oceněného; null = nedochovalo se (např. trenér klubu bez lidského manažera). */
+  name: string | null;
+  /** Upřesnění: počet gólů, post v jedenáctce nebo zdůvodnění poroty. */
+  detail: string | null;
+}
+
+export interface ClubWebsiteHistoryCupRun {
+  seasonNumber: number;
+  cupName: string;
+  /** won = vyhrál pohár, eliminated = vypadl, running = letošní ročník, klub je stále ve hře. */
+  status: "won" | "eliminated" | "running";
+  /** Kolo, kam klub došel (u `running` kolo, které se právě hraje). */
+  reachedRound: number;
+  /** Název kola („2. předkolo“, „Čtvrtfinále“, „Finále“…), stejný jako ve hře. */
+  reachedRoundName: string;
+  totalRounds: number;
+  /** Rozhodující zápas: finále u vítěze, zápas, ve kterém klub vypadl, u ostatních. */
+  decidingMatch: {
+    opponentName: string;
+    /** null = soupeř není klub ze hry (generovaný velkoklub), bez odkazu. */
+    opponentTeamId: string | null;
+    isHome: boolean;
+    goalsFor: number;
+    goalsAgainst: number;
+    /** Penalty jen při remíze, jinak null. */
+    pensFor: number | null;
+    pensAgainst: number | null;
+  } | null;
+}
+
+export interface ClubWebsiteHistoryScorer {
+  /** Odkaz na profil hráče; null = hráč už ve hře není. */
+  playerId: string | null;
+  name: string;
+  goals: number;
+  /** Zápasy, ve kterých za klub nastoupil (liga i pohár). */
+  appearances: number;
+  stillAtClub: boolean;
+}
+
+export interface ClubWebsiteHistoryAchievement {
+  key: string;
+  icon: string;
+  title: string;
+  desc: string;
+  tier: "bronze" | "silver" | "gold";
+  earnedAt: string;
 }
 
 

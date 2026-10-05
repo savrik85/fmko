@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import { ROLE_DEFS, type StaffRole } from "@okresni-masina/shared";
 import {
@@ -20,7 +20,27 @@ import { ClubScarf } from "@/components/team/club-scarf";
 import { ManagerFace } from "../ManagerFace";
 import { TacticalPitch } from "../TacticalPitch";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
+import { PressCenter, hasPressCenterContent } from "../PressCenter";
+import { ClubHallOfFame } from "../ClubHallOfFame";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
+
+/**
+ * Web je v barvách klubu: proměnné `--club-*` nastavuje obal stránky (`clubPaletteStyle`).
+ * Odvozené odstíny šablony:
+ * - `--club-ink`: `--club-accent-light` drží kontrast 4.5:1 jen proti čisté bílé, na šedých
+ *   kartičkách (slate-50) a barevných štítcích proto drobný text bere o čtvrtinu tmavší odstín.
+ * - `--club-tint` / `--club-tint-strong`: světlé podbarvení štítků a našeho řádku v tabulce.
+ * - `--club-line`: světlý rámeček.
+ * Odstíny jsou proměnné, ne třídy `bg-[color-mix(...)]`: Tailwind pro prohlížeče bez color-mix
+ * podstrčí plnou barvu akcentu a tmavý text by na ní zmizel. Neplatná proměnná místo toho
+ * nechá pozadí průhledné.
+ */
+const CLUB_TONES = {
+  "--club-ink": "color-mix(in srgb, var(--club-accent-light) 75%, black)",
+  "--club-tint": "color-mix(in srgb, var(--club-accent-light) 10%, white)",
+  "--club-tint-strong": "color-mix(in srgb, var(--club-accent-light) 18%, white)",
+  "--club-line": "color-mix(in srgb, var(--club-accent-light) 30%, white)",
+} as CSSProperties;
 
 export function RegionalStandardTemplate({
   data,
@@ -38,7 +58,7 @@ export function RegionalStandardTemplate({
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
 
-  const primary = team.primaryColor || "#1e3a8a";
+  const primary = team.primaryColor || "#2D5F2D";
   const secondary = team.secondaryColor || "#ffffff";
   const badgePattern = (team.badge.pattern as BadgePattern) || "shield";
   const badgeIni = team.badge.customInitials || team.name.slice(0, 3).toUpperCase();
@@ -100,12 +120,12 @@ export function RegionalStandardTemplate({
     isHome ? <TeamLink id={opponent.id} name={opponent.name} /> : team.name;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-16">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-16" style={CLUB_TONES}>
       {/* Top Accent Strip */}
-      <div className="h-1.5 w-full" style={{ backgroundColor: primary }} />
+      <div className="h-1.5 w-full bg-[var(--club-secondary)]" />
 
       {/* Modern Clean Header (nelepí, nahoře už je lišta z ClubWebsiteClient) */}
-      <header className="bg-white border-b border-slate-200 shadow-sm">
+      <header className="bg-[var(--club-bar)] text-[var(--club-on-bar)] border-b border-black/10 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="shrink-0 drop-shadow-sm">
@@ -119,24 +139,23 @@ export function RegionalStandardTemplate({
               />
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+              <div className="text-sm font-bold text-[var(--club-on-bar)] uppercase tracking-wider">
                 Oficiální klubový portál
               </div>
-              <h1 className="font-heading font-black text-xl sm:text-2xl text-slate-900 tracking-tight break-words">
+              <h1 className="font-heading font-black text-xl sm:text-2xl text-[var(--club-on-bar)] tracking-tight break-words">
                 {team.name}
               </h1>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-600">
-              Vstupné <strong className="text-slate-900">{tickets.adultPrice} Kč</strong>
+            <span className="text-sm text-[var(--club-on-bar)]">
+              Vstupné <strong className="text-[var(--club-on-bar)]">{tickets.adultPrice} Kč</strong>
             </span>
             <button
               type="button"
               onClick={onOpenTickets}
-              className="px-4 py-2 rounded-xl text-white font-heading font-extrabold text-sm shadow hover:opacity-90 active:scale-95 transition"
-              style={{ backgroundColor: primary }}
+              className="px-4 py-2 rounded-xl bg-[var(--club-on-bar)] text-[var(--club-bar)] font-heading font-extrabold text-sm shadow hover:opacity-90 active:scale-95 transition"
             >
               🎟️ Vstupenky
             </button>
@@ -147,15 +166,17 @@ export function RegionalStandardTemplate({
       {/* Horizontal Navigation Pills (lepí pod horní lištou ClubWebsiteClient) */}
       <nav className="bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm sticky top-[52px] z-40">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-2 text-sm font-heading font-bold text-slate-600 flex items-center gap-6 overflow-x-auto">
-          <a href="#zapas" className="hover:text-slate-900 shrink-0">⚽ Zápasy</a>
-          <a href="#tabulka" className="hover:text-slate-900 shrink-0">📊 Tabulka</a>
-          <a href="#kadr" className="hover:text-slate-900 shrink-0">👥 Soupiska</a>
-          <a href="#prestupy" className="hover:text-slate-900 shrink-0">📜 Přestupy ({transfers.length})</a>
-          <a href="#identita" className="hover:text-slate-900 shrink-0">👕 Dresy & Maskot</a>
-          <a href="#stadion" className="hover:text-slate-900 shrink-0">🏟️ Stadion & Areál</a>
-          <a href="#bufet" className="hover:text-slate-900 shrink-0">🍺 Občerstvení</a>
-          {hasAudioModule && <a href="#audio" className="text-blue-600 hover:underline shrink-0">🎵 Audio přehrávač</a>}
-          {hasStaff && <a href="#realizak" className="hover:text-slate-900 shrink-0">👔 Realizační tým</a>}
+          <a href="#zapas" className="hover:text-[var(--club-accent-light)] shrink-0">⚽ Zápasy</a>
+          <a href="#tabulka" className="hover:text-[var(--club-accent-light)] shrink-0">📊 Tabulka</a>
+          <a href="#kadr" className="hover:text-[var(--club-accent-light)] shrink-0">👥 Soupiska</a>
+          <a href="#prestupy" className="hover:text-[var(--club-accent-light)] shrink-0">📜 Přestupy ({transfers.length})</a>
+          <a href="#identita" className="hover:text-[var(--club-accent-light)] shrink-0">👕 Dresy & Maskot</a>
+          {hasPressCenterContent(data) && <a href="#tisk" className="hover:text-[var(--club-accent-light)] shrink-0">🎙️ Tisk</a>}
+          {data.history && <a href="#historie" className="hover:text-[var(--club-accent-light)] shrink-0">🏆 Síň slávy</a>}
+          <a href="#stadion" className="hover:text-[var(--club-accent-light)] shrink-0">🏟️ Stadion & Areál</a>
+          <a href="#bufet" className="hover:text-[var(--club-accent-light)] shrink-0">🍺 Občerstvení</a>
+          {hasAudioModule && <a href="#audio" className="text-[var(--club-accent-light)] hover:underline shrink-0">🎵 Audio přehrávač</a>}
+          {hasStaff && <a href="#realizak" className="hover:text-[var(--club-accent-light)] shrink-0">👔 Realizační tým</a>}
         </div>
       </nav>
 
@@ -175,8 +196,8 @@ export function RegionalStandardTemplate({
       <main className="max-w-6xl mx-auto px-4 sm:px-8 mt-8 space-y-10">
         {/* Press Announcement Box: jen skutečné prohlášení vedení */}
         {announcement && (
-          <div className="bg-white border-l-4 p-5 rounded-2xl shadow-sm border-blue-600">
-            <div className="text-sm uppercase font-heading font-extrabold text-blue-700 mb-1 flex items-center gap-2">
+          <div className="bg-white border-l-4 p-5 rounded-2xl shadow-sm border-[var(--club-accent-light)]">
+            <div className="text-sm uppercase font-heading font-extrabold text-[var(--club-accent-light)] mb-1 flex items-center gap-2">
               <span>📢</span>
               <span>Oficiální prohlášení klubu {hasPressOfficer && "· Tiskový mluvčí"}</span>
             </div>
@@ -195,7 +216,7 @@ export function RegionalStandardTemplate({
                 <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-heading font-bold uppercase text-slate-500 mb-4">
                   <span>Příští zápas · {nextMatch?.round ? `${nextMatch.round}. kolo` : "Nadcházející utkání"}</span>
                   {nextMatch && (
-                    <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 font-black">
+                    <span className="px-2.5 py-1 rounded-full bg-[var(--club-tint)] text-[var(--club-ink)] border border-[var(--club-line)] font-black">
                       {nextMatch.isHome ? "Domácí utkání" : "Venkovní utkání"}
                     </span>
                   )}
@@ -222,7 +243,7 @@ export function RegionalStandardTemplate({
 
                     <div className="text-center">
                       <div className="text-2xl sm:text-3xl font-heading font-black text-slate-400">VS</div>
-                      <div className="text-sm font-heading font-bold text-blue-600 mt-1">
+                      <div className="text-sm font-heading font-bold text-[var(--club-accent-light)] mt-1">
                         {formatDateTime(nextMatch.scheduledAt)}
                       </div>
                     </div>
@@ -263,8 +284,7 @@ export function RegionalStandardTemplate({
                 <button
                   type="button"
                   onClick={onOpenTickets}
-                  className="px-4 py-2 rounded-xl text-white font-heading font-bold shadow hover:opacity-90 transition shrink-0"
-                  style={{ backgroundColor: primary }}
+                  className="px-4 py-2 rounded-xl bg-[var(--club-bar)] text-[var(--club-on-bar)] ring-1 ring-inset ring-black/10 font-heading font-bold shadow hover:opacity-90 transition shrink-0"
                 >
                   Vstupenky
                 </button>
@@ -345,7 +365,7 @@ export function RegionalStandardTemplate({
                           <button
                             type="button"
                             onClick={() => onOpenHighlights(m)}
-                            className="text-blue-600 hover:text-blue-800 font-heading font-bold text-sm"
+                            className="text-[var(--club-ink)] hover:underline font-heading font-bold text-sm"
                           >
                             Sestřih
                           </button>
@@ -429,7 +449,7 @@ export function RegionalStandardTemplate({
                         key={row.teamId}
                         className={`transition ${
                           row.isCurrentTeam
-                            ? "bg-blue-50/80 font-bold text-blue-950 border-l-4 border-l-blue-600"
+                            ? "bg-[var(--club-tint)] font-bold text-[var(--club-ink)] border-l-4 border-l-[var(--club-accent-light)]"
                             : "hover:bg-slate-50/60 text-slate-700"
                         }`}
                       >
@@ -438,7 +458,7 @@ export function RegionalStandardTemplate({
                         </td>
                         <td className="py-2.5 px-3 font-medium min-w-[9rem]">
                           <TeamLink id={row.teamId} name={row.teamName} />{" "}
-                          {row.isCurrentTeam && <span className="text-sm font-black text-blue-700 ml-1.5 px-1.5 py-0.5 bg-blue-100 rounded whitespace-nowrap">NÁŠ TÝM</span>}
+                          {row.isCurrentTeam && <span className="text-sm font-black text-[var(--club-ink)] ml-1.5 px-1.5 py-0.5 bg-[var(--club-tint-strong)] rounded whitespace-nowrap">NÁŠ TÝM</span>}
                         </td>
                         <td className="py-2.5 px-2 text-center">{row.played}</td>
                         <td className="py-2.5 px-2 text-center text-emerald-700 font-bold">{row.won}</td>
@@ -479,7 +499,7 @@ export function RegionalStandardTemplate({
                   onClick={() => setActiveRosterTab("aTeam")}
                   className={`px-3 py-1.5 rounded-lg transition ${
                     activeRosterTab === "aTeam"
-                      ? "bg-slate-900 text-white shadow-sm"
+                      ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] shadow-sm"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -490,7 +510,7 @@ export function RegionalStandardTemplate({
                   onClick={() => setActiveRosterTab("u21Team")}
                   className={`px-3 py-1.5 rounded-lg transition ${
                     activeRosterTab === "u21Team"
-                      ? "bg-slate-900 text-white shadow-sm"
+                      ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] shadow-sm"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -502,14 +522,14 @@ export function RegionalStandardTemplate({
                 <button
                   type="button"
                   onClick={() => setViewMode("cards")}
-                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "cards" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "cards" ? "bg-white text-[var(--club-accent-light)] shadow-sm" : "text-slate-600"}`}
                 >
                   📋 Seznam
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("pitch")}
-                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "pitch" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "pitch" ? "bg-white text-[var(--club-accent-light)] shadow-sm" : "text-slate-600"}`}
                 >
                   ⚽ Taktika 11
                 </button>
@@ -528,7 +548,7 @@ export function RegionalStandardTemplate({
                   onClick={() => setPositionFilter(pos)}
                   className={`px-3.5 py-1.5 rounded-lg border transition ${
                     positionFilter === pos
-                      ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                      ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] border-[var(--club-accent-light)] shadow-sm"
                       : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
                   }`}
                 >
@@ -560,7 +580,7 @@ export function RegionalStandardTemplate({
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="min-w-7 h-7 px-1 rounded bg-slate-100 text-slate-700 font-heading font-black text-sm flex items-center justify-center shrink-0 border border-slate-200">
+                        <span className="min-w-7 h-7 px-1 rounded bg-[var(--club-bar)] text-[var(--club-on-bar)] font-heading font-black text-sm flex items-center justify-center shrink-0 border border-black/10">
                           {player.squadNumber ?? EMPTY}
                         </span>
                         <span className="text-sm font-heading font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
@@ -621,7 +641,7 @@ export function RegionalStandardTemplate({
                     onClick={() => setTransferFilter(tab)}
                     className={`px-3 py-1.5 rounded-lg border transition ${
                       transferFilter === tab
-                        ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                        ? "bg-[var(--club-bar)] text-[var(--club-on-bar)] border-[var(--club-accent-light)] shadow-sm"
                         : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                     }`}
                   >
@@ -677,7 +697,7 @@ export function RegionalStandardTemplate({
                       </p>
 
                       {t.quote && (
-                        <div className="p-3 bg-white border-l-4 border-blue-600 rounded-r-xl text-sm italic text-slate-700 shadow-sm break-words">
+                        <div className="p-3 bg-white border-l-4 border-[var(--club-accent-light)] rounded-r-xl text-sm italic text-slate-700 shadow-sm break-words">
                           <strong>Slovo hráče:</strong> „{t.quote}“
                         </div>
                       )}
@@ -792,7 +812,7 @@ export function RegionalStandardTemplate({
                         className="w-16 h-16 rounded-xl border border-slate-200 object-cover shrink-0 shadow-sm"
                       />
                     ) : (
-                      <div className="w-16 h-16 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-center text-3xl shrink-0">
+                      <div className="w-16 h-16 bg-[var(--club-tint)] border border-[var(--club-line)] rounded-xl flex items-center justify-center text-3xl shrink-0">
                         🦁
                       </div>
                     )}
@@ -815,10 +835,40 @@ export function RegionalStandardTemplate({
           </div>
         </section>
 
+        {/* ═══ TISKOVÉ STŘEDISKO ═══ */}
+        {hasPressCenterContent(data) && (
+        <section id="tisk" className={ANCHOR_OFFSET}>
+          <div className="mb-6">
+            <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-ink)] mb-1">
+              Tiskové středisko
+            </div>
+            <h2 className="font-heading font-black text-2xl sm:text-3xl text-slate-900 break-words">Slovo trenéra a zprávy klubu</h2>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-6 shadow-sm">
+            <PressCenter data={data} tone="light" />
+          </div>
+        </section>
+        )}
+
+        {/* ═══ SÍŇ SLÁVY ═══ */}
+        {data.history && (
+        <section id="historie" className={ANCHOR_OFFSET}>
+          <div className="mb-6">
+            <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-ink)] mb-1">
+              Historie klubu
+            </div>
+            <h2 className="font-heading font-black text-2xl sm:text-3xl text-slate-900 break-words">Síň slávy</h2>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-6 shadow-sm">
+            <ClubHallOfFame history={data.history} tone="light" />
+          </div>
+        </section>
+        )}
+
         {/* ═══ STADION: FOTKY Z 3D MODELU AREÁLU ═══ */}
         <section id="stadion" className={ANCHOR_OFFSET}>
           <div className="mb-6">
-            <div className="text-sm font-heading font-bold uppercase tracking-wider text-slate-500 mb-1">
+            <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-ink)] mb-1">
               Klubové zázemí
             </div>
             <h2 className="font-heading font-black text-2xl sm:text-3xl text-slate-900 break-words">
@@ -869,7 +919,7 @@ export function RegionalStandardTemplate({
           <section id="audio" className={ANCHOR_OFFSET}>
             <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm">
               <div className="mb-4">
-                <div className="text-sm font-heading font-bold uppercase tracking-widest text-blue-600 mb-1">
+                <div className="text-sm font-heading font-bold uppercase tracking-widest text-[var(--club-accent-light)] mb-1">
                   Klubové audio
                 </div>
                 <h2 className="font-heading font-black text-xl sm:text-2xl text-slate-900 break-words">
@@ -904,7 +954,7 @@ export function RegionalStandardTemplate({
                       <ManagerFace faceConfig={manager.avatar} size={52} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-heading font-bold uppercase text-blue-700">Hlavní trenér</div>
+                      <div className="text-sm font-heading font-bold uppercase text-[var(--club-ink)]">Hlavní trenér</div>
                       <div className="font-heading font-extrabold text-base text-slate-900 break-words">{manager.name}</div>
                       <div className="text-sm text-slate-500">{manager.age} let · Licence {manager.licence}</div>
                     </div>

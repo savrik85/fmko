@@ -10,6 +10,8 @@ import { ManagerFace } from "../ManagerFace";
 import { TacticalPitch } from "../TacticalPitch";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
+import { PressCenter, hasPressCenterContent } from "../PressCenter";
+import { ClubHallOfFame } from "../ClubHallOfFame";
 import {
   ANCHOR_OFFSET,
   EMPTY,
@@ -87,6 +89,8 @@ export function ProfiLeagueTemplate({
     { href: "#tabulka", label: "Tabulka" },
     { href: "#kadr", label: "Kádr" },
     { href: "#prestupy", label: `Přestupy (${transfers.length})` },
+    ...(hasPressCenterContent(data) ? [{ href: "#tisk", label: "Tisk" }] : []),
+    ...(data.history ? [{ href: "#historie", label: "Síň slávy" }] : []),
     { href: "#identita", label: "Dresy" },
     { href: "#stadion", label: "Stadion" },
     { href: "#bufet", label: "Bufet" },
@@ -94,9 +98,9 @@ export function ProfiLeagueTemplate({
   ];
 
   return (
-    <div className="min-h-screen bg-[#070a12] text-white font-sans pb-16 selection:bg-red-600 selection:text-white">
+    <div className="min-h-screen bg-[#070a12] text-white font-sans pb-16 selection:bg-[var(--club-accent-dark)] selection:text-[var(--club-on-accent-dark)]">
       {/* Hlavička klubu (nelepí, nahoře už je lišta z ClubWebsiteClient) */}
-      <header className="bg-[#0e1320] border-b border-white/10 shadow-2xl">
+      <header className="bg-[var(--club-bar)] text-[var(--club-on-bar)] border-b border-white/10 shadow-2xl">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
             <div className="shrink-0 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
@@ -111,27 +115,27 @@ export function ProfiLeagueTemplate({
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="px-2 py-0.5 rounded bg-red-600/20 text-red-400 border border-red-500/30 text-sm font-heading font-black tracking-wide break-words">
+                <span className="px-2 py-0.5 rounded text-[var(--club-on-bar)] border border-[color-mix(in_srgb,var(--club-on-bar)_40%,transparent)] text-sm font-heading font-black tracking-wide break-words">
                   {leagueName}
                 </span>
-                <span className="text-sm text-white/50 font-heading font-bold">
+                <span className="text-sm text-[var(--club-on-bar)] font-heading font-bold">
                   {team.village.name}
                 </span>
               </div>
-              <h1 className="font-heading font-black text-xl sm:text-2xl tracking-tight text-white uppercase mt-1 break-words">
+              <h1 className="font-heading font-black text-xl sm:text-2xl tracking-tight text-[var(--club-on-bar)] uppercase mt-1 break-words">
                 {team.name}
               </h1>
             </div>
           </div>
 
           <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3">
-            <span className="text-sm text-white/60 font-heading font-bold">
+            <span className="text-sm text-[var(--club-on-bar)] font-heading font-bold">
               Vstupné {tickets.adultPrice} Kč
             </span>
             <button
               type="button"
               onClick={onOpenTickets}
-              className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-heading font-black text-sm uppercase tracking-wider shadow-[0_0_20px_rgba(220,38,38,0.4)] active:scale-95 transition"
+              className="px-5 py-2.5 rounded-xl bg-[var(--club-on-bar)] text-[var(--club-bar)] hover:ring-2 hover:ring-[color-mix(in_srgb,var(--club-on-bar)_45%,transparent)] font-heading font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition"
             >
               Vstupenky
             </button>
@@ -142,7 +146,7 @@ export function ProfiLeagueTemplate({
       {/* Lepící navigace pod lištou z ClubWebsiteClient (výška cca 52 px) */}
       <nav
         aria-label="Sekce webu"
-        className="sticky top-[52px] z-40 border-b border-white/10 bg-[#0b0e17]/95 backdrop-blur-md"
+        className="sticky top-[52px] z-40 border-b border-[color-mix(in_srgb,var(--club-accent-dark)_35%,transparent)] bg-[#0b0e17]/95 backdrop-blur-md"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-2.5 text-sm font-heading font-bold uppercase tracking-wide text-white/70 flex items-center gap-5 overflow-x-auto">
           {navItems.map((item) => (
@@ -151,13 +155,13 @@ export function ProfiLeagueTemplate({
               href={item.href}
               className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
                 item.highlight === "live"
-                  ? "text-red-400 hover:text-red-300"
+                  ? "text-[var(--club-accent-dark)] hover:text-white"
                   : item.highlight === "audio"
                     ? "text-amber-400 hover:text-amber-300"
                     : "hover:text-white"
               }`}
             >
-              {item.highlight === "live" && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+              {item.highlight === "live" && <span className="w-2 h-2 rounded-full bg-[var(--club-accent-dark)] animate-pulse" />}
               <span>{item.label}</span>
             </a>
           ))}
@@ -190,10 +194,10 @@ export function ProfiLeagueTemplate({
       <main className="max-w-6xl mx-auto px-4 sm:px-8 mt-8 space-y-12">
         {/* Tiskové prohlášení: jen když ho klub opravdu napsal */}
         {announcement && (
-          <div className="bg-[#111726] border-l-4 border-red-500 p-5 rounded-2xl shadow-xl flex items-start gap-4">
+          <div className="bg-[#111726] border-l-4 border-[var(--club-accent-dark)] p-5 rounded-2xl shadow-xl flex items-start gap-4">
             <span className="text-3xl shrink-0 mt-0.5">🎙️</span>
             <div className="min-w-0">
-              <div className="text-sm font-heading font-black uppercase tracking-wider text-red-400 mb-1">
+              <div className="text-sm font-heading font-black uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
                 Tiskové prohlášení klubu{hasPressOfficer && " · tiskový mluvčí"}
               </div>
               <p className="text-white/90 text-base font-medium leading-relaxed whitespace-pre-line break-words">
@@ -209,13 +213,13 @@ export function ProfiLeagueTemplate({
             {/* Podsvícení v barvě klubu */}
             <div
               className="absolute -right-20 -top-20 w-80 h-80 rounded-full blur-3xl opacity-20 pointer-events-none"
-              style={{ background: primary }}
+              style={{ background: "var(--club-accent-dark)" }}
             />
 
             <div className="relative flex flex-wrap items-center justify-between gap-2 mb-6 pb-4 border-b border-white/10">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 rounded-md bg-red-600 text-white font-heading font-black text-sm uppercase tracking-wider flex items-center gap-1.5 shadow">
-                  <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                <span className="px-3 py-1 rounded-md bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-heading font-black text-sm uppercase tracking-wider flex items-center gap-1.5 shadow">
+                  <span className="w-2 h-2 rounded-full bg-[var(--club-on-accent-dark)] animate-ping" />
                   Příští zápas
                 </span>
                 {nextMatch && (
@@ -224,7 +228,7 @@ export function ProfiLeagueTemplate({
                   </span>
                 )}
               </div>
-              <div className="text-sm font-heading font-black text-red-400 bg-black/40 px-3 py-1 rounded-lg border border-white/10 max-w-full break-words">
+              <div className="text-sm font-heading font-black text-[var(--club-accent-dark)] bg-black/40 px-3 py-1 rounded-lg border border-white/10 max-w-full break-words">
                 {leagueName}
               </div>
             </div>
@@ -257,7 +261,7 @@ export function ProfiLeagueTemplate({
 
                   {/* Termín a vstupenky */}
                   <div className="flex flex-col items-center text-center">
-                    <div className="px-6 py-2 rounded-2xl bg-black/60 border border-white/10 text-3xl sm:text-5xl font-heading font-black tracking-widest text-red-500 shadow-inner">
+                    <div className="px-6 py-2 rounded-2xl bg-black/60 border border-white/10 text-3xl sm:text-5xl font-heading font-black tracking-widest text-[var(--club-accent-dark)] shadow-inner">
                       VS
                     </div>
                     <div className="text-base font-heading font-bold text-white/80 mt-3">
@@ -269,7 +273,7 @@ export function ProfiLeagueTemplate({
                     <button
                       type="button"
                       onClick={onOpenTickets}
-                      className="mt-5 px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-heading font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition"
+                      className="mt-5 px-6 py-2.5 rounded-xl bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] hover:shadow-[0_0_24px_color-mix(in_srgb,var(--club-accent-dark)_55%,transparent)] font-heading font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition"
                     >
                       Vstupenky
                     </button>
@@ -361,7 +365,7 @@ export function ProfiLeagueTemplate({
               <div className="relative mt-8 pt-6 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-6">
                 {recentMatches.length > 0 && (
                   <div id="zaznamy" className={`${ANCHOR_OFFSET} bg-[#121826] border border-white/10 rounded-2xl p-3 sm:p-4`}>
-                    <h3 className="mb-3 border-b border-white/5 pb-2 font-heading font-black text-sm uppercase tracking-wider text-red-400 flex items-center gap-1.5">
+                    <h3 className="mb-3 border-b border-white/5 pb-2 font-heading font-black text-sm uppercase tracking-wider text-[var(--club-accent-dark)] flex items-center gap-1.5">
                       <span>⏪</span> Záznamy zápasů
                     </h3>
                     <ul className="space-y-2">
@@ -381,13 +385,13 @@ export function ProfiLeagueTemplate({
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-black px-2 py-0.5 bg-white/10 rounded text-amber-400 font-mono text-base">
+                            <span className="font-black px-2 py-0.5 bg-white/10 rounded text-[var(--club-accent-dark)] font-mono text-base">
                               {m.scoreHome}:{m.scoreAway}
                             </span>
                             <button
                               type="button"
                               onClick={() => onOpenHighlights(m)}
-                              className="px-2 py-1 rounded-lg text-red-400 hover:text-red-300 hover:bg-white/5 font-bold text-sm"
+                              className="px-2 py-1 rounded-lg text-[var(--club-accent-dark)] hover:text-white hover:bg-white/5 font-bold text-sm"
                             >
                               Záznam
                             </button>
@@ -418,7 +422,7 @@ export function ProfiLeagueTemplate({
                             </div>
                           </div>
                           <span className={`shrink-0 text-sm font-black px-2 py-0.5 rounded uppercase ${
-                            um.isHome ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-white/10 text-white/70"
+                            um.isHome ? "bg-[color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] text-[color-mix(in_srgb,var(--club-accent-dark)_60%,#ffffff)] border border-[color-mix(in_srgb,var(--club-accent-dark)_35%,transparent)]" : "bg-white/10 text-white/70"
                           }`}>
                             {um.isHome ? "Doma" : "Venku"}
                           </span>
@@ -436,7 +440,7 @@ export function ProfiLeagueTemplate({
         <section id="tabulka" className={ANCHOR_OFFSET}>
           <div className="bg-[#0e1320] border border-white/10 rounded-3xl p-4 sm:p-8 shadow-2xl relative overflow-hidden">
             <div className="mb-6 border-b border-white/10 pb-4">
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-red-500 break-words">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] break-words">
                 {leagueName}
               </div>
               <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
@@ -465,7 +469,7 @@ export function ProfiLeagueTemplate({
                         key={row.teamId}
                         className={`transition ${
                           row.isCurrentTeam
-                            ? "bg-red-600/25 font-bold text-white border-l-4 border-l-red-500 shadow-inner"
+                            ? "bg-[color-mix(in_srgb,var(--club-accent-dark)_18%,transparent)] font-bold text-white border-l-4 border-l-[var(--club-accent-dark)] shadow-inner"
                             : "hover:bg-white/5 text-white/80"
                         }`}
                       >
@@ -481,7 +485,7 @@ export function ProfiLeagueTemplate({
                         <td className="py-3 px-2 text-center font-mono text-white/60">{row.drawn}</td>
                         <td className="py-3 px-2 text-center font-mono text-red-400 font-bold">{row.lost}</td>
                         <td className="py-3 px-2 sm:px-3 text-center font-mono whitespace-nowrap">{row.gf}:{row.ga}</td>
-                        <td className="py-3 px-2 sm:px-4 text-center font-heading font-black text-amber-400 text-base bg-black/40">{row.points}</td>
+                        <td className="py-3 px-2 sm:px-4 text-center font-heading font-black text-[var(--club-accent-dark)] text-base bg-black/40">{row.points}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -499,7 +503,7 @@ export function ProfiLeagueTemplate({
         <section id="kadr" className={ANCHOR_OFFSET}>
           <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-6">
             <div>
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-red-500 mb-1">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
                 Soupiska
               </div>
               <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight uppercase">
@@ -516,7 +520,7 @@ export function ProfiLeagueTemplate({
                     onClick={() => setActiveRosterTab("aTeam")}
                     className={`px-3 py-1.5 rounded-lg transition ${
                       activeRosterTab === "aTeam"
-                        ? "bg-red-600 text-white shadow"
+                        ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] shadow"
                         : "text-white/60 hover:text-white"
                     }`}
                   >
@@ -527,7 +531,7 @@ export function ProfiLeagueTemplate({
                     onClick={() => setActiveRosterTab("u21Team")}
                     className={`px-3 py-1.5 rounded-lg transition ${
                       activeRosterTab === "u21Team"
-                        ? "bg-red-600 text-white shadow"
+                        ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] shadow"
                         : "text-white/60 hover:text-white"
                     }`}
                   >
@@ -540,14 +544,14 @@ export function ProfiLeagueTemplate({
                 <button
                   type="button"
                   onClick={() => setViewMode("cards")}
-                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "cards" ? "bg-red-600 text-white shadow" : "text-white/60"}`}
+                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "cards" ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] shadow" : "text-white/60"}`}
                 >
                   Karty
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("pitch")}
-                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "pitch" ? "bg-red-600 text-white shadow" : "text-white/60"}`}
+                  className={`px-3 py-1.5 rounded-lg transition ${viewMode === "pitch" ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] shadow" : "text-white/60"}`}
                 >
                   Na hřišti
                 </button>
@@ -567,7 +571,7 @@ export function ProfiLeagueTemplate({
                     onClick={() => setPositionFilter(pos)}
                     className={`px-3 sm:px-4 py-1.5 rounded-lg uppercase tracking-wide transition ${
                       positionFilter === pos
-                        ? "bg-red-600 text-white font-black shadow-lg"
+                        ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-black shadow-lg"
                         : "bg-[#121826] text-white/70 hover:bg-white/10 border border-white/10"
                     }`}
                   >
@@ -595,7 +599,7 @@ export function ProfiLeagueTemplate({
               {filteredRoster.map((player) => (
                 <article
                   key={player.id}
-                  className="bg-gradient-to-b from-[#161f33] to-[#0e1422] border border-white/15 rounded-2xl p-4 shadow-xl relative overflow-hidden group hover:border-red-500/60 transition-colors flex flex-col justify-between"
+                  className="bg-gradient-to-b from-[#161f33] to-[#0e1422] border border-white/15 rounded-2xl p-4 shadow-xl relative overflow-hidden group hover:border-[color-mix(in_srgb,var(--club-accent-dark)_60%,transparent)] transition-colors flex flex-col justify-between"
                 >
                   {/* Číslo dresu jako vodoznak */}
                   <div className="absolute -right-3 -top-5 text-7xl font-heading font-black text-white/5 pointer-events-none select-none tracking-tighter">
@@ -606,7 +610,7 @@ export function ProfiLeagueTemplate({
                     {/* Hodnocení, post a číslo */}
                     <div className="flex items-center justify-between gap-2 mb-3">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="shrink-0 px-2 py-0.5 rounded bg-red-600 text-white font-heading font-black text-sm shadow" title="Hodnocení hráče">
+                        <span className="shrink-0 px-2 py-0.5 rounded bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] font-heading font-black text-sm shadow" title="Hodnocení hráče">
                           {player.overallRating}
                         </span>
                         <span className="text-sm font-heading font-extrabold uppercase tracking-wide text-white/60 truncate">
@@ -620,7 +624,7 @@ export function ProfiLeagueTemplate({
 
                     {/* Portrét a jméno */}
                     <div className="flex items-center gap-3">
-                      <div className="w-16 h-18 rounded-xl overflow-hidden bg-black/40 border border-white/20 shrink-0 flex items-center justify-center shadow-inner group-hover:border-red-500/50 transition-colors">
+                      <div className="w-16 h-18 rounded-xl overflow-hidden bg-black/40 border border-white/20 shrink-0 flex items-center justify-center shadow-inner group-hover:border-[color-mix(in_srgb,var(--club-accent-dark)_50%,transparent)] transition-colors">
                         <ManagerFace faceConfig={player.avatar} size={58} />
                       </div>
 
@@ -648,7 +652,7 @@ export function ProfiLeagueTemplate({
                     </div>
                     <div className="bg-black/30 p-1.5 rounded-lg border border-white/5">
                       <div className="text-sm text-white/50 font-bold">Góly</div>
-                      <div className="font-black text-base text-red-400">{player.stats.goals}</div>
+                      <div className="font-black text-base text-[var(--club-accent-dark)]">{player.stats.goals}</div>
                     </div>
                     <div className="bg-black/30 p-1.5 rounded-lg border border-white/5">
                       <div className="text-sm text-white/50 font-bold">Minuty</div>
@@ -666,7 +670,7 @@ export function ProfiLeagueTemplate({
           <div className="bg-[#0e1320] border border-white/10 rounded-3xl p-4 sm:p-8 shadow-2xl">
             <div className="flex items-center justify-between mb-6 border-b border-white/10 pb-4 flex-wrap gap-3">
               <div>
-                <div className="text-sm font-heading font-bold uppercase tracking-wider text-red-500">
+                <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)]">
                   Příchody a odchody
                 </div>
                 <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
@@ -682,7 +686,7 @@ export function ProfiLeagueTemplate({
                     onClick={() => setTransferFilter(tab)}
                     className={`px-3 py-1.5 rounded-lg border transition ${
                       transferFilter === tab
-                        ? "bg-red-600 text-white border-red-500 shadow"
+                        ? "bg-[var(--club-accent-dark)] text-[var(--club-on-accent-dark)] border-[var(--club-accent-dark)] shadow"
                         : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10"
                     }`}
                   >
@@ -734,7 +738,7 @@ export function ProfiLeagueTemplate({
                       </p>
 
                       {t.quote && (
-                        <div className="p-3 bg-white/5 border-l-4 border-red-600 rounded-r-xl text-sm italic text-white/80 break-words">
+                        <div className="p-3 bg-white/5 border-l-4 border-[var(--club-accent-dark)] rounded-r-xl text-sm italic text-white/80 break-words">
                           <strong>Slovo hráče:</strong> „{t.quote}“
                         </div>
                       )}
@@ -754,7 +758,7 @@ export function ProfiLeagueTemplate({
         <section id="identita" className={ANCHOR_OFFSET}>
           <div className="bg-[#0e1320] border border-white/10 rounded-3xl p-4 sm:p-8 shadow-2xl space-y-6">
             <div className="border-b border-white/10 pb-4">
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-red-500">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)]">
                 Výstroj a identita
               </div>
               <h3 className="text-xl sm:text-3xl font-heading font-black text-white tracking-tight uppercase">
@@ -764,7 +768,7 @@ export function ProfiLeagueTemplate({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col items-center text-center">
-                <span className="text-sm uppercase tracking-wide font-heading font-black text-red-400 mb-3">
+                <span className="text-sm uppercase tracking-wide font-heading font-black text-[var(--club-accent-dark)] mb-3">
                   Domácí dres
                 </span>
                 <div className="flex items-center justify-center gap-4 py-2">
@@ -791,7 +795,7 @@ export function ProfiLeagueTemplate({
               </div>
 
               <div className="bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col items-center text-center">
-                <span className="text-sm uppercase tracking-wide font-heading font-black text-red-400 mb-3">
+                <span className="text-sm uppercase tracking-wide font-heading font-black text-[var(--club-accent-dark)] mb-3">
                   Venkovní dres
                 </span>
                 <div className="flex items-center justify-center gap-4 py-2">
@@ -847,7 +851,7 @@ export function ProfiLeagueTemplate({
                         className="w-16 h-16 rounded-xl border border-white/10 object-cover shrink-0 shadow"
                       />
                     ) : (
-                      <div className="w-16 h-16 bg-red-600/20 border border-red-500/30 rounded-xl flex items-center justify-center text-3xl shrink-0">
+                      <div className="w-16 h-16 bg-[color-mix(in_srgb,var(--club-accent-dark)_15%,transparent)] border border-[color-mix(in_srgb,var(--club-accent-dark)_35%,transparent)] rounded-xl flex items-center justify-center text-3xl shrink-0">
                         🦁
                       </div>
                     )}
@@ -870,10 +874,40 @@ export function ProfiLeagueTemplate({
           </div>
         </section>
 
+        {/* ═══ TISKOVÉ STŘEDISKO ═══ */}
+        {hasPressCenterContent(data) && (
+          <section id="tisk" className={ANCHOR_OFFSET}>
+            <div className="mb-6">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
+                Tiskové středisko
+              </div>
+              <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight uppercase">Slovo trenéra a zprávy klubu</h2>
+            </div>
+            <div className="bg-[#121826] border border-white/10 rounded-3xl p-4 sm:p-6 shadow-xl">
+              <PressCenter data={data} tone="dark" />
+            </div>
+          </section>
+        )}
+
+        {/* ═══ SÍŇ SLÁVY ═══ */}
+        {data.history && (
+          <section id="historie" className={ANCHOR_OFFSET}>
+            <div className="mb-6">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
+                Historie klubu
+              </div>
+              <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight uppercase">Síň slávy</h2>
+            </div>
+            <div className="bg-[#121826] border border-white/10 rounded-3xl p-4 sm:p-6 shadow-xl">
+              <ClubHallOfFame history={data.history} tone="dark" />
+            </div>
+          </section>
+        )}
+
         {/* ═══ STADION ═══ */}
         <section id="stadion" className={ANCHOR_OFFSET}>
           <div className="mb-6">
-            <div className="text-sm font-heading font-bold uppercase tracking-wider text-red-500 mb-1">
+            <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
               Stadion
             </div>
             <h2 className="font-heading font-black text-2xl sm:text-4xl text-white tracking-tight uppercase break-words">
@@ -889,7 +923,7 @@ export function ProfiLeagueTemplate({
         <section id="bufet" className={ANCHOR_OFFSET}>
           <div className="bg-[#121826] border border-white/10 rounded-3xl p-4 sm:p-8 shadow-xl">
             <div className="mb-6">
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-red-500 mb-1">
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
                 Bufet
               </div>
               <h2 className="font-heading font-black text-xl sm:text-2xl text-white uppercase">
@@ -909,7 +943,7 @@ export function ProfiLeagueTemplate({
                       <div className="font-black text-base text-white break-words">{item.name || item.label}</div>
                       <div className="text-sm text-white/50">{item.label}</div>
                     </div>
-                    <div className="shrink-0 text-2xl font-black text-red-400 tabular-nums">
+                    <div className="shrink-0 text-2xl font-black text-[var(--club-accent-dark)] tabular-nums">
                       {item.price} Kč
                     </div>
                   </div>
@@ -928,7 +962,7 @@ export function ProfiLeagueTemplate({
           <section id="audio" className={ANCHOR_OFFSET}>
             <div className="bg-[#121826] border border-white/10 rounded-3xl p-4 sm:p-8 shadow-xl">
               <div className="mb-4">
-                <div className="text-sm font-heading font-bold uppercase tracking-wider text-red-500 mb-1">
+                <div className="text-sm font-heading font-bold uppercase tracking-wider text-[var(--club-accent-dark)] mb-1">
                   Klubové písně
                 </div>
                 <h2 className="font-heading font-black text-xl sm:text-2xl text-white uppercase">

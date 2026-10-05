@@ -19,6 +19,7 @@ import { RegionalStandardTemplate } from "./templates/RegionalStandardTemplate";
 import { ProfiLeagueTemplate } from "./templates/ProfiLeagueTemplate";
 import { ChampionsTemplate } from "./templates/ChampionsTemplate";
 import type { TemplateProps } from "./templates/types";
+import { ClubBasePathContext, clubPaletteStyle } from "./templates/shared";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -143,7 +144,7 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" style={clubPaletteStyle(primary, secondary)}>
       {/* ═══ HORNÍ LIŠTA (sdílení a návrat do hry) ═══ */}
       <div className="bg-[#0b0f17] text-slate-300 border-b border-white/10 px-3 sm:px-6 py-2 text-sm flex items-center justify-between gap-2 sticky top-0 z-50 shadow-md backdrop-blur-md min-h-[52px]">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -204,7 +205,9 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
         </div>
       </div>
 
-      <Template {...templateProps} />
+      <ClubBasePathContext.Provider value={`/klub/${website.customSlug || team.id}`}>
+        <Template {...templateProps} />
+      </ClubBasePathContext.Provider>
 
       {/* ═══ SPOLEČNÁ OKNA ═══ */}
       <TicketModal

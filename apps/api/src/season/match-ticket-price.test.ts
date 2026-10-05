@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchTicketPrice, stadiumFacilityLevels, getBaseTicketPrice, mapVillageSize } from "./finance-processor";
+import { matchTicketPrice, stadiumFacilityLevels, getBaseTicketPrice, mapVillageSize, websiteBannerWeeklyBonus } from "./finance-processor";
 
 // Klubový web ukazuje cenu lístku stejnou funkcí, jakou se počítají tržby ze zápasu.
 // Kdyby se tyhle dvě cesty rozešly, web by fanouškům tvrdil jinou cenu, než zaplatí.
@@ -40,5 +40,21 @@ describe("stadiumFacilityLevels", () => {
     expect(levels.fence).toBe(2);
     expect(levels.stands).toBe(1);
     expect("stand_main" in levels).toBe(false);
+  });
+});
+
+describe("websiteBannerWeeklyBonus", () => {
+  it("bez partnerů na bannerech nic", () => {
+    expect(websiteBannerWeeklyBonus(0, 1)).toBe(0);
+  });
+
+  it("5 % z týdenních plateb bannerů a stadionu, stejný přepočet jako sponzorské příjmy", () => {
+    // 27 800 Kč/měs je průměr lidských klubů na produ (2026-10)
+    expect(websiteBannerWeeklyBonus(27800, 1)).toBe(Math.round((27800 / 4.3) * 2 * 0.05));
+    expect(websiteBannerWeeklyBonus(27800, 1)).toBe(647);
+  });
+
+  it("ekonom bonus zvedá stejně jako ostatní sponzorské příjmy", () => {
+    expect(websiteBannerWeeklyBonus(10000, 1.2)).toBe(Math.round((10000 / 4.3) * 2 * 1.2 * 0.05));
   });
 });
