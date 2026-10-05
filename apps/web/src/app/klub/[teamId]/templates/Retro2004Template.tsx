@@ -101,7 +101,7 @@ export function Retro2004Template({
         <div className="bg-[#fff9d6] border-b border-gray-400 py-1 px-3 text-xs text-blue-900 font-mono font-bold flex items-center overflow-hidden">
           <span className="shrink-0 bg-red-600 text-white px-1.5 py-0.2 mr-2 text-[10px] font-sans uppercase">Zpráva:</span>
           <div className="whitespace-nowrap overflow-x-auto text-[11px]">
-            +++ VÍTÁME VÁS NA WEBU ODDÍLU {team.name.toUpperCase()} +++ PŘÍŠTÍ UTKÁNÍ: {nextMatch ? `${nextMatch.isHome ? "DOMA" : "VENKU"} PROTI ${nextMatch.opponent.name.toUpperCase()}` : "ČEKÁ SE NA ROZLOSOVÁNÍ"} +++ BUFET U HŘIŠTĚ V PROVOZU OD 13:00 +++ K DISPOZICI TOČENÉ PIVO ${concessions.beerName} (${concessions.beerPrice} KČ) +++
+            +++ VÍTÁME VÁS NA WEBU ODDÍLU {team.name.toUpperCase()} +++ PŘÍŠTÍ UTKÁNÍ: {nextMatch ? `${nextMatch.isHome ? "DOMA" : "VENKU"} PROTI ${nextMatch.opponent.name.toUpperCase()}` : "ČEKÁ SE NA ROZLOSOVÁNÍ"} +++ BUFET U HŘIŠTĚ V PROVOZU OD 13:00 +++ K DISPOZICI TOČENÉ PIVO {concessions.beerName.toUpperCase()} ({concessions.beerPrice} KČ) +++
           </div>
         </div>
 
@@ -891,12 +891,26 @@ export function Retro2004Template({
             <section id="stadion" className="border border-gray-400 bg-white">
               <div className="bg-[#002b66] text-white px-3 py-1.5 font-bold text-sm uppercase flex items-center justify-between">
                 <span>Fotodokumentace areálu TJ</span>
-                {hasStadiumGallery && (
-                  <span className="text-yellow-300 text-xs font-mono">[ Odemčená fotogalerie 4 foto ]</span>
-                )}
+                <span className="text-yellow-300 text-xs font-mono">[ Fotogalerie 4 foto ]</span>
               </div>
               <div className="p-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div
+                    onClick={() =>
+                      onOpenLightbox({
+                        src: "/images/stadion-areal.jpg",
+                        title: "Panoráma areálu",
+                        desc: `Celkový pohled na fotbalové hřiště a areál v obci ${team.village.name}`,
+                      })
+                    }
+                    className="border border-black p-1 bg-white cursor-pointer hover:bg-yellow-50 sm:col-span-2 lg:col-span-3"
+                  >
+                    <img src="/images/stadion-areal.jpg" alt="Areál hřiště" className="w-full aspect-[16/9] object-cover border border-gray-400 max-h-72" />
+                    <div className="p-1 font-serif text-xs text-center text-gray-800 font-bold">
+                      Obr. 1: Panoramatický pohled na travnatou plochu a areál v obci {team.village.name}
+                    </div>
+                  </div>
+
                   <div
                     onClick={() =>
                       onOpenLightbox({
@@ -909,7 +923,7 @@ export function Retro2004Template({
                   >
                     <img src="/images/stadion-tribuna.jpg" alt="Tribuna" className="w-full aspect-[4/3] object-cover border border-gray-400" />
                     <div className="p-1 font-serif text-xs text-center text-gray-800">
-                      Obr. 1: Dřevěná tribuna a klandr
+                      Obr. 2: Dřevěná tribuna a klandr
                     </div>
                   </div>
 
@@ -925,7 +939,7 @@ export function Retro2004Template({
                   >
                     <img src="/images/stadion-kiosek.jpg" alt="Kiosek" className="w-full aspect-[4/3] object-cover border border-gray-400" />
                     <div className="p-1 font-serif text-xs text-center text-gray-800">
-                      Obr. 2: Klubový kiosek s udírnou
+                      Obr. 3: Klubový kiosek s udírnou
                     </div>
                   </div>
 
@@ -941,27 +955,9 @@ export function Retro2004Template({
                   >
                     <img src="/images/stadion-kabiny.jpg" alt="Kabiny" className="w-full aspect-[4/3] object-cover border border-gray-400" />
                     <div className="p-1 font-serif text-xs text-center text-gray-800">
-                      Obr. 3: Zázemí šaten a rozhodčích
+                      Obr. 4: Zázemí šaten a rozhodčích
                     </div>
                   </div>
-
-                  {hasStadiumGallery && (
-                    <div
-                      onClick={() =>
-                        onOpenLightbox({
-                          src: "/images/stadion-areal.jpg",
-                          title: "Panoráma areálu",
-                          desc: "Celkový pohled na fotbalové hřiště",
-                        })
-                      }
-                      className="border border-black p-1 bg-white cursor-pointer hover:bg-yellow-50 sm:col-span-2 lg:col-span-3"
-                    >
-                      <img src="/images/stadion-areal.jpg" alt="Areál" className="w-full aspect-[16/9] object-cover border border-gray-400 max-h-56" />
-                      <div className="p-1 font-serif text-xs text-center text-gray-800 font-bold">
-                        Obr. 4: Panoramatický pohled na travnatou plochu a areál v obci {team.village.name}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </section>

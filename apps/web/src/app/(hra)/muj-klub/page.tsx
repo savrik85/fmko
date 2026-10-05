@@ -699,6 +699,31 @@ export default function MujKlubPage() {
                   <div className="text-muted text-xs">U nás: <span className="text-ink/70">{clubData.stadium.specialita}</span></div>
                 )}
               </div>
+
+              <div className="my-3 space-y-2">
+                <div className="rounded-xl overflow-hidden border border-border bg-slate-100 aspect-[16/9] max-h-36 relative shadow-sm">
+                  <img src="/images/stadion-areal.jpg" alt="Areál stadionu" className="w-full h-full object-cover" />
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 text-xs text-white font-bold flex items-center justify-between">
+                    <span>🏟️ Fotodokumentace areálu</span>
+                    <span className="text-[10px] text-white/80 font-normal">4 fotografie</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div className="rounded-lg overflow-hidden border border-border bg-slate-100 aspect-[4/3] relative">
+                    <img src="/images/stadion-tribuna.jpg" alt="Tribuna" className="w-full h-full object-cover" />
+                    <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-[10px] text-center text-white font-medium truncate">Tribuna</div>
+                  </div>
+                  <div className="rounded-lg overflow-hidden border border-border bg-slate-100 aspect-[4/3] relative">
+                    <img src="/images/stadion-kiosek.jpg" alt="Kiosek" className="w-full h-full object-cover" />
+                    <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-[10px] text-center text-white font-medium truncate">Kiosek</div>
+                  </div>
+                  <div className="rounded-lg overflow-hidden border border-border bg-slate-100 aspect-[4/3] relative">
+                    <img src="/images/stadion-kabiny.jpg" alt="Kabiny" className="w-full h-full object-cover" />
+                    <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-[10px] text-center text-white font-medium truncate">Kabiny</div>
+                  </div>
+                </div>
+              </div>
+
               <ActionTile action={clubData.stadium.name ? "Upravit stadion" : "Doplnit stadion"} href="/muj-klub/stadion">
                 Přezdívka stadionu, rok výstavby, názvy tribun a vesnická specialita.
               </ActionTile>

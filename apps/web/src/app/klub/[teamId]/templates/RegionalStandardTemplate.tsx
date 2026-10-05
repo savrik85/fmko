@@ -758,14 +758,29 @@ export function RegionalStandardTemplate({
                 Stadion & areál
               </h2>
             </div>
-            {hasStadiumGallery && (
-              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-heading font-bold text-xs border border-blue-200">
-                📸 Odemčená fotogalerie areálu (4 fotografie)
-              </span>
-            )}
+            <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-heading font-bold text-xs border border-blue-200">
+              📸 Fotogalerie areálu (4 fotografie)
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div
+              onClick={() =>
+                onOpenLightbox({
+                  src: "/images/stadion-areal.jpg",
+                  title: "Panoramatický pohled na areál",
+                  desc: "Celkový pohled na fotbalové hřiště a okolní obec",
+                })
+              }
+              className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm hover:shadow-md cursor-pointer transition sm:col-span-2 lg:col-span-3"
+            >
+              <div className="aspect-[16/9] max-h-72 rounded-xl overflow-hidden bg-slate-100">
+                <img src="/images/stadion-areal.jpg" alt="Areál" className="w-full h-full object-cover" />
+              </div>
+              <div className="mt-2.5 font-heading font-bold text-sm text-slate-900">Panoráma sportovního areálu</div>
+              <div className="text-xs text-slate-500">Kvalitní přírodní trávník v obci {team.village.name}</div>
+            </div>
+
             <div
               onClick={() =>
                 onOpenLightbox({
@@ -816,25 +831,6 @@ export function RegionalStandardTemplate({
               <div className="mt-2.5 font-heading font-bold text-sm text-slate-900">Kabiny & šatny</div>
               <div className="text-xs text-slate-500">Šatny hráčů, sprchy a zázemí</div>
             </div>
-
-            {hasStadiumGallery && (
-              <div
-                onClick={() =>
-                  onOpenLightbox({
-                    src: "/images/stadion-areal.jpg",
-                    title: "Panoramatický pohled na areál",
-                    desc: "Celkový pohled na fotbalové hřiště a okolní obec",
-                  })
-                }
-                className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm hover:shadow-md cursor-pointer transition sm:col-span-2 lg:col-span-3"
-              >
-                <div className="aspect-[16/9] max-h-60 rounded-xl overflow-hidden bg-slate-100">
-                  <img src="/images/stadion-areal.jpg" alt="Areál" className="w-full h-full object-cover" />
-                </div>
-                <div className="mt-2.5 font-heading font-bold text-sm text-slate-900">Panoráma sportovního areálu</div>
-                <div className="text-xs text-slate-500">Kvalitní přírodní trávník v obci {team.village.name}</div>
-              </div>
-            )}
           </div>
         </section>
 

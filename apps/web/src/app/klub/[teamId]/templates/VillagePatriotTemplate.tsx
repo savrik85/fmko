@@ -814,6 +814,23 @@ export function VillagePatriotTemplate({
             <div
               onClick={() =>
                 onOpenLightbox({
+                  src: "/images/stadion-areal.jpg",
+                  title: "Panoráma areálu",
+                  desc: "Celkový pohled na fotbalové hřiště a obec",
+                })
+              }
+              className="bg-white border-2 border-[#b89a7a] p-3 rounded-2xl shadow-md cursor-pointer hover:border-[#8c3d0b] transition sm:col-span-2 lg:col-span-3"
+            >
+              <div className="aspect-[16/9] max-h-72 rounded-xl overflow-hidden shadow">
+                <img src="/images/stadion-areal.jpg" alt="Areál" className="w-full h-full object-cover" />
+              </div>
+              <div className="mt-2 font-serif font-bold text-sm text-[#2b170c]">Panoramatický pohled na celé hřiště</div>
+              <div className="text-xs text-[#704222] font-serif">Krásný vesnický pažit v obci {team.village.name}</div>
+            </div>
+
+            <div
+              onClick={() =>
+                onOpenLightbox({
                   src: "/images/stadion-tribuna.jpg",
                   title: "Dřevěná krytá tribuna",
                   desc: "Místní tribuna pro diváky a stání podél klandru",
@@ -861,25 +878,6 @@ export function VillagePatriotTemplate({
               <div className="mt-2 font-serif font-bold text-sm text-[#2b170c]">Kabiny & Zázemí</div>
               <div className="text-xs text-[#704222] font-serif">Šatny hráčů, sprchy a tabule na taktiku</div>
             </div>
-
-            {hasStadiumGallery && (
-              <div
-                onClick={() =>
-                  onOpenLightbox({
-                    src: "/images/stadion-areal.jpg",
-                    title: "Panoráma areálu",
-                    desc: "Celkový pohled na fotbalové hřiště a obec",
-                  })
-                }
-                className="bg-white border-2 border-[#b89a7a] p-3 rounded-2xl shadow-md cursor-pointer hover:border-[#8c3d0b] transition sm:col-span-2 lg:col-span-3"
-              >
-                <div className="aspect-[16/9] max-h-64 rounded-xl overflow-hidden shadow">
-                  <img src="/images/stadion-areal.jpg" alt="Areál" className="w-full h-full object-cover" />
-                </div>
-                <div className="mt-2 font-serif font-bold text-sm text-[#2b170c]">Panoramatický pohled na celé hřiště</div>
-                <div className="text-xs text-[#704222] font-serif">Krásný vesnický pažit v obci {team.village.name}</div>
-              </div>
-            )}
           </div>
         </section>
 
