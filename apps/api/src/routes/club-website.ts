@@ -138,6 +138,31 @@ async function resolveTeamId(db: D1Database, identifier: string): Promise<string
     return matching.id;
   }
 
+  // 4. Fallback: partial / substring match in slugified team name (e.g. "brevnov" -> "fk-rohlik-brevnov")
+  const partialMatching = (allTeams.results ?? []).find((t) => {
+    const s = slugifyTeamName(t.name);
+    return s.includes(identifier) || identifier.includes(s);
+  });
+  if (partialMatching) {
+    return partialMatching.id;
+  }
+
+  // 5. Fallback: match by village name
+  const villageTeam = await db
+    .prepare(
+      `SELECT t.id FROM teams t 
+       JOIN villages v ON v.id = t.village_id 
+       WHERE lower(v.name) = ? OR replace(lower(v.name), ' ', '-') = ? 
+       LIMIT 1`,
+    )
+    .bind(identifier.toLowerCase(), identifier.toLowerCase())
+    .first<{ id: string }>()
+    .catch((e) => {
+      logger.warn({ module: "club-website" }, "resolveTeamId village check", e);
+      return null;
+    });
+  if (villageTeam) return villageTeam.id;
+
   return null;
 }
 
