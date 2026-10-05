@@ -868,8 +868,8 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
         <div className={`${cardBg} overflow-hidden mb-8 border-2 border-white/10 group shadow-2xl`}>
           <div className="relative aspect-[21/9] sm:aspect-[2.5/1] min-h-[220px] w-full bg-slate-900 overflow-hidden">
             <img
-              src="/images/prales-okres.webp"
-              alt={`${team.stadium.name || "Fotbalový stadion"} v obci ${team.village.name}`}
+              src="/images/stadion-areal.jpg"
+              alt={`Fotografie areálu ${team.stadium.name || "Fotbalový stadion"} v obci ${team.village.name}`}
               className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
               loading="eager"
             />
