@@ -16,6 +16,57 @@ import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stand
 
 export const clubWebsiteRouter = new Hono<{ Bindings: Bindings }>();
 
+function formatPlayerPositionCZ(pos: string): string {
+  const p = (pos || "").toUpperCase();
+  switch (p) {
+    case "GK":
+    case "BRA":
+      return "Brankář";
+    case "DEF":
+    case "OBR":
+      return "Obránce";
+    case "CB":
+      return "Stoper";
+    case "LB":
+      return "Levý obránce";
+    case "RB":
+      return "Pravý obránce";
+    case "LWB":
+    case "RWB":
+      return "Krajní obránce";
+    case "MID":
+    case "ZAL":
+    case "ZÁL":
+      return "Záložník";
+    case "CM":
+      return "Střední záložník";
+    case "LM":
+      return "Levý záložník";
+    case "RM":
+      return "Pravý záložník";
+    case "CDM":
+    case "DM":
+      return "Defenzivní záložník";
+    case "CAM":
+    case "AM":
+      return "Ofenzivní záložník";
+    case "FWD":
+    case "UTO":
+    case "ÚTO":
+      return "Útočník";
+    case "ST":
+      return "Hrotový útočník";
+    case "CF":
+      return "Útočník";
+    case "LW":
+      return "Levé křídlo";
+    case "RW":
+      return "Pravé křídlo";
+    default:
+      return pos || "Hráč";
+  }
+}
+
 // Helper for generating unique team slug based on team name
 async function generateUniqueTeamSlug(db: D1Database, teamId: string, teamName: string): Promise<string> {
   const baseSlug = slugifyTeamName(teamName) || `tym-${teamId.slice(0, 8)}`;
@@ -389,9 +440,14 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
        )
      WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
      GROUP BY p.id
-     ORDER BY CASE p.position WHEN 'GK' THEN 1 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 
-                              WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 
-                              WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 ELSE 5 END, p.squad_number ASC`,
+     ORDER BY CASE p.position 
+                WHEN 'GK' THEN 1 
+                WHEN 'DEF' THEN 2 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 WHEN 'LWB' THEN 2 WHEN 'RWB' THEN 2
+                WHEN 'MID' THEN 3 WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 WHEN 'CDM' THEN 3 WHEN 'CAM' THEN 3 WHEN 'DM' THEN 3 WHEN 'AM' THEN 3
+                WHEN 'FWD' THEN 4 WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 WHEN 'LW' THEN 4 WHEN 'RW' THEN 4 
+                ELSE 5 END, 
+              CASE WHEN p.squad_number IS NULL OR p.squad_number = 0 THEN 999 ELSE p.squad_number END ASC, 
+              p.overall_rating DESC`,
   ).bind(teamId).all<{
     id: string; first_name: string; last_name: string; position: string; overall_rating: number;
     age: number; squad_number: number | null; avatar: string;
@@ -410,6 +466,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
       firstName: p.first_name,
       lastName: p.last_name,
       position: p.position,
+      positionName: formatPlayerPositionCZ(p.position),
       overallRating: p.overall_rating,
       age: p.age,
       squadNumber: p.squad_number,
@@ -450,9 +507,14 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
          )
        WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
        GROUP BY p.id
-       ORDER BY CASE p.position WHEN 'GK' THEN 1 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 
-                                WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 
-                                WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 ELSE 5 END, p.squad_number ASC`,
+       ORDER BY CASE p.position 
+                  WHEN 'GK' THEN 1 
+                  WHEN 'DEF' THEN 2 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 WHEN 'LWB' THEN 2 WHEN 'RWB' THEN 2
+                  WHEN 'MID' THEN 3 WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 WHEN 'CDM' THEN 3 WHEN 'CAM' THEN 3 WHEN 'DM' THEN 3 WHEN 'AM' THEN 3
+                  WHEN 'FWD' THEN 4 WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 WHEN 'LW' THEN 4 WHEN 'RW' THEN 4 
+                  ELSE 5 END, 
+                CASE WHEN p.squad_number IS NULL OR p.squad_number = 0 THEN 999 ELSE p.squad_number END ASC, 
+                p.overall_rating DESC`,
     ).bind(u21Team.id).all<any>().catch((e) => {
       logger.warn({ module: "club-website" }, "fetch u21 players", e);
       return { results: [] };
@@ -470,6 +532,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
         firstName: p.first_name,
         lastName: p.last_name,
         position: p.position,
+        positionName: formatPlayerPositionCZ(p.position),
         overallRating: p.overall_rating,
         age: p.age,
         squadNumber: p.squad_number,

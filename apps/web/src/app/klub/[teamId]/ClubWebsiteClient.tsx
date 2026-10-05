@@ -1,9 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ClubWebsiteData, ClubWebsiteTemplate, ClubWebsiteTransfer, ClubWebsiteMatchSummary } from "@okresni-masina/shared";
+import type {
+  ClubWebsiteData,
+  ClubWebsiteTemplate,
+  ClubWebsiteTransfer,
+  ClubWebsiteMatchSummary,
+  ClubWebsitePlayer,
+} from "@okresni-masina/shared";
 import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
@@ -43,6 +49,88 @@ const STAFF_ROLE_LABELS: Record<string, string> = {
   sef_fanklubu: "Šéf fanklubu",
   ekonom: "Klubový hospodář",
 };
+
+type PositionCategory = "all" | "GK" | "DEF" | "MID" | "FWD";
+
+const POSITION_ORDER: Record<string, number> = {
+  GK: 1,
+  BRA: 1,
+  DEF: 2,
+  OBR: 2,
+  CB: 2,
+  LB: 2,
+  RB: 2,
+  LWB: 2,
+  RWB: 2,
+  MID: 3,
+  ZAL: 3,
+  ZÁL: 3,
+  CM: 3,
+  LM: 3,
+  RM: 3,
+  CDM: 3,
+  CAM: 3,
+  DM: 3,
+  AM: 3,
+  FWD: 4,
+  UTO: 4,
+  ÚTO: 4,
+  ST: 4,
+  CF: 4,
+  LW: 4,
+  RW: 4,
+};
+
+const POSITION_LABELS_CZ: Record<string, string> = {
+  GK: "Brankář",
+  BRA: "Brankář",
+  DEF: "Obránce",
+  OBR: "Obránce",
+  CB: "Stoper",
+  LB: "Levý obránce",
+  RB: "Pravý obránce",
+  LWB: "Krajní obránce",
+  RWB: "Krajní obránce",
+  MID: "Záložník",
+  ZAL: "Záložník",
+  ZÁL: "Záložník",
+  CM: "Záložník",
+  LM: "Levý záložník",
+  RM: "Pravý záložník",
+  CDM: "Def. záložník",
+  CAM: "Of. záložník",
+  DM: "Def. záložník",
+  AM: "Of. záložník",
+  FWD: "Útočník",
+  UTO: "Útočník",
+  ÚTO: "Útočník",
+  ST: "Útočník",
+  CF: "Útočník",
+  LW: "Levé křídlo",
+  RW: "Pravé křídlo",
+};
+
+function getPlayerPositionGroup(pos?: string): "GK" | "DEF" | "MID" | "FWD" {
+  const p = (pos || "").toUpperCase();
+  if (p === "GK" || p === "BRA") return "GK";
+  if (["DEF", "OBR", "CB", "LB", "RB", "LWB", "RWB", "SW"].includes(p)) return "DEF";
+  if (["MID", "ZAL", "ZÁL", "CM", "LM", "RM", "CDM", "CAM", "DM", "AM"].includes(p)) return "MID";
+  if (["FWD", "UTO", "ÚTO", "ST", "CF", "LW", "RW"].includes(p)) return "FWD";
+  return "MID";
+}
+
+function getPlayerPositionLabel(player: ClubWebsitePlayer): string {
+  if (player.positionName) return player.positionName;
+  const p = (player.position || "").toUpperCase();
+  return POSITION_LABELS_CZ[p] || player.position || "Hráč";
+}
+
+const POSITION_SECTIONS: Array<{ group: "GK" | "DEF" | "MID" | "FWD"; title: string; icon: string }> = [
+  { group: "GK", title: "Brankáři", icon: "🧤" },
+  { group: "DEF", title: "Obránci", icon: "🛡️" },
+  { group: "MID", title: "Záložníci", icon: "⚙️" },
+  { group: "FWD", title: "Útočníci", icon: "⚡" },
+];
 
 interface ClubWebsiteClientProps {
   data: ClubWebsiteData;
@@ -136,8 +224,31 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
   const badgeIni = team.badge.customInitials || team.name.slice(0, 3).toUpperCase();
   const shareUrl = `${siteUrl}/klub/${website.customSlug || team.id}`;
 
+  const [positionFilter, setPositionFilter] = useState<PositionCategory>("all");
+
   const currentRoster = activeRosterTab === "aTeam" ? roster.aTeam : roster.u21Team;
   const hasU21 = roster.u21Team && roster.u21Team.length > 0;
+
+  const positionCounts = useMemo(() => {
+    const counts = { all: currentRoster.length, GK: 0, DEF: 0, MID: 0, FWD: 0 };
+    for (const p of currentRoster) {
+      const group = getPlayerPositionGroup(p.position);
+      counts[group] = (counts[group] || 0) + 1;
+    }
+    return counts;
+  }, [currentRoster]);
+
+  const sortedRoster = useMemo(() => {
+    return [...currentRoster].sort((a, b) => {
+      const orderA = POSITION_ORDER[a.position?.toUpperCase()] ?? POSITION_ORDER[getPlayerPositionGroup(a.position)] ?? 5;
+      const orderB = POSITION_ORDER[b.position?.toUpperCase()] ?? POSITION_ORDER[getPlayerPositionGroup(b.position)] ?? 5;
+      if (orderA !== orderB) return orderA - orderB;
+      const numA = a.squadNumber === null || a.squadNumber === 0 ? 999 : a.squadNumber;
+      const numB = b.squadNumber === null || b.squadNumber === 0 ? 999 : b.squadNumber;
+      if (numA !== numB) return numA - numB;
+      return (b.overallRating ?? 0) - (a.overallRating ?? 0);
+    });
+  }, [currentRoster]);
 
   // Template theme styles
   const isRetro = template === "retro_2004";
@@ -428,19 +539,67 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
 
               {matches.lastMatch ? (
                 <div>
-                  <div className="flex items-center justify-between gap-3 my-2">
-                    <span className="font-heading font-bold truncate">
-                      {matches.lastMatch.isHome ? team.name : matches.lastMatch.opponent.name}
-                    </span>
-                    <span className="font-heading font-[900] text-3xl tabular-nums text-emerald-400">
-                      {matches.lastMatch.scoreHome} : {matches.lastMatch.scoreAway}
-                    </span>
-                    <span className="font-heading font-bold truncate">
-                      {matches.lastMatch.isHome ? matches.lastMatch.opponent.name : team.name}
-                    </span>
+                  {/* Scoreboard Box: Full team names and non-wrapping scores */}
+                  <div className="my-2 p-3 sm:p-4 rounded-2xl bg-black/15 dark:bg-white/5 border border-black/10 dark:border-white/10 space-y-2.5">
+                    {/* Home team row */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-[10px] font-heading font-black uppercase tracking-wider px-2 py-0.5 rounded bg-black/20 dark:bg-white/10 opacity-70 shrink-0">
+                          {matches.lastMatch.isHome ? "DOMA" : "VENKU"}
+                        </span>
+                        <span
+                          className={`font-heading font-extrabold text-sm sm:text-base leading-tight break-words ${
+                            matches.lastMatch.scoreHome > matches.lastMatch.scoreAway
+                              ? "text-emerald-400 font-black"
+                              : ""
+                          }`}
+                        >
+                          {matches.lastMatch.isHome ? team.name : matches.lastMatch.opponent.name}
+                        </span>
+                      </div>
+                      <span
+                        className={`font-heading font-black text-2xl sm:text-3xl tabular-nums shrink-0 whitespace-nowrap px-2.5 py-0.5 rounded-lg bg-black/25 ${
+                          matches.lastMatch.scoreHome > matches.lastMatch.scoreAway
+                            ? "text-emerald-400"
+                            : "text-current/90"
+                        }`}
+                      >
+                        {matches.lastMatch.scoreHome}
+                      </span>
+                    </div>
+
+                    <div className="border-t border-black/10 dark:border-white/10" />
+
+                    {/* Away team row */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-[10px] font-heading font-black uppercase tracking-wider px-2 py-0.5 rounded bg-black/20 dark:bg-white/10 opacity-70 shrink-0">
+                          {!matches.lastMatch.isHome ? "DOMA" : "VENKU"}
+                        </span>
+                        <span
+                          className={`font-heading font-extrabold text-sm sm:text-base leading-tight break-words ${
+                            matches.lastMatch.scoreAway > matches.lastMatch.scoreHome
+                              ? "text-emerald-400 font-black"
+                              : ""
+                          }`}
+                        >
+                          {matches.lastMatch.isHome ? matches.lastMatch.opponent.name : team.name}
+                        </span>
+                      </div>
+                      <span
+                        className={`font-heading font-black text-2xl sm:text-3xl tabular-nums shrink-0 whitespace-nowrap px-2.5 py-0.5 rounded-lg bg-black/25 ${
+                          matches.lastMatch.scoreAway > matches.lastMatch.scoreHome
+                            ? "text-emerald-400"
+                            : "text-current/90"
+                        }`}
+                      >
+                        {matches.lastMatch.scoreAway}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-center text-xs opacity-60 mt-2">
-                    Kolo {matches.lastMatch.round} · {matches.lastMatch.date ? new Date(matches.lastMatch.date).toLocaleDateString("cs-CZ") : "Odehráno"}
+
+                  <div className="text-center text-xs opacity-60 mt-2 font-heading">
+                    Kolo {matches.lastMatch.round} · {matches.lastMatch.date ? new Date(matches.lastMatch.date).toLocaleDateString("cs-CZ") : "Odehráno"} · Konečný výsledek
                   </div>
 
                   <button
@@ -582,70 +741,250 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
               </h3>
             </div>
             <TacticalPitch
-              players={currentRoster}
+              players={sortedRoster}
               primaryColor={primary}
               secondaryColor={secondary}
             />
           </div>
         ) : (
           /* View Mode: Cards by Position */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {currentRoster.map((player) => {
-              const isGk = player.position === "GK";
-              return (
-                <div
-                  key={player.id}
-                  className={`${cardBg} p-4 flex flex-col justify-between hover:scale-[1.02] transition-transform`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="shrink-0 w-14 h-16 rounded-xl overflow-hidden bg-black/20 border border-white/10 flex items-center justify-center">
-                      <ManagerFace faceConfig={player.avatar} size={52} />
-                    </div>
+          <div className="space-y-6">
+            {/* Position filter buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setPositionFilter("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                  positionFilter === "all"
+                    ? "bg-amber-500 text-black shadow-md font-extrabold"
+                    : "bg-black/20 hover:bg-black/40 text-current/80 border border-white/10"
+                }`}
+              >
+                Všichni ({positionCounts.all})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPositionFilter("GK")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                  positionFilter === "GK"
+                    ? "bg-amber-500 text-black shadow-md font-extrabold"
+                    : "bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/20"
+                }`}
+              >
+                🧤 Brankáři ({positionCounts.GK})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPositionFilter("DEF")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                  positionFilter === "DEF"
+                    ? "bg-blue-500 text-white shadow-md font-extrabold"
+                    : "bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 border border-blue-500/20"
+                }`}
+              >
+                🛡️ Obránci ({positionCounts.DEF})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPositionFilter("MID")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                  positionFilter === "MID"
+                    ? "bg-emerald-500 text-white shadow-md font-extrabold"
+                    : "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/20"
+                }`}
+              >
+                ⚙️ Záložníci ({positionCounts.MID})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPositionFilter("FWD")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-heading font-bold transition-all ${
+                  positionFilter === "FWD"
+                    ? "bg-rose-500 text-white shadow-md font-extrabold"
+                    : "bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 border border-rose-500/20"
+                }`}
+              >
+                ⚡ Útočníci ({positionCounts.FWD})
+              </button>
+            </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-heading font-black text-[11px] flex items-center justify-center shrink-0">
-                          {player.squadNumber ?? "-"}
+            {/* Empty roster check */}
+            {sortedRoster.length === 0 ? (
+              <div className="p-8 text-center text-white/50 bg-black/20 rounded-2xl border border-white/10">
+                Žádní hráči nejsou v kádru k dispozici.
+              </div>
+            ) : positionFilter === "all" ? (
+              /* All positions - grouped into lines (Brankáři, Obránci, Záložníci, Útočníci) */
+              <div className="space-y-8">
+                {POSITION_SECTIONS.map((section) => {
+                  const sectionPlayers = sortedRoster.filter(
+                    (p) => getPlayerPositionGroup(p.position) === section.group,
+                  );
+                  if (sectionPlayers.length === 0) return null;
+                  return (
+                    <div key={section.group} className="space-y-3">
+                      <div className="flex items-center gap-2 border-b border-black/10 dark:border-white/10 pb-2">
+                        <span className="text-lg">{section.icon}</span>
+                        <h3 className="font-heading font-black text-base sm:text-lg tracking-wide uppercase">
+                          {section.title}
+                        </h3>
+                        <span className="text-xs font-heading font-bold opacity-60 bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded-full">
+                          {sectionPlayers.length}
                         </span>
-                        <span className="text-[10px] font-heading font-bold px-1.5 py-0.5 rounded bg-white/10 uppercase tracking-wide">
-                          {player.position}
-                        </span>
                       </div>
-                      <div className="font-heading font-extrabold text-sm sm:text-base mt-1 leading-tight truncate">
-                        {player.firstName} {player.lastName}
-                      </div>
-                      <div className="text-xs opacity-60 mt-0.5">
-                        {player.age} let
-                      </div>
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {sectionPlayers.map((player) => {
+                          const posGroup = getPlayerPositionGroup(player.position);
+                          const posLabel = getPlayerPositionLabel(player);
+                          const isGk = posGroup === "GK";
 
-                  {/* Season stats pills */}
-                  <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 grid grid-cols-4 gap-1 text-center font-heading">
-                    <div className="p-1 rounded bg-black/10 dark:bg-white/5">
-                      <div className="text-[9px] opacity-60">ZÁP</div>
-                      <div className="text-xs font-bold">{player.stats.appearances}</div>
-                    </div>
-                    <div className="p-1 rounded bg-black/10 dark:bg-white/5">
-                      <div className="text-[9px] opacity-60">{isGk ? "NULY" : "GÓL"}</div>
-                      <div className="text-xs font-bold text-emerald-400">
-                        {isGk ? player.stats.cleanSheets : player.stats.goals}
+                          const badgeStyle =
+                            posGroup === "GK"
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                              : posGroup === "DEF"
+                              ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                              : posGroup === "MID"
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                              : "bg-rose-500/20 text-rose-300 border-rose-500/30";
+
+                          return (
+                            <div
+                              key={player.id}
+                              className={`${cardBg} p-4 flex flex-col justify-between hover:scale-[1.02] transition-transform`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="shrink-0 w-14 h-16 rounded-xl overflow-hidden bg-black/20 border border-white/10 flex items-center justify-center">
+                                  <ManagerFace faceConfig={player.avatar} size={52} />
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-heading font-black text-[11px] flex items-center justify-center shrink-0">
+                                      {player.squadNumber ?? "-"}
+                                    </span>
+                                    <span
+                                      className={`text-[10px] font-heading font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${badgeStyle}`}
+                                    >
+                                      {posLabel}
+                                    </span>
+                                  </div>
+                                  <div className="font-heading font-extrabold text-sm sm:text-base mt-1 leading-tight truncate">
+                                    {player.firstName} {player.lastName}
+                                  </div>
+                                  <div className="text-xs opacity-60 mt-0.5">
+                                    {player.age} let
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Season stats pills */}
+                              <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 grid grid-cols-4 gap-1 text-center font-heading">
+                                <div className="p-1 rounded bg-black/10 dark:bg-white/5">
+                                  <div className="text-[9px] opacity-60">ZÁP</div>
+                                  <div className="text-xs font-bold">{player.stats.appearances}</div>
+                                </div>
+                                <div className="p-1 rounded bg-black/10 dark:bg-white/5">
+                                  <div className="text-[9px] opacity-60">{isGk ? "NULY" : "GÓL"}</div>
+                                  <div className="text-xs font-bold text-emerald-400">
+                                    {isGk ? player.stats.cleanSheets : player.stats.goals}
+                                  </div>
+                                </div>
+                                <div className="p-1 rounded bg-black/10 dark:bg-white/5">
+                                  <div className="text-[9px] opacity-60">{isGk ? "GÓL" : "ASIS"}</div>
+                                  <div className="text-xs font-bold text-yellow-400">
+                                    {isGk ? player.stats.goals : player.stats.assists}
+                                  </div>
+                                </div>
+                                <div className="p-1 rounded bg-black/10 dark:bg-white/5">
+                                  <div className="text-[9px] opacity-60">MIN</div>
+                                  <div className="text-xs font-bold">{player.stats.minutesPlayed}</div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div className="p-1 rounded bg-black/10 dark:bg-white/5">
-                      <div className="text-[9px] opacity-60">{isGk ? "GÓL" : "ASIS"}</div>
-                      <div className="text-xs font-bold text-yellow-400">
-                        {isGk ? player.stats.goals : player.stats.assists}
+                  );
+                })}
+              </div>
+            ) : (
+              /* Filtered single position group */
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {sortedRoster
+                  .filter((p) => getPlayerPositionGroup(p.position) === positionFilter)
+                  .map((player) => {
+                    const posGroup = getPlayerPositionGroup(player.position);
+                    const posLabel = getPlayerPositionLabel(player);
+                    const isGk = posGroup === "GK";
+
+                    const badgeStyle =
+                      posGroup === "GK"
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                        : posGroup === "DEF"
+                        ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                        : posGroup === "MID"
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                        : "bg-rose-500/20 text-rose-300 border-rose-500/30";
+
+                    return (
+                      <div
+                        key={player.id}
+                        className={`${cardBg} p-4 flex flex-col justify-between hover:scale-[1.02] transition-transform`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="shrink-0 w-14 h-16 rounded-xl overflow-hidden bg-black/20 border border-white/10 flex items-center justify-center">
+                            <ManagerFace faceConfig={player.avatar} size={52} />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-heading font-black text-[11px] flex items-center justify-center shrink-0">
+                                {player.squadNumber ?? "-"}
+                              </span>
+                              <span
+                                className={`text-[10px] font-heading font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${badgeStyle}`}
+                              >
+                                {posLabel}
+                              </span>
+                            </div>
+                            <div className="font-heading font-extrabold text-sm sm:text-base mt-1 leading-tight truncate">
+                              {player.firstName} {player.lastName}
+                            </div>
+                            <div className="text-xs opacity-60 mt-0.5">
+                              {player.age} let
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Season stats pills */}
+                        <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 grid grid-cols-4 gap-1 text-center font-heading">
+                          <div className="p-1 rounded bg-black/10 dark:bg-white/5">
+                            <div className="text-[9px] opacity-60">ZÁP</div>
+                            <div className="text-xs font-bold">{player.stats.appearances}</div>
+                          </div>
+                          <div className="p-1 rounded bg-black/10 dark:bg-white/5">
+                            <div className="text-[9px] opacity-60">{isGk ? "NULY" : "GÓL"}</div>
+                            <div className="text-xs font-bold text-emerald-400">
+                              {isGk ? player.stats.cleanSheets : player.stats.goals}
+                            </div>
+                          </div>
+                          <div className="p-1 rounded bg-black/10 dark:bg-white/5">
+                            <div className="text-[9px] opacity-60">{isGk ? "GÓL" : "ASIS"}</div>
+                            <div className="text-xs font-bold text-yellow-400">
+                              {isGk ? player.stats.goals : player.stats.assists}
+                            </div>
+                          </div>
+                          <div className="p-1 rounded bg-black/10 dark:bg-white/5">
+                            <div className="text-[9px] opacity-60">MIN</div>
+                            <div className="text-xs font-bold">{player.stats.minutesPlayed}</div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="p-1 rounded bg-black/10 dark:bg-white/5">
-                      <div className="text-[9px] opacity-60">MIN</div>
-                      <div className="text-xs font-bold">{player.stats.minutesPlayed}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                    );
+                  })}
+              </div>
+            )}
           </div>
         )}
       </section>

@@ -200,7 +200,7 @@ export default async function KlubPublicPage({
         "member": (roster?.aTeam || []).slice(0, 20).map((p) => ({
           "@type": "Person",
           "name": `${p.firstName} ${p.lastName}`,
-          "jobTitle": p.position,
+          "jobTitle": p.positionName || p.position,
         })),
       },
       {

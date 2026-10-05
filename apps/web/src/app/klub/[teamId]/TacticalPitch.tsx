@@ -2,6 +2,40 @@
 
 import type { ClubWebsitePlayer } from "@okresni-masina/shared";
 
+const POSITION_LABELS_CZ: Record<string, string> = {
+  GK: "Brankář",
+  BRA: "Brankář",
+  DEF: "Obránce",
+  OBR: "Obránce",
+  CB: "Stoper",
+  LB: "Levý obránce",
+  RB: "Pravý obránce",
+  LWB: "Krajní obránce",
+  RWB: "Krajní obránce",
+  MID: "Záložník",
+  ZAL: "Záložník",
+  ZÁL: "Záložník",
+  CM: "Záložník",
+  LM: "Levý záložník",
+  RM: "Pravý záložník",
+  CDM: "Def. záložník",
+  CAM: "Of. záložník",
+  DM: "Def. záložník",
+  AM: "Of. záložník",
+  FWD: "Útočník",
+  UTO: "Útočník",
+  ÚTO: "Útočník",
+  ST: "Útočník",
+  CF: "Útočník",
+  LW: "Levé křídlo",
+  RW: "Pravé křídlo",
+};
+
+function formatPositionLabel(pos?: string): string {
+  if (!pos) return "";
+  return POSITION_LABELS_CZ[pos.toUpperCase()] || pos;
+}
+
 interface TacticalPitchProps {
   players: ClubWebsitePlayer[];
   primaryColor: string;
@@ -38,6 +72,7 @@ export function TacticalPitch({ players, primaryColor, secondaryColor }: Tactica
 
   const renderPlayerNode = (player: ClubWebsitePlayer | undefined, labelPos: string) => {
     if (!player) return null;
+    const czPos = player.positionName || formatPositionLabel(player.position || labelPos);
     return (
       <div className="flex flex-col items-center group relative cursor-pointer">
         {/* Shirt / Node Circle */}
@@ -57,14 +92,15 @@ export function TacticalPitch({ players, primaryColor, secondaryColor }: Tactica
         </div>
 
         {/* Position tag */}
-        <div className="text-[9px] font-heading text-white/80 flex items-center gap-1 mt-0.5">
-          <span className="uppercase text-yellow-300 font-bold">{player.position || labelPos}</span>
+        <div className="text-[9px] font-heading font-bold text-yellow-300 flex items-center gap-1 mt-0.5 uppercase tracking-wide">
+          <span>{czPos}</span>
         </div>
 
         {/* Hover detail tooltip */}
         <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col bg-gray-900 border border-white/20 rounded-xl p-2.5 text-xs text-white shadow-2xl z-20 w-36 pointer-events-none">
           <div className="font-bold text-white border-b border-white/10 pb-1 mb-1">
-            {player.firstName} {player.lastName}
+            <div>{player.firstName} {player.lastName}</div>
+            <div className="text-[10px] text-amber-400 font-semibold">{czPos}</div>
           </div>
           <div className="flex justify-between text-white/70">
             <span>Zápasy:</span>

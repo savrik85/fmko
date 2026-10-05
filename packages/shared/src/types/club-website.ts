@@ -110,6 +110,7 @@ export interface ClubWebsitePlayer {
   firstName: string;
   lastName: string;
   position: string;
+  positionName?: string;
   overallRating: number;
   age: number;
   squadNumber: number | null;
