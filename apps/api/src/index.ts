@@ -165,6 +165,16 @@ export default {
       }
     }
 
+    // ── Čísla dresů: hráči, kteří přišli mimo přestup (mládež, hospoda, volní), dostanou číslo,
+    // kolize se rozřeší. Když je vše v pořádku, jsou to jen dva agregační dotazy.
+    try {
+      const { ensureAllSquadNumbers } = await import("./players/squad-numbers");
+      const fixed = await ensureAllSquadNumbers(env.DB);
+      if (fixed.players > 0) log("info", `čísla dresů: doplněno ${fixed.players} hráčům v ${fixed.teams} týmech`);
+    } catch (e: any) {
+      log("error", "čísla dresů se nepodařilo doplnit", e);
+    }
+
     // ── DAILY TICK: 4:00 CET (3:00 UTC) — posouvá dny, tréninky, zprávy ──
     // Manuální trigger (!cron) spustí denní tick + zápasový tick
     if (cron === "0 3 * * *" || !cron) {

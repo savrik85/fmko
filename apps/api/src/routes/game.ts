@@ -98,7 +98,7 @@ async function sendPhoneSMS(db: D1Database, teamId: string, senderName: string, 
     .bind(body.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
 }
 
-/** After transfer: recalculate commute distance and reset squad number. */
+/** After transfer: recalculate commute distance and give the player a free squad number in the new team. */
 async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: string) {
   // Get new team's village info
   const team = await db.prepare("SELECT v.name, v.district, v.lat, v.lng FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
@@ -121,6 +121,11 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
     await db.prepare("UPDATE players SET squad_number = NULL, life_context = json_remove(life_context, '$.trainingRest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   }
+
+  // Číslo ze starého klubu se smazalo výše; v novém dostane volné (bez kolize se spoluhráči)
+  const { ensureSquadNumbers } = await import("../players/squad-numbers");
+  await ensureSquadNumbers(db, newTeamId)
+    .catch((e) => logger.warn({ module: "game" }, "squad number after transfer", e));
 
   // Vazby na nové spoluhráče a výchozí vztah k trenérovi — projde tudy každý přestup i hostování.
   const { attachNewcomerRelations } = await import("../transfers/attach-relations");
@@ -5058,6 +5063,30 @@ gameRouter.post("/admin/backfill-achievements", async (c) => {
 // ═══ TRANSFER SYSTEM ═══
 
 // Release player → free agent
+// PUT /api/teams/:teamId/players/:playerId/squad-number — manažer mění číslo dresu.
+// Obsazené číslo se se spoluhráčem prohodí, takže dva hráči týmu nikdy nemají stejné číslo.
+gameRouter.put("/teams/:teamId/players/:playerId/squad-number", async (c) => {
+  const teamId = c.req.param("teamId");
+  const playerId = c.req.param("playerId");
+  const body = (await c.req.json().catch((e) => {
+    logger.warn({ module: "game" }, "parse squad number body", e);
+    return null;
+  })) as { number?: unknown } | null;
+  const number = Number(body?.number);
+
+  // Dorostenec patří U21 týmu, manažer ho ale ovládá z A-týmu (stejně jako u propuštění)
+  const owned = await c.env.DB.prepare(
+    `SELECT p.id FROM players p JOIN teams t ON p.team_id = t.id
+      WHERE p.id = ? AND (p.team_id = ? OR t.parent_team_id = ?)`,
+  ).bind(playerId, teamId, teamId).first<{ id: string }>();
+  if (!owned) return c.json({ error: "Hráč nenalezen" }, 404);
+
+  const { setSquadNumber } = await import("../players/squad-numbers");
+  const result = await setSquadNumber(c.env.DB, playerId, number);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+
 gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   try {
   const teamId = c.req.param("teamId");

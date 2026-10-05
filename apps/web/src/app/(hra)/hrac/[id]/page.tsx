@@ -9,6 +9,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
 import { usePotencial, PotentialBox, PotentialBadge } from "@/components/players/potential-summary";
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
+import { SquadNumberEditor } from "./SquadNumberEditor";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
 import { nationalityLabel } from "@/lib/nationality";
 import { attributeImportance, coachRelationBand, marketValue, marketValueEstimate, type AttrImportance } from "@okresni-masina/shared";
@@ -981,6 +982,24 @@ export default function PlayerDetailPage() {
               number={player.squad_number ?? undefined} />
           </div>
           <div className="space-y-0">
+            {isOwnPlayer && teamId && (
+              <DetailRow
+                label="Číslo dresu"
+                value={
+                  <SquadNumberEditor
+                    teamId={teamId}
+                    playerId={player.id}
+                    current={player.squad_number}
+                    teammates={allPlayers}
+                    onChanged={(changes) => {
+                      const byId = new Map(changes.map((ch) => [ch.id, ch.number]));
+                      setPlayer((prev) => (prev && byId.has(prev.id) ? { ...prev, squad_number: byId.get(prev.id) ?? null } : prev));
+                      setAllPlayers((prev) => prev.map((p) => (byId.has(p.id) ? { ...p, squad_number: byId.get(p.id) ?? null } : p)));
+                    }}
+                  />
+                }
+              />
+            )}
             <DetailRow label="Pozice" value={<PositionBadge position={player.position} />} />
             <DetailRow label="Věk" value={`${player.age} let`} />
             <DetailRow label="Národnost" value={nationalityLabel((player as { nationality?: string }).nationality)} />
