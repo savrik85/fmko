@@ -422,7 +422,7 @@ export function VillagePatriotTemplate({
                       : "text-[#3b2010] hover:bg-[#cfbfab]"
                   }`}
                 >
-                  🌱 Dorost / B-Tým ({roster.u21Team?.length || 0})
+                  🌱 Dorost U21 ({roster.u21Team?.length || 0})
                 </button>
               </div>
 

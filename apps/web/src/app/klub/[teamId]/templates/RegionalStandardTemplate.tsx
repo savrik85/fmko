@@ -443,7 +443,7 @@ export function RegionalStandardTemplate({
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  🌱 Dorost / U21 ({roster.u21Team?.length || 0})
+                  🌱 Dorost U21 ({roster.u21Team?.length || 0})
                 </button>
               </div>
 

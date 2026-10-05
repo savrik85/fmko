@@ -445,7 +445,7 @@ export function ChampionsTemplate({
                       : "text-white/60 hover:text-white"
                   }`}
                 >
-                  🌱 DOROST / U21 ({roster.u21Team?.length || 0})
+                  🌱 DOROST U21 ({roster.u21Team?.length || 0})
                 </button>
               </div>
 

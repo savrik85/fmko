@@ -524,7 +524,7 @@ export function Retro2004Template({
                           : "bg-[#f5f5f0] text-blue-900 font-bold border-t-white border-l-white border-b-gray-600 border-r-gray-600 hover:bg-yellow-100"
                       }`}
                     >
-                      🌱 B-TÝM / U21 ({roster.u21Team.length} HRÁČŮ)
+                      🌱 U21 ({roster.u21Team.length} HRÁČŮ)
                     </button>
                   )}
                 </div>
