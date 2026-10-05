@@ -190,8 +190,17 @@ async function slugTakenByOtherTeam(
   ]);
   if (website || alias || byId) return true;
   const teams = seniorTeams ?? (await loadSeniorTeamSlugs(db));
-  return teams.some((t) => t.id !== teamId && t.slug === slug);
+  // Slovo z názvu nebo obce jiného klubu (např. "vimperk") patří jemu, pokud ho nemá
+  // i náš klub. Vlastní adresa má při hledání přednost, takže by jinak šlo
+  // převzít adresu, pod kterou lidé hledají soupeře.
+  const contains = (haystack: string) => !!haystack && `-${haystack}-`.includes(`-${slug}-`);
+  const own = teams.find((t) => t.id === teamId);
+  const ownsWord = !!own && (contains(own.slug) || contains(own.villageSlug));
+  return teams.some((t) => t.id !== teamId && (t.slug === slug || (!ownsWord && (contains(t.slug) || contains(t.villageSlug)))));
 }
+
+/** Kolik starých adres si klub pamatuje. Víc by šlo zneužít k zabírání adres přejmenováváním. */
+const MAX_SLUG_ALIASES = 3;
 
 async function generateUniqueTeamSlug(db: D1Database, teamId: string, teamName: string): Promise<string> {
   const baseSlug = slugifyTeamName(teamName) || `tym-${teamId.slice(0, 8)}`;
@@ -1263,9 +1272,11 @@ clubWebsiteRouter.post("/:id/website/poll", async (c) => {
     return c.json({ error: "Anketa k tomuto zápasu už je uzavřená" }, 400);
   }
 
-  const ip = c.req.header("cf-connecting-ip") ?? "nezname";
-  const ua = c.req.header("user-agent") ?? "";
-  const voter = await sha256Hex(`${ip}|${ua}|${teamId}|${next.id}`);
+  // Jeden hlas na IP adresu a zápas. User-Agent sem nepatří: jde měnit libovolně,
+  // takže by jedna IP mohla hlasovat donekonečna. Domácnost za jednou IP má holt jeden hlas.
+  const ip = c.req.header("cf-connecting-ip");
+  if (!ip) return c.json({ error: "Hlas se nepodařilo ověřit" }, 400);
+  const voter = await sha256Hex(`${ip}|${teamId}|${next.id}`);
   const res = await db
     .prepare("INSERT OR IGNORE INTO team_website_poll_votes (team_id, match_id, voter, choice) VALUES (?, ?, ?, ?)")
     .bind(teamId, next.id, voter, choice)
@@ -1483,6 +1494,13 @@ async function changeSlug(db: D1Database, teamId: string, oldSlug: string | null
     await db.prepare("INSERT OR IGNORE INTO team_website_slug_aliases (slug, team_id) VALUES (?, ?)")
       .bind(oldSlug, teamId).run()
       .catch((e) => logger.warn(MODULE, "remember previous slug", e));
+    // Jen posledních pár adres; starší uvolnit pro ostatní kluby
+    await db.prepare(
+      `DELETE FROM team_website_slug_aliases WHERE team_id = ? AND slug NOT IN (
+         SELECT slug FROM team_website_slug_aliases WHERE team_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?
+       )`,
+    ).bind(teamId, teamId, MAX_SLUG_ALIASES).run()
+      .catch((e) => logger.warn(MODULE, "trim old slug aliases", e));
   }
 }
 
