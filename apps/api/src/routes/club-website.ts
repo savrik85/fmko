@@ -6,6 +6,7 @@ import { recordTransaction } from "../season/finance-processor";
 import {
   CLUB_WEBSITE_TEMPLATES,
   CLUB_WEBSITE_ADDONS,
+  slugifyTeamName,
   type ClubWebsiteTemplate,
   type ClubWebsiteAddon,
 } from "@okresni-masina/shared";
@@ -13,27 +14,82 @@ import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stand
 
 export const clubWebsiteRouter = new Hono<{ Bindings: Bindings }>();
 
-// Helper to resolve teamId either from direct ID or from custom_slug
+// Helper for generating unique team slug based on team name
+async function generateUniqueTeamSlug(db: D1Database, teamId: string, teamName: string): Promise<string> {
+  const baseSlug = slugifyTeamName(teamName) || `tym-${teamId.slice(0, 8)}`;
+  let candidate = baseSlug;
+  let counter = 1;
+
+  while (counter <= 50) {
+    const existing = await db
+      .prepare("SELECT team_id FROM team_websites WHERE custom_slug = ? AND team_id <> ?")
+      .bind(candidate, teamId)
+      .first<{ team_id: string }>()
+      .catch((e) => {
+        logger.warn({ module: "club-website" }, "check slug uniqueness", e);
+        return null;
+      });
+
+    if (!existing) {
+      return candidate;
+    }
+
+    counter++;
+    candidate = `${baseSlug}-${counter}`;
+  }
+
+  return `${baseSlug}-${teamId.slice(0, 4)}`;
+}
+
+// Helper to resolve teamId either from direct ID or from custom_slug / team name slug
 async function resolveTeamId(db: D1Database, identifier: string): Promise<string | null> {
   // 1. Direct team id check
   const direct = await db
     .prepare("SELECT id FROM teams WHERE id = ?")
     .bind(identifier)
-    .first<{ id: string }>();
+    .first<{ id: string }>()
+    .catch((e) => {
+      logger.warn({ module: "club-website" }, "resolveTeamId direct check", e);
+      return null;
+    });
   if (direct) return direct.id;
 
   // 2. Custom slug check
   const bySlug = await db
     .prepare("SELECT team_id FROM team_websites WHERE custom_slug = ?")
     .bind(identifier)
-    .first<{ team_id: string }>();
+    .first<{ team_id: string }>()
+    .catch((e) => {
+      logger.warn({ module: "club-website" }, "resolveTeamId bySlug check", e);
+      return null;
+    });
   if (bySlug) return bySlug.team_id;
+
+  // 3. Fallback: match by slugified team name across teams
+  const allTeams = await db
+    .prepare("SELECT id, name FROM teams WHERE name IS NOT NULL")
+    .all<{ id: string; name: string }>()
+    .catch((e) => {
+      logger.warn({ module: "club-website" }, "resolveTeamId all teams check", e);
+      return { results: [] };
+    });
+
+  const matching = (allTeams.results ?? []).find(
+    (t) => slugifyTeamName(t.name) === identifier,
+  );
+  if (matching) {
+    // Persist this slug in team_websites so future requests hit index directly
+    await ensureWebsiteRow(db, matching.id, identifier).catch((e) =>
+      logger.warn({ module: "club-website" }, "persist slug in resolveTeamId", e),
+    );
+    return matching.id;
+  }
 
   return null;
 }
 
-// Ensure website row exists in team_websites
-async function ensureWebsiteRow(db: D1Database, teamId: string) {
+// Ensure website row exists in team_websites (with default slug derived from team name)
+async function ensureWebsiteRow(db: D1Database, teamId: string, preferredSlug?: string) {
   const existing = await db
     .prepare("SELECT * FROM team_websites WHERE team_id = ?")
     .bind(teamId)
@@ -49,13 +105,28 @@ async function ensureWebsiteRow(db: D1Database, teamId: string) {
     }>();
 
   if (!existing) {
+    const team = await db
+      .prepare("SELECT name FROM teams WHERE id = ?")
+      .bind(teamId)
+      .first<{ name: string }>()
+      .catch((e) => {
+        logger.warn({ module: "club-website" }, "lookup team name for slug", e);
+        return null;
+      });
+
+    const defaultSlug = await generateUniqueTeamSlug(
+      db,
+      teamId,
+      preferredSlug || team?.name || `tym-${teamId.slice(0, 8)}`,
+    );
+
     await db
       .prepare(
         `INSERT OR IGNORE INTO team_websites 
          (team_id, template, unlocked_templates, unlocked_addons, custom_slug, announcement, sponsor_banner_enabled, visitor_count) 
-         VALUES (?, 'retro_2004', '["retro_2004"]', '[]', NULL, NULL, 0, 1)`,
+         VALUES (?, 'retro_2004', '["retro_2004"]', '[]', ?, NULL, 0, 1)`,
       )
-      .bind(teamId)
+      .bind(teamId, defaultSlug)
       .run()
       .catch((e) => logger.warn({ module: "club-website" }, "ensureWebsiteRow insert", e));
 
@@ -63,11 +134,31 @@ async function ensureWebsiteRow(db: D1Database, teamId: string) {
       template: "retro_2004" as ClubWebsiteTemplate,
       unlockedTemplates: ["retro_2004"] as ClubWebsiteTemplate[],
       unlockedAddons: [] as ClubWebsiteAddon[],
-      customSlug: null,
+      customSlug: defaultSlug,
       announcement: null,
       sponsorBannerEnabled: false,
       visitorCount: 1,
     };
+  }
+
+  // If existing row has NO custom_slug, generate and backfill it from team name
+  let customSlug = existing.custom_slug;
+  if (!customSlug) {
+    const team = await db
+      .prepare("SELECT name FROM teams WHERE id = ?")
+      .bind(teamId)
+      .first<{ name: string }>()
+      .catch((e) => {
+        logger.warn({ module: "club-website" }, "lookup team name for backfill slug", e);
+        return null;
+      });
+
+    customSlug = await generateUniqueTeamSlug(db, teamId, team?.name || `tym-${teamId.slice(0, 8)}`);
+    await db
+      .prepare("UPDATE team_websites SET custom_slug = ? WHERE team_id = ?")
+      .bind(customSlug, teamId)
+      .run()
+      .catch((e) => logger.warn({ module: "club-website" }, "backfill custom_slug", e));
   }
 
   // Increment visitor count quietly
@@ -94,7 +185,7 @@ async function ensureWebsiteRow(db: D1Database, teamId: string) {
     template: (existing.template || "retro_2004") as ClubWebsiteTemplate,
     unlockedTemplates,
     unlockedAddons,
-    customSlug: existing.custom_slug,
+    customSlug,
     announcement: existing.announcement,
     sponsorBannerEnabled: existing.sponsor_banner_enabled === 1,
     visitorCount: (existing.visitor_count || 0) + 1,
@@ -653,8 +744,8 @@ async function checkTeamAuth(c: Context<{ Bindings: Bindings }>, teamId: string)
   const session = await getSession(c.env.SESSION_KV, token);
   if (!session) return { error: "Neplatná session", status: 401 };
 
-  const team = await c.env.DB.prepare("SELECT user_id, budget, game_date FROM teams WHERE id = ?")
-    .bind(teamId).first<{ user_id: string; budget: number; game_date: string }>();
+  const team = await c.env.DB.prepare("SELECT user_id, budget, game_date, name FROM teams WHERE id = ?")
+    .bind(teamId).first<{ user_id: string; budget: number; game_date: string; name: string }>();
   if (!team) return { error: "Tým nenalezen", status: 404 };
   if (team.user_id !== session.userId) return { error: "Přístup odepřen", status: 403 };
 
@@ -807,15 +898,12 @@ clubWebsiteRouter.patch("/:id/website", async (c) => {
   if (!body) return c.json({ error: "Neplatná data" }, 400);
   const web = await ensureWebsiteRow(c.env.DB, teamId);
 
-  // Slug update
+  // Slug update (defaultně z názvu týmu, možnost libovolné úpravy zdarma)
   if (body.customSlug !== undefined) {
-    if (body.customSlug !== null && !web.unlockedAddons.includes("custom_slug")) {
-      return c.json({ error: "Pro nastavení vlastní adresy musíš nejprve zakoupit doplněk Vlastní URL adresa." }, 400);
-    }
-    if (body.customSlug) {
-      const sanitized = body.customSlug.toLowerCase().trim().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
-      if (sanitized.length < 3 || sanitized.length > 30) {
-        return c.json({ error: "Adresa musí mít 3 až 30 znaků (jen malá písmena bez diakritiky, čísla a pomlčky)." }, 400);
+    if (body.customSlug && body.customSlug.trim()) {
+      const sanitized = slugifyTeamName(body.customSlug);
+      if (sanitized.length < 3 || sanitized.length > 50) {
+        return c.json({ error: "Adresa musí mít 3 až 50 znaků (jen písmena bez diakritiky, čísla a pomlčky)." }, 400);
       }
       // Check collision
       const collision = await c.env.DB.prepare(
@@ -827,8 +915,10 @@ clubWebsiteRouter.patch("/:id/website", async (c) => {
       await c.env.DB.prepare("UPDATE team_websites SET custom_slug = ? WHERE team_id = ?")
         .bind(sanitized, teamId).run();
     } else {
-      await c.env.DB.prepare("UPDATE team_websites SET custom_slug = NULL WHERE team_id = ?")
-        .bind(teamId).run();
+      // Obnovit výchozí slug z názvu týmu
+      const defaultSlug = await generateUniqueTeamSlug(c.env.DB, teamId, auth.team.name);
+      await c.env.DB.prepare("UPDATE team_websites SET custom_slug = ? WHERE team_id = ?")
+        .bind(defaultSlug, teamId).run();
     }
   }
 

@@ -6,11 +6,24 @@ export type ClubWebsiteTemplate =
   | "champions";
 
 export type ClubWebsiteAddon =
-  | "custom_slug"
   | "sponsor_banner"
   | "audio_module"
   | "stadium_gallery"
   | "press_officer";
+
+/**
+ * Převede název týmu na čistou URL adresu (slug).
+ * Např. "FK Rohlík Břevnov" -> "fk-rohlik-brevnov"
+ */
+export function slugifyTeamName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 export interface TemplateDefinition {
   id: ClubWebsiteTemplate;
@@ -66,12 +79,6 @@ export const CLUB_WEBSITE_TEMPLATES: Record<ClubWebsiteTemplate, TemplateDefinit
 };
 
 export const CLUB_WEBSITE_ADDONS: Record<ClubWebsiteAddon, AddonDefinition> = {
-  custom_slug: {
-    id: "custom_slug",
-    name: "Vlastní URL adresa (slug)",
-    price: 10000,
-    description: "Unikátní webová adresa (např. prales.cz/klub/fk-kozlovice) místo číselného ID.",
-  },
   sponsor_banner: {
     id: "sponsor_banner",
     name: "Sponzorská reklamní lišta",

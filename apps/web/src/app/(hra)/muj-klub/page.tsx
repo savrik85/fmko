@@ -300,7 +300,6 @@ export default function MujKlubPage() {
         <div className="flex items-center gap-2">
           <Link
             href={`/klub/${publicSlug}`}
-            target="_blank"
             className="px-4 py-2 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-600 transition-colors flex items-center gap-1.5 shadow"
           >
             <span>🌐</span>
@@ -399,10 +398,10 @@ export default function MujKlubPage() {
             <Card className="p-4">
               <div className="text-xs uppercase font-heading font-bold text-muted">Veřejná adresa</div>
               <div className="text-sm font-heading font-extrabold text-ink mt-1 truncate">
-                prales.cz/klub/{publicSlug}
+                prales.fun/klub/{publicSlug}
               </div>
               <div className="text-xs text-muted mt-0.5">
-                {website?.customSlug ? "Vlastní URL aktivní" : "Základní systémová adresa"}
+                Oficiální adresa webu
               </div>
             </Card>
           </div>
@@ -421,28 +420,28 @@ export default function MujKlubPage() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label htmlFor="slug-input" className="text-xs font-heading font-bold text-ink uppercase">
-                    Vlastní adresa webu (Slug)
+                    Adresa webu (URL slug)
                   </label>
-                  {!unlockedAddons.includes("custom_slug") && (
-                    <span className="text-xs text-amber-600 font-heading font-bold">
-                      Vyžaduje doplněk Vlastní URL adresa (10 000 Kč)
-                    </span>
-                  )}
+                  <span className="text-xs text-muted font-heading">
+                    Výchozí z názvu klubu
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted font-mono bg-gray-100 px-3 py-2 rounded-soft border border-gray-200">
-                    prales.cz/klub/
+                    prales.fun/klub/
                   </span>
                   <input
                     id="slug-input"
                     type="text"
                     value={slugInput}
                     onChange={(e) => setSlugInput(e.target.value)}
-                    disabled={!unlockedAddons.includes("custom_slug")}
-                    placeholder="např. fk-kozlovice"
-                    className="flex-1 px-3 py-2 text-sm rounded-soft border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pitch-500 disabled:bg-gray-50 disabled:text-gray-400 font-mono"
+                    placeholder="např. fk-rohlik-brevnov"
+                    className="flex-1 px-3 py-2 text-sm rounded-soft border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pitch-500 font-mono"
                   />
                 </div>
+                <p className="text-[11px] text-muted mt-1">
+                  Adresa se skládá z malých písmen a pomlček. Pokud pole smažeš a uložíš, obnoví se výchozí adresa z názvu klubu.
+                </p>
               </div>
 
               {/* Announcement */}

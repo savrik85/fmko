@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ClubWebsiteData, ClubWebsiteTemplate, ClubWebsiteTransfer } from "@okresni-masina/shared";
 import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
@@ -18,8 +19,27 @@ interface ClubWebsiteClientProps {
 }
 
 export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
+  const router = useRouter();
   const { team, website, manager, staff, roster, matches, concessions, tickets, interviews, news } = data;
   const template = (website.template || "retro_2004") as ClubWebsiteTemplate;
+
+  const [isPlayer, setIsPlayer] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsPlayer(!!localStorage.getItem("om_token"));
+    }
+  }, []);
+
+  const handleBackToGame = () => {
+    if (typeof window !== "undefined") {
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        router.push("/muj-klub");
+      }
+    }
+  };
 
   const [activeRosterTab, setActiveRosterTab] = useState<"aTeam" | "u21Team">("aTeam");
   const [rosterViewMode, setRosterViewMode] = useState<"cards" | "pitch">("cards");
@@ -125,7 +145,41 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
     : "bg-[#0e131d] text-white border-b border-white/10";
 
   return (
-    <div className={`min-h-screen ${themeBg} pb-24 transition-colors duration-300`}>
+    <div className={`min-h-screen ${themeBg} pb-12 transition-colors duration-300`}>
+      {/* ═══ TOP UTILITY BAR (PWA & RETURN NAVIGATION) ═══ */}
+      <div className="bg-[#0b0f17] text-slate-300 border-b border-white/10 px-3 sm:px-6 py-2 text-xs flex items-center justify-between sticky top-0 z-50 shadow-md backdrop-blur-md">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={handleBackToGame}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-heading font-black text-xs uppercase tracking-wider shadow transition"
+          >
+            <span>←</span>
+            <span>Zpět do hry</span>
+          </button>
+          <span className="hidden sm:inline text-slate-400 text-[11px] font-medium truncate max-w-xs">
+            Oficiální web klubu {team.name}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="/muj-klub"
+            className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 font-heading font-bold text-xs transition px-2 py-1 rounded hover:bg-white/5"
+          >
+            <span>⚙️</span>
+            <span className="hidden xs:inline">Správa webu</span>
+          </Link>
+          <Link
+            href={`/tym/${team.id}/stadion`}
+            className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 font-heading font-bold text-xs transition px-2 py-1 rounded hover:bg-white/5"
+          >
+            <span>🏟️</span>
+            <span className="hidden sm:inline">3D Areál</span>
+          </Link>
+        </div>
+      </div>
+
       {/* ═══ SPONSOR BANNER ADDON (Top Bar) ═══ */}
       {website.sponsorBannerEnabled && (
         <div className="bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 text-black py-2 px-4 text-xs font-heading font-extrabold text-center tracking-wider shadow-inner flex items-center justify-center gap-3">
@@ -136,7 +190,7 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
       )}
 
       {/* ═══ HEADER & NAV ═══ */}
-      <header className={`${headerGradient} sticky top-0 z-40 transition-all`}>
+      <header className={`${headerGradient} relative z-30 transition-all`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between gap-4">
           {/* Brand / Logo + Name */}
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -751,14 +805,23 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
       </section>
 
       {/* ═══ STADION & AREÁL (FOTOGALERIE) ═══ */}
-      <section id="stadion" className="max-w-6xl mx-auto px-4 sm:px-8 mt-16">
-        <div className="mb-6">
-          <div className="text-xs font-heading font-bold uppercase tracking-widest opacity-60 mb-1">
-            Zázemí & Domov
+      <section id="stadion" className="max-w-6xl mx-auto px-4 sm:px-8 mt-16 scroll-mt-14">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <div className="text-xs font-heading font-bold uppercase tracking-widest opacity-60 mb-1">
+              Zázemí & Domov
+            </div>
+            <h2 className="font-heading font-[900] text-2xl sm:text-4xl">
+              Stadion & Klubový areál
+            </h2>
           </div>
-          <h2 className="font-heading font-[900] text-2xl sm:text-4xl">
-            Stadion & Klubový areál
-          </h2>
+          <Link
+            href={`/tym/${team.id}/stadion`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-heading font-black text-xs uppercase tracking-wider shadow-lg transition active:scale-95 self-start sm:self-auto"
+          >
+            <span>🏟️</span>
+            <span>3D virtuální prohlídka stadionu →</span>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -783,83 +846,148 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
               )}
             </div>
 
-            <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 grid grid-cols-2 gap-3 text-xs font-heading">
-              <div>
-                <span className="opacity-60 text-[10px] uppercase">Kapacita</span>
-                <div className="font-[900] text-xl tabular-nums mt-0.5">
-                  {team.stadium.capacity ? team.stadium.capacity.toLocaleString("cs") : "400"} diváků
-                </div>
-              </div>
-              <div>
-                <span className="opacity-60 text-[10px] uppercase">Postaveno</span>
-                <div className="font-[900] text-xl tabular-nums mt-0.5">
-                  {team.stadium.builtYear || "1972"}
-                </div>
-              </div>
-              {(team.stadium.tribunaNorth || team.stadium.tribunaSouth) && (
-                <div className="col-span-2 pt-2 border-t border-black/5 dark:border-white/5">
-                  <span className="opacity-60 text-[10px] uppercase">Tribuny</span>
-                  <div className="font-bold mt-0.5">
-                    {[team.stadium.tribunaNorth, team.stadium.tribunaSouth].filter(Boolean).join(" · ")}
+            <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-xs font-heading">
+                <div>
+                  <span className="opacity-60 text-[10px] uppercase">Kapacita</span>
+                  <div className="font-[900] text-xl tabular-nums mt-0.5">
+                    {team.stadium.capacity ? team.stadium.capacity.toLocaleString("cs") : "400"} diváků
                   </div>
                 </div>
-              )}
+                <div>
+                  <span className="opacity-60 text-[10px] uppercase">Postaveno</span>
+                  <div className="font-[900] text-xl tabular-nums mt-0.5">
+                    {team.stadium.builtYear || "1972"}
+                  </div>
+                </div>
+                <div>
+                  <span className="opacity-60 text-[10px] uppercase">Povrch</span>
+                  <div className="font-bold text-sm mt-0.5">
+                    {team.stadium.pitchType || "Přírodní tráva"}
+                  </div>
+                </div>
+                <div>
+                  <span className="opacity-60 text-[10px] uppercase">Stav trávníku</span>
+                  <div className="font-bold text-sm text-emerald-400 mt-0.5">
+                    {team.stadium.pitchCondition ?? 75} %
+                  </div>
+                </div>
+                {(team.stadium.tribunaNorth || team.stadium.tribunaSouth) && (
+                  <div className="col-span-2 pt-2 border-t border-black/5 dark:border-white/5">
+                    <span className="opacity-60 text-[10px] uppercase">Tribuny</span>
+                    <div className="font-bold mt-0.5">
+                      {[team.stadium.tribunaNorth, team.stadium.tribunaSouth].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Link
+                href={`/tym/${team.id}/stadion`}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-heading font-black text-xs uppercase tracking-wider text-center shadow transition flex items-center justify-center gap-2"
+              >
+                <span>🌐</span>
+                <span>Prohlédnout v 3D zobrazení</span>
+              </Link>
             </div>
           </div>
 
           {/* Photo Gallery Grid */}
           <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Foto 1: Reálné foto hřiště a areálu */}
             <div className={`${cardBg} p-4 flex flex-col justify-between group overflow-hidden`}>
-              <div className="aspect-video rounded-xl bg-gradient-to-br from-emerald-800 to-green-950 flex flex-col items-center justify-center text-4xl shadow-inner relative overflow-hidden">
-                <span>🏟️</span>
-                <span className="text-[10px] uppercase tracking-widest font-heading font-bold text-white/70 mt-2">
-                  Hlavní travnatá plocha
-                </span>
+              <div className="aspect-video rounded-xl relative overflow-hidden shadow-inner bg-slate-900 border border-white/10">
+                <img
+                  src="/images/prales-okres.webp"
+                  alt={`${team.stadium.name || "Fotbalový stadion"} v obci ${team.village.name}`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3">
+                  <span className="text-xs font-heading font-extrabold text-white flex items-center gap-1.5 drop-shadow">
+                    <span>📸</span>
+                    <span>Areál & Hrací plocha {team.village.name}</span>
+                  </span>
+                </div>
               </div>
               <div className="mt-3">
                 <div className="font-heading font-bold text-sm">Hrací plocha & Klandr</div>
-                <div className="text-xs opacity-60 mt-0.5">Přírodní trávník udržovaný místním správcem</div>
+                <div className="text-xs opacity-60 mt-0.5">Přírodní pažit s výhledem na obec {team.village.name} ({team.village.district})</div>
               </div>
             </div>
 
+            {/* Foto 2: Reálné foto kotle s klubovým choreem */}
             <div className={`${cardBg} p-4 flex flex-col justify-between group overflow-hidden`}>
-              <div className="aspect-video rounded-xl bg-gradient-to-br from-amber-800 to-yellow-950 flex flex-col items-center justify-center text-4xl shadow-inner relative overflow-hidden">
-                <span>🍺</span>
-                <span className="text-[10px] uppercase tracking-widest font-heading font-bold text-white/70 mt-2">
-                  Klubový bufet & Udírna
-                </span>
+              <div className="aspect-video rounded-xl relative overflow-hidden shadow-inner bg-slate-900 border border-white/10">
+                <img
+                  src={`/kotel-foto?p=${encodeURIComponent(primary)}&s=${encodeURIComponent(secondary)}&team=${encodeURIComponent(team.name)}&att=${team.stadium.capacity || 400}&text=${encodeURIComponent(team.stadium.nickname || `${team.name.toUpperCase()} DO TOHO!`)}&lvl=2`}
+                  alt={`Kotel a fanoušci ${team.name}`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3">
+                  <span className="text-xs font-heading font-extrabold text-white flex items-center gap-1.5 drop-shadow">
+                    <span>🔥</span>
+                    <span>Domácí kotel & Tribuna</span>
+                  </span>
+                </div>
               </div>
               <div className="mt-3">
-                <div className="font-heading font-bold text-sm">Stánek s občerstvením</div>
-                <div className="text-xs opacity-60 mt-0.5">Místo setkávání fanoušků o poločasové pauze</div>
+                <div className="font-heading font-bold text-sm">Tribuna fanoušků</div>
+                <div className="text-xs opacity-60 mt-0.5">Kapacita {team.stadium.capacity || 400} míst k stání i sezení</div>
               </div>
             </div>
 
-            <div className={`${cardBg} p-4 flex flex-col justify-between group overflow-hidden`}>
-              <div className="aspect-video rounded-xl bg-gradient-to-br from-slate-800 to-gray-950 flex flex-col items-center justify-center text-4xl shadow-inner relative overflow-hidden">
-                <span>🚪</span>
-                <span className="text-[10px] uppercase tracking-widest font-heading font-bold text-white/70 mt-2">
-                  Kabiny & Sprchy
+            {/* Karta 3: 3D Virtuální prohlídka */}
+            <Link
+              href={`/tym/${team.id}/stadion`}
+              className={`${cardBg} p-4 flex flex-col justify-between group overflow-hidden hover:border-cyan-500/50 transition-all cursor-pointer`}
+            >
+              <div className="aspect-video rounded-xl bg-gradient-to-br from-cyan-950 via-slate-900 to-blue-950 flex flex-col items-center justify-center text-4xl shadow-inner relative overflow-hidden group-hover:scale-[1.02] transition-transform border border-cyan-500/20">
+                <div className="absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px] opacity-30" />
+                <span className="relative z-10 text-5xl animate-pulse">🏟️</span>
+                <span className="relative z-10 text-[11px] uppercase tracking-widest font-heading font-black text-cyan-300 mt-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/30">
+                  Interaktivní 3D model
                 </span>
               </div>
-              <div className="mt-3">
-                <div className="font-heading font-bold text-sm">Zázemí hráčů</div>
-                <div className="text-xs opacity-60 mt-0.5">Šatny domácích a hostů s masérským stolem</div>
+              <div className="mt-3 flex items-center justify-between">
+                <div>
+                  <div className="font-heading font-bold text-sm text-cyan-400 group-hover:underline flex items-center gap-1.5">
+                    <span>3D Virtuální prohlídka</span>
+                    <span>→</span>
+                  </div>
+                  <div className="text-xs opacity-60 mt-0.5">Prozkoumej tribuny, střídačky a areál ve 3D</div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 font-heading font-bold text-[10px] uppercase">
+                  Otevřít 3D
+                </span>
               </div>
-            </div>
+            </Link>
 
-            <div className={`${cardBg} p-4 flex flex-col justify-between group overflow-hidden`}>
-              <div className="aspect-video rounded-xl bg-gradient-to-br from-blue-900 to-indigo-950 flex flex-col items-center justify-center text-4xl shadow-inner relative overflow-hidden">
-                <span>🌳</span>
-                <span className="text-[10px] uppercase tracking-widest font-heading font-bold text-white/70 mt-2">
-                  Areál v obci
+            {/* Karta 4: Klubový kiosek & bufet */}
+            <a
+              href="#bufet"
+              className={`${cardBg} p-4 flex flex-col justify-between group overflow-hidden hover:border-amber-500/50 transition-all`}
+            >
+              <div className="aspect-video rounded-xl bg-gradient-to-br from-amber-950 via-amber-900/60 to-black flex flex-col items-center justify-center text-4xl shadow-inner relative overflow-hidden border border-amber-500/20">
+                <span className="text-5xl">🍺</span>
+                <span className="text-[11px] uppercase tracking-widest font-heading font-black text-amber-300 mt-2 px-3 py-1 rounded-full bg-amber-950/80 border border-amber-500/30">
+                  Kiosek & Udírna
                 </span>
               </div>
-              <div className="mt-3">
-                <div className="font-heading font-bold text-sm">Okolí stadionu</div>
-                <div className="text-xs opacity-60 mt-0.5">Klidné venkovské prostředí a sokolovna</div>
+              <div className="mt-3 flex items-center justify-between">
+                <div>
+                  <div className="font-heading font-bold text-sm text-amber-400 group-hover:underline flex items-center gap-1.5">
+                    <span>Klubové občerstvení</span>
+                    <span>↓</span>
+                  </div>
+                  <div className="text-xs opacity-60 mt-0.5">{concessions.beerName} ({concessions.beerPrice} Kč) & {concessions.sausageName}</div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-heading font-bold text-[10px] uppercase">
+                  Ceník
+                </span>
               </div>
-            </div>
+            </a>
           </div>
         </div>
       </section>
@@ -1161,37 +1289,25 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
       </section>
 
       {/* ═══ FOOTER ═══ */}
-      <footer className="max-w-6xl mx-auto px-4 sm:px-8 mt-20 pt-8 border-t border-black/10 dark:border-white/10 text-xs opacity-60 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="max-w-6xl mx-auto px-4 sm:px-8 mt-20 pt-8 border-t border-black/10 dark:border-white/10 text-xs opacity-75 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           Oficiální web fotbalového klubu {team.name} · Běží na platformě <Link href="/" className="font-bold underline">Prales</Link>
         </div>
-        <Link href={`/tym/${team.id}`} className="hover:underline font-heading font-bold">
-          Zobrazit tým v herní aplikaci →
-        </Link>
-      </footer>
-
-      {/* ═══ STICKY VIRAL CTA BANNER (PRO NEREGISTROVANÉ / PROPAGACE) ═══ */}
-      <div className="fixed bottom-0 inset-x-0 z-40 bg-[#0f172a] text-white border-t border-slate-700 shadow-2xl py-3 px-4 sm:px-8">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-3 text-center sm:text-left">
-            <span className="text-2xl hidden sm:inline">⚽</span>
-            <div>
-              <div className="font-heading font-extrabold text-sm text-yellow-400 leading-tight">
-                Chceš vyzvat {team.name} v okresní soutěži?
-              </div>
-              <div className="text-xs text-slate-300">
-                Založ si vlastní fotbalový klub na Pralesu zdarma a doveď ho ze pralesa až na vrchol!
-              </div>
-            </div>
-          </div>
-          <Link
-            href="/registrace"
-            className="shrink-0 px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-heading font-[900] text-xs uppercase tracking-wider shadow-lg transition-transform active:scale-95"
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleBackToGame}
+            className="hover:underline font-heading font-bold text-emerald-400 flex items-center gap-1 cursor-pointer"
           >
-            Založit klub zdarma 🚀
+            <span>←</span>
+            <span>Zpět do hry</span>
+          </button>
+          <span>·</span>
+          <Link href={`/tym/${team.id}`} className="hover:underline font-heading font-bold">
+            Zobrazit profil v aplikaci →
           </Link>
         </div>
-      </div>
+      </footer>
 
       {/* Ticket Modal */}
       <TicketModal
