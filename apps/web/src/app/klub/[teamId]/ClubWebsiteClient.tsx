@@ -449,16 +449,38 @@ export function ClubWebsiteClient({ data, siteUrl }: ClubWebsiteClientProps) {
                       setSelectedHighlightMatch(matches.lastMatch);
                       setIsHighlightsOpen(true);
                     }}
-                    className="mt-4 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-heading font-extrabold text-xs shadow-md flex items-center justify-center gap-2 transition active:scale-95 group"
+                    className="mt-4 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-heading font-extrabold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition active:scale-95 group"
                   >
                     <span className="text-base group-hover:scale-110 transition-transform">🎥</span>
-                    <span>
-                      Přehrát sestřih utkání
-                      {matches.lastMatch.highlights && matches.lastMatch.highlights.length > 0
-                        ? ` (${matches.lastMatch.highlights.length} momentů)`
-                        : ""}
-                    </span>
+                    <span>Přehrát záznam zápasu</span>
                   </button>
+
+                  {/* Previous matches quick links */}
+                  {matches.recentMatches && matches.recentMatches.length > 1 && (
+                    <div className="mt-3 pt-2.5 border-t border-black/10 dark:border-white/10">
+                      <div className="text-[10px] font-heading font-bold uppercase opacity-60 mb-1.5">
+                        Předchozí odehrané zápasy:
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {matches.recentMatches.slice(1).map((rm) => (
+                          <button
+                            key={rm.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedHighlightMatch(rm);
+                              setIsHighlightsOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-black/10 dark:bg-white/10 hover:bg-amber-500 hover:text-black text-xs font-heading font-bold transition-colors flex items-center gap-1"
+                          >
+                            <span>▶ {rm.round ? `${rm.round}. kolo` : "Zápas"}</span>
+                            <span className="opacity-75">
+                              ({rm.scoreHome}:{rm.scoreAway})
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="py-6 text-center opacity-50 text-xs">

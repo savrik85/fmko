@@ -545,6 +545,38 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     highlights: extractHighlights(row.events),
   }));
 
+  // Fallback to cup matches if no league matches played yet
+  if (recentMatches.length === 0) {
+    const cupMatchesRows = await c.env.DB.prepare(
+      `SELECT cm.id, cm.round, cm.home_score, cm.away_score, cm.events, cm.simulated_at,
+              hct.team_id as home_id, hct.name as home_name, hct.primary_color as home_primary,
+              act.team_id as away_id, act.name as away_name, act.primary_color as away_primary
+       FROM cup_matches cm
+       JOIN cup_teams hct ON cm.home_cup_team_id = hct.id
+       JOIN cup_teams act ON cm.away_cup_team_id = act.id
+       WHERE (hct.team_id = ? OR act.team_id = ?) AND cm.status = 'simulated'
+       ORDER BY cm.simulated_at DESC LIMIT 3`,
+    ).bind(teamId, teamId).all<any>().catch((e) => {
+      logger.warn({ module: "club-website" }, "fetch recent cup matches", e);
+      return { results: [] };
+    });
+
+    for (const row of cupMatchesRows?.results || []) {
+      recentMatches.push({
+        id: row.id,
+        round: row.round,
+        isHome: row.home_id === teamId,
+        scoreHome: row.home_score,
+        scoreAway: row.away_score,
+        opponent: row.home_id === teamId
+          ? { id: row.away_id || "", name: row.away_name, primaryColor: row.away_primary || "#D94032", badge: "shield" }
+          : { id: row.home_id || "", name: row.home_name, primaryColor: row.home_primary || "#2D5F2D", badge: "shield" },
+        date: row.simulated_at,
+        highlights: extractHighlights(row.events),
+      });
+    }
+  }
+
   const lastMatch = recentMatches[0] || null;
 
   const nextMatch = await c.env.DB.prepare(
