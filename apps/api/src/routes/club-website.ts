@@ -372,17 +372,23 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     };
   });
 
-  // 5. Players (A-tým)
+  // 5. Players (A-tým) — filtrováno na aktivní/poslední sezonu a s GROUP BY p.id proti duplicitám z více sezon
   const playersRows = await c.env.DB.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.squad_number, p.avatar,
-            COALESCE(ps.appearances, 0) as appearances,
-            COALESCE(ps.goals, 0) as goals,
-            COALESCE(ps.assists, 0) as assists,
-            COALESCE(ps.clean_sheets, 0) as clean_sheets,
-            COALESCE(ps.minutes_played, 0) as minutes_played
+            COALESCE(SUM(ps.appearances), 0) as appearances,
+            COALESCE(SUM(ps.goals), 0) as goals,
+            COALESCE(SUM(ps.assists), 0) as assists,
+            COALESCE(SUM(ps.clean_sheets), 0) as clean_sheets,
+            COALESCE(SUM(ps.minutes_played), 0) as minutes_played
      FROM players p
      LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id
-     WHERE p.team_id = ?
+       AND ps.season_id = (
+         SELECT id FROM seasons 
+         ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, number DESC 
+         LIMIT 1
+       )
+     WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+     GROUP BY p.id
      ORDER BY CASE p.position WHEN 'GK' THEN 1 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 
                               WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 
                               WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 ELSE 5 END, p.squad_number ASC`,
@@ -430,15 +436,23 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
   if (u21Team) {
     const u21Rows = await c.env.DB.prepare(
       `SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.squad_number, p.avatar,
-              COALESCE(ps.appearances, 0) as appearances,
-              COALESCE(ps.goals, 0) as goals,
-              COALESCE(ps.assists, 0) as assists,
-              COALESCE(ps.clean_sheets, 0) as clean_sheets,
-              COALESCE(ps.minutes_played, 0) as minutes_played
+              COALESCE(SUM(ps.appearances), 0) as appearances,
+              COALESCE(SUM(ps.goals), 0) as goals,
+              COALESCE(SUM(ps.assists), 0) as assists,
+              COALESCE(SUM(ps.clean_sheets), 0) as clean_sheets,
+              COALESCE(SUM(ps.minutes_played), 0) as minutes_played
        FROM players p
        LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id
-       WHERE p.team_id = ?
-       ORDER BY p.squad_number ASC`,
+         AND ps.season_id = (
+           SELECT id FROM seasons 
+           ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, number DESC 
+           LIMIT 1
+         )
+       WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+       GROUP BY p.id
+       ORDER BY CASE p.position WHEN 'GK' THEN 1 WHEN 'CB' THEN 2 WHEN 'LB' THEN 2 WHEN 'RB' THEN 2 
+                                WHEN 'CM' THEN 3 WHEN 'LM' THEN 3 WHEN 'RM' THEN 3 
+                                WHEN 'ST' THEN 4 WHEN 'CF' THEN 4 ELSE 5 END, p.squad_number ASC`,
     ).bind(u21Team.id).all<any>().catch((e) => {
       logger.warn({ module: "club-website" }, "fetch u21 players", e);
       return { results: [] };
