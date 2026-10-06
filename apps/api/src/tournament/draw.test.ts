@@ -68,9 +68,9 @@ describe("buildLeagueSchedule", () => {
 });
 
 describe("drawOptions", () => {
-  it("sudý počet nabízí 3..9 zápasů s délkou ligová fáze + play-off", () => {
+  it("sudý počet nabízí 4..9 zápasů, aby turnaj trval 7 až 12 dní", () => {
     const opts = drawOptions(16);
-    expect(opts.map((o) => o.matchesPerTeam)).toEqual([3, 4, 5, 6, 7, 8, 9]);
+    expect(opts.map((o) => o.matchesPerTeam)).toEqual([4, 5, 6, 7, 8, 9]);
     expect(opts.find((o) => o.matchesPerTeam === 4)?.totalDays).toBe(7);
   });
 
@@ -110,10 +110,19 @@ describe("assignVenues", () => {
     expect(out).toEqual(["v2", "arena", "v1"]);
   });
 
-  it("přednost na hlavním má tým, který tam ještě nehrál", () => {
-    const main = new Map([["a", 1], ["b", 1]]);
-    const out = assignVenues([{ home: "a", away: "b" }, { home: "e", away: "f" }], venues, rep, main);
+  it("přednost na hlavním mají týmy, které tam ještě nehrály", () => {
+    const history = new Map([["a", new Map([["arena", 1]])], ["b", new Map([["arena", 1]])]]);
+    const out = assignVenues([{ home: "a", away: "b" }, { home: "e", away: "f" }], venues, rep, history);
     expect(out[1]).toBe("arena");
+  });
+
+  it("během turnaje se kluby na vedlejších hřištích střídají", () => {
+    const history = new Map<string, Map<string, number>>();
+    const day = [{ home: "a", away: "b" }, { home: "c", away: "d" }, { home: "e", away: "f" }];
+    const first = assignVenues(day, venues, rep, history);
+    const second = assignVenues(day, venues, rep, history);
+    // c–d byl podruhé na jiném vedlejším hřišti než poprvé.
+    expect(second[1]).not.toBe(first[1]);
   });
 
   it("nestačí-li hřiště, vyhodí chybu", () => {

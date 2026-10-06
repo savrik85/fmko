@@ -58,6 +58,13 @@ export interface DrawOption {
 /** Možnosti K pro admin po uzávěrce: platné hodnoty a výsledná délka turnaje. */
 export function drawOptions(teamCount: number): DrawOption[] {
   if (teamCount < MIN_TEAMS) return [];
+  const all = allDrawOptions(teamCount);
+  // Propozice slibují 7 až 12 dní; u malého turnaje, kde to nejde, se nabídne, co jde.
+  const promised = all.filter((o) => o.totalDays >= 7 && o.totalDays <= 12);
+  return promised.length > 0 ? promised : all;
+}
+
+function allDrawOptions(teamCount: number): DrawOption[] {
   const out: DrawOption[] = [];
   for (let k = MIN_MATCHES; k <= Math.min(MAX_MATCHES, teamCount - 1); k++) {
     // Lichý počet týmů: N·K zápasových účastí musí jít spárovat → K sudé.
@@ -191,36 +198,53 @@ export function buildLeagueSchedule(teams: DrawTeam[], matchesPerTeam: number, s
 }
 
 /**
- * Hřiště pro zápasy jednoho dne. Nejatraktivnější zápas (součet reputací) jde na hlavní
- * stadion; přednost má zápas s týmem, který na hlavním ještě nehrál. Zbytek podle
- * atraktivity na vedlejší hřiště od největšího. `mainCount` se průběžně doplňuje.
+ * Hřiště pro zápasy jednoho dne. Na hlavní stadion jde zápas s nejvíc týmy, které tam
+ * ještě nehrály, mezi nimi ten nejatraktivnější (součet reputací). Ostatní zápasy podle
+ * atraktivity dostanou hřiště, na kterém jejich týmy byly nejméně (při shodě větší), ať
+ * kluby během turnaje poznají víc hřišť. `history` (tým → hřiště → počet) se doplňuje.
  */
 export function assignVenues(
   day: DrawPair[],
   venues: DrawVenue[],
   reputation: Map<string, number>,
-  mainCount: Map<string, number>,
+  history: Map<string, Map<string, number>>,
 ): string[] {
   const main = venues.find((v) => v.isMain);
   const side = venues.filter((v) => !v.isMain).sort((a, b) => b.capacity - a.capacity);
   if (!main) throw new Error("Areál nemá hlavní stadion");
   if (day.length > side.length + 1) throw new Error(`Na ${day.length} souběžných zápasů nestačí ${side.length + 1} hřišť`);
 
+  const visits = (team: string, venue: string) => history.get(team)?.get(venue) ?? 0;
+  const visit = (team: string, venue: string) => {
+    const per = history.get(team) ?? new Map<string, number>();
+    per.set(venue, (per.get(venue) ?? 0) + 1);
+    history.set(team, per);
+  };
   const appeal = (m: DrawPair) => (reputation.get(m.home) ?? 0) + (reputation.get(m.away) ?? 0);
+  const fresh = (m: DrawPair) => (visits(m.home, main.id) === 0 ? 1 : 0) + (visits(m.away, main.id) === 0 ? 1 : 0);
+
   const order = day.map((m, i) => ({ m, i })).sort((a, b) => appeal(b.m) - appeal(a.m));
-  const fresh = order.find(({ m }) => !(mainCount.get(m.home) ?? 0) || !(mainCount.get(m.away) ?? 0));
-  const onMain = fresh ?? order[0];
+  const onMain = [...order].sort((a, b) => fresh(b.m) - fresh(a.m) || appeal(b.m) - appeal(a.m))[0];
 
   const result: string[] = new Array(day.length);
   if (onMain) {
     result[onMain.i] = main.id;
-    mainCount.set(onMain.m.home, (mainCount.get(onMain.m.home) ?? 0) + 1);
-    mainCount.set(onMain.m.away, (mainCount.get(onMain.m.away) ?? 0) + 1);
+    visit(onMain.m.home, main.id);
+    visit(onMain.m.away, main.id);
   }
-  let s = 0;
-  for (const { i } of order) {
+  const free = [...side];
+  for (const { m, i } of order) {
     if (onMain && i === onMain.i) continue;
-    result[i] = side[s++].id;
+    let bestIdx = 0;
+    for (let k = 1; k < free.length; k++) {
+      const score = visits(m.home, free[k].id) + visits(m.away, free[k].id);
+      const best = visits(m.home, free[bestIdx].id) + visits(m.away, free[bestIdx].id);
+      if (score < best) bestIdx = k;
+    }
+    const v = free.splice(bestIdx, 1)[0];
+    result[i] = v.id;
+    visit(m.home, v.id);
+    visit(m.away, v.id);
   }
   return result;
 }

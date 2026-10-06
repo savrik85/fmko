@@ -101,7 +101,7 @@ export async function performDraw(db: D1Database, matchesPerTeam: number, now = 
   const drawVenues: DrawVenue[] = venues.map((v) => ({ id: v.id, capacity: v.capacity, isMain: v.is_main === 1 }));
   const schedule = buildLeagueSchedule(entrants, matchesPerTeam, seedOf(t.id));
   const reputation = new Map(entrants.map((e) => [e.id, e.reputation]));
-  const mainCount = new Map<string, number>();
+  const history = new Map<string, Map<string, number>>();
 
   const lock = await db.prepare("UPDATE tournaments SET status = 'drawing' WHERE id = ? AND status IN ('registration', 'closed')")
     .bind(t.id).run();
@@ -111,7 +111,7 @@ export async function performDraw(db: D1Database, matchesPerTeam: number, now = 
     const stmts: D1PreparedStatement[] = [];
     schedule.forEach((day, idx) => {
       const dayNo = idx + 1;
-      const venueIds = assignVenues(day, drawVenues, reputation, mainCount);
+      const venueIds = assignVenues(day, drawVenues, reputation, history);
       day.forEach((m, pos) => {
         stmts.push(db.prepare(
           `INSERT INTO tournament_matches (id, tournament_id, stage, day, bracket_pos, scheduled_at, venue_id, home_team_id, away_team_id)
