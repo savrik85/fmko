@@ -15,7 +15,7 @@ const DETAIL_PREFIXES = ["/hrac/", "/tym/", "/zapas/", "/pohar/tym/", "/telefon/
 // Telefon má vlastní hlavičku („Telefon", kredit, tužka) a nad ní ještě
 // stavový řádek. Hlavička stránky nad tím dělala druhý nadpis Telefon a
 // na mobilu ukrajovala kus obrazovky, na které má být vidět seznam zpráv.
-const CUSTOM_HEADER_PAGES = ["/liga", "/rozpis", "/pohar", "/telefon"];
+const CUSTOM_HEADER_PAGES = ["/liga", "/rozpis", "/pohar", "/turnaj", "/telefon"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

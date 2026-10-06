@@ -43,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/rozhodci", label: "Rozhodčí", icon: "\u{1F9D1}\u200D\u2696\uFE0F", group: "league" },
   { href: "/soutez", label: "Grémium", icon: "\u{1F3DB}\uFE0F", group: "league" },
   { href: "/pohar", label: "Pohár", icon: "\u{1F3C5}", group: "league" },
+  { href: "/turnaj", label: "Turnaj", icon: "\u26BD", group: "league" },
   { href: "/kalendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
   { href: "/napoveda", label: "Nápověda", icon: "\u{1F4D6}", group: "league" },
   // Sněm dočasně skryt z menu — dostupný přes přímou URL /hlasovani.

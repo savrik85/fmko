@@ -60,6 +60,7 @@ const BASE_SECTIONS: Section[] = [
     items: [
       { href: "/liga", icon: "🏆", label: "Liga", color: "#B8860B" },
       { href: "/pohar", icon: "🥇", label: "Pohár", color: "#A0722D" },
+      { href: "/turnaj", icon: "⚽", label: "Turnaj P-Mobile", color: "#A3155F" },
       { href: "/rozpis", icon: "📅", label: "Rozpis", color: "#3D6B5C" },
       { href: "/pratelaky", icon: "🤛", label: "Přáteláky", color: "#4A7A5C" },
       { href: "/kalendar", icon: "🗓️", label: "Kalendář", color: "#6B7B3D" },
