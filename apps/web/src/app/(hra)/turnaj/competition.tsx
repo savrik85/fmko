@@ -203,7 +203,7 @@ export function CompetitionView({
             <div className="text-sm text-muted">{winner ? "Turnaj skončil." : "Další zápas zatím nemáš. Play-off se doplní po dohrání předchozí fáze."}</div>
           )}
           <div className="text-sm">
-            <span className="text-muted">Od P-Mobile jsi zatím dostal: </span>
+            <span className="text-muted">Od P-Mobile tvůj klub zatím dostal: </span>
             <span className="font-heading font-bold text-base" style={{ color: BRAND }}>{kc(myEarnings)}</span>
           </div>
         </div>
