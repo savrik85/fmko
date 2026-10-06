@@ -21,6 +21,7 @@ import {
   sponsorTerminates, TERMINATION_REPUTATION, type PromiseKind, type PromiseOutcome,
 } from "./promise-eval";
 import { contractClawback, loadAdvanceContract, loadTeamSeasonProgress, moneyStatements, type Guard } from "./signing";
+import { clubPrefixOf } from "@okresni-masina/shared";
 
 const M = "sponsor-promises";
 
@@ -225,7 +226,8 @@ export async function terminateContractBySponsor(db: D1Database, contract: Contr
     ).bind(teamId).first<{ name: string; village_name: string }>();
     oldName = team?.name ?? "";
     const village = team?.village_name ?? "";
-    newName = `SK ${village}`.trim();
+    // Zkratka klubu zůstává, ze jména zmizí jen sponzor.
+    newName = `${clubPrefixOf(oldName) ?? "SK"} ${village}`.trim();
     if (!village) {
       logger.warn({ module: M, teamId }, `výpověď smlouvy ${contract.id}: klub bez obce, název se nevrací`);
     } else if (category === "main") {
