@@ -63,6 +63,8 @@ export type TransactionType =
   | "manager_bet_win"
   | "manager_bet_loss"
   | "cup_prize"
+  // Turnaj P-Mobile: body v ligové fázi a prémie za umístění (platí sponzor turnaje).
+  | "tournament_prize"
   | "staff_wage"
   // Cestovné skauta na úkolu (scouting/scout-work.ts). Běžný provoz jako mzdy, ne nákup:
   // skaut, který nemá na benzín, ten týden prostě nejede.

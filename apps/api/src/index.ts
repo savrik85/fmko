@@ -294,6 +294,12 @@ export default {
           log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
         }
       } catch (e) { log("error", "stuck round recovery (16:20) failed", e); }
+      // Turnaj: dohraje zápasy dne, které se v 16:00/16:05 nevešly nebo spadly (zábor propadá po 15 min).
+      try {
+        const { maybeAdvanceTournament } = await import("./tournament/advance");
+        const tr = await maybeAdvanceTournament(env.DB, { maxMatches: 6 });
+        if (tr.played > 0) log("info", `tournament recovery (16:20): ${tr.played} zápasů`);
+      } catch (e) { log("error", "tournament recovery (16:20) failed", e); }
     }
 
     // ── MATCH TICK: 18:00 CEST — simuluje zápasy ──
@@ -360,6 +366,14 @@ export default {
           totalMatches += friendlyCount;
           if (friendlyCount > 0) log("info", `${friendlyCount} friendly matches simulated`);
         } catch (e) { log("error", "friendly matches failed", e); }
+
+        // ── Turnaj P-Mobile: splatné zápasy dne (dávky, každý zápas se před simulací zabere) ──
+        try {
+          const { maybeAdvanceTournament } = await import("./tournament/advance");
+          const tr = await maybeAdvanceTournament(env.DB);
+          totalMatches += tr.played;
+          if (tr.played > 0) log("info", `${tr.played} tournament matches simulated`);
+        } catch (e) { log("error", "tournament tick failed", e); }
 
         log("info", `match tick done: ${totalMatches} matches simulated (režim ${mode})`);
 

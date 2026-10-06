@@ -131,6 +131,15 @@ export async function runEndSeasonStep(
     return { allDone: true, ready: false, seasonNumber, remainingLeagues: 0, detail: "sezóna zatím nezačala, žádná odehraná liga" };
   }
 
+  // Gate: rozehraný Turnaj P-Mobile. Platí i s force — rollover by uprostřed turnaje
+  // měnil kádry (stárnutí, odchody) a zrušil by stopky i rozpis. Konec sezóny až po finále.
+  const runningTournament = await db.prepare(
+    "SELECT name FROM tournaments WHERE status IN ('drawing', 'drawn', 'running') LIMIT 1"
+  ).first<{ name: string }>();
+  if (runningTournament) {
+    return { allDone: true, ready: false, seasonNumber, remainingLeagues: 0, detail: `${runningTournament.name} ještě běží, sezónu jde zakončit až po finále` };
+  }
+
   // Gate: lidské odehrané ligy musí být dohrané (AI-only neblokují). force přebije.
   if (!opts.force) {
     const blocking = started.filter((s) => s.humans > 0 && !s.complete);

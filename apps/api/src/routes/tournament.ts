@@ -1,7 +1,7 @@
 /**
  * Turnaj P-Mobile — každoroční turnaj přihlášených lidských klubů na konci sezóny.
- * Etapa 1: ročník a přihlášky (přihlásit / odhlásit do uzávěrky, seznam přihlášených)
- * a pozvánka od sponzora všem klubům (admin).
+ * Přihlášky (přihlásit / odhlásit do uzávěrky), pozvánka od sponzora, los a průběh
+ * (admin), data pro stránku /turnaj, detail zápasu a hřiště pro 3D.
  */
 
 import { Hono } from "hono";
@@ -10,6 +10,9 @@ import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
 import { logger } from "../lib/logger";
+import { DrawError, drawPreview, loadCurrentTournament, performDraw, type TournamentRow } from "../tournament/service";
+import { loadCompetitionView } from "../tournament/view";
+import { maybeAdvanceTournament } from "../tournament/advance";
 
 const M = "tournament";
 
@@ -21,35 +24,10 @@ tournamentRouter.use("/admin/tournament/*", requireAdmin);
 // SMS se tlačítkem „Otevřít turnaj" v telefonu.
 const SMS_META = { type: "tournament" };
 
-interface TournamentRow {
-  id: string;
-  edition: number;
-  name: string;
-  sponsor: string;
-  city: string;
-  city_locative: string | null;
-  venue_name: string;
-  status: string;
-  registration_deadline: string;
-  starts_on: string | null;
-  point_reward: number;
-  prize_quarterfinal: number;
-  prize_semifinal: number;
-  prize_finalist: number;
-  prize_winner: number;
-  league_matches: number | null;
-  invited_at: string | null;
-}
-
 interface TeamRow {
   id: string;
   user_id: string | null;
   team_type: string | null;
-}
-
-/** Aktuální ročník = nejvyšší číslo ročníku (po skončení zůstává vidět výsledek). */
-async function loadCurrentTournament(db: D1Database): Promise<TournamentRow | null> {
-  return db.prepare("SELECT * FROM tournaments ORDER BY edition DESC LIMIT 1").first<TournamentRow>();
 }
 
 function isRegistrationOpen(t: TournamentRow, now: Date): boolean {
@@ -182,7 +160,12 @@ tournamentRouter.get("/teams/:teamId/tournament", async (c) => {
         winner: tournament.prize_winner,
       },
       leagueMatches: tournament.league_matches,
+      leagueDays: tournament.league_days,
+      winnerTeamId: tournament.winner_team_id,
     },
+    competition: ["drawn", "running", "finished"].includes(tournament.status)
+      ? await loadCompetitionView(db, tournament, teamId)
+      : null,
     registrationOpen: isRegistrationOpen(tournament, new Date()),
     entries: entries.results.map((e) => ({
       teamId: e.team_id,
@@ -323,6 +306,126 @@ tournamentRouter.post("/admin/tournament/invite", async (c) => {
 
   logger.info({ module: M }, `invite sent: ${sent} sms, ${pushed} push (tournament ${t.id})`);
   return c.json({ ok: true, sent, pushed });
+});
+
+// ── Los a průběh (admin) ──
+
+const SHORT_WEEKDAY = ["ne", "po", "út", "st", "čt", "pá", "so"];
+
+/** Náhled losu: počet přihlášených a možnosti, kolik zápasů na tým a jak dlouho to potrvá. */
+tournamentRouter.get("/admin/tournament/draw", async (c) => {
+  const preview = await drawPreview(c.env.DB);
+  if (!preview) return c.json({ error: "Turnaj není vypsaný" }, 404);
+  return c.json(preview);
+});
+
+/** Los: rozpis ligové fáze s hřišti, pak SMS od sponzora každému klubu s jeho zápasy. */
+tournamentRouter.post("/admin/tournament/draw", async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{ matchesPerTeam?: number }>().catch((e) => {
+    logger.warn({ module: M }, "draw: invalid body", e);
+    return {} as { matchesPerTeam?: number };
+  });
+  if (!Number.isInteger(body.matchesPerTeam)) return c.json({ error: "Vyber počet zápasů na tým" }, 400);
+  let result: { matches: number; leagueDays: number };
+  try {
+    result = await performDraw(db, body.matchesPerTeam as number);
+  } catch (e) {
+    if (e instanceof DrawError) return c.json({ error: e.message }, 400);
+    logger.error({ module: M }, "los selhal", e);
+    return c.json({ error: "Los se nepodařil" }, 500);
+  }
+
+  const t = await loadCurrentTournament(db);
+  if (t) {
+    const rows = await db.prepare(
+      `SELECT m.day, m.scheduled_at, m.home_team_id, m.away_team_id, h.name AS home_name, a.name AS away_name, v.name AS venue
+         FROM tournament_matches m JOIN teams h ON h.id = m.home_team_id JOIN teams a ON a.id = m.away_team_id
+         LEFT JOIN tournament_venues v ON v.id = m.venue_id
+        WHERE m.tournament_id = ? ORDER BY m.day`
+    ).bind(t.id).all<{ day: number; scheduled_at: string; home_team_id: string; away_team_id: string; home_name: string; away_name: string; venue: string | null }>();
+    const entries = await db.prepare("SELECT team_id FROM tournament_entries WHERE tournament_id = ?").bind(t.id).all<{ team_id: string }>();
+    for (const e of entries.results) {
+      const mine = rows.results.filter((r) => r.home_team_id === e.team_id || r.away_team_id === e.team_id);
+      const lines = mine.map((r) => {
+        const opp = r.home_team_id === e.team_id ? r.away_name : r.home_name;
+        const d = new Date(r.scheduled_at);
+        return `${SHORT_WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()}. ${d.getUTCMonth() + 1}. ${opp} (${r.venue ?? t.venue_name})`;
+      });
+      const body =
+        `Los je hotový! Vaše zápasy v ligové fázi, výkop vždy v 18:00: ${lines.join("; ")}. ` +
+        `Nejlepší kluby z tabulky postoupí do play-off. Sestavu na každý zápas nastavíte na stránce Sestava. Hodně štěstí!`;
+      await sendSystemSMS(db, e.team_id, t.sponsor, body, SMS_META)
+        .catch((err) => logger.warn({ module: M }, `SMS s rozpisem pro tým ${e.team_id}`, err));
+    }
+  }
+  return c.json({ ok: true, ...result });
+});
+
+/** Admin (test): odehraje nejbližší neodehraný hrací den hned, bez čekání na 18:00. */
+tournamentRouter.post("/admin/tournament/advance", async (c) => {
+  const r = await maybeAdvanceTournament(c.env.DB, { forceDay: true, maxMatches: 6 });
+  return c.json({ ok: true, ...r });
+});
+
+// ── Detail zápasu (stejný tvar jako /cup-matches/:id) ──
+
+const STAGE_NAME: Record<string, string> = { qf: "Čtvrtfinále", sf: "Semifinále", final: "Finále" };
+
+tournamentRouter.get("/tournament-matches/:id", async (c) => {
+  const row = await c.env.DB.prepare(
+    `SELECT m.*, t.name AS tournament_name, t.edition,
+            h.name AS home_name, h.primary_color AS home_color, h.secondary_color AS home_secondary, h.badge_pattern AS home_badge,
+            a.name AS away_name, a.primary_color AS away_color, a.secondary_color AS away_secondary, a.badge_pattern AS away_badge,
+            v.name AS venue_name, v.capacity AS venue_capacity, v.is_main AS venue_is_main
+       FROM tournament_matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+       JOIN teams h ON h.id = m.home_team_id
+       JOIN teams a ON a.id = m.away_team_id
+       LEFT JOIN tournament_venues v ON v.id = m.venue_id
+      WHERE m.id = ?`
+  ).bind(c.req.param("id")).first<Record<string, unknown>>();
+  if (!row) return c.json({ error: "Match not found" }, 404);
+
+  const parse = <T>(v: unknown, fallback: T): T => {
+    if (typeof v !== "string") return fallback;
+    try { return JSON.parse(v) as T; } catch (e) {
+      logger.warn({ module: M }, `nečitelná data zápasu ${row.id}`, e);
+      return fallback;
+    }
+  };
+  const homeLineup = parse<{ starters: Array<{ id: string; squadNumber?: number | null }>; subs: Array<{ id: string; squadNumber?: number | null }> } | null>(row.home_lineup_data, null);
+  const awayLineup = parse<typeof homeLineup>(row.away_lineup_data, null);
+  const ids = [homeLineup, awayLineup].flatMap((ld) => ld ? [...ld.starters, ...ld.subs].map((p) => p.id) : []).filter(Boolean);
+  if (ids.length > 0) {
+    const nums = await c.env.DB.prepare(`SELECT id, squad_number FROM players WHERE id IN (${ids.map(() => "?").join(",")})`)
+      .bind(...ids).all<{ id: string; squad_number: number | null }>()
+      .catch((e) => { logger.warn({ module: M }, "čísla dresů do detailu", e); return { results: [] as Array<{ id: string; squad_number: number | null }> }; });
+    const byId = new Map(nums.results.map((p) => [p.id, p.squad_number]));
+    for (const ld of [homeLineup, awayLineup]) {
+      if (!ld) continue;
+      for (const p of [...ld.starters, ...ld.subs]) { const n = byId.get(p.id); if (n != null) p.squadNumber = n; }
+    }
+  }
+
+  const stage = row.stage as string;
+  return c.json({
+    ...row,
+    isCup: false,
+    isTournament: true,
+    round: null,
+    roundName: stage === "league" ? `${row.tournament_name}, ${row.day}. den` : `${row.tournament_name}, ${STAGE_NAME[stage] ?? stage}`,
+    venue: row.venue_id ? { id: row.venue_id, name: row.venue_name, capacity: row.venue_capacity, isMain: row.venue_is_main === 1 } : null,
+    home_badge: row.home_badge ?? "shield", away_badge: row.away_badge ?? "shield",
+    home_secondary: row.home_secondary ?? "#FFFFFF", away_secondary: row.away_secondary ?? "#FFFFFF",
+    events: parse(row.events, []),
+    commentary: parse(row.commentary, []),
+    player_ratings: parse(row.player_ratings, {}),
+    home_lineup_data: homeLineup,
+    away_lineup_data: awayLineup,
+    absences: parse(row.absences, []),
+    isLocalDerby: false,
+  });
 });
 
 export default tournamentRouter;
