@@ -14,7 +14,7 @@ import {
 } from "@okresni-masina/shared";
 import { calculateStaffEffects } from "../staff/staff-effects";
 import {
-  endStaffTasksOnLeave, createStaffTask, cancelStaffTask, loadStaffTaskViews, findNextLeagueMatch, gameDay,
+  endStaffTasksOnLeave, createStaffTask, cancelStaffTask, loadStaffTaskViews, loadStaffTaskPlayers, findNextLeagueMatch, gameDay,
 } from "../staff/staff-tasks";
 
 export const staffRouter = new Hono<{ Bindings: Bindings }>();
@@ -365,41 +365,13 @@ staffRouter.get("/teams/:teamId/staff/tasks", async (c) => {
   if (denied) return denied;
   const db = c.env.DB;
   const gameDate = await loadGameDate(db, teamId);
-  const [tasks, nextMatch, players] = await Promise.all([
+  const today = gameDay(gameDate);
+  const [tasks, nextMatch] = await Promise.all([
     loadStaffTaskViews(db, teamId),
-    findNextLeagueMatch(db, teamId, gameDay(gameDate)),
-    db.prepare(
-      `SELECT p.id, p.first_name, p.last_name, p.age, p.position, t.team_type,
-              (SELECT MAX(i.days_remaining) FROM injuries i WHERE i.player_id = p.id AND i.days_remaining > 0 AND i.osobni_volno = 0) AS injury_days,
-              json_extract(p.life_context, '$.condition') AS cond,
-              json_extract(p.life_context, '$.morale') AS morale,
-              json_extract(p.life_context, '$.transferUnrest.level') AS unrest
-         FROM players p JOIN teams t ON t.id = p.team_id
-        WHERE t.id = ? OR t.parent_team_id = ?
-        ORDER BY t.parent_team_id IS NOT NULL, CASE p.position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 ELSE 3 END, p.last_name`,
-    ).bind(teamId, teamId).all<{
-      id: string; first_name: string; last_name: string; age: number; position: string; team_type: string | null;
-      injury_days: number | null; cond: number | null; morale: number | null; unrest: number | null;
-    }>()
-      .then((r) => r.results)
-      .catch((e) => { logger.warn({ module: "staff" }, "hráči pro úkoly", e); return []; }),
+    findNextLeagueMatch(db, teamId, today),
   ]);
-  return c.json({
-    gameDate: gameDay(gameDate),
-    tasks,
-    nextMatch,
-    players: players.map((p) => ({
-      id: p.id,
-      name: `${p.first_name} ${p.last_name}`,
-      age: p.age,
-      position: p.position,
-      isU21: p.team_type === "u21",
-      injuryDays: p.injury_days,
-      condition: p.cond === null ? null : Math.round(p.cond),
-      morale: p.morale === null ? null : Math.round(p.morale),
-      unrest: p.unrest === null ? null : Math.round(p.unrest),
-    })),
-  });
+  const players = await loadStaffTaskPlayers(db, teamId, today, nextMatch?.id ?? null);
+  return c.json({ gameDate: today, tasks, nextMatch, players });
 });
 
 /** POST /teams/:teamId/staff/:staffId/tasks { taskType, playerId?, playerIds?, durationDays? } — zadá úkol. */
