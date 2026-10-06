@@ -123,7 +123,7 @@ export function SquadNumberEditor({ teamId, playerId, playerName, current, teamm
                 : isCurrent
                   ? "bg-pitch-50 text-pitch-700 border border-pitch-500"
                   : taken
-                    ? "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200"
+                    ? "bg-gray-200 text-gray-600 border border-gray-300 hover:bg-gray-300"
                     : "bg-white text-ink border border-gray-200 hover:border-pitch-500 hover:bg-pitch-50";
               return (
                 <button
@@ -132,6 +132,7 @@ export function SquadNumberEditor({ teamId, playerId, playerName, current, teamm
                   role="option"
                   aria-selected={isSelected}
                   title={taken ? `Nosí ${taken.first_name} ${taken.last_name}` : isCurrent ? "Současné číslo" : "Volné"}
+                  aria-label={`Číslo ${n}, ${taken ? `nosí ${taken.first_name} ${taken.last_name}` : isCurrent ? "současné" : "volné"}`}
                   onClick={() => setSelected(n)}
                   className={`${base} ${look}`}
                 >
@@ -143,7 +144,7 @@ export function SquadNumberEditor({ teamId, playerId, playerName, current, teamm
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
             <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-white border border-gray-300" />volné</span>
-            <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-gray-200" />obsazené</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300" />obsazené</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-pitch-50 border border-pitch-500" />současné</span>
           </div>
 
