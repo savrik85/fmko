@@ -90,8 +90,9 @@ export function Sheet({
         style={{ maxWidth }}
         className={`relative w-full max-h-[92vh] overflow-y-auto overscroll-contain bg-paper shadow-[var(--shadow-modal)] rounded-t-[20px] sm:rounded-soft outline-none ${className}`}
       >
-        {/* Úchyt — na mobilu říká, že se plachta dá stáhnout pohledem i prstem */}
-        <div className="sm:hidden sticky top-0 pt-2 pb-1 flex justify-center bg-paper" aria-hidden="true">
+        {/* Úchyt — na mobilu říká, že se plachta dá stáhnout pohledem i prstem.
+            z-20: jinak se přes něj při posouvání kreslí obsah s position (relative, sticky). */}
+        <div className="sm:hidden sticky top-0 z-20 pt-2 pb-1 flex justify-center bg-paper" aria-hidden="true">
           <span className="h-1 w-9 rounded-full bg-line-strong" />
         </div>
         {children}
