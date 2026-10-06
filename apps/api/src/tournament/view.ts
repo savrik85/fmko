@@ -3,6 +3,7 @@
  * střelci a kolik už klub od sponzora dostal.
  */
 
+import { logger } from "../lib/logger";
 import { computeStandings } from "./draw";
 import type { TournamentRow } from "./service";
 
@@ -22,12 +23,23 @@ interface MatchViewRow {
   away_name: string;
   home_color: string | null;
   away_color: string | null;
+  home_crest: string;
+  away_crest: string;
   home_score: number | null;
   away_score: number | null;
   home_pens: number | null;
   away_pens: number | null;
   winner_team_id: string | null;
   attendance: number | null;
+}
+
+/** Znak klubu pro výpis zápasů (stejné hodnoty, jaké kreslí BadgePreview). */
+function parseCrest(raw: string | null): Record<string, string | null> | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as Record<string, string | null>; } catch (e) {
+    logger.warn({ module: "tournament-view" }, "nečitelný znak klubu", e);
+    return null;
+  }
 }
 
 export async function loadCompetitionView(db: D1Database, t: TournamentRow, teamId: string) {
@@ -37,6 +49,8 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
               v.name AS venue_name, v.is_main AS venue_is_main,
               m.home_team_id, m.away_team_id, h.name AS home_name, a.name AS away_name,
               h.primary_color AS home_color, a.primary_color AS away_color,
+              json_object('pattern', h.badge_pattern, 'primary', COALESCE(h.badge_primary_color, h.primary_color), 'secondary', COALESCE(h.badge_secondary_color, h.secondary_color), 'initials', h.badge_initials, 'symbol', h.badge_symbol) AS home_crest,
+              json_object('pattern', a.badge_pattern, 'primary', COALESCE(a.badge_primary_color, a.primary_color), 'secondary', COALESCE(a.badge_secondary_color, a.secondary_color), 'initials', a.badge_initials, 'symbol', a.badge_symbol) AS away_crest,
               m.home_score, m.away_score, m.home_pens, m.away_pens, m.winner_team_id, m.attendance
          FROM tournament_matches m
          JOIN teams h ON h.id = m.home_team_id
@@ -46,10 +60,11 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
         ORDER BY m.day, CASE WHEN v.is_main = 1 THEN 0 ELSE 1 END, m.bracket_pos`
     ).bind(t.id).all<MatchViewRow>(),
     db.prepare(
-      `SELECT t.id, t.name, t.primary_color, COALESCE(t.reputation, 0) AS reputation, l.district
+      `SELECT t.id, t.name, t.primary_color, COALESCE(t.reputation, 0) AS reputation, l.district,
+              json_object('pattern', t.badge_pattern, 'primary', COALESCE(t.badge_primary_color, t.primary_color), 'secondary', COALESCE(t.badge_secondary_color, t.secondary_color), 'initials', t.badge_initials, 'symbol', t.badge_symbol) AS crest
          FROM tournament_entries e JOIN teams t ON t.id = e.team_id LEFT JOIN leagues l ON l.id = t.league_id
         WHERE e.tournament_id = ?`
-    ).bind(t.id).all<{ id: string; name: string; primary_color: string | null; reputation: number; district: string | null }>(),
+    ).bind(t.id).all<{ id: string; name: string; primary_color: string | null; reputation: number; district: string | null; crest: string }>(),
     db.prepare("SELECT id, name, capacity, is_main FROM tournament_venues WHERE city = ? ORDER BY sort").bind(t.city)
       .all<{ id: string; name: string; capacity: number; is_main: number }>(),
     db.prepare(
@@ -78,8 +93,8 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
     scheduledAt: m.scheduled_at,
     status: m.status,
     venue: m.venue_id ? { id: m.venue_id, name: m.venue_name, isMain: m.venue_is_main === 1 } : null,
-    home: { teamId: m.home_team_id, name: m.home_name, color: m.home_color },
-    away: { teamId: m.away_team_id, name: m.away_name, color: m.away_color },
+    home: { teamId: m.home_team_id, name: m.home_name, color: m.home_color, crest: parseCrest(m.home_crest) },
+    away: { teamId: m.away_team_id, name: m.away_name, color: m.away_color, crest: parseCrest(m.away_crest) },
     homeScore: m.home_score,
     awayScore: m.away_score,
     homePens: m.home_pens,
@@ -97,6 +112,7 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
     teamId: r.teamId,
     name: meta.get(r.teamId)?.name ?? "",
     color: meta.get(r.teamId)?.primary_color ?? null,
+    crest: parseCrest(meta.get(r.teamId)?.crest ?? null),
     district: meta.get(r.teamId)?.district ?? null,
     played: r.played, won: r.won, drawn: r.drawn, lost: r.lost,
     goalsFor: r.goalsFor, goalsAgainst: r.goalsAgainst, points: r.points,
