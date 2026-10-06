@@ -989,8 +989,14 @@ export default function PlayerDetailPage() {
                   <SquadNumberEditor
                     teamId={teamId}
                     playerId={player.id}
+                    playerName={`${player.first_name} ${player.last_name}`}
                     current={player.squad_number}
                     teammates={allPlayers}
+                    jersey={{
+                      primary: color,
+                      secondary: displayTeam.secondary_color || "#FFF",
+                      pattern: (displayTeam.jersey_pattern as string) || "solid",
+                    }}
                     onChanged={(changes) => {
                       const byId = new Map(changes.map((ch) => [ch.id, ch.number]));
                       setPlayer((prev) => (prev && byId.has(prev.id) ? { ...prev, squad_number: byId.get(prev.id) ?? null } : prev));
