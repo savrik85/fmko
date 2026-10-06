@@ -150,7 +150,8 @@ describe("applyContractOutcomes", () => {
     const out = await applyContractOutcomes(jakoD1(db), CONTRACT, [ev(row("p1", "no_riots"), "broken", 2)], CTX);
     expect(out).toMatchObject({ terminated: true, terminatedSponsorId: 7 });
     const rename = db.davky.flat().find((d) => /UPDATE teams SET name = \? WHERE id = \?/.test(d.sql));
-    expect(rename?.params).toEqual(["SK Lhota", "t1"]);
+    // Zkratka klubu (FK) zůstává, ze jména zmizí jen sponzor.
+    expect(rename?.params).toEqual(["FK Lhota", "t1"]);
     const rep = db.davky.flat().find((d) => /INSERT INTO reputation_log/.test(d.sql));
     expect(rep?.params[3]).toBe(-5);
     expect(rep?.params[7]).toBe("sponsor-quit-c1");
