@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader, Tabs, useTabParam } from "@/components/ui";
-import { bestTextOn } from "@/lib/team-color";
+import { FixtureGroup, FixtureRow, type FixtureCrest, type FixtureSide } from "@/components/match/fixture-row";
 
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["pavouk", "strelci"] as const;
 
-interface Side { name: string; color: string | null; isBig: boolean; teamId: string | null; strength: number; cupTeamId?: string }
+interface Side { name: string; color: string | null; isBig: boolean; teamId: string | null; strength: number; cupTeamId?: string; crest?: FixtureCrest | null }
 interface BracketMatch {
+  id?: string; scheduledAt?: string | null;
   bracketPos: number; home: Side | null; away: Side | null;
   homeScore: number | null; awayScore: number | null; homePens: number | null; awayPens: number | null;
   winnerId: string | null; status: string; upset: boolean;
@@ -44,74 +45,38 @@ interface CupData {
   scorers?: Scorer[];
 }
 
-function initials(name: string) {
-  return name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+const GOLD = "#B8862B";
+
+function fixtureSide(s: Side | null): FixtureSide {
+  if (!s) return { name: "volný los" };
+  return {
+    name: s.name,
+    href: s.teamId ? `/tym/${s.teamId}` : s.cupTeamId ? `/pohar/tym/${s.cupTeamId}` : null,
+    color: s.color,
+    crest: s.crest ?? null,
+    italic: s.isBig,
+  };
 }
 
-function TeamCell({ s, align, bold }: { s: Side | null; align: "left" | "right"; bold: boolean }) {
-  // Dresy sahají až k bílé (#FFFFFF) — bílé iniciály na světlém kolečku zmizí
-  // a samo kolečko splyne s kartou, proto k tmavému textu i obrys.
-  const color = s?.color || "#9aa18c";
-  const badge = (
-    <span
-      className={`w-6 h-6 rounded-full flex items-center justify-center text-micro font-heading font-bold shrink-0 border ${
-        bestTextOn(color) === "light" ? "text-white border-transparent" : "text-gray-900 border-gray-300"
-      }`}
-      style={{ background: color }}
-    >
-      {s ? initials(s.name) : "?"}
-    </span>
-  );
-  const name = s?.teamId
-    ? <Link href={`/tym/${s.teamId}`} className={`truncate hover:underline ${s.isBig ? "italic" : ""}`}>{s.name}</Link>
-    : s?.cupTeamId
-      ? <Link href={`/pohar/tym/${s.cupTeamId}`} className={`truncate hover:underline ${s.isBig ? "italic" : ""}`}>{s.name}</Link>
-      : <span className={`truncate ${s?.isBig ? "italic" : ""} ${!s ? "text-muted" : ""}`}>{s?.name ?? "volný los"}</span>;
-  return (
-    <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${align === "right" ? "sm:flex-row-reverse sm:text-right" : ""}`}>
-      {badge}
-      <span className={`min-w-0 text-sm leading-tight ${bold ? "font-bold text-ink" : "text-ink/70"}`}>{name}</span>
-    </div>
-  );
-}
-
-/** Řádek pohárového zápasu — desktop: domácí | skóre | hosté; mobil: týmy pod sebou. */
+/** Pohárový zápas: tabule vede na detail odehraného zápasu, před zápasem ukáže datum. */
 function TieRow({ m, mine }: { m: BracketMatch; mine: boolean }) {
-  const sim = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
-  const homeWon = sim && (m.homeScore! > m.awayScore! || (m.homeScore === m.awayScore && (m.homePens ?? 0) > (m.awayPens ?? 0)));
-  const awayWon = sim && !homeWon;
-  const pens = sim && m.homeScore === m.awayScore && m.homePens != null;
+  const played = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
+  const homeWon = played && (m.homeScore! > m.awayScore! || (m.homeScore === m.awayScore && (m.homePens ?? 0) > (m.awayPens ?? 0)));
+  const kickoff = m.scheduledAt
+    ? new Date(m.scheduledAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" })
+    : null;
   return (
-    <div className={`rounded-soft border ${mine ? "border-pitch-300 bg-pitch-50" : "border-gray-100 bg-white"}`}>
-      {/* ≥sm: jeden řádek — domácí | skóre | hosté */}
-      <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-2">
-        <TeamCell s={m.home} align="right" bold={homeWon} />
-        <div className="shrink-0 w-14 text-center">
-          {sim
-            ? <div className="font-heading font-[800] text-sm tabular-nums leading-none">{m.homeScore}:{m.awayScore}{pens && <div className="text-micro text-muted font-normal mt-0.5">pen {m.homePens}:{m.awayPens}</div>}</div>
-            : <span className="text-xs text-muted font-heading">vs</span>}
-        </div>
-        <TeamCell s={m.away} align="left" bold={awayWon} />
-        <span className="w-3.5 shrink-0 text-center text-xs">{m.upset ? "🔥" : ""}</span>
-      </div>
-      {/* mobil: týmy pod sebou, skóre vpravo */}
-      <div className="sm:hidden px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center gap-2">
-          <TeamCell s={m.home} align="left" bold={homeWon} />
-          <span className={`font-heading font-[800] text-sm tabular-nums shrink-0 w-5 text-right ${homeWon ? "text-ink" : "text-ink/60"}`}>{sim ? m.homeScore : "–"}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <TeamCell s={m.away} align="left" bold={awayWon} />
-          <span className={`font-heading font-[800] text-sm tabular-nums shrink-0 w-5 text-right ${awayWon ? "text-ink" : "text-ink/60"}`}>{sim ? m.awayScore : "–"}</span>
-        </div>
-        {(pens || m.upset) && (
-          <div className="text-micro text-muted pl-8">
-            {pens && <span>na penalty {m.homePens}:{m.awayPens}</span>}
-            {m.upset && <span className={pens ? "ml-2" : ""}>🔥 překvapení</span>}
-          </div>
-        )}
-      </div>
-    </div>
+    <FixtureRow
+      home={fixtureSide(m.home)}
+      away={fixtureSide(m.away)}
+      score={played ? { home: m.homeScore!, away: m.awayScore!, homePens: m.homePens, awayPens: m.awayPens } : null}
+      kickoff={kickoff}
+      winner={played ? (homeWon ? "home" : "away") : null}
+      href={played && m.id ? `/zapas/${m.id}` : null}
+      hrefLabel={`Detail zápasu ${m.home?.name ?? ""} proti ${m.away?.name ?? ""}`}
+      accent={mine ? GOLD : null}
+      meta={m.upset ? <span className="font-heading font-bold text-ink/70">🔥 překvapení</span> : undefined}
+    />
   );
 }
 
@@ -180,56 +145,48 @@ export default function PoharPage() {
         </div>
       )}
 
-      {/* Tvoje cesta */}
-      {myTeam && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <SectionLabel>Tvoje cesta{myEarnings > 0 && <span className="text-pitch-600 font-bold normal-case"> · vyděláno {myEarnings.toLocaleString("cs")} Kč</span>}</SectionLabel>
-            <span className={`text-xs font-heading font-bold ${myTeam.isChampion ? "text-gold-600" : myTeam.alive ? "text-pitch-600" : "text-muted"}`}>
-              {myTeam.isChampion ? "🏆 vítěz poháru" : myTeam.alive ? "ve hře" : `vyřazeni — ${myMatches.find((m) => m.round === myTeam.eliminatedRound)?.roundName ?? ""}`}
-            </span>
-          </div>
-          <div className="card">
+      {/* Tvoje cesta — stejné řádky jako pavouk, s kolem a výsledkem pod zápasem */}
+      {myTeam && (() => {
+        const entryById = new Map(rounds.flatMap((r) => r.matches).filter((m) => m.id).map((m) => [m.id as string, m]));
+        const status = myTeam.isChampion ? "vítěz poháru" : myTeam.alive ? "ve hře" : "vyřazeni";
+        return (
+          <FixtureGroup
+            title="Tvoje cesta"
+            note={myEarnings > 0 ? `${status}, vyděláno ${myEarnings.toLocaleString("cs")} Kč` : status}
+          >
             {myMatches.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-muted text-center">Zatím bez zápasu — čeká se na los.</div>
-            ) : myMatches.map((m, i) => {
-              const pen = m.status === "simulated" && m.myScore === m.oppScore && m.myPens != null;
+              <div className="px-4 py-4 text-sm text-muted text-center">Zatím bez zápasu, čeká se na los.</div>
+            ) : myMatches.map((m) => {
+              const e = entryById.get(m.matchId);
+              if (!e) return null;
+              const played = m.status === "simulated" && e.homeScore != null && e.awayScore != null;
+              const homeWon = played && (e.homeScore! > e.awayScore! || (e.homeScore === e.awayScore && (e.homePens ?? 0) > (e.awayPens ?? 0)));
               return (
-                <div key={i} className="px-3 py-2.5 border-b border-gray-50 last:border-b-0">
-                  {/* mobil: kolo + doma/venku nad soupeřem */}
-                  <div className="sm:hidden text-micro font-heading uppercase text-muted mb-1">
-                    {m.roundName} · {m.isHome ? "doma" : "venku"}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="hidden sm:block text-micro font-heading uppercase text-muted w-24 shrink-0">{m.roundName}</span>
-                    <span className="hidden sm:block text-xs text-muted shrink-0 w-12">{m.isHome ? "doma" : "venku"}</span>
-                    <span className="flex-1 min-w-0 text-base sm:text-sm font-bold truncate">
-                      {m.opponent?.teamId ? <Link href={`/tym/${m.opponent.teamId}`} className="hover:underline">{m.opponent.name}</Link> : m.opponent?.cupTeamId ? <Link href={`/pohar/tym/${m.opponent.cupTeamId}`} className={`hover:underline ${m.opponent.isBig ? "italic" : ""}`}>{m.opponent.name}</Link> : <span className={m.opponent?.isBig ? "italic" : ""}>{m.opponent?.name}</span>}
-                    </span>
-                    {m.status === "simulated" ? (
-                      <>
-                        <span className="font-heading font-[800] text-sm tabular-nums shrink-0">{m.myScore}:{m.oppScore}{pen && <span className="text-micro text-muted font-normal"> (p {m.myPens}:{m.oppPens})</span>}</span>
-                        <span className={`text-micro font-bold px-1.5 py-0.5 rounded shrink-0 ${m.won ? "bg-pitch-50 text-pitch-600" : "bg-card-red/10 text-card-red"}`}>{m.won ? "POSTUP" : "KONEC"}</span>
-                      </>
-                    ) : (
-                      <span className="text-xs shrink-0">
-                        {m.scheduledAt && <span className="text-muted">{new Date(m.scheduledAt).toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" })}</span>}
-                        {m.daysUntil != null && <span className="ml-1.5 font-heading font-bold text-pitch-600">{daysLabel(m.daysUntil)}</span>}
-                        {!m.scheduledAt && m.daysUntil == null && <span className="text-muted">naplánováno</span>}
-                      </span>
-                    )}
-                  </div>
-                  {m.status === "simulated" && m.matchId && (
-                    <div className="mt-1 text-right">
-                      <Link href={`/zapas/${m.matchId}`} className="text-xs font-heading font-bold text-pitch-600 hover:underline">Detail zápasu →</Link>
-                    </div>
-                  )}
-                </div>
+                <FixtureRow
+                  key={m.matchId}
+                  home={fixtureSide(e.home)}
+                  away={fixtureSide(e.away)}
+                  score={played ? { home: e.homeScore!, away: e.awayScore!, homePens: e.homePens, awayPens: e.awayPens } : null}
+                  kickoff={m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : null}
+                  winner={played ? (homeWon ? "home" : "away") : null}
+                  href={played ? `/zapas/${m.matchId}` : `/zapas?calendarId=${m.matchId}`}
+                  hrefLabel={played ? "Detail zápasu" : "Nastavit sestavu"}
+                  accent={GOLD}
+                  meta={
+                    <>
+                      <span className="font-heading font-bold text-ink/80">{m.roundName}</span>
+                      {played && (
+                        <span className={`font-heading font-bold ${m.won ? "text-pitch-600" : "text-card-red"}`}>{m.won ? "postup" : "konec v poháru"}</span>
+                      )}
+                      {!played && m.daysUntil != null && <span>{daysLabel(m.daysUntil)}</span>}
+                    </>
+                  }
+                />
               );
             })}
-          </div>
-        </div>
-      )}
+          </FixtureGroup>
+        );
+      })()}
 
       {/* Taby — pavouk / střelci */}
       <Tabs
@@ -270,17 +227,19 @@ export default function PoharPage() {
       )}
 
       {/* Všechna kola */}
-      {tab === "pavouk" && [...rounds].reverse().map((r) => (
-        <div key={r.round}>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="font-heading font-bold text-base text-pitch-600">{r.roundName}</span>
-            <span className="text-sm text-muted">· {r.matches.length} {r.matches.length === 1 ? "zápas" : r.matches.length < 5 ? "zápasy" : "zápasů"}</span>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-1.5">
-            {r.matches.map((m, i) => <TieRow key={i} m={m} mine={matchIsMine(m)} />)}
-          </div>
-        </div>
-      ))}
+      {tab === "pavouk" && [...rounds].reverse().map((r) => {
+        // Moje zápasy nahoru, ať je v kole se 64 dvojicemi nemusím hledat.
+        const ordered = [...r.matches].sort((a, b) => Number(matchIsMine(b)) - Number(matchIsMine(a)));
+        return (
+          <FixtureGroup
+            key={r.round}
+            title={r.roundName}
+            note={`${r.matches.length} ${r.matches.length === 1 ? "zápas" : r.matches.length < 5 ? "zápasy" : "zápasů"}`}
+          >
+            {ordered.map((m, i) => <TieRow key={m.id ?? i} m={m} mine={matchIsMine(m)} />)}
+          </FixtureGroup>
+        );
+      })}
       </div>
     </>
   );

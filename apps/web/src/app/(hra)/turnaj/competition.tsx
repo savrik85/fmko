@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { SectionLabel, Tabs, useTabParam } from "@/components/ui";
-import { bestTextOn } from "@/lib/team-color";
+import { BadgePreview, Tabs, useTabParam, type BadgePattern } from "@/components/ui";
+import { FixtureGroup, FixtureRow, type FixtureCrest } from "@/components/match/fixture-row";
 
 export const BRAND = "#C8006A";
 
-export interface Side { teamId: string; name: string; color: string | null }
+export interface Side { teamId: string; name: string; color: string | null; crest?: FixtureCrest | null }
 
 export interface CompetitionMatch {
   id: string;
@@ -26,7 +26,7 @@ export interface CompetitionMatch {
 }
 
 export interface StandingRow {
-  position: number; teamId: string; name: string; color: string | null; district: string | null;
+  position: number; teamId: string; name: string; color: string | null; crest?: FixtureCrest | null; district: string | null;
   played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; points: number;
 }
 
@@ -61,66 +61,48 @@ function stageTitle(m: CompetitionMatch): string {
   return m.stage === "league" ? `${m.day}. den` : STAGE_NAME[m.stage] ?? m.stage;
 }
 
-function Dot({ color }: { color: string | null }) {
-  const c = color || "#9aa18c";
+/** Zápas turnaje: tabule vede na detail (odehraný) nebo na sestavu (můj nadcházející). */
+function MatchRow({ m, myTeamId }: { m: CompetitionMatch; myTeamId: string | null }) {
+  const played = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
+  const mine = m.home.teamId === myTeamId || m.away.teamId === myTeamId;
+  const winner = !played ? null
+    : m.winnerTeamId === m.home.teamId ? "home"
+    : m.winnerTeamId === m.away.teamId ? "away"
+    : m.homeScore! > m.awayScore! ? "home" : m.awayScore! > m.homeScore! ? "away" : null;
   return (
-    <span
-      className={`w-3.5 h-3.5 rounded-full shrink-0 border ${bestTextOn(c) === "light" ? "border-transparent" : "border-gray-300"}`}
-      style={{ background: c }}
-      aria-hidden
+    <FixtureRow
+      home={{ name: m.home.name, href: `/tym/${m.home.teamId}`, color: m.home.color, crest: m.home.crest }}
+      away={{ name: m.away.name, href: `/tym/${m.away.teamId}`, color: m.away.color, crest: m.away.crest }}
+      score={played ? { home: m.homeScore!, away: m.awayScore!, homePens: m.homePens, awayPens: m.awayPens } : null}
+      kickoff={timeLabel(m.scheduledAt)}
+      winner={winner}
+      href={played ? `/zapas/${m.id}` : mine ? `/zapas?calendarId=${m.id}` : null}
+      hrefLabel={played ? `Detail zápasu ${m.home.name} proti ${m.away.name}` : "Nastavit sestavu"}
+      accent={mine ? BRAND : null}
+      meta={
+        <>
+          {m.venue?.name && (
+            <span className={m.venue.isMain ? "font-heading font-bold" : undefined} style={m.venue.isMain ? { color: BRAND } : undefined}>
+              {m.venue.name}
+            </span>
+          )}
+          {played && m.attendance != null && m.attendance > 0 && <span>{m.attendance.toLocaleString("cs")} diváků</span>}
+          {!played && mine && <span>Klepni na čas a nastav sestavu</span>}
+        </>
+      }
     />
   );
 }
 
-function TeamName({ side, bold }: { side: Side; bold: boolean }) {
-  return (
-    <span className="flex items-center gap-2 min-w-0">
-      <Dot color={side.color} />
-      <Link href={`/tym/${side.teamId}`} className={`truncate text-base hover:underline ${bold ? "font-bold text-ink" : "text-ink/80"}`}>{side.name}</Link>
-    </span>
-  );
-}
-
-/** Zápas: týmy pod sebou (mobil), skóre nebo čas vpravo, pod tím hřiště. */
-function MatchRow({ m, myTeamId }: { m: CompetitionMatch; myTeamId: string | null }) {
-  const played = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
-  const mine = m.home.teamId === myTeamId || m.away.teamId === myTeamId;
-  const pens = played && m.homePens != null && m.awayPens != null;
-  return (
-    <div className={`px-4 py-3 border-b border-gray-50 last:border-b-0 ${mine ? "bg-pitch-50" : ""}`}>
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <TeamName side={m.home} bold={played && m.winnerTeamId === m.home.teamId} />
-          <TeamName side={m.away} bold={played && m.winnerTeamId === m.away.teamId} />
-        </div>
-        {played ? (
-          <div className="shrink-0 text-right">
-            <div className="font-heading font-[800] text-base tabular-nums leading-tight">{m.homeScore}</div>
-            <div className="font-heading font-[800] text-base tabular-nums leading-tight mt-1.5">{m.awayScore}</div>
-          </div>
-        ) : (
-          <div className="shrink-0 text-sm text-muted text-right">{timeLabel(m.scheduledAt)}</div>
-        )}
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-        {m.venue?.name && <span>{m.venue.isMain ? "🏟️ " : ""}{m.venue.name}</span>}
-        {pens && <span>na penalty {m.homePens}:{m.awayPens}</span>}
-        {played && m.attendance != null && m.attendance > 0 && <span>{m.attendance.toLocaleString("cs")} diváků</span>}
-        {played && <Link href={`/zapas/${m.id}`} className="font-heading font-bold text-pitch-600 hover:underline">Detail →</Link>}
-        {!played && mine && <Link href={`/zapas?calendarId=${m.id}`} className="font-heading font-bold text-pitch-600 hover:underline">Sestava →</Link>}
-      </div>
-    </div>
-  );
+function zapasy(n: number): string {
+  return `${n} ${n === 1 ? "zápas" : n >= 2 && n <= 4 ? "zápasy" : "zápasů"}`;
 }
 
 function DayBlock({ title, matches, myTeamId }: { title: string; matches: CompetitionMatch[]; myTeamId: string | null }) {
   return (
-    <div>
-      <SectionLabel>{title}</SectionLabel>
-      <div className="card mt-2">
-        {matches.map((m) => <MatchRow key={m.id} m={m} myTeamId={myTeamId} />)}
-      </div>
-    </div>
+    <FixtureGroup title={title} note={zapasy(matches.length)}>
+      {matches.map((m) => <MatchRow key={m.id} m={m} myTeamId={myTeamId} />)}
+    </FixtureGroup>
   );
 }
 
@@ -141,7 +123,14 @@ function Standings({ rows, advancing, myTeamId }: { rows: StandingRow[]; advanci
         >
           <span className={`w-6 text-right text-sm tabular-nums ${r.position <= advancing ? "font-bold text-pitch-600" : "text-muted"}`}>{r.position}.</span>
           <span className="flex-1 min-w-0 flex items-center gap-2">
-            <Dot color={r.color} />
+            <BadgePreview
+              primary={r.crest?.primary || r.color || "#5c6b52"}
+              secondary={r.crest?.secondary || "#FFFFFF"}
+              pattern={(r.crest?.pattern as BadgePattern) || "shield"}
+              initials={r.crest?.initials || r.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+              symbol={r.crest?.symbol}
+              size={22}
+            />
             <Link href={`/tym/${r.teamId}`} className="truncate text-base font-bold hover:underline">{r.name}</Link>
           </span>
           <span className="w-8 text-center text-sm tabular-nums">{r.played}</span>
@@ -225,8 +214,8 @@ export function CompetitionView({
 
       {tab === "prehled" && (
         <div className="space-y-5">
-          {nextDay != null && <DayBlock title={`Příští zápasy · ${stageTitle(byDay(nextDay)[0])} · ${dayLabel(byDay(nextDay)[0].scheduledAt)}`} matches={byDay(nextDay)} myTeamId={myTeamId} />}
-          {lastPlayedDay != null && <DayBlock title={`Poslední výsledky · ${stageTitle(byDay(lastPlayedDay)[0])}`} matches={byDay(lastPlayedDay)} myTeamId={myTeamId} />}
+          {nextDay != null && <DayBlock title={`Hraje se ${dayLabel(byDay(nextDay)[0].scheduledAt)}, ${stageTitle(byDay(nextDay)[0]).toLowerCase()}`} matches={byDay(nextDay)} myTeamId={myTeamId} />}
+          {lastPlayedDay != null && <DayBlock title={`Výsledky: ${stageTitle(byDay(lastPlayedDay)[0]).toLowerCase()}`} matches={byDay(lastPlayedDay)} myTeamId={myTeamId} />}
         </div>
       )}
 
@@ -236,7 +225,7 @@ export function CompetitionView({
         <div className="space-y-5">
           {[...leagueDays, ...playoffStages.map((st) => matches.find((m) => m.stage === st)?.day ?? 0)]
             .filter((d, i, arr) => d > 0 && arr.indexOf(d) === i)
-            .map((d) => <DayBlock key={d} title={`${stageTitle(byDay(d)[0])} · ${dayLabel(byDay(d)[0].scheduledAt)}`} matches={byDay(d)} myTeamId={myTeamId} />)}
+            .map((d) => <DayBlock key={d} title={`${stageTitle(byDay(d)[0])}, ${dayLabel(byDay(d)[0].scheduledAt)}`} matches={byDay(d)} myTeamId={myTeamId} />)}
         </div>
       )}
 

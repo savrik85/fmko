@@ -8779,12 +8779,25 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   if (!cup) return c.json({ cup: null });
 
   const { roundName, cupPrizeTable } = await import("../cup/cup");
-  const teamsRes = await c.env.DB.prepare("SELECT id, team_id, name, strength, is_big_club, primary_color, eliminated_round FROM cup_teams WHERE cup_id = ?")
-    .bind(cup.id).all<{ id: string; team_id: string | null; name: string; strength: number; is_big_club: number; primary_color: string | null; eliminated_round: number | null }>()
+  // Znak skutečného klubu (velkoklub ho nemá, kreslí se štít s iniciálami).
+  const teamsRes = await c.env.DB.prepare(
+    `SELECT ct.id, ct.team_id, ct.name, ct.strength, ct.is_big_club, ct.primary_color, ct.eliminated_round,
+            t.badge_pattern, COALESCE(t.badge_primary_color, t.primary_color) AS badge_primary, COALESCE(t.badge_secondary_color, t.secondary_color) AS badge_secondary,
+            t.badge_initials, t.badge_symbol
+       FROM cup_teams ct LEFT JOIN teams t ON t.id = ct.team_id
+      WHERE ct.cup_id = ?`
+  ).bind(cup.id).all<{ id: string; team_id: string | null; name: string; strength: number; is_big_club: number; primary_color: string | null; eliminated_round: number | null; badge_pattern: string | null; badge_primary: string | null; badge_secondary: string | null; badge_initials: string | null; badge_symbol: string | null }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "load cup teams", e); return { results: [] as any[] }; });
   const tmap = new Map(teamsRes.results.map((t) => [t.id, t]));
   const ctOf = (id: string | null) => (id ? tmap.get(id) : null);
-  const side = (id: string | null) => { const t = ctOf(id); return t ? { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id, strength: t.strength, cupTeamId: t.id } : null; };
+  const side = (id: string | null) => {
+    const t = ctOf(id);
+    if (!t) return null;
+    const crest = t.badge_pattern
+      ? { pattern: t.badge_pattern, primary: t.badge_primary, secondary: t.badge_secondary, initials: t.badge_initials, symbol: t.badge_symbol }
+      : null;
+    return { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id, strength: t.strength, cupTeamId: t.id, crest };
+  };
 
   const matchesRes = await c.env.DB.prepare("SELECT id, round, bracket_pos, home_cup_team_id, away_cup_team_id, home_score, away_score, home_pens, away_pens, winner_cup_team_id, status, upset, scheduled_at FROM cup_matches WHERE cup_id = ? ORDER BY round, bracket_pos")
     .bind(cup.id).all<{ id: string; round: number; bracket_pos: number; home_cup_team_id: string | null; away_cup_team_id: string | null; home_score: number | null; away_score: number | null; home_pens: number | null; away_pens: number | null; winner_cup_team_id: string | null; status: string; upset: number; scheduled_at: string | null }>()
@@ -8801,6 +8814,8 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   const myMatches: any[] = [];
   for (const m of matchesRes.results) {
     const entry = {
+      id: m.id,
+      scheduledAt: m.scheduled_at,
       bracketPos: m.bracket_pos,
       home: side(m.home_cup_team_id), away: side(m.away_cup_team_id),
       homeScore: m.home_score, awayScore: m.away_score, homePens: m.home_pens, awayPens: m.away_pens,
