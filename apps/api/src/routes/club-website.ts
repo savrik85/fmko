@@ -17,11 +17,19 @@ import {
   type ClubWebsiteStadiumRender,
   type StadiumPhotoViewpoint,
   type ClubWebsiteTemplate,
+  type ClubWebsiteClubRef,
+  type ClubWebsiteFixture,
+  type ClubWebsiteScorer,
+  type ClubWebsiteMatchesPage,
+  type ClubWebsiteProgramPage,
+  type ClubWebsiteProgramTeam,
+  type ClubWebsiteCoachPage,
   type ClubWebsiteAddon,
   type ClubWebsiteMatchHighlight,
   type ClubWebsiteMatchSummary,
 } from "@okresni-masina/shared";
 import { standFacilities } from "../stadium/stands-model";
+import { roundName } from "../cup/cup";
 
 export const clubWebsiteRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -1649,13 +1657,16 @@ clubWebsiteRouter.get("/:id/website/player/:playerId", async (c) => {
       }),
     db.prepare(
       `SELECT p.id, p.first_name, p.last_name, p.nickname, p.age, p.position, p.overall_rating, p.squad_number,
-              p.nationality, p.description, p.avatar, p.status, p.team_id, t.name AS team_name
+              p.nationality, p.description, p.avatar, p.status, p.team_id, t.name AS team_name, p.residence,
+              json_extract(p.physical, '$.preferredFoot') AS preferred_foot,
+              json_extract(p.life_context, '$.occupation') AS occupation
        FROM players p LEFT JOIN teams t ON t.id = p.team_id
        WHERE p.id = ?`,
     ).bind(playerId).first<{
       id: string; first_name: string; last_name: string; nickname: string | null; age: number; position: string;
       overall_rating: number; squad_number: number | null; nationality: string | null; description: string | null;
       avatar: string; status: string | null; team_id: string | null; team_name: string | null;
+      residence: string | null; preferred_foot: string | null; occupation: string | null;
     }>(),
   ]);
   if (!club || !player) return c.json({ error: "Hráč nenalezen" }, 404);
@@ -1694,8 +1705,74 @@ clubWebsiteRouter.get("/:id/website/player/:playerId", async (c) => {
     }),
   ]);
 
+  type RecentRow = {
+    match_id: string; team_id: string; started: number; minutes_played: number; goals: number; assists: number;
+    yellow_cards: number; red_cards: number; rating: number | null;
+    l_home_id: string | null; l_away_id: string | null; l_home_name: string | null; l_away_name: string | null;
+    l_home_score: number | null; l_away_score: number | null; l_date: string | null;
+    c_home_id: string | null; c_away_id: string | null; c_home_name: string | null; c_away_name: string | null;
+    c_home_score: number | null; c_away_score: number | null; c_date: string | null;
+  };
+  const [recentRows, momRow] = await Promise.all([
+    db.prepare(
+      `SELECT mps.match_id, mps.team_id, mps.started, mps.minutes_played, mps.goals, mps.assists,
+              mps.yellow_cards, mps.red_cards, mps.rating,
+              m.home_team_id AS l_home_id, m.away_team_id AS l_away_id, lht.name AS l_home_name, lat.name AS l_away_name,
+              m.home_score AS l_home_score, m.away_score AS l_away_score, m.simulated_at AS l_date,
+              hct.team_id AS c_home_id, act.team_id AS c_away_id, hct.name AS c_home_name, act.name AS c_away_name,
+              cm.home_score AS c_home_score, cm.away_score AS c_away_score, cm.simulated_at AS c_date
+       FROM match_player_stats mps
+       LEFT JOIN matches m ON m.id = mps.match_id
+       LEFT JOIN teams lht ON lht.id = m.home_team_id
+       LEFT JOIN teams lat ON lat.id = m.away_team_id
+       LEFT JOIN cup_matches cm ON cm.id = mps.match_id
+       LEFT JOIN cup_teams hct ON hct.id = cm.home_cup_team_id
+       LEFT JOIN cup_teams act ON act.id = cm.away_cup_team_id
+       WHERE mps.player_id = ? AND (m.league_id IS NOT NULL OR cm.id IS NOT NULL)
+       ORDER BY COALESCE(m.simulated_at, cm.simulated_at, mps.created_at) DESC
+       LIMIT 10`,
+    ).bind(playerId).all<RecentRow>().catch((e) => {
+      logger.warn(MODULE, "player profile: recent matches", e);
+      return { results: [] as RecentRow[] };
+    }),
+    db.prepare("SELECT COUNT(*) AS n FROM matches WHERE mom_player_id = ?").bind(playerId).first<{ n: number }>()
+      .catch((e) => {
+        logger.warn(MODULE, "player profile: man of match", e);
+        return null;
+      }),
+  ]);
+  const recentMatches = (recentRows.results ?? []).map((r) => {
+    const cup = !r.l_home_id;
+    const homeId = cup ? r.c_home_id : r.l_home_id;
+    const isHome = homeId === r.team_id;
+    const homeScore = cup ? r.c_home_score : r.l_home_score;
+    const awayScore = cup ? r.c_away_score : r.l_away_score;
+    return {
+      matchId: r.match_id,
+      competition: (cup ? "cup" : "league") as "cup" | "league",
+      date: cup ? r.c_date : r.l_date,
+      teamId: r.team_id,
+      opponentId: (isHome ? (cup ? r.c_away_id : r.l_away_id) : homeId) ?? null,
+      opponentName: (isHome ? (cup ? r.c_away_name : r.l_away_name) : (cup ? r.c_home_name : r.l_home_name)) ?? "Soupeř",
+      isHome,
+      goalsFor: isHome ? homeScore : awayScore,
+      goalsAgainst: isHome ? awayScore : homeScore,
+      started: r.started === 1,
+      minutes: r.minutes_played ?? 0,
+      goals: r.goals ?? 0,
+      assists: r.assists ?? 0,
+      yellowCards: r.yellow_cards ?? 0,
+      redCards: r.red_cards ?? 0,
+      rating: r.rating,
+    };
+  });
+  const foot = player.preferred_foot === "left" || player.preferred_foot === "right" || player.preferred_foot === "both"
+    ? player.preferred_foot
+    : null;
+
   const released = player.status === "released";
   const teamSlugs = await teamSlugMap(db, [
+    ...recentMatches.map((m) => m.opponentId),
     club.id,
     player.team_id,
     ...(seasonRows.results ?? []).map((r) => r.team_id),
@@ -1726,6 +1803,13 @@ clubWebsiteRouter.get("/:id/website/player/:playerId", async (c) => {
       avatar: parseAvatar(player.avatar, "player profile"),
       status: player.status,
     },
+    personal: {
+      preferredFoot: foot,
+      occupation: player.occupation || null,
+      residence: player.residence || null,
+      manOfMatchCount: momRow?.n ?? 0,
+    },
+    recentMatches,
     currentTeam: player.team_id && !released ? { id: player.team_id, name: player.team_name ?? "Neznámý klub" } : null,
     playsForClub: player.team_id === club.id && !released,
     seasons: (seasonRows.results ?? []).map((r) => ({
@@ -1752,3 +1836,531 @@ clubWebsiteRouter.get("/:id/website/player/:playerId", async (c) => {
     })),
   });
 });
+
+// ── Podstránky webu: rozpis zápasů, zpravodaj ke kolu, trenér ───────────────
+
+const ACTIVE_PLAYER_SQL = "(p.status IS NULL OR p.status NOT IN ('released', 'quit'))";
+
+async function loadClubRef(db: D1Database, teamId: string): Promise<ClubWebsiteClubRef | null> {
+  const row = await db
+    .prepare(
+      `SELECT t.id, t.name, t.primary_color, t.secondary_color, tw.custom_slug, tw.template, l.name AS league_name
+       FROM teams t
+       LEFT JOIN team_websites tw ON tw.team_id = t.id
+       LEFT JOIN leagues l ON l.id = t.league_id
+       WHERE t.id = ?`,
+    )
+    .bind(teamId)
+    .first<{
+      id: string; name: string; primary_color: string; secondary_color: string;
+      custom_slug: string | null; template: string | null; league_name: string | null;
+    }>();
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.custom_slug,
+    template: (row.template || "retro_2004") as ClubWebsiteTemplate,
+    primaryColor: row.primary_color,
+    secondaryColor: row.secondary_color,
+    leagueName: row.league_name,
+  };
+}
+
+async function currentSeasonNumber(db: D1Database): Promise<number | null> {
+  const row = await db
+    .prepare("SELECT number FROM seasons ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, number DESC LIMIT 1")
+    .first<{ number: number }>()
+    .catch((e) => {
+      logger.warn(MODULE, "current season number", e);
+      return null;
+    });
+  return row?.number ?? null;
+}
+
+/** Jména aktivních hráčů týmů → ID, aby šli střelci z událostí zápasu prolinkovat na profil. */
+async function playerNameIndex(db: D1Database, teamIds: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(teamIds.filter(Boolean))].slice(0, 90);
+  const index = new Map<string, string>();
+  if (unique.length === 0) return index;
+  const rows = await db
+    .prepare(
+      `SELECT p.id, p.first_name, p.last_name, p.team_id FROM players p
+       WHERE p.team_id IN (${unique.map(() => "?").join(",")})`,
+    )
+    .bind(...unique)
+    .all<{ id: string; first_name: string; last_name: string; team_id: string }>()
+    .catch((e) => {
+      logger.warn(MODULE, "player name index", e);
+      return { results: [] as Array<{ id: string; first_name: string; last_name: string; team_id: string }> };
+    });
+  for (const r of rows.results ?? []) index.set(`${r.team_id}|${r.first_name} ${r.last_name}`, r.id);
+  return index;
+}
+
+function parseEvents(raw: unknown): any[] {
+  if (!raw) return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    logger.warn(MODULE, "parse match events", e);
+    return [];
+  }
+}
+
+/** Střelci ze záznamu zápasu. teamId v události: 1 = domácí, 2 = hosté. */
+function scorersFromEvents(
+  raw: unknown,
+  isHome: boolean,
+  ourTeamId: string,
+  opponentTeamId: string | null,
+  names: Map<string, string>,
+): ClubWebsiteScorer[] {
+  return parseEvents(raw)
+    .filter((e) => e?.type === "goal")
+    .map((e) => {
+      const ours = (e.teamId === 1) === isHome;
+      const name = String(e.playerName || "Hráč");
+      const team = ours ? ourTeamId : opponentTeamId;
+      return {
+        minute: Number(e.minute ?? 0),
+        name,
+        playerId: team ? names.get(`${team}|${name}`) ?? null : null,
+        ours,
+        penalty: e.source === "penalty",
+      };
+    })
+    .sort((a, b) => a.minute - b.minute);
+}
+
+// GET /api/teams/:id/website/matches — rozpis a výsledky aktuální sezóny
+clubWebsiteRouter.get("/:id/website/matches", async (c) => {
+  const db = c.env.DB;
+  const teamId = await resolveTeamId(db, c.req.param("id"));
+  if (!teamId) return c.json({ error: "Klub nenalezen" }, 404);
+  const [club, season] = await Promise.all([loadClubRef(db, teamId), currentSeasonNumber(db)]);
+  if (!club) return c.json({ error: "Klub nenalezen" }, 404);
+
+  type LeagueRow = {
+    id: string; round: number; status: string; home_score: number | null; away_score: number | null;
+    attendance: number | null; events: string | null; mom_player_id: string | null; simulated_at: string | null;
+    scheduled_at: string | null; home_id: string; home_name: string; away_id: string; away_name: string;
+    league_name: string | null; mom_first: string | null; mom_last: string | null;
+  };
+  type CupRow = {
+    id: string; round: number; status: string; home_score: number | null; away_score: number | null;
+    home_pens: number | null; away_pens: number | null; attendance: number | null; events: string | null;
+    scheduled_at: string | null; simulated_at: string | null; home_id: string | null; home_name: string;
+    away_id: string | null; away_name: string; cup_name: string; total_rounds: number;
+  };
+
+  const [leagueRows, cupRows] = await Promise.all([
+    db.prepare(
+      `SELECT m.id, m.round, m.status, m.home_score, m.away_score, m.attendance, m.events, m.mom_player_id,
+              m.simulated_at, sc.scheduled_at, ht.id AS home_id, ht.name AS home_name, at.id AS away_id,
+              at.name AS away_name, l.name AS league_name, mp.first_name AS mom_first, mp.last_name AS mom_last
+       FROM matches m
+       JOIN teams ht ON ht.id = m.home_team_id
+       JOIN teams at ON at.id = m.away_team_id
+       LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
+       LEFT JOIN leagues l ON l.id = m.league_id
+       LEFT JOIN players mp ON mp.id = m.mom_player_id
+       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.league_id IS NOT NULL
+         AND (sc.season_number = ? OR ? IS NULL)
+       ORDER BY m.round ASC`,
+    ).bind(teamId, teamId, season, season).all<LeagueRow>()
+      .catch((e) => {
+        logger.warn(MODULE, "matches page: league", e);
+        return { results: [] as LeagueRow[] };
+      }),
+    db.prepare(
+      `SELECT cm.id, cm.round, cm.status, cm.home_score, cm.away_score, cm.home_pens, cm.away_pens, cm.attendance,
+              cm.events, cm.scheduled_at, cm.simulated_at, hct.team_id AS home_id, hct.name AS home_name,
+              act.team_id AS away_id, act.name AS away_name, cc.name AS cup_name, cc.total_rounds
+       FROM cup_matches cm
+       JOIN cup_competitions cc ON cc.id = cm.cup_id
+       JOIN cup_teams hct ON hct.id = cm.home_cup_team_id
+       JOIN cup_teams act ON act.id = cm.away_cup_team_id
+       WHERE (hct.team_id = ? OR act.team_id = ?) AND (cc.season_number = ? OR ? IS NULL)
+       ORDER BY cm.round ASC`,
+    ).bind(teamId, teamId, season, season).all<CupRow>()
+      .catch((e) => {
+        logger.warn(MODULE, "matches page: cup", e);
+        return { results: [] as CupRow[] };
+      }),
+  ]);
+
+  const opponentIds = [
+    ...(leagueRows.results ?? []).map((r) => (r.home_id === teamId ? r.away_id : r.home_id)),
+    ...(cupRows.results ?? []).map((r) => (r.home_id === teamId ? r.away_id : r.home_id)),
+  ].filter((id): id is string => !!id);
+  const [names, teamSlugs] = await Promise.all([
+    playerNameIndex(db, [teamId, ...opponentIds]),
+    teamSlugMap(db, [teamId, ...opponentIds]),
+  ]);
+
+  const fixtures: ClubWebsiteFixture[] = [
+    ...(leagueRows.results ?? []).map((r): ClubWebsiteFixture => {
+      const isHome = r.home_id === teamId;
+      const oppId = isHome ? r.away_id : r.home_id;
+      const played = r.status === "simulated";
+      return {
+        id: r.id,
+        competition: "league",
+        competitionName: r.league_name ?? club.leagueName ?? "Soutěž",
+        round: r.round,
+        roundName: `${r.round}. kolo`,
+        date: played ? r.simulated_at ?? r.scheduled_at : r.scheduled_at,
+        isHome,
+        opponent: { id: oppId, name: isHome ? r.away_name : r.home_name },
+        played,
+        goalsFor: played ? (isHome ? r.home_score : r.away_score) : null,
+        goalsAgainst: played ? (isHome ? r.away_score : r.home_score) : null,
+        pensFor: null,
+        pensAgainst: null,
+        attendance: played ? r.attendance : null,
+        scorers: played ? scorersFromEvents(r.events, isHome, teamId, oppId, names) : [],
+        manOfMatch: r.mom_player_id && r.mom_first ? { id: r.mom_player_id, name: `${r.mom_first} ${r.mom_last}` } : null,
+      };
+    }),
+    ...(cupRows.results ?? []).map((r): ClubWebsiteFixture => {
+      const isHome = r.home_id === teamId;
+      const oppId = isHome ? r.away_id : r.home_id;
+      const played = r.status === "simulated";
+      return {
+        id: r.id,
+        competition: "cup",
+        competitionName: r.cup_name,
+        round: r.round,
+        roundName: roundName(r.round, r.total_rounds),
+        date: played ? r.simulated_at ?? r.scheduled_at : r.scheduled_at,
+        isHome,
+        opponent: { id: oppId, name: isHome ? r.away_name : r.home_name },
+        played,
+        goalsFor: played ? (isHome ? r.home_score : r.away_score) : null,
+        goalsAgainst: played ? (isHome ? r.away_score : r.home_score) : null,
+        pensFor: played ? (isHome ? r.home_pens : r.away_pens) : null,
+        pensAgainst: played ? (isHome ? r.away_pens : r.home_pens) : null,
+        attendance: played ? r.attendance : null,
+        scorers: played ? scorersFromEvents(r.events, isHome, teamId, oppId, names) : [],
+        manOfMatch: null,
+      };
+    }),
+  ].sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.round - b.round);
+
+  const page: ClubWebsiteMatchesPage = { club, teamSlugs, seasonNumber: season, fixtures };
+  return c.json(page);
+});
+
+/** Forma, pozice, nejlepší střelec a soupiska týmu pro zpravodaj. */
+async function programTeam(
+  db: D1Database,
+  teamId: string,
+  standings: Array<{ teamId: string; pos: number; points: number; played: number }>,
+  season: number | null,
+): Promise<ClubWebsiteProgramTeam | null> {
+  const [team, coach, form, scorer, roster] = await Promise.all([
+    db.prepare("SELECT t.id, t.name, v.name AS village FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?")
+      .bind(teamId).first<{ id: string; name: string; village: string | null }>(),
+    db.prepare("SELECT m.name FROM managers m JOIN teams t ON t.user_id = m.user_id WHERE t.id = ?")
+      .bind(teamId).first<{ name: string }>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: coach", e);
+        return null;
+      }),
+    db.prepare(
+      `SELECT home_team_id, home_score, away_score FROM matches
+       WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated' AND league_id IS NOT NULL
+       ORDER BY simulated_at DESC LIMIT 5`,
+    ).bind(teamId, teamId).all<{ home_team_id: string; home_score: number; away_score: number }>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: form", e);
+        return { results: [] as Array<{ home_team_id: string; home_score: number; away_score: number }> };
+      }),
+    db.prepare(
+      `SELECT p.id, p.first_name, p.last_name, SUM(ps.goals) AS goals
+       FROM player_stats ps JOIN players p ON p.id = ps.player_id
+       JOIN seasons s ON s.id = ps.season_id
+       WHERE ps.team_id = ? AND (s.number = ? OR ? IS NULL)
+       GROUP BY p.id ORDER BY goals DESC LIMIT 1`,
+    ).bind(teamId, season, season).first<{ id: string; first_name: string; last_name: string; goals: number }>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: top scorer", e);
+        return null;
+      }),
+    db.prepare(
+      `SELECT p.id, p.squad_number, p.first_name, p.last_name, p.position FROM players p
+       WHERE p.team_id = ? AND ${ACTIVE_PLAYER_SQL}
+       ORDER BY CASE WHEN p.squad_number IS NULL THEN 999 ELSE p.squad_number END, p.last_name`,
+    ).bind(teamId).all<{ id: string; squad_number: number | null; first_name: string; last_name: string; position: string }>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: roster", e);
+        return { results: [] as Array<{ id: string; squad_number: number | null; first_name: string; last_name: string; position: string }> };
+      }),
+  ]);
+  if (!team) return null;
+  const st = standings.find((s) => s.teamId === teamId);
+  return {
+    id: team.id,
+    name: team.name,
+    village: team.village,
+    coachName: coach?.name ?? null,
+    position: st?.pos ?? null,
+    points: st?.points ?? null,
+    played: st?.played ?? null,
+    form: (form.results ?? []).reverse().map((m) => {
+      const ours = m.home_team_id === teamId ? m.home_score : m.away_score;
+      const theirs = m.home_team_id === teamId ? m.away_score : m.home_score;
+      return ours > theirs ? "V" : ours === theirs ? "R" : "P";
+    }),
+    topScorer: scorer && scorer.goals > 0
+      ? { name: `${scorer.first_name} ${scorer.last_name}`, playerId: scorer.id, goals: scorer.goals }
+      : null,
+    roster: (roster.results ?? []).map((p) => ({
+      id: p.id,
+      number: p.squad_number,
+      name: `${p.first_name} ${p.last_name}`,
+      position: formatPlayerPositionCZ(p.position),
+    })),
+  };
+}
+
+// GET /api/teams/:id/website/program — zpravodaj k příštímu ligovému zápasu
+clubWebsiteRouter.get("/:id/website/program", async (c) => {
+  const db = c.env.DB;
+  const teamId = await resolveTeamId(db, c.req.param("id"));
+  if (!teamId) return c.json({ error: "Klub nenalezen" }, 404);
+  const [club, season, next] = await Promise.all([
+    loadClubRef(db, teamId),
+    currentSeasonNumber(db),
+    db.prepare(UPCOMING_SQL).bind(teamId, teamId).first<{
+      id: string; round: number; scheduled_at: string | null; home_id: string; home_stadium: string | null; away_id: string;
+    }>(),
+  ]);
+  if (!club) return c.json({ error: "Klub nenalezen" }, 404);
+
+  const empty: ClubWebsiteProgramPage = {
+    club, teamSlugs: {}, match: null, home: null, away: null, headToHead: [], coachWord: null, ticketPrice: null, partners: [],
+  };
+  if (!next) return c.json(empty);
+
+  const teamRow = await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string | null }>();
+  const standings = teamRow?.league_id
+    ? await import("../stats/standings")
+      .then(({ calculateStandings }) => calculateStandings(db, teamRow.league_id as string))
+      .then((st) => st.map((s) => ({ teamId: s.teamId, pos: s.pos, points: s.points, played: s.played })))
+      .catch((e) => {
+        logger.warn(MODULE, "program: standings", e);
+        return [];
+      })
+    : [];
+
+  const isHome = next.home_id === teamId;
+  const [home, away, h2h, interview, website] = await Promise.all([
+    programTeam(db, next.home_id, standings, season),
+    programTeam(db, next.away_id, standings, season),
+    db.prepare(
+      `SELECT m.home_score, m.away_score, m.simulated_at, ht.name AS home_name, at.name AS away_name
+       FROM matches m JOIN teams ht ON ht.id = m.home_team_id JOIN teams at ON at.id = m.away_team_id
+       WHERE m.status = 'simulated' AND ((m.home_team_id = ? AND m.away_team_id = ?) OR (m.home_team_id = ? AND m.away_team_id = ?))
+       ORDER BY m.simulated_at DESC LIMIT 5`,
+    ).bind(next.home_id, next.away_id, next.away_id, next.home_id)
+      .all<{ home_score: number; away_score: number; simulated_at: string | null; home_name: string; away_name: string }>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: head to head", e);
+        return { results: [] as Array<{ home_score: number; away_score: number; simulated_at: string | null; home_name: string; away_name: string }> };
+      }),
+    db.prepare(
+      `SELECT ci.kind, ci.game_week, ci.questions, ci.answers, m.name AS manager_name
+       FROM coach_interviews ci LEFT JOIN managers m ON m.id = ci.manager_id
+       WHERE ci.team_id = ? AND ci.status = 'answered'
+       ORDER BY CASE WHEN ci.kind = 'pre_match' AND ci.game_week = ? THEN 0 ELSE 1 END, ci.created_at DESC
+       LIMIT 1`,
+    ).bind(teamId, next.round)
+      .first<{ kind: string | null; game_week: number; questions: string; answers: string | null; manager_name: string | null }>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: coach word", e);
+        return null;
+      }),
+    ensureWebsiteRow(db, teamId),
+  ]);
+
+  // Vstupné a partneři stejně jako na hlavní stránce webu
+  const [fansRow, stadium, sponsors] = await Promise.all([
+    db.prepare("SELECT base_ticket_price, satisfaction FROM fans WHERE team_id = ? LIMIT 1").bind(next.home_id)
+      .first<{ base_ticket_price: number; satisfaction: number }>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: fans", e);
+        return null;
+      }),
+    db.prepare("SELECT s.*, v.size AS village_size FROM stadiums s JOIN teams t ON t.id = s.team_id JOIN villages v ON v.id = t.village_id WHERE s.team_id = ? LIMIT 1")
+      .bind(next.home_id).first<any>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: stadium", e);
+        return null;
+      }),
+    db.prepare("SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' ORDER BY monthly_amount DESC LIMIT 10")
+      .bind(teamId).all<{ sponsor_name: string }>()
+      .catch((e) => {
+        logger.warn(MODULE, "program: sponsors", e);
+        return { results: [] as Array<{ sponsor_name: string }> };
+      }),
+  ]);
+  const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+  const ticketPrice = stadium
+    ? matchTicketPrice({
+      userBasePrice: fansRow?.base_ticket_price ?? 0,
+      villageBasePrice: getBaseTicketPrice(mapVillageSize(stadium.village_size)),
+      ticketPriceBonus: calculateFacilityEffects(stadiumFacilityLevels(stadium)).ticketPriceBonus,
+      satisfaction: fansRow?.satisfaction ?? 50,
+    })
+    : null;
+
+  const opponentId = isHome ? next.away_id : next.home_id;
+  const teamSlugs = await teamSlugMap(db, [teamId, opponentId]);
+  const page: ClubWebsiteProgramPage = {
+    club: { ...club, slug: club.slug ?? website.customSlug },
+    teamSlugs,
+    match: {
+      id: next.id,
+      round: next.round,
+      date: next.scheduled_at,
+      isHome,
+      stadiumName: next.home_stadium,
+      competitionName: club.leagueName ?? "Soutěž",
+    },
+    home,
+    away,
+    headToHead: (h2h.results ?? []).map((r) => ({
+      date: r.simulated_at, homeName: r.home_name, awayName: r.away_name, homeScore: r.home_score, awayScore: r.away_score,
+    })),
+    coachWord: interview
+      ? {
+        coachName: interview.manager_name ?? "Trenér",
+        kind: interview.kind,
+        gameWeek: interview.game_week,
+        pairs: parseJsonList<string>(interview.questions, [], "program interview questions").map((q, i) => ({
+          question: q,
+          answer: (interview.answers ? parseJsonList<string>(interview.answers, [], "program interview answers")[i] : null)?.trim() || "Bez komentáře.",
+        })),
+      }
+      : null,
+    ticketPrice: isHome ? ticketPrice : null,
+    partners: [...new Set((sponsors.results ?? []).map((s) => s.sponsor_name).filter(Boolean))],
+  };
+  return c.json(page);
+});
+
+// GET /api/teams/:id/website/coach — trenér a realizační tým
+clubWebsiteRouter.get("/:id/website/coach", async (c) => {
+  const db = c.env.DB;
+  const teamId = await resolveTeamId(db, c.req.param("id"));
+  if (!teamId) return c.json({ error: "Klub nenalezen" }, 404);
+  const club = await loadClubRef(db, teamId);
+  if (!club) return c.json({ error: "Klub nenalezen" }, 404);
+
+  const [manager, staffRows] = await Promise.all([
+    db.prepare(
+      `SELECT m.id, m.name, m.age, m.avatar, m.bio, m.birthplace, m.backstory, m.licence_level, m.created_at
+       FROM managers m JOIN teams t ON t.user_id = m.user_id WHERE t.id = ?`,
+    ).bind(teamId).first<{
+      id: string; name: string; age: number | null; avatar: string; bio: string | null; birthplace: string | null;
+      backstory: string | null; licence_level: number | null; created_at: string | null;
+    }>().catch((e) => {
+      logger.warn(MODULE, "coach page: manager", e);
+      return null;
+    }),
+    db.prepare(
+      `SELECT id, role, first_name, last_name, age, avatar, description FROM staff_members WHERE team_id = ? ORDER BY role`,
+    ).bind(teamId).all<{
+      id: string; role: string; first_name: string; last_name: string; age: number | null; avatar: string; description: string | null;
+    }>().catch((e) => {
+      logger.warn(MODULE, "coach page: staff", e);
+      return { results: [] as never[] };
+    }),
+  ]);
+
+  let record: ClubWebsiteCoachPage["record"] = null;
+  let interviews: ClubWebsiteCoachPage["interviews"] = [];
+  if (manager) {
+    const since = manager.created_at ?? "0000";
+    const [league, cup, ivs] = await Promise.all([
+      db.prepare(
+        `SELECT home_team_id, home_score, away_score FROM matches
+         WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated' AND league_id IS NOT NULL AND simulated_at >= ?`,
+      ).bind(teamId, teamId, since).all<{ home_team_id: string; home_score: number; away_score: number }>()
+        .catch((e) => {
+          logger.warn(MODULE, "coach page: league record", e);
+          return { results: [] as Array<{ home_team_id: string; home_score: number; away_score: number }> };
+        }),
+      db.prepare(
+        `SELECT hct.team_id AS home_team_id, cm.home_score, cm.away_score FROM cup_matches cm
+         JOIN cup_teams hct ON hct.id = cm.home_cup_team_id JOIN cup_teams act ON act.id = cm.away_cup_team_id
+         WHERE (hct.team_id = ? OR act.team_id = ?) AND cm.status = 'simulated' AND cm.simulated_at >= ?`,
+      ).bind(teamId, teamId, since).all<{ home_team_id: string; home_score: number; away_score: number }>()
+        .catch((e) => {
+          logger.warn(MODULE, "coach page: cup record", e);
+          return { results: [] as Array<{ home_team_id: string; home_score: number; away_score: number }> };
+        }),
+      db.prepare(
+        `SELECT id, kind, game_week, created_at FROM coach_interviews
+         WHERE team_id = ? AND manager_id = ? AND status = 'answered' ORDER BY created_at DESC LIMIT 10`,
+      ).bind(teamId, manager.id).all<{ id: string; kind: string | null; game_week: number; created_at: string }>()
+        .catch((e) => {
+          logger.warn(MODULE, "coach page: interviews", e);
+          return { results: [] as Array<{ id: string; kind: string | null; game_week: number; created_at: string }> };
+        }),
+    ]);
+    record = { played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 };
+    for (const m of [...(league.results ?? []), ...(cup.results ?? [])]) {
+      const ours = m.home_team_id === teamId ? m.home_score : m.away_score;
+      const theirs = m.home_team_id === teamId ? m.away_score : m.home_score;
+      record.played++;
+      record.goalsFor += ours ?? 0;
+      record.goalsAgainst += theirs ?? 0;
+      if (ours > theirs) record.wins++;
+      else if (ours === theirs) record.draws++;
+      else record.losses++;
+    }
+    interviews = (ivs.results ?? []).map((r) => ({ id: r.id, kind: r.kind, gameWeek: r.game_week, createdAt: r.created_at }));
+  }
+
+  const { ROLE_DEFS } = await import("@okresni-masina/shared");
+  const page: ClubWebsiteCoachPage = {
+    club,
+    teamSlugs: {},
+    coach: manager
+      ? {
+        name: manager.name,
+        age: manager.age,
+        birthplace: manager.birthplace,
+        bio: manager.bio,
+        background: MANAGER_BACKGROUNDS[manager.backstory ?? ""] ?? null,
+        licence: manager.licence_level === 4 ? "PRO" : manager.licence_level === 3 ? "UEFA A" : manager.licence_level === 2 ? "UEFA B" : manager.licence_level === 1 ? "UEFA C" : "Bez licence",
+        avatar: parseAvatar(manager.avatar, "coach page"),
+        since: manager.created_at,
+      }
+      : null,
+    record,
+    interviews,
+    staff: (staffRows.results ?? []).map((s) => ({
+      id: s.id,
+      roleLabel: (ROLE_DEFS as Record<string, { label: string }>)[s.role]?.label ?? s.role,
+      name: `${s.first_name} ${s.last_name}`,
+      age: s.age,
+      avatar: parseAvatar(s.avatar, "staff"),
+      description: s.description,
+    })),
+  };
+  return c.json(page);
+});
+
+/** Kdo trenér byl, než začal trénovat (stejné texty jako generátor manažerů). */
+const MANAGER_BACKGROUNDS: Record<string, string> = {
+  byvaly_hrac: "Bývalý hráč",
+  mistni_ucitel: "Místní učitel",
+  pristehovalec: "Přistěhovalec",
+  syn_trenera: "Syn předchozího trenéra",
+  hospodsky: "Hospodský",
+};

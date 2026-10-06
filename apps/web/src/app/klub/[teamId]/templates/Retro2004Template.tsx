@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useContext, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import { ROLE_DEFS, type StaffRole } from "@okresni-masina/shared";
 import {
   ANCHOR_OFFSET,
+  ClubBasePathContext,
   EMPTY,
   PlayerLink,
   TeamLink,
@@ -89,6 +91,8 @@ export function Retro2004Template({
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
   const [openInterviews, setOpenInterviews] = useState<Record<string, boolean>>({});
   const fanPoll = useFanPoll(data);
+  // Adresa webu klubu pro podstránky (zápasy, zpravodaj, trenér).
+  const base = useContext(ClubBasePathContext) ?? `/klub/${team.id}`;
 
   const primary = team.primaryColor || "#2D5F2D";
   const badgePattern = (team.badge.pattern as BadgePattern) || "shield";
@@ -152,7 +156,23 @@ export function Retro2004Template({
     const coach = interviewCoach(iv, data);
     return (
       <div className="text-gray-700 mb-2 break-words">
-        Odpovídá {coach === "Trenér" ? "trenér klubu" : <>trenér <strong>{coach}</strong></>}
+        Odpovídá{" "}
+        {coach === "Trenér" ? (
+          "trenér klubu"
+        ) : (
+          <>
+            trenér{" "}
+            <strong>
+              {manager && coach === manager.name ? (
+                <Link href={`${base}/trener`} className="hover:underline">
+                  {coach}
+                </Link>
+              ) : (
+                coach
+              )}
+            </strong>
+          </>
+        )}
       </div>
     );
   };
@@ -259,6 +279,12 @@ export function Retro2004Template({
           <a href="#zapas" className={`${navLink} font-medium`}>
             Úvod & Zápasy
           </a>
+          <Link href={`${base}/zapasy`} className={`${navLink} font-medium`}>
+            Zápasy sezóny
+          </Link>
+          <Link href={`${base}/zpravodaj`} className={`${navLink} font-medium`}>
+            Zpravodaj
+          </Link>
           <a href="#tabulka" className={`${navLink} font-bold text-[var(--club-ink)]`}>
             Tabulka soutěže
           </a>
@@ -302,6 +328,8 @@ export function Retro2004Template({
               </div>
               <ul className="p-2 space-y-1.5 text-blue-800 underline">
                 <li><a href="#zapas" className="hover:text-red-600">» Příští zápas</a></li>
+                <li><Link href={`${base}/zapasy`} className="hover:text-red-600">» Zápasy sezóny</Link></li>
+                <li><Link href={`${base}/zpravodaj`} className="hover:text-red-600">» Zpravodaj</Link></li>
                 <li><a href="#kadr" className="hover:text-red-600">» Hráčská soupiska</a></li>
                 {hasPress && <li><a href="#tisk" className="hover:text-red-600">» Tiskové středisko</a></li>}
                 <li><a href="#stadion" className="hover:text-red-600">» Fotky stadionu</a></li>
@@ -475,6 +503,11 @@ export function Retro2004Template({
                         <div className="text-sm text-gray-600 mt-0.5 break-words">
                           🏟️ Hřiště: {nextMatch.stadiumName} · {nextMatch.isHome ? "Domácí hřiště" : "Hřiště soupeře"}
                         </div>
+                        <div className="text-sm mt-0.5">
+                          <Link href={`${base}/zpravodaj`} className="text-blue-800 underline hover:text-red-600 font-bold">
+                            [ Zpravodaj ke kolu ]
+                          </Link>
+                        </div>
                       </div>
 
                       <div className="flex flex-col items-center gap-1 shrink-0">
@@ -590,6 +623,12 @@ export function Retro2004Template({
                     </div>
                   </div>
                 )}
+
+                <div className="text-sm text-right">
+                  <Link href={`${base}/zapasy`} className="text-blue-800 underline hover:text-red-600 font-bold">
+                    [ Všechny zápasy ]
+                  </Link>
+                </div>
               </div>
             </section>
 
@@ -1029,7 +1068,11 @@ export function Retro2004Template({
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm text-[var(--club-ink)] font-bold uppercase">Hlavní trenér</div>
-                      <div className="font-bold text-base text-[var(--club-ink)] break-words">{manager.name}</div>
+                      <div className="font-bold text-base text-[var(--club-ink)] break-words">
+                        <Link href={`${base}/trener`} className="hover:underline">
+                          {manager.name}
+                        </Link>
+                      </div>
                       <div className="text-gray-600 text-sm">Věk {manager.age} let · Licence {manager.licence}</div>
                     </div>
                   </div>
@@ -1046,6 +1089,11 @@ export function Retro2004Template({
                     </div>
                   </div>
                 ))}
+              </div>
+              <div className="px-3 pb-3 text-sm text-right">
+                <Link href={`${base}/trener`} className="text-blue-800 underline hover:text-red-600 font-bold">
+                  [ Celý realizační tým ]
+                </Link>
               </div>
             </section>
 

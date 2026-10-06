@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useContext, useState, type ReactNode } from "react";
+import Link from "next/link";
 import type { ClubWebsiteData, ClubWebsiteHistoryCupRun, ClubWebsiteMatchSummary } from "@okresni-masina/shared";
 import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import type { TemplateProps } from "./types";
@@ -30,6 +31,7 @@ import {
 } from "./club-content";
 import {
   ANCHOR_OFFSET,
+  ClubBasePathContext,
   EMPTY,
   PlayerLink,
   TeamLink,
@@ -62,10 +64,25 @@ const RESULT_LABEL: Record<"V" | "R" | "P", string> = {
   P: "prohra",
 };
 
-/** Podpis pod titulkem rozhovoru: kdo odpovídá. */
-function interviewByline(iv: Interview, data: ClubWebsiteData): string {
+/**
+ * Podpis pod titulkem rozhovoru: kdo odpovídá. Současný trenér je odkaz na jeho stránku,
+ * dřívější zůstane jen jménem.
+ */
+function interviewByline(iv: Interview, data: ClubWebsiteData, base: string): ReactNode {
   const coach = interviewCoach(iv, data);
-  return coach === "Trenér" ? "Odpovídá trenér klubu" : `Odpovídá trenér ${coach}`;
+  if (coach === "Trenér") return "Odpovídá trenér klubu";
+  return (
+    <>
+      Odpovídá trenér{" "}
+      {data.manager && coach === data.manager.name ? (
+        <Link href={`${base}/trener`} className="hover:text-white hover:underline">
+          {coach}
+        </Link>
+      ) : (
+        coach
+      )}
+    </>
+  );
 }
 
 /** Rozhovor jako v klubovém zpravodaji: otázka tučně, odpověď trenéra pod ní. */
@@ -126,6 +143,8 @@ export function ChampionsTemplate({
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
   const [openInterviewId, setOpenInterviewId] = useState<string | null>(null);
+  // Adresa webu klubu pro podstránky (zápasy, zpravodaj, trenér).
+  const base = useContext(ClubBasePathContext) ?? `/klub/${team.id}`;
 
   const primary = team.primaryColor || "#0284c7";
   const secondary = team.secondaryColor || "#fbbf24";
@@ -189,6 +208,9 @@ export function ChampionsTemplate({
 
   const navItems: Array<{ href: string; label: string; highlight?: "main" | "audio" }> = [
     { href: "#zapas", label: "Přehled", highlight: "main" },
+    { href: `${base}/zapasy`, label: "Zápasy" },
+    { href: `${base}/zpravodaj`, label: "Zpravodaj" },
+    { href: `${base}/trener`, label: "Trenér" },
     { href: "#tabulka", label: "Tabulka" },
     { href: "#kadr", label: "Kádr" },
     { href: "#prestupy", label: `Přestupy (${transfers.length})` },
@@ -257,22 +279,31 @@ export function ChampionsTemplate({
         className="sticky top-[52px] z-40 border-b border-[color-mix(in_srgb,var(--club-accent-dark)_25%,transparent)] bg-[#030a1c]/90 backdrop-blur-xl"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-2.5 text-sm font-heading font-bold uppercase tracking-wide text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] flex items-center gap-5 overflow-x-auto">
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
-                item.highlight === "main"
-                  ? "text-[var(--club-accent-dark)] hover:text-white"
-                  : item.highlight === "audio"
-                    ? "text-amber-400 hover:text-amber-300"
-                    : "hover:text-[var(--club-accent-dark)]"
-              }`}
-            >
-              {item.highlight === "main" && <span>✨</span>}
-              <span>{item.label}</span>
-            </a>
-          ))}
+          {navItems.map((item) => {
+            const className = `shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
+              item.highlight === "main"
+                ? "text-[var(--club-accent-dark)] hover:text-white"
+                : item.highlight === "audio"
+                  ? "text-amber-400 hover:text-amber-300"
+                  : "hover:text-[var(--club-accent-dark)]"
+            }`;
+            const content = (
+              <>
+                {item.highlight === "main" && <span>✨</span>}
+                <span>{item.label}</span>
+              </>
+            );
+            // Sekce téže stránky jsou kotvy, podstránky webu (zápasy, zpravodaj) jdou přes Link.
+            return item.href.startsWith("#") ? (
+              <a key={item.href} href={item.href} className={className}>
+                {content}
+              </a>
+            ) : (
+              <Link key={item.href} href={item.href} className={className}>
+                {content}
+              </Link>
+            );
+          })}
         </div>
       </nav>
 
@@ -400,6 +431,12 @@ export function ChampionsTemplate({
                     <div className="text-sm text-[color-mix(in_srgb,var(--club-accent-dark)_20%,#ffffffa6)] mt-2">
                       Vstupné {tickets.adultPrice} Kč
                     </div>
+                    <Link
+                      href={`${base}/zpravodaj`}
+                      className="mt-1 px-2 py-1 rounded-lg text-[var(--club-accent-dark)] hover:text-white hover:bg-white/5 font-bold text-sm"
+                    >
+                      Zpravodaj ke kolu
+                    </Link>
                   </div>
 
                   {/* Hosté */}
@@ -519,6 +556,14 @@ export function ChampionsTemplate({
                         </li>
                       ))}
                     </ul>
+                    <div className="mt-2 text-right">
+                      <Link
+                        href={`${base}/zapasy`}
+                        className="inline-block px-2 py-1 rounded-lg text-[var(--club-accent-dark)] hover:text-white hover:bg-white/5 font-bold text-sm"
+                      >
+                        Všechny zápasy
+                      </Link>
+                    </div>
                   </div>
                 )}
 
@@ -899,7 +944,7 @@ export function ChampionsTemplate({
                       {interviewHeadline(latestInterview)}
                     </h3>
                     <div className="text-sm font-heading font-bold text-[var(--club-accent-dark)] mt-1 mb-5 break-words">
-                      {interviewByline(latestInterview, data)}
+                      {interviewByline(latestInterview, data, base)}
                     </div>
                     <InterviewText interview={latestInterview} />
                   </article>
@@ -944,7 +989,7 @@ export function ChampionsTemplate({
                                 className="px-3 sm:px-4 pt-3 pb-4 border-t border-white/10"
                               >
                                 <div className="text-sm font-heading font-bold text-[var(--club-accent-dark)] mb-4 break-words">
-                                  {interviewByline(iv, data)}
+                                  {interviewByline(iv, data, base)}
                                 </div>
                                 <InterviewText interview={iv} />
                               </div>

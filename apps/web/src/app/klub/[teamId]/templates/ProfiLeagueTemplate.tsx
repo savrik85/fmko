@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useContext, useState, type ReactNode } from "react";
+import Link from "next/link";
 import type { ClubWebsiteData, ClubWebsiteHistoryCupRun } from "@okresni-masina/shared";
 import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import type { TemplateProps } from "./types";
@@ -30,6 +31,7 @@ import {
 } from "./club-content";
 import {
   ANCHOR_OFFSET,
+  ClubBasePathContext,
   EMPTY,
   PlayerLink,
   TeamLink,
@@ -41,11 +43,25 @@ import {
   useCountdown,
 } from "./shared";
 
-/** „Odpovídá trenér Novák“; když se jméno trenéra nedochovalo, jen „trenér klubu“. */
-function coachLine(iv: Interview, data: ClubWebsiteData): string {
-  return iv.managerName || data.manager?.name
-    ? `Odpovídá trenér ${interviewCoach(iv, data)}`
-    : "Odpovídá trenér klubu";
+/**
+ * „Odpovídá trenér Novák“; když se jméno trenéra nedochovalo, jen „trenér klubu“.
+ * Současný trenér je odkaz na jeho stránku, dřívější zůstane jen jménem.
+ */
+function coachLine(iv: Interview, data: ClubWebsiteData, base: string): ReactNode {
+  if (!iv.managerName && !data.manager?.name) return "Odpovídá trenér klubu";
+  const coach = interviewCoach(iv, data);
+  return (
+    <>
+      Odpovídá trenér{" "}
+      {data.manager && coach === data.manager.name ? (
+        <Link href={`${base}/trener`} className="hover:text-white hover:underline">
+          {coach}
+        </Link>
+      ) : (
+        coach
+      )}
+    </>
+  );
 }
 
 /** Otázky tučně, odpověď pod nimi, jako v novinovém rozhovoru. */
@@ -108,6 +124,8 @@ export function ProfiLeagueTemplate({
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
   const [openInterviews, setOpenInterviews] = useState<Record<string, boolean>>({});
+  // Adresa webu klubu pro podstránky (zápasy, zpravodaj, trenér).
+  const base = useContext(ClubBasePathContext) ?? `/klub/${team.id}`;
 
   const primary = team.primaryColor || "#dc2626";
   const secondary = team.secondaryColor || "#ffffff";
@@ -163,6 +181,9 @@ export function ProfiLeagueTemplate({
   const navItems: Array<{ href: string; label: string; highlight?: "live" | "audio" }> = [
     { href: "#zapas", label: "Příští zápas", highlight: "live" },
     ...(recentMatches.length > 0 ? [{ href: "#zaznamy", label: "Záznamy zápasů" }] : []),
+    { href: `${base}/zapasy`, label: "Zápasy" },
+    { href: `${base}/zpravodaj`, label: "Zpravodaj" },
+    { href: `${base}/trener`, label: "Trenér" },
     { href: "#tabulka", label: "Tabulka" },
     { href: "#kadr", label: "Kádr" },
     { href: "#prestupy", label: `Přestupy (${transfers.length})` },
@@ -226,22 +247,31 @@ export function ProfiLeagueTemplate({
         className="sticky top-[52px] z-40 border-b border-[color-mix(in_srgb,var(--club-accent-dark)_35%,transparent)] bg-[#0b0e17]/95 backdrop-blur-md"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-2.5 text-sm font-heading font-bold uppercase tracking-wide text-white/70 flex items-center gap-5 overflow-x-auto">
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
-                item.highlight === "live"
-                  ? "text-[var(--club-accent-dark)] hover:text-white"
-                  : item.highlight === "audio"
-                    ? "text-amber-400 hover:text-amber-300"
-                    : "hover:text-white"
-              }`}
-            >
-              {item.highlight === "live" && <span className="w-2 h-2 rounded-full bg-[var(--club-accent-dark)] animate-pulse" />}
-              <span>{item.label}</span>
-            </a>
-          ))}
+          {navItems.map((item) => {
+            const className = `shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
+              item.highlight === "live"
+                ? "text-[var(--club-accent-dark)] hover:text-white"
+                : item.highlight === "audio"
+                  ? "text-amber-400 hover:text-amber-300"
+                  : "hover:text-white"
+            }`;
+            const content = (
+              <>
+                {item.highlight === "live" && <span className="w-2 h-2 rounded-full bg-[var(--club-accent-dark)] animate-pulse" />}
+                <span>{item.label}</span>
+              </>
+            );
+            // Sekce téže stránky jsou kotvy, podstránky webu (zápasy, zpravodaj) jdou přes Link.
+            return item.href.startsWith("#") ? (
+              <a key={item.href} href={item.href} className={className}>
+                {content}
+              </a>
+            ) : (
+              <Link key={item.href} href={item.href} className={className}>
+                {content}
+              </Link>
+            );
+          })}
         </div>
       </nav>
 
@@ -357,6 +387,12 @@ export function ProfiLeagueTemplate({
                     <div className="text-sm text-white/60 mt-2">
                       Vstupné {tickets.adultPrice} Kč
                     </div>
+                    <Link
+                      href={`${base}/zpravodaj`}
+                      className="mt-1 px-2 py-1 rounded-lg text-[var(--club-accent-dark)] hover:text-white hover:bg-white/5 font-bold text-sm"
+                    >
+                      Zpravodaj ke kolu
+                    </Link>
                   </div>
 
                   {/* Hosté */}
@@ -476,6 +512,14 @@ export function ProfiLeagueTemplate({
                         </li>
                       ))}
                     </ul>
+                    <div className="mt-2 text-right">
+                      <Link
+                        href={`${base}/zapasy`}
+                        className="inline-block px-2 py-1 rounded-lg text-[var(--club-accent-dark)] hover:text-white hover:bg-white/5 font-bold text-sm"
+                      >
+                        Všechny zápasy
+                      </Link>
+                    </div>
                   </div>
                 )}
 
@@ -976,7 +1020,7 @@ export function ProfiLeagueTemplate({
                   <h3 className="font-heading font-black text-lg sm:text-xl text-white uppercase tracking-tight break-words">
                     {interviewHeadline(leadInterview)}
                   </h3>
-                  <p className="text-sm text-white/60 mb-4 break-words">{coachLine(leadInterview, data)}</p>
+                  <p className="text-sm text-white/60 mb-4 break-words">{coachLine(leadInterview, data, base)}</p>
                   <InterviewText iv={leadInterview} />
                 </article>
               )}
@@ -1009,7 +1053,7 @@ export function ProfiLeagueTemplate({
                             </span>
                           </button>
                           <div id={panelId} hidden={!open} className="px-3 pt-3 pb-4 border-t border-white/10">
-                            <p className="text-sm text-white/60 mb-3 break-words">{coachLine(iv, data)}</p>
+                            <p className="text-sm text-white/60 mb-3 break-words">{coachLine(iv, data, base)}</p>
                             <InterviewText iv={iv} />
                           </div>
                         </li>

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useContext, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import {
   ANCHOR_OFFSET,
+  ClubBasePathContext,
   EMPTY,
   PlayerLink,
   TeamLink,
@@ -35,6 +37,7 @@ import {
   pressInterviews,
   pressNews,
   trophyTitle,
+  type Interview,
 } from "./club-content";
 
 /**
@@ -74,6 +77,8 @@ export function VillagePatriotTemplate({
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
   const [openInterviewId, setOpenInterviewId] = useState<string | null>(null);
+  // Adresa webu klubu pro podstránky (zápasy, zpravodaj, trenér).
+  const base = useContext(ClubBasePathContext) ?? `/klub/${team.id}`;
 
   const primary = team.primaryColor || "#2D5F2D";
   const badgePattern = (team.badge.pattern as BadgePattern) || "shield";
@@ -130,6 +135,17 @@ export function VillagePatriotTemplate({
   const latestInterview = interviews[0] ?? null;
   const olderInterviews = interviews.slice(1);
   const pressNewsItems = pressNews(data);
+  // Současný trenér v rozhovoru je odkaz na jeho stránku; dřívější trenér zůstane jen jménem.
+  const coachName = (iv: Interview) => {
+    const coach = interviewCoach(iv, data);
+    return data.manager && coach === data.manager.name ? (
+      <Link href={`${base}/trener`} className="hover:underline">
+        {coach}
+      </Link>
+    ) : (
+      coach
+    );
+  };
 
   // Kronika oddílu: jen to, co se dochovalo; prázdné části se nevypisují.
   const history = hasHistory(data.history) ? data.history : null;
@@ -193,6 +209,9 @@ export function VillagePatriotTemplate({
         {/* Rustic Quick Nav Links */}
         <div className="bg-[#2a160b] border-t border-[#4a2b16] px-4 sm:px-8 py-2 text-sm text-[#eed8c5] font-serif font-bold flex items-center gap-5 overflow-x-auto">
           <a href="#plakat" className="hover:text-[var(--club-chalk)] shrink-0">📌 Zápasový plakát</a>
+          <Link href={`${base}/zapasy`} className="hover:text-[var(--club-chalk)] shrink-0">📅 Zápasy</Link>
+          <Link href={`${base}/zpravodaj`} className="hover:text-[var(--club-chalk)] shrink-0">🗞️ Zápasový zpravodaj</Link>
+          <Link href={`${base}/trener`} className="hover:text-[var(--club-chalk)] shrink-0">👔 Trenér</Link>
           <a href="#tabulka" className="hover:text-[var(--club-chalk)] shrink-0">📊 Tabulka soutěže</a>
           {announcement && <a href="#nastenka" className="hover:text-[var(--club-chalk)] shrink-0">📋 Vývěska vedení</a>}
           <a href="#kadr" className="hover:text-[var(--club-chalk)] shrink-0">🪪 Hráčské registračky</a>
@@ -283,6 +302,12 @@ export function VillagePatriotTemplate({
                   >
                     Vstupenky
                   </button>
+                  <Link
+                    href={`${base}/zpravodaj`}
+                    className="mt-3 text-sm font-serif text-[var(--club-ink)] underline hover:no-underline font-bold"
+                  >
+                    Zpravodaj ke kolu →
+                  </Link>
                 </div>
 
                 {/* Away team */}
@@ -365,6 +390,11 @@ export function VillagePatriotTemplate({
                       </div>
                     </div>
                   ))}
+                </div>
+                <div className="mt-2 text-right text-sm font-serif">
+                  <Link href={`${base}/zapasy`} className="text-[var(--club-ink)] underline hover:no-underline font-bold">
+                    Všechny zápasy →
+                  </Link>
                 </div>
               </div>
             )}
@@ -915,7 +945,7 @@ export function VillagePatriotTemplate({
                   </h4>
                   <div className="text-sm text-[#4a2e18] mt-1 mb-4 pb-3 border-b border-dashed border-[#d8be9f] break-words">
                     Odpovídá trenér{" "}
-                    <strong className="text-base text-[#2b170c]">{interviewCoach(latestInterview, data)}</strong>
+                    <strong className="text-base text-[#2b170c]">{coachName(latestInterview)}</strong>
                   </div>
                   <div className="md:columns-2 md:gap-8">
                     {interviewPairs(latestInterview).map((pair, i) => (
@@ -959,7 +989,7 @@ export function VillagePatriotTemplate({
                             <div id={panelId} className="px-3 pb-3 pt-2 border-t border-[#d8be9f] space-y-3">
                               <div className="text-sm text-[#4a2e18] break-words">
                                 Odpovídá trenér{" "}
-                                <strong className="text-base text-[#2b170c]">{interviewCoach(iv, data)}</strong>
+                                <strong className="text-base text-[#2b170c]">{coachName(iv)}</strong>
                               </div>
                               {interviewPairs(iv).map((pair, i) => (
                                 <div key={i}>

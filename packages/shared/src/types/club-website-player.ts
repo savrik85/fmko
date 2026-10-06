@@ -30,6 +30,32 @@ export interface ClubWebsitePlayerProfile {
     /** active | released | quit… (propuštěný hráč už v klubu není) */
     status: string | null;
   };
+  /** Veřejné osobní údaje jako na webech klubů (žádné herní atributy). */
+  personal: {
+    preferredFoot: "left" | "right" | "both" | null;
+    occupation: string | null;
+    residence: string | null;
+    manOfMatchCount: number;
+  };
+  /** Posledních 10 soutěžních zápasů hráče (liga i pohár). */
+  recentMatches: Array<{
+    matchId: string;
+    competition: "league" | "cup";
+    date: string | null;
+    teamId: string | null;
+    opponentId: string | null;
+    opponentName: string;
+    isHome: boolean;
+    goalsFor: number | null;
+    goalsAgainst: number | null;
+    started: boolean;
+    minutes: number;
+    goals: number;
+    assists: number;
+    yellowCards: number;
+    redCards: number;
+    rating: number | null;
+  }>;
   /** Kde hráč hraje teď; null = bez klubu. */
   currentTeam: { id: string; name: string } | null;
   /** Hraje za klub, z jehož webu se profil otevřel? */

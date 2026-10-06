@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useContext, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { LeagueTeamLinks } from "./LeagueTeamLinks";
 import { ROLE_DEFS, type StaffRole } from "@okresni-masina/shared";
 import {
   ANCHOR_OFFSET,
+  ClubBasePathContext,
   EMPTY,
   PlayerLink,
   TeamLink,
@@ -74,11 +76,24 @@ export function RegionalStandardTemplate({
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
   const [transferFilter, setTransferFilter] = useState<"all" | "in" | "out">("all");
   const [openInterviews, setOpenInterviews] = useState<Record<string, boolean>>({});
+  // Adresa webu klubu pro podstránky (zápasy, zpravodaj, trenér).
+  const base = useContext(ClubBasePathContext) ?? `/klub/${team.id}`;
 
   // Tiskové středisko a historie: jen data, vzhled dělá tahle šablona sama.
   const showPress = hasPressContent(data);
   const [latestInterview, ...olderInterviews] = pressInterviews(data);
   const clubNews = pressNews(data);
+  // Současný trenér v rozhovoru je odkaz na jeho stránku; dřívější trenér zůstane jen jménem.
+  const coachName = (iv: Interview) => {
+    const coach = interviewCoach(iv, data);
+    return manager && coach === manager.name ? (
+      <Link href={`${base}/trener`} className="hover:underline">
+        {coach}
+      </Link>
+    ) : (
+      coach
+    );
+  };
   const history = hasHistory(data.history) ? data.history : null;
   const awardGroups = history ? awardsBySeason(history) : [];
 
@@ -191,6 +206,8 @@ export function RegionalStandardTemplate({
       <nav className="bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm sticky top-[52px] z-40">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-2 text-sm font-heading font-bold text-slate-600 flex items-center gap-6 overflow-x-auto">
           <a href="#zapas" className="hover:text-[var(--club-accent-light)] shrink-0">⚽ Zápasy</a>
+          <Link href={`${base}/zapasy`} className="hover:text-[var(--club-accent-light)] shrink-0">📅 Zápasy sezóny</Link>
+          <Link href={`${base}/zpravodaj`} className="hover:text-[var(--club-accent-light)] shrink-0">📰 Zpravodaj</Link>
           <a href="#tabulka" className="hover:text-[var(--club-accent-light)] shrink-0">📊 Tabulka</a>
           <a href="#kadr" className="hover:text-[var(--club-accent-light)] shrink-0">👥 Soupiska</a>
           <a href="#prestupy" className="hover:text-[var(--club-accent-light)] shrink-0">📜 Přestupy ({transfers.length})</a>
@@ -304,6 +321,11 @@ export function RegionalStandardTemplate({
                   <div className="text-slate-500">
                     Vstupné {tickets.adultPrice} Kč, platí se u vstupu
                   </div>
+                  {nextMatch && (
+                    <Link href={`${base}/zpravodaj`} className="text-[var(--club-ink)] hover:underline font-heading font-bold text-sm">
+                      Zpravodaj ke kolu
+                    </Link>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -396,6 +418,11 @@ export function RegionalStandardTemplate({
                         </div>
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-3 text-right">
+                    <Link href={`${base}/zapasy`} className="text-[var(--club-ink)] hover:underline font-heading font-bold text-sm">
+                      Všechny zápasy
+                    </Link>
                   </div>
                 </div>
               )}
@@ -888,7 +915,7 @@ export function RegionalStandardTemplate({
                     </h4>
                     <div className="text-sm text-slate-600 mb-4 break-words">
                       Odpovídá trenér{" "}
-                      <strong className="text-base font-bold text-slate-900">{interviewCoach(latestInterview, data)}</strong>
+                      <strong className="text-base font-bold text-slate-900">{coachName(latestInterview)}</strong>
                     </div>
                     <InterviewText interview={latestInterview} />
                   </article>
@@ -925,7 +952,7 @@ export function RegionalStandardTemplate({
                             <div id={panelId} hidden={!open} className="px-3 pb-4 pt-1 border-t border-slate-100">
                               <div className="text-sm text-slate-600 my-3 break-words">
                                 Odpovídá trenér{" "}
-                                <strong className="text-base font-bold text-slate-900">{interviewCoach(iv, data)}</strong>
+                                <strong className="text-base font-bold text-slate-900">{coachName(iv)}</strong>
                               </div>
                               <InterviewText interview={iv} />
                             </div>
@@ -1258,7 +1285,11 @@ export function RegionalStandardTemplate({
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-heading font-bold uppercase text-[var(--club-ink)]">Hlavní trenér</div>
-                      <div className="font-heading font-extrabold text-base text-slate-900 break-words">{manager.name}</div>
+                      <div className="font-heading font-extrabold text-base text-slate-900 break-words">
+                        <Link href={`${base}/trener`} className="hover:underline">
+                          {manager.name}
+                        </Link>
+                      </div>
                       <div className="text-sm text-slate-500">{manager.age} let · Licence {manager.licence}</div>
                     </div>
                   </div>
@@ -1277,6 +1308,11 @@ export function RegionalStandardTemplate({
                     </div>
                   </div>
                 ))}
+              </div>
+              <div className="mt-4 text-right">
+                <Link href={`${base}/trener`} className="text-[var(--club-ink)] hover:underline font-heading font-bold text-sm">
+                  Celý realizační tým
+                </Link>
               </div>
             </div>
           </section>
