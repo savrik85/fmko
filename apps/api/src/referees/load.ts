@@ -189,6 +189,18 @@ export async function loadCupReferee(
   return { profile: rowToProfile(row), snapshot: toSnapshot(row) };
 }
 
+/**
+ * Sudí pro zápas na hřišti, které nepatří žádnému klubu (turnaj na neutrální půdě):
+ * deterministicky z komise okresu, kde se hraje. Bez komise píská neutrální sudí.
+ */
+export async function loadDistrictReferee(db: D1Database, matchKey: string, district: string): Promise<LoadedReferee> {
+  const pool = await ensureReferees(db, district)
+    .catch((e) => { logger.warn({ module: "referees" }, `komise rozhodčích okresu ${district}`, e); return [] as Awaited<ReturnType<typeof ensureReferees>>; });
+  if (pool.length === 0) return { profile: NEUTRAL_REFEREE, snapshot: NEUTRAL_SNAPSHOT };
+  const row = pool[seedFromString(matchKey) % pool.length];
+  return { profile: rowToProfile(row), snapshot: toSnapshot(row) };
+}
+
 /** Sporná situace s DB identifikátory týmů — tak, jak se ukládá do zápasu. */
 export interface StoredIncident extends Omit<RefereeIncident, "againstTeamId" | "favourTeamId"> {
   againstTeamId: string;

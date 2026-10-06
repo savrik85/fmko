@@ -3805,6 +3805,32 @@ gameRouter.delete("/teams/:teamId/classifieds/:id", async (c) => {
 
 // GET next match info + current lineup
 // Optional ?calendarId=X — vrátí konkrétní zápas (calendar entry NEBO friendly match.id), jinak nejbližší
+const TOURNAMENT_STAGE_NAME: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", final: "finále" };
+
+/** „Turnaj P-Mobile, 2. den" / „Turnaj P-Mobile, finále" */
+function tournamentRoundName(m: Record<string, unknown>): string {
+  const name = (m.tournament_name as string) ?? "Turnaj";
+  return m.stage === "league" ? `${name}, ${m.day}. den` : `${name}, ${TOURNAMENT_STAGE_NAME[m.stage as string] ?? m.stage}`;
+}
+
+/** Turnajový zápas týmu: konkrétní (`matchId`), nebo nejbližší neodehraný. Stejné sloupce jako zápasy ligy. */
+async function loadTournamentMatchForTeam(db: D1Database, teamId: string, matchId: string | null): Promise<Record<string, unknown> | null> {
+  return db.prepare(
+    `SELECT m.id, m.tournament_id, m.stage, m.day, m.scheduled_at, m.home_team_id, m.away_team_id,
+            h.name AS home_name, a.name AS away_name, h.primary_color AS home_color, a.primary_color AS away_color,
+            t.name AS tournament_name, t.city, v.name AS venue_name
+       FROM tournament_matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+       JOIN teams h ON h.id = m.home_team_id
+       JOIN teams a ON a.id = m.away_team_id
+       LEFT JOIN tournament_venues v ON v.id = m.venue_id
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+        AND ${matchId ? "m.id = ?" : "m.status = 'scheduled'"}
+      ORDER BY m.scheduled_at ASC LIMIT 1`
+  ).bind(...(matchId ? [teamId, teamId, matchId] : [teamId, teamId])).first<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "game" }, "turnajový zápas pro sestavu", e); return null; });
+}
+
 gameRouter.get("/teams/:teamId/next-match", async (c) => {
   const teamId = c.req.param("teamId");
   const requestedCalId = c.req.query("calendarId");
@@ -3821,6 +3847,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   let scheduledAt: string | null = null;
   let isFriendly = false;
   let isCup = false;
+  let isTournament = false;
   let cupRoundName: string | null = null;
 
   // Pokud klient požaduje konkrétní calendarId/matchId, najdi přesně ten zápas
@@ -3874,6 +3901,16 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
           scheduledAt = cupM.scheduled_at as string | null;
           const { roundName } = await import("../cup/cup");
           cupRoundName = roundName(cupM.round as number, cupM.total_rounds as number);
+        } else {
+          // Turnaj P-Mobile (tournament_matches.id) — sestava se ukládá na id zápasu jako u poháru.
+          const tm = await loadTournamentMatchForTeam(c.env.DB, teamId, requestedCalId);
+          if (tm) {
+            match = tm;
+            isTournament = true;
+            calendarId = tm.id as string;
+            scheduledAt = tm.scheduled_at as string;
+            cupRoundName = tournamentRoundName(tm);
+          }
         }
       }
     }
@@ -3931,8 +3968,18 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       ).bind(teamId).first<Record<string, unknown>>()
         .catch((e) => { logger.warn({ module: "game" }, "load next cup match", e); return null; });
 
-      const useCup = nextCup && (!leagueCand || ((nextCup.scheduled_at as string) ?? "") < leagueCand.scheduledAt);
-      if (useCup && nextCup) {
+      const nextTournament = await loadTournamentMatchForTeam(c.env.DB, teamId, null);
+      const cupAt = (nextCup?.scheduled_at as string | undefined) ?? null;
+      const tourAt = (nextTournament?.scheduled_at as string | undefined) ?? null;
+      const useTournament = !!nextTournament && (!leagueCand || (tourAt ?? "") < leagueCand.scheduledAt) && (!cupAt || (tourAt ?? "") < cupAt);
+      const useCup = !useTournament && nextCup && (!leagueCand || ((nextCup.scheduled_at as string) ?? "") < leagueCand.scheduledAt);
+      if (useTournament && nextTournament) {
+        match = nextTournament;
+        isTournament = true;
+        calendarId = nextTournament.id as string;
+        scheduledAt = tourAt;
+        cupRoundName = tournamentRoundName(nextTournament);
+      } else if (useCup && nextCup) {
         match = nextCup;
         isCup = true;
         calendarId = nextCup.id as string;
@@ -3981,6 +4028,13 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     if (lineup) lineupSource = "default";
   }
   const players = { results: playersRes.results as Record<string, unknown>[] };
+  // V turnaji platí jen turnajové stopky (ligové se tam neodpykávají a naopak).
+  if (isTournament) {
+    const { loadTournamentSuspensions } = await import("../tournament/match");
+    const susp = await loadTournamentSuspensions(c.env.DB, match.tournament_id as string, [teamId])
+      .catch((e) => { logger.warn({ module: "game" }, "turnajové stopky pro sestavu", e); return new Map<string, number>(); });
+    for (const r of players.results) r.suspended_matches = susp.get(r.id as string) ?? 0;
+  }
 
   // Generate absences only day_before or match_day (not 2+ days before) — friendlies always match_day
   const matchDate = new Date(scheduledAt!);
@@ -4100,7 +4154,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   });
 
   // Upcoming matches strip — ligové, přátelské i pohárové, sloučené chronologicky
-  let upcomingMatches: Array<{ calendarId: string; gameWeek: number | null; scheduledAt: string; opponentName: string; isHome: boolean; hasLineup: boolean; isFriendly: boolean; isCup?: boolean; roundName?: string | null }> = [];
+  let upcomingMatches: Array<{ calendarId: string; gameWeek: number | null; scheduledAt: string; opponentName: string; isHome: boolean; hasLineup: boolean; isFriendly: boolean; isCup?: boolean; isTournament?: boolean; roundName?: string | null }> = [];
   try {
     // Ligové zápasy z kalendáře
     if (team.league_id) {
@@ -4182,6 +4236,31 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         });
       }
     }
+    // Turnaj P-Mobile — tournament_matches.id jako calendarId
+    const upcomingTournament = await c.env.DB.prepare(
+      `SELECT m.id, m.stage, m.day, m.scheduled_at, m.home_team_id, h.name AS home_name, a.name AS away_name, t.name AS tournament_name,
+        (SELECT COUNT(*) FROM lineups l WHERE l.team_id = ? AND l.calendar_id = m.id) AS has_lineup
+       FROM tournament_matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+       JOIN teams h ON h.id = m.home_team_id
+       JOIN teams a ON a.id = m.away_team_id
+       WHERE m.status = 'scheduled' AND (m.home_team_id = ? OR m.away_team_id = ?)
+       ORDER BY m.scheduled_at ASC LIMIT 12`
+    ).bind(teamId, teamId, teamId).all();
+    for (const u of upcomingTournament.results) {
+      const isHome = u.home_team_id === teamId;
+      upcomingMatches.push({
+        calendarId: u.id as string,
+        gameWeek: null,
+        scheduledAt: u.scheduled_at as string,
+        opponentName: (isHome ? u.away_name : u.home_name) as string,
+        isHome,
+        hasLineup: (u.has_lineup as number) > 0,
+        isFriendly: false,
+        isTournament: true,
+        roundName: tournamentRoundName(u),
+      });
+    }
     // Sloučit chronologicky
     upcomingMatches.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
   } catch (e) { logger.warn({ module: "game" }, "fetch upcoming matches", e); }
@@ -4195,7 +4274,14 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       // takže ho jde ukázat rovnou. Dotaz do `matches` by u pohárového id nevrátil nic,
       // protože pohár žije v `cup_matches`; karta by pak byla vždycky prázdná.
       let refRow: Record<string, unknown> | null = null;
-      if (isCup) {
+      if (isTournament) {
+        const { loadDistrictReferee } = await import("../referees/load");
+        const { profile } = await loadDistrictReferee(c.env.DB, match.id as string, match.city as string);
+        if (profile.id) {
+          refRow = await c.env.DB.prepare("SELECT * FROM referees WHERE id = ?")
+            .bind(profile.id).first<Record<string, unknown>>();
+        }
+      } else if (isCup) {
         const { loadCupReferee } = await import("../referees/load");
         const { profile } = await loadCupReferee(
           c.env.DB, match.id as string, (match.home_team_id as string | null) ?? null,
@@ -4271,7 +4357,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   const forecast = await forecastForMatch(
     c.env.DB, (match.calendar_id as string | null) ?? null, scheduledAt ?? "", String(match.id),
   );
-  const pitchRow = await c.env.DB.prepare(
+  const pitchRow = isTournament ? null : await c.env.DB.prepare(
     "SELECT pitch_condition, pitch_moisture FROM stadiums WHERE team_id = ?"
   ).bind(homeTeamId).first<{ pitch_condition: number; pitch_moisture: number }>()
     .catch((e) => { logger.warn({ module: "game" }, "hriste k tipum na sestavu", e); return null; });
@@ -4304,7 +4390,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     tacticHints: hints,
     nextMatch: {
       matchId: match.id,
-      calendarId: (isFriendly || isCup) ? (match.id as string) : calendarId,
+      calendarId: (isFriendly || isCup || isTournament) ? (match.id as string) : calendarId,
       gameWeek: gameWeek,
       scheduledAt: scheduledAt,
       isHome: match.home_team_id === teamId,
@@ -4312,6 +4398,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       homeColor: match.home_color, awayColor: match.away_color,
       isFriendly,
       isCup,
+      isTournament,
+      venueName: isTournament ? (match.venue_name as string | null) ?? null : null,
       roundName: cupRoundName,
       isLocalDerby,
     },
@@ -4507,13 +4595,23 @@ gameRouter.post("/teams/:teamId/lineup", async (c) => {
     return c.json({ error: "Sestava obsahuje duplicitního hráče" }, 400);
   }
   const placeholders = playerIds.map(() => "?").join(",");
+  // Turnajový zápas: ligová stopka v turnaji neplatí, hlídá se turnajová.
+  const tournamentMatch = await c.env.DB.prepare(
+    "SELECT tournament_id FROM tournament_matches WHERE id = ? AND (home_team_id = ? OR away_team_id = ?)"
+  ).bind(body.calendarId, teamId, teamId).first<{ tournament_id: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "turnajový zápas pro uložení sestavy", e); return null; });
   const validPlayers = await c.env.DB.prepare(
     `SELECT p.id FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
      WHERE p.id IN (${placeholders}) AND p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
-     AND i.id IS NULL AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)`
+     AND i.id IS NULL${tournamentMatch ? "" : " AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)"}`
   ).bind(...playerIds, teamId).all().catch((e) => { logger.warn({ module: "game" }, "validate lineup players", e); return { results: [] }; });
 
   const validIds = new Set(validPlayers.results.map((r) => r.id as string));
+  if (tournamentMatch) {
+    const { loadTournamentSuspensions } = await import("../tournament/match");
+    const susp = await loadTournamentSuspensions(c.env.DB, tournamentMatch.tournament_id, [teamId]);
+    for (const id of susp.keys()) validIds.delete(id);
+  }
   const invalid = playerIds.filter((id) => !validIds.has(id));
   if (invalid.length > 0) {
     return c.json({ error: `${invalid.length} hráč(ů) není dostupných (zranění, suspendace nebo nepatří do týmu)` }, 400);

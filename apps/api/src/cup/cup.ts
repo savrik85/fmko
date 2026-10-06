@@ -318,7 +318,7 @@ async function loadCupClubRows(db: D1Database, cupTeamId: string): Promise<{ res
 }
 
 /** Penaltový rozstřel — mírně zvýhodní silnější tým. */
-function cupShootout(rng: Rng, sHome: number, sAway: number): { hp: number; ap: number } {
+export function cupShootout(rng: Rng, sHome: number, sAway: number): { hp: number; ap: number } {
   let hp = 0, ap = 0;
   const pHome = Math.max(0.55, Math.min(0.9, 0.72 + (sHome - 50) / 500));
   const pAway = Math.max(0.55, Math.min(0.9, 0.72 + (sAway - 50) / 500));
@@ -330,7 +330,7 @@ function cupShootout(rng: Rng, sHome: number, sAway: number): { hp: number; ap: 
 }
 
 /** Sestaví lineup_data JSON pro detail zápasu (obdoba buildLineupData v match-runner). */
-function buildCupLineupData(
+export function buildCupLineupData(
   lineup: Array<Record<string, any>>, subs: Array<Record<string, any>>,
   idMap: Map<number, string>, formation: string, tactic: string, hardness: string,
 ): { starters: any[]; subs: any[]; formation: string; tactic: string; hardness: string; captainId: string | null } {
