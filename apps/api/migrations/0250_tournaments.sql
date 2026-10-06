@@ -5,12 +5,15 @@
 -- stav bez přestavby tabulky — viz matches.status). Hlídá se v kódu.
 -- registration_deadline je skutečný čas (UTC ISO), ne herní — přihlašují se lidé.
 -- league_matches = počet zápasů na tým v ligové fázi, volí admin při losu (NULL do losu).
+-- city_locative = město v 6. pádě pro texty („v Táboře"), invited_at = kdy odešla pozvánka
+-- (claim proti dvojímu rozeslání).
 CREATE TABLE IF NOT EXISTS tournaments (
   id TEXT PRIMARY KEY,
   edition INTEGER NOT NULL UNIQUE,
   name TEXT NOT NULL,
   sponsor TEXT NOT NULL,
   city TEXT NOT NULL,
+  city_locative TEXT,
   venue_name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'registration',
   registration_deadline TEXT NOT NULL,
@@ -22,6 +25,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
   prize_winner INTEGER NOT NULL DEFAULT 0,
   league_matches INTEGER,
   winner_team_id TEXT REFERENCES teams(id),
+  invited_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 

@@ -155,6 +155,10 @@ export default function AdminPage() {
         <BroadcastSection />
       </Rozbalovaci>
 
+      <Rozbalovaci nazev="Turnaj" ikona="⚽" popis="Pozvánka od pořadatele">
+        <TournamentInviteSection />
+      </Rozbalovaci>
+
       <Rozbalovaci nazev="Uživatelé" ikona="👥" popis="Účty a hesla">
         <UserManagement />
       </Rozbalovaci>
@@ -612,6 +616,86 @@ function BroadcastSection() {
         <div className="text-sm text-muted">Zatím žádné odpovědi</div>
       )}
       <button onClick={loadReplies} className="text-xs text-pitch-600 hover:underline mt-2">Obnovit odpovědi</button>
+    </div>
+  );
+}
+
+/* ── Turnaj: pozvánka od pořadatele ── */
+
+function TournamentInviteSection() {
+  const { token } = useTeam();
+  const [info, setInfo] = useState<{ tournament: { name: string; edition: number; sponsor: string }; defaultMessage: string; recipients: number; invitedAt: string | null } | null>(null);
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+  const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const load = async () => {
+    const res = await fetch(`${API}/api/admin/tournament/invite`, { headers: authH })
+      .catch((e) => { console.error("load tournament invite:", e); return null; });
+    if (!res?.ok) { setStatus("Turnaj není vypsaný"); return; }
+    const data = await res.json();
+    setInfo(data);
+    setMessage((prev) => prev || data.defaultMessage);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const send = async () => {
+    if (!info || !message.trim()) return;
+    if (!potvrd(
+      `Poslat pozvánku od ${info.tournament.sponsor}?`,
+      `Dorazí ${info.recipients} klubům, které se ještě nepřihlásily, jako SMS od ${info.tournament.sponsor} a push. Pozvánka jde poslat jen jednou.`,
+    )) return;
+    setSending(true);
+    try {
+      const res = await fetch(`${API}/api/admin/tournament/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authH },
+        body: JSON.stringify({ message: message.trim() }),
+      });
+      const data = await res.json();
+      setStatus(res.ok ? `Odesláno ${data.sent ?? 0} klubům (push ${data.pushed ?? 0})` : (data.error ?? "Chyba při odesílání"));
+      load();
+    } catch (e) {
+      console.error("tournament invite send:", e);
+      setStatus("Chyba při odesílání");
+    }
+    setSending(false);
+  };
+
+  if (!info) return <div className="card p-4 text-sm text-muted">{status || "Načítám…"}</div>;
+
+  return (
+    <div className="card p-4 space-y-3">
+      <SectionLabel>{`${info.tournament.sponsor}: pozvánka na ${info.tournament.edition}. ročník`}</SectionLabel>
+      {info.invitedAt ? (
+        <div className="text-sm font-heading font-bold text-pitch-600">
+          Pozvánka odešla {new Date(info.invitedAt).toLocaleString("cs", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}.
+        </div>
+      ) : (
+        <>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            rows={6}
+            className="w-full border border-gray-200 rounded-soft px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-pitch-400"
+          />
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={send}
+              disabled={sending || !message.trim()}
+              className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50"
+            >
+              {sending ? "Odesílám…" : "Poslat pozvánku"}
+            </button>
+            <span className="text-sm text-muted">Adresáti: {info.recipients} nepřihlášených klubů</span>
+          </div>
+        </>
+      )}
+      {status && <div className="text-sm font-heading font-bold text-pitch-500">{status}</div>}
     </div>
   );
 }
