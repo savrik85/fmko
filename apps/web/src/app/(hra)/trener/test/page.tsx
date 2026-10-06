@@ -370,7 +370,7 @@ function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
             ⏱ {formatTime(remaining)}
           </div>
           {leaves > 0 && (
-            <div className="text-sm font-heading font-bold text-card-red">Odchody z testu: −{penaltyTotal(leaves)}</div>
+            <div className="text-sm font-heading font-bold text-card-red whitespace-nowrap">Odchody −{penaltyTotal(leaves)}</div>
           )}
         </div>
       </div>
