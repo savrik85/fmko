@@ -379,6 +379,7 @@ export function MatchReplayViewer({
       .then(hydrate)
       .catch(() =>
         apiFetch<Record<string, unknown>>(`/api/cup-matches/${matchId}`)
+          .catch(() => apiFetch<Record<string, unknown>>(`/api/tournament-matches/${matchId}`))
           .then(hydrate)
           .catch((e) => {
             if (cancelled) return;

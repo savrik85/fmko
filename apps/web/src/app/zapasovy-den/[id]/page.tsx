@@ -47,6 +47,10 @@ interface MatchInfo {
   pitch_type: string;
   isCup: boolean;
   roundName: string | null;
+  /** Turnaj na neutrální půdě: hřiště areálu má vlastní barvy, ne barvy domácích. */
+  venueColor: string | null;
+  venueSecondary: string | null;
+  isTournament: boolean;
 }
 
 interface StadiumFacilities {
@@ -71,8 +75,10 @@ export default function MatchDayPage() {
     // řádově víc; teprve když ID nesedí, sáhneme do poháru.
     apiFetch<Record<string, unknown>>(`/api/matches/${matchId}`)
       .catch(() => apiFetch<Record<string, unknown>>(`/api/cup-matches/${matchId}`))
+      .catch(() => apiFetch<Record<string, unknown>>(`/api/tournament-matches/${matchId}`))
       .then(async (r) => {
         const homeTeamId = r.home_team_id as string;
+        const venueLook = (r.venue as { look?: Record<string, unknown> } | null | undefined)?.look ?? null;
         const rawWeather = (r.weather as string) || "sunny";
         const validWeather: WeatherType = ["sunny", "cloudy", "rain", "wind", "snow"].includes(rawWeather)
           ? (rawWeather as WeatherType)
@@ -97,13 +103,21 @@ export default function MatchDayPage() {
           weather: validWeather,
           stadium_name: (r.stadium_name as string) ?? null,
           pitch_condition: (r.pitch_condition as number) ?? 85,
-          pitch_type: (r.pitch_type as string) ?? "natural",
+          pitch_type: (venueLook?.pitch_type as string) ?? (r.pitch_type as string) ?? "natural",
           isCup: r.isCup === true,
           roundName: (r.roundName as string) ?? null,
+          venueColor: (venueLook?.primary as string) ?? null,
+          venueSecondary: (venueLook?.secondary as string) ?? null,
+          isTournament: r.isTournament === true,
         });
 
-        // Načteme zázemí stadionu domácího týmu pro 3D scénu
-        if (homeTeamId) {
+        // Turnaj: 3D podle hřiště z losu (úrovně tribun, střechy, světel z areálu).
+        if (r.isTournament === true && venueLook) {
+          const facilities: Record<string, number> = {};
+          for (const [k, v] of Object.entries(venueLook)) if (typeof v === "number") facilities[k] = v;
+          setStadiumData({ facilities });
+        } else if (homeTeamId) {
+          // Načteme zázemí stadionu domácího týmu pro 3D scénu
           try {
             const stRes = await apiFetch<StadiumFacilities>(
               `/api/teams/${homeTeamId}/stadium`,
@@ -183,10 +197,10 @@ export default function MatchDayPage() {
           pitchType={match.pitch_type}
           facilities={stadiumData?.facilities ?? { stands: 1, fence: 1, entrance_gate: 1 }}
           standExtensions={builtExtensionsOf(stadiumData?.standExtensions)}
-          teamColor={hc}
-          secondaryColor={match.home_secondary}
-          badgePattern={match.home_badge}
-          badgeInitials={ini(match.home_name)}
+          teamColor={match.venueColor ?? hc}
+          secondaryColor={match.venueSecondary ?? match.home_secondary}
+          badgePattern={match.isTournament ? "shield" : match.home_badge}
+          badgeInitials={match.isTournament ? "PM" : ini(match.home_name)}
           stadiumName={match.stadium_name ?? `Stadion ${match.home_name}`}
           initialViewpoint="orbit"
           initialWeather={match.weather}

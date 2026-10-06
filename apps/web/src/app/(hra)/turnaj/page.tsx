@@ -6,9 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader, Button } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
-
-// Barva pořadatele turnaje (fiktivní operátor P-Mobile).
-const BRAND = "#C8006A";
+import { BRAND, CompetitionView, type Competition } from "./competition";
 
 interface Entry {
   teamId: string;
@@ -32,7 +30,10 @@ interface TournamentData {
     pointReward: number;
     prizes: { quarterfinal: number; semifinal: number; finalist: number; winner: number };
     leagueMatches: number | null;
+    leagueDays: number | null;
+    winnerTeamId: string | null;
   } | null;
+  competition?: Competition | null;
   registrationOpen?: boolean;
   entries?: Entry[];
   myEntry?: boolean;
@@ -173,13 +174,103 @@ export default function TurnajPage() {
   const open = !!data?.registrationOpen;
   const myEntry = !!data?.myEntry;
   const winOn = (amount: number) => kc(amount * 3);
+  const competition = data?.competition ?? null;
+
+  // Propozice, odměny, hřiště a přihlášené kluby: před losem hlavní obsah, po losu záložka Info.
+  const info = (
+    <div className="space-y-5">
+      {/* Propozice */}
+      <div>
+        <SectionLabel>Propozice</SectionLabel>
+        <div className="card mt-2">
+          <TermRow icon="📍" title="Dějiště">
+            {t.venueName}, {t.city}. Neutrální půda, nikdo nehraje doma.
+          </TermRow>
+          <TermRow icon="📅" title="Termín">
+            {t.startsOn ? `Začíná se ${onDayLabel(t.startsOn)} ` : ""}Hraje se každý den, turnaj potrvá 7 až 12 dní.
+          </TermRow>
+          <TermRow icon="🏆" title="Formát">
+            Formát a přesnou délku upřesníme po uzávěrce podle počtu přihlášených klubů.
+          </TermRow>
+          <TermRow icon="🔄" title="Kádr">
+            Zápas je každý den, takže se vyplatí střídat celý kádr A-týmu.
+          </TermRow>
+          <TermRow icon="💸" title="Náklady">
+            Všechny náklady spojené s turnajem hradí {t.sponsor}.
+          </TermRow>
+        </div>
+      </div>
+
+      {/* Odměny */}
+      <div>
+        <SectionLabel>Odměny od {t.sponsor}</SectionLabel>
+        <div className="card p-4 mt-2 space-y-4">
+          <PrizeCell label="Za každý získaný bod" amount={t.pointReward} note={`výhra = ${winOn(t.pointReward)}`} />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 pt-3 border-t border-gray-100">
+            <PrizeCell label="Čtvrtfinále" amount={t.prizes.quarterfinal} />
+            <PrizeCell label="Semifinále" amount={t.prizes.semifinal} />
+            <PrizeCell label="Finalista" amount={t.prizes.finalist} />
+            <PrizeCell label="Vítěz" amount={t.prizes.winner} note="a trofej do vitríny" />
+          </div>
+        </div>
+      </div>
+
+      {/* Přihlášené kluby */}
+      <div>
+        <SectionLabel>Přihlášené kluby · {clubsLabel(entries.length)}</SectionLabel>
+        <div className="card mt-2">
+          {entries.length === 0 ? (
+            <div className="px-4 py-5 text-sm text-muted text-center">Zatím se nikdo nepřihlásil. Buď první.</div>
+          ) : entries.map((e) => {
+            const color = e.primaryColor || "#9aa18c";
+            const mine = e.teamId === teamId;
+            return (
+              <div key={e.teamId} className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 ${mine ? "bg-pitch-50" : ""}`}>
+                {/* Bílé dresy splývají s kartou, proto obrys u světlých barev. */}
+                <span
+                  className={`w-3.5 h-3.5 rounded-full shrink-0 border ${bestTextOn(color) === "light" ? "border-transparent" : "border-gray-300"}`}
+                  style={{ background: color }}
+                  aria-hidden
+                />
+                <Link href={`/tym/${e.teamId}`} className="flex-1 min-w-0 truncate text-base font-bold hover:underline">{e.name}</Link>
+                {e.district && <span className="text-sm text-muted shrink-0">{e.district}</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {competition && competition.venues.length > 0 && (
+        <div>
+          <SectionLabel>Hřiště areálu · {t.city}</SectionLabel>
+          <div className="card mt-2">
+            {competition.venues.map((v) => (
+              <div key={v.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0">
+                <span className="flex-1 min-w-0 truncate text-base font-bold">{v.isMain ? "🏟️ " : ""}{v.name}</span>
+                <span className="text-sm text-muted shrink-0">{v.capacity.toLocaleString("cs")} míst</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
 
   return (
     <>
       <PageHeader compact name={t.name} detail={`${t.edition}. ročník · ${t.city}`}>{null}</PageHeader>
       <div className="page-container space-y-5">
 
-        {/* Hlavička turnaje + přihláška */}
+        {/* Hlavička turnaje + přihláška (po losu jen hlavička a průběh) */}
+        {competition ? (
+          <div className="card overflow-hidden">
+            <div className="px-4 py-4 text-white" style={{ background: BRAND }}>
+              <div className="text-sm font-heading font-bold uppercase tracking-wider text-white/80">{t.sponsor} uvádí</div>
+              <div className="text-2xl font-heading font-[800] leading-tight mt-0.5">{t.name}</div>
+              <div className="text-sm text-white/90 mt-1">{t.edition}. ročník · {t.venueName}, {t.city} · {clubsLabel(entries.length)}</div>
+            </div>
+          </div>
+        ) : (
         <div className="card overflow-hidden">
           <div className="px-4 py-4 text-white" style={{ background: BRAND }}>
             <div className="text-sm font-heading font-bold uppercase tracking-wider text-white/80">{t.sponsor} uvádí</div>
@@ -225,67 +316,17 @@ export default function TurnajPage() {
             {error && <div className="text-sm text-card-red">{error}</div>}
           </div>
         </div>
+        )}
 
-        {/* Propozice */}
-        <div>
-          <SectionLabel>Propozice</SectionLabel>
-          <div className="card mt-2">
-            <TermRow icon="📍" title="Dějiště">
-              {t.venueName}, {t.city}. Neutrální půda, nikdo nehraje doma.
-            </TermRow>
-            <TermRow icon="📅" title="Termín">
-              {t.startsOn ? `Začíná se ${onDayLabel(t.startsOn)} ` : ""}Hraje se každý den, turnaj potrvá 7 až 12 dní.
-            </TermRow>
-            <TermRow icon="🏆" title="Formát">
-              Formát a přesnou délku upřesníme po uzávěrce podle počtu přihlášených klubů.
-            </TermRow>
-            <TermRow icon="🔄" title="Kádr">
-              Zápas je každý den, takže se vyplatí střídat celý kádr A-týmu.
-            </TermRow>
-            <TermRow icon="💸" title="Náklady">
-              Všechny náklady spojené s turnajem hradí {t.sponsor}.
-            </TermRow>
-          </div>
-        </div>
-
-        {/* Odměny */}
-        <div>
-          <SectionLabel>Odměny od {t.sponsor}</SectionLabel>
-          <div className="card p-4 mt-2 space-y-4">
-            <PrizeCell label="Za každý získaný bod" amount={t.pointReward} note={`výhra = ${winOn(t.pointReward)}`} />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 pt-3 border-t border-gray-100">
-              <PrizeCell label="Čtvrtfinále" amount={t.prizes.quarterfinal} />
-              <PrizeCell label="Semifinále" amount={t.prizes.semifinal} />
-              <PrizeCell label="Finalista" amount={t.prizes.finalist} />
-              <PrizeCell label="Vítěz" amount={t.prizes.winner} note="a trofej do vitríny" />
-            </div>
-          </div>
-        </div>
-
-        {/* Přihlášené kluby */}
-        <div>
-          <SectionLabel>Přihlášené kluby · {clubsLabel(entries.length)}</SectionLabel>
-          <div className="card mt-2">
-            {entries.length === 0 ? (
-              <div className="px-4 py-5 text-sm text-muted text-center">Zatím se nikdo nepřihlásil. Buď první.</div>
-            ) : entries.map((e) => {
-              const color = e.primaryColor || "#9aa18c";
-              const mine = e.teamId === teamId;
-              return (
-                <div key={e.teamId} className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 ${mine ? "bg-pitch-50" : ""}`}>
-                  {/* Bílé dresy splývají s kartou, proto obrys u světlých barev. */}
-                  <span
-                    className={`w-3.5 h-3.5 rounded-full shrink-0 border ${bestTextOn(color) === "light" ? "border-transparent" : "border-gray-300"}`}
-                    style={{ background: color }}
-                    aria-hidden
-                  />
-                  <Link href={`/tym/${e.teamId}`} className="flex-1 min-w-0 truncate text-base font-bold hover:underline">{e.name}</Link>
-                  {e.district && <span className="text-sm text-muted shrink-0">{e.district}</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {competition ? (
+          <CompetitionView
+            competition={competition}
+            myTeamId={teamId}
+            myEntry={myEntry}
+            winnerTeamId={t.winnerTeamId}
+            info={info}
+          />
+        ) : info}
 
       </div>
     </>

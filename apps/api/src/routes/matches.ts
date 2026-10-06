@@ -910,11 +910,43 @@ matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
   ).bind(teamId, teamId).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "matches" }, "unseen: pohárový zápas", e); return null; });
 
-  if (!leagueRow && !cupRow) return c.json(null);
+  const tournamentRow = await c.env.DB.prepare(
+    `SELECT m.id, m.stage, m.day, m.home_team_id, m.away_team_id, h.name AS home_name, a.name AS away_name,
+       t.name AS tournament_name, m.simulated_at AS ord
+     FROM tournament_matches m
+     JOIN tournaments t ON t.id = m.tournament_id
+     JOIN teams h ON h.id = m.home_team_id
+     JOIN teams a ON a.id = m.away_team_id
+     WHERE m.status = 'simulated' AND m.events IS NOT NULL AND LENGTH(m.events) > 10
+     AND ((m.home_team_id = ? AND m.home_seen_at IS NULL)
+       OR (m.away_team_id = ? AND m.away_seen_at IS NULL))
+     ORDER BY m.simulated_at ASC LIMIT 1`
+  ).bind(teamId, teamId).first<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "matches" }, "unseen: turnajový zápas", e); return null; });
+
+  if (!leagueRow && !cupRow && !tournamentRow) return c.json(null);
 
   // Starší zápas jde první. Chybějící ord (historická data) posíláme dozadu, ať se
   // nepředbíhá před zápas, u kterého čas známe.
   const ordOf = (r: Record<string, unknown> | null) => (r?.ord as string) ?? "9999";
+  const useTournament = !!tournamentRow
+    && (!leagueRow || ordOf(tournamentRow) < ordOf(leagueRow))
+    && (!cupRow || ordOf(tournamentRow) < ordOf(cupRow));
+  if (useTournament && tournamentRow) {
+    const isHome = tournamentRow.home_team_id === teamId;
+    const stageName: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", final: "finále" };
+    return c.json({
+      matchId: tournamentRow.id,
+      opponent: isHome ? tournamentRow.away_name : tournamentRow.home_name,
+      round: null,
+      roundName: tournamentRow.stage === "league"
+        ? `${tournamentRow.tournament_name}, ${tournamentRow.day}. den`
+        : `${tournamentRow.tournament_name}, ${stageName[tournamentRow.stage as string] ?? tournamentRow.stage}`,
+      isHome,
+      isCup: false,
+      isTournament: true,
+    });
+  }
   const useCup = !!cupRow && (!leagueRow || ordOf(cupRow) < ordOf(leagueRow));
 
   if (useCup && cupRow) {
@@ -970,7 +1002,21 @@ matchesRouter.post("/matches/:id/mark-seen", async (c) => {
        WHERE cm.id = ?`
     ).bind(matchId).first<{ home_real: string | null; away_real: string | null }>()
       .catch((e) => { logger.warn({ module: "matches" }, "mark-seen: pohárový zápas", e); return null; });
-    if (!cup) return c.json({ error: "Match not found" }, 404);
+    if (!cup) {
+      // Ani pohár → turnaj P-Mobile.
+      const tm = await c.env.DB.prepare("SELECT home_team_id, away_team_id FROM tournament_matches WHERE id = ?")
+        .bind(matchId).first<{ home_team_id: string; away_team_id: string }>()
+        .catch((e) => { logger.warn({ module: "matches" }, "mark-seen: turnajový zápas", e); return null; });
+      if (!tm) return c.json({ error: "Match not found" }, 404);
+      if (tm.home_team_id !== body.teamId && tm.away_team_id !== body.teamId) {
+        return c.json({ error: "Přístup odepřen" }, 403);
+      }
+      const tCol = tm.home_team_id === body.teamId ? "home_seen_at" : "away_seen_at";
+      await c.env.DB.prepare(`UPDATE tournament_matches SET ${tCol} = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`)
+        .bind(matchId).run()
+        .catch((e) => logger.warn({ module: "matches" }, "mark-seen: uložení turnaje", e));
+      return c.json({ ok: true });
+    }
     if (cup.home_real !== body.teamId && cup.away_real !== body.teamId) {
       return c.json({ error: "Přístup odepřen" }, 403);
     }

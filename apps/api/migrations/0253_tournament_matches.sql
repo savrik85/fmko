@@ -46,8 +46,8 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
   referee_incidents TEXT,
   referee_grade REAL,
   simulated_at TEXT,
-  home_seen INTEGER NOT NULL DEFAULT 0,
-  away_seen INTEGER NOT NULL DEFAULT 0
+  home_seen_at TEXT,
+  away_seen_at TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_matches_slot ON tournament_matches(tournament_id, stage, day, bracket_pos);
