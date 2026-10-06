@@ -28,6 +28,7 @@ import { fansRouter } from "./routes/fans";
 import { incidentsRouter } from "./routes/incidents";
 import competitionRouter from "./routes/competition";
 import bettingRouter from "./routes/betting";
+import tournamentRouter from "./routes/tournament";
 import { clubWebsiteRouter } from "./routes/club-website";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
@@ -126,6 +127,7 @@ app.route("/api", fansRouter);
 app.route("/api", incidentsRouter);
 app.route("/api", competitionRouter);
 app.route("/api", bettingRouter);
+app.route("/api", tournamentRouter);
 
 export default {
   fetch: app.fetch,
