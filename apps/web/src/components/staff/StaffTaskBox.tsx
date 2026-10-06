@@ -99,7 +99,7 @@ function playerInfo(type: StaffTaskType, p: StaffTaskPlayer): Info[] {
       break;
     }
     case "massage_prep":
-      if (p.condition !== null) out.push({ text: `🔋 kondice ${p.condition} %`, tone: toneOf(p.condition) });
+      if (p.condition !== null) out.push({ text: `${p.condition >= 50 ? "🔋" : "🪫"} kondice ${p.condition} %`, tone: toneOf(p.condition) });
       if (p.lineup) out.push(LINEUP_LABEL[p.lineup]);
       break;
     case "psych_session":
