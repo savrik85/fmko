@@ -6,6 +6,9 @@
  * Čas hlídá server: spuštěním testu začne běžet a nezastaví se ani po zavření
  * stránky. Každá odpověď se hned ukládá, takže po návratu test pokračuje se
  * zbývajícím časem. Při nule se test odevzdá sám.
+ *
+ * Proti opisování: běžící test zavře skripta v ostatních oknech a každý
+ * odchod z okna (jiný tab, jiná aplikace) ubere čas na serveru.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -14,6 +17,8 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
 import { SectionLabel, Spinner } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { COURSE_RULES } from "@okresni-masina/shared";
+import { announceExamRunning } from "@/lib/coach-exam-channel";
 
 interface Rules {
   questions: number;
@@ -36,6 +41,13 @@ interface Running {
   questions: Question[];
   answers: number[];
   rules: Rules;
+  leaves: number;
+}
+
+interface LeaveResult {
+  expiresAt: string;
+  serverNow: string;
+  leaves: number;
 }
 
 interface Ready {
@@ -71,11 +83,21 @@ interface Result {
   review: ReviewItem[];
   retakePrice: number | null;
   reward: string | null;
+  leaves: number;
 }
 
 type Exam = Running | Ready | Result;
 
 const LETTERS = ["A", "B", "C", "D"];
+
+const PENALTY_SEC = COURSE_RULES.examLeavePenaltySec;
+const PENALTY_TEXT = PENALTY_SEC === 60 ? "minutu" : `${PENALTY_SEC} s`;
+
+/** Čas ztracený odchody z testu, např. „2 min“. */
+function penaltyTotal(leaves: number): string {
+  const sec = leaves * PENALTY_SEC;
+  return sec % 60 === 0 ? `${sec / 60} min` : `${sec} s`;
+}
 
 function formatTime(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));
@@ -174,7 +196,9 @@ function Intro({ exam, teamId, courseId, onStarted }: { exam: Ready; teamId: str
         <ul className="mt-2 space-y-2 text-base text-amber-900">
           <li>• Jakmile test spustíš, <strong>čas běží, i když stránku zavřeš</strong> nebo ti vypadne signál.</li>
           <li>• Test <strong>nejde pozastavit ani spustit znovu</strong>.</li>
-          <li>• <strong>Skripta budou během testu zamčená.</strong> Přečti si je předem.</li>
+          <li>• <strong>Skripta budou během testu zamčená</strong>, i když je máš otevřená v jiném okně. Přečti si je předem.</li>
+          <li>• <strong>Vlastní zápisky jsou povolené a doporučujeme je.</strong> Co si ze skript vypíšeš na papír, můžeš mít u testu.</li>
+          <li>• <strong>Z testu neodcházej.</strong> Každý odchod do jiného tabu nebo aplikace (i zavření nebo obnovení stránky) ti ubere {PENALTY_TEXT} času.</li>
           <li>• Odpovědi se ukládají hned. <strong>Nezodpovězené otázky se počítají jako špatně.</strong></li>
           <li>• Když čas doběhne, test se odevzdá sám.</li>
         </ul>
@@ -205,11 +229,14 @@ function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
   const [index, setIndex] = useState(() => Math.max(0, exam.answers.findIndex((a) => a < 0)));
   const [now, setNow] = useState(() => Date.now());
   const [submitting, setSubmitting] = useState(false);
+  // Konec testu se posouvá dopředu s každým odchodem z okna.
+  const [expiresAt, setExpiresAt] = useState(exam.expiresAt);
+  const [leaves, setLeaves] = useState(exam.leaves);
   const offset = useRef(Date.parse(exam.serverNow) - Date.now());
   const pending = useRef<Promise<unknown>>(Promise.resolve());
   const submitted = useRef(false);
 
-  const remaining = Date.parse(exam.expiresAt) - (now + offset.current);
+  const remaining = Date.parse(expiresAt) - (now + offset.current);
 
   const submit = useCallback(async () => {
     if (submitted.current) return;
@@ -250,6 +277,59 @@ function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
 
+  // Skripta otevřená v jiném okně se hned zavřou (i když se test jen obnovil po návratu).
+  useEffect(() => { announceExamRunning(courseId); }, [courseId]);
+
+  // Odchod z okna ubere čas. Posílá se hned při odchodu (keepalive přežije
+  // zavření stránky); když se to nestihne, odešle se po návratu.
+  useEffect(() => {
+    let sending: Promise<boolean> | null = null;
+    const send = () =>
+      apiFetch<LeaveResult>(`/api/teams/${teamId}/coach/courses/${courseId}/exam/leave`, {
+        method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attemptId: exam.attemptId }),
+      })
+        .then((r) => {
+          offset.current = Date.parse(r.serverNow) - Date.now();
+          setExpiresAt(r.expiresAt);
+          setLeaves(r.leaves);
+          return true;
+        })
+        .catch((e) => {
+          console.warn("exam leave:", e);
+          return false;
+        });
+    const onVisibility = async () => {
+      if (submitted.current) return;
+      if (document.visibilityState === "hidden") {
+        sending = send();
+        return;
+      }
+      const first = sending;
+      sending = null;
+      if (first && !(await first)) await send();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [teamId, courseId, exam.attemptId]);
+
+  // Telefon nesmí během testu zhasnout: zamčení obrazovky by se počítalo jako odchod.
+  useEffect(() => {
+    let wakeLock: WakeLockSentinel | null = null;
+    const acquire = () => {
+      if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+      navigator.wakeLock.request("screen")
+        .then((l) => { wakeLock = l; })
+        .catch((e) => console.warn("wake lock:", e));
+    };
+    acquire();
+    document.addEventListener("visibilitychange", acquire);
+    return () => {
+      document.removeEventListener("visibilitychange", acquire);
+      wakeLock?.release().catch((e) => console.warn("wake lock release:", e));
+    };
+  }, []);
+
   const choose = (qi: number, option: number) => {
     if (submitted.current) return;
     setAnswers((prev) => prev.map((a, i) => (i === qi ? option : a)));
@@ -285,8 +365,13 @@ function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
       {/* Odpočet — pořád na očích */}
       <div className={`sticky top-0 z-10 card p-3 flex items-center justify-between ${low ? "bg-red-50 border border-red-300" : ""}`}>
         <div className="text-sm text-muted">Otázka <strong className="text-ink tabular-nums">{index + 1}/{exam.questions.length}</strong> · zodpovězeno {answeredCount}</div>
-        <div className={`text-2xl font-heading font-extrabold tabular-nums ${low ? "text-card-red" : "text-ink"}`} aria-live="polite">
-          ⏱ {formatTime(remaining)}
+        <div className="text-right">
+          <div className={`text-2xl font-heading font-extrabold tabular-nums ${low ? "text-card-red" : "text-ink"}`} aria-live="polite">
+            ⏱ {formatTime(remaining)}
+          </div>
+          {leaves > 0 && (
+            <div className="text-sm font-heading font-bold text-card-red">Odchody z testu: −{penaltyTotal(leaves)}</div>
+          )}
         </div>
       </div>
 
@@ -368,6 +453,9 @@ function ResultView({ result, teamId, courseId }: { result: Result; teamId: stri
           <span className="text-muted"> (potřeba {result.passScore})</span>
         </div>
         {result.reward && <div className="text-base font-heading font-bold text-pitch-700 mt-2">Odměna: {result.reward}</div>}
+        {result.leaves > 0 && (
+          <p className="text-sm text-muted mt-2">Z testu jsi odešel {result.leaves}× a přišel o {penaltyTotal(result.leaves)} času.</p>
+        )}
         {result.retakePrice !== null && (
           <p className="text-sm text-red-800 mt-2">
             Máš jeden opravný termín. Přihlásit se na něj můžeš v záložce Vzdělání (cena {result.retakePrice.toLocaleString("cs")} Kč).

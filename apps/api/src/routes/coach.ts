@@ -14,7 +14,8 @@ import { tymyDivaka } from "../auth/divak";
 import { loadKabina, loadPlayerRelationLog } from "../coach/kabina";
 import { ensureAiManager } from "../coach/ai-manager";
 import {
-  CourseError, loadEducation, loadExam, loadMaterials, payRetake, saveAnswer, startCourse, startExam, submitExam,
+  CourseError, loadEducation, loadExam, loadMaterials, loadMaterialsStatus, payRetake, recordExamLeave, saveAnswer,
+  startCourse, startExam, submitExam,
 } from "../coach/courses";
 
 export const coachRouter = new Hono<{ Bindings: Bindings }>();
@@ -122,6 +123,13 @@ coachRouter.get("/teams/:teamId/coach/courses/:courseId/materials", async (c) =>
   return courseCall(c, `materials ${teamId}`, () => loadMaterials(c.env.DB, teamId, c.req.param("courseId")));
 });
 
+/** GET /teams/:teamId/coach/courses/:courseId/materials/status — běží test? Otevřená skripta se podle toho zavřou. */
+coachRouter.get("/teams/:teamId/coach/courses/:courseId/materials/status", async (c) => {
+  const teamId = c.req.param("teamId");
+  if (!(await tymyDivaka(c)).has(teamId)) return c.json({ error: NOT_YOUR_COURSE }, 403);
+  return courseCall(c, `materials status ${teamId}`, () => loadMaterialsStatus(c.env.DB, teamId, c.req.param("courseId")));
+});
+
 /** GET /teams/:teamId/coach/courses/:courseId/exam — běžící test, připravený test, nebo výsledek. */
 coachRouter.get("/teams/:teamId/coach/courses/:courseId/exam", async (c) => {
   const teamId = c.req.param("teamId");
@@ -152,6 +160,17 @@ coachRouter.put("/teams/:teamId/coach/courses/:courseId/exam/answer", async (c) 
   return courseCall(c, `exam answer ${teamId}`, () => saveAnswer(c.env.DB, teamId, c.req.param("courseId"), {
     attemptId: body.attemptId!, questionIndex: body.questionIndex!, answer: body.answer!,
   }));
+});
+
+/** POST /teams/:teamId/coach/courses/:courseId/exam/leave { attemptId } — odchod z okna během testu ubere čas. */
+coachRouter.post("/teams/:teamId/coach/courses/:courseId/exam/leave", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ attemptId?: string }>().catch((e) => {
+    logger.warn({ module: "coach" }, "exam leave body", e);
+    return {} as { attemptId?: string };
+  });
+  if (!body.attemptId) return c.json({ error: "Chybí pokus." }, 400);
+  return courseCall(c, `exam leave ${teamId}`, () => recordExamLeave(c.env.DB, teamId, c.req.param("courseId"), body.attemptId!));
 });
 
 /** POST /teams/:teamId/coach/courses/:courseId/exam/submit { attemptId } — odevzdání a výsledek. */

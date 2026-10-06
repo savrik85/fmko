@@ -76,6 +76,8 @@ interface AttemptRow {
   started_at: string;
   expires_at: string;
   submitted_at: string | null;
+  /** Kolikrát trenér během testu odešel z okna, každý odchod ubral čas. */
+  leaves: number;
 }
 
 interface ManagerRow {
@@ -452,6 +454,16 @@ export async function loadMaterials(db: D1Database, teamId: string, courseId: st
   };
 }
 
+/**
+ * Lehká kontrola pro otevřená skripta: běží zrovna test? Skripta otevřená
+ * v jiném okně se podle toho zavřou, stažený text by jinak zůstal na očích.
+ */
+export async function loadMaterialsStatus(db: D1Database, teamId: string, courseId: string) {
+  const course = await loadCourse(db, teamId, courseId);
+  const open = openAttempt(await loadAttempts(db, course.id));
+  return { locked: !!open && !isExpired(open), status: course.status };
+}
+
 // ── Test ──
 
 export interface ExamRunning {
@@ -463,6 +475,7 @@ export interface ExamRunning {
   questions: PublicQuestion[];
   answers: number[];
   rules: ExamRules;
+  leaves: number;
 }
 
 export interface ExamResult {
@@ -476,6 +489,7 @@ export interface ExamResult {
   review: ReviewItem[];
   retakePrice: number | null;
   reward: string | null;
+  leaves: number;
 }
 
 export interface ExamReady {
@@ -499,6 +513,7 @@ function running(a: AttemptRow, rules: ExamRules): ExamRunning {
     questions: publicQuestions(examOf(a)),
     answers: answersOf(a),
     rules,
+    leaves: a.leaves ?? 0,
   };
 }
 
@@ -522,6 +537,7 @@ function resultOf(course: CourseRow, a: AttemptRow): ExamResult {
     review: reviewFor(examOf(a), answersOf(a), reveal),
     retakePrice: course.status === "retake_available" ? course.retake_price : null,
     reward: passed ? rewardText(course) : null,
+    leaves: a.leaves ?? 0,
   };
 }
 
@@ -621,6 +637,34 @@ export async function saveAnswer(
   ).bind(`$[${i}]`, answer, attempt.id).run();
   if ((res.meta?.changes ?? 0) === 0) throw new CourseError(409, "Test už je odevzdaný.");
   return { ok: true };
+}
+
+/**
+ * Trenér během testu odešel z okna (jiný tab, jiná aplikace, zavření stránky):
+ * čas se zkrátí o COURSE_RULES.examLeavePenaltySec. Zkrácení dělá SQL nad
+ * uloženým koncem, takže dva souběžné odchody ubírají dvakrát a nic se nepřepíše.
+ */
+export async function recordExamLeave(
+  db: D1Database,
+  teamId: string,
+  courseId: string,
+  attemptId: string,
+): Promise<{ expiresAt: string; serverNow: string; leaves: number }> {
+  const attempt = await db.prepare("SELECT * FROM coach_exam_attempts WHERE id = ? AND course_id = ? AND team_id = ?")
+    .bind(attemptId, courseId, teamId).first<AttemptRow>();
+  if (!attempt) throw new CourseError(404, "Pokus nenalezen.");
+  const state = (a: AttemptRow) => ({ expiresAt: a.expires_at, serverNow: new Date().toISOString(), leaves: a.leaves ?? 0 });
+  if (attempt.submitted_at || isExpired(attempt)) return state(attempt);
+
+  await db.prepare(
+    `UPDATE coach_exam_attempts
+        SET leaves = leaves + 1, expires_at = strftime('%Y-%m-%dT%H:%M:%fZ', expires_at, ?)
+      WHERE id = ? AND submitted_at IS NULL`,
+  ).bind(`-${COURSE_RULES.examLeavePenaltySec} seconds`, attempt.id).run();
+  const updated = await db.prepare("SELECT * FROM coach_exam_attempts WHERE id = ?").bind(attempt.id).first<AttemptRow>();
+  if (!updated) throw new CourseError(404, "Pokus nenalezen.");
+  logger.info({ module: M }, `test ${courseId} pokus ${updated.attempt_no}: odchod z okna č. ${updated.leaves}, konec ${updated.expires_at}`);
+  return state(updated);
 }
 
 export async function submitExam(db: D1Database, teamId: string, courseId: string, attemptId: string): Promise<ExamResult> {
