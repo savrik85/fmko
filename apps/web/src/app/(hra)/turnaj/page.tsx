@@ -205,10 +205,11 @@ export default function TurnajPage() {
               <div className="space-y-2">
                 <div className="rounded-soft border border-pitch-300 bg-pitch-50 px-3 py-2.5 text-sm">
                   <span className="font-heading font-bold text-pitch-600">✓ Tvůj klub je přihlášený.</span>
-                  {t.startsOn && <span className="text-ink/80"> Hrát se začne {onDayLabel(t.startsOn)}.</span>}
+                  {/* onDayLabel končí tečkou za měsícem, druhá tečka za větu by byla navíc. */}
+                  {t.startsOn && <span className="text-ink/80"> Hrát se začne {onDayLabel(t.startsOn)}</span>}
                 </div>
                 {open && (
-                  <Button variant="ghost" size="sm" onClick={() => changeEntry("DELETE")} disabled={busy}>
+                  <Button variant="ghost" size="md" onClick={() => changeEntry("DELETE")} disabled={busy}>
                     {busy ? "Odhlašuji…" : "Odhlásit klub"}
                   </Button>
                 )}
@@ -233,7 +234,7 @@ export default function TurnajPage() {
               {t.venueName}, {t.city}. Neutrální půda, nikdo nehraje doma.
             </TermRow>
             <TermRow icon="📅" title="Termín">
-              {t.startsOn ? `Začíná se ${onDayLabel(t.startsOn)}. ` : ""}Hraje se každý den, turnaj potrvá 7 až 12 dní.
+              {t.startsOn ? `Začíná se ${onDayLabel(t.startsOn)} ` : ""}Hraje se každý den, turnaj potrvá 7 až 12 dní.
             </TermRow>
             <TermRow icon="🏆" title="Formát">
               Formát a přesnou délku upřesníme po uzávěrce podle počtu přihlášených klubů.
