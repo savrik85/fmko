@@ -167,9 +167,10 @@ tournamentRouter.post("/teams/:teamId/tournament/entry", async (c) => {
 
   // Potvrzení jen při skutečně nové přihlášce, ne při dvojkliku.
   if (res.meta.changes > 0) {
-    const start = tournament.starts_on ? ` Hrát se začne ${formatDay(tournament.starts_on)}.` : "";
+    // formatDay končí tečkou za měsícem („14. 10."), druhou tečku za větu nepřidávat.
+    const start = tournament.starts_on ? ` Hrát se začne ${formatDay(tournament.starts_on)}` : "";
     const body =
-      `Přihláška do ${tournament.edition}. ročníku turnaje ${tournament.name} je přijata. ` +
+      `${tournament.name}, ${tournament.edition}. ročník: přihláška je přijata. ` +
       `Uzávěrka je ${formatPragueDeadline(tournament.registration_deadline)}, pak proběhne los.${start} ` +
       `Dějiště: ${tournament.venue_name}, ${tournament.city}. Všechny náklady hradíme my, vy se soustřeďte na fotbal.`;
     await sendSystemSMS(db, teamId, tournament.sponsor, body)
