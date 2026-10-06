@@ -12,6 +12,20 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-06",
+    emoji: "📋",
+    title: "Úkoly pro zaměstnance",
+    items: [
+      "Zaměstnancům můžeš nově zadávat konkrétní práci. Svůj bonus dávají dál, úkol je práce navíc. U každého v Zaměstnancích najdeš tlačítko Zadat úkol, skaut má dál své vlastní úkoly.",
+      "Před ligovým zápasem: lékař udělá prohlídku a v zápase je menší šance na zranění, masér ráno promasíruje až pět hráčů, asistent nacvičí standardky a kondiční trenér rozvrhne zátěž tak, aby hráčům vydržely síly do konce.",
+      "Jen na domácí zápas: správce hřiště připraví trávník, šéf fanklubu svolá fanoušky a nachystá choreo a obsluha po zápase udělá u bufetu grilovačku, ze které fanoušci odcházejí spokojenější.",
+      "Po zápasovém úkolu má zaměstnanec týden oddech, takže si vyber, na který zápas ho nasadíš. Zápasové úkoly zatím platí jen pro ligu, ne pro pohár.",
+      "Delší úkoly s konkrétním hráčem: lékař se každý den stará o zraněného, který se pak uzdraví dřív, a pozná, když hráč zranění jen předstírá. Psycholog se týden věnuje jednomu hráči, zvedne mu náladu a uklidní ho, když chce pryč. Trenér mládeže a trenér brankářů připraví hráči vlastní plán, se kterým se na tréninku zlepšuje rychleji.",
+      "Ekonom dva týdny obchází firmy v okrese a majitelé jsou pak při jednání se sponzory vstřícnější.",
+      "Úkol, který ještě nezačal, zrušíš a dostaneš celé peníze zpět. Za rozběhnutý úkol se nevrací nic. Když zaměstnance během dlouhého úkolu propustíš nebo přeřadíš jinam, vrátí se peníze jen za dny, které ještě neodpracoval. Jak úkol dopadl, ti zaměstnanec napíše do telefonu.",
+    ],
+  },
+  {
     date: "2026-10-05",
     emoji: "🌐",
     title: "Veřejný klubový web: sdílej ho s kýmkoliv",
