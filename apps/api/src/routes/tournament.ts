@@ -1,12 +1,14 @@
 /**
  * Turnaj P-Mobile — každoroční turnaj přihlášených lidských klubů na konci sezóny.
- * Etapa 1: ročník a přihlášky (přihlásit / odhlásit do uzávěrky, seznam přihlášených).
+ * Etapa 1: ročník a přihlášky (přihlásit / odhlásit do uzávěrky, seznam přihlášených)
+ * a pozvánka od sponzora všem klubům (admin).
  */
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
-import { requireTeamOwnership } from "../auth/middleware";
+import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { sendSystemSMS } from "../messaging/system-sms";
+import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
 import { logger } from "../lib/logger";
 
 const M = "tournament";
@@ -14,6 +16,10 @@ const M = "tournament";
 const tournamentRouter = new Hono<{ Bindings: Bindings }>();
 
 tournamentRouter.use("/teams/:teamId/tournament/*", requireTeamOwnership);
+tournamentRouter.use("/admin/tournament/*", requireAdmin);
+
+// SMS se tlačítkem „Otevřít turnaj" v telefonu.
+const SMS_META = { type: "tournament" };
 
 interface TournamentRow {
   id: string;
@@ -21,6 +27,7 @@ interface TournamentRow {
   name: string;
   sponsor: string;
   city: string;
+  city_locative: string | null;
   venue_name: string;
   status: string;
   registration_deadline: string;
@@ -31,6 +38,7 @@ interface TournamentRow {
   prize_finalist: number;
   prize_winner: number;
   league_matches: number | null;
+  invited_at: string | null;
 }
 
 interface TeamRow {
@@ -55,8 +63,10 @@ function ineligibleReason(team: TeamRow): string | null {
   return null;
 }
 
-// Den v týdnu s předložkou (4. pád): „v pondělí", „ve středu".
+// Den v týdnu s předložkou: „v pondělí" (kdy), „do pondělí" (dokdy), „od středy" (odkdy).
 const ON_WEEKDAY = ["v neděli", "v pondělí", "v úterý", "ve středu", "ve čtvrtek", "v pátek", "v sobotu"];
+const UNTIL_WEEKDAY = ["do neděle", "do pondělí", "do úterý", "do středy", "do čtvrtka", "do pátku", "do soboty"];
+const FROM_WEEKDAY = ["od neděle", "od pondělí", "od úterý", "od středy", "od čtvrtka", "od pátku", "od soboty"];
 
 /** „ve 20:00" / „v 18:00" — „ve" před dvě, tři, čtyři, dvanáct a dvacet. */
 function atTime(hour: number, minute: string): string {
@@ -64,20 +74,64 @@ function atTime(hour: number, minute: string): string {
   return `${ve ? "ve" : "v"} ${hour}:${minute}`;
 }
 
-/** „v pondělí 12. 10. ve 20:00" v pražském čase. */
-function formatPragueDeadline(iso: string): string {
+/** Den v týdnu, datum a čas v pražském čase (uzávěrka je skutečný čas, ne herní). */
+function pragueParts(iso: string) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Prague", weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
   }).formatToParts(new Date(iso));
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  const weekdayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
-  return `${ON_WEEKDAY[weekdayIdx] ?? ""} ${get("day")}. ${get("month")}. ${atTime(Number(get("hour")), get("minute"))}`.trim();
+  return {
+    weekday: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday")),
+    date: `${get("day")}. ${get("month")}.`,
+    hour: Number(get("hour")),
+    minute: get("minute"),
+  };
+}
+
+/** „v pondělí 12. 10. ve 20:00" */
+function formatPragueDeadline(iso: string): string {
+  const p = pragueParts(iso);
+  return `${ON_WEEKDAY[p.weekday] ?? ""} ${p.date} ${atTime(p.hour, p.minute)}`.trim();
+}
+
+/** „do pondělí 12. 10. (20:00)" */
+function untilDeadline(iso: string): string {
+  const p = pragueParts(iso);
+  return `${UNTIL_WEEKDAY[p.weekday] ?? "do"} ${p.date} (${p.hour}:${p.minute})`;
 }
 
 /** „ve středu 14. 10." z data YYYY-MM-DD. */
 function formatDay(ymd: string): string {
   const d = new Date(`${ymd}T12:00:00Z`);
   return `${ON_WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()}. ${d.getUTCMonth() + 1}.`;
+}
+
+/** „od středy 14. 10." z data YYYY-MM-DD. */
+function fromDay(ymd: string): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  return `${FROM_WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()}. ${d.getUTCMonth() + 1}.`;
+}
+
+/** „150 000 Kč" */
+function kc(n: number): string {
+  return `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} Kč`;
+}
+
+/** „Turnaj P-Mobile" → „Turnaje P-Mobile" (2. pád do věty „ročník …"). */
+function nameGenitive(name: string): string {
+  return name.startsWith("Turnaj ") ? `Turnaje ${name.slice("Turnaj ".length)}` : name;
+}
+
+/** Výchozí text pozvánky od sponzora. Admin ho před odesláním vidí a může upravit. */
+function defaultInviteMessage(t: TournamentRow): string {
+  const where = t.city_locative ?? `ve městě ${t.city}`;
+  const when = t.starts_on ? ` ${fromDay(t.starts_on)}` : "";
+  return (
+    `Dobrý den, tady ${t.sponsor}! Zveme váš klub na ${t.edition}. ročník ${nameGenitive(t.name)}. ` +
+    `Hraje se ${where}${when}, každý den, 7 až 12 dní. ` +
+    `Za každý získaný bod vyplácíme ${kc(t.point_reward)}, vítěz bere ${kc(t.prize_winner)} a trofej. ` +
+    `Všechny náklady hradíme my. Přihlásit se můžete ${untilDeadline(t.registration_deadline)} na stránce Turnaj.`
+  );
 }
 
 /**
@@ -173,7 +227,7 @@ tournamentRouter.post("/teams/:teamId/tournament/entry", async (c) => {
       `${tournament.name}, ${tournament.edition}. ročník: přihláška je přijata. ` +
       `Uzávěrka je ${formatPragueDeadline(tournament.registration_deadline)}, pak proběhne los.${start} ` +
       `Dějiště: ${tournament.venue_name}, ${tournament.city}. Všechny náklady hradíme my, vy se soustřeďte na fotbal.`;
-    await sendSystemSMS(db, teamId, tournament.sponsor, body)
+    await sendSystemSMS(db, teamId, tournament.sponsor, body, SMS_META)
       .catch((e) => logger.warn({ module: M }, `confirmation sms for team ${teamId}`, e));
   }
 
@@ -191,6 +245,80 @@ tournamentRouter.delete("/teams/:teamId/tournament/entry", async (c) => {
     .bind(check.tournament.id, teamId).run();
 
   return c.json({ ok: true });
+});
+
+/**
+ * Lidské A-týmy, které se zatím nepřihlásily — adresáti pozvánky.
+ * U21 sdílí user_id s A-týmem, proto filtr na team_type.
+ */
+async function inviteRecipients(db: D1Database, tournamentId: string): Promise<string[]> {
+  const rows = await db.prepare(
+    `SELECT t.id FROM teams t
+      WHERE t.team_type = 'senior' AND t.user_id IS NOT NULL AND t.user_id != 'ai'
+        AND t.id NOT IN (SELECT team_id FROM tournament_entries WHERE tournament_id = ?)`
+  ).bind(tournamentId).all<{ id: string }>();
+  return rows.results.map((r) => r.id);
+}
+
+/** Admin: náhled pozvánky — výchozí text, počet adresátů, jestli už odešla. */
+tournamentRouter.get("/admin/tournament/invite", async (c) => {
+  const db = c.env.DB;
+  const t = await loadCurrentTournament(db);
+  if (!t) return c.json({ error: "Turnaj není vypsaný" }, 404);
+  const recipients = await inviteRecipients(db, t.id);
+  return c.json({
+    tournament: { id: t.id, edition: t.edition, name: t.name, sponsor: t.sponsor },
+    defaultMessage: defaultInviteMessage(t),
+    recipients: recipients.length,
+    invitedAt: t.invited_at,
+  });
+});
+
+/**
+ * Admin: rozeslat pozvánku od sponzora (SMS + push) všem nepřihlášeným lidským klubům.
+ * Jen jednou za ročník — claim přes invited_at, ať dvojklik ani opakovaný fetch
+ * nepošle všem SMS dvakrát.
+ */
+tournamentRouter.post("/admin/tournament/invite", async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{ message?: string }>().catch((e) => {
+    logger.warn({ module: M }, "invite: invalid body", e);
+    return {} as { message?: string };
+  });
+
+  const t = await loadCurrentTournament(db);
+  if (!t) return c.json({ error: "Turnaj není vypsaný" }, 404);
+  if (!isRegistrationOpen(t, new Date())) return c.json({ error: "Přihlášky jsou uzavřené" }, 400);
+
+  const message = body.message?.trim() || defaultInviteMessage(t);
+
+  const claim = await db.prepare("UPDATE tournaments SET invited_at = ? WHERE id = ? AND invited_at IS NULL")
+    .bind(new Date().toISOString(), t.id).run();
+  if (claim.meta.changes === 0) {
+    return c.json({ error: `Pozvánka už odešla (${t.invited_at ?? "dříve"})` }, 409);
+  }
+
+  const pushTitle = `${t.sponsor}: pozvánka na turnaj`;
+  const pushBody = message.length > 120 ? `${message.slice(0, 117)}...` : message;
+  let sent = 0;
+  let pushed = 0;
+  for (const teamId of await inviteRecipients(db, t.id)) {
+    await sendSystemSMS(db, teamId, t.sponsor, message, SMS_META)
+      .then(() => { sent++; })
+      .catch((e) => logger.warn({ module: M }, `invite sms for team ${teamId}`, e));
+
+    // Push respektuje vypnuté systémové notifikace; selhání nesmí zastavit rozesílání.
+    const prefs = await getNotificationPreferences(db, teamId)
+      .catch((e) => { logger.warn({ module: M }, `invite push prefs for team ${teamId}`, e); return null; });
+    if (prefs?.system !== false) {
+      await sendWebPushToTeam(c.env, teamId, pushTitle, pushBody, "/turnaj")
+        .then(() => { pushed++; })
+        .catch((e) => logger.warn({ module: M }, `invite push for team ${teamId}`, e));
+    }
+  }
+
+  logger.info({ module: M }, `invite sent: ${sent} sms, ${pushed} push (tournament ${t.id})`);
+  return c.json({ ok: true, sent, pushed });
 });
 
 export default tournamentRouter;
