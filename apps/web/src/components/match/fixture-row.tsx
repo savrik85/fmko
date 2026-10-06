@@ -93,7 +93,8 @@ function Board({ score, kickoff, winner }: { score?: FixtureScore | null; kickof
     <span className={`tabular-nums ${winner && winner !== side ? "text-white/55" : "text-white"}`}>{v}</span>
   );
   return (
-    <span className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 rounded-md bg-ink px-2.5 py-1.5 sm:py-0 sm:h-9 min-w-[2.5rem] sm:min-w-[3.75rem] font-heading font-[800] text-lg leading-none">
+    // Na mobilu čísla sedí přesně na řádky klubů (znak 28 px + mezera 8 px → středy 36 px od sebe).
+    <span className="flex flex-col sm:flex-row items-center justify-center gap-[18px] sm:gap-1.5 rounded-md bg-ink px-2.5 py-[5px] sm:py-0 sm:h-9 min-w-[2.5rem] sm:min-w-[3.75rem] font-heading font-[800] text-lg leading-none">
       {digit(score.home, "home")}
       <span className="hidden sm:inline text-white/40 font-bold">:</span>
       {digit(score.away, "away")}
@@ -103,7 +104,9 @@ function Board({ score, kickoff, winner }: { score?: FixtureScore | null; kickof
 
 export function FixtureRow({ home, away, score, kickoff, winner, href, hrefLabel, meta, accent }: FixtureRowProps) {
   const state = (side: "home" | "away") => (!score || !winner ? "even" : winner === side ? "win" : "loss");
-  const pens = score && score.homePens != null && score.awayPens != null;
+  // Pohár ukládá 0:0 i bez rozstřelu, penalty dávají smysl jen po remíze.
+  const pens = !!score && score.home === score.away && score.homePens != null && score.awayPens != null
+    && (score.homePens > 0 || score.awayPens > 0);
   const board = <Board score={score} kickoff={kickoff} winner={winner} />;
   const boardEl = href
     ? <Link href={href} aria-label={hrefLabel ?? `${home.name} proti ${away.name}`} className="shrink-0 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pitch-500 hover:opacity-90">{board}</Link>
