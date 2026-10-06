@@ -37,6 +37,7 @@ import {
 } from "./negotiation-db";
 import { DEADLINE_KINDS } from "./promise-kinds";
 import { validateProposal } from "./proposal";
+import { clubPrefixOf } from "@okresni-masina/shared";
 
 export interface PaidConstruction { kind: "stadium" | "equipment"; key: string; level: number; cost: number }
 /** Výpovědní pokuta u předchozího sponzora, kterou zaplatil nový sponzor (key = id staré smlouvy). */
@@ -206,7 +207,8 @@ export async function applyMainSponsorRename(
       .catch((e) => { logger.warn({ module: "sponsors", teamId }, "fetch village for sponsor rename", e); return null; })
     : null;
   const oldName = teamInfo?.name ?? "";
-  const newName = `FK ${sponsorName} ${village?.name ?? ""}`.trim();
+  // Zkratku si klub vybral sám (FK, SK, AC…), sponzor mění jen prostředek názvu.
+  const newName = `${clubPrefixOf(oldName) ?? "FK"} ${sponsorName} ${village?.name ?? ""}`.trim();
   await db.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ? WHERE id = ?")
     .bind(newName, season, teamId).run();
   if (!opts.freeSwitch) {

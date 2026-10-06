@@ -19,7 +19,7 @@ import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
 import { suspensionSms, injurySms } from "../events/injury-sms";
-import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, marketValue, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
+import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, marketValue, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
 
 /**
  * Povrchy areálu, které má klub ZAPLACENÉ.
@@ -2954,7 +2954,8 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   if (category === "main") {
     // Návrat k původnímu názvu — fanoušci z toho nadšení nejsou (-2).
     const oldName = (await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>())?.name ?? "";
-    const defaultName = `SK ${village?.name ?? ""}`.trim();
+    // Zkratka klubu zůstává, ze jména zmizí jen sponzor.
+    const defaultName = `${clubPrefixOf(oldName) ?? "SK"} ${village?.name ?? ""}`.trim();
     await c.env.DB.prepare("UPDATE teams SET name = ? WHERE id = ?")
       .bind(defaultName, teamId).run();
     {

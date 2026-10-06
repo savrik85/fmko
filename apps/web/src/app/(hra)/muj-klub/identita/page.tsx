@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
 import { Spinner, Card, CardHeader, CardBody, SectionLabel, StickyActions } from "@/components/ui";
+import { withClubPrefix, type ClubPrefix } from "@okresni-masina/shared";
 
 interface ClubIdentity {
   identity: {
@@ -15,6 +16,13 @@ interface ClubIdentity {
     foundingStory: string | null;
     colorsMeaning: string | null;
   };
+}
+
+interface PrefixInfo {
+  name: string;
+  prefix: ClubPrefix | null;
+  options: ClubPrefix[];
+  canChange: boolean;
 }
 
 function AiButton({ onClick, loading, label = "Vygenerovat přes AI" }: { onClick: () => void; loading: boolean; label?: string }) {
@@ -31,7 +39,7 @@ function AiButton({ onClick, loading, label = "Vygenerovat přes AI" }: { onClic
 }
 
 export default function IdentitaPage() {
-  const { teamId } = useTeam();
+  const { teamId, setTeam } = useTeam();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,6 +53,10 @@ export default function IdentitaPage() {
 
   const [genLoading, setGenLoading] = useState<"motto" | "story" | "colors" | null>(null);
 
+  // Zkratka v názvu (FK, SK, AC…): jen ze seznamu, jednou za sezónu.
+  const [prefixInfo, setPrefixInfo] = useState<PrefixInfo | null>(null);
+  const [prefix, setPrefix] = useState<ClubPrefix | null>(null);
+
   useEffect(() => {
     if (!teamId) return;
     apiFetch<ClubIdentity>(`/api/teams/${teamId}/club`).then((data) => {
@@ -55,6 +67,10 @@ export default function IdentitaPage() {
       setColorsMeaning(data.identity.colorsMeaning ?? "");
       setLoading(false);
     }).catch((e) => { console.error("load identity:", e); setLoading(false); });
+    apiFetch<PrefixInfo>(`/api/teams/${teamId}/club/prefix`).then((data) => {
+      setPrefixInfo(data);
+      setPrefix(data.prefix);
+    }).catch((e) => console.error("load club prefix:", e));
   }, [teamId]);
 
   async function handleGenerate(kind: "motto" | "story" | "colors") {
@@ -81,6 +97,15 @@ export default function IdentitaPage() {
     if (!teamId || saving) return;
     setSaving(true);
     try {
+      if (prefixInfo && prefix && prefix !== prefixInfo.prefix) {
+        const res = await apiFetch<{ name: string }>(`/api/teams/${teamId}/club/prefix`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prefix }),
+        });
+        setPrefixInfo({ ...prefixInfo, name: res.name, prefix, canChange: false });
+        setTeam(teamId, res.name);
+      }
       const yearNum = foundingYear.trim() ? parseInt(foundingYear, 10) : null;
       await apiFetch(`/api/teams/${teamId}/club/identity`, {
         method: "PATCH",
@@ -110,8 +135,50 @@ export default function IdentitaPage() {
       <div className="mb-5">
         <Link href="/muj-klub" className="text-sm text-muted hover:text-ink">← Zpět na Klubový web</Link>
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Identita klubu</h1>
-        <p className="text-sm text-muted mt-0.5">Přezdívka, motto, rok založení, příběh a význam barev. AI generace je zdarma a neomezená.</p>
+        <p className="text-sm text-muted mt-0.5">Zkratka v názvu, přezdívka, motto, rok založení, příběh a význam barev. AI generace je zdarma a neomezená.</p>
       </div>
+
+      {prefixInfo && (
+        <Card className="mb-4">
+          <CardHeader>
+            <h2 className="font-heading font-bold text-base text-ink flex items-center gap-2">
+              <span>{"\u{1F6E1}️"}</span> Zkratka v názvu klubu
+            </h2>
+          </CardHeader>
+          <CardBody className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              {prefixInfo.options.map((p) => {
+                const active = prefix === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPrefix(p)}
+                    disabled={!prefixInfo.canChange}
+                    aria-pressed={active}
+                    className={`min-w-[3.5rem] px-3 py-2 rounded-soft border text-sm font-heading font-bold transition-colors disabled:opacity-60 ${
+                      active ? "border-pitch-500 bg-pitch-500 text-white" : "border-gray-200 text-ink hover:border-pitch-300"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-sm">
+              <span className="text-muted">Název klubu: </span>
+              <span className="font-heading font-bold text-base text-ink">
+                {prefix ? withClubPrefix(prefixInfo.name, prefix) : prefixInfo.name}
+              </span>
+            </div>
+            <div className="text-sm text-muted">
+              {prefixInfo.canChange
+                ? "Mění se jen zkratka, sponzor a obec v názvu zůstávají. Změnit ji jde zdarma, jednou za sezónu."
+                : "Zkratku už klub v téhle sezóně měnil. Další změna půjde v příští sezóně."}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       <Card className="mb-4">
         <CardHeader>
