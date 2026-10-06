@@ -240,7 +240,7 @@ export default function TurnajPage() {
               Formát a přesnou délku upřesníme po uzávěrce podle počtu přihlášených klubů.
             </TermRow>
             <TermRow icon="🔄" title="Kádr">
-              Zápas je každý den, takže se vyplatí střídat. Šanci dostanou i hráči z U21.
+              Zápas je každý den, takže se vyplatí střídat celý kádr A-týmu.
             </TermRow>
             <TermRow icon="💸" title="Náklady">
               Všechny náklady spojené s turnajem hradí {t.sponsor}.
