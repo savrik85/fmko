@@ -11,6 +11,7 @@ import { CLUB_PREFIXES, clubPrefixOf, isClubPrefix, slugifyTeamName, withClubPre
 import { logger } from "../lib/logger";
 
 const M = "club-prefix";
+const MAX_NAME_LENGTH = 50;
 
 const clubPrefixRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -70,6 +71,19 @@ clubPrefixRouter.patch("/teams/:teamId/club/prefix", async (c) => {
 
   const oldName = team.name;
   const newName = withClubPrefix(oldName, prefix);
+  // Stejný strop jako ruční přejmenování (POST /teams/:id/rename).
+  if (newName.length > MAX_NAME_LENGTH) return c.json({ error: `Název by měl víc než ${MAX_NAME_LENGTH} znaků` }, 400);
+
+  // Nový název nesmí patřit jinému klubu ani převzít adresu jeho webu (vlastní adresa,
+  // stará adresa po přejmenování) — jinak by odkazy na cizí web vedly sem.
+  const newSlug = slugifyTeamName(newName);
+  const clash = await db.prepare(
+    `SELECT 1 FROM teams WHERE id <> ?1 AND team_type = 'senior' AND lower(name) = lower(?2)
+     UNION ALL SELECT 1 FROM team_websites WHERE team_id <> ?1 AND custom_slug = ?3
+     UNION ALL SELECT 1 FROM team_website_slug_aliases WHERE team_id <> ?1 AND slug = ?3
+     LIMIT 1`
+  ).bind(teamId, newName, newSlug).first();
+  if (clash) return c.json({ error: "Takový název už má jiný klub" }, 409);
 
   // Podmínka na starý název: dvě souběžné změny nepřepíšou jedna druhou.
   const res = await db.prepare("UPDATE teams SET name = ?, prefix_changed_season = ? WHERE id = ? AND name = ?")
