@@ -337,6 +337,8 @@ export const COURSE_RULES = {
   retakeShare: 0.2,
   /** Kolik herních dní po konci kurzu je na test (a na opravný termín). */
   examWindowDays: 7,
+  /** O kolik sekund se zkrátí čas testu za každý odchod z okna (jiný tab, jiná aplikace). */
+  examLeavePenaltySec: 60,
   maxAttrCoursesPerSeason: 3,
   maxLicenceCoursesPerSeason: 1,
 } as const;
