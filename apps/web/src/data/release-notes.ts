@@ -13,6 +13,16 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-10-06",
+    emoji: "🛡️",
+    title: "Zkratka v názvu klubu",
+    items: [
+      "Klub si může vybrat zkratku na začátku názvu: FK, SK, AC, FC, TJ, AFK, SFK, MFK nebo SC. Najdeš ji v Klubovém webu v sekci Identita klubu.",
+      "Mění se jen zkratka, jméno sponzora a obce v názvu zůstane. Z FK Rohlík Břevnov se tak stane třeba AC Rohlík Břevnov.",
+      "Změna je zdarma a jde udělat jednou za sezónu. Zkratka ti zůstane, i když podepíšeš nového hlavního sponzora.",
+    ],
+  },
+  {
+    date: "2026-10-06",
     emoji: "📋",
     title: "Úkoly pro zaměstnance",
     items: [
