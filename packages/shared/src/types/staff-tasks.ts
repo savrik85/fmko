@@ -155,3 +155,24 @@ export interface StaffTaskView {
   resultText: string | null;
   endReason: string | null;
 }
+
+/** Hráč v nabídce úkolu: jen to, podle čeho manažer vybírá. */
+export interface StaffTaskPlayer {
+  id: string;
+  name: string;
+  age: number;
+  position: string;
+  isU21: boolean;
+  rating: number | null;
+  injuryDays: number | null;
+  injuryDaysTotal: number | null;
+  /** Popis zranění, jak ho vidí hráč („podvrtnutý kotník“). */
+  injuryName: string | null;
+  condition: number | null;
+  morale: number | null;
+  unrest: number | null;
+  /** Sestava na příští ligový zápas: `start` základ, `bench` lavička, `out` mimo, `null` neví se (sestava není, lavičku vybere automat). */
+  lineup: "start" | "bench" | "out" | null;
+  /** Sezení s psychologem jde znovu až od tohoto herního dne (YYYY-MM-DD), jinak `null`. */
+  psychAgainFrom: string | null;
+}

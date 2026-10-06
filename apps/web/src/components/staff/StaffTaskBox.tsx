@@ -16,21 +16,10 @@ import {
   staffTaskCost,
   staffTasksForRole,
   type StaffRole,
+  type StaffTaskPlayer,
   type StaffTaskType,
   type StaffTaskView,
 } from "@okresni-masina/shared";
-
-export interface StaffTaskPlayer {
-  id: string;
-  name: string;
-  age: number;
-  position: string;
-  isU21: boolean;
-  injuryDays: number | null;
-  condition: number | null;
-  morale: number | null;
-  unrest: number | null;
-}
 
 export interface StaffTasksData {
   gameDate: string;
@@ -72,24 +61,82 @@ function eligiblePlayers(type: StaffTaskType, players: StaffTaskPlayer[]): Staff
   }
 }
 
-function playerHint(type: StaffTaskType, p: StaffTaskPlayer): string {
-  switch (type) {
-    case "doctor_injury_care": return `zraněný ${p.injuryDays} ${daysWord(p.injuryDays ?? 0)}`;
-    case "massage_prep": return p.condition !== null ? `kondice ${p.condition}` : "";
-    case "psych_session": return [
-      p.morale !== null ? `morálka ${p.morale}` : "",
-      (p.unrest ?? 0) > 0 ? `chce pryč (${p.unrest})` : "",
-    ].filter(Boolean).join(", ");
-    default: return `${p.age} let`;
-  }
+/** Stejné prahy a ikony jako v Kádru. */
+function toneOf(v: number): string {
+  if (v >= 80) return "text-pitch-500";
+  if (v >= 50) return "text-gold-600";
+  return "text-card-red";
 }
 
-/** Komu se sezení / plán nejvíc hodí, ten jde nahoru. */
+function moraleIcon(v: number): string {
+  if (v >= 80) return "😊";
+  if (v >= 60) return "🙂";
+  if (v >= 40) return "😐";
+  if (v >= 20) return "😞";
+  return "😡";
+}
+
+const LINEUP_LABEL: Record<"start" | "bench" | "out", { text: string; tone: string }> = {
+  start: { text: "v základu", tone: "text-pitch-500" },
+  bench: { text: "na lavičce", tone: "text-ink" },
+  out: { text: "mimo sestavu", tone: "text-muted" },
+};
+
+interface Info { text: string; tone: string }
+
+/** Co u hráče rozhoduje o tomhle úkolu. */
+function playerInfo(type: StaffTaskType, p: StaffTaskPlayer): Info[] {
+  const out: Info[] = [];
+  const ageRating = () => {
+    out.push({ text: `${p.age} let`, tone: "text-muted" });
+    if (p.rating !== null) out.push({ text: `hodnocení ${p.rating}`, tone: "text-ink" });
+  };
+  switch (type) {
+    case "doctor_injury_care": {
+      const days = p.injuryDays ?? 0;
+      out.push({ text: `🩹 ${p.injuryName ?? "zranění"}`, tone: "text-card-red" });
+      out.push({ text: `zbývá ${days} ${daysWord(days)}${p.injuryDaysTotal ? ` z ${p.injuryDaysTotal}` : ""}`, tone: "text-ink" });
+      break;
+    }
+    case "massage_prep":
+      if (p.condition !== null) out.push({ text: `🔋 kondice ${p.condition} %`, tone: toneOf(p.condition) });
+      if (p.lineup) out.push(LINEUP_LABEL[p.lineup]);
+      break;
+    case "psych_session":
+      if (p.morale !== null) out.push({ text: `${moraleIcon(p.morale)} nálada ${p.morale} %`, tone: toneOf(p.morale) });
+      if ((p.unrest ?? 0) > 0) out.push({ text: `🚪 chce pryč (nespokojenost ${p.unrest})`, tone: "text-card-red" });
+      break;
+    case "youth_plan":
+    case "gk_plan":
+      ageRating();
+      break;
+    default:
+      out.push({ text: `${p.age} let`, tone: "text-muted" });
+  }
+  return out;
+}
+
+/** Proč hráče na tenhle úkol teď vybrat nejde, jinak `null`. Server to hlídá taky. */
+function unavailableReason(type: StaffTaskType, p: StaffTaskPlayer, data: StaffTasksData): string | null {
+  const same = data.tasks.find((t) => t.status === "active" && t.taskType === type && t.targetPlayerId === p.id);
+  if (same) return `tenhle úkol už má, do ${czDate(same.endsGameDate)}`;
+  if (type === "psych_session" && p.psychAgainFrom && p.psychAgainFrom > data.gameDate) {
+    return `u psychologa byl nedávno, znovu od ${czDate(p.psychAgainFrom)}`;
+  }
+  return null;
+}
+
+const LINEUP_ORDER = { start: 0, bench: 1, out: 2 } as const;
+
+/** Komu se úkol nejvíc hodí, ten jde nahoru. */
 function sortForTask(type: StaffTaskType, players: StaffTaskPlayer[]): StaffTaskPlayer[] {
   const arr = [...players];
-  if (type === "massage_prep") arr.sort((a, b) => (a.condition ?? 100) - (b.condition ?? 100));
+  if (type === "massage_prep") {
+    arr.sort((a, b) => (LINEUP_ORDER[a.lineup ?? "out"] - LINEUP_ORDER[b.lineup ?? "out"]) || (a.condition ?? 100) - (b.condition ?? 100));
+  }
   if (type === "psych_session") arr.sort((a, b) => (b.unrest ?? 0) - (a.unrest ?? 0) || (a.morale ?? 50) - (b.morale ?? 50));
   if (type === "doctor_injury_care") arr.sort((a, b) => (b.injuryDays ?? 0) - (a.injuryDays ?? 0));
+  if (type === "youth_plan") arr.sort((a, b) => a.age - b.age || (b.rating ?? 0) - (a.rating ?? 0));
   return arr;
 }
 
@@ -163,7 +210,12 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
     : null;
 
   const def = picked ? STAFF_TASK_DEFS[picked] : null;
-  const candidates = picked ? sortForTask(picked, eligiblePlayers(picked, data.players)) : [];
+  const candidates = picked
+    ? sortForTask(picked, eligiblePlayers(picked, data.players))
+      .map((p) => ({ p, blockedBy: unavailableReason(picked, p, data) }))
+      .sort((a, b) => Number(!!a.blockedBy) - Number(!!b.blockedBy))
+    : [];
+  const noLineupYet = picked === "massage_prep" && candidates.length > 0 && candidates.every(({ p }) => p.lineup === null);
   const blocked = def ? (def.kind === "match" && (!data.nextMatch || (def.homeOnly && !data.nextMatch.isHome))) : false;
   const ready = !!def && !blocked
     && (def.target !== "player" || !!playerId)
@@ -253,22 +305,26 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
                 <div className="text-sm font-heading font-bold">
                   {def.target === "players" ? `Vyber hráče (nejvýš ${def.maxPlayers})` : "Vyber hráče"}
                 </div>
+                {noLineupYet && (
+                  <div className="text-sm text-muted">Sestavu na zápas ještě nemáš. Masáž dej hráčům, se kterými počítáš.</div>
+                )}
                 {candidates.length === 0 ? (
                   <div className="text-sm text-muted">
                     {picked === "doctor_injury_care" ? "Nikdo není zraněný." : picked === "gk_plan" ? "V klubu není brankář." : "V klubu není nikdo vhodný."}
                   </div>
                 ) : (
                   <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-soft">
-                    {candidates.map((p) => {
+                    {candidates.map(({ p, blockedBy }) => {
                       const selected = def.target === "players" ? playerIds.includes(p.id) : playerId === p.id;
                       const full = def.target === "players" && !selected && playerIds.length >= (def.maxPlayers ?? 5);
+                      const disabled = full || !!blockedBy;
                       return (
-                        <label key={p.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${selected ? "bg-pitch-500/10" : ""} ${full ? "opacity-50" : ""}`}>
+                        <label key={p.id} className={`flex items-center gap-3 px-3 py-2 ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${selected ? "bg-pitch-500/10" : ""}`}>
                           <input
                             type={def.target === "players" ? "checkbox" : "radio"}
                             name={`task-player-${member.id}`}
                             checked={selected}
-                            disabled={full}
+                            disabled={disabled}
                             onChange={() => {
                               if (def.target === "players") {
                                 setPlayerIds((cur) => cur.includes(p.id) ? cur.filter((x) => x !== p.id) : [...cur, p.id]);
@@ -278,7 +334,11 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
                           <span className="text-sm font-heading text-muted w-9 shrink-0">{POSITION_LABEL[p.position] ?? p.position}</span>
                           <span className="flex-1 min-w-0">
                             <span className="text-base font-bold truncate block">{p.name}{p.isU21 ? " (U21)" : ""}</span>
-                            <span className="text-sm text-muted">{playerHint(picked!, p)}</span>
+                            <span className="text-sm flex flex-wrap gap-x-2">
+                              {blockedBy
+                                ? <span className="text-muted">{blockedBy}</span>
+                                : playerInfo(picked!, p).map((i) => <span key={i.text} className={i.tone}>{i.text}</span>)}
+                            </span>
                           </span>
                         </label>
                       );

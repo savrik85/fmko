@@ -17,7 +17,7 @@
 import {
   ROLE_DEFS, STAFF_TASK_DEFS, STAFF_TASK_MATCH_COOLDOWN_DAYS, PSYCH_SESSION_PLAYER_GAP_DAYS,
   YOUTH_PLAN_AGE_MAX, staffTaskCost,
-  type StaffRole, type StaffTaskType, type StaffTaskView,
+  type StaffRole, type StaffTaskType, type StaffTaskView, type StaffTaskPlayer,
 } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { logConditionStmt } from "../lib/condition-log";
@@ -790,6 +790,77 @@ export async function runStaffTasks(db: D1Database, todayIso: string): Promise<S
 }
 
 // ─── Pohled pro API ───────────────────────────────────────────────────────────
+
+/** Kdo je v sestavě áčka na zápas: přesná sestava na kolo, jinak poslední ruční (jako match-runner). */
+async function loadLineupIds(db: D1Database, teamId: string, matchId: string): Promise<{ start: Set<string>; bench: Set<string> | null } | null> {
+  const row = await db.prepare(
+    `SELECT l.players_data, l.bench_data FROM lineups l
+      WHERE l.team_id = ?1 AND (l.calendar_id = (SELECT calendar_id FROM matches WHERE id = ?2) OR l.is_auto = 0)
+      ORDER BY l.calendar_id = (SELECT calendar_id FROM matches WHERE id = ?2) DESC, l.is_auto ASC, l.submitted_at DESC, l.id ASC
+      LIMIT 1`,
+  ).bind(teamId, matchId).first<{ players_data: string | null; bench_data: string | null }>()
+    .catch((e) => { logger.warn({ module: MODULE }, `sestava ${teamId}`, e); return null; });
+  if (!row) return null;
+  const start = parseJson<{ playerId?: string }[]>(row.players_data, "sestava") ?? [];
+  // Bez uložené lavičky ji před zápasem vybere automat: kdo na ní bude, se neví.
+  const bench = parseJson<unknown[]>(row.bench_data, "lavička");
+  return {
+    start: new Set(start.map((p) => p.playerId).filter((id): id is string => typeof id === "string")),
+    bench: Array.isArray(bench) ? new Set(bench.filter((id): id is string => typeof id === "string")) : null,
+  };
+}
+
+/** Hráči klubu (áčko i U21) pro výběr v úkolu, s tím, podle čeho se vybírá. */
+export async function loadStaffTaskPlayers(db: D1Database, teamId: string, today: string, nextMatchId: string | null): Promise<StaffTaskPlayer[]> {
+  const since = addDays(today, -PSYCH_SESSION_PLAYER_GAP_DAYS);
+  const [rows, lineup] = await Promise.all([
+    db.prepare(
+      `SELECT p.id, p.first_name, p.last_name, p.age, p.position, p.overall_rating, t.team_type,
+              i.days_remaining AS injury_days, i.days_total AS injury_total, COALESCE(i.description, i.type) AS injury_name,
+              json_extract(p.life_context, '$.condition') AS cond,
+              json_extract(p.life_context, '$.morale') AS morale,
+              json_extract(p.life_context, '$.transferUnrest.level') AS unrest,
+              (SELECT MAX(st.ends_game_date) FROM staff_tasks st
+                WHERE st.task_type = 'psych_session' AND st.target_player_id = p.id
+                  AND st.status IN ('active', 'done') AND st.ends_game_date > ?2) AS psych_last
+         FROM players p
+         JOIN teams t ON t.id = p.team_id
+         LEFT JOIN injuries i ON i.id = (SELECT i2.id FROM injuries i2 WHERE i2.player_id = p.id AND i2.days_remaining > 0 AND i2.osobni_volno = 0
+                                          ORDER BY i2.days_remaining DESC LIMIT 1)
+        WHERE (t.id = ?1 OR t.parent_team_id = ?1) AND (p.status IS NULL OR p.status != 'released')
+        ORDER BY t.parent_team_id IS NOT NULL, CASE p.position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 ELSE 3 END, p.last_name`,
+    ).bind(teamId, since).all<{
+      id: string; first_name: string; last_name: string; age: number; position: string; overall_rating: number | null; team_type: string | null;
+      injury_days: number | null; injury_total: number | null; injury_name: string | null;
+      cond: number | null; morale: number | null; unrest: number | null; psych_last: string | null;
+    }>()
+      .then((r) => r.results)
+      .catch((e) => { logger.warn({ module: MODULE }, `hráči pro úkoly ${teamId}`, e); return []; }),
+    nextMatchId ? loadLineupIds(db, teamId, nextMatchId) : Promise.resolve(null),
+  ]);
+  return rows.map((p) => {
+    const isU21 = p.team_type === "u21";
+    return {
+      id: p.id,
+      name: `${p.first_name} ${p.last_name}`,
+      age: p.age,
+      position: p.position,
+      isU21,
+      rating: p.overall_rating === null ? null : Math.round(p.overall_rating),
+      injuryDays: p.injury_days,
+      injuryDaysTotal: p.injury_total,
+      injuryName: p.injury_name,
+      condition: p.cond === null ? null : Math.round(p.cond),
+      morale: p.morale === null ? null : Math.round(p.morale),
+      unrest: p.unrest === null ? null : Math.round(p.unrest),
+      lineup: !lineup || isU21 ? null
+        : lineup.start.has(p.id) ? "start"
+        : !lineup.bench ? null
+        : lineup.bench.has(p.id) ? "bench" : "out",
+      psychAgainFrom: p.psych_last ? addDays(p.psych_last, PSYCH_SESSION_PLAYER_GAP_DAYS) : null,
+    };
+  });
+}
 
 export async function loadStaffTaskViews(db: D1Database, teamId: string): Promise<StaffTaskView[]> {
   const rows = await db.prepare(
