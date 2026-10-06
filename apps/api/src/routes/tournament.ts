@@ -127,10 +127,14 @@ function defaultInviteMessage(t: TournamentRow): string {
   const where = t.city_locative ?? `ve městě ${t.city}`;
   const when = t.starts_on ? ` ${fromDay(t.starts_on)}` : "";
   return (
-    `Dobrý den, tady ${t.sponsor}! Zveme váš klub na ${t.edition}. ročník ${nameGenitive(t.name)}. ` +
-    `Hraje se ${where}${when}, každý den, 7 až 12 dní. ` +
-    `Za každý získaný bod vyplácíme ${kc(t.point_reward)}, vítěz bere ${kc(t.prize_winner)} a trofej. ` +
-    `Všechny náklady hradíme my. Přihlásit se můžete ${untilDeadline(t.registration_deadline)} na stránce Turnaj.`
+    `Dobrý den, srdečně vás zveme na ${t.edition}. ročník ${nameGenitive(t.name)}! ` +
+    `Odehraje se ${where}${when} a potkají se v něm kluby z různých okresů. ` +
+    `Připravili jsme štědré odměny: za každý získaný bod vyplácíme ${kc(t.point_reward)}, ` +
+    `za postup do play-off další prémie a vítěz si odveze ${kc(t.prize_winner)} a trofej do klubové vitríny. ` +
+    `Všechny náklady spojené s turnajem platíme my, vy se soustřeďte jen na fotbal. ` +
+    `Zápasy budou každý den, takže je to ideální příležitost dát šanci celému kádru včetně hráčů z U21. ` +
+    `Přihlášky přijímáme ${untilDeadline(t.registration_deadline)} na stránce Turnaj. ` +
+    `Těšíme se na vás! Váš ${t.sponsor}`
   );
 }
 
