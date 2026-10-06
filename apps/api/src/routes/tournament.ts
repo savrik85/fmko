@@ -377,7 +377,7 @@ tournamentRouter.get("/tournament-matches/:id", async (c) => {
     `SELECT m.*, t.name AS tournament_name, t.edition,
             h.name AS home_name, h.primary_color AS home_color, h.secondary_color AS home_secondary, h.badge_pattern AS home_badge,
             a.name AS away_name, a.primary_color AS away_color, a.secondary_color AS away_secondary, a.badge_pattern AS away_badge,
-            v.name AS venue_name, v.capacity AS venue_capacity, v.is_main AS venue_is_main
+            v.name AS venue_name, v.capacity AS venue_capacity, v.is_main AS venue_is_main, v.look AS venue_look
        FROM tournament_matches m
        JOIN tournaments t ON t.id = m.tournament_id
        JOIN teams h ON h.id = m.home_team_id
@@ -415,7 +415,10 @@ tournamentRouter.get("/tournament-matches/:id", async (c) => {
     isTournament: true,
     round: null,
     roundName: stage === "league" ? `${row.tournament_name}, ${row.day}. den` : `${row.tournament_name}, ${STAGE_NAME[stage] ?? stage}`,
-    venue: row.venue_id ? { id: row.venue_id, name: row.venue_name, capacity: row.venue_capacity, isMain: row.venue_is_main === 1 } : null,
+    venue: row.venue_id ? {
+      id: row.venue_id, name: row.venue_name, capacity: row.venue_capacity, isMain: row.venue_is_main === 1,
+      look: parse<Record<string, unknown>>(row.venue_look, {}),
+    } : null,
     home_badge: row.home_badge ?? "shield", away_badge: row.away_badge ?? "shield",
     home_secondary: row.home_secondary ?? "#FFFFFF", away_secondary: row.away_secondary ?? "#FFFFFF",
     events: parse(row.events, []),

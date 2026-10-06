@@ -155,8 +155,11 @@ export default function AdminPage() {
         <BroadcastSection />
       </Rozbalovaci>
 
-      <Rozbalovaci nazev="Turnaj" ikona="⚽" popis="Pozvánka od pořadatele">
-        <TournamentInviteSection />
+      <Rozbalovaci nazev="Turnaj" ikona="⚽" popis="Los, průběh, pozvánka od pořadatele">
+        <div className="space-y-3">
+          <TournamentDrawSection />
+          <TournamentInviteSection />
+        </div>
       </Rozbalovaci>
 
       <Rozbalovaci nazev="Uživatelé" ikona="👥" popis="Účty a hesla">
@@ -616,6 +619,129 @@ function BroadcastSection() {
         <div className="text-sm text-muted">Zatím žádné odpovědi</div>
       )}
       <button onClick={loadReplies} className="text-xs text-pitch-600 hover:underline mt-2">Obnovit odpovědi</button>
+    </div>
+  );
+}
+
+/* ── Turnaj: los a průběh ── */
+
+interface DrawPreview {
+  tournament: { id: string; edition: number; status: string; startsOn: string | null; registrationDeadline: string };
+  entrants: number;
+  venues: number;
+  playoff: string[];
+  options: Array<{ matchesPerTeam: number; leagueDays: number; totalDays: number; roundRobin: boolean }>;
+}
+
+function TournamentDrawSection() {
+  const { token } = useTeam();
+  const [preview, setPreview] = useState<DrawPreview | null>(null);
+  const [k, setK] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+  const authH: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  // Ruční odehrání dne je jen pro test; na produkci se hraje v 18:00 cronem.
+  const isTestEnv = typeof window !== "undefined" && /test\.|localhost/.test(window.location.hostname);
+
+  const load = async () => {
+    const res = await fetch(`${API}/api/admin/tournament/draw`, { headers: authH })
+      .catch((e) => { console.error("load tournament draw preview:", e); return null; });
+    if (!res?.ok) { setStatus("Turnaj není vypsaný"); return; }
+    const data = (await res.json()) as DrawPreview;
+    setPreview(data);
+    setK((prev) => prev ?? data.options.find((o) => o.totalDays === 7)?.matchesPerTeam ?? data.options[0]?.matchesPerTeam ?? null);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const draw = async () => {
+    if (!preview || k == null) return;
+    const opt = preview.options.find((o) => o.matchesPerTeam === k);
+    if (!potvrd(
+      "Vylosovat turnaj?",
+      `${preview.entrants} klubů, ${k} zápasů na tým, turnaj potrvá ${opt?.totalDays ?? "?"} dní od ${preview.tournament.startsOn ?? "?"}. Všem přihlášeným odejde SMS s rozpisem.`,
+    )) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/api/admin/tournament/draw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authH },
+        body: JSON.stringify({ matchesPerTeam: k }),
+      });
+      const data = await res.json();
+      setStatus(res.ok ? `Vylosováno: ${data.matches} zápasů ligové fáze, ${data.leagueDays} dní` : (data.error ?? "Los se nepodařil"));
+      load();
+    } catch (e) {
+      console.error("tournament draw:", e);
+      setStatus("Los se nepodařil");
+    }
+    setBusy(false);
+  };
+
+  const advance = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/api/admin/tournament/advance`, { method: "POST", headers: authH });
+      const data = await res.json();
+      setStatus(res.ok ? `Odehráno ${data.played} zápasů` : (data.error ?? "Chyba"));
+      load();
+    } catch (e) {
+      console.error("tournament advance:", e);
+      setStatus("Odehrání se nepodařilo");
+    }
+    setBusy(false);
+  };
+
+  if (!preview) return <div className="card p-4 text-sm text-muted">{status || "Načítám…"}</div>;
+  const canDraw = preview.tournament.status === "registration" || preview.tournament.status === "closed";
+  const deadlinePassed = new Date(preview.tournament.registrationDeadline).getTime() <= Date.now();
+
+  return (
+    <div className="card p-4 space-y-3">
+      <SectionLabel>{`Los ${preview.tournament.edition}. ročníku`}</SectionLabel>
+      <div className="text-sm">
+        Přihlášeno <span className="font-bold">{preview.entrants}</span> klubů · hřišť {preview.venues} · stav <span className="font-bold">{preview.tournament.status}</span>
+        {" · "}play-off od {preview.playoff[0] === "qf" ? "čtvrtfinále" : "semifinále"}
+      </div>
+      {canDraw ? (
+        <>
+          {!deadlinePassed && <div className="text-sm text-muted">Losovat jde až po uzávěrce přihlášek.</div>}
+          <div className="flex flex-wrap gap-2">
+            {preview.options.map((o) => (
+              <button
+                key={o.matchesPerTeam}
+                type="button"
+                onClick={() => setK(o.matchesPerTeam)}
+                aria-pressed={k === o.matchesPerTeam}
+                className={`px-3 py-2 rounded-soft border text-sm text-left ${k === o.matchesPerTeam ? "border-pitch-500 bg-pitch-500 text-white" : "border-gray-200 text-ink hover:border-pitch-300"}`}
+              >
+                <span className="font-heading font-bold">{o.matchesPerTeam} zápasů</span>
+                <span className="block">{o.totalDays} dní{o.roundRobin ? " · každý s každým" : ""}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={draw}
+            disabled={busy || k == null || !deadlinePassed}
+            className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50"
+          >
+            {busy ? "Losuji…" : "Vylosovat"}
+          </button>
+        </>
+      ) : (
+        isTestEnv && preview.tournament.status !== "finished" && (
+          <button
+            onClick={advance}
+            disabled={busy}
+            className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50"
+          >
+            {busy ? "Hraje se…" : "Odehrát další den (test)"}
+          </button>
+        )
+      )}
+      {status && <div className="text-sm font-heading font-bold text-pitch-500">{status}</div>}
     </div>
   );
 }

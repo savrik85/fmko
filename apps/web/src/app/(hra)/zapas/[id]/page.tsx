@@ -111,10 +111,21 @@ export default function MatchDetailPage() {
   const [lineupSort, setLineupSort] = useState<"position" | "rating">("position");
 
   useEffect(() => {
-    // Pohárový zápas má oddělené tabulky → vlastní endpoint. Ligový detail neexistuje → 404 → fallback na pohár.
+    // Pohár a turnaj mají oddělené tabulky → vlastní endpointy. Ligový detail neexistuje → 404 →
+    // fallback na pohár, pak na turnaj. Neodehraný turnajový zápas vede na editor sestavy.
+    const loadTournament = () => apiFetch<MatchDetail & { status?: string }>(`/api/tournament-matches/${matchId}`)
+      .then((m) => {
+        if (m.status !== "simulated") {
+          router.replace(`/zapas?calendarId=${matchId}`);
+          return;
+        }
+        setMatch(m);
+        setLoading(false);
+      })
+      .catch((e) => { console.error("Failed to load tournament match:", e); setLoading(false); });
     const loadCup = () => apiFetch<MatchDetail>(`/api/cup-matches/${matchId}`)
       .then((m) => { setMatch(m); setLoading(false); })
-      .catch((e) => { console.error("Failed to load cup match:", e); setLoading(false); });
+      .catch(() => loadTournament());
     apiFetch<MatchDetail & { calendar_id?: string | null }>(`/api/matches/${matchId}`)
       .then((m) => {
         // Pre-match (neodehráno) → redirect na editor sestavy. Tato stránka je jen pro výsledky.
