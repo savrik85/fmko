@@ -24,6 +24,7 @@ import {
   beerSceneText, dartsWinText, dartsLossText,
   giftSincereMessage, giftPoisonMessage,
   stammtischNews, stammtischQuarrelText, stammtischDeclineText, stammtischSceneText,
+  STAMMTISCH_TOPIC_MAX, normalizeStammtischTopic, stammtischInviteText,
   pubRoundMessage,
   type RelationNames,
 } from "../community/relation-texts";
@@ -137,9 +138,14 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
 
   // Stav odpovědí pozvaných (jen pokud hostuješ právě teď naplánované posezení)
   let plannedInvites: Array<{ teamId: string; teamName: string; managerName: string; status: string }> = [];
+  let plannedTopic: string | null = null;
   if (stammtischPlanned && lastStammtisch) {
     let eventId: string | null = null;
-    try { eventId = JSON.parse(lastStammtisch.payload)?.eventId ?? null; } catch (e) {
+    try {
+      const payload = JSON.parse(lastStammtisch.payload);
+      eventId = payload?.eventId ?? null;
+      plannedTopic = normalizeStammtischTopic(payload?.topic);
+    } catch (e) {
       logger.warn({ module: "relations" }, "parse planned stammtisch payload", e);
     }
     if (eventId) {
@@ -188,13 +194,14 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
 
   // Příchozí pozvánky na posezení (čekající na odpověď)
   const invitesRes = await db.prepare(
-    `SELECT mi.id, mi.actor_team_id, t.name as host_team, m.name as host_manager
+    `SELECT mi.id, mi.actor_team_id, t.name as host_team, m.name as host_manager,
+            json_extract(mi.payload, '$.topic') as topic
      FROM manager_interactions mi
      JOIN teams t ON t.id = mi.actor_team_id
      LEFT JOIN managers m ON m.team_id = mi.actor_team_id
      WHERE mi.type = 'stammtisch_invite' AND mi.target_team_id = ? AND mi.status = 'invited'
      ORDER BY mi.created_at DESC`
-  ).bind(teamId).all<{ id: string; actor_team_id: string; host_team: string; host_manager: string | null }>();
+  ).bind(teamId).all<{ id: string; actor_team_id: string; host_team: string; host_manager: string | null; topic: string | null }>();
 
   return c.json({
     stammtisch: {
@@ -203,6 +210,8 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
       cooldownDaysLeft: stammtischCooldownLeft === Infinity ? 0 : stammtischCooldownLeft,
       costPerHead: STAMMTISCH_COST_PER_HEAD,
       plannedInvites,
+      topic: plannedTopic,
+      topicMax: STAMMTISCH_TOPIC_MAX,
     },
     pubRound,
     incomingInvites: invitesRes.results.map((i) => ({
@@ -210,6 +219,7 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
       hostTeamId: i.actor_team_id,
       hostTeam: i.host_team,
       hostManager: i.host_manager ?? `Trenér ${i.host_team}`,
+      topic: normalizeStammtischTopic(i.topic),
     })),
   });
 });
@@ -804,13 +814,18 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
 relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
   const teamId = c.req.param("teamId");
   const db = c.env.DB;
-  const body = await c.req.json<{ guestTeamIds?: string[] }>().catch((e) => {
+  const body = await c.req.json<{ guestTeamIds?: string[]; topic?: string }>().catch((e) => {
     logger.warn({ module: "relations" }, "parse stammtisch body", e);
     return null;
   });
   const guestIds = [...new Set(body?.guestTeamIds ?? [])].filter((id) => id !== teamId);
   if (guestIds.length < 1 || guestIds.length > 4) {
     return c.json({ error: "Pozvi 1 až 4 trenéry, na víc nemá hospoda stůl." }, 400);
+  }
+  // Téma je jen text do pozvánky, na vyhodnocení večera nemá vliv.
+  const topic = normalizeStammtischTopic(body?.topic);
+  if (topic && topic.length > STAMMTISCH_TOPIC_MAX) {
+    return c.json({ error: `Téma posezení může mít nejvýš ${STAMMTISCH_TOPIC_MAX} znaků.` }, 400);
   }
 
   // Cooldown (kryje i čekající akci)
@@ -858,14 +873,14 @@ relationsRouter.post("/teams/:teamId/stammtisch", async (c) => {
 
   // Pozvánky hostům + notifikace s odkazem na jejich hospodu
   for (const gid of guestIds) {
-    await insertInteraction(db, "stammtisch_invite", teamId, gid, null, { eventId }, "invited");
+    await insertInteraction(db, "stammtisch_invite", teamId, gid, null, { eventId, topic }, "invited");
     await createNotification(db, gid, "event", "🍻 Pozvánka na posezení",
-      `Trenér ${myManager} (${myName}) tě zve dnes večer na posezení s trenéry. Přijmi nebo odmítni ve své hospodě.`,
+      stammtischInviteText(myManager, myName, topic),
       "/hospoda", c.env as never)
       .catch((e) => logger.warn({ module: "relations" }, "stammtisch invite notification", e));
   }
 
-  await insertInteraction(db, "stammtisch", teamId, teamId, null, { guestTeamIds: guestIds, eventId }, "planned");
+  await insertInteraction(db, "stammtisch", teamId, teamId, null, { guestTeamIds: guestIds, eventId, topic }, "planned");
   return c.json({
     ok: true,
     planned: true,

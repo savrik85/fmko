@@ -319,6 +319,22 @@ export function dartsLossText(n: RelationNames): string {
 // Posezení s trenéry (skupinové pivo)
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Nejdelší téma posezení. Vejde se do jedné pozvánky v telefonu. */
+export const STAMMTISCH_TOPIC_MAX = 120;
+
+/** Téma od hostitele: jeden řádek bez zbytečných mezer. Prázdné znamená bez tématu. */
+export function normalizeStammtischTopic(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const topic = raw.replace(/\s+/g, " ").trim();
+  return topic || null;
+}
+
+/** Text pozvánky, kterou pozvaný trenér dostane do telefonu. */
+export function stammtischInviteText(hostManager: string, hostTeam: string, topic: string | null): string {
+  const tema = topic ? ` Téma: „${topic}“.` : "";
+  return `Trenér ${hostManager} (${hostTeam}) tě zve dnes večer na posezení s trenéry.${tema} Přijmi nebo odmítni ve své hospodě.`;
+}
+
 export function stammtischNews(hostManager: string, hostTeam: string, attendeeNames: string[]): { headline: string; body: string } {
   const guests = attendeeNames.join(", ");
   return pick([
