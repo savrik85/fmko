@@ -41,20 +41,39 @@ u21Router.get("/teams/:teamId/u21/players", async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT id, first_name, last_name, nickname, age, position, overall_rating,
             skills, physical, personality, life_context, avatar, weekly_wage, status,
-            parent_club_id, next_match_return
+            parent_club_id, next_match_return, coach_relationship
        FROM players
       WHERE team_id = ?
       ORDER BY overall_rating DESC`
   ).bind(u21Team.id).all<Record<string, unknown>>();
 
-  const players = rows.results.map((row) => ({
-    ...row,
-    skills: row.skills ? JSON.parse(row.skills as string) : null,
-    physical: row.physical ? JSON.parse(row.physical as string) : null,
-    personality: row.personality ? JSON.parse(row.personality as string) : null,
-    lifeContext: row.life_context ? JSON.parse(row.life_context as string) : null,
-    avatar: row.avatar ? JSON.parse(row.avatar as string) : null,
-  }));
+  // Zranění a absence potřebuje tabulka atributů U21, stejně jako kádr áčka.
+  const activeInjuries = await c.env.DB.prepare(
+    "SELECT player_id, type, days_remaining FROM injuries WHERE team_id = ? AND days_remaining > 0"
+  ).bind(u21Team.id).all<{ player_id: string; type: string; days_remaining: number }>()
+    .catch((e) => { logger.warn({ module: "u21" }, "fetch u21 injuries", e); return { results: [] }; });
+  const injuryByPlayer = new Map(activeInjuries.results.map((r) => [r.player_id, { type: r.type, daysRemaining: r.days_remaining }]));
+
+  // GET projde `requireTeamOwnership` bez kontroly. Vztah k trenérovi je u cizích
+  // klubů skrytý (viz `/teams/:id/players`), takže ho dostane jen majitel.
+  const { tymyDivaka } = await import("../auth/divak");
+  const vlastni = (await tymyDivaka(c)).has(teamId);
+
+  const players = rows.results.map((row) => {
+    const lifeContext = row.life_context ? JSON.parse(row.life_context as string) : null;
+    const { coach_relationship, ...rest } = row;
+    return {
+      ...rest,
+      ...(vlastni ? { coach_relationship } : {}),
+      skills: row.skills ? JSON.parse(row.skills as string) : null,
+      physical: row.physical ? JSON.parse(row.physical as string) : null,
+      personality: row.personality ? JSON.parse(row.personality as string) : null,
+      lifeContext,
+      avatar: row.avatar ? JSON.parse(row.avatar as string) : null,
+      injury: injuryByPlayer.get(row.id as string) ?? null,
+      absence: (lifeContext as Record<string, unknown> | null)?.absence ?? null,
+    };
+  });
 
   return c.json({ players });
 });

@@ -26,3 +26,15 @@ export function attrValue(player: Player, key: "vision" | "experience"): number 
   if (key === "experience" && typeof column === "number") return column;
   return 0;
 }
+
+/**
+ * Barva štítku s hodnotou atributu. Jediná škála pro kartu Dovednosti v profilu hráče
+ * i tabulku atributů kádru, aby stejné číslo všude vypadalo stejně.
+ */
+export function attrBg(value: number): string {
+  if (value >= 70) return "bg-pitch-500 text-white";
+  if (value >= 50) return "bg-pitch-100 text-pitch-800";
+  if (value >= 30) return "bg-gray-100 text-ink";
+  if (value >= 15) return "bg-amber-100 text-amber-800";
+  return "bg-red-100 text-card-red";
+}
