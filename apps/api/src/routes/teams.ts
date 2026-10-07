@@ -1033,13 +1033,20 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   // Kmenový klub hráče na hostování — pořád je to jeho hráč, takže žádné rozmazávání
   // atributů. Akce v UI ale zůstávají na `isOwn`, ten hráč teď hraje jinde.
   const isParentClub = divakovo && !!row.loan_from_team_id && row.loan_from_team_id === teamId;
+  // Hráč mé U21 je taky můj: v URL je áčko, hráč má ale `team_id` rezervy. Bez toho
+  // profil vlastního U21 hráče ukazoval dovednosti na pětky a bez mzdy jako u soupeře.
+  // Stejně jako `isParentClub` jen ruší zamlžení, akce v UI zůstávají na `isOwn`.
+  const isOwnU21 = divakovo && !isOwn && !!(await c.env.DB.prepare(
+    "SELECT 1 AS ok FROM teams WHERE id = ? AND parent_team_id = ? AND team_type = 'u21'"
+  ).bind(row.team_id, teamId).first<{ ok: number }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "check U21 ownership for player detail", e); return null; }));
   const skills = JSON.parse(row.skills as string);
   const physical = JSON.parse(row.physical as string);
   const personality = JSON.parse(row.personality as string);
   const lifeContext = JSON.parse(row.life_context as string);
 
   // Foreign players: round attributes to nearest 5, hide personality details
-  if (!isOwn && !isParentClub) {
+  if (!isOwn && !isParentClub && !isOwnU21) {
     const blur = (v: number) => Math.round(v / 5) * 5;
     for (const k of Object.keys(skills)) { if (typeof skills[k] === "number") skills[k] = blur(skills[k]); }
     for (const k of Object.keys(physical)) { if (typeof physical[k] === "number") physical[k] = blur(physical[k]); }
@@ -1049,7 +1056,7 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     }
   }
   const { ocistiRadekProCizi, verejnyZivotHrace } = await import("../transfers/player-view");
-  const cizi = !isOwn && !isParentClub;
+  const cizi = !isOwn && !isParentClub && !isOwnU21;
   // Cizí klub: jen whitelist `life_context` (kondice a morálka po desítkách, povolání)
   // a řádek bez potenciálu, skrytého talentu, vztahu k trenérovi a mzdy.
   const vystupniZivot = cizi ? verejnyZivotHrace(lifeContext) : lifeContext;
