@@ -12,6 +12,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-07",
+    emoji: "⚖️",
+    title: "Srovnání hráčů",
+    items: [
+      "V profilu každého hráče, tvého i cizího, najdeš pod dovednostmi srovnání s kýmkoliv z tvého kádru včetně U21. Hráče vybereš v nabídce, hráči na stejném postu jsou nahoře.",
+      "U každého atributu je hned vidět, kdo je lepší: lepší hráč má číslo v barevném štítku. Žlutě podbarvené jsou atributy, na kterých na daném postu nejvíc záleží.",
+      "Vybraný hráč ti zůstane, i když listuješ cizím kádrem. Svého útočníka tak porovnáš postupně se všemi hráči soupeře.",
+    ],
+  },
+  {
     date: "2026-10-06",
     emoji: "🛡️",
     title: "Zkratka v názvu klubu",
