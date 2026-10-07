@@ -150,8 +150,41 @@ export async function kontextDojizdeni(
 }
 
 /**
+ * Které fáze losu absencí už manažer smí vidět. Řídí se tím, kdy hráči píšou do skupiny:
+ * den předem odpoví všichni (výmluvy „den předem“), ranní omluvenky „v den zápasu“ přijdou
+ * až ráno. Kdyby je sestava ukázala už den předem, hráč by v chatu psal „přijdu“ a v sestavě
+ * byl škrtnutý s výmluvou „dneska…“.
+ *
+ * Přátelák má `daysUntilMatch` vždy 0, takže vidí obě fáze hned.
+ */
+export function visibleAbsencePhases(daysUntilMatch: number): Array<"day_before" | "match_day"> {
+  if (daysUntilMatch > 1) return [];
+  if (daysUntilMatch === 1) return ["day_before"];
+  return ["day_before", "match_day"];
+}
+
+/**
+ * Hráči, kteří se ve skupině zápasu omluvili už den předem („ne“). Ranní omluvenka v den
+ * zápasu jde všem ostatním: kdo den předem napsal „přijdu“, si to ráno může rozmyslet.
+ * Dřív se vynechával každý, kdo den předem napsal cokoli. Den předem ale píše celý kádr,
+ * takže ranní omluvenka skoro nikdy nedošla a hráč chyběl bez jediné zprávy.
+ *
+ * Chybu dotazu nepolyká: bez seznamu by ranní SMS dostali i ti, kdo se už omluvili.
+ */
+export async function playersExcusedDayBefore(
+  db: D1Database,
+  conversationId: string,
+): Promise<Set<string>> {
+  const rows = await db.prepare(
+    "SELECT sender_id FROM messages WHERE conversation_id = ? AND sender_type = 'player' AND json_extract(metadata, '$.response') = 'no'",
+  ).bind(conversationId).all<{ sender_id: string }>();
+  return new Set(rows.results.map((r) => r.sender_id));
+}
+
+/**
  * Vrátí Map<playerId, info> pro hráče absentní z generátoru (ne injury/suspension).
  * Prázdná mapa pokud je zápas vzdálenější než den a není přátelák.
+ * Den před zápasem jen výmluvy „den předem“, viz `visibleAbsencePhases`.
  */
 export async function getAbsentPlayersMap(
   db: D1Database,
@@ -163,7 +196,8 @@ export async function getAbsentPlayersMap(
   const daysUntilMatch = ctx.isFriendly
     ? 0
     : Math.max(0, Math.round((matchDate.getTime() - gameDate.getTime()) / 86400000));
-  if (daysUntilMatch > 1) return new Map();
+  const phases = visibleAbsencePhases(daysUntilMatch);
+  if (phases.length === 0) return new Map();
 
   const [playersRes, injRes, district] = await Promise.all([
     db.prepare(
@@ -194,8 +228,11 @@ export async function getAbsentPlayersMap(
   const matchDayRng = createRng(absenceSeedForMatch({ matchKey: ctx.matchKey, teamId, phase: "match_day" }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather });
+  // Každá fáze má vlastní seed, takže vynechání ranní fáze los „den předem“ neposune.
+  const matchDayAbs = phases.includes("match_day")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather })
+    : [];
   const seen = new Set<number>();
   const absences = pridejIncidentniAbsence(
     [...dayBeforeAbs, ...matchDayAbs].filter((a) => {

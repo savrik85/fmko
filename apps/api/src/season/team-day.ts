@@ -619,14 +619,12 @@ export async function processTeamDay(
             ).bind(teamId, `%${todayMatch.id}%`).first<{ id: string }>().then((r) => r?.id).catch((e) => { logger.warn({ module: "daily-tick" }, "match_day find conversation", e); return null; });
 
             if (matchConvId) {
-              // Exclude players who already sent day_before messages
-              const alreadyMessaged = await env.DB.prepare(
-                "SELECT sender_id FROM messages WHERE conversation_id = ? AND sender_type = 'player'"
-              ).bind(matchConvId).all().catch(() => ({ results: [] }));
-              const alreadyIds = new Set(alreadyMessaged.results.map((r) => r.sender_id as string));
+              // Vynechat jen ty, kdo se omluvili už den předem. Kdo napsal „přijdu“, ten ráno
+              // omluvenku poslat musí, jinak v zápase chybí a v chatu u něj zůstane „přijdu“.
+              const { kontextDojizdeni: kontextDojizdeniMd, playersExcusedDayBefore } = await import("../events/match-absences");
+              const alreadyIds = await playersExcusedDayBefore(env.DB, matchConvId);
 
               const teamDistrictMd = (team.village_district as string | null) ?? undefined;
-              const { kontextDojizdeni: kontextDojizdeniMd } = await import("../events/match-absences");
               const { resolveRoundWeather: resolveMdWeather } = await import("./season-weather");
               const { commuteMod: commuteModMd, maDodavku: maDodavkuMd, isAway: isAwayMd } = await kontextDojizdeniMd(env.DB, teamId, todayMatch.id as string);
               const matchDayAbsences = pridejIncidentniAbsence(
