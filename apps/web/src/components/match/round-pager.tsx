@@ -13,9 +13,11 @@ export interface RoundPage {
   label: string;
 }
 
-export function RoundPager({ pages, initialKey, children }: {
+export function RoundPager({ pages, initialKey, accent, children }: {
   pages: RoundPage[];
   initialKey?: string | null;
+  /** Barva aktivního kola (výchozí tmavá ink). */
+  accent?: string | null;
   children: (key: string) => ReactNode;
 }) {
   const [current, setCurrent] = useState<string | null>(initialKey ?? pages.at(-1)?.key ?? null);
@@ -66,6 +68,7 @@ export function RoundPager({ pages, initialKey, children }: {
                 aria-selected={active}
                 aria-current={active ? "true" : undefined}
                 onClick={() => setCurrent(p.key)}
+                style={active && accent ? { background: accent, borderColor: accent } : undefined}
                 className={`shrink-0 px-3 h-10 rounded-full text-sm font-heading font-bold whitespace-nowrap border transition-colors ${
                   active ? "bg-ink text-white border-ink" : "bg-white text-ink/70 border-gray-200 hover:border-pitch-300"
                 }`}

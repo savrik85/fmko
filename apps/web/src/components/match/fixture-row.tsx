@@ -52,6 +52,8 @@ interface FixtureRowProps {
   meta?: ReactNode;
   /** Barva proužku vlevo pro zápas mého klubu. */
   accent?: string | null;
+  /** Barva odehrané tabule (výchozí tmavá ink; turnaj P-Mobile má vlastní). */
+  boardColor?: string | null;
 }
 
 function initialsOf(name: string): string {
@@ -81,7 +83,7 @@ function Name({ side, state, align }: { side: FixtureSide; state: "win" | "loss"
 }
 
 /** Tabule: od sm vodorovně „2 : 1", na mobilu čísla pod sebou u svých týmů. */
-function Board({ score, kickoff, winner }: { score?: FixtureScore | null; kickoff?: string | null; winner?: "home" | "away" | null }) {
+function Board({ score, kickoff, winner, color }: { score?: FixtureScore | null; kickoff?: string | null; winner?: "home" | "away" | null; color?: string | null }) {
   if (!score) {
     return (
       <span className="flex items-center justify-center rounded-md border border-ink/15 bg-paper px-2.5 h-9 min-w-[3.75rem] font-heading font-bold text-sm text-ink tabular-nums">
@@ -94,7 +96,7 @@ function Board({ score, kickoff, winner }: { score?: FixtureScore | null; kickof
   );
   return (
     // Na mobilu čísla sedí přesně na řádky klubů (znak 28 px + mezera 8 px → středy 36 px od sebe).
-    <span className="flex flex-col sm:flex-row items-center justify-center gap-[18px] sm:gap-1.5 rounded-md bg-ink px-2.5 py-[5px] sm:py-0 sm:h-9 min-w-[2.5rem] sm:min-w-[3.75rem] font-heading font-[800] text-lg leading-none">
+    <span style={color ? { background: color } : undefined} className="flex flex-col sm:flex-row items-center justify-center gap-[18px] sm:gap-1.5 rounded-md bg-ink px-2.5 py-[5px] sm:py-0 sm:h-9 min-w-[2.5rem] sm:min-w-[3.75rem] font-heading font-[800] text-lg leading-none">
       {digit(score.home, "home")}
       <span className="hidden sm:inline text-white/40 font-bold">:</span>
       {digit(score.away, "away")}
@@ -102,12 +104,12 @@ function Board({ score, kickoff, winner }: { score?: FixtureScore | null; kickof
   );
 }
 
-export function FixtureRow({ home, away, score, kickoff, winner, href, hrefLabel, meta, accent }: FixtureRowProps) {
+export function FixtureRow({ home, away, score, kickoff, winner, href, hrefLabel, meta, accent, boardColor }: FixtureRowProps) {
   const state = (side: "home" | "away") => (!score || !winner ? "even" : winner === side ? "win" : "loss");
   // Pohár ukládá 0:0 i bez rozstřelu, penalty dávají smysl jen po remíze.
   const pens = !!score && score.home === score.away && score.homePens != null && score.awayPens != null
     && (score.homePens > 0 || score.awayPens > 0);
-  const board = <Board score={score} kickoff={kickoff} winner={winner} />;
+  const board = <Board score={score} kickoff={kickoff} winner={winner} color={boardColor} />;
   const boardEl = href
     ? <Link href={href} aria-label={hrefLabel ?? `${home.name} proti ${away.name}`} className="shrink-0 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pitch-500 hover:opacity-90">{board}</Link>
     : <span className="shrink-0">{board}</span>;
