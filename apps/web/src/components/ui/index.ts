@@ -5,6 +5,7 @@ export { StatBar } from "./stat-bar";
 export { Spinner } from "./spinner";
 export { CollapsibleCard, useOpenOnDesktop } from "./CollapsibleCard";
 export { Input } from "./input";
+export { AutoGrowTextarea } from "./auto-grow-textarea";
 export { ErrorBox } from "./error-box";
 export { Modal } from "./modal";
 export { SectionLabel } from "./section-label";

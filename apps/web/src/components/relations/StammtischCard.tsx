@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel } from "@/components/ui";
+import { AutoGrowTextarea, SectionLabel } from "@/components/ui";
 
 interface RelationListItem {
   teamId: string;
@@ -236,10 +236,14 @@ export function StammtischCard({ teamId }: { teamId: string }) {
           </div>
           <label className="mt-3 block">
             <span className="text-sm font-heading font-bold">Téma posezení <span className="font-normal text-muted">(nepovinné)</span></span>
-            <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)}
+            {/* Téma je jeden řádek textu, Enter proto nový řádek nedělá. Pole roste, ať je vidět celé. */}
+            <AutoGrowTextarea value={topic} onChange={(e) => setTopic(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+              enterKeyHint="done"
+              maxRows={4}
               maxLength={info.stammtisch.topicMax ?? 120}
               placeholder="Třeba: Kdo letos spadne?"
-              className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-soft text-base focus:border-pitch-500 focus:outline-none" />
+              className="mt-1 block w-full px-3 py-2.5 border border-gray-200 rounded-soft text-base leading-6 focus:border-pitch-500 focus:outline-none" />
             <span className="mt-1 block text-sm text-muted">
               Pozvaní ho uvidí v pozvánce v telefonu. {topic.length}/{info.stammtisch.topicMax ?? 120}
             </span>
