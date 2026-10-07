@@ -129,6 +129,10 @@ const STAMMTISCH_RESERVATION_FEE = 100;
 relationsRouter.get("/teams/:teamId/social-info", async (c) => {
   const teamId = c.req.param("teamId");
   const db = c.env.DB;
+  // GET tu nehlídá vlastnictví. Téma posezení je soukromý text pro pozvané, takže ho
+  // dostane jen majitel `:teamId`, ne kdokoli, kdo zná id klubu.
+  const { tymyDivaka } = await import("../auth/divak");
+  const vlastni = (await tymyDivaka(c)).has(teamId);
 
   const lastStammtisch = await db.prepare(
     "SELECT id, created_at, status, payload FROM manager_interactions WHERE type = 'stammtisch' AND actor_team_id = ? ORDER BY created_at DESC LIMIT 1"
@@ -210,7 +214,7 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
       cooldownDaysLeft: stammtischCooldownLeft === Infinity ? 0 : stammtischCooldownLeft,
       costPerHead: STAMMTISCH_COST_PER_HEAD,
       plannedInvites,
-      topic: plannedTopic,
+      topic: vlastni ? plannedTopic : null,
       topicMax: STAMMTISCH_TOPIC_MAX,
     },
     pubRound,
@@ -219,7 +223,7 @@ relationsRouter.get("/teams/:teamId/social-info", async (c) => {
       hostTeamId: i.actor_team_id,
       hostTeam: i.host_team,
       hostManager: i.host_manager ?? `Trenér ${i.host_team}`,
-      topic: normalizeStammtischTopic(i.topic),
+      topic: vlastni ? normalizeStammtischTopic(i.topic) : null,
     })),
   });
 });
