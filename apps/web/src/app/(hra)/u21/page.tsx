@@ -267,11 +267,6 @@ export default function U21Page() {
 
   return (
     <div className="p-3 sm:p-4 md:p-6 space-y-3 max-w-7xl mx-auto w-full">
-      {/* Nejbližší zápas */}
-      {nextMatch && tab === "kadr" && (
-        <NextMatchBanner data={nextMatch} gameDate={ctxGameDate} />
-      )}
-
       {/* Tabs */}
       <Tabs
         value={tab}
@@ -287,6 +282,11 @@ export default function U21Page() {
           { key: "akademie", label: "Akademie" },
         ]}
       />
+
+      {/* Nejbližší zápas: pod záložkami, ať lišta drží na stejném místě */}
+      {nextMatch && tab === "kadr" && (
+        <NextMatchBanner data={nextMatch} gameDate={ctxGameDate} />
+      )}
 
       {error && (
         <div className="card border-l-4 border-card-red bg-red-50 p-3 text-sm text-red-800">
