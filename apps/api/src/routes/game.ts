@@ -3988,7 +3988,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   const { absenceSeedForMatch } = await import("../lib/seed");
   const { generateAbsences } = await import("../events/absence");
-  const { fetchTeamDistrict } = await import("../events/match-absences");
+  const { fetchTeamDistrict, visibleAbsencePhases } = await import("../events/match-absences");
   const matchKey = isFriendly ? (match.id as string) : calendarId!;
 
   // Healthy squad — shoda s match-runner/SMS filtrem. Zraněné a suspendované vynecháme,
@@ -4006,11 +4006,13 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
 
   const { hracProAbsenci } = await import("../events/absence");
   const district = await fetchTeamDistrict(c.env.DB, teamId);
-  // Preview spouští obě fáze se stejnými seedy jako SMS + simulace, pak deduplikuje dle playerIndex.
-  // Absence zobrazujeme jen day-before nebo match-day (ne 2+ dny předem). Přátelák = vyšší šance.
+  // Preview spouští fáze se stejnými seedy jako SMS + simulace, pak deduplikuje dle playerIndex.
+  // Den předem jen výmluvy „den předem“, ranní až v den zápasu, kdy je hráči pošlou do skupiny
+  // (visibleAbsencePhases). 2+ dny předem nic. Přátelák = vyšší šance.
   const friendlyMultiplier = isFriendly ? 1.8 : undefined;
+  const phases = visibleAbsencePhases(daysUntilMatch);
   let absences: ReturnType<typeof generateAbsences> = [];
-  if (daysUntilMatch <= 1) {
+  if (phases.length > 0) {
     // Vlivy incidentů (spec 17a) se čtou jen tady — los běží jen v tomhle okně, dřív se dotaz
     // na incidenty a sestavení absenceSquad dělaly zbytečně i 2+ dny před zápasem.
     const { nactiIncidentniKontext, pridejIncidentniAbsence } = await import("../incidents/absence-hracu");
@@ -4027,7 +4029,10 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     const { commuteMod, maDodavku, isAway } = await kontextDojizdeni(c.env.DB, teamId, matchKey);
     const weather = (await resolveWeatherForMatchKey(c.env.DB, matchKey))?.weather;
     const dayBeforeAbs = generateAbsences(dayBeforeRng as any, absenceSquad, { timing: "day_before", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather });
-    const matchDayAbs = generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather });
+    // Každá fáze má vlastní seed, takže vynechání ranní fáze los „den předem“ neposune.
+    const matchDayAbs = phases.includes("match_day")
+      ? generateAbsences(matchDayRng as any, absenceSquad, { timing: "match_day", district, friendlyMultiplier, commuteMod, maDodavku, isAway, weather })
+      : [];
     const seen = new Set<number>();
     absences = pridejIncidentniAbsence(
       [...dayBeforeAbs, ...matchDayAbs].filter((a) => {
