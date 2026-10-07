@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiFetch, type Player } from "@/lib/api";
 import { attrValue } from "@/lib/player-attrs";
 import { PositionBadge, SectionLabel } from "@/components/ui";
+import { FaceAvatar } from "@/components/players/face-avatar";
 import { attributeImportance } from "@okresni-masina/shared";
 
 /** Poslední hráč, se kterým se srovnávalo — při listování cizím kádrem zůstane vybraný. */
@@ -165,45 +166,53 @@ export function PlayerCompare({ teamId, player, exactValues }: {
 
   return (
     <div className="card p-4 sm:p-5">
-      <SectionLabel>Srovnání s hráčem z kádru</SectionLabel>
-
-      {/* Na širokém monitoru by se zrcadlové pruhy roztáhly přes celou stránku */}
-      <div className="max-w-2xl mx-auto">
-      <select
-        value={compareId ?? ""}
-        onChange={(e) => choose(e.target.value)}
-        aria-label="Hráč z kádru ke srovnání"
-        className={`w-full px-3 py-2.5 rounded-soft border-2 bg-white text-base font-heading transition-colors ${
-          other ? "border-pitch-500/40 text-ink" : "border-gray-200 text-muted"
-        }`}
-      >
-        <option value="">Vyber hráče z kádru</option>
-        {options.samePosition.length > 0 && (
-          <optgroup label={`Stejný post (${POS_SHORT[player.position] ?? player.position})`}>
-            {options.samePosition.map((p) => <option key={p.id} value={p.id}>{optionLabel(p)}</option>)}
-          </optgroup>
-        )}
-        {options.seniorOther.length > 0 && (
-          <optgroup label="Ostatní z A-týmu">
-            {options.seniorOther.map((p) => <option key={p.id} value={p.id}>{optionLabel(p)}</option>)}
-          </optgroup>
-        )}
-        {options.youthOther.length > 0 && (
-          <optgroup label="Ostatní z U21">
-            {options.youthOther.map((p) => <option key={p.id} value={p.id}>{optionLabel(p)}</option>)}
-          </optgroup>
-        )}
-      </select>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+        <SectionLabel>Srovnání s hráčem z kádru</SectionLabel>
+        <select
+          value={compareId ?? ""}
+          onChange={(e) => choose(e.target.value)}
+          aria-label="Hráč z kádru ke srovnání"
+          className={`w-full sm:w-96 px-3 py-2.5 rounded-soft border-2 bg-white text-base font-heading transition-colors ${
+            other ? "border-pitch-500/40 text-ink" : "border-gray-200 text-muted"
+          }`}
+        >
+          <option value="">Vyber hráče z kádru</option>
+          {options.samePosition.length > 0 && (
+            <optgroup label={`Stejný post (${POS_SHORT[player.position] ?? player.position})`}>
+              {options.samePosition.map((p) => <option key={p.id} value={p.id}>{optionLabel(p)}</option>)}
+            </optgroup>
+          )}
+          {options.seniorOther.length > 0 && (
+            <optgroup label="Ostatní z A-týmu">
+              {options.seniorOther.map((p) => <option key={p.id} value={p.id}>{optionLabel(p)}</option>)}
+            </optgroup>
+          )}
+          {options.youthOther.length > 0 && (
+            <optgroup label="Ostatní z U21">
+              {options.youthOther.map((p) => <option key={p.id} value={p.id}>{optionLabel(p)}</option>)}
+            </optgroup>
+          )}
+        </select>
+      </div>
 
       {other && (
         <div className="mt-4">
-          {/* Hlavička: prohlížený hráč vlevo, můj hráč vpravo */}
-          <div className="grid grid-cols-2 gap-3 pb-3 border-b border-gray-100">
-            <PlayerHead player={subject} win={ratingWin === -1} lose={ratingWin === 1} />
-            <PlayerHead player={other} link alignRight isU21={other.isU21} win={ratingWin === 1} lose={ratingWin === -1} />
+          {/* Hlavička: prohlížený hráč vlevo, můj hráč vpravo, uprostřed skóre lepších atributů */}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3 pb-4 border-b border-gray-100">
+            <PlayerHead player={subject} side="left" win={ratingWin === -1} />
+            <div className="text-center pt-1">
+              <div className="font-heading font-extrabold text-3xl sm:text-4xl tabular-nums leading-none whitespace-nowrap">
+                <span className={SIDE.left.text}>{leftWins}</span>
+                <span className="text-gray-300 mx-1.5">:</span>
+                <span className={SIDE.right.text}>{rightWins}</span>
+              </div>
+              <div className="mt-1.5 text-sm text-muted leading-tight">lepší<br className="sm:hidden" /> atributy</div>
+              {ties > 0 && <div className="mt-0.5 text-sm text-muted leading-tight">{ties} {ties === 1 ? "vyrovnaný" : ties < 5 ? "vyrovnané" : "vyrovnaných"}</div>}
+            </div>
+            <PlayerHead player={other} side="right" link isU21={other.isU21} win={ratingWin === 1} />
           </div>
 
-          <div className="mt-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-10 mt-1">
             {results.map(({ attr, left, right, win }) => (
               <CompareRow
                 key={attr.key}
@@ -216,49 +225,50 @@ export function PlayerCompare({ teamId, player, exactValues }: {
             ))}
           </div>
 
-          <div className="grid grid-cols-[2.25rem_1fr_2.25rem] items-center gap-1.5 mt-2 pt-3 border-t border-gray-100">
-            <span className={`text-base font-heading font-bold tabular-nums text-center ${leftWins > rightWins ? "text-pitch-600" : "text-ink"}`}>{leftWins}</span>
-            <span className="text-sm text-center text-ink-light">
-              Lepší atributy{ties > 0 ? `, vyrovnaných ${ties}` : ""}
-            </span>
-            <span className={`text-base font-heading font-bold tabular-nums text-center ${rightWins > leftWins ? "text-pitch-600" : "text-ink"}`}>{rightWins}</span>
-          </div>
-
-          <p className="mt-3 pt-3 border-t border-gray-100 text-sm text-muted flex items-start gap-1.5">
-            <span className="text-pitch-500 text-micro leading-5" aria-hidden>●</span>
-            <span>
-              Zvýrazněné jsou klíčové pro post {POS_SHORT[subject.position] ?? subject.position}.
-              {approximate && " Hráče z cizího klubu znáš jen přibližně (na pětky), rozdíl do 2 bodů se proto počítá jako vyrovnaný."}
-            </span>
+          <p className="mt-3 pt-3 border-t border-gray-100 text-sm text-muted">
+            Plné číslo a barevný pruh má ten, kdo je v atributu lepší. U náchylnosti ke zraněním je lepší nižší číslo.
+            {" "}<span className="font-bold text-ink-light">●</span> Tučně jsou klíčové atributy pro post {POS_SHORT[subject.position] ?? subject.position}.
+            {approximate && " Hráče z cizího klubu znáš jen přibližně (na pětky), rozdíl do 2 bodů se proto počítá jako vyrovnaný."}
           </p>
         </div>
       )}
-      </div>
     </div>
   );
 }
 
-function PlayerHead({ player, link, alignRight, isU21, win, lose }: {
+/** Každý hráč má ve srovnání svou barvu, aby bylo hned vidět, čí je který řádek. */
+const SIDE = {
+  left: { text: "text-blue-600", bg: "bg-blue-600", bar: "bg-blue-500" },
+  right: { text: "text-pitch-500", bg: "bg-pitch-500", bar: "bg-pitch-400" },
+} as const;
+
+function PlayerHead({ player, side, link, isU21, win }: {
   player: Player;
+  side: "left" | "right";
   link?: boolean;
-  alignRight?: boolean;
   isU21?: boolean;
   win: boolean;
-  lose: boolean;
 }) {
   const name = `${player.first_name} ${player.last_name}`;
-  const ratingColor = win ? "text-pitch-600" : lose ? "text-muted" : "text-ink";
+  const right = side === "right";
+  const colors = SIDE[side];
   return (
-    <div className={`min-w-0 ${alignRight ? "text-right" : ""}`}>
-      <div className="font-heading font-bold text-base leading-tight break-words">
-        {link ? <Link href={`/hrac/${player.id}`} className="hover:underline">{name}</Link> : name}
+    <div className={`min-w-0 flex flex-col ${right ? "items-end text-right" : "items-start"}`}>
+      <div className={`flex items-center gap-3 ${right ? "flex-row-reverse" : ""}`}>
+        <FaceAvatar faceConfig={player.avatar} size={40} className="shrink-0 hidden sm:block bg-gray-50 rounded-xl" />
+        <div className="min-w-0">
+          <div className={`h-1 w-8 rounded-full mb-1.5 ${colors.bg} ${right ? "ml-auto" : ""}`} aria-hidden />
+          <div className="font-heading font-bold text-base leading-tight break-words">
+            {link ? <Link href={`/hrac/${player.id}`} className="hover:underline">{name}</Link> : name}
+          </div>
+          <div className={`flex items-center gap-1.5 mt-1 text-sm text-muted ${right ? "justify-end" : ""}`}>
+            <PositionBadge position={player.position} />
+            <span>{player.age} let{isU21 ? " · U21" : ""}</span>
+          </div>
+        </div>
       </div>
-      <div className={`flex items-center gap-1.5 mt-1 text-sm text-muted ${alignRight ? "justify-end" : ""}`}>
-        <PositionBadge position={player.position} />
-        <span>{player.age} let{isU21 ? " · U21" : ""}</span>
-      </div>
-      <div className={`mt-1 font-heading font-extrabold text-2xl tabular-nums leading-none ${ratingColor}`}>
-        {player.overall_rating}
+      <div className="mt-2 font-heading tabular-nums leading-none">
+        <span className={`font-extrabold text-2xl ${win ? colors.text : "text-ink"}`}>{player.overall_rating}</span>
         <span className="ml-1 text-sm font-bold text-muted">rating</span>
       </div>
     </div>
@@ -272,23 +282,32 @@ function CompareRow({ label, left, right, win, isKey }: {
   win: -1 | 0 | 1;
   isKey: boolean;
 }) {
-  const barColor = (side: -1 | 1) => (win === 0 ? "bg-gray-400" : win === side ? "bg-pitch-500" : "bg-gray-300");
-  const numColor = (side: -1 | 1) => (win === 0 ? "text-ink" : win === side ? "text-pitch-600" : "text-muted");
   const width = (v: number) => `${Math.max(0, Math.min(100, v))}%`;
+  const badge = (side: "left" | "right") => {
+    const won = win === (side === "left" ? -1 : 1);
+    if (won) return `${SIDE[side].bg} text-white`;
+    if (win === 0) return "bg-gray-100 text-ink";
+    return "text-gray-400";
+  };
+  const bar = (side: "left" | "right") => {
+    const won = win === (side === "left" ? -1 : 1);
+    if (won) return SIDE[side].bar;
+    return win === 0 ? "bg-gray-400" : "bg-gray-200";
+  };
   return (
-    <div className={`grid grid-cols-[2.25rem_1fr_6rem_1fr_2.25rem] items-center gap-1.5 py-1.5 ${isKey ? "-mx-2 px-2 bg-pitch-50/70 rounded" : ""}`}>
-      <span className={`text-sm font-heading font-bold tabular-nums text-center ${numColor(-1)}`}>{left}</span>
-      <div className="h-2 rounded-full bg-gray-100 flex justify-end overflow-hidden">
-        <div className={`h-full rounded-full ${barColor(-1)}`} style={{ width: width(left) }} />
+    <div className="grid grid-cols-[2.5rem_1fr_6.25rem_1fr_2.5rem] items-center gap-1.5 py-1.5 border-b border-gray-50">
+      <span className={`inline-flex items-center justify-center h-7 rounded-md text-sm font-heading font-bold tabular-nums ${badge("left")}`}>{left}</span>
+      <div className="h-2.5 rounded-full bg-gray-100 flex justify-end overflow-hidden">
+        <div className={`h-full rounded-full ${bar("left")}`} style={{ width: width(left) }} />
       </div>
-      <span className={`text-sm text-center truncate ${isKey ? "text-pitch-700 font-bold" : "text-ink-light"}`}>
-        {isKey && <span className="text-pitch-500 text-micro leading-none mr-1" aria-hidden>●</span>}
+      <span className={`text-sm text-center truncate ${isKey ? "text-ink font-bold" : "text-ink-light"}`}>
+        {isKey && <span className="text-ink-light text-micro leading-none mr-1" aria-hidden>●</span>}
         {label}
       </span>
-      <div className="h-2 rounded-full bg-gray-100 flex justify-start overflow-hidden">
-        <div className={`h-full rounded-full ${barColor(1)}`} style={{ width: width(right) }} />
+      <div className="h-2.5 rounded-full bg-gray-100 flex justify-start overflow-hidden">
+        <div className={`h-full rounded-full ${bar("right")}`} style={{ width: width(right) }} />
       </div>
-      <span className={`text-sm font-heading font-bold tabular-nums text-center ${numColor(1)}`}>{right}</span>
+      <span className={`inline-flex items-center justify-center h-7 rounded-md text-sm font-heading font-bold tabular-nums ${badge("right")}`}>{right}</span>
     </div>
   );
 }
