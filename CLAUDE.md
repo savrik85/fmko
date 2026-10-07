@@ -33,6 +33,12 @@
    - Hybrid → oboje
    - Použij slash command `/verify` pro checklist.
 
+6. **NIKDY české identifikátory v kódu.**
+   - Proměnné, funkce, typy, komponenty, názvy souborů, props, klíče objektů i id v testech: anglicky.
+   - Česky jen texty pro hráče, komentáře a popisy testů (`describe`/`it`).
+   - České názvy, které už v repu jsou (`tymyDivaka`, `youth.ts`…), nenapodobovat.
+   - Před každým commitem projít nové názvy: `git diff --cached | grep "^+" | grep -oE "\b(const|let|function|interface|type|class)\s+\w+" | sort -u`
+
 ---
 
 ## 🚢 Deploy workflow
