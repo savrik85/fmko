@@ -17,7 +17,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: "Srovnání hráčů",
     items: [
       "V profilu každého hráče, tvého i cizího, najdeš pod dovednostmi srovnání s kýmkoliv z tvého kádru včetně U21. Hráče vybereš v nabídce, hráči na stejném postu jsou nahoře.",
-      "U každého atributu je hned vidět, kdo je lepší: lepší hráč má číslo v barevném štítku. Žlutě podbarvené jsou atributy, na kterých na daném postu nejvíc záleží.",
+      "U každého atributu je hned vidět, kdo je lepší: lepší hráč má číslo v barevném štítku. Zvýrazněné jsou atributy, na kterých na daném postu nejvíc záleží, stejně jako v dovednostech hráče.",
       "Vybraný hráč ti zůstane, i když listuješ cizím kádrem. Svého útočníka tak porovnáš postupně se všemi hráči soupeře.",
     ],
   },
