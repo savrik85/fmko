@@ -167,6 +167,8 @@ export function PlayerCompare({ teamId, player, exactValues }: {
     <div className="card p-4 sm:p-5">
       <SectionLabel>Srovnání s hráčem z kádru</SectionLabel>
 
+      {/* Na širokém monitoru by se zrcadlové pruhy roztáhly přes celou stránku */}
+      <div className="max-w-2xl mx-auto">
       <select
         value={compareId ?? ""}
         onChange={(e) => choose(e.target.value)}
@@ -231,6 +233,7 @@ export function PlayerCompare({ teamId, player, exactValues }: {
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -269,7 +272,7 @@ function CompareRow({ label, left, right, win, isKey }: {
   win: -1 | 0 | 1;
   isKey: boolean;
 }) {
-  const barColor = (side: -1 | 1) => (win === 0 ? "bg-gray-400" : win === side ? "bg-pitch-500" : "bg-gray-200");
+  const barColor = (side: -1 | 1) => (win === 0 ? "bg-gray-400" : win === side ? "bg-pitch-500" : "bg-gray-300");
   const numColor = (side: -1 | 1) => (win === 0 ? "text-ink" : win === side ? "text-pitch-600" : "text-muted");
   const width = (v: number) => `${Math.max(0, Math.min(100, v))}%`;
   return (
