@@ -18,7 +18,7 @@ import { MoneyInput } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { PlayerObligationsCard } from "@/components/transfers/player-obligations";
 import { formatLogDate } from "@/components/manager/CoachKabinaTab";
-import { attrValue } from "@/lib/player-attrs";
+import { attrBg, attrValue } from "@/lib/player-attrs";
 
 import type { BadgePattern } from "@/components/ui";
 import { isLightColor } from "@/lib/team-color";
@@ -2115,14 +2115,6 @@ function StatBox({ label, value, color }: { label: string; value: number; color?
       <div className="text-label text-micro uppercase">{label}</div>
     </div>
   );
-}
-
-function attrBg(value: number): string {
-  if (value >= 70) return "bg-pitch-500 text-white";
-  if (value >= 50) return "bg-pitch-100 text-pitch-800";
-  if (value >= 30) return "bg-gray-100 text-ink";
-  if (value >= 15) return "bg-amber-100 text-amber-800";
-  return "bg-red-100 text-card-red";
 }
 
 /* ── Training Development Section ── */

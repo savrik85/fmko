@@ -6,14 +6,11 @@ import { useTeam } from "@/context/team-context";
 import { TalentStars } from "@/components/players/talent-stars";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
-import { ATTRIBUTE_INFO, getTooltip, type AttrKey, type Pos } from "@/lib/attribute-info";
-import { coachRelationBand } from "@okresni-masina/shared";
+import { PositionFilter, SquadAttributeTable, type PosFilter } from "@/components/players/squad-attribute-table";
 
 type Tab = "atributy" | "sezona" | "top" | "dochazka";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["atributy", "sezona", "top", "dochazka"] as const;
-type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
-type SortKey = "name" | "pos" | "age" | "rat" | "pot" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "rel" | "wage";
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
 type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "injury" | "suspension" | "excuse" | "bench" | "notNominated";
 type SortDir = "asc" | "desc";
@@ -57,91 +54,6 @@ interface TeamStatsResponse {
 
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 
-// attrKey: pokud sloupec odpovídá atributu hráče, zobrazí se detail tooltip + position dots
-const COLUMNS: Array<{ key: SortKey; label: string; tip: string; attrKey?: AttrKey }> = [
-  { key: "name", label: "Jméno", tip: "Jméno hráče" },
-  { key: "pos", label: "Poz", tip: "Pozice" },
-  { key: "age", label: "Věk", tip: getTooltip("age"), attrKey: "age" },
-  { key: "rat", label: "Rat", tip: getTooltip("rat"), attrKey: "rat" },
-  { key: "pot", label: "Pot", tip: "Potenciál, kam hráč reálně dojde, než ho dožene věk. Odhad skauta, bez skauta se nezobrazí." },
-  { key: "spd", label: "Rch", tip: getTooltip("spd"), attrKey: "spd" },
-  { key: "tec", label: "Tch", tip: getTooltip("tec"), attrKey: "tec" },
-  { key: "sho", label: "Stř", tip: getTooltip("sho"), attrKey: "sho" },
-  { key: "pas", label: "Přh", tip: getTooltip("pas"), attrKey: "pas" },
-  { key: "hea", label: "Hlv", tip: getTooltip("hea"), attrKey: "hea" },
-  { key: "def", label: "Obr", tip: getTooltip("def"), attrKey: "def" },
-  { key: "gk", label: "Brk", tip: getTooltip("gk"), attrKey: "gk" },
-  { key: "sta", label: "Výd", tip: getTooltip("sta"), attrKey: "sta" },
-  { key: "str", label: "Síl", tip: getTooltip("str"), attrKey: "str" },
-  { key: "cond", label: "Kon", tip: getTooltip("cond"), attrKey: "cond" },
-  { key: "mor", label: "Mor", tip: getTooltip("mor"), attrKey: "mor" },
-  { key: "rel", label: "Vzt", tip: "Vztah hráče k tobě (trenérovi). 0 nepřítel, 50 neutrál, 100 oddán" },
-  { key: "wage", label: "Mzda", tip: getTooltip("wage"), attrKey: "wage" },
-];
-
-const POS_DOT_COLOR: Record<Pos, string> = {
-  GK: "bg-gold-500",
-  DEF: "bg-blue-500",
-  MID: "bg-pitch-500",
-  FWD: "bg-card-red",
-};
-
-function getVal(p: Player, key: SortKey, potencial?: Map<string, { strop: number | null }>): string | number {
-  const s = p.skills as Record<string, number> | undefined;
-  const lc = p.lifeContext as unknown as Record<string, number> | undefined;
-  switch (key) {
-    // Bez skauta potenciál neznáme — takoví hráči padají na konec, ne na začátek
-    case "pot": return potencial?.get(p.id)?.strop ?? -1;
-    case "name": return `${p.last_name} ${p.first_name}`;
-    case "pos": return POS_ORDER[p.position] ?? 9;
-    case "age": return p.age;
-    case "rat": return p.overall_rating ?? 0;
-    case "spd": return s?.speed ?? 0;
-    case "tec": return s?.technique ?? 0;
-    case "sho": return s?.shooting ?? 0;
-    case "pas": return s?.passing ?? 0;
-    case "hea": return s?.heading ?? 0;
-    case "def": return s?.defense ?? 0;
-    case "gk": return s?.goalkeeping ?? 0;
-    case "sta": return s?.stamina ?? 0;
-    case "str": return s?.strength ?? 0;
-    case "cond": return lc?.condition ?? 0;
-    case "mor": return lc?.morale ?? 0;
-    case "rel": return p.coach_relationship ?? 50;
-    case "wage": return p.weekly_wage ?? 0;
-  }
-}
-
-function cellColor(v: number): string {
-  if (v >= 70) return "bg-pitch-500 text-white font-bold";
-  if (v >= 55) return "bg-pitch-100 text-pitch-800";
-  if (v >= 40) return "bg-gray-50 text-ink";
-  if (v >= 25) return "bg-amber-50 text-amber-800";
-  return "bg-red-50 text-card-red";
-}
-
-function condColor(v: number): string {
-  if (v >= 80) return "text-pitch-500";
-  if (v >= 50) return "text-gold-600";
-  return "text-card-red";
-}
-
-function moraleIcon(v: number): string {
-  if (v >= 80) return "😊";
-  if (v >= 60) return "🙂";
-  if (v >= 40) return "😐";
-  if (v >= 20) return "😞";
-  return "😡";
-}
-
-function relationIcon(v: number): string {
-  return coachRelationBand(v).icon;
-}
-
-function relationLabel(v: number): string {
-  return coachRelationBand(v).label;
-}
-
 export default function SquadPage() {
   const { teamId } = useTeam();
   const [team, setTeam] = useState<Team | null>(null);
@@ -152,8 +64,6 @@ export default function SquadPage() {
   const [seasonStats, setSeasonStats] = useState<PlayerSeasonStats[]>([]);
   const [tab, setTab] = useTabParam(TAB_KEYS);
   const [filter, setFilter] = useState<PosFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("rat");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [statsSortKey, setStatsSortKey] = useState<StatsKey>("g");
   const [statsSortDir, setStatsSortDir] = useState<SortDir>("desc");
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
@@ -259,18 +169,6 @@ export default function SquadPage() {
 
   const filtered = filter === "all" ? players : players.filter((p) => p.position === filter);
 
-  const sorted = [...filtered].sort((a, b) => {
-    const va = getVal(a, sortKey, potencial);
-    const vb = getVal(b, sortKey, potencial);
-    const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
-    return sortDir === "asc" ? cmp : -cmp;
-  });
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir(key === "name" ? "asc" : "desc"); }
-  };
-
   // Stats tab — filter + sort
   const statsFiltered = filter === "all" ? seasonStats : seasonStats.filter((s) => s.position === filter);
   const getStatsVal = (s: PlayerSeasonStats, k: StatsKey): string | number => {
@@ -310,8 +208,6 @@ export default function SquadPage() {
   const avgRating = players.length ? Math.round(players.reduce((s, p) => s + (p.overall_rating ?? 0), 0) / players.length) : 0;
   const totalWage = players.reduce((s, p) => s + (p.weekly_wage ?? 0), 0);
   const avgAge = players.length ? (players.reduce((s, p) => s + p.age, 0) / players.length).toFixed(1) : "0";
-  const posCounts = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
-  for (const p of players) posCounts[p.position as keyof typeof posCounts]++;
 
   return (
     <div className="page-container space-y-4">
@@ -351,175 +247,10 @@ export default function SquadPage() {
         />
       </div>
 
-      {/* Position filter — segmented control */}
-      <div className="card p-3">
-        <div className="text-micro text-muted font-heading uppercase tracking-wide mb-2">Filtr pozice</div>
-        <div className="flex rounded-xl bg-gray-50 p-0.5 gap-0.5">
-          {([
-            ["all", "Vše", players.length],
-            ["GK", "Brankáři", posCounts.GK],
-            ["DEF", "Obrana", posCounts.DEF],
-            ["MID", "Záloha", posCounts.MID],
-            ["FWD", "Útok", posCounts.FWD],
-          ] as Array<[PosFilter, string, number]>).map(([pos, label, count]) => (
-            <button
-              key={pos}
-              onClick={() => setFilter(pos)}
-              className={`flex-1 py-1.5 px-1 rounded-soft text-center transition-all font-heading font-bold ${
-                filter === pos
-                  ? "bg-white shadow-sm text-pitch-600"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              <div className="text-xs sm:text-sm truncate">{label}</div>
-              <div className={`text-micro tabular-nums ${filter === pos ? "text-pitch-500" : "text-muted-light"}`}>{count}</div>
-            </button>
-          ))}
-        </div>
-      </div>
+      <PositionFilter players={players} value={filter} onChange={setFilter} />
 
       {/* FM-style table — Atributy tab */}
-      {tab === "atributy" && (
-      <div className="card overflow-x-auto table-scroll">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b-2 border-gray-200">
-              {COLUMNS.map((col) => {
-                const relevantFor = col.attrKey ? ATTRIBUTE_INFO[col.attrKey].relevantFor : null;
-                const showDots = relevantFor && relevantFor.length > 0 && relevantFor.length < 4;
-                return (
-                  <th key={col.key}
-                    onClick={() => toggleSort(col.key)}
-                    title={col.tip}
-                    className={`py-2.5 px-1.5 font-heading uppercase cursor-help select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                      sortKey === col.key ? "text-pitch-600 bg-pitch-50" : "text-muted"
-                    } ${col.key === "name" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"}`}
-                  >
-                    <div className={`flex flex-col gap-0.5 ${col.key === "name" ? "items-start" : "items-center"}`}>
-                      <span>{col.label}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</span>
-                      {showDots && (
-                        <span className="flex gap-0.5" aria-hidden="true" title={`Klíčové pro: ${relevantFor.join(", ")}`}>
-                          {relevantFor.map((p) => (
-                            <span key={p} className={`w-1 h-1 rounded-full ${POS_DOT_COLOR[p]}`} />
-                          ))}
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((p) => {
-              const s = p.skills as Record<string, number> | undefined;
-              const lc = p.lifeContext as unknown as Record<string, number> | undefined;
-              const cond = lc?.condition ?? 100;
-              const morale = lc?.morale ?? 50;
-              const isQuit = (p as any).status === "quit";
-
-              return (
-                <tr key={p.id} className={`border-b border-gray-50 hover:bg-pitch-50/30 transition-colors ${isQuit ? "opacity-40" : ""}`}>
-                  {/* Name — sticky */}
-                  <td className="py-2 px-1.5 pl-3 sticky left-0 bg-white z-10">
-                    <Link href={`/hrac/${p.id}`}
-                      className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
-                      {p.first_name} {p.last_name}
-                    </Link>
-                    {p.loan_from_team_id && (
-                      <span className="ml-1.5 text-micro bg-yellow-100 text-yellow-700 font-heading font-bold px-1.5 py-0.5 rounded-full">Host.</span>
-                    )}
-                    {(() => {
-                      const inj = (p as unknown as { injury?: { type?: string; daysRemaining: number } | null }).injury;
-                      if (!inj) return null;
-                      const daysLabel = inj.daysRemaining === 1 ? "den" : inj.daysRemaining < 5 ? "dny" : "dní";
-                      const tip = `Zraněný${inj.type ? ` — ${inj.type}` : ""} · ${inj.daysRemaining} ${daysLabel} do návratu`;
-                      return (
-                        <span className="ml-1.5 text-micro bg-red-100 text-red-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🩹</span>
-                      );
-                    })()}
-                    {(() => {
-                      const abs = (p as unknown as { absence?: { reason?: string; category?: string } | null }).absence;
-                      if (!abs) return null;
-                      const tip = `Chybí dnes${abs.reason ? ` — ${abs.reason}` : ""}`;
-                      return (
-                        <span className="ml-1.5 text-micro bg-amber-100 text-amber-700 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>🚫</span>
-                      );
-                    })()}
-                    {(lc as unknown as { hangover?: number | boolean } | undefined)?.hangover ? (
-                      <span className="ml-1.5 cursor-help" title="Ranní kocovina po včerejší výhře (−15 kondice)" aria-label="Kocovina">🍺</span>
-                    ) : null}
-                  </td>
-                  {/* Position */}
-                  <td className="py-2 px-1.5 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
-                  {/* Age */}
-                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{p.age}</td>
-                  {/* Rating */}
-                  <td className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${cellColor(p.overall_rating ?? 0)}`}>{p.overall_rating}</td>
-                  {/* Potenciál — kam reálně dojde. Barva nese verdikt, ať jde kádr přeletět očima. */}
-                  {(() => {
-                    const pot = potencial.get(p.id);
-                    const barva = pot?.uroven === "hvezda" ? "text-gold-600"
-                      : pot?.uroven === "nadejny" ? "text-pitch-500"
-                      : pot?.uroven === "prumer" ? "text-blue-600" : "text-muted";
-                    return (
-                      <td
-                        className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${barva}`}
-                        title={pot?.slovne ?? "Bez skauta v realizačním týmu potenciál neodhadneš"}
-                      >
-                        {pot?.strop ?? "—"}
-                      </td>
-                    );
-                  })()}
-                  {/* Skills */}
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.speed ?? 0)}`}>{s?.speed ?? "—"}</td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.technique ?? 0)}`}>{s?.technique ?? "—"}</td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.shooting ?? 0)}`}>{s?.shooting ?? "—"}</td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.passing ?? 0)}`}>{s?.passing ?? "—"}</td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.heading ?? 0)}`}>{s?.heading ?? "—"}</td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.defense ?? 0)}`}>{s?.defense ?? "—"}</td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.goalkeeping ?? 0)}`}>{s?.goalkeeping ?? "—"}</td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.stamina ?? 0)}`}>{s?.stamina ?? "—"}</td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums ${cellColor(s?.strength ?? 0)}`}>{s?.strength ?? "—"}</td>
-                  {/* Condition */}
-                  <td className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${condColor(cond)}`}>{cond}%</td>
-                  {/* Morale */}
-                  <td className="py-2 px-1.5 text-center" title={`${morale}%`}>{moraleIcon(morale)}</td>
-                  {/* Vztah k trenérovi */}
-                  {(() => {
-                    const rel = p.coach_relationship ?? 50;
-                    return (
-                      <td className="py-2 px-1.5 text-center" title={`${relationLabel(rel)} (${rel}/100)`}>
-                        <span className="inline-flex items-center gap-1 tabular-nums">
-                          <span>{relationIcon(rel)}</span>
-                          <span className="text-micro text-muted">{rel}</span>
-                        </span>
-                      </td>
-                    );
-                  })()}
-                  {/* Wage */}
-                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{(p.weekly_wage ?? 0).toLocaleString("cs")}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      )}
-
-      {/* Legenda — co znamenají barevné tečky u headerů */}
-      {tab === "atributy" && (
-        <div className="card p-2.5 text-micro text-muted">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-heading uppercase text-micro tracking-wide">Tečky u hlaviček:</span>
-            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gold-500" /> Brankář</span>
-            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Obrana</span>
-            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-pitch-500" /> Záloha</span>
-            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-card-red" /> Útok</span>
-            <span className="ml-auto italic">Najetím na hlavičku zjistíš, co atribut dělá.</span>
-          </div>
-        </div>
-      )}
+      {tab === "atributy" && <SquadAttributeTable players={filtered} potencial={potencial} />}
 
       {/* Sezóna — match stats tab */}
       {tab === "sezona" && (
