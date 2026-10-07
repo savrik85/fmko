@@ -8,7 +8,7 @@ import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam } f
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { AcademyCard } from "@/components/players/academy-card";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
-import { U21Atributy } from "@/components/players/u21-atributy";
+import { U21Attributes } from "@/components/players/u21-attributes";
 import type { BadgePattern } from "@/components/ui";
 
 interface U21Player {
@@ -425,7 +425,7 @@ export default function U21Page() {
         </div>
       )}
 
-      {tab === "atributy" && teamId && <U21Atributy teamId={teamId} />}
+      {tab === "atributy" && teamId && <U21Attributes teamId={teamId} />}
 
       {tab === "rozvoj" && teamId && <U21Rozvoj teamId={teamId} />}
 

@@ -14,13 +14,13 @@ import { attributeImportance, coachRelationBand } from "@okresni-masina/shared";
 import { PositionBadge } from "@/components/ui";
 import type { Player } from "@/lib/api";
 import { ATTRIBUTE_INFO, getTooltip, type AttrKey } from "@/lib/attribute-info";
-import { attrBg } from "@/lib/player-attrs";
+import { attrBg, attrValue } from "@/lib/player-attrs";
 
 type Pos = "GK" | "DEF" | "MID" | "FWD";
 export type PosFilter = "all" | Pos;
-export type Potencial = Map<string, { strop: number | null; uroven: string | null; slovne: string | null }>;
+export type PotentialMap = Map<string, { strop: number | null; uroven: string | null; slovne: string | null }>;
 
-type SortKey = "name" | "pos" | "age" | "rat" | "pot" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk" | "sta" | "str" | "cond" | "mor" | "rel" | "wage";
+type SortKey = "name" | "pos" | "age" | "rat" | "pot" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "vis" | "exp" | "cre" | "set" | "gk" | "sta" | "str" | "cond" | "mor" | "rel" | "wage";
 type SortDir = "asc" | "desc";
 
 const POSITIONS: Pos[] = ["GK", "DEF", "MID", "FWD"];
@@ -40,6 +40,10 @@ const COLUMNS: Array<{ key: SortKey; label: string; tip?: string; attrKey?: Attr
   { key: "pas", label: "Přh", attrKey: "pas", skill: "passing" },
   { key: "hea", label: "Hlv", attrKey: "hea", skill: "heading" },
   { key: "def", label: "Obr", attrKey: "def", skill: "defense" },
+  { key: "vis", label: "Pře", attrKey: "vis", skill: "vision" },
+  { key: "exp", label: "Zku", attrKey: "exp", skill: "experience" },
+  { key: "cre", label: "Kre", attrKey: "cre", skill: "creativity" },
+  { key: "set", label: "Std", attrKey: "set", skill: "setPieces" },
   { key: "gk", label: "Brk", attrKey: "gk", skill: "goalkeeping" },
   { key: "sta", label: "Výd", attrKey: "sta", skill: "stamina" },
   { key: "str", label: "Síl", attrKey: "str", skill: "strength" },
@@ -67,29 +71,36 @@ function keyPositions(skill: string): Pos[] {
 function columnTip(col: (typeof COLUMNS)[number]): string {
   if (col.skill && col.attrKey) {
     const info = ATTRIBUTE_INFO[col.attrKey];
-    return `${info.label} ${info.description}\nKlíčové pro: ${keyPositions(col.skill).map((p) => POS_ACCUSATIVE[p]).join(", ")}`;
+    const positions = keyPositions(col.skill);
+    const keyFor = positions.length > 0
+      ? `Klíčové pro: ${positions.map((p) => POS_ACCUSATIVE[p]).join(", ")}`
+      : "Pro žádný post není klíčový";
+    return `${info.label} ${info.description}\n${keyFor}`;
   }
   return col.attrKey ? getTooltip(col.attrKey) : col.tip ?? "";
 }
 
 /**
- * Hodnota atributu. Výdrž a sílu bere z `physical` jako karta Dovednosti v profilu,
- * v plochém `skills` u části hráčů (hlavně dorostu) chybí.
+ * Hodnota atributu, dohledaná stejně jako v kartě Dovednosti profilu hráče: výdrž a síla
+ * z `physical`, přehled a zkušenost přes `attrValue`, chybějící standardky 50 a kreativita 0.
  */
 function skillValue(p: Player, skill: string): number | undefined {
+  if (skill === "vision" || skill === "experience") return attrValue(p, skill);
   if (skill === "stamina" || skill === "strength") {
     const fromPhysical = (p.physical as unknown as Record<string, number> | undefined)?.[skill];
     if (typeof fromPhysical === "number") return fromPhysical;
   }
   const flat = (p.skills as Record<string, number> | undefined)?.[skill];
-  return typeof flat === "number" ? flat : undefined;
+  if (typeof flat === "number") return flat;
+  if (skill === "setPieces") return 50;
+  return skill === "creativity" ? 0 : undefined;
 }
 
-function getVal(p: Player, key: SortKey, potencial: Potencial): string | number {
+function getVal(p: Player, key: SortKey, potential: PotentialMap): string | number {
   const lc = p.lifeContext as unknown as Record<string, number> | undefined;
   switch (key) {
     // Bez skauta potenciál neznáme. Takoví hráči padají na konec, ne na začátek.
-    case "pot": return potencial.get(p.id)?.strop ?? -1;
+    case "pot": return potential.get(p.id)?.strop ?? -1;
     case "name": return `${p.last_name} ${p.first_name}`;
     case "pos": return POS_ORDER[p.position] ?? 9;
     case "age": return p.age;
@@ -100,6 +111,10 @@ function getVal(p: Player, key: SortKey, potencial: Potencial): string | number 
     case "pas": return skillValue(p, "passing") ?? 0;
     case "hea": return skillValue(p, "heading") ?? 0;
     case "def": return skillValue(p, "defense") ?? 0;
+    case "vis": return skillValue(p, "vision") ?? 0;
+    case "exp": return skillValue(p, "experience") ?? 0;
+    case "cre": return skillValue(p, "creativity") ?? 0;
+    case "set": return skillValue(p, "setPieces") ?? 0;
     case "gk": return skillValue(p, "goalkeeping") ?? 0;
     case "sta": return skillValue(p, "stamina") ?? 0;
     case "str": return skillValue(p, "strength") ?? 0;
@@ -162,13 +177,13 @@ export function PositionFilter({ players, value, onChange }: {
   );
 }
 
-export function SquadAttributeTable({ players, potencial = new Map() }: { players: Player[]; potencial?: Potencial }) {
+export function SquadAttributeTable({ players, potential = new Map() }: { players: Player[]; potential?: PotentialMap }) {
   const [sortKey, setSortKey] = useState<SortKey>("rat");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const sorted = [...players].sort((a, b) => {
-    const va = getVal(a, sortKey, potencial);
-    const vb = getVal(b, sortKey, potencial);
+    const va = getVal(a, sortKey, potential);
+    const vb = getVal(b, sortKey, potential);
     const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -218,7 +233,7 @@ export function SquadAttributeTable({ players, potencial = new Map() }: { player
               const rel = p.coach_relationship ?? 50;
               const relBand = coachRelationBand(rel);
               const isQuit = p.status === "quit";
-              const pot = potencial.get(p.id);
+              const pot = potential.get(p.id);
               const potColor = pot?.uroven === "hvezda" ? "text-gold-600"
                 : pot?.uroven === "nadejny" ? "text-pitch-500"
                 : pot?.uroven === "prumer" ? "text-blue-600" : "text-muted";

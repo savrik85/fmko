@@ -3,6 +3,7 @@
 
 export type AttrKey =
   | "rat" | "spd" | "tec" | "sho" | "pas" | "hea" | "def" | "gk"
+  | "vis" | "exp" | "cre" | "set"
   | "sta" | "str" | "cond" | "mor" | "wage" | "age";
 
 export type Pos = "GK" | "DEF" | "MID" | "FWD";
@@ -53,6 +54,26 @@ export const ATTRIBUTE_INFO: Record<AttrKey, AttrInfo> = {
     label: "Obrana",
     description: "Schopnost ubránit soupeře, čtení hry. Klíčová pro obránce a defenzivní záložníky.",
     relevantFor: ["DEF", "MID"],
+  },
+  vis: {
+    label: "Přehled",
+    description: "Čtení hry a výběr správného řešení s míčem. Nejvíc rozhoduje u záložníků.",
+    relevantFor: ["DEF", "MID", "FWD"],
+  },
+  exp: {
+    label: "Zkušenost",
+    description: "Herní zkušenost a rozvaha. Počítá se do hodnocení všech postů.",
+    relevantFor: ["GK", "DEF", "MID"],
+  },
+  cre: {
+    label: "Kreativita",
+    description: "Nápady s míčem a nečekaná řešení. U brankáře jde o komunikaci s obranou.",
+    relevantFor: ["GK", "MID", "FWD"],
+  },
+  set: {
+    label: "Standardky",
+    description: "Zahrávání standardních situací. Na hodnocení mají menší vliv než ostatní dovednosti.",
+    relevantFor: ["MID", "FWD"],
   },
   gk: {
     label: "Brankář",
