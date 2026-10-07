@@ -117,6 +117,8 @@ interface Stadium3DProps {
   badgeSecondary?: string | null;
   stadiumName?: string | null;
   sponsors?: string[];
+  /** Barva reklamních mantinelů, když se liší od barvy stadionu (turnaj P-Mobile). */
+  adBoardColor?: string;
   customization?: Stadium3DCustomization;
   lastMatch?: LastMatchScore | null;
   initialTimeOfDay?: TimeOfDay;
@@ -171,6 +173,7 @@ export function Stadium3D({
   badgeSecondary,
   stadiumName,
   sponsors,
+  adBoardColor,
   customization,
   lastMatch,
   initialTimeOfDay = "day",
@@ -760,7 +763,7 @@ export function Stadium3D({
 
           {/* Reklamní bannery podél hřiště */}
           {sponsors && sponsors.length > 0 && (
-            <AdBoards sponsors={sponsors} teamColor={teamColor} />
+            <AdBoards sponsors={sponsors} teamColor={adBoardColor ?? teamColor} />
           )}
 
           {/* Scoreboard za severní brankou */}

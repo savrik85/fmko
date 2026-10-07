@@ -66,7 +66,8 @@ export function PageHeader({ name, detail, color, badge, children, compact }: Pa
   // aby si tyhle stránky mohly znak i pravý štítek odepřít.
   if (compact) {
     const title = name || pageTitleFor(pathname) || displayName;
-    const znak = badge === null ? null : makeBadge(26);
+    // Vlastní znak stránky (např. logo pořadatele turnaje) má přednost před znakem týmu.
+    const znak = badge === null ? null : (badge ?? makeBadge(26));
     return (
       <div className="hero-gradient py-2 px-4 sm:px-8" style={{ backgroundColor: bg }}>
         <div className="flex items-center gap-3 min-w-0">

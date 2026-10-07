@@ -7,6 +7,21 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader, Button } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 import { BRAND, CompetitionView, type Competition } from "./competition";
+import { PMobileLogo, PMobileMark, SignalWaves, pMobileTheme } from "@/components/brand/p-mobile";
+
+/** Hlavička turnaje v barvách pořadatele: logo P-Mobile, název, ročník a dějiště. */
+function Hero({ name, edition, venueName, city, extra }: { name: string; edition: number; venueName: string; city: string; extra?: string }) {
+  return (
+    <div className="relative overflow-hidden px-5 py-5 text-white" style={{ background: BRAND }}>
+      <SignalWaves className="absolute -right-10 top-1/2 -translate-y-1/2 h-[220%] pointer-events-none" />
+      <div className="relative">
+        <PMobileLogo size={28} inverse />
+        <div className="mt-4 text-3xl font-heading font-[800] leading-none">{name}</div>
+        <div className="mt-2 text-sm text-white/85">{edition}. ročník, {venueName}, {city}{extra ? `, ${extra}` : ""}</div>
+      </div>
+    </div>
+  );
+}
 
 interface Entry {
   teamId: string;
@@ -257,26 +272,18 @@ export default function TurnajPage() {
 
 
   return (
-    <>
-      <PageHeader compact name={t.name} detail={`${t.edition}. ročník · ${t.city}`}>{null}</PageHeader>
+    <div style={pMobileTheme}>
+      <PageHeader compact name={t.name} detail={`${t.edition}. ročník, ${t.city}`} color={BRAND} badge={<PMobileMark size={26} inverse />}>{null}</PageHeader>
       <div className="page-container space-y-5">
 
         {/* Hlavička turnaje + přihláška (po losu jen hlavička a průběh) */}
         {competition ? (
           <div className="card overflow-hidden">
-            <div className="px-4 py-4 text-white" style={{ background: BRAND }}>
-              <div className="text-sm font-heading font-bold uppercase tracking-wider text-white/80">{t.sponsor} uvádí</div>
-              <div className="text-2xl font-heading font-[800] leading-tight mt-0.5">{t.name}</div>
-              <div className="text-sm text-white/90 mt-1">{t.edition}. ročník · {t.venueName}, {t.city} · {clubsLabel(entries.length)}</div>
-            </div>
+            <Hero name={t.name} edition={t.edition} venueName={t.venueName} city={t.city} extra={clubsLabel(entries.length)} />
           </div>
         ) : (
         <div className="card overflow-hidden">
-          <div className="px-4 py-4 text-white" style={{ background: BRAND }}>
-            <div className="text-sm font-heading font-bold uppercase tracking-wider text-white/80">{t.sponsor} uvádí</div>
-            <div className="text-2xl font-heading font-[800] leading-tight mt-0.5">{t.name}</div>
-            <div className="text-sm text-white/90 mt-1">{t.edition}. ročník · {t.venueName}, {t.city}</div>
-          </div>
+          <Hero name={t.name} edition={t.edition} venueName={t.venueName} city={t.city} />
 
           <div className="px-4 py-4 space-y-3">
             {open ? (
@@ -329,6 +336,6 @@ export default function TurnajPage() {
         ) : info}
 
       </div>
-    </>
+    </div>
   );
 }

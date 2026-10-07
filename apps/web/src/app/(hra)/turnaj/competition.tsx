@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BadgePreview, Tabs, useTabParam, type BadgePattern } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureCrest } from "@/components/match/fixture-row";
 import { RoundPager } from "@/components/match/round-pager";
+import { PMOBILE, PMobileLogo } from "@/components/brand/p-mobile";
 
 export const BRAND = "#C8006A";
 
@@ -80,6 +81,7 @@ function MatchRow({ m, myTeamId }: { m: CompetitionMatch; myTeamId: string | nul
       href={played ? `/zapas/${m.id}` : mine ? `/zapas?calendarId=${m.id}` : null}
       hrefLabel={played ? `Detail zápasu ${m.home.name} proti ${m.away.name}` : "Nastavit sestavu"}
       accent={mine ? BRAND : null}
+      boardColor={PMOBILE.deep}
       meta={
         <>
           {m.venue?.name && (
@@ -231,6 +233,7 @@ export function CompetitionView({
           <RoundPager
             pages={days.map((d) => ({ key: String(d), label: stageTitle(byDay(d)[0]) }))}
             initialKey={initial != null ? String(initial) : null}
+            accent={BRAND}
           >
             {(key) => {
               const d = Number(key);
@@ -273,6 +276,12 @@ export function CompetitionView({
       )}
 
       {tab === "info" && info}
+
+      {/* Pořadatel */}
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 py-4 text-sm text-muted">
+        <PMobileLogo size={22} />
+        <span>pořádá turnaj a hradí všechny jeho náklady</span>
+      </div>
     </div>
   );
 }

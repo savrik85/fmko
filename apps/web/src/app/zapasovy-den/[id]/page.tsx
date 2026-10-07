@@ -201,6 +201,8 @@ export default function MatchDayPage() {
           secondaryColor={match.venueSecondary ?? match.home_secondary}
           badgePattern={match.isTournament ? "shield" : match.home_badge}
           badgeInitials={match.isTournament ? "PM" : ini(match.home_name)}
+          sponsors={match.isTournament ? ["P-Mobile"] : undefined}
+          adBoardColor={match.isTournament ? "#C8006A" : undefined}
           stadiumName={match.stadium_name ?? `Stadion ${match.home_name}`}
           initialViewpoint="orbit"
           initialWeather={match.weather}
