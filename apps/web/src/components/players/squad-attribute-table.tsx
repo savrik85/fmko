@@ -72,8 +72,20 @@ function columnTip(col: (typeof COLUMNS)[number]): string {
   return col.attrKey ? getTooltip(col.attrKey) : col.tip ?? "";
 }
 
+/**
+ * Hodnota atributu. Výdrž a sílu bere z `physical` jako karta Dovednosti v profilu,
+ * v plochém `skills` u části hráčů (hlavně dorostu) chybí.
+ */
+function skillValue(p: Player, skill: string): number | undefined {
+  if (skill === "stamina" || skill === "strength") {
+    const fromPhysical = (p.physical as unknown as Record<string, number> | undefined)?.[skill];
+    if (typeof fromPhysical === "number") return fromPhysical;
+  }
+  const flat = (p.skills as Record<string, number> | undefined)?.[skill];
+  return typeof flat === "number" ? flat : undefined;
+}
+
 function getVal(p: Player, key: SortKey, potencial: Potencial): string | number {
-  const s = p.skills as Record<string, number> | undefined;
   const lc = p.lifeContext as unknown as Record<string, number> | undefined;
   switch (key) {
     // Bez skauta potenciál neznáme. Takoví hráči padají na konec, ne na začátek.
@@ -82,15 +94,15 @@ function getVal(p: Player, key: SortKey, potencial: Potencial): string | number 
     case "pos": return POS_ORDER[p.position] ?? 9;
     case "age": return p.age;
     case "rat": return p.overall_rating ?? 0;
-    case "spd": return s?.speed ?? 0;
-    case "tec": return s?.technique ?? 0;
-    case "sho": return s?.shooting ?? 0;
-    case "pas": return s?.passing ?? 0;
-    case "hea": return s?.heading ?? 0;
-    case "def": return s?.defense ?? 0;
-    case "gk": return s?.goalkeeping ?? 0;
-    case "sta": return s?.stamina ?? 0;
-    case "str": return s?.strength ?? 0;
+    case "spd": return skillValue(p, "speed") ?? 0;
+    case "tec": return skillValue(p, "technique") ?? 0;
+    case "sho": return skillValue(p, "shooting") ?? 0;
+    case "pas": return skillValue(p, "passing") ?? 0;
+    case "hea": return skillValue(p, "heading") ?? 0;
+    case "def": return skillValue(p, "defense") ?? 0;
+    case "gk": return skillValue(p, "goalkeeping") ?? 0;
+    case "sta": return skillValue(p, "stamina") ?? 0;
+    case "str": return skillValue(p, "strength") ?? 0;
     case "cond": return lc?.condition ?? 0;
     case "mor": return lc?.morale ?? 0;
     case "rel": return p.coach_relationship ?? 50;
@@ -200,7 +212,6 @@ export function SquadAttributeTable({ players, potencial = new Map() }: { player
           </thead>
           <tbody>
             {sorted.map((p) => {
-              const s = p.skills as Record<string, number> | undefined;
               const lc = p.lifeContext as unknown as Record<string, number> | undefined;
               const cond = lc?.condition ?? 100;
               const morale = lc?.morale ?? 50;
@@ -257,7 +268,7 @@ export function SquadAttributeTable({ players, potencial = new Map() }: { player
                     {pot?.strop ?? "—"}
                   </td>
                   {COLUMNS.filter((col) => col.skill).map((col) => {
-                    const v = s?.[col.skill!];
+                    const v = skillValue(p, col.skill!);
                     const isKey = attributeImportance(p.position, col.skill!) === "key";
                     // Podklad sám je mezi štítky skoro neviditelný, proto se ostatní atributy
                     // ztlumí. Klíčové pak v řádku vystoupí bez nové barvy.
