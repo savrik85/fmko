@@ -331,8 +331,8 @@ export function normalizeStammtischTopic(raw: unknown): string | null {
 
 /** Text pozvánky, kterou pozvaný trenér dostane do telefonu. */
 export function stammtischInviteText(hostManager: string, hostTeam: string, topic: string | null): string {
-  const tema = topic ? ` Téma: „${topic}“.` : "";
-  return `Trenér ${hostManager} (${hostTeam}) tě zve dnes večer na posezení s trenéry.${tema} Přijmi nebo odmítni ve své hospodě.`;
+  const topicPart = topic ? ` Téma: „${topic}“.` : "";
+  return `Trenér ${hostManager} (${hostTeam}) tě zve dnes večer na posezení s trenéry.${topicPart} Přijmi nebo odmítni ve své hospodě.`;
 }
 
 export function stammtischNews(hostManager: string, hostTeam: string, attendeeNames: string[]): { headline: string; body: string } {

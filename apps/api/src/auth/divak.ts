@@ -22,3 +22,14 @@ export async function tymyDivaka(c: Context<{ Bindings: Bindings }>): Promise<Se
     .catch((e) => { logger.warn({ module: "divak" }, "týmy diváka", e); return { results: [] as Array<{ id: string }> }; });
   return new Set(rows.results.map((r) => r.id));
 }
+
+/**
+ * Pro GET routy s neveřejnými daty klubu. `requireTeamOwnership` GET propouští bez kontroly
+ * (většina herních dat je veřejná), tohle ne. Vrací chybovou odpověď (401 bez přihlášení,
+ * 403 cizí klub), nebo null, když se dívá majitel `teamId`.
+ */
+export async function rejectUnlessOwner(c: Context<{ Bindings: Bindings }>, teamId: string): Promise<Response | null> {
+  if (!getTokenFromRequest(c)) return c.json({ error: "Nepřihlášen" }, 401);
+  if (!(await tymyDivaka(c)).has(teamId)) return c.json({ error: "Přístup odepřen" }, 403);
+  return null;
+}
