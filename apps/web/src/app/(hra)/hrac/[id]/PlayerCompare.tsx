@@ -159,9 +159,6 @@ export function PlayerCompare({ teamId, player, exactValues }: {
         return { attr: a, left, right, win: winner(left, right, !!a.inverted, tolerance) };
       })
     : [];
-  const leftWins = results.filter((r) => r.win === -1).length;
-  const rightWins = results.filter((r) => r.win === 1).length;
-  const ties = results.length - leftWins - rightWins;
   const ratingWin = other ? winner(subject.overall_rating ?? 0, other.overall_rating ?? 0, false, 0) : 0;
 
   return (
@@ -197,22 +194,13 @@ export function PlayerCompare({ teamId, player, exactValues }: {
 
       {other && (
         <div className="mt-4">
-          {/* Hlavička: prohlížený hráč vlevo, můj hráč vpravo, uprostřed skóre lepších atributů */}
-          <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3 pb-4 border-b border-gray-100">
+          {/* Hlavička: prohlížený hráč vlevo, můj hráč vpravo */}
+          <div className="grid grid-cols-2 items-start gap-3 pb-4 border-b border-gray-100">
             <PlayerHead player={subject} side="left" win={ratingWin === -1} />
-            <div className="text-center pt-1">
-              <div className="font-heading font-extrabold text-3xl sm:text-4xl tabular-nums leading-none whitespace-nowrap">
-                <span className={SIDE.left.text}>{leftWins}</span>
-                <span className="text-gray-300 mx-1.5">:</span>
-                <span className={SIDE.right.text}>{rightWins}</span>
-              </div>
-              <div className="mt-1.5 text-sm text-muted leading-tight">lepší<br className="sm:hidden" /> atributy</div>
-              {ties > 0 && <div className="mt-0.5 text-sm text-muted leading-tight">{ties} {ties === 1 ? "vyrovnaný" : ties < 5 ? "vyrovnané" : "vyrovnaných"}</div>}
-            </div>
             <PlayerHead player={other} side="right" link isU21={other.isU21} win={ratingWin === 1} />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-10 mt-1">
+          <div className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-10 gap-y-0.5 mt-2">
             {results.map(({ attr, left, right, win }) => (
               <CompareRow
                 key={attr.key}
@@ -227,7 +215,7 @@ export function PlayerCompare({ teamId, player, exactValues }: {
 
           <p className="mt-3 pt-3 border-t border-gray-100 text-sm text-muted">
             Plné číslo a barevný pruh má ten, kdo je v atributu lepší. U náchylnosti ke zraněním je lepší nižší číslo.
-            {" "}<span className="font-bold text-ink-light">●</span> Tučně jsou klíčové atributy pro post {POS_SHORT[subject.position] ?? subject.position}.
+            {" "}<span className="font-bold text-gold-700">Žlutě podbarvené</span> jsou klíčové pro post {POS_SHORT[subject.position] ?? subject.position}.
             {approximate && " Hráče z cizího klubu znáš jen přibližně (na pětky), rozdíl do 2 bodů se proto počítá jako vyrovnaný."}
           </p>
         </div>
@@ -295,15 +283,12 @@ function CompareRow({ label, left, right, win, isKey }: {
     return win === 0 ? "bg-gray-400" : "bg-gray-200";
   };
   return (
-    <div className="grid grid-cols-[2.5rem_1fr_6.25rem_1fr_2.5rem] items-center gap-1.5 py-1.5 border-b border-gray-50">
+    <div className={`grid grid-cols-[2.5rem_1fr_6.25rem_1fr_2.5rem] items-center gap-1.5 py-1.5 -mx-2 px-2 rounded-lg ${isKey ? "bg-gold-100" : ""}`}>
       <span className={`inline-flex items-center justify-center h-7 rounded-md text-sm font-heading font-bold tabular-nums ${badge("left")}`}>{left}</span>
       <div className="h-2.5 rounded-full bg-gray-100 flex justify-end overflow-hidden">
         <div className={`h-full rounded-full ${bar("left")}`} style={{ width: width(left) }} />
       </div>
-      <span className={`text-sm text-center truncate ${isKey ? "text-ink font-bold" : "text-ink-light"}`}>
-        {isKey && <span className="text-ink-light text-micro leading-none mr-1" aria-hidden>●</span>}
-        {label}
-      </span>
+      <span className={`text-sm text-center truncate ${isKey ? "text-gold-700 font-bold" : "text-ink-light"}`}>{label}</span>
       <div className="h-2.5 rounded-full bg-gray-100 flex justify-start overflow-hidden">
         <div className={`h-full rounded-full ${bar("right")}`} style={{ width: width(right) }} />
       </div>
