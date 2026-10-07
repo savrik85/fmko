@@ -47,15 +47,19 @@ afterAll(async () => {
   await miniflare.dispose();
 });
 
-async function socialInfo(teamId: string, token?: string) {
+function requestSocialInfo(teamId: string, token?: string) {
   const headers = new Headers();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await relationsRouter.fetch(new Request(`http://test.local/teams/${teamId}/social-info`, { headers }), env);
+  return relationsRouter.fetch(new Request(`http://test.local/teams/${teamId}/social-info`, { headers }), env);
+}
+
+async function socialInfo(teamId: string, token: string) {
+  const response = await requestSocialInfo(teamId, token);
   expect(response.status).toBe(200);
   return response.json() as Promise<Record<string, any>>;
 }
 
-describe("téma posezení v social-info", () => {
+describe("social-info posezení s trenéry", () => {
   it("pozvaný vidí téma u příchozí pozvánky", async () => {
     const info = await socialInfo("guest", "token-guest");
     expect(info.incomingInvites[0].topic).toBe("Kdo letos spadne?");
@@ -67,9 +71,13 @@ describe("téma posezení v social-info", () => {
     expect(info.stammtisch.topic).toBe("Kdo letos spadne?");
   });
 
-  it("cizí ani nepřihlášený téma nedostane", async () => {
-    expect((await socialInfo("guest")).incomingInvites[0].topic).toBeNull();
-    expect((await socialInfo("guest", "token-host")).incomingInvites[0].topic).toBeNull();
-    expect((await socialInfo("host", "token-guest")).stammtisch.topic).toBeNull();
+  it("bez přihlášení se pozvánky a plány posezení nevydají", async () => {
+    expect((await requestSocialInfo("guest")).status).toBe(401);
+    expect((await requestSocialInfo("host")).status).toBe(401);
+  });
+
+  it("trenér cizího klubu cizí pozvánky ani plány nevidí", async () => {
+    expect((await requestSocialInfo("guest", "token-host")).status).toBe(403);
+    expect((await requestSocialInfo("host", "token-guest")).status).toBe(403);
   });
 });

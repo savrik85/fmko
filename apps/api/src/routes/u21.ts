@@ -32,6 +32,11 @@ u21Router.get("/teams/:teamId/u21", async (c) => {
  */
 u21Router.get("/teams/:teamId/u21/players", async (c) => {
   const teamId = c.req.param("teamId");
+  // Přesné atributy, povaha, mzdy a stav dorostu patří jen majiteli. `requireTeamOwnership`
+  // GET propouští, takže dřív tenhle seznam četl kdokoli, i bez přihlášení.
+  const { rejectUnlessOwner } = await import("../auth/divak");
+  const rejected = await rejectUnlessOwner(c, teamId);
+  if (rejected) return rejected;
 
   const u21Team = await c.env.DB.prepare(
     "SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'"
@@ -41,7 +46,7 @@ u21Router.get("/teams/:teamId/u21/players", async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT id, first_name, last_name, nickname, age, position, overall_rating,
             skills, physical, personality, life_context, avatar, weekly_wage, status,
-            parent_club_id, next_match_return, coach_relationship
+            parent_club_id, next_match_return, coach_relationship, skills_max, experience
        FROM players
       WHERE team_id = ?
       ORDER BY overall_rating DESC`
@@ -54,17 +59,10 @@ u21Router.get("/teams/:teamId/u21/players", async (c) => {
     .catch((e) => { logger.warn({ module: "u21" }, "fetch u21 injuries", e); return { results: [] }; });
   const injuryByPlayer = new Map(activeInjuries.results.map((r) => [r.player_id, { type: r.type, daysRemaining: r.days_remaining }]));
 
-  // GET projde `requireTeamOwnership` bez kontroly. Vztah k trenérovi je u cizích
-  // klubů skrytý (viz `/teams/:id/players`), takže ho dostane jen majitel.
-  const { tymyDivaka } = await import("../auth/divak");
-  const vlastni = (await tymyDivaka(c)).has(teamId);
-
   const players = rows.results.map((row) => {
     const lifeContext = row.life_context ? JSON.parse(row.life_context as string) : null;
-    const { coach_relationship, ...rest } = row;
     return {
-      ...rest,
-      ...(vlastni ? { coach_relationship } : {}),
+      ...row,
       skills: row.skills ? JSON.parse(row.skills as string) : null,
       physical: row.physical ? JSON.parse(row.physical as string) : null,
       personality: row.personality ? JSON.parse(row.personality as string) : null,
