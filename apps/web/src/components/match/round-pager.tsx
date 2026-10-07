@@ -28,10 +28,14 @@ export function RoundPager({ pages, initialKey, accent, children }: {
     if (current == null || !pages.some((p) => p.key === current)) setCurrent(initialKey ?? pages.at(-1)?.key ?? null);
   }, [initialKey, pages, current]);
 
-  // Aktivní kolo vždy vidět v řadě (na mobilu se řada posouvá do strany).
+  // Aktivní kolo vždy vidět v řadě (na mobilu se řada posouvá do strany). Posun řady
+  // přímo, ne scrollIntoView: ten umí posunout i celou stránku a plynulý posun se
+  // bez vykreslování (aplikace na pozadí) neprovede vůbec.
   useEffect(() => {
-    const el = stripRef.current?.querySelector<HTMLElement>("[aria-current='true']");
-    el?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    const strip = stripRef.current;
+    const el = strip?.querySelector<HTMLElement>("[aria-current='true']");
+    if (!strip || !el) return;
+    strip.scrollLeft = Math.max(0, el.offsetLeft - strip.offsetLeft - (strip.clientWidth - el.offsetWidth) / 2);
   }, [current]);
 
   if (pages.length === 0 || current == null) return null;
