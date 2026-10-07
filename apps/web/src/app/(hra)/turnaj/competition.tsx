@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { BadgePreview, Tabs, useTabParam, type BadgePattern } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureCrest } from "@/components/match/fixture-row";
+import { RoundPager } from "@/components/match/round-pager";
 
 export const BRAND = "#C8006A";
 
@@ -221,13 +222,23 @@ export function CompetitionView({
 
       {tab === "tabulka" && <Standings rows={standings} advancing={advancing} myTeamId={myTeamId} />}
 
-      {tab === "rozpis" && (
-        <div className="space-y-5">
-          {[...leagueDays, ...playoffStages.map((st) => matches.find((m) => m.stage === st)?.day ?? 0)]
-            .filter((d, i, arr) => d > 0 && arr.indexOf(d) === i)
-            .map((d) => <DayBlock key={d} title={`${stageTitle(byDay(d)[0])}, ${dayLabel(byDay(d)[0].scheduledAt)}`} matches={byDay(d)} myTeamId={myTeamId} />)}
-        </div>
-      )}
+      {tab === "rozpis" && (() => {
+        const days = [...leagueDays, ...playoffStages.map((st) => matches.find((m) => m.stage === st)?.day ?? 0)]
+          .filter((d, i, arr) => d > 0 && arr.indexOf(d) === i);
+        // Výchozí den: nejbližší, který se ještě hraje; po turnaji poslední.
+        const initial = nextDay ?? days.at(-1) ?? null;
+        return (
+          <RoundPager
+            pages={days.map((d) => ({ key: String(d), label: stageTitle(byDay(d)[0]) }))}
+            initialKey={initial != null ? String(initial) : null}
+          >
+            {(key) => {
+              const d = Number(key);
+              return <DayBlock title={`${stageTitle(byDay(d)[0])}, ${dayLabel(byDay(d)[0].scheduledAt)}`} matches={byDay(d)} myTeamId={myTeamId} />;
+            }}
+          </RoundPager>
+        );
+      })()}
 
       {tab === "playoff" && (
         playoffStages.length === 0 ? (

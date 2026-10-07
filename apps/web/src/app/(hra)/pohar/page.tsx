@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader, Tabs, useTabParam } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureCrest, type FixtureSide } from "@/components/match/fixture-row";
+import { RoundPager } from "@/components/match/round-pager";
 
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["pavouk", "strelci"] as const;
@@ -227,19 +228,29 @@ export default function PoharPage() {
       )}
 
       {/* Všechna kola */}
-      {tab === "pavouk" && [...rounds].reverse().map((r) => {
-        // Moje zápasy nahoru, ať je v kole se 64 dvojicemi nemusím hledat.
-        const ordered = [...r.matches].sort((a, b) => Number(matchIsMine(b)) - Number(matchIsMine(a)));
-        return (
-          <FixtureGroup
-            key={r.round}
-            title={r.roundName}
-            note={`${r.matches.length} ${r.matches.length === 1 ? "zápas" : r.matches.length < 5 ? "zápasy" : "zápasů"}`}
-          >
-            {ordered.map((m, i) => <TieRow key={m.id ?? i} m={m} mine={matchIsMine(m)} />)}
-          </FixtureGroup>
-        );
-      })}
+      {tab === "pavouk" && rounds.length > 0 && (
+        // Po kolech: výchozí je aktuální kolo (po konci poháru finále).
+        <RoundPager
+          pages={rounds.map((r) => ({ key: String(r.round), label: r.roundName }))}
+          initialKey={String(rounds.some((r) => r.round === cup.currentRound) ? cup.currentRound : rounds.at(-1)!.round)}
+        >
+          {(key) => {
+            const r = rounds.find((x) => String(x.round) === key);
+            if (!r) return null;
+            // Moje zápasy nahoru, ať je v kole se 64 dvojicemi nemusím hledat.
+            const ordered = [...r.matches].sort((a, b) => Number(matchIsMine(b)) - Number(matchIsMine(a)));
+            const date = r.matches.find((m) => m.scheduledAt)?.scheduledAt;
+            return (
+              <FixtureGroup
+                title={date ? `${r.roundName}, ${new Date(date).toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" })}` : r.roundName}
+                note={`${r.matches.length} ${r.matches.length === 1 ? "zápas" : r.matches.length < 5 ? "zápasy" : "zápasů"}`}
+              >
+                {ordered.map((m, i) => <TieRow key={m.id ?? i} m={m} mine={matchIsMine(m)} />)}
+              </FixtureGroup>
+            );
+          }}
+        </RoundPager>
+      )}
       </div>
     </>
   );
