@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Spinner } from "@/components/ui";
+import { AutoGrowTextarea, Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 interface Message {
@@ -245,6 +245,11 @@ export default function ConversationPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Když pole pro psaní povyroste, ubere místo chatu. Poslední zpráva má zůstat vidět.
+  const scrollToLatest = useCallback(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, []);
 
 
   // O kanálu i o tom, jestli se dá psát, rozhoduje server.
@@ -674,12 +679,20 @@ export default function ConversationPage() {
             )}
           </p>
         )}
-        <div className="flex gap-2">
-          <input
-            type="text"
+        <div className="flex items-end gap-2">
+          {/* Roste s textem, ať je vidět celá zpráva. Enter odesílá, Shift+Enter dělá nový řádek. */}
+          <AutoGrowTextarea
             value={newMsg}
             onChange={(e) => setNewMsg(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            onHeightChange={scrollToLatest}
+            enterKeyHint="send"
+            maxRows={6}
             placeholder={
               cekaSeNaHrace ? (ownerSponsorId ? "Píše…" : "Hráč píše…")
                 : nemaNaSms ? "Došel kredit"
@@ -688,12 +701,12 @@ export default function ConversationPage() {
                     : "SMS"
             }
             disabled={cekaSeNaHrace || nemaNaSms}
-            className="flex-1 bg-gray-100 rounded-full px-3 py-2 text-base outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 min-w-0 bg-gray-100 rounded-[1.25rem] px-3 py-2 text-base leading-6 outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <button
             onClick={handleSend}
             disabled={!newMsg.trim() || sending || cekaSeNaHrace || nemaNaSms}
-            className={`shrink-0 w-8 h-8 rounded-full text-white flex items-center justify-center disabled:opacity-40 text-sm self-end ${
+            className={`shrink-0 w-8 h-8 rounded-full text-white flex items-center justify-center disabled:opacity-40 text-sm self-end mb-1 ${
               jeImessage ? "bg-blue-500" : "bg-pitch-500"
             }`}
           >
