@@ -250,7 +250,7 @@ export default function SquadPage() {
       <PositionFilter players={players} value={filter} onChange={setFilter} />
 
       {/* FM-style table — Atributy tab */}
-      {tab === "atributy" && <SquadAttributeTable players={filtered} potencial={potencial} />}
+      {tab === "atributy" && <SquadAttributeTable players={filtered} potential={potencial} />}
 
       {/* Sezóna — match stats tab */}
       {tab === "sezona" && (

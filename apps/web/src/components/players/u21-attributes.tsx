@@ -9,28 +9,28 @@
 import { useEffect, useState } from "react";
 import { apiFetch, type Player } from "@/lib/api";
 import { Spinner } from "@/components/ui";
-import { PositionFilter, SquadAttributeTable, type PosFilter, type Potencial } from "./squad-attribute-table";
+import { PositionFilter, SquadAttributeTable, type PosFilter, type PotentialMap } from "./squad-attribute-table";
 
-interface RozvojHrac {
+interface DevelopmentPlayer {
   id: string;
   strop: number | null;
   nadejnost: { slovne: string; uroven: string } | null;
 }
 
-export function U21Atributy({ teamId }: { teamId: string }) {
+export function U21Attributes({ teamId }: { teamId: string }) {
   const [players, setPlayers] = useState<Player[] | null>(null);
-  const [potencial, setPotencial] = useState<Potencial>(new Map());
+  const [potential, setPotential] = useState<PotentialMap>(new Map());
   const [filter, setFilter] = useState<PosFilter>("all");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<{ players: Player[] }>(`/api/teams/${teamId}/u21/players`)
       .then((d) => setPlayers(d.players ?? []))
-      .catch((e) => { console.error("u21 atributy:", e); setError("Kádr U21 se nepodařilo načíst. Zkus záložku otevřít znovu."); });
+      .catch((e) => { console.error("u21 attributes:", e); setError("Kádr U21 se nepodařilo načíst. Zkus záložku otevřít znovu."); });
     // Potenciál stejný jako na záložce Rozvoj. Bez skauta zůstane prázdný.
-    apiFetch<{ hraci: RozvojHrac[] }>(`/api/teams/${teamId}/u21/rozvoj`)
-      .then((d) => setPotencial(new Map(d.hraci.map((h) => [h.id, { strop: h.strop, uroven: h.nadejnost?.uroven ?? null, slovne: h.nadejnost?.slovne ?? null }]))))
-      .catch((e) => console.error("u21 potencial:", e));
+    apiFetch<{ hraci: DevelopmentPlayer[] }>(`/api/teams/${teamId}/u21/rozvoj`)
+      .then((d) => setPotential(new Map(d.hraci.map((h) => [h.id, { strop: h.strop, uroven: h.nadejnost?.uroven ?? null, slovne: h.nadejnost?.slovne ?? null }]))))
+      .catch((e) => console.error("u21 potential:", e));
   }, [teamId]);
 
   if (error) return <p role="alert" className="card p-4 text-sm">{error}</p>;
@@ -41,7 +41,7 @@ export function U21Atributy({ teamId }: { teamId: string }) {
   return (
     <div className="space-y-3">
       <PositionFilter players={players} value={filter} onChange={setFilter} />
-      <SquadAttributeTable players={filtered} potencial={potencial} />
+      <SquadAttributeTable players={filtered} potential={potential} />
     </div>
   );
 }
