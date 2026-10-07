@@ -12,6 +12,7 @@ import { attributeImportance } from "@okresni-masina/shared";
 const STORAGE_KEY = "player-compare-id";
 
 const POS_SHORT: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
+const POS_GENITIVE: Record<string, string> = { GK: "brankáře", DEF: "obránce", MID: "záložníka", FWD: "útočníka" };
 
 interface SquadPlayer extends Player {
   isU21: boolean;
@@ -215,7 +216,7 @@ export function PlayerCompare({ teamId, player, exactValues }: {
 
           <p className="mt-3 pt-3 border-t border-gray-100 text-sm text-muted">
             Plné číslo a barevný pruh má ten, kdo je v atributu lepší. U náchylnosti ke zraněním je lepší nižší číslo.
-            {" "}<span className="font-bold text-gold-700">Žlutě podbarvené</span> jsou klíčové pro post {POS_SHORT[subject.position] ?? subject.position}.
+            {" "}<span className="text-pitch-500 text-micro leading-none" aria-hidden>●</span> Zvýrazněné jsou klíčové pro {POS_GENITIVE[subject.position] ?? "tento post"}.
             {approximate && " Hráče z cizího klubu znáš jen přibližně (na pětky), rozdíl do 2 bodů se proto počítá jako vyrovnaný."}
           </p>
         </div>
@@ -283,12 +284,15 @@ function CompareRow({ label, left, right, win, isKey }: {
     return win === 0 ? "bg-gray-400" : "bg-gray-200";
   };
   return (
-    <div className={`grid grid-cols-[2.5rem_1fr_6.25rem_1fr_2.5rem] items-center gap-1.5 py-1.5 -mx-2 px-2 rounded-lg ${isKey ? "bg-gold-100" : ""}`}>
+    <div className={`grid grid-cols-[2.5rem_1fr_6.25rem_1fr_2.5rem] items-center gap-1.5 py-1.5 -mx-2 px-2 rounded-lg ${isKey ? "bg-pitch-50/70" : ""}`}>
       <span className={`inline-flex items-center justify-center h-7 rounded-md text-sm font-heading font-bold tabular-nums ${badge("left")}`}>{left}</span>
       <div className="h-2.5 rounded-full bg-gray-100 flex justify-end overflow-hidden">
         <div className={`h-full rounded-full ${bar("left")}`} style={{ width: width(left) }} />
       </div>
-      <span className={`text-sm text-center truncate ${isKey ? "text-gold-700 font-bold" : "text-ink-light"}`}>{label}</span>
+      <span className={`text-sm text-center truncate ${isKey ? "text-pitch-700 font-bold" : "text-ink-light"}`}>
+        {isKey && <span className="text-pitch-500 text-micro leading-none mr-1" aria-hidden>●</span>}
+        {label}
+      </span>
       <div className="h-2.5 rounded-full bg-gray-100 flex justify-start overflow-hidden">
         <div className={`h-full rounded-full ${bar("right")}`} style={{ width: width(right) }} />
       </div>
