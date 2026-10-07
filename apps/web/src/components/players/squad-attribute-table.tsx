@@ -259,8 +259,10 @@ export function SquadAttributeTable({ players, potencial = new Map() }: { player
                   {COLUMNS.filter((col) => col.skill).map((col) => {
                     const v = s?.[col.skill!];
                     const isKey = attributeImportance(p.position, col.skill!) === "key";
+                    // Podklad sám je mezi štítky skoro neviditelný, proto se ostatní atributy
+                    // ztlumí. Klíčové pak v řádku vystoupí bez nové barvy.
                     return (
-                      <td key={col.key} className={`py-1.5 px-1 text-center ${isKey ? "bg-pitch-50/70" : ""}`}>
+                      <td key={col.key} className={`py-1.5 px-1 text-center ${isKey ? "bg-pitch-50/70" : "opacity-40"}`}>
                         {typeof v === "number"
                           ? <span className={`${VALUE_BADGE} ${attrBg(v)}`}>{v}</span>
                           : <span className="text-muted">—</span>}
@@ -293,7 +295,7 @@ export function SquadAttributeTable({ players, potencial = new Map() }: { player
           <span className="inline-flex items-center gap-1.5 rounded bg-pitch-50/70 px-2 py-0.5 font-bold text-pitch-700">
             <span className="text-pitch-500 text-micro leading-none" aria-hidden>●</span>Zvýrazněné
           </span>{" "}
-          jsou atributy klíčové pro post hráče, stejně jako v dovednostech hráče.
+          jsou atributy klíčové pro post hráče, stejně jako v dovednostech hráče. Ostatní jsou ztlumené.
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>Tečky u hlaviček: pro koho je atribut klíčový</span>
