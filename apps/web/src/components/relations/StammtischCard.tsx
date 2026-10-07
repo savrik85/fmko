@@ -30,9 +30,14 @@ interface PlannedInvite {
 }
 
 interface SocialInfo {
-  stammtisch: { available: boolean; planned: boolean; cooldownDaysLeft: number; costPerHead: number; plannedInvites: PlannedInvite[] };
+  stammtisch: {
+    available: boolean; planned: boolean; cooldownDaysLeft: number; costPerHead: number; plannedInvites: PlannedInvite[];
+    /** Téma naplánovaného posezení, jen text do pozvánky. */
+    topic?: string | null;
+    topicMax?: number;
+  };
   pubRound: { available: boolean; planned: boolean; reason: string | null };
-  incomingInvites: Array<{ id: string; hostTeamId: string; hostTeam: string; hostManager: string }>;
+  incomingInvites: Array<{ id: string; hostTeamId: string; hostTeam: string; hostManager: string; topic?: string | null }>;
 }
 
 const INVITE_LABEL: Record<string, { text: string; cls: string }> = {
@@ -48,6 +53,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
   const [managers, setManagers] = useState<RelationListItem[]>([]);
   const [picking, setPicking] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [topic, setTopic] = useState("");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -79,11 +85,12 @@ export function StammtischCard({ teamId }: { teamId: string }) {
     try {
       const res = await apiFetch<{ ok: boolean; message: string }>(
         `/api/teams/${teamId}/stammtisch`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ guestTeamIds: [...selected] }) },
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ guestTeamIds: [...selected], topic }) },
       );
       setFeedback(res.message);
       setPicking(false);
       setSelected(new Set());
+      setTopic("");
       load();
     } catch (e) {
       console.error("stammtisch:", e);
@@ -143,6 +150,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
             <div key={inv.id} className="border border-amber-200 bg-amber-50 rounded-soft p-3 flex items-center gap-3 flex-wrap">
               <span className="text-sm flex-1 min-w-[200px]">
                 🍻 Trenér <b>{inv.hostManager}</b> ({inv.hostTeam}) tě zve dnes večer na posezení s trenéry. Útratu platí on.
+                {inv.topic && <span className="block mt-1">Téma: „{inv.topic}“</span>}
               </span>
               <button disabled={busy} onClick={() => respondInvite(inv.id, true)}
                 className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
@@ -161,6 +169,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
         {info.stammtisch.planned ? (
           <div className="w-full">
             <div className="text-sm font-heading font-bold mb-2">🍻 Posezení je domluvené — odpovědi pozvaných</div>
+            {info.stammtisch.topic && <div className="text-sm mb-2">Téma: „{info.stammtisch.topic}“</div>}
             <div className="space-y-1">
               {info.stammtisch.plannedInvites.length === 0 ? (
                 <div className="text-sm text-muted">Pozvánky se rozesílají…</div>
@@ -225,6 +234,16 @@ export function StammtischCard({ teamId }: { teamId: string }) {
               </label>
             ))}
           </div>
+          <label className="mt-3 block">
+            <span className="text-sm font-heading font-bold">Téma posezení <span className="font-normal text-muted">(nepovinné)</span></span>
+            <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)}
+              maxLength={info.stammtisch.topicMax ?? 120}
+              placeholder="Třeba: Kdo letos spadne?"
+              className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-soft text-base focus:border-pitch-500 focus:outline-none" />
+            <span className="mt-1 block text-sm text-muted">
+              Pozvaní ho uvidí v pozvánce v telefonu. {topic.length}/{info.stammtisch.topicMax ?? 120}
+            </span>
+          </label>
           <div className="mt-3 flex items-center gap-3">
             <button disabled={busy || selected.size < 1} onClick={runStammtisch}
               className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
