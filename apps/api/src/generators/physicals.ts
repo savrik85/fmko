@@ -151,20 +151,55 @@ export const BODY_WEIGHT_FACTOR: Record<BodyType, number> = {
   thin: 0.88, athletic: 1.0, normal: 1.05, stocky: 1.15, obese: 1.32,
 };
 
+/** Průměrná dospělá výška podle postu. */
+const MEAN_HEIGHT: Record<string, number> = { GK: 185, DEF: 180, FWD: 178, MID: 176 };
+/** Rozptyl výšky: normální rozložení, takže občas obr kolem 195–200 cm i prcek. */
+const HEIGHT_SD = 6;
+const MIN_HEIGHT = 163;
+const MAX_HEIGHT = 205;
+
+/** Kolik cm dorostenci zbývá dorůst do dospělé výšky (season/body-drift.ts growYoungPlayers). */
+export function remainingGrowthCm(age: number): number {
+  if (age <= 14) return 10;
+  if (age === 15) return 8;
+  if (age === 16) return 5;
+  if (age === 17) return 2;
+  return 0;
+}
+
+/** Normálně rozložené číslo (Box–Muller) z rovnoměrné náhody. */
+function normalSample(rng: Rng): number {
+  const u1 = Math.max(1e-9, rng.random());
+  const u2 = rng.random();
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
 /**
- * Výška podle postu ±8 cm, váha z výšky a postavy ±3 kg. Dřív se váha losovala
- * nezávisle na výšce (170 cm i 194 cm kolem 80 kg) a postava se po vzniku hráče zahodila.
+ * Výška, váha a přirozená váha nového hráče.
+ *
+ * - Dospělá výška má normální rozložení kolem průměru postu (σ 6 cm, 163–205 cm). Dřív byla
+ *   rovnoměrně ±8 cm, takže hráč přes 193 cm nevznikl nikdy.
+ * - Dorostenec začíná nižší o to, co mu zbývá dorůst (`growthLeft`), a k dospělé výšce doroste
+ *   na konci sezón. Jinak by se k dospělé výšce ještě přičítal růst.
+ * - `naturalBase` je přirozená váha (ideál × postava), ke které se váha v čase vrací.
+ *   Váha je kolem ní ± 3 kg.
  */
 export function generateHeightWeight(
   rng: Rng,
   position: string,
   bodyType: string = "normal",
-): { height: number; weight: number; bodyType: BodyType } {
+  age = 25,
+): { height: number; weight: number; bodyType: BodyType; naturalBase: number; growthLeft?: number } {
   const type: BodyType = isBodyType(bodyType) ? bodyType : "normal";
-  const baseHeight = position === "GK" ? 185 : position === "DEF" ? 180 : position === "FWD" ? 178 : 176;
-  const height = baseHeight + rng.int(-8, 8);
-  const weight = Math.round(idealWeight(height) * BODY_WEIGHT_FACTOR[type]) + rng.int(-3, 3);
-  return { height, weight, bodyType: type };
+  const mean = MEAN_HEIGHT[position] ?? MEAN_HEIGHT.MID;
+  const adult = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(mean + normalSample(rng) * HEIGHT_SD)));
+  const growthLeft = remainingGrowthCm(age);
+  const height = adult - growthLeft;
+  const naturalBase = Math.round(idealWeight(height) * BODY_WEIGHT_FACTOR[type] * 100) / 100;
+  const weight = Math.round(naturalBase) + rng.int(-3, 3);
+  return growthLeft > 0
+    ? { height, weight, bodyType: type, naturalBase, growthLeft }
+    : { height, weight, bodyType: type, naturalBase };
 }
 
 /**

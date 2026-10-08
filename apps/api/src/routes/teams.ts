@@ -3034,13 +3034,13 @@ teamsRouter.get("/:id/players/:playerId/weight-log", async (c) => {
   if (!player?.team_id) return c.json({ error: "Player not found" }, 404);
 
   const { tymyDivaka } = await import("../auth/divak");
-  const divak = await tymyDivaka(c);
-  let own = divak.has(player.team_id) || (!!player.loan_from_team_id && divak.has(player.loan_from_team_id));
+  const viewerTeams = await tymyDivaka(c);
+  let own = viewerTeams.has(player.team_id) || (!!player.loan_from_team_id && viewerTeams.has(player.loan_from_team_id));
   if (!own) {
     const parent = await c.env.DB.prepare("SELECT parent_team_id FROM teams WHERE id = ? AND team_type = 'u21'").bind(player.team_id)
       .first<{ parent_team_id: string | null }>()
       .catch((e) => { logger.warn({ module: "teams" }, "weight-log u21 parent", e); return null; });
-    own = !!parent?.parent_team_id && divak.has(parent.parent_team_id);
+    own = !!parent?.parent_team_id && viewerTeams.has(parent.parent_team_id);
   }
   if (!own) return c.json({ error: "Not your player" }, 403);
 

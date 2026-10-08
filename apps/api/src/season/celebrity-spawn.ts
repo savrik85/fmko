@@ -77,7 +77,7 @@ export async function spawnCelebrity(
   const physicalObj = {
     stamina: skillsObj.stamina, strength: skillsObj.strength,
     injuryProneness: celeb.injuryProneness,
-    ...generateHeightWeight(rng, celeb.position, celeb.bodyType),
+    ...generateHeightWeight(rng, celeb.position, celeb.bodyType, celeb.age),
     preferredFoot: celeb.preferredFoot, preferredSide: celeb.preferredSide,
   };
 

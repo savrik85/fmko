@@ -6,6 +6,7 @@ let miniflare: Miniflare;
 let db: D1Database;
 
 const TODAY = "2026-10-12"; // pondělí
+const YESTERDAY = "2026-10-11";
 
 async function weightOf(id: string): Promise<number> {
   const row = await db.prepare("SELECT json_extract(physical, '$.weight') AS w FROM players WHERE id = ?").bind(id).first<{ w: number }>();
@@ -46,8 +47,16 @@ beforeAll(async () => {
     player("injured", natural),
     player("no-height", { weight: 90 }),
     player("gainer", { height: 180, weight: 84, bodyType: "athletic" }),
+    player("summer", { height: 180, weight: 84, bodyType: "athletic" }),
+    db.prepare("INSERT INTO weight_log (player_id, team_id, game_date, weight, source) VALUES ('summer', 't1', '2026-09-14', 80, 'weekly')"),
+    db.prepare("INSERT INTO weight_log (player_id, team_id, game_date, weight, source) VALUES ('summer', 't1', '2026-09-20', 83, 'summer')"),
+    // Hráč zraněný ještě u jiného klubu: přibírá, i když zranění patří starému týmu.
+    db.prepare("INSERT INTO injuries (id, player_id, team_id, days_remaining) VALUES ('i2', 'summer', 'old-club', 5)"),
+    // Hospoda se počítá včerejší, uzavřená. Dnešní ráno ještě může trenér přepsat posezením.
     db.prepare("INSERT INTO pub_sessions (team_id, game_date, attendees, incidents) VALUES ('t1', ?, ?, '[]')")
-      .bind(TODAY, JSON.stringify([{ playerId: "drinker" }, { playerId: "no-height" }])),
+      .bind(YESTERDAY, JSON.stringify([{ playerId: "drinker" }, { playerId: "no-height" }])),
+    db.prepare("INSERT INTO pub_sessions (team_id, game_date, attendees, incidents) VALUES ('t1', ?, ?, '[]')")
+      .bind(TODAY, JSON.stringify([{ playerId: "runner" }])),
     db.prepare("INSERT INTO injuries (id, player_id, team_id, days_remaining) VALUES ('i1', 'injured', 't1', 5)"),
     db.prepare("INSERT INTO weight_log (player_id, team_id, game_date, weight, source) VALUES ('gainer', 't1', '2026-09-14', 80, 'weekly')"),
     db.prepare("INSERT INTO weight_log (player_id, team_id, game_date, weight, source) VALUES ('gainer', 't1', '2025-01-01', 70, 'weekly')"),
@@ -67,14 +76,24 @@ describe("processDailyBodyDrift", () => {
     expect(await weightOf("runner")).toBeCloseTo(76.07, 2);
     expect(await weightOf("injured")).toBeCloseTo(76.17, 2);
     expect(await weightOf("no-height")).toBeCloseTo(90.08, 2);
-    expect(r.updated).toBe(5);
+    expect(r.updated).toBe(6);
   });
 
   it("pondělní záznam vznikne jednou, staré záznamy nad rok zmizí", async () => {
     const weekly = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE game_date = ? AND source = 'weekly'").bind(TODAY).first<{ n: number }>();
-    expect(weekly!.n).toBe(5);
+    expect(weekly!.n).toBe(6);
     const old = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE game_date = '2025-01-01'").first<{ n: number }>();
     expect(old!.n).toBe(0);
+  });
+
+  it("zranění u starého klubu se počítá taky (+0,03 a tah)", async () => {
+    // summer: 84 kg, přirozená 76,14 → tah −0,047, zranění +0,03 → 83,98
+    expect(await weightOf("summer")).toBeCloseTo(83.98, 2);
+  });
+
+  it("SMS nepřijde, když nárůst v okně dělá léto nebo růst", async () => {
+    const msgs = await db.prepare("SELECT body FROM messages").all<{ body: string }>();
+    expect(msgs.results.some((m) => m.body.includes("summer"))).toBe(false);
   });
 
   it("kondiční trenér napíše o hráči, který za 4 týdny přibral 3 kg a víc", async () => {
@@ -89,7 +108,7 @@ describe("processDailyBodyDrift", () => {
   it("druhý běh téhož dne nezaloží druhý záznam ani druhou SMS", async () => {
     await processDailyBodyDrift(db, { teamIds: ["t1"], trainedToday: new Map(), gameDate: TODAY, isMonday: true });
     const weekly = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE game_date = ? AND source = 'weekly'").bind(TODAY).first<{ n: number }>();
-    expect(weekly!.n).toBe(5);
+    expect(weekly!.n).toBe(6);
     const msgs = await db.prepare("SELECT COUNT(*) AS n FROM messages").first<{ n: number }>();
     expect(msgs!.n).toBe(1);
   });
@@ -109,7 +128,7 @@ describe("léto a růst dorostu", () => {
       players: [{ id: "s1", age: 32, alcohol: 80, weight: 80 }, { id: "s2", age: 24, alcohol: 20, weight: 80 }],
       events: new Map([["s1", "rusty"], ["s2", "fit"]]),
     });
-    await db.batch(stmts);
+    await db.batch([...stmts.updates, ...stmts.logs]);
     expect(await weightOf("s1")).toBe(83);
     expect(await weightOf("s2")).toBe(78.5);
     const logs = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE team_id = 't2' AND source = 'summer'").first<{ n: number }>();
@@ -119,8 +138,9 @@ describe("léto a růst dorostu", () => {
   it("růst: sedmnáctiletý vyroste o 2–4 cm se stejným BMI, dvacetiletý ne", async () => {
     const { growYoungPlayers } = await import("./body-drift");
     await db.batch([
+      db.prepare("INSERT INTO teams (id, user_id) VALUES ('t3', 'user-3')"),
       db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('y17', 't3', 'Jan', 'Mladý', 17, ?, '{}', '{}')")
-        .bind(JSON.stringify({ height: 175, weight: 70, bodyType: "normal" })),
+        .bind(JSON.stringify({ height: 175, weight: 70, naturalBase: 70, bodyType: "normal", growthLeft: 4 })),
       db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('y20', 't3', 'Jan', 'Starší', 20, ?, '{}', '{}')")
         .bind(JSON.stringify({ height: 175, weight: 70, bodyType: "normal" })),
     ]);
@@ -131,9 +151,40 @@ describe("léto a růst dorostu", () => {
     expect(p.height).toBeGreaterThanOrEqual(177);
     expect(p.height).toBeLessThanOrEqual(179);
     expect(p.weight / (p.height / 100) ** 2).toBeCloseTo(70 / 1.75 ** 2, 1);
+    expect(p.naturalBase).toBeCloseTo(70 * (p.height / 175) ** 2, 1);
+    expect(4 - (p.height - 175)).toBe(p.growthLeft ?? 0);
     const y20 = await db.prepare("SELECT physical FROM players WHERE id = 'y20'").first<{ physical: string }>();
     expect(JSON.parse(y20!.physical).height).toBe(175);
     const logs = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE player_id = 'y17' AND source = 'growth'").first<{ n: number }>();
     expect(logs!.n).toBe(1);
+  });
+
+  it("hráč bez growthLeft (stávající, už dospělá výška) neroste, v 18 dorovná zbytek", async () => {
+    const { growYoungPlayers } = await import("./body-drift");
+    await db.batch([
+      db.prepare("INSERT INTO teams (id, user_id) VALUES ('t5', 'user-5')"),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('old16', 't5', 'Jan', 'Starý', 16, ?, '{}', '{}')")
+        .bind(JSON.stringify({ height: 180, weight: 75 })),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('last18', 't5', 'Jan', 'Poslední', 18, ?, '{}', '{}')")
+        .bind(JSON.stringify({ height: 180, weight: 75, growthLeft: 3 })),
+    ]);
+    await growYoungPlayers(db, "t5", "2026-11-01");
+    const old16 = await db.prepare("SELECT physical FROM players WHERE id = 'old16'").first<{ physical: string }>();
+    expect(JSON.parse(old16!.physical).height).toBe(180);
+    const last18 = JSON.parse((await db.prepare("SELECT physical FROM players WHERE id = 'last18'").first<{ physical: string }>())!.physical);
+    expect(last18.height).toBe(183);
+    expect(last18.growthLeft).toBeUndefined();
+  });
+
+  it("AI tým roste, ale historii váhy neplní", async () => {
+    const { growYoungPlayers } = await import("./body-drift");
+    await db.batch([
+      db.prepare("INSERT INTO teams (id, user_id) VALUES ('t-ai', 'ai')"),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('ai17', 't-ai', 'Jan', 'Ajťák', 17, ?, '{}', '{}')")
+        .bind(JSON.stringify({ height: 175, weight: 70, growthLeft: 4 })),
+    ]);
+    expect(await growYoungPlayers(db, "t-ai", "2026-11-01")).toBe(1);
+    const logs = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE player_id = 'ai17'").first<{ n: number }>();
+    expect(logs!.n).toBe(0);
   });
 });

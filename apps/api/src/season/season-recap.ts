@@ -495,11 +495,15 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
     const events = new Map<string, SummerEvent>(summerRaw.map((s) => [
       s.id, s.effect === "fit" || s.effect === "rusty" || s.effect === "injury" ? s.effect : null,
     ]));
-    stmts.push(...summerWeightStatements(db, {
+    const summerWeight = summerWeightStatements(db, {
       teamId, gameDate: gd?.game_date ?? new Date().toISOString(),
       players: squad.map((p) => ({ id: p.id, age: p.age, alcohol: p.alcohol, weight: p.weight })), events,
-    }));
+    });
+    stmts.push(...summerWeight.updates);
     for (let i = 0; i < stmts.length; i += 20) await db.batch(stmts.slice(i, i + 20)).catch((e) => logger.warn({ module: M }, "apply summer effects", e));
+    if (summerWeight.logs.length > 0) {
+      await db.batch(summerWeight.logs).catch((e) => logger.warn({ module: M }, "summer weight log", e));
+    }
   }
 
   const summer = summerRaw.map((s) => ({ name: s.name, text: s.text, effect: s.effect }));
