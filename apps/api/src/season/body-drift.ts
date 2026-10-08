@@ -8,7 +8,11 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { createRng } from "../generators/rng";
 import { BODY_WEIGHT_FACTOR, idealWeight, isBodyType } from "../generators/physicals";
+import { logger } from "../lib/logger";
+import { seedFromString } from "../lib/seed";
+import { sendSystemSMS } from "../messaging/system-sms";
 
 /** Jakou část rozdílu k přirozené váze tělo za den srovná. */
 const NATURAL_PULL = 0.006;
@@ -148,4 +152,189 @@ const WEIGHT_SMS_TEXTS: Record<WeightSmsCause, string[]> = {
 export function weightSmsText(rng: Rng, cause: WeightSmsCause, name: string, kg: number): string {
   const template = rng.pick(WEIGHT_SMS_TEXTS[cause]);
   return template.replace("{name}", name).replace("{kg}", kg.toFixed(1).replace(".", ","));
+}
+
+// ── Orchestrace nad D1 ──────────────────────────────────────────────────────────
+
+const M = "body-drift";
+
+function parseJson(raw: unknown, what: string, playerId: string): Record<string, unknown> | null {
+  try {
+    return raw ? JSON.parse(raw as string) as Record<string, unknown> : {};
+  } catch (e) {
+    logger.warn({ module: M, playerId }, `parse ${what}`, e);
+    return null;
+  }
+}
+
+function chunks<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+function shiftDate(isoDay: string, days: number): string {
+  const d = new Date(`${isoDay.slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+interface DriftPlayerRow {
+  id: string; team_id: string; first_name: string; last_name: string; age: number;
+  physical: string | null; personality: string | null; life_context: string | null;
+}
+
+/**
+ * Denní změna váhy hráčů týmů, které denní tick trénuje. Volá se po vygenerování dnešní
+ * hospody. V pondělí navíc týdenní záznam do `weight_log`, úklid záznamů starších než rok
+ * a SMS od štábu o hráčích, kteří za ~4 týdny přibrali 3 kg a víc.
+ */
+export async function processDailyBodyDrift(
+  db: D1Database,
+  opts: { teamIds: readonly string[]; trainedToday: ReadonlyMap<string, "conditioning" | "other">; gameDate: string; isMonday: boolean },
+): Promise<{ updated: number; logged: number; sms: number }> {
+  const result = { updated: 0, logged: 0, sms: 0 };
+  if (opts.teamIds.length === 0) return result;
+  const gameDate = opts.gameDate.slice(0, 10);
+
+  for (const teamIds of chunks(opts.teamIds, 40)) {
+    const ph = teamIds.map(() => "?").join(",");
+    const players = await db.prepare(
+      `SELECT id, team_id, first_name, last_name, age, physical, personality, life_context FROM players
+        WHERE team_id IN (${ph}) AND (status IS NULL OR status = 'active')`,
+    ).bind(...teamIds).all<DriftPlayerRow>()
+      .catch((e) => { logger.warn({ module: M }, "load players", e); return { results: [] as DriftPlayerRow[] }; });
+
+    const pubToday = new Set<string>();
+    const pubRows = await db.prepare(`SELECT attendees FROM pub_sessions WHERE game_date = ? AND team_id IN (${ph})`)
+      .bind(gameDate, ...teamIds).all<{ attendees: string }>()
+      .catch((e) => { logger.warn({ module: M }, "load pub sessions", e); return { results: [] as { attendees: string }[] }; });
+    for (const r of pubRows.results) {
+      try {
+        for (const a of JSON.parse(r.attendees) as Array<{ playerId?: string }>) if (a.playerId) pubToday.add(a.playerId);
+      } catch (e) {
+        logger.warn({ module: M }, "parse pub attendees", e);
+      }
+    }
+
+    const injuredRows = await db.prepare(
+      `SELECT DISTINCT player_id FROM injuries WHERE days_remaining > 0 AND COALESCE(osobni_volno, 0) = 0 AND team_id IN (${ph})`,
+    ).bind(...teamIds).all<{ player_id: string }>()
+      .catch((e) => { logger.warn({ module: M }, "load injuries", e); return { results: [] as { player_id: string }[] }; });
+    const injured = new Set(injuredRows.results.map((r) => r.player_id));
+
+    const updates: D1PreparedStatement[] = [];
+    const newWeights = new Map<string, number>();
+    for (const p of players.results) {
+      const physical = parseJson(p.physical, "physical", p.id);
+      const personality = parseJson(p.personality, "personality", p.id);
+      if (!physical || !personality) continue;
+      const weight = physical.weight;
+      if (typeof weight !== "number" || !(weight > 0)) continue;
+      const alcohol = typeof personality.alcohol === "number" ? personality.alcohol : 30;
+      const next = applyDailyWeight(weight, dailyWeightChange({
+        weight,
+        natural: naturalWeight(physical.height, physical.bodyType, p.age ?? 25),
+        pubVisit: pubToday.has(p.id),
+        alcohol,
+        training: opts.trainedToday.get(p.id) ?? null,
+        injured: injured.has(p.id),
+      }));
+      newWeights.set(p.id, next);
+      if (next !== weight) {
+        updates.push(db.prepare("UPDATE players SET physical = json_set(physical, '$.weight', ?) WHERE id = ?").bind(next, p.id));
+      }
+    }
+    for (const batch of chunks(updates, 100)) {
+      await db.batch(batch).then(() => { result.updated += batch.length; })
+        .catch((e) => logger.warn({ module: M }, "update weights", e));
+    }
+
+    if (!opts.isMonday) continue;
+
+    const logs: D1PreparedStatement[] = [];
+    for (const p of players.results) {
+      const w = newWeights.get(p.id);
+      if (w === undefined) continue;
+      logs.push(db.prepare(
+        `INSERT INTO weight_log (player_id, team_id, game_date, weight, source)
+         SELECT ?1, ?2, ?3, ?4, 'weekly'
+          WHERE NOT EXISTS (SELECT 1 FROM weight_log WHERE player_id = ?1 AND game_date = ?3 AND source = 'weekly')`,
+      ).bind(p.id, p.team_id, gameDate, w));
+    }
+    for (const batch of chunks(logs, 100)) {
+      await db.batch(batch).then((rs) => { result.logged += rs.reduce((s, r) => s + (r.meta?.changes ?? 0), 0); })
+        .catch((e) => logger.warn({ module: M }, "insert weight log", e));
+    }
+    await db.prepare(`DELETE FROM weight_log WHERE game_date < ? AND team_id IN (${ph})`)
+      .bind(shiftDate(gameDate, -365), ...teamIds).run()
+      .catch((e) => logger.warn({ module: M }, "prune weight log", e));
+
+    result.sms += await sendWeightAlerts(db, players.results, newWeights, injured, gameDate, ph, teamIds);
+  }
+  return result;
+}
+
+async function sendWeightAlerts(
+  db: D1Database,
+  players: readonly DriftPlayerRow[],
+  newWeights: ReadonlyMap<string, number>,
+  injured: ReadonlySet<string>,
+  gameDate: string,
+  ph: string,
+  teamIds: readonly string[],
+): Promise<number> {
+  const history = await db.prepare(
+    `SELECT player_id, game_date, weight FROM weight_log WHERE team_id IN (${ph}) AND game_date BETWEEN ? AND ?`,
+  ).bind(...teamIds, shiftDate(gameDate, -35), shiftDate(gameDate, -21)).all<{ player_id: string; game_date: string; weight: number }>()
+    .catch((e) => { logger.warn({ module: M }, "load weight history", e); return { results: [] as { player_id: string; game_date: string; weight: number }[] }; });
+  const byPlayer = new Map<string, { gameDate: string; weight: number }[]>();
+  for (const h of history.results) {
+    const list = byPlayer.get(h.player_id) ?? [];
+    list.push({ gameDate: h.game_date, weight: h.weight });
+    byPlayer.set(h.player_id, list);
+  }
+
+  let sent = 0;
+  for (const p of players) {
+    const current = newWeights.get(p.id);
+    const entries = byPlayer.get(p.id);
+    if (current === undefined || !entries) continue;
+    const lifeContext = parseJson(p.life_context, "life_context", p.id);
+    if (!lifeContext) continue;
+    const gain = weightTrend(current, entries, gameDate, 21, 35);
+    const lastSmsAt = typeof lifeContext.weightSmsAt === "string" ? lifeContext.weightSmsAt : null;
+    if (!weightAlertDue({ gain, lastSmsAt, today: gameDate })) continue;
+
+    const team = await db.prepare("SELECT team_type, parent_team_id FROM teams WHERE id = ?").bind(p.team_id)
+      .first<{ team_type: string | null; parent_team_id: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, "load team", e); return null; });
+    const recipient = team?.team_type === "u21" && team.parent_team_id ? team.parent_team_id : p.team_id;
+    const roles = await db.prepare("SELECT role FROM staff_members WHERE team_id = ? AND role IN ('kondicni_trener', 'maser')")
+      .bind(recipient).all<{ role: string }>()
+      .catch((e) => { logger.warn({ module: M }, "load staff", e); return { results: [] as { role: string }[] }; });
+    const hasRole = (r: string) => roles.results.some((x) => x.role === r);
+    const sender = hasRole("kondicni_trener") ? "Kondiční trenér" : hasRole("maser") ? "Masér" : "Kapitán";
+
+    const pubRows = await db.prepare("SELECT attendees FROM pub_sessions WHERE team_id = ? AND game_date > ?")
+      .bind(p.team_id, shiftDate(gameDate, -28)).all<{ attendees: string }>()
+      .catch((e) => { logger.warn({ module: M }, "load pub history", e); return { results: [] as { attendees: string }[] }; });
+    let pubVisits28d = 0;
+    for (const r of pubRows.results) {
+      try {
+        if ((JSON.parse(r.attendees) as Array<{ playerId?: string }>).some((a) => a.playerId === p.id)) pubVisits28d++;
+      } catch (e) {
+        logger.warn({ module: M }, "parse pub history", e);
+      }
+    }
+
+    const rng = createRng(seedFromString(`${p.id}:${gameDate}:weight-sms`));
+    const text = weightSmsText(rng, weightSmsCause({ injured: injured.has(p.id), pubVisits28d }), `${p.first_name} ${p.last_name}`, gain!);
+    await sendSystemSMS(db, recipient, sender, text);
+    await db.prepare("UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.weightSmsAt', ?) WHERE id = ?")
+      .bind(gameDate, p.id).run()
+      .catch((e) => logger.warn({ module: M }, "mark weight sms", e));
+    sent++;
+  }
+  return sent;
 }
