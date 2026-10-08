@@ -24,9 +24,9 @@ Jen hráči týmů, které denní tick trénuje (lidské týmy a jejich U21). AI
 
 | Vliv | Změna za den |
 |---|---|
-| Tah k přirozené váze | `0,006 × (přirozená − váha)` |
+| Tah k přirozené váze (jen shora, od 2026-10-08) | `0,006 × (přirozená − váha)`, když je váha nad přirozenou; pod ní 0 |
 | Byl dnes v hospodě (`pub_sessions.attendees` dnešního dne) | `+0,08 × (0,5 + alkohol / 100)` |
-| Byl dnes na tréninku | `−0,03`, kondiční trénink `−0,07` |
+| Byl dnes na tréninku | `−0,03`, kondiční trénink `−0,07`; bez plánu hubnutí nejvýš na přirozenou váhu |
 | Je zraněný (`injuries.days_remaining > 0`, ne `osobni_volno`) | `+0,03` |
 
 Výsledek se zaokrouhlí na 0,01 a drží v rozsahu 50–140 kg. Běží po vygenerování dnešní hospody;

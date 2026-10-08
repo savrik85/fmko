@@ -47,7 +47,8 @@ beforeAll(async () => {
     db.prepare("INSERT INTO teams (id, user_id) VALUES ('t1', 'user-1')"),
     db.prepare("INSERT INTO staff_members (id, team_id, role) VALUES ('s1', 't1', 'kondicni_trener')"),
     player("drinker", natural, 80),
-    player("runner", natural),
+    // Nad přirozenou váhou: běžný trénink srazí váhu nejvýš na přirozenou.
+    player("runner", { ...natural, weight: 78 }),
     player("injured", natural),
     player("no-height", { weight: 90 }),
     player("gainer", { height: 180, weight: 84, bodyType: "athletic" }),
@@ -77,7 +78,7 @@ describe("processDailyBodyDrift", () => {
       teamIds: ["t1"], trainedToday: new Map([["runner", "conditioning"]]), gameDate: TODAY, isMonday: true,
     });
     expect(await weightOf("drinker")).toBeCloseTo(76.24, 2);
-    expect(await weightOf("runner")).toBeCloseTo(76.07, 2);
+    expect(await weightOf("runner")).toBeCloseTo(77.92, 2);
     expect(await weightOf("injured")).toBeCloseTo(76.17, 2);
     expect(await weightOf("no-height")).toBeCloseTo(90.08, 2);
     expect(r.updated).toBe(6);

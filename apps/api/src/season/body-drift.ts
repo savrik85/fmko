@@ -45,7 +45,7 @@ export interface DailyBodyInput {
   injured: boolean;
   /** Násobek přírůstku z hospody (vybavení Váha a jídelníček, slib z SMS). Chybí = 1. */
   pubMul?: number;
-  /** Násobek tahu k přirozené váze (vybavení). Chybí = 1. */
+  /** Násobek tahu k přirozené váze shora (vybavení). Chybí = 1. */
   pullMul?: number;
   /** Kg navíc dolů v den tréninku, když je hráč na plánu hubnutí. Chybí = 0. */
   planLoss?: number;
@@ -70,11 +70,17 @@ export function naturalWeight(physical: Record<string, unknown>, age: number): n
 
 /** Změna váhy za jeden herní den (kg, nezaokrouhlená). */
 export function dailyWeightChange(input: DailyBodyInput): number {
-  let change = input.natural === null ? 0 : NATURAL_PULL * (input.pullMul ?? 1) * (input.natural - input.weight);
+  const above = input.natural === null ? 0 : input.weight - input.natural;
+  // Tělo táhne jen shora: kdo je nad přirozenou váhou, vrací se k ní. Kdo shodil pod ni,
+  // kila si drží, jinak by tah hubnoucímu hráči na plánu ubíral to, co shodil.
+  let change = above > 0 ? -NATURAL_PULL * (input.pullMul ?? 1) * above : 0;
   if (input.pubVisit) change += PUB_VISIT_KG * (0.5 + input.alcohol / 100) * (input.pubMul ?? 1);
-  if (input.training === "conditioning") change += CONDITIONING_KG;
-  else if (input.training === "other") change += TRAINING_KG;
-  if (input.training !== null && input.planLoss) change -= input.planLoss;
+  const burn = input.training === "conditioning" ? CONDITIONING_KG : input.training === "other" ? TRAINING_KG : 0;
+  const onPlan = input.training !== null && !!input.planLoss;
+  // Běžný trénink srazí váhu nejvýš na přirozenou, pod ni se dostane jen hráč na plánu hubnutí.
+  // Bez toho by dříč bez tahu zespodu hubl donekonečna.
+  change += input.natural === null || onPlan ? burn : Math.max(burn, -Math.max(0, above));
+  if (onPlan) change -= input.planLoss ?? 0;
   if (input.injured) change += INJURED_KG;
   return change;
 }
