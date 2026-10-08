@@ -28,7 +28,11 @@ beforeAll(async () => {
     `CREATE TABLE injuries (id TEXT PRIMARY KEY, player_id TEXT, team_id TEXT, days_remaining INTEGER, osobni_volno INTEGER DEFAULT 0)`,
     `CREATE TABLE weight_log (id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT NOT NULL, team_id TEXT NOT NULL,
       game_date TEXT NOT NULL, weight REAL NOT NULL, source TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')))`,
-    `CREATE TABLE staff_members (id TEXT PRIMARY KEY, team_id TEXT, role TEXT)`,
+    `CREATE TABLE staff_members (id TEXT PRIMARY KEY, team_id TEXT, role TEXT, first_name TEXT, last_name TEXT, gender TEXT,
+      coaching INTEGER, medicine INTEGER, maintenance INTEGER, judgement INTEGER, communication INTEGER, work_rate INTEGER,
+      charm INTEGER, course_attribute TEXT, task_cooldown_until TEXT)`,
+    `CREATE TABLE staff_tasks (id TEXT PRIMARY KEY, team_id TEXT, staff_id TEXT, task_type TEXT, status TEXT, target_player_id TEXT)`,
+    `CREATE TABLE equipment (team_id TEXT PRIMARY KEY, nutrition INTEGER NOT NULL DEFAULT 0, nutrition_condition INTEGER NOT NULL DEFAULT 50)`,
     `CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, title TEXT, pinned INTEGER,
       unread_count INTEGER, last_message_text TEXT, last_message_at TEXT, created_at TEXT)`,
     `CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, sender_id TEXT,
@@ -186,5 +190,33 @@ describe("léto a růst dorostu", () => {
     expect(await growYoungPlayers(db, "t-ai", "2026-11-01")).toBe(1);
     const logs = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE player_id = 'ai17'").first<{ n: number }>();
     expect(logs!.n).toBe(0);
+  });
+});
+
+describe("páky na váhu v denní změně", () => {
+  it("vybavení áčka platí i pro U21, plán hubnutí ubírá v den tréninku, slib tlumí hospodu", async () => {
+    const natural = { height: 180, weight: 76.14, naturalBase: 76.14, bodyType: "athletic" };
+    const add = (id: string, team: string, physical: Record<string, unknown>, personality: Record<string, unknown>, lc: Record<string, unknown> = {}) =>
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES (?, ?, 'Jan', ?, 25, ?, ?, ?)")
+        .bind(id, team, id, JSON.stringify(physical), JSON.stringify(personality), JSON.stringify(lc));
+    await db.batch([
+      db.prepare("INSERT INTO teams (id, user_id) VALUES ('t6', 'user-6')"),
+      db.prepare("INSERT INTO teams (id, user_id, team_type, parent_team_id) VALUES ('t6u', 'ai', 'u21', 't6')"),
+      db.prepare("INSERT INTO equipment (team_id, nutrition, nutrition_condition) VALUES ('t6', 3, 100)"),
+      db.prepare("INSERT INTO staff_members (id, team_id, role, first_name, last_name, gender, coaching, work_rate) VALUES ('kt', 't6', 'kondicni_trener', 'Karel', 'Běžec', 'm', 10, 10)"),
+      db.prepare("INSERT INTO staff_tasks (id, team_id, staff_id, task_type, status, target_player_id) VALUES ('wp', 't6', 'kt', 'weight_plan', 'active', 'on-plan')"),
+      add("u21-drinker", "t6u", natural, { alcohol: 80 }),
+      add("on-plan", "t6", { height: 180, weight: 90, naturalBase: 90, bodyType: "stocky" }, { alcohol: 10, workRate: 50 }),
+      add("pledged", "t6", natural, { alcohol: 80 }, { dietPledgeUntil: "2026-10-20" }),
+      db.prepare("INSERT INTO pub_sessions (team_id, game_date, attendees, incidents) VALUES ('t6u', ?, ?, '[]')").bind(YESTERDAY, JSON.stringify([{ playerId: "u21-drinker" }])),
+      db.prepare("INSERT INTO pub_sessions (team_id, game_date, attendees, incidents) VALUES ('t6', ?, ?, '[]')").bind(YESTERDAY, JSON.stringify([{ playerId: "pledged" }])),
+    ]);
+    await processDailyBodyDrift(db, { teamIds: ["t6", "t6u"], trainedToday: new Map([["on-plan", "other"]]), gameDate: TODAY, isMonday: false });
+    // hospoda 0,08 × 1,3 = 0,104, vybavení úrovně 3 ji půlí → +0,05
+    expect(await weightOf("u21-drinker")).toBeCloseTo(76.19, 2);
+    // trénink −0,03 a plán (0,10 + 0,15 × 0,5) × 1,0 = −0,175 → 89,8
+    expect(await weightOf("on-plan")).toBeCloseTo(89.8, 2);
+    // hospoda 0,104 × vybavení 0,5 × slib 0,25 = +0,013 → 76,15
+    expect(await weightOf("pledged")).toBeCloseTo(76.15, 2);
   });
 });
