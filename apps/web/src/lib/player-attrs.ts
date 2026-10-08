@@ -49,3 +49,15 @@ export function bodyNote(delta: number | undefined, reason: string): string | un
   if (!delta) return undefined;
   return `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ${reason}`;
 }
+
+/** Kila na desetiny s desetinnou čárkou: 96,4. Celé číslo bez ",0". */
+export function formatKg(kg: number): string {
+  const rounded = Math.round(kg * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(".", ",");
+}
+
+/** Změna váhy se znaménkem: „+1,2 kg“, „−0,8 kg“ (znak minus, ne pomlčka). */
+export function formatKgChange(kg: number): string {
+  if (kg === 0) return "0 kg";
+  return `${kg > 0 ? "+" : "−"}${formatKg(Math.abs(kg))} kg`;
+}
