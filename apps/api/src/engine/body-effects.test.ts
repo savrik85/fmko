@@ -9,7 +9,7 @@ describe("applyBodyEffects", () => {
   it("nadváha ubere rychlost a výdrž, hmotnost přidá sílu, výška nastaví height", () => {
     const p = { ...createPlayer(1, "DEF", 40), stamina: 40 };
     applyBodyEffects(p, { height: 180, weight: 90 });
-    expect([p.speed, p.stamina, p.strength, p.heading, p.height]).toEqual([35, 35, 43, 40, 180]);
+    expect([p.speed, p.stamina, p.strength, p.heading, p.height]).toEqual([35, 35, 41, 40, 180]);
   });
 
   it("vlastnost úpravou nespadne pod 1", () => {
@@ -69,6 +69,6 @@ describe("mapRowToMatchPlayer", () => {
       physical: JSON.stringify({ stamina: 40, strength: 40, height: 180, weight: 90 }),
     };
     const p = mapRowToMatchPlayer(row);
-    expect([p.speed, p.stamina, p.strength, p.height]).toEqual([35, 35, 43, 180]);
+    expect([p.speed, p.stamina, p.strength, p.height]).toEqual([35, 35, 41, 180]);
   });
 });

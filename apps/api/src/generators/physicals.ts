@@ -18,7 +18,14 @@ export const IDEAL_BMI = 23.5;
 /** Kolik kg od ideálu se ještě nic neděje. */
 export const WEIGHT_TOLERANCE_KG = 4;
 const OVERWEIGHT_CAP = 12;
-const MASS_STRENGTH_CAP = 4;
+/**
+ * Hmotnost: +1 síla za každých 12 kg nadváhy, nejvýš +1. Spec měla +1 za 4 kg se stropem +4,
+ * jenže simulace (3000 zápasů, postavy z produkce, 2026-10-08) ukázala, že taková síla
+ * vyruší postih rychlosti a výdrže: tým s +12 kg vyhrával stejně jako tým v normě
+ * a gólů ubylo 3,8 %. S 12 kg / +1 vyhrává o 1,5 bodu méně a gólů ubude 2,3 %.
+ */
+const MASS_KG_PER_POINT = 12;
+const MASS_STRENGTH_CAP = 1;
 const UNDERWEIGHT_CAP = 6;
 const HEADING_REFERENCE_CM = 180;
 const HEADING_PER_CM = 0.4;
@@ -78,7 +85,7 @@ export function bodyEffects(physical: Record<string, unknown> | null | undefined
   let strength = 0;
   if (excess > WEIGHT_TOLERANCE_KG) {
     speed = noNegativeZero(-Math.min(OVERWEIGHT_CAP, Math.round((excess - WEIGHT_TOLERANCE_KG) / 2)));
-    strength = Math.min(MASS_STRENGTH_CAP, Math.floor(excess / 4));
+    strength = Math.min(MASS_STRENGTH_CAP, Math.floor(excess / MASS_KG_PER_POINT));
   } else if (excess < -WEIGHT_TOLERANCE_KG) {
     strength = noNegativeZero(-Math.min(UNDERWEIGHT_CAP, Math.round((-excess - WEIGHT_TOLERANCE_KG) / 2)));
   }

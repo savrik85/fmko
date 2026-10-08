@@ -47,7 +47,7 @@ Ideální váha: `IDEAL_BMI × (výška v m)²`, `IDEAL_BMI = 23,5` (180 cm → 
 |---|---|---|---|
 | Nadváha → rychlost | −1 za každé 2 kg nad `excess − 4` | −12 | 180 cm / 90 kg: −5 |
 | Nadváha → výdrž | stejně jako rychlost | −12 | 180 cm / 90 kg: −5 |
-| Hmotnost → síla | +1 za každé 4 kg `excess` nad 0 | +4 | 180 cm / 90 kg: +3 |
+| Hmotnost → síla | +1 za každých 12 kg `excess` (jen nad tolerancí) | +1 | 180 cm / 90 kg: +1 |
 | Podváha → síla | když `excess < −4`: −1 za každé 2 kg z `(−excess − 4)` | −6 | 190 cm / 70 kg: −5 |
 | Výška → hlavičky | `(výška − 180) × 0,4` | ±5 | 192 cm: +5, 170 cm: −4 |
 | Výška brankáře → dosah | násobek `1 + (výška − 185) × 0,008` | 0,9–1,1 | 193 cm: ×1,064 |
@@ -55,6 +55,9 @@ Ideální váha: `IDEAL_BMI × (výška v m)²`, `IDEAL_BMI = 23,5` (180 cm → 
 - Úpravy se zaokrouhlí na celé body (`Math.round`) a výsledná vlastnost nesmí klesnout pod 1.
 - Hráč s nadváhou je zároveň pomalejší a silnější v soubojích. To je záměr: těžký stoper se hůř
   obchází, ale nestíhá.
+- Doladěno simulací 2026-10-08: původní +1 za 4 kg (strop +4) vyrušilo postih za nadváhu,
+  tým s +12 kg vyhrával stejně jako tým v normě a gólů ubylo 3,8 %. Po úpravě na 12 kg / +1
+  vyhrává o 1,5 bodu méně a gólů ubude 2,3 % (limit ±3 %).
 - Chybí-li výška nebo váha, žádná úprava (neutrální).
 - Dosah brankáře působí jen tam, kde jde o vysoké míče: `calcAerialProb` (rohy a centry ze
   standardek, složka brankáře v `cover`) a hlavičkové šance ze hry v `calcGoalProb`
