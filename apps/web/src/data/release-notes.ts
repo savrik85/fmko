@@ -12,6 +12,21 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-08",
+    emoji: "🍺",
+    title: "Výška a váha hráčů",
+    items: [
+      "Postava hráče se projeví v zápase. Nadváha bere rychlost a výdrž, těžší hráč je silnější v soubojích a vysoký hráč vyhrává víc hlaviček. Vysokému brankáři se líp chytají centry a rohy. Hodnocení, cena ani mzda hráče se tím nemění.",
+      "V profilu hráče uvidíš u váhy, jestli má podváhu, ideální váhu, je svalnatý, nebo má nadváhu či velkou nadváhu. Kila navíc, která nese síla, se za nadváhu nepočítají.",
+      "Váha se mění každý den. Hospoda přidává, tím víc, čím víc hráč pije. Trénink ubírá, kondiční víc. Zraněný hráč přibírá. Přes léto se váha změní podle toho, jak hráč léto prožil, a dorost do 18 let ještě roste.",
+      "V profilu najdeš, kolik hráč za poslední měsíc přibral nebo shodil, a v Historii kartu Vývoj váhy. Když hráč za měsíc přibere 3 kg a víc, napíše ti to kondiční trenér, masér nebo kapitán.",
+      "V Kádru je nová záložka Postava: kolik má kádr průměrně nad ideálem, kdo má problém, proč přibírá a kolik rychlosti a výdrže nadváha bere tvé sestavě. Hráči odtud rovnou napíšeš.",
+      "Kondičnímu trenérovi můžeš zadat úkol Plán hubnutí pro hráče s nadváhou, na 14 nebo 28 dní za 400 Kč na týden. Hráč hubne v každý den, kdy přijde na trénink, a čím lepší trenér a pracovitější hráč, tím víc. Shozená kila si udrží, dokud nezačne zase vysedávat v hospodě. Na konci ti trenér napíše, kolik hráč shodil.",
+      "Ve Vybavení je nové vybavení Váha a jídelníček ve třech úrovních. Hráči méně přibírají z hospody a na vyšších úrovních se rychleji vracejí ke své váze. Platí i pro U21.",
+      "Hráči s nadváhou můžeš napsat SMS, ať zhubne nebo omezí hospodu. Disciplinovaný hráč v dobré náladě slíbí, že dva týdny vydrží, a hospoda ho pak skoro nevykrmí. Vznětlivý se může urazit a spadne mu nálada. O váze s ním jde mluvit jednou za 14 dní.",
+    ],
+  },
+  {
     date: "2026-10-07",
     emoji: "⚖️",
     title: "Srovnání hráčů",
