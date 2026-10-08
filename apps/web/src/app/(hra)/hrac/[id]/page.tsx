@@ -1029,9 +1029,14 @@ export default function PlayerDetailPage() {
             <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />
             <DetailRow
               label="Váha"
-              value={player.physical?.weight
-                ? `${formatKg(player.physical.weight)} kg${player.body?.idealWeight ? ` (ideál ${player.body.idealWeight} kg)` : ""}`
-                : "—"}
+              value={player.physical?.weight ? (
+                <>
+                  {formatKg(player.physical.weight)} kg
+                  {player.body?.weightCategory && (
+                    <span className={WEIGHT_CATEGORY[player.body.weightCategory].color}> · {WEIGHT_CATEGORY[player.body.weightCategory].label}</span>
+                  )}
+                </>
+              ) : "—"}
             />
             {player.body?.trend30d != null && (
               <DetailRow
@@ -2268,6 +2273,14 @@ function weightTrendColor(trend: number, weight: number | undefined, ideal: numb
 }
 
 const WEIGHT_SOURCE_LABEL: Record<string, string> = { weekly: "Týden", summer: "Léto", growth: "Růst" };
+
+/** Váha proti ideálu slovy. Hranice počítá API (playerBodyView), tady jen popisek a barva. */
+const WEIGHT_CATEGORY: Record<"under" | "ideal" | "over" | "obese", { label: string; color: string }> = {
+  under: { label: "podváha", color: "text-gold-600" },
+  ideal: { label: "ideální", color: "text-pitch-500" },
+  over: { label: "nadváha", color: "text-gold-600" },
+  obese: { label: "velká nadváha", color: "text-card-red" },
+};
 
 interface WeightLogEntry { id: number; gameDate: string; weight: number; source: string }
 
