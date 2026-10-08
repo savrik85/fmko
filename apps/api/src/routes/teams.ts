@@ -966,10 +966,13 @@ teamsRouter.get("/:id/players", async (c) => {
     // Hráč na hostování zůstává kmenovému klubu vlastním i v cizím kádru.
     const vlastni = divak.has(teamId) || (!!row.loan_from_team_id && divak.has(row.loan_from_team_id as string));
     if (vlastni) {
+      const physical = JSON.parse(row.physical as string);
       return {
         ...row,
         skills: JSON.parse(row.skills as string),
-        physical: JSON.parse(row.physical as string),
+        physical,
+        // Postava pro srovnání hráčů v profilu, stejně jako detail hráče.
+        body: playerBodyView(physical),
         personality: JSON.parse(row.personality as string),
         lifeContext,
         avatar: JSON.parse(row.avatar as string),
@@ -980,10 +983,13 @@ teamsRouter.get("/:id/players", async (c) => {
     const { row: cisty, doplnitDoSkills } = ocistiRadekProCizi(row);
     const skills = zamlzAtributy(JSON.parse(row.skills as string));
     for (const [k, v] of Object.entries(doplnitDoSkills)) if (skills[k] == null) skills[k] = v;
+    const physical = zamlzAtributy(JSON.parse(row.physical as string));
     return {
       ...cisty,
       skills,
-      physical: zamlzAtributy(JSON.parse(row.physical as string)),
+      physical,
+      // Ze zamlžených hodnot, aby postava neprozradila přesnou váhu cizího hráče.
+      body: playerBodyView(physical),
       personality: zamlzAtributy(JSON.parse(row.personality as string)),
       lifeContext: verejnyZivotHrace(lifeContext),
       avatar: JSON.parse(row.avatar as string),
