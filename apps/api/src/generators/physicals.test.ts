@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { bodyEffects, gkReachFactor, idealWeight, isBodyType, playerBodyView } from "./physicals";
+import { bodyEffects, generateHeightWeight, gkReachFactor, idealWeight, isBodyType, playerBodyView } from "./physicals";
+import type { BodyType } from "./physicals";
+import { createRng } from "./rng";
 
 describe("idealWeight", () => {
   it("BMI 23,5: 180 cm → 76 kg, 190 cm → 85 kg", () => {
@@ -87,5 +89,40 @@ describe("playerBodyView", () => {
     expect(isBodyType("obese")).toBe(true);
     expect(isBodyType("giant")).toBe(false);
     expect(isBodyType(undefined)).toBe(false);
+  });
+});
+
+describe("generateHeightWeight", () => {
+  const avgBmi = (bodyType: BodyType) => {
+    const rng = createRng(99);
+    let sum = 0;
+    for (let i = 0; i < 2000; i++) {
+      const { height, weight } = generateHeightWeight(rng, "MID", bodyType);
+      sum += weight / (height / 100) ** 2;
+    }
+    return sum / 2000;
+  };
+
+  it("průměrné BMI podle postavy: hubený ~21, atletický ~23,5, normální ~25, zavalitý ~27, obézní ~31", () => {
+    expect(avgBmi("thin")).toBeCloseTo(20.7, 0);
+    expect(avgBmi("athletic")).toBeCloseTo(23.5, 0);
+    expect(avgBmi("normal")).toBeCloseTo(24.7, 0);
+    expect(avgBmi("stocky")).toBeCloseTo(27, 0);
+    expect(avgBmi("obese")).toBeCloseTo(31, 0);
+  });
+
+  it("vrací uložitelný typ postavy, neznámý typ je normal", () => {
+    const rng = createRng(1);
+    expect(generateHeightWeight(rng, "GK", "stocky").bodyType).toBe("stocky");
+    expect(generateHeightWeight(rng, "GK", "giant").bodyType).toBe("normal");
+  });
+
+  it("vyšší hráč je při stejné postavě těžší", () => {
+    const rng = createRng(5);
+    const samples = Array.from({ length: 3000 }, () => generateHeightWeight(rng, "DEF", "normal"));
+    const tall = samples.filter((s) => s.height >= 185);
+    const short = samples.filter((s) => s.height <= 175);
+    const mean = (xs: typeof samples) => xs.reduce((a, s) => a + s.weight, 0) / xs.length;
+    expect(mean(tall)).toBeGreaterThan(mean(short) + 5);
   });
 });

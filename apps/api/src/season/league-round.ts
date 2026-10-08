@@ -16,6 +16,7 @@ import type { ReportQueueMessage } from "../queue/messages";
 import { logger } from "../lib/logger";
 import { typZraneniZPopisu, zavaznostZeDnu } from "../injuries/injury-types";
 import { injuryPronenessOf } from "../injuries/proneness";
+import { isBodyType } from "../generators/physicals";
 
 /** Truc hráče, který mezi koly prohlásí, že přemýšlí o odchodu. */
 const WANTS_TO_LEAVE_UNREST = 55;
@@ -514,7 +515,7 @@ async function runBetweenRoundEvents(
             stamina: s.stamina ?? 50, strength: s.strength ?? 50, discipline: p.discipline ?? 50,
             patriotism: p.patriotism ?? 50, alcohol: p.alcohol ?? 30, temper: p.temper ?? 40,
             injuryProneness: injuryPronenessOf(ph, p), occupation: lc.occupation ?? "",
-            bodyType: "normal" as const, avatarConfig: {} as any, condition: lc.condition ?? 100, morale: lc.morale ?? 50,
+            bodyType: isBodyType(ph.bodyType) ? ph.bodyType : "normal", avatarConfig: {} as any, condition: lc.condition ?? 100, morale: lc.morale ?? 50,
             preferredFoot: "right" as const, preferredSide: "center" as const,
             leadership: p.leadership ?? 30, workRate: p.workRate ?? 50, aggression: p.aggression ?? 40,
             consistency: p.consistency ?? 50, clutch: p.clutch ?? 50,

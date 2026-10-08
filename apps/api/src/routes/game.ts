@@ -20,6 +20,7 @@ import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../t
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
 import { suspensionSms, injurySms } from "../events/injury-sms";
 import { injuryPronenessOf } from "../injuries/proneness";
+import { isBodyType } from "../generators/physicals";
 import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, marketValue, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
 
 /**
@@ -1339,7 +1340,7 @@ gameRouter.get("/teams/:teamId/transfers", async (c) => {
       injuryProneness: injuryPronenessOf(physical, personality), discipline: personality.discipline,
       patriotism: personality.patriotism, alcohol: personality.alcohol,
       temper: personality.temper, occupation: lifeContext.occupation,
-      bodyType: "normal" as const, avatarConfig: {} as any,
+      bodyType: isBodyType(physical.bodyType) ? physical.bodyType : "normal", avatarConfig: {} as any,
       condition: lifeContext.condition ?? 100, morale: lifeContext.morale ?? 50,
       preferredFoot: "right" as const, preferredSide: "center" as const,
       leadership: personality.leadership ?? 30, workRate: personality.workRate ?? 50,

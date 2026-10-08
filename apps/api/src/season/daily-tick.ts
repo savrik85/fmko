@@ -15,6 +15,7 @@ import type { PitchCareMode } from "../stadium/pitch-care";
 import { MEETING_DAY_OF_WEEK } from "../competition/defaults";
 import { overallRatingFromFlat } from "../skills/generator";
 import { injuryPronenessOf } from "../injuries/proneness";
+import { isBodyType } from "../generators/physicals";
 import { injuryReturnCondition } from "../injuries/injury-generator";
 
 export interface DailyTickEvent {
@@ -398,7 +399,7 @@ export async function executeDailyTick(
             discipline: personality.discipline,
             patriotism: personality.patriotism, alcohol: personality.alcohol,
             temper: personality.temper, occupation: lifeContext.occupation ?? "",
-            bodyType: "normal" as const, avatarConfig: {} as any,
+            bodyType: isBodyType(physical.bodyType) ? physical.bodyType : "normal", avatarConfig: {} as any,
             condition: lifeContext.condition ?? 100, morale: lifeContext.morale ?? 50,
             preferredFoot: "right" as const, preferredSide: "center" as const,
             leadership: personality.leadership ?? 30, workRate: personality.workRate ?? 50,
