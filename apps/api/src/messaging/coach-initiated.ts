@@ -81,10 +81,10 @@ export async function startCoachThread(
       .catch((e) => { logger.warn({ module: M }, "stav vlákna", e); return null; });
     const tema = temaZeStavu(vlakno?.ai_thread_state ?? null);
     // Domluva o váze (postava, část 3): výsledek rozhodla hra, model odpoví podle něj.
-    const herniDen = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(opts.teamId)
+    const teamGameDate = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(opts.teamId)
       .first<{ game_date: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "herní den pro domluvu o váze", e); return null; });
-    if (herniDen?.game_date) player.weightTalk = weightTalkFromState(vlakno?.ai_thread_state, herniDen.game_date);
+    if (teamGameDate?.game_date) player.weightTalk = weightTalkFromState(vlakno?.ai_thread_state, teamGameDate.game_date);
     player.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: opts.playerId, tema });
 
     /*
