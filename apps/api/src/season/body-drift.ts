@@ -43,6 +43,12 @@ export interface DailyBodyInput {
   alcohol: number;
   training: TrainingToday;
   injured: boolean;
+  /** Násobek přírůstku z hospody (vybavení Váha a jídelníček, slib z SMS). Chybí = 1. */
+  pubMul?: number;
+  /** Násobek tahu k přirozené váze (vybavení). Chybí = 1. */
+  pullMul?: number;
+  /** Kg navíc dolů v den tréninku, když je hráč na plánu hubnutí. Chybí = 0. */
+  planLoss?: number;
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -64,12 +70,37 @@ export function naturalWeight(physical: Record<string, unknown>, age: number): n
 
 /** Změna váhy za jeden herní den (kg, nezaokrouhlená). */
 export function dailyWeightChange(input: DailyBodyInput): number {
-  let change = input.natural === null ? 0 : NATURAL_PULL * (input.natural - input.weight);
-  if (input.pubVisit) change += PUB_VISIT_KG * (0.5 + input.alcohol / 100);
+  let change = input.natural === null ? 0 : NATURAL_PULL * (input.pullMul ?? 1) * (input.natural - input.weight);
+  if (input.pubVisit) change += PUB_VISIT_KG * (0.5 + input.alcohol / 100) * (input.pubMul ?? 1);
   if (input.training === "conditioning") change += CONDITIONING_KG;
   else if (input.training === "other") change += TRAINING_KG;
+  if (input.training !== null && input.planLoss) change -= input.planLoss;
   if (input.injured) change += INJURED_KG;
   return change;
+}
+
+// ── Páky manažera (část 3) ──────────────────────────────────────────────────────
+
+/** Slib z SMS: dokud platí, přírůstek z hospody je čtvrtinový. */
+export const PLEDGE_PUB_MUL = 0.25;
+
+/**
+ * Plán hubnutí kondičního trenéra: kolik kg navíc hráč shodí v den, kdy trénoval.
+ * `trainerStrength` 0–1 (rowEffectiveness / 20), pracovitost 0–100.
+ */
+export function weightPlanDailyLoss(trainerStrength: number, workRate: number): number {
+  const s = Math.max(0, Math.min(1, trainerStrength));
+  return (0.10 + 0.15 * s) * (0.75 + workRate / 200);
+}
+
+const NUTRITION_PUB_REDUCTION = [0, 0.2, 0.35, 0.5];
+const NUTRITION_PULL_BONUS = [0, 0, 0.25, 0.5];
+
+/** Vybavení „Váha a jídelníček“: násobek hospody a tahu k přirozené váze podle úrovně a stavu. */
+export function nutritionEffects(level: number, condition: number): { pubMul: number; pullMul: number } {
+  const lvl = Math.max(0, Math.min(3, Math.round(level)));
+  const c = Math.max(0, Math.min(100, condition)) / 100;
+  return { pubMul: 1 - NUTRITION_PUB_REDUCTION[lvl] * c, pullMul: 1 + NUTRITION_PULL_BONUS[lvl] * c };
 }
 
 /** Nová váha: na setiny kg, v rozsahu 50–140. */
