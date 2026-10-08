@@ -34,7 +34,7 @@ export interface OverviewPlayer {
   weightCategory: WeightCategory | null;
   trend30d: number | null;
   effects: { speed: number; stamina: number; strength: number; heading: number };
-  /** Proč přibírá, jen u hráčů s nadváhou nebo s rychlým přírůstkem. */
+  /** Proč přibírá: jen u hráčů, kteří přibírají a mají nadváhu nebo rychlý přírůstek. */
   cause: WeightSmsCause | null;
   planUntil: string | null;
   pledgeUntil: string | null;
@@ -77,7 +77,8 @@ export function buildBodyOverview(inputs: readonly OverviewPlayerInput[], lineup
       weightCategory: view.weightCategory,
       trend30d: p.trend30d,
       effects: view.effects,
-      cause: heavy || gaining ? weightSmsCause({ injured: p.injured, pubVisits28d: p.pubVisits28d }) : null,
+      // Příčina vysvětluje přírůstek: kdo nepřibírá (nadváhu má od začátku nebo hubne), žádnou nemá.
+      cause: (p.trend30d ?? 0) > 0 && (heavy || gaining) ? weightSmsCause({ injured: p.injured, pubVisits28d: p.pubVisits28d }) : null,
       planUntil: p.planUntil,
       pledgeUntil: p.pledgeUntil,
       problem: heavy || gaining || view.weightCategory === "under",
