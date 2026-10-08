@@ -33,6 +33,16 @@ describe("buildBodyOverview", () => {
     expect(cause).toMatchObject({ obese: "injury", over: "pub", gainer: "idle", fit: null, thin: null });
   });
 
+  it("příčina jen u hráče, který přibírá: nadváha bez trendu nebo s hubnutím příčinu nemá", () => {
+    const o2 = buildBodyOverview([
+      p("heavyNoTrend", { height: 180, weight: 92 }),
+      p("heavyLosing", { height: 180, weight: 92 }, { trend30d: -1.2, pubVisits28d: 9 }),
+      p("heavyGaining", { height: 180, weight: 92 }, { trend30d: 0.6 }),
+    ], null);
+    const cause = Object.fromEntries(o2.players.map((x) => [x.id, x.cause]));
+    expect(cause).toEqual({ heavyNoTrend: null, heavyLosing: null, heavyGaining: "idle" });
+  });
+
   it("postih jedenáctky: bez sestavy 11 nejlepších podle hodnocení", () => {
     expect(o.summary.lineupSource).toBe("best11");
     expect(o.summary.lineupPenalty.speed).toBe(o.players.reduce((s, x) => s + x.effects.speed, 0));
