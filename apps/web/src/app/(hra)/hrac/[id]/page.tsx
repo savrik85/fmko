@@ -18,7 +18,7 @@ import { MoneyInput } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { PlayerObligationsCard } from "@/components/transfers/player-obligations";
 import { formatLogDate } from "@/components/manager/CoachKabinaTab";
-import { attrBg, attrValue } from "@/lib/player-attrs";
+import { attrBg, attrValue, withBody, bodyNote } from "@/lib/player-attrs";
 
 import type { BadgePattern } from "@/components/ui";
 import { isLightColor } from "@/lib/team-color";
@@ -2080,17 +2080,6 @@ function positionLabel(position: string): string {
 const BODY_TYPE_LABEL: Record<"thin" | "normal" | "athletic" | "stocky" | "obese", string> = {
   thin: "Hubená", normal: "Normální", athletic: "Atletická", stocky: "Zavalitá", obese: "Obézní",
 };
-
-/** Vlastnost po úpravě postavou. Bez úpravy beze změny, upravená nikdy pod 1 (stejně jako engine). */
-function withBody(base: number, delta: number | undefined): number {
-  return delta ? Math.max(1, base + delta) : base;
-}
-
-/** Poznámka k vlastnosti, např. „−5 nadváha“. Znaménko minus, ne pomlčka. */
-function bodyNote(delta: number | undefined, reason: string): string | undefined {
-  if (!delta) return undefined;
-  return `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ${reason}`;
-}
 
 function AttrRow({ label, value, inverted, importance, note }: {
   label: string;

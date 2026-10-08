@@ -38,3 +38,14 @@ export function attrBg(value: number): string {
   if (value >= 15) return "bg-amber-100 text-amber-800";
   return "bg-red-100 text-card-red";
 }
+
+/** Vlastnost po úpravě postavou (API pole `body`). Bez úpravy beze změny, upravená nikdy pod 1 (stejně jako engine). */
+export function withBody(base: number, delta: number | undefined): number {
+  return delta ? Math.max(1, base + delta) : base;
+}
+
+/** Poznámka k vlastnosti, např. „−5 nadváha“. Znaménko minus, ne pomlčka. */
+export function bodyNote(delta: number | undefined, reason: string): string | undefined {
+  if (!delta) return undefined;
+  return `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ${reason}`;
+}

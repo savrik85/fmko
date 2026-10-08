@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, type Player } from "@/lib/api";
-import { attrValue } from "@/lib/player-attrs";
+import { attrValue, withBody } from "@/lib/player-attrs";
 import { PositionBadge, SectionLabel } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { attributeImportance } from "@okresni-masina/shared";
@@ -27,21 +27,21 @@ interface AttrDef {
   gkOnly?: boolean;
 }
 
-// Stejné pořadí a stejné náhradní hodnoty jako karta Dovednosti v profilu.
+// Stejné pořadí, stejné náhradní hodnoty a stejné úpravy postavou jako karta Dovednosti v profilu.
 const ATTRS: AttrDef[] = [
-  { key: "speed", label: "Rychlost", read: (p) => p.skills?.speed ?? 0 },
+  { key: "speed", label: "Rychlost", read: (p) => withBody(p.skills?.speed ?? 0, p.body?.effects.speed) },
   { key: "technique", label: "Technika", read: (p) => p.skills?.technique ?? 0 },
   { key: "shooting", label: "Střelba", read: (p) => p.skills?.shooting ?? 0 },
   { key: "passing", label: "Přihrávky", read: (p) => p.skills?.passing ?? 0 },
-  { key: "heading", label: "Hlavičky", read: (p) => p.skills?.heading ?? 0 },
+  { key: "heading", label: "Hlavičky", read: (p) => withBody(p.skills?.heading ?? 0, p.body?.effects.heading) },
   { key: "defense", label: "Obrana", read: (p) => p.skills?.defense ?? 0 },
   { key: "vision", label: "Přehled", read: (p) => attrValue(p, "vision") },
   { key: "experience", label: "Zkušenost", read: (p) => attrValue(p, "experience") },
   { key: "creativity", label: "Kreativita", read: (p) => p.skills?.creativity ?? 0 },
   { key: "setPieces", label: "Standardky", read: (p) => p.skills?.setPieces ?? 50 },
   { key: "goalkeeping", label: "Brankář", read: (p) => p.skills?.goalkeeping ?? 0, gkOnly: true },
-  { key: "stamina", label: "Výdrž", read: (p) => p.physical?.stamina ?? 0 },
-  { key: "strength", label: "Síla", read: (p) => p.physical?.strength ?? 0 },
+  { key: "stamina", label: "Výdrž", read: (p) => withBody(p.physical?.stamina ?? 0, p.body?.effects.stamina) },
+  { key: "strength", label: "Síla", read: (p) => withBody(p.physical?.strength ?? 0, p.body?.effects.strength) },
   {
     key: "injuryProneness", label: "Náchylnost", inverted: true,
     read: (p) => p.physical?.injuryProneness ?? p.personality?.injuryProneness ?? 50,
