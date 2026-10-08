@@ -11,7 +11,7 @@
 import type { MatchPlayer, TeamSetup } from "./types";
 // Modifikátory taktiky se berou z jednoho místa. Dřív tu byla kopie, kterou
 // bylo nutné ručně synchronizovat — a s příchodem tvrdosti hry by se rozjela.
-import { TACTIC_MODS } from "./tactics";
+import { TACTIC_MODS, calcTacticEffectiveness, effMod } from "./tactics";
 
 function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
   if (lineup.length === 0) return 0;
@@ -69,7 +69,7 @@ function rawAttackPower(setup: TeamSetup): number {
     teamAvg(outfield, "workRate") * 0.3
   ) / 5;
 
-  return base * tacticMod.attackMod;
+  return base * effMod(tacticMod.attackMod, calcTacticEffectiveness(setup.lineup, setup.tactic, setup.formation));
 }
 
 function rawDefensePower(setup: TeamSetup): number {
@@ -84,7 +84,7 @@ function rawDefensePower(setup: TeamSetup): number {
     teamAvg(defOutfield, "workRate") * 0.2
   ) / 3;
 
-  return base * tacticMod.defenseMod;
+  return base * effMod(tacticMod.defenseMod, calcTacticEffectiveness(setup.lineup, setup.tactic, setup.formation));
 }
 
 // Normalize attack/defense power to 0-100 scale.
@@ -159,6 +159,8 @@ export function calcLineupStrength(setup: TeamSetup): LineupStrength {
   );
 
   const tacticMod = TACTIC_MODS[setup.tactic] ?? TACTIC_MODS.balanced;
+  const tacticEff = calcTacticEffectiveness(setup.lineup, setup.tactic, setup.formation);
+  const round2 = (v: number) => Math.round(v * 100) / 100;
 
   const notes: string[] = [];
   // Detekovat slabiny v sestavě
@@ -179,10 +181,12 @@ export function calcLineupStrength(setup: TeamSetup): LineupStrength {
     attack,
     defense,
     overall,
+    // Skutečný efekt taktiky po započtení toho, jak ji kádr zvládá (stejně jako v zápase).
+    // Dřív se ukazovala nominální procenta, která tým se slabým fitem nikdy neviděl.
     tacticEffect: {
-      attackMod: tacticMod.attackMod,
-      defenseMod: tacticMod.defenseMod,
-      chanceMod: tacticMod.chanceMod,
+      attackMod: round2(effMod(tacticMod.attackMod, tacticEff)),
+      defenseMod: round2(effMod(tacticMod.defenseMod, tacticEff)),
+      chanceMod: round2(effMod(tacticMod.chanceMod, tacticEff)),
     },
     notes,
   };
