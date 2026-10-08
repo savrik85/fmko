@@ -1,4 +1,5 @@
 import type { Rng } from "./rng";
+import type { MatchPlayer } from "../engine/types";
 
 export type PositionKind = "GK" | "DEF" | "MID" | "FWD";
 export type BodyType = "thin" | "athletic" | "stocky" | "obese" | "normal";
@@ -121,4 +122,19 @@ export function generateHeightWeight(
   const height = baseHeight + rng.int(-8, 8);
   const weight = Math.round(idealWeight(height) * BODY_WEIGHT_FACTOR[type]) + rng.int(-3, 3);
   return { height, weight, bodyType: type };
+}
+
+/**
+ * Přičte úpravy postavou k vlastnostem hráče pro engine. Volá se jen při stavbě
+ * hráčů pro zápas a náhled, nikdy nad uloženými dovednostmi. Vlastnost bez úpravy
+ * se nemění (ani nula), upravená neklesne pod 1.
+ */
+export function applyBodyEffects(player: MatchPlayer, physical: Record<string, unknown> | null | undefined): void {
+  const e = bodyEffects(physical);
+  if (e.speed !== 0) player.speed = Math.max(1, player.speed + e.speed);
+  if (e.stamina !== 0) player.stamina = Math.max(1, player.stamina + e.stamina);
+  if (e.strength !== 0) player.strength = Math.max(1, player.strength + e.strength);
+  if (e.heading !== 0) player.heading = Math.max(1, player.heading + e.heading);
+  const height = positive(physical?.height);
+  if (height !== null) player.height = height;
 }

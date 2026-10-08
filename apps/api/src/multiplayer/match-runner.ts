@@ -24,6 +24,7 @@ import {typZraneniZPopisu, zavaznostZeDnu} from "../injuries/injury-types";
 import {matchInjuryDays} from "../injuries/injury-generator";
 import {seedFromString} from "../lib/seed";
 import {FORM_BASELINE, playerFormFromRatings} from "../engine/form";
+import {applyBodyEffects} from "../generators/physicals";
 
 export interface MatchRunResult {
     matchId: string;
@@ -1719,7 +1720,7 @@ export async function buildMatchPlayers(
         positionMap.set(dbId, row.position as string);
 
         const mp = matchPositionMap.get(dbId);
-        return {
+        const player = {
             id: engineId,
             firstName: row.first_name as string,
             lastName: row.last_name as string,
@@ -1754,6 +1755,8 @@ export async function buildMatchPlayers(
             condition: lifeContext.condition ?? 100,
             morale: lifeContext.morale ?? 50,
         };
+        applyBodyEffects(player, physical);
+        return player;
     });
 
     // ── Assign matchPositions to replacements ──
