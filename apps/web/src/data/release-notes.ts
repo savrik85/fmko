@@ -18,7 +18,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     items: [
       "Postava hráče se projeví v zápase. Nadváha bere rychlost a výdrž, těžší hráč je silnější v soubojích a vysoký hráč vyhrává víc hlaviček. Vysokému brankáři se líp chytají centry a rohy. Hodnocení, cena ani mzda hráče se tím nemění.",
       "Přehled celého kádru najdeš na stránce Kádr v nové záložce Postava: kolik má kádr průměrně nad ideálem, jak se za měsíc změnil, kdo má s váhou problém, proč přibírá a kolik rychlosti a výdrže nadváha bere tvé sestavě. Hráči odtud rovnou napíšeš SMS.",
-      "Informace o každém hráči jsou v jeho profilu: výška, váha s ideální váhou a popisem, jestli má podváhu, ideální váhu, je svalnatý, nebo má nadváhu či velkou nadváhu, a kolik za poslední měsíc přibral nebo shodil. V záložce Historie je karta Vývoj váhy. Kila navíc, která nese síla, se za nadváhu nepočítají.",
+      "Informace o každém hráči jsou v jeho profilu: výška a váha s popiskem, jestli má podváhu, ideální váhu, je svalnatý, nebo má nadváhu či velkou nadváhu, a kolik za poslední měsíc přibral nebo shodil. V záložce Historie je karta Vývoj váhy. Kila navíc, která nese síla, se za nadváhu nepočítají.",
       "Váha se mění každý den. Hospoda přidává, tím víc, čím víc hráč pije. Trénink ubírá, kondiční víc. Zraněný hráč přibírá. Přes léto se váha změní podle toho, jak hráč léto prožil, a dorost do 18 let ještě roste.",
       "Když hráč za měsíc přibere 3 kg a víc, napíše ti to kondiční trenér, masér nebo kapitán.",
       "Když postavu neřešíš, nic zásadního se nestane: hráči si drží svou váhu a přiberou jen ti, co vysedávají v hospodě. Když se ale o hráče staráš, s nadváhou na tréninku hubnou až k váze, na které už neztrácejí rychlost ani výdrž.",
