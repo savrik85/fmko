@@ -14,6 +14,7 @@ import { logger } from "../lib/logger";
 import type { PitchCareMode } from "../stadium/pitch-care";
 import { MEETING_DAY_OF_WEEK } from "../competition/defaults";
 import { overallRatingFromFlat } from "../skills/generator";
+import { injuryPronenessOf } from "../injuries/proneness";
 
 export interface DailyTickEvent {
   type: "training" | "training_skipped" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return";
@@ -392,7 +393,7 @@ export async function executeDailyTick(
             setPieces: skills.setPieces ?? 30,
             stamina: physical.stamina ?? skills.stamina ?? skills.speed,
             strength: physical.strength ?? skills.strength ?? skills.defense,
-            injuryProneness: personality.injuryProneness ?? 50,
+            injuryProneness: injuryPronenessOf(physical, personality),
             discipline: personality.discipline,
             patriotism: personality.patriotism, alcohol: personality.alcohol,
             temper: personality.temper, occupation: lifeContext.occupation ?? "",

@@ -15,6 +15,7 @@ import type { StandingEntry } from "../stats/standings";
 import type { ReportQueueMessage } from "../queue/messages";
 import { logger } from "../lib/logger";
 import { typZraneniZPopisu, zavaznostZeDnu } from "../injuries/injury-types";
+import { injuryPronenessOf } from "../injuries/proneness";
 
 export type LeagueRoundStatus =
   /** Kolo odsimulováno. */
@@ -502,13 +503,14 @@ async function runBetweenRoundEvents(
           const s = JSON.parse(r.skills);
           const p = JSON.parse(r.personality);
           const lc = JSON.parse(r.life_context);
+          const ph = r.physical ? JSON.parse(r.physical) : {};
           return {
             firstName: r.first_name, lastName: r.last_name, age: r.age, position: r.position,
             speed: s.speed ?? 50, technique: s.technique ?? 50, shooting: s.shooting ?? 50, passing: s.passing ?? 50,
             heading: s.heading ?? 50, defense: s.defense ?? 50, goalkeeping: s.goalkeeping ?? 0,
             stamina: s.stamina ?? 50, strength: s.strength ?? 50, discipline: p.discipline ?? 50,
             patriotism: p.patriotism ?? 50, alcohol: p.alcohol ?? 30, temper: p.temper ?? 40,
-            injuryProneness: p.injuryProneness ?? 50, occupation: lc.occupation ?? "",
+            injuryProneness: injuryPronenessOf(ph, p), occupation: lc.occupation ?? "",
             bodyType: "normal" as const, avatarConfig: {} as any, condition: lc.condition ?? 100, morale: lc.morale ?? 50,
             preferredFoot: "right" as const, preferredSide: "center" as const,
             leadership: p.leadership ?? 30, workRate: p.workRate ?? 50, aggression: p.aggression ?? 40,

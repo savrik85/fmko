@@ -19,6 +19,7 @@ import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
 import { suspensionSms, injurySms } from "../events/injury-sms";
+import { injuryPronenessOf } from "../injuries/proneness";
 import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, marketValue, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
 
 /**
@@ -1335,7 +1336,7 @@ gameRouter.get("/teams/:teamId/transfers", async (c) => {
       goalkeeping: skills.goalkeeping,
       stamina: physical.stamina ?? skills.stamina ?? 50,
       strength: physical.strength ?? skills.strength ?? 50,
-      injuryProneness: personality.injuryProneness ?? 50, discipline: personality.discipline,
+      injuryProneness: injuryPronenessOf(physical, personality), discipline: personality.discipline,
       patriotism: personality.patriotism, alcohol: personality.alcohol,
       temper: personality.temper, occupation: lifeContext.occupation,
       bodyType: "normal" as const, avatarConfig: {} as any,
