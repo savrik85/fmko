@@ -11,6 +11,7 @@ import { logger } from "../lib/logger";
 import type { TeamDeparturesResult } from "./season-departures";
 import { createRng } from "../generators/rng";
 import { generateInjury } from "../injuries/injury-generator";
+import { injuryPronenessOf } from "../injuries/proneness";
 import { overallRatingFromFlat } from "../skills/generator";
 
 const M = "season-recap";
@@ -378,19 +379,26 @@ const SUMMER_EVENTS: { text: string; effect: "injury" | "fit" | "rusty" }[] = [
   { text: "{p} zhubl s partou z vesnice na společném běhání a je zpátky ve formě.", effect: "fit" },
 ];
 
-interface PubSquad { id: string; name: string; position: string; age: number; alcohol: number }
+interface PubSquad { id: string; name: string; position: string; age: number; alcohol: number; injuryProneness: number }
 
 async function buildPubNight(db: D1Database, teamId: string, seasonNumber: number, applyEffects = false) {
   const rng = createRng(pubSeed(`${teamId}:s${seasonNumber}:pub`));
 
   const squadRes = await db.prepare(
-    "SELECT id, first_name, last_name, position, age, personality FROM players WHERE team_id = ? AND status = 'active'",
-  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; position: string; age: number; personality: string }>()
+    "SELECT id, first_name, last_name, position, age, personality, physical FROM players WHERE team_id = ? AND status = 'active'",
+  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; position: string; age: number; personality: string; physical: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "pub load squad", e); return { results: [] as any[] }; });
   const squad: PubSquad[] = squadRes.results.map((p) => {
     let alcohol = 30;
-    try { const pe = JSON.parse(p.personality || "{}"); if (typeof pe.alcohol === "number") alcohol = pe.alcohol; } catch { alcohol = 30; }
-    return { id: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, alcohol };
+    let injuryProneness = 50;
+    try {
+      const pe = JSON.parse(p.personality || "{}");
+      if (typeof pe.alcohol === "number") alcohol = pe.alcohol;
+      injuryProneness = injuryPronenessOf(JSON.parse(p.physical || "{}"), pe);
+    } catch (e) {
+      logger.warn({ module: M }, "pub squad json", e);
+    }
+    return { id: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, alcohol, injuryProneness };
   });
   if (squad.length === 0) return { party: null, summer: [] as { name: string; text: string; effect: string | null }[] };
   const nameOf = (id: string) => squad.find((s) => s.id === id)?.name ?? null;
@@ -444,7 +452,7 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
       id: pl.id, name: pl.name, text: tmpl.text.replace(/\{p\}/g, pl.name), effect: tmpl.effect,
       // Generátor zranění potřebuje vědět, komu se to stalo — starší a náchylnější hráč
       // dostane vážnější druh.
-      age: (pl as { age?: number }).age, injuryProneness: (pl as { injuryProneness?: number }).injuryProneness,
+      age: pl.age, injuryProneness: pl.injuryProneness,
     };
   });
 
@@ -471,7 +479,7 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
         // napříč deseti typy, ale nikdo ho nevolal — v produkci proto za celou historii
         // hry vznikla jen zranění typu 'obecne' a 'sval', zatímco koleno, záda, hlava,
         // žebra, achilovka, třísla ani rameno se neobjevily ANI JEDNOU.
-        const { injury: druh, days: dnu } = generateInjury(rng, s.age ?? 25, s.injuryProneness ?? 30);
+        const { injury: druh, days: dnu } = generateInjury(rng, s.age ?? 25, s.injuryProneness ?? 50);
         stmts.push(db.prepare(
           "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         ).bind(crypto.randomUUID(), s.id, teamId, druh.type, druh.description, druh.severity, dnu, dnu));

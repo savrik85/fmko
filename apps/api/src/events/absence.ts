@@ -14,6 +14,7 @@ import type { Rng } from "../generators/rng";
 import { getOccupationByName, pickProfessionalExcuse, type Occupation } from "../generators/occupations";
 import type { Weather } from "../engine/types";
 import { logger } from "../lib/logger";
+import { injuryPronenessOf } from "../injuries/proneness";
 import { DLUHY_SANCE_NAVIC, RIDICAK_SANCE_NAVIC } from "../incidents/nastaveni";
 
 export type AbsenceTiming = "day_before" | "match_day" | "any";
@@ -89,7 +90,7 @@ export function hracProAbsenci(row: Record<string, unknown>, druhy?: readonly st
     temper: pers.temper ?? 40,
     morale: lc.morale ?? 50,
     stamina: phys.stamina ?? 50,
-    injuryProneness: pers.injuryProneness ?? 50,
+    injuryProneness: injuryPronenessOf(phys, pers),
     commuteKm: (row.commute_km as number) ?? 0,
     transferUnrest: lc.transferUnrest?.level ?? 0,
     isCelebrity: !!(row.is_celebrity as number),
