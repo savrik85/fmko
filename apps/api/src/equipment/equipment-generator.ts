@@ -13,7 +13,7 @@ export const CATEGORIES = [
   "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
   "team_van", "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup",
   "laundry", "mower", "pitch_heating", "pitch_irrigation", "coffee_maker",
-  "sports_drinks", "raffle", "pa_system", "trophy_case", "area_security",
+  "sports_drinks", "raffle", "pa_system", "trophy_case", "area_security", "nutrition",
 ] as const;
 export type EquipmentCategory = typeof CATEGORIES[number];
 
@@ -42,6 +42,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   pitch_irrigation: "Zavlažování hřiště",
   coffee_maker: "Kávovar do kabiny",
   sports_drinks: "Iontové nápoje a gely",
+  nutrition: "Váha a jídelníček",
   raffle: "Tombola a losy",
   pa_system: "Ozvučení a hlasatel",
   trophy_case: "Klubová kronika a vitrína",
@@ -176,6 +177,12 @@ const LEVEL_DESCRIPTIONS: Record<string, string[]> = {
     "Rychlovarná konvice a Jacobs 3v1",
     "Překapávač a bylinkový čaj od Pepovy ženy",
     "Pákový kávovar, Pepa dělá i cappuccino",
+  ],
+  nutrition: [
+    "Kdo chce vědět, kolik váží, stoupne si na váhu u řezníka",
+    "Osobní váha v kabině, každý se vidí",
+    "Mísa s ovocem a džbán vody místo piva po tréninku",
+    "Nutriční plán klubu, jídelníček visí na lednici v kabině",
   ],
   sports_drinks: [
     "V poločase se dopije, co zbylo",
@@ -338,6 +345,7 @@ const UPGRADE_COSTS: Record<string, number[]> = {
   pitch_irrigation:[0, 6000, 22000, 65000],
   coffee_maker:    [0, 1500, 6000, 18000],
   sports_drinks:   [0, 3000, 12000, 35000],
+  nutrition:       [0, 3000, 12000, 35000],
   raffle:          [0, 2000, 8000, 25000],
   pa_system:       [0, 6000, 22000, 65000],
   trophy_case:     [0, 3000, 12000, 35000],
@@ -502,6 +510,7 @@ const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
   pitch_irrigation:["", "Vysychání na výhni -33 %", "Vysychání na výhni -66 %", "Na výhni trávník nevysychá vůbec"],
   coffee_maker:    ["", "Kocovina o 15 % míň častá", "Kocovina o 30 % míň častá", "Kocovina o 45 % míň častá"],
   sports_drinks:   ["", "Únava v závěru -20 %", "Únava v závěru -40 %", "Únava v závěru -60 %"],
+  nutrition:       ["", "Přibírání z hospody -20 %", "Hospoda -35 %, rychlejší návrat k přirozené váze", "Hospoda -50 %, návrat k přirozené váze 1,5×"],
   raffle:          ["", "+3 Kč z diváka na domácím zápase", "+6 Kč z diváka na domácím zápase", "+9 Kč z diváka na domácím zápase"],
   pa_system:       ["", "+2 spokojenost fanoušků za zápas", "+4 spokojenost fanoušků za zápas", "+6 spokojenost fanoušků za zápas"],
   trophy_case:     ["", "Truc hráčů roste o 12 % pomaleji", "Truc hráčů roste o 24 % pomaleji", "Truc hráčů roste o 36 % pomaleji"],
