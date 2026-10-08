@@ -11,10 +11,15 @@ describe("idealWeight", () => {
 });
 
 describe("bodyEffects", () => {
-  it("180 cm / 90 kg: −5 rychlost, −5 výdrž, +3 síla", () => {
+  it("180 cm / 90 kg: −5 rychlost, −5 výdrž, +1 síla", () => {
     const e = bodyEffects({ height: 180, weight: 90 });
-    expect(e).toMatchObject({ speed: -5, stamina: -5, strength: 3, heading: 0 });
+    expect(e).toMatchObject({ speed: -5, stamina: -5, strength: 1, heading: 0 });
     expect(e.gkReach).toBeCloseTo(0.96);
+  });
+
+  it("hmotnost přidá sílu až od 12 kg nadváhy", () => {
+    expect(bodyEffects({ height: 180, weight: 87 }).strength).toBe(0);
+    expect(bodyEffects({ height: 180, weight: 89 }).strength).toBe(1);
   });
 
   it("v toleranci ±4 kg se nic neděje", () => {
@@ -28,11 +33,11 @@ describe("bodyEffects", () => {
     expect(e.speed).toBe(0);
   });
 
-  it("stropy: nadváha −12, hmotnost +4, podváha −6", () => {
+  it("stropy: nadváha −12, hmotnost +1, podváha −6", () => {
     const fat = bodyEffects({ height: 170, weight: 140 });
     expect(fat.speed).toBe(-12);
     expect(fat.stamina).toBe(-12);
-    expect(fat.strength).toBe(4);
+    expect(fat.strength).toBe(1);
     expect(bodyEffects({ height: 194, weight: 55 }).strength).toBe(-6);
   });
 
@@ -75,7 +80,7 @@ describe("gkReachFactor", () => {
 describe("playerBodyView", () => {
   it("vrátí typ postavy, zaokrouhlený ideál a úpravy bez dosahu", () => {
     expect(playerBodyView({ height: 180, weight: 90, bodyType: "stocky" })).toEqual({
-      bodyType: "stocky", idealWeight: 76, effects: { speed: -5, stamina: -5, strength: 3, heading: 0 },
+      bodyType: "stocky", idealWeight: 76, effects: { speed: -5, stamina: -5, strength: 1, heading: 0 },
     });
   });
 
