@@ -113,3 +113,29 @@ describe("úkoly zaměstnanců: plán hubnutí", () => {
     expect(weightPlanSummary("Jan Novák", null, 90, 14)).not.toContain("—");
   });
 });
+
+describe("úkoly zaměstnanců: plán nabírání", () => {
+  it("kondiční trenér má plán nabírání na 14 nebo 28 dní za 400 Kč týdně", () => {
+    const def = STAFF_TASK_DEFS.weight_gain;
+    expect(def.role).toBe("kondicni_trener");
+    expect(def.kind).toBe("weekly");
+    expect(def.target).toBe("player");
+    expect(def.durations).toEqual([14, 28]);
+    expect(staffTaskCost("weight_gain", 14)).toBe(800);
+  });
+
+  it("na plán nabírání smí jen hráč s podváhou", async () => {
+    const { weightGainEligible } = await import("./staff-tasks");
+    expect(weightGainEligible({ height: 190, weight: 70 })).toBe(true);
+    expect(weightGainEligible({ height: 180, weight: 78 })).toBe(false);
+    expect(weightGainEligible({ height: 180, weight: 90 })).toBe(false);
+    expect(weightGainEligible({})).toBe(false);
+  });
+
+  it("souhrn: kolik nabral, nebo že skoro nic", async () => {
+    const { weightGainSummary } = await import("./staff-tasks");
+    expect(weightGainSummary("Jan Novák", 68, 70.1, 28)).toBe("💪 Plán nabírání: Jan Novák za 28 dní nabral 2,1 kg, teď váží 70,1 kg.");
+    expect(weightGainSummary("Jan Novák", 68, 68.2, 14)).toBe("💪 Plán nabírání: Jan Novák za 14 dní skoro nenabral. Bez tréninku plán nepomůže.");
+    expect(weightGainSummary("Jan Novák", null, 70, 14)).not.toContain("—");
+  });
+});

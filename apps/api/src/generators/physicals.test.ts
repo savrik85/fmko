@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodyEffects, fitWeight, generateHeightWeight, gkReachFactor, idealWeight, isBodyType, playerBodyView } from "./physicals";
+import { bodyEffects, fitWeight, minFitWeight, generateHeightWeight, gkReachFactor, idealWeight, isBodyType, playerBodyView } from "./physicals";
 import type { BodyType } from "./physicals";
 import { createRng } from "./rng";
 
@@ -88,6 +88,16 @@ describe("fitWeight", () => {
     const fit = fitWeight({ height: 180, strength: 70 })!;
     expect(bodyEffects({ height: 180, strength: 70, weight: fit }).speed).toBe(0);
     expect(playerBodyView({ height: 180, strength: 70, weight: fit + 3 }).weightCategory).toBe("over");
+  });
+});
+
+describe("minFitWeight", () => {
+  it("dolní hranice váhy bez postihu: ideál − 4 kg, na ní podváha ani postih síly není", () => {
+    const min = minFitWeight({ height: 190 })!;
+    expect(min).toBeCloseTo(idealWeight(190) - 4, 5);
+    expect(playerBodyView({ height: 190, weight: min }).weightCategory).toBe("ideal");
+    expect(bodyEffects({ height: 190, weight: min }).strength).toBe(0);
+    expect(minFitWeight({ weight: 70 })).toBeNull();
   });
 });
 

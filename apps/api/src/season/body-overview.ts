@@ -23,6 +23,8 @@ export interface OverviewPlayerInput {
   injured: boolean;
   pubVisits28d: number;
   planUntil: string | null;
+  /** Plán kondičního trenéra: hubnutí, nebo nabírání. */
+  planKind: "loss" | "gain" | null;
   pledgeUntil: string | null;
 }
 
@@ -37,6 +39,8 @@ export interface OverviewPlayer {
   /** Proč přibírá: jen u hráčů, kteří přibírají a mají nadváhu nebo rychlý přírůstek. */
   cause: WeightSmsCause | null;
   planUntil: string | null;
+  /** Plán kondičního trenéra: hubnutí, nebo nabírání. */
+  planKind: "loss" | "gain" | null;
   pledgeUntil: string | null;
   problem: boolean;
 }
@@ -80,6 +84,7 @@ export function buildBodyOverview(inputs: readonly OverviewPlayerInput[], lineup
       // Příčina vysvětluje přírůstek: kdo nepřibírá (nadváhu má od začátku nebo hubne), žádnou nemá.
       cause: (p.trend30d ?? 0) > 0 && (heavy || gaining) ? weightSmsCause({ injured: p.injured, pubVisits28d: p.pubVisits28d }) : null,
       planUntil: p.planUntil,
+      planKind: p.planKind,
       pledgeUntil: p.pledgeUntil,
       problem: heavy || gaining || view.weightCategory === "under",
       rating: p.rating ?? 0,
@@ -147,9 +152,9 @@ export async function loadBodyOverview(db: D1Database, teamId: string): Promise<
     db.prepare(`SELECT DISTINCT player_id FROM injuries WHERE days_remaining > 0 AND COALESCE(osobni_volno, 0) = 0 AND player_id IN (${ph})`)
       .bind(...ids).all<{ player_id: string }>()
       .catch((e) => { logger.warn({ module: M }, "injuries", e); return { results: [] as { player_id: string }[] }; }),
-    db.prepare(`SELECT target_player_id, ends_game_date FROM staff_tasks WHERE task_type = 'weight_plan' AND status = 'active' AND target_player_id IN (${ph})`)
-      .bind(...ids).all<{ target_player_id: string; ends_game_date: string }>()
-      .catch((e) => { logger.warn({ module: M }, "weight plans", e); return { results: [] as { target_player_id: string; ends_game_date: string }[] }; }),
+    db.prepare(`SELECT target_player_id, ends_game_date, task_type FROM staff_tasks WHERE task_type IN ('weight_plan', 'weight_gain') AND status = 'active' AND target_player_id IN (${ph})`)
+      .bind(...ids).all<{ target_player_id: string; ends_game_date: string; task_type: string }>()
+      .catch((e) => { logger.warn({ module: M }, "weight plans", e); return { results: [] as { target_player_id: string; ends_game_date: string; task_type: string }[] }; }),
   ]);
 
   const logBy = new Map<string, { gameDate: string; weight: number }[]>();
@@ -164,6 +169,7 @@ export async function loadBodyOverview(db: D1Database, teamId: string): Promise<
   }
   const injured = new Set(injuries.results.map((r) => r.player_id));
   const planBy = new Map(plans.results.map((r) => [r.target_player_id, r.ends_game_date]));
+  const planKindBy = new Map(plans.results.map((r) => [r.target_player_id, r.task_type === "weight_gain" ? "gain" as const : "loss" as const]));
 
   let lineupIds: Set<string> | null = null;
   try {
@@ -189,6 +195,7 @@ export async function loadBodyOverview(db: D1Database, teamId: string): Promise<
       injured: injured.has(r.id),
       pubVisits28d: pubCount.get(r.id) ?? 0,
       planUntil: planBy.get(r.id) ?? null,
+      planKind: planKindBy.get(r.id) ?? null,
       pledgeUntil: pledge,
     };
   });

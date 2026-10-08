@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildBodyOverview, type OverviewPlayerInput } from "./body-overview";
 
 const base: Omit<OverviewPlayerInput, "id" | "name" | "physical"> = {
-  position: "MID", rating: 40, trend30d: null, injured: false, pubVisits28d: 0, planUntil: null, pledgeUntil: null,
+  position: "MID", rating: 40, trend30d: null, injured: false, pubVisits28d: 0, planUntil: null, planKind: null, pledgeUntil: null,
 };
 const p = (id: string, physical: Record<string, unknown>, extra: Partial<OverviewPlayerInput> = {}): OverviewPlayerInput =>
   ({ ...base, id, name: `Hráč ${id}`, physical, ...extra });
@@ -52,5 +52,14 @@ describe("buildBodyOverview", () => {
     const withLineup = buildBodyOverview(players, new Set(["fit", "obese"]));
     expect(withLineup.summary.lineupSource).toBe("lineup");
     expect(withLineup.summary.lineupPenalty.speed).toBe(o.players.find((x) => x.id === "obese")!.effects.speed);
+  });
+
+  it("u plánu přehled ví, jestli hráč hubne, nebo nabírá", () => {
+    const o2 = buildBodyOverview([
+      p("loser", { height: 180, weight: 92 }, { planUntil: "2026-11-05", planKind: "loss" }),
+      p("gainer", { height: 190, weight: 70 }, { planUntil: "2026-10-22", planKind: "gain" }),
+    ], null);
+    const kind = Object.fromEntries(o2.players.map((x) => [x.id, x.planKind]));
+    expect(kind).toEqual({ loser: "loss", gainer: "gain" });
   });
 });

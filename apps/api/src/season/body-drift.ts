@@ -9,7 +9,7 @@
 
 import type { Rng } from "../generators/rng";
 import { createRng } from "../generators/rng";
-import { BODY_WEIGHT_FACTOR, fitWeight, idealWeight, isBodyType } from "../generators/physicals";
+import { BODY_WEIGHT_FACTOR, fitWeight, idealWeight, isBodyType, minFitWeight } from "../generators/physicals";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
@@ -20,6 +20,8 @@ const NATURAL_PULL = 0.006;
 const PUB_VISIT_KG = 0.08;
 const TRAINING_KG = -0.03;
 const CONDITIONING_KG = -0.07;
+/** Hráč s podváhou, o kterého se klub stará: trénink s posilovnou a jídlem přidá. */
+const TRAINING_GAIN_KG = 0.03;
 const INJURED_KG = 0.03;
 const MIN_WEIGHT = 50;
 const MAX_WEIGHT = 140;
@@ -54,12 +56,24 @@ export interface DailyBodyInput {
    * bez postihu (`fitWeight`, nejvýš přirozená). Chybí = jen na přirozenou váhu.
    */
   careFloor?: number | null;
-  /** Kg dolů každý den z jídelníčku (vybavení úrovně 2 a 3), jen nad `careFloor`. Chybí = 0. */
+  /** Kg každý den z jídelníčku (vybavení úrovně 2 a 3): dolů nad `careFloor`, nahoru pod `careCeiling`. Chybí = 0. */
   dietLoss?: number;
+  /**
+   * Péče u podváhy: kam až smí trénink, jídelníček a plán nabírání hráče dostat, typicky dolní
+   * hranice váhy bez postihu (`minFitWeight`). Chybí = nikam, hráč pod ní nenabírá.
+   */
+  careCeiling?: number | null;
+  /** Kg navíc nahoru v den tréninku, když je hráč na plánu nabírání. Chybí = 0. */
+  planGain?: number;
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/** naturalBase, ze kterého naturalWeight pro daný věk vyjde právě `weight`. */
+export function naturalBaseFor(weight: number, age: number): number {
+  return weight / (1 + Math.max(0, age - AGE_GAIN_FROM) * AGE_GAIN_PER_YEAR);
+}
 
 /**
  * Přirozená váha, ke které tělo táhne. Vlastní `physical.naturalBase` má přednost: stávajícím
@@ -77,7 +91,10 @@ export function naturalWeight(physical: Record<string, unknown>, age: number): n
 
 /** Změna váhy za jeden herní den (kg, nezaokrouhlená). */
 export function dailyWeightChange(input: DailyBodyInput): number {
-  const above = input.natural === null ? 0 : input.weight - input.natural;
+  // Podváha s péčí: dokud je hráč pod hranicí, nic ho netáhne dolů (přirozená váha = hranice).
+  const ceiling = input.careCeiling ?? null;
+  const natural = ceiling !== null && input.natural !== null ? Math.max(input.natural, ceiling) : input.natural;
+  const above = natural === null ? 0 : input.weight - natural;
   // Tělo táhne jen shora: kdo je nad přirozenou váhou, vrací se k ní. Kdo shodil pod ni,
   // kila si drží, jinak by tah hubnoucímu hráči na plánu ubíral to, co shodil.
   let change = above > 0 ? -NATURAL_PULL * (input.pullMul ?? 1) * above : 0;
@@ -87,11 +104,18 @@ export function dailyWeightChange(input: DailyBodyInput): number {
   // Běžný trénink a jídelníček srazí váhu nejvýš na dno: přirozenou váhu, u hráče, o kterého se
   // klub stará, na váhu bez postihu. Bez dna by dříč bez tahu zespodu hubl donekonečna.
   // Hráč na plánu hubnutí trénuje bez dna, plán je na nadváhu.
-  const floor = input.careFloor ?? input.natural;
+  const baseFloor = input.careFloor ?? natural;
+  const floor = baseFloor !== null && ceiling !== null ? Math.max(baseFloor, ceiling) : baseFloor;
   const room = floor === null ? null : Math.max(0, input.weight - floor);
   const diet = room === null ? input.dietLoss ?? 0 : Math.min(input.dietLoss ?? 0, room);
   if (onPlan) change += burn - (input.planLoss ?? 0) - diet;
   else change -= room === null ? -burn + diet : Math.min(-burn + diet, room);
+  // Podváha s péčí: trénink, jídelníček a plán nabírání přidají, nejvýš k dolní hranici ideálu.
+  const headroom = ceiling === null ? 0 : Math.max(0, ceiling - input.weight);
+  if (headroom > 0) {
+    const gain = (input.dietLoss ?? 0) + (input.training !== null ? TRAINING_GAIN_KG + (input.planGain ?? 0) : 0);
+    change += Math.min(gain, headroom);
+  }
   if (input.injured) change += INJURED_KG;
   return change;
 }
@@ -108,6 +132,11 @@ export const PLEDGE_PUB_MUL = 0.25;
 export function weightPlanDailyLoss(trainerStrength: number, workRate: number): number {
   const s = Math.max(0, Math.min(1, trainerStrength));
   return (0.10 + 0.15 * s) * (0.75 + workRate / 200);
+}
+
+/** Plán nabírání: svaly rostou pomaleji, než jde dolů tuk, proto 0,6 × plán hubnutí. */
+export function weightGainDailyAmount(trainerStrength: number, workRate: number): number {
+  return 0.6 * weightPlanDailyLoss(trainerStrength, workRate);
 }
 
 const NUTRITION_PUB_REDUCTION = [0, 0.2, 0.35, 0.5];
@@ -317,6 +346,7 @@ export async function processDailyBodyDrift(
     const nutritionByOwner = new Map(equipRows.results.map((r) => [r.team_id, nutritionEffects(r.nutrition ?? 0, r.nutrition_condition ?? 0)]));
     const { loadWeightPlanStrengths } = await import("../staff/staff-tasks");
     const plans = await loadWeightPlanStrengths(db, teamIds);
+    const gainPlans = await loadWeightPlanStrengths(db, teamIds, "weight_gain");
 
     const updates: D1PreparedStatement[] = [];
     const newWeights = new Map<string, number>();
@@ -335,12 +365,17 @@ export async function processDailyBodyDrift(
       const natural = naturalWeight(physical, p.age ?? 25);
       // Péče = vybavení, slib nebo plán: trénink a jídelníček smí hráče stáhnout až na váhu bez postihu.
       const fit = fitWeight(physical);
-      const cared = nutrition.cared || pledge || planStrength !== undefined;
+      const minFit = minFitWeight(physical);
+      const gainStrength = gainPlans.get(p.id);
+      const cared = nutrition.cared || pledge || planStrength !== undefined || gainStrength !== undefined;
+      const careCeiling = cared && minFit !== null && weight < minFit ? minFit : null;
       const next = applyDailyWeight(weight, dailyWeightChange({
         pubMul: nutrition.pubMul * (pledge ? PLEDGE_PUB_MUL : 1),
         pullMul: nutrition.pullMul,
         planLoss: planStrength === undefined ? 0 : weightPlanDailyLoss(planStrength, workRate),
         careFloor: cared && natural !== null && fit !== null ? Math.min(natural, fit) : null,
+        careCeiling,
+        planGain: gainStrength === undefined ? 0 : weightGainDailyAmount(gainStrength, workRate),
         dietLoss: nutrition.dietLoss,
         weight,
         natural,
@@ -350,7 +385,13 @@ export async function processDailyBodyDrift(
         injured: injured.has(p.id),
       }));
       newWeights.set(p.id, next);
-      if (next !== weight) {
+      // Co hráč s podváhou s péčí nabral, přijme tělo za své: posune se i přirozená váha,
+      // jinak by ho po skončení péče tah stáhl zpátky (hubnoucí si kila drží taky).
+      const raiseNatural = careCeiling !== null && natural !== null && next > natural;
+      if (raiseNatural) {
+        updates.push(db.prepare("UPDATE players SET physical = json_set(physical, '$.weight', ?, '$.naturalBase', ?) WHERE id = ?")
+          .bind(next, round2(naturalBaseFor(next, p.age ?? 25)), p.id));
+      } else if (next !== weight) {
         updates.push(db.prepare("UPDATE players SET physical = json_set(physical, '$.weight', ?) WHERE id = ?").bind(next, p.id));
       }
     }
