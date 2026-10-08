@@ -215,8 +215,8 @@ describe("páky na váhu v denní změně", () => {
     await processDailyBodyDrift(db, { teamIds: ["t6", "t6u"], trainedToday: new Map([["on-plan", "other"]]), gameDate: TODAY, isMonday: false });
     // hospoda 0,08 × 1,3 = 0,104, vybavení úrovně 3 ji půlí → +0,05
     expect(await weightOf("u21-drinker")).toBeCloseTo(76.19, 2);
-    // trénink −0,03 a plán (0,10 + 0,15 × 0,5) × 1,0 = −0,175 → 89,8
-    expect(await weightOf("on-plan")).toBeCloseTo(89.8, 2);
+    // trénink −0,03, plán (0,10 + 0,15 × 0,5) × 1,0 = −0,175 a jídelníček úrovně 3 −0,02 → 89,78
+    expect(await weightOf("on-plan")).toBeCloseTo(89.78, 2);
     // hospoda 0,104 × vybavení 0,5 × slib 0,25 = +0,013 → 76,15
     expect(await weightOf("pledged")).toBeCloseTo(76.15, 2);
   });

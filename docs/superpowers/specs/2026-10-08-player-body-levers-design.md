@@ -63,6 +63,27 @@ Web: souhrn nahoře (karty), pod ním „Kdo má problém“ jako karty pod sebo
   odpověděl podle něj. Při vypnuté AI hráč neodpoví, ale účinek platí.
 - Účinek: dokud slib platí, přírůstek z hospody ×0,25.
 
+## 5. Péče (doplněno po simulaci 2026-10-08)
+
+Uživatel: „když necháš být, nic zásadního se nestane, když se staráš, máš výhodu“.
+
+- Tah k přirozené váze působí jen shora. Běžný trénink srazí váhu nejvýš na přirozenou váhu.
+- Hráč, o kterého se klub stará (vybavení Váha a jídelníček úrovně 1+ ve stavu nad 0, platný slib
+  z SMS, nebo plán hubnutí), smí tréninkem a jídelníčkem hubnout až na **váhu bez postihu**
+  `fitWeight = ideál + 4 kg + muscleToleranceKg(síla)`, nejvýš na přirozenou váhu.
+- Jídelníček ubírá každý den `[0, 0, 0,01, 0,02] × stav` kg, jen nad váhou bez postihu.
+- Plán hubnutí dno nemá.
+
+Simulace 120 dní skutečného denního ticku nad kopií testovací DB (54 lidských klubů):
+
+| Skupina | Změna váhy | Postih rychlost + výdrž (Ø na hráče) |
+|---|---|---|
+| bez zásahu (283 hráčů áčka) | +0,57 kg | −5,07 → −5,40 |
+| jen vybavení L3 (113 hráčů) | −0,94 kg | −4,92 → −3,84 |
+| plná péče: L3, SMS, plán (22 hráčů) | −1,59 kg | −3,18 → −1,18, velká nadváha 4 → 0 |
+
+SMS od štábu o váze: 0 za 120 dní. Podváha se péčí nezvětšuje.
+
 ## Testování
 
 - Jednotkové: účinek plánu a vybavení na denní změnu, rozpoznání řeči o váze, výpočet šance,

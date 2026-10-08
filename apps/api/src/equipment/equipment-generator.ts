@@ -510,7 +510,7 @@ const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
   pitch_irrigation:["", "Vysychání na výhni -33 %", "Vysychání na výhni -66 %", "Na výhni trávník nevysychá vůbec"],
   coffee_maker:    ["", "Kocovina o 15 % míň častá", "Kocovina o 30 % míň častá", "Kocovina o 45 % míň častá"],
   sports_drinks:   ["", "Únava v závěru -20 %", "Únava v závěru -40 %", "Únava v závěru -60 %"],
-  nutrition:       ["", "Přibírání z hospody -20 %", "Hospoda -35 %, rychlejší návrat k přirozené váze", "Hospoda -50 %, návrat k přirozené váze 1,5×"],
+  nutrition:       ["", "Hospoda -20 %, s nadváhou hubnou tréninkem", "Hospoda -35 %, jídelníček ubírá kila", "Hospoda -50 %, jídelníček ubírá 2× víc"],
   raffle:          ["", "+3 Kč z diváka na domácím zápase", "+6 Kč z diváka na domácím zápase", "+9 Kč z diváka na domácím zápase"],
   pa_system:       ["", "+2 spokojenost fanoušků za zápas", "+4 spokojenost fanoušků za zápas", "+6 spokojenost fanoušků za zápas"],
   trophy_case:     ["", "Truc hráčů roste o 12 % pomaleji", "Truc hráčů roste o 24 % pomaleji", "Truc hráčů roste o 36 % pomaleji"],
