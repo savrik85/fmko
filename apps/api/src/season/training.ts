@@ -24,6 +24,31 @@ export type TrainingPlayer = GeneratedPlayer & {
 export type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
 export type TrainingApproach = "strict" | "balanced" | "relaxed";
 
+const TRAINING_TYPES = new Set<string>(["conditioning", "technique", "tactics", "match_practice"]);
+const TRAINING_APPROACHES = new Set<string>(["strict", "balanced", "relaxed"]);
+
+export function isTrainingType(v: unknown): v is TrainingType {
+  return typeof v === "string" && TRAINING_TYPES.has(v);
+}
+
+export function isTrainingApproach(v: unknown): v is TrainingApproach {
+  return typeof v === "string" && TRAINING_APPROACHES.has(v);
+}
+
+/**
+ * Typ tréninku z DB. Neznámý řetězec (třeba „kondice“ ze staršího klienta) se trénuje jako
+ * kondice: simulateTraining by na něm spadl a tým by netrénoval vůbec. Prázdný = bez tréninku.
+ */
+export function storedTrainingType(raw: unknown): TrainingType | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  return isTrainingType(raw) ? raw : "conditioning";
+}
+
+/** Přístup k tréninku z DB, neznámý je vyvážený. */
+export function storedTrainingApproach(raw: unknown): TrainingApproach {
+  return isTrainingApproach(raw) ? raw : "balanced";
+}
+
 const CELEB_TRAINING_EXCUSES = [
   "Dnes má rehabilitaci u svého fyzioterapeuta",
   "Běhá si sám v parku, má vlastní program",

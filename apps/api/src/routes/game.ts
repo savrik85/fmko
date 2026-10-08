@@ -191,6 +191,11 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
 gameRouter.post("/teams/:teamId/training", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ type: string; approach: string; sessionsPerWeek: number; trainingDays?: number[] | null; trainingPlan?: Record<string, string> | null }>();
+  // Neznámý typ nebo přístup by denní tick neodtrénoval (tým s „kondice“ netrénoval půl roku).
+  const { isTrainingApproach, isTrainingType } = await import("../season/training");
+  if (!isTrainingType(body.type) || !isTrainingApproach(body.approach)) {
+    return c.json({ error: "Neplatný typ tréninku nebo přístup" }, 400);
+  }
 
   // Validace trainingDays: pole 1-5, unikatni, max 5 polozek. null/undefined → default mapping podle sessionsPerWeek.
   let trainingDaysJson: string | null = null;
