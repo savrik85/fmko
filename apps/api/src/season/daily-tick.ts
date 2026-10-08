@@ -327,7 +327,16 @@ export async function executeDailyTick(
         : (trainingDayMap[sessionsForTeam] ?? trainingDayMap[2]);
     const isTeamTrainingDay = teamTrainingDays.includes(dayOfWeek);
     // Typ pro DNEŠNÍ den — z plánu, jinak jednotný týmový typ.
-    const todayTrainingType = dayPlan?.[dayOfWeek]?.type ?? (team.training_type as string | null);
+    const rawTrainingType = dayPlan?.[dayOfWeek]?.type ?? (team.training_type as string | null);
+    const { storedTrainingType, storedTrainingApproach } = await import("./training");
+    const todayTrainingType = storedTrainingType(rawTrainingType);
+    const trainingApproach = storedTrainingApproach(team.training_approach);
+    if (rawTrainingType && rawTrainingType !== todayTrainingType) {
+      logger.warn({ module: "daily-tick", teamId }, `neznámý typ tréninku ${rawTrainingType}, trénuje se kondice`);
+    }
+    if (team.training_approach && team.training_approach !== trainingApproach) {
+      logger.warn({ module: "daily-tick", teamId }, `neznámý přístup k tréninku ${String(team.training_approach)}, platí vyvážený`);
+    }
     const todayIntensity = dayPlan?.[dayOfWeek]?.intensity ?? "normal";
     // Týdenní zátěž pro spokojenost hráčů — tvrdý trénink váží víc než lehký.
     const { INTENSITY } = await import("./training");
@@ -501,10 +510,10 @@ export async function executeDailyTick(
         const individualMul = hraciIds.map((id) => planMuls.get(id));
 
         const result = simulateTraining(rng, squad, {
-          type: (todayTrainingType as any) ?? "conditioning",
+          type: todayTrainingType ?? "conditioning",
           intensity: todayIntensity,
           weeklyLoad,
-          approach: (team.training_approach as any) ?? "balanced",
+          approach: trainingApproach,
           sessionsPerWeek: (team.training_sessions as number) ?? 2,
         }, commuteKms, equipMul, mgrBonus,
           { attendanceBonus: equipAttendanceBonus, youthTrainingMod: equipYouthMod, gkTrainingMul: staffFx.gkTrainingMul, individualMul },
