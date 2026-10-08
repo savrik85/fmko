@@ -17,10 +17,10 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: "Výška a váha hráčů",
     items: [
       "Postava hráče se projeví v zápase. Nadváha bere rychlost a výdrž, těžší hráč je silnější v soubojích a vysoký hráč vyhrává víc hlaviček. Vysokému brankáři se líp chytají centry a rohy. Hodnocení, cena ani mzda hráče se tím nemění.",
-      "V profilu hráče uvidíš u váhy, jestli má podváhu, ideální váhu, je svalnatý, nebo má nadváhu či velkou nadváhu. Kila navíc, která nese síla, se za nadváhu nepočítají.",
+      "Přehled celého kádru najdeš na stránce Kádr v nové záložce Postava: kolik má kádr průměrně nad ideálem, jak se za měsíc změnil, kdo má s váhou problém, proč přibírá a kolik rychlosti a výdrže nadváha bere tvé sestavě. Hráči odtud rovnou napíšeš SMS.",
+      "Informace o každém hráči jsou v jeho profilu: výška, váha s ideální váhou a popisem, jestli má podváhu, ideální váhu, je svalnatý, nebo má nadváhu či velkou nadváhu, a kolik za poslední měsíc přibral nebo shodil. V záložce Historie je karta Vývoj váhy. Kila navíc, která nese síla, se za nadváhu nepočítají.",
       "Váha se mění každý den. Hospoda přidává, tím víc, čím víc hráč pije. Trénink ubírá, kondiční víc. Zraněný hráč přibírá. Přes léto se váha změní podle toho, jak hráč léto prožil, a dorost do 18 let ještě roste.",
-      "V profilu najdeš, kolik hráč za poslední měsíc přibral nebo shodil, a v Historii kartu Vývoj váhy. Když hráč za měsíc přibere 3 kg a víc, napíše ti to kondiční trenér, masér nebo kapitán.",
-      "V Kádru je nová záložka Postava: kolik má kádr průměrně nad ideálem, kdo má problém, proč přibírá a kolik rychlosti a výdrže nadváha bere tvé sestavě. Hráči odtud rovnou napíšeš.",
+      "Když hráč za měsíc přibere 3 kg a víc, napíše ti to kondiční trenér, masér nebo kapitán.",
       "Když postavu neřešíš, nic zásadního se nestane: hráči si drží svou váhu a přiberou jen ti, co vysedávají v hospodě. Když se ale o hráče staráš, s nadváhou na tréninku hubnou až k váze, na které už neztrácejí rychlost ani výdrž.",
       "Ve Vybavení je nové vybavení Váha a jídelníček ve třech úrovních. Hráči méně přibírají z hospody a ti s nadváhou hubnou na každém tréninku. Na vyšších úrovních jim jídelníček ubírá kila i ve dnech bez tréninku. Platí i pro U21.",
       "Kondičnímu trenérovi můžeš zadat úkol Plán hubnutí pro hráče s nadváhou, na 14 nebo 28 dní za 400 Kč na týden. Hráč na plánu hubne nejrychleji, v každý den, kdy přijde na trénink, a čím lepší trenér a pracovitější hráč, tím víc. Shozená kila si udrží, dokud nezačne zase vysedávat v hospodě. Na konci ti trenér napíše, kolik hráč shodil.",
