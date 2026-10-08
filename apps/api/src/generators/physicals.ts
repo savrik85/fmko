@@ -48,6 +48,20 @@ export interface BodyEffects {
   gkReach: number;
 }
 
+/**
+ * Svaly: kila nad ideálem, která nese síla, nejsou tuk. Za každých 10 bodů síly nad 40
+ * se toleruje 2 kg navíc, nejvýš 10 kg. Svalnatý hráč se 189 cm, 93 kg a silou 70 tak
+ * nemá žádný postih rychlosti ani výdrže. Na podváhu svaly nepůsobí.
+ */
+const MUSCLE_FROM_STRENGTH = 40;
+const MUSCLE_KG_PER_10_STRENGTH = 2;
+const MUSCLE_CAP_KG = 10;
+
+export function muscleToleranceKg(strength: unknown): number {
+  const s = typeof strength === "number" && Number.isFinite(strength) ? strength : 0;
+  return Math.min(MUSCLE_CAP_KG, Math.max(0, ((s - MUSCLE_FROM_STRENGTH) / 10) * MUSCLE_KG_PER_10_STRENGTH));
+}
+
 const NO_EFFECTS: BodyEffects = { speed: 0, stamina: 0, strength: 0, heading: 0, gkReach: 1 };
 
 /** Kladné konečné číslo, jinak null. Text („180“) a nula jsou chybějící údaj. */
@@ -84,7 +98,9 @@ export function bodyEffects(physical: Record<string, unknown> | null | undefined
   let speed = 0;
   let strength = 0;
   if (excess > WEIGHT_TOLERANCE_KG) {
-    speed = noNegativeZero(-Math.min(OVERWEIGHT_CAP, Math.round((excess - WEIGHT_TOLERANCE_KG) / 2)));
+    // Postih jen za tuk: kila nad tolerancí, která nenese síla (muscleToleranceKg).
+    const fat = excess - WEIGHT_TOLERANCE_KG - muscleToleranceKg(physical?.strength);
+    if (fat > 0) speed = noNegativeZero(-Math.min(OVERWEIGHT_CAP, Math.round(fat / 2)));
     strength = Math.min(MASS_STRENGTH_CAP, Math.floor(excess / MASS_KG_PER_POINT));
   } else if (excess < -WEIGHT_TOLERANCE_KG) {
     strength = noNegativeZero(-Math.min(UNDERWEIGHT_CAP, Math.round((-excess - WEIGHT_TOLERANCE_KG) / 2)));
@@ -92,8 +108,8 @@ export function bodyEffects(physical: Record<string, unknown> | null | undefined
   return { speed, stamina: speed, strength, heading, gkReach };
 }
 
-/** Váha proti ideálu slovy: podváha, ideální, nadváha, velká nadváha. */
-export type WeightCategory = "under" | "ideal" | "over" | "obese";
+/** Váha proti ideálu slovy: podváha, ideální, svalnatý, nadváha, velká nadváha. */
+export type WeightCategory = "under" | "ideal" | "muscular" | "over" | "obese";
 /** Od kolika kg nad ideálem je nadváha „velká“ (rychlost a výdrž už −4 a víc). */
 const OBESE_EXCESS_KG = 12;
 
@@ -114,9 +130,12 @@ export function playerBodyView(physical: Record<string, unknown> | null | undefi
   let weightCategory: WeightCategory | null = null;
   if (height !== null && weight !== null) {
     const excess = weight - idealWeight(height);
+    // Nadváha a velká nadváha se měří jen tukem, kila nesená svaly dělají „svalnatého“.
+    const fat = excess - muscleToleranceKg(physical?.strength);
     weightCategory = excess < -WEIGHT_TOLERANCE_KG ? "under"
       : excess <= WEIGHT_TOLERANCE_KG ? "ideal"
-      : excess <= OBESE_EXCESS_KG ? "over"
+      : fat <= WEIGHT_TOLERANCE_KG ? "muscular"
+      : fat <= OBESE_EXCESS_KG ? "over"
       : "obese";
   }
   return {

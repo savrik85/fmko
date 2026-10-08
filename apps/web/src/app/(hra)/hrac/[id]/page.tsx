@@ -2275,9 +2275,11 @@ function weightTrendColor(trend: number, weight: number | undefined, ideal: numb
 const WEIGHT_SOURCE_LABEL: Record<string, string> = { weekly: "Týden", summer: "Léto", growth: "Růst" };
 
 /** Váha proti ideálu slovy. Hranice počítá API (playerBodyView), tady jen popisek a barva. */
-const WEIGHT_CATEGORY: Record<"under" | "ideal" | "over" | "obese", { label: string; color: string }> = {
+const WEIGHT_CATEGORY: Record<"under" | "ideal" | "muscular" | "over" | "obese", { label: string; color: string }> = {
   under: { label: "podváha", color: "text-gold-600" },
   ideal: { label: "ideální", color: "text-pitch-500" },
+  // Kila nad ideálem nese síla (API muscleToleranceKg), postih za ně není.
+  muscular: { label: "svalnatý", color: "text-pitch-500" },
   over: { label: "nadváha", color: "text-gold-600" },
   obese: { label: "velká nadváha", color: "text-card-red" },
 };

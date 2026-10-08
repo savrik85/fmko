@@ -161,7 +161,7 @@ export interface Player {
     bodyType: "thin" | "normal" | "athletic" | "stocky" | "obese" | null;
     idealWeight: number | null;
     /** Váha proti ideálu slovy (API playerBodyView). */
-    weightCategory?: "under" | "ideal" | "over" | "obese" | null;
+    weightCategory?: "under" | "ideal" | "muscular" | "over" | "obese" | null;
     effects: { speed: number; stamina: number; strength: number; heading: number };
     /** Změna váhy za ~měsíc (kg), jen u vlastních hráčů a jen v detailu hráče. */
     trend30d?: number | null;

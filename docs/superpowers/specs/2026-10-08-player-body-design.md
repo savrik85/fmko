@@ -52,6 +52,12 @@ Ideální váha: `IDEAL_BMI × (výška v m)²`, `IDEAL_BMI = 23,5` (180 cm → 
 | Výška → hlavičky | `(výška − 180) × 0,4` | ±5 | 192 cm: +5, 170 cm: −4 |
 | Výška brankáře → dosah | násobek `1 + (výška − 185) × 0,008` | 0,9–1,1 | 193 cm: ×1,064 |
 
+- Svaly (doplněno 2026-10-08 na přání uživatele): kila nad ideálem, která nese síla, nejsou tuk.
+  Za každých 10 bodů síly nad 40 se toleruje 2 kg navíc, nejvýš 10 kg. Postih rychlosti a výdrže
+  se počítá jen z kil nad tolerancí 4 kg a nad touto svalovou tolerancí. 189 cm / 93 kg se silou
+  70: bez postihu, popisek „svalnatý“. Bonus síly za hmotnost i podváha se počítají jako dřív.
+- Popisek váhy v profilu: podváha (pod −4 kg), ideální (±4 kg), svalnatý (nad tolerancí, ale kryté
+  svaly), nadváha (tuk do 12 kg nad ideálem), velká nadváha (víc).
 - Úpravy se zaokrouhlí na celé body (`Math.round`) a výsledná vlastnost nesmí klesnout pod 1.
 - Hráč s nadváhou je zároveň pomalejší a silnější v soubojích. To je záměr: těžký stoper se hůř
   obchází, ale nestíhá.
