@@ -9,7 +9,7 @@
 
 import type { Rng } from "../generators/rng";
 import { createRng } from "../generators/rng";
-import { BODY_WEIGHT_FACTOR, idealWeight, isBodyType } from "../generators/physicals";
+import { BODY_WEIGHT_FACTOR, fitWeight, idealWeight, isBodyType } from "../generators/physicals";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
@@ -49,6 +49,13 @@ export interface DailyBodyInput {
   pullMul?: number;
   /** Kg navíc dolů v den tréninku, když je hráč na plánu hubnutí. Chybí = 0. */
   planLoss?: number;
+  /**
+   * Péče (vybavení, slib, plán): kam až smí trénink a jídelníček hráče stáhnout, typicky váha
+   * bez postihu (`fitWeight`, nejvýš přirozená). Chybí = jen na přirozenou váhu.
+   */
+  careFloor?: number | null;
+  /** Kg dolů každý den z jídelníčku (vybavení úrovně 2 a 3), jen nad `careFloor`. Chybí = 0. */
+  dietLoss?: number;
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -77,10 +84,14 @@ export function dailyWeightChange(input: DailyBodyInput): number {
   if (input.pubVisit) change += PUB_VISIT_KG * (0.5 + input.alcohol / 100) * (input.pubMul ?? 1);
   const burn = input.training === "conditioning" ? CONDITIONING_KG : input.training === "other" ? TRAINING_KG : 0;
   const onPlan = input.training !== null && !!input.planLoss;
-  // Běžný trénink srazí váhu nejvýš na přirozenou, pod ni se dostane jen hráč na plánu hubnutí.
-  // Bez toho by dříč bez tahu zespodu hubl donekonečna.
-  change += input.natural === null || onPlan ? burn : Math.max(burn, -Math.max(0, above));
-  if (onPlan) change -= input.planLoss ?? 0;
+  // Běžný trénink a jídelníček srazí váhu nejvýš na dno: přirozenou váhu, u hráče, o kterého se
+  // klub stará, na váhu bez postihu. Bez dna by dříč bez tahu zespodu hubl donekonečna.
+  // Hráč na plánu hubnutí trénuje bez dna, plán je na nadváhu.
+  const floor = input.careFloor ?? input.natural;
+  const room = floor === null ? null : Math.max(0, input.weight - floor);
+  const diet = room === null ? input.dietLoss ?? 0 : Math.min(input.dietLoss ?? 0, room);
+  if (onPlan) change += burn - (input.planLoss ?? 0) - diet;
+  else change -= room === null ? -burn + diet : Math.min(-burn + diet, room);
   if (input.injured) change += INJURED_KG;
   return change;
 }
@@ -101,12 +112,29 @@ export function weightPlanDailyLoss(trainerStrength: number, workRate: number): 
 
 const NUTRITION_PUB_REDUCTION = [0, 0.2, 0.35, 0.5];
 const NUTRITION_PULL_BONUS = [0, 0, 0.25, 0.5];
+/** Jídelníček: kg dolů za den u hráče nad váhou bez postihu (×stav). */
+const NUTRITION_DIET_LOSS = [0, 0, 0.01, 0.02];
 
-/** Vybavení „Váha a jídelníček“: násobek hospody a tahu k přirozené váze podle úrovně a stavu. */
-export function nutritionEffects(level: number, condition: number): { pubMul: number; pullMul: number } {
+export interface NutritionEffects {
+  pubMul: number;
+  pullMul: number;
+  dietLoss: number;
+  /** Klub se o váhu stará: trénink smí hráče stáhnout až na váhu bez postihu. */
+  cared: boolean;
+}
+
+const NO_NUTRITION: NutritionEffects = { pubMul: 1, pullMul: 1, dietLoss: 0, cared: false };
+
+/** Vybavení „Váha a jídelníček“ podle úrovně a stavu: hospoda, tah shora, jídelníček, péče. */
+export function nutritionEffects(level: number, condition: number): NutritionEffects {
   const lvl = Math.max(0, Math.min(3, Math.round(level)));
   const c = Math.max(0, Math.min(100, condition)) / 100;
-  return { pubMul: 1 - NUTRITION_PUB_REDUCTION[lvl] * c, pullMul: 1 + NUTRITION_PULL_BONUS[lvl] * c };
+  return {
+    pubMul: 1 - NUTRITION_PUB_REDUCTION[lvl] * c,
+    pullMul: 1 + NUTRITION_PULL_BONUS[lvl] * c,
+    dietLoss: NUTRITION_DIET_LOSS[lvl] * c,
+    cared: lvl > 0 && c > 0,
+  };
 }
 
 /** Nová váha: na setiny kg, v rozsahu 50–140. */
@@ -301,15 +329,21 @@ export async function processDailyBodyDrift(
       if (typeof weight !== "number" || !(weight > 0)) continue;
       const alcohol = typeof personality.alcohol === "number" ? personality.alcohol : 30;
       const workRate = typeof personality.workRate === "number" ? personality.workRate : 50;
-      const nutrition = nutritionByOwner.get(ownerOf.get(p.team_id) ?? p.team_id) ?? { pubMul: 1, pullMul: 1 };
+      const nutrition = nutritionByOwner.get(ownerOf.get(p.team_id) ?? p.team_id) ?? NO_NUTRITION;
       const pledge = typeof lifeContext?.dietPledgeUntil === "string" && lifeContext.dietPledgeUntil >= gameDate;
       const planStrength = plans.get(p.id);
+      const natural = naturalWeight(physical, p.age ?? 25);
+      // Péče = vybavení, slib nebo plán: trénink a jídelníček smí hráče stáhnout až na váhu bez postihu.
+      const fit = fitWeight(physical);
+      const cared = nutrition.cared || pledge || planStrength !== undefined;
       const next = applyDailyWeight(weight, dailyWeightChange({
         pubMul: nutrition.pubMul * (pledge ? PLEDGE_PUB_MUL : 1),
         pullMul: nutrition.pullMul,
         planLoss: planStrength === undefined ? 0 : weightPlanDailyLoss(planStrength, workRate),
+        careFloor: cared && natural !== null && fit !== null ? Math.min(natural, fit) : null,
+        dietLoss: nutrition.dietLoss,
         weight,
-        natural: naturalWeight(physical, p.age ?? 25),
+        natural,
         pubVisit: pubToday.has(p.id),
         alcohol,
         training: opts.trainedToday.get(p.id) ?? null,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodyEffects, generateHeightWeight, gkReachFactor, idealWeight, isBodyType, playerBodyView } from "./physicals";
+import { bodyEffects, fitWeight, generateHeightWeight, gkReachFactor, idealWeight, isBodyType, playerBodyView } from "./physicals";
 import type { BodyType } from "./physicals";
 import { createRng } from "./rng";
 
@@ -74,6 +74,20 @@ describe("gkReachFactor", () => {
     expect(gkReachFactor(210)).toBe(1.1);
     expect(gkReachFactor(160)).toBe(0.9);
     expect(gkReachFactor(undefined)).toBe(1);
+  });
+});
+
+describe("fitWeight", () => {
+  it("váha bez postihu: ideál + 4 kg + kila, která nese síla; bez výšky null", () => {
+    expect(fitWeight({ height: 180 })).toBeCloseTo(idealWeight(180) + 4, 5);
+    expect(fitWeight({ height: 180, strength: 70 })).toBeCloseTo(idealWeight(180) + 4 + 6, 5);
+    expect(fitWeight({ weight: 80 })).toBeNull();
+  });
+
+  it("na váze bez postihu hráč postih nemá, o tři kila víc už má nadváhu", () => {
+    const fit = fitWeight({ height: 180, strength: 70 })!;
+    expect(bodyEffects({ height: 180, strength: 70, weight: fit }).speed).toBe(0);
+    expect(playerBodyView({ height: 180, strength: 70, weight: fit + 3 }).weightCategory).toBe("over");
   });
 });
 

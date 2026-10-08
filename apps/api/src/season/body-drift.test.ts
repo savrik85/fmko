@@ -78,6 +78,32 @@ describe("denní změna váhy: měsíční cíle ze spec", () => {
     expect(after).toBe(0);
   });
 
+  it("péče: trénink smí hráče stáhnout až na váhu bez postihu (careFloor), ne jen na přirozenou", () => {
+    const base = { weight: 90, natural: 90, pubVisit: false, alcohol: 50, injured: false } as const;
+    expect(dailyWeightChange({ ...base, training: "other" })).toBe(0);
+    expect(dailyWeightChange({ ...base, training: "other", careFloor: 80 })).toBeCloseTo(-0.03, 5);
+    expect(dailyWeightChange({ ...base, weight: 80.01, training: "conditioning", careFloor: 80 })).toBeCloseTo(-0.01, 5);
+  });
+
+  it("jídelníček ubírá každý den, ale jen nad váhou bez postihu", () => {
+    const base = { natural: 90, pubVisit: false, alcohol: 50, injured: false, training: null } as const;
+    expect(dailyWeightChange({ ...base, weight: 90, careFloor: 80, dietLoss: 0.02 })).toBeCloseTo(-0.02, 5);
+    expect(dailyWeightChange({ ...base, weight: 80, careFloor: 80, dietLoss: 0.02 })).toBe(0);
+  });
+
+  it("hráč s nadváhou: bez péče za měsíc beze změny, s jídelníčkem a tréninkem shodí přes kilo", () => {
+    const trainings = spread(10);
+    const day = (i: number) => ({ training: (trainings.has(i) ? "other" : null) as TrainingToday });
+    expect(month(96, 96, day)).toBe(0);
+    let w = 96;
+    for (let i = 0; i < 30; i++) {
+      w = applyDailyWeight(w, dailyWeightChange({
+        weight: w, natural: 96, pubVisit: false, alcohol: 50, injured: false, training: day(i).training, careFloor: 80, dietLoss: 0.02,
+      }));
+    }
+    expect(w - 96).toBeLessThanOrEqual(-0.8);
+  });
+
   it("bez přirozené váhy (chybí postava) se táhne jen hospodou a tréninkem", () => {
     expect(dailyWeightChange({ weight: 90, natural: null, pubVisit: false, alcohol: 50, training: null, injured: false })).toBe(0);
   });
@@ -194,9 +220,10 @@ describe("páky na váhu (část 3)", () => {
 
   it("vybavení Váha a jídelníček: úroveň 3 v plném stavu půlí hospodu a zrychlí tah o polovinu", async () => {
     const { nutritionEffects } = await import("./body-drift");
-    expect(nutritionEffects(0, 100)).toEqual({ pubMul: 1, pullMul: 1 });
-    expect(nutritionEffects(1, 100)).toEqual({ pubMul: 0.8, pullMul: 1 });
-    expect(nutritionEffects(3, 100)).toEqual({ pubMul: 0.5, pullMul: 1.5 });
+    expect(nutritionEffects(0, 100)).toEqual({ pubMul: 1, pullMul: 1, dietLoss: 0, cared: false });
+    expect(nutritionEffects(1, 100)).toEqual({ pubMul: 0.8, pullMul: 1, dietLoss: 0, cared: true });
+    expect(nutritionEffects(3, 100)).toEqual({ pubMul: 0.5, pullMul: 1.5, dietLoss: 0.02, cared: true });
+    expect(nutritionEffects(3, 0).cared).toBe(false);
     const half = nutritionEffects(2, 50);
     expect(half.pubMul).toBeCloseTo(1 - 0.35 * 0.5, 5);
     expect(half.pullMul).toBeCloseTo(1 + 0.25 * 0.5, 5);

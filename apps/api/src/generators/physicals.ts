@@ -62,6 +62,16 @@ export function muscleToleranceKg(strength: unknown): number {
   return Math.min(MUSCLE_CAP_KG, Math.max(0, ((s - MUSCLE_FROM_STRENGTH) / 10) * MUSCLE_KG_PER_10_STRENGTH));
 }
 
+/**
+ * Nejvyšší váha bez postihu za tuk: ideál + tolerance + kila, která nese síla. Sem smí hráče,
+ * o kterého se klub stará, stáhnout trénink a jídelníček (season/body-drift.ts).
+ */
+export function fitWeight(physical: Record<string, unknown> | null | undefined): number | null {
+  const height = positive(physical?.height);
+  if (height === null) return null;
+  return idealWeight(height) + WEIGHT_TOLERANCE_KG + muscleToleranceKg(physical?.strength);
+}
+
 const NO_EFFECTS: BodyEffects = { speed: 0, stamina: 0, strength: 0, heading: 0, gkReach: 1 };
 
 /** Kladné konečné číslo, jinak null. Text („180“) a nula jsou chybějící údaj. */
