@@ -21,6 +21,8 @@ import {
 import {logger} from "../lib/logger";
 import {parseStoredBench, benchColumn} from "../lib/lineup-bench";
 import {typZraneniZPopisu, zavaznostZeDnu} from "../injuries/injury-types";
+import {matchInjuryDays} from "../injuries/injury-generator";
+import {seedFromString} from "../lib/seed";
 
 export interface MatchRunResult {
     matchId: string;
@@ -1109,6 +1111,8 @@ export async function runScheduledMatches(
 
                 // ── Persist injuries from match events ──
                 const injuryStmts: D1PreparedStatement[] = [];
+                const injuryRng = createRng(seedFromString(`${matchId}:injuries`));
+                const enginePlayers = new Map([...homeBuild.players, ...awayBuild.players].map((p) => [p.id, p]));
                 for (const event of result.events) {
                     if (event.type === "injury") {
                         const evTeamId = event.teamId === 1 ? homeTeamId : awayTeamId;
@@ -1117,7 +1121,8 @@ export async function runScheduledMatches(
                         if (realPlayerId) {
                             // Lékárnička Lv2+: ošetření hned na hřišti — nové zranění o 1-2 dny kratší
                             const injuryReduction = (event.teamId === 1 ? homeEquipment : awayEquipment)?.injuryDaysReduction ?? 0;
-                            const days = Math.max(2, 3 + Math.floor(Math.random() * 18) - injuryReduction);
+                            const injured = enginePlayers.get(event.playerId);
+                            const days = matchInjuryDays(injuryRng, event.detail, injured?.age ?? 25, injured?.injuryProneness ?? 50, injuryReduction);
                             const injType = typZraneniZPopisu(event.detail);
                             const severity = zavaznostZeDnu(days);
                             injuryStmts.push(db.prepare(
@@ -1741,6 +1746,7 @@ export async function buildMatchPlayers(
             consistency: personality.consistency ?? 50,
             clutch: personality.clutch ?? 50,
             injuryProneness: physical.injuryProneness ?? personality.injuryProneness ?? 50,
+            age: (row.age as number) ?? 25,
             preferredFoot: physical.preferredFoot ?? "right",
             preferredSide: physical.preferredSide ?? "center",
             condition: lifeContext.condition ?? 100,

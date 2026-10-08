@@ -4,6 +4,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import type { POPISY_ZRANENI } from "../engine/simulation";
 
 export interface InjuryDef {
   type: string;
@@ -62,6 +63,47 @@ export function generateInjury(
   const days = rng.int(injury.daysMin, injury.daysMax);
 
   return { injury, days };
+}
+
+/** Popis zranění, který posílá zápasový engine (`POPISY_ZRANENI`). */
+type MatchInjury = (typeof POPISY_ZRANENI)[number];
+
+/**
+ * Délky zranění ze zápasu podle druhu. `minor` je běžný průběh, `serious` vážnější varianta
+ * (natržený sval, výron, meniskus). `seriousBase` je základní šance na vážnější variantu.
+ *
+ * Dřív se délka losovala 3–20 dní bez ohledu na druh, takže křeče klidně vyřadily hráče na
+ * tři týdny a koleno se zahojilo za tři dny. Průměr zůstává kolem 10 dní jako dřív, jen se
+ * rozdělil: drobnosti hráče o zápas nepřipraví, koleno umí vyřadit na kus sezóny.
+ */
+const MATCH_INJURY_DAYS: Record<MatchInjury, { minor: [number, number]; serious: [number, number]; seriousBase: number }> = {
+  "křeče": { minor: [1, 3], serious: [1, 3], seriousBase: 0 },
+  "naraženina": { minor: [2, 6], serious: [7, 14], seriousBase: 0.05 },
+  "natažený sval": { minor: [4, 10], serious: [12, 24], seriousBase: 0.2 },
+  "podvrtnutý kotník": { minor: [4, 10], serious: [14, 28], seriousBase: 0.2 },
+  "koleno": { minor: [7, 14], serious: [30, 75], seriousBase: 0.25 },
+};
+
+/**
+ * Kolik dní bude hráč po zranění ze zápasu mimo. Starší a náchylnější hráč má větší šanci
+ * na vážnější variantu, stejně jako v `generateInjury`. `reductionDays` je ošetření na
+ * hřišti z lékárničky. Neznámý popis se bere jako naraženina.
+ */
+export function matchInjuryDays(
+  rng: Rng,
+  description: string | undefined,
+  playerAge: number,
+  injuryProneness: number,
+  reductionDays = 0,
+): number {
+  const def = MATCH_INJURY_DAYS[description as MatchInjury] ?? MATCH_INJURY_DAYS["naraženina"];
+  const seriousChance = def.seriousBase === 0 ? 0
+    : def.seriousBase
+      + (playerAge > 30 ? 0.05 : 0)
+      + (playerAge > 35 ? 0.05 : 0)
+      + (injuryProneness / 100) * 0.1;
+  const [min, max] = rng.random() < seriousChance ? def.serious : def.minor;
+  return Math.max(1, rng.int(min, max) - reductionDays);
 }
 
 const SEVERITY_LABELS: Record<string, string> = {
