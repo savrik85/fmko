@@ -2,14 +2,15 @@
 
 /**
  * Záložka Postava v Kádru (postava, část 3): kdo má s váhou problém, proč a co to stojí
- * základní jedenáctku. Páky: SMS hráči, plán hubnutí u kondičního trenéra, vybavení Váha a jídelníček.
+ * sestavu. Vzhled převzatý z Docházky (FM tabulka), souhrn jako karty v hlavičce Kádru,
+ * ovládání pod tabulkou. Páky: SMS hráči, plán hubnutí, vybavení Váha a jídelníček.
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { Spinner, PositionBadge } from "@/components/ui";
 import { formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 import type { PosFilter } from "@/components/players/squad-attribute-table";
 
@@ -40,44 +41,36 @@ interface BodyOverview {
   players: OverviewPlayer[];
 }
 
-const CAUSE_LABEL: Record<Cause, string> = {
-  pub: "🍺 sedí v hospodě",
-  idle: "🛋️ nechodí na trénink",
-  injury: "🩹 je zraněný",
+const CAUSE: Record<Cause, { icon: string; label: string }> = {
+  pub: { icon: "🍺", label: "sedí v hospodě" },
+  idle: { icon: "🛋️", label: "málo se hýbe" },
+  injury: { icon: "🩹", label: "je zraněný" },
 };
 
-const COUNT_ORDER: WeightCategoryKey[] = ["ideal", "muscular", "over", "obese", "under"];
-const POS_SHORT: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
+/** Záporné číslo se znakem minus (ne pomlčkou), kladné s plusem. */
+function signed(v: number): string {
+  return v > 0 ? `+${v}` : v < 0 ? `−${Math.abs(v)}` : "0";
+}
 
 function czDate(iso: string): string {
   return new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
 }
 
-/** Postih vlastností slovy: „rychlost −5, výdrž −5“. Znak minus, ne pomlčka. */
-function penaltyText(e: OverviewPlayer["effects"]): string | null {
-  const parts: string[] = [];
-  if (e.speed) parts.push(`rychlost ${e.speed > 0 ? "+" : "−"}${Math.abs(e.speed)}`);
-  if (e.stamina) parts.push(`výdrž ${e.stamina > 0 ? "+" : "−"}${Math.abs(e.stamina)}`);
-  return parts.length > 0 ? parts.join(", ") : null;
-}
-
 function trendTone(trend: number, category: WeightCategoryKey | null): string {
   if (trend === 0) return "text-muted";
-  if (category === "under") return trend > 0 ? "text-pitch-500" : "text-card-red";
-  if (category === "over" || category === "obese") return trend > 0 ? "text-card-red" : "text-pitch-500";
-  return trend > 0 ? "text-gold-600" : "text-muted";
+  if (category === "under") return trend > 0 ? "text-pitch-600" : "text-card-red";
+  if (category === "over" || category === "obese") return trend > 0 ? "text-card-red" : "text-pitch-600";
+  return trend > 0 ? "text-amber-600" : "text-muted";
 }
 
-/** Souhrn je za celý kádr, filtr postů zužuje jen seznamy hráčů. */
+/** Souhrn je za celý kádr, filtr postů zužuje jen tabulku. */
 export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFilter }) {
   const router = useRouter();
   const [data, setData] = useState<BodyOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
-    if (!teamId) return;
     apiFetch<BodyOverview>(`/api/teams/${teamId}/body-overview`)
       .then(setData)
       .catch((e) => { console.error("body-overview fetch:", e); setError("Přehled se nepodařilo načíst."); })
@@ -94,122 +87,128 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
   }
 
   if (loading) return <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>;
-  if (error || !data) return <div className="card p-4"><p className="text-sm text-card-red">{error ?? "Přehled se nepodařilo načíst."}</p></div>;
+  if (error || !data) return <div className="card p-4 text-sm text-card-red text-center">{error ?? "Přehled se nepodařilo načíst."}</div>;
 
   const { summary } = data;
-  const shown = data.players.filter((p) => filter === "all" || p.position === filter);
-  const problems = shown.filter((p) => p.problem);
-  const others = shown.filter((p) => !p.problem);
+  const problemCount = data.players.filter((p) => p.problem).length;
+  const rows = data.players.filter((p) => filter === "all" || p.position === filter);
+  const penalty = summary.lineupPenalty;
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="card p-4">
-          <div className="text-sm text-muted">Nad ideálem v průměru</div>
-          <div className="font-heading font-bold text-2xl tabular-nums">
-            {summary.avgExcess === null ? "—" : `${summary.avgExcess > 0 ? "+" : summary.avgExcess < 0 ? "−" : ""}${formatKg(Math.abs(summary.avgExcess))} kg`}
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="card p-3 text-center">
+          <div className="font-heading font-[800] text-2xl tabular-nums">
+            {summary.avgExcess === null ? "—" : `${signed(summary.avgExcess).replace(".", ",")} kg`}
           </div>
+          <div className="text-micro text-muted uppercase tracking-wide">Ø nad ideálem</div>
         </div>
-        <div className="card p-4">
-          <div className="text-sm text-muted">Kádr za měsíc</div>
-          <div className={`font-heading font-bold text-2xl tabular-nums ${summary.avgTrend30d && summary.avgTrend30d > 0 ? "text-card-red" : "text-ink"}`}>
+        <div className="card p-3 text-center">
+          <div className={`font-heading font-[800] text-2xl tabular-nums ${summary.avgTrend30d && summary.avgTrend30d > 0 ? "text-card-red" : ""}`}>
             {summary.avgTrend30d === null ? "—" : formatKgChange(summary.avgTrend30d)}
           </div>
+          <div className="text-micro text-muted uppercase tracking-wide">Ø za měsíc</div>
         </div>
-        <div className="card p-4 col-span-2">
-          <div className="text-sm text-muted">
-            Tuk stojí {summary.lineupSource === "lineup" ? "sestavu na příští zápas" : "11 nejlepších hráčů"}
+        <div className="card p-3 text-center">
+          <div className={`font-heading font-[800] text-2xl tabular-nums ${problemCount > 0 ? "text-amber-600" : "text-pitch-600"}`}>
+            {problemCount}<span className="text-muted text-base">/{data.players.length}</span>
           </div>
-          <div className="font-heading font-bold text-2xl tabular-nums">
-            {summary.lineupPenalty.speed === 0 && summary.lineupPenalty.stamina === 0
-              ? <span className="text-pitch-500">nic</span>
-              : <span className="text-card-red">rychlost −{Math.abs(summary.lineupPenalty.speed)}, výdrž −{Math.abs(summary.lineupPenalty.stamina)}</span>}
+          <div className="text-micro text-muted uppercase tracking-wide">S problémem</div>
+        </div>
+        <div className="card p-3 text-center" title="Kolik rychlosti a výdrže bere nadváha hráčům v sestavě dohromady">
+          <div className={`font-heading font-[800] text-2xl tabular-nums ${penalty.speed || penalty.stamina ? "text-card-red" : "text-pitch-600"}`}>
+            {penalty.speed === penalty.stamina ? signed(penalty.speed) : `${signed(penalty.speed)}/${signed(penalty.stamina)}`}
+          </div>
+          <div className="text-micro text-muted uppercase tracking-wide">
+            {summary.lineupSource === "lineup" ? "Postih sestavy" : "Postih nejlepší 11"}
           </div>
         </div>
       </div>
 
-      <div className="card p-4 flex flex-wrap gap-x-4 gap-y-1">
-        {COUNT_ORDER.map((k) => (
-          <span key={k} className="text-sm">
-            <span className={`font-heading font-bold ${WEIGHT_CATEGORY[k].color}`}>{summary.counts[k]}</span>{" "}
-            <span className="text-muted">{WEIGHT_CATEGORY[k].label}</span>
-          </span>
-        ))}
-      </div>
-
-      <div>
-        <SectionLabel>Kdo má problém</SectionLabel>
-        {problems.length === 0 ? (
-          <p className="text-sm text-muted">Nikdo z kádru nemá s váhou problém.</p>
-        ) : (
-          <div className="space-y-3">
-            {problems.map((p) => {
-              const cat = p.weightCategory ? WEIGHT_CATEGORY[p.weightCategory] : null;
-              const penalty = penaltyText(p.effects);
-              const canPlan = (p.weightCategory === "over" || p.weightCategory === "obese") && !p.planUntil;
-              return (
-                <div key={p.id} className="card p-4 space-y-2">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:underline">
-                      {p.name}
-                    </Link>
-                    <span className="text-sm text-muted">{POS_SHORT[p.position] ?? p.position}</span>
-                  </div>
-                  <div className="text-sm flex flex-wrap gap-x-3 gap-y-1">
-                    {p.weight !== null && <span className="font-heading font-bold">{formatKg(p.weight)} kg</span>}
-                    {cat && <span className={cat.color}>{cat.label}</span>}
-                    {p.trend30d !== null && (
-                      <span className={trendTone(p.trend30d, p.weightCategory)}>{formatKgChange(p.trend30d)} za měsíc</span>
-                    )}
-                    {penalty && <span className="text-card-red">{penalty}</span>}
-                  </div>
-                  {(p.cause || p.planUntil || p.pledgeUntil) && (
-                    <div className="text-sm flex flex-wrap gap-x-3 gap-y-1 text-muted">
-                      {p.cause && <span>{CAUSE_LABEL[p.cause]}</span>}
-                      {p.planUntil && <span className="text-pitch-500">🏃 plán hubnutí do {czDate(p.planUntil)}</span>}
-                      {p.pledgeUntil && <span className="text-pitch-500">🤝 slíbil omezit hospodu do {czDate(p.pledgeUntil)}</span>}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <button onClick={() => openSms(p.id)} className="btn btn-secondary btn-md" aria-label={`Napsat hráči ${p.name}`}>
-                      💬 Napsat SMS
-                    </button>
-                    {canPlan && (
-                      <Link href="/zamestnanci" className="btn btn-secondary btn-md">🏃 Plán hubnutí</Link>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {others.length > 0 && (
-        <div className="card p-4">
-          <button onClick={() => setShowAll((v) => !v)} className="text-sm font-heading font-bold text-pitch-500 hover:underline">
-            {showAll ? "Skrýt ostatní" : `Bez problému: ${others.length} ${others.length === 1 ? "hráč" : others.length < 5 ? "hráči" : "hráčů"}`}
-          </button>
-          {showAll && (
-            <div className="mt-2 divide-y divide-gray-50">
-              {others.map((p) => (
-                <div key={p.id} className="py-1.5 flex items-center justify-between gap-3 text-sm">
-                  <Link href={`/hrac/${p.id}`} className="hover:underline">{p.name}</Link>
-                  <span className="tabular-nums">
-                    {p.weight !== null ? `${formatKg(p.weight)} kg` : "—"}
-                    {p.weightCategory && <span className={WEIGHT_CATEGORY[p.weightCategory].color}> · {WEIGHT_CATEGORY[p.weightCategory].label}</span>}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+      {rows.length === 0 ? (
+        <div className="card p-4 text-sm text-muted text-center">Žádní hráči neodpovídají filtru.</div>
+      ) : (
+        <div className="card overflow-x-auto table-scroll">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b-2 border-gray-200">
+                {([
+                  ["Jméno", "Jméno hráče", "left"],
+                  ["Poz", "Pozice", "center"],
+                  ["Váha", "Aktuální váha", "center"],
+                  ["Stav", "Váha proti ideálu podle výšky", "center"],
+                  ["Měsíc", "Změna váhy za poslední měsíc", "center"],
+                  ["Postih", "O kolik nadváha snižuje rychlost a výdrž", "center"],
+                  ["Proč", "Příčina přírůstku, plán hubnutí, slib", "center"],
+                  ["", "Napsat hráči", "center"],
+                ] as Array<[string, string, "left" | "center"]>).map(([label, tip, align], i) => (
+                  <th key={i} title={tip}
+                    className={`py-2.5 px-1.5 font-heading uppercase text-muted whitespace-nowrap ${
+                      align === "left" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"
+                    }`}>
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => {
+                const cat = p.weightCategory ? WEIGHT_CATEGORY[p.weightCategory] : null;
+                const { speed, stamina } = p.effects;
+                return (
+                  <tr key={p.id} className={`border-b border-gray-50 hover:bg-pitch-50/30 transition-colors ${p.problem ? "" : "opacity-70"}`}>
+                    <td className="py-2 px-1.5 pl-3 sticky left-0 bg-white z-10">
+                      <Link href={`/hrac/${p.id}`}
+                        className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
+                        {p.name}
+                      </Link>
+                    </td>
+                    <td className="py-2 px-1.5 text-center"><PositionBadge position={p.position} /></td>
+                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold whitespace-nowrap">
+                      {p.weight !== null ? formatKg(p.weight) : "—"}
+                    </td>
+                    <td className={`py-2 px-1.5 text-center whitespace-nowrap font-heading font-bold ${cat?.color ?? "text-muted"}`}>
+                      {cat?.label ?? "—"}
+                    </td>
+                    <td className={`py-2 px-1.5 text-center tabular-nums whitespace-nowrap ${p.trend30d !== null ? trendTone(p.trend30d, p.weightCategory) : "text-muted"}`}>
+                      {p.trend30d !== null ? formatKgChange(p.trend30d) : "—"}
+                    </td>
+                    <td className={`py-2 px-1.5 text-center tabular-nums whitespace-nowrap ${speed || stamina ? "text-card-red font-heading font-bold" : "text-muted"}`}>
+                      {!speed && !stamina ? "—" : speed === stamina ? signed(speed) : `${signed(speed)}/${signed(stamina)}`}
+                    </td>
+                    <td className="py-2 px-1.5 text-center whitespace-nowrap text-sm">
+                      {p.cause && <span title={CAUSE[p.cause].label}>{CAUSE[p.cause].icon}</span>}
+                      {p.planUntil && <span title={`Plán hubnutí do ${czDate(p.planUntil)}`}>🏃</span>}
+                      {p.pledgeUntil && <span title={`Slíbil omezit hospodu do ${czDate(p.pledgeUntil)}`}>🤝</span>}
+                      {!p.cause && !p.planUntil && !p.pledgeUntil && <span className="text-muted text-xs">—</span>}
+                    </td>
+                    <td className="py-1 px-1.5 text-center">
+                      {p.problem && (
+                        <button onClick={() => openSms(p.id)} aria-label={`Napsat hráči ${p.name}`} title="Napsat SMS"
+                          className="min-w-9 min-h-9 rounded-control hover:bg-pitch-50 transition-colors text-sm">
+                          💬
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      <p className="text-sm text-muted">
-        Hubnutí: plán u kondičního trenéra v <Link href="/zamestnanci" className="text-pitch-500 hover:underline">Zaměstnancích</Link>,
-        vybavení Váha a jídelníček ve <Link href="/vybaveni" className="text-pitch-500 hover:underline">Vybavení</Link>, nebo hráči napiš.
-      </p>
-    </div>
+      <div className="card p-3 text-sm text-muted space-y-1">
+        <div>
+          🍺 sedí v hospodě · 🛋️ málo se hýbe · 🩹 je zraněný · 🏃 plán hubnutí · 🤝 slíbil omezit hospodu
+        </div>
+        <div>
+          Hubnutí: 💬 napiš hráči, plán u kondičního trenéra v{" "}
+          <Link href="/zamestnanci" className="text-pitch-600 underline decoration-pitch-500/30">Zaměstnancích</Link>,
+          váha a jídelníček ve{" "}
+          <Link href="/vybaveni" className="text-pitch-600 underline decoration-pitch-500/30">Vybavení</Link>.
+        </div>
+      </div>
+    </>
   );
 }
