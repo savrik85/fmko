@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Záložky — jedna komponenta místo dvanácti ručních variant.
@@ -145,9 +145,22 @@ export function Tabs<T extends string>({
   };
 
   const isGrid = layout === "grid";
+  const listRef = useRef<HTMLDivElement>(null);
+  // Aktivní záložka za okrajem pruhu (odkaz na ?tab=postava na mobilu) se posune do zobrazení.
+  // Jen vodorovně v pruhu, stránka se nehne.
+  useEffect(() => {
+    const list = listRef.current;
+    const active = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!list || !active || isGrid) return;
+    // Pruh je relative, takže offsetLeft je poloha v jeho obsahu nezávislá na posunu.
+    const left = active.offsetLeft;
+    if (left < list.scrollLeft || left + active.offsetWidth > list.scrollLeft + list.clientWidth) {
+      list.scrollLeft = left - (list.clientWidth - active.offsetWidth) / 2;
+    }
+  }, [value, isGrid]);
   const listClass = isGrid
     ? "grid grid-cols-2 gap-1 bg-surface rounded-card p-1 sm:flex"
-    : "flex gap-1 bg-surface rounded-card p-1 overflow-x-auto no-scrollbar [overscroll-behavior-x:contain]";
+    : "relative flex gap-1 bg-surface rounded-card p-1 overflow-x-auto no-scrollbar [overscroll-behavior-x:contain]";
   const itemClass = isGrid
     ? "min-w-0 sm:grow sm:basis-auto min-h-11 px-2 sm:px-3.5 rounded-control text-sm font-heading font-bold leading-tight transition-colors"
     : `shrink-0 grow basis-auto whitespace-nowrap min-h-11 ${dense ? "px-1.5" : "px-2.5"} sm:px-3.5 rounded-control text-xs sm:text-sm font-heading font-bold transition-colors`;
@@ -155,6 +168,7 @@ export function Tabs<T extends string>({
   return (
     <div className={`relative ${className}`}>
       <div
+        ref={listRef}
         role="tablist"
         aria-label={ariaLabel}
         onKeyDown={onKeyDown}
