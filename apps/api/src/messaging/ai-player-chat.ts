@@ -13,6 +13,7 @@ import { getOccupationByName, smenaProPovolani } from "../generators/occupations
 import { domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji } from "./chat-kontext";
 import { blokZnalosti } from "../incidents/znalosti";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
+import { weightTalkPrompt } from "../season/weight-talk";
 
 
 export interface ThreadMessage {
@@ -191,6 +192,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
       : "",
     situace,
     blokZnalosti(player.znalostiIncidentu),
+    player.weightTalk ? weightTalkPrompt(player.weightTalk) : "",
   ].filter(Boolean).join("\n");
 }
 

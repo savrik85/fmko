@@ -15,6 +15,7 @@ import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
 import { coachRelationStmts } from "../lib/coach-relation";
+import { weightTalkFromState } from "../season/weight-talk";
 import {
   generateInitialMessage,
   generateReply,
@@ -622,6 +623,11 @@ async function handleAiPlayerReplyInner(
   });
   const situaceKind = (await nactiSituaceTymu(db, conv.team_id)).get(player.id);
   player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
+  // Domluva o váze (postava, část 3): výsledek rozhodla hra, model odpoví podle něj.
+  const herniDen = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(conv.team_id)
+    .first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "herní den pro domluvu o váze", e); return null; });
+  if (herniDen?.game_date) player.weightTalk = weightTalkFromState(conv.ai_thread_state, herniDen.game_date);
   const teamCtx = await loadTeamContext(db, conv.team_id);
 
   // Načti historii (posledních 6 zpráv chronologicky)

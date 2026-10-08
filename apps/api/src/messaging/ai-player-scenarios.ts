@@ -72,6 +72,12 @@ export interface PlayerSnapshot {
    * (`status = 'probiha'`, `subject_player_id`), `undefined` = žádná.
    */
   zivotniSituace?: { kind: string; label: string };
+
+  /**
+   * Dnešní domluva o váze (postava, část 3): výsledek rozhodla hra předem
+   * (`season/weight-talk.ts`), model jen odpoví podle něj. `undefined` = o váze řeč není.
+   */
+  weightTalk?: "pledge" | "refused";
 }
 
 export interface AiScenario {

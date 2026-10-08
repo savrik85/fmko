@@ -389,6 +389,10 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const { zpracujZpravuTrenera } = await import("../incidents/zprava-trenera");
     await zpracujZpravuTrenera(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
       .catch((e) => logger.warn({ module: "messaging" }, "otázka na incident", e));
+    // Domluva o váze (postava, část 3): slib nebo urážka se rozhodne tady, před odpovědí.
+    const { handleWeightTalk } = await import("../season/weight-talk");
+    await handleWeightTalk(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
+      .catch((e) => logger.warn({ module: "messaging" }, "domluva o váze", e));
   }
 
   // AI player chat hook: pokud je thread aktivní a čeká na trenéra,
