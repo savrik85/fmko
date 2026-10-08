@@ -16,7 +16,8 @@ export type ConditionSource =
   | "friendly"   // 🤝 Přátelák
   | "hangover"   // 🍺 Ranní kocovina po výhře
   | "pub"        // 🍻 Hospodská akce
-  | "event";     // 🎉 Sezónní událost / náhoda
+  | "event"      // 🎉 Sezónní událost / náhoda
+  | "injury_return"; // 🩹 Nerozehranost po delším zranění
 
 export function logConditionStmt(
   db: D1Database,

@@ -2241,6 +2241,7 @@ const CONDITION_SOURCE_META: Record<string, { icon: string; label: string }> = {
   hangover: { icon: "🍺", label: "Kocovina" },
   pub: { icon: "🍻", label: "Hospoda" },
   event: { icon: "🎉", label: "Událost" },
+  injury_return: { icon: "🩹", label: "Návrat po zranění" },
 };
 
 interface ConditionLogEntry {

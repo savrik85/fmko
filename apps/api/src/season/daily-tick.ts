@@ -15,6 +15,7 @@ import type { PitchCareMode } from "../stadium/pitch-care";
 import { MEETING_DAY_OF_WEEK } from "../competition/defaults";
 import { overallRatingFromFlat } from "../skills/generator";
 import { injuryPronenessOf } from "../injuries/proneness";
+import { injuryReturnCondition } from "../injuries/injury-generator";
 
 export interface DailyTickEvent {
   type: "training" | "training_skipped" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return";
@@ -932,8 +933,10 @@ export async function executeDailyTick(
     "UPDATE injuries SET days_remaining = days_remaining - 1 WHERE days_remaining > 0"
   ).run();
   const healed = await env.DB.prepare(
-    "SELECT p.first_name, p.last_name FROM injuries i JOIN players p ON i.player_id = p.id WHERE i.days_remaining <= 0"
-  ).all().catch((e) => { logger.warn({ module: "daily-tick" }, "fetch healed injuries", e); return { results: [] }; });
+    `SELECT p.id, p.team_id, p.first_name, p.last_name, i.days_total, i.is_fake, i.osobni_volno
+     FROM injuries i JOIN players p ON i.player_id = p.id WHERE i.days_remaining <= 0`
+  ).all<{ id: string; team_id: string; first_name: string; last_name: string; days_total: number | null; is_fake: number | null; osobni_volno: number | null }>()
+    .catch((e) => { logger.warn({ module: "daily-tick" }, "fetch healed injuries", e); return { results: [] as never[] }; });
   await env.DB.prepare("DELETE FROM injuries WHERE days_remaining <= 0").run();
 
   if (healed.results.length > 0) {
@@ -977,6 +980,32 @@ export async function executeDailyTick(
     `UPDATE players SET life_context = json_set(life_context, '$.condition', ${recoveryNewCondSql})`,
   ).run();
   events.push({ type: "recovery", description: "Regenerace kondice (dle staminy a věku)" });
+
+  // Návrat po zranění: hráč, který byl delší dobu mimo, není rozehraný. Až do dneška
+  // regenerace běžela i zraněným, takže se vraceli se 100 % kondice. Teď dostane kondici
+  // podle délky zranění a zbytek dožene běžnou regenerací (+10 až +23 denně).
+  // Předstírané zranění a osobní volno nerozehranost nenesou.
+  const returnStmts: D1PreparedStatement[] = [];
+  for (const h of healed.results) {
+    if (h.is_fake || h.osobni_volno) continue;
+    const target = injuryReturnCondition(h.days_total ?? 0);
+    if (target >= 100) continue;
+    returnStmts.push(
+      env.DB.prepare(
+        `INSERT INTO condition_log (player_id, team_id, old_value, new_value, delta, source, description)
+         SELECT id, team_id, json_extract(life_context, '$.condition'), ?1,
+                ?1 - json_extract(life_context, '$.condition'), 'injury_return', ?2
+         FROM players WHERE id = ?3 AND json_extract(life_context, '$.condition') > ?1`,
+      ).bind(target, `Po zranění (${h.days_total} dní) není rozehraný`, h.id),
+      env.DB.prepare(
+        `UPDATE players SET life_context = json_set(life_context, '$.condition', ?1)
+         WHERE id = ?2 AND json_extract(life_context, '$.condition') > ?1`,
+      ).bind(target, h.id),
+    );
+  }
+  if (returnStmts.length > 0) {
+    await env.DB.batch(returnStmts).catch((e) => logger.warn({ module: "daily-tick" }, "injury return condition", e));
+  }
 
   // Shower facility bonus: extra condition recovery per team
   try {

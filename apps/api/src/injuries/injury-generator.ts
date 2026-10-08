@@ -106,6 +106,15 @@ export function matchInjuryDays(
   return Math.max(1, rng.int(min, max) - reductionDays);
 }
 
+/**
+ * Kondice hráče v den, kdy se vrátí po zranění. Týden mimo ho skoro nepoznamená,
+ * měsíc ho srazí na 70, dva měsíce a víc na 50. Kratší zranění než 7 dní nic nemění.
+ */
+export function injuryReturnCondition(daysTotal: number): number {
+  if (daysTotal < 7) return 100;
+  return Math.max(50, Math.min(90, 100 - daysTotal));
+}
+
 const SEVERITY_LABELS: Record<string, string> = {
   lehke: "Lehké",
   stredni: "Střední",
