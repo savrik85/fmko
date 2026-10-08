@@ -1,0 +1,153 @@
+import { describe, expect, it } from "vitest";
+import { createRng } from "../generators/rng";
+import {
+  applyDailyWeight, dailyWeightChange, grownWeight, naturalWeight, summerWeightChange,
+  weightAlertDue, weightSmsCause, weightSmsText, weightTrend, youthGrowthCm,
+  type TrainingToday,
+} from "./body-drift";
+
+/** Rozprostře n událostí rovnoměrně do 30 dní. */
+function spread(n: number, total = 30): Set<number> {
+  return new Set(Array.from({ length: n }, (_, i) => Math.floor((i * total) / n)));
+}
+
+function month(start: number, natural: number, day: (i: number) => { pub?: boolean; alcohol?: number; training?: TrainingToday; injured?: boolean }) {
+  let w = start;
+  for (let i = 0; i < 30; i++) {
+    const d = day(i);
+    w = applyDailyWeight(w, dailyWeightChange({
+      weight: w, natural, pubVisit: !!d.pub, alcohol: d.alcohol ?? 50, training: d.training ?? null, injured: !!d.injured,
+    }));
+  }
+  return w - start;
+}
+
+describe("denní změna váhy: měsíční cíle ze spec", () => {
+  it("štamgast (hospoda 13×, alkohol 80, netrénuje) přibere 1,0 až 1,5 kg", () => {
+    const pub = spread(13);
+    const gain = month(80, 80, (i) => ({ pub: pub.has(i), alcohol: 80 }));
+    expect(gain).toBeGreaterThanOrEqual(1.0);
+    expect(gain).toBeLessThanOrEqual(1.5);
+  });
+
+  it("průměrný hráč (hospoda 6×, 8 tréninků, 2 kondiční) zůstane v ±0,3 kg", () => {
+    const pub = spread(6);
+    const trainings = [...spread(8)].sort((a, b) => a - b);
+    const conditioning = new Set(trainings.filter((_, i) => i % 4 === 0));
+    const change = month(80, 80, (i) => ({
+      pub: pub.has(i), alcohol: 50,
+      training: trainings.includes(i) ? (conditioning.has(i) ? "conditioning" : "other") : null,
+    }));
+    expect(Math.abs(change)).toBeLessThanOrEqual(0.3);
+  });
+
+  it("dříč 5 kg nad přirozenou (17 tréninků, 4 kondiční, bez hospody) shodí 1,0 až 1,8 kg", () => {
+    const trainings = [...spread(17)].sort((a, b) => a - b);
+    const conditioning = new Set(trainings.filter((_, i) => i % 4 === 0).slice(0, 4));
+    const change = month(85, 80, (i) => ({
+      training: trainings.includes(i) ? (conditioning.has(i) ? "conditioning" : "other") : null,
+    }));
+    expect(change).toBeLessThanOrEqual(-1.0);
+    expect(change).toBeGreaterThanOrEqual(-1.8);
+  });
+
+  it("zraněný celý měsíc přibere 0,6 až 1,0 kg", () => {
+    const gain = month(80, 80, () => ({ injured: true }));
+    expect(gain).toBeGreaterThanOrEqual(0.6);
+    expect(gain).toBeLessThanOrEqual(1.0);
+  });
+
+  it("bez přirozené váhy (chybí postava) se táhne jen hospodou a tréninkem", () => {
+    expect(dailyWeightChange({ weight: 90, natural: null, pubVisit: false, alcohol: 50, training: null, injured: false })).toBe(0);
+  });
+
+  it("váha se drží mezi 50 a 140 kg a ukládá na setiny", () => {
+    expect(applyDailyWeight(139.99, 0.5)).toBe(140);
+    expect(applyDailyWeight(50.01, -0.5)).toBe(50);
+    expect(applyDailyWeight(80, 0.123456)).toBe(80.12);
+  });
+});
+
+describe("naturalWeight", () => {
+  it("ideál × postava, od 28 let +0,5 % za rok", () => {
+    expect(naturalWeight(180, "athletic", 25)).toBeCloseTo(76.14, 1);
+    expect(naturalWeight(180, "stocky", 25)).toBeCloseTo(87.56, 1);
+    expect(naturalWeight(180, "athletic", 38)).toBeCloseTo(76.14 * 1.05, 1);
+  });
+
+  it("bez výšky nebo postavy null", () => {
+    expect(naturalWeight(0, "normal", 25)).toBeNull();
+    expect(naturalWeight(180, undefined, 25)).toBeNull();
+  });
+});
+
+describe("summerWeightChange", () => {
+  it("piják přes 30 s rusty +3 (strop), dříč s fit −1,5", () => {
+    expect(summerWeightChange({ alcohol: 80, age: 32, event: "rusty" })).toBe(3);
+    expect(summerWeightChange({ alcohol: 20, age: 24, event: "fit" })).toBe(-1.5);
+    expect(summerWeightChange({ alcohol: 20, age: 24, event: null })).toBe(1);
+  });
+});
+
+describe("růst dorostu", () => {
+  it("do 17 let +2 až +4 cm, v 18 +1 až +2, pak nic", () => {
+    const rng = createRng(3);
+    for (let i = 0; i < 200; i++) {
+      const g17 = youthGrowthCm(rng, 17);
+      expect(g17).toBeGreaterThanOrEqual(2);
+      expect(g17).toBeLessThanOrEqual(4);
+      const g18 = youthGrowthCm(rng, 18);
+      expect(g18).toBeGreaterThanOrEqual(1);
+      expect(g18).toBeLessThanOrEqual(2);
+      expect(youthGrowthCm(rng, 19)).toBe(0);
+    }
+  });
+
+  it("váha roste se zachováním BMI: 175 cm / 70 kg → 178 cm / 72,42 kg", () => {
+    expect(grownWeight(70, 175, 178)).toBe(72.42);
+  });
+});
+
+describe("weightTrend", () => {
+  const entries = [
+    { gameDate: "2026-09-01", weight: 80 },
+    { gameDate: "2026-09-10", weight: 81 },
+    { gameDate: "2026-09-30", weight: 82 },
+  ];
+
+  it("bere záznam nejbližší 28 dnům v rozmezí 14–42 dní", () => {
+    expect(weightTrend(83.4, entries, "2026-10-08", 14, 42)).toBe(2.4);
+  });
+
+  it("bez dost starého záznamu null", () => {
+    expect(weightTrend(83, [{ gameDate: "2026-10-01", weight: 82 }], "2026-10-08", 14, 42)).toBeNull();
+  });
+});
+
+describe("SMS o váze", () => {
+  it("nárůst 3 kg a víc, nejvýš jednou za 30 dní", () => {
+    expect(weightAlertDue({ gain: 3.2, lastSmsAt: null, today: "2026-10-08" })).toBe(true);
+    expect(weightAlertDue({ gain: 2.9, lastSmsAt: null, today: "2026-10-08" })).toBe(false);
+    expect(weightAlertDue({ gain: 3.5, lastSmsAt: "2026-09-20", today: "2026-10-08" })).toBe(false);
+    expect(weightAlertDue({ gain: 3.5, lastSmsAt: "2026-09-01", today: "2026-10-08" })).toBe(true);
+    expect(weightAlertDue({ gain: null, lastSmsAt: null, today: "2026-10-08" })).toBe(false);
+  });
+
+  it("příčina: zranění, pak hospoda (6+ za 28 dní), jinak nechodí na trénink", () => {
+    expect(weightSmsCause({ injured: true, pubVisits28d: 10 })).toBe("injury");
+    expect(weightSmsCause({ injured: false, pubVisits28d: 6 })).toBe("pub");
+    expect(weightSmsCause({ injured: false, pubVisits28d: 2 })).toBe("idle");
+  });
+
+  it("text obsahuje jméno a kila s čárkou, bez dlouhé pomlčky", () => {
+    const rng = createRng(1);
+    for (const cause of ["pub", "idle", "injury"] as const) {
+      for (let i = 0; i < 10; i++) {
+        const text = weightSmsText(rng, cause, "Novák", 3.4);
+        expect(text).toContain("Novák");
+        expect(text).toContain("3,4");
+        expect(text).not.toContain("—");
+      }
+    }
+  });
+});

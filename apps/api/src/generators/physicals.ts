@@ -111,7 +111,7 @@ export function playerBodyView(physical: Record<string, unknown> | null | undefi
 }
 
 /** Váha k ideálu podle výšky. BMI: hubený ~21, atletický 23,5, normální ~25, zavalitý ~27, obézní ~31. */
-const BODY_WEIGHT_FACTOR: Record<BodyType, number> = {
+export const BODY_WEIGHT_FACTOR: Record<BodyType, number> = {
   thin: 0.88, athletic: 1.0, normal: 1.05, stocky: 1.15, obese: 1.32,
 };
 
