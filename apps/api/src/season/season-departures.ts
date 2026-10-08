@@ -296,6 +296,15 @@ async function bumpAges(db: D1Database, teamId: string): Promise<number> {
     logger.warn({ module: "season-departures", teamId }, "dospívání mladých", e);
   }
 
+  // Dorost do 18 let vyroste (postava, část 2). Taky až po zestárnutí.
+  try {
+    const { growYoungPlayers } = await import("./body-drift");
+    const gd = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+    await growYoungPlayers(db, teamId, gd?.game_date ?? new Date().toISOString());
+  } catch (e) {
+    logger.warn({ module: "season-departures", teamId }, "růst dorostu", e);
+  }
+
   return res?.meta?.changes ?? 0;
 }
 

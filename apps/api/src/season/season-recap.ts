@@ -12,6 +12,7 @@ import type { TeamDeparturesResult } from "./season-departures";
 import { createRng } from "../generators/rng";
 import { generateInjury } from "../injuries/injury-generator";
 import { injuryPronenessOf } from "../injuries/proneness";
+import { summerWeightStatements, type SummerEvent } from "./body-drift";
 import { overallRatingFromFlat } from "../skills/generator";
 
 const M = "season-recap";
@@ -379,7 +380,7 @@ const SUMMER_EVENTS: { text: string; effect: "injury" | "fit" | "rusty" }[] = [
   { text: "{p} zhubl s partou z vesnice na společném běhání a je zpátky ve formě.", effect: "fit" },
 ];
 
-interface PubSquad { id: string; name: string; position: string; age: number; alcohol: number; injuryProneness: number }
+interface PubSquad { id: string; name: string; position: string; age: number; alcohol: number; injuryProneness: number; weight: number | null }
 
 async function buildPubNight(db: D1Database, teamId: string, seasonNumber: number, applyEffects = false) {
   const rng = createRng(pubSeed(`${teamId}:s${seasonNumber}:pub`));
@@ -391,14 +392,17 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
   const squad: PubSquad[] = squadRes.results.map((p) => {
     let alcohol = 30;
     let injuryProneness = 50;
+    let weight: number | null = null;
     try {
       const pe = JSON.parse(p.personality || "{}");
+      const ph = JSON.parse(p.physical || "{}");
       if (typeof pe.alcohol === "number") alcohol = pe.alcohol;
-      injuryProneness = injuryPronenessOf(JSON.parse(p.physical || "{}"), pe);
+      injuryProneness = injuryPronenessOf(ph, pe);
+      if (typeof ph.weight === "number") weight = ph.weight;
     } catch (e) {
       logger.warn({ module: M }, "pub squad json", e);
     }
-    return { id: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, alcohol, injuryProneness };
+    return { id: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, alcohol, injuryProneness, weight };
   });
   if (squad.length === 0) return { party: null, summer: [] as { name: string; text: string; effect: string | null }[] };
   const nameOf = (id: string) => squad.find((s) => s.id === id)?.name ?? null;
@@ -485,6 +489,16 @@ async function buildPubNight(db: D1Database, teamId: string, seasonNumber: numbe
         ).bind(crypto.randomUUID(), s.id, teamId, druh.type, druh.description, druh.severity, dnu, dnu));
       }
     }
+    // Postava (část 2): váha se přes léto posune podle chování celého kádru.
+    const gd = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, "summer weight game_date", e); return null; });
+    const events = new Map<string, SummerEvent>(summerRaw.map((s) => [
+      s.id, s.effect === "fit" || s.effect === "rusty" || s.effect === "injury" ? s.effect : null,
+    ]));
+    stmts.push(...summerWeightStatements(db, {
+      teamId, gameDate: gd?.game_date ?? new Date().toISOString(),
+      players: squad.map((p) => ({ id: p.id, age: p.age, alcohol: p.alcohol, weight: p.weight })), events,
+    }));
     for (let i = 0; i < stmts.length; i += 20) await db.batch(stmts.slice(i, i + 20)).catch((e) => logger.warn({ module: M }, "apply summer effects", e));
   }
 

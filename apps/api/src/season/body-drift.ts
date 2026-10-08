@@ -338,3 +338,65 @@ async function sendWeightAlerts(
   }
   return sent;
 }
+
+/**
+ * Zápisy změny váhy přes léto pro kádr jednoho týmu (letní souhrn, jednou za sezónu).
+ * Vrací příkazy, volající je provede dávkou spolu s ostatními letními efekty.
+ */
+export function summerWeightStatements(
+  db: D1Database,
+  input: {
+    teamId: string;
+    gameDate: string;
+    players: ReadonlyArray<{ id: string; age: number; alcohol: number; weight: number | null }>;
+    events: ReadonlyMap<string, SummerEvent>;
+  },
+): D1PreparedStatement[] {
+  const stmts: D1PreparedStatement[] = [];
+  for (const p of input.players) {
+    if (p.weight === null || !(p.weight > 0)) continue;
+    const next = applyDailyWeight(p.weight, summerWeightChange({ alcohol: p.alcohol, age: p.age, event: input.events.get(p.id) ?? null }));
+    stmts.push(
+      db.prepare("UPDATE players SET physical = json_set(physical, '$.weight', ?) WHERE id = ?").bind(next, p.id),
+      db.prepare("INSERT INTO weight_log (player_id, team_id, game_date, weight, source) VALUES (?, ?, ?, ?, 'summer')")
+        .bind(p.id, input.teamId, input.gameDate.slice(0, 10), next),
+    );
+  }
+  return stmts;
+}
+
+/**
+ * Růst dorostu po zestárnutí na konci sezóny: do 18 let výška roste, váha se stejným BMI.
+ * Volá se hned za dospíváním (`dospejMladeHrace`). Vrací počet hráčů, kteří vyrostli.
+ */
+export async function growYoungPlayers(db: D1Database, teamId: string, gameDate: string): Promise<number> {
+  const rows = await db.prepare(
+    "SELECT id, age, physical FROM players WHERE team_id = ? AND age <= 18 AND (status IS NULL OR status = 'active')",
+  ).bind(teamId).all<{ id: string; age: number; physical: string | null }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "load young players", e); return { results: [] as { id: string; age: number; physical: string | null }[] }; });
+
+  const stmts: D1PreparedStatement[] = [];
+  let grown = 0;
+  for (const r of rows.results) {
+    const physical = parseJson(r.physical, "physical", r.id);
+    if (!physical) continue;
+    const height = physical.height;
+    if (typeof height !== "number" || !(height > 0)) continue;
+    const cm = youthGrowthCm(createRng(seedFromString(`${r.id}:growth:${r.age}`)), r.age);
+    if (cm === 0) continue;
+    const newHeight = height + cm;
+    const weight = typeof physical.weight === "number" && physical.weight > 0 ? grownWeight(physical.weight, height, newHeight) : null;
+    stmts.push(weight === null
+      ? db.prepare("UPDATE players SET physical = json_set(physical, '$.height', ?) WHERE id = ?").bind(newHeight, r.id)
+      : db.prepare("UPDATE players SET physical = json_set(physical, '$.height', ?, '$.weight', ?) WHERE id = ?").bind(newHeight, weight, r.id));
+    if (weight !== null) {
+      stmts.push(db.prepare("INSERT INTO weight_log (player_id, team_id, game_date, weight, source) VALUES (?, ?, ?, ?, 'growth')")
+        .bind(r.id, teamId, gameDate.slice(0, 10), weight));
+    }
+    grown++;
+  }
+  for (const batch of chunks(stmts, 100)) {
+    await db.batch(batch).catch((e) => logger.warn({ module: M, teamId }, "apply youth growth", e));
+  }
+  return grown;
+}
