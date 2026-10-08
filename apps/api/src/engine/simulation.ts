@@ -51,6 +51,15 @@ function playersInSlot(lineup: MatchPlayer[], pos: MatchPlayer["position"]): Mat
   return lineup.filter((p) => (p.matchPosition ?? p.position) === pos);
 }
 
+/**
+ * Jak moc je hráč čerstvý: 1,0 při plné kondici, 0,925 při polovině, 0,85 úplně vyždímaný.
+ * Unavený útočník zakončuje hůř a unavený brankář hůř chytá. Dřív kondice jednotlivce
+ * na jeho výkon nepůsobila vůbec, jen průměr útočícího týmu na počet šancí.
+ */
+export function freshness(p: MatchPlayer): number {
+  return 0.85 + 0.15 * Math.max(0, Math.min(100, p.condition)) / 100;
+}
+
 /** Get player display name */
 function playerName(p: MatchPlayer): string {
   return `${p.firstName} ${p.lastName}`;
@@ -233,13 +242,19 @@ function calcChanceProb(
   ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor * attMoraleMod * famMod * chemMod
     * manpowerFactor(attacking.lineup).attack * (1 - intimidation);
 
+  // Unavená obrana nestíhá. Útočící tým má únavu v počtu šancí (conditionMod níž),
+  // bránící ji dřív neměl nikde, takže čerstvé střídání v obraně nic nepřineslo.
+  const defFatigueMod = defOutfield.length > 0
+    ? defOutfield.reduce((s, p) => s + freshness(p), 0) / defOutfield.length
+    : 1;
+
   const defensePower = (
     teamAvg(defOutfield, "defense") * 1.0 +
     teamAvg(defOutfield, "strength") * 0.7 +
     (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
     teamAvg(defOutfield, "workRate") * 0.2
   ) / 3 * effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff) * defMoraleMod
-    * manpowerFactor(defending.lineup).defense * hardDefenseMod;
+    * manpowerFactor(defending.lineup).defense * hardDefenseMod * defFatigueMod;
 
   // Use DIFFERENCE not ratio — so stronger teams create more chances
   // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
@@ -259,8 +274,11 @@ function calcChanceProb(
 /**
  * Otevřená hra dává o něco méně gólů než dřív — rozdíl přebraly standardky
  * (penalty, přímáky, rohy), aby celková gólovost zápasu zůstala stejná.
+ *
+ * 0,855 → 0,82 (2026-10-08): únava obrany a brankáře přidala vyrovnaným zápasům asi 4 %
+ * gólů. Srovnání 3000 zápasů 37:37 před a po: 4,39 → 4,42 gólu (produkce má 4,56).
  */
-const OPEN_PLAY_GOAL_SCALE = 0.855;
+const OPEN_PLAY_GOAL_SCALE = 0.82;
 
 /**
  * Calculate goal probability from an open-play chance.
@@ -278,11 +296,11 @@ export function calcGoalProb(
 ): number {
   // 30% šancí = hlavičky (centr ze hry)
   const isHeader = rng.random() < 0.3;
-  const attackVal = isHeader
+  const attackVal = (isHeader
     ? (attacker.heading * 2 + attacker.strength) / 3
-    : (attacker.shooting * 2 + attacker.technique) / 3;
+    : (attacker.shooting * 2 + attacker.technique) / 3) * freshness(attacker);
 
-  const defenseVal = (gk.goalkeeping * gkHandlingMod * 2 + defenseAvg) / 3;
+  const defenseVal = (gk.goalkeeping * gkHandlingMod * freshness(gk) * 2 + defenseAvg) / 3;
 
   let ratio = attackVal / (attackVal + defenseVal);
 
@@ -512,7 +530,10 @@ function updateCondition(lineup: MatchPlayer[], minute: number, drainMod: number
     // Závěr zápasu bere všem stejně; iontové nápoje a gely na lavičce to tlumí.
     const lateFatigue = minute > 70 ? 0.15 * (1 - lateFatigueMod) : 0;
 
-    const decay = (0.3 + staminaFactor * 0.5 + alcoholPenalty + lateFatigue) * drainMod;
+    // Brankář naběhá zlomek toho co hráč v poli. Dřív se unavoval stejně, přestože
+    // match-plan.ts s tím, že kondici skoro neztrácí, počítá.
+    const roleMod = (p.matchPosition ?? p.position) === "GK" ? 0.35 : 1;
+    const decay = (0.3 + staminaFactor * 0.5 + alcoholPenalty + lateFatigue) * drainMod * roleMod;
     p.condition = round2(Math.max(0, p.condition - decay));
   }
 }
@@ -1382,8 +1403,12 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       // křehký hráč (100) má ~3× vyšší riziko než železný (0). Dřív čistá náhoda,
       // přestože UI atribut "Náchylnost" zobrazuje.
       const homeCount = home.lineup.length;
+      // Unavený hráč se zraní snáz: při plné kondici ×1, při polovině ×1,5. Dřív kondice
+      // na riziko nepůsobila, takže nechat na hřišti vyždímaného hráče nic nestálo.
       const proneWeights = allPlayers.map((p, i) =>
-        (0.5 + ((p.injuryProneness ?? 50) / 100)) * (i < homeCount ? homeInjFactor : awayInjFactor));
+        (0.5 + ((p.injuryProneness ?? 50) / 100))
+          * (1 + (100 - Math.max(0, Math.min(100, p.condition))) / 100)
+          * (i < homeCount ? homeInjFactor : awayInjFactor));
       const totalProne = proneWeights.reduce((a, b) => a + b, 0);
       let proneRoll = rng.random() * totalProne;
       let unlucky = allPlayers[allPlayers.length - 1];
