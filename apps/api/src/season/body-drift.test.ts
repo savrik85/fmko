@@ -11,12 +11,13 @@ function spread(n: number, total = 30): Set<number> {
   return new Set(Array.from({ length: n }, (_, i) => Math.floor((i * total) / n)));
 }
 
-function month(start: number, natural: number, day: (i: number) => { pub?: boolean; alcohol?: number; training?: TrainingToday; injured?: boolean }) {
+function month(start: number, natural: number, day: (i: number) => { pub?: boolean; alcohol?: number; training?: TrainingToday; injured?: boolean; planLoss?: number }) {
   let w = start;
   for (let i = 0; i < 30; i++) {
     const d = day(i);
     w = applyDailyWeight(w, dailyWeightChange({
       weight: w, natural, pubVisit: !!d.pub, alcohol: d.alcohol ?? 50, training: d.training ?? null, injured: !!d.injured,
+      planLoss: d.planLoss,
     }));
   }
   return w - start;
@@ -55,6 +56,26 @@ describe("denní změna váhy: měsíční cíle ze spec", () => {
     const gain = month(80, 80, () => ({ injured: true }));
     expect(gain).toBeGreaterThanOrEqual(0.6);
     expect(gain).toBeLessThanOrEqual(1.0);
+  });
+
+  it("tah k přirozené váze působí jen shora: kdo je pod ní, nahoru se netáhne", () => {
+    expect(dailyWeightChange({ weight: 90, natural: 94, pubVisit: false, alcohol: 50, training: null, injured: false })).toBe(0);
+    expect(dailyWeightChange({ weight: 98, natural: 94, pubVisit: false, alcohol: 50, training: null, injured: false })).toBeCloseTo(-0.024, 5);
+  });
+
+  it("běžný trénink srazí váhu nejvýš na přirozenou, pod ni jen plán hubnutí", () => {
+    const base = { natural: 94, pubVisit: false, alcohol: 50, injured: false } as const;
+    expect(dailyWeightChange({ ...base, weight: 90, training: "other" })).toBe(0);
+    expect(dailyWeightChange({ ...base, weight: 94.01, training: "conditioning" })).toBeCloseTo(-0.01, 3);
+    expect(dailyWeightChange({ ...base, weight: 90, training: "other", planLoss: 0.2 })).toBeCloseTo(-0.23, 5);
+  });
+
+  it("hráč s nadváhou na plánu shodí kila a po plánu si je drží, dokud nechodí do hospody", () => {
+    const trainings = spread(13);
+    const onPlan = month(96, 96, (i) => ({ training: trainings.has(i) ? "other" : null, planLoss: 0.175 }));
+    expect(onPlan).toBeLessThanOrEqual(-2.5);
+    const after = month(96 + onPlan, 96, (i) => ({ training: trainings.has(i) ? "other" : null }));
+    expect(after).toBe(0);
   });
 
   it("bez přirozené váhy (chybí postava) se táhne jen hospodou a tréninkem", () => {
