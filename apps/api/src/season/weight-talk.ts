@@ -70,9 +70,12 @@ export async function handleWeightTalk(
 ): Promise<WeightTalkOutcome | null> {
   if (!detectWeightTalk(opts.text)) return null;
 
+  // Jen hráč áčka nebo jeho U21. Konverzace zůstává i po přestupu a zpráva o váze nesmí
+  // změnit morálku ani slib hráči, který už hraje za jiný klub.
   const row = await db.prepare(
     `SELECT p.physical, p.personality, p.life_context, t.game_date
-       FROM players p JOIN teams t ON t.id = ? WHERE p.id = ?`,
+       FROM players p JOIN teams t ON t.id = ?1
+      WHERE p.id = ?2 AND (p.team_id = ?1 OR p.team_id IN (SELECT id FROM teams WHERE parent_team_id = ?1))`,
   ).bind(opts.teamId, opts.playerId).first<{ physical: string | null; personality: string | null; life_context: string | null; game_date: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "load player", e); return null; });
   if (!row?.game_date) return null;

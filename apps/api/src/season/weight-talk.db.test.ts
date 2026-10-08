@@ -14,7 +14,7 @@ beforeAll(async () => {
   miniflare = new Miniflare({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: ["DB"] });
   db = await miniflare.getD1Database("DB");
   for (const sql of [
-    `CREATE TABLE teams (id TEXT PRIMARY KEY, user_id TEXT, game_date TEXT)`,
+    `CREATE TABLE teams (id TEXT PRIMARY KEY, user_id TEXT, game_date TEXT, parent_team_id TEXT)`,
     `CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT, age INTEGER, physical TEXT, personality TEXT, life_context TEXT)`,
     `CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, ai_thread_state TEXT, ai_thread_active INTEGER DEFAULT 0)`,
     `CREATE TABLE weight_log (id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT, team_id TEXT, game_date TEXT, weight REAL, source TEXT)`,
@@ -25,7 +25,10 @@ beforeAll(async () => {
     db.prepare("INSERT INTO players VALUES ('good', 't1', 25, ?, ?, ?)").bind(fat, JSON.stringify({ discipline: 100, temper: 0 }), JSON.stringify({ morale: 100 })),
     db.prepare("INSERT INTO players VALUES ('hothead', 't1', 25, ?, ?, ?)").bind(fat, JSON.stringify({ discipline: 0, temper: 100 }), JSON.stringify({ morale: 0 })),
     db.prepare("INSERT INTO players VALUES ('fit', 't1', 25, ?, ?, ?)").bind(JSON.stringify({ height: 180, weight: 76 }), JSON.stringify({ discipline: 100 }), JSON.stringify({ morale: 60 })),
-    db.prepare("INSERT INTO conversations (id, team_id) VALUES ('c-good', 't1'), ('c-hot', 't1'), ('c-fit', 't1')"),
+    db.prepare("INSERT INTO conversations (id, team_id) VALUES ('c-good', 't1'), ('c-hot', 't1'), ('c-fit', 't1'), ('c-gone', 't1')"),
+    // Hráč, který mezitím přestoupil jinam: konverzace u nás zůstala, hráč už ne.
+    db.prepare("INSERT INTO teams (id, user_id, game_date) VALUES ('t2', 'u2', '2026-10-12T16:00:00.000Z')"),
+    db.prepare("INSERT INTO players VALUES ('gone', 't2', 25, ?, ?, ?)").bind(fat, JSON.stringify({ discipline: 100 }), JSON.stringify({ morale: 60 })),
   ]);
 });
 
@@ -59,6 +62,11 @@ describe("handleWeightTalk", () => {
   it("hráč v normě: nic se nestane a pauza se nespotřebuje", async () => {
     expect(await handleWeightTalk(db, { teamId: "t1", convId: "c-fit", playerId: "fit", text: "Musíš zhubnout" })).toBeNull();
     expect((await lc("fit")).dietTalkAt).toBeUndefined();
+  });
+
+  it("hráč, který už je v jiném klubu, se nezmění", async () => {
+    expect(await handleWeightTalk(db, { teamId: "t1", convId: "c-gone", playerId: "gone", text: "Musíš zhubnout" })).toBeNull();
+    expect((await lc("gone")).dietTalkAt).toBeUndefined();
   });
 
   it("zpráva bez řeči o váze se ignoruje", async () => {
