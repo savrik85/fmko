@@ -18,7 +18,7 @@ import { MoneyInput } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { PlayerObligationsCard } from "@/components/transfers/player-obligations";
 import { formatLogDate } from "@/components/manager/CoachKabinaTab";
-import { attrBg, attrValue, withBody, bodyNote } from "@/lib/player-attrs";
+import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange } from "@/lib/player-attrs";
 
 import type { BadgePattern } from "@/components/ui";
 import { isLightColor } from "@/lib/team-color";
@@ -1030,9 +1030,15 @@ export default function PlayerDetailPage() {
             <DetailRow
               label="Váha"
               value={player.physical?.weight
-                ? `${player.physical.weight} kg${player.body?.idealWeight ? ` (ideál ${player.body.idealWeight} kg)` : ""}`
+                ? `${formatKg(player.physical.weight)} kg${player.body?.idealWeight ? ` (ideál ${player.body.idealWeight} kg)` : ""}`
                 : "—"}
             />
+            {player.body?.trend30d != null && (
+              <DetailRow
+                label="Za měsíc"
+                value={<span className={weightTrendColor(player.body.trend30d, player.physical?.weight, player.body.idealWeight)}>{formatKgChange(player.body.trend30d)}</span>}
+              />
+            )}
             {player.body?.bodyType && <DetailRow label="Postava" value={BODY_TYPE_LABEL[player.body.bodyType]} />}
             <DetailRow label="Noha" value={footLabel(player.physical?.preferredFoot)} />
             <DetailRow label="Strana" value={sideLabel(player.physical?.preferredSide)} />
@@ -1120,6 +1126,7 @@ export default function PlayerDetailPage() {
           <ConditionLog teamId={teamId} playerId={playerId} />
         </div>
       )}
+      {player.team_id === teamId && <WeightLog teamId={teamId} playerId={playerId} />}
 
       {/* ═══ Historie klubů ═══ */}
       {contracts.length > 0 && (
@@ -2244,6 +2251,73 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
             </button>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Barva trendu váhy: červeně, když hráč přibírá a je nad ideálem víc než o toleranci (4 kg),
+ * zeleně, když se nad ideálem vrací dolů. Jinak neutrálně.
+ */
+function weightTrendColor(trend: number, weight: number | undefined, ideal: number | null | undefined): string {
+  const over = weight != null && ideal != null ? weight - ideal : 0;
+  if (trend > 0 && over > 4) return "text-card-red";
+  if (trend < 0 && over > 0) return "text-pitch-500";
+  return "";
+}
+
+const WEIGHT_SOURCE_LABEL: Record<string, string> = { weekly: "Týden", summer: "Léto", growth: "Růst" };
+
+interface WeightLogEntry { id: number; gameDate: string; weight: number; source: string }
+
+/** Vývoj váhy: týdenní záznamy, léto a růst (postava, část 2). */
+function WeightLog({ teamId, playerId }: { teamId: string; playerId: string }) {
+  const [entries, setEntries] = useState<WeightLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch<{ entries: WeightLogEntry[] }>(`/api/teams/${teamId}/players/${playerId}/weight-log`)
+      .then((d) => setEntries(d.entries))
+      .catch((e) => { console.error("weight-log fetch:", e); setEntries([]); })
+      .finally(() => setLoading(false));
+  }, [teamId, playerId]);
+
+  if (loading) return null;
+
+  return (
+    <div className="card p-4 sm:p-5">
+      <SectionLabel>Vývoj váhy</SectionLabel>
+      {entries.length === 0 ? (
+        <p className="text-sm text-muted">Zatím žádné záznamy. Váha se zapisuje každé pondělí.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 text-xs text-muted uppercase">
+              <th className="text-left py-2 pr-3 font-heading">Kdy</th>
+              <th className="text-left py-2 pr-3 font-heading">Zdroj</th>
+              <th className="text-right py-2 pr-3 font-heading">Váha</th>
+              <th className="text-right py-2 font-heading">Změna</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry, i) => {
+              const previous = entries[i + 1];
+              const change = previous ? Math.round((entry.weight - previous.weight) * 10) / 10 : null;
+              const date = new Date(entry.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
+              return (
+                <tr key={entry.id} className="border-b border-gray-50 last:border-b-0">
+                  <td className="py-1.5 pr-3 tabular-nums text-muted whitespace-nowrap">{date}</td>
+                  <td className="py-1.5 pr-3">{WEIGHT_SOURCE_LABEL[entry.source] ?? entry.source}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums font-heading font-bold">{formatKg(entry.weight)} kg</td>
+                  <td className={`py-1.5 text-right tabular-nums whitespace-nowrap ${change === null || change === 0 ? "text-muted" : change > 0 ? "text-card-red" : "text-pitch-500"}`}>
+                    {change === null ? "" : formatKgChange(change)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       )}
     </div>
   );
