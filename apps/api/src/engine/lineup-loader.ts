@@ -17,6 +17,7 @@ interface PlayerRow {
   personality: string;
   life_context: string;
   physical: string | null;
+  age?: number;
 }
 
 let engineIdCounter = 1;
@@ -56,6 +57,7 @@ export function mapRowToMatchPlayer(row: PlayerRow, matchPosition?: string): Mat
     clutch: (personality.clutch as number) ?? 50,
     // Náchylnost bývá ve physical (nové) i personality (starší záznamy)
     injuryProneness: ((physical.injuryProneness as number) ?? (personality.injuryProneness as number)) ?? 50,
+    age: row.age,
     preferredFoot: ((physical.preferredFoot as string) ?? "right") as MatchPlayer["preferredFoot"],
     preferredSide: ((physical.preferredSide as string) ?? "center") as MatchPlayer["preferredSide"],
     condition: (lifeContext.condition as number) ?? 100,

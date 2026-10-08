@@ -13,6 +13,7 @@ import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { experienceGainChance } from "../skills/training";
 import { typZraneniZPopisu, zavaznostZeDnu } from "../injuries/injury-types";
+import { matchInjuryDays } from "../injuries/injury-generator";
 import { buildCupLineupData, cupShootout, cupTieWeather } from "../cup/cup";
 import type { TeamSetup, Weather } from "../engine/types";
 import type { TournamentRow, VenueRow } from "./service";
@@ -399,7 +400,8 @@ export async function simulateTournamentMatch(
       const isHome = event.teamId === 1;
       const playerId = (isHome ? homeBuild.idMap : awayBuild.idMap).get(event.playerId);
       if (!playerId) continue;
-      const days = Math.max(2, 3 + Math.floor(rng.random() * 18));
+      const injured = (isHome ? homeBuild.players : awayBuild.players).find((p) => p.id === event.playerId);
+      const days = matchInjuryDays(rng, event.detail, injured?.age ?? 25, injured?.injuryProneness ?? 50);
       injuryStmts.push(db.prepare(
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(crypto.randomUUID(), playerId, isHome ? homeId : awayId, typZraneniZPopisu(event.detail), event.detail ?? "zranění", zavaznostZeDnu(days), days, days, m.id));
