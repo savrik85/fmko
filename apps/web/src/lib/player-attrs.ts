@@ -61,3 +61,15 @@ export function formatKgChange(kg: number): string {
   if (kg === 0) return "0 kg";
   return `${kg > 0 ? "+" : "−"}${formatKg(Math.abs(kg))} kg`;
 }
+
+export type WeightCategoryKey = "under" | "ideal" | "muscular" | "over" | "obese";
+
+/** Váha slovy a barva. Hranice počítá API (playerBodyView), tady jen popisek. */
+export const WEIGHT_CATEGORY: Record<WeightCategoryKey, { label: string; color: string }> = {
+  under: { label: "podváha", color: "text-gold-600" },
+  ideal: { label: "ideální", color: "text-pitch-500" },
+  // Kila nad ideálem nese síla (API muscleToleranceKg), postih za ně není.
+  muscular: { label: "svalnatý", color: "text-pitch-500" },
+  over: { label: "nadváha", color: "text-gold-600" },
+  obese: { label: "velká nadváha", color: "text-card-red" },
+};

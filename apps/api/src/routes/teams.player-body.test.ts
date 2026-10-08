@@ -112,3 +112,18 @@ describe("váha v čase: trend a historie", () => {
     expect(response.status).toBe(403);
   });
 });
+
+describe("přehled Postava kádru", () => {
+  it("vlastní tým: souhrn a hráči s problémem nahoře", async () => {
+    const o = await get("my-a/body-overview");
+    expect(o.summary.counts.obese).toBe(1);
+    expect(o.players[0]).toMatchObject({ id: "my-heavy", weightCategory: "obese", problem: true });
+    expect(o.players[0].trend30d).toBe(3);
+  });
+
+  it("cizí tým je zakázaný", async () => {
+    const headers = new Headers({ Authorization: "Bearer token-me" });
+    const response = await teamsRouter.fetch(new Request("http://test.local/rival-a/body-overview", { headers }), env);
+    expect(response.status).toBe(403);
+  });
+});

@@ -941,6 +941,15 @@ teamsRouter.get("/:id", async (c) => {
   });
 });
 
+// GET /api/teams/:id/body-overview — přehled Postava kádru (postava, část 3), jen vlastní tým.
+teamsRouter.get("/:id/body-overview", async (c) => {
+  const teamId = c.req.param("id");
+  const { tymyDivaka } = await import("../auth/divak");
+  if (!(await tymyDivaka(c)).has(teamId)) return c.json({ error: "Not your team" }, 403);
+  const { loadBodyOverview } = await import("../season/body-overview");
+  return c.json(await loadBodyOverview(c.env.DB, teamId));
+});
+
 // GET /api/teams/:id/players
 teamsRouter.get("/:id/players", async (c) => {
   const teamId = c.req.param("id");
