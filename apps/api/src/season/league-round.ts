@@ -17,6 +17,9 @@ import { logger } from "../lib/logger";
 import { typZraneniZPopisu, zavaznostZeDnu } from "../injuries/injury-types";
 import { injuryPronenessOf } from "../injuries/proneness";
 
+/** Truc hráče, který mezi koly prohlásí, že přemýšlí o odchodu. */
+const WANTS_TO_LEAVE_UNREST = 55;
+
 export type LeagueRoundStatus =
   /** Kolo odsimulováno. */
   | "done"
@@ -495,9 +498,9 @@ async function runBetweenRoundEvents(
 
       for (const { humanTeamId, jeDoma } of strany) {
         const td = await db
-          .prepare("SELECT budget, reputation, game_date FROM teams WHERE id = ?")
+          .prepare("SELECT budget, reputation, game_date, training_attendance FROM teams WHERE id = ?")
           .bind(humanTeamId)
-          .first<{ budget: number; reputation: number; game_date: string }>();
+          .first<{ budget: number; reputation: number; game_date: string; training_attendance: string | null }>();
         const sqRows = await db.prepare("SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')").bind(humanTeamId).all();
         const squad = sqRows.results.map((r: any) => {
           const s = JSON.parse(r.skills);
@@ -527,7 +530,17 @@ async function runBetweenRoundEvents(
             logger.warn({ module: "league-round" }, "Failed to get team district", e);
             return null;
           });
-        const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget ?? 0, td?.reputation ?? 50, lastWon, gameWeek, teamDistrict?.district);
+        let attendanceById: Record<string, { attended: number; total: number }> = {};
+        try {
+          attendanceById = JSON.parse(td?.training_attendance ?? "{}");
+        } catch (e) {
+          logger.warn({ module: "league-round" }, "training_attendance json", e);
+        }
+        const attendanceRates = sqRows.results.map((r: any) => {
+          const a = attendanceById[r.id as string];
+          return a && a.total > 0 ? a.attended / a.total : 1;
+        });
+        const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget ?? 0, td?.reputation ?? 50, lastWon, gameWeek, teamDistrict?.district, attendanceRates);
 
         for (const ev of brEvents) {
           if (ev.effect) {
@@ -576,9 +589,16 @@ async function runBetweenRoundEvents(
             if (eff.type === "player_leave" && eff.playerIndex != null) {
               const leaver = sqRows.results[eff.playerIndex];
               if (leaver) {
+                // Hráč o odchodu jen mluví, takže z klubu nemizí. Dostane truc (transferUnrest),
+                // míň chodí na trénink a trenér ho může přes SMS usmířit (transfers/unrest.ts).
+                // Truc opadá o 3 body denně v transfer-pressure-tick. Pod 60 nehrozí simulované
+                // zranění. Dřív tu bylo rovnou status = 'quit', jenže podmínka nikdy neplatila.
                 await db
-                  .prepare("UPDATE players SET status = 'quit' WHERE id = ?")
-                  .bind(leaver.id)
+                  .prepare(
+                    `UPDATE players SET life_context = json_set(life_context, '$.transferUnrest', json(?))
+                     WHERE id = ? AND COALESCE(json_extract(life_context, '$.transferUnrest.level'), 0) < ?`,
+                  )
+                  .bind(JSON.stringify({ level: WANTS_TO_LEAVE_UNREST, reason: "wants_to_leave", since: new Date().toISOString() }), leaver.id, WANTS_TO_LEAVE_UNREST)
                   .run()
                   .catch((e) => logger.warn({ module: "league-round" }, "player_leave effect failed", e));
               }
