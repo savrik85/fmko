@@ -18,7 +18,7 @@ import { MoneyInput } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { PlayerObligationsCard } from "@/components/transfers/player-obligations";
 import { formatLogDate } from "@/components/manager/CoachKabinaTab";
-import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange } from "@/lib/player-attrs";
+import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 
 import type { BadgePattern } from "@/components/ui";
 import { isLightColor } from "@/lib/team-color";
@@ -2261,8 +2261,6 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
   );
 }
 
-type WeightCategoryKey = "under" | "ideal" | "muscular" | "over" | "obese";
-
 /**
  * Barva změny váhy podle toho, kam hráč míří: zeleně k ideálu (podváha přibírá, nadváha hubne),
  * červeně od ideálu (nadváha přibírá, podváha hubne). U ideálního a svalnatého neutrálně.
@@ -2276,15 +2274,7 @@ function weightChangeColor(change: number, category: WeightCategoryKey | null): 
 
 const WEIGHT_SOURCE_LABEL: Record<string, string> = { weekly: "Týden", summer: "Léto", growth: "Růst" };
 
-/** Váha proti ideálu slovy. Hranice počítá API (playerBodyView), tady jen popisek a barva. */
-const WEIGHT_CATEGORY: Record<WeightCategoryKey, { label: string; color: string }> = {
-  under: { label: "podváha", color: "text-gold-600" },
-  ideal: { label: "ideální", color: "text-pitch-500" },
-  // Kila nad ideálem nese síla (API muscleToleranceKg), postih za ně není.
-  muscular: { label: "svalnatý", color: "text-pitch-500" },
-  over: { label: "nadváha", color: "text-gold-600" },
-  obese: { label: "velká nadváha", color: "text-card-red" },
-};
+
 
 interface WeightLogEntry { id: number; gameDate: string; weight: number; source: string }
 

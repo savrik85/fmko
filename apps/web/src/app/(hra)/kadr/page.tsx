@@ -7,10 +7,11 @@ import { TalentStars } from "@/components/players/talent-stars";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 import { PositionFilter, SquadAttributeTable, type PosFilter } from "@/components/players/squad-attribute-table";
+import { SquadBodyTab } from "@/components/players/squad-body-tab";
 
-type Tab = "atributy" | "sezona" | "top" | "dochazka";
+type Tab = "atributy" | "sezona" | "top" | "dochazka" | "postava";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["atributy", "sezona", "top", "dochazka"] as const;
+const TAB_KEYS = ["atributy", "sezona", "top", "dochazka", "postava"] as const;
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
 type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "injury" | "suspension" | "excuse" | "bench" | "notNominated";
 type SortDir = "asc" | "desc";
@@ -243,6 +244,7 @@ export default function SquadPage() {
             { key: "sezona", label: "Sezóna", icon: "\u{1F4CA}" },
             { key: "top", label: "TOP", icon: "\u{1F3C6}" },
             { key: "dochazka", label: "Docházka", icon: "\u{1F4C5}" },
+            { key: "postava", label: "Postava", icon: "\u2696\uFE0F" },
           ]}
         />
       </div>
@@ -395,6 +397,8 @@ export default function SquadPage() {
           />
         )
       )}
+
+      {tab === "postava" && teamId && <SquadBodyTab teamId={teamId} filter={filter} />}
 
     </div>
   );

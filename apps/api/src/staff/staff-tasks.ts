@@ -852,7 +852,7 @@ export async function runStaffTasks(db: D1Database, todayIso: string): Promise<S
 // ─── Pohled pro API ───────────────────────────────────────────────────────────
 
 /** Kdo je v sestavě áčka na zápas: přesná sestava na kolo, jinak poslední ruční (jako match-runner). */
-async function loadLineupIds(db: D1Database, teamId: string, matchId: string): Promise<{ start: Set<string>; bench: Set<string> | null } | null> {
+export async function loadLineupIds(db: D1Database, teamId: string, matchId: string): Promise<{ start: Set<string>; bench: Set<string> | null } | null> {
   const row = await db.prepare(
     `SELECT l.players_data, l.bench_data FROM lineups l
       WHERE l.team_id = ?1 AND (l.calendar_id = (SELECT calendar_id FROM matches WHERE id = ?2) OR l.is_auto = 0)
