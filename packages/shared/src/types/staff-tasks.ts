@@ -24,7 +24,8 @@ export type StaffTaskType =
   | "psych_session"
   | "youth_plan"
   | "gk_plan"
-  | "sponsor_care";
+  | "sponsor_care"
+  | "weight_plan";
 
 export type StaffTaskKind = "match" | "weekly";
 export type StaffTaskStatus = "active" | "done" | "cancelled" | "failed";
@@ -116,6 +117,11 @@ export const STAFF_TASK_DEFS: Record<StaffTaskType, StaffTaskDef> = {
     label: "Individuální trénink brankáře",
     description: "Trénuje s jedním brankářem zvlášť. Na tréninku se zlepšuje rychleji.",
   },
+  weight_plan: {
+    role: "kondicni_trener", kind: "weekly", target: "player", cost: 400, durations: [14, 28],
+    label: "Plán hubnutí",
+    description: "Hlídá jednomu hráči s nadváhou jídelníček a po tréninku s ním běhá. Hubne jen ten, kdo na trénink chodí.",
+  },
   sponsor_care: {
     role: "ekonom", kind: "weekly", target: "none", cost: 300, durations: [14],
     label: "Péče o sponzory",
@@ -175,4 +181,10 @@ export interface StaffTaskPlayer {
   lineup: "start" | "bench" | "out" | null;
   /** Sezení s psychologem jde znovu až od tohoto herního dne (YYYY-MM-DD), jinak `null`. */
   psychAgainFrom: string | null;
+  /** Váha v kg (postava), `null` bez údaje. */
+  weight: number | null;
+  /** Váha slovy (API playerBodyView), pro plán hubnutí jen over a obese. */
+  weightCategory: "under" | "ideal" | "muscular" | "over" | "obese" | null;
+  /** Kg nad ideálem, `null` bez výšky nebo váhy. */
+  weightExcess: number | null;
 }
