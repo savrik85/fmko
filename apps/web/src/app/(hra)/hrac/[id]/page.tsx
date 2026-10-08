@@ -1027,7 +1027,13 @@ export default function PlayerDetailPage() {
               return <DetailRow label="Tržní cena" value={shown} />;
             })()}
             <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />
-            <DetailRow label="Váha" value={player.physical?.weight ? `${player.physical.weight} kg` : "—"} />
+            <DetailRow
+              label="Váha"
+              value={player.physical?.weight
+                ? `${player.physical.weight} kg${player.body?.idealWeight ? ` (ideál ${player.body.idealWeight} kg)` : ""}`
+                : "—"}
+            />
+            {player.body?.bodyType && <DetailRow label="Postava" value={BODY_TYPE_LABEL[player.body.bodyType]} />}
             <DetailRow label="Noha" value={footLabel(player.physical?.preferredFoot)} />
             <DetailRow label="Strana" value={sideLabel(player.physical?.preferredSide)} />
           </div>
@@ -1037,11 +1043,11 @@ export default function PlayerDetailPage() {
         <div className="card p-4 sm:p-5">
           <SectionLabel>Dovednosti</SectionLabel>
           <div className="grid grid-cols-2 gap-x-4 gap-y-0">
-            <AttrRow label="Rychlost" value={player.skills?.speed ?? 0} importance={imp("speed")} />
+            <AttrRow label="Rychlost" value={withBody(player.skills?.speed ?? 0, player.body?.effects.speed)} note={bodyNote(player.body?.effects.speed, "nadváha")} importance={imp("speed")} />
             <AttrRow label="Technika" value={player.skills?.technique ?? 0} importance={imp("technique")} />
             <AttrRow label="Střelba" value={player.skills?.shooting ?? 0} importance={imp("shooting")} />
             <AttrRow label="Přihrávky" value={player.skills?.passing ?? 0} importance={imp("passing")} />
-            <AttrRow label="Hlavičky" value={player.skills?.heading ?? 0} importance={imp("heading")} />
+            <AttrRow label="Hlavičky" value={withBody(player.skills?.heading ?? 0, player.body?.effects.heading)} note={bodyNote(player.body?.effects.heading, "výška")} importance={imp("heading")} />
             <AttrRow label="Obrana" value={player.skills?.defense ?? 0} importance={imp("defense")} />
             <AttrRow label="Přehled" value={attrValue(player, "vision")} importance={imp("vision")} />
             <AttrRow label="Zkušenost" value={attrValue(player, "experience")} importance={imp("experience")} />
@@ -1055,8 +1061,13 @@ export default function PlayerDetailPage() {
           <div className="mt-4 pt-3 border-t border-gray-100">
             <div className="text-label text-micro uppercase tracking-wide mb-2">Fyzické</div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-0">
-              <AttrRow label="Výdrž" value={player.physical?.stamina ?? 0} importance={imp("stamina")} />
-              <AttrRow label="Síla" value={player.physical?.strength ?? 0} importance={imp("strength")} />
+              <AttrRow label="Výdrž" value={withBody(player.physical?.stamina ?? 0, player.body?.effects.stamina)} note={bodyNote(player.body?.effects.stamina, "nadváha")} importance={imp("stamina")} />
+              <AttrRow
+                label="Síla"
+                value={withBody(player.physical?.strength ?? 0, player.body?.effects.strength)}
+                note={bodyNote(player.body?.effects.strength, (player.body?.effects.strength ?? 0) > 0 ? "hmotnost" : "podváha")}
+                importance={imp("strength")}
+              />
               <AttrRow label="Náchylnost" value={player.physical?.injuryProneness ?? player.personality?.injuryProneness ?? 50} inverted />
             </div>
           </div>
@@ -2066,12 +2077,29 @@ function positionLabel(position: string): string {
   return POSITION_LABELS[position] ?? "této pozice";
 }
 
-function AttrRow({ label, value, inverted, importance }: {
+const BODY_TYPE_LABEL: Record<"thin" | "normal" | "athletic" | "stocky" | "obese", string> = {
+  thin: "Hubená", normal: "Normální", athletic: "Atletická", stocky: "Zavalitá", obese: "Obézní",
+};
+
+/** Vlastnost po úpravě postavou. Bez úpravy beze změny, upravená nikdy pod 1 (stejně jako engine). */
+function withBody(base: number, delta: number | undefined): number {
+  return delta ? Math.max(1, base + delta) : base;
+}
+
+/** Poznámka k vlastnosti, např. „−5 nadváha“. Znaménko minus, ne pomlčka. */
+function bodyNote(delta: number | undefined, reason: string): string | undefined {
+  if (!delta) return undefined;
+  return `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ${reason}`;
+}
+
+function AttrRow({ label, value, inverted, importance, note }: {
   label: string;
   value: number;
   inverted?: boolean;
   /** Váha atributu na hráčově pozici — řídí zvýraznění. */
   importance?: AttrImportance;
+  /** Úprava postavou, např. „−5 nadváha“ (detail hráče, pole body). */
+  note?: string;
 }) {
   const colorValue = inverted ? 100 - value : value;
   const isKey = importance === "key";
@@ -2081,9 +2109,12 @@ function AttrRow({ label, value, inverted, importance }: {
         isKey ? "-mx-2 px-2 bg-pitch-50/70 rounded border-b-pitch-100" : ""
       }`}
     >
-      <span className={`text-sm flex items-center gap-1.5 ${isKey ? "text-pitch-700 font-bold" : "text-ink-light"}`}>
-        {isKey && <span className="text-pitch-500 text-micro leading-none" aria-hidden>●</span>}
-        {label}
+      <span className="flex flex-col">
+        <span className={`text-sm flex items-center gap-1.5 ${isKey ? "text-pitch-700 font-bold" : "text-ink-light"}`}>
+          {isKey && <span className="text-pitch-500 text-micro leading-none" aria-hidden>●</span>}
+          {label}
+        </span>
+        {note && <span className={`text-sm ${note.startsWith("+") ? "text-pitch-500" : "text-card-red"}`}>{note}</span>}
       </span>
       <span className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs font-heading font-bold tabular-nums ${attrBg(colorValue)}`}>
         {value}
