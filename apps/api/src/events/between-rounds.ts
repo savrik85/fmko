@@ -60,6 +60,8 @@ interface EventContext {
   reputation: number;
   lastMatchWon: boolean | null;
   round: number;
+  /** Podíl tréninků, na které hráč chodí (0–1), po indexech kádru. Chybí = všichni stejně. */
+  trainingAttendance?: ReadonlyArray<number>;
 }
 
 const EVENT_RULES: EventRule[] = [
@@ -133,7 +135,9 @@ const EVENT_RULES: EventRule[] = [
     evaluate: (ctx) => {
       const candidates = ctx.squad
         .map((p, i) => ({ player: p, index: i }))
-        .filter((x) => x.player.patriotism <= 8 && x.player.morale < 40);
+        // Patriotismus je na škále 0–100. Dřív tu byl práh 8 ze staré škály 0–20, kterému
+        // nevyhověl nikdo (na produkci je minimum 13), takže hráč nikdy nechtěl odejít.
+        .filter((x) => x.player.patriotism <= 40 && x.player.morale < 40);
       if (candidates.length === 0) return null;
       const pick = ctx.rng.pick(candidates);
       return {
@@ -149,12 +153,26 @@ const EVENT_RULES: EventRule[] = [
     emoji: "\u{1F915}",
     baseProb: 0.05,
     evaluate: (ctx) => {
-      const idx = ctx.rng.int(0, ctx.squad.length - 1);
+      // Zranit se může jen ten, kdo na tréninky chodí, a křehký hráč častěji. Dřív se
+      // vybíral kdokoli z kádru a šance byla náchylnost / 20 (stará škála 0–20), takže
+      // vycházela ≥ 1 u každého s náchylností nad 20 a nic nerozlišovala.
+      const weights = ctx.squad.map((p, i) =>
+        (0.25 + p.injuryProneness / 100) * (ctx.trainingAttendance?.[i] ?? 1));
+      const total = weights.reduce((a, b) => a + b, 0);
+      if (total <= 0) return null;
+      let roll = ctx.rng.random() * total;
+      let idx = weights.length - 1;
+      for (let i = 0; i < weights.length; i++) {
+        roll -= weights[i];
+        if (roll <= 0) { idx = i; break; }
+      }
       const player = ctx.squad[idx];
+      const meanProneness = ctx.squad.reduce((s, p) => s + p.injuryProneness, 0) / ctx.squad.length;
       const popis = ctx.rng.pick(POPISY_ZRANENI_TRENINK);
       const duration = ctx.rng.int(1, 4);
       return {
-        prob: player.injuryProneness / 20,
+        // Kádr skleněných mužů se zraní častěji, odolný kádr zhruba o polovinu méně.
+        prob: Math.min(1, meanProneness / 50),
         description: `${player.firstName} ${player.lastName} si na tréninku přivodil ${popis}. Bude chybět ${duration} ${duration === 1 ? "kolo" : duration < 5 ? "kola" : "kol"}.`,
         effect: { type: "injury", playerIndex: idx, duration, popisZraneni: popis },
       };
@@ -166,7 +184,8 @@ const EVENT_RULES: EventRule[] = [
     emoji: "\u{1F4A2}",
     baseProb: 0.04,
     evaluate: (ctx) => {
-      const hotHeads = ctx.squad.filter((p) => p.temper >= 14);
+      // Škála 0–100; práh 14 ze staré škály 0–20 dělal horkou hlavu z 87 % hráčů.
+      const hotHeads = ctx.squad.filter((p) => p.temper >= 70);
       if (hotHeads.length < 2) return null;
       const a = ctx.rng.pick(hotHeads);
       const b = ctx.rng.pick(hotHeads.filter((p) => p !== a));
@@ -258,8 +277,9 @@ export function generateBetweenRoundEvents(
   lastMatchWon: boolean | null,
   round: number,
   district?: string,
+  trainingAttendance?: ReadonlyArray<number>,
 ): GameEvent[] {
-  const ctx: EventContext = { rng, squad, budget, reputation, lastMatchWon, round };
+  const ctx: EventContext = { rng, squad, budget, reputation, lastMatchWon, round, trainingAttendance };
   const events: GameEvent[] = [];
   const targetCount = rng.int(1, 3);
 
