@@ -42,6 +42,7 @@ export interface MatchPlayer {
   clutch: number;       // hidden from UI
   injuryProneness?: number; // 0-100, váží výběr zraněného v simulaci (default 50)
   age?: number; // délka zranění po zápase (starší hráč má častěji vážnější variantu)
+  form?: number; // −1 až +1 z posledních hodnocení proti vlastnímu průměru (engine/form.ts), chybí = 0
   // Positioning
   preferredFoot: PreferredFoot;
   preferredSide: PreferredSide;

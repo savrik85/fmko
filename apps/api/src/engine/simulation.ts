@@ -16,6 +16,7 @@ import type {
   Weather,
 } from "./types";
 import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor, TACTIC_MODS, effMod } from "./tactics";
+import { MATCH_DAY_SWING, teamFormFactor } from "./form";
 import { squadChemistryFactor } from "./squad-chemistry";
 import { hardnessMods, hardEff, intimidationPenalty, type Hardness } from "./hardness";
 import { ruleMatches, pendingPlannedSubs, plannedSubPlayers, type EngineMatchPlanRule } from "./match-plan";
@@ -675,9 +676,10 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     [away.teamId, new Set<string>()],
   ]);
 
-  // Match-day form: random factor 0.75-1.25 applied to attack power
-  const homeForm = 0.75 + rng.random() * 0.50;
-  const awayForm = 0.75 + rng.random() * 0.50;
+  // Forma dne: náhodný výkyv ±15 % krát forma sestavy z posledních zápasů (±10 %).
+  // Dřív jen kostka 0,75–1,25 a nic jiného (engine/form.ts).
+  const homeForm = (1 - MATCH_DAY_SWING + rng.random() * 2 * MATCH_DAY_SWING) * teamFormFactor(home.lineup);
+  const awayForm = (1 - MATCH_DAY_SWING + rng.random() * 2 * MATCH_DAY_SWING) * teamFormFactor(away.lineup);
 
   // Accumulate per-minute possession to compute final 0-100 figure
   let homePossSum = 0;

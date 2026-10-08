@@ -23,6 +23,7 @@ import {parseStoredBench, benchColumn} from "../lib/lineup-bench";
 import {typZraneniZPopisu, zavaznostZeDnu} from "../injuries/injury-types";
 import {matchInjuryDays} from "../injuries/injury-generator";
 import {seedFromString} from "../lib/seed";
+import {FORM_BASELINE, playerFormFromRatings} from "../engine/form";
 
 export interface MatchRunResult {
     matchId: string;
@@ -1747,6 +1748,7 @@ export async function buildMatchPlayers(
             clutch: personality.clutch ?? 50,
             injuryProneness: physical.injuryProneness ?? personality.injuryProneness ?? 50,
             age: (row.age as number) ?? 25,
+            form: 0, // doplní se z posledních hodnocení níž
             preferredFoot: physical.preferredFoot ?? "right",
             preferredSide: physical.preferredSide ?? "center",
             condition: lifeContext.condition ?? 100,
@@ -1820,6 +1822,33 @@ export async function buildMatchPlayers(
 
     const matchSquadIds = ordered.map((r) => r.id as string);
     const inSquad = new Set(matchSquadIds);
+
+    // Forma z posledních zápasů (engine/form.ts). Velkokluby z poháru v match_player_stats
+    // nejsou, dostanou neutrální 0. Výpadek dotazu formu jen vynechá, zápas se hraje dál.
+    if (matchSquadIds.length > 0) {
+        const placeholders = matchSquadIds.map(() => "?").join(",");
+        const ratingRows = await db.prepare(
+            `SELECT player_id, rating FROM (
+               SELECT player_id, rating,
+                      ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY created_at DESC) AS rn
+               FROM match_player_stats
+               WHERE player_id IN (${placeholders}) AND minutes_played >= 20
+             ) WHERE rn <= ${FORM_BASELINE} ORDER BY player_id, rn`
+        ).bind(...matchSquadIds).all<{ player_id: string; rating: number }>()
+            .catch((e) => { logger.warn({module: "match-runner", teamId}, "load player form", e); return { results: [] as { player_id: string; rating: number }[] }; });
+        const ratingsById = new Map<string, number[]>();
+        for (const r of ratingRows.results) {
+            const list = ratingsById.get(r.player_id);
+            if (list) list.push(r.rating);
+            else ratingsById.set(r.player_id, [r.rating]);
+        }
+        for (const p of players) {
+            const dbId = idMap.get(p.id);
+            const ratings = dbId ? ratingsById.get(dbId) : undefined;
+            if (ratings) p.form = playerFormFromRatings(ratings);
+        }
+    }
+
     return {
         players, idMap, positionMap, absentNames: absentInfo,
         matchSquadIds,
