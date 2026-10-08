@@ -29,6 +29,7 @@ import { getDistrictDataFromDB } from "../data/districts";
 import { FIRSTNAMES } from "../data/czech-names";
 import { deriveLicenceLevel, type ManagerBackstory } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { playerBodyView } from "../generators/physicals";
 import { updateSessionTeamId } from "../auth/session";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
 
@@ -1138,6 +1139,8 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     loan,
     skills,
     physical,
+    // Počítá se až ze zamlžených hodnot: u cizího hráče nesmí prozradit přesnou váhu.
+    body: playerBodyView(physical),
     personality,
     lifeContext: vystupniZivot,
     avatar: JSON.parse(row.avatar as string),
