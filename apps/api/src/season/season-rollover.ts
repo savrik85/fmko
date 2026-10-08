@@ -323,9 +323,14 @@ export async function rolloverAllLeagues(
         ).all<{ id: string }>()
           .catch((e) => { logger.warn({ module: "season-rollover" }, "load u21 teams for maturation", e); return { results: [] as { id: string }[] }; });
 
+        const { growYoungPlayers } = await import("./body-drift");
         for (const t of u21Tymy.results) {
           const vyrostli = await dospejMladeHrace(db, t.id);
           if (vyrostli.length > 0) await oznamDospivani(db, t.id, vyrostli);
+          // Dorost do 18 let vyroste (postava, část 2).
+          const gd = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(t.id).first<{ game_date: string | null }>()
+            .catch((e) => { logger.warn({ module: "season-rollover" }, "u21 growth game_date", e); return null; });
+          await growYoungPlayers(db, t.id, gd?.game_date ?? new Date().toISOString());
         }
         logger.info({ module: "season-rollover" }, `dospívání dorostu: ${u21Tymy.results.length} týmů`);
       } catch (e) {

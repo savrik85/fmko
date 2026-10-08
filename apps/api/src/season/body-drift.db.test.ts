@@ -94,3 +94,46 @@ describe("processDailyBodyDrift", () => {
     expect(msgs!.n).toBe(1);
   });
 });
+
+describe("léto a růst dorostu", () => {
+  it("léto: starší piják s rusty +3 kg, dříč s fit −1,5 kg, záznam summer", async () => {
+    const { summerWeightStatements } = await import("./body-drift");
+    await db.batch([
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('s1', 't2', 'Petr', 'Pivař', 32, ?, '{}', '{}')")
+        .bind(JSON.stringify({ height: 180, weight: 80 })),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('s2', 't2', 'Karel', 'Dříč', 24, ?, '{}', '{}')")
+        .bind(JSON.stringify({ height: 180, weight: 80 })),
+    ]);
+    const stmts = summerWeightStatements(db, {
+      teamId: "t2", gameDate: "2026-11-01",
+      players: [{ id: "s1", age: 32, alcohol: 80, weight: 80 }, { id: "s2", age: 24, alcohol: 20, weight: 80 }],
+      events: new Map([["s1", "rusty"], ["s2", "fit"]]),
+    });
+    await db.batch(stmts);
+    expect(await weightOf("s1")).toBe(83);
+    expect(await weightOf("s2")).toBe(78.5);
+    const logs = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE team_id = 't2' AND source = 'summer'").first<{ n: number }>();
+    expect(logs!.n).toBe(2);
+  });
+
+  it("růst: sedmnáctiletý vyroste o 2–4 cm se stejným BMI, dvacetiletý ne", async () => {
+    const { growYoungPlayers } = await import("./body-drift");
+    await db.batch([
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('y17', 't3', 'Jan', 'Mladý', 17, ?, '{}', '{}')")
+        .bind(JSON.stringify({ height: 175, weight: 70, bodyType: "normal" })),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES ('y20', 't3', 'Jan', 'Starší', 20, ?, '{}', '{}')")
+        .bind(JSON.stringify({ height: 175, weight: 70, bodyType: "normal" })),
+    ]);
+    const grown = await growYoungPlayers(db, "t3", "2026-11-01");
+    expect(grown).toBe(1);
+    const y17 = await db.prepare("SELECT physical FROM players WHERE id = 'y17'").first<{ physical: string }>();
+    const p = JSON.parse(y17!.physical);
+    expect(p.height).toBeGreaterThanOrEqual(177);
+    expect(p.height).toBeLessThanOrEqual(179);
+    expect(p.weight / (p.height / 100) ** 2).toBeCloseTo(70 / 1.75 ** 2, 1);
+    const y20 = await db.prepare("SELECT physical FROM players WHERE id = 'y20'").first<{ physical: string }>();
+    expect(JSON.parse(y20!.physical).height).toBe(175);
+    const logs = await db.prepare("SELECT COUNT(*) AS n FROM weight_log WHERE player_id = 'y17' AND source = 'growth'").first<{ n: number }>();
+    expect(logs!.n).toBe(1);
+  });
+});
