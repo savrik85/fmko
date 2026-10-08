@@ -5,6 +5,7 @@ import type { Player } from "@/lib/api";
 import { FaceAvatar } from "./face-avatar";
 import { nationalityFlag } from "@/lib/nationality";
 import { readableOnLight, bestTextOn } from "@/lib/team-color";
+import { formatKg } from "@/lib/player-attrs";
 
 interface RevealCardProps {
   player: Player;
@@ -223,7 +224,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
         <div className="text-sm text-ink">
           {player.age} let
           {player.physical?.height ? ` · ${player.physical.height} cm` : ""}
-          {player.physical?.weight ? ` · ${player.physical.weight} kg` : ""}
+          {player.physical?.weight ? ` · ${formatKg(player.physical.weight)} kg` : ""}
         </div>
         <div className="text-sm font-heading font-bold text-muted truncate">{player.lifeContext?.occupation ?? ""}</div>
       </div>

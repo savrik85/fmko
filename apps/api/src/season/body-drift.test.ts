@@ -69,15 +69,20 @@ describe("denní změna váhy: měsíční cíle ze spec", () => {
 });
 
 describe("naturalWeight", () => {
-  it("ideál × postava, od 28 let +0,5 % za rok", () => {
-    expect(naturalWeight(180, "athletic", 25)).toBeCloseTo(76.14, 1);
-    expect(naturalWeight(180, "stocky", 25)).toBeCloseTo(87.56, 1);
-    expect(naturalWeight(180, "athletic", 38)).toBeCloseTo(76.14 * 1.05, 1);
+  it("vlastní přirozená váha hráče (naturalBase) má přednost, od 28 let +0,5 % za rok", () => {
+    expect(naturalWeight({ naturalBase: 90, height: 180, bodyType: "athletic" }, 25)).toBe(90);
+    expect(naturalWeight({ naturalBase: 90 }, 38)).toBeCloseTo(94.5, 5);
   });
 
-  it("bez výšky nebo postavy null", () => {
-    expect(naturalWeight(0, "normal", 25)).toBeNull();
-    expect(naturalWeight(180, undefined, 25)).toBeNull();
+  it("bez naturalBase ideál × postava", () => {
+    expect(naturalWeight({ height: 180, bodyType: "athletic" }, 25)).toBeCloseTo(76.14, 1);
+    expect(naturalWeight({ height: 180, bodyType: "stocky" }, 25)).toBeCloseTo(87.56, 1);
+    expect(naturalWeight({ height: 180, bodyType: "athletic" }, 38)).toBeCloseTo(76.14 * 1.05, 1);
+  });
+
+  it("bez naturalBase, výšky nebo postavy null", () => {
+    expect(naturalWeight({ height: 0, bodyType: "normal" }, 25)).toBeNull();
+    expect(naturalWeight({ height: 180 }, 25)).toBeNull();
   });
 });
 

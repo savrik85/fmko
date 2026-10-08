@@ -1041,7 +1041,7 @@ export default function PlayerDetailPage() {
             {player.body?.trend30d != null && (
               <DetailRow
                 label="Za měsíc"
-                value={<span className={weightTrendColor(player.body.trend30d, player.physical?.weight, player.body.idealWeight)}>{formatKgChange(player.body.trend30d)}</span>}
+                value={<span className={weightChangeColor(player.body.trend30d, player.body.weightCategory ?? null)}>{formatKgChange(player.body.trend30d)}</span>}
               />
             )}
             {player.body?.bodyType && <DetailRow label="Postava" value={BODY_TYPE_LABEL[player.body.bodyType]} />}
@@ -1131,7 +1131,7 @@ export default function PlayerDetailPage() {
           <ConditionLog teamId={teamId} playerId={playerId} />
         </div>
       )}
-      {player.team_id === teamId && <WeightLog teamId={teamId} playerId={playerId} />}
+      {isOwnPlayer && teamId && <WeightLog teamId={teamId} playerId={playerId} category={player.body?.weightCategory ?? null} />}
 
       {/* ═══ Historie klubů ═══ */}
       {contracts.length > 0 && (
@@ -2261,21 +2261,23 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
   );
 }
 
+type WeightCategoryKey = "under" | "ideal" | "muscular" | "over" | "obese";
+
 /**
- * Barva trendu váhy: červeně, když hráč přibírá a je nad ideálem víc než o toleranci (4 kg),
- * zeleně, když se nad ideálem vrací dolů. Jinak neutrálně.
+ * Barva změny váhy podle toho, kam hráč míří: zeleně k ideálu (podváha přibírá, nadváha hubne),
+ * červeně od ideálu (nadváha přibírá, podváha hubne). U ideálního a svalnatého neutrálně.
  */
-function weightTrendColor(trend: number, weight: number | undefined, ideal: number | null | undefined): string {
-  const over = weight != null && ideal != null ? weight - ideal : 0;
-  if (trend > 0 && over > 4) return "text-card-red";
-  if (trend < 0 && over > 0) return "text-pitch-500";
-  return "";
+function weightChangeColor(change: number, category: WeightCategoryKey | null): string {
+  if (change === 0 || !category) return "text-muted";
+  const towardIdeal = (category === "under" && change > 0) || ((category === "over" || category === "obese") && change < 0);
+  const awayFromIdeal = (category === "under" && change < 0) || ((category === "over" || category === "obese") && change > 0);
+  return towardIdeal ? "text-pitch-500" : awayFromIdeal ? "text-card-red" : "text-muted";
 }
 
 const WEIGHT_SOURCE_LABEL: Record<string, string> = { weekly: "Týden", summer: "Léto", growth: "Růst" };
 
 /** Váha proti ideálu slovy. Hranice počítá API (playerBodyView), tady jen popisek a barva. */
-const WEIGHT_CATEGORY: Record<"under" | "ideal" | "muscular" | "over" | "obese", { label: string; color: string }> = {
+const WEIGHT_CATEGORY: Record<WeightCategoryKey, { label: string; color: string }> = {
   under: { label: "podváha", color: "text-gold-600" },
   ideal: { label: "ideální", color: "text-pitch-500" },
   // Kila nad ideálem nese síla (API muscleToleranceKg), postih za ně není.
@@ -2287,7 +2289,7 @@ const WEIGHT_CATEGORY: Record<"under" | "ideal" | "muscular" | "over" | "obese",
 interface WeightLogEntry { id: number; gameDate: string; weight: number; source: string }
 
 /** Vývoj váhy: týdenní záznamy, léto a růst (postava, část 2). */
-function WeightLog({ teamId, playerId }: { teamId: string; playerId: string }) {
+function WeightLog({ teamId, playerId, category }: { teamId: string; playerId: string; category: WeightCategoryKey | null }) {
   const [entries, setEntries] = useState<WeightLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -2308,7 +2310,7 @@ function WeightLog({ teamId, playerId }: { teamId: string; playerId: string }) {
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-xs text-muted uppercase">
+            <tr className="border-b border-gray-100 text-sm text-muted uppercase">
               <th className="text-left py-2 pr-3 font-heading">Kdy</th>
               <th className="text-left py-2 pr-3 font-heading">Zdroj</th>
               <th className="text-right py-2 pr-3 font-heading">Váha</th>
@@ -2325,7 +2327,7 @@ function WeightLog({ teamId, playerId }: { teamId: string; playerId: string }) {
                   <td className="py-1.5 pr-3 tabular-nums text-muted whitespace-nowrap">{date}</td>
                   <td className="py-1.5 pr-3">{WEIGHT_SOURCE_LABEL[entry.source] ?? entry.source}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums font-heading font-bold">{formatKg(entry.weight)} kg</td>
-                  <td className={`py-1.5 text-right tabular-nums whitespace-nowrap ${change === null || change === 0 ? "text-muted" : change > 0 ? "text-card-red" : "text-pitch-500"}`}>
+                  <td className={`py-1.5 text-right tabular-nums whitespace-nowrap ${change === null ? "text-muted" : weightChangeColor(change, category)}`}>
                     {change === null ? "" : formatKgChange(change)}
                   </td>
                 </tr>

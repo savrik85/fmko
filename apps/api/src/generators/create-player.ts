@@ -75,7 +75,7 @@ export interface CreatedPlayer {
   experience: number;
   physical: {
     stamina: number; strength: number; injuryProneness: number;
-    height: number; weight: number; bodyType: BodyType;
+    height: number; weight: number; bodyType: BodyType; naturalBase: number; growthLeft?: number;
     preferredFoot: PlayerIdentity["preferredFoot"]; preferredSide: PlayerIdentity["preferredSide"];
   };
   personality: {
@@ -111,7 +111,7 @@ export function createPlayer(rng: Rng, opts: CreatePlayerOptions): CreatedPlayer
       stamina: generated.skills.stamina,
       strength: generated.skills.strength,
       injuryProneness: identity.injuryProneness,
-      ...generateHeightWeight(rng, position, identity.bodyType),
+      ...generateHeightWeight(rng, position, identity.bodyType, age),
       preferredFoot: identity.preferredFoot,
       preferredSide: identity.preferredSide,
     },

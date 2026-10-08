@@ -167,3 +167,35 @@ describe("svaly podle síly", () => {
     expect(bodyEffects({ height: 190, weight: 70, strength: 90 }).strength).toBe(-5);
   });
 });
+
+describe("generateHeightWeight: výška a dorost", () => {
+  it("výška má normální rozložení: průměr postu drží, občas obr přes 195 cm, nikdy přes 205", () => {
+    const rng = createRng(11);
+    const heights = Array.from({ length: 4000 }, () => generateHeightWeight(rng, "GK", "normal").height);
+    const mean = heights.reduce((a, b) => a + b, 0) / heights.length;
+    expect(mean).toBeGreaterThan(184);
+    expect(mean).toBeLessThan(186);
+    expect(heights.some((h) => h >= 196)).toBe(true);
+    expect(Math.max(...heights)).toBeLessThanOrEqual(205);
+    expect(Math.min(...heights)).toBeGreaterThanOrEqual(163);
+  });
+
+  it("dorostenec začíná nižší o zbývající růst, dospělý roste nemá", () => {
+    const rng = createRng(12);
+    const youth = generateHeightWeight(rng, "MID", "normal", 16);
+    expect(youth.growthLeft).toBe(5);
+    const adult = generateHeightWeight(rng, "MID", "normal", 25);
+    expect(adult.growthLeft).toBeUndefined();
+    const young = Array.from({ length: 2000 }, () => generateHeightWeight(rng, "MID", "normal", 16).height);
+    expect(young.reduce((a, b) => a + b, 0) / young.length).toBeCloseTo(171, 0);
+  });
+
+  it("přirozená váha nového hráče je ideál × postava, váha kolem ní ± 3 kg", () => {
+    const rng = createRng(13);
+    for (let i = 0; i < 200; i++) {
+      const g = generateHeightWeight(rng, "DEF", "stocky");
+      expect(g.naturalBase).toBeCloseTo(idealWeight(g.height) * 1.15, 1);
+      expect(Math.abs(g.weight - g.naturalBase)).toBeLessThanOrEqual(3.5);
+    }
+  });
+});
