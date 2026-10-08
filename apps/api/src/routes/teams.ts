@@ -1138,6 +1138,20 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     };
   }
 
+  // Změna váhy za ~měsíc (postava, část 2). Jen u vlastních hráčů, cizí profil je zamlžený.
+  let trend30d: number | null = null;
+  if (!cizi && typeof physical.weight === "number") {
+    const gd = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId)
+      .first<{ game_date: string | null }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "game_date for weight trend", e); return null; });
+    const today = (gd?.game_date ?? new Date().toISOString()).slice(0, 10);
+    const { weightTrend } = await import("../season/body-drift");
+    const log = await c.env.DB.prepare("SELECT game_date, weight FROM weight_log WHERE player_id = ? ORDER BY game_date DESC LIMIT 12")
+      .bind(row.id as string).all<{ game_date: string; weight: number }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "weight log for trend", e); return { results: [] as { game_date: string; weight: number }[] }; });
+    trend30d = weightTrend(physical.weight, log.results.map((r) => ({ gameDate: r.game_date, weight: r.weight })), today);
+  }
+
   return c.json({
     ...ocisteny.row,
     isOwn,
@@ -1146,7 +1160,7 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     skills,
     physical,
     // Počítá se až ze zamlžených hodnot: u cizího hráče nesmí prozradit přesnou váhu.
-    body: playerBodyView(physical),
+    body: { ...playerBodyView(physical), trend30d },
     personality,
     lifeContext: vystupniZivot,
     avatar: JSON.parse(row.avatar as string),
@@ -3008,6 +3022,33 @@ teamsRouter.get("/:id/pub-session", async (c) => {
       createdAt: session.created_at,
     },
   });
+});
+
+// GET /api/teams/:id/players/:playerId/weight-log — vývoj váhy (postava, část 2), jen vlastní hráči.
+// Vlastní = hráč mého týmu, mé U21 nebo můj hráč na hostování. Posledních 12 záznamů.
+teamsRouter.get("/:id/players/:playerId/weight-log", async (c) => {
+  const playerId = c.req.param("playerId");
+  const player = await c.env.DB.prepare("SELECT team_id, loan_from_team_id FROM players WHERE id = ?").bind(playerId)
+    .first<{ team_id: string | null; loan_from_team_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "weight-log player", e); return null; });
+  if (!player?.team_id) return c.json({ error: "Player not found" }, 404);
+
+  const { tymyDivaka } = await import("../auth/divak");
+  const divak = await tymyDivaka(c);
+  let own = divak.has(player.team_id) || (!!player.loan_from_team_id && divak.has(player.loan_from_team_id));
+  if (!own) {
+    const parent = await c.env.DB.prepare("SELECT parent_team_id FROM teams WHERE id = ? AND team_type = 'u21'").bind(player.team_id)
+      .first<{ parent_team_id: string | null }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "weight-log u21 parent", e); return null; });
+    own = !!parent?.parent_team_id && divak.has(parent.parent_team_id);
+  }
+  if (!own) return c.json({ error: "Not your player" }, 403);
+
+  const rows = await c.env.DB.prepare(
+    "SELECT id, game_date, weight, source FROM weight_log WHERE player_id = ? ORDER BY game_date DESC, id DESC LIMIT 12",
+  ).bind(playerId).all<{ id: number; game_date: string; weight: number; source: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "load weight log", e); return { results: [] as { id: number; game_date: string; weight: number; source: string }[] }; });
+  return c.json({ entries: rows.results.map((r) => ({ id: r.id, gameDate: r.game_date, weight: r.weight, source: r.source })) });
 });
 
 // GET /api/teams/:id/players/:playerId/condition-log — vývoj kondice (timeline)
