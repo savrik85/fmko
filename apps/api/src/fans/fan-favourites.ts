@@ -161,7 +161,10 @@ async function nactiKadr(db: D1Database, teamId: string): Promise<HodnocenyHrac[
   const rows = await db
     .prepare(
       `SELECT p.id, p.first_name, p.last_name, p.nickname, p.position, p.age,
-              p.overall_rating, p.personality, p.experience, p.residence,
+              p.overall_rating, p.personality, p.residence,
+              -- Zkušenost roste odehranými minutami ve skills. Sloupec players.experience
+              -- se po vložení hráče nikdy nemění, takže pamětníci dřív hodnotili šum.
+              COALESCE(json_extract(p.skills, '$.experience'), 0) AS experience,
               v.name AS obec,
               COALESCE(ps.goals, 0) AS goals, COALESCE(ps.assists, 0) AS assists,
               COALESCE(ps.appearances, 0) AS appearances

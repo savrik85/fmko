@@ -572,8 +572,10 @@ export function simulateTraining(
     }
   }
 
-  // Veteran decay: 37+ lose physical attributes (was 34+)
-  for (const [playerIndex] of attendanceCounts) {
+  // Veteran decay: 37+ lose physical attributes (was 34+).
+  // Stárnou všichni, nejen ti, kdo přišli. Dřív se úbytek počítal jen z přítomných,
+  // takže kdo na trénink nechodil, fyzicky nestárl.
+  for (let playerIndex = 0; playerIndex < squad.length; playerIndex++) {
     const player = squad[playerIndex];
     if (player.age >= 37) {
       const decayChance = (player.age - 36) * 0.01;
