@@ -46,6 +46,19 @@ interface TacticDef {
 
 const OUTFIELD: Pos[] = ["DEF", "MID", "FWD"];
 
+// PRAHY = MEDIÁN TÝMŮ. Spočítáno z produkce 2026-10-08 (82 týmů, sestava = nejlepší hráči
+// na postu: 2 útočníci, 4 záložníci, 4 obránci, 10 hráčů v poli). Průměrný tým tak taktiku
+// zvládne na 1,0, slabý spadne k 0,7 a nejlepší dojdou ke stropu 1,15.
+//
+// Dřív tu byly prahy 55–65, jenže medián je u dovedností 29–39. Poměr se ořízl na 0,6
+// a fit na 0,7 skoro každému: taktika fungovala jen ze 70 % a „sedí kádru" nic neznamenalo.
+// Pracovitost a agresivita jsou z povahy a mají jiný rozptyl (medián 48 a 56).
+//
+// Percentily pro případné přeladění (p10 / p50 / p90):
+//   útočníci střelba 22/39/67, rychlost 23/37/62, hlavičky 17/29/55, síla 17/30/52
+//   obránci obrana 24/37/61, síla 22/35/52
+//   záložníci technika 20/31/57, přihrávky 25/36/60, přehled 25/39/53
+//   brankář hlavičky 11/27/45; hráči v poli výdrž 20/37/56, pracovitost 41/48/56, agresivita 46/56/64
 export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
   balanced: {
     requirements: [],
@@ -53,39 +66,39 @@ export const TACTIC_CATALOG: Record<Tactic, TacticDef> = {
   },
   offensive: {
     requirements: [
-      { skill: "shooting", positions: ["FWD"], threshold: 60, weight: 1.0 },
-      { skill: "speed", positions: ["FWD"], threshold: 60, weight: 0.8 },
+      { skill: "shooting", positions: ["FWD"], threshold: 39, weight: 1.0 },
+      { skill: "speed", positions: ["FWD"], threshold: 37, weight: 0.8 },
     ],
     formationSynergy: { "4-3-3": 1.05, "3-4-3": 1.08, "4-5-1": 0.93, "3-5-2": 1.0, "5-3-2": 0.95 },
   },
   defensive: {
     requirements: [
-      { skill: "defense", positions: ["DEF"], threshold: 60, weight: 1.0 },
-      { skill: "strength", positions: ["DEF"], threshold: 55, weight: 0.6 },
+      { skill: "defense", positions: ["DEF"], threshold: 37, weight: 1.0 },
+      { skill: "strength", positions: ["DEF"], threshold: 35, weight: 0.6 },
     ],
     formationSynergy: { "4-5-1": 1.06, "5-3-2": 1.05, "3-5-2": 0.98, "3-4-3": 0.92, "4-3-3": 0.95 },
   },
   long_ball: {
     requirements: [
-      { skill: "heading", positions: ["FWD"], threshold: 60, weight: 1.0 },
-      { skill: "strength", positions: ["FWD"], threshold: 55, weight: 0.7 },
-      { skill: "heading", positions: ["GK"], threshold: 50, weight: 0.3 },
+      { skill: "heading", positions: ["FWD"], threshold: 29, weight: 1.0 },
+      { skill: "strength", positions: ["FWD"], threshold: 30, weight: 0.7 },
+      { skill: "heading", positions: ["GK"], threshold: 27, weight: 0.3 },
     ],
     formationSynergy: { "4-4-2": 1.05, "5-3-2": 1.05, "3-5-2": 1.03, "3-4-3": 0.92, "4-5-1": 0.95 },
   },
   possession: {
     requirements: [
-      { skill: "technique", positions: ["MID"], threshold: 65, weight: 1.0 },
-      { skill: "passing", positions: ["MID"], threshold: 65, weight: 1.0 },
-      { skill: "vision", positions: ["MID"], threshold: 60, weight: 0.7 },
+      { skill: "technique", positions: ["MID"], threshold: 31, weight: 1.0 },
+      { skill: "passing", positions: ["MID"], threshold: 36, weight: 1.0 },
+      { skill: "vision", positions: ["MID"], threshold: 39, weight: 0.7 },
     ],
     formationSynergy: { "4-3-3": 1.08, "3-5-2": 1.06, "4-5-1": 1.04, "3-4-3": 1.03, "5-3-2": 0.92 },
   },
   pressing: {
     requirements: [
-      { skill: "stamina", positions: OUTFIELD, threshold: 65, weight: 1.0 },
-      { skill: "workRate", positions: OUTFIELD, threshold: 60, weight: 0.8 },
-      { skill: "aggression", positions: OUTFIELD, threshold: 55, weight: 0.5 },
+      { skill: "stamina", positions: OUTFIELD, threshold: 37, weight: 1.0 },
+      { skill: "workRate", positions: OUTFIELD, threshold: 48, weight: 0.8 },
+      { skill: "aggression", positions: OUTFIELD, threshold: 56, weight: 0.5 },
     ],
     formationSynergy: { "4-3-3": 1.05, "3-5-2": 1.04, "4-5-1": 0.95, "5-3-2": 0.95 },
     drainMod: 1.3,
