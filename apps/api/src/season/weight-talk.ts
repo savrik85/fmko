@@ -21,15 +21,20 @@ const TREND_TO_TALK_KG = 1.5;
 
 export type WeightTalkOutcome = "pledge" | "refused";
 
+/** Slova, která o váze mluví sama o sobě. „Vážím si tě“ ani „slovo má váhu“ to nejsou. */
 const WEIGHT_PATTERNS: RegExp[] = [
-  /hubn/, /\bvah(a|y|u|ou)\b/, /\bvazi/, /\bkil(o|a|u|ama)?\b/, /bric?h|bris/, /tlust|tloust/, /nadvah/,
-  /\bpiv/, /hospod/, /jidelni/, /\bdiet/,
+  /hubn/, /(?<!\bma |\bmit |\bnema )\bvah(a|y|u|ou)\b/, /\bvaze\b/, /\bvaz(i|is|ite|it)\b(?!\s+si\b)/,
+  /\bkil(o|a|u|ama)?\b/, /bric?h|bris/, /tlust|tloust/, /nadvah/, /jidelni/, /\bdiet/,
 ];
+/** Pivo a hospoda jsou řeč o váze, jen když je trenér chce omezit. „Pojď na pivo“ není. */
+const PUB_PATTERNS: RegExp[] = [/\bpiv/, /\bhospod(a|y|u|e|ou|ach|ami)?\b/];
+const LIMIT_PATTERN = /\b(min|mene|omez\w*|nech\w*|prestan\w*|zadn\w*|bez|nepi\w*|vynech\w*|dost)\b/;
 
-/** Řeší trenér v textu váhu, hospodu nebo pivo? Bez diakritiky i s ní. */
+/** Řeší trenér v textu váhu, nebo chce omezit hospodu a pivo? Bez diakritiky i s ní. */
 export function detectWeightTalk(text: string): boolean {
   const normalized = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  return WEIGHT_PATTERNS.some((re) => re.test(normalized));
+  if (WEIGHT_PATTERNS.some((re) => re.test(normalized))) return true;
+  return PUB_PATTERNS.some((re) => re.test(normalized)) && LIMIT_PATTERN.test(normalized);
 }
 
 /** Šance, že hráč slíbí: disciplína a nálada pomáhají, vznětlivost škodí. 0,1–0,9. */
@@ -113,7 +118,7 @@ export async function handleWeightTalk(
   const topic = db.prepare(
     `UPDATE conversations SET ai_thread_state = json_set(
         CASE WHEN json_valid(ai_thread_state) THEN ai_thread_state ELSE '{}' END,
-        '$.weightTalk', json_object('outcome', ?, 'den', ?))
+        '$.weightTalk', json_object('outcome', ?, 'day', ?))
       WHERE id = ? AND team_id = ?`,
   ).bind(outcome, today, opts.convId, opts.teamId);
   await db.batch([update, topic]).catch((e) => logger.warn({ module: M }, "save weight talk", e));
@@ -124,12 +129,27 @@ export async function handleWeightTalk(
 export function weightTalkFromState(rawState: string | null | undefined, today: string): WeightTalkOutcome | undefined {
   if (!rawState) return undefined;
   try {
-    const state = JSON.parse(rawState) as { weightTalk?: { outcome?: string; den?: string } };
-    const talk = state.weightTalk;
-    if (!talk || talk.den !== today.slice(0, 10)) return undefined;
+    const state = JSON.parse(rawState) as { weightTalk?: { outcome?: string; day?: string } } | null;
+    const talk = state?.weightTalk;
+    if (!talk || talk.day !== today.slice(0, 10)) return undefined;
     return talk.outcome === "pledge" || talk.outcome === "refused" ? talk.outcome : undefined;
   } catch (e) {
     logger.warn({ module: M }, "parse thread state", e);
     return undefined;
+  }
+}
+
+/**
+ * Výsledek domluvy ze starého stavu vlákna, aby ho nový stav nezahodil. Bez něj hráč po první
+ * odpovědi zapomene, že slíbil nebo se urazil, a model může v dalších SMS slibovat naprázdno.
+ */
+export function carryWeightTalk(rawState: string | null | undefined): { weightTalk?: unknown } {
+  if (!rawState) return {};
+  try {
+    const state = JSON.parse(rawState) as { weightTalk?: unknown } | null;
+    return state && typeof state === "object" && state.weightTalk ? { weightTalk: state.weightTalk } : {};
+  } catch (e) {
+    logger.warn({ module: M }, "parse thread state for carry", e);
+    return {};
   }
 }

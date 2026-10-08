@@ -65,6 +65,22 @@ describe("konverzace začatá trenérem a téma incidentu", () => {
   });
 });
 
+describe("konverzace začatá trenérem a domluva o váze", () => {
+  const TALK = { weightTalk: { outcome: "refused", day: "2026-10-12" } };
+
+  it("pokračující i uzavřené vlákno si výsledek domluvy nese dál", async () => {
+    vi.mocked(generateCoachInitiatedReply).mockResolvedValue({ body: "Do toho ti nic není.", conversationComplete: false });
+    const open = db(TALK);
+    await zacni(open);
+    expect(JSON.parse(String(stavVlakna(open)))).toMatchObject({ awaiting: "coach", ...TALK });
+
+    vi.mocked(generateCoachInitiatedReply).mockResolvedValue({ body: "Do toho ti nic není.", conversationComplete: true });
+    const closed = db(TALK);
+    await zacni(closed);
+    expect(JSON.parse(String(stavVlakna(closed)))).toEqual(TALK);
+  });
+});
+
 describe("kabina", () => {
   it("mluvčí dostane jen veřejné znalosti", async () => {
     await replyInSquadGroup(jakoD1(db(null)), {}, { teamId: "tym-a", convId: "kabina", coachMessage: "Kdo ukradl dresy?" });
