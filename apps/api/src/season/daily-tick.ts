@@ -286,8 +286,14 @@ export async function executeDailyTick(
     }
   }
 
+  // Postava (část 2): které týmy tick trénuje a kdo dnes na tréninku byl. Denní změna
+  // váhy se spočítá až po hospodě, viz processDailyBodyDrift níž.
+  const bodyDriftTeams: string[] = [];
+  const trainedToday = new Map<string, "conditioning" | "other">();
+
   for (const team of teams.results) {
     const teamId = team.id as string;
+    bodyDriftTeams.push(teamId);
     // Trenér, vybavení a realizační tým visí na A-týmu — U21 nemá vlastní ani jedno.
     // Bez tohohle přesměrování trénoval dorost s výchozími hodnotami (trenér 40, vybavení 1,0),
     // tedy hůř než áčko, přestože právě u mládeže má rozvoj fungovat nejlíp.
@@ -771,6 +777,13 @@ export async function executeDailyTick(
           description: `Trénink: ${summary.attendedCount}/${summary.totalCount} hráčů, ${improvementsWithNames.length} zlepšení${restedPlayers.length > 0 ? `, ${restedPlayers.length} volno` : ""}`,
           data: summary,
         });
+
+        // Kdo dnes trénoval a jaký trénink, pro denní změnu váhy (bez náhody, nemění RNG).
+        for (const a of result.attendance) {
+          if (!a.attended) continue;
+          const pid = playersResult.results[a.playerIndex]?.id as string | undefined;
+          if (pid) trainedToday.set(pid, todayTrainingType === "conditioning" ? "conditioning" : "other");
+        }
       } catch (e) {
         logger.error({ module: "daily-tick" }, `training failed for team ${teamId}`, e);
       }
@@ -1098,6 +1111,17 @@ export async function executeDailyTick(
     if (r.sessionsCreated > 0) events.push({ type: "recovery", description: `Hospoda: ${r.sessionsCreated} session` });
   } catch (e) {
     logger.error({ module: "daily-tick" }, "pub sessions", e);
+  }
+
+  // ── Postava: denní změna váhy (po hospodě, ať se počítá i dnešní večer) ──
+  try {
+    const { processDailyBodyDrift } = await import("./body-drift");
+    const r = await processDailyBodyDrift(env.DB, { teamIds: bodyDriftTeams, trainedToday, gameDate: todayKey, isMonday: dayOfWeek === 1 });
+    if (r.updated > 0 || r.logged > 0) {
+      events.push({ type: "recovery", description: `Váha: ${r.updated} hráčů, ${r.logged} týdenních záznamů, ${r.sms} SMS` });
+    }
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "body drift", e);
   }
 
   // ── Naplánované hospodské akce trenérů (posezení, runda) — vyhodnotit po „odehrání" hospody ──
