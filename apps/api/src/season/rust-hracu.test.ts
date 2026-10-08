@@ -132,15 +132,27 @@ describe("výdrž neklesá hráčům, kteří chodí trénovat", () => {
   });
 
   it("kdo netrénuje, spadne z formy, ale ne pode dno", () => {
-    // Lajdák, který skoro nikdy nedorazí, ale začíná s vysokou výdrží.
+    // Lajdák, který skoro nikdy nedorazí, ale začíná s vysokou výdrží. Po večerech
+    // obsluhuje v hospodě, takže na večerní trénink chodí nejmíň, jak to jde (5 %).
     // Podlaha je 60 % stropu výdrže (90) = 54 — pod ni absencí spadnout nejde.
-    const lajdak = hrac(25);
-    const rec = lajdak as unknown as Record<string, number>;
-    rec.discipline = 1; rec.workRate = 1; rec.condition = 15; rec.alcohol = 95;
-    rec.stamina = 85;
-    odtrenuj([lajdak, ...Array.from({ length: 10 }, () => hrac(25))], 300, "technique", 3);
-    expect(rec.stamina).toBeLessThan(85);          // z formy vypadl
-    expect(rec.stamina).toBeGreaterThanOrEqual(53); // ale ne pode dno
+    //
+    // Průměr přes 20 seedů: jeden seed je hod mincí. Ztráta je 2 % za vynechaný trénink
+    // a pár tréninků, na které dorazí, ji zčásti vrátí, takže jednotlivé běhy končí
+    // mezi 77 a 89. Test na jednom seedu prošel nebo spadl podle toho, kolik náhody
+    // spotřebovaly výmluvy ostatních hráčů.
+    const finals: number[] = [];
+    for (let seed = 1; seed <= 20; seed++) {
+      const slacker = hrac(25);
+      const rec = slacker as unknown as Record<string, number>;
+      rec.discipline = 1; rec.workRate = 1; rec.condition = 15; rec.alcohol = 95;
+      rec.stamina = 85;
+      (slacker as unknown as Record<string, unknown>).occupation = "Barman";
+      odtrenuj([slacker, ...Array.from({ length: 10 }, () => hrac(25))], 300, "technique", seed);
+      finals.push(rec.stamina);
+    }
+    const average = finals.reduce((a, b) => a + b, 0) / finals.length;
+    expect(average).toBeLessThan(85);                       // z formy vypadl
+    expect(Math.min(...finals)).toBeGreaterThanOrEqual(53); // ale ne pode dno
   });
 });
 

@@ -9,6 +9,7 @@ import { ratingWeightsFor, coachingTrainingMul, youthTrainingMul, disciplineAtte
 import { pokusuZaTalent } from "../skills/talent";
 import type { GeneratedPlayer } from "../generators/player";
 import { TRENINK_SITUACE } from "../incidents/nastaveni";
+import { occupationTrainingAttendance } from "../generators/occupations";
 
 /**
  * Hráč v tréninku: GeneratedPlayer + volitelné stropy atributů (maxPotential ze
@@ -349,7 +350,10 @@ export function simulateAttendance(
 
   return squad.map((player, i) => {
     // Base attendance from discipline (+ bonus z vybavení, např. klubová dodávka)
-    let attendProb = player.discipline / 100 * 0.6 + 0.3 + attendanceBonus + managerAttendanceMod;
+    // Práce: večerní provoz a směnaři na večerní trénink chodí míň, volný rozvrh víc.
+    // Průměrně −0,03, proto základ 0,3 → 0,33 (průměrná docházka se nemění).
+    let attendProb = player.discipline / 100 * 0.6 + 0.33 + attendanceBonus + managerAttendanceMod
+      + occupationTrainingAttendance(player.occupation);
 
     const km = commuteKms?.[i] ?? 0;
 

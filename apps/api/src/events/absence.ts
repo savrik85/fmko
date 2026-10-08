@@ -11,7 +11,7 @@
  */
 
 import type { Rng } from "../generators/rng";
-import { getOccupationByName, pickProfessionalExcuse, type Occupation } from "../generators/occupations";
+import { getOccupationByName, occupationMatchAbsence, pickProfessionalExcuse, type Occupation } from "../generators/occupations";
 import type { Weather } from "../engine/types";
 import { logger } from "../lib/logger";
 import { injuryPronenessOf } from "../injuries/proneness";
@@ -747,7 +747,14 @@ export function generateAbsences(
     const patriotismFactor = (100 - p.patriotism) / 200;
     const moraleFactor = (100 - p.morale) / 300;
     const commuteFactor = Math.min(0.04, (p.commuteKm ?? 0) * 0.002) * (1 - commuteMod);
-    let baseChance = (0.02 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor) * 0.95;
+    // Práce (směny, přesčasy) a pití. Dřív povolání měnilo jen text výmluvy a alkohol
+    // jen druh výmluvy, ne to, jestli hráč přijde. Obě přirážky dělají v průměru kádru
+    // +1,5 bodu, proto základ klesl z 0,02 na 0,01 a násobek z 0,95 na 0,88:
+    // průměrná absence zůstává kolem 7 %, jen se přesunula k pijákům a směnařům.
+    const workFactor = occupationMatchAbsence(p.occupation);
+    const alcoholFactor = p.alcohol > 70 ? 0.015 : 0;
+    let baseChance = (0.01 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor
+      + workFactor + alcoholFactor) * 0.88;
 
     // Transfer truc — naštvaný hráč si hledá výmluvy častěji
     if ((p.transferUnrest ?? 0) >= 40) baseChance += 0.05;
