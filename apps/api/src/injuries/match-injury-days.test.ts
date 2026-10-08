@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
-import { matchInjuryDays } from "./injury-generator";
+import { injuryReturnCondition, matchInjuryDays } from "./injury-generator";
 import { POPISY_ZRANENI } from "../engine/simulation";
 
 function sample(description: string, age = 25, proneness = 50, n = 4000): number[] {
@@ -36,5 +36,16 @@ describe("matchInjuryDays", () => {
 
   it("neznámý popis se bere jako naraženina", () => {
     expect(Math.max(...sample("něco jiného"))).toBeLessThanOrEqual(14);
+  });
+});
+
+describe("injuryReturnCondition", () => {
+  it("krátké zranění kondici nemění", () => {
+    expect(injuryReturnCondition(3)).toBe(100);
+  });
+  it("čím déle mimo, tím méně rozehraný, ale aspoň 50", () => {
+    expect(injuryReturnCondition(7)).toBe(90);
+    expect(injuryReturnCondition(30)).toBe(70);
+    expect(injuryReturnCondition(75)).toBe(50);
   });
 });
