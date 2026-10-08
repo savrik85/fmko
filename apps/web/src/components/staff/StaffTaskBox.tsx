@@ -10,6 +10,7 @@ import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
 import { Sheet } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { formatKg } from "@/lib/player-attrs";
 import {
   STAFF_TASK_DEFS,
   YOUTH_PLAN_AGE_MAX,
@@ -57,6 +58,7 @@ function eligiblePlayers(type: StaffTaskType, players: StaffTaskPlayer[]): Staff
     case "youth_plan": return players.filter((p) => p.age <= YOUTH_PLAN_AGE_MAX);
     case "gk_plan": return players.filter((p) => p.position === "GK");
     case "massage_prep": return players.filter((p) => !p.isU21);
+    case "weight_plan": return players.filter((p) => p.weightCategory === "over" || p.weightCategory === "obese");
     default: return players;
   }
 }
@@ -110,6 +112,15 @@ function playerInfo(type: StaffTaskType, p: StaffTaskPlayer): Info[] {
     case "gk_plan":
       ageRating();
       break;
+    case "weight_plan":
+      if (p.weight !== null) out.push({ text: `⚖️ ${formatKg(p.weight)} kg`, tone: "text-ink" });
+      if (p.weightExcess !== null) {
+        out.push({
+          text: `${p.weightCategory === "obese" ? "velká nadváha" : "nadváha"} +${formatKg(p.weightExcess)} kg`,
+          tone: p.weightCategory === "obese" ? "text-card-red" : "text-gold-600",
+        });
+      }
+      break;
     default:
       out.push({ text: `${p.age} let`, tone: "text-muted" });
   }
@@ -137,6 +148,7 @@ function sortForTask(type: StaffTaskType, players: StaffTaskPlayer[]): StaffTask
   if (type === "psych_session") arr.sort((a, b) => (b.unrest ?? 0) - (a.unrest ?? 0) || (a.morale ?? 50) - (b.morale ?? 50));
   if (type === "doctor_injury_care") arr.sort((a, b) => (b.injuryDays ?? 0) - (a.injuryDays ?? 0));
   if (type === "youth_plan") arr.sort((a, b) => a.age - b.age || (b.rating ?? 0) - (a.rating ?? 0));
+  if (type === "weight_plan") arr.sort((a, b) => (b.weightExcess ?? 0) - (a.weightExcess ?? 0));
   return arr;
 }
 
@@ -310,7 +322,10 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
                 )}
                 {candidates.length === 0 ? (
                   <div className="text-sm text-muted">
-                    {picked === "doctor_injury_care" ? "Nikdo není zraněný." : picked === "gk_plan" ? "V klubu není brankář." : "V klubu není nikdo vhodný."}
+                    {picked === "doctor_injury_care" ? "Nikdo není zraněný."
+                      : picked === "gk_plan" ? "V klubu není brankář."
+                      : picked === "weight_plan" ? "Nikdo v kádru nemá nadváhu."
+                      : "V klubu není nikdo vhodný."}
                   </div>
                 ) : (
                   <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-soft">

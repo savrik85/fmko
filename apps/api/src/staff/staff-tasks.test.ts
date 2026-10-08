@@ -87,3 +87,29 @@ describe("úkoly zaměstnanců: vratka", () => {
     expect(refundAmount({ ...match, last_work_game_date: "2026-10-08" }, true)).toBe(0);
   });
 });
+
+describe("úkoly zaměstnanců: plán hubnutí", () => {
+  it("kondiční trenér má týdenní plán hubnutí na 14 nebo 28 dní za 400 Kč týdně", () => {
+    const def = STAFF_TASK_DEFS.weight_plan;
+    expect(def.role).toBe("kondicni_trener");
+    expect(def.kind).toBe("weekly");
+    expect(def.target).toBe("player");
+    expect(def.durations).toEqual([14, 28]);
+    expect(staffTaskCost("weight_plan", 28)).toBe(1600);
+  });
+
+  it("na plán smí jen hráč s nadváhou", async () => {
+    const { weightPlanEligible } = await import("./staff-tasks");
+    expect(weightPlanEligible({ height: 180, weight: 90 })).toBe(true);
+    expect(weightPlanEligible({ height: 180, weight: 78 })).toBe(false);
+    expect(weightPlanEligible({ height: 189, weight: 93, strength: 70 })).toBe(false);
+    expect(weightPlanEligible({})).toBe(false);
+  });
+
+  it("souhrn: kolik shodil, nebo že nechodil", async () => {
+    const { weightPlanSummary } = await import("./staff-tasks");
+    expect(weightPlanSummary("Jan Novák", 92, 89.6, 28)).toBe("🏃 Plán hubnutí: Jan Novák za 28 dní shodil 2,4 kg, teď váží 89,6 kg.");
+    expect(weightPlanSummary("Jan Novák", 92, 91.8, 14)).toBe("🏃 Plán hubnutí: Jan Novák za 14 dní skoro nezhubl. Na trénink chodit musí, jinak plán nepomůže.");
+    expect(weightPlanSummary("Jan Novák", null, 90, 14)).not.toContain("—");
+  });
+});

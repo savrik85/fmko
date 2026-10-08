@@ -24,6 +24,7 @@ import { logConditionStmt } from "../lib/condition-log";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
 import { rowEffectiveness, type StaffEffectRow } from "./staff-effects";
 import { sendStaffSystemMessage } from "./staff-messages";
+import { idealWeight, playerBodyView } from "../generators/physicals";
 
 const MODULE = "staff-tasks";
 
@@ -60,7 +61,7 @@ interface TaskStaffRow extends StaffEffectRow {
 
 const STAFF_COLS = "s.id, s.team_id, s.role, s.first_name, s.last_name, s.gender, s.coaching, s.medicine, s.maintenance, s.judgement, s.communication, s.work_rate, s.charm, s.course_attribute, s.task_cooldown_until";
 
-interface TaskParams { playerIds?: string[]; durationDays?: number; pitchBefore?: number; pitchAfter?: number }
+interface TaskParams { playerIds?: string[]; durationDays?: number; pitchBefore?: number; pitchAfter?: number; startWeight?: number }
 interface TaskResult { text: string }
 
 /** Herní den YYYY-MM-DD z ISO data (teams.game_date i datum staff ticku). */
@@ -178,6 +179,45 @@ export async function loadIndividualTrainingMuls(db: D1Database, teamId: string)
   return map;
 }
 
+/** Plán hubnutí jen pro hráče s nadváhou (ne svalnatého, ne v normě). */
+export function weightPlanEligible(physical: Record<string, unknown>): boolean {
+  const cat = playerBodyView(physical).weightCategory;
+  return cat === "over" || cat === "obese";
+}
+
+/** Kg s desetinnou čárkou. */
+function kgText(kg: number): string {
+  return (Math.round(kg * 10) / 10).toFixed(1).replace(".", ",");
+}
+
+/** Závěrečná SMS plánu hubnutí. Pod půl kila se bere jako „skoro nezhubl“. */
+export function weightPlanSummary(name: string, startWeight: number | null, currentWeight: number | null, days: number): string {
+  const lost = startWeight !== null && currentWeight !== null ? startWeight - currentWeight : 0;
+  if (lost < 0.5 || currentWeight === null) {
+    return `🏃 Plán hubnutí: ${name} za ${days} dní skoro nezhubl. Na trénink chodit musí, jinak plán nepomůže.`;
+  }
+  return `🏃 Plán hubnutí: ${name} za ${days} dní shodil ${kgText(lost)} kg, teď váží ${kgText(currentWeight)} kg.`;
+}
+
+/**
+ * Hráč → síla kondičního trenéra (0–1) z běžících plánů hubnutí. Úbytek z ní spočítá denní
+ * změna váhy (season/body-drift.ts weightPlanDailyLoss), tady se jen najdou plány.
+ */
+export async function loadWeightPlanStrengths(db: D1Database, teamIds: readonly string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (teamIds.length === 0) return map;
+  const rows = await db.prepare(
+    `SELECT t.target_player_id, ${STAFF_COLS}
+       FROM staff_tasks t
+       JOIN staff_members s ON s.id = t.staff_id AND s.team_id = t.team_id
+       JOIN players p ON p.id = t.target_player_id
+      WHERE p.team_id IN (${teamIds.map(() => "?").join(",")}) AND t.status = 'active' AND t.task_type = 'weight_plan'`,
+  ).bind(...teamIds).all<TaskStaffRow & { target_player_id: string }>()
+    .catch((e) => { logger.warn({ module: MODULE }, "plány hubnutí", e); return { results: [] as (TaskStaffRow & { target_player_id: string })[] }; });
+  for (const r of rows.results) map.set(r.target_player_id, strength(r, "weight_plan"));
+  return map;
+}
+
 // ─── Zadání ───────────────────────────────────────────────────────────────
 
 export interface NextLeagueMatch {
@@ -292,6 +332,18 @@ export async function createStaffTask(db: D1Database, input: CreateStaffTaskInpu
     const name = `${p.first_name} ${p.last_name}`;
     if (type === "youth_plan" && p.age > YOUTH_PLAN_AGE_MAX) return fail(400, `${name} je na plán pro mladé moc starý (do ${YOUTH_PLAN_AGE_MAX} let).`);
     if (type === "gk_plan" && p.position !== "GK") return fail(400, `${name} není brankář.`);
+    if (type === "weight_plan") {
+      const row = await db.prepare("SELECT physical FROM players WHERE id = ?").bind(p.id).first<{ physical: string | null }>()
+        .catch((e) => { logger.warn({ module: MODULE }, "postava hráče pro plán", e); return null; });
+      let physical: Record<string, unknown> = {};
+      try {
+        physical = row?.physical ? JSON.parse(row.physical) : {};
+      } catch (e) {
+        logger.warn({ module: MODULE }, "parse physical pro plán", e);
+      }
+      if (!weightPlanEligible(physical)) return fail(400, `${name} nadváhu nemá, hubnout nepotřebuje.`);
+      if (typeof physical.weight === "number") params.startWeight = physical.weight;
+    }
     if (type === "doctor_injury_care") {
       const inj = await db.prepare("SELECT id FROM injuries WHERE player_id = ? AND days_remaining > 0 AND osobni_volno = 0 LIMIT 1")
         .bind(p.id).first<{ id: string }>()
@@ -652,6 +704,14 @@ async function weeklySummary(db: D1Database, task: StaffTaskRow, staff: TaskStaf
       const unrest = lc?.unrest ?? 0;
       return `🧠 Týden sezení s hráčem ${name} je za námi. Morálka je teď ${Math.round(lc?.morale ?? 50)}${unrest > 0 ? `, pryč ale pořád chce (nespokojenost ${Math.round(unrest)})` : ", odchod neřeší"}.`;
     }
+    case "weight_plan": {
+      const name = pid ? await playerName(db, pid) : "Hráč";
+      const params = parseJson<TaskParams>(task.params, "params") ?? {};
+      const now = pid ? await db.prepare("SELECT json_extract(physical, '$.weight') AS w FROM players WHERE id = ?").bind(pid)
+        .first<{ w: number | null }>()
+        .catch((e) => { logger.warn({ module: MODULE }, "váha na konci plánu", e); return null; }) : null;
+      return weightPlanSummary(name, params.startWeight ?? null, now?.w ?? null, params.durationDays ?? 14);
+    }
     case "youth_plan":
     case "gk_plan": {
       const name = pid ? await playerName(db, pid) : "Hráč";
@@ -820,6 +880,7 @@ export async function loadStaffTaskPlayers(db: D1Database, teamId: string, today
               json_extract(p.life_context, '$.condition') AS cond,
               json_extract(p.life_context, '$.morale') AS morale,
               json_extract(p.life_context, '$.transferUnrest.level') AS unrest,
+              p.physical,
               (SELECT MAX(st.ends_game_date) FROM staff_tasks st
                 WHERE st.task_type = 'psych_session' AND st.target_player_id = p.id
                   AND st.status IN ('active', 'done') AND st.ends_game_date > ?2) AS psych_last
@@ -832,7 +893,7 @@ export async function loadStaffTaskPlayers(db: D1Database, teamId: string, today
     ).bind(teamId, since).all<{
       id: string; first_name: string; last_name: string; age: number; position: string; overall_rating: number | null; team_type: string | null;
       injury_days: number | null; injury_total: number | null; injury_name: string | null;
-      cond: number | null; morale: number | null; unrest: number | null; psych_last: string | null;
+      cond: number | null; morale: number | null; unrest: number | null; psych_last: string | null; physical: string | null;
     }>()
       .then((r) => r.results)
       .catch((e) => { logger.warn({ module: MODULE }, `hráči pro úkoly ${teamId}`, e); return []; }),
@@ -840,6 +901,14 @@ export async function loadStaffTaskPlayers(db: D1Database, teamId: string, today
   ]);
   return rows.map((p) => {
     const isU21 = p.team_type === "u21";
+    let physical: Record<string, unknown> = {};
+    try {
+      physical = p.physical ? JSON.parse(p.physical) : {};
+    } catch (e) {
+      logger.warn({ module: MODULE }, `postava hráče ${p.id}`, e);
+    }
+    const weight = typeof physical.weight === "number" ? physical.weight : null;
+    const height = typeof physical.height === "number" && physical.height > 0 ? physical.height : null;
     return {
       id: p.id,
       name: `${p.first_name} ${p.last_name}`,
@@ -858,6 +927,9 @@ export async function loadStaffTaskPlayers(db: D1Database, teamId: string, today
         : !lineup.bench ? null
         : lineup.bench.has(p.id) ? "bench" : "out",
       psychAgainFrom: p.psych_last ? addDays(p.psych_last, PSYCH_SESSION_PLAYER_GAP_DAYS) : null,
+      weight,
+      weightCategory: playerBodyView(physical).weightCategory,
+      weightExcess: weight !== null && height !== null ? Math.round((weight - idealWeight(height)) * 10) / 10 : null,
     };
   });
 }
