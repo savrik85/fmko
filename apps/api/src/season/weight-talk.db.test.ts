@@ -44,7 +44,7 @@ describe("handleWeightTalk", () => {
     expect(l.dietPledgeUntil).toBe("2026-10-26");
     expect(l.dietTalkAt).toBe("2026-10-12");
     const conv = await db.prepare("SELECT ai_thread_state FROM conversations WHERE id = 'c-good'").first<{ ai_thread_state: string }>();
-    expect(JSON.parse(conv!.ai_thread_state).weightTalk).toEqual({ outcome: "pledge", den: "2026-10-12" });
+    expect(JSON.parse(conv!.ai_thread_state).weightTalk).toEqual({ outcome: "pledge", day: "2026-10-12" });
   });
 
   it("vznětlivý s mizernou náladou se urazí a klesne mu morálka", async () => {

@@ -22,7 +22,7 @@ import {
 } from "./ai-player-chat";
 import { INJURY_COLUMN, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, pockejNezDopise } from "./ai-player-spawn";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
-import { weightTalkFromState } from "../season/weight-talk";
+import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
 
 const M = "coach-initiated";
 
@@ -129,6 +129,8 @@ export async function startCoachThread(
     // znamená „nic neběží", takže další zpráva zase založí nové vlákno.
     // Téma incidentu v něm zůstává: platí do konce herního dne (spec 7a).
     const temaVeStavu = tema ? { incidentId: tema.incidentId, incidentDen: tema.den } : null;
+    // Výsledek domluvy o váze platí do konce herního dne stejně jako téma incidentu.
+    const carried = { ...(temaVeStavu ?? {}), ...carryWeightTalk(vlakno?.ai_thread_state) };
     const state = pokracuje
       ? {
         trigger: "coach_initiated",
@@ -138,9 +140,9 @@ export async function startCoachThread(
         awaiting: "coach",
         initiated_at: now,
         player_id: opts.playerId,
-        ...(temaVeStavu ?? {}),
+        ...carried,
       }
-      : temaVeStavu;
+      : Object.keys(carried).length > 0 ? carried : null;
 
     // Rozhovor skončil hned touhle odpovědí: dopad na vztah a morálku se vyhodnotil
     // ve stejném volání modelu. Dřív se v tomhle případě nezapočítalo nic, protože

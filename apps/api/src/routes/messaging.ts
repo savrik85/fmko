@@ -428,6 +428,11 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const { isSulking } = await import("../multiplayer/left-out");
     const sulk = sulkRow?.sulk ? JSON.parse(sulkRow.sulk) : null;
     if (sulk && isSulking(sulk, sulkRow?.game_date ?? now)) {
+      // Nový stav nesmí zahodit výsledek domluvy o váze, který hook výše právě zapsal.
+      const { carryWeightTalk } = await import("../season/weight-talk");
+      const prevState = await c.env.DB.prepare("SELECT ai_thread_state FROM conversations WHERE id = ?")
+        .bind(convId).first<{ ai_thread_state: string | null }>()
+        .catch((e) => { logger.warn({ module: "messaging" }, "stav vlákna před trucem", e); return null; });
       const opened = await c.env.DB.prepare(
         `UPDATE conversations SET ai_thread_active = 1, ai_thread_last_at = ?, ai_thread_state = ?
          WHERE id = ? AND ai_thread_active != 1`,
@@ -440,6 +445,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         initiated_at: now,
         player_id: conv.participant_id,
         resolution: null,
+        ...carryWeightTalk(prevState?.ai_thread_state),
       }), convId).run()
         .catch((e) => { logger.warn({ module: "messaging" }, "otevření vlákna s trucujícím hráčem", e); return null; });
       if (opened && (opened.meta?.changes ?? 0) > 0) {
