@@ -67,17 +67,17 @@ async function get(path: string) {
 }
 
 describe("postava v seznamu kádru (srovnání hráčů v profilu)", () => {
-  it("vlastní hráč 180 cm / 96 kg: −8 rychlost a výdrž, +1 síla, ideál 76", async () => {
+  it("vlastní hráč 180 cm / 96 kg se silou 53: svaly kryjí 2,6 kg, −7 rychlost a výdrž, +1 síla, ideál 76", async () => {
     const [p] = await get("my-a/players");
     expect(p.body).toMatchObject({
-      bodyType: "stocky", idealWeight: 76, weightCategory: "obese", effects: { speed: -8, stamina: -8, strength: 1, heading: 0 },
+      bodyType: "stocky", idealWeight: 76, weightCategory: "obese", effects: { speed: -7, stamina: -7, strength: 1, heading: 0 },
     });
   });
 
   it("cizí hráč: postava ze zamlžených hodnot (96 kg → 95 kg), přesnou váhu neprozradí", async () => {
     const [p] = await get("rival-a/players");
     expect(p.physical.weight).toBe(95);
-    expect(p.body.effects).toEqual({ speed: -10, stamina: -10, strength: 1, heading: -2 });
+    expect(p.body.effects).toEqual({ speed: -8, stamina: -8, strength: 1, heading: -2 });
   });
 });
 
@@ -85,7 +85,7 @@ describe("postava v detailu hráče", () => {
   it("cizí hráč: body se počítá až ze zamlžených hodnot", async () => {
     const p = await get("my-a/players/rival-heavy");
     expect(p.physical.weight).toBe(95);
-    expect(p.body.effects).toEqual({ speed: -10, stamina: -10, strength: 1, heading: -2 });
+    expect(p.body.effects).toEqual({ speed: -8, stamina: -8, strength: 1, heading: -2 });
   });
 });
 

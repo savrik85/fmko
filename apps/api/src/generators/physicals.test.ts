@@ -143,3 +143,27 @@ describe("weightCategory v playerBodyView", () => {
     expect(cat(89)).toBe("obese");
   });
 });
+
+describe("svaly podle síly", () => {
+  it("189 cm / 93 kg se silou 70: kila nese svaly, bez postihu, svalnatý", () => {
+    const physical = { height: 189, weight: 93, strength: 70 };
+    expect(bodyEffects(physical)).toMatchObject({ speed: 0, stamina: 0, strength: 0, heading: 4 });
+    expect(playerBodyView(physical).weightCategory).toBe("muscular");
+  });
+
+  it("stejná váha se silou 40: −3 rychlost a výdrž, nadváha", () => {
+    const physical = { height: 189, weight: 93, strength: 40 };
+    expect(bodyEffects(physical)).toMatchObject({ speed: -3, stamina: -3 });
+    expect(playerBodyView(physical).weightCategory).toBe("over");
+  });
+
+  it("svaly kryjí nejvýš 10 kg: 189 cm / 102 kg se silou 99 je pořád nadváha", () => {
+    const physical = { height: 189, weight: 102, strength: 99 };
+    expect(bodyEffects(physical).speed).toBeLessThan(0);
+    expect(playerBodyView(physical).weightCategory).toBe("over");
+  });
+
+  it("na podváhu svaly nepůsobí", () => {
+    expect(bodyEffects({ height: 190, weight: 70, strength: 90 }).strength).toBe(-5);
+  });
+});
