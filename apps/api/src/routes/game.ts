@@ -1351,7 +1351,8 @@ gameRouter.get("/teams/:teamId/transfers", async (c) => {
 
   // Use a deterministic seed based on team + current week (changes weekly)
   const weekSeed = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
-  const rng = createRng(weekSeed + teamId.charCodeAt(0));
+  const { teamSeed } = await import("../lib/seed");
+  const rng = createRng(teamSeed(teamId, weekSeed, "transfers"));
 
   // `team.size` je velikost z DB (hamlet…city), ne kategorie — dřív se předávala syrová
   // a generátor z ní nenašel kvalitu, takže dovednosti vyšly NaN.

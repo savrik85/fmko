@@ -59,6 +59,15 @@ const SOURCES = [
 /** Zdroj nabídky — kdo hráče přivedl. */
 export type OfferSource = (typeof SOURCES)[number]["source"];
 
+/**
+ * Komu denní tick posílá nabídky: jen lidským áčkům s herním datem a okresem.
+ * U21 ne — starosta i hospodský nabízejí dospělé chlapy (starosta 28–42 let) a do U21 nepatří.
+ * Ruční hromadné generování v adminu U21 vynechává taky (`parent_team_id IS NULL`).
+ */
+export function receivesPlayerOffers(team: Record<string, unknown>): boolean {
+  return team.user_id !== "ai" && team.team_type !== "u21" && !!team.game_date && !!team.village_district;
+}
+
 /** Věk, pro který platí cíl „4–12 bodů pod průměrem áčka". Mladší kluk vyjde slabší podle věkové křivky. */
 const YOUTH_TARGET_AGE = 20;
 

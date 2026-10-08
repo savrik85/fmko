@@ -7,6 +7,7 @@ import { isSulking } from "../multiplayer/left-out";
 import { managerFansEffect } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
+import { teamSeed } from "../lib/seed";
 import { simulateTraining, trainingTypeLabel } from "./training";
 import { trainingExperienceChance } from "../skills/training";
 import { logger } from "../lib/logger";
@@ -466,7 +467,7 @@ export async function executeDailyTick(
         const { resolveWeatherForDate } = await import("./season-weather");
         const trainingWeather = await resolveWeatherForDate(env.DB, team.game_date as string);
 
-        const rng = createRng(now.getTime() + teamId.charCodeAt(0));
+        const rng = createRng(teamSeed(teamId, now.getTime(), "training"));
         // Vzdálenost dojíždění po indexech kádru. Dřív se místo ní předávalo undefined,
         // takže postih docházky za dojíždění ani výmluvy „nejede autobus" nikdy neplatily
         // a bonus dodávky k docházce nic nevyrovnával.
@@ -1344,13 +1345,13 @@ export async function executeDailyTick(
 
   // ── Player offer generation (organické nabídky — hospodský, kamarád, dorost, starosta) ──
   try {
-    const { generatePlayerOffer } = await import("../events/player-offers");
+    const { generatePlayerOffer, receivesPlayerOffers } = await import("../events/player-offers");
     const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
-    const humanTeams = allTeams.results.filter((t) => t.user_id !== "ai" && t.game_date && t.village_district);
+    const humanTeams = allTeams.results.filter(receivesPlayerOffers);
 
     for (const team of humanTeams) {
       const teamId = team.id as string;
-      const offerRng = createRng(now.getTime() + teamId.charCodeAt(0) + 22222);
+      const offerRng = createRng(teamSeed(teamId, now.getTime(), "player-offers"));
       // ~14% per day ≈ 1 nabídka týdně
       if (offerRng.random() > 0.14) continue;
 
