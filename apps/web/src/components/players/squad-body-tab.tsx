@@ -26,6 +26,7 @@ interface OverviewPlayer {
   effects: { speed: number; stamina: number; strength: number; heading: number };
   cause: Cause | null;
   planUntil: string | null;
+  planKind: "loss" | "gain" | null;
   pledgeUntil: string | null;
   problem: boolean;
 }
@@ -178,7 +179,9 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
                     </td>
                     <td className="py-2 px-1.5 text-center whitespace-nowrap text-sm">
                       {p.cause && <span title={CAUSE[p.cause].label}>{CAUSE[p.cause].icon}</span>}
-                      {p.planUntil && <span title={`Plán hubnutí do ${czDate(p.planUntil)}`}>🏃</span>}
+                      {p.planUntil && (p.planKind === "gain"
+                        ? <span title={`Plán nabírání do ${czDate(p.planUntil)}`}>💪</span>
+                        : <span title={`Plán hubnutí do ${czDate(p.planUntil)}`}>🏃</span>)}
                       {p.pledgeUntil && <span title={`Slíbil omezit hospodu do ${czDate(p.pledgeUntil)}`}>🤝</span>}
                       {!p.cause && !p.planUntil && !p.pledgeUntil && <span className="text-muted text-xs">—</span>}
                     </td>
@@ -200,12 +203,12 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
 
       <div className="card p-3 text-sm text-muted space-y-1">
         <div>
-          🍺 sedí v hospodě · 🛋️ málo se hýbe · 🩹 je zraněný · 🏃 plán hubnutí · 🤝 slíbil omezit hospodu
+          🍺 sedí v hospodě · 🛋️ málo se hýbe · 🩹 je zraněný · 🏃 plán hubnutí · 💪 plán nabírání · 🤝 slíbil omezit hospodu
         </div>
         <div>
-          Hubnutí: 💬 napiš hráči, plán u kondičního trenéra v{" "}
+          Hráči s nadváhou 💬 napiš. Plán hubnutí i nabírání zadáš kondičnímu trenérovi v{" "}
           <Link href="/zamestnanci" className="text-pitch-600 underline decoration-pitch-500/30">Zaměstnancích</Link>,
-          váha a jídelníček ve{" "}
+          s oběma pomáhá Váha a jídelníček ve{" "}
           <Link href="/vybaveni" className="text-pitch-600 underline decoration-pitch-500/30">Vybavení</Link>.
         </div>
       </div>

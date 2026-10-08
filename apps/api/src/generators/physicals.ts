@@ -72,6 +72,13 @@ export function fitWeight(physical: Record<string, unknown> | null | undefined):
   return idealWeight(height) + WEIGHT_TOLERANCE_KG + muscleToleranceKg(physical?.strength);
 }
 
+/** Dolní hranice váhy bez postihu: ideál − tolerance. Sem smí péče hráče s podváhou dostat. */
+export function minFitWeight(physical: Record<string, unknown> | null | undefined): number | null {
+  const height = positive(physical?.height);
+  if (height === null) return null;
+  return idealWeight(height) - WEIGHT_TOLERANCE_KG;
+}
+
 const NO_EFFECTS: BodyEffects = { speed: 0, stamina: 0, strength: 0, heading: 0, gkReach: 1 };
 
 /** Kladné konečné číslo, jinak null. Text („180“) a nula jsou chybějící údaj. */

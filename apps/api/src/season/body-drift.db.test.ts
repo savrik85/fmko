@@ -220,4 +220,26 @@ describe("páky na váhu v denní změně", () => {
     // hospoda 0,104 × vybavení 0,5 × slib 0,25 = +0,013 → 76,15
     expect(await weightOf("pledged")).toBeCloseTo(76.15, 2);
   });
+
+  it("plán nabírání a vybavení: hráč s podváhou nabírá v den tréninku, nejvýš k dolní hranici ideálu", async () => {
+    const add = (id: string, physical: Record<string, unknown>) =>
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, physical, personality, life_context) VALUES (?, 't7', 'Jan', ?, 25, ?, ?, '{}')")
+        .bind(id, id, JSON.stringify(physical), JSON.stringify({ alcohol: 10, workRate: 50 }));
+    await db.batch([
+      db.prepare("INSERT INTO teams (id, user_id) VALUES ('t7', 'user-7')"),
+      db.prepare("INSERT INTO equipment (team_id, nutrition, nutrition_condition) VALUES ('t7', 3, 100)"),
+      db.prepare("INSERT INTO staff_members (id, team_id, role, first_name, last_name, gender, coaching, work_rate) VALUES ('gain-coach', 't7', 'kondicni_trener', 'Karel', 'Silák', 'm', 10, 10)"),
+      db.prepare("INSERT INTO staff_tasks (id, team_id, staff_id, task_type, status, target_player_id) VALUES ('wg', 't7', 'gain-coach', 'weight_gain', 'active', 'thin-plan')"),
+      add("thin-plan", { height: 190, weight: 70, naturalBase: 70, bodyType: "thin" }),
+      add("thin-care", { height: 190, weight: 70, naturalBase: 70, bodyType: "thin" }),
+    ]);
+    await processDailyBodyDrift(db, { teamIds: ["t7"], trainedToday: new Map([["thin-plan", "other"], ["thin-care", "other"]]), gameDate: TODAY, isMonday: false });
+    // trénink +0,03, plán 0,6 × 0,175 = +0,105, jídelníček úrovně 3 +0,02 → 70,16 (hranice 190 cm je 80,8)
+    expect(await weightOf("thin-plan")).toBeCloseTo(70.16, 2);
+    // bez plánu jen trénink a jídelníček → 70,05
+    expect(await weightOf("thin-care")).toBeCloseTo(70.05, 2);
+    // nabraná kila si tělo nechá: přirozená váha se posune s váhou
+    const base = await db.prepare("SELECT json_extract(physical, '$.naturalBase') AS b FROM players WHERE id = 'thin-plan'").first<{ b: number }>();
+    expect(base?.b).toBeCloseTo(70.16, 2);
+  });
 });

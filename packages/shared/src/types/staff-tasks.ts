@@ -25,7 +25,8 @@ export type StaffTaskType =
   | "youth_plan"
   | "gk_plan"
   | "sponsor_care"
-  | "weight_plan";
+  | "weight_plan"
+  | "weight_gain";
 
 export type StaffTaskKind = "match" | "weekly";
 export type StaffTaskStatus = "active" | "done" | "cancelled" | "failed";
@@ -121,6 +122,11 @@ export const STAFF_TASK_DEFS: Record<StaffTaskType, StaffTaskDef> = {
     role: "kondicni_trener", kind: "weekly", target: "player", cost: 400, durations: [14, 28],
     label: "Plán hubnutí",
     description: "Hlídá jednomu hráči s nadváhou jídelníček a po tréninku s ním běhá. Hubne jen ten, kdo na trénink chodí.",
+  },
+  weight_gain: {
+    role: "kondicni_trener", kind: "weekly", target: "player", cost: 400, durations: [14, 28],
+    label: "Plán nabírání",
+    description: "Hráči s podváhou naplánuje posilovnu a pořádné jídlo. Nabírá jen ten, kdo na trénink chodí.",
   },
   sponsor_care: {
     role: "ekonom", kind: "weekly", target: "none", cost: 300, durations: [14],

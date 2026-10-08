@@ -104,6 +104,37 @@ describe("denní změna váhy: měsíční cíle ze spec", () => {
     expect(w - 96).toBeLessThanOrEqual(-0.8);
   });
 
+  it("péče u podváhy: trénink a jídelníček přidávají až k dolní hranici ideálu (careCeiling)", () => {
+    const base = { natural: 66, pubVisit: false, alcohol: 50, injured: false } as const;
+    expect(dailyWeightChange({ ...base, weight: 66, training: "other" })).toBe(0);
+    expect(dailyWeightChange({ ...base, weight: 66, training: "other", careCeiling: 70 })).toBeCloseTo(0.03, 5);
+    expect(dailyWeightChange({ ...base, weight: 66, training: null, careCeiling: 70, dietLoss: 0.02 })).toBeCloseTo(0.02, 5);
+    expect(dailyWeightChange({ ...base, weight: 69.99, training: "other", careCeiling: 70, dietLoss: 0.02 })).toBeCloseTo(0.01, 5);
+    expect(dailyWeightChange({ ...base, weight: 70, training: "other", careCeiling: 70, dietLoss: 0.02 })).toBe(0);
+  });
+
+  it("plán nabírání přidává v den tréninku, nejvýš k dolní hranici ideálu", () => {
+    const base = { natural: 66, pubVisit: false, alcohol: 50, injured: false, careCeiling: 70 } as const;
+    expect(dailyWeightChange({ ...base, weight: 66, training: "other", planGain: 0.1 })).toBeCloseTo(0.13, 5);
+    expect(dailyWeightChange({ ...base, weight: 66, training: null, planGain: 0.1 })).toBe(0);
+    expect(dailyWeightChange({ ...base, weight: 69.95, training: "other", planGain: 0.1 })).toBeCloseTo(0.05, 5);
+  });
+
+  it("hráč s podváhou: bez péče za měsíc beze změny, s plánem a jídelníčkem nabere přes kilo", async () => {
+    const { weightGainDailyAmount } = await import("./body-drift");
+    const trainings = spread(10);
+    expect(month(66, 66, (i) => ({ training: trainings.has(i) ? "other" : null }))).toBe(0);
+    let w = 66;
+    for (let i = 0; i < 30; i++) {
+      w = applyDailyWeight(w, dailyWeightChange({
+        weight: w, natural: 66, pubVisit: false, alcohol: 50, injured: false, training: trainings.has(i) ? "other" : null,
+        careCeiling: 72, dietLoss: 0.02, planGain: weightGainDailyAmount(0.5, 50),
+      }));
+    }
+    expect(w - 66).toBeGreaterThanOrEqual(1.0);
+    expect(weightGainDailyAmount(0.5, 50)).toBeCloseTo(0.6 * 0.175, 5);
+  });
+
   it("bez přirozené váhy (chybí postava) se táhne jen hospodou a tréninkem", () => {
     expect(dailyWeightChange({ weight: 90, natural: null, pubVisit: false, alcohol: 50, training: null, injured: false })).toBe(0);
   });

@@ -59,6 +59,7 @@ function eligiblePlayers(type: StaffTaskType, players: StaffTaskPlayer[]): Staff
     case "gk_plan": return players.filter((p) => p.position === "GK");
     case "massage_prep": return players.filter((p) => !p.isU21);
     case "weight_plan": return players.filter((p) => p.weightCategory === "over" || p.weightCategory === "obese");
+    case "weight_gain": return players.filter((p) => p.weightCategory === "under");
     default: return players;
   }
 }
@@ -121,6 +122,10 @@ function playerInfo(type: StaffTaskType, p: StaffTaskPlayer): Info[] {
         });
       }
       break;
+    case "weight_gain":
+      if (p.weight !== null) out.push({ text: `⚖️ ${formatKg(p.weight)} kg`, tone: "text-ink" });
+      if (p.weightExcess !== null) out.push({ text: `podváha −${formatKg(Math.abs(p.weightExcess))} kg`, tone: "text-gold-600" });
+      break;
     default:
       out.push({ text: `${p.age} let`, tone: "text-muted" });
   }
@@ -149,6 +154,7 @@ function sortForTask(type: StaffTaskType, players: StaffTaskPlayer[]): StaffTask
   if (type === "doctor_injury_care") arr.sort((a, b) => (b.injuryDays ?? 0) - (a.injuryDays ?? 0));
   if (type === "youth_plan") arr.sort((a, b) => a.age - b.age || (b.rating ?? 0) - (a.rating ?? 0));
   if (type === "weight_plan") arr.sort((a, b) => (b.weightExcess ?? 0) - (a.weightExcess ?? 0));
+  if (type === "weight_gain") arr.sort((a, b) => (a.weightExcess ?? 0) - (b.weightExcess ?? 0));
   return arr;
 }
 
@@ -325,6 +331,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
                     {picked === "doctor_injury_care" ? "Nikdo není zraněný."
                       : picked === "gk_plan" ? "V klubu není brankář."
                       : picked === "weight_plan" ? "Nikdo v kádru nemá nadváhu."
+                      : picked === "weight_gain" ? "Nikdo v kádru nemá podváhu."
                       : "V klubu není nikdo vhodný."}
                   </div>
                 ) : (
