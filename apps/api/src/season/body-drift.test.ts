@@ -156,3 +156,35 @@ describe("SMS o váze", () => {
     }
   });
 });
+
+describe("páky na váhu (část 3)", () => {
+  it("plán hubnutí: trenér 0,5 a pracovitost 50 ubere ~2,3 kg za 13 tréninků", async () => {
+    const { weightPlanDailyLoss } = await import("./body-drift");
+    expect(13 * weightPlanDailyLoss(0.5, 50)).toBeCloseTo(2.275, 2);
+    expect(weightPlanDailyLoss(1, 100)).toBeCloseTo(0.3125, 5);
+    expect(weightPlanDailyLoss(0, 0)).toBeCloseTo(0.075, 5);
+  });
+
+  it("plán působí jen v den tréninku", () => {
+    const base = { weight: 90, natural: 90, pubVisit: false, alcohol: 50, injured: false, planLoss: 0.2 };
+    expect(dailyWeightChange({ ...base, training: null })).toBe(0);
+    expect(dailyWeightChange({ ...base, training: "other" })).toBeCloseTo(-0.23, 5);
+  });
+
+  it("vybavení Váha a jídelníček: úroveň 3 v plném stavu půlí hospodu a zrychlí tah o polovinu", async () => {
+    const { nutritionEffects } = await import("./body-drift");
+    expect(nutritionEffects(0, 100)).toEqual({ pubMul: 1, pullMul: 1 });
+    expect(nutritionEffects(1, 100)).toEqual({ pubMul: 0.8, pullMul: 1 });
+    expect(nutritionEffects(3, 100)).toEqual({ pubMul: 0.5, pullMul: 1.5 });
+    const half = nutritionEffects(2, 50);
+    expect(half.pubMul).toBeCloseTo(1 - 0.35 * 0.5, 5);
+    expect(half.pullMul).toBeCloseTo(1 + 0.25 * 0.5, 5);
+  });
+
+  it("násobky hospody a tahu vstupují do denní změny", () => {
+    const pub = { weight: 80, natural: 80, pubVisit: true, alcohol: 50, training: null, injured: false };
+    expect(dailyWeightChange({ ...pub, pubMul: 0.25 })).toBeCloseTo(0.02, 5);
+    const pull = { weight: 90, natural: 80, pubVisit: false, alcohol: 50, training: null, injured: false };
+    expect(dailyWeightChange({ ...pull, pullMul: 1.5 })).toBeCloseTo(-0.09, 5);
+  });
+});
