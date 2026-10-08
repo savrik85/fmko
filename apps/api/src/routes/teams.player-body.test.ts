@@ -70,7 +70,7 @@ describe("postava v seznamu kádru (srovnání hráčů v profilu)", () => {
   it("vlastní hráč 180 cm / 96 kg: −8 rychlost a výdrž, +1 síla, ideál 76", async () => {
     const [p] = await get("my-a/players");
     expect(p.body).toMatchObject({
-      bodyType: "stocky", idealWeight: 76, effects: { speed: -8, stamina: -8, strength: 1, heading: 0 },
+      bodyType: "stocky", idealWeight: 76, weightCategory: "obese", effects: { speed: -8, stamina: -8, strength: 1, heading: 0 },
     });
   });
 

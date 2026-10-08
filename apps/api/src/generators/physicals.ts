@@ -92,10 +92,17 @@ export function bodyEffects(physical: Record<string, unknown> | null | undefined
   return { speed, stamina: speed, strength, heading, gkReach };
 }
 
+/** Váha proti ideálu slovy: podváha, ideální, nadváha, velká nadváha. */
+export type WeightCategory = "under" | "ideal" | "over" | "obese";
+/** Od kolika kg nad ideálem je nadváha „velká“ (rychlost a výdrž už −4 a víc). */
+const OBESE_EXCESS_KG = 12;
+
 export interface PlayerBodyView {
   bodyType: BodyType | null;
   /** Ideální váha v celých kg, null bez výšky. */
   idealWeight: number | null;
+  /** Null bez výšky nebo váhy. Hranice ±4 kg je tolerance, od které se ubírají vlastnosti. */
+  weightCategory: WeightCategory | null;
   effects: { speed: number; stamina: number; strength: number; heading: number };
 }
 
@@ -103,9 +110,19 @@ export interface PlayerBodyView {
 export function playerBodyView(physical: Record<string, unknown> | null | undefined): PlayerBodyView {
   const height = positive(physical?.height);
   const e = bodyEffects(physical);
+  const weight = positive(physical?.weight);
+  let weightCategory: WeightCategory | null = null;
+  if (height !== null && weight !== null) {
+    const excess = weight - idealWeight(height);
+    weightCategory = excess < -WEIGHT_TOLERANCE_KG ? "under"
+      : excess <= WEIGHT_TOLERANCE_KG ? "ideal"
+      : excess <= OBESE_EXCESS_KG ? "over"
+      : "obese";
+  }
   return {
     bodyType: isBodyType(physical?.bodyType) ? physical!.bodyType as BodyType : null,
     idealWeight: height === null ? null : Math.round(idealWeight(height)),
+    weightCategory,
     effects: { speed: e.speed, stamina: e.stamina, strength: e.strength, heading: e.heading },
   };
 }

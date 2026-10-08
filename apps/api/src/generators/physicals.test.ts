@@ -80,13 +80,13 @@ describe("gkReachFactor", () => {
 describe("playerBodyView", () => {
   it("vrátí typ postavy, zaokrouhlený ideál a úpravy bez dosahu", () => {
     expect(playerBodyView({ height: 180, weight: 90, bodyType: "stocky" })).toEqual({
-      bodyType: "stocky", idealWeight: 76, effects: { speed: -5, stamina: -5, strength: 1, heading: 0 },
+      bodyType: "stocky", idealWeight: 76, weightCategory: "obese", effects: { speed: -5, stamina: -5, strength: 1, heading: 0 },
     });
   });
 
   it("neznámý typ postavy a chybějící výška", () => {
     expect(playerBodyView({ bodyType: "giant" })).toEqual({
-      bodyType: null, idealWeight: null, effects: { speed: 0, stamina: 0, strength: 0, heading: 0 },
+      bodyType: null, idealWeight: null, weightCategory: null, effects: { speed: 0, stamina: 0, strength: 0, heading: 0 },
     });
   });
 
@@ -129,5 +129,17 @@ describe("generateHeightWeight", () => {
     const short = samples.filter((s) => s.height <= 175);
     const mean = (xs: typeof samples) => xs.reduce((a, s) => a + s.weight, 0) / xs.length;
     expect(mean(tall)).toBeGreaterThan(mean(short) + 5);
+  });
+});
+
+describe("weightCategory v playerBodyView", () => {
+  it("podváha pod −4 kg, ideální do ±4, nadváha do +12, nad tím velká nadváha", () => {
+    const cat = (weight: number) => playerBodyView({ height: 180, weight }).weightCategory;
+    expect(cat(66)).toBe("under");
+    expect(cat(72.5)).toBe("ideal");
+    expect(cat(80)).toBe("ideal");
+    expect(cat(85)).toBe("over");
+    expect(cat(88)).toBe("over");
+    expect(cat(89)).toBe("obese");
   });
 });
