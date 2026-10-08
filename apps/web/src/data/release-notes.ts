@@ -21,9 +21,10 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Váha se mění každý den. Hospoda přidává, tím víc, čím víc hráč pije. Trénink ubírá, kondiční víc. Zraněný hráč přibírá. Přes léto se váha změní podle toho, jak hráč léto prožil, a dorost do 18 let ještě roste.",
       "V profilu najdeš, kolik hráč za poslední měsíc přibral nebo shodil, a v Historii kartu Vývoj váhy. Když hráč za měsíc přibere 3 kg a víc, napíše ti to kondiční trenér, masér nebo kapitán.",
       "V Kádru je nová záložka Postava: kolik má kádr průměrně nad ideálem, kdo má problém, proč přibírá a kolik rychlosti a výdrže nadváha bere tvé sestavě. Hráči odtud rovnou napíšeš.",
-      "Kondičnímu trenérovi můžeš zadat úkol Plán hubnutí pro hráče s nadváhou, na 14 nebo 28 dní za 400 Kč na týden. Hráč hubne v každý den, kdy přijde na trénink, a čím lepší trenér a pracovitější hráč, tím víc. Shozená kila si udrží, dokud nezačne zase vysedávat v hospodě. Na konci ti trenér napíše, kolik hráč shodil.",
-      "Ve Vybavení je nové vybavení Váha a jídelníček ve třech úrovních. Hráči méně přibírají z hospody a na vyšších úrovních se rychleji vracejí ke své váze. Platí i pro U21.",
-      "Hráči s nadváhou můžeš napsat SMS, ať zhubne nebo omezí hospodu. Disciplinovaný hráč v dobré náladě slíbí, že dva týdny vydrží, a hospoda ho pak skoro nevykrmí. Vznětlivý se může urazit a spadne mu nálada. O váze s ním jde mluvit jednou za 14 dní.",
+      "Když postavu neřešíš, nic zásadního se nestane: hráči si drží svou váhu a přiberou jen ti, co vysedávají v hospodě. Když se ale o hráče staráš, s nadváhou na tréninku hubnou až k váze, na které už neztrácejí rychlost ani výdrž.",
+      "Ve Vybavení je nové vybavení Váha a jídelníček ve třech úrovních. Hráči méně přibírají z hospody a ti s nadváhou hubnou na každém tréninku. Na vyšších úrovních jim jídelníček ubírá kila i ve dnech bez tréninku. Platí i pro U21.",
+      "Kondičnímu trenérovi můžeš zadat úkol Plán hubnutí pro hráče s nadváhou, na 14 nebo 28 dní za 400 Kč na týden. Hráč na plánu hubne nejrychleji, v každý den, kdy přijde na trénink, a čím lepší trenér a pracovitější hráč, tím víc. Shozená kila si udrží, dokud nezačne zase vysedávat v hospodě. Na konci ti trenér napíše, kolik hráč shodil.",
+      "Hráči s nadváhou můžeš napsat SMS, ať zhubne nebo omezí hospodu. Disciplinovaný hráč v dobré náladě slíbí, že na sobě dva týdny zamaká: hospoda ho skoro nevykrmí a na tréninku hubne. Vznětlivý se může urazit a spadne mu nálada. O váze s ním jde mluvit jednou za 14 dní.",
     ],
   },
   {
