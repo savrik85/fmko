@@ -116,6 +116,7 @@ export function Tabs<T extends string>({
   ariaLabel = "Záložky",
   layout = "scroll",
   dense = false,
+  mobileIcons = true,
 }: {
   items: ReadonlyArray<TabItem<T>>;
   value: T;
@@ -130,6 +131,11 @@ export function Tabs<T extends string>({
   layout?: "scroll" | "grid";
   /** Užší okraje na mobilu: podzáložky se čtyřmi popisky a odznaky se vejdou do 375 px bez posouvání. */
   dense?: boolean;
+  /**
+   * false: ikony až od sm:. Na 375 px se pět záložek s ikonami nevejde a poslední je schovaná
+   * za okrajem, kde ji nikdo nenajde (Kádr: Postava).
+   */
+  mobileIcons?: boolean;
 }) {
   const onKeyDown = (e: React.KeyboardEvent) => {
     const i = items.findIndex((t) => t.key === value);
@@ -192,7 +198,7 @@ export function Tabs<T extends string>({
               isActive ? "bg-surface-2 text-pitch-600 shadow-xs" : "text-muted hover:text-ink"
             }`}
           >
-            {t.icon && <span aria-hidden="true" className="mr-1">{t.icon}</span>}
+            {t.icon && <span aria-hidden="true" className={mobileIcons ? "mr-1" : "hidden sm:inline mr-1"}>{t.icon}</span>}
             {t.label}
             {t.count != null && (
               // Odznak, ne šedé číslo vedle popisku — jinak si ho nikdo nevšimne.

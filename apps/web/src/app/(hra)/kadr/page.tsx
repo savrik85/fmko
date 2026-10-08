@@ -239,6 +239,8 @@ export default function SquadPage() {
           value={tab}
           onChange={setTab}
           ariaLabel="Pohled na kádr"
+          dense
+          mobileIcons={false}
           items={[
             { key: "atributy", label: "Atributy", icon: "\u{1F4CB}" },
             { key: "sezona", label: "Sezóna", icon: "\u{1F4CA}" },
