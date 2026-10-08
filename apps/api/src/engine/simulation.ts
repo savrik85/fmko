@@ -17,6 +17,7 @@ import type {
 } from "./types";
 import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor, TACTIC_MODS, effMod } from "./tactics";
 import { MATCH_DAY_SWING, teamFormFactor } from "./form";
+import { gkReachFactor } from "../generators/physicals";
 import { squadChemistryFactor } from "./squad-chemistry";
 import { hardnessMods, hardEff, intimidationPenalty, type Hardness } from "./hardness";
 import { ruleMatches, pendingPlannedSubs, plannedSubPlayers, type EngineMatchPlanRule } from "./match-plan";
@@ -300,7 +301,9 @@ export function calcGoalProb(
     ? (attacker.heading * 2 + attacker.strength) / 3
     : (attacker.shooting * 2 + attacker.technique) / 3) * freshness(attacker);
 
-  const defenseVal = (gk.goalkeeping * gkHandlingMod * freshness(gk) * 2 + defenseAvg) / 3;
+  // Dosah brankáře platí jen u hlaviček, na střelu nohou výška nepůsobí.
+  const reach = isHeader ? gkReachFactor(gk.height) : 1;
+  const defenseVal = (gk.goalkeeping * gkHandlingMod * freshness(gk) * reach * 2 + defenseAvg) / 3;
 
   let ratio = attackVal / (attackVal + defenseVal);
 
@@ -495,7 +498,7 @@ function calcFreekickProb(
  * se potkává s důrazem hlavičkáře proti obraně a brankáři. Při samých
  * padesátkách vyjde přesně base — od toho se ladí gólovost standardek.
  */
-function calcAerialProb(
+export function calcAerialProb(
   kicker: MatchPlayer,
   header: MatchPlayer,
   gk: MatchPlayer,
@@ -506,9 +509,11 @@ function calcAerialProb(
   const delivery = (kicker.setPieces * 0.7 + kicker.passing * 0.3) / 100;
   const attack = (header.heading * 0.65 + header.strength * 0.35) / 100;
   const defenders = defending.lineup.filter((p) => p.position === "DEF");
+  // Vysoký brankář dosáhne na centr, malý ho pustí (generators/physicals.ts).
+  const gkCover = gk.goalkeeping * gkReachFactor(gk.height);
   const cover = defenders.length > 0
-    ? (teamAvg(defenders, "heading") * 0.5 + teamAvg(defenders, "strength") * 0.3 + gk.goalkeeping * 0.2) / 100
-    : gk.goalkeeping / 100;
+    ? (teamAvg(defenders, "heading") * 0.5 + teamAvg(defenders, "strength") * 0.3 + gkCover * 0.2) / 100
+    : gkCover / 100;
 
   // Těžký míč nahrává hlavičkářům — brankáři se centry drží hůř. Vítr naopak
   // centr rozhodí dřív, než doletí.

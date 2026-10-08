@@ -6,6 +6,7 @@
  */
 
 import type { MatchPlayer } from "./types";
+import { applyBodyEffects } from "../generators/physicals";
 
 interface PlayerRow {
   id: string;
@@ -28,7 +29,7 @@ export function mapRowToMatchPlayer(row: PlayerRow, matchPosition?: string): Mat
   const lifeContext = JSON.parse(row.life_context) as Record<string, number | string>;
   const physical = row.physical ? JSON.parse(row.physical) as Record<string, number | string> : {};
 
-  return {
+  const player: MatchPlayer = {
     id: engineIdCounter++,
     firstName: row.first_name,
     lastName: row.last_name,
@@ -63,6 +64,8 @@ export function mapRowToMatchPlayer(row: PlayerRow, matchPosition?: string): Mat
     condition: (lifeContext.condition as number) ?? 100,
     morale: (lifeContext.morale as number) ?? 50,
   };
+  applyBodyEffects(player, physical);
+  return player;
 }
 
 /**
