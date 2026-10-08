@@ -988,3 +988,36 @@ export function smenaProPovolani(name: string | undefined): Smena {
   const occ = getOccupationByName(name);
   return (occ ? SMENY[occ.id] : undefined) ?? "denni";
 }
+
+/**
+ * Jak práce bere hráče od zápasu (přičítá se k šanci na absenci). Zápasy jsou o víkendu
+ * odpoledne: směnaři a hospodští tou dobou často slouží, zemědělec má práci i v sobotu,
+ * kdo si rozvrh určuje sám (student, podnikatel), přijde spíš. K tomu přesčasy oboru.
+ *
+ * Dřív povolání jen vybíralo text výmluvy, šanci na absenci neměnilo. Průměr přes
+ * produkční kádry (2026-10) je +1 procentní bod, `events/absence.ts` ho odečítá ze základu.
+ */
+const MATCH_ABSENCE_BY_SHIFT: Record<Smena, number> = {
+  smenny: 0.025, vecerni: 0.015, rano: 0.01, denni: 0, volny: -0.005,
+};
+
+export function occupationMatchAbsence(name: string | undefined): number {
+  const occ = name ? getOccupationByName(name) : undefined;
+  return MATCH_ABSENCE_BY_SHIFT[smenaProPovolani(name)] + (occ?.overtimeRisk ?? 0) * 0.03;
+}
+
+/**
+ * Jak práce bere hráče od tréninku (přičítá se k pravděpodobnosti, že přijde).
+ * Trénink je večer ve všední den: večerní provoz (hospodský, barman, kuchař) a směnaři
+ * chybí nejvíc, ranní vstávání (zemědělec, pekař) bere síly, volný rozvrh pomáhá.
+ * Průměr přes produkční kádry (2026-10) je −3 procentní body, `season/training.ts`
+ * je přičítá zpět do základu, takže průměrná docházka zůstává stejná.
+ */
+const TRAINING_ATTENDANCE_BY_SHIFT: Record<Smena, number> = {
+  vecerni: -0.15, smenny: -0.12, rano: -0.05, denni: 0, volny: 0.05,
+};
+
+export function occupationTrainingAttendance(name: string | undefined): number {
+  const occ = name ? getOccupationByName(name) : undefined;
+  return TRAINING_ATTENDANCE_BY_SHIFT[smenaProPovolani(name)] - (occ?.overtimeRisk ?? 0) * 0.08;
+}
