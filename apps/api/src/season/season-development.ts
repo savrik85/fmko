@@ -10,6 +10,7 @@ import { LICENCE_LEVELS, MANAGER_FANS, MAX_LICENCE } from "@okresni-masina/share
 import { createRng } from "../generators/rng";
 import { getTeamPosition } from "../stats/standings";
 import { logger } from "../lib/logger";
+import { overallRatingFromFlat } from "../skills/generator";
 
 const M = "season-development";
 
@@ -36,6 +37,36 @@ function ratingDelta(rng: ReturnType<typeof createRng>, age: number): number {
   return rng.int(-4, -2);
 }
 
+/**
+ * Proporční změna dovedností o `ratio` (celý hráč se mírně zlepší nebo zhorší).
+ *
+ * - Zkušenost se nemění: roste odehranými minutami, ne věkem. Dřív se násobila taky,
+ *   takže veterán každé léto o zkušenost přišel a mladík ji dostal zadarmo.
+ * - Růst se zastaví na potenciálu (`skills_max`). Hodnotu, která už nad ním je, nesnižuje.
+ * - Výdrž a síla se propíšou i do `physical`, odkud je čte zápas. Dřív se měnila jen kopie
+ *   ve `skills` a obě hodnoty se rozjely.
+ */
+export function applySeasonDevelopment(
+  skills: Record<string, unknown>,
+  physical: Record<string, unknown>,
+  ratio: number,
+  skillsMax?: Record<string, { maxPotential?: number }>,
+): void {
+  const scale = (k: string, value: number): number => {
+    const next = clamp(Math.round(value * ratio), 1, 99);
+    const cap = skillsMax?.[k]?.maxPotential;
+    return next > value && typeof cap === "number" ? Math.min(next, Math.max(value, cap)) : next;
+  };
+  for (const k of Object.keys(skills)) {
+    const value = skills[k];
+    if (typeof value === "number" && k !== "experience") skills[k] = scale(k, value);
+  }
+  for (const k of ["stamina", "strength"] as const) {
+    if (typeof skills[k] === "number") physical[k] = skills[k];
+    else if (typeof physical[k] === "number") physical[k] = scale(k, physical[k] as number);
+  }
+}
+
 const MGR_LABELS: Record<string, string> = {
   coaching: "Trénování", motivation: "Motivace", tactics: "Taktika",
   youth_development: "Mládež", discipline: "Disciplína",
@@ -51,30 +82,37 @@ export async function developSquadAndManager(
 
   // ── Hráči ──
   const playersRes = await db.prepare(
-    "SELECT id, first_name, last_name, age, position, overall_rating, skills FROM players WHERE team_id = ? AND status = 'active'",
-  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; age: number; position: string; overall_rating: number; skills: string }>()
+    "SELECT id, first_name, last_name, age, position, overall_rating, skills, skills_max, physical, hidden_talent FROM players WHERE team_id = ? AND status = 'active'",
+  ).bind(teamId).all<{ id: string; first_name: string; last_name: string; age: number; position: string; overall_rating: number; skills: string; skills_max: string | null; physical: string | null; hidden_talent: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "load players", e); return { results: [] as any[] }; });
 
   const entries: PlayerDevEntry[] = [];
   for (const p of playersRes.results) {
     const before = p.overall_rating;
-    const delta = ratingDelta(rng, p.age);
-    const after = clamp(before + delta, 20, 99);
-    const realDelta = after - before;
-    if (realDelta === 0) continue;
+    const target = clamp(before + ratingDelta(rng, p.age), 20, 99);
+    if (target === before || before <= 0) continue;
 
-    // proporční změna skills (celý hráč se mírně zlepší/zhorší)
-    let skills: Record<string, unknown> = {};
-    try { skills = JSON.parse(p.skills); } catch { skills = {}; }
-    if (before > 0) {
-      const ratio = after / before;
-      for (const k of Object.keys(skills)) {
-        if (typeof skills[k] === "number") skills[k] = clamp(Math.round((skills[k] as number) * ratio), 1, 99);
-      }
+    let skills: Record<string, unknown>;
+    let physical: Record<string, unknown>;
+    let skillsMax: Record<string, { maxPotential?: number }> | undefined;
+    try {
+      skills = JSON.parse(p.skills);
+      physical = p.physical ? JSON.parse(p.physical) : {};
+      skillsMax = p.skills_max ? JSON.parse(p.skills_max) : undefined;
+    } catch (e) {
+      // Bez čitelných dovedností hráče radši vynechat. Dřív se tu uložil prázdný objekt.
+      logger.warn({ module: M, playerId: p.id }, "parse player json", e);
+      continue;
     }
-    await db.prepare("UPDATE players SET overall_rating = ?, skills = ? WHERE id = ?")
-      .bind(after, JSON.stringify(skills), p.id).run()
+
+    applySeasonDevelopment(skills, physical, target / before, skillsMax);
+    const after = overallRatingFromFlat(p.position, skills, physical, p.hidden_talent ?? 0, skillsMax) ?? target;
+    const realDelta = after - before;
+
+    await db.prepare("UPDATE players SET overall_rating = ?, skills = ?, physical = ? WHERE id = ?")
+      .bind(after, JSON.stringify(skills), JSON.stringify(physical), p.id).run()
       .catch((e) => logger.warn({ module: M }, "update player dev", e));
+    if (realDelta === 0) continue;
 
     entries.push({ playerId: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, before, after, delta: realDelta });
   }
