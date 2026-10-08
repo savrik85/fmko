@@ -89,7 +89,7 @@ export const EQUIPMENT_ICONS: Record<string, string> = {
   team_van: "🚐", gym_corner: "💪", training_wall: "🧱", club_grill: "🍖",
   fan_drums: "📣", winter_gear: "🧥", video_setup: "📹",
   laundry: "🧺", mower: "🚜", pitch_heating: "🔥", pitch_irrigation: "💧", coffee_maker: "☕",
-  sports_drinks: "🥤", raffle: "🎟", pa_system: "🎙", trophy_case: "🏆", area_security: "🔒",
+  sports_drinks: "🥤", raffle: "🎟", pa_system: "🎙", trophy_case: "🏆", area_security: "🔒", nutrition: "⚖️",
 };
 
 export function formatCZK(v: number): string {
