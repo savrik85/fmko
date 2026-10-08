@@ -102,14 +102,23 @@ export function playerBodyView(physical: Record<string, unknown> | null | undefi
   };
 }
 
+/** Váha k ideálu podle výšky. BMI: hubený ~21, atletický 23,5, normální ~25, zavalitý ~27, obézní ~31. */
+const BODY_WEIGHT_FACTOR: Record<BodyType, number> = {
+  thin: 0.88, athletic: 1.0, normal: 1.05, stocky: 1.15, obese: 1.32,
+};
+
+/**
+ * Výška podle postu ±8 cm, váha z výšky a postavy ±3 kg. Dřív se váha losovala
+ * nezávisle na výšce (170 cm i 194 cm kolem 80 kg) a postava se po vzniku hráče zahodila.
+ */
 export function generateHeightWeight(
   rng: Rng,
   position: string,
   bodyType: string = "normal",
-): { height: number; weight: number } {
+): { height: number; weight: number; bodyType: BodyType } {
+  const type: BodyType = isBodyType(bodyType) ? bodyType : "normal";
   const baseHeight = position === "GK" ? 185 : position === "DEF" ? 180 : position === "FWD" ? 178 : 176;
   const height = baseHeight + rng.int(-8, 8);
-  const baseWeight = bodyType === "obese" ? 100 : bodyType === "stocky" ? 88 : bodyType === "thin" ? 68 : bodyType === "athletic" ? 78 : 80;
-  const weight = baseWeight + rng.int(-5, 8);
-  return { height, weight };
+  const weight = Math.round(idealWeight(height) * BODY_WEIGHT_FACTOR[type]) + rng.int(-3, 3);
+  return { height, weight, bodyType: type };
 }

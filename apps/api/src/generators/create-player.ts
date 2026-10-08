@@ -13,7 +13,7 @@
 
 import type { Rng } from "./rng";
 import { generatePlayer, type GeneratedPlayer, type PlayerIdentity, type VillageInfo } from "./player";
-import { generateHeightWeight } from "./physicals";
+import { generateHeightWeight, type BodyType } from "./physicals";
 import { generatePlayerSkills, type PlayerSkillsOptions, type PlayerPositionCode } from "../skills/generator";
 import { generatePlayerFace } from "../routes/teams";
 
@@ -75,7 +75,7 @@ export interface CreatedPlayer {
   experience: number;
   physical: {
     stamina: number; strength: number; injuryProneness: number;
-    height: number; weight: number;
+    height: number; weight: number; bodyType: BodyType;
     preferredFoot: PlayerIdentity["preferredFoot"]; preferredSide: PlayerIdentity["preferredSide"];
   };
   personality: {
