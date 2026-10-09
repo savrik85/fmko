@@ -67,7 +67,7 @@ function formatRelative(iso: string): string {
 export function OfferTimeline({
   events, myTeamId,
   fromTeamId, toTeamId,
-  fromManager, toManager,
+  fromManager, toManager, hasSwap = false,
 }: {
   events: OfferEvent[];
   myTeamId: string;
@@ -75,6 +75,8 @@ export function OfferTimeline({
   toTeamId: string;
   fromManager: TimelineManager | null;
   toManager: TimelineManager | null;
+  /** U výměny hráčů je nula „bez doplatku", ne „zdarma". */
+  hasSwap?: boolean;
 }) {
   if (events.length === 0) {
     return <div className="text-sm text-muted italic">Žádná historie</div>;
@@ -117,7 +119,7 @@ export function OfferTimeline({
               </div>
               {e.amount != null && (
                 <div className="font-heading font-bold tabular-nums text-lg leading-tight">
-                  {e.amount > 0 ? `${e.amount.toLocaleString("cs")} Kč` : "zdarma"}
+                  {e.amount > 0 ? `${e.amount.toLocaleString("cs")} Kč` : hasSwap ? "bez doplatku" : "zdarma"}
                 </div>
               )}
               {e.amount != null && e.amount > 0 && (e.installments || e.sell_on_pct) ? (
