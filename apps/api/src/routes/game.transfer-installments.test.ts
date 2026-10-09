@@ -294,7 +294,15 @@ beforeAll(async () => {
       last_name TEXT,
       age INTEGER,
       position TEXT,
-      overall_rating INTEGER
+      overall_rating INTEGER,
+      avatar TEXT
+    );
+
+    CREATE TABLE transfer_offer_swap_players (
+      offer_id TEXT NOT NULL,
+      player_id TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (offer_id, player_id)
     );
   `);
 
@@ -342,6 +350,7 @@ beforeEach(async () => {
     DELETE FROM transfer_bids;
     DELETE FROM transfer_listings;
     DELETE FROM player_contracts;
+    DELETE FROM transfer_offer_swap_players;
     DELETE FROM transfer_offers;
     DELETE FROM players;
     DELETE FROM managers;
@@ -667,5 +676,129 @@ describe("závazky klubu a hráče", () => {
     expect(third.json).toEqual({ paying: null, receiving: null, sellOnOwed: null, sellOnClaim: null });
     const mine = await getObligations("/teams/buyer-a/players/star/obligations", "buyer-token");
     expect(mine.json!.paying).toMatchObject({ remaining: 42_000 });
+  });
+});
+
+describe("výměna víc hráčů za jednoho", () => {
+  async function addBuyerPlayer(id: string, firstName: string, lastName: string, squadNumber: number) {
+    await db.batch([
+      db.prepare(`INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating,
+        skills, physical, personality, life_context, avatar, weekly_wage, squad_number, residence, commute_km)
+        VALUES (?, 'buyer-a', ?, ?, 24, 'MID', 40, '{}', '{}', '{}', '{"condition":100}', '{}', 200, ?, 'Testov', 0)`)
+        .bind(id, firstName, lastName, squadNumber),
+      db.prepare(`INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active)
+        VALUES (?, ?, 'buyer-a', 'season', ?, 'generated', 0, 1)`).bind(`contract-${id}`, id, GAME_DATE),
+    ]);
+  }
+
+  beforeEach(async () => {
+    await addBuyerPlayer("swap-one", "Karel", "První", 21);
+    await addBuyerPlayer("swap-two", "Josef", "Druhý", 22);
+  });
+
+  const teamOf = async (id: string) =>
+    (await db.prepare("SELECT team_id FROM players WHERE id = ?").bind(id).first<{ team_id: string }>())!.team_id;
+
+  it("dva hráči bez doplatku: oba jdou k prodávajícímu, hvězda ke kupujícímu, peníze se nehnou", async () => {
+    const offer = await makeOffer({ amount: 0, offeredPlayerIds: ["swap-one", "swap-two"] });
+    expect(offer.status).toBe(200);
+    expect((await db.prepare("SELECT player_id FROM transfer_offer_swap_players WHERE offer_id = ? ORDER BY sort_order").bind(offer.id).all()).results)
+      .toEqual([{ player_id: "swap-one" }, { player_id: "swap-two" }]);
+
+    const before = await budgets();
+    const r = await callRoute(`/teams/seller-a/offers/${offer.id}/accept`, { method: "POST", token: "seller-token", body: {} });
+    expect(r.status).toBe(200);
+
+    expect(await teamOf("star")).toBe("buyer-a");
+    expect(await teamOf("swap-one")).toBe("seller-a");
+    expect(await teamOf("swap-two")).toBe("seller-a");
+    expect((await db.prepare("SELECT player_id FROM player_contracts WHERE join_type = 'swap' AND team_id = 'seller-a' AND is_active = 1 ORDER BY player_id").all()).results)
+      .toEqual([{ player_id: "swap-one" }, { player_id: "swap-two" }]);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM player_contracts WHERE player_id IN ('swap-one','swap-two') AND team_id = 'buyer-a' AND is_active = 1").first<{ n: number }>())!.n).toBe(0);
+
+    const after = await budgets();
+    expect(after["buyer-a"]).toBe(before["buyer-a"]);
+    expect(after["seller-a"]).toBe(before["seller-a"]);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE type IN ('transfer_fee','transfer_income')").first<{ n: number }>())!.n).toBe(0);
+
+    expect(sideEffects.createTransferNews).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), null, "transfer_completed",
+      expect.objectContaining({ swapPlayerNames: ["Karel První", "Josef Druhý"], fee: 0 }),
+    );
+    const sms = (await db.prepare("SELECT body FROM messages WHERE body LIKE '%Přestup potvrzen%' ORDER BY body").all<{ body: string }>()).results.map((m) => m.body);
+    expect(sms.some((b) => b.includes("výměnou za Karel První a Josef Druhý."))).toBe(true);
+    expect(sms.some((b) => b.includes("0 Kč"))).toBe(false);
+  });
+
+  it("u doplatku se peníze přičtou k výčtu hráčů", async () => {
+    const offer = await makeOffer({ amount: 5_000, offeredPlayerIds: ["swap-one", "swap-two"] });
+    expect((await callRoute(`/teams/seller-a/offers/${offer.id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
+    const sms = (await db.prepare("SELECT body FROM messages WHERE body LIKE '%Přestup potvrzen%'").all<{ body: string }>()).results.map((m) => m.body);
+    expect(sms.some((b) => /výměnou za Karel První, Josef Druhý a 5\s000 Kč\./.test(b))).toBe(true);
+  });
+
+  it("když jeden z hráčů mezitím odejde, obchod padá celý a nikdo se nepřesune", async () => {
+    const offer = await makeOffer({ amount: 1_000, offeredPlayerIds: ["swap-one", "swap-two"] });
+    await db.prepare("UPDATE players SET team_id = 'third-a' WHERE id = 'swap-two'").run();
+    const before = await budgets();
+    const r = await callRoute(`/teams/seller-a/offers/${offer.id}/accept`, { method: "POST", token: "seller-token", body: {} });
+    expect(r.status).toBe(409);
+    expect(await teamOf("star")).toBe("seller-a");
+    expect(await teamOf("swap-one")).toBe("buyer-a");
+    expect(await budgets()).toEqual(before);
+    expect((await db.prepare("SELECT status FROM transfer_offers WHERE id = ?").bind(offer.id).first<{ status: string }>())!.status).toBe("pending");
+  });
+
+  it("když se druhý hráč nedá přesunout, vrátí se hvězda i už přesunutý první hráč", async () => {
+    const offer = await makeOffer({ amount: 1_000, offeredPlayerIds: ["swap-one", "swap-two"] });
+    // Hráč uprostřed jiného přestupu projde kontrolou vlastnictví, ale přesun ho odmítne.
+    await db.prepare("UPDATE players SET status = 'transferring' WHERE id = 'swap-two'").run();
+    const before = await budgets();
+    const r = await callRoute(`/teams/seller-a/offers/${offer.id}/accept`, { method: "POST", token: "seller-token", body: {} });
+    expect(r.status).toBe(409);
+    expect(await teamOf("star")).toBe("seller-a");
+    expect(await teamOf("swap-one")).toBe("buyer-a");
+    expect(await teamOf("swap-two")).toBe("buyer-a");
+    expect(await budgets()).toEqual(before);
+    expect((await db.prepare("SELECT status FROM transfer_offers WHERE id = ?").bind(offer.id).first<{ status: string }>())!.status).toBe("pending");
+  });
+
+  it("odmítne tři hráče, stejného hráče dvakrát, cizího hráče a nulu bez výměny", async () => {
+    await addBuyerPlayer("swap-three", "Pavel", "Třetí", 23);
+    expect((await makeOffer({ amount: 0, offeredPlayerIds: ["swap-one", "swap-two", "swap-three"] })).status).toBe(400);
+    expect((await makeOffer({ amount: 0, offeredPlayerIds: ["swap-one", "swap-one"] })).status).toBe(400);
+    expect((await makeOffer({ amount: 0, offeredPlayerIds: ["swap-one", "junior"] })).status).toBe(400);
+    expect((await makeOffer({ amount: 0 })).status).toBe(400);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM transfer_offer_swap_players").first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it("starý klient s jedním hráčem v offeredPlayerId funguje dál", async () => {
+    const offer = await makeOffer({ amount: 1_000, offeredPlayerId: "swap-one" });
+    expect(offer.status).toBe(200);
+    expect((await db.prepare("SELECT player_id FROM transfer_offer_swap_players WHERE offer_id = ?").bind(offer.id).all()).results)
+      .toEqual([{ player_id: "swap-one" }]);
+  });
+
+  it("protinávrh na nulu jde jen u výměny", async () => {
+    const swap = await makeOffer({ amount: 5_000, offeredPlayerIds: ["swap-one"] });
+    expect((await callRoute(`/teams/seller-a/offers/${swap.id}/counter`, { method: "POST", token: "seller-token", body: { amount: 0 } })).status).toBe(200);
+    await db.prepare("DELETE FROM transfer_offers WHERE id = ?").bind(swap.id).run();
+    const plain = await makeOffer({ amount: 5_000 });
+    expect((await callRoute(`/teams/seller-a/offers/${plain.id}/counter`, { method: "POST", token: "seller-token", body: { amount: 0 } })).status).toBe(400);
+  });
+
+  it("seznam nabídek i historie ukážou oba hráče v pořadí výběru", async () => {
+    const offer = await makeOffer({ amount: 1_000, offeredPlayerIds: ["swap-two", "swap-one"] });
+    const list = await readJson(await callRoute("/teams/seller-a/offers", { token: "seller-token" }));
+    const incoming = list.incoming.find((o: Record<string, unknown>) => o.id === offer.id);
+    expect(incoming.swap_players.map((p: Record<string, unknown>) => p.last_name)).toEqual(["Druhý", "První"]);
+
+    const detail = await readJson(await callRoute(`/teams/seller-a/offers/${offer.id}`, { token: "seller-token" }));
+    expect(detail.offeredPlayers.map((p: Record<string, unknown>) => p.id)).toEqual(["swap-two", "swap-one"]);
+
+    expect((await callRoute(`/teams/seller-a/offers/${offer.id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
+    const after = await readJson(await callRoute("/teams/buyer-a/offers", { token: "buyer-token" }));
+    const done = after.history.find((o: Record<string, unknown>) => o.id === offer.id);
+    expect(done.swap_players.map((p: Record<string, unknown>) => p.last_name)).toEqual(["Druhý", "První"]);
   });
 });

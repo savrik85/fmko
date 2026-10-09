@@ -34,7 +34,6 @@ interface OfferDetail {
     expires_at: string;
     created_at: string;
     resolved_at: string | null;
-    offered_player_id: string | null;
     is_virtual?: boolean;
     player_interest?: number | null;
     upfront_pct?: number | null;
@@ -44,7 +43,8 @@ interface OfferDetail {
   role: "buyer" | "seller";
   on_turn: boolean;
   player: PlayerSummary | null;
-  offeredPlayer: PlayerSummary | null;
+  /** Hráči, které kupující nabízí na výměnu (nejvýš dva). Starší API vracelo jednoho v `offeredPlayer`. */
+  offeredPlayers?: PlayerSummary[];
   fromTeam: TeamSummary | null;
   toTeam: TeamSummary | null;
   fromManager: ManagerSummary | null;
@@ -140,7 +140,7 @@ export default function OfferDetailPage() {
     );
   }
 
-  const { offer, role, on_turn, player, offeredPlayer, fromTeam, toTeam, fromManager, toManager, events, currentAmount, crossLeague, adminFee, playerInterest } = data;
+  const { offer, role, on_turn, player, offeredPlayers = [], fromTeam, toTeam, fromManager, toManager, events, currentAmount, crossLeague, adminFee, playerInterest } = data;
   const terms: TransferTerms = data.terms ?? { amount: currentAmount, upfrontPct: 100, installments: 0, sellOnPct: 0 };
   const payNow = data.payNow ?? currentAmount + adminFee;
   // Splátky a procenta se vyjednávají jen u trvalého přestupu mezi lidmi.
@@ -222,7 +222,7 @@ export default function OfferDetailPage() {
             <div className="flex justify-center">
               <PlayerHero
                 player={player}
-                offeredPlayer={offeredPlayer}
+                offeredPlayers={offeredPlayers}
                 currentAmount={currentAmount}
                 offerType={offer.offer_type}
                 loanDuration={offer.loan_duration}
@@ -268,7 +268,7 @@ export default function OfferDetailPage() {
           {player && (
             <PlayerHero
               player={player}
-              offeredPlayer={offeredPlayer}
+              offeredPlayers={offeredPlayers}
               currentAmount={currentAmount}
               offerType={offer.offer_type}
               loanDuration={offer.loan_duration}
@@ -336,9 +336,10 @@ export default function OfferDetailPage() {
             saleDeductions={role === "seller" && owed ? {
               settle: owed.remaining, settleTo: owed.to,
               sellOnPct: owed.pct, sellOnTo: owed.pctTo, sellOn: sellOnShare(currentAmount, owed.pct),
-              withSwap: !!offeredPlayer,
+              withSwap: offeredPlayers.length > 0,
             } : null}
             hideCounter={!!offer.is_virtual}
+            hasSwap={offeredPlayers.length > 0}
             rejectWarning={rejectWarning}
             onAccept={accept}
             onCounter={counter}

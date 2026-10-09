@@ -39,11 +39,11 @@ function positionSkills(pos: string, skills: Record<string, number>): Array<[str
 }
 
 export function PlayerHero({
-  player, offeredPlayer, currentAmount, offerType, loanDuration,
+  player, offeredPlayers, currentAmount, offerType, loanDuration,
   crossLeague, adminFee, terms, sellerName, message, playerInterest,
 }: {
   player: PlayerSummary;
-  offeredPlayer: PlayerSummary | null;
+  offeredPlayers: PlayerSummary[];
   currentAmount: number;
   offerType: "transfer" | "loan";
   loanDuration: number | null;
@@ -55,7 +55,8 @@ export function PlayerHero({
   playerInterest?: PlayerInterest | null;
 }) {
   const hasAvatar = player.avatar && Object.keys(player.avatar).length > 0;
-  const swapHasAvatar = offeredPlayer?.avatar && Object.keys(offeredPlayer.avatar).length > 0;
+  // Dva hráči na výměnu se musí vejít vedle hlavního i na mobilu.
+  const swapAvatarSize = offeredPlayers.length > 1 ? 60 : 72;
   const blurPrefix = player.isOwn ? "" : "~";
   const posSkills = positionSkills(player.position, player.skills);
 
@@ -67,20 +68,22 @@ export function PlayerHero({
         ) : (
           <div className="w-[140px] h-[168px] bg-gray-100 rounded-soft" />
         )}
-        {offeredPlayer && (
+        {offeredPlayers.length > 0 && (
           <>
             <div className="text-2xl text-muted shrink-0">⇄</div>
-            <Link href={`/hrac/${offeredPlayer.id}`} className="flex flex-col items-center gap-1 group">
-              {swapHasAvatar ? (
-                <FaceAvatar faceConfig={offeredPlayer.avatar} size={72} />
-              ) : (
-                <div className="w-[72px] h-[86px] bg-gray-100 rounded-soft" />
-              )}
-              <span className="text-micro font-heading font-bold text-muted uppercase tracking-wider">Na výměnu</span>
-              <span className="font-heading font-bold text-xs group-hover:text-pitch-500 transition-colors text-center max-w-[80px] truncate">
-                {offeredPlayer.first_name} {offeredPlayer.last_name}
-              </span>
-            </Link>
+            {offeredPlayers.map((op) => (
+              <Link key={op.id} href={`/hrac/${op.id}`} className="flex flex-col items-center gap-1 group">
+                {op.avatar && Object.keys(op.avatar).length > 0 ? (
+                  <FaceAvatar faceConfig={op.avatar} size={swapAvatarSize} />
+                ) : (
+                  <div className="bg-gray-100 rounded-soft" style={{ width: swapAvatarSize, height: Math.round(swapAvatarSize * 1.2) }} />
+                )}
+                <span className="text-micro font-heading font-bold text-muted uppercase tracking-wider">Na výměnu</span>
+                <span className="font-heading font-bold text-xs group-hover:text-pitch-500 transition-colors text-center max-w-[80px] truncate">
+                  {op.first_name} {op.last_name}
+                </span>
+              </Link>
+            ))}
           </>
         )}
       </div>
@@ -113,10 +116,10 @@ export function PlayerHero({
         <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider">
           {offerType === "loan"
             ? `Hostování${loanDuration ? ` na ${loanDuration} dní` : ""}`
-            : offeredPlayer ? "Nabídka + výměna" : "Aktuální nabídka"}
+            : offeredPlayers.length > 0 ? "Nabídka + výměna" : "Aktuální nabídka"}
         </div>
         <div className="font-heading font-[900] text-3xl tabular-nums text-pitch-500 mt-1">
-          {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : "Zdarma"}
+          {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : offeredPlayers.length > 0 ? "Bez doplatku" : "Zdarma"}
         </div>
         {offerType === "transfer" && (terms.installments > 0 || terms.sellOnPct > 0) ? (
           <div className="mt-2 w-[280px] max-w-full text-left">

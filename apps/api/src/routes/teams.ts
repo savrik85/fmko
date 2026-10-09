@@ -3116,18 +3116,20 @@ teamsRouter.get("/:id/players/:playerId/career-history", async (c) => {
   // Závora na join_type je nutná — bez ní se chytne starší kontrakt v témže klubu.
   const SWAP_PARTNER_SQL = `
        CASE WHEN pc.join_type IN ('transfer', 'swap') THEN COALESCE(
-         (SELECT COALESCE(sp.first_name || ' ' || sp.last_name, sdp.first_name || ' ' || sdp.last_name)
-            FROM transfer_offers o
-            LEFT JOIN players sp ON sp.id = o.offered_player_id
-            LEFT JOIN departed_players sdp ON sdp.id = o.offered_player_id
-           WHERE o.status = 'accepted' AND o.offered_player_id IS NOT NULL
-             AND o.player_id = pc.player_id AND o.from_team_id = pc.team_id LIMIT 1),
+         (SELECT GROUP_CONCAT(COALESCE(sp.first_name || ' ' || sp.last_name, sdp.first_name || ' ' || sdp.last_name), ', ')
+            FROM transfer_offer_swap_players s
+            LEFT JOIN players sp ON sp.id = s.player_id
+            LEFT JOIN departed_players sdp ON sdp.id = s.player_id
+           WHERE s.offer_id = (SELECT o.id FROM transfer_offers o
+                                WHERE o.status = 'accepted' AND o.player_id = pc.player_id AND o.from_team_id = pc.team_id
+                                  AND EXISTS (SELECT 1 FROM transfer_offer_swap_players x WHERE x.offer_id = o.id)
+                                LIMIT 1)),
          (SELECT COALESCE(mp.first_name || ' ' || mp.last_name, mdp.first_name || ' ' || mdp.last_name)
             FROM transfer_offers o2
+            JOIN transfer_offer_swap_players s2 ON s2.offer_id = o2.id AND s2.player_id = pc.player_id
             LEFT JOIN players mp ON mp.id = o2.player_id
             LEFT JOIN departed_players mdp ON mdp.id = o2.player_id
-           WHERE o2.status = 'accepted' AND o2.offered_player_id = pc.player_id
-             AND o2.to_team_id = pc.team_id LIMIT 1)
+           WHERE o2.status = 'accepted' AND o2.to_team_id = pc.team_id LIMIT 1)
        ) END as swap_partner,
        CASE WHEN pc.join_type = 'transfer' THEN
          (SELECT o.installments FROM transfer_offers o

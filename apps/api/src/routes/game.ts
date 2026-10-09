@@ -6308,7 +6308,7 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const teamId = c.req.param("teamId");
   const buyerClubTeamId = await resolveClubTeamId(c.env.DB, teamId);
   if (!buyerClubTeamId) return c.json({ error: "Kupující tým nenalezen" }, 404);
-  const body = await c.req.json<{ playerId: string; amount: number; message?: string; offerType?: "transfer" | "loan"; loanDuration?: number; offeredPlayerId?: string | null; targetSquad?: "senior" | "u21"; upfrontPct?: number; installments?: number; sellOnPct?: number }>();
+  const body = await c.req.json<{ playerId: string; amount: number; message?: string; offerType?: "transfer" | "loan"; loanDuration?: number; offeredPlayerId?: string | null; offeredPlayerIds?: string[]; targetSquad?: "senior" | "u21"; upfrontPct?: number; installments?: number; sellOnPct?: number }>();
   const targetSquad: "senior" | "u21" = body.targetSquad === "u21" ? "u21" : "senior";
   const player = await c.env.DB.prepare("SELECT p.*, t.user_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ?").bind(body.playerId).first<Record<string, unknown>>();
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
@@ -6342,9 +6342,14 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const offerType = body.offerType ?? "transfer";
   const loanDuration = offerType === "loan" ? (body.loanDuration ?? 30) : null;
 
-  // Validace částky: loan povoluje 0 (bezplatné hostování), transfer vyžaduje kladné celé číslo
-  if (!Number.isInteger(body.amount) || body.amount < 0 || (offerType !== "loan" && body.amount === 0)) {
-    return c.json({ error: "Nabídka musí být kladné celé číslo (0 povolena jen pro hostování)" }, 400);
+  const { parseSwapPlayerIds, swapPlayersError, insertSwapPlayersStmts } = await import("../transfers/swap-players");
+  const parsedSwap = parseSwapPlayerIds(body);
+  if ("error" in parsedSwap) return c.json({ error: parsedSwap.error }, 400);
+  const swapPlayerIds = parsedSwap.ids;
+
+  // Validace částky: 0 jde u hostování (zdarma) a u výměny (hráči za hráče bez doplatku).
+  if (!Number.isInteger(body.amount) || body.amount < 0 || (offerType !== "loan" && body.amount === 0 && swapPlayerIds.length === 0)) {
+    return c.json({ error: "Nabídka musí být kladné celé číslo (0 jen u hostování nebo výměny hráčů)" }, 400);
   }
   if (body.amount > MAX_TRANSFER_AMOUNT) return c.json({ error: `Částka může být nejvýš ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.` }, 400);
 
@@ -6374,19 +6379,11 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
     return c.json({ error: "Délka hostování musí být 7–180 dní" }, 400);
   }
 
-  // Player swap validation: jen v initial offer, jen pro transfer, jen můj hráč, nezraněný, ne stejný hráč
-  const offeredPlayerId = body.offeredPlayerId ?? null;
-  if (offeredPlayerId) {
+  // Hráči na výměnu: jen v úvodní nabídce a jen u trvalého přestupu, vlastní, nezranění, ne chtěný hráč.
+  if (swapPlayerIds.length > 0) {
     if (offerType === "loan") return c.json({ error: "Hráče na výměnu lze přidat jen u trvalého přestupu" }, 400);
-    if (offeredPlayerId === body.playerId) return c.json({ error: "Nelze nabídnout stejného hráče" }, 400);
-    const swap = await c.env.DB.prepare("SELECT team_id, loan_from_team_id, next_match_return FROM players WHERE id = ?").bind(offeredPlayerId).first<{ team_id: string; loan_from_team_id: string | null; next_match_return: number }>();
-    if (!swap) return c.json({ error: "Hráč na výměnu nenalezen" }, 404);
-    const swapClubTeamId = await resolveClubTeamId(c.env.DB, swap.team_id);
-    if (swapClubTeamId !== buyerClubTeamId) return c.json({ error: "Hráč na výměnu není ve tvém klubu" }, 400);
-    if (swap.loan_from_team_id) return c.json({ error: "Hráč na výměnu je na hostování, nelze vyměnit" }, 400);
-    if (swap.next_match_return === 1) return c.json({ error: "Hráč na výměnu čeká na návrat z U21, nelze ho nabídnout" }, 400);
-    const injury = await c.env.DB.prepare("SELECT 1 FROM injuries WHERE player_id = ? AND days_remaining > 0 LIMIT 1").bind(offeredPlayerId).first().catch((e) => { logger.warn({ module: "game" }, "check swap player injury", e); return null; });
-    if (injury) return c.json({ error: "Zraněného hráče nelze nabídnout na výměnu" }, 400);
+    const swapError = await swapPlayersError(c.env.DB, swapPlayerIds, { buyerClubTeamId, targetPlayerId: body.playerId });
+    if (swapError) return c.json({ error: swapError.error }, swapError.status);
   }
 
   // Idempotence: pokud existuje aktivní nabídka od tohoto týmu na tohoto hráče, vrátit ji
@@ -6422,8 +6419,12 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, offered_player_id, target_squad, player_interest, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, buyerClubTeamId, offeredPlayerId, targetSquad, interest?.level ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct).run();
+  // Nabídka a hráči na výměnu vznikají naráz, jinak by mohla viset nabídka bez slíbených hráčů.
+  await c.env.DB.batch([
+    c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, target_squad, player_interest, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, buyerClubTeamId, targetSquad, interest?.level ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct),
+    ...insertSwapPlayersStmts(c.env.DB, id, swapPlayerIds),
+  ]);
 
   // Log initial offer event (s podmínkami, ať historie vyjednávání ukáže, co se měnilo)
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, 'offer', ?, ?, ?, ?, ?)")
@@ -6490,10 +6491,8 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
        (SELECT recorded.league_id FROM teams recorded WHERE recorded.id = to2.to_team_id)
      ) as to_league_id,
      COALESCE((SELECT COALESCE(la.parent_team_id, la.id) FROM teams la WHERE la.id = to2.last_action_by), to2.last_action_by) as last_action_club_id,
-     CASE WHEN to2.from_team_id = 'virtual_ai' THEN 1 ELSE 0 END as is_virtual,
-     op.first_name as offered_first_name, op.last_name as offered_last_name, op.position as offered_position
+     CASE WHEN to2.from_team_id = 'virtual_ai' THEN 1 ELSE 0 END as is_virtual
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id LEFT JOIN teams t ON to2.from_team_id = t.id
-     LEFT JOIN players op ON to2.offered_player_id = op.id
      WHERE to2.to_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
        AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(clubTeamId, clubTeamId).all();
@@ -6507,10 +6506,8 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
        t.league_id
      ) as to_league_id,
      (SELECT tf.league_id FROM teams tf WHERE tf.id = to2.from_team_id) as from_league_id,
-     COALESCE((SELECT COALESCE(la.parent_team_id, la.id) FROM teams la WHERE la.id = to2.last_action_by), to2.last_action_by) as last_action_club_id,
-     op.first_name as offered_first_name, op.last_name as offered_last_name, op.position as offered_position
+     COALESCE((SELECT COALESCE(la.parent_team_id, la.id) FROM teams la WHERE la.id = to2.last_action_by), to2.last_action_by) as last_action_club_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
-     LEFT JOIN players op ON to2.offered_player_id = op.id
      WHERE to2.from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
        AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
   ).bind(clubTeamId, clubTeamId).all();
@@ -6521,13 +6518,6 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
     `SELECT to2.*, COALESCE(p.first_name, dp.first_name) as first_name, COALESCE(p.last_name, dp.last_name) as last_name,
      COALESCE(p.age, dp.age) as age, COALESCE(p.position, dp.position) as position,
      COALESCE(p.overall_rating, dp.overall_rating) as overall_rating, p.avatar as player_avatar,
-     -- Výměnný hráč: jde opačným směrem jako protihodnota. Bez něj vypadá
-     -- doplatek jako celá cena přestupu a druhý hráč se v historii vůbec neobjeví.
-     COALESCE(sp.first_name, sdp.first_name) as swap_first_name,
-     COALESCE(sp.last_name, sdp.last_name) as swap_last_name,
-     COALESCE(sp.position, sdp.position) as swap_position,
-     COALESCE(sp.overall_rating, sdp.overall_rating) as swap_overall_rating,
-     sp.avatar as swap_avatar,
      ${virtualNameSql.replace("ELSE t.name END", "ELSE tf.name END")} as from_team_name, tt.name as to_team_name,
      tf.league_id as from_league_id, tt.league_id as to_league_id,
      COALESCE((SELECT COALESCE(fc.parent_team_id, fc.id) FROM teams fc WHERE fc.id = to2.from_team_id), to2.from_team_id) as from_club_team_id,
@@ -6535,8 +6525,6 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      FROM transfer_offers to2
      LEFT JOIN players p ON to2.player_id = p.id
      LEFT JOIN departed_players dp ON to2.player_id = dp.id
-     LEFT JOIN players sp ON to2.offered_player_id = sp.id
-     LEFT JOIN departed_players sdp ON to2.offered_player_id = sdp.id
      LEFT JOIN teams tf ON to2.from_team_id = tf.id
      JOIN teams tt ON to2.to_team_id = tt.id
      WHERE (to2.from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
@@ -6593,8 +6581,17 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
       return { ...r, on_turn: onTurn };
     });
 
+  // Hráči na výměnu jdou opačným směrem jako protihodnota. Bez nich vypadá
+  // doplatek jako celá cena přestupu a druzí hráči se v historii vůbec neobjeví.
+  const { loadSwapPlayers } = await import("../transfers/swap-players");
+  const offerRows = [incoming.results, outgoing.results, history.results].flat() as Record<string, unknown>[];
+  const swapsByOffer = await loadSwapPlayers(c.env.DB, offerRows.map((r) => r.id as string))
+    .catch((e) => { logger.error({ module: "game" }, "hráči na výměnu k nabídkám", e); return new Map<string, unknown[]>(); });
+  const withSwaps = (rows: Record<string, unknown>[]): Record<string, unknown>[] =>
+    rows.map((r) => ({ ...r, swap_players: swapsByOffer.get(r.id as string) ?? [] }));
+
   // Historie — doplnit "role" (buyer/seller) pro kazdy zaznam
-  const historyWithRole = (history.results as Record<string, unknown>[]).map((r) => ({
+  const historyWithRole = withSwaps(history.results as Record<string, unknown>[]).map((r) => ({
     ...r,
     my_role: r.from_club_team_id === clubTeamId ? "buyer" : "seller",
   }));
@@ -6661,8 +6658,8 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
   };
 
   return c.json({
-    incoming: await dopocitejPoplatek(addOnTurn(incoming.results as Record<string, unknown>[], "seller")),
-    outgoing: await dopocitejPoplatek(addOnTurn(outgoing.results as Record<string, unknown>[], "buyer")),
+    incoming: await dopocitejPoplatek(addOnTurn(withSwaps(incoming.results as Record<string, unknown>[]), "seller")),
+    outgoing: await dopocitejPoplatek(addOnTurn(withSwaps(outgoing.results as Record<string, unknown>[]), "buyer")),
     incomingBids: addBidOnTurn(incomingBids.results as Record<string, unknown>[], "seller"),
     outgoingBids: addBidOnTurn(outgoingBids.results as Record<string, unknown>[], "buyer"),
     history: historyWithRole,
@@ -6714,16 +6711,18 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     ? currentSellerSquadCandidate
     : scope.sellerSquadTeamId;
 
-  let offeredPlayer = null;
-  if (offer.offered_player_id) {
-    const op = await c.env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(offer.offered_player_id).first<Record<string, unknown>>();
-    if (op) {
-      const offeredPlayerClubTeamId = await resolveClubTeamId(c.env.DB, String(op.team_id));
-      const offeredPlayerViewerTeamId = offeredPlayerClubTeamId === scope.actorClubTeamId
-        ? String(op.team_id)
-        : scope.actorClubTeamId;
-      offeredPlayer = buildPlayerView(op, offeredPlayerViewerTeamId);
-    }
+  // Hráči na výměnu v pořadí, v jakém je kupující vybral. Kdo už v databázi není, se nezobrazí.
+  const offeredPlayers: ReturnType<typeof buildPlayerView>[] = [];
+  const swapRows = await c.env.DB.prepare(
+    `SELECT p.* FROM transfer_offer_swap_players s JOIN players p ON p.id = s.player_id
+      WHERE s.offer_id = ? ORDER BY s.sort_order`,
+  ).bind(offerId).all<Record<string, unknown>>();
+  for (const op of swapRows.results) {
+    const offeredPlayerClubTeamId = await resolveClubTeamId(c.env.DB, String(op.team_id));
+    const offeredPlayerViewerTeamId = offeredPlayerClubTeamId === scope.actorClubTeamId
+      ? String(op.team_id)
+      : scope.actorClubTeamId;
+    offeredPlayers.push(buildPlayerView(op, offeredPlayerViewerTeamId));
   }
 
   const teamFields = "id, name, primary_color, secondary_color, badge_pattern, badge_symbol, badge_initials, badge_primary_color, badge_secondary_color, budget, reputation, league_id";
@@ -6852,7 +6851,6 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
       expires_at: offer.expires_at,
       created_at: offer.created_at,
       resolved_at: offer.resolved_at,
-      offered_player_id: offer.offered_player_id,
       player_interest: offer.player_interest ?? null,
       is_virtual: isVirtualOffer,
       upfront_pct: offer.upfront_pct ?? 100,
@@ -6862,7 +6860,7 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     role,
     on_turn: onTurn,
     player,
-    offeredPlayer,
+    offeredPlayers,
     fromTeam: fromTeamRow ? teamPublic(fromTeamRow, role === "buyer") : virtualFromTeam,
     toTeam: toTeamRow ? teamPublic(toTeamRow, role === "seller") : null,
     fromManager,
@@ -6908,18 +6906,20 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const offerType = (offer.offer_type as string) ?? "transfer";
   const loanDuration = offer.loan_duration as number | null;
   if (offerType === "loan" && !loanDuration) return c.json({ error: "Nabídce hostování chybí délka" }, 400);
-  const swapPlayerId = (offer.offered_player_id as string | null) ?? null;
-  // Jméno vyměněného hráče se čte teď, dokud ještě sedí na původní soupisce —
-  // po dokončení výměny už je jinde a do zprávy by se dohledávalo hůř.
-  const swapPlayerRow = swapPlayerId
-    ? await c.env.DB.prepare("SELECT first_name, last_name, overall_rating, age, position FROM players WHERE id = ?")
-        .bind(swapPlayerId).first<{ first_name: string; last_name: string; overall_rating: number; age: number; position: string }>()
-        .catch((e) => { logger.warn({ module: "game" }, "jméno vyměněného hráče", e); return null; })
-    : null;
-  const swapPlayerName = swapPlayerRow ? `${swapPlayerRow.first_name} ${swapPlayerRow.last_name}` : null;
-  // Procenta z příštího přestupu se u výměny počítají z doplatku i z tržní ceny hráče, který
-  // jde opačně. Jinak by šlo doložku obejít prodejem za hráče a symbolický doplatek.
-  const saleValueForSellOn = amount + (swapPlayerRow ? marketValue(swapPlayerRow.overall_rating, swapPlayerRow.age, swapPlayerRow.position) : 0);
+  // Hráči na výměnu se čtou teď, dokud ještě sedí na původní soupisce —
+  // po dokončení výměny už jsou jinde a do zprávy by se dohledávali hůř.
+  // Bez try/catch schválně: přestup bez slíbených hráčů by byl horší než chyba.
+  const swapRows = (await c.env.DB.prepare(
+    `SELECT s.player_id AS id, p.first_name, p.last_name, p.overall_rating, p.age, p.position
+       FROM transfer_offer_swap_players s LEFT JOIN players p ON p.id = s.player_id
+      WHERE s.offer_id = ? ORDER BY s.sort_order`,
+  ).bind(offerId).all<{ id: string; first_name: string | null; last_name: string | null; overall_rating: number | null; age: number | null; position: string | null }>()).results;
+  const swapPlayerIds = swapRows.map((r) => r.id);
+  const swapPlayerNames = swapRows.filter((r) => r.first_name).map((r) => `${r.first_name} ${r.last_name}`);
+  // Procenta z příštího přestupu se u výměny počítají z doplatku i z tržní ceny hráčů, kteří
+  // jdou opačně. Jinak by šlo doložku obejít prodejem za hráče a symbolický doplatek.
+  const saleValueForSellOn = amount + swapRows.reduce((sum, r) =>
+    sum + (r.overall_rating != null ? marketValue(r.overall_rating, r.age ?? 26, r.position) : 0), 0);
   const targetSquad = ((offer.target_squad as string) ?? "senior") === "u21" ? "u21" : "senior";
 
   // Nabídka odkazuje na konkrétní soupisku, finance ale patří mateřskému klubu.
@@ -7231,13 +7231,11 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
         : "Kupující nemá dostatek prostředků" }, 400);
     }
 
-    // Swap hráč — ověř že stále patří kupujícímu (race-safe).
-    let swapRosterTeamId: string | null = null;
-    let swapPreviousLoanUntil: string | null = null;
-    let swapPreviousParentClubId: string | null = null;
-    let swapPreviousNextMatchReturn = 0;
-    if (swapPlayerId) {
-      const swap = await c.env.DB.prepare("SELECT team_id, loan_from_team_id, loan_until, parent_club_id, next_match_return FROM players WHERE id = ?").bind(swapPlayerId).first<{ team_id: string; loan_from_team_id: string | null; loan_until: string | null; parent_club_id: string | null; next_match_return: number }>();
+    // Hráči na výměnu — ověř, že všichni stále patří kupujícímu (race-safe).
+    // Stačí, aby jeden mezitím odešel, a celý obchod padá.
+    const swapMoves: Array<{ id: string; rosterTeamId: string; loanUntil: string | null; parentClubId: string | null; nextMatchReturn: number }> = [];
+    for (const swapId of swapPlayerIds) {
+      const swap = await c.env.DB.prepare("SELECT team_id, loan_from_team_id, loan_until, parent_club_id, next_match_return FROM players WHERE id = ?").bind(swapId).first<{ team_id: string; loan_from_team_id: string | null; loan_until: string | null; parent_club_id: string | null; next_match_return: number }>();
       const swapClubTeamId = swap ? await resolveClubTeamId(c.env.DB, swap.team_id) : null;
       if (!swap || swapClubTeamId !== buyerTeamId || swap.loan_from_team_id || swap.next_match_return === 1) {
         // Vrátit peníze (rollback budget)
@@ -7246,11 +7244,13 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
         await releaseOfferClaim();
         return c.json({ error: "Hráč na výměnu již není k dispozici" }, 409);
       }
-      swapRosterTeamId = swap.team_id;
-      swapPreviousLoanUntil = swap.loan_until;
-      swapPreviousParentClubId = swap.parent_club_id;
-      swapPreviousNextMatchReturn = swap.next_match_return;
+      swapMoves.push({ id: swapId, rosterTeamId: swap.team_id, loanUntil: swap.loan_until, parentClubId: swap.parent_club_id, nextMatchReturn: swap.next_match_return });
     }
+    // Vrácení už přesunutých hráčů na výměnu na jejich původní soupisku.
+    const swapRollbackStmts = (moves: typeof swapMoves) => moves.map((m) => c.env.DB.prepare(
+      `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = ?, parent_club_id = ?, next_match_return = ?
+       WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
+    ).bind(m.rosterTeamId, m.loanUntil, m.parentClubId, m.nextMatchReturn, m.id, sellerTeamId));
 
     // Přičíst prodávajícímu + přesunout hráče + swap + uzavřít nabídku atomicky.
     // Guard `AND team_id = ?` chrání proti race condition (hráč mezitím prodán).
@@ -7266,20 +7266,24 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       return c.json({ error: "Hráč mezitím změnil klub" }, 409);
     }
 
-    if (swapPlayerId && swapRosterTeamId) {
+    for (let i = 0; i < swapMoves.length; i++) {
+      const m = swapMoves[i];
       const swapMoved = await c.env.DB.prepare(
         `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0
          WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL AND next_match_return = 0
            AND COALESCE(status, 'active') != 'transferring'`,
-      ).bind(sellerTeamId, swapPlayerId, swapRosterTeamId).run();
+      ).bind(sellerTeamId, m.id, m.rosterTeamId).run();
       if (swapMoved.meta.changes === 0) {
-        await c.env.DB.prepare(
-          `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
-           WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
-        ).bind(
-          currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
-          currentPlayer.parent_club_id, currentPlayer.next_match_return, playerId, buyerDestTeamId,
-        ).run().catch((e) => logger.warn({ module: "game" }, "rollback player after swap race", e));
+        await c.env.DB.batch([
+          c.env.DB.prepare(
+            `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
+             WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
+          ).bind(
+            currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
+            currentPlayer.parent_club_id, currentPlayer.next_match_return, playerId, buyerDestTeamId,
+          ),
+          ...swapRollbackStmts(swapMoves.slice(0, i)),
+        ]).catch((e) => logger.warn({ module: "game" }, "rollback players after swap race", e));
         await c.env.DB.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId).run()
           .catch((e) => logger.warn({ module: "game" }, "refund budget after swap race", e));
         await releaseOfferClaim();
@@ -7297,13 +7301,18 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       ).bind(playerId, offerId),
       c.env.DB.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'").bind(playerId),
       c.env.DB.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id IN (SELECT id FROM transfer_listings WHERE player_id = ?) AND status = 'pending'").bind(playerId),
-      c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), buyerTeamId, -payNow, buyerBalanceAfter + adminFee,
-          terms.installments > 0 ? `Přestup: ${offerPlayerName} (záloha ${terms.upfrontPct} %, zbytek ${terms.installments}× týdně)` : `Přestup: ${offerPlayerName}`, gameDate),
-      c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), sellerTeamId, payNow, (seller?.budget ?? 0) + payNow,
-          terms.installments > 0 ? `Prodej: ${offerPlayerName} (záloha, zbytek ${terms.installments}× týdně)` : `Prodej: ${offerPlayerName}`, gameDate),
     ];
+    // Čistá výměna hráčů bez doplatku nemá co účtovat — nulové řádky by jen zaplevelily finance.
+    if (payNow > 0) {
+      transferCore.push(
+        c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_fee', ?, ?, ?, ?)")
+          .bind(crypto.randomUUID(), buyerTeamId, -payNow, buyerBalanceAfter + adminFee,
+            terms.installments > 0 ? `Přestup: ${offerPlayerName} (záloha ${terms.upfrontPct} %, zbytek ${terms.installments}× týdně)` : `Přestup: ${offerPlayerName}`, gameDate),
+        c.env.DB.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_income', ?, ?, ?, ?)")
+          .bind(crypto.randomUUID(), sellerTeamId, payNow, (seller?.budget ?? 0) + payNow,
+            terms.installments > 0 ? `Prodej: ${offerPlayerName} (záloha, zbytek ${terms.installments}× týdně)` : `Prodej: ${offerPlayerName}`, gameDate),
+      );
+    }
     if (terms.installments > 0) {
       transferCore.push(c.env.DB.prepare(
         `INSERT INTO transfer_installments (id, offer_id, player_id, player_name, buyer_team_id, seller_team_id, total_amount, upfront_amount,
@@ -7352,16 +7361,16 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     transferCore.push(c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 'transfer', ?, 1)")
       .bind(crypto.randomUUID(), playerId, buyerDestTeamId, seasonId, gameDate, amount));
 
-    // Kontrakty pro swap hráče
-    if (swapPlayerId) {
+    // Kontrakty pro hráče na výměnu
+    for (const m of swapMoves) {
       transferCore.push(
         c.env.DB.prepare(
           `UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'transfer'
            WHERE player_id = ? AND is_active = 1
              AND team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)`,
-        ).bind(gameDate, swapPlayerId, buyerTeamId, buyerTeamId),
+        ).bind(gameDate, m.id, buyerTeamId, buyerTeamId),
         c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 'swap', 0, 1)")
-          .bind(crypto.randomUUID(), swapPlayerId, sellerTeamId, seasonId, gameDate),
+          .bind(crypto.randomUUID(), m.id, sellerTeamId, seasonId, gameDate),
       );
     }
 
@@ -7382,15 +7391,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
         c.env.DB.prepare("UPDATE transfer_offers SET status = ?, resolved_at = NULL WHERE id = ? AND status = 'accepted'")
           .bind(offer.status, offerId),
       ];
-      if (swapPlayerId && swapRosterTeamId) {
-        rollback.push(c.env.DB.prepare(
-          `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = ?, parent_club_id = ?, next_match_return = ?
-           WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
-        ).bind(
-          swapRosterTeamId, swapPreviousLoanUntil, swapPreviousParentClubId, swapPreviousNextMatchReturn,
-          swapPlayerId, sellerTeamId,
-        ));
-      }
+      rollback.push(...swapRollbackStmts(swapMoves));
       await c.env.DB.batch(rollback).catch((rollbackError) => logger.error({ module: "game" }, "rollback failed transfer offer", rollbackError));
       return c.json({ error: "Přestup se nepodařilo dokončit, zkus to znovu" }, 500);
     }
@@ -7412,7 +7413,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
       playerName: offerPlayerName, playerAge: player?.age as number,
       playerPosition: player?.position as string, teamName: seller?.name ?? "",
       fromTeamName: seller?.name, toTeamName: buyer.name, fee: amount,
-      swapPlayerName: swapPlayerName ?? undefined,
+      swapPlayerNames,
       playerRating: player?.overall_rating as number | undefined,
       sellerTeamId, buyerTeamId,
     }).catch((e) => logger.warn({ module: "game" }, "create offer accepted news", e));
@@ -7425,19 +7426,26 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
 
   // Update commute + reset squad number
   await onPlayerTransferred(c.env.DB, playerId, buyerDestTeamId);
-  if (swapPlayerId) {
-    await onPlayerTransferred(c.env.DB, swapPlayerId, sellerTeamId);
+  for (const swapId of swapPlayerIds) {
+    await onPlayerTransferred(c.env.DB, swapId, sellerTeamId);
   }
 
   // SMS notifications
   const playerName = offerPlayerName;
   const smsRole = "Sportovní ředitel";
+  // U výměny je částka jen doplatek (klidně nulový) — „za 0 Kč" by z výměny udělalo dárek.
+  const { czechList } = await import("../transfers/swap-players");
+  const moneyLabel = `${amount.toLocaleString("cs-CZ")} Kč`;
+  const swapGoods = swapPlayerNames.length > 0
+    ? czechList(amount > 0 ? [...swapPlayerNames, moneyLabel] : swapPlayerNames)
+    : null;
+  const dealLabel = swapGoods ? `výměnou za ${swapGoods}` : `za ${moneyLabel}`;
   if (offerType === "loan") {
     await sendPhoneSMS(c.env.DB, buyerTeamId, smsRole, smsRole, `🤝 Hostování schváleno! ${playerName} přichází z ${seller?.name ?? "neznámého klubu"} na ${loanDuration} dní.`).catch((e) => logger.warn({ module: "game" }, "loan accept SMS buyer", e));
     await sendPhoneSMS(c.env.DB, sellerTeamId, smsRole, smsRole, `📤 Hostování potvrzeno. ${playerName} odchází do ${buyer.name} na ${loanDuration} dní.${amount > 0 ? ` Poplatek: ${amount.toLocaleString("cs")} Kč.` : ""}`).catch((e) => logger.warn({ module: "game" }, "loan accept SMS seller", e));
   } else {
-    await sendPhoneSMS(c.env.DB, buyerTeamId, smsRole, smsRole, `🤝 Přestup potvrzen! ${playerName} přichází z ${seller?.name ?? "neznámého klubu"} za ${amount.toLocaleString("cs")} Kč.`).catch((e) => logger.warn({ module: "game" }, "transfer accept SMS buyer", e));
-    await sendPhoneSMS(c.env.DB, sellerTeamId, smsRole, smsRole, `📤 Přestup potvrzen. ${playerName} odchází do ${buyer.name} za ${amount.toLocaleString("cs")} Kč.`).catch((e) => logger.warn({ module: "game" }, "transfer accept SMS seller", e));
+    await sendPhoneSMS(c.env.DB, buyerTeamId, smsRole, smsRole, `🤝 Přestup potvrzen! ${playerName} přichází z ${seller?.name ?? "neznámého klubu"} ${dealLabel}.`).catch((e) => logger.warn({ module: "game" }, "transfer accept SMS buyer", e));
+    await sendPhoneSMS(c.env.DB, sellerTeamId, smsRole, smsRole, `📤 Přestup potvrzen. ${playerName} odchází do ${buyer.name} ${dealLabel}.`).catch((e) => logger.warn({ module: "game" }, "transfer accept SMS seller", e));
   }
 
   // Push notifikace
@@ -7446,13 +7454,13 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB };
     const label = offerType === "loan" ? "Hostování" : "Přestup";
     const acceptNote = acceptMessage ? ` „${acceptMessage}"` : "";
-    await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} za ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/prestupy/nabidka/${offerId}`, pushEnv);
-    await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `${buyer.name} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.${acceptNote}`, `/prestupy/nabidka/${offerId}`, pushEnv);
+    await createNotification(c.env.DB, buyerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `Koupili jste od ${seller?.name ?? "prodávajícího"} ${dealLabel}.${acceptNote}`, `/prestupy/nabidka/${offerId}`, pushEnv);
+    await createNotification(c.env.DB, sellerTeamId, "transfer", `✅ ${label} ${playerName} dokončen`, `${swapGoods ? `Od ${buyer.name} přichází ${swapGoods}` : `${buyer.name} zaplatil ${moneyLabel}`}.${acceptNote}`, `/prestupy/nabidka/${offerId}`, pushEnv);
     // Push týmům sledujícím hráče ve watchlistu (kromě obou stran)
     const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
     await sendWebPushToPlayerWatchers(pushEnv, offer.player_id as string, buyerTeamId,
       `⭐ ${playerName} ${offerType === "loan" ? "jde na hostování" : "přestoupil"}`,
-      `${seller?.name ?? "Klub"} → ${buyer.name} za ${amount.toLocaleString("cs-CZ")} Kč.`,
+      `${seller?.name ?? "Klub"} → ${buyer.name} ${dealLabel}.`,
       `/hrac/${offer.player_id}`);
   } catch (e) { logger.warn({ module: "game" }, "offer accept notifications", e); }
 
@@ -7541,7 +7549,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
   const body = await c.req.json<{ amount: number; message?: string; upfrontPct?: number; installments?: number; sellOnPct?: number }>();
-  if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) {
+  if (!Number.isInteger(body.amount) || body.amount < 0) {
     return c.json({ error: "Protinabídka musí být kladné celé číslo" }, 400);
   }
   if (body.amount > MAX_TRANSFER_AMOUNT) return c.json({ error: `Částka může být nejvýš ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.` }, 400);
@@ -7551,6 +7559,12 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
     "SELECT player_id, from_team_id, to_team_id, status, last_action_by, expires_at, offer_type, upfront_pct, installments, sell_on_pct FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')"
   ).bind(offerId).first<{ player_id: string; from_team_id: string; to_team_id: string; status: string; last_action_by: string | null; expires_at: string; offer_type: string | null; upfront_pct: number | null; installments: number | null; sell_on_pct: number | null }>();
   if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
+  // Nula jde jen u výměny hráčů — hráči za hráče bez doplatku.
+  if (body.amount === 0) {
+    const hasSwap = await c.env.DB.prepare("SELECT 1 FROM transfer_offer_swap_players WHERE offer_id = ? LIMIT 1")
+      .bind(offerId).first();
+    if (!hasSwap) return c.json({ error: "Protinabídka musí být kladné celé číslo (0 jen u výměny hráčů)" }, 400);
+  }
   const scope = await resolveOfferClubScope(c.env.DB, teamId, offer);
   if (!scope?.role) return c.json({ error: "Nabídka nenalezena" }, 404);
   if (scope.buyerClubTeamId === "virtual_ai") {
