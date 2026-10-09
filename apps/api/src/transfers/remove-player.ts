@@ -85,6 +85,13 @@ export async function removePlayer(
   // Vynuluj FK offered_player_id pro VŠECHNY stavy (nejen pending/countered) — jinak DELETE hráče
   // spadne na FK transfer_offers→players a zacyklí fázi departures / rozbije release i „Kdo zůstane?".
   await db.prepare("UPDATE transfer_offers SET status = CASE WHEN status IN ('pending','countered') THEN 'withdrawn' ELSE status END, offered_player_id = NULL WHERE offered_player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "withdraw swap offers", e));
+  // Nabídky, kde je hráč na výměnu, padají taky. Řádek ve výměnách zůstává: historie
+  // uzavřených výměn si jméno dohledá v departed_players.
+  await db.prepare(
+    `UPDATE transfer_offers SET status = 'withdrawn'
+      WHERE status IN ('pending','countered')
+        AND id IN (SELECT offer_id FROM transfer_offer_swap_players WHERE player_id = ?)`,
+  ).bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "withdraw offers with swap player", e));
   await db.prepare("UPDATE teams SET captain_id = NULL WHERE captain_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "clear captain", e));
   await db.prepare("UPDATE teams SET penalty_taker_id = NULL WHERE penalty_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "clear penalty taker", e));
   await db.prepare("UPDATE teams SET freekick_taker_id = NULL WHERE freekick_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "clear freekick taker", e));

@@ -12,7 +12,7 @@ type DialogKind = "accept" | "counter" | "reject" | null;
 export function ActionBar({
   onAccept, onCounter, onReject,
   currentAmount, defaultCounter, terms, termsNegotiable, adminFee, payNow,
-  canAfford, waiting, role, hideCounter, rejectWarning, initialDialog = null, saleDeductions = null,
+  canAfford, waiting, role, hideCounter, rejectWarning, initialDialog = null, saleDeductions = null, hasSwap = false,
 }: {
   onAccept: (message: string) => Promise<void>;
   onCounter: (amount: number, message: string, terms: TermsValue | null) => Promise<void>;
@@ -34,6 +34,8 @@ export function ActionBar({
   initialDialog?: DialogKind;
   /** Prodávající za hráče sám splácí nebo slíbil procenta: co se mu z ceny hned strhne. */
   saleDeductions?: { settle: number; settleTo: string; sellOnPct: number; sellOnTo: string; sellOn: number; withSwap: boolean } | null;
+  /** U výměny hráčů jde i nulový doplatek. */
+  hasSwap?: boolean;
 }) {
   const [dialog, setDialog] = useState<DialogKind>(initialDialog);
 
@@ -108,7 +110,7 @@ export function ActionBar({
       {dialog === "accept" && (
         <MessageDialog
           title="Přijmout nabídku?"
-          description={currentAmount > 0 ? formatTermsSummary(terms) : "Zdarma"}
+          description={currentAmount > 0 ? formatTermsSummary(terms) : hasSwap ? "Výměna hráčů bez doplatku" : "Zdarma"}
           confirmLabel="Přijmout"
           confirmColor="pitch"
           onCancel={() => setDialog(null)}
@@ -128,6 +130,7 @@ export function ActionBar({
       {dialog === "counter" && (
         <CounterDialog
           initial={defaultCounter}
+          allowZero={hasSwap}
           initialTerms={termsNegotiable ? { upfrontPct: terms.upfrontPct, installments: terms.installments, sellOnPct: terms.sellOnPct } : null}
           onCancel={() => setDialog(null)}
           onConfirm={async (amount, msg, t) => { await onCounter(amount, msg, t); setDialog(null); }}
@@ -137,8 +140,9 @@ export function ActionBar({
   );
 }
 
-function CounterDialog({ initial, initialTerms, onCancel, onConfirm }: {
+function CounterDialog({ initial, allowZero, initialTerms, onCancel, onConfirm }: {
   initial: number;
+  allowZero: boolean;
   /** null = podmínky se nevyjednávají (hostování). */
   initialTerms: TermsValue | null;
   onCancel: () => void;
@@ -149,9 +153,9 @@ function CounterDialog({ initial, initialTerms, onCancel, onConfirm }: {
   const [msg, setMsg] = useState("");
 
   return (
-    <SheetDialog open title="Protinabídka" confirmLabel="Poslat" variant="gold" confirmDisabled={!v}
+    <SheetDialog open title="Protinabídka" confirmLabel="Poslat" variant="gold" confirmDisabled={v == null || (v === 0 && !allowZero)}
       onCancel={onCancel}
-      onConfirm={async () => { if (v) await onConfirm(v, msg.trim(), terms); }}>
+      onConfirm={async () => { if (v != null && (v > 0 || allowZero)) await onConfirm(v, msg.trim(), terms); }}>
       <label className="text-sm text-muted font-heading uppercase">Nová částka (Kč)</label>
       <MoneyInput
         value={v}
@@ -159,7 +163,8 @@ function CounterDialog({ initial, initialTerms, onCancel, onConfirm }: {
         autoFocus
         className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
       />
-      <div className="flex justify-center gap-2 mt-2">
+      {/* U výměny bez doplatku by všechny předvolby vyšly na nulu. */}
+      {initial >= 100 && <div className="flex justify-center gap-2 mt-2">
         {[0.8, 1, 1.2, 1.5].map((mul) => Math.round((initial * mul) / 100) * 100).map((preset, i) => (
           <button
             key={i}
@@ -172,7 +177,7 @@ function CounterDialog({ initial, initialTerms, onCancel, onConfirm }: {
             {formatAmount(preset)}
           </button>
         ))}
-      </div>
+      </div>}
       {terms && (
         <div className="mt-4">
           <TransferTermsFields amount={v} value={terms} onChange={setTerms} />

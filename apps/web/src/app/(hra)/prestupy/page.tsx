@@ -68,6 +68,45 @@ interface TeamBadge {
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
+interface SwapPlayerBrief {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  position: string | null;
+  avatar: unknown;
+}
+
+function swapPlayerLabel(p: SwapPlayerBrief): string {
+  return p.first_name ? `${p.first_name} ${p.last_name ?? ""}`.trim() : "hráč už v databázi není";
+}
+
+/** Výčet po česku: „A", „A a B", „A, B a C". */
+function czechList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} a ${items[items.length - 1]}`;
+}
+
+/** Částka nabídky; u výměny bez doplatku by „0 Kč" vypadalo jako dar. */
+function offerAmountLabel(amount: number, swapCount: number): string {
+  return swapCount > 0 && amount === 0 ? "bez doplatku" : formatCZK(amount);
+}
+
+function SwapPlayerChips({ players }: { players: SwapPlayerBrief[] }) {
+  if (players.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5">
+      {players.map((p) => (
+        <div key={p.id} className="inline-flex items-center gap-1.5 bg-gold-50 border border-gold-300/60 rounded-full px-2.5 py-0.5 text-xs">
+          <span>⇄</span>
+          <span className="font-heading font-bold text-ink">{swapPlayerLabel(p)}</span>
+          {p.position && <span className="text-muted">({p.position})</span>}
+          <span className="text-muted">na výměnu</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function relativeTimeCs(iso: string): string {
   const t = new Date(iso).getTime();
@@ -550,10 +589,8 @@ interface TransferOffer {
   upfront_pct?: number | null; installments?: number | null; sell_on_pct?: number | null;
   avatar?: Record<string, unknown>;
   on_turn?: boolean; // true = já jsem na tahu (druhá strana čeká)
-  offered_player_id?: string | null;
-  offered_first_name?: string | null;
-  offered_last_name?: string | null;
-  offered_position?: string | null;
+  /** Hráči, které kupující nabízí na výměnu, v pořadí výběru. */
+  swap_players?: SwapPlayerBrief[];
   is_virtual?: number; // 1 = nabídka od virtuálního (počítačového) klubu
   player_interest?: number | null; // 0-3 zájem hráče o přestup
 }
@@ -2047,13 +2084,12 @@ export default function TransfersPage() {
                       } catch { return null; }
                     };
                     const hAvatar = parseAvatar((o as any).player_avatar ?? (o as any).avatar);
-                    // Výměna se v historii ukazuje jako dva přestupy — každý hráč
-                    // svůj řádek. Jinak by druhý hráč nebyl vidět vůbec a doplatek
+                    // Výměna se v historii ukazuje jako víc přestupů — každý hráč
+                    // svůj řádek. Jinak by hráči na výměnu nebyli vidět vůbec a doplatek
                     // by vypadal jako celá cena obchodu.
-                    const swapName = (o as any).swap_first_name
-                      ? `${(o as any).swap_first_name} ${(o as any).swap_last_name}`
-                      : null;
-                    const jeVymena = !!(o as any).offered_player_id;
+                    const swaps = o.swap_players ?? [];
+                    const swapName = czechList(swaps.map(swapPlayerLabel));
+                    const jeVymena = swaps.length > 0;
                     const druh = isLoan ? "Hostování" : jeVymena ? "Výměna" : "Přestup";
 
                     const radek = (
@@ -2088,20 +2124,20 @@ export default function TransfersPage() {
                     const hlavni = radek(
                       o.id, `${o.first_name} ${o.last_name}`, o.position as string, hAvatar,
                       o.my_role === "buyer", amount,
-                      [jeVymena && swapName ? `za ${swapName}` : null, podminky || null].filter(Boolean).join(" · ") || null,
+                      [jeVymena ? `za ${swapName}` : null, podminky || null].filter(Boolean).join(" · ") || null,
                     );
                     if (!jeVymena) return [hlavni];
 
                     return [
                       hlavni,
-                      radek(
-                        `${o.id}-swap`,
-                        swapName ?? "hráč už v databázi není",
-                        (o as any).swap_position ?? null,
-                        parseAvatar((o as any).swap_avatar),
+                      ...swaps.map((sp) => radek(
+                        `${o.id}-swap-${sp.id}`,
+                        swapPlayerLabel(sp),
+                        sp.position,
+                        parseAvatar(sp.avatar),
                         o.my_role !== "buyer", null,
                         `za ${o.first_name} ${o.last_name}`,
-                      ),
+                      )),
                     ];
                   })}
                 </div>
@@ -2247,7 +2283,7 @@ export default function TransfersPage() {
                           {o.offer_type === "loan" ? (
                             <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}{(o.counter_amount ?? o.offer_amount) > 0 ? ` za ${formatCZK(o.counter_amount ?? o.offer_amount)}` : " zdarma"}</span>
                           ) : (
-                            <span className="font-heading font-bold text-pitch-500">{formatCZK(o.counter_amount ?? o.offer_amount)}</span>
+                            <span className="font-heading font-bold text-pitch-500">{offerAmountLabel(o.counter_amount ?? o.offer_amount, o.swap_players?.length ?? 0)}</span>
                           )}
                         </div>
                         {hasTerms(o) && <div className="text-sm text-muted tabular-nums">{offerTermsNote(o)}</div>}
@@ -2256,14 +2292,7 @@ export default function TransfersPage() {
                           const cut = ow.remaining + sellOnShare(o.counter_amount ?? o.offer_amount, ow.pct);
                           return <div className="text-sm text-gold-600 tabular-nums">Z ceny se ti hned strhne {formatCZK(cut)} ({[ow.remaining > 0 ? "doplacení splátek" : null, ow.pct > 0 ? `${ow.pct} %` : null].filter(Boolean).join(" a ")} pro {ow.to})</div>;
                         })()}
-                        {o.offered_player_id && (
-                          <div className="mt-1 inline-flex items-center gap-1.5 bg-gold-50 border border-gold-300/60 rounded-full px-2.5 py-0.5 text-xs">
-                            <span>⇄</span>
-                            <span className="font-heading font-bold text-ink">{o.offered_first_name} {o.offered_last_name}</span>
-                            {o.offered_position && <span className="text-muted">({o.offered_position})</span>}
-                            <span className="text-muted">na výměnu</span>
-                          </div>
-                        )}
+                        <SwapPlayerChips players={o.swap_players ?? []} />
                         {o.player_interest != null && (
                           <div className="mt-1">
                             <span className={`inline-flex items-center gap-1 rounded-full text-micro font-heading font-bold px-2 py-0.5 ${
@@ -2379,9 +2408,9 @@ export default function TransfersPage() {
                           {o.offer_type === "loan" ? (
                             <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}</span>
                           ) : (
-                            <>Nabídka: <span className="font-heading font-bold text-ink">{formatCZK(o.offer_amount)}</span></>
+                            <>Nabídka: <span className="font-heading font-bold text-ink">{offerAmountLabel(o.offer_amount, o.swap_players?.length ?? 0)}</span></>
                           )}
-                          {o.counter_amount && <span className="text-gold-600 ml-2">Protinabídka: {formatCZK(o.counter_amount)}</span>}
+                          {o.counter_amount != null && <span className="text-gold-600 ml-2">Protinabídka: {offerAmountLabel(o.counter_amount, o.swap_players?.length ?? 0)}</span>}
                           {hasTerms(o) && <span className="block tabular-nums">{offerTermsNote(o)}</span>}
                           {(() => {
                             // Poplatek počítá server — zná sazbu, kterou si soutěž odhlasovala,
@@ -2391,14 +2420,7 @@ export default function TransfersPage() {
                             return <span className="text-xs text-card-red ml-2">+ poplatek {formatCZK(fee)}</span>;
                           })()}
                         </div>
-                        {o.offered_player_id && (
-                          <div className="mt-1 inline-flex items-center gap-1.5 bg-gold-50 border border-gold-300/60 rounded-full px-2.5 py-0.5 text-xs">
-                            <span>⇄</span>
-                            <span className="font-heading font-bold text-ink">{o.offered_first_name} {o.offered_last_name}</span>
-                            {o.offered_position && <span className="text-muted">({o.offered_position})</span>}
-                            <span className="text-muted">na výměnu</span>
-                          </div>
-                        )}
+                        <SwapPlayerChips players={o.swap_players ?? []} />
                       </div>
                       <div className="flex flex-wrap items-stretch gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
                         <Link href={`/prestupy/nabidka/${o.id}`} className="inline-flex items-center justify-center py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">

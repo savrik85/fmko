@@ -641,9 +641,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
        -- v transfer_offers je from_team_id ten, kdo nabízí (kupující), a to_team_id
        -- majitel hráče (prodávající) — hráč se stěhuje do from_team_id.
        (SELECT 1 FROM transfer_offers o
-         WHERE o.status = 'accepted' AND o.offered_player_id IS NOT NULL
-           AND ((o.player_id = pc.player_id AND o.from_team_id = pc.team_id)
-             OR (o.offered_player_id = pc.player_id AND o.to_team_id = pc.team_id))
+         WHERE o.status = 'accepted'
+           AND ((o.player_id = pc.player_id AND o.from_team_id = pc.team_id
+                 AND EXISTS (SELECT 1 FROM transfer_offer_swap_players s WHERE s.offer_id = o.id))
+             OR (o.to_team_id = pc.team_id
+                 AND EXISTS (SELECT 1 FROM transfer_offer_swap_players s WHERE s.offer_id = o.id AND s.player_id = pc.player_id)))
          LIMIT 1) as je_vymena,
        -- Podmínky z nabídky, která přestup uzavřela: cena v contracts je celková,
        -- tady se jen dozvíme, jestli se platí na splátky a jestli jsou procenta.

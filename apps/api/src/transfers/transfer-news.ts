@@ -7,6 +7,7 @@ import type { Rng } from "../generators/rng";
 import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
 import { silaPodleHrace, type ClubEventKind } from "../engine/fan-reactions";
 import { recordClubEvent } from "../fans/club-events";
+import { czechList } from "./swap-players";
 
 const HUMOR_POOL: DistrictPool<string> = {
   core: [
@@ -86,8 +87,8 @@ export async function createTransferNews(
     fromTeamName?: string;
     toTeamName?: string;
     fee?: number;
-    /** Hráč, který šel opačným směrem. U výměny je cena jen doplatek. */
-    swapPlayerName?: string;
+    /** Hráči, kteří šli opačným směrem. U výměny je cena jen doplatek. */
+    swapPlayerNames?: string[];
     reason?: string;
     isCrossDistrict?: boolean;
     /** Síla hráče — rozhoduje, jestli je jeho odchod pro fanoušky rána, nebo nic. */
@@ -134,15 +135,16 @@ export async function createTransferNews(
     case "transfer_completed": {
       // U výměny je částka jen doplatek, ne cena hráče. Napsat „za 10 Kč" by
       // z vyrovnaného obchodu udělalo výprodej.
-      const zaCo = data.swapPlayerName
-        ? ` výměnou za ${data.swapPlayerName}${data.fee ? ` a ${data.fee.toLocaleString("cs")} Kč` : ""}`
+      const swapNames = data.swapPlayerNames ?? [];
+      const zaCo = swapNames.length > 0
+        ? ` výměnou za ${czechList(data.fee ? [...swapNames, `${data.fee.toLocaleString("cs")} Kč`] : swapNames)}`
         : data.fee ? ` za ${data.fee.toLocaleString("cs")} Kč` : "";
       if (data.isCrossDistrict) {
         headline = `Posila z jiného okresu! ${data.playerName} přichází z ${data.fromTeamName}`;
         body = `${data.toTeamName} přivedl ${data.playerName} (${data.playerAge}, ${data.playerPosition}) až z ${data.fromTeamName}${zaCo}. Meziokresní přestup vzbudil pozornost, uvidíme, jestli se novému prostředí přizpůsobí.`;
-      } else if (data.swapPlayerName) {
-        headline = `Výměna! ${data.playerName} za ${data.swapPlayerName}`;
-        body = `${data.fromTeamName} a ${data.toTeamName} si vyměnily hráče: ${data.playerName} (${data.playerAge}, ${data.playerPosition}) míří do ${data.toTeamName}, opačným směrem jde ${data.swapPlayerName}${data.fee ? `, k tomu doplatek ${data.fee.toLocaleString("cs")} Kč` : ""}. ${humor}`;
+      } else if (swapNames.length > 0) {
+        headline = `Výměna! ${data.playerName} za ${czechList(swapNames)}`;
+        body = `${data.fromTeamName} a ${data.toTeamName} si vyměnily hráče: ${data.playerName} (${data.playerAge}, ${data.playerPosition}) míří do ${data.toTeamName}, opačným směrem ${swapNames.length > 1 ? "jdou" : "jde"} ${czechList(swapNames)}${data.fee ? `, k tomu doplatek ${data.fee.toLocaleString("cs")} Kč` : ""}. ${humor}`;
       } else {
         headline = `Přestup! ${data.playerName} míří z ${data.fromTeamName} do ${data.toTeamName}`;
         body = `${data.playerName} (${data.playerAge}, ${data.playerPosition}) přestupuje z ${data.fromTeamName} do ${data.toTeamName}${zaCo}. ${humor}`;

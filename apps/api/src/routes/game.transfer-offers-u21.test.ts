@@ -282,7 +282,15 @@ beforeAll(async () => {
       last_name TEXT,
       age INTEGER,
       position TEXT,
-      overall_rating INTEGER
+      overall_rating INTEGER,
+      avatar TEXT
+    );
+
+    CREATE TABLE transfer_offer_swap_players (
+      offer_id TEXT NOT NULL,
+      player_id TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (offer_id, player_id)
     );
   `);
 
@@ -321,6 +329,7 @@ beforeEach(async () => {
     DELETE FROM transfer_bids;
     DELETE FROM transfer_listings;
     DELETE FROM player_contracts;
+    DELETE FROM transfer_offer_swap_players;
     DELETE FROM transfer_offers;
     DELETE FROM players;
     DELETE FROM managers;

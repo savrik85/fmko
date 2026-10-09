@@ -11,6 +11,7 @@
 import { logger } from "../lib/logger";
 import { actsFor, presidentOf } from "./officials";
 import { estimateMarketValue } from "../season/economy";
+import { loadSwapPlayers, swapPlayerName, czechList, type SwapPlayerBrief } from "../transfers/swap-players";
 
 const M = "competition-integrity";
 
@@ -139,18 +140,11 @@ export async function listinaPrestupu(
 ): Promise<ZaznamPrestupu[]> {
   const rows = await db.prepare(
     `SELECT o.id, o.offer_amount, o.counter_amount, o.offer_type, o.resolved_at,
-            o.offered_player_id,
             p.first_name, p.last_name, p.id AS player_id, p.overall_rating, p.age, p.position,
-            sp.first_name AS sw_first, sp.last_name AS sw_last,
-            sp.overall_rating AS sw_rating, sp.age AS sw_age, sp.position AS sw_position,
-            sdp.first_name AS swd_first, sdp.last_name AS swd_last,
-            sdp.overall_rating AS swd_rating, sdp.age AS swd_age, sdp.position AS swd_position,
             fromT.name AS z_klubu, fromT.user_id AS z_user, fromT.id AS z_id,
             toT.name AS do_klubu, toT.user_id AS do_user, toT.id AS do_id
        FROM transfer_offers o
        LEFT JOIN players p ON p.id = o.player_id
-       LEFT JOIN players sp ON sp.id = o.offered_player_id
-       LEFT JOIN departed_players sdp ON sdp.id = o.offered_player_id
        LEFT JOIN teams fromT ON fromT.id = o.from_team_id
        JOIN teams toT ON toT.id = o.to_team_id
       WHERE o.status = 'accepted'
@@ -158,6 +152,9 @@ export async function listinaPrestupu(
       ORDER BY o.resolved_at DESC LIMIT ?`
   ).bind(leagueId, leagueId, limit).all<Record<string, unknown>>()
     .catch((e) => { logger.error({ module: M }, `listina přestupů ${leagueId}`, e); return { results: [] }; });
+
+  const swapsByOffer = await loadSwapPlayers(db, rows.results.map((r) => r.id as string))
+    .catch((e) => { logger.error({ module: M }, `hráči na výměnu v listině ${leagueId}`, e); return new Map<string, SwapPlayerBrief[]>(); });
 
   // Kolikrát spolu tytéž dva kluby obchodovaly
   const dvojice = new Map<string, number>();
@@ -178,17 +175,14 @@ export async function listinaPrestupu(
       ? estimateMarketValue(r.overall_rating as number, (r.age as number) ?? 26, r.position as string | null)
       : 0;
 
-    // Výměna: druhý hráč šel opačným směrem jako protihodnota. Bez něj by
+    // Výměna: hráči na výměnu šli opačným směrem jako protihodnota. Bez nich by
     // desetikorunový doplatek vypadal jako obchod za deset korun a komisař by
     // dostal falešné podezření z podhodnocené ceny.
-    const swFirst = (r.sw_first ?? r.swd_first) as string | null;
-    const swLast = (r.sw_last ?? r.swd_last) as string | null;
-    const swRating = (r.sw_rating ?? r.swd_rating) as number | null;
-    const swAge = (r.swd_age ?? r.sw_age) as number | null;
-    const jeVymena = !!r.offered_player_id;
-    const swPosition = (r.swd_position ?? r.sw_position) as string | null;
-    const protihodnota = swRating ? estimateMarketValue(swRating, swAge ?? 26, swPosition) : 0;
-    const swJmeno = swFirst ? `${swFirst} ${swLast}` : jeVymena ? "hráč už v databázi není" : null;
+    const swapPlayers = swapsByOffer.get(r.id as string) ?? [];
+    const jeVymena = swapPlayers.length > 0;
+    const protihodnota = swapPlayers.reduce((sum, sp) =>
+      sum + (sp.overall_rating ? estimateMarketValue(sp.overall_rating, sp.age ?? 26, sp.position) : 0), 0);
+    const swJmeno = jeVymena ? czechList(swapPlayers.map(swapPlayerName)) : null;
 
     const priznaky: string[] = [];
     const zUser = r.z_user as string | null;
@@ -225,12 +219,12 @@ export async function listinaPrestupu(
       vymena: jeVymena, protihrac: swJmeno,
     });
 
-    // Druhý hráč výměny je taky přestup a musí být v listině vidět. Jde opačným
-    // směrem a peníze nenese — ty visí u prvního záznamu, ať se nesčítají dvakrát.
-    if (jeVymena) {
+    // Hráči na výměnu jsou taky přestupy a musí být v listině vidět. Jdou opačným
+    // směrem a peníze nenesou — ty visí u prvního záznamu, ať se nesčítají dvakrát.
+    for (const sp of swapPlayers) {
       out.push({
-        hrac: swJmeno ?? "hráč už v databázi není",
-        playerId: (r.offered_player_id as string) ?? "",
+        hrac: swapPlayerName(sp),
+        playerId: sp.id,
         zKlubu: doKlubu, doKlubu: zKlubu ?? doKlubu,
         castka: 0, druh, gameDate, priznaky,
         vymena: true,

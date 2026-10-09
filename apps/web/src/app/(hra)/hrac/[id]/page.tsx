@@ -23,6 +23,9 @@ import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT
 import type { BadgePattern } from "@/components/ui";
 import { isLightColor } from "@/lib/team-color";
 
+// Stejný strop hlídá API (apps/api/src/transfers/swap-players.ts).
+const MAX_SWAP_PLAYERS = 2;
+
 interface CoachRelationLogItem {
   delta: number;
   newValue: number;
@@ -128,7 +131,9 @@ export default function PlayerDetailPage() {
   const [offerType, setOfferType] = useState<"transfer" | "loan">("transfer");
   const [loanDuration, setLoanDuration] = useState("30");
   const [targetSquad, setTargetSquad] = useState<"senior" | "u21">("senior");
-  const [offeredPlayerId, setOfferedPlayerId] = useState<string | null>(null);
+  // Hráči na výměnu: každý slot je jeden výběr, nejvýš MAX_SWAP_PLAYERS. Prázdný slot = zatím nevybráno.
+  const [swapSlots, setSwapSlots] = useState<(string | null)[]>([null]);
+  const swapPlayerIds = swapSlots.filter((id): id is string => !!id);
   const [offerTerms, setOfferTerms] = useState<TermsValue>(PLAIN_TERMS);
   const [myListing, setMyListing] = useState<{ listingId: string; askingPrice: number } | null>(null);
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
@@ -389,7 +394,8 @@ export default function PlayerDetailPage() {
   async function sendOffer() {
     if (!teamId || !player || offerSending) return;
     const amount = offerAmount ?? 0;
-    if (offerType === "transfer" && (!amount || amount <= 0)) return;
+    // Bez peněz jde trvalý přestup jen jako výměna hráčů.
+    if (offerType === "transfer" && amount <= 0 && swapPlayerIds.length === 0) return;
     setOfferSending(true);
     const ok = await apiAction(apiFetch(`/api/teams/${teamId}/offers`, {
       method: "POST",
@@ -400,7 +406,7 @@ export default function PlayerDetailPage() {
         message: offerMessage.trim() || undefined,
         offerType,
         ...(offerType === "loan" ? { loanDuration: parseInt(loanDuration, 10) } : {}),
-        ...(offerType === "transfer" && offeredPlayerId ? { offeredPlayerId } : {}),
+        ...(offerType === "transfer" && swapPlayerIds.length > 0 ? { offeredPlayerIds: swapPlayerIds } : {}),
         ...(offerType === "transfer" && targetSquad === "u21" ? { targetSquad: "u21" } : {}),
         ...(offerType === "transfer" ? offerTerms : {}),
       }),
@@ -808,7 +814,7 @@ export default function PlayerDetailPage() {
                   <MoneyInput
                     value={offerAmount}
                     onChange={setOfferAmount}
-                    placeholder={offerType === "loan" ? "0 = zdarma" : "např. 50 000"}
+                    placeholder={offerType === "loan" ? "0 = zdarma" : swapPlayerIds.length > 0 ? "0 = bez doplatku" : "např. 50 000"}
                     className={`w-full rounded-soft px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 placeholder:text-gray-400 border border-black/20 focus:border-black/40" : "bg-white/10 text-white placeholder:text-white/30 border border-white/20 focus:border-white/50"}`}
                   />
                 </div>
@@ -846,43 +852,62 @@ export default function PlayerDetailPage() {
                 <TransferTermsFields amount={offerAmount} value={offerTerms} onChange={setOfferTerms} variant={light ? "light" : "dark"} />
               )}
 
-              {/* Hráč na výměnu — jen u trvalého přestupu; nabízím SVÉ hráče */}
+              {/* Hráči na výměnu — jen u trvalého přestupu; nabízím SVÉ hráče, nejvýš dva */}
               {offerType === "transfer" && !isLoanedToUs && mySquad.length > 0 && (
                 <div>
                   <label className={`${light ? "text-gray-500" : "text-white/60"} text-xs font-heading uppercase mb-1 block`}>
-                    Hráč na výměnu (volitelné)
+                    Hráči na výměnu (volitelné, nejvýš {MAX_SWAP_PLAYERS})
                   </label>
-                  <div className="flex gap-2 items-center">
-                    <select
-                      value={offeredPlayerId ?? ""}
-                      onChange={(e) => setOfferedPlayerId(e.target.value || null)}
-                      className={`flex-1 rounded-soft px-3 py-2 text-sm font-heading focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
-                    >
-                      <option value="" className="bg-gray-800 text-white">— bez výměny —</option>
-                      {mySquad
-                        .filter((p) => !p.loan_from_team_id)
-                        .map((p) => (
-                          <option key={p.id} value={p.id} className="bg-gray-800 text-white">
-                            {p.first_name} {p.last_name} ({p.position}, {p.age} let)
-                          </option>
-                        ))}
-                    </select>
-                    {offeredPlayerId && (
-                      <button
-                        onClick={() => setOfferedPlayerId(null)}
-                        className={`px-2 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${light ? "bg-black/5 text-gray-600 hover:bg-black/10" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
-                        title="Odstranit výměnu"
-                      >
-                        ✕
-                      </button>
-                    )}
+                  <div className="space-y-2">
+                    {swapSlots.map((slotId, slot) => (
+                      <div key={slot} className="flex gap-2 items-center">
+                        <select
+                          value={slotId ?? ""}
+                          onChange={(e) => setSwapSlots((prev) => prev.map((id, i) => (i === slot ? e.target.value || null : id)))}
+                          className={`flex-1 min-w-0 rounded-soft px-3 py-2 text-sm font-heading focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
+                        >
+                          <option value="" className="bg-gray-800 text-white">— bez výměny —</option>
+                          {mySquad
+                            .filter((p) => !p.loan_from_team_id)
+                            // Hráč vybraný v jiném slotu podruhé nabídnout nejde.
+                            .filter((p) => p.id === slotId || !swapSlots.includes(p.id))
+                            .map((p) => (
+                              <option key={p.id} value={p.id} className="bg-gray-800 text-white">
+                                {p.first_name} {p.last_name} ({p.position}, {p.age} let)
+                              </option>
+                            ))}
+                        </select>
+                        {slotId && (
+                          <button
+                            type="button"
+                            onClick={() => setSwapSlots((prev) => {
+                              const rest = prev.filter((_, i) => i !== slot);
+                              return rest.length > 0 ? rest : [null];
+                            })}
+                            className={`px-2 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${light ? "bg-black/5 text-gray-600 hover:bg-black/10" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
+                            title="Odebrat hráče z výměny"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
+                  {swapSlots.length < MAX_SWAP_PLAYERS && swapSlots.every(Boolean) && (
+                    <button
+                      type="button"
+                      onClick={() => setSwapSlots((prev) => [...prev, null])}
+                      className={`mt-2 text-sm font-heading font-bold underline underline-offset-2 ${light ? "text-gray-700 hover:text-gray-900" : "text-white/80 hover:text-white"}`}
+                    >
+                      + Přidat dalšího hráče
+                    </button>
+                  )}
                 </div>
               )}
 
               <button
                 onClick={sendOffer}
-                disabled={offerSending || (!offerAmount && offerType !== "loan")}
+                disabled={offerSending || (!offerAmount && offerType !== "loan" && swapPlayerIds.length === 0)}
                 className="w-full sm:w-auto bg-pitch-500 hover:bg-pitch-600 disabled:opacity-50 text-white font-heading font-bold text-sm px-5 py-2.5 rounded-soft transition-colors"
               >
                 {offerSending ? "Odesílám..." : offerType === "loan" ? "Nabídnout hostování" : "Odeslat nabídku"}
