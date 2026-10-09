@@ -300,6 +300,7 @@ export default function OfferDetailPage() {
           toTeamId={offer.to_team_id}
           fromManager={fromManager ? { avatar: fromManager.avatar, name: fromManager.name } : null}
           toManager={toManager ? { avatar: toManager.avatar, name: toManager.name } : null}
+          hasSwap={offeredPlayers.length > 0}
         />
       </div>
 
