@@ -214,23 +214,6 @@ export default function SquadPage() {
   return (
     <div className="page-container space-y-4">
 
-      {/* Souhrn kádru jen u Atributů a v jednom řádku: na mobilu dřív zabíral půl displeje na každé záložce */}
-      {tab === "atributy" && (
-        <div className="card grid grid-cols-4 divide-x divide-gray-100">
-          {[
-            { value: String(players.length), label: "Hráčů", className: "" },
-            { value: String(avgRating), label: "Ø Rating", className: "" },
-            { value: avgAge, label: "Ø Věk", className: "" },
-            { value: totalWage.toLocaleString("cs"), label: "Mzdy/týd", className: "text-card-red" },
-          ].map((s) => (
-            <div key={s.label} className="px-1 py-2 sm:py-3 text-center min-w-0">
-              <div className={`font-heading font-[800] text-base sm:text-2xl tabular-nums leading-tight ${s.className}`}>{s.value}</div>
-              <div className="text-micro text-muted uppercase tracking-wide truncate">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Tabs */}
       <div className="card p-1.5">
         <Tabs
@@ -250,6 +233,24 @@ export default function SquadPage() {
           ]}
         />
       </div>
+
+      {/* Souhrn kádru jen u Atributů, v jednom řádku a POD lištou záložek: nad ní by lišta při
+          přepínání skákala nahoru a dolů. */}
+      {tab === "atributy" && (
+        <div className="card grid grid-cols-4 divide-x divide-gray-100">
+          {[
+            { value: String(players.length), label: "Hráčů", className: "" },
+            { value: String(avgRating), label: "Ø Rating", className: "" },
+            { value: avgAge, label: "Ø Věk", className: "" },
+            { value: totalWage.toLocaleString("cs"), label: "Mzdy/týd", className: "text-card-red" },
+          ].map((s) => (
+            <div key={s.label} className="px-1 py-2 sm:py-3 text-center min-w-0">
+              <div className={`font-heading font-[800] text-base sm:text-2xl tabular-nums leading-tight ${s.className}`}>{s.value}</div>
+              <div className="text-micro text-muted uppercase tracking-wide truncate">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Rozbor je za celou jedenáctku, filtr postů by v něm nic neznamenal. */}
       {tab !== "rozbor" && <PositionFilter players={players} value={filter} onChange={setFilter} />}
