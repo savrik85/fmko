@@ -158,8 +158,13 @@ export function calcLineupPreview(ownSetup: TeamSetup, opponentSetup?: TeamSetup
   if (comparison.perLine.mid === "MUCH_WEAKER" || comparison.perLine.mid === "WEAKER") weakLines.push("zálohu");
   if (comparison.perLine.fwd === "MUCH_WEAKER" || comparison.perLine.fwd === "WEAKER") weakLines.push("útok");
 
+  // „Ve všech liniích“ jen tehdy, když je opravdu silnější každá řada. Dřív to stačilo
+  // „nikde slabší“ a s náhledem, který do 2026-10-10 ukazoval skoro všude 100, to nevadilo.
+  const strongerEverywhere = Object.values(comparison.perLine).every((c) => c === "STRONGER" || c === "MUCH_STRONGER");
   if (weakLines.length === 0 && comparison.overall === "STRONGER") {
-    recommendation = "Tvůj tým je silnější ve všech liniích, můžeš hrát útočněji.";
+    recommendation = strongerEverywhere
+      ? "Tvůj tým je silnější ve všech liniích, můžeš hrát útočněji."
+      : "Tvůj tým je celkově silnější a slabé místo soupeři nenabízí.";
   } else if (weakLines.length === 0 && comparison.overall === "MUCH_STRONGER") {
     recommendation = "Výrazně silnější tým, neztrať koncentraci a hrej s respektem.";
   } else if (weakLines.length >= 2 && comparison.overall === "MUCH_WEAKER") {
