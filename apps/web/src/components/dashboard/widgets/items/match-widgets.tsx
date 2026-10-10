@@ -38,6 +38,9 @@ export function TodayProgramWidget({ data }: WidgetProps) {
 
   const matchOpponent = nextMatch ? (nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName) : null;
   const dayName = gameDate ? gameDate.toLocaleDateString("cs", { weekday: "long" }) : "";
+  // Pohár se hraje v poledne pražského času (cup tick v index.ts), liga a přáteláky v 18:00.
+  // Uložený `scheduled_at` pohárového zápasu (16:00 UTC) skutečný výkop neříká.
+  const kickoff = nextMatch?.isCup ? "výkop ve 12:00" : "výkop v 18:00";
 
   return (
     // Zvýraznění zápasového dne zůstává uvnitř karty — kdyby se roztáhlo přes
@@ -51,7 +54,7 @@ export function TodayProgramWidget({ data }: WidgetProps) {
         <div className="text-sm text-muted">
           {dayName && <span className="capitalize">{dayName}</span>}
           {isMatchDay && matchOpponent && (
-            <span> · <span className="font-heading font-bold text-pitch-600">{matchOpponent}</span> · výkop v 18:00</span>
+            <span> · <span className="font-heading font-bold text-pitch-600">{matchOpponent}</span> · {kickoff}</span>
           )}
           {isTrainingDay && !isMatchDay && <span> · Trénink dle plánu</span>}
           {!isTrainingDay && !isMatchDay && <span> · Regenerace, žádný program</span>}
