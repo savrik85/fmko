@@ -17,7 +17,7 @@ import type {
 } from "./types";
 import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor, TACTIC_MODS, effMod } from "./tactics";
 import { MATCH_DAY_SWING, teamFormFactor } from "./form";
-import { freshness, finishingValue, gkValue, GK_SHOT_WEIGHT, possessionShare, slotOf, teamAttack, teamDefense, teamPossession, type GkSituation, type SkillAdjust } from "./roles";
+import { freshness, finishingValue, gkValue, GK_SHOT_WEIGHT, possessionShare, slotOf, teamAttack, teamDefense, teamPossession, type GkSituation } from "./roles";
 import { squadChemistryFactor } from "./squad-chemistry";
 import { hardnessMods, hardEff, intimidationPenalty, type Hardness } from "./hardness";
 import { ruleMatches, pendingPlannedSubs, plannedSubPlayers, type EngineMatchPlanRule } from "./match-plan";
@@ -250,9 +250,8 @@ export function calcChanceProb(
   // které jsou pro něj v hodnocení klíčové. Počasí a hřiště ubírají hře po zemi,
   // tedy technice a přihrávkám (dohromady zhruba pětina útoku, jako dřív samotná
   // technika ve starém vzorci).
-  const techniqueFactor = weatherMod.techniqueMod * pitchTechniqueFactor(pitchCondition) * moistureTechniqueFactor(pitchMoisture);
-  const groundAdjust: SkillAdjust = (_p, skill, value) => (skill === "technique" || skill === "passing" ? value * techniqueFactor : value);
-  const attackSkill = teamAttack(attacking.lineup, groundAdjust);
+  const groundFactor = weatherMod.techniqueMod * pitchTechniqueFactor(pitchCondition) * moistureTechniqueFactor(pitchMoisture);
+  const attackSkill = teamAttack(attacking.lineup, groundFactor);
   // Oslabení po červené je už v součtu rolí (chybí hráč i jeho příspěvek), proto tu
   // není `manpowerFactor` — dvojí postih by z vyloučení udělal konec zápasu.
   const attackMods = formFactor * attMoraleMod * famMod * chemMod * (1 - intimidation);
