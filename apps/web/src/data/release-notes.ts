@@ -12,6 +12,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-10",
+    emoji: "🧭",
+    title: "Rozbor kádru od asistenta",
+    items: [
+      "V Kádru je nová záložka Rozbor. Asistent trenéra v ní řekne, jak silné máš řady proti lize, co kterou řadu drží zpátky a kam by hledal posilu.",
+      "Po klepnutí na řadu uvidíš klíčové vlastnosti proti průměru ligy a všechny hráče na postu, v čem vynikají a v čem ztrácejí. Pod tím je perspektiva kádru: věk a zkušenost proti soupeřům, kdo na tréninku roste, mladí hráči a opory přes 30.",
+      "Jak přesný rozbor je, záleží na kvalitě asistenta. Lepší asistent vidí víc a odhaduje přesněji, slabší jen zhruba a leccos přehlédne. Bez asistenta je záložka zamčená.",
+    ],
+  },
+  {
+    date: "2026-10-10",
+    emoji: "🎫",
+    title: "Nové sázky",
+    items: [
+      "Sázková kancelář vypisuje víc kurzů: handicap (vyhraje o dva a víc, neprohraje o víc než gól), víc gólových hranic, počet gólů v pásmech, oba týmy dají gól, góly jednoho týmu a výsledek s počtem gólů.",
+    ],
+  },
+  {
     date: "2026-10-08",
     emoji: "🍺",
     title: "Výška a váha hráčů",
