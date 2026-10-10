@@ -196,13 +196,18 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
         </div>
 
         {homeForm && awayForm && (homeForm.form.length > 0 || awayForm.form.length > 0) && (
-          <div className="flex items-center px-4 py-2 border-b border-gray-100 overflow-hidden">
-            <div className="flex-1 min-w-0 flex gap-1 justify-end overflow-hidden">
-              {homeForm.form.slice(0, 5).map((f, i) => <MiniForm key={i} f={f} />)}
+          // Pět a pět výsledků se vejde od 360 px. Na užší kartě (320 px, tři
+          // sloupce na menším desktopu) se co se nevejde zalomí do skrytého
+          // druhého řádku — mizí celé odznáčky, ne jejich půlky, a vždy ty
+          // nejstarší. Proto jde forma od nejnovějšího a row-reverse ji vrací
+          // do pořadí zleva od nejstaršího.
+          <div className="flex items-center px-3 py-2 border-b border-gray-100 overflow-hidden">
+            <div className="flex-1 min-w-0 h-5 flex flex-row-reverse flex-wrap gap-0.5 overflow-hidden">
+              {homeForm.form.slice(-5).reverse().map((f, i) => <MiniForm key={i} f={f} />)}
             </div>
             <div className="shrink-0 w-12 text-center text-micro text-muted uppercase font-heading">Forma</div>
-            <div className="flex-1 min-w-0 flex gap-1 overflow-hidden">
-              {awayForm.form.slice(0, 5).map((f, i) => <MiniForm key={i} f={f} />)}
+            <div className="flex-1 min-w-0 h-5 flex flex-row-reverse flex-wrap justify-end gap-0.5 overflow-hidden">
+              {awayForm.form.slice(-5).reverse().map((f, i) => <MiniForm key={i} f={f} />)}
             </div>
           </div>
         )}
