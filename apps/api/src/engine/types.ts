@@ -43,6 +43,10 @@ export interface MatchPlayer {
   injuryProneness?: number; // 0-100, váží výběr zraněného v simulaci (default 50)
   age?: number; // délka zranění po zápase (starší hráč má častěji vážnější variantu)
   height?: number; // cm; dosah brankáře na vysoké míče (generators/physicals.ts)
+  /** Zkušenost 0–100 (ploché `skills.experience`), roste odehranými zápasy. Chybí = průměr (engine/roles.ts). */
+  experience?: number;
+  /** Bonus trenéra brankářů a vybavení k zákrokům. Přičítá se k hodnotě zákroku, ne k chytání, takže nepropadá na stropu 100. */
+  gkBonus?: number;
   form?: number; // −1 až +1 z posledních hodnocení proti vlastnímu průměru (engine/form.ts), chybí = 0
   // Positioning
   preferredFoot: PreferredFoot;

@@ -48,6 +48,7 @@ export function mapRowToMatchPlayer(row: PlayerRow, matchPosition?: string): Mat
     vision: (skills.vision as number) ?? 50,
     creativity: (skills.creativity as number) ?? 50,
     setPieces: (skills.setPieces as number) ?? 50,
+    experience: (skills.experience as number) ?? 0,
     discipline: (personality.discipline as number) ?? 50,
     alcohol: (personality.alcohol as number) ?? 30,
     temper: (personality.temper as number) ?? 40,

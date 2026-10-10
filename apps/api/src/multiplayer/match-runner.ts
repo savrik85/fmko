@@ -1739,6 +1739,7 @@ export async function buildMatchPlayers(
             vision: skills.vision ?? 50,
             creativity: skills.creativity ?? 50,
             setPieces: skills.setPieces ?? 50,
+            experience: skills.experience ?? 0,
             discipline: personality.discipline ?? 50,
             alcohol: personality.alcohol ?? 30,
             temper: personality.temper ?? 40,

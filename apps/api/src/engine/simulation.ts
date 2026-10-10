@@ -17,7 +17,7 @@ import type {
 } from "./types";
 import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor, TACTIC_MODS, effMod } from "./tactics";
 import { MATCH_DAY_SWING, teamFormFactor } from "./form";
-import { gkReachFactor } from "../generators/physicals";
+import { freshness, finishingValue, gkValue, GK_SHOT_WEIGHT, possessionShare, slotOf, teamAttack, teamDefense, teamPossession, type GkSituation, type SkillAdjust } from "./roles";
 import { squadChemistryFactor } from "./squad-chemistry";
 import { hardnessMods, hardEff, intimidationPenalty, type Hardness } from "./hardness";
 import { ruleMatches, pendingPlannedSubs, plannedSubPlayers, type EngineMatchPlanRule } from "./match-plan";
@@ -52,14 +52,8 @@ function playersInSlot(lineup: MatchPlayer[], pos: MatchPlayer["position"]): Mat
   return lineup.filter((p) => (p.matchPosition ?? p.position) === pos);
 }
 
-/**
- * Jak moc je hráč čerstvý: 1,0 při plné kondici, 0,925 při polovině, 0,85 úplně vyždímaný.
- * Unavený útočník zakončuje hůř a unavený brankář hůř chytá. Dřív kondice jednotlivce
- * na jeho výkon nepůsobila vůbec, jen průměr útočícího týmu na počet šancí.
- */
-export function freshness(p: MatchPlayer): number {
-  return 0.85 + 0.15 * Math.max(0, Math.min(100, p.condition)) / 100;
-}
+/** Čerstvost hráče žije v engine/roles.ts — násobí všechny jeho příspěvky. */
+export { freshness } from "./roles";
 
 /** Get player display name */
 function playerName(p: MatchPlayer): string {
@@ -104,14 +98,11 @@ export const WEATHER_MODS: Record<Weather, WeatherMod> = {
  * Calculate possession probability for home team (0–1).
  */
 function calcPossession(home: TeamSetup, away: TeamSetup, homeAdvantage: number): number {
-  const homeMids = playersInSlot(home.lineup, "MID");
-  const awayMids = playersInSlot(away.lineup, "MID");
-  const homeMid = teamAvg(homeMids, "technique") + teamAvg(homeMids, "passing");
-  const awayMid = teamAvg(awayMids, "technique") + teamAvg(awayMids, "passing");
-
-  const total = homeMid + awayMid;
-  if (total === 0) return 0.5;
-  return Math.min(0.7, Math.max(0.3, (homeMid / total) + homeAdvantage));
+  // Na míči se podílí celý tým: rozehrávka brankáře a obránců, kombinace zálohy,
+  // podržení míče útočníky (engine/roles.ts). Do 2026-10-10 jen technika
+  // a přihrávky záložníků, a tím záloha přebíjela všechno ostatní.
+  const share = possessionShare(teamPossession(home.lineup), teamPossession(away.lineup));
+  return Math.min(0.7, Math.max(0.3, share + homeAdvantage));
 }
 
 /**
@@ -205,7 +196,7 @@ const MODIFIER_ELASTICITY = 2;
 const MIN_CHANCE = 0.04;
 const MAX_CHANCE = 0.22;
 
-function calcChanceProb(
+export function calcChanceProb(
   attacking: TeamSetup,
   defending: TeamSetup,
   weather: Weather,
@@ -234,11 +225,7 @@ function calcChanceProb(
   const attEff = calcTacticEffectiveness(attacking.lineup, attacking.tactic, attacking.formation, attacking.formationFamiliarity);
   const defEff = calcTacticEffectiveness(defending.lineup, defending.tactic, defending.formation, defending.formationFamiliarity);
 
-  const outfield = attacking.lineup.filter((p) => p.position !== "GK");
-  const mids = attacking.lineup.filter((p) => p.position === "MID");
-  const midAndFwd = attacking.lineup.filter((p) => p.position === "MID" || p.position === "FWD");
-  const defOutfield = defending.lineup.filter((p) => p.position !== "GK");
-  const defs = defending.lineup.filter((p) => p.position === "DEF");
+  const defOutfield = defending.lineup.filter((p) => slotOf(p) !== "GK");
 
   // Morálka týmu: 0.94–1.06 (neutrální při 50) — sebevědomý tým hraje odvážněji,
   // zlomený tým se bojí. Díky tomu má reálný efekt i kapitán, vůdcovství a motivace
@@ -259,17 +246,16 @@ function calcChanceProb(
   // Zastrašení: tvrdá hra srazí útok soupeře podle toho, jak měkký má kádr.
   const intimidation = intimidationPenalty(defHard, defHardEff, attacking.lineup);
 
-  const attackSkill = (
-    teamAvg(outfield, "technique") * weatherMod.techniqueMod * pitchTechniqueFactor(pitchCondition)
-      * moistureTechniqueFactor(pitchMoisture) * 0.8 +
-    teamAvg(outfield, "passing") * 1.0 +
-    teamAvg(outfield, "speed") * 0.7 +
-    (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
-    (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
-    teamAvg(outfield, "workRate") * 0.3
-  ) / 5;
-  const attackMods = formFactor * attMoraleMod * famMod * chemMod
-    * manpowerFactor(attacking.lineup).attack * (1 - intimidation);
+  // Útok a obrana podle rolí (engine/roles.ts): každý post přispívá vlastnostmi,
+  // které jsou pro něj v hodnocení klíčové. Počasí a hřiště ubírají hře po zemi,
+  // tedy technice a přihrávkám (dohromady zhruba pětina útoku, jako dřív samotná
+  // technika ve starém vzorci).
+  const techniqueFactor = weatherMod.techniqueMod * pitchTechniqueFactor(pitchCondition) * moistureTechniqueFactor(pitchMoisture);
+  const groundAdjust: SkillAdjust = (_p, skill, value) => (skill === "technique" || skill === "passing" ? value * techniqueFactor : value);
+  const attackSkill = teamAttack(attacking.lineup, groundAdjust);
+  // Oslabení po červené je už v součtu rolí (chybí hráč i jeho příspěvek), proto tu
+  // není `manpowerFactor` — dvojí postih by z vyloučení udělal konec zápasu.
+  const attackMods = formFactor * attMoraleMod * famMod * chemMod * (1 - intimidation);
 
   // Unavená obrana nestíhá. Útočící tým má únavu v počtu šancí (conditionMod níž),
   // bránící ji dřív neměl nikde, takže čerstvé střídání v obraně nic nepřineslo.
@@ -277,13 +263,8 @@ function calcChanceProb(
     ? defOutfield.reduce((s, p) => s + freshness(p), 0) / defOutfield.length
     : 1;
 
-  const defenseSkill = (
-    teamAvg(defOutfield, "defense") * 1.0 +
-    teamAvg(defOutfield, "strength") * 0.7 +
-    (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
-    teamAvg(defOutfield, "workRate") * 0.2
-  ) / 3;
-  const defenseMods = defMoraleMod * manpowerFactor(defending.lineup).defense * hardDefenseMod * defFatigueMod;
+  const defenseSkill = teamDefense(defending.lineup);
+  const defenseMods = defMoraleMod * hardDefenseMod * defFatigueMod;
 
   const tacticRatio = effMod(tacticMod.attackMod, attEff)
     / effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff);
@@ -294,8 +275,12 @@ function calcChanceProb(
     ? 1 + weatherMod.longBallBonus + pitchLongBallBonus(pitchCondition) + moistureLongBallBonus(pitchMoisture)
     : 1;
 
+  // Přeskupení po vyloučení: chybějícího hráče nese jeho role v součtu, ale zbytek
+  // týmu musí navíc pokrýt jeho zónu. Proto i mírná paušální srážka, s citlivostí 1
+  // (dřív 2, kdy role nebyly a vyloučení jinak nic nestálo).
+  const manpowerRatio = manpowerFactor(attacking.lineup).attack / manpowerFactor(defending.lineup).defense;
   const chance = BASE_CHANCE * skillRatio ** STRENGTH_EXPONENT
-    * (attackMods / defenseMods) ** MODIFIER_ELASTICITY * tacticRatio * longBallFactor;
+    * (attackMods / defenseMods) ** MODIFIER_ELASTICITY * manpowerRatio * tacticRatio * longBallFactor;
   return Math.min(MAX_CHANCE, Math.max(MIN_CHANCE, chance)) * effMod(tacticMod.chanceMod, attEff);
 }
 
@@ -305,8 +290,13 @@ function calcChanceProb(
  *
  * 0,855 → 0,82 (2026-10-08): únava obrany a brankáře přidala vyrovnaným zápasům asi 4 %
  * gólů. Srovnání 3000 zápasů 37:37 před a po: 4,39 → 4,42 gólu (produkce má 4,56).
+ *
+ * 0,82 → 0,74 (2026-10-10): brankáře od zavedení rolí hodnotí i postavení, vybíhání
+ * a zkušenost (engine/roles.ts). Skutečným brankářům to dává nižší hodnotu zákroku
+ * než samotné chytání (častých 100), takže mini liga šesti prachatických týmů
+ * z kopie produkce dávala 4,91 gólu místo 4,52. Úroveň gólů se vrací sem.
  */
-const OPEN_PLAY_GOAL_SCALE = 0.82;
+const OPEN_PLAY_GOAL_SCALE = 0.74;
 
 /**
  * Calculate goal probability from an open-play chance.
@@ -321,16 +311,18 @@ export function calcGoalProb(
   scoreDiff: number,
   /** Jistota rukou brankáře podle počasí (1 = sucho). Kluzký míč mu ubere z chytání. */
   gkHandlingMod: number = 1,
+  /** Brejk: útočník je sám před brankářem, rozhoduje vybíhání a postavení brankáře. */
+  oneOnOne: boolean = false,
 ): number {
   // 30% šancí = hlavičky (centr ze hry)
   const isHeader = rng.random() < 0.3;
-  const attackVal = (isHeader
-    ? (attacker.heading * 2 + attacker.strength) / 3
-    : (attacker.shooting * 2 + attacker.technique) / 3) * freshness(attacker);
+  const attackVal = finishingValue(attacker, isHeader);
 
-  // Dosah brankáře platí jen u hlaviček, na střelu nohou výška nepůsobí.
-  const reach = isHeader ? gkReachFactor(gk.height) : 1;
-  const defenseVal = (gk.goalkeeping * gkHandlingMod * freshness(gk) * reach * 2 + defenseAvg) / 3;
+  // Zákrok brankáře podle situace (engine/roles.ts): u hlaviček dosah a výška,
+  // po brejku vybíhání. Bonus trenéra brankářů a vybavení je v hodnotě zákroku.
+  const situation: GkSituation = isHeader ? "header" : oneOnOne ? "oneOnOne" : "shot";
+  const gkWeight = GK_SHOT_WEIGHT.value;
+  const defenseVal = (gkValue(gk, situation) * gkHandlingMod * freshness(gk) * gkWeight + defenseAvg) / (gkWeight + 1);
 
   let ratio = attackVal / (attackVal + defenseVal);
 
@@ -340,9 +332,9 @@ export function calcGoalProb(
   // Morálka střelce: 0.95-1.05 (neutrální při 50) — hráč v pohodě zakončuje líp
   ratio *= 0.95 + (attacker.morale / 100) * 0.10;
 
-  // Clutch: po 75' při těsném skóre (≤1 gól)
+  // Tlak: po 75' při těsném skóre (≤1 gól) rozhoduje povaha i zkušenost.
   if (minute >= 75 && Math.abs(scoreDiff) <= 1) {
-    ratio *= 0.9 + (attacker.clutch / 100) * 0.2;
+    ratio *= 0.9 + (composureUnderPressure(attacker) / 100) * 0.2;
   }
 
   // Mentorská dvojice na hřišti dodá klid oběma — bonus škáluje síla vztahu.
@@ -354,6 +346,14 @@ export function calcGoalProb(
 }
 
 /**
+ * Klid pod tlakem: povaha (clutch) a zkušenost napůl. Nervák se zkušenostmi
+ * v závěru nezkolabuje tak jako nováček, ostřílený chladnokrevný hráč je nejlepší.
+ */
+function composureUnderPressure(p: MatchPlayer): number {
+  return (p.clutch + (p.experience ?? 40)) / 2;
+}
+
+/**
  * Pick attacker weighted by position + skill quality.
  */
 function pickAttacker(rng: Rng, lineup: MatchPlayer[]): MatchPlayer {
@@ -361,7 +361,8 @@ function pickAttacker(rng: Rng, lineup: MatchPlayer[]): MatchPlayer {
   if (candidates.length === 0) return rng.pick(lineup);
 
   const weights = candidates.map((p) => {
-    const posW = p.position === "FWD" ? 4.0 : p.position === "MID" ? 1.0 : 0.3;
+    const slot = slotOf(p);
+    const posW = slot === "FWD" ? 4.0 : slot === "MID" ? 1.0 : 0.3;
     const skillFactor = 0.5 + ((p.shooting * 0.5 + p.speed * 0.3 + p.heading * 0.2)) / 100;
     const workFactor = 0.9 + (p.workRate / 100) * 0.2;
     return posW * skillFactor * workFactor;
@@ -384,7 +385,8 @@ function pickAssister(rng: Rng, lineup: MatchPlayer[], scorer: MatchPlayer): Mat
   if (candidates.length === 0) return null;
 
   const weights = candidates.map((p) => {
-    const posW = p.position === "MID" ? 2.0 : p.position === "FWD" ? 1.5 : 0.8;
+    const slot = slotOf(p);
+    const posW = slot === "MID" ? 2.0 : slot === "FWD" ? 1.5 : 0.8;
     const rawSkill = (p.passing * 0.4 + p.vision * 0.35 + p.creativity * 0.25);
     const skillFactor = (rawSkill / 50) ** 1.5; // exponential — star playmakers dominate
     // Bratři/otec-syn/mentor si nahrávají častěji (+15 %), spolužáci jsou sehraní
@@ -492,11 +494,11 @@ function calcPenaltyProb(
 ): number {
   const skill = kicker.setPieces * 0.5 + kicker.technique * 0.3 + kicker.shooting * 0.2;
   let prob = 0.60 + (skill / 100) * 0.28;
-  prob -= ((gk.goalkeeping - 50) / 100) * 0.12;
+  prob -= ((gkValue(gk, "penalty") - 50) / 100) * 0.12;
   prob *= 0.92 + (kicker.consistency / 100) * 0.16;
   prob *= 0.96 + (kicker.morale / 100) * 0.08;
   if (minute >= 75 && Math.abs(scoreDiff) <= 1) {
-    prob *= 0.85 + (kicker.clutch / 100) * 0.30;
+    prob *= 0.85 + (composureUnderPressure(kicker) / 100) * 0.30;
   }
   return Math.max(0.35, Math.min(0.93, prob));
 }
@@ -513,7 +515,7 @@ function calcFreekickProb(
 ): number {
   const skill = kicker.setPieces * 0.6 + kicker.technique * 0.4;
   let prob = 0.02 + (skill / 100) * 0.14;
-  prob -= ((gk.goalkeeping - 50) / 100) * 0.05;
+  prob -= ((gkValue(gk, "shot") - 50) / 100) * 0.05;
   prob -= ((defenseAvg - 50) / 100) * 0.02;  // zeď
   // Mokrý a rozfoukaný míč se hůř zvedá přes zeď
   prob *= WEATHER_MODS[weather].techniqueMod;
@@ -536,8 +538,9 @@ export function calcAerialProb(
   const delivery = (kicker.setPieces * 0.7 + kicker.passing * 0.3) / 100;
   const attack = (header.heading * 0.65 + header.strength * 0.35) / 100;
   const defenders = defending.lineup.filter((p) => p.position === "DEF");
-  // Vysoký brankář dosáhne na centr, malý ho pustí (generators/physicals.ts).
-  const gkCover = gk.goalkeeping * gkReachFactor(gk.height);
+  // Vysoký brankář dosáhne na centr, malý ho pustí (generators/physicals.ts);
+  // k tomu hlavičky (dosah) a síla v souboji (engine/roles.ts).
+  const gkCover = gkValue(gk, "aerial");
   const cover = defenders.length > 0
     ? (teamAvg(defenders, "heading") * 0.5 + teamAvg(defenders, "strength") * 0.3 + gkCover * 0.2) / 100
     : gkCover / 100;
@@ -546,7 +549,10 @@ export function calcAerialProb(
   // centr rozhodí dřív, než doletí.
   const weatherMod = weather === "rain" ? 1.08 : weather === "snow" ? 1.12 : weather === "wind" ? 0.92 : 1.0;
 
-  const base = isCorner ? 0.065 : 0.12;
+  // 0,065/0,12 → 0,06/0,112 (2026-10-10): brankáři od zavedení rolí chytají centry
+  // i hlavičkami a silou (engine/roles.ts), u skutečných brankářů slabšími než chytání.
+  // Mini liga z kopie produkce dávala z rohů o 9 % a z centrů o 6 % gólů víc.
+  const base = isCorner ? 0.06 : 0.112;
   const ratio = (delivery * 0.45 + attack * 0.55) / Math.max(0.2, cover);
   return Math.max(0.01, Math.min(isCorner ? 0.16 : 0.26, base * ratio * weatherMod));
 }
@@ -654,13 +660,13 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   if (homeEq) {
     for (const p of home.lineup) {
       p.technique = Math.min(100, p.technique + homeEq.techniqueMod);
-      if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + homeEq.gkBonus);
+      if (p.position === "GK") p.gkBonus = (p.gkBonus ?? 0) + homeEq.gkBonus;
       p.morale = Math.min(100, p.morale + homeEq.moraleMod);
       p.setPieces = Math.min(100, p.setPieces + (homeEq.setPiecesMod ?? 0));
     }
     for (const p of home.subs) {
       p.technique = Math.min(100, p.technique + homeEq.techniqueMod);
-      if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + homeEq.gkBonus);
+      if (p.position === "GK") p.gkBonus = (p.gkBonus ?? 0) + homeEq.gkBonus;
       p.setPieces = Math.min(100, p.setPieces + (homeEq.setPiecesMod ?? 0));
     }
     home.weatherResist = homeEq.weatherResistMod ?? 0;
@@ -668,13 +674,13 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   if (awayEq) {
     for (const p of away.lineup) {
       p.technique = Math.min(100, p.technique + awayEq.techniqueMod);
-      if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + awayEq.gkBonus);
+      if (p.position === "GK") p.gkBonus = (p.gkBonus ?? 0) + awayEq.gkBonus;
       p.morale = Math.min(100, p.morale + awayEq.moraleMod);
       p.setPieces = Math.min(100, p.setPieces + (awayEq.setPiecesMod ?? 0));
     }
     for (const p of away.subs) {
       p.technique = Math.min(100, p.technique + awayEq.techniqueMod);
-      if (p.position === "GK") p.goalkeeping = Math.min(100, p.goalkeeping + awayEq.gkBonus);
+      if (p.position === "GK") p.gkBonus = (p.gkBonus ?? 0) + awayEq.gkBonus;
       p.setPieces = Math.min(100, p.setPieces + (awayEq.setPiecesMod ?? 0));
     }
     away.weatherResist = awayEq.weatherResistMod ?? 0;
@@ -1334,7 +1340,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       const counterGk = getGK(attacking.lineup);
       const counterDefAvg = teamAvg(playersInSlot(attacking.lineup, "DEF"), "defense");
       const counterScoreDiff = isHomePossession ? awayScore - homeScore : homeScore - awayScore;
-      const counterGoalProb = calcGoalProb(rng, counterAttacker, counterGk, counterDefAvg, minute, counterScoreDiff, gkHandling(attacking)) * 0.85;
+      const counterGoalProb = calcGoalProb(rng, counterAttacker, counterGk, counterDefAvg, minute, counterScoreDiff, gkHandling(attacking), true) * 0.85;
 
       if (rng.random() < counterGoalProb) {
         scoreGoal(minute, counterAttacker, defending, attacking,

@@ -155,8 +155,9 @@ Postup: nastavit koeficienty → změřit → upravit → opakovat, dokud neplat
 ## Nasazení
 
 - Vývoj ve větvi `feat/engine-roles`, ověření na testu (zápasy, náhled sestavy, góly).
-- Produkce **až po finále turnaje P-Mobile (čt 22. 10. 2026)** a před prvním ligovým kolem nové
-  sezóny, aby se turnaj nedohrával podle jiných pravidel. Jde tam spolu s `7c911ec3`, na kterém stojí.
+- Produkce **ještě 2026-10-10** (rozhodnutí uživatele), po testu skutečnými zápasy na localhostu.
+  Turnaj P-Mobile (start 14. 10.) se tak odehraje celý na novém enginu. Jde tam spolu s `7c911ec3`,
+  na kterém stojí.
 - Novinka do „Co je nového“ jen na výslovné přání.
 
 ## Rizika
@@ -164,6 +165,55 @@ Postup: nastavit koeficienty → změřit → upravit → opakovat, dokud neplat
 - **Posun síly klubů:** kluby postavené na technické záloze relativně zeslábnou, kluby se silnou
   obranou a brankářem zesílí. Je to záměr, ale hráči si toho všimnou.
 - **Přeladění na pár týmů:** proto tři sestavy a syntetický tým.
-- **Výkon workeru:** match tick zpracuje všechny ligy v jedné invokaci. Příspěvky hráčů se spočítají
-  jednou na začátku zápasu a přepočítají jen při střídání, kartě nebo změně kondice, ne každou minutu
-  od nuly.
+- **Výkon workeru:** match tick zpracuje všechny ligy v jedné invokaci. Fáze se počítají každou minutu
+  stejně jako dřív průměry řad: 11 hráčů × několik koeficientů, žádné volání DB.
+
+## Implementace a naměřené výsledky (2026-10-10)
+
+Oproti návrhu výše:
+
+- **Výdrž a nasazení nejsou položkou fáze, ale násobitelem** všeho, co hráč dělá
+  (`STAMINA_EFFECT` podle postu, nasazení 0,15 v útoku a 0,2 v obraně, agresivita obránců 0,3),
+  se středem v 50. Přičítání do obrany dělalo útok/obranu závislé na úrovni ligy (slabá liga
+  měla o 12 % méně gólů než silná); jako násobitel je poměr na úrovni nezávislý.
+- **Zkušenost je koeficient** ve fázích a zákrocích jako ostatní vlastnosti (brankář: zákrok,
+  úniky, penalty, organizace obrany; obránce: bránění, rozehrávka; záloha: držení míče; útočník:
+  podržení míče; všichni: zakončení). Pod tlakem (po 75. minutě při rozdílu do jednoho gólu
+  a na penaltách) se počítá napůl se povahou (`clutch`).
+- **Zakončení má tabulku pro každý post** (`FINISHING`), brankářské situace `GK_SITUATIONS`
+  (střela, centr, únik, penalta). Váha brankáře proti obráncům u střely `GK_SHOT_WEIGHT` 2,04.
+- **Oslabení:** chybějící hráč chybí ve své roli (součet, ne průměr) a k tomu mírná srážka za
+  přeskupení s citlivostí 1 (dřív 2, kdy vyloučení jinak nic nestálo).
+- **Hřiště a počasí** ubírají technice i přihrávkám v útoku (dohromady pětina útoku jako dřív
+  samotná technika).
+- **Úroveň gólů:** skuteční brankáři mají postavení, vybíhání a hlavičky slabší než chytání, takže
+  jejich zákrok vychází níž a padalo víc gólů. `OPEN_PLAY_GOAL_SCALE` 0,82 → 0,74, základ centrů
+  a rohů 0,065/0,12 → 0,06/0,112.
+- **Náhled síly sestavy** měl zastaralé měřítko (dovednosti ×4) a skoro všude ukazoval 100; teď
+  počítá řady, útok a obranu z `roles.ts` (50 = průměrný tým).
+- Testy tvrdosti a bahna ověřovaly celkové góly na pár stovkách zápasů; přeměření ukázalo, že
+  efekt byl pod úrovní šumu i na starém enginu. Hlídají teď mechanismus přesně (šance za minutu,
+  góly ze hry).
+
+Ladění: 4 kola, 2 sestavy (Jitona 4-3-3, AppYours 4-4-2) proti pěti soupeřům, 48 scénářů
+po 6 000 zápasech, 9 souběžných dávek.
+
+**Výsledek (kritéria 1–3 splněna):**
+
+| | Brankář | Obránce | Záložník | Útočník |
+|---|---|---|---|---|
+| Hráč o 10 horší, před | 0,022 | 0,040 | 0,091 | 0,060 |
+| Hráč o 10 horší, po | 0,091 (+17 %) | 0,072 (−8 %) | 0,070 (−11 %) | 0,079 (+2 %) |
+
+Podíl každé vlastnosti na vlivu postu je 0,53–1,46× jejího podílu na vahách (pásmo 0,5–2),
+žádná vlastnost s vahou nemá nulu (`roles.test.ts` to ověřuje simulací).
+
+**Góly (kritérium 4)**, mini liga šesti prachatických týmů z kopie produkce, 6 000 zápasů:
+engine z testu 4,52 gólu, 47,2 % výher domácích, 19,8 % remíz; nový 4,56 / 48,1 % / 18,8 %.
+Ze hry 3,15 → 3,11, rohy a centry po úpravě základu stejně.
+
+**Postava** (Jitona proti pěti soupeřům, 5 000 zápasů): všichni o 12 kg těžší −0,065 bodu na
+zápas, o 8 cm menší −0,061, brankář o 10 cm vyšší +0,022.
+
+**Tvrdá hra** na skutečných týmech (10 000 zápasů): +0,065 → +0,058 bodu na zápas, góly soupeře
+ze hry −7,6 % → −7,4 %, tedy beze změny v rámci šumu.
