@@ -597,6 +597,26 @@ function getPositionPenalty(natural: Pos, playing: Pos): PosPenalty {
 }
 
 /**
+ * Postih za hraní mimo přirozený post — sníží hráči dovednosti na místě, kde stojí.
+ * Sdílí ho zápas i rozbor kádru od asistenta (analysis/squad-analysis-data.ts),
+ * aby hráč postavený mimo post nevycházel v rozboru lépe než v zápase.
+ */
+export function applyPositionPenalty(p: MatchPlayer): void {
+  const mp = p.matchPosition ?? p.position;
+  if (mp === p.position) return;
+  const pen = getPositionPenalty(p.position, mp);
+  p.speed = Math.max(5, Math.round(p.speed * (1 - pen.speed)));
+  p.technique = Math.max(5, Math.round(p.technique * (1 - pen.technique)));
+  p.shooting = Math.max(5, Math.round(p.shooting * (1 - pen.shooting)));
+  p.passing = Math.max(5, Math.round(p.passing * (1 - pen.passing)));
+  p.heading = Math.max(5, Math.round(p.heading * (1 - pen.heading)));
+  p.defense = Math.max(5, Math.round(p.defense * (1 - pen.defense)));
+  p.goalkeeping = Math.max(5, Math.round(p.goalkeeping * (1 - pen.goalkeeping)));
+  p.vision = Math.max(5, Math.round(p.vision * (1 - pen.vision)));
+  p.creativity = Math.max(5, Math.round(p.creativity * (1 - pen.creativity)));
+}
+
+/**
  * Vybrat ze střídaček nejvhodnějšího hráče dle pozice zraněného/vyčerpaného.
  * Preferuje stejnou pozici, pak sousední (DEF↔MID↔FWD). Brankář se NIKDY
  * nepostaví do pole, pokud zraněný není sám brankář — to by byla katastrofa.
@@ -697,21 +717,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   const awayInjuryMod = 1 - (awayEq?.injurySeverityMod ?? 0);
 
   // Apply out-of-position penalties
-  for (const p of [...home.lineup, ...home.subs, ...away.lineup, ...away.subs]) {
-    const mp = p.matchPosition ?? p.position;
-    if (mp !== p.position) {
-      const pen = getPositionPenalty(p.position, mp);
-      p.speed = Math.max(5, Math.round(p.speed * (1 - pen.speed)));
-      p.technique = Math.max(5, Math.round(p.technique * (1 - pen.technique)));
-      p.shooting = Math.max(5, Math.round(p.shooting * (1 - pen.shooting)));
-      p.passing = Math.max(5, Math.round(p.passing * (1 - pen.passing)));
-      p.heading = Math.max(5, Math.round(p.heading * (1 - pen.heading)));
-      p.defense = Math.max(5, Math.round(p.defense * (1 - pen.defense)));
-      p.goalkeeping = Math.max(5, Math.round(p.goalkeeping * (1 - pen.goalkeeping)));
-      p.vision = Math.max(5, Math.round(p.vision * (1 - pen.vision)));
-      p.creativity = Math.max(5, Math.round(p.creativity * (1 - pen.creativity)));
-    }
-  }
+  for (const p of [...home.lineup, ...home.subs, ...away.lineup, ...away.subs]) applyPositionPenalty(p);
 
   // Track cards per player to avoid double yellow → red
   const yellowCards = new Set<number>();

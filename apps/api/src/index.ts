@@ -31,6 +31,7 @@ import bettingRouter from "./routes/betting";
 import tournamentRouter from "./routes/tournament";
 import clubPrefixRouter from "./routes/club-prefix";
 import { clubWebsiteRouter } from "./routes/club-website";
+import { squadAnalysisRouter } from "./routes/squad-analysis";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -130,6 +131,7 @@ app.route("/api", competitionRouter);
 app.route("/api", bettingRouter);
 app.route("/api", tournamentRouter);
 app.route("/api", clubPrefixRouter);
+app.route("/api", squadAnalysisRouter);
 
 export default {
   fetch: app.fetch,
