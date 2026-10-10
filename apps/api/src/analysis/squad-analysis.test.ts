@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { MatchPlayer } from "../engine/types";
 import type { Slot } from "../engine/roles";
 import {
-  assistantLevel, assistantQuality, buildSquadAnalysis, gameWeekKey, measureSquad,
-  type LeagueTeam, type SquadAnalysisInput, type SquadAnalysisReport, type SquadMember, type TextPart,
+  assistantLevel, assistantQuality, buildSquadAnalysis, gameWeekKey, headlineFor, measureSquad,
+  type Insight, type LeagueTeam, type LineReport, type Reinforcement, type SquadAnalysisInput, type SquadAnalysisReport, type SquadMember, type TextPart,
 } from "./squad-analysis";
 import { formationQuotas, pickBestEleven } from "./squad-analysis-data";
 
@@ -278,5 +278,30 @@ describe("rozbor kádru: pomocné funkce", () => {
     expect(picked.filter((p) => p.slot === "DEF").map((p) => p.row.id)).toEqual(expect.arrayContaining(["d4", "d3", "d2", "d1"]));
     // Záložníci jsou jen dva: zbylá místa doplní nejlepší zbylí hráči na svých postech.
     expect(new Set(picked.map((p) => p.row.id)).size).toBe(11);
+  });
+});
+
+describe("verdikt asistenta nahoře v záložce", () => {
+  const line = (slot: "GK" | "DEF" | "MID" | "FWD", verdict: LineReport["verdict"]): LineReport => ({
+    line: slot, label: slot, verdict, vague: false, text: [], bestTeam: null, bar: { low: 0, high: 1, average: 0.5, best: 1 },
+  });
+  const signing: Reinforcement = { line: "FWD", priority: "high", text: [], attributes: [] };
+
+  it("řekne celkový dojem, o co se opřít, co drží zpátky a kam posilu, s rodem podle asistenta", () => {
+    const lines = [line("GK", "aboveAverage"), line("DEF", "average"), line("MID", "best"), line("FWD", "belowAverage")];
+    const he = headlineFor(lines, [], [signing], false).map((p) => (p.kind === "text" ? p.text : p.name)).join("");
+    const she = headlineFor(lines, [], [signing], true).map((p) => (p.kind === "text" ? p.text : p.name)).join("");
+    expect(he).toContain("Nejvíc se můžeme opřít o zálohu, zpátky nás drží útok.");
+    expect(he).toContain("Posilu bych hledal do útoku.");
+    expect(she).toContain("Posilu bych hledala do útoku.");
+    expect(he).not.toContain("—");
+  });
+
+  it("u vyrovnaných řad sáhne po hlavní slabině", () => {
+    const lines = [line("GK", "average"), line("DEF", "average"), line("MID", "aboveAverage"), line("FWD", "average")];
+    const weak: Insight = { aspect: "fwdMovement", line: "FWD", scope: "league", title: "Útok je čitelný, náběhy chybí", text: [] } as Insight;
+    const text = headlineFor(lines, [weak], [], false).map((p) => (p.kind === "text" ? p.text : "")).join("");
+    expect(text).toContain("Nejvíc nás brzdí tohle: útok je čitelný, náběhy chybí.");
+    expect(text).not.toContain("Posilu");
   });
 });

@@ -12,7 +12,7 @@ import { SquadAnalysisTab } from "@/components/players/squad-analysis-tab";
 
 type Tab = "atributy" | "sezona" | "top" | "dochazka" | "postava" | "rozbor";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["atributy", "sezona", "top", "dochazka", "postava", "rozbor"] as const;
+const TAB_KEYS = ["atributy", "rozbor", "sezona", "postava", "dochazka", "top"] as const;
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
 type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "injury" | "suspension" | "excuse" | "bench" | "notNominated";
 type SortDir = "asc" | "desc";
@@ -243,12 +243,13 @@ export default function SquadPage() {
           dense
           mobileIcons={false}
           items={[
+            // Rozbor hned za Atributy: na mobilu je vidět bez posouvání lišty, TOP až na konci.
             { key: "atributy", label: "Atributy", icon: "\u{1F4CB}" },
-            { key: "sezona", label: "Sezóna", icon: "\u{1F4CA}" },
-            { key: "top", label: "TOP", icon: "\u{1F3C6}" },
-            { key: "dochazka", label: "Docházka", icon: "\u{1F4C5}" },
-            { key: "postava", label: "Postava", icon: "\u2696\uFE0F" },
             { key: "rozbor", label: "Rozbor", icon: "\u{1F9ED}" },
+            { key: "sezona", label: "Sezóna", icon: "\u{1F4CA}" },
+            { key: "postava", label: "Postava", icon: "\u2696\uFE0F" },
+            { key: "dochazka", label: "Docházka", icon: "\u{1F4C5}" },
+            { key: "top", label: "TOP", icon: "\u{1F3C6}" },
           ]}
         />
       </div>
