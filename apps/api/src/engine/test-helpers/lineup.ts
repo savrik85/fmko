@@ -24,6 +24,9 @@ export function createPlayer(id: number, pos: "GK" | "DEF" | "MID" | "FWD", skil
     vision: skill,
     creativity: skill,
     setPieces: skill,
+    // Zkušenost je od 2026-10-10 v zápase dovednost jako ostatní (engine/roles.ts);
+    // „tým na úrovni X“ ji má taky X, jinak by slabá liga vypadala zkušeněji.
+    experience: skill,
     discipline: 50,
     alcohol: 10,
     temper: 50,

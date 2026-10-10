@@ -75,29 +75,37 @@ describe("nasáklost půdy a technika", () => {
  * simulace nepropsala (což byl stav do 2026-08-25), vyšla by obě čísla stejně.
  */
 describe("rozmáčené hřiště v odehraném zápase", () => {
-  it("na bahně padne za stejných podmínek míň gólů než na suchu", async () => {
+  // Do 2026-10-10 tu bylo „na bahně padne míň gólů“ na 120 zápasech. Bahno ubere
+  // technice a přihrávkám zhruba 1 % útoku a šance za minutu klesnou o ~0,6 %, což
+  // je na tisícovce zápasů pod úrovní šumu (starý engine −0,4 %, nový +0,8 %).
+  // Test proto hlídá dvě věci zvlášť a bez náhody: vlhkost se do zápasu propíše
+  // (jiný průběh) a na bahně vzniká méně šancí.
+  it("vlhkost se do odehraného zápasu propíše", async () => {
     const { simulateMatch } = await import("./simulation");
     const { createRng } = await import("../generators/rng");
     const { createTeam } = await import("./test-helpers/lineup");
 
-    const N = 120;
-    let sucho = 0;
-    let bahno = 0;
-    for (let i = 0; i < N; i++) {
+    let changedMatches = 0;
+    for (let i = 0; i < 60; i++) {
       const a = simulateMatch(createRng(7000 + i), {
         home: createTeam(1, "TJ Sokol"), away: createTeam(2, "SK Lhota"),
         weather: "cloudy", isHomeAdvantage: false, pitchCondition: 80, pitchMoisture: 50,
       });
-      sucho += a.homeScore + a.awayScore;
-
       const b = simulateMatch(createRng(7000 + i), {
         home: createTeam(1, "TJ Sokol"), away: createTeam(2, "SK Lhota"),
         weather: "cloudy", isHomeAdvantage: false, pitchCondition: 80, pitchMoisture: 100,
       });
-      bahno += b.homeScore + b.awayScore;
+      if (JSON.stringify(a.events) !== JSON.stringify(b.events)) changedMatches++;
     }
+    expect(changedMatches).toBeGreaterThan(30);
+  });
 
-    expect(bahno).toBeLessThan(sucho);
+  it("na bahně vzniká méně šancí než na suchu", async () => {
+    const { calcChanceProb } = await import("./simulation");
+    const { createTeam } = await import("./test-helpers/lineup");
+    const dry = calcChanceProb(createTeam(1, "TJ Sokol"), createTeam(2, "SK Lhota"), "cloudy", 1, undefined, undefined, 80, 50);
+    const mud = calcChanceProb(createTeam(1, "TJ Sokol"), createTeam(2, "SK Lhota"), "cloudy", 1, undefined, undefined, 80, 100);
+    expect(mud).toBeLessThan(dry);
   });
 
   it("na bahně se hráči častěji zraní", async () => {

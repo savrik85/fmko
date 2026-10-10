@@ -12,6 +12,7 @@ import type { MatchPlayer, TeamSetup } from "./types";
 // Modifikátory taktiky se berou z jednoho místa. Dřív tu byla kopie, kterou
 // bylo nutné ručně synchronizovat — a s příchodem tvrdosti hry by se rozjela.
 import { TACTIC_MODS, calcTacticEffectiveness, effMod } from "./tactics";
+import { playerRoleRating, slotOf, teamAttackIndex, teamDefenseIndex } from "./roles";
 
 function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
   if (lineup.length === 0) return 0;
@@ -19,78 +20,23 @@ function teamAvg(lineup: MatchPlayer[], stat: keyof MatchPlayer): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-// ── Per-line strength: vážený průměr klíčových atributů pro pozici ──────────
-// Hodnoty atributů jsou 1–20, normalizujeme na 0–100 pro UI.
+// ── Síla řad a útoku/obrany — z rolí, stejně jako v zápase ─────────────────
+// Do 2026-10-10 tu byla ruční kopie vzorců enginu a vlastní váhy řad, přepočtené
+// na „UI škálu“ násobkem 4 z doby, kdy dovednosti jely 1–25. U dnešních hráčů
+// (dovednosti kolem 50) tak náhled skoro všude ukazoval strop 100.
 
-// Realne pozorovane atributy ve hre se pohybuji ~5-30 (max ~40 u top hracu).
-// Pro UI 0-100 skalu nasobime ~4x (silny hrac → 80-95, prumer → 50-65, slaby → 20-40).
-// condition/morale jsou 0-100 → nasobeni neni potreba, pouzivame primo.
-const SKILL_TO_UI_FACTOR = 4;
-
-function gkStrength(gks: MatchPlayer[]): number {
-  if (gks.length === 0) return 0;
-  const gk = gks[0];
-  return clamp(gk.goalkeeping * SKILL_TO_UI_FACTOR * 0.7 + gk.condition * 0.15 + gk.morale * 0.15, 0, 100);
-}
-
-function defStrength(defs: MatchPlayer[]): number {
-  if (defs.length === 0) return 0;
-  return clamp((teamAvg(defs, "defense") * 0.5 + teamAvg(defs, "strength") * 0.25 + teamAvg(defs, "heading") * 0.15 + teamAvg(defs, "speed") * 0.1) * SKILL_TO_UI_FACTOR, 0, 100);
-}
-
-function midStrength(mids: MatchPlayer[]): number {
-  if (mids.length === 0) return 0;
-  return clamp((teamAvg(mids, "passing") * 0.35 + teamAvg(mids, "technique") * 0.25 + teamAvg(mids, "vision") * 0.15 + teamAvg(mids, "workRate") * 0.15 + teamAvg(mids, "stamina") * 0.10) * SKILL_TO_UI_FACTOR, 0, 100);
-}
-
-function fwdStrength(fwds: MatchPlayer[]): number {
-  if (fwds.length === 0) return 0;
-  return clamp((teamAvg(fwds, "shooting") * 0.4 + teamAvg(fwds, "speed") * 0.2 + teamAvg(fwds, "technique") * 0.2 + teamAvg(fwds, "heading") * 0.1 + teamAvg(fwds, "creativity") * 0.1) * SKILL_TO_UI_FACTOR, 0, 100);
+function lineStrength(players: MatchPlayer[]): number {
+  if (players.length === 0) return 0;
+  return clamp(players.reduce((s, p) => s + playerRoleRating(p), 0) / players.length, 0, 100);
 }
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
 
-// ── Attack / Defense power — kopie engine vzorce ────────────────────────────
-
-function rawAttackPower(setup: TeamSetup): number {
-  const outfield = setup.lineup.filter((p) => p.position !== "GK");
-  const mids = setup.lineup.filter((p) => p.position === "MID");
-  const midAndFwd = setup.lineup.filter((p) => p.position === "MID" || p.position === "FWD");
+function tacticAdjusted(setup: TeamSetup, value: number, kind: "attackMod" | "defenseMod"): number {
   const tacticMod = TACTIC_MODS[setup.tactic] ?? TACTIC_MODS.balanced;
-
-  const base = (
-    teamAvg(outfield, "technique") * 0.8 +
-    teamAvg(outfield, "passing") * 1.0 +
-    teamAvg(outfield, "speed") * 0.7 +
-    (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
-    (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
-    teamAvg(outfield, "workRate") * 0.3
-  ) / 5;
-
-  return base * effMod(tacticMod.attackMod, calcTacticEffectiveness(setup.lineup, setup.tactic, setup.formation));
-}
-
-function rawDefensePower(setup: TeamSetup): number {
-  const defOutfield = setup.lineup.filter((p) => p.position !== "GK");
-  const defs = setup.lineup.filter((p) => p.position === "DEF");
-  const tacticMod = TACTIC_MODS[setup.tactic] ?? TACTIC_MODS.balanced;
-
-  const base = (
-    teamAvg(defOutfield, "defense") * 1.0 +
-    teamAvg(defOutfield, "strength") * 0.7 +
-    (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
-    teamAvg(defOutfield, "workRate") * 0.2
-  ) / 3;
-
-  return base * effMod(tacticMod.defenseMod, calcTacticEffectiveness(setup.lineup, setup.tactic, setup.formation));
-}
-
-// Normalize attack/defense power to 0-100 scale.
-// Engine values typically ~20–35 (attack), ~18–25 (defense).
-function normalize(rawValue: number, low: number, high: number): number {
-  return clamp(((rawValue - low) / (high - low)) * 100, 0, 100);
+  return value * effMod(tacticMod[kind], calcTacticEffectiveness(setup.lineup, setup.tactic, setup.formation));
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -138,25 +84,21 @@ function compare(own: number, opp: number): Comparison {
 }
 
 export function calcLineupStrength(setup: TeamSetup): LineupStrength {
-  const gks = setup.lineup.filter((p) => p.position === "GK");
-  const defs = setup.lineup.filter((p) => p.position === "DEF");
-  const mids = setup.lineup.filter((p) => p.position === "MID");
-  const fwds = setup.lineup.filter((p) => p.position === "FWD");
+  const inSlot = (slot: string) => setup.lineup.filter((p) => slotOf(p) === slot);
 
   const perLine: LineStrengths = {
-    gk: Math.round(gkStrength(gks)),
-    def: Math.round(defStrength(defs)),
-    mid: Math.round(midStrength(mids)),
-    fwd: Math.round(fwdStrength(fwds)),
+    gk: Math.round(lineStrength(inSlot("GK"))),
+    def: Math.round(lineStrength(inSlot("DEF"))),
+    mid: Math.round(lineStrength(inSlot("MID"))),
+    fwd: Math.round(lineStrength(inSlot("FWD"))),
   };
 
-  // rawAttack/Defense vychazi ze skutecnych atributu (1-30 typicky).
-  // Pozorovany engine range: attack ~7-20, defense ~5-18.
-  const attack = Math.round(normalize(rawAttackPower(setup), 5, 22));
-  const defense = Math.round(normalize(rawDefensePower(setup), 4, 18));
-  const overall = Math.round(
-    perLine.gk * 0.15 + perLine.def * 0.30 + perLine.mid * 0.30 + perLine.fwd * 0.25
-  );
+  // Útok a obrana stejně jako v zápase (engine/roles.ts), 50 = průměrný tým.
+  const attack = Math.round(clamp(tacticAdjusted(setup, teamAttackIndex(setup.lineup), "attackMod"), 0, 100));
+  const defense = Math.round(clamp(tacticAdjusted(setup, teamDefenseIndex(setup.lineup), "defenseMod"), 0, 100));
+  // Řady se váží počtem hráčů — každý hráč v sestavě má stejný hlas jako v zápase.
+  const counted = setup.lineup.length || 1;
+  const overall = Math.round(setup.lineup.reduce((s, p) => s + playerRoleRating(p), 0) / counted);
 
   const tacticMod = TACTIC_MODS[setup.tactic] ?? TACTIC_MODS.balanced;
   const tacticEff = calcTacticEffectiveness(setup.lineup, setup.tactic, setup.formation);

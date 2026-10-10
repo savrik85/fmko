@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
-import { simulateMatch } from "./simulation";
+import { calcChanceProb, simulateMatch } from "./simulation";
 import { NEUTRAL_REFEREE, type RefereeProfile } from "./referee";
 import {
   HARDNESS_MODS, calcHardnessFit, benefitScale, careFactor, susceptibility,
@@ -61,6 +61,8 @@ const REF: Record<string, RefereeProfile> = {
 interface Totals {
   matches: number;
   homeGoals: number; awayGoals: number;
+  /** Góly soupeře ze hry (bez standardek) — tam tvrdost šetří, standardky po faulech platí. */
+  awayOpenPlay: number;
   homeFouls: number; homeYellow: number; homeRed: number;
   injuries: number; homeInjuries: number;
 }
@@ -73,7 +75,7 @@ function run(
   opts: { homeAttrs?: PlayerOverrides; awayAttrs?: PlayerOverrides; awayHardness?: Hardness } = {},
 ): Totals {
   const t: Totals = {
-    matches, homeGoals: 0, awayGoals: 0,
+    matches, homeGoals: 0, awayGoals: 0, awayOpenPlay: 0,
     homeFouls: 0, homeYellow: 0, homeRed: 0, injuries: 0, homeInjuries: 0,
   };
   for (let i = 0; i < matches; i++) {
@@ -85,6 +87,7 @@ function run(
     t.homeGoals += r.homeScore;
     t.awayGoals += r.awayScore;
     for (const e of r.events) {
+      if (e.type === "goal" && e.teamId === 2 && e.source === "open_play") t.awayOpenPlay++;
       if (e.type === "foul" && e.teamId === 1) t.homeFouls++;
       if (e.type === "card" && e.teamId === 1) { e.detail === "red" ? t.homeRed++ : t.homeYellow++; }
       if (e.type === "injury") { t.injuries++; if (e.teamId === 1) t.homeInjuries++; }
@@ -132,14 +135,24 @@ describe("tvrdost hry, agregáty", () => {
     expect(hard.homeRed).toBeGreaterThan(fair.homeRed * 2);
   }, SLOW);
 
-  // Práh byl do 2026-10-10 0,08. Starý vzorec šancí efekt tvrdosti zesiloval podle
-  // úrovně hráčů: na padesátkách tady ubrala 0,11 gólu, na úrovni 37 (medián produkce)
-  // jen 0,05. Šance jsou teď na úrovni nezávislé, ubere ~0,05 a rozdíl skóre +0,12
-  // drží (dřív +0,14). Část ušetřených šancí soupeř dožene ze standardek po faulech.
-  it("tvrdá hra reálně ubere soupeři góly", () => {
-    const conceded = (t: Totals) => per(t.awayGoals, t);
-    expect(conceded(normal) - conceded(hard)).toBeGreaterThan(0.03);
+  // Do 2026-10-10 test hlídal CELKOVÉ obdržené góly s prahem 0,03. Přeměření na
+  // 20 000 zápasech ukázalo, že skutečný rozdíl na téhle sestavě je jen 0,02 (starý
+  // engine) a 0,006 (engine podle rolí) — test procházel díky šťastným semínkům.
+  // Tvrdost totiž šetří góly ze hry a soupeř část z nich dožene ze standardek po
+  // faulech; to je záměr. Hlídá se proto přímo úspora ze hry (naměřeno 0,10–0,12)
+  // a ubrané šance za minutu, které náhoda neovlivní. Na skutečných týmech z kopie
+  // produkce (10 000 zápasů) tvrdost dál přidává ~0,06 bodu na zápas.
+  it("tvrdá hra reálně ubere soupeři góly ze hry", () => {
+    const openPlay = (t: Totals) => per(t.awayOpenPlay, t);
+    expect(openPlay(normal) - openPlay(hard)).toBeGreaterThan(0.05);
   }, SLOW);
+
+  it("tvrdá hra ubere soupeři šance za minutu", () => {
+    const attacker = mkTeam(2, 100, 50, "normal");
+    const vsNormal = calcChanceProb(attacker, mkTeam(1, 1, 50, "normal", { aggression: 75, strength: 65 }), "sunny");
+    const vsHard = calcChanceProb(attacker, mkTeam(1, 1, 50, "hard", { aggression: 75, strength: 65 }), "sunny");
+    expect(vsHard).toBeLessThan(vsNormal * 0.95);
+  });
 
   it("tvrdá hra zraňuje víc soupeře než vlastní hráče", () => {
     const soupereva = (t: Totals) => per(t.injuries - t.homeInjuries, t);
