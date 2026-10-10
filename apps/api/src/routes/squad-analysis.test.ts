@@ -60,8 +60,9 @@ beforeAll(async () => {
     });
   };
   addSquad("my-a", 45);
-  addSquad("rival-a", 35);
-  addSquad("rival-b", 50);
+  // Hodnoty mimo pětky: rozbor je musí vidět zaokrouhlené jako profil cizího hráče (35 a 50).
+  addSquad("rival-a", 37);
+  addSquad("rival-b", 52);
   addSquad("my-u21", 30, 8);
   addSquad("lonely", 40);
   statements.push(db.prepare("INSERT INTO injuries (id, player_id, team_id, days_remaining) VALUES ('inj', 'my-a-1', 'my-a', 5)"));
@@ -109,6 +110,10 @@ describe("GET /teams/:teamId/squad-analysis", () => {
     const kinds = r.warnings.map((w: { kind: string }) => w.kind);
     expect(kinds).not.toContain("injured");
     expect(kinds).not.toContain("outOfPosition");
+    // Soupeře asistent zná jen jako manažer: vlastnosti na pětky (35 a 50), průměr 42,5,
+    // ne přesných 44,5. Výborný asistent k tomu nic nepřidává.
+    const fwd = r.lineTables.find((t: { line: string }) => t.line === "FWD");
+    expect(fwd.attributes.find((a: { skill: string }) => a.skill === "shooting").league).toBe(43);
     // Skutečná čísla modelu (hodnocení, vlivy) ven nejdou.
     expect(JSON.stringify(r)).not.toMatch(/"effect"|"gain"|"quality"/);
   });

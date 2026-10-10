@@ -19,6 +19,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "V Kádru je nová záložka Rozbor. Asistent trenéra v ní řekne, jak silné máš řady proti lize, co kterou řadu drží zpátky a kam by hledal posilu.",
       "Po klepnutí na řadu uvidíš klíčové vlastnosti proti průměru ligy a všechny hráče na postu, v čem vynikají a v čem ztrácejí. Pod tím je perspektiva kádru: věk a zkušenost proti soupeřům, kdo na tréninku roste, mladí hráči a opory přes 30.",
       "Jak přesný rozbor je, záleží na kvalitě asistenta. Lepší asistent vidí víc a odhaduje přesněji, slabší jen zhruba a leccos přehlédne. Bez asistenta je záložka zamčená.",
+      "Soupeře asistent hodnotí jen podle odhadů. Vlastnosti cizích hráčů nezná přesně, vidí je stejně jako ty, když si otevřeš profil cizího hráče.",
     ],
   },
   {
