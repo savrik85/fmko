@@ -157,6 +157,8 @@ export interface Warning {
 export interface SquadAnalysisReport {
   status: "ready";
   assistant: { name: string; female: boolean; level: AssistantLevel; note: string };
+  /** Verdikt asistenta dvěma až třemi větami: celkový dojem, o co se opřít, kam posilu. */
+  headline: TextPart[];
   basis: { source: "lineup" | "best11"; formation: string };
   lines: LineReport[];
   strengths: Insight[];
@@ -569,6 +571,7 @@ export function buildSquadAnalysis(input: SquadAnalysisInput): SquadAnalysisRepo
   return {
     status: "ready",
     assistant: { name: assistant.name, female: assistant.female, level: precision.level, note: assistantNote(assistant, precision.level) },
+    headline: headlineFor(lines, weaknesses, reinforcements, assistant.female),
     basis: { source: input.lineupSource, formation: input.formation },
     lines,
     strengths,
@@ -577,6 +580,46 @@ export function buildSquadAnalysis(input: SquadAnalysisInput): SquadAnalysisRepo
     style,
     warnings,
   };
+}
+
+const VERDICT_RANK: Record<LineVerdict, number> = {
+  best: 6, top: 5, aboveAverage: 4, average: 3, belowAverage: 2, bottom: 1, worst: 0,
+};
+/** Řada ve 4. pádě („opřít se o zálohu“) a v 1. pádě malým písmenem. */
+const LINE_ACC: Record<Slot, string> = { GK: "brankáře", DEF: "obranu", MID: "zálohu", FWD: "útok" };
+const LINE_NOM: Record<Slot, string> = { GK: "brankář", DEF: "obrana", MID: "záloha", FWD: "útok" };
+const LINE_INTO: Record<Slot, string> = { GK: "do branky", DEF: "do obrany", MID: "do zálohy", FWD: "do útoku" };
+
+/**
+ * Verdikt nahoře v záložce: celkový dojem z kádru, o kterou řadu se opřít a která drží
+ * zpátky, a kam by asistent hledal posilu. Skládá se z toho, co asistent vidí (verdikty
+ * řad už jsou rozmazané podle jeho kvality), takže slabý asistent řekne i hrubší větu.
+ */
+export function headlineFor(lines: LineReport[], weaknesses: Insight[], reinforcements: Reinforcement[], female: boolean): TextPart[] {
+  const ranked = lines.map((l) => ({ line: l.line, rank: VERDICT_RANK[l.verdict] })).sort((a, b) => b.rank - a.rank);
+  const avg = ranked.reduce((s, l) => s + l.rank, 0) / Math.max(1, ranked.length);
+  const overall = avg >= 5.5 ? "Máme jeden z nejsilnějších kádrů ligy."
+    : avg >= 4.5 ? "Kádr patří k lepším v lize."
+      : avg >= 3.5 ? "Kádr je o kousek nad průměrem ligy."
+        : avg >= 2.5 ? "Kádr je průměrný."
+          : avg >= 1.5 ? "Kádr je pod průměrem ligy."
+            : "Kádr patří k nejslabším v lize.";
+  const parts: string[] = [overall];
+  const best = ranked[0];
+  const worst = ranked[ranked.length - 1];
+  if (best && worst && best.rank - worst.rank >= 2) {
+    parts.push(`Nejvíc se můžeme opřít o ${LINE_ACC[best.line]}, zpátky nás drží ${LINE_NOM[worst.line]}.`);
+  } else if (weaknesses[0]) {
+    const t = weaknesses[0].title;
+    parts.push(`Nejvíc nás brzdí tohle: ${t.charAt(0).toLowerCase()}${t.slice(1)}.`);
+  } else {
+    parts.push("Řady máme vyrovnané.");
+  }
+  const signing = reinforcements[0];
+  if (signing && signing.priority !== "low") {
+    parts.push(`Posilu bych ${female ? "hledala" : "hledal"} ${LINE_INTO[signing.line]}.`);
+  }
+  return [{ kind: "text", text: parts.join(" ") }];
 }
 
 /** Poctivá věta o tom, jak moc se dá rozboru věřit. */
