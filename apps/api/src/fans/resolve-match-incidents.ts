@@ -36,7 +36,14 @@ export interface ResolveOpts {
   /** Odkud se bere nárok a kam se zapisuje snapshot. Pohár má vlastní tabulku. */
   table?: "matches" | "cup_matches";
   homeTeamId: string;
-  awayTeamId: string;
+  /**
+   * null = soupeř nemá ve hře skutečný tým (velkoklub v poháru). Pak není čí
+   * kotel by přijel, komu dát pokutu za hosty ani s kým vést rivalitu, a Tribuna
+   * píše jen za domácí. Dosadit sem domácí tým nejde — klub by hrál sám se sebou.
+   */
+  awayTeamId: string | null;
+  /** Název soupeře, když nemá skutečný tým a jméno se tedy nedá dohledat v `teams`. */
+  awayName?: string;
   homeScore: number;
   awayScore: number;
   attendance: number;
@@ -223,19 +230,22 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
   // Přiloží se i bez průšvihu: potkat se u plotu stačí, aby si to pamatovali.
   // Rvačka váží nejvíc, ostatní výtržnost při jejich zápase míň.
   const rvacka = snapshoty.find((x) => x.kind === "bitka_kotle");
-  await priloz(db, {
-    teamA: opts.homeTeamId,
-    teamB: opts.awayTeamId,
-    duvod: rvacka ? "rvacka" : snapshoty.length > 0 ? "incident" : "zapas",
-    gameDate: opts.gameDate,
-    text: rvacka ? rvacka.text : snapshoty[0]?.text ?? "Odehráli spolu zápas.",
-  }).catch((e) => { logger.warn({ module: M }, "přiložení k rivalitě", e); });
+  const awayTeamId = opts.awayTeamId;
+  if (awayTeamId) {
+    await priloz(db, {
+      teamA: opts.homeTeamId,
+      teamB: awayTeamId,
+      duvod: rvacka ? "rvacka" : snapshoty.length > 0 ? "incident" : "zapas",
+      gameDate: opts.gameDate,
+      text: rvacka ? rvacka.text : snapshoty[0]?.text ?? "Odehráli spolu zápas.",
+    }).catch((e) => { logger.warn({ module: M }, "přiložení k rivalitě", e); });
+  }
 
   // ── Rvačka má dvě strany ──
   // Dřív se trestal jen domácí kotel a hosté odjeli bez následku, přestože se
   // prali stejně. Teď schytají svůj díl: pokutu, ztrátu v jádru i zprávu domů.
-  if (rvacka) {
-    await potrestejHosty(db, opts, rvacka).catch((e) => {
+  if (rvacka && awayTeamId) {
+    await potrestejHosty(db, opts, awayTeamId, rvacka).catch((e) => {
       logger.error({ module: M }, `potrestání hostů po rvačce ${opts.matchId}`, e);
     });
   }
@@ -263,26 +273,30 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
 
     const jmena = await db
       .prepare("SELECT id, name FROM teams WHERE id IN (?, ?)")
-      .bind(opts.homeTeamId, opts.awayTeamId)
+      .bind(opts.homeTeamId, awayTeamId)
       .all<{ id: string; name: string }>()
       .catch((e) => { logger.warn({ module: M }, "názvy klubů pro Tribunu", e); return { results: [] as never[] }; });
     const nazev = (id: string) => jmena.results.find((t) => t.id === id)?.name ?? "soupeř";
+    const opponentName = awayTeamId ? nazev(awayTeamId) : opts.awayName ?? "soupeř";
 
     await prispevkyKZapasu(db, {
       teamId: opts.homeTeamId, matchId: opts.matchId,
       gf: opts.homeScore, ga: opts.awayScore,
-      souper: nazev(opts.awayTeamId), gameDate: opts.gameDate,
+      souper: opponentName, gameDate: opts.gameDate,
     });
-    await prispevkyKZapasu(db, {
-      teamId: opts.awayTeamId, matchId: `${opts.matchId}-a`,
-      gf: opts.awayScore, ga: opts.homeScore,
-      souper: nazev(opts.homeTeamId), gameDate: opts.gameDate,
-    });
+    // Velkoklub bez skutečného týmu nemá fanoušky ve hře, za něj se nepíše.
+    if (awayTeamId) {
+      await prispevkyKZapasu(db, {
+        teamId: awayTeamId, matchId: `${opts.matchId}-a`,
+        gf: opts.awayScore, ga: opts.homeScore,
+        souper: nazev(opts.homeTeamId), gameDate: opts.gameDate,
+      });
+    }
 
-    if (rvacka || rivalitaHorka(ctx.rivalita)) {
+    if (awayTeamId && (rvacka || rivalitaHorka(ctx.rivalita))) {
       await prispevkyKRivalite(db, {
-        teamA: opts.homeTeamId, teamB: opts.awayTeamId,
-        nazevA: nazev(opts.homeTeamId), nazevB: nazev(opts.awayTeamId),
+        teamA: opts.homeTeamId, teamB: awayTeamId,
+        nazevA: nazev(opts.homeTeamId), nazevB: opponentName,
         matchId: opts.matchId, gameDate: opts.gameDate,
       });
     }
@@ -303,6 +317,7 @@ export async function resolveMatchIncidents(db: D1Database, opts: ResolveOpts): 
 async function potrestejHosty(
   db: D1Database,
   opts: ResolveOpts,
+  awayTeamId: string,
   rvacka: IncidentSnapshot,
 ): Promise<void> {
   const incidentId = `inc-${opts.matchId}-hoste`;
@@ -317,7 +332,7 @@ async function potrestejHosty(
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .bind(
-      incidentId, incidentId, opts.matchId, opts.awayTeamId, opts.homeTeamId, null,
+      incidentId, incidentId, opts.matchId, awayTeamId, opts.homeTeamId, null,
       "bitka_kotle", rvacka.severity, rvacka.minute, text, pokuta, 0, 0, 0, opts.gameDate,
     )
     .run()
@@ -325,7 +340,7 @@ async function potrestejHosty(
   if ((zapis?.meta?.changes ?? 0) === 0) return;
 
   // Zákazy vstupu a zadržení uberou z jádra na obou stranách.
-  for (const [teamId, kdo] of [[opts.awayTeamId, "hosté"], [opts.homeTeamId, "domácí"]] as const) {
+  for (const [teamId, kdo] of [[awayTeamId, "hosté"], [opts.homeTeamId, "domácí"]] as const) {
     const g = await db
       .prepare("SELECT id, core FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
       .bind(teamId).first<{ id: string; core: number }>()
@@ -343,7 +358,7 @@ async function potrestejHosty(
     await issueSanction(db, {
       leagueId: opts.leagueId,
       seasonNumber: opts.seasonNumber,
-      teamId: opts.awayTeamId,
+      teamId: awayTeamId,
       amount: pokuta,
       kind: "fan_disorder",
       reason: "rvačka jejich kotle na hřišti soupeře",
@@ -358,7 +373,7 @@ async function potrestejHosty(
 
   const { sendSystemSMS } = await import("../lib/sms");
   await sendSystemSMS(
-    db, opts.awayTeamId, "Hlavní pořadatel", "Hlavní pořadatel",
+    db, awayTeamId, "Hlavní pořadatel", "Hlavní pořadatel",
     `🥊 Vaši lidé se na výjezdu porvali s domácím kotlem.`
     + (pokuta > 0 ? ` Svaz vám za to vyměřil ${pokuta.toLocaleString("cs-CZ")} Kč.` : "")
     + " Pár jich má zákaz vstupu.",
@@ -465,18 +480,25 @@ async function nactiKontext(db: D1Database, opts: ResolveOpts): Promise<Kontext>
   // řádků nechá `core` na nule a u klubu, jehož party nikdo nikdy neotevřel,
   // by tedy „nepřijel nikdo". Na testu to bylo 111 kotlů ze 113, takže rvačka
   // s hostujícím kotlem nemohla nastat prakticky nikdy.
-  await syncFanGroups(db, opts.awayTeamId, { drift: false }).catch((e) => {
-    logger.warn({ module: M }, `party hostů ${opts.awayTeamId}`, e); return [];
-  });
-  const host = await db
-    .prepare("SELECT core, mood, heat, aggression FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
-    .bind(opts.awayTeamId)
-    .first<{ core: number; mood: number; heat: number; aggression: number }>()
-    .catch((e) => { logger.warn({ module: M }, "kotel hostů", e); return null; });
-  const hosteTym = await db
-    .prepare("SELECT name FROM teams WHERE id = ?")
-    .bind(opts.awayTeamId).first<{ name: string }>()
-    .catch((e) => { logger.warn({ module: M }, "název hostů", e); return null; });
+  //
+  // Velkoklub bez skutečného týmu kotel ve hře nemá — nepřijede nikdo.
+  const awayTeamId = opts.awayTeamId;
+  let host: { core: number; mood: number; heat: number; aggression: number } | null = null;
+  let awayTeam: { name: string } | null = null;
+  if (awayTeamId) {
+    await syncFanGroups(db, awayTeamId, { drift: false }).catch((e) => {
+      logger.warn({ module: M }, `party hostů ${awayTeamId}`, e); return [];
+    });
+    host = await db
+      .prepare("SELECT core, mood, heat, aggression FROM fan_groups WHERE team_id = ? AND kind = 'kotel'")
+      .bind(awayTeamId)
+      .first<{ core: number; mood: number; heat: number; aggression: number }>()
+      .catch((e) => { logger.warn({ module: M }, "kotel hostů", e); return null; });
+    awayTeam = await db
+      .prepare("SELECT name FROM teams WHERE id = ?")
+      .bind(awayTeamId).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: M }, "název hostů", e); return null; });
+  }
 
   // Ven jezdí JÁDRO, ne čtvrtina celé party. Dřív se tu bral podíl z velikosti,
   // takže na zápas „přijelo" i padesát rodin s kočárky a riziko rvačky rostlo
@@ -491,8 +513,8 @@ async function nactiKontext(db: D1Database, opts: ResolveOpts): Promise<Kontext>
     hosteMood: host?.mood ?? 50,
     hosteHeat: host?.heat ?? 0,
     hosteAggression: host?.aggression ?? 50,
-    hosteNazev: hosteTym?.name ?? "hosté",
-    rivalita: await teplotaRivality(db, opts.homeTeamId, opts.awayTeamId, opts.gameDate),
+    hosteNazev: awayTeam?.name ?? opts.awayName ?? "hosté",
+    rivalita: awayTeamId ? await teplotaRivality(db, opts.homeTeamId, awayTeamId, opts.gameDate) : 0,
     pivoNaHlavu: (facilities.refreshments ?? 0) / 3,
   };
 }
@@ -795,7 +817,8 @@ async function vyhodnotHosty(
   ctx: Kontext,
 ): Promise<{ pocet: number; nazev: string; incidenty: Array<{ kind: string; label: string; text: string; fine: number; minute: number }> }> {
   const out = { pocet: ctx.hostujiciKotel, nazev: ctx.hosteNazev, incidenty: [] as Array<{ kind: string; label: string; text: string; fine: number; minute: number }> };
-  if (ctx.hostujiciKotel < FAN_SKALY.MIN_SIZE) return out;
+  const awayTeamId = opts.awayTeamId;
+  if (!awayTeamId || ctx.hostujiciKotel < FAN_SKALY.MIN_SIZE) return out;
 
   const rng = createRng(seedFromString(`hoste|${opts.matchId}`));
   const sance = incidentChance({
@@ -846,7 +869,7 @@ async function vyhodnotHosty(
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .bind(
-      incidentId, incidentId, opts.matchId, opts.awayTeamId, opts.homeTeamId, null,
+      incidentId, incidentId, opts.matchId, awayTeamId, opts.homeTeamId, null,
       kind, severity, minute, text, dopad.fine, 0, 0, 0, opts.gameDate,
     )
     .run()
@@ -860,7 +883,7 @@ async function vyhodnotHosty(
     await issueSanction(db, {
       leagueId: opts.leagueId,
       seasonNumber: opts.seasonNumber,
-      teamId: opts.awayTeamId,
+      teamId: awayTeamId,
       amount: dopad.fine,
       kind: "fan_disorder",
       reason: `${dopad.label.toLowerCase()} na hřišti soupeře`,
@@ -889,7 +912,7 @@ async function vyhodnotHosty(
 
   const { sendSystemSMS } = await import("../lib/sms");
   await sendSystemSMS(
-    db, opts.awayTeamId, "Hlavní pořadatel", "Hlavní pořadatel",
+    db, awayTeamId, "Hlavní pořadatel", "Hlavní pořadatel",
     `📣 Váš kotel to na výjezdu přehnal: ${FAN_INCIDENTS[kind].label.toLowerCase()}.`
     + (dopad.fine > 0 ? ` Pokuta ${dopad.fine.toLocaleString("cs-CZ")} Kč.` : ""),
   ).catch((e) => { logger.warn({ module: M }, "SMS hostům o výtržnosti", e); });
