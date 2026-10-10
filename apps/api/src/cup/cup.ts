@@ -868,7 +868,9 @@ async function simulateCupTie(
       const { resolveMatchIncidents } = await import("../fans/resolve-match-incidents");
       await resolveMatchIncidents(db, {
         matchId: cupMatchId, table: "cup_matches",
-        homeTeamId: homeReal, awayTeamId: awayReal ?? homeReal,
+        // Velkoklub nemá skutečný tým: hostem je null, ne domácí, jinak by
+        // klub hrál sám se sebou (Tribuna za obě strany, rivalita se sebou).
+        homeTeamId: homeReal, awayTeamId: awayReal, awayName: nameOf.get(awayCupTeamId),
         homeScore: result.homeScore, awayScore: result.awayScore,
         attendance: ctx.attendance, preMatchHeat: 0,
         leagueId: liga, seasonNumber: 0, gameDate: gd.slice(0, 10),
