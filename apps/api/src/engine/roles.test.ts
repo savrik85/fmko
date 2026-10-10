@@ -121,3 +121,35 @@ describe("brankář", () => {
     expect(teamDefense(loud)).toBeGreaterThan(teamDefense(quiet));
   });
 });
+
+describe("náhled síly sestavy řadí sestavy jako zápas", () => {
+  // Spec 2026-10-10, kritérium 5: tři sestavy téhož týmu — pořadí podle náhledu musí
+  // odpovídat pořadí podle odsimulovaných bodů. Dřív měl náhled vlastní kopii vzorců
+  // a zastaralé měřítko (skoro všude 100), takže tohle neplatilo.
+  it("plná sestava > slabší obrana > slabší obrana i útok", async () => {
+    const { calcLineupStrength } = await import("./lineup-strength");
+    const weaken = (slots: string[], by: number) => {
+      const t = createTeam(1, "A", 50);
+      for (const p of t.lineup) {
+        if (!slots.includes(p.matchPosition ?? p.position)) continue;
+        for (const s of ["speed", "technique", "shooting", "passing", "heading", "defense", "vision", "creativity", "strength"] as const) p[s] = Math.max(1, p[s] - by);
+      }
+      return t;
+    };
+    const lineups = [createTeam(1, "A", 50), weaken(["DEF"], 12), weaken(["DEF", "FWD"], 12)];
+    const points = lineups.map((home) => {
+      let pts = 0;
+      for (let i = 0; i < 400; i++) {
+        const fresh = structuredClone(home);
+        const r = simulateMatch(createRng(81000 + i), { home: fresh, away: createTeam(2, "B", 50), weather: "cloudy", isHomeAdvantage: false });
+        pts += r.homeScore > r.awayScore ? 3 : r.homeScore === r.awayScore ? 1 : 0;
+      }
+      return pts;
+    });
+    const preview = lineups.map((t) => calcLineupStrength(t).overall);
+    expect(points[0]).toBeGreaterThan(points[1]);
+    expect(points[1]).toBeGreaterThan(points[2]);
+    expect(preview[0]).toBeGreaterThan(preview[1]);
+    expect(preview[1]).toBeGreaterThan(preview[2]);
+  }, 120_000);
+});
