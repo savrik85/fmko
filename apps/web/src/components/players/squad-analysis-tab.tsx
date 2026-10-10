@@ -508,10 +508,18 @@ function LockedAnalysis() {
 
 // ── Záložka ────────────────────────────────────────────────────────────────
 
-/** Výchozí řada: ta s nejhorším verdiktem, protože tam asistent má co říct. */
-function defaultSlot(lines: LineReport[]): Slot {
+/**
+ * Výchozí řada po otevření: tam, kde asistent vidí slabinu, jinak kde má nejvíc
+ * postřehů, a teprve pak ta nejslabší. Prázdný detail hned po otevření nic neřekne.
+ */
+function defaultSlot(r: ReadyAnalysis): Slot {
   const order: LineVerdict[] = ["worst", "bottom", "belowAverage", "average", "aboveAverage", "top", "best"];
-  return [...lines].sort((a, b) => order.indexOf(a.verdict) - order.indexOf(b.verdict))[0]?.line ?? "MID";
+  const score = (l: LineReport) => {
+    const weak = r.weaknesses.filter((w) => w.line === l.line).length;
+    const all = weak + r.strengths.filter((s) => s.line === l.line).length;
+    return weak * 100 + all * 10 + (order.length - order.indexOf(l.verdict));
+  };
+  return [...r.lines].sort((a, b) => score(b) - score(a))[0]?.line ?? "MID";
 }
 
 export function SquadAnalysisTab({ teamId }: { teamId: string }) {
@@ -529,7 +537,7 @@ export function SquadAnalysisTab({ teamId }: { teamId: string }) {
   }, [teamId]);
 
   const ready = data?.status === "ready" ? data : null;
-  const slot = selected ?? (ready ? defaultSlot(ready.lines) : "MID");
+  const slot = selected ?? (ready ? defaultSlot(ready) : "MID");
   const byLine = useMemo(() => {
     if (!ready) return null;
     const pick = (items: Insight[], s: Slot | null) => items.filter((i) => i.line === s);
