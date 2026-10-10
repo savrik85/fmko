@@ -8,6 +8,25 @@ export function kurz(x100: number): string {
   return (x100 / 100).toFixed(2).replace(".", ",");
 }
 
+/** Jedno tlačítko kurzu. Jméno týmu ani hráče do něj NIKDY nepatří, musí zůstat odkazem. */
+export function OddsButton({ tip, label, oddsX100, vybrano, onClick }: {
+  tip: string; label: string; oddsX100: number; vybrano: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      type="button" onClick={onClick} aria-pressed={vybrano}
+      aria-label={`${label}, kurz ${kurz(oddsX100)}`}
+      className={`min-h-12 rounded-control px-2 flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer
+        ${vybrano ? "bg-pitch-500 text-white" : "bg-gray-50 text-ink hover:bg-gray-100 active:bg-gray-200"}`}
+    >
+      <span className={`text-micro font-heading font-bold uppercase leading-none ${vybrano ? "text-white/70" : "text-muted"}`}>
+        {tip}
+      </span>
+      <span className="text-base font-heading font-bold tabular-nums leading-none">{kurz(oddsX100)}</span>
+    </button>
+  );
+}
+
 export function czk(n: number): string {
   return `${n.toLocaleString("cs")} Kč`;
 }

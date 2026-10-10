@@ -7,7 +7,7 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
-import { generateBoard, nextOpenRound, teamStandings } from "../betting/board";
+import { generateBoard, nextOpenRound, teamStandings, EXTRA_MARKETS } from "../betting/board";
 import { placeTicket, limitsFor, canBet, type SelectionInput } from "../betting/tickets";
 import { settleRound } from "../betting/settle";
 import { oddsCalibration, CALIBRATION_DAYS } from "../betting/calibration";
@@ -77,15 +77,21 @@ bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
   // Nestačí ptát se, jestli v kole VŮBEC nějaký kurz je: když se z něj smaže
   // jeden trh (třeba po opravě modelu střelců), zbytek by generování zablokoval
   // a hráči by ten trh na lístku nenašli. Kontroluje se proto každý trh zvlášť.
+  //
+  // Doplňkové trhy (handicap, pásma gólů…) se po jednom vypsat nemusí, kurz
+  // může být mimo rozumné meze. Všechny naráz ale chybí jen na lístku, který
+  // vznikl před jejich zavedením, a ten se má přepočítat hned.
   const pokryti = await c.env.DB.prepare(
-    `SELECT COUNT(DISTINCT market) AS trhu, COUNT(*) AS kurzu
+    `SELECT COUNT(DISTINCT CASE WHEN market IN ('1x2','dchance','totals') THEN market END) AS trhu,
+            COUNT(DISTINCT CASE WHEN market IN (${EXTRA_MARKETS.map(() => "?").join(",")}) THEN market END) AS extra,
+            COUNT(*) AS kurzu
        FROM bet_odds WHERE calendar_id = ?`
-  ).bind(round.calendar_id).first<{ trhu: number; kurzu: number }>()
+  ).bind(...EXTRA_MARKETS, round.calendar_id).first<{ trhu: number; extra: number; kurzu: number }>()
     .catch((e) => { logger.warn({ module: M }, "kontrola lístku", e); return null; });
 
   // 1x2, dchance a totals jsou vždycky; scorer chybí jen v soutěži bez hráčů.
   const OCEKAVANE_TRHY = 3;
-  if ((pokryti?.kurzu ?? 0) === 0 || (pokryti?.trhu ?? 0) < OCEKAVANE_TRHY) {
+  if ((pokryti?.kurzu ?? 0) === 0 || (pokryti?.trhu ?? 0) < OCEKAVANE_TRHY || (pokryti?.extra ?? 0) === 0) {
     await generateBoard(c.env.DB, meta.league_id, meta.game_date ?? new Date().toISOString())
       .catch((e) => logger.error({ module: M }, `generování lístku ligy ${meta.league_id}`, e));
   }
@@ -173,20 +179,24 @@ bettingRouter.get("/teams/:teamId/bets/board", async (c) => {
         };
       };
 
+      const offers = (market: string) => k.filter((x) => x.market === market)
+        .map((x) => ({ selection: x.selection, label: x.label, oddsX100: x.odds_x100 }));
+
       return {
         matchId: m.id,
         home: strana(m.home_team_id, m.home_name, m.home_color),
         away: strana(m.away_team_id, m.away_name, m.away_color),
         ownMatch: vlastni,
         markets: vlastni ? null : {
-          result: k.filter((x) => x.market === "1x2")
-            .map((x) => ({ selection: x.selection, label: x.label, oddsX100: x.odds_x100 })),
-          dchance: k.filter((x) => x.market === "dchance")
-            .map((x) => ({ selection: x.selection, label: x.label, oddsX100: x.odds_x100 })),
-          totals: k.filter((x) => x.market === "totals")
-            .map((x) => ({ selection: x.selection, label: x.label, oddsX100: x.odds_x100 })),
-          scorers: k.filter((x) => x.market === "scorer")
-            .map((x) => ({ selection: x.selection, label: x.label, oddsX100: x.odds_x100 })),
+          result: offers("1x2"),
+          dchance: offers("dchance"),
+          totals: offers("totals"),
+          scorers: offers("scorer"),
+          handicap: offers("handicap"),
+          goalsBand: offers("goals_band"),
+          btts: offers("btts"),
+          teamTotals: offers("team_totals"),
+          resultTotal: offers("result_total"),
         },
       };
     }),

@@ -92,6 +92,199 @@ describe("střelec", () => {
   });
 });
 
+// ── Doplňkové trhy ─────────────────────────────────────────────────────────
+
+const score = (homeScore: number, awayScore: number) => ({ homeScore, awayScore });
+type GradeCase = [string, number, number, "won" | "lost"];
+
+function gradeTable(market: string, cases: GradeCase[]) {
+  for (const [selection, home, away, expected] of cases) {
+    it(`${selection} při ${home}:${away} → ${expected}`, () => {
+      expect(gradeSelection(market, selection, score(home, away), nikdo)).toBe(expected);
+    });
+  }
+}
+
+describe("handicap", () => {
+  gradeTable("handicap", [
+    // −1,5: vyhrát o 2 a víc
+    ["home_m15", 0, 0, "lost"],
+    ["home_m15", 1, 0, "lost"],
+    ["home_m15", 2, 0, "won"],
+    ["home_m15", 3, 3, "lost"],
+    ["home_m15", 6, 0, "won"],
+    ["home_m15", 0, 6, "lost"],
+    // +1,5: neprohrát o víc než 1 gól
+    ["away_p15", 0, 0, "won"],
+    ["away_p15", 1, 0, "won"],
+    ["away_p15", 2, 0, "lost"],
+    ["away_p15", 3, 3, "won"],
+    ["away_p15", 0, 6, "won"],
+    // −2,5 a +2,5
+    ["home_m25", 2, 0, "lost"],
+    ["home_m25", 3, 0, "won"],
+    ["home_m25", 6, 0, "won"],
+    ["away_p25", 2, 0, "won"],
+    ["away_p25", 3, 0, "lost"],
+    ["away_p25", 3, 1, "won"],
+    // Hosté s handicapem, domácí s náskokem
+    ["away_m15", 0, 2, "won"],
+    ["away_m15", 1, 2, "lost"],
+    ["away_m15", 0, 6, "won"],
+    ["home_p15", 0, 1, "won"],
+    ["home_p15", 0, 2, "lost"],
+    ["home_p15", 2, 0, "won"],
+    ["away_m25", 0, 3, "won"],
+    ["home_p25", 0, 3, "lost"],
+    ["home_p25", 1, 3, "won"],
+  ]);
+
+  it("každá dvojice stran se vylučuje: vyhraje právě jedna", () => {
+    for (const [h, a] of [[0, 0], [1, 0], [2, 0], [3, 3], [6, 0], [0, 6], [4, 1], [1, 4]]) {
+      for (const [x, y] of [["home_m15", "away_p15"], ["away_m15", "home_p15"], ["home_m25", "away_p25"], ["away_m25", "home_p25"]]) {
+        const winners = [x, y].filter((t) => gradeSelection("handicap", t, score(h, a), nikdo) === "won");
+        expect(winners).toHaveLength(1);
+      }
+    }
+  });
+
+  it("poškozený kód tiket nezabije", () => {
+    expect(gradeSelection("handicap", "home_q15", score(2, 0), nikdo)).toBe("void");
+    expect(gradeSelection("handicap", "1", score(2, 0), nikdo)).toBe("void");
+  });
+});
+
+describe("přesný počet gólů v pásmu", () => {
+  gradeTable("goals_band", [
+    ["goals_0_1", 0, 0, "won"],
+    ["goals_0_1", 1, 0, "won"],
+    ["goals_0_1", 2, 0, "lost"],
+    ["goals_2_3", 2, 0, "won"],
+    ["goals_2_3", 2, 1, "won"],
+    ["goals_2_3", 1, 0, "lost"],
+    ["goals_4_5", 3, 1, "won"],
+    ["goals_4_5", 3, 2, "won"],
+    ["goals_4_5", 3, 3, "lost"],
+    ["goals_6_plus", 3, 3, "won"],
+    ["goals_6_plus", 6, 0, "won"],
+    ["goals_6_plus", 9, 4, "won"],
+    ["goals_6_plus", 3, 2, "lost"],
+  ]);
+
+  it("při každém skóre vyhraje právě jedno pásmo", () => {
+    for (let h = 0; h <= 8; h++) {
+      for (let a = 0; a <= 8; a++) {
+        const winners = ["goals_0_1", "goals_2_3", "goals_4_5", "goals_6_plus"]
+          .filter((t) => gradeSelection("goals_band", t, score(h, a), nikdo) === "won");
+        expect(winners).toHaveLength(1);
+      }
+    }
+  });
+
+  it("neznámé pásmo se anuluje", () => {
+    expect(gradeSelection("goals_band", "goals_7_9", score(4, 4), nikdo)).toBe("void");
+  });
+});
+
+describe("oba týmy dají gól", () => {
+  gradeTable("btts", [
+    ["btts_yes", 0, 0, "lost"],
+    ["btts_yes", 1, 0, "lost"],
+    ["btts_yes", 6, 0, "lost"],
+    ["btts_yes", 1, 1, "won"],
+    ["btts_yes", 3, 3, "won"],
+    ["btts_no", 0, 0, "won"],
+    ["btts_no", 2, 0, "won"],
+    ["btts_no", 0, 6, "won"],
+    ["btts_no", 3, 3, "lost"],
+  ]);
+
+  it("neznámá varianta se anuluje", () => {
+    expect(gradeSelection("btts", "btts_maybe", score(1, 1), nikdo)).toBe("void");
+  });
+});
+
+describe("góly týmu", () => {
+  gradeTable("team_totals", [
+    ["home_over15", 0, 0, "lost"],
+    ["home_over15", 1, 0, "lost"],
+    ["home_over15", 2, 0, "won"],
+    ["home_under15", 1, 5, "won"],
+    ["home_under15", 2, 0, "lost"],
+    ["home_over25", 3, 3, "won"],
+    ["home_over25", 2, 0, "lost"],
+    ["home_under25", 2, 0, "won"],
+    ["home_under25", 6, 0, "lost"],
+    ["away_over15", 6, 0, "lost"],
+    ["away_over15", 0, 2, "won"],
+    ["away_under15", 6, 1, "won"],
+    ["away_over25", 3, 3, "won"],
+    ["away_under25", 0, 6, "lost"],
+  ]);
+
+  it("počítá jen góly sázeného týmu, ne celkové skóre", () => {
+    // Celkem 6 gólů, ale hosté nedali ani jeden.
+    expect(gradeSelection("team_totals", "away_over15", score(6, 0), nikdo)).toBe("lost");
+    expect(gradeSelection("totals", "over15", score(6, 0), nikdo)).toBe("won");
+  });
+
+  it("poškozený kód se anuluje", () => {
+    expect(gradeSelection("team_totals", "home_overXY", score(2, 0), nikdo)).toBe("void");
+  });
+});
+
+describe("výsledek a počet gólů", () => {
+  gradeTable("result_total", [
+    ["1_over35", 3, 1, "won"],
+    ["1_over35", 2, 1, "lost"],
+    ["1_over35", 6, 0, "won"],
+    ["1_under35", 2, 0, "won"],
+    ["1_under35", 1, 0, "won"],
+    ["1_under35", 0, 0, "lost"],
+    ["X_under35", 0, 0, "won"],
+    ["X_under35", 1, 1, "won"],
+    ["X_under35", 2, 2, "lost"],
+    ["X_over35", 2, 2, "won"],
+    ["X_over35", 3, 3, "won"],
+    ["X_over35", 1, 1, "lost"],
+    ["2_over35", 0, 6, "won"],
+    ["2_over35", 1, 2, "lost"],
+    ["2_under35", 1, 2, "won"],
+    ["2_under35", 6, 0, "lost"],
+    // Linie je v kódu, takže tip vsazený na 4,5 se vyhodnotí na 4,5.
+    ["1_over45", 3, 1, "lost"],
+    ["1_over45", 4, 1, "won"],
+    ["X_under45", 2, 2, "won"],
+  ]);
+
+  it("při každém skóre vyhraje právě jedna ze šesti možností", () => {
+    const allSelections = ["1_over35", "1_under35", "X_over35", "X_under35", "2_over35", "2_under35"];
+    for (let h = 0; h <= 7; h++) {
+      for (let a = 0; a <= 7; a++) {
+        const winners = allSelections.filter((t) => gradeSelection("result_total", t, score(h, a), nikdo) === "won");
+        expect(winners).toHaveLength(1);
+      }
+    }
+  });
+
+  it("poškozený kód se anuluje", () => {
+    expect(gradeSelection("result_total", "1_over", score(3, 1), nikdo)).toBe("void");
+  });
+});
+
+describe("nové gólové linie trhu totals", () => {
+  gradeTable("totals", [
+    ["over15", 1, 0, "lost"],
+    ["over15", 1, 1, "won"],
+    ["under15", 0, 0, "won"],
+    ["over45", 3, 1, "lost"],
+    ["over45", 3, 2, "won"],
+    ["under55", 3, 2, "won"],
+    ["under55", 3, 3, "lost"],
+    ["over55", 6, 0, "won"],
+  ]);
+});
+
 describe("neznámý trh", () => {
   it("se anuluje, hráč za naši chybu neplatí", () => {
     expect(gradeSelection("neco_noveho", "cokoliv", vyhraDomacich, nikdo)).toBe("void");

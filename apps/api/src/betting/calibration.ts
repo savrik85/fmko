@@ -19,6 +19,7 @@
 
 import { logger } from "../lib/logger";
 import { gradeSelection, type SelectionResult } from "./grade";
+import { BTTS_YES } from "./markets";
 
 const M = "betting-calibration";
 
@@ -35,7 +36,9 @@ export const CALIBRATION_DAYS = 21;
  *
  * Při každé změně modelu, která mění kurzy, se posune na den nasazení.
  */
-export const MODEL_SINCE = "2026-09-22";
+// 2026-10-11: engine podle rolí, STRENGTH_K 0,085 a úroveň gólů jen z kol nového
+// enginu (engine-transition.ts) — hlídá se jen to, co od té doby běží.
+export const MODEL_SINCE = "2026-10-11";
 
 /** Pod tolik vyhodnocených tipů se trh neposuzuje, je to jen šum. */
 export const CALIBRATION_MIN_N = 50;
@@ -77,6 +80,12 @@ function marketGroup(market: string, selection: string): string {
   if (market === "dchance") return "dvojtip";
   if (market === "scorer") return "střelec";
   if (market === "totals") return selection.startsWith("over") ? "víc gólů" : "míň gólů";
+  // Doplňkové trhy taky po stranách: díra bývá na favoritovi, nebo na outsiderovi.
+  if (market === "handicap") return /_m\d+$/.test(selection) ? "handicap výhra o víc" : "handicap neprohra o víc";
+  if (market === "goals_band") return "pásmo gólů";
+  if (market === "btts") return selection === BTTS_YES ? "oba dají gól: ano" : "oba dají gól: ne";
+  if (market === "team_totals") return /_over\d+$/.test(selection) ? "víc gólů týmu" : "míň gólů týmu";
+  if (market === "result_total") return "výsledek a góly";
   return market;
 }
 

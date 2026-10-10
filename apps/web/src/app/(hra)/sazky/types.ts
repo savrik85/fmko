@@ -39,6 +39,12 @@ export interface Zapas {
     dchance: Nabidka[];
     totals: Nabidka[];
     scorers: Nabidka[];
+    // Doplňkové trhy. Volitelné jen kvůli API z doby před jejich zavedením.
+    handicap?: Nabidka[];
+    goalsBand?: Nabidka[];
+    btts?: Nabidka[];
+    teamTotals?: Nabidka[];
+    resultTotal?: Nabidka[];
   } | null;
 }
 
@@ -100,12 +106,17 @@ export interface TiketyOdpoved {
   summary: Bilance;
 }
 
+/** Kódy trhů na serveru (bet_odds.market). */
+export type ServerMarket = "1x2" | "dchance" | "totals" | "scorer"
+  | "handicap" | "goals_band" | "btts" | "team_totals" | "result_total";
+
 /** Jeden vybraný tip v košíku. Žije jen v paměti stránky. */
 export interface VybranyTip {
   matchId: string;
-  market: "result" | "dchance" | "totals" | "scorers";
+  market: "result" | "dchance" | "totals" | "scorers"
+    | "handicap" | "goalsBand" | "btts" | "teamTotals" | "resultTotal";
   /** Kód, který chce server. */
-  serverMarket: "1x2" | "dchance" | "totals" | "scorer";
+  serverMarket: ServerMarket;
   selection: string;
   oddsX100: number;
   label: string;

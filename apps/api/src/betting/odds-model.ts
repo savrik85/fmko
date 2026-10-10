@@ -64,8 +64,14 @@ export const BASE_AWAY_GOALS = 1.480;
  * Hodnota je zároveň provázaná s bázemi: spolu musí dát průměrné λ napříč
  * reálnými dvojicemi 3,43 gólu. Při 0,08 vychází 3,46 a linie 2,5 sedí na
  * 62,1 % proti naměřeným 61,5 %.
+ *
+ * 0,08 → 0,085 (2026-10-10, engine podle rolí): nejlíp sedí jak na 6 552 zápasech
+ * nového enginu z lokálního přehrání sezóny skutečným runnerem, tak na 252 zápasech
+ * 2. poloviny sezóny na produkci. Báze a rozptyl zůstávají — přehrání nadsazuje
+ * výhodu domácích (51,5 % výher proti 48,6 % na produkci i se starým enginem)
+ * a nižší rozptyl z něj by podcenil vysoké výsledky, na kterých se dřív prodělávalo.
  */
-export const STRENGTH_K = 0.08;
+export const STRENGTH_K = 0.085;
 
 /**
  * Sražení extrémů. U síly z celého kádru bylo potřeba (0,85), protože rozdíly

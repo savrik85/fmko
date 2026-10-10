@@ -14,8 +14,14 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { czk, kurz, IkonaTipu, Prazdno, StavPill, TYP_TIKETU } from "./ui";
 import type { ArenaOdpoved, ArenaTiket } from "./types";
 
+/**
+ * Název trhu před popiskem tipu. Prázdný řetězec = popisek mluví sám za sebe
+ * („Oba týmy dají gól: ano"), předpona by se jen opakovala.
+ */
 const TRH: Record<string, string> = {
   "1x2": "Vítěz", dchance: "Neprohra", totals: "Góly", scorer: "Střelec",
+  handicap: "Handicap", goals_band: "", btts: "", team_totals: "Góly týmu",
+  result_total: "Výsledek a góly",
 };
 
 function kdy(iso: string): string {
@@ -187,7 +193,7 @@ function ArenaKarta({ t, maxComment, teamId, onZmena }: {
             <div className="flex-1 min-w-0">
               <div className="text-base font-semibold leading-tight break-words">{s.zapas}</div>
               <div className="text-sm text-muted leading-tight break-words">
-                {TRH[s.market] ?? s.market}: {s.label}
+                {(TRH[s.market] ?? s.market) && `${TRH[s.market] ?? s.market}: `}{s.label}
                 {s.vysledek && <> · <span className="tabular-nums text-ink">{s.vysledek}</span></>}
               </div>
             </div>
