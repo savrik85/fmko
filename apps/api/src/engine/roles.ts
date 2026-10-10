@@ -108,8 +108,34 @@ export function skillOf(p: MatchPlayer, skill: RoleSkill): number {
   return p[skill] as number;
 }
 
-/** Úprava vlastnosti pro konkrétní zápas (počasí a hřiště ubírají technice). */
-export type SkillAdjust = (p: MatchPlayer, skill: RoleSkill, value: number) => number;
+/**
+ * Předpočítané tabulky koeficientů. Fáze se počítají každou minutu zápasu pro oba
+ * týmy a match tick zpracuje všechny ligy v jedné invokaci workeru; procházet objekt
+ * přes Object.entries při každém hráči a minutě dělalo simulaci 2,2× pomalejší.
+ */
+interface CompiledCoeffs { keys: RoleSkill[]; coefs: number[]; total: number }
+
+function compile(c: Coeffs): CompiledCoeffs {
+  const keys: RoleSkill[] = [];
+  const coefs: number[] = [];
+  let total = 0;
+  for (const k in c) {
+    const v = c[k as RoleSkill] ?? 0;
+    if (v === 0) continue;
+    keys.push(k as RoleSkill);
+    coefs.push(v);
+    total += v;
+  }
+  return { keys, coefs, total };
+}
+
+function valueOf(p: MatchPlayer, skill: RoleSkill): number {
+  return skill === "experience" ? (p.experience ?? NEUTRAL_EXPERIENCE) : (p[skill] as number);
+}
+
+const SLOTS: readonly Slot[] = ["GK", "DEF", "MID", "FWD"];
+const PHASES: readonly TeamPhase[] = ["possession", "attack", "defense"];
+let phaseTables = {} as Record<TeamPhase, Record<Slot, CompiledCoeffs>>;
 
 /**
  * Jak moc je hráč čerstvý: 1,0 při plné kondici, 0,85 úplně vyždímaný. Násobí
@@ -119,13 +145,19 @@ export function freshness(p: MatchPlayer): number {
   return 0.85 + 0.15 * Math.max(0, Math.min(100, p.condition)) / 100;
 }
 
-function rawContribution(p: MatchPlayer, phase: TeamPhase, adjust?: SkillAdjust): number {
+/**
+ * Příspěvek hráče do fáze. `ground` < 1 = rozbité nebo mokré hřiště a počasí ubírají
+ * hře po zemi (technika a přihrávky), viz calcChanceProb.
+ */
+function rawContribution(p: MatchPlayer, phase: TeamPhase, ground = 1): number {
   const slot = slotOf(p);
-  const coeffs = TEAM_PHASES[phase][slot];
+  const t = phaseTables[phase][slot];
   let sum = 0;
-  for (const [skill, c] of Object.entries(coeffs) as Array<[RoleSkill, number]>) {
-    const v = skillOf(p, skill);
-    sum += c * (adjust ? adjust(p, skill, v) : v);
+  for (let i = 0; i < t.keys.length; i++) {
+    const k = t.keys[i];
+    let v = valueOf(p, k);
+    if (ground !== 1 && (k === "technique" || k === "passing")) v *= ground;
+    sum += t.coefs[i] * v;
   }
   if (sum === 0) return 0;
   let work = 1 + STAMINA_EFFECT[slot] * (p.stamina - 50) / 100 + WORKRATE_EFFECT[phase] * (p.workRate - 50) / 100;
@@ -138,9 +170,9 @@ function rawContribution(p: MatchPlayer, phase: TeamPhase, adjust?: SkillAdjust)
  * zranění bez střídání) chybí přesně tam, kde hrál: vyloučený stoper oslabí obranu,
  * vyloučený útočník útok. Paušální srážka za oslabení se proto v šancích nepoužívá.
  */
-function teamPhaseRaw(lineup: MatchPlayer[], phase: TeamPhase, adjust?: SkillAdjust): number {
+function teamPhaseRaw(lineup: MatchPlayer[], phase: TeamPhase, ground = 1): number {
   let sum = 0;
-  for (const p of lineup) sum += rawContribution(p, phase, adjust);
+  for (let i = 0; i < lineup.length; i++) sum += rawContribution(lineup[i], phase, ground);
   return sum;
 }
 
@@ -161,25 +193,43 @@ let ATTACK_SCALE = 1;
 let DEFENSE_SCALE = 1;
 let POSSESSION_SCALE = 1;
 
-/** Přepočítá měřítka fází z referenčního týmu. Volá se po načtení modulu a po ladění koeficientů. */
+/**
+ * Předpočítá tabulky a měřítka fází z referenčního týmu. Volá se na konci modulu
+ * a po ladění koeficientů (laboratoř enginu mění tabulky za běhu).
+ */
 export function refreshRoleScales(): void {
+  const next = {} as Record<TeamPhase, Record<Slot, CompiledCoeffs>>;
+  for (const phase of PHASES) {
+    next[phase] = {} as Record<Slot, CompiledCoeffs>;
+    for (const slot of SLOTS) next[phase][slot] = compile(TEAM_PHASES[phase][slot]);
+  }
+  phaseTables = next;
+  gkTables = {
+    shot: compile(GK_SITUATIONS.shot), aerial: compile(GK_SITUATIONS.aerial),
+    oneOnOne: compile(GK_SITUATIONS.oneOnOne), penalty: compile(GK_SITUATIONS.penalty),
+  };
+  finishTables = {
+    DEF: { shot: compile(FINISHING.DEF.shot), header: compile(FINISHING.DEF.header) },
+    MID: { shot: compile(FINISHING.MID.shot), header: compile(FINISHING.MID.header) },
+    FWD: { shot: compile(FINISHING.FWD.shot), header: compile(FINISHING.FWD.header) },
+  };
   ATTACK_SCALE = REFERENCE_ATTACK / teamPhaseRaw(REF, "attack");
   DEFENSE_SCALE = REFERENCE_DEFENSE / teamPhaseRaw(REF, "defense");
   POSSESSION_SCALE = 50 / teamPhaseRaw(REF, "possession");
 }
-refreshRoleScales();
 
-export function teamAttack(lineup: MatchPlayer[], adjust?: SkillAdjust): number {
-  return teamPhaseRaw(lineup, "attack", adjust) * ATTACK_SCALE;
+/** Útok týmu; `ground` < 1 ubírá technice a přihrávkám (počasí, hřiště). */
+export function teamAttack(lineup: MatchPlayer[], ground = 1): number {
+  return teamPhaseRaw(lineup, "attack", ground) * ATTACK_SCALE;
 }
 
-export function teamDefense(lineup: MatchPlayer[], adjust?: SkillAdjust): number {
-  return teamPhaseRaw(lineup, "defense", adjust) * DEFENSE_SCALE;
+export function teamDefense(lineup: MatchPlayer[]): number {
+  return teamPhaseRaw(lineup, "defense") * DEFENSE_SCALE;
 }
 
 /** Kontrola míče týmu, měřítko 50 = průměrný tým. */
-export function teamPossession(lineup: MatchPlayer[], adjust?: SkillAdjust): number {
-  return teamPhaseRaw(lineup, "possession", adjust) * POSSESSION_SCALE;
+export function teamPossession(lineup: MatchPlayer[]): number {
+  return teamPhaseRaw(lineup, "possession") * POSSESSION_SCALE;
 }
 
 /** Podíl domácích na míči z kontroly obou týmů (bez výhody domácích a mezí). */
@@ -214,14 +264,18 @@ export const GK_SITUATIONS: Record<"shot" | "aerial" | "oneOnOne" | "penalty", C
 export const GK_SHOT_WEIGHT = { value: 2.04 };
 
 function weighted(p: MatchPlayer, coeffs: Coeffs): number {
-  let sum = 0;
-  let w = 0;
-  for (const [skill, c] of Object.entries(coeffs) as Array<[RoleSkill, number]>) {
-    sum += c * skillOf(p, skill);
-    w += c;
-  }
-  return w > 0 ? sum / w : 0;
+  return weightedCompiled(p, compile(coeffs));
 }
+
+function weightedCompiled(p: MatchPlayer, t: CompiledCoeffs): number {
+  if (t.total === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < t.keys.length; i++) sum += t.coefs[i] * valueOf(p, t.keys[i]);
+  return sum / t.total;
+}
+
+let gkTables = {} as Record<"shot" | "aerial" | "oneOnOne" | "penalty", CompiledCoeffs>;
+let finishTables = {} as Record<Exclude<Slot, "GK">, { shot: CompiledCoeffs; header: CompiledCoeffs }>;
 
 export type GkSituation = "shot" | "header" | "oneOnOne" | "penalty" | "aerial";
 
@@ -230,11 +284,11 @@ export function gkValue(gk: MatchPlayer, situation: GkSituation): number {
   // Výdrž brankáře = soustředění celý zápas, stejný princip jako u hráčů v poli.
   const focus = 1 + STAMINA_EFFECT.GK * (gk.stamina - 50) / 100;
   switch (situation) {
-    case "shot": return (weighted(gk, GK_SITUATIONS.shot) + bonus) * focus;
+    case "shot": return (weightedCompiled(gk, gkTables.shot) + bonus) * focus;
     case "header":
-    case "aerial": return (weighted(gk, GK_SITUATIONS.aerial) + bonus) * gkReachFactor(gk.height) * focus;
-    case "oneOnOne": return (weighted(gk, GK_SITUATIONS.oneOnOne) + bonus) * focus;
-    case "penalty": return (weighted(gk, GK_SITUATIONS.penalty) + bonus) * focus;
+    case "aerial": return (weightedCompiled(gk, gkTables.aerial) + bonus) * gkReachFactor(gk.height) * focus;
+    case "oneOnOne": return (weightedCompiled(gk, gkTables.oneOnOne) + bonus) * focus;
+    case "penalty": return (weightedCompiled(gk, gkTables.penalty) + bonus) * focus;
   }
 }
 
@@ -253,8 +307,8 @@ export const FINISHING: Record<Exclude<Slot, "GK">, { shot: Coeffs; header: Coef
 
 export function finishingValue(p: MatchPlayer, header: boolean): number {
   const slot = slotOf(p);
-  const table = FINISHING[slot === "GK" ? "FWD" : slot];
-  return weighted(p, header ? table.header : table.shot) * freshness(p);
+  const table = finishTables[slot === "GK" ? "FWD" : slot];
+  return weightedCompiled(p, header ? table.header : table.shot) * freshness(p);
 }
 
 // ── Náhled síly sestavy ────────────────────────────────────────────────────
@@ -310,3 +364,5 @@ export function slotSkillUses(slot: Slot): Set<RoleSkill> {
   }
   return used;
 }
+
+refreshRoleScales();
