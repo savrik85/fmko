@@ -159,28 +159,15 @@ async function loadAssistant(db: D1Database, clubTeamId: string): Promise<StaffR
     .catch((e) => { logger.warn({ module: M, teamId: clubTeamId }, "assistant", e); return null; });
 }
 
-/** Poslední ručně uložená sestava týmu: formace a kdo kde hraje. */
-async function loadSavedLineup(db: D1Database, teamId: string): Promise<{ formation: string; slots: Map<string, Slot> } | null> {
+/** Rozestavění z poslední ručně uložené sestavy (kdo v ní hraje, rozbor neřeší). */
+async function loadSavedFormation(db: D1Database, teamId: string): Promise<string | null> {
   const row = await db.prepare(
-    `SELECT formation, players_data FROM lineups
+    `SELECT formation FROM lineups
       WHERE team_id = ? AND is_auto = 0 AND submitted_at IS NOT NULL
       ORDER BY submitted_at DESC LIMIT 1`,
-  ).bind(teamId).first<{ formation: string | null; players_data: string | null }>()
-    .catch((e) => { logger.warn({ module: M, teamId }, "saved lineup", e); return null; });
-  if (!row?.players_data) return null;
-  let entries: unknown;
-  try {
-    entries = JSON.parse(row.players_data);
-  } catch (e) {
-    logger.warn({ module: M, teamId }, "parse lineup players", e);
-    return null;
-  }
-  if (!Array.isArray(entries)) return null;
-  const slots = new Map<string, Slot>();
-  for (const entry of entries as Array<{ playerId?: unknown; matchPosition?: unknown }>) {
-    if (typeof entry?.playerId === "string" && isSlot(entry.matchPosition)) slots.set(entry.playerId, entry.matchPosition);
-  }
-  return { formation: row.formation ?? "4-4-2", slots };
+  ).bind(teamId).first<{ formation: string | null }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "saved formation", e); return null; });
+  return row?.formation ?? null;
 }
 
 function summary(staff: StaffRow, quality: number): AssistantSummary {
@@ -218,7 +205,7 @@ export async function loadSquadAnalysisInput(db: D1Database, teamId: string): Pr
   const quality = assistantQuality(staff);
   const assistantSummary = summary(staff, quality);
 
-  const [ownRows, leagueTeams, leagueRows, injuries, saved, familiarity] = await Promise.all([
+  const [ownRows, leagueTeams, leagueRows, injuries, savedFormation, familiarity] = await Promise.all([
     db.prepare(`SELECT ${PLAYER_COLUMNS} FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')`)
       .bind(teamId).all<PlayerRow>()
       .catch((e) => { logger.warn({ module: M, teamId }, "own players", e); return { results: [] as PlayerRow[] }; }),
@@ -239,7 +226,7 @@ export async function loadSquadAnalysisInput(db: D1Database, teamId: string): Pr
           AND (team_id = ? OR team_id IN (SELECT id FROM teams WHERE league_id = ?))`,
     ).bind(teamId, team.league_id ?? "").all<{ player_id: string }>()
       .catch((e) => { logger.warn({ module: M, teamId }, "injuries", e); return { results: [] as Array<{ player_id: string }> }; }),
-    loadSavedLineup(db, teamId),
+    loadSavedFormation(db, teamId),
     readFamiliarity(db, teamId),
   ]);
   // Kdo roste: přírůstek dovedností z tréninku za poslední čtyři týdny.
@@ -253,28 +240,15 @@ export async function loadSquadAnalysisInput(db: D1Database, teamId: string): Pr
   for (const r of growthRows.results) growth[r.player_id] = r.gain;
   const injured = new Set(injuries.results.map((r) => r.player_id));
 
-  // Vlastní jedenáctka: uložená sestava, když z ní je v kádru pořád aspoň jedenáct hráčů.
-  const byId = new Map(ownRows.results.map((r) => [r.id, r]));
-  let lineupSource: "lineup" | "best11" = "best11";
-  let formation = "4-4-2";
-  let elevenPicks: Array<{ row: PlayerRow; slot: Slot }> = [];
-  if (saved) {
-    const picks = [...saved.slots.entries()]
-      .map(([id, slot]) => ({ row: byId.get(id), slot }))
-      .filter((p): p is { row: PlayerRow; slot: Slot } => !!p.row);
-    if (picks.length >= 11) {
-      elevenPicks = picks.slice(0, 11);
-      lineupSource = "lineup";
-      formation = saved.formation;
-    }
-  }
-  if (lineupSource === "best11") {
-    const familiar = Object.entries(familiarity.formation)
-      .filter(([f]) => formationQuotas(f) !== null)
-      .sort((a, b) => b[1] - a[1])[0]?.[0];
-    formation = familiar ?? "4-4-2";
-    elevenPicks = pickBestEleven(ownRows.results.filter((r) => !injured.has(r.id)), formationQuotas(formation) ?? DEFAULT_QUOTAS);
-  }
+  // Rozbor je o kádru, ne o tom, kdo zrovna hraje: sestava se mění zápas od zápasu. Řady se
+  // proto měří na nejlepší jedenáctce ze zdravých hráčů. Rozestavění se bere z poslední
+  // uložené sestavy (tak trenér hraje), jinak to nejsehranější.
+  const lineupSource = "best11" as const;
+  const familiar = Object.entries(familiarity.formation)
+    .filter(([f]) => formationQuotas(f) !== null)
+    .sort((a, b) => b[1] - a[1])[0]?.[0];
+  const formation = savedFormation && formationQuotas(savedFormation) ? savedFormation : familiar ?? "4-4-2";
+  const elevenPicks = pickBestEleven(ownRows.results.filter((r) => !injured.has(r.id)), formationQuotas(formation) ?? DEFAULT_QUOTAS);
 
   const eleven = elevenPicks
     .map((p) => toMember(p.row, p.slot, injured.has(p.row.id)))

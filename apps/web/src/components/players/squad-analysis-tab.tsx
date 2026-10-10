@@ -4,25 +4,33 @@
  * Záložka Rozbor v Kádru: asistent trenéra rozebere kádr podle toho, jak se v zápase
  * doopravdy hraje (model rolí v enginu). Jen radí, nic nemění.
  *
- * Kompozice: nahoře verdikt asistenta, pod ním přepínač řad a u vybrané řady tabulka
- * klíčových vlastností (liga, špička, naše řada, hráči) s větou, co řadě chybí. Pak
- * perspektiva kádru (věk, zkušenost, kdo roste), posila, styl a sbalená upozornění.
+ * Kompozice: krátký přehled, podrobnosti až na klepnutí (karta pod přehledem, žádné okno).
+ *  1. Verdikt asistenta: dvě tři věty, co s kádrem udělat.
+ *  2. Řady proti lize: čtyři řádky (měřák síly, verdikt, co chybí). Klepnutím se pod
+ *     přehledem ukáže karta řady: vlastnosti proti lize, všichni hráči postu, posila.
+ *  3. Kádr ve čtyřech číslech; klepnutím věkový graf, kdo roste, mladí a opory.
+ *  4. Styl a upozornění, obojí sbalené.
+ *
+ * Rozbor je o kádru, ne o tom, kdo zrovna hraje: řady měří server na nejlepší jedenáctce
+ * ze zdravých hráčů, hráči postu jsou seřazení od nejlepšího.
  *
  * Přesnost počítá server podle asistenta; tady se jen kreslí. Bez asistenta je záložka
  * zamčená a odkazuje do Zaměstnanců.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { Spinner, PositionBadge } from "@/components/ui";
+import { Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { RATING_WEIGHTS } from "@okresni-masina/shared";
 
 type Slot = "GK" | "DEF" | "MID" | "FWD";
 type LineVerdict = "best" | "top" | "aboveAverage" | "average" | "belowAverage" | "bottom" | "worst";
 type FitVerdict = "great" | "good" | "manageable" | "poor";
 type AssistantLevel = "weak" | "average" | "good" | "excellent";
 type WarningKind = "injured" | "outOfPosition" | "overweight" | "tired" | "lowStamina" | "inexperienced";
+type AttrVerdict = "strong" | "even" | "weak";
 
 type TextPart =
   | { kind: "text"; text: string }
@@ -44,7 +52,6 @@ interface LineReport {
   vague: boolean;
   text: TextPart[];
   bestTeam: { id: string; name: string } | null;
-  bar: { low: number; high: number; average: number; best: number };
 }
 
 interface Insight {
@@ -60,6 +67,33 @@ interface Reinforcement {
   priority: "high" | "medium" | "low";
   text: TextPart[];
   attributes: string[];
+}
+
+interface LinePlayer {
+  id: string;
+  name: string;
+  age: number | null;
+  starter: boolean;
+  injured: boolean;
+  outOfPosition: boolean;
+  values: Array<{ skill: string; value: number; verdict: AttrVerdict }>;
+}
+
+interface LineTable {
+  line: Slot;
+  attributes: Array<{ skill: string; ours: number; league: number; top: number | null; verdict: AttrVerdict }>;
+  players: LinePlayer[];
+  lookFor: TextPart[];
+}
+
+interface Outlook {
+  verdict: TextPart[];
+  ages: { under21: number; prime: number; over30: number; average: number; leagueAverage: number };
+  experience: { ours: number; league: number; verdict: AttrVerdict };
+  growing: Array<{ id: string; name: string; age: number | null; pace: "fast" | "steady" }>;
+  veterans: Array<{ id: string; name: string; age: number | null }>;
+  youngsters: Array<{ id: string; name: string; age: number | null; starter: boolean }>;
+  squadAges?: Array<{ age: number; starter: boolean }>;
 }
 
 interface ReadyAnalysis {
@@ -82,23 +116,27 @@ interface ReadyAnalysis {
   outlook?: Outlook;
 }
 
-type AnalysisResponse =
+export type SquadAnalysisResponse =
   | { status: "locked" }
   | { status: "shortSquad" | "noLeague"; assistant: AssistantInfo }
   | ReadyAnalysis;
+
+/** Odhad skauta z Kádru (`potencial-kadru`), třeba „Výhled: sestava áčka“. */
+export type SquadPotential = Map<string, { slovne: string | null }>;
 
 // ── Slovník ─────────────────────────────────────────────────────────────────
 
 type Tone = "good" | "mid" | "bad";
 
-const VERDICT: Record<LineVerdict, { label: string; tone: Tone }> = {
-  best: { label: "Nejlepší v lize", tone: "good" },
-  top: { label: "Mezi nejlepšími", tone: "good" },
-  aboveAverage: { label: "Nad průměrem", tone: "good" },
-  average: { label: "Průměr", tone: "mid" },
-  belowAverage: { label: "Pod průměrem", tone: "bad" },
-  bottom: { label: "Mezi nejslabšími", tone: "bad" },
-  worst: { label: "Nejslabší v lize", tone: "bad" },
+/** Síla řady: text, tón a počet dílků na měřáku (1 až 5). */
+const VERDICT: Record<LineVerdict, { label: string; tone: Tone; level: number }> = {
+  best: { label: "Nejlepší v lize", tone: "good", level: 5 },
+  top: { label: "Mezi nejlepšími", tone: "good", level: 5 },
+  aboveAverage: { label: "Nad průměrem", tone: "good", level: 4 },
+  average: { label: "Průměr ligy", tone: "mid", level: 3 },
+  belowAverage: { label: "Pod průměrem", tone: "bad", level: 2 },
+  bottom: { label: "Mezi nejslabšími", tone: "bad", level: 1 },
+  worst: { label: "Nejslabší v lize", tone: "bad", level: 1 },
 };
 
 /** Slabý asistent mluví jen třemi stupni. */
@@ -108,10 +146,27 @@ const VAGUE_VERDICT: Partial<Record<LineVerdict, string>> = {
   belowAverage: "Spíš slabá",
 };
 
-const PLAYER_NOM: Record<Slot, string> = { GK: "brankář", DEF: "obránce", MID: "záložník", FWD: "útočník" };
+const TONE_TEXT: Record<Tone, string> = { good: "text-pitch-600", mid: "text-gold-700", bad: "text-card-red" };
+const TONE_FILL: Record<Tone, string> = { good: "bg-pitch-400", mid: "bg-gold-500", bad: "bg-card-red" };
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+const LINE_LABEL: Record<Slot, string> = { GK: "Brankář", DEF: "Obrana", MID: "Záloha", FWD: "Útok" };
+const LINE_ORDER: Slot[] = ["GK", "DEF", "MID", "FWD"];
+
+/** Názvy vlastností jako v profilu hráče; u brankáře fotbalově (obrana = postavení…). */
+const SKILL_NAME: Record<string, string> = {
+  speed: "Rychlost", technique: "Technika", shooting: "Střelba", passing: "Přihrávky", heading: "Hlavičky",
+  defense: "Obrana", goalkeeping: "Chytání", vision: "Přehled", experience: "Zkušenost", creativity: "Kreativita",
+  setPieces: "Standardky", stamina: "Výdrž", strength: "Síla",
+};
+const KEEPER_SKILL_NAME: Record<string, string> = {
+  defense: "Postavení", speed: "Vybíhání", heading: "Hra ve vzduchu", creativity: "Komunikace", passing: "Rozehrávka",
+};
+/** Server posílá u posily názvy z profilu; u brankáře se přeloží na brankářské. */
+const KEEPER_UI_NAME: Record<string, string> = {
+  Obrana: "Postavení", Rychlost: "Vybíhání", Hlavičky: "Hra ve vzduchu", Kreativita: "Komunikace", Přihrávky: "Rozehrávka",
+};
+function skillName(skill: string, line: Slot): string {
+  return (line === "GK" && KEEPER_SKILL_NAME[skill]) || SKILL_NAME[skill] || skill;
 }
 
 const FIT: Record<FitVerdict, { label: string; className: string }> = {
@@ -151,6 +206,8 @@ const LEVEL: Record<AssistantLevel, { label: string; dots: number }> = {
   excellent: { label: "přesný odhad", dots: 4 },
 };
 
+const PILL = "inline-flex items-center px-2 py-0.5 rounded-tight text-sm font-heading font-bold whitespace-nowrap";
+
 // ── Drobné komponenty ──────────────────────────────────────────────────────
 
 /** Věta s odkazy na hráče a týmy, jména tučně a v plné velikosti jako jinde v Kádru. */
@@ -168,6 +225,14 @@ function RichText({ parts }: { parts: TextPart[] }) {
         );
       })}
     </>
+  );
+}
+
+function PlayerLink({ id, name, className = "" }: { id: string; name: string; className?: string }) {
+  return (
+    <Link href={`/hrac/${id}`} className={`font-heading font-bold text-base text-ink hover:text-pitch-500 transition-colors ${className}`}>
+      {name}
+    </Link>
   );
 }
 
@@ -193,205 +258,162 @@ function LevelDots({ level }: { level: AssistantLevel }) {
   );
 }
 
-/** Verdikt asistenta: jediný text na stránce, který má velké písmo. */
+/** Měřák síly řady: pět dílků jako signál, plné podle místa v lize. */
+function PowerMeter({ verdict }: { verdict: LineVerdict }) {
+  const v = VERDICT[verdict];
+  return (
+    <span className="inline-flex items-end gap-[3px] h-5" aria-hidden>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span
+          key={i}
+          className={`w-[5px] rounded-[2px] ${i <= v.level ? TONE_FILL[v.tone] : "bg-gray-200"}`}
+          style={{ height: `${8 + i * 2.4}px` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" className={`w-5 h-5 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} aria-hidden>
+      <path d="M5 7.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * Plus a minus řady: dvě nejsilnější a dvě nejslabší klíčové vlastnosti proti lize,
+ * vážené tím, jak moc vlastnost na postu rozhoduje (stejně jako věta, co řadě chybí).
+ */
+function lineHighlights(table: LineTable | undefined): { plus: string[]; minus: string[] } {
+  if (!table) return { plus: [], minus: [] };
+  const weights = RATING_WEIGHTS[table.line] as Record<string, number>;
+  const gap = (a: LineTable["attributes"][number]) => (a.ours - a.league) * (weights[a.skill] ?? 1);
+  const byGap = [...table.attributes].sort((a, b) => gap(b) - gap(a));
+  return {
+    plus: byGap.filter((a) => a.verdict === "strong").slice(0, 2).map((a) => a.skill),
+    minus: byGap.filter((a) => a.verdict === "weak").reverse().slice(0, 2).map((a) => a.skill),
+  };
+}
+
+function SkillChip({ label, positive }: { label: string; positive: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-tight text-sm font-bold whitespace-nowrap ${
+      positive ? "bg-pitch-50 text-pitch-700" : "bg-card-red/10 text-card-red"
+    }`}>
+      <span aria-hidden>{positive ? "+" : "−"}</span>
+      {label}
+    </span>
+  );
+}
+
+function signed(n: number): string {
+  return n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0";
+}
+
+// ── 1. Verdikt ─────────────────────────────────────────────────────────────
+
 function Verdict({ r }: { r: ReadyAnalysis }) {
   const headline = r.headline && r.headline.length > 0 ? r.headline : null;
   return (
-    <section className="card p-4 sm:p-5">
+    <section className="card p-4 sm:p-6">
       <div className="flex items-center gap-3">
-        <AssistantFace assistant={r.assistant} size={44} />
+        <AssistantFace assistant={r.assistant} size={48} />
         <div className="min-w-0">
+          <div className="text-sm text-muted leading-tight">Asistent trenéra</div>
           <div className="font-heading font-bold text-base leading-tight truncate">{r.assistant.name}</div>
           <LevelDots level={r.assistant.level} />
         </div>
       </div>
       {headline && (
-        <p className="font-heading font-bold text-lg sm:text-xl leading-snug text-ink mt-3 max-w-[60ch]">
-          „<RichText parts={headline} />“
+        <p className="font-heading font-bold text-lg sm:text-xl leading-snug text-ink mt-4 max-w-[62ch]">
+          <RichText parts={headline} />
         </p>
       )}
-      <p className="text-sm text-muted mt-2">
-        {r.basis.source === "lineup" ? "Podle tvé uložené sestavy" : "Podle nejlepší jedenáctky, sestavu zatím nemáš uloženou"},{" "}
-        rozestavění <span className="whitespace-nowrap">{r.basis.formation}</span>. {r.assistant.note}
-      </p>
     </section>
   );
 }
 
-type AttrVerdict = "strong" | "even" | "weak";
+// ── 2. Řady ────────────────────────────────────────────────────────────────
 
-interface LineTable {
-  line: Slot;
-  attributes: Array<{ skill: string; ours: number; league: number; top: number | null; verdict: AttrVerdict }>;
-  players: Array<{
-    id: string;
-    name: string;
-    age: number | null;
-    starter: boolean;
-    injured: boolean;
-    outOfPosition: boolean;
-    values: Array<{ skill: string; value: number; verdict: AttrVerdict }>;
-  }>;
-  lookFor: TextPart[];
-}
-
-interface Outlook {
-  verdict: TextPart[];
-  ages: { under21: number; prime: number; over30: number; average: number; leagueAverage: number };
-  experience: { ours: number; league: number; verdict: AttrVerdict };
-  growing: Array<{ id: string; name: string; age: number | null; pace: "fast" | "steady" }>;
-  veterans: Array<{ id: string; name: string; age: number | null }>;
-  youngsters: Array<{ id: string; name: string; age: number | null; starter: boolean }>;
-}
-
-/** Odhad skauta z Kádru (`potencial-kadru`), třeba „Výhled: sestava áčka“. */
-export type SquadPotential = Map<string, { slovne: string | null }>;
-
-/** Stejné zkratky jako v tabulce Atributy, aby se nemusely učit nové. */
-const SKILL_LABEL: Record<string, { short: string; full: string }> = {
-  speed: { short: "Rch", full: "rychlost" },
-  technique: { short: "Tch", full: "technika" },
-  shooting: { short: "Stř", full: "střelba" },
-  passing: { short: "Přh", full: "přihrávky" },
-  heading: { short: "Hlv", full: "hlavičky" },
-  defense: { short: "Obr", full: "obrana" },
-  goalkeeping: { short: "Brk", full: "chytání" },
-  vision: { short: "Pře", full: "přehled" },
-  experience: { short: "Zku", full: "zkušenost" },
-  creativity: { short: "Kre", full: "kreativita" },
-  setPieces: { short: "Std", full: "standardky" },
-  stamina: { short: "Výd", full: "výdrž" },
-  strength: { short: "Síl", full: "síla" },
-};
-
-/** Barva hodnoty proti průměru ligy na stejném postu. */
-const CELL: Record<AttrVerdict, string> = {
-  strong: "bg-pitch-100 text-pitch-800",
-  even: "bg-gray-100 text-ink",
-  weak: "bg-card-red/10 text-card-red",
-};
-
-const VALUE_BADGE = "inline-flex items-center justify-center w-full max-w-10 h-7 rounded-tight text-sm font-heading font-bold tabular-nums";
-
-const TONE_DOT: Record<Tone, string> = { good: "bg-pitch-400", mid: "bg-gold-500", bad: "bg-card-red" };
-
-/** Přepínač řad: čtyři tlačítka vedle sebe, u každého verdikt asistenta. */
-function LineSwitch({ lines, selected, onSelect }: { lines: LineReport[]; selected: Slot; onSelect: (s: Slot) => void }) {
-  const order: Slot[] = ["GK", "DEF", "MID", "FWD"];
-  const bySlot = new Map(lines.map((l) => [l.line, l]));
+/**
+ * Klíčové vlastnosti řady proti lize. Pruh = průměr naší nejlepší jedenáctky (0 až 100),
+ * svislá čárka = průměr ligy na stejném postu. Seřazeno od největšího náskoku po
+ * největší ztrátu, takže slabiny jsou vždy dole a nemusí se hledat.
+ */
+function AttributeBars({ table }: { table: LineTable }) {
+  const rows = [...table.attributes].sort((a, b) => (b.ours - b.league) - (a.ours - a.league));
   return (
-    <div className="grid grid-cols-4 gap-1 p-1 rounded-card bg-gray-100" role="tablist" aria-label="Řady týmu">
-      {order.map((slot) => {
-        const l = bySlot.get(slot);
-        if (!l) return null;
-        const v = VERDICT[l.verdict];
-        const label = (l.vague && VAGUE_VERDICT[l.verdict]) || v.label;
-        const active = slot === selected;
-        return (
-          <button
-            key={slot}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onSelect(slot)}
-            className={`min-w-0 rounded-control px-1 py-2 text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-pitch-500 ${
-              active ? "bg-white shadow-sm" : "hover:bg-white/60"
-            }`}
-          >
-            <span className="block font-heading font-bold text-base leading-tight">{l.label}</span>
-            <span className="mt-1 flex items-start justify-center gap-1 text-sm text-muted leading-tight">
-              <span className={`shrink-0 mt-1 w-2 h-2 rounded-full ${TONE_DOT[v.tone]}`} aria-hidden />
-              <span>{label}</span>
-            </span>
-          </button>
-        );
-      })}
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h4 className="font-heading font-bold text-base">Nejlepší jedenáctka proti lize</h4>
+        <span className="flex items-center gap-1.5 text-sm text-muted whitespace-nowrap">
+          <span className="relative inline-block w-5 h-2.5" aria-hidden>
+            <span className="absolute left-1/2 top-0 w-[2px] h-full rounded-full bg-ink" />
+          </span>
+          liga
+        </span>
+      </div>
+      <ul className="space-y-3">
+        {rows.map((a) => {
+          const diff = a.ours - a.league;
+          const fill = a.verdict === "strong" ? "bg-pitch-400" : a.verdict === "weak" ? "bg-card-red" : "bg-gray-400";
+          const diffClass = a.verdict === "strong" ? "text-pitch-600" : a.verdict === "weak" ? "text-card-red" : "text-muted";
+          return (
+            <li key={a.skill} className="grid grid-cols-[7rem_minmax(0,1fr)_1.75rem_2.25rem] items-center gap-2">
+              <span className="text-sm text-ink-light truncate">{skillName(a.skill, table.line)}</span>
+              <span className="relative h-2.5 rounded-full bg-gray-200/70" title={`Průměr ligy ${a.league}`}>
+                <span className={`absolute inset-y-0 left-0 rounded-full ${fill}`} style={{ width: `${Math.min(100, Math.max(2, a.ours))}%` }} />
+                <span className="absolute -top-[3px] w-[2px] h-4 rounded-full bg-ink" style={{ left: `calc(${Math.min(100, a.league)}% - 1px)` }} />
+              </span>
+              <span className="text-right font-heading font-bold text-base tabular-nums">{a.ours}</span>
+              <span className={`text-right text-sm font-bold tabular-nums ${diffClass}`}>{signed(diff)}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
-  );
-}
-
-function PlayerName({ id, name }: { id: string; name: string }) {
-  return (
-    <Link href={`/hrac/${id}`} className="font-heading font-bold text-base text-ink hover:text-pitch-500 truncate block">
-      {name}
-    </Link>
   );
 }
 
 /**
- * Klíčové vlastnosti řady: průměr ligy a špičky, naše řada a každý hráč zvlášť.
- * Barva = srovnání s průměrem ligy na stejném postu, takže je hned vidět, jestli útok
- * nemá třeba rychlost, ale chybí mu střelba, a co hledat u posily.
- *
- * Na mobilu má každý řádek jméno nahoře přes celou šířku a hodnoty pod ním, aby se
- * všech sedm osm vlastností vešlo bez posouvání do strany. Od `sm` je jméno vlevo.
+ * Hráč postu: dvě vlastnosti, ve kterých nad ligou nejvíc vyniká, a dvě, ve kterých
+ * nejvíc ztrácí. Rozdíl proti lize se váží tím, jak moc vlastnost na postu rozhoduje.
  */
-function AttributeTable({ table }: { table: LineTable }) {
-  const cols = { "--cols": table.attributes.length } as React.CSSProperties;
-  const row = "grid gap-x-1 gap-y-1 items-center grid-cols-[repeat(var(--cols),minmax(0,1fr))] sm:grid-cols-[11rem_repeat(var(--cols),minmax(0,1fr))]";
-  const head = "col-span-full sm:col-span-1 min-w-0";
-  const hasTop = table.attributes.some((a) => a.top !== null);
-  const reference = (label: string, values: Array<number | null>) => (
-    <div className={`${row} py-1`} style={cols}>
-      <div className={`${head} text-sm text-muted`}>{label}</div>
-      {values.map((v, i) => (
-        <div key={table.attributes[i].skill} className="text-center text-sm text-muted tabular-nums">{v ?? "–"}</div>
-      ))}
-    </div>
-  );
-  const firstBench = table.players.findIndex((p) => !p.starter);
+function PlayerRow({ p, table }: { p: LinePlayer; table: LineTable }) {
+  const weights = RATING_WEIGHTS[table.line] as Record<string, number>;
+  const league = new Map(table.attributes.map((a) => [a.skill, a.league]));
+  const gap = (v: LinePlayer["values"][number]) => (v.value - (league.get(v.skill) ?? v.value)) * (weights[v.skill] ?? 1);
+  const byGap = [...p.values].sort((a, b) => gap(b) - gap(a));
+  const plus = byGap.filter((v) => v.verdict === "strong").slice(0, 2);
+  const minus = byGap.filter((v) => v.verdict === "weak").reverse().slice(0, 2);
   return (
-    <div>
-      <div className={`${row} pb-1 border-b border-gray-200`} style={cols}>
-        <div className="hidden sm:block text-sm text-muted">Hráč</div>
-        {table.attributes.map((a) => (
-          <div key={a.skill} className="text-center font-heading font-bold text-sm text-ink-light" title={SKILL_LABEL[a.skill]?.full ?? a.skill}>
-            {SKILL_LABEL[a.skill]?.short ?? a.skill}
-          </div>
-        ))}
+    <li className="py-2.5 border-t border-gray-200/70 first:border-t-0">
+      <div className="flex items-baseline gap-2 min-w-0">
+        <PlayerLink id={p.id} name={p.name} className="truncate" />
+        <span className="shrink-0 text-sm text-muted">{p.age !== null ? `${p.age} let` : ""}</span>
+        {p.injured && <span className={`${PILL} shrink-0 bg-card-red/10 text-card-red`}>Zraněný</span>}
       </div>
-      {reference("Průměr ligy", table.attributes.map((a) => a.league))}
-      {hasTop && reference("Špička ligy", table.attributes.map((a) => a.top))}
-      <div className={`${row} py-2 border-t border-gray-200`} style={cols}>
-        <div className={`${head} font-heading font-bold text-base text-ink`}>Naše řada</div>
-        {table.attributes.map((a) => (
-          <div key={a.skill} className="flex justify-center">
-            <span className={`${VALUE_BADGE} ${CELL[a.verdict]}`}>{a.ours}</span>
-          </div>
-        ))}
-      </div>
-      {table.players.map((p, idx) => (
-        <div key={p.id}>
-          {idx === firstBench && <div className="pt-3 pb-1 text-sm text-muted border-t border-gray-200">Na lavičce</div>}
-          <div className={`${row} py-1.5 ${idx > 0 && idx !== firstBench ? "border-t border-gray-100" : idx === 0 ? "border-t border-gray-200" : ""}`} style={cols}>
-            <div className={`${head} flex items-baseline gap-2 sm:block`}>
-              <PlayerName id={p.id} name={p.name} />
-              <span className="shrink-0 text-sm text-muted whitespace-nowrap">
-                {p.age !== null ? `${p.age} let` : ""}
-                {p.injured && <span title="Zraněný"> 🩹</span>}
-                {p.outOfPosition && <span title="Hraje mimo svůj post"> 🔀</span>}
-              </span>
-            </div>
-            {p.values.map((v) => (
-              <div key={v.skill} className="flex justify-center">
-                <span className={`${VALUE_BADGE} ${CELL[v.verdict]}`}>{v.value}</span>
-              </div>
-            ))}
-          </div>
+      {(plus.length > 0 || minus.length > 0) && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {plus.map((v) => <SkillChip key={v.skill} label={`${skillName(v.skill, table.line)} ${v.value}`} positive />)}
+          {minus.map((v) => <SkillChip key={v.skill} label={`${skillName(v.skill, table.line)} ${v.value}`} positive={false} />)}
         </div>
-      ))}
-    </div>
+      )}
+    </li>
   );
 }
 
-function SkillLegend({ skills }: { skills: string[] }) {
+const PLAYERS_TITLE: Record<Slot, string> = { GK: "Brankáři v kádru", DEF: "Obránci v kádru", MID: "Záložníci v kádru", FWD: "Útočníci v kádru" };
+
+function LinePlayers({ table }: { table: LineTable }) {
   return (
-    <p className="text-sm text-muted leading-snug">
-      {skills.map((k) => `${SKILL_LABEL[k]?.short ?? k} ${SKILL_LABEL[k]?.full ?? k}`).join(", ")}.{" "}
-      <span className="whitespace-nowrap"><span className="inline-block w-2.5 h-2.5 rounded-full bg-pitch-200 align-middle" aria-hidden /> lepší</span>{" "}
-      <span className="whitespace-nowrap"><span className="inline-block w-2.5 h-2.5 rounded-full bg-card-red/60 align-middle" aria-hidden /> horší</span>{" "}
-      než průměr ligy na stejném postu.
-    </p>
+    <div>
+      <h4 className="font-heading font-bold text-base">{PLAYERS_TITLE[table.line]}</h4>
+      <ul>{table.players.map((p) => <PlayerRow key={p.id} p={p} table={table} />)}</ul>
+      <p className="text-sm text-muted mt-2">Od nejlepšího. Zeleně co má hráč nad průměrem ligy na svém postu, červeně co pod ním.</p>
+    </div>
   );
 }
 
@@ -414,60 +436,177 @@ function InsightRow({ item, positive }: { item: Insight; positive: boolean }) {
   );
 }
 
-function Insights({ strengths, weaknesses }: { strengths: Insight[]; weaknesses: Insight[] }) {
+function Insights({ title, strengths, weaknesses }: { title: string; strengths: Insight[]; weaknesses: Insight[] }) {
   if (strengths.length === 0 && weaknesses.length === 0) return null;
   return (
-    <ul className="space-y-3.5 pt-4 border-t border-gray-100">
-      {strengths.map((s) => <InsightRow key={`s-${s.scope}-${s.aspect}`} item={s} positive />)}
-      {weaknesses.map((w) => <InsightRow key={`w-${w.scope}-${w.aspect}`} item={w} positive={false} />)}
-    </ul>
+    <div>
+      <h4 className="font-heading font-bold text-base mb-2.5">{title}</h4>
+      <ul className="space-y-3">
+        {weaknesses.map((w) => <InsightRow key={`w-${w.scope}-${w.aspect}`} item={w} positive={false} />)}
+        {strengths.map((s) => <InsightRow key={`s-${s.scope}-${s.aspect}`} item={s} positive />)}
+      </ul>
+    </div>
   );
 }
 
-/** Vybraná řada: jak je silná, co jí chybí, vlastnosti hráčů a postřehy asistenta. */
-function LineSection({ line, table, strengths, weaknesses }: {
-  line: LineReport; table: LineTable | undefined; strengths: Insight[]; weaknesses: Insight[];
+/** Rozbalená řada: diagnóza, vlastnosti proti lize, hráči postu, posila. */
+function LineDetail({ line, table, signing, strengths, weaknesses }: {
+  line: LineReport;
+  table: LineTable | undefined;
+  signing: Reinforcement | undefined;
+  strengths: Insight[];
+  weaknesses: Insight[];
 }) {
   return (
-    <section className="card p-4 sm:p-5 space-y-4" role="tabpanel">
-      <div>
-        <p className="text-base text-ink-light leading-snug"><RichText parts={line.text} /></p>
-        {line.bestTeam && (
-          <p className="text-sm text-muted mt-1">
-            Nejlíp ji má{" "}
-            <Link href={`/tym/${line.bestTeam.id}`} className="font-heading font-bold text-base text-ink hover:text-pitch-500">
-              {line.bestTeam.name}
-            </Link>
-            .
-          </p>
-        )}
+    <div className="px-4 sm:px-6 pb-5 pt-2 space-y-5">
+      <div className="space-y-1">
+        {table && <p className="font-heading font-bold text-base leading-snug"><RichText parts={table.lookFor} /></p>}
+        <p className="text-sm text-muted"><RichText parts={line.text} /></p>
       </div>
+
       {table && (
-        <>
-          <p className="font-heading font-bold text-base leading-snug text-ink bg-paper rounded-control px-3 py-2.5">
-            <RichText parts={table.lookFor} />
-          </p>
-          <AttributeTable table={table} />
-          <SkillLegend skills={table.attributes.map((a) => a.skill)} />
-        </>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-6">
+          <AttributeBars table={table} />
+          <LinePlayers table={table} />
+        </div>
       )}
-      <Insights strengths={strengths} weaknesses={weaknesses} />
+
+      {signing && (
+        <div className="rounded-card bg-paper p-3 sm:p-4">
+          <h4 className="font-heading font-bold text-base">
+            {signing.priority === "high" ? "Posila sem by přidala nejvíc" : "Kdyby posila"}
+          </h4>
+          <p className="text-base text-ink-light leading-snug mt-1"><RichText parts={signing.text} /></p>
+          {signing.attributes.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {signing.attributes.map((a) => <SkillChip key={a} label={line.line === "GK" ? KEEPER_UI_NAME[a] ?? a : a} positive />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      <Insights title="Čeho si asistent všiml" strengths={strengths} weaknesses={weaknesses} />
+    </div>
+  );
+}
+
+/** Řádek přehledu: název, měřák a verdikt, pod tím jednou větou co chybí. Klepnutím detail. */
+function LineRow({ line, table, selected, onSelect }: {
+  line: LineReport; table: LineTable | undefined; selected: boolean; onSelect: () => void;
+}) {
+  const v = VERDICT[line.verdict];
+  const label = (line.vague && VAGUE_VERDICT[line.verdict]) || v.label;
+  const { minus } = lineHighlights(table);
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-expanded={selected}
+      className={`w-full text-left px-4 sm:px-6 py-3 block transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-pitch-500 ${
+        selected ? "bg-pitch-50" : "hover:bg-paper/60"
+      }`}
+    >
+      <span className="flex items-center gap-3">
+        <span className="font-heading font-bold text-base w-[4.5rem] shrink-0">{LINE_LABEL[line.line]}</span>
+        <PowerMeter verdict={line.verdict} />
+        <span className={`ml-auto text-sm font-heading font-bold whitespace-nowrap ${TONE_TEXT[v.tone]}`}>{label}</span>
+        <Chevron open={selected} />
+      </span>
+      <span className="block mt-0.5 text-sm text-ink-light">
+        {minus.length > 0
+          ? <>Chybí: {minus.map((s) => skillName(s, line.line).toLowerCase()).join(", ")}</>
+          : <span className="text-pitch-600">Bez slabin proti lize</span>}
+      </span>
+    </button>
+  );
+}
+
+/** Detail vybrané řady jako samostatná karta pod přehledem. */
+function LineCard({ line, children, onClose }: { line: LineReport; children: React.ReactNode; onClose: () => void }) {
+  const v = VERDICT[line.verdict];
+  const label = (line.vague && VAGUE_VERDICT[line.verdict]) || v.label;
+  return (
+    <section className="card">
+      <div className="px-4 sm:px-6 pt-4 flex items-center gap-3">
+        <h3 className="font-heading font-bold text-lg leading-tight">{LINE_LABEL[line.line]}</h3>
+        <span className={`text-sm font-heading font-bold ${TONE_TEXT[v.tone]}`}>{label}</span>
+        <button type="button" onClick={onClose} aria-label="Zavřít detail" className="ml-auto text-muted hover:text-ink text-xl leading-none px-1">✕</button>
+      </div>
+      {children}
     </section>
   );
 }
 
-function PersonList({ title, items, empty }: { title: string; items: Array<{ id: string; name: string; note: string }>; empty: string }) {
+// ── 3. Perspektiva kádru ───────────────────────────────────────────────────
+
+const AGE_GROUP = {
+  young: { full: "bg-pitch-300" },
+  prime: { full: "bg-pitch-500" },
+  old: { full: "bg-gold-500" },
+};
+function ageGroup(age: number) {
+  return age <= 21 ? AGE_GROUP.young : age >= 30 ? AGE_GROUP.old : AGE_GROUP.prime;
+}
+
+/**
+ * Věkový graf kádru: sloupec za každý ročník. Plná čára = průměrný věk naší nejlepší
+ * jedenáctky, čárkovaná = jedenáctek soupeřů.
+ */
+function AgeChart({ ages, xiAverage, leagueAverage }: { ages: Array<{ age: number; starter: boolean }>; xiAverage: number; leagueAverage: number }) {
+  const minAge = Math.min(17, ...ages.map((a) => a.age));
+  const maxAge = Math.max(35, ...ages.map((a) => a.age));
+  const years = Array.from({ length: maxAge - minAge + 1 }, (_, i) => minAge + i);
+  const counts = new Map(years.map((y) => [y, { starters: 0, others: 0 }]));
+  for (const a of ages) {
+    const c = counts.get(a.age);
+    if (c) { if (a.starter) c.starters++; else c.others++; }
+  }
+  const peak = Math.max(3, ...[...counts.values()].map((c) => c.starters + c.others));
+  const span = years.length;
+  const pos = (age: number) => `${((age - minAge + 0.5) / span) * 100}%`;
+  const height = 88;
+  return (
+    <div>
+      <div className="relative" style={{ height }}>
+        <div className="absolute inset-0 flex items-end gap-[2px]">
+          {years.map((y) => {
+            const c = counts.get(y)!;
+            const g = ageGroup(y);
+            const total = c.starters + c.others;
+            return (
+              <div key={y} className="flex-1 h-full flex flex-col justify-end" title={total > 0 ? `${y} let: ${total}` : undefined}>
+                {total > 0 && <div className={`${g.full} rounded-t-[3px]`} style={{ height: (total / peak) * height }} />}
+              </div>
+            );
+          })}
+        </div>
+        <div className="absolute top-0 bottom-0 border-l-2 border-dashed border-muted" style={{ left: pos(leagueAverage) }} />
+        <div className="absolute top-0 bottom-0 border-l-2 border-ink" style={{ left: pos(xiAverage) }} />
+      </div>
+      <div className="relative h-5 border-t border-gray-200 text-sm text-muted">
+        {years.filter((y) => y % 5 === 0).map((y) => (
+          <span key={y} className="absolute top-0.5 -translate-x-1/2 tabular-nums" style={{ left: pos(y) }}>{y}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PersonList({ title, items, empty }: { title: string; items: Array<{ id: string; name: string; note: string; accent?: string }>; empty: string }) {
   return (
     <div className="min-w-0">
-      <h4 className="font-heading font-bold text-base mb-1.5">{title}</h4>
+      <h4 className="font-heading font-bold text-base mb-1">{title}</h4>
       {items.length === 0 ? (
         <p className="text-sm text-muted">{empty}</p>
       ) : (
-        <ul className="space-y-2">
+        <ul>
           {items.map((p) => (
-            <li key={p.id} className="min-w-0">
-              <PlayerName id={p.id} name={p.name} />
-              <div className="text-sm text-ink-light leading-tight">{p.note}</div>
+            <li key={p.id} className="flex items-baseline gap-2 py-1.5 border-t border-gray-100 first:border-t-0 min-w-0">
+              <PlayerLink id={p.id} name={p.name} className="truncate" />
+              <span className="ml-auto shrink-0 text-sm text-right">
+                <span className="text-muted">{p.note}</span>
+                {p.accent && <span className="text-pitch-600 font-bold"> {p.accent}</span>}
+              </span>
             </li>
           ))}
         </ul>
@@ -480,78 +619,109 @@ function yearsCs(v: number): string {
   return v.toFixed(1).replace(".", ",");
 }
 
-/** „Výhled: sestava áčka“ → „výhled sestava áčka“ do poznámky za věkem. */
-function potentialNote(slovne: string | null | undefined): string | null {
-  if (!slovne) return null;
-  return slovne.replace(/^Výhled:\s*/, "výhled: ");
+/** „Výhled: možná sestava áčka“ → „možná sestava áčka“: odhad skauta k mladému hráči. */
+function potentialNote(slovne: string | null | undefined): string | undefined {
+  if (!slovne) return undefined;
+  return slovne.replace(/^Výhled:\s*/, "");
 }
 
-/** Perspektiva kádru: věk, zkušenost, kdo roste, mladí a stárnoucí opory. */
-function OutlookSection({ outlook, potential, teamStrengths, teamWeaknesses }: {
-  outlook: Outlook; potential: SquadPotential | undefined; teamStrengths: Insight[]; teamWeaknesses: Insight[];
-}) {
+/** Kádr ve čtyřech číslech; klepnutím se pod ním otevře věkový graf a jména. */
+function SquadSummary({ outlook, open, onToggle }: { outlook: Outlook; open: boolean; onToggle: () => void }) {
   const { ages, experience } = outlook;
-  const total = Math.max(1, ages.under21 + ages.prime + ages.over30);
-  const segments = [
-    { label: "Do 21 let", n: ages.under21, className: "bg-pitch-300" },
-    { label: "22 až 29 let", n: ages.prime, className: "bg-pitch-500" },
-    { label: "30 a víc", n: ages.over30, className: "bg-gold-400" },
+  const expColor = experience.verdict === "strong" ? "text-pitch-600" : experience.verdict === "weak" ? "text-card-red" : "text-ink";
+  const stats = [
+    { value: yearsCs(ages.average), label: "věk", sub: `liga ${yearsCs(ages.leagueAverage)}`, className: "text-ink" },
+    { value: String(experience.ours), label: "zkušenost", sub: `liga ${experience.league}`, className: expColor },
+    { value: String(ages.under21), label: "do 21 let", sub: "hráčů", className: "text-pitch-600" },
+    { value: String(ages.over30), label: "30 a víc", sub: "hráčů", className: "text-gold-700" },
   ];
-  const hasScout = potential ? [...potential.values()].some((p) => p.slovne) : false;
   return (
-    <section className="card p-4 sm:p-5 space-y-4">
-      <div>
-        <h3 className="font-heading font-bold text-lg leading-tight">Perspektiva kádru</h3>
-        <p className="text-base text-ink-light leading-snug mt-1"><RichText parts={outlook.verdict} /></p>
+    <section className="card">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={`w-full text-left px-4 sm:px-6 py-4 block transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-pitch-500 ${
+          open ? "bg-pitch-50" : "hover:bg-paper/60"
+        }`}
+      >
+        <span className="flex items-center gap-3">
+          <span className="font-heading font-bold text-lg leading-tight">Kádr</span>
+          <span className="text-sm text-muted">věk, zkušenost, mladí</span>
+          <span className="ml-auto"><Chevron open={open} /></span>
+        </span>
+        <span className="mt-3 grid grid-cols-4 gap-2">
+          {stats.map((s) => (
+            <span key={s.label} className="block min-w-0 text-center">
+              <span className={`block font-heading font-[800] text-xl sm:text-2xl leading-tight tabular-nums ${s.className}`}>{s.value}</span>
+              <span className="block text-sm text-ink-light leading-tight">{s.label}</span>
+              <span className="block text-sm text-muted leading-tight">{s.sub}</span>
+            </span>
+          ))}
+        </span>
+      </button>
+    </section>
+  );
+}
+
+function OutlookDetail({ outlook, potential, teamStrengths, teamWeaknesses, onClose }: {
+  outlook: Outlook; potential: SquadPotential | undefined; teamStrengths: Insight[]; teamWeaknesses: Insight[]; onClose: () => void;
+}) {
+  const { ages } = outlook;
+  const hasScout = potential ? [...potential.values()].some((p) => p.slovne) : false;
+  const groups = [
+    { label: "do 21 let", n: ages.under21, className: AGE_GROUP.young.full },
+    { label: "22 až 29", n: ages.prime, className: AGE_GROUP.prime.full },
+    { label: "30 a víc", n: ages.over30, className: AGE_GROUP.old.full },
+  ];
+  return (
+    <section className="card px-4 sm:px-6 pt-4 pb-5 space-y-5">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0">
+          <h3 className="font-heading font-bold text-lg leading-tight">Perspektiva kádru</h3>
+          <p className="text-base text-ink-light leading-snug mt-1 max-w-[70ch]"><RichText parts={outlook.verdict} /></p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Zavřít detail" className="ml-auto text-muted hover:text-ink text-xl leading-none px-1">✕</button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <div className="flex h-3 rounded-full overflow-hidden bg-gray-100" aria-hidden>
-            {segments.map((s) => s.n > 0 && <div key={s.label} className={s.className} style={{ width: `${(s.n / total) * 100}%` }} />)}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-light">
-            {segments.map((s) => (
-              <span key={s.label} className="inline-flex items-center gap-1.5">
-                <span className={`w-2.5 h-2.5 rounded-full ${s.className}`} aria-hidden />
-                {s.label}: <b className="text-ink">{s.n}</b>
+      {outlook.squadAges && outlook.squadAges.length > 0 && (
+        <div className="max-w-2xl">
+          <AgeChart ages={outlook.squadAges} xiAverage={ages.average} leagueAverage={ages.leagueAverage} />
+          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-light">
+            {groups.map((g) => (
+              <span key={g.label} className="inline-flex items-center gap-1.5">
+                <span className={`w-2.5 h-2.5 rounded-[2px] ${g.className}`} aria-hidden />
+                <b className="text-ink tabular-nums">{g.n}</b> {g.label}
               </span>
             ))}
           </div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+            <span className="inline-flex items-center gap-1.5"><span className="w-0 h-3 border-l-2 border-ink" aria-hidden />průměr naší jedenáctky</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-0 h-3 border-l-2 border-dashed border-muted" aria-hidden />soupeřů</span>
+          </div>
         </div>
-        <dl className="grid grid-cols-2 gap-2">
-          <div className="rounded-control bg-paper px-3 py-2">
-            <dt className="text-sm text-muted">Věk sestavy</dt>
-            <dd className="font-heading font-bold text-lg leading-tight">{yearsCs(ages.average)}</dd>
-            <dd className="text-sm text-muted">liga {yearsCs(ages.leagueAverage)}</dd>
-          </div>
-          <div className="rounded-control bg-paper px-3 py-2">
-            <dt className="text-sm text-muted">Zkušenost sestavy</dt>
-            <dd className="mt-0.5"><span className={`inline-flex items-center justify-center w-10 h-7 rounded-tight text-sm font-heading font-bold tabular-nums ${CELL[experience.verdict]}`}>{experience.ours}</span></dd>
-            <dd className="text-sm text-muted">liga {experience.league}</dd>
-          </div>
-        </dl>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
-        <PersonList
-          title="Mladí do 21 let"
-          items={outlook.youngsters.map((y) => ({
-            id: y.id,
-            name: y.name,
-            note: [`${y.age ?? "?"} let`, y.starter ? "hraje v sestavě" : null, potentialNote(potential?.get(y.id)?.slovne)].filter(Boolean).join(", "),
-          }))}
-          empty="Nikoho do 21 let v kádru nemáme."
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-5 border-t border-gray-100">
         <PersonList
           title="Na tréninku rostou"
-          items={outlook.growing.map((g) => ({ id: g.id, name: g.name, note: `${g.age ?? "?"} let, ${g.pace === "fast" ? "roste rychle" : "pomalu se zlepšuje"}` }))}
+          items={outlook.growing.map((g) => ({
+            id: g.id, name: g.name, note: `${g.age ?? "?"} let,`, accent: g.pace === "fast" ? "rychle" : "pozvolna",
+          }))}
           empty="Za poslední čtyři týdny nikdo výrazně nepovyrostl."
         />
         <PersonList
+          title="Mladí do 21 let"
+          items={outlook.youngsters.map((y) => {
+            const scout = potentialNote(potential?.get(y.id)?.slovne);
+            return { id: y.id, name: y.name, note: `${y.age ?? "?"} let${scout ? "," : ""}`, accent: scout };
+          })}
+          empty="Nikoho do 21 let v kádru nemáme."
+        />
+        <PersonList
           title="Opory přes 30"
-          items={outlook.veterans.map((v) => ({ id: v.id, name: v.name, note: `${v.age ?? "?"} let, brzy začne ztrácet` }))}
-          empty="V sestavě nikoho přes 30 nemáme."
+          items={outlook.veterans.map((v) => ({ id: v.id, name: v.name, note: `${v.age ?? "?"} let` }))}
+          empty="V nejlepší jedenáctce nikoho přes 30 nemáme."
         />
       </div>
       {!hasScout && outlook.youngsters.length > 0 && (
@@ -561,111 +731,57 @@ function OutlookSection({ outlook, potential, teamStrengths, teamWeaknesses }: {
         </p>
       )}
 
-      <Insights strengths={teamStrengths} weaknesses={teamWeaknesses} />
-    </section>
-  );
-}
-
-/** Vlastnosti, na které se u posily dívat: stejné zvýraznění jako klíčové atributy v profilu hráče. */
-function AttributeChips({ names }: { names: string[] }) {
-  if (names.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {names.map((n) => (
-        <span key={n} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-tight bg-pitch-50/70 text-pitch-700 font-bold text-sm">
-          <span className="text-pitch-500 text-micro leading-none" aria-hidden>●</span>
-          {n}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function Signings({ items }: { items: Reinforcement[] }) {
-  if (items.length === 0) {
-    return (
-      <section className="card p-4 sm:p-5">
-        <h3 className="font-heading font-bold text-base">Posila</h3>
-        <p className="text-base text-ink-light mt-1">Posila by teď nikde moc nepřidala, kádr je vyrovnaný.</p>
-      </section>
-    );
-  }
-  const [main, ...rest] = items;
-  return (
-    <section className="card overflow-hidden">
-      <div className="p-4 sm:p-5 border-l-4 border-pitch-500">
-        <div className="flex items-center gap-2">
-          <PositionBadge position={main.line} />
-          <h3 className="font-heading font-bold text-lg leading-tight">
-            {main.priority === "low" ? "Kdyby přece jen posila" : "Hlavní posila"}: {PLAYER_NOM[main.line]}
-          </h3>
-        </div>
-        <p className="text-base text-ink-light leading-snug mt-2"><RichText parts={main.text} /></p>
-        {main.attributes.length > 0 && (
-          <div className="mt-3">
-            <div className="text-sm text-muted mb-1.5">Hledej hráče, který vyniká v těchhle vlastnostech:</div>
-            <AttributeChips names={main.attributes} />
-          </div>
-        )}
-      </div>
-      {rest.length > 0 && (
-        <div className="border-t border-gray-100 px-4 sm:px-5 py-3 space-y-2.5 bg-paper/40">
-          <div className="text-sm text-muted">Méně naléhavé</div>
-          {rest.map((x) => (
-            <div key={x.line} className="flex items-start gap-2.5">
-              <PositionBadge position={x.line} />
-              <div className="min-w-0">
-                <div className="text-base font-heading font-bold leading-tight">{capitalize(PLAYER_NOM[x.line])}</div>
-                {x.attributes.length > 0 && <div className="text-sm text-ink-light">{x.attributes.join(", ")}</div>}
-              </div>
-            </div>
-          ))}
+      {(teamStrengths.length > 0 || teamWeaknesses.length > 0) && (
+        <div className="pt-5 border-t border-gray-100">
+          <Insights title="Celý tým" strengths={teamStrengths} weaknesses={teamWeaknesses} />
         </div>
       )}
     </section>
   );
 }
 
-function StyleTile({ label, value, pill }: { label: string; value: string; pill: { label: string; className: string } }) {
+// ── 4. Styl a upozornění ───────────────────────────────────────────────────
+
+function StyleRow({ label, value, pill }: { label: string; value: string; pill: { label: string; className: string } }) {
   return (
-    <div className="card p-3 flex flex-col gap-1.5 min-w-0">
+    <li className="py-2.5 border-t border-gray-100 first:border-t-0 grid grid-cols-[5.75rem_minmax(0,1fr)_auto] items-center gap-2">
       <span className="text-sm text-muted">{label}</span>
-      <span className="font-heading font-bold text-base leading-tight break-words">{value}</span>
-      <span className={`self-start px-2 py-0.5 rounded-tight text-sm font-heading font-bold ${pill.className}`}>{pill.label}</span>
-    </div>
+      <span className="font-heading font-bold text-base leading-tight">{value}</span>
+      <span className={`${PILL} ${pill.className}`}>{pill.label}</span>
+    </li>
   );
 }
 
-function Style({ style }: { style: ReadyAnalysis["style"] }) {
+function StyleSection({ style }: { style: ReadyAnalysis["style"] }) {
   const recommended = style.tactics.find((t) => t.recommended) ?? style.tactics[0];
   return (
-    <section className="space-y-2">
-      <h3 className="font-heading font-bold text-base px-1">Jaký styl nám sedí</h3>
-      <div className="grid grid-cols-3 gap-2">
-        {recommended && <StyleTile label="Taktika" value={recommended.label} pill={FIT[recommended.verdict]} />}
-        <StyleTile label="Tvrdost" value="Do těla" pill={HARDNESS[style.hardness.verdict]} />
-        <StyleTile label="Rozestavění" value={style.formation.formation} pill={FAMILIARITY[style.formation.familiarity]} />
-      </div>
-      <details className="card group">
-        <summary className="list-none cursor-pointer p-3 sm:px-4 flex items-center justify-between gap-2 text-base text-ink-light">
-          <span>{style.summary}</span>
-          <span className="shrink-0 text-sm text-pitch-600 font-bold group-open:hidden">Všechny taktiky</span>
-          <span className="shrink-0 text-sm text-pitch-600 font-bold hidden group-open:inline">Skrýt</span>
-        </summary>
-        <ul className="px-3 sm:px-4 pb-3">
+    <details className="card group">
+      <summary className="list-none cursor-pointer px-4 sm:px-6 py-3.5 flex items-center gap-3">
+        <span className="font-heading font-bold text-base">Styl</span>
+        <span className="text-sm text-ink-light truncate">{recommended ? `sedí taktika „${recommended.label}“` : style.summary}</span>
+        <span className="ml-auto transition-transform group-open:rotate-180"><Chevron open={false} /></span>
+      </summary>
+      <div className="px-4 sm:px-6 pb-4">
+        <p className="text-base text-ink-light leading-snug">{style.summary}</p>
+        <ul className="mt-2">
+          <StyleRow label="Tvrdost" value="Hra do těla" pill={HARDNESS[style.hardness.verdict]} />
+          <StyleRow label="Rozestavění" value={style.formation.formation} pill={FAMILIARITY[style.formation.familiarity]} />
+        </ul>
+        <h4 className="font-heading font-bold text-base mt-3">Všechny taktiky</h4>
+        <ul className="mt-1">
           {style.tactics.map((t) => (
-            <li key={t.tactic} className="flex items-start justify-between gap-3 py-2 border-t border-gray-100">
+            <li key={t.tactic} className="flex items-start justify-between gap-3 py-2 border-t border-gray-100 first:border-t-0">
               <div className="min-w-0">
                 <div className={`text-base ${t.recommended ? "font-bold text-pitch-700" : "text-ink"}`}>{t.label}</div>
                 {t.reason && <div className="text-sm text-muted">{t.reason}</div>}
               </div>
-              <span className={`shrink-0 px-2 py-0.5 rounded-tight text-sm font-heading font-bold ${FIT[t.verdict].className}`}>{FIT[t.verdict].label}</span>
+              <span className={`${PILL} ${FIT[t.verdict].className}`}>{FIT[t.verdict].label}</span>
             </li>
           ))}
-          <li className="py-2 border-t border-gray-100 text-sm text-muted">{style.hardness.text} {style.formation.text}</li>
         </ul>
-      </details>
-    </section>
+        <p className="text-sm text-muted mt-2">{style.hardness.text} {style.formation.text}</p>
+      </div>
+    </details>
   );
 }
 
@@ -673,14 +789,14 @@ function Warnings({ items }: { items: ReadyAnalysis["warnings"] }) {
   if (items.length === 0) return null;
   return (
     <details className="card group">
-      <summary className="list-none cursor-pointer p-3 sm:px-4 flex items-center justify-between gap-2">
+      <summary className="list-none cursor-pointer px-4 sm:px-6 py-3.5 flex items-center justify-between gap-2">
         <span className="font-heading font-bold text-base">
-          Na co si dát pozor <span className="ml-1 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-gold-100 text-gold-700 text-sm">{items.length}</span>
+          Na co si dát pozor{" "}
+          <span className="ml-1 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-gold-100 text-gold-700 text-sm">{items.length}</span>
         </span>
-        <span className="shrink-0 text-sm text-pitch-600 font-bold group-open:hidden">Ukázat</span>
-        <span className="shrink-0 text-sm text-pitch-600 font-bold hidden group-open:inline">Skrýt</span>
+        <span className="transition-transform group-open:rotate-180"><Chevron open={false} /></span>
       </summary>
-      <ul className="px-3 sm:px-4 pb-3 space-y-2.5">
+      <ul className="px-4 sm:px-6 pb-4 space-y-2.5">
         {items.map((w, i) => (
           <li key={i} className="flex items-start gap-2.5 pt-2.5 border-t border-gray-100">
             <span className="text-base shrink-0 w-6 text-center" title={WARNING_ICON[w.kind].label} aria-label={WARNING_ICON[w.kind].label}>
@@ -712,49 +828,30 @@ function LockedAnalysis() {
 
 // ── Záložka ────────────────────────────────────────────────────────────────
 
-/**
- * Výchozí řada po otevření: tam, kde asistent vidí slabinu, jinak kde má nejvíc
- * postřehů, a teprve pak ta nejslabší. Prázdný detail hned po otevření nic neřekne.
- */
-function defaultSlot(r: ReadyAnalysis): Slot {
-  const order: LineVerdict[] = ["worst", "bottom", "belowAverage", "average", "aboveAverage", "top", "best"];
-  const score = (l: LineReport) => {
-    const weak = r.weaknesses.filter((w) => w.line === l.line).length;
-    const all = weak + r.strengths.filter((s) => s.line === l.line).length;
-    return weak * 100 + all * 10 + (order.length - order.indexOf(l.verdict));
-  };
-  return [...r.lines].sort((a, b) => score(b) - score(a))[0]?.line ?? "MID";
-}
+type Open = Slot | "squad" | null;
 
-export function SquadAnalysisTab({ teamId, potential }: { teamId: string; potential?: SquadPotential }) {
-  const [data, setData] = useState<AnalysisResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Slot | null>(null);
+/** Celý rozbor z hotových dat, bez načítání. Nahoře krátký přehled, detail jen na klepnutí. */
+export function SquadAnalysisView({ data, potential }: { data: SquadAnalysisResponse; potential?: SquadPotential }) {
+  const ready = data.status === "ready" ? data : null;
+  const [open, setOpen] = useState<Open>(null);
+  const lineDetailRef = useRef<HTMLDivElement>(null);
+  const squadDetailRef = useRef<HTMLDivElement>(null);
 
+  // Po otevření detailu ho posunout do zorného pole, na mobilu by jinak zůstal pod okrajem.
   useEffect(() => {
-    setLoading(true);
-    apiFetch<AnalysisResponse>(`/api/teams/${teamId}/squad-analysis`)
-      .then(setData)
-      .catch((e) => { console.error("squad-analysis fetch:", e); setError("Rozbor se nepodařilo načíst."); })
-      .finally(() => setLoading(false));
-  }, [teamId]);
+    if (!open) return;
+    const el = open === "squad" ? squadDetailRef.current : lineDetailRef.current;
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [open]);
 
-  const ready = data?.status === "ready" ? data : null;
-  const slot = selected ?? (ready ? defaultSlot(ready) : "MID");
-  const byLine = useMemo(() => {
+  const team = useMemo(() => {
     if (!ready) return null;
-    const pick = (items: Insight[], s: Slot | null) => items.filter((i) => i.line === s);
     return {
-      strengths: pick(ready.strengths, slot),
-      weaknesses: pick(ready.weaknesses, slot),
-      teamStrengths: pick(ready.strengths, null),
-      teamWeaknesses: pick(ready.weaknesses, null),
+      strengths: ready.strengths.filter((i) => i.line === null),
+      weaknesses: ready.weaknesses.filter((i) => i.line === null),
     };
-  }, [ready, slot]);
+  }, [ready]);
 
-  if (loading) return <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>;
-  if (error || !data) return <div className="card p-4 text-sm text-card-red text-center">{error ?? "Rozbor se nepodařilo načíst."}</div>;
   if (data.status === "locked") return <LockedAnalysis />;
   if (data.status !== "ready") {
     return (
@@ -773,28 +870,86 @@ export function SquadAnalysisTab({ teamId, potential }: { teamId: string; potent
   }
 
   const r = data;
-  const line = r.lines.find((l) => l.line === slot) ?? r.lines[0];
-  const table = r.lineTables?.find((t) => t.line === slot);
+  const lines = LINE_ORDER.map((s) => r.lines.find((l) => l.line === s)).filter((l): l is LineReport => !!l);
+  const selectedLine = open && open !== "squad" ? lines.find((l) => l.line === open) : undefined;
+  const toggle = (next: Exclude<Open, null>) => setOpen((cur) => (cur === next ? null : next));
   return (
     <div className="space-y-3">
       <Verdict r={r} />
 
-      <LineSwitch lines={r.lines} selected={slot} onSelect={setSelected} />
-      {line && byLine && <LineSection line={line} table={table} strengths={byLine.strengths} weaknesses={byLine.weaknesses} />}
+      <section className="card">
+        <div className="px-4 sm:px-6 pt-4 pb-2.5 flex items-baseline justify-between gap-3">
+          <h3 className="font-heading font-bold text-lg leading-tight">Řady proti lize</h3>
+          <span className="text-sm text-muted">nejlepší jedenáctka, {r.basis.formation}</span>
+        </div>
+        <div className="divide-y divide-gray-100 border-t border-gray-100">
+          {lines.map((l) => (
+            <LineRow
+              key={l.line}
+              line={l}
+              table={r.lineTables?.find((t) => t.line === l.line)}
+              selected={open === l.line}
+              onSelect={() => toggle(l.line)}
+            />
+          ))}
+        </div>
+      </section>
 
-      {r.outlook && byLine && (
-        <OutlookSection outlook={r.outlook} potential={potential} teamStrengths={byLine.teamStrengths} teamWeaknesses={byLine.teamWeaknesses} />
+      {selectedLine && (
+        <div ref={lineDetailRef} className="scroll-mt-4">
+          <LineCard line={selectedLine} onClose={() => setOpen(null)}>
+            <LineDetail
+              line={selectedLine}
+              table={r.lineTables?.find((t) => t.line === selectedLine.line)}
+              signing={r.reinforcements.find((x) => x.line === selectedLine.line)}
+              strengths={r.strengths.filter((i) => i.line === selectedLine.line)}
+              weaknesses={r.weaknesses.filter((i) => i.line === selectedLine.line)}
+            />
+          </LineCard>
+        </div>
       )}
 
-      <Signings items={r.reinforcements} />
-      <Style style={r.style} />
+      {r.outlook && team && (
+        <>
+          <SquadSummary outlook={r.outlook} open={open === "squad"} onToggle={() => toggle("squad")} />
+          {open === "squad" && (
+            <div ref={squadDetailRef} className="scroll-mt-4">
+              <OutlookDetail
+                outlook={r.outlook}
+                potential={potential}
+                teamStrengths={team.strengths}
+                teamWeaknesses={team.weaknesses}
+                onClose={() => setOpen(null)}
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      <StyleSection style={r.style} />
       <Warnings items={r.warnings} />
 
       <p className="text-sm text-muted px-1">
-        Asistent jen radí, rozhoduješ ty. Pohled na kádr mění jen se změnou kádru nebo sestavy, lepší asistent v{" "}
-        <Link href="/zamestnanci" className="text-pitch-600 underline decoration-pitch-500/30">Zaměstnancích</Link>{" "}
-        uvidí víc a přesněji.
+        {r.assistant.note} Asistent jen radí, rozhoduješ ty.
       </p>
     </div>
   );
+}
+
+export function SquadAnalysisTab({ teamId, potential }: { teamId: string; potential?: SquadPotential }) {
+  const [data, setData] = useState<SquadAnalysisResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiFetch<SquadAnalysisResponse>(`/api/teams/${teamId}/squad-analysis`)
+      .then(setData)
+      .catch((e) => { console.error("squad-analysis fetch:", e); setError("Rozbor se nepodařilo načíst."); })
+      .finally(() => setLoading(false));
+  }, [teamId]);
+
+  if (loading) return <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>;
+  if (error || !data) return <div className="card p-4 text-sm text-card-red text-center">{error ?? "Rozbor se nepodařilo načíst."}</div>;
+  return <SquadAnalysisView data={data} potential={potential} />;
 }

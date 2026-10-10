@@ -92,18 +92,23 @@ describe("GET /teams/:teamId/squad-analysis", () => {
     expect((await call("rival-a")).status).toBe(403);
   });
 
-  it("vlastní tým s asistentem: celý rozbor podle uložené sestavy", async () => {
+  it("vlastní tým s asistentem: rozbor celého kádru podle nejlepší jedenáctky, ne podle uložené sestavy", async () => {
     const response = await call("my-a");
     expect(response.status).toBe(200);
     const r = await response.json() as any;
     expect(r.status).toBe("ready");
     expect(r.assistant).toMatchObject({ name: "Marek Mikeš", female: false, level: "excellent" });
-    expect(r.basis).toEqual({ source: "lineup", formation: "4-4-2" });
+    // Rozestavění z uložené sestavy, hráči ne: kdo hraje, se mění zápas od zápasu.
+    expect(r.basis).toEqual({ source: "best11", formation: "4-4-2" });
     expect(r.lines.map((l: { line: string }) => l.line)).toEqual(["GK", "DEF", "MID", "FWD"]);
     expect(r.style.tactics).toHaveLength(6);
-    // Zraněný v uložené sestavě a útočník v záloze.
+    // Zraněný z uložené sestavy do nejlepší jedenáctky nepatří, varování o sestavě nejsou.
+    const starters = r.lineTables.flatMap((t: { players: Array<{ id: string; starter: boolean }> }) => t.players.filter((p) => p.starter).map((p) => p.id));
+    expect(starters).toHaveLength(11);
+    expect(starters).not.toContain("my-a-1");
     const kinds = r.warnings.map((w: { kind: string }) => w.kind);
-    expect(kinds).toEqual(expect.arrayContaining(["injured", "outOfPosition"]));
+    expect(kinds).not.toContain("injured");
+    expect(kinds).not.toContain("outOfPosition");
     // Skutečná čísla modelu (hodnocení, vlivy) ven nejdou.
     expect(JSON.stringify(r)).not.toMatch(/"effect"|"gain"|"quality"/);
   });

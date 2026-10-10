@@ -214,25 +214,22 @@ export default function SquadPage() {
   return (
     <div className="page-container space-y-4">
 
-      {/* Summary stats — 4 boxes grid (2x2 mobile, 4 cols desktop) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div className="card p-3 text-center">
-          <div className="font-heading font-[800] text-2xl tabular-nums">{players.length}</div>
-          <div className="text-micro text-muted uppercase tracking-wide">Hráčů</div>
+      {/* Souhrn kádru jen u Atributů a v jednom řádku: na mobilu dřív zabíral půl displeje na každé záložce */}
+      {tab === "atributy" && (
+        <div className="card grid grid-cols-4 divide-x divide-gray-100">
+          {[
+            { value: String(players.length), label: "Hráčů", className: "" },
+            { value: String(avgRating), label: "Ø Rating", className: "" },
+            { value: avgAge, label: "Ø Věk", className: "" },
+            { value: totalWage.toLocaleString("cs"), label: "Mzdy/týd", className: "text-card-red" },
+          ].map((s) => (
+            <div key={s.label} className="px-1 py-2 sm:py-3 text-center min-w-0">
+              <div className={`font-heading font-[800] text-base sm:text-2xl tabular-nums leading-tight ${s.className}`}>{s.value}</div>
+              <div className="text-micro text-muted uppercase tracking-wide truncate">{s.label}</div>
+            </div>
+          ))}
         </div>
-        <div className="card p-3 text-center">
-          <div className="font-heading font-[800] text-2xl tabular-nums">{avgRating}</div>
-          <div className="text-micro text-muted uppercase tracking-wide">Ø Rating</div>
-        </div>
-        <div className="card p-3 text-center">
-          <div className="font-heading font-[800] text-2xl tabular-nums">{avgAge}</div>
-          <div className="text-micro text-muted uppercase tracking-wide">Ø Věk</div>
-        </div>
-        <div className="card p-3 text-center">
-          <div className="font-heading font-[800] text-xl tabular-nums text-card-red">{totalWage.toLocaleString("cs")}</div>
-          <div className="text-micro text-muted uppercase tracking-wide">Mzdy Kč/týd</div>
-        </div>
-      </div>
+      )}
 
       {/* Tabs */}
       <div className="card p-1.5">
