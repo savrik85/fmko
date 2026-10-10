@@ -23,6 +23,7 @@ import {
   teamAttack, teamDefense, teamPossession,
   type RoleSkill, type Slot,
 } from "../engine/roles";
+import { RATING_WEIGHTS } from "@okresni-masina/shared";
 import { TACTIC_CATALOG, calcTacticEffectiveness } from "../engine/tactics";
 import { calcHardnessFit } from "../engine/hardness";
 import type { WeightCategory } from "../generators/physicals";
@@ -81,6 +82,8 @@ export interface SquadAnalysisInput {
   assistant: AssistantProfile;
   /** Klíč herního týdne (pondělí), drží rozbor stejný celý týden. */
   week: string;
+  /** Přírůstek dovedností z tréninku za poslední 4 týdny podle hráče (training_log). */
+  growth?: Record<string, number>;
 }
 
 // ── Výstup ─────────────────────────────────────────────────────────────────
@@ -166,6 +169,51 @@ export interface SquadAnalysisReport {
   reinforcements: Reinforcement[];
   style: StyleReport;
   warnings: Warning[];
+  /** Klíčové vlastnosti každé řady: naši hráči proti průměru a špičce ligy. */
+  lineTables: LineTable[];
+  /** Věk, zkušenost, kdo roste a kdo stárne. */
+  outlook: SquadOutlook;
+}
+
+export type AttributeVerdict = "strong" | "even" | "weak";
+
+export interface LineAttribute {
+  skill: AnalysisSkill;
+  /** Průměr naší řady v základní sestavě. */
+  ours: number;
+  /** Průměr ligy na tomhle postu, jak ho asistent odhadne. */
+  league: number;
+  /** Průměr špičky ligy, jen když to asistent umí posoudit. */
+  top: number | null;
+  verdict: AttributeVerdict;
+}
+
+export interface LinePlayer {
+  id: string;
+  name: string;
+  age: number | null;
+  starter: boolean;
+  injured: boolean;
+  outOfPosition: boolean;
+  values: Array<{ skill: AnalysisSkill; value: number; verdict: AttributeVerdict }>;
+}
+
+export interface LineTable {
+  line: Slot;
+  attributes: LineAttribute[];
+  players: LinePlayer[];
+  /** Co řadě z klíčových vlastností chybí a co hledat. */
+  lookFor: TextPart[];
+}
+
+export interface SquadOutlook {
+  verdict: TextPart[];
+  /** Počty v celém kádru; průměr je základní sestavy proti sestavám soupeřů. */
+  ages: { under21: number; prime: number; over30: number; average: number; leagueAverage: number };
+  experience: { ours: number; league: number; verdict: AttributeVerdict };
+  growing: Array<{ id: string; name: string; age: number | null; pace: "fast" | "steady" }>;
+  veterans: Array<{ id: string; name: string; age: number | null }>;
+  youngsters: Array<{ id: string; name: string; age: number | null; starter: boolean }>;
 }
 
 // ── Kvalita asistenta ──────────────────────────────────────────────────────
@@ -567,6 +615,8 @@ export function buildSquadAnalysis(input: SquadAnalysisInput): SquadAnalysisRepo
   );
   const style = styleReport(input, lineup, precision, noise);
   const warnings = warningReports(input, opponentLineups, precision);
+  const lineTables = buildLineTables(input, lineup, avg, slotAverages(byStrength.slice(0, edge)), precision, noise);
+  const outlook = buildOutlook(input, opponentLineups, precision, noise);
 
   return {
     status: "ready",
@@ -579,6 +629,8 @@ export function buildSquadAnalysis(input: SquadAnalysisInput): SquadAnalysisRepo
     reinforcements,
     style,
     warnings,
+    lineTables,
+    outlook,
   };
 }
 
@@ -1181,4 +1233,177 @@ export function gameWeekKey(gameDate: string | null | undefined): string {
   const day = valid.getUTCDay() || 7;
   const monday = new Date(Date.UTC(valid.getUTCFullYear(), valid.getUTCMonth(), valid.getUTCDate() - day + 1));
   return monday.toISOString().slice(0, 10);
+}
+
+// ── Tabulky řad a perspektiva kádru ────────────────────────────────────────
+
+/**
+ * Jak přesně asistent odhadne průměr ligy: výborný přesně, dobrý o pár bodů vedle,
+ * slabší zaokrouhlí na pětky a víc se splete. Vlastní hráče vidí přesně vždy.
+ */
+function blurLeague(value: number, precision: Precision, n: number): number {
+  switch (precision.level) {
+    case "excellent": return Math.round(value);
+    case "good": return Math.round(value + 2 * n);
+    case "average": return Math.round((value + 4 * n) / 5) * 5;
+    case "weak": return Math.round((value + 8 * n) / 5) * 5;
+  }
+}
+
+function attributeVerdict(value: number, league: number): AttributeVerdict {
+  if (value >= league + 5) return "strong";
+  if (value <= league - 5) return "weak";
+  return "even";
+}
+
+/** Klíčové vlastnosti postu: váha v hodnocení 2 a víc, seřazené podle váhy (jako zvýraznění v profilu). */
+function keySkills(slot: Slot): AnalysisSkill[] {
+  return Object.entries(RATING_WEIGHTS[slot])
+    .filter(([, w]) => w >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k]) => k as AnalysisSkill);
+}
+
+function buildLineTables(
+  input: SquadAnalysisInput,
+  lineup: MatchPlayer[],
+  avg: SlotAverages,
+  top: SlotAverages,
+  precision: Precision,
+  noise: (key: string) => number,
+): LineTable[] {
+  const out: LineTable[] = [];
+  for (const slot of ["GK", "DEF", "MID", "FWD"] as Slot[]) {
+    const skills = keySkills(slot);
+    const starters = input.eleven.filter((m) => slotOf(m.player) === slot);
+    const bench = input.others.filter((m) => m.position === slot);
+    if (starters.length === 0 && bench.length === 0) continue;
+    const startersPlayers = lineup.filter((p) => slotOf(p) === slot);
+
+    const attributes: LineAttribute[] = skills.map((skill) => {
+      const values = startersPlayers.map((p) => readSkill(p, skill)).filter((v): v is number => typeof v === "number");
+      const ours = values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
+      const league = blurLeague(avg[slot][skill] ?? ours, precision, noise(`lt:${slot}:${skill}`));
+      const topValue = precision.bestTeam && top[slot][skill] !== undefined
+        ? blurLeague(top[slot][skill] as number, precision, noise(`tt:${slot}:${skill}`))
+        : null;
+      return { skill, ours, league, top: topValue, verdict: attributeVerdict(ours, league) };
+    });
+    const leagueBySkill = new Map(attributes.map((a) => [a.skill, a.league]));
+
+    const toRow = (m: SquadMember, starter: boolean): LinePlayer => ({
+      id: m.id,
+      name: m.name,
+      age: m.player.age ?? null,
+      starter,
+      injured: m.injured,
+      outOfPosition: starter && m.position !== slot,
+      values: skills.map((skill) => {
+        const value = Math.round(readSkill(m.player, skill) ?? 0);
+        return { skill, value, verdict: attributeVerdict(value, leagueBySkill.get(skill) ?? value) };
+      }),
+    });
+    const players = [
+      ...starters.map((m) => toRow(m, true)),
+      ...bench.map((m) => toRow(m, false)),
+    ];
+
+    out.push({ line: slot, attributes, players, lookFor: lookForText(slot, attributes, precision) });
+  }
+  return out;
+}
+
+/** „Útoku chybí hlavně střelba a přehled, posila by měla vynikat právě v nich.“ */
+function lookForText(slot: Slot, attributes: LineAttribute[], precision: Precision): TextPart[] {
+  const forms = LINE_FORMS[slot];
+  const keeper = slot === "GK";
+  const weights = RATING_WEIGHTS[slot] as Record<string, number>;
+  const gaps = attributes
+    .map((a) => ({ a, gap: (a.league - a.ours) * (weights[a.skill] ?? 1) }))
+    .sort((x, y) => y.gap - x.gap);
+  const weak = gaps.filter((g) => g.a.verdict === "weak").slice(0, Math.max(1, precision.reinforcementAttributes)).map((g) => g.a.skill);
+  const whom = slot === "GK" ? "Brankáři" : slot === "DEF" ? "Obraně" : slot === "MID" ? "Záloze" : "Útoku";
+  if (weak.length > 0) {
+    return [{ kind: "text", text: `${whom} chybí hlavně ${skillsNom(weak, keeper)}. Posila by měla vynikat právě tady.` }];
+  }
+  const strong = attributes.filter((a) => a.verdict === "strong").map((a) => a.skill);
+  const toTop = attributes
+    .filter((a) => a.top !== null && a.ours < (a.top as number) - 3)
+    .sort((x, y) => ((y.top as number) - y.ours) - ((x.top as number) - x.ours))
+    .slice(0, 2)
+    .map((a) => a.skill);
+  const base = strong.length >= Math.ceil(attributes.length / 2)
+    ? `${forms.label} má klíčové vlastnosti nad úrovní ligy.`
+    : `${forms.label} má klíčové vlastnosti na úrovni ligy.`;
+  const topPart = toTop.length > 0 ? ` Na špičku ztrácí hlavně ${skillsNom(toTop, keeper)}.` : "";
+  return [{ kind: "text", text: base + topPart }];
+}
+
+function buildOutlook(
+  input: SquadAnalysisInput,
+  opponentLineups: MatchPlayer[][],
+  precision: Precision,
+  noise: (key: string) => number,
+): SquadOutlook {
+  const squad = [...input.eleven, ...input.others];
+  const ageOf = (m: SquadMember) => m.player.age ?? null;
+  const ages = squad.map(ageOf).filter((a): a is number => typeof a === "number");
+  const leagueAges = opponentLineups.flat().map((p) => p.age).filter((a): a is number => typeof a === "number");
+  const mean = (xs: number[]) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+
+  const xiExp = mean(input.eleven.map((m) => skillOf(m.player, "experience")));
+  const leagueExp = mean(opponentLineups.flat().map((p) => skillOf(p, "experience")));
+  const perceivedLeagueExp = blurLeague(leagueExp, precision, noise("exp:league"));
+
+  const growth = input.growth ?? {};
+  const growing = squad
+    .map((m) => ({ m, g: growth[m.id] ?? 0 }))
+    .filter((x) => x.g >= 6)
+    .sort((a, b) => b.g - a.g)
+    .slice(0, precision.level === "weak" ? 2 : 4)
+    .map(({ m, g }) => ({ id: m.id, name: m.name, age: ageOf(m), pace: (g >= 15 ? "fast" : "steady") as "fast" | "steady" }));
+  const veterans = input.eleven
+    .filter((m) => (ageOf(m) ?? 0) >= 31)
+    .sort((a, b) => (ageOf(b) ?? 0) - (ageOf(a) ?? 0))
+    .map((m) => ({ id: m.id, name: m.name, age: ageOf(m) }));
+  const starterIds = new Set(input.eleven.map((m) => m.id));
+  const youngsters = squad
+    .filter((m) => (ageOf(m) ?? 99) <= 21)
+    .sort((a, b) => (ageOf(a) ?? 0) - (ageOf(b) ?? 0))
+    .map((m) => ({ id: m.id, name: m.name, age: ageOf(m), starter: starterIds.has(m.id) }));
+
+  // Věk se srovnává sestava se sestavami soupeřů — o ty jde v zápase.
+  const xiAverage = round1(mean(input.eleven.map(ageOf).filter((a): a is number => typeof a === "number")));
+  const leagueAverage = round1(mean(leagueAges));
+  const under21 = ages.filter((a) => a <= 21).length;
+  const over30 = ages.filter((a) => a >= 30).length;
+  const prime = ages.length - under21 - over30;
+
+  const sentences: string[] = [];
+  if (xiAverage <= leagueAverage - 1.5) sentences.push(`Základní sestava je mladší než u soupeřů (průměr ${years(xiAverage)} proti ${years(leagueAverage)}).`);
+  else if (xiAverage >= leagueAverage + 1.5) sentences.push(`Základní sestava je starší než u soupeřů (průměr ${years(xiAverage)} proti ${years(leagueAverage)}).`);
+  else sentences.push(`Věkem je sestava jako u soupeřů (průměr ${years(xiAverage)}).`);
+  if (growing.some((g) => g.pace === "fast")) sentences.push("Pár kluků teď na tréninku roste rychle.");
+  if (veterans.length >= 3) sentences.push(`V základní sestavě ${playersOver30(veterans.length)}, s dalším rokem začnou ztrácet.`);
+  else if (under21 >= 4) sentences.push(`Do 21 let máme ${under21} hráčů, je na čem stavět.`);
+
+  return {
+    verdict: [{ kind: "text", text: sentences.join(" ") }],
+    ages: { under21, prime, over30, average: xiAverage, leagueAverage },
+    experience: { ours: Math.round(xiExp), league: perceivedLeagueExp, verdict: attributeVerdict(xiExp, perceivedLeagueExp) },
+    growing,
+    veterans,
+    youngsters,
+  };
+}
+
+/** „27,2 roku“: u desetinného čísla je roku, ne let. */
+function years(v: number): string {
+  return `${v.toFixed(1).replace(".", ",")} roku`;
+}
+
+/** „jsou 3 hráči přes 30“ / „je 5 hráčů přes 30“. */
+function playersOver30(n: number): string {
+  return n >= 2 && n <= 4 ? `jsou ${n} hráči přes 30` : `je ${n} hráčů přes 30`;
 }

@@ -406,7 +406,7 @@ export default function SquadPage() {
 
       {tab === "postava" && teamId && <SquadBodyTab teamId={teamId} filter={filter} />}
 
-      {tab === "rozbor" && teamId && <SquadAnalysisTab teamId={teamId} />}
+      {tab === "rozbor" && teamId && <SquadAnalysisTab teamId={teamId} potential={potencial} />}
 
     </div>
   );
