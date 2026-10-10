@@ -242,6 +242,15 @@ export async function loadSquadAnalysisInput(db: D1Database, teamId: string): Pr
     loadSavedLineup(db, teamId),
     readFamiliarity(db, teamId),
   ]);
+  // Kdo roste: přírůstek dovedností z tréninku za poslední čtyři týdny.
+  const growthRows = await db.prepare(
+    `SELECT player_id, SUM(change) AS gain FROM training_log
+      WHERE team_id = ? AND change > 0 AND created_at > datetime('now', '-28 days')
+      GROUP BY player_id`,
+  ).bind(teamId).all<{ player_id: string; gain: number }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "training growth", e); return { results: [] as Array<{ player_id: string; gain: number }> }; });
+  const growth: Record<string, number> = {};
+  for (const r of growthRows.results) growth[r.player_id] = r.gain;
   const injured = new Set(injuries.results.map((r) => r.player_id));
 
   // Vlastní jedenáctka: uložená sestava, když z ní je v kádru pořád aspoň jedenáct hráčů.
@@ -296,6 +305,7 @@ export async function loadSquadAnalysisInput(db: D1Database, teamId: string): Pr
     formation,
     formationFamiliarity: familiarity.formation,
     opponents,
+    growth,
     assistant: {
       id: staff.id,
       name: assistantSummary.name,

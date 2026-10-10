@@ -305,3 +305,33 @@ describe("verdikt asistenta nahoře v záložce", () => {
     expect(text).not.toContain("Posilu");
   });
 });
+
+describe("rozbor kádru: tabulky řad a perspektiva", () => {
+  it("útoku se slabou střelbou řekne, že chybí střelba, a označí každého útočníka", () => {
+    const r = buildSquadAnalysis(input({ eleven: eleven(42, { FWD: { shooting: 20 } }) }));
+    const fwd = r.lineTables.find((t) => t.line === "FWD");
+    expect(fwd).toBeDefined();
+    const shooting = fwd!.attributes.find((a) => a.skill === "shooting");
+    expect(shooting?.verdict).toBe("weak");
+    expect(plain(fwd!.lookFor)).toContain("Útoku chybí hlavně");
+    expect(plain(fwd!.lookFor)).toContain("střelb");
+    for (const p of fwd!.players.filter((x) => x.starter)) {
+      expect(p.values.find((v) => v.skill === "shooting")?.verdict).toBe("weak");
+    }
+    // Brankáři se tabulka dívá na chytání, ne na střelbu
+    const gk = r.lineTables.find((t) => t.line === "GK")!;
+    expect(gk.attributes.map((a) => a.skill)).toContain("goalkeeping");
+    expect(gk.attributes.map((a) => a.skill)).not.toContain("shooting");
+  });
+
+  it("perspektiva spočítá mladé, opory přes 30 a kdo na tréninku roste", () => {
+    const xi = SLOTS_442.map((slot, i) => member(`own-${i}`, slot, 42, { age: i < 4 ? 19 : i < 8 ? 25 : 33 }));
+    const r = buildSquadAnalysis(input({ eleven: xi, growth: { "own-0": 20, "own-1": 7, "own-2": 2 } }));
+    expect(r.outlook.ages).toMatchObject({ under21: 4, prime: 4, over30: 3 });
+    expect(r.outlook.youngsters.map((y) => y.id)).toEqual(["own-0", "own-1", "own-2", "own-3"]);
+    expect(r.outlook.veterans).toHaveLength(3);
+    expect(r.outlook.growing.map((g) => [g.id, g.pace])).toEqual([["own-0", "fast"], ["own-1", "steady"]]);
+    expect(plain(r.outlook.verdict)).toContain("jsou 3 hráči přes 30");
+    expect(plain(r.outlook.verdict)).not.toContain("—");
+  });
+});
