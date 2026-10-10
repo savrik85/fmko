@@ -81,6 +81,15 @@ describe("měřítko fází", () => {
   });
 });
 
+describe("zkušenost", () => {
+  it("hráč bez vyplněné zkušenosti (pohárový velkoklub) má průměr, ne nulu", () => {
+    const withExp = { ...createPlayer(1, "DEF", 50), experience: 40 };
+    const missing = { ...createPlayer(1, "DEF", 50), experience: undefined };
+    expect(teamDefense([missing])).toBeCloseTo(teamDefense([withExp]), 6);
+    expect(teamDefense([{ ...withExp, experience: 0 }])).toBeLessThan(teamDefense([missing]));
+  });
+});
+
 describe("brankář", () => {
   const gk = (o: Partial<MatchPlayer> = {}): MatchPlayer => ({ ...createPlayer(1, "GK", 60), ...o });
 

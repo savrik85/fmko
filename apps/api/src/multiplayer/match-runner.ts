@@ -1739,7 +1739,8 @@ export async function buildMatchPlayers(
             vision: skills.vision ?? 50,
             creativity: skills.creativity ?? 50,
             setPieces: skills.setPieces ?? 50,
-            experience: skills.experience ?? 0,
+            // Chybí u hráčů pohárových velkoklubů (cup_club_players) → průměr v engine/roles.ts, ne nula.
+            experience: skills.experience,
             discipline: personality.discipline ?? 50,
             alcohol: personality.alcohol ?? 30,
             temper: personality.temper ?? 40,
