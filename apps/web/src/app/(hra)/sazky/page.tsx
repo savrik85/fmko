@@ -77,10 +77,13 @@ export default function SazkyPage() {
    * klik na už vybraný ho odebere. Server to stejně vynucuje unikátním klíčem,
    * ale hráč se to nemá dozvědět až z chyby.
    */
-  const prepni = (t: VybranyTip) => setVybrane((p) =>
-    p.some((x) => x.matchId === t.matchId && x.selection === t.selection)
-      ? p.filter((x) => !(x.matchId === t.matchId && x.selection === t.selection))
+  const prepni = (t: VybranyTip) => {
+    const same = (x: VybranyTip) =>
+      x.matchId === t.matchId && x.serverMarket === t.serverMarket && x.selection === t.selection;
+    setVybrane((p) => p.some(same)
+      ? p.filter((x) => !same(x))
       : [...p.filter((x) => x.matchId !== t.matchId), t]);
+  };
 
   const celkovyKurz = useMemo(
     () => vybrane.length === 0 ? 100

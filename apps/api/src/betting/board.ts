@@ -15,18 +15,31 @@
  */
 
 import { logger } from "../lib/logger";
+import { ENGINE_SINCE, engineFallbackLevel } from "./engine-transition";
 import {
   expectedGoals, formAdjustment, outcomeProbabilities, totalsProbabilities,
   doubleChanceProbabilities,
   scorerShares, scorerProbability,
-  marketOdds, singleSideOdds,
-  goalLevel, LEVEL_WINDOW_ROUNDS, type LevelSample,
+  marketOdds, singleSideOdds, MAX_ODDS_X100,
+  goalLevel, LEVEL_WINDOW_ROUNDS, type LevelSample, type Lambdas,
 } from "./odds-model";
+import {
+  HANDICAP_LINES, TEAM_TOTAL_LINES, GOAL_BANDS, BTTS_YES, BTTS_NO,
+  handicapProbabilities, goalBandProbabilities, bothTeamsScoreProbability,
+  teamTotalProbabilities, resultTotalProbabilities, mainTotalLine,
+  handicapCode, teamTotalCode, resultTotalCode, handicapLabel, lineText,
+  type BetMarket,
+} from "./markets";
 
 const M = "betting-board";
 
-/** Linie, na které se vypisuje trh „kolik padne gólů". */
-export const TOTAL_LINES = [2.5, 3.5, 6.5] as const;
+/**
+ * Linie, na které se vypisuje trh „kolik padne gólů".
+ *
+ * Kódy výběrů ('over25', 'under65') se z linie skládají pořád stejně, takže
+ * tipy podané na dřívější linie 2,5 / 3,5 / 6,5 se vyhodnocují dál.
+ */
+export const TOTAL_LINES = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5] as const;
 
 /** Kolik střelců se nabízí z každého týmu. */
 export const SCORERS_PER_TEAM = 6;
@@ -58,6 +71,26 @@ export const MIN_SCORER_PROB = 0.06;
  * V Praze padla linie 2,5 gólu ve 48 zápasech ze 49.
  */
 export const MIN_OFFERED_ODDS = 120;
+
+/**
+ * Vypisuje se možnost s tímhle kurzem?
+ *
+ * Zdola MIN_OFFERED_ODDS (viz výš). Shora strop kurzu: kurz, který narazil na
+ * MAX_ODDS_X100, už neodpovídá pravděpodobnosti, jen zabírá místo na lístku
+ * („outsider vyhraje o 3 a víc" za 15,00 při šanci jedno procento). Strop je
+ * stejně v neprospěch sázejícího, takže skrýt ho kancelář nic nestojí.
+ *
+ * Platí pro gólové linie a všechny doplňkové trhy z markets.ts.
+ */
+export function isOffered(oddsX100: number): boolean {
+  return oddsX100 >= MIN_OFFERED_ODDS && oddsX100 < MAX_ODDS_X100;
+}
+
+/**
+ * Trhy, které nový přepočet vypisuje vedle 1/X/2, neprohry a počtu gólů.
+ * Když v kole nechybí všechny, lístek už je z verze, která je zná (routes/betting.ts).
+ */
+export const EXTRA_MARKETS = ["handicap", "goals_band", "btts", "team_totals", "result_total"] as const;
 
 /** Kolik posledních zápasů se počítá do formy. */
 const FORM_MATCHES = 5;
@@ -94,7 +127,7 @@ export interface OddsRow {
   seasonNumber: number;
   calendarId: string;
   matchId: string;
-  market: "1x2" | "dchance" | "totals" | "scorer";
+  market: BetMarket;
   selection: string;
   oddsX100: number;
   probability: number;
@@ -277,12 +310,14 @@ async function loadScorers(
  * ne tehdejší. Za šest kol se kádry pohnou o pár bodů, na úroveň to nemá vliv.
  */
 async function loadGoalLevel(db: D1Database, leagueId: string): Promise<number> {
+  // Jen kola odehraná na enginu podle rolí; do prvního z nich úroveň z přehrání
+  // nového enginu (engine-transition.ts), ne z „hokejových“ kol starého.
   const kola = await db.prepare(
-    `SELECT id FROM season_calendar WHERE league_id = ? AND status = 'simulated'
+    `SELECT id FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND scheduled_at >= ?
       ORDER BY scheduled_at DESC LIMIT ?`
-  ).bind(leagueId, LEVEL_WINDOW_ROUNDS).all<{ id: string }>()
+  ).bind(leagueId, ENGINE_SINCE, LEVEL_WINDOW_ROUNDS).all<{ id: string }>()
     .catch((e) => { logger.warn({ module: M }, `odehraná kola ligy ${leagueId}`, e); return { results: [] }; });
-  if (kola.results.length === 0) return 1;
+  if (kola.results.length === 0) return engineFallbackLevel(leagueId);
   const stari = new Map(kola.results.map((k, i) => [k.id, i]));
 
   const zapasy = await db.prepare(
@@ -309,6 +344,82 @@ async function loadGoalLevel(db: D1Database, leagueId: string): Promise<number> 
     };
   });
   return goalLevel(vzorky);
+}
+
+type MatchOddsRow = Omit<OddsRow, "leagueId" | "seasonNumber" | "calendarId">;
+
+/**
+ * Doplňkové trhy zápasu (markets.ts) ze stejných očekávaných gólů jako 1/X/2.
+ *
+ * Maržuje se stejnou mašinérií jako stávající trhy:
+ *  - dvoucestné sázky (handicap, oba dají gól, góly týmu) přes marketOdds na
+ *    dvojici, která dává dohromady 1, stejně jako gólové linie;
+ *  - víccestné trhy (pásma gólů, výsledek s góly) po jedné možnosti přes
+ *    singleSideOdds, stejně jako dvojtip. Společný overround by tu byl
+ *    nebezpečný: podlaha PROB_FLOOR zvedne malé možnosti, normalizace pak ubere
+ *    marži té velké a pravděpodobný tip by mohl mít kurz nad férovou cenou.
+ * Vypisuje se jen to, co projde isOffered.
+ */
+export function extraMarketOdds(
+  matchId: string, homeName: string, awayName: string, lambdas: Lambdas,
+): MatchOddsRow[] {
+  const out: MatchOddsRow[] = [];
+  const push = (market: BetMarket, selection: string, oddsX100: number, probability: number, label: string) => {
+    if (isOffered(oddsX100)) out.push({ matchId, market, selection, oddsX100, probability, label });
+  };
+
+  // Handicap: na každé linii dvě dvoucestné sázky, domácí −linie proti hostům
+  // +linie a obráceně. Nabízí se obě strany, které mají rozumný kurz.
+  for (const line of HANDICAP_LINES) {
+    const h = handicapProbabilities(lambdas, line);
+    const [kHomeMinus, kAwayPlus] = marketOdds([h.homeMinus, h.awayPlus]);
+    const [kAwayMinus, kHomePlus] = marketOdds([h.awayMinus, h.homePlus]);
+    push("handicap", handicapCode("home", "m", line), kHomeMinus, h.homeMinus, handicapLabel(homeName, "m", line));
+    push("handicap", handicapCode("away", "p", line), kAwayPlus, h.awayPlus, handicapLabel(awayName, "p", line));
+    push("handicap", handicapCode("away", "m", line), kAwayMinus, h.awayMinus, handicapLabel(awayName, "m", line));
+    push("handicap", handicapCode("home", "p", line), kHomePlus, h.homePlus, handicapLabel(homeName, "p", line));
+  }
+
+  // Přesný počet gólů v pásmu
+  const bands = goalBandProbabilities(lambdas);
+  GOAL_BANDS.forEach((b, i) => push("goals_band", b.code, singleSideOdds(bands[i]), bands[i], b.label));
+
+  // Oba týmy dají gól
+  const btts = bothTeamsScoreProbability(lambdas);
+  const [kYes, kNo] = marketOdds([btts, 1 - btts]);
+  push("btts", BTTS_YES, kYes, btts, "Oba týmy dají gól: ano");
+  push("btts", BTTS_NO, kNo, 1 - btts, "Oba týmy dají gól: ne");
+
+  // Góly jednoho týmu
+  const sides = [["home", homeName, lambdas.home], ["away", awayName, lambdas.away]] as const;
+  for (const [side, name, mu] of sides) {
+    for (const line of TEAM_TOTAL_LINES) {
+      const t = teamTotalProbabilities(mu, line);
+      const [kOver, kUnder] = marketOdds([t.over, t.under]);
+      push("team_totals", teamTotalCode(side, "over", line), kOver, t.over,
+           `${name} dá víc než ${lineText(line)} gólu`);
+      push("team_totals", teamTotalCode(side, "under", line), kUnder, t.under,
+           `${name} dá míň než ${lineText(line)} gólu`);
+    }
+  }
+
+  // Výsledek a počet gólů na hlavní linii zápasu (nejblíž půl na půl)
+  const line = mainTotalLine(lambdas, TOTAL_LINES);
+  const rt = resultTotalProbabilities(lambdas, line);
+  const lineStr = lineText(line);
+  const combos: Array<["1" | "X" | "2", "over" | "under", number, string]> = [
+    ["1", "over", rt.homeOver, `${homeName} vyhraje a padne víc než ${lineStr} gólu`],
+    ["1", "under", rt.homeUnder, `${homeName} vyhraje a padne míň než ${lineStr} gólu`],
+    ["X", "over", rt.drawOver, `Remíza a padne víc než ${lineStr} gólu`],
+    ["X", "under", rt.drawUnder, `Remíza a padne míň než ${lineStr} gólu`],
+    ["2", "over", rt.awayOver, `${awayName} vyhraje a padne víc než ${lineStr} gólu`],
+    ["2", "under", rt.awayUnder, `${awayName} vyhraje a padne míň než ${lineStr} gólu`],
+  ];
+  for (const [outcome, dir, prob, label] of combos) {
+    push("result_total", resultTotalCode(outcome, dir, line), singleSideOdds(prob), prob, label);
+  }
+
+  return out;
 }
 
 /** Kurzy jednoho zápasu. Čistá část výpočtu, jen skládá volání modelu. */
@@ -373,16 +484,18 @@ export function matchOdds(input: {
 
     // Strana se nabízí jen tam, kde má smysl. „Míň než 6,5 gólu" vychází
     // v běžné soutěži na podlahu kurzu, „víc než 2,5 gólu" v soutěži, kde
-    // padá šest gólů na zápas, taky.
-    if (kover >= MIN_OFFERED_ODDS) {
+    // padá šest gólů na zápas, taky. Opačný konec (kurz na stropu) viz isOffered.
+    if (isOffered(kover)) {
       out.push({ matchId: input.matchId, market: "totals", selection: `over${tag}`,
                  oddsX100: kover, probability: t.over, label: `Víc než ${cara} gólu` });
     }
-    if (kunder >= MIN_OFFERED_ODDS) {
+    if (isOffered(kunder)) {
       out.push({ matchId: input.matchId, market: "totals", selection: `under${tag}`,
                  oddsX100: kunder, probability: t.under, label: `Míň než ${cara} gólu` });
     }
   }
+
+  out.push(...extraMarketOdds(input.matchId, input.homeName, input.awayName, lambdas));
 
   // Střelci — zvlášť pro každý tým, podíly se dělí uvnitř týmu
   for (const isHome of [true, false]) {
@@ -498,6 +611,11 @@ export async function generateBoard(
   return { calendarId: round.calendar_id, rows: vsechny.length };
 }
 
+/** Řádků kurzů v jednom INSERTu. D1 bere nejvýš 100 parametrů, řádek jich má 11. */
+export const ODDS_ROWS_PER_STATEMENT = 9;
+/** Příkazů v jedné dávce. 20 × 9 = 180 kurzů, kolo jsou dvě dávky. */
+export const ODDS_STATEMENTS_PER_BATCH = 20;
+
 /**
  * Zápis lístku. UPSERT na UNIQUE(match_id, market, selection) — souběžné běhy
  * tak nemůžou vyrobit dvě sady kurzů na týž zápas.
@@ -516,11 +634,15 @@ export async function generateBoard(
 export async function writeOdds(db: D1Database, rows: OddsRow[], gameDate: string): Promise<void> {
   if (rows.length === 0) return;
 
-  const stmt = db.prepare(
+  // Víc řádků v jednom INSERTu. S doplňkovými trhy má zápas kolem padesáti
+  // kurzů, kolo přes tři sta, a denní tick píše lístky všech soutěží v jedné
+  // invokaci. Po řádku by to byly stovky příkazů na soutěž, takhle desítky.
+  // D1 bere nejvýš 100 parametrů na příkaz: 9 řádků × 11 sloupců = 99.
+  const insert = (rowCount: number) => db.prepare(
     `INSERT INTO bet_odds
        (id, league_id, season_number, calendar_id, match_id, market, selection,
         odds_x100, probability, label, game_date)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+     VALUES ${Array.from({ length: rowCount }, () => "(?,?,?,?,?,?,?,?,?,?,?)").join(",")}
      ON CONFLICT(match_id, market, selection) DO UPDATE SET
        odds_x100 = excluded.odds_x100,
        probability = excluded.probability,
@@ -528,17 +650,20 @@ export async function writeOdds(db: D1Database, rows: OddsRow[], gameDate: strin
        game_date = excluded.game_date`
   );
 
-  // D1 zvládne dávku pohodlně; sedm zápasů dá kolem sta řádků.
-  const CHUNK = 60;
-  let selhalo = false;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const davka = rows.slice(i, i + CHUNK).map((r) => stmt.bind(
+  const statements: D1PreparedStatement[] = [];
+  for (let i = 0; i < rows.length; i += ODDS_ROWS_PER_STATEMENT) {
+    const part = rows.slice(i, i + ODDS_ROWS_PER_STATEMENT);
+    statements.push(insert(part.length).bind(...part.flatMap((r) => [
       crypto.randomUUID(), r.leagueId, r.seasonNumber, r.calendarId, r.matchId,
       r.market, r.selection, r.oddsX100, r.probability, r.label, gameDate,
-    ));
-    await db.batch(davka).catch((e) => {
+    ])));
+  }
+
+  let selhalo = false;
+  for (let i = 0; i < statements.length; i += ODDS_STATEMENTS_PER_BATCH) {
+    await db.batch(statements.slice(i, i + ODDS_STATEMENTS_PER_BATCH)).catch((e) => {
       selhalo = true;
-      logger.error({ module: M }, `zápis kurzů (dávka od ${i})`, e);
+      logger.error({ module: M }, `zápis kurzů (dávka od příkazu ${i})`, e);
     });
   }
 

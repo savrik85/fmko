@@ -2,27 +2,9 @@
 
 import { useState } from "react";
 import { EntityLink } from "@/components/ui";
-import { Forma, kurz } from "./ui";
+import { Forma, OddsButton } from "./ui";
+import { ExtraMarkets, extraMarketCount } from "./extra-markets";
 import type { Board, Nabidka, Strana, VybranyTip, Zapas } from "./types";
-
-/** Jedno tlačítko kurzu. Jméno týmu ani hráče do něj NIKDY nepatří — musí zůstat odkazem. */
-function Kurz({ tip, label, oddsX100, vybrano, onClick }: {
-  tip: string; label: string; oddsX100: number; vybrano: boolean; onClick: () => void;
-}) {
-  return (
-    <button
-      type="button" onClick={onClick} aria-pressed={vybrano}
-      aria-label={`${label}, kurz ${kurz(oddsX100)}`}
-      className={`min-h-12 rounded-control px-2 flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer
-        ${vybrano ? "bg-pitch-500 text-white" : "bg-gray-50 text-ink hover:bg-gray-100 active:bg-gray-200"}`}
-    >
-      <span className={`text-micro font-heading font-bold uppercase leading-none ${vybrano ? "text-white/70" : "text-muted"}`}>
-        {tip}
-      </span>
-      <span className="text-base font-heading font-bold tabular-nums leading-none">{kurz(oddsX100)}</span>
-    </button>
-  );
-}
 
 /**
  * Řádek týmu: pořadí, jméno, forma a skóre.
@@ -77,6 +59,7 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
   z: Zapas; vybrane: VybranyTip[]; onToggle: (t: VybranyTip) => void; muzeSazet: boolean;
 }) {
   const [rozbaleno, setRozbaleno] = useState(false);
+  const [extraOpen, setExtraOpen] = useState(false);
   const nazev = `${z.home.name} ${z.away.name}`;
   const vybranyKlic = vybrane.find((v) => v.matchId === z.matchId);
 
@@ -107,8 +90,11 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
     oddsX100: n.oddsX100, label: n.label, zapas: nazev,
   });
 
-  const jeVybran = (selection: string) => vybranyKlic?.selection === selection;
+  // Kód výběru se porovnává i s trhem: jeden zápas má víc trhů a tip je na tiketu jen jeden.
+  const jeVybran = (serverMarket: VybranyTip["serverMarket"], selection: string) =>
+    vybranyKlic?.serverMarket === serverMarket && vybranyKlic.selection === selection;
   const pocetDalsich = m.dchance.length + m.totals.length + m.scorers.length;
+  const extraCount = extraMarketCount(m);
 
   return (
     <article className="card overflow-hidden">
@@ -119,8 +105,8 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
 
       <div className="grid grid-cols-3 gap-1.5 px-3 pb-3">
         {m.result.map((n) => (
-          <Kurz key={n.selection} tip={n.selection} label={n.label} oddsX100={n.oddsX100}
-                vybrano={jeVybran(n.selection)}
+          <OddsButton key={n.selection} tip={n.selection} label={n.label} oddsX100={n.oddsX100}
+                vybrano={jeVybran("1x2", n.selection)}
                 onClick={() => muzeSazet && pridej("result", "1x2", n)} />
         ))}
       </div>
@@ -143,8 +129,8 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
               </div>
               <div className="grid grid-cols-3 gap-1.5">
                 {m.dchance.map((n) => (
-                  <Kurz key={n.selection} tip={n.selection} label={n.label} oddsX100={n.oddsX100}
-                        vybrano={jeVybran(n.selection)}
+                  <OddsButton key={n.selection} tip={n.selection} label={n.label} oddsX100={n.oddsX100}
+                        vybrano={jeVybran("dchance", n.selection)}
                         onClick={() => muzeSazet && pridej("dchance", "dchance", n)} />
                 ))}
               </div>
@@ -161,19 +147,24 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
                 Kolik padne gólů
               </div>
               <div className="space-y-1.5">
-                {[...new Set(m.totals.map((t) => lineLabel(t.selection).cara))].map((cara) => {
-                  const dvojice = m.totals.filter((t) => lineLabel(t.selection).cara === cara);
-                  return (
-                    <div key={cara} className="grid grid-cols-[3rem_1fr_1fr] items-center gap-1.5">
-                      <span className="text-sm font-heading font-bold tabular-nums text-muted">{cara}</span>
-                      {dvojice.map((n) => (
-                        <Kurz key={n.selection} tip={lineLabel(n.selection).smer} label={n.label}
-                              oddsX100={n.oddsX100} vybrano={jeVybran(n.selection)}
-                              onClick={() => muzeSazet && pridej("totals", "totals", n)} />
-                      ))}
-                    </div>
-                  );
-                })}
+                {/* Linie od nejnižší, „víc" vždy vlevo a „míň" vpravo. Chybějící strana
+                    (kurz mimo rozumné meze) nechá prázdné místo, ať sloupce nelezou. */}
+                {[...new Set(m.totals.map((t) => lineLabel(t.selection).cara))]
+                  .sort((a, b) => Number(a.replace(",", ".")) - Number(b.replace(",", ".")))
+                  .map((cara) => {
+                    const side = (prefix: string) => m.totals.find((t) =>
+                      t.selection.startsWith(prefix) && lineLabel(t.selection).cara === cara);
+                    return (
+                      <div key={cara} className="grid grid-cols-[3rem_1fr_1fr] items-center gap-1.5">
+                        <span className="text-sm font-heading font-bold tabular-nums text-muted">{cara}</span>
+                        {[side("over"), side("under")].map((n, i) => n ? (
+                          <OddsButton key={n.selection} tip={lineLabel(n.selection).smer} label={n.label}
+                                oddsX100={n.oddsX100} vybrano={jeVybran("totals", n.selection)}
+                                onClick={() => muzeSazet && pridej("totals", "totals", n)} />
+                        ) : <span key={i} aria-hidden />)}
+                      </div>
+                    );
+                  })}
               </div>
             </section>
           )}
@@ -195,8 +186,8 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
                       </span>
                     </div>
                     <div className="w-20 shrink-0">
-                      <Kurz tip="Gól" label={n.label} oddsX100={n.oddsX100}
-                            vybrano={jeVybran(n.selection)}
+                      <OddsButton tip="Gól" label={n.label} oddsX100={n.oddsX100}
+                            vybrano={jeVybran("scorer", n.selection)}
                             onClick={() => muzeSazet && pridej("scorers", "scorer", n)} />
                     </div>
                   </div>
@@ -209,6 +200,23 @@ function ZapasKarta({ z, vybrane, onToggle, muzeSazet }: {
             </section>
           )}
         </div>
+      )}
+
+      {extraCount > 0 && (
+        <button type="button" onClick={() => setExtraOpen(!extraOpen)} aria-expanded={extraOpen}
+          className="w-full min-h-11 px-3 border-t border-gray-50 flex items-center gap-2 text-sm text-muted hover:bg-gray-50/50 cursor-pointer">
+          <span className="font-heading font-bold">Další sázky</span>
+          <span className="text-micro tabular-nums">({extraCount})</span>
+          <span className={`ml-auto transition-transform ${extraOpen ? "rotate-180" : ""}`} aria-hidden>▾</span>
+        </button>
+      )}
+
+      {extraOpen && (
+        <ExtraMarkets
+          match={z}
+          isSelected={jeVybran}
+          onPick={(market, serverMarket, n) => muzeSazet && pridej(market, serverMarket, n)}
+        />
       )}
     </article>
   );

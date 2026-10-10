@@ -2,6 +2,10 @@
  * Vyhodnocení jednoho výběru na tiketu. Čistá funkce, žádné I/O.
  */
 
+import {
+  BTTS_YES, BTTS_NO, parseHandicap, parseGoalBand, parseTeamTotal, parseResultTotal,
+} from "./markets";
+
 export type SelectionResult = "won" | "lost" | "void";
 
 export interface MatchResult {
@@ -58,6 +62,47 @@ export function gradeSelection(
     const goals = apps.get(selection);
     if (goals === undefined) return "void";   // vůbec nenastoupil
     return goals > 0 ? "won" : "lost";
+  }
+
+  // Doplňkové trhy (markets.ts). Všechny linie jsou půlgólové, takže žádný
+  // z nich nemůže skončit nerozhodně a vrácení vkladu je jen pro poškozený kód.
+  if (market === "handicap") {
+    const h = parseHandicap(selection);
+    if (!h) return "void";
+    // Rozdíl skóre z pohledu sázeného týmu.
+    const diff = h.side === "home" ? result.homeScore - result.awayScore : result.awayScore - result.homeScore;
+    // −1,5: vyhrát o víc než 1,5, tedy o 2 a víc. +1,5: neprohrát o víc než 1.
+    const won = h.sign === "m" ? diff > h.line : diff > -h.line;
+    return won ? "won" : "lost";
+  }
+
+  if (market === "goals_band") {
+    const band = parseGoalBand(selection);
+    if (!band) return "void";
+    return total >= band.min && (band.max === null || total <= band.max) ? "won" : "lost";
+  }
+
+  if (market === "btts") {
+    const both = result.homeScore > 0 && result.awayScore > 0;
+    if (selection === BTTS_YES) return both ? "won" : "lost";
+    if (selection === BTTS_NO) return both ? "lost" : "won";
+    return "void";
+  }
+
+  if (market === "team_totals") {
+    const t = parseTeamTotal(selection);
+    if (!t) return "void";
+    const goals = t.side === "home" ? result.homeScore : result.awayScore;
+    return (t.dir === "over" ? goals > t.line : goals < t.line) ? "won" : "lost";
+  }
+
+  if (market === "result_total") {
+    const rt = parseResultTotal(selection);
+    if (!rt) return "void";
+    const outcome = result.homeScore > result.awayScore ? "1"
+      : result.homeScore === result.awayScore ? "X" : "2";
+    const goalsOk = rt.dir === "over" ? total > rt.line : total < rt.line;
+    return outcome === rt.outcome && goalsOk ? "won" : "lost";
   }
 
   // Neznámý trh nemůže prohrát tiket — radši vrátit vklad než potrestat hráče
