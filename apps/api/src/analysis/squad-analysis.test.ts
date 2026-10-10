@@ -113,19 +113,6 @@ describe("rozbor kádru: kde posílit", () => {
     const r = buildSquadAnalysis(i);
     expect(r.reinforcements.map((x) => x.line)).toEqual(gains.filter((g) => g.gain >= 0.01).map((g) => g.line));
   });
-
-  it("když má v kádru lepšího hráče na post, řekne to dřív, než pošle shánět posilu", () => {
-    const own = eleven(44, { FWD: { speed: 15, shooting: 15, technique: 15, creativity: 15, vision: 15 } });
-    const r = buildSquadAnalysis(input({ eleven: own, others: [member("bench-fwd", "FWD", 55)] }));
-    const fwd = r.reinforcements.find((x) => x.line === "FWD")!;
-    expect(fwd.text.some((p) => p.kind === "player" && p.id === "bench-fwd")).toBe(true);
-  });
-
-  it("zraněného hráče z lavičky místo posily nedoporučí", () => {
-    const own = eleven(44, { FWD: { speed: 15, shooting: 15, technique: 15, creativity: 15, vision: 15 } });
-    const r = buildSquadAnalysis(input({ eleven: own, others: [member("bench-fwd", "FWD", 55, {}, { injured: true })] }));
-    expect(r.reinforcements.flatMap((x) => x.text).some((p) => p.kind === "player" && p.id === "bench-fwd")).toBe(false);
-  });
 });
 
 describe("rozbor kádru: přesnost podle asistenta", () => {
@@ -295,6 +282,14 @@ describe("verdikt asistenta nahoře v záložce", () => {
     expect(he).toContain("Posilu bych hledal do útoku.");
     expect(she).toContain("Posilu bych hledala do útoku.");
     expect(he).not.toContain("—");
+  });
+
+  it("při shodě nejslabších řad jmenuje tu, kam míří posila", () => {
+    const lines = [line("GK", "belowAverage"), line("DEF", "best"), line("MID", "top"), line("FWD", "belowAverage")];
+    const gk: Reinforcement = { line: "GK", priority: "high", text: [], attributes: [] };
+    const text = headlineFor(lines, [], [gk], false).map((p) => (p.kind === "text" ? p.text : "")).join("");
+    expect(text).toContain("zpátky nás drží brankář");
+    expect(text).toContain("Posilu bych hledal do branky.");
   });
 
   it("u vyrovnaných řad sáhne po hlavní slabině", () => {

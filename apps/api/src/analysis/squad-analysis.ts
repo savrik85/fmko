@@ -179,7 +179,7 @@ export type AttributeVerdict = "strong" | "even" | "weak";
 
 export interface LineAttribute {
   skill: AnalysisSkill;
-  /** Průměr naší řady v základní sestavě. */
+  /** Průměr naší řady v nejlepší jedenáctce. */
   ours: number;
   /** Průměr ligy na tomhle postu, jak ho asistent odhadne. */
   league: number;
@@ -208,12 +208,14 @@ export interface LineTable {
 
 export interface SquadOutlook {
   verdict: TextPart[];
-  /** Počty v celém kádru; průměr je základní sestavy proti sestavám soupeřů. */
+  /** Počty v celém kádru; průměr je nejlepší jedenáctky proti jedenáctkám soupeřů. */
   ages: { under21: number; prime: number; over30: number; average: number; leagueAverage: number };
   experience: { ours: number; league: number; verdict: AttributeVerdict };
   growing: Array<{ id: string; name: string; age: number | null; pace: "fast" | "steady" }>;
   veterans: Array<{ id: string; name: string; age: number | null }>;
   youngsters: Array<{ id: string; name: string; age: number | null; starter: boolean }>;
+  /** Věk každého hráče kádru (pro věkový graf); `starter` = patří do nejlepší jedenáctky. */
+  squadAges: Array<{ age: number; starter: boolean }>;
 }
 
 // ── Kvalita asistenta ──────────────────────────────────────────────────────
@@ -611,11 +613,11 @@ export function buildSquadAnalysis(input: SquadAnalysisInput): SquadAnalysisRepo
   );
 
   const reinforcements = reinforcementReports(
-    input, lineup, memberByPlayer, baseOutlook, opponentStats, signingTargets(opponentLineups), precision, noise, rng,
+    input, lineup, memberByPlayer, baseOutlook, opponentStats, signingTargets(opponentLineups), precision, noise,
   );
   const style = styleReport(input, lineup, precision, noise);
   const warnings = warningReports(input, opponentLineups, precision);
-  const lineTables = buildLineTables(input, lineup, avg, slotAverages(byStrength.slice(0, edge)), precision, noise);
+  const lineTables = buildLineTables(input, lineup, avg, slotAverages(byStrength.slice(0, edge)), precision, noise, lines);
   const outlook = buildOutlook(input, opponentLineups, precision, noise);
 
   return {
@@ -658,7 +660,9 @@ export function headlineFor(lines: LineReport[], weaknesses: Insight[], reinforc
             : "Kádr patří k nejslabším v lize.";
   const parts: string[] = [overall];
   const best = ranked[0];
-  const worst = ranked[ranked.length - 1];
+  // Při shodě nejslabších řad jmenuj tu, kam míří posila, ať si věty neprotiřečí.
+  const lowest = ranked[ranked.length - 1]?.rank;
+  const worst = ranked.find((l) => l.rank === lowest && l.line === reinforcements[0]?.line) ?? ranked[ranked.length - 1];
   if (best && worst && best.rank - worst.rank >= 2) {
     parts.push(`Nejvíc se můžeme opřít o ${LINE_ACC[best.line]}, zpátky nás drží ${LINE_NOM[worst.line]}.`);
   } else if (weaknesses[0]) {
@@ -838,7 +842,7 @@ function buildInsight(
     text.push(txt(positive ? "Tady jsme silnější než soupeři." : "Tady za soupeři zaostáváme."));
   } else if (named.length === 0 && e.def.key === "experience") {
     // Nadpis už zkušenost jmenuje, „Chybí zkušenost.“ by ho jen opakovalo.
-    text.push(txt(positive ? "Ostřílení hráči drží tým v klidu i v koncovce." : "Hodně kluků v sestavě nemá odehráno dost zápasů."));
+    text.push(txt(positive ? "Ostřílení hráči drží tým v klidu i v koncovce." : "Hodně kluků v nejlepší jedenáctce nemá odehráno dost zápasů."));
   } else if (named.length === 0) {
     text.push(txt(positive ? `Síla je ${skillsLoc(namedSkills, keeper)}.` : `Chybí ${skillsNom(namedSkills, keeper)}.`));
   } else {
@@ -904,6 +908,7 @@ const MIN_UPGRADE_GAIN = 0.01;
 /** O kolik musí být hráč z kádru v roli lepší, aby ho asistent doporučil místo posily. */
 const BENCH_MARGIN = 1.5;
 
+
 type SlotTargets = Record<Slot, Partial<Record<AnalysisSkill, number>>>;
 
 function signingTargets(opponentLineups: readonly MatchPlayer[][]): SlotTargets {
@@ -961,7 +966,6 @@ function reinforcementReports(
   targets: SlotTargets,
   precision: Precision,
   noise: (key: string) => number,
-  rng: Rng,
 ): Reinforcement[] {
   const options = upgradeOptions(lineup, baseOutlook, opponents, targets)
     .map((o) => ({ ...o, perceived: o.gain * (1 + noise(`upgrade:${o.line}`) * precision.effectNoise) }));
@@ -996,23 +1000,6 @@ function reinforcementReports(
     }
     if (member && !several) text.push(txt(" Musí být lepší, než je "), { kind: "player", id: member.id, name: member.name }, txt("."));
 
-    if (precision.benchHint && member) {
-      const weakestRating = playerRoleRating(o.weakest);
-      const candidate = input.others
-        .filter((m) => !m.injured && m.position === o.line)
-        .map((m) => ({ m, rating: playerRoleRating(fresh({ ...m.player, matchPosition: o.line })) }))
-        .sort((a, b) => b.rating - a.rating)[0];
-      if (candidate && candidate.rating > weakestRating + BENCH_MARGIN) {
-        const phrase = rng.pick(["Než začneš shánět posilu, podívej se do kádru: ", "Posila možná nebude potřeba: "]);
-        text.push(
-          txt(` ${phrase}`),
-          { kind: "player", id: candidate.m.id, name: candidate.m.name },
-          txt(" by tam hrál líp než "),
-          { kind: "player", id: member.id, name: member.name },
-          txt("."),
-        );
-      }
-    }
 
     return {
       line: o.line,
@@ -1153,7 +1140,7 @@ const WARNING_GROUPS = {
   exhausted: { kind: "tired", one: " je vyždímaný, potřebuje odpočinek.", many: " jsou vyždímaní, potřebují odpočinek." },
   tired: { kind: "tired", one: " je unavený, v zápase nebude stíhat.", many: " jsou unavení, v zápase nebudou stíhat." },
   lowStamina: { kind: "lowStamina", one: " nemá výdrž, ve druhém poločase odpadá.", many: " nemají výdrž, ve druhém poločase odpadají." },
-  inexperienced: { kind: "inexperienced", one: " je v sestavě nováček, v těsném zápase může zaváhat.", many: " jsou v sestavě nováčci, v těsném zápase můžou zaváhat." },
+  inexperienced: { kind: "inexperienced", one: " je nováček, v těsném zápase může zaváhat.", many: " jsou nováčci, v těsném zápase můžou zaváhat." },
 } satisfies Record<string, WarningGroup>;
 
 function warningReports(input: SquadAnalysisInput, opponentLineups: MatchPlayer[][], precision: Precision): Warning[] {
@@ -1271,6 +1258,7 @@ function buildLineTables(
   top: SlotAverages,
   precision: Precision,
   noise: (key: string) => number,
+  lines: LineReport[],
 ): LineTable[] {
   const out: LineTable[] = [];
   for (const slot of ["GK", "DEF", "MID", "FWD"] as Slot[]) {
@@ -1303,18 +1291,23 @@ function buildLineTables(
         return { skill, value, verdict: attributeVerdict(value, leagueBySkill.get(skill) ?? value) };
       }),
     });
+    // Všichni hráči postu od nejlepšího: kdo hraje, se mění, rozbor se dívá na celý kádr.
+    const strength = (m: SquadMember) => playerRoleRating(fresh({ ...m.player, matchPosition: slot }));
     const players = [
-      ...starters.map((m) => toRow(m, true)),
-      ...bench.map((m) => toRow(m, false)),
-    ];
+      ...starters.map((m) => ({ m, starter: true })),
+      ...bench.map((m) => ({ m, starter: false })),
+    ]
+      .sort((a, b) => strength(b.m) - strength(a.m))
+      .map(({ m, starter }) => toRow(m, starter));
 
-    out.push({ line: slot, attributes, players, lookFor: lookForText(slot, attributes, precision) });
+    const verdict = lines.find((l) => l.line === slot)?.verdict ?? "average";
+    out.push({ line: slot, attributes, players, lookFor: lookForText(slot, attributes, precision, verdict) });
   }
   return out;
 }
 
-/** „Útoku chybí hlavně střelba a přehled, posila by měla vynikat právě v nich.“ */
-function lookForText(slot: Slot, attributes: LineAttribute[], precision: Precision): TextPart[] {
+/** „Útoku chybí hlavně střelba a přehled.“ U silné řady: „…, slabší je jen přehled.“ */
+function lookForText(slot: Slot, attributes: LineAttribute[], precision: Precision, verdict: LineVerdict): TextPart[] {
   const forms = LINE_FORMS[slot];
   const keeper = slot === "GK";
   const weights = RATING_WEIGHTS[slot] as Record<string, number>;
@@ -1323,8 +1316,11 @@ function lookForText(slot: Slot, attributes: LineAttribute[], precision: Precisi
     .sort((x, y) => y.gap - x.gap);
   const weak = gaps.filter((g) => g.a.verdict === "weak").slice(0, Math.max(1, precision.reinforcementAttributes)).map((g) => g.a.skill);
   const whom = slot === "GK" ? "Brankáři" : slot === "DEF" ? "Obraně" : slot === "MID" ? "Záloze" : "Útoku";
+  if (weak.length > 0 && VERDICT_RANK[verdict] >= VERDICT_RANK.aboveAverage) {
+    return [{ kind: "text", text: `${forms.label} je nad průměrem ligy, slabší ${weak.length > 1 ? "jsou" : "je"} jen ${skillsNom(weak, keeper)}.` }];
+  }
   if (weak.length > 0) {
-    return [{ kind: "text", text: `${whom} chybí hlavně ${skillsNom(weak, keeper)}. Posila by měla vynikat právě tady.` }];
+    return [{ kind: "text", text: `${whom} chybí hlavně ${skillsNom(weak, keeper)}.` }];
   }
   const strong = attributes.filter((a) => a.verdict === "strong").map((a) => a.skill);
   const toTop = attributes
@@ -1335,7 +1331,7 @@ function lookForText(slot: Slot, attributes: LineAttribute[], precision: Precisi
   const base = strong.length >= Math.ceil(attributes.length / 2)
     ? `${forms.label} má klíčové vlastnosti nad úrovní ligy.`
     : `${forms.label} má klíčové vlastnosti na úrovni ligy.`;
-  const topPart = toTop.length > 0 ? ` Na špičku ztrácí hlavně ${skillsNom(toTop, keeper)}.` : "";
+  const topPart = toTop.length > 0 ? ` Na špičku ztrácí hlavně ${skillsLoc(toTop, keeper)}.` : "";
   return [{ kind: "text", text: base + topPart }];
 }
 
@@ -1381,11 +1377,11 @@ function buildOutlook(
   const prime = ages.length - under21 - over30;
 
   const sentences: string[] = [];
-  if (xiAverage <= leagueAverage - 1.5) sentences.push(`Základní sestava je mladší než u soupeřů (průměr ${years(xiAverage)} proti ${years(leagueAverage)}).`);
-  else if (xiAverage >= leagueAverage + 1.5) sentences.push(`Základní sestava je starší než u soupeřů (průměr ${years(xiAverage)} proti ${years(leagueAverage)}).`);
-  else sentences.push(`Věkem je sestava jako u soupeřů (průměr ${years(xiAverage)}).`);
+  if (xiAverage <= leagueAverage - 1.5) sentences.push(`Nejlepší jedenáctka je mladší než u soupeřů (průměr ${years(xiAverage)} proti ${years(leagueAverage)}).`);
+  else if (xiAverage >= leagueAverage + 1.5) sentences.push(`Nejlepší jedenáctka je starší než u soupeřů (průměr ${years(xiAverage)} proti ${years(leagueAverage)}).`);
+  else sentences.push(`Věkem je nejlepší jedenáctka jako u soupeřů (průměr ${years(xiAverage)}).`);
   if (growing.some((g) => g.pace === "fast")) sentences.push("Pár kluků teď na tréninku roste rychle.");
-  if (veterans.length >= 3) sentences.push(`V základní sestavě ${playersOver30(veterans.length)}, s dalším rokem začnou ztrácet.`);
+  if (veterans.length >= 3) sentences.push(`V nejlepší jedenáctce ${playersOver30(veterans.length)}, s dalším rokem začnou ztrácet.`);
   else if (under21 >= 4) sentences.push(`Do 21 let máme ${under21} hráčů, je na čem stavět.`);
 
   return {
@@ -1395,6 +1391,10 @@ function buildOutlook(
     growing,
     veterans,
     youngsters,
+    squadAges: squad
+      .filter((m) => typeof ageOf(m) === "number")
+      .map((m) => ({ age: ageOf(m) as number, starter: starterIds.has(m.id) }))
+      .sort((a, b) => a.age - b.age),
   };
 }
 
