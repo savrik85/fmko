@@ -8,10 +8,11 @@ import { apiFetch, type Team, type Player } from "@/lib/api";
 import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 import { PositionFilter, SquadAttributeTable, type PosFilter } from "@/components/players/squad-attribute-table";
 import { SquadBodyTab } from "@/components/players/squad-body-tab";
+import { SquadAnalysisTab } from "@/components/players/squad-analysis-tab";
 
-type Tab = "atributy" | "sezona" | "top" | "dochazka" | "postava";
+type Tab = "atributy" | "sezona" | "top" | "dochazka" | "postava" | "rozbor";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["atributy", "sezona", "top", "dochazka", "postava"] as const;
+const TAB_KEYS = ["atributy", "sezona", "top", "dochazka", "postava", "rozbor"] as const;
 type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
 type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "injury" | "suspension" | "excuse" | "bench" | "notNominated";
 type SortDir = "asc" | "desc";
@@ -247,11 +248,13 @@ export default function SquadPage() {
             { key: "top", label: "TOP", icon: "\u{1F3C6}" },
             { key: "dochazka", label: "Docházka", icon: "\u{1F4C5}" },
             { key: "postava", label: "Postava", icon: "\u2696\uFE0F" },
+            { key: "rozbor", label: "Rozbor", icon: "\u{1F9ED}" },
           ]}
         />
       </div>
 
-      <PositionFilter players={players} value={filter} onChange={setFilter} />
+      {/* Rozbor je za celou jedenáctku, filtr postů by v něm nic neznamenal. */}
+      {tab !== "rozbor" && <PositionFilter players={players} value={filter} onChange={setFilter} />}
 
       {/* FM-style table — Atributy tab */}
       {tab === "atributy" && <SquadAttributeTable players={filtered} potential={potencial} />}
@@ -401,6 +404,8 @@ export default function SquadPage() {
       )}
 
       {tab === "postava" && teamId && <SquadBodyTab teamId={teamId} filter={filter} />}
+
+      {tab === "rozbor" && teamId && <SquadAnalysisTab teamId={teamId} />}
 
     </div>
   );
