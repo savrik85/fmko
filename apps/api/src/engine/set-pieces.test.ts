@@ -99,13 +99,13 @@ describe("standardky", () => {
     expect(t.goals).toBeGreaterThan(0);
   });
 
-  // Testovací týmy mají všechny atributy na 50, což dává vyšší gólovost než
-  // reálná liga (~3,5) — slabší útočníci reálných týmů proměňují míň. Rozhoduje
-  // proto shoda s naměřeným baseline 5,01 gólu ze stavu před přepracováním
-  // standardek: přerozdělit góly ano, přidat je ne.
+  // Hlídá úroveň gólovosti vyrovnaného zápasu: přerozdělit góly ano, přidat je ne.
+  // Do 2026-10-10 tu bylo pásmo 4,6–5,3, protože šance rostly s úrovní hráčů
+  // a padesátky dávaly víc gólů než reálná liga. Šance jsou teď na úrovni nezávislé
+  // (viz calcChanceProb) a vyrovnaný zápas dává ~4,0 gólu na jakékoli úrovni.
   it("nezvedla celkovou gólovost oproti baseline", () => {
-    expect(per(t.goals)).toBeGreaterThan(4.6);
-    expect(per(t.goals)).toBeLessThan(5.3);
+    expect(per(t.goals)).toBeGreaterThan(3.7);
+    expect(per(t.goals)).toBeLessThan(4.4);
   });
 
   it("dává 20–32 % gólů ze standardek", () => {
@@ -132,10 +132,22 @@ describe("standardky", () => {
     expect(per(t.bySource.freekick ?? 0)).toBeLessThan(0.30);
   });
 
+  // Dřív se tu srovnávaly dvě ligy (všichni 35 proti všem 75), což měřilo jen to,
+  // že šance rostly s úrovní ligy. Rohy mají sledovat převahu v zápase.
   it("silnější tým vykope víc rohů než slabší", () => {
-    const weak = runSeason(600, 35, 5000);
-    const strong = runSeason(600, 75, 5000);
-    expect(strong.corners / strong.matches).toBeGreaterThan(weak.corners / weak.matches);
+    let strongCorners = 0;
+    let weakCorners = 0;
+    for (let i = 0; i < 600; i++) {
+      const result = simulateMatch(createRng(5000 + i), {
+        home: mkTeam(1, 1, 35), away: mkTeam(2, 100, 60),
+        weather: "sunny", isHomeAdvantage: true,
+      });
+      for (const e of result.events) {
+        if (e.type !== "corner") continue;
+        if (e.teamId === 2) strongCorners++; else weakCorners++;
+      }
+    }
+    expect(strongCorners).toBeGreaterThan(weakCorners * 1.3);
   });
 });
 
