@@ -338,37 +338,32 @@ function Verdict({ r }: { r: ReadyAnalysis }) {
 // ── 2. Řady ────────────────────────────────────────────────────────────────
 
 /**
- * Klíčové vlastnosti řady proti lize. Pruh = průměr naší nejlepší jedenáctky (0 až 100),
- * svislá čárka = průměr ligy na stejném postu. Seřazeno od největšího náskoku po
- * největší ztrátu, takže slabiny jsou vždy dole a nemusí se hledat.
+ * Klíčové vlastnosti řady proti lize jako obyčejná tabulka: naše nejlepší jedenáctka,
+ * průměr ligy na stejném postu (jak ho asistent odhaduje) a rozdíl. Seřazeno od největšího
+ * náskoku po největší ztrátu, takže slabiny jsou vždy dole.
  */
 function AttributeBars({ table }: { table: LineTable }) {
   const rows = [...table.attributes].sort((a, b) => (b.ours - b.league) - (a.ours - a.league));
+  const cols = "grid grid-cols-[minmax(0,1fr)_3.25rem_3.25rem_3.5rem] items-center gap-2";
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <h4 className="font-heading font-bold text-base">Nejlepší jedenáctka proti lize</h4>
-        <span className="flex items-center gap-1.5 text-sm text-muted whitespace-nowrap">
-          <span className="relative inline-block w-5 h-2.5" aria-hidden>
-            <span className="absolute left-1/2 top-0 w-[2px] h-full rounded-full bg-ink" />
-          </span>
-          liga
-        </span>
+      <h4 className="font-heading font-bold text-base mb-1">Nejlepší jedenáctka proti lize</h4>
+      <div className={`${cols} py-1.5 text-sm text-muted border-b border-gray-200`}>
+        <span>Vlastnost</span>
+        <span className="text-right">My</span>
+        <span className="text-right">Liga</span>
+        <span className="text-right">Rozdíl</span>
       </div>
-      <ul className="space-y-3">
+      <ul>
         {rows.map((a) => {
           const diff = a.ours - a.league;
-          const fill = a.verdict === "strong" ? "bg-pitch-400" : a.verdict === "weak" ? "bg-card-red" : "bg-gray-400";
           const diffClass = a.verdict === "strong" ? "text-pitch-600" : a.verdict === "weak" ? "text-card-red" : "text-muted";
           return (
-            <li key={a.skill} className="grid grid-cols-[7rem_minmax(0,1fr)_1.75rem_2.25rem] items-center gap-2">
-              <span className="text-sm text-ink-light truncate">{skillName(a.skill, table.line)}</span>
-              <span className="relative h-2.5 rounded-full bg-gray-200/70" title={`Průměr ligy ${a.league}`}>
-                <span className={`absolute inset-y-0 left-0 rounded-full ${fill}`} style={{ width: `${Math.min(100, Math.max(2, a.ours))}%` }} />
-                <span className="absolute -top-[3px] w-[2px] h-4 rounded-full bg-ink" style={{ left: `calc(${Math.min(100, a.league)}% - 1px)` }} />
-              </span>
+            <li key={a.skill} className={`${cols} py-2 border-b border-gray-100 last:border-b-0`}>
+              <span className="text-base text-ink truncate">{skillName(a.skill, table.line)}</span>
               <span className="text-right font-heading font-bold text-base tabular-nums">{a.ours}</span>
-              <span className={`text-right text-sm font-bold tabular-nums ${diffClass}`}>{signed(diff)}</span>
+              <span className="text-right text-base text-ink-light tabular-nums">{a.league}</span>
+              <span className={`text-right text-base font-bold tabular-nums ${diffClass}`}>{signed(diff)}</span>
             </li>
           );
         })}
