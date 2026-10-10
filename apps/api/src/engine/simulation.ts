@@ -68,6 +68,7 @@ function playerName(p: MatchPlayer): string {
 
 export interface WeatherMod {
   techniqueMod: number;
+  /** Šance navíc pro nakopávaný balon, podíl: 0,15 = o 15 % víc šancí. */
   longBallBonus: number;
   injuryMod: number;
   conditionDrainMod: number;
@@ -176,8 +177,34 @@ export function moistureInjuryFactor(moisture: number | null | undefined): numbe
 }
 
 /**
- * Calculate chance probability per minute for attacking team.
+ * Šance za minutu = základ × (dovednosti útoku / dovednosti obrany)^exponent
+ *                   × (modifikátory útoku / modifikátory obrany)^citlivost
+ *                   × taktika × nakopávaný balon.
+ *
+ * Do 2026-10-10 se počítal ROZDÍL `(útok − obrana) / 100` přičtený k základu 0,10.
+ * Všechny modifikátory (taktika, morálka, forma…) přitom násobí sílu, takže jejich
+ * dopad rostl s úrovní hráčů: dvě útočné taktiky přidaly zápasu při průměru hráčů 47
+ * o 70 % gólů víc, při průměru 24 o 37 %. Bonus za
+ * nakopávaný balon se přičítal napevno (déšť +0,15 na základ 0,10), takže long ball
+ * v dešti trefil strop. Produkce měla v Praze a Prachaticích 6,5–7 gólů na zápas.
+ *
+ * Poměr je nezávislý na úrovni ligy: vyrovnané týmy mají stejně šancí, ať hrají
+ * dvacítky nebo padesátky.
+ *
+ * - Exponent pod 1 tlumí rozdíl v dovednostech — silnější tým má navíc víc míče
+ *   a lepší zakončení, bez tlumení by se ty tři výhody násobily do hokejových výsledků.
+ * - Taktika a nakopávaný balon platí jako procenta: útočná +15 % útoku je +15 % šancí.
+ * - Ostatní modifikátory (forma, morálka, sehranost, oslabení, tvrdost, únava obrany)
+ *   mají citlivost 2, protože tak byly naladěné: starý rozdílový vzorec je při
+ *   úrovni hráčů kolem 37, kde se kalibrovaly, zesiloval zhruba dvakrát. Na téhle
+ *   úrovni tak oslabení po červené, tvrdá hra i forma působí stejně jako dřív.
  */
+const BASE_CHANCE = 0.105;
+const STRENGTH_EXPONENT = 0.5;
+const MODIFIER_ELASTICITY = 2;
+const MIN_CHANCE = 0.04;
+const MAX_CHANCE = 0.22;
+
 function calcChanceProb(
   attacking: TeamSetup,
   defending: TeamSetup,
@@ -232,7 +259,7 @@ function calcChanceProb(
   // Zastrašení: tvrdá hra srazí útok soupeře podle toho, jak měkký má kádr.
   const intimidation = intimidationPenalty(defHard, defHardEff, attacking.lineup);
 
-  const attackPower = (
+  const attackSkill = (
     teamAvg(outfield, "technique") * weatherMod.techniqueMod * pitchTechniqueFactor(pitchCondition)
       * moistureTechniqueFactor(pitchMoisture) * 0.8 +
     teamAvg(outfield, "passing") * 1.0 +
@@ -240,7 +267,8 @@ function calcChanceProb(
     (mids.length > 0 ? teamAvg(mids, "vision") * 0.6 : 0) +
     (midAndFwd.length > 0 ? teamAvg(midAndFwd, "creativity") * 0.5 : 0) +
     teamAvg(outfield, "workRate") * 0.3
-  ) / 5 * effMod(tacticMod.attackMod, attEff) * formFactor * attMoraleMod * famMod * chemMod
+  ) / 5;
+  const attackMods = formFactor * attMoraleMod * famMod * chemMod
     * manpowerFactor(attacking.lineup).attack * (1 - intimidation);
 
   // Unavená obrana nestíhá. Útočící tým má únavu v počtu šancí (conditionMod níž),
@@ -249,27 +277,26 @@ function calcChanceProb(
     ? defOutfield.reduce((s, p) => s + freshness(p), 0) / defOutfield.length
     : 1;
 
-  const defensePower = (
+  const defenseSkill = (
     teamAvg(defOutfield, "defense") * 1.0 +
     teamAvg(defOutfield, "strength") * 0.7 +
     (defs.length > 0 ? teamAvg(defs, "aggression") * 0.2 : 0) +
     teamAvg(defOutfield, "workRate") * 0.2
-  ) / 3 * effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff) * defMoraleMod
-    * manpowerFactor(defending.lineup).defense * hardDefenseMod * defFatigueMod;
+  ) / 3;
+  const defenseMods = defMoraleMod * manpowerFactor(defending.lineup).defense * hardDefenseMod * defFatigueMod;
 
-  // Use DIFFERENCE not ratio — so stronger teams create more chances
-  // attackPower ~20 (weak) to ~35 (strong), defensePower ~18 to ~25
-  const advantage = (attackPower - defensePower) / 100; // skill difference matters but not overwhelming
-  const baseChance = 0.10; // neutral chance per minute — target ~3.5 goals/match
+  const tacticRatio = effMod(tacticMod.attackMod, attEff)
+    / effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff);
+
+  const skillRatio = defenseSkill > 0 ? attackSkill / defenseSkill : MAX_CHANCE / BASE_CHANCE;
   // Nakopávaný balon těží z počasí i z rozbitého hřiště — obojí sráží hru po zemi.
-  const longBallBonus = attacking.tactic === "long_ball"
-    ? weatherMod.longBallBonus + pitchLongBallBonus(pitchCondition) + moistureLongBallBonus(pitchMoisture)
-    : 0;
+  const longBallFactor = attacking.tactic === "long_ball"
+    ? 1 + weatherMod.longBallBonus + pitchLongBallBonus(pitchCondition) + moistureLongBallBonus(pitchMoisture)
+    : 1;
 
-  // Underdog boost: weaker team gets small floor boost
-  const underdogBoost = advantage < -0.05 ? 0.02 : 0;
-  // Okresní přebor: skill advantage matters but not overwhelmingly
-  return Math.min(0.25, Math.max(0.07, baseChance + advantage + longBallBonus + underdogBoost)) * effMod(tacticMod.chanceMod, attEff);
+  const chance = BASE_CHANCE * skillRatio ** STRENGTH_EXPONENT
+    * (attackMods / defenseMods) ** MODIFIER_ELASTICITY * tacticRatio * longBallFactor;
+  return Math.min(MAX_CHANCE, Math.max(MIN_CHANCE, chance)) * effMod(tacticMod.chanceMod, attEff);
 }
 
 /**

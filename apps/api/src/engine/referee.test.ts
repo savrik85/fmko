@@ -127,8 +127,9 @@ describe("rozhodčí, agregáty", () => {
     expect((neutral.yellow + neutral.red) / N).toBeLessThan(1.9);
     expect(neutral.penalties / N).toBeGreaterThan(0.20);
     expect(neutral.penalties / N).toBeLessThan(0.40);
-    expect(neutral.goals / N).toBeGreaterThan(4.6);
-    expect(neutral.goals / N).toBeLessThan(5.3);
+    // Pásmo 4,6–5,3 platilo do 2026-10-10, kdy šance rostly s úrovní hráčů (tady 50).
+    expect(neutral.goals / N).toBeGreaterThan(3.7);
+    expect(neutral.goals / N).toBeLessThan(4.4);
   });
 
   it("přísný píská výrazně víc než benevolentní", () => {

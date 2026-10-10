@@ -60,8 +60,8 @@ export function tacticHints(input: TacticHintInput): TacticHint[] {
 
   // ── Nakopávaný balon ──
   const longBall = mods.longBallBonus + pitchLongBallBonus(cond);
-  // Práh 0,05: samotné rozorané hřiště dá nejvýš 0,057, a to už je podle měření
-  // +2 góly za zápas u nakopávané taktiky. Vyšší práh by tenhle případ přeskočil.
+  // Bonus je podíl šancí navíc (0,05 = o 5 % víc šancí, viz calcChanceProb).
+  // Práh 0,05: samotné rozorané hřiště dá nejvýš 0,057. Vyšší práh by tenhle případ přeskočil.
   if (longBall >= 0.05) {
     hints.push({
       tone: "opportunity",
