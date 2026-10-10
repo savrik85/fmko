@@ -16,6 +16,7 @@ import { applyPositionPenalty } from "../engine/simulation";
 import { readFamiliarity } from "../engine/chemistry";
 import { playerBodyView } from "../generators/physicals";
 import { logger } from "../lib/logger";
+import { zamlzAtributy } from "../transfers/player-view";
 import {
   assistantLevel, assistantNote, assistantQuality, buildSquadAnalysis, gameWeekKey,
   type AssistantLevel, type LeagueTeam, type SquadAnalysisInput, type SquadAnalysisReport, type SquadMember,
@@ -95,6 +96,23 @@ function parseObject(raw: string | null | undefined, what: string, id: string): 
     logger.warn({ module: M, id }, `parse ${what}`, e);
     return {};
   }
+}
+
+/**
+ * Hráč soupeře tak, jak ho vidí manažer v profilu cizího hráče: vlastnosti, postava
+ * i povaha zaokrouhlené na pětky (stejně jako GET /teams/:id/players/:playerId).
+ * Asistent tedy soupeře zná jen z odhadů, jeho vlastní nepřesnost se přidává až navrch.
+ * Celkové hodnocení je veřejné a zůstává přesné, podle něj se skládá jedenáctka soupeře.
+ */
+function asSeenByRival(row: PlayerRow): PlayerRow {
+  const blur = (raw: string | null, what: string) =>
+    JSON.stringify(zamlzAtributy(parseObject(raw, what, row.id) as Record<string, number>));
+  return {
+    ...row,
+    skills: blur(row.skills, "skills"),
+    physical: row.physical ? blur(row.physical, "physical") : row.physical,
+    personality: blur(row.personality, "personality"),
+  };
 }
 
 /** Hráč pro engine, nebo null, když má rozbitý záznam (rozbor ho vynechá, nespadne). */
@@ -266,7 +284,7 @@ export async function loadSquadAnalysisInput(db: D1Database, teamId: string): Pr
   const opponents: LeagueTeam[] = [];
   for (const t of leagueTeams.results) {
     const picks = pickBestEleven((rowsByTeam.get(t.id) ?? []).filter((r) => !injured.has(r.id)));
-    const players = picks.map((p) => toMatchPlayer(p.row, p.slot)).filter((p): p is MatchPlayer => p !== null);
+    const players = picks.map((p) => toMatchPlayer(asSeenByRival(p.row), p.slot)).filter((p): p is MatchPlayer => p !== null);
     if (players.length >= 11) opponents.push({ id: t.id, name: t.name, eleven: players });
   }
   if (opponents.length === 0) return { status: "noLeague", assistant: assistantSummary };
