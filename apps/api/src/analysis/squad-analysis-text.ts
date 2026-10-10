@@ -136,9 +136,9 @@ export function verdictPhrase(verdict: LineVerdict, feminine: boolean, vague: bo
   switch (verdict) {
     case "best": return "je nejlepší v lize";
     case "top": return "patří k nejlepším v lize";
-    case "aboveAverage": return `je nadprůměrn${a}`;
+    case "aboveAverage": return "je mírně nad průměrem ligy";
     case "average": return `je průměrn${a}`;
-    case "belowAverage": return `je podprůměrn${a}`;
+    case "belowAverage": return "je mírně pod průměrem ligy";
     case "bottom": return "patří k nejslabším v lize";
     case "worst": return "je nejslabší v lize";
   }

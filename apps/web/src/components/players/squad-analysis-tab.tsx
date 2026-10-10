@@ -128,13 +128,16 @@ export type SquadPotential = Map<string, { slovne: string | null }>;
 
 type Tone = "good" | "mid" | "bad";
 
-/** Síla řady: text, tón a počet dílků na měřáku (1 až 5). */
+/**
+ * Síla řady: text, tón a počet dílků na měřáku (1 až 5). Červená jen pro chvost ligy,
+ * kousek pod průměrem je zlatý: mírná ztráta není tragédie.
+ */
 const VERDICT: Record<LineVerdict, { label: string; tone: Tone; level: number }> = {
   best: { label: "Nejlepší v lize", tone: "good", level: 5 },
   top: { label: "Mezi nejlepšími", tone: "good", level: 5 },
-  aboveAverage: { label: "Nad průměrem", tone: "good", level: 4 },
+  aboveAverage: { label: "Mírně nad průměrem", tone: "good", level: 4 },
   average: { label: "Průměr ligy", tone: "mid", level: 3 },
-  belowAverage: { label: "Pod průměrem", tone: "bad", level: 2 },
+  belowAverage: { label: "Mírně pod průměrem", tone: "mid", level: 2 },
   bottom: { label: "Mezi nejslabšími", tone: "bad", level: 1 },
   worst: { label: "Nejslabší v lize", tone: "bad", level: 1 },
 };
@@ -308,10 +311,6 @@ function SkillChip({ label, positive }: { label: string; positive: boolean }) {
   );
 }
 
-function signed(n: number): string {
-  return n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0";
-}
-
 // ── 1. Verdikt ─────────────────────────────────────────────────────────────
 
 function Verdict({ r }: { r: ReadyAnalysis }) {
@@ -337,37 +336,71 @@ function Verdict({ r }: { r: ReadyAnalysis }) {
 
 // ── 2. Řady ────────────────────────────────────────────────────────────────
 
+/** Barvy stran jako ve Srovnání hráčů v profilu: vlevo modrá (liga), vpravo zelená (my). */
+const SIDE = {
+  left: { bg: "bg-blue-600", bar: "bg-blue-500" },
+  right: { bg: "bg-pitch-500", bar: "bg-pitch-400" },
+} as const;
+
+/** Řádek převzatý 1:1 ze Srovnání hráčů (CompareRow v PlayerCompare.tsx). */
+function CompareRow({ label, left, right, win }: { label: string; left: number; right: number; win: -1 | 0 | 1 }) {
+  const width = (v: number) => `${Math.max(0, Math.min(100, v))}%`;
+  const badge = (side: "left" | "right") => {
+    const won = win === (side === "left" ? -1 : 1);
+    if (won) return `${SIDE[side].bg} text-white`;
+    if (win === 0) return "bg-gray-100 text-ink";
+    return "text-gray-400";
+  };
+  const bar = (side: "left" | "right") => {
+    const won = win === (side === "left" ? -1 : 1);
+    if (won) return SIDE[side].bar;
+    return win === 0 ? "bg-gray-400" : "bg-gray-200";
+  };
+  return (
+    <div className="grid grid-cols-[2.5rem_1fr_6.25rem_1fr_2.5rem] items-center gap-1.5 py-1.5">
+      <span className={`inline-flex items-center justify-center h-7 rounded-md text-sm font-heading font-bold tabular-nums ${badge("left")}`}>{left}</span>
+      <div className="h-2.5 rounded-full bg-gray-100 flex justify-end overflow-hidden">
+        <div className={`h-full rounded-full ${bar("left")}`} style={{ width: width(left) }} />
+      </div>
+      <span className="text-sm text-center truncate text-ink-light">{label}</span>
+      <div className="h-2.5 rounded-full bg-gray-100 flex justify-start overflow-hidden">
+        <div className={`h-full rounded-full ${bar("right")}`} style={{ width: width(right) }} />
+      </div>
+      <span className={`inline-flex items-center justify-center h-7 rounded-md text-sm font-heading font-bold tabular-nums ${badge("right")}`}>{right}</span>
+    </div>
+  );
+}
+
 /**
- * Klíčové vlastnosti řady proti lize jako obyčejná tabulka: naše nejlepší jedenáctka,
- * průměr ligy na stejném postu (jak ho asistent odhaduje) a rozdíl. Seřazeno od největšího
- * náskoku po největší ztrátu, takže slabiny jsou vždy dole.
+ * Klíčové vlastnosti řady proti lize ve stejném vzhledu jako Srovnání hráčů: vlevo průměr
+ * ligy na stejném postu (jak ho asistent odhaduje), vpravo naše nejlepší jedenáctka.
+ * Rozdíl do 4 bodů je vyrovnaný, stejně jako ve větě o tom, co řadě chybí.
  */
 function AttributeBars({ table }: { table: LineTable }) {
-  const rows = [...table.attributes].sort((a, b) => (b.ours - b.league) - (a.ours - a.league));
-  const cols = "grid grid-cols-[minmax(0,1fr)_3.25rem_3.25rem_3.5rem] items-center gap-2";
   return (
     <div>
-      <h4 className="font-heading font-bold text-base mb-1">Nejlepší jedenáctka proti lize</h4>
-      <div className={`${cols} py-1.5 text-sm text-muted border-b border-gray-200`}>
-        <span>Vlastnost</span>
-        <span className="text-right">My</span>
-        <span className="text-right">Liga</span>
-        <span className="text-right">Rozdíl</span>
+      <div className="grid grid-cols-2 gap-3 pb-2 border-b border-gray-100">
+        <div className="min-w-0">
+          <div className={`h-1 w-8 rounded-full mb-1.5 ${SIDE.left.bg}`} aria-hidden />
+          <div className="font-heading font-bold text-base leading-tight">Průměr ligy</div>
+        </div>
+        <div className="min-w-0 text-right">
+          <div className={`h-1 w-8 rounded-full mb-1.5 ml-auto ${SIDE.right.bg}`} aria-hidden />
+          <div className="font-heading font-bold text-base leading-tight">Naše jedenáctka</div>
+        </div>
       </div>
-      <ul>
-        {rows.map((a) => {
-          const diff = a.ours - a.league;
-          const diffClass = a.verdict === "strong" ? "text-pitch-600" : a.verdict === "weak" ? "text-card-red" : "text-muted";
-          return (
-            <li key={a.skill} className={`${cols} py-2 border-b border-gray-100 last:border-b-0`}>
-              <span className="text-base text-ink truncate">{skillName(a.skill, table.line)}</span>
-              <span className="text-right font-heading font-bold text-base tabular-nums">{a.ours}</span>
-              <span className="text-right text-base text-ink-light tabular-nums">{a.league}</span>
-              <span className={`text-right text-base font-bold tabular-nums ${diffClass}`}>{signed(diff)}</span>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="mt-1">
+        {table.attributes.map((a) => (
+          <CompareRow
+            key={a.skill}
+            label={skillName(a.skill, table.line)}
+            left={a.league}
+            right={a.ours}
+            win={a.verdict === "strong" ? 1 : a.verdict === "weak" ? -1 : 0}
+          />
+        ))}
+      </div>
+      <p className="mt-2 text-sm text-muted">Plné číslo a barevný pruh má ten, kdo je ve vlastnosti lepší.</p>
     </div>
   );
 }
