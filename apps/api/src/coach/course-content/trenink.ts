@@ -8,6 +8,14 @@
  * Hill-Haas a kol. 2011 (Sports Med, hry na malém prostoru), Foster a kol. 2001
  * (session RPE), ACSM 2007 (pitný režim), AASM 2015/2016 (spánek), Meeusen a kol.
  * 2013 (přetrénování), van Dyk a kol. 2019 (BJSM, severský hamstring).
+ * Síla a výbušnost: Wisløff a kol. 2004 (BJSM, polodřep a sprint), Hoff a Helgerud 2004
+ * (Sports Med), Helgerud a kol. 2011 (IJSM, 4× 4 polodřep), Ramirez-Campillo a kol. 2022
+ * (Sports, PMC9230747, programování plyometrie), Wilson a kol. 2012 (JSCR, souběžný trénink),
+ * Lauersen a kol. 2014 (BJSM, prevence zranění).
+ * Rychlost: Faude a kol. 2012 (J Sports Sci, akce před góly), Sheppard a Young 2006
+ * (J Sports Sci, agilita), Little a Williams 2005 (JSCR), Young a kol. 2001 (JSCR,
+ * specifičnost), Andrzejewski a kol. 2013 (JSCR, sprinty v Evropské lize), Haugen a kol. 2019
+ * (Sports Med Open, PMC6872694, atletická praxe), Bishop a kol. 2011 (Sports Med, opakované sprinty).
  * Stavba jednotky podle české trenérské metodiky (úvodní, průpravná, hlavní, závěrečná).
  */
 import type { CategoryContent } from "./types";
@@ -163,6 +171,44 @@ Doporučení zní: před **každým tréninkem, aspoň dvakrát týdně**, a př
 Klíčem je **správná technika**: noha v jedné linii, **koleno nad špičkou**, měkké dopady. Koleno nesmí uhýbat dovnitř. Studie v British Medical Journal z roku 2008 ukázala, že dívčí mládežnické týmy s touto rozcvičkou měly méně zranění než týmy s obvyklým rozcvičením.
 
 Jedním z cviků části 2 je **severský (nordický) hamstring**: hráč klečí, spoluhráč mu drží kotníky a on se pomalu spouští dopředu. Souhrnná analýza (van Dyk a kol., 2019) zjistila, že programy s tímto cvikem snižují počet zranění zadních stehenních svalů **zhruba na polovinu**. Dvacet minut před tréninkem je levnější než šest týdnů s obvazem.`,
+    },
+    {
+      id: "trenink-strength-power",
+      category: "trenink",
+      difficulty: 3,
+      title: "Síla a výbušnost: činka a plyometrie",
+      body: `Na okrese se posilovna často bere jako výmysl pro kulturisty. Studie Wisløffa a kolegů (2004) u 17 hráčů mezinárodní úrovně přitom ukázala, že **maximální síla v polodřepu** silně souvisela s rychlostí sprintu i s výškou výskoku. A silnější hráči neměli horší maximální spotřebu kyslíku, takže strach, že činka zabije vytrvalost, se nepotvrdil.
+
+Hoff a Helgerud (2004) doporučují trénovat **maximální sílu**: velká zátěž, málo opakování a zvedací, tedy **koncentrickou** fázi pohybu provést co nejrychleji. Helgerud a kolegové (2011) to vyzkoušeli s hráči týmu, který krátce předtím hrál Ligu mistrů: osm týdnů dvakrát týdně **4 série po 4 opakováních** polodřepu s maximální zátěží, k tomu intervalový běh. Maximum v polodřepu stouplo zhruba o polovinu, sprint na 10 m se zrychlil o 0,06 s a výskok vzrostl asi o 3 cm.
+
+**Plyometrie** znamená skoky, při kterých se sval pod zátěží nejdřív protáhne a hned nato zkrátí, třeba dopad a okamžitý odraz. Říká se tomu **cyklus protažení a zkrácení**. Přehled 90 studií u fotbalistů (Ramirez-Campillo a kol., 2022) navrhuje zhruba 7 týdnů po 1–2 jednotkách týdně, kolem **80 skoků** za jednotku v téměř maximálním úsilí, mezi jednotkami 24–48 hodin, měkký povrch jako tráva a hlavně **odpočatý stav**, ne skoky v únavě na konci tréninku.
+
+Síla a vytrvalost se trochu perou. Metaanalýza Wilsona a kolegů (2012) zjistila, že souběžný vytrvalostní trénink ubírá ze silového nejvíc **výbušnosti**, běh víc než jízda na kole, a tím víc, čím je vytrvalosti častěji a déle.
+
+A bonus: souhrn randomizovaných studií (Lauersen a kol., 2014) zjistil, že silový trénink snížil počet sportovních zranění **na méně než třetinu**, kdežto protahování nepomohlo. Činka v kabině vedle sekačky tedy není rozmar, ale pojistka.`,
+    },
+    {
+      id: "trenink-speed-agility",
+      category: "trenink",
+      difficulty: 3,
+      title: "Rychlost, zrychlení a změna směru",
+      body: `Rozbor 360 gólů německé bundesligy (Faude a kol., 2012) ukázal, že **83 % gólů** předcházela aspoň jedna výbušná akce střelce nebo nahrávače. Střelec nejčastěji **sprintoval rovně**, a to před 45 % gólů, většinou bez míče a bez soupeře v cestě.
+
+Rychlost ale není jedna schopnost:
+- **zrychlení** (akcelerace): první metry z místa,
+- **maximální rychlost**: nejvyšší tempo v plném běhu,
+- **změna směru**: rychlé otočení na předem známé dráze,
+- **agilita**: rychlý pohyb celého těla se změnou rychlosti nebo směru **v reakci na podnět**, třeba na soupeře nebo míč (Sheppard a Young, 2006).
+
+U 106 profesionálů (Little a Williams, 2005) spolu výsledky sprintu na 10 m, letmých 20 m a kličkování mezi kužely souvisely jen volně, jde tedy o **samostatné schopnosti**. Young a kolegové (2001) navíc zjistili, že trénink přímých sprintů se do běhu se změnami směru přenesl málo a trénink změn směru přímý sprint nezlepšil. Co chceš zlepšit, to musíš trénovat.
+
+V zápasech Evropské ligy měli hráči průměrně kolem 11 sprintů a zhruba **90 % z nich trvalo méně než 5 sekund** (Andrzejewski a kol., 2013).
+
+**Trénink rychlosti** chce maximální úsilí a **plný odpočinek**, aby každý úsek šel naplno. Atletická praxe (Haugen a kol., 2019) dává na zrychlení úseky 10–50 m s pauzou zhruba **2–7 minut** a trénink končí, jakmile časy klesají nebo se kazí technika.
+
+**Schopnost opakovaných sprintů** je něco jiného: výkon v sérii sprintů do 10 sekund s pauzami **do 60 sekund** (Bishop a kol., 2011). Přehled radí kombinovat trénink jednotlivého sprintu včetně síly s **intervalovým tréninkem** vysoké intenzity, který zlepšuje zotavení mezi sprinty.
+
+Půlminutová pauza mezi sprinty tedy není trénink rychlosti, ale opakovaných sprintů. A když se stoperovi po posvícení časy zhorší už ve třetím úseku, rychlost pro dnešek končí.`,
     },
   ],
   questions: [
@@ -596,6 +642,140 @@ Jedním z cviků části 2 je **severský (nordický) hamstring**: hráč kleč�
       ],
       correct: 3,
       explain: "Zařazení severského hamstringu do prevence zhruba půlí počet zranění zadní strany stehna.",
+    },
+
+    // Síla a výbušnost: činka a plyometrie
+    {
+      id: "trenink-strength-power-1",
+      lessonId: "trenink-strength-power",
+      text: "Co ukázala studie Wisløffa a kolegů (2004) u hráčů mezinárodní úrovně?",
+      options: [
+        "Silnější hráči měli výrazně horší maximální spotřebu kyslíku",
+        "Síla v polodřepu souvisela s výskokem, ale se sprintem vůbec ne",
+        "Síla v polodřepu silně souvisela se sprintem i s výskokem",
+        "Rychlost sprintu souvisela jen s tělesnou výškou hráče",
+      ],
+      correct: 2,
+      explain: "Maximální síla v polodřepu silně souvisela s rychlostí sprintu i výškou výskoku a vytrvalost silnějších hráčů nebyla horší. Viz lekce: Síla a výbušnost: činka a plyometrie.",
+    },
+    {
+      id: "trenink-strength-power-2",
+      lessonId: "trenink-strength-power",
+      text: "Jak vypadal silový trénink ve studii Helgeruda a kolegů (2011)?",
+      options: [
+        "4× 4 polodřepy s maximální zátěží, dvakrát týdně",
+        "3× 20 opakování s lehkou činkou, každý den",
+        "Jedna série dřepů do vyčerpání, jednou za dva týdny",
+        "4× 15 výpadů bez zátěže, jednou týdně",
+      ],
+      correct: 0,
+      explain: "Hráči osm týdnů dvakrát týdně dělali 4× 4 polodřepy s maximální zátěží; maximum stouplo zhruba o polovinu a zlepšil se sprint i výskok.",
+    },
+    {
+      id: "trenink-strength-power-3",
+      lessonId: "trenink-strength-power",
+      text: "Co se děje se svalem při plyometrickém skoku?",
+      options: [
+        "Sval zůstává po celou dobu skoku stejně dlouhý",
+        "Sval se jen pomalu zkracuje, bez jakéhokoli protažení",
+        "Sval se nejdřív zkrátí a teprve po dlouhé pauze protáhne",
+        "Sval se pod zátěží protáhne a hned nato zkrátí",
+      ],
+      correct: 3,
+      explain: "Plyometrie využívá cyklus protažení a zkrácení, třeba dopad a okamžitý odraz.",
+    },
+    {
+      id: "trenink-strength-power-4",
+      lessonId: "trenink-strength-power",
+      text: "Co navrhuje přehled 90 studií o plyometrii u fotbalistů (2022)?",
+      options: [
+        "Skákat denně co nejvíc, klidně několik set skoků za jednotku",
+        "Zhruba 80 skoků za jednotku a vždy v odpočatém stavu",
+        "Zařazovat skoky na konec tréninku, až jsou hráči pořádně unavení",
+        "Skákat hlavně na betonu, protože tvrdý povrch vrací víc energie",
+      ],
+      correct: 1,
+      explain: "Přehled navrhuje 1–2 jednotky týdně po zhruba 80 skocích, 24–48 hodin mezi jednotkami, měkký povrch a odpočatý stav.",
+    },
+    {
+      id: "trenink-strength-power-5",
+      lessonId: "trenink-strength-power",
+      text: "Co podle metaanalýzy Wilsona a kolegů (2012) nejvíc trpí, když se k silovému tréninku přidá vytrvalost?",
+      options: [
+        "Nic, vytrvalost silovému tréninku vždy jen pomáhá",
+        "Jen ohebnost, síla a výbušnost zůstanou beze změny",
+        "Nejvíc výbušnost, a víc při běhu než při jízdě na kole",
+        "Nejvíc síla, a víc při jízdě na kole než při běhu",
+      ],
+      correct: 2,
+      explain: "Souběžný vytrvalostní trénink ubíral nejvíc z výbušnosti, běh víc než kolo, a tím víc, čím častější a delší vytrvalost byla.",
+    },
+
+    // Rychlost, zrychlení a změna směru
+    {
+      id: "trenink-speed-agility-1",
+      lessonId: "trenink-speed-agility",
+      text: "Která výbušná akce střelce předcházela gólům v bundeslize podle rozboru Faudeho a kolegů (2012) nejčastěji?",
+      options: [
+        "Výskok do hlavičky",
+        "Přímý sprint",
+        "Otočka s míčem",
+        "Sprint se změnou směru",
+      ],
+      correct: 1,
+      explain: "Střelec nejčastěji sprintoval rovně, a to před 45 % gólů, většinou bez míče a bez soupeře. Viz lekce: Rychlost, zrychlení a změna směru.",
+    },
+    {
+      id: "trenink-speed-agility-2",
+      lessonId: "trenink-speed-agility",
+      text: "Čím se agilita liší od prosté změny směru?",
+      options: [
+        "Agilita se trénuje jen bez míče, změna směru jen s míčem",
+        "Agilita je jiný název pro maximální rychlost v plném běhu",
+        "Agilita se týká jen brankářů, změna směru hráčů v poli",
+        "Agilita reaguje na podnět, změna směru jde po známé dráze",
+      ],
+      correct: 3,
+      explain: "Podle Shepparda a Younga (2006) je agilita rychlý pohyb celého těla se změnou rychlosti nebo směru v reakci na podnět, třeba na soupeře nebo míč.",
+    },
+    {
+      id: "trenink-speed-agility-3",
+      lessonId: "trenink-speed-agility",
+      text: "Jak spolu podle studií v lekci souvisí zrychlení, maximální rychlost a změna směru?",
+      options: [
+        "Jsou to samostatné schopnosti, každou je potřeba trénovat zvlášť",
+        "Stačí trénovat přímý sprint a změny směru se zlepší samy",
+        "Kdo je nejrychlejší na 10 m, je vždy nejrychlejší i v kličkování",
+        "Trénink změn směru je nejlepší cesta k rychlejšímu přímému sprintu",
+      ],
+      correct: 0,
+      explain: "Výsledky testů spolu souvisely jen volně a trénink přímých sprintů se do změn směru přenesl málo, proto se každá schopnost trénuje zvlášť.",
+    },
+    {
+      id: "trenink-speed-agility-4",
+      lessonId: "trenink-speed-agility",
+      text: "Jak se podle atletické praxe trénuje zrychlení?",
+      options: [
+        "Úseky 100–200 m s pauzou 20 sekund, dokud hráči vydrží",
+        "Úseky 10–50 m s pauzou 30 sekund, i když časy klesají",
+        "Úseky 10–50 m s pauzou 2–7 minut, dokud časy neklesají",
+        "Jeden dlouhý úsek na 400 m v maximálním tempu",
+      ],
+      correct: 2,
+      explain: "Rychlost chce maximální úsilí a plný odpočinek; trénink končí, jakmile časy klesají nebo se kazí technika.",
+    },
+    {
+      id: "trenink-speed-agility-5",
+      lessonId: "trenink-speed-agility",
+      text: "Co se podle Bishopa a kolegů (2011) myslí schopností opakovaných sprintů?",
+      options: [
+        "Jeden maximální sprint na 100 m s letmým startem",
+        "Série sprintů do 10 sekund s pauzami do 60 sekund",
+        "Sprinty po 30 sekundách s pauzami 5 až 10 minut",
+        "Schopnost uběhnout za zápas co nejvíc kilometrů",
+      ],
+      correct: 1,
+      explain: "Jde o krátké sprinty s krátkými pauzami; přehled radí kombinovat trénink jednotlivého sprintu s intervalovým tréninkem vysoké intenzity.",
     },
   ],
 };
