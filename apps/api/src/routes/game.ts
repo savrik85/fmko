@@ -18,6 +18,7 @@ import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../aut
 import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
+import { offerReplyDeadline } from "../transfers/offer-deadline";
 import { suspensionSms, injurySms } from "../events/injury-sms";
 import { injuryPronenessOf } from "../injuries/proneness";
 import { isBodyType } from "../generators/physicals";
@@ -6058,12 +6059,10 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     return c.json({ ok: true, offerId: existing.id, alreadyExists: true });
   }
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
   const offerId = crypto.randomUUID();
   await c.env.DB.prepare(
     "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, expires_at, offer_type, last_action_by, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, ?, ?, ?, 'transfer', ?, ?, ?, ?)"
-  ).bind(offerId, listingInfo.player_id, buyerClubTeamId, listingInfo.seller_team_id, body.amount, expiresAt.toISOString(), buyerClubTeamId,
+  ).bind(offerId, listingInfo.player_id, buyerClubTeamId, listingInfo.seller_team_id, body.amount, offerReplyDeadline(), buyerClubTeamId,
     terms.upfrontPct, terms.installments, terms.sellOnPct).run();
 
   await c.env.DB.prepare(
@@ -6451,13 +6450,11 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   const interest = await computeInterestForOffer(c.env.DB, body.playerId, { fromTeamId: buyerClubTeamId, offerAmount: body.amount })
     .catch((e) => { logger.warn({ module: "game" }, "compute player interest", e); return null; });
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
   const id = crypto.randomUUID();
   // Nabídka a hráči na výměnu vznikají naráz, jinak by mohla viset nabídka bez slíbených hráčů.
   await c.env.DB.batch([
     c.env.DB.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, target_squad, player_interest, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, expiresAt.toISOString(), offerType, loanDuration, buyerClubTeamId, targetSquad, interest?.level ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct),
+      .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, offerReplyDeadline(), offerType, loanDuration, buyerClubTeamId, targetSquad, interest?.level ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct),
     ...insertSwapPlayersStmts(c.env.DB, id, swapPlayerIds),
   ]);
 
@@ -7644,9 +7641,12 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   }
 
   const countered = await c.env.DB.prepare(
-    `UPDATE transfer_offers SET status = 'countered', counter_amount = ?, upfront_pct = ?, installments = ?, sell_on_pct = ?, last_action_by = ?
+    `UPDATE transfer_offers SET status = 'countered', counter_amount = ?, upfront_pct = ?, installments = ?, sell_on_pct = ?, last_action_by = ?,
+            expires_at = ?
      WHERE id = ? AND status = ? AND last_action_by IS ?`
-  ).bind(body.amount, terms.upfrontPct, terms.installments, terms.sellOnPct, scope.actorClubTeamId, offerId, offer.status, offer.last_action_by).run();
+  ).bind(body.amount, terms.upfrontPct, terms.installments, terms.sellOnPct, scope.actorClubTeamId,
+    // Lhůta běží od posledního tahu: protinávrh dává druhé straně nové tři dny.
+    offerReplyDeadline(), offerId, offer.status, offer.last_action_by).run();
   if (countered.meta.changes === 0) return c.json({ error: "Nabídku mezitím vyřešil někdo jiný" }, 409);
 
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, 'counter', ?, ?, ?, ?, ?)")
@@ -7789,8 +7789,9 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const withdrawMessage = (body as { message?: string }).message ?? null;
   // Stáhnout/ukončit smí kupec i prodávající, pokud je jednání aktivní.
   const offer = await c.env.DB.prepare(
-    "SELECT player_id, from_team_id, to_team_id, status, last_action_by FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')"
-  ).bind(offerId).first<{ player_id: string; from_team_id: string; to_team_id: string; status: string; last_action_by: string | null }>();
+    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data
+     FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')`
+  ).bind(offerId).first<{ id: string; player_id: string; from_team_id: string; to_team_id: string; offer_amount: number; counter_amount: number | null; offer_type: string; status: string; last_action_by: string | null; virtual_team_data: string | null }>();
   if (!offer) return c.json({ error: "Jednání nelze ukončit (nejsi součástí nebo už je vyřešené)" }, 409);
   const scope = await resolveOfferClubScope(c.env.DB, teamId, offer);
   if (!scope?.role) return c.json({ error: "Jednání nelze ukončit (nejsi součástí nebo už je vyřešené)" }, 409);
@@ -7804,6 +7805,18 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   await c.env.DB.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'withdraw', NULL, ?)")
     .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, withdrawMessage).run()
     .catch((e) => logger.warn({ module: "game" }, "insert withdraw event", e));
+
+  // Prodávající, který jednání ukončí, hráče nepustil: dopad jako u odmítnutí.
+  // Jinak šla nespokojenost hráče, který chtěl odejít, obejít ukončením místo odmítnutí.
+  if (scope.role === "seller") {
+    const { applyOfferRejectionImpact } = await import("../transfers/offer-rejection-impact");
+    c.executionCtx.waitUntil(
+      applyOfferRejectionImpact(c.env.DB, offer, "reject", {
+        GEMINI_API_KEY: c.env.GEMINI_API_KEY,
+        VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB,
+      }).catch((e) => logger.warn({ module: "game" }, "end negotiation impact", e))
+    );
+  }
 
   // Notifikace druhé strane + SMS
   if (scope.buyerClubTeamId !== "virtual_ai") {

@@ -149,6 +149,11 @@ export default function OfferDetailPage() {
     ? `⚠️ ${player?.first_name ?? "Hráč"} o přestup stojí — odmítnutí mu srazí náladu.`
     : null;
   const isActive = offer.status === "pending" || offer.status === "countered";
+  const playerWantsOut = role === "seller" && (playerInterest?.level ?? 0) >= 2;
+  // Lhůta na odpověď běží od posledního tahu, pak nabídka propadne (u prodávajícího jako odmítnutí).
+  const replyDeadline = new Date(offer.expires_at).toLocaleString("cs-CZ", {
+    weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit",
+  });
   const myTeam = role === "buyer" ? fromTeam : toTeam;
   const myBudget = myTeam?.budget ?? null;
   // Na splátky stačí mít na zálohu, zbytek se strhává každé pondělí.
@@ -348,6 +353,13 @@ export default function OfferDetailPage() {
           />
         )}
         {isActive && (
+          <p className="mt-3 text-center text-sm text-muted">
+            {on_turn
+              ? <>Odpověz do <span className="font-heading font-bold text-ink">{replyDeadline}</span>, jinak nabídka propadne{playerWantsOut ? ` a ${player?.first_name ?? "hráč"} to vezme jako odmítnutí` : ""}.</>
+              : <>Soupeř má na odpověď čas do <span className="font-heading font-bold text-ink">{replyDeadline}</span>, pak nabídka propadne.</>}
+          </p>
+        )}
+        {isActive && (
           <div className="mt-4 text-center">
             <button onClick={() => setWithdrawDialog(true)} className="text-xs text-muted hover:text-red-600 underline transition-colors">
               {role === "buyer" ? "Stáhnout svou nabídku" : "Ukončit jednání"}
@@ -361,7 +373,9 @@ export default function OfferDetailPage() {
           title={role === "buyer" ? "Stáhnout nabídku?" : "Ukončit jednání?"}
           description={role === "buyer"
             ? "Nabídka bude zrušena."
-            : "Jednání bude ukončeno."}
+            : playerWantsOut
+              ? `Jednání bude ukončeno. ${player?.first_name ?? "Hráč"} o přestup stojí, vezme to jako odmítnutí a spadne mu nálada.`
+              : "Jednání bude ukončeno."}
           confirmLabel={role === "buyer" ? "Stáhnout" : "Ukončit"}
           confirmColor="red"
           onCancel={() => setWithdrawDialog(false)}

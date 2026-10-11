@@ -2,8 +2,8 @@
  * Transfer pressure tick — vlastní denní cron pro FM-style tlak na hvězdy.
  *
  * Tři kroky:
- *  1. Expirace přestupových nabídek (přesunuto z daily-ticku) — s hookem na
- *     dopad na morálku hráče, který o přestup stál (applyOfferRejectionImpact).
+ *  1. Propadnutí nabídek, na které strana na tahu do lhůty neodpověděla
+ *     (offer-expiry.ts); mlčení prodávajícího má dopad jako odmítnutí.
  *  2. Generování CPU nabídek od virtuálních klubů (přesunuto z match ticku).
  *  3. Zpracování trucu (transferUnrest) — decay, fake injuries, pledge checks.
  *
@@ -20,9 +20,6 @@ export interface TransferPressureResult {
   aiOffers: number;
   unrestProcessed: number;
 }
-
-/** Max nabídek, na které se za jeden tick aplikuje dopad expirace (D1 limity). */
-const EXPIRY_IMPACT_LIMIT = 20;
 
 export async function executeTransferPressureTick(
   env: Bindings,
@@ -45,24 +42,10 @@ export async function executeTransferPressureTick(
 
   const result: TransferPressureResult = { skipped: false, expiredOffers: 0, aiOffers: 0, unrestProcessed: 0 };
 
-  // ── 1. Expirace nabídek s dopadem ──
+  // ── 1. Propadnutí nabídek bez odpovědi (mlčení prodávajícího = odmítnutí) ──
   try {
-    const nowIso = now.toISOString();
-    const expiring = await env.DB.prepare(
-      `SELECT * FROM transfer_offers WHERE status = 'pending' AND expires_at < ? LIMIT ?`
-    ).bind(nowIso, EXPIRY_IMPACT_LIMIT).all<Record<string, unknown>>()
-      .catch((e) => { logger.warn({ module: "transfer-pressure" }, "fetch expiring offers", e); return { results: [] as Record<string, unknown>[] }; });
-
-    // Vypršení = tiché odmítnutí — hráč, který o přestup stál, se naštve stejně.
-    const { applyOfferRejectionImpact } = await import("./offer-rejection-impact");
-    for (const offer of expiring.results) {
-      await applyOfferRejectionImpact(env.DB, offer, "expire", env)
-        .catch((e) => logger.warn({ module: "transfer-pressure" }, "expiry impact", e));
-    }
-
-    await env.DB.prepare("UPDATE transfer_offers SET status = 'expired', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE status = 'pending' AND expires_at < ?")
-      .bind(nowIso).run();
-    result.expiredOffers = expiring.results.length;
+    const { expireIdleOffers } = await import("./offer-expiry");
+    result.expiredOffers = await expireIdleOffers(env, now);
   } catch (e) {
     logger.error({ module: "transfer-pressure" }, "offer expiry failed", e);
   }
