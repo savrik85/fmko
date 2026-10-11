@@ -807,6 +807,11 @@ describe("nabídka na hráče U21 ovládaná trenérem mateřského klubu", () =
     ).first<{ team_id: string; event_type: string; message: string }>();
     expect(event).toEqual({ team_id: "seller-a", event_type: "withdraw", message: "Jednání končí" });
 
+    // Ukončení prodávajícím hráč bere jako odmítnutí.
+    expect(sideEffects.applyOfferRejectionImpact).toHaveBeenCalledTimes(1);
+    expect(sideEffects.applyOfferRejectionImpact.mock.calls[0]?.[1]).toMatchObject({ id: "offer-u21", player_id: "junior" });
+    expect(sideEffects.applyOfferRejectionImpact.mock.calls[0]?.[2]).toBe("reject");
+
     const historyResponse = await callRoute("/teams/seller-a/offers", { token: "seller-token" });
     const historyBody = await readJson(historyResponse);
     expect(historyResponse.status).toBe(200);

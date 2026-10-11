@@ -5,6 +5,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { offerReplyDeadline } from "./offer-deadline";
 import { FIRSTNAMES } from "../data/czech-names";
 import type { VillageInfo } from "../generators/player";
 import { createPlayer } from "../generators/create-player";
@@ -346,12 +347,12 @@ async function maybeOfferForTeam(
   const offerId = crypto.randomUUID();
   await db.prepare(
     `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, message, virtual_team_data, player_interest, expires_at, created_at)
-     VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, ?, ?, datetime('now', '+7 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+     VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
   ).bind(
     offerId, target.id, targetTeamId, offerPrice,
     `Máme vážný zájem o vašeho hráče. Nabízíme ${offerPrice.toLocaleString("cs")} Kč, peníze máme připravené.`,
     JSON.stringify({ name: virtualTeam.name, city: virtualTeam.city, district: virtualTeam.district, rating: virtualTeam.rating }),
-    interest?.level ?? null,
+    interest?.level ?? null, offerReplyDeadline(),
   ).run();
 
   // Player message in Kabina — tón podle toho, jak moc hráč o přestup stojí
