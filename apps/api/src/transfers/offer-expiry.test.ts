@@ -5,12 +5,14 @@ import type { Bindings } from "../index";
 const sideEffects = vi.hoisted(() => ({
   applyOfferRejectionImpact: vi.fn(async (_db: unknown, _offer: { id: string }, _trigger: string, _env: unknown) => undefined),
   sendSystemSMS: vi.fn(async (_db: unknown, _teamId: string, _role: string, _body: string) => undefined),
+  createNotification: vi.fn(async (_db: unknown, _teamId: string, _type: string, _title: string, _body: string, _url?: string) => undefined),
 }));
 
 vi.mock("./offer-rejection-impact", () => ({ applyOfferRejectionImpact: sideEffects.applyOfferRejectionImpact }));
 vi.mock("../messaging/system-sms", () => ({ sendSystemSMS: sideEffects.sendSystemSMS }));
+vi.mock("../community/notifications", () => ({ createNotification: sideEffects.createNotification }));
 
-import { expireIdleOffers } from "./offer-expiry";
+import { expireIdleOffers, remindIdleOffers } from "./offer-expiry";
 import { OFFER_REPLY_DAYS, offerReplyDeadline } from "./offer-deadline";
 
 let miniflare: Miniflare;
@@ -26,19 +28,21 @@ beforeAll(async () => {
     modules: true,
     script: "export default { fetch() { return new Response('ok'); } }",
     d1Databases: ["DB"],
+    kvNamespaces: ["CACHE_KV"],
   });
   db = await miniflare.getD1Database("DB");
+  const cacheKv = await miniflare.getKVNamespace("CACHE_KV") as unknown as KVNamespace;
   for (const sql of [
     "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT NOT NULL, parent_team_id TEXT)",
     "CREATE TABLE players (id TEXT PRIMARY KEY, first_name TEXT NOT NULL, last_name TEXT NOT NULL)",
     `CREATE TABLE transfer_offers (
       id TEXT PRIMARY KEY, player_id TEXT NOT NULL, from_team_id TEXT NOT NULL, to_team_id TEXT NOT NULL,
       offer_amount INTEGER NOT NULL, counter_amount INTEGER, status TEXT NOT NULL, last_action_by TEXT,
-      offer_type TEXT, virtual_team_data TEXT, expires_at TEXT NOT NULL, resolved_at TEXT)`,
+      offer_type TEXT, virtual_team_data TEXT, player_interest INTEGER, expires_at TEXT NOT NULL, resolved_at TEXT)`,
     `INSERT INTO teams VALUES ('buyer', 'FK Kupec', NULL), ('seller', 'SK Prodej', NULL), ('seller-u21', 'SK Prodej U21', 'seller')`,
     `INSERT INTO players VALUES ('p1', 'Karel', 'Chtivý')`,
   ]) await db.prepare(sql).run();
-  env = { DB: db } as unknown as Bindings;
+  env = { DB: db, CACHE_KV: cacheKv } as unknown as Bindings;
 });
 
 afterAll(async () => {
@@ -48,14 +52,15 @@ afterAll(async () => {
 beforeEach(async () => {
   sideEffects.applyOfferRejectionImpact.mockClear();
   sideEffects.sendSystemSMS.mockClear();
+  sideEffects.createNotification.mockClear();
   await db.prepare("DELETE FROM transfer_offers").run();
 });
 
-async function addOffer(id: string, o: { status: string; lastActionBy: string | null; expiresAt: string; from?: string; to?: string; virtual?: string }) {
+async function addOffer(id: string, o: { status: string; lastActionBy: string | null; expiresAt: string; from?: string; to?: string; virtual?: string; interest?: number }) {
   await db.prepare(
-    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, status, last_action_by, offer_type, virtual_team_data, expires_at)
-     VALUES (?, 'p1', ?, ?, 10000, ?, ?, 'transfer', ?, ?)`,
-  ).bind(id, o.from ?? "buyer", o.to ?? "seller", o.status, o.lastActionBy, o.virtual ?? null, o.expiresAt).run();
+    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, status, last_action_by, offer_type, virtual_team_data, player_interest, expires_at)
+     VALUES (?, 'p1', ?, ?, 10000, ?, ?, 'transfer', ?, ?, ?)`,
+  ).bind(id, o.from ?? "buyer", o.to ?? "seller", o.status, o.lastActionBy, o.virtual ?? null, o.interest ?? null, o.expiresAt).run();
 }
 
 async function statusOf(id: string) {
@@ -118,5 +123,41 @@ describe("propadnutí nabídek bez odpovědi", () => {
     expect(await expireIdleOffers(env, NOW)).toBe(0);
     expect(await statusOf("fresh")).toBe("pending");
     expect(impactedOffers()).toEqual([]);
+  });
+});
+
+describe("připomínka před koncem lhůty", () => {
+  const SOON = "2026-10-12T08:00:00.000Z"; // za 22 h
+  const LATER = "2026-10-13T08:00:00.000Z"; // za 46 h
+
+  it("prodávajícímu na tahu připomene lhůtu a že to hráč vezme jako odmítnutí", async () => {
+    await addOffer("remind-seller", { status: "pending", lastActionBy: "buyer", expiresAt: SOON, interest: 3 });
+    expect(await remindIdleOffers(env, NOW)).toBe(1);
+    const [sms] = smsTo("seller");
+    expect(sms).toContain("Na nabídku od FK Kupec na přestup Karel Chtivý máš čas do");
+    expect(sms).toContain("Karel to vezme jako odmítnutí");
+    expect(sideEffects.createNotification.mock.calls[0]?.[1]).toBe("seller");
+    expect(sideEffects.createNotification.mock.calls[0]?.[5]).toBe("/prestupy/nabidka/remind-seller");
+    expect(await statusOf("remind-seller")).toBe("pending");
+  });
+
+  it("podruhé už nepřipomíná", async () => {
+    await addOffer("remind-once", { status: "pending", lastActionBy: "buyer", expiresAt: SOON });
+    await remindIdleOffers(env, NOW);
+    expect(await remindIdleOffers(env, NOW)).toBe(0);
+    expect(smsTo("seller")).toHaveLength(1);
+  });
+
+  it("po protinávrhu prodávajícího připomene kupci", async () => {
+    await addOffer("remind-buyer", { status: "countered", lastActionBy: "seller", expiresAt: SOON, interest: 3 });
+    await remindIdleOffers(env, NOW);
+    expect(smsTo("seller")).toEqual([]);
+    expect(smsTo("buyer")[0]).toContain("Na protinabídku od SK Prodej");
+    expect(smsTo("buyer")[0]).not.toContain("odmítnutí");
+  });
+
+  it("se vzdálenou lhůtou nepřipomíná", async () => {
+    await addOffer("remind-later", { status: "pending", lastActionBy: "buyer", expiresAt: LATER });
+    expect(await remindIdleOffers(env, NOW)).toBe(0);
   });
 });

@@ -17,6 +17,7 @@ import { logger } from "../lib/logger";
 export interface TransferPressureResult {
   skipped: boolean;
   expiredOffers: number;
+  remindedOffers: number;
   aiOffers: number;
   unrestProcessed: number;
 }
@@ -34,18 +35,20 @@ export async function executeTransferPressureTick(
       .catch((e) => { logger.warn({ module: "transfer-pressure" }, "read KV flag", e); return null; });
     if (alreadyRan) {
       logger.warn({ module: "transfer-pressure" }, `SKIP, tick for ${todayKey} already ran`);
-      return { skipped: true, expiredOffers: 0, aiOffers: 0, unrestProcessed: 0 };
+      return { skipped: true, expiredOffers: 0, remindedOffers: 0, aiOffers: 0, unrestProcessed: 0 };
     }
     await env.CACHE_KV.put(`transfer-pressure:${todayKey}`, "1", { expirationTtl: 60 * 60 * 36 })
       .catch((e) => logger.warn({ module: "transfer-pressure" }, "set KV flag", e));
   }
 
-  const result: TransferPressureResult = { skipped: false, expiredOffers: 0, aiOffers: 0, unrestProcessed: 0 };
+  const result: TransferPressureResult = { skipped: false, expiredOffers: 0, remindedOffers: 0, aiOffers: 0, unrestProcessed: 0 };
 
   // ── 1. Propadnutí nabídek bez odpovědi (mlčení prodávajícího = odmítnutí) ──
   try {
-    const { expireIdleOffers } = await import("./offer-expiry");
+    const { expireIdleOffers, remindIdleOffers } = await import("./offer-expiry");
     result.expiredOffers = await expireIdleOffers(env, now);
+    // Kdo je na tahu a lhůta mu brzy skončí, dostane připomínku.
+    result.remindedOffers = await remindIdleOffers(env, now);
   } catch (e) {
     logger.error({ module: "transfer-pressure" }, "offer expiry failed", e);
   }
@@ -74,6 +77,6 @@ export async function executeTransferPressureTick(
   }
 
   logger.info({ module: "transfer-pressure" },
-    `DONE expired=${result.expiredOffers} aiOffers=${result.aiOffers} unrest=${result.unrestProcessed}`);
+    `DONE expired=${result.expiredOffers} reminded=${result.remindedOffers} aiOffers=${result.aiOffers} unrest=${result.unrestProcessed}`);
   return result;
 }
