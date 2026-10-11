@@ -5269,13 +5269,23 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
   try {
     const teamId = c.req.param("teamId");
     const team = await c.env.DB.prepare(
-      "SELECT t.reputation, v.district, v.lat, v.lng FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
-    ).bind(teamId).first<{ reputation: number; district: string; lat: number; lng: number }>();
+      "SELECT t.reputation, t.user_id, v.district, v.lat, v.lng FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
+    ).bind(teamId).first<{ reputation: number; user_id: string; district: string; lat: number; lng: number }>();
     if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
+    // Z jiných okresů jen hráči, které propustil lidský klub. Vygenerované zůstávají
+    // ve svém okrese, jinak by je okresy s víc manažery vyzobaly ostatním. Hráči
+    // propuštění z dalšího klubu téhož majitele se nenabízejí (viz podpis).
     const agents = await c.env.DB.prepare(
-      "SELECT fa.*, v.lat as v_lat, v.lng as v_lon, v.name as village_name FROM free_agents fa LEFT JOIN villages v ON fa.village_id = v.id WHERE fa.district = ? AND fa.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now') ORDER BY fa.overall_rating DESC"
-    ).bind(team.district).all();
+      `SELECT fa.*, v.lat as v_lat, v.lng as v_lon, v.name as village_name
+         FROM free_agents fa
+         LEFT JOIN villages v ON fa.village_id = v.id
+         LEFT JOIN teams rt ON rt.id = fa.released_from_team_id
+        WHERE fa.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+          AND (fa.district = ?
+               OR (fa.source IN ('released', 'quit') AND rt.user_id IS NOT NULL AND rt.user_id != 'ai' AND rt.user_id != ?))
+        ORDER BY fa.overall_rating DESC`
+    ).bind(team.district, team.user_id).all();
 
     // Filter out agents who rejected this team
     const filtered = agents.results.filter((fa) => {
@@ -5297,6 +5307,8 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
         age: fa.age, position: fa.position, overallRating: fa.overall_rating, weeklyWage: fa.weekly_wage,
         occupation: (() => { try { return JSON.parse(fa.life_context as string)?.occupation ?? ""; } catch (e) { logger.warn({ module: "game" }, "parse free agent life_context", e); return ""; } })(),
         source: fa.source, villageName: fa.village_name ?? null, distanceKm: distKm, expiresAt: fa.expires_at,
+        // Odkud hráč je, když ne z tvého okresu. Stejný štítek jako u inzerátů.
+        origin: fa.district !== team.district ? (fa.district ?? null) : null,
         avatar: (() => { try { return JSON.parse(fa.avatar as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent avatar", e); return {}; } })(),
         skills: (() => { try { return JSON.parse(fa.skills as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent skills", e); return {}; } })(),
         physical: (() => { try { return JSON.parse(fa.physical as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent physical", e); return {}; } })(),
@@ -5369,6 +5381,16 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
 
   const fa = await c.env.DB.prepare("SELECT * FROM free_agents WHERE id = ?").bind(faId).first<Record<string, unknown>>();
   if (!fa) return c.json({ error: "Volný hráč nenalezen" }, 404);
+
+  // Hráč z jiného okresu propuštěný dalším klubem téhož majitele: propuštění a podpis
+  // by přesunuly hráče mezi vlastními kluby bez přestupu, mimo dohled soutěže.
+  if (fa.district !== team.district && fa.released_from_team_id && fa.released_from_team_id !== teamId) {
+    const releasedBy = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?")
+      .bind(fa.released_from_team_id).first<{ user_id: string }>();
+    if (releasedBy && releasedBy.user_id !== "ai" && releasedBy.user_id === team.user_id) {
+      return c.json({ error: "Hráče propuštěného z jiného tvého klubu podepsat nemůžeš." }, 400);
+    }
+  }
 
   let agentVillage: { lat: number; lng: number } | null = null;
   if (fa.village_id) {
@@ -5820,19 +5842,27 @@ gameRouter.delete("/teams/:teamId/listings/:listingId", async (c) => {
 // Browse transfer market
 gameRouter.get("/teams/:teamId/market", async (c) => {
   const teamId = c.req.param("teamId");
-  const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(teamId).first<{ league_id: string }>();
+  const team = await c.env.DB.prepare(
+    "SELECT t.league_id, l.district FROM teams t LEFT JOIN leagues l ON l.id = t.league_id WHERE t.id = ?"
+  ).bind(teamId).first<{ league_id: string; district: string | null }>();
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
+  // Z ostatních soutěží jen inzeráty lidských klubů. Hráči cizích klubů (is_ai_listing)
+  // se nabízejí jen ve své lize, jinak by je soutěže s víc manažery vyzobaly ostatním.
   const listings = await c.env.DB.prepare(
     `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data, tl.rejected_by,
+     tl.league_id, l.name as league_name, l.district as league_district,
      p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills, p.nationality,
      t.name as team_name, i.days_remaining as injury_days
      FROM transfer_listings tl
      LEFT JOIN players p ON tl.player_id = p.id AND tl.is_ai_listing = 0
      LEFT JOIN teams t ON tl.team_id = t.id AND tl.is_ai_listing = 0
+     LEFT JOIN leagues l ON l.id = tl.league_id
      LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 AND tl.is_ai_listing = 0
-     WHERE tl.league_id = ? AND tl.status = 'active' AND tl.team_id != ? ORDER BY tl.created_at DESC`
-  ).bind(team.league_id, teamId).all();
+     WHERE tl.status = 'active' AND tl.team_id != ?
+       AND (tl.league_id = ? OR (tl.is_ai_listing = 0 AND t.user_id IS NOT NULL AND t.user_id != 'ai'))
+     ORDER BY CASE WHEN tl.league_id = ? THEN 0 ELSE 1 END, tl.created_at DESC`
+  ).bind(teamId, team.league_id, team.league_id).all();
 
   // Filter out listings where this team was rejected (same as free agents)
   listings.results = listings.results.filter((l) => {
@@ -5920,6 +5950,11 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
         id: l.id, playerId: l.player_id, askingPrice: l.asking_price, isAiListing: false,
         playerName: `${l.first_name} ${l.last_name}`, nationality: (l.nationality as string) ?? "CZ", playerAge: l.age, position: l.position,
         overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
+        // Štítek „odkud“ jako u volných hráčů: okres, a jen u jiné soutěže téhož okresu
+        // (III. třída proti přeboru) název soutěže.
+        origin: l.league_id === team.league_id ? null
+          : l.league_district !== team.district ? ((l.league_district as string | null) ?? null)
+          : ((l.league_name as string | null) ?? null),
         injuryDays: (l.injury_days as number) ?? null,
         avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
         skills: (() => { try { const s = JSON.parse(l.skills as string); const blur = (v: number) => Math.round(v / 5) * 5; return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === "number" ? blur(v) : v])); } catch { return {}; } })(),

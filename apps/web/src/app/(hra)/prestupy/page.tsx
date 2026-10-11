@@ -543,6 +543,8 @@ interface FreeAgent {
   id: string; firstName: string; lastName: string; nickname?: string; nationality?: string; age: number;
   position: string; overallRating: number; weeklyWage: number; occupation: string;
   source: string; villageName: string | null; distanceKm: number | null;
+  /** Okres, když hráč není z tvého (sem se dostane jen propuštěný lidským klubem). */
+  origin?: string | null;
   expiresAt: string; avatar: Record<string, unknown>;
   skills: { speed?: number; technique?: number; shooting?: number; passing?: number; heading?: number; defense?: number; goalkeeping?: number; creativity?: number; setPieces?: number };
   physical: { stamina?: number; strength?: number; preferredFoot?: string };
@@ -553,11 +555,23 @@ interface FreeAgent {
 interface MarketListing {
   id: string; playerId: string; askingPrice: number; playerName: string; nationality?: string;
   playerAge: number; position: string; overallRating: number; teamName: string;
+  /** Okres inzerátu lidského klubu z jiné soutěže (u soutěže téhož okresu její název). */
+  origin?: string | null;
   expiresAt: string; avatar: Record<string, unknown>;
   myBidAmount?: number | null;
   myActiveOfferId?: string | null;
   myActiveOfferAmount?: number | null;
   myActiveOfferStatus?: string | null;
+}
+
+/** Štítek „odkud“ u hráče z jiného okresu nebo soutěže — stejný na Volných i na Prodeji. */
+function OriginBadge({ origin }: { origin?: string | null }) {
+  if (!origin) return null;
+  return (
+    <span className="mr-1.5 px-1.5 rounded-full text-micro font-heading font-bold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap">
+      {origin}
+    </span>
+  );
 }
 
 interface MyListing {
@@ -1482,7 +1496,7 @@ export default function TransfersPage() {
               je to jen přepínač — stejný jako „Víc" v Hledání. */}
           <div className="flex items-center justify-between gap-2">
             <SectionLabel>
-              Volní hráči v okresu{" "}
+              Volní hráči{" "}
               {isFiltered
                 ? `(${filteredAgents.length} z ${freeAgents.length} ${hraciTvar(freeAgents.length)})`
                 : `(${freeAgents.length} ${hraciTvar(freeAgents.length)})`
@@ -1685,6 +1699,12 @@ export default function TransfersPage() {
             </div>
           </div>
 
+          {freeAgents.some((fa) => fa.origin) && (
+            <p className="text-sm text-muted">
+              Hráči se štítkem jsou z jiného okresu. Stěhovat se k tobě se jim chce méně.
+            </p>
+          )}
+
           {/* Free agent cards */}
           {filteredAgents.length === 0 ? (
             <div className="card p-6 text-center space-y-3">
@@ -1736,6 +1756,7 @@ export default function TransfersPage() {
                             a karta kvůli tomu měřila skoro 190 px. */}
                         <div className="flex items-center gap-2">
                           <div className="flex-1 min-w-0 text-sm text-muted truncate">
+                            <OriginBadge origin={fa.origin} />
                             {fa.occupation}
                             {" · "}<span className="font-heading font-bold text-ink">{formatCZK(fa.weeklyWage)}/týd</span>
                             {fa.distanceKm !== null && <>{" · "}{fa.distanceKm} km</>}
@@ -1844,6 +1865,11 @@ export default function TransfersPage() {
         <div className="space-y-5">
           <div>
             <SectionLabel>Na trhu ({listings.length})</SectionLabel>
+            {listings.some((l) => l.origin) && (
+              <p className="text-sm text-muted mb-2">
+                Hráči se štítkem jsou z jiné soutěže. Za přestup odtamtud platíš navíc meziligový poplatek.
+              </p>
+            )}
             {listings.length === 0 ? (
               <div className="card p-6 text-center text-muted">Nikdo momentálně nenabízí hráče.</div>
             ) : (
@@ -1868,6 +1894,7 @@ export default function TransfersPage() {
                           <span className="text-sm font-heading font-bold tabular-nums">{l.overallRating}</span>
                         </div>
                         <div className="text-xs text-muted">
+                          <OriginBadge origin={l.origin} />
                           <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span> — {l.teamName}
                           {(l as any).injuryDays > 0 && (
                             <span className="ml-2 text-card-red font-heading font-bold">🩹 Zraněný ({(l as any).injuryDays}d)</span>

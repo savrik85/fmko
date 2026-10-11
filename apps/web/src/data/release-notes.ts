@@ -12,6 +12,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-11",
+    emoji: "🗺️",
+    title: "Trh ze všech okresů",
+    items: [
+      "Na trhu vidíš hráče, které prodávají nebo propustili manažeři ze všech okresů. Kluby bez manažera nabízejí hráče jen u sebe v okrese.",
+    ],
+  },
+  {
     date: "2026-10-10",
     emoji: "🧭",
     title: "Rozbor kádru od asistenta",

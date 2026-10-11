@@ -48,6 +48,7 @@ export function FreeAgentsWidget({ data, height }: WidgetProps) {
               <div className="font-heading font-bold text-sm truncate">{a.firstName} {a.lastName}</div>
               <div className="text-micro text-muted truncate">
                 {a.age} let{a.villageName ? ` · ${a.villageName}` : ""}
+                {a.origin ? ` · ${a.origin}` : ""}
                 {a.distanceKm != null ? ` · ${Math.round(a.distanceKm)} km` : ""}
               </div>
             </div>
@@ -82,7 +83,9 @@ export function MarketListingsWidget({ data, height }: WidgetProps) {
               <a href={`/hrac/${l.playerId}`} className="font-heading font-bold text-sm truncate block hover:text-pitch-500 hover:underline transition-colors">
                 {l.playerName}
               </a>
-              <div className="text-micro text-muted truncate">{l.playerAge} let · {l.teamName}</div>
+              <div className="text-micro text-muted truncate">
+                {l.playerAge} let · {l.teamName}{l.origin ? ` · ${l.origin}` : ""}
+              </div>
             </div>
             <span className="text-sm font-heading font-bold tabular-nums shrink-0">{compactCZK(l.askingPrice)}</span>
             <Rating value={l.overallRating} />

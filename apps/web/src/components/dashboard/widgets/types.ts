@@ -356,11 +356,13 @@ export interface FreeAgent {
   id: string; firstName: string; lastName: string; age: number;
   position: string; overallRating: number; weeklyWage: number;
   occupation: string; villageName: string | null; distanceKm: number | null;
+  origin?: string | null;
 }
 
 export interface MarketListing {
   id: string; playerId: string; playerName: string; playerAge: number;
   position: string; overallRating: number; teamName: string; askingPrice: number;
+  origin?: string | null;
 }
 
 export interface LeagueTransfer {
