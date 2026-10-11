@@ -5,6 +5,19 @@
  * „Only the captain“, Guidelines for temporary dismissals) a Pravidla fotbalu FAČR
  * (česká terminologie a výklad k pravidlu 3). Disciplinární řád FAČR (tresty za počet
  * žlutých, pokuty) záměrně vynechán.
+ *
+ * Pokročilé lekce o hře rukou a VAR (ověřeno v říjnu 2026 na theifab.com):
+ * - pravidlo 12 v. 2026/27 (Handling the ball, Cautionable a Sending-off offences) a otázky
+ *   a odpovědi k pravidlu 12 (rameno, náhodná ruka střelce a spoluhráče, brankář mimo vápno),
+ * - Video Assistant Referee (VAR) protocol v. 2026/27 (principy, pět přezkoumatelných oblastí,
+ *   kontrola a přezkoumání, OFR, konečné rozhodnutí, hráči a funkcionáři) a jeho FAQ
+ *   (přehlédnutá druhá žlutá),
+ * - Law changes 2026/27 (rozšíření VAR: nesprávná druhá žlutá, záměna hráče z kteréhokoli týmu,
+ *   chybně nařízený roh jako možnost soutěže),
+ * - článek IFAB „Historic step for greater fairness in football“ (3. 3. 2018, filozofie
+ *   „minimum interference – maximum benefit“).
+ * České termíny pro VAR (kontrola, přezkoumání, OFR) jsou překlad, oficiální znění FAČR nebylo
+ * dostupné.
  */
 import type { CategoryContent } from "./types";
 
@@ -200,6 +213,51 @@ IFAB, rada, která pravidla schvaluje, vydala zásady **„Jen kapitán“**. Po
 - soutěž může takto trestat všechny napomínané přestupky (**systém A**), nebo jen vybrané (**systém B**), třeba nesouhlas nebo simulování.
 
 Respekt k sudímu se vyplácí. Kdo si deset minut odsedí kvůli protestům, má čas přemýšlet, jestli to stálo za to.`,
+    },
+    {
+      id: "karty-handball",
+      category: "karty",
+      difficulty: 3,
+      title: "Hra rukou podle pravidla 12",
+      body: `Na okrese se z tribuny ozve „ruka!“ pokaždé, když míč trefí cokoli pod bradou. **Pravidlo 12** je ale střízlivější: **ne každý dotek míče rukou nebo paží je přestupek**.
+
+Kde paže začíná? Pro posouzení hry rukou je její horní hranice v úrovni **spodního okraje podpaží**. **Rameno k paži nepatří**, takže gól ramenem platí, i když ho střelec dal schválně.
+
+Hry rukou se hráč dopustí, když:
+- se míče dotkne rukou nebo paží **úmyslně**, třeba když paží pohne směrem k míči,
+- se míče dotkne rukou nebo paží, která **nepřirozeně zvětšila jeho tělo**, tedy když poloha paže není důsledkem pohybu těla v dané situaci a nedá se jím ospravedlnit,
+- dá soupeři gól **přímo rukou nebo paží**, i nechtěně, a to platí i pro brankáře,
+- dá gól **hned poté**, co se mu míč dotkl ruky nebo paže, i když náhodou.
+
+Poslední dvě pravidla se týkají jen **střelce**. Když se míč náhodou dotkne paže spoluhráče, která tělo nezvětšila, a ten gól jen připraví, branka platí. Přestupek není ani to, když si hráč míč sám nakopne do paže nebo ho dostane do paže přitažené k tělu. A obránce, kterému se míč od hlavy odrazí do vlastní paže a pak do vlastní sítě, si vlastní gól nevymluví.
+
+**Brankář** má mimo své pokutové území pro hru rukou stejná omezení jako ostatní hráči.
+
+Ruka sama o sobě kartu neznamená, trestá se přímým volným kopem nebo penaltou. **Žlutou** dostane hráč, který rukou přeruší nebo zastaví **slibně se rozvíjející útok** (ne však, když rozhodčí nařídí penaltu za neúmyslnou ruku), a hráč, který se i neúspěšně **pokusí dát gól rukou**. Za zmaření gólu nebo zjevné brankové možnosti rukou hrozí **červená**, podrobnosti jsou v lekci o zmařené šanci.
+
+Až zase někdo z lavičky zařve „ruka!“ na míč, který se odrazil od ramene, ukaž mu podpaží.`,
+    },
+    {
+      id: "karty-var",
+      category: "karty",
+      difficulty: 3,
+      title: "VAR: kdy zasahuje videorozhodčí",
+      body: `Na okrese je videorozhodčím strejda s mobilem za zábradlím a jeho záznam nikoho nezajímá. Ve vyšších soutěžích ale sedí **videorozhodčí (VAR)** v místnosti plné obrazovek a je to člen týmu rozhodčích. Soutěž ho smí použít, jen když splní požadavky a dostane **písemné povolení FIFA**.
+
+Filozofie zní **„minimální zásah, maximální přínos“**. VAR nemá posuzovat každý souboj, ale opravit **jasnou a zřejmou chybu** nebo **vážný přehlédnutý incident**. Podle protokolu 2026/27 smí pomoct v pěti oblastech:
+- **gól, nebo ne**, včetně přestupku útočícího týmu v akci před gólem,
+- **penalta, nebo ne**,
+- **červená karta**, nově i ta po zjevně nesprávné druhé žluté,
+- **záměna hráče**, když rozhodčí potrestá kartou jiného hráče, nově z kteréhokoli týmu,
+- **chybně nařízený roh**, pokud to soutěž zavedla a oprava jde hned, bez zdržení navázání hry.
+
+Pozor: když sudí přehlédne přestupek na druhou žlutou, VAR ji nedoplní. Zasáhne jen tam, kde druhou žlutou ukázal zjevně neprávem.
+
+VAR automaticky **kontroluje** každý gól, penaltu, přímou červenou i záměnu hráče, většinou potichu. Rozhodčí přitom musí vždy nejdřív rozhodnout sám. Když VAR najde pravděpodobnou chybu, může jen **doporučit přezkoumání**. Zahájit ho smí jen rozhodčí a **konečné rozhodnutí je vždy jeho**. U faktů, jako je ofsajdová pozice, místo přestupku nebo míč za čarou, obvykle stačí informace od VAR. U subjektivních věcí, třeba intenzity faulu nebo hry rukou, se rozhodčí zpravidla podívá na záznam sám u hrací plochy, tomu se říká **přezkoumání na hrací ploše (OFR)**. Časový limit není, přesnost má přednost před rychlostí. Soutěž navíc může zavést, že rozhodčí po přezkoumání rozhodnutí veřejně vysvětlí a oznámí.
+
+Hráči ani trenéři si o přezkoumání říct nemůžou. Kdo přehnaně kreslí rukama obrazovku nebo vstoupí do prostoru pro přezkoumání, dostane **žlutou**. Kdo vejde do místnosti videorozhodčích, **červenou**.
+
+Na okrese tak zůstává jediný záznam: paměť štamgastů. A ta se mění s každým pivem.`,
     },
   ],
 
@@ -584,6 +642,135 @@ Respekt k sudímu se vyplácí. Kdo si deset minut odsedí kvůli protestům, m�
       options: ["2 minuty", "5 minut", "Do konce poločasu", "10 minut"],
       correct: 3,
       explain: "Dočasné vyloučení má trvat 10–15 % hrací doby, v zápase na 90 minut tedy 10 minut.",
+    },
+
+    // ── Hra rukou podle pravidla 12 ──
+    {
+      id: "karty-handball-1",
+      lessonId: "karty-handball",
+      text: "Útočník schválně usměrní míč do branky ramenem. Co rozhodčí?",
+      options: [
+        "Gól neuzná, úmyslný dotek ramenem je hra rukou",
+        "Gól neuzná a útočníkovi ukáže žlutou",
+        "Gól uzná, rameno k paži nepatří",
+        "Gól uzná, jen když se míč ramene dotkl náhodou",
+      ],
+      correct: 2,
+      explain: "Pro posouzení hry rukou končí paže u spodního okraje podpaží. Rameno k ní nepatří, takže gól ramenem platí, i když byl úmyslný.",
+    },
+    {
+      id: "karty-handball-2",
+      lessonId: "karty-handball",
+      text: "Míč se útočníkovi náhodou odrazí od paže, která jeho tělo nezvětšila, a útočník ho hned pošle do sítě. Platí gól?",
+      options: [
+        "Ne, střelec nesmí skórovat hned po doteku paže",
+        "Ano, dotek byl náhodný a paže tělo nezvětšila",
+        "Ano, pokud se míč paže dotkl mimo pokutové území",
+        "Ne, a útočník navíc dostane žlutou kartu",
+      ],
+      correct: 0,
+      explain: "Střelec nesmí dát gól hned poté, co se mu míč dotkl ruky nebo paže, a to ani při náhodném doteku. Samotná ruka kartu neznamená.",
+    },
+    {
+      id: "karty-handball-3",
+      lessonId: "karty-handball",
+      text: "Míč se náhodou dotkne paže útočníka, která tělo nezvětšila. Útočník pak přihraje spoluhráči a ten skóruje. Co rozhodčí?",
+      options: [
+        "Gól neuzná, ruka v přípravě gólu je přestupek",
+        "Gól neuzná a nařídí nepřímý volný kop",
+        "Gól uzná, ale útočníkovi ukáže žlutou",
+        "Gól uzná, přestupek to není",
+      ],
+      correct: 3,
+      explain: "Zákaz skórovat po náhodném doteku paže platí jen pro střelce. Náhodná ruka spoluhráče, která tělo nezvětšila, přestupkem není.",
+    },
+    {
+      id: "karty-handball-4",
+      lessonId: "karty-handball",
+      text: "Co platí o hře rukou pro brankáře mimo jeho pokutové území?",
+      options: [
+        "Smí hrát rukou na celé vlastní polovině",
+        "Má stejná omezení jako ostatní hráči",
+        "Za každou ruku mimo vápno dostane červenou",
+        "Za ruku se mu nařizuje jen nepřímý volný kop",
+      ],
+      correct: 1,
+      explain: "Mimo své pokutové území má brankář pro hru rukou stejná omezení jako kterýkoli jiný hráč.",
+    },
+    {
+      id: "karty-handball-5",
+      lessonId: "karty-handball",
+      text: "Hráč se pokusí dát gól rukou, ale míč branku mine. Jaký osobní trest dostane?",
+      options: ["Žádný, gól přece nepadl", "Červenou kartu", "Žlutou kartu", "Jen ústní napomenutí"],
+      correct: 2,
+      explain: "Za pokus dát gól rukou se napomíná žlutou kartou, ať se pokus povede, nebo ne.",
+    },
+
+    // ── VAR: kdy zasahuje videorozhodčí ──
+    {
+      id: "karty-var-1",
+      lessonId: "karty-var",
+      text: "Kdy smí videorozhodčí rozhodčímu pomoct?",
+      options: [
+        "U každého sporného souboje, který záznam z některé kamery zachytí",
+        "Kdykoli o to kapitán nebo hlavní trenér požádá znakem obrazovky",
+        "Jen o přestávce, aby přezkoumáním nezdržoval hru na hřišti",
+        "Jen při jasné a zřejmé chybě nebo vážném přehlédnutém incidentu",
+      ],
+      correct: 3,
+      explain: "Podle filozofie „minimální zásah, maximální přínos“ opravuje VAR jen jasnou a zřejmou chybu nebo vážný přehlédnutý incident.",
+    },
+    {
+      id: "karty-var-2",
+      lessonId: "karty-var",
+      text: "Sudí přehlédne bezohledný faul hráče, který už má žlutou kartu. Může VAR doporučit přezkoumání kvůli druhé žluté?",
+      options: [
+        "Ano, druhá žlutá je od sezóny 2026/27 přezkoumatelná vždy",
+        "Ne, VAR zasáhne jen u druhé žluté ukázané zjevně neprávem",
+        "Ano, ale jen když o to požádá kapitán poškozeného týmu",
+        "Ne, karty VAR nepřezkoumává vůbec",
+      ],
+      correct: 1,
+      explain: "Přehlédnutou druhou žlutou VAR nedoplní. Pomoct může jen tehdy, když rozhodčí druhou žlutou ukázal zjevně neprávem.",
+    },
+    {
+      id: "karty-var-3",
+      lessonId: "karty-var",
+      text: "Kdo zahajuje přezkoumání a kdo dělá konečné rozhodnutí?",
+      options: [
+        "Přezkoumání zahajuje VAR, konečné slovo má rozhodčí",
+        "Obojí dělá VAR, rozhodčí rozhodnutí jen oznámí",
+        "Obojí dělá rozhodčí, VAR přezkoumání jen doporučuje",
+        "Přezkoumání si vyžádá trenér, rozhoduje VAR",
+      ],
+      correct: 2,
+      explain: "Zahájit přezkoumání smí jen rozhodčí, VAR ho může jen doporučit. Konečné rozhodnutí je vždy na rozhodčím.",
+    },
+    {
+      id: "karty-var-4",
+      lessonId: "karty-var",
+      text: "Sudí nařídí penaltu, ale VAR zjistí, že faul byl před pokutovým územím. Jak se u takové faktické věci obvykle postupuje?",
+      options: [
+        "Obvykle stačí informace od VAR, k monitoru jít nemusí",
+        "Rozhodčí se musí vždy podívat na záznam u hrací plochy",
+        "Penalta platí, místo přestupku VAR neřeší",
+        "O místě přestupku má poslední slovo asistent u čáry",
+      ],
+      correct: 0,
+      explain: "U faktů, jako je místo přestupku, ofsajdová pozice nebo míč za čarou, obvykle stačí informace od VAR. Přezkoumání u hrací plochy je hlavně pro subjektivní věci.",
+    },
+    {
+      id: "karty-var-5",
+      lessonId: "karty-var",
+      text: "Za jakých podmínek smí VAR pomoct s chybně nařízeným rohem?",
+      options: [
+        "Kdykoli do konce poločasu, i když už se rozehrálo",
+        "Jen když z rohu padne gól a bránící tým protestuje",
+        "Nikdy, rohový kop VAR podle protokolu přezkoumat nesmí",
+        "Když to soutěž zavedla a oprava jde hned, bez zdržení",
+      ],
+      correct: 3,
+      explain: "Chybně nařízený roh je oblast, kterou si soutěž může zvolit. Oprava navíc musí jít udělat hned, bez zdržení navázání hry.",
     },
   ],
 };

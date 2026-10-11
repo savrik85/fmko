@@ -12,6 +12,20 @@
  * (etapy, citlivá období, pozdní specializace fotbalu, poměry trénink : soutěž),
  * Ford a kol. 2011 (kritika LTAD), Barnsley a kol. 1985 a Helsen a kol. 2005
  * (relativní věk), Cumming a kol. 2018 (bio-banding), AAP 2016 (specializace).
+ *
+ * Motivační klima: Nicholls 1984 (Psychological Review 91, zaměření na úkol a na ego),
+ * Duda (TEOSQ, přenos teorie do sportu), Ames 1992 (Journal of Educational Psychology 84),
+ * Newton, Duda a Yin 2000 (PMCSQ-2: trestání chyb, nestejné uznání, rivalita v týmu),
+ * Epstein 1988 a 1989 a Ames (TARGET, popis oblastí podle Cecchini a kol. 2014,
+ * Int. J. Sports Sci. Coach. 9), Harwood a kol. 2015 (Psychology of Sport and Exercise 18,
+ * přehled 104 studií), Smith, Smoll a Cumming 2007 (J. Sport Exerc. Psychol. 29,
+ * basketbal 10–14 let, úzkost, kontrola výsledků zápasů; tisková zpráva University
+ * of Washington 2007).
+ * Motorické učení: Shea a Morgan 1979 (J. Exp. Psychol. Hum. Learn. Mem. 5), Brady 2004
+ * a Czyż a kol. 2024 (Frontiers in Psychology, meta-analýzy: malý efekt v praxi a u dětí),
+ * Guadagnoli a Lee 2004 (challenge point, s. 219), Wulf 2013 (Int. Rev. Sport Exerc.
+ * Psychol. 6, přehled 15 let), Chua a kol. 2021 (Psychological Bulletin, meta-analýza,
+ * věk nemoderuje), Wulf a kol. 2010 (Frontiers in Psychology, vhazování, děti 10–12 let).
  */
 import type { CategoryContent } from "./types";
 
@@ -189,6 +203,50 @@ Pomáhá:
 - mluvit s nimi o jejich roli, ne je jen hodit do vody.
 
 Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a jde radši na brigádu.`,
+    },
+    {
+      id: "mladez-motivational-climate",
+      category: "mladez",
+      difficulty: 3,
+      title: "Motivační klima v týmu",
+      body: `Proč jeden trenér žáků vychová partu, která maká i za stavu 0 : 4, a druhý ustrašené děti, které se bojí zkusit kličku? Často za tím stojí **motivační klima**, tedy ovzduší, které trenér vytváří tím, co oceňuje, co trestá a podle čeho hodnotí.
+
+Základem je **teorie cílů výkonu**. **John Nicholls** (1984) popsal dva způsoby, jak člověk posuzuje vlastní schopnosti. Při **zaměření na úkol** měří úspěch vlastním zlepšením a zvládnutím úkolu. Při **zaměření na ego** je úspěch být lepší než ostatní. Do sportu teorii přenesla hlavně **Joan Duda**, autorka dotazníku, který obě orientace u sportovců měří.
+
+**Carole Ames** popsala stejné dvě podoby u prostředí. **Klima zaměřené na zvládnutí** (mastery) oceňuje snahu, zlepšení a učení. **Klima zaměřené na výkon** (performance) hráče porovnává mezi sebou. V dotaznících pro sportovce k němu patří **trestání chyb**, **nestejné uznání** a **rivalita uvnitř týmu**.
+
+Přehled **Harwooda a kolegů (2015)** ze 104 studií ukázal, že klima zaměřené na zvládnutí souvisí s vnitřní motivací, pocitem kompetence a pozitivními emocemi. Klima zaměřené na výkon souvisí s vnější motivací, ztrátou motivace a negativními emocemi. **Smith, Smoll a Cumming (2007)** proškolili trenéry dětského basketbalu (10 až 14 let) v přístupu zaměřeném na zvládnutí. Jejich hráčům úzkost během sezóny klesla, hráčům neproškolených trenérů vzrostla, a nebylo to dáno výsledky zápasů.
+
+Prakticky pomáhá model **TARGET**. Vznikl pro školní třídy a Carole Ames ho doporučila i pro sport. Jeho šest oblastí:
+- **úkol**: pestré úkoly přiměřené každému,
+- **autorita**: nech hráče spolurozhodovat,
+- **uznání**: oceňuj osobní zlepšení, raději mezi čtyřma očima,
+- **skupiny**: smíšené skupiny a spolupráce místo rivality,
+- **hodnocení**: porovnávej hráče s ním samým, ne se spoluhráči,
+- **čas**: pomalejším dej na úkol víc času.
+
+Vyhrávat se dál smí. Jen žebříček „kdo je nejlepší“ nevěš v kabině vedle rozpisu, kdo pere dresy.`,
+    },
+    {
+      id: "mladez-motor-learning",
+      category: "mladez",
+      difficulty: 3,
+      title: "Motorické učení: opakování a pozornost",
+      body: `Trenér se snadno nechá ošálit tím, jak cvičení vypadá na tréninku. Výzkum motorického učení rozlišuje **výkon při tréninku** a **učení**, tedy co hráči zůstane i po čase a co dokáže použít v nové situaci.
+
+**Blokové opakování** znamená odcvičit všechny pokusy jedné dovednosti a teprve pak přejít na další. **Náhodné opakování** dovednosti střídá v proměnlivém pořadí. Střídání vytváří takzvanou **kontextovou interferenci**. **Shea a Morgan (1979)** nechali lidi trénovat tři pohybové úlohy. Skupina s náhodným pořadím se při tréninku zlepšovala pomaleji, ale v pozdějším testu a při přenosu na novou úlohu dopadla lépe než skupina s bloky.
+
+Laboratoř ale není okresní hřiště. Souhrnné analýzy ukazují, že ve sportovní praxi je efekt menší a **u dětí vychází malý a nejistý**. **Guadagnoli a Lee (2004)** radí ladit obtížnost podle úrovně: **začátečníkům svědčí méně střídání, zkušenějším víc**. Novou dovednost tedy klidně nejdřív v blocích, a jakmile ji dítě zvládá, začni ji míchat s jinými.
+
+Druhá otázka je, **kam hráč míří pozorností**:
+- **vnitřní zaměření** je na vlastní tělo, třeba „zpevni kotník“,
+- **vnější zaměření** je na účinek pohybu, třeba „pošli míč za kužel“.
+
+**Gabriele Wulfová** v přehledu z roku 2013 shrnula patnáct let výzkumu: vnější zaměření zlepšuje výkon i učení. Pozdější meta-analýza z roku 2021 našla tuto výhodu bez ohledu na věk i úroveň.
+
+Wulfová s kolegy (2010) to zkoušela i s dětmi od 10 do 12 let při fotbalovém vhazování. Nejlepší techniku měla skupina, která dostávala **zpětnou vazbu s vnějším zaměřením po každém pokusu**.
+
+Takže místo přednášky o kotníku, koleni a kyčli stačí Pepíkovi říct: „Trefa za levou tyč.“ Přírodopis má stejně ve škole.`,
     },
   ],
   questions: [
@@ -622,6 +680,140 @@ Jinak se ti stane, že talent po dvou výpraskách od Horní Plané skončí a j
       ],
       correct: 0,
       explain: "Za muže smějí nastupovat hráči kategorie mladšího dorostu, tedy od ročníku začínajícího v roce, kdy dovrší 15 let.",
+    },
+
+    // Motivační klima v týmu
+    {
+      id: "mladez-motivational-climate-1",
+      lessonId: "mladez-motivational-climate",
+      text: "Podle čeho měří úspěch hráč zaměřený na úkol, jak to popsal John Nicholls?",
+      options: [
+        "Podle toho, jestli byl lepší než spoluhráči",
+        "Podle vlastního zlepšení a zvládnutí úkolu",
+        "Podle počtu vstřelených gólů za sezónu",
+        "Podle místa svého týmu v tabulce",
+      ],
+      correct: 1,
+      explain: "Při zaměření na úkol je měřítkem vlastní zlepšení a zvládnutí úkolu, při zaměření na ego srovnání s ostatními. Viz lekce: Motivační klima v týmu.",
+    },
+    {
+      id: "mladez-motivational-climate-2",
+      lessonId: "mladez-motivational-climate",
+      text: "Co podle dotazníků pro sportovce patří ke klimatu zaměřenému na výkon?",
+      options: [
+        "Oceňování snahy, osobního zlepšení a učení se novým věcem",
+        "Pestré úkoly přiměřené úrovni každého jednotlivého hráče",
+        "Smíšené skupiny a vzájemná spolupráce hráčů při cvičení",
+        "Trestání chyb, nestejné uznání a rivalita uvnitř týmu",
+      ],
+      correct: 3,
+      explain: "Klima zaměřené na výkon porovnává hráče mezi sebou; patří k němu trestání chyb, nestejné uznání a rivalita v týmu.",
+    },
+    {
+      id: "mladez-motivational-climate-3",
+      lessonId: "mladez-motivational-climate",
+      text: "Co zjistili Smith, Smoll a Cumming (2007) u dětského basketbalu?",
+      options: [
+        "Hráčům proškolených trenérů úzkost klesla, ostatním vzrostla, bez ohledu na výsledky",
+        "Úzkost klesla jen v týmech, které během sezóny často vyhrávaly, jinde vzrostla",
+        "Hráčům proškolených trenérů úzkost vzrostla, protože na ně trenéři víc tlačili",
+        "Školení trenérů nemělo na úzkost hráčů během sezóny žádný měřitelný vliv",
+      ],
+      correct: 0,
+      explain: "Hráčům trenérů proškolených v přístupu zaměřeném na zvládnutí úzkost klesla, u ostatních vzrostla, nezávisle na výsledcích zápasů.",
+    },
+    {
+      id: "mladez-motivational-climate-4",
+      lessonId: "mladez-motivational-climate",
+      text: "S čím podle přehledu Harwooda a kolegů (2015) souvisí klima zaměřené na výkon?",
+      options: [
+        "S vyšší vnitřní motivací, radostí ze hry a pozitivními emocemi",
+        "S lepším pocitem kompetence a vyšším sebevědomím všech hráčů",
+        "S vnější motivací, ztrátou motivace a negativními emocemi",
+        "S ničím, motivační klima podle přehledu na hráče nepůsobí",
+      ],
+      correct: 2,
+      explain: "Přehled 104 studií spojil klima zaměřené na výkon s vnější motivací, ztrátou motivace a negativními emocemi, klima zaměřené na zvládnutí s vnitřní motivací.",
+    },
+    {
+      id: "mladez-motivational-climate-5",
+      lessonId: "mladez-motivational-climate",
+      text: "Jak hodnotit hráče podle oblasti hodnocení v modelu TARGET?",
+      options: [
+        "Po každém tréninku veřejně vyhlásit pořadí hráčů",
+        "Porovnávat ho s ním samým, ne se spoluhráči",
+        "Hodnotit hlavně podle vstřelených gólů",
+        "Nechat hodnocení na rodičích u lajny",
+      ],
+      correct: 1,
+      explain: "V klimatu zaměřeném na zvládnutí se hráč porovnává se sebou samým; srovnávání se spoluhráči patří ke klimatu zaměřenému na výkon.",
+    },
+
+    // Motorické učení: opakování a pozornost
+    {
+      id: "mladez-motor-learning-1",
+      lessonId: "mladez-motor-learning",
+      text: "Co zjistili Shea a Morgan (1979) o blokovém a náhodném opakování?",
+      options: [
+        "S bloky šlo zlepšení rychleji a v pozdějším testu vyšly taky lépe",
+        "Na pořadí pokusů nezáleželo při tréninku ani v pozdějším testu",
+        "S náhodným pořadím šlo zlepšení pomaleji, ale v pozdějším testu vyšlo lépe",
+        "S náhodným pořadím šlo zlepšení rychleji, ale v pozdějším testu vyšlo hůř",
+      ],
+      correct: 2,
+      explain: "Skupina s náhodným pořadím se zlepšovala pomaleji, ale v pozdějším testu a na nové úloze dopadla lépe. Viz lekce: Motorické učení: opakování a pozornost.",
+    },
+    {
+      id: "mladez-motor-learning-2",
+      lessonId: "mladez-motor-learning",
+      text: "Co je vnější zaměření pozornosti?",
+      options: [
+        "Soustředění na to, jak se při kopu hýbe vlastní tělo",
+        "Soustředění na účinek pohybu, třeba kam má letět míč",
+        "Soustředění na pokřik diváků za zábradlím",
+        "Soustředění na trenérovy pokyny při každém doteku",
+      ],
+      correct: 1,
+      explain: "Vnější zaměření míří na účinek pohybu („pošli míč za kužel“), vnitřní na vlastní tělo („zpevni kotník“).",
+    },
+    {
+      id: "mladez-motor-learning-3",
+      lessonId: "mladez-motor-learning",
+      text: "Co radí Guadagnoli a Lee (2004) o střídání dovedností v tréninku?",
+      options: [
+        "Začátečníkům co nejvíc střídání, zkušenějším bloky",
+        "Všem stejně, na úrovni hráče nezáleží",
+        "Střídat dovednosti jen u dětí do deseti let",
+        "Začátečníkům méně střídání, zkušenějším víc",
+      ],
+      correct: 3,
+      explain: "Obtížnost se má ladit podle úrovně: začátečníkům svědčí méně kontextové interference, zkušenějším víc.",
+    },
+    {
+      id: "mladez-motor-learning-4",
+      lessonId: "mladez-motor-learning",
+      text: "Co ukazují souhrnné analýzy o efektu kontextové interference u dětí?",
+      options: [
+        "Efekt vychází malý a nejistý",
+        "Efekt je u dětí větší než v laboratoři",
+        "Blokové opakování dětem spolehlivě škodí",
+        "Děti se při střídání dovedností nenaučí nic",
+      ],
+      correct: 0,
+      explain: "Ve sportovní praxi je efekt menší než v laboratoři a u dětí vychází malý a nejistý.",
+    },
+    {
+      id: "mladez-motor-learning-5",
+      lessonId: "mladez-motor-learning",
+      text: "Která skupina měla ve studii Wulfové a kolegů (2010) s dětmi při vhazování nejlepší techniku?",
+      options: [
+        "Skupina s vnitřní zpětnou vazbou po každém pokusu",
+        "Skupina s vnější zpětnou vazbou po každém třetím pokusu",
+        "Skupina s vnější zpětnou vazbou po každém pokusu",
+        "Skupina s vnitřní zpětnou vazbou po každém třetím pokusu",
+      ],
+      correct: 2,
+      explain: "Nejlepší techniku vhazování měly děti, které dostávaly zpětnou vazbu s vnějším zaměřením po každém pokusu.",
     },
   ],
 };

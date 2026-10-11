@@ -39,7 +39,8 @@ export function courseLessons(course: CourseRef): Lesson[] {
   const category = ATTR_CATEGORY[course.attr as CourseAttr];
   if (!category) return [];
   const lessons = COURSE_CONTENT[category].lessons;
-  return course.kind === "attr_basic" ? lessons.filter((l) => l.difficulty <= 2) : lessons;
+  // Pokročilý kurz má jen vlastní lekce, látku základního kurzu znovu neprobírá.
+  return course.kind === "attr_basic" ? lessons.filter((l) => l.difficulty <= 2) : lessons.filter((l) => l.difficulty === 3);
 }
 
 export function courseQuestionPool(course: CourseRef): QuizQuestion[] {

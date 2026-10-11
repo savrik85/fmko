@@ -55,16 +55,18 @@ describe("obsah trenérské školy", () => {
     }
   });
 
-  it("vlastnosti: na základní kurz i opravný termín je dost otázek", () => {
+  it("vlastnosti: na základní i pokročilý kurz a jejich opravné termíny je dost otázek", () => {
     for (const cat of ATTRIBUTE_CATEGORIES) {
       const c = COURSE_CONTENT[cat];
       const basicLessons = new Set(c.lessons.filter((l) => l.difficulty <= 2).map((l) => l.id));
+      const advancedLessons = new Set(c.lessons.filter((l) => l.difficulty === 3).map((l) => l.id));
       const basicPool = c.questions.filter((q) => basicLessons.has(q.lessonId));
+      const advancedPool = c.questions.filter((q) => advancedLessons.has(q.lessonId));
       // Základní test 8 otázek + opravný 8 jiných.
       expect(basicPool.length, cat).toBeGreaterThanOrEqual(16);
-      // Pokročilý test 10 + opravný 10 ze všech lekcí.
-      expect(c.questions.length, cat).toBeGreaterThanOrEqual(24);
-      expect(c.lessons.some((l) => l.difficulty === 3), cat).toBe(true);
+      // Pokročilý test 10 + opravný 10 jiných, jen z lekcí pokročilého kurzu.
+      expect(advancedPool.length, cat).toBeGreaterThanOrEqual(20);
+      expect(advancedLessons.size, cat).toBeGreaterThanOrEqual(5);
     }
   });
 

@@ -5,6 +5,19 @@
  * Fakta ověřena proti UEFA.com, FIFA, oficiálním webům klubů a Wikipedii
  * (vždy s druhým zdrojem). Sporné detaily (přesné minuty, které se ve zdrojích
  * liší, nejisté citace) jsou vynechané nebo parafrázované.
+ *
+ * Dánsko 1992: UEFA.com (rozhovory s P. Schmeichelem 2015, J. Jensenem 2013,
+ * B. Laudrupem 2020, „Denmark late show steals spotlight“, „EURO cult heroes: Kim
+ * Vilfort“ 2016, fr.uefa.com „Instantané: surprise danoise“), en.wikipedia.org/wiki/UEFA_Euro_1992.
+ * Den oznámení se ve zdrojích liší (31. 5. podle Wikipedie, „týden“ až „dva týdny“
+ * podle UEFA), proto jen „na konci května, necelé dva týdny před zahájením“.
+ *
+ * Leicester 2016: premierleague.com (PL30: How Ranieri masterminded Leicester's
+ * title victory; 2016/17 preview), lcfc.com (15/16 by the numbers; Champions),
+ * ESPN (Leicester 10 years later), C. Ranieri: „We Do Not Dream“ (The Players'
+ * Tribune, 2016; pizza, 40 bodů, Kanté), Sporting Life a OffTheBall (zvonečky),
+ * en.wikipedia.org/wiki/2015–16_Leicester_City_F.C._season. Lineker a jeho tweet
+ * „Ranieri? Really?“ vynechány, citace má jen jeden zdroj.
  */
 import type { CategoryContent } from "./types";
 
@@ -166,6 +179,42 @@ Nejslavnější večer přišel **7. května 2019** v odvetě semifinále Ligy m
 Liverpool vyhrál **4:0** a Klopp nazval své hráče **mentálními obry**. Finále v Madridu s Tottenhamem vyhrál **2:0** a o rok později přinesl Liverpoolu **první ligový titul po 30 letech**. Klub opustil v roce 2024.
 
 Poučení pro kabinu: víra se nedá nařídit, ale trenér ji může zasít. Na okrese stačí začít tím, že po ztrátě míče nikdo nestojí a nenadává.`,
+    },
+    {
+      id: "legendy-denmark-1992",
+      category: "legendy",
+      difficulty: 3,
+      title: "Dánsko 1992: mistři, kteří nepostoupili",
+      body: `Mistrovství Evropy 1992 ve Švédsku hrálo jen **osm týmů** a Dánsko mezi nimi původně nebylo. V kvalifikační skupině skončilo o bod **za Jugoslávií**. Ta se ale rozpadala ve válce, OSN na ni uvalila sankce a UEFA ji z turnaje vyřadila. Její místo dostalo na konci května **Dánsko**, necelé dva týdny před zahájením.
+
+Traduje se, že trenér **Richard Møller Nielsen** sháněl hráče po plážích. Brankář **Peter Schmeichel** to označil za **mýtus**: hráči ještě trénovali a čekal je jeden přátelský zápas, jen hlavou už byli na dovolené. Záložník **John Jensen** se chystal k moři do Španělska a trenér měl to léto doma dělat novou kuchyň. Chyběla i největší hvězda **Michael Laudrup**, který po sporu s trenérem za reprezentaci nehrál. Jeho bratr **Brian** se na jaře vrátil.
+
+- Ve skupině remíza 0:0 s Anglií, prohra 0:1 se Švédskem a rozhodující výhra **2:1 nad Francií**.
+- V semifinále s obhájcem titulu **Nizozemskem** dal dva góly **Henrik Larsen**. Po remíze **2:2 po prodloužení** chytil Schmeichel v rozstřelu penaltu **Marcu van Bastenovi** a Dánsko vyhrálo **5:4**.
+- Finále **26. června 1992** v **Göteborgu** proti mistru světa **Německu** rozhodli góly **Johna Jensena** a **Kima Vilforta**, **2:0**.
+
+Vilfort přitom po dvou zápasech odjel domů za dcerou, která se léčila s leukémií, a zápas s Francií vynechal. Rodina ho povzbudila k návratu. V semifinále proměnil penaltu v rozstřelu a ve finále dal druhý gól. Dcera zemřela několik týdnů po turnaji.
+
+Brian Laudrup vzpomínal, že jádro týmu spolu hrálo léta a trenér hráče přesvědčil, že **nemožné je možné**. Poučení pro kabinu: kdo nemá co ztratit, hraje uvolněně, ale pohodu musí nést parta, která se zná a drží při sobě i mimo hřiště. Kuchyň počká.`,
+    },
+    {
+      id: "legendy-leicester-2016",
+      category: "legendy",
+      difficulty: 3,
+      title: "Leicester 2016: titul za 5000:1",
+      body: `V sezóně 2014/15 strávil **Leicester City** většinu ročníku na **posledním místě** Premier League. Pod trenérem Nigelem Pearsonem pak vyhrál **sedm z posledních devíti zápasů** a zachránil se na 14. místě. V létě klub Pearsona propustil a **13. července 2015** jmenoval Itala **Claudia Ranieriho**. Sázkové kanceláře vypisovaly na titul Leicesteru kurz **5000:1**.
+
+Ranieri o titulu nemluvil. Cílem bylo **40 bodů**, tedy záchrana. V Chelsea měl kdysi přezdívku **Tinkerman**, kutil, protože pořád předělával sestavu. V Leicesteru hrál kompaktní **4-4-2** na rychlé brejky a za celou sezónu udělal v základní sestavě jen **33 změn**. Každý věděl, kde hraje a co má dělat.
+
+- **Jamie Vardy** dal 24 ligových gólů a skóroval v **11 zápasech po sobě**, čímž překonal rekord Ruuda van Nistelrooye.
+- **Riyad Mahrez** dal 17 gólů a profesionální hráči ho v anketě PFA zvolili **nejlepším hráčem sezóny**.
+- **N'Golo Kanté**, koupený z francouzského Caen, měl nejvíc odebraných míčů a zachycených přihrávek v lize. Ranieri vzpomínal, že ho musel brzdit, ať neběhá za každým míčem.
+
+Tým dlouho nedokázal udržet čisté konto, a tak Ranieri slíbil, že za první nulu zaplatí všem **pizzu**. Přišla v říjnu po výhře 1:0 nad Crystal Palace. V pizzerii si ji ale hráči museli **udělat sami**, protože podle trenéra se pracuje za všechno, i za pizzu. Když na tréninku polevila pozornost, volal **„dilly-ding, dilly-dong“**, ať se hráči probudí, a o Vánocích jim i realizačnímu týmu koupil malé zvonečky.
+
+Titul potvrdila **2. května 2016** remíza Tottenhamu na hřišti Chelsea 2:2. Leicester skončil s **81 body**, o deset před Arsenalem, prohrál jen tři zápasy a poprvé ve své 132leté historii byl mistrem Anglie.
+
+Poučení pro kabinu: velký sen svazuje nohy, malý cíl a smích je uvolní. Na okrese stačí slíbit za nulu klobásy, ale opéct si je kluci musí sami.`,
     },
   ],
   questions: [
@@ -529,6 +578,140 @@ Poučení pro kabinu: víra se nedá nařídit, ale trenér ji může zasít. Na
       ],
       correct: 0,
       explain: "Titul přišel rok po výhře v Lize mistrů a ukončil třicetileté čekání Liverpoolu na ligový titul.",
+    },
+
+    // Dánsko 1992
+    {
+      id: "legendy-denmark-1992-1",
+      lessonId: "legendy-denmark-1992",
+      text: "Proč Dánsko hrálo mistrovství Evropy 1992, ačkoli v kvalifikaci skončilo za Jugoslávií?",
+      options: [
+        "Turnaj se rozšířil o dva týmy",
+        "Jugoslávie se vzdala kvůli penězům",
+        "UEFA vyřadila Jugoslávii kvůli válce",
+        "Dánsko vyhrálo baráž o volné místo",
+      ],
+      correct: 2,
+      explain: "Jugoslávie se rozpadala ve válce a OSN na ni uvalila sankce, proto ji UEFA z turnaje vyřadila. Místo dostalo Dánsko, druhé z její kvalifikační skupiny.",
+    },
+    {
+      id: "legendy-denmark-1992-2",
+      lessonId: "legendy-denmark-1992",
+      text: "Co podle Petera Schmeichela platí o historce, že Dánové přijeli na turnaj rovnou z pláží?",
+      options: [
+        "Je to mýtus, hráči ještě trénovali",
+        "Je to pravda, celý tým byl u moře",
+        "Je to pravda, ale jen u náhradníků",
+        "Historku si vymyslel sám trenér",
+      ],
+      correct: 0,
+      explain: "Schmeichel to označil za mýtus. Hráči ještě trénovali a čekal je přátelský zápas, jen hlavou už byli na dovolené.",
+    },
+    {
+      id: "legendy-denmark-1992-3",
+      lessonId: "legendy-denmark-1992",
+      text: "Jak Dánsko v semifinále vyřadilo obhájce titulu Nizozemsko?",
+      options: [
+        "Vyhrálo 2:0 po gólech Jensena a Vilforta",
+        "Po remíze 2:2 vyhrálo penaltový rozstřel 5:4",
+        "Rozhodl zlatý gól Larsena v prodloužení",
+        "Otočilo ve druhém poločase na 2:1",
+      ],
+      correct: 1,
+      explain: "Henrik Larsen dal dva góly a zápas skončil 2:2 po prodloužení. V rozstřelu Schmeichel chytil penaltu van Bastenovi a Dánsko vyhrálo 5:4.",
+    },
+    {
+      id: "legendy-denmark-1992-4",
+      lessonId: "legendy-denmark-1992",
+      text: "Proč na mistrovství Evropy 1992 chyběl Michael Laudrup?",
+      options: [
+        "Nestihl se doléčit ze zranění",
+        "Měl trest za červenou kartu z kvalifikace",
+        "Jeho klub ho na turnaj neuvolnil",
+        "Po sporu s trenérem za reprezentaci nehrál",
+      ],
+      correct: 3,
+      explain: "Michael Laudrup po sporu s Møllerem Nielsenem za reprezentaci nehrál. Jeho bratr Brian se do týmu na jaře 1992 vrátil.",
+    },
+    {
+      id: "legendy-denmark-1992-5",
+      lessonId: "legendy-denmark-1992",
+      text: "Proč Kim Vilfort vynechal zápas s Francií?",
+      options: [
+        "Měl trest za dvě žluté karty",
+        "Trenér ho nechal odpočinout",
+        "Odjel domů za nemocnou dcerou",
+        "Zranil se v zápase se Švédskem",
+      ],
+      correct: 2,
+      explain: "Vilfort odjel za dcerou, která se léčila s leukémií. Rodina ho povzbudila k návratu a ve finále dal gól na 2:0.",
+    },
+
+    // Leicester 2016
+    {
+      id: "legendy-leicester-2016-1",
+      lessonId: "legendy-leicester-2016",
+      text: "Jaký cíl měl Leicester podle Ranieriho na začátku mistrovské sezóny 2015/16?",
+      options: [
+        "Postup do evropských pohárů",
+        "40 bodů, tedy záchrana",
+        "Místo v horní polovině tabulky",
+        "Titul v Premier League",
+      ],
+      correct: 1,
+      explain: "Ranieri o titulu nemluvil, cílem bylo 40 bodů a záchrana. Tým nakonec získal 81 bodů a titul.",
+    },
+    {
+      id: "legendy-leicester-2016-2",
+      lessonId: "legendy-leicester-2016",
+      text: "Čím se Ranieri v Leicesteru vzdálil své staré přezdívce Tinkerman z Chelsea?",
+      options: [
+        "Každý týden měnil rozestavení",
+        "Střídal brankáře podle soupeře",
+        "Přešel na hru s pěti obránci",
+        "Skoro neměnil základní sestavu",
+      ],
+      correct: 3,
+      explain: "Tinkerman znamená kutil, který pořád předělává sestavu. V Leicesteru Ranieri udělal za celou sezónu jen 33 změn v základní sestavě.",
+    },
+    {
+      id: "legendy-leicester-2016-3",
+      lessonId: "legendy-leicester-2016",
+      text: "Jaký rekord Premier League překonal v mistrovské sezóně Jamie Vardy?",
+      options: [
+        "Gól v 11 ligových zápasech po sobě",
+        "Nejvíc gólů v jedné sezóně",
+        "Nejrychlejší hattrick v historii soutěže",
+        "Nejvíc gólů hlavou za sezónu",
+      ],
+      correct: 0,
+      explain: "Vardy skóroval v 11 zápasech po sobě a překonal rekord Ruuda van Nistelrooye. Celkem dal v sezóně 24 ligových gólů.",
+    },
+    {
+      id: "legendy-leicester-2016-4",
+      lessonId: "legendy-leicester-2016",
+      text: "Jaký háček měla Ranieriho odměna pizzou za první čisté konto?",
+      options: [
+        "Pizzu dostali jen obránci a brankář",
+        "Pizzu platil kapitán ze svého",
+        "Pizzu si hráči museli udělat sami",
+        "Pizzu směli sníst až po sezóně",
+      ],
+      correct: 2,
+      explain: "První nula přišla v říjnu po výhře 1:0 nad Crystal Palace. Ranieri pizzu zaplatil, ale hráči si ji museli udělat sami, protože se pracuje za všechno.",
+    },
+    {
+      id: "legendy-leicester-2016-5",
+      lessonId: "legendy-leicester-2016",
+      text: "K čemu sloužilo Ranieriho „dilly-ding, dilly-dong“?",
+      options: [
+        "Tak oznamoval hráčům volný den",
+        "Budil hráče, když polevila pozornost",
+        "Byl to pokřik fanoušků po gólu",
+        "Byl to signál k rychlému rozehrání rohu",
+      ],
+      correct: 1,
+      explain: "Když na tréninku polevila pozornost, Ranieri volal dilly-ding, dilly-dong, ať se hráči probudí. O Vánocích jim pak koupil malé zvonečky.",
     },
   ],
 };

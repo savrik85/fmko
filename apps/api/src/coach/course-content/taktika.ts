@@ -4,6 +4,14 @@
  * Zdroje: pravidla IFAB 2026/27 (theifab.com), Pravidla fotbalu FAČR (pravidlo 11, 13, 17),
  * u historie a taktických pojmů anglická Wikipedie (Formation, Marking, Gegenpressing,
  * Catenaccio, Total Football, Forward: False 9, England v Hungary 1953).
+ *
+ * Rozehrávka zezadu a tři stopeři: IFAB pravidlo 16 (kop od branky) a změny pravidel 2026/27
+ * (odpočet pěti sekund, theifab.com); FIFA Training Centre, Building from goal kicks (2021);
+ * Coaches' Voice, „football tactics explained“: Third-man runs (2022), The half-spaces (2022),
+ * The back three (2021), The 3-5-2 (2022), The 3-4-3 (2025), Wing-backs (2022); Pink Un, rozbor
+ * Norwiche (salida lavolpiana); Forza Italian Football, tři obránci proti jednomu a dvěma útočníkům
+ * (2012); Jonathan Wilson, Sports Illustrated 2010 (Argentina 1986); anglická Wikipedie (Formation,
+ * 2016–17 Chelsea F.C. season).
  */
 import type { CategoryContent } from "./types";
 
@@ -157,6 +165,49 @@ Z historie:
 - V moderní době roli proslavil **Lionel Messi** v Barceloně pod **Pepem Guardiolou**. Španělsko s **Cescem Fàbregasem** jako falešnou devítkou vyhrálo **Euro 2012**, Fàbregas tak nastoupil i ve finále.
 
 Pro okresního trenéra: falešná devítka dává smysl, když máš technického hráče a rychlé nabíhající záložníky. Když nemáš ani jedno, zůstaň u klasického útočníka, který stojí stoperovi za zády a otravuje ho celých devadesát minut.`,
+    },
+    {
+      id: "taktika-build-up",
+      category: "taktika",
+      difficulty: 3,
+      title: "Rozehrávka zezadu a třetí hráč",
+      body: `**Rozehrávka zezadu** znamená, že tým nekope míč od brankáře naslepo dopředu, ale postupuje přihrávkami přes obránce a zálohu. Pomohlo jí pravidlo platné od sezóny 2019/20: při **kopu od branky** je míč ve hře, jakmile je kopnut a zřetelně se pohne, a **nemusí opustit pokutové území**. Spoluhráč ho tedy může převzít přímo ve vápně. Soupeři musí zůstat mimo pokutové území, dokud míč není ve hře. Kdo kop od branky schválně zdržuje, riskuje: podle pravidel 2026/27 začne rozhodčí zdviženou rukou odpočítávat pět sekund, a když míč ani pak není ve hře, kope soupeř **roh**.
+
+Jak se rozehrávka staví:
+- **brankář** hraje nohama jako hráč v poli navíc a pomáhá vytvořit přesilu proti napadajícím útočníkům,
+- **stopeři** se rozestoupí do stran. Čím jsou od sebe dál, tím víc místa vznikne uprostřed,
+- **defenzivní záložník** často klesne mezi stopery, vzadu vznikne trojice a krajní obránci můžou jít výš. Tomu se říká **salida lavolpiana**, podle argentinského trenéra Ricarda La Volpeho.
+
+Cílem není kroužit vzadu, ale vylákat soupeře a dostat míč za jeho první řadu, nejlépe hráči **mezi liniemi** nebo v **poloprostoru**. Když hřiště rozdělíš na pět podélných pásů, poloprostory jsou ty dva mezi středem a krajem. Hráč, který tam převezme míč, může hrát skoro kamkoli a obránce těžko odhaduje, jestli na něj vystoupit.
+
+Osvědčený trik je **třetí hráč**: první hráč přitáhne soupeře a přihraje druhému, ten míč hned přepustí třetímu, který mezitím naběhl do uvolněného místa. Míč tak dojde k hráči, na kterého přímá přihrávka nevedla.
+
+Nejdražší chyba je **ztráta míče před vlastní brankou**. Když soupeř zavře krátké přihrávky, přichází **dlouhý míč**, ideálně na útočníka, který ho podrží, a spoluhráče, který nabíhá za obranu. Kdo hraje jen nakrátko, je čitelný. Na okrese, kde stoper umí levou nohou jen stát, to platí dvojnásob.`,
+    },
+    {
+      id: "taktika-back-three",
+      category: "taktika",
+      difficulty: 3,
+      title: "Tři stopeři a wingbeci: 3-5-2 a 3-4-3",
+      body: `V základním kurzu padlo, že v rozestavení 3-5-2 hrají tři střední obránci a dva **wingbeci**. Teď proč a kdy.
+
+**3-5-2** má vpředu dva útočníky a uprostřed zálohy tři hráče. **3-4-3** má uprostřed jen **dvojici záložníků** a vpředu trojici, třeba hrotového útočníka a dva hráče těsně za ním.
+
+Proč tři stopeři:
+- **proti dvěma útočníkům** mají přesilu. Dva útočníky pohlídají dva stopeři a třetí jistí za nimi nebo převezme záložníka, který naběhne,
+- **proti jedinému útočníkovi** bývá třetí stoper skoro zbytečný. Může proto s míčem vyrazit do zálohy a vytvořit přesilu tam,
+- při rozehrávce mají spolu s brankářem proti napadání soupeře hráče navíc.
+
+**Wingbeci** jsou obvykle nejširší hráči týmu. V útoku dávají šířku a centrují, v obraně klesnou ke stoperům a vznikne **pětiobrana**. Celý zápas běhají od jedné branky ke druhé, takže potřebují rychlost i kondici.
+
+Slabiny:
+- prostor **vedle trojice stoperů**, hlavně při protiútoku, když se wingbeci vracejí z útoku přes půl hřiště. Krajní stopeři pak musí vybíhat do stran a hlídat náběhy za záda wingbeků,
+- když wingbeci zůstanou hluboko v pětiobraně, má soupeř volno **před ní**,
+- v 3-4-3 může soupeř přečíslit dvojici středních záložníků.
+
+Z historie: **Argentina Carlose Bilarda** vyhrála mistrovství světa 1986 v rozestavení 3-5-2. Libero jistil za dvěma obránci, kteří osobně hlídali útočníky soupeře. **Antonio Conte** po porážkách s Liverpoolem a Arsenalem na podzim 2016 přestavěl **Chelsea** na **3-4-3**, vyhrál třináct ligových zápasů v řadě a na konci sezóny i Premier League.
+
+Na okrese platí: kdo nemá dva wingbeky s plícemi jako měchy, ať radši zůstane u čtyř obránců.`,
     },
   ],
 
@@ -556,6 +607,135 @@ Pro okresního trenéra: falešná devítka dává smysl, když máš technické
       ],
       correct: 0,
       explain: "Falešná devítka hraje mezi řadami, takže potřebuje driblink, krátkou kombinaci a přehled na přihrávku za obranu.",
+    },
+
+    // ── Rozehrávka zezadu ──
+    {
+      id: "taktika-build-up-1",
+      lessonId: "taktika-build-up",
+      text: "Kdy je podle pravidel míč při kopu od branky ve hře?",
+      options: [
+        "Až když míč celým objemem opustí pokutové území",
+        "Jakmile je kopnut a zřetelně se pohne",
+        "Až když se ho dotkne další hráč",
+        "Až když opustí brankové území",
+      ],
+      correct: 1,
+      explain: "Od sezóny 2019/20 je míč ve hře, jakmile je kopnut a zřetelně se pohne. Pokutové území opouštět nemusí, takže spoluhráč ho může převzít ve vápně.",
+    },
+    {
+      id: "taktika-build-up-2",
+      lessonId: "taktika-build-up",
+      text: "Tým schválně zdržuje kop od branky. Rozhodčí odpočítá pět sekund a míč pořád není ve hře. Co následuje?",
+      options: [
+        "Kop od branky se opakuje",
+        "Nepřímý volný kop pro soupeře na hranici vápna",
+        "Brankář dostane žlutou kartu a kope se znovu",
+        "Soupeř dostane kop z rohu",
+      ],
+      correct: 3,
+      explain: "Podle pravidel 2026/27 dostane soupeř roh, když míč po odpočtu pěti sekund pořád není ve hře.",
+    },
+    {
+      id: "taktika-build-up-3",
+      lessonId: "taktika-build-up",
+      text: "Co se stane, když defenzivní záložník při rozehrávce klesne mezi stopery?",
+      options: [
+        "Vzadu vznikne trojice a krajní obránci můžou jít výš",
+        "Tým se zavře do pětiobrany a s míčem už neútočí",
+        "Brankář musí vyběhnout s míčem až k půlicí čáře",
+        "Oba stopeři se posunou do útoku k hrotovému útočníkovi",
+      ],
+      correct: 0,
+      explain: "Záložník mezi stopery vytvoří při rozehrávce trojici a krajní obránci se můžou posunout výš. Říká se tomu salida lavolpiana.",
+    },
+    {
+      id: "taktika-build-up-4",
+      lessonId: "taktika-build-up",
+      text: "Co jsou poloprostory?",
+      options: [
+        "Úzké pásy podél obou postranních čar až k rohovým praporkům",
+        "Prostor mezi brankovým a pokutovým územím",
+        "Dva podélné pásy mezi středem hřiště a krajem",
+        "Obě poloviny hřiště oddělené půlicí čárou",
+      ],
+      correct: 2,
+      explain: "Když se hřiště rozdělí na pět podélných pásů, poloprostory jsou dva pásy mezi středem a krajem. Hráč odtamtud může hrát skoro kamkoli.",
+    },
+    {
+      id: "taktika-build-up-5",
+      lessonId: "taktika-build-up",
+      text: "Jak funguje kombinace přes třetího hráče?",
+      options: [
+        "Tři hráči si přihrávají vzadu, dokud soupeř nepřestane napadat",
+        "Druhý hráč míč hned přepustí třetímu, který naběhl do uvolněného místa",
+        "Druhý hráč si míč zpracuje, otočí se a vyrazí s ním sám dopředu",
+        "Třetí hráč stojí za stopery a jistí každou přihrávku",
+      ],
+      correct: 1,
+      explain: "První hráč přitáhne soupeře a přihraje druhému, ten míč hned přepustí třetímu do uvolněného prostoru. Míč tak dojde k hráči, na kterého přímá přihrávka nevedla.",
+    },
+
+    // ── Tři stopeři a wingbeci ──
+    {
+      id: "taktika-back-three-1",
+      lessonId: "taktika-back-three",
+      text: "Proč se tři stopeři hodí hlavně proti soupeři se dvěma útočníky?",
+      options: [
+        "Trojice stoperů může stát výš, protože dva útočníci za obranu nenabíhají",
+        "Wingbeci se pak nemusí vůbec vracet do obrany",
+        "Dva stopeři pohlídají útočníky a třetí má volno na jištění",
+        "Stoperům stačí stát v jedné řadě a hlídat ofsajd",
+      ],
+      correct: 2,
+      explain: "Proti dvěma útočníkům mají tři stopeři přesilu: dva útočníky pohlídají a třetí jistí za nimi nebo převezme naběhnutého záložníka.",
+    },
+    {
+      id: "taktika-back-three-2",
+      lessonId: "taktika-back-three",
+      text: "Co lekce říká o trojici stoperů proti soupeři s jediným útočníkem?",
+      options: [
+        "Třetí stoper je skoro zbytečný, může s míčem vyrazit do zálohy",
+        "Všichni tři by ho měli hlídat osobně, aby nedal gól",
+        "Tým musí hned přejít na čtyři obránce, jinak hrozí ofsajd",
+        "Třetí stoper se má postavit na brankovou čáru vedle brankáře",
+      ],
+      correct: 0,
+      explain: "Proti jedinému útočníkovi bývá třetí stoper navíc. Může proto vyrazit s míčem do zálohy a vytvořit přesilu tam.",
+    },
+    {
+      id: "taktika-back-three-3",
+      lessonId: "taktika-back-three",
+      text: "Kde je podle lekce slabé místo trojice stoperů při protiútoku soupeře?",
+      options: [
+        "Prostor přímo před brankářem, kam se nevejdou všichni tři stopeři",
+        "Střed hřiště mezi oběma útočníky soupeře",
+        "Rohové kopy, protože tři stopeři nestačí na hlavičky",
+        "Prostor vedle trojice, když se wingbeci vracejí z útoku",
+      ],
+      correct: 3,
+      explain: "Když jsou wingbeci vysoko, zůstává prostor vedle trojice stoperů. Krajní stopeři pak musí vybíhat do stran a hlídat náběhy za záda wingbeků.",
+    },
+    {
+      id: "taktika-back-three-4",
+      lessonId: "taktika-back-three",
+      text: "Jaké riziko má rozestavení 3-4-3 ve středu hřiště?",
+      options: [
+        "Nemá wingbeky, takže mu chybí šířka",
+        "Má uprostřed jen dva záložníky a soupeř je může přečíslit",
+        "Vpředu má jen jednoho hráče, takže nemůže napadat",
+        "Středoví záložníci musí osobně hlídat útočníky soupeře",
+      ],
+      correct: 1,
+      explain: "3-4-3 má ve středu jen dvojici záložníků a vpředu trojici. Soupeř s více hráči uprostřed je může přečíslit.",
+    },
+    {
+      id: "taktika-back-three-5",
+      lessonId: "taktika-back-three",
+      text: "Na jaké rozestavení přestavěl Antonio Conte Chelsea na podzim 2016, než s ní vyhrál Premier League?",
+      options: ["4-4-2", "4-2-3-1", "3-4-3", "4-3-3"],
+      correct: 2,
+      explain: "Po porážkách s Liverpoolem a Arsenalem přešel Conte na 3-4-3, vyhrál třináct ligových zápasů v řadě a na konci sezóny i titul.",
     },
   ],
 };
