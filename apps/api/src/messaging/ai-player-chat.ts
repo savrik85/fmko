@@ -132,7 +132,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
   // jako v neděli odpoledne, což je na SMS od vesnického fotbalisty poznat.
   const cas = kontextCasu(
     kdy, smenaProPovolani(player.occupation), seedFromString(player.id),
-    player.alcohol, player.age,
+    player.alcohol, player.age, player.lastOwnMessageAt,
   );
   const occ = player.occupation ? getOccupationByName(player.occupation) : undefined;
   // Výmluvy bez vazby na počasí: tady o něm nic nevíme.
