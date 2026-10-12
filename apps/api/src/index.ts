@@ -283,6 +283,12 @@ export default {
       } catch (e: any) {
         log("error", "ai player chats tick failed", e);
       }
+      // Turnaj: zápas o 3. místo se hraje v 16:00 v Praze, dvě hodiny před finále.
+      try {
+        const { maybeAdvanceTournament } = await import("./tournament/advance");
+        const tr = await maybeAdvanceTournament(env.DB);
+        if (tr.played > 0) log("info", `tournament (14:00): ${tr.played} zápasů`);
+      } catch (e) { log("error", "tournament tick (14:00) failed", e); }
     }
 
     // ── DOHRÁNÍ ZASEKLÝCH KOL: 16:20 UTC ──

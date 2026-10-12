@@ -67,9 +67,14 @@ function stageTitle(m: CompetitionMatch): string {
   return m.stage === "league" ? `${m.day}. den` : STAGE_NAME[m.stage] ?? m.stage;
 }
 
-/** Název hracího dne: finále se hraje ve stejný den jako zápas o 3. místo. */
+/** Název hracího dne: v den finále se dřív hraje i o 3. místo. */
 function dayTitle(ms: CompetitionMatch[]): string {
-  return ms.some((m) => m.stage === "final") && ms.some((m) => m.stage === "third") ? "Finále a o 3. místo" : stageTitle(ms[0]);
+  return ms.some((m) => m.stage === "final") && ms.some((m) => m.stage === "third") ? "O 3. místo a finále" : stageTitle(ms[0]);
+}
+
+/** Krátký název dne do přepínače dnů. */
+function dayShortTitle(ms: CompetitionMatch[]): string {
+  return ms.some((m) => m.stage === "final") ? "Finále" : stageTitle(ms[0]);
 }
 
 /** Název mého zápasu: u skupin i se skupinou („Skupina A, 1. den"). */
@@ -195,9 +200,10 @@ export function CompetitionView({
   const groups = competition.groups ?? null;
 
   const leagueDays = [...new Set(matches.filter((m) => m.stage === "league").map((m) => m.day))].sort((a, b) => a - b);
-  // Ve dni skupin jdou zápasy po skupinách (A, B, C, D), jinak v pořadí z API (hlavní stadion první).
+  // Zápasy dne podle výkopu (o 3. místo před finále), ve skupinách po skupinách (A, B, C, D),
+  // jinak v pořadí z API (hlavní stadion první).
   const byDay = (day: number) => matches.filter((m) => m.day === day)
-    .sort((a, b) => (a.group ?? "").localeCompare(b.group ?? ""));
+    .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt) || (a.group ?? "").localeCompare(b.group ?? ""));
   const nextDay = matches.filter((m) => m.status !== "simulated").reduce<number | null>((min, m) => (min == null || m.day < min ? m.day : min), null);
   const lastPlayedDay = matches.filter((m) => m.status === "simulated").reduce<number | null>((max, m) => (max == null || m.day > max ? m.day : max), null);
   const myNext = matches
@@ -271,7 +277,7 @@ export function CompetitionView({
         const initial = nextDay ?? days.at(-1) ?? null;
         return (
           <RoundPager
-            pages={days.map((d) => ({ key: String(d), label: stageTitle(byDay(d)[0]) }))}
+            pages={days.map((d) => ({ key: String(d), label: dayShortTitle(byDay(d)) }))}
             initialKey={initial != null ? String(initial) : null}
             accent={BRAND}
           >

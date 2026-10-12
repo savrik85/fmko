@@ -16,9 +16,16 @@ import { simulateTournamentMatch, type TournamentMatchRow } from "./match";
 
 const M = "tournament";
 const CLAIM_TTL_MS = 15 * 60 * 1000;
+/** Zápas o 3. místo začíná o 2 hodiny dřív než finále (16:00 v Praze), ať se nehrají naráz. */
+const THIRD_PLACE_EARLIER_MS = 2 * 60 * 60 * 1000;
 const SMS_META = { type: "tournament" };
 
 const STAGE_LABEL: Record<string, string> = { league: "ligová fáze", qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
+
+/** „16:00" v pražském čase. */
+function pragueTime(iso: string): string {
+  return new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+}
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -143,9 +150,10 @@ async function insertStage(db: D1Database, t: TournamentRow, stage: "qf" | "sf" 
 }
 
 /**
- * Zápas o 3. místo: poražení semifinalisté, ve stejný den jako finále na největším vedlejším
- * hřišti (hlavní stadion patří finále). Prémie za semifinále jim zůstává, zápas rozhodne jen
- * o pořadí. Idempotentní přes unikátní slot, SMS odejde jen při prvním založení.
+ * Zápas o 3. místo: poražení semifinalisté, ve stejný den jako finále, ale o 2 hodiny dřív
+ * a na největším vedlejším hřišti (hlavní stadion patří finále). Prémie za semifinále jim
+ * zůstává, zápas rozhodne jen o pořadí. Idempotentní přes unikátní slot, SMS odejde jen při
+ * prvním založení.
  */
 async function ensureThirdPlace(
   db: D1Database, t: TournamentRow, semis: Array<{ home_team_id: string; away_team_id: string; winner_team_id: string | null }>, day: number, venues: VenueRow[],
@@ -153,15 +161,16 @@ async function ensureThirdPlace(
   const losers = semis.map((m) => (m.winner_team_id === m.home_team_id ? m.away_team_id : m.home_team_id));
   if (losers.length !== 2) return;
   const [, venueId] = playoffVenues(2, venues.map((v) => ({ id: v.id, capacity: v.capacity, isMain: v.is_main === 1 })));
+  const kickoff = new Date(Date.parse(kickoffAt(t.starts_on as string, day)) - THIRD_PLACE_EARLIER_MS).toISOString();
   const res = await db.prepare(
     `INSERT OR IGNORE INTO tournament_matches (id, tournament_id, stage, day, bracket_pos, scheduled_at, venue_id, home_team_id, away_team_id)
      VALUES (?, ?, 'third', ?, 1, ?, ?, ?, ?)`
-  ).bind(crypto.randomUUID(), t.id, day, kickoffAt(t.starts_on as string, day), venueId ?? null, losers[0], losers[1]).run();
+  ).bind(crypto.randomUUID(), t.id, day, kickoff, venueId ?? null, losers[0], losers[1]).run();
   if (res.meta.changes === 0) return;
   const [home, away] = await Promise.all(losers.map((id) => teamName(db, id)));
   for (const [teamId, opp] of [[losers[0], away], [losers[1], home]] as const) {
     await sendSystemSMS(db, teamId, t.sponsor,
-      `Do finále to tentokrát nevyšlo, ale turnaj pro vás ještě nekončí. Zítra v 18:00 hrajete o 3. místo proti ${opp}.`, SMS_META)
+      `Do finále to tentokrát nevyšlo, ale turnaj pro vás ještě nekončí. Zítra v ${pragueTime(kickoff)} hrajete o 3. místo proti ${opp}.`, SMS_META)
       .catch((e) => logger.warn({ module: M }, `SMS o 3. místo týmu ${teamId}`, e));
   }
 }
