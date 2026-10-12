@@ -42,10 +42,10 @@ function parseCrest(raw: string | null): Record<string, string | null> | null {
   }
 }
 
-/** Vzhled hřiště pro 3D (úrovně tribun, střechy, světel… a barvy areálu). */
-function parseLook(raw: string | null): Record<string, number | string> | null {
+/** Vzhled hřiště pro 3D (úrovně tribun, střechy, světel…, barvy areálu a přístavby tribun). */
+function parseLook(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;
-  try { return JSON.parse(raw) as Record<string, number | string>; } catch (e) {
+  try { return JSON.parse(raw) as Record<string, unknown>; } catch (e) {
     logger.warn({ module: "tournament-view" }, "nečitelný vzhled hřiště", e);
     return null;
   }

@@ -11,6 +11,7 @@ import type { BadgePattern } from "@/components/ui";
 import { WEATHER_OPTIONS, type WeatherType } from "@/components/stadium/stadium-3d/constants";
 
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
+import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
 );
@@ -113,9 +114,11 @@ export default function MatchDayPage() {
 
         // Turnaj: 3D podle hřiště z losu (úrovně tribun, střechy, světel z areálu).
         if (r.isTournament === true && venueLook) {
-          const facilities: Record<string, number> = {};
-          for (const [k, v] of Object.entries(venueLook)) if (typeof v === "number") facilities[k] = v;
-          setStadiumData({ facilities });
+          setStadiumData({
+            facilities: venueFacilities(venueLook),
+            // Stejný tvar jako /stadium klubu, ať ho builtExtensionsOf přečte.
+            standExtensions: { slots: venueExtensions(venueLook).map((e) => ({ slot: e.slot, built: { kind: e.kind, level: e.level } })) },
+          });
         } else if (homeTeamId) {
           // Načteme zázemí stadionu domácího týmu pro 3D scénu
           try {
