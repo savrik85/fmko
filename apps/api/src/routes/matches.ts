@@ -305,9 +305,114 @@ matchesRouter.get("/teams/:teamId/cup-preview/:cupMatchId", async (c) => {
   });
 });
 
-// GET /api/teams/:teamId/schedule — rozpis zápasů (odehrané + nadcházející)
 /** Fáze play-off turnaje P-Mobile pro názvy zápasů („Turnaj P-Mobile, čtvrtfinále"). */
 const TOURNAMENT_STAGE_NAME: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
+
+// GET /api/teams/:teamId/tournament-preview/:matchId — náhled zápasu Turnaje P-Mobile.
+// Stejný tvar jako match-preview: kádry, pořadí a forma ze skupiny (nebo ligové fáze), hřiště
+// areálu, počasí dne. Kurzy turnaj nemá.
+matchesRouter.get("/teams/:teamId/tournament-preview/:matchId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const matchId = c.req.param("matchId");
+  const db = c.env.DB;
+
+  const m = await db.prepare(
+    `SELECT m.id, m.tournament_id, m.stage, m.day, m.scheduled_at, m.home_team_id, m.away_team_id, m.venue_id,
+            t.name AS tournament_name, v.name AS venue_name, v.capacity AS venue_capacity, v.look AS venue_look
+       FROM tournament_matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+       LEFT JOIN tournament_venues v ON v.id = m.venue_id
+      WHERE m.id = ?`
+  ).bind(matchId).first<{
+    id: string; tournament_id: string; stage: string; day: number; scheduled_at: string; home_team_id: string; away_team_id: string;
+    venue_id: string | null; tournament_name: string; venue_name: string | null; venue_capacity: number | null; venue_look: string | null;
+  }>().catch((e) => { logger.warn({ module: "matches" }, "fetch tournament match for preview", e); return null; });
+  if (!m) return c.json({ error: "Tournament match not found" }, 404);
+
+  const [entries, played] = await Promise.all([
+    db.prepare(
+      `SELECT e.team_id, e.group_code, t.name, COALESCE(t.reputation, 0) AS reputation
+         FROM tournament_entries e JOIN teams t ON t.id = e.team_id WHERE e.tournament_id = ?`
+    ).bind(m.tournament_id).all<{ team_id: string; group_code: string | null; name: string; reputation: number }>(),
+    db.prepare(
+      `SELECT home_team_id, away_team_id, home_score, away_score FROM tournament_matches
+        WHERE tournament_id = ? AND stage = 'league' AND status = 'simulated' ORDER BY day`
+    ).bind(m.tournament_id).all<{ home_team_id: string; away_team_id: string; home_score: number; away_score: number }>(),
+  ]);
+  const { computeStandings } = await import("../tournament/draw");
+  const groupOf = new Map(entries.results.map((e) => [e.team_id, e.group_code]));
+
+  const buildSide = async (id: string) => {
+    const team = await db.prepare("SELECT name, primary_color, secondary_color, badge_pattern FROM teams WHERE id = ?")
+      .bind(id).first<{ name: string; primary_color: string | null; secondary_color: string | null; badge_pattern: string | null }>();
+    const squad = (await db.prepare("SELECT position, overall_rating, age FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released')")
+      .bind(id).all<{ position: string; overall_rating: number; age: number }>()
+      .catch((e) => { logger.warn({ module: "matches" }, "squad for tournament preview", e); return { results: [] as Array<{ position: string; overall_rating: number; age: number }> }; })).results;
+    // Pořadí a forma: skupina týmu (bez skupin celá ligová fáze), jen zápasy uvnitř ní.
+    const members = entries.results.filter((e) => groupOf.get(e.team_id) === groupOf.get(id));
+    const inScope = new Set(members.map((e) => e.team_id));
+    const scoped = played.results
+      .filter((x) => inScope.has(x.home_team_id) && inScope.has(x.away_team_id))
+      .map((x) => ({ home: x.home_team_id, away: x.away_team_id, homeScore: x.home_score, awayScore: x.away_score }));
+    const table = computeStandings(members.map((e) => ({ id: e.team_id, name: e.name, reputation: e.reputation })), scoped);
+    const idx = table.findIndex((r) => r.teamId === id);
+    const row = table[idx];
+    const form = scoped.filter((x) => x.home === id || x.away === id).map((x) => {
+      const mine = x.home === id ? x.homeScore : x.awayScore;
+      const theirs = x.home === id ? x.awayScore : x.homeScore;
+      return mine > theirs ? "W" : mine < theirs ? "L" : "D";
+    });
+    return {
+      id,
+      name: team?.name ?? "",
+      primaryColor: team?.primary_color ?? "#2D5F2D",
+      secondaryColor: team?.secondary_color ?? "#FFFFFF",
+      badgePattern: team?.badge_pattern ?? "shield",
+      // Pořadí ve skupině ukazujeme až po prvním odehraném zápasu, před ním by „1. místo" klamalo.
+      position: row && row.played > 0 ? idx + 1 : 0,
+      points: row?.points ?? 0, played: row?.played ?? 0, wins: row?.won ?? 0, draws: row?.drawn ?? 0, losses: row?.lost ?? 0,
+      goalsFor: row?.goalsFor ?? 0, goalsAgainst: row?.goalsAgainst ?? 0,
+      form,
+      avgRating: squad.length ? Math.round(squad.reduce((sum, p) => sum + p.overall_rating, 0) / squad.length) : 0,
+      squadSize: squad.length,
+      squad: squad.map((p) => ({ age: p.age, position: p.position, rating: p.overall_rating })),
+      isPlayer: id === teamId,
+    };
+  };
+  const [home, away] = await Promise.all([buildSide(m.home_team_id), buildSide(m.away_team_id)]);
+
+  const { resolveWeatherForDate } = await import("../season/season-weather");
+  const { describeWeather } = await import("../season/weather");
+  const dayW = await resolveWeatherForDate(db, m.scheduled_at);
+  const forecast = { expected: dayW?.weather ?? "cloudy", temperature: dayW?.temperature ?? 12, ...describeWeather(dayW?.weather ?? "cloudy", matchId) };
+  let pitchType = "natural";
+  try {
+    pitchType = (JSON.parse(m.venue_look ?? "{}") as { pitch_type?: string }).pitch_type ?? "natural";
+  } catch (e) {
+    logger.warn({ module: "matches" }, `nečitelný vzhled hřiště zápasu ${matchId}`, e);
+  }
+  const group = groupOf.get(teamId);
+  const label = m.stage === "league"
+    ? `${group ? `skupina ${group}, ` : ""}${m.day}. den`
+    : TOURNAMENT_STAGE_NAME[m.stage] ?? m.stage;
+
+  return c.json({
+    matchId: m.id,
+    round: null,
+    isCup: false,
+    isTournament: true,
+    roundName: `${m.tournament_name}, ${label}`,
+    scheduledAt: m.scheduled_at,
+    isHome: m.home_team_id === teamId,
+    isLocalDerby: false,
+    home,
+    away,
+    venue: { id: m.venue_id, name: m.venue_name ?? m.tournament_name, capacity: m.venue_capacity ?? 0, pitchCondition: 100, pitchType },
+    weather: { icon: forecast.icon, expected: forecast.expected, temperature: forecast.temperature, description: forecast.description },
+  });
+});
+
+// GET /api/teams/:teamId/schedule — rozpis zápasů (odehrané + nadcházející)
 
 matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   const teamId = c.req.param("teamId");

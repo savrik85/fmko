@@ -289,7 +289,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                 stadion soupeře. Bez odkazu se hráč o hřišti, na kterém za dva dny
                 nastoupí, nedozvěděl nic. */}
             <Link
-              href={nextMatch.isHome ? "/stadion" : `/tym/${homeTeam.id}/stadion`}
+              href={nextMatch.isTournament ? (preview.venue.id ? `/turnaj/hriste/${preview.venue.id}` : "/turnaj?tab=info") : nextMatch.isHome ? "/stadion" : `/tym/${homeTeam.id}/stadion`}
               className="text-sm text-muted truncate ml-2 hover:text-pitch-600 hover:underline"
             >
               {preview.venue.name}

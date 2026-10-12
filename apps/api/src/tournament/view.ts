@@ -42,6 +42,15 @@ function parseCrest(raw: string | null): Record<string, string | null> | null {
   }
 }
 
+/** Vzhled hřiště pro 3D (úrovně tribun, střechy, světel… a barvy areálu). */
+function parseLook(raw: string | null): Record<string, number | string> | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as Record<string, number | string>; } catch (e) {
+    logger.warn({ module: "tournament-view" }, "nečitelný vzhled hřiště", e);
+    return null;
+  }
+}
+
 export async function loadCompetitionView(db: D1Database, t: TournamentRow, teamId: string) {
   const [matchRows, teamRows, venueRows, scorerRows, earned] = await Promise.all([
     db.prepare(
@@ -65,8 +74,8 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
          FROM tournament_entries e JOIN teams t ON t.id = e.team_id LEFT JOIN leagues l ON l.id = t.league_id
         WHERE e.tournament_id = ?`
     ).bind(t.id).all<{ id: string; name: string; primary_color: string | null; reputation: number; district: string | null; group_code: string | null; crest: string }>(),
-    db.prepare("SELECT id, name, capacity, is_main FROM tournament_venues WHERE city = ? ORDER BY sort").bind(t.city)
-      .all<{ id: string; name: string; capacity: number; is_main: number }>(),
+    db.prepare("SELECT id, name, capacity, is_main, look FROM tournament_venues WHERE city = ? ORDER BY sort").bind(t.city)
+      .all<{ id: string; name: string; capacity: number; is_main: number; look: string | null }>(),
     db.prepare(
       `SELECT s.player_id, p.first_name, p.last_name, s.team_id, t.name AS team_name,
               SUM(s.goals) AS goals, SUM(s.assists) AS assists, COUNT(*) AS apps
@@ -140,7 +149,7 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
   return {
     matches,
     standings,
-    venues: venueRows.results.map((v) => ({ id: v.id, name: v.name, capacity: v.capacity, isMain: v.is_main === 1 })),
+    venues: venueRows.results.map((v) => ({ id: v.id, name: v.name, capacity: v.capacity, isMain: v.is_main === 1, look: parseLook(v.look) })),
     scorers: scorerRows.results.map((s) => ({
       playerId: s.player_id,
       name: [s.first_name, s.last_name].filter(Boolean).join(" ") || "Neznámý hráč",
