@@ -376,7 +376,7 @@ tournamentRouter.post("/admin/tournament/advance", async (c) => {
 
 // ── Detail zápasu (stejný tvar jako /cup-matches/:id) ──
 
-const STAGE_NAME: Record<string, string> = { qf: "Čtvrtfinále", sf: "Semifinále", final: "Finále" };
+const STAGE_NAME: Record<string, string> = { qf: "Čtvrtfinále", sf: "Semifinále", third: "Zápas o 3. místo", final: "Finále" };
 
 tournamentRouter.get("/tournament-matches/:id", async (c) => {
   const row = await c.env.DB.prepare(

@@ -934,7 +934,7 @@ matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
     && (!cupRow || ordOf(tournamentRow) < ordOf(cupRow));
   if (useTournament && tournamentRow) {
     const isHome = tournamentRow.home_team_id === teamId;
-    const stageName: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", final: "finále" };
+    const stageName: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
     return c.json({
       matchId: tournamentRow.id,
       opponent: isHome ? tournamentRow.away_name : tournamentRow.home_name,

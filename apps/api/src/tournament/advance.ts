@@ -18,7 +18,7 @@ const M = "tournament";
 const CLAIM_TTL_MS = 15 * 60 * 1000;
 const SMS_META = { type: "tournament" };
 
-const STAGE_LABEL: Record<string, string> = { league: "ligová fáze", qf: "čtvrtfinále", sf: "semifinále", final: "finále" };
+const STAGE_LABEL: Record<string, string> = { league: "ligová fáze", qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -142,6 +142,30 @@ async function insertStage(db: D1Database, t: TournamentRow, stage: "qf" | "sf" 
   await db.batch(stmts);
 }
 
+/**
+ * Zápas o 3. místo: poražení semifinalisté, ve stejný den jako finále na největším vedlejším
+ * hřišti (hlavní stadion patří finále). Prémie za semifinále jim zůstává, zápas rozhodne jen
+ * o pořadí. Idempotentní přes unikátní slot, SMS odejde jen při prvním založení.
+ */
+async function ensureThirdPlace(
+  db: D1Database, t: TournamentRow, semis: Array<{ home_team_id: string; away_team_id: string; winner_team_id: string | null }>, day: number, venues: VenueRow[],
+): Promise<void> {
+  const losers = semis.map((m) => (m.winner_team_id === m.home_team_id ? m.away_team_id : m.home_team_id));
+  if (losers.length !== 2) return;
+  const [, venueId] = playoffVenues(2, venues.map((v) => ({ id: v.id, capacity: v.capacity, isMain: v.is_main === 1 })));
+  const res = await db.prepare(
+    `INSERT OR IGNORE INTO tournament_matches (id, tournament_id, stage, day, bracket_pos, scheduled_at, venue_id, home_team_id, away_team_id)
+     VALUES (?, ?, 'third', ?, 1, ?, ?, ?, ?)`
+  ).bind(crypto.randomUUID(), t.id, day, kickoffAt(t.starts_on as string, day), venueId ?? null, losers[0], losers[1]).run();
+  if (res.meta.changes === 0) return;
+  const [home, away] = await Promise.all(losers.map((id) => teamName(db, id)));
+  for (const [teamId, opp] of [[losers[0], away], [losers[1], home]] as const) {
+    await sendSystemSMS(db, teamId, t.sponsor,
+      `Do finále to tentokrát nevyšlo, ale turnaj pro vás ještě nekončí. Zítra v 18:00 hrajete o 3. místo proti ${opp}.`, SMS_META)
+      .catch((e) => logger.warn({ module: M }, `SMS o 3. místo týmu ${teamId}`, e));
+  }
+}
+
 /** Prémie za umístění v play-off (nekumulativní, podle toho, kde tým skončil). */
 async function payPlacement(db: D1Database, t: TournamentRow, teamId: string, place: "qf" | "sf" | "final" | "winner"): Promise<void> {
   const amount = { qf: t.prize_quarterfinal, sf: t.prize_semifinal, final: t.prize_finalist, winner: t.prize_winner }[place];
@@ -220,6 +244,9 @@ export async function progressStages(db: D1Database, t: TournamentRow): Promise<
     if (matches.length === 0 || matches.some((m) => m.status !== "simulated")) return;
 
     if (stage === "final") {
+      // Turnaj končí, až je dohraný i zápas o 3. místo (hraje se ve stejný den).
+      const third = await loadStageMatches(db, t.id, "third");
+      if (third.some((m) => m.status !== "simulated")) return;
       const final = matches[0];
       const winner = final.winner_team_id;
       if (!winner) return;
@@ -253,6 +280,7 @@ export async function progressStages(db: D1Database, t: TournamentRow): Promise<
       await payPlacement(db, t, loser, stage);
     }
     const next = stages[i + 1];
+    if (next === "final") await ensureThirdPlace(db, t, matches, leagueDays + i + 2, venues);
     const nextMatches = await loadStageMatches(db, t.id, next);
     if (nextMatches.length > 0) continue;
     const winners = matches.map((m) => m.winner_team_id).filter((w): w is string => !!w);

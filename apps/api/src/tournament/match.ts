@@ -79,8 +79,8 @@ async function squadWithTournamentSuspensions(db: D1Database, teamId: string, su
 export function tournamentAttendance(opts: {
   homeFans: number; awayFans: number; stage: string; isMain: boolean; weather: Weather; capacity: number; seed: string;
 }): number {
-  const travel = { league: 0.25, qf: 0.4, sf: 0.5, final: 0.7 }[opts.stage] ?? 0.25;
-  const locals = (opts.isMain ? 600 : 150) * ({ league: 1, qf: 1.6, sf: 2.2, final: 3.5 }[opts.stage] ?? 1);
+  const travel = { league: 0.25, qf: 0.4, sf: 0.5, third: 0.4, final: 0.7 }[opts.stage] ?? 0.25;
+  const locals = (opts.isMain ? 600 : 150) * ({ league: 1, qf: 1.6, sf: 2.2, third: 1.6, final: 3.5 }[opts.stage] ?? 1);
   const weatherMod = { sunny: 1.05, cloudy: 1, rain: 0.75, snow: 0.6, wind: 0.9, fog: 0.85 }[opts.weather as string] ?? 1;
   let h = 0;
   for (let i = 0; i < opts.seed.length; i++) h = (h * 31 + opts.seed.charCodeAt(i)) >>> 0;
