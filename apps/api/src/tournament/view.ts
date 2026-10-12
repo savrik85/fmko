@@ -6,6 +6,7 @@
 import { logger } from "../lib/logger";
 import { BEST_THIRDS, compareAcrossGroups, computeStandings, GROUP_ADVANCING, type PlayedMatch } from "./draw";
 import type { TournamentRow } from "./service";
+import { loadTournamentAwards } from "./awards";
 
 interface MatchViewRow {
   id: string;
@@ -162,6 +163,7 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
     myEarnings: earned?.total ?? 0,
     groups,
     thirds: thirds ? { rows: thirds, advancing: BEST_THIRDS } : null,
+    awards: t.status === "finished" ? await loadTournamentAwards(db, t.id) : [],
     advancing: groups ? GROUP_ADVANCING : t.league_matches != null && teamRows.results.length >= 8 ? 8 : 4,
   };
 }

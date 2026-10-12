@@ -45,6 +45,52 @@ export interface Competition {
   scorers: Array<{ playerId: string; name: string; teamId: string; teamName: string; goals: number; assists: number; apps: number }>;
   myEarnings: number;
   advancing: number;
+  /** Ceny po finále: hráč, gólman, mladý hráč, osobnost turnaje. */
+  awards?: Array<{
+    award: string; label: string; playerId: string; playerName: string; teamId: string; teamName: string;
+    age: number | null; apps: number; goals: number; assists: number; avgRating: number; cleanSheets: number;
+  }>;
+}
+
+/** „1 gól", „3 góly", „5 gólů". */
+function count(n: number, one: string, few: string, many: string): string {
+  return `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
+}
+
+const AWARD_ICON: Record<string, string> = { player: "⭐", goalkeeper: "🧤", young: "🌱", veteran: "🎖️" };
+
+/** Ceny turnaje pod vítězem: kdo, za koho a čím si to vysloužil. */
+function Awards({ awards }: { awards: NonNullable<Competition["awards"]> }) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
+        <h3 className="font-heading font-bold text-base text-ink">Ceny turnaje</h3>
+      </div>
+      <div className="card divide-y divide-gray-100">
+        {awards.map((a) => (
+          <div key={a.award} className="flex items-start gap-3 px-4 py-3">
+            <span className="text-2xl shrink-0" aria-hidden>{AWARD_ICON[a.award] ?? "🏅"}</span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm text-muted">{a.label}</span>
+              <Link href={`/hrac/${a.playerId}`} className="block truncate text-base font-bold hover:underline">{a.playerName}</Link>
+              <Link href={`/tym/${a.teamId}`} className="block truncate text-sm text-muted hover:underline">
+                {a.teamName}{a.age != null ? `, ${a.age} let` : ""}
+              </Link>
+              <span className="block text-sm text-muted mt-0.5">
+                {[
+                  count(a.apps, "zápas", "zápasy", "zápasů"),
+                  a.award === "goalkeeper" ? count(a.cleanSheets, "čisté konto", "čistá konta", "čistých kont") : null,
+                  a.award !== "goalkeeper" && a.goals > 0 ? count(a.goals, "gól", "góly", "gólů") : null,
+                  a.award !== "goalkeeper" && a.assists > 0 ? count(a.assists, "asistence", "asistence", "asistencí") : null,
+                  `průměrná známka ${a.avgRating.toFixed(2).replace(".", ",")}`,
+                ].filter(Boolean).join(", ")}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 const TAB_KEYS = ["prehled", "tabulka", "rozpis", "playoff", "strelci", "info"] as const;
@@ -247,6 +293,8 @@ export function CompetitionView({
           </div>
         </div>
       )}
+
+      {(competition.awards?.length ?? 0) > 0 && <Awards awards={competition.awards!} />}
 
       {myEntry && (
         <div className="card px-4 py-4 space-y-3">
