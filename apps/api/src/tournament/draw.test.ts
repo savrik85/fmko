@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  assignVenues, buildLeagueSchedule, computeStandings, drawOptions, leagueDays, playoffSeeding, playoffVenues,
+  assignVenues, buildGroupSchedule, buildLeagueSchedule, computeStandings, drawGroups, drawOptions, groupPlayoffSeeding,
+  groupSizes, leagueDays, playoffSeeding, playoffVenues,
   type DrawTeam, type DrawVenue, type LeagueSchedule,
 } from "./draw";
 
@@ -69,13 +70,13 @@ describe("buildLeagueSchedule", () => {
 
 describe("drawOptions", () => {
   it("sudý počet nabízí 4..9 zápasů, aby turnaj trval 7 až 12 dní", () => {
-    const opts = drawOptions(16);
+    const opts = drawOptions(16).filter((o) => o.format === "league");
     expect(opts.map((o) => o.matchesPerTeam)).toEqual([4, 5, 6, 7, 8, 9]);
     expect(opts.find((o) => o.matchesPerTeam === 4)?.totalDays).toBe(7);
   });
 
   it("lichý počet nabízí jen sudé počty zápasů a den navíc", () => {
-    const opts = drawOptions(11);
+    const opts = drawOptions(11).filter((o) => o.format === "league");
     expect(opts.map((o) => o.matchesPerTeam)).toEqual([4, 6, 8]);
     expect(opts[0].leagueDays).toBe(5);
     expect(opts[0].totalDays).toBe(8);
@@ -151,5 +152,87 @@ describe("play-off a tabulka", () => {
     ]);
     expect(rows.map((r) => r.teamId)).toEqual(["c", "a", "b"]);
     expect(rows[0]).toMatchObject({ points: 4, goalsFor: 4, goalsAgainst: 1 });
+  });
+});
+
+// Skutečné přihlášky 1. ročníku po vyřazení Klamovky (reputace, okres, obec).
+const ENTRANTS: DrawTeam[] = [
+  ["dvorce", 100, "Praha", "Dvorce"], ["greenwatt", 93, "Prachatice", "Čkyně"], ["appyours", 93, "Prachatice", "Čkyně"],
+  ["jitona", 91, "Prachatice", "Spůle"], ["engel", 91, "Prachatice", "Vimperk"], ["bachl", 88, "Prachatice", "Vlachovo Březí"],
+  ["fasta", 87, "Prachatice", "Vimperk"], ["forpsi", 87, "Prachatice", "Čkyně"], ["kmp", 87, "Prachatice", "Čkyně"],
+  ["fezko", 86, "Prachatice", "Výškovice"], ["budvar", 85, "Prachatice", "Spůle"], ["loffler", 85, "Prachatice", "Hradčany"],
+  ["reznictvi", 85, "České Budějovice", "České Budějovice"], ["rohlik", 84, "Praha", "Břevnov"], ["alza", 81, "Praha", "Vinohrady"],
+  ["volary", 79, "Prachatice", "Volary"], ["lcovice", 70, "Prachatice", "Lčovice"], ["jihostroj", 65, "Prachatice", "Spůle"],
+].map(([id, reputation, district, village]) => ({ id: id as string, reputation: reputation as number, district: district as string, village: village as string }));
+
+describe("skupiny", () => {
+  it("18 týmů = skupiny 5, 5, 4, 4 a turnaj na 8 dní", () => {
+    expect(groupSizes(18)).toEqual([5, 5, 4, 4]);
+    expect(drawOptions(18).find((o) => o.format === "groups")).toMatchObject({ leagueDays: 5, totalDays: 8, matchesPerTeam: 4, groupSizes: [5, 5, 4, 4] });
+  });
+
+  it("skupiny se nenabídnou, když by turnaj nevyšel na 7 až 12 dní nebo by skupina měla pod 3 týmy", () => {
+    expect(drawOptions(16).some((o) => o.format === "groups")).toBe(false); // 4×4 = 3 kola + play-off = 6 dní
+    expect(drawOptions(10).some((o) => o.format === "groups")).toBe(false);
+    expect(drawOptions(20).some((o) => o.format === "groups")).toBe(true);
+  });
+
+  it.each([1, 2, 3, 42, 2024])("los z košů: nasazení v různých skupinách, nejslabší v pětkách, okresy a obce rozprostřené (seed %i)", (seed) => {
+    const groups = drawGroups(ENTRANTS, seed);
+    const byId = new Map(ENTRANTS.map((t) => [t.id, t]));
+    expect(groups.map((g) => g.length)).toEqual([5, 5, 4, 4]);
+    expect(new Set(groups.flat()).size).toBe(18);
+    // Koš 1 (Dvorce, Greenwatt, AppYours a jeden z dvojice Jitona/Engel) je rozdělený do čtyř skupin.
+    const pot1 = groups.map((g) => g.filter((id) => ["dvorce", "greenwatt", "appyours"].includes(id)).length);
+    expect(Math.max(...pot1)).toBe(1);
+    // Dva nejslabší (koš 5) jdou do větších skupin A a B, každý do jiné.
+    expect([groups[0], groups[1]].map((g) => g.filter((id) => id === "lcovice" || id === "jihostroj").length)).toEqual([1, 1]);
+    // V každé skupině právě jeden klub odjinud než z Prachaticka.
+    for (const g of groups) expect(g.filter((id) => byId.get(id)?.district !== "Prachatice")).toHaveLength(1);
+    // Kluby ze stejné obce v různých skupinách.
+    for (const g of groups) {
+      const villages = g.map((id) => byId.get(id)?.village);
+      expect(new Set(villages).size).toBe(villages.length);
+    }
+  });
+
+  it("los je deterministický podle seedu", () => {
+    expect(drawGroups(ENTRANTS, 7)).toEqual(drawGroups(ENTRANTS, 7));
+  });
+
+  it("rozpis: ve skupině každý s každým, nikdo dvakrát za den, čtyřky hrají 1., 3. a 5. den", () => {
+    const groups = drawGroups(ENTRANTS, 5);
+    const s = buildGroupSchedule(groups, 9);
+    expect(s).toHaveLength(5);
+    for (const day of s) {
+      const today = day.flatMap((m) => [m.home, m.away]);
+      expect(new Set(today).size).toBe(today.length);
+    }
+    groups.forEach((g, gi) => {
+      const inGroup = new Set(g);
+      const matches = s.flat().filter((m) => inGroup.has(m.home) || inGroup.has(m.away));
+      // Žádný zápas mimo skupinu.
+      for (const m of matches) expect(inGroup.has(m.home) && inGroup.has(m.away)).toBe(true);
+      const pairs = new Set(matches.map((m) => [m.home, m.away].sort().join("|")));
+      expect(pairs.size).toBe((g.length * (g.length - 1)) / 2);
+      expect(matches).toHaveLength(pairs.size);
+      const days = s.map((day, i) => (day.some((m) => inGroup.has(m.home)) ? i + 1 : null)).filter((d) => d != null);
+      expect(days).toEqual(gi < 2 ? [1, 2, 3, 4, 5] : [1, 3, 5]);
+    });
+    // Nejvíc 8 zápasů za den, Tábor má 10 hřišť.
+    expect(Math.max(...s.map((d) => d.length))).toBe(8);
+  });
+
+  it("čtvrtfinále A1–B2, C1–D2, B1–A2, D1–C2: týmy jedné skupiny se znovu potkají nejdřív ve finále", () => {
+    const qf = groupPlayoffSeeding([["a1", "a2", "a3"], ["b1", "b2"], ["c1", "c2"], ["d1", "d2"]]);
+    expect(qf).toEqual([
+      { home: "a1", away: "b2" }, { home: "c1", away: "d2" }, { home: "b1", away: "a2" }, { home: "d1", away: "c2" },
+    ]);
+    // Semifinále páruje vítěze 1.+2. a 3.+4. čtvrtfinále: polovina pavouka bez spoluhráčů ze skupiny.
+    const half = (i: number) => (i < 2 ? 0 : 1);
+    for (const g of ["a", "b", "c", "d"]) {
+      const sides = qf.flatMap((m, i) => [m.home, m.away].filter((id) => id.startsWith(g)).map(() => half(i)));
+      expect(new Set(sides).size).toBe(2);
+    }
   });
 });

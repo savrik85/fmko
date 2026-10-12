@@ -4,8 +4,8 @@
 
 import { logger } from "../lib/logger";
 import {
-  assignVenues, buildLeagueSchedule, drawOptions, leagueDays as leagueDaysFor, playoffStages,
-  type DrawTeam, type DrawVenue,
+  assignVenues, buildGroupSchedule, buildLeagueSchedule, drawGroups, drawOptions, groupCode, playoffStages,
+  type DrawFormat, type DrawTeam, type DrawVenue, type LeagueSchedule,
 } from "./draw";
 
 const M = "tournament";
@@ -60,17 +60,27 @@ export function kickoffAt(startsOn: string, day: number): string {
   return d.toISOString();
 }
 
-/** Přihlášené týmy s okresem a reputací — podklad pro los. */
+/** Přihlášené týmy s okresem, obcí a reputací — podklad pro los. */
 export async function loadEntrants(db: D1Database, tournamentId: string): Promise<Array<DrawTeam & { name: string }>> {
   const rows = await db.prepare(
-    `SELECT t.id, t.name, COALESCE(t.reputation, 0) AS reputation, l.district
+    `SELECT t.id, t.name, COALESCE(t.reputation, 0) AS reputation, l.district, t.village_id
        FROM tournament_entries e
        JOIN teams t ON t.id = e.team_id
        LEFT JOIN leagues l ON l.id = t.league_id
       WHERE e.tournament_id = ?
       ORDER BY e.registered_at`
-  ).bind(tournamentId).all<{ id: string; name: string; reputation: number; district: string | null }>();
-  return rows.results.map((r) => ({ id: r.id, name: r.name, reputation: r.reputation, district: r.district }));
+  ).bind(tournamentId).all<{ id: string; name: string; reputation: number; district: string | null; village_id: string | null }>();
+  return rows.results.map((r) => ({ id: r.id, name: r.name, reputation: r.reputation, district: r.district, village: r.village_id }));
+}
+
+/** Skupiny ročníku: písmeno → id týmů. Prázdné = hraje se jedna tabulka. */
+export async function loadGroups(db: D1Database, tournamentId: string): Promise<Map<string, string[]>> {
+  const rows = await db.prepare(
+    "SELECT team_id, group_code FROM tournament_entries WHERE tournament_id = ? AND group_code IS NOT NULL ORDER BY group_code"
+  ).bind(tournamentId).all<{ team_id: string; group_code: string }>();
+  const groups = new Map<string, string[]>();
+  for (const r of rows.results) groups.set(r.group_code, [...(groups.get(r.group_code) ?? []), r.team_id]);
+  return groups;
 }
 
 /** Seed losu z id ročníku — opakovaný los (např. po chybě) dá stejný rozpis. */
@@ -82,11 +92,13 @@ function seedOf(id: string): number {
 
 export class DrawError extends Error {}
 
+export type DrawChoice = { format: "league"; matchesPerTeam: number } | { format: "groups" };
+
 /**
- * Los: uloží ligovou fázi s hřišti a nastaví ročník na `drawn`. Zámek přes status
- * (`drawing`), ať dvojklik admina nevylosuje turnaj dvakrát.
+ * Los: uloží ligovou fázi (jednu tabulku, nebo skupiny) s hřišti a nastaví ročník na `drawn`.
+ * Zámek přes status (`drawing`), ať dvojklik admina nevylosuje turnaj dvakrát.
  */
-export async function performDraw(db: D1Database, matchesPerTeam: number, now = new Date()): Promise<{ matches: number; leagueDays: number }> {
+export async function performDraw(db: D1Database, choice: DrawChoice, now = new Date()): Promise<{ matches: number; leagueDays: number; format: DrawFormat }> {
   const t = await loadCurrentTournament(db);
   if (!t) throw new DrawError("Turnaj není vypsaný");
   if (t.status !== "registration" && t.status !== "closed") throw new DrawError("Turnaj už je vylosovaný");
@@ -94,12 +106,24 @@ export async function performDraw(db: D1Database, matchesPerTeam: number, now = 
   if (!t.starts_on) throw new DrawError("Turnaj nemá datum začátku");
 
   const entrants = await loadEntrants(db, t.id);
-  const option = drawOptions(entrants.length).find((o) => o.matchesPerTeam === matchesPerTeam);
-  if (!option) throw new DrawError(`S ${entrants.length} kluby nejde hrát ${matchesPerTeam} zápasů na tým`);
+  const option = drawOptions(entrants.length).find((o) => o.format === choice.format
+    && (choice.format === "groups" || o.matchesPerTeam === choice.matchesPerTeam));
+  if (!option) {
+    throw new DrawError(choice.format === "groups"
+      ? `S ${entrants.length} kluby nejdou hrát skupiny`
+      : `S ${entrants.length} kluby nejde hrát ${choice.matchesPerTeam} zápasů na tým`);
+  }
 
   const venues = await loadVenues(db, t.city);
   const drawVenues: DrawVenue[] = venues.map((v) => ({ id: v.id, capacity: v.capacity, isMain: v.is_main === 1 }));
-  const schedule = buildLeagueSchedule(entrants, matchesPerTeam, seedOf(t.id));
+  let schedule: LeagueSchedule;
+  let groups: string[][] = [];
+  if (choice.format === "groups") {
+    groups = drawGroups(entrants, seedOf(t.id));
+    schedule = buildGroupSchedule(groups, seedOf(t.id) + 1);
+  } else {
+    schedule = buildLeagueSchedule(entrants, choice.matchesPerTeam, seedOf(t.id));
+  }
   const reputation = new Map(entrants.map((e) => [e.id, e.reputation]));
   const history = new Map<string, Map<string, number>>();
 
@@ -119,14 +143,21 @@ export async function performDraw(db: D1Database, matchesPerTeam: number, now = 
         ).bind(crypto.randomUUID(), t.id, dayNo, pos + 1, kickoffAt(t.starts_on as string, dayNo), venueIds[pos], m.home, m.away));
       });
     });
-    const days = leagueDaysFor(entrants.length, matchesPerTeam);
+    const matchCount = stmts.length;
+    groups.forEach((teamIds, g) => {
+      for (const teamId of teamIds) {
+        stmts.push(db.prepare("UPDATE tournament_entries SET group_code = ? WHERE tournament_id = ? AND team_id = ?")
+          .bind(groupCode(g), t.id, teamId));
+      }
+    });
+    const days = schedule.length;
     stmts.push(db.prepare(
       "UPDATE tournaments SET status = 'drawn', drawn_at = ?, league_matches = ?, league_days = ? WHERE id = ?"
-    ).bind(now.toISOString(), matchesPerTeam, days, t.id));
+    ).bind(now.toISOString(), option.matchesPerTeam, days, t.id));
     // Jedna dávka = všechno, nebo nic.
     await db.batch(stmts);
-    logger.info({ module: M }, `los ${t.id}: ${entrants.length} týmů, ${stmts.length - 1} zápasů, ${days} dní ligové fáze`);
-    return { matches: stmts.length - 1, leagueDays: days };
+    logger.info({ module: M }, `los ${t.id}: ${entrants.length} týmů, ${choice.format === "groups" ? `${groups.length} skupiny, ` : ""}${matchCount} zápasů, ${days} dní ligové fáze`);
+    return { matches: matchCount, leagueDays: days, format: choice.format };
   } catch (e) {
     await db.prepare("UPDATE tournaments SET status = 'closed' WHERE id = ? AND status = 'drawing'").bind(t.id).run()
       .catch((err) => logger.error({ module: M }, `los ${t.id}: návrat stavu po chybě`, err));

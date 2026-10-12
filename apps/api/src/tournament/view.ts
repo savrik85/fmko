@@ -1,10 +1,10 @@
 /**
- * Data pro stránku /turnaj po losu: rozpis se skóre, tabulka ligové fáze, hřiště,
+ * Data pro stránku /turnaj po losu: rozpis se skóre, tabulka ligové fáze (nebo skupin), hřiště,
  * střelci a kolik už klub od sponzora dostal.
  */
 
 import { logger } from "../lib/logger";
-import { computeStandings } from "./draw";
+import { computeStandings, GROUP_ADVANCING, type PlayedMatch } from "./draw";
 import type { TournamentRow } from "./service";
 
 interface MatchViewRow {
@@ -60,11 +60,11 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
         ORDER BY m.day, CASE WHEN v.is_main = 1 THEN 0 ELSE 1 END, m.bracket_pos`
     ).bind(t.id).all<MatchViewRow>(),
     db.prepare(
-      `SELECT t.id, t.name, t.primary_color, COALESCE(t.reputation, 0) AS reputation, l.district,
+      `SELECT t.id, t.name, t.primary_color, COALESCE(t.reputation, 0) AS reputation, l.district, e.group_code,
               json_object('pattern', t.badge_pattern, 'primary', COALESCE(t.badge_primary_color, t.primary_color), 'secondary', COALESCE(t.badge_secondary_color, t.secondary_color), 'initials', t.badge_initials, 'symbol', t.badge_symbol) AS crest
          FROM tournament_entries e JOIN teams t ON t.id = e.team_id LEFT JOIN leagues l ON l.id = t.league_id
         WHERE e.tournament_id = ?`
-    ).bind(t.id).all<{ id: string; name: string; primary_color: string | null; reputation: number; district: string | null; crest: string }>(),
+    ).bind(t.id).all<{ id: string; name: string; primary_color: string | null; reputation: number; district: string | null; group_code: string | null; crest: string }>(),
     db.prepare("SELECT id, name, capacity, is_main FROM tournament_venues WHERE city = ? ORDER BY sort").bind(t.city)
       .all<{ id: string; name: string; capacity: number; is_main: number }>(),
     db.prepare(
@@ -86,9 +86,11 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
     ).bind(teamId, `tournament-${t.id}-place-${teamId}`, teamId, t.id).first<{ total: number }>(),
   ]);
 
+  const groupOf = new Map(teamRows.results.map((r) => [r.id, r.group_code]));
   const matches = matchRows.results.map((m) => ({
     id: m.id,
     stage: m.stage,
+    group: m.stage === "league" ? groupOf.get(m.home_team_id) ?? null : null,
     day: m.day,
     scheduledAt: m.scheduled_at,
     status: m.status,
@@ -103,11 +105,11 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
     attendance: m.attendance,
   }));
 
-  const league = matchRows.results.filter((m) => m.stage === "league" && m.status === "simulated");
-  const meta = new Map(teamRows.results.map((r) => [r.id, r]));
-  const standings = computeStandings(teamRows.results, league.map((m) => ({
+  const league: PlayedMatch[] = matchRows.results.filter((m) => m.stage === "league" && m.status === "simulated").map((m) => ({
     home: m.home_team_id, away: m.away_team_id, homeScore: m.home_score ?? 0, awayScore: m.away_score ?? 0,
-  }))).map((r, i) => ({
+  }));
+  const meta = new Map(teamRows.results.map((r) => [r.id, r]));
+  const table = (teams: typeof teamRows.results, played: PlayedMatch[]) => computeStandings(teams, played).map((r, i) => ({
     position: i + 1,
     teamId: r.teamId,
     name: meta.get(r.teamId)?.name ?? "",
@@ -117,6 +119,15 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
     played: r.played, won: r.won, drawn: r.drawn, lost: r.lost,
     goalsFor: r.goalsFor, goalsAgainst: r.goalsAgainst, points: r.points,
   }));
+  const standings = table(teamRows.results, league);
+
+  // Skupiny: tabulka každé skupiny jen ze zápasů uvnitř skupiny.
+  const codes = [...new Set(teamRows.results.map((r) => r.group_code).filter((g): g is string => !!g))].sort();
+  const groups = codes.length === 0 ? null : codes.map((code) => {
+    const members = teamRows.results.filter((r) => r.group_code === code);
+    const ids = new Set(members.map((r) => r.id));
+    return { code, standings: table(members, league.filter((m) => ids.has(m.home) && ids.has(m.away))) };
+  });
 
   return {
     matches,
@@ -132,6 +143,7 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
       apps: s.apps,
     })),
     myEarnings: earned?.total ?? 0,
-    advancing: t.league_matches != null && teamRows.results.length >= 8 ? 8 : 4,
+    groups,
+    advancing: groups ? GROUP_ADVANCING : t.league_matches != null && teamRows.results.length >= 8 ? 8 : 4,
   };
 }

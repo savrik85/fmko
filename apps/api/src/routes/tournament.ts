@@ -10,7 +10,7 @@ import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
 import { logger } from "../lib/logger";
-import { DrawError, drawPreview, loadCurrentTournament, performDraw, type TournamentRow } from "../tournament/service";
+import { DrawError, drawPreview, loadCurrentTournament, performDraw, type DrawChoice, type TournamentRow } from "../tournament/service";
 import { loadCompetitionView } from "../tournament/view";
 import { maybeAdvanceTournament } from "../tournament/advance";
 
@@ -319,17 +319,20 @@ tournamentRouter.get("/admin/tournament/draw", async (c) => {
   return c.json(preview);
 });
 
-/** Los: rozpis ligové fáze s hřišti, pak SMS od sponzora každému klubu s jeho zápasy. */
+/** Los: rozpis ligové fáze (jedna tabulka, nebo skupiny) s hřišti, pak SMS od sponzora každému klubu s jeho zápasy. */
 tournamentRouter.post("/admin/tournament/draw", async (c) => {
   const db = c.env.DB;
-  const body = await c.req.json<{ matchesPerTeam?: number }>().catch((e) => {
+  const body = await c.req.json<{ format?: string; matchesPerTeam?: number }>().catch((e) => {
     logger.warn({ module: M }, "draw: invalid body", e);
-    return {} as { matchesPerTeam?: number };
+    return {} as { format?: string; matchesPerTeam?: number };
   });
-  if (!Number.isInteger(body.matchesPerTeam)) return c.json({ error: "Vyber počet zápasů na tým" }, 400);
-  let result: { matches: number; leagueDays: number };
+  let choice: DrawChoice;
+  if (body.format === "groups") choice = { format: "groups" };
+  else if (Number.isInteger(body.matchesPerTeam)) choice = { format: "league", matchesPerTeam: body.matchesPerTeam as number };
+  else return c.json({ error: "Vyber formát nebo počet zápasů na tým" }, 400);
+  let result: Awaited<ReturnType<typeof performDraw>>;
   try {
-    result = await performDraw(db, body.matchesPerTeam as number);
+    result = await performDraw(db, choice);
   } catch (e) {
     if (e instanceof DrawError) return c.json({ error: e.message }, 400);
     logger.error({ module: M }, "los selhal", e);
@@ -344,7 +347,8 @@ tournamentRouter.post("/admin/tournament/draw", async (c) => {
          LEFT JOIN tournament_venues v ON v.id = m.venue_id
         WHERE m.tournament_id = ? ORDER BY m.day`
     ).bind(t.id).all<{ day: number; scheduled_at: string; home_team_id: string; away_team_id: string; home_name: string; away_name: string; venue: string | null }>();
-    const entries = await db.prepare("SELECT team_id FROM tournament_entries WHERE tournament_id = ?").bind(t.id).all<{ team_id: string }>();
+    const entries = await db.prepare("SELECT team_id, group_code FROM tournament_entries WHERE tournament_id = ?")
+      .bind(t.id).all<{ team_id: string; group_code: string | null }>();
     for (const e of entries.results) {
       const mine = rows.results.filter((r) => r.home_team_id === e.team_id || r.away_team_id === e.team_id);
       const lines = mine.map((r) => {
@@ -352,9 +356,11 @@ tournamentRouter.post("/admin/tournament/draw", async (c) => {
         const d = new Date(r.scheduled_at);
         return `${SHORT_WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()}. ${d.getUTCMonth() + 1}. ${opp} (${r.venue ?? t.venue_name})`;
       });
-      const body =
-        `Los je hotový! Vaše zápasy v ligové fázi, výkop vždy v 18:00: ${lines.join("; ")}. ` +
-        `Nejlepší kluby z tabulky postoupí do play-off. Sestavu na každý zápas nastavíte na stránce Sestava. Hodně štěstí!`;
+      const body = e.group_code
+        ? `Los je hotový! Hrajete ve skupině ${e.group_code}, každý s každým. Vaše zápasy, výkop vždy v 18:00: ${lines.join("; ")}. ` +
+          `Do čtvrtfinále postupují první dva z každé skupiny. Sestavu na každý zápas nastavíte na stránce Sestava. Hodně štěstí!`
+        : `Los je hotový! Vaše zápasy v ligové fázi, výkop vždy v 18:00: ${lines.join("; ")}. ` +
+          `Nejlepší kluby z tabulky postoupí do play-off. Sestavu na každý zápas nastavíte na stránce Sestava. Hodně štěstí!`;
       await sendSystemSMS(db, e.team_id, t.sponsor, body, SMS_META)
         .catch((err) => logger.warn({ module: M }, `SMS s rozpisem pro tým ${e.team_id}`, err));
     }

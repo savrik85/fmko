@@ -13,6 +13,8 @@ export interface Side { teamId: string; name: string; color: string | null; cres
 export interface CompetitionMatch {
   id: string;
   stage: "league" | "qf" | "sf" | "final";
+  /** Písmeno skupiny u zápasu ve skupině, jinak null. */
+  group?: string | null;
   day: number;
   scheduledAt: string;
   status: string;
@@ -35,6 +37,8 @@ export interface StandingRow {
 export interface Competition {
   matches: CompetitionMatch[];
   standings: StandingRow[];
+  /** Tabulky skupin, null = hraje se jedna tabulka. */
+  groups?: Array<{ code: string; standings: StandingRow[] }> | null;
   venues: Array<{ id: string; name: string; capacity: number; isMain: boolean }>;
   scorers: Array<{ playerId: string; name: string; teamId: string; teamName: string; goals: number; assists: number; apps: number }>;
   myEarnings: number;
@@ -63,6 +67,11 @@ function stageTitle(m: CompetitionMatch): string {
   return m.stage === "league" ? `${m.day}. den` : STAGE_NAME[m.stage] ?? m.stage;
 }
 
+/** Název mého zápasu: u skupin i se skupinou („Skupina A, 1. den"). */
+function matchTitle(m: CompetitionMatch): string {
+  return m.group ? `Skupina ${m.group}, ${stageTitle(m)}` : stageTitle(m);
+}
+
 /** Zápas turnaje: tabule vede na detail (odehraný) nebo na sestavu (můj nadcházející). */
 function MatchRow({ m, myTeamId }: { m: CompetitionMatch; myTeamId: string | null }) {
   const played = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
@@ -84,6 +93,7 @@ function MatchRow({ m, myTeamId }: { m: CompetitionMatch; myTeamId: string | nul
       boardColor={PMOBILE.deep}
       meta={
         <>
+          {m.group && <span className="font-heading font-bold text-ink">Skupina {m.group}</span>}
           {m.venue?.name && (
             <span className={m.venue.isMain ? "font-heading font-bold" : undefined} style={m.venue.isMain ? { color: BRAND } : undefined}>
               {m.venue.name}
@@ -109,7 +119,7 @@ function DayBlock({ title, matches, myTeamId }: { title: string; matches: Compet
   );
 }
 
-function Standings({ rows, advancing, myTeamId }: { rows: StandingRow[]; advancing: number; myTeamId: string | null }) {
+function Standings({ rows, advancing, myTeamId, footer }: { rows: StandingRow[]; advancing: number; myTeamId: string | null; footer: string | null }) {
   return (
     <div className="card overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2 text-sm text-muted border-b border-gray-100">
@@ -141,7 +151,25 @@ function Standings({ rows, advancing, myTeamId }: { rows: StandingRow[]; advanci
           <span className="w-8 text-right font-heading font-[800] text-base tabular-nums">{r.points}</span>
         </div>
       ))}
-      <div className="px-4 py-2 text-sm text-muted">Pod čarou končí ligová fáze, nad ní se postupuje do play-off.</div>
+      {footer && <div className="px-4 py-2 text-sm text-muted">{footer}</div>}
+    </div>
+  );
+}
+
+/** Tabulky skupin pod sebou, nadpis jako u bloků zápasů. */
+function GroupTables({ groups, advancing, myTeamId }: { groups: NonNullable<Competition["groups"]>; advancing: number; myTeamId: string | null }) {
+  return (
+    <div className="space-y-5">
+      {groups.map((g) => (
+        <section key={g.code}>
+          <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
+            <h3 className="font-heading font-bold text-base text-ink">Skupina {g.code}</h3>
+            <span className="text-sm text-muted shrink-0">{g.standings.length} {g.standings.length >= 2 && g.standings.length <= 4 ? "týmy" : "týmů"}</span>
+          </div>
+          <Standings rows={g.standings} advancing={advancing} myTeamId={myTeamId} footer={null} />
+        </section>
+      ))}
+      <div className="px-1 text-sm text-muted">Z každé skupiny postupují do čtvrtfinále první dva, nad čarou.</div>
     </div>
   );
 }
@@ -157,9 +185,12 @@ export function CompetitionView({
 }) {
   const [tab, setTab] = useTabParam(TAB_KEYS);
   const { matches, standings, scorers, myEarnings, advancing } = competition;
+  const groups = competition.groups ?? null;
 
   const leagueDays = [...new Set(matches.filter((m) => m.stage === "league").map((m) => m.day))].sort((a, b) => a - b);
-  const byDay = (day: number) => matches.filter((m) => m.day === day);
+  // Ve dni skupin jdou zápasy po skupinách (A, B, C, D), jinak v pořadí z API (hlavní stadion první).
+  const byDay = (day: number) => matches.filter((m) => m.day === day)
+    .sort((a, b) => (a.group ?? "").localeCompare(b.group ?? ""));
   const nextDay = matches.filter((m) => m.status !== "simulated").reduce<number | null>((min, m) => (min == null || m.day < min ? m.day : min), null);
   const lastPlayedDay = matches.filter((m) => m.status === "simulated").reduce<number | null>((max, m) => (max == null || m.day > max ? m.day : max), null);
   const myNext = matches
@@ -184,7 +215,7 @@ export function CompetitionView({
         <div className="card px-4 py-4 space-y-3">
           {myNext ? (
             <div>
-              <div className="text-sm text-muted">Tvůj další zápas · {stageTitle(myNext)} · {dayLabel(myNext.scheduledAt)} v {timeLabel(myNext.scheduledAt)}</div>
+              <div className="text-sm text-muted">Tvůj další zápas · {matchTitle(myNext)} · {dayLabel(myNext.scheduledAt)} v {timeLabel(myNext.scheduledAt)}</div>
               <div className="font-heading font-bold text-base mt-0.5">
                 {myNext.home.teamId === myTeamId ? myNext.away.name : myNext.home.name}
                 {myNext.venue?.name && <span className="text-muted font-normal text-sm"> · {myNext.venue.name}</span>}
@@ -207,7 +238,7 @@ export function CompetitionView({
         ariaLabel="Turnaj"
         items={[
           { key: "prehled", label: "Přehled", icon: "📋" },
-          { key: "tabulka", label: "Tabulka", icon: "📊" },
+          { key: "tabulka", label: groups ? "Skupiny" : "Tabulka", icon: "📊" },
           { key: "rozpis", label: "Rozpis", icon: "📅" },
           { key: "playoff", label: "Play-off", icon: "🏆" },
           { key: "strelci", label: "Střelci", icon: "⚽" },
@@ -222,7 +253,9 @@ export function CompetitionView({
         </div>
       )}
 
-      {tab === "tabulka" && <Standings rows={standings} advancing={advancing} myTeamId={myTeamId} />}
+      {tab === "tabulka" && (groups
+        ? <GroupTables groups={groups} advancing={advancing} myTeamId={myTeamId} />
+        : <Standings rows={standings} advancing={advancing} myTeamId={myTeamId} footer="Pod čarou končí ligová fáze, nad ní se postupuje do play-off." />)}
 
       {tab === "rozpis" && (() => {
         const days = [...leagueDays, ...playoffStages.map((st) => matches.find((m) => m.stage === st)?.day ?? 0)]
@@ -245,7 +278,11 @@ export function CompetitionView({
 
       {tab === "playoff" && (
         playoffStages.length === 0 ? (
-          <div className="card p-8 text-center text-muted text-sm">Play-off se rozlosuje po ligové fázi. Postupuje {advancing} nejlepších z tabulky.</div>
+          <div className="card p-8 text-center text-muted text-sm">
+            {groups
+              ? "Čtvrtfinále se doplní po skupinách. Postupují první dva z každé skupiny: A1 s B2, C1 s D2, B1 s A2 a D1 s C2."
+              : `Play-off se rozlosuje po ligové fázi. Postupuje ${advancing} nejlepších z tabulky.`}
+          </div>
         ) : (
           <div className="space-y-5">
             {[...playoffStages].reverse().map((st) => (

@@ -10,8 +10,8 @@
 import { logger } from "../lib/logger";
 import { recordTransaction } from "../season/finance-processor";
 import { sendSystemSMS } from "../messaging/system-sms";
-import { computeStandings, playoffSeeding, playoffStages, playoffVenues, pointsFor } from "./draw";
-import { kickoffAt, loadCurrentTournament, loadVenues, type TournamentRow, type VenueRow } from "./service";
+import { computeStandings, groupPlayoffSeeding, playoffSeeding, playoffStages, playoffVenues, pointsFor } from "./draw";
+import { kickoffAt, loadCurrentTournament, loadGroups, loadVenues, type TournamentRow, type VenueRow } from "./service";
 import { simulateTournamentMatch, type TournamentMatchRow } from "./match";
 
 const M = "tournament";
@@ -19,6 +19,10 @@ const CLAIM_TTL_MS = 15 * 60 * 1000;
 const SMS_META = { type: "tournament" };
 
 const STAGE_LABEL: Record<string, string> = { league: "ligová fáze", qf: "čtvrtfinále", sf: "semifinále", final: "finále" };
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 function kc(n: number): string {
   return `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} Kč`;
@@ -80,15 +84,53 @@ async function loadStageMatches(db: D1Database, tournamentId: string, stage: str
   return rows.results;
 }
 
-/** Pořadí ligové fáze (id týmů od 1. místa). */
-export async function leagueRanking(db: D1Database, t: TournamentRow): Promise<string[]> {
+/** Pořadí ligové fáze (id týmů od 1. místa), volitelně jen pro týmy jedné skupiny. */
+export async function leagueRanking(db: D1Database, t: TournamentRow, only?: string[]): Promise<string[]> {
   const teams = await db.prepare(
     "SELECT t.id, t.name, COALESCE(t.reputation, 0) AS reputation FROM tournament_entries e JOIN teams t ON t.id = e.team_id WHERE e.tournament_id = ?"
   ).bind(t.id).all<{ id: string; name: string; reputation: number }>();
   const played = (await loadStageMatches(db, t.id, "league")).filter((m) => m.status === "simulated");
-  return computeStandings(teams.results, played.map((m) => ({
-    home: m.home_team_id, away: m.away_team_id, homeScore: m.home_score ?? 0, awayScore: m.away_score ?? 0,
-  }))).map((r) => r.teamId);
+  const inScope = only ? new Set(only) : null;
+  return computeStandings(
+    inScope ? teams.results.filter((x) => inScope.has(x.id)) : teams.results,
+    played
+      .filter((m) => !inScope || (inScope.has(m.home_team_id) && inScope.has(m.away_team_id)))
+      .map((m) => ({ home: m.home_team_id, away: m.away_team_id, homeScore: m.home_score ?? 0, awayScore: m.away_score ?? 0 })),
+  ).map((r) => r.teamId);
+}
+
+interface FirstStagePlan {
+  grouped: boolean;
+  pairs: Array<{ home: string; away: string }>;
+  /** Umístění týmu pro SMS: místo a případně skupina. */
+  placeText: (teamId: string) => { place: number; where: string } | null;
+}
+
+/** Kdo postupuje do první fáze play-off: z jedné tabulky nejlepších 8 (4), ze skupin první dva. */
+async function planFirstStage(db: D1Database, t: TournamentRow, first: "qf" | "sf"): Promise<FirstStagePlan> {
+  const groups = await loadGroups(db, t.id);
+  if (groups.size > 0) {
+    const codes = [...groups.keys()].sort();
+    const rankings = await Promise.all(codes.map((code) => leagueRanking(db, t, groups.get(code))));
+    return {
+      grouped: true,
+      pairs: groupPlayoffSeeding(rankings),
+      placeText: (teamId) => {
+        const g = rankings.findIndex((r) => r.includes(teamId));
+        return g < 0 ? null : { place: rankings[g].indexOf(teamId) + 1, where: ` ve skupině ${codes[g]}` };
+      },
+    };
+  }
+  const ranking = await leagueRanking(db, t);
+  const advancing = ranking.slice(0, first === "qf" ? 8 : 4);
+  return {
+    grouped: false,
+    pairs: playoffSeeding(advancing, first),
+    placeText: (teamId) => {
+      const i = ranking.indexOf(teamId);
+      return i < 0 ? null : { place: i + 1, where: "" };
+    },
+  };
 }
 
 async function insertStage(db: D1Database, t: TournamentRow, stage: "qf" | "sf" | "final", day: number, pairs: Array<{ home: string; away: string }>, venues: VenueRow[]): Promise<void> {
@@ -152,18 +194,20 @@ export async function progressStages(db: D1Database, t: TournamentRow): Promise<
   const first = stages[0] as "qf" | "sf";
   const firstMatches = await loadStageMatches(db, t.id, first);
   if (firstMatches.length === 0) {
-    const ranking = await leagueRanking(db, t);
-    const advancing = ranking.slice(0, first === "qf" ? 8 : 4);
-    await insertStage(db, t, first, leagueDays + 1, playoffSeeding(advancing, first), venues);
+    const { grouped, pairs, placeText } = await planFirstStage(db, t, first);
+    await insertStage(db, t, first, leagueDays + 1, pairs, venues);
     const names = new Map((await db.prepare("SELECT id, name FROM teams WHERE id IN (SELECT team_id FROM tournament_entries WHERE tournament_id = ?)")
       .bind(t.id).all<{ id: string; name: string }>()).results.map((r) => [r.id, r.name]));
-    const pairs = playoffSeeding(advancing, first);
     await notifyEntrants(db, t, (teamId) => {
       const pair = pairs.find((p) => p.home === teamId || p.away === teamId);
-      const place = ranking.indexOf(teamId) + 1;
-      if (!pair) return `Ligová fáze je u konce. Skončili jste na ${place}. místě a do play-off to nestačilo. Díky za skvělé zápasy, za body jsme vám vyplatili odměnu průběžně.`;
+      const at = placeText(teamId);
+      const placed = at ? `na ${at.place}. místě${at.where}` : "mimo postupová místa";
+      if (!pair) {
+        return `${grouped ? "Skupiny jsou" : "Ligová fáze je"} u konce. Skončili jste ${placed} a do ${grouped ? "čtvrtfinále" : "play-off"} to nestačilo. Díky za skvělé zápasy, za body jsme vám vyplatili odměnu průběžně.`;
+      }
       const opp = names.get(pair.home === teamId ? pair.away : pair.home) ?? "soupeř";
-      return `Gratulujeme, postupujete do play-off z ${place}. místa! ${STAGE_LABEL[first]} hrajete zítra v 18:00 proti ${opp}.`;
+      const from = at ? ` z ${at.place}. místa${at.where}` : "";
+      return `Gratulujeme, postupujete do ${grouped ? "čtvrtfinále" : "play-off"}${from}! ${capitalize(STAGE_LABEL[first])} hrajete zítra v 18:00 proti ${opp}.`;
     });
     logger.info({ module: M }, `${t.id}: ligová fáze dohraná, založeno ${first}`);
     return;
