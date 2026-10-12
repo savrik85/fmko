@@ -39,6 +39,8 @@ export interface Competition {
   standings: StandingRow[];
   /** Tabulky skupin, null = hraje se jedna tabulka. */
   groups?: Array<{ code: string; standings: StandingRow[] }> | null;
+  /** Ve 3 skupinách: pořadí třetích míst, postupuje `advancing` nejlepších. */
+  thirds?: { rows: Array<StandingRow & { group: string }>; advancing: number } | null;
   venues: Array<{ id: string; name: string; capacity: number; isMain: boolean }>;
   scorers: Array<{ playerId: string; name: string; teamId: string; teamName: string; goals: number; assists: number; apps: number }>;
   myEarnings: number;
@@ -168,8 +170,10 @@ function Standings({ rows, advancing, myTeamId, footer }: { rows: StandingRow[];
   );
 }
 
-/** Tabulky skupin pod sebou, nadpis jako u bloků zápasů. */
-function GroupTables({ groups, advancing, myTeamId }: { groups: NonNullable<Competition["groups"]>; advancing: number; myTeamId: string | null }) {
+/** Tabulky skupin pod sebou, nadpis jako u bloků zápasů; ve 3 skupinách i pořadí třetích míst. */
+function GroupTables({ groups, thirds, advancing, myTeamId }: {
+  groups: NonNullable<Competition["groups"]>; thirds: Competition["thirds"]; advancing: number; myTeamId: string | null;
+}) {
   return (
     <div className="space-y-5">
       {groups.map((g) => (
@@ -181,7 +185,23 @@ function GroupTables({ groups, advancing, myTeamId }: { groups: NonNullable<Comp
           <Standings rows={g.standings} advancing={advancing} myTeamId={myTeamId} footer={null} />
         </section>
       ))}
-      <div className="px-1 text-sm text-muted">Z každé skupiny postupují do čtvrtfinále první dva, nad čarou.</div>
+      {thirds && thirds.rows.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
+            <h3 className="font-heading font-bold text-base text-ink">Třetí místa</h3>
+            <span className="text-sm text-muted shrink-0">postupují {thirds.advancing} nejlepší</span>
+          </div>
+          <Standings
+            rows={thirds.rows.map((r) => ({ ...r, name: `${r.name} (${r.group})` }))}
+            advancing={thirds.advancing}
+            myTeamId={myTeamId}
+            footer="Třetí ze skupin se porovnávají podle bodů, rozdílu skóre a vstřelených gólů."
+          />
+        </section>
+      )}
+      <div className="px-1 text-sm text-muted">
+        Z každé skupiny postupují do čtvrtfinále první dva{thirds ? " a k nim dva nejlepší ze třetích míst" : ""}, nad čarou.
+      </div>
     </div>
   );
 }
@@ -267,7 +287,7 @@ export function CompetitionView({
       )}
 
       {tab === "tabulka" && (groups
-        ? <GroupTables groups={groups} advancing={advancing} myTeamId={myTeamId} />
+        ? <GroupTables groups={groups} thirds={competition.thirds ?? null} advancing={advancing} myTeamId={myTeamId} />
         : <Standings rows={standings} advancing={advancing} myTeamId={myTeamId} footer="Pod čarou končí ligová fáze, nad ní se postupuje do play-off." />)}
 
       {tab === "rozpis" && (() => {
@@ -293,7 +313,9 @@ export function CompetitionView({
         playoffStages.length === 0 ? (
           <div className="card p-8 text-center text-muted text-sm">
             {groups
-              ? "Čtvrtfinále se doplní po skupinách. Postupují první dva z každé skupiny: A1 s B2, C1 s D2, B1 s A2 a D1 s C2."
+              ? groups.length === 3
+                ? "Čtvrtfinále se doplní po skupinách. Postupují první dva z každé skupiny a dva nejlepší ze třetích míst. Vítězové skupin hrají se třetími a s nejhorším z druhých, týmy ze stejné skupiny se ve čtvrtfinále nepotkají."
+                : "Čtvrtfinále se doplní po skupinách. Postupují první dva z každé skupiny: A1 s B2, C1 s D2, B1 s A2 a D1 s C2."
               : `Play-off se rozlosuje po ligové fázi. Postupuje ${advancing} nejlepších z tabulky.`}
           </div>
         ) : (

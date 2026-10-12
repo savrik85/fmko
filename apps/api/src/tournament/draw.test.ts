@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assignVenues, buildGroupSchedule, buildLeagueSchedule, computeStandings, drawGroups, drawOptions, groupPlayoffSeeding,
-  groupSizes, leagueDays, playoffSeeding, playoffVenues,
+  groupSizes, leagueDays, playoffSeeding, playoffVenues, threeGroupPlayoffSeeding,
   type DrawTeam, type DrawVenue, type LeagueSchedule,
 } from "./draw";
 
@@ -166,13 +166,50 @@ const ENTRANTS: DrawTeam[] = [
 ].map(([id, reputation, district, village]) => ({ id: id as string, reputation: reputation as number, district: district as string, village: village as string }));
 
 describe("skupiny", () => {
-  it("18 týmů = skupiny 5, 5, 4, 4 a turnaj na 8 dní", () => {
+  it("18 týmů = 4 skupiny 5, 5, 4, 4 nebo 3 skupiny po 6, obojí na 8 dní", () => {
     expect(groupSizes(18)).toEqual([5, 5, 4, 4]);
-    expect(drawOptions(18).find((o) => o.format === "groups")).toMatchObject({ leagueDays: 5, totalDays: 8, matchesPerTeam: 4, groupSizes: [5, 5, 4, 4] });
+    expect(groupSizes(18, 3)).toEqual([6, 6, 6]);
+    const groups = drawOptions(18).filter((o) => o.format === "groups");
+    expect(groups).toEqual([
+      expect.objectContaining({ leagueDays: 5, totalDays: 8, matchesPerTeam: 4, groupSizes: [5, 5, 4, 4] }),
+      expect.objectContaining({ leagueDays: 5, totalDays: 8, matchesPerTeam: 5, groupSizes: [6, 6, 6] }),
+    ]);
+  });
+
+  it.each([1, 2, 42])("3 skupiny po 6: nasazení v různých skupinách, okresy a obce rozprostřené (seed %i)", (seed) => {
+    const groups = drawGroups(ENTRANTS, seed, 3);
+    const byId = new Map(ENTRANTS.map((t) => [t.id, t]));
+    expect(groups.map((g) => g.length)).toEqual([6, 6, 6]);
+    expect(new Set(groups.flat()).size).toBe(18);
+    // Koš 1 = Dvorce, Greenwatt, AppYours: každý jinde.
+    expect(groups.map((g) => g.filter((id) => ["dvorce", "greenwatt", "appyours"].includes(id)).length)).toEqual([1, 1, 1]);
+    // 4 kluby mimo Prachaticko do 3 skupin: 2, 1, 1.
+    expect(groups.map((g) => g.filter((id) => byId.get(id)?.district !== "Prachatice").length).sort()).toEqual([1, 1, 2]);
+    // Čkyně (4 kluby) nejvýš 2 v jedné skupině, Spůle (3) a Vimperk (2) každý jinde.
+    for (const g of groups) {
+      const count = (v: string) => g.filter((id) => byId.get(id)?.village === v).length;
+      expect(count("Čkyně")).toBeLessThanOrEqual(2);
+      expect(count("Spůle")).toBeLessThanOrEqual(1);
+      expect(count("Vimperk")).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("3 skupiny po 6: každý den hrají všichni, každý s každým jednou", () => {
+    const groups = drawGroups(ENTRANTS, 3, 3);
+    const s = buildGroupSchedule(groups, 4);
+    expect(s.map((d) => d.length)).toEqual([9, 9, 9, 9, 9]);
+    for (const day of s) expect(new Set(day.flatMap((m) => [m.home, m.away])).size).toBe(18);
+    for (const g of groups) {
+      const inGroup = new Set(g);
+      const pairs = new Set(s.flat().filter((m) => inGroup.has(m.home)).map((m) => [m.home, m.away].sort().join("|")));
+      expect(pairs.size).toBe(15);
+      for (const m of s.flat().filter((x) => inGroup.has(x.home))) expect(inGroup.has(m.away)).toBe(true);
+    }
   });
 
   it("skupiny se nenabídnou, když by turnaj nevyšel na 7 až 12 dní nebo by skupina měla pod 3 týmy", () => {
-    expect(drawOptions(16).some((o) => o.format === "groups")).toBe(false); // 4×4 = 3 kola + play-off = 6 dní
+    // 16 týmů: 4×4 = 3 kola + play-off = 6 dní (ne), 3 skupiny 6, 5, 5 = 5 kol + 3 = 8 dní (ano).
+    expect(drawOptions(16).filter((o) => o.format === "groups").map((o) => o.groupSizes)).toEqual([[6, 5, 5]]);
     expect(drawOptions(10).some((o) => o.format === "groups")).toBe(false);
     expect(drawOptions(20).some((o) => o.format === "groups")).toBe(true);
   });
@@ -234,5 +271,60 @@ describe("skupiny", () => {
       const sides = qf.flatMap((m, i) => [m.home, m.away].filter((id) => id.startsWith(g)).map(() => half(i)));
       expect(new Set(sides).size).toBe(2);
     }
+  });
+});
+
+describe("pořadí a postup ze 3 skupin", () => {
+  const row = (teamId: string, points: number, gf: number, ga: number) => ({ teamId, played: 5, won: 0, drawn: 0, lost: 0, goalsFor: gf, goalsAgainst: ga, points });
+
+  it("tři týmy se stejnými body: rozhoduje skóre ze vzájemných zápasů", () => {
+    const t = ["a", "b", "c"].map((id) => ({ id, name: id, reputation: 50 }));
+    // a i b mají 3 body; b má lepší celkové skóre, ale a vyhrálo vzájemný zápas.
+    const rows = computeStandings(t, [
+      { home: "a", away: "b", homeScore: 1, awayScore: 0 },
+      { home: "b", away: "c", homeScore: 6, awayScore: 0 },
+      { home: "c", away: "a", homeScore: 2, awayScore: 0 },
+    ]);
+    // Všichni tři mají 3 body, minitabulka je tedy celá skupina: b 6:1, a 1:2, c 2:6 → b, a, c.
+    expect(rows.map((r) => r.teamId)).toEqual(["b", "a", "c"]);
+  });
+
+  it("dva týmy se stejnými body: vítěz vzájemného zápasu je výš i s horším skóre", () => {
+    const t = ["a", "b", "c", "d"].map((id) => ({ id, name: id, reputation: 50 }));
+    const rows = computeStandings(t, [
+      { home: "a", away: "b", homeScore: 1, awayScore: 0 },
+      { home: "b", away: "c", homeScore: 9, awayScore: 0 },
+      { home: "a", away: "d", homeScore: 0, awayScore: 1 },
+      { home: "c", away: "d", homeScore: 0, awayScore: 1 },
+    ]);
+    // d 6 b; a a b po 3 b, a vyhrálo vzájemný zápas, b má o hodně lepší skóre.
+    expect(rows.map((r) => r.teamId)).toEqual(["d", "a", "b", "c"]);
+  });
+
+  it("čtvrtfinále: vítězové proti třetím a nejhoršímu druhému, pavouk 1–8, 4–5, 2–7, 3–6", () => {
+    const tables = [
+      [row("a1", 15, 10, 1), row("a2", 9, 8, 6), row("a3", 7, 6, 6)],
+      [row("b1", 13, 9, 3), row("b2", 10, 7, 5), row("b3", 6, 5, 7)],
+      [row("c1", 12, 8, 4), row("c2", 8, 6, 6), row("c3", 7, 9, 8)],
+    ];
+    // Nasazení: a1, b1, c1 | b2, a2, c2 | c3 (7 b, +1), a3 (7 b, 0). Pavouk by dal a1–a3 a c1–c2,
+    // proto se spodní nasazení prohodí tak, aby se nepotkala stejná skupina.
+    const { pairs, bestThirds } = threeGroupPlayoffSeeding(tables);
+    expect(bestThirds).toEqual(["c3", "a3"]);
+    expect(pairs.map((p) => p.home)).toEqual(["a1", "b2", "b1", "c1"]);
+    for (const p of pairs) expect(p.home[0]).not.toBe(p.away[0]);
+    expect(new Set(pairs.flatMap((p) => [p.home, p.away]))).toEqual(new Set(["a1", "b1", "c1", "a2", "b2", "c2", "c3", "a3"]));
+  });
+
+  it("bez kolize skupin platí pavouk 1–8, 4–5, 2–7, 3–6 beze změny", () => {
+    const tables = [
+      [row("a1", 15, 10, 1), row("a2", 10, 8, 6), row("a3", 7, 6, 6)],
+      [row("b1", 13, 9, 3), row("b2", 9, 7, 5), row("b3", 5, 5, 7)],
+      [row("c1", 12, 8, 4), row("c2", 11, 6, 6), row("c3", 6, 9, 8)],
+    ];
+    // Nasazení: a1, b1, c1 | c2, a2, b2 | a3, c3.
+    expect(threeGroupPlayoffSeeding(tables).pairs).toEqual([
+      { home: "a1", away: "c3" }, { home: "c2", away: "a2" }, { home: "b1", away: "a3" }, { home: "c1", away: "b2" },
+    ]);
   });
 });

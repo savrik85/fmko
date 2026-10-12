@@ -81,6 +81,8 @@ export interface ScheduleMatch {
   scheduledAt: string | null;
   isFriendly?: boolean;
   isCup?: boolean;
+  /** Turnaj P-Mobile: neutrální půda, bez propagace a ligového náhledu. */
+  isTournament?: boolean;
   roundName?: string | null;
   homeTeamId?: string | null;
   awayTeamId?: string | null;

@@ -10,7 +10,8 @@
  * Z mnoha náhodných pokusů vyhraje rozpis s nejvíc zápasy mezi okresy a nejvyrovnanější
  * silou soupeřů.
  *
- * Skupiny: 4 skupiny, v každé každý s každým, do čtvrtfinále první dva z každé skupiny.
+ * Skupiny: 4 skupiny (do čtvrtfinále první dva z každé), nebo 3 skupiny (první dva z každé
+ * a dva nejlepší ze třetích míst). Ve skupině každý s každým.
  */
 
 import { createRng, type Rng } from "../generators/rng";
@@ -70,15 +71,18 @@ export function drawOptions(teamCount: number): DrawOption[] {
   const all = allDrawOptions(teamCount);
   // Propozice slibují 7 až 12 dní; u malého turnaje, kde to nejde, se nabídne, co jde.
   const promised = all.filter((o) => o.totalDays >= 7 && o.totalDays <= 12);
-  const groups = groupsOption(teamCount);
-  return [...(promised.length > 0 ? promised : all), ...(groups ? [groups] : [])];
+  const groups = GROUP_COUNTS.map((n) => groupsOption(teamCount, n)).filter((o): o is DrawOption => o != null);
+  return [...(promised.length > 0 ? promised : all), ...groups];
 }
 
 // ── Skupiny ──
 
 export const GROUP_COUNT = 4;
-/** Z každé skupiny postupují první dva → 8 týmů do čtvrtfinále. */
+/** Nabízené počty skupin: 4 (postupují první dva) a 3 (první dva a dva nejlepší třetí). */
+export const GROUP_COUNTS = [4, 3] as const;
+/** Z každé skupiny postupují první dva; u 3 skupin k nim dva nejlepší ze třetích míst → 8 do čtvrtfinále. */
 export const GROUP_ADVANCING = 2;
+export const BEST_THIRDS = 2;
 
 export function groupCode(index: number): string {
   return String.fromCharCode(65 + index);
@@ -96,10 +100,13 @@ function groupRounds(size: number): number {
   return size % 2 === 0 ? size - 1 : size;
 }
 
-/** Skupiny se nabídnou, jen když v každé jsou aspoň 3 týmy a turnaj vyjde na slíbených 7 až 12 dní. */
-function groupsOption(teamCount: number): DrawOption | null {
-  const sizes = groupSizes(teamCount);
-  if (sizes.some((n) => n < 3)) return null;
+/**
+ * Skupiny se nabídnou, jen když v každé jsou aspoň 3 týmy (u 3 skupin aspoň 4, ať je co
+ * porovnávat mezi třetími) a turnaj vyjde na slíbených 7 až 12 dní.
+ */
+function groupsOption(teamCount: number, groupCount: number): DrawOption | null {
+  const sizes = groupSizes(teamCount, groupCount);
+  if (sizes.some((n) => n < (groupCount === 3 ? 4 : 3))) return null;
   const days = Math.max(...sizes.map(groupRounds));
   const totalDays = days + playoffStages(teamCount).length;
   if (totalDays < 7 || totalDays > 12) return null;
@@ -180,6 +187,52 @@ export function buildGroupSchedule(groups: string[][], seed: number): LeagueSche
     });
   }
   return schedule;
+}
+
+/** Pořadí týmů z různých skupin (třetí místa, nasazení do čtvrtfinále): body, rozdíl skóre, góly. */
+export function compareAcrossGroups(x: StandingRow, y: StandingRow): number {
+  return y.points - x.points
+    || (y.goalsFor - y.goalsAgainst) - (x.goalsFor - x.goalsAgainst)
+    || y.goalsFor - x.goalsFor;
+}
+
+/**
+ * Čtvrtfinále ze 3 skupin (tabulky seřazené, index 0 = 1. místo; při shodě rozhoduje pořadí
+ * `reputationOrder`, vyšší reputace první). Postupují vítězové, druzí a dva nejlepší třetí.
+ * Nasazení: vítězové 1.–3., druzí 4.–6., třetí 7.–8. (vždy podle compareAcrossGroups).
+ * Pavouk 1–8, 4–5 | 2–7, 3–6 jako playoffSeeding; když by se potkaly týmy ze stejné skupiny,
+ * prohodí se spodní nasazení tak, aby se od pavouka odchýlila co nejméně.
+ */
+export function threeGroupPlayoffSeeding(tables: StandingRow[][], reputationOrder: string[] = []): { pairs: DrawPair[]; bestThirds: string[] } {
+  const groupOf = new Map<string, number>();
+  tables.forEach((t, g) => t.forEach((r) => groupOf.set(r.teamId, g)));
+  const rep = (id: string) => {
+    const i = reputationOrder.indexOf(id);
+    return i < 0 ? Infinity : i;
+  };
+  const rank = (rows: StandingRow[]) => [...rows].sort((x, y) => compareAcrossGroups(x, y) || rep(x.teamId) - rep(y.teamId));
+  const winners = rank(tables.map((t) => t[0]));
+  const runners = rank(tables.map((t) => t[1]));
+  const thirds = rank(tables.map((t) => t[2])).slice(0, BEST_THIRDS);
+  const seeds = [...winners, ...runners, ...thirds].map((r) => r.teamId);
+  const top = [0, 3, 1, 2];
+  const ideal = [7, 4, 6, 5];
+  let best: number[] = ideal;
+  let bestCost = Infinity;
+  const permute = (rest: number[], acc: number[]) => {
+    if (rest.length === 0) {
+      if (acc.some((b, i) => groupOf.get(seeds[top[i]]) === groupOf.get(seeds[b]))) return;
+      const cost = acc.reduce((sum, b, i) => sum + Math.abs(b - ideal[i]), 0);
+      if (cost < bestCost) { bestCost = cost; best = acc; }
+      return;
+    }
+    rest.forEach((b, i) => permute([...rest.slice(0, i), ...rest.slice(i + 1)], [...acc, b]));
+  };
+  permute(ideal, []);
+  return {
+    pairs: top.map((t, i) => ({ home: seeds[t], away: seeds[best[i]] })),
+    bestThirds: thirds.map((r) => r.teamId),
+  };
 }
 
 /**
@@ -427,28 +480,52 @@ export interface PlayedMatch {
   awayScore: number;
 }
 
-/** Tabulka ligové fáze: body, rozdíl skóre, vstřelené góly, pak reputace a jméno. */
+/**
+ * Tabulka ligové fáze i skupiny. Pořadí (stejně jako v Info turnaje):
+ *   1. body,
+ *   2. body ze vzájemných zápasů týmů se stejným počtem bodů,
+ *   3. rozdíl skóre ze vzájemných zápasů,
+ *   4. vstřelené góly ze vzájemných zápasů,
+ *   5. celkový rozdíl skóre,
+ *   6. celkem vstřelené góly,
+ *   7. vyšší reputace klubu (pak jméno, ať je pořadí vždy stejné).
+ */
 export function computeStandings(
   teams: Array<{ id: string; name: string; reputation: number }>,
   matches: PlayedMatch[],
 ): StandingRow[] {
-  const rows = new Map<string, StandingRow>(teams.map((t) => [t.id, {
-    teamId: t.id, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0,
-  }]));
-  for (const m of matches) {
-    const h = rows.get(m.home);
-    const a = rows.get(m.away);
-    if (!h || !a) continue;
-    h.played++; a.played++;
-    h.goalsFor += m.homeScore; h.goalsAgainst += m.awayScore;
-    a.goalsFor += m.awayScore; a.goalsAgainst += m.homeScore;
-    if (m.homeScore > m.awayScore) { h.won++; a.lost++; h.points += 3; }
-    else if (m.homeScore < m.awayScore) { a.won++; h.lost++; a.points += 3; }
-    else { h.drawn++; a.drawn++; h.points++; a.points++; }
+  const table = (ids: Set<string>) => {
+    const rows = new Map<string, StandingRow>([...ids].map((id) => [id, {
+      teamId: id, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0,
+    }]));
+    for (const m of matches) {
+      const h = rows.get(m.home);
+      const a = rows.get(m.away);
+      if (!h || !a) continue;
+      h.played++; a.played++;
+      h.goalsFor += m.homeScore; h.goalsAgainst += m.awayScore;
+      a.goalsFor += m.awayScore; a.goalsAgainst += m.homeScore;
+      if (m.homeScore > m.awayScore) { h.won++; a.lost++; h.points += 3; }
+      else if (m.homeScore < m.awayScore) { a.won++; h.lost++; a.points += 3; }
+      else { h.drawn++; a.drawn++; h.points++; a.points++; }
+    }
+    return rows;
+  };
+  const rows = table(new Set(teams.map((t) => t.id)));
+  // Vzájemné zápasy: minitabulka jen ze zápasů mezi týmy se stejným počtem bodů.
+  const headToHead = new Map<string, StandingRow>();
+  for (const pts of new Set([...rows.values()].map((r) => r.points))) {
+    const tied = [...rows.values()].filter((r) => r.points === pts);
+    if (tied.length < 2) continue;
+    for (const [id, r] of table(new Set(tied.map((r) => r.teamId)))) headToHead.set(id, r);
   }
   const meta = new Map(teams.map((t) => [t.id, t]));
+  const h2h = (id: string) => headToHead.get(id) ?? { points: 0, goalsFor: 0, goalsAgainst: 0 };
   return [...rows.values()].sort((x, y) =>
     y.points - x.points
+    || h2h(y.teamId).points - h2h(x.teamId).points
+    || (h2h(y.teamId).goalsFor - h2h(y.teamId).goalsAgainst) - (h2h(x.teamId).goalsFor - h2h(x.teamId).goalsAgainst)
+    || h2h(y.teamId).goalsFor - h2h(x.teamId).goalsFor
     || (y.goalsFor - y.goalsAgainst) - (x.goalsFor - x.goalsAgainst)
     || y.goalsFor - x.goalsFor
     || (meta.get(y.teamId)?.reputation ?? 0) - (meta.get(x.teamId)?.reputation ?? 0)

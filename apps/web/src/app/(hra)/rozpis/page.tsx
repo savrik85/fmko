@@ -38,6 +38,8 @@ interface ScheduleMatch {
   defaultPresetSlot?: "A" | "B" | "C" | null;
   isLocalDerby?: boolean;
   isCup?: boolean;
+  /** Turnaj P-Mobile: neutrální půda, nejde propagovat. */
+  isTournament?: boolean;
   roundName?: string | null;
   homePens?: number | null;
   awayPens?: number | null;
@@ -159,7 +161,7 @@ export default function SchedulePage() {
   const upcoming = matches.filter((m) => m.status !== "simulated");
   const upcomingIds = new Set(upcoming.map((m) => m.id));
 
-  const nextHome = upcoming.find((m) => m.isHome); // ligový i pohárový domácí zápas lze propagovat
+  const nextHome = upcoming.find((m) => m.isHome && !m.isTournament); // ligový i pohárový domácí zápas lze propagovat, turnaj ne
 
   return (
     <>
@@ -307,13 +309,13 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
       {/* Mobile layout */}
       <div className="flex md:hidden items-center gap-2">
         <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
-          {m.isLocalDerby ? <span title="Místní derby" className="text-red-600">🏘️</span> : m.isCup ? <span title={m.roundName ?? "Pohár"} className="text-gold-600">🏆</span> : (m.round ? `${m.round}.` : "")}
+          {m.isLocalDerby ? <span title="Místní derby" className="text-red-600">🏘️</span> : m.isCup || m.isTournament ? <span title={m.roundName ?? "Pohár"} className="text-gold-600">🏆</span> : (m.round ? `${m.round}.` : "")}
         </div>
         <BadgePreview primary={opp.color} secondary={opp.secondary} pattern={opp.badge as BadgePattern}
           initials={oppInitials} size={22} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-heading font-bold truncate">{opp.name}</div>
-          <div className="text-micro text-muted font-heading">{m.isHome ? "doma" : "venku"}</div>
+          <div className="text-micro text-muted font-heading">{m.isTournament ? m.roundName : m.isHome ? "doma" : "venku"}</div>
         </div>
         {isPlayed ? (
           <>
@@ -335,7 +337,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
         <div className="shrink-0 w-8 text-center">
           {m.isLocalDerby ? (
             <div className="text-sm text-red-600" title="Místní derby">🏘️</div>
-          ) : m.isCup ? (
+          ) : m.isCup || m.isTournament ? (
             <div className="text-sm text-gold-600" title={m.roundName ?? "Pohár"}>🏆</div>
           ) : (
             <div className="text-xs text-muted font-heading">{m.round ? `${m.round}.` : ""}</div>

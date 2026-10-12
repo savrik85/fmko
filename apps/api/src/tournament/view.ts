@@ -4,7 +4,7 @@
  */
 
 import { logger } from "../lib/logger";
-import { computeStandings, GROUP_ADVANCING, type PlayedMatch } from "./draw";
+import { BEST_THIRDS, compareAcrossGroups, computeStandings, GROUP_ADVANCING, type PlayedMatch } from "./draw";
 import type { TournamentRow } from "./service";
 
 interface MatchViewRow {
@@ -128,6 +128,14 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
     const ids = new Set(members.map((r) => r.id));
     return { code, standings: table(members, league.filter((m) => ids.has(m.home) && ids.has(m.away))) };
   });
+  // Ve 3 skupinách postupují i dva nejlepší ze třetích míst: jejich vlastní pořadí napříč skupinami.
+  const thirds = groups && groups.length === 3
+    ? groups
+      .map((g) => (g.standings[2] ? { ...g.standings[2], group: g.code } : null))
+      .filter((r): r is NonNullable<typeof r> => r != null)
+      .sort((x, y) => compareAcrossGroups(x, y) || (meta.get(y.teamId)?.reputation ?? 0) - (meta.get(x.teamId)?.reputation ?? 0))
+      .map((r, i) => ({ ...r, position: i + 1 }))
+    : null;
 
   return {
     matches,
@@ -144,6 +152,7 @@ export async function loadCompetitionView(db: D1Database, t: TournamentRow, team
     })),
     myEarnings: earned?.total ?? 0,
     groups,
+    thirds: thirds ? { rows: thirds, advancing: BEST_THIRDS } : null,
     advancing: groups ? GROUP_ADVANCING : t.league_matches != null && teamRows.results.length >= 8 ? 8 : 4,
   };
 }

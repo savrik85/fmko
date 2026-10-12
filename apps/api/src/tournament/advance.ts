@@ -10,7 +10,10 @@
 import { logger } from "../lib/logger";
 import { recordTransaction } from "../season/finance-processor";
 import { sendSystemSMS } from "../messaging/system-sms";
-import { computeStandings, groupPlayoffSeeding, playoffSeeding, playoffStages, playoffVenues, pointsFor } from "./draw";
+import {
+  computeStandings, groupPlayoffSeeding, playoffSeeding, playoffStages, playoffVenues, pointsFor, threeGroupPlayoffSeeding,
+  type StandingRow,
+} from "./draw";
 import { kickoffAt, loadCurrentTournament, loadGroups, loadVenues, type TournamentRow, type VenueRow } from "./service";
 import { simulateTournamentMatch, type TournamentMatchRow } from "./match";
 
@@ -91,19 +94,28 @@ async function loadStageMatches(db: D1Database, tournamentId: string, stage: str
   return rows.results;
 }
 
-/** Pořadí ligové fáze (id týmů od 1. místa), volitelně jen pro týmy jedné skupiny. */
-export async function leagueRanking(db: D1Database, t: TournamentRow, only?: string[]): Promise<string[]> {
-  const teams = await db.prepare(
+async function loadEntrantTeams(db: D1Database, t: TournamentRow) {
+  return (await db.prepare(
     "SELECT t.id, t.name, COALESCE(t.reputation, 0) AS reputation FROM tournament_entries e JOIN teams t ON t.id = e.team_id WHERE e.tournament_id = ?"
-  ).bind(t.id).all<{ id: string; name: string; reputation: number }>();
+  ).bind(t.id).all<{ id: string; name: string; reputation: number }>()).results;
+}
+
+/** Tabulka ligové fáze, volitelně jen pro týmy jedné skupiny (jen zápasy uvnitř skupiny). */
+async function leagueTable(db: D1Database, t: TournamentRow, only?: string[]): Promise<StandingRow[]> {
+  const teams = await loadEntrantTeams(db, t);
   const played = (await loadStageMatches(db, t.id, "league")).filter((m) => m.status === "simulated");
   const inScope = only ? new Set(only) : null;
   return computeStandings(
-    inScope ? teams.results.filter((x) => inScope.has(x.id)) : teams.results,
+    inScope ? teams.filter((x) => inScope.has(x.id)) : teams,
     played
       .filter((m) => !inScope || (inScope.has(m.home_team_id) && inScope.has(m.away_team_id)))
       .map((m) => ({ home: m.home_team_id, away: m.away_team_id, homeScore: m.home_score ?? 0, awayScore: m.away_score ?? 0 })),
-  ).map((r) => r.teamId);
+  );
+}
+
+/** Pořadí ligové fáze (id týmů od 1. místa), volitelně jen pro týmy jedné skupiny. */
+export async function leagueRanking(db: D1Database, t: TournamentRow, only?: string[]): Promise<string[]> {
+  return (await leagueTable(db, t, only)).map((r) => r.teamId);
 }
 
 interface FirstStagePlan {
@@ -113,15 +125,20 @@ interface FirstStagePlan {
   placeText: (teamId: string) => { place: number; where: string } | null;
 }
 
-/** Kdo postupuje do první fáze play-off: z jedné tabulky nejlepších 8 (4), ze skupin první dva. */
+/**
+ * Kdo postupuje do první fáze play-off: z jedné tabulky nejlepších 8 (4), ze 4 skupin první dva,
+ * ze 3 skupin první dva a dva nejlepší ze třetích míst.
+ */
 async function planFirstStage(db: D1Database, t: TournamentRow, first: "qf" | "sf"): Promise<FirstStagePlan> {
   const groups = await loadGroups(db, t.id);
   if (groups.size > 0) {
     const codes = [...groups.keys()].sort();
-    const rankings = await Promise.all(codes.map((code) => leagueRanking(db, t, groups.get(code))));
+    const tables = await Promise.all(codes.map((code) => leagueTable(db, t, groups.get(code))));
+    const rankings = tables.map((table) => table.map((r) => r.teamId));
+    const byReputation = (await loadEntrantTeams(db, t)).sort((a, b) => b.reputation - a.reputation).map((x) => x.id);
     return {
       grouped: true,
-      pairs: groupPlayoffSeeding(rankings),
+      pairs: codes.length === 3 ? threeGroupPlayoffSeeding(tables, byReputation).pairs : groupPlayoffSeeding(rankings),
       placeText: (teamId) => {
         const g = rankings.findIndex((r) => r.includes(teamId));
         return g < 0 ? null : { place: rankings[g].indexOf(teamId) + 1, where: ` ve skupině ${codes[g]}` };

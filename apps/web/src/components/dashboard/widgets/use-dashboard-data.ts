@@ -190,7 +190,8 @@ export function useDashboardData(teamId: string | null, needed: DataKey[]) {
       apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`)
         .then((d) => {
           const next = (d.matches ?? []).find((m) => m.status !== "simulated");
-          if (!next) {
+          // Turnaj nemá ligový ani pohárový náhled (tabulka, forma, kurzy) — karta ukáže jen soupeře.
+          if (!next || next.isTournament) {
             patch("preview", { data: null, loading: false, error: false });
             return null;
           }
