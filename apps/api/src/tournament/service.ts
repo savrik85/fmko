@@ -92,7 +92,7 @@ function seedOf(id: string): number {
 
 export class DrawError extends Error {}
 
-export type DrawChoice = { format: "league"; matchesPerTeam: number } | { format: "groups" };
+export type DrawChoice = { format: "league"; matchesPerTeam: number } | { format: "groups"; groupCount: number };
 
 /**
  * Los: uloží ligovou fázi (jednu tabulku, nebo skupiny) s hřišti a nastaví ročník na `drawn`.
@@ -107,10 +107,10 @@ export async function performDraw(db: D1Database, choice: DrawChoice, now = new 
 
   const entrants = await loadEntrants(db, t.id);
   const option = drawOptions(entrants.length).find((o) => o.format === choice.format
-    && (choice.format === "groups" || o.matchesPerTeam === choice.matchesPerTeam));
+    && (choice.format === "groups" ? o.groupSizes?.length === choice.groupCount : o.matchesPerTeam === choice.matchesPerTeam));
   if (!option) {
     throw new DrawError(choice.format === "groups"
-      ? `S ${entrants.length} kluby nejdou hrát skupiny`
+      ? `S ${entrants.length} kluby nejde hrát ${choice.groupCount} skupiny`
       : `S ${entrants.length} kluby nejde hrát ${choice.matchesPerTeam} zápasů na tým`);
   }
 
@@ -119,7 +119,7 @@ export async function performDraw(db: D1Database, choice: DrawChoice, now = new 
   let schedule: LeagueSchedule;
   let groups: string[][] = [];
   if (choice.format === "groups") {
-    groups = drawGroups(entrants, seedOf(t.id));
+    groups = drawGroups(entrants, seedOf(t.id), choice.groupCount);
     schedule = buildGroupSchedule(groups, seedOf(t.id) + 1);
   } else {
     schedule = buildLeagueSchedule(entrants, choice.matchesPerTeam, seedOf(t.id));
@@ -165,6 +165,33 @@ export async function performDraw(db: D1Database, choice: DrawChoice, now = new 
   }
 }
 
+/** Los jde zrušit, dokud se nezačalo hrát (žádný zápas odehraný ani zabraný k simulaci). */
+async function drawIsResettable(db: D1Database, t: TournamentRow): Promise<boolean> {
+  if (t.status !== "drawn") return false;
+  const started = await db.prepare(
+    "SELECT COUNT(*) AS n FROM tournament_matches WHERE tournament_id = ? AND (status != 'scheduled' OR claimed_at IS NOT NULL)"
+  ).bind(t.id).first<{ n: number }>();
+  return (started?.n ?? 0) === 0;
+}
+
+/**
+ * Zrušení losu před prvním zápasem: smaže rozpis, skupiny a vrátí ročník do stavu po uzávěrce,
+ * takže jde vylosovat znovu. Přihlášky zůstávají. SMS z losu to nemaže.
+ */
+export async function resetDraw(db: D1Database): Promise<{ matches: number }> {
+  const t = await loadCurrentTournament(db);
+  if (!t) throw new DrawError("Turnaj není vypsaný");
+  if (!(await drawIsResettable(db, t))) throw new DrawError("Los jde zrušit jen před prvním zápasem");
+  const res = await db.batch([
+    db.prepare("DELETE FROM tournament_matches WHERE tournament_id = ? AND status = 'scheduled' AND claimed_at IS NULL").bind(t.id),
+    db.prepare("UPDATE tournament_entries SET group_code = NULL WHERE tournament_id = ?").bind(t.id),
+    db.prepare("UPDATE tournaments SET status = 'closed', drawn_at = NULL, league_matches = NULL, league_days = NULL WHERE id = ? AND status = 'drawn'").bind(t.id),
+  ]);
+  const removed = (res[0] as { meta?: { changes?: number } }).meta?.changes ?? 0;
+  logger.info({ module: M }, `los ${t.id} zrušen: smazáno ${removed} zápasů`);
+  return { matches: removed };
+}
+
 /** Náhled pro admina: počet přihlášených a možnosti délky. */
 export async function drawPreview(db: D1Database) {
   const t = await loadCurrentTournament(db);
@@ -173,6 +200,7 @@ export async function drawPreview(db: D1Database) {
   const venues = await loadVenues(db, t.city);
   return {
     tournament: { id: t.id, edition: t.edition, status: t.status, startsOn: t.starts_on, registrationDeadline: t.registration_deadline },
+    canReset: await drawIsResettable(db, t),
     entrants: entrants.length,
     venues: venues.length,
     playoff: playoffStages(entrants.length),

@@ -152,7 +152,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
             <span className="text-micro font-heading font-bold uppercase tracking-widest text-white/40">
               {/* Trofej i k nazvu kola — roundName vraci u strednich kol holé „N. kolo",
                   ktere je jinak k nerozeznani od ligoveho. */}
-              {nextMatch.isCup ? `🏆 ${nextMatch.roundName ?? "Pohár"}` : nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}
+              {nextMatch.isTournament ? nextMatch.roundName : nextMatch.isCup ? `🏆 ${nextMatch.roundName ?? "Pohár"}` : nextMatch.round != null ? `${nextMatch.round}. kolo` : "Přátelák"}
             </span>
             {nextMatch.scheduledAt && gameDate && (() => {
               const daysUntil = Math.max(0, Math.round((new Date(nextMatch.scheduledAt).getTime() - gameDate.getTime()) / 86400000));
@@ -299,10 +299,11 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
 
         <div className="text-center px-4 py-2">
           <Link href="/zapas" className="inline text-sm text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
-          {nextMatch.isHome && nextMatch.promoted && (
+          {/* Turnaj se hraje na neutrální půdě, propagovat ho nejde. */}
+          {nextMatch.isHome && !nextMatch.isTournament && nextMatch.promoted && (
             <span className="inline ml-4 text-sm text-gold-600 font-heading font-bold">📢 Propagováno</span>
           )}
-          {nextMatch.isHome && !nextMatch.promoted && (
+          {nextMatch.isHome && !nextMatch.isTournament && !nextMatch.promoted && (
             <button
               onClick={() => promoteMatch(nextMatch)}
               disabled={promoting}
@@ -343,9 +344,14 @@ export function FixturesWidget({ data, height }: WidgetProps) {
             const switchId = m.calendarId ?? m.id;
             return (
               <Link key={m.id} href={`/zapas?calendarId=${switchId}`} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors">
-                <span className="text-sm text-muted tabular-nums w-5">{m.round}.</span>
+                <span className="text-sm text-muted tabular-nums w-5" title={m.roundName ?? undefined}>
+                  {m.round != null ? `${m.round}.` : m.isCup || m.isTournament ? "🏆" : ""}
+                </span>
                 <span className="text-sm font-heading font-bold flex-1 truncate">{opp}</span>
-                <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
+                {/* Turnaj je na neutrální půdě: ani doma, ani venku. */}
+                {!m.isTournament && (
+                  <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
+                )}
                 <LineupFlag m={m} />
                 <span className="text-micro text-muted tabular-nums">{date}</span>
               </Link>

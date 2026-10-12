@@ -306,6 +306,9 @@ matchesRouter.get("/teams/:teamId/cup-preview/:cupMatchId", async (c) => {
 });
 
 // GET /api/teams/:teamId/schedule — rozpis zápasů (odehrané + nadcházející)
+/** Fáze play-off turnaje P-Mobile pro názvy zápasů („Turnaj P-Mobile, čtvrtfinále"). */
+const TOURNAMENT_STAGE_NAME: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
+
 matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   const teamId = c.req.param("teamId");
 
@@ -383,7 +386,8 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     isDefaultLineup: (row.lineup_is_auto === null || row.lineup_is_auto !== 0) && hasAnyDefaultLineup, // má fallback default
     defaultPresetSlot, // jaký preset slot má poslední uložená sestava (pro indikaci u "(výchozí)")
     isLocalDerby: !!row.home_village_id && row.home_village_id === row.away_village_id,
-    roundName: null as string | null, // jen pro pohár (label kola)
+    roundName: null as string | null, // jen pro pohár a turnaj (label kola)
+    isTournament: false,
     homePens: null as number | null,
     awayPens: null as number | null,
   }));
@@ -441,13 +445,77 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
         isLocalDerby: false,
         // Pohár-specifická pole
         roundName: roundName(row.round as number, row.total_rounds as number),
+        isTournament: false,
         homePens: row.home_pens as number | null,
         awayPens: row.away_pens as number | null,
       });
     }
-    // Přeřaď celý rozpis chronologicky (cup se vloží mezi ligová kola dle data)
-    matches.sort((a, b) => String(a.scheduledAt ?? "").localeCompare(String(b.scheduledAt ?? "")));
   } catch (e) { logger.warn({ module: "matches" }, "merge cup into schedule", e); }
+
+  // Turnaj P-Mobile — vlastní tabulka tournament_matches, jen běžící ročník (vylosovaný nebo
+  // rozehraný). Hraje se na neutrální půdě: isHome jen říká, kdo je v zápisu domácí, propagace
+  // ani stánek u turnaje nejsou (viz isTournament na FE).
+  try {
+    const tournamentRows = await c.env.DB.prepare(
+      `SELECT m.id, m.stage, m.day, m.status, m.scheduled_at, m.simulated_at, m.home_team_id, m.away_team_id,
+         m.home_score, m.away_score, m.home_pens, m.away_pens, t.name AS tournament_name, e.group_code,
+         ht.name AS home_name, ht.primary_color AS home_color, ht.secondary_color AS home_secondary, ht.badge_pattern AS home_badge,
+         at.name AS away_name, at.primary_color AS away_color, at.secondary_color AS away_secondary, at.badge_pattern AS away_badge,
+         (SELECT COUNT(*) FROM lineups l WHERE l.team_id = ? AND l.calendar_id = m.id) AS has_lineup
+       FROM tournament_matches m
+       JOIN tournaments t ON t.id = m.tournament_id AND t.status IN ('drawn', 'running')
+       JOIN teams ht ON ht.id = m.home_team_id
+       JOIN teams at ON at.id = m.away_team_id
+       LEFT JOIN tournament_entries e ON e.tournament_id = m.tournament_id AND e.team_id = ?
+       WHERE m.home_team_id = ? OR m.away_team_id = ?`
+    ).bind(teamId, teamId, teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch tournament matches for schedule", e); return { results: [] }; });
+
+    for (const row of tournamentRows.results) {
+      const stage = row.stage as string;
+      const label = stage === "league"
+        ? `${row.group_code ? `skupina ${row.group_code}, ` : ""}${row.day}. den`
+        : TOURNAMENT_STAGE_NAME[stage] ?? stage;
+      matches.push({
+        id: row.id as string,
+        calendarId: row.id as string, // turnaj používá tournament_matches.id jako calendarId (stejně jako pohár)
+        round: null,
+        status: row.status as string,
+        homeTeamId: row.home_team_id as string,
+        homeName: row.home_name as string,
+        homeColor: (row.home_color as string) || "#2D5F2D",
+        homeSecondary: (row.home_secondary as string) || "#FFFFFF",
+        homeBadge: (row.home_badge as string) || "shield",
+        homeScore: row.home_score as number | null,
+        awayTeamId: row.away_team_id as string,
+        awayName: row.away_name as string,
+        awayColor: (row.away_color as string) || "#2D5F2D",
+        awaySecondary: (row.away_secondary as string) || "#FFFFFF",
+        awayBadge: (row.away_badge as string) || "shield",
+        awayScore: row.away_score as number | null,
+        scheduledAt: (row.scheduled_at as string | null) ?? "",
+        gameWeek: null,
+        isFriendly: false,
+        isCup: false,
+        isHome: row.home_team_id === teamId,
+        simulatedAt: row.simulated_at as string | null,
+        promoted: false,
+        promotionCost: null,
+        promotionBoost: 1.0,
+        presetSlot: null,
+        hasLineup: (row.has_lineup as number) > 0,
+        isDefaultLineup: false,
+        defaultPresetSlot,
+        isLocalDerby: false,
+        roundName: `${row.tournament_name}, ${label}`,
+        isTournament: true,
+        homePens: row.home_pens as number | null,
+        awayPens: row.away_pens as number | null,
+      });
+    }
+  } catch (e) { logger.warn({ module: "matches" }, "merge tournament into schedule", e); }
+
+  // Přeřaď celý rozpis chronologicky (pohár a turnaj se vloží mezi ligová kola dle data)
+  matches.sort((a, b) => String(a.scheduledAt ?? "").localeCompare(String(b.scheduledAt ?? "")));
 
   return c.json({
     leagueName: league?.name ?? "Liga",
@@ -934,14 +1002,13 @@ matchesRouter.get("/teams/:teamId/unseen-match", async (c) => {
     && (!cupRow || ordOf(tournamentRow) < ordOf(cupRow));
   if (useTournament && tournamentRow) {
     const isHome = tournamentRow.home_team_id === teamId;
-    const stageName: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
     return c.json({
       matchId: tournamentRow.id,
       opponent: isHome ? tournamentRow.away_name : tournamentRow.home_name,
       round: null,
       roundName: tournamentRow.stage === "league"
         ? `${tournamentRow.tournament_name}, ${tournamentRow.day}. den`
-        : `${tournamentRow.tournament_name}, ${stageName[tournamentRow.stage as string] ?? tournamentRow.stage}`,
+        : `${tournamentRow.tournament_name}, ${TOURNAMENT_STAGE_NAME[tournamentRow.stage as string] ?? tournamentRow.stage}`,
       isHome,
       isCup: false,
       isTournament: true,

@@ -195,7 +195,7 @@ export default function TurnajPage() {
   const groupCount = competition?.groups?.length ?? 0;
   const totalDays = competition && t.leagueDays ? t.leagueDays + (entries.length >= 8 ? 3 : 2) : null;
   const formatText = groupCount > 0
-    ? `${groupCount} skupiny, v každé hraje každý s každým. Do čtvrtfinále postupují první dva z každé skupiny, pak semifinále a finále. Poražení semifinalisté hrají o 3. místo.`
+    ? `${groupCount} skupiny, v každé hraje každý s každým. Do čtvrtfinále postupují první dva z každé skupiny${groupCount === 3 ? " a dva nejlepší ze třetích míst" : ""}, pak semifinále a finále. Poražení semifinalisté hrají o 3. místo.`
     : competition && t.leagueMatches
       ? `Ligová fáze v jedné tabulce, ${t.leagueMatches} zápasů na tým. ${competition.advancing === 8 ? "Do čtvrtfinále postupuje 8 nejlepších" : "Do semifinále postupují 4 nejlepší"}, pak se hraje vyřazovacím systémem až do finále. Poražení semifinalisté hrají o 3. místo.`
       : "Formát a přesnou délku upřesníme po uzávěrce podle počtu přihlášených klubů.";
@@ -215,6 +215,14 @@ export default function TurnajPage() {
           </TermRow>
           <TermRow icon="🏆" title="Formát">
             {formatText}
+          </TermRow>
+          <TermRow icon="📊" title="Pořadí v tabulce">
+            Rozhodují body (výhra 3, remíza 1). Při rovnosti bodů pak postupně: body ze vzájemných zápasů týmů se stejným počtem bodů,
+            rozdíl skóre ze vzájemných zápasů, vstřelené góly ze vzájemných zápasů, celkový rozdíl skóre, celkem vstřelené góly
+            a nakonec vyšší reputace klubu.{groupCount === 3 ? " Třetí místa ze skupin se mezi sebou porovnávají podle bodů, rozdílu skóre, vstřelených gólů a reputace." : ""}
+          </TermRow>
+          <TermRow icon="🥅" title="Play-off">
+            Hraje se na jeden zápas. Když je po 90 minutách nerozhodně, hned se kopou penalty, prodloužení se nehraje.
           </TermRow>
           <TermRow icon="🔄" title="Kádr">
             Zápas je každý den, takže se vyplatí střídat celý kádr A-týmu.

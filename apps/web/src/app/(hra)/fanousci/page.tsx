@@ -16,6 +16,8 @@ interface ScheduleMatch {
   scheduledAt: string | null;
   isHome: boolean;
   isCup?: boolean;
+  /** Turnaj P-Mobile: neutrální půda, klub tam nemá stánek ani propagaci. */
+  isTournament?: boolean;
   roundName?: string | null;
   promoted?: boolean;
   promotionCost?: number | null;
@@ -362,7 +364,7 @@ export default function FansPage() {
     setFanbaseHistory(fbh.history ?? []);
     setFanGroups(fg);
     // Propagace i doprava fanoušků fungují pro ligové, přátelské i pohárové domácí zápasy.
-    const home = sched.matches.find((m) => m.status !== "simulated" && m.isHome) ?? null;
+    const home = sched.matches.find((m) => m.status !== "simulated" && m.isHome && !m.isTournament) ?? null;
     setNextHomeMatch(home);
     setPromotionPrice((sched as { promotionPrice?: number }).promotionPrice ?? null);
     // Předvyplnit cenu vstupenky: user override, jinak automatická podle obce

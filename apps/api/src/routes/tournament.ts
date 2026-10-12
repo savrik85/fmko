@@ -10,7 +10,7 @@ import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
 import { logger } from "../lib/logger";
-import { DrawError, drawPreview, loadCurrentTournament, performDraw, type DrawChoice, type TournamentRow } from "../tournament/service";
+import { DrawError, drawPreview, loadCurrentTournament, performDraw, resetDraw, type DrawChoice, type TournamentRow } from "../tournament/service";
 import { loadCompetitionView } from "../tournament/view";
 import { maybeAdvanceTournament } from "../tournament/advance";
 
@@ -322,12 +322,12 @@ tournamentRouter.get("/admin/tournament/draw", async (c) => {
 /** Los: rozpis ligové fáze (jedna tabulka, nebo skupiny) s hřišti, pak SMS od sponzora každému klubu s jeho zápasy. */
 tournamentRouter.post("/admin/tournament/draw", async (c) => {
   const db = c.env.DB;
-  const body = await c.req.json<{ format?: string; matchesPerTeam?: number }>().catch((e) => {
+  const body = await c.req.json<{ format?: string; matchesPerTeam?: number; groupCount?: number }>().catch((e) => {
     logger.warn({ module: M }, "draw: invalid body", e);
-    return {} as { format?: string; matchesPerTeam?: number };
+    return {} as { format?: string; matchesPerTeam?: number; groupCount?: number };
   });
   let choice: DrawChoice;
-  if (body.format === "groups") choice = { format: "groups" };
+  if (body.format === "groups" && Number.isInteger(body.groupCount)) choice = { format: "groups", groupCount: body.groupCount as number };
   else if (Number.isInteger(body.matchesPerTeam)) choice = { format: "league", matchesPerTeam: body.matchesPerTeam as number };
   else return c.json({ error: "Vyber formát nebo počet zápasů na tým" }, 400);
   let result: Awaited<ReturnType<typeof performDraw>>;
@@ -349,6 +349,7 @@ tournamentRouter.post("/admin/tournament/draw", async (c) => {
     ).bind(t.id).all<{ day: number; scheduled_at: string; home_team_id: string; away_team_id: string; home_name: string; away_name: string; venue: string | null }>();
     const entries = await db.prepare("SELECT team_id, group_code FROM tournament_entries WHERE tournament_id = ?")
       .bind(t.id).all<{ team_id: string; group_code: string | null }>();
+    const groupCount = new Set(entries.results.map((e) => e.group_code).filter(Boolean)).size;
     for (const e of entries.results) {
       const mine = rows.results.filter((r) => r.home_team_id === e.team_id || r.away_team_id === e.team_id);
       const lines = mine.map((r) => {
@@ -358,7 +359,7 @@ tournamentRouter.post("/admin/tournament/draw", async (c) => {
       });
       const body = e.group_code
         ? `Los je hotový! Hrajete ve skupině ${e.group_code}, každý s každým. Vaše zápasy, výkop vždy v 18:00: ${lines.join("; ")}. ` +
-          `Do čtvrtfinále postupují první dva z každé skupiny. Sestavu na každý zápas nastavíte na stránce Sestava. Hodně štěstí!`
+          `Do čtvrtfinále postupují první dva z každé skupiny${groupCount === 3 ? " a dva nejlepší ze třetích míst" : ""}. Sestavu na každý zápas nastavíte na stránce Sestava. Hodně štěstí!`
         : `Los je hotový! Vaše zápasy v ligové fázi, výkop vždy v 18:00: ${lines.join("; ")}. ` +
           `Nejlepší kluby z tabulky postoupí do play-off. Sestavu na každý zápas nastavíte na stránce Sestava. Hodně štěstí!`;
       await sendSystemSMS(db, e.team_id, t.sponsor, body, SMS_META)
@@ -366,6 +367,18 @@ tournamentRouter.post("/admin/tournament/draw", async (c) => {
     }
   }
   return c.json({ ok: true, ...result });
+});
+
+/** Zrušení losu před prvním zápasem (rozpis a skupiny pryč, ročník zpět po uzávěrce). */
+tournamentRouter.post("/admin/tournament/reset-draw", async (c) => {
+  try {
+    const r = await resetDraw(c.env.DB);
+    return c.json({ ok: true, ...r });
+  } catch (e) {
+    if (e instanceof DrawError) return c.json({ error: e.message }, 400);
+    logger.error({ module: M }, "zrušení losu selhalo", e);
+    return c.json({ error: "Los se nepodařilo zrušit" }, 500);
+  }
 });
 
 /** Admin (test): odehraje nejbližší neodehraný hrací den hned, bez čekání na 18:00. */

@@ -627,6 +627,8 @@ function BroadcastSection() {
 
 interface DrawPreview {
   tournament: { id: string; edition: number; status: string; startsOn: string | null; registrationDeadline: string };
+  /** Los jde zrušit (vylosováno, ještě se nehrálo). */
+  canReset?: boolean;
   entrants: number;
   venues: number;
   playoff: string[];
@@ -637,7 +639,7 @@ interface DrawOption { format: "league" | "groups"; matchesPerTeam: number; leag
 
 /** Klíč volby losu: skupiny, nebo počet zápasů v jedné tabulce. */
 function drawKey(o: DrawOption): string {
-  return o.format === "groups" ? "groups" : `league-${o.matchesPerTeam}`;
+  return o.format === "groups" ? `groups-${o.groupSizes?.length ?? 4}` : `league-${o.matchesPerTeam}`;
 }
 
 function TournamentDrawSection() {
@@ -658,7 +660,8 @@ function TournamentDrawSection() {
     if (!res?.ok) { setStatus("Turnaj není vypsaný"); return; }
     const data = (await res.json()) as DrawPreview;
     setPreview(data);
-    const preferred = data.options.find((o) => o.format === "groups") ?? data.options.find((o) => o.totalDays === 7) ?? data.options[0];
+    const preferred = data.options.find((o) => o.format === "groups" && o.groupSizes?.length === 3)
+      ?? data.options.find((o) => o.format === "groups") ?? data.options.find((o) => o.totalDays === 7) ?? data.options[0];
     setChoice((prev) => prev ?? (preferred ? drawKey(preferred) : null));
   };
 
@@ -679,7 +682,7 @@ function TournamentDrawSection() {
       const res = await fetch(`${API}/api/admin/tournament/draw`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authH },
-        body: JSON.stringify(opt.format === "groups" ? { format: "groups" } : { matchesPerTeam: opt.matchesPerTeam }),
+        body: JSON.stringify(opt.format === "groups" ? { format: "groups", groupCount: opt.groupSizes?.length } : { matchesPerTeam: opt.matchesPerTeam }),
       });
       const data = await res.json();
       setStatus(res.ok ? `Vylosováno: ${data.matches} zápasů ${data.format === "groups" ? "ve skupinách" : "ligové fáze"}, ${data.leagueDays} dní` : (data.error ?? "Los se nepodařil"));
@@ -687,6 +690,24 @@ function TournamentDrawSection() {
     } catch (e) {
       console.error("tournament draw:", e);
       setStatus("Los se nepodařil");
+    }
+    setBusy(false);
+  };
+
+  const resetDraw = async () => {
+    if (!potvrd(
+      "Zrušit los?",
+      "Smaže se rozpis i skupiny a turnaj se vrátí do stavu po uzávěrce, pak jde vylosovat znovu. Přihlášky zůstanou. SMS z losu se nemažou.",
+    )) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/api/admin/tournament/reset-draw`, { method: "POST", headers: authH });
+      const data = await res.json();
+      setStatus(res.ok ? `Los zrušen, smazáno ${data.matches} zápasů` : (data.error ?? "Los se nepodařilo zrušit"));
+      load();
+    } catch (e) {
+      console.error("tournament reset draw:", e);
+      setStatus("Los se nepodařilo zrušit");
     }
     setBusy(false);
   };
@@ -743,6 +764,25 @@ function TournamentDrawSection() {
             {busy ? "Losuji…" : "Vylosovat"}
           </button>
         </>
+      ) : preview.canReset ? (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={resetDraw}
+            disabled={busy}
+            className="px-4 py-2 border border-card-red text-card-red rounded-soft font-heading font-bold text-sm disabled:opacity-50"
+          >
+            {busy ? "Ruším…" : "Zrušit los"}
+          </button>
+          {isTestEnv && (
+            <button
+              onClick={advance}
+              disabled={busy}
+              className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50"
+            >
+              {busy ? "Hraje se…" : "Odehrát další den (test)"}
+            </button>
+          )}
+        </div>
       ) : (
         isTestEnv && preview.tournament.status !== "finished" && (
           <button
