@@ -16,6 +16,7 @@ import {
 } from "./draw";
 import { kickoffAt, loadCurrentTournament, loadGroups, loadVenues, type TournamentRow, type VenueRow } from "./service";
 import { simulateTournamentMatch, type TournamentMatchRow } from "./match";
+import { announceTournamentAwards } from "./awards";
 
 const M = "tournament";
 const CLAIM_TTL_MS = 15 * 60 * 1000;
@@ -295,6 +296,7 @@ export async function progressStages(db: D1Database, t: TournamentRow): Promise<
             `Ve finále ${t.edition}. ročníku ${t.city_locative ?? `ve městě ${t.city}`} zvítězil ${winnerName} ${final.home_score}:${final.away_score}${final.home_pens != null ? ` (na penalty ${final.home_pens}:${final.away_pens})` : ""}.`)
             .run().catch((e) => logger.warn({ module: M }, "zpráva o vítězi do zpravodaje", e));
         }
+        await announceTournamentAwards(db, t).catch((e) => logger.error({ module: M }, `${t.id}: vyhlášení cen turnaje`, e));
       }
       logger.info({ module: M }, `${t.id}: turnaj dohrán, vítěz ${winner}`);
       return;
