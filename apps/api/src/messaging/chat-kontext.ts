@@ -122,8 +122,38 @@ function vecerniDen(kdy: Date, hodina: number): number {
   return Math.floor(ms / 86_400_000);
 }
 
+/** Jak dlouho po vlastní zprávě hráč ještě určitě nespí. */
+export const AWAKE_AFTER_OWN_MESSAGE_MS = 30 * 60_000;
+
+/** Psal hráč sám v posledních třiceti minutách? Zpráva s časem v budoucnu se nepočítá. */
+function wroteRecently(kdy: Date, lastOwnMessageAt: string | undefined): boolean {
+  if (!lastOwnMessageAt) return false;
+  const ago = kdy.getTime() - Date.parse(lastOwnMessageAt);
+  return ago >= 0 && ago <= AWAKE_AFTER_OWN_MESSAGE_MS;
+}
+
 /**
  * Co hráč právě dělá.
+ *
+ * Rozhodují hodiny a povolání (`contextByClock`). Výjimka: kdo před chvílí
+ * sám psal, ten nespí. Pešek ve 22:06 poděkoval za odmítnutou nabídku
+ * a o minutu později trenérovi vyčítal, že ho SMS vzbudila.
+ * Bdělost jen přebíjí spánek, do práce ani k pivu nikoho neposílá.
+ *
+ * `lastOwnMessageAt` je ISO čas jeho poslední zprávy ve vlákně.
+ */
+export function kontextCasu(
+  kdy: Date, smena: Smena, seed = 0, alcohol = 0, vek = 28, lastOwnMessageAt?: string,
+): CasovyKontext {
+  const k = contextByClock(kdy, smena, seed, alcohol, vek);
+  if (k.situace !== "spi" || !wroteRecently(kdy, lastOwnMessageAt)) return k;
+  // Doma a vzhůru: kdo dnes do práce nešel, ten má volno, ostatní po šichtě.
+  const noWorkToday = smena === "volny" || (smena === "denni" && k.jeVikend);
+  return { ...k, situace: noWorkToday ? "volno" : "po_praci" };
+}
+
+/**
+ * Co hráč dělá podle hodin.
  *
  * `seed` je jen pro směnný provoz a hospodu (obvykle hash id hráče), u
  * ostatních oborů na něm nezáleží. O víkendu se do práce chodí jen ve
@@ -133,8 +163,8 @@ function vecerniDen(kdy: Date, hodina: number): number {
  * odepisovali v deset večer, že spí. `vek` jen rozhoduje, jestli se pije
  * v hospodě nebo doma.
  */
-export function kontextCasu(
-  kdy: Date, smena: Smena, seed = 0, alcohol = 0, vek = 28,
+function contextByClock(
+  kdy: Date, smena: Smena, seed: number, alcohol: number, vek: number,
 ): CasovyKontext {
   const { hodina, denIndex } = prazskyCas(kdy);
   const jeVikend = denIndex === 0 || denIndex === 6;

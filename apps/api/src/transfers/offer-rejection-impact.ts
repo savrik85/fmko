@@ -52,7 +52,7 @@ const REJECTED_SMS_WANTS_HOT: string[] = [
   "Tak takhle teda ne, trenére. {team} byla moje šance a vy jste mi ji sebral. Uvidíme, jak se vám bude hrát beze mě.",
 ];
 const REJECTED_SMS_LOYAL: string[] = [
-  "Trenére, díky že jste tu nabídku odmítl. Jsem tady doma a jinam nechci.",
+  "Trenére, díky, že jste tu nabídku odmítl. Jsem tady doma a jinam nechci.",
   "Trenére, slyšel jsem o té nabídce. Dobře, že jste ji poslal k šípku. Já svůj dres nevyměním.",
 ];
 

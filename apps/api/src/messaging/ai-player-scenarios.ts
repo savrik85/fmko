@@ -78,6 +78,12 @@ export interface PlayerSnapshot {
    * (`season/weight-talk.ts`), model jen odpoví podle něj. `undefined` = o váze řeč není.
    */
   weightTalk?: "pledge" | "refused";
+
+  /**
+   * Kdy hráč ve vlákně naposledy sám psal (ISO). Načítá volající přes
+   * `loadLastOwnMessageAt`. Kdo před chvílí psal, toho trenérova SMS nevzbudila.
+   */
+  lastOwnMessageAt?: string;
 }
 
 export interface AiScenario {

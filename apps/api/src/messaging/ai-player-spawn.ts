@@ -628,6 +628,7 @@ async function handleAiPlayerReplyInner(
     .first<{ game_date: string | null }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "herní den pro domluvu o váze", e); return null; });
   if (teamGameDate?.game_date) player.weightTalk = weightTalkFromState(conv.ai_thread_state, teamGameDate.game_date);
+  player.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, player.id);
   const teamCtx = await loadTeamContext(db, conv.team_id);
 
   // Načti historii (posledních 6 zpráv chronologicky)
@@ -1084,6 +1085,27 @@ async function offendPlayer(
 }
 
 /**
+ * Kdy hráč v konverzaci naposledy sám psal (ISO), `undefined` když nikdy.
+ *
+ * Šablonové SMS (díky za odmítnutou nabídku, výmluva na zranění) chodí
+ * i v deset večer. Kdo ji před minutou poslal, nemůže trenérovi vyčítat,
+ * že ho vzbudil. V kabině píše víc hráčů, proto filtr na `sender_id`.
+ *
+ * Přes `julianday`, protože část zpráv má `sent_at` z `datetime('now')`
+ * s mezerou místo `T` a jako řetězec by se se zbytkem neporovnala správně.
+ */
+export async function loadLastOwnMessageAt(
+  db: D1Database, convId: string, playerId: string,
+): Promise<string | undefined> {
+  const row = await db.prepare(
+    `SELECT strftime('%Y-%m-%dT%H:%M:%SZ', MAX(julianday(sent_at))) AS at FROM messages
+     WHERE conversation_id = ? AND sender_type = 'player' AND sender_id = ?`,
+  ).bind(convId, playerId).first<{ at: string | null }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "poslední zpráva hráče", e); return null; });
+  return row?.at ?? undefined;
+}
+
+/**
  * Nechá odpověď dojít až za chvíli.
  *
  * Model odpoví do vteřiny a zpráva do té doby padala do telefonu rychleji,
@@ -1099,7 +1121,7 @@ export async function pockejNezDopise(
   text: string,
   player: {
     occupation?: string; id: string; discipline: number; temper: number;
-    age: number; alcohol: number;
+    age: number; alcohol: number; lastOwnMessageAt?: string;
   },
 ): Promise<void> {
   const { kontextCasu, zpozdeniOdpovedi } = await import("./chat-kontext");
@@ -1108,7 +1130,7 @@ export async function pockejNezDopise(
 
   const cas = kontextCasu(
     new Date(), smenaProPovolani(player.occupation), seedFromString(player.id),
-    player.alcohol, player.age,
+    player.alcohol, player.age, player.lastOwnMessageAt,
   );
   const cil = zpozdeniOdpovedi({
     znaku: text.length, situace: cas.situace,

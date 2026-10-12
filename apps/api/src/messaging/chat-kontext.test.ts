@@ -154,6 +154,42 @@ describe("čas je vždycky pražský", () => {
   });
 });
 
+describe("kdo před chvílí psal, ten nespí", () => {
+  // Pešek ve 22:06 poděkoval za odmítnutou nabídku a ve 22:07 trenérovi
+  // vyčítal, že ho SMS vzbudila (prod, 2026-10-12).
+  const now = new Date("2026-10-12T20:07:00Z");
+
+  it("hráč, který psal před minutou, není vzbuzený, je doma vzhůru", () => {
+    const k = kontextCasu(now, "denni", 1, 0, 28, "2026-10-12T20:06:21Z");
+    expect(k.situace).toBe("po_praci");
+    expect(popisSituace(k, "Truhlář", [])).not.toContain("SPAL JSI");
+  });
+
+  it("po půl hodině od vlastní zprávy už zase spí", () => {
+    expect(kontextCasu(now, "denni", 1, 0, 28, "2026-10-12T19:30:00Z").situace).toBe("spi");
+  });
+
+  it("bez vlastní zprávy spí jako dřív", () => {
+    expect(kontextCasu(now, "denni", 1, 0, 28).situace).toBe("spi");
+    expect(kontextCasu(now, "denni", 1, 0, 28, "nesmysl").situace).toBe("spi");
+  });
+
+  it("zpráva s časem v budoucnu se nepočítá", () => {
+    expect(kontextCasu(now, "denni", 1, 0, 28, "2026-10-12T20:10:00Z").situace).toBe("spi");
+  });
+
+  it("student a dělník o víkendu mají volno, ne po šichtě", () => {
+    const night = new Date("2027-01-05T02:00:00Z");
+    expect(kontextCasu(night, "volny", 1, 0, 28, "2027-01-05T01:55:00Z").situace).toBe("volno");
+    const saturdayNight = new Date("2026-09-19T21:00:00Z");
+    expect(kontextCasu(saturdayNight, "denni", 1, 0, 28, "2026-09-19T20:50:00Z").situace).toBe("volno");
+  });
+
+  it("vzhůru neznamená v práci ani u piva: jen přebije spánek", () => {
+    expect(kontextCasu(kdy(2, 10), "denni", 1, 0, 28, kdy(2, 10).toISOString()).situace).toBe("prace");
+  });
+});
+
 describe("kdo si dává", () => {
   /** Notorik, kterého najdeš večer u piva. */
   const PIJAK = 90;

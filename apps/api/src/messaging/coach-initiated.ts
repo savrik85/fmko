@@ -20,7 +20,9 @@ import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
   generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError,
 } from "./ai-player-chat";
-import { INJURY_COLUMN, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, pockejNezDopise } from "./ai-player-spawn";
+import {
+  INJURY_COLUMN, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, pockejNezDopise,
+} from "./ai-player-spawn";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
 
@@ -86,6 +88,7 @@ export async function startCoachThread(
       .catch((e) => { logger.warn({ module: M }, "herní den pro domluvu o váze", e); return null; });
     if (teamGameDate?.game_date) player.weightTalk = weightTalkFromState(vlakno?.ai_thread_state, teamGameDate.game_date);
     player.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: opts.playerId, tema });
+    player.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, player.id);
 
     /*
      * Historie i tady: když trenér napíše podruhé po uzavřeném vlákně, hráč
@@ -249,6 +252,7 @@ export async function replyInSquadGroup(
 
     // Před celou kabinou nikdo nic neprozradí: jen veřejné znalosti (spec 10b).
     mluvci.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: mluvci.id });
+    mluvci.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, mluvci.id);
 
     const team = await loadTeamContext(db, opts.teamId);
 

@@ -13,6 +13,7 @@ vi.mock("./ai-player-spawn", () => ({
   loadTeamContext: vi.fn(async () => ({ teamName: "TJ Dvory" })),
   pockejNezDopise: vi.fn(async () => undefined),
   nactiSituaceTymu: vi.fn(async () => new Map()),
+  loadLastOwnMessageAt: vi.fn(async () => undefined),
 }));
 vi.mock("../incidents/znalosti-db", () => ({ nactiZnalostiHrace: vi.fn(async () => []) }));
 

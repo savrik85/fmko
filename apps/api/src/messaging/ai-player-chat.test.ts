@@ -61,6 +61,14 @@ describe("hráč ví, kolik je hodin", () => {
     expect(buildSystemPrompt(hrac({ occupation: "Hospodský" }), tym, kdy(2, 22))).toContain("V PRÁCI");
     expect(buildSystemPrompt(hrac({ occupation: "Zedník" }), tym, kdy(2, 22))).toContain("SPAL JSI");
   });
+
+  it("kdo před chvílí sám psal, toho SMS nevzbudila", () => {
+    const now = kdy(2, 2);
+    const fewMinutesAgo = new Date(now.getTime() - 5 * 60_000).toISOString();
+    const p = buildSystemPrompt(hrac({ lastOwnMessageAt: fewMinutesAgo }), tym, now);
+    expect(p).not.toContain("SPAL JSI");
+    expect(p).toContain("napsat můžeš");
+  });
 });
 
 describe("hráč píše jako člověk", () => {
