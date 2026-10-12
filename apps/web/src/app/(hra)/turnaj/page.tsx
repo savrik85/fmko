@@ -276,10 +276,11 @@ export default function TurnajPage() {
           <SectionLabel>Hřiště areálu · {t.city}</SectionLabel>
           <div className="card mt-2">
             {competition.venues.map((v) => (
-              <div key={v.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0">
+              <Link key={v.id} href={`/turnaj/hriste/${v.id}`} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50">
                 <span className="flex-1 min-w-0 truncate text-base font-bold">{v.isMain ? "🏟️ " : ""}{v.name}</span>
                 <span className="text-sm text-muted shrink-0">{v.capacity.toLocaleString("cs")} míst</span>
-              </div>
+                <span className="text-sm text-muted shrink-0" aria-hidden>›</span>
+              </Link>
             ))}
           </div>
         </div>

@@ -41,7 +41,7 @@ export interface Competition {
   groups?: Array<{ code: string; standings: StandingRow[] }> | null;
   /** Ve 3 skupinách: pořadí třetích míst, postupuje `advancing` nejlepších. */
   thirds?: { rows: Array<StandingRow & { group: string }>; advancing: number } | null;
-  venues: Array<{ id: string; name: string; capacity: number; isMain: boolean }>;
+  venues: Array<{ id: string; name: string; capacity: number; isMain: boolean; look?: Record<string, number | string> | null }>;
   scorers: Array<{ playerId: string; name: string; teamId: string; teamName: string; goals: number; assists: number; apps: number }>;
   myEarnings: number;
   advancing: number;
@@ -56,7 +56,7 @@ function kc(n: number): string {
 }
 
 /** „st 14. 10." z výkopu (UTC půlnoc nehrozí, výkop je odpoledne). */
-function dayLabel(iso: string): string {
+export function dayLabel(iso: string): string {
   const d = new Date(iso);
   return `${WEEKDAY[d.getDay()]} ${d.getDate()}. ${d.getMonth() + 1}.`;
 }
@@ -65,7 +65,7 @@ function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" });
 }
 
-function stageTitle(m: CompetitionMatch): string {
+export function stageTitle(m: CompetitionMatch): string {
   return m.stage === "league" ? `${m.day}. den` : STAGE_NAME[m.stage] ?? m.stage;
 }
 
@@ -109,9 +109,13 @@ function MatchRow({ m, myTeamId, showTag }: { m: CompetitionMatch; myTeamId: str
         <>
           {tag && <span className="font-heading font-bold text-ink">{tag}</span>}
           {m.venue?.name && (
-            <span className={m.venue.isMain ? "font-heading font-bold" : undefined} style={m.venue.isMain ? { color: BRAND } : undefined}>
+            <Link
+              href={`/turnaj/hriste/${m.venue.id}`}
+              className={`hover:underline ${m.venue.isMain ? "font-heading font-bold" : ""}`}
+              style={m.venue.isMain ? { color: BRAND } : undefined}
+            >
               {m.venue.name}
-            </span>
+            </Link>
           )}
           {played && m.attendance != null && m.attendance > 0 && <span>{m.attendance.toLocaleString("cs")} diváků</span>}
           {!played && mine && <span>Klepni na čas a nastav sestavu</span>}
@@ -125,7 +129,7 @@ function zapasy(n: number): string {
   return `${n} ${n === 1 ? "zápas" : n >= 2 && n <= 4 ? "zápasy" : "zápasů"}`;
 }
 
-function DayBlock({ title, matches, myTeamId, showTags = true }: { title: string; matches: CompetitionMatch[]; myTeamId: string | null; showTags?: boolean }) {
+export function DayBlock({ title, matches, myTeamId, showTags = true }: { title: string; matches: CompetitionMatch[]; myTeamId: string | null; showTags?: boolean }) {
   return (
     <FixtureGroup title={title} note={zapasy(matches.length)}>
       {matches.map((m) => <MatchRow key={m.id} m={m} myTeamId={myTeamId} showTag={showTags} />)}
@@ -251,7 +255,9 @@ export function CompetitionView({
               <div className="text-sm text-muted">Tvůj další zápas · {matchTitle(myNext)} · {dayLabel(myNext.scheduledAt)} v {timeLabel(myNext.scheduledAt)}</div>
               <div className="font-heading font-bold text-base mt-0.5">
                 {myNext.home.teamId === myTeamId ? myNext.away.name : myNext.home.name}
-                {myNext.venue?.name && <span className="text-muted font-normal text-sm"> · {myNext.venue.name}</span>}
+                {myNext.venue?.name && (
+                  <span className="text-muted font-normal text-sm"> · <Link href={`/turnaj/hriste/${myNext.venue.id}`} className="hover:underline">{myNext.venue.name}</Link></span>
+                )}
               </div>
               <Link href={`/zapas?calendarId=${myNext.id}`} className="btn btn-primary btn-md mt-3 inline-block">Nastavit sestavu</Link>
             </div>

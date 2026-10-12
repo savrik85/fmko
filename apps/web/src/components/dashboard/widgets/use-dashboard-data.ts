@@ -190,14 +190,15 @@ export function useDashboardData(teamId: string | null, needed: DataKey[]) {
       apiFetch<{ matches: ScheduleMatch[] }>(`/api/teams/${teamId}/schedule`)
         .then((d) => {
           const next = (d.matches ?? []).find((m) => m.status !== "simulated");
-          // Turnaj nemá ligový ani pohárový náhled (tabulka, forma, kurzy) — karta ukáže jen soupeře.
-          if (!next || next.isTournament) {
+          if (!next) {
             patch("preview", { data: null, loading: false, error: false });
             return null;
           }
-          const url = next.isCup
-            ? `/api/teams/${teamId}/cup-preview/${next.id}`
-            : `/api/teams/${teamId}/match-preview/${next.id}`;
+          const url = next.isTournament
+            ? `/api/teams/${teamId}/tournament-preview/${next.id}`
+            : next.isCup
+              ? `/api/teams/${teamId}/cup-preview/${next.id}`
+              : `/api/teams/${teamId}/match-preview/${next.id}`;
           return apiFetch<MatchPreview>(url).then((p) => {
             patch("preview", { data: p, loading: false, error: false });
             return p;

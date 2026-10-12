@@ -125,7 +125,8 @@ export interface MatchPreview {
   roundName?: string | null;
   home: PreviewTeam;
   away: PreviewTeam;
-  venue: { name: string; capacity: number; pitchCondition: number; pitchType: string };
+  /** `id` jen u turnaje (hřiště areálu), jinak stadion domácího týmu. */
+  venue: { id?: string | null; name: string; capacity: number; pitchCondition: number; pitchType: string };
   weather: { icon: string; expected: string; temperature: number; description: string };
   /** Kurzy sázkové kanceláře v setinách. null = na tenhle zápas nejsou vypsané. */
   odds: { home: number | null; draw: number | null; away: number | null } | null;
