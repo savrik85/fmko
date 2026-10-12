@@ -9,6 +9,8 @@
  *     v nich měly volno (je jich přesně K), se utkají mezi sebou v dni K+1.
  * Z mnoha náhodných pokusů vyhraje rozpis s nejvíc zápasy mezi okresy a nejvyrovnanější
  * silou soupeřů.
+ *
+ * Skupiny: 4 skupiny, v každé každý s každým, do čtvrtfinále první dva z každé skupiny.
  */
 
 import { createRng, type Rng } from "../generators/rng";
@@ -17,6 +19,8 @@ export interface DrawTeam {
   id: string;
   district: string | null;
   reputation: number;
+  /** Obec klubu: kluby ze stejné obce los dává do různých skupin. */
+  village?: string | null;
 }
 
 export interface DrawPair {
@@ -48,20 +52,149 @@ export const MIN_TEAMS = 4;
 const MIN_MATCHES = 3;
 const MAX_MATCHES = 9;
 
+export type DrawFormat = "league" | "groups";
+
 export interface DrawOption {
+  format: DrawFormat;
+  /** U skupin nejvyšší počet zápasů na tým (menší skupiny hrají o zápas méně). */
   matchesPerTeam: number;
   leagueDays: number;
   totalDays: number;
   roundRobin: boolean;
+  groupSizes?: number[];
 }
 
-/** Možnosti K pro admin po uzávěrce: platné hodnoty a výsledná délka turnaje. */
+/** Možnosti pro admin po uzávěrce: jedna tabulka s K zápasy nebo skupiny, a výsledná délka turnaje. */
 export function drawOptions(teamCount: number): DrawOption[] {
   if (teamCount < MIN_TEAMS) return [];
   const all = allDrawOptions(teamCount);
   // Propozice slibují 7 až 12 dní; u malého turnaje, kde to nejde, se nabídne, co jde.
   const promised = all.filter((o) => o.totalDays >= 7 && o.totalDays <= 12);
-  return promised.length > 0 ? promised : all;
+  const groups = groupsOption(teamCount);
+  return [...(promised.length > 0 ? promised : all), ...(groups ? [groups] : [])];
+}
+
+// ── Skupiny ──
+
+export const GROUP_COUNT = 4;
+/** Z každé skupiny postupují první dva → 8 týmů do čtvrtfinále. */
+export const GROUP_ADVANCING = 2;
+
+export function groupCode(index: number): string {
+  return String.fromCharCode(65 + index);
+}
+
+/** Velikosti skupin: větší skupiny jsou první (18 týmů → 5, 5, 4, 4). */
+export function groupSizes(teamCount: number, groupCount = GROUP_COUNT): number[] {
+  const base = Math.floor(teamCount / groupCount);
+  const extra = teamCount % groupCount;
+  return Array.from({ length: groupCount }, (_, i) => base + (i < extra ? 1 : 0));
+}
+
+/** Kola skupiny každý s každým: při lichém počtu má v každém kole jeden tým volno. */
+function groupRounds(size: number): number {
+  return size % 2 === 0 ? size - 1 : size;
+}
+
+/** Skupiny se nabídnou, jen když v každé jsou aspoň 3 týmy a turnaj vyjde na slíbených 7 až 12 dní. */
+function groupsOption(teamCount: number): DrawOption | null {
+  const sizes = groupSizes(teamCount);
+  if (sizes.some((n) => n < 3)) return null;
+  const days = Math.max(...sizes.map(groupRounds));
+  const totalDays = days + playoffStages(teamCount).length;
+  if (totalDays < 7 || totalDays > 12) return null;
+  return { format: "groups", matchesPerTeam: Math.max(...sizes) - 1, leagueDays: days, totalDays, roundRobin: true, groupSizes: sizes };
+}
+
+/** Penalizace rozdělení: nerovnoměrné okresy (hlavní) a kluby ze stejné obce v jedné skupině. */
+function groupPenalty(groups: DrawTeam[][], districtShare: Map<string, number>): number {
+  let spread = 0;
+  let sameVillage = 0;
+  for (const g of groups) {
+    for (const [district, share] of districtShare) {
+      const n = g.filter((t) => (t.district ?? "") === district).length;
+      spread += (n - share * g.length) ** 2;
+    }
+    for (let i = 0; i < g.length; i++) {
+      for (let j = i + 1; j < g.length; j++) {
+        if (g[i].village && g[i].village === g[j].village) sameVillage++;
+      }
+    }
+  }
+  return spread * 10 + sameVillage * 3;
+}
+
+/**
+ * Los do skupin z košů podle reputace. Koš má tolik týmů, kolik je skupin, takže
+ * nejsilnější kluby jsou nasazení každý do jiné skupiny. Neúplný poslední koš (nejslabší)
+ * se dolosuje do větších skupin. Z mnoha pokusů vyhraje rozdělení s okresy rozprostřenými
+ * rovnoměrně a kluby ze stejné obce v různých skupinách. Deterministický podle `seed`.
+ * Vrací id týmů po skupinách (index 0 = skupina A).
+ */
+export function drawGroups(teams: DrawTeam[], seed: number, groupCount = GROUP_COUNT, attempts = 3000): string[][] {
+  const sizes = groupSizes(teams.length, groupCount);
+  if (sizes.some((n) => n < 3)) throw new Error(`Na ${groupCount} skupiny je potřeba aspoň ${groupCount * 3} týmů`);
+  const rng = createRng(seed);
+  // Při shodné reputaci rozhodne o koši los (sort je stabilní, pořadí po zamíchání zůstane).
+  const ranked = rng.shuffle([...teams]).sort((a, b) => b.reputation - a.reputation);
+  const pots: DrawTeam[][] = [];
+  for (let i = 0; i < ranked.length; i += groupCount) pots.push(ranked.slice(i, i + groupCount));
+
+  const districtShare = new Map<string, number>();
+  for (const t of teams) districtShare.set(t.district ?? "", (districtShare.get(t.district ?? "") ?? 0) + 1 / teams.length);
+
+  let best: DrawTeam[][] | null = null;
+  let bestPenalty = Infinity;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const groups: DrawTeam[][] = sizes.map(() => []);
+    for (const pot of pots) {
+      // Neúplný koš jde jen do prvních (větších) skupin.
+      const slots = rng.shuffle(Array.from({ length: pot.length }, (_, i) => i));
+      pot.forEach((t, i) => groups[slots[i]].push(t));
+    }
+    const penalty = groupPenalty(groups, districtShare);
+    if (penalty < bestPenalty) {
+      bestPenalty = penalty;
+      best = groups;
+    }
+  }
+  return (best as DrawTeam[][]).map((g) => g.map((t) => t.id));
+}
+
+/**
+ * Rozpis skupin: v každé každý s každým (metoda kruhu). Skupina s méně koly hraje ob den,
+ * aby všechny skupiny začínaly i končily ve stejný den (18 týmů: pětky hrají 5 dní,
+ * čtyřky 1., 3. a 5. den). Index dne 0 = den 1.
+ */
+export function buildGroupSchedule(groups: string[][], seed: number): LeagueSchedule {
+  const rng = createRng(seed);
+  const days = Math.max(...groups.map((g) => groupRounds(g.length)));
+  const schedule: LeagueSchedule = Array.from({ length: days }, () => []);
+  for (const group of groups) {
+    const rounds = circleRounds<string>(rng.shuffle([...group]));
+    rounds.forEach((pairs, i) => {
+      const day = rounds.length === 1 ? days - 1 : Math.round((i * (days - 1)) / (rounds.length - 1));
+      for (const [a, b] of pairs) {
+        if (a != null && b != null) schedule[day].push({ home: a, away: b });
+      }
+    });
+  }
+  return schedule;
+}
+
+/**
+ * Čtvrtfinále ze 4 skupin (pořadí ve skupině, index 0 = 1. místo): A1–B2, C1–D2, B1–A2, D1–C2.
+ * Vítězové 1. a 2. čtvrtfinále hrají spolu semifinále, stejně 3. a 4., takže týmy ze stejné
+ * skupiny se znovu potkají nejdřív ve finále.
+ */
+export function groupPlayoffSeeding(rankings: string[][]): DrawPair[] {
+  const [a, b, c, d] = rankings;
+  return [
+    { home: a[0], away: b[1] },
+    { home: c[0], away: d[1] },
+    { home: b[0], away: a[1] },
+    { home: d[0], away: c[1] },
+  ];
 }
 
 function allDrawOptions(teamCount: number): DrawOption[] {
@@ -70,7 +203,7 @@ function allDrawOptions(teamCount: number): DrawOption[] {
     // Lichý počet týmů: N·K zápasových účastí musí jít spárovat → K sudé.
     if (teamCount % 2 === 1 && k % 2 === 1) continue;
     const days = leagueDays(teamCount, k);
-    out.push({ matchesPerTeam: k, leagueDays: days, totalDays: days + playoffStages(teamCount).length, roundRobin: k === teamCount - 1 });
+    out.push({ format: "league", matchesPerTeam: k, leagueDays: days, totalDays: days + playoffStages(teamCount).length, roundRobin: k === teamCount - 1 });
   }
   return out;
 }

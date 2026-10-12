@@ -630,13 +630,20 @@ interface DrawPreview {
   entrants: number;
   venues: number;
   playoff: string[];
-  options: Array<{ matchesPerTeam: number; leagueDays: number; totalDays: number; roundRobin: boolean }>;
+  options: DrawOption[];
+}
+
+interface DrawOption { format: "league" | "groups"; matchesPerTeam: number; leagueDays: number; totalDays: number; roundRobin: boolean; groupSizes?: number[] }
+
+/** Klíč volby losu: skupiny, nebo počet zápasů v jedné tabulce. */
+function drawKey(o: DrawOption): string {
+  return o.format === "groups" ? "groups" : `league-${o.matchesPerTeam}`;
 }
 
 function TournamentDrawSection() {
   const { token } = useTeam();
   const [preview, setPreview] = useState<DrawPreview | null>(null);
-  const [k, setK] = useState<number | null>(null);
+  const [choice, setChoice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
 
@@ -651,27 +658,31 @@ function TournamentDrawSection() {
     if (!res?.ok) { setStatus("Turnaj není vypsaný"); return; }
     const data = (await res.json()) as DrawPreview;
     setPreview(data);
-    setK((prev) => prev ?? data.options.find((o) => o.totalDays === 7)?.matchesPerTeam ?? data.options[0]?.matchesPerTeam ?? null);
+    const preferred = data.options.find((o) => o.format === "groups") ?? data.options.find((o) => o.totalDays === 7) ?? data.options[0];
+    setChoice((prev) => prev ?? (preferred ? drawKey(preferred) : null));
   };
 
   useEffect(() => { load(); }, []);
 
   const draw = async () => {
-    if (!preview || k == null) return;
-    const opt = preview.options.find((o) => o.matchesPerTeam === k);
+    const opt = preview?.options.find((o) => drawKey(o) === choice);
+    if (!preview || !opt) return;
+    const format = opt.format === "groups"
+      ? `${opt.groupSizes?.length ?? 4} skupiny (${opt.groupSizes?.join(", ") ?? "?"} týmů), každý s každým`
+      : `${opt.matchesPerTeam} zápasů na tým v jedné tabulce`;
     if (!potvrd(
       "Vylosovat turnaj?",
-      `${preview.entrants} klubů, ${k} zápasů na tým, turnaj potrvá ${opt?.totalDays ?? "?"} dní od ${preview.tournament.startsOn ?? "?"}. Všem přihlášeným odejde SMS s rozpisem.`,
+      `${preview.entrants} klubů, ${format}, turnaj potrvá ${opt.totalDays} dní od ${preview.tournament.startsOn ?? "?"}. Všem přihlášeným odejde SMS s rozpisem.`,
     )) return;
     setBusy(true);
     try {
       const res = await fetch(`${API}/api/admin/tournament/draw`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authH },
-        body: JSON.stringify({ matchesPerTeam: k }),
+        body: JSON.stringify(opt.format === "groups" ? { format: "groups" } : { matchesPerTeam: opt.matchesPerTeam }),
       });
       const data = await res.json();
-      setStatus(res.ok ? `Vylosováno: ${data.matches} zápasů ligové fáze, ${data.leagueDays} dní` : (data.error ?? "Los se nepodařil"));
+      setStatus(res.ok ? `Vylosováno: ${data.matches} zápasů ${data.format === "groups" ? "ve skupinách" : "ligové fáze"}, ${data.leagueDays} dní` : (data.error ?? "Los se nepodařil"));
       load();
     } catch (e) {
       console.error("tournament draw:", e);
@@ -711,20 +722,22 @@ function TournamentDrawSection() {
           <div className="flex flex-wrap gap-2">
             {preview.options.map((o) => (
               <button
-                key={o.matchesPerTeam}
+                key={drawKey(o)}
                 type="button"
-                onClick={() => setK(o.matchesPerTeam)}
-                aria-pressed={k === o.matchesPerTeam}
-                className={`px-3 py-2 rounded-soft border text-sm text-left ${k === o.matchesPerTeam ? "border-pitch-500 bg-pitch-500 text-white" : "border-gray-200 text-ink hover:border-pitch-300"}`}
+                onClick={() => setChoice(drawKey(o))}
+                aria-pressed={choice === drawKey(o)}
+                className={`px-3 py-2 rounded-soft border text-sm text-left ${choice === drawKey(o) ? "border-pitch-500 bg-pitch-500 text-white" : "border-gray-200 text-ink hover:border-pitch-300"}`}
               >
-                <span className="font-heading font-bold">{o.matchesPerTeam} zápasů</span>
-                <span className="block">{o.totalDays} dní{o.roundRobin ? " · každý s každým" : ""}</span>
+                <span className="font-heading font-bold">{o.format === "groups" ? `${o.groupSizes?.length ?? 4} skupiny` : `${o.matchesPerTeam} zápasů`}</span>
+                <span className="block">
+                  {o.totalDays} dní{o.format === "groups" ? ` · ${o.groupSizes?.join(", ")}` : o.roundRobin ? " · každý s každým" : ""}
+                </span>
               </button>
             ))}
           </div>
           <button
             onClick={draw}
-            disabled={busy || k == null || !deadlinePassed}
+            disabled={busy || choice == null || !deadlinePassed}
             className="px-4 py-2 bg-pitch-500 text-white rounded-soft font-heading font-bold text-sm disabled:opacity-50"
           >
             {busy ? "Losuji…" : "Vylosovat"}

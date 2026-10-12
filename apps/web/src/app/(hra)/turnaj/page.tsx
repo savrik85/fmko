@@ -191,6 +191,15 @@ export default function TurnajPage() {
   const winOn = (amount: number) => kc(amount * 3);
   const competition = data?.competition ?? null;
 
+  // Po losu propozice říkají skutečný formát a délku, před ním jen rámec.
+  const groupCount = competition?.groups?.length ?? 0;
+  const totalDays = competition && t.leagueDays ? t.leagueDays + (entries.length >= 8 ? 3 : 2) : null;
+  const formatText = groupCount > 0
+    ? `${groupCount} skupiny, v každé hraje každý s každým. Do čtvrtfinále postupují první dva z každé skupiny, pak semifinále a finále.`
+    : competition && t.leagueMatches
+      ? `Ligová fáze v jedné tabulce, ${t.leagueMatches} zápasů na tým. ${competition.advancing === 8 ? "Do čtvrtfinále postupuje 8 nejlepších" : "Do semifinále postupují 4 nejlepší"}, pak se hraje vyřazovacím systémem až do finále.`
+      : "Formát a přesnou délku upřesníme po uzávěrce podle počtu přihlášených klubů.";
+
   // Propozice, odměny, hřiště a přihlášené kluby: před losem hlavní obsah, po losu záložka Info.
   const info = (
     <div className="space-y-5">
@@ -202,10 +211,10 @@ export default function TurnajPage() {
             {t.venueName}, {t.city}. Neutrální půda, nikdo nehraje doma.
           </TermRow>
           <TermRow icon="📅" title="Termín">
-            {t.startsOn ? `Začíná se ${onDayLabel(t.startsOn)} ` : ""}Hraje se každý den, turnaj potrvá 7 až 12 dní.
+            {t.startsOn ? `Začíná se ${onDayLabel(t.startsOn)} ` : ""}Hraje se každý den, turnaj potrvá {totalDays ? `${totalDays} dní` : "7 až 12 dní"}.
           </TermRow>
           <TermRow icon="🏆" title="Formát">
-            Formát a přesnou délku upřesníme po uzávěrce podle počtu přihlášených klubů.
+            {formatText}
           </TermRow>
           <TermRow icon="🔄" title="Kádr">
             Zápas je každý den, takže se vyplatí střídat celý kádr A-týmu.
