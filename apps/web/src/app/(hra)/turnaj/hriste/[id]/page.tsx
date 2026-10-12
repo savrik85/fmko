@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { pMobileTheme } from "@/components/brand/p-mobile";
 import { BRAND, DayBlock, dayLabel, stageTitle, type Competition } from "../../competition";
+import { venueColors, venueExtensions, venueFacilities } from "../../venue-scene";
 
 const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
@@ -49,11 +50,8 @@ export default function TournamentVenuePage() {
   if (!data?.tournament || !venue) return <div className="page-container">Hřiště nenalezeno.</div>;
 
   const look = venue.look ?? {};
-  const facilities: Record<string, number> = {};
-  for (const [k, v] of Object.entries(look)) if (typeof v === "number") facilities[k] = v;
   const pitchType = typeof look.pitch_type === "string" ? look.pitch_type : "natural";
-  const color = typeof look.primary === "string" ? look.primary : BRAND;
-  const secondary = typeof look.secondary === "string" ? look.secondary : "#FFFFFF";
+  const colors = venueColors(look, BRAND);
   const prev = venues[(index - 1 + venues.length) % venues.length];
   const next = venues[(index + 1) % venues.length];
   const matches = (data.competition?.matches ?? []).filter((m) => m.venue?.id === venue.id);
@@ -62,9 +60,10 @@ export default function TournamentVenuePage() {
   const scene = {
     pitchCondition: 100,
     pitchType,
-    facilities,
-    teamColor: color,
-    secondaryColor: secondary,
+    facilities: venueFacilities(look),
+    standExtensions: venueExtensions(look),
+    teamColor: colors.primary,
+    secondaryColor: colors.secondary,
     badgePattern: "shield",
     badgeInitials: "PM",
     sponsors: ["P-Mobile"],

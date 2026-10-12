@@ -41,7 +41,7 @@ export interface Competition {
   groups?: Array<{ code: string; standings: StandingRow[] }> | null;
   /** Ve 3 skupinách: pořadí třetích míst, postupuje `advancing` nejlepších. */
   thirds?: { rows: Array<StandingRow & { group: string }>; advancing: number } | null;
-  venues: Array<{ id: string; name: string; capacity: number; isMain: boolean; look?: Record<string, number | string> | null }>;
+  venues: Array<{ id: string; name: string; capacity: number; isMain: boolean; look?: Record<string, unknown> | null }>;
   scorers: Array<{ playerId: string; name: string; teamId: string; teamName: string; goals: number; assists: number; apps: number }>;
   myEarnings: number;
   advancing: number;
