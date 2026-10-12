@@ -12,7 +12,7 @@ export interface Side { teamId: string; name: string; color: string | null; cres
 
 export interface CompetitionMatch {
   id: string;
-  stage: "league" | "qf" | "sf" | "final";
+  stage: "league" | "qf" | "sf" | "third" | "final";
   /** Písmeno skupiny u zápasu ve skupině, jinak null. */
   group?: string | null;
   day: number;
@@ -46,7 +46,7 @@ export interface Competition {
 }
 
 const TAB_KEYS = ["prehled", "tabulka", "rozpis", "playoff", "strelci", "info"] as const;
-const STAGE_NAME: Record<string, string> = { qf: "Čtvrtfinále", sf: "Semifinále", final: "Finále" };
+const STAGE_NAME: Record<string, string> = { qf: "Čtvrtfinále", sf: "Semifinále", third: "O 3. místo", final: "Finále" };
 const WEEKDAY = ["ne", "po", "út", "st", "čt", "pá", "so"];
 
 function kc(n: number): string {
@@ -67,13 +67,20 @@ function stageTitle(m: CompetitionMatch): string {
   return m.stage === "league" ? `${m.day}. den` : STAGE_NAME[m.stage] ?? m.stage;
 }
 
+/** Název hracího dne: finále se hraje ve stejný den jako zápas o 3. místo. */
+function dayTitle(ms: CompetitionMatch[]): string {
+  return ms.some((m) => m.stage === "final") && ms.some((m) => m.stage === "third") ? "Finále a o 3. místo" : stageTitle(ms[0]);
+}
+
 /** Název mého zápasu: u skupin i se skupinou („Skupina A, 1. den"). */
 function matchTitle(m: CompetitionMatch): string {
   return m.group ? `Skupina ${m.group}, ${stageTitle(m)}` : stageTitle(m);
 }
 
 /** Zápas turnaje: tabule vede na detail (odehraný) nebo na sestavu (můj nadcházející). */
-function MatchRow({ m, myTeamId }: { m: CompetitionMatch; myTeamId: string | null }) {
+function MatchRow({ m, myTeamId, showTag }: { m: CompetitionMatch; myTeamId: string | null; showTag: boolean }) {
+  // Štítek u zápasu, který ve výpisu dne není poznat z nadpisu: skupina, nebo zápas o 3. místo vedle finále.
+  const tag = !showTag ? null : m.group ? `Skupina ${m.group}` : m.stage === "third" ? "O 3. místo" : null;
   const played = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
   const mine = m.home.teamId === myTeamId || m.away.teamId === myTeamId;
   const winner = !played ? null
@@ -93,7 +100,7 @@ function MatchRow({ m, myTeamId }: { m: CompetitionMatch; myTeamId: string | nul
       boardColor={PMOBILE.deep}
       meta={
         <>
-          {m.group && <span className="font-heading font-bold text-ink">Skupina {m.group}</span>}
+          {tag && <span className="font-heading font-bold text-ink">{tag}</span>}
           {m.venue?.name && (
             <span className={m.venue.isMain ? "font-heading font-bold" : undefined} style={m.venue.isMain ? { color: BRAND } : undefined}>
               {m.venue.name}
@@ -111,10 +118,10 @@ function zapasy(n: number): string {
   return `${n} ${n === 1 ? "zápas" : n >= 2 && n <= 4 ? "zápasy" : "zápasů"}`;
 }
 
-function DayBlock({ title, matches, myTeamId }: { title: string; matches: CompetitionMatch[]; myTeamId: string | null }) {
+function DayBlock({ title, matches, myTeamId, showTags = true }: { title: string; matches: CompetitionMatch[]; myTeamId: string | null; showTags?: boolean }) {
   return (
     <FixtureGroup title={title} note={zapasy(matches.length)}>
-      {matches.map((m) => <MatchRow key={m.id} m={m} myTeamId={myTeamId} />)}
+      {matches.map((m) => <MatchRow key={m.id} m={m} myTeamId={myTeamId} showTag={showTags} />)}
     </FixtureGroup>
   );
 }
@@ -197,7 +204,7 @@ export function CompetitionView({
     .filter((m) => m.status !== "simulated" && (m.home.teamId === myTeamId || m.away.teamId === myTeamId))
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))[0];
   const winner = winnerTeamId ? standings.find((s) => s.teamId === winnerTeamId) ?? null : null;
-  const playoffStages = (["qf", "sf", "final"] as const).filter((st) => matches.some((m) => m.stage === st));
+  const playoffStages = (["qf", "sf", "third", "final"] as const).filter((st) => matches.some((m) => m.stage === st));
 
   return (
     <div className="space-y-5">
@@ -248,8 +255,8 @@ export function CompetitionView({
 
       {tab === "prehled" && (
         <div className="space-y-5">
-          {nextDay != null && <DayBlock title={`Hraje se ${dayLabel(byDay(nextDay)[0].scheduledAt)}, ${stageTitle(byDay(nextDay)[0]).toLowerCase()}`} matches={byDay(nextDay)} myTeamId={myTeamId} />}
-          {lastPlayedDay != null && <DayBlock title={`Výsledky: ${stageTitle(byDay(lastPlayedDay)[0]).toLowerCase()}`} matches={byDay(lastPlayedDay)} myTeamId={myTeamId} />}
+          {nextDay != null && <DayBlock title={`Hraje se ${dayLabel(byDay(nextDay)[0].scheduledAt)}, ${dayTitle(byDay(nextDay)).toLowerCase()}`} matches={byDay(nextDay)} myTeamId={myTeamId} />}
+          {lastPlayedDay != null && <DayBlock title={`Výsledky: ${dayTitle(byDay(lastPlayedDay)).toLowerCase()}`} matches={byDay(lastPlayedDay)} myTeamId={myTeamId} />}
         </div>
       )}
 
@@ -270,7 +277,7 @@ export function CompetitionView({
           >
             {(key) => {
               const d = Number(key);
-              return <DayBlock title={`${stageTitle(byDay(d)[0])}, ${dayLabel(byDay(d)[0].scheduledAt)}`} matches={byDay(d)} myTeamId={myTeamId} />;
+              return <DayBlock title={`${dayTitle(byDay(d))}, ${dayLabel(byDay(d)[0].scheduledAt)}`} matches={byDay(d)} myTeamId={myTeamId} />;
             }}
           </RoundPager>
         );
@@ -286,7 +293,7 @@ export function CompetitionView({
         ) : (
           <div className="space-y-5">
             {[...playoffStages].reverse().map((st) => (
-              <DayBlock key={st} title={STAGE_NAME[st]} matches={matches.filter((m) => m.stage === st)} myTeamId={myTeamId} />
+              <DayBlock key={st} title={STAGE_NAME[st]} matches={matches.filter((m) => m.stage === st)} myTeamId={myTeamId} showTags={false} />
             ))}
           </div>
         )

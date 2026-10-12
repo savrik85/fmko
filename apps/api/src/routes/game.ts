@@ -3814,7 +3814,7 @@ gameRouter.delete("/teams/:teamId/classifieds/:id", async (c) => {
 
 // GET next match info + current lineup
 // Optional ?calendarId=X — vrátí konkrétní zápas (calendar entry NEBO friendly match.id), jinak nejbližší
-const TOURNAMENT_STAGE_NAME: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", final: "finále" };
+const TOURNAMENT_STAGE_NAME: Record<string, string> = { qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
 
 /** „Turnaj P-Mobile, 2. den" / „Turnaj P-Mobile, finále" */
 function tournamentRoundName(m: Record<string, unknown>): string {

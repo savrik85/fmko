@@ -195,9 +195,9 @@ export default function TurnajPage() {
   const groupCount = competition?.groups?.length ?? 0;
   const totalDays = competition && t.leagueDays ? t.leagueDays + (entries.length >= 8 ? 3 : 2) : null;
   const formatText = groupCount > 0
-    ? `${groupCount} skupiny, v každé hraje každý s každým. Do čtvrtfinále postupují první dva z každé skupiny, pak semifinále a finále.`
+    ? `${groupCount} skupiny, v každé hraje každý s každým. Do čtvrtfinále postupují první dva z každé skupiny, pak semifinále a finále. Poražení semifinalisté hrají o 3. místo.`
     : competition && t.leagueMatches
-      ? `Ligová fáze v jedné tabulce, ${t.leagueMatches} zápasů na tým. ${competition.advancing === 8 ? "Do čtvrtfinále postupuje 8 nejlepších" : "Do semifinále postupují 4 nejlepší"}, pak se hraje vyřazovacím systémem až do finále.`
+      ? `Ligová fáze v jedné tabulce, ${t.leagueMatches} zápasů na tým. ${competition.advancing === 8 ? "Do čtvrtfinále postupuje 8 nejlepších" : "Do semifinále postupují 4 nejlepší"}, pak se hraje vyřazovacím systémem až do finále. Poražení semifinalisté hrají o 3. místo.`
       : "Formát a přesnou délku upřesníme po uzávěrce podle počtu přihlášených klubů.";
 
   // Propozice, odměny, hřiště a přihlášené kluby: před losem hlavní obsah, po losu záložka Info.
