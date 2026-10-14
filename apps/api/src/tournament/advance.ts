@@ -321,6 +321,12 @@ export async function progressStages(db: D1Database, t: TournamentRow): Promise<
 }
 
 /**
+ * Kolik zápasů odehraje jeden běh cronu. Celý hrací den (ve skupinách 9 zápasů) se odehraje
+ * najednou v 18:00 jako ligové kolo; 18:05 a 18:20 jen dohrávají, co spadlo.
+ */
+const MATCHES_PER_RUN = 12;
+
+/**
  * Odehraje splatné zápasy turnaje (nejvýš `maxMatches` za běh) a posune fáze.
  * `forceDay`: admin na testu odehraje nejbližší neodehraný den bez ohledu na čas.
  */
@@ -340,10 +346,10 @@ export async function maybeAdvanceTournament(
       return { played: 0 };
     }
     due = (await db.prepare("SELECT * FROM tournament_matches WHERE tournament_id = ? AND status = 'scheduled' AND day = ? ORDER BY bracket_pos LIMIT ?")
-      .bind(t.id, next.d, opts.maxMatches ?? 4).all<TournamentMatchRow>()).results;
+      .bind(t.id, next.d, opts.maxMatches ?? MATCHES_PER_RUN).all<TournamentMatchRow>()).results;
   } else {
     due = (await db.prepare("SELECT * FROM tournament_matches WHERE tournament_id = ? AND status = 'scheduled' AND scheduled_at <= ? ORDER BY day, bracket_pos LIMIT ?")
-      .bind(t.id, now.toISOString(), opts.maxMatches ?? 4).all<TournamentMatchRow>()).results;
+      .bind(t.id, now.toISOString(), opts.maxMatches ?? MATCHES_PER_RUN).all<TournamentMatchRow>()).results;
   }
 
   if (due.length > 0 && t.status === "drawn") {
