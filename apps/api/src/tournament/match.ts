@@ -285,9 +285,11 @@ export async function simulateTournamentMatch(
   }
 
   {
+    // Turnaj se hraje denně a kádr se točí, kdo nejel, nezlobí se (morálka, vztah k trenérovi
+    // ani SMS). Kdo jel, tomu série zápasů bez nominace a truc končí stejně jako v lize.
     const { reactToLeftOut } = await import("../multiplayer/left-out");
     for (const [teamId, build] of [[homeId, homeBuild], [awayId, awayBuild]] as const) {
-      await reactToLeftOut(db, teamId, m.id, build)
+      await reactToLeftOut(db, teamId, m.id, { ...build, leftOutIds: [] })
         .catch((e) => logger.warn({ module: M }, `reakce hráčů mimo zápas, tým ${teamId}`, e));
     }
   }
