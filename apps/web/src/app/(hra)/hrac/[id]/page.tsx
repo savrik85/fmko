@@ -2181,10 +2181,13 @@ const TRAIN_ATTR_LABELS: Record<string, string> = {
   passing: "Přihrávky", heading: "Hlavičky", defense: "Obrana",
   stamina: "Výdrž", strength: "Síla", goalkeeping: "Brankář",
   vision: "Přehled", creativity: "Kreativita", setPieces: "Standardky",
+  dospivani: "Celkové hodnocení",
 };
 
 const TRAIN_TYPE_LABELS: Record<string, string> = {
   conditioning: "Kondice", technique: "Technika", tactics: "Taktika", match_practice: "Zápasová praxe",
+  // Zlepšení ze zápasů a z dospívání, ne z tréninku
+  match: "Ligový zápas", cup: "Pohár", tournament: "Turnaj", friendly: "Přátelák", dospivani: "Dospívání",
 };
 
 interface TrainingLogEntry {

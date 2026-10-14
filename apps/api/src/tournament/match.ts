@@ -325,7 +325,7 @@ export async function simulateTournamentMatch(
         zapisDovednost(skills, physical, growth.attribute, growth.newValue);
         changed = true;
         await db.prepare(
-          "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'cup', ?)"
+          "INSERT INTO training_log (player_id, team_id, attribute, old_value, new_value, change, training_type, game_date) VALUES (?, ?, ?, ?, ?, 1, 'tournament', ?)"
         ).bind(dbId, teamId, growth.attribute, growth.oldValue, growth.newValue, new Date().toISOString())
           .run().catch((e) => logger.warn({ module: M }, "záznam zlepšení", e));
       }
