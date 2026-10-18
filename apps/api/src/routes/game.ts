@@ -6769,7 +6769,7 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
   // Virtuální klub nemá řádek v teams — syntetický profil z virtual_team_data (legacy: message JSON).
   let virtualFromTeam: Record<string, unknown> | null = null;
   if (isVirtualOffer) {
-    let vd: { name?: string; city?: string; district?: string; rating?: number } = {};
+    let vd: { name?: string; city?: string; district?: string; rating?: number; country?: string } = {};
     try {
       if (offer.virtual_team_data) vd = JSON.parse(offer.virtual_team_data as string);
       else if (offer.message) { const legacy = JSON.parse(offer.message as string); vd = { name: legacy.teamName, city: legacy.city }; }
@@ -6789,6 +6789,7 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
       is_virtual: true,
       city: vd.city ?? null,
       district: vd.district ?? null,
+      country: vd.country ?? null,
     };
   }
 
@@ -6853,8 +6854,9 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     const isOfferActive = offer.status === "pending" || offer.status === "countered";
     if (isOfferActive && playerRow) {
       const virtualRating = virtualFromTeam ? (virtualFromTeam.reputation as number | null) : null;
+      const virtualCountry = virtualFromTeam ? (virtualFromTeam.country as string | null) : null;
       const fresh = await computeInterestForOffer(c.env.DB, offer.player_id as string, {
-        fromTeamId: offer.from_team_id as string, offerAmount: currentAmount, virtualRating,
+        fromTeamId: offer.from_team_id as string, offerAmount: currentAmount, virtualRating, virtualCountry,
       });
       if (fresh) {
         playerInterest = { level: fresh.level, label: INTEREST_LABELS[fresh.level] };
@@ -7027,7 +7029,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   // ── Prodej virtuálnímu klubu — hráč odchází ze hry, prodávající dostane peníze ──
   if (buyerTeamId === "virtual_ai") {
     const previousPlayerStatus = currentPlayer.status ?? "active";
-    let vd: { name?: string; city?: string } = {};
+    let vd: { name?: string; city?: string; country?: string } = {};
     try {
       if (offer.virtual_team_data) vd = JSON.parse(offer.virtual_team_data as string);
       else if (offer.message) { const legacy = JSON.parse(offer.message as string); vd = { name: legacy.teamName, city: legacy.city }; }
@@ -7107,7 +7109,7 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     }).catch((e) => logger.warn({ module: "game" }, "create virtual sale news", e));
 
     await sendPhoneSMS(c.env.DB, sellerTeamId, "Sportovní ředitel", "Sportovní ředitel",
-      `📤 Přestup potvrzen. ${soldName} odchází do ${virtualName}${vd.city ? ` (${vd.city})` : ""} za ${amount.toLocaleString("cs")} Kč.`
+      `📤 Přestup potvrzen. ${soldName} odchází do ${virtualName}${vd.city ? ` (${vd.city}${vd.country === "DE" ? ", Německo" : ""})` : ""} za ${amount.toLocaleString("cs")} Kč.`
     ).catch((e) => logger.warn({ module: "game" }, "virtual sale SMS", e));
     try {
       const { createNotification } = await import("../community/notifications");

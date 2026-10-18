@@ -16,6 +16,8 @@ export interface TeamSummary {
   reputation: number | null;
   is_virtual?: boolean; // virtuální (počítačový) klub — nemá profil ani trenéra
   city?: string | null;
+  /** Země virtuálního klubu (`DE` = bavorský klub). */
+  country?: string | null;
 }
 
 export interface ManagerSummary {
@@ -88,7 +90,7 @@ export function TeamSide({
         </Link>
         )}
         {team.is_virtual && team.city && (
-          <div className="text-xs text-muted">{team.city}</div>
+          <div className="text-xs text-muted">{team.city}{team.country === "DE" ? ", Německo 🇩🇪" : ""}</div>
         )}
         <div className={`flex flex-wrap gap-1.5 mt-1 ${isRight ? "justify-end" : "justify-start"}`}>
           {team.budget != null && (

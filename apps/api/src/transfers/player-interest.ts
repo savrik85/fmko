@@ -46,7 +46,12 @@ export interface InterestInputs {
   /** Jméno trenéra kupujícího a prodávajícího (reputace + licence). Chybí = bez vlivu. */
   buyerCoach?: CoachStanding | null;
   sellerCoach?: CoachStanding | null;
+  /** Nabídka od klubu v cizině (německý klub): hráče to láká víc. */
+  abroad?: boolean;
 }
+
+/** O kolik víc láká hráče nabídka německého klubu (vyšší soutěž, jiný svět než okres). */
+export const ABROAD_INTEREST_BONUS = 10;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -74,6 +79,8 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
   else if (input.offerAmount >= marketValue * 0.95) add("Slušné peníze", 8);
   else if (input.offerAmount > 0 && input.offerAmount <= marketValue * 0.5) add("Urážlivě málo", -6);
 
+  if (input.abroad) add("Fotbal v Německu", ABROAD_INTEREST_BONUS);
+
   // Spokojenost brzdí — jen opravdu spokojený a spřízněný hráč zůstane
   add("Morálka", (50 - input.morale) * 0.4);
   add("Vztah s trenérem", (50 - input.coachRelationship) * 0.3);
@@ -97,6 +104,14 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
   return { level, score, factors };
 }
 
+/** Nabídka, ke které se zájem počítá. U virtuálního klubu jeho síla a země (`DE` = německý klub). */
+export interface InterestOffer {
+  fromTeamId: string;
+  offerAmount: number;
+  virtualRating?: number | null;
+  virtualCountry?: string | null;
+}
+
 /**
  * Načte vstupy pro computePlayerInterest z DB.
  * offerTeam: id lidského kupujícího, nebo { virtualRating } pro virtuální klub.
@@ -104,7 +119,7 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
 export async function loadInterestInputs(
   db: D1Database,
   playerId: string,
-  offer: { fromTeamId: string; offerAmount: number; virtualRating?: number | null },
+  offer: InterestOffer,
 ): Promise<InterestInputs | null> {
   const player = await db.prepare(
     `SELECT p.team_id, p.age, p.position, p.overall_rating, p.coach_relationship, p.personality, p.life_context,
@@ -161,6 +176,7 @@ export async function loadInterestInputs(
     offerAmount: offer.offerAmount,
     buyerCoach: coaches.get(offer.fromTeamId) ?? null,
     sellerCoach: coaches.get(player.team_id as string) ?? null,
+    abroad: offer.fromTeamId === "virtual_ai" && !!offer.virtualCountry && offer.virtualCountry !== "CZ",
   };
 }
 
@@ -185,7 +201,7 @@ export async function loadCoachStandings(db: D1Database, teamIds: string[]): Pro
 export async function computeInterestForOffer(
   db: D1Database,
   playerId: string,
-  offer: { fromTeamId: string; offerAmount: number; virtualRating?: number | null },
+  offer: InterestOffer,
 ): Promise<InterestResult | null> {
   const inputs = await loadInterestInputs(db, playerId, offer);
   return inputs ? computePlayerInterest(inputs) : null;
