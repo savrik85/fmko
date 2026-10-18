@@ -10,8 +10,8 @@ describe("termín zápasu podle klíče", () => {
     const pohar = new FalesnaD1([{ sql: /FROM cup_matches/, first: { scheduled_at: "2026-09-21T15:00:00.000Z" } }]);
     expect(await terminZapasu(jakoD1(pohar), "cup-1")).toBe("2026-09-21T15:00:00.000Z");
 
-    const turnaj = new FalesnaD1([{ sql: /FROM tournament_matches/, first: { scheduled_at: "2026-10-18T16:00:00.000Z" } }]);
-    expect(await terminZapasu(jakoD1(turnaj), "tm-1")).toBe("2026-10-18T16:00:00.000Z");
+    const tournament = new FalesnaD1([{ sql: /FROM tournament_matches/, first: { scheduled_at: "2026-10-18T16:00:00.000Z" } }]);
+    expect(await terminZapasu(jakoD1(tournament), "tm-1")).toBe("2026-10-18T16:00:00.000Z");
 
     const pratelak = new FalesnaD1([{ sql: /FROM matches WHERE id/, first: { created_at: "2026-09-22T10:00:00.000Z" } }]);
     expect(await terminZapasu(jakoD1(pratelak), "m-1")).toBe("2026-09-22T10:00:00.000Z");
