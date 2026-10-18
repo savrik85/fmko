@@ -6,8 +6,11 @@
  * Teď má klub obce na sezónu pevný kádr. Vznikne při první návštěvě kteréhokoli skauta,
  * všichni skauti pak vidí stejné hráče a hráče dostane ten, kdo ho první podepíše.
  *
- * Síla kádru se odvozuje od ligy nejbližšího klubu ve hře, ne od ligy kupce: Písek musí být
- * stejně silný pro každého, kdo tam skauta pošle.
+ * Síla kádru se odvozuje od nejsilnější okresní ligy ve hře, ne od ligy kupce: Písek musí být
+ * stejně silný pro každého, kdo tam skauta pošle. Ani od ligy nejbližšího klubu: okresy mají
+ * ligy velmi rozdílné (2026-10-18 Prachatice 48,8, Praha 40,2, České Budějovice 29,3), takže
+ * stejně velká Vodňany a Strakonice by se lišily o deset bodů jen podle toho, ke kterému
+ * okresu ve hře mají blíž. Městské kluby hrají soutěž nad všemi okresními přebory.
  */
 
 import { createRng, type Rng } from "../generators/rng";
@@ -15,7 +18,6 @@ import { createPlayer, categoryFromVillageSize, type CreatePlayerOptions } from 
 import { shiftForRating } from "../skills/generator";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
-import { haversineKm } from "../transfers/player-agency";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { clubMeanFor, normal, townClubMean, villageClubName, type VillageInRange } from "./candidates";
 
@@ -94,22 +96,14 @@ export function buildOutsideSquad(
   return built;
 }
 
-/** Průměr ligy nejbližšího klubu ve hře (stejný výpočet jako průměr ligy kupce dřív). */
-async function anchorLeague(db: D1Database, village: { lat: number; lng: number }): Promise<{ leagueId: string; average: number } | null> {
-  const teams = await db.prepare(
-    `SELECT t.league_id, v.lat, v.lng FROM teams t JOIN villages v ON v.id = t.village_id
-      WHERE t.league_id IS NOT NULL AND COALESCE(t.team_type, 'senior') != 'u21'`,
-  ).all<{ league_id: string; lat: number; lng: number }>();
-  let nearest: { league_id: string; d: number } | null = null;
-  for (const t of teams.results) {
-    const d = haversineKm(village.lat, village.lng, t.lat, t.lng);
-    if (!nearest || d < nearest.d) nearest = { league_id: t.league_id, d };
-  }
-  if (!nearest) return null;
-  const avg = await db.prepare(
-    "SELECT AVG(p.overall_rating) AS avg FROM players p JOIN teams t ON t.id = p.team_id WHERE t.league_id = ?",
-  ).bind(nearest.league_id).first<{ avg: number | null }>();
-  return avg?.avg != null ? { leagueId: nearest.league_id, average: avg.avg } : null;
+/** Nejsilnější liga dospělých ve hře a její průměr (stejný výpočet jako průměr ligy kupce dřív). */
+async function anchorLeague(db: D1Database): Promise<{ leagueId: string; average: number } | null> {
+  const row = await db.prepare(
+    `SELECT t.league_id, AVG(p.overall_rating) AS avg FROM players p JOIN teams t ON t.id = p.team_id
+      WHERE t.league_id IS NOT NULL AND COALESCE(t.team_type, 'senior') != 'u21'
+      GROUP BY t.league_id ORDER BY avg DESC LIMIT 1`,
+  ).first<{ league_id: string; avg: number | null }>();
+  return row?.avg != null ? { leagueId: row.league_id, average: row.avg } : null;
 }
 
 type PlayerRow = {
@@ -149,7 +143,7 @@ export async function loadOutsideSquad(
   const existing = await readSquad(db, village.id, seasonNumber);
   if (existing && existing.players.length > 0) return existing;
 
-  const anchor = await anchorLeague(db, village);
+  const anchor = await anchorLeague(db);
   const mean = outsideClubMean(village.population, anchor?.average ?? null);
   const rng = createRng(seedFromString(`outside|${village.id}|${seasonNumber}`));
   const squad = buildOutsideSquad(rng, village, mean, names);
