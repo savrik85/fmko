@@ -14,6 +14,7 @@ import { logger } from "../lib/logger";
 import { shiftForRating } from "../skills/generator";
 import { villageClubName } from "../scouting/candidates";
 import { haversineKm } from "./player-agency";
+import { brokenCzech } from "../messaging/foreign-speech";
 
 // ═══════════════════════════════════════════════
 // HARDCODED VIRTUAL TEAMS PER DISTRICT
@@ -353,7 +354,7 @@ async function maybeOfferForTeam(
   // Top hráči TOHOTO kádru dle ratingu (~15 %, min 2) — CPU jde po hvězdách týmu.
   // Per-hráč cooldown 14 dní: koho nedávno řešila JAKÁKOLI nabídka, toho CPU nechá být.
   const players = await db.prepare(
-    `SELECT id, first_name, last_name, age, position, overall_rating, personality, life_context
+    `SELECT id, first_name, last_name, nationality, age, position, overall_rating, personality, life_context
      FROM players p WHERE team_id = ? AND (status IS NULL OR status = 'active') AND is_celebrity = 0
      AND loan_from_team_id IS NULL
      AND NOT EXISTS (SELECT 1 FROM transfer_offers o WHERE o.player_id = p.id AND o.created_at > datetime('now', '-14 days'))
@@ -435,10 +436,10 @@ async function maybeOfferForTeam(
     const templates = abroad
       ? (level >= 2 ? GERMAN_OFFER_MESSAGES_KEEN : level === 0 ? GERMAN_OFFER_MESSAGES_LOYAL : GERMAN_OFFER_MESSAGES_NORMAL)
       : (level >= 2 ? OFFER_MESSAGES_LOW_MORALE : level === 0 ? OFFER_MESSAGES_LOYAL : OFFER_MESSAGES_NORMAL);
-    const msgText = rng.pick(templates)
+    const msgText = brokenCzech(rng.pick(templates)
       .replace("{team}", virtualTeam.name)
       .replace("{city}", virtualTeam.city)
-      .replace("{price}", offerPrice.toLocaleString("cs"));
+      .replace("{price}", offerPrice.toLocaleString("cs")), target.nationality as string | null, offerId);
 
     await db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"

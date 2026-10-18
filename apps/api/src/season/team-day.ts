@@ -15,6 +15,7 @@
  * team_day_log s PRIMARY KEY (team_id, game_date).
  */
 
+import { brokenCzech } from "../messaging/foreign-speech";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
@@ -127,7 +128,7 @@ export async function processTeamDay(
               const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
               // Vynech zraněné a suspendované — ti nedostanou absence SMS (mají vlastní kanál)
               const squadRows = await env.DB.prepare(
-                `SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
+                `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
                    FROM players p
                    LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
                    WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
@@ -170,7 +171,8 @@ export async function processTeamDay(
                 const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any);
                 await env.DB.prepare(
                   "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
-                ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName, absence ? absence.smsText : msg.body,
+                ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName,
+                  brokenCzech(absence ? absence.smsText : msg.body, row.nationality as string | null, `${pid}|${tomorrowMatch.id}`),
                   JSON.stringify({ type: "attendance", response: available ? "yes" : "no", timing: "day_before", calendarId: tomorrowMatch.id }), msgCount * 10,
                 ).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before attendance msg", e));
                 msgCount++;
@@ -597,7 +599,7 @@ export async function processTeamDay(
             // (match-runner, next-match preview, day-before SMS) — jinak RNG indexuje do různě
             // seřazeného pole a výsledky se liší.
             const squadRows = await env.DB.prepare(
-              `SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
+              `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
                  FROM players p
                  LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
                  WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
@@ -649,7 +651,8 @@ export async function processTeamDay(
                 for (const a of matchDayAbsences) {
                   const row = squadRows.results[a.playerIndex]; if (!row) continue;
                   await env.DB.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))")
-                    .bind(crypto.randomUUID(), matchConvId, row.id, `${row.first_name} ${row.last_name}`, a.smsText,
+                    .bind(crypto.randomUUID(), matchConvId, row.id, `${row.first_name} ${row.last_name}`,
+                      brokenCzech(a.smsText, row.nationality as string | null, `${row.id}|${todayMatch.id}`),
                       JSON.stringify({ type: "attendance", response: "no", timing: "match_day", calendarId: todayMatch.id }), cnt * 10,
                     ).run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day absence msg", e));
                   cnt++;
