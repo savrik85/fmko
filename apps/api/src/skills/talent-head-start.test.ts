@@ -54,9 +54,9 @@ describe("pestřejší jména", () => {
   it("nejčastější křestní jméno vychází výrazně méně často než podle četnosti", () => {
     const rng = createRng(3);
     const data: FirstnameData = { male: FIRSTNAMES, female: {} };
-    let jan = 0;
-    for (let i = 0; i < 3000; i++) if (pickFirstName(rng, data, 25) === "Jan") jan++;
-    expect(jan / 3000).toBeLessThan(0.05);
+    let janCount = 0;
+    for (let i = 0; i < 3000; i++) if (pickFirstName(rng, data, 25) === "Jan") janCount++;
+    expect(janCount / 3000).toBeLessThan(0.05);
   });
 
   it("v jednom kádru nejsou dva hráči se stejným jménem i příjmením", () => {
