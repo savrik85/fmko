@@ -116,11 +116,13 @@ export async function applyOfferRejectionImpact(
   // Jméno nabízejícího klubu
   let teamName = "Neznámý klub";
   let virtualRating: number | null = null;
+  let virtualCountry: string | null = null;
   if (fromTeamId === "virtual_ai") {
     try {
       const vd = offer.virtual_team_data ? JSON.parse(offer.virtual_team_data as string) : null;
       if (vd?.name) teamName = vd.name;
       if (vd?.rating) virtualRating = vd.rating;
+      if (vd?.country) virtualCountry = vd.country;
     } catch (e) { logger.warn({ module: "rejection-impact" }, "parse vtd", e); }
   } else {
     const t = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(fromTeamId).first<{ name: string }>()
@@ -129,7 +131,7 @@ export async function applyOfferRejectionImpact(
   }
 
   // Čerstvý přepočet zájmu — dopad odpovídá AKTUÁLNÍMU stavu hráče
-  const interest = await computeInterestForOffer(db, playerId, { fromTeamId, offerAmount: amount, virtualRating });
+  const interest = await computeInterestForOffer(db, playerId, { fromTeamId, offerAmount: amount, virtualRating, virtualCountry });
   if (!interest) return;
 
   const pers = (() => { try { return JSON.parse(player.personality as string) ?? {}; } catch { return {}; } })();

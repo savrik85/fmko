@@ -12,6 +12,8 @@ import { createPlayer } from "../generators/create-player";
 import { estimateMarketValue } from "../season/economy";
 import { logger } from "../lib/logger";
 import { shiftForRating } from "../skills/generator";
+import { villageClubName } from "../scouting/candidates";
+import { haversineKm } from "./player-agency";
 
 // ═══════════════════════════════════════════════
 // HARDCODED VIRTUAL TEAMS PER DISTRICT
@@ -22,6 +24,8 @@ interface VirtualTeam {
   city: string;
   district: string;
   rating: number; // average player quality base
+  /** Země klubu: chybí = Česko, `DE` = bavorský klub z okresu Freyung-Grafenau. */
+  country?: string;
 }
 
 const VIRTUAL_TEAMS: Record<string, VirtualTeam[]> = {
@@ -86,11 +90,14 @@ function calcAskingPrice(rating: number, age: number, position: string, rng: Rng
 
 /**
  * Cena CPU nabídky: tržní hodnota až o čtvrtinu výš. Cizí klub kupuje za tržní cenu
- * a hráče, kterého chce, si trochu připlatí.
+ * a hráče, kterého chce, si trochu připlatí. Německý klub dá o 30–50 % víc než český
+ * (rozhodnutí 2026-10-18).
  */
-function calcOfferPrice(rating: number, age: number, position: string, rng: Rng): number {
+function calcOfferPrice(rating: number, age: number, position: string, rng: Rng, abroad = false): number {
   const value = estimateMarketValue(rating, age, position);
-  return Math.round((value * rng.int(100, 125) / 100) / 100) * 100;
+  const czech = value * rng.int(100, 125) / 100;
+  const price = abroad ? czech * rng.int(130, 150) / 100 : czech;
+  return Math.round(price / 100) * 100;
 }
 
 // ═══════════════════════════════════════════════
@@ -206,6 +213,29 @@ const OFFER_MESSAGES_LOYAL = [
   "Trenére, {team} nabízí {price} Kč. Já nikam nechci, jen hlásím.",
 ];
 
+// Nabídka z Německa: hráč o ní mluví jinak (víc peněz, jiná soutěž).
+const GERMAN_OFFER_MESSAGES_NORMAL = [
+  "Trenére, ozvali se mi Němci z {team}. Nabízejí {price} Kč, to by u nás nikdo nedal. Co vy na to?",
+  "Trenére, volal mi chlap z {team} z Bavorska. Prej mě viděli hrát a chtějí mě. Rozhodnutí je na vás.",
+];
+const GERMAN_OFFER_MESSAGES_KEEN = [
+  "Trenére, {team} z Bavorska nabízí {price} Kč. Tohle bych fakt bral, Německo je jiná liga.",
+  "Trenére, Němci z {team} mě chtějí. Nebudu lhát, o tomhle jsem vždycky snil.",
+];
+const GERMAN_OFFER_MESSAGES_LOYAL = [
+  "Trenére, volali Němci z {team}. Peníze dobrý, ale já jsem tady doma. Jen ať víte.",
+];
+
+/**
+ * Dopis německého klubu: píše lámanou češtinou (cizinec, česky se učí z překladače).
+ * Bez dlouhých pomlček, jen pro hráče čitelné.
+ */
+const GERMAN_CLUB_LETTERS = [
+  "Dobrý den, my jsme {team} z Bavorsko. My mít velký zájem o váš hráč {player}. Nabízet {price} Kč, peníze jsou připravený. Děkujeme a Grüße!",
+  "Dobrý den pane trenér, {team} chtít koupit {player}. Platit {price} Kč, hned na účet. My čekat na vaše odpověď. Mit freundlichen Grüßen",
+  "Ahoj z Německo! {team} sledoval váš hráč {player} a on se nám moc líbit. Dáváme {price} Kč. Prosím odpovědět brzo, danke!",
+];
+
 /**
  * CPU nabídky od virtuálních klubů — spravedlivě per tým: každý lidský tým v lize
  * se posuzuje samostatně se stejnou šancí, cílí se na top hráče JEHO kádru
@@ -264,6 +294,37 @@ export async function getVirtualTeamsForDistrict(db: D1Database, district: strin
 /** Šance na CPU nabídku per tým a den (~1 nabídka za 2 týdny, cooldowny to dál ředí). */
 const OFFER_CHANCE_PER_TEAM = 0.08;
 
+/** Jak daleko od obce týmu nakupují bavorské kluby (Prachaticko a Krumlovsko, ne Praha). */
+export const GERMAN_BUYER_RADIUS_KM = 70;
+/** Kolik CPU nabídek u týmů v dosahu přijde z Německa (zbytek z českých klubů). */
+export const GERMAN_OFFER_SHARE = 0.35;
+/** Kupují jen bavorská města od 5 tisíc obyvatel (Waldkirchen, Grafenau, Freyung). */
+const GERMAN_BUYER_MIN_POPULATION = 5_000;
+
+/** Bavorské kluby v dosahu obce týmu. Bez migrace 0266 (`foreign_villages`) prázdné. */
+export async function germanClubsNear(db: D1Database, teamId: string): Promise<VirtualTeam[]> {
+  const home = await db.prepare("SELECT v.lat, v.lng FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?")
+    .bind(teamId).first<{ lat: number; lng: number }>()
+    .catch((e) => { logger.warn({ module: "virtual-teams" }, "obec týmu pro německé kluby", e); return null; });
+  if (!home) return [];
+  const towns = await db.prepare(
+    "SELECT id, name, district, population, lat, lng, country FROM foreign_villages WHERE population >= ? ORDER BY population DESC",
+  ).bind(GERMAN_BUYER_MIN_POPULATION).all<{ id: string; name: string; district: string; population: number; lat: number; lng: number; country: string }>()
+    .catch((e) => { logger.warn({ module: "virtual-teams" }, "německá města", e); return { results: [] as Array<{ id: string; name: string; district: string; population: number; lat: number; lng: number; country: string }> }; });
+  return towns.results
+    .filter((t) => haversineKm(home.lat, home.lng, t.lat, t.lng) <= GERMAN_BUYER_RADIUS_KM)
+    .map((t, i) => ({
+      name: villageClubName({ id: t.id, name: t.name, country: t.country }), city: t.name, district: t.district,
+      rating: 60 - i * 2, country: t.country,
+    }));
+}
+
+/** Text dopisu německého klubu (lámaná čeština). */
+export function germanClubLetter(rng: Rng, team: string, player: string, price: number): string {
+  return rng.pick(GERMAN_CLUB_LETTERS)
+    .replace("{team}", team).replace("{player}", player).replace("{price}", price.toLocaleString("cs"));
+}
+
 async function maybeOfferForTeam(
   db: D1Database,
   targetTeamId: string,
@@ -315,25 +376,29 @@ async function maybeOfferForTeam(
   // "Lepší klub než my" — nabízející klub musí být lákavý i pro hvězdy silných kádrů.
   // Rating pro tuto nabídku zvedneme aspoň na průměr kádru +3..12 (ambiciózní klub, co staví tým) —
   // jinak by top hráčům vycházel faktor „Slabší klub" a tlak na hvězdy by nefungoval.
-  const baseTeam = teams.filter((t) => t.rating > teamAvg).length > 0
-    ? rng.pick(teams.filter((t) => t.rating > teamAvg))
-    : teams.reduce((a, b) => (a.rating >= b.rating ? a : b));
+  // Týmy blízko hranice: část nabídek dají bavorské kluby (víc peněz, hráče to láká).
+  const german = await germanClubsNear(db, targetTeamId);
+  const pool = german.length > 0 && rng.random() < GERMAN_OFFER_SHARE ? german : teams;
+  const baseTeam = pool.filter((t) => t.rating > teamAvg).length > 0
+    ? rng.pick(pool.filter((t) => t.rating > teamAvg))
+    : pool.reduce((a, b) => (a.rating >= b.rating ? a : b));
+  const abroad = !!baseTeam.country && baseTeam.country !== "CZ";
   const virtualTeam: VirtualTeam = {
     ...baseTeam,
     rating: Math.max(baseTeam.rating, Math.round(teamAvg) + 8 + rng.int(0, 12)),
   };
 
   let target = rng.pick(candidates);
-  let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, target.position as string, rng);
+  let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, target.position as string, rng, abroad);
   let interest = await computeInterestForOffer(db, target.id as string, {
-    fromTeamId: "virtual_ai", offerAmount: offerPrice, virtualRating: virtualTeam.rating,
+    fromTeamId: "virtual_ai", offerAmount: offerPrice, virtualRating: virtualTeam.rating, virtualCountry: virtualTeam.country,
   }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest", e); return null; });
 
   if (interest && interest.level === 0 && candidates.length > 1) {
     const other = rng.pick(candidates.filter((p) => p.id !== target.id));
-    const otherPrice = calcOfferPrice(other.overall_rating as number, (other.age as number) ?? 25, other.position as string, rng);
+    const otherPrice = calcOfferPrice(other.overall_rating as number, (other.age as number) ?? 25, other.position as string, rng, abroad);
     const otherInterest = await computeInterestForOffer(db, other.id as string, {
-      fromTeamId: "virtual_ai", offerAmount: otherPrice, virtualRating: virtualTeam.rating,
+      fromTeamId: "virtual_ai", offerAmount: otherPrice, virtualRating: virtualTeam.rating, virtualCountry: virtualTeam.country,
     }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest #2", e); return null; });
     if (otherInterest && otherInterest.level >= 1) {
       target = other;
@@ -350,8 +415,13 @@ async function maybeOfferForTeam(
      VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
   ).bind(
     offerId, target.id, targetTeamId, offerPrice,
-    `Máme vážný zájem o vašeho hráče. Nabízíme ${offerPrice.toLocaleString("cs")} Kč, peníze máme připravené.`,
-    JSON.stringify({ name: virtualTeam.name, city: virtualTeam.city, district: virtualTeam.district, rating: virtualTeam.rating }),
+    abroad
+      ? germanClubLetter(rng, virtualTeam.name, `${target.first_name} ${target.last_name}`, offerPrice)
+      : `Máme vážný zájem o vašeho hráče. Nabízíme ${offerPrice.toLocaleString("cs")} Kč, peníze máme připravené.`,
+    JSON.stringify({
+      name: virtualTeam.name, city: virtualTeam.city, district: virtualTeam.district, rating: virtualTeam.rating,
+      ...(abroad ? { country: virtualTeam.country } : {}),
+    }),
     interest?.level ?? null, offerReplyDeadline(),
   ).run();
 
@@ -362,7 +432,9 @@ async function maybeOfferForTeam(
 
   if (kabinaConv) {
     const level = interest?.level ?? 1;
-    const templates = level >= 2 ? OFFER_MESSAGES_LOW_MORALE : level === 0 ? OFFER_MESSAGES_LOYAL : OFFER_MESSAGES_NORMAL;
+    const templates = abroad
+      ? (level >= 2 ? GERMAN_OFFER_MESSAGES_KEEN : level === 0 ? GERMAN_OFFER_MESSAGES_LOYAL : GERMAN_OFFER_MESSAGES_NORMAL)
+      : (level >= 2 ? OFFER_MESSAGES_LOW_MORALE : level === 0 ? OFFER_MESSAGES_LOYAL : OFFER_MESSAGES_NORMAL);
     const msgText = rng.pick(templates)
       .replace("{team}", virtualTeam.name)
       .replace("{city}", virtualTeam.city)
