@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
-  clubMeanFor, clubRankOf, expectedMatches, pickClubsToVisit, villageClubName, villagesInRadius, type VillageRow,
+  clubMeanFor, clubRankOf, expectedMatches, pickClubsToVisit, townClubMean, villageClubName, villagesInRadius, type VillageRow,
 } from "./candidates";
 import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms } from "./report-text";
 
@@ -38,6 +38,17 @@ describe("kluby mimo hru", () => {
     // Písek ~48,7 a Strakonice ~47,2 (tabulka ze specu).
     expect(clubMeanFor(31_121)).toBeCloseTo(48.7, 0);
     expect(clubMeanFor(22_355)).toBeCloseTo(47.2, 0);
+  });
+
+  it("město od 5 tisíc má klub o soutěž výš: průměr ligy kupce a náskok až 12 u třiceti tisíc", () => {
+    expect(townClubMean(4_999, 48.8)).toBeNull();
+    expect(townClubMean(31_121, null)).toBeNull();
+    expect(townClubMean(5_000, 48.8)).toBeCloseTo(48.8, 5);
+    // Prachatice ~54, Strakonice ~59, Písek a větší plných +12.
+    expect(townClubMean(11_049, 48.8)).toBeCloseTo(54.1, 0);
+    expect(townClubMean(22_355, 48.8)).toBeCloseTo(58.8, 0);
+    expect(townClubMean(31_121, 48.8)).toBeCloseTo(60.8, 5);
+    expect(townClubMean(1_200_000, 40.2)).toBeCloseTo(52.2, 5);
   });
 
   it("stejná obec má pořád stejný název klubu", () => {
@@ -109,5 +120,12 @@ describe("texty hlášení", () => {
     for (const t of texts) expect(t).not.toContain("—");
     expect(texts[0]).toContain("Jan Novák, 20 let");
     expect(texts[2]).toContain("Husinec, Strakonice a Písek");
+  });
+
+  it("nadějného skaut označí, hotového ne", () => {
+    const base = { name: "Jan Novák", age: 18, position: "MID", ratingLo: 38, ratingHi: 44, potentialLo: 60, potentialHi: 68, youth: true, source: "village_club" as const, clubName: "TJ Strakonice", villageName: "Strakonice", district: "Strakonice", askHint: 9000 };
+    expect(reportSms(createRng(3), { ...base, promising: true })).toContain("Na sestavu zatím nemá, ale do dvou sezón by se do ní dostat mohl.");
+    expect(reportSms(createRng(3), base)).not.toContain("Na sestavu zatím nemá");
+    expect(reportSms(createRng(3), { ...base, promising: true })).not.toContain("—");
   });
 });

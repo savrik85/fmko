@@ -24,11 +24,11 @@ import { estimateWillingness, expireNegotiation, type AiNegotiationRow, type Pus
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { haversineKm } from "../transfers/player-agency";
 import {
-  boundingBox, clubMeanFor, clubRankOf, expectedMatches, loadVillagesInRadius, normal, pickClubsToVisit,
+  boundingBox, clubMeanFor, clubRankOf, expectedMatches, loadVillagesInRadius, normal, pickClubsToVisit, townClubMean,
   villageClubName, type VillageInRange, CLUB_AGE_MAX, CLUB_AGE_MIN,
 } from "./candidates";
 import { blurredAskHint, blurredWillingness, potentialRange, rangeMid, ratingRange, type Range } from "./fog";
-import { clubValuation } from "./youth-growth";
+import { clubValuation, projectRating } from "./youth-growth";
 import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms, type ReportSubject } from "./report-text";
 
 /** Hlášení platí deset dní (odhad, spec). */
@@ -50,6 +50,8 @@ const MAX_MATCHES_PER_CLUB = 4;
 const CLUB_MEAN_OVER_LEAGUE = 2;
 /** Názor na potenciál dává skaut jen u mladých; u dospělých by model růstu sliboval nesmysly. */
 const POTENTIAL_MAX_AGE = 21;
+/** Za kolik sezón musí nadějný mladík dorůst na sestavu, aby ho skaut nahlásil. */
+const PROMISING_SEASONS = 2;
 
 export interface AssignmentRow {
   id: string;
@@ -878,26 +880,47 @@ async function search(db: D1Database, a: AssignmentRow, eff: number, sender: str
   const candidates: Candidate[] = [];
   const names = new Map<string, Awaited<ReturnType<typeof namesFor>>>();
   const league = await leagueAverage(db, a.team_id);
-  const meanCap = league != null ? league + CLUB_MEAN_OVER_LEAGUE : Number.POSITIVE_INFINITY;
   for (const v of visited) {
     if (!names.has(v.district)) names.set(v.district, await namesFor(db, v.district));
-    candidates.push(...villageCandidates(rng, v, a, eff, names.get(v.district)!, meanCap));
+    candidates.push(...villageCandidates(rng, v, a, eff, names.get(v.district)!, league));
   }
   candidates.push(...await freeAgentCandidates(db, a, home, eff, rng));
 
   // Dospělý musí mít aspoň na jedenáctého nejlepšího v kádru, mladý na průměr sestavy:
   // jeho odhad je potenciál a model růstu je spíš optimistický.
-  const bar = youth ? await lineupAverage(db, a.team_id) : await lineupBar(db, a.team_id);
-  const best = candidates
-    .filter((c) => c.estimate >= bar)
-    .sort((x, y) => y.estimate - x.estimate)[0];
-
-  if (!best) {
-    await sendScoutSms(db, a.team_id, sender, emptyWeekSms(rng, visited.map((v) => v.name)));
-    return { visited: visited.length, reported: false };
+  const youthBar = await lineupAverage(db, a.team_id);
+  if (youth) {
+    const best = candidates.filter((c) => c.estimate >= youthBar).sort((x, y) => y.estimate - x.estimate)[0];
+    if (!best) return emptyWeek(db, a, sender, rng, visited);
+    await createReport(db, a, best, sender, rng, true, gameDate, eff);
+    return { visited: visited.length, reported: true };
   }
-  await createReport(db, a, best, sender, rng, youth, gameDate, eff);
+
+  // Úkol i pro starší (třeba 16–25): přednost má hráč, který na sestavu má už teď. Když
+  // takový není, skaut nahlásí aspoň nadějného do 21 let, který se do sestavy dostane do
+  // `PROMISING_SEASONS` sezón (naměřené tempo růstu, youth-growth.ts). Dřív se mladí v takovém
+  // úkolu měřili jen dnešním hodnocením a nadějné skaut neviděl. Potenciál na 8 sezón se na to
+  // nehodí: slibuje sestavu i osmnáctiletému s hodnocením 8.
+  const bar = await lineupBar(db, a.team_id);
+  const ready = candidates.filter((c) => c.estimate >= bar).sort((x, y) => y.estimate - x.estimate)[0];
+  const promising = ready ? undefined : candidates
+    .filter((c) => c.player.age <= POTENTIAL_MAX_AGE)
+    .map((c) => ({ c, later: c.estimate + projectRating(
+      { age: c.player.age, rating: c.rating, position: c.player.position, talent: c.talent, skillsMax: c.skillsMax }, PROMISING_SEASONS,
+    ) - c.rating }))
+    .filter((x) => x.later >= bar)
+    .sort((x, y) => y.later - x.later)[0]?.c;
+  const best = ready ?? promising;
+  if (!best) return emptyWeek(db, a, sender, rng, visited);
+  await createReport(db, a, best, sender, rng, best.player.age <= POTENTIAL_MAX_AGE && !!best.potential, gameDate, eff, !ready);
   return { visited: visited.length, reported: true };
+}
+
+async function emptyWeek(
+  db: D1Database, a: AssignmentRow, sender: string, rng: Rng, visited: readonly VillageInRange[],
+): Promise<{ visited: number; reported: boolean }> {
+  await sendScoutSms(db, a.team_id, sender, emptyWeekSms(rng, visited.map((v) => v.name)));
+  return { visited: visited.length, reported: false };
 }
 
 async function namesFor(db: D1Database, district: string) {
@@ -910,9 +933,12 @@ async function namesFor(db: D1Database, district: string) {
 }
 
 function villageCandidates(
-  rng: Rng, v: VillageInRange, a: AssignmentRow, eff: number, names: Awaited<ReturnType<typeof namesFor>>, meanCap: number,
+  rng: Rng, v: VillageInRange, a: AssignmentRow, eff: number, names: Awaited<ReturnType<typeof namesFor>>, league: number | null,
 ): Candidate[] {
-  const mean = Math.min(clubMeanFor(v.population), meanCap);
+  // Vesnice podle počtu obyvatel, nejvýš kousek nad průměr ligy kupce (jinak by pražské městské
+  // části vycházely nad pražskou ligu). Města od 5 tisíc mají klub o soutěž výš (townClubMean).
+  const village = Math.min(clubMeanFor(v.population), league != null ? league + CLUB_MEAN_OVER_LEAGUE : Number.POSITIVE_INFINITY);
+  const mean = Math.max(village, townClubMean(v.population, league) ?? village);
   const positions = assignmentPositions(a);
   const expected = expectedMatches(positions, a.age_min, a.age_max);
   const count = Math.min(MAX_MATCHES_PER_CLUB, Math.floor(expected) + (rng.random() < expected - Math.floor(expected) ? 1 : 0));
@@ -1026,7 +1052,9 @@ export function openingAsk(p: VirtualPlayerData, clubRank: number | null, teamId
   }).ask;
 }
 
-async function createReport(db: D1Database, a: AssignmentRow, c: Candidate, sender: string, rng: Rng, youth: boolean, gameDate: string, eff: number): Promise<void> {
+async function createReport(
+  db: D1Database, a: AssignmentRow, c: Candidate, sender: string, rng: Rng, youth: boolean, gameDate: string, eff: number, promising = false,
+): Promise<void> {
   const p = c.player;
   const askHint = c.source === "village_club" ? blurredAskHint(openingAsk(p, c.clubRank, a.team_id, c.id), eff, 1, c.id) : null;
   const chance = await estimateWillingness(db, a.team_id, p, c.village?.district ?? null,
@@ -1052,6 +1080,7 @@ async function createReport(db: D1Database, a: AssignmentRow, c: Candidate, send
     name: `${p.firstName} ${p.lastName}`, age: p.age, position: p.position,
     ratingLo: c.ratingRange.lo, ratingHi: c.ratingRange.hi, potentialLo: c.potential?.lo ?? null, potentialHi: c.potential?.hi ?? null,
     youth, source: c.source, clubName: c.clubName, villageName: c.village?.name ?? null, district: c.village?.district ?? null, askHint,
+    promising,
   }), c.id);
 }
 

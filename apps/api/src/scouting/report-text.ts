@@ -75,6 +75,8 @@ export interface ReportSmsInput {
   villageName: string | null;
   district: string | null;
   askHint: number | null;
+  /** Na sestavu zatím nemá, skaut ho hlásí jako nadějného (doroste do dvou sezón). */
+  promising?: boolean;
 }
 
 export function reportSms(rng: Rng, r: ReportSmsInput): string {
@@ -86,10 +88,11 @@ export function reportSms(rng: Rng, r: ReportSmsInput): string {
   const youth = r.youth && r.potentialLo != null && r.potentialHi != null
     ? ` Dotáhnout by to mohl na ${range(r.potentialLo, r.potentialHi)}.`
     : "";
+  const promising = r.promising ? " Na sestavu zatím nemá, ale do dvou sezón by se do ní dostat mohl." : "";
   const price = r.source === "free_agent"
     ? " Je bez klubu, podepsat ho jde rovnou."
     : r.askHint ? ` Klub si o něj řekne asi ${kc(r.askHint)}.` : "";
-  return `${head}${youth}${price}`;
+  return `${head}${promising}${youth}${price}`;
 }
 
 export function emptyWeekSms(rng: Rng, villageNames: string[]): string {
