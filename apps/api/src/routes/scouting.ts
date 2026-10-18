@@ -50,7 +50,7 @@ interface ReportRow {
   distance_km: number; free_agent_id: string | null; player_data: string; first_name: string; last_name: string; age: number;
   position: string; rating_lo: number; rating_hi: number; potential_lo: number | null; potential_hi: number | null; visits: number;
   ask_hint: number | null; pros: string; cons: string; willingness: number | null; status: string; negotiation_id: string | null;
-  expires_at: string; created_at: string; club_mean: number | null; village_id: string | null;
+  expires_at: string; created_at: string; club_mean: number | null; village_id: string | null; outside_player_id: string | null;
 }
 
 function parseList(raw: string | null): string[] {
@@ -87,7 +87,7 @@ function reportView(r: ReportRow) {
 
 const REPORT_COLS = `id, source, club_name, club_city, district, distance_km, free_agent_id, player_data, first_name, last_name, age,
   position, rating_lo, rating_hi, potential_lo, potential_hi, visits, ask_hint, pros, cons, willingness, status, negotiation_id,
-  expires_at, created_at, club_mean, village_id`;
+  expires_at, created_at, club_mean, village_id, outside_player_id`;
 
 scoutingRouter.get("/teams/:teamId/scout", async (c) => {
   const teamId = c.req.param("teamId");
@@ -307,7 +307,8 @@ scoutingRouter.get("/teams/:teamId/scout/reports/:id", async (c) => {
       if (chance != null) {
         // Ochotu vidíš očima skauta: slabší se může o stupeň splést.
         const scout = await loadTeamScout(c.env.DB, teamId);
-        const level = blurredWillingness(willingnessFromChance(chance), scout ? scoutEffectiveness(scout) : 0, r.visits, r.id);
+        // Mlha se odvozuje od hráče (u stálého kádru se liší od id hlášení), stejně jako při vzniku hlášení.
+        const level = blurredWillingness(willingnessFromChance(chance), scout ? scoutEffectiveness(scout) : 0, r.visits, r.outside_player_id ?? r.id);
         view.willingness = { level, label: SCOUT_WILLINGNESS_LABELS[level] };
       }
     } catch (e) {

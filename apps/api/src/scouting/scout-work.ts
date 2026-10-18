@@ -2,9 +2,10 @@
  * Skaut na úkolu (spec 2026-10-04): manažer mu zadá post, věk, okruh a počet týdnů,
  * skaut každé pondělí objede 2–4 kluby mimo hru v okruhu a pošle nejvýš jedno hlášení.
  *
- * Brzdy balancu: kvalita klubů mimo hru podle velikosti obce (candidates.ts), hlásí se jen
- * hráč, jehož odhad dosáhne aspoň jedenáctého nejlepšího v kádru, cestovné každý týden,
- * hlášení platí deset dní a mezitím hráče může sebrat jiný klub.
+ * Brzdy balancu: kluby mimo hru mají stálé kádry podle velikosti obce (outside-clubs.ts),
+ * hlásí se hráč s odhadem aspoň na jedenáctého nejlepšího v kádru (u mladých i to, kam do
+ * dvou sezón doroste), cestovné každý týden, hlášení platí deset dní a mezitím hráče může
+ * koupit jiný tým nebo ho sebrat klub mimo hru.
  */
 
 import {
@@ -13,9 +14,7 @@ import {
 } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { createRng, cryptoSeed, type Rng } from "../generators/rng";
-import { createPlayer, categoryFromVillageSize } from "../generators/create-player";
 import { FIRSTNAMES } from "../data/czech-names";
-import { shiftForRating } from "../skills/generator";
 import { recordTransaction } from "../season/finance-processor";
 import { logger } from "../lib/logger";
 import { stableSeed } from "../lib/scout-estimate";
@@ -23,12 +22,10 @@ import { initAiSellerState } from "../transfers/ai-seller";
 import { estimateWillingness, expireNegotiation, type AiNegotiationRow, type PushEnv } from "../transfers/ai-negotiation";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { haversineKm } from "../transfers/player-agency";
-import {
-  boundingBox, clubMeanFor, clubRankOf, expectedMatches, loadVillagesInRadius, normal, pickClubsToVisit, townClubMean,
-  villageClubName, type VillageInRange, CLUB_AGE_MAX, CLUB_AGE_MIN,
-} from "./candidates";
+import { boundingBox, loadVillagesInRadius, pickClubsToVisit, villageClubName, type VillageInRange } from "./candidates";
 import { blurredAskHint, blurredWillingness, potentialRange, rangeMid, ratingRange, type Range } from "./fog";
 import { clubValuation, projectRating } from "./youth-growth";
+import { activeSeasonNumber, loadOutsideSquad, type OutsideSquad } from "./outside-clubs";
 import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms, type ReportSubject } from "./report-text";
 
 /** Hlášení platí deset dní (odhad, spec). */
@@ -37,17 +34,6 @@ export const SCOUT_REPORT_TTL_DAYS = 10;
 const REVISIT_EXTEND_DAYS = 7;
 /** Denní šance, že hráče z hlášení sebere jiný klub (odhad, spec). */
 export const SCOUT_SNAP_UP_DAILY_CHANCE = 0.03;
-/** Rozptyl cíle při vzniku hráče; generátor sám přidá ~3,3, dohromady sd 4,5 (spec). */
-const TARGET_SD = 3.1;
-/** Nejvýš tolik hráčů z jednoho kádru odpovídá úkolu. */
-const MAX_MATCHES_PER_CLUB = 4;
-/**
- * Klub mimo hru není silnější než průměr ligy kupujícího + 2 body. Vzorec podle velikosti
- * obce je nafitovaný na jižní Čechy, kde vychází Písek 48,7 a Strakonice 47,2 proti průměru
- * Prachatic 47,4. Pražské městské části mají desítky tisíc obyvatel a bez stropu by kluby
- * mimo hru byly o deset bodů nad pražskou ligou (průměr 39). Strop je odhad, ne data.
- */
-const CLUB_MEAN_OVER_LEAGUE = 2;
 /** Názor na potenciál dává skaut jen u mladých; u dospělých by model růstu sliboval nesmysly. */
 const POTENTIAL_MAX_AGE = 21;
 /** Za kolik sezón musí nadějný mladík dorůst na sestavu, aby ho skaut nahlásil. */
@@ -379,15 +365,6 @@ async function lineupAverage(db: D1Database, teamId: string): Promise<number> {
   return Math.round(row?.avg ?? 0);
 }
 
-/** Průměr dospělých hráčů ligy kupujícího (strop síly klubů mimo hru). */
-async function leagueAverage(db: D1Database, teamId: string): Promise<number | null> {
-  const row = await db.prepare(
-    `SELECT AVG(p.overall_rating) AS avg FROM players p JOIN teams t ON t.id = p.team_id
-      WHERE t.league_id = (SELECT league_id FROM teams WHERE id = ?)`,
-  ).bind(teamId).first<{ avg: number | null }>();
-  return row?.avg ?? null;
-}
-
 interface Candidate {
   id: string;
   source: "village_club" | "free_agent";
@@ -401,6 +378,8 @@ interface Candidate {
   clubRank: number | null;
   distanceKm: number;
   freeAgentId: string | null;
+  /** Hráč stálého kádru klubu mimo hru (`outside_players.id`); u něj je `id` totéž. */
+  outsidePlayerId: string | null;
   ratingRange: Range;
   potential: Range | null;
   estimate: number;
@@ -646,24 +625,26 @@ async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, r
 
 async function revisit(db: D1Database, a: AssignmentRow, eff: number, sender: string): Promise<boolean> {
   const r = await db.prepare(
-    "SELECT id, player_data, visits, age, position, expires_at, source, club_rank FROM scout_reports WHERE id = ? AND team_id = ? AND status IN ('active','negotiating')",
-  ).bind(a.revisit_report_id, a.team_id).first<{ id: string; player_data: string; visits: number; age: number; position: string; expires_at: string; source: string; club_rank: number | null }>();
+    "SELECT id, player_data, visits, age, position, expires_at, source, club_rank, outside_player_id FROM scout_reports WHERE id = ? AND team_id = ? AND status IN ('active','negotiating')",
+  ).bind(a.revisit_report_id, a.team_id).first<{ id: string; player_data: string; visits: number; age: number; position: string; expires_at: string; source: string; club_rank: number | null; outside_player_id: string | null }>();
   if (!r) return false;
+  // Mlha i cena klubu se odvozují od hráče, ne od hlášení (u stálého kádru se liší).
+  const seedKey = r.outside_player_id ?? r.id;
   let player: VirtualPlayerData;
   try { player = JSON.parse(r.player_data) as VirtualPlayerData; } catch (e) {
     logger.warn({ module: "scouting" }, "parse player_data při návštěvě", e);
     return false;
   }
   const visits = r.visits + 1;
-  const rr = ratingRange(player.overallRating, eff, visits, r.id);
+  const rr = ratingRange(player.overallRating, eff, visits, seedKey);
   const pr = r.age <= POTENTIAL_MAX_AGE
     ? potentialRange({
       age: r.age, rating: player.overallRating, position: r.position, talent: player.hiddenTalent ?? 0, skillsMax: player.skillCaps ?? {},
-    }, eff, visits, r.id)
+    }, eff, visits, seedKey)
     : null;
   const extended = new Date(Math.max(new Date(r.expires_at).getTime(), Date.now() + REVISIT_EXTEND_DAYS * 86_400_000)).toISOString();
   // Další návštěva zpřesní i odhad ceny.
-  const askHint = r.source === "village_club" ? blurredAskHint(openingAsk(player, r.club_rank, a.team_id, r.id), eff, visits, r.id) : null;
+  const askHint = r.source === "village_club" ? blurredAskHint(openingAsk(player, r.club_rank, a.team_id, seedKey), eff, visits, seedKey) : null;
   await db.prepare(
     "UPDATE scout_reports SET visits = ?, rating_lo = ?, rating_hi = ?, potential_lo = ?, potential_hi = ?, expires_at = ?, ask_hint = COALESCE(?, ask_hint) WHERE id = ?",
   ).bind(visits, rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, extended, askHint, r.id).run();
@@ -879,10 +860,18 @@ async function search(db: D1Database, a: AssignmentRow, eff: number, sender: str
 
   const candidates: Candidate[] = [];
   const names = new Map<string, Awaited<ReturnType<typeof namesFor>>>();
-  const league = await leagueAverage(db, a.team_id);
+  const season = await activeSeasonNumber(db);
+  // Hráč, o kterém už tým hlášení má (nebo ho odmítl, nebo ho koupil), se znovu nehlásí.
+  const known = new Set((await db.prepare(
+    `SELECT outside_player_id AS id FROM scout_reports
+      WHERE team_id = ? AND outside_player_id IS NOT NULL AND status IN ('active','negotiating','signed','refused')`,
+  ).bind(a.team_id).all<{ id: string }>()).results.map((r) => r.id));
   for (const v of visited) {
+    if (season == null) break;
     if (!names.has(v.district)) names.set(v.district, await namesFor(db, v.district));
-    candidates.push(...villageCandidates(rng, v, a, eff, names.get(v.district)!, league));
+    const squad = await loadOutsideSquad(db, v, season, names.get(v.district)!)
+      .catch((e) => { logger.warn({ module: "scouting" }, `kádr klubu ${v.name}`, e); return null; });
+    if (squad) candidates.push(...squadCandidates(v, squad, a, eff, known));
   }
   candidates.push(...await freeAgentCandidates(db, a, home, eff, rng));
 
@@ -932,47 +921,22 @@ async function namesFor(db: D1Database, district: string) {
   };
 }
 
-function villageCandidates(
-  rng: Rng, v: VillageInRange, a: AssignmentRow, eff: number, names: Awaited<ReturnType<typeof namesFor>>, league: number | null,
-): Candidate[] {
-  // Vesnice podle počtu obyvatel, nejvýš kousek nad průměr ligy kupce (jinak by pražské městské
-  // části vycházely nad pražskou ligu). Města od 5 tisíc mají klub o soutěž výš (townClubMean).
-  const village = Math.min(clubMeanFor(v.population), league != null ? league + CLUB_MEAN_OVER_LEAGUE : Number.POSITIVE_INFINITY);
-  const mean = Math.max(village, townClubMean(v.population, league) ?? village);
+/**
+ * Kdo z kádru klubu odpovídá úkolu: post, věk, pořád v klubu a tým o něm ještě nemá hlášení.
+ * Skaut na zápase vidí celý kádr, takže bere všechny, kdo úkolu odpovídají.
+ */
+function squadCandidates(v: VillageInRange, squad: OutsideSquad, a: AssignmentRow, eff: number, known: ReadonlySet<string>): Candidate[] {
   const positions = assignmentPositions(a);
-  const expected = expectedMatches(positions, a.age_min, a.age_max);
-  const count = Math.min(MAX_MATCHES_PER_CLUB, Math.floor(expected) + (rng.random() < expected - Math.floor(expected) ? 1 : 0));
   const youth = isYouthScoutTask(a.age_max);
-  const out: Candidate[] = [];
-  for (let i = 0; i < count; i++) {
-    // Post losovaný podle toho, kolik hráčů na něm v kádru je (2 brankáři, 6 obránců, 6 záložníků, 4 útočníci).
-    const weights: Record<string, number> = { GK: 2, DEF: 6, MID: 6, FWD: 4 };
-    const position = rng.weighted(positions ? Object.fromEntries(positions.map((p) => [p, weights[p] ?? 0])) : weights) as "GK" | "DEF" | "MID" | "FWD";
-    const age = rng.int(Math.max(CLUB_AGE_MIN, a.age_min), Math.min(CLUB_AGE_MAX, a.age_max));
-    const target = mean + normal(rng) * TARGET_SD;
-    const created = createPlayer(rng, {
-      position, age, level: "village",
-      village: { region_code: v.district, category: categoryFromVillageSize(v.size), population: v.population, district: v.district },
-      names, shift: shiftForRating("village", position, 27, target),
-    });
-    const id = crypto.randomUUID();
-    const clubName = villageClubName(v);
-    const player: VirtualPlayerData = {
-      firstName: created.firstName, lastName: created.lastName, age: created.age, position,
-      overallRating: created.rating, skills: created.skills, physical: created.physical, personality: created.personality,
-      weeklyWage: Math.round(10 + (created.rating / 100) * 400), avatar: created.avatar, nationality: created.nationality,
-      fromTeam: clubName, fromCity: v.name, fromDistrict: v.district,
-      skillCaps: created.skillsMax as Record<string, { current: number; maxPotential: number }>, hiddenTalent: created.hiddenTalent,
-      occupation: created.lifeContext.occupation,
-    };
-    out.push(withEstimate({
-      id, source: "village_club", player, rating: created.rating, talent: created.hiddenTalent,
-      skillsMax: player.skillCaps!, village: { id: v.id, name: v.name, district: v.district, lat: v.lat, lng: v.lng },
-      clubName, clubMean: Math.round(mean), clubRank: clubRankOf(rng, created.rating, mean), distanceKm: v.distanceKm,
-      freeAgentId: null,
+  return squad.players
+    .filter((p) => p.status === "available" && !known.has(p.id)
+      && p.age >= a.age_min && p.age <= a.age_max && (!positions || positions.includes(p.position)))
+    .map((p) => withEstimate({
+      id: p.id, source: "village_club", player: p.player, rating: p.rating, talent: p.player.hiddenTalent ?? 0,
+      skillsMax: p.player.skillCaps ?? {}, village: { id: v.id, name: v.name, district: v.district, lat: v.lat, lng: v.lng },
+      clubName: villageClubName(v), clubMean: Math.round(squad.clubMean), clubRank: p.clubRank, distanceKm: v.distanceKm,
+      freeAgentId: null, outsidePlayerId: p.id,
     }, eff, youth));
-  }
-  return out;
 }
 
 function withEstimate(c: Omit<Candidate, "ratingRange" | "potential" | "estimate">, eff: number, youth: boolean): Candidate {
@@ -1030,7 +994,7 @@ async function freeAgentCandidates(
       out.push(withEstimate({
         id: crypto.randomUUID(), source: "free_agent", player, rating: fa.overall_rating, talent: fa.hidden_talent ?? 0, skillsMax,
         village: { id: fa.v_id, name: fa.v_name, district: fa.district, lat: fa.lat, lng: fa.lng },
-        clubName: null, clubMean: null, clubRank: null, distanceKm, freeAgentId: fa.id,
+        clubName: null, clubMean: null, clubRank: null, distanceKm, freeAgentId: fa.id, outsidePlayerId: null,
       }, eff, youth));
     } catch (e) {
       logger.warn({ module: "scouting" }, `volný hráč ${fa.id}`, e);
@@ -1062,18 +1026,22 @@ async function createReport(
     .catch((e) => { logger.warn({ module: "scouting" }, "odhad ochoty do hlášení", e); return null; });
   const subject = { position: p.position, age: p.age, skills: p.skills, personality: p.personality, distanceKm: c.distanceKm };
   const expiresAt = new Date(Date.now() + SCOUT_REPORT_TTL_DAYS * 86_400_000).toISOString();
+  // Hráče stálého kádru může mít v hlášení víc týmů: hlášení má vlastní id, hráč zůstává `c.id`
+  // (z něj se odvozuje mlha odhadů i cena klubu, stejně jako v jednání).
+  const reportId = c.outsidePlayerId ? crypto.randomUUID() : c.id;
 
   await db.prepare(
     `INSERT INTO scout_reports (id, team_id, assignment_id, source, village_id, club_name, club_city, district, distance_km,
        free_agent_id, player_data, first_name, last_name, age, position, rating_lo, rating_hi, potential_lo, potential_hi,
-       visits, club_rank, club_mean, ask_hint, pros, cons, willingness, expires_at, created_game_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       visits, club_rank, club_mean, ask_hint, pros, cons, willingness, expires_at, created_game_date, outside_player_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
-    c.id, a.team_id, a.id, c.source, c.village?.id ?? null, c.clubName, c.village?.name ?? null, c.village?.district ?? null,
+    reportId, a.team_id, a.id, c.source, c.village?.id ?? null, c.clubName, c.village?.name ?? null, c.village?.district ?? null,
     c.distanceKm, c.freeAgentId, JSON.stringify(p), p.firstName, p.lastName, p.age, p.position,
     c.ratingRange.lo, c.ratingRange.hi, c.potential?.lo ?? null, c.potential?.hi ?? null,
     c.clubRank, c.clubMean, askHint, JSON.stringify(reportPros(subject)), JSON.stringify(reportCons(subject)),
     chance != null ? blurredWillingness(willingnessFromChance(chance), eff, 1, c.id) : null, expiresAt, gameDate.slice(0, 10),
+    c.outsidePlayerId,
   ).run();
 
   await sendScoutSms(db, a.team_id, sender, reportSms(rng, {
@@ -1081,7 +1049,7 @@ async function createReport(
     ratingLo: c.ratingRange.lo, ratingHi: c.ratingRange.hi, potentialLo: c.potential?.lo ?? null, potentialHi: c.potential?.hi ?? null,
     youth, source: c.source, clubName: c.clubName, villageName: c.village?.name ?? null, district: c.village?.district ?? null, askHint,
     promising,
-  }), c.id);
+  }), reportId);
 }
 
 // ─── Denní údržba hlášení ───────────────────────────────────────────────────
@@ -1102,21 +1070,41 @@ export async function maintainScoutReports(db: D1Database, env: PushEnv | undefi
      WHERE status = 'active' AND source = 'free_agent' AND NOT EXISTS (SELECT 1 FROM free_agents fa WHERE fa.id = scout_reports.free_agent_id)`,
   ).bind(nowIso).run();
 
-  const live = await db.prepare(
-    "SELECT id, status, negotiation_id FROM scout_reports WHERE status IN ('active','negotiating') AND source = 'village_club'",
-  ).all<{ id: string; status: string; negotiation_id: string | null }>();
   const rng = createRng(cryptoSeed());
   let gone = 0;
-  for (const r of live.results) {
-    if (rng.random() >= SCOUT_SNAP_UP_DAILY_CHANCE) continue;
+  const goneReport = async (r: { id: string; status: string; negotiation_id: string | null }) => {
     const res = await db.prepare("UPDATE scout_reports SET status = 'gone', resolved_at = ? WHERE id = ? AND status = ?")
       .bind(nowIso, r.id, r.status).run();
-    if ((res.meta?.changes ?? 0) === 0) continue;
+    if ((res.meta?.changes ?? 0) === 0) return;
     gone++;
     if (r.negotiation_id) {
       const row = await db.prepare("SELECT * FROM ai_negotiations WHERE id = ?").bind(r.negotiation_id).first<AiNegotiationRow>();
       if (row) await expireNegotiation(db, env, row, "Hráče mezitím sebral jiný klub.", now);
     }
+  };
+
+  // Hráč stálého kádru: jiný klub mimo hru ho sebere všem najednou (los za hráče, ne za hlášení).
+  const shared = await db.prepare(
+    "SELECT DISTINCT outside_player_id AS id FROM scout_reports WHERE status IN ('active','negotiating') AND outside_player_id IS NOT NULL",
+  ).all<{ id: string }>();
+  for (const p of shared.results) {
+    if (rng.random() >= SCOUT_SNAP_UP_DAILY_CHANCE) continue;
+    const sold = await db.prepare("UPDATE outside_players SET status = 'sold', sold_at = ? WHERE id = ? AND status = 'available'")
+      .bind(nowIso, p.id).run();
+    if ((sold.meta?.changes ?? 0) === 0) continue;
+    const reports = await db.prepare(
+      "SELECT id, status, negotiation_id FROM scout_reports WHERE outside_player_id = ? AND status IN ('active','negotiating')",
+    ).bind(p.id).all<{ id: string; status: string; negotiation_id: string | null }>();
+    for (const r of reports.results) await goneReport(r);
+  }
+
+  // Starší hlášení (hráč vylosovaný jen pro jedno hlášení) po staru, každé zvlášť.
+  const live = await db.prepare(
+    "SELECT id, status, negotiation_id FROM scout_reports WHERE status IN ('active','negotiating') AND source = 'village_club' AND outside_player_id IS NULL",
+  ).all<{ id: string; status: string; negotiation_id: string | null }>();
+  for (const r of live.results) {
+    if (rng.random() >= SCOUT_SNAP_UP_DAILY_CHANCE) continue;
+    await goneReport(r);
   }
   return { expired: expired.meta?.changes ?? 0, gone };
 }

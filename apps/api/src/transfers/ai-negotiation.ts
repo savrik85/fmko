@@ -98,6 +98,11 @@ interface NegotiationSource {
   expiresAt: string;
   /** Hráč vás už jednou odmítl (inzerát) — nemá cenu jednat. */
   rejectedBy: string[];
+  /**
+   * Klíč hráče pro jednání: u stálého kádru klubu mimo hru `outside_players.id` (sdílí ho víc
+   * týmů a stane se `players.id`), jinak id inzerátu nebo hlášení.
+   */
+  playerKey: string;
 }
 
 function parseJson<T>(raw: string | null | undefined, fallback: T, what: string): T {
@@ -120,22 +125,35 @@ async function loadSource(db: D1Database, source: "listing" | "scout_report", id
     return {
       source, id, player, stance: "listed", askingPrice: l.asking_price,
       clubName: player.fromTeam ?? "Cizí klub", clubCity: player.fromCity ?? null, clubDistrict: player.fromDistrict ?? null,
-      expiresAt: l.expires_at, rejectedBy: parseJson<string[]>(l.rejected_by, [], "rejected_by"),
+      expiresAt: l.expires_at, rejectedBy: parseJson<string[]>(l.rejected_by, [], "rejected_by"), playerKey: id,
     };
   }
   const r = await db.prepare(
     `SELECT id, team_id, source, player_data, club_name, club_city, district, club_rank, club_mean, village_id, distance_km,
-            status, expires_at FROM scout_reports WHERE id = ?`,
-  ).bind(id).first<{ id: string; team_id: string; source: string; player_data: string; club_name: string | null; club_city: string | null; district: string | null; club_rank: number | null; club_mean: number | null; village_id: string | null; distance_km: number; status: string; expires_at: string }>();
+            status, expires_at, outside_player_id FROM scout_reports WHERE id = ?`,
+  ).bind(id).first<{ id: string; team_id: string; source: string; player_data: string; club_name: string | null; club_city: string | null; district: string | null; club_rank: number | null; club_mean: number | null; village_id: string | null; distance_km: number; status: string; expires_at: string; outside_player_id: string | null }>();
   if (!r || r.team_id !== buyerClubTeamId) return fail(404, "Hlášení nenalezeno.");
   if (r.source !== "village_club") return fail(400, "Volný hráč nemá klub, s kým jednat. Podepiš ho rovnou.");
+  if (r.outside_player_id && !await outsidePlayerAvailable(db, r.outside_player_id)) {
+    await db.prepare("UPDATE scout_reports SET status = 'gone', resolved_at = ? WHERE id = ? AND status = 'active'")
+      .bind(new Date().toISOString(), r.id).run()
+      .catch((e) => logger.warn({ module: "ai-negotiation" }, "hlášení na prodaného hráče", e));
+    return fail(409, "Hráč už v klubu není, koupil ho někdo jiný.");
+  }
   const player = parseJson<VirtualPlayerData | null>(r.player_data, null, "player_data");
   if (!player) return fail(500, "Hlášení je poškozené.");
   return {
     source, id, player, stance: "poached", clubRank: r.club_rank ?? 12, clubMean: r.club_mean,
     clubName: r.club_name ?? "Cizí klub", clubCity: r.club_city, clubDistrict: r.district,
     villageId: r.village_id, distanceKm: r.distance_km, expiresAt: r.expires_at, rejectedBy: [],
+    playerKey: r.outside_player_id ?? r.id,
   };
+}
+
+/** Je hráč stálého kádru klubu mimo hru pořád v klubu? */
+async function outsidePlayerAvailable(db: D1Database, outsidePlayerId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT status FROM outside_players WHERE id = ?").bind(outsidePlayerId).first<{ status: string }>();
+  return row?.status === "available";
 }
 
 /**
@@ -209,7 +227,7 @@ export async function startAiNegotiation(db: D1Database, input: {
 
   const src = await loadSource(db, input.source, input.sourceId, buyer);
   if ("ok" in src) return src;
-  const playerKey = src.id;
+  const playerKey = src.playerKey;
 
   const open = await db.prepare(
     "SELECT id FROM ai_negotiations WHERE team_id = ? AND player_key = ? AND status IN ('open','agreed') LIMIT 1",
@@ -603,7 +621,16 @@ export async function signAiNegotiation(db: D1Database, env: PushEnv | undefined
         ? await db.prepare("UPDATE transfer_listings SET status = 'sold' WHERE id = ? AND status = 'active'").bind(row.listing_id).run()
         : await db.prepare("UPDATE scout_reports SET status = 'signed', resolved_at = ? WHERE id = ? AND status = 'negotiating' AND negotiation_id = ?")
           .bind(now.toISOString(), row.scout_report_id, row.id).run();
-      if ((sourceClaim.meta?.changes ?? 0) > 0) return true;
+      // Hráč stálého kádru: kdo ho zabere první, ten ho má. Druhý tým tady narazí.
+      const outsideClaim = (sourceClaim.meta?.changes ?? 0) > 0 && src.outsidePlayerId
+        ? await db.prepare("UPDATE outside_players SET status = 'sold', sold_to_team_id = ?, sold_at = ? WHERE id = ? AND status = 'available'")
+          .bind(buyer, now.toISOString(), src.outsidePlayerId).run()
+        : null;
+      if ((sourceClaim.meta?.changes ?? 0) > 0 && (!outsideClaim || (outsideClaim.meta?.changes ?? 0) > 0)) return true;
+      if (outsideClaim) {
+        await db.prepare("UPDATE scout_reports SET status = 'negotiating', resolved_at = NULL WHERE id = ? AND status = 'signed'")
+          .bind(row.scout_report_id).run().catch((e) => logger.error({ module: "ai-negotiation" }, "vrácení hlášení", e));
+      }
       await db.prepare("UPDATE ai_negotiations SET status = ?, player_id = NULL, resolved_at = NULL WHERE id = ?")
         .bind(prevStatus, row.id).run().catch((e) => logger.error({ module: "ai-negotiation" }, "vrácení jednání", e));
       return false;
@@ -617,6 +644,10 @@ export async function signAiNegotiation(db: D1Database, env: PushEnv | undefined
       } else if (row.scout_report_id) {
         await db.prepare("UPDATE scout_reports SET status = 'negotiating', resolved_at = NULL WHERE id = ? AND status = 'signed'")
           .bind(row.scout_report_id).run().catch((e) => logger.error({ module: "ai-negotiation" }, "vrácení hlášení", e));
+        if (src.outsidePlayerId) {
+          await db.prepare("UPDATE outside_players SET status = 'available', sold_to_team_id = NULL, sold_at = NULL WHERE id = ? AND sold_to_team_id = ?")
+            .bind(src.outsidePlayerId, buyer).run().catch((e) => logger.error({ module: "ai-negotiation" }, "vrácení hráče klubu mimo hru", e));
+        }
       }
     },
   });
@@ -624,13 +655,24 @@ export async function signAiNegotiation(db: D1Database, env: PushEnv | undefined
 
   await addEvent(db, row.id, "player", "sign", terms, decision?.explanation ?? null, now);
 
-  // Ostatní kluby, které o stejného hráče jednaly, mají smůlu.
+  // Ostatní kluby, které o stejného hráče jednaly, mají smůlu. U stálého kádru se dozví kdo.
+  const buyerName = src.outsidePlayerId
+    ? (await db.prepare("SELECT name FROM teams WHERE id = ?").bind(buyer).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: "ai-negotiation" }, "jméno kupce", e); return null; }))?.name ?? null
+    : null;
   const rivals = await db.prepare(
     "SELECT * FROM ai_negotiations WHERE player_key = ? AND id != ? AND status IN ('open','agreed')",
   ).bind(row.player_key, row.id).all<AiNegotiationRow>()
     .catch((e) => { logger.warn({ module: "ai-negotiation" }, "souběžná jednání", e); return { results: [] as AiNegotiationRow[] }; });
   for (const r of rivals.results) {
-    await expireNegotiation(db, env, r, "Hráče koupil jiný klub.", now);
+    await expireNegotiation(db, env, r, buyerName ? `Hráče koupil ${buyerName}.` : "Hráče koupil jiný klub.", now);
+  }
+  if (src.outsidePlayerId) {
+    // Hlášení ostatních týmů na téhož hráče: po skončení jednání by se vrátila jako platná.
+    await db.prepare(
+      "UPDATE scout_reports SET status = 'gone', resolved_at = ? WHERE outside_player_id = ? AND team_id != ? AND status IN ('active','negotiating')",
+    ).bind(now.toISOString(), src.outsidePlayerId, buyer).run()
+      .catch((e) => logger.warn({ module: "ai-negotiation" }, "hlášení ostatních týmů na koupeného hráče", e));
   }
   return { ok: true, signed: true, playerId: result.playerId };
 }
@@ -641,6 +683,8 @@ interface SigningSource {
   villageCoords: { lat: number; lng: number } | null;
   clubMean: number | null;
   residence?: { name: string; commuteKm: number };
+  /** Hráč stálého kádru klubu mimo hru, kterého si při podpisu tým zabere. */
+  outsidePlayerId?: string | null;
 }
 
 async function loadSourceForSigning(db: D1Database, row: AiNegotiationRow): Promise<SigningSource | null> {
@@ -657,10 +701,11 @@ async function loadSourceForSigning(db: D1Database, row: AiNegotiationRow): Prom
   }
   if (!row.scout_report_id) return null;
   const r = await db.prepare(
-    `SELECT sr.player_data, sr.status, sr.negotiation_id, sr.club_mean, sr.distance_km, sr.club_city, v.lat, v.lng
+    `SELECT sr.player_data, sr.status, sr.negotiation_id, sr.club_mean, sr.distance_km, sr.club_city, sr.outside_player_id, v.lat, v.lng
        FROM scout_reports sr LEFT JOIN villages v ON v.id = sr.village_id WHERE sr.id = ?`,
-  ).bind(row.scout_report_id).first<{ player_data: string; status: string; negotiation_id: string | null; club_mean: number | null; distance_km: number; club_city: string | null; lat: number | null; lng: number | null }>();
+  ).bind(row.scout_report_id).first<{ player_data: string; status: string; negotiation_id: string | null; club_mean: number | null; distance_km: number; club_city: string | null; outside_player_id: string | null; lat: number | null; lng: number | null }>();
   if (!r || r.status !== "negotiating" || r.negotiation_id !== row.id) return null;
+  if (r.outside_player_id && !await outsidePlayerAvailable(db, r.outside_player_id)) return null;
   const player = parseJson<VirtualPlayerData | null>(r.player_data, null, "player_data");
   if (!player) return null;
   return {
@@ -668,6 +713,7 @@ async function loadSourceForSigning(db: D1Database, row: AiNegotiationRow): Prom
     villageCoords: r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null,
     clubMean: r.club_mean,
     residence: r.club_city ? { name: r.club_city, commuteKm: r.distance_km } : undefined,
+    outsidePlayerId: r.outside_player_id,
   };
 }
 
