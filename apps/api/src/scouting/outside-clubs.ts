@@ -116,6 +116,7 @@ export function buildOutsideSquad(
       ...(german ? { fromCountry: village.country } : {}),
       skillCaps: created.skillsMax as Record<string, { current: number; maxPotential: number }>, hiddenTalent: created.hiddenTalent,
       occupation: created.lifeContext.occupation,
+      ...(!german && created.lifeContext.romani ? { romani: true } : {}),
     };
     return { villageId: village.id, slot, position, age: created.age, rating: created.rating, clubRank: 0, player };
   });

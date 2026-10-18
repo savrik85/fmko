@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brokenCzech, foreignSpeechRule, writesForeign } from "./foreign-speech";
+import { brokenCzech, foreignSpeechRule, romaniSpeechRule, speaksRomani, writesForeign } from "./foreign-speech";
 
 const SAMPLES = [
   "Sorry, nemůžu. Mám směnu.",
@@ -63,5 +63,24 @@ describe("řeč cizinců", () => {
     expect(foreignSpeechRule("DE")).toContain("LÁMANĚ");
     expect(foreignSpeechRule("DE")).toContain("genau");
     expect(foreignSpeechRule("VN")).toContain("bez diakritiky");
+  });
+
+  it("romsky mluví jen část romských hráčů, pevně podle jména; jiní nikdy", () => {
+    const names = ["René Gaži", "Robert Dužda", "Milan Giňa", "Emil Lakatoš", "Denis Berky", "Kevin Žiga", "Josef Ferko", "Erik Oláh", "Dušan Demeter", "Marián Bihári"];
+    const flags = names.map((n) => { const [firstName, lastName] = n.split(" "); return speaksRomani({ firstName, lastName, nationality: "CZ", ethnicity: "brown" }); });
+    expect(flags.some(Boolean)).toBe(true);
+    expect(flags.every(Boolean)).toBe(false);
+    expect(speaksRomani({ firstName: "René", lastName: "Gaži", nationality: "CZ", ethnicity: "brown" })).toBe(flags[0]);
+    expect(speaksRomani({ firstName: "Jan", lastName: "Novák", nationality: "CZ", ethnicity: "white" })).toBe(false);
+    expect(speaksRomani({ firstName: "Minh", lastName: "Lê", nationality: "VN", ethnicity: "asian" })).toBe(false);
+  });
+
+  it("romský pokyn: normální čeština a občas skutečné romské slovo, bez zkomolení", () => {
+    expect(romaniSpeechRule(false)).toBeNull();
+    const rule = romaniSpeechRule(true)!;
+    expect(rule).toContain("normální hovorovou češtinou");
+    expect(rule).toContain("more");
+    expect(rule).toContain("phrala");
+    expect(rule).toContain("žádnou zkomolenou češtinu");
   });
 });

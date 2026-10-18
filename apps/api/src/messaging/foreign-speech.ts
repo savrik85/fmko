@@ -143,3 +143,27 @@ export function brokenCzech(text: string, nationality: string | null | undefined
   }
   return out;
 }
+
+/**
+ * Romský hráč (čeština je jeho rodný jazyk) a jestli mluví i romsky (2026-10-18, přání
+ * uživatele: autenticky, ne parodie). Romsky neumí každý Rom, proto jen polovina, pevně
+ * podle jména (bez losu z rng, aby se neposunuly ostatní hody generátoru).
+ */
+export function speaksRomani(identity: { firstName: string; lastName: string; nationality?: string | null; ethnicity?: string | null }): boolean {
+  if (identity.ethnicity !== "brown" || (identity.nationality ?? "CZ") !== "CZ") return false;
+  return seedFromString(`romani|${identity.firstName} ${identity.lastName}`) % 2 === 0;
+}
+
+/**
+ * Pokyn do promptu pro hráče, který mluví i romsky: normální hovorová čeština jako u ostatních,
+ * jen občas skutečné romské oslovení nebo slovo. Žádná zkomolená čeština, přízvuk ani stereotypy.
+ */
+export function romaniSpeechRule(romani: boolean | undefined): string | null {
+  if (!romani) return null;
+  return [
+    "JAZYK: Jsi Rom z Česka, píšeš normální hovorovou češtinou jako ostatní kluci z týmu.",
+    " Občas (ne v každé zprávě) použiješ romské oslovení nebo slovo: more (kámo), phrala (brácho), čhavale (kluci),",
+    " šukar (pěkný), lačho (dobrý), O Devla (bože), paľikerav (děkuju), sar san? (jak je?).",
+    " Nic dalšího si nepřidávej: žádnou zkomolenou češtinu, přízvuk ani stereotypy.",
+  ].join("");
+}

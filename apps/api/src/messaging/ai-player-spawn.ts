@@ -148,6 +148,7 @@ export function loadPlayerSnapshot(
     transferUnrest: lifeContext.transferUnrest?.level ?? 0,
     occupation: lifeContext.occupation,
     nationality: (row.nationality as string | null | undefined) ?? null,
+    romani: lifeContext.romani === true,
     injury: parseInjury(row.injury),
     // Kontext posledního zápasu — hráč, který nenastoupil, má last_minutes NULL.
     lastMatchOutcome: matchCtx?.lastOutcome ?? null,

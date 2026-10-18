@@ -6,7 +6,7 @@
  * a volající (cron / reply hook) má za úkol thread čistě skipnout / nechat pro pozdější retry.
  */
 
-import { foreignSpeechRule } from "./foreign-speech";
+import { foreignSpeechRule, romaniSpeechRule } from "./foreign-speech";
 import { logger } from "../lib/logger";
 import { COACH_CHAT_MAX_MORALE, COACH_CHAT_MAX_RELATION } from "../lib/coach-relation";
 import { seedFromString } from "../lib/seed";
@@ -162,6 +162,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     `Píšeš SMS PŘÍMO svému trenérovi. Jmenuje se ${team.managerName ?? "trenér"} a je to ten, komu právě píšeš — nikdo jiný.`,
     // Cizinec píše lámaně (Slovák slovensky): pokyn nahrazuje českou hovorovou mluvu i oslovení.
     language ?? "Mluv neformálně česky, jako vesničan z malého klubu, používej hovorové výrazy, klidně i nadávku nebo povzdech.",
+    language ? "" : (romaniSpeechRule(player.romani) ?? ""),
     "PRAVIDLA STYLU:",
     language
       ? "- Oslovuj trenéra podle pokynu JAZYK (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe'."
