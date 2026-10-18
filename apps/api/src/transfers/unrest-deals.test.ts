@@ -3,7 +3,7 @@ import type { TransferUnrest } from "./offer-rejection-impact";
 import { availableActions, bonusAmount, pledgeText, type UnrestContext } from "./unrest";
 import { reasonsText, transferTalkFrom, unrestReasonsFromFactors } from "./unrest-reasons";
 
-const CTX: UnrestContext = { seasonNumber: 4, patriotism: 50, discipline: 50, leadership: 30, coachRelationship: 50, isCaptain: false, now: new Date("2026-10-18T12:00:00Z") };
+const CTX: UnrestContext = { seasonNumber: 4, patriotism: 50, discipline: 50, leadership: 30, coachRelationship: 50, isCaptain: false, ownedHere: true, now: new Date("2026-10-18T12:00:00Z") };
 const ids = (u: TransferUnrest, lc: Record<string, unknown> = {}, ctx: Partial<UnrestContext> = {}) =>
   availableActions(u, lc, { ...CTX, ...ctx }).map((a) => a.id);
 const unrest = (o: Partial<TransferUnrest> = {}): TransferUnrest => ({ level: 50, ...o });
@@ -59,6 +59,13 @@ describe("dohody podle důvodu", () => {
       reasons: ["money"], offer: VIRTUAL_OFFER,
       pledge: { type: "release", madeAt: "2026-10-17T12:00:00Z", deadline: "2026-10-21T12:00:00Z", offerId: "o1" },
     }))).not.toContain("release");
+  });
+
+  it("hráč na hostování: páska ani „pustit ho“ (obojí by zapsalo do cizího týmu)", () => {
+    const u = unrest({ reasons: ["better_club", "money"], offer: VIRTUAL_OFFER });
+    expect(ids(u, {}, { leadership: 70 })).toEqual(expect.arrayContaining(["captaincy", "release"]));
+    expect(ids(u, {}, { leadership: 70, ownedHere: false })).not.toContain("captaincy");
+    expect(ids(u, {}, { leadership: 70, ownedHere: false })).not.toContain("release");
   });
 
   it("uzavřená dohoda se v tomtéž truci znovu nenabízí", () => {

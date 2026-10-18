@@ -212,7 +212,8 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   if (convOwner.type === "player" && convOwner.participant_id && unrestThreadOk) {
     try {
       const playerRow = await c.env.DB.prepare(
-        `SELECT p.life_context, p.personality, p.coach_relationship, current_team.captain_id
+        `SELECT p.life_context, p.personality, p.coach_relationship, current_team.captain_id, p.loan_from_team_id,
+                COALESCE(current_team.parent_team_id, current_team.id) AS current_club_id
          FROM players p
          JOIN teams current_team ON current_team.id = p.team_id
          LEFT JOIN teams owner_team ON owner_team.id = p.loan_from_team_id
@@ -220,7 +221,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
            COALESCE(current_team.parent_team_id, current_team.id) = ?
            OR COALESCE(owner_team.parent_team_id, owner_team.id) = ?
          )`,
-      ).bind(convOwner.participant_id, teamId, teamId).first<{ life_context: string | null; personality: string | null; coach_relationship: number | null; captain_id: string | null }>();
+      ).bind(convOwner.participant_id, teamId, teamId).first<{ life_context: string | null; personality: string | null; coach_relationship: number | null; captain_id: string | null; loan_from_team_id: string | null; current_club_id: string | null }>();
       const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
       if (lc?.transferUnrest?.level > 0) {
         const { availableActions, unrestMoodQuote, pledgeText } = await import("../transfers/unrest");
@@ -240,6 +241,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
             seasonNumber: seasonRow?.number ?? null, patriotism: pers.patriotism ?? 50, discipline: pers.discipline ?? 50,
             leadership: pers.leadership ?? 30, coachRelationship: playerRow?.coach_relationship ?? 50,
             isCaptain: playerRow?.captain_id === convOwner.participant_id,
+            ownedHere: playerRow?.loan_from_team_id == null && playerRow?.current_club_id === teamId,
           }),
         };
       }
