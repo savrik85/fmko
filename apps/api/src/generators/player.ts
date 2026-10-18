@@ -132,7 +132,26 @@ function ageToDecade(age: number): string {
  * křestních jmen na 1 500 hráčů 268 místo 126.
  */
 const NAME_WEIGHT_POWER = 0.5;
+/**
+ * Křestní jméno musí mít v dekádě aspoň takový podíl. Odmocnina dávala vzácné polovině
+ * seznamu MV ČR (jména od 10–20 narozených za dekádu) přes 20 % losů: na vesnici běhali
+ * Damien, Fabio a Marcus. Od 0,03 % zůstanou jen jména, která dostal aspoň zhruba každý
+ * třítisící kluk; nejčastější jméno 3,7 % (podle četnosti 7,5 %), různých jmen víc o desetinu.
+ */
+const MIN_FIRST_NAME_SHARE = 0.0003;
 const flattenedNameCache = new WeakMap<Record<string, number>, Record<string, number>>();
+const firstNameCache = new WeakMap<Record<string, number>, Record<string, number>>();
+
+/** Křestní jména dekády bez nejvzácnějších, vážená odmocninou četnosti. */
+function firstNameWeights(decade: Record<string, number>): Record<string, number> {
+  const cached = firstNameCache.get(decade);
+  if (cached) return cached;
+  const total = Object.values(decade).reduce((sum, w) => sum + Math.max(0, w), 0);
+  const common = Object.fromEntries(Object.entries(decade).filter(([, w]) => total <= 0 || w / total >= MIN_FIRST_NAME_SHARE));
+  const weights = flattenedNameWeights(Object.keys(common).length > 0 ? common : decade);
+  firstNameCache.set(decade, weights);
+  return weights;
+}
 
 export function flattenedNameWeights(weights: Record<string, number>): Record<string, number> {
   const cached = flattenedNameCache.get(weights);
@@ -151,7 +170,7 @@ export function pickFirstName(
   rng: Rng, firstnameData: FirstnameData, age: number, fallbackDecade = "1980s", exclude?: ReadonlySet<string>,
 ): string {
   const decade = ageToDecade(age);
-  const weights = flattenedNameWeights(firstnameData.male[decade] ?? firstnameData.male[fallbackDecade]);
+  const weights = firstNameWeights(firstnameData.male[decade] ?? firstnameData.male[fallbackDecade]);
   if (exclude && exclude.size > 0) {
     const free = Object.fromEntries(Object.entries(weights).filter(([name]) => !exclude.has(name)));
     if (Object.keys(free).length > 0) return rng.weighted(free);
