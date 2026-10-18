@@ -203,6 +203,40 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
 }
 
 /**
+ * Rozhovor po zatrhnutém přestupu (2026-10-18): hráč zná svůj skutečný důvod odchodu
+ * a dohody, které mu trenér nabídl. Dřív model znal jen obecný scénář, takže nepoznal,
+ * jestli trenér trefil, co hráče štve, a výsledek působil jako loterie.
+ */
+function transferTalkLines(player: PlayerSnapshot): string[] {
+  const t = player.transferTalk;
+  if (!t) return [];
+  return [
+    t.reasons
+      ? `PROČ JSI CHTĚL ODEJÍT: hlavně kvůli ${t.reasons}${t.offer ? ` (${t.offer})` : ""}. Když se trenér ptá nebo to obchází, řekni mu to narovinu.`
+      : (t.offer ? `NABÍDKA: ${t.offer}.` : ""),
+    t.deals.length > 0
+      ? `DOHODA S TRENÉREM (platí, není to jen řeč): ${t.deals.join("; ")}. Když řeší tvůj hlavní důvod, uklidni se a dej mu to najevo.`
+      : "",
+    "Prázdné řeči bez konkrétního kroku tě neuklidní. Slušné vysvětlení, proč tě klub potřebuje, tě ale aspoň trochu usmíří.",
+  ].filter(Boolean);
+}
+
+/** Totéž pro AI rozhodčího: hodnotí, jestli trenér řešil hlavní důvod. */
+function transferJudgeLines(player: PlayerSnapshot): string[] {
+  const t = player.transferTalk;
+  if (!t) return [];
+  return [
+    `HLAVNÍ DŮVOD ODCHODU: ${t.reasons ?? "nezjištěn"}${t.offer ? ` (${t.offer})` : ""}.`,
+    `UZAVŘENÉ DOHODY: ${t.deals.length > 0 ? t.deals.join("; ") : "žádná"}.`,
+    "Tón (rozhoduje o tom, jestli se hráč přestane zlobit):",
+    "- positive: trenér uzavřel dohodu, která řeší hlavní důvod, a nebyl hrubý. Nebo bez dohody, když hlavní důvod konkrétně a s respektem řešil a hráč v rozhovoru ustoupil.",
+    "- neutral: trenér byl slušný a snažil se, ale hlavní důvod neřešil nebo jen sliboval bez konkrétního kroku, případně dohoda řeší jen vedlejší důvod.",
+    "- negative: trenér hráče odbyl, byl hrubý, zesměšnil ho nebo jeho důvod ignoroval.",
+    "",
+  ];
+}
+
+/**
  * Env, který chat potřebuje.
  *
  * Není to jen klíč ke Gemini: chat musí vidět i `CACHE_KV`, protože v něm leží
@@ -332,6 +366,7 @@ export async function generateReply(
     system,
     "",
     `SCÉNÁŘ: ${scenario.description}${contextLine}`,
+    ...(scenario.id === "rejected_offer" ? transferTalkLines(player) : []),
     "",
     "HISTORIE KONVERZACE:",
     histText,
@@ -431,6 +466,7 @@ export async function evaluateResolution(
     "Vrať POUZE JSON v tomto tvaru (žádný markdown, žádný komentář):",
     `{"morale_delta": <-15..+15>, "condition_delta": <-5..+5>, "relationship_delta": <-15..+15>, "absence_days": <0..5>, "absence_reason": "<krátký česky důvod, jen pokud absence_days > 0>", "summary": "<1 věta česky o tom jak hráč odchází>", "tone": "positive"|"negative"|"neutral"}`,
     "",
+    ...(scenario.id === "rejected_offer" ? transferJudgeLines(player) : []),
     "Pravidla:",
     "- Pokud trenér reagoval empaticky/správně → kladné delty (zvlášť relationship +5..+12, morale +3..+10).",
     "- Pokud trenér byl odmítavý/hrubý/lhostejný → záporné (relationship -5..-12, morale -3..-10).",

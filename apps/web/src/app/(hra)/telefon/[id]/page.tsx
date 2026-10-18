@@ -47,6 +47,12 @@ interface UnrestInfo {
   level: number;
   teamName?: string;
   mood?: string;
+  /** Proč chtěl odejít („penězům a lepšímu klubu“), u starších trucu chybí. */
+  reasons?: string | null;
+  /** Platný slib trenéra. */
+  pledge?: string | null;
+  /** V rozhovoru jde dohodu nabídnout jen, když je na tahu trenér. */
+  canAct?: boolean;
   actions: { id: string; label: string; description: string }[];
 }
 
@@ -335,6 +341,9 @@ export default function ConversationPage() {
       const fresh = await apiFetch<ConvDetailResponse>(messagesUrl);
       setMessages(fresh.messages);
       setUnrest(fresh.unrest ?? null);
+      // Dohoda v rozhovoru: hráč teď odpovídá, ať se rozblikají tečky.
+      setAiThreadActive(fresh.aiThreadActive);
+      setAiThreadState(fresh.aiThreadState);
     } catch (e) {
       console.error("unrest action:", e);
       setUnrestEffects([e instanceof Error ? e.message : "Akce se nezdařila"]);
@@ -578,37 +587,48 @@ export default function ConversationPage() {
         <div ref={endRef} />
       </div>
 
-      {/* Unrest — vážně trucující hráč: konkrétní dohody (řeči nestačily) */}
-      {!isGroup && unrest && unrest.level >= 40 && !aiThreadActive && (
-        <div className="bg-orange-50 border-t border-orange-200 px-3 py-2 shrink-0">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-heading font-bold text-orange-700">
-              😠 Nespokojený{unrest.teamName ? ` (nabídka od ${unrest.teamName})` : ""} — {unrest.level}/100
-            </span>
+      {/* Hráč, který chtěl odejít: dohody podle toho, proč chtěl pryč. Platí i v rozhovoru. */}
+      {!isGroup && unrest && unrest.level > 0 && (
+        <div className="bg-orange-50 border-t border-orange-200 px-3 py-2 shrink-0 max-h-[45vh] overflow-y-auto">
+          <div className="text-sm font-heading font-bold text-orange-700">
+            😠 Chtěl odejít{unrest.teamName ? ` do ${unrest.teamName}` : ""}, nespokojenost {unrest.level}/100
           </div>
-          {unrest.mood && (
-            <div className="text-sm italic text-orange-800/80 mb-1">&bdquo;{unrest.mood}&ldquo;</div>
+          {unrest.reasons && (
+            <div className="text-sm text-orange-900 mt-0.5">Chtěl pryč hlavně kvůli {unrest.reasons}.</div>
           )}
-          <div className="text-sm font-heading font-bold text-orange-700/70 uppercase tracking-wide mb-1.5">🤝 Nabídni mu něco konkrétního:</div>
+          {unrest.mood && (
+            <div className="text-sm italic text-orange-800/80 mt-0.5">&bdquo;{unrest.mood}&ldquo;</div>
+          )}
+          {unrest.pledge && (
+            <div className="text-sm text-orange-900 mt-0.5">🤞 {unrest.pledge}</div>
+          )}
           {unrestEffects && (
-            <div className="mb-1.5 bg-white rounded-soft px-2.5 py-1.5 text-sm text-gray-700 space-y-0.5">
+            <div className="mt-1.5 bg-white rounded-soft px-2.5 py-1.5 text-sm text-gray-700 space-y-0.5">
               {unrestEffects.map((ef, i) => <div key={i}>• {ef}</div>)}
               <button onClick={() => setUnrestEffects(null)} className="text-sm text-muted underline">skrýt</button>
             </div>
           )}
-          <div className="flex flex-wrap gap-1.5">
-            {unrest.actions.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => handleUnrestAction(a.id)}
-                disabled={unrestBusy}
-                title={a.description}
-                className="text-sm font-heading font-bold bg-white border border-orange-300 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors disabled:opacity-50"
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
+          {unrest.actions.length > 0 && (
+            <>
+              <div className="text-sm font-heading font-bold text-orange-700/80 mt-1.5 mb-1">🤝 Co mu můžeš nabídnout:</div>
+              <div className="space-y-1">
+                {unrest.actions.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => handleUnrestAction(a.id)}
+                    disabled={unrestBusy || unrest.canAct === false}
+                    className="w-full text-left bg-white border border-orange-300 rounded-soft px-2.5 py-1.5 hover:bg-orange-100 transition-colors disabled:opacity-50"
+                  >
+                    <span className="block text-sm font-heading font-bold text-orange-800">{a.label}</span>
+                    <span className="block text-sm text-gray-600">{a.description}</span>
+                  </button>
+                ))}
+              </div>
+              {unrest.canAct === false && (
+                <div className="text-sm text-muted mt-1">Počkej, až ti odpoví.</div>
+              )}
+            </>
+          )}
         </div>
       )}
 

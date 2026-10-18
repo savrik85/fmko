@@ -6,13 +6,15 @@
  * players.life_context → $.transferUnrest:
  *   { level: 0-100, reason, offerId, teamName, since, lastImpactAt, lastActionAt,
  *     fakeInjuryUsed, fakeInjuryAt, fakeInjuryHintSent, wageRaised,
- *     pledge: {type: "minutes"|"transfer", madeAt, deadline} | null }
+ *     pledge: {type: "minutes"|"transfer"|"release", madeAt, deadline, offerId?} | null,
+ *     reasons, offer, deals }
  */
 
 import { computeInterestForOffer, INTEREST_LABELS } from "./player-interest";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
+import { unrestReasonsFromFactors, type UnrestReason } from "./unrest-reasons";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -29,7 +31,17 @@ export interface TransferUnrest {
   fakeInjuryAt?: string;
   fakeInjuryHintSent?: boolean;
   wageRaised?: boolean;
-  pledge?: { type: "minutes" | "transfer"; madeAt: string; deadline: string } | null;
+  /**
+   * Slib: místo v sestavě, prodej při další nabídce, nebo „pustit“ = trenér si u klubu
+   * vyžádal novou nabídku (`offerId`) a slíbil ji přijmout.
+   */
+  pledge?: { type: "minutes" | "transfer" | "release"; madeAt: string; deadline: string; offerId?: string } | null;
+  /** Proč chtěl odejít (unrest-reasons.ts), od nejsilnějšího důvodu. */
+  reasons?: UnrestReason[];
+  /** Odmítnutá nabídka: kvůli prémii (podíl z částky) a „pustit ho“ (stejný klub, stejná částka). */
+  offer?: { amount: number; fromTeamId: string; virtualTeamData: string | null; at: string };
+  /** Dohody uzavřené v tomhle truci (každá jen jednou). Nové odmítnutí je smaže. */
+  deals?: Array<{ id: string; at: string }>;
 }
 
 export function parseUnrest(lifeContext: string | null | undefined): TransferUnrest | null {
@@ -147,8 +159,12 @@ export async function applyOfferRejectionImpact(
     avatar: player.avatar as string | null,
   };
 
+  // Trenér si nabídku sám vyžádal a slíbil hráče pustit („Pustit ho“), a teď ji odmítl
+  // nebo nechal propadnout: porušený slib bez ohledu na to, jak moc hráč chce pryč.
+  const brokenReleasePledge = unrest.pledge?.type === "release" && unrest.pledge.offerId === (offer.id as string);
+
   // Hráč odejít nechtěl → žádný trest; věrný patriot má z odmítnutí radost
-  if (interest.level <= 1) {
+  if (interest.level <= 1 && !brokenReleasePledge) {
     if (interest.level === 0 && (pers.patriotism ?? 50) > 70) {
       const newMorale = clamp(morale + 2, 0, 100);
       await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?")
@@ -159,7 +175,8 @@ export async function applyOfferRejectionImpact(
   }
 
   // Slib prodeje porušen dalším odmítnutím → maximální vztek
-  const brokenTransferPledge = unrest.pledge?.type === "transfer" && new Date(unrest.pledge.deadline) > new Date();
+  const brokenTransferPledge = brokenReleasePledge
+    || (unrest.pledge?.type === "transfer" && new Date(unrest.pledge.deadline) > new Date());
 
   // Anti-stack: dopad max 1× za 7 dní v plné síle
   const recentImpact = unrest.lastImpactAt && (Date.now() - new Date(unrest.lastImpactAt).getTime()) < 7 * DAY_MS;
@@ -201,6 +218,13 @@ export async function applyOfferRejectionImpact(
     since: unrest.since ?? nowIso,
     lastImpactAt: nowIso,
     pledge: brokenTransferPledge ? null : (unrest.pledge ?? null),
+    // Nové odmítnutí = nový truc: důvody podle téhle nabídky, dohody znovu k mání.
+    reasons: brokenTransferPledge ? (unrest.reasons ?? []) : unrestReasonsFromFactors(interest.factors),
+    offer: {
+      amount, fromTeamId, at: nowIso,
+      virtualTeamData: fromTeamId === "virtual_ai" ? ((offer.virtual_team_data as string | null) ?? null) : null,
+    },
+    deals: [],
   };
 
   await db.prepare(
@@ -219,7 +243,9 @@ export async function applyOfferRejectionImpact(
 
   // SMS od hráče — naštvání podle tempera; při porušeném slibu vždy nejostřejší
   const pool = brokenTransferPledge || temper > 65 ? REJECTED_SMS_WANTS_HOT : REJECTED_SMS_WANTS;
-  const smsBody = brokenTransferPledge
+  const smsBody = brokenReleasePledge
+    ? `Volal jste do ${teamName}, že mě pustíte, a teď to zase zaříznete? S vámi jsem skončil, trenére.`
+    : brokenTransferPledge
     ? `Slíbil jste, že mě při další dobré nabídce pustíte! ${teamName} přišel a vy nic. S vámi jsem skončil.`
     : pick(pool).replace("{team}", teamName);
   const convId = await sendPlayerSMS(db, sellerClubTeamId, playerRef, smsBody);
@@ -241,7 +267,8 @@ export async function applyOfferRejectionImpact(
       JSON.stringify({
         trigger: "rejected_offer",
         scenario_id: "rejected_offer",
-        max_replies: 2,
+        // Tři výměny: hráč řekne, co ho štve, trenér může nabídnout dohodu a hráč na ni zareaguje.
+        max_replies: 3,
         current_replies: 0,
         awaiting: "coach",
         initiated_at: nowIso,
@@ -337,7 +364,7 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
       lc.morale = clamp(morale - 8, 0, 100);
       await sendPlayerSMS(db, clubTeamId, playerRef, "Sliboval jste mi místo v sestavě, trenére. A já zase sedím. Tohle nemá cenu.");
     }
-  } else if (unrest.pledge?.type === "transfer" && new Date(unrest.pledge.deadline) < new Date()) {
+  } else if ((unrest.pledge?.type === "transfer" || unrest.pledge?.type === "release") && new Date(unrest.pledge.deadline) < new Date()) {
     // Slib prodeje vypršel bez další nabídky — smazat (porušení řeší applyOfferRejectionImpact)
     unrest.pledge = null;
   }
@@ -347,8 +374,9 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
     unrest.level = clamp(unrest.level - 3, 0, 100);
   }
 
-  // 3) Konec trucu → uklidit (a zázračně uzdravit případnou fake injury)
-  if (unrest.level <= 0) {
+  // 3) Konec trucu → uklidit (a zázračně uzdravit případnou fake injury). Slib „pustit“
+  // zůstává, dokud trenér obnovenou nabídku nevyřídí nebo slib nevyprší.
+  if (unrest.level <= 0 && unrest.pledge?.type !== "release") {
     await db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.transferUnrest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "remove unrest", e));
     if (hasFakeInjury) await healFakeInjury(db, clubTeamId, playerRef);

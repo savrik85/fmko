@@ -10,6 +10,7 @@
  */
 
 import type { RadekZnalosti } from "../incidents/znalosti";
+import type { TransferTalk } from "../transfers/unrest-reasons";
 
 export type ScenarioCategory = "complaint" | "positive" | "personal" | "transfer";
 
@@ -57,6 +58,8 @@ export interface PlayerSnapshot {
   nationality?: string | null;
   /** Mluví i romsky (`life_context.romani`): občas romské slovo, jinak česky. */
   romani?: boolean;
+  /** Truc po zatrhnutém přestupu: proč chtěl odejít a co mu trenér už nabídl (unrest-reasons.ts). */
+  transferTalk?: TransferTalk;
   /**
    * Právě běžící zranění nebo volno (tabulka injuries). `null` = hráč je fit,
    * `undefined` = volající ho nenačetl a prompt o zdraví mlčí. Bez toho model
