@@ -205,7 +205,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     level: number; levelText: string; teamName?: string; mood: string; reasons: string | null; pledge: string | null; canAct: boolean;
     /** Proč teď dohoda nejde (už dnes byla jedna), jinak null. */
     blockedText: string | null;
-    actions: { id: string; label: string; description: string }[];
+    actions: { id: string; label: string; description: string; message: string }[];
   } | null = null;
   const threadState = (() => {
     try { return convOwner.ai_thread_active === 1 ? JSON.parse(convOwner.ai_thread_state ?? "{}") as { scenario_id?: string; awaiting?: string } : null; } catch { return null; }
@@ -214,7 +214,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   if (convOwner.type === "player" && convOwner.participant_id && unrestThreadOk) {
     try {
       const playerRow = await c.env.DB.prepare(
-        `SELECT p.life_context, p.personality, p.coach_relationship, current_team.captain_id, p.loan_from_team_id,
+        `SELECT p.first_name, p.life_context, p.personality, p.coach_relationship, current_team.captain_id, p.loan_from_team_id,
                 COALESCE(current_team.parent_team_id, current_team.id) AS current_club_id
          FROM players p
          JOIN teams current_team ON current_team.id = p.team_id
@@ -223,7 +223,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
            COALESCE(current_team.parent_team_id, current_team.id) = ?
            OR COALESCE(owner_team.parent_team_id, owner_team.id) = ?
          )`,
-      ).bind(convOwner.participant_id, teamId, teamId).first<{ life_context: string | null; personality: string | null; coach_relationship: number | null; captain_id: string | null; loan_from_team_id: string | null; current_club_id: string | null }>();
+      ).bind(convOwner.participant_id, teamId, teamId).first<{ first_name: string; life_context: string | null; personality: string | null; coach_relationship: number | null; captain_id: string | null; loan_from_team_id: string | null; current_club_id: string | null }>();
       const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
       if (lc?.transferUnrest?.level > 0) {
         const { availableActions, unrestMoodQuote, unrestMoodText, pledgeText, dealCooldownText } = await import("../transfers/unrest");
@@ -246,7 +246,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
             leadership: pers.leadership ?? 30, coachRelationship: playerRow?.coach_relationship ?? 50,
             isCaptain: playerRow?.captain_id === convOwner.participant_id,
             ownedHere: playerRow?.loan_from_team_id == null && playerRow?.current_club_id === teamId,
-          }),
+          }).map((a) => ({ ...a, message: a.message.replace("{name}", playerRow?.first_name ?? "") })),
         };
       }
     } catch (e) { logger.warn({ module: "messaging" }, "load unrest for conversation", e); }

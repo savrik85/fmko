@@ -139,7 +139,7 @@ function fillText(text: string, unrest: TransferUnrest, actionId: UnrestActionId
  */
 export function availableActions(
   unrest: TransferUnrest, lifeContext: Record<string, unknown>, ctx: UnrestContext,
-): Array<{ id: UnrestActionId; label: string; description: string }> {
+): Array<{ id: UnrestActionId; label: string; description: string; message: string }> {
   const reasons = unrest.reasons?.length ? unrest.reasons : LEGACY_REASONS;
   const dealt = new Set((unrest.deals ?? []).map((d) => d.id));
   const ids: UnrestActionId[] = [];
@@ -164,7 +164,8 @@ export function availableActions(
     && now - new Date(unrest.offer.at).getTime() <= RELEASE_WINDOW_DAYS * DAY_MS) add("release");
   return ids.map((id) => {
     const def = UNREST_ACTIONS.find((a) => a.id === id)!;
-    return { id, label: def.label, description: fillText(def.description, unrest, id) };
+    // `message` je hotová SMS trenéra (jen {name} doplní volající), v telefonu se nabízí jako rychlá odpověď.
+    return { id, label: def.label, description: fillText(def.description, unrest, id), message: fillText(def.coachMessage, unrest, id) };
   });
 }
 

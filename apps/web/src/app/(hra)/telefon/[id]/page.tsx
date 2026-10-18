@@ -57,7 +57,7 @@ interface UnrestInfo {
   canAct?: boolean;
   /** Proč teď dohoda nejde (už dnes byla jedna). */
   blockedText?: string | null;
-  actions: { id: string; label: string; description: string }[];
+  actions: { id: string; label: string; description: string; message: string }[];
 }
 
 interface ConvDetailResponse {
@@ -149,7 +149,6 @@ export default function ConversationPage() {
   const [unrest, setUnrest] = useState<UnrestInfo | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [unrestBusy, setUnrestBusy] = useState(false);
-  const [unrestEffects, setUnrestEffects] = useState<string[] | null>(null);
   const [unrestError, setUnrestError] = useState<string | null>(null);
   // Seznam dohod je dlouhý: na mobilu by zakryl rozhovor, proto se rozbaluje až na klepnutí.
   const [unrestOpen, setUnrestOpen] = useState(false);
@@ -161,6 +160,8 @@ export default function ConversationPage() {
   const [sending, setSending] = useState(false);
   /** Svítí „píše…". Naskakuje s odstupem, ne hned po odeslání. */
   const [pise, setPise] = useState(false);
+  /** Po rychlé odpovědi (majitel, dohoda) čekáme na odpověď, kterou server teprve skládá. */
+  const [awaitingReply, setAwaitingReply] = useState(false);
   const [credit, setCredit] = useState<{ zbyva: number; cenaSms: number; zprav: number } | null>(null);
   // Skupinové chaty vlastní detail endpoint nemají — tam se píše vždycky.
   const [canReply, setCanReply] = useState(true);
@@ -273,10 +274,10 @@ export default function ConversationPage() {
   // „Píše" nenaskočí hned. V reálném chatu je nejdřív ticho, než si druhý
   // zprávy všimne, a teprve pak se rozblikají tečky.
   useEffect(() => {
-    if (!cekaSeNaHrace) { setPise(false); return; }
-    const t = setTimeout(() => setPise(true), 1800);
+    if (!cekaSeNaHrace && !awaitingReply) { setPise(false); return; }
+    const t = setTimeout(() => setPise(true), awaitingReply ? 900 : 1800);
     return () => clearTimeout(t);
-  }, [cekaSeNaHrace]);
+  }, [cekaSeNaHrace, awaitingReply]);
   // Zbylá koruna je z pohledu hráče stejně došlý kredit — na zprávu nestačí.
   const nemaNaSms = platiSeKredit && !!credit && credit.zbyva < credit.cenaSms;
   /*
@@ -292,6 +293,10 @@ export default function ConversationPage() {
   // Hledá se zpětně: za čekající SMS mohla přibýt výměna o příspěvek (bez tlačítek).
   const nabidkaOdpovedi = !isGroup && aiThreadActive && canReply && !cekaSeNaHrace
     ? (messages.slice().reverse().map(ownerOptionsOf).find((o) => o.length > 0) ?? [])
+    : [];
+  // Dohody s hráčem, který chtěl odejít: jen když jdou (na tahu je trenér, dnes ještě žádná nebyla).
+  const unrestDeals = !isGroup && canReply && unrest && unrest.level > 0 && !unrest.blockedText && unrest.canAct !== false
+    ? unrest.actions
     : [];
   // Majitel firmy — jméno v hlavičce vede na jeho stránku (`participantId` = `so-{sponsorId}`).
   const ownerSponsorId = participantId?.startsWith("so-") ? Number(participantId.slice(3)) : null;
@@ -335,17 +340,17 @@ export default function ConversationPage() {
     setSending(false);
   };
 
-  const handleUnrestAction = async (actionId: string) => {
+  const handleUnrestAction = async (deal: { id: string; message: string }) => {
     if (!teamId || !participantId || unrestBusy) return;
     setUnrestBusy(true);
     setUnrestError(null);
+    setUnrestOpen(false);
+    const tmpId = showOwnMessage(deal.message);
     try {
-      const res = await apiFetch<{ ok: boolean; effects?: string[]; unrestLevel?: number }>(
+      await apiFetch<{ ok: boolean }>(
         `/api/teams/${teamId}/players/${participantId}/unrest-talk`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: actionId }) },
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: deal.id }) },
       );
-      setUnrestEffects(res.effects ?? null);
-      setUnrestOpen(false);
       // Zprávy (trenér + odpověď hráče) vložil server — načíst čerstvě
       const fresh = await apiFetch<ConvDetailResponse>(messagesUrl);
       setMessages(fresh.messages);
@@ -355,16 +360,33 @@ export default function ConversationPage() {
       setAiThreadState(fresh.aiThreadState);
     } catch (e) {
       console.error("unrest action:", e);
-      setUnrestEffects(null);
+      setMessages((prev) => prev.filter((m) => m.id !== tmpId));
       setUnrestError(e instanceof Error ? e.message : "Dohoda se nepovedla.");
     }
+    setAwaitingReply(false);
     setUnrestBusy(false);
+  };
+
+  /**
+   * Hotová SMS (rychlá odpověď): v konverzaci se ukáže hned, ne až po odpovědi serveru.
+   * Server mezitím skládá odpověď druhé strany, a to trvá i několik sekund — dřív se
+   * po klepnutí chvíli nedělo nic a vypadalo to, že tlačítko nefunguje.
+   */
+  const showOwnMessage = (text: string): string => {
+    const id = `tmp-${Date.now()}`;
+    setMessages((prev) => [...prev, {
+      id, senderType: "user", senderId: teamId ?? null, senderName: "Ty", body: text, metadata: null,
+      sentAt: new Date().toISOString(), read: true,
+    }]);
+    setAwaitingReply(true);
+    return id;
   };
 
   const handleOwnerOption = async (opt: OwnerOption) => {
     if (!teamId || sending) return;
     setSending(true);
     setCreditError(null);
+    const tmpId = showOwnMessage(opt.text);
     try {
       await apiFetch(messagesUrl, {
         method: "POST",
@@ -381,8 +403,10 @@ export default function ConversationPage() {
       setReplyHint(fresh.replyHint ? { text: fresh.replyHint, href: fresh.replyHintHref, label: fresh.replyHintLabel } : null);
     } catch (e) {
       console.error("odpověď majiteli firmy:", e);
+      setMessages((prev) => prev.filter((m) => m.id !== tmpId));
       setCreditError("Odpověď se nepodařilo odeslat.");
     }
+    setAwaitingReply(false);
     setSending(false);
   };
 
@@ -597,56 +621,6 @@ export default function ConversationPage() {
         <div ref={endRef} />
       </div>
 
-      {/* Hráč, který chtěl odejít: dohody podle toho, proč chtěl pryč. Platí i v rozhovoru. */}
-      {!isGroup && unrest && unrest.level > 0 && (
-        <div className="bg-orange-50 border-t border-orange-200 px-3 py-2 shrink-0 max-h-[45vh] overflow-y-auto">
-          <div className="text-sm font-heading font-bold text-orange-700">
-            😠 Chtěl odejít{unrest.teamName ? ` do ${unrest.teamName}` : ""}
-          </div>
-          {unrest.levelText && <div className="text-sm text-orange-900">{unrest.levelText}.</div>}
-          {unrest.reasons && (
-            <div className="text-sm text-orange-900 mt-0.5">Chtěl pryč hlavně kvůli {unrest.reasons}.</div>
-          )}
-          {/* Hráč mluví jen přes SMS: vymyšlená hláška v panelu vypadala jako jeho zpráva, a nebyla. */}
-          {unrest.pledge && (
-            <div className="text-sm text-orange-900 mt-0.5">🤞 {unrest.pledge}</div>
-          )}
-          {unrestEffects && unrestEffects.length > 0 && (
-            <div className="text-sm text-pitch-700 mt-1">✅ {unrestEffects.join(". ")}.</div>
-          )}
-          {unrestError && <div className="text-sm text-red-700 mt-1">{unrestError}</div>}
-          {unrest.blockedText ? (
-            <div className="text-sm text-muted mt-1">{unrest.blockedText}</div>
-          ) : unrest.actions.length > 0 && (
-            <>
-              <button
-                onClick={() => setUnrestOpen((o) => !o)}
-                aria-expanded={unrestOpen}
-                className="text-sm font-heading font-bold text-orange-700 mt-1.5 mb-1 underline-offset-2 hover:underline"
-              >
-                🤝 Co mu můžeš nabídnout ({unrest.actions.length}) {unrestOpen ? "▴" : "▾"}
-              </button>
-              {unrestOpen && <div className="space-y-1">
-                {unrest.actions.map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => handleUnrestAction(a.id)}
-                    disabled={unrestBusy || unrest.canAct === false}
-                    className="w-full text-left bg-white border border-orange-300 rounded-soft px-2.5 py-1.5 hover:bg-orange-100 transition-colors disabled:opacity-50"
-                  >
-                    <span className="block text-sm font-heading font-bold text-orange-800">{a.label}</span>
-                    <span className="block text-sm text-gray-600">{a.description}</span>
-                  </button>
-                ))}
-              </div>}
-              {unrest.canAct === false && (
-                <div className="text-sm text-muted mt-1">Počkej, až ti odpoví.</div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
       {/* AI thread done banner */}
       {aiThreadState?.awaiting === "done" && (
         <div className={`px-3 py-2 text-sm text-center border-t shrink-0 ${
@@ -679,19 +653,36 @@ export default function ConversationPage() {
         </div>
       ) : (
       <div className="bg-white border-t border-gray-100 px-3 py-2 shrink-0">
+        {/* Hráč, který chtěl odejít: dohody jako hotové SMS (přání 2026-10-18: „ať je to vše
+            formou SMS“). Proč chtěl pryč, řekl hráč sám ve své SMS; výsledek je jeho odpověď. */}
+        {unrestDeals.length > 0 && (
+          <div className="mb-2">
+            <button
+              onClick={() => setUnrestOpen((o) => !o)}
+              aria-expanded={unrestOpen}
+              className="text-sm font-heading font-bold text-pitch-700 px-1 mb-1.5"
+            >
+              🤝 Nabídnout mu dohodu {unrestOpen ? "▴" : "▾"}
+            </button>
+            {unrestOpen && (
+              <QuickReplies
+                options={unrestDeals.map((a) => ({ id: a.id, text: a.message, hint: a.description }))}
+                imessage={jeImessage}
+                disabled={unrestBusy || sending}
+                onPick={(o) => handleUnrestAction({ id: o.id, message: o.text })}
+              />
+            )}
+          </div>
+        )}
+        {unrestError && <p className="text-sm text-card-red mb-1.5 px-1">{unrestError}</p>}
         {nabidkaOdpovedi.length > 0 && (
-          <div className="flex flex-col gap-1.5 mb-2">
-            {nabidkaOdpovedi.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => handleOwnerOption(o)}
-                disabled={sending}
-                title={o.label}
-                className="w-full min-h-11 text-left text-sm bg-blue-50 border border-blue-200 text-blue-700 rounded-2xl px-3 py-2 hover:bg-blue-100 transition-colors disabled:opacity-50"
-              >
-                {o.text}
-              </button>
-            ))}
+          <div className="mb-2">
+            <QuickReplies
+              options={nabidkaOdpovedi.map((o) => ({ id: o.id, text: o.text, hint: o.label }))}
+              imessage={jeImessage}
+              disabled={sending}
+              onPick={(o) => { const opt = nabidkaOdpovedi.find((x) => x.id === o.id); if (opt) handleOwnerOption(opt); }}
+            />
           </div>
         )}
         {creditError && (
@@ -751,5 +742,36 @@ export default function ConversationPage() {
       </div>
       )}
     </PhoneFrame>
+  );
+}
+
+/**
+ * Hotové SMS k odeslání (odpověď majiteli, dohoda s hráčem). Vypadají jako moje zpráva,
+ * kterou se chystám poslat: vpravo, v barvě mých bublin, jen obrysem. Dřív to byly široké
+ * modré obdélníky přes celý telefon.
+ */
+function QuickReplies({ options, imessage, disabled, onPick }: {
+  options: Array<{ id: string; text: string; hint?: string }>;
+  imessage: boolean;
+  disabled: boolean;
+  onPick: (o: { id: string; text: string }) => void;
+}) {
+  const colorClass = imessage
+    ? "border-blue-400 text-blue-700 hover:bg-blue-50"
+    : "border-pitch-500 text-pitch-700 hover:bg-pitch-50";
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          onClick={() => onPick(o)}
+          disabled={disabled}
+          title={o.hint}
+          className={`max-w-[85%] text-left text-sm bg-white border rounded-2xl rounded-br-tight px-3 py-2 transition-colors disabled:opacity-50 ${colorClass}`}
+        >
+          {o.text}
+        </button>
+      ))}
+    </div>
   );
 }

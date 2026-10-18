@@ -82,3 +82,15 @@ export function transferTalkFrom(unrest: { reasons?: UnrestReason[]; teamName?: 
     deals: (unrest.deals ?? []).map((d) => DEAL_TEXTS[d.id]).filter(Boolean),
   };
 }
+
+/**
+ * Věta, kterou hráč v první SMS po odmítnutí řekne, proč chtěl pryč. Důvod se manažer
+ * dozví od hráče, ne z panelu (přání 2026-10-18: „ať je to vše formou SMS“).
+ */
+export const REASON_SMS: Record<UnrestReason, string> = {
+  money: "Nabízeli víc peněz, než tady uvidím za celou sezónu.",
+  better_club: "Konečně jsem si mohl zahrát pořádnou soutěž.",
+  minutes: "Tady stejně skoro nehraju.",
+  coach: "S vámi si stejně moc nerozumíme.",
+  morale: "Poslední dobou mě to tady vůbec nebaví.",
+};
