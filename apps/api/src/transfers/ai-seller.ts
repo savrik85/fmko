@@ -11,7 +11,7 @@
  *   na produkci (medián 1,03, p75 1,35, p90 1,87, n = 22 přestupů za 5 000 Kč a víc od 15. 9.);
  * - inzerát 0,85 požadavku: konečná cena / první protinávrh prodávajícího, p25;
  * - krok protinávrhu 0,93 a šance 0,38 na „ještě přitlačit": tamtéž;
- * - šum e^N(0; 0,25) a pásmo prvního požadavku 1,0–1,35 jsou odhady;
+ * - šum e^N(0; 0,12) a pásmo prvního požadavku 1,0–1,35 jsou odhady (šum do 2026-10-18 0,25);
  * - diskont splátek 2,06 % týdně: bankovní půjčka 15 % na ~13 týdnů (competition/defaults.ts),
  *   takže splátky nevyjdou levněji než půjčka a nejde koupit hvězdu za 10 % zálohy.
  */
@@ -24,7 +24,8 @@ export const AI_SELLER = {
   poached: { patience: 2, concession: 0.25, squeezeChance: 0.38, askSpreadMin: 1.0, askSpreadMax: 1.35 },
   /** Nejlepší hráč klubu: klub ho pouští nerad a dlouho se nebaví. */
   keyPlayerPatience: 1,
-  noiseSd: 0.25,
+  /** Odhad; dřív 0,25 a první cena pak občas vyletěla dvojnásobně (20letý s hodnocením 50 za 250 000). */
+  noiseSd: 0.12,
   /** Nejmenší krok, o který klub sleví (3 % požadavku), aby jednání nestálo. */
   minStepPct: 0.03,
   /** Požadavek / nabídka pod tímto poměrem = blízko, trpělivost se neubírá. */

@@ -13,7 +13,7 @@
  * se na konci sezóny přičítá dospívání (`bodyDospivani`), stejně jako to dělá hra.
  */
 
-import { marketValue } from "@okresni-masina/shared";
+import { marketValue, marketValueUncapped } from "@okresni-masina/shared";
 import { bodyDospivani, DOSPIVANI_DO_VEKU } from "../season/dospivani";
 import { teoretickyStropHrace } from "../skills/vyhled-hrace";
 import { tempoPodleVeku } from "../skills/verdikt";
@@ -54,18 +54,29 @@ export function projectRating(p: YouthSubject, seasons: number): number {
 export const POTENTIAL_HORIZON_SEASONS = 8;
 
 /**
- * Klub zná svého kluka: mladíka do 21 let nepustí za cenu podle dnešního hodnocení, ale za
- * tržní cenu hráče, kterým bude za sezónu (rok tréninku a dospívání). Talentovaný kluk tak
- * stojí víc než netalentovaný se stejným dnešním hodnocením. Horizont jedné sezóny je odhad,
- * ne data: lidé talent nevidí, takže ho v cenách skutečných přestupů naměřit nejde.
+ * Kolik si cizí klub řekne za svého hráče: podle talentu (rozhodnutí 2026-10-18). Klub ví,
+ * jak rychle jeho kluk poroste, a přirazí si za to, o kolik ho talent za `TALENT_PREMIUM_SEASONS`
+ * sezóny posune před běžného kluka stejného věku a hodnocení (talent `TYPICAL_TALENT`). Cena je
+ * pak tržní cena hráče s tímto hodnocením navíc, ve stejném věku; nikdy pod dnešní tržní cenu.
+ *
+ * Proč ne podle reálného stropu z výhledu: model růstu je optimistický pro všechny, podle něj
+ * doroste skoro každý teenager na 77–85, a obyčejný osmnáctiletý s talentem 29 vycházel na
+ * 322 000 Kč. Lidé přitom teenagery s hodnocením 40–49 prodávají za medián 17 600 Kč. Rozdíl
+ * proti běžnému klukovi oceňuje jen to, co je na hráči opravdu zvláštní: talent.
+ *
+ * Dřív (do 2026-10-18) klub cenil podle jedné sezóny dopředu včetně dospívání: netalentovaný
+ * osmnáctiletý s hodnocením 46 za 145 000 Kč, klenot s talentem 90 za 87 000.
  */
-export const CLUB_VALUATION_SEASONS = 1;
+export const TALENT_PREMIUM_SEASONS = 3;
+/** Běžný talent kluka z obce (střed losování `generateHiddenTalent` na vesnici). */
+export const TYPICAL_TALENT = 20;
+/** Nejvyšší ocenění klubu: 2,5× nejdražší skutečný přestup (120 000 Kč, říjen 2026). */
+export const CLUB_VALUATION_MAX = 300_000;
 
 export function clubValuation(p: YouthSubject): number {
-  if (p.age > DOSPIVANI_DO_VEKU) return marketValue(p.rating, p.age, p.position);
-  const projected = projectRating(p, CLUB_VALUATION_SEASONS);
-  return Math.max(
-    marketValue(p.rating, p.age, p.position),
-    marketValue(projected, p.age + CLUB_VALUATION_SEASONS, p.position),
-  );
+  const today = marketValue(p.rating, p.age, p.position);
+  if (p.age > DOSPIVANI_DO_VEKU) return today;
+  const advantage = projectRating(p, TALENT_PREMIUM_SEASONS) - projectRating({ ...p, talent: TYPICAL_TALENT }, TALENT_PREMIUM_SEASONS);
+  if (advantage <= 0) return today;
+  return Math.min(CLUB_VALUATION_MAX, Math.max(today, marketValueUncapped(p.rating + advantage, p.age, p.position)));
 }

@@ -30,10 +30,19 @@ export function marketValueAgeFactor(age: number): number {
 const POSITION_FACTOR: Record<string, number> = { GK: 0.32, DEF: 0.74, MID: 1, FWD: 0.8 };
 
 export function marketValue(overallRating: number, age: number, position?: string | null): number {
+  return Math.min(MARKET_VALUE_MAX, marketValueUncapped(overallRating, age, position));
+}
+
+/**
+ * Tentýž vzorec bez stropu 150 000. Jen pro ocenění budoucího hráče (cizí klub cení klenot
+ * podle toho, kým bude): hráč s hodnocením 80+ v datech přestupů není, strop by ho uřízl
+ * na cenu průměrného talentu.
+ */
+export function marketValueUncapped(overallRating: number, age: number, position?: string | null): number {
   const value = Math.exp(LN_BASE + PER_RATING_POINT * overallRating)
     * marketValueAgeFactor(age)
     * (position ? POSITION_FACTOR[position] ?? 1 : 1);
-  return Math.min(MARKET_VALUE_MAX, Math.max(MARKET_VALUE_MIN, Math.round(value / 100) * 100));
+  return Math.max(MARKET_VALUE_MIN, Math.round(value / 100) * 100);
 }
 
 /**

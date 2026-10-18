@@ -8,6 +8,7 @@ import { SKILL_RANGES_BY_LEVEL } from "./types";
 // Váhy hodnocení žijí ve sdíleném balíku — používá je i web pro zvýraznění atributů v profilu.
 import { ratingWeightsFor } from "@okresni-masina/shared";
 import { youthTrainingTempo } from "./youth-tempo";
+import { PRALES_MAX_RATING } from "./limits";
 
 function generateSkillValue(rng: Rng, range: LeagueLevelRange, positionBonus: number): SkillValue {
   const cap = rng.int(range.capMin + positionBonus, range.capMax + positionBonus);
@@ -311,6 +312,31 @@ function typicalTalent(level: string): number {
   return (base + 30) / 2;
 }
 
+/**
+ * Stáhne stropy dovedností tak, aby nejvyšší možné hodnocení (vážený průměr stropů podle
+ * postu) nepřesáhlo `PRALES_MAX_RATING`. Všechny stropy klesnou o stejný kus, nikdy ale pod
+ * dnešní hodnotu dovednosti.
+ */
+function capToPralesMax(position: PlayerPositionCode, values: Record<string, SkillValue>): void {
+  const weights = ratingWeightsFor(position);
+  let sum = 0, weight = 0, movable = 0;
+  for (const [key, w] of Object.entries(weights)) {
+    const v = values[key];
+    if (!v) continue;
+    sum += v.maxPotential * w; weight += w;
+    // Zkušenost (strop 100) se nestahuje, roste odehranými minutami: přebytek nesou ostatní.
+    if (key !== "experience") movable += w;
+  }
+  if (weight === 0 || movable === 0) return;
+  const excess = sum / weight - PRALES_MAX_RATING;
+  if (excess <= 0) return;
+  const shift = Math.ceil((excess * weight) / movable);
+  for (const [key, v] of Object.entries(values)) {
+    if (key === "experience") continue;
+    v.maxPotential = Math.max(v.current, v.maxPotential - shift);
+  }
+}
+
 /** Šance na klenot u kluka do 21 let: talent 70–95 a strop o 12–25 výš. */
 export const GEM_CHANCE = 0.07;
 const GEM_TALENT: [number, number] = [70, 95];
@@ -341,6 +367,8 @@ export interface PlayerSkillsOptions {
   hiddenTalent?: number;
   /** Strop výš o tolik bodů na každé dovednosti. */
   capBonus?: number;
+  /** Šance na klenot místo výchozí (`GEM_CHANCE` do 21 let). Kádry klubů mimo hru mají 1 %. */
+  gemChance?: number;
   /**
    * Posun zvedne jen dnešní úroveň, ne potenciál: strop zůstane jako u hráče z dané obce
    * bez posunu, jen nikdy pod dnešní hodnotou + prostorem podle věku (`prostorPodleVeku`).
@@ -465,7 +493,7 @@ export function generatePlayerSkills(rng: Rng, opts: PlayerSkillsOptions): Playe
     hiddenTalent = Math.min(100, hiddenTalent + rng.int(opts.academy.talent[0], opts.academy.talent[1]));
   }
   // Občas se urodí kluk, co vesnici přeroste: zpočátku vypadá stejně, ale trénink ho vytáhne výš.
-  const gemChance = opts.academy?.gemChance ?? (age <= 21 ? GEM_CHANCE : 0);
+  const gemChance = opts.academy?.gemChance ?? (age <= 21 ? opts.gemChance ?? GEM_CHANCE : 0);
   if (rng.random() < gemChance) {
     hiddenTalent = rng.int(GEM_TALENT[0], GEM_TALENT[1]);
     capBonus += rng.int(GEM_EXTRA_CAP[0], GEM_EXTRA_CAP[1]);
@@ -483,6 +511,7 @@ export function generatePlayerSkills(rng: Rng, opts: PlayerSkillsOptions): Playe
     value.maxPotential = Math.min(100, value.maxPotential + capBonus);
     value.current = Math.max(1, Math.min(value.maxPotential, value.current + currentBonus));
   }
+  capToPralesMax(position, values);
 
   const skills = flattenGeneratedSkills(generated, isGK);
   const skillsMax = isGK ? withGoalkeeperFlatCaps(values) : { ...values };

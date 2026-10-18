@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { marketValue } from "@okresni-masina/shared";
-import { clubValuation, projectRating, youthTrainingTempo } from "./youth-growth";
+import { CLUB_VALUATION_MAX, clubValuation, projectRating, youthTrainingTempo } from "./youth-growth";
 
 // Stropy dovedností hodně vysoko, aby projekci neomezovaly.
 const HIGH_CAPS = Object.fromEntries(
@@ -59,5 +59,16 @@ describe("cena, za kterou klub kluka pustí", () => {
 
   it("dospělý stojí tržní cenu", () => {
     expect(clubValuation({ ...kid(78), age: 25, rating: 50 })).toBe(marketValue(50, 25, "DEF"));
+  });
+
+  it("netalentovaný teenager stojí tržní cenu, žádnou přirážku za optimistický výhled", () => {
+    expect(clubValuation(kid(10, { rating: 46 }))).toBe(marketValue(46, 18, "DEF"));
+    expect(clubValuation(kid(20, { rating: 46 }))).toBe(marketValue(46, 18, "DEF"));
+  });
+
+  it("klenot je výrazně dražší, ale nejvýš CLUB_VALUATION_MAX", () => {
+    const gem = clubValuation(kid(90, { rating: 40, age: 18 }));
+    expect(gem).toBeGreaterThan(marketValue(40, 18, "DEF") * 5);
+    expect(gem).toBeLessThanOrEqual(CLUB_VALUATION_MAX);
   });
 });
