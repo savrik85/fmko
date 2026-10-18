@@ -24,7 +24,8 @@ import {
 import { aiReplyText } from "./ai-seller-texts";
 import { installmentBudgetError, installmentLimitError, weeklyInstallment } from "./installments";
 import { purchaseVirtualPlayer, type VirtualPlayerData } from "./virtual-purchase";
-import { clubValuation } from "../scouting/youth-growth";
+import { outsideClubValuation } from "../scouting/outside-clubs";
+import { villageCoords } from "../scouting/candidates";
 
 /** Nejvíc hráčů v kádru; víc klub z trhu nekoupí (stejně jako u volných hráčů). */
 export const SQUAD_CAP = 30;
@@ -157,16 +158,12 @@ async function outsidePlayerAvailable(db: D1Database, outsidePlayerId: string): 
 }
 
 /**
- * Z jaké ceny klub vychází. Klub z hlášení skauta zná svého kluka a mladíka ocení podle toho,
- * kým bude za sezónu (`clubValuation`); inzerát vychází z tržní ceny jako dřív.
+ * Z jaké ceny klub vychází. Klub z hlášení skauta zná svého kluka a ocení ho podle talentu,
+ * německý klub dvakrát dráž (`outsideClubValuation`); inzerát vychází z tržní ceny jako dřív.
  */
 function sellerValuation(src: NegotiationSource): number {
   const p = src.player;
-  if (src.source === "scout_report") {
-    return clubValuation({
-      age: p.age, rating: p.overallRating, position: p.position, talent: p.hiddenTalent ?? 0, skillsMax: p.skillCaps ?? {},
-    });
-  }
+  if (src.source === "scout_report") return outsideClubValuation(p);
   return marketValue(p.overallRating, p.age, p.position);
 }
 
@@ -701,16 +698,16 @@ async function loadSourceForSigning(db: D1Database, row: AiNegotiationRow): Prom
   }
   if (!row.scout_report_id) return null;
   const r = await db.prepare(
-    `SELECT sr.player_data, sr.status, sr.negotiation_id, sr.club_mean, sr.distance_km, sr.club_city, sr.outside_player_id, v.lat, v.lng
-       FROM scout_reports sr LEFT JOIN villages v ON v.id = sr.village_id WHERE sr.id = ?`,
-  ).bind(row.scout_report_id).first<{ player_data: string; status: string; negotiation_id: string | null; club_mean: number | null; distance_km: number; club_city: string | null; outside_player_id: string | null; lat: number | null; lng: number | null }>();
+    `SELECT sr.player_data, sr.status, sr.negotiation_id, sr.club_mean, sr.distance_km, sr.club_city, sr.outside_player_id, sr.village_id
+       FROM scout_reports sr WHERE sr.id = ?`,
+  ).bind(row.scout_report_id).first<{ player_data: string; status: string; negotiation_id: string | null; club_mean: number | null; distance_km: number; club_city: string | null; outside_player_id: string | null; village_id: string | null }>();
   if (!r || r.status !== "negotiating" || r.negotiation_id !== row.id) return null;
   if (r.outside_player_id && !await outsidePlayerAvailable(db, r.outside_player_id)) return null;
   const player = parseJson<VirtualPlayerData | null>(r.player_data, null, "player_data");
   if (!player) return null;
   return {
     player, rejectedBy: [],
-    villageCoords: r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null,
+    villageCoords: await villageCoords(db, r.village_id),
     clubMean: r.club_mean,
     residence: r.club_city ? { name: r.club_city, commuteKm: r.distance_km } : undefined,
     outsidePlayerId: r.outside_player_id,
@@ -736,7 +733,7 @@ async function playerDecision(
   const personality = row.listing_id ? { ...(src.player.personality ?? {}), patriotism: 65 } : (src.player.personality ?? {});
   const seed = stableSeed(`${row.player_key}:${buyer}:${season?.id ?? "?"}`);
   return evaluateSigningChance(
-    { weekly_wage: src.player.weeklyWage ?? 200, personality, district: row.club_district },
+    { weekly_wage: src.player.weeklyWage ?? 200, personality, district: row.club_district, country: src.player.fromCountry },
     { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize, district: teamInfo.district, coach },
     src.villageCoords, src.player.weeklyWage ?? 200, createRng(seed), extra,
   );
@@ -781,7 +778,7 @@ export async function estimateWillingness(
     pick: <T,>(arr: readonly T[]) => arr[0],
   } as unknown as ReturnType<typeof createRng>;
   const d = evaluateSigningChance(
-    { weekly_wage: player.weeklyWage ?? 200, personality, district },
+    { weekly_wage: player.weeklyWage ?? 200, personality, district, country: player.fromCountry },
     { reputation: teamInfo.reputation, villageLat: teamInfo.lat, villageLon: teamInfo.lng, squadSize: squad?.n ?? 15, district: teamInfo.district, coach },
     coords, player.weeklyWage ?? 200, mid, clubStrengthFactor(squad?.avg ?? null, clubMean),
   );

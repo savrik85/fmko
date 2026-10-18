@@ -77,13 +77,17 @@ export interface ReportSmsInput {
   askHint: number | null;
   /** Na sestavu zatím nemá, skaut ho hlásí jako nadějného (doroste do dvou sezón). */
   promising?: boolean;
+  /** Klub je v Německu (okres Freyung-Grafenau). */
+  abroad?: boolean;
 }
 
 export function reportSms(rng: Rng, r: ReportSmsInput): string {
   const post = POST_SLOVEM[r.position] ?? r.position;
   const where = r.source === "free_agent"
     ? `Volný hráč z okresu ${r.district ?? "?"}`
-    : rng.pick([`Byl jsem se podívat na ${r.clubName} (${r.villageName})`, `Byl jsem na zápase v obci ${r.villageName}, hrál ${r.clubName}`]);
+    : r.abroad
+      ? `Zajel jsem za hranice do Bavorska, hrál ${r.clubName} (${r.villageName})`
+      : rng.pick([`Byl jsem se podívat na ${r.clubName} (${r.villageName})`, `Byl jsem na zápase v obci ${r.villageName}, hrál ${r.clubName}`]);
   const head = `🔍 ${where}. ${r.name}, ${r.age} let, ${post}. Hodnocení odhaduju na ${range(r.ratingLo, r.ratingHi)}.`;
   const youth = r.youth && r.potentialLo != null && r.potentialHi != null
     ? ` Dotáhnout by to mohl na ${range(r.potentialLo, r.potentialHi)}.`
@@ -91,7 +95,7 @@ export function reportSms(rng: Rng, r: ReportSmsInput): string {
   const promising = r.promising ? " Na sestavu zatím nemá, ale do dvou sezón by se do ní dostat mohl." : "";
   const price = r.source === "free_agent"
     ? " Je bez klubu, podepsat ho jde rovnou."
-    : r.askHint ? ` Klub si o něj řekne asi ${kc(r.askHint)}.` : "";
+    : r.askHint ? ` Klub si o něj řekne asi ${kc(r.askHint)}.${r.abroad ? " Němci si řeknou víc než naši a plat chce taky vyšší." : ""}` : "";
   return `${head}${promising}${youth}${price}`;
 }
 

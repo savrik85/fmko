@@ -20,6 +20,7 @@ import {
 import { estimateWillingness, startAiNegotiation } from "../transfers/ai-negotiation";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { blurredWillingness } from "../scouting/fog";
+import { villageCoords } from "../scouting/candidates";
 
 /** Avatar zaměstnance je v DB JSON text; neplatný se bere jako bez obličeje. */
 function parseAvatar(raw: string | null | undefined): Record<string, unknown> {
@@ -299,9 +300,7 @@ scoutingRouter.get("/teams/:teamId/scout/reports/:id", async (c) => {
 
   // Ochota se přepočítá čerstvě: mezitím se mohl změnit kádr, trenér nebo reputace.
   if (r.status === "active" || r.status === "negotiating") {
-    const coords = r.village_id
-      ? await c.env.DB.prepare("SELECT lat, lng FROM villages WHERE id = ?").bind(r.village_id).first<{ lat: number; lng: number }>()
-      : null;
+    const coords = await villageCoords(c.env.DB, r.village_id);
     try {
       const chance = await estimateWillingness(c.env.DB, teamId, JSON.parse(r.player_data) as VirtualPlayerData, r.district, coords, r.club_mean);
       if (chance != null) {
