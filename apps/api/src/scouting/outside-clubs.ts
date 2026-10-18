@@ -31,6 +31,12 @@ export const OUTSIDE_SQUAD_POSITIONS = [
 ] as const;
 export const OUTSIDE_AGE_MIN = 16;
 export const OUTSIDE_AGE_MAX = 35;
+/**
+ * Klenot (talent 70–95) v kádru klubu mimo hru jen výjimečně (rozhodnutí 2026-10-18). S šancí
+ * jako v dorostu (7 %) by okolní kádry měly ~90 klenotů, víc než celá liga (39); takový kluk
+ * by v realitě dávno byl v akademii velkého klubu.
+ */
+export const OUTSIDE_GEM_CHANCE = 0.01;
 /** Rozptyl cíle při vzniku hráče; generátor sám přidá ~3,3, dohromady sd 4,5 (spec skautingu). */
 const TARGET_SD = 3.1;
 /**
@@ -81,7 +87,7 @@ export function buildOutsideSquad(
     const created = createPlayer(rng, {
       position, age, level: "village",
       village: { region_code: village.district, category: categoryFromVillageSize(village.size), population: village.population, district: village.district },
-      names, shift: shiftForRating("village", position, 27, target),
+      names, shift: shiftForRating("village", position, 27, target), gemChance: OUTSIDE_GEM_CHANCE,
     });
     let firstName = created.firstName;
     if (taken.has(`${firstName} ${created.lastName}`) && created.nationality === "CZ") {

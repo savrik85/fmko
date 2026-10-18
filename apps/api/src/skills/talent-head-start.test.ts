@@ -3,6 +3,9 @@ import { createRng } from "../generators/rng";
 import { generatePlayerSkills, overallRatingFromFlat, talentHeadStart } from "./generator";
 import { flattenedNameWeights, generateSquad, pickFirstName, type VillageInfo } from "../generators/player";
 import { FIRSTNAMES } from "../data/czech-names";
+import { PRALES_MAX_RATING } from "./limits";
+import { teoretickyStropHrace } from "./vyhled-hrace";
+import { OUTSIDE_GEM_CHANCE } from "../scouting/outside-clubs";
 
 type SurnameData = Parameters<typeof generateSquad>[2];
 type FirstnameData = Parameters<typeof generateSquad>[3];
@@ -41,6 +44,27 @@ describe("náskok talentu u hráče, který vzniká starší než dorostenec", (
         expect(v).toBeLessThanOrEqual(g.skillsMax[k].maxPotential);
       }
     }
+  });
+});
+
+describe("strop Pralesa 85", () => {
+  it("žádný vygenerovaný hráč nemá stropy, se kterými by dorostl nad 85, ani klenot", () => {
+    const rng = createRng(21);
+    for (let i = 0; i < 3000; i++) {
+      const position = (["GK", "DEF", "MID", "FWD"] as const)[i % 4];
+      const g = generatePlayerSkills(rng, { position, age: 16 + (i % 6), level: ["village", "town", "small_city", "city"][i % 4], gemChance: 1, shift: 15 });
+      const caps = Object.fromEntries(Object.entries(g.skillsMax).map(([k, v]) => [k, v.maxPotential]));
+      const max = overallRatingFromFlat(position, caps, { stamina: caps.stamina, strength: caps.strength }, g.hiddenTalent) ?? 0;
+      expect(max).toBeLessThanOrEqual(PRALES_MAX_RATING + 1);
+      expect(teoretickyStropHrace(position, g.skillsMax, g.hiddenTalent) ?? 0).toBeLessThanOrEqual(PRALES_MAX_RATING);
+    }
+  });
+
+  it("klenot v kádru klubu mimo hru jen s šancí 1 %", () => {
+    const rng = createRng(4);
+    let gems = 0;
+    for (let i = 0; i < 4000; i++) if (generatePlayerSkills(rng, { position: "MID", age: 18, level: "village", gemChance: OUTSIDE_GEM_CHANCE }).hiddenTalent >= 70) gems++;
+    expect(gems / 4000).toBeLessThan(0.025);
   });
 });
 

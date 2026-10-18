@@ -12,6 +12,7 @@ import {
   type LatkyKadru, type Verdikt,
 } from "./verdikt";
 import { ratingWeightsFor } from "@okresni-masina/shared";
+import { PRALES_MAX_RATING } from "./limits";
 
 export interface VstupVyhledu {
   vek: number;
@@ -94,7 +95,7 @@ export function teoretickyStropHrace(
     if (typeof strop === "number") { soucet += strop * w; vaha += w; }
   }
   if (vaha === 0) return null;
-  return Math.round(soucet / vaha + talent * 0.15);
+  return Math.min(PRALES_MAX_RATING, Math.round(soucet / vaha + talent * 0.15));
 }
 
 /** Kompletní výhled hráče. Bez stropů dovedností vrací samá `null` — manažer nemá co vidět. */
