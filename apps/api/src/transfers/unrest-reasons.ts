@@ -57,8 +57,8 @@ export function reasonsText(reasons: readonly UnrestReason[]): string {
 export const DEAL_TEXTS: Record<string, string> = {
   bonus: "trenér ti vyplatil prémii z klubové kasy",
   raise_wage: "trenér ti natrvalo zvedl odměny o třetinu",
-  promise_minutes: "trenér ti slíbil místo v základu ve 2 ze 3 příštích zápasů (hra to hlídá)",
-  promise_transfer: "trenér ti dal slovo, že tě při další slušné nabídce do 30 dní pustí (hra to hlídá)",
+  promise_minutes: "trenér ti slíbil místo v základu ve 2 ze 3 příštích zápasů",
+  promise_transfer: "trenér ti dal slovo, že tě při další slušné nabídce do 30 dní pustí",
   captaincy: "trenér z tebe udělal kapitána týmu",
   personal_talk: "trenér tě pozval na pivo, sedli jste a vyříkali si to",
   appeal_loyalty: "trenér ti připomněl, co pro tebe klub znamená",
