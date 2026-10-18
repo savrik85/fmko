@@ -601,9 +601,7 @@ export default function ConversationPage() {
           {unrest.reasons && (
             <div className="text-sm text-orange-900 mt-0.5">Chtěl pryč hlavně kvůli {unrest.reasons}.</div>
           )}
-          {unrest.mood && (
-            <div className="text-sm italic text-orange-800/80 mt-0.5">&bdquo;{unrest.mood}&ldquo;</div>
-          )}
+          {/* Hráč mluví jen přes SMS: vymyšlená hláška v panelu vypadala jako jeho zpráva, a nebyla. */}
           {unrest.pledge && (
             <div className="text-sm text-orange-900 mt-0.5">🤞 {unrest.pledge}</div>
           )}
