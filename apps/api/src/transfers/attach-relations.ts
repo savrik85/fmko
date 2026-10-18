@@ -8,7 +8,8 @@
  */
 
 import { createRng, cryptoSeed } from "../generators/rng";
-import { generateRelationsForNewcomer, type RelationCandidate } from "../generators/relationships";
+import { generateRelationsForNewcomer, missingFamilyLinks, type RelationCandidate } from "../generators/relationships";
+import type { RelationshipType } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 
 const M = "attach-relations";
@@ -45,6 +46,36 @@ async function homeVillageOf(db: D1Database, teamId: string): Promise<string | n
   ).bind(teamId).first<{ name: string }>()
     .catch((e) => { logger.warn({ module: M }, "load home village", e); return null; });
   return row?.name ?? null;
+}
+
+/**
+ * Dotáhne rodiny v kádru do celku (bratr bratra je bratr, viz `missingFamilyLinks`).
+ * Běží po každém přidání vazeb: nováček dostane nejvýš jednu dvě vazby, takže bez toho
+ * by se stal bratrem jen jednoho ze sourozenců. Vrací počet doplněných vazeb.
+ */
+async function completeFamilies(db: D1Database, teamId: string, squad: ReadonlyArray<{ id: string; age: number }>): Promise<number> {
+  // Podle týmu, ne seznamem id: dva seznamy id velkého kádru by přetekly limit 100 parametrů D1.
+  const rows = await db.prepare(
+    `SELECT r.id, r.player_a_id, r.player_b_id, r.type FROM relationships r
+       JOIN players a ON a.id = r.player_a_id JOIN players b ON b.id = r.player_b_id
+      WHERE a.team_id = ?1 AND b.team_id = ?1`,
+  ).bind(teamId).all<{ id: string; player_a_id: string; player_b_id: string; type: RelationshipType }>();
+  const links = rows.results.map((r) => ({ a: r.player_a_id, b: r.player_b_id, type: r.type }));
+  const fixes = missingFamilyLinks(createRng(cryptoSeed()), new Map(squad.map((p) => [p.id, p.age] as const)), links);
+  if (fixes.length === 0) return 0;
+
+  const stmts = fixes.map((f) => {
+    const current = f.replaces
+      ? rows.results.find((r) => (r.player_a_id === f.a && r.player_b_id === f.b) || (r.player_a_id === f.b && r.player_b_id === f.a))
+      : undefined;
+    return current
+      ? db.prepare("UPDATE relationships SET type = ?, strength = ? WHERE id = ?").bind(f.type, f.strength, current.id)
+      : db.prepare("INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), f.a, f.b, f.type, f.strength);
+  });
+  await db.batch(stmts);
+  logger.info({ module: M, teamId }, `rodina doplněna o ${fixes.length} vazeb (${fixes.map((f) => f.type).join(", ")})`);
+  return fixes.length;
 }
 
 /**
@@ -100,7 +131,9 @@ export async function attachNewcomerRelations(
 
     await db.batch(stmts);
     logger.info({ module: M, teamId }, `nováček ${playerId}: ${stmts.length} nových vazeb (${relations.map((r) => r.type).join(", ")})`);
-    return stmts.length;
+    const familyAdded = await completeFamilies(db, teamId, squad)
+      .catch((e) => { logger.warn({ module: M, teamId }, "doplnění rodiny po nováčkovi", e); return 0; });
+    return stmts.length + familyAdded;
   } catch (e) {
     logger.warn({ module: M, teamId }, "attach newcomer relations failed", e);
     return 0;
@@ -151,7 +184,9 @@ export async function attachSquadRelations(
 
     for (let i = 0; i < stmts.length; i += 40) await db.batch(stmts.slice(i, i + 40));
     logger.info({ module: M, teamId }, `soupiska: ${stmts.length} vazeb pro ${squad.length} hráčů`);
-    return stmts.length;
+    const familyAdded = await completeFamilies(db, teamId, squad)
+      .catch((e) => { logger.warn({ module: M, teamId }, "doplnění rodiny v soupisce", e); return 0; });
+    return stmts.length + familyAdded;
   } catch (e) {
     logger.warn({ module: M, teamId }, "attach squad relations failed", e);
     return 0;

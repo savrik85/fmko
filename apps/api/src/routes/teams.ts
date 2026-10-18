@@ -13,7 +13,7 @@ import type { Bindings } from "../index";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { generateSquad, type GeneratedPlayer } from "../generators/player";
 import { generateNickname } from "../generators/nickname";
-import { generateRelationships } from "../generators/relationships";
+import { completeGeneratedFamilies, generateRelationships } from "../generators/relationships";
 import type { AbsencePlayerInfo } from "../events/match-absences";
 import { generateDescription } from "../generators/description-generator";
 import { createPlayer, levelFromVillageSize, aiTeamShift } from "../generators/create-player";
@@ -305,6 +305,8 @@ teamsRouter.post("/", async (c) => {
   // Add manager backstory extra relationships
   if (managerMods?.extraRelationships) {
     rels.push(...managerMods.extraRelationships);
+    // Příběh „syn trenéra“ přidává otce a syna, jehož bratři by jinak synové nebyli.
+    completeGeneratedFamilies(rng, squad, rels);
   }
   // Add neighbors — players who live in the same non-home village
   const residenceGroups = new Map<string, number[]>();
