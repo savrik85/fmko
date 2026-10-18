@@ -16,6 +16,7 @@
 import { createRng, type Rng } from "../generators/rng";
 import { createPlayer, categoryFromVillageSize, type CreatePlayerOptions } from "../generators/create-player";
 import { shiftForRating } from "../skills/generator";
+import { firstNamesTakenWith, pickFirstName } from "../generators/player";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
@@ -72,6 +73,8 @@ export function buildOutsideSquad(
   rng: Rng, village: Pick<VillageInRange, "id" | "name" | "district" | "population" | "size">, mean: number, names: SquadNames,
 ): Array<Omit<OutsidePlayer, "id" | "status">> {
   const clubName = villageClubName(village);
+  // Stejné jméno i příjmení dvakrát v jednom kádru mate: při shodě se křestní jméno losuje znovu.
+  const taken = new Set<string>();
   const built = OUTSIDE_SQUAD_POSITIONS.map((position, slot) => {
     const age = rng.int(OUTSIDE_AGE_MIN, OUTSIDE_AGE_MAX);
     const target = mean + normal(rng) * TARGET_SD;
@@ -80,8 +83,13 @@ export function buildOutsideSquad(
       village: { region_code: village.district, category: categoryFromVillageSize(village.size), population: village.population, district: village.district },
       names, shift: shiftForRating("village", position, 27, target),
     });
+    let firstName = created.firstName;
+    if (taken.has(`${firstName} ${created.lastName}`) && created.nationality === "CZ") {
+      firstName = pickFirstName(rng, names.firstnameData, created.age, "1980s", firstNamesTakenWith(taken, created.lastName));
+    }
+    taken.add(`${firstName} ${created.lastName}`);
     const player: VirtualPlayerData = {
-      firstName: created.firstName, lastName: created.lastName, age: created.age, position,
+      firstName, lastName: created.lastName, age: created.age, position,
       overallRating: created.rating, skills: created.skills, physical: created.physical, personality: created.personality,
       weeklyWage: Math.round(10 + (created.rating / 100) * 400), avatar: created.avatar, nationality: created.nationality,
       fromTeam: clubName, fromCity: village.name, fromDistrict: village.district,
