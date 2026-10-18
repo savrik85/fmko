@@ -96,6 +96,26 @@ const znalost = (o: Partial<RadekZnalosti> = {}): RadekZnalosti => ({
   odhalen: false, pachatel: null, pachatelJeOn: false, ...o,
 });
 
+describe("cizinec píše lámaně, Slovák slovensky", () => {
+  it("Čech má českou hovorovou mluvu a oslovení „trenére“", () => {
+    const p = buildSystemPrompt(hrac({ nationality: "CZ" }), tym, kdy(6, 14));
+    expect(p).toContain("Mluv neformálně česky");
+    expect(p).toContain("slovem 'trenére'");
+    expect(p).not.toContain("JAZYK:");
+  });
+
+  it("Ukrajinec dostane pokyn k lámané češtině místo české mluvy", () => {
+    const p = buildSystemPrompt(hrac({ nationality: "UA" }), tym, kdy(6, 14));
+    expect(p).toContain("JAZYK: Jsi cizinec (Ukrajina)");
+    expect(p).not.toContain("Mluv neformálně česky");
+    expect(p).not.toContain("slovem 'trenére'");
+  });
+
+  it("Slovák píše slovensky", () => {
+    expect(buildSystemPrompt(hrac({ nationality: "SK" }), tym, kdy(6, 14))).toContain("SLOVENSKY");
+  });
+});
+
 describe("hráč ví o dění v klubu jen to, co je v DB", () => {
   it("blok znalostí s pokynem jde do promptu", () => {
     const p = buildSystemPrompt(hrac({

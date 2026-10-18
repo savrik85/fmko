@@ -2,6 +2,7 @@
  * FMK-62: Game system API routes — tréninky, ekonomika, mládež, nábor.
  */
 
+import { brokenCzech } from "../messaging/foreign-speech";
 import { Hono, type Context } from "hono";
 import type { Bindings } from "../index";
 import { createRng, cryptoSeed } from "../generators/rng";
@@ -10088,7 +10089,7 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
 
     // Vyloučit zraněné a suspendované — ti nedostanou absence SMS (mají vlastní kanál)
     const squadRows = await c.env.DB.prepare(
-      `SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity, p.suspended_matches
+      `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity, p.suspended_matches
          FROM players p
          LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
          WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
@@ -10141,7 +10142,7 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
       await c.env.DB.prepare(
         "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
       ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName,
-        absence ? absence.smsText : msg.body,
+        brokenCzech(absence ? absence.smsText : msg.body, row.nationality as string | null, `${pid}|${tomorrowMatch.id}`),
         JSON.stringify({ type: "attendance", response: available ? "yes" : "no", timing: "day_before", calendarId: tomorrowMatch.id }), msgCount * 10,
       ).run().catch((e) => logger.warn({ module: "game" }, "trigger-day-before player msg", e));
       msgCount++;

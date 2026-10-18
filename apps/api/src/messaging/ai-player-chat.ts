@@ -6,6 +6,7 @@
  * a volající (cron / reply hook) má za úkol thread čistě skipnout / nechat pro pozdější retry.
  */
 
+import { foreignSpeechRule } from "./foreign-speech";
 import { logger } from "../lib/logger";
 import { COACH_CHAT_MAX_MORALE, COACH_CHAT_MAX_RELATION } from "../lib/coach-relation";
 import { seedFromString } from "../lib/seed";
@@ -145,6 +146,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     ? `TVOJE ŽIVOTNÍ SITUACE (mluv o ní, když se hodí, nic dalšího si nevymýšlej): ${player.zivotniSituace.label}.`
     : "";
   const zakaz = player.zivotniSituace ? "" : ZAKAZ_ZIVOTNICH_SITUACI;
+  const language = foreignSpeechRule(player.nationality);
 
   return [
     `Jsi ${player.firstName} ${player.lastName}, ${player.age}letý ${positionStr} amatérského týmu ${team.teamName}${village} v české vesnické soutěži.`,
@@ -158,9 +160,12 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     // jako dalšího člověka z klubu a posílal trenéra za trenérem:
     // „To si řešte s Klementem, ne se mnou" — Klement byl přitom on sám.
     `Píšeš SMS PŘÍMO svému trenérovi. Jmenuje se ${team.managerName ?? "trenér"} a je to ten, komu právě píšeš — nikdo jiný.`,
-    "Mluv neformálně česky, jako vesničan z malého klubu, používej hovorové výrazy, klidně i nadávku nebo povzdech.",
+    // Cizinec píše lámaně (Slovák slovensky): pokyn nahrazuje českou hovorovou mluvu i oslovení.
+    language ?? "Mluv neformálně česky, jako vesničan z malého klubu, používej hovorové výrazy, klidně i nadávku nebo povzdech.",
     "PRAVIDLA STYLU:",
-    "- Oslovuj trenéra slovem 'trenére' (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe' — to neříkáme.",
+    language
+      ? "- Oslovuj trenéra podle pokynu JAZYK (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe'."
+      : "- Oslovuj trenéra slovem 'trenére' (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe' — to neříkáme.",
     `- O trenérovi NIKDY nemluv ve třetí osobě a neposílej ho za ním samým. Když napíšeš „${team.managerName ?? "trenér"}", oslovuješ toho, s kým si píšeš.`,
     cas.podnapilost >= 3
       ? "- Krátce: 1-2 věty, do 200 znaků. Gramatiku ani pravopis teď neřeš, jsi opilý."

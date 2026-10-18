@@ -42,7 +42,7 @@ const MAX_VYMEN = 30;
 
 /** Dotaz na hráče ve tvaru, jaký očekává `loadPlayerSnapshot`. */
 const PLAYER_SELECT = `
-  SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.age, p.position,
+  SELECT p.id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.age, p.position,
          p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
          0 AS recent_minutes, 6.5 AS recent_rating_avg,
          ${INJURY_COLUMN}

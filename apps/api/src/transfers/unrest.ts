@@ -136,7 +136,7 @@ export async function performUnrestAction(
   if (!action) return { ok: false, error: "Neznámá akce", status: 400 };
 
   const player = await db.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.personality, p.life_context, p.coach_relationship, p.weekly_wage,
+    `SELECT p.id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.personality, p.life_context, p.coach_relationship, p.weekly_wage,
             (SELECT COUNT(*) FROM conversations c WHERE c.team_id = ? AND c.type = 'player' AND c.participant_id = p.id AND c.ai_thread_active = 1) as thread_active
      FROM players p
      JOIN teams current_team ON current_team.id = p.team_id

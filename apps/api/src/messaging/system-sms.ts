@@ -3,6 +3,7 @@
  * Stejné chování jako sendPhoneSMS v game.ts — systémová konverzace dle role.
  */
 
+import { brokenCzech } from "./foreign-speech";
 import { logger } from "../lib/logger";
 
 /** Pošle zprávu do systémové konverzace týmu (např. "Sportovní ředitel", "Fyzioterapeut"). */
@@ -38,6 +39,10 @@ export async function sendPlayerSMS(
 ): Promise<string> {
   const { getOrCreatePlayerConversation } = await import("./ai-player-spawn");
   const convId = await getOrCreatePlayerConversation(db, teamId, player);
+  // Cizinec píše lámaně, Slovák slovensky (šablony jsou česky).
+  const nat = await db.prepare("SELECT nationality FROM players WHERE id = ?").bind(player.id).first<{ nationality: string | null }>()
+    .catch((e) => { logger.warn({ module: "system-sms" }, "národnost hráče", e); return null; });
+  body = brokenCzech(body, nat?.nationality ?? null, `${player.id}|${body}`);
   await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
     .bind(crypto.randomUUID(), convId, player.id, `${player.firstName} ${player.lastName}`, body, metadata ? JSON.stringify(metadata) : null).run()
     .catch((e) => logger.warn({ module: "system-sms" }, "insert player msg", e));

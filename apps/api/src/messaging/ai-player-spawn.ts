@@ -147,6 +147,7 @@ export function loadPlayerSnapshot(
     isCelebrity: !!(row.is_celebrity as number),
     transferUnrest: lifeContext.transferUnrest?.level ?? 0,
     occupation: lifeContext.occupation,
+    nationality: (row.nationality as string | null | undefined) ?? null,
     injury: parseInjury(row.injury),
     // Kontext posledního zápasu — hráč, který nenastoupil, má last_minutes NULL.
     lastMatchOutcome: matchCtx?.lastOutcome ?? null,
@@ -381,7 +382,7 @@ async function spawnForTeam(
 
   // 1. Načti aktivní hráče s recent stats (last 30 dní)
   const playersRow = await db.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.age, p.position,
+    `SELECT p.id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.age, p.position,
             p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
             COALESCE(stats.recent_minutes, 0) as recent_minutes,
             COALESCE(stats.recent_rating_avg, 6.5) as recent_rating_avg,
@@ -580,7 +581,7 @@ async function handleAiPlayerReplyInner(
 
   // Načti hráče (recent stats nejsou pro reply potřeba)
   const playerRow = await db.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.age, p.position, p.team_id, p.loan_from_team_id, p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
+    `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.position, p.team_id, p.loan_from_team_id, p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
             ${INJURY_COLUMN}
        FROM players p WHERE p.id = ?`,
   ).bind(state.player_id).first<Record<string, unknown>>()
@@ -979,7 +980,7 @@ async function closeCoachThreadQuietly(
   let playerId: string | null = null;
   try {
     const playerRow = await db.prepare(
-      `SELECT p.id, p.first_name, p.last_name, p.age, p.position, p.team_id, p.loan_from_team_id, p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
+      `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.position, p.team_id, p.loan_from_team_id, p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
             ${INJURY_COLUMN}
        FROM players p WHERE p.id = ?`,
     ).bind(state.player_id).first<Record<string, unknown>>();

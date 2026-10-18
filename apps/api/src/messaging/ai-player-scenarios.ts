@@ -53,6 +53,8 @@ export interface PlayerSnapshot {
 
   // optional context
   occupation?: string;
+  /** Národnost (`players.nationality`); cizinec píše lámaně, Slovák slovensky. Chybí = Čech. */
+  nationality?: string | null;
   /**
    * Právě běžící zranění nebo volno (tabulka injuries). `null` = hráč je fit,
    * `undefined` = volající ho nenačetl a prompt o zdraví mlčí. Bez toho model
