@@ -222,6 +222,12 @@ function hashStr(s: string): number {
   return h;
 }
 
+/** Další dohodu jde uzavřít až den po té poslední. Vrací větu pro panel, nebo null. */
+export function dealCooldownText(unrest: Pick<TransferUnrest, "lastActionAt">, now: Date = new Date()): string | null {
+  if (!unrest.lastActionAt || now.getTime() - new Date(unrest.lastActionAt).getTime() >= DAY_MS) return null;
+  return "Dnes už jste se na něčem dohodli, další dohoda jde až zítra.";
+}
+
 /** Jak je hráč naštvaný, slovy (číslo nespokojenosti manažer nevidí). */
 export function unrestMoodText(level: number): string {
   if (level >= 70) return "Je hodně naštvaný a hlavou je jinde";
@@ -303,9 +309,8 @@ export async function performUnrestAction(
   if (!unrest || unrest.level <= 0) return { ok: false, error: "Hráč zrovna netrucuje, není co řešit", status: 409 };
 
   // Limit 1 dohoda / hráč / den
-  if (unrest.lastActionAt && (Date.now() - new Date(unrest.lastActionAt).getTime()) < DAY_MS) {
-    return { ok: false, error: "Dnes už jste se na něčem dohodli. Dej mu čas do zítřka.", status: 429 };
-  }
+  const cooldown = dealCooldownText(unrest);
+  if (cooldown) return { ok: false, error: cooldown, status: 429 };
 
   const pers = (() => { try { return JSON.parse(player.personality as string) ?? {}; } catch { return {}; } })();
   const seasonRow = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
