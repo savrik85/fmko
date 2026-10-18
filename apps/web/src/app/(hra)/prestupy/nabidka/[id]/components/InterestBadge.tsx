@@ -42,17 +42,25 @@ export function InterestBadge({ interest, size = "md" }: { interest: PlayerInter
           <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mb-1.5">Proč?</div>
           <div className="space-y-1">
             {interest.factors!.map((f, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 text-xs">
+              <div key={i} className="flex items-center justify-between gap-3 text-sm">
                 <span>{f.label}</span>
-                <span className={`font-heading font-bold tabular-nums ${f.delta > 0 ? "text-red-600" : "text-pitch-500"}`}>
-                  {f.delta > 0 ? `+${f.delta}` : f.delta}
+                <span className={`font-heading font-bold whitespace-nowrap ${f.delta > 0 ? "text-red-600" : "text-pitch-500"}`}>
+                  {factorText(f.delta)}
                 </span>
               </div>
             ))}
           </div>
-          <div className="text-micro text-muted mt-2">+ zvyšuje chuť odejít, − drží hráče doma</div>
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * Síla vlivu slovy (2026-10-18: hra je simulace, hodnoty spokojenosti a zájmu manažer nevidí
+ * jako čísla). Prahy podle rozsahu faktorů v player-interest.ts (síla klubu až 30, peníze 22).
+ */
+function factorText(delta: number): string {
+  const strength = Math.abs(delta) >= 15 ? "hodně " : Math.abs(delta) >= 6 ? "" : "trochu ";
+  return delta > 0 ? `${strength}táhne ho pryč` : `${strength}drží ho doma`;
 }

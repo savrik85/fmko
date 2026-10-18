@@ -202,7 +202,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   // Nabízejí se po celou dobu truce, i uprostřed rozhovoru po zatrhnutém přestupu: tam je
   // dohoda tah trenéra a hráč na ni odpoví. Jiný rozhovor dohody skrývá.
   let unrest: {
-    level: number; teamName?: string; mood: string; reasons: string | null; pledge: string | null; canAct: boolean;
+    level: number; levelText: string; teamName?: string; mood: string; reasons: string | null; pledge: string | null; canAct: boolean;
     actions: { id: string; label: string; description: string }[];
   } | null = null;
   const threadState = (() => {
@@ -224,7 +224,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
       ).bind(convOwner.participant_id, teamId, teamId).first<{ life_context: string | null; personality: string | null; coach_relationship: number | null; captain_id: string | null; loan_from_team_id: string | null; current_club_id: string | null }>();
       const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
       if (lc?.transferUnrest?.level > 0) {
-        const { availableActions, unrestMoodQuote, pledgeText } = await import("../transfers/unrest");
+        const { availableActions, unrestMoodQuote, unrestMoodText, pledgeText } = await import("../transfers/unrest");
         const { reasonsText } = await import("../transfers/unrest-reasons");
         const seasonRow = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
           .first<{ number: number }>().catch((e) => { logger.warn({ module: "messaging" }, "load season for unrest", e); return null; });
@@ -232,6 +232,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
         const u = lc.transferUnrest;
         unrest = {
           level: u.level,
+          levelText: unrestMoodText(u.level),
           teamName: u.teamName,
           mood: unrestMoodQuote(convOwner.participant_id, u.level, u.teamName),
           reasons: u.reasons?.length ? reasonsText(u.reasons) : null,

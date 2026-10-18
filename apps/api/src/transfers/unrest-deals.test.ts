@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TransferUnrest } from "./offer-rejection-impact";
-import { availableActions, bonusAmount, pledgeText, type UnrestContext } from "./unrest";
+import { availableActions, bonusAmount, pledgeText, unrestChangeText, unrestMoodText, type UnrestContext } from "./unrest";
 import { reasonsText, transferTalkFrom, unrestReasonsFromFactors } from "./unrest-reasons";
 
 const CTX: UnrestContext = { seasonNumber: 4, patriotism: 50, discipline: 50, leadership: 30, coachRelationship: 50, isCaptain: false, ownedHere: true, now: new Date("2026-10-18T12:00:00Z") };
@@ -110,5 +110,16 @@ describe("prémie, sliby a texty pro AI", () => {
     expect(t.offer).toBe(`SV Grafenau nabízel ${(60_000).toLocaleString("cs")} Kč`);
     expect(t.deals).toEqual(["trenér ti vyplatil prémii z klubové kasy"]);
     expect(transferTalkFrom(undefined)).toBeUndefined();
+  });
+
+  it("nálada a změna slovy, bez čísel", () => {
+    expect(unrestMoodText(90)).toBe("Je hodně naštvaný a hlavou je jinde");
+    expect(unrestMoodText(50)).toBe("Je naštvaný");
+    expect(unrestMoodText(5)).toBe("Už se skoro uklidnil");
+    expect(unrestChangeText(60, 0)).toBe("Uklidnil se");
+    expect(unrestChangeText(60, 25)).toBe("Výrazně se uklidnil");
+    expect(unrestChangeText(60, 45)).toBe("Trochu se uklidnil");
+    expect(unrestChangeText(40, 50)).toBe("Naštval se ještě víc");
+    for (const t of [unrestMoodText(77), unrestChangeText(80, 10)]) expect(t).not.toMatch(/\d/);
   });
 });
