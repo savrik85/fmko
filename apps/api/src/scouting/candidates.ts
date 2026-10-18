@@ -10,6 +10,7 @@
 
 import { haversineKm } from "../transfers/player-agency";
 import { stableOffset } from "../lib/scout-estimate";
+import { logger } from "../lib/logger";
 import type { Rng } from "../generators/rng";
 
 export const SCOUT_CLUB_MEAN_COEF = 4.71;
@@ -30,6 +31,8 @@ export interface VillageRow {
   size: string | null;
   lat: number;
   lng: number;
+  /** Země obce: české obce `CZ` (nebo chybí), německé z `foreign_villages` `DE`. */
+  country?: string;
 }
 
 export interface VillageInRange extends VillageRow { distanceKm: number }
@@ -63,11 +66,19 @@ export function townClubMean(population: number, leagueAverage: number | null): 
 }
 
 const CLUB_PREFIXES = ["TJ Sokol", "SK", "TJ", "FK", "Sokol", "SK Slavoj"] as const;
+/** Bavorské vesnické kluby: Turn- und Sportverein, Sportverein, Spielvereinigung… */
+const GERMAN_CLUB_PREFIXES = ["TSV", "SV", "FC", "SpVgg", "DJK", "TuS", "1. FC"] as const;
+
+/** Je obec v cizině (německý okres pro skauty)? */
+export function isForeignVillage(village: { country?: string | null }): boolean {
+  return !!village.country && village.country !== "CZ";
+}
 
 /** Název klubu obce. Stabilní: stejná obec má pořád stejný klub. */
-export function villageClubName(village: { id: string; name: string }): string {
-  const i = Math.floor(((stableOffset(`club:${village.id}`) + 1) / 2) * CLUB_PREFIXES.length) % CLUB_PREFIXES.length;
-  return `${CLUB_PREFIXES[i]} ${village.name}`;
+export function villageClubName(village: { id: string; name: string; country?: string | null }): string {
+  const prefixes = village.country === "DE" ? GERMAN_CLUB_PREFIXES : CLUB_PREFIXES;
+  const i = Math.floor(((stableOffset(`club:${village.id}`) + 1) / 2) * prefixes.length) % prefixes.length;
+  return `${prefixes[i]} ${village.name}`;
 }
 
 /** Obdélník kolem bodu, do kterého se okruh vejde (předfiltr pro SQL). */
@@ -87,7 +98,11 @@ export function villagesInRadius(rows: VillageRow[], home: { id?: string; lat: n
   return out;
 }
 
-/** Obce bez týmu ve hře v okruhu kolem obce klubu. */
+/**
+ * Obce bez týmu ve hře v okruhu kolem obce klubu, včetně německých obcí za hranicí
+ * (`foreign_villages`, okres Freyung-Grafenau). Ty jsou v samostatné tabulce, protože
+ * `villages` čte ~20 míst ve hře (registrace klubu, volní hráči…) a tam nepatří.
+ */
 export async function loadVillagesInRadius(
   db: D1Database, home: { id: string; lat: number; lng: number }, km: number,
 ): Promise<VillageInRange[]> {
@@ -97,7 +112,20 @@ export async function loadVillagesInRadius(
       WHERE v.lat BETWEEN ? AND ? AND v.lng BETWEEN ? AND ?
         AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.village_id = v.id)`,
   ).bind(box.minLat, box.maxLat, box.minLng, box.maxLng).all<VillageRow>();
-  return villagesInRadius(rows.results, home, km);
+  const foreign = await db.prepare(
+    `SELECT id, name, district, population, size, lat, lng, country FROM foreign_villages
+      WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?`,
+  ).bind(box.minLat, box.maxLat, box.minLng, box.maxLng).all<VillageRow>()
+    .catch((e) => { logger.warn({ module: "scouting" }, "německé obce v okruhu", e); return { results: [] as VillageRow[] }; });
+  return villagesInRadius([...rows.results, ...foreign.results], home, km);
+}
+
+/** Souřadnice obce podle id: česká z `villages`, jinak z `foreign_villages`. */
+export async function villageCoords(db: D1Database, villageId: string | null): Promise<{ lat: number; lng: number } | null> {
+  if (!villageId) return null;
+  const table = villageId.startsWith("de-") ? "foreign_villages" : "villages";
+  return db.prepare(`SELECT lat, lng FROM ${table} WHERE id = ?`).bind(villageId).first<{ lat: number; lng: number }>()
+    .catch((e) => { logger.warn({ module: "scouting" }, `souřadnice obce ${villageId}`, e); return null; });
 }
 
 /**

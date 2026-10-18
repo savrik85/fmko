@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
 import { FIRSTNAMES } from "../data/czech-names";
-import { buildOutsideSquad, OUTSIDE_AGE_MAX, OUTSIDE_AGE_MIN, outsideClubMean, type SquadNames } from "./outside-clubs";
+import { GERMAN_FIRSTNAMES } from "../data/german-names";
+import { clubValuation } from "./youth-growth";
+import { FOREIGN_CLUB_BONUS, FOREIGN_PRICE_FACTOR, FOREIGN_WAGE_FACTOR } from "./foreign";
+import { buildOutsideSquad, OUTSIDE_AGE_MAX, OUTSIDE_AGE_MIN, outsideClubMean, outsideClubValuation, type SquadNames } from "./outside-clubs";
 
 const NAMES: SquadNames = { surnameData: { surnames: { Novák: 1, Svoboda: 1 }, female_forms: {} }, firstnameData: { male: FIRSTNAMES, female: {} } };
 const PISEK = { id: "pisek", name: "Písek", district: "Písek", population: 31_121, size: "mesto" };
+const BAVARIAN_NAMES: SquadNames = { ...NAMES, surnameData: { surnames: { Huber: 3, Zellner: 1, Kölbl: 1 }, female_forms: {} } };
+const WALDKIRCHEN = { id: "de-waldkirchen", name: "Waldkirchen", district: "Freyung-Grafenau", population: 11_326, size: "small_city", country: "DE" };
+const germanFirstNames = new Set(Object.values(GERMAN_FIRSTNAMES).flatMap((d) => Object.keys(d)));
 
 describe("stálý kádr klubu mimo hru", () => {
   it("18 hráčů: 2 brankáři, 6 obránců, 6 záložníků, 4 útočníci, věk 16–35, pořadí podle hodnocení", () => {
@@ -44,5 +50,41 @@ describe("stálý kádr klubu mimo hru", () => {
     expect(outsideClubMean(11_049, 48.8)).toBeCloseTo(54.1, 0);
     // Bez ligy (žádný klub ve hře) jen vesnický vzorec.
     expect(outsideClubMean(31_121, null)).toBeCloseTo(4.71 * Math.log(31_121), 5);
+    // Bavorský klub je o FOREIGN_CLUB_BONUS silnější než český stejně velký.
+    expect(outsideClubMean(11_049, 48.8, "DE")).toBeCloseTo(outsideClubMean(11_049, 48.8) + FOREIGN_CLUB_BONUS, 5);
+    expect(outsideClubMean(800, 48.8, "DE")).toBeCloseTo(outsideClubMean(800, 48.8) + FOREIGN_CLUB_BONUS, 5);
+  });
+});
+
+describe("klub v německém okrese", () => {
+  it("německý název klubu, německá jména a národnost, plat ×1,5", () => {
+    const squad = buildOutsideSquad(createRng(11), WALDKIRCHEN, 55, BAVARIAN_NAMES);
+    const czech = buildOutsideSquad(createRng(11), { ...WALDKIRCHEN, country: undefined }, 55, BAVARIAN_NAMES);
+    for (const p of squad) {
+      expect(p.player.fromTeam).toMatch(/^(TSV|SV|FC|SpVgg|DJK|TuS|1\. FC) Waldkirchen$/);
+      expect(p.player.nationality).toBe("DE");
+      expect(p.player.fromCountry).toBe("DE");
+      expect(germanFirstNames.has(p.player.firstName)).toBe(true);
+      expect(["Huber", "Zellner", "Kölbl"]).toContain(p.player.lastName);
+      expect(p.player.weeklyWage).toBe(Math.round(Math.round(10 + (p.rating / 100) * 400) * FOREIGN_WAGE_FACTOR));
+    }
+    // Česká obec téhož jména zůstává česká.
+    expect(czech.every((p) => p.player.fromCountry === undefined)).toBe(true);
+    expect(czech.some((p) => p.player.nationality === "CZ")).toBe(true);
+  });
+
+  it("ani v německém kádru dvakrát stejné jméno a příjmení", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const squad = buildOutsideSquad(createRng(seed), WALDKIRCHEN, 50, BAVARIAN_NAMES);
+      const full = squad.map((p) => `${p.player.firstName} ${p.player.lastName}`);
+      expect(new Set(full).size).toBe(full.length);
+    }
+  });
+
+  it("německý klub chce za hráče dvakrát víc než český", () => {
+    const [p] = buildOutsideSquad(createRng(5), WALDKIRCHEN, 55, BAVARIAN_NAMES).map((x) => x.player);
+    const base = clubValuation({ age: p.age, rating: p.overallRating, position: p.position, talent: p.hiddenTalent ?? 0, skillsMax: p.skillCaps ?? {} });
+    expect(outsideClubValuation(p)).toBe(Math.round(base * FOREIGN_PRICE_FACTOR));
+    expect(outsideClubValuation({ ...p, fromCountry: undefined })).toBe(base);
   });
 });

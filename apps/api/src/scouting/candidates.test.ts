@@ -56,6 +56,11 @@ describe("kluby mimo hru", () => {
     expect(villageClubName({ id: "hu", name: "Husinec" })).toMatch(/Husinec$/);
   });
 
+  it("německá obec má německý klub", () => {
+    expect(villageClubName({ id: "de-freyung", name: "Freyung", country: "DE" })).toMatch(/^(TSV|SV|FC|SpVgg|DJK|TuS|1\. FC) Freyung$/);
+    expect(villageClubName({ id: "de-freyung", name: "Freyung", country: "CZ" })).toMatch(/^(TJ Sokol|SK|TJ|FK|Sokol|SK Slavoj) Freyung$/);
+  });
+
   it("skaut objede každý klub nejvýš jednou a víc, než jich je, ne", () => {
     const rng = createRng(5);
     const inRange = villagesInRadius(OBCE, PRACHATICE, 50);
@@ -127,5 +132,14 @@ describe("texty hlášení", () => {
     expect(reportSms(createRng(3), { ...base, promising: true })).toContain("Na sestavu zatím nemá, ale do dvou sezón by se do ní dostat mohl.");
     expect(reportSms(createRng(3), base)).not.toContain("Na sestavu zatím nemá");
     expect(reportSms(createRng(3), { ...base, promising: true })).not.toContain("—");
+  });
+
+  it("u klubu z Německa skaut řekne, že byl za hranicemi a že to bude dražší", () => {
+    const base = { name: "Lukas Huber", age: 22, position: "DEF", ratingLo: 50, ratingHi: 56, potentialLo: null, potentialHi: null, youth: false, source: "village_club" as const, clubName: "TSV Waldkirchen", villageName: "Waldkirchen", district: "Freyung-Grafenau", askHint: 120000 };
+    const abroad = reportSms(createRng(4), { ...base, abroad: true });
+    expect(abroad).toContain("za hranice do Bavorska, hrál TSV Waldkirchen (Waldkirchen)");
+    expect(abroad).toContain("Němci si řeknou víc než naši");
+    expect(abroad).not.toContain("—");
+    expect(reportSms(createRng(4), base)).not.toContain("Bavorsk");
   });
 });

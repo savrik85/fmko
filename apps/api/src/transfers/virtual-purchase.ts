@@ -29,6 +29,8 @@ export interface VirtualPlayerData {
   fromTeam?: string;
   fromCity?: string;
   fromDistrict?: string;
+  /** Země klubu, odkud hráč přichází (`DE` = německý okres pro skauty); chybí = Česko. */
+  fromCountry?: string;
   skillCaps?: Record<string, { current: number; maxPotential: number }>;
   hiddenTalent?: number;
   occupation?: string;

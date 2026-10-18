@@ -16,11 +16,13 @@
 import { createRng, type Rng } from "../generators/rng";
 import { createPlayer, categoryFromVillageSize, type CreatePlayerOptions } from "../generators/create-player";
 import { shiftForRating } from "../skills/generator";
-import { firstNamesTakenWith, pickFirstName } from "../generators/player";
+import { firstNamesTakenWith, pickFirstName, pickSurname } from "../generators/player";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
-import { clubMeanFor, normal, townClubMean, villageClubName, type VillageInRange } from "./candidates";
+import { clubMeanFor, isForeignVillage, normal, townClubMean, villageClubName, type VillageInRange } from "./candidates";
+import { FOREIGN_CLUB_BONUS, FOREIGN_WAGE_FACTOR, GERMAN_FIRSTNAME_DATA, foreignPriceFactor } from "./foreign";
+import { clubValuation } from "./youth-growth";
 
 const M = "outside-clubs";
 
@@ -65,20 +67,29 @@ export interface OutsideSquad {
   players: OutsidePlayer[];
 }
 
-/** Síla klubu obce podle počtu obyvatel a ligy, ke které obec patří. */
-export function outsideClubMean(population: number, anchorLeagueAverage: number | null): number {
+/**
+ * Síla klubu obce podle počtu obyvatel a nejsilnější ligy ve hře. Bavorský klub
+ * (`country` = DE) je o `FOREIGN_CLUB_BONUS` silnější.
+ */
+export function outsideClubMean(population: number, anchorLeagueAverage: number | null, country?: string | null): number {
   const village = Math.min(
     clubMeanFor(population),
     anchorLeagueAverage != null ? anchorLeagueAverage + VILLAGE_MEAN_OVER_LEAGUE : Number.POSITIVE_INFINITY,
   );
-  return Math.max(village, townClubMean(population, anchorLeagueAverage) ?? village);
+  const mean = Math.max(village, townClubMean(population, anchorLeagueAverage) ?? village);
+  return isForeignVillage({ country }) ? mean + FOREIGN_CLUB_BONUS : mean;
 }
 
 /** Celý kádr klubu obce. Čistá funkce: stejné `rng` dá stejný kádr. */
 export function buildOutsideSquad(
-  rng: Rng, village: Pick<VillageInRange, "id" | "name" | "district" | "population" | "size">, mean: number, names: SquadNames,
+  rng: Rng, village: Pick<VillageInRange, "id" | "name" | "district" | "population" | "size" | "country">, mean: number, names: SquadNames,
 ): Array<Omit<OutsidePlayer, "id" | "status">> {
   const clubName = villageClubName(village);
+  // Německá obec: jména z bavorských příjmení okresu (`names.surnameData`) a německých
+  // křestních jmen, národnost DE, plat ×1,5. Menšinová jména generátoru (vietnamská,
+  // ukrajinská…) jsou udělaná pro Česko, v Bavorsku se přepisují také.
+  const german = isForeignVillage(village);
+  const firstNameData = german ? GERMAN_FIRSTNAME_DATA : names.firstnameData;
   // Stejné jméno i příjmení dvakrát v jednom kádru mate: při shodě se křestní jméno losuje znovu.
   const taken = new Set<string>();
   const built = OUTSIDE_SQUAD_POSITIONS.map((position, slot) => {
@@ -89,16 +100,20 @@ export function buildOutsideSquad(
       village: { region_code: village.district, category: categoryFromVillageSize(village.size), population: village.population, district: village.district },
       names, shift: shiftForRating("village", position, 27, target), gemChance: OUTSIDE_GEM_CHANCE,
     });
-    let firstName = created.firstName;
-    if (taken.has(`${firstName} ${created.lastName}`) && created.nationality === "CZ") {
-      firstName = pickFirstName(rng, names.firstnameData, created.age, "1980s", firstNamesTakenWith(taken, created.lastName));
+    let firstName = german ? pickFirstName(rng, firstNameData, created.age, "1990s") : created.firstName;
+    const lastName = german ? pickSurname(rng, names.surnameData) : created.lastName;
+    const nationality = german ? (village.country as string) : created.nationality;
+    if (taken.has(`${firstName} ${lastName}`) && (german || nationality === "CZ")) {
+      firstName = pickFirstName(rng, firstNameData, created.age, german ? "1990s" : "1980s", firstNamesTakenWith(taken, lastName));
     }
-    taken.add(`${firstName} ${created.lastName}`);
+    taken.add(`${firstName} ${lastName}`);
+    const wage = Math.round(10 + (created.rating / 100) * 400);
     const player: VirtualPlayerData = {
-      firstName, lastName: created.lastName, age: created.age, position,
+      firstName, lastName, age: created.age, position,
       overallRating: created.rating, skills: created.skills, physical: created.physical, personality: created.personality,
-      weeklyWage: Math.round(10 + (created.rating / 100) * 400), avatar: created.avatar, nationality: created.nationality,
+      weeklyWage: german ? Math.round(wage * FOREIGN_WAGE_FACTOR) : wage, avatar: created.avatar, nationality,
       fromTeam: clubName, fromCity: village.name, fromDistrict: village.district,
+      ...(german ? { fromCountry: village.country } : {}),
       skillCaps: created.skillsMax as Record<string, { current: number; maxPotential: number }>, hiddenTalent: created.hiddenTalent,
       occupation: created.lifeContext.occupation,
     };
@@ -108,6 +123,15 @@ export function buildOutsideSquad(
   const order = [...built].sort((a, b) => b.rating - a.rating || a.slot - b.slot);
   order.forEach((p, i) => { p.clubRank = i + 1; });
   return built;
+}
+
+/**
+ * Z jaké ceny vychází klub mimo hru, který o hráči z hlášení skauta jedná: cena podle talentu
+ * (`clubValuation`), u německého klubu dvojnásobná. Jediný výpočet pro odhad skauta i jednání.
+ */
+export function outsideClubValuation(p: VirtualPlayerData): number {
+  const base = clubValuation({ age: p.age, rating: p.overallRating, position: p.position, talent: p.hiddenTalent ?? 0, skillsMax: p.skillCaps ?? {} });
+  return Math.round(base * foreignPriceFactor(p));
 }
 
 /** Nejsilnější liga dospělých ve hře a její průměr (stejný výpočet jako průměr ligy kupce dřív). */
@@ -158,7 +182,7 @@ export async function loadOutsideSquad(
   if (existing && existing.players.length > 0) return existing;
 
   const anchor = await anchorLeague(db);
-  const mean = outsideClubMean(village.population, anchor?.average ?? null);
+  const mean = outsideClubMean(village.population, anchor?.average ?? null, village.country);
   const rng = createRng(seedFromString(`outside|${village.id}|${seasonNumber}`));
   const squad = buildOutsideSquad(rng, village, mean, names);
   const stmts = [

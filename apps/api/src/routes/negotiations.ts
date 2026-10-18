@@ -14,6 +14,7 @@ import {
 } from "../transfers/ai-negotiation";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { blurredWillingness } from "../scouting/fog";
+import { villageCoords } from "../scouting/candidates";
 import { clubChairman } from "../transfers/club-chairman";
 import { loadTeamScout, scoutEffectiveness } from "../scouting/scout-work";
 import { transferSchedule, willingnessFromChance, SCOUT_WILLINGNESS_LABELS, type TransferTerms } from "@okresni-masina/shared";
@@ -110,9 +111,9 @@ negotiationsRouter.get("/teams/:teamId/negotiations/:id", async (c) => {
 
   const report = row.scout_report_id
     ? await c.env.DB.prepare(
-      `SELECT sr.potential_lo, sr.potential_hi, sr.distance_km, sr.club_mean, sr.district, sr.visits, v.lat, v.lng
-         FROM scout_reports sr LEFT JOIN villages v ON v.id = sr.village_id WHERE sr.id = ?`,
-    ).bind(row.scout_report_id).first<{ potential_lo: number | null; potential_hi: number | null; distance_km: number; club_mean: number | null; district: string | null; visits: number; lat: number | null; lng: number | null }>()
+      `SELECT sr.potential_lo, sr.potential_hi, sr.distance_km, sr.club_mean, sr.district, sr.visits, sr.village_id
+         FROM scout_reports sr WHERE sr.id = ?`,
+    ).bind(row.scout_report_id).first<{ potential_lo: number | null; potential_hi: number | null; distance_km: number; club_mean: number | null; district: string | null; visits: number; village_id: string | null }>()
     : null;
   const data = parse<Partial<VirtualPlayerData>>(row.listing_data ?? row.report_data, {});
 
@@ -133,7 +134,7 @@ negotiationsRouter.get("/teams/:teamId/negotiations/:id", async (c) => {
   // Ochota hráče: jen u běžícího jednání, u uzavřeného už rozhodl.
   let willingness: { level: number; label: string } | null = null;
   if ((row.status === "open" || row.status === "agreed") && data.firstName) {
-    let coords: { lat: number; lng: number } | null = report?.lat != null && report?.lng != null ? { lat: report.lat, lng: report.lng } : null;
+    let coords = await villageCoords(c.env.DB, report?.village_id ?? null);
     if (!coords && data.fromCity) {
       coords = await c.env.DB.prepare("SELECT lat, lng FROM villages WHERE name = ? OR name LIKE ? LIMIT 1")
         .bind(data.fromCity, `${data.fromCity}%`).first<{ lat: number; lng: number }>()

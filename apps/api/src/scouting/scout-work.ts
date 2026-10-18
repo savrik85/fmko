@@ -24,8 +24,9 @@ import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { haversineKm } from "../transfers/player-agency";
 import { boundingBox, loadVillagesInRadius, pickClubsToVisit, villageClubName, type VillageInRange } from "./candidates";
 import { blurredAskHint, blurredWillingness, potentialRange, rangeMid, ratingRange, type Range } from "./fog";
-import { clubValuation, projectRating } from "./youth-growth";
-import { activeSeasonNumber, loadOutsideSquad, type OutsideSquad } from "./outside-clubs";
+import { projectRating } from "./youth-growth";
+import { isFromAbroad } from "./foreign";
+import { activeSeasonNumber, loadOutsideSquad, outsideClubValuation, type OutsideSquad } from "./outside-clubs";
 import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms, type ReportSubject } from "./report-text";
 
 /** Hlášení platí deset dní (odhad, spec). */
@@ -1011,7 +1012,7 @@ async function freeAgentCandidates(
 export function openingAsk(p: VirtualPlayerData, clubRank: number | null, teamId: string, reportId: string): number {
   return initAiSellerState({
     stance: "poached", clubRank: clubRank ?? 12,
-    marketValue: clubValuation({ age: p.age, rating: p.overallRating, position: p.position, talent: p.hiddenTalent ?? 0, skillsMax: p.skillCaps ?? {} }),
+    marketValue: outsideClubValuation(p),
     seed: stableSeed(`${reportId}:${teamId}`),
   }).ask;
 }
@@ -1048,7 +1049,7 @@ async function createReport(
     name: `${p.firstName} ${p.lastName}`, age: p.age, position: p.position,
     ratingLo: c.ratingRange.lo, ratingHi: c.ratingRange.hi, potentialLo: c.potential?.lo ?? null, potentialHi: c.potential?.hi ?? null,
     youth, source: c.source, clubName: c.clubName, villageName: c.village?.name ?? null, district: c.village?.district ?? null, askHint,
-    promising,
+    promising, abroad: isFromAbroad(p),
   }), reportId);
 }
 
