@@ -14,7 +14,7 @@ import { computeInterestForOffer, INTEREST_LABELS } from "./player-interest";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
-import { unrestReasonsFromFactors, type UnrestReason } from "./unrest-reasons";
+import { REASON_SMS, unrestReasonsFromFactors, type UnrestReason } from "./unrest-reasons";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -247,7 +247,7 @@ export async function applyOfferRejectionImpact(
     ? `Volal jste do ${teamName}, že mě pustíte, a teď to zase zaříznete? S vámi jsem skončil, trenére.`
     : brokenTransferPledge
     ? `Slíbil jste, že mě při další dobré nabídce pustíte! ${teamName} přišel a vy nic. S vámi jsem skončil.`
-    : pick(pool).replace("{team}", teamName);
+    : `${pick(pool).replace("{team}", teamName)}${newUnrest.reasons?.length ? ` ${REASON_SMS[newUnrest.reasons[0]]}` : ""}`;
   const convId = await sendPlayerSMS(db, sellerClubTeamId, playerRef, smsBody);
 
   // Otevřít živou konverzaci (AI thread): trenér může volně odpovědět, hráč reaguje,
