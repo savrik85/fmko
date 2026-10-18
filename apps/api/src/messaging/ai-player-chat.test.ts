@@ -119,6 +119,14 @@ describe("cizinec píše lámaně, Slovák slovensky", () => {
     expect(p).not.toContain("slovem 'trenére'");
   });
 
+  it("Rom, který mluví i romsky, píše česky a občas romské slovo", () => {
+    const p = buildSystemPrompt(hrac({ nationality: "CZ", romani: true }), tym, kdy(6, 14));
+    expect(p).toContain("Mluv neformálně česky");
+    expect(p).toContain("Jsi Rom z Česka");
+    expect(p).toContain("slovem 'trenére'");
+    expect(buildSystemPrompt(hrac({ nationality: "CZ" }), tym, kdy(6, 14))).not.toContain("Jsi Rom");
+  });
+
   it("Slovák píše slovensky", () => {
     expect(buildSystemPrompt(hrac({ nationality: "SK" }), tym, kdy(6, 14))).toContain("SLOVENSKY");
   });

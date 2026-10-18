@@ -34,6 +34,8 @@ export interface VirtualPlayerData {
   skillCaps?: Record<string, { current: number; maxPotential: number }>;
   hiddenTalent?: number;
   occupation?: string;
+  /** Mluví i romsky (viz `speaksRomani`). */
+  romani?: boolean;
 }
 
 export interface VirtualPurchase {
@@ -79,7 +81,9 @@ export async function purchaseVirtualPlayer(p: VirtualPurchase): Promise<Virtual
   const skillsMax = JSON.stringify(player.skillCaps ?? stropyZDovednosti(rngCaps, player.skills ?? {}, player.age ?? 25));
   const hiddenTalent = player.hiddenTalent ?? talentPodleVeku(rngCaps, player.age ?? 25);
   const weeklyWage = player.weeklyWage ?? Math.round(10 + ((player.overallRating ?? 40) / 100) * 400);
-  const lifeContext = JSON.stringify({ occupation: player.occupation ?? "Fotbalista", condition: 80, morale: 55 });
+  const lifeContext = JSON.stringify({
+    occupation: player.occupation ?? "Fotbalista", condition: 80, morale: 55, ...(player.romani ? { romani: true } : {}),
+  });
 
   const writes: D1PreparedStatement[] = [
     db.prepare(

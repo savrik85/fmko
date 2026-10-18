@@ -11,6 +11,7 @@
  *   výška a váha                                     → `generateHeightWeight`
  */
 
+import { speaksRomani } from "../messaging/foreign-speech";
 import type { Rng } from "./rng";
 import { generatePlayer, type GeneratedPlayer, type PlayerIdentity, type VillageInfo } from "./player";
 import { generateHeightWeight, type BodyType } from "./physicals";
@@ -82,7 +83,8 @@ export interface CreatedPlayer {
     discipline: number; patriotism: number; alcohol: number; temper: number;
     leadership: number; workRate: number; aggression: number; consistency: number; clutch: number;
   };
-  lifeContext: { occupation: string; condition: number; morale: number };
+  /** `romani`: hráč mluví i romsky (občas romské slovo v chatu), viz `speaksRomani`. */
+  lifeContext: { occupation: string; condition: number; morale: number; romani?: true };
   avatar: Record<string, unknown>;
 }
 
@@ -121,7 +123,10 @@ export function createPlayer(rng: Rng, opts: CreatePlayerOptions): CreatedPlayer
       leadership: identity.leadership, workRate: identity.workRate,
       aggression: identity.aggression, consistency: identity.consistency, clutch: identity.clutch,
     },
-    lifeContext: { occupation: identity.occupation, condition: 100, morale: identity.morale },
+    lifeContext: {
+      occupation: identity.occupation, condition: 100, morale: identity.morale,
+      ...(speaksRomani(identity) ? { romani: true as const } : {}),
+    },
     avatar: generatePlayerFace({ age, bodyType: identity.bodyType, ethnicity: identity.ethnicity }),
   };
 }
