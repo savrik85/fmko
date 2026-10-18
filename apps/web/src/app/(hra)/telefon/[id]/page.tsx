@@ -146,6 +146,8 @@ export default function ConversationPage() {
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [unrestBusy, setUnrestBusy] = useState(false);
   const [unrestEffects, setUnrestEffects] = useState<string[] | null>(null);
+  // Seznam dohod je dlouhý: na mobilu by zakryl rozhovor, proto se rozbaluje až na klepnutí.
+  const [unrestOpen, setUnrestOpen] = useState(false);
   // Rozhovory, které ještě čekají na odpověď — jen u nich má proklik smysl.
   // Bez toho by tlačítko viselo i u dávno vypršelých žádostí z minulých sezón.
   const [otevreneRozhovory, setOtevreneRozhovory] = useState<Set<string>>(new Set());
@@ -610,8 +612,14 @@ export default function ConversationPage() {
           )}
           {unrest.actions.length > 0 && (
             <>
-              <div className="text-sm font-heading font-bold text-orange-700/80 mt-1.5 mb-1">🤝 Co mu můžeš nabídnout:</div>
-              <div className="space-y-1">
+              <button
+                onClick={() => setUnrestOpen((o) => !o)}
+                aria-expanded={unrestOpen}
+                className="text-sm font-heading font-bold text-orange-700 mt-1.5 mb-1 underline-offset-2 hover:underline"
+              >
+                🤝 Co mu můžeš nabídnout ({unrest.actions.length}) {unrestOpen ? "▴" : "▾"}
+              </button>
+              {unrestOpen && <div className="space-y-1">
                 {unrest.actions.map((a) => (
                   <button
                     key={a.id}
@@ -623,7 +631,7 @@ export default function ConversationPage() {
                     <span className="block text-sm text-gray-600">{a.description}</span>
                   </button>
                 ))}
-              </div>
+              </div>}
               {unrest.canAct === false && (
                 <div className="text-sm text-muted mt-1">Počkej, až ti odpoví.</div>
               )}
