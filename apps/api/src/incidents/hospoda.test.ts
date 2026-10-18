@@ -232,9 +232,30 @@ describe("ohlášení činu", () => {
     expect(pribehyHospody([host(PROBLEMOVY)], { ...k, hrozi: new Set(["p"]) }, JISTE).ohlaseni).toBeNull();
     expect(pribehyHospody([host(PROBLEMOVY), host(KAMARAD)], k, { ...JISTE, ohlasi: "k" }).ohlaseni).toEqual({ playerId: "k", obvineny: false });
   });
+
+  it("klub má nejvýš jednu hrozbu naraz: když už hrozí čin jiného hráče, nikdo další nic neohlásí", () => {
+    const k = kontext({ kadr: new Map([[PROBLEMOVY.id, PROBLEMOVY], [KAMARAD.id, KAMARAD]]), hrozi: new Set(["k"]) });
+    expect(pribehyHospody([host(PROBLEMOVY)], k, JISTE).ohlaseni).toBeNull();
+    expect(pribehyHospody([host(PROBLEMOVY)], { ...k, hrozi: new Set() }, JISTE).ohlaseni).toEqual({ playerId: "p", obvineny: false });
+  });
 });
 
 describe("jaký čin a kdo o něm dá vědět", () => {
+  it("při otevřeném problému se nic neohlásí, jako v losu dne", () => {
+    const clubState = stavKlubu({ vybaveni: { jerseys: 2 }, otevreneProblemy: 1 });
+    expect(vyberCin(clubState, true, createRng(1))).toBeNull();
+    expect(vyberCin({ ...clubState, otevreneProblemy: 0 }, true, createRng(1))).toBe("vloupani_sklad");
+  });
+
+  it("stejný čin nejdřív po 21 dnech od posledního incidentu toho typu, i od nesplněné hrozby", () => {
+    const clubState = stavKlubu({ den: "2026-09-16", vybaveni: { jerseys: 2, team_van: 1 } });
+    const vanRecently = { ...clubState, posledniVyskyt: { dodavka_pujcena: "2026-09-01" } };
+    for (let seed = 1; seed <= 50; seed++) expect(vyberCin(vanRecently, false, createRng(seed))).toBe("vloupani_sklad");
+    const vanLongAgo = { ...clubState, posledniVyskyt: { dodavka_pujcena: "2026-08-26" } };
+    const kinds = new Set(Array.from({ length: 50 }, (_, i) => vyberCin(vanLongAgo, false, createRng(i + 1))));
+    expect(kinds.has("dodavka_pujcena")).toBe(true);
+  });
+
   it("nikdy neohlásí čin, na který klub nemá", () => {
     const jenDresy = stavKlubu({ vybaveni: { jerseys: 2 } });
     for (let s = 1; s <= 50; s++) expect(vyberCin(jenDresy, true, createRng(s))).toBe("vloupani_sklad");
