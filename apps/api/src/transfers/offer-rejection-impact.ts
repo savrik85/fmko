@@ -374,9 +374,10 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
     unrest.level = clamp(unrest.level - 3, 0, 100);
   }
 
-  // 3) Konec trucu → uklidit (a zázračně uzdravit případnou fake injury). Slib „pustit“
-  // zůstává, dokud trenér obnovenou nabídku nevyřídí nebo slib nevyprší.
-  if (unrest.level <= 0 && unrest.pledge?.type !== "release") {
+  // 3) Konec trucu → uklidit (a zázračně uzdravit případnou fake injury). Běžící slib
+  // (sestava, prodej, „pustit“) zůstává, dokud se nevyhodnotí nebo nevyprší: dřív zmizel
+  // s trucem a hra přestala hlídat, jestli ho trenér dodržel.
+  if (unrest.level <= 0 && !unrest.pledge) {
     await db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.transferUnrest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "remove unrest", e));
     if (hasFakeInjury) await healFakeInjury(db, clubTeamId, playerRef);

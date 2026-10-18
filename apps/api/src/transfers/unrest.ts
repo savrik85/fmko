@@ -110,6 +110,12 @@ export interface UnrestContext {
   leadership: number;
   coachRelationship: number;
   isCaptain: boolean;
+  /**
+   * Hráč je v kádru klubu, který s ním jedná, a není na hostování. Jen pak jde dát pásku
+   * a „pustit ho“: obojí zapisuje do jeho týmu (kapitán, nabídka) a u hostování by to byl
+   * cizí tým.
+   */
+  ownedHere: boolean;
   now?: Date;
 }
 
@@ -146,7 +152,7 @@ export function availableActions(
       if (unrest.pledge?.type !== "minutes") add("promise_minutes");
     } else if (reason === "better_club") {
       if (unrest.pledge?.type !== "transfer") add("promise_transfer");
-      if (ctx.leadership >= 55 && !ctx.isCaptain) add("captaincy");
+      if (ctx.ownedHere && ctx.leadership >= 55 && !ctx.isCaptain) add("captaincy");
     } else {
       add("personal_talk");
     }
@@ -154,7 +160,7 @@ export function availableActions(
   if (ctx.patriotism > 60 || ctx.coachRelationship > 65) add("appeal_loyalty");
   if (ctx.discipline > 60) add("tough_love");
   const now = (ctx.now ?? new Date()).getTime();
-  if (unrest.offer?.fromTeamId === "virtual_ai" && unrest.offer.virtualTeamData && unrest.pledge?.type !== "release"
+  if (ctx.ownedHere && unrest.offer?.fromTeamId === "virtual_ai" && unrest.offer.virtualTeamData && unrest.pledge?.type !== "release"
     && now - new Date(unrest.offer.at).getTime() <= RELEASE_WINDOW_DAYS * DAY_MS) add("release");
   return ids.map((id) => {
     const def = UNREST_ACTIONS.find((a) => a.id === id)!;
@@ -244,8 +250,9 @@ export async function performUnrestAction(
   if (!action) return { ok: false, error: "Neznámá akce", status: 400 };
 
   const player = await db.prepare(
-    `SELECT p.id, p.team_id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.personality, p.life_context,
-            p.coach_relationship, p.weekly_wage, current_team.captain_id
+    `SELECT p.id, p.team_id, p.loan_from_team_id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.personality, p.life_context,
+            p.coach_relationship, p.weekly_wage, current_team.captain_id,
+            COALESCE(current_team.parent_team_id, current_team.id) AS current_club_id
      FROM players p
      JOIN teams current_team ON current_team.id = p.team_id
      LEFT JOIN teams owner_team ON owner_team.id = p.loan_from_team_id
@@ -290,6 +297,7 @@ export async function performUnrestAction(
   const ctx: UnrestContext = {
     seasonNumber, patriotism: pers.patriotism ?? 50, discipline: pers.discipline ?? 50, leadership: pers.leadership ?? 30,
     coachRelationship: coachRel, isCaptain: player.captain_id === playerId,
+    ownedHere: player.loan_from_team_id == null && player.current_club_id === teamId,
   };
   if (!availableActions(unrest, lc, ctx).some((a) => a.id === action.id)) {
     return { ok: false, error: "Tahle dohoda teď nejde, vyber jinou.", status: 409 };
@@ -393,8 +401,8 @@ export async function performUnrestAction(
     lastAction: action.id,
     deals: [...(unrest.deals ?? []), { id: action.id, at: nowIso }],
   };
-  // Při nule truc končí, kromě slibu „pustit“: ten musí přežít, dokud trenér nabídku nevyřídí.
-  if (newLevel <= 0 && updatedUnrest.pledge?.type !== "release") {
+  // Při nule truc končí, kromě běžícího slibu: ten musí přežít, dokud se nevyhodnotí.
+  if (newLevel <= 0 && !updatedUnrest.pledge) {
     delete lc.transferUnrest;
   } else {
     lc.transferUnrest = updatedUnrest;
