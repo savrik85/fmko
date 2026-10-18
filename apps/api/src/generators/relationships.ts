@@ -191,7 +191,33 @@ export function generateRelationships(
     }
   }
 
+  // Krok 1 i 2 párují po dvojicích, takže bratr bratra by bratrem nebyl.
+  completeGeneratedFamilies(rng, squad, relationships);
   return relationships;
+}
+
+/**
+ * Dotáhne rodiny ve vygenerovaném kádru do celku (viz `missingFamilyLinks`). Upravuje
+ * `relationships` na místě. Volá se i po přidání vazeb z příběhu trenéra (routes/teams.ts),
+ * který přidává otce a syna mimo generátor.
+ */
+export function completeGeneratedFamilies(
+  rng: Rng,
+  squad: ReadonlyArray<{ age: number }>,
+  relationships: GeneratedRelationship[],
+): void {
+  const key = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+  const ages = new Map(squad.map((p, i) => [i, p.age] as const));
+  const links = relationships.map((r) => ({ a: r.playerAIndex, b: r.playerBIndex, type: r.type }));
+  for (const fix of missingFamilyLinks(rng, ages, links)) {
+    const current = relationships.find((r) => key(r.playerAIndex, r.playerBIndex) === key(fix.a, fix.b));
+    if (current) {
+      current.type = fix.type;
+      current.strength = fix.strength;
+    } else {
+      relationships.push({ playerAIndex: fix.a, playerBIndex: fix.b, type: fix.type, strength: fix.strength });
+    }
+  }
 }
 
 /** Hráč tak, jak ho pro vazby potřebujeme — stačí pár polí, ne celá PlayerIdentity. */
@@ -308,4 +334,84 @@ export function generateRelationsForNewcomer(
   }
 
   return out;
+}
+
+/** Chybějící příbuzenská vazba z `missingFamilyLinks`. */
+export interface FamilyLinkFix<K> {
+  a: K;
+  b: K;
+  type: "brothers" | "father_son";
+  strength: number;
+  /** Jiná vazba, kterou dvojice už má a kterou rodina nahradí (pár má vždy jen jednu). */
+  replaces: RelationshipType | null;
+}
+
+const isFamily = (type: RelationshipType) => type === "brothers" || type === "father_son";
+
+/**
+ * Rodina v kádru musí být celá: bratr bratra je bratr, synové jednoho otce jsou bratři
+ * a bratr syna je taky jeho syn. Vazby vznikají po dvojicích (generátor kádru, příchod
+ * hráče s nejvýš jednou dvěma vazbami), takže rodiny zůstávaly přetržené: ze tří Veselých
+ * ve Forpsi Čkyni nejstarší a nejmladší „nebyli bratři“ (prod 2026-10-18, 21 rodin).
+ *
+ * Vrací dvojice z jedné rodiny, kterým příbuzenská vazba chybí. Typ se bere z generací,
+ * ne z věku: otec, který je jen o 17 let starší než jeden ze synů, je pořád otec. Rodinu,
+ * jejíž vazby si odporují (bratr je zároveň otcem), nechává být. Dědeček s vnukem v kádru
+ * (věk 16–50) nevznikne, dvojice o dvě generace od sebe se přeskakuje.
+ */
+export function missingFamilyLinks<K>(
+  rng: Rng,
+  ages: ReadonlyMap<K, number>,
+  links: ReadonlyArray<{ a: K; b: K; type: RelationshipType }>,
+): Array<FamilyLinkFix<K>> {
+  const pairKey = (a: K, b: K) => [String(a), String(b)].sort().join("|");
+  const existing = new Map(links.map((l) => [pairKey(l.a, l.b), l.type]));
+  const family = links.filter((l) => isFamily(l.type) && ages.has(l.a) && ages.has(l.b) && l.a !== l.b);
+
+  const neighbours = new Map<K, Array<{ other: K; type: RelationshipType }>>();
+  for (const l of family) {
+    neighbours.set(l.a, [...(neighbours.get(l.a) ?? []), { other: l.b, type: l.type }]);
+    neighbours.set(l.b, [...(neighbours.get(l.b) ?? []), { other: l.a, type: l.type }]);
+  }
+
+  const fixes: Array<FamilyLinkFix<K>> = [];
+  const visited = new Set<K>();
+  for (const start of neighbours.keys()) {
+    if (visited.has(start)) continue;
+    // Generace v rodině: bratři stejná, otec o jednu výš (menší číslo) než syn.
+    const generation = new Map<K, number>([[start, 0]]);
+    const queue = [start];
+    let consistent = true;
+    while (queue.length > 0) {
+      const u = queue.shift() as K;
+      visited.add(u);
+      for (const { other, type } of neighbours.get(u) ?? []) {
+        const step = type === "brothers" ? 0 : (ages.get(other) ?? 0) > (ages.get(u) ?? 0) ? -1 : 1;
+        const expected = (generation.get(u) ?? 0) + step;
+        const known = generation.get(other);
+        if (known === undefined) {
+          generation.set(other, expected);
+          queue.push(other);
+        } else if (known !== expected) {
+          consistent = false;
+        }
+      }
+    }
+    if (!consistent) continue;
+
+    const members = [...generation.keys()];
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const a = members[i];
+        const b = members[j];
+        const current = existing.get(pairKey(a, b)) ?? null;
+        if (current && isFamily(current)) continue;
+        const gap = Math.abs((generation.get(a) ?? 0) - (generation.get(b) ?? 0));
+        if (gap > 1) continue;
+        const type = gap === 0 ? "brothers" : "father_son";
+        fixes.push({ a, b, type, strength: type === "brothers" ? rng.int(70, 95) : rng.int(60, 90), replaces: current });
+      }
+    }
+  }
+  return fixes;
 }
