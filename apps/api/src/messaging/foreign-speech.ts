@@ -43,7 +43,7 @@ export function foreignSpeechRule(nationality: string | null | undefined): strin
     ? " Píšeš úplně bez diakritiky a velmi krátké věty, skoro bez skloňování."
     : " Nepíšeš háčky nad ř, ě a ů.";
   return [
-    `JAZYK: Jsi cizinec (${label}), v Česku žiješ pár let a česky píšeš LÁMANĚ: pleteš pády a rody,`,
+    `JAZYK: Jsi cizinec (${label}), v Česku žiješ pár let a česky píšeš LÁMANĚ: pleteš pády a rody, `,
     "slovesa často dáš do infinitivu („já zítra nepřijít“, „trenér, já mít problém“), trenéra oslovuješ „trenér“ (bez 5. pádu).",
     vietnam,
     words ? ` Občas vložíš slovo z rodného jazyka (${words}).` : "",
@@ -55,23 +55,40 @@ type Swap = [string, string];
 
 /** Lámaná čeština: časté tvary sloves a frází nahradí infinitiv s „já“. */
 const BROKEN_SWAPS: Swap[] = [
-  ["omlouvám se", "promiňte"], ["omlouvám", "promiňte"],
+  ["omlouvám se", "promiňte"], ["omlouvám", "promiňte"], ["těším se", "já těšit"],
+  ["slíbil jsem", "já slíbit"], ["byl jsem", "já být"], ["měl jsem", "já mít"], ["jsem měl", "já mít"], ["jsem byl", "já být"],
   ["nepřijdu", "já nepřijít"], ["přijdu", "já přijít"], ["nedorazím", "já nepřijít"], ["dorazím", "já přijít"],
   ["nemůžu", "já nemoct"], ["můžu", "já moct"], ["nebudu", "já nebýt"], ["budu", "já být"],
   ["nemám", "já nemít"], ["mám", "já mít"], ["musím", "já muset"], ["nechci", "já nechtít"], ["chci", "já chtít"],
-  ["nevím", "já nevědět"], ["vím", "já vědět"], ["jdu", "já jít"], ["děkuju", "děkovat"], ["děkuji", "děkovat"],
-  ["jsem", "já"], ["trenére", "trenér"],
+  ["nevím", "já nevědět"], ["vím", "já vědět"], ["nejdu", "já nejít"], ["jdu", "já jít"], ["nejedu", "já nejet"], ["jedu", "já jet"],
+  ["sedím", "já sedět"], ["hlídám", "já hlídat"], ["zvažuju", "já zvažovat"], ["musíme", "my muset"], ["můžeme", "my moct"],
+  ["děkuju", "děkovat"], ["děkuji", "děkovat"], ["jsem", "já"], ["trenére", "trenér"],
 ];
 
 /** Slovenština: nejčastější slova ze šablon. Zbytek zůstane česky (v Česku běžná směs). */
 const SLOVAK_SWAPS: Swap[] = [
-  ["omlouvám se", "ospravedlňujem sa"], ["trenére", "tréner"], ["nejsem", "nie som"], ["jsem", "som"], ["jsi", "si"],
-  ["není", "nie je"], ["nemůžu", "nemôžem"], ["můžu", "môžem"], ["nepřijdu", "neprídem"], ["přijdu", "prídem"],
+  // Delší fráze dřív než jednotlivá slova („se mnou“ před „se“, „v práci“ před „práci“).
+  ["omlouvám se", "ospravedlňujem sa"], ["těším se", "teším sa"], ["se mnou", "so mnou"],
+  ["z práce", "z roboty"], ["v práci", "v robote"], ["do práce", "do roboty"], ["práci", "robote"], ["práce", "robota"],
+  ["trenére", "tréner"], ["nejsem", "nie som"], ["jsem", "som"], ["jsi", "si"], ["jste", "ste"], ["není", "nie je"],
+  ["nemůžu", "nemôžem"], ["můžu", "môžem"], ["nemůže", "nemôže"], ["nepřijdu", "neprídem"], ["přijdu", "prídem"],
   ["nedorazím", "neprídem"], ["dorazím", "prídem"], ["nebudu", "nebudem"], ["budu", "budem"], ["nechci", "nechcem"],
-  ["chci", "chcem"], ["nevím", "neviem"], ["vím", "viem"], ["dneska", "dnes"], ["zítra", "zajtra"], ["teď", "teraz"],
-  ["taky", "tiež"], ["kluci", "chalani"], ["kluky", "chalanov"], ["děkuju", "ďakujem"], ["děkuji", "ďakujem"],
-  ["prostě", "proste"], ["ještě", "ešte"], ["proč", "prečo"], ["když", "keď"], ["co", "čo"], ["jo", "hej"],
-  ["moc", "veľmi"], ["hrát", "hrať"], ["jet", "ísť"], ["práci", "robote"], ["práce", "robota"], ["holka", "baba"],
+  ["chci", "chcem"], ["chtějí", "chcú"], ["nevím", "neviem"], ["vím", "viem"], ["bych", "by som"], ["byl", "bol"], ["byla", "bola"],
+  ["měl", "mal"], ["být", "byť"], ["jít", "ísť"], ["jet", "ísť"], ["hrát", "hrať"], ["trénovat", "trénovať"], ["odvézt", "odviezť"],
+  ["lhát", "klamať"], ["snil", "sníval"], ["sliboval", "sľuboval"], ["slíbil", "sľúbil"], ["zvažuju", "zvažujem"],
+  ["říkali", "hovorili"], ["říkáte", "hovoríte"], ["nabízí", "ponúka"], ["nabízejí", "ponúkajú"], ["nabídka", "ponuka"], ["nabídku", "ponuku"],
+  ["hledají", "hľadajú"], ["pozici", "pozíciu"], ["rozhodnutí", "rozhodnutie"], ["upřímně", "úprimne"],
+  ["počítejte", "počítajte"], ["nepočítej", "nepočítaj"], ["počítej", "počítaj"],
+  ["dneska", "dnes"], ["zítra", "zajtra"], ["zítřka", "zajtra"], ["teď", "teraz"], ["taky", "tiež"], ["vždycky", "vždy"],
+  ["kluci", "chalani"], ["kluky", "chalanov"], ["děkuju", "ďakujem"], ["děkuji", "ďakujem"], ["bohužel", "bohužiaľ"],
+  ["svatbu", "svadbu"], ["svatba", "svadba"], ["babičku", "babku"], ["rodičů", "rodičov"], ["deště", "dažďa"], ["dešti", "daždi"],
+  ["sestavě", "zostave"], ["sestavu", "zostavu"], ["sestavy", "zostavy"], ["místě", "mieste"], ["místo", "miesto"],
+  ["hospodě", "krčme"], ["hospoda", "krčma"], ["špatnej", "zlý"], ["špatný", "zlý"], ["špatně", "zle"], ["den", "deň"],
+  ["tohle", "toto"], ["tomhle", "tomto"], ["tuhle", "túto"], ["jinak", "inak"], ["jiná", "iná"], ["jiný", "iný"], ["víc", "viac"],
+  ["prostě", "proste"], ["ještě", "ešte"], ["proč", "prečo"], ["když", "keď"], ["co", "čo"], ["jak", "ako"], ["kdo", "kto"],
+  ["kdy", "kedy"], ["nic", "nič"], ["všechno", "všetko"], ["tady", "tu"], ["hodně", "veľa"], ["moc", "veľmi"], ["jo", "hej"],
+  ["ano", "áno"], ["prej", "vraj"], ["mě", "ma"], ["mně", "mne"], ["já", "ja"], ["se", "sa"], ["holka", "baba"], ["rovnou", "rovno"],
+  ["jedu", "idem"], ["nejedu", "nejdem"], ["pro", "pre"], ["vrací", "vracia"],
 ];
 
 const NOT_LETTER = "(?<![\\p{L}])";
@@ -97,8 +114,9 @@ export function brokenCzech(text: string, nationality: string | null | undefined
   if (nationality === "SK") return swapWords(text, SLOVAK_SWAPS).replace(/ř/g, "r").replace(/Ř/g, "R").replace(/ů/g, "u").replace(/ě/g, "e");
 
   let out = swapWords(text, BROKEN_SWAPS)
-    // „já já“ po dvou náhradách vedle sebe, „Já já“ na začátku věty.
-    .replace(/(?<![\p{L}])([Jj]á) já(?![\p{L}])/gu, "$1");
+    // „já já“ po dvou náhradách vedle sebe, „Já já“ na začátku věty, „já zase já sedět“.
+    .replace(/(?<![\p{L}])([Jj]á) já(?![\p{L}])/gu, "$1")
+    .replace(/(?<![\p{L}])([Jj]á) (\p{L}+) já(?![\p{L}])/gu, "$1 $2");
   if (nationality === "DE" || nationality === "AT") out = out.replace(/(?<![\p{L}])[Tt]renér(?![\p{L}])/gu, "Trainer");
   if (nationality === "PL") {
     out = out.replace(/ř/g, "rz").replace(/Ř/g, "Rz").replace(/č/g, "cz").replace(/Č/g, "Cz").replace(/š/g, "sz").replace(/Š/g, "Sz");
@@ -109,8 +127,11 @@ export function brokenCzech(text: string, nationality: string | null | undefined
 
   const native = NATIVE_WORDS[nationality as string];
   const rng = createRng(seedFromString(`foreign|${seed}`));
-  // Úvodní slovíčko jen před běžným slovem s velkým písmenem (ne před emoji ani „Trainer“).
-  if (native && native.openers.length > 0 && rng.random() < 0.4 && /^\p{Lu}\p{Ll}/u.test(out) && !out.startsWith("Trainer")) {
+  // Úvodní slovíčko jen před běžným slovem s velkým písmenem (ne před emoji, „Trainer“
+  // ani citoslovcem: „Jó, jo, já fit“ zní jako koktání).
+  const firstWord = out.split(/[^\p{L}]/u)[0].toLowerCase();
+  if (native && native.openers.length > 0 && rng.random() < 0.4 && /^\p{Lu}\p{Ll}/u.test(out)
+    && !["trainer", "jo", "no", "ano", "jasne", "jasně", "sorry", "ja", "tak", "nu", "bože"].includes(firstWord)) {
     out = rng.pick(native.openers) + out[0].toLowerCase() + out.slice(1);
   }
   if (native && native.closers.length > 0 && rng.random() < 0.3) {

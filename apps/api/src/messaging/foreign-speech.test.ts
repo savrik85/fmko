@@ -34,12 +34,16 @@ describe("řeč cizinců", () => {
   it("Němec píše Trainer, Polák polským pravopisem, Vietnamec bez diakritiky", () => {
     expect(brokenCzech("Trenére, mám problém", "DE", "d")).toMatch(/Trainer, já mít problém/);
     expect(brokenCzech("Přijdu až večer, čekám na řemeslníka", "PL", "e")).toMatch(/[Jj]á przijít až veczer, czekám na rzemeslníka/);
-    expect(brokenCzech("Dneska ne, hlídám děti", "VN", "f")).toMatch(/Dneska ne, hlidam deti/);
+    expect(brokenCzech("Dneska ne, hlídám děti", "VN", "f")).toMatch(/Dneska ne, ja hlidat deti/);
+    // „já“ se nezopakuje ani přes jedno slovo.
+    expect(brokenCzech("A já zase sedím.", "HU", "g")).toMatch(/A já zase sedet\./);
   });
 
   it("Slovák píše slovensky", () => {
     expect(brokenCzech("Trenére, dneska nemůžu, jsem v práci", "SK", "g")).toBe("Tréner, dnes nemôžem, som v robote");
     expect(brokenCzech("Jasně, přijdu", "SK", "h")).toBe("Jasne, prídem");
+    expect(brokenCzech("Bohužel musím na svatbu", "SK", "i")).toBe("Bohužiaľ musím na svadbu");
+    expect(brokenCzech("Počítejte se mnou, ozval se mi", "SK", "j")).toBe("Počítajte so mnou, ozval sa mi");
   });
 
   it("stejný seed dá stejný text, žádné dlouhé pomlčky ani zdvojené „já“", () => {
