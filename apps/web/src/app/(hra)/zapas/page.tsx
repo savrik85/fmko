@@ -158,6 +158,42 @@ interface UpcomingMatch {
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
+/**
+ * Nedostupné hráče sestavy (omluvenka, zranění, stopka, odchod z klubu) nahradí nejlepším
+ * dostupným na pozici slotu, jinak kýmkoli. Platí pro každou cestu, kudy se sestava dostane
+ * na hřiště: sestava zápasu, výchozí sestava, přepnutí zápasu i načtení sestavy A/B/C.
+ * Dřív to dělalo jen první načtení stránky, takže po přepnutí na uloženou sestavu stál
+ * omluvený hráč na hřišti, jako by hrál (prod 2026-10-18, Veselý z Čkyně).
+ *
+ * Hráči původní sestavy se jako náhrada neberou, zpracují se na vlastním slotu. Bez toho
+ * by omluvený na slotu i vytáhl X-tého hráče sestavy a slot toho X-tého by pak chytil
+ * kohokoli (typicky brankáře na útok). Když náhrada není, hráč na slotu zůstane.
+ */
+function replaceUnavailableStarters(lineupIds: Array<string | null>, pool: AvailablePlayer[], formation: string): Array<string | null> {
+  const byId = new Map(pool.map((p) => [p.id, p]));
+  const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
+  const originalIds = new Set(lineupIds.filter((id): id is string => !!id));
+  const used = new Set<string>();
+  const byRating = (a: AvailablePlayer, b: AvailablePlayer) => b.overallRating - a.overallRating;
+  return lineupIds.map((id, i) => {
+    if (!id) return null;
+    const stored = byId.get(id);
+    if (stored && !stored.absent && !used.has(id)) { used.add(id); return id; }
+    const free = (x: AvailablePlayer) => !x.absent && !used.has(x.id) && !originalIds.has(x.id);
+    const repl = pool.filter((x) => free(x) && x.position === slots[i]?.pos).sort(byRating)[0]
+      ?? pool.filter(free).sort(byRating)[0];
+    if (repl) { used.add(repl.id); return repl.id; }
+    return id;
+  });
+}
+
+/** Kapitán zůstane, jen když v sestavě opravdu hraje. Jinak ten s největším vůdcovstvím. */
+function captainInLineup(captainId: string | null, lineupIds: Array<string | null>, pool: AvailablePlayer[]): string | null {
+  const starters = pool.filter((p) => lineupIds.includes(p.id) && !p.absent);
+  if (captainId && starters.some((p) => p.id === captainId)) return captainId;
+  return starters.sort((a, b) => (b.leadership ?? 30) - (a.leadership ?? 30))[0]?.id ?? null;
+}
+
 export default function MatchPageWrapper() {
   return <Suspense><MatchPage /></Suspense>;
 }
@@ -235,33 +271,7 @@ function MatchPage() {
         setFormation(data.lineup.formation);
         setTactic(data.lineup.tactic);
         setHardness((data.lineup.hardness ?? "normal") as HardnessKey);
-        // Auto-replace any stored player who is now unavailable (injury/suspension)
-        // with the best available player for that slot's position
-        const pool = data.availablePlayers ?? [];
-        const playerMap = new Map(pool.map((p) => [p.id, p]));
-        const slots = POSITIONS[data.lineup.formation] ?? POSITIONS["4-4-2"];
-        const used = new Set<string>();
-        // Hráče původní sestavy si rezervujeme — nesmí být použiti jako náhrada
-        // za jiný slot (zpracují se na svém vlastním slotu níže). Bez toho
-        // by absent hráč na slotu i vytáhl X-tého hráče sestavy jako náhradu,
-        // a slot toho X-tého by pak fallbackem chytl libovolného hráče
-        // (typicky GK na FWD pozici) — bug s "neviditelným" hráčem v lavičce.
-        const originalIds = new Set(data.lineup.players.map((p) => p.playerId));
-        const nextSelected = data.lineup.players.map((p, i) => {
-          const stored = playerMap.get(p.playerId);
-          if (stored && !stored.absent && !used.has(p.playerId)) { used.add(p.playerId); return p.playerId; }
-          // Find replacement: best available at this slot's position (or any).
-          // Vyloučit hráče z původní sestavy — ti se zpracují na vlastním slotu.
-          const slotPos = slots[i].pos;
-          const notOriginal = (x: { id: string }) => !originalIds.has(x.id);
-          const repl = pool.filter((x) => !x.absent && !used.has(x.id) && notOriginal(x) && x.position === slotPos)
-            .sort((a, b) => b.overallRating - a.overallRating)[0]
-            ?? pool.filter((x) => !x.absent && !used.has(x.id) && notOriginal(x))
-              .sort((a, b) => b.overallRating - a.overallRating)[0];
-          if (repl) { used.add(repl.id); return repl.id; }
-          return p.playerId; // keep stale if nothing available
-        });
-        setSelected(nextSelected);
+        setSelected(replaceUnavailableStarters(data.lineup.players.map((p) => p.playerId), data.availablePlayers ?? [], data.lineup.formation));
       } else { autoFill(data.availablePlayers ?? [], "4-4-2"); }
       // Pokud lineup má preset_slot, prostě ho aktivuj. Fallback vs explicit nás nezajímá v UI —
       // user vidí "Sestava A vybraná" a může save-nout (pak se uloží per-zápas).
@@ -271,17 +281,11 @@ function MatchPage() {
       setLineupSource(data.lineup?.source ?? null);
       // Save button "Uloženo ✓" jen pokud lineup je explicit pro tento zápas
       setSaved(data.lineup?.source === "explicit");
-      // Captain: prefer saved captain_id from DB; only auto-pick if none saved
-      if (data.lineup?.captainId) {
-        setCaptainId(data.lineup.captainId);
-      } else {
-        const lineup11 = data.lineup?.players.map((p) => p.playerId) ?? [];
-        if (lineup11.length === 11) {
-          const best = (data.availablePlayers ?? [])
-            .filter((p) => lineup11.includes(p.id))
-            .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
-          if (best) setCaptainId(best.id);
-        }
+      // Kapitán: uložený, pokud hraje, jinak automat podle vůdcovství
+      if (data.lineup && data.lineup.players.length === 11) {
+        const pool = data.availablePlayers ?? [];
+        const lineup11 = replaceUnavailableStarters(data.lineup.players.map((p) => p.playerId), pool, data.lineup.formation);
+        setCaptainId(captainInLineup(data.lineup.captainId, lineup11, pool));
       }
       setLoading(false);
       // If calendarId in URL, switch to that match
@@ -300,10 +304,12 @@ function MatchPage() {
           apiFetch<{ lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; players: Array<{ playerId: string }> } | null }>(`/api/teams/${teamId}/lineup/${urlCalId}`)
             .then((ld) => {
               if (ld.lineup?.players.length === 11) {
+                const pool = data.availablePlayers ?? [];
+                const lineup11 = replaceUnavailableStarters(ld.lineup.players.map((p) => p.playerId), pool, ld.lineup.formation);
                 setFormation(ld.lineup.formation);
                 setTactic(ld.lineup.tactic);
-                setSelected(ld.lineup.players.map((p) => p.playerId));
-                if (ld.lineup.captainId) setCaptainId(ld.lineup.captainId);
+                setSelected(lineup11);
+                setCaptainId(captainInLineup(ld.lineup.captainId, lineup11, pool));
               }
               setActivePreset(ld.lineup?.presetSlot ?? null);
               setMatchPlan(ld.lineup?.matchPlan ?? []);
@@ -380,10 +386,13 @@ function MatchPage() {
       setFormation(data.formation);
       setTactic(data.tactic);
       setHardness((data.hardness ?? "normal") as HardnessKey);
-      const newSel = data.players.map((p) => p.playerId);
-      while (newSel.length < 11) newSel.push(null as any);
+      const presetSel: Array<string | null> = data.players.map((p) => p.playerId);
+      while (presetSel.length < 11) presetSel.push(null);
+      // Server nahrazuje jen zraněné a vyloučené, omluvené nechává (sestava se pak dá uložit
+      // i při velké absenci). Omluvené proto nahradíme tady, jako při načtení stránky.
+      const newSel = replaceUnavailableStarters(presetSel, players, data.formation);
       setSelected(newSel);
-      setCaptainId(data.captainId);
+      setCaptainId(captainInLineup(data.captainId, newSel, players));
       setMatchPlan(data.matchPlan ?? []);
       setBenchIds(data.bench ?? null);
       setSaved(false);
@@ -627,18 +636,11 @@ function MatchPage() {
                   setFormation(data.lineup.formation);
                   setTactic(data.lineup.tactic);
                   setHardness((data.lineup.hardness ?? "normal") as HardnessKey);
-                  setSelected(data.lineup.players.map((p) => p.playerId));
-                  // Captain reset — explicit setter i pro null aby se neudržoval starý captain z předchozího zápasu
-                  if (data.lineup.captainId) {
-                    setCaptainId(data.lineup.captainId);
-                  } else {
-                    // Pokud lineup nemá captain, najdi auto (nejvyšší leadership)
-                    const lineupIds = data.lineup.players.map((p) => p.playerId);
-                    const best = (data.availablePlayers ?? [])
-                      .filter((p) => lineupIds.includes(p.id))
-                      .sort((a, b) => ((b as any).leadership ?? 30) - ((a as any).leadership ?? 30))[0];
-                    setCaptainId(best?.id ?? null);
-                  }
+                  const pool = data.availablePlayers ?? [];
+                  const lineup11 = replaceUnavailableStarters(data.lineup.players.map((p) => p.playerId), pool, data.lineup.formation);
+                  setSelected(lineup11);
+                  // Kapitán se nastaví vždy, i na null, ať nezůstane z předchozího zápasu
+                  setCaptainId(captainInLineup(data.lineup.captainId, lineup11, pool));
                 } else if (data.availablePlayers) {
                   // Žádný lineup → autoFill (jako v hlavním useEffect)
                   autoFill(data.availablePlayers, "4-4-2");
@@ -936,6 +938,8 @@ function MatchPage() {
             const pid = selected[i];
             const player = pid ? players.find((p) => p.id === pid) : null;
             const isOOP = player && player.position !== slot.pos;
+            // Omluvený na hřišti zůstane, jen když za něj není náhrada. Pak ať je vidět, že nehraje.
+            const isOut = !!player?.absent;
             const num = player?.squadNumber ?? (i + 1);
             const isEditing = editSlot === i;
 
@@ -968,7 +972,7 @@ function MatchPage() {
                 <div className="relative">
                   <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-heading font-[800] text-sm sm:text-base shadow-md transition-all ${POS_BG[slot.pos]} ${
                     isEditing ? "scale-125 ring-2 ring-white" : isSwapSource ? "scale-125 ring-2 ring-gold-400 animate-pulse" : isSwapTarget ? "ring-2 ring-white/60" : "group-hover:scale-110"
-                  } ${isOOP && !isSwapSource ? "ring-2 ring-orange-400/60" : ""}`}>
+                  } ${isOut && !isSwapSource ? "ring-2 ring-card-red opacity-60" : isOOP && !isSwapSource ? "ring-2 ring-orange-400/60" : ""}`}>
                     {num}
                   </div>
                   {pid === captainId && (
@@ -978,9 +982,10 @@ function MatchPage() {
                 <div className="text-center mt-0.5 leading-tight">
                   {/* Jméno musí zůstat vycentrované pod kolečkem. Když byla ikona
                       součástí textu, centrovala se dvojice a jméno uteklo doleva. */}
-                  <div className="relative inline-block text-xs sm:text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  <div className={`relative inline-block text-xs sm:text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isOut ? "line-through" : ""}`}
+                    title={isOut ? (player?.absenceSms ?? player?.absenceReason ?? "Nehraje") : undefined}>
                     {player?.lastName ?? "—"}
-                    {isOOP && (
+                    {isOOP && !isOut && (
                       <span className="absolute left-full top-0 ml-0.5" title="Hraje mimo svou pozici">⚠️</span>
                     )}
                   </div>

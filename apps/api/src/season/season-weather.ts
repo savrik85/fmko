@@ -197,7 +197,12 @@ export async function resolveRoundWeather(
 
 /**
  * Termín zápasu podle klíče: ligové kolo (`season_calendar`), pohárový zápas
- * (`cup_matches`), nebo přátelák (`matches.created_at`). `null`, když klíč nic nezná.
+ * (`cup_matches`), turnajový zápas (`tournament_matches`), nebo přátelák
+ * (`matches.created_at`). `null`, když klíč nic nezná.
+ *
+ * Bez turnaje simulace turnajového zápasu termín nenašla a omluvenky losovala bez vlivů
+ * incidentů a bez počasí, zatímco náhled sestavy je počítal. Výmluvy se pak rozcházely
+ * a hráč s výslechem v den zápasu byl v sestavě omluvený, ale nastoupil.
  */
 export async function terminZapasu(db: D1Database, matchKey: string): Promise<string | null> {
   if (!matchKey) return null;
@@ -208,6 +213,7 @@ export async function terminZapasu(db: D1Database, matchKey: string): Promise<st
   };
   return await hledej("SELECT scheduled_at FROM season_calendar WHERE id = ?", "scheduled_at")
     ?? await hledej("SELECT scheduled_at FROM cup_matches WHERE id = ?", "scheduled_at")
+    ?? await hledej("SELECT scheduled_at FROM tournament_matches WHERE id = ?", "scheduled_at")
     ?? await hledej("SELECT created_at FROM matches WHERE id = ?", "created_at");
 }
 
