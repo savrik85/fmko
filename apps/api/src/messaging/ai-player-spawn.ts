@@ -11,6 +11,7 @@
  *                            po odpovědi trenéra (generuje další reply nebo resolution).
  */
 
+import { transferTalkFrom } from "../transfers/unrest-reasons";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
@@ -149,6 +150,7 @@ export function loadPlayerSnapshot(
     occupation: lifeContext.occupation,
     nationality: (row.nationality as string | null | undefined) ?? null,
     romani: lifeContext.romani === true,
+    transferTalk: transferTalkFrom(lifeContext.transferUnrest),
     injury: parseInjury(row.injury),
     // Kontext posledního zápasu — hráč, který nenastoupil, má last_minutes NULL.
     lastMatchOutcome: matchCtx?.lastOutcome ?? null,

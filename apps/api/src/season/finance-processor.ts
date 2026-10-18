@@ -60,6 +60,8 @@ export type TransactionType =
   | "sell_on_income"
   | "village_brigade"
   | "manager_social"
+  // Prémie hráči, který chtěl odejít (dohoda po zatrhnutém přestupu, transfers/unrest.ts).
+  | "player_bonus"
   | "manager_bet_win"
   | "manager_bet_loss"
   | "cup_prize"
@@ -195,7 +197,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "equipment_upgrade", "equipment_purchase", "stadium_upgrade", "stadium_visual", "club_website",
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
-  "manager_social", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
+  "manager_social", "player_bonus", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
   "bet_stake", "bet_levy",
 ]);
 

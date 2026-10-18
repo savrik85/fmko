@@ -7577,6 +7577,14 @@ gameRouter.post("/teams/:teamId/players/:playerId/unrest-talk", async (c) => {
   const { performUnrestAction } = await import("../transfers/unrest");
   const result = await performUnrestAction(c.env.DB, c.env, teamId, playerId, actionId);
   if (!result.ok) return c.json({ error: result.error }, (result.status ?? 400) as 400);
+  // Dohoda uprostřed rozhovoru po zatrhnutém přestupu: hráč odpoví v rozhovoru.
+  if (result.threadConvId) {
+    const { handleAiPlayerReply } = await import("../messaging/ai-player-spawn");
+    c.executionCtx.waitUntil(
+      handleAiPlayerReply(c.env.DB, c.env, result.threadConvId)
+        .catch((e) => logger.error({ module: "game" }, "odpověď hráče na dohodu v rozhovoru", e)),
+    );
+  }
   return c.json(result);
 });
 

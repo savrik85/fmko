@@ -198,14 +198,21 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     .catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check", e); return null; });
   if (!convOwner || convOwner.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
 
-  // Trucující hráč (transferUnrest) → konkrétní dohody (chips na FE).
-  // Primární kanál je živá konverzace (AI thread po odmítnuté nabídce) — dohody
-  // se nabízejí až když řeči nestačily: vážný truc (≥40) a žádný aktivní thread.
-  let unrest: { level: number; teamName?: string; mood: string; actions: { id: string; label: string; description: string }[] } | null = null;
-  if (convOwner.type === "player" && convOwner.participant_id && convOwner.ai_thread_active !== 1) {
+  // Trucující hráč (transferUnrest) → dohody podle toho, proč chtěl odejít (chips na FE).
+  // Nabízejí se po celou dobu truce, i uprostřed rozhovoru po zatrhnutém přestupu: tam je
+  // dohoda tah trenéra a hráč na ni odpoví. Jiný rozhovor dohody skrývá.
+  let unrest: {
+    level: number; teamName?: string; mood: string; reasons: string | null; pledge: string | null; canAct: boolean;
+    actions: { id: string; label: string; description: string }[];
+  } | null = null;
+  const threadState = (() => {
+    try { return convOwner.ai_thread_active === 1 ? JSON.parse(convOwner.ai_thread_state ?? "{}") as { scenario_id?: string; awaiting?: string } : null; } catch { return null; }
+  })();
+  const unrestThreadOk = !threadState || threadState.scenario_id === "rejected_offer";
+  if (convOwner.type === "player" && convOwner.participant_id && unrestThreadOk) {
     try {
       const playerRow = await c.env.DB.prepare(
-        `SELECT p.life_context
+        `SELECT p.life_context, p.personality, p.coach_relationship, current_team.captain_id
          FROM players p
          JOIN teams current_team ON current_team.id = p.team_id
          LEFT JOIN teams owner_team ON owner_team.id = p.loan_from_team_id
@@ -213,18 +220,27 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
            COALESCE(current_team.parent_team_id, current_team.id) = ?
            OR COALESCE(owner_team.parent_team_id, owner_team.id) = ?
          )`,
-      ).bind(convOwner.participant_id, teamId, teamId).first<{ life_context: string | null }>();
+      ).bind(convOwner.participant_id, teamId, teamId).first<{ life_context: string | null; personality: string | null; coach_relationship: number | null; captain_id: string | null }>();
       const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
-      if (lc?.transferUnrest?.level >= 40) {
-        const { availableActions, unrestMoodQuote } = await import("../transfers/unrest");
+      if (lc?.transferUnrest?.level > 0) {
+        const { availableActions, unrestMoodQuote, pledgeText } = await import("../transfers/unrest");
+        const { reasonsText } = await import("../transfers/unrest-reasons");
         const seasonRow = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
           .first<{ number: number }>().catch((e) => { logger.warn({ module: "messaging" }, "load season for unrest", e); return null; });
+        const pers = playerRow?.personality ? JSON.parse(playerRow.personality) : {};
+        const u = lc.transferUnrest;
         unrest = {
-          level: lc.transferUnrest.level,
-          teamName: lc.transferUnrest.teamName,
-          mood: unrestMoodQuote(convOwner.participant_id, lc.transferUnrest.level, lc.transferUnrest.teamName),
-          actions: availableActions(lc.transferUnrest, lc, seasonRow?.number ?? null)
-            .map((a) => ({ id: a.id, label: a.label, description: a.description })),
+          level: u.level,
+          teamName: u.teamName,
+          mood: unrestMoodQuote(convOwner.participant_id, u.level, u.teamName),
+          reasons: u.reasons?.length ? reasonsText(u.reasons) : null,
+          pledge: pledgeText(u),
+          canAct: !threadState || threadState.awaiting === "coach",
+          actions: availableActions(u, lc, {
+            seasonNumber: seasonRow?.number ?? null, patriotism: pers.patriotism ?? 50, discipline: pers.discipline ?? 50,
+            leadership: pers.leadership ?? 30, coachRelationship: playerRow?.coach_relationship ?? 50,
+            isCaptain: playerRow?.captain_id === convOwner.participant_id,
+          }),
         };
       }
     } catch (e) { logger.warn({ module: "messaging" }, "load unrest for conversation", e); }
