@@ -203,6 +203,8 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   // dohoda tah trenéra a hráč na ni odpoví. Jiný rozhovor dohody skrývá.
   let unrest: {
     level: number; levelText: string; teamName?: string; mood: string; reasons: string | null; pledge: string | null; canAct: boolean;
+    /** Proč teď dohoda nejde (už dnes byla jedna), jinak null. */
+    blockedText: string | null;
     actions: { id: string; label: string; description: string }[];
   } | null = null;
   const threadState = (() => {
@@ -224,7 +226,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
       ).bind(convOwner.participant_id, teamId, teamId).first<{ life_context: string | null; personality: string | null; coach_relationship: number | null; captain_id: string | null; loan_from_team_id: string | null; current_club_id: string | null }>();
       const lc = playerRow?.life_context ? JSON.parse(playerRow.life_context) : {};
       if (lc?.transferUnrest?.level > 0) {
-        const { availableActions, unrestMoodQuote, unrestMoodText, pledgeText } = await import("../transfers/unrest");
+        const { availableActions, unrestMoodQuote, unrestMoodText, pledgeText, dealCooldownText } = await import("../transfers/unrest");
         const { reasonsText } = await import("../transfers/unrest-reasons");
         const seasonRow = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
           .first<{ number: number }>().catch((e) => { logger.warn({ module: "messaging" }, "load season for unrest", e); return null; });
@@ -238,6 +240,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
           reasons: u.reasons?.length ? reasonsText(u.reasons) : null,
           pledge: pledgeText(u),
           canAct: !threadState || threadState.awaiting === "coach",
+          blockedText: dealCooldownText(u),
           actions: availableActions(u, lc, {
             seasonNumber: seasonRow?.number ?? null, patriotism: pers.patriotism ?? 50, discipline: pers.discipline ?? 50,
             leadership: pers.leadership ?? 30, coachRelationship: playerRow?.coach_relationship ?? 50,

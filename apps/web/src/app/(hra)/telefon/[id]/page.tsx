@@ -55,6 +55,8 @@ interface UnrestInfo {
   pledge?: string | null;
   /** V rozhovoru jde dohodu nabídnout jen, když je na tahu trenér. */
   canAct?: boolean;
+  /** Proč teď dohoda nejde (už dnes byla jedna). */
+  blockedText?: string | null;
   actions: { id: string; label: string; description: string }[];
 }
 
@@ -148,6 +150,7 @@ export default function ConversationPage() {
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [unrestBusy, setUnrestBusy] = useState(false);
   const [unrestEffects, setUnrestEffects] = useState<string[] | null>(null);
+  const [unrestError, setUnrestError] = useState<string | null>(null);
   // Seznam dohod je dlouhý: na mobilu by zakryl rozhovor, proto se rozbaluje až na klepnutí.
   const [unrestOpen, setUnrestOpen] = useState(false);
   // Rozhovory, které ještě čekají na odpověď — jen u nich má proklik smysl.
@@ -335,12 +338,14 @@ export default function ConversationPage() {
   const handleUnrestAction = async (actionId: string) => {
     if (!teamId || !participantId || unrestBusy) return;
     setUnrestBusy(true);
+    setUnrestError(null);
     try {
       const res = await apiFetch<{ ok: boolean; effects?: string[]; unrestLevel?: number }>(
         `/api/teams/${teamId}/players/${participantId}/unrest-talk`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: actionId }) },
       );
       setUnrestEffects(res.effects ?? null);
+      setUnrestOpen(false);
       // Zprávy (trenér + odpověď hráče) vložil server — načíst čerstvě
       const fresh = await apiFetch<ConvDetailResponse>(messagesUrl);
       setMessages(fresh.messages);
@@ -350,7 +355,8 @@ export default function ConversationPage() {
       setAiThreadState(fresh.aiThreadState);
     } catch (e) {
       console.error("unrest action:", e);
-      setUnrestEffects([e instanceof Error ? e.message : "Akce se nezdařila"]);
+      setUnrestEffects(null);
+      setUnrestError(e instanceof Error ? e.message : "Dohoda se nepovedla.");
     }
     setUnrestBusy(false);
   };
@@ -605,13 +611,13 @@ export default function ConversationPage() {
           {unrest.pledge && (
             <div className="text-sm text-orange-900 mt-0.5">🤞 {unrest.pledge}</div>
           )}
-          {unrestEffects && (
-            <div className="mt-1.5 bg-white rounded-soft px-2.5 py-1.5 text-sm text-gray-700 space-y-0.5">
-              {unrestEffects.map((ef, i) => <div key={i}>• {ef}</div>)}
-              <button onClick={() => setUnrestEffects(null)} className="text-sm text-muted underline">skrýt</button>
-            </div>
+          {unrestEffects && unrestEffects.length > 0 && (
+            <div className="text-sm text-pitch-700 mt-1">✅ {unrestEffects.join(". ")}.</div>
           )}
-          {unrest.actions.length > 0 && (
+          {unrestError && <div className="text-sm text-red-700 mt-1">{unrestError}</div>}
+          {unrest.blockedText ? (
+            <div className="text-sm text-muted mt-1">{unrest.blockedText}</div>
+          ) : unrest.actions.length > 0 && (
             <>
               <button
                 onClick={() => setUnrestOpen((o) => !o)}
