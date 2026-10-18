@@ -22,7 +22,7 @@ type Outcome = "calmed" | "partial" | "backfired";
 export interface UnrestActionDef {
   id: UnrestActionId;
   label: string;          // text na FE chipu (bez ceny, ceny do tlačítek nepatří)
-  coachMessage: string;   // co trenér hráči napíše (šablona: {name} křestní, {amount} částka, {team} klub)
+  coachMessage: string;   // hotová SMS trenéra (šablona: {amount} částka, {team} klub); bez oslovení jménem, 5. pád neumíme
   description: string;    // vysvětlení efektu pro FE ({amount}, {team} se doplní)
 }
 
@@ -35,55 +35,55 @@ export const UNREST_ACTIONS: UnrestActionDef[] = [
   {
     id: "bonus",
     label: "Vyplatit prémii",
-    coachMessage: "{name}, vím, že ti šlo i o peníze. Tady máš {amount} prémii, zasloužíš si ji. A teď hlavu nahoru, potřebuju tě.",
+    coachMessage: "Vím, že ti šlo i o peníze. Tady máš {amount} prémii, zasloužíš si ji. A teď hlavu nahoru, potřebuju tě.",
     description: "Jednorázově {amount} z klubové kasy. Hráče, kterému šlo o peníze, spolehlivě uklidní.",
   },
   {
     id: "raise_wage",
     label: "Zvednout odměny (+30 %)",
-    coachMessage: "{name}, vážím si tě a chci, abys tu byl spokojený. Od příštího týdne ti zvedám odměny o třetinu.",
+    coachMessage: "Vážím si tě a chci, abys tu byl spokojený. Od příštího týdne ti zvedám odměny o třetinu.",
     description: "Trvale zvýší týdenní odměny hráče o 30 %. Jde použít 1× za sezónu.",
   },
   {
     id: "promise_minutes",
     label: "Slíbit místo v sestavě",
-    coachMessage: "{name}, chápu, že jsi naštvaný. Uděláme dohodu, v příštích zápasech s tebou počítám v základu. Ukaž mi, že na to máš.",
+    coachMessage: "Chápu, že jsi naštvaný. Uděláme dohodu, v příštích zápasech s tebou počítám v základu. Ukaž mi, že na to máš.",
     description: "Zklidní hráče, ale slib se počítá: 2 ze 3 příštích zápasů v základu, jinak se naštve víc.",
   },
   {
     id: "promise_transfer",
     label: "Slíbit prodej při další nabídce",
-    coachMessage: "{name}, dobře. Když přijde další slušná nabídka, pustím tě. Máš moje slovo. Do té doby chci ale plný nasazení.",
+    coachMessage: "Dobře. Když přijde další slušná nabídka, pustím tě. Máš moje slovo. Do té doby chci ale plný nasazení.",
     description: "Výrazně zklidní. Slib platí 30 dní: další odmítnutá nabídka, o kterou hráč stojí, ho rozzuří naplno.",
   },
   {
     id: "captaincy",
     label: "Dát mu kapitánskou pásku",
-    coachMessage: "{name}, chceš víc? Tak to ukaž tady. Od zítřka jsi kapitán, beru tě jako lídra týmu.",
+    coachMessage: "Chceš víc? Tak to ukaž tady. Od zítřka jsi kapitán, beru tě jako lídra týmu.",
     description: "Stane se kapitánem týmu (dosavadní kapitán o pásku přijde). Ambiciózního hráče to podrží.",
   },
   {
     id: "personal_talk",
     label: "Pozvat ho na pivo",
-    coachMessage: "{name}, pojď večer na pivo, platím já. Chci slyšet, co tě štve, a vyříkat si to z očí do očí.",
+    coachMessage: "Pojď večer na pivo, platím já. Chci slyšet, co tě štve, a vyříkat si to z očí do očí.",
     description: "Posezení za {amount}. Zlepší vztah s tebou a hráč se vypovídá.",
   },
   {
     id: "appeal_loyalty",
     label: "Apelovat na srdcaře",
-    coachMessage: "{name}, tenhle klub tě vychoval. Kabina tě potřebuje a lidi ve vsi za tebou stojí. Nenech se zblbnout penězi.",
+    coachMessage: "Tenhle klub tě vychoval. Kabina tě potřebuje a lidi ve vsi za tebou stojí. Nenech se zblbnout penězi.",
     description: "Na hráče, kterému na klubu záleží, apel zabere.",
   },
   {
     id: "tough_love",
     label: "Zpražit ho",
-    coachMessage: "{name}, poslouchej. Trucování ti nepomůže. Buď makáš jako ostatní, nebo si sedneš na lavku. Tvoje volba.",
+    coachMessage: "Poslouchej. Trucování ti nepomůže. Buď makáš jako ostatní, nebo si sedneš na lavku. Tvoje volba.",
     description: "Disciplinovaný hráč si to vezme k srdci.",
   },
   {
     id: "release",
     label: "Zavolat klubu a pustit ho",
-    coachMessage: "{name}, dobře, nebudu ti stát v cestě. Volal jsem do {team}, jestli o tebe pořád stojí. Když pošlou nabídku znovu, pustím tě.",
+    coachMessage: "Dobře, nebudu ti stát v cestě. Volal jsem do {team}, jestli o tebe pořád stojí. Když pošlou nabídku znovu, pustím tě.",
     description: "{team} pošle stejnou nabídku znovu (najdeš ji v Přestupech). Když ji pak odmítneš nebo necháš propadnout, hráč se rozzuří naplno.",
   },
 ];
