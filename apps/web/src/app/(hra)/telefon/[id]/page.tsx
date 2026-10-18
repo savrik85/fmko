@@ -666,7 +666,7 @@ export default function ConversationPage() {
             </button>
             {unrestOpen && (
               <QuickReplies
-                options={unrestDeals.map((a) => ({ id: a.id, text: a.message, hint: a.description }))}
+                options={unrestDeals.map((a) => ({ id: a.id, label: a.label, text: a.message }))}
                 imessage={jeImessage}
                 disabled={unrestBusy || sending}
                 onPick={(o) => handleUnrestAction({ id: o.id, message: o.text })}
@@ -678,7 +678,7 @@ export default function ConversationPage() {
         {nabidkaOdpovedi.length > 0 && (
           <div className="mb-2">
             <QuickReplies
-              options={nabidkaOdpovedi.map((o) => ({ id: o.id, text: o.text, hint: o.label }))}
+              options={nabidkaOdpovedi.map((o) => ({ id: o.id, label: o.label, text: o.text }))}
               imessage={jeImessage}
               disabled={sending}
               onPick={(o) => { const opt = nabidkaOdpovedi.find((x) => x.id === o.id); if (opt) handleOwnerOption(opt); }}
@@ -746,12 +746,12 @@ export default function ConversationPage() {
 }
 
 /**
- * Hotové SMS k odeslání (odpověď majiteli, dohoda s hráčem). Vypadají jako moje zpráva,
- * kterou se chystám poslat: vpravo, v barvě mých bublin, jen obrysem. Dřív to byly široké
- * modré obdélníky přes celý telefon.
+ * Hotové SMS k odeslání (odpověď majiteli, dohoda s hráčem) jako krátké štítky vpravo
+ * v barvě mých zpráv. Klepnutí pošle celou připravenou SMS, ta se hned ukáže v rozhovoru.
+ * Dřív to byly široké modré obdélníky s celým textem: šest dohod zakrylo celý telefon.
  */
 function QuickReplies({ options, imessage, disabled, onPick }: {
-  options: Array<{ id: string; text: string; hint?: string }>;
+  options: Array<{ id: string; label: string; text: string }>;
   imessage: boolean;
   disabled: boolean;
   onPick: (o: { id: string; text: string }) => void;
@@ -760,16 +760,16 @@ function QuickReplies({ options, imessage, disabled, onPick }: {
     ? "border-blue-400 text-blue-700 hover:bg-blue-50"
     : "border-pitch-500 text-pitch-700 hover:bg-pitch-50";
   return (
-    <div className="flex flex-col items-end gap-1.5">
+    <div className="flex flex-wrap justify-end gap-1.5">
       {options.map((o) => (
         <button
           key={o.id}
           onClick={() => onPick(o)}
           disabled={disabled}
-          title={o.hint}
-          className={`max-w-[85%] text-left text-sm bg-white border rounded-2xl rounded-br-tight px-3 py-2 transition-colors disabled:opacity-50 ${colorClass}`}
+          title={o.text}
+          className={`text-sm font-heading font-bold bg-white border rounded-full px-3 py-1.5 transition-colors disabled:opacity-50 ${colorClass}`}
         >
-          {o.text}
+          {o.label}
         </button>
       ))}
     </div>
