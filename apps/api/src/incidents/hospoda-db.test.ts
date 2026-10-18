@@ -41,6 +41,7 @@ function pravidlaKontextu(): Pravidlo[] {
     ] },
     { sql: /FROM players WHERE team_id = \?/, all: [hracRadek("s", "Pepa", "Kos"), hracRadek("p", "Franta", "Novák"), hracRadek("k", "Karel", "Vrba")] },
     { sql: /status = 'probiha' AND category = 'zivotni'/, all: [{ player_id: "s", incident_id: "inc-dluhy-s", kind: "dluhy", zaloha: "odmitnuto" }] },
+    { sql: /SELECT user_id, team_type FROM teams/, first: { user_id: "user-1", team_type: "senior" } },
   ];
 }
 
@@ -100,6 +101,17 @@ describe("kontext hospody z DB", () => {
     expect(hrozi?.typ === "hrozi" && hrozi.cin.kind).toBe("vitrina");
     expect(r.pribehy.find((p) => p.type === "ohlasuje_cin")).toMatchObject({ playerIds: ["k"], incidentId: "inc-tym-a-vitrina-2026-09-16-hrozi-k" });
     expect(r.seasonNumber).toBe(4);
+  });
+
+  it("rezerva U21 ani AI klub hrozbu nedostanou: denní krok incidentů je přeskakuje a nevyhodnotil by ji", async () => {
+    for (const team of [{ user_id: "user-1", team_type: "u21" }, { user_id: "ai", team_type: "senior" }]) {
+      const db = new FalesnaD1([{ sql: /SELECT user_id, team_type FROM teams/, first: team }, ...pravidlaKontextu()]);
+      const r = await udalostiHospody(jakoD1(db), TYM, [navstevnik("k", "Karel", "Vrba")], { trener: false, jiste: false, ohlasi: "k" });
+      expect(r.zapisy.find((z) => z.typ === "hrozi")).toBeUndefined();
+      expect(r.pribehy.find((p) => p.type === "ohlasuje_cin")).toBeUndefined();
+    }
+    // Stav klubu (a s ním výběr činu) se pro ně vůbec nenačítá.
+    expect(nactiStavKlubu).not.toHaveBeenCalled();
   });
 
   it("nový klub bez odehraných zápasů ohlášení nedostane (ochrana jako v losování)", async () => {

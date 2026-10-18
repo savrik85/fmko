@@ -18,10 +18,11 @@ import { seedFromString } from "../lib/seed";
 import { jePoznatelne, jeProdejnaKradez, kradeneZbozi } from "./bazar";
 import { pozdejsi } from "./incident-db";
 import { CINY_HRACE, muzeOhlasit, nazevIncidentu, type CinHrace } from "./katalog";
+import { naCooldownu } from "./losovani";
 import {
   BONUS_POLICIE, CELA_HOSPODA_DNI, CELA_HOSPODA_SANCE, CELA_HOSPODA_ZAVAZNOST, CERSTVY_ZLODEJ_DNI, CHLUBI_ALKOHOL,
   CHLUBI_DNI, CHLUBI_SANCE, CHLUBI_TEMPERAMENT, CHLUBI_TEMPERAMENT_NASOBEK, DRBY_ALKOHOL, DRBY_SANCE, HROZI_LHUTA_MAX,
-  HROZI_LHUTA_MIN, LHUTA_PO_ODHALENI_DNI, NABIZI_SANCE, OBVINENI_PAMET_DNI, OCHOTA_POSLA, OHLASUJE_ALKOHOL,
+  HROZI_LHUTA_MIN, LHUTA_PO_ODHALENI_DNI, MAX_OTEVRENYCH_PROBLEMU, NABIZI_SANCE, OBVINENI_PAMET_DNI, OCHOTA_POSLA, OHLASUJE_ALKOHOL,
   OHLASUJE_SANCE, PENEZNI_KINDY, POVOLANI_HOSPODSKY, PRAH_VAHY_PACHATELE, RUNDY_DNI, RUNDY_NASOBEK_SVEDKA, RUNDY_SANCE,
   RVACKA_SANCE, SEKERA_SANCE, STEZUJE_MORALKA, STEZUJE_SANCE, STEZUJE_VZTAH, TRENER_V_HOSPODE_NASOBEK,
   ZNALOST_DRB_DNI,
@@ -468,6 +469,9 @@ function zlodejiUStolu(k: KontextHospody, tady: ReadonlyMap<string, HostHospody>
 }
 
 function kdoOhlasi(k: KontextHospody, v: VolbyHospody, mistni: readonly HostHospody[]): { playerId: string; obvineny: boolean } | null {
+  // Klub má nejvýš jednu hrozbu naraz, jako má nejvýš jeden otevřený problém (losovani.ts).
+  // Hospoda je každý den, takže bez toho se čin ohlašoval obden a visely i tři naráz (prod 2026-10).
+  if (v.ohlasi === undefined && k.hrozi.size > 0) return null;
   for (const h of mistni) {
     const hrac = k.kadr.get(h.playerId);
     if (!hrac || k.hrozi.has(h.playerId)) continue;
@@ -505,9 +509,15 @@ function drbyDoCizichKlubu(k: KontextHospody, hoste: readonly HostHospody[], pri
   return zapisy;
 }
 
-/** Jaký čin hráč ohlásí: jen takový, na který klub má (spec 9a). Obviněný spíš kopne do dveří. */
+/**
+ * Jaký čin hráč ohlásí: jen takový, na který klub má (spec 9a). Obviněný spíš kopne do dveří.
+ * Ohlášený čin je problém jako každý jiný, platí pro něj stejná pravidla jako pro los dne
+ * (losovani.ts): při otevřeném problému se nic neohlásí a stejný typ přijde nejdřív po
+ * `COOLDOWN_TYPU_DNI`. Dřív si hráči v jednom klubu „půjčovali dodávku“ čtyřikrát za dva týdny.
+ */
 export function vyberCin(stav: StavKlubu, obvineny: boolean, rng: Rng): CinHrace | null {
-  const mozne = CINY_HRACE.filter((kind) => muzeOhlasit(kind, stav, obvineny));
+  if (stav.otevreneProblemy >= MAX_OTEVRENYCH_PROBLEMU) return null;
+  const mozne = CINY_HRACE.filter((kind) => !naCooldownu(stav, kind) && muzeOhlasit(kind, stav, obvineny));
   if (mozne.length === 0) return null;
   const kind = rng.weighted(Object.fromEntries(mozne.map((x) => [x, x === "kopnute_dvere" ? 3 : 1])));
   return mozne.find((x) => x === kind) ?? null;

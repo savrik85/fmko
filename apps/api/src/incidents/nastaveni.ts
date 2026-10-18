@@ -158,7 +158,8 @@ export const CHLUBI_DNI = 10;
 export const CHLUBI_TEMPERAMENT = 65;
 export const CHLUBI_TEMPERAMENT_NASOBEK = 1.5;
 export const OHLASUJE_ALKOHOL = 70;
-export const OHLASUJE_SANCE = 0.1;
+/** Na hráče a hospodu. Hospoda je každý den, při 0,1 měl klub 4,6 hrozby měsíčně (prod 2026-10). */
+export const OHLASUJE_SANCE = 0.05;
 /** Odhalený zloděj dráždí (rvačka, vůdce fanoušků) jen chvíli po odhalení nebo uzavření. */
 export const CERSTVY_ZLODEJ_DNI = 14;
 /** Hráč, který manažerovi napíše o ohlášeném činu, musí mít k trenérovi aspoň takový vztah (spec 9a). */

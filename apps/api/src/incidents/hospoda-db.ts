@@ -184,7 +184,13 @@ export async function udalostiHospody(
     const r = pribehyHospody(hoste, k, v);
     const vysledek: UdalostiHospody = { pribehy: r.pribehy, zapisy: r.zapisy, zlodeji: r.zlodeji, seasonNumber: k.seasonNumber };
 
-    if (r.ohlaseni) {
+    // AI kluby a rezervy U21 denní krok incidentů přeskakuje (denni-krok.ts), takže by se jejich
+    // hrozba nikdy nevyhodnotila a visela by navždy (prod 2026-10: 16 hrozeb jedné U21).
+    const team = r.ohlaseni
+      ? await db.prepare("SELECT user_id, team_type FROM teams WHERE id = ?").bind(t.teamId)
+        .first<{ user_id: string | null; team_type: string | null }>()
+      : null;
+    if (r.ohlaseni && team && team.user_id !== "ai" && team.team_type !== "u21") {
       // Co ohlásí, rozhoduje stav klubu: nikdy čin, na který klub nemá (spec 9a).
       const stav = await nactiStavKlubu(db, { id: t.teamId, league_id: t.leagueId }, t.gameDate, k.seasonNumber);
       const rng = createRng(seedFromString(`hospoda|${t.teamId}|${k.den}|cin|${r.ohlaseni.playerId}`));
