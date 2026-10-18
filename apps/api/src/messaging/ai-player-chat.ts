@@ -381,6 +381,11 @@ export async function generateReply(
     "- Když trenér souhlasil/podpořil → poděkuj upřímně, žádná ironie.",
     "",
     closingHint,
+    // Slabší model pokyn o dohodě uprostřed promptu přešel a zopakoval svou předchozí
+    // zprávu (test 2026-10-18), proto ještě jednou na konci, kde ho nepřehlédne.
+    scenario.id === "rejected_offer" && player.transferTalk?.deals.length
+      ? `NEJDŮLEŽITĚJŠÍ: trenér s tebou uzavřel dohodu (${player.transferTalk.deals[player.transferTalk.deals.length - 1]}). Zareaguj PŘÍMO na ni a nezačínej znovu svou stížnost.`
+      : "",
     `Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEOPAKUJ slova ani fráze co jsi nebo trenér už použil v této konverzaci. NEPIŠ podpis.`,
     "",
     "Vrať POUZE JSON v tomto tvaru (žádný markdown, žádný komentář):",
