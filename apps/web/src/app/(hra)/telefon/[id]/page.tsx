@@ -45,6 +45,8 @@ interface AiThreadState {
 
 interface UnrestInfo {
   level: number;
+  /** Jak je naštvaný, slovy (čísla se nezobrazují, hra je simulace). */
+  levelText?: string;
   teamName?: string;
   mood?: string;
   /** Proč chtěl odejít („penězům a lepšímu klubu“), u starších trucu chybí. */
@@ -593,8 +595,9 @@ export default function ConversationPage() {
       {!isGroup && unrest && unrest.level > 0 && (
         <div className="bg-orange-50 border-t border-orange-200 px-3 py-2 shrink-0 max-h-[45vh] overflow-y-auto">
           <div className="text-sm font-heading font-bold text-orange-700">
-            😠 Chtěl odejít{unrest.teamName ? ` do ${unrest.teamName}` : ""}, nespokojenost {unrest.level}/100
+            😠 Chtěl odejít{unrest.teamName ? ` do ${unrest.teamName}` : ""}
           </div>
+          {unrest.levelText && <div className="text-sm text-orange-900">{unrest.levelText}.</div>}
           {unrest.reasons && (
             <div className="text-sm text-orange-900 mt-0.5">Chtěl pryč hlavně kvůli {unrest.reasons}.</div>
           )}

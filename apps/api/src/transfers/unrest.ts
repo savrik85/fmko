@@ -222,6 +222,24 @@ function hashStr(s: string): number {
   return h;
 }
 
+/** Jak je hráč naštvaný, slovy (číslo nespokojenosti manažer nevidí). */
+export function unrestMoodText(level: number): string {
+  if (level >= 70) return "Je hodně naštvaný a hlavou je jinde";
+  if (level >= 40) return "Je naštvaný";
+  if (level >= 15) return "Pořád to v něm trochu vře";
+  if (level > 0) return "Už se skoro uklidnil";
+  return "Uklidnil se";
+}
+
+/** Co dohoda s hráčem udělala, slovy. */
+export function unrestChangeText(before: number, after: number): string {
+  if (after <= 0) return "Uklidnil se";
+  if (after > before) return "Naštval se ještě víc";
+  if (before - after >= 30) return "Výrazně se uklidnil";
+  if (after < before) return "Trochu se uklidnil";
+  return "Nic se nezměnilo";
+}
+
 /** Platný slib trenéra česky pro panel u hráče, nebo null. */
 export function pledgeText(unrest: TransferUnrest): string | null {
   const p = unrest.pledge;
@@ -391,8 +409,10 @@ export async function performUnrestAction(
 
   const newLevel = clamp(unrest.level + unrestDelta, 0, 100);
   const newMorale = clamp(morale + moraleDelta, 0, 100);
-  effects.unshift(`Nespokojenost ${unrest.level} → ${newLevel}`);
-  if (moraleDelta !== 0) effects.push(`Morálka ${morale} → ${newMorale}`);
+  // Bez čísel (přání 2026-10-18: hra je simulace, hodnoty nálady a nespokojenosti hráč nevidí).
+  effects.unshift(unrestChangeText(unrest.level, newLevel));
+  if (moraleDelta > 0) effects.push("Má lepší náladu");
+  else if (moraleDelta < 0) effects.push("Spadla mu nálada");
 
   const updatedUnrest: TransferUnrest & { lastAction?: string } = {
     ...unrest,
