@@ -125,6 +125,52 @@ function ageToDecade(age: number): string {
 }
 
 /**
+ * Jména se losují podle odmocniny skutečné četnosti, ne podle četnosti samotné. Okres má
+ * jen ~150 příjmení a mezi křestními jmény dekády vládne pár nejčastějších, takže při
+ * losování podle četnosti vycházel Jan u 8,6 % hráčů a Novák u 2,5 % (měřeno 2026-10-18).
+ * Odmocnina nechá běžná jména častější, jen méně: Jan 2,7 %, Novák 1,3 %, různých
+ * křestních jmen na 1 500 hráčů 268 místo 126.
+ */
+const NAME_WEIGHT_POWER = 0.5;
+const flattenedNameCache = new WeakMap<Record<string, number>, Record<string, number>>();
+
+export function flattenedNameWeights(weights: Record<string, number>): Record<string, number> {
+  const cached = flattenedNameCache.get(weights);
+  if (cached) return cached;
+  const flat = Object.fromEntries(Object.entries(weights).map(([name, w]) => [name, Math.max(0, w) ** NAME_WEIGHT_POWER]));
+  flattenedNameCache.set(weights, flat);
+  return flat;
+}
+
+/**
+ * Křestní jméno podle dekády narození (věku), vážené odmocninou četnosti. `exclude` = jména,
+ * která se losovat nesmí (v kádru už je hráč se stejným jménem i příjmením); když by nezbylo
+ * nic, losuje se ze všech.
+ */
+export function pickFirstName(
+  rng: Rng, firstnameData: FirstnameData, age: number, fallbackDecade = "1980s", exclude?: ReadonlySet<string>,
+): string {
+  const decade = ageToDecade(age);
+  const weights = flattenedNameWeights(firstnameData.male[decade] ?? firstnameData.male[fallbackDecade]);
+  if (exclude && exclude.size > 0) {
+    const free = Object.fromEntries(Object.entries(weights).filter(([name]) => !exclude.has(name)));
+    if (Object.keys(free).length > 0) return rng.weighted(free);
+  }
+  return rng.weighted(weights);
+}
+
+/** Křestní jména, která v kádru už nosí hráč s tímhle příjmením. */
+export function firstNamesTakenWith(taken: ReadonlySet<string>, lastName: string): Set<string> {
+  const suffix = ` ${lastName}`;
+  return new Set([...taken].filter((n) => n.endsWith(suffix)).map((n) => n.slice(0, -suffix.length)));
+}
+
+/** Příjmení z okresu, vážené odmocninou četnosti. */
+export function pickSurname(rng: Rng, surnameData: SurnameData): string {
+  return rng.weighted(flattenedNameWeights(surnameData.surnames));
+}
+
+/**
  * Generate a single player.
  */
 export function generatePlayer(
@@ -144,9 +190,8 @@ export function generatePlayer(
       ? rng.int(16, 18) // Young talent
       : rng.int(19, 37));
 
-  const decade = ageToDecade(age);
-  let firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1980s"]);
-  let lastName = rng.weighted(surnameData.surnames);
+  let firstName = pickFirstName(rng, firstnameData, age);
+  let lastName = pickSurname(rng, surnameData);
   // Nízké % cizinců/menšin — přepíše jméno + nastaví etnikum pro avatar.
   let nationality = "CZ";
   let ethnicity: Ethnicity = "white";
@@ -322,9 +367,17 @@ export function generateSquad(
   while (positions.length > size) positions.pop();
   rng.shuffle(positions);
 
-  return positions.map((pos) =>
-    generatePlayer(rng, village, pos, surnameData, firstnameData)
-  );
+  // Dva hráči se stejným jménem i příjmením v jednom kádru matou (na produkci 34 dvojic):
+  // při shodě se jméno losuje znovu.
+  const taken = new Set<string>();
+  return positions.map((pos) => {
+    const player = generatePlayer(rng, village, pos, surnameData, firstnameData);
+    if (taken.has(`${player.firstName} ${player.lastName}`) && player.nationality === "CZ") {
+      player.firstName = pickFirstName(rng, firstnameData, player.age, "1980s", firstNamesTakenWith(taken, player.lastName));
+    }
+    taken.add(`${player.firstName} ${player.lastName}`);
+    return player;
+  });
 }
 
 // ═══════════════════════════════════════════════
@@ -427,8 +480,7 @@ export function generateCelebrityLegend(
   const cfg = TIER_CONFIG[tier];
   const age = rng.int(cfg.ageMin, cfg.ageMax);
   const position = rng.pick(["DEF", "MID", "FWD"] as PlayerPosition[]);
-  const decade = ageToDecade(age);
-  const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1980s"]);
+  const firstName = pickFirstName(rng, firstnameData, age, "1980s");
   const lastName = rng.pick(CELEBRITY_SURNAMES);
   const nickname = rng.random() < 0.6 ? rng.pick(CELEBRITY_NICKNAMES[tier]) : null;
   const avatarConfig = celebrityAvatar(rng, ["athletic", "normal", "stocky"], age);
@@ -479,8 +531,7 @@ export function generateFallenStar(
 ): CelebrityResult {
   const age = rng.int(22, 28);
   const position = rng.pick(["MID", "FWD"] as PlayerPosition[]);
-  const decade = ageToDecade(age);
-  const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1990s"]);
+  const firstName = pickFirstName(rng, firstnameData, age, "1990s");
   const lastName = rng.pick(CELEBRITY_SURNAMES);
   const avatarConfig = celebrityAvatar(rng, ["normal", "stocky"], age);
 
@@ -524,8 +575,7 @@ export function generateGlassMan(
 ): CelebrityResult {
   const age = rng.int(27, 33);
   const position = rng.pick(["DEF", "MID", "FWD"] as PlayerPosition[]);
-  const decade = ageToDecade(age);
-  const firstName = rng.weighted(firstnameData.male[decade] ?? firstnameData.male["1990s"]);
+  const firstName = pickFirstName(rng, firstnameData, age, "1990s");
   const lastName = rng.pick(CELEBRITY_SURNAMES);
   const avatarConfig = celebrityAvatar(rng, ["thin", "athletic", "normal"], age);
 

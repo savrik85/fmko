@@ -17,14 +17,10 @@ import { marketValue } from "@okresni-masina/shared";
 import { bodyDospivani, DOSPIVANI_DO_VEKU } from "../season/dospivani";
 import { teoretickyStropHrace } from "../skills/vyhled-hrace";
 import { tempoPodleVeku } from "../skills/verdikt";
+import { youthTrainingTempo } from "../skills/youth-tempo";
 
-/** Naměřené tempo tréninku mladých (body hodnocení za sezónu) podle skrytého talentu. */
-export function youthTrainingTempo(talent: number): number {
-  if (talent >= 70) return 5.87;
-  if (talent >= 50) return 4.28;
-  if (talent >= 30) return 3.11;
-  return 2.58;
-}
+// Tempo tréninku žije v skills/youth-tempo.ts (používá ho i generátor hráčů).
+export { youthTrainingTempo };
 
 export interface YouthSubject {
   age: number;

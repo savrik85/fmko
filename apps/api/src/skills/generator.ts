@@ -7,6 +7,7 @@ import type { FieldSkills, GoalkeeperSkills, SkillValue, LeagueLevelRange } from
 import { SKILL_RANGES_BY_LEVEL } from "./types";
 // Váhy hodnocení žijí ve sdíleném balíku — používá je i web pro zvýraznění atributů v profilu.
 import { ratingWeightsFor } from "@okresni-masina/shared";
+import { youthTrainingTempo } from "./youth-tempo";
 
 function generateSkillValue(rng: Rng, range: LeagueLevelRange, positionBonus: number): SkillValue {
   const cap = rng.int(range.capMin + positionBonus, range.capMax + positionBonus);
@@ -280,6 +281,36 @@ export function overallRatingFromFlat(
 
 export type PlayerPositionCode = "GK" | "DEF" | "MID" | "FWD";
 
+/**
+ * Náskok talentovaného hráče, který vzniká rovnou starší než dorostenec (17–23 let: kádry
+ * klubů mimo hru, volní hráči, U21, trh). Takový hráč má za sebou sezóny od 16 let, kdy
+ * talent už pracoval, ale generátor ho dřív udělal stejně dobrého jako vrstevníky: kluk
+ * s talentem 85 vyšel v 19 letech na hodnocení 24, desátý v kádru slabé vesnice.
+ *
+ * Náskok = sezóny od 16 let × (naměřené tempo tréninku jeho talentu − tempo běžného talentu
+ * dané úrovně), nejvýš za `HEAD_START_MAX_SEASONS` sezóny. Na produkci (2026-10-18) jsou
+ * hráči s talentem 70+ ve věku 18–21 o 10–13 bodů před hráči s talentem pod 30; klenot tak
+ * dostane v 17 letech +3, v 18 +7 a od 19 let +10. S náskokem za pět sezón (+16 ve 21) byl
+ * jednadvacetiletý klenot lepší než všichni dospělí své úrovně (audit 45 000 hráčů: max 74
+ * proti 69), to data z produkce nepodporují.
+ * Dospívání se nepočítá: na produkci ještě neběželo, data k němu nejsou. Dorostenec v 16
+ * nemá za sebou nic, náskok 0. Od 24 let talent sám slábne (`talentForAge`), náskok taky 0.
+ */
+const HEAD_START_MAX_SEASONS = 3;
+
+export function talentHeadStart(age: number, talent: number, level: string): number {
+  if (age <= 16 || age > 23) return 0;
+  const seasons = Math.min(age - 16, HEAD_START_MAX_SEASONS);
+  const typical = typicalTalent(level);
+  return Math.round(seasons * (youthTrainingTempo(talent) - youthTrainingTempo(typical)));
+}
+
+/** Střed losování `generateHiddenTalent` pro danou úroveň (běžný kluk z obce). */
+function typicalTalent(level: string): number {
+  const base = level === "city" ? 25 : level === "small_city" ? 20 : level === "town" ? 15 : 10;
+  return (base + 30) / 2;
+}
+
 /** Šance na klenot u kluka do 21 let: talent 70–95 a strop o 12–25 výš. */
 export const GEM_CHANCE = 0.07;
 const GEM_TALENT: [number, number] = [70, 95];
@@ -440,12 +471,17 @@ export function generatePlayerSkills(rng: Rng, opts: PlayerSkillsOptions): Playe
     capBonus += rng.int(GEM_EXTRA_CAP[0], GEM_EXTRA_CAP[1]);
   }
   if (opts.hiddenTalent !== undefined) hiddenTalent = opts.hiddenTalent;
+  // Kdo chce přesné dnešní hodnocení (`targetRating`: pohárový klub, celebrita) nebo pevný
+  // talent (zkrachovalý talent z ligy), dostane přesně to, náskok by mu ho posunul.
+  if (opts.targetRating === undefined && opts.hiddenTalent === undefined) {
+    currentBonus += talentHeadStart(age, hiddenTalent, level);
+  }
 
   for (const [key, value] of Object.entries(values)) {
     // Zkušenost dávají odehrané minuty, ne talent ani akademie
     if (key === "experience") continue;
     value.maxPotential = Math.min(100, value.maxPotential + capBonus);
-    value.current = Math.min(value.maxPotential, value.current + currentBonus);
+    value.current = Math.max(1, Math.min(value.maxPotential, value.current + currentBonus));
   }
 
   const skills = flattenGeneratedSkills(generated, isGK);

@@ -154,6 +154,11 @@ export async function purchaseVirtualPlayer(p: VirtualPurchase): Promise<Virtual
     logger.warn({ module: "virtual-purchase" }, "vazby nového hráče", e);
   }
 
+  // Číslo dresu hned, ne až při nočním úklidu (jako u přestupu mezi lidmi, routes/game.ts).
+  const { ensureSquadNumbers } = await import("../players/squad-numbers");
+  await ensureSquadNumbers(db, p.destTeamId)
+    .catch((e) => logger.warn({ module: "virtual-purchase" }, "číslo dresu nového hráče", e));
+
   const teamRow = await db.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(p.buyerClubTeamId)
     .first<{ name: string; league_id: string }>()
     .catch((e) => { logger.warn({ module: "virtual-purchase" }, "tým pro zprávu", e); return null; });
