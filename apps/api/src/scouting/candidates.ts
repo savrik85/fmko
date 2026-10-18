@@ -38,6 +38,30 @@ export function clubMeanFor(population: number): number {
   return SCOUT_CLUB_MEAN_COEF * Math.log(Math.max(30, population));
 }
 
+/** Od kolika obyvatel má město klub, který hraje výš než okresní soutěže ve hře. */
+export const TOWN_MIN_POPULATION = 5_000;
+/** Od kolika obyvatel je náskok městského klubu plný. */
+export const TOWN_FULL_POPULATION = 30_000;
+/**
+ * O kolik je nejsilnější městský klub lepší než průměr ligy kupce. Kotva z produkce
+ * (2026-10-18): v jihočeské lize je průměr hráčů 48,8 a základ nejlepších lidských týmů
+ * 59–60,5, tedy zhruba o 12 výš. Písek nebo Strakonice tak mají hráče na úrovni sestav
+ * nejlepších klubů ve hře, malé obce zůstávají slabé.
+ */
+export const TOWN_MAX_BONUS = 12;
+
+/**
+ * Síla městského klubu mimo hru: průměr ligy kupce plus náskok, který roste s logaritmem
+ * počtu obyvatel od 5 do 30 tisíc. Pod 5 tisíc `null` (platí vesnický vzorec `clubMeanFor`).
+ * Dřív měla i třicetitisícová města sílu jen podle `clubMeanFor` (Písek 48,7) a skaut
+ * silného klubu nenašel nikoho: hlášení v 5 % týdnů (prod 2026-10-18, Jitona).
+ */
+export function townClubMean(population: number, leagueAverage: number | null): number | null {
+  if (leagueAverage == null || population < TOWN_MIN_POPULATION) return null;
+  const share = Math.min(1, Math.log(population / TOWN_MIN_POPULATION) / Math.log(TOWN_FULL_POPULATION / TOWN_MIN_POPULATION));
+  return leagueAverage + TOWN_MAX_BONUS * share;
+}
+
 const CLUB_PREFIXES = ["TJ Sokol", "SK", "TJ", "FK", "Sokol", "SK Slavoj"] as const;
 
 /** Název klubu obce. Stabilní: stejná obec má pořád stejný klub. */
