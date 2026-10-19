@@ -239,10 +239,12 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
                       </div>
                     )}
                     {p.lastChange && (
-                      <div className="text-xs sm:text-sm text-muted mt-1.5 flex items-center gap-1.5 flex-wrap">
+                      <div className="text-sm text-muted mt-1.5 flex items-start gap-1">
                         <RelationTrend delta={p.lastChange.delta} />
-                        <span className="text-ink-light">{p.lastChange.description}</span>
-                        <span className="text-muted">· {formatLogDate(p.lastChange.date)}</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="text-ink-light">{p.lastChange.description}</span>
+                          <span className="text-muted"> · {formatLogDate(p.lastChange.date)}</span>
+                        </span>
                       </div>
                     )}
                   </div>
