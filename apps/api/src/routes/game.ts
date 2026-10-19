@@ -6949,6 +6949,42 @@ gameRouter.get("/teams/:teamId/promises", async (c) => {
   return c.json({ active: Object.fromEntries(await activePromisesForClub(c.env.DB, clubTeamId)) });
 });
 
+// GET /teams/:teamId/demands — poptávky: moje, manažerů, klubů mimo hru a koho můžu nabídnout.
+gameRouter.get("/teams/:teamId/demands", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const { listDemands } = await import("../transfers/demands");
+  const data = await listDemands(c.env.DB, teamId);
+  return data ? c.json(data) : c.json({ error: "Tým nenalezen" }, 404);
+});
+
+// POST /teams/:teamId/demands — nová poptávka (post, věk, kam ho chci, strop ceny).
+gameRouter.post("/teams/:teamId/demands", async (c) => {
+  const { parseDemandInput, createDemand } = await import("../transfers/demands");
+  const body = await c.req.json().catch((e) => { logger.warn({ module: "game" }, "demand body", e); return null; });
+  const parsed = parseDemandInput(body);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const res = await createDemand(c.env.DB, c.req.param("teamId"), parsed.value);
+  return res.ok ? c.json(res) : c.json({ error: res.error }, 400);
+});
+
+// POST /teams/:teamId/demands/:demandId/withdraw — stáhnout vlastní poptávku.
+gameRouter.post("/teams/:teamId/demands/:demandId/withdraw", async (c) => {
+  const { withdrawDemand } = await import("../transfers/demands");
+  const ok = await withdrawDemand(c.env.DB, c.req.param("teamId"), c.req.param("demandId"));
+  return ok ? c.json({ ok: true }) : c.json({ error: "Poptávku se nepodařilo stáhnout." }, 404);
+});
+
+// POST /teams/:teamId/demands/:demandId/pitch — nabídnout k poptávce svého hráče.
+gameRouter.post("/teams/:teamId/demands/:demandId/pitch", async (c) => {
+  const { pitchPlayer } = await import("../transfers/demands");
+  const body = await c.req.json<{ playerId?: string }>().catch((e) => { logger.warn({ module: "game" }, "pitch body", e); return null; });
+  if (!body?.playerId) return c.json({ error: "Vyber hráče." }, 400);
+  const res = await pitchPlayer(c.env.DB, c.req.param("teamId"), c.req.param("demandId"), body.playerId, createRng(cryptoSeed()));
+  return res.ok ? c.json(res) : c.json({ error: res.error }, 400);
+});
+
 // GET /teams/:teamId/players/:playerId/promises — co trenér hráči slíbil (profil hráče).
 gameRouter.get("/teams/:teamId/players/:playerId/promises", async (c) => {
   const teamId = c.req.param("teamId");
@@ -9138,6 +9174,21 @@ gameRouter.post("/admin/generate-ai-offers", async (c) => {
     created += await generateAiOffers(c.env.DB, lg.district as string, lg.id as string, rng, { force: true });
   }
   return c.json({ ok: true, expired, created });
+});
+
+// POST /api/admin/generate-club-demands — doplní poptávky klubů mimo hru do plna v každém okrese s manažery.
+gameRouter.post("/admin/generate-club-demands", async (c) => {
+  const { generateClubDemands, CLUB_DEMANDS_PER_DISTRICT } = await import("../transfers/demands");
+  const rng = createRng(cryptoSeed());
+  const districts = await c.env.DB.prepare(
+    "SELECT DISTINCT l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id IS NOT NULL AND t.user_id != 'ai' AND t.parent_team_id IS NULL",
+  ).all<{ district: string }>();
+  let created = 0;
+  for (const d of districts.results) {
+    if (!d.district) continue;
+    for (let i = 0; i < CLUB_DEMANDS_PER_DISTRICT; i++) created += await generateClubDemands(c.env.DB, d.district, rng, { force: true });
+  }
+  return c.json({ ok: true, created });
 });
 
 // POST /api/admin/backfill-departed-avatars — doplní náhodný obličej všem archivovaným

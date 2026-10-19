@@ -94,7 +94,7 @@ function calcAskingPrice(rating: number, age: number, position: string, rng: Rng
  * a hráče, kterého chce, si trochu připlatí. Německý klub dá o 30–50 % víc než český
  * (rozhodnutí 2026-10-18).
  */
-function calcOfferPrice(rating: number, age: number, position: string, rng: Rng, abroad = false): number {
+export function calcOfferPrice(rating: number, age: number, position: string, rng: Rng, abroad = false): number {
   const value = estimateMarketValue(rating, age, position);
   const czech = value * rng.int(100, 125) / 100;
   const price = abroad ? czech * rng.int(130, 150) / 100 : czech;
