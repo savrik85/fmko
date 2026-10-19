@@ -260,11 +260,10 @@ export function DemandsTab({ teamId }: { teamId: string }) {
           onDone={async (res) => {
             setPitchFor(null);
             load();
+            // Odmítnutí klubu je vidět přímo v kartě; okno jen u nabídky, ať jde hned otevřít.
             if (res.status === "accepted" && res.offerId) {
               const open = await confirm({ title: `${pitchFor.who} ho chce`, description: res.message, confirmLabel: "Otevřít nabídku", cancelLabel: "Zavřít" });
               if (open) router.push(`/prestupy/nabidka/${res.offerId}`);
-            } else if (res.status === "declined") {
-              await confirm({ title: `${pitchFor.who} ho nechce`, description: res.message, confirmLabel: "Rozumím", cancelLabel: "Zavřít" });
             }
           }} />
       )}
