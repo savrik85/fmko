@@ -19,7 +19,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  for (const t of ["player_contracts", "players", "departed_players", "teams", "seasons"]) {
+  for (const t of ["player_contracts", "players", "departed_players", "teams", "seasons", "ai_negotiations", "transfer_offers"]) {
     await db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
   }
   await db.prepare("CREATE TABLE seasons (id TEXT PRIMARY KEY, number INTEGER)").run();
@@ -30,6 +30,8 @@ beforeEach(async () => {
     `CREATE TABLE player_contracts (id TEXT PRIMARY KEY, player_id TEXT, team_id TEXT, season_id TEXT, joined_at TEXT,
        left_at TEXT, join_type TEXT, leave_type TEXT, fee INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT)`,
   ).run();
+  await db.prepare("CREATE TABLE ai_negotiations (id TEXT PRIMARY KEY, player_id TEXT, club_name TEXT, status TEXT, resolved_at TEXT)").run();
+  await db.prepare("CREATE TABLE transfer_offers (id TEXT PRIMARY KEY, player_id TEXT, from_team_id TEXT, status TEXT, offer_amount INTEGER, virtual_team_data TEXT, resolved_at TEXT)").run();
   await db.prepare("INSERT INTO seasons VALUES ('s1', 1), ('s2', 2)").run();
   await db.prepare("INSERT INTO teams VALUES ('A','Dvorce','#112233','#FFFFFF',NULL,NULL,'shield',NULL,NULL), ('B','Prachatice','#AA0000','#FFFFFF','#BB1111','#EEEEEE','stripes','PR','star')").run();
   await db.prepare(`INSERT INTO players VALUES ('p1','Jan','Novák','{"head":1,"hair":2,"eyes":3}'), ('p2','Petr','Svoboda',NULL)`).run();
@@ -41,6 +43,21 @@ const contract = (id: string, player: string, team: string, season: string, join
     .bind(id, player, team, season, joined, extra.left ?? null, join, extra.leave ?? null, extra.fee ?? 0, extra.left ? 0 : 1, extra.created).run();
 
 describe("loadTransferOverview", () => {
+  it("klub mimo hru: koupě od něj i prodej do něj ukazují jeho jméno (dřív „Volný hráč“ / nic)", async () => {
+    // Koupě od klubu mimo hru přes skauta: předchozí smlouva ve hře není, jméno zná jednání.
+    await contract("c1", "p1", "B", "s2", "2026-10-19", "transfer", { fee: 90000, created: "2026-10-19 05:10:00" });
+    await db.prepare("INSERT INTO ai_negotiations VALUES ('n1', 'p1', 'FK Blatná', 'signed', '2026-10-19T05:10:00Z')").run();
+    const buyer = (await loadTransferOverview(db, "B"))[0];
+    expect(buyer).toMatchObject({ direction: "in", kind: "transfer", otherTeamId: null, otherTeamName: "FK Blatná", fee: 90000 });
+    expect(buyer.otherTeamBadge?.initials).toBe("FB");
+
+    // Prodej do klubu mimo hru: hráč zmizel ze hry, kupce a cenu zná přijatá nabídka.
+    await contract("c2", "p3", "A", "s1", "2026-01-01", "generated", { left: "2026-10-18", leave: "transfer", created: "2026-01-01 10:00:00" });
+    await db.prepare(`INSERT INTO transfer_offers VALUES ('o1', 'p3', 'virtual_ai', 'accepted', 93000, '{"name":"SV Grafenau"}', '2026-10-18T12:00:00Z')`).run();
+    const seller = (await loadTransferOverview(db, "A"))[0];
+    expect(seller).toMatchObject({ direction: "out", kind: "transfer", otherTeamId: null, otherTeamName: "SV Grafenau", fee: 93000 });
+  });
+
   it("přestup vidí kupující jako příchod a prodávající jako odchod, s protistranou a cenou", async () => {
     await contract("c1", "p1", "A", "s1", "2026-01-01", "generated", { left: "2026-03-01", leave: "transfer", created: "2026-01-01 10:00:00" });
     await contract("c2", "p1", "B", "s1", "2026-03-01", "transfer", { fee: 12000, created: "2026-03-01 10:00:00" });

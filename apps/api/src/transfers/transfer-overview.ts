@@ -31,6 +31,13 @@ export interface TransferOverviewRow {
   date: string;
 }
 
+/** Odznak klubu mimo hru (nemá vlastní barvy), null když klub neznáme. */
+function outsideBadge(name: string | null): TeamBadge | null {
+  if (!name) return null;
+  const initials = name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+  return { primary: "#4a5d43", secondary: "#e8e4d8", pattern: "shield", initials, symbol: null };
+}
+
 const PLAYER_AVATAR_SQL = `COALESCE(p.avatar, dp.avatar)`;
 const PLAYER_NAME_SQL = `COALESCE(p.first_name || ' ' || p.last_name, dp.first_name || ' ' || dp.last_name, 'Neznámý hráč')`;
 
@@ -45,7 +52,12 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
               CASE WHEN pc.join_type IN ('transfer', 'swap') THEN
                 (SELECT prev.team_id FROM player_contracts prev
                   WHERE prev.player_id = pc.player_id AND prev.id != pc.id AND prev.created_at <= pc.created_at
-                  ORDER BY prev.created_at DESC LIMIT 1) END AS other_id
+                  ORDER BY prev.created_at DESC LIMIT 1) END AS other_id,
+              -- Klub mimo hru (skaut, inzerát) ve hře smlouvu nemá: jméno zná jednání o koupi.
+              CASE WHEN pc.join_type = 'transfer' THEN
+                (SELECT n.club_name FROM ai_negotiations n
+                  WHERE n.player_id = pc.player_id AND n.status = 'signed'
+                  ORDER BY n.resolved_at DESC LIMIT 1) END AS outside_club
        FROM player_contracts pc
        LEFT JOIN seasons s ON s.id = pc.season_id
        LEFT JOIN players p ON p.id = pc.player_id
@@ -54,7 +66,7 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
        ORDER BY pc.joined_at DESC LIMIT ?`,
     )
     .bind(teamId, cap)
-    .all<{ player_id: string; kind: string; fee: number | null; date: string; created_at: string; season_number: number | null; player_name: string; player_avatar: string | null; other_id: string | null }>();
+    .all<{ player_id: string; kind: string; fee: number | null; date: string; created_at: string; season_number: number | null; player_name: string; player_avatar: string | null; other_id: string | null; outside_club: string | null }>();
 
   // Odchody: kontrakt, který skončil přestupem nebo propuštěním. Protistrana, cena i sezóna patří následujícímu kontraktu (u propuštění sezóna není známá).
   const departures = await db
@@ -72,7 +84,17 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
               CASE WHEN pc.leave_type = 'transfer' THEN
                 (SELECT ns.number FROM player_contracts nx JOIN seasons ns ON ns.id = nx.season_id
                   WHERE nx.player_id = pc.player_id AND nx.id != pc.id AND nx.created_at >= pc.created_at AND nx.join_type IN ('transfer', 'swap')
-                  ORDER BY nx.created_at ASC LIMIT 1) END AS season_number
+                  ORDER BY nx.created_at ASC LIMIT 1) END AS season_number,
+              -- Prodej do klubu mimo hru: hráč ze hry zmizel, další smlouva není. Kupce a cenu
+              -- zná přijatá nabídka cizího klubu.
+              CASE WHEN pc.leave_type = 'transfer' THEN
+                (SELECT json_extract(o.virtual_team_data, '$.name') FROM transfer_offers o
+                  WHERE o.player_id = pc.player_id AND o.from_team_id = 'virtual_ai' AND o.status = 'accepted'
+                  ORDER BY o.resolved_at DESC LIMIT 1) END AS outside_club,
+              CASE WHEN pc.leave_type = 'transfer' THEN
+                (SELECT o.offer_amount FROM transfer_offers o
+                  WHERE o.player_id = pc.player_id AND o.from_team_id = 'virtual_ai' AND o.status = 'accepted'
+                  ORDER BY o.resolved_at DESC LIMIT 1) END AS outside_fee
        FROM player_contracts pc
        LEFT JOIN players p ON p.id = pc.player_id
        LEFT JOIN departed_players dp ON dp.id = pc.player_id
@@ -80,7 +102,7 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
        ORDER BY pc.left_at DESC LIMIT ?`,
     )
     .bind(teamId, cap)
-    .all<{ player_id: string; kind: string; fee: number | null; date: string; created_at: string; season_number: number | null; player_name: string; player_avatar: string | null; other_id: string | null }>();
+    .all<{ player_id: string; kind: string; fee: number | null; date: string; created_at: string; season_number: number | null; player_name: string; player_avatar: string | null; other_id: string | null; outside_club: string | null; outside_fee: number | null }>();
 
   const otherIds = [...new Set([...arrivals.results, ...departures.results].map((r) => r.other_id).filter((x): x is string => !!x))];
   const teams = new Map<string, { name: string; badge: TeamBadge }>();
@@ -125,8 +147,8 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
       playerId: r.player_id,
       playerName: r.player_name,
       otherTeamId: r.other_id,
-      otherTeamName: r.other_id ? teams.get(r.other_id)?.name ?? null : null,
-      otherTeamBadge: r.other_id ? teams.get(r.other_id)?.badge ?? null : null,
+      otherTeamName: r.other_id ? teams.get(r.other_id)?.name ?? null : r.outside_club,
+      otherTeamBadge: r.other_id ? teams.get(r.other_id)?.badge ?? null : outsideBadge(r.outside_club),
       playerAvatar: parseAvatar(r.player_avatar),
       fee: r.fee ?? 0,
       seasonNumber: r.season_number,
@@ -139,10 +161,10 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
       playerId: r.player_id,
       playerName: r.player_name,
       otherTeamId: r.other_id,
-      otherTeamName: r.other_id ? teams.get(r.other_id)?.name ?? null : null,
-      otherTeamBadge: r.other_id ? teams.get(r.other_id)?.badge ?? null : null,
+      otherTeamName: r.other_id ? teams.get(r.other_id)?.name ?? null : r.outside_club,
+      otherTeamBadge: r.other_id ? teams.get(r.other_id)?.badge ?? null : outsideBadge(r.outside_club),
       playerAvatar: parseAvatar(r.player_avatar),
-      fee: r.fee ?? 0,
+      fee: r.fee ?? r.outside_fee ?? 0,
       seasonNumber: r.season_number,
       date: r.date,
       createdAt: r.created_at,

@@ -72,22 +72,21 @@ export function TransferOverview({ teamId }: { teamId: string }) {
                   <span className={`font-bold ${r.direction === "in" ? "text-pitch-600" : "text-card-red"}`}>
                     {r.direction === "in" ? "→" : "←"} {KIND_LABEL[r.kind]}
                   </span>
-                  {r.otherTeamId && r.otherTeamName && (
+                  {r.otherTeamName && (
                     <>
                       <span>{r.direction === "in" ? "z" : "do"}</span>
-                      <Link href={`/tym/${r.otherTeamId}`} className="inline-flex items-center gap-1 font-semibold text-gray-700 hover:underline">
-                        {r.otherTeamBadge && (
-                          <BadgePreview
-                            primary={r.otherTeamBadge.primary}
-                            secondary={r.otherTeamBadge.secondary}
-                            pattern={r.otherTeamBadge.pattern as BadgePattern}
-                            initials={r.otherTeamBadge.initials}
-                            symbol={r.otherTeamBadge.symbol}
-                            size={20}
-                          />
-                        )}
-                        {r.otherTeamName}
-                      </Link>
+                      {/* Klub mimo hru (skaut, inzerát, cizí kupec) nemá stránku: jméno bez odkazu. */}
+                      {r.otherTeamId ? (
+                        <Link href={`/tym/${r.otherTeamId}`} className="inline-flex items-center gap-1 font-semibold text-gray-700 hover:underline">
+                          <OtherTeamBadge badge={r.otherTeamBadge} />
+                          {r.otherTeamName}
+                        </Link>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 font-semibold text-gray-700">
+                          <OtherTeamBadge badge={r.otherTeamBadge} />
+                          {r.otherTeamName}
+                        </span>
+                      )}
                     </>
                   )}
                   {r.fee > 0 && <span>· {fmtCZK(r.fee)}</span>}
@@ -99,5 +98,19 @@ export function TransferOverview({ teamId }: { teamId: string }) {
         </ul>
       )}
     </div>
+  );
+}
+
+function OtherTeamBadge({ badge }: { badge: TransferRow["otherTeamBadge"] }) {
+  if (!badge) return null;
+  return (
+    <BadgePreview
+      primary={badge.primary}
+      secondary={badge.secondary}
+      pattern={badge.pattern as BadgePattern}
+      initials={badge.initials}
+      symbol={badge.symbol}
+      size={20}
+    />
   );
 }

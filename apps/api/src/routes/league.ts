@@ -18,6 +18,11 @@ function deriveInitials(name: string | null | undefined): string {
   return words.slice(0, 3).map((w) => w[0] ?? "").join("").toUpperCase();
 }
 
+/** Odznak klubu mimo hru (nemá vlastní barvy): stejný jako u cizího klubu v detailu nabídky. */
+function outsideClubBadge(name: string) {
+  return { primary: "#4a5d43", secondary: "#e8e4d8", pattern: "shield", initials: deriveInitials(name), symbol: null };
+}
+
 // GET /api/teams/:teamId/standings — real standings from DB
 leagueRouter.get("/teams/:teamId/standings", async (c) => {
   const teamId = c.req.param("teamId");
@@ -636,7 +641,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         AND pc2.leave_type IN ('transfer', 'released')
         AND pc2.left_at <= pc.joined_at
         ORDER BY pc2.left_at DESC LIMIT 1) as from_team_id,
-       -- Hráč, u kterého visí doplatek, má join_type 'transfer' jako každý jiný.
+       -- Klub mimo hru (skaut, inzerát na trhu) nemá ve hře smlouvu, takže výš vyjde NULL
+       -- a web napsal „Volný hráč“. Jméno klubu zná jednání, kterým se hráč koupil.
+       (SELECT n.club_name FROM ai_negotiations n
+         WHERE n.player_id = pc.player_id AND n.status = 'signed'
+         ORDER BY n.resolved_at DESC LIMIT 1) as outside_club,
        -- Že šlo o výměnu, se pozná jen z nabídky, která ji uzavřela. Pozor na směr:
        -- v transfer_offers je from_team_id ten, kdo nabízí (kupující), a to_team_id
        -- majitel hráče (prodávající) — hráč se stěhuje do from_team_id.
@@ -716,8 +725,8 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         age: (r.age as number) ?? 0,
         position: (r.position as string) ?? "",
         fromTeamId: r.from_team_id as string | null,
-        fromTeam: fromTeam?.name ?? null,
-        fromTeamBadge: fromBadge,
+        fromTeam: fromTeam?.name ?? (r.join_type === "transfer" ? (r.outside_club as string | null) : null) ?? null,
+        fromTeamBadge: fromBadge ?? (r.join_type === "transfer" && r.outside_club ? outsideClubBadge(r.outside_club as string) : null),
         toTeamId: r.to_team_id as string,
         toTeam: r.to_team_name as string,
         toTeamBadge: toBadge,
@@ -770,7 +779,7 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
       fromTeamBadge: fromBadge,
       toTeamId: "virtual_ai",
       toTeam: (r.virtual_club as string | null) ?? "Cizí klub",
-      toTeamBadge: { primary: "#4a5d43", secondary: "#e8e4d8", pattern: "shield", initials: "?", symbol: null },
+      toTeamBadge: outsideClubBadge((r.virtual_club as string | null) ?? "Cizí klub"),
       fee: (r.fee as number) ?? 0,
       date: r.joined_at as string,
       isCrossLeague: false,
