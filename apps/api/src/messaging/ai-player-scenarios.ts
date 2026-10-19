@@ -384,7 +384,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "transfer",
     expectedTurns: 2,
     description:
-      "Trenér právě odmítl přestupovou nabídku od jiného klubu, o kterou hráč STÁL (klub a částka jsou v první zprávě hráče). Hráč je naštvaný a chce vysvětlení. Podle trenérovy reakce se buď uklidní (vysvětlení, ocenění, slib), nebo se naštve ještě víc (odbytí, ignorace, arogance). Nechce slyšet výmluvy, chce respekt.",
+      "Trenér právě odmítl přestupovou nabídku od jiného klubu, o kterou hráč STÁL (klub je v první zprávě hráče). Částka nabídky je odstupné pro trenérův klub, hráč z ní nic nedostane. Hráč je naštvaný a chce vysvětlení. Podle trenérovy reakce se buď uklidní (vysvětlení, ocenění, slib), nebo se naštve ještě víc (odbytí, ignorace, arogance). Nechce slyšet výmluvy, chce respekt.",
     weight: () => 0,
   },
   {

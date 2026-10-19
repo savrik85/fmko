@@ -211,9 +211,9 @@ function transferTalkLines(player: PlayerSnapshot): string[] {
   const t = player.transferTalk;
   if (!t) return [];
   return [
-    t.reasons
-      ? `PROČ JSI CHTĚL ODEJÍT: hlavně kvůli ${t.reasons}${t.offer ? ` (${t.offer})` : ""}. Když se trenér ptá nebo to obchází, řekni mu to narovinu.`
-      : (t.offer ? `NABÍDKA: ${t.offer}.` : ""),
+    t.reasons ? `PROČ JSI CHTĚL ODEJÍT: hlavně kvůli ${t.reasons}. Když se trenér ptá nebo to obchází, řekni mu to narovinu.` : "",
+    t.offer ? `NABÍDKA: ${t.offer}` : "",
+    t.league ? `SOUTĚŽ: ${t.league}` : "",
     t.deals.length > 0
       ? `DOHODA S TRENÉREM (platí, není to jen řeč): ${t.deals.join("; ")}. Když řeší tvůj hlavní důvod, uklidni se a dej mu to najevo.`
       : "",
@@ -226,7 +226,9 @@ function transferJudgeLines(player: PlayerSnapshot): string[] {
   const t = player.transferTalk;
   if (!t) return [];
   return [
-    `HLAVNÍ DŮVOD ODCHODU: ${t.reasons ?? "nezjištěn"}${t.offer ? ` (${t.offer})` : ""}.`,
+    `HLAVNÍ DŮVOD ODCHODU: ${t.reasons ?? "nezjištěn"}.`,
+    ...(t.offer ? [`NABÍDKA (odstupné pro klub, ne pro hráče): ${t.offer}`] : []),
+    ...(t.league ? [`SOUTĚŽ: ${t.league}`] : []),
     `UZAVŘENÉ DOHODY: ${t.deals.length > 0 ? t.deals.join("; ") : "žádná"}.`,
     "Tón (rozhoduje o tom, jestli se hráč přestane zlobit):",
     "- positive: trenér uzavřel dohodu, která řeší hlavní důvod, a nebyl hrubý. Nebo bez dohody, když hlavní důvod konkrétně a s respektem řešil a hráč v rozhovoru ustoupil.",

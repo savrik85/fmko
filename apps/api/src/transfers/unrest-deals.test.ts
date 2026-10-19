@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { TransferUnrest } from "./offer-rejection-impact";
 import { availableActions, bonusAmount, pledgeText, unrestChangeText, unrestMoodText, type UnrestContext } from "./unrest";
-import { reasonsText, transferTalkFrom, unrestReasonsFromFactors } from "./unrest-reasons";
+import { reasonSms, reasonsText, transferTalkFrom, unrestReasonsFromFactors } from "./unrest-reasons";
+import { clubStepFor } from "./offer-rejection-impact";
 
 const CTX: UnrestContext = { seasonNumber: 4, patriotism: 50, discipline: 50, leadership: 30, coachRelationship: 50, isCaptain: false, ownedHere: true, now: new Date("2026-10-18T12:00:00Z") };
 const ids = (u: TransferUnrest, lc: Record<string, unknown> = {}, ctx: Partial<UnrestContext> = {}) =>
@@ -20,8 +21,16 @@ describe("proč hráč chtěl odejít", () => {
   });
 
   it("text důvodů pro panel a prompt", () => {
-    expect(reasonsText(["money"])).toBe("penězům");
-    expect(reasonsText(["money", "better_club", "minutes"])).toBe("penězům, lepšímu klubu a tomu, že málo hraje");
+    expect(reasonsText(["money"])).toBe("velkému zájmu klubu");
+    expect(reasonsText(["money", "better_club", "minutes"])).toBe("velkému zájmu klubu, lepšímu klubu a tomu, že málo hraje");
+  });
+
+  it("první SMS: soutěž jen tam, kde je opravdu vyšší; peníze nejsou jeho výplata", () => {
+    expect(reasonSms("better_club", "higher_league")).toContain("pořádnou soutěž");
+    expect(reasonSms("better_club", "seniors")).toContain("mezi dospělými");
+    expect(reasonSms("better_club", "abroad")).toContain("Německu");
+    for (const step of ["stronger_team", undefined] as const) expect(reasonSms("better_club", step)).not.toContain("soutěž");
+    expect(reasonSms("money", undefined)).not.toMatch(/uvidím|výplat|plat/);
   });
 });
 
@@ -105,9 +114,12 @@ describe("prémie, sliby a texty pro AI", () => {
   });
 
   it("AI zná důvody, nabídku a uzavřené dohody", () => {
-    const t = transferTalkFrom({ reasons: ["money"], teamName: "SV Grafenau", offer: { amount: 60_000 }, deals: [{ id: "bonus" }] })!;
-    expect(t.reasons).toBe("penězům");
-    expect(t.offer).toBe(`SV Grafenau nabízel ${(60_000).toLocaleString("cs")} Kč`);
+    const t = transferTalkFrom({ reasons: ["money"], teamName: "SV Grafenau", offer: { amount: 60_000 }, leagueNote: "SV Grafenau je bavorský klub.", deals: [{ id: "bonus" }] })!;
+    expect(t.reasons).toBe("velkému zájmu klubu");
+    // Odstupné patří klubu: hráč si dřív myslel, že ty peníze nabízeli jemu.
+    expect(t.offer).toContain(`nabídl tvému klubu ${(60_000).toLocaleString("cs")} Kč odstupné`);
+    expect(t.offer).toContain("dostal klub, ne ty");
+    expect(t.league).toBe("SV Grafenau je bavorský klub.");
     expect(t.deals).toEqual(["trenér ti vyplatil prémii z klubové kasy"]);
     expect(transferTalkFrom(undefined)).toBeUndefined();
   });
@@ -121,5 +133,36 @@ describe("prémie, sliby a texty pro AI", () => {
     expect(unrestChangeText(60, 45)).toBe("Trochu se uklidnil");
     expect(unrestChangeText(40, 50)).toBe("Naštval se ještě víc");
     for (const t of [unrestMoodText(77), unrestChangeText(80, 10)]) expect(t).not.toMatch(/\d/);
+  });
+});
+
+describe("kam by hráč přestupem šel", () => {
+  const stubDb = (row: Record<string, unknown> | null) => ({
+    prepare: () => ({ bind: () => ({ first: async () => row }) }),
+  }) as unknown as D1Database;
+  const base = { fromTeamId: "B", rosterTeamId: "S", teamName: "FK Seznam Dvorce", virtualCountry: null };
+
+  it("U21 hráč a nabídka áčka ze stejného přeboru: mezi dospělé, ne „pořádná soutěž“", async () => {
+    const r = await clubStepFor(stubDb({ buyer_parent: null, buyer_level: "okresni_prebor", buyer_league: "Přebor Prahy", roster_parent: "S0", roster_level: "okresni_prebor" }), base);
+    expect(r.step).toBe("seniors");
+    expect(r.note).toContain("mezi dospělými");
+  });
+
+  it("stejná soutěž: jen silnější tým, model nesmí tvrdit vyšší soutěž", async () => {
+    const r = await clubStepFor(stubDb({ buyer_parent: null, buyer_level: "okresni_prebor", buyer_league: "Přebor Prahy", roster_parent: null, roster_level: "okresni_prebor" }), base);
+    expect(r.step).toBe("stronger_team");
+    expect(r.note).toContain("není vyšší soutěž");
+  });
+
+  it("přebor proti III. třídě: vyšší soutěž", async () => {
+    const r = await clubStepFor(stubDb({ buyer_parent: null, buyer_level: "okresni_prebor", buyer_league: "Okresní přebor Prachatice", roster_parent: null, roster_level: "okresni_soutez" }), base);
+    expect(r.step).toBe("higher_league");
+  });
+
+  it("klub mimo hru: Německo, český z jiného okresu bez vymýšlení soutěže", async () => {
+    expect((await clubStepFor(stubDb(null), { ...base, fromTeamId: "virtual_ai", virtualCountry: "DE" })).step).toBe("abroad");
+    const cz = await clubStepFor(stubDb(null), { ...base, fromTeamId: "virtual_ai" });
+    expect(cz.step).toBe("stronger_team");
+    expect(cz.note).toContain("nevymýšlej");
   });
 });

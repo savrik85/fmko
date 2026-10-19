@@ -14,7 +14,8 @@ import { computeInterestForOffer, INTEREST_LABELS } from "./player-interest";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
-import { REASON_SMS, unrestReasonsFromFactors, type UnrestReason } from "./unrest-reasons";
+import { reasonSms, unrestReasonsFromFactors, type ClubStep, type UnrestReason } from "./unrest-reasons";
+import { LEVEL_RANK } from "../league/district-leagues";
 import { resolvePromises } from "./promises";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -43,6 +44,41 @@ export interface TransferUnrest {
   offer?: { amount: number; fromTeamId: string; virtualTeamData: string | null; at: string };
   /** Dohody uzavřené v tomhle truci (každá jen jednou). Nové odmítnutí je smaže. */
   deals?: Array<{ id: string; at: string }>;
+  /** Kam by šel: vyšší soutěž, áčko z U21, Německo, nebo jen silnější tým (clubStepFor). */
+  clubStep?: ClubStep;
+  /** Věta o soutěžích pro prompt rozhovoru, ať si model soutěž nevymýšlí. */
+  leagueNote?: string;
+}
+
+/**
+ * Kam by hráč přestupem šel a jak to říct. Dřív první SMS u „lepšího klubu“ vždy psala
+ * „pořádnou soutěž“, i když nabídka byla ze stejného přeboru (2026-10-19).
+ */
+export async function clubStepFor(
+  db: D1Database,
+  input: { fromTeamId: string; rosterTeamId: string; teamName: string; virtualCountry: string | null },
+): Promise<{ step: ClubStep; note: string }> {
+  const { fromTeamId, rosterTeamId, teamName, virtualCountry } = input;
+  if (fromTeamId === "virtual_ai") {
+    return virtualCountry && virtualCountry !== "CZ"
+      ? { step: "abroad", note: `${teamName} je bavorský klub, hrál bys v Německu.` }
+      : { step: "stronger_team", note: `${teamName} je klub z jiného okresu. Jakou soutěž hraje, přesně nevíš, tak si to nevymýšlej.` };
+  }
+  const row = await db.prepare(
+    `SELECT bt.parent_team_id AS buyer_parent, bl.level AS buyer_level, bl.name AS buyer_league,
+            st.parent_team_id AS roster_parent, sl.level AS roster_level
+     FROM teams bt LEFT JOIN leagues bl ON bl.id = bt.league_id, teams st LEFT JOIN leagues sl ON sl.id = st.league_id
+     WHERE bt.id = ? AND st.id = ?`,
+  ).bind(fromTeamId, rosterTeamId).first<{ buyer_parent: string | null; buyer_level: string | null; buyer_league: string | null; roster_parent: string | null; roster_level: string | null }>()
+    .catch((e) => { logger.warn({ module: "rejection-impact" }, "soutěž kupujícího a hráče", e); return null; });
+  const league = row?.buyer_league ?? "neznámou soutěž";
+  if (row?.roster_parent && !row.buyer_parent) {
+    return { step: "seniors", note: `${teamName} hraje ${league} mezi dospělými, ty zatím hraješ za U21.` };
+  }
+  if ((LEVEL_RANK[row?.buyer_level ?? ""] ?? 0) > (LEVEL_RANK[row?.roster_level ?? ""] ?? 0)) {
+    return { step: "higher_league", note: `${teamName} hraje ${league}, o soutěž výš než ty.` };
+  }
+  return { step: "stronger_team", note: `${teamName} hraje ${league}, to není vyšší soutěž než ta tvoje. Netvrď, že bys tam hrál lepší soutěž.` };
 }
 
 export function parseUnrest(lifeContext: string | null | undefined): TransferUnrest | null {
@@ -211,6 +247,7 @@ export async function applyOfferRejectionImpact(
   }
 
   const newMorale = clamp(morale + moraleDelta, 0, 100);
+  const step = await clubStepFor(db, { fromTeamId, rosterTeamId: player.team_id as string, teamName, virtualCountry });
   const newUnrest: TransferUnrest = {
     ...unrest,
     level: newLevel,
@@ -227,6 +264,8 @@ export async function applyOfferRejectionImpact(
       virtualTeamData: fromTeamId === "virtual_ai" ? ((offer.virtual_team_data as string | null) ?? null) : null,
     },
     deals: [],
+    clubStep: step.step,
+    leagueNote: step.note,
   };
 
   await db.prepare(
@@ -249,7 +288,7 @@ export async function applyOfferRejectionImpact(
     ? `Volal jste do ${teamName}, že mě pustíte, a teď to zase zaříznete? S vámi jsem skončil, trenére.`
     : brokenTransferPledge
     ? `Slíbil jste, že mě při další dobré nabídce pustíte! ${teamName} přišel a vy nic. S vámi jsem skončil.`
-    : `${pick(pool).replace("{team}", teamName)}${newUnrest.reasons?.length ? ` ${REASON_SMS[newUnrest.reasons[0]]}` : ""}`;
+    : `${pick(pool).replace("{team}", teamName)}${newUnrest.reasons?.length ? ` ${reasonSms(newUnrest.reasons[0], step.step)}` : ""}`;
   const convId = await sendPlayerSMS(db, sellerClubTeamId, playerRef, smsBody);
 
   // Otevřít živou konverzaci (AI thread): trenér může volně odpovědět, hráč reaguje,
