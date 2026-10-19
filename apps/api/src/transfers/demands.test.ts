@@ -235,5 +235,8 @@ describe("poptávky klubů mimo hru", () => {
     expect(starter).toBe(52);
     // Málo dat → podle síly klubu.
     expect(await demandRatingThreshold(db, "Prachatice", "GK", "starter", 46)).toBe(46);
+    // Slabé kádry okresu: klub nechce hráče o moc slabšího, než je sám.
+    expect(await demandRatingThreshold(db, "Prachatice", "DEF", "starter", 62)).toBe(56);
+    expect(await demandRatingThreshold(db, "Prachatice", "DEF", "squad", 62)).toBe(50);
   });
 });
