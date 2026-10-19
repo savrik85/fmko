@@ -32,6 +32,16 @@ const POSITION_ACCUSATIVE: Record<DemandPosition, string> = {
   GK: "brankáře", DEF: "obránce", MID: "záložníka", FWD: "útočníka",
 };
 
+/** Dovednosti, které jde v poptávce chtít; názvy jako v kádru a na profilu hráče. */
+export const DEMAND_SKILLS: Record<string, string> = {
+  speed: "Rychlost", technique: "Technika", shooting: "Střelba", passing: "Přihrávky", heading: "Hlavičky",
+  defense: "Obrana", vision: "Přehled", experience: "Zkušenost", creativity: "Kreativita", setPieces: "Standardky",
+  goalkeeping: "Brankář", stamina: "Výdrž", strength: "Síla",
+};
+export const MAX_DEMAND_SKILLS = 2;
+const RATING_HIGH = 85;
+const SKILL_HIGH = 99;
+
 export const MAX_ACTIVE_DEMANDS = 3;
 export const DEMAND_DAYS = 14;
 export const MAX_PITCHES_PER_DEMAND = 2;
@@ -57,6 +67,10 @@ export interface DemandInput {
   role: DemandRole;
   maxPrice: number | null;
   note: string | null;
+  /** Hodnocení aspoň (RAT z kádru); null = bez požadavku. */
+  minRating: number | null;
+  /** Dovednosti aspoň, nejvýš dvě. */
+  skills: Array<{ skill: string; min: number }>;
 }
 
 interface ClubData {
@@ -79,6 +93,7 @@ interface DemandRow {
   role: DemandRole;
   max_price: number | null;
   min_rating: number | null;
+  skill_mins: string | null;
   note: string | null;
   status: string;
   expires_at: string;
@@ -104,7 +119,23 @@ export function parseDemandInput(body: unknown): { ok: true; value: DemandInput 
   }
   const rawNote = typeof b.note === "string" ? b.note.trim().replace(/\s+/g, " ") : "";
   if (rawNote.length > NOTE_MAX) return { ok: false, error: `Poznámka může mít nejvýš ${NOTE_MAX} znaků.` };
-  return { ok: true, value: { position, ageMin, ageMax, role, maxPrice, note: rawNote || null } };
+  let minRating: number | null = null;
+  if (b.minRating !== null && b.minRating !== undefined && b.minRating !== "") {
+    minRating = Math.round(Number(b.minRating));
+    if (!Number.isFinite(minRating) || minRating < 1 || minRating > RATING_HIGH) return { ok: false, error: `Hodnocení může být od 1 do ${RATING_HIGH}.` };
+  }
+  const rawSkills = Array.isArray(b.skills) ? b.skills as Array<Record<string, unknown>> : [];
+  const skills: Array<{ skill: string; min: number }> = [];
+  for (const r of rawSkills) {
+    const skill = String(r?.skill ?? "");
+    const min = Math.round(Number(r?.min));
+    if (!DEMAND_SKILLS[skill]) return { ok: false, error: "Neznámá dovednost." };
+    if (!Number.isFinite(min) || min < 1 || min > SKILL_HIGH) return { ok: false, error: `${DEMAND_SKILLS[skill]} může být od 1 do ${SKILL_HIGH}.` };
+    if (skills.some((x) => x.skill === skill)) return { ok: false, error: `${DEMAND_SKILLS[skill]} je tam dvakrát.` };
+    skills.push({ skill, min });
+  }
+  if (skills.length > MAX_DEMAND_SKILLS) return { ok: false, error: `Nejvýš ${MAX_DEMAND_SKILLS} dovednosti.` };
+  return { ok: true, value: { position, ageMin, ageMax, role, maxPrice, note: rawNote || null, minRating, skills } };
 }
 
 /** „záložníka do základu (18 až 25 let)“, „mladého brankáře (do 20 let)“ — do SMS a do textů poptávky. */
@@ -147,8 +178,35 @@ async function loadMyTeam(db: D1Database, teamId: string): Promise<MyTeam | null
   return { clubTeamId, userId: row.user_id, name: row.name, leagueId: row.league_id, district: baseDistrict(row.district), leagueName: row.league_name };
 }
 
-function demandView(d: DemandRow) {
+function parseSkillMins(raw: string | null): Array<{ skill: string; label: string; min: number }> {
+  if (!raw) return [];
+  try {
+    return Object.entries(JSON.parse(raw) as Record<string, number>)
+      .filter(([k]) => DEMAND_SKILLS[k])
+      .map(([skill, min]) => ({ skill, label: DEMAND_SKILLS[skill], min }));
+  } catch (e) {
+    logger.warn({ module: "demands" }, "parse skill_mins", e);
+    return [];
+  }
+}
+
+/** Dovednosti hráče z JSON, jen ty, které jde v poptávce chtít. */
+function playerSkills(raw: string | null): Record<string, number> {
+  if (!raw) return {};
+  try {
+    const all = JSON.parse(raw) as Record<string, unknown>;
+    return Object.fromEntries(Object.keys(DEMAND_SKILLS).map((k) => [k, typeof all[k] === "number" ? all[k] as number : 0]));
+  } catch (e) {
+    logger.warn({ module: "demands" }, "parse player skills", e);
+    return {};
+  }
+}
+
+/** `showRating` jen u manažerů: u klubu mimo hru je min_rating jeho skrytý práh. */
+function demandView(d: DemandRow, showRating: boolean) {
   return {
+    minRating: showRating ? d.min_rating : null,
+    skills: parseSkillMins(d.skill_mins),
     id: d.id,
     position: d.position,
     ageMin: d.age_min,
@@ -187,11 +245,11 @@ export async function listDemands(db: D1Database, teamId: string) {
        ORDER BY created_at DESC`,
     ).bind(now, me.district ?? "", me.clubTeamId).all<DemandRow>(),
     db.prepare(
-      `SELECT id, first_name, last_name, age, position FROM players
+      `SELECT id, first_name, last_name, age, position, overall_rating, skills FROM players
        WHERE (team_id = ? OR team_id IN (SELECT id FROM teams WHERE parent_team_id = ?))
          AND (status IS NULL OR status = 'active') AND loan_from_team_id IS NULL AND is_celebrity = 0
        ORDER BY position, age`,
-    ).bind(me.clubTeamId, me.clubTeamId).all<{ id: string; first_name: string; last_name: string; age: number; position: DemandPosition }>(),
+    ).bind(me.clubTeamId, me.clubTeamId).all<{ id: string; first_name: string; last_name: string; age: number; position: DemandPosition; overall_rating: number; skills: string | null }>(),
   ]);
 
   const mine = mineRes.results;
@@ -228,9 +286,9 @@ export async function listDemands(db: D1Database, teamId: string) {
   }
 
   return {
-    mine: mine.map((d) => ({ ...demandView(d), pitches: incoming.get(d.id) ?? [] })),
+    mine: mine.map((d) => ({ ...demandView(d, true), pitches: incoming.get(d.id) ?? [] })),
     managers: managersRes.results.map((d) => ({
-      ...demandView(d),
+      ...demandView(d, true),
       teamId: d.team_id as string,
       teamName: d.team_name,
       // Štítek „odkud“ jako na trhu: okres, u jiné soutěže téhož okresu název soutěže.
@@ -242,7 +300,7 @@ export async function listDemands(db: D1Database, teamId: string) {
     clubs: clubsRes.results.map((d) => {
       const club = parseClub(d.club_data);
       return {
-        ...demandView(d),
+        ...demandView(d, false),
         clubName: club?.name ?? "Klub mimo hru",
         clubCity: club?.city ?? null,
         abroad: !!club?.country && club.country !== "CZ",
@@ -250,8 +308,13 @@ export async function listDemands(db: D1Database, teamId: string) {
         myPitches: outgoing.get(d.id) ?? [],
       };
     }),
-    pitchable: pitchableRes.results.map((p) => ({ id: p.id, name: `${p.first_name} ${p.last_name}`, age: p.age, position: p.position })),
-    limits: { maxActive: MAX_ACTIVE_DEMANDS, pitchesPerDemand: MAX_PITCHES_PER_DEMAND, noteMax: NOTE_MAX, days: DEMAND_DAYS },
+    // Vlastní hráči i s hodnocením a dovednostmi: nabídka ukáže jen ty, kdo poptávku splní.
+    pitchable: pitchableRes.results.map((p) => ({
+      id: p.id, name: `${p.first_name} ${p.last_name}`, age: p.age, position: p.position, rating: p.overall_rating,
+      skills: playerSkills(p.skills),
+    })),
+    limits: { maxActive: MAX_ACTIVE_DEMANDS, pitchesPerDemand: MAX_PITCHES_PER_DEMAND, noteMax: NOTE_MAX, days: DEMAND_DAYS, maxSkills: MAX_DEMAND_SKILLS },
+    skillOptions: Object.entries(DEMAND_SKILLS).map(([key, label]) => ({ key, label })),
   };
 }
 
@@ -264,9 +327,10 @@ export async function createDemand(db: D1Database, teamId: string, input: Demand
   const id = crypto.randomUUID();
   const now = new Date();
   await db.prepare(
-    `INSERT INTO transfer_demands (id, team_id, league_id, position, age_min, age_max, role, max_price, note, status, expires_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+    `INSERT INTO transfer_demands (id, team_id, league_id, position, age_min, age_max, role, max_price, note, min_rating, skill_mins, status, expires_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
   ).bind(id, me.clubTeamId, me.leagueId, input.position, input.ageMin, input.ageMax, input.role, input.maxPrice, input.note,
+    input.minRating, input.skills.length > 0 ? JSON.stringify(Object.fromEntries(input.skills.map((x) => [x.skill, x.min]))) : null,
     new Date(now.getTime() + DEMAND_DAYS * 86_400_000).toISOString(), now.toISOString()).run();
   return { ok: true, id };
 }
@@ -331,17 +395,24 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
   }
 
   const player = await db.prepare(
-    `SELECT id, first_name, last_name, nationality, age, position, overall_rating, team_id, loan_from_team_id, status, is_celebrity FROM players
+    `SELECT id, first_name, last_name, nationality, age, position, overall_rating, skills, team_id, loan_from_team_id, status, is_celebrity FROM players
      WHERE id = ? AND (team_id = ? OR team_id IN (SELECT id FROM teams WHERE parent_team_id = ?))`,
   ).bind(playerId, me.clubTeamId, me.clubTeamId).first<{
     id: string; first_name: string; last_name: string; nationality: string | null; age: number; position: string; overall_rating: number;
-    team_id: string; loan_from_team_id: string | null; status: string | null; is_celebrity: number;
+    team_id: string; loan_from_team_id: string | null; status: string | null; is_celebrity: number; skills: string | null;
   }>();
   if (!player || (player.status && player.status !== "active") || player.loan_from_team_id || player.is_celebrity) {
     return { ok: false, error: "Tohohle hráče nabídnout nemůžeš." };
   }
   if (player.position !== demand.position) return { ok: false, error: "Hráč nehraje na poptávaném postu." };
   if (player.age < demand.age_min || player.age > demand.age_max) return { ok: false, error: "Hráč nesedí věkem." };
+  // Hodnocení a dovednosti hlídáme jen u manažera; práh klubu mimo hru je jeho rozhodnutí níž.
+  if (demand.team_id) {
+    if (demand.min_rating && player.overall_rating < demand.min_rating) return { ok: false, error: `Hráč nemá hodnocení ${demand.min_rating}+.` };
+    const have = playerSkills(player.skills);
+    const missing = parseSkillMins(demand.skill_mins).find((x) => (have[x.skill] ?? 0) < x.min);
+    if (missing) return { ok: false, error: `Hráč nemá ${missing.label} ${missing.min}+.` };
+  }
 
   const mine = await db.prepare("SELECT player_id FROM transfer_demand_pitches WHERE demand_id = ? AND team_id = ?")
     .bind(demandId, me.clubTeamId).all<{ player_id: string }>();

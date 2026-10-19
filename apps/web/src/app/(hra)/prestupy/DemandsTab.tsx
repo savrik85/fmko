@@ -28,6 +28,9 @@ interface DemandBase {
   maxPrice: number | null;
   note: string | null;
   expiresAt: string;
+  /** Hodnocení aspoň (jen u manažerů; klub mimo hru práh neukazuje). */
+  minRating: number | null;
+  skills: Array<{ skill: string; label: string; min: number }>;
 }
 
 interface MyPitch { playerId: string; playerName: string; status: "pitched" | "accepted" | "declined"; reply: string | null; offerId: string | null }
@@ -36,8 +39,9 @@ export interface DemandsData {
   mine: Array<DemandBase & { pitches: Array<{ playerId: string; playerName: string; age: number; position: Position; teamId: string; teamName: string }> }>;
   managers: Array<DemandBase & { teamId: string; teamName: string; origin: string | null; myPitches: MyPitch[] }>;
   clubs: Array<DemandBase & { clubName: string; clubCity: string | null; abroad: boolean; filled: boolean; myPitches: MyPitch[] }>;
-  pitchable: Array<{ id: string; name: string; age: number; position: Position }>;
-  limits: { maxActive: number; pitchesPerDemand: number; noteMax: number; days: number };
+  pitchable: Array<{ id: string; name: string; age: number; position: Position; rating: number; skills: Record<string, number> }>;
+  limits: { maxActive: number; pitchesPerDemand: number; noteMax: number; days: number; maxSkills: number };
+  skillOptions: Array<{ key: string; label: string }>;
 }
 
 const POSITION_OPTIONS: Array<{ key: Position; label: string }> = [
@@ -56,6 +60,7 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const ageText = (d: { ageMin: number; ageMax: number }) => (d.ageMin <= 16 ? `do ${d.ageMax} let` : `${d.ageMin} až ${d.ageMax} let`);
 
 const CHIP = "min-h-11 px-3 rounded-control text-sm font-heading font-bold transition-colors";
+const REQ_CHIP = "px-2 py-0.5 rounded-full bg-surface border border-gray-100 text-sm font-heading font-bold text-ink tabular-nums";
 // Na telefonu tlačítko pod poptávkou, aby nezužovalo text; od tabletu vpravo jako na trhu.
 const PITCH_BUTTON = "self-start sm:shrink-0 min-h-11 sm:min-h-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors";
 const chipClass = (on: boolean) => `${CHIP} ${on ? "bg-pitch-500 text-white" : "bg-black/5 text-ink hover:bg-black/10"}`;
@@ -73,6 +78,12 @@ function DemandHead({ d, who }: { d: DemandBase; who: React.ReactNode }) {
         {who}
         {d.maxPrice ? <> · do <span className="font-heading font-bold text-ink">{formatCZK(d.maxPrice)}</span></> : " · cena dohodou"}
       </div>
+      {(d.minRating || d.skills.length > 0) && (
+        <div className="flex flex-wrap gap-1.5 mt-1.5">
+          {d.minRating ? <span className={REQ_CHIP}>Hodnocení {d.minRating}+</span> : null}
+          {d.skills.map((x) => <span key={x.skill} className={REQ_CHIP}>{x.label} {x.min}+</span>)}
+        </div>
+      )}
       {d.note && <p className="text-sm text-ink-light italic mt-1">„{d.note}“</p>}
       <div className="text-sm text-muted mt-1">Platí do {dateCz(d.expiresAt)}</div>
     </>
@@ -251,6 +262,7 @@ export function DemandsTab({ teamId }: { teamId: string }) {
 
       {creating && (
         <CreateDemandSheet teamId={teamId} noteMax={data.limits.noteMax} days={data.limits.days}
+          skillOptions={data.skillOptions} maxSkills={data.limits.maxSkills}
           onClose={() => setCreating(false)} onCreated={() => { setCreating(false); load(); }} />
       )}
       {pitchFor && (
@@ -271,8 +283,9 @@ export function DemandsTab({ teamId }: { teamId: string }) {
   );
 }
 
-function CreateDemandSheet({ teamId, noteMax, days, onClose, onCreated }: {
-  teamId: string; noteMax: number; days: number; onClose: () => void; onCreated: () => void;
+function CreateDemandSheet({ teamId, noteMax, days, skillOptions, maxSkills, onClose, onCreated }: {
+  teamId: string; noteMax: number; days: number; skillOptions: DemandsData["skillOptions"]; maxSkills: number;
+  onClose: () => void; onCreated: () => void;
 }) {
   const [position, setPosition] = useState<Position | null>(null);
   const [role, setRole] = useState<Role>("starter");
@@ -280,6 +293,12 @@ function CreateDemandSheet({ teamId, noteMax, days, onClose, onCreated }: {
   const [ageMax, setAgeMax] = useState(30);
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
   const [note, setNote] = useState("");
+  const [minRating, setMinRating] = useState("");
+  const [skillRows, setSkillRows] = useState<Array<{ skill: string; min: string }>>([]);
+  // Rozepsaná dovednost bez čísla (nebo číslo bez dovednosti) by se tiše zahodila; radši nepustit.
+  const skillsIncomplete = skillRows.some((r) => !r.skill || !r.min);
+  const updateRow = (i: number, patch: Partial<{ skill: string; min: string }>) =>
+    setSkillRows((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   const pickRole = (r: Role) => {
     setRole(r);
@@ -292,7 +311,11 @@ function CreateDemandSheet({ teamId, noteMax, days, onClose, onCreated }: {
     try {
       await apiFetch(`/api/teams/${teamId}/demands`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position, role, ageMin, ageMax, maxPrice, note }),
+        body: JSON.stringify({
+          position, role, ageMin, ageMax, maxPrice, note,
+          minRating: minRating === "" ? null : Number(minRating),
+          skills: skillRows.map((r) => ({ skill: r.skill, min: Number(r.min) })),
+        }),
       });
       onCreated();
     } catch (e) {
@@ -304,7 +327,7 @@ function CreateDemandSheet({ teamId, noteMax, days, onClose, onCreated }: {
   const select = "flex-1 min-h-11 rounded-control bg-black/5 px-3 text-sm font-heading font-bold text-ink";
   return (
     <SheetDialog open title="Zadat poptávku" description={`Poptávka platí ${days} dní. Ostatní manažeři ti k ní nabídnou hráče a dostaneš o tom zprávu do telefonu.`}
-      confirmLabel="Zadat poptávku" confirmDisabled={!position || ageMin > ageMax} onConfirm={submit} onCancel={onClose}>
+      confirmLabel="Zadat poptávku" confirmDisabled={!position || ageMin > ageMax || skillsIncomplete} onConfirm={submit} onCancel={onClose}>
       <div className="space-y-4">
         <div>
           <div className="text-sm font-heading font-bold text-muted mb-1.5">Post</div>
@@ -335,6 +358,40 @@ function CreateDemandSheet({ teamId, noteMax, days, onClose, onCreated }: {
           {ageMin > ageMax && <p className="text-sm text-card-red mt-1">„Od“ nesmí být víc než „do“.</p>}
         </div>
         <div>
+          <div className="text-sm font-heading font-bold text-muted mb-1.5">Hodnocení aspoň (nepovinné)</div>
+          <input type="number" inputMode="numeric" min={1} max={85} value={minRating} onChange={(e) => setMinRating(e.target.value)}
+            placeholder="Třeba 45" aria-label="Hodnocení aspoň"
+            className="w-full min-h-11 rounded-control bg-black/5 px-3 text-sm font-heading font-bold text-ink" />
+        </div>
+        <div>
+          <div className="text-sm font-heading font-bold text-muted mb-1.5">Dovednosti aspoň (nepovinné, nejvýš {maxSkills})</div>
+          <div className="space-y-2">
+            {skillRows.map((r, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <select aria-label="Dovednost" value={r.skill} onChange={(e) => updateRow(i, { skill: e.target.value })} className={select}>
+                  <option value="">Vyber dovednost</option>
+                  {skillOptions.filter((o) => o.key === r.skill || !skillRows.some((x) => x.skill === o.key)).map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+                <input type="number" inputMode="numeric" min={1} max={99} value={r.min} onChange={(e) => updateRow(i, { min: e.target.value })}
+                  placeholder="aspoň" aria-label="Dovednost aspoň"
+                  className="w-24 min-h-11 rounded-control bg-black/5 px-3 text-sm font-heading font-bold text-ink" />
+                <button type="button" onClick={() => setSkillRows((rows) => rows.filter((_, j) => j !== i))} aria-label="Odebrat dovednost"
+                  className="shrink-0 min-h-11 min-w-11 rounded-control text-muted hover:text-card-red hover:bg-black/5 font-heading font-bold">
+                  ✕
+                </button>
+              </div>
+            ))}
+            {skillRows.length < maxSkills && (
+              <button type="button" onClick={() => setSkillRows((rows) => [...rows, { skill: "", min: "" }])}
+                className="min-h-11 px-3 rounded-control text-sm font-heading font-bold text-pitch-600 hover:bg-black/5">
+                + Přidat dovednost
+              </button>
+            )}
+          </div>
+        </div>
+        <div>
           <div className="text-sm font-heading font-bold text-muted mb-1.5">Kolik nejvýš zaplatíš</div>
           <MoneyInput value={maxPrice} onChange={setMaxPrice} placeholder="Nech prázdné, když je cena dohodou"
             className="w-full min-h-11 rounded-control bg-black/5 px-3 text-sm font-heading font-bold text-ink" />
@@ -360,7 +417,11 @@ function PitchSheet({ teamId, demand, who, players, already, onClose, onDone }: 
   onClose: () => void;
   onDone: (res: { status: "pitched" | "accepted" | "declined"; message: string; offerId?: string }) => void;
 }) {
-  const fitting = players.filter((p) => p.position === demand.position && p.age >= demand.ageMin && p.age <= demand.ageMax && !already.includes(p.id));
+  const meetsRequirements = (p: DemandsData["pitchable"][number]) =>
+    (!demand.minRating || p.rating >= demand.minRating) && demand.skills.every((x) => (p.skills[x.skill] ?? 0) >= x.min);
+  const fitting = players.filter((p) => p.position === demand.position && p.age >= demand.ageMin && p.age <= demand.ageMax
+    && meetsRequirements(p) && !already.includes(p.id));
+  const hasRequirements = !!demand.minRating || demand.skills.length > 0;
   const [chosen, setChosen] = useState<string | null>(fitting.length === 1 ? fitting[0].id : null);
 
   const submit = async () => {
@@ -377,10 +438,13 @@ function PitchSheet({ teamId, demand, who, players, already, onClose, onDone }: 
   };
 
   return (
-    <SheetDialog open title="Nabídnout hráče" description={`${who} hledá ${demand.summary}.`}
+    <SheetDialog open title="Nabídnout hráče"
+      description={`${who} hledá ${demand.summary}.${hasRequirements
+        ? ` Chce ${[demand.minRating ? `hodnocení ${demand.minRating}+` : null, ...demand.skills.map((x) => `${x.label} ${x.min}+`)].filter(Boolean).join(", ")}.`
+        : ""}`}
       confirmLabel="Nabídnout" confirmDisabled={!chosen} onConfirm={submit} onCancel={onClose}>
       {fitting.length === 0 ? (
-        <p className="text-sm text-muted">Nikdo z tvého kádru nesedí na post a věk.</p>
+        <p className="text-sm text-muted">{hasRequirements ? "Nikdo z tvého kádru nesplňuje post, věk a požadavky." : "Nikdo z tvého kádru nesedí na post a věk."}</p>
       ) : (
         <div className="space-y-1.5">
           {fitting.map((p) => (
@@ -389,6 +453,11 @@ function PitchSheet({ teamId, demand, who, players, already, onClose, onDone }: 
               <span className="font-heading font-bold text-base flex-1 min-w-0 truncate">{p.name}</span>
               <PositionBadge position={p.position} />
               <span className="text-sm text-muted shrink-0">{p.age} let</span>
+              {hasRequirements && (
+                <span className="text-sm text-muted shrink-0 tabular-nums hidden sm:inline">
+                  {[demand.minRating ? `Hodn. ${p.rating}` : null, ...demand.skills.map((x) => `${x.label} ${p.skills[x.skill] ?? 0}`)].filter(Boolean).join(", ")}
+                </span>
+              )}
             </label>
           ))}
         </div>
