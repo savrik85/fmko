@@ -14,6 +14,8 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
 import { WatchlistTab } from "./WatchlistTab";
 import { ObligationsTab } from "./ObligationsTab";
+import { DemandsTab } from "./DemandsTab";
+import { OriginBadge } from "@/components/transfers/origin-badge";
 import { AiNegotiationsList } from "@/components/transfers/AiNegotiationsList";
 import { termsNote, TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
@@ -21,11 +23,11 @@ import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-me
 
 // Na telefonu se 7 záložek nevešlo, proto 4 hlavní a pod nimi podzáložky:
 // Hledat = všechno, kde vybírám cizí hráče; Můj tým = vlastní kádr a peníze za přestupy.
-type Tab = "overview" | "hledat" | "offers" | "squad" | LegacyTab;
+type Tab = "overview" | "hledat" | "offers" | "squad" | "demands" | LegacyTab;
 // Staré adresy (?tab=search, market, free_agents, sledovani, zavazky) se přesměrují na podzáložku.
 type LegacyTab = "search" | "free_agents" | "market" | "sledovani" | "zavazky";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["overview", "hledat", "offers", "squad", "search", "free_agents", "market", "sledovani", "zavazky"] as const;
+const TAB_KEYS = ["overview", "hledat", "offers", "squad", "demands", "search", "free_agents", "market", "sledovani", "zavazky"] as const;
 const HLEDAT_SUBTABS = ["hledani", "na-prodej", "volni", "sledovani"] as const;
 const SQUAD_SUBTABS = ["hraci", "zavazky"] as const;
 
@@ -565,15 +567,6 @@ interface MarketListing {
 }
 
 /** Štítek „odkud“ u hráče z jiného okresu nebo soutěže — stejný na Volných i na Prodeji. */
-function OriginBadge({ origin }: { origin?: string | null }) {
-  if (!origin) return null;
-  return (
-    <span className="mr-1.5 px-1.5 rounded-full text-micro font-heading font-bold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap">
-      {origin}
-    </span>
-  );
-}
-
 interface MyListing {
   id: string; playerId: string; askingPrice: number; playerName: string;
   playerAge: number; position: string; overallRating: number; expiresAt: string;
@@ -1009,6 +1002,7 @@ export default function TransfersPage() {
     ["hledat", "Hledat", 0],
     ["offers", "Nabídky", unseenOffers],
     ["squad", "Můj tým", quitCount],
+    ["demands", "Poptávky", 0],
   ];
 
   return (
@@ -1483,6 +1477,8 @@ export default function TransfersPage() {
       )}
 
       {/* ═══ Hledat / Sledovaní ═══ */}
+      {tab === "demands" && teamId && <DemandsTab teamId={teamId} />}
+
       {tab === "hledat" && hledatSub === "sledovani" && teamId && (
         <WatchlistTab teamId={teamId} onCount={setWatchCount} color={primaryColor || "#2D5F2D"}
           onColorText={bestTextOn(primaryColor || "#2D5F2D") === "light" ? "text-white border border-transparent" : "text-gray-900 border border-gray-300"}

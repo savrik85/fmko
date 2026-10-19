@@ -585,6 +585,15 @@ export default function ConversationPage() {
                               Otevřít incident
                             </Link>
                           )}
+                          {/* Někdo mi nabídl hráče k poptávce. */}
+                          {msg.metadata?.type === "demand" && (
+                            <Link
+                              href="/prestupy?tab=demands"
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                            >
+                              Otevřít poptávky
+                            </Link>
+                          )}
                           {/* Pozvánka a potvrzení přihlášky od pořadatele turnaje. */}
                           {msg.metadata?.type === "tournament" && (
                             <Link

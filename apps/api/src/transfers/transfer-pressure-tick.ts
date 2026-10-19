@@ -4,7 +4,8 @@
  * Tři kroky:
  *  1. Propadnutí nabídek, na které strana na tahu do lhůty neodpověděla
  *     (offer-expiry.ts); mlčení prodávajícího má dopad jako odmítnutí.
- *  2. Generování CPU nabídek od virtuálních klubů (přesunuto z match ticku).
+ *  2. Generování CPU nabídek od virtuálních klubů (přesunuto z match ticku)
+ *     a poptávek klubů mimo hru (demands.ts).
  *  3. Zpracování trucu (transferUnrest) — decay, fake injuries, pledge checks.
  *
  * Kroky 1 a 3 jsou zapojované postupně (fáze 4 plánu) — struktura tu je od začátku.
@@ -19,6 +20,7 @@ export interface TransferPressureResult {
   expiredOffers: number;
   remindedOffers: number;
   aiOffers: number;
+  clubDemands: number;
   unrestProcessed: number;
 }
 
@@ -35,13 +37,13 @@ export async function executeTransferPressureTick(
       .catch((e) => { logger.warn({ module: "transfer-pressure" }, "read KV flag", e); return null; });
     if (alreadyRan) {
       logger.warn({ module: "transfer-pressure" }, `SKIP, tick for ${todayKey} already ran`);
-      return { skipped: true, expiredOffers: 0, remindedOffers: 0, aiOffers: 0, unrestProcessed: 0 };
+      return { skipped: true, expiredOffers: 0, remindedOffers: 0, aiOffers: 0, clubDemands: 0, unrestProcessed: 0 };
     }
     await env.CACHE_KV.put(`transfer-pressure:${todayKey}`, "1", { expirationTtl: 60 * 60 * 36 })
       .catch((e) => logger.warn({ module: "transfer-pressure" }, "set KV flag", e));
   }
 
-  const result: TransferPressureResult = { skipped: false, expiredOffers: 0, remindedOffers: 0, aiOffers: 0, unrestProcessed: 0 };
+  const result: TransferPressureResult = { skipped: false, expiredOffers: 0, remindedOffers: 0, aiOffers: 0, clubDemands: 0, unrestProcessed: 0 };
 
   // ── 1. Propadnutí nabídek bez odpovědi (mlčení prodávajícího = odmítnutí) ──
   try {
@@ -68,6 +70,20 @@ export async function executeTransferPressureTick(
     logger.error({ module: "transfer-pressure" }, "AI offers failed", e);
   }
 
+  // ── 2b. Poptávky klubů mimo hru (jednou za okres, U21 soutěže pod okresem áčka) ──
+  try {
+    const { generateClubDemands } = await import("./demands");
+    const rng = createRng(cryptoSeed());
+    const districts = await env.DB.prepare(
+      "SELECT DISTINCT l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id IS NOT NULL AND t.user_id != 'ai' AND t.parent_team_id IS NULL",
+    ).all<{ district: string }>();
+    for (const d of districts.results) {
+      if (d.district) result.clubDemands += await generateClubDemands(env.DB, d.district, rng);
+    }
+  } catch (e) {
+    logger.error({ module: "transfer-pressure" }, "club demands failed", e);
+  }
+
   // ── 3. Truc (transferUnrest) — decay, fake injuries, fyzio hint, pledge checks ──
   try {
     const { processTransferUnrest } = await import("./offer-rejection-impact");
@@ -80,6 +96,6 @@ export async function executeTransferPressureTick(
   }
 
   logger.info({ module: "transfer-pressure" },
-    `DONE expired=${result.expiredOffers} reminded=${result.remindedOffers} aiOffers=${result.aiOffers} unrest=${result.unrestProcessed}`);
+    `DONE expired=${result.expiredOffers} reminded=${result.remindedOffers} aiOffers=${result.aiOffers} clubDemands=${result.clubDemands} unrest=${result.unrestProcessed}`);
   return result;
 }
