@@ -446,10 +446,14 @@ function percentile(sorted: number[], p: number): number {
   return sorted[i];
 }
 
+/** O kolik slabšího hráče, než je sám, klub nanejvýš vezme. Pojistka pro okresy se slabými kádry. */
+const CLUB_FLOOR_GAP: Record<DemandRole, number> = { starter: 6, squad: 12, prospect: 18 };
+
 /**
  * Jak dobrého hráče klub chce: podle kádrů lidských týmů v okrese, ne pevné číslo
  * (rating není stovková škála a brankáři mají nafouknutý). Do základu ~ 70. percentil
- * postu, do kádru ~ 40. percentil, talent ~ 75. percentil hráčů do 20 let.
+ * postu, do kádru ~ 40. percentil, talent ~ 75. percentil hráčů do 20 let. Nejníž
+ * o CLUB_FLOOR_GAP pod sílou klubu: na testu slabé kádry dávaly poptávky „do 1 000 Kč“.
  */
 export async function demandRatingThreshold(db: D1Database, district: string, position: DemandPosition, role: DemandRole, clubRating: number): Promise<number> {
   const rows = await db.prepare(
@@ -463,7 +467,8 @@ export async function demandRatingThreshold(db: D1Database, district: string, po
     : rows.results.filter((x) => !x.parent_team_id);
   const sorted = pool.map((x) => x.r).sort((a, b) => a - b);
   if (sorted.length < 5) return role === "starter" ? clubRating : role === "squad" ? clubRating - 5 : clubRating - 12;
-  return percentile(sorted, role === "starter" ? 0.7 : role === "squad" ? 0.4 : 0.75);
+  const fromSquads = percentile(sorted, role === "starter" ? 0.7 : role === "squad" ? 0.4 : 0.75);
+  return Math.max(fromSquads, clubRating - CLUB_FLOOR_GAP[role]);
 }
 
 const ROLE_AGES: Record<DemandRole, (rng: Rng) => [number, number]> = {
