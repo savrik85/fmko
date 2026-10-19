@@ -28,7 +28,8 @@ beforeEach(async () => {
   await db.prepare("CREATE TABLE departed_players (id TEXT PRIMARY KEY, first_name TEXT, last_name TEXT, avatar TEXT)").run();
   await db.prepare(
     `CREATE TABLE player_contracts (id TEXT PRIMARY KEY, player_id TEXT, team_id TEXT, season_id TEXT, joined_at TEXT,
-       left_at TEXT, join_type TEXT, leave_type TEXT, fee INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT)`,
+       left_at TEXT, join_type TEXT, leave_type TEXT, fee INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT,
+       from_club_name TEXT)`,
   ).run();
   await db.prepare("CREATE TABLE ai_negotiations (id TEXT PRIMARY KEY, player_id TEXT, club_name TEXT, status TEXT, resolved_at TEXT)").run();
   await db.prepare("CREATE TABLE transfer_offers (id TEXT PRIMARY KEY, player_id TEXT, from_team_id TEXT, status TEXT, offer_amount INTEGER, virtual_team_data TEXT, resolved_at TEXT)").run();
@@ -56,6 +57,12 @@ describe("loadTransferOverview", () => {
     await db.prepare(`INSERT INTO transfer_offers VALUES ('o1', 'p3', 'virtual_ai', 'accepted', 93000, '{"name":"SV Grafenau"}', '2026-10-18T12:00:00Z')`).run();
     const seller = (await loadTransferOverview(db, "A"))[0];
     expect(seller).toMatchObject({ direction: "out", kind: "transfer", otherTeamId: null, otherTeamName: "SV Grafenau", fee: 93000 });
+  });
+
+  it("starší koupě z trhu bez jednání: klub ze smlouvy (from_club_name)", async () => {
+    await contract("c1", "p2", "B", "s1", "2026-09-20", "transfer", { fee: 6500, created: "2026-09-20 10:00:00" });
+    await db.prepare("UPDATE player_contracts SET from_club_name = 'FK Český Krumlov' WHERE id = 'c1'").run();
+    expect((await loadTransferOverview(db, "B"))[0]).toMatchObject({ otherTeamId: null, otherTeamName: "FK Český Krumlov", fee: 6500 });
   });
 
   it("přestup vidí kupující jako příchod a prodávající jako odchod, s protistranou a cenou", async () => {

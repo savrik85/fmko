@@ -96,8 +96,9 @@ export async function purchaseVirtualPlayer(p: VirtualPurchase): Promise<Virtual
       lifeContext, JSON.stringify(player.avatar ?? {}), weeklyWage, player.nationality ?? "CZ", skillsMax, hiddenTalent,
       p.residence?.name ?? null, p.residence?.commuteKm ?? null,
     ),
-    db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'transfer', ?, 1)")
-      .bind(crypto.randomUUID(), p.playerId, p.destTeamId, season?.id ?? "unknown", p.terms.amount),
+    // `from_club_name`: klub mimo hru nemá ve hře smlouvu, přehled přestupů by jinak psal „Volný hráč“.
+    db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active, from_club_name) VALUES (?, ?, ?, ?, 'transfer', ?, 1, ?)")
+      .bind(crypto.randomUUID(), p.playerId, p.destTeamId, season?.id ?? "unknown", p.terms.amount, p.sellerName),
   ];
   if (p.terms.installments > 0) {
     writes.push(db.prepare(
