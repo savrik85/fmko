@@ -17,14 +17,17 @@ export interface CoachRelationBand {
 }
 
 const COACH_RELATION_BANDS: Array<CoachRelationBand & { min: number }> = [
-  { min: 80, key: "idol", label: "Idol", icon: "❤️", tone: "good" },
-  { min: 60, key: "loyal", label: "Loajální", icon: "👍", tone: "good" },
-  { min: 40, key: "neutral", label: "Neutrální", icon: "🤝", tone: "neutral" },
-  { min: 20, key: "skeptic", label: "Skeptický", icon: "🙄", tone: "bad" },
-  { min: 0, key: "hostile", label: "Nepřátelský", icon: "💢", tone: "bad" },
+  { min: 80, key: "idol", label: "Jste kamarádi", icon: "❤️", tone: "good" },
+  { min: 60, key: "loyal", label: "Má tě rád", icon: "👍", tone: "good" },
+  { min: 40, key: "neutral", label: "Bere tě", icon: "🤝", tone: "neutral" },
+  { min: 20, key: "skeptic", label: "Nemá tě rád", icon: "🙄", tone: "bad" },
+  { min: 0, key: "hostile", label: "Nesnáší tě", icon: "💢", tone: "bad" },
 ];
 
-/** Slovní pásmo vztahu. Hranice 80/60/40/20 platí v kádru, na profilu hráče i v Kabině. */
+/**
+ * Slovní pásmo vztahu. Hranice 80/60/40/20 platí v kádru, na profilu hráče i v Kabině.
+ * Popisky jsou řečí hráče k trenérovi (2026-10-19), číslo vztahu se v UI neukazuje.
+ */
 export function coachRelationBand(value: number): CoachRelationBand {
   const band = COACH_RELATION_BANDS.find((b) => value >= b.min) ?? COACH_RELATION_BANDS[COACH_RELATION_BANDS.length - 1];
   return { key: band.key, label: band.label, icon: band.icon, tone: band.tone };

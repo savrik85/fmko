@@ -180,6 +180,10 @@ export async function processTeamDay(
               await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
                 .bind(msgCount, `📋 ${dayBeforeAbsences.length} omluvených z ${squadRows.results.length}`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before conversation update", e));
               logger.info({ module: "daily-tick", teamId }, `day_before attendance: ${msgCount} msgs → ⚽ vs ${opponentName}`);
+              // Hráč se slíbeným místem v sestavě se den před zápasem ozve.
+              const { remindMinutesPromises } = await import("../transfers/promises");
+              await remindMinutesPromises(env.DB, teamId, String(tomorrowMatch.id))
+                .catch((e) => logger.warn({ module: "daily-tick", teamId }, "připomínka slibu sestavy", e));
               // match_reminder push notifikace
               const { createNotification } = await import("../community/notifications");
               await createNotification(env.DB, teamId, "match_reminder", `Zítra hrajeme! Nastav sestavu`, `Zápas proti ${opponentName}`, "/zapas",

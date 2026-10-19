@@ -84,15 +84,44 @@ export function formatLogDate(raw: string): string {
   return d.toLocaleDateString("cs", { day: "numeric", month: "numeric" });
 }
 
-export function DeltaBubble({ delta }: { delta: number }) {
+const BIG_CHANGE = 10;
+
+/** Šipka místo čísla změny: velká změna má šipky dvě. Vztah je simulace, body hráč nevidí. */
+function trendArrows(delta: number): string {
+  if (delta === 0) return "•";
+  const arrow = delta > 0 ? "▲" : "▼";
+  return Math.abs(delta) >= BIG_CHANGE ? arrow + arrow : arrow;
+}
+
+export function RelationTrend({ delta }: { delta: number }) {
+  const label = delta > 0 ? "Vztah se zlepšil" : delta < 0 ? "Vztah se zhoršil" : "Beze změny";
   return (
-    <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-heading font-bold text-sm tabular-nums ${
+    <span aria-label={label} title={label}
+      className={`shrink-0 w-7 text-xs leading-5 font-heading font-bold ${delta > 0 ? "text-pitch-600" : delta < 0 ? "text-card-red" : "text-muted"}`}>
+      {trendArrows(delta)}
+    </span>
+  );
+}
+
+function DeltaBubble({ delta }: { delta: number }) {
+  return (
+    <div aria-label={delta > 0 ? "Vztah se zlepšil" : delta < 0 ? "Vztah se zhoršil" : "Beze změny"}
+      className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-heading font-bold text-xs ${
       delta > 0 ? "bg-pitch-50 text-pitch-600" : delta < 0 ? "bg-red-50 text-card-red" : "bg-gray-50 text-muted"
     }`}>
-      {delta > 0 ? "+" : ""}{delta}
+      {trendArrows(delta)}
     </div>
   );
 }
+
+/** Souhrn celé kabiny podle průměrného pásma. */
+const TEAM_BAND_LABEL: Record<CoachRelationBandKey, string> = {
+  idol: "Kabina tě zbožňuje",
+  loyal: "Kabina za tebou stojí",
+  neutral: "Kabina tě bere",
+  skeptic: "Kabina o tobě pochybuje",
+  hostile: "Kabina tě nesnáší",
+};
 
 function Flag({ children, tone }: { children: React.ReactNode; tone: "bad" | "warn" }) {
   return (
@@ -138,8 +167,7 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
         <div className="flex items-center gap-4 mt-1">
           <div className="text-4xl leading-none">{avgBand.icon}</div>
           <div className="flex-1 min-w-0">
-            <div className={`text-lg font-heading font-extrabold ${TONE_TEXT[avgBand.tone]}`}>{avgBand.label}</div>
-            <div className="text-sm text-muted">Průměrný vztah hráčů k tobě: <span className="font-bold text-ink tabular-nums">{summary.avgRelationship}</span> ze 100</div>
+            <div className={`text-lg font-heading font-extrabold ${TONE_TEXT[avgBand.tone]}`}>{TEAM_BAND_LABEL[avgBand.key]}</div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 mt-4">
@@ -195,8 +223,7 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
                         <PositionBadge position={p.position} />
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`text-xs sm:text-sm font-heading font-bold ${TONE_TEXT[band.tone]}`}>{band.icon} {band.label}</span>
-                        <span className="text-sm font-heading font-extrabold tabular-nums text-ink">{p.relationship}</span>
+                        <span className={`text-sm font-heading font-bold ${TONE_TEXT[band.tone]}`}>{band.icon} {band.label}</span>
                       </div>
                     </div>
                     <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-1.5">
@@ -206,16 +233,14 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {p.sulking && <Flag tone="bad">😤 Trucuje</Flag>}
                         {p.wantsOut && <Flag tone="warn">✈️ Chce pryč</Flag>}
-                        {p.lowMorale && <Flag tone="warn">📉 Morálka {p.morale}</Flag>}
+                        {p.lowMorale && <Flag tone="warn">📉 Nízká morálka</Flag>}
                         {p.leftOutStreak >= 2 && !p.sulking && <Flag tone="warn">🪑 {p.leftOutStreak}× nejel na zápas</Flag>}
                         {p.injuredDays ? <Flag tone="warn">🩹 Zraněný {p.injuredDays} d</Flag> : null}
                       </div>
                     )}
                     {p.lastChange && (
                       <div className="text-xs sm:text-sm text-muted mt-1.5 flex items-center gap-1.5 flex-wrap">
-                        <span className={`font-bold tabular-nums ${p.lastChange.delta > 0 ? "text-pitch-600" : "text-card-red"}`}>
-                          {p.lastChange.delta > 0 ? "+" : ""}{p.lastChange.delta}
-                        </span>
+                        <RelationTrend delta={p.lastChange.delta} />
                         <span className="text-ink-light">{p.lastChange.description}</span>
                         <span className="text-muted">· {formatLogDate(p.lastChange.date)}</span>
                       </div>
@@ -247,7 +272,7 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-sm text-muted tabular-nums">{formatLogDate(f.date)}</div>
-                  <div className="text-sm font-heading font-bold tabular-nums">{f.newValue}</div>
+                  <div className="text-sm" title={coachRelationBand(f.newValue).label}>{coachRelationBand(f.newValue).icon}</div>
                 </div>
               </div>
             ))}

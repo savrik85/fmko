@@ -63,6 +63,8 @@ export default function SquadPage() {
   // Potenciál celého kádru jedním dotazem — bez skauta zůstane prázdný
   const [potencial, setPotencial] = useState<Map<string, { strop: number | null; uroven: string | null; slovne: string | null }>>(new Map());
   const [stropOpor, setStropOpor] = useState<number | null>(null);
+  /** Běžící sliby hráčům: hráč → co jsi mu slíbil (značka 🤞 u jména). */
+  const [promises, setPromises] = useState<Map<string, string>>(new Map());
   const [seasonStats, setSeasonStats] = useState<PlayerSeasonStats[]>([]);
   const [tab, setTab] = useTabParam(TAB_KEYS);
   const [filter, setFilter] = useState<PosFilter>("all");
@@ -90,6 +92,10 @@ export default function SquadPage() {
         setPotencial(new Map(d.hraci.map((h) => [h.id, { strop: h.strop, uroven: h.uroven, slovne: h.slovne }])));
       })
       .catch((e) => console.error("potencial kadru:", e));
+
+    apiFetch<{ active: Record<string, string> }>(`/api/teams/${teamId}/promises`)
+      .then((d) => setPromises(new Map(Object.entries(d.active))))
+      .catch((e) => console.error("sliby hráčům:", e));
   }, [teamId]);
 
   // Lazy fetch attendance při kliknutí na tab Docházka
@@ -256,7 +262,7 @@ export default function SquadPage() {
       {tab !== "rozbor" && <PositionFilter players={players} value={filter} onChange={setFilter} />}
 
       {/* FM-style table — Atributy tab */}
-      {tab === "atributy" && <SquadAttributeTable players={filtered} potential={potencial} />}
+      {tab === "atributy" && <SquadAttributeTable players={filtered} potential={potencial} promises={promises} />}
 
       {/* Sezóna — match stats tab */}
       {tab === "sezona" && (

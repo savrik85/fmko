@@ -9,6 +9,7 @@ import { logger } from "../lib/logger";
 import { sendPlayerSMS } from "../messaging/system-sms";
 import { parseUnrest, type TransferUnrest } from "./offer-rejection-impact";
 import type { UnrestReason } from "./unrest-reasons";
+import { promiseInsert } from "./promises";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -364,12 +365,14 @@ export async function performUnrestAction(
     case "promise_minutes": {
       unrestDelta = -25; moraleDelta = 5;
       unrest.pledge = { type: "minutes", madeAt: nowIso, deadline: new Date(Date.now() + 21 * DAY_MS).toISOString() };
+      dbUpdates.push(promiseInsert(db, { clubTeamId: teamId, playerId, type: "minutes", madeAt: nowIso, deadline: unrest.pledge.deadline }));
       effects.push("Slib: 2 ze 3 příštích zápasů v základu");
       break;
     }
     case "promise_transfer": {
       unrestDelta = -35; moraleDelta = 3;
       unrest.pledge = { type: "transfer", madeAt: nowIso, deadline: new Date(Date.now() + 30 * DAY_MS).toISOString() };
+      dbUpdates.push(promiseInsert(db, { clubTeamId: teamId, playerId, type: "transfer", madeAt: nowIso, deadline: unrest.pledge.deadline }));
       effects.push("Slib: při další dobré nabídce ho pustíš (platí 30 dní)");
       break;
     }
@@ -408,6 +411,9 @@ export async function performUnrestAction(
       if (!offerId) return { ok: false, error: "Klub už o hráče nestojí.", status: 409 };
       unrestDelta = -20; moraleDelta = 5;
       unrest.pledge = { type: "release", madeAt: nowIso, deadline: new Date(Date.now() + 4 * DAY_MS).toISOString(), offerId };
+      dbUpdates.push(promiseInsert(db, {
+        clubTeamId: teamId, playerId, type: "release", madeAt: nowIso, deadline: unrest.pledge.deadline, offerId, club: teamNameOf(unrest),
+      }));
       effects.push(`${teamNameOf(unrest)} poslal nabídku znovu, najdeš ji v Přestupech`);
       break;
     }

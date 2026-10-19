@@ -72,6 +72,9 @@ export async function executeTransferPressureTick(
   try {
     const { processTransferUnrest } = await import("./offer-rejection-impact");
     result.unrestProcessed = await processTransferUnrest(env.DB);
+    // Sliby hráčů, kteří z klubu odešli: prodej splněn, sestava vypršela.
+    const { settleDepartedPromises } = await import("./promises");
+    await settleDepartedPromises(env.DB);
   } catch (e) {
     logger.error({ module: "transfer-pressure" }, "unrest processing failed", e);
   }

@@ -426,6 +426,10 @@ async function maybeOfferForTeam(
     interest?.level ?? null, offerReplyDeadline(),
   ).run();
 
+  // Hráč, kterému trenér slíbil prodej, mu to připomene.
+  const { remindTransferPromise } = await import("./promises");
+  await remindTransferPromise(db, target.id as string, virtualTeam.name, offerId);
+
   // Player message in Kabina — tón podle toho, jak moc hráč o přestup stojí
   const kabinaConv = await db.prepare(
     "SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group' AND title = 'Kabina' ORDER BY created_at DESC LIMIT 1"

@@ -8,6 +8,7 @@
  * štítky hodnot (`attrBg`). Hráč se tak učí jeden vizuální jazyk.
  */
 
+import { PromiseBadge } from "@/components/players/promise-card";
 import { useState } from "react";
 import Link from "next/link";
 import { attributeImportance, coachRelationBand } from "@okresni-masina/shared";
@@ -49,7 +50,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; tip?: string; attrKey?: Attr
   { key: "str", label: "Síl", attrKey: "str", skill: "strength" },
   { key: "cond", label: "Kon", attrKey: "cond" },
   { key: "mor", label: "Mor", attrKey: "mor" },
-  { key: "rel", label: "Vzt", tip: "Vztah hráče k tobě (trenérovi). 0 nepřítel, 50 neutrál, 100 oddán" },
+  { key: "rel", label: "Vzt", tip: "Vztah hráče k tobě: ❤️ jste kamarádi, 👍 má tě rád, 🤝 bere tě, 🙄 nemá tě rád, 💢 nesnáší tě" },
   { key: "wage", label: "Mzda", attrKey: "wage" },
 ];
 
@@ -177,7 +178,12 @@ export function PositionFilter({ players, value, onChange }: {
   );
 }
 
-export function SquadAttributeTable({ players, potential = new Map() }: { players: Player[]; potential?: PotentialMap }) {
+export function SquadAttributeTable({ players, potential = new Map(), promises = new Map() }: {
+  players: Player[];
+  potential?: PotentialMap;
+  /** Běžící sliby hráčům (hráč → co jsi slíbil), značka 🤞 u jména. */
+  promises?: Map<string, string>;
+}) {
   const [sortKey, setSortKey] = useState<SortKey>("rat");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -249,6 +255,7 @@ export function SquadAttributeTable({ players, potential = new Map() }: { player
                     {p.loan_from_team_id && (
                       <span className="ml-1.5 text-micro bg-yellow-100 text-yellow-700 font-heading font-bold px-1.5 py-0.5 rounded-full">Host.</span>
                     )}
+                    {promises.has(p.id) && <PromiseBadge text={promises.get(p.id)!} />}
                     {(() => {
                       const inj = p.injury;
                       if (!inj) return null;
@@ -297,11 +304,8 @@ export function SquadAttributeTable({ players, potential = new Map() }: { player
                   })}
                   <td className={`py-2 px-1 text-center tabular-nums font-heading font-bold ${condColor(cond)}`}>{cond}%</td>
                   <td className="py-2 px-1 text-center" title={`${morale}%`}>{moraleIcon(morale)}</td>
-                  <td className="py-2 px-1 text-center" title={`${relBand.label} (${rel}/100)`}>
-                    <span className="inline-flex items-center gap-1 tabular-nums">
-                      <span>{relBand.icon}</span>
-                      <span className="text-micro text-muted">{rel}</span>
-                    </span>
+                  <td className="py-2 px-1 text-center cursor-help" title={relBand.label} aria-label={relBand.label}>
+                    {relBand.icon}
                   </td>
                   <td className="py-2 px-1.5 text-center tabular-nums text-muted">{(p.weekly_wage ?? 0).toLocaleString("cs")}</td>
                 </tr>
