@@ -3,7 +3,7 @@ import { Miniflare } from "miniflare";
 import { readFileSync } from "node:fs";
 import { createRng } from "../generators/rng";
 import {
-  createDemand, demandRatingThreshold, demandSummary, generateClubDemands, listDemands, parseDemandInput, pitchPlayer, withdrawDemand,
+  closeDemandsForArrival, createDemand, demandRatingThreshold, demandSummary, generateClubDemands, listDemands, parseDemandInput, pitchPlayer, withdrawDemand,
 } from "./demands";
 
 let miniflare: Miniflare;
@@ -179,6 +179,18 @@ describe("nabídnutí hráče manažerovi", () => {
     expect((await listDemands(db, "B"))!.clubs[0].minRating).toBeNull();
   });
 
+  it("manažer si nabídnutého hráče koupil: poptávka se zavře všem", async () => {
+    const d = await createDemand(db, "A", input());
+    if (!d.ok) throw new Error();
+    await pitchPlayer(db, "B", d.id, "b1", createRng(30));
+    // Přestup jiného hráče poptávku nezavře.
+    expect(await closeDemandsForArrival(db, "b4", "A")).toBe(0);
+    // Nabídnutý hráč přišel do U21 kupce: pořád jeho klub.
+    expect(await closeDemandsForArrival(db, "b1", "A21")).toBe(1);
+    expect((await listDemands(db, "A"))!.mine).toHaveLength(0);
+    expect((await listDemands(db, "B"))!.managers).toHaveLength(0);
+  });
+
   it("stažená poptávka už hráče nebere", async () => {
     const d = await createDemand(db, "A", input());
     if (!d.ok) throw new Error();
@@ -236,6 +248,10 @@ describe("poptávky klubů mimo hru", () => {
     expect(forB[0]).toMatchObject({ filled: true, clubName: "TJ Písek" });
     expect(forB[0].myPitches.map((p) => p.status).sort()).toEqual(["accepted", "declined"]);
     expect((await listDemands(db, "A"))!.clubs).toHaveLength(0);
+
+    // Po rozhodnutí o nabídce (přestup proběhl) zmizí i jemu.
+    await db.prepare("UPDATE transfer_offers SET status = 'accepted'").run();
+    expect((await listDemands(db, "B"))!.clubs).toHaveLength(0);
   });
 
   it("dva souběžní zájemci: klub pošle jen jednu nabídku", async () => {

@@ -104,6 +104,10 @@ async function sendPhoneSMS(db: D1Database, teamId: string, senderName: string, 
 
 /** After transfer: recalculate commute distance and give the player a free squad number in the new team. */
 async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: string) {
+  // Kupec si vzal hráče nabídnutého k jeho poptávce → poptávka je vyřízená.
+  const { closeDemandsForArrival } = await import("../transfers/demands");
+  await closeDemandsForArrival(db, playerId, newTeamId)
+    .catch((e) => logger.warn({ module: "game" }, "uzavření poptávky po přestupu", e));
   // Get new team's village info
   const team = await db.prepare("SELECT v.name, v.district, v.lat, v.lng FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
     .bind(newTeamId).first<{ name: string; district: string; lat: number; lng: number }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });

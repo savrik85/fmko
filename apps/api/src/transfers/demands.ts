@@ -238,10 +238,13 @@ export async function listDemands(db: D1Database, teamId: string) {
          AND (t.user_id IS NULL OR t.user_id != ?)
        ORDER BY CASE WHEN d.league_id = ? THEN 0 ELSE 1 END, d.created_at DESC LIMIT 60`,
     ).bind(now, me.clubTeamId, me.userId ?? "", me.leagueId ?? "").all<DemandRow & { team_name: string; league_district: string | null; league_name: string | null }>(),
-    // Kluby mimo hru z okresu. Obsazená poptávka zůstane vidět tomu, komu klub poslal nabídku.
+    // Kluby mimo hru z okresu. Obsazená poptávka zůstane vidět tomu, komu klub poslal nabídku,
+    // jen dokud se o ní nerozhodne; po přestupu (nebo odmítnutí) visela dál prázdná (2026-10-19).
     db.prepare(
       `SELECT * FROM transfer_demands WHERE team_id IS NULL AND expires_at > ? AND district = ?
-         AND (status = 'active' OR (status = 'filled' AND id IN (SELECT demand_id FROM transfer_demand_pitches WHERE team_id = ? AND status = 'accepted')))
+         AND (status = 'active' OR (status = 'filled' AND id IN (
+           SELECT dp.demand_id FROM transfer_demand_pitches dp JOIN transfer_offers o ON o.id = dp.offer_id
+           WHERE dp.team_id = ? AND dp.status = 'accepted' AND o.status IN ('pending', 'countered'))))
        ORDER BY created_at DESC`,
     ).bind(now, me.district ?? "", me.clubTeamId).all<DemandRow>(),
     db.prepare(
@@ -333,6 +336,19 @@ export async function createDemand(db: D1Database, teamId: string, input: Demand
     input.minRating, input.skills.length > 0 ? JSON.stringify(Object.fromEntries(input.skills.map((x) => [x.skill, x.min]))) : null,
     new Date(now.getTime() + DEMAND_DAYS * 86_400_000).toISOString(), now.toISOString()).run();
   return { ok: true, id };
+}
+
+/**
+ * Hráč přestoupil: když ho manažerovi někdo nabídl k poptávce a ten si ho koupil,
+ * poptávka je vyřízená a zmizí všem. Dřív visela, dokud ji manažer sám nestáhl.
+ */
+export async function closeDemandsForArrival(db: D1Database, playerId: string, newTeamId: string): Promise<number> {
+  const clubTeamId = (await resolveClubTeamId(db, newTeamId)) ?? newTeamId;
+  const res = await db.prepare(
+    `UPDATE transfer_demands SET status = 'filled'
+     WHERE team_id = ? AND status = 'active' AND id IN (SELECT demand_id FROM transfer_demand_pitches WHERE player_id = ?)`,
+  ).bind(clubTeamId, playerId).run();
+  return res.meta?.changes ?? 0;
 }
 
 export async function withdrawDemand(db: D1Database, teamId: string, demandId: string): Promise<boolean> {
