@@ -30,7 +30,7 @@ beforeEach(async () => {
   await db.prepare("CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, league_id TEXT, parent_team_id TEXT, village_id TEXT)").run();
   await db.prepare(
     `CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT, first_name TEXT, last_name TEXT, nationality TEXT, age INTEGER, position TEXT,
-     overall_rating INTEGER, status TEXT, loan_from_team_id TEXT, is_celebrity INTEGER DEFAULT 0, life_context TEXT, personality TEXT)`,
+     overall_rating INTEGER, status TEXT, loan_from_team_id TEXT, is_celebrity INTEGER DEFAULT 0, life_context TEXT, personality TEXT, skills TEXT)`,
   ).run();
   await db.prepare("CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, title TEXT, pinned INTEGER, unread_count INTEGER, last_message_text TEXT, last_message_at TEXT, created_at TEXT)").run();
   await db.prepare("CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, sender_id TEXT, sender_name TEXT, body TEXT, metadata TEXT, sent_at TEXT)").run();
@@ -40,6 +40,7 @@ beforeEach(async () => {
   ).run();
   await runMigration("0268_player_promises.sql", "-- Sliby, které už běží");
   await runMigration("0269_transfer_demands.sql");
+  await runMigration("0270_transfer_demand_skills.sql");
 
   await db.prepare("INSERT INTO leagues VALUES ('LP', 'Prachatice', 'Okresní přebor'), ('LP3', 'Prachatice', 'III. třída'), ('LPU', 'Prachatice U21', 'U21'), ('LPR', 'Praha', 'Pražský přebor')").run();
   await db.prepare(
@@ -69,7 +70,14 @@ describe("zadání poptávky", () => {
     expect(parseDemandInput({ position: "MID", ageMin: 18, ageMax: 25, role: "squad", maxPrice: -5 }).ok).toBe(false);
     expect(parseDemandInput({ position: "MID", ageMin: 18, ageMax: 25, role: "squad", note: "x".repeat(141) }).ok).toBe(false);
     const ok = parseDemandInput({ position: "MID", ageMin: 18, ageMax: 25, role: "squad", maxPrice: "", note: "  a   b " });
-    expect(ok).toEqual({ ok: true, value: { position: "MID", ageMin: 18, ageMax: 25, role: "squad", maxPrice: null, note: "a b" } });
+    expect(ok).toEqual({ ok: true, value: { position: "MID", ageMin: 18, ageMax: 25, role: "squad", maxPrice: null, note: "a b", minRating: null, skills: [] } });
+    const base = { position: "MID", ageMin: 18, ageMax: 25, role: "squad" };
+    expect(parseDemandInput({ ...base, minRating: 99 }).ok).toBe(false);
+    expect(parseDemandInput({ ...base, skills: [{ skill: "flying", min: 50 }] }).ok).toBe(false);
+    expect(parseDemandInput({ ...base, skills: [{ skill: "speed", min: 50 }, { skill: "speed", min: 60 }] }).ok).toBe(false);
+    expect(parseDemandInput({ ...base, skills: [{ skill: "speed", min: 50 }, { skill: "heading", min: 50 }, { skill: "defense", min: 50 }] }).ok).toBe(false);
+    expect(parseDemandInput({ ...base, minRating: "45", skills: [{ skill: "speed", min: "60" }] }))
+      .toMatchObject({ ok: true, value: { minRating: 45, skills: [{ skill: "speed", min: 60 }] } });
   });
 
   it("souhrn bez dlouhé pomlčky", () => {
@@ -146,6 +154,29 @@ describe("nabídnutí hráče manažerovi", () => {
     const res = await Promise.all(["b1", "b2", "b4"].map((pid, i) => pitchPlayer(db, "B", d.id, pid, createRng(10 + i))));
     expect(res.filter((r) => r.ok)).toHaveLength(2);
     expect((await db.prepare("SELECT COUNT(*) AS n FROM transfer_demand_pitches").first<{ n: number }>())?.n).toBe(2);
+  });
+
+  it("hodnocení a dovednosti: projde jen hráč, který je splní; klub mimo hru práh nevyzradí", async () => {
+    await db.prepare("UPDATE players SET skills = ? WHERE id = 'b1'").bind(JSON.stringify({ speed: 70, heading: 40 })).run();
+    await db.prepare("UPDATE players SET skills = ? WHERE id = 'b4'").bind(JSON.stringify({ speed: 50, heading: 60 })).run();
+    const d = await createDemand(db, "A", input({ minRating: 50, skills: [{ skill: "speed", min: 60 }] }));
+    if (!d.ok) throw new Error();
+    const rng = createRng(20);
+    expect(await pitchPlayer(db, "B", d.id, "b4", rng)).toMatchObject({ ok: false, error: "Hráč nemá hodnocení 50+." }); // 48
+    await db.prepare("UPDATE players SET overall_rating = 52 WHERE id = 'b4'").run();
+    expect(await pitchPlayer(db, "B", d.id, "b4", rng)).toMatchObject({ ok: false, error: "Hráč nemá Rychlost 60+." });
+    expect(await pitchPlayer(db, "B", d.id, "b1", rng)).toMatchObject({ ok: true, status: "pitched" });
+
+    const forB = await listDemands(db, "B");
+    expect(forB!.managers[0]).toMatchObject({ minRating: 50, skills: [{ skill: "speed", label: "Rychlost", min: 60 }] });
+    expect(forB!.pitchable.find((p) => p.id === "b1")).toMatchObject({ rating: 55, skills: { speed: 70, heading: 40 } });
+    expect(forB!.skillOptions.map((o) => o.label)).toContain("Hlavičky");
+
+    await db.prepare(
+      `INSERT INTO transfer_demands (id, team_id, club_data, district, position, age_min, age_max, role, max_price, min_rating, status, expires_at, created_at)
+       VALUES ('club', NULL, '{"name":"TJ Písek","rating":46}', 'Prachatice', 'MID', 18, 30, 'starter', 30000, 53, 'active', ?, ?)`,
+    ).bind(new Date(Date.now() + 86_400_000).toISOString(), new Date().toISOString()).run();
+    expect((await listDemands(db, "B"))!.clubs[0].minRating).toBeNull();
   });
 
   it("stažená poptávka už hráče nebere", async () => {
