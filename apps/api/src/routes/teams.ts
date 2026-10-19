@@ -542,7 +542,7 @@ teamsRouter.post("/", async (c) => {
 
       if (allTeamIds.length >= 2) {
         const schedule = generateSchedule(rng, allTeamIds.length);
-        const calendar = generateSeasonCalendar(existingLeague.id, season.number, new Date());
+        const calendar = generateSeasonCalendar(existingLeague.id, season.number, new Date(), totalRounds(allTeamIds.length));
 
         for (const entry of calendar.entries) {
           await c.env.DB.prepare(
@@ -782,7 +782,7 @@ teamsRouter.post("/", async (c) => {
     logger.info({ module: "teams" }, `liga ${leagueName} založena v přípravném období, rozpis vytvoří rollover`);
   } else if (teamIds.length >= 2) {
     const schedule = generateSchedule(rng, teamIds.length);
-    const calendar = generateSeasonCalendar(leagueId, season.number, new Date());
+    const calendar = generateSeasonCalendar(leagueId, season.number, new Date(), totalRounds(teamIds.length));
 
     // Insert calendar entries
     for (const entry of calendar.entries) {

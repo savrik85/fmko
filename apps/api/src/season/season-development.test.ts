@@ -40,3 +40,18 @@ describe("applySeasonDevelopment", () => {
     expect(physical.stamina).toBe(45);
   });
 });
+
+describe("vývoj za celou sezónu", () => {
+  it("hodnocení na začátku sezóny je bez toho, co hráč za sezónu natrénoval", async () => {
+    const { seasonStartRating } = await import("./season-development");
+    const { overallRatingFromFlat } = await import("../skills/generator");
+    const skills = { speed: 60, technique: 62, shooting: 55, passing: 64, heading: 50, defense: 45, vision: 63, creativity: 60, setPieces: 50, goalkeeping: 5, experience: 30 };
+    const physical = { stamina: 60, strength: 55 };
+    const now = overallRatingFromFlat("MID", skills, physical, 0, undefined)!;
+    const start = seasonStartRating("MID", skills, physical, 0, undefined, new Map([["passing", 12], ["vision", 10], ["technique", 8], ["stamina", 6]]));
+    expect(start).not.toBeNull();
+    expect(now - start!).toBeGreaterThanOrEqual(4);
+    // Bez záznamů o růstu nic nedopočítává.
+    expect(seasonStartRating("MID", skills, physical, 0, undefined, undefined)).toBeNull();
+  });
+});

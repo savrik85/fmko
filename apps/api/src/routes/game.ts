@@ -3080,7 +3080,8 @@ gameRouter.post("/leagues/:leagueId/generate-schedule", async (c) => {
 
   const rng = createRng(cryptoSeed());
   const schedule = generateSchedule(rng, teamIds.length);
-  const calendar = generateSeasonCalendar(leagueId, league.season_number, new Date());
+  const { totalRounds } = await import("../league/schedule");
+  const calendar = generateSeasonCalendar(leagueId, league.season_number, new Date(), totalRounds(teamIds.length));
 
   for (const entry of calendar.entries) {
     await c.env.DB.prepare(
@@ -3477,7 +3478,7 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
   const seasonNumber = mustSeason(seasonRow?.number);
 
   const schedule = generateSchedule(rng, teamIds.length);
-  const calendar = generateSeasonCalendar(league.id, seasonNumber, new Date());
+  const calendar = generateSeasonCalendar(league.id, seasonNumber, new Date(), totalRounds(teamIds.length));
   const rounds = totalRounds(teamIds.length);
 
   // Insert calendar entries

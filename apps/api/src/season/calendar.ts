@@ -5,8 +5,8 @@
  * So 18:00 Europe/Prague — liga
  * Ne 18:00 Europe/Prague — liga (jen nabitý týden)
  *
- * 30 kol, 2 zápasy/týden = ~15 týdnů podzim + 15 jaro
- * + zimní přestávka (1 týden) + letní (1-2 týdny)
+ * Kol tolik, kolik jich má rozpis ligy (14 týmů = 26), 2 zápasy/týden, půlka na podzim
+ * a půlka na jaře + zimní přestávka (1 týden) + letní (1-2 týdny)
  */
 
 /**
@@ -32,7 +32,7 @@ export interface CalendarEntry {
   id: string;
   leagueId: string;
   seasonNumber: number;
-  gameWeek: number;       // 1-30
+  gameWeek: number;       // 1..počet kol
   matchDay: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
   scheduledAt: string;    // ISO datetime
   status: "scheduled" | "lineup_locked" | "simulated";
@@ -49,15 +49,18 @@ export interface SeasonCalendar {
 /**
  * Generate a full season calendar starting from a given date.
  *
- * 16 teams, 30 rounds:
- * - Autumn: rounds 1-15 (weeks 1-8)
- * - Winter break: 1 week
- * - Spring: rounds 16-30 (weeks 10-17)
+ * `rounds` = počet kol rozpisu (`totalRounds(počet týmů)`). Dřív bylo napevno 30 kol
+ * jako pro 16 týmů, takže ligám se 14 týmy zbyla 4 prázdná kola a sezóna se o dva
+ * týdny protáhla (2026-10-19).
+ * - Podzim: první polovina kol (u 26 kol 1-13)
+ * - Zimní přestávka: 1 týden
+ * - Jaro: druhá polovina
  */
 export function generateSeasonCalendar(
   leagueId: string,
   seasonNumber: number,
   startDate: Date,
+  rounds = 30,
 ): SeasonCalendar {
   const entries: CalendarEntry[] = [];
   // Liga hraje 2× týdně (po + čt) → sezóna může začít i čtvrtkem. První kolo = nejbližší
@@ -84,8 +87,9 @@ export function generateSeasonCalendar(
   const autumnStart = cursor.toISOString();
   let round = 1;
 
-  // PODZIM: kola 1-15, každý ligový den (po/čt)
-  for (; round <= 15; round++) {
+  // PODZIM: první polovina kol, každý ligový den (po/čt)
+  const autumnRounds = Math.ceil(rounds / 2);
+  for (; round <= autumnRounds; round++) {
     pushRound(round);
     advance();
   }
@@ -98,8 +102,8 @@ export function generateSeasonCalendar(
   while (cursor.getDay() !== 1 && cursor.getDay() !== 4) cursor.setDate(cursor.getDate() + 1);
   const springStart = new Date(cursor);
 
-  // JARO: kola 16-30
-  for (; round <= 30; round++) {
+  // JARO: zbytek kol
+  for (; round <= rounds; round++) {
     pushRound(round);
     advance();
   }
