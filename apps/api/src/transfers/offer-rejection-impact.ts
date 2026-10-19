@@ -62,7 +62,7 @@ export async function clubStepFor(
   if (fromTeamId === "virtual_ai") {
     return virtualCountry && virtualCountry !== "CZ"
       ? { step: "abroad", note: `${teamName} je bavorský klub, hrál bys v Německu.` }
-      : { step: "stronger_team", note: `${teamName} je klub z jiného okresu. Jakou soutěž hraje, přesně nevíš, tak si to nevymýšlej.` };
+      : { step: "stronger_team", note: `${teamName} nehraje vaši soutěž. Jakou soutěž hraje, přesně nevíš, tak si to nevymýšlej.` };
   }
   const row = await db.prepare(
     `SELECT bt.parent_team_id AS buyer_parent, bl.level AS buyer_level, bl.name AS buyer_league,
