@@ -140,6 +140,14 @@ describe("nabídnutí hráče manažerovi", () => {
     expect(forB!.managers[0].myPitches).toHaveLength(2);
   });
 
+  it("tři hráči najednou: strop 2 platí i při souběhu", async () => {
+    const d = await createDemand(db, "A", input({ ageMax: 35 }));
+    if (!d.ok) throw new Error();
+    const res = await Promise.all(["b1", "b2", "b4"].map((pid, i) => pitchPlayer(db, "B", d.id, pid, createRng(10 + i))));
+    expect(res.filter((r) => r.ok)).toHaveLength(2);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM transfer_demand_pitches").first<{ n: number }>())?.n).toBe(2);
+  });
+
   it("stažená poptávka už hráče nebere", async () => {
     const d = await createDemand(db, "A", input());
     if (!d.ok) throw new Error();
@@ -197,6 +205,17 @@ describe("poptávky klubů mimo hru", () => {
     expect(forB[0]).toMatchObject({ filled: true, clubName: "TJ Písek" });
     expect(forB[0].myPitches.map((p) => p.status).sort()).toEqual(["accepted", "declined"]);
     expect((await listDemands(db, "A"))!.clubs).toHaveLength(0);
+  });
+
+  it("dva souběžní zájemci: klub pošle jen jednu nabídku", async () => {
+    const id = await clubDemand(50);
+    const [a, b] = await Promise.all([
+      pitchPlayer(db, "A", id, "a1", createRng(5)),
+      pitchPlayer(db, "B", id, "b1", createRng(6)),
+    ]);
+    expect([a, b].filter((r) => r.ok && r.status === "accepted")).toHaveLength(1);
+    expect([a, b].filter((r) => !r.ok)).toHaveLength(1);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM transfer_offers").first<{ n: number }>())?.n).toBe(1);
   });
 
   it("z jiného okresu klubu hráče nenabídneš", async () => {

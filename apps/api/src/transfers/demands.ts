@@ -278,6 +278,25 @@ export async function withdrawDemand(db: D1Database, teamId: string, demandId: s
   return (res.meta?.changes ?? 0) > 0;
 }
 
+/**
+ * Zápis nabídnutého hráče. Strop hráčů na poptávku hlídá přímo INSERT (souběžné kliknutí
+ * z dvou oken by jinak prošlo dvakrát), stejného hráče podruhé nepustí UNIQUE v tabulce.
+ */
+async function insertPitch(db: D1Database, p: {
+  id: string; demandId: string; teamId: string; playerId: string; status: "pitched" | "accepted" | "declined"; reply?: string; offerId?: string;
+}): Promise<boolean> {
+  try {
+    const res = await db.prepare(
+      `INSERT INTO transfer_demand_pitches (id, demand_id, team_id, player_id, status, reply, offer_id, created_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM transfer_demand_pitches WHERE demand_id = ? AND team_id = ?) < ?`,
+    ).bind(p.id, p.demandId, p.teamId, p.playerId, p.status, p.reply ?? null, p.offerId ?? null, nowIso(), p.demandId, p.teamId, MAX_PITCHES_PER_DEMAND).run();
+    return (res.meta?.changes ?? 0) === 1;
+  } catch (e) {
+    logger.warn({ module: "demands" }, "zápis nabídnutého hráče", e);
+    return false;
+  }
+}
+
 export type PitchResult =
   | { ok: true; status: "pitched" | "accepted" | "declined"; message: string; offerId?: string }
   | { ok: false; error: string };
@@ -333,9 +352,9 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
   const pitchId = crypto.randomUUID();
   const summary = demandSummary({ position: demand.position, ageMin: demand.age_min, ageMax: demand.age_max, role: demand.role });
 
+  const capError = `K jedné poptávce můžeš nabídnout nejvýš ${MAX_PITCHES_PER_DEMAND} hráče.`;
   if (demand.team_id) {
-    await db.prepare("INSERT INTO transfer_demand_pitches (id, demand_id, team_id, player_id, status, created_at) VALUES (?, ?, ?, ?, 'pitched', ?)")
-      .bind(pitchId, demandId, me.clubTeamId, playerId, nowIso()).run();
+    if (!(await insertPitch(db, { id: pitchId, demandId, teamId: me.clubTeamId, playerId, status: "pitched" }))) return { ok: false, error: capError };
     await sendSystemSMS(db, demand.team_id, SMS_ROLE,
       `${me.name} ti k poptávce na ${summary} nabízí hráče ${playerName} (${player.age} let). Když o něj stojíš, pošli nabídku z jeho profilu.`,
       { type: "demand", demandId, playerId });
@@ -351,8 +370,7 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
   if (!good) {
     const pool = demand.role === "prospect" ? CLUB_DECLINE_PROSPECT : CLUB_DECLINE_REPLIES;
     const reply = speak(rng.pick(pool).replace("{player}", playerName));
-    await db.prepare("INSERT INTO transfer_demand_pitches (id, demand_id, team_id, player_id, status, reply, created_at) VALUES (?, ?, ?, ?, 'declined', ?, ?)")
-      .bind(pitchId, demandId, me.clubTeamId, playerId, reply, nowIso()).run();
+    if (!(await insertPitch(db, { id: pitchId, demandId, teamId: me.clubTeamId, playerId, status: "declined", reply }))) return { ok: false, error: capError };
     return { ok: true, status: "declined", message: reply };
   }
 
@@ -370,17 +388,31 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
     ? germanClubLetter(rng, clubName, playerName, price)
     : `Děkujeme za tip na hráče ${playerName}. Je to přesně to, co hledáme, nabízíme ${price.toLocaleString("cs")} Kč.`;
   const reply = speak(rng.pick(CLUB_ACCEPT_REPLIES).replace("{player}", playerName));
-  await db.batch([
-    db.prepare(
+
+  // Klub si poptávku nejdřív zabere: dva souběžní zájemci nesmí dostat dvě nabídky.
+  const claimed = await db.prepare("UPDATE transfer_demands SET status = 'filled' WHERE id = ? AND status = 'active' AND expires_at > ?")
+    .bind(demandId, nowIso()).run();
+  if ((claimed.meta?.changes ?? 0) !== 1) return { ok: false, error: "Poptávka už neplatí." };
+  const release = (why: string) => db.prepare("UPDATE transfer_demands SET status = 'active' WHERE id = ? AND status = 'filled'").bind(demandId).run()
+    .catch((e) => logger.error({ module: "demands" }, `vrácení poptávky po chybě (${why})`, e));
+  if (!(await insertPitch(db, { id: pitchId, demandId, teamId: me.clubTeamId, playerId, status: "accepted", reply, offerId }))) {
+    await release("strop nabídnutých hráčů");
+    return { ok: false, error: capError };
+  }
+  try {
+    await db.prepare(
       `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, message, virtual_team_data, player_interest, expires_at, created_at)
        VALUES (?, ?, 'virtual_ai', ?, ?, 'transfer', 'pending', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
     ).bind(offerId, playerId, player.team_id, price, letter,
       JSON.stringify({ name: clubName, city: club?.city ?? null, district: club?.district ?? null, rating: club?.rating ?? null, ...(abroad ? { country: club?.country } : {}), demandId }),
-      interest?.level ?? null, offerReplyDeadline()),
-    db.prepare("INSERT INTO transfer_demand_pitches (id, demand_id, team_id, player_id, status, reply, offer_id, created_at) VALUES (?, ?, ?, ?, 'accepted', ?, ?, ?)")
-      .bind(pitchId, demandId, me.clubTeamId, playerId, reply, offerId, nowIso()),
-    db.prepare("UPDATE transfer_demands SET status = 'filled' WHERE id = ?").bind(demandId),
-  ]);
+      interest?.level ?? null, offerReplyDeadline()).run();
+  } catch (e) {
+    logger.error({ module: "demands" }, "nabídka klubu z poptávky", e);
+    await db.prepare("DELETE FROM transfer_demand_pitches WHERE id = ?").bind(pitchId).run()
+      .catch((err) => logger.error({ module: "demands" }, "úklid nabídnutí po chybě", err));
+    await release("zápis nabídky");
+    return { ok: false, error: "Klub nabídku nestihl poslat, zkus to znovu." };
+  }
 
   // Hráč, kterému trenér slíbil prodej, mu to připomene.
   const { remindTransferPromise } = await import("./promises");
