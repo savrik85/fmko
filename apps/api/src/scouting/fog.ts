@@ -9,6 +9,7 @@
  * Rozmezí je stabilní (posun z ID hlášení, ne z náhody) a skutečné hodnocení v něm leží vždy.
  */
 
+import { PRALES_MAX_RATING } from "../skills/limits";
 import { stableOffset } from "../lib/scout-estimate";
 import { teoretickyStropHrace } from "../skills/vyhled-hrace";
 import { POTENTIAL_HORIZON_SEASONS, projectRating } from "./youth-growth";
@@ -62,7 +63,8 @@ export function potentialRange(
   // Do 21 let naměřené tempo podle talentu a dospívání tak, jak ho hra opravdu dělá,
   // pak tempo podle věku (youth-growth.ts). Nikdy přes strop dovedností.
   const reachable = projectRating(player, POTENTIAL_HORIZON_SEASONS);
-  const range = rangeAround(reachable, ratingHalfWidth(eff, visits), `${seed}:potential`, 1, 100);
+  // Nad strop Pralesa (85) nikdo nedoroste, ani v odhadu slabého skauta (dřív „82–98“).
+  const range = rangeAround(reachable, ratingHalfWidth(eff, visits), `${seed}:potential`, 1, PRALES_MAX_RATING);
   // Pod dnešní výkon nikdo nespadne, i kdyby skaut odhadoval sebehůř.
   return { lo: Math.max(range.lo, Math.min(player.rating, range.hi)), hi: range.hi };
 }
