@@ -880,30 +880,57 @@ async function search(db: D1Database, a: AssignmentRow, eff: number, sender: str
   // jeho odhad je potenciál a model růstu je spíš optimistický.
   const youthBar = await lineupAverage(db, a.team_id);
   if (youth) {
-    const best = candidates.filter((c) => c.estimate >= youthBar).sort((x, y) => y.estimate - x.estimate)[0];
+    const best = pickReported(rng, candidates, (c) => c.estimate, youthBar);
     if (!best) return emptyWeek(db, a, sender, rng, visited);
     await createReport(db, a, best, sender, rng, true, gameDate, eff);
     return { visited: visited.length, reported: true };
   }
 
-  // Úkol i pro starší (třeba 16–25): přednost má hráč, který na sestavu má už teď. Když
-  // takový není, skaut nahlásí aspoň nadějného do 21 let, který se do sestavy dostane do
-  // `PROMISING_SEASONS` sezón (naměřené tempo růstu, youth-growth.ts). Dřív se mladí v takovém
-  // úkolu měřili jen dnešním hodnocením a nadějné skaut neviděl. Potenciál na 8 sezón se na to
-  // nehodí: slibuje sestavu i osmnáctiletému s hodnocením 8.
+  // Úkol i pro starší (třeba 16–25): skaut losuje mezi hráči kolem laťky sestavy (`pickReported`).
+  // Mladí do 21 let se měří i tím, kam se dostanou do `PROMISING_SEASONS` sezón (naměřené tempo
+  // růstu, youth-growth.ts), takže skaut hlásí i nadějné. Potenciál na 8 sezón se na to nehodí:
+  // slibuje sestavu i osmnáctiletému s hodnocením 8.
   const bar = await lineupBar(db, a.team_id);
-  const ready = candidates.filter((c) => c.estimate >= bar).sort((x, y) => y.estimate - x.estimate)[0];
-  const promising = ready ? undefined : candidates
-    .filter((c) => c.player.age <= POTENTIAL_MAX_AGE)
-    .map((c) => ({ c, later: c.estimate + projectRating(
-      { age: c.player.age, rating: c.rating, position: c.player.position, talent: c.talent, skillsMax: c.skillsMax }, PROMISING_SEASONS,
-    ) - c.rating }))
-    .filter((x) => x.later >= bar)
-    .sort((x, y) => y.later - x.later)[0]?.c;
-  const best = ready ?? promising;
+  const later = (c: Candidate) => c.estimate + projectRating(
+    { age: c.player.age, rating: c.rating, position: c.player.position, talent: c.talent, skillsMax: c.skillsMax }, PROMISING_SEASONS,
+  ) - c.rating;
+  // Nadějný = do 21 let, dnes na sestavu nemá, ale do ní doroste. Hlásí se jen občas
+  // (`PROMISING_SHARE`) nebo když kolem laťky nikdo není: ve společném losu s ostatními
+  // vyhrávali (mladých je v kádrech hodně) a skaut nosil skoro jen šestnáctileté.
+  const ready = pickReported(rng, candidates, (c) => c.estimate, bar);
+  const promisingPool = candidates.filter((c) => c.player.age <= POTENTIAL_MAX_AGE && c.estimate < bar && later(c) >= bar);
+  const usePromising = promisingPool.length > 0 && (!ready || rng.random() < PROMISING_SHARE);
+  const best = usePromising ? pickReported(rng, promisingPool, later, bar) : ready;
   if (!best) return emptyWeek(db, a, sender, rng, visited);
-  await createReport(db, a, best, sender, rng, best.player.age <= POTENTIAL_MAX_AGE && !!best.potential, gameDate, eff, !ready);
+  await createReport(db, a, best, sender, rng, best.player.age <= POTENTIAL_MAX_AGE && !!best.potential, gameDate, eff, usePromising);
   return { visited: visited.length, reported: true };
+}
+
+/**
+ * O kolik pod laťkou sestavy skaut hráče ještě nahlásí. Dřív hlásil jen hráče nad laťkou,
+ * a to vždy toho s nejlepším odhadem: u silného týmu jen opory městských klubů, každý týden
+ * (Jitona 2026-10-19). Skaut ale nepřiváží jen to nejlepší v okolí, ale toho, koho najde.
+ */
+export const REPORT_MARGIN = 5;
+/** Jak často skaut místo hráče kolem laťky přinese nadějného mladíka (když nějakého viděl). */
+export const PROMISING_SHARE = 0.25;
+
+/**
+ * Koho skaut nahlásí: los mezi hráči, kterým podle svého odhadu (`score`) dává aspoň laťku
+ * mínus `REPORT_MARGIN`, s vahou podle toho, o kolik je nad touto hranicí. Lepší hráč má
+ * větší šanci, ale přijde i průměrný; slabý skaut se navíc v odhadu plete (fog.ts).
+ */
+export function pickReported<T>(rng: Rng, candidates: readonly T[], score: (c: T) => number, bar: number): T | undefined {
+  const floor = bar - REPORT_MARGIN;
+  const pool = candidates.map((c) => ({ c, w: score(c) - floor + 1 })).filter((x) => x.w >= 1);
+  if (pool.length === 0) return undefined;
+  const total = pool.reduce((sum, x) => sum + x.w, 0);
+  let r = rng.random() * total;
+  for (const x of pool) {
+    r -= x.w;
+    if (r <= 0) return x.c;
+  }
+  return pool[pool.length - 1].c;
 }
 
 async function emptyWeek(

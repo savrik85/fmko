@@ -98,4 +98,14 @@ describe("odhad ceny a ochoty podle skauta", () => {
       }
     }
   });
+
+  it("odhad potenciálu nikdy nad strop Pralesa 85", () => {
+    for (let i = 0; i < 200; i++) {
+      const r = potentialRange({ age: 18, rating: 50, position: "MID", talent: 90, skillsMax: {
+        speed: { maxPotential: 95 }, technique: { maxPotential: 95 }, passing: { maxPotential: 95 }, vision: { maxPotential: 95 },
+        creativity: { maxPotential: 95 }, stamina: { maxPotential: 95 }, shooting: { maxPotential: 95 }, defense: { maxPotential: 95 },
+      } }, 1, 1, `p${i}`);
+      if (r) expect(r.hi).toBeLessThanOrEqual(85);
+    }
+  });
 });
