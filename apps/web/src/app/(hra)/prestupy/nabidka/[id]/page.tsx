@@ -54,6 +54,8 @@ interface OfferDetail {
   crossLeague: boolean;
   adminFee: number;
   playerInterest?: PlayerInterest | null;
+  /** Trenér hráči slíbil prodej: odmítnutím slib poruší. */
+  promiseWarning?: string | null;
   /** Podmínky posledního návrhu (záloha, splátky, procenta). Starší API je nevrací. */
   terms?: TransferTerms;
   /** Kolik kupující zaplatí při přijetí hned (záloha + administrační poplatek). */
@@ -145,9 +147,12 @@ export default function OfferDetailPage() {
   const payNow = data.payNow ?? currentAmount + adminFee;
   // Splátky a procenta se vyjednávají jen u trvalého přestupu mezi lidmi.
   const termsNegotiable = offer.offer_type === "transfer" && !offer.is_virtual;
-  const rejectWarning = role === "seller" && (playerInterest?.level ?? 0) >= 2
-    ? `⚠️ ${player?.first_name ?? "Hráč"} o přestup stojí — odmítnutí mu srazí náladu.`
-    : null;
+  // Slib přebíjí obecné varování: odmítnutím by se porušil (hráč se rozzuří naplno).
+  const rejectWarning = data.promiseWarning
+    ? `🤞 ${data.promiseWarning}`
+    : role === "seller" && (playerInterest?.level ?? 0) >= 2
+      ? `⚠️ ${player?.first_name ?? "Hráč"} o přestup stojí, odmítnutí mu srazí náladu.`
+      : null;
   const isActive = offer.status === "pending" || offer.status === "countered";
   const playerWantsOut = role === "seller" && (playerInterest?.level ?? 0) >= 2;
   // Lhůta na odpověď běží od posledního tahu, pak nabídka propadne (u prodávajícího jako odmítnutí).

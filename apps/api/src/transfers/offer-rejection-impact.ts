@@ -15,6 +15,7 @@ import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
 import { REASON_SMS, unrestReasonsFromFactors, type UnrestReason } from "./unrest-reasons";
+import { resolvePromises } from "./promises";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -206,6 +207,7 @@ export async function applyOfferRejectionImpact(
     moraleDelta = -12;
     coachRelDelta = -8;
     newLevel = 90;
+    await resolvePromises(db, playerId, ["transfer", "release"], "broken");
   }
 
   const newMorale = clamp(morale + moraleDelta, 0, 100);
@@ -354,11 +356,13 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
     const verdict = await checkMinutesPledge(db, playerId, rosterTeamId, unrest.pledge);
     if (verdict === "kept") {
       unrest.pledge = null;
+      await resolvePromises(db, playerId, ["minutes"], "kept");
       unrest.level = clamp(unrest.level - 10, 0, 100);
       await sendPlayerSMS(db, clubTeamId, playerRef, "Trenére, díky že jste dodržel slovo s tou sestavou. Vážím si toho.");
     } else if (verdict === "broken") {
       pledgeBroken = true;
       unrest.pledge = null;
+      await resolvePromises(db, playerId, ["minutes"], "broken");
       unrest.level = clamp(unrest.level + 35, 0, 100);
       const morale: number = typeof lc.morale === "number" ? lc.morale : 50;
       lc.morale = clamp(morale - 8, 0, 100);
@@ -367,6 +371,7 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
   } else if ((unrest.pledge?.type === "transfer" || unrest.pledge?.type === "release") && new Date(unrest.pledge.deadline) < new Date()) {
     // Slib prodeje vypršel bez další nabídky — smazat (porušení řeší applyOfferRejectionImpact)
     unrest.pledge = null;
+    await resolvePromises(db, playerId, ["transfer", "release"], "expired");
   }
 
   // 2) Decay −3/den (když se nic nestalo)

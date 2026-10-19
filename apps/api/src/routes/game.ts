@@ -6065,6 +6065,13 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
     "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, expires_at, offer_type, last_action_by, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, ?, ?, ?, 'transfer', ?, ?, ?, ?)"
   ).bind(offerId, listingInfo.player_id, buyerClubTeamId, listingInfo.seller_team_id, body.amount, offerReplyDeadline(), buyerClubTeamId,
     terms.upfrontPct, terms.installments, terms.sellOnPct).run();
+  {
+    // Hráč, kterému trenér slíbil prodej, mu to připomene.
+    const buyer = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(buyerClubTeamId).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "kupec pro připomínku slibu", e); return null; });
+    const { remindTransferPromise } = await import("../transfers/promises");
+    await remindTransferPromise(c.env.DB, listingInfo.player_id, buyer?.name ?? "jiného klubu", offerId);
+  }
 
   await c.env.DB.prepare(
     "INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, 'offer', ?, ?, ?, ?)"
@@ -6466,6 +6473,11 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
 
   // SMS to the owner team about the incoming offer
   const buyerTeam = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(buyerClubTeamId).first<{ name: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
+  // Hráč, kterému trenér slíbil prodej, mu to připomene.
+  if (offerType === "transfer") {
+    const { remindTransferPromise } = await import("../transfers/promises");
+    await remindTransferPromise(c.env.DB, body.playerId, buyerTeam?.name ?? "jiného klubu", id);
+  }
   const pName = `${player.first_name} ${player.last_name}`;
 
   // Komu zprávu doručit. U hráče z rezervy vlastní kartu U21 tým, jenže trenér
@@ -6849,6 +6861,21 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
 
   // Zájem hráče o přestup — u aktivní nabídky čerstvý přepočet, u uzavřené snapshot.
   // Detailní faktory vidí jen vlastník hráče (role seller); kupec jen úroveň.
+  // Trenér hráči slíbil prodej („pustit ho“ nebo při další nabídce): okno odmítnutí upozorní.
+  let promiseWarning: string | null = null;
+  if (role === "seller" && (offer.status === "pending" || offer.status === "countered")) {
+    const { activeTransferPromise } = await import("../transfers/promises");
+    const promise = await activeTransferPromise(c.env.DB, offer.player_id as string);
+    if (promise?.type === "release") {
+      const offerId = await c.env.DB.prepare("SELECT json_extract(details, '$.offerId') AS id FROM player_promises WHERE id = ?")
+        .bind(promise.id).first<{ id: string | null }>()
+        .catch((e) => { logger.warn({ module: "game" }, "slib pustit ho u nabídky", e); return null; });
+      if (offerId?.id === offer.id) promiseWarning = "Slíbil jsi mu, že tuhle nabídku přijmeš. Když ji odmítneš nebo necháš propadnout, slib porušíš.";
+    } else if (promise?.type === "transfer" && offer.offer_type !== "loan") {
+      promiseWarning = "Slíbil jsi mu, že ho při další dobré nabídce pustíš. Když ji odmítneš, slib porušíš.";
+    }
+  }
+
   let playerInterest: { level: number; label: string; factors?: { label: string; delta: number }[] } | null = null;
   try {
     const { computeInterestForOffer, INTEREST_LABELS } = await import("../transfers/player-interest");
@@ -6908,6 +6935,32 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     crossLeague,
     adminFee,
     playerInterest,
+    promiseWarning,
+  });
+});
+
+// GET /teams/:teamId/promises — běžící sliby hráčům klubu (značka 🤞 v kádru).
+gameRouter.get("/teams/:teamId/promises", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const clubTeamId = (await resolveClubTeamId(c.env.DB, teamId)) ?? teamId;
+  const { activePromisesForClub } = await import("../transfers/promises");
+  return c.json({ active: Object.fromEntries(await activePromisesForClub(c.env.DB, clubTeamId)) });
+});
+
+// GET /teams/:teamId/players/:playerId/promises — co trenér hráči slíbil (profil hráče).
+gameRouter.get("/teams/:teamId/players/:playerId/promises", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const clubTeamId = (await resolveClubTeamId(c.env.DB, teamId)) ?? teamId;
+  const { listPromises, promiseText, PROMISE_STATUS_LABELS } = await import("../transfers/promises");
+  const promises = await listPromises(c.env.DB, c.req.param("playerId"), clubTeamId);
+  return c.json({
+    promises: promises.map((p) => ({
+      id: p.id, text: promiseText(p), status: p.status, statusLabel: PROMISE_STATUS_LABELS[p.status], madeAt: p.madeAt, resolvedAt: p.resolvedAt,
+    })),
   });
 });
 

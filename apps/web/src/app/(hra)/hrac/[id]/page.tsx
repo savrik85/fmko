@@ -1,5 +1,6 @@
 "use client";
 
+import { PromiseCard, type PlayerPromiseView } from "@/components/players/promise-card";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -17,7 +18,7 @@ import { attributeImportance, coachRelationBand, marketValue, marketValueEstimat
 import { MoneyInput } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { PlayerObligationsCard } from "@/components/transfers/player-obligations";
-import { formatLogDate } from "@/components/manager/CoachKabinaTab";
+import { formatLogDate, RelationTrend } from "@/components/manager/CoachKabinaTab";
 import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 
 import type { BadgePattern } from "@/components/ui";
@@ -373,6 +374,14 @@ export default function PlayerDetailPage() {
   // U21 hráč je „můj" pokud jeho tým má parent_team_id rovné mému A-tým ID.
   const isMyU21Player = playerTeam?.team_type === "u21" && playerTeam?.parent_team_id === teamId;
   const isOwnPlayer = player?.team_id === teamId || isMyU21Player;
+  // Co jsi hráči slíbil (jen vlastní hráč).
+  const [promises, setPromises] = useState<PlayerPromiseView[]>([]);
+  useEffect(() => {
+    if (!isOwnPlayer || !teamId || !playerId) return;
+    apiFetch<{ promises: PlayerPromiseView[] }>(`/api/teams/${teamId}/players/${playerId}/promises`)
+      .then((d) => setPromises(d.promises))
+      .catch((e) => console.error("sliby hráči:", e));
+  }, [isOwnPlayer, teamId, playerId]);
   // Potenciál se načte jednou a použije se na třech místech: hlavička, odznak, karta dole
   const potencial = usePotencial(isOwnPlayer ? teamId : null, playerId);
   const isLoanedToUs = isOwnPlayer && !!player?.loan_from_team_id;
@@ -1226,6 +1235,9 @@ export default function PlayerDetailPage() {
       {/* ═══ TAB: VZTAHY — Vztahy v kádru + Watchers ═══ */}
       {activeTab === "vztahy" && <>
 
+      {/* ═══ Sliby ═══ */}
+      {isOwnPlayer && <PromiseCard promises={promises} />}
+
       {/* ═══ Vztah s trenérem ═══ */}
       {isOwnPlayer && (() => {
         const rel = player.coach_relationship ?? 50;
@@ -1235,9 +1247,8 @@ export default function PlayerDetailPage() {
         return (
           <div className="card p-4 sm:p-5 mb-5">
             <SectionLabel>Vztah s trenérem</SectionLabel>
-            <div className="flex items-end justify-between mt-2 mb-1.5">
+            <div className="mt-2 mb-1.5">
               <span className={`text-base font-heading font-bold ${labelColor}`}>{band.icon} {band.label}</span>
-              <span className="text-sm font-heading font-bold text-ink tabular-nums">{rel}/100</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div className={`h-full ${tone} transition-all`} style={{ width: `${rel}%` }} />
@@ -1247,9 +1258,7 @@ export default function PlayerDetailPage() {
                 <div className="text-sm font-heading font-bold text-muted mb-1">Proč</div>
                 {coachLog.slice(0, 5).map((l, i) => (
                   <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0 text-sm">
-                    <span className={`shrink-0 w-9 font-heading font-bold tabular-nums ${l.delta > 0 ? "text-pitch-600" : "text-card-red"}`}>
-                      {l.delta > 0 ? "+" : ""}{l.delta}
-                    </span>
+                    <RelationTrend delta={l.delta} />
                     <span className="flex-1 text-ink-light">{l.description}</span>
                     <span className="shrink-0 text-muted tabular-nums">{formatLogDate(l.date)}</span>
                   </div>

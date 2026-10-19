@@ -99,6 +99,11 @@ export async function remindIdleOffers(env: Bindings, now: Date = new Date()): P
     const consequence = wantsOut ? `, propadne a ${names.firstName} to vezme jako odmítnutí` : ", propadne";
 
     await sendSystemSMS(db, onTurnTeamId, SMS_ROLE, `⏰ Na ${what} máš čas do ${deadline}. Když neodpovíš${consequence}.`);
+    // Trenér hráči slíbil, že tuhle nabídku přijme („pustit ho“): hráč se ozve sám.
+    if (sellerOnTurn) {
+      const { remindReleasePromise } = await import("./promises");
+      await remindReleasePromise(db, offer.id, names.buyerName);
+    }
     try {
       const { createNotification } = await import("../community/notifications");
       const pushEnv = env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT
