@@ -12,6 +12,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-19",
+    emoji: "🔎",
+    title: "Poptávky",
+    items: [
+      "Na Přestupech je nová záložka Poptávky. Napiš, koho hledáš: post, věk, kolik nejvýš dáš, případně hodnocení a dovednosti, a ostatní manažeři ti hráče nabídnou. Hráče hledají i kluby z okolí. Když jim nabídneš někoho, kdo jim stačí, pošlou na něj nabídku.",
+    ],
+  },
+  {
     date: "2026-10-11",
     emoji: "🗺️",
     title: "Trh ze všech okresů",
