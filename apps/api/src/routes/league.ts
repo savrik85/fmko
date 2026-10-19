@@ -643,9 +643,9 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
         ORDER BY pc2.left_at DESC LIMIT 1) as from_team_id,
        -- Klub mimo hru (skaut, inzerát na trhu) nemá ve hře smlouvu, takže výš vyjde NULL
        -- a web napsal „Volný hráč“. Jméno klubu zná jednání, kterým se hráč koupil.
-       (SELECT n.club_name FROM ai_negotiations n
+       COALESCE(pc.from_club_name, (SELECT n.club_name FROM ai_negotiations n
          WHERE n.player_id = pc.player_id AND n.status = 'signed'
-         ORDER BY n.resolved_at DESC LIMIT 1) as outside_club,
+         ORDER BY n.resolved_at DESC LIMIT 1)) as outside_club,
        -- Že šlo o výměnu, se pozná jen z nabídky, která ji uzavřela. Pozor na směr:
        -- v transfer_offers je from_team_id ten, kdo nabízí (kupující), a to_team_id
        -- majitel hráče (prodávající) — hráč se stěhuje do from_team_id.

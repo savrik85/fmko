@@ -55,9 +55,9 @@ export async function loadTransferOverview(db: D1Database, teamId: string, limit
                   ORDER BY prev.created_at DESC LIMIT 1) END AS other_id,
               -- Klub mimo hru (skaut, inzerát) ve hře smlouvu nemá: jméno zná jednání o koupi.
               CASE WHEN pc.join_type = 'transfer' THEN
-                (SELECT n.club_name FROM ai_negotiations n
+                COALESCE(pc.from_club_name, (SELECT n.club_name FROM ai_negotiations n
                   WHERE n.player_id = pc.player_id AND n.status = 'signed'
-                  ORDER BY n.resolved_at DESC LIMIT 1) END AS outside_club
+                  ORDER BY n.resolved_at DESC LIMIT 1)) END AS outside_club
        FROM player_contracts pc
        LEFT JOIN seasons s ON s.id = pc.season_id
        LEFT JOIN players p ON p.id = pc.player_id
