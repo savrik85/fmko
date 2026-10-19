@@ -9,9 +9,13 @@ import type { InterestFactor } from "./player-interest";
 
 export type UnrestReason = "money" | "better_club" | "minutes" | "coach" | "morale";
 
-/** Jak důvod zní v panelu u hráče a v promptu („chtěl odejít kvůli …“). */
+/**
+ * Jak důvod zní v promptu („chtěl odejít kvůli …“). „Peníze“ znamenají, kolik za hráče
+ * klub nabídl (faktor zájmu se počítá z odstupného), ne jeho výplatu: s „penězi“ si
+ * hráč myslel, že odstupné by dostal on (2026-10-19).
+ */
 export const REASON_LABELS: Record<UnrestReason, string> = {
-  money: "penězům",
+  money: "velkému zájmu klubu",
   better_club: "lepšímu klubu",
   minutes: "tomu, že málo hraje",
   coach: "vztahu s trenérem",
@@ -70,17 +74,41 @@ export const DEAL_TEXTS: Record<string, string> = {
 export interface TransferTalk {
   reasons: string | null;
   offer: string | null;
+  /** Jakou soutěž klub hraje proti hráčově, ať si ji model nevymýšlí. */
+  league: string | null;
   deals: string[];
 }
 
 /** Z `life_context.transferUnrest` (null, když hráč netrucuje). */
-export function transferTalkFrom(unrest: { reasons?: UnrestReason[]; teamName?: string; offer?: { amount: number }; deals?: Array<{ id: string }> } | null | undefined): TransferTalk | undefined {
+export function transferTalkFrom(unrest: { reasons?: UnrestReason[]; teamName?: string; offer?: { amount: number }; leagueNote?: string; deals?: Array<{ id: string }> } | null | undefined): TransferTalk | undefined {
   if (!unrest) return undefined;
   return {
     reasons: unrest.reasons?.length ? reasonsText(unrest.reasons) : null,
-    offer: unrest.offer?.amount ? `${unrest.teamName ?? "Klub"} nabízel ${unrest.offer.amount.toLocaleString("cs")} Kč` : null,
+    // Odstupné patří klubu; dřív „X nabízel 14 000 Kč“ a hráč tvrdil, že ty peníze nabízeli jemu.
+    offer: unrest.offer?.amount
+      ? `${unrest.teamName ?? "Klub"} za tebe nabídl tvému klubu ${unrest.offer.amount.toLocaleString("cs")} Kč odstupné. Ty peníze by dostal klub, ne ty. Jaký plat bys tam měl, nevíš, tak si ho nevymýšlej.`
+      : null,
+    league: unrest.leagueNote ?? null,
     deals: (unrest.deals ?? []).map((d) => DEAL_TEXTS[d.id]).filter(Boolean),
   };
+}
+
+/**
+ * Kam by hráč přestupem šel (2026-10-19). Podle toho první SMS mluví o soutěži jen tam,
+ * kde je opravdu vyšší: „pořádnou soutěž“ hráč z U21 psal i o klubu ze stejného přeboru.
+ */
+export type ClubStep = "higher_league" | "seniors" | "abroad" | "stronger_team";
+
+const BETTER_CLUB_SMS: Record<ClubStep, string> = {
+  higher_league: "Konečně jsem si mohl zahrát pořádnou soutěž.",
+  seniors: "Konečně jsem mohl hrát mezi dospělými.",
+  abroad: "Hrát v Německu, to se nenaskytne každý den.",
+  stronger_team: "Mají prostě silnější tým než my.",
+};
+
+/** Věta o důvodu do první SMS; u lepšího klubu podle toho, kam by hráč šel. */
+export function reasonSms(reason: UnrestReason, step: ClubStep | undefined): string {
+  return reason === "better_club" ? BETTER_CLUB_SMS[step ?? "stronger_team"] : REASON_SMS[reason];
 }
 
 /**
@@ -88,8 +116,8 @@ export function transferTalkFrom(unrest: { reasons?: UnrestReason[]; teamName?: 
  * dozví od hráče, ne z panelu (přání 2026-10-18: „ať je to vše formou SMS“).
  */
 export const REASON_SMS: Record<UnrestReason, string> = {
-  money: "Nabízeli víc peněz, než tady uvidím za celou sezónu.",
-  better_club: "Konečně jsem si mohl zahrát pořádnou soutěž.",
+  money: "Dávali za mě takové peníze, že mě tam fakt chtěli.",
+  better_club: BETTER_CLUB_SMS.stronger_team,
   minutes: "Tady stejně skoro nehraju.",
   coach: "S vámi si stejně moc nerozumíme.",
   morale: "Poslední dobou mě to tady vůbec nebaví.",

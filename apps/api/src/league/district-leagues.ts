@@ -20,7 +20,7 @@ import { logger } from "../lib/logger";
 export type DistrictLeagueLevel = "okresni_prebor" | "okresni_soutez";
 
 /** Pořadí úrovní shora dolů. Vyšší číslo = vyšší soutěž. */
-const LEVEL_RANK: Record<string, number> = {
+export const LEVEL_RANK: Record<string, number> = {
   krajsky_prebor: 5,
   ia_trida: 4,
   ib_trida: 3,
