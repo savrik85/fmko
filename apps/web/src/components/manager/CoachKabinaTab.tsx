@@ -56,10 +56,10 @@ interface Kabina {
 
 /** Sloveso k počtu hráčů v pásmu: [1, 2–4, 5+]. */
 const BAND_VERB: Record<CoachRelationBandKey, [string, string, string]> = {
-  idol: ["tě zbožňuje", "tě zbožňují", "tě zbožňuje"],
+  idol: ["je tvůj kamarád", "jsou tvoji kamarádi", "je tvých kamarádů"],
   loyal: ["za tebou stojí", "za tebou stojí", "za tebou stojí"],
-  neutral: ["je neutrální", "jsou neutrální", "je neutrálních"],
-  skeptic: ["o tobě pochybuje", "o tobě pochybují", "o tobě pochybuje"],
+  neutral: ["tě bere", "tě berou", "tě bere"],
+  skeptic: ["tě nemusí", "tě nemusí", "tě nemusí"],
   hostile: ["tě nesnáší", "tě nesnáší", "tě nesnáší"],
 };
 
