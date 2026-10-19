@@ -395,7 +395,9 @@ export async function simulateTournamentMatch(
       })).catch((e) => logger.warn({ module: M }, "bilance rozhodčího", e));
     }
 
-    // Zranění z turnaje platí i v lize.
+    // Zranění z turnaje platí i v lize. Bez odkazu na zápas: `injuries.match_id` míří na ligové
+    // `matches`, turnajový zápas tam není a cizí klíč shodil celý zápis (2026-10-19 se ukázalo,
+    // že se z turnaje nezapsalo ani jedno zranění).
     const injuryStmts: D1PreparedStatement[] = [];
     for (const event of result.events) {
       if (event.type !== "injury") continue;
@@ -406,7 +408,7 @@ export async function simulateTournamentMatch(
       const days = matchInjuryDays(rng, event.detail, injured?.age ?? 25, injured?.injuryProneness ?? 50);
       injuryStmts.push(db.prepare(
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(crypto.randomUUID(), playerId, isHome ? homeId : awayId, typZraneniZPopisu(event.detail), event.detail ?? "zranění", zavaznostZeDnu(days), days, days, m.id));
+      ).bind(crypto.randomUUID(), playerId, isHome ? homeId : awayId, typZraneniZPopisu(event.detail), event.detail ?? "zranění", zavaznostZeDnu(days), days, days, null));
     }
     if (injuryStmts.length > 0) await db.batch(injuryStmts);
   } catch (e) {

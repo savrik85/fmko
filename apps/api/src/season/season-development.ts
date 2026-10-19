@@ -67,6 +67,46 @@ export function applySeasonDevelopment(
   }
 }
 
+/** Součet změn dovedností za sezónu po hráčích (training_log zapisuje trénink, zápasy i turnaj). */
+async function loadSeasonGains(db: D1Database, teamId: string, playerIds: string[]): Promise<Map<string, Map<string, number>>> {
+  const gains = new Map<string, Map<string, number>>();
+  if (playerIds.length === 0) return gains;
+  const team = await db.prepare("SELECT season_start FROM teams WHERE id = ?").bind(teamId).first<{ season_start: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "začátek sezóny týmu", e); return null; });
+  if (!team?.season_start) return gains;
+  const rows = await db.prepare(
+    `SELECT player_id, attribute, SUM(change) AS total FROM training_log
+     WHERE game_date >= ? AND player_id IN (${playerIds.map(() => "?").join(",")})
+     GROUP BY player_id, attribute`,
+  ).bind(team.season_start, ...playerIds).all<{ player_id: string; attribute: string; total: number }>()
+    .catch((e) => { logger.warn({ module: M }, "růst hráčů za sezónu", e); return { results: [] as Array<{ player_id: string; attribute: string; total: number }> }; });
+  for (const r of rows.results) {
+    const m = gains.get(r.player_id) ?? new Map<string, number>();
+    m.set(r.attribute, r.total);
+    gains.set(r.player_id, m);
+  }
+  return gains;
+}
+
+/** Hodnocení na začátku sezóny: dnešní dovednosti bez toho, co hráč za sezónu získal. */
+export function seasonStartRating(
+  position: string,
+  skills: Record<string, unknown>,
+  physical: Record<string, unknown>,
+  hiddenTalent: number,
+  skillsMax: Record<string, { maxPotential?: number }> | undefined,
+  gains: Map<string, number> | undefined,
+): number | null {
+  if (!gains || gains.size === 0) return null;
+  const s0: Record<string, unknown> = { ...skills };
+  const p0: Record<string, unknown> = { ...physical };
+  for (const [attr, total] of gains) {
+    if (typeof s0[attr] === "number") s0[attr] = clamp((s0[attr] as number) - total, 1, 99);
+    if (typeof p0[attr] === "number") p0[attr] = clamp((p0[attr] as number) - total, 1, 99);
+  }
+  return overallRatingFromFlat(position, s0, p0, hiddenTalent, skillsMax);
+}
+
 const MGR_LABELS: Record<string, string> = {
   coaching: "Trénování", motivation: "Motivace", tactics: "Taktika",
   youth_development: "Mládež", discipline: "Disciplína",
@@ -86,11 +126,16 @@ export async function developSquadAndManager(
   ).bind(teamId).all<{ id: string; first_name: string; last_name: string; age: number; position: string; overall_rating: number; skills: string; skills_max: string | null; physical: string | null; hidden_talent: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "load players", e); return { results: [] as any[] }; });
 
+  // Co kdo za sezónu natrénoval a nahrál (trénink, zápasy, turnaj): z toho se dopočítá
+  // hodnocení na začátku sezóny. Přehled „Vývoj týmu“ dřív ukazoval jen letní skok podle
+  // věku (nejvýš ±4), takže hráč, který za sezónu vyrostl o 7, měl v přehledu +3 (2026-10-19).
+  const seasonGains = await loadSeasonGains(db, teamId, playersRes.results.map((p) => p.id));
+
   const entries: PlayerDevEntry[] = [];
   for (const p of playersRes.results) {
     const before = p.overall_rating;
+    if (before <= 0) continue;
     const target = clamp(before + ratingDelta(rng, p.age), 20, 99);
-    if (target === before || before <= 0) continue;
 
     let skills: Record<string, unknown>;
     let physical: Record<string, unknown>;
@@ -105,16 +150,21 @@ export async function developSquadAndManager(
       continue;
     }
 
-    applySeasonDevelopment(skills, physical, target / before, skillsMax);
-    const after = overallRatingFromFlat(p.position, skills, physical, p.hidden_talent ?? 0, skillsMax) ?? target;
-    const realDelta = after - before;
+    const seasonStart = seasonStartRating(p.position, skills, physical, p.hidden_talent ?? 0, skillsMax, seasonGains.get(p.id));
 
-    await db.prepare("UPDATE players SET overall_rating = ?, skills = ?, physical = ? WHERE id = ?")
-      .bind(after, JSON.stringify(skills), JSON.stringify(physical), p.id).run()
-      .catch((e) => logger.warn({ module: M }, "update player dev", e));
-    if (realDelta === 0) continue;
+    let after = before;
+    if (target !== before) {
+      applySeasonDevelopment(skills, physical, target / before, skillsMax);
+      after = overallRatingFromFlat(p.position, skills, physical, p.hidden_talent ?? 0, skillsMax) ?? target;
+      await db.prepare("UPDATE players SET overall_rating = ?, skills = ?, physical = ? WHERE id = ?")
+        .bind(after, JSON.stringify(skills), JSON.stringify(physical), p.id).run()
+        .catch((e) => logger.warn({ module: M }, "update player dev", e));
+    }
 
-    entries.push({ playerId: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, before, after, delta: realDelta });
+    // Za celou sezónu: od hodnocení na jejím začátku po hodnocení po letním skoku.
+    const start = seasonStart ?? before;
+    if (after === start) continue;
+    entries.push({ playerId: p.id, name: `${p.first_name} ${p.last_name}`, position: p.position, age: p.age, before: start, after, delta: after - start });
   }
 
   const improved = entries.filter((e) => e.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 3);
