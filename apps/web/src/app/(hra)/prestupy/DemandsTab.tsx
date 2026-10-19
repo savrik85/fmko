@@ -147,6 +147,68 @@ export function DemandsTab({ teamId }: { teamId: string }) {
     <div className="space-y-5">
       {confirmDialog}
 
+      {/* ═══ Manažeři ═══ */}
+      <div>
+        <SectionLabel>Manažeři hledají ({data.managers.length})</SectionLabel>
+        {data.managers.length === 0 ? (
+          <div className="card p-6 text-center text-muted text-sm">Zatím nikdo z manažerů nic nehledá.</div>
+        ) : (
+          <div className="space-y-3">
+            {data.managers.map((d) => {
+              const full = d.myPitches.length >= data.limits.pitchesPerDemand;
+              return (
+                <div key={d.id} className="card p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <DemandHead d={d} who={<><OriginBadge origin={d.origin} /><Link href={`/tym/${d.teamId}`} className="font-heading font-bold text-ink hover:text-pitch-500 underline decoration-pitch-500/20">{d.teamName}</Link></>} />
+                    </div>
+                    {!full && (
+                      <button onClick={() => setPitchFor({ demand: d, who: d.teamName })}
+                        className={PITCH_BUTTON}>
+                        Nabídnout
+                      </button>
+                    )}
+                  </div>
+                  <MyPitches pitches={d.myPitches} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ═══ Kluby mimo hru ═══ */}
+      <div>
+        <SectionLabel>Kluby z okolí hledají ({data.clubs.length})</SectionLabel>
+        {data.clubs.length === 0 ? (
+          <div className="card p-6 text-center text-muted text-sm">Teď žádný klub z okolí nikoho nehledá. Nové poptávky přibývají průběžně.</div>
+        ) : (
+          <div className="space-y-3">
+            {data.clubs.map((d) => {
+              const full = d.myPitches.length >= data.limits.pitchesPerDemand;
+              // „SV Grafenau, Grafenau“ by opakovalo město; přidá se jen, když v názvu klubu není.
+              const who = d.clubCity && !d.clubName.includes(d.clubCity) ? `${d.clubName}, ${d.clubCity}` : d.clubName;
+              return (
+                <div key={d.id} className="card p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <DemandHead d={d} who={<>{d.abroad && <span title="Německo">🇩🇪 </span>}<span className="font-heading font-bold text-ink">{who}</span></>} />
+                    </div>
+                    {!d.filled && !full && (
+                      <button onClick={() => setPitchFor({ demand: d, who })}
+                        className={PITCH_BUTTON}>
+                        Nabídnout
+                      </button>
+                    )}
+                  </div>
+                  <MyPitches pitches={d.myPitches} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* ═══ Moje poptávky ═══ */}
       <div>
         <div className="flex items-center justify-between gap-3 mb-2">
@@ -194,68 +256,6 @@ export function DemandsTab({ teamId }: { teamId: string }) {
                 </div>
               </div>
             ))}
-          </div>
-        )}
-      </div>
-
-      {/* ═══ Kluby mimo hru ═══ */}
-      <div>
-        <SectionLabel>Kluby z okolí hledají ({data.clubs.length})</SectionLabel>
-        {data.clubs.length === 0 ? (
-          <div className="card p-6 text-center text-muted text-sm">Teď žádný klub z okolí nikoho nehledá. Nové poptávky přibývají průběžně.</div>
-        ) : (
-          <div className="space-y-3">
-            {data.clubs.map((d) => {
-              const full = d.myPitches.length >= data.limits.pitchesPerDemand;
-              // „SV Grafenau, Grafenau“ by opakovalo město; přidá se jen, když v názvu klubu není.
-              const who = d.clubCity && !d.clubName.includes(d.clubCity) ? `${d.clubName}, ${d.clubCity}` : d.clubName;
-              return (
-                <div key={d.id} className="card p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <DemandHead d={d} who={<>{d.abroad && <span title="Německo">🇩🇪 </span>}<span className="font-heading font-bold text-ink">{who}</span></>} />
-                    </div>
-                    {!d.filled && !full && (
-                      <button onClick={() => setPitchFor({ demand: d, who })}
-                        className={PITCH_BUTTON}>
-                        Nabídnout
-                      </button>
-                    )}
-                  </div>
-                  <MyPitches pitches={d.myPitches} />
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ═══ Manažeři ═══ */}
-      <div>
-        <SectionLabel>Manažeři hledají ({data.managers.length})</SectionLabel>
-        {data.managers.length === 0 ? (
-          <div className="card p-6 text-center text-muted text-sm">Zatím nikdo z manažerů nic nehledá.</div>
-        ) : (
-          <div className="space-y-3">
-            {data.managers.map((d) => {
-              const full = d.myPitches.length >= data.limits.pitchesPerDemand;
-              return (
-                <div key={d.id} className="card p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <DemandHead d={d} who={<><OriginBadge origin={d.origin} /><Link href={`/tym/${d.teamId}`} className="font-heading font-bold text-ink hover:text-pitch-500 underline decoration-pitch-500/20">{d.teamName}</Link></>} />
-                    </div>
-                    {!full && (
-                      <button onClick={() => setPitchFor({ demand: d, who: d.teamName })}
-                        className={PITCH_BUTTON}>
-                        Nabídnout
-                      </button>
-                    )}
-                  </div>
-                  <MyPitches pitches={d.myPitches} />
-                </div>
-              );
-            })}
           </div>
         )}
       </div>
