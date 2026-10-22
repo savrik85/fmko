@@ -23,23 +23,23 @@ describe("tempo mladých podle talentu (naměřeno na produkci)", () => {
   });
 
   it("za sezónu trénink + dospívání", () => {
-    // talent 78: 25 + 5,87 + dospívání 11 = 41,87 → 42
-    expect(projectRating(kid(78), 1)).toBe(42);
-    // talent 10: 25 + 2,58 + dospívání 5 = 32,58 → 33
-    expect(projectRating(kid(10), 1)).toBe(33);
+    // talent 78: 25 + 5,87 + dospívání 7 = 37,87 → 38
+    expect(projectRating(kid(78), 1)).toBe(38);
+    // talent 10: 25 + 2,58 + dospívání 3 = 30,58 → 31
+    expect(projectRating(kid(10), 1)).toBe(31);
   });
 
   it("dvacetiletý dospěje už jen jednou, jednadvacetiletý vůbec", () => {
-    // 20 let: trénink 5,87 + dospívání (bude mu 21) 12 = +17,87
-    expect(projectRating(kid(84, { age: 20, rating: 20 }), 1)).toBe(38);
+    // 20 let: trénink 5,87 + dospívání (bude mu 21) 7 = +12,87
+    expect(projectRating(kid(84, { age: 20, rating: 20 }), 1)).toBe(33);
     // 21 let: jen trénink, dospívání už ne (bude mu 22)
     expect(projectRating(kid(84, { age: 21, rating: 20 }), 1)).toBe(26);
   });
 
   it("po 21 letech roste tempem podle věku, ne tempem dorostu", () => {
     // Jakub Horák z testu: 20 let, hodnocení 20, talent 84. 8 sezón:
-    // 20 → 37,9 (trénink + dospívání) → 43,7 (21) → 3× 2,0 (22–24) → 3× 1,5 (25–27) = 54
-    expect(projectRating(kid(84, { age: 20, rating: 20 }), 8)).toBe(54);
+    // 20 → 32,9 (trénink + dospívání) → 38,7 (21) → 3× 2,0 (22–24) → 3× 1,5 (25–27) = 49
+    expect(projectRating(kid(84, { age: 20, rating: 20 }), 8)).toBe(49);
   });
 
   it("nikdy přes strop dovedností", () => {
