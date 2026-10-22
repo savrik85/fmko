@@ -252,8 +252,9 @@ export async function processLeagueRound(
   prof.mark("simulace");
 
   // Po U21 kole: vrátit hráče s next_match_return zpět do A-týmu
+  const isU21Round = !!(await db.prepare("SELECT 1 FROM leagues WHERE id = ? AND league_type = 'u21'").bind(leagueId).first()
+    .catch((e) => { logger.warn({ module: "league-round" }, "typ ligy", e); return null; }));
   try {
-    const isU21Round = await db.prepare("SELECT 1 FROM leagues WHERE id = ? AND league_type = 'u21'").bind(leagueId).first();
     if (isU21Round) {
       const { returnNextMatchPlayers } = await import("./u21-return");
       const returned = await returnNextMatchPlayers(db, calendarId);
@@ -299,12 +300,16 @@ export async function processLeagueRound(
     prof.mark("zpravodaj");
     await sendMatchResultNotifications(env, db, results);
     prof.mark("notifikace");
-    await dispatchRoundReports(env, leagueId, calendarId, gameWeek, standingsBefore, opts);
-    prof.mark("reporty");
-    await runBetweenRoundEvents(db, results, gameWeek, leagueId, calendarId);
-    prof.mark("udalosti-mezi-koly");
-    await runAdhocEvents(env, db, leagueId, gameWeek);
-    prof.mark("adhoc-udalosti");
+    // U21: AI články, události mezi koly (rozpočet, morálka) a nahodilé události patří
+    // klubu, tedy áčku. Výsledky, tabulka a souhrn kola U21 má.
+    if (!isU21Round) {
+      await dispatchRoundReports(env, leagueId, calendarId, gameWeek, standingsBefore, opts);
+      prof.mark("reporty");
+      await runBetweenRoundEvents(db, results, gameWeek, leagueId, calendarId);
+      prof.mark("udalosti-mezi-koly");
+      await runAdhocEvents(env, db, leagueId, gameWeek);
+      prof.mark("adhoc-udalosti");
+    }
     await cleanupMatchDayConversations(db, calendarId);
     prof.mark("uklid-konverzaci");
   }

@@ -36,6 +36,10 @@ const WRAP_PHASES = [
 ] as const;
 type WrapPhase = (typeof WRAP_PHASES)[number];
 
+// U21 je plnohodnotná soutěž (od 2026-10-22): dostane ocenění a archiv sezóny. Peníze,
+// odchody, akademie, obec ani články se jí netýkají, ty řeší liga áčka.
+const U21_WRAP_PHASES = ["awards", "archive"] as const satisfies readonly WrapPhase[];
+
 const ROLLOVER_KEY = "__global__";
 const DEPARTURES_CHUNK = 3;
 
@@ -71,15 +75,15 @@ async function getGlobalSeason(db: D1Database): Promise<number | null> {
   return fb?.n ?? null;
 }
 
-async function getSeniorStates(db: D1Database, seasonNumber: number): Promise<LeagueState[]> {
+async function getLeagueStates(db: D1Database, seasonNumber: number, leagueType: "senior" | "u21" = "senior"): Promise<LeagueState[]> {
   const res = await db.prepare(
     `SELECT l.id AS league_id,
             (SELECT COUNT(*) FROM season_calendar sc WHERE sc.league_id = l.id AND sc.season_number = ? AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id)) AS total,
             (SELECT COUNT(*) FROM season_calendar sc WHERE sc.league_id = l.id AND sc.season_number = ? AND sc.status != 'simulated' AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id)) AS pending,
             (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id AND t.user_id != 'ai') AS humans
-     FROM leagues l WHERE l.league_type = 'senior'`,
-  ).bind(seasonNumber, seasonNumber).all<{ league_id: string; total: number; pending: number; humans: number }>()
-    .catch((e) => { logger.warn({ module: "end-season" }, "senior states", e); return { results: [] as { league_id: string; total: number; pending: number; humans: number }[] }; });
+     FROM leagues l WHERE l.league_type = ?`,
+  ).bind(seasonNumber, seasonNumber, leagueType).all<{ league_id: string; total: number; pending: number; humans: number }>()
+    .catch((e) => { logger.warn({ module: "end-season" }, `${leagueType} states`, e); return { results: [] as { league_id: string; total: number; pending: number; humans: number }[] }; });
 
   return res.results.map((r) => ({
     leagueId: r.league_id,
@@ -123,7 +127,7 @@ export async function runEndSeasonStep(
   const seasonNumber = await getGlobalSeason(db);
   if (seasonNumber == null) return { allDone: true, ready: false, remainingLeagues: 0, detail: "žádná aktivní sezóna" };
 
-  const states = await getSeniorStates(db, seasonNumber);
+  const states = await getLeagueStates(db, seasonNumber);
   const started = states.filter((s) => s.started);
 
   // Žádná odehraná liga → není co zakončit (a guard proti smyčce: čerstvě rollnutá sezóna)
@@ -140,9 +144,11 @@ export async function runEndSeasonStep(
     return { allDone: true, ready: false, seasonNumber, remainingLeagues: 0, detail: `${runningTournament.name} ještě běží, sezónu jde zakončit až po finále` };
   }
 
-  // Gate: lidské odehrané ligy musí být dohrané (AI-only neblokují). force přebije.
+  const u21Started = (await getLeagueStates(db, seasonNumber, "u21")).filter((s) => s.started);
+
+  // Gate: lidské odehrané ligy musí být dohrané (AI-only neblokují), i U21. force přebije.
   if (!opts.force) {
-    const blocking = started.filter((s) => s.humans > 0 && !s.complete);
+    const blocking = [...started, ...u21Started].filter((s) => s.humans > 0 && !s.complete);
     if (blocking.length > 0) {
       return { allDone: true, ready: false, seasonNumber, remainingLeagues: blocking.length, detail: `sezóna ještě běží ${blocking.length} lidských lig nedohraných (force=1 přebije)` };
     }
@@ -158,6 +164,16 @@ export async function runEndSeasonStep(
     if (firstPending) {
       const status = await runWrapPhase(db, geminiApiKey, st.leagueId, seasonNumber, firstPending);
       return { allDone: false, ready: true, seasonNumber, leagueId: st.leagueId, phase: firstPending, status, remainingLeagues: started.length, detail: `${firstPending} → ${status}` };
+    }
+  }
+
+  // 1b. U21: ocenění a archiv sezóny
+  for (const st of u21Started) {
+    for (const phase of U21_WRAP_PHASES) {
+      const prog = await getProgress(db, st.leagueId, seasonNumber, phase);
+      if (prog?.status === "done") continue;
+      const status = await runWrapPhase(db, geminiApiKey, st.leagueId, seasonNumber, phase);
+      return { allDone: false, ready: true, seasonNumber, leagueId: st.leagueId, phase, status, remainingLeagues: u21Started.length, detail: `U21 ${phase} → ${status}` };
     }
   }
 
