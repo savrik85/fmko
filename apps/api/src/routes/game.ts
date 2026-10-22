@@ -8807,7 +8807,7 @@ gameRouter.get("/teams/:teamId/season-welcome", async (c) => {
   if (!w) return c.json(null);
   const seasonNumber = w.season_number;
 
-  const team = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>()
+  const team = await c.env.DB.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(teamId).first<{ name: string; league_id: string | null }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "welcome team", e); return null; });
   const firstMatch = await c.env.DB.prepare(
     "SELECT MIN(sc.scheduled_at) AS d FROM season_calendar sc JOIN matches m ON m.calendar_id = sc.id WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'scheduled' AND sc.season_number = ?"
@@ -8834,6 +8834,10 @@ gameRouter.get("/teams/:teamId/season-welcome", async (c) => {
     { icon: "📅", title: "Pevné hrací dny", text: "Liga se hraje v pondělí a čtvrtek, pohár v sobotu." },
   ] : [];
 
+  // Pravidla, která grémium soutěže změnilo — hodnoty z řádku nové sezóny, ze kterého čte hra.
+  const { seasonRuleChanges } = await import("../competition/season-rule-changes");
+  const ruleChanges = team?.league_id ? await seasonRuleChanges(c.env.DB, team.league_id, seasonNumber) : [];
+
   return c.json({
     seasonNumber,
     teamName: team?.name ?? "",
@@ -8841,6 +8845,7 @@ gameRouter.get("/teams/:teamId/season-welcome", async (c) => {
     squadSize: squad?.c ?? 0,
     cup,
     news,
+    ruleChanges,
   });
 });
 

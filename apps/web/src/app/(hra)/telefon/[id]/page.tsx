@@ -585,6 +585,24 @@ export default function ConversationPage() {
                               Otevřít incident
                             </Link>
                           )}
+                          {/* Komunální volby: nové vedení obce. */}
+                          {msg.metadata?.type === "village" && (
+                            <Link
+                              href="/obec"
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                            >
+                              Otevřít obec
+                            </Link>
+                          )}
+                          {/* Volby do grémia soutěže: kandidovat a volit se dá v záložce Vedení. */}
+                          {msg.metadata?.type === "competition" && (
+                            <Link
+                              href="/soutez?tab=vedeni"
+                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                            >
+                              Otevřít grémium
+                            </Link>
+                          )}
                           {/* Někdo mi nabídl hráče k poptávce. */}
                           {msg.metadata?.type === "demand" && (
                             <Link

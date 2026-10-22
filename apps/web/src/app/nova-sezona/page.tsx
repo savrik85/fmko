@@ -13,6 +13,7 @@ interface WelcomeData {
   squadSize: number;
   cup: { name: string; rounds: number; myStrength: number | null; bigMin: number; bigMax: number; realAvg: number } | null;
   news: { icon: string; title: string; text: string }[];
+  ruleChanges?: { kind: string; label: string; change: string; note: string | null; fromThisSeason: boolean }[];
 }
 
 export default function NovaSezonaPage() {
@@ -69,9 +70,48 @@ export default function NovaSezonaPage() {
 
         {data.cup && (
           <div className="bg-white/10 rounded-xl p-4 mb-6 text-sm leading-relaxed">
-            <span className="font-heading font-bold">🏆 {data.cup.name}</span> — tvoje síla <b>{data.cup.myStrength ?? "?"}</b>, velkokluby z měst mají <b>{data.cup.bigMin}–{data.cup.bigMax}</b>. V 1. kole na velkoklub nenarazíš, máš šanci projít.
+            <span className="font-heading font-bold">🏆 {data.cup.name}</span>: tvoje síla <b>{data.cup.myStrength ?? "?"}</b>, velkokluby z měst mají <b>{data.cup.bigMin}–{data.cup.bigMax}</b>. V 1. kole na velkoklub nenarazíš, máš šanci projít.
           </div>
         )}
+
+        {/* Pravidla, která změnilo grémium soutěže */}
+        {(() => {
+          const changes = data.ruleChanges ?? [];
+          if (changes.length === 0) return null;
+          const fresh = changes.filter((r) => r.fromThisSeason);
+          const kept = changes.filter((r) => !r.fromThisSeason);
+          return (
+            <div className="mb-6">
+              <div className="text-xs font-heading uppercase tracking-wider text-white/60 mb-2">Nová pravidla od grémia</div>
+              {fresh.length > 0 && (
+                <div className="space-y-2">
+                  {fresh.map((r) => (
+                    <div key={r.kind} className="bg-white/10 rounded-xl p-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                        <div className="font-heading font-bold">{r.label}</div>
+                        <div className="font-heading font-bold text-amber-200 ml-auto text-right">{r.change}</div>
+                      </div>
+                      {r.note && <div className="text-sm text-white/70 leading-snug mt-0.5">{r.note}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {kept.length > 0 && (
+                <div className="bg-white/10 rounded-xl p-3 mt-2">
+                  <div className="text-sm text-white/70 mb-1.5">{fresh.length > 0 ? "Platí dál, schválené už během minulé sezóny:" : "Schválené během minulé sezóny, platí dál:"}</div>
+                  <ul className="space-y-1">
+                    {kept.map((r) => (
+                      <li key={r.kind} className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                        <span>{r.label}</span>
+                        <span className="font-bold ml-auto text-right">{r.change}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Co je nového */}
         {data.news.length > 0 && (

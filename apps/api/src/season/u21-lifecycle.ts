@@ -9,7 +9,8 @@
  * ročník nemá odkud přijít.
  *
  * Cyklus proto dělá dvě věci:
- *   1. Kdo dosáhl 22 let, z dorostu odchází — buď do áčka, nebo mezi volné hráče.
+ *   1. Kdo dosáhl 22 let, z dorostu odchází. U lidského klubu vždy do áčka (o kádru
+ *      rozhoduje manažer), u AI klubu do áčka do stropu, zbytek mezi volné hráče.
  *   2. Kádr se doplní čerstvým ročníkem šestnáctiletých na cílový počet.
  */
 
@@ -18,6 +19,7 @@ import { createRng, cryptoSeed, type Rng } from "../generators/rng";
 import type { VillageInfo } from "../generators/player";
 import { levelFromVillageSize } from "../generators/create-player";
 import type { Position } from "../league/u21-generator";
+import { teoretickyStropHrace } from "../skills/vyhled-hrace";
 
 const M = "u21-lifecycle";
 
@@ -28,10 +30,12 @@ export const VEK_ODCHODU_Z_DOROSTU = 22;
 export const CILOVY_POCET_DOROSTU = 16;
 
 /**
- * Nad kolik hráčů se A-tým už nedoplňuje. Přerostlý dorostenec pak jde mezi volné hráče
- * místo do áčka — jinak by kádry AI klubů rok co rok bobtnaly donekonečna.
+ * Nad kolik hráčů se A-tým AI klubu už nedoplňuje. Přerostlý dorostenec pak jde mezi volné
+ * hráče místo do áčka, jinak by kádry AI klubů rok co rok bobtnaly donekonečna. Stejně jako
+ * strop kádru při nákupu (`SQUAD_CAP`); dřív tu bylo 24 a platilo i pro lidské kluby, takže
+ * Jitona přišla o kluka s talentem 95 (2026-10-20).
  */
-export const MAX_KADR_ACKA = 24;
+export const MAX_KADR_ACKA = 30;
 
 /** Jak má vypadat rozložení postů v dorostu — podle toho se doplňuje, co chybí. */
 const CILOVE_POSTY: Record<Position, number> = { GK: 2, DEF: 5, MID: 5, FWD: 2 };
@@ -43,6 +47,8 @@ export interface VysledekCyklu {
   propusteni: { jmeno: string; vek: number; rating: number }[];
   /** Kolik nových šestnáctiletých přišlo. */
   prislo: number;
+  /** Kolik hráčů má áčko po povýšení (jen lidský klub, kvůli upozornění nad stropem). */
+  seniorSquadSize?: number;
 }
 
 /**
@@ -64,19 +70,25 @@ export async function dorostovyCyklus(
     .catch((e) => { logger.warn({ module: M, teamId: u21TeamId }, "load u21 team", e); return null; });
   if (!tym?.parent_team_id) return vysledek;
   const clubId = tym.parent_team_id;
+  const owner = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(clubId).first<{ user_id: string | null }>()
+    .catch((e) => { logger.warn({ module: M, teamId: clubId }, "load club owner", e); return null; });
+  const humanClub = !!owner?.user_id && owner.user_id !== "ai";
 
   // ── 1. Odchody ──────────────────────────────────────────────────────────────────
-  const prerostli = await db.prepare(
-    `SELECT id, first_name, last_name, age, overall_rating, loan_from_team_id
+  const overageRows = await db.prepare(
+    `SELECT id, first_name, last_name, age, position, overall_rating, skills_max, hidden_talent, loan_from_team_id
        FROM players
-      WHERE team_id = ? AND age >= ? AND (status IS NULL OR status = 'active')
-      ORDER BY overall_rating DESC`,
+      WHERE team_id = ? AND age >= ? AND (status IS NULL OR status = 'active')`,
   ).bind(u21TeamId, VEK_ODCHODU_Z_DOROSTU).all<{
-    id: string; first_name: string; last_name: string; age: number;
-    overall_rating: number; loan_from_team_id: string | null;
+    id: string; first_name: string; last_name: string; age: number; position: string;
+    overall_rating: number; skills_max: string | null; hidden_talent: number | null; loan_from_team_id: string | null;
   }>().catch((e) => { logger.warn({ module: M, teamId: u21TeamId }, "load overage", e); return { results: [] as never[] }; });
+  // Když je v áčku AI klubu místo jen pro některé, dostane ho ten s největším potenciálem,
+  // ne ten, kdo je zrovna o pár bodů lepší.
+  const prerostli = { results: [...overageRows.results].sort((a, b) => youthPotential(b) - youthPotential(a)) };
 
-  let mistoVAcku = await volneMistoVAcku(db, clubId);
+  // Lidský klub: všichni do áčka, koho pustit, rozhodne manažer.
+  let mistoVAcku = humanClub ? Number.POSITIVE_INFINITY : await volneMistoVAcku(db, clubId);
 
   for (const h of prerostli.results) {
     const jmeno = `${h.first_name} ${h.last_name}`;
@@ -104,6 +116,13 @@ export async function dorostovyCyklus(
     } catch (e) {
       logger.warn({ module: M, playerId: h.id }, "release overage youth", e);
     }
+  }
+
+  if (humanClub && vysledek.povyseni.length > 0) {
+    const r = await db.prepare("SELECT COUNT(*) AS pocet FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')")
+      .bind(clubId).first<{ pocet: number }>()
+      .catch((e) => { logger.warn({ module: M, teamId: clubId }, "count senior squad after promotion", e); return null; });
+    vysledek.seniorSquadSize = r?.pocet;
   }
 
   // ── 2. Nový ročník ──────────────────────────────────────────────────────────────
@@ -144,6 +163,17 @@ export async function dorostovyCyklus(
   }
 
   return vysledek;
+}
+
+/** Potenciál dorostence: teoretický strop z dovedností a talentu, jinak aktuální hodnocení. */
+function youthPotential(p: { position: string; overall_rating: number; skills_max: string | null; hidden_talent: number | null }): number {
+  if (!p.skills_max) return p.overall_rating;
+  try {
+    return teoretickyStropHrace(p.position, JSON.parse(p.skills_max), p.hidden_talent ?? 0) ?? p.overall_rating;
+  } catch (e) {
+    logger.warn({ module: M }, "parse skills_max for youth potential", e);
+    return p.overall_rating;
+  }
 }
 
 /** Kolik hráčů se ještě vejde do A-týmu, než narazí na `MAX_KADR_ACKA`. */
@@ -236,12 +266,15 @@ export async function oznamDorostovyCyklus(
   if (v.povyseni.length > 0) {
     const jmena = v.povyseni.slice(0, 5).map((p) => `${p.jmeno} (${p.rating})`).join(", ");
     const zbytek = v.povyseni.length > 5 ? ` a další ${v.povyseni.length - 5}` : "";
-    casti.push(`Do áčka jde ${jmena}${zbytek}`);
+    casti.push(`Do áčka ${v.povyseni.length === 1 ? "jde" : "jdou"} ${jmena}${zbytek}`);
   }
   if (v.propusteni.length > 0) {
     const jmena = v.propusteni.slice(0, 3).map((p) => p.jmeno).join(", ");
     const zbytek = v.propusteni.length > 3 ? ` a další ${v.propusteni.length - 3}` : "";
     casti.push(`v áčku nebylo místo pro ${jmena}${zbytek}, jsou volní`);
+  }
+  if (v.seniorSquadSize !== undefined && v.seniorSquadSize > MAX_KADR_ACKA) {
+    casti.push(`v áčku je teď ${v.seniorSquadSize} hráčů, nad ${MAX_KADR_ACKA} nikoho nekoupíš, dokud někoho nepustíš`);
   }
   if (v.prislo > 0) {
     casti.push(`z žáků přišlo ${v.prislo} ${v.prislo === 1 ? "nový kluk" : v.prislo < 5 ? "noví kluci" : "nových kluků"}`);

@@ -651,3 +651,33 @@ export async function restoreOfficial(
     logger.warn({ module: M }, "reputace za neúspěšné pozastavení", e);
   }
 }
+
+/** Nejbližší středa PO daném dni: volba vyhlášená dnes se uzavírá až na příštím zasedání. */
+export function nextMeetingAfter(gameDate: string): Date {
+  const d = new Date(gameDate);
+  do { d.setUTCDate(d.getUTCDate() + 1); } while (d.getUTCDay() !== 3);
+  return d;
+}
+
+/**
+ * SMS všem manažerům soutěže, že začaly volby do grémia. Bez ní se o volbách nikdo
+ * nedozvěděl: kandidovat jde v záložce Vedení, kam se nikdo nepodívá (2026-10-20).
+ */
+export async function notifyElectionsOpened(db: D1Database, leagueId: string, seasonNumber: number, gameDate: string): Promise<number> {
+  const open = await db.prepare(
+    "SELECT role FROM competition_elections WHERE league_id = ? AND season_number = ? AND status = 'open'",
+  ).bind(leagueId, seasonNumber).all<{ role: OfficialRole }>()
+    .catch((e) => { logger.warn({ module: M }, "otevřené volby pro oznámení", e); return { results: [] as Array<{ role: OfficialRole }> }; });
+  if (open.results.length === 0) return 0;
+  const teams = await db.prepare(
+    "SELECT id FROM teams WHERE league_id = ? AND user_id IS NOT NULL AND user_id != 'ai' AND parent_team_id IS NULL",
+  ).bind(leagueId).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "kluby pro oznámení voleb", e); return { results: [] as Array<{ id: string }> }; });
+  const roles = open.results.map((r) => ROLE_LABEL[r.role]).join(", ");
+  const meeting = nextMeetingAfter(gameDate);
+  const when = `${meeting.getUTCDate()}. ${meeting.getUTCMonth() + 1}.`;
+  const body = `🗳️ Začaly volby do grémia soutěže: ${roles}. Kandidovat i volit můžeš v Grémiu, v záložce Vedení. Volby se uzavřou na zasedání ve středu ${when}`;
+  const { sendSystemSMS } = await import("../messaging/system-sms");
+  for (const t of teams.results) await sendSystemSMS(db, t.id, "Grémium soutěže", body, { type: "competition" });
+  return teams.results.length;
+}

@@ -11,6 +11,7 @@ import { createRng } from "../generators/rng";
 import { getTeamPosition } from "../stats/standings";
 import { logger } from "../lib/logger";
 import { overallRatingFromFlat } from "../skills/generator";
+import { DOSPIVANI_DO_VEKU } from "./dospivani";
 
 const M = "season-development";
 
@@ -26,9 +27,12 @@ export interface ManagerAttrDelta { attr: string; label: string; before: number;
 export interface ManagerDev { name: string; age: number; deltas: ManagerAttrDelta[] }
 export interface DevResult { improved: PlayerDevEntry[]; declined: PlayerDevEntry[]; manager: ManagerDev | null }
 
-/** Věkově řízená změna overall (s trochou náhody). */
+/**
+ * Věkově řízená změna overall (s trochou náhody). Hráči do 21 let ji nedostávají: rostou
+ * dospíváním (`dospivani.ts`), a obojí najednou dávalo mladým přes léto dvojí skok (2026-10-20).
+ */
 function ratingDelta(rng: ReturnType<typeof createRng>, age: number): number {
-  if (age <= 20) return rng.int(1, 4);
+  if (age <= DOSPIVANI_DO_VEKU) return 0;
   if (age <= 23) return rng.int(0, 3);
   if (age <= 26) return rng.int(-1, 2);
   if (age <= 29) return rng.int(-1, 1);

@@ -201,6 +201,12 @@ describe("talent se v tréninku opravdu pozná", () => {
     expect(nadany).toBeGreaterThan(pomaly * 1.25);
   });
 
+  it("u dorostence rozhoduje talent: pomalý roste zhruba poloviční rychlostí klenotu", () => {
+    // Dřív 5 proti 8 pokusům a netalentovaný kluk rostl skoro jako klenot (2026-10-20).
+    expect(sezona(83)).toBeGreaterThan(sezona(9) * 1.8);
+    expect(sezona(40)).toBeGreaterThan(sezona(26));
+  });
+
   it("hráč bez talentu se pořád zlepšuje, jen pomaleji", () => {
     expect(sezona(0)).toBeGreaterThan(0);
   });

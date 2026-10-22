@@ -25,7 +25,7 @@ describe("bodyDospivani", () => {
   });
 
   it("i kluk bez talentu povyroste, dospívání není jen pro vyvolené", () => {
-    expect(bodyDospivani(17, 0)).toBeGreaterThanOrEqual(3);
+    expect(bodyDospivani(17, 0)).toBeGreaterThanOrEqual(2);
   });
 
   it("přírůstek roste s talentem monotónně", () => {
@@ -36,14 +36,15 @@ describe("bodyDospivani", () => {
   });
 
   it("nesmyslný talent nerozbije výpočet", () => {
-    expect(bodyDospivani(17, -50)).toBe(4);
-    expect(bodyDospivani(17, 500)).toBe(13);
+    expect(bodyDospivani(17, -50)).toBe(2);
+    expect(bodyDospivani(17, 500)).toBe(8);
   });
 
-  it("dorostenec za tři sezóny získá dost na průraz do sestavy", () => {
-    // Laťka základní sestavy je ~20 bodů nad startem dorostence.
-    // Slibný kluk (talent 40) to musí zvládnout do tří sezón i bez tréninku.
+  it("dospívání samo hráče do sestavy nedostane, musí i trénovat", () => {
+    // Od 2026-10-20 poloviční: slibný kluk (talent 40) za tři léta +12 bodů dovedností,
+    // zbytek k laťce sestavy musí natrénovat.
     const zaTriSezony = bodyDospivani(17, 40) + bodyDospivani(18, 40) + bodyDospivani(19, 40);
-    expect(zaTriSezony).toBeGreaterThanOrEqual(20);
+    expect(zaTriSezony).toBeGreaterThanOrEqual(10);
+    expect(zaTriSezony).toBeLessThan(20);
   });
 });

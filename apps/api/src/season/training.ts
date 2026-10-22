@@ -6,7 +6,7 @@ import type { Weather } from "../engine/types";
 
 import type { Rng } from "../generators/rng";
 import { ratingWeightsFor, coachingTrainingMul, youthTrainingMul, disciplineAttendanceMod } from "@okresni-masina/shared";
-import { pokusuZaTalent } from "../skills/talent";
+import { pokusuZaTalent, youthAttempts, YOUTH_TALENT_AGE } from "../skills/talent";
 import type { GeneratedPlayer } from "../generators/player";
 import { TRENINK_SITUACE } from "../incidents/nastaveni";
 import { occupationTrainingAttendance } from "../generators/occupations";
@@ -566,7 +566,11 @@ export function simulateTraining(
     // pokusu prostě nevypadne. Druhý pokus ten strop zvedne.
     // Talent přidává (nebo ubírá) celé pokusy, ne procenta k šanci — ta se u dorostence
     // stejně opře o strop, takže se v ní násobek ztratil. Viz `skills/talent.ts`.
-    const pokusuZaTrenink = Math.max(1, pokusuPodleVeku(player.age) + pokusuZaTalent(player.hiddenTalent ?? 0));
+    // Do 21 let rozhoduje o tempu hlavně talent (`youthAttempts`), dospělým se k základu
+    // podle věku jen přičítá.
+    const pokusuZaTrenink = player.age < YOUTH_TALENT_AGE
+      ? youthAttempts(player.hiddenTalent ?? 0)
+      : Math.max(1, pokusuPodleVeku(player.age) + pokusuZaTalent(player.hiddenTalent ?? 0));
     const pokusu = sessions * pokusuZaTrenink;
     for (let s = 0; s < pokusu; s++) {
       // GK filter: non-GK never gets goalkeeping, GK prefers goalkeeping in match_practice
