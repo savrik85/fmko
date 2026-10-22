@@ -5049,8 +5049,8 @@ gameRouter.post("/admin/backfill-stammtisch-coaches", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
-// POST /api/admin/regenerate-u21-schedule — smaže existující U21 rozpis a vygeneruje
-// single round-robin (každý s každým 1×, „polovina sezóny"). Volitelně ?leagueId=...
+// POST /api/admin/regenerate-u21-schedule — smaže U21 rozpis aktuální sezóny a vygeneruje
+// celé dvoukolo, kola den po áčku. Pozor: maže i odehrané zápasy sezóny. Volitelně ?leagueId=...
 gameRouter.post("/admin/regenerate-u21-schedule", async (c) => {
   const u21LeagueId = c.req.query("leagueId");
   const { regenerateU21Schedule } = await import("../league/u21-generator");

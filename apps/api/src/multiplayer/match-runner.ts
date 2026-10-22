@@ -185,10 +185,14 @@ export async function runScheduledMatches(
             const rng = createRng(seedFromString(calendarId) + Date.now());
 
             // Determine match type
-            const homeTeam = await db.prepare("SELECT name, user_id, penalty_taker_id, freekick_taker_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
+            const homeTeam = await db.prepare("SELECT name, user_id, team_type, penalty_taker_id, freekick_taker_id FROM teams WHERE id = ?").bind(homeTeamId).first<Record<string, unknown>>();
             const awayTeam = await db.prepare("SELECT name, user_id, penalty_taker_id, freekick_taker_id FROM teams WHERE id = ?").bind(awayTeamId).first<Record<string, unknown>>();
             const homeIsHuman = !!homeTeam && homeTeam.user_id !== "ai";
             const awayIsHuman = !!awayTeam && awayTeam.user_id !== "ai";
+            // Zápas U21: hraje se, počítají se statistiky, zranění a kondice, ale ekonomika
+            // klubu (finance, reputace, fanoušci, sponzoři, obec, vztahy manažerů) patří
+            // áčku. U21 tým má user_id majitele, takže to dřív všechno běželo i pro něj.
+            const clubSideEffects = homeTeam?.team_type !== "u21";
             const matchType: MatchRunResult["matchType"] = homeIsHuman && awayIsHuman ? "pvp"
                 : homeIsHuman ? "pve_home" : awayIsHuman ? "pve_away" : "ai_vs_ai";
 
@@ -828,33 +832,36 @@ export async function runScheduledMatches(
                 continue;
             }
 
-            // Majitelé firem na tribuně: výsledek jim pohne náklonností ke klubu.
-            // Až tady, po zámku zápasu — konkurenční běh, který o zámek přišel, skončil
-            // výše continue a nesahá na favor z výsledku, který se vůbec neuložil.
-            try {
-                const { settleSponsorInvitations } = await import("../sponsors/hooks");
-                // Efektivní úroveň: 0, pokud klub nemá tribuny (výtržnosti je uměly zbořit
-                // i pod stojící lóží) — viz facilityEffects.vipBoxEffectiveLevel výše.
-                await settleSponsorInvitations(db, matchId, homeTeamId, result.homeScore, result.awayScore, facilityEffects.vipBoxEffectiveLevel);
-            } catch (e) {
-                logger.warn({module: "match-runner", matchId}, "settle sponsor invitations", e);
-            }
-
-            // Zastupitelé obce ve VIP lóži. Až za zámkem zápasu: pozvánky jsou už
-            // `attended` (přepnuté před simulací) a sem dojde jen jeden běh.
-            if (facilityEffects.vipBoxEffectiveLevel > 0 && officialCount > 0) {
+            // Sponzoři, VIP lóže a trávník — jen áčko.
+            if (clubSideEffects) {
+                // Majitelé firem na tribuně: výsledek jim pohne náklonností ke klubu.
+                // Až tady, po zámku zápasu — konkurenční běh, který o zámek přišel, skončil
+                // výše continue a nesahá na favor z výsledku, který se vůbec neuložil.
                 try {
-                    const { applyVipBoxVillageFavor } = await import("../villages/vip-box-favor");
-                    await applyVipBoxVillageFavor(db, matchId, homeTeamId, facilityEffects.vipBoxEffectiveLevel);
+                    const { settleSponsorInvitations } = await import("../sponsors/hooks");
+                    // Efektivní úroveň: 0, pokud klub nemá tribuny (výtržnosti je uměly zbořit
+                    // i pod stojící lóží) — viz facilityEffects.vipBoxEffectiveLevel výše.
+                    await settleSponsorInvitations(db, matchId, homeTeamId, result.homeScore, result.awayScore, facilityEffects.vipBoxEffectiveLevel);
                 } catch (e) {
-                    logger.warn({module: "match-runner", matchId}, "VIP lóže: přízeň zastupitelů", e);
+                    logger.warn({module: "match-runner", matchId}, "settle sponsor invitations", e);
                 }
-            }
 
-            // Devadesát minut na hřišti trávník stojí — nese to domácí tým.
-            {
-                const { applyPitchWear } = await import("../stadium/pitch-wear");
-                await applyPitchWear(db, homeTeamId, weather);
+                // Zastupitelé obce ve VIP lóži. Až za zámkem zápasu: pozvánky jsou už
+                // `attended` (přepnuté před simulací) a sem dojde jen jeden běh.
+                if (facilityEffects.vipBoxEffectiveLevel > 0 && officialCount > 0) {
+                    try {
+                        const { applyVipBoxVillageFavor } = await import("../villages/vip-box-favor");
+                        await applyVipBoxVillageFavor(db, matchId, homeTeamId, facilityEffects.vipBoxEffectiveLevel);
+                    } catch (e) {
+                        logger.warn({module: "match-runner", matchId}, "VIP lóže: přízeň zastupitelů", e);
+                    }
+                }
+
+                // Devadesát minut na hřišti trávník stojí — nese to domácí tým.
+                {
+                    const { applyPitchWear } = await import("../stadium/pitch-wear");
+                    await applyPitchWear(db, homeTeamId, weather);
+                }
             }
 
             // Bilance rozhodčího — sezónní statistika + historie vůči oběma klubům.
@@ -898,97 +905,100 @@ export async function runScheduledMatches(
                 logger.warn({module: "match-runner"}, "apply chemistry post-match", e);
             }
 
-            // ── Post-match: tier-based fanbase update ──────────────────────────────
-            // Bus konverze (per village), promo konverze, tier promotion (loyalty up)
-            // a loss streak penalty pro oba týmy.
-            try {
-                const {
-                    applyBusConversion,
-                    applyPromoConversion,
-                    applyTierPromotion,
-                    applyLossStreakPenalty,
-                } = await import("../season/fanbase-helpers");
-
-                // Domácí: bus + promo + tier promotion + loss penalty
-                const busResult = await applyBusConversion(db, homeTeamId, matchId);
-                const wasPromoted = (promoRow?.promotion_boost ?? 1.0) > 1.0;
-                const promoResult = await applyPromoConversion(
-                    db,
-                    homeTeamId,
-                    wasPromoted,
-                    rawAttendance,
-                );
-                const tierResult = await applyTierPromotion(db, homeTeamId);
-                const lossResult = await applyLossStreakPenalty(db, homeTeamId);
-
-                logger.info(
-                    {module: "match-runner", teamId: homeTeamId, matchId},
-                    `fanbase post-match: bus drop-in=${busResult.totalDropIn} converted=${busResult.totalConverted} promo+${promoResult.converted} -${promoResult.lost} tier c→r=${tierResult.casualToRegular} r→h=${tierResult.regularToHardcore} loss-penalty=${lossResult.triggered ? `c-${lossResult.casualLost}/r-${lossResult.regularLost}` : "no"}`,
-                );
-
-                // Hosté: jen loss streak penalty (jejich domácí akce nejsou)
-                await applyLossStreakPenalty(db, awayTeamId);
-            } catch (e) {
-                logger.warn({module: "match-runner"}, "fanbase post-match update", e);
-            }
-
-            // ── Post-match: vztahy manažerů (pasivní heat/respekt, derby morálka, sázky) ──
-            try {
-                const {applyPostMatchRelations} = await import("../community/manager-relations");
-                await applyPostMatchRelations(db, {
-                    matchId,
-                    homeTeamId,
-                    awayTeamId,
-                    homeScore: result.homeScore,
-                    awayScore: result.awayScore,
-                    leagueId: (match.league_id as string | null) ?? null,
-                    preMatchHeat,
-                });
-            } catch (e) {
-                logger.warn({module: "match-runner"}, "manager relations post-match", e);
-            }
-
-            // ── Post-match: co se dělo na tribunách ──────────────────────────────
-            // Nárok na vyhodnocení si bere resolver sám (matches.fan_incidents),
-            // takže opakovaný běh kola nestrhne pokutu podruhé.
-            try {
-                const {resolveMatchIncidents} = await import("../fans/resolve-match-incidents");
-                // HERNÍ datum, ne reálné — pokuta i uzavření sektoru patří do herního
-                // času. `matches` sloupec s datem nemá, kanonický zdroj je teams.game_date.
-                const fanGd = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
-                    .bind(homeTeamId).first<{ game_date: string | null }>()
-                    .catch((e) => {
-                        logger.warn({module: "match-runner"}, "herní datum pro výtržnosti", e);
-                        return null;
-                    }))?.game_date ?? new Date().toISOString().slice(0, 10);
-                await resolveMatchIncidents(db, {
-                    matchId,
-                    homeTeamId,
-                    awayTeamId,
-                    homeScore: result.homeScore,
-                    awayScore: result.awayScore,
-                    attendance: attendanceWithOfficials,
-                    preMatchHeat,
-                    leagueId: (match.league_id as string | null) ?? calRow?.league_id ?? null,
-                    seasonNumber: calRow?.season_number ?? 0,
-                    gameDate: fanGd,
-                    // Sporný verdikt nebo vyloučení domácích rozpálí tribunu nejvíc.
-                    sporneVerdikty: storedIncidents.length > 0
-                        || result.events.some((e) => e.type === "card" && e.detail === "red"),
-                    refereeId: referee.profile.id ?? null,
-                });
-            } catch (e) {
-                logger.warn({module: "match-runner"}, "vyhodnocení výtržností", e);
-            }
-
-            // SMS od majitelů firem (po zápase, po výtržnosti). Až za oběma háčky výše,
-            // aby se z fronty vybrala ta nejdůležitější, a až za zámkem zápasu (continue výše).
-            if (homeIsHuman) {
+            // Fanoušci, vztahy manažerů, výtržnosti, SMS majitelů — jen áčko.
+            if (clubSideEffects) {
+                // ── Post-match: tier-based fanbase update ──────────────────────────────
+                // Bus konverze (per village), promo konverze, tier promotion (loyalty up)
+                // a loss streak penalty pro oba týmy.
                 try {
-                    const {deliverOwnerSmsForTeam} = await import("../sponsors/owner-sms");
-                    await deliverOwnerSmsForTeam(db, homeTeamId);
+                    const {
+                        applyBusConversion,
+                        applyPromoConversion,
+                        applyTierPromotion,
+                        applyLossStreakPenalty,
+                    } = await import("../season/fanbase-helpers");
+
+                    // Domácí: bus + promo + tier promotion + loss penalty
+                    const busResult = await applyBusConversion(db, homeTeamId, matchId);
+                    const wasPromoted = (promoRow?.promotion_boost ?? 1.0) > 1.0;
+                    const promoResult = await applyPromoConversion(
+                        db,
+                        homeTeamId,
+                        wasPromoted,
+                        rawAttendance,
+                    );
+                    const tierResult = await applyTierPromotion(db, homeTeamId);
+                    const lossResult = await applyLossStreakPenalty(db, homeTeamId);
+
+                    logger.info(
+                        {module: "match-runner", teamId: homeTeamId, matchId},
+                        `fanbase post-match: bus drop-in=${busResult.totalDropIn} converted=${busResult.totalConverted} promo+${promoResult.converted} -${promoResult.lost} tier c→r=${tierResult.casualToRegular} r→h=${tierResult.regularToHardcore} loss-penalty=${lossResult.triggered ? `c-${lossResult.casualLost}/r-${lossResult.regularLost}` : "no"}`,
+                    );
+
+                    // Hosté: jen loss streak penalty (jejich domácí akce nejsou)
+                    await applyLossStreakPenalty(db, awayTeamId);
                 } catch (e) {
-                    logger.warn({module: "match-runner", matchId}, "SMS od majitelů firem", e);
+                    logger.warn({module: "match-runner"}, "fanbase post-match update", e);
+                }
+
+                // ── Post-match: vztahy manažerů (pasivní heat/respekt, derby morálka, sázky) ──
+                try {
+                    const {applyPostMatchRelations} = await import("../community/manager-relations");
+                    await applyPostMatchRelations(db, {
+                        matchId,
+                        homeTeamId,
+                        awayTeamId,
+                        homeScore: result.homeScore,
+                        awayScore: result.awayScore,
+                        leagueId: (match.league_id as string | null) ?? null,
+                        preMatchHeat,
+                    });
+                } catch (e) {
+                    logger.warn({module: "match-runner"}, "manager relations post-match", e);
+                }
+
+                // ── Post-match: co se dělo na tribunách ──────────────────────────────
+                // Nárok na vyhodnocení si bere resolver sám (matches.fan_incidents),
+                // takže opakovaný běh kola nestrhne pokutu podruhé.
+                try {
+                    const {resolveMatchIncidents} = await import("../fans/resolve-match-incidents");
+                    // HERNÍ datum, ne reálné — pokuta i uzavření sektoru patří do herního
+                    // času. `matches` sloupec s datem nemá, kanonický zdroj je teams.game_date.
+                    const fanGd = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+                        .bind(homeTeamId).first<{ game_date: string | null }>()
+                        .catch((e) => {
+                            logger.warn({module: "match-runner"}, "herní datum pro výtržnosti", e);
+                            return null;
+                        }))?.game_date ?? new Date().toISOString().slice(0, 10);
+                    await resolveMatchIncidents(db, {
+                        matchId,
+                        homeTeamId,
+                        awayTeamId,
+                        homeScore: result.homeScore,
+                        awayScore: result.awayScore,
+                        attendance: attendanceWithOfficials,
+                        preMatchHeat,
+                        leagueId: (match.league_id as string | null) ?? calRow?.league_id ?? null,
+                        seasonNumber: calRow?.season_number ?? 0,
+                        gameDate: fanGd,
+                        // Sporný verdikt nebo vyloučení domácích rozpálí tribunu nejvíc.
+                        sporneVerdikty: storedIncidents.length > 0
+                            || result.events.some((e) => e.type === "card" && e.detail === "red"),
+                        refereeId: referee.profile.id ?? null,
+                    });
+                } catch (e) {
+                    logger.warn({module: "match-runner"}, "vyhodnocení výtržností", e);
+                }
+
+                // SMS od majitelů firem (po zápase, po výtržnosti). Až za oběma háčky výše,
+                // aby se z fronty vybrala ta nejdůležitější, a až za zámkem zápasu (continue výše).
+                if (homeIsHuman) {
+                    try {
+                        const {deliverOwnerSmsForTeam} = await import("../sponsors/owner-sms");
+                        await deliverOwnerSmsForTeam(db, homeTeamId);
+                    } catch (e) {
+                        logger.warn({module: "match-runner", matchId}, "SMS od majitelů firem", e);
+                    }
                 }
             }
 
@@ -1136,113 +1146,116 @@ export async function runScheduledMatches(
                 if (injuryStmts.length > 0) await db.batch(injuryStmts).catch((e) => logger.warn({module: "match-runner"}, "batch persist injuries", e));
             }
 
-            // Match-day finances for both teams
-            try {
-                const {processMatchDayFinances, processCashLoanRepayment} = await import("../season/finance-processor");
-                const homeResult = result.homeScore > result.awayScore ? "win" : result.homeScore < result.awayScore ? "loss" : "draw";
-                const awayResult = result.awayScore > result.homeScore ? "win" : result.awayScore < result.homeScore ? "loss" : "draw";
-                const gameDate = new Date().toISOString();
-                // Load both teams reputation — slouží pro satisfaction expectations calc
-                const repRows = await db.prepare(
-                    "SELECT id, reputation FROM teams WHERE id IN (?, ?)",
-                ).bind(homeTeamId, awayTeamId).all<{ id: string; reputation: number }>().catch((e) => {
-                    logger.warn({module: "match-runner"}, "load team reputations for finances", e);
-                    return {results: []};
-                });
-                const repMap = new Map(repRows.results.map((r) => [r.id, r.reputation ?? 50]));
-                const homeRep = repMap.get(homeTeamId) ?? 50;
-                const awayRep = repMap.get(awayTeamId) ?? 50;
-                await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendanceWithOfficials, gameDate, awayRep, false, weather, compCtx);
-                await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendanceWithOfficials, gameDate, homeRep, false, weather, compCtx);
-                // Cash loan repayments — po všech ostatních match-day financích (na čerstvém budgetu)
-                await processCashLoanRepayment(db, homeTeamId, matchId, gameDate);
-                await processCashLoanRepayment(db, awayTeamId, matchId, gameDate);
-
-                // Klubová reputace — vyprodáno / prázdné hlediště (jen doma) a série výsledků.
+            // Finance, reputace klubu a rozvoj manažera — jen áčko.
+            if (clubSideEffects) {
+                // Match-day finances for both teams
                 try {
-                    const {applyAttendanceReputation, applyStreakReputation} = await import("../season/reputation-sources");
-                    const seasonRow = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
-                        .first<{ number: number }>();
-                    const seasonNo = seasonRow?.number ?? 1;
-                    // HERNÍ datum, ne reálné. Útlum reputace porovnává game_date v okně
-                    // 28 herních dní; reálný timestamp (game_clock.offset_days posouvá herní
-                    // čas až o desítky dní) by do okna nikdy netrefil a decay by sebral bod
-                    // i týmu, který právě vyprodal stadion.
-                    const gdRow = await db.prepare("SELECT game_date FROM teams WHERE id = ?")
-                        .bind(homeTeamId).first<{ game_date: string | null }>()
-                        .catch((e) => { logger.warn({module: "match-runner"}, "load game date for reputation", e); return null; });
-                    const repGameDate = gdRow?.game_date ?? gameDate;
-                    await applyAttendanceReputation(db, homeTeamId, matchId, attendanceWithOfficials, stadiumCapacity, seasonNo, repGameDate);
-                    await applyStreakReputation(db, homeTeamId, seasonNo, repGameDate);
-                    await applyStreakReputation(db, awayTeamId, seasonNo, repGameDate);
+                    const {processMatchDayFinances, processCashLoanRepayment} = await import("../season/finance-processor");
+                    const homeResult = result.homeScore > result.awayScore ? "win" : result.homeScore < result.awayScore ? "loss" : "draw";
+                    const awayResult = result.awayScore > result.homeScore ? "win" : result.awayScore < result.homeScore ? "loss" : "draw";
+                    const gameDate = new Date().toISOString();
+                    // Load both teams reputation — slouží pro satisfaction expectations calc
+                    const repRows = await db.prepare(
+                        "SELECT id, reputation FROM teams WHERE id IN (?, ?)",
+                    ).bind(homeTeamId, awayTeamId).all<{ id: string; reputation: number }>().catch((e) => {
+                        logger.warn({module: "match-runner"}, "load team reputations for finances", e);
+                        return {results: []};
+                    });
+                    const repMap = new Map(repRows.results.map((r) => [r.id, r.reputation ?? 50]));
+                    const homeRep = repMap.get(homeTeamId) ?? 50;
+                    const awayRep = repMap.get(awayTeamId) ?? 50;
+                    await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendanceWithOfficials, gameDate, awayRep, false, weather, compCtx);
+                    await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendanceWithOfficials, gameDate, homeRep, false, weather, compCtx);
+                    // Cash loan repayments — po všech ostatních match-day financích (na čerstvém budgetu)
+                    await processCashLoanRepayment(db, homeTeamId, matchId, gameDate);
+                    await processCashLoanRepayment(db, awayTeamId, matchId, gameDate);
+
+                    // Klubová reputace — vyprodáno / prázdné hlediště (jen doma) a série výsledků.
+                    try {
+                        const {applyAttendanceReputation, applyStreakReputation} = await import("../season/reputation-sources");
+                        const seasonRow = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+                            .first<{ number: number }>();
+                        const seasonNo = seasonRow?.number ?? 1;
+                        // HERNÍ datum, ne reálné. Útlum reputace porovnává game_date v okně
+                        // 28 herních dní; reálný timestamp (game_clock.offset_days posouvá herní
+                        // čas až o desítky dní) by do okna nikdy netrefil a decay by sebral bod
+                        // i týmu, který právě vyprodal stadion.
+                        const gdRow = await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+                            .bind(homeTeamId).first<{ game_date: string | null }>()
+                            .catch((e) => { logger.warn({module: "match-runner"}, "load game date for reputation", e); return null; });
+                        const repGameDate = gdRow?.game_date ?? gameDate;
+                        await applyAttendanceReputation(db, homeTeamId, matchId, attendanceWithOfficials, stadiumCapacity, seasonNo, repGameDate);
+                        await applyStreakReputation(db, homeTeamId, seasonNo, repGameDate);
+                        await applyStreakReputation(db, awayTeamId, seasonNo, repGameDate);
+                    } catch (e) {
+                        logger.warn({module: "match-runner"}, "reputation sources", e);
+                    }
                 } catch (e) {
-                    logger.warn({module: "match-runner"}, "reputation sources", e);
+                    logger.error({module: "match-runner"}, `Match finances failed for ${matchId}`, e);
                 }
-            } catch (e) {
-                logger.error({module: "match-runner"}, `Match finances failed for ${matchId}`, e);
-            }
 
-            // Manager development po každém zápase — OBOUSMĚRNĚ podle výsledku.
-            // HERNÍ datum (game_clock posouvá herní čas o desítky dní) — audit se čte
-            // a filtruje v herním čase stejně jako u klubové reputace.
-            const mgrGameDate = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
-                .bind(homeTeamId).first<{ game_date: string | null }>()
-                .catch((e) => { logger.warn({module: "match-runner"}, "load game date for manager dev", e); return null; })
-            )?.game_date ?? new Date().toISOString();
+                // Manager development po každém zápase — OBOUSMĚRNĚ podle výsledku.
+                // HERNÍ datum (game_clock posouvá herní čas o desítky dní) — audit se čte
+                // a filtruje v herním čase stejně jako u klubové reputace.
+                const mgrGameDate = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+                    .bind(homeTeamId).first<{ game_date: string | null }>()
+                    .catch((e) => { logger.warn({module: "match-runner"}, "load game date for manager dev", e); return null; })
+                )?.game_date ?? new Date().toISOString();
 
-            for (const tid of [homeTeamId, awayTeamId]) {
-                try {
-                    const isHome = tid === homeTeamId;
-                    const gf = isHome ? result.homeScore : result.awayScore; // vstřelené
-                    const ga = isHome ? result.awayScore : result.homeScore; // obdržené
-                    const margin = gf - ga;
-                    const won = margin > 0, lost = margin < 0;
-                    const bigWin = margin >= 3, blowoutLoss = margin <= -3;
+                for (const tid of [homeTeamId, awayTeamId]) {
+                    try {
+                        const isHome = tid === homeTeamId;
+                        const gf = isHome ? result.homeScore : result.awayScore; // vstřelené
+                        const ga = isHome ? result.awayScore : result.homeScore; // obdržené
+                        const margin = gf - ga;
+                        const won = margin > 0, lost = margin < 0;
+                        const bigWin = margin >= 3, blowoutLoss = margin <= -3;
 
-                    // Deterministický RNG ze zápasu a týmu — Math.random() dělal z každého
-                    // přesimulování jiný výsledek. Spolu s reference_id v auditu to znamená,
-                    // že opakované zpracování zápasu nepřipíše nic podruhé.
-                    const {seedFromString} = await import("../lib/seed");
-                    const {createRng} = await import("../generators/rng");
-                    const mgrRng = createRng(seedFromString(`${matchId}:${tid}:mgrdev`));
-                    const {applyManagerAttrDelta} = await import("../lib/manager-attrs");
-                    const resultWord = won ? "výhra" : lost ? "prohra" : "remíza";
-                    const src = won ? "match_win" as const : lost ? "match_loss" as const : "match_draw" as const;
+                        // Deterministický RNG ze zápasu a týmu — Math.random() dělal z každého
+                        // přesimulování jiný výsledek. Spolu s reference_id v auditu to znamená,
+                        // že opakované zpracování zápasu nepřipíše nic podruhé.
+                        const {seedFromString} = await import("../lib/seed");
+                        const {createRng} = await import("../generators/rng");
+                        const mgrRng = createRng(seedFromString(`${matchId}:${tid}:mgrdev`));
+                        const {applyManagerAttrDelta} = await import("../lib/manager-attrs");
+                        const resultWord = won ? "výhra" : lost ? "prohra" : "remíza";
+                        const src = won ? "match_win" as const : lost ? "match_loss" as const : "match_draw" as const;
 
-                    // Zkušenost (koučink/taktika) roste — víc při výhře.
-                    if (mgrRng.random() < (won ? 0.16 : 0.10)) {
-                        const upAttr = mgrRng.random() < 0.5 ? "coaching" : "tactics";
-                        await applyManagerAttrDelta(db, tid, upAttr, 1, src,
-                            `Zkušenost z odehraného zápasu (${resultWord})`,
-                            {referenceId: `mgr-${matchId}-${tid}-up`, gameDate: mgrGameDate});
+                        // Zkušenost (koučink/taktika) roste — víc při výhře.
+                        if (mgrRng.random() < (won ? 0.16 : 0.10)) {
+                            const upAttr = mgrRng.random() < 0.5 ? "coaching" : "tactics";
+                            await applyManagerAttrDelta(db, tid, upAttr, 1, src,
+                                `Zkušenost z odehraného zápasu (${resultWord})`,
+                                {referenceId: `mgr-${matchId}-${tid}-up`, gameDate: mgrGameDate});
+                        }
+                        // Prohra erozuje motivaci/disciplínu (blamáž víc).
+                        if (lost && mgrRng.random() < (blowoutLoss ? 0.25 : 0.12)) {
+                            const downAttr = mgrRng.random() < 0.5 ? "motivation" : "discipline";
+                            await applyManagerAttrDelta(db, tid, downAttr, -1, "match_loss",
+                                blowoutLoss ? "Debakl vzal vítr z plachet" : "Prohra sebrala chuť",
+                                {referenceId: `mgr-${matchId}-${tid}-down`, gameDate: mgrGameDate});
+                        }
+                        // Mládežnický rozvoj — pomalu roste.
+                        if (mgrRng.random() < 0.05) {
+                            await applyManagerAttrDelta(db, tid, "youth_development", 1, src,
+                                "Práce s mladými se posunula",
+                                {referenceId: `mgr-${matchId}-${tid}-youth`, gameDate: mgrGameDate});
+                        }
+                        // Reputace: OBOUSMĚRNĚ dle výsledku.
+                        let repDelta = 0;
+                        if (won) repDelta = bigWin ? 2 : 1;
+                        else if (lost) repDelta = blowoutLoss ? -2 : -1;
+                        if (repDelta !== 0 && mgrRng.random() < 0.35) {
+                            const desc = bigWin ? `Výhra o ${margin} góly`
+                                : won ? "Výhra v zápase"
+                                : blowoutLoss ? `Debakl o ${Math.abs(margin)} góly`
+                                : "Prohra v zápase";
+                            await applyManagerAttrDelta(db, tid, "reputation", repDelta, src, desc,
+                                {referenceId: `mgr-${matchId}-${tid}-rep`, gameDate: mgrGameDate});
+                        }
+                    } catch (e) {
+                        logger.warn({module: "match-runner"}, "manager xp update", e);
                     }
-                    // Prohra erozuje motivaci/disciplínu (blamáž víc).
-                    if (lost && mgrRng.random() < (blowoutLoss ? 0.25 : 0.12)) {
-                        const downAttr = mgrRng.random() < 0.5 ? "motivation" : "discipline";
-                        await applyManagerAttrDelta(db, tid, downAttr, -1, "match_loss",
-                            blowoutLoss ? "Debakl vzal vítr z plachet" : "Prohra sebrala chuť",
-                            {referenceId: `mgr-${matchId}-${tid}-down`, gameDate: mgrGameDate});
-                    }
-                    // Mládežnický rozvoj — pomalu roste.
-                    if (mgrRng.random() < 0.05) {
-                        await applyManagerAttrDelta(db, tid, "youth_development", 1, src,
-                            "Práce s mladými se posunula",
-                            {referenceId: `mgr-${matchId}-${tid}-youth`, gameDate: mgrGameDate});
-                    }
-                    // Reputace: OBOUSMĚRNĚ dle výsledku.
-                    let repDelta = 0;
-                    if (won) repDelta = bigWin ? 2 : 1;
-                    else if (lost) repDelta = blowoutLoss ? -2 : -1;
-                    if (repDelta !== 0 && mgrRng.random() < 0.35) {
-                        const desc = bigWin ? `Výhra o ${margin} góly`
-                            : won ? "Výhra v zápase"
-                            : blowoutLoss ? `Debakl o ${Math.abs(margin)} góly`
-                            : "Prohra v zápase";
-                        await applyManagerAttrDelta(db, tid, "reputation", repDelta, src, desc,
-                            {referenceId: `mgr-${matchId}-${tid}-rep`, gameDate: mgrGameDate});
-                    }
-                } catch (e) {
-                    logger.warn({module: "match-runner"}, "manager xp update", e);
                 }
             }
 
@@ -1391,10 +1404,17 @@ export async function runScheduledMatches(
         await decayRefereeMemory(db, calRow.league_id);
     }
 
+    // Kolo U21: rozhovory a AI články se nedělají, trenér je dává za áčko a články
+    // o U21 by nikde nebyly vidět.
+    const youthRound = calRow?.league_id
+        ? !!(await db.prepare("SELECT 1 FROM leagues WHERE id = ? AND league_type = 'u21'").bind(calRow.league_id).first()
+            .catch((e) => { logger.warn({module: "match-runner"}, "typ ligy kola", e); return null; }))
+        : false;
+
     // Pozápasový rozhovor — první v řadě, protože je časově citlivý: hráč musí stihnout
     // odpovědět, než se odehraje další kolo. Nevyžaduje Gemini (má šablonový fallback),
     // proto stojí mimo blok podmíněný klíčem.
-    if (results.length > 0) {
+    if (results.length > 0 && !youthRound) {
         try {
             const {tryCreatePostMatchInterviews} = await import("../news/post-match-interview");
             await tryCreatePostMatchInterviews(db, geminiApiKey, calendarId);
@@ -1404,7 +1424,7 @@ export async function runScheduledMatches(
     }
 
     // Round summary — AI vybere Hráče a Trenéra kola + napíše článek
-    if (results.length > 0 && geminiApiKey) {
+    if (results.length > 0 && geminiApiKey && !youthRound) {
         try {
             const {generateRoundSummary} = await import("../news/round-summary");
             await generateRoundSummary(db, geminiApiKey, calendarId);

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
+import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { apiFetch } from "@/lib/api";
 import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -89,7 +90,7 @@ interface LeagueRound {
 }
 
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["kadr", "atributy", "rozvoj", "tabulka", "rozpis", "akademie"] as const;
+const TAB_KEYS = ["kadr", "atributy", "rozvoj", "tabulka", "rozpis", "statistiky", "akademie"] as const;
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -116,6 +117,8 @@ export default function U21Page() {
   const [standingsLoaded, setStandingsLoaded] = useState(false);
   const [scheduleLoaded, setScheduleLoaded] = useState(false);
   const [standingsError, setStandingsError] = useState<string | null>(null);
+  const [statsData, setStatsData] = useState<StatsData | null>(null);
+  const [statsLoaded, setStatsLoaded] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
   const [onlyOurMatches, setOnlyOurMatches] = useState(true);
@@ -179,6 +182,14 @@ export default function U21Page() {
       .then((r) => { setStandings(r.standings ?? []); setStandingsLoaded(true); setStandingsError(null); })
       .catch((e) => { console.error("fetch u21 standings:", e); setStandingsError("Tabulku se nepodařilo načíst. Zkus záložku otevřít znovu."); });
   }, [tab, u21LeagueId]);
+
+  // Statistiky soutěže U21: stejný endpoint jako liga áčka, jen za U21 tým.
+  useEffect(() => {
+    if (tab !== "statistiky" || !u21TeamId || statsLoaded) return;
+    apiFetch<StatsData>(`/api/teams/${u21TeamId}/league-stats`)
+      .then((d) => { setStatsData(d); setStatsLoaded(true); })
+      .catch((e) => { console.error("fetch u21 league-stats:", e); setStatsLoaded(true); });
+  }, [tab, u21TeamId, statsLoaded]);
 
   // Load rozpis hned po zjištění U21 ligy — potřebujeme i pro „Nejbližší zápas" banner.
   useEffect(() => {
@@ -279,6 +290,7 @@ export default function U21Page() {
           { key: "rozvoj", label: "Rozvoj" },
           { key: "tabulka", label: "Tabulka" },
           { key: "rozpis", label: "Rozpis" },
+          { key: "statistiky", label: "Statistiky" },
           { key: "akademie", label: "Akademie" },
         ]}
       />
@@ -414,7 +426,7 @@ export default function U21Page() {
                             </div>;
                           })}
                         </div>
-                        <div className="mt-2 text-[11px] text-muted">{m.status === "simulated" ? "Odehráno" : r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "Termín bude upřesněn"} · domácí nahoře</div>
+                        <div className="mt-2 text-[11px] text-muted">{m.status === "simulated" ? <Link href={`/zapas/${m.id}`} className="font-semibold text-pitch-600 hover:underline">Odehráno, detail zápasu</Link> : r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "Termín bude upřesněn"} · domácí nahoře</div>
                       </li>
                     ))}
                   </ul>
@@ -424,6 +436,8 @@ export default function U21Page() {
           </div>
         </div>
       )}
+
+      {tab === "statistiky" && <LeagueStatsTab data={statsData} loaded={statsLoaded} />}
 
       {tab === "atributy" && teamId && <U21Attributes teamId={teamId} />}
 
