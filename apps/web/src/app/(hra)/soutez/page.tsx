@@ -413,7 +413,7 @@ export default function SoutezPage() {
         items={[
           { key: "zasedani", label: "Zasedání", count: openAll.length || null },
           { key: "pokladna", label: "Pokladna" },
-          { key: "vedeni", label: "Vedení", count: elections.filter((e) => e.status === "open").length || null },
+          { key: "vedeni", label: "Vedení", count: elections.filter((e) => e.status === "open" && !e.myVote && e.candidates.length > 0).length || null },
           { key: "zapisy", label: "Zápisy" },
         ]}
         value={tab}
