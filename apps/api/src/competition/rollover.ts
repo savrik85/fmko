@@ -14,7 +14,7 @@
 import { logger } from "../lib/logger";
 import { DEFAULT_RULES, MIN_HUMAN_CLUBS, type CompetitionRules } from "./defaults";
 import { recomputeBalance, recordCompetitionEntry } from "./ledger";
-import { applyTermReputation, openElections } from "./officials";
+import { applyTermReputation, notifyElectionsOpened, openElections } from "./officials";
 import { subsidyFor } from "./projection";
 import { nextSeasonRules } from "./proposals";
 import { countAllClubs, countHumanClubs, loadGovernance, loadRules } from "./rules";
@@ -121,6 +121,8 @@ async function rolloverOne(
   await settleSponsor(db, leagueId, newSeason, startDate);
   await endOfficialTerms(db, leagueId, newSeason, startDate);
   await openElections(db, leagueId, newSeason, startDate);
+  await notifyElectionsOpened(db, leagueId, newSeason, startDate)
+    .catch((e) => logger.warn({ module: M }, `oznámení voleb ${leagueId}`, e));
   await restampDeadlines(db, leagueId, startDate);
   // Sponzorské nabídky na novou sezónu. Soutěž, která sponzora má, žádné
   // nedostane — přijmout jde jen jednu smlouvu.

@@ -35,9 +35,10 @@ const ATRIBUTY = [
  */
 export function bodyDospivani(vek: number, talent: number): number {
   if (vek > DOSPIVANI_DO_VEKU) return 0;
-  // Základ zvednutý ze 3 na 4: i kluk bez talentu má za pět let dorostu (16–21) posbírat
-  // dvacet bodů dovedností, ne patnáct. Talentovaný dostává dál výrazně víc.
-  return Math.round(4 + Math.max(0, Math.min(100, talent)) / 100 * 9);
+  // Zhruba poloviční proti dřívějšímu 4 + talent·9 (2026-10-20). Mladí tehdy přes léto
+  // poskočili o 4 (pomalí) až 10 (klenoty) bodů hodnocení a k tomu ještě trénink za sezónu
+  // +4 až +8, takže všichni rostli „brutálně“. Talentovaný dostává dál víc než dvojnásobek.
+  return Math.round(2 + Math.max(0, Math.min(100, talent)) / 100 * 6);
 }
 
 export interface VysledekDospivani {
@@ -62,7 +63,8 @@ export async function dospejMladeHrace(db: D1Database, teamId: string): Promise<
     `SELECT id, first_name, last_name, age, position, overall_rating, hidden_talent,
             skills, physical, skills_max
        FROM players
-      WHERE team_id = ? AND age <= ? AND (status IS NULL OR status = 'active')`,
+      WHERE team_id = ? AND age <= ? AND (status IS NULL OR status = 'active')
+        AND json_extract(COALESCE(life_context, '{}'), '$.freshAcademyGraduate') IS NULL`,
   ).bind(teamId, DOSPIVANI_DO_VEKU).all<{
     id: string; first_name: string; last_name: string; age: number; position: string;
     overall_rating: number; hidden_talent: number | null;

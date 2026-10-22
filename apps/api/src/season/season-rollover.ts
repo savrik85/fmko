@@ -309,7 +309,11 @@ export async function rolloverAllLeagues(
     const agedMark = await db.prepare("SELECT status FROM season_end_progress WHERE league_id = '__u21__' AND season_number = ? AND phase = 'u21_aging'")
       .bind(newNum).first<{ status: string }>().catch((e) => { logger.warn({ module: "season-rollover" }, "u21 aging marker", e); return { status: "done" }; });
     if (agedMark?.status !== "done") {
-      await db.prepare("UPDATE players SET age = age + 1 WHERE team_id IN (SELECT id FROM teams WHERE team_type = 'u21')").run()
+      // Čerstvý odchovanec z akademie (vznikl v tomhle konci sezóny) nestárne a nedospívá.
+      await db.prepare(
+        `UPDATE players SET age = age + 1 WHERE team_id IN (SELECT id FROM teams WHERE team_type = 'u21')
+           AND json_extract(COALESCE(life_context, '{}'), '$.freshAcademyGraduate') IS NULL`,
+      ).run()
         .catch((e) => logger.warn({ module: "season-rollover" }, "u21 aging", e));
 
       // Dospívání dorostenců — musí být TADY, ne ve fázi departures: ta běží jen pro
@@ -350,10 +354,34 @@ export async function rolloverAllLeagues(
         logger.warn({ module: "season-rollover" }, "dorostový cyklus selhal", e);
       }
 
+      // Značka čerstvého odchovance platí jen pro tohle léto.
+      await db.prepare(
+        "UPDATE players SET life_context = json_remove(life_context, '$.freshAcademyGraduate') WHERE json_extract(COALESCE(life_context, '{}'), '$.freshAcademyGraduate') IS NOT NULL",
+      ).run().catch((e) => logger.warn({ module: "season-rollover" }, "clear fresh academy graduate flag", e));
+
       await db.prepare("INSERT INTO season_end_progress (league_id, season_number, phase, status, updated_at) VALUES ('__u21__', ?, 'u21_aging', 'done', strftime('%Y-%m-%dT%H:%M:%SZ','now')) ON CONFLICT(league_id, season_number, phase) DO UPDATE SET status = 'done'")
         .bind(newNum).run().catch((e) => logger.warn({ module: "season-rollover" }, "u21 aging marker save", e));
     }
   } catch (e) { logger.warn({ module: "season-rollover" }, "u21 rollover failed", e); }
+
+  // Komunální volby jednou za konec sezóny (marker): nová sezóna = nové vedení obcí
+  // a každý klub dostane SMS s novým starostou (2026-10-20, dřív jen ruční admin tlačítko).
+  const villagesMark = await db.prepare(
+    "SELECT status FROM season_end_progress WHERE league_id = '__villages__' AND season_number = ? AND phase = 'municipal_elections'",
+  ).bind(newNum).first<{ status: string }>()
+    .catch((e) => { logger.warn({ module: "season-rollover" }, "municipal elections marker", e); return { status: "done" }; });
+  if (villagesMark?.status !== "done") {
+    try {
+      const { holdMunicipalElections } = await import("../villages/municipal-elections");
+      const r = await holdMunicipalElections(db);
+      logger.info({ module: "season-rollover" }, `komunální volby: ${r.villagesProcessed} obcí, ${r.teamsNotified} klubům SMS`);
+    } catch (e) {
+      logger.error({ module: "season-rollover" }, "komunální volby selhaly", e);
+    }
+    await db.prepare(
+      "INSERT INTO season_end_progress (league_id, season_number, phase, status, updated_at) VALUES ('__villages__', ?, 'municipal_elections', 'done', strftime('%Y-%m-%dT%H:%M:%SZ','now')) ON CONFLICT(league_id, season_number, phase) DO UPDATE SET status = 'done'",
+    ).bind(newNum).run().catch((e) => logger.warn({ module: "season-rollover" }, "municipal elections marker save", e));
+  }
 
   logger.info({ module: "season-rollover" }, `global rollover → sezóna ${newNum}, ${rolledLeagues} lig, ${matchesCreated} zápasů`);
   return { newSeasonNumber: newNum, rolledLeagues, matchesCreated };

@@ -61,3 +61,22 @@ export function pokusuZaTalent(talent: number): number {
     default: return -1;
   }
 }
+
+/** Do kolika let platí dorostové tempo podle talentu (stejně jako odchod z dorostu ve 22). */
+export const YOUTH_TALENT_AGE = 22;
+
+/**
+ * Pokusy o zlepšení za trénink pro hráče do 21 let. U mladých rozhoduje talent víc než
+ * u dospělých: dřív měli základ 6 pokusů a talent jen −1 až +2, takže kluk, který se
+ * „rozvíjí pomalu", rostl skoro jako klenot. Naměřeno nad kopií produkce 2026-10-20,
+ * růst hodnocení za sezónu u lidských klubů: pomalu +4,2, průměrně +6,0, rychle +5,7,
+ * bleskově +8,0. S tímhle počtem pokusů vychází +2,6 / +4,1 / +4,9 / +8,0.
+ */
+export function youthAttempts(talent: number): number {
+  switch (stupenTalentu(talent)) {
+    case "bleskove": return 8;
+    case "rychle": return 6;
+    case "prumerne": return 4;
+    default: return 3;
+  }
+}

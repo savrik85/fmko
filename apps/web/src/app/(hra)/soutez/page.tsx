@@ -413,7 +413,7 @@ export default function SoutezPage() {
         items={[
           { key: "zasedani", label: "Zasedání", count: openAll.length || null },
           { key: "pokladna", label: "Pokladna" },
-          { key: "vedeni", label: "Vedení" },
+          { key: "vedeni", label: "Vedení", count: elections.filter((e) => e.status === "open").length || null },
           { key: "zapisy", label: "Zápisy" },
         ]}
         value={tab}
@@ -422,6 +422,18 @@ export default function SoutezPage() {
 
       {tab === "zasedani" && (
         <div className="space-y-4">
+          {/* Volby jsou v záložce Vedení a nikdo je tam nehledal (2026-10-20). */}
+          {elections.some((e) => e.status === "open") && (
+            <div className="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1 min-w-0 text-sm">
+                <span className="font-heading font-bold text-base">🗳️ Probíhají volby do grémia.</span>{" "}
+                Kandidovat i volit můžeš do středečního zasedání.
+              </div>
+              <button type="button" className="btn btn-md btn-primary self-start sm:shrink-0" onClick={() => setTab("vedeni")}>
+                K volbám
+              </button>
+            </div>
+          )}
           {/* Odbory hned pod hlavní záložky. Mezi těmi dvěma lištami dřív visela
               vývěska a hráč se k agendě odboru proscrolloval přes šest cizích
               rozhodnutí — dvě navigace oddělené dlouhým seznamem. Co grémium

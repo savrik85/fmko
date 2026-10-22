@@ -138,7 +138,9 @@ export async function graduateAcademyPlayer(
   ).bind(
     playerId, u21.id, p.firstName, p.lastName, p.age, position, Math.max(1, rating),
     JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
-    JSON.stringify({ ...created.lifeContext, morale: 60 }),
+    // Odchovanec vzniká před letním stárnutím a dospíváním dorostu (rollover). Značka mu ho
+    // v prvním létě přeskočí, jinak by v první SMS měl 18 let a v další 19 s nárůstem +7.
+    JSON.stringify({ ...created.lifeContext, morale: 60, freshAcademyGraduate: true }),
     JSON.stringify(created.avatar),
     graduate.description,
     JSON.stringify(skillsMax), hiddenTalent, skills.experience,
