@@ -467,7 +467,10 @@ competitionRouter.get("/teams/:teamId/competition/pending", async (c) => {
     `SELECT COUNT(*) AS n FROM competition_elections e
       WHERE e.league_id = ? AND e.status = 'open'
         AND NOT EXISTS (SELECT 1 FROM competition_election_ballots b
-                         WHERE b.election_id = e.id AND b.team_id = ?)`
+                         WHERE b.election_id = e.id AND b.team_id = ?)
+        -- Bez kandidáta se volit nedá, odznak by visel až do zasedání.
+        AND EXISTS (SELECT 1 FROM competition_candidacies k
+                     WHERE k.election_id = e.id AND k.withdrawn = 0)`
   ).bind(leagueId, teamId).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "počet čekajících voleb", e); return null; });
 
