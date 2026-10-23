@@ -3,7 +3,8 @@
  * příznaky z listiny přestupů a do účetnictví smí jen komisař nebo prezident.
  */
 import { describe, expect, it } from "vitest";
-import { auditFlags, noBuyerPrice, windowStart, CONCESSION_FLAG_RATIO } from "./club-audit";
+import { auditFlags, windowStart, CONCESSION_FLAG_RATIO } from "./club-audit";
+import { concessionNoSalePrice } from "../season/concession-catalog";
 import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
 import type { Bindings } from "../index";
 import bettingRouter from "../routes/betting";
@@ -59,8 +60,8 @@ describe("příznaky revize účetnictví", () => {
   });
 
   it("přemrštěná cena v bufetu je nápadná od hranice, kde podle vzorce nikdo nekoupí", () => {
-    // Pivo L3 (Plzeň 12°) běžně 50 Kč, elasticita 0,8 → nikdo nekoupí od 112,50 Kč.
-    expect(noBuyerPrice("beer", 3)).toBeCloseTo(112.5);
+    // Pivo L3 (Plzeň 12°) běžně 50 Kč, elasticita 0,8 → nikdo nekoupí od 113 Kč.
+    expect(concessionNoSalePrice("beer", 3)).toBe(113);
     const base = { teamId: "t1", teamName: "FK Test", concession: new Map(), betting: new Map(), transferFlags: NO_TRANSFERS };
     // Čeština odděluje tisíce nezlomitelnou mezerou.
     const flags = auditFlags({ ...base, prices: [{ productKey: "beer", qualityLevel: 3, sellPrice: 1000 }] })

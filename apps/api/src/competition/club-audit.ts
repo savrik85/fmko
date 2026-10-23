@@ -8,7 +8,7 @@
  */
 
 import { logger } from "../lib/logger";
-import { getDefaultSellPrice, getProductCatalog } from "../season/concession-catalog";
+import { concessionNoSalePrice, getDefaultSellPrice, getProductCatalog, type ProductKey } from "../season/concession-catalog";
 import { listinaPrestupu } from "./integrity";
 
 const M = "competition-club-audit";
@@ -96,17 +96,6 @@ export async function bettingNet(
 export interface ConcessionPrice { productKey: string; qualityLevel: number; sellPrice: number }
 
 /**
- * Cena, od které podle vzorce poptávky bufetu už nikdo nekoupí: běžná cena
- * × (1 + 1 / elasticita). Pivo 2,25×, klobása 2,67×, svařák 3×, limo 3,5×.
- */
-export function noBuyerPrice(productKey: string, qualityLevel: number): number | null {
-  const catalog = getProductCatalog(productKey);
-  const normal = getDefaultSellPrice(productKey, qualityLevel);
-  if (!catalog || normal <= 0 || catalog.priceElasticity <= 0) return null;
-  return normal * (1 + 1 / catalog.priceElasticity);
-}
-
-/**
  * Příznaky k revizi. Ceny v bufetu se měří vzorcem poptávky, tržby a sázky
  * se poměřují se zbytkem soutěže, přestupy přebírají příznaky z listiny
  * přestupů (týž majitel, cena mimo hodnotu hráče).
@@ -124,7 +113,8 @@ export function auditFlags(opts: {
   // Tržba za zápas přemrštěnou cenu neprozradí (běžné kluby vyberou 140–190 tisíc
   // na zápas taky), cena ano.
   for (const p of opts.prices ?? []) {
-    const limit = noBuyerPrice(p.productKey, p.qualityLevel);
+    // Hranice „nikdo nekoupí“ je v katalogu bufetu, počítá s ní i prodej.
+    const limit = concessionNoSalePrice(p.productKey as ProductKey, p.qualityLevel);
     if (limit == null || p.sellPrice < limit) continue;
     const label = getProductCatalog(p.productKey)?.label ?? p.productKey;
     flags.push(`Bufet: ${label.toLowerCase()} za ${czk(p.sellPrice)}, běžně ${czk(getDefaultSellPrice(p.productKey, p.qualityLevel))}.`);
