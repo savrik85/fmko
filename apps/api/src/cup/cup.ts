@@ -497,15 +497,11 @@ async function simulateCupTie(
   if (awayReal) await applyManagerMatchBonus(db, awayReal, [awayLineup, awaySubs]);
 
   // Incidenty v klubu (spec 17c): neprávem obviněný a odhalený zloděj v sestavě.
+  // Morálka od trenéra i z incidentů platí jen pro tenhle zápas: do DB jde po zápase
+  // jen změna z průběhu a výsledku zápasu (multiplayer/post-match-players.ts).
   const { applyIncidentMatchMods } = await import("../incidents/zapas");
-  const homeIncidentMods = homeReal ? await applyIncidentMatchMods(db, homeReal, [homeLineup, homeSubs], homeBuild.idMap) : null;
-  const awayIncidentMods = awayReal ? await applyIncidentMatchMods(db, awayReal, [awayLineup, awaySubs], awayBuild.idMap) : null;
-  // Morálka snížená incidentem je jen dočasný handicap PRO TENTO zápas — při zápisu post-sim
-  // morálky do DB (níž) se tahle delta zase odečte, ať hráč nezůstane postižený trvale.
-  const incidentMoraleDelta = new Map<number, number>([
-    ...(homeIncidentMods?.moraleDelta ?? []),
-    ...(awayIncidentMods?.moraleDelta ?? []),
-  ]);
+  if (homeReal) await applyIncidentMatchMods(db, homeReal, [homeLineup, homeSubs], homeBuild.idMap);
+  if (awayReal) await applyIncidentMatchMods(db, awayReal, [awayLineup, awaySubs], awayBuild.idMap);
   if (homeLineup.length < 7 || awayLineup.length < 7) {
     logger.warn({ module: M }, `cup tie ${cupMatchId}: málo hráčů (home ${homeLineup.length}, away ${awayLineup.length}) → silová simulace bez statistik (kádr velkoklubu nebo tenký reálný kádr)`);
     const fb = simMatch(strengthOf.get(homeCupTeamId) ?? 30, strengthOf.get(awayCupTeamId) ?? 30, rng);
@@ -538,8 +534,11 @@ async function simulateCupTie(
           const dbId = idMap.get(p.id);
           if (!dbId) continue;
           const newCond = Math.max(30, Math.round(((p as any).condition ?? 80) - 9));
-          const newMorale = Math.max(0, Math.min(100, Math.round(((p as any).morale ?? 50) + moraleDelta)));
-          stmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?").bind(newCond, newMorale, dbId));
+          // Jen výsledek k uložené morálce. `p.morale` už nese předzápasový bonus trenéra
+          // a incidenty, ty platí jen pro tenhle zápas.
+          stmts.push(db.prepare(
+            "UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.morale'), 50) + ?))) WHERE id = ?",
+          ).bind(newCond, moraleDelta, dbId));
         }
         if (stmts.length > 0) await db.batch(stmts).catch((e) => logger.warn({ module: M }, "cup fallback fatigue batch", e));
       };
@@ -669,14 +668,12 @@ async function simulateCupTie(
     if (susStmts.length > 0) await db.batch(susStmts).catch((e) => logger.warn({ module: M }, "cup suspensions", e));
 
     // Kondice + morálka zpět do players pro každého, kdo nastoupil, i vystřídané a vyloučené.
-    // Velkoklub (teamId null) se přeskočí, jeho kádr v players není.
-    // Od morálky se odečte dočasný incidentní handicap (spec 17c) — do DB jde jen morálka
-    // z herního výsledku, ne z toho, že hráč nastoupil obviněný.
+    // Velkoklub (teamId null) se přeskočí, jeho kádr v players není. Morálka jen o změnu
+    // z průběhu zápasu: bonus trenéra a incidenty (spec 17c) se do DB nepropíšou.
     const { postMatchPlayers, postMatchPlayerStatements } = await import("../multiplayer/post-match-players");
     const played = postMatchPlayers(result,
       { teamId: homeReal, idMap: homeBuild.idMap },
-      { teamId: awayReal, idMap: awayBuild.idMap },
-      incidentMoraleDelta);
+      { teamId: awayReal, idMap: awayBuild.idMap });
     const condStmts = postMatchPlayerStatements(db, played,
       { source: "match", description: `Pohár (${result.homeScore}:${result.awayScore})` });
     if (condStmts.length > 0) await db.batch(condStmts).catch((e) => logger.warn({ module: M }, "cup condition/morale persist", e));

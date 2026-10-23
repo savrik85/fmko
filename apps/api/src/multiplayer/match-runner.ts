@@ -576,7 +576,12 @@ export async function runScheduledMatches(
                 }
             }
 
-            // Morálka domácích: šatny + sektor kotle (atmosféra)
+            // Morálka domácích: šatny + sektor kotle (atmosféra).
+            //
+            // Tahle a další předzápasové úpravy morálky níž (domácí výhoda z fanoušků, trenér,
+            // zastrašení hostů výš, incidenty) platí jen pro simulaci. Po zápase se do DB
+            // zapíše jen změna z průběhu zápasu (multiplayer/post-match-players.ts); dřív se
+            // ukládaly natrvalo, takže domácí s kotlem stoupali každé domácí kolo.
             const homeMoraleBoost = facilityEffects.homeMoraleBonus + ultrasMorale;
             if (homeMoraleBoost > 0) {
                 for (const p of homeLineup) {
@@ -621,16 +626,11 @@ export async function runScheduledMatches(
             await applyManagerMatchBonus(db, awayTeamId, [awayLineup, awaySubs]);
 
             // Incidenty v klubu (spec 17c): neprávem obviněný a odhalený zloděj v sestavě.
+            // Morálka snížená incidentem je jen dočasný handicap PRO TENTO zápas, stejně jako
+            // ostatní předzápasové úpravy výš: do DB jde po zápase jen změna z průběhu zápasu.
             const {applyIncidentMatchMods} = await import("../incidents/zapas");
-            const homeIncidentMods = await applyIncidentMatchMods(db, homeTeamId, [homeLineup, homeSubs], homeBuild.idMap);
-            const awayIncidentMods = await applyIncidentMatchMods(db, awayTeamId, [awayLineup, awaySubs], awayBuild.idMap);
-            // Morálka snížená incidentem je jen dočasný handicap PRO TENTO zápas — při zápisu
-            // post-sim morálky do DB (níž) se tahle delta zase odečte, ať hráč nezůstane
-            // postižený trvale.
-            const incidentMoraleDelta = new Map<number, number>([
-                ...(homeIncidentMods?.moraleDelta ?? []),
-                ...(awayIncidentMods?.moraleDelta ?? []),
-            ]);
+            await applyIncidentMatchMods(db, homeTeamId, [homeLineup, homeSubs], homeBuild.idMap);
+            await applyIncidentMatchMods(db, awayTeamId, [awayLineup, awaySubs], awayBuild.idMap);
 
             // Pozvaní zastupitelé domácího týmu zvyšují návštěvu, do hry nesahají (viz homeAdvantage níž)
             const acceptedOfficials = await db.prepare(
@@ -1270,15 +1270,14 @@ export async function runScheduledMatches(
 
             // Kondice a morálka po zápase pro každého, kdo nastoupil, i vystřídané a vyloučené
             // (dřív jen konečná jedenáctka). Kondice před zápasem jde z výkopu, takže
-            // záznam v condition_log dostanou i střídající.
+            // záznam v condition_log dostanou i střídající. Morálka jen o změnu z průběhu
+            // zápasu: předzápasové bonusy a postihy (kotel, fanoušci, trenér, zastrašení,
+            // incidenty) se do DB nepropíšou.
             try {
                 const {postMatchPlayers, postMatchPlayerStatements} = await import("./post-match-players");
-                // Odečíst dočasný incidentní handicap (spec 17c) — do DB jde jen morálka
-                // z herního výsledku, ne z toho, že hráč nastoupil obviněný.
                 const played = postMatchPlayers(result,
                     {teamId: homeTeamId, idMap: homeBuild.idMap},
-                    {teamId: awayTeamId, idMap: awayBuild.idMap},
-                    incidentMoraleDelta);
+                    {teamId: awayTeamId, idMap: awayBuild.idMap});
                 const stmts = postMatchPlayerStatements(db, played,
                     {source: "match", description: `Zápas (${result.homeScore}:${result.awayScore})`});
                 if (stmts.length > 0) await db.batch(stmts);

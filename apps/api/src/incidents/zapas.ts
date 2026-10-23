@@ -19,10 +19,9 @@ export interface IncidentVZapase {
   obvinenych: number;
   pachatelVSestave: boolean;
   /**
-   * Engine player id → skutečně uplatněná změna morálky (záporná, po podlaze na 0). Slouží
-   * jen k tomu, aby volající uměl po zápase odečíst tenhle dočasný handicap zpátky předtím,
-   * než se výsledná morálka zapíše do `players.life_context` (spec 17c: modifikátory platí
-   * jen pro tenhle zápas, nesmí se propsat trvale).
+   * Engine player id → skutečně uplatněná záporná změna morálky (po podlaze na 0), pro přehled.
+   * Do `players.life_context` se po zápase nepropíše žádná úprava odsud: runnery ukládají
+   * jen změnu z průběhu zápasu proti morálce při výkopu (multiplayer/post-match-players.ts).
    */
   moraleDelta: Map<number, number>;
 }
@@ -59,7 +58,7 @@ export function upravSestavuZIncidentu(
         if (moralka) {
           const puvodni = h.morale;
           h.morale = Math.max(0, Math.min(100, h.morale + moralka));
-          // Po zápase se odečítá jen postih; radost z narození dítěte si hráč nechá.
+          // Do přehledu jde jen postih.
           if (moralka < 0) pridejDeltu(h, puvodni);
         }
         const konzistence = SITUACE_KONZISTENCE[kind];
