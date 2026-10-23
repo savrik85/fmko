@@ -4,7 +4,7 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
-import { requireTeamOwnership } from "../auth/middleware";
+import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
@@ -13,6 +13,9 @@ import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stand
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
 matchesRouter.use("/teams/:teamId/*", requireTeamOwnership);
+// matchesRouter je v index.ts připojený dřív než gameRouter, jehož kontrola admina by
+// na zdejší admin routy nikdy nedošla (handler odpoví první).
+matchesRouter.use("/admin/*", requireAdmin);
 
 function uuid(): string { return crypto.randomUUID(); }
 
