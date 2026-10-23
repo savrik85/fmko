@@ -546,6 +546,65 @@ bettingRouter.post("/teams/:teamId/betting/tickets/:ticketId/confiscate", async 
   return c.json({ ok: true, confiscated: tiket.payout });
 });
 
+/** Kluby soutěže, do jejichž účetnictví smí komisař nahlédnout, a kdy to letos udělal. */
+bettingRouter.get("/teams/:teamId/integrity/audits", async (c) => {
+  const teamId = c.req.param("teamId");
+  if (!(await ownsTeam(c as never, teamId))) return c.json({ error: "Cizí klub" }, 403);
+
+  const kde = await ligaASezona(c.env.DB, teamId);
+  if (!kde) return c.json({ error: "Klub nemá soutěž" }, 404);
+  if (!(await muzeDoKnihy(c.env.DB, kde.leagueId, teamId, kde.seasonNumber))) {
+    return c.json({ error: "Do účetnictví klubů vidí jen komisař pro integritu a prezident soutěže." }, 403);
+  }
+
+  const { listAuditTargets, AUDIT_WINDOW_DAYS } = await import("../competition/club-audit");
+  const clubs = await listAuditTargets(c.env.DB, kde.leagueId, kde.seasonNumber, teamId);
+  return c.json({ windowDays: AUDIT_WINDOW_DAYS, clubs });
+});
+
+/**
+ * Revize účetnictví klubu. První revize v sezóně se klubu ohlásí SMS,
+ * opakované nahlédnutí už ne.
+ */
+bettingRouter.post("/teams/:teamId/integrity/audits/:targetTeamId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const targetTeamId = c.req.param("targetTeamId");
+  if (!(await ownsTeam(c as never, teamId))) return c.json({ error: "Cizí klub" }, 403);
+  if (targetTeamId === teamId) return c.json({ error: "Vlastní klub revidovat nejde." }, 400);
+
+  const kde = await ligaASezona(c.env.DB, teamId);
+  if (!kde) return c.json({ error: "Klub nemá soutěž" }, 404);
+  if (!(await muzeDoKnihy(c.env.DB, kde.leagueId, teamId, kde.seasonNumber))) {
+    return c.json({ error: "Do účetnictví klubů vidí jen komisař pro integritu a prezident soutěže." }, 403);
+  }
+
+  const gameDate = (await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
+    .bind(teamId).first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "herní datum revize", e); return null; }))?.game_date
+    ?? new Date().toISOString();
+
+  const { loadClubAudit, recordAudit, AUDIT_WINDOW_DAYS } = await import("../competition/club-audit");
+  const audit = await loadClubAudit(c.env.DB, {
+    leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, targetTeamId, gameDate,
+  });
+  if (!audit) return c.json({ error: "Klub v téhle soutěži nehraje." }, 404);
+
+  const first = await recordAudit(c.env.DB, {
+    leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, targetTeamId, auditorTeamId: teamId, gameDate,
+  });
+  if (first) {
+    const { actsFor } = await import("../competition/officials");
+    const role = await actsFor(c.env.DB, kde.leagueId, teamId, "integrita", kde.seasonNumber);
+    const sender = role.ok && !role.asPresident ? "Komisař pro integritu" : "Prezident soutěže";
+    const { sendSystemSMS } = await import("../messaging/system-sms");
+    await sendSystemSMS(c.env.DB, targetTeamId, sender,
+      `Dobrý den, v rámci dohledu nad soutěží jsem si vyžádal k revizi účetnictví vašeho klubu za posledních ${AUDIT_WINDOW_DAYS} dní. Není to obvinění, kontrolu může dostat kterýkoli klub.`)
+      .catch((e) => logger.warn({ module: M }, "SMS o revizi účetnictví", e));
+  }
+
+  return c.json(audit);
+});
+
 // ── Admin ───────────────────────────────────────────────────────────────────
 
 bettingRouter.post("/admin/betting/:leagueId/board", async (c) => {
