@@ -4,7 +4,7 @@
  * prodlouží na plných 30 dní, nejvýš jednou za den (jeden zápis do KV na hráče a den).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSession, deleteSession, getSession, SESSION_RENEW_AFTER_MS, type Session } from "./session";
+import { createSession, deleteSession, getSession, SESSION_MAX_AGE_MS, SESSION_RENEW_AFTER_MS, type Session } from "./session";
 
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
@@ -149,6 +149,55 @@ describe("session", () => {
     vi.setSystemTime(START.getTime() + 2 * DAY);
     await deleteSession(asKv(kv), token);
     expect(await getSession(asKv(kv), token)).toBeNull();
-    expect(kv.puts).toHaveLength(1);
+    // Jediný zápis session je její vznik; odhlášení přidá jen záznam `revoked:`.
+    expect(kv.puts.filter((x) => x.key.startsWith("session:"))).toHaveLength(1);
+  });
+});
+
+describe("horní hranice a odhlášení", () => {
+  it("session se prodlužuje nejvýš do 90 dní od přihlášení", async () => {
+    const kv = new MemoryKv();
+    // Přihlášení před 89,5 dne, hráč chodí denně: prodlouží se jen do 90. dne, ne o 30 dní.
+    const session: Session = {
+      userId: "u1", email: "u1@example.test", teamId: "t1",
+      createdAt: new Date(START.getTime() - SESSION_MAX_AGE_MS + 12 * HOUR).toISOString(),
+      renewedAt: new Date(START.getTime() - DAY).toISOString(),
+    };
+    await kv.put("session:near-limit", JSON.stringify(session), { expirationTtl: THIRTY_DAYS_S });
+    kv.puts = [];
+    expect(await getSession(asKv(kv), "near-limit")).not.toBeNull();
+    expect(kv.puts.map((x) => [x.key, x.ttl])).toEqual([["session:near-limit", 12 * 60 * 60]]);
+  });
+
+  it("po 90 dnech od přihlášení se session už neprodlouží", async () => {
+    const kv = new MemoryKv();
+    const session: Session = {
+      userId: "u1", email: "u1@example.test", teamId: "t1",
+      createdAt: new Date(START.getTime() - SESSION_MAX_AGE_MS).toISOString(),
+      renewedAt: new Date(START.getTime() - 2 * DAY).toISOString(),
+    };
+    await kv.put("session:old", JSON.stringify(session), { expirationTtl: THIRTY_DAYS_S });
+    kv.puts = [];
+    expect(await getSession(asKv(kv), "old")).not.toBeNull();
+    expect(kv.puts).toEqual([]);
+  });
+
+  it("odhlášení zanechá záznam a ten zablokuje prodloužení z jiné instance", async () => {
+    const kv = new MemoryKv();
+    const token = await createSession(asKv(kv), "u1", "u1@example.test", "t1");
+    await deleteSession(asKv(kv), token);
+    expect(await kv.get(`revoked:${token}`)).toBe("1");
+
+    // Jiná instance workeru načetla session těsně před odhlášením a teď by ji prodlužovala.
+    vi.setSystemTime(new Date(START.getTime() + 2 * DAY));
+    const stale: Session = {
+      userId: "u1", email: "u1@example.test", teamId: "t1",
+      createdAt: START.toISOString(), renewedAt: START.toISOString(),
+    };
+    await kv.put(`session:${token}-other`, JSON.stringify(stale), { expirationTtl: THIRTY_DAYS_S });
+    await kv.put(`revoked:${token}-other`, "1", { expirationTtl: THIRTY_DAYS_S });
+    kv.puts = [];
+    await getSession(asKv(kv), `${token}-other`);
+    expect(kv.puts.filter((x) => x.key === `session:${token}-other`)).toEqual([]);
   });
 });
