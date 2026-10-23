@@ -752,38 +752,42 @@ export async function processMatchDayFinances(
       `Občerstvení po zápase`, gameDate, matchId);
   }
 
-  // Match result reward
-  const sponsors = await db.prepare(
-    "SELECT monthly_amount, win_bonus FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
-  ).bind(teamId).all().catch((e) => { logger.warn({ module: "finance" }, "query sponsors", e); return { results: [] }; });
+  // Match result reward — jen za ostrý zápas. Přátelák je trénink: dřív výhra v něm vyplatila
+  // sponzorský bonus, 500 Kč „od soutěže“ i bonus fanoušků, a protože jde domluvit každé tři
+  // dny, dva manažeři si mohli bonusy točit dokola. Vstupné a bufet z přáteláku zůstávají výš.
+  if (!isFriendly) {
+    const sponsors = await db.prepare(
+      "SELECT monthly_amount, win_bonus FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
+    ).bind(teamId).all().catch((e) => { logger.warn({ module: "finance" }, "query sponsors", e); return { results: [] }; });
 
-  const sponsorBonus = result === "win"
-    ? sponsors.results.reduce((s, sp) => s + ((sp.win_bonus as number) ?? 0), 0)
-    : result === "draw"
-      ? Math.round(sponsors.results.reduce((s, sp) => s + ((sp.win_bonus as number) ?? 0), 0) * 0.3)
-      : 0;
+    const sponsorBonus = result === "win"
+      ? sponsors.results.reduce((s, sp) => s + ((sp.win_bonus as number) ?? 0), 0)
+      : result === "draw"
+        ? Math.round(sponsors.results.reduce((s, sp) => s + ((sp.win_bonus as number) ?? 0), 0) * 0.3)
+        : 0;
 
-  const winBonus = league?.rules.win_bonus ?? 500;
-  const drawBonus = league?.rules.draw_bonus ?? 150;
-  const leagueBonus = result === "win" ? winBonus : result === "draw" ? drawBonus : 0;
-  const fanBase = category === "vesnice" ? 50 : category === "obec" ? 100 : 200;
-  const fanBonus = result === "win" ? fanBase : result === "draw" ? Math.round(fanBase * 0.5) : 0;
+    const winBonus = league?.rules.win_bonus ?? 500;
+    const drawBonus = league?.rules.draw_bonus ?? 150;
+    const leagueBonus = result === "win" ? winBonus : result === "draw" ? drawBonus : 0;
+    const fanBase = category === "vesnice" ? 50 : category === "obec" ? 100 : 200;
+    const fanBonus = result === "win" ? fanBase : result === "draw" ? Math.round(fanBase * 0.5) : 0;
 
-  const totalReward = sponsorBonus + leagueBonus + fanBonus;
-  if (totalReward > 0) {
-    const resultLabel = result === "win" ? "výhra" : result === "draw" ? "remíza" : "prohra";
-    await recordTransaction(db, teamId, "match_reward", totalReward,
-      `Bonusy za ${resultLabel}${sponsorBonus > 0 ? ` (sponzoři ${sponsorBonus} Kč)` : ""}`,
-      gameDate, matchId);
-  }
+    const totalReward = sponsorBonus + leagueBonus + fanBonus;
+    if (totalReward > 0) {
+      const resultLabel = result === "win" ? "výhra" : result === "draw" ? "remíza" : "prohra";
+      await recordTransaction(db, teamId, "match_reward", totalReward,
+        `Bonusy za ${resultLabel}${sponsorBonus > 0 ? ` (sponzoři ${sponsorBonus} Kč)` : ""}`,
+        gameDate, matchId);
+    }
 
-  // Prémii platí soutěž. Sponzorský ani fanouškovský bonus ne — ty jdou mimo pokladnu.
-  if (league && leagueBonus > 0) {
-    await recordCompetitionEntry(db, {
-      leagueId: league.leagueId, seasonNumber: league.seasonNumber, type: "match_bonus",
-      amount: -leagueBonus, description: `Prémie za ${result === "win" ? "výhru" : "remízu"}`,
-      teamId, gameDate, referenceId: `mb-${matchId}-${teamId}`,
-    });
+    // Prémii platí soutěž. Sponzorský ani fanouškovský bonus ne — ty jdou mimo pokladnu.
+    if (league && leagueBonus > 0) {
+      await recordCompetitionEntry(db, {
+        leagueId: league.leagueId, seasonNumber: league.seasonNumber, type: "match_bonus",
+        amount: -leagueBonus, description: `Prémie za ${result === "win" ? "výhru" : "remízu"}`,
+        teamId, gameDate, referenceId: `mb-${matchId}-${teamId}`,
+      });
+    }
   }
 
   // Satisfaction delta — aplikuje se i pro venkovní zápas (fanoušci sledují výsledek)
