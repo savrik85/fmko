@@ -1401,7 +1401,7 @@ async function sendSMS(db: D1Database, teamId: string, senderName: string, roleT
 matchesRouter.post("/teams/:teamId/challenge/:opponentTeamId", async (c) => {
   const teamId = c.req.param("teamId");
   const opponentTeamId = c.req.param("opponentTeamId");
-  const body = await c.req.json<{ message?: string }>().catch(() => ({}));
+  const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "matches" }, "neplatné tělo výzvy na přátelák", e); return {}; });
 
   if (teamId === opponentTeamId) return c.json({ error: "Nemůžeš vyzvat sám sebe" }, 400);
 

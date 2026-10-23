@@ -479,7 +479,7 @@ export async function recallOfficial(
     `SELECT team_id FROM competition_officials
       WHERE league_id = ? AND role = ? AND season_number = ? AND status IN ('active','suspended')`
   ).bind(leagueId, role, seasonNumber).first<{ team_id: string }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, `držitel funkce ${role}`, e); return null; });
   if (!holder) return false;
 
   const res = await db.prepare(

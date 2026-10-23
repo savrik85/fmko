@@ -554,7 +554,7 @@ fansRouter.post("/teams/:teamId/fans/groups/:groupId/action", async (c) => {
   const db = c.env.DB;
   const teamId = c.req.param("teamId");
   const groupId = c.req.param("groupId");
-  const body = await c.req.json<{ action?: string; variant?: string }>().catch(() => null);
+  const body = await c.req.json<{ action?: string; variant?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo akce s partou", e); return null; });
   const action = body?.action as FanActionKey | undefined;
 
   if (!action || !FAN_ACTIONS[action]) return c.json({ error: "Neznámá akce" }, 400);

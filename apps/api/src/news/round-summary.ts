@@ -245,7 +245,7 @@ PRAVIDLA:
   ).catch((e) => { logger.warn({ module: "round-summary" }, "gemini fetch failed", e); return null; });
 
   if (!res || !res.ok) {
-    const errBody = res ? await res.text().catch(() => "") : "";
+    const errBody = res ? await res.text().catch((e) => { logger.warn({ module: "round-summary" }, "tělo chybové odpovědi Gemini", e); return ""; }) : "";
     logger.warn({ module: "round-summary" }, `Gemini error: ${res?.status ?? "no response"} — ${errBody.slice(0, 200)}`);
     return { awarded: false, reason: "gemini http error" };
   }

@@ -72,7 +72,7 @@ async function callGemini(apiKey: string, prompt: string, maxTokens = 1536): Pro
   });
 
   if (!res || !res.ok) {
-    const errBody = res ? await res.text().catch(() => "") : "";
+    const errBody = res ? await res.text().catch((e) => { logger.warn({ module: "player-interview" }, "tělo chybové odpovědi Gemini", e); return ""; }) : "";
     logger.warn({ module: "player-interview" }, `Gemini API error: ${res?.status} ${errBody.slice(0, 200)}`);
     return null;
   }

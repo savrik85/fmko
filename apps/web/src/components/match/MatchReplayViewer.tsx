@@ -372,7 +372,7 @@ export function MatchReplayViewer({
             pitchCondition: (r.pitch_condition as number) ?? 50,
           });
         })
-        .catch(() => {});
+        .catch((e) => console.warn("stadion domácích pro záznam zápasu:", e));
     };
 
     apiFetch<Record<string, unknown>>(`/api/matches/${matchId}`)

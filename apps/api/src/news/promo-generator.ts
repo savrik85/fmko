@@ -404,7 +404,7 @@ POZNÁMKA: Jména trenérů můžeš (ale nemusíš) zmínit pro koloritovost (n
   });
 
   if (!res || !res.ok) {
-    const errBody = res ? await res.text().catch(() => "") : "";
+    const errBody = res ? await res.text().catch((e) => { logger.warn({ module: "promo-generator" }, "tělo chybové odpovědi Gemini", e); return ""; }) : "";
     logger.warn({ module: "promo-generator" }, `Gemini API error: ${res?.status} ${errBody.slice(0, 200)}`);
     return null;
   }

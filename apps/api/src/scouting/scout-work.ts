@@ -455,7 +455,7 @@ async function evaluatePlayerMission(
     : null;
 
   let pers: Record<string, number> = {};
-  try { pers = player.personality ? JSON.parse(player.personality) : {}; } catch { /* ignore */ }
+  try { pers = player.personality ? JSON.parse(player.personality) : {}; } catch (e) { logger.warn({ module: "scouting" }, "neplatná povaha hráče v hlášení", e); }
   const pros: string[] = [];
   const cons: string[] = [];
   if ((pers.workRate ?? 50) >= 65) pros.push("Dříč na tréninku, nevypustí souboj.");
@@ -735,7 +735,7 @@ async function searchLeague(
     try {
       const parsed = JSON.parse(rep.player_data) as { id?: string };
       if (parsed?.id) reportedIds.add(parsed.id);
-    } catch { /* ignore */ }
+    } catch (e) { logger.warn({ module: "scouting" }, "neplatná data hráče v hlášení skauta", e); }
   }
 
   const pool = pRows.results.filter((p) => !reportedIds.has(p.id));
@@ -755,19 +755,19 @@ async function searchLeague(
           }
         }
       }
-    } catch {}
+    } catch (e) { logger.warn({ module: "scouting" }, "neplatný strop dovedností kandidáta", e); }
 
     let faceConfig: Record<string, unknown> | undefined = undefined;
-    try { if (p.face_config) faceConfig = JSON.parse(p.face_config); } catch {}
+    try { if (p.face_config) faceConfig = JSON.parse(p.face_config); } catch (e) { logger.warn({ module: "scouting" }, "neplatný obličej kandidáta", e); }
 
     let parsedSkills: Record<string, number> = {};
-    try { if (p.skills) parsedSkills = JSON.parse(p.skills); } catch {}
+    try { if (p.skills) parsedSkills = JSON.parse(p.skills); } catch (e) { logger.warn({ module: "scouting" }, "neplatné dovednosti kandidáta", e); }
 
     let parsedPersonality: Record<string, number> = {};
-    try { if (p.personality) parsedPersonality = JSON.parse(p.personality); } catch {}
+    try { if (p.personality) parsedPersonality = JSON.parse(p.personality); } catch (e) { logger.warn({ module: "scouting" }, "neplatná povaha kandidáta", e); }
 
     let parsedPhysical: Record<string, unknown> = {};
-    try { if (p.physical) parsedPhysical = JSON.parse(p.physical); } catch {}
+    try { if (p.physical) parsedPhysical = JSON.parse(p.physical); } catch (e) { logger.warn({ module: "scouting" }, "neplatné fyzické údaje kandidáta", e); }
 
     const rr = ratingRange(p.overall_rating, eff, 1, p.id);
     const pr = isU21 || p.age <= POTENTIAL_MAX_AGE

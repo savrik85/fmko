@@ -669,7 +669,7 @@ async function currentGameDate(db: D1Database, teamId: string): Promise<string> 
   if (row?.game_date) return row.game_date;
   const any = await db.prepare("SELECT MAX(game_date) AS d FROM teams WHERE game_date IS NOT NULL")
     .first<{ d: string | null }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "nejnovější herní datum", e); return null; });
   return any?.d ?? new Date().toISOString();
 }
 
@@ -677,7 +677,7 @@ async function currentGameDate(db: D1Database, teamId: string): Promise<string> 
 competitionRouter.post("/teams/:teamId/competition/proposals/:id/ballot", async (c) => {
   const teamId = c.req.param("teamId");
   const proposalId = c.req.param("id");
-  const body = await c.req.json<{ answer?: string }>().catch(() => null);
+  const body = await c.req.json<{ answer?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo odpovědi na návrh", e); return null; });
   const answer = body?.answer;
   if (!answer || !["pro", "proti", "zdrzel"].includes(answer)) {
     return c.json({ error: "Neplatná odpověď" }, 400);
@@ -896,7 +896,7 @@ competitionRouter.get("/teams/:teamId/competition/pitches", async (c) => {
 competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ targetTeamId?: string; offence?: string; amount?: number; note?: string }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "neplatné tělo návrhu na pokutu", e); return null; });
   if (!body?.targetTeamId || !body.offence) return c.json({ error: "Chybí klub nebo skutek" }, 400);
 
   const leagueId = await leagueOfTeam(c.env.DB, teamId);
@@ -937,7 +937,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
   }
 
   const target = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
-    .bind(body.targetTeamId).first<{ name: string }>().catch(() => null);
+    .bind(body.targetTeamId).first<{ name: string }>().catch((e) => { logger.warn({ module: M }, "název klubu k pokutě", e); return null; });
   const gameDate = await currentGameDate(c.env.DB, teamId);
   const id = crypto.randomUUID();
   const reason = offence.freeText ? (body.note ?? "").slice(0, 200) : offence.label;
@@ -972,7 +972,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
 /** Obhajoba dotčeného klubu — visí nad hlasovacími tlačítky a jde do zápisu. */
 competitionRouter.post("/teams/:teamId/competition/proposals/:id/defence", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ text?: string }>().catch(() => null);
+  const body = await c.req.json<{ text?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo obhajoby", e); return null; });
   const text = (body?.text ?? "").trim().slice(0, 150);
   if (!text) return c.json({ error: "Obhajoba nesmí být prázdná." }, 400);
 
@@ -1025,7 +1025,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/:id/appeal", async 
 competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ targetTeamId?: string; offence?: string; amount?: number; note?: string }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "neplatné tělo návrhu na pokutu", e); return null; });
   if (!body?.targetTeamId || !body.offence) return c.json({ error: "Chybí klub nebo skutek" }, 400);
 
   const leagueId = await leagueOfTeam(c.env.DB, teamId);
@@ -1146,7 +1146,7 @@ competitionRouter.get("/competition/:leagueId/referees", async (c) => {
 competitionRouter.post("/teams/:teamId/competition/referee-swap", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ matchId?: string; refereeId?: string; note?: string }>()
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "neplatné tělo stížnosti na sudího", e); return null; });
   if (!body?.matchId || !body.refereeId) return c.json({ error: "Chybí zápas nebo rozhodčí" }, 400);
   const note = (body.note ?? "").trim();
   if (note.length < 10) {
@@ -1207,7 +1207,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-swap", async (c) => {
  */
 competitionRouter.post("/teams/:teamId/competition/referee-pauses", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ refereeId?: string; note?: string }>().catch(() => null);
+  const body = await c.req.json<{ refereeId?: string; note?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo stopky sudímu", e); return null; });
   if (!body?.refereeId) return c.json({ error: "Chybí rozhodčí" }, 400);
   const note = (body.note ?? "").trim();
   if (note.length < 10) {
@@ -1278,7 +1278,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-pauses", async (c) =>
 
 competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ refereeId?: string; note?: string }>().catch(() => null);
+  const body = await c.req.json<{ refereeId?: string; note?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo vyškrtnutí sudího", e); return null; });
   if (!body?.refereeId) return c.json({ error: "Chybí rozhodčí" }, 400);
 
   const leagueId = await leagueOfTeam(c.env.DB, teamId);
@@ -1299,7 +1299,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
 
   const already = await c.env.DB.prepare(
     "SELECT COUNT(*) AS n FROM competition_proposals WHERE league_id = ? AND kind = 'referee_ban' AND status = 'open'"
-  ).bind(leagueId).first<{ n: number }>().catch(() => null);
+  ).bind(leagueId).first<{ n: number }>().catch((e) => { logger.warn({ module: M }, "počet otevřených návrhů na vyškrtnutí sudího", e); return null; });
   if ((already?.n ?? 0) > 0) {
     return c.json({ error: "Jeden návrh na vyškrtnutí už na programu je." }, 409);
   }
@@ -1348,7 +1348,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
  */
 competitionRouter.post("/teams/:teamId/competition/referee-bans/direct", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ refereeId?: string; note?: string }>().catch(() => null);
+  const body = await c.req.json<{ refereeId?: string; note?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo přímého vyškrtnutí sudího", e); return null; });
   if (!body?.refereeId) return c.json({ error: "Chybí rozhodčí" }, 400);
   const note = (body.note ?? "").trim();
   if (note.length < 10) {
@@ -1411,7 +1411,7 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{
     kind?: string; amount?: number; targetTeamId?: string; note?: string;
-  }>().catch(() => null);
+  }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo návrhu z pokladny", e); return null; });
 
   const kind = String(body?.kind ?? "") as GrantKind;
   const amount = Math.round(Number(body?.amount));
@@ -1459,12 +1459,12 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
   if (cileno && !body?.targetTeamId) return c.json({ error: "Chybí klub, kterému to má jít." }, 400);
   if (body?.targetTeamId && !voters.voters.includes(body.targetTeamId)) {
     const jeVSouteZi = await c.env.DB.prepare("SELECT 1 FROM teams WHERE id = ? AND league_id = ?")
-      .bind(body.targetTeamId, leagueId).first().catch(() => null);
+      .bind(body.targetTeamId, leagueId).first().catch((e) => { logger.warn({ module: M }, "klub v soutěži", e); return null; });
     if (!jeVSouteZi) return c.json({ error: "Takový klub v soutěži není." }, 404);
   }
   if (kind === "loan" && body?.targetTeamId) {
     const t = await c.env.DB.prepare("SELECT budget, name FROM teams WHERE id = ?")
-      .bind(body.targetTeamId).first<{ budget: number; name: string }>().catch(() => null);
+      .bind(body.targetTeamId).first<{ budget: number; name: string }>().catch((e) => { logger.warn({ module: M }, "rozpočet a název klubu pro půjčku", e); return null; });
     if (!t) return c.json({ error: "Takový klub v soutěži není." }, 404);
     if (t.budget >= 0) {
       return c.json({ error: `${t.name} v mínusu není. Půjčka je pro kluby v nouzi.` }, 400);
@@ -1473,7 +1473,7 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
 
   const cil = body?.targetTeamId
     ? await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?")
-        .bind(body.targetTeamId).first<{ name: string }>().catch(() => null)
+        .bind(body.targetTeamId).first<{ name: string }>().catch((e) => { logger.warn({ module: M }, "název cílového klubu", e); return null; })
     : null;
 
   const gameDate = await currentGameDate(c.env.DB, teamId);
@@ -1606,7 +1606,7 @@ competitionRouter.post("/teams/:teamId/competition/sponsor-offers/:id/propose", 
 
   const already = await c.env.DB.prepare(
     "SELECT COUNT(*) AS n FROM competition_proposals WHERE league_id = ? AND kind = 'sponsor' AND status = 'open'"
-  ).bind(leagueId).first<{ n: number }>().catch(() => null);
+  ).bind(leagueId).first<{ n: number }>().catch((e) => { logger.warn({ module: M }, "počet otevřených návrhů sponzora", e); return null; });
   if ((already?.n ?? 0) > 0) {
     return c.json({ error: "O jedné nabídce se už hlasuje." }, 409);
   }
@@ -1644,7 +1644,7 @@ competitionRouter.post("/teams/:teamId/competition/sponsor-offers/:id/propose", 
 competitionRouter.post("/teams/:teamId/competition/officials/:role/suspend", async (c) => {
   const teamId = c.req.param("teamId");
   const role = c.req.param("role");
-  const body = await c.req.json<{ reason?: string }>().catch(() => null);
+  const body = await c.req.json<{ reason?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo odvolání z funkce", e); return null; });
   const reason = (body?.reason ?? "").trim();
   if (reason.length < 10) {
     return c.json({ error: "Napiš, proč mu pravomoc bereš (aspoň 10 znaků). Uvidí to celé grémium." }, 400);
@@ -1731,7 +1731,7 @@ competitionRouter.get("/teams/:teamId/competition/board", async (c) => {
 
 competitionRouter.post("/teams/:teamId/competition/board", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ text?: string; scope?: string; targetRole?: string }>().catch(() => null);
+  const body = await c.req.json<{ text?: string; scope?: string; targetRole?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo vzkazu na nástěnku", e); return null; });
   const text = (body?.text ?? "").trim();
   if (!text) return c.json({ error: "Zpráva nesmí být prázdná." }, 400);
   const scope = body?.scope === "verejne" ? "verejne"
@@ -1902,7 +1902,7 @@ competitionRouter.delete("/teams/:teamId/competition/elections/:id/candidacy", a
 competitionRouter.post("/teams/:teamId/competition/elections/:id/vote", async (c) => {
   const teamId = c.req.param("teamId");
   const electionId = c.req.param("id");
-  const body = await c.req.json<{ candidateTeamId?: string }>().catch(() => null);
+  const body = await c.req.json<{ candidateTeamId?: string }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo hlasu ve volbě", e); return null; });
   if (!body?.candidateTeamId) return c.json({ error: "Chybí kandidát" }, 400);
 
   const el = await c.env.DB.prepare(
@@ -1973,7 +1973,7 @@ competitionRouter.post("/admin/competition/:leagueId/sponsor-offers", async (c) 
 
   const gameDate = await c.env.DB.prepare("SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?")
     .bind(leagueId).first<{ d: string | null }>().then((r) => r?.d)
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "herní datum soutěže", e); return null; });
 
   const { generateOffers } = await import("../competition/sponsors");
   const humans = await countHumanClubs(c.env.DB, leagueId);
@@ -2044,12 +2044,12 @@ competitionRouter.post("/admin/competition/:leagueId/regenerate-minutes", async 
     `SELECT COUNT(DISTINCT b.team_id) AS n FROM competition_ballots b
        JOIN competition_proposals p ON p.id = b.proposal_id
       WHERE p.league_id = ? AND p.closed_game_date = ?`
-  ).bind(leagueId, meeting.game_date).first<{ n: number }>().catch(() => null);
+  ).bind(leagueId, meeting.game_date).first<{ n: number }>().catch((e) => { logger.warn({ module: M }, "počet bodů zasedání", e); return null; });
 
   const { sestavZapis, mluvci, nactiProtiHlasy } = await import("../competition/minutes");
   const { redaktorProRubriku } = await import("../news/journalists");
   const redaktor = await redaktorProRubriku(c.env.DB, leagueId, "governance_minutes", meeting.game_date)
-    .catch(() => null);
+    .catch((e) => { logger.warn({ module: M }, "redaktor zápisu ze zasedání", e); return null; });
 
   const { headline, body } = sestavZapis(redaktor, {
     leagueId, leagueName: meta.name, seasonNumber: meta.season_number,
