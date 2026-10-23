@@ -288,12 +288,13 @@ export default function SponsorsPage() {
     const res = await apiFetch<{ ok: boolean; newName?: string }>(`/api/teams/${teamId}/rename`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: renameInput.trim() }),
-    }).catch((e) => { console.error("team/rename:", e); return null; });
+    }).catch((e) => { console.error("team/rename:", e); setActionError((e as Error).message); return null; });
     if (res?.newName && teamId) {
       setTeamCtx(teamId, res.newName);
+      // Pole zůstane otevřené jen při chybě (např. název už má jiný klub), ať jde opravit.
+      setShowRename(false);
+      setRenameInput("");
     }
-    setShowRename(false);
-    setRenameInput("");
     await refresh();
     setActing(false);
   };

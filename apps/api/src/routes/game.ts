@@ -14,6 +14,7 @@ import { validateMatchPlan, parseStoredPlan } from "../lib/match-plan-validation
 import { validateBench, parseStoredBench, benchColumn } from "../lib/lineup-bench";
 import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
 import { mustSeason } from "../lib/season";
+import { clubNameTaken, MAX_CLUB_NAME_LENGTH, renameClub } from "../lib/club-rename";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
@@ -2970,10 +2971,13 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
   if (category === "main") {
     // Návrat k původnímu názvu — fanoušci z toho nadšení nejsou (-2).
     const oldName = (await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>())?.name ?? "";
-    // Zkratka klubu zůstává, ze jména zmizí jen sponzor.
+    // Zkratka klubu zůstává, ze jména zmizí jen sponzor. Pohár, U21 i stará adresa webu
+    // jdou s názvem (club-rename.ts).
     const defaultName = `${clubPrefixOf(oldName) ?? "SK"} ${village?.name ?? ""}`.trim();
-    await c.env.DB.prepare("UPDATE teams SET name = ? WHERE id = ?")
-      .bind(defaultName, teamId).run();
+    const renamed = await renameClub(c.env.DB, { teamId, oldName, newName: defaultName });
+    if (!renamed) {
+      logger.warn({ module: "game", teamId }, `výpověď smlouvy ${contract.id}: název se mezitím změnil, klub se nepřejmenoval`);
+    }
     {
       const { applyReputationDelta } = await import("../lib/reputation");
       await applyReputationDelta(
@@ -2983,14 +2987,18 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
     }
 
     // News for entire league
-    await c.env.DB.prepare(
-      "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-    ).bind(crypto.randomUUID(), teamId,
-      `${oldName} se přejmenovává na ${defaultName}`,
-      `Klub ${oldName} ukončil sponzorskou smlouvu a vrací se k názvu ${defaultName}. Fanoušci zmatení (-2 reputace).`,
-    ).run().catch((e) => logger.warn({ module: "game" }, "insert termination rename news", e));
+    if (renamed) {
+      await c.env.DB.prepare(
+        "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+      ).bind(crypto.randomUUID(), teamId,
+        `${oldName} se přejmenovává na ${defaultName}`,
+        `Klub ${oldName} ukončil sponzorskou smlouvu a vrací se k názvu ${defaultName}. Fanoušci zmatení (-2 reputace).`,
+      ).run().catch((e) => logger.warn({ module: "game" }, "insert termination rename news", e));
+    }
 
-    return c.json({ ok: true, fee, clawback, forfeitPenalty: forfeit.total, newTeamName: defaultName, reputationPenalty: 2 });
+    return c.json({
+      ok: true, fee, clawback, forfeitPenalty: forfeit.total, newTeamName: renamed ? defaultName : undefined, reputationPenalty: 2,
+    });
   }
 
   if (category === "stadium") {
@@ -3009,8 +3017,8 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
   const teamId = c.req.param("teamId");
   const { name } = await c.req.json<{ name: string }>();
 
-  if (!name || name.trim().length < 2 || name.trim().length > 50) {
-    return c.json({ error: "Název musí mít 2-50 znaků" }, 400);
+  if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > MAX_CLUB_NAME_LENGTH) {
+    return c.json({ error: `Název musí mít 2-${MAX_CLUB_NAME_LENGTH} znaků` }, 400);
   }
 
   // Check season limit
@@ -3033,9 +3041,13 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
 
   const oldName = team.name;
   const newName = name.trim();
-  // Přejmenování klubu fanoušci neberou dobře (-3).
-  await c.env.DB.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ? WHERE id = ?")
-    .bind(newName, sn, teamId).run();
+  if (await clubNameTaken(c.env.DB, teamId, newName)) return c.json({ error: "Takový název už má jiný klub" }, 409);
+  // Přejmenování klubu fanoušci neberou dobře (-3). Pohár, U21 i stará adresa webu jdou
+  // s názvem; zápis podmíněný starým názvem, dvojklik nepřejmenuje dvakrát (club-rename.ts).
+  const renamed = await renameClub(c.env.DB, {
+    teamId, oldName, newName, seasonMark: { column: "last_main_sponsor_change_season", season: sn },
+  });
+  if (!renamed) return c.json({ error: "Název se mezitím změnil, načti stránku znovu" }, 409);
   {
     const { applyReputationDelta } = await import("../lib/reputation");
     await applyReputationDelta(

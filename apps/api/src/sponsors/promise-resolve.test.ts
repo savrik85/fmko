@@ -149,9 +149,12 @@ describe("applyContractOutcomes", () => {
     const db = new FalesnaD1(rules([{ sql: /SELECT breaches_season FROM sponsor_contracts/, first: { breaches_season: 2 } }]));
     const out = await applyContractOutcomes(jakoD1(db), CONTRACT, [ev(row("p1", "no_riots"), "broken", 2)], CTX);
     expect(out).toMatchObject({ terminated: true, terminatedSponsorId: 7 });
-    const rename = db.davky.flat().find((d) => /UPDATE teams SET name = \? WHERE id = \?/.test(d.sql));
-    // Zkratka klubu (FK) zůstává, ze jména zmizí jen sponzor.
-    expect(rename?.params).toEqual(["FK Lhota", "t1"]);
+    const rename = vse(db).find((d) => /UPDATE teams SET name = \? WHERE id = \? AND name = \?/.test(d.sql));
+    // Zkratka klubu (FK) zůstává, ze jména zmizí jen sponzor. Zápis jen nad nezměněným názvem;
+    // pohár, U21 a starou adresu webu srovná renameClub (club-rename.test.ts).
+    expect(rename?.params).toEqual(["FK Lhota", "t1", "FK Pivovar Lhota Lhota"]);
+    expect(vse(db).find((d) => /INSERT OR IGNORE INTO team_website_slug_aliases/.test(d.sql))?.params)
+      .toEqual(["fk-pivovar-lhota-lhota", "t1"]);
     const rep = db.davky.flat().find((d) => /INSERT INTO reputation_log/.test(d.sql));
     expect(rep?.params[3]).toBe(-5);
     expect(rep?.params[7]).toBe("sponsor-quit-c1");

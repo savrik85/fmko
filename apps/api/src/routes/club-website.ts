@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { rememberOldWebsiteSlug } from "../lib/club-rename";
 import { getSession } from "../auth/session";
 import {
   recordTransaction,
@@ -206,9 +207,6 @@ async function slugTakenByOtherTeam(
   const ownsWord = !!own && (contains(own.slug) || contains(own.villageSlug));
   return teams.some((t) => t.id !== teamId && (t.slug === slug || (!ownsWord && (contains(t.slug) || contains(t.villageSlug)))));
 }
-
-/** Kolik starých adres si klub pamatuje. Víc by šlo zneužít k zabírání adres přejmenováváním. */
-const MAX_SLUG_ALIASES = 3;
 
 /**
  * Hezké adresy webů pro odkazy na jiné kluby (`/klub/fk-appyours-ckyne` místo ID).
@@ -1561,27 +1559,15 @@ clubWebsiteRouter.post("/:id/website/buy-addon", async (c) => {
   });
 });
 
-/** Uloží novou adresu a starou si zapamatuje, aby sdílené odkazy dál fungovaly. */
+/**
+ * Uloží novou adresu a starou si zapamatuje, aby sdílené odkazy dál fungovaly. Stejná
+ * pravidla starých adres (nejvýš MAX_SLUG_ALIASES) jako při přejmenování klubu (club-rename.ts).
+ */
 async function changeSlug(db: D1Database, teamId: string, oldSlug: string | null, newSlug: string) {
   if (oldSlug === newSlug) return;
   await db.prepare("UPDATE team_websites SET custom_slug = ?, updated_at = datetime('now') WHERE team_id = ?")
     .bind(newSlug, teamId).run();
-  // Když se klub vrací ke staré adrese, už to není alias, ale hlavní adresa
-  await db.prepare("DELETE FROM team_website_slug_aliases WHERE slug = ? AND team_id = ?")
-    .bind(newSlug, teamId).run()
-    .catch((e) => logger.warn(MODULE, "drop alias that became main slug", e));
-  if (oldSlug) {
-    await db.prepare("INSERT OR IGNORE INTO team_website_slug_aliases (slug, team_id) VALUES (?, ?)")
-      .bind(oldSlug, teamId).run()
-      .catch((e) => logger.warn(MODULE, "remember previous slug", e));
-    // Jen posledních pár adres; starší uvolnit pro ostatní kluby
-    await db.prepare(
-      `DELETE FROM team_website_slug_aliases WHERE team_id = ? AND slug NOT IN (
-         SELECT slug FROM team_website_slug_aliases WHERE team_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?
-       )`,
-    ).bind(teamId, teamId, MAX_SLUG_ALIASES).run()
-      .catch((e) => logger.warn(MODULE, "trim old slug aliases", e));
-  }
+  await rememberOldWebsiteSlug(db, teamId, oldSlug, newSlug);
 }
 
 // PATCH /api/teams/:id/website

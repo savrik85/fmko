@@ -10,6 +10,7 @@
  * `fulfilled` vždycky znamená „bonus vyplacený" (vratka zálohy v signing.ts s tím počítá).
  * Sliby smluv, které už nejsou aktivní, se nenárokují a zůstávají čekat.
  */
+import { renameClub } from "../lib/club-rename";
 import { logger } from "../lib/logger";
 import { applyReputationDelta } from "../lib/reputation";
 import { sendSystemSMS } from "../lib/sms";
@@ -220,6 +221,7 @@ export async function terminateContractBySponsor(db: D1Database, contract: Contr
   const category = contract.category === "stadium" || contract.category === "banner" ? contract.category : "main";
   let oldName = "";
   let newName = "";
+  let renamed = false;
   try {
     const team = await db.prepare(
       "SELECT t.name, v.name AS village_name FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?",
@@ -231,11 +233,9 @@ export async function terminateContractBySponsor(db: D1Database, contract: Contr
     if (!village) {
       logger.warn({ module: M, teamId }, `výpověď smlouvy ${contract.id}: klub bez obce, název se nevrací`);
     } else if (category === "main") {
-      await db.batch([
-        db.prepare("UPDATE teams SET name = ? WHERE id = ?").bind(newName, teamId),
-        db.prepare("UPDATE cup_teams SET name = ? WHERE team_id = ?").bind(newName, teamId),
-        db.prepare("UPDATE teams SET name = ? WHERE parent_team_id = ? AND team_type = 'u21'").bind(`${newName} U21`, teamId),
-      ]);
+      // Pohár, U21 i stará adresa webu jdou s názvem (club-rename.ts).
+      renamed = await renameClub(db, { teamId, oldName, newName });
+      if (!renamed) logger.warn({ module: M, teamId }, `výpověď smlouvy ${contract.id}: název se mezitím změnil, klub se nepřejmenoval`);
     } else if (category === "stadium") {
       await db.prepare("UPDATE teams SET stadium_name = ? WHERE id = ?").bind(`Sportovní areál ${village}`.trim(), teamId).run();
     }
@@ -259,7 +259,6 @@ export async function terminateContractBySponsor(db: D1Database, contract: Contr
   }
 
   try {
-    const renamed = category === "main" && newName !== "";
     const headline = renamed
       ? `${oldName} se přejmenovává na ${newName}`
       : `${contract.sponsor_name} končí u klubu ${oldName}`;
@@ -276,7 +275,7 @@ export async function terminateContractBySponsor(db: D1Database, contract: Contr
 
   try {
     const parts = [`📋 Firma ${contract.sponsor_name} vypověděla smlouvu, protože klub nedodržel sliby.`];
-    if (category === "main" && newName) parts.push(`Klub se vrací k názvu ${newName}.`);
+    if (renamed) parts.push(`Klub se vrací k názvu ${newName}.`);
     parts.push("Výpovědní pokutu neplatíme, pokuty za porušené sliby ano.");
     if (clawback > 0) parts.push(`Nesplacenou část zálohy vracíme, ${kc(clawback)}.`);
     parts.push(`Reputace klesla o ${Math.abs(TERMINATION_REPUTATION)}.`);
