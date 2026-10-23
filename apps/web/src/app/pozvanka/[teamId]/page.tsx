@@ -30,7 +30,10 @@ async function fetchTeam(teamId: string): Promise<TeamData | null> {
     const r = await fetch(`${API}/api/teams/${teamId}`, { cache: "no-store" });
     if (!r.ok) return null;
     return r.json();
-  } catch { return null; }
+  } catch (e) {
+    console.warn("pozvánka: načtení týmu", e);
+    return null;
+  }
 }
 
 async function fetchManager(teamId: string): Promise<ManagerData | null> {
@@ -38,7 +41,10 @@ async function fetchManager(teamId: string): Promise<ManagerData | null> {
     const r = await fetch(`${API}/api/teams/${teamId}/manager`, { cache: "no-store" });
     if (!r.ok) return null;
     return r.json();
-  } catch { return null; }
+  } catch (e) {
+    console.warn("pozvánka: načtení trenéra", e);
+    return null;
+  }
 }
 
 async function fetchPosition(teamId: string): Promise<number | null> {
@@ -48,7 +54,10 @@ async function fetchPosition(teamId: string): Promise<number | null> {
     const standings = await r.json();
     const idx = standings.findIndex?.((t: { team_id: string }) => t.team_id === teamId);
     return idx >= 0 ? idx + 1 : null;
-  } catch { return null; }
+  } catch (e) {
+    console.warn("pozvánka: načtení tabulky", e);
+    return null;
+  }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ teamId: string }> }): Promise<Metadata> {
@@ -61,7 +70,8 @@ export async function generateMetadata({ params }: { params: Promise<{ teamId: s
 
   const managerName = manager?.name ?? "Trenér";
   const title = `${team.name} tě vyzývá! | Prales`;
-  const description = `${managerName} z ${team.village_name} tě zve do okresního přeboru ${team.district}. Přijmi výzvu a založ si svůj tým!`;
+  // Obec by za „z" musela být ve 2. pádě (z Lhoty). Název klubu za „z klubu" se neskloňuje.
+  const description = `${managerName} z klubu ${team.name} tě zve do okresního přeboru ${team.district}. Přijmi výzvu a založ si svůj tým!`;
 
   return {
     title,
@@ -93,9 +103,9 @@ export default async function InvitePage({ params }: { params: Promise<{ teamId:
     return (
       <main className="min-h-dvh bg-auth flex items-center justify-center">
         <div className="text-white text-center">
-          <h1 className="text-2xl font-heading font-bold mb-2">Tym nenalezen</h1>
-          <p className="text-white/50 mb-6">Tento odkaz je neplatny.</p>
-          <a href="/" className="btn btn-primary-dark">Zpet na hlavni stranku</a>
+          <h1 className="text-2xl font-heading font-bold mb-2">Tým nenalezen</h1>
+          <p className="text-white/50 mb-6">Tento odkaz je neplatný.</p>
+          <a href="/" className="btn btn-primary-dark">Zpět na hlavní stránku</a>
         </div>
       </main>
     );

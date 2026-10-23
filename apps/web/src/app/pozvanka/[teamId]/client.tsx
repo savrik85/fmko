@@ -100,7 +100,7 @@ export function InvitePageClient({ team, manager, position }: Props) {
         {/* What is this */}
         <div className="space-y-2 mb-5">
           <Feature text={`Postav fotbalov\u00FD t\u00FDm v re\u00E1ln\u00E9 \u010Desk\u00E9 obci`} />
-          <Feature text={`Ka\u017Ed\u00FD hr\u00E1\u010D m\u00E1 sv\u016Fj \u017Eivot \u2014 pr\u00E1ci, rodinu i v\u00FDmluvy`} />
+          <Feature text="Každý hráč má svůj život: práci, rodinu i výmluvy" />
           <Feature text={`Odtr\u00E9nuj sez\u00F3nu a vyhraj okresn\u00ED p\u0159ebor`} />
           <Feature text={`Hraj proti kamar\u00E1d\u016Fm ze stejn\u00E9ho okresu`} />
         </div>
@@ -108,7 +108,7 @@ export function InvitePageClient({ team, manager, position }: Props) {
         {/* Early access note */}
         <div className="rounded-xl px-4 py-3 mb-8 text-center" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
           <p className="text-white/40 text-xs leading-relaxed">
-            {`\u{1F331} Prob\u00EDh\u00E1 prvn\u00ED testovac\u00ED sez\u00F3na. Hra se aktivn\u011B vyv\u00EDj\u00ED \u2014 tv\u016Fj feedback pom\u016F\u017Ee utv\u00E1\u0159et budouc\u00ED verze.`}
+            {"\u{1F331} Probíhá první testovací sezóna. Hra se aktivně vyvíjí a tvoje připomínky pomohou utvářet další verze."}
           </p>
         </div>
 

@@ -13,13 +13,15 @@ export default function InvitePage() {
   const inviteUrl = `${origin}/pozvanka/${teamId}`;
   const color = primaryColor || "#2D5F2D";
   const initials = (teamName ?? "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+  const toDistrict = district ? `do okresu ${district}` : "do tvého okresu";
 
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    } catch {
+    } catch (e) {
+      console.warn("kopírování pozvánky do schránky, zkouším výběr textu:", e);
       const input = document.querySelector<HTMLInputElement>("#invite-url");
       if (input) { input.select(); document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 2500); }
     }
@@ -29,11 +31,16 @@ export default function InvitePage() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `${teamName} te vyzyva! | Prales`,
-          text: `Pridej se do okresniho preboru ${district} a ukaz mi, kdo je tu lepsi trener!`,
+          title: `${teamName} tě vyzývá! | Prales`,
+          text: district
+            ? `Přidej se do okresního přeboru ${district} a ukaž mi, kdo je tu lepší trenér!`
+            : "Přidej se do okresního přeboru a ukaž mi, kdo je tu lepší trenér!",
           url: inviteUrl,
         });
-      } catch { /* user cancelled */ }
+      } catch (e) {
+        // Zavřené sdílecí okno (AbortError) taky skončí tady.
+        console.warn("sdílení pozvánky:", e);
+      }
     } else {
       copyLink();
     }
@@ -60,7 +67,7 @@ export default function InvitePage() {
 
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-ink">
-            Posli tento odkaz kamaradovi. Uvidi tvuj tym s vyzvou a muze si rovnou zalozit ucet ve tvem okresu.
+            Pošli tento odkaz kamarádovi. Uvidí tvůj tým s výzvou a může si rovnou založit účet ve tvém okrese.
           </p>
 
           {/* Link */}
@@ -74,13 +81,13 @@ export default function InvitePage() {
               onClick={(e) => (e.target as HTMLInputElement).select()}
             />
             <button onClick={copyLink} className="btn btn-primary shrink-0 min-w-[110px]">
-              {copied ? "\u2714 Zkopirovano!" : "\u{1F4CB} Kopirovat"}
+              {copied ? "\u2714 Zkopírováno!" : "\u{1F4CB} Kopírovat"}
             </button>
           </div>
 
           {/* Share (mobile) */}
           <button onClick={shareLink} className="btn btn-secondary w-full">
-            {"\u{1F4E4}"} Sdilet odkaz
+            {"\u{1F4E4}"} Sdílet odkaz
           </button>
         </div>
       </div>
@@ -90,9 +97,9 @@ export default function InvitePage() {
         <div className="px-6 py-5">
           <h3 className="font-heading font-bold text-sm text-muted uppercase tracking-wide mb-4">Jak to funguje</h3>
           <div className="space-y-3">
-            <Step n={1} text="Posli odkaz kamaradovi pres SMS, WhatsApp nebo Messenger" />
-            <Step n={2} text="Kamarad uvidi tvuj tym a vyzvu k zapasu" />
-            <Step n={3} text={`Zaregistruje se a jeho tym se prida do okresu ${district}`} />
+            <Step n={1} text="Pošli odkaz kamarádovi přes SMS, WhatsApp nebo Messenger" />
+            <Step n={2} text="Kamarád uvidí tvůj tým a výzvu k zápasu" />
+            <Step n={3} text={`Zaregistruje se a jeho tým se přidá ${toDistrict}`} />
           </div>
         </div>
       </div>
