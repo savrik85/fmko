@@ -100,7 +100,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Rozpočet se mění týdně. Příjmy a výdaje se zpracovávají každé pondělí." },
       { heading: "Příjmy", text: "Dotace obce: vesnice 6 000/měs., obec 10 000, městys 15 000, město 25 000 Kč. Sponzoři: 1 000–8 000/měs. podle typu. Příspěvky hráčů: 100 Kč/hráč/měsíc. Vstupné: 20–50 Kč/divák podle velikosti obce." },
       { heading: "Výdaje", text: "Tréninky: 200–1 000 Kč/trénink (podle velikosti obce). Údržba hřiště: 500–3 000/měsíc. Rozhodčí: 800–1 500 Kč/zápas. Cestovné + občerstvení: 400–1 200 Kč/zápas." },
-      { heading: "Zápasové odměny", text: "Výhra: sponzorský bonus + 500 Kč liga + fanouškovský bonus (50–200 Kč). Remíza: 30 % bonusu + 150 Kč. Prohra: nic." },
+      { heading: "Zápasové odměny", text: "Výhra: sponzorský bonus + 500 Kč liga + fanouškovský bonus (50–200 Kč). Remíza: 30 % bonusu + 150 Kč. Prohra: nic. Za přátelák se odměny nevyplácejí, jen vstupné a bufet." },
       { heading: "Místní podpora", text: "Reputace klubu × 100 Kč/měsíc. Při reputaci 50 je to 5 000 Kč/měs., při 70 už 7 000. Detail v sekci Reputace." },
       { text: "Záporný rozpočet = náhodné negativní události (krádež, vandalismus, odchod hráčů). Udržuj kladný zůstatek!", tip: true },
     ],
