@@ -147,7 +147,8 @@ export const POKUSU_MLADI = 6;
  *
  * Odstupňované, ne se srázem: dřív dostal osmadvacetiletý šest pokusů a devětadvacetiletý
  * jeden, takže hráč ze dne na den přestal růst. Fotbalista se zlepšuje i po třicítce,
- * jen pomaleji, a po pětatřicítce mu spíš ubývá (o to se stará `aging.ts`).
+ * jen pomaleji, a s věkem mu spíš ubývá (o to se stará roční vývoj na konci sezóny,
+ * `ratingDelta` v `season-development.ts`).
  */
 export function pokusuPodleVeku(vek: number): number {
   if (vek < POCET_POKUSU_DO_VEKU) return POKUSU_MLADI;  // do 27 včetně
@@ -632,7 +633,8 @@ export function simulateTraining(
   //
   // Nově se dá spadnout nejvýš na 60 % vlastního stropu výdrže. Kdo netrénuje, je
   // rozlámaný, ale ne mrtvý — a dohnat se to dá kondičním tréninkem. Skutečné stárnutí
-  // řeší `aging.ts`: od 30 let ubývá rychlost, výdrž i síla bez ohledu na docházku.
+  // řeší roční vývoj na konci sezóny (`ratingDelta` v `season-development.ts`): od 30 let
+  // klesá hodnocení a s ním poměrně všechny dovednosti včetně výdrže, bez ohledu na docházku.
   // Naměřeno: při 5 % vycházela ztráta 0,9 bodu za sezónu proti zisku 0,6 z kondičního
   // tréninku, takže výdrž klesala KAŽDÉMU hráči v lize bez ohledu na věk. Při 2 % je
   // ztráta 0,36 a poměr se otočí do plusu — kdo chodí, přidává; kdo nechodí, ztrácí.
