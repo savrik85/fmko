@@ -35,6 +35,13 @@ export const DNU_DO_VYSUMENI = 10;
  */
 export const DNU_KLIDU_PO_KAMPANI = 30;
 
+/**
+ * Kolik herních dní po splnění kampaň proti trenérovi ještě běží: visí transparent,
+ * zpívá se chorál, ptají se novináři a volají lidi. Proti hráči kampaň skončí jeho
+ * odchodem, trenér ale odejít nemůže, takže bez tohohle neskončila nikdy.
+ */
+export const FULFILLED_COACH_CAMPAIGN_DAYS = 14;
+
 export type KampanKind = "hrac_ven" | "trener_ven";
 
 export interface KampanRow {
@@ -73,6 +80,8 @@ export interface StavKampani {
   zalozene: KampanRow[];
   splnene: KampanRow[];
   vysumele: KampanRow[];
+  /** Splněné kampaně proti trenérovi, kterým dnes uplynulo `FULFILLED_COACH_CAMPAIGN_DAYS`. */
+  closed: KampanRow[];
 }
 
 /**
@@ -87,7 +96,7 @@ export async function tikKampani(
   groups: readonly FanGroupRow[],
   gameDate: string,
 ): Promise<StavKampani> {
-  const out: StavKampani = { zalozene: [], splnene: [], vysumele: [] };
+  const out: StavKampani = { zalozene: [], splnene: [], vysumele: [], closed: [] };
   if (groups.length === 0) return out;
 
   const zive = await db
@@ -225,8 +234,31 @@ export async function tikKampani(
     }
   }
 
+  // ── Splněné kampaně proti trenérovi ──
+  // Kampaň proti hráči skončí, až hráč odejde (`uzavriKampaneNaHrace`). Trenér odejít
+  // nemůže, takže splněná kampaň proti němu dřív neskončila nikdy: transparent, chorál,
+  // otázky v rozhovorech i zmeškané hovory běžely napořád, protože všechny berou
+  // kampaně ve stavu `sbira` nebo `splnena`. Lidi řekli svoje a po dvou týdnech to
+  // vyšumí. Klid před další kampaní (`DNU_KLIDU_PO_KAMPANI`) se počítá od tohohle konce.
+  const fulfilledCoachCampaigns = await db
+    .prepare("SELECT * FROM fan_campaigns WHERE team_id = ? AND kind = 'trener_ven' AND status = 'splnena'")
+    .bind(teamId).all<KampanRow & { ended_game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `splněné kampaně proti trenérovi ${teamId}`, e); return { results: [] as Array<KampanRow & { ended_game_date: string | null }> }; });
+  for (const k of fulfilledCoachCampaigns.results) {
+    if (dnyMezi(k.ended_game_date, gameDate) < FULFILLED_COACH_CAMPAIGN_DAYS) continue;
+    stmts.push(
+      db.prepare(
+        "UPDATE fan_campaigns SET status = 'vyzumela', ended_game_date = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ? AND status = 'splnena'",
+      ).bind(gameDate, k.id),
+    );
+    out.closed.push(k);
+  }
+
   if (stmts.length > 0) {
     await db.batch(stmts).catch((e) => { logger.warn({ module: M }, `zápis kampaní ${teamId}`, e); });
+  }
+  if (out.closed.length > 0) {
+    logger.info({ module: M, teamId }, `kampaň proti trenérovi skončila ${FULFILLED_COACH_CAMPAIGN_DAYS} dní po splnění`);
   }
   return out;
 }
