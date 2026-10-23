@@ -303,9 +303,24 @@ export async function sendWebPushToPlayerWatchers(
     "SELECT DISTINCT w.team_id FROM player_watchlist w WHERE w.player_id = ?"
   ).bind(playerId).all<{ team_id: string }>().catch((e) => { logger.warn({ module: "web-push" }, "load watchers", e); return { results: [] }; });
 
-  for (const r of rows.results) {
-    const teamId = r.team_id;
-    if (excludeTeamId && teamId === excludeTeamId) continue;
+  const teamIds = rows.results.map((r) => r.team_id).filter((teamId) => !excludeTeamId || teamId !== excludeTeamId);
+  await sendWebPushToTeams(env, teamIds, title, body, url);
+}
+
+/**
+ * Odeslat push sledujícím, které volající zná předem. Respektuje notification_preferences.transfer.
+ *
+ * Pro odchody hráče ze hry nebo mezi volné hráče: tam se sledující musí načíst před
+ * odebráním (`removePlayer` vrací `watcherTeamIds`), potom už je pod id hráče nikdo nenajde.
+ */
+export async function sendWebPushToTeams(
+  env: PushEnv,
+  teamIds: readonly string[],
+  title: string,
+  body: string,
+  url?: string,
+): Promise<void> {
+  for (const teamId of new Set(teamIds)) {
     const prefs = await getNotificationPreferences(env.DB, teamId).catch((e) => { logger.warn({ module: "web-push" }, `load prefs for team ${teamId}`, e); return null; });
     if (prefs && prefs.transfer === false) continue;
     await sendWebPushToTeam(env, teamId, title, body, url).catch((e) =>

@@ -38,6 +38,10 @@ export interface BrowseRow {
   club?: { id: string; name: string } | null;
   form?: { matches: number; goals: number; assists: number; avgRating: number } | null;
   watchedSince?: string | null;
+  /** Co udělá klik na řádek. Bez něj profil hráče; volný hráč profil nemá. */
+  onOpen?: () => void;
+  /** Text místo klubu, když hráč žádný nemá (třeba „volný hráč"). */
+  clubLabel?: string;
 }
 
 const POS_LABELS: Record<Position, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -148,6 +152,8 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
     </th>
   );
 
+  const open = (r: BrowseRow) => (r.onOpen ? r.onOpen() : router.push(`/hrac/${r.id}`));
+
   const removeButton = (r: BrowseRow) => onRemove && (
     <button onClick={(e) => { e.stopPropagation(); onRemove(r); }}
       className="text-sm font-heading font-bold text-card-red hover:underline whitespace-nowrap">
@@ -198,7 +204,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
           </thead>
           <tbody>
             {sorted.map((r) => (
-              <tr key={r.id} onClick={() => router.push(`/hrac/${r.id}`)}
+              <tr key={r.id} onClick={() => open(r)}
                 className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer">
                 <td className="py-2 pl-4 sm:pl-5 pr-1"><PositionBadge position={r.position} /></td>
                 <td className="py-2 pr-2">
@@ -214,7 +220,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                   <td className="py-2 pr-2 whitespace-nowrap">
                     {r.club
                       ? <Link href={`/tym/${r.club.id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">{r.club.name}</Link>
-                      : <span className="text-muted">bez klubu</span>}
+                      : <span className="text-muted">{r.clubLabel ?? "bez klubu"}</span>}
                   </td>
                 )}
                 <td className="py-2 pr-2 text-center tabular-nums text-muted">{r.age}</td>
@@ -243,7 +249,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
       {/* ── Mobil: seznam s popsanými dovednostmi ── */}
       <div className="md:hidden flex flex-col gap-2">
         {sorted.map((r) => (
-          <div key={r.id} onClick={() => router.push(`/hrac/${r.id}`)}
+          <div key={r.id} onClick={() => open(r)}
             className="card px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer">
             <div className="flex items-center gap-3">
               <PositionBadge position={r.position} />
@@ -251,7 +257,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               <div className="flex-1 min-w-0">
                 <div className="font-heading font-bold text-base truncate">{r.firstName} {r.lastName}</div>
                 <div className="text-sm text-muted tabular-nums truncate">
-                  {columns.club && r.club ? `${r.club.name} · ` : ""}{r.age} let · {formatValue(rowValue(r))}
+                  {columns.club && (r.club || r.clubLabel) ? `${r.club?.name ?? r.clubLabel} · ` : ""}{r.age} let · {formatValue(rowValue(r))}
                 </div>
               </div>
               <span className={`px-2 py-1 rounded-soft font-heading font-bold text-base tabular-nums shrink-0 ${onColorText}`} style={{ backgroundColor: color }}>

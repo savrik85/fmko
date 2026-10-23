@@ -5261,12 +5261,15 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
     playerPosition: player.position as string, teamName: player.team_name as string,
   }).catch((e) => logger.warn({ module: "game" }, "create release news", e));
 
-  // Push týmům, které hráče sledují ve watchlistu — je volný!
+  // Push týmům, které hráče sledují ve watchlistu — je volný! Sledující načetl
+  // `removePlayer` ještě před úklidem. Dřív se hledali až tady, kdy už pod id
+  // hráče nikdo nebyl, a zprávu tak nedostal nikdo. Sledování samo se převedlo
+  // na volného hráče.
   try {
-    const { sendWebPushToPlayerWatchers } = await import("../community/web-push");
-    await sendWebPushToPlayerWatchers(
+    const { sendWebPushToTeams } = await import("../community/web-push");
+    await sendWebPushToTeams(
       { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT, DB: c.env.DB },
-      playerId, teamId,
+      (removed.watcherTeamIds ?? []).filter((id) => id !== teamId && id !== kmenovy),
       `⭐ ${player.first_name} ${player.last_name} je volný!`,
       `${player.team_name} ho uvolnil, teď je k mání jako volný hráč.`,
       "/prestupy",
@@ -5504,6 +5507,12 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
       .catch((e) => logger.warn({ module: "game" }, "rollback player after FA race condition", e));
     return c.json({ error: "Hráč již byl podepsán jiným týmem" }, 409);
   }
+
+  // Kdo volného hráče sledoval, sleduje ho dál v novém klubu. Podpisem dostal hráč
+  // nové id a sledování pod id volného hráče by jinak viselo na ničem.
+  await c.env.DB.prepare("UPDATE player_watchlist SET player_id = ? WHERE player_id = ?")
+    .bind(playerId, faId).run()
+    .catch((e) => logger.warn({ module: "game" }, "převod sledování na podepsaného hráče", e));
 
   const gameDate = (team.game_date as string) ?? new Date().toISOString();
   await recordTransaction(c.env.DB, teamId, "signing_fee", -FREE_AGENT_SIGNING_FEE, `Registrace: ${fa.first_name} ${fa.last_name}`, gameDate);
@@ -5837,10 +5846,67 @@ gameRouter.get("/teams/:teamId/watchlist", async (c) => {
         avgRating: Math.round(stats.avgRating * 10) / 10,
       },
       transfers: transfers.get(r.id as string) ?? [],
+      freeAgent: false,
     };
   });
 
-  return c.json({ players });
+  // Sledovaní, kteří jsou zrovna volní. Propuštěním dostane hráč nové id (záznam
+  // ve `free_agents`) a `removePlayer` na něj sledování převede. Bez tohohle by
+  // sledujícím ze seznamu zmizel přesně ve chvíli, kdy je k mání.
+  const freeRows = await c.env.DB.prepare(
+    `SELECT w.created_at AS watched_since, fa.id, fa.first_name, fa.last_name, fa.nickname, fa.age,
+            fa.position, fa.overall_rating, fa.skills, fa.avatar, fa.district, v.name AS village_name
+       FROM player_watchlist w
+       JOIN free_agents fa ON fa.id = w.player_id
+       LEFT JOIN villages v ON v.id = fa.village_id
+      WHERE w.team_id = ? AND fa.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
+  ).bind(teamId).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "game" }, "fetch watched free agents", e); return { results: [] as Record<string, unknown>[] }; });
+  const freeAgents = freeRows.results.map((r) => {
+    const parseJson = (raw: unknown, what: string): Record<string, unknown> => {
+      try { return JSON.parse(raw as string) ?? {}; } catch (e) {
+        logger.warn({ module: "game" }, `rozbité ${what} sledovaného volného hráče ${String(r.id)}`, e);
+        return {};
+      }
+    };
+    const skills = parseJson(r.skills, "dovednosti");
+    const avatar = parseJson(r.avatar, "avatar");
+    const blurredSkills: Record<string, number> = {};
+    for (const k of Object.keys(skills)) {
+      if (typeof skills[k] === "number") blurredSkills[k] = roundTo5(skills[k]);
+    }
+    return {
+      id: r.id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      nickname: r.nickname,
+      age: r.age,
+      position: r.position,
+      overallRating: r.overall_rating,
+      skills: blurredSkills,
+      avatar,
+      teamId: null,
+      teamName: null,
+      teamColor: null,
+      teamSecondary: null,
+      teamBadge: null,
+      teamIsAI: false,
+      villageName: r.village_name ?? null,
+      district: r.district,
+      injury: null,
+      watchedSince: r.watched_since,
+      // Zápasy se vedou pod starým id hráče, volný hráč žádné nemá.
+      recentStats: null,
+      transfers: [],
+      freeAgent: true,
+    };
+  });
+
+  // Nejčerstvěji sledovaní nahoře, stejně jako dřív: řetězec data se řadí sám.
+  const since = (p: { watchedSince: unknown }) => String(p.watchedSince ?? "");
+  const watched = [...players, ...freeAgents]
+    .sort((a, b) => (since(a) < since(b) ? 1 : since(a) > since(b) ? -1 : 0));
+  return c.json({ players: watched });
 });
 
 // Withdraw listing

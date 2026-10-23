@@ -38,6 +38,17 @@ export interface RemovePlayerResult {
   ok: boolean;
   reason?: "not_found";
   player?: RemovedPlayer;
+  /**
+   * Týmy, které hráče sledovaly. Načtené PŘED úklidem: po odebrání už je v
+   * `player_watchlist` pod tímhle id nikdo nenajde, takže zprávu sledujícím
+   * musí volající poslat podle tohohle seznamu.
+   */
+  watcherTeamIds?: string[];
+  /**
+   * Id nového záznamu mezi volnými hráči (jen s `toFreeAgent`). Sledování se na
+   * něj převádí, aby hráč sledujícím nezmizel ze Sledovaných.
+   */
+  freeAgentId?: string;
 }
 
 export interface RemovePlayerOptions {
@@ -79,6 +90,15 @@ export async function removePlayer(
     await lapseSellOnClauses(db, playerId);
   }
 
+  // Kdo hráče sleduje, se musí zjistit TEĎ. Úklid níž sledování smaže (nebo převede
+  // na volného hráče) a zpráva „je volný" dřív chodila až po něm, takže ji nedostal nikdo.
+  const watchers = await db.prepare("SELECT DISTINCT team_id FROM player_watchlist WHERE player_id = ?")
+    .bind(playerId).all<{ team_id: string }>()
+    .catch((e) => { logger.warn({ module: "remove-player" }, "load watchers", e); return { results: [] as Array<{ team_id: string }> }; });
+  const watcherTeamIds = watchers.results.map((w) => w.team_id);
+  // Id volného hráče dopředu: sledování se na něj převede ve stejné dávce, ve které vzniká.
+  const freeAgentId = opts.toFreeAgent ? crypto.randomUUID() : undefined;
+
   // 1) Vyčistit reference (každá může selhat nezávisle, nekritické)
   await db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "withdraw listings", e));
   await db.prepare("UPDATE transfer_offers SET status = 'withdrawn' WHERE player_id = ? AND status IN ('pending','countered')").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "withdraw offers", e));
@@ -97,7 +117,11 @@ export async function removePlayer(
   await db.prepare("UPDATE teams SET freekick_taker_id = NULL WHERE freekick_taker_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "clear freekick taker", e));
   await db.prepare("DELETE FROM player_stats WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete player_stats", e));
   await db.prepare("DELETE FROM injuries WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete injuries", e));
-  await db.prepare("DELETE FROM player_watchlist WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete watchlist", e));
+  // Kdo jde mezi volné hráče, toho sledující neztratí: sledování se převede na jeho
+  // nové id v dávce níž. Kdo ze hry odchází úplně, tomu se sledování smaže.
+  if (!freeAgentId) {
+    await db.prepare("DELETE FROM player_watchlist WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete watchlist", e));
+  }
   // FK constraint na players(id) by blokoval DELETE FROM players
   await db.prepare("DELETE FROM training_log WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete training_log", e));
   await db.prepare("DELETE FROM weight_log WHERE player_id = ?").bind(playerId).run().catch((e) => logger.warn({ module: "remove-player" }, "delete weight_log", e));
@@ -126,7 +150,7 @@ export async function removePlayer(
     ),
   );
 
-  if (opts.toFreeAgent) {
+  if (freeAgentId) {
     // free_agents.source CHECK povoluje jen 'generated' | 'released' | 'quit'
     const faSource = leaveType === "quit" ? "quit" : "released";
     // Tři dny, ne sedm: odložení hráči se do stropu poolu nepočítají, takže se
@@ -143,7 +167,7 @@ export async function removePlayer(
         `INSERT INTO free_agents (id, district, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, source, released_from_team_id, village_id, expires_at, is_celebrity, nationality, skills_max)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
-        crypto.randomUUID(), row.district, row.first_name, row.last_name, row.nickname ?? null,
+        freeAgentId, row.district, row.first_name, row.last_name, row.nickname ?? null,
         row.age, row.position, row.overall_rating,
         row.skills, row.physical ?? "{}", row.personality ?? "{}", row.life_context ?? "{}",
         row.avatar ?? "{}", row.hidden_talent ?? 0, row.weekly_wage ?? 0,
@@ -154,11 +178,19 @@ export async function removePlayer(
         (row.skills_max as string) ?? "{}",
       ),
     );
+    // Sledování jde s hráčem na trh. Podmínka na kádr: kdyby se hráč mezitím
+    // přesunul jinam, závěrečný DELETE nic nesmaže a sledující musí zůstat u něj.
+    batch.push(
+      db.prepare(
+        `UPDATE player_watchlist SET player_id = ?
+          WHERE player_id = ? AND EXISTS (SELECT 1 FROM players WHERE id = ? AND team_id = ?)`,
+      ).bind(freeAgentId, playerId, playerId, teamId),
+    );
   }
 
   // Propuštěný hráč není nové tělo, jen se vrátil na trh. V přehledu se to
   // nesmí míchat s tím, co vytvořila hra, jinak vyjde, že se generuje moc.
-  if (opts.toFreeAgent) {
+  if (freeAgentId) {
     await zapisNaTrh(db, { district: row.district as string | null, origin: "released", teamId });
   }
 
@@ -195,5 +227,7 @@ export async function removePlayer(
       teamName: row.team_name as string,
       leagueId: (row.team_league_id as string) ?? null,
     },
+    watcherTeamIds,
+    freeAgentId,
   };
 }
