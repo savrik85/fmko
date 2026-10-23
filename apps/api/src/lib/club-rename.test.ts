@@ -3,6 +3,7 @@
  * a v adrese klubového webu. Dřív je srovnávala jen změna zkratky; ruční přejmenování
  * a výpověď sponzora manažerem měnily jen `teams.name`, podpis sponzora a výpověď
  * sponzorem zapomněly na starou adresu webu a ruční název mohl být stejný jako cizí.
+ * Adresa webu z nového názvu nesmí vést na cizí klub (stará adresa, obec, vlastní adresa).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
@@ -11,9 +12,10 @@ import { join } from "node:path";
 import type { Bindings } from "../index";
 import { gameRouter } from "../routes/game";
 import clubPrefixRouter from "../routes/club-prefix";
+import { resolveTeamId, teamSlugMap } from "../routes/club-website";
 import { applyMainSponsorRename } from "../sponsors/signing";
 import { terminateContractBySponsor } from "../sponsors/promise-resolve";
-import { clubNameTaken, MAX_SLUG_ALIASES, renameClub } from "./club-rename";
+import { clubNameTaken, MAX_SLUG_ALIASES, NAME_TAKEN_ERROR, renameClub } from "./club-rename";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -148,7 +150,7 @@ async function call(router: { fetch: (req: Request, env: Bindings, ctx: Executio
 describe("renameClub", () => {
   it("přejmenuje A-tým, pohár i U21 a stará adresa webu dál vede na klub", async () => {
     await seedClub("SK Lhota");
-    expect(await renameClub(db, { teamId: "t1", oldName: "SK Lhota", newName: "AC Lhota" })).toBe(true);
+    expect(await renameClub(db, { teamId: "t1", oldName: "SK Lhota", newName: "AC Lhota" })).toBe("renamed");
     expect(await names()).toEqual({ senior: "AC Lhota", u21: "AC Lhota U21", cup: "AC Lhota" });
     expect(await aliases()).toEqual(["sk-lhota"]);
   });
@@ -162,7 +164,7 @@ describe("renameClub", () => {
 
   it("název se mezitím změnil: nezapíše se nic", async () => {
     await seedClub("SK Lhota");
-    expect(await renameClub(db, { teamId: "t1", oldName: "FK Lhota", newName: "AC Lhota" })).toBe(false);
+    expect(await renameClub(db, { teamId: "t1", oldName: "FK Lhota", newName: "AC Lhota" })).toBe("name_changed");
     expect(await names()).toEqual({ senior: "SK Lhota", u21: "SK Lhota U21", cup: "SK Lhota" });
     expect(await aliases()).toEqual([]);
   });
@@ -181,12 +183,19 @@ describe("renameClub", () => {
     await seedClub("SK A");
     const chain = ["SK A", "SK B", "SK C", "SK D", "SK E"];
     for (let i = 1; i < chain.length; i++) {
-      expect(await renameClub(db, { teamId: "t1", oldName: chain[i - 1], newName: chain[i] })).toBe(true);
+      expect(await renameClub(db, { teamId: "t1", oldName: chain[i - 1], newName: chain[i] })).toBe("renamed");
     }
     expect(await aliases()).toEqual(["sk-b", "sk-c", "sk-d"]);
     // Klub se vrací k názvu SK B: adresa sk-b je zase hlavní, sk-e je nová stará adresa.
     await renameClub(db, { teamId: "t1", oldName: "SK E", newName: "SK B" });
     expect(await aliases()).toEqual(["sk-c", "sk-d", "sk-e"]);
+  });
+
+  it("název zvolený manažerem, který by se pletl s jiným klubem, nezapíše", async () => {
+    await seedClub("SK Lhota");
+    expect(await renameClub(db, { teamId: "t1", oldName: "SK Lhota", newName: "SK Čkyně", chosenByManager: true }))
+      .toBe("name_taken");
+    expect(await names()).toEqual({ senior: "SK Lhota", u21: "SK Lhota U21", cup: "SK Lhota" });
   });
 
   it("starou adresu, kterou už má jiný klub, nepřebere", async () => {
@@ -223,6 +232,25 @@ describe("clubNameTaken", () => {
     expect(await clubNameTaken(db, "t1", "FK Čkyně")).toBe(true);
   });
 
+  it("slovo z názvu nebo obce jiného klubu, které náš klub nemá, je obsazené", async () => {
+    await seedClub("SK Lhota");
+    // /klub/ckyne hledá SK Čkyně podle obce; přesný název by tu adresu přebral.
+    expect(await clubNameTaken(db, "t1", "Čkyně")).toBe(true);
+    expect(await clubNameTaken(db, "t2", "Lhota")).toBe(true);
+    expect(await clubNameTaken(db, "t1", "Tygři")).toBe(false);
+  });
+
+  it("slovo z vlastní obce nebo vlastního názvu nevadí", async () => {
+    await seedClub("SK Lhota");
+    expect(await clubNameTaken(db, "t1", "Lhota")).toBe(false);
+    expect(await clubNameTaken(db, "t2", "Čkyně")).toBe(false);
+  });
+
+  it("id jiného klubu je obsazené", async () => {
+    await seedClub("SK Lhota");
+    expect(await clubNameTaken(db, "t1", "t2")).toBe(true);
+  });
+
   it("U21 jiného klubu se nepočítá", async () => {
     await seedClub("SK Lhota");
     expect(await clubNameTaken(db, "t2", "SK Lhota U21")).toBe(false);
@@ -246,11 +274,19 @@ describe("každé přejmenování srovná pohár, U21 i starou adresu webu", () 
     await seedClub("SK Lhota");
     const res = await call(gameRouter, "POST", "/teams/t1/rename", { name: "sk čkyně" });
     expect(res.status).toBe(409);
-    expect(res.json.error).toBe("Takový název už má jiný klub");
+    expect(res.json.error).toBe(NAME_TAKEN_ERROR);
     expect(await names()).toEqual({ senior: "SK Lhota", u21: "SK Lhota U21", cup: "SK Lhota" });
     const team = await db.prepare("SELECT last_main_sponsor_change_season AS s, reputation FROM teams WHERE id = 't1'")
       .first<{ s: number | null; reputation: number }>();
     expect(team).toEqual({ s: null, reputation: 50 });
+  });
+
+  it("ruční přejmenování na obec jiného klubu: 409, adresa /klub/ckyne dál vede na SK Čkyně", async () => {
+    await seedClub("SK Lhota");
+    const res = await call(gameRouter, "POST", "/teams/t1/rename", { name: "Čkyně" });
+    expect(res.status).toBe(409);
+    expect(res.json.error).toBe(NAME_TAKEN_ERROR);
+    expect(await resolveTeamId(db, "ckyne")).toBe("t2");
   });
 
   it("výpověď hlavního sponzora manažerem (POST /teams/:id/sponsors/terminate)", async () => {
@@ -302,5 +338,43 @@ describe("každé přejmenování srovná pohár, U21 i starou adresu webu", () 
     const res = await call(clubPrefixRouter, "PATCH", "/teams/t1/club/prefix", { prefix: "AC" });
     expect(res.status).toBe(409);
     expect(await names()).toEqual({ senior: "SK Lhota", u21: "SK Lhota U21", cup: "SK Lhota" });
+  });
+});
+
+describe("adresa webu po přejmenování nevede na cizí klub", () => {
+  it("přesný název má při hledání webu přednost před starou adresou jiného klubu", async () => {
+    await seedClub("FK Lhota");
+    await db.prepare("INSERT INTO team_website_slug_aliases (slug, team_id) VALUES ('fk-lhota', 't2')").run();
+    expect(await resolveTeamId(db, "fk-lhota")).toBe("t1");
+    // Dvojznačný název (dva kluby FK Lhota) rozhodne až stará adresa.
+    await db.prepare("INSERT INTO teams (id, name, village_id, league_id) VALUES ('t3', 'FK Lhota', 'v-lhota', 'l2')").run();
+    expect(await resolveTeamId(db, "fk-lhota")).toBe("t2");
+  });
+
+  it("podpis sponzora: stará adresa jiného klubu stejného znění ustoupí novému názvu", async () => {
+    await seedClub("SK Lhota");
+    await db.prepare("INSERT INTO team_website_slug_aliases (slug, team_id) VALUES ('sk-pivovar-lhota-lhota', 't2')").run();
+    const out = await applyMainSponsorRename(db, "t1", "Pivovar Lhota", 3);
+    expect(out.newName).toBe("SK Pivovar Lhota Lhota");
+    expect(await aliases("t2")).toEqual([]);
+    expect(await resolveTeamId(db, "sk-pivovar-lhota-lhota")).toBe("t1");
+    expect(await teamSlugMap(db, ["t1"])).toEqual({ t1: "sk-pivovar-lhota-lhota" });
+  });
+
+  it("výpověď sponzorem: název je vlastní adresou jiného klubu, odkaz na klub vede přes id", async () => {
+    await seedClub("FK Pivovar Lhota Lhota");
+    await db.batch([
+      db.prepare("INSERT INTO team_websites (team_id, custom_slug) VALUES ('t2', 'fk-lhota')"),
+      db.prepare(
+        "INSERT INTO sponsor_contracts (id, team_id, sponsor_id, sponsor_name, category, status) VALUES ('c1', 't1', 7, 'Pivovar Lhota', 'main', 'active')",
+      ),
+    ]);
+    await terminateContractBySponsor(db, {
+      id: "c1", team_id: "t1", sponsor_id: 7, sponsor_name: "Pivovar Lhota", category: "main", seasons_remaining: 1,
+    }, { gameDate: "2026-10-20T16:00:00.000Z", day: "2026-10-20" });
+    expect((await names()).senior).toBe("FK Lhota");
+    // Vlastní adresu si SK Čkyně nastavila sama, zůstává jí. Odkaz na Lhotu ji nesmí použít.
+    expect(await resolveTeamId(db, "fk-lhota")).toBe("t2");
+    expect(await teamSlugMap(db, ["t1", "t2"])).toEqual({ t2: "fk-lhota" });
   });
 });

@@ -14,7 +14,7 @@ import { validateMatchPlan, parseStoredPlan } from "../lib/match-plan-validation
 import { validateBench, parseStoredBench, benchColumn } from "../lib/lineup-bench";
 import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
 import { mustSeason } from "../lib/season";
-import { clubNameTaken, MAX_CLUB_NAME_LENGTH, renameClub } from "../lib/club-rename";
+import { MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
@@ -2974,7 +2974,7 @@ gameRouter.post("/teams/:teamId/sponsors/terminate", async (c) => {
     // Zkratka klubu zůstává, ze jména zmizí jen sponzor. Pohár, U21 i stará adresa webu
     // jdou s názvem (club-rename.ts).
     const defaultName = `${clubPrefixOf(oldName) ?? "SK"} ${village?.name ?? ""}`.trim();
-    const renamed = await renameClub(c.env.DB, { teamId, oldName, newName: defaultName });
+    const renamed = await renameClub(c.env.DB, { teamId, oldName, newName: defaultName }) === "renamed";
     if (!renamed) {
       logger.warn({ module: "game", teamId }, `výpověď smlouvy ${contract.id}: název se mezitím změnil, klub se nepřejmenoval`);
     }
@@ -3041,13 +3041,14 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
 
   const oldName = team.name;
   const newName = name.trim();
-  if (await clubNameTaken(c.env.DB, teamId, newName)) return c.json({ error: "Takový název už má jiný klub" }, 409);
-  // Přejmenování klubu fanoušci neberou dobře (-3). Pohár, U21 i stará adresa webu jdou
-  // s názvem; zápis podmíněný starým názvem, dvojklik nepřejmenuje dvakrát (club-rename.ts).
-  const renamed = await renameClub(c.env.DB, {
-    teamId, oldName, newName, seasonMark: { column: "last_main_sponsor_change_season", season: sn },
+  // Přejmenování klubu fanoušci neberou dobře (-3). Název se nesmí plést s jiným klubem;
+  // pohár, U21 i stará adresa webu jdou s názvem; zápis podmíněný starým názvem,
+  // dvojklik nepřejmenuje dvakrát (club-rename.ts).
+  const outcome = await renameClub(c.env.DB, {
+    teamId, oldName, newName, chosenByManager: true, seasonMark: { column: "last_main_sponsor_change_season", season: sn },
   });
-  if (!renamed) return c.json({ error: "Název se mezitím změnil, načti stránku znovu" }, 409);
+  if (outcome === "name_taken") return c.json({ error: NAME_TAKEN_ERROR }, 409);
+  if (outcome === "name_changed") return c.json({ error: "Název se mezitím změnil, načti stránku znovu" }, 409);
   {
     const { applyReputationDelta } = await import("../lib/reputation");
     await applyReputationDelta(
