@@ -454,6 +454,8 @@ export interface CupInjurySide {
  * Bez odkazu na zápas, stejně jako turnaj: `injuries.match_id` má cizí klíč na ligové `matches`,
  * pohárový zápas tam není. Dřív se sem psalo id z `cup_matches`, cizí klíč shodil celou dávku
  * a zranění z poháru se neuložilo ani jedno (na produ 255 odehraných pohárových zápasů a 0 zranění).
+ *
+ * Používá ho i přátelák. Ten má řádek v `matches`, takže na zápas odkázat smí (`matchId`).
  */
 export function cupInjuryStatements(
   db: D1Database,
@@ -461,6 +463,7 @@ export function cupInjuryStatements(
   home: CupInjurySide,
   away: CupInjurySide,
   rng: Rng,
+  matchId: string | null = null,
 ): D1PreparedStatement[] {
   const stmts: D1PreparedStatement[] = [];
   for (const event of events) {
@@ -474,7 +477,7 @@ export function cupInjuryStatements(
     stmts.push(db.prepare(
       "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(crypto.randomUUID(), realPlayerId, side.teamId, typZraneniZPopisu(event.detail), event.detail ?? "zranění",
-      zavaznostZeDnu(days), days, days, null));
+      zavaznostZeDnu(days), days, days, matchId));
   }
   return stmts;
 }
