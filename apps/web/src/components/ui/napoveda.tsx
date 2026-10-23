@@ -156,7 +156,7 @@ const HELP: Record<string, HelpEntry> = {
     sections: [
       { text: "Stav hřiště ovlivňuje kvalitu hry a riziko zranění." },
       { heading: "Počasí", text: "Déšť: technika 0,8×, zranění 1,3×. Sníh: technika 0,7×, zranění 1,4×. Vítr: technika 0,9×. Počasí se generuje náhodně." },
-      { heading: "Návštěvnost", text: "Závisí na fanouškovské základně, reputaci klubu, formě, počasí a kapacitě. Základní vstupné: vesnice 20, obec 30, městys 40, město 50 Kč/divák." },
+      { heading: "Návštěvnost", text: "Závisí na fanouškovské základně, reputaci klubu, formě, počasí, ceně vstupného a kapacitě. Základní vstupné: vesnice 20, obec 30, městys 40, město 50 Kč/divák. Nad základní cenou přijde méně lidí, od trojnásobku nepřijde nikdo." },
       { heading: "Zámky vylepšení", text: "2. úroveň: reputace 50+ a 15 odehraných zápasů. 3. úroveň: reputace 70+, 35 zápasů a sezona 3+. Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec, tam reputace nerozhoduje, jen přízeň." },
     ],
   },

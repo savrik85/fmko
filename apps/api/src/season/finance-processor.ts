@@ -191,6 +191,36 @@ export function matchTicketPrice(opts: {
   return Math.round(effectiveBase * (1 + opts.ticketPriceBonus) * satisfactionTicketMul);
 }
 
+/**
+ * Kolik lidí vstupné nechá přijít. Do obvyklé ceny obce přijdou všichni, nad ní lidí
+ * ubývá a od trojnásobku nepřijde nikdo. Násobí poptávku domácích diváků před stropem
+ * kapacity, všude, kde se vybírá vstupné (liga, domácí pohár, přátelák).
+ *
+ * Dřív cena do návštěvy nevstupovala vůbec: vstupné 500 Kč znamenalo stejnou návštěvu
+ * jako 30 Kč a jediným postihem bylo −2 spokojenosti za zápas.
+ *
+ * @param userBasePrice cena manažera (`fans.base_ticket_price`), 0 = sazba obce
+ * @param villageBasePrice sazba obce z `getBaseTicketPrice`
+ */
+export function ticketPriceAttendanceFactor(userBasePrice: number, villageBasePrice: number): number {
+  if (villageBasePrice <= 0) return 1;
+  const ratio = (userBasePrice > 0 ? userBasePrice : villageBasePrice) / villageBasePrice;
+  return ratio <= 1 ? 1 : Math.max(0, 1 - (ratio - 1) * 0.5);
+}
+
+/** `ticketPriceAttendanceFactor` pro domácí tým z jeho ceny a velikosti obce. Bez dat 1. */
+export async function loadTicketAttendanceFactor(db: D1Database, teamId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT v.size, f.base_ticket_price FROM teams t
+       JOIN villages v ON v.id = t.village_id
+       LEFT JOIN fans f ON f.team_id = t.id
+      WHERE t.id = ?`,
+  ).bind(teamId).first<{ size: string | null; base_ticket_price: number | null }>()
+    .catch((e) => { logger.warn({ module: "finance", teamId }, "cena vstupného pro návštěvu", e); return null; });
+  if (!row) return 1;
+  return ticketPriceAttendanceFactor(row.base_ticket_price ?? 0, getBaseTicketPrice(mapVillageSize(row.size ?? "village")));
+}
+
 /** Typy transakcí, které jsou diskrétním uživatelským nákupem — blokovány při záporném rozpočtu. */
 const PURCHASE_TYPES = new Set<TransactionType>([
   "transfer_fee", "signing_fee", "classified_ad",

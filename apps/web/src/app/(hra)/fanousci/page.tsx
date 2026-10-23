@@ -1018,7 +1018,9 @@ export default function FansPage() {
         <SectionLabel>Vstupné</SectionLabel>
         <div className="text-sm text-muted mb-4">
           Základní cena se řídí velikostí obce a vybavením stadionu. Tady ji můžeš přebít vlastní hodnotou.
-          Cena přes 1.2× běžné úrovně rozzlobí fanoušky.
+          Do běžné ceny obce ({fans.villageBaseTicketPrice} Kč) přijdou všichni, nad ní přijde méně lidí
+          a od trojnásobku ({fans.villageBaseTicketPrice * 3} Kč) nepřijde nikdo.
+          Cena přes 1,2× běžné úrovně navíc rozzlobí fanoušky.
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex-1 min-w-0">

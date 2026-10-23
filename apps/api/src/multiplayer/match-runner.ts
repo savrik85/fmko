@@ -440,13 +440,20 @@ export async function runScheduledMatches(
             }
             // Fan satisfaction multiplier — happy fans = víc lidí chodí, nespokojení zůstanou doma.
             // 0.75 (nespokojení) -> 1.25 (nadšení), default 1.0 pokud fans row neexistuje
-            const fansSatRow = await db.prepare("SELECT satisfaction FROM fans WHERE team_id = ?")
-                .bind(homeTeamId).first<{ satisfaction: number }>().catch((e) => {
+            const fansSatRow = await db.prepare("SELECT satisfaction, base_ticket_price FROM fans WHERE team_id = ?")
+                .bind(homeTeamId).first<{ satisfaction: number; base_ticket_price: number | null }>().catch((e) => {
                     logger.warn({module: "match-runner"}, "load fans satisfaction", e);
                     return null;
                 });
             const fansSat = fansSatRow?.satisfaction ?? 50;
             const satisfactionAttendanceMul = 0.75 + (Math.max(0, Math.min(100, fansSat)) / 100) * 0.5;
+
+            // Vstupné: do obvyklé ceny obce přijdou všichni, nad ní lidí ubývá, od trojnásobku
+            // nikdo. U21 vstupné nevybírá (finance patří áčku), tam cena nehraje roli.
+            const {ticketPriceAttendanceFactor, getBaseTicketPrice, mapVillageSize} = await import("../season/finance-processor");
+            const ticketAttendanceMul = clubSideEffects
+                ? ticketPriceAttendanceFactor(fansSatRow?.base_ticket_price ?? 0, getBaseTicketPrice(mapVillageSize(homeInfo?.size ?? "village")))
+                : 1;
 
             // Promotion boost — tým zaplatil propagaci, přitáhne víc diváků
             const promoRow = await db.prepare("SELECT promotion_boost FROM matches WHERE id = ?")
@@ -512,9 +519,9 @@ export async function runScheduledMatches(
                 );
             }
 
-            // Apply facility attendance bonus (lighting + parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením), cap at available capacity
+            // Apply facility attendance bonus (lighting + parking) + celebrity bonus + satisfaction + promo + derby + počasí (se zastřešením) + cena vstupného, cap at available capacity
             const attendance = Math.min(
-                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather * pitchAttMul * fgAttendanceMul),
+                Math.round(rawAttendance * promoBoost * (1 + facilityEffects.attendanceBonus) * celebAttendanceMultiplier * satisfactionAttendanceMul * derbyAttendanceMul * shieldedWeather * pitchAttMul * fgAttendanceMul * ticketAttendanceMul),
                 sektory.kapacita,
             );
 
@@ -645,11 +652,13 @@ export async function runScheduledMatches(
             // navíc nemá co dělat s tím, kdo má míč.
             const fanbaseAdvantage = Math.max(-0.01, Math.min(0.03, (haInfo.total + (groupFx?.noiseBonus ?? 0)) * 0.01));
             const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + ultrasAdvantage + fanbaseAdvantage));
-            // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál
+            // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál.
+            // Lidi, které přilákají zastupitelé, platí vstupné jako ostatní, takže je přemrštěná
+            // cena odradí taky — jinak by od trojnásobku chodilo padesát lidí na každého zastupitele.
             const crowdBoost = 1 + (homeEquipment?.crowdMod ?? 0);
             const attendanceWithOfficials = Math.min(
                 stadiumCapacity,
-                Math.round((attendance ?? 0) * crowdBoost) + officialCount * 50,
+                Math.round((attendance ?? 0) * crowdBoost) + Math.round(officialCount * 50 * ticketAttendanceMul),
             );
 
             // Rozhodčí — delegovaný dva herní dny předem. Když delegace chybí (tick kolo
