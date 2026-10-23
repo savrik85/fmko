@@ -4,6 +4,8 @@
  * Session platí 30 dní od posledního prodloužení. Používaná session se prodlužuje
  * v `getSession` (volá ho každá přihlášená routa i middleware), nejvýš jednou za den,
  * takže aktivní hráč se znovu přihlašovat nemusí a do KV jde nejvýš jeden zápis na hráče a den.
+ * Nejdéle ale 90 dní od přihlášení: pak se session přestane prodlužovat a hráč se přihlásí znovu.
+ * Odhlášení zanechá v KV záznam `revoked:<token>`, aby souběžné prodloužení session nevzkřísilo.
  */
 
 import type { Context } from "hono";
@@ -13,6 +15,10 @@ import { logger } from "../lib/logger";
 const SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
 /** Jak dlouho po posledním prodloužení se session při použití prodlouží znovu. */
 export const SESSION_RENEW_AFTER_MS = 24 * 60 * 60 * 1000;
+/** Nejdelší život session od přihlášení. Ukradený token se tak nedá prodlužovat donekonečna. */
+export const SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+/** KV nepřijme kratší lhůtu než 60 s. */
+const MIN_KV_TTL_S = 60;
 
 export interface Session {
   userId: string;
@@ -77,9 +83,24 @@ async function renewIfStale(kv: KVNamespace, token: string, session: Session): P
   if (attempted !== undefined && now - attempted < SESSION_RENEW_AFTER_MS) return;
   if (renewalAttempts.size >= MAX_TRACKED_RENEWALS) renewalAttempts.clear();
   renewalAttempts.set(token, now);
-  const renewed: Session = { ...session, renewedAt: new Date(now).toISOString() };
+
+  // Horní hranice od přihlášení: prodlužuje se nejvýš do ní, pak session dožije.
+  const created = Date.parse(session.createdAt);
+  const remainingS = Number.isFinite(created)
+    ? Math.floor((created + SESSION_MAX_AGE_MS - now) / 1000)
+    : SESSION_TTL;
+  if (remainingS < MIN_KV_TTL_S) return;
+
+  const renewed: Session = {
+    ...session,
+    // Session bez čitelného data vzniku začne počítat horní hranici odteď.
+    createdAt: Number.isFinite(created) ? session.createdAt : new Date(now).toISOString(),
+    renewedAt: new Date(now).toISOString(),
+  };
   try {
-    await kv.put(`session:${token}`, JSON.stringify(renewed), { expirationTtl: SESSION_TTL });
+    // Odhlášená session se nesmí zápisem vrátit (souběh s odhlášením v jiné instanci).
+    if (await kv.get(`revoked:${token}`)) return;
+    await kv.put(`session:${token}`, JSON.stringify(renewed), { expirationTtl: Math.min(SESSION_TTL, remainingS) });
   } catch (e) {
     // Prodloužení nesmí shodit požadavek, session platí dál s dosavadní lhůtou.
     logger.warn({ module: "session" }, "prodloužení session", e);
@@ -129,6 +150,9 @@ export async function deleteSession(
   // Souběžný požadavek, který session načetl před odhlášením, ji v téhle instanci už
   // prodloužením nezapíše zpátky.
   renewalAttempts.set(token, Date.now());
+  // Záznam o odhlášení vydrží, dokud by session mohla žít. Prodloužení v jiné instanci
+  // ho před zápisem zkontroluje.
+  await kv.put(`revoked:${token}`, "1", { expirationTtl: SESSION_TTL });
   await kv.delete(`session:${token}`);
 }
 
