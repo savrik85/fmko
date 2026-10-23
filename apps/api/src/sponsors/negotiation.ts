@@ -12,6 +12,7 @@ import {
 } from "./ambition";
 import { clampFavor } from "./favor-math";
 import { WISH_ACCUSATIVE } from "./negotiation-texts";
+import type { LeagueMovement } from "../league/district-promotion";
 import type { OwnerPersonality } from "./owners";
 import {
   BIG_FACILITIES, CLUB_CONTROLLED_KINDS, DEADLINE_KINDS, isOfferableKind, LEAGUE_FINISH_KINDS, PROMISE_BASE_SHARE, PROMISE_DEADLINE_DAYS, SEASONAL_KINDS,
@@ -70,6 +71,8 @@ export interface NegotiationContext {
    * Smlouva běží od podpisu do konce poslední sezóny, tahle část sezóny podpisu do ní nepatří.
    */
   seasonProgressMonths: number;
+  /** Postup a sestup, které liga klubu má (leagueMovement): jen pak jde slíbit postup, resp. nesestup. */
+  leagueMovement: LeagueMovement;
 }
 
 export interface Demands {
@@ -328,8 +331,8 @@ export function reduceToWillingness(proposal: Proposal, ctx: NegotiationContext,
  */
 export function defaultPromise(kind: PromiseKind, ctx: NegotiationContext, proposal: Proposal): PromiseSpec | null {
   if (SEASONAL_KINDS.has(kind) && proposal.seasons < 2) return null;
-  // Postup a nesestup se teď nehrají (starší jednání je můžou mít mezi přáními).
-  if (!isOfferableKind(kind)) return null;
+  // Postup jen z ligy, ze které se postupuje, nesestup jen z ligy, ze které se sestupuje.
+  if (!isOfferableKind(kind, ctx.leagueMovement)) return null;
   if (!kindAllowedForCategory(kind, ctx.category)) return null;
   const spec = (params: PromiseParams): PromiseSpec => ({ kind, params });
   switch (kind) {

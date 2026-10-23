@@ -44,31 +44,40 @@ const RIOTS_SQL = `
                        WHERE cc.season_number = ?2))`;
 
 /**
- * Konečné místo v lize. Přednost má archiv (`league_history`, fáze archive běží před
- * rolloverem); `calculateStandings` tu nejde, v rolloveru už existuje kalendář nové sezóny.
- * Bez archivu (ruční vyhodnocení během sezóny) se tabulka spočítá ze zápasů té sezóny.
+ * Konečné místo v lize, ve které klub sezónu `season` HRÁL. Ne podle `teams.league_id`:
+ * v rolloveru postup a sestup (league/district-promotion.ts, krok 2b) přesune kluby do nové
+ * ligy dřív, než se sliby vyhodnotí (krok 4a), a mistr III. třídy by pak měl místo v přeboru
+ * s nulou bodů. Přednost má archiv (`league_history` té sezóny, ve kterém klub je; fáze archive
+ * běží před rolloverem). Bez archivu (ruční vyhodnocení během sezóny) se tabulka spočítá ze
+ * zápasů ligy, ve které klub v té sezóně hrál. `calculateStandings` tu nejde, bere týmy podle
+ * současné ligy a v rolloveru už existuje kalendář nové sezóny.
  */
 async function loadFinalPosition(db: D1Database, teamId: string, season: number): Promise<{ position: number; teams: number } | null> {
+  // instr jen předvybere archivy, ve kterých id klubu je; místo hledá positionFromStandings přesně.
   const hist = await db.prepare(
     `SELECT lh.final_standings FROM league_history lh
-     WHERE lh.season_number = ?1 AND lh.league_id = (SELECT league_id FROM teams WHERE id = ?2)
-     LIMIT 1`,
-  ).bind(season, teamId).first<{ final_standings: string }>();
-  if (hist) {
-    const p = positionFromStandings(hist.final_standings, teamId);
+     WHERE lh.season_number = ?1 AND instr(lh.final_standings, ?2) > 0`,
+  ).bind(season, teamId).all<{ final_standings: string }>();
+  for (const h of hist.results) {
+    const p = positionFromStandings(h.final_standings, teamId);
     if (p) return p;
   }
-  const [teams, matches] = await Promise.all([
-    db.prepare("SELECT id FROM teams WHERE league_id = (SELECT league_id FROM teams WHERE id = ?)")
-      .bind(teamId).all<{ id: string }>(),
-    db.prepare(
-      `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score
-       FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
-       WHERE m.league_id = (SELECT league_id FROM teams WHERE id = ?1) AND sc.season_number = ?2 AND m.status = 'simulated'`,
-    ).bind(teamId, season).all<MatchResultRow>(),
-  ]);
-  if (matches.results.length === 0) return null;
-  const ranks = rankTable(teams.results.map((t) => t.id), matches.results);
+  const league = await db.prepare(
+    `SELECT m.league_id FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+     WHERE sc.season_number = ?1 AND (m.home_team_id = ?2 OR m.away_team_id = ?2) AND m.league_id IS NOT NULL
+     LIMIT 1`,
+  ).bind(season, teamId).first<{ league_id: string }>();
+  if (!league) return null;
+  const matches = await db.prepare(
+    `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.status
+     FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+     WHERE m.league_id = ?1 AND sc.season_number = ?2`,
+  ).bind(league.league_id, season).all<MatchResultRow & { status: string }>();
+  const played = matches.results.filter((m) => m.status === "simulated");
+  if (played.length === 0) return null;
+  // Týmy ligy podle jejího rozpisu té sezóny (i ty, co ještě nehrály), ne podle současného složení.
+  const teamIds = [...new Set(matches.results.flatMap((m) => [m.home_team_id, m.away_team_id]))];
+  const ranks = rankTable(teamIds, played);
   const position = ranks.get(teamId);
   return position === undefined ? null : { position, teams: ranks.size };
 }

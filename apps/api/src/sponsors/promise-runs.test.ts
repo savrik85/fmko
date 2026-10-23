@@ -19,7 +19,7 @@ function vse(db: FalesnaD1) {
 const STANDINGS = JSON.stringify([{ pos: 1, teamId: "a" }, { pos: 2, teamId: "t1" }, { pos: 3, teamId: "c" }]);
 
 const STATS_RULES: Pravidlo[] = [
-  { sql: /FROM league_history/, first: { final_standings: STANDINGS } },
+  { sql: /FROM league_history/, all: [{ final_standings: STANDINGS }] },
   { sql: /FROM cup_competitions/, first: { status: "finished", total_rounds: 6, current_round: 6, eliminated_round: 3, cup_team_id: "ct1", is_winner: 0 } },
   { sql: /AVG\(m\.attendance\)/, first: { avg: 412.4 } },
   { sql: /match_player_stats/, first: { matches: 10, young: 17 } },
@@ -47,9 +47,10 @@ describe("loadSeasonStats", () => {
 
   it("bez archivu spočítá tabulku ze zápasů té sezóny", async () => {
     const db = new FalesnaD1([
-      { sql: /FROM league_history/, first: null },
-      { sql: /SELECT id FROM teams WHERE league_id/, all: [{ id: "a" }, { id: "t1" }] },
-      { sql: /SELECT m\.home_team_id/, all: [{ home_team_id: "t1", away_team_id: "a", home_score: 2, away_score: 0 }] },
+      { sql: /FROM league_history/, all: [] },
+      // Liga, ve které klub sezónu 5 hrál (ne jeho současná), a její rozpis té sezóny.
+      { sql: /SELECT m\.league_id FROM matches/, first: { league_id: "l1" } },
+      { sql: /SELECT m\.home_team_id/, all: [{ home_team_id: "t1", away_team_id: "a", home_score: 2, away_score: 0, status: "simulated" }] },
       ...STATS_RULES.slice(1),
     ]);
     const s = await loadSeasonStats(jakoD1(db), "t1", 5, { agedSinceSeason: false });
