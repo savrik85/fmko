@@ -7,7 +7,7 @@ import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { experienceGainChance } from "../skills/training";
 import { getBaseTicketPrice, mapVillageSize, recordTransaction, ticketPriceAttendanceFactor } from "../season/finance-processor";
-import type { Weather, TeamSetup } from "../engine/types";
+import type { MatchEvent, Weather, TeamSetup } from "../engine/types";
 import { typZraneniZPopisu, zavaznostZeDnu } from "../injuries/injury-types";
 import { matchInjuryDays } from "../injuries/injury-generator";
 
@@ -441,6 +441,44 @@ async function applyCupHomeFanbase(db: D1Database, homeRealTeamId: string, cupMa
   }
 }
 
+/** Jedna strana pohárového zápasu pro zápis zranění. `teamId` null = velkoklub, ten v `players` není. */
+export interface CupInjurySide {
+  teamId: string | null;
+  idMap: ReadonlyMap<number, string>;
+  players: ReadonlyArray<{ id: number; age?: number; injuryProneness?: number }>;
+}
+
+/**
+ * Zápis zranění z pohárového zápasu, jen pro skutečné týmy (velkoklubové kádry nejsou v players).
+ *
+ * Bez odkazu na zápas, stejně jako turnaj: `injuries.match_id` má cizí klíč na ligové `matches`,
+ * pohárový zápas tam není. Dřív se sem psalo id z `cup_matches`, cizí klíč shodil celou dávku
+ * a zranění z poháru se neuložilo ani jedno (na produ 255 odehraných pohárových zápasů a 0 zranění).
+ */
+export function cupInjuryStatements(
+  db: D1Database,
+  events: readonly MatchEvent[],
+  home: CupInjurySide,
+  away: CupInjurySide,
+  rng: Rng,
+): D1PreparedStatement[] {
+  const stmts: D1PreparedStatement[] = [];
+  for (const event of events) {
+    if (event.type !== "injury") continue;
+    const side = event.teamId === 1 ? home : away;
+    if (!side.teamId) continue;
+    const realPlayerId = side.idMap.get(event.playerId);
+    if (!realPlayerId) continue;
+    const injured = side.players.find((p) => p.id === event.playerId);
+    const days = matchInjuryDays(rng, event.detail, injured?.age ?? 25, injured?.injuryProneness ?? 50);
+    stmts.push(db.prepare(
+      "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(crypto.randomUUID(), realPlayerId, side.teamId, typZraneniZPopisu(event.detail), event.detail ?? "zranění",
+      zavaznostZeDnu(days), days, days, null));
+  }
+  return stmts;
+}
+
 /** Deterministický malý rozptyl návštěvy z team id (nemáme tu Math.random ve všech cestách). */
 function rng2(seed: string): number {
   let h = 0;
@@ -823,22 +861,10 @@ async function simulateCupTie(
     }
 
     // Zranění ze zápasu — jen pro reálné týmy (velkoklubové kádry nejsou v players, FK by spadl)
-    const injuryStmts: D1PreparedStatement[] = [];
-    for (const event of result.events) {
-      if (event.type !== "injury") continue;
-      const isHome = event.teamId === 1;
-      const realTeam = isHome ? homeReal : awayReal;
-      if (!realTeam) continue;
-      const realPlayerId = (isHome ? homeBuild.idMap : awayBuild.idMap).get(event.playerId);
-      if (!realPlayerId) continue;
-      const injured = (isHome ? homeBuild.players : awayBuild.players).find((p) => p.id === event.playerId);
-      const days = matchInjuryDays(rng, event.detail, injured?.age ?? 25, injured?.injuryProneness ?? 50);
-      const injType = typZraneniZPopisu(event.detail);
-      const severity = zavaznostZeDnu(days);
-      injuryStmts.push(db.prepare(
-        "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(crypto.randomUUID(), realPlayerId, realTeam, injType, event.detail ?? "zranění", severity, days, days, cupMatchId));
-    }
+    const injuryStmts = cupInjuryStatements(db, result.events,
+      { teamId: homeReal, idMap: homeBuild.idMap, players: homeBuild.players },
+      { teamId: awayReal, idMap: awayBuild.idMap, players: awayBuild.players },
+      rng);
     if (injuryStmts.length > 0) await db.batch(injuryStmts).catch((e) => logger.warn({ module: M }, "persist cup injuries", e));
 
     // Domácí tržby (vstupné + občerstvení) — jen pokud domácí je reálný tým se stadionem
