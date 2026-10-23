@@ -14,7 +14,9 @@ import { describe, expect, it } from "vitest";
  * správně, protože přesun je právě ta chvíle, kdy se na tohle zapomíná.
  */
 
-const FE_FINANCE = join(__dirname, "../../../web/src/app/(hra)/finance/page.tsx");
+// Mapy se přesunuly ze stránky Financí do sdíleného souboru, protože je používá
+// i revize účetnictví u komisaře pro integritu soutěže.
+const FE_FINANCE = join(__dirname, "../../../web/src/lib/transaction-labels.ts");
 
 function klice(zdroj: string, mapa: string): Set<string> {
   const m = new RegExp(`${mapa}\\s*:\\s*Record<string, string>\\s*=\\s*\\{([\\s\\S]*?)\\n\\};`).exec(zdroj);
