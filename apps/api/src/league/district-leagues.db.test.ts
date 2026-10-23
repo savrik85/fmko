@@ -336,7 +336,8 @@ describe("III. třída a přípravné období", () => {
     const champion = await db.prepare("SELECT champion_team_id FROM season_awards WHERE league_id = ? AND season_number = 1")
       .bind(prebor!.id).first<{ champion_team_id: string }>();
     expect(champion?.champion_team_id).toBeTruthy();
+    // Okresní přebor není krajský: šampion kraje se neudělí, vítěz má Mistra sezóny.
     const champions = await db.prepare("SELECT team_id FROM team_achievements WHERE achievement_key = 'champion'").all<{ team_id: string }>();
-    expect(champions.results.map((r) => r.team_id)).toEqual([champion!.champion_team_id]);
+    expect(champions.results).toEqual([]);
   }, 300_000);
 });

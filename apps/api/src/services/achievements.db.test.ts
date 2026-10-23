@@ -23,6 +23,8 @@ beforeAll(async () => {
       tier TEXT, meta TEXT, PRIMARY KEY (team_id, achievement_key))`,
     `CREATE TABLE season_awards (id TEXT PRIMARY KEY, league_id TEXT NOT NULL, season_number INTEGER NOT NULL,
       champion_team_id TEXT, UNIQUE (league_id, season_number))`,
+    "CREATE TABLE leagues (id TEXT PRIMARY KEY, level TEXT)",
+    "INSERT INTO leagues (id, level) VALUES ('l1', 'krajsky_prebor'), ('l2', 'okresni_prebor')",
     "CREATE TABLE villages (id TEXT PRIMARY KEY, name TEXT, size TEXT, district TEXT)",
     "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, league_id TEXT, village_id TEXT, budget INTEGER, game_date TEXT)",
     "CREATE TABLE seasons (id TEXT PRIMARY KEY, number INTEGER, status TEXT)",
@@ -55,7 +57,7 @@ async function achievementsOf(teamId: string): Promise<string[]> {
 }
 
 describe("šampion ligy", () => {
-  it("vítěz z ocenění sezóny dostane šampiona, opakovaný běh fáze nic nepřidá", async () => {
+  it("vítěz krajského přeboru dostane šampiona kraje, opakovaný běh fáze nic nepřidá", async () => {
     await db.prepare("INSERT INTO season_awards (id, league_id, season_number, champion_team_id) VALUES ('aw-1', 'l1', 3, 'winner')").run();
 
     expect(await awardLeagueChampion(db, "l1", 3)).toBe("winner");
@@ -63,6 +65,12 @@ describe("šampion ligy", () => {
 
     const rows = await db.prepare("SELECT team_id, achievement_key, tier FROM team_achievements").all();
     expect(rows.results).toEqual([{ team_id: "winner", achievement_key: "champion", tier: "gold" }]);
+  });
+
+  it("vítěz okresní ligy šampiona kraje nedostane, má trofej Mistr sezóny", async () => {
+    await db.prepare("INSERT INTO season_awards (id, league_id, season_number, champion_team_id) VALUES ('aw-2', 'l2', 3, 'district-winner')").run();
+    expect(await awardLeagueChampion(db, "l2", 3)).toBeNull();
+    expect(await achievementsOf("district-winner")).toEqual([]);
   });
 
   it("bez ocenění sezóny se nic neudělí", async () => {

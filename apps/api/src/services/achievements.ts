@@ -221,10 +221,15 @@ export async function checkFreeAgentSigningAchievements(
  * `award` je idempotentní. Bez tohohle trofej nešla získat vůbec.
  */
 export async function awardLeagueChampion(db: D1Database, leagueId: string, seasonNumber: number): Promise<string | null> {
-  const row = await db.prepare("SELECT champion_team_id FROM season_awards WHERE league_id = ? AND season_number = ?")
-    .bind(leagueId, seasonNumber).first<{ champion_team_id: string | null }>()
+  // „Šampion kraje: Vyhrát krajský přebor“. Vítěz okresní ligy už dostává `season_champion`
+  // („Vyhrát svou ligu“), dvě zlaté za totéž a jedna s nepravdivým textem by nedávaly smysl.
+  // Dokud ve hře krajský přebor není, zůstává trofej nezískatelná.
+  const row = await db.prepare(
+    `SELECT a.champion_team_id, l.level FROM season_awards a JOIN leagues l ON l.id = a.league_id
+      WHERE a.league_id = ? AND a.season_number = ?`,
+  ).bind(leagueId, seasonNumber).first<{ champion_team_id: string | null; level: string | null }>()
     .catch((e) => { logger.warn({ module: "achievements" }, `vítěz ligy ${leagueId}/${seasonNumber}`, e); return null; });
-  if (!row?.champion_team_id) return null;
+  if (!row?.champion_team_id || row.level !== "krajsky_prebor") return null;
   await award(db, row.champion_team_id, "champion", { leagueId, seasonNumber });
   return row.champion_team_id;
 }
