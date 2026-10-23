@@ -9,12 +9,14 @@ vi.mock("../messaging/system-sms", () => ({
 }));
 vi.mock("../season/finance-processor", () => ({ recordTransaction: vi.fn(async () => 0) }));
 vi.mock("../transfers/remove-player", () => ({ removePlayer: vi.fn(async () => ({ ok: true })) }));
+vi.mock("../community/web-push", () => ({ sendWebPushToTeams: vi.fn(async () => undefined) }));
 
 import type { Bindings } from "../index";
 import { applyManagerAttrDelta } from "../lib/manager-attrs";
 import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import { removePlayer } from "../transfers/remove-player";
+import { sendWebPushToTeams } from "../community/web-push";
 import { rozhodni } from "./akce";
 import type { IncidentRadek } from "./incident-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
@@ -58,6 +60,21 @@ describe("tresty", () => {
     const { env } = prostredi(ODHALENY);
     expect(await rozhodni(env, "tym-a", "inc-1", "vyhodit")).toEqual({ ok: true, castka: null });
     expect(removePlayer).toHaveBeenCalledWith(expect.anything(), "p", "released", { toFreeAgent: true, teamId: "tym-a" });
+    expect(sendWebPushToTeams).not.toHaveBeenCalled();
+  });
+
+  it("vyhodit: kdo pachatele sledoval, dostane zprávu, že je volný", async () => {
+    vi.mocked(removePlayer).mockResolvedValueOnce({
+      ok: true,
+      player: { id: "p", firstName: "Pepa", lastName: "Průšvih", nickname: "", age: 25, position: "MID", overallRating: 40, teamId: "tym-a", teamName: "Sokol A", leagueId: "l1" },
+      watcherTeamIds: ["tym-b", "tym-a"],
+      freeAgentId: "fa-1",
+    });
+    const { env } = prostredi(ODHALENY);
+    expect(await rozhodni(env, "tym-a", "inc-1", "vyhodit")).toEqual({ ok: true, castka: null });
+    expect(sendWebPushToTeams).toHaveBeenCalledWith(
+      expect.anything(), ["tym-b"], "⭐ Pepa Průšvih je volný!", "Sokol A ho uvolnil, teď je k mání jako volný hráč.", "/prestupy",
+    );
   });
 
   it("když vyhazov selže, incident se vrátí k rozhodnutí", async () => {

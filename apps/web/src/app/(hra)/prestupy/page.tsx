@@ -1480,7 +1480,8 @@ export default function TransfersPage() {
       {tab === "demands" && teamId && <DemandsTab teamId={teamId} />}
 
       {tab === "hledat" && hledatSub === "sledovani" && teamId && (
-        <WatchlistTab teamId={teamId} onCount={setWatchCount} color={primaryColor || "#2D5F2D"}
+        <WatchlistTab teamId={teamId} onCount={setWatchCount} onOpenFreeAgents={() => setHledatSub("volni")}
+          color={primaryColor || "#2D5F2D"}
           onColorText={bestTextOn(primaryColor || "#2D5F2D") === "light" ? "text-white border border-transparent" : "text-gray-900 border border-gray-300"}
           ratingColor={readableOnLight(primaryColor || "#2D5F2D")} />
       )}

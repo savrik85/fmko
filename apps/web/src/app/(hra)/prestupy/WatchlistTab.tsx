@@ -24,13 +24,18 @@ export interface WatchedPlayer {
   teamName: string | null;
   injury: { daysRemaining: number; type: string | null } | null;
   watchedSince: string;
-  recentStats: { matches: number; goals: number; assists: number; avgRating: number };
+  /** Volný hráč zápasy nemá, ty se vedou pod jeho starým id. */
+  recentStats: { matches: number; goals: number; assists: number; avgRating: number } | null;
+  /** Propuštěný hráč, kterého pořád sleduješ. Je k mání mezi volnými hráči. */
+  freeAgent?: boolean;
 }
 
-export function WatchlistTab({ teamId, onCount, color, onColorText, ratingColor }: {
+export function WatchlistTab({ teamId, onCount, onOpenFreeAgents, color, onColorText, ratingColor }: {
   teamId: string;
   /** Počet sledovaných pro odznak v podzáložce. */
   onCount?: (count: number) => void;
+  /** Přepne na podzáložku Volní. Volný hráč profil nemá, podepisuje se odtamtud. */
+  onOpenFreeAgents: () => void;
   color: string;
   onColorText: string;
   ratingColor: string;
@@ -69,6 +74,7 @@ export function WatchlistTab({ teamId, onCount, color, onColorText, ratingColor 
     club: p.teamId && p.teamName ? { id: p.teamId, name: p.teamName } : null,
     form: p.recentStats ?? null,
     watchedSince: p.watchedSince,
+    ...(p.freeAgent ? { onOpen: onOpenFreeAgents, clubLabel: "volný hráč" } : {}),
   }));
 
   return (

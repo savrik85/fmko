@@ -277,6 +277,24 @@ export async function rozhodni(
     await atributTrenera(db, teamId, incidentId, "discipline", 1, `Vyhozen pachatel incidentu: ${pachatel.jmeno}`, gameDate);
     await posunKadru(db, teamId, oblibeny ? -4 : 1).run()
       .catch((e) => logger.warn({ module: M }, `morálka po vyhazovu ${incidentId}`, e));
+    // Vyhozený jde mezi volné hráče stejně jako po propuštění z kádru, takže sledující
+    // dostanou stejnou zprávu (routes/game.ts). Sledování jim `removePlayer` převedl
+    // na volného hráče, seznam sledujících načetl ještě před úklidem.
+    const watchers = (odebrany.watcherTeamIds ?? []).filter((id) => id !== teamId);
+    if (watchers.length > 0) {
+      try {
+        const { sendWebPushToTeams } = await import("../community/web-push");
+        await sendWebPushToTeams(
+          { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db },
+          watchers,
+          `⭐ ${pachatel.krestni} ${pachatel.prijmeni} je volný!`,
+          `${odebrany.player?.teamName ?? "Klub"} ho uvolnil, teď je k mání jako volný hráč.`,
+          "/prestupy",
+        );
+      } catch (e) {
+        logger.warn({ module: M }, `zpráva sledujícím po vyhazovu ${incidentId}`, e);
+      }
+    }
     return { ok: true, castka: null };
   }
 

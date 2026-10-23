@@ -32,6 +32,10 @@ class FakeStatement {
     if (/FROM seasons/.test(this.sql)) return { number: 4 } as unknown as T;
     return null;
   }
+  async all<T>(): Promise<{ results: T[] }> {
+    if (/FROM player_watchlist/.test(this.sql)) return { results: [{ team_id: "w1" }, { team_id: "w2" }] as unknown as T[] };
+    return { results: [] };
+  }
   async run(): Promise<{ meta: { changes: number } }> { return { meta: { changes: 1 } }; }
 }
 
@@ -90,5 +94,42 @@ describe("removePlayer, expirace v poolu volných hráčů", () => {
     await removePlayer(db as unknown as D1Database, "p1", "retired", {});
 
     expect(db.freeAgentInsert()).toBeUndefined();
+  });
+});
+
+describe("removePlayer, sledující hráče", () => {
+  it("sledující se načtou dřív, než se cokoli uklidí", async () => {
+    const db = new FakeD1();
+
+    const res = await removePlayer(db as unknown as D1Database, "p1", "released", { toFreeAgent: true });
+
+    expect(res.watcherTeamIds).toEqual(["w1", "w2"]);
+    const loadIndex = db.recorded.findIndex((r) => /SELECT DISTINCT team_id FROM player_watchlist/.test(r.sql));
+    const watchlistWriteIndex = db.recorded.findIndex((r) => /(UPDATE|DELETE FROM) player_watchlist/.test(r.sql));
+    expect(loadIndex).toBeGreaterThanOrEqual(0);
+    expect(loadIndex).toBeLessThan(watchlistWriteIndex);
+  });
+
+  it("propuštěním se sledování převede na id volného hráče, nesmaže se", async () => {
+    const db = new FakeD1();
+
+    const res = await removePlayer(db as unknown as D1Database, "p1", "released", { toFreeAgent: true, teamId: "t1" });
+
+    const faId = db.freeAgentInsert()!.params[0];
+    expect(res.freeAgentId).toBe(faId);
+    const move = db.recorded.find((r) => /UPDATE player_watchlist SET player_id = \?/.test(r.sql));
+    expect(move?.params).toEqual([faId, "p1", "p1", "t1"]);
+    expect(db.recorded.some((r) => /DELETE FROM player_watchlist/.test(r.sql))).toBe(false);
+  });
+
+  it("odchodem ze hry se sledování smaže", async () => {
+    const db = new FakeD1();
+
+    const res = await removePlayer(db as unknown as D1Database, "p1", "retired", {});
+
+    expect(res.watcherTeamIds).toEqual(["w1", "w2"]);
+    expect(res.freeAgentId).toBeUndefined();
+    expect(db.recorded.some((r) => /DELETE FROM player_watchlist/.test(r.sql))).toBe(true);
+    expect(db.recorded.some((r) => /UPDATE player_watchlist/.test(r.sql))).toBe(false);
   });
 });
