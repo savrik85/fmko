@@ -184,9 +184,20 @@ export async function loadClubAudit(
   };
 }
 
+/** Klub, který jde v soutěži revidovat, nebo null. */
+export async function findAuditTarget(
+  db: D1Database, leagueId: string, targetTeamId: string,
+): Promise<{ id: string; name: string } | null> {
+  return db.prepare("SELECT id, name FROM teams WHERE id = ? AND league_id = ? AND parent_team_id IS NULL")
+    .bind(targetTeamId, leagueId).first<{ id: string; name: string }>();
+}
+
 /**
  * Zapíše revizi. Vrací true, když jde o první revizi klubu v sezóně — jen tehdy
  * dostane klub SMS, aby opakované nahlédnutí nespamovalo.
+ *
+ * Chyba zápisu se NEpolyká: revize bez záznamu by byla nahlédnutí potají,
+ * proto se pak účetnictví vůbec nezobrazí.
  */
 export async function recordAudit(
   db: D1Database,
@@ -195,9 +206,8 @@ export async function recordAudit(
   const res = await db.prepare(
     `INSERT OR IGNORE INTO competition_audits (league_id, season_number, target_team_id, auditor_team_id, game_date)
      VALUES (?, ?, ?, ?, ?)`
-  ).bind(opts.leagueId, opts.seasonNumber, opts.targetTeamId, opts.auditorTeamId, opts.gameDate).run()
-    .catch((e) => { logger.warn({ module: M }, `zápis revize ${opts.targetTeamId}`, e); return null; });
-  return (res?.meta?.changes ?? 0) > 0;
+  ).bind(opts.leagueId, opts.seasonNumber, opts.targetTeamId, opts.auditorTeamId, opts.gameDate).run();
+  return (res.meta?.changes ?? 0) > 0;
 }
 
 export interface AuditTarget { teamId: string; name: string; auditedAt: string | null }

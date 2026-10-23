@@ -78,4 +78,44 @@ describe("revize účetnictví přes routu", () => {
     const res = await bettingRouter.request("/teams/t1/integrity/audits/t1", { method: "POST", headers: AUTH }, bindings(db));
     expect(res.status).toBe(400);
   });
+
+  const COMMISSIONER_RULES = [
+    ...BASE_RULES,
+    { sql: /FROM competition_officials\s+WHERE league_id = \? AND role = \?/, first: { team_id: "t1", status: "active" } },
+    { sql: /SELECT id, name FROM teams WHERE id = \? AND league_id = \? AND parent_team_id IS NULL/, first: { id: "t2", name: "FK Cíl" } },
+    { sql: /SELECT game_date FROM teams WHERE id = \?/, first: { game_date: "2026-10-23T16:00:00.000Z" } },
+    { sql: /SELECT id, name, budget FROM teams WHERE id = \? AND league_id = \?/, first: { id: "t2", name: "FK Cíl", budget: 12_000 } },
+  ];
+
+  it("první revize v sezóně pošle klubu SMS a vrátí účetnictví", async () => {
+    const db = new FalesnaD1([...COMMISSIONER_RULES, { sql: /INSERT OR IGNORE INTO competition_audits/, changes: 1 }]);
+    const res = await bettingRouter.request("/teams/t1/integrity/audits/t2", { method: "POST", headers: AUTH }, bindings(db));
+    expect(res.status).toBe(200);
+    expect((await res.json() as { teamName: string }).teamName).toBe("FK Cíl");
+    expect(db.dotazy.some((d) => /INSERT INTO messages/.test(d.sql))).toBe(true);
+  });
+
+  it("opakovaná revize v téže sezóně už SMS neposílá", async () => {
+    const db = new FalesnaD1([...COMMISSIONER_RULES, { sql: /INSERT OR IGNORE INTO competition_audits/, changes: 0 }]);
+    const res = await bettingRouter.request("/teams/t1/integrity/audits/t2", { method: "POST", headers: AUTH }, bindings(db));
+    expect(res.status).toBe(200);
+    expect(db.dotazy.some((d) => /INSERT INTO messages/.test(d.sql))).toBe(false);
+  });
+
+  it("když se revize nezapíše, účetnictví se neukáže", async () => {
+    const db = new FalesnaD1(COMMISSIONER_RULES);
+    const real = jakoD1(db);
+    const failingInsert = new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== "prepare") return Reflect.get(target, prop, receiver);
+        return (sql: string) => /INSERT OR IGNORE INTO competition_audits/.test(sql)
+          ? { bind: () => ({ run: async () => { throw new Error("D1_ERROR: no such table: competition_audits"); } }) }
+          : target.prepare(sql);
+      },
+    });
+    const env = { DB: failingInsert, SESSION_KV: { get: async () => JSON.stringify({ userId: "u1" }) } } as unknown as Bindings;
+    const res = await bettingRouter.request("/teams/t1/integrity/audits/t2", { method: "POST", headers: AUTH }, env);
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(db.dotazy.some((d) => /FROM transactions/.test(d.sql))).toBe(false);
+  });
 });
