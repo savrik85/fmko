@@ -166,6 +166,11 @@ export async function purchaseVirtualPlayer(p: VirtualPurchase): Promise<Virtual
   await ensureSquadNumbers(db, p.destTeamId)
     .catch((e) => logger.warn({ module: "virtual-purchase" }, "číslo dresu nového hráče", e));
 
+  // Kořaly kupce: koupě od klubu mimo hru je koupě jako každá jiná.
+  const { checkTransferAchievements } = await import("../services/achievements");
+  await checkTransferAchievements(db, p.buyerClubTeamId, p.playerId)
+    .catch((e) => logger.warn({ module: "virtual-purchase" }, "kořaly po koupi", e));
+
   const teamRow = await db.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(p.buyerClubTeamId)
     .first<{ name: string; league_id: string }>()
     .catch((e) => { logger.warn({ module: "virtual-purchase" }, "tým pro zprávu", e); return null; });

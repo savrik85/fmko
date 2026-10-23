@@ -10,6 +10,7 @@ vi.mock("../messaging/system-sms", () => ({
 vi.mock("../season/finance-processor", () => ({ recordTransaction: vi.fn(async () => 0) }));
 vi.mock("../transfers/remove-player", () => ({ removePlayer: vi.fn(async () => ({ ok: true })) }));
 vi.mock("../community/web-push", () => ({ sendWebPushToTeams: vi.fn(async () => undefined) }));
+vi.mock("../services/achievements", () => ({ checkReleaseAchievements: vi.fn(async () => []) }));
 
 import type { Bindings } from "../index";
 import { applyManagerAttrDelta } from "../lib/manager-attrs";
@@ -17,6 +18,7 @@ import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import { removePlayer } from "../transfers/remove-player";
 import { sendWebPushToTeams } from "../community/web-push";
+import { checkReleaseAchievements } from "../services/achievements";
 import { rozhodni } from "./akce";
 import type { IncidentRadek } from "./incident-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
@@ -61,6 +63,8 @@ describe("tresty", () => {
     expect(await rozhodni(env, "tym-a", "inc-1", "vyhodit")).toEqual({ ok: true, castka: null });
     expect(removePlayer).toHaveBeenCalledWith(expect.anything(), "p", "released", { toFreeAgent: true, teamId: "tym-a" });
     expect(sendWebPushToTeams).not.toHaveBeenCalled();
+    // Vyhazov je propuštění: kořaly „Reforma kádru" klubu.
+    expect(checkReleaseAchievements).toHaveBeenCalledWith(expect.anything(), "tym-a");
   });
 
   it("vyhodit: kdo pachatele sledoval, dostane zprávu, že je volný", async () => {
@@ -82,6 +86,7 @@ describe("tresty", () => {
     const { db, env } = prostredi(ODHALENY);
     expect(await rozhodni(env, "tym-a", "inc-1", "vyhodit")).toMatchObject({ ok: false, kod: 500 });
     expect(db.pocet(/SET status = 'otevreny', resolution = NULL/)).toBe(1);
+    expect(checkReleaseAchievements).not.toHaveBeenCalled();
   });
 
   it("vyřadit: bez platného počtu zápasů 400 a nic se nestane", async () => {
