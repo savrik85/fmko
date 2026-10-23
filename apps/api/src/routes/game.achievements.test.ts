@@ -121,12 +121,23 @@ afterAll(async () => {
 async function callRoute(path: string, options: { method?: string; body?: Record<string, unknown> } = {}) {
   const headers = new Headers({ Authorization: "Bearer club-token" });
   if (options.body) headers.set("Content-Type", "application/json");
-  const ctx = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
-  return gameRouter.fetch(new Request(`http://test.local${path}`, {
+  // Práce na pozadí (waitUntil) se dřív zahazovala a běžela dál do dalšího testu.
+  // V zatíženém CI pak narazila na D1 souběžně s ním a test náhodně padal
+  // (assert uvnitř Miniflare, 500). Počká se na ni, než se vrátí odpověď.
+  const background: Promise<unknown>[] = [];
+  const ctx = {
+    waitUntil: (p: Promise<unknown>) => { background.push(p); },
+    passThroughOnException: () => undefined,
+  } as unknown as ExecutionContext;
+  const res = await gameRouter.fetch(new Request(`http://test.local${path}`, {
     method: options.method ?? "GET",
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   }), env, ctx);
+  for (const result of await Promise.allSettled(background)) {
+    if (result.status === "rejected") console.warn("práce na pozadí v testu selhala:", result.reason);
+  }
+  return res;
 }
 
 async function achievements(): Promise<string[]> {
