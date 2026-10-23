@@ -4,6 +4,7 @@
  * Fallback na statický pool v matches.ts pokud AI selže.
  */
 
+import { GEMINI_TEXT_MODEL } from "./gemini-helper";
 import { calculateStandings } from "../stats/standings";
 import { logger } from "../lib/logger";
 import { VILLAGE_FLAVOR, WEATHER_CZ } from "./ai-reporter";
@@ -385,7 +386,7 @@ POZNÁMKA: Jména trenérů můžeš (ale nemusíš) zmínit pro koloritovost (n
 
   // 8. Volání Gemini
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${geminiApiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

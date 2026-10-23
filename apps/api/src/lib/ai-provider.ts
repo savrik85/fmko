@@ -6,7 +6,7 @@
  * produkční kvótu každý den.
  *
  * Hodnoty:
- *   "gemini"     — výchozí, produkční chování (Gemini 2.5 Flash)
+ *   "gemini"     — výchozí, produkční chování (model `GEMINI_TEXT_MODEL` z news/gemini-helper.ts)
  *   "workers-ai" — Cloudflare Workers AI (etapa B, zatím jen pro testing)
  *   "off"        — negenerovat nic; generátory dostanou prázdný klíč a samy
  *                  se přeskočí (všechny mají `if (!apiKey) return` větev)

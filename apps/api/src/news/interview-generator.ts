@@ -5,6 +5,7 @@
  * Gemini vygeneruje 3–4 otázky, trenér napíše odpovědi, AI sestaví novinový článek.
  */
 
+import { GEMINI_TEXT_MODEL } from "./gemini-helper";
 import { logger } from "../lib/logger";
 import { calculateStandings } from "../stats/standings";
 import { VILLAGE_FLAVOR } from "./ai-reporter";
@@ -166,7 +167,7 @@ async function callGemini(
   maxTokens = 1024,
 ): Promise<string | null> {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

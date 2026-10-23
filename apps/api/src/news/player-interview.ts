@@ -10,6 +10,7 @@
  * coach_relationship). Žádná nová mechanika, žádné parsování volného textu.
  */
 
+import { GEMINI_TEXT_MODEL } from "./gemini-helper";
 import { calculateStandings } from "../stats/standings";
 import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
@@ -52,7 +53,7 @@ const SPICY_OCCUPATIONS = [
 
 async function callGemini(apiKey: string, prompt: string, maxTokens = 1536): Promise<string | null> {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

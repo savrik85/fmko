@@ -9,6 +9,7 @@
  *   5. Insert do news + round_awards + push notifikace lidským týmům
  */
 
+import { GEMINI_TEXT_MODEL } from "./gemini-helper";
 import { calculateStandings } from "../stats/standings";
 import { logger } from "../lib/logger";
 
@@ -228,7 +229,7 @@ PRAVIDLA:
 
   // 7. Call Gemini
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${geminiApiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
