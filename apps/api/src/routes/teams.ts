@@ -1,3 +1,4 @@
+import { GEMINI_TEXT_MODEL } from "../news/gemini-helper";
 import { districtAccess, appointFounder } from "../registration/district-access";
 /**
  * Sprint 1: Teams API — raw SQL on D1.
@@ -1804,7 +1805,7 @@ Požadavky:
 - Vrať POUZE text hymny, žádné další komentáře`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${geminiApiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2203,7 +2204,7 @@ Požadavky:
   }
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${geminiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2545,7 +2546,7 @@ Požadavky:
 - Vrať POUZE text, žádné další komentáře`;
 
   const geminiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${geminiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

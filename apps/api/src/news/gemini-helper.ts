@@ -1,5 +1,5 @@
 /**
- * Sdílený helper pro volání Gemini 2.5 Flash.
+ * Sdílený helper pro volání Gemini (model `GEMINI_TEXT_MODEL`).
  * Vrací čistý text (thinking parts odfiltrovány) nebo null při chybě.
  *
  * ── AI Gateway ──────────────────────────────────────────────────────────────
@@ -15,7 +15,13 @@
 import { logger } from "../lib/logger";
 
 const GEMINI_HOST = "https://generativelanguage.googleapis.com";
-const GEMINI_PATH = "/v1beta/models/gemini-2.5-flash:generateContent";
+/**
+ * Model pro všechny texty. Gemini 2.5 Flash Google novým účtům už nedává
+ * („no longer available to new users“), proto od přechodu na nový klíč
+ * 2026-10-24 běží 3.8 Flash. `thinkingBudget: 0` u něj platí dál.
+ */
+export const GEMINI_TEXT_MODEL = "gemini-3.8-flash";
+const GEMINI_PATH = `/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`;
 
 export interface GeminiOpts {
   maxOutputTokens?: number;
