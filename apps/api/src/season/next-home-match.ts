@@ -74,3 +74,35 @@ export async function findNextHomeMatch(db: D1Database, teamId: string): Promise
     cupRow ? { id: cupRow.id, calendarId: null, scheduledAt: cupRow.scheduled_at, opponent: cupRow.opponent, isCup: true } : null,
   );
 }
+
+export interface HomeOpponent {
+  id: string;
+  name: string;
+  primary_color: string | null;
+}
+
+/**
+ * Soupeř nejbližšího domácího ligového zápasu — kdo přijede do sektoru hostů.
+ *
+ * Stejný výběr jako ligová část `findNextHomeMatch`. Dotaz dřív žil ve stadionu
+ * (`routes/game.ts`) a řadil podle `sc.match_date`, který kalendář nemá: spadl do
+ * catch a hosté pro příští domácí zápas se nikdy nespočítali. Bez filtru na
+ * sezónu by navíc vyhrál neodehraný zbytek ze staré sezóny, ten je v kalendáři
+ * nejdřív.
+ */
+export async function findNextHomeLeagueOpponent(db: D1Database, teamId: string): Promise<HomeOpponent | null> {
+  return db
+    .prepare(
+      `SELECT t.id, t.name, t.primary_color
+       FROM matches m JOIN teams t ON t.id = m.away_team_id
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+       WHERE m.home_team_id = ? AND m.status != 'simulated'
+         AND sc.season_number = (
+           SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id
+         )
+       ORDER BY sc.scheduled_at ASC LIMIT 1`,
+    )
+    .bind(teamId)
+    .first<HomeOpponent>()
+    .catch((e) => { logger.warn({ module: "next-home-match" }, "příští domácí soupeř", e); return null; });
+}
