@@ -1,6 +1,6 @@
 import { managerFansEffect } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
-import { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS, concessionWeatherFactor, type ProductKey } from "./concession-catalog";
+import { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS, concessionPriceFactor, concessionWeatherFactor, type ProductKey } from "./concession-catalog";
 import type { Weather } from "../engine/types";
 
 /**
@@ -276,12 +276,9 @@ export function computeSelfConcessionMatch(
     const tier = catalog.tiers[p.qualityLevel];
     if (!tier) continue;
 
-    // Price elasticity: ratio current/default; if cheaper than default → vyšší demand, pokud dražší → nižší
-    const defaultPrice = tier.defaultSellPrice;
-    const priceRatio = defaultPrice > 0 ? p.sellPrice / defaultPrice : 1;
-    // priceFactor = 1 při priceRatio=1, klesá když priceRatio > 1
-    // např. priceRatio=1.5, elasticity=0.6 → 1 - 0.5 * 0.6 = 0.7
-    const priceFactor = Math.max(0.1, 1 - (priceRatio - 1) * catalog.priceElasticity);
+    // Cena: levněji než doporučeně = víc kupců, dráž = míň, za přemrštěnou cenu nikdo.
+    // např. 1,5× doporučené ceny, elasticita 0,6 → 1 - 0,5 × 0,6 = 0,7
+    const priceFactor = concessionPriceFactor(p.key, p.qualityLevel, p.sellPrice);
 
     // Quality boost: vyšší quality → mírně víc demand (lidé chtějí "to dobré")
     const qualityBoost = 1 + (p.qualityLevel - 1) * 0.1; // L1=1.0, L2=1.1, L3=1.2

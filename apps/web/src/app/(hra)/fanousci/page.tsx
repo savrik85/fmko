@@ -63,6 +63,8 @@ interface ProductTier {
   label: string;
   wholesalePrice: number;
   defaultSellPrice: number;
+  /** Od téhle prodejní ceny nikdo nekoupí. Null u kvality, která se nenabízí. */
+  noSalePrice: number | null;
   /** Kusů téhle kvality na skladě. */
   stock: number;
 }
@@ -1421,6 +1423,9 @@ export default function FansPage() {
             {concession.products.map((p) => {
               const currentTier = p.tiers[p.qualityLevel];
               const priceDraft = productDrafts[p.key]?.sellPrice ?? String(p.sellPrice);
+              const priceDraftNum = parseInt(priceDraft, 10);
+              const noBuyers = currentTier.noSalePrice != null && !isNaN(priceDraftNum)
+                && priceDraftNum >= currentTier.noSalePrice;
               const qty = restockQty[p.key] ?? "";
               const qtyNum = parseInt(qty, 10);
               const total = !isNaN(qtyNum) && qtyNum > 0 ? qtyNum * currentTier.wholesalePrice : 0;
@@ -1497,6 +1502,9 @@ export default function FansPage() {
                       {acting === "price-" + p.key ? "..." : "Uložit"}
                     </button>
                   </div>
+                  {noBuyers && (
+                    <p className="text-sm text-card-red mt-1.5">Za tuhle cenu nikdo nekoupí.</p>
+                  )}
 
                   {/* Restock */}
                   <div className="flex items-center gap-2 sm:gap-3 mt-2">

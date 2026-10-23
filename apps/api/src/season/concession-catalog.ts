@@ -134,6 +134,35 @@ export function getDefaultSellPrice(key: string, qualityLevel: number): number {
   return tier?.defaultSellPrice ?? 0;
 }
 
+/**
+ * Kolik poptávky zbyde při dané prodejní ceně. Za doporučenou cenu 1, levněji víc,
+ * dráž lineárně dolů podle elasticity produktu a od hranice z `concessionNoSalePrice`
+ * nula: za přemrštěnou cenu nikdo nekoupí.
+ *
+ * Dřív tu byla podlaha 10 % poptávky, takže pivo za 1 000 Kč si pořád kupoval
+ * každý desátý a z přemrštěné ceny byl zlatý důl.
+ */
+export function concessionPriceFactor(key: ProductKey, qualityLevel: number, sellPrice: number): number {
+  const entry = CONCESSION_CATALOG[key];
+  const defaultPrice = entry?.tiers[qualityLevel]?.defaultSellPrice ?? 0;
+  if (!entry || defaultPrice <= 0) return 1;
+  const factor = 1 - (sellPrice / defaultPrice - 1) * entry.priceElasticity;
+  // Plovoucí čárka: klobása za 80 Kč (30 Kč × 2,67) vyjde 1e-16 místo nuly.
+  return factor > 1e-9 ? factor : 0;
+}
+
+/**
+ * Nejnižší celá prodejní cena, za kterou už nikdo nekoupí: doporučená cena
+ * × (1 + 1 / elasticita). Pivo 2,25×, klobása 2,67×, svařák 3×, limonáda 3,5×.
+ * Null u kvality, která se nenabízí.
+ */
+export function concessionNoSalePrice(key: ProductKey, qualityLevel: number): number | null {
+  const entry = CONCESSION_CATALOG[key];
+  const defaultPrice = entry?.tiers[qualityLevel]?.defaultSellPrice ?? 0;
+  if (!entry || qualityLevel <= 0 || defaultPrice <= 0) return null;
+  return Math.ceil(defaultPrice * (1 + 1 / entry.priceElasticity) - 1e-9);
+}
+
 /** Referenční teplota, při které je teplotní složka neutrální (jarní/podzimní zápas). */
 const REFERENCE_TEMP = 15;
 
