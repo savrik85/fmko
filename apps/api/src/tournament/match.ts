@@ -261,24 +261,15 @@ export async function simulateTournamentMatch(
     logger.error({ module: M }, `turnajové stopky po zápase ${m.id}`, e);
   }
 
-  // ── Kondice a morálka po zápase
+  // ── Kondice a morálka po zápase pro každého, kdo nastoupil, i vystřídané a vyloučené
   try {
-    const { logConditionStmt } = await import("../lib/condition-log");
-    const preCond = new Map<number, number>();
-    for (const p of [...homePre, ...awayPre]) preCond.set(p.id, p.condition);
-    const homePost = result.homeLineup ?? [];
-    const stmts: D1PreparedStatement[] = [];
-    for (const p of [...homePost, ...(result.awayLineup ?? [])]) {
-      const dbId = fullIdMap.get(p.id);
-      if (!dbId) continue;
-      const teamId = homePost.includes(p) ? homeId : awayId;
-      const morale = Math.max(0, Math.min(100, Math.round(p.morale - (incidentMoraleDelta.get(p.id) ?? 0))));
-      stmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?").bind(Math.round(p.condition), morale, dbId));
-      const old = preCond.get(p.id);
-      if (old != null && Math.round(old) !== Math.round(p.condition)) {
-        stmts.push(logConditionStmt(db, dbId, teamId, old, p.condition, "match", `Turnaj (${result.homeScore}:${result.awayScore})`));
-      }
-    }
+    const { postMatchPlayers, postMatchPlayerStatements } = await import("../multiplayer/post-match-players");
+    const played = postMatchPlayers(result,
+      { teamId: homeId, idMap: homeBuild.idMap },
+      { teamId: awayId, idMap: awayBuild.idMap },
+      incidentMoraleDelta);
+    const stmts = postMatchPlayerStatements(db, played,
+      { source: "match", description: `Turnaj (${result.homeScore}:${result.awayScore})` });
     if (stmts.length > 0) await db.batch(stmts);
   } catch (e) {
     logger.warn({ module: M }, `kondice a morálka po zápase ${m.id}`, e);

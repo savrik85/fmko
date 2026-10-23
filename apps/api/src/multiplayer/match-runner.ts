@@ -1268,32 +1268,19 @@ export async function runScheduledMatches(
                 }
             }
 
-            // Persist condition + morale changes back to DB (batched)
-            // Pre-sim condition je v homeLineupPreSim/awayLineupPreSim — z toho spočítáme delta pro condition_log.
+            // Kondice a morálka po zápase pro každého, kdo nastoupil, i vystřídané a vyloučené
+            // (dřív jen konečná jedenáctka). Kondice před zápasem jde z výkopu, takže
+            // záznam v condition_log dostanou i střídající.
             try {
-                const {logConditionStmt} = await import("../lib/condition-log");
-                const preSimCondById = new Map<number, number>();
-                for (const p of [...homeLineupPreSim, ...awayLineupPreSim]) preSimCondById.set(p.id, p.condition);
-
-                const stmts: D1PreparedStatement[] = [];
-                for (const p of [...result.homeLineup, ...result.awayLineup]) {
-                    const dbId = fullIdMap.get(p.id);
-                    if (!dbId) continue;
-                    // Odečíst dočasný incidentní handicap (spec 17c) — do DB jde jen morálka
-                    // z herního výsledku, ne z toho, že hráč nastoupil obviněný.
-                    const persistMorale = Math.max(0, Math.min(100, Math.round(p.morale - (incidentMoraleDelta.get(p.id) ?? 0))));
-                    stmts.push(db.prepare(
-                        `UPDATE players
-                         SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?)
-                         WHERE id = ?`,
-                    ).bind(Math.round(p.condition), persistMorale, dbId));
-
-                    const oldCond = preSimCondById.get(p.id);
-                    if (oldCond != null && Math.round(oldCond) !== Math.round(p.condition)) {
-                        const teamIdForPlayer = result.homeLineup.includes(p) ? homeTeamId : awayTeamId;
-                        stmts.push(logConditionStmt(db, dbId, teamIdForPlayer, oldCond, p.condition, "match", `Zápas (${result.homeScore}:${result.awayScore})`));
-                    }
-                }
+                const {postMatchPlayers, postMatchPlayerStatements} = await import("./post-match-players");
+                // Odečíst dočasný incidentní handicap (spec 17c) — do DB jde jen morálka
+                // z herního výsledku, ne z toho, že hráč nastoupil obviněný.
+                const played = postMatchPlayers(result,
+                    {teamId: homeTeamId, idMap: homeBuild.idMap},
+                    {teamId: awayTeamId, idMap: awayBuild.idMap},
+                    incidentMoraleDelta);
+                const stmts = postMatchPlayerStatements(db, played,
+                    {source: "match", description: `Zápas (${result.homeScore}:${result.awayScore})`});
                 if (stmts.length > 0) await db.batch(stmts);
             } catch (e) {
                 logger.error({module: "match-runner"}, "Condition persist failed", e);

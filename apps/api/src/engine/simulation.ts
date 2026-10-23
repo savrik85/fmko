@@ -726,6 +726,14 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   const playerMinutes: Record<number, { entered: number; left: number | null }> = {};
   for (const p of home.lineup) playerMinutes[p.id] = { entered: 0, left: null };
   for (const p of away.lineup) playerMinutes[p.id] = { entered: 0, left: null };
+
+  // Kdo všechno za tým nastoupil. `team.lineup` na konci drží jen ty, kdo dohráli;
+  // vystřídaní a vyloučení z něj vypadnou, a kdo zapisoval únavu jen z něj, poslal
+  // je ze zápasu odpočaté (kolo 1. 10. na produ: únava u 0 ze 70 vystřídaných).
+  const homeParticipants: MatchPlayer[] = [...home.lineup];
+  const awayParticipants: MatchPlayer[] = [...away.lineup];
+  const kickoffCondition: Record<number, number> = {};
+  for (const p of [...home.lineup, ...home.subs, ...away.lineup, ...away.subs]) kickoffCondition[p.id] = p.condition;
   let homeSubsUsed = 0;
   let awaySubsUsed = 0;
   // Jako v okresním přeboru a III. třídě: do hry smí pět náhradníků (z nejvýš sedmi v zápise)
@@ -809,6 +817,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     team.subs.splice(subIdx, 1);
     sub.matchPosition = out.matchPosition ?? out.position;
     team.lineup[lineupIdx] = sub;
+    (team === home ? homeParticipants : awayParticipants).push(sub);
     playerMinutes[out.id] = { ...playerMinutes[out.id], left: minute };
     playerMinutes[sub.id] = { entered: minute, left: null };
     if (team === home) homeSubsUsed++; else awaySubsUsed++;
@@ -960,6 +969,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       const sIdx = team.lineup.indexOf(sacrificed);
       keeper.matchPosition = "GK";
       team.lineup[sIdx] = keeper;
+      (team === home ? homeParticipants : awayParticipants).push(keeper);
       playerMinutes[sacrificed.id] = { ...playerMinutes[sacrificed.id], left: minute };
       playerMinutes[keeper.id] = { entered: minute, left: null };
       if (team === home) homeSubsUsed++; else awaySubsUsed++;
@@ -1732,6 +1742,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     events,
     homeLineup: home.lineup,
     awayLineup: away.lineup,
+    homeParticipants,
+    awayParticipants,
+    kickoffCondition,
     playerMinutes,
     possessionHome,
     refereeIncidents,
