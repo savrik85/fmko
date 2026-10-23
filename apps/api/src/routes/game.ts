@@ -9932,7 +9932,7 @@ gameRouter.patch("/teams/:teamId/fans/ticket-price", async (c) => {
 gameRouter.get("/teams/:teamId/concession", async (c) => {
   const teamId = c.req.param("teamId");
   const { ensureFansRow } = await import("../season/fans-processor");
-  const { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS } = await import("../season/concession-catalog");
+  const { CONCESSION_CATALOG, CONCESSION_PRODUCT_KEYS, concessionNoSalePrice } = await import("../season/concession-catalog");
   await ensureFansRow(c.env.DB, teamId);
 
   const stadium = await c.env.DB.prepare(
@@ -9971,6 +9971,8 @@ gameRouter.get("/teams/:teamId/concession", async (c) => {
         label: t.label,
         wholesalePrice: t.wholesalePrice,
         defaultSellPrice: t.defaultSellPrice,
+        /** Od téhle ceny nikdo nekoupí. Null u kvality, která se nenabízí. */
+        noSalePrice: concessionNoSalePrice(key, i),
         /** Kolik kusů téhle kvality je na skladě. */
         stock: row?.stockByTier[i] ?? 0,
       })),
