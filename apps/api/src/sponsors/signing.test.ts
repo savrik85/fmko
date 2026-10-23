@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1, type Pravidlo, type ZaznamDotazu } from "../incidents/testovaci-d1";
 import { MONTHS_PER_SEASON } from "./ambition";
 import type { NegotiationContext, Proposal } from "./negotiation";
+import { NO_LEAGUE_MOVEMENT } from "../league/district-promotion";
 import type { NegotiationRound, NegotiationState } from "./negotiation-db";
 import { MAIN_SPONSOR_FREE_SQL } from "./exclusivity";
 import { effectiveContractMonths, openingOffer } from "./negotiation";
@@ -53,7 +54,7 @@ const FULL_CTX: NegotiationContext = {
   sponsorType: "pub", sectorBannerActive: false, sleeveHeldBySponsor: false,
   facilities: [{ facility: "vip_box", currentLevel: 1, locked: false, costs: [0, 55000, 170000, 450000] }],
   equipment: [{ category: "balls", currentLevel: 0, nextLevel: 1, cost: 6000, locked: false }],
-  currentTerminationFee: 0, seasonProgressMonths: 0,
+  currentTerminationFee: 0, seasonProgressMonths: 0, leagueMovement: NO_LEAGUE_MOVEMENT,
 };
 
 const TERMS: Proposal = {

@@ -2,9 +2,10 @@
  * Přání majitele podle povahy a oboru, zájem o slib (čisté funkce).
  */
 import { describe, expect, it } from "vitest";
+import { NO_LEAGUE_MOVEMENT } from "../league/district-promotion";
 import { kindAllowedForCategory, ownerWishes, PERSONALITY_WISHES, promiseInterest } from "./wishes";
 
-const base = { sponsorId: 11, teamId: "t1", season: 3, category: "main" as const };
+const base = { sponsorId: 11, teamId: "t1", season: 3, category: "main" as const, leagueMovement: NO_LEAGUE_MOVEMENT };
 
 describe("ownerWishes", () => {
   it("fanoušek z oboru bez přání navíc: 2 přání z výsledků", () => {
@@ -63,18 +64,38 @@ describe("ownerWishes", () => {
   });
 });
 
-describe("ownerWishes bez postupů", () => {
-  it("postup ani nesestup majitel nikdy nechce (postupy se teď nehrají)", () => {
+describe("ownerWishes a postup se sestupem ligy", () => {
+  /** Přání přes mnoho firem, povah, oborů i kategorií. */
+  function allWishes(leagueMovement: typeof NO_LEAGUE_MOVEMENT): string[][] {
+    const out: string[][] = [];
     for (let id = 1; id <= 60; id++) {
       for (const personality of ["fan", "cautious", "patriot", "businessman"] as const) {
         for (const sponsorType of ["it", "shop", "construction", "pub"]) {
           for (const category of ["main", "stadium"] as const) {
-            const w = ownerWishes({ ...base, sponsorId: id, personality, sponsorType, category });
-            expect(w).not.toContain("promotion");
-            expect(w).not.toContain("no_relegation");
+            out.push(ownerWishes({ ...base, sponsorId: id, personality, sponsorType, category, leagueMovement }));
           }
         }
       }
+    }
+    return out;
+  }
+
+  it("III. třída: fanoušek občas chce postup, nesestup nikdo", () => {
+    const all = allWishes({ promotion: true, relegation: false });
+    expect(all.some((w) => w.includes("promotion"))).toBe(true);
+    expect(all.some((w) => w.includes("no_relegation"))).toBe(false);
+  });
+
+  it("přebor nad III. třídou: opatrný občas chce nesestup, postup nikdo", () => {
+    const all = allWishes({ promotion: false, relegation: true });
+    expect(all.some((w) => w.includes("no_relegation"))).toBe(true);
+    expect(all.some((w) => w.includes("promotion"))).toBe(false);
+  });
+
+  it("liga bez postupu a sestupu: postup ani nesestup majitel nikdy nechce", () => {
+    for (const w of allWishes(NO_LEAGUE_MOVEMENT)) {
+      expect(w).not.toContain("promotion");
+      expect(w).not.toContain("no_relegation");
     }
   });
 });

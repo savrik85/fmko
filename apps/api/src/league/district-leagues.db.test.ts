@@ -1,6 +1,7 @@
 /**
  * Dvě okresní soutěže nad sebou na skutečné D1 (Miniflare, všechny migrace):
- * zakládání III. třídy, přípravné období, postup a sestup 2 ↔ 2 a konec sezóny.
+ * zakládání III. třídy, přípravné období, postup a sestup 2 ↔ 2, konec sezóny
+ * a sliby sponzorům vyhodnocené podle tabulky skončené sezóny.
  */
 import { afterAll, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
@@ -12,6 +13,7 @@ import { rolloverAllLeagues } from "../season/season-rollover";
 import { runEndSeasonStep } from "../season/end-season";
 import { calculateStandings } from "../stats/standings";
 import { getLeaguePreseason, resolveDistrictSlot } from "./district-leagues";
+import { leagueMovement } from "./district-promotion";
 import type { Bindings } from "../index";
 
 const DISTRICT = "Strakonice";
@@ -188,11 +190,13 @@ describe("III. třída a přípravné období", () => {
     expect(full.body.error).toBe("league_full");
   }, 120_000);
 
-  it("(c) rollover prohodí 2 ↔ 2 včetně U21, druhý běh nic nezmění", async () => {
+  it("(c) rollover prohodí 2 ↔ 2 včetně U21, druhý běh nic nezmění, sliby sponzorům podle staré ligy", async () => {
     await freshDb();
     const villages = await districtVillages();
     expect((await createTeam("founder", villages[0], "SK Zakladatel")).status).toBe(201);
     const { prebor } = await seniorLeagues();
+    // Okres jen s přeborem: postup ani sestup se nehraje, slib postupu ani nesestupu dát nejde.
+    expect(await leagueMovement(db, prebor!.id)).toEqual({ promotion: false, relegation: false });
     await fillWithHumans(prebor!.id, "prebor");
     // Sezóna ještě neběží: III. třída dostane rozpis hned (dnešní chování)
     const preborVillages = new Set((await db.prepare("SELECT village_id FROM teams WHERE league_id = ?").bind(prebor!.id).all<{ village_id: string }>()).results.map((r) => r.village_id));
@@ -201,11 +205,35 @@ describe("III. třída a přípravné období", () => {
     expect(second.body.preseason).toBe(false);
     const { soutez } = await seniorLeagues();
     expect(await count("SELECT COUNT(*) AS n FROM matches WHERE league_id = ?", soutez!.id)).toBeGreaterThan(0);
+    // Z III. třídy se postupuje, z přeboru sestupuje.
+    expect(await leagueMovement(db, prebor!.id)).toEqual({ promotion: false, relegation: true });
+    expect(await leagueMovement(db, soutez!.id)).toEqual({ promotion: true, relegation: false });
 
     const preborOrder = await teamIdsByName(prebor!.id);
     const soutezOrder = await teamIdsByName(soutez!.id);
     await playLeague(prebor!.id, preborOrder);
     await playLeague(soutez!.id, soutezOrder);
+
+    // Sliby sponzorovi stadionu na sezónu 1: mistr III. třídy umístění do 3. místa, druhý
+    // III. třídy postup, poslední přeboru nesestup, šestý přeboru umístění do 6. místa.
+    const sponsors = (await db.prepare("SELECT id, name FROM district_sponsors ORDER BY id LIMIT 4").all<{ id: number; name: string }>()).results;
+    expect(sponsors).toHaveLength(4);
+    const promises: Array<{ team: string; kind: string; params: Record<string, number> }> = [
+      { team: soutezOrder[0], kind: "league_position", params: { position: 3 } },
+      { team: soutezOrder[1], kind: "promotion", params: {} },
+      { team: preborOrder[preborOrder.length - 1], kind: "no_relegation", params: {} },
+      { team: preborOrder[5], kind: "league_position", params: { position: 6 } },
+    ];
+    for (const [i, p] of promises.entries()) {
+      await db.prepare(
+        `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, seasons_total, seasons_remaining, status, category, sponsor_id)
+         VALUES (?, ?, ?, 'pub', 5000, 2, 2, 'active', 'stadium', ?)`,
+      ).bind(`contract-${i}`, p.team, sponsors[i].name, sponsors[i].id).run();
+      await db.prepare(
+        `INSERT INTO sponsor_promises (id, contract_id, team_id, sponsor_id, kind, params, season, value_share, reward, penalty)
+         VALUES (?, ?, ?, ?, ?, ?, 1, 0.1, 0, 1000)`,
+      ).bind(`promise-${i}`, `contract-${i}`, p.team, sponsors[i].id, p.kind, JSON.stringify(p.params)).run();
+    }
     const preborTable = await calculateStandings(db, prebor!.id, 1);
     const soutezTable = await calculateStandings(db, soutez!.id, 1);
     const relegated = preborTable.slice(-2).map((s) => s.teamId);
@@ -221,6 +249,15 @@ describe("III. třída a přípravné období", () => {
       .bind(...relegated, ...promoted).all<{ id: string; reputation: number }>()).results.map((r) => [r.id, r.reputation]));
 
     await rolloverAllLeagues(db, 1);
+
+    // Sliby vyhodnotil krok 4a AŽ po přesunu klubů (krok 2b), přesto podle tabulky sezóny 1:
+    // mistr III. třídy skončil první (ne s nulou bodů v přeboru), poslední přeboru sestoupil.
+    const promiseStatus = async (id: string) => (await db.prepare("SELECT status FROM sponsor_promises WHERE id = ?").bind(id)
+      .first<{ status: string }>())?.status;
+    expect(await promiseStatus("promise-0")).toBe("fulfilled");
+    expect(await promiseStatus("promise-1")).toBe("fulfilled");
+    expect(await promiseStatus("promise-2")).toBe("broken");
+    expect(await promiseStatus("promise-3")).toBe("fulfilled");
 
     for (const id of relegated) {
       expect((await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(id).first<{ league_id: string }>())!.league_id).toBe(soutez!.id);

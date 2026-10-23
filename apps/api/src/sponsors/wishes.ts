@@ -4,6 +4,7 @@
  * při znovuotevření jednání v téže sezóně nemění.
  */
 import { createRng } from "../generators/rng";
+import type { LeagueMovement } from "../league/district-promotion";
 import { hashSeed } from "../villages/officials-generator";
 import type { OwnerPersonality } from "./owners";
 import { isOfferableKind, RESULT_KINDS, type PromiseKind } from "./promise-kinds";
@@ -18,7 +19,7 @@ export const PERSONALITY_WISHES: Record<OwnerPersonality, readonly PromiseKind[]
 
 /**
  * Obor přidá jedno přání: hospody návštěvu, stavaři modernizaci, IT výsledky.
- * Přání, která teď nabídnout nejde (postup, nesestup, isOfferableKind), ownerWishes vynechá.
+ * Přání, která klubu nabídnout nejde (postup, nesestup podle ligy, isOfferableKind), ownerWishes vynechá.
  */
 export const SECTOR_WISH: Partial<Record<SponsorType, PromiseKind>> = {
   brewery: "attendance",
@@ -44,10 +45,12 @@ export function ownerWishes(i: {
   category: "main" | "stadium";
   /** Rukáv dresu už nese logo tohohle sponzora (aktivní smlouva): logo mu za přání nabízet nejde. */
   sleeveHeldBySponsor?: boolean;
+  /** Postup a sestup ligy klubu: bez nich majitel postup ani nesestup nechce. */
+  leagueMovement: LeagueMovement;
 }): PromiseKind[] {
   const rng = createRng(hashSeed(`sponsor-wishes|${i.sponsorId}|${i.teamId}|${i.season}|${i.category}`));
   const pool = PERSONALITY_WISHES[i.personality]
-    .filter((k) => isOfferableKind(k) && kindAllowedForCategory(k, i.category) && (k !== "jersey_logo" || !i.sleeveHeldBySponsor));
+    .filter((k) => isOfferableKind(k, i.leagueMovement) && kindAllowedForCategory(k, i.category) && (k !== "jersey_logo" || !i.sleeveHeldBySponsor));
   const shuffled = [...pool];
   for (let j = shuffled.length - 1; j > 0; j--) {
     const k = Math.floor(rng.random() * (j + 1));
@@ -55,7 +58,7 @@ export function ownerWishes(i: {
   }
   const out = shuffled.slice(0, 2);
   const sector = SECTOR_WISH[i.sponsorType as SponsorType];
-  if (sector && isOfferableKind(sector) && kindAllowedForCategory(sector, i.category) && !out.includes(sector)) out.push(sector);
+  if (sector && isOfferableKind(sector, i.leagueMovement) && kindAllowedForCategory(sector, i.category) && !out.includes(sector)) out.push(sector);
   return out;
 }
 

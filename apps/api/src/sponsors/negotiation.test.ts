@@ -2,6 +2,7 @@
  * Matematika jednání se sponzorem: ochota, cena, kolo, trpělivost, řádky slibů.
  */
 import { describe, expect, it } from "vitest";
+import { NO_LEAGUE_MOVEMENT } from "../league/district-promotion";
 import { expectedWinsPerSeason, MONTHS_PER_SEASON } from "./ambition";
 import {
   advanceClawback, afterReject, allowedContractSeasons, minContractSeasons, buildPromiseRows, complaintFor, contractMonths, deadlineGoalBonusTotal, defaultPromise, earlyTerminationFee,
@@ -21,7 +22,7 @@ const CTX: NegotiationContext = {
     { facility: "toilets", currentLevel: 0, locked: false, costs: [0, 12000, 40000, 100000] },
   ],
   equipment: [{ category: "balls", currentLevel: 1, nextLevel: 2, cost: 8000, locked: false }],
-  currentTerminationFee: 7442, seasonProgressMonths: 0,
+  currentTerminationFee: 7442, seasonProgressMonths: 0, leagueMovement: NO_LEAGUE_MOVEMENT,
 };
 
 function prop(demands: Partial<Demands> = {}, seasons = 2, promises: PromiseSpec[] = []): Proposal {
@@ -245,7 +246,7 @@ describe("evaluateRound", () => {
     expect(reduceToWillingness(prop({ monthly: 5 }), CTX, 1)?.demands.monthly).toBe(1);
     expect(reduceToWillingness(prop({ monthly: 5 }), CTX, 0)).toBeNull();
   });
-  it("protinabídka za přání nenabídne postup (postupy se teď nehrají), zbývá sleva", () => {
+  it("protinabídka za přání nenabídne postup ani nesestup, když je liga klubu nemá, zbývá sleva", () => {
     const ctx = { ...CTX, wishes: ["promotion" as const, "no_relegation" as const] };
     expect(defaultPromise("promotion", ctx, prop({}, 2))).toBeNull();
     expect(defaultPromise("no_relegation", ctx, prop({}, 2))).toBeNull();
@@ -632,11 +633,26 @@ describe("openingOffer", () => {
     expect(validateProposal(offer, ctx).ok).toBe(true);
   });
 
-  it("postup ani nesestup do nabídky nedá (postupy se teď nehrají), i když je má mezi přáními", () => {
+  it("postup ani nesestup do nabídky nedá, když je liga klubu nemá, i když je má mezi přáními", () => {
     const ctx: NegotiationContext = { ...CTX, wishes: ["promotion", "league_position", "no_relegation", "cup_round"] };
     const offer = openingOffer(ctx);
     expect(offer.promises.map((p) => p.kind)).toEqual(["league_position", "cup_round"]);
     expect(validateProposal(offer, ctx).ok).toBe(true);
+  });
+
+  it("III. třída: postup z přání do nabídky dá (jeden cíl v lize), přebor klubu v ohrožení dá nesestup", () => {
+    const wishes: NegotiationContext["wishes"] = ["promotion", "league_position", "no_relegation", "cup_round"];
+    const lower: NegotiationContext = { ...CTX, wishes, leagueMovement: { promotion: true, relegation: false } };
+    const lowerOffer = openingOffer(lower);
+    expect(lowerOffer.promises.map((p) => p.kind)).toEqual(["promotion", "cup_round"]);
+    expect(validateProposal(lowerOffer, lower).ok).toBe(true);
+    // Uprostřed tabulky je nesestup skoro jistý a majitel ho do nabídky nedá (nulová hodnota).
+    const upper: NegotiationContext = {
+      ...CTX, expectedPosition: 13, wishes: ["no_relegation", "promotion", "cup_round"], leagueMovement: { promotion: false, relegation: true },
+    };
+    const upperOffer = openingOffer(upper);
+    expect(upperOffer.promises.map((p) => p.kind)).toEqual(["no_relegation", "cup_round"]);
+    expect(validateProposal(upperOffer, upper).ok).toBe(true);
   });
 
   it("na konci sezóny (1 sezóna nejde) nabídne nejkratší povolenou délku, sezónní sliby drží", () => {

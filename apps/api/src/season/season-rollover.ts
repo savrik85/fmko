@@ -33,6 +33,8 @@ export function smlouvyVyprsely(pocet: number): string {
  * (`startIso` už nese nové herní datum, krok 2/3) a PŘED krokem 4b (expirace smluv): smlouvy,
  * které teď vyprší, jsou ještě aktivní, takže se jim sezónní sliby i exkluzivita oboru
  * vyhodnotí, a výpověď sponzorem (za nesplněné sliby) má přednost před obyčejným vypršením.
+ * Postup a sestup (krok 2b) už kluby přesunul do nové ligy; místo v tabulce se proto bere
+ * z ligy, ve které klub skončenou sezónu hrál (promise-data.ts), ne z té současné.
  *
  * Retry bezpečné: když předchozí pokus o rollover termíny staré sezóny už posunul
  * (`shiftPromiseDeadlinesForRollover` nechal marker), vyhodnocení termínové sliby končících

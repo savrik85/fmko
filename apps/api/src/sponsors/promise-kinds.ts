@@ -9,6 +9,8 @@
  *   attendance {attendance}      youth {count}           reputation {reputation}
  *   no_riots {}
  */
+import type { LeagueMovement } from "../league/district-promotion";
+
 export const PROMISE_KINDS = [
   "league_position", "promotion", "no_relegation", "cup_round", "coach_licence", "stadium_upgrade",
   "jersey_logo", "sector_exclusivity", "attendance", "youth", "reputation", "no_riots",
@@ -20,26 +22,23 @@ export function isPromiseKind(v: unknown): v is PromiseKind {
 }
 
 /**
- * Hra zatím nemá postupy ani sestupy (league/promotion.ts). Dokud je tohle false, sliby postupu
- * a nesestupu nejdou nabídnout nikde (katalog, validace, přání majitele, protinabídky, úvodní
- * nabídka). Vyhodnocení (promise-eval.ts) je nechává být kvůli starším řádkům. Až postupy
- * budou, stačí přepnout na true.
+ * Postup a sestup se hrají jen v okresech s přeborem i III. třídou (league/district-promotion.ts):
+ * z III. třídy se postupuje, z přeboru sestupuje. Slib postupu jde dát jen klubu, jehož liga
+ * postup má, slib nesestupu jen klubu, jehož liga sestup má. Platí všude, kde se slib nabízí
+ * (katalog, validace, přání majitele, protinabídky, úvodní nabídka).
  */
-export const LEAGUE_MOVEMENT_ENABLED = false;
-
-/** Sliby, které dávají smysl jen s postupy a sestupy. */
-export const LEAGUE_MOVEMENT_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["promotion", "no_relegation"]);
-
-/** Jde tenhle druh slibu teď při jednání nabídnout? */
-export function isOfferableKind(kind: PromiseKind): boolean {
-  return LEAGUE_MOVEMENT_ENABLED || !LEAGUE_MOVEMENT_KINDS.has(kind);
+export function isOfferableKind(kind: PromiseKind, movement: LeagueMovement): boolean {
+  if (kind === "promotion") return movement.promotion;
+  if (kind === "no_relegation") return movement.relegation;
+  return true;
 }
 
-/** Druhy slibů, které jde teď při jednání nabídnout. */
-export const OFFERABLE_KINDS: readonly PromiseKind[] = PROMISE_KINDS.filter(isOfferableKind);
-
-/** Důvod odmítnutí slibu, který se teď nabízet nedá. */
-export const NOT_OFFERABLE_ERROR = "Postup ani sestup se teď nehraje, tenhle slib dát nejde.";
+/** Důvod odmítnutí slibu, který liga klubu nedovolí. */
+export function notOfferableError(kind: PromiseKind): string {
+  return kind === "promotion"
+    ? "Z tvé ligy se nepostupuje, postup slíbit nejde."
+    : "Z tvé ligy se nesestupuje, nesestup slíbit nejde.";
+}
 
 export interface PromiseParams {
   position?: number;
@@ -87,10 +86,7 @@ export const GOAL_BONUS_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>([
 /** „Výsledky nad nesestup": opatrnému majiteli jsou jedno. */
 export const RESULT_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["league_position", "promotion", "cup_round"]);
 
-/**
- * Stejný cíl v lize: umístění, postup a nesestup se navzájem vylučují, klub smí slíbit jen jeden.
- * Dokud LEAGUE_MOVEMENT_ENABLED je false, jde nabídnout jen umístění, pravidlo se tedy neuplatní.
- */
+/** Stejný cíl v lize: umístění, postup a nesestup se navzájem vylučují, klub smí slíbit jen jeden. */
 export const LEAGUE_FINISH_KINDS: ReadonlySet<PromiseKind> = new Set<PromiseKind>(["league_position", "promotion", "no_relegation"]);
 
 /** Základ hodnoty slibu jako podíl rozpočtu B. Licence a stavba se násobí počtem stupňů (negotiation.ts). */

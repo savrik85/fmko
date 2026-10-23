@@ -7,6 +7,7 @@
 import { logger } from "../lib/logger";
 import { gameExpiry, isGameExpired } from "../lib/game-time";
 import { mustSeason } from "../lib/season";
+import { leagueMovement, type LeagueMovement } from "../league/district-promotion";
 import { CATEGORIES, getUpgradeOptions as equipmentUpgradeOptions } from "../equipment/equipment-generator";
 import { FACILITY_LABELS, getUpgradeOptions as stadiumUpgradeOptions, UPGRADE_COSTS } from "../stadium/stadium-generator";
 import { DEFAULT_CUP_ROUNDS, expectedPosition, MONTHS_PER_SEASON } from "./ambition";
@@ -390,9 +391,11 @@ async function sleeveHeldBySponsor(db: D1Database, teamId: string, sponsorId: nu
 export async function buildNegotiationContext(db: D1Database, i: {
   team: NegotiationTeam; sponsor: NegotiationSponsor; category: NegotiationCategory; season: number;
   personality: OwnerPersonality; wishes: PromiseKind[]; budgetB: number;
+  /** Už načtený postup a sestup ligy klubu (openNegotiation ho potřebuje pro přání dřív). */
+  leagueMovement?: LeagueMovement;
 }): Promise<NegotiationContext> {
   const { team, sponsor } = i;
-  const [league, cup, attendance, manager, stadium, equip, played, banner, contracts, progress, sleeve] = await Promise.all([
+  const [league, cup, attendance, manager, stadium, equip, played, banner, contracts, progress, sleeve, movement] = await Promise.all([
     leagueStrength(db, team.league_id, team.id),
     db.prepare("SELECT total_rounds FROM cup_competitions WHERE season_number = ? ORDER BY rowid DESC LIMIT 1")
       .bind(i.season).first<{ total_rounds: number }>(),
@@ -408,6 +411,7 @@ export async function buildNegotiationContext(db: D1Database, i: {
     categoryContracts(db, team.id, i.category),
     loadTeamSeasonProgress(db, team.id),
     i.category === "stadium" ? sleeveHeldBySponsor(db, team.id, sponsor.id) : Promise.resolve(false),
+    i.leagueMovement ? Promise.resolve(i.leagueMovement) : leagueMovement(db, team.league_id),
   ]);
   const matchesPlayed = played?.cnt ?? 0;
   const other = contracts.active && contracts.active.sponsor_id !== sponsor.id ? contracts.active : null;
@@ -428,6 +432,7 @@ export async function buildNegotiationContext(db: D1Database, i: {
     equipment: equipmentGiftOptions(equip, team.reputation, matchesPlayed, i.season),
     currentTerminationFee,
     seasonProgressMonths: progress,
+    leagueMovement: movement,
   };
 }
 
@@ -451,8 +456,14 @@ export async function openNegotiation(
   const favor = await getFavor(db, sponsorId, teamId);
   const budgetB = sponsorBudgetB({ monthlyMax: sponsor.monthly_max, reputation: team.reputation, villageSize: team.size, category, favor });
   const sleeve = category === "stadium" ? await sleeveHeldBySponsor(db, teamId, sponsorId) : false;
-  const wishes = ownerWishes({ sponsorId, teamId, season, personality: owner.personality, sponsorType: sponsor.type, category, sleeveHeldBySponsor: sleeve });
-  const ctx = await buildNegotiationContext(db, { team, sponsor, category, season, personality: owner.personality, wishes, budgetB });
+  const movement = await leagueMovement(db, team.league_id);
+  const wishes = ownerWishes({
+    sponsorId, teamId, season, personality: owner.personality, sponsorType: sponsor.type, category, sleeveHeldBySponsor: sleeve,
+    leagueMovement: movement,
+  });
+  const ctx = await buildNegotiationContext(db, {
+    team, sponsor, category, season, personality: owner.personality, wishes, budgetB, leagueMovement: movement,
+  });
   const rounds = openingRounds(ctx, owner.personality, teamGameDate(team), teamId);
   const id = crypto.randomUUID();
   // Jedno běžící jednání na klub, firmu a kategorii: podmíněný INSERT ustojí i dvojklik

@@ -2,9 +2,10 @@
  * Validace návrhu (anti-podvrh) a katalog slibů pro klienta.
  */
 import { describe, expect, it } from "vitest";
+import { NO_LEAGUE_MOVEMENT } from "../league/district-promotion";
 import { MONTHS_PER_SEASON } from "./ambition";
 import { evaluateRound, requestCost, willingness, type NegotiationContext } from "./negotiation";
-import { GOAL_BONUS_KINDS, LEAGUE_MOVEMENT_ENABLED, NOT_OFFERABLE_ERROR, OFFERABLE_KINDS } from "./promise-kinds";
+import { GOAL_BONUS_KINDS, notOfferableError } from "./promise-kinds";
 import { constructionOptions, promiseCatalog, validateProposal } from "./proposal";
 
 const CTX: NegotiationContext = {
@@ -16,8 +17,12 @@ const CTX: NegotiationContext = {
     { facility: "roof", currentLevel: 0, locked: true, costs: [0, 30000, 90000, 230000] },
   ],
   equipment: [{ category: "balls", currentLevel: 1, nextLevel: 2, cost: 8000, locked: false }],
-  currentTerminationFee: 0, seasonProgressMonths: 0,
+  currentTerminationFee: 0, seasonProgressMonths: 0, leagueMovement: NO_LEAGUE_MOVEMENT,
 };
+/** III. třída v okrese s přeborem: postupuje se. */
+const LOWER: NegotiationContext = { ...CTX, leagueMovement: { promotion: true, relegation: false } };
+/** Přebor v okrese s III. třídou: sestupuje se. */
+const UPPER: NegotiationContext = { ...CTX, leagueMovement: { promotion: false, relegation: true } };
 
 const ok = (raw: unknown) => validateProposal(raw, CTX);
 const demands = { monthly: 6000, winBonus: 0, signingBonus: 0, goalBonuses: {}, construction: null, equipment: null, payCurrentFee: false };
@@ -112,12 +117,26 @@ describe("validateProposal", () => {
     expect(ok({ seasons: 2, promises: [{ kind: "reputation", params: { reputation: 51 } }], demands }).ok).toBe(false);
     expect(ok({ seasons: 2, promises: [{ kind: "reputation", params: { reputation: 53 } }], demands }).ok).toBe(true);
   });
-  it("postup ani nesestup slíbit nejde, postupy a sestupy se teď nehrají", () => {
+  it("liga bez postupu a sestupu: postup ani nesestup slíbit nejde", () => {
     for (const kind of ["promotion", "no_relegation"] as const) {
       const r = ok({ seasons: 2, promises: [{ kind, params: {} }], demands });
-      expect(r).toEqual({ ok: false, error: NOT_OFFERABLE_ERROR });
+      expect(r).toEqual({ ok: false, error: notOfferableError(kind) });
     }
     expect(ok({ seasons: 2, promises: [{ kind: "league_position", params: { position: 7 } }], demands }).ok).toBe(true);
+  });
+  it("III. třída slíbí postup, nesestup ne; přebor slíbí nesestup, postup ne", () => {
+    const promise = (kind: "promotion" | "no_relegation") => ({ seasons: 2, promises: [{ kind, params: {} }], demands });
+    expect(validateProposal(promise("promotion"), LOWER).ok).toBe(true);
+    expect(validateProposal(promise("no_relegation"), LOWER)).toEqual({ ok: false, error: "Z tvé ligy se nesestupuje, nesestup slíbit nejde." });
+    expect(validateProposal(promise("no_relegation"), UPPER).ok).toBe(true);
+    expect(validateProposal(promise("promotion"), UPPER)).toEqual({ ok: false, error: "Z tvé ligy se nepostupuje, postup slíbit nejde." });
+  });
+  it("postup a umístění jsou jeden cíl v lize, dohromady neprojdou", () => {
+    const r = validateProposal({
+      seasons: 2, demands,
+      promises: [{ kind: "promotion", params: {} }, { kind: "league_position", params: { position: 3 } }],
+    }, LOWER);
+    expect(r).toEqual({ ok: false, error: "Umístění, postup a nesestup se navzájem vylučují, vyber jen jeden." });
   });
 });
 
@@ -130,11 +149,17 @@ describe("promiseCatalog", () => {
     expect(seventh.value).toEqual({ low: 1856, high: 2644 });
     expect(seventh.seasonal).toBe(true);
   });
-  it("bez postupu a nesestupu, dokud se postupy nehrají", () => {
-    expect(LEAGUE_MOVEMENT_ENABLED).toBe(false);
-    expect(OFFERABLE_KINDS).not.toContain("promotion");
-    expect(OFFERABLE_KINDS).not.toContain("no_relegation");
+  it("liga bez postupu a sestupu: v katalogu není postup ani nesestup", () => {
     expect(cat.some((o) => o.kind === "promotion" || o.kind === "no_relegation")).toBe(false);
+  });
+  it("III. třída má v katalogu postup, přebor nesestup", () => {
+    const kinds = (ctx: NegotiationContext) => promiseCatalog(ctx, 50).map((o) => o.kind)
+      .filter((k) => k === "promotion" || k === "no_relegation");
+    expect(kinds(LOWER)).toEqual(["promotion"]);
+    expect(kinds(UPPER)).toEqual(["no_relegation"]);
+    const promotion = promiseCatalog(LOWER, 50).find((o) => o.kind === "promotion")!;
+    expect(promotion.label).toBe("postup, 1. nebo 2. místo");
+    expect(promotion.seasonal).toBe(true);
   });
   it("bez loga na rukávu u hlavního sponzora, bez zamčené stavby", () => {
     expect(cat.some((o) => o.kind === "jersey_logo")).toBe(false);

@@ -34,6 +34,35 @@ export interface DistrictMove {
   relegated: string[];
 }
 
+/** Postup a sestup, které liga na konci sezóny opravdu má. */
+export interface LeagueMovement {
+  promotion: boolean;
+  relegation: boolean;
+}
+
+export const NO_LEAGUE_MOVEMENT: LeagueMovement = { promotion: false, relegation: false };
+
+/** Ligy, mezi kterými se postupuje a sestupuje (stejný výběr pro přesuny i pro sliby sponzorům). */
+const MOVEMENT_LEAGUES_SQL = `COALESCE(league_type, 'senior') = 'senior' AND status = 'active'
+        AND level IN ('okresni_prebor', 'okresni_soutez')`;
+
+/**
+ * Má liga postup, nebo sestup? Jen okres s přeborem i III. třídou si je prohazuje
+ * (applyDistrictPromotions): z III. třídy se postupuje, z přeboru sestupuje. Přebor nemá
+ * kam postoupit (I.B třída ve hře není), III. třída nemá kam sestoupit, U21 se řídí áčkem.
+ */
+export async function leagueMovement(db: D1Database, leagueId: string | null): Promise<LeagueMovement> {
+  if (!leagueId) return NO_LEAGUE_MOVEMENT;
+  const rows = await db.prepare(
+    `SELECT id, level FROM leagues
+      WHERE district = (SELECT district FROM leagues WHERE id = ?) AND ${MOVEMENT_LEAGUES_SQL}`,
+  ).bind(leagueId).all<{ id: string; level: string }>();
+  const own = rows.results.find((r) => r.id === leagueId);
+  const both = rows.results.some((r) => r.level === "okresni_prebor") && rows.results.some((r) => r.level === "okresni_soutez");
+  if (!own || !both) return NO_LEAGUE_MOVEMENT;
+  return { promotion: own.level === "okresni_soutez", relegation: own.level === "okresni_prebor" };
+}
+
 /** Počet odehraných zápasů ligy ve staré sezóně. */
 async function playedMatches(db: D1Database, leagueId: string, seasonNumber: number): Promise<number> {
   const row = await db.prepare(
@@ -63,9 +92,7 @@ export async function applyDistrictPromotions(
   db: D1Database, oldSeasonNumber: number, gameDate: string,
 ): Promise<DistrictMove[]> {
   const leagues = await db.prepare(
-    `SELECT id, district, level, name FROM leagues
-      WHERE COALESCE(league_type, 'senior') = 'senior' AND status = 'active'
-        AND level IN ('okresni_prebor', 'okresni_soutez')`,
+    `SELECT id, district, level, name FROM leagues WHERE ${MOVEMENT_LEAGUES_SQL}`,
   ).all<LeagueRow>();
 
   const byDistrict = new Map<string, { prebor?: LeagueRow; soutez?: LeagueRow }>();
