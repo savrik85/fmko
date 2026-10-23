@@ -153,14 +153,11 @@ export async function simulateTournamentMatch(
   await applyManagerMatchBonus(db, homeId, [homeLineup, homeSubs]);
   await applyManagerMatchBonus(db, awayId, [awayLineup, awaySubs]);
 
+  // Morálka od trenéra i z incidentů je jen pro tenhle zápas, do DB se nezapisuje:
+  // po zápase se uloží jen změna z průběhu zápasu (multiplayer/post-match-players.ts).
   const { applyIncidentMatchMods } = await import("../incidents/zapas");
-  const homeIncidentMods = await applyIncidentMatchMods(db, homeId, [homeLineup, homeSubs], homeBuild.idMap);
-  const awayIncidentMods = await applyIncidentMatchMods(db, awayId, [awayLineup, awaySubs], awayBuild.idMap);
-  // Morálka snížená incidentem je jen handicap pro tenhle zápas, do DB se nezapisuje.
-  const incidentMoraleDelta = new Map<number, number>([
-    ...(homeIncidentMods?.moraleDelta ?? []),
-    ...(awayIncidentMods?.moraleDelta ?? []),
-  ]);
+  await applyIncidentMatchMods(db, homeId, [homeLineup, homeSubs], homeBuild.idMap);
+  await applyIncidentMatchMods(db, awayId, [awayLineup, awaySubs], awayBuild.idMap);
 
   const homePre = homeLineup.map((p) => ({ ...p }));
   const awayPre = awayLineup.map((p) => ({ ...p }));
@@ -266,8 +263,7 @@ export async function simulateTournamentMatch(
     const { postMatchPlayers, postMatchPlayerStatements } = await import("../multiplayer/post-match-players");
     const played = postMatchPlayers(result,
       { teamId: homeId, idMap: homeBuild.idMap },
-      { teamId: awayId, idMap: awayBuild.idMap },
-      incidentMoraleDelta);
+      { teamId: awayId, idMap: awayBuild.idMap });
     const stmts = postMatchPlayerStatements(db, played,
       { source: "match", description: `Turnaj (${result.homeScore}:${result.awayScore})` });
     if (stmts.length > 0) await db.batch(stmts);

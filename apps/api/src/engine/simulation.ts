@@ -733,7 +733,13 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   const homeParticipants: MatchPlayer[] = [...home.lineup];
   const awayParticipants: MatchPlayer[] = [...away.lineup];
   const kickoffCondition: Record<number, number> = {};
-  for (const p of [...home.lineup, ...home.subs, ...away.lineup, ...away.subs]) kickoffCondition[p.id] = p.condition;
+  // Morálka až po bonusu z vybavení výš: předzápasové úpravy platí jen pro tenhle zápas
+  // a uložit se smí jen to, co s ní udělal průběh zápasu.
+  const kickoffMorale: Record<number, number> = {};
+  for (const p of [...home.lineup, ...home.subs, ...away.lineup, ...away.subs]) {
+    kickoffCondition[p.id] = p.condition;
+    kickoffMorale[p.id] = p.morale;
+  }
   let homeSubsUsed = 0;
   let awaySubsUsed = 0;
   // Jako v okresním přeboru a III. třídě: do hry smí pět náhradníků (z nejvýš sedmi v zápise)
@@ -1745,6 +1751,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     homeParticipants,
     awayParticipants,
     kickoffCondition,
+    kickoffMorale,
     playerMinutes,
     possessionHome,
     refereeIncidents,

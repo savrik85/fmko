@@ -141,6 +141,12 @@ export interface MatchResult {
   awayParticipants: MatchPlayer[];
   /** Kondice při výkopu, engine ID → kondice. Základ i lavička. */
   kickoffCondition: Record<number, number>;
+  /**
+   * Morálka při výkopu, už se všemi předzápasovými úpravami (zázemí, kotel, domácí
+   * výhoda, trenér, zastrašení, vybavení, incidenty). Rozdíl od ní je to, co s hráčem
+   * udělal průběh zápasu; jen ten se smí propsat do uložené morálky.
+   */
+  kickoffMorale: Record<number, number>;
   playerMinutes: Record<number, PlayerMinuteTrack>; // engineId → minuty
   possessionHome: number; // 0-100, average možnost domácích za zápas
   /** Sporné situace rozhodčího — nejvýš jedna na zápas. */
