@@ -5255,6 +5255,14 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
   const removed = await removePlayer(c.env.DB, playerId, "released", { toFreeAgent: true, teamId: kmenovy });
   if (!removed.ok) return c.json({ error: "Hráč nenalezen" }, 404);
 
+  // Kořaly „Reforma kádru" patří klubu (áčku z adresy), i když šel dorostenec.
+  // Kontrola dřív neběžela nikde a trofej šla jen ručním zpětným přepočtem.
+  {
+    const { checkReleaseAchievements } = await import("../services/achievements");
+    await checkReleaseAchievements(c.env.DB, teamId)
+      .catch((e) => logger.warn({ module: "game" }, "kořaly po propuštění", e));
+  }
+
   const { createTransferNews } = await import("../transfers/transfer-news");
   await createTransferNews(c.env.DB, player.league_id as string, teamId, "player_released", {
     playerName: `${player.first_name} ${player.last_name}`, playerAge: player.age as number,
@@ -5516,6 +5524,14 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
 
   const gameDate = (team.game_date as string) ?? new Date().toISOString();
   await recordTransaction(c.env.DB, teamId, "signing_fee", -FREE_AGENT_SIGNING_FEE, `Registrace: ${fa.first_name} ${fa.last_name}`, gameDate);
+
+  // Kořaly „Showman": celebrity přicházejí do hry mezi volnými hráči, takže tohle
+  // je skoro jediná cesta, jak ji získat. Dřív se nekontrolovala nikde.
+  if (isCelebrity) {
+    const { checkFreeAgentSigningAchievements } = await import("../services/achievements");
+    await checkFreeAgentSigningAchievements(c.env.DB, teamId, { isCelebrity: true })
+      .catch((e) => logger.warn({ module: "game" }, "kořaly po podpisu celebrity", e));
+  }
 
   const { createTransferNews } = await import("../transfers/transfer-news");
   if (isCelebrity) {
@@ -6244,6 +6260,14 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
     .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při přijetí bidu", e));
 
   await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
+
+  // Kořaly kupce: první koupě, celebrita v týmu. Kontrola dřív neběžela nikde a obě
+  // trofeje šly získat jen ručním zpětným přepočtem.
+  {
+    const { checkTransferAchievements } = await import("../services/achievements");
+    await checkTransferAchievements(c.env.DB, buyerTeamId, playerId)
+      .catch((e) => logger.warn({ module: "game" }, "kořaly po přijetí bidu", e));
+  }
 
   await c.env.DB.prepare("UPDATE player_contracts SET leave_type = 'transfer', is_active = 0, left_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE player_id = ? AND team_id = ? AND is_active = 1")
     .bind(playerId, sellerTeamId).run().catch((e) => logger.warn({ module: "game" }, "deactivate contract on transfer", e));
@@ -7629,6 +7653,14 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   await onPlayerTransferred(c.env.DB, playerId, buyerDestTeamId);
   for (const swapId of swapPlayerIds) {
     await onPlayerTransferred(c.env.DB, swapId, sellerTeamId);
+  }
+
+  // Kořaly kupce (klub, ne jeho dorost): první koupě, celebrita v týmu. Hostování
+  // koupě není. Kontrola dřív neběžela nikde a trofeje šly jen ručním přepočtem.
+  if (offerType !== "loan") {
+    const { checkTransferAchievements } = await import("../services/achievements");
+    await checkTransferAchievements(c.env.DB, buyerTeamId, playerId)
+      .catch((e) => logger.warn({ module: "game" }, "kořaly po přijetí nabídky", e));
   }
 
   // SMS notifications

@@ -225,10 +225,16 @@ async function runWrapPhase(
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
       }
-      case "awards":
+      case "awards": {
         await generateSeasonAwards(db, geminiApiKey, leagueId, seasonNumber);
+        // Kořaly „Šampion" vítězi ligy. Vítěz se čte ze zapsaných ocenění, takže
+        // opakovaný běh fáze nic neudělí podruhé. Dřív trofej neuděloval nikdo.
+        const { awardLeagueChampion } = await import("../services/achievements");
+        await awardLeagueChampion(db, leagueId, seasonNumber)
+          .catch((e) => logger.warn({ module: "end-season" }, `kořaly šampiona ligy ${leagueId}`, e));
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
+      }
       case "archive":
         await archiveLeagueSeason(db, leagueId, seasonNumber);
         await setProgress(db, leagueId, seasonNumber, phase, "done");

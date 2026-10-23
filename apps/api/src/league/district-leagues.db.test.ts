@@ -39,6 +39,8 @@ async function freshDb(): Promise<void> {
     const source = readFileSync(new URL(file, dir), "utf8").replace(/--[^\n]*/g, "").replace(/\n/g, " ");
     await db.exec(source);
   }
+  // Kořaly nemají migraci, na produkci tabulka vznikla ručně. Tohle je její tvar odtamtud.
+  await db.exec("CREATE TABLE IF NOT EXISTS team_achievements (team_id TEXT NOT NULL, achievement_key TEXT NOT NULL, earned_at TEXT NOT NULL, tier TEXT, meta TEXT, PRIMARY KEY (team_id, achievement_key))");
   await db.prepare("INSERT OR REPLACE INTO district_registrations (district, status, ready_at) VALUES (?, 'ready', '2026-09-01')")
     .bind(DISTRICT).run();
 }
@@ -329,5 +331,12 @@ describe("III. třída a přípravné období", () => {
     expect(await getLeaguePreseason(db, soutez!.id)).toBeNull();
     // III. třída ve staré sezóně nehrála → žádný postup ani sestup
     expect(await count("SELECT COUNT(*) AS n FROM news WHERE type = 'league_movement'")).toBe(0);
+
+    // Kořaly šampiona: vítěz přeboru z ocenění sezóny, jen on a jen jednou.
+    const champion = await db.prepare("SELECT champion_team_id FROM season_awards WHERE league_id = ? AND season_number = 1")
+      .bind(prebor!.id).first<{ champion_team_id: string }>();
+    expect(champion?.champion_team_id).toBeTruthy();
+    const champions = await db.prepare("SELECT team_id FROM team_achievements WHERE achievement_key = 'champion'").all<{ team_id: string }>();
+    expect(champions.results.map((r) => r.team_id)).toEqual([champion!.champion_team_id]);
   }, 300_000);
 });

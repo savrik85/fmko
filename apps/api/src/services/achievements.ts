@@ -3,8 +3,10 @@
  *
  * Checker se volá po klíčových eventech:
  * - Po odehraném zápase (match-runner) → zápasové milníky, derby
- * - Po transferu (transfers.ts) → koupě/prodej milníky
+ * - Po přestupu (přijetí bidu/nabídky, koupě mimo hru) a podpisu volného hráče → koupě, celebrita
+ * - Po propuštění hráče (z kádru i vyhazovem po incidentu) → reforma kádru
  * - Po daily-tick → finanční a týdenní milníky
+ * - Na konci sezóny (ocenění, archiv) → šampion, mistr, dokončená sezóna
  *
  * Idempotentní: PRIMARY KEY (team_id, achievement_key) zabrání duplicitě.
  */
@@ -177,16 +179,54 @@ export async function checkMatchAchievements(
   return unlocked;
 }
 
-/** Po přestupu — nový hráč do týmu. */
+/**
+ * Po přestupu — nový hráč do týmu. Volá se z přijetí bidu, nabídky (ne hostování)
+ * a z koupě od klubu mimo hru.
+ *
+ * Celebritu si zjistí sama a chybu jen zaloguje: kořaly jsou vedlejší efekt
+ * a nesmí shodit přestup, který už proběhl.
+ */
 export async function checkTransferAchievements(
   db: D1Database,
   buyerTeamId: string,
-  playerInfo: { isCelebrity: boolean },
+  playerId: string,
 ): Promise<string[]> {
   const unlocked: string[] = [];
   if (await award(db, buyerTeamId, "first_signing")) unlocked.push("first_signing");
-  if (playerInfo.isCelebrity && await award(db, buyerTeamId, "celebrity_signing")) unlocked.push("celebrity_signing");
+  const player = await db.prepare("SELECT is_celebrity FROM players WHERE id = ?")
+    .bind(playerId).first<{ is_celebrity: number | null }>()
+    .catch((e) => { logger.warn({ module: "achievements" }, `celebrita po přestupu ${playerId}`, e); return null; });
+  if (player?.is_celebrity && await award(db, buyerTeamId, "celebrity_signing")) unlocked.push("celebrity_signing");
   return unlocked;
+}
+
+/**
+ * Po podpisu volného hráče. Koupě to není (`first_signing` je „Koupit prvního hráče"),
+ * ale celebrity do hry přicházejí právě mezi volnými hráči, takže jinudy se
+ * `celebrity_signing` získat skoro nedá.
+ */
+export async function checkFreeAgentSigningAchievements(
+  db: D1Database,
+  teamId: string,
+  playerInfo: { isCelebrity: boolean },
+): Promise<string[]> {
+  const unlocked: string[] = [];
+  if (playerInfo.isCelebrity && await award(db, teamId, "celebrity_signing")) unlocked.push("celebrity_signing");
+  return unlocked;
+}
+
+/**
+ * Konec sezóny, fáze ocenění: `champion` vítězi ligy. Vítěze bere z `season_awards`,
+ * které tatáž fáze právě zapsala, takže opakovaný běh fáze dá týž výsledek a
+ * `award` je idempotentní. Bez tohohle trofej nešla získat vůbec.
+ */
+export async function awardLeagueChampion(db: D1Database, leagueId: string, seasonNumber: number): Promise<string | null> {
+  const row = await db.prepare("SELECT champion_team_id FROM season_awards WHERE league_id = ? AND season_number = ?")
+    .bind(leagueId, seasonNumber).first<{ champion_team_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "achievements" }, `vítěz ligy ${leagueId}/${seasonNumber}`, e); return null; });
+  if (!row?.champion_team_id) return null;
+  await award(db, row.champion_team_id, "champion", { leagueId, seasonNumber });
+  return row.champion_team_id;
 }
 
 /** Konec sezóny — dokončení sezóny (všem) + mistr (vítězi). Idempotentní. */
@@ -197,7 +237,7 @@ export async function awardSeasonEnd(db: D1Database, teamId: string, opts: { cha
   return unlocked;
 }
 
-/** Po release (uvolnění) hráče. */
+/** Po release (uvolnění) hráče. Volá se z propuštění z kádru a z vyhazovu pachatele incidentu. */
 export async function checkReleaseAchievements(db: D1Database, teamId: string): Promise<string[]> {
   const unlocked: string[] = [];
   if (await award(db, teamId, "released_first")) unlocked.push("released_first");
@@ -264,10 +304,11 @@ export async function backfillTeamAchievements(db: D1Database, teamId: string): 
   ).bind(teamId).first<{ n: number }>().catch((e) => { logger.warn({ module: "achievements" }, "backfill signings", e); return null; });
   if ((signingRow?.n ?? 0) >= 1 && await award(db, teamId, "first_signing")) push("first_signing");
 
+  // I podpis volného hráče: celebrity do hry přicházejí právě tudy (viz checkFreeAgentSigningAchievements).
   const celebRow = await db.prepare(
     `SELECT COUNT(*) as n FROM player_contracts pc
      JOIN players p ON p.id = pc.player_id
-     WHERE pc.team_id = ? AND pc.join_type = 'transfer' AND p.is_celebrity = 1`
+     WHERE pc.team_id = ? AND pc.join_type IN ('transfer', 'free_agent') AND p.is_celebrity = 1`
   ).bind(teamId).first<{ n: number }>().catch((e) => { logger.warn({ module: "achievements" }, "backfill celeb", e); return null; });
   if ((celebRow?.n ?? 0) >= 1 && await award(db, teamId, "celebrity_signing")) push("celebrity_signing");
 

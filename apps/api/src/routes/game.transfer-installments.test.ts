@@ -304,6 +304,11 @@ beforeAll(async () => {
       sort_order INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (offer_id, player_id)
     );
+
+    CREATE TABLE team_achievements (
+      team_id TEXT NOT NULL, achievement_key TEXT NOT NULL, earned_at TEXT NOT NULL, tier TEXT, meta TEXT,
+      PRIMARY KEY (team_id, achievement_key)
+    );
   `);
 
   await sessionKv.put("session:seller-token", JSON.stringify({
@@ -360,6 +365,7 @@ beforeEach(async () => {
     DELETE FROM seasons;
     DELETE FROM season_calendar;
     DELETE FROM departed_players;
+    DELETE FROM team_achievements;
   `);
 
   await db.batch([
@@ -461,6 +467,12 @@ async function budgets(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.results.map((r) => [r.id, r.budget]));
 }
 
+async function achievementsOf(teamId: string): Promise<string[]> {
+  const rows = await db.prepare("SELECT achievement_key FROM team_achievements WHERE team_id = ? ORDER BY achievement_key")
+    .bind(teamId).all<{ achievement_key: string }>();
+  return rows.results.map((r) => r.achievement_key);
+}
+
 async function makeOffer(body: Record<string, unknown>, token = "buyer-token", team = "buyer-a") {
   const r = await callRoute(`/teams/${team}/offers`, { method: "POST", token, body: { playerId: "star", ...body } });
   const json = await readJson(r);
@@ -546,6 +558,9 @@ describe("přestup na splátky a procenta z příštího přestupu", () => {
     expect(await db.prepare("SELECT beneficiary_team_id, owner_team_id, pct, status FROM sell_on_clauses").first())
       .toEqual({ beneficiary_team_id: "seller-a", owner_team_id: "buyer-a", pct: 10, status: "active" });
     expect((await db.prepare("SELECT fee FROM player_contracts WHERE player_id = 'star' AND is_active = 1").first<{ fee: number }>())!.fee).toBe(60_000);
+    // Kořaly: první koupě patří kupujícímu, prodávající nic nekoupil.
+    expect(await achievementsOf("buyer-a")).toEqual(["first_signing"]);
+    expect(await achievementsOf("seller-a")).toEqual([]);
   });
 
   it("přijetí při plném limitu dohod se odmítne a nic se nestrhne", async () => {
@@ -605,6 +620,14 @@ describe("doložku o procentech nejde obejít", () => {
     expect(clause).toEqual({ status: "paid", paid_amount: Math.round((1 + 40_000) * 0.2) });
   });
 
+  it("hostování není koupě: kořaly za první koupi nedá", async () => {
+    const offer = await makeOffer({ amount: 1_000, offerType: "loan", loanDuration: 30 });
+    expect(offer.status).toBe(200);
+    expect((await callRoute(`/teams/seller-a/offers/${offer.id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
+    expect(await db.prepare("SELECT team_id FROM player_contracts WHERE player_id = 'star' AND join_type = 'loan'").first()).toEqual({ team_id: "buyer-a" });
+    expect(await achievementsOf("buyer-a")).toEqual([]);
+  });
+
   async function buyWithSellOn() {
     const { id } = await makeOffer({ amount: 60_000, upfrontPct: 30, installments: 4, sellOnPct: 10 });
     expect((await callRoute(`/teams/seller-a/offers/${id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
@@ -645,6 +668,8 @@ describe("doložku o procentech nejde obejít", () => {
     expect(after["seller-a"] - before["seller-a"]).toBe(42_000 + 7_000);
     expect((await db.prepare("SELECT status FROM transfer_installments").first<{ status: string }>())!.status).toBe("settled");
     expect((await db.prepare("SELECT status FROM sell_on_clauses").first<{ status: string }>())!.status).toBe("paid");
+    // Kořaly: koupě z inzerátu je první koupě kupce z inzerátu.
+    expect(await achievementsOf("third-a")).toEqual(["first_signing"]);
   });
 });
 

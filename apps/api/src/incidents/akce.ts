@@ -277,6 +277,13 @@ export async function rozhodni(
     await atributTrenera(db, teamId, incidentId, "discipline", 1, `Vyhozen pachatel incidentu: ${pachatel.jmeno}`, gameDate);
     await posunKadru(db, teamId, oblibeny ? -4 : 1).run()
       .catch((e) => logger.warn({ module: M }, `morálka po vyhazovu ${incidentId}`, e));
+    // Kořaly „Reforma kádru: Vyhodit prvního hráče". Vyhazov pachatele je propuštění
+    // stejně jako to z kádru.
+    {
+      const { checkReleaseAchievements } = await import("../services/achievements");
+      await checkReleaseAchievements(db, teamId)
+        .catch((e) => logger.warn({ module: M }, `kořaly po vyhazovu ${incidentId}`, e));
+    }
     // Vyhozený jde mezi volné hráče stejně jako po propuštění z kádru, takže sledující
     // dostanou stejnou zprávu (routes/game.ts). Sledování jim `removePlayer` převedl
     // na volného hráče, seznam sledujících načetl ještě před úklidem.
