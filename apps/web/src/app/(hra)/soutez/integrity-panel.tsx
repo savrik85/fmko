@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Modal, EntityLink } from "@/components/ui";
 import { Empty, Ornament, Rozbaleni, czk, plural } from "./ui";
+import { ClubAuditSection } from "./club-audit-section";
 import type { State } from "./types";
 
 interface TipKnihy { label: string; oddsX100: number; result: string; zapas: string }
@@ -216,6 +217,9 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
           </ul>
         )}
       </Rozbaleni>
+
+      {/* ── Účetnictví klubů ─────────────────────────────────────────────── */}
+      {teamId && <ClubAuditSection teamId={teamId} />}
 
       {/* Ovládání zůstává mimo rozbalení — jinak by se k němu komisař proklikával. */}
       {jsemKomisar && (

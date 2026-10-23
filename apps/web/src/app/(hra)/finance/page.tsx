@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam } from "@/components/ui";
+import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Typy
@@ -69,71 +70,6 @@ type FlowSide = "income" | "expenses";
 // Konstanty a formátování
 // ────────────────────────────────────────────────────────────────────────────
 
-const TXN_ICONS: Record<string, string> = {
-  wage: "💸", sponsor_income: "💰", match_income: "🏟", match_expense: "⚽",
-  match_reward: "🏆", training_cost: "🏋", pitch_maintenance: "🌿",
-  equipment_expense: "👟", equipment_upgrade: "⬆", stadium_upgrade: "🏗",
-  pitch_repair: "🛠", pitch_upgrade: "🌿", classified_ad: "📰",
-  sponsor_termination: "❌", sponsor_signing: "✍", sponsor_request: "🤲", season_reward: "🏆", event: "⚡",
-  transfer_fee: "🤝", transfer_income: "💵", signing_fee: "✍",
-  loan_fee: "📄", loan_income: "📄", transfer_admin_fee: "🗂",
-  concession_wholesale: "📦", concession_income_external: "🏪", concession_income_self: "🍺",
-  promotional_campaign: "📢", stadium_visual: "🎨", club_website: "🌐", bus_subsidy: "🚌",
-  cash_loan_disbursement: "💳", cash_loan_repayment: "💳", village_brigade: "🔨",
-  transfer_installment: "🗓️", transfer_installment_income: "🗓️",
-  transfer_installment_settlement: "🗓️", transfer_installment_settlement_income: "🗓️",
-  sell_on_fee: "📈", sell_on_income: "📈",
-  manager_social: "🍻", player_bonus: "💵", manager_bet_win: "🍺", manager_bet_loss: "🍺", cup_prize: "🏅", tournament_prize: "⚽",
-  bet_stake: "🎫", bet_win: "🎫", bet_levy: "🎫", bet_refund: "↩",
-  staff_wage: "👔", scout_travel: "🚗", staff_signing: "✍", course_fee: "🎓", staff_task: "🧰", disciplinary_fine: "⚖️", fan_relations: "📣",
-  coach_course: "🎓", coach_exam_retake: "📝",
-  incident_fine: "🧾", incident_deduction: "✂️", incident_recovery: "🚓", incident_advance: "💸", incident_loss: "💸",
-  incident_gift: "🎁",
-  raffle_income: "🎟", youth_academy: "🧒", equipment_purchase: "🛒", equipment_sale: "🏷",
-  equipment_pawn: "💍", competition_fee: "🏛", competition_deposit: "🏛",
-  competition_grant: "🏛", bet_confiscated: "🚫",
-  sponsor_bonus: "🎯", sponsor_penalty: "⚠️",
-  // Historické typy z ručních zásahů — kód je už negeneruje, ale v účetnictví klubů leží.
-  admin_correction: "🛠", bonus: "🎁", transfer_correction: "↩",
-  other: "📋",
-};
-
-const TXN_LABELS: Record<string, string> = {
-  wage: "Mzdy", sponsor_income: "Sponzoři", match_income: "Vstupné", match_expense: "Zápasové náklady",
-  match_reward: "Bonus za výsledek", training_cost: "Trénink", pitch_maintenance: "Údržba hřiště",
-  equipment_expense: "Vybavení", equipment_upgrade: "Upgrade vybavení", stadium_upgrade: "Upgrade stadionu",
-  pitch_repair: "Oprava hřiště", pitch_upgrade: "Změna povrchu", classified_ad: "Inzerát",
-  sponsor_termination: "Ukončení smlouvy", sponsor_signing: "Sponzor při podpisu", sponsor_request: "Příspěvek od sponzora", season_reward: "Sezónní odměna", event: "Událost",
-  transfer_fee: "Přestupová cena", transfer_income: "Prodej hráče", signing_fee: "Podpisový bonus",
-  loan_fee: "Hostování, platba", loan_income: "Hostování, příjem", transfer_admin_fee: "Přestupní poplatek",
-  concession_wholesale: "Nákup zboží", concession_income_external: "Pronájem bufetu", concession_income_self: "Tržby z občerstvení",
-  promotional_campaign: "Propagace zápasu", stadium_visual: "Vzhled stadionu", club_website: "Klubový web", bus_subsidy: "Autobus fanoušků",
-  cash_loan_disbursement: "Půjčka, přijatá", cash_loan_repayment: "Splátka půjčky", village_brigade: "Brigáda v obci",
-  transfer_installment: "Splátka přestupu", transfer_installment_income: "Splátka přestupu, příjem",
-  transfer_installment_settlement: "Doplacení splátek přestupu", transfer_installment_settlement_income: "Doplacení splátek přestupu, příjem",
-  sell_on_fee: "Procenta z prodeje hráče", sell_on_income: "Procenta z prodeje hráče, příjem",
-  manager_social: "Trenérská diplomacie", player_bonus: "Prémie hráčům", manager_bet_win: "Vyhraná sázka", manager_bet_loss: "Prohraná sázka", cup_prize: "Odměna z poháru", tournament_prize: "Odměna z turnaje",
-  bet_stake: "Sázka u kanceláře", bet_win: "Výhra ze sázky", bet_levy: "Odvod ze sázky", bet_refund: "Vrácený vklad",
-  staff_wage: "Mzdy zaměstnanců", scout_travel: "Cestovné skauta", staff_signing: "Podpisné zaměstnance", course_fee: "Kurz zaměstnance", staff_task: "Úkol zaměstnance",
-  coach_course: "Trenérská škola", coach_exam_retake: "Opravný termín testu",
-  disciplinary_fine: "Pokuta disciplinární komise",
-  incident_fine: "Pokuta hráči za incident",
-  incident_deduction: "Srážka ze mzdy hráče",
-  incident_recovery: "Náhrada škody od pachatele",
-  incident_advance: "Záloha hráči",
-  incident_loss: "Ukradená hotovost",
-  incident_gift: "Dar klubu",
-  fan_relations: "Fanoušci a kotel",
-  raffle_income: "Tombola", youth_academy: "Mládežnická akademie",
-  equipment_purchase: "Nákup vybavení z bazaru", equipment_sale: "Prodej vybavení do bazaru",
-  equipment_pawn: "Výkup v zastavárně", competition_fee: "Poplatek soutěži",
-  competition_deposit: "Kauce za návrh", competition_grant: "Dotace ze soutěže",
-  bet_confiscated: "Zabavená výhra ze sázky",
-  sponsor_bonus: "Bonus od sponzora", sponsor_penalty: "Pokuta od sponzora",
-  admin_correction: "Oprava vedení soutěže", bonus: "Mimořádná prémie",
-  transfer_correction: "Oprava přestupu",
-  other: "Ostatní",
-};
 
 function formatCZK(amount: number): string {
   return amount.toLocaleString("cs") + " Kč";
