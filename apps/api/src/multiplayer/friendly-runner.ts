@@ -4,7 +4,7 @@
 
 import { simulateMatch } from "../engine/simulation";
 import { generateMatchCommentary, loadCommentaryFromDB } from "../engine/commentary";
-import { createRng } from "../generators/rng";
+import { createRng, cryptoSeed } from "../generators/rng";
 import { experienceGainChance } from "../skills/training";
 import type { TeamSetup, Weather, Hardness } from "../engine/types";
 import { buildMatchPlayers } from "./match-runner";
@@ -285,6 +285,19 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         if (stmts.length > 0) await db.batch(stmts);
       } catch (e) {
         logger.error({ module: "friendly-runner" }, "Condition persist failed", e);
+      }
+
+      // Zranění z přáteláku platí jako z ligy. Engine je vygeneroval, ale nikam se
+      // nezapsala, takže hráč zraněný v přáteláku nastoupil hned v dalším zápase.
+      try {
+        const { cupInjuryStatements } = await import("../cup/cup");
+        const injuryStmts = cupInjuryStatements(db, result.events,
+          { teamId: homeTeamId, idMap: homeBuild.idMap, players: [...homeLineup, ...homeSubs] },
+          { teamId: awayTeamId, idMap: awayBuild.idMap, players: [...awayLineup, ...awaySubs] },
+          createRng(cryptoSeed()), matchId);
+        if (injuryStmts.length > 0) await db.batch(injuryStmts);
+      } catch (e) {
+        logger.error({ module: "friendly-runner" }, "zápis zranění z přáteláku", e);
       }
 
       // Match experience: small chance to improve skills (same as league, but halved chance)

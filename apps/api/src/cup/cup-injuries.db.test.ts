@@ -76,6 +76,14 @@ describe("zranění z pohárového zápasu", () => {
     }
   });
 
+  it("přátelák (zápas v matches) zranění na zápas odkáže", async () => {
+    await db.prepare("INSERT OR IGNORE INTO matches VALUES ('friendly-1')").run();
+    const stmts = cupInjuryStatements(db, [injury(1, 1)], home, away, createRng(5), "friendly-1");
+    await db.batch(stmts);
+    const row = await db.prepare("SELECT player_id, match_id FROM injuries").first<{ player_id: string; match_id: string }>();
+    expect(row).toEqual({ player_id: "p-home", match_id: "friendly-1" });
+  });
+
   it("hráč velkoklubu (tým mimo players) se nezapisuje", async () => {
     const stmts = cupInjuryStatements(db, [injury(1, 1), injury(101, 2)], home, { ...away, teamId: null }, createRng(5));
     await db.batch(stmts);
@@ -95,5 +103,9 @@ describe("kdo zapisuje injuries.match_id", () => {
   it("pohár ani turnaj neposílají do match_id id zápasu mimo matches", () => {
     expect(read("cup/cup.ts")).not.toMatch(/days, days, cupMatchId\)/);
     expect(read("tournament/match.ts")).not.toMatch(/days, days, m\.id\)/);
+  });
+
+  it("přátelák zranění zapisuje (dřív je nezapisoval vůbec)", () => {
+    expect(read("multiplayer/friendly-runner.ts")).toMatch(/cupInjuryStatements\([\s\S]*?matchId\)/);
   });
 });
