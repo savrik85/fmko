@@ -144,11 +144,23 @@ export function auditFlags(opts: {
     flags.push(`Na sázkách vydělal nejvíc z celé soutěže: ${czk(net)} čistého.`);
   }
 
+  // Opakované obchody s jedním klubem nesou tentýž příznak u každého přestupu.
+  // Sloučí se do jednoho řádku na klub a příznak, jinak by zahltily revizi.
+  const byPartner = new Map<string, { partner: string; flag: string; players: string[] }>();
   for (const t of opts.transferFlags) {
     if (t.priznaky.length === 0) continue;
     if (t.zKlubu !== opts.teamName && t.doKlubu !== opts.teamName) continue;
-    const route = `${t.zKlubu ?? "volný hráč"} → ${t.doKlubu}`;
-    for (const p of t.priznaky) flags.push(`Přestup ${t.hrac} (${route}): ${p}.`);
+    const partner = t.zKlubu === opts.teamName ? t.doKlubu : (t.zKlubu ?? "volný hráč");
+    for (const p of t.priznaky) {
+      const key = `${partner}|${p}`;
+      const entry = byPartner.get(key) ?? { partner, flag: p, players: [] };
+      entry.players.push(t.hrac);
+      byPartner.set(key, entry);
+    }
+  }
+  for (const { partner, flag, players } of byPartner.values()) {
+    const what = players.length === 1 ? `Přestup ${players[0]}` : `Přestupy ${players.join(", ")}`;
+    flags.push(`${what} (s klubem ${partner}): ${flag}.`);
   }
 
   return flags;
