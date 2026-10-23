@@ -140,6 +140,10 @@ export async function prijemci(db: D1Database, opts: {
  *
  * Počítá se z odehraných zápasů sezóny, ne z ničeho — cena bez měřitelného
  * důvodu je jen přesun peněz kamarádovi.
+ *
+ * Sezónu zápasu nese `season_calendar` (přes `matches.calendar_id`), `matches` vlastní
+ * číslo sezóny nemá. Dřív se filtrovalo podle neexistujícího `matches.season_number`,
+ * dotazy padaly a žádná cena se nikdy neudělila.
  */
 export async function seasonAwards(db: D1Database, opts: {
   leagueId: string;
@@ -152,11 +156,13 @@ export async function seasonAwards(db: D1Database, opts: {
     `SELECT t.id, t.name,
             COALESCE(SUM(mps.yellow_cards), 0) + 3 * COALESCE(SUM(mps.red_cards), 0) AS body
        FROM teams t
-       LEFT JOIN match_player_stats mps ON mps.team_id = t.id
-       LEFT JOIN matches m ON m.id = mps.match_id AND m.season_number = ?
+       JOIN matches m ON (m.home_team_id = t.id OR m.away_team_id = t.id)
+                     AND m.league_id = ? AND m.status = 'simulated'
+       JOIN season_calendar sc ON sc.id = m.calendar_id AND sc.season_number = ?
+       LEFT JOIN match_player_stats mps ON mps.match_id = m.id AND mps.team_id = t.id
       WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
       GROUP BY t.id ORDER BY body ASC, t.id ASC LIMIT 1`
-  ).bind(opts.seasonNumber, opts.leagueId).first<{ id: string; name: string; body: number }>()
+  ).bind(opts.leagueId, opts.seasonNumber, opts.leagueId).first<{ id: string; name: string; body: number }>()
     .catch((e) => { logger.warn({ module: M }, "fair play", e); return null; });
   if (fairplay) {
     out.push({ teamId: fairplay.id, title: `Cena fair play ${fairplay.name}`, amount: opts.amountPerAward });
@@ -165,10 +171,11 @@ export async function seasonAwards(db: D1Database, opts: {
   const navstevnost = await db.prepare(
     `SELECT t.id, t.name, COALESCE(AVG(m.attendance), 0) AS prumer
        FROM teams t
-       JOIN matches m ON m.home_team_id = t.id AND m.season_number = ? AND m.status = 'simulated'
+       JOIN matches m ON m.home_team_id = t.id AND m.league_id = ? AND m.status = 'simulated'
+       JOIN season_calendar sc ON sc.id = m.calendar_id AND sc.season_number = ?
       WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
       GROUP BY t.id ORDER BY prumer DESC, t.id ASC LIMIT 1`
-  ).bind(opts.seasonNumber, opts.leagueId).first<{ id: string; name: string; prumer: number }>()
+  ).bind(opts.leagueId, opts.seasonNumber, opts.leagueId).first<{ id: string; name: string; prumer: number }>()
     .catch((e) => { logger.warn({ module: M }, "návštěvnost", e); return null; });
   if (navstevnost && navstevnost.prumer > 0) {
     out.push({
@@ -184,14 +191,14 @@ export async function seasonAwards(db: D1Database, opts: {
             COALESCE(p.last_name, dp.last_name) AS prijmeni,
             SUM(mps.goals) AS golu
        FROM match_player_stats mps
-       JOIN matches m ON m.id = mps.match_id AND m.season_number = ?
+       JOIN matches m ON m.id = mps.match_id AND m.league_id = ? AND m.status = 'simulated'
+       JOIN season_calendar sc ON sc.id = m.calendar_id AND sc.season_number = ?
        JOIN teams t ON t.id = mps.team_id
        LEFT JOIN players p ON p.id = mps.player_id
        LEFT JOIN departed_players dp ON dp.id = mps.player_id
-      WHERE t.league_id = ?
       GROUP BY mps.player_id HAVING golu > 0
       ORDER BY golu DESC, mps.player_id ASC LIMIT 1`
-  ).bind(opts.seasonNumber, opts.leagueId)
+  ).bind(opts.leagueId, opts.seasonNumber)
     .first<{ team_id: string; team_name: string; jmeno: string; prijmeni: string; golu: number }>()
     .catch((e) => { logger.warn({ module: M }, "nejlepší střelec", e); return null; });
   if (strelec) {
