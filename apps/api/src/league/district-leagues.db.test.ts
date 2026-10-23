@@ -39,8 +39,6 @@ async function freshDb(): Promise<void> {
     const source = readFileSync(new URL(file, dir), "utf8").replace(/--[^\n]*/g, "").replace(/\n/g, " ");
     await db.exec(source);
   }
-  // Kořaly nemají migraci, na produkci tabulka vznikla ručně. Tohle je její tvar odtamtud.
-  await db.exec("CREATE TABLE IF NOT EXISTS team_achievements (team_id TEXT NOT NULL, achievement_key TEXT NOT NULL, earned_at TEXT NOT NULL, tier TEXT, meta TEXT, PRIMARY KEY (team_id, achievement_key))");
   await db.prepare("INSERT OR REPLACE INTO district_registrations (district, status, ready_at) VALUES (?, 'ready', '2026-09-01')")
     .bind(DISTRICT).run();
 }
