@@ -21,6 +21,7 @@
  * smlouvu navíc tím, že je stará smlouva v tu chvíli pořád aktivní: souběžná výpověď
  * nebo rollover ji nestrhnou podruhé.
  */
+import { renameClub } from "../lib/club-rename";
 import { logger } from "../lib/logger";
 import { CATEGORIES } from "../equipment/equipment-generator";
 import type { TransactionType } from "../season/finance-processor";
@@ -193,13 +194,14 @@ export async function viewWithClawback(db: D1Database, st: NegotiationState): Pr
 }
 
 /**
- * Nový hlavní sponzor: klub nese jeho jméno, pohár, U21 a zpráva do ligy.
+ * Nový hlavní sponzor: klub nese jeho jméno (i v poháru, U21 a adrese webu) a zpráva do ligy.
  * `freeSwitch`: přechod od legacy smlouvy (bez jednání) je zdarma — bez −3 reputace za přejmenování,
  * motivuje kluby přejít na nový systém sponzorů (signFromState počítá legacySwitch).
+ * `newName: null` = název se mezitím změnil a klub se nepřejmenoval.
  */
 export async function applyMainSponsorRename(
   db: D1Database, teamId: string, sponsorName: string, season: number, opts: { freeSwitch?: boolean } = {},
-): Promise<{ oldName: string; newName: string }> {
+): Promise<{ oldName: string; newName: string | null }> {
   const teamInfo = await db.prepare("SELECT name, village_id FROM teams WHERE id = ?")
     .bind(teamId).first<{ name: string; village_id: string }>();
   const village = teamInfo
@@ -209,8 +211,14 @@ export async function applyMainSponsorRename(
   const oldName = teamInfo?.name ?? "";
   // Zkratku si klub vybral sám (FK, SK, AC…), sponzor mění jen prostředek názvu.
   const newName = `${clubPrefixOf(oldName) ?? "FK"} ${sponsorName} ${village?.name ?? ""}`.trim();
-  await db.prepare("UPDATE teams SET name = ?, last_main_sponsor_change_season = ? WHERE id = ?")
-    .bind(newName, season, teamId).run();
+  // Pohár, U21 i stará adresa webu jdou s názvem (club-rename.ts).
+  const renamed = await renameClub(db, {
+    teamId, oldName, newName, seasonMark: { column: "last_main_sponsor_change_season", season },
+  });
+  if (!renamed) {
+    logger.warn({ module: "sponsors", teamId }, `přejmenování podle sponzora ${sponsorName}: název se mezitím změnil, klub se nepřejmenoval`);
+    return { oldName, newName: null };
+  }
   if (!opts.freeSwitch) {
     // Přejmenování podle sponzora fanoušky nepotěší (-3).
     const { applyReputationDelta } = await import("../lib/reputation");
@@ -224,11 +232,6 @@ export async function applyMainSponsorRename(
     payload: { co: `Teď jsme ${newName}` },
     referenceId: `fan-rename-${teamId}-s${season}`,
   });
-  // Přejmenování promítnout i do poháru a do U21 týmu klubu (jinak drží starý název).
-  await db.prepare("UPDATE cup_teams SET name = ? WHERE team_id = ?").bind(newName, teamId).run()
-    .catch((e) => logger.warn({ module: "sponsors", teamId }, "rename cup_teams on sponsor change", e));
-  await db.prepare("UPDATE teams SET name = ? WHERE parent_team_id = ? AND team_type = 'u21'").bind(`${newName} U21`, teamId).run()
-    .catch((e) => logger.warn({ module: "sponsors", teamId }, "rename U21 on sponsor change", e));
   const newsBody = opts.freeSwitch
     ? `Klub ${oldName} podepsal sponzorskou smlouvu s firmou ${sponsorName} a mění svůj název na ${newName}. Přechod ze staré smlouvy byl zdarma, reputaci to nestálo.`
     : `Klub ${oldName} podepsal sponzorskou smlouvu s firmou ${sponsorName} a mění svůj název na ${newName}. Fanoušci nejsou nadšení (-3 reputace).`;
@@ -525,7 +528,7 @@ export async function signFromState(db: D1Database, st: NegotiationState): Promi
   let reputationPenalty = 0;
   if (neg.category === "main" && !st.isRenewal) {
     newTeamName = (await applyMainSponsorRename(db, teamId, sponsor.name, season, { freeSwitch: freeRename })).newName;
-    reputationPenalty = freeRename ? 0 : 3;
+    reputationPenalty = newTeamName && !freeRename ? 3 : 0;
   }
   if (neg.category === "stadium" && !st.isRenewal) await applyStadiumRename(db, teamId, contractName, contractId);
 
