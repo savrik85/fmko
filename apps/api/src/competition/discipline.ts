@@ -538,7 +538,7 @@ export async function canChairFine(
   // Vyhrocený vztah = konflikt zájmů. Existující systém vztahů manažerů to ví.
   const heat = await db.prepare(
     `SELECT heat FROM manager_relations
-      WHERE (team_a = ? AND team_b = ?) OR (team_a = ? AND team_b = ?)`
+      WHERE (team_a_id = ? AND team_b_id = ?) OR (team_a_id = ? AND team_b_id = ?)`
   ).bind(chairTeamId, targetTeamId, targetTeamId, chairTeamId).first<{ heat: number }>()
     .catch((e) => { logger.warn({ module: M }, "vztah předsedy k cíli", e); return null; });
   if ((heat?.heat ?? 0) >= CHAIR_HEAT_LIMIT) {
