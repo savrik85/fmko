@@ -130,8 +130,17 @@ export interface MatchResult {
   homeScore: number;
   awayScore: number;
   events: MatchEvent[];
+  /** Kdo dohrál na hřišti. Vystřídaní a vyloučení tu chybí, ti jsou v `homeParticipants`. */
   homeLineup: MatchPlayer[];
   awayLineup: MatchPlayer[];
+  /**
+   * Každý, kdo za tým nastoupil: základní sestava, střídající i vystřídaní a vyloučení,
+   * ve stavu z chvíle, kdy hřiště opustili (kondice odpovídá odehraným minutám).
+   */
+  homeParticipants: MatchPlayer[];
+  awayParticipants: MatchPlayer[];
+  /** Kondice při výkopu, engine ID → kondice. Základ i lavička. */
+  kickoffCondition: Record<number, number>;
   playerMinutes: Record<number, PlayerMinuteTrack>; // engineId → minuty
   possessionHome: number; // 0-100, average možnost domácích za zápas
   /** Sporné situace rozhodčího — nejvýš jedna na zápas. */

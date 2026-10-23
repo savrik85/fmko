@@ -668,26 +668,17 @@ async function simulateCupTie(
     for (const u of awayUpdates) if (u.redCards > 0 && awayReal) susStmts.push(db.prepare("UPDATE players SET suspended_matches = suspended_matches + 1 WHERE id = ?").bind(u.playerId));
     if (susStmts.length > 0) await db.batch(susStmts).catch((e) => logger.warn({ module: M }, "cup suspensions", e));
 
-    // Kondice + morálka zpět do players (post-sim hodnoty z result.homeLineup/awayLineup)
-    const { logConditionStmt } = await import("../lib/condition-log");
-    const preSimCondById = new Map<number, number>();
-    for (const p of [...homePre, ...awayPre]) preSimCondById.set(p.id, p.condition);
-    const condStmts: D1PreparedStatement[] = [];
-    const homePost = result.homeLineup ?? [];
-    for (const p of [...homePost, ...(result.awayLineup ?? [])]) {
-      const dbId = fullIdMap.get(p.id);
-      if (!dbId) continue;
-      const realTeam = homePost.includes(p) ? homeReal : awayReal;
-      if (!realTeam) continue; // velkoklub → není v players
-      // Odečíst dočasný incidentní handicap (spec 17c) — do DB jde jen morálka z herního
-      // výsledku, ne z toho, že hráč nastoupil obviněný.
-      const persistMorale = Math.max(0, Math.min(100, Math.round(p.morale - (incidentMoraleDelta.get(p.id) ?? 0))));
-      condStmts.push(db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?").bind(Math.round(p.condition), persistMorale, dbId));
-      const oldCond = preSimCondById.get(p.id);
-      if (oldCond != null && Math.round(oldCond) !== Math.round(p.condition)) {
-        condStmts.push(logConditionStmt(db, dbId, realTeam, oldCond, p.condition, "match", `Pohár (${result.homeScore}:${result.awayScore})`));
-      }
-    }
+    // Kondice + morálka zpět do players pro každého, kdo nastoupil, i vystřídané a vyloučené.
+    // Velkoklub (teamId null) se přeskočí, jeho kádr v players není.
+    // Od morálky se odečte dočasný incidentní handicap (spec 17c) — do DB jde jen morálka
+    // z herního výsledku, ne z toho, že hráč nastoupil obviněný.
+    const { postMatchPlayers, postMatchPlayerStatements } = await import("../multiplayer/post-match-players");
+    const played = postMatchPlayers(result,
+      { teamId: homeReal, idMap: homeBuild.idMap },
+      { teamId: awayReal, idMap: awayBuild.idMap },
+      incidentMoraleDelta);
+    const condStmts = postMatchPlayerStatements(db, played,
+      { source: "match", description: `Pohár (${result.homeScore}:${result.awayScore})` });
     if (condStmts.length > 0) await db.batch(condStmts).catch((e) => logger.warn({ module: M }, "cup condition/morale persist", e));
   } catch (e) {
     logger.warn({ module: M }, "cup kondice/morálka/suspendace", e);

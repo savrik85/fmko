@@ -273,30 +273,15 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         logger.error({ module: "friendly-runner" }, "Finance processing failed", e);
       }
 
-      // Persist condition + morale changes for players who actually played
+      // Kondice a morálka pro každého, kdo nastoupil, i vystřídané a vyloučené (dřív jen
+      // konečná jedenáctka, takže střídat v přáteláku bylo zadarmo).
       try {
-        const { logConditionStmt } = await import("../lib/condition-log");
-        const allPlayers = [...result.homeLineup, ...result.awayLineup];
-        const fullIdMap = new Map<number, string>();
-        for (const [engineId, dbId] of homeBuild.idMap) fullIdMap.set(engineId, dbId);
-        for (const [engineId, dbId] of awayBuild.idMap) fullIdMap.set(engineId, dbId);
-        const preSimCondById = new Map<number, number>();
-        for (const p of [...homeLineupPreSim, ...awayLineupPreSim]) preSimCondById.set(p.id, p.condition);
-
-        const stmts: D1PreparedStatement[] = [];
-        for (const p of allPlayers) {
-          const dbId = fullIdMap.get(p.id);
-          if (!dbId) continue;
-          stmts.push(db.prepare(
-            "UPDATE players SET life_context = json_set(life_context, '$.condition', ?, '$.morale', ?) WHERE id = ?",
-          ).bind(Math.round(p.condition), Math.round(p.morale), dbId));
-
-          const oldCond = preSimCondById.get(p.id);
-          if (oldCond != null && Math.round(oldCond) !== Math.round(p.condition)) {
-            const teamIdForPlayer = result.homeLineup.includes(p) ? homeTeamId : awayTeamId;
-            stmts.push(logConditionStmt(db, dbId, teamIdForPlayer, oldCond, p.condition, "friendly", `Přátelák (${result.homeScore}:${result.awayScore})`));
-          }
-        }
+        const { postMatchPlayers, postMatchPlayerStatements } = await import("./post-match-players");
+        const played = postMatchPlayers(result,
+          { teamId: homeTeamId, idMap: homeBuild.idMap },
+          { teamId: awayTeamId, idMap: awayBuild.idMap });
+        const stmts = postMatchPlayerStatements(db, played,
+          { source: "friendly", description: `Přátelák (${result.homeScore}:${result.awayScore})` });
         if (stmts.length > 0) await db.batch(stmts);
       } catch (e) {
         logger.error({ module: "friendly-runner" }, "Condition persist failed", e);
