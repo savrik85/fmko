@@ -291,6 +291,14 @@ export async function executeDailyTick(
   const bodyDriftTeams: string[] = [];
   const trainedToday = new Map<string, "conditioning" | "other">();
 
+  // Počasí tréninkového dne. Je stejné pro celý okres, takže stačí jednou, a patří
+  // hernímu dni ticku (`effectiveDate`), stejně jako u trávníku níž. Dřív se tu bralo
+  // `team.game_date`, který dotaz na týmy vůbec nenačítá: počasí vycházelo null
+  // a déšť ani sníh docházku na trénink nikdy nesrazily. I kdyby ho načítal,
+  // sedí v něm v tuhle chvíli ještě včerejšek.
+  const { resolveWeatherForDate } = await import("./season-weather");
+  const trainingWeather = await resolveWeatherForDate(env.DB, effectiveDate.toISOString());
+
   for (const team of teams.results) {
     const teamId = team.id as string;
     bodyDriftTeams.push(teamId);
@@ -481,9 +489,6 @@ export async function executeDailyTick(
         equipMul *= staffFx.trainingMultiplier;
         equipAttendanceBonus += staffFx.trainingAttendanceBonus;
         equipYouthMod += staffFx.youthTrainingMod;
-
-        const { resolveWeatherForDate } = await import("./season-weather");
-        const trainingWeather = await resolveWeatherForDate(env.DB, team.game_date as string);
 
         const rng = createRng(teamSeed(teamId, now.getTime(), "training"));
         // Vzdálenost dojíždění po indexech kádru. Dřív se místo ní předávalo undefined,
