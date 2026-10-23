@@ -44,7 +44,7 @@ export default function AdminPage() {
     addLog("Spouštím denní tick (posunutí dne, tréninky, zprávy)...");
     try {
       const res = await fetch(`${API}/api/game/advance-day`, { method: "POST", headers: { "Content-Type": "application/json", ...authH }, body: "{}" });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch((e) => { console.warn("odpověď admin akce není JSON:", e); return {}; });
       addLog(`Denní tick hotov: ${JSON.stringify(data).slice(0, 200)}`);
     } catch (e: any) { addLog(`CHYBA: ${e.message}`); }
     setRunning(false);
@@ -59,7 +59,7 @@ export default function AdminPage() {
     addLog("Spouštím zápasový tick (18:00 simulace)...");
     try {
       const res = await fetch(`${API}/api/game/run-matches`, { method: "POST", headers: { "Content-Type": "application/json", ...authH }, body: "{}" });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch((e) => { console.warn("odpověď admin akce není JSON:", e); return {}; });
       addLog(`Zápasový tick hotov: ${JSON.stringify(data).slice(0, 200)}`);
     } catch (e: any) { addLog(`CHYBA: ${e.message}`); }
     setRunning(false);
@@ -332,7 +332,7 @@ function MunicipalElectionsSection() {
     add("Spouštím komunální volby…");
     try {
       const res = await fetch(`${API}/api/villages/admin/run-elections`, { method: "POST", headers: { "Content-Type": "application/json", ...authH } });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch((e) => { console.warn("odpověď admin akce není JSON:", e); return {}; });
       if (data.ok) {
         add(`✅ Hotovo, obcí: ${data.villagesProcessed}, nových zastupitelů: ${data.officialsReplaced}, reset přízně: ${data.favorRowsReset} řádků, článků: ${data.articlesPublished}.`);
       } else {

@@ -224,7 +224,7 @@ scoutingRouter.post("/teams/:teamId/scout/assignment", async (c) => {
   const teamId = c.req.param("teamId");
   const clubId = await club(c, teamId);
   if (typeof clubId !== "string") return clubId;
-  const body = (await c.req.json().catch(() => ({}))) as {
+  const body = (await c.req.json().catch((e) => { logger.warn({ module: "scouting" }, "neplatné tělo úkolu skauta", e); return {}; })) as {
     staffId?: string;
     type?: "area" | "player" | "match" | "u21_league" | "league";
     assignmentType?: "area" | "player" | "match" | "u21_league" | "league";

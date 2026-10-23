@@ -102,7 +102,8 @@ async function rolloverOne(
 
   if (!gov) {
     const name = await db.prepare("SELECT name FROM leagues WHERE id = ?")
-      .bind(leagueId).first<{ name: string }>().catch(() => null);
+      .bind(leagueId).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: M }, "název soutěže", e); return null; });
     await db.prepare(
       `INSERT INTO competition_governance (league_id, enabled, enabled_from_season, original_name)
        VALUES (?, 1, ?, ?)`
@@ -131,7 +132,8 @@ async function rolloverOne(
     const stav = await loadGovernance(db, leagueId);
     if (!stav?.sponsor_name) {
       const okres = await db.prepare("SELECT district FROM leagues WHERE id = ?")
-        .bind(leagueId).first<{ district: string }>().catch(() => null);
+        .bind(leagueId).first<{ district: string }>()
+        .catch((e) => { logger.warn({ module: M }, "okres soutěže", e); return null; });
       await generateOffers(db, {
         leagueId, district: okres?.district ?? "", seasonNumber: newSeason,
         humanClubs: humans, gameDate: startDate,

@@ -287,18 +287,15 @@ async function callModel(
 /** Robustní parse JSON i když Gemini obalí do markdown bloku ```json...``` nebo přidá text okolo. */
 function tryParseJson<T>(raw: string): T | null {
   const trimmed = raw.trim();
-  // Try direct parse first
-  try { return JSON.parse(trimmed) as T; } catch { /* try fallbacks */ }
-
-  // Strip markdown fence
+  // Zkouší se postupně: celý text, bez markdown bloku, první {...} v textu.
   const fenced = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-  try { return JSON.parse(fenced) as T; } catch { /* try fallbacks */ }
-
-  // Extract first {...} block
   const match = trimmed.match(/\{[\s\S]*\}/);
-  if (match) {
-    try { return JSON.parse(match[0]) as T; } catch { /* fall through */ }
+  const candidates = [trimmed, fenced, match?.[0]].filter((x): x is string => !!x);
+  let lastError: unknown = null;
+  for (const candidate of candidates) {
+    try { return JSON.parse(candidate) as T; } catch (e) { lastError = e; }
   }
+  logger.warn({ module: "ai-player-chat" }, "odpověď modelu není JSON", lastError);
   return null;
 }
 

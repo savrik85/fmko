@@ -185,7 +185,7 @@ async function callGemini(
   });
 
   if (!res || !res.ok) {
-    const errBody = res ? await res.text().catch(() => "") : "";
+    const errBody = res ? await res.text().catch((e) => { logger.warn({ module: "interview-generator" }, "tělo chybové odpovědi Gemini", e); return ""; }) : "";
     logger.warn(
       { module: "interview-generator" },
       `Gemini API error: ${res?.status} ${errBody.slice(0, 200)}`,
@@ -519,7 +519,7 @@ export async function tryCreateInterviewRequest(
       loadLastMatchResult(db, teamRow.team_id),
       loadTopPlayers(db, teamRow.team_id),
       loadInjuredText(db, teamRow.team_id),
-      calculateStandings(db, ctx.leagueId).catch(() => []),
+      calculateStandings(db, ctx.leagueId).catch((e) => { logger.warn({ module: "interview-generator" }, "tabulka pro rozhovor", e); return []; }),
       loadTeamForm(db, opponentTeamId),
       loadLastMatchResult(db, opponentTeamId),
       getRelationPromptContext(db, teamRow.team_id, opponentTeamId),

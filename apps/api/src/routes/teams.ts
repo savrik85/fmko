@@ -1816,7 +1816,7 @@ Požadavky:
   );
 
   if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
+    const errBody = await res.text().catch((e) => { logger.warn({ module: "teams" }, "tělo chybové odpovědi Gemini", e); return ""; });
     logger.warn({ module: "teams" }, `Gemini API error for anthem: ${res.status} ${errBody.slice(0, 200)}`);
     return c.json({ error: "Generace hymny selhala" }, 502);
   }
@@ -1889,7 +1889,7 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
   });
 
   if (!sunoRes.ok) {
-    const errBody = await sunoRes.text().catch(() => "");
+    const errBody = await sunoRes.text().catch((e) => { logger.warn({ module: "teams" }, "tělo chybové odpovědi Suno", e); return ""; });
     logger.warn({ module: "teams" }, `Suno API error: ${sunoRes.status} ${errBody.slice(0, 200)}`);
     return c.json({ error: "Hudební generace selhala (Suno API chyba)" }, 502);
   }
@@ -2214,7 +2214,7 @@ Požadavky:
     },
   );
   if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
+    const errBody = await res.text().catch((e) => { logger.warn({ module: "teams" }, "tělo chybové odpovědi Gemini", e); return ""; });
     logger.warn({ module: "teams" }, `Gemini identity error: ${res.status} ${errBody.slice(0, 200)}`);
     return c.json({ error: "Generace selhala" }, 502);
   }
@@ -2467,7 +2467,7 @@ teamsRouter.post("/:id/club/mascot/generate", async (c) => {
   });
 
   if (!replicateRes.ok) {
-    const errBody = await replicateRes.text().catch(() => "");
+    const errBody = await replicateRes.text().catch((e) => { logger.warn({ module: "teams" }, "tělo chybové odpovědi Replicate", e); return ""; });
     logger.warn({ module: "teams" }, `Replicate error: ${replicateRes.status} ${errBody.slice(0, 300)}`);
     if (replicateRes.status === 402 || errBody.toLowerCase().includes("insufficient credit")) {
       return c.json({ error: "Replicate účet nemá kredity. Kontaktuj administrátora aby dokoupil kredity na https://replicate.com/account/billing." }, 402);
@@ -3498,7 +3498,7 @@ teamsRouter.post("/:id/match/:mid/bus", async (c) => {
   // teamsRouter je připojený dřív než obecná kontrola vlastníka, vlastnictví se hlídá tady.
   const auth = await requireTeamOwner(c, teamId);
   if (auth.error) return auth.error;
-  const body = (await c.req.json().catch(() => ({}))) as {
+  const body = (await c.req.json().catch((e) => { logger.warn({ module: "teams" }, "neplatné tělo objednávky autobusu", e); return {}; })) as {
     sourceVillageId?: string;
     busSize?: BusSize;
   };

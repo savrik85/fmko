@@ -5,6 +5,7 @@ import { requireAdmin, requireAuth } from "../auth/middleware";
 import { createSession, type Session } from "../auth/session";
 import { hashPassword } from "../auth/password";
 import { districtAccess } from "../registration/district-access";
+import { logger } from "../lib/logger";
 
 export const registrationRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -48,7 +49,7 @@ registrationRouter.get("/districts", async c => {
 });
 
 registrationRouter.post("/requests", async c => {
-  const body = await c.req.json().catch(() => null);
+  const body = await c.req.json().catch((e) => { logger.warn({ module: "registration" }, "neplatné tělo požadavku", e); return null; });
   if (!body || typeof body.name !== "string" || typeof body.email !== "string" || typeof body.district !== "string") {
     return c.json({ error: "Vyplň jméno, e-mail a okres." }, 400);
   }
@@ -81,7 +82,7 @@ registrationRouter.post("/requests", async c => {
  * a po založení klubu dostane první předsednický mandát. Nepřipravený okres jde dál přes /requests.
  */
 registrationRouter.post("/join", async c => {
-  const body = await c.req.json().catch(() => null);
+  const body = await c.req.json().catch((e) => { logger.warn({ module: "registration" }, "neplatné tělo požadavku", e); return null; });
   if (!body || typeof body.name !== "string" || typeof body.email !== "string" || typeof body.district !== "string") {
     return c.json({ error: "Vyplň jméno, e-mail, heslo a okres." }, 400);
   }
@@ -160,7 +161,7 @@ registrationRouter.post("/admin/requests/:id/approve", async c => {
     .bind(c.req.param("id")).first<{ id: string; email: string; district: string; status: string }>();
   if (!request) return c.json({ error: "Žádost nebyla nalezena." }, 404);
   if (request.status === "activated") return c.json({ error: "Účet je už aktivovaný." }, 409);
-  const body = await c.req.json().catch(() => null);
+  const body = await c.req.json().catch((e) => { logger.warn({ module: "registration" }, "neplatné tělo požadavku", e); return null; });
   if (body?.dataReady !== true) return c.json({ error: "Nejdřív potvrď dokončení místních dat." }, 400);
   // Kontrola základních dat; obsah a kvalitu správce potvrzuje v administraci.
   const data = await c.env.DB.prepare(`SELECT
@@ -184,7 +185,7 @@ registrationRouter.post("/admin/requests/:id/approve", async c => {
 });
 
 registrationRouter.post("/activation", async c => {
-  const body = await c.req.json().catch(() => null);
+  const body = await c.req.json().catch((e) => { logger.warn({ module: "registration" }, "neplatné tělo požadavku", e); return null; });
   if (!body || typeof body.token !== "string" || !/^[a-f0-9]{64}$/.test(body.token)) return c.json({ error: "Neplatný aktivační odkaz." }, 400);
   const hash = await hashActivationToken(body.token);
   const request = await c.env.DB.prepare(`SELECT r.id, r.name, r.email, r.district, d.founder_request_id = r.id AS is_founder
@@ -197,7 +198,7 @@ registrationRouter.post("/activation", async c => {
 });
 
 registrationRouter.post("/activate", async c => {
-  const body = await c.req.json().catch(() => null);
+  const body = await c.req.json().catch((e) => { logger.warn({ module: "registration" }, "neplatné tělo požadavku", e); return null; });
   if (!body || typeof body.token !== "string" || !/^[a-f0-9]{64}$/.test(body.token) || !validPassword(body.password)) {
     return c.json({ error: "Heslo musí mít 8–128 znaků, malé i velké písmeno a číslo. Použij platný aktivační odkaz." }, 400);
   }

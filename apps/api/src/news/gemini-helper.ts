@@ -80,7 +80,7 @@ export async function callGemini(apiKey: string, prompt: string, opts: GeminiOpt
   }).catch((e) => { logger.warn({ module: mod }, "gemini fetch failed", e); return null; });
 
   if (!res || !res.ok) {
-    const errBody = res ? await res.text().catch(() => "") : "";
+    const errBody = res ? await res.text().catch((e) => { logger.warn({ module: mod }, "tělo chybové odpovědi Gemini", e); return ""; }) : "";
     logger.warn({ module: mod }, `gemini http ${res?.status ?? "no-response"}: ${errBody.slice(0, 200)}`);
     return null;
   }
