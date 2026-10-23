@@ -3,7 +3,7 @@
  * příznaky z listiny přestupů a do účetnictví smí jen komisař nebo prezident.
  */
 import { describe, expect, it } from "vitest";
-import { auditFlags, windowStart, CONCESSION_FLAG_RATIO } from "./club-audit";
+import { auditFlags, noBuyerPrice, windowStart, CONCESSION_FLAG_RATIO } from "./club-audit";
 import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
 import type { Bindings } from "../index";
 import bettingRouter from "../routes/betting";
@@ -42,6 +42,17 @@ describe("příznaky revize účetnictví", () => {
     ];
     const flags = auditFlags({ teamId: "t1", teamName: "FK Test", concession: new Map(), betting: new Map(), transferFlags });
     expect(flags).toEqual(["Přestup Jan Novák (FK Test → FK Kamarád): Oba kluby patří témuž majiteli."]);
+  });
+
+  it("přemrštěná cena v bufetu je nápadná od hranice, kde podle vzorce nikdo nekoupí", () => {
+    // Pivo L3 (Plzeň 12°) běžně 50 Kč, elasticita 0,8 → nikdo nekoupí od 112,50 Kč.
+    expect(noBuyerPrice("beer", 3)).toBeCloseTo(112.5);
+    const base = { teamId: "t1", teamName: "FK Test", concession: new Map(), betting: new Map(), transferFlags: NO_TRANSFERS };
+    // Čeština odděluje tisíce nezlomitelnou mezerou.
+    const flags = auditFlags({ ...base, prices: [{ productKey: "beer", qualityLevel: 3, sellPrice: 1000 }] })
+      .map((f) => f.replace(/\u00a0/g, " "));
+    expect(flags).toEqual(["Bufet: pivo za 1 000 Kč, běžně 50 Kč."]);
+    expect(auditFlags({ ...base, prices: [{ productKey: "beer", qualityLevel: 3, sellPrice: 100 }] })).toEqual([]);
   });
 
   it("okno revize sahá 60 dní zpět", () => {
