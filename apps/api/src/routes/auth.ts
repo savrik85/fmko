@@ -203,9 +203,12 @@ authRouter.get("/me", async (c) => {
   const session = await getSession(c.env.SESSION_KV, token);
   if (!session) return c.json({ error: "Neplatná session" }, 401);
 
-  // Track last activity
-  await c.env.DB.prepare("UPDATE users SET last_activity_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-    .bind(session.userId).run().catch((e) => console.error("Failed to update last_activity_at:", e));
+  // Naposledy viděn: web volá /me každou minutu z každého otevřeného tabu. Zapisuje se
+  // nejvýš jednou za 5 minut, ať zbytečné zápisy nezatěžují D1 v době kola.
+  await c.env.DB.prepare(
+    `UPDATE users SET last_activity_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+     WHERE id = ? AND (last_activity_at IS NULL OR last_activity_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-5 minutes'))`,
+  ).bind(session.userId).run().catch((e) => logger.warn({ module: "auth" }, "update last_activity_at", e));
 
   // Refresh team info
   const team = await c.env.DB.prepare(
@@ -398,5 +401,4 @@ authRouter.delete("/admin/users/:userId", async (c) => {
   // sama (30 dní) a bez týmu se s ní stejně nedá nic dělat.
   return c.json({ ok: true, smazano: user.email });
 });
-
 export { authRouter };

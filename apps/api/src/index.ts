@@ -35,6 +35,11 @@ import { squadAnalysisRouter } from "./routes/squad-analysis";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
+import {
+  isTransientDbError,
+  TRANSIENT_DB_ERROR_MESSAGE,
+  TRANSIENT_DB_RETRY_AFTER_SECONDS,
+} from "./lib/transient-db-error";
 import type { MatchQueueMessage, ReportQueueMessage } from "./queue/messages";
 
 export type Bindings = {
@@ -92,6 +97,12 @@ app.onError((err, c) => {
     stack: err.stack?.split("\n").slice(0, 4).join(" | "),
     reqId,
   };
+  // Export databáze nebo přetížení při kole: nejde o chybu kódu, web to zkusí znovu.
+  if (isTransientDbError(err)) {
+    console.warn(JSON.stringify({ ...entry, level: "warn" }));
+    c.header("Retry-After", String(TRANSIENT_DB_RETRY_AFTER_SECONDS));
+    return c.json({ error: TRANSIENT_DB_ERROR_MESSAGE, reqId }, 503);
+  }
   console.error(JSON.stringify(entry));
   // Vracíme pouze reqId pro debugging, nikoli raw err.message (může obsahovat SQL detaily).
   return c.json({ error: "Interní chyba serveru", reqId }, 500);

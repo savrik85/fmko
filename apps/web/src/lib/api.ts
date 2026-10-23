@@ -3,6 +3,16 @@ import { trackEvent } from "@/lib/analytics";
 // API_BASE is inlined at build time from .env.production
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
+/**
+ * Prodlevy před opakováním čtení, když API vrátí 503. Tak hlásí databázi, která
+ * na chvíli odmítá dotazy (záloha, přetížení při kole v 18 h).
+ */
+const RETRY_DELAYS_MS = [800, 2500];
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // Automaticky přidáme Authorization header pokud je token v localStorage
   const token = typeof window !== "undefined" ? localStorage.getItem("om_token") : null;
@@ -15,15 +25,25 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       ...(init?.headers as Record<string, string> | undefined),
     },
   };
+  const method = (mergedInit.method ?? "GET").toUpperCase();
+  // Opakovat jde jen čtení, zápis by se mohl provést dvakrát.
+  const canRetry = method === "GET" || method === "HEAD";
 
   let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, mergedInit);
-  } catch {
-    // Network error (API unreachable) — throw with status 0
-    const error = new Error("Network error");
-    (error as Error & { status: number }).status = 0;
-    throw error;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`${API_BASE}${path}`, mergedInit);
+    } catch {
+      // Network error (API unreachable) — throw with status 0
+      const error = new Error("Network error");
+      (error as Error & { status: number }).status = 0;
+      throw error;
+    }
+    if (res.status === 503 && canRetry && attempt < RETRY_DELAYS_MS.length) {
+      await wait(RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+    break;
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -42,7 +62,6 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   // Po úspěšné write operaci probudit team-context aby se aktualizoval
   // rozpočet/sezona/atd. v topbaru (jinak by tam visely staré hodnoty
   // až do dalšího 60s pollingu).
-  const method = (mergedInit.method ?? "GET").toUpperCase();
   if (typeof window !== "undefined" && method !== "GET" && method !== "HEAD") {
     window.dispatchEvent(new Event("team-budget-changed"));
   }
