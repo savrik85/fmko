@@ -4803,7 +4803,7 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   const slot = c.req.param("slot") as PresetSlot;
   if (!PRESET_SLOTS.includes(slot)) return c.json({ error: "Neplatný slot" }, 400);
   // Optional body — zatím nepoužíváme, ale FE ho posílá. Parse pro kompatibilitu.
-  await c.req.json<{ calendarId?: string }>().catch(() => ({}));
+  await c.req.json<{ calendarId?: string }>().catch((e) => { logger.warn({ module: "game" }, "neplatné tělo uložení sestavy do slotu", e); return {}; });
 
   const preset = await c.env.DB.prepare(
     "SELECT formation, tactic, hardness, captain_id, players_data, match_plan, bench_data FROM lineup_presets WHERE team_id = ? AND slot = ?"
@@ -7010,7 +7010,7 @@ gameRouter.get("/teams/:teamId/players/:playerId/promises", async (c) => {
 gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
-  const body = await c.req.json<{ message?: string }>().catch(() => ({}));
+  const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "game" }, "neplatné tělo odpovědi na nabídku", e); return {}; });
   const acceptMessage = (body as { message?: string }).message ?? null;
   // Accept smí ten, kdo JE na tahu — tj. neudělal poslední akci. Buyer i seller mohou přijmout protinabídku.
   // Fallback pro nabídky bez last_action_by: pending → seller, countered → buyer.
@@ -7892,7 +7892,7 @@ gameRouter.post("/teams/:teamId/loans/:playerId/recall", async (c) => {
 gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const teamId = c.req.param("teamId");
   const offerId = c.req.param("offerId");
-  const body = await c.req.json<{ message?: string }>().catch(() => ({}));
+  const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "game" }, "neplatné tělo odpovědi na nabídku", e); return {}; });
   const withdrawMessage = (body as { message?: string }).message ?? null;
   // Stáhnout/ukončit smí kupec i prodávající, pokud je jednání aktivní.
   const offer = await c.env.DB.prepare(
