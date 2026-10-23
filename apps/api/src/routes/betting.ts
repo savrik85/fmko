@@ -583,12 +583,12 @@ bettingRouter.post("/teams/:teamId/integrity/audits/:targetTeamId", async (c) =>
     .catch((e) => { logger.warn({ module: M }, "herní datum revize", e); return null; }))?.game_date
     ?? new Date().toISOString();
 
-  const { loadClubAudit, recordAudit, AUDIT_WINDOW_DAYS } = await import("../competition/club-audit");
-  const audit = await loadClubAudit(c.env.DB, {
-    leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, targetTeamId, gameDate,
-  });
-  if (!audit) return c.json({ error: "Klub v téhle soutěži nehraje." }, 404);
+  const { findAuditTarget, loadClubAudit, recordAudit, AUDIT_WINDOW_DAYS } = await import("../competition/club-audit");
+  const target = await findAuditTarget(c.env.DB, kde.leagueId, targetTeamId);
+  if (!target) return c.json({ error: "Klub v téhle soutěži nehraje." }, 404);
 
+  // Nejdřív záznam, pak data. Když se revize nezapíše, účetnictví se neukáže:
+  // nahlédnutí bez stopy a bez zprávy klubu by bylo potají.
   const first = await recordAudit(c.env.DB, {
     leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, targetTeamId, auditorTeamId: teamId, gameDate,
   });
@@ -602,6 +602,10 @@ bettingRouter.post("/teams/:teamId/integrity/audits/:targetTeamId", async (c) =>
       .catch((e) => logger.warn({ module: M }, "SMS o revizi účetnictví", e));
   }
 
+  const audit = await loadClubAudit(c.env.DB, {
+    leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, targetTeamId, gameDate,
+  });
+  if (!audit) return c.json({ error: "Klub v téhle soutěži nehraje." }, 404);
   return c.json(audit);
 });
 
