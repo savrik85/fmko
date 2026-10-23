@@ -8,7 +8,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { requireTeamOwnership } from "../auth/middleware";
 import { CLUB_PREFIXES, clubPrefixOf, isClubPrefix, withClubPrefix } from "@okresni-masina/shared";
-import { clubNameTaken, MAX_CLUB_NAME_LENGTH, renameClub } from "../lib/club-rename";
+import { MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
 import { logger } from "../lib/logger";
 
 const M = "club-prefix";
@@ -75,15 +75,14 @@ clubPrefixRouter.patch("/teams/:teamId/club/prefix", async (c) => {
   if (newName.length > MAX_CLUB_NAME_LENGTH) return c.json({ error: `Název by měl víc než ${MAX_CLUB_NAME_LENGTH} znaků` }, 400);
 
   // Nový název nesmí patřit jinému klubu ani převzít adresu jeho webu (vlastní adresa,
-  // stará adresa po přejmenování) — jinak by odkazy na cizí web vedly sem.
-  if (await clubNameTaken(db, teamId, newName)) return c.json({ error: "Takový název už má jiný klub" }, 409);
-
+  // stará adresa, slovo z názvu nebo obce soupeře) — jinak by odkazy na cizí web vedly sem.
   // Podmínka na starý název: dvě souběžné změny nepřepíšou jedna druhou. Pohár, U21
   // i stará adresa webu jdou s názvem (club-rename.ts).
-  const renamed = await renameClub(db, {
-    teamId, oldName, newName, seasonMark: { column: "prefix_changed_season", season },
+  const outcome = await renameClub(db, {
+    teamId, oldName, newName, chosenByManager: true, seasonMark: { column: "prefix_changed_season", season },
   });
-  if (!renamed) return c.json({ error: "Název se mezitím změnil, zkus to znovu" }, 409);
+  if (outcome === "name_taken") return c.json({ error: NAME_TAKEN_ERROR }, 409);
+  if (outcome === "name_changed") return c.json({ error: "Název se mezitím změnil, zkus to znovu" }, 409);
 
   await db.prepare(
     "INSERT INTO news (id, league_id, type, headline, body, created_at) VALUES (?, (SELECT league_id FROM teams WHERE id = ?), 'rename', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",

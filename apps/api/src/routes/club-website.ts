@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
-import { rememberOldWebsiteSlug } from "../lib/club-rename";
+import { loadSeniorTeamSlugs, rememberOldWebsiteSlug, slugTakenByOtherTeam } from "../lib/club-rename";
 import { getSession } from "../auth/session";
 import {
   recordTransaction,
@@ -92,43 +92,20 @@ function formatPlayerPositionCZ(pos: string): string {
 /** Nejkratší adresa, kterou smí mít klub nastavenou nebo podle které ho hledáme odhadem. */
 const MIN_FUZZY_SLUG = 4;
 
-interface TeamSlugRow {
-  id: string;
-  slug: string;
-  villageSlug: string;
-}
-
-/** Seniorské týmy se slugem názvu a obce. U21 má vlastní web jen přes ID, nikdy přes odhad. */
-async function loadSeniorTeamSlugs(db: D1Database): Promise<TeamSlugRow[]> {
-  const rows = await db
-    .prepare(
-      `SELECT t.id, t.name, v.name AS village_name
-       FROM teams t LEFT JOIN villages v ON v.id = t.village_id
-       WHERE t.name IS NOT NULL AND (t.team_type IS NULL OR t.team_type <> 'u21')`,
-    )
-    .all<{ id: string; name: string; village_name: string | null }>()
-    .catch((e) => {
-      logger.warn(MODULE, "load senior team slugs", e);
-      return { results: [] as Array<{ id: string; name: string; village_name: string | null }> };
-    });
-  return (rows.results ?? []).map((r) => ({
-    id: r.id,
-    slug: slugifyTeamName(r.name),
-    villageSlug: r.village_name ? slugifyTeamName(r.village_name) : "",
-  }));
-}
-
 /** Vrátí jediný prvek, jinak null. Dvojznačná adresa nesmí otevřít náhodný klub. */
 function only<T>(items: T[]): T | null {
   return items.length === 1 ? items[0] : null;
 }
 
 /**
- * Najde klub podle adresy. Pořadí: ID, vlastní adresa, stará adresa, přesný název,
+ * Najde klub podle adresy. Pořadí: ID, vlastní adresa, přesný název, stará adresa,
  * název podle celých slov (aspoň 4 znaky, jen když sedí na jediný klub), obec (jen jediný klub).
+ * Přesný název je před starou adresou: když název po přejmenování nese jiný klub
+ * (např. návrat k názvu obce po výpovědi sponzora), patří adresa jemu, ne klubu,
+ * který se tak jmenoval dřív.
  * Neznámá nebo dvojznačná adresa vrátí null (404), nikdy cizí klub.
  */
-async function resolveTeamId(db: D1Database, identifier: string): Promise<string | null> {
+export async function resolveTeamId(db: D1Database, identifier: string): Promise<string | null> {
   const direct = await db
     .prepare("SELECT id FROM teams WHERE id = ?")
     .bind(identifier)
@@ -152,6 +129,11 @@ async function resolveTeamId(db: D1Database, identifier: string): Promise<string
     });
   if (bySlug) return bySlug.team_id;
 
+  const teams = await loadSeniorTeamSlugs(db);
+
+  const exact = only(teams.filter((t) => t.slug === wanted));
+  if (exact) return exact.id;
+
   const byAlias = await db
     .prepare("SELECT team_id FROM team_website_slug_aliases WHERE slug = ?")
     .bind(wanted)
@@ -161,11 +143,6 @@ async function resolveTeamId(db: D1Database, identifier: string): Promise<string
       return null;
     });
   if (byAlias) return byAlias.team_id;
-
-  const teams = await loadSeniorTeamSlugs(db);
-
-  const exact = only(teams.filter((t) => t.slug === wanted));
-  if (exact) return exact.id;
 
   if (wanted.length >= MIN_FUZZY_SLUG) {
     // Celá slova: "brevnov" najde "fk-rohlik-brevnov", ale "ab" nenajde "rapid-reporyje".
@@ -179,41 +156,13 @@ async function resolveTeamId(db: D1Database, identifier: string): Promise<string
   return null;
 }
 
-/** Je adresa obsazená jiným klubem? Hlídá i názvy a staré adresy, aby si nikdo nepřivlastnil web soupeře. */
-async function slugTakenByOtherTeam(
-  db: D1Database,
-  slug: string,
-  teamId: string,
-  seniorTeams?: TeamSlugRow[],
-): Promise<boolean> {
-  const [website, alias, byId] = await Promise.all([
-    db.prepare("SELECT team_id FROM team_websites WHERE custom_slug = ? AND team_id <> ?")
-      .bind(slug, teamId).first<{ team_id: string }>(),
-    db.prepare("SELECT team_id FROM team_website_slug_aliases WHERE slug = ? AND team_id <> ?")
-      .bind(slug, teamId).first<{ team_id: string }>()
-      .catch((e) => {
-        logger.warn(MODULE, "check slug alias collision", e);
-        return null;
-      }),
-    db.prepare("SELECT id FROM teams WHERE id = ? AND id <> ?").bind(slug, teamId).first<{ id: string }>(),
-  ]);
-  if (website || alias || byId) return true;
-  const teams = seniorTeams ?? (await loadSeniorTeamSlugs(db));
-  // Slovo z názvu nebo obce jiného klubu (např. "vimperk") patří jemu, pokud ho nemá
-  // i náš klub. Vlastní adresa má při hledání přednost, takže by jinak šlo
-  // převzít adresu, pod kterou lidé hledají soupeře.
-  const contains = (haystack: string) => !!haystack && `-${haystack}-`.includes(`-${slug}-`);
-  const own = teams.find((t) => t.id === teamId);
-  const ownsWord = !!own && (contains(own.slug) || contains(own.villageSlug));
-  return teams.some((t) => t.id !== teamId && (t.slug === slug || (!ownsWord && (contains(t.slug) || contains(t.villageSlug)))));
-}
-
 /**
  * Hezké adresy webů pro odkazy na jiné kluby (`/klub/fk-appyours-ckyne` místo ID).
  * Vlastní adresa klubu má přednost; bez ní slug z názvu, ale jen když ho nemá jiný
- * klub stejný (jinak by ho resolveTeamId neuměl rozlišit). Jinak zůstane ID.
+ * klub stejný a není to vlastní adresa jiného klubu (resolveTeamId by odkaz poslal
+ * jinam). Jinak zůstane ID.
  */
-async function teamSlugMap(db: D1Database, ids: Array<string | null | undefined>): Promise<Record<string, string>> {
+export async function teamSlugMap(db: D1Database, ids: Array<string | null | undefined>): Promise<Record<string, string>> {
   const unique = [...new Set(ids.filter((id): id is string => !!id))];
   if (unique.length === 0) return {};
   const rows: Array<{ id: string; name: string; custom_slug: string | null }> = [];
@@ -239,6 +188,24 @@ async function teamSlugMap(db: D1Database, ids: Array<string | null | undefined>
   const slugCount = new Map<string, number>();
   for (const t of seniors) slugCount.set(t.slug, (slugCount.get(t.slug) ?? 0) + 1);
 
+  // Adresa z názvu, kterou má jiný klub jako vlastní adresu webu (název daný hrou se s ní
+  // může potkat), vede na ten klub.
+  const nameSlugs = [...new Set(rows.filter((r) => !r.custom_slug).map((r) => slugifyTeamName(r.name)).filter(Boolean))];
+  const customTaken = new Set<string>();
+  for (let i = 0; i < nameSlugs.length; i += 90) {
+    const chunk = nameSlugs.slice(i, i + 90);
+    const res = await db
+      .prepare(`SELECT custom_slug FROM team_websites WHERE custom_slug IN (${chunk.map(() => "?").join(",")})`)
+      .bind(...chunk)
+      .all<{ custom_slug: string }>()
+      .catch((e) => {
+        logger.warn(MODULE, "team slug map: custom slugs of other clubs", e);
+        // Bez kontroly by odkaz mohl vést na cizí klub, raději ID.
+        return { results: chunk.map((slug) => ({ custom_slug: slug })) };
+      });
+    for (const r of res.results ?? []) customTaken.add(r.custom_slug);
+  }
+
   const map: Record<string, string> = {};
   for (const r of rows) {
     if (r.custom_slug) {
@@ -246,7 +213,7 @@ async function teamSlugMap(db: D1Database, ids: Array<string | null | undefined>
       continue;
     }
     const slug = slugifyTeamName(r.name);
-    if (slug && seniorIds.has(r.id) && slugCount.get(slug) === 1) map[r.id] = slug;
+    if (slug && seniorIds.has(r.id) && slugCount.get(slug) === 1 && !customTaken.has(slug)) map[r.id] = slug;
   }
   return map;
 }

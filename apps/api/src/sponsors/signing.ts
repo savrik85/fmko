@@ -212,10 +212,10 @@ export async function applyMainSponsorRename(
   // Zkratku si klub vybral sám (FK, SK, AC…), sponzor mění jen prostředek názvu.
   const newName = `${clubPrefixOf(oldName) ?? "FK"} ${sponsorName} ${village?.name ?? ""}`.trim();
   // Pohár, U21 i stará adresa webu jdou s názvem (club-rename.ts).
-  const renamed = await renameClub(db, {
+  const outcome = await renameClub(db, {
     teamId, oldName, newName, seasonMark: { column: "last_main_sponsor_change_season", season },
   });
-  if (!renamed) {
+  if (outcome !== "renamed") {
     logger.warn({ module: "sponsors", teamId }, `přejmenování podle sponzora ${sponsorName}: název se mezitím změnil, klub se nepřejmenoval`);
     return { oldName, newName: null };
   }

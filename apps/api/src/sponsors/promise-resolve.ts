@@ -234,7 +234,7 @@ export async function terminateContractBySponsor(db: D1Database, contract: Contr
       logger.warn({ module: M, teamId }, `výpověď smlouvy ${contract.id}: klub bez obce, název se nevrací`);
     } else if (category === "main") {
       // Pohár, U21 i stará adresa webu jdou s názvem (club-rename.ts).
-      renamed = await renameClub(db, { teamId, oldName, newName });
+      renamed = await renameClub(db, { teamId, oldName, newName }) === "renamed";
       if (!renamed) logger.warn({ module: M, teamId }, `výpověď smlouvy ${contract.id}: název se mezitím změnil, klub se nepřejmenoval`);
     } else if (category === "stadium") {
       await db.prepare("UPDATE teams SET stadium_name = ? WHERE id = ?").bind(`Sportovní areál ${village}`.trim(), teamId).run();
