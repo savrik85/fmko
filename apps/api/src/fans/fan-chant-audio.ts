@@ -82,6 +82,13 @@ export async function kandidatiNaNahravku(
         -- Rezerva se neplatí. Nemá vlastní kotel a hraje na stejném hřišti
         -- jako áčko, jehož chorál už nahraný je.
         AND COALESCE(t.team_type, 'senior') <> 'u21'
+        -- Chorál proti trenérovi se nahrává jen, dokud kampaň za jeho odvolání běží.
+        -- Po jejím konci chorál ještě pár dní doznívá se silou nad 80 a bez tohohle
+        -- by se za něj platila nahrávka, kterou už nikdo zpívat nebude.
+        AND NOT (c.kind = 'trener_proti' AND NOT EXISTS (
+          SELECT 1 FROM fan_campaigns k
+           WHERE k.team_id = c.team_id AND k.kind = 'trener_ven' AND k.status IN ('sbira','splnena')
+        ))
         AND (
           (c.kind = 'domov' AND u.last_activity_at > date('now', ?))
           OR c.sila >= ?
