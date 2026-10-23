@@ -8,6 +8,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { getDefaultSellPrice, getProductCatalog } from "../season/concession-catalog";
 import { listinaPrestupu } from "./integrity";
 
 const M = "competition-club-audit";
@@ -92,9 +93,23 @@ export async function bettingNet(
   return new Map(rows.results.map((r) => [r.team_id, r.net]));
 }
 
+export interface ConcessionPrice { productKey: string; qualityLevel: number; sellPrice: number }
+
 /**
- * Příznaky k revizi. Bufet a sázky se poměřují se zbytkem soutěže, přestupy
- * přebírají příznaky z listiny přestupů (týž majitel, cena mimo hodnotu hráče).
+ * Cena, od které podle vzorce poptávky bufetu už nikdo nekoupí: běžná cena
+ * × (1 + 1 / elasticita). Pivo 2,25×, klobása 2,67×, svařák 3×, limo 3,5×.
+ */
+export function noBuyerPrice(productKey: string, qualityLevel: number): number | null {
+  const catalog = getProductCatalog(productKey);
+  const normal = getDefaultSellPrice(productKey, qualityLevel);
+  if (!catalog || normal <= 0 || catalog.priceElasticity <= 0) return null;
+  return normal * (1 + 1 / catalog.priceElasticity);
+}
+
+/**
+ * Příznaky k revizi. Ceny v bufetu se měří vzorcem poptávky, tržby a sázky
+ * se poměřují se zbytkem soutěže, přestupy přebírají příznaky z listiny
+ * přestupů (týž majitel, cena mimo hodnotu hráče).
  */
 export function auditFlags(opts: {
   teamId: string;
@@ -102,8 +117,18 @@ export function auditFlags(opts: {
   concession: Map<string, number>;
   betting: Map<string, number>;
   transferFlags: Array<{ hrac: string; zKlubu: string | null; doKlubu: string; priznaky: string[] }>;
+  prices?: ConcessionPrice[];
 }): string[] {
   const flags: string[] = [];
+
+  // Tržba za zápas přemrštěnou cenu neprozradí (běžné kluby vyberou 140–190 tisíc
+  // na zápas taky), cena ano.
+  for (const p of opts.prices ?? []) {
+    const limit = noBuyerPrice(p.productKey, p.qualityLevel);
+    if (limit == null || p.sellPrice < limit) continue;
+    const label = getProductCatalog(p.productKey)?.label ?? p.productKey;
+    flags.push(`Bufet: ${label.toLowerCase()} za ${czk(p.sellPrice)}, běžně ${czk(getDefaultSellPrice(p.productKey, p.qualityLevel))}.`);
+  }
 
   const own = opts.concession.get(opts.teamId);
   const others = [...opts.concession.entries()].filter(([id]) => id !== opts.teamId).map(([, v]) => v);
@@ -140,7 +165,7 @@ export async function loadClubAudit(
 
   const since = windowStart(opts.gameDate);
 
-  const [categories, largest, items, concession, betting, transfers] = await Promise.all([
+  const [categories, largest, items, concession, betting, transfers, prices] = await Promise.all([
     db.prepare(
       `SELECT type,
               SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income,
@@ -163,6 +188,10 @@ export async function loadClubAudit(
     concessionPerMatch(db, opts.leagueId, since),
     bettingNet(db, opts.leagueId, since),
     listinaPrestupu(db, opts.leagueId, opts.seasonNumber),
+    db.prepare(
+      "SELECT product_key, quality_level, sell_price FROM concession_products WHERE team_id = ? AND quality_level > 0"
+    ).bind(team.id).all<{ product_key: string; quality_level: number; sell_price: number }>()
+      .catch((e) => { logger.warn({ module: M }, `ceny bufetu ${team.id}`, e); return { results: [] }; }),
   ]);
 
   const toItem = (r: { type: string; amount: number; description: string | null; game_date: string | null }): LedgerItem =>
@@ -180,7 +209,10 @@ export async function loadClubAudit(
     categories: cats,
     largest: largest.results.map(toItem),
     items: items.results.map(toItem),
-    flags: auditFlags({ teamId: team.id, teamName: team.name, concession, betting, transferFlags: transfers }),
+    flags: auditFlags({
+      teamId: team.id, teamName: team.name, concession, betting, transferFlags: transfers,
+      prices: prices.results.map((p) => ({ productKey: p.product_key, qualityLevel: p.quality_level, sellPrice: p.sell_price })),
+    }),
   };
 }
 
