@@ -1,5 +1,3 @@
-export { applyAging } from "./aging";
-export type { AgingResult } from "./aging";
 export { tryGraduateYouth, youthMonthlyCost } from "./youth";
 export type { YouthInvestment, YouthConfig, YouthGraduate } from "./youth";
 export { simulateTraining } from "./training";
