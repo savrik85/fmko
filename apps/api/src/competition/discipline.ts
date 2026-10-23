@@ -125,8 +125,10 @@ export interface EvidenceLimits {
   /** Platí v soutěži zákaz obchodů mezi kluby stejného majitele? */
   ownerTransfersBanned: boolean;
   /**
-   * Herní datum začátku sezóny — okno pro důkazy, které se počítají „za sezónu".
-   * Prázdné = bez omezení (starší data, kde se kalendář nedohledá).
+   * Herní den začátku sezóny (`YYYY-MM-DD`) — okno pro důkazy, které se počítají
+   * „za sezónu". Jen den, bez času: výtržnost zapsaná k samotnému dni by jinak podle
+   * hodiny v řetězci vypadla. Prázdné = bez omezení (starší data, kde se začátek
+   * nedohledá).
    */
   seasonStart?: string;
 }
@@ -150,15 +152,24 @@ export async function evidenceLimitsFor(
   try {
     const { resolveRules } = await import("./rules");
     const r = await resolveRules(db, leagueId, seasonNumber);
-    // `seasons` datum začátku nedrží, ale kalendář ano — první kolo sezóny.
+    // Začátek sezóny jako jinde ve hře (vývoj hráčů, počasí): `teams.season_start`
+    // zapisuje rollover a patří k němu i předsezóna, kdy se přestupuje. Liga, která
+    // rolloverem ještě neprošla, ho nemá, a tam platí první kolo sezóny z kalendáře.
+    //
+    // Dřív se tu četl `MIN(match_date)`, jenže kalendář drží `scheduled_at`. Dotaz
+    // pokaždé spadl do catch, začátek vyšel prázdný a „za sezónu" znamenalo celou
+    // historii klubu.
     const zacatek = await db.prepare(
-      "SELECT MIN(match_date) AS d FROM season_calendar WHERE league_id = ? AND season_number = ?",
-    ).bind(leagueId, seasonNumber).first<{ d: string | null }>()
+      `SELECT COALESCE(
+         (SELECT MAX(season_start) FROM teams WHERE league_id = ?),
+         (SELECT MIN(scheduled_at) FROM season_calendar WHERE league_id = ? AND season_number = ?)
+       ) AS d`,
+    ).bind(leagueId, leagueId, seasonNumber).first<{ d: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "zacatek sezony pro dukazy", e); return null; });
     return {
       pitchThreshold: r.min_pitch_condition > 0 ? r.min_pitch_condition : DEFAULT_PITCH_THRESHOLD,
       ownerTransfersBanned: r.ban_own_owner_transfers > 0,
-      seasonStart: zacatek?.d ?? "",
+      seasonStart: zacatek?.d ? zacatek.d.slice(0, 10) : "",
     };
   } catch (e) {
     logger.warn({ module: M }, "nacteni mezi pro dukazy", e);
@@ -186,6 +197,9 @@ export async function collectEvidence(
 ): Promise<EvidenceItem[]> {
   const { pitchThreshold, ownerTransfersBanned } = limits;
   const out: EvidenceItem[] = [];
+  // Okno „za sezónu" pro všechno kromě hřiště (to je stav, ne skutek). Prázdné okno
+  // pustí všechno: `'' <= cokoli`.
+  const seasonFrom = limits.seasonStart ?? "";
 
   const pitch = await db.prepare("SELECT pitch_condition FROM stadiums WHERE team_id = ?")
     .bind(teamId).first<{ pitch_condition: number }>()
@@ -204,13 +218,12 @@ export async function collectEvidence(
   // takže klub, který jednou v minulosti něco měl, byl žalovatelný navždy.
   // `fan_incidents` číslo sezóny nenese, ale nese herní datum — okno se proto
   // bere od začátku aktuální sezóny.
-  const odKdy = limits.seasonStart ?? "";
   const bordel = await db.prepare(
     `SELECT
        COUNT(*) AS n,
        SUM(CASE WHEN kind = 'bitka_kotle' THEN 1 ELSE 0 END) AS rvacky
      FROM fan_incidents WHERE team_id = ? AND COALESCE(game_date, '') >= ?`
-  ).bind(teamId, odKdy).first<{ n: number; rvacky: number }>()
+  ).bind(teamId, seasonFrom).first<{ n: number; rvacky: number }>()
     .catch((e) => { logger.warn({ module: M }, "výtržnosti fanoušků", e); return null; });
   if (bordel && bordel.n >= FAN_INCIDENT_THRESHOLD) {
     out.push({
@@ -228,9 +241,21 @@ export async function collectEvidence(
     });
   }
 
+  // Červené karty téhle sezóny ze zápasů, které řídil rozhodčí: liga, pohár a turnaj.
+  // Dřív se sčítala bilance klubu u rozhodčích (`referee_team_relations`), jenže ta se
+  // přes sezóny nenuluje, takže klub s jednou červenou za rok byl po třech letech
+  // „hrubě nedisciplinovaný" navždy. Termín zápasu je herní datum: kolo z kalendáře,
+  // pohárový nebo turnajový zápas ze své tabulky. Přátelák rozhodčího nemá.
   const reds = await db.prepare(
-    "SELECT COALESCE(SUM(red_cards), 0) AS n FROM referee_team_relations WHERE team_id = ?"
-  ).bind(teamId).first<{ n: number }>()
+    `SELECT COALESCE(SUM(mps.red_cards), 0) AS n
+       FROM match_player_stats mps
+       LEFT JOIN matches m ON m.id = mps.match_id
+       LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
+       LEFT JOIN cup_matches cm ON cm.id = mps.match_id
+       LEFT JOIN tournament_matches tm ON tm.id = mps.match_id
+      WHERE mps.team_id = ? AND mps.red_cards > 0
+        AND COALESCE(sc.scheduled_at, cm.scheduled_at, tm.scheduled_at) >= ?`
+  ).bind(teamId, seasonFrom).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "červené karty", e); return null; });
   if (reds && reds.n >= RED_CARD_THRESHOLD) {
     out.push({
@@ -243,13 +268,19 @@ export async function collectEvidence(
   // ten zákaz odhlasovala — do té doby je převod mezi vlastními kluby dovolený
   // a stavět na něm obvinění by znamenalo trestat za pravidlo, které neplatí.
   // Dřív se sem obchody dostávaly vždycky, takže přepínač v sazebníku nic neměnil.
+  //
+  // Jen obchody téhle sezóny: dřív se počítala celá historie a obchod z první sezóny
+  // šel klubu vytknout donekonečna. Nabídka nese reálný čas uzavření, ne herní. Rollover
+  // ale herní hodiny nuluje, takže `season_start` je zároveň reálný den rolloveru
+  // a obchod z minulé sezóny je vždycky před ním.
   const suspicious = ownerTransfersBanned ? await db.prepare(
     `SELECT COUNT(*) AS n FROM transfer_offers o
        JOIN teams f ON f.id = o.from_team_id
        JOIN teams t ON t.id = o.to_team_id
       WHERE o.status = 'accepted' AND f.user_id = t.user_id AND f.user_id != 'ai'
-        AND (o.from_team_id = ? OR o.to_team_id = ?)`
-  ).bind(teamId, teamId).first<{ n: number }>()
+        AND (o.from_team_id = ? OR o.to_team_id = ?)
+        AND COALESCE(o.resolved_at, o.created_at) >= ?`
+  ).bind(teamId, teamId, seasonFrom).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "podezřelé přestupy", e); return null; })
     : null;
   if (suspicious && suspicious.n > 0) {
@@ -259,11 +290,15 @@ export async function collectEvidence(
     });
   }
 
+  // Pozápasový rozhovor patří ke kolu (`match_calendar_id`), takže sezónu nese jeho
+  // termín. Dřív se počítaly rozhovory ze všech sezón.
   const criticism = await db.prepare(
-    `SELECT COUNT(*) AS n FROM coach_interviews
-      WHERE team_id = ? AND kind = 'post_match' AND analysis IS NOT NULL
-        AND json_extract(analysis, '$.rozhodci.postoj') = 'kritika'`
-  ).bind(teamId).first<{ n: number }>()
+    `SELECT COUNT(*) AS n FROM coach_interviews ci
+       LEFT JOIN season_calendar sc ON sc.id = ci.match_calendar_id
+      WHERE ci.team_id = ? AND ci.kind = 'post_match' AND ci.analysis IS NOT NULL
+        AND json_extract(ci.analysis, '$.rozhodci.postoj') = 'kritika'
+        AND COALESCE(sc.scheduled_at, ci.created_at) >= ?`
+  ).bind(teamId, seasonFrom).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "kritika rozhodčích", e); return null; });
   if (criticism && criticism.n >= CRITICISM_THRESHOLD) {
     out.push({

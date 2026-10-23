@@ -1865,17 +1865,8 @@ async function stavSektoru(
 
   let hoste: { pocet: number; barva: string; nazev: string; kdy: "prijede" | "prijel" } | null = null;
 
-  const pristi = await db
-    .prepare(
-      `SELECT t.id, t.name, t.primary_color
-       FROM matches m JOIN teams t ON t.id = m.away_team_id
-       JOIN season_calendar sc ON sc.id = m.calendar_id
-       WHERE m.home_team_id = ? AND m.home_score IS NULL
-       ORDER BY sc.match_date ASC LIMIT 1`,
-    )
-    .bind(teamId)
-    .first<{ id: string; name: string; primary_color: string | null }>()
-    .catch((e) => { logger.warn({ module: "game" }, "příští domácí zápas", e); return null; });
+  const { findNextHomeLeagueOpponent } = await import("../season/next-home-match");
+  const nextOpponent = await findNextHomeLeagueOpponent(db, teamId);
 
   /** Kolik jich z toho klubu vyrazí ven. `syncFanGroups` dopočítá jádro. */
   const kolikPrijede = async (awayTeamId: string): Promise<number> => {
@@ -1891,11 +1882,11 @@ async function stavSektoru(
 
   // Soupeř se vrací i s nulou. Když má malý a otrávený kotel, NIKOHO nepošle
   // a to je informace: hráč jinak vidí prázdno a myslí si, že je něco rozbité.
-  if (pristi) {
+  if (nextOpponent) {
     hoste = {
-      pocet: await kolikPrijede(pristi.id),
-      barva: pristi.primary_color ?? "#B91C1C",
-      nazev: pristi.name,
+      pocet: await kolikPrijede(nextOpponent.id),
+      barva: nextOpponent.primary_color ?? "#B91C1C",
+      nazev: nextOpponent.name,
       kdy: "prijede",
     };
   }
