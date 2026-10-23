@@ -6,7 +6,7 @@
 import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { experienceGainChance } from "../skills/training";
-import { recordTransaction } from "../season/finance-processor";
+import { getBaseTicketPrice, mapVillageSize, recordTransaction, ticketPriceAttendanceFactor } from "../season/finance-processor";
 import type { Weather, TeamSetup } from "../engine/types";
 import { typZraneniZPopisu, zavaznostZeDnu } from "../injuries/injury-types";
 import { matchInjuryDays } from "../injuries/injury-generator";
@@ -361,8 +361,8 @@ async function cupHomeMatchContext(db: D1Database, homeRealTeamId: string | null
     const { BUS_CONFIG } = await import("../season/fanbase-config");
 
     const team = await db.prepare(
-      "SELECT t.reputation, v.population FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?"
-    ).bind(homeRealTeamId).first<{ reputation: number; population: number }>();
+      "SELECT t.reputation, v.population, v.size FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?"
+    ).bind(homeRealTeamId).first<{ reputation: number; population: number; size: string | null }>();
     const rep = team?.reputation ?? 50;
 
     const { agg: fanbaseAgg } = await loadFanbaseAggregate(db, homeRealTeamId);
@@ -376,8 +376,10 @@ async function cupHomeMatchContext(db: D1Database, homeRealTeamId: string | null
     ).bind(homeRealTeamId, homeRealTeamId, homeRealTeamId, homeRealTeamId).first<{ w: number }>().catch((e) => { logger.warn({ module: M }, "cup home recent wins", e); return { w: 0 }; });
     const formBonus = Math.round((wins?.w ?? 0) * popBase * 0.08);
 
-    const fansSatRow = await db.prepare("SELECT satisfaction FROM fans WHERE team_id = ?").bind(homeRealTeamId).first<{ satisfaction: number }>().catch((e) => { logger.warn({ module: M }, "cup home fans satisfaction", e); return null; });
+    const fansSatRow = await db.prepare("SELECT satisfaction, base_ticket_price FROM fans WHERE team_id = ?").bind(homeRealTeamId).first<{ satisfaction: number; base_ticket_price: number | null }>().catch((e) => { logger.warn({ module: M }, "cup home fans satisfaction", e); return null; });
     const satMul = 0.75 + (Math.max(0, Math.min(100, fansSatRow?.satisfaction ?? 50)) / 100) * 0.5;
+    // Vstupné jako v lize: nad obvyklou cenou obce lidí ubývá, od trojnásobku nepřijde nikdo.
+    const ticketMul = ticketPriceAttendanceFactor(fansSatRow?.base_ticket_price ?? 0, getBaseTicketPrice(mapVillageSize(team?.size ?? "village")));
 
     const stadiumRow = await db.prepare("SELECT * FROM stadiums WHERE team_id = ?").bind(homeRealTeamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: M }, "cup home stadium", e); return null; });
     const facilities = stadiumRow ?? {};
@@ -405,7 +407,7 @@ async function cupHomeMatchContext(db: D1Database, homeRealTeamId: string | null
     const wf = weatherAttendanceFactor(weather);
     const shieldedWeather = wf + (1 - wf) * fx.weatherAttendanceShield;
     const rawAttendance = Math.max(8, popBase + repBonus + formBonus + busDropIn + Math.round(rng2(homeRealTeamId) * 10 - 5));
-    const attendance = Math.min(Math.round(rawAttendance * (1 + fx.attendanceBonus) * satMul * shieldedWeather * promoBoost), stadiumCapacity);
+    const attendance = Math.min(Math.round(rawAttendance * (1 + fx.attendanceBonus) * satMul * shieldedWeather * promoBoost * ticketMul), stadiumCapacity);
     return {
       attendance, stadiumName,
       pitchCondition: (stadiumRow?.pitch_condition as number) ?? 50,

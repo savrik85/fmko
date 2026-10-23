@@ -8,6 +8,7 @@ import { createRng } from "../generators/rng";
 import { experienceGainChance } from "../skills/training";
 import type { TeamSetup, Weather, Hardness } from "../engine/types";
 import { buildMatchPlayers } from "./match-runner";
+import { loadTicketAttendanceFactor } from "../season/finance-processor";
 import { logger } from "../lib/logger";
 
 export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
@@ -166,8 +167,10 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         loadMatchMods(db, homeTeamId, true), loadMatchMods(db, awayTeamId, false),
       ]);
 
-      // Simulate — vypočítej attendance JEDNOU a použij ji všude (jinak by simulace + DB měly různá čísla)
-      const friendlyAttendance = Math.round(20 + Math.random() * 50);
+      // Simulate — vypočítej attendance JEDNOU a použij ji všude (jinak by simulace + DB měly různá čísla).
+      // I na přátelák se vybírá vstupné domácích, takže přemrštěná cena odradí i tady.
+      const ticketAttendanceMul = await loadTicketAttendanceFactor(db, homeTeamId);
+      const friendlyAttendance = Math.round((20 + Math.random() * 50) * ticketAttendanceMul);
       const result = simulateMatch(rng, {
         home: homeSetup,
         away: awaySetup,
