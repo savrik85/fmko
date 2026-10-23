@@ -51,7 +51,7 @@ beforeEach(async () => {
   await db.exec("DELETE FROM fan_chants");
 });
 
-const zpivane = () => db.prepare("SELECT * FROM fan_chants WHERE team_id = 't1' AND status = 'zpiva'")
+const singing = () => db.prepare("SELECT * FROM fan_chants WHERE team_id = 't1' AND status = 'zpiva'")
   .all<{ id: string; kind: string; text: string; duvod: string; audio_a: string | null }>();
 
 describe("chorál o miláčkovi kotle", () => {
@@ -67,7 +67,7 @@ describe("chorál o miláčkovi kotle", () => {
       .first<{ status: string; text: string; audio_a: string }>();
     expect(oldChant).toEqual({ status: "zapomenut", text: "Robl je náš!", audio_a: "r2/robl.mp3" });
 
-    const newChant = (await zpivane()).results.find((c) => c.kind === "oblibenec");
+    const newChant = (await singing()).results.find((c) => c.kind === "oblibenec");
     expect(newChant?.id).not.toBe("old");
     expect(newChant?.duvod).toBe("Jakub Kučera je miláček kotle.");
     expect(newChant?.text.toUpperCase()).toContain("KUČERA");
@@ -82,7 +82,7 @@ describe("chorál o miláčkovi kotle", () => {
 
     await tikChoralu(db, "t1", [kotel], "2026-10-23T16:00:00.000Z");
 
-    const r = (await zpivane()).results.filter((c) => c.kind === "oblibenec");
+    const r = (await singing()).results.filter((c) => c.kind === "oblibenec");
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ id: "k", text: "Kučera, Kučera, hej!", audio_a: "r2/k.mp3" });
   });
@@ -103,7 +103,7 @@ describe("chorál bez předmětu", () => {
     await tikChoralu(db, "t1", [kotel], "2026-10-23T16:00:00.000Z");
     await db.exec("DELETE FROM matches");
 
-    const win = (await zpivane()).results.find((c) => c.kind === "vyhra");
+    const win = (await singing()).results.find((c) => c.kind === "vyhra");
     expect(win).toMatchObject({ id: "v", text: "Jedeme dál od AI!", audio_a: "r2/v.mp3" });
     expect(win?.duvod).toBe("Série 3 výher.");
   });
