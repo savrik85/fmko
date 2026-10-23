@@ -17,6 +17,7 @@ export type { League, LeagueStatus } from "./league";
 export type { LeagueStanding } from "./league-standing";
 export type { Match, MatchStatus, MatchEvent, EventType, GoalSource } from "./match";
 export type { Sponsor, SponsorType } from "./sponsor";
+export { SPONSOR_PAYOUT_MULTIPLIER, sponsorWeeklyPayout, sponsorMonthlyPayout } from "./sponsor";
 export type { GameEvent, GameEventType } from "./event";
 export type { User } from "./user";
 export type { Manager, ManagerBackstory } from "./manager";

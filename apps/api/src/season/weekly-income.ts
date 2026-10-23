@@ -4,6 +4,7 @@
  * reputace, dotace obce podle přízně a členské příspěvky placených hráčů.
  */
 
+import { sponsorWeeklyPayout } from "@okresni-masina/shared";
 import { mapVillageSize, PLACENY_HRAC_SQL } from "./finance-processor";
 import { logger } from "../lib/logger";
 
@@ -33,7 +34,8 @@ export async function weeklyIncomeOf(db: D1Database, teamId: string): Promise<We
   const playerCount = (playersRes.results[0] as { cnt: number } | undefined)?.cnt ?? 0;
   const favor = (favorRes.results[0] as { favor: number } | undefined)?.favor ?? 50;
 
-  const sponsors = Math.round(monthlySponsors / 4.3) * 2;
+  // Stejně jako pondělní výplata (bez bonusu ekonoma) a jako řádky smluv v přehledu.
+  const sponsors = sponsorWeeklyPayout(monthlySponsors);
   const baseSponsor = Math.round(((team.reputation ?? 50) * 100) / 4.3);
   const subsidy = Math.round(((MONTHLY_SUBSIDY_BASE[mapVillageSize(team.size)] ?? 8000) * (0.5 + favor / 100)) / 4.3);
   const contributions = Math.round((playerCount * 100) / 4.3);

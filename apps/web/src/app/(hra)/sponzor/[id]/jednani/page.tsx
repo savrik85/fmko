@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { ErrorBox, SectionLabel, Spinner, useConfirm } from "@/components/ui";
 import { formatCZK } from "@/lib/sponsor-owners";
-import { formatGameDay, seasonsAccusative } from "@/lib/sponsor-format";
+import { formatGameDay, seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 import {
   estimateRange, initialDraft, previewCost, proposalsEqual, RESPONSE_LABELS, withSeasons,
   type NegotiationRound, type NegotiationView, type PromiseKind, type Proposal,
@@ -125,7 +125,8 @@ export default function NegotiationPage() {
       description: `Smlouva na ${seasonsAccusative(p.proposal.seasons)}. Slibů: ${p.promises.length}. Nesplněné sliby stojí pokutu, dvě porušení v sezóně a sponzor smlouvu vypoví.`
         + (legacySwitch ? " Přechod ze staré smlouvy je zdarma: žádná výpovědní pokuta ani ztráta reputace." : ""),
       details: [
-        { label: "Měsíčně", value: `+${formatCZK(d.monthly)}`, color: "text-pitch-500" },
+        // Co klub opravdu dostane, stejně jako u podpisu banneru (s násobitelem výplaty).
+        { label: "Týdenní příjem", value: `+${formatCZK(weeklyAmount(d.monthly))}`, color: "text-pitch-500" },
         ...(d.signingBonus > 0 ? [{ label: "Za podpis", value: `+${formatCZK(d.signingBonus)}`, color: "text-pitch-500" }] : []),
         ...(view.current && !view.current.sameSponsor && p.currentFee === 0 && view.current.terminationFee > 0
           ? [{ label: "Výpovědní pokuta", value: `-${formatCZK(view.current.terminationFee)}`, color: "text-card-red" }] : []),

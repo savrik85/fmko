@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
 import { formatCZK } from "@/lib/sponsor-owners";
-import { seasonsAccusative, remainingSeasonsText } from "@/lib/sponsor-format";
+import { seasonsAccusative, remainingSeasonsText, weeklyAmount } from "@/lib/sponsor-format";
 import type {
   DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorPromiseView, SponsorsData,
 } from "@/lib/sponsor-page-types";
@@ -140,7 +140,7 @@ export default function SponsorsPage() {
     const isMain = category === "main";
     const isBanner = category === "banner";
     const details = [
-      { label: "Týdenní příjem", value: `+${formatCZK(Math.round(offer.monthlyAmount / 4.3))}`, color: "text-pitch-500" },
+      { label: "Týdenní příjem", value: `+${formatCZK(weeklyAmount(offer.monthlyAmount))}`, color: "text-pitch-500" },
       ...(offer.winBonus > 0 ? [{ label: "Bonus za výhru", value: `+${formatCZK(offer.winBonus)}`, color: "text-pitch-400" }] : []),
       { label: "Výpovědní pokuta", value: `-${formatCZK(offer.earlyTerminationFee)}`, color: "text-card-red" },
     ];
@@ -239,7 +239,7 @@ export default function SponsorsPage() {
       title: `Prodloužit smlouvu s firmou ${contract.sponsorName}?`,
       description: `Nová smlouva na ${seasonsAccusative(r.seasons)} za podmínek podle aktuální reputace. Beze změny názvu klubu a bez sankce.`,
       details: [
-        { label: "Nově týdně", value: `+${formatCZK(Math.round(r.monthlyAmount / 4.3))}`, color: "text-pitch-500" },
+        { label: "Nově týdně", value: `+${formatCZK(weeklyAmount(r.monthlyAmount))}`, color: "text-pitch-500" },
         ...(r.winBonus > 0 ? [{ label: "Za výhru", value: `+${formatCZK(r.winBonus)}`, color: "text-pitch-400" }] : []),
         { label: "Délka", value: seasonsAccusative(r.seasons) },
       ],

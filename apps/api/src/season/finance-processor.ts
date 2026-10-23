@@ -1,3 +1,4 @@
+import { SPONSOR_PAYOUT_MULTIPLIER } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import type { Weather } from "../engine/types";
 import { recordCompetitionEntry } from "../competition/ledger";
@@ -159,7 +160,7 @@ export const WEBSITE_BANNER_BONUS = 0.05;
 /** Týdenní bonus za lištu: stejný přepočet jako běžné sponzorské příjmy (měsíc / 4,3 × 2 × ekonom). */
 export function websiteBannerWeeklyBonus(bannerMonthlyTotal: number, sponsorBonusMul: number): number {
   if (bannerMonthlyTotal <= 0) return 0;
-  return Math.round((bannerMonthlyTotal / 4.3) * 2 * sponsorBonusMul * WEBSITE_BANNER_BONUS);
+  return Math.round((bannerMonthlyTotal / 4.3) * SPONSOR_PAYOUT_MULTIPLIER * sponsorBonusMul * WEBSITE_BANNER_BONUS);
 }
 
 /** Úrovně zázemí ze sloupců stadionu, ze kterých se počítají efekty v zápase (calculateFacilityEffects). */
@@ -370,14 +371,15 @@ export async function processWeeklyFinances(
 
   // ── PŘÍJMY ──
 
-  // 4. Sponsor contract income (monthly / 4.3 = weekly)
+  // 4. Sponsor contract income (monthly / 4.3 × násobitel výplaty = weekly)
   const sponsorResult = await db.prepare(
     "SELECT COALESCE(SUM(monthly_amount), 0) as total FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).first<{ total: number }>();
 
   if (sponsorResult && sponsorResult.total > 0) {
-    // Ekonom zvedá sponzorské příjmy (sponsorBonusMul >= 1)
-    const weeklyIncome = Math.round((sponsorResult.total / 4.3) * 2 * staffFx.sponsorBonusMul);
+    // Ekonom zvedá sponzorské příjmy (sponsorBonusMul >= 1). Násobitel výplaty je sdílený
+    // se vším, co příjem od sponzora ukazuje (seznam smluv, přehled financí).
+    const weeklyIncome = Math.round((sponsorResult.total / 4.3) * SPONSOR_PAYOUT_MULTIPLIER * staffFx.sponsorBonusMul);
     await recordTransaction(db, teamId, "sponsor_income", weeklyIncome,
       `Sponzorské příjmy`, gameDate);
   }

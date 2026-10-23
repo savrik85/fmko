@@ -1,8 +1,13 @@
 /** Sponzorské částky, délky smluv a změny náklonnosti v textu pro hráče. */
 
-/** Smlouvy drží měsíční částku, hráč vidí týdenní. */
+import { sponsorWeeklyPayout } from "@okresni-masina/shared";
+
+/**
+ * Smlouvy drží měsíční částku, hráč vidí týdenní, a to tu, kterou sponzor opravdu
+ * vyplácí (s násobitelem výplaty). Dřív tu bylo jen monthly / 4,3, tedy polovina.
+ */
 export function weeklyAmount(monthly: number): number {
-  return Math.round(monthly / 4.3);
+  return sponsorWeeklyPayout(monthly);
 }
 
 /** „1 sezónu“, „3 sezóny“, „5 sezón“ (4. pád, po předložce „na“). */

@@ -23,7 +23,7 @@ import { offerReplyDeadline } from "../transfers/offer-deadline";
 import { suspensionSms, injurySms } from "../events/injury-sms";
 import { injuryPronenessOf } from "../injuries/proneness";
 import { isBodyType } from "../generators/physicals";
-import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, marketValue, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
+import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, marketValue, sponsorWeeklyPayout, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
 
 /**
  * Povrchy areálu, které má klub ZAPLACENÉ.
@@ -832,7 +832,9 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
 
   return c.json({
     budget: team.budget,
-    sponsors: sponsors.map((s) => ({ ...s, weeklyAmount: Math.round(s.monthlyAmount / 4.3) })),
+    // Týdně tolik, kolik sponzor opravdu vyplácí (s násobitelem výplaty), ať řádky smluv
+    // sedí se souhrnem sponzorských smluv výš.
+    sponsors: sponsors.map((s) => ({ ...s, weeklyAmount: sponsorWeeklyPayout(s.monthlyAmount) })),
     playerCount,
     wageBill: {
       weekly: weeklyWages,

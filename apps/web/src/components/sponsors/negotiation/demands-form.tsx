@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCZK } from "@/lib/sponsor-owners";
-import { seasonsAccusative } from "@/lib/sponsor-format";
+import { seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 import {
   allowedSeasonsOf, findOption, PROMISE_LABELS, proposalOneTimeTotal, type Demands, type NegotiationView, type Proposal,
 } from "@/lib/sponsor-negotiation";
@@ -31,7 +31,12 @@ export function DemandsForm({ view, proposal, onChange }: {
 
   return (
     <div className="space-y-4">
-      <MoneyInput label="Měsíčně" value={d.monthly} onChange={(v) => set({ monthly: v })} />
+      <MoneyInput
+        label="Měsíčně"
+        hint={`Na účet přijde ${formatCZK(weeklyAmount(d.monthly))} každé pondělí.`}
+        value={d.monthly}
+        onChange={(v) => set({ monthly: v })}
+      />
       {view.category === "main" && (
         <MoneyInput label="Za každou výhru" value={d.winBonus} onChange={(v) => set({ winBonus: v })} />
       )}
