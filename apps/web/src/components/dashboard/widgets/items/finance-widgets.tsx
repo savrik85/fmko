@@ -3,6 +3,7 @@
 /** Finanční widgety — rozpočet, prognóza, struktura příjmů a výdajů, sponzoři, občerstvení. */
 
 import Link from "next/link";
+import { sponsorMonthlyPayout } from "@okresni-masina/shared";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import {
   LineChart, DonutChart, BarChart, HBarChart, StatTile, ChartEmpty, ChartHero,
@@ -148,7 +149,9 @@ export function SponsorsWidget({ data }: WidgetProps) {
     .filter((c): c is NonNullable<typeof c> => Boolean(c));
   if (contracts.length === 0) return <ChartEmpty>Klub zatím nemá sponzora.</ChartEmpty>;
 
-  const total = contracts.reduce((sum, c) => sum + (c.monthlyAmount ?? 0), 0);
+  // Kolik sponzoři měsíčně opravdu vyplácí (s násobitelem výplaty), ne částka ve smlouvě.
+  const paid = (c: (typeof contracts)[number]) => sponsorMonthlyPayout(c.monthlyAmount ?? 0);
+  const total = contracts.reduce((sum, c) => sum + paid(c), 0);
   const categoryLabel = (cat: string) =>
     cat === "main" ? "hlavní" : cat === "stadium" ? "stadion" : "banner";
 
@@ -158,8 +161,8 @@ export function SponsorsWidget({ data }: WidgetProps) {
       <HBarChart
         data={contracts.map((c) => ({
           label: `${c.sponsorName} · ${categoryLabel(c.category)}`,
-          value: c.monthlyAmount ?? 0,
-          display: compactCZK(c.monthlyAmount ?? 0),
+          value: paid(c),
+          display: compactCZK(paid(c)),
         }))}
       />
       <MoreLink href="/sponzori">Detail sponzorů →</MoreLink>

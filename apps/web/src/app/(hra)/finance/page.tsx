@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { sponsorMonthlyPayout } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
@@ -437,7 +438,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
                     </div>
                     <div className="text-right">
                       <div className="text-sm tabular-nums text-pitch-500 font-heading font-bold">{formatCZK(s.weeklyAmount)}/týd</div>
-                      <div className="text-micro text-muted">{formatCZK(s.monthlyAmount)}/měs</div>
+                      <div className="text-micro text-muted">{formatCZK(sponsorMonthlyPayout(s.monthlyAmount))}/měs</div>
                     </div>
                   </div>
                 ))}
