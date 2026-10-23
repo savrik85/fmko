@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Prales - Pozvanka";
+export const alt = "Prales: pozvánka do okresního fotbalu";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -19,8 +19,8 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
 
   try {
     const [teamRes, mgrRes] = await Promise.all([
-      fetch(`${API}/api/teams/${teamId}`).then((r) => r.json()).catch(() => null),
-      fetch(`${API}/api/teams/${teamId}/manager`).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/api/teams/${teamId}`).then((r) => r.json()).catch((e) => { console.warn("obrázek pozvánky: tým", e); return null; }),
+      fetch(`${API}/api/teams/${teamId}/manager`).then((r) => r.json()).catch((e) => { console.warn("obrázek pozvánky: trenér", e); return null; }),
     ]);
     if (teamRes?.name) {
       teamName = teamRes.name;
@@ -30,7 +30,10 @@ export default async function Image({ params }: { params: Promise<{ teamId: stri
       initials = teamName.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
     }
     if (mgrRes?.name) managerName = mgrRes.name;
-  } catch { /* fallback values */ }
+  } catch (e) {
+    // Obrázek se vykreslí s výchozími hodnotami.
+    console.warn("obrázek pozvánky:", e);
+  }
 
   return new ImageResponse(
     (
