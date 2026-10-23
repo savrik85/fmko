@@ -41,7 +41,21 @@ describe("příznaky revize účetnictví", () => {
       { hrac: "Karel Velký", zKlubu: null, doKlubu: "FK Test", priznaky: [] },
     ];
     const flags = auditFlags({ teamId: "t1", teamName: "FK Test", concession: new Map(), betting: new Map(), transferFlags });
-    expect(flags).toEqual(["Přestup Jan Novák (FK Test → FK Kamarád): Oba kluby patří témuž majiteli."]);
+    expect(flags).toEqual(["Přestup Jan Novák (s klubem FK Kamarád): Oba kluby patří témuž majiteli."]);
+  });
+
+  it("opakované obchody s jedním klubem se sloučí do jednoho řádku", () => {
+    const repeated = "Tyhle dva kluby spolu obchodují opakovaně";
+    const transferFlags = [
+      { hrac: "Jakub Vácha", zKlubu: "FK Kamarád", doKlubu: "FK Test", priznaky: [repeated] },
+      { hrac: "Lukáš Veselý", zKlubu: "FK Test", doKlubu: "FK Kamarád", priznaky: [repeated] },
+      { hrac: "Ondřej Chval", zKlubu: "FK Jiný", doKlubu: "FK Test", priznaky: ["Plnění výrazně pod odhadem hodnoty hráče"] },
+    ];
+    const flags = auditFlags({ teamId: "t1", teamName: "FK Test", concession: new Map(), betting: new Map(), transferFlags });
+    expect(flags).toEqual([
+      "Přestupy Jakub Vácha, Lukáš Veselý (s klubem FK Kamarád): Tyhle dva kluby spolu obchodují opakovaně.",
+      "Přestup Ondřej Chval (s klubem FK Jiný): Plnění výrazně pod odhadem hodnoty hráče.",
+    ]);
   });
 
   it("přemrštěná cena v bufetu je nápadná od hranice, kde podle vzorce nikdo nekoupí", () => {
