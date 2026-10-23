@@ -3495,6 +3495,9 @@ teamsRouter.get("/:id/villages-nearby", async (c) => {
 teamsRouter.post("/:id/match/:mid/bus", async (c) => {
   const teamId = c.req.param("id");
   const matchId = c.req.param("mid");
+  // teamsRouter je připojený dřív než obecná kontrola vlastníka, vlastnictví se hlídá tady.
+  const auth = await requireTeamOwner(c, teamId);
+  if (auth.error) return auth.error;
   const body = (await c.req.json().catch(() => ({}))) as {
     sourceVillageId?: string;
     busSize?: BusSize;
