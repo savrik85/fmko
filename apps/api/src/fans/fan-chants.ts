@@ -104,14 +104,22 @@ export async function tikChoralu(
       ).bind(sila, z.id));
       continue;
     }
-    // Text se mění, jen když se změnil důvod: jinak by se chorál přepisoval
-    // každý den a „zpívá se od podzimu" by nic neznamenalo.
-    const novyText = navrh && navrh.duvod !== z.duvod ? navrh.text : z.text;
+    // Kotel má nového miláčka (rivala, stížnost): o tom starém se zpívat
+    // přestane a níž vznikne nový chorál s vlastním textem i nahrávkou.
+    // Přepsat jen text by nechalo starou nahrávku se starým jménem.
+    if (navrh?.predmet && !z.duvod.includes(navrh.predmet)) {
+      stmts.push(db.prepare(
+        "UPDATE fan_chants SET status = 'zapomenut', updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?",
+      ).bind(z.id));
+      continue;
+    }
+    // Text i nahrávka zůstávají, mění se jen důvod (třeba delší série). Jinak by
+    // se chorál přepisoval a „zpívá se od podzimu" by nic neznamenalo.
     const novyDuvod = navrh?.duvod ?? z.duvod;
     stmts.push(db.prepare(
-      `UPDATE fan_chants SET sila = ?, text = ?, duvod = ?, last_game_date = ?,
+      `UPDATE fan_chants SET sila = ?, duvod = ?, last_game_date = ?,
          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
-    ).bind(sila, novyText, novyDuvod, gameDate, z.id));
+    ).bind(sila, novyDuvod, gameDate, z.id));
     podleDruhu.delete(z.kind as ChantKind);
   }
 

@@ -44,6 +44,12 @@ export interface NovyChorál {
   duvod: string;
   /** Počáteční síla 0–100. Silnější důvod = hlasitější chorál. */
   sila: number;
+  /**
+   * O kom nebo o čem chorál je, když to v textu zazní: miláček, rival, co chybí
+   * na stadionu. Změní-li se, starý chorál se zapomene a vznikne nový i s novou
+   * nahrávkou. Bez předmětu (série, vzdor) se mění jen důvod, text zůstává.
+   */
+  predmet?: string;
 }
 
 /** Příjmení: na tribuně se křestní nekřičí. */
@@ -96,6 +102,7 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
       ]),
       duvod: `${s.oblibenec} je miláček kotle.`,
       sila: 55,
+      predmet: s.oblibenec!,
     });
   }
 
@@ -117,6 +124,7 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
       ]),
       duvod: `Rivalita s klubem ${r} je vyhrocená.`,
       sila: Math.min(90, 40 + s.rival.heat / 2),
+      predmet: r,
     });
   }
 
@@ -204,6 +212,7 @@ export function vymysliChoraly(s: ChantStav, roll: number): NovyChorál[] {
       ]),
       duvod: `Na stadionu jim vadí: ${s.stiznostNaVybaveni}.`,
       sila: 35,
+      predmet: s.stiznostNaVybaveni,
     });
   }
 
