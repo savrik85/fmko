@@ -3,6 +3,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import type { ClubWebsiteFixture, ClubWebsiteMatchesPage, ClubWebsiteTemplate } from "@okresni-masina/shared";
+import { API_BASE } from "@/lib/api";
 import { ClubSubpageShell, type Skin } from "../templates/skins";
 import { EMPTY, PlayerLink, TeamLink, formatDate, formatDateTime } from "../templates/shared";
 
@@ -77,7 +78,7 @@ function FixtureRows({ f, clubName, skin, tone }: { f: ClubWebsiteFixture; clubN
   const pensAway = f.isHome ? f.pensAgainst : f.pensFor;
   const hasPens = pensHome !== null && pensAway !== null;
   const scorers = f.scorers.filter((s) => s.ours);
-  const hasDetail = f.played && (scorers.length > 0 || !!f.attendance || !!f.manOfMatch);
+  const hasDetail = f.played && (scorers.length > 0 || !!f.attendance || !!f.manOfMatch || !!f.fanPhoto);
 
   return (
     <>
@@ -145,6 +146,23 @@ function FixtureRows({ f, clubName, skin, tone }: { f: ClubWebsiteFixture; clubN
                   </>
                 )}
               </div>
+            )}
+            {f.fanPhoto && (
+              // Fotka z reportu Prales Ultras, v rámečku, jaký má šablona pro fotky lidí.
+              <figure className="mt-2 mb-1 max-w-md">
+                <div className={skin.faceBox}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- fotka z API, ne ze statiky */}
+                  <img
+                    src={`${API_BASE}/api/ultras-photos/${f.fanPhoto.id}`}
+                    alt={f.fanPhoto.text ? `Náš kotel s plachtou „${f.fanPhoto.text}“` : "Náš kotel"}
+                    loading="lazy"
+                    className="block w-full h-auto"
+                  />
+                </div>
+                <figcaption className="mt-1">
+                  Náš kotel{f.fanPhoto.text ? <> s plachtou <span className={skin.quote}>„{f.fanPhoto.text}“</span></> : null}
+                </figcaption>
+              </figure>
             )}
           </td>
         </tr>
