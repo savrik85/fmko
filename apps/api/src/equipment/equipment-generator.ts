@@ -561,6 +561,8 @@ export interface UpgradeOption {
   nextLevel: number;
   cost: number;
   effect: string;
+  /** Výjimka k efektu, která patří ke kartě (zabezpečení); jinak prázdné. */
+  effectNote: string;
   description: string;
   locked: boolean;
   /** Textové shrnutí — drží se kvůli starším klientům během deploye. */
@@ -654,6 +656,7 @@ export function getUpgradeOptions(
       nextLevel: next,
       cost: costs[next] ?? 99999,
       effect: getUpgradeEffectLabel(cat, next),
+      effectNote: getUpgradeEffectNote(cat, next),
       description: LEVEL_DESCRIPTIONS[cat]?.[next] ?? "",
       locked: unlock.locked,
       lockReason: unlock.reason,
@@ -719,24 +722,21 @@ export function getLevelDescription(category: string, level: number): string {
 }
 
 /**
- * Dovětek k popisku: čísla platí pro vybavení v plném stavu.
+ * Poznámka k efektu, která neplatí pro všechno vybavení stejně.
  *
- * Efekt se násobí stavem (`lv × stav / 100` v calculateEffects) a vybavení každý den
- * chátrá (season/daily-tick.ts), takže koupené „+10 % trénink" po měsíci dává míň.
- * Zabezpečení areálu se stavem nenásobí: zámek chrání i zrezivělý, alarm a kamera
- * pod `ZABEZPECENI_MIN_STAV` nefungují vůbec.
+ * Efekt se obecně násobí stavem (`lv × stav / 100` v calculateEffects) a vybavení každý den
+ * chátrá (season/daily-tick.ts). To platí pro všechno a stránka vybavení to říká jednou,
+ * ne u každé karty. Zabezpečení areálu se stavem nenásobí: zámek chrání i zrezivělý,
+ * alarm a kamera pod `ZABEZPECENI_MIN_STAV` nefungují vůbec. To jediné patří ke kartě.
  */
-function wearNote(category: string, level: number): string {
-  if (category === "area_security") {
-    return level >= 2 ? `pod ${ZABEZPECENI_MIN_STAV} % stavu nefungují, zámek chrání dál` : "";
+export function getUpgradeEffectNote(category: string, level: number): string {
+  if (category === "area_security" && level >= 2) {
+    return `Alarm a kamera pod ${ZABEZPECENI_MIN_STAV} % stavu nefungují, zámek chrání dál.`;
   }
-  return "platí v plném stavu, s opotřebením slábne";
+  return "";
 }
 
 /** Textový popis bonusu na dané úrovni — obchod ho ukazuje u vylepšení, bazar na kartě nabídky. */
 export function getUpgradeEffectLabel(category: string, level: number): string {
-  const label = UPGRADE_EFFECT_LABELS[category]?.[level] ?? "";
-  if (!label) return "";
-  const note = wearNote(category, level);
-  return note ? `${label} (${note})` : label;
+  return UPGRADE_EFFECT_LABELS[category]?.[level] ?? "";
 }

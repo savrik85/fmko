@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, LockDetail, Tabs } from "@/components/ui";
-import { amenityDetail, amenityTone, withAmenityNote } from "@/lib/amenity-outlook";
+import { amenityDetail, withAmenityNote } from "@/lib/amenity-outlook";
+import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 import { SellDialog } from "./SellDialog";
 import { BazarTab } from "./BazarTab";
 import {
@@ -314,10 +315,15 @@ function EquipmentPage() {
                     </div>
                   ))}
                 </div>
-                <div className="text-xs text-muted mt-2 italic">Bonusy závisí na úrovni a stavu vybavení. Aplikují se na tréninky i zápasy.</div>
               </div>
             </div>
           )}
+
+          {/* Jednou pro celou stránku, ne dovětkem u každé karty. Mimo sbalovací panel,
+              aby to bylo vidět i na mobilu. */}
+          <p className="text-sm text-muted">
+            Bonusy platí na tréninky i zápasy. Čísla u vylepšení platí v plném stavu, s opotřebením slábnou.
+          </p>
 
           {/* ═══ Equipment grid — cards ═══ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -361,11 +367,9 @@ function EquipmentPage() {
                   {upgrade && !upgrade.locked && (
                     <div className="flex items-center justify-between gap-3 mt-1">
                       <div className="min-w-0">
-                        <div className="text-sm"><span className="font-heading font-bold">Lv.{upgrade.nextLevel}</span> <span className="text-muted">—</span> <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span></div>
+                        <div className="text-sm"><span className="font-heading font-bold">Úroveň {upgrade.nextLevel}</span> <span className="text-muted">·</span> <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span></div>
                         <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
-                        {upgrade.amenity && (
-                          <div className={`text-sm leading-snug mt-1 ${amenityTone(upgrade.amenity)}`}>{upgrade.amenity.note}</div>
-                        )}
+                        {upgrade.effectNote && <div className="text-sm text-muted leading-snug mt-0.5">{upgrade.effectNote}</div>}
                       </div>
                       <button onClick={() => handleUpgrade(upgrade)} disabled={!canUpgrade || !!acting}
                         className={`${CARD_BTN} ${
@@ -375,6 +379,8 @@ function EquipmentPage() {
                       </button>
                     </div>
                   )}
+                  {/* Pod řádkem s tlačítkem, ať má štítek celou šířku karty a nezalamuje se. */}
+                  {upgrade && !upgrade.locked && upgrade.amenity && <AmenityGainChip amenity={upgrade.amenity} />}
                   {upgrade?.locked && (
                     <LockDetail detail={upgrade.lockDetail} hint={upgrade.lockHint} fallback={upgrade.lockReason} />
                   )}
@@ -385,7 +391,7 @@ function EquipmentPage() {
                   {/* Repair */}
                   {repair && (
                     <div className="flex items-center justify-between gap-3 mt-2 pt-2 border-t border-gray-100">
-                      <div className="text-sm text-muted">Oprava na 100% — <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(repair.cost)}</span></div>
+                      <div className="text-sm text-muted">Oprava na 100 %: <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatCZK(repair.cost)}</span></div>
                       <button onClick={() => handleRepair(repair.category, repair.label, repair.condition, repair.cost)} disabled={!canRepair || !!acting}
                         className={`${CARD_BTN} ${
                           canRepair ? "bg-gold-500 text-white hover:bg-gold-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -416,7 +422,7 @@ function EquipmentPage() {
                           {/* Cenu v bazaru si určuje hráč, žádné číslo mu tu nepodsouváme.
                               Výkup zastavárny je naopak pevně daný, ten smysl má. */}
                           <div className="text-sm text-muted">
-                            Prodej — zastavárna dá hned <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(sell.pawnQuote)}</span>
+                            Prodej: zastavárna dá hned <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatCZK(sell.pawnQuote)}</span>
                           </div>
                           <button onClick={() => setSelling(sell)} disabled={!!acting}
                             className={`${CARD_BTN} border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50`}>

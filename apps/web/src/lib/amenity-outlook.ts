@@ -16,13 +16,6 @@ export interface AmenityOutlook {
   note: string;
 }
 
-/** Barva poznámky: celý přírůstek nenápadně, useknutý zlatě, nulový červeně. */
-export function amenityTone(a: AmenityOutlook): string {
-  if (a.gain <= 0) return "text-card-red";
-  if (a.gain < a.raw) return "text-gold-600";
-  return "text-muted";
-}
-
 /** Popis v potvrzení nákupu doplněný o větu, kolik vylepšení klubu opravdu přidá. */
 export function withAmenityNote(text: string, a?: AmenityOutlook): string {
   if (!a) return text;
@@ -35,6 +28,7 @@ export function amenityDetail(a: AmenityOutlook): { label: string; value: string
   return {
     label: "Spokojenost po domácím zápase",
     value: a.gain > 0 ? `+${a.gain}` : "nepřidá nic",
-    color: a.gain <= 0 ? "text-card-red" : a.gain < a.raw ? "text-gold-600" : "text-pitch-500",
+    // Zlatě jako štítek na kartě: je to upozornění, ne chyba.
+    color: a.gain < a.raw ? "text-gold-600" : "text-pitch-500",
   };
 }

@@ -1,8 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateEffects, CATEGORIES, CATEGORY_LABELS, efektyZabezpeceni,
-  getLevelDescription, getUpgradeEffectLabel,
+  getLevelDescription, getUpgradeEffectLabel, getUpgradeEffectNote, getUpgradeOptions,
 } from "./equipment-generator";
+
+describe("popisek efektu a poznámka k opotřebení", () => {
+  it("popisek je jen efekt, obecná věta o opotřebení je na stránce jednou, ne u každé karty", () => {
+    expect(getUpgradeEffectLabel("balls", 3)).not.toContain("plném stavu");
+    expect(getUpgradeEffectNote("balls", 3)).toBe("");
+  });
+
+  it("zabezpečení má vlastní poznámku, protože se stavem nenásobí", () => {
+    expect(getUpgradeEffectNote("area_security", 2)).toContain("nefungují");
+    expect(getUpgradeEffectNote("area_security", 1)).toBe("");
+  });
+
+  it("nabídka vylepšení nese poznámku zvlášť", () => {
+    const security = getUpgradeOptions({ area_security: 1 }, 100, 50, 1).find((o) => o.category === "area_security");
+    expect(security?.effectNote).toContain("nefungují");
+    expect(security?.effect).not.toContain("nefungují");
+  });
+});
 
 describe("zabezpečení areálu", () => {
   it("je plnohodnotná kategorie vybavení", () => {

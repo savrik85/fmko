@@ -8,6 +8,8 @@ export interface CategoryInfo {
 export interface UpgradeOption {
   category: string; label: string; currentLevel: number; nextLevel: number; cost: number;
   effect: string; description: string; locked: boolean;
+  /** Výjimka k efektu, která patří ke kartě (zabezpečení); jinak prázdné. */
+  effectNote?: string;
   lockReason?: string; lockDetail?: LockDetailData; lockHint?: string;
   /** Ozvučení: kolik spokojenosti klubu po stropu zázemí opravdu přidá. */
   amenity?: AmenityOutlook;
@@ -55,6 +57,7 @@ export interface BazarListing {
   isAiListing: boolean;
   category: string; categoryLabel: string;
   level: number; levelDescription: string; effect: string;
+  effectNote?: string;
   /** Živý stav prodávajícího — vybavení mu chátrá dál, dokud se neprodá. */
   condition: number; conditionAtListing: number;
   price: number; expiresAt: string;
