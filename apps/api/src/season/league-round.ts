@@ -417,6 +417,18 @@ async function dispatchRoundReports(
   standingsBefore: StandingEntry[],
   opts: LeagueRoundOpts,
 ): Promise<void> {
+  // Ligu jen s AI kluby nikdo nečte: report kola a Prales Ultras by jen pálily Gemini.
+  // Jakmile do ligy přijde člověk, články se píšou zase.
+  const hasHuman = await env.DB
+    .prepare("SELECT 1 FROM teams WHERE league_id = ? AND user_id != 'ai' LIMIT 1")
+    .bind(leagueId)
+    .first()
+    .catch((e) => {
+      logger.warn({ module: "league-round" }, "reports human check", e);
+      return null;
+    });
+  if (!hasHuman) return;
+
   // Rozhoduje poskytovatel, ne holý Gemini klíč — v režimu "workers-ai" se články
   // generují i bez něj, v režimu "off" se nezařadí vůbec (a fronta zůstane prázdná).
   const { readAiProvider } = await import("../lib/ai-provider");
