@@ -52,7 +52,7 @@ export default function FriendlyPage() {
     if (!teamId || busyId) return;
     setBusyId(id);
     try {
-      await apiFetch(`/api/teams/${teamId}${path}`, { method: "POST" });
+      await apiFetch(path, { method: "POST" });
       flash(success);
       load();
     } catch (e) {
@@ -71,7 +71,7 @@ export default function FriendlyPage() {
       { label: "Tvoje náklady", value: sumCosts(f.myCosts) > 0 ? formatCZK(sumCosts(f.myCosts)) : "nic" },
     ];
     const ok = await confirm({ title: `Přátelák s ${f.opponent.name}?`, details, confirmLabel: "Přijmout" });
-    if (ok) await act(f.id, `/challenge/${f.id}/accept`, "Výzvu se nepodařilo přijmout", `Přátelák s ${f.opponent.name} je domluvený${f.date ? ` na ${dayLabel(f.date)}` : "."}`);
+    if (ok) await act(f.id, `/api/teams/${teamId}/challenge/${f.id}/accept`, "Výzvu se nepodařilo přijmout", `Přátelák s ${f.opponent.name} je domluvený${f.date ? ` na ${dayLabel(f.date)}` : "."}`);
   };
 
   const take = async (o: OfferView) => {
@@ -82,7 +82,7 @@ export default function FriendlyPage() {
       { label: "Tvoje náklady", value: sumCosts(o.myCosts) > 0 ? formatCZK(sumCosts(o.myCosts)) : "nic" },
     ];
     const ok = await confirm({ title: `Hrát s ${o.team.name}?`, details, confirmLabel: "Beru termín" });
-    if (ok) await act(o.id, `/friendly-offers/${o.id}/take`, "Termín se nepodařilo vzít", `Přátelák s ${o.team.name} je domluvený na ${dayLabel(o.date)}`);
+    if (ok) await act(o.id, `/api/teams/${teamId}/friendly-offers/${o.id}/take`, "Termín se nepodařilo vzít", `Přátelák s ${o.team.name} je domluvený na ${dayLabel(o.date)}`);
   };
 
   // Z karty rivala rovnou do výzvy s vybraným soupeřem.
@@ -117,8 +117,8 @@ export default function FriendlyPage() {
 
       {tab === "matches" && (
         <MatchesTab data={data} busyId={busyId} onAccept={accept}
-          onDecline={(f) => act(f.id, `/challenge/${f.id}/decline`, "Výzvu se nepodařilo odmítnout", "Výzva odmítnuta.")}
-          onCancel={(f) => act(f.id, `/challenge/${f.id}/cancel`, "Výzvu se nepodařilo stáhnout", "Výzva stažena.")}
+          onDecline={(f) => act(f.id, `/api/teams/${teamId}/challenge/${f.id}/decline`, "Výzvu se nepodařilo odmítnout", "Výzva odmítnuta.")}
+          onCancel={(f) => act(f.id, `/api/teams/${teamId}/challenge/${f.id}/cancel`, "Výzvu se nepodařilo stáhnout", "Výzva stažena.")}
           onGoChallenge={() => setTab("challenge")} onGoOffers={() => setTab("offers")} />
       )}
 
@@ -179,7 +179,7 @@ export default function FriendlyPage() {
                     tags={o.stake > 0 ? <div className="flex flex-wrap gap-1.5 mt-2"><StakeTag stake={o.stake} /></div> : null}
                     message={o.message}
                     actions={
-                      <button onClick={() => act(o.id, `/friendly-offers/${o.id}/withdraw`, "Nabídku se nepodařilo stáhnout", "Nabídka stažena.")}
+                      <button onClick={() => act(o.id, `/api/teams/${teamId}/friendly-offers/${o.id}/withdraw`, "Nabídku se nepodařilo stáhnout", "Nabídka stažena.")}
                         disabled={busyId === o.id} className={SECONDARY_BUTTON}>
                         Stáhnout
                       </button>
