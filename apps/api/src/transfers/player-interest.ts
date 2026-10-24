@@ -113,6 +113,28 @@ export interface InterestOffer {
 }
 
 /**
+ * Nabídka pro výpočet zájmu z řádku `transfer_offers`: platí naposledy navržená částka, u cizího
+ * klubu jeho síla a země z `virtual_team_data`. Sdílí ji dopad odmítnutí a propadnutí
+ * i připomínka lhůty, ať připomínka slibuje stejný následek, jaký pak opravdu přijde.
+ */
+export function interestOfferOf(offer: {
+  from_team_id?: unknown; offer_amount?: unknown; counter_amount?: unknown; virtual_team_data?: unknown;
+}): InterestOffer {
+  const fromTeamId = offer.from_team_id as string;
+  const offerAmount = (offer.counter_amount != null ? offer.counter_amount : offer.offer_amount) as number;
+  let virtualRating: number | null = null;
+  let virtualCountry: string | null = null;
+  if (fromTeamId === "virtual_ai" && offer.virtual_team_data) {
+    try {
+      const vd = JSON.parse(offer.virtual_team_data as string) as { rating?: number; country?: string } | null;
+      if (vd?.rating) virtualRating = vd.rating;
+      if (vd?.country) virtualCountry = vd.country;
+    } catch (e) { logger.warn({ module: "player-interest" }, "parse virtual_team_data", e); }
+  }
+  return { fromTeamId, offerAmount, virtualRating, virtualCountry };
+}
+
+/**
  * Načte vstupy pro computePlayerInterest z DB.
  * offerTeam: id lidského kupujícího, nebo { virtualRating } pro virtuální klub.
  */
