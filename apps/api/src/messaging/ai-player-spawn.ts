@@ -817,14 +817,20 @@ async function handleAiPlayerReplyInner(
 
   // Načti historii (posledních 6 zpráv chronologicky)
   const histRows = await db.prepare(
-    "SELECT sender_type, body, json_extract(metadata, '$.photoAlt') AS photo_alt FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 6",
-  ).bind(convId).all<{ sender_type: string; body: string; photo_alt: string | null }>()
+    "SELECT sender_type, body, sent_at, json_extract(metadata, '$.photoAlt') AS photo_alt FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 6",
+  ).bind(convId).all<{ sender_type: string; body: string; sent_at: string; photo_alt: string | null }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load history", e); return { results: [] }; });
 
   const history: ThreadMessage[] = histRows.results
     .reverse()
     .filter((m) => m.sender_type === "player" || m.sender_type === "user")
-    .map((m) => ({ sender: m.sender_type === "player" ? "player" : "coach", body: historyBody(m.body, m.photo_alt) }));
+    .map((m) => ({
+      sender: m.sender_type === "player" ? "player" : "coach",
+      body: historyBody(m.body, m.photo_alt),
+      // Zprávy z dřívějších rozhovorů: model je smí znát, ale vyhodnocení tohohle rozhovoru
+      // je počítat nesmí (příslib místa v základu z 13. 10. se propsal do hospody 24. 10.).
+      earlier: m.sent_at < (state.initiated_at ?? ""),
+    }));
 
   const newRepliesCount = state.current_replies + 1;
   // max_replies funguje jako tvrdý strop. AI ale může konverzaci uzavřít kdykoli dřív přes conversation_complete.
@@ -913,16 +919,13 @@ async function applyResolutionAndClose(
   };
 
   const absenceDays = resolution.absence_days ?? 0;
-  const absenceLine = absenceDays > 0 ? ` Hráč nebude k dispozici ${absenceDays} ${absenceDays === 1 ? "den" : absenceDays < 5 ? "dny" : "dní"}.` : "";
-  const systemMsg = `💬 Konverzace ukončena ${resolution.summary}${absenceLine}`;
+  const systemMsg = `📅 Schválené volno: hráč nebude k dispozici ${absenceDays} ${absenceDays === 1 ? "den" : absenceDays < 5 ? "dny" : "dní"}.`;
 
-  // Hlášku o ukončení píšeme jen k vláknům, která si otevřel hráč: ta mají
-  // jedno téma a jeho uzavření je informace. Když si píše trenér od sebe,
-  // žádné téma se nezavírá a „Konverzace ukončena" uprostřed hovoru, na
-  // který za chvíli přijde další odpověď, jen mate. Absence je výjimka,
-  // o té se trenér dozvědět musí.
+  // „Konverzace ukončena" se shrnutím do chatu už nepíšeme (uživatel 2026-10-24): jestli
+  // hráče naštval, vidí trenér ve vztahu v profilu. Hlášku dostane jen schválené volno,
+  // o tom se trenér dozvědět musí.
   const jeOdTrenera = scenarioId === "coach_initiated";
-  const hlasitUkonceni = !jeOdTrenera || absenceDays > 0;
+  const hlasitUkonceni = absenceDays > 0;
 
   const stmts: D1PreparedStatement[] = [
     // Závěrečná zpráva hráče

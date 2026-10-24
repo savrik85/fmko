@@ -613,6 +613,9 @@ export default function ConversationPage() {
 
                   const isUser = msg.senderType === "user";
                   const isSystem = msg.senderType === "system";
+                  // „Konverzace ukončena" se shrnutím se už nepíše a starší se neukazují (uživatel 2026-10-24):
+                  // jak rozhovor dopadl, je vidět ve vztahu v profilu hráče.
+                  if (isSystem && msg.body.startsWith("💬 Konverzace ukončena")) return null;
                   const first = !prev || prev.senderType !== msg.senderType
                     || (conv?.type === "squad_group" && prev.senderName !== msg.senderName);
                   const isVoice = msg.metadata?.type === "voice" && !!teamId;
@@ -767,20 +770,6 @@ export default function ConversationPage() {
         )}
         <div ref={endRef} />
       </div>
-
-      {/* AI thread done banner */}
-      {aiThreadState?.awaiting === "done" && (
-        <div className={`px-3 py-2 text-sm text-center border-t shrink-0 ${
-          aiThreadState.resolution?.tone === "positive" ? "bg-pitch-50 text-pitch-700 border-pitch-200"
-          : aiThreadState.resolution?.tone === "negative" ? "bg-red-50 text-red-700 border-red-200"
-          : "bg-gray-50 text-gray-600 border-gray-200"
-        }`}>
-          <div className="font-medium">💬 Konverzace ukončena</div>
-          {aiThreadState.resolution?.summary && (
-            <div className="mt-0.5 text-sm opacity-80">{aiThreadState.resolution.summary}</div>
-          )}
-        </div>
-      )}
 
       {/* Do jednosměrného oznámení se nepíše — vstupní pole by slibovalo odpověď,
           která nikdy nepřijde. Místo něj se rovnou řekne proč. */}
