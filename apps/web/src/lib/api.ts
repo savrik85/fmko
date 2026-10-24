@@ -1,7 +1,7 @@
 import { trackEvent } from "@/lib/analytics";
 
 // API_BASE is inlined at build time from .env.production
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
 /**
  * Prodlevy před opakováním čtení, když API vrátí 503. Tak hlásí databázi, která
