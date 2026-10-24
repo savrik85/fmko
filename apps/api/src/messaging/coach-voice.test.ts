@@ -1,14 +1,59 @@
 import { describe, expect, it } from "vitest";
-import { COACH_VOICE_NOTES_PER_DAY, coachAudioKey, isCoachAudioKey, sanitizePeaks, takeVoiceNoteQuota, trustedTranscript } from "./coach-voice";
+import {
+  COACH_VOICE_NOTES_PER_DAY, attachCoachAudio, cleanupPendingCoachAudio, isPendingCoachAudioKey, pendingCoachAudioKey,
+  sanitizePeaks, takeVoiceNoteQuota, trustedTranscript,
+} from "./coach-voice";
+
+/** R2 v paměti: put/get/delete/list s časem nahrání. */
+function memoryBucket(uploaded: Record<string, Date> = {}) {
+  const objects = new Map<string, { body: Uint8Array; uploaded: Date; type?: string }>();
+  for (const [key, at] of Object.entries(uploaded)) objects.set(key, { body: new Uint8Array([1, 2, 3]), uploaded: at });
+  const bucket = {
+    objects,
+    get: async (key: string) => {
+      const o = objects.get(key);
+      return o ? { arrayBuffer: async () => o.body.buffer, httpMetadata: { contentType: o.type } } : null;
+    },
+    put: async (key: string, value: ArrayBuffer, opts?: { httpMetadata?: { contentType?: string } }) => {
+      objects.set(key, { body: new Uint8Array(value), uploaded: new Date(), type: opts?.httpMetadata?.contentType });
+      return { key };
+    },
+    delete: async (keys: string | string[]) => { for (const k of Array.isArray(keys) ? keys : [keys]) objects.delete(k); },
+    list: async ({ prefix }: { prefix: string }) => ({
+      objects: [...objects.entries()].filter(([k]) => k.startsWith(prefix)).map(([key, o]) => ({ key, uploaded: o.uploaded })),
+      truncated: false,
+    }),
+  };
+  return bucket as unknown as R2Bucket & { objects: typeof objects };
+}
 
 describe("hlasová odpověď trenéra", () => {
-  it("k zprávě jde připojit jen nahrávka vlastního týmu", () => {
-    const key = coachAudioKey("team-1", "abc-123", "webm");
-    expect(isCoachAudioKey("team-1", key)).toBe(true);
-    expect(isCoachAudioKey("team-2", key)).toBe(false);
-    expect(isCoachAudioKey("team-1", "voice/m1.wav")).toBe(false);
-    expect(isCoachAudioKey("team-1", "voice/coach/team-1/../x.webm")).toBe(false);
-    expect(isCoachAudioKey("team-1", 42)).toBe(false);
+  it("k zprávě jde připojit jen odložená nahrávka vlastního týmu", () => {
+    const key = pendingCoachAudioKey("team-1", "abc-123", "webm");
+    expect(key).toBe("voice/coach-pending/team-1/abc-123.webm");
+    expect(isPendingCoachAudioKey("team-1", key)).toBe(true);
+    expect(isPendingCoachAudioKey("team-2", key)).toBe(false);
+    expect(isPendingCoachAudioKey("team-1", "voice/coach/team-1/abc-123.webm")).toBe(false);
+    expect(isPendingCoachAudioKey("team-1", "voice/coach-pending/team-1/../x.webm")).toBe(false);
+    expect(isPendingCoachAudioKey("team-1", 42)).toBe(false);
+  });
+
+  it("odeslaná nahrávka se přesune z odkladu k hlasovkám", async () => {
+    const bucket = memoryBucket({ "voice/coach-pending/t1/a.webm": new Date() });
+    expect(await attachCoachAudio(bucket, "voice/coach-pending/t1/a.webm")).toBe("voice/coach/t1/a.webm");
+    expect([...bucket.objects.keys()]).toEqual(["voice/coach/t1/a.webm"]);
+    expect(await attachCoachAudio(bucket, "voice/coach-pending/t1/chybi.webm")).toBeNull();
+  });
+
+  it("noční úklid smaže jen neodeslané nahrávky starší než den", async () => {
+    const now = new Date("2026-10-25T03:00:00Z");
+    const bucket = memoryBucket({
+      "voice/coach-pending/t1/stara.webm": new Date("2026-10-24T01:00:00Z"),
+      "voice/coach-pending/t1/cerstva.webm": new Date("2026-10-25T02:00:00Z"),
+      "voice/coach/t1/odeslana.webm": new Date("2026-10-20T01:00:00Z"),
+    });
+    expect(await cleanupPendingCoachAudio(bucket, now)).toBe(1);
+    expect([...bucket.objects.keys()].sort()).toEqual(["voice/coach-pending/t1/cerstva.webm", "voice/coach/t1/odeslana.webm"]);
   });
 
   it("obrys z prohlížeče bere jen rozumná čísla", () => {

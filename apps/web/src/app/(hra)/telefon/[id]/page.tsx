@@ -10,7 +10,7 @@ import { AutoGrowTextarea, Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { VoiceMessage } from "../VoiceMessage";
-import { CoachVoiceRecorder, type CoachVoiceNote } from "../CoachVoiceRecorder";
+import { CoachVoiceRecorder, SendIcon, isVoiceRecordingSupported, type CoachVoiceNote } from "../CoachVoiceRecorder";
 interface Message {
   id: string;
   body: string;
@@ -117,6 +117,44 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("cs", { day: "numeric", month: "long" });
 }
 
+/**
+ * Telefon vypadá jako WhatsApp (přání 2026-10-24). Barvy jsou schválně mimo tokeny
+ * hry, stejně jako rámeček telefonu: je to rekvizita, ne panel aplikace.
+ */
+const WA_BUBBLE_SHADOW = "shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]";
+const WA_LINK_BUTTON = "block -mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm font-medium text-[#027EB5]";
+/** Barvy jmen ve skupinové konverzaci, jako ve WhatsAppu podle odesílatele. */
+const WA_NAME_COLORS = ["#E5368B", "#1FA855", "#027EB5", "#A62C71", "#FA6533", "#5E47DE", "#C88B2A", "#00A5F4"];
+
+function nameColor(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return WA_NAME_COLORS[h % WA_NAME_COLORS.length];
+}
+
+/** Ocásek u první bubliny v řadě zpráv od stejného odesílatele. */
+function BubbleTail({ outgoing }: { outgoing: boolean }) {
+  return outgoing ? (
+    <svg viewBox="0 0 8 13" width="8" height="13" className="absolute top-0 -right-2 text-[#D9FDD3]" aria-hidden>
+      <path fill="currentColor" d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 8 13" width="8" height="13" className="absolute top-0 -left-2 text-white" aria-hidden>
+      <path fill="currentColor" d="M1.533 3.568 8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z" />
+    </svg>
+  );
+}
+
+/** Dvě fajfky: modré, když už druhá strana odpověděla (zprávu četla). */
+function Ticks({ read }: { read: boolean }) {
+  return (
+    <svg viewBox="0 0 16 11" width="16" height="11" className={read ? "text-[#53BDEB]" : "text-[#8696A0]"} aria-label={read ? "Přečteno" : "Doručeno"}>
+      <path fill="currentColor" d="M11.07.65 10.4.12a.46.46 0 0 0-.64.08L4.3 7.1 2.2 5.12a.46.46 0 0 0-.65.02L1 5.75a.46.46 0 0 0 .02.65l2.97 2.8a.46.46 0 0 0 .66-.04l6.5-7.9a.46.46 0 0 0-.08-.6z" />
+      <path fill="currentColor" d="M15.07.65 14.4.12a.46.46 0 0 0-.64.08L8.3 7.1l-.83-.78-.72.88 1.27 1.2a.46.46 0 0 0 .66-.04l6.5-7.9a.46.46 0 0 0-.08-.6z" />
+    </svg>
+  );
+}
+
 function isGroupChatId(id: string): boolean {
   return id === "global" || id.startsWith("league:");
 }
@@ -172,6 +210,9 @@ export default function ConversationPage() {
   const [creditError, setCreditError] = useState<string | null>(null);
   // Trenér nahrává nebo kontroluje hlasovou odpověď: řádek pro SMS ustoupí nahrávání.
   const [voiceActive, setVoiceActive] = useState(false);
+  // MediaRecorder existuje až v prohlížeči, ne při renderu na serveru.
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  useEffect(() => { setVoiceSupported(isVoiceRecordingSupported()); }, []);
   const endRef = useRef<HTMLDivElement>(null);
 
   const messagesUrl = isGroup
@@ -291,7 +332,6 @@ export default function ConversationPage() {
    * data, zelená SMS — přesně jak to lidi znají z telefonu.
    */
   const jeImessage = isGroup || channel === "imessage";
-  const mojeBublina = jeImessage ? "bg-blue-500 text-white" : "bg-pitch-500 text-white";
   const lzePsat = isGroup || canReply;
   // Tlačítka jen dokud majitel čeká odpověď.
   // Hledá se zpětně: za čekající SMS mohla přibýt výměna o příspěvek (bez tlačítek).
@@ -433,6 +473,11 @@ export default function ConversationPage() {
     setSending(false);
   };
 
+  // Moje zpráva je „přečtená", když na ni druhá strana už něco napsala.
+  const lastReplyAt = messages.reduce(
+    (latest, m) => (m.senderType && m.senderType !== "user" && m.sentAt > latest ? m.sentAt : latest), "",
+  );
+
   const grouped: Array<{ date: string; messages: Message[] }> = [];
   for (const msg of messages) {
     const date = formatDate(msg.sentAt);
@@ -449,7 +494,7 @@ export default function ConversationPage() {
   return (
     <PhoneFrame>
       {/* Header */}
-      <div className="bg-[#1c1c1e] text-white px-3 py-2.5 flex items-center gap-2.5 shrink-0">
+      <div className="bg-[#008069] text-white px-3 py-2 flex items-center gap-2.5 shrink-0">
         <button onClick={() => router.push("/telefon")} className="text-white/70 hover:text-white text-sm">
           &#8592;
         </button>
@@ -458,20 +503,24 @@ export default function ConversationPage() {
             {headerEmoji}
           </div>
         ) : conv?.participantAvatar && Object.keys(conv.participantAvatar).length > 2 ? (
-          <FaceAvatar faceConfig={conv.participantAvatar} size={28} className="rounded-full shrink-0" />
+          <FaceAvatar faceConfig={conv.participantAvatar} size={36} className="rounded-full shrink-0 bg-white/90" />
         ) : (
-          <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold shrink-0">
+          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold shrink-0">
             {conv?.title?.[0] ?? "?"}
           </div>
         )}
-        {ownerSponsorId ? (
-          <SponsorLink
-            id={ownerSponsorId} name={conv?.title ?? "..."} className="font-heading font-bold text-sm truncate"
-            hoverClassName="hover:text-white hover:underline"
-          />
-        ) : (
-          <span className="font-heading font-bold text-sm truncate">{conv?.title ?? "..."}</span>
-        )}
+        <div className="min-w-0 flex flex-col leading-tight">
+          {ownerSponsorId ? (
+            <SponsorLink
+              id={ownerSponsorId} name={conv?.title ?? "..."} className="font-heading font-bold text-base truncate"
+              hoverClassName="hover:text-white hover:underline"
+            />
+          ) : (
+            <span className="font-heading font-bold text-base truncate">{conv?.title ?? "..."}</span>
+          )}
+          {/* Jako ve WhatsAppu: „píše…" pod jménem v hlavičce. */}
+          {pise && <span className="text-sm text-white/85">píše…</span>}
+        </div>
         {/* Kredit je hned pod hlavičkou u vstupního pole, kde je i cena zprávy —
             druhá pilulka nahoře z lišty dělala změť. */}
         {credit && (
@@ -486,7 +535,7 @@ export default function ConversationPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3 bg-gray-50">
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3 bg-[#EFEAE2]">
         {loading ? (
           <div className="flex items-center justify-center h-40"><Spinner /></div>
         ) : messages.length === 0 ? (
@@ -497,20 +546,22 @@ export default function ConversationPage() {
           grouped.map((group) => (
             <div key={group.date}>
               <div className="text-center mb-2">
-                <span className="text-sm text-muted bg-gray-200/60 px-2.5 py-0.5 rounded-full">{group.date}</span>
+                <span className={`text-sm text-[#54656F] bg-white px-3 py-1 rounded-lg ${WA_BUBBLE_SHADOW}`}>{group.date}</span>
               </div>
-              <div className="space-y-2">
-                {group.messages.map((msg) => {
+              <div>
+                {group.messages.map((msg, i) => {
+                  const prev = group.messages[i - 1];
                   if (isGroup) {
                     const isOwn = msg.senderTeamId === teamId;
+                    const first = !prev || prev.senderTeamId !== msg.senderTeamId;
                     const avatar = msg.senderManagerAvatar;
                     const hasFaceAvatar = avatar && Object.keys(avatar).length > 2;
                     const initialsFallback = (msg.senderManagerName ?? msg.senderTeamName ?? "?")
                       .split(" ").map((w) => w[0]).slice(0, 2).join("");
                     return (
-                      <div key={msg.id} className={`flex gap-1.5 ${isOwn ? "justify-end" : "justify-start"}`}>
+                      <div key={msg.id} className={`flex gap-1.5 ${isOwn ? "justify-end" : "justify-start"} ${first ? "mt-2" : "mt-0.5"}`}>
                         {!isOwn && (
-                          <div className="shrink-0 self-end mb-0.5">
+                          <div className={`shrink-0 self-start w-8 ${first ? "" : "invisible"}`}>
                             {hasFaceAvatar ? (
                               <FaceAvatar faceConfig={avatar} size={32} className="rounded-full" />
                             ) : (
@@ -520,25 +571,31 @@ export default function ConversationPage() {
                             )}
                           </div>
                         )}
-                        <div className="max-w-[75%]">
-                          {!isOwn && msg.senderTeamId && (
-                            <Link
-                              href={`/tym/${msg.senderTeamId}`}
-                              className="text-sm text-pitch-600 font-medium mb-0.5 ml-1 block hover:underline"
-                            >
-                              {msg.senderManagerName
-                                ? `${msg.senderManagerName}${msg.senderTeamName ? ` (${msg.senderTeamName})` : ""}`
-                                : (msg.senderTeamName ?? "Tým")}
-                            </Link>
-                          )}
-                          <div className={`px-3 py-2 rounded-2xl text-[13px] leading-snug ${
-                            isOwn
-                              ? "bg-pitch-500 text-white rounded-br-tight"
-                              : "bg-white shadow-sm rounded-bl-tight"
-                          }`}>
-                            <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
-                            <div className={`text-sm mt-0.5 ${isOwn ? "text-white/50" : "text-muted"} text-right`}>
-                              {formatTime(msg.sentAt)}
+                        <div className="max-w-[80%]">
+                          <div className={`relative px-2.5 pt-1.5 pb-1 rounded-lg text-sm leading-snug text-[#111B21] ${WA_BUBBLE_SHADOW} ${
+                            isOwn ? "bg-[#D9FDD3]" : "bg-white"
+                          } ${first ? (isOwn ? "rounded-tr-none" : "rounded-tl-none") : ""}`}>
+                            {first && <BubbleTail outgoing={isOwn} />}
+                            {/* Jméno odesílatele uvnitř bubliny barvou podle týmu, jako ve skupině na WhatsAppu. */}
+                            {!isOwn && first && msg.senderTeamId && (
+                              <Link
+                                href={`/tym/${msg.senderTeamId}`}
+                                className="text-sm font-medium block hover:underline truncate"
+                                style={{ color: nameColor(msg.senderTeamId) }}
+                              >
+                                {msg.senderManagerName
+                                  ? `${msg.senderManagerName}${msg.senderTeamName ? ` (${msg.senderTeamName})` : ""}`
+                                  : (msg.senderTeamName ?? "Tým")}
+                              </Link>
+                            )}
+                            <div className="relative">
+                              <p className="whitespace-pre-wrap break-words">
+                                {emoticonize(msg.body)}
+                                <span className="inline-block w-12" aria-hidden />
+                              </p>
+                              <span className="absolute bottom-0 right-0 text-sm text-[#667781] leading-none">
+                                {formatTime(msg.sentAt)}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -548,6 +605,9 @@ export default function ConversationPage() {
 
                   const isUser = msg.senderType === "user";
                   const isSystem = msg.senderType === "system";
+                  const first = !prev || prev.senderType !== msg.senderType
+                    || (conv?.type === "squad_group" && prev.senderName !== msg.senderName);
+                  const isVoice = msg.metadata?.type === "voice" && !!teamId;
 
                   if (isSystem && conv?.type === "squad_group") {
                     return (
@@ -558,36 +618,52 @@ export default function ConversationPage() {
                   }
 
                   return (
-                    <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                    <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"} ${first ? "mt-2" : "mt-0.5"}`}>
                       {/* Oznámení z redakce a od svazu jsou jednosměrná — bublina na 75 %
                           by tam nechala mrtvý pruh a dlouhé titulky lámala do sloupce. */}
-                      <div className={isSystem ? "w-full" : "max-w-[75%]"}>
-                        {!isUser && (conv?.type === "squad_group") && (
-                          <div className="text-sm text-pitch-600 font-medium mb-0.5 ml-2">{msg.senderName}</div>
-                        )}
-                        <div className={`px-3 py-2 rounded-2xl text-[13px] leading-snug ${
-                          isUser
-                            ? `${mojeBublina} rounded-br-tight`
-                            : "bg-white shadow-sm rounded-bl-tight"
-                        }`}>
-                          {msg.metadata?.type === "voice" && teamId ? (
-                            <VoiceMessage
-                              teamId={teamId}
-                              messageId={msg.id}
-                              durationSec={Number(msg.metadata.durationSec ?? 0)}
-                              peaks={Array.isArray(msg.metadata.peaks) ? (msg.metadata.peaks as number[]) : undefined}
-                              transcript={msg.body}
-                              rev={Number(msg.metadata.rev ?? 1)}
-                            />
+                      <div className={isSystem ? "w-full" : "max-w-[80%]"}>
+                        <div className={`relative px-2.5 pt-1.5 pb-1 rounded-lg text-sm leading-snug text-[#111B21] ${WA_BUBBLE_SHADOW} ${
+                          isUser ? "bg-[#D9FDD3]" : "bg-white"
+                        } ${first && !isSystem ? (isUser ? "rounded-tr-none" : "rounded-tl-none") : ""}`}>
+                          {first && !isSystem && <BubbleTail outgoing={isUser} />}
+                          {!isUser && first && conv?.type === "squad_group" && (
+                            <div className="text-sm font-medium truncate" style={{ color: nameColor(msg.senderName ?? "") }}>{msg.senderName}</div>
+                          )}
+                          {isVoice && teamId ? (
+                            <>
+                              <VoiceMessage
+                                teamId={teamId}
+                                messageId={msg.id}
+                                durationSec={Number(msg.metadata?.durationSec ?? 0)}
+                                peaks={Array.isArray(msg.metadata?.peaks) ? (msg.metadata?.peaks as number[]) : undefined}
+                                transcript={msg.body}
+                                rev={Number(msg.metadata?.rev ?? 1)}
+                                outgoing={isUser}
+                                avatar={isUser ? null : conv?.participantAvatar}
+                              />
+                              <div className="flex justify-end items-center gap-1 text-sm text-[#667781] leading-none -mt-4">
+                                {formatTime(msg.sentAt)}
+                                {isUser && <Ticks read={msg.sentAt <= lastReplyAt} />}
+                              </div>
+                            </>
                           ) : (
-                            <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
+                            <div className="relative">
+                              <p className="whitespace-pre-wrap break-words">
+                                {emoticonize(msg.body)}
+                                <span className={`inline-block ${isUser ? "w-[4.5rem]" : "w-12"}`} aria-hidden />
+                              </p>
+                              <span className="absolute bottom-0 right-0 flex items-center gap-1 text-sm text-[#667781] leading-none">
+                                {formatTime(msg.sentAt)}
+                                {isUser && <Ticks read={msg.sentAt <= lastReplyAt} />}
+                              </span>
+                            </div>
                           )}
                           {/* Žádost o rozhovor chodí SMS, ale formulář je na Událostech. */}
                           {msg.metadata?.type === "interview_request"
                             && otevreneRozhovory.has(String(msg.metadata.interviewId ?? "")) && (
                             <Link
                               href={`/udalosti#rozhovor-${String(msg.metadata.interviewId ?? "")}`}
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                              className={WA_LINK_BUTTON}
                             >
                               Otevřít rozhovor
                             </Link>
@@ -596,7 +672,7 @@ export default function ConversationPage() {
                           {msg.metadata?.type === "ai_negotiation" && typeof msg.metadata.negotiationId === "string" && (
                             <Link
                               href={`/prestupy/jednani/${encodeURIComponent(msg.metadata.negotiationId)}`}
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                              className={WA_LINK_BUTTON}
                             >
                               Otevřít jednání
                             </Link>
@@ -605,7 +681,7 @@ export default function ConversationPage() {
                           {msg.metadata?.type === "scout_report" && typeof msg.metadata.reportId === "string" && (
                             <Link
                               href={`/zamestnanci/skaut?hlaseni=${encodeURIComponent(msg.metadata.reportId)}`}
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                              className={WA_LINK_BUTTON}
                             >
                               Otevřít hlášení
                             </Link>
@@ -614,7 +690,7 @@ export default function ConversationPage() {
                           {msg.metadata?.type === "incident" && typeof msg.metadata.incidentId === "string" && (
                             <Link
                               href={`/incidenty?id=${encodeURIComponent(msg.metadata.incidentId)}`}
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                              className={WA_LINK_BUTTON}
                             >
                               Otevřít incident
                             </Link>
@@ -623,7 +699,7 @@ export default function ConversationPage() {
                           {msg.metadata?.type === "village" && (
                             <Link
                               href="/obec"
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                              className={WA_LINK_BUTTON}
                             >
                               Otevřít obec
                             </Link>
@@ -632,7 +708,7 @@ export default function ConversationPage() {
                           {msg.metadata?.type === "competition" && (
                             <Link
                               href="/soutez?tab=vedeni"
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                              className={WA_LINK_BUTTON}
                             >
                               Otevřít grémium
                             </Link>
@@ -641,7 +717,7 @@ export default function ConversationPage() {
                           {msg.metadata?.type === "demand" && (
                             <Link
                               href="/prestupy?tab=demands"
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                              className={WA_LINK_BUTTON}
                             >
                               Otevřít poptávky
                             </Link>
@@ -650,14 +726,11 @@ export default function ConversationPage() {
                           {msg.metadata?.type === "tournament" && (
                             <Link
                               href="/turnaj"
-                              className="block mt-1.5 text-center rounded-xl bg-ink text-surface px-3 py-1.5 text-sm font-heading font-bold"
+                              className={WA_LINK_BUTTON}
                             >
                               Otevřít turnaj
                             </Link>
                           )}
-                          <div className={`text-sm mt-0.5 ${isUser ? "text-white/50" : "text-muted"} text-right`}>
-                            {formatTime(msg.sentAt)}
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -669,7 +742,8 @@ export default function ConversationPage() {
         )}
         {pise && (
           <div className="flex justify-start">
-            <div className="bg-white shadow-sm rounded-2xl rounded-bl-tight px-3 py-2 text-sm text-muted italic flex items-center gap-1.5">
+            <div className={`relative mt-2 bg-white ${WA_BUBBLE_SHADOW} rounded-lg rounded-tl-none px-3 py-2 text-sm text-[#667781] flex items-center gap-1.5`}>
+              <BubbleTail outgoing={false} />
               <span className="inline-flex gap-0.5">
                 <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -713,7 +787,7 @@ export default function ConversationPage() {
           )}
         </div>
       ) : (
-      <div className="bg-white border-t border-gray-100 px-3 py-2 shrink-0">
+      <div className="bg-[#F0F2F5] px-2 py-1.5 shrink-0">
         {/* Hráč, který chtěl odejít: dohody jako hotové SMS (přání 2026-10-18: „ať je to vše
             formou SMS“). Proč chtěl pryč, řekl hráč sám ve své SMS; výsledek je jeho odpověď. */}
         {unrestDeals.length > 0 && (
@@ -728,7 +802,6 @@ export default function ConversationPage() {
             {unrestOpen && (
               <QuickReplies
                 options={unrestDeals.map((a) => ({ id: a.id, label: a.label, text: a.message }))}
-                imessage={jeImessage}
                 disabled={unrestBusy || sending}
                 onPick={(o) => handleUnrestAction({ id: o.id, message: o.text })}
               />
@@ -740,7 +813,6 @@ export default function ConversationPage() {
           <div className="mb-2">
             <QuickReplies
               options={nabidkaOdpovedi.map((o) => ({ id: o.id, label: o.label, text: o.text }))}
-              imessage={jeImessage}
               disabled={sending}
               onPick={(o) => { const opt = nabidkaOdpovedi.find((x) => x.id === o.id); if (opt) handleOwnerOption(opt); }}
             />
@@ -789,11 +861,12 @@ export default function ConversationPage() {
                     : "SMS"
             }
             disabled={cekaSeNaHrace || nemaNaSms}
-            className="flex-1 min-w-0 bg-gray-100 rounded-[1.25rem] px-3 py-2 text-base leading-6 outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 min-w-0 bg-white rounded-3xl px-4 py-2.5 text-base leading-6 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
           />
           )}
-          {/* Hlasová odpověď jen hráči: přepis čte AI stejně jako SMS. */}
-          {!isGroup && conv?.type === "player" && teamId && (
+          {/* Jako ve WhatsAppu: prázdné pole má vpravo mikrofon, s textem šipku.
+              Hlasová odpověď jen hráči, přepis čte AI stejně jako SMS. */}
+          {!isGroup && conv?.type === "player" && teamId && voiceSupported && !newMsg.trim() ? (
             <CoachVoiceRecorder
               teamId={teamId}
               convId={convId}
@@ -802,16 +875,14 @@ export default function ConversationPage() {
               onActiveChange={setVoiceActive}
               onError={setCreditError}
             />
-          )}
-          {!voiceActive && (
+          ) : !voiceActive && (
           <button
             onClick={handleSend}
             disabled={!newMsg.trim() || sending || cekaSeNaHrace || nemaNaSms}
-            className={`shrink-0 w-8 h-8 rounded-full text-white flex items-center justify-center disabled:opacity-40 text-sm self-end mb-1 ${
-              jeImessage ? "bg-blue-500" : "bg-pitch-500"
-            }`}
+            aria-label="Odeslat zprávu"
+            className="shrink-0 w-11 h-11 rounded-full bg-[#00A884] text-white flex items-center justify-center disabled:opacity-40"
           >
-            &#9654;
+            <SendIcon />
           </button>
           )}
         </div>
@@ -826,15 +897,13 @@ export default function ConversationPage() {
  * v barvě mých zpráv. Klepnutí pošle celou připravenou SMS, ta se hned ukáže v rozhovoru.
  * Dřív to byly široké modré obdélníky s celým textem: šest dohod zakrylo celý telefon.
  */
-function QuickReplies({ options, imessage, disabled, onPick }: {
+function QuickReplies({ options, disabled, onPick }: {
   options: Array<{ id: string; label: string; text: string }>;
-  imessage: boolean;
   disabled: boolean;
   onPick: (o: { id: string; text: string }) => void;
 }) {
-  const colorClass = imessage
-    ? "border-blue-400 text-blue-700 hover:bg-blue-50"
-    : "border-pitch-500 text-pitch-700 hover:bg-pitch-50";
+  // Jako tlačítka rychlých odpovědí ve WhatsAppu: bílá, modrý text.
+  const colorClass = `border-transparent text-[#027EB5] hover:bg-[#F5F6F6] ${WA_BUBBLE_SHADOW}`;
   return (
     <div className="flex flex-wrap justify-end gap-1.5">
       {options.map((o) => (
@@ -843,7 +912,7 @@ function QuickReplies({ options, imessage, disabled, onPick }: {
           onClick={() => onPick(o)}
           disabled={disabled}
           title={o.text}
-          className={`text-sm font-heading font-bold bg-white border rounded-full px-3 py-1.5 transition-colors disabled:opacity-50 ${colorClass}`}
+          className={`text-sm font-medium bg-white border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 ${colorClass}`}
         >
           {o.label}
         </button>

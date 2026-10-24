@@ -39,15 +39,55 @@ export async function takeVoiceNoteQuota(kv: KVNamespace, teamId: string, now = 
   return true;
 }
 
-export function coachAudioKey(teamId: string, id: string, ext: string): string {
-  return `voice/coach/${teamId}/${id}.${ext}`;
+/**
+ * Nahrávka čeká v odkladu, dokud ji trenér neodešle. Odesláním se přesune vedle
+ * hlasovek, takže noční úklid maže jen odklad a nemusí prohledávat zprávy.
+ */
+export const COACH_AUDIO_PENDING_PREFIX = "voice/coach-pending/";
+const COACH_AUDIO_PREFIX = "voice/coach/";
+/** Neodeslaná nahrávka se smaže po dni. */
+export const COACH_AUDIO_PENDING_TTL_MS = 86_400_000;
+
+export function pendingCoachAudioKey(teamId: string, id: string, ext: string): string {
+  return `${COACH_AUDIO_PENDING_PREFIX}${teamId}/${id}.${ext}`;
 }
 
 /** Nahrávku smí k vlastní zprávě připojit jen tým, který ji nahrál. */
-export function isCoachAudioKey(teamId: string, key: unknown): key is string {
+export function isPendingCoachAudioKey(teamId: string, key: unknown): key is string {
   return typeof key === "string"
-    && /^voice\/coach\/[\w-]+\/[\w-]+\.(webm|ogg|m4a|mp3|wav)$/.test(key)
-    && key.startsWith(`voice/coach/${teamId}/`);
+    && /^voice\/coach-pending\/[\w-]+\/[\w-]+\.(webm|ogg|m4a|mp3|wav)$/.test(key)
+    && key.startsWith(`${COACH_AUDIO_PENDING_PREFIX}${teamId}/`);
+}
+
+/** Přesune odeslanou nahrávku z odkladu k hlasovkám. Vrací nový klíč, nebo null. */
+export async function attachCoachAudio(bucket: R2Bucket, pendingKey: string): Promise<string | null> {
+  const obj = await bucket.get(pendingKey)
+    .catch((e: unknown) => { logger.warn({ module: M }, `načtení nahrávky ${pendingKey}`, e); return null; });
+  if (!obj) return null;
+  const finalKey = COACH_AUDIO_PREFIX + pendingKey.slice(COACH_AUDIO_PENDING_PREFIX.length);
+  const saved = await bucket.put(finalKey, await obj.arrayBuffer(), { httpMetadata: obj.httpMetadata })
+    .catch((e: unknown) => { logger.warn({ module: M }, `přesun nahrávky ${pendingKey}`, e); return null; });
+  if (!saved) return null;
+  await bucket.delete(pendingKey)
+    .catch((e: unknown) => logger.warn({ module: M }, `smazání odložené nahrávky ${pendingKey}`, e));
+  return finalKey;
+}
+
+/** Noční úklid: smaže nahrávky, které trenér nahrál, ale do dne neodeslal. */
+export async function cleanupPendingCoachAudio(bucket: R2Bucket, now = new Date()): Promise<number> {
+  const cutoff = now.getTime() - COACH_AUDIO_PENDING_TTL_MS;
+  let deleted = 0;
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix: COACH_AUDIO_PENDING_PREFIX, cursor, limit: 1000 });
+    const stale = page.objects.filter((o) => o.uploaded.getTime() < cutoff).map((o) => o.key);
+    if (stale.length > 0) {
+      await bucket.delete(stale);
+      deleted += stale.length;
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return deleted;
 }
 
 /** Obrys z prohlížeče: nanejvýš 64 čísel 0–1, jinak bublina použije náhradní. */

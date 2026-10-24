@@ -367,7 +367,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId/voice-note", async (c
   if (!rule.canReply) return c.json({ error: "Do téhle konverzace se odpovídat nedá." }, 400);
 
   const {
-    COACH_AUDIO_TYPES, COACH_AUDIO_MAX_BYTES, COACH_AUDIO_MAX_SEC, coachAudioKey, transcribeCoachVoice, takeVoiceNoteQuota,
+    COACH_AUDIO_TYPES, COACH_AUDIO_MAX_BYTES, COACH_AUDIO_MAX_SEC, pendingCoachAudioKey, transcribeCoachVoice, takeVoiceNoteQuota,
   } = await import("../messaging/coach-voice");
   const contentType = (c.req.header("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
   const ext = COACH_AUDIO_TYPES[contentType];
@@ -399,7 +399,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId/voice-note", async (c
   const transcript = await transcribeCoachVoice(c.env.AI, audio);
   if (!transcript) return c.json({ error: "Nahrávce nebylo rozumět, zkus to znovu a mluv blíž k mikrofonu." }, 422);
 
-  const audioKey = coachAudioKey(teamId, uuid(), ext);
+  const audioKey = pendingCoachAudioKey(teamId, uuid(), ext);
   const saved = await c.env.SEED_DATA.put(audioKey, audio, { httpMetadata: { contentType } })
     .catch((e) => { logger.warn({ module: "messaging" }, `uložení hlasové odpovědi ${audioKey}`, e); return null; });
   if (!saved) return c.json({ error: "Nahrávku se nepodařilo uložit." }, 500);
@@ -442,12 +442,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
   let voiceMeta: { type: "voice"; audioKey: string; durationSec: number; peaks?: number[] } | null = null;
   if (body.voice) {
-    const { isCoachAudioKey, sanitizePeaks, COACH_AUDIO_MAX_SEC } = await import("../messaging/coach-voice");
+    const { isPendingCoachAudioKey, sanitizePeaks, COACH_AUDIO_MAX_SEC } = await import("../messaging/coach-voice");
     const key = body.voice.audioKey;
-    const stored = isCoachAudioKey(teamId, key)
+    const stored = isPendingCoachAudioKey(teamId, key)
       ? await c.env.SEED_DATA.head(key).catch((e) => { logger.warn({ module: "messaging" }, "kontrola hlasové odpovědi", e); return null; })
       : null;
-    if (!isCoachAudioKey(teamId, key) || !stored) return c.json({ error: "Nahrávka nenalezena" }, 400);
+    if (!isPendingCoachAudioKey(teamId, key) || !stored) return c.json({ error: "Nahrávka nenalezena" }, 400);
     const peaks = sanitizePeaks(body.voice.peaks);
     voiceMeta = {
       type: "voice",
@@ -504,6 +504,17 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
   const msgId = uuid();
   const now = new Date().toISOString();
+
+  // Odeslaná hlasová odpověď se přesune z odkladu, jinak by ji noční úklid smazal.
+  if (voiceMeta) {
+    const { attachCoachAudio } = await import("../messaging/coach-voice");
+    const finalKey = await attachCoachAudio(c.env.SEED_DATA, voiceMeta.audioKey);
+    if (!finalKey) {
+      logger.error({ module: "messaging" }, `hlasovou odpověď ${voiceMeta.audioKey} se nepodařilo přesunout, kredit už je stržený`);
+      return c.json({ error: "Hlasovku se nepodařilo odeslat." }, 500);
+    }
+    voiceMeta.audioKey = finalKey;
+  }
 
   await c.env.DB.prepare(
     "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'user', ?, ?, ?, ?, ?, 1)"

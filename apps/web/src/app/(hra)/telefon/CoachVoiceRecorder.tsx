@@ -5,8 +5,10 @@ import { apiFetch } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 
 /**
- * Hlasová odpověď trenéra: nahrát, nechat přepsat (Whisper na serveru), zkontrolovat
- * přepis a odeslat. Odeslání obstará stránka konverzace přes `onSend`, stejně jako SMS.
+ * Hlasová odpověď trenéra jako ve WhatsAppu: zelený mikrofon místo šipky, během
+ * nahrávání červená tečka s časem, koš a šipka. Šipka nahrávku pošle rovnou,
+ * přepis (Whisper na serveru) se ukáže pod hlasovkou. Odeslání obstará stránka
+ * konverzace přes `onSend`, stejně jako SMS.
  */
 export interface CoachVoiceNote {
   audioKey: string;
@@ -20,16 +22,21 @@ interface CoachVoiceRecorderProps {
   convId: string;
   disabled: boolean;
   onSend: (note: CoachVoiceNote) => Promise<void>;
-  /** Během nahrávání a kontroly přepisu zabírá recorder celý řádek místo pole pro SMS. */
+  /** Během nahrávání zabírá lišta nahrávání celý řádek místo pole pro zprávu. */
   onActiveChange: (active: boolean) => void;
   /** Chyba se ukáže tam, kde chyby SMS (nad polem pro zprávu). */
   onError: (message: string | null) => void;
 }
 
-type RecState = "idle" | "recording" | "uploading" | "preview" | "sending";
+type RecState = "idle" | "recording" | "sending";
 
 const MAX_SEC = 60;
 const PEAK_BARS = 40;
+
+/** Umí prohlížeč nahrávat? Volat až v prohlížeči (v efektu), ne při renderu na serveru. */
+export function isVoiceRecordingSupported(): boolean {
+  return typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && !!pickMimeType();
+}
 
 function pickMimeType(): string | undefined {
   if (typeof MediaRecorder === "undefined") return undefined;
@@ -63,14 +70,29 @@ function formatTime(sec: number): string {
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 }
 
+export function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden>
+      <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2z" />
+    </svg>
+  );
+}
+
+export function SendIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden>
+      <path d="M3.4 20.4 21 12 3.4 3.6 3.39 10.1 15 12l-11.61 1.9.01 6.5z" />
+    </svg>
+  );
+}
+
 export function CoachVoiceRecorder({ teamId, convId, disabled, onSend, onActiveChange, onError }: CoachVoiceRecorderProps) {
   const [state, setState] = useState<RecState>("idle");
   const [elapsed, setElapsed] = useState(0);
-  const [note, setNote] = useState<CoachVoiceNote | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedRef = useRef(0);
-  const cancelledRef = useRef(false);
+  const sendOnStopRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => {
@@ -80,11 +102,9 @@ export function CoachVoiceRecorder({ teamId, convId, disabled, onSend, onActiveC
 
   useEffect(() => { onActiveChange(state !== "idle"); }, [state, onActiveChange]);
 
-  const supported = typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && !!pickMimeType();
-  if (!supported) return null;
 
-  async function upload(blob: Blob, durationSec: number) {
-    setState("uploading");
+  async function uploadAndSend(blob: Blob, durationSec: number) {
+    setState("sending");
     try {
       const [res, peaks] = await Promise.all([
         apiFetch<{ audioKey: string; transcript: string; durationSec: number }>(
@@ -93,13 +113,12 @@ export function CoachVoiceRecorder({ teamId, convId, disabled, onSend, onActiveC
         ),
         peaksFromBlob(blob),
       ]);
-      setNote({ ...res, peaks });
-      setState("preview");
+      await onSend({ ...res, peaks });
     } catch (e) {
-      console.error("nahrání hlasové odpovědi:", e);
-      onError(e instanceof Error && e.message ? e.message : "Nahrávku se nepodařilo zpracovat.");
-      setState("idle");
+      console.error("odeslání hlasové odpovědi:", e);
+      onError(e instanceof Error && e.message ? e.message : "Hlasovku se nepodařilo odeslat.");
     }
+    setState("idle");
   }
 
   async function start() {
@@ -109,14 +128,14 @@ export function CoachVoiceRecorder({ teamId, convId, disabled, onSend, onActiveC
       const mimeType = pickMimeType();
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       chunksRef.current = [];
-      cancelledRef.current = false;
+      sendOnStopRef.current = false;
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         if (timerRef.current) clearInterval(timerRef.current);
-        if (cancelledRef.current) { setState("idle"); return; }
+        if (!sendOnStopRef.current) { setState("idle"); return; }
         const durationSec = Math.max(1, Math.round((Date.now() - startedRef.current) / 1000));
-        void upload(new Blob(chunksRef.current, { type: recorder.mimeType || mimeType }), durationSec);
+        void uploadAndSend(new Blob(chunksRef.current, { type: recorder.mimeType || mimeType }), durationSec);
       };
       recorderRef.current = recorder;
       startedRef.current = Date.now();
@@ -126,7 +145,8 @@ export function CoachVoiceRecorder({ teamId, convId, disabled, onSend, onActiveC
       timerRef.current = setInterval(() => {
         const sec = Math.round((Date.now() - startedRef.current) / 1000);
         setElapsed(sec);
-        if (sec >= MAX_SEC) recorder.stop();
+        // Po minutě se nahrávka odešle sama, jako když trenér dojde na konec.
+        if (sec >= MAX_SEC) { sendOnStopRef.current = true; recorder.stop(); }
       }, 250);
     } catch (e) {
       console.error("mikrofon:", e);
@@ -134,59 +154,45 @@ export function CoachVoiceRecorder({ teamId, convId, disabled, onSend, onActiveC
     }
   }
 
-  function stop(cancel: boolean) {
-    cancelledRef.current = cancel;
+  function stop(send: boolean) {
+    sendOnStopRef.current = send;
     recorderRef.current?.stop();
   }
 
-  async function send() {
-    if (!note) return;
-    setState("sending");
-    try {
-      await onSend(note);
-      setNote(null);
-      setState("idle");
-    } catch (e) {
-      console.error("odeslání hlasové odpovědi:", e);
-      onError(e instanceof Error && e.message ? e.message : "Hlasovku se nepodařilo odeslat.");
-      setState("preview");
-    }
-  }
-
-  if (state === "recording") {
+  if (state === "recording" || state === "sending") {
     return (
       <div className="flex items-center gap-2 w-full">
-        <span className="w-2.5 h-2.5 rounded-full bg-card-red animate-pulse shrink-0" aria-hidden />
-        <span className="text-sm tabular-nums flex-1">Nahrávám {formatTime(elapsed)}</span>
-        <button type="button" onClick={() => stop(true)} className="text-sm text-muted px-2 py-1">Zrušit</button>
-        <button type="button" onClick={() => stop(false)} className="text-sm font-heading font-bold text-white bg-pitch-500 rounded-full px-3 py-1.5">
-          Hotovo
+        <button
+          type="button"
+          onClick={() => stop(false)}
+          disabled={state === "sending"}
+          aria-label="Zahodit nahrávku"
+          className="w-10 h-10 shrink-0 flex items-center justify-center text-[#54656F] disabled:opacity-40"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden>
+            <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm-3 6h12l-1 12H7L6 9zm4 2v8h1.5v-8H10zm3.5 0v8H15v-8h-1.5z" />
+          </svg>
         </button>
-      </div>
-    );
-  }
-
-  if (state === "uploading") {
-    return (
-      <div className="flex items-center gap-2 w-full text-sm text-muted">
-        <Spinner size="sm" /> Přepisuju nahrávku…
-      </div>
-    );
-  }
-
-  if ((state === "preview" || state === "sending") && note) {
-    return (
-      <div className="w-full">
-        <p className="text-sm text-muted mb-1">🎤 {formatTime(note.durationSec)} · takhle ti to rozumí:</p>
-        <p className="text-sm bg-gray-100 rounded-xl px-3 py-2 mb-1.5 whitespace-pre-wrap">{note.transcript}</p>
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={() => { setNote(null); setState("idle"); }} disabled={state === "sending"} className="text-sm text-muted px-2 py-1">
-            Zahodit
-          </button>
-          <button type="button" onClick={send} disabled={state === "sending"} className="text-sm font-heading font-bold text-white bg-pitch-500 rounded-full px-3 py-1.5 disabled:opacity-50">
-            {state === "sending" ? "Odesílám…" : "Odeslat hlasovku"}
-          </button>
+        <div className="flex-1 min-w-0 flex items-center gap-2 bg-white rounded-full px-4 h-11">
+          {state === "sending" ? (
+            <span className="text-sm text-[#667781] flex items-center gap-2"><Spinner size="sm" /> Odesílám hlasovku…</span>
+          ) : (
+            <>
+              <span className="w-2.5 h-2.5 rounded-full bg-[#F15C6D] animate-pulse shrink-0" aria-hidden />
+              <span className="text-base tabular-nums text-[#111B21]">{formatTime(elapsed)}</span>
+              <span className="text-sm text-[#667781] truncate">Nahrávám…</span>
+            </>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={() => stop(true)}
+          disabled={state === "sending"}
+          aria-label="Odeslat hlasovku"
+          className="w-11 h-11 shrink-0 rounded-full bg-[#00A884] text-white flex items-center justify-center disabled:opacity-60"
+        >
+          <SendIcon />
+        </button>
       </div>
     );
   }
@@ -197,9 +203,9 @@ export function CoachVoiceRecorder({ teamId, convId, disabled, onSend, onActiveC
       onClick={start}
       disabled={disabled}
       aria-label="Nahrát hlasovou odpověď"
-      className="shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center disabled:opacity-40 text-base self-end mb-1"
+      className="w-11 h-11 shrink-0 rounded-full bg-[#00A884] text-white flex items-center justify-center disabled:opacity-40"
     >
-      🎤
+      <MicIcon />
     </button>
   );
 }
