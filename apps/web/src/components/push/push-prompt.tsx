@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { currentPushSubscription, enablePush, pushAvailability } from "@/lib/push";
+import { currentPushSubscription, enablePush, isMobileDevice, pushAvailability } from "@/lib/push";
 
 const DISMISS_KEY = "push_prompt_dismissed_at";
 const DISMISS_MS = 14 * 24 * 3600 * 1000;
@@ -24,7 +24,8 @@ export function PushPrompt() {
   useEffect(() => {
     let alive = true;
     const decide = async () => {
-      if (dismissedRecently()) return;
+      // Na počítači výzva nemá co dělat, upozornění jde zapnout v Nastavení.
+      if (dismissedRecently() || !isMobileDevice()) return;
       const availability = pushAvailability();
       if (availability === "ios_install") { if (alive) setView("ios"); return; }
       // Zakázané v prohlížeči se z Přehledu napravit nedá, to vysvětlí Nastavení.
