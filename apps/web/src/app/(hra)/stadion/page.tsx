@@ -8,7 +8,8 @@ import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData } fr
 import { StadiumView } from "@/components/stadium/stadium-view";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 import { moistureLabel, moistureHint } from "@/lib/pitch-moisture";
-import { amenityDetail, amenityTone, withAmenityNote, type AmenityOutlook } from "@/lib/amenity-outlook";
+import { amenityDetail, withAmenityNote, type AmenityOutlook } from "@/lib/amenity-outlook";
+import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 
 /** Počasí nad areálem — popisek do hlavičky karty. */
 const WEATHER_LABEL: Record<string, string> = {
@@ -1533,9 +1534,7 @@ export default function StadiumPage() {
                       <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span>
                     </div>
                     <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
-                    {upgrade.amenity && (
-                      <div className={`text-sm leading-snug mt-1 ${amenityTone(upgrade.amenity)}`}>{upgrade.amenity.note}</div>
-                    )}
+                    {upgrade.amenity && <AmenityGainChip amenity={upgrade.amenity} />}
                   </div>
                   <button
                     onClick={() => handleUpgrade(upgrade.facility, upgrade.label, upgrade.cost, upgrade.effect, upgrade.amenity)}

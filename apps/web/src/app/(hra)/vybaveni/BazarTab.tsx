@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { LockDetail, SectionLabel, Spinner } from "@/components/ui";
-import { amenityTone } from "@/lib/amenity-outlook";
+import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 import {
   EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, formatCZK,
   type BazarData, type BazarListing, type MyListing,
@@ -169,9 +169,12 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
                 </div>
               </div>
 
-              {l.effect && <div className="text-sm text-pitch-600 mb-3">{l.effect}</div>}
-              {l.amenity && (
-                <div className={`text-sm leading-snug -mt-2 mb-3 ${amenityTone(l.amenity)}`}>{l.amenity.note}</div>
+              {l.effect && (
+                <div className="mb-3">
+                  <div className="text-sm text-pitch-600">{l.effect}</div>
+                  {l.effectNote && <div className="text-sm text-muted leading-snug mt-0.5">{l.effectNote}</div>}
+                  {l.amenity && <AmenityGainChip amenity={l.amenity} />}
+                </div>
               )}
 
               <div className="mt-auto space-y-1">
